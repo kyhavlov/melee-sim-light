@@ -1,0 +1,88 @@
+# Agent Meta Notes
+
+These notes capture between-cycle process takeaways for long rollout/correctness work. They are
+not gameplay specification; use `SPEC.md` for source-backed mechanics.
+
+## Long-Work Cycle Hygiene
+
+- Keep a live worklog as a review manifest, not just a narrative:
+  - selected owner/system
+  - source/decomp/data basis
+  - changed files and owner-specific hunks in shared files
+  - tests/locks added
+  - SPEC/docs notes added
+  - before/after one-step, rollout, disruptive score, and float metrics
+  - rejected experiments and what they proved
+  - current unresolved local path, if interrupted
+  - packaging notes
+- Snapshot each completed owner immediately. Do not rely on reconstructing intent from a large
+  dirty diff later.
+- Packaging is a real risk area. Shared files such as `SPEC.md`, `src/items.c`, `src/combat.c`,
+  `src/action.c`, validation reports, and schema/data files accumulate unrelated hunks quickly.
+- Runtime-required generated data must get a data-contract decision immediately:
+  - tracked tiny contract files need `.gitignore` exceptions and guard tests
+  - large/local generated artifacts stay ignored with regeneration commands documented
+- Nested Dolphin probe changes are local probe state unless explicitly exported under
+  `tools/dolphin/patches/`.
+- Before moving to another owner, run a short review self-audit:
+  - source-port vs local-slot domains are explicit
+  - carries/provenance are scoped per source owner, hitbox, victim, or phase as appropriate
+  - stale collision/contact IDs are not used as current provenance without a latch
+  - gameplay constants are data/source-backed
+  - tests are behavioral locks, not source-text grep checks when runtime coverage is possible
+
+## Target Selection
+
+- Use disruptive rollout clusters as the primary target selector, but treat high repeated float
+  residuals as first-class signals.
+- Max float error alone is a poor ranker because downstream rollout divergence can create huge
+  late-position/velocity errors after an earlier owner break.
+- Prefer float targets when the divergence is:
+  - early, before discrete mismatch
+  - repeated across a coherent action/mechanic family
+  - tied to a top rollout/disruptive owner
+  - modelplay-visible
+- Low-priority float spikes are one-off max errors that occur only after an already-diverged
+  rollout branch, unless they expose a coherent owner.
+
+## Investigation Discipline
+
+- Treat each mismatch as an entry point, not the patch boundary.
+- Stay on the selected owner until fixed. A failed experiment should refine the source predicate,
+  seed surface, callback order, or missing hidden-state hypothesis.
+- Do not mark an owner blocked merely because replay-visible state is insufficient. First attempt
+  local paths: decomp/asm audit, extraction, probe, instrumentation, or the smallest explicit
+  seed/internal lane.
+- Hidden seed/internal lanes must update the full contract surface immediately: C structs, Python
+  dtype/schema, `DATA_CONTRACT.md`, schema guards, and preprocess notes.
+- Avoid row-fit fixes:
+  - no replay id, dataset id, row id, character-id proxy, stale-state shortcut, or broad tolerance
+    hack in gameplay code
+  - broadening is allowed only when source-shaped
+  - narrowing must use decomp/data predicates or explicit seed/probe evidence
+- Add positive and negative replay-real locks around each retained owner boundary.
+
+## Current Hard Parts
+
+- Remaining bugs are often hidden-state/provenance issues, not missing simple callbacks:
+  - live JObj/AObj pose and constrained-joint snapshots
+  - HitCapsule `victims_1` / dense-vs-per-hitbox hitlist provenance
+  - mpColl candidate lists, floor masks, wall/ceil envelope resolution
+  - source-port vs local-slot ownership domains
+  - hitlag/IASA/action-entry callback phase ordering
+- Reduced geometry proxies are a major source of float residuals:
+  - BODY/contact hurtcap pose and HitCapsule centers
+  - ShieldDesc placement and shield/body boundary
+  - laser/item collision normals and shield-bounce/reflection provenance
+- Replay-visible state is often one frame too coarse. The successful fixes usually model or seed a
+  narrow hidden owner instead of deriving behavior from visible row shape.
+
+## Tooling Notes
+
+- Faster parallel `make test`, cache-aware preprocess, and parallel validation reduce the general
+  feedback cost.
+- Fresh disruptive rollout simulation/ranking remains the main slow loop when raw rows must be
+  regenerated. Use rerank when existing rows are still valid.
+- Validation reports should remain generator-produced only.
+- For modelplay-visible regressions, use compact fixtures under `tests/fixtures/modelplay/`, not
+  full `reports/modelplay/**/trace.json` artifacts.

@@ -1,0 +1,96 @@
+Work on the current branch/worktree. Do not commit.
+
+I'm giving you an open-ended long-work prompt so you can work for hours while I'm away. Keep an incremental scratch worklog of improvements as you accumulate them and leave retained changes uncommitted in the tree.
+
+Before choosing the first target, read:
+- AGENTS.md
+- docs/AGENT_META_NOTES.md
+- docs/RL10_COMPLETION_CHECKLIST.md
+- SPEC.md
+
+Use docs/AGENT_META_NOTES.md as persistent process guidance, not as gameplay authority. Gameplay logic still needs source/decomp/data backing.
+
+Worklog:
+- If a prior open worklog exists and the tree is dirty, continue from it.
+- If the tree is clean or no current worklog exists, start a new worklog at reports/triage/open_rollout_work_log.md.
+- Treat the worklog as a live review manifest, not just a narrative.
+- After each completed owner, snapshot progress immediately so later review does not require archaeology.
+
+Repeat this loop indefinitely until I come back and stop you, or until the retained dirty stack becomes extremely large/unwieldy to continue safely:
+
+0. Write starting baselines in the worklog.
+1. Pick something to improve simulator correctness. Use your best judgment.
+2. Continue investigating and working the selected item until it is done. Do not stop or change topics. If you need supporting functionality to finish or continue the investigation, add it and keep going until the selected item is done.
+3. Write the completed item into the worklog with updated baselines and packaging notes.
+4. When the item is done to our rules, return to step 1 and pick a new target area.
+
+Done means no regressions on mismatch, float error, or rollout metrics for the retained changes.
+
+Process details to keep in mind:
+
+- No hard cap on work duration or number of retained fixes; you should be able to work for a full day if needed.
+- The worklog should include, for each selected owner/system:
+  - selected owner/system
+  - source/decomp/data basis
+  - changed files and owner-specific hunks in shared files
+  - tests/locks added
+  - SPEC/docs notes added
+  - before/after one-step, rollout, disruptive score, and float metrics
+  - rejected experiments and what they proved
+  - current unresolved local path, if interrupted
+  - packaging notes for shared-file hunks
+- If taking a lightweight patch snapshot, write it under reports/triage/, but do not treat snapshots as a substitute for the worklog manifest.
+- Validation reports should be generator-produced only, and the worklog should note which retained owner refreshed them.
+- When touching shared files, record hunk ownership in the worklog immediately.
+- Runtime-required generated data must get a data-contract decision immediately:
+  - tracked tiny contract files need .gitignore exceptions and guard tests
+  - large/local generated artifacts stay ignored with documented regeneration commands
+- After each retained owner, run a review self-audit before selecting another owner:
+  - source-port vs local-slot domains are explicit and tested
+  - carries/provenance are scoped per source owner, hitbox, victim, or phase as appropriate
+  - stale collision/contact IDs are not used as current provenance without a latch
+  - gameplay constants are data/source-backed
+  - tests are behavioral locks, not source-text grep checks when runtime coverage is possible
+
+Prioritization:
+
+- Prioritize rollout-visible impact, but do not over-bias toward easy fixability.
+- Start from disruptive rollout reports and one-step taxonomy.
+- Use disruptive rollout clusters as the primary target selector.
+- Treat high repeated float residuals as first-class signals, especially:
+  - early float divergence before discrete mismatch
+  - repeated same-owner float deltas
+  - float divergence tied to a top rollout/disruptive owner
+  - modelplay-visible float/position/velocity bugs
+- Prefer large blast-radius/high-score clusters.
+- Prefer coherent shared owners over isolated row wins.
+- Prefer decomp/data-backed mechanics.
+- Stay on a major selected owner until fixed.
+- Only take adjacent smaller wins when they naturally belong to the same owner family.
+
+Investigation rules:
+
+- Treat a mismatch as an entry point, not the patch boundary.
+- Do not hop between unrelated clusters after a failed experiment.
+- Use failed experiments to refine the source predicate, seed surface, callback order, probe need, extraction need, or hidden-state need.
+- If an experiment fails, do not immediately revert it unless it is truly a dead end. Continue investigating the same owner with deeper evidence: decomp C, raw game asm, Slippi asm/labels, probes, extraction, instrumentation, or minimal seed/internal lanes.
+- No replay id, dataset id, row id, character-id proxy, stale-state shortcut, or broad tolerance hack in gameplay code.
+- If hidden state is required, add the smallest explicit seed/internal lane or local probe/tooling path that exposes the real owner.
+- If a hidden seed/internal lane is added or changed, immediately update C structs, Python dtype/schema, DATA_CONTRACT.md, schema guards, and preprocess notes.
+- Add positive and negative replay-real locks for each retained owner boundary.
+- For modelplay-visible regressions, tests must use compact fixtures under tests/fixtures/modelplay/, not full reports/modelplay/**/trace.json artifacts.
+
+Important hidden-state rule:
+
+For each selected owner, do not mark it blocked or move on merely because visible replay state is insufficient. Missing hidden state/live pose/callback phase/extracted data means the next step is to expose it locally via probe, extraction, instrumentation, or a minimal seed/internal lane. “Blocked” is NOT ALLOWED. You have EVERYTHING you need to solve ANY ISSUE in building the sim between the reference materials like game decomp, game asm, Slippi asm/labels, local probes, and extraction. If you write “needs probe/extraction/seed lane,” immediately attempt that lane before considering any other owner. If a path appears impossible, treat that as evidence that the current representation is wrong: switch from gameplay patching to extraction/probe/instrumentation/decomp work for the same owner, and keep the worklog centered on that owner. Failed experiments refine the same owner hypothesis; they do not permit target switching.
+
+Validation cadence:
+
+- After each retained owner, run focused tests and cheap checks.
+- Run full validation before handoff, before packaging, and after schema/data-contract changes.
+- If seed/schema/data contract changes, force preprocess primary + aggregate.
+- Before final handoff, run the appropriate full validation set for the retained dirty stack.
+
+Hard rule:
+
+Do not commit. Leave retained work dirty for review unless explicitly told to package/commit.
