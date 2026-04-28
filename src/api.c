@@ -617,34 +617,42 @@ static int msl_seed_local_slot_from_source_port0(const MslSeed* seed, int active
   return -1;
 }
 
-static inline uint8_t msl_reseed_seed_uses_attackairb_damageflytop_replay_rng_clock(
-    const MslSeed* seed, int active_players) {
+static inline uint8_t msl_reseed_seed_uses_rollout_replay_frame_clock(const MslSeed* seed,
+                                                                      int active_players) {
   if (seed == NULL) {
     return 0u;
   }
   for (int victim = 0; victim < active_players; victim++) {
-    if (seed->action_id[victim] != (uint16_t)MSL_ACT_DAMAGE_FLY_TOP ||
-        seed->on_ground[victim] != 0u || seed->hitlag[victim] != 0u ||
-        seed->hitstun[victim] == 0u ||
-        seed->fighter_8006cda4_pre_gate_consume_count[victim] == 0u) {
-      continue;
-    }
-    // Slippi `last_hit_by` is raw source-port domain, not local-player-slot domain. Map through
-    // the replay seed's `source_port0` lane before indexing local fighter state.
-    // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
     const int attacker =
         msl_seed_local_slot_from_source_port0(seed, active_players, seed->last_hit_by[victim]);
     if (attacker < 0 || attacker == victim) {
       continue;
     }
-    if (seed->action_id[attacker] == (uint16_t)MSL_ACT_ATTACK_AIR_B &&
-        seed->action_frame[attacker] >= 6) {
+    if (seed->action_id[victim] == (uint16_t)MSL_ACT_DAMAGE_FLY_TOP &&
+        seed->on_ground[victim] == 0u && seed->hitlag[victim] == 0u &&
+        seed->hitstun[victim] != 0u &&
+        seed->fighter_8006cda4_pre_gate_consume_count[victim] != 0u &&
+        seed->instance_hit_by[victim] != 0u) {
       // Replay-seeded AttackAirB -> DamageFlyTop carry rollouts need the Slippi frame-start RNG
-      // clock to advance until the delayed damage-entry frame. The visible discriminator mirrors
-      // the narrow explicit Fighter_8006CDA4 pre-gate seed lane.
+      // clock to advance until the delayed damage-entry frame. The visible discriminator is the
+      // explicit Fighter_8006CDA4 stream-phase lane plus live source-instance provenance.
       // refs/slippi-ssbm-asm/Recording/SendFrameStart.s
       // refs/slippi-ssbm-asm/Recording/SendGamePreFrame.asm
+      // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by raw source-port domain)
       // refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+      return 1u;
+    }
+    if ((seed->action_id[victim] == (uint16_t)MSL_ACT_FX_SPECIAL_HI_FALL ||
+         seed->action_id[victim] == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_END) &&
+        seed->on_ground[victim] == 0u && seed->hitlag[victim] == 0u &&
+        seed->hitstun[victim] == 0u && seed->instance_hit_by[victim] != 0u) {
+      // Spacie special-fall/end source-owner rollout windows can reach a later AttackAirB
+      // enable-edge DamageFlyRoll decision from the same replay-seeded episode. Keep this clock
+      // ownership on the rollout reseed path only; normal one-step reseed keeps frame metadata
+      // seed-owned.
+      // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiFall_Anim
+      // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialAirSEnd_Anim
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
       return 1u;
     }
@@ -2134,7 +2142,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
     if (batch->rollout_clock_rng_owned != NULL) {
       uint8_t clock_owner = rollout_owned_after;
       if (clock_owner == (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED &&
-          !msl_reseed_seed_uses_attackairb_damageflytop_replay_rng_clock(seed, active_players)) {
+          !msl_reseed_seed_uses_rollout_replay_frame_clock(seed, active_players)) {
         clock_owner = (uint8_t)MSL_ROLLOUT_CLOCK_NONE;
       }
       batch->rollout_clock_rng_owned[bi] = clock_owner;
@@ -2145,6 +2153,12 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
 }
 
 int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t seed_stride_bytes) {
+  return msl_batch_reseed_seed_impl(batch, seed_bytes, seed_stride_bytes, NULL, 0,
+                                    (uint8_t)MSL_ROLLOUT_CLOCK_NONE);
+}
+
+int msl_batch_reseed_seed_rollout(MslBatch* batch, const uint8_t* seed_bytes,
+                                  size_t seed_stride_bytes) {
   return msl_batch_reseed_seed_impl(batch, seed_bytes, seed_stride_bytes, NULL, 0,
                                     (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED);
 }

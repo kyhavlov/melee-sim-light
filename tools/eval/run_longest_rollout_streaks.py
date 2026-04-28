@@ -262,7 +262,7 @@ def _scan_dataset_streaks(
 
     def reseed_at(j: int) -> None:
         seed_bytes[0, :] = samples_u8[j, seed_off : seed_off + seed_stride]
-        binding.reseed_seed(handle, seed_bytes)
+        binding.reseed_seed_rollout(handle, seed_bytes)
 
     def step_and_compare(j: int) -> _AttemptResult:
         prev_input_bytes[0, :] = samples_u8[j, prev_input_off : prev_input_off + input_stride]

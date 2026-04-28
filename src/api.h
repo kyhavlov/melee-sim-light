@@ -385,7 +385,7 @@ typedef struct MslSeed {
   // - 0: no ProcessHit-owned clear override on this row.
   // - 1: consume ProcessHit-owned clear before x18C8 decrement for this one-step row.
   uint8_t source_clear_processhit_damage_pending_phase[MSL_MAX_PLAYERS];
-  // Explicit Fighter_8006CDA4 pre-gate RNG consume-count seed lane for DamageFlyRoll entry.
+  // Explicit Fighter_8006CDA4 pre-gate RNG stream-phase seed lane for DamageFlyRoll entry.
   //
   // Decomp ownership context:
   // - Fighter_8006CDA4 runs before the HSD_Randf DamageFlyRoll gate in ftCo_8008DCE0 and can
@@ -395,9 +395,12 @@ typedef struct MslSeed {
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
   //
   // Producer (tools/slippi/make_dataset_from_slp.py):
-  // - 0: no seeded pre-gate consume ownership on this row.
+  // - 0: no seeded pre-gate stream ownership.
   // - 1: consume one pre-gate HSD_Randi before the DamageFlyRoll gate.
   // - 2: consume two pre-gate HSD_Randi calls before the DamageFlyRoll gate.
+  // - 3: consume all three decomp-visible pre-gate HSD_Randi calls before the DamageFlyRoll gate.
+  // - 4: source-proven zero-consume gate; admit the gate without a pre-gate stream advance.
+  // Nonzero DamageFlyTop values may carry across the same segment as hidden held-item/x197C state.
   uint8_t fighter_8006cda4_pre_gate_consume_count[MSL_MAX_PLAYERS];
   // Grounded damage-clear phase bridge for source-owner clear (`ftCommon_800804FC` path).
   //
@@ -1742,6 +1745,10 @@ int msl_batch_init_match_masked(MslBatch* batch, const uint8_t* config_bytes,
 // Reseed from packed MslSeed array of length batch_size.
 // seed_stride_bytes must be >= sizeof(MslSeed).
 int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t seed_stride_bytes);
+// Reseed for validation rollouts that need simulator-owned replay frame-clock metadata.
+// Normal teacher-forced one-step callers should use msl_batch_reseed_seed().
+int msl_batch_reseed_seed_rollout(MslBatch* batch, const uint8_t* seed_bytes,
+                                  size_t seed_stride_bytes);
 
 // Step one frame using packed inputs. The current "empty sim" stub ignores inputs.
 // input_stride_bytes must be >= sizeof(MslInput).

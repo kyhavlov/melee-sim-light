@@ -1084,7 +1084,7 @@ def _scan_dataset_scalar(
     try:
         for start in range(record_start, record_stop, max(1, int(stride))):
             seed_bytes[0, :] = samples_u8[start, seed_off : seed_off + seed_stride]
-            binding.reseed_seed(handle, seed_bytes)
+            binding.reseed_seed_rollout(handle, seed_bytes)
             first_mismatch: FirstMismatch | None = None
             for offset in range(1, max_horizon + 1):
                 j = start + offset - 1
@@ -1240,7 +1240,7 @@ def _scan_dataset(
 
             seed_bytes[:active_count, :] = samples_u8[starts, seed_off : seed_off + seed_stride]
             _fill_inactive_lanes(seed_bytes, active_count)
-            binding.reseed_seed(handle, seed_bytes)
+            binding.reseed_seed_rollout(handle, seed_bytes)
 
             first_mismatches: list[FirstMismatch | None] = [None for _ in range(active_count)]
             chunk_rows: list[list[DisruptiveRow]] = [[] for _ in range(active_count)]

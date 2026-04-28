@@ -483,7 +483,7 @@ def _score_window(
     out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(1)
 
     seed_bytes[0, :] = samples_u8[start_seed_record, seed_off : seed_off + seed_stride]
-    binding.reseed_seed(handle, seed_bytes)
+    binding.reseed_seed_rollout(handle, seed_bytes)
 
     for j in range(start_seed_record, start_record):
         prev_input_bytes[0, :] = samples_u8[j, prev_input_off : prev_input_off + input_stride]

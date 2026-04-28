@@ -868,6 +868,39 @@ static PyObject* msl_reseed_seed(PyObject* self, PyObject* args) {
   Py_RETURN_NONE;
 }
 
+static PyObject* msl_reseed_seed_rollout(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  PyObject* seed_obj = NULL;
+  if (!PyArg_ParseTuple(args, "OO", &handle_obj, &seed_obj)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+
+  PyArrayObject* seed = require_contiguous_array(seed_obj, NPY_UINT8, 2, "seed");
+  if (seed == NULL) {
+    return NULL;
+  }
+  if (PyArray_DIM(seed, 1) < (npy_intp)sizeof(MslSeed)) {
+    PyErr_SetString(PyExc_ValueError, "seed second dim too small for MslSeed");
+    return NULL;
+  }
+
+  const uint8_t* seed_bytes = (const uint8_t*)PyArray_DATA(seed);
+  const size_t stride = (size_t)PyArray_STRIDE(seed, 0);
+
+  const int err = msl_batch_reseed_seed_rollout(h->batch, seed_bytes, stride);
+  if (err != 0) {
+    PyErr_Format(PyExc_RuntimeError, "msl_batch_reseed_seed_rollout failed: %d", err);
+    return NULL;
+  }
+
+  Py_RETURN_NONE;
+}
+
 static PyObject* msl_init_match(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* handle_obj = NULL;
@@ -2995,6 +3028,8 @@ static PyMethodDef methods[] = {
      "destroy(handle) -> None (free underlying C batch immediately)"},
     {"reseed_seed", msl_reseed_seed, METH_VARARGS,
      "reseed_seed(handle, seed_bytes[batch, seed_stride])"},
+    {"reseed_seed_rollout", msl_reseed_seed_rollout, METH_VARARGS,
+     "reseed_seed_rollout(handle, seed_bytes[batch, seed_stride])"},
     {"init_match", msl_init_match, METH_VARARGS,
      "init_match(handle, match_config_bytes[batch, match_config_stride])"},
     {"init_match_masked", msl_init_match_masked, METH_VARARGS,
