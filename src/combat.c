@@ -192,33 +192,6 @@ static inline uint8_t combat_shine_start_damageair_entry_pose_bridge_applies(con
   return 1u;
 }
 
-static inline uint8_t combat_downbound_hidden_colanim_rejects_attackdash_body_contact(
-    const MslBatch* batch, size_t a_idx, size_t d_idx) {
-  if (batch == NULL) {
-    return 0u;
-  }
-  if (batch->state.action_id[a_idx] != (uint16_t)MSL_ACT_ATTACK_DASH) {
-    return 0u;
-  }
-  const uint16_t d_action = batch->state.action_id[d_idx];
-  if (d_action != (uint16_t)MSL_ACT_DOWN_BOUND_U && d_action != (uint16_t)MSL_ACT_DOWN_BOUND_D) {
-    return 0u;
-  }
-  if (batch->state.colanim_timer_x1994[d_idx] == 0u || batch->state.hurtbox_state[d_idx] != 0u) {
-    return 0u;
-  }
-  // DownBound hidden colanim contact guard:
-  // - DownBound can carry hidden x198C/x1994 collision status while Slippi's visible merged
-  //   hurtbox_state remains vulnerable.
-  // - This suite-proven lane is a pose/eligibility ordering guard for adjacent AttackDash BODY
-  //   checks; allowing an invincible-only BODY contact here gives attacker hitlag while vanilla
-  //   keeps the frame miss-only.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::{
-  //   ftCo_DownBound_Anim,ftCo_DownBound_Coll}
-  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007B868,ftColl_80076ED8}
-  return 1u;
-}
-
 static inline uint8_t combat_attackairlw_invincible_contact_rejects_body_hitlag(
     const MslBatch* batch, size_t a_idx, size_t d_idx) {
   if (batch == NULL) {
@@ -1568,6 +1541,44 @@ static inline uint8_t combat_is_guard_reflect_frozen_snapshot_idx(const MslBatch
   return (batch->state.action_frame[idx] <= MSL_GUARD_REFLECT_FROZEN_ACTION_FRAME_MAX) ? 1u : 0u;
 }
 
+static inline uint8_t combat_defer_late_slot_same_frame_speciallw_entry_hit(
+    const MslBatch* batch, size_t a_idx, size_t d_idx, int attacker, int defender) {
+  if (batch == NULL || attacker <= defender) {
+    return 0u;
+  }
+  const uint16_t action = batch->state.action_id[a_idx];
+  if (action != (uint16_t)MSL_ACT_FX_SPECIAL_LW_START) {
+    return 0u;
+  }
+  if (batch->state.prev_action_id[a_idx] == action) {
+    return 0u;
+  }
+  if (batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_TURN || !batch->state.on_ground[d_idx] ||
+      batch->state.hitlag[d_idx] != 0u || batch->state.hitstun[d_idx] != 0u) {
+    return 0u;
+  }
+  if (batch->state.turn_has_turned[d_idx] == 0u) {
+    return 0u;
+  }
+
+  // Fighter BODY pair-order + Turn internal-facing microphase owner:
+  // - ftColl_80078C70 walks the fighter entity list as an unordered pair pass. For a later entity
+  //   attacking an earlier entity, its freshly-created same-frame HitCapsule can miss the earlier
+  //   fighter's already-processed collision-pair phase.
+  // - This boundary is only replay-proven for the Turn internal-facing microphase (`has_turned=1`):
+  //   ftCo_Turn_Anim_Inner has flipped fp->facing_dir while the replay-visible facing byte can
+  //   still be stale, and the simulator's SSANIM/x58 bootstrap can otherwise create an extra
+  //   grounded Shine frame-0 BODY hit from the internal-facing hurtcap pose. Pre-turn Turn
+  //   (`has_turned=0`) remains on the normal BODY path; HVG:5200/TCH:3376 prove those same later
+  //   slot grounded Shine entries still hit.
+  // - Aerial SpecialLwStart remains on the normal BODY path.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_Anim_Inner
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLw_Enter
+  // data/moves/{fox,falco}.json specials_by_msid["313"|"317"].events
+  return 1u;
+}
+
 static inline uint8_t combat_prev_action_is_guard_reflect_locomotion_source(uint16_t action_id) {
   switch (action_id) {
     case (uint16_t)MSL_ACT_WAIT:
@@ -1694,6 +1705,28 @@ uint8_t combat_is_powershield_active_idx(const MslBatch* batch, size_t idx) {
     return (batch->state.guard_reflect_timer_x14[idx] != 0u) ? 1u : 0u;
   }
   return (flags_221c & (uint8_t)MSL_STATE_FLAG_221C_POWERSHIELD_ACTIVE) ? 1u : 0u;
+}
+
+static inline uint8_t combat_guard_setoff_recoil_x221c_b2_idx(const MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
+  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
+  enum { MSL_STATE_FLAG_221C_POWERSHIELD_ACTIVE = 0x20 };
+  const uint8_t flags_221c =
+      batch->state.state_flags[idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221C_INDEX];
+  if ((flags_221c & (uint8_t)MSL_STATE_FLAG_221C_POWERSHIELD_ACTIVE) != 0u) {
+    return 1u;
+  }
+  if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_REFLECT) {
+    // GuardSetOff recoil consumes fp->x221C_b2 directly inside ftCo_80092F2C. That lane is owned by
+    // GuardReflect's x18 timer, not the shorter ReflectDesc/x14 ownership used by item reflect.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80093BC0,ftCo_80092F2C}
+    // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Guard.s:0x80093080..0x800930A0
+    return (batch->state.guard_reflect_timer_x18[idx] != 0u) ? 1u : 0u;
+  }
+  return 0u;
 }
 
 // Combo / last-attack tracking (decomp-first).
@@ -2433,12 +2466,21 @@ static inline uint8_t combat_damageflyroll_rng_subset_allows_pre_action(const Ms
     case (uint16_t)MSL_ACT_ATTACK_AIR_B: {
       // narrowed_temporary:
       // - AttackAirB pre-action is enabled from the extracted create-window onward.
-      // - Early pre-create frames remain excluded until upstream RNG consumers in this window
-      //   are fully represented, preventing non-causal stream skew.
+      // - Early pre-create frames require the explicit Fighter_8006CDA4 stream-phase seed; visible
+      //   action shape alone is not enough to admit the gate.
       // data/moves/{fox,falco}.json moves["ftCo_SM_AttackAirB"].events create_hitbox frame=4
       const int16_t pre_af = batch->state.action_frame[d_idx];
-      return (pre_af >= 5) ? 1u : 0u;
+      return (pre_af >= 5 || batch->state.fighter_8006cda4_pre_gate_consume_count[d_idx] != 0u)
+                 ? 1u
+                 : 0u;
     }
+    case (uint16_t)MSL_ACT_ATTACK_AIR_N:
+      // AttackAirN pre-action can reach the same ftCo_8008DCE0 DamageFlyRoll gate, but only when
+      // the replay seed proves the hidden Fighter_8006CDA4 stream phase. Visible action shape alone
+      // is not enough because Slippi does not expose item_gobj/x197C branch inputs.
+      // refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+      return (batch->state.fighter_8006cda4_pre_gate_consume_count[d_idx] != 0u) ? 1u : 0u;
     default:
       return 0u;
   }
@@ -4072,7 +4114,7 @@ void combat_apply_item_shield_hit(MslBatch* batch, int batch_index, int attacker
   // item callback state still uses shield/reflect flags for bounce/reflect ownership.
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077688
   // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
-  const uint8_t powershield_active_recoil = combat_is_powershield_active_idx(batch, d_idx);
+  const uint8_t powershield_active_recoil = combat_guard_setoff_recoil_x221c_b2_idx(batch, d_idx);
   int shield_damage_taken =
       (int_dmg + (int)hitbox_shield_damage > 0) ? (int_dmg + (int)hitbox_shield_damage) : 0;
 
@@ -5138,6 +5180,10 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
         if (!batch->state.hitbox_enabled[hb_i]) {
           continue;
         }
+        if (combat_defer_late_slot_same_frame_speciallw_entry_hit(batch, a_idx, d_idx, attacker,
+                                                                  defender)) {
+          continue;
+        }
         if (clank_skip_hb[attacker][defender][hb_id]) {
           continue;
         }
@@ -5268,10 +5314,6 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
                 by, bz, &attackairb_overlap_amount);
           }
           if (!overlaps) {
-            continue;
-          }
-          if (combat_downbound_hidden_colanim_rejects_attackdash_body_contact(batch, a_idx,
-                                                                              d_idx)) {
             continue;
           }
           if (combat_attackairlw_invincible_contact_rejects_body_hitlag(batch, a_idx, d_idx)) {
@@ -5481,6 +5523,10 @@ static void combat_select_body_hits_one_debug(MslBatch* batch, int bi,
         if (!batch->state.hitbox_enabled[hb_i]) {
           continue;
         }
+        if (combat_defer_late_slot_same_frame_speciallw_entry_hit(batch, a_idx, d_idx, attacker,
+                                                                  defender)) {
+          continue;
+        }
 
         const uint16_t hb_flags = batch->state.hitbox_flags[hb_i];
         const uint8_t defender_on_ground = batch->state.on_ground[d_idx] ? 1 : 0;
@@ -5567,10 +5613,6 @@ static void combat_select_body_hits_one_debug(MslBatch* batch, int bi,
             }
           }
           if (!overlaps) {
-            continue;
-          }
-          if (combat_downbound_hidden_colanim_rejects_attackdash_body_contact(batch, a_idx,
-                                                                              d_idx)) {
             continue;
           }
           if (!combat_shine_start_damageair_entry_pose_allows_body_contact(

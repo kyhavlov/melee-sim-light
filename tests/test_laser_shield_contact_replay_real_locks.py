@@ -2,9 +2,26 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 import pytest
 
+from tools.eval.dataset import COMPARE_DTYPE, read_dataset
 from tests.test_combat_ownership_seed_guardrail_locks import _run_one_step_row, _skip_if_required_artifacts_missing
+
+
+def _live_laser_keys(items) -> set[tuple[int, int, int, int]]:
+    keys: set[tuple[int, int, int, int]] = set()
+    for it in items:
+        if int(it["exists"]) != 1 or int(it["type"]) != 55:
+            continue
+        keys.add((int(it["owner"]), int(it["instance_id"]), int(it["spawn_id"]), int(it["state"])))
+    return keys
+
+
+def _assert_live_laser_set_matches_ref(*, out_row, ref_row, record: int) -> None:
+    got = _live_laser_keys(out_row["items"])
+    exp = _live_laser_keys(ref_row["items"])
+    assert got == exp, f"record={record} live laser set expected={exp} got={got}"
 
 
 @pytest.mark.integration
@@ -25,6 +42,11 @@ from tests.test_combat_ownership_seed_guardrail_locks import _run_one_step_row, 
         (
             "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl",
             202,
+            1,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl",
+            7294,
             1,
         ),
     ],
@@ -50,6 +72,12 @@ def test_falco_laser_shield_contact_enters_guardsetoff_and_despawns_laser(
 
     seed_row, ref_row, out_row = _run_one_step_row(dataset_path, record, p)
 
+    if record == 7294:
+        assert int(seed_row["action_id"][p]) == 182  # GuardReflect
+        assert int(seed_row["seed_prev_action_id"][p]) == 20  # Dash
+        assert int(seed_row["guard_reflect_timer_x14"][p]) == 2
+        assert int(seed_row["item_reflect_transfer_port"][0]) == 0xFF
+
     assert int(ref_row["action_id"][p]) == 181
     assert int(out_row["action_id"][p]) == 181
     assert int(out_row["hitlag"][p]) == int(ref_row["hitlag"][p])
@@ -61,6 +89,106 @@ def test_falco_laser_shield_contact_enters_guardsetoff_and_despawns_laser(
                 f"record={record} item={i} field={field} "
                 f"expected={int(ref_row['items'][i][field])} got={int(out_row['items'][i][field])}"
             )
+    _assert_live_laser_set_matches_ref(out_row=out_row, ref_row=ref_row, record=record)
+
+
+@pytest.mark.integration
+def test_late_dash_guardreflect_hitshield_requires_reflectdesc_stage_x_overlap() -> None:
+    # Negative controls for the MAJ:7294 late Dash/GuardReflect handoff: moving the defender's
+    # ReflectDesc center away in stage X or Z must not still take the retained HitShield/despawn
+    # branch. This guards against testing the ReflectDesc radius around a stale ShieldDesc center.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_CreateReflectHit,ftColl_80077464,ftColl_80077688}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    p = 1
+
+    def _separate_reflectdesc(seed_t) -> None:
+        seed_t["pos_x"][0, p] = np.float32(float(seed_t["pos_x"][0, p]) + 40.0)
+
+    seed_row, ref_row, out_row = _run_one_step_row(dataset_path, 7294, p, seed_mutator=_separate_reflectdesc)
+    assert int(seed_row["action_id"][p]) == 182
+    assert int(ref_row["action_id"][p]) == 181
+    assert not (
+        int(out_row["action_id"][p]) == 181 and _live_laser_keys(out_row["items"]) == _live_laser_keys(ref_row["items"])
+    )
+
+
+@pytest.mark.integration
+def test_late_dash_guardreflect_laser_shield_hit_rollout_crosses_maj7294() -> None:
+    # Rollout lock for the same MAJ family as the one-step row above:
+    # - the seed at rec=7293 is the hidden Dash -> GuardReflect entry,
+    # - rec=7294 must take the Item_80269DC8 HitShield / GuardSetOff path instead of the active
+    #   GuardReflect keepalive lane.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    #   ftCo_80091A4C,ftCo_800939B4,ftCo_80093A50,ftCo_GuardReflect_Anim}
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80077688,ftColl_80077464}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    binding = pytest.importorskip("msl_binding")
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    start_record = 7286
+    target_record = 7294
+    assert int(samples.shape[0]) > target_record
+
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    seed_bytes = (
+        np.frombuffer(samples[start_record : start_record + 1]["seed_t"].tobytes(order="C"), dtype=np.uint8)
+        .copy()
+        .reshape(1, seed_stride)
+    )
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        binding.reseed_seed_rollout(handle, seed_bytes)
+        out = None
+        ref = None
+        for record in range(start_record, target_record + 1):
+            prev_input_bytes = (
+                np.frombuffer(samples[record : record + 1]["prev_input_t"].tobytes(order="C"), dtype=np.uint8)
+                .copy()
+                .reshape(1, input_stride)
+            )
+            input_bytes = (
+                np.frombuffer(samples[record : record + 1]["input_t"].tobytes(order="C"), dtype=np.uint8)
+                .copy()
+                .reshape(1, input_stride)
+            )
+            binding.step_input(handle, prev_input_bytes, input_bytes)
+            binding.write_compare(handle, out_compare_bytes)
+            out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()
+            ref = samples[record]["ref_t1"]
+    finally:
+        binding.destroy(handle)
+
+    assert out is not None and ref is not None
+    p = 1
+    assert int(ref["action_id"][p]) == 181
+    assert int(out["action_id"][p]) == 181
+    assert int(out["action_frame"][p]) == int(ref["action_frame"][p]) == 0
+    assert int(out["animation_index"][p]) == int(ref["animation_index"][p]) == 40
+    assert int(out["hitlag"][p]) == int(ref["hitlag"][p]) == 3
+    assert abs(float(out["shield_hp"][p]) - float(ref["shield_hp"][p])) <= 5e-4
+    assert int(out["items"][0]["exists"]) == int(ref["items"][0]["exists"]) == 0
+    _assert_live_laser_set_matches_ref(out_row=out, ref_row=ref, record=target_record)
 
 
 @pytest.mark.integration

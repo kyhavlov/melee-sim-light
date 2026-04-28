@@ -9,6 +9,8 @@ from tools.eval.dataset import COMPARE_DTYPE, read_dataset
 
 
 _DCC = Path("datasets/aggregate_recent/replays/debug/fd_mixed_recent/DistinctCaringCobra.msl")
+_HVG = Path("datasets/aggregate_recent/replays/validation/aggregate_recent/HilariousVillainousGiraffe.msl")
+_TCH = Path("datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl")
 _QGD = Path("datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.msl")
 
 
@@ -91,6 +93,82 @@ def test_grounded_shine_start_dense_seed_requires_explicit_victim_proof() -> Non
     assert int(out["hitlag"][attacker]) > 0
     assert int(out["hitlag"][defender]) > 0
     assert float(out["percent"][defender]) > float(row["seed_t"]["percent"][0, defender])
+
+
+@pytest.mark.integration
+def test_late_slot_grounded_shine_start_entry_does_not_hit_earlier_turn_defender() -> None:
+    # DCC rec=3864 has p1 entering grounded SpecialLwStart while p0 is an earlier-slot Turn
+    # defender that has already flipped its internal Turn facing. Vanilla does not apply the frame-0
+    # Shine BODY hit here: ftColl_80078C70 walks fighter pairs in entity order, so the late
+    # entry-created HitCapsule can miss the earlier fighter's collision-pair phase during this
+    # internal-facing microphase.
+    #
+    # HVG:5200/TCH:3376 below prove this is not a broad later-slot Shine-vs-Turn suppressor.
+    #
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_Anim_Inner
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLw_Enter
+    root = Path(__file__).resolve().parents[1]
+    ds_path = root / _DCC
+    if not ds_path.exists():
+        pytest.skip(f"missing local dataset: {ds_path}")
+
+    binding = pytest.importorskip("msl_binding")
+    ds = read_dataset(str(ds_path))
+    row = ds.samples[3864:3865]
+    attacker = 1
+    defender = 0
+
+    assert int(row["seed_t"]["action_id"][0, attacker]) == 39  # Squat
+    assert int(row["ref_t1"]["action_id"][0, attacker]) == 360  # grounded SpecialLwStart
+    assert int(row["seed_t"]["action_id"][0, defender]) == 18  # Turn
+    assert int(row["seed_t"]["turn_has_turned"][0, defender]) == 1
+    assert int(row["ref_t1"]["action_id"][0, defender]) == 18
+    assert float(row["ref_t1"]["percent"][0, defender]) == pytest.approx(
+        float(row["seed_t"]["percent"][0, defender])
+    )
+
+    out = _run_one_step(binding, row, num_players=int(ds.header["num_players"]))
+    for field in ("action_id", "action_frame", "hitlag", "hitstun", "instance_id", "instance_hit_by"):
+        assert int(out[field][defender]) == int(row["ref_t1"][field][0, defender]), field
+    assert float(out["percent"][defender]) == pytest.approx(float(row["ref_t1"]["percent"][0, defender]))
+    assert int(out["hitlag"][attacker]) == int(row["ref_t1"]["hitlag"][0, attacker])
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "seed_action"),
+    (
+        (_HVG, 5200, 39),
+        (_TCH, 3376, 40),
+    ),
+)
+def test_late_slot_grounded_shine_start_still_hits_pre_turn_internal_facing_controls(
+    dataset_rel: Path, record: int, seed_action: int
+) -> None:
+    root = Path(__file__).resolve().parents[1]
+    ds_path = root / dataset_rel
+    if not ds_path.exists():
+        pytest.skip(f"missing local dataset: {ds_path}")
+
+    binding = pytest.importorskip("msl_binding")
+    ds = read_dataset(str(ds_path))
+    row = ds.samples[record:record + 1]
+    attacker = 1
+    defender = 0
+
+    assert int(row["seed_t"]["action_id"][0, attacker]) == seed_action
+    assert int(row["ref_t1"]["action_id"][0, attacker]) == 360  # grounded SpecialLwStart
+    assert int(row["seed_t"]["action_id"][0, defender]) == 18  # Turn
+    assert int(row["seed_t"]["turn_has_turned"][0, defender]) == 0
+    assert int(row["ref_t1"]["action_id"][0, defender]) == 90  # DamageFlyTop
+    assert float(row["ref_t1"]["percent"][0, defender]) > float(row["seed_t"]["percent"][0, defender])
+
+    out = _run_one_step(binding, row, num_players=int(ds.header["num_players"]))
+    for field in ("action_id", "action_frame", "hitlag", "hitstun", "instance_id", "instance_hit_by"):
+        assert int(out[field][defender]) == int(row["ref_t1"][field][0, defender]), field
+    assert float(out["percent"][defender]) == pytest.approx(float(row["ref_t1"]["percent"][0, defender]))
+    assert int(out["hitlag"][attacker]) == int(row["ref_t1"]["hitlag"][0, attacker])
 
 
 @pytest.mark.integration

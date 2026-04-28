@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from tests.test_combat_ownership_seed_guardrail_locks import (
@@ -10,7 +11,8 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
-from tools.eval.dataset import read_dataset
+from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.run_longest_rollout_streaks import _load_binding
 
 
 @dataclass(frozen=True)
@@ -92,6 +94,49 @@ class _ThrowHiSameCharacterCallbackCase:
     item_slot: int
     expect_exists: bool
     note: str
+
+
+def _run_rollout_rows(dataset_path: Path, start_record: int, rows: tuple[int, ...]) -> dict[int, tuple[np.void, np.void]]:
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    binding = _load_binding()
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
+    prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+    input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+    out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(1)
+
+    sample_stride = int(samples.dtype.itemsize)
+    samples_u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), sample_stride)
+    seed_off = int(samples.dtype.fields["seed_t"][1])
+    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
+    input_off = int(samples.dtype.fields["input_t"][1])
+    end_record = max(rows)
+
+    try:
+        seed_bytes[0, :] = samples_u8[start_record, seed_off : seed_off + seed_stride]
+        binding.reseed_seed_rollout(handle, seed_bytes)
+        out: dict[int, tuple[np.void, np.void]] = {}
+        for record in range(start_record, end_record + 1):
+            prev_input_bytes[0, :] = samples_u8[record, prev_input_off : prev_input_off + input_stride]
+            input_bytes[0, :] = samples_u8[record, input_off : input_off + input_stride]
+            binding.step_input(handle, prev_input_bytes, input_bytes)
+            binding.write_compare(handle, out_compare_bytes)
+            if record in rows:
+                out[record] = (out_view[0].copy(), samples["ref_t1"][record].copy())
+        return out
+    finally:
+        binding.destroy(handle)
 
 
 @pytest.mark.integration
@@ -485,6 +530,36 @@ def test_throwhi_same_character_callback_phase_locks(
         got = int(out_row["items"][slot][field])
         exp = int(ref_row["items"][slot][field])
         assert got == exp, f"{case.note}: item_{field} expected={exp} got={got}"
+
+
+@pytest.mark.integration
+def test_throwhi_rollout_uses_frame_crossing_after_seed_pending_authority_clears() -> None:
+    # Rollout lock for the same ThrowHi command-cursor owner:
+    # - `throw_command_pending_pulse_frame` is authoritative only for the teacher-forced reseed
+    #   frame.
+    # - After that seed authority clears, rollout must fall back to live frame crossing so later
+    #   frame-20/frame-24 ThrowHi pulses still serialize instead of being suppressed by the
+    #   same-character first-pulse callback negative.
+    # refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+    # refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C6CC
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    assert int(ds.samples[2068]["seed_t"]["throw_command_pending_pulse_frame"][0]) == 20
+    assert int(ds.samples[2071]["seed_t"]["throw_command_pending_pulse_frame"][0]) == 24
+
+    rows = _run_rollout_rows(dataset_path, 2042, (2068, 2071))
+    for record, slot in ((2068, 2), (2071, 3)):
+        out_row, ref_row = rows[record]
+        assert int(ref_row["items"][slot]["exists"]) == 1
+        for field in ("exists", "type", "state", "owner", "instance_id"):
+            assert int(out_row["items"][slot][field]) == int(ref_row["items"][slot][field])
 
 
 @pytest.mark.integration

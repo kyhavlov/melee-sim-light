@@ -178,6 +178,43 @@ def _run_rollout_records(
 
 
 @pytest.mark.integration
+def test_throwhi_pending_release_placeholder_does_not_run_fall_phys_before_damage() -> None:
+    # Aggregate F03 release-placement lock:
+    # - ftCo_800DD724 consumes ThrowHi release during the thrower's Anim callback.
+    # - ftCo_800DDDE4/ftCo_800DE7C0 then enter Damage before the victim's same-frame Phys, so the
+    #   simulator's temporary Fall placeholder for deferred item ordering must not run generic Fall
+    #   drift before the throw hit applies.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD724,ftCo_800DDDE4}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE7C0
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    victim = 1
+    seed, ref, out = _run_one_step_row(dataset_path, 2419)
+    assert int(seed["action_id"][victim]) == 241  # ThrownHi
+    assert int(ref["action_id"][victim]) == 90  # DamageFlyTop
+    assert int(out["action_id"][victim]) == int(ref["action_id"][victim])
+    assert float(out["pos_x"][victim]) == pytest.approx(float(ref["pos_x"][victim]), abs=2e-5)
+    assert float(out["pos_y"][victim]) == pytest.approx(float(ref["pos_y"][victim]), abs=4e-5)
+
+    rollout = _run_rollout_records(dataset_path, 2399, (2418, 2419, 2420, 2421))
+    out_pre, ref_pre = rollout[2418]
+    assert int(out_pre["action_id"][victim]) == int(ref_pre["action_id"][victim]) == 241
+    assert float(out_pre["pos_x"][victim]) == pytest.approx(float(ref_pre["pos_x"][victim]), abs=1e-4)
+    assert float(out_pre["pos_y"][victim]) == pytest.approx(float(ref_pre["pos_y"][victim]), abs=1e-4)
+
+    for rec in (2419, 2420, 2421):
+        out_rec, ref_rec = rollout[rec]
+        assert int(out_rec["action_id"][victim]) == int(ref_rec["action_id"][victim]) == 90
+        assert float(out_rec["pos_x"][victim]) == pytest.approx(float(ref_rec["pos_x"][victim]), abs=2e-5)
+        assert float(out_rec["pos_y"][victim]) == pytest.approx(float(ref_rec["pos_y"][victim]), abs=4e-5)
+
+
+@pytest.mark.integration
 def test_throwhi_rollout_shared_throw_rate_reaches_release_frame_bhh() -> None:
     # Replay-real rollout lock for attached ThrowHi/ThrownHi timebase:
     # - ftCo_800DD4B0 computes the shared 4/3 throw anim rate for Fox/Fox ThrowHi.

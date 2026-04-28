@@ -341,6 +341,10 @@ def main() -> None:
         #   ftCo_DeadUpStar_Anim uses p_ftCommonData fields at 0x508 and 0x50C as per-phase timers:
         #     - on phase enter: fp->x2340 = *(p_ftCommonData + 0x508); fp->x2344 = 1
         #     - on stock loss:  fp->x2340 = *(p_ftCommonData + 0x50C); fp->x2344 = 2
+        #   The same phase-enter branch writes:
+        #     - fp->self_vel.z = *(p_ftCommonData + 0x510) / x508
+        #     - fp->self_vel.y = (*(p_ftCommonData + 0x514) * Stage_GetCamBoundsTopOffset()
+        #                         - fp->cur_pos.y) / x508
         #   refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s::ftCo_DeadUpStar_Anim
         # - Rebirth/RebirthWait timers:
         #   - Rebirth:     fp->x2340 = *(p_ftCommonData + 0x5D0) right before ChangeMotionState(Rebirth)
@@ -358,6 +362,8 @@ def main() -> None:
         "dead_up_star_initial_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x504))),
         "dead_up_star_phase1_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x508))),
         "dead_up_star_phase2_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x50C))),
+        "dead_up_star_phase1_z_vel_total": float(_f32_be(buf, ft_common_abs + 0x510)),
+        "dead_up_star_phase1_cam_top_mul": float(_f32_be(buf, ft_common_abs + 0x514)),
         "rebirth_timer_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x5D0))),
         "rebirth_wait_timer_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x5D4))),
         "colanim_rebirth_fall_x1994_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x5D8))),

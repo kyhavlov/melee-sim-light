@@ -649,6 +649,140 @@ def test_laser_shield_bounce_runtime_rollout_keeps_gat_laser_alive() -> None:
 
 
 @pytest.mark.integration
+def test_laser_shield_bounce_runtime_rollout_keeps_maj_slot_lifecycle_alive() -> None:
+    # Runtime-positive for same-step locomotion -> GuardReflect -> GuardSetOff ShieldBounced:
+    # - MAJ:751 starts before the shield-bounce row, so no teacher-forced item_shield_bounce seed
+    #   lane is available at the contact frame.
+    # - At MAJ:763 native keeps the aged Falco laser alive through Item_80269DC8 ShieldBounced.
+    # - At MAJ:766 the next blaster gun spawns into the following item slot; clearing the bounced
+    #   laser early compacts the gun into slot 0 and creates the top F00 item_exists rollout cluster.
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80077688
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007DD8,lbColl_800077A0}
+    # refs/melee/src/melee/it/item.c::Item_80269DC8
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_missing_laser_artifacts(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path.relative_to(root)}")
+
+    ds = read_dataset(str(dataset_path))
+    seed_751 = ds.samples["seed_t"][751]
+    assert not any(int(v) for v in seed_751["item_shield_bounce_valid"])
+
+    rows = _rollout_rows(dataset_path, 751, 766)
+    out_763, ref_763 = rows[763]
+    out_766, ref_766 = rows[766]
+
+    assert int(ref_763["action_id"][1]) == 181
+    assert int(out_763["action_id"][1]) == 181
+    assert int(out_763["hitlag"][1]) == int(ref_763["hitlag"][1]) == 3
+    assert int(ref_763["items"][0]["exists"]) == 1
+    assert int(ref_763["items"][0]["type"]) == 55
+    assert int(ref_763["items"][0]["instance_id"]) == 211
+    assert int(out_763["items"][0]["exists"]) == 1
+    assert int(out_763["items"][0]["type"]) == 55
+    assert int(out_763["items"][0]["instance_id"]) == 211
+    assert float(out_763["items"][0]["vel_y"]) > 0.0
+
+    assert int(ref_766["items"][0]["exists"]) == 1
+    assert int(ref_766["items"][0]["type"]) == 55
+    assert int(ref_766["items"][0]["instance_id"]) == 211
+    assert int(ref_766["items"][1]["exists"]) == 1
+    assert int(ref_766["items"][1]["type"]) == 75
+    assert int(out_766["items"][0]["exists"]) == 1
+    assert int(out_766["items"][0]["type"]) == 55
+    assert int(out_766["items"][0]["instance_id"]) == 211
+    assert int(out_766["items"][1]["exists"]) == 1
+    assert int(out_766["items"][1]["type"]) == 75
+
+
+@pytest.mark.integration
+def test_laser_shield_bounce_runtime_rollout_keeps_agn_walk_guardreflect_laser_alive() -> None:
+    # Runtime-positive for the same F00 owner after a Damage -> Walk -> GuardReflect handoff:
+    # - AGN:4036 starts before Walk rate and item shield-bounce seed lanes are available.
+    # - The Walk action_frame must tick through the entry/IASA handoff before the aged Falco laser
+    #   reaches same-frame locomotion -> GuardReflect -> GuardSetOff ShieldBounced at AGN:4044.
+    # - Existing GAT/MAJ positives and IAT negatives keep this from becoming a broad shield-hit
+    #   keepalive rule.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::{ftCo_Walk_Enter,ftCo_Walk_Anim}
+    # refs/melee/src/melee/it/itcoll.c::it_8027137C
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80077688
+    # refs/melee/src/melee/it/item.c::Item_80269DC8
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_missing_laser_artifacts(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path.relative_to(root)}")
+
+    ds = read_dataset(str(dataset_path))
+    seed_4036 = ds.samples["seed_t"][4036]
+    assert not any(int(v) for v in seed_4036["item_shield_bounce_valid"])
+
+    rows = _rollout_rows(dataset_path, 4036, 4045)
+    out_4037, ref_4037 = rows[4037]
+    out_4044, ref_4044 = rows[4044]
+    out_4045, ref_4045 = rows[4045]
+
+    assert int(out_4037["action_id"][1]) == int(ref_4037["action_id"][1]) == 15
+    assert int(out_4037["action_frame"][1]) == int(ref_4037["action_frame"][1]) == 2
+
+    assert int(out_4044["action_id"][1]) == int(ref_4044["action_id"][1]) == 181
+    assert int(out_4044["hitlag"][1]) == int(ref_4044["hitlag"][1]) == 3
+    assert int(ref_4044["items"][1]["exists"]) == 1
+    assert int(ref_4044["items"][1]["type"]) == 55
+    assert int(ref_4044["items"][1]["instance_id"]) == 861
+    assert int(out_4044["items"][1]["exists"]) == 1
+    assert int(out_4044["items"][1]["type"]) == 55
+    assert int(out_4044["items"][1]["instance_id"]) == 861
+    assert float(out_4044["items"][1]["vel_y"]) > 0.0
+
+    assert int(ref_4045["items"][0]["exists"]) == 1
+    assert int(ref_4045["items"][0]["type"]) == 55
+    assert int(ref_4045["items"][0]["instance_id"]) == 861
+    assert int(out_4045["items"][0]["exists"]) == 1
+    assert int(out_4045["items"][0]["type"]) == 55
+    assert int(out_4045["items"][0]["instance_id"]) == 861
+
+
+@pytest.mark.integration
+def test_laser_shield_bounce_locomotion_guardreflect_cap_blocks_iat_compacted_laser() -> None:
+    # Runtime-negative for the same late locomotion -> GuardReflect predicate used by the MAJ
+    # keepalive: the compacted IAT laser is in the capped ShieldDesc lane and must not become a
+    # broad scaled-segment ShieldBounced hit.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_800939B4,ftCo_80093A50}
+    # refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Anim,it_8029C4D4}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_missing_laser_artifacts(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path.relative_to(root)}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[11406 : 11406 + 1]
+    out = _one_step_out_compare(ds=ds, row=row)
+    ref = row["ref_t1"]
+
+    assert int(row["seed_t"]["action_id"][0, 1]) == 16
+    assert int(ref["action_id"][0, 1]) == 182
+    assert int(out["action_id"][0, 1]) == 182
+    assert float(out["shield_hp"][0, 1]) == pytest.approx(float(ref["shield_hp"][0, 1]), abs=1e-6)
+    assert int(out["items"][0, 0]["exists"]) == 1
+    assert int(out["items"][0, 0]["type"]) == 55
+    assert int(out["items"][0, 0]["instance_id"]) == 2147
+    assert float(out["items"][0, 0]["vel_x"]) == pytest.approx(-5.0, abs=1e-6)
+    assert abs(float(out["items"][0, 0]["vel_y"])) <= 1e-5
+
+
+@pytest.mark.integration
 def test_laser_guardreflect_runtime_rollout_final_x14_hitshield_destroys_maj_laser() -> None:
     # Runtime-negative for broad GuardReflect timer-only reflect staging:
     # - MAJ:201 is still inside the active GuardReflect window, but the laser is outside the live

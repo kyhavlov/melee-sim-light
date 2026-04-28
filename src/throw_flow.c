@@ -151,44 +151,10 @@ static inline void throw_flow_bridge_integrate_deferred_throw_hit_position(
   if (apply_damage_phys_step && !on_ground &&
       throw_flow_action_is_damage_family(batch->state.action_id[victim_idx])) {
     throw_flow_apply_deferred_throw_hit_kb_decay(batch, victim_idx);
-  }
-
-  const float vy_self = batch->state.speed_y_self[victim_idx];
-  const float vx = vx_self + batch->state.speed_x_attack[victim_idx];
-  const float vy = vy_self + batch->state.speed_y_attack[victim_idx];
-  float owner_dx = 0.0f;
-  if (owner_idx != victim_idx) {
-    const uint8_t owner_on_ground = batch->state.on_ground[owner_idx] ? 1u : 0u;
-    owner_dx = owner_on_ground ? batch->state.speed_ground_x_self[owner_idx]
-                               : batch->state.speed_air_x_self[owner_idx];
-  }
-
-  // Throw release/hit ordering bridge:
-  // - In decomp, set_throw_flags(0) consume + throw-hit application (ftCo_800DE2A8/ftCo_800DE7C0)
-  //   occurs in Throw Anim callback before Fighter_procUpdate Phys integration.
-  // - This simulator defers throw-hit apply to post-items to preserve item-preemption ordering;
-  //   apply one immediate position integration here so throw-hit velocities displace in-frame.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DE2A8
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE7C0
-  // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
-  //
-  // Release-position bridge (narrow x-lane ownership):
-  // - ftCo_800DDDE4 resolves thrown-release world position from throw-side joints after the
-  //   thrower's own motion update for the frame.
-  // - This simulator defers release/hit apply to post-items; carry the thrower displacement once
-  //   so deferred rows don't drop that owner-motion term on pos_x.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
-  // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
-  batch->state.pos_x[victim_idx] += vx + owner_dx;
-  batch->state.pos_y[victim_idx] += vy;
-
-  if (apply_damage_phys_step && !on_ground &&
-      throw_flow_action_is_damage_family(batch->state.action_id[victim_idx])) {
     // Deferred throw-release damage entry happens after this simulator's normal physics pass, but in
-    // decomp the release hit is consumed before the victim's Damage* Phys owner has settled the
-    // frame-end self velocity. Keep the release-position bridge on the pre-Phys self velocity above,
-    // then apply the one-frame airborne gravity owner to the stored velocity.
+    // decomp the release hit is consumed before the victim's Damage* Phys owner runs. Apply the
+    // one-frame airborne gravity owner before integration so the current displacement observes the
+    // Damage Phys self velocity.
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE7C0
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_DamageFly_Phys,ftCo_Damage_Phys}
@@ -202,6 +168,32 @@ static inline void throw_flow_bridge_integrate_deferred_throw_hit_position(
       batch->state.speed_y_self[victim_idx] = next_vy;
     }
   }
+
+  const float vy_self = batch->state.speed_y_self[victim_idx];
+  const float vx = vx_self + batch->state.speed_x_attack[victim_idx];
+  const float vy = vy_self + batch->state.speed_y_attack[victim_idx];
+  (void)owner_idx;
+
+  // Throw release/hit ordering bridge:
+  // - In decomp, set_throw_flags(0) consume + throw-hit application (ftCo_800DE2A8/ftCo_800DE7C0)
+  //   occurs in Throw Anim callback before Fighter_procUpdate Phys integration.
+  // - This simulator defers throw-hit apply to post-items to preserve item-preemption ordering;
+  //   apply one immediate position integration here so throw-hit velocities displace in-frame.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DE2A8
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE7C0
+  // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+  //
+  // Release-position ownership:
+  // - ftCo_800DD724 consumes set_throw_flags(0) in the thrower's Anim callback, and ftCo_800DDDE4
+  //   samples the throw-side joint immediately there before the thrower's Phys integration.
+  // - This simulator already applies the same-frame release anchor in throw_flow_update_pre_physics()
+  //   before deferred throw-hit damage is applied post-items; do not add the thrower's self-velocity
+  //   again here.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+  // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+  batch->state.pos_x[victim_idx] += vx;
+  batch->state.pos_y[victim_idx] += vy;
 }
 
 static inline void throw_flow_apply_post_release_damage_callback_phase(MslBatch* batch,

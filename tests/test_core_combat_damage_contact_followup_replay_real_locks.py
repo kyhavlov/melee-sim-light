@@ -366,6 +366,75 @@ def test_core_damage_contact_followup_rows_are_replay_exact(case: _DamageContact
 
 
 @pytest.mark.integration
+def test_low_kb_damageair_floor_contact_copies_self_x_to_ground_speed() -> None:
+    # Low-KB DamageAir floor contact can preserve the visible DamageAir motion instead of entering
+    # Landing, but the same Damage_Coll -> ftCommon_8007D7FC grounding helper still runs
+    # ftCommon_8007D6A4 and copies self_vel.x into gr_vel.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Coll
+    # refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D7FC,ftCommon_8007D6A4}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip("missing local MotionlessAggressiveJay aggregate dataset")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[8933]
+    p = 1
+    assert int(row["seed_t"]["action_id"][p]) == 84  # DamageAir1
+    assert int(row["seed_t"]["on_ground"][p]) == 0
+    assert int(row["ref_t1"]["action_id"][p]) == 84
+    assert int(row["ref_t1"]["on_ground"][p]) == 1
+
+    _, ref_row, out_row = _run_one_step_row(dataset_path, 8933, p)
+    assert float(out_row["speed_air_x_self"][p]) == pytest.approx(
+        float(ref_row["speed_air_x_self"][p]), abs=1e-6
+    )
+    assert float(out_row["speed_ground_x_self"][p]) == pytest.approx(
+        float(ref_row["speed_ground_x_self"][p]), abs=1e-6
+    )
+
+
+@pytest.mark.integration
+def test_damageair_grounded_kneebend_followup_enters_specialhi_from_bup_edge() -> None:
+    # Replay-real continuation for the MotionlessAggressiveJay low-KB DamageAir floor-contact row:
+    # DamageAir_Coll first keeps the visible DamageAir motion while copying self_vel.x into gr_vel,
+    # then the grounded KneeBend followup uses the source KneeBend_IASA -> SpecialHi owner.
+    #
+    # The decomp C name is misleading: ftCo_KneeBend_IASA calls ftCo_Attack100_CheckInput, whose
+    # body dispatches ftData_SpecialHi when Fighter_UnkIncrementCounters_8006ABEC reset x686 from
+    # the current B+Up edge. Side/Neutral/Down-B are guarded by unit negatives in
+    # tests/test_spacie_special_lockouts_regression.py.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+    #   ftCo_Attack100_CheckInput,ftCo_800D6928}
+    # refs/melee/src/melee/ft/fighter.c::Fighter_UnkIncrementCounters_8006ABEC
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip("missing local MotionlessAggressiveJay aggregate dataset")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[8935]
+    p = 1
+    assert int(row["seed_t"]["action_id"][p]) == 24  # KneeBend
+    assert (int(row["input_t"]["p"]["buttons"][p]) & 0x0200) != 0
+    assert (int(row["prev_input_t"]["p"]["buttons"][p]) & 0x0200) == 0
+    assert int(row["input_t"]["p"]["main_y"][p]) > 0
+    assert int(row["ref_t1"]["action_id"][p]) == 353  # Fox/Falco grounded SpecialHiHold
+
+    _, ref_row, out_row = _run_one_step_row(dataset_path, 8935, p)
+    _assert_transition_fields_match_ref(out_row=out_row, ref_row=ref_row, record=8935, p=p)
+
+
+@pytest.mark.integration
 def test_downdamage_hitlag_exit_uses_common_damage_phys() -> None:
     # Replay-real lock for the MotionlessAggressiveJay DownBoundD -> DownDamageD followup:
     # - ftCo_DownDamage_Phys delegates to ftCo_Damage_Phys, so the hitlag-exit row applies common

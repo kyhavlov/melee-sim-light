@@ -65,3 +65,44 @@ def test_guardsetoff_ground_push_target_pm1_and_negative() -> None:
     assert float(out_neg["speed_ground_x_self"][p]) == pytest.approx(
         float(ref_neg["speed_ground_x_self"][p]), abs=1e-6
     )
+
+
+@pytest.mark.integration
+def test_guardreflect_hitshield_guardsetoff_recoil_uses_x221c_b2_boundary() -> None:
+    # Replay-real lock for the GuardReflect -> item HitShield -> GuardSetOff recoil boundary:
+    # - ftCo_80092F2C's recoil multiplier reads fp->x221C_b2 directly.
+    # - GuardReflect's x18 timer owns that bit beyond the shorter x14 ReflectDesc window.
+    # - Clearing x18/0x221C_b2 must fall back to the non-powershield recoil multiplier instead of
+    #   treating every GuardReflect HitShield row as powershield-active.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80093BC0,ftCo_80092F2C}
+    # refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Guard.s:0x80093080..0x800930A0
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    target_path = root / (
+        "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
+        "TreasuredBackKangaroo.msl"
+    )
+    if not target_path.exists():
+        pytest.skip("missing local dataset artifacts")
+
+    p = 0
+    seed, ref, out = _run_one_step_row(target_path, 2323, p)
+    assert int(seed["action_id"][p]) == 182  # GuardReflect
+    assert int(ref["action_id"][p]) == 181  # GuardSetOff
+    assert int(seed["guard_reflect_timer_x18"][p]) > 0
+    assert int(seed["state_flags"][p, 3]) & 0x20
+    assert float(out["speed_ground_x_self"][p]) == pytest.approx(
+        float(ref["speed_ground_x_self"][p]), abs=1e-6
+    )
+    assert float(out["speed_ground_x_self"][p]) == pytest.approx(0.5800000429153442, abs=1e-6)
+
+    def clear_x221c_b2(seed_t) -> None:
+        seed_t["guard_reflect_timer_x18"][0, p] = 0
+        seed_t["state_flags"][0, p, 3] = int(seed_t["state_flags"][0, p, 3]) & ~0x20
+
+    _, _, out_without_b2 = _run_one_step_row(target_path, 2323, p, seed_mutator=clear_x221c_b2)
+    assert int(out_without_b2["action_id"][p]) == 181
+    assert float(out_without_b2["speed_ground_x_self"][p]) == pytest.approx(0.34800004959106445, abs=1e-6)
+    assert float(out_without_b2["speed_ground_x_self"][p]) != pytest.approx(
+        float(ref["speed_ground_x_self"][p]), abs=1e-6
+    )

@@ -168,16 +168,19 @@ typedef struct MslCommonParams {
   // - refs/melee/src/melee/ft/ft_0D31.c::ftCo_800D3158 (dead_up_kb_vel_threshold)
   // - refs/melee/src/melee/ft/ft_0D31.c::ftCo_800D3680 (dead_timer_frames)
   // - refs/melee/src/melee/ft/ft_0D31.c::ftCo_800D40B8 (dead_up_star_initial_frames)
-  // - refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s::ftCo_DeadUpStar_Anim (dead_up_star_phase1/2_frames)
+  // - refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s::ftCo_DeadUpStar_Anim
+  //   (dead_up_star_phase1/2_frames, phase1 y/z velocity setup)
   // - refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s (Rebirth/RebirthWait timers at 0x5D0/0x5D4)
   // - refs/melee/src/melee/ft/ft_0C31.c (entry_start_frames/entry_end_frames)
-  float dead_up_kb_vel_threshold;        // p_ftCommonData->x4F0
-  uint16_t dead_timer_frames;            // p_ftCommonData->x500 (DeadDown/Left/Right timer)
-  uint16_t dead_up_star_initial_frames;  // p_ftCommonData->x504
-  uint16_t dead_up_star_phase1_frames;   // p_ftCommonData->x508
-  uint16_t dead_up_star_phase2_frames;   // p_ftCommonData->x50C
-  uint16_t rebirth_timer_frames;         // p_ftCommonData->0x5D0
-  uint16_t rebirth_wait_timer_frames;    // p_ftCommonData->0x5D4
+  float dead_up_kb_vel_threshold;         // p_ftCommonData->x4F0
+  uint16_t dead_timer_frames;             // p_ftCommonData->x500 (DeadDown/Left/Right timer)
+  uint16_t dead_up_star_initial_frames;   // p_ftCommonData->x504
+  uint16_t dead_up_star_phase1_frames;    // p_ftCommonData->x508
+  uint16_t dead_up_star_phase2_frames;    // p_ftCommonData->x50C
+  float dead_up_star_phase1_z_vel_total;  // p_ftCommonData->x510
+  float dead_up_star_phase1_cam_top_mul;  // p_ftCommonData->x514
+  uint16_t rebirth_timer_frames;          // p_ftCommonData->0x5D0
+  uint16_t rebirth_wait_timer_frames;     // p_ftCommonData->0x5D4
   uint16_t
       colanim_rebirth_fall_x1994_frames;  // p_ftCommonData->0x5D8 (ftColl_8007B7A4 on Fall enter)
   uint16_t entry_start_frames;            // p_ftCommonData->x6BC

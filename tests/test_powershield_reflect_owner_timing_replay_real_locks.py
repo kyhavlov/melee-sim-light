@@ -266,6 +266,40 @@ def test_aged_powershield_reflect_does_not_broad_transfer_controls(case: _Case) 
 
 
 @pytest.mark.integration
+def test_non_dash_same_frame_guardreflect_contact_does_not_transfer_owner_xda8() -> None:
+    # Negative for the rejected broad same-frame ReflectDesc-overlap owner transfer:
+    # Run/locomotion-origin GuardReflect can expose same-frame shield contact while keeping the
+    # incoming laser on ShieldBounced/item-owner state. Immediate owner/xDA8 transfer is restricted
+    # to the Dash-terminal scalar phase.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_800939B4,ftCo_80093A50}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
+    # refs/melee/src/melee/it/item.c::{Item_80269F14,Item_80269DC8}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path.relative_to(root)}")
+
+    seed_t, out_t, ref_t = _step_one_row(dataset_path, 6314)
+    p = 0
+    slot = 0
+    assert int(seed_t["action_id"][p]) == 182
+    assert int(seed_t["seed_prev_action_id"][p]) == 21
+    assert int(seed_t["guard_reflect_timer_x14"][p]) == 2
+    assert int(ref_t["action_id"][p]) == 182
+
+    for field in ("action_id", "action_frame", "animation_index", "hitlag", "hitstun"):
+        assert int(out_t[field][p]) == int(ref_t[field][p]), field
+    for field in ("exists", "type", "state", "owner", "instance_id", "direction", "vel_x"):
+        assert out_t["items"][slot][field] == ref_t["items"][slot][field], field
+    assert int(out_t["items"][slot]["owner"]) == int(seed_t["items"][slot]["owner"])
+    assert int(out_t["items"][slot]["instance_id"]) == int(seed_t["items"][slot]["instance_id"])
+
+
+@pytest.mark.integration
 def test_final_x14_guardreflect_hitshield_handoff_destroys_laser() -> None:
     # Replay-real lock for final-x14 GuardReflect HitShield handoff:
     # - ftCo_GuardReflect_Anim ticks the reflect window before the row reaches normal shield-hit

@@ -251,6 +251,41 @@ uint8_t hitlist_allows_fighter(MslBatch* batch, int bi, int attacker, int hb_id,
 
   const size_t hb_i = idx_fighter_hitlist(bi, attacker, hb_id);
   MslHitlistCapsule* hit = &batch->state.fighter_hitlist[hb_i];
+  {
+    const size_t valid_i =
+        ((size_t)bi * (size_t)MSL_MAX_PLAYERS + (size_t)attacker) * (size_t)MSL_MAX_HITBOXES +
+        (size_t)hb_id;
+    const size_t hb_base =
+        (size_t)bi * (size_t)MSL_MAX_PLAYERS * (size_t)MSL_MAX_HITBOXES * (size_t)MSL_MAX_PLAYERS;
+    const size_t hb_cd_i =
+        hb_base +
+        (((size_t)attacker * (size_t)MSL_MAX_HITBOXES + (size_t)hb_id) * (size_t)MSL_MAX_PLAYERS +
+         (size_t)victim);
+    const size_t a_idx = msl_idx_player(bi, attacker);
+    const size_t v_idx = msl_idx_player(bi, victim);
+    const uint16_t seed_cd = batch->state.combat_hitlist_hb_cd[hb_cd_i];
+    if (batch->state.combat_hitlist_hb_valid[valid_i] && seed_cd != 0u &&
+        (batch->state.hitlag_pre_timer[a_idx] != 0u ||
+         batch->state.hitlag_pre_timer[v_idx] != 0u)) {
+      // Hitlag-frozen per-HitCapsule seed carry:
+      // - Fighter_8006A360 skips ftAction_8007121C while hitlag is active, so an already-created
+      //   HitCapsule's victims_1 list must survive through the first post-decrement hitlag-exit
+      //   collision pass.
+      // - A reseed can provide authoritative per-HitCapsule victims_1 state
+      //   (`combat_hitlist_hb_valid/cd`), but the runtime capsule may not have been materialized if
+      //   the previous rollout step stayed frozen and skipped combat. Materialize that exact lane
+      //   lazily before lbColl_8000ACFC-style victim-presence testing.
+      // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+      // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+      // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+      MslHitlistVictimEntry key;
+      memset(&key, 0, sizeof(key));
+      key.id16 = batch->state.combat_hitlist_hb_victim_iid[hb_cd_i];
+      key.kind_slot = hitlist_fighter_key((uint8_t)victim);
+      const uint8_t cd_set = (seed_cd == 0xFFFFu) ? 0u : (uint8_t)(seed_cd & 0xFFu);
+      (void)hitlist_insert_victims1(hit, (int)MSL_LBCOLL_INSERT_FT_SHIELD, &key, cd_set);
+    }
+  }
   size_t found = 0;
   if (hitlist_capsule_find_fighter_entry(batch, bi, hit->victims_1, (size_t)MSL_HITLIST_VICTIM_CAP,
                                          (uint8_t)victim, victim_iid, &found)) {
