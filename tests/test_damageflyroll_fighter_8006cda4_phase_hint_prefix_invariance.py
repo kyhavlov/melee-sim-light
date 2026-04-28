@@ -91,7 +91,7 @@ def test_fighter_8006cda4_pre_gate_consume_count_prefix_invariance_suffix_mutati
         num_players=2,
     )
 
-    assert int(base[2]) == 1
+    assert int(base[2]) == 0
     assert int(base[5]) == 2
     assert int(base[7]) == 2
     assert int(base[8]) == 1
@@ -124,3 +124,163 @@ def test_fighter_8006cda4_pre_gate_consume_count_maps_raw_source_port_to_local_s
     )
 
     assert int(out[0]) == 2
+
+
+def test_fighter_8006cda4_pre_gate_consume_count_accounts_for_same_frame_global_rng_order() -> None:
+    # Same-frame reciprocal aerial contacts share the global HSD RNG stream. The later
+    # attacker-ordered victim must derive its explicit Fighter_8006CDA4 stream phase after the
+    # earlier victim's DamageFlyRoll gate sample.
+    n = 1
+    source_port0 = np.array([[0, 1]], dtype=np.uint8)
+    all_action_id = np.array([[65, 67]], dtype=np.uint16)
+    all_action_frame = np.array([[10, 3]], dtype=np.int16)
+    all_ref_action_id = np.array([[91, 91]], dtype=np.uint16)
+    all_on_ground = np.array([[0, 0]], dtype=np.uint8)
+    all_hitlag = np.array([[0, 0]], dtype=np.uint16)
+    all_hitstun = np.array([[0, 0]], dtype=np.uint16)
+    all_last_hit_by = np.array([[1, 0]], dtype=np.uint8)
+    seed = np.array([325637027], dtype=np.uint32)
+    state_flags = np.zeros((n, 5), dtype=np.uint8)
+
+    p0 = _derive_fighter_8006cda4_pre_gate_consume_count_seed_lane(
+        action_id_u16=all_action_id[:, 0],
+        action_frame_i16=all_action_frame[:, 0],
+        ref_action_id_u16=all_ref_action_id[:, 0],
+        on_ground_u8=all_on_ground[:, 0],
+        hitlag_u16=all_hitlag[:, 0],
+        hitstun_u16=all_hitstun[:, 0],
+        state_flags_u8=state_flags,
+        last_hit_by_u8=all_last_hit_by[:, 0],
+        all_source_port0_u8=source_port0,
+        all_action_id_u16=all_action_id,
+        all_action_frame_i16=all_action_frame,
+        all_ref_action_id_u16=all_ref_action_id,
+        all_on_ground_u8=all_on_ground,
+        all_hitlag_u16=all_hitlag,
+        all_hitstun_u16=all_hitstun,
+        all_last_hit_by_u8=all_last_hit_by,
+        frame_pre_random_seed_u32=seed,
+        damagefly_roll_prob=0.3,
+        victim_port=0,
+        num_players=2,
+    )
+    p1 = _derive_fighter_8006cda4_pre_gate_consume_count_seed_lane(
+        action_id_u16=all_action_id[:, 1],
+        action_frame_i16=all_action_frame[:, 1],
+        ref_action_id_u16=all_ref_action_id[:, 1],
+        on_ground_u8=all_on_ground[:, 1],
+        hitlag_u16=all_hitlag[:, 1],
+        hitstun_u16=all_hitstun[:, 1],
+        state_flags_u8=state_flags,
+        last_hit_by_u8=all_last_hit_by[:, 1],
+        all_source_port0_u8=source_port0,
+        all_action_id_u16=all_action_id,
+        all_action_frame_i16=all_action_frame,
+        all_ref_action_id_u16=all_ref_action_id,
+        all_on_ground_u8=all_on_ground,
+        all_hitlag_u16=all_hitlag,
+        all_hitstun_u16=all_hitstun,
+        all_last_hit_by_u8=all_last_hit_by,
+        frame_pre_random_seed_u32=seed,
+        damagefly_roll_prob=0.3,
+        victim_port=1,
+        num_players=2,
+    )
+
+    assert int(p1[0]) == 4
+    assert int(p0[0]) == 1
+
+
+def test_attackairn_pre_gate_backfill_stops_on_action_and_phase_boundaries() -> None:
+    # Only the contiguous airborne AttackAirN/source episode may carry the replay-proven hidden
+    # Fighter_8006CDA4 stream phase backward. Grounded/unrelated prior rows are not part of the
+    # source episode even if the later target row proves a nonzero consume.
+    n = 4
+    source_port0 = np.array([[0, 1]] * n, dtype=np.uint8)
+    action_id = np.array([24, 65, 65, 65], dtype=np.uint16)
+    action_frame = np.array([3, 0, 1, 2], dtype=np.int16)
+    ref_action_id = np.array([24, 65, 65, 91], dtype=np.uint16)
+    on_ground = np.array([1, 0, 0, 0], dtype=np.uint8)
+    hitlag = np.zeros(n, dtype=np.uint16)
+    hitstun = np.zeros(n, dtype=np.uint16)
+    all_action_id = np.zeros((n, 2), dtype=np.uint16)
+    all_action_frame = np.zeros((n, 2), dtype=np.int16)
+    all_ref_action_id = np.zeros((n, 2), dtype=np.uint16)
+    all_on_ground = np.zeros((n, 2), dtype=np.uint8)
+    all_hitlag = np.zeros((n, 2), dtype=np.uint16)
+    all_hitstun = np.zeros((n, 2), dtype=np.uint16)
+    all_last_hit_by = np.full((n, 2), 6, dtype=np.uint8)
+    all_ref_last_hit_by = np.full((n, 2), 6, dtype=np.uint8)
+    all_action_id[:, 0] = action_id
+    all_action_frame[:, 0] = action_frame
+    all_ref_action_id[:, 0] = ref_action_id
+    all_on_ground[:, 0] = on_ground
+    all_action_id[:, 1] = np.array([69, 69, 69, 69], dtype=np.uint16)
+    all_action_frame[:, 1] = np.array([3, 4, 5, 6], dtype=np.int16)
+    all_ref_action_id[:, 1] = all_action_id[:, 1]
+    all_ref_last_hit_by[3, 0] = 1
+
+    out = _derive_fighter_8006cda4_pre_gate_consume_count_seed_lane(
+        action_id_u16=action_id,
+        action_frame_i16=action_frame,
+        ref_action_id_u16=ref_action_id,
+        on_ground_u8=on_ground,
+        hitlag_u16=hitlag,
+        hitstun_u16=hitstun,
+        state_flags_u8=np.zeros((n, 5), dtype=np.uint8),
+        last_hit_by_u8=all_last_hit_by[:, 0],
+        all_source_port0_u8=source_port0,
+        all_action_id_u16=all_action_id,
+        all_action_frame_i16=all_action_frame,
+        all_ref_action_id_u16=all_ref_action_id,
+        all_on_ground_u8=all_on_ground,
+        all_hitlag_u16=all_hitlag,
+        all_hitstun_u16=all_hitstun,
+        all_last_hit_by_u8=all_last_hit_by,
+        all_ref_last_hit_by_u8=all_ref_last_hit_by,
+        frame_pre_random_seed_u32=np.full(n, 6009, dtype=np.uint32),
+        damagefly_roll_prob=0.3,
+        victim_port=0,
+        num_players=2,
+    )
+
+    assert out.tolist() == [0, 1, 1, 1]
+
+
+def test_attackairn_pre_gate_backfill_does_not_carry_zero_consume_marker() -> None:
+    # Marker 4 means the immediate target row uses the frame-start gate sample with zero pre-gate
+    # consumes. It is not persistent hidden held-item/x197C state and must not backfill.
+    n = 2
+    source_port0 = np.array([[0, 1]] * n, dtype=np.uint8)
+    all_action_id = np.array([[65, 69], [65, 69]], dtype=np.uint16)
+    all_action_frame = np.array([[1, 5], [2, 6]], dtype=np.int16)
+    all_ref_action_id = all_action_id.copy()
+    all_ref_action_id[1, 0] = 91
+    all_ref_last_hit_by = np.full((n, 2), 6, dtype=np.uint8)
+    all_ref_last_hit_by[1, 0] = 1
+
+    out = _derive_fighter_8006cda4_pre_gate_consume_count_seed_lane(
+        action_id_u16=all_action_id[:, 0],
+        action_frame_i16=all_action_frame[:, 0],
+        ref_action_id_u16=all_ref_action_id[:, 0],
+        on_ground_u8=np.zeros(n, dtype=np.uint8),
+        hitlag_u16=np.zeros(n, dtype=np.uint16),
+        hitstun_u16=np.zeros(n, dtype=np.uint16),
+        state_flags_u8=np.zeros((n, 5), dtype=np.uint8),
+        last_hit_by_u8=np.full(n, 6, dtype=np.uint8),
+        all_source_port0_u8=source_port0,
+        all_action_id_u16=all_action_id,
+        all_action_frame_i16=all_action_frame,
+        all_ref_action_id_u16=all_ref_action_id,
+        all_on_ground_u8=np.zeros((n, 2), dtype=np.uint8),
+        all_hitlag_u16=np.zeros((n, 2), dtype=np.uint16),
+        all_hitstun_u16=np.zeros((n, 2), dtype=np.uint16),
+        all_last_hit_by_u8=np.full((n, 2), 6, dtype=np.uint8),
+        all_ref_last_hit_by_u8=all_ref_last_hit_by,
+        frame_pre_random_seed_u32=np.full(n, 1, dtype=np.uint32),
+        damagefly_roll_prob=1.0,
+        victim_port=0,
+        num_players=2,
+    )
+
+    assert out.tolist() == [0, 4]

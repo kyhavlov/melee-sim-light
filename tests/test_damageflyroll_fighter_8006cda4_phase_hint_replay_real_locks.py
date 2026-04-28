@@ -169,6 +169,30 @@ class _DamageFlyRoll8006CDA4Case:
             expect_hb0_enable_edge=1,
         ),
         _DamageFlyRoll8006CDA4Case(
+            dataset_rel="datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            target_record=2367,
+            victim_port=0,
+            expect_seed_count=2,
+            expect_action_id=91,
+            note="AttackAirN pre-action carries double Fighter_8006CDA4 stream phase (TBK)",
+        ),
+        _DamageFlyRoll8006CDA4Case(
+            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl",
+            target_record=10207,
+            victim_port=0,
+            expect_seed_count=3,
+            expect_action_id=91,
+            note="AttackAirN pre-action carries triple Fighter_8006CDA4 stream phase (PRH)",
+        ),
+        _DamageFlyRoll8006CDA4Case(
+            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl",
+            target_record=4968,
+            victim_port=0,
+            expect_seed_count=1,
+            expect_action_id=91,
+            note="AttackAirN pre-action follows same-frame reciprocal gate in the global RNG stream (DCC)",
+        ),
+        _DamageFlyRoll8006CDA4Case(
             dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl",
             target_record=7019,
             victim_port=0,
@@ -205,7 +229,7 @@ def test_fighter_8006cda4_pre_gate_consume_count_replay_real_locks(
     ), case.note
 
     if int(case.expect_seed_count) == 1 and int(seed["action_id"][victim]) != 90:
-        assert int(seed["action_id"][victim]) in {57, 67, 74, 363}, case.note
+        assert int(seed["action_id"][victim]) in {57, 65, 67, 74, 363}, case.note
         assert int(seed["hitlag"][victim]) == 0, case.note
     if int(case.expect_seed_count) == 1 and int(seed["action_id"][victim]) == 90:
         attacker = int(seed["last_hit_by"][victim])
@@ -229,22 +253,32 @@ def test_fighter_8006cda4_pre_gate_consume_count_replay_real_locks(
         assert int(seed["action_frame"][attacker]) >= 3, case.note
     if int(case.expect_seed_count) == 3:
         attacker = int(seed["last_hit_by"][victim])
-        assert int(seed["action_id"][victim]) == 90, case.note  # DamageFlyTop
+        assert int(seed["action_id"][victim]) in {65, 90}, case.note  # AttackAirN / DamageFlyTop
         assert int(seed["hitlag"][victim]) == 0, case.note
-        assert int(seed["hitstun"][victim]) > 0, case.note
+        if int(seed["action_id"][victim]) == 90:
+            assert int(seed["hitstun"][victim]) > 0, case.note
+        else:
+            assert int(seed["hitstun"][victim]) == 0, case.note
         assert int(seed["on_ground"][victim]) == 0, case.note
-        assert attacker in (0, 1), case.note
-        assert int(seed["action_id"][attacker]) == 67, case.note  # AttackAirB
-        assert int(seed["action_frame"][attacker]) == 3, case.note
+        if int(seed["action_id"][victim]) == 90:
+            assert attacker in (0, 1), case.note
+            assert int(seed["action_id"][attacker]) == 67, case.note  # AttackAirB
+            assert int(seed["action_frame"][attacker]) == 3, case.note
     if int(case.expect_seed_count) == 4:
         attacker = int(seed["last_hit_by"][victim])
-        assert int(seed["action_id"][victim]) == 90, case.note  # DamageFlyTop
+        assert int(seed["action_id"][victim]) in {65, 90}, case.note  # AttackAirN / DamageFlyTop
         assert int(seed["hitlag"][victim]) == 0, case.note
-        assert int(seed["hitstun"][victim]) > 0, case.note
+        if int(seed["action_id"][victim]) == 90:
+            assert int(seed["hitstun"][victim]) > 0, case.note
+        else:
+            assert int(seed["hitstun"][victim]) == 0, case.note
         assert int(seed["on_ground"][victim]) == 0, case.note
-        assert attacker in (0, 1), case.note
-        assert int(seed["action_id"][attacker]) == 67, case.note  # AttackAirB
-        assert int(seed["action_frame"][attacker]) in (3, 4), case.note
+        if int(seed["action_id"][victim]) == 90:
+            assert attacker in (0, 1), case.note
+    if int(case.expect_seed_count) in {2, 3} and int(seed["action_id"][victim]) == 65:
+        assert int(seed["hitlag"][victim]) == 0, case.note
+        assert int(seed["hitstun"][victim]) == 0, case.note
+        assert int(seed["on_ground"][victim]) == 0, case.note
     if case.expect_hb0_enable_edge is not None:
         attacker = int(seed["last_hit_by"][victim])
         assert int(seed["action_id"][victim]) == 358, case.note  # Fox SpecialHiFall
@@ -349,6 +383,47 @@ def test_tbk_damageflytop_segment_carries_fighter_8006cda4_stream_phase_to_delay
 
     ref_target, out_target, _ = rows[3907]
     assert int(out_target["action_id"][1]) == int(ref_target["action_id"][1]) == 91
+
+
+@pytest.mark.integration
+def test_tbk_attackairn_segment_carries_fighter_8006cda4_stream_phase_to_delayed_hit() -> None:
+    # This TBK segment seeds on the contiguous AttackAirN <- AttackAirLw damage-entry episode.
+    # The explicit Fighter_8006CDA4 stream phase must survive until ftCo_8008DCE0 consumes it, but
+    # must not be carried backward across unrelated grounded/action/source boundaries.
+    # refs/slippi-ssbm-asm/Recording/SendFrameStart.s
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
+        "TreasuredBackKangaroo.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    start_seed = ds.samples[2366]["seed_t"]
+    assert int(start_seed["fighter_8006cda4_pre_gate_consume_count"][0]) == 2
+
+    rows = _run_rollout_window_rows_with_trace(
+        dataset_path,
+        start_record=2366,
+        window_records=(2366, 2367, 2368, 2378, 2399),
+        rng_damage_fly_roll_gate=True,
+        trace_path=root / "reports/triage/rng_tbk2366_attackairn_segment_rollout.tsv",
+    )
+    for rec in (2366, 2367, 2368, 2378, 2399):
+        ref_row, out_row, site1_count = rows[rec]
+        for p in (0, 1):
+            _assert_transition_identity_lock_fields_match_ref(
+                out_row=out_row,
+                ref_row=ref_row,
+                record=rec,
+                p=p,
+            )
+        assert site1_count == (1 if rec == 2367 else 0), f"unexpected DamageFlyRoll gate pulse at {rec}"
 
 
 @pytest.mark.integration

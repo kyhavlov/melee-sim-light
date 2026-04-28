@@ -33,20 +33,6 @@
 // yet; keep the forward declaration local to preserve the current include surface.
 extern void blaster_update_post_collision(MslBatch* batch);
 
-static int step_local_slot_from_source_port0(const MslBatch* batch, int bi, int num_players,
-                                             uint8_t source_port0) {
-  if (batch == NULL) {
-    return -1;
-  }
-  for (int p = 0; p < num_players; p++) {
-    const size_t idx = msl_idx_player(bi, p);
-    if (batch->state.source_port0[idx] == source_port0) {
-      return p;
-    }
-  }
-  return -1;
-}
-
 static inline void clear_landing_transients(MslBatch* batch) {
   if (batch == NULL) {
     return;
@@ -62,6 +48,50 @@ static inline void clear_landing_transients(MslBatch* batch) {
       batch->state.anim_defer_tick_once[idx] = 0;
     }
   }
+}
+
+static inline int step_local_slot_from_source_port0(const MslBatch* batch, int bi, int num_players,
+                                                    uint8_t source_port0) {
+  if (batch == NULL) {
+    return -1;
+  }
+  for (int p = 0; p < num_players; p++) {
+    const size_t idx = msl_idx_player(bi, p);
+    if (batch->state.source_port0[idx] == source_port0) {
+      return p;
+    }
+  }
+  return -1;
+}
+
+static inline uint8_t step_keep_fighter_8006cda4_pre_gate_count(const MslBatch* batch, int bi,
+                                                                int p, int num_players) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  const size_t idx = msl_idx_player(bi, p);
+  const uint8_t count = batch->state.fighter_8006cda4_pre_gate_consume_count[idx];
+  if (count == 0u || count > 4u) {
+    return 0u;
+  }
+
+  const uint16_t action = batch->state.action_id[idx];
+  if ((action == (uint16_t)MSL_ACT_ATTACK_AIR_N || action == (uint16_t)MSL_ACT_ATTACK_AIR_B) &&
+      batch->state.on_ground[idx] == 0u && batch->state.hitlag[idx] == 0u &&
+      batch->state.hitstun[idx] == 0u) {
+    return 1u;
+  }
+
+  if (count <= 3u && action == (uint16_t)MSL_ACT_DAMAGE_FLY_TOP &&
+      batch->state.on_ground[idx] == 0u && batch->state.hitlag[idx] == 0u &&
+      batch->state.hitstun[idx] != 0u && batch->state.instance_hit_by[idx] != 0u) {
+    const int attacker =
+        step_local_slot_from_source_port0(batch, bi, num_players, batch->state.last_hit_by[idx]);
+    if (attacker >= 0 && attacker != p) {
+      return 1u;
+    }
+  }
+  return 0u;
 }
 
 static inline void clear_seed_owned_transients_post_frame(MslBatch* batch) {
@@ -98,24 +128,12 @@ static inline void clear_seed_owned_transients_post_frame(MslBatch* batch) {
       // refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC
       batch->state.source_clear_processhit_damage_pending_phase[idx] = 0u;
       // `seed_t.fighter_8006cda4_pre_gate_consume_count` is usually a one-step pre-gate owner.
-      // DamageFlyTop segments with values 1..3 are the exception: those values represent hidden
-      // Fighter_8006CDA4 held-item/x197C branch state and must survive replay-seeded rollout frames
-      // until combat consumes them at the next damage-entry gate.
+      // Keep rollout continuity only across the source-owned airborne AttackAir*/DamageFlyTop
+      // episode that can still reach ftCo_8008DCE0. Marker 4 is an immediate zero-consume gate
+      // marker and is not allowed to persist across DamageFlyTop hitstun segments.
       // refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-      uint8_t keep_fighter_8006cda4_count = 0u;
-      if (batch->state.fighter_8006cda4_pre_gate_consume_count[idx] >= 1u &&
-          batch->state.fighter_8006cda4_pre_gate_consume_count[idx] <= 3u &&
-          batch->state.action_id[idx] == (uint16_t)MSL_ACT_DAMAGE_FLY_TOP &&
-          batch->state.on_ground[idx] == 0u && batch->state.hitlag[idx] == 0u &&
-          batch->state.hitstun[idx] > 0u) {
-        int8_t source_slot = step_local_slot_from_source_port0(batch, bi, num_players,
-                                                               batch->state.last_hit_by[idx]);
-        if (source_slot >= 0) {
-          keep_fighter_8006cda4_count = (batch->state.instance_hit_by[idx] != 0u) ? 1u : 0u;
-        }
-      }
-      if (!keep_fighter_8006cda4_count) {
+      if (!step_keep_fighter_8006cda4_pre_gate_count(batch, bi, p, num_players)) {
         batch->state.fighter_8006cda4_pre_gate_consume_count[idx] = 0u;
       }
       // `seed_t.source_clear_grounded_damage_clear_phase` is a one-step bridge for grounded
@@ -218,17 +236,15 @@ static inline void cache_floor_sweep_prev_pos(MslBatch* batch) {
     return;
   }
 
-  // Decomp: CollData carries `prev_pos`/`cur_pos` through mpColl so map callbacks can sweep the
-  // full frame's movement segment, including pre-physics callbacks such as Damage_OnEveryHitlag
-  // SDI/ASDI that mutate `cur_pos` before collision.
+  // Decomp: ft_80081DD4-style map callbacks preserve the previous CollData position as the start
+  // of the collision sweep, then write the fighter's current position before calling mpColl. The
+  // replay seed surface provides that previous sweep endpoint explicitly.
   //
-  // Keep this snapshot at frame start. If we refresh it after SDI or other pre-collision position
-  // writes, mpCheckFloor-style sweeps can see an already-below-floor zero-length segment and miss
-  // the crossing. Horizontal-only active-hitlag floor-height rows are locked separately so the
-  // full x/y segment does not synthesize a false Landing/FloorPush.
-  // refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_80043754,mpCheckFloor}
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
-  //   ftCo_Damage_OnEveryHitlag,ftCo_Damage_Coll,ftCo_DamageFly_Coll}
+  // In rollout, do not overwrite the current sweep endpoint with the current root at frame start:
+  // DamageFly floor-contact rows can need the prior frame's sweep root to see the floor crossing.
+  // The next endpoint is promoted after physics records prev_pos_* for this frame.
+  // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80043754,mpCheckFloor}
   const int num_players = (int)batch->config.num_players;
   for (int bi = 0; bi < batch->batch_size; bi++) {
     for (int p = 0; p < num_players; p++) {
@@ -237,10 +253,25 @@ static inline void cache_floor_sweep_prev_pos(MslBatch* batch) {
         batch->state.floor_sweep_prev_pos_x[idx] = batch->state.floor_sweep_seed_prev_pos_x[idx];
         batch->state.floor_sweep_prev_pos_y[idx] = batch->state.floor_sweep_seed_prev_pos_y[idx];
         batch->state.floor_sweep_seed_prev_valid[idx] = 0u;
-      } else {
+      } else if (!isfinite(batch->state.floor_sweep_prev_pos_x[idx]) ||
+                 !isfinite(batch->state.floor_sweep_prev_pos_y[idx])) {
         batch->state.floor_sweep_prev_pos_x[idx] = batch->state.pos_x[idx];
         batch->state.floor_sweep_prev_pos_y[idx] = batch->state.pos_y[idx];
       }
+    }
+  }
+}
+
+static inline void promote_floor_sweep_prev_pos_post_frame(MslBatch* batch) {
+  if (batch == NULL) {
+    return;
+  }
+  const int num_players = (int)batch->config.num_players;
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    for (int p = 0; p < num_players; p++) {
+      const size_t idx = msl_idx_player(bi, p);
+      batch->state.floor_sweep_prev_pos_x[idx] = batch->state.prev_pos_x[idx];
+      batch->state.floor_sweep_prev_pos_y[idx] = batch->state.prev_pos_y[idx];
     }
   }
 }
@@ -472,6 +503,7 @@ static int step_one_frame_core(MslBatch* batch, const uint8_t* prev_input_bytes,
   anim_timebase_apply_deferred_tick_once_post_combat(batch);
   sync_runbrake_cmd0_post_frame(batch);
   state_flags_refresh_post_frame(batch);
+  promote_floor_sweep_prev_pos_post_frame(batch);
   promote_seed_prev_action_snapshot_post_frame(batch);
   clear_seed_owned_transients_post_frame(batch);
 

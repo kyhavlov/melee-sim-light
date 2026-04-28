@@ -57,12 +57,15 @@ typedef struct MslStateSoA {
   float* illusion_ghost_pos2_y;
   float* prev_pos_x;  // Position at start of current frame (pre-integration).
   float* prev_pos_y;  // Position at start of current frame (pre-integration).
-  // Frame-start position snapshot for mpColl floor sweeps. Kept separate from prev_pos_* because
-  // existing grounded rollback helpers use prev_pos_* as a pre-physics integration snapshot.
+  // Previous collision-sweep root for mpColl floor sweeps. Kept separate from prev_pos_* because
+  // existing grounded rollback helpers use prev_pos_* as the current frame's pre-physics snapshot;
+  // floor sweeps consume the previous promoted sweep root and only promote prev_pos_* after frame
+  // simulation.
   float* floor_sweep_prev_pos_x;
   float* floor_sweep_prev_pos_y;
   // Seed-only override for the first floor-sweep snapshot after reseed. Normal rollouts clear the
-  // valid bit and cache frame-start position into floor_sweep_prev_pos_{x,y}.
+  // valid bit, consume floor_sweep_prev_pos_{x,y}, then promote this frame's pre-physics root for
+  // the next frame.
   // refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_80043754,mpCheckFloor}
   float* floor_sweep_seed_prev_pos_x;
   float* floor_sweep_seed_prev_pos_y;

@@ -625,6 +625,16 @@ static inline uint8_t msl_reseed_seed_uses_rollout_replay_frame_clock(const MslS
   for (int victim = 0; victim < active_players; victim++) {
     const int attacker =
         msl_seed_local_slot_from_source_port0(seed, active_players, seed->last_hit_by[victim]);
+    if (seed->fighter_8006cda4_pre_gate_consume_count[victim] >= 1u &&
+        seed->fighter_8006cda4_pre_gate_consume_count[victim] <= 4u) {
+      // Replay-seeded delayed Fighter_8006CDA4 stream-phase rollouts need the Slippi frame-start
+      // RNG clock to advance until combat consumes the later DamageFlyRoll gate. This rollout-only
+      // clock owner is separate from normal one-step reseed metadata.
+      // refs/slippi-ssbm-asm/Recording/SendFrameStart.s
+      // refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+      return 1u;
+    }
     if (attacker < 0 || attacker == victim) {
       continue;
     }
@@ -955,6 +965,13 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
            isfinite(seed->floor_sweep_prev_pos_y_f32[p]))
               ? 1u
               : 0u;
+      if (batch->state.floor_sweep_seed_prev_valid[idx]) {
+        batch->state.floor_sweep_prev_pos_x[idx] = seed->floor_sweep_prev_pos_x_f32[p];
+        batch->state.floor_sweep_prev_pos_y[idx] = seed->floor_sweep_prev_pos_y_f32[p];
+      } else {
+        batch->state.floor_sweep_prev_pos_x[idx] = seed->pos_x[p];
+        batch->state.floor_sweep_prev_pos_y[idx] = seed->pos_y[p];
+      }
       batch->state.speed_air_x_self[idx] = seed->speed_air_x_self[p];
       batch->state.speed_ground_x_self[idx] = seed->speed_ground_x_self[p];
       batch->state.speed_y_self[idx] = seed->speed_y_self[p];
@@ -1410,18 +1427,23 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         // Narrow explicit DownBound x1994 seed bridge:
         // - Slippi merged hurtbox_state can remain 0 on reseeded rows even when dataset/history
         //   captured an x1994 timer.
-        // - The replay-proven owner using this hidden timer is the adjacent AttackDash
-        //   DownBound-colanim reject in combat_downbound_hidden_colanim_rejects_attackdash_body_contact;
-        //   do not globally raise x198C here, because other DownBound BODY contacts in the same
-        //   timer window can still be damage-eligible through ftColl_80078C70/Fighter_ProcessHit.
+        // - The timer is owned by Fighter_8006A360 and is independent of the post-frame ground
+        //   bit. Airborne-at-snapshot DownBound rows can floor-contact before the later AttackDash
+        //   BODY check while the same x1994 lane is still live; already-grounded continuing
+        //   DownBound rows are in the same post-Anim collision-pose episode.
+        // - The replay-proven consumer is the adjacent DownBound post-Anim collision-pose bridge
+        //   in hurtboxes_refresh; already-grounded first-frame DownBound rows keep the visible
+        //   vulnerable contact state because real BODY contacts in the same timer window can still
+        //   be damage-eligible through ftColl_80078C70/Fighter_ProcessHit.
         // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
         // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_8007B7A4,ftColl_8007B868}
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::{ftCo_DownBound_Anim,ftCo_DownBound_Coll}
         if ((seed->action_id[p] == (uint16_t)MSL_ACT_DOWN_BOUND_U ||
              seed->action_id[p] == (uint16_t)MSL_ACT_DOWN_BOUND_D) &&
-            seed->on_ground[p] != 0u && seed->colanim_hit_status_x198c[p] == 1u &&
-            seed->colanim_timer_x1994[p] != 0u && seed->colanim_timer_x1990[p] == 0u &&
-            seed->colanim_lock_x2221_b0[p] == 0u && seed_hurtbox_state == 0u) {
+            (seed->on_ground[p] == 0u || seed->action_frame[p] > 0) &&
+            seed->colanim_hit_status_x198c[p] == 1u && seed->colanim_timer_x1994[p] != 0u &&
+            seed->colanim_timer_x1990[p] == 0u && seed->colanim_lock_x2221_b0[p] == 0u &&
+            seed_hurtbox_state == 0u) {
           batch->state.colanim_timer_x1994[idx] = seed->colanim_timer_x1994[p];
         }
         if (seed->hitlag[p] == 0u && seed->hitstun[p] == 0u &&
