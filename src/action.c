@@ -1438,6 +1438,16 @@ static inline void shieldbreak_update_anim_callback_pre_input(MslBatch* batch,
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_FURAFURA;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
   batch->state.shield_hp[idx] = c->shield_break_reset_health;
+  // Furafura entry does not keep ShieldBreakStand's collision-animation hit status:
+  // ftCo_80099010 changes motion with only SkipModel | SkipMatAnim, while ShieldBreakStand used
+  // KeepColAnimHitStatus | SkipColAnim. Clear the hidden x198C timer/status lanes along with the
+  // replay-visible hurtbox state on the destination row.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_ShieldBreakStand.c::ftCo_80098F3C
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Furafura.c::ftCo_80099010
+  batch->state.colanim_hit_status_x198c[idx] = 0u;
+  batch->state.colanim_timer_x1990[idx] = 0u;
+  batch->state.colanim_timer_x1994[idx] = 0u;
+  batch->state.hurtbox_state[idx] = 0u;
 }
 
 void action_update_anim_callbacks_pre_input(MslBatch* batch) {

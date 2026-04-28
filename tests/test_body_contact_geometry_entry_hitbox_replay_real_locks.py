@@ -33,7 +33,37 @@ def _step_one_row_with_seed(dataset_path: Path, record: int, seed: np.ndarray) -
 
     handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
     try:
-        binding.reseed_seed(handle, seed_bytes)
+        binding.reseed_seed_rollout(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+    finally:
+        binding.destroy(handle)
+
+    return out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0], ref
+
+
+def _step_one_row_with_inputs(
+    dataset_path: Path, record: int, prev_input: np.ndarray, cur_input: np.ndarray
+) -> tuple[np.void, np.void]:
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    row = samples[record : record + 1]
+    ref = row["ref_t1"][0]
+
+    binding = _load_binding()
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, seed_stride)
+    prev_input_bytes = np.frombuffer(prev_input.tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
+    input_bytes = np.frombuffer(cur_input.tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        binding.reseed_seed_rollout(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)
         binding.write_compare(handle, out_compare_bytes)
     finally:
@@ -207,7 +237,7 @@ def test_rebirth_fall_x1994_seed_fixes_gat_9063_rollout_window() -> None:
         ucf_cardinals_1_0_enabled=1,
     )
     try:
-        binding.reseed_seed(handle, seed_bytes)
+        binding.reseed_seed_rollout(handle, seed_bytes)
         for record in range(start, stop + 1):
             prev_input_bytes = samples_u8[
                 record : record + 1, prev_input_off : prev_input_off + input_stride
@@ -219,6 +249,122 @@ def test_rebirth_fall_x1994_seed_fixes_gat_9063_rollout_window() -> None:
             ref = samples["ref_t1"][record]
             for field in ("action_id", "animation_index", "hitlag", "hitstun", "hurtbox_state"):
                 assert int(out[field][defender]) == int(ref[field][defender]), f"record={record} field={field}"
+    finally:
+        binding.destroy(handle)
+
+
+@pytest.mark.integration
+def test_shieldbreakstand_furafura_entry_clears_colanim_hit_status_prh_11549_rollout() -> None:
+    # Rollout-real lock for the disruptive former-F08b PRH cluster:
+    # ShieldBreakStand keeps colanim hit status while standing up from shield break, but
+    # ftCo_80099010 enters Furafura without KeepColAnimHitStatus / SkipColAnim. The destination
+    # row must clear x198C-derived hurtbox_state rather than carrying invulnerability through the
+    # dazed action.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_ShieldBreakStand.c::ftCo_80098F3C
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Furafura.c::ftCo_80099010
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    binding = _load_binding()
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    sample_stride = int(samples.dtype.itemsize)
+    samples_u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), sample_stride)
+    seed_off = int(samples.dtype.fields["seed_t"][1])
+    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
+    input_off = int(samples.dtype.fields["input_t"][1])
+
+    start = 11549
+    stop = 11565
+    p = 0
+    seed_bytes = samples_u8[start : start + 1, seed_off : seed_off + seed_stride].copy()
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+    out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(1)
+
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    try:
+        binding.reseed_seed_rollout(handle, seed_bytes)
+        for record in range(start, stop + 1):
+            prev_input_bytes = samples_u8[
+                record : record + 1, prev_input_off : prev_input_off + input_stride
+            ].copy()
+            input_bytes = samples_u8[record : record + 1, input_off : input_off + input_stride].copy()
+            binding.step_input(handle, prev_input_bytes, input_bytes)
+            binding.write_compare(handle, out_compare_bytes)
+            out = out_view[0].copy()
+            ref = samples["ref_t1"][record]
+            for field in ("action_id", "animation_index", "action_frame", "hurtbox_state"):
+                assert int(out[field][p]) == int(ref[field][p]), f"record={record} field={field}"
+    finally:
+        binding.destroy(handle)
+
+
+@pytest.mark.integration
+def test_landingairb_lcancel_rate_uses_hitlag_latched_lr_edge_fsp_6448_rollout() -> None:
+    # Rollout-real lock for the disruptive former-F08b FSP cluster:
+    # an LR press during AttackAirB hitlag is held in input.x668 while fp->x2219_b5 is active, so
+    # x67F remains inside the L-cancel window when AttackAirB_Coll enters LandingAirB. Runtime must
+    # carry that hitlag-latched input-history owner, otherwise LandingAirB runs at full landing lag
+    # and action_frame falls behind replay.
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_Spaghetti_8006AD10_Inner1,Fighter_Spaghetti_8006AD10}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c::ftCo_LandingAir_EnterWithLag
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    binding = _load_binding()
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    sample_stride = int(samples.dtype.itemsize)
+    samples_u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), sample_stride)
+    seed_off = int(samples.dtype.fields["seed_t"][1])
+    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
+    input_off = int(samples.dtype.fields["input_t"][1])
+
+    start = 6448
+    stop = 6470
+    p = 1
+    seed_bytes = samples_u8[start : start + 1, seed_off : seed_off + seed_stride].copy()
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+    out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(1)
+
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    try:
+        binding.reseed_seed_rollout(handle, seed_bytes)
+        for record in range(start, stop + 1):
+            prev_input_bytes = samples_u8[
+                record : record + 1, prev_input_off : prev_input_off + input_stride
+            ].copy()
+            input_bytes = samples_u8[record : record + 1, input_off : input_off + input_stride].copy()
+            binding.step_input(handle, prev_input_bytes, input_bytes)
+            binding.write_compare(handle, out_compare_bytes)
+            out = out_view[0].copy()
+            ref = samples["ref_t1"][record]
+            for field in ("action_id", "animation_index", "action_frame", "hitlag", "l_cancel"):
+                assert int(out[field][p]) == int(ref[field][p]), f"record={record} field={field}"
     finally:
         binding.destroy(handle)
 
@@ -316,7 +462,7 @@ def test_attacks3_angle_variant_hitbox_events_fix_rollout_agg_5577() -> None:
     defender = 1
     try:
         seed_bytes[0, :] = samples_u8[start_record, seed_off : seed_off + seed_stride]
-        binding.reseed_seed(handle, seed_bytes)
+        binding.reseed_seed_rollout(handle, seed_bytes)
         for record in range(start_record, 5612):
             prev_input_bytes[0, :] = samples_u8[
                 record, prev_input_off : prev_input_off + input_stride
@@ -601,6 +747,63 @@ def test_late_attackairhi_hitcapsule_latch_rejects_false_wait_hit_fsp_7079() -> 
     assert int(ref["action_id"][defender]) == 14  # Wait, not DamageFlyTop
     for field in ("action_id", "animation_index", "hitlag", "hitstun", "instance_hit_by", "last_hit_by"):
         assert int(out[field][defender]) == int(ref[field][defender]), f"field={field}"
+
+
+@pytest.mark.integration
+def test_jumpf_tap_crossing_iasa_preempts_false_attacklw4_body_fsp_4852() -> None:
+    # JumpF/B live-input IASA tap crossing:
+    # - ftCo_Jump_IASA reaches ftCo_800CB870 before BODY collision.
+    # - FSP:4852 seeds Fox in JumpF frame 0 with post-entry x671=0xFE, but the live input snapshot
+    #   crosses the tap-jump threshold on this frame. Source enters JumpAerialF before Fox
+    #   AttackLw4 BODY selection, so the false hit must not be admitted.
+    # refs/melee/src/melee/ft/fighter.c::{
+    #   Fighter_Spaghetti_8006AD10,Fighter_procUpdate}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_800CB870
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    seed, out, ref = _step_one_row(dataset_path, 4852)
+    attacker = 0
+    defender = 1
+    assert int(seed["action_id"][defender]) == 25  # JumpF
+    assert int(seed["action_frame"][defender]) == 0
+    assert int(seed["tilt_timer_y"][defender]) == 0xFE
+    assert int(ref["action_id"][defender]) == 27  # JumpAerialF
+    for field in ("action_id", "animation_index", "jumps_left", "hitlag", "hitstun"):
+        assert int(out[field][defender]) == int(ref[field][defender]), f"field={field}"
+    assert int(out["hitlag"][attacker]) == int(ref["hitlag"][attacker]) == 0
+
+
+@pytest.mark.integration
+def test_jumpf_tap_crossing_iasa_requires_fresh_tap_threshold_crossing_fsp_4852() -> None:
+    # Negative boundary for the JumpF/B tap-crossing reconstruction: held-up snapshots whose
+    # previous stick is already above the tap threshold must continue to rely on x671/XY edges,
+    # not become a broad "JumpF plus high Y means double jump" shortcut.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[4852 : 4853]
+    prev_input = row["prev_input_t"].copy()
+    cur_input = row["input_t"].copy()
+    defender = 1
+    prev_input["p"]["main_y"][0, defender] = cur_input["p"]["main_y"][0, defender]
+
+    out, _ref = _step_one_row_with_inputs(dataset_path, 4852, prev_input, cur_input)
+    assert int(row["seed_t"][0]["action_id"][defender]) == 25  # JumpF
+    assert int(row["seed_t"][0]["tilt_timer_y"][defender]) == 0xFE
+    assert int(out["action_id"][defender]) != 27  # not JumpAerialF without a fresh crossing
 
 
 @pytest.mark.integration

@@ -31,7 +31,7 @@ def _run_rollout_window(dataset_path: Path, start: int, stop: int):
 
     handle = msl_binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
     try:
-        msl_binding.reseed_seed(handle, field_bytes(start, seed_off, seed_stride))
+        msl_binding.reseed_seed_rollout(handle, field_bytes(start, seed_off, seed_stride))
         out_bytes = np.zeros((1, compare_stride), dtype=np.uint8, order="C")
         for record in range(int(start), int(stop) + 1):
             msl_binding.step_input(
@@ -125,6 +125,63 @@ def test_guard_shielddesc_runtime_pose_accepts_prh_rollout_contact() -> None:
     assert int(out["action_id"][defender]) == 181
     assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender])
     assert float(out["shield_hp"][defender]) == pytest.approx(float(ref["shield_hp"][defender]))
+
+
+@pytest.mark.integration
+def test_guardreflect_shielddesc_runtime_pose_rejects_high_dair_body_rollout_contact() -> None:
+    # Runtime-negative ShieldDesc boundary for fighter-vs-fighter collision. PRH 1510 is a
+    # GuardReflect no-submotion frame whose frame-start x14 is still active. `ftCo_8009388C` owns
+    # ReflectDesc only during that phase; ShieldDesc is recreated after x14 expiry, so stale shield
+    # geometry must not suppress the BODY pass that applies DamageFlyHi.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_8009388C,ftCo_80093BC0}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    defender = 1
+    ref, out = _run_rollout_window(dataset_path, 1483, 1510)
+
+    assert int(ref["action_id"][defender]) == 87
+    assert int(out["action_id"][defender]) == 87
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 6
+    assert int(out["hitstun"][defender]) == int(ref["hitstun"][defender]) == 61
+    assert int(out["on_ground"][defender]) == int(ref["on_ground"][defender]) == 0
+
+
+@pytest.mark.integration
+def test_locomotion_guardreflect_entry_keeps_shielddesc_for_same_frame_dair_contact() -> None:
+    # Runtime-positive ShieldDesc boundary for locomotion -> GuardReflect. Unlike
+    # `ftCo_8009388C` guard-origin entry, `ftCo_80093A50` calls `ftCo_80092450` before creating
+    # ReflectDesc, so the first no-submotion GuardReflect frame still exposes ShieldDesc to
+    # fighter-vs-fighter collision and takes the x221C_b2 powershield damage gate.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    #   ftCo_80091A4C,ftCo_800939B4,ftCo_80093A50}
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    defender = 1
+    ref, out = _run_rollout_window(dataset_path, 2201, 2217)
+
+    assert int(ref["action_id"][defender]) == 181
+    assert int(out["action_id"][defender]) == 181
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 5
+    assert int(out["hitstun"][defender]) == int(ref["hitstun"][defender]) == 0
+    assert int(out["on_ground"][defender]) == int(ref["on_ground"][defender]) == 1
+    assert float(out["shield_hp"][defender]) == pytest.approx(float(ref["shield_hp"][defender]))
+    assert int(out["state_flags"][defender][3]) == int(ref["state_flags"][defender][3])
 
 
 @pytest.mark.integration

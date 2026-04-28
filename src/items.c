@@ -396,6 +396,32 @@ static inline uint8_t action_is_blaster_throw(uint16_t action_id_u16) {
              : 0u;
 }
 
+static inline float item_throw_pose_facing_dir(const MslBatch* batch, size_t owner_idx,
+                                               uint16_t action_id_u16) {
+  const float current = batch->state.facing[owner_idx] ? 1.0f : -1.0f;
+  if (!action_is_blaster_throw(action_id_u16)) {
+    return current;
+  }
+  // Throw-side laser joints are sampled through lb_8000B1CC from the fighter JObj tree in
+  // ftFx_Throw_Anim. Fighter_ChangeMotionState installs root Y rotation from fp->facing_dir and
+  // copies that value to fp->facing_dir1; ThrowB's set_throw_flags later flips fp->facing_dir but
+  // does not re-enter the motion state or reinstall the root JObj rotation before blaster pulses.
+  // Use the motion-entry facing lane for this pose transform, while scalar gameplay facing remains
+  // current-facing owned.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_ChangeMotionState,ftPartSetRotY}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
+  //   ftFx_SpecialN_FtGetHoldJoint,ftFx_SpecialN_ItGetHoldJoint,ftFx_Throw_Anim}
+  const int8_t motion_entry_facing = batch->state.facing_dir1[owner_idx];
+  if (motion_entry_facing > 0) {
+    return 1.0f;
+  }
+  if (motion_entry_facing < 0) {
+    return -1.0f;
+  }
+  return current;
+}
+
 static inline uint8_t items_action_is_damage_family(uint16_t action_id_u16) {
   switch (action_id_u16) {
     case MSL_ACT_DAMAGE_FALL:
@@ -2107,7 +2133,8 @@ static int laser_spawn_from_fighter(MslBatch* batch, int bi, int owner, const Ms
     return -1;
   }
   const uint16_t msid = (uint16_t)anim_u32;
-  const float anim_frame_f32 = items_cur_anim_frame_f32(batch, o_idx);
+  const uint16_t action_id_u16 = batch->state.action_id[o_idx];
+  float anim_frame_f32 = items_cur_anim_frame_f32(batch, o_idx);
   const uint16_t frame = msl_anim_frame_floor_u16(anim_frame_f32);
   const MslCharParams* chp = msl_char_params(char_id);
 
@@ -2130,7 +2157,7 @@ static int laser_spawn_from_fighter(MslBatch* batch, int bi, int owner, const Ms
   }
   float m[12];
   int matrix_ok = -1;
-  if (action_is_blaster_throw(batch->state.action_id[o_idx])) {
+  if (action_is_blaster_throw(action_id_u16)) {
     // Throw laser hold-joint pose:
     // - ftFx_Throw_Anim samples ftFx_SpecialN_FtGetHoldJoint / ItGetHoldJoint from live JObj
     //   matrices in the Anim callback, then calls it_8029C6CC.
@@ -2153,7 +2180,7 @@ static int laser_spawn_from_fighter(MslBatch* batch, int bi, int owner, const Ms
   float lx = 0.0f, ly = 0.0f, lz = 0.0f;
   msl_mtx34_mul_point(m, lp->spawn_off_xyz, &lx, &ly, &lz);
 
-  const float facing_dir = batch->state.facing[o_idx] ? 1.0f : -1.0f;
+  const float facing_dir = item_throw_pose_facing_dir(batch, o_idx, action_id_u16);
 
   // Decomp: fighter facing is applied as a root Y rotation by +/-90°, which mixes X/Z.
   // For blaster shot spawn, local Z contributes meaningfully to stage X, so apply the same
@@ -2205,7 +2232,7 @@ static int laser_spawn_from_fighter(MslBatch* batch, int bi, int owner, const Ms
     }
   }
   float ang = lp->blaster_angle;
-  if (action_is_blaster_throw(batch->state.action_id[o_idx])) {
+  if (action_is_blaster_throw(action_id_u16)) {
     // Throw-side launch angle is owned by ftFx_Throw_Anim for Throw{B,Hi,Lw}:
     //   atan2f(FtGetHoldJoint.y - ItGetHoldJoint.y,
     //          FtGetHoldJoint.x - ItGetHoldJoint.x)
@@ -3018,6 +3045,14 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
            batch->state.guard_reflect_timer_x18_seed[d_idx] > 0u)
               ? 1u
               : 0u;
+      const uint8_t guard_reflect_frozen_final_seed_keepalive_snapshot =
+          (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
+           batch->state.action_frame[d_idx] <= -2 &&
+           batch->state.animation_index[d_idx] == UINT32_MAX &&
+           batch->state.guard_reflect_timer_x14_seed[d_idx] == 1u &&
+           batch->state.guard_reflect_timer_x18_seed[d_idx] > 0u)
+              ? 1u
+              : 0u;
       const uint16_t prev_action = batch->state.seed_prev_action_id[d_idx];
       const uint8_t guard_on_entry_from_landing =
           (guard_on_no_submotion_snapshot && (prev_action == (uint16_t)MSL_ACT_LANDING)) ? 1u : 0u;
@@ -3270,6 +3305,20 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
             }
           }
         }
+        // Frozen final-x14 GuardReflect rows split on actual shield-contact ownership:
+        // - if the current item sphere still overlaps the shield bubble, Item_80269DC8 can own
+        //   HitShield / laser destruction on this final tick,
+        // - otherwise the frozen GuardReflect callback keeps the article alive without staging a
+        //   broad reflected-owner snapshot.
+        // Use the same shield bubble from shields_refresh() / ftColl shield checks rather than the
+        // narrower reduced-offset `shield_hit` proxy above, which is only an item-hitcap sample.
+        // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076CBC,ftColl_80077688}
+        // refs/melee/src/melee/it/item.c::Item_80269DC8
+        const uint8_t guard_reflect_frozen_final_seed_shield_overlap =
+            (guard_reflect_frozen_final_seed_keepalive_snapshot &&
+             item_sphere_sphere_intersects_2d(x, y, sr, shx, shy, shr))
+                ? 1u
+                : 0u;
         if (shield_hit) {
           // Powershield reflect: on a reflected hit, reverse the velocity vector and transfer owner.
           //
@@ -3428,6 +3477,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
             can_powershield_reflect = 0u;
             powershield_reflect_hitshield_handoff = 1u;
           }
+          uint8_t powershield_reflect_desc_overlap = 0u;
           if (can_powershield_reflect && laser_age_frames > 1.0f &&
               batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT && common != NULL &&
               common->powershield_reflect_size > 0.0f &&
@@ -3438,9 +3488,11 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
                   common->powershield_reflect_size * batch->state.fighter_scale_y[d_idx];
               const float reflect_lane_r = sr + reflect_r;
               const float y_delta = y - reflect_y;
+              const uint8_t reflect_vertical_overlap = (fabsf(y_delta) <= reflect_lane_r) ? 1u : 0u;
+              powershield_reflect_desc_overlap = reflect_vertical_overlap;
               if (y_delta < -reflect_lane_r ||
                   (batch->state.guard_reflect_timer_x14_seed[d_idx] <= 1u &&
-                   fabsf(y_delta) <= reflect_lane_r)) {
+                   batch->state.action_frame[d_idx] >= -1 && reflect_vertical_overlap)) {
                 // GuardReflect HitShield discriminator:
                 // - lasers below the shield-bone ReflectDesc lane hit shield instead of reflect,
                 // - the final x14 tick inside that lane has handed off to Item_80269DC8 HitShield
@@ -3455,6 +3507,57 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
                 powershield_reflect_hitshield_handoff = 1u;
               }
             }
+          }
+          if (can_powershield_reflect && guard_reflect_frozen_final_seed_shield_overlap) {
+            // Final frozen x14 shield-contact handoff:
+            // - at the last visible GuardReflect tick, current shield-bubble contact is owned by
+            //   Item_80269DC8 HitShield rather than ftColl_80077464 reflect transfer,
+            // - non-overlap frozen rows remain keepalive-only and do not stage a reflected owner.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardReflect_Anim,ftCo_80093BC0}
+            // refs/melee/src/melee/it/item.c::{Item_80269F14,Item_80269DC8}
+            can_powershield_reflect = 0u;
+            powershield_reflect_hitshield_handoff = 1u;
+          }
+          const uint8_t spawn_frame_powershield_reflect_owner =
+              (can_powershield_reflect && laser_age_frames <= 1.0f) ? 1u : 0u;
+          const uint8_t guardon_followup_reflect_owner_commit =
+              (can_powershield_reflect &&
+               item_should_commit_guardon_followup_powershield_reflect_owner(
+                   batch, d_idx, def, x, y, vx, laser_age_frames, sr))
+                  ? 1u
+                  : 0u;
+          const uint8_t aged_reflect_owner_commit =
+              (can_powershield_reflect && item_should_commit_aged_powershield_reflect_owner(
+                                              batch, d_idx, def, x, y, vx, laser_age_frames, sr))
+                  ? 1u
+                  : 0u;
+          const uint8_t powershield_non_reflect_keepalive =
+              (can_powershield_reflect &&
+               batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_SET_OFF &&
+               batch->state.hitlag[d_idx] == 0u && batch->state.hitstun[d_idx] == 0u)
+                  ? 1u
+                  : 0u;
+          if (can_powershield_reflect && !same_frame_locomotion_reflect_owner_commit &&
+              !spawn_frame_powershield_reflect_owner && !guardon_followup_reflect_owner_commit &&
+              !aged_reflect_owner_commit && !powershield_reflect_desc_overlap) {
+            // Reflect snapshot provenance:
+            // - ftColl_80077464 writes the pending reflect snapshot only when the item overlaps
+            //   ReflectDesc (`fp->reflecting` + `reflect_hit` bone/size/offset).
+            // - Active GuardReflect timer bits alone are not a transfer. If the ReflectDesc
+            //   geometry misses, the active-window no-submotion lane below keeps the item alive
+            //   without staging a next-frame reflected owner; final-x14 rows can then fall through
+            //   to Item_80269DC8 HitShield destruction.
+            // refs/melee/src/melee/ft/ftcoll.c::{ftColl_CreateReflectHit,ftColl_80077464}
+            // refs/melee/src/melee/it/item.c::{Item_80269F14,Item_80269DC8}
+            if (powershield_non_reflect_keepalive) {
+              // GuardSetOff can carry the collision-time powershield bit (`fp+0x221C_b2`) after
+              // GuardReflect ownership without a live ReflectDesc transfer. That bit suppresses
+              // regular shield damage in ftColl_80076CBC, so keep the item callback alive without
+              // inventing a reflected owner snapshot.
+              // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076CBC,ftColl_80077464}
+              break;
+            }
+            can_powershield_reflect = 0u;
           }
           if (can_powershield_reflect) {
             // Decomp reflect snapshot ownership:
@@ -3488,7 +3591,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
             } else {
               item_apply_powershield_reflect_snapshot(batch, ii, def, dmg_mul);
             }
-            if (laser_age_frames <= 1.0f) {
+            if (spawn_frame_powershield_reflect_owner) {
               // Spawn-frame powershield reflect ownership:
               // - A newly spawned SpecialN laser can overlap GuardReflect in the same item logic
               //   pass. In that path, ftColl_80077464 writes the reflect snapshot and
@@ -3499,8 +3602,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
               // refs/melee/src/melee/it/item.c::Item_80269F14
               // refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C504,it_8029C4D4}
               item_commit_powershield_reflect_owner_snapshot(batch, ii, def);
-            } else if (item_should_commit_guardon_followup_powershield_reflect_owner(
-                           batch, d_idx, def, x, y, vx, laser_age_frames, sr)) {
+            } else if (guardon_followup_reflect_owner_commit) {
               // GuardOn follow-up powershield reflect owner/xDA8 commit:
               // - ftCo_8009388C can enter GuardReflect from GuardOn and install ReflectDesc in the
               //   same step, before seed-visible x14/x18 have a post-frame to expose the lane.
@@ -3510,8 +3612,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
               // refs/melee/src/melee/ft/ftcoll.c::{ftColl_CreateReflectHit,ftColl_80077464}
               // refs/melee/src/melee/it/item.c::Item_80269F14
               item_commit_powershield_reflect_owner_snapshot(batch, ii, def);
-            } else if (item_should_commit_aged_powershield_reflect_owner(
-                           batch, d_idx, def, x, y, vx, laser_age_frames, sr)) {
+            } else if (aged_reflect_owner_commit) {
               // Aged powershield reflect owner/xDA8 commit:
               // - ftColl_80077464 writes owner/xDA8 to the item reflect snapshot when the laser
               //   overlaps the GuardReflect ReflectDesc.
@@ -3531,11 +3632,14 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
             // ftCommonData x2B0 directly (or identity) for these rows.
             break;
           }
-          if (guard_reflect_active_window_no_submotion_snapshot &&
+          if ((guard_reflect_active_window_no_submotion_snapshot ||
+               (guard_reflect_frozen_final_seed_keepalive_snapshot &&
+                !guard_reflect_frozen_final_seed_shield_overlap)) &&
               !powershield_reflect_hitshield_handoff) {
-            // The active reflect window owns this frozen GuardReflect row, but the reflect geometry
+            // The active/frozen reflect window owns this GuardReflect row, but the reflect geometry
             // above may reject the projectile. In that case do not fall through into regular
-            // GuardSetOff shield-hit ownership until the final x14 handoff tick.
+            // GuardSetOff shield-hit ownership until the x14 handoff has fully expired. Frozen
+            // final-x14 rows with current shield-bubble overlap can hand off to Item_80269DC8 below.
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardReflect_Anim,ftCo_80093BC0}
             break;
           }
@@ -4136,6 +4240,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       if (laser_state != 0u && batch->state.action_id[o_idx] == (uint16_t)MSL_ACT_THROW_LW &&
           has_last_throw_pulse &&
           items_cur_anim_frame_f32(batch, o_idx) >= ((float)last_throw_pulse_af + 1.0f) &&
+          batch->state.throw_pulse_crossed_prev_frame[o_idx] != (uint8_t)last_throw_pulse_af &&
           batch->state.grab_owner_port[d_idx] == (uint8_t)owner &&
           msl_action_is_grabbed_victim(batch->state.action_id[d_idx])) {
         continue;
@@ -5305,8 +5410,17 @@ void items_spawn_pre_physics(MslBatch* batch) {
       if (is_blaster_throw && action_id == (uint16_t)MSL_ACT_THROW_LW &&
           lp->shot_itkind == (uint16_t)MSL_IT_KIND_FALCO_LASER_SHOT &&
           batch->state.throw_pulse_crossed_curr_frame[idx] == 28u &&
-          batch->state.throw_command_pending_pulse_frame[idx] == 28u &&
           batch->state.action_frame[idx] <= 28 && throw_seed_shot_count[p] == 0u) {
+        // Falco ThrowLw frame-28 attached BODY callback:
+        // - The source predicate is the current ftAction command pulse consumed by ftFx_Throw_Anim
+        //   (`throw_flags_b0`), represented either by explicit pending-command seed ownership in
+        //   one-step or by live anim-frame crossing in rollout.
+        // - Do not require the explicit seed lane after `throw_pulse_crossed_curr_frame` proves the
+        //   current frame-28 pulse; otherwise replay-seeded rollouts spawn the article but miss the
+        //   same-frame attached BODY callback.
+        // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
+        // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+        // refs/melee/src/melee/it/itcoll.c::{it_8026FAC4,it_80272460}
         laser_spawn_apply_throwlw_attached_body_callback(batch, bi, p, spawned_slot, lp, 0u, 0u);
       }
       if (is_blaster_throw && action_id == (uint16_t)MSL_ACT_THROW_LW &&

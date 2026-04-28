@@ -1170,7 +1170,6 @@ static inline uint8_t combat_shield_overlap_ftcoll_80007bcc(
           ? defender_params->model_scaling
           : 1.0f;
   const float shield_matrix_scale = shield_owner_scale_y * shield_owner_model_scale;
-
   float eff_shx = shx;
   float eff_shy = shy;
   float eff_shz = shz;
@@ -1619,6 +1618,30 @@ static inline uint8_t combat_guard_reflect_no_submotion_x14_expired_lane(const M
              : 0u;
 }
 
+static inline uint8_t combat_guard_reflect_no_submotion_reflectdesc_only_lane(const MslBatch* batch,
+                                                                              size_t idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  // `ftCo_8009388C` enters GuardReflect from an already-shielding guard state by clearing
+  // `x221B_b0` and creating only ReflectDesc; ShieldDesc is recreated later by
+  // `ftCo_80093BC0` after x14 expires. The locomotion-entry path
+  // `ftCo_80091A4C -> ftCo_800939B4 -> ftCo_80093A50` is different: it calls
+  // `ftCo_80092450` before creating ReflectDesc, so active-x14 no-submotion rows from locomotion
+  // still expose ShieldDesc to fighter-vs-fighter collision. Use the frame-start seed latch as the
+  // phase predicate only for non-locomotion snapshots.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+  //   ftCo_8009388C,ftCo_80093A50,ftCo_80093BC0}
+  return (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
+          batch->state.action_frame[idx] < 0 && batch->state.animation_index[idx] == UINT32_MAX &&
+          (batch->state.guard_reflect_timer_x14_seed[idx] != 0u ||
+           batch->state.guard_reflect_timer_x14[idx] != 0u) &&
+          !combat_is_guard_reflect_fresh_locomotion_snapshot_idx(batch, idx) &&
+          batch->state.hitlag[idx] == 0u && batch->state.hitstun[idx] == 0u)
+             ? 1u
+             : 0u;
+}
+
 static inline uint8_t combat_shield_damage_powershield_suppressed_idx(const MslBatch* batch,
                                                                       size_t idx) {
   if (batch == NULL) {
@@ -1642,23 +1665,6 @@ static inline uint8_t combat_shield_damage_powershield_suppressed_idx(const MslB
       batch->state.animation_index[idx] == UINT32_MAX &&
       batch->state.guard_reflect_timer_x14[idx] == 0u &&
       batch->state.guard_reflect_timer_x18[idx] != 0u) {
-    powershield_active = 0u;
-  }
-  // Fresh locomotion -> GuardReflect same-frame shield-hit lane:
-  // - grounded guard admission can enter GuardReflect through ftCo_80091A4C -> ftCo_800939B4 ->
-  //   ftCo_80093A50 before the same-frame projectile shield contact is resolved,
-  // - those contact rows still take the regular ftColl_80076CBC shield-hit / GuardSetOff path
-  //   (including shieldDamageTaken depletion), and
-  // - the replay-visible GuardSetOff destination can still expose x221C_b2 later in the same
-  //   frame once ftCo_80093A50 / ftCo_80093BC0-owned carry becomes visible.
-  // For shield-damage accumulation only, keep that fresh locomotion GuardReflect admission out of
-  // the powershield suppression lane; item reflect ownership continues to use
-  // combat_is_powershield_active_idx().
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
-  //   ftCo_80091A4C,ftCo_800939B4,ftCo_80093A50,ftCo_GuardReflect_Anim,ftCo_GuardSetOff_Anim,
-  //   ftCo_80093BC0}
-  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_CreateReflectHit,ftColl_80076CBC}
-  if (powershield_active && combat_is_guard_reflect_fresh_locomotion_snapshot_idx(batch, idx)) {
     powershield_active = 0u;
   }
   return powershield_active;
@@ -2308,6 +2314,20 @@ static inline uint8_t combat_damage_severity_u8_from_kb(const MslCommonParams* c
   return 3;
 }
 
+static int combat_local_slot_from_source_port0(const MslBatch* batch, int bi, int num_players,
+                                               uint8_t source_port0) {
+  if (batch == NULL) {
+    return -1;
+  }
+  for (int p = 0; p < num_players; p++) {
+    const size_t idx = msl_idx_player(bi, p);
+    if (batch->state.source_port0[idx] == source_port0) {
+      return p;
+    }
+  }
+  return -1;
+}
+
 static inline uint8_t combat_damageflyroll_rng_subset_allows_pre_action(const MslBatch* batch,
                                                                         size_t d_idx,
                                                                         uint16_t action_id) {
@@ -2327,9 +2347,10 @@ static inline uint8_t combat_damageflyroll_rng_subset_allows_pre_action(const Ms
   // - Includes Fall/Run/AttackAirLw carry windows with replay-exact RNG pulse parity in the
   //   suite's severe-airborne damage transition families.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Anim
+  // - SpecialHiFall is admitted only when the current AttackAirB HitCapsule is on its
+  //   ftAction_8007121C enable edge; steady active contacts remain excluded.
   // - Keep the remaining SpecialHi/Landing pre-actions excluded until their upstream RNG
-  //   consumers are represented in this runtime; JumpAerialF/B now have a dedicated
-  //   AttackAirB carry bridge below.
+  //   consumers are represented in this runtime.
   // refs/melee/src/melee/ft/chara/ftCommon/forward.h::ftCommon_MotionState
   switch (action_id) {
     case (uint16_t)MSL_ACT_DAMAGE_FALL:
@@ -2345,12 +2366,39 @@ static inline uint8_t combat_damageflyroll_rng_subset_allows_pre_action(const Ms
     case (uint16_t)MSL_ACT_FX_SPECIAL_LW_END:
     case (uint16_t)MSL_ACT_ATTACK_AIR_LW:
       return 1u;
+    case (uint16_t)MSL_ACT_FX_SPECIAL_HI_FALL: {
+      // SpecialHiFall carry rows are admitted only on a current AttackAirB hitbox enable-edge.
+      // Steady already-active AttackAirB contacts can still apply damage, but do not show this
+      // DamageFlyRoll gate ownership in replay-real controls.
+      // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+      // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076808,ftColl_800768A0}
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+      const int num_players = (int)batch->config.num_players;
+      const size_t bi = d_idx / (size_t)MSL_MAX_PLAYERS;
+      const int attacker = combat_local_slot_from_source_port0(batch, (int)bi, num_players,
+                                                               batch->state.last_hit_by[d_idx]);
+      if (attacker < 0 || (size_t)attacker == (d_idx % (size_t)MSL_MAX_PLAYERS)) {
+        return 0u;
+      }
+      const size_t bi_base = bi * (size_t)MSL_MAX_PLAYERS;
+      const size_t a_idx = bi_base + (size_t)attacker;
+      if (batch->state.action_id[a_idx] != (uint16_t)MSL_ACT_ATTACK_AIR_B) {
+        return 0u;
+      }
+      const size_t hb_base = a_idx * (size_t)MSL_MAX_HITBOXES;
+      for (int hb = 0; hb < MSL_MAX_HITBOXES; hb++) {
+        if (batch->state.hitbox_enable_edge[hb_base + (size_t)hb] != 0u) {
+          return 1u;
+        }
+      }
+      return 0u;
+    }
     case (uint16_t)MSL_ACT_DAMAGE_FLY_TOP: {
       // narrowed_temporary:
       // - ftCo_8008DCE0 evaluates the DamageFlyRoll RNG gate before entering a new damage
       //   motion state, so `action_id` here is the defender pre-action from the prior frame.
       // - In the currently modeled stream, AttackAirB create-window carry rows use an explicit
-      //   Fighter_8006CDA4 pre-gate consume-count seed lane before this gate is evaluated.
+      //   Fighter_8006CDA4 pre-gate stream-phase seed lane before this gate is evaluated.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
       // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
       // data/moves/{fox,falco}.json moves["ftCo_SM_AttackAirB"].events create_hitbox frame=4
@@ -2358,22 +2406,26 @@ static inline uint8_t combat_damageflyroll_rng_subset_allows_pre_action(const Ms
       // TODO(narrowed_temporary): Expand beyond AttackAirB once upstream pre-gate RNG consumers
       // are represented for the regressing AttackAirF/ThrowHi windows.
       const int num_players = (int)batch->config.num_players;
-      const uint8_t attacker = batch->state.last_hit_by[d_idx];
-      if ((int)attacker >= num_players) {
+      const size_t bi = d_idx / (size_t)MSL_MAX_PLAYERS;
+      const int attacker = combat_local_slot_from_source_port0(batch, (int)bi, num_players,
+                                                               batch->state.last_hit_by[d_idx]);
+      if (attacker < 0 || (size_t)attacker == (d_idx % (size_t)MSL_MAX_PLAYERS)) {
         return 0u;
       }
-      const size_t bi = d_idx / (size_t)MSL_MAX_PLAYERS;
       const size_t a_idx = bi * (size_t)MSL_MAX_PLAYERS + (size_t)attacker;
       const uint16_t a_action = batch->state.action_id[a_idx];
       const int16_t a_af = batch->state.action_frame[a_idx];
       // Create-window threshold:
-      // - create_hitbox starts at frame 4, and this runtime checks the pre-action gate after the
-      //   same-frame fighter tick. Existing replay-real early stale-suppression controls at
-      //   action_frame 4 still resolve to DamageFlyHi after the same-frame tick, so keep the
-      //   DamageFlyRoll carry at the first replay-visible post-create steady row that remains
-      //   post-edge after the tick (action_frame >=6).
+      // - AttackAirB's first create event is script frame 4. This gate is checked after the
+      //   same-frame fighter tick.
+      // - Early create-edge rows are admitted only when the explicit Fighter_8006CDA4 pre-gate
+      //   stream-phase lane proves hidden RNG ownership; steady rows keep the existing
+      //   post-create gate. The explicit zero-consume marker is required because lane value 0
+      //   means ordinary rollout/no seed-lane, not "source-proven gate with zero pre-consumes".
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim
-      if (a_action == (uint16_t)MSL_ACT_ATTACK_AIR_B && a_af >= 6) {
+      // data/moves/{fox,falco}.json moves["ftCo_SM_AttackAirB"].events create_hitbox frame=4
+      if (a_action == (uint16_t)MSL_ACT_ATTACK_AIR_B &&
+          (a_af >= 6 || batch->state.fighter_8006cda4_pre_gate_consume_count[d_idx] != 0u)) {
         return 1u;
       }
       return 0u;
@@ -2451,22 +2503,30 @@ static inline void combat_damageflyroll_consume_fighter_8006cda4_pre_gate_count(
   if (consume_count == 0u) {
     return;
   }
-  // Explicit pre-gate RNG consume-count owner:
+  // Explicit pre-gate RNG stream-phase owner:
   // - Fighter_8006CDA4 runs before the ftCo_8008DCE0 block_33 HSD_Randf gate and can advance the
   //   same global RNG stream via HSD_Randi calls.
   // - Slippi does not expose the hidden held-item/x197C owner inputs directly, so the seed surface
-  //   stores the total pre-gate consume count explicitly.
+  //   stores the total pre-gate stream phase explicitly.
+  // - Value 4 is a source-proven zero-consume gate marker: admit the early AttackAirB
+  //   DamageFlyTop gate but do not advance the RNG stream before the gate draw.
   // - The HSD_Randi return value is not otherwise used in this lite sim, so `max_val=1` is enough
   //   to model the stream advance without introducing extra gameplay constants.
   // refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
   // refs/melee/src/melee/ft/types.h
   // refs/melee/src/sysdolphin/baselib/random.c::HSD_Randi
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-  (void)combat_rng_consume_randi_site(
-      batch, bi, MSL_RNG_SITE_DAMAGE_FLY_ROLL_PRE_GATE_FIGHTER_8006CDA4_PRIMARY, 1);
-  if (consume_count >= 2u) {
+  if (consume_count <= 3u) {
+    (void)combat_rng_consume_randi_site(
+        batch, bi, MSL_RNG_SITE_DAMAGE_FLY_ROLL_PRE_GATE_FIGHTER_8006CDA4_PRIMARY, 1);
+  }
+  if (consume_count >= 2u && consume_count <= 3u) {
     (void)combat_rng_consume_randi_site(
         batch, bi, MSL_RNG_SITE_DAMAGE_FLY_ROLL_PRE_GATE_FIGHTER_8006CDA4_SECONDARY, 1);
+  }
+  if (consume_count == 3u) {
+    (void)combat_rng_consume_randi_site(
+        batch, bi, MSL_RNG_SITE_DAMAGE_FLY_ROLL_PRE_GATE_FIGHTER_8006CDA4_TERTIARY, 1);
   }
   batch->state.fighter_8006cda4_pre_gate_consume_count[d_idx] = 0u;
 }
@@ -2490,11 +2550,13 @@ static inline void combat_damageflyroll_consume_jumpaerial_attackairb_carry(MslB
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
   // refs/melee/src/sysdolphin/baselib/random.c::{HSD_Randi,HSD_Randf}
   const int num_players = (int)batch->config.num_players;
-  const uint8_t attacker = batch->state.last_hit_by[d_idx];
-  if ((int)attacker >= num_players) {
+  const size_t bi_slot = d_idx / (size_t)MSL_MAX_PLAYERS;
+  const int attacker = combat_local_slot_from_source_port0(batch, (int)bi_slot, num_players,
+                                                           batch->state.last_hit_by[d_idx]);
+  if (attacker < 0 || (size_t)attacker == (d_idx % (size_t)MSL_MAX_PLAYERS)) {
     return;
   }
-  const size_t bi_base = (d_idx / (size_t)MSL_MAX_PLAYERS) * (size_t)MSL_MAX_PLAYERS;
+  const size_t bi_base = bi_slot * (size_t)MSL_MAX_PLAYERS;
   const size_t a_idx = bi_base + (size_t)attacker;
   if (batch->state.action_id[a_idx] != (uint16_t)MSL_ACT_ATTACK_AIR_B) {
     return;
@@ -3405,6 +3467,18 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
   // - If the defender is a grabbed/thrown victim attached to the attacker (grab_owner_port),
   //   apply percent/hitlag attribution but do not enter Damage* (no hitstun/KB state change).
   if (d_is_attached_grabbed_victim) {
+    // Attached item-hit pulses apply percent/hitlag while the victim stays in Thrown*/Capture*.
+    // Because this path suppresses Damage* entry, stale Damage no-reaction state (`x221C_b0`)
+    // must not carry into the frozen attached window. Low-throw laser pulse rows with the bit
+    // seeded set (PRH) and seeded clear (QGD) both observe the post-hitlag row clear. Clear this
+    // for the accepted attached item-hit path as a whole: hitlag may already have been established
+    // by an earlier same-frame pulse before this branch sees the final max hitlag value.
+    //
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+    // refs/melee/src/melee/it/itcoll.c::{it_8026FAC4,it_80272460}
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::inlineB1
+    combat_state_flags_clear_x221c_b0(batch, d_idx);
+
     // Victim-side x221A_b3 can be set alongside hitlag start even without Damage* entry.
     // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
     if (d_hl > d_hl_prev) {
@@ -3993,19 +4067,14 @@ void combat_apply_item_shield_hit(MslBatch* batch, int batch_index, int attacker
     return;
   }
 
-  // Decomp: powershield-active (`fp->x221C_b2`) gates only shieldDamageTaken accumulation, not
-  // the full shield-hit path (x19A4/x1924 max-int lanes still drive GuardSetOff/hitlag in
-  // Fighter_ProcessHit_8006D1EC).
-  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+  // Decomp item->shield path does not gate shieldDamageTaken on powershield-active
+  // (`fp->x221C_b2`); ftColl_80077688 accumulates fp->x19A0 unconditionally, while the separate
+  // item callback state still uses shield/reflect flags for bounce/reflect ownership.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077688
   // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
-  const uint8_t powershield_active_shield_damage =
-      combat_shield_damage_powershield_suppressed_idx(batch, d_idx);
   const uint8_t powershield_active_recoil = combat_is_powershield_active_idx(batch, d_idx);
   int shield_damage_taken =
       (int_dmg + (int)hitbox_shield_damage > 0) ? (int_dmg + (int)hitbox_shield_damage) : 0;
-  if (powershield_active_shield_damage) {
-    shield_damage_taken = 0;
-  }
 
   // Guard-owned lightshield transform:
   // - shield depletion and GuardSetOff stun both consume the current guard lightshield lane,
@@ -4778,6 +4847,8 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
            batch->state.guard_reflect_timer_x18_seed[d_idx] <= 1u)
               ? 1u
               : 0u;
+      const uint8_t guard_reflect_reflectdesc_only =
+          combat_guard_reflect_no_submotion_reflectdesc_only_lane(batch, d_idx);
 
       // Combat collision consumes world-space hitbox/hurtcap primitives derived from:
       // - pose matrices driven by fp->cur_anim_frame (prio 1, ftAnim_8006EBA4), and
@@ -4903,13 +4974,15 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           if (shield_seed_kind == 1u) {
             continue;
           }
-          const uint8_t overlaps_shield =
-              (shield_seed_kind == 2u)
-                  ? 1u
-                  : combat_shield_overlap_ftcoll_80007bcc(
-                        batch, bi, attacker, defender, hb_id, hx, hy, hz, hr, shx, shy, shz, shr,
-                        /*shield_desc_radius=*/1.0f, batch->state.fighter_scale_y[d_idx],
-                        shield_desc_envelope_ready, shield_extent_bridge_active, NULL);
+          uint8_t overlaps_shield = 0u;
+          if (shield_seed_kind == 2u) {
+            overlaps_shield = 1u;
+          } else if (!guard_reflect_reflectdesc_only) {
+            overlaps_shield = combat_shield_overlap_ftcoll_80007bcc(
+                batch, bi, attacker, defender, hb_id, hx, hy, hz, hr, shx, shy, shz, shr,
+                /*shield_desc_radius=*/1.0f, batch->state.fighter_scale_y[d_idx],
+                shield_desc_envelope_ready, shield_extent_bridge_active, NULL);
+          }
           if (!overlaps_shield) {
             continue;
           }
@@ -5110,14 +5183,15 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
         const uint8_t shield_seed_kind =
             batch->state
                 .combat_shield_contact_hb_kind[idx_hitbox_victim(bi, attacker, hb_id, defender)];
-        const uint8_t body_blocked_by_shield =
-            shield_active &&
-            (shield_seed_kind == 2u ||
-             (shield_seed_kind != 1u &&
-              combat_shield_overlap_ftcoll_80007bcc(
-                  batch, bi, attacker, defender, hb_id, hx, hy, hz, hr, shx, shy, shz, shr,
-                  /*shield_desc_radius=*/1.0f, batch->state.fighter_scale_y[d_idx],
-                  shield_desc_envelope_ready, shield_extent_bridge_active, NULL)));
+        uint8_t body_blocked_by_shield = 0u;
+        if (shield_active && shield_seed_kind == 2u) {
+          body_blocked_by_shield = 1u;
+        } else if (shield_active && shield_seed_kind != 1u && !guard_reflect_reflectdesc_only) {
+          body_blocked_by_shield = combat_shield_overlap_ftcoll_80007bcc(
+              batch, bi, attacker, defender, hb_id, hx, hy, hz, hr, shx, shy, shz, shr,
+              /*shield_desc_radius=*/1.0f, batch->state.fighter_scale_y[d_idx],
+              shield_desc_envelope_ready, shield_extent_bridge_active, NULL);
+        }
         if (body_blocked_by_shield) {
           continue;
         }
@@ -5752,6 +5826,8 @@ int combat_debug_shield_candidate_decisions(MslBatch* batch, int batch_index,
            batch->state.guard_reflect_timer_x18_seed[d_idx] <= 1u)
               ? 1u
               : 0u;
+      const uint8_t guard_reflect_reflectdesc_only =
+          combat_guard_reflect_no_submotion_reflectdesc_only_lane(batch, d_idx);
       const uint8_t defender_on_ground = batch->state.on_ground[d_idx] ? 1u : 0u;
 
       uint8_t pair_reason = (uint8_t)MSL_DEBUG_SHIELD_DECISION_ACCEPT_SHIELD;
@@ -5888,14 +5964,16 @@ int combat_debug_shield_candidate_decisions(MslBatch* batch, int batch_index,
           const uint8_t shield_seed_kind =
               batch->state
                   .combat_shield_contact_hb_kind[idx_hitbox_victim(bi, attacker, hb_id, defender)];
-          const uint8_t overlaps =
-              (shield_seed_kind == 2u)
-                  ? 1u
-                  : combat_shield_overlap_ftcoll_80007bcc(
-                        batch, bi, attacker, defender, hb_id, out->hitbox_x, out->hitbox_y,
-                        out->hitbox_z, out->hitbox_radius, shx, shy, shz, shr,
-                        /*shield_desc_radius=*/1.0f, batch->state.fighter_scale_y[d_idx],
-                        shield_desc_envelope_ready, shield_extent_bridge_active, &overlap_margin);
+          uint8_t overlaps = 0u;
+          if (shield_seed_kind == 2u) {
+            overlaps = 1u;
+          } else if (!guard_reflect_reflectdesc_only) {
+            overlaps = combat_shield_overlap_ftcoll_80007bcc(
+                batch, bi, attacker, defender, hb_id, out->hitbox_x, out->hitbox_y, out->hitbox_z,
+                out->hitbox_radius, shx, shy, shz, shr, /*shield_desc_radius=*/1.0f,
+                batch->state.fighter_scale_y[d_idx], shield_desc_envelope_ready,
+                shield_extent_bridge_active, &overlap_margin);
+          }
           out->overlap_shield = overlaps ? 1u : 0u;
           out->shield_overlap_margin = overlap_margin;
           if (!overlaps) {

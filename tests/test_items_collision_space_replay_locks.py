@@ -44,7 +44,7 @@ def _one_step_out_compare(*, ds, row) -> np.ndarray:
         )
         input_bytes[:] = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).reshape(1, input_stride)
 
-        binding.reseed_seed(handle, seed_bytes)
+        binding.reseed_seed_rollout(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)
         binding.write_compare(handle, out_compare_bytes)
 
@@ -81,7 +81,7 @@ def _rollout_rows(dataset_path: Path, start_record: int, end_record_inclusive: i
 
     try:
         seed_bytes[0, :] = samples_u8[start_record, seed_off : seed_off + seed_stride]
-        binding.reseed_seed(handle, seed_bytes)
+        binding.reseed_seed_rollout(handle, seed_bytes)
         rows: dict[int, tuple[np.void, np.void]] = {}
         for record in range(start_record, end_record_inclusive + 1):
             prev_input_bytes[0, :] = samples_u8[
@@ -646,6 +646,103 @@ def test_laser_shield_bounce_runtime_rollout_keeps_gat_laser_alive() -> None:
         assert int(out["items"][0]["instance_id"]) == 1216
         assert int(out["action_id"][0]) == int(ref["action_id"][0]) == 181
         assert int(out["hitlag"][0]) == int(ref["hitlag"][0])
+
+
+@pytest.mark.integration
+def test_laser_guardreflect_runtime_rollout_final_x14_hitshield_destroys_maj_laser() -> None:
+    # Runtime-negative for broad GuardReflect timer-only reflect staging:
+    # - MAJ:201 is still inside the active GuardReflect window, but the laser is outside the live
+    #   ReflectDesc vertical lane and must not stage a deferred reflected owner/direction.
+    # - MAJ:202 is the final-x14 handoff; the same laser then resolves through Item_80269DC8
+    #   HitShield destruction and enters GuardSetOff.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80093BC0,ftCo_GuardReflect_Anim}
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_CreateReflectHit,ftColl_80077464}
+    # refs/melee/src/melee/it/item.c::{Item_80269F14,Item_80269DC8}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_missing_laser_artifacts(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path.relative_to(root)}")
+
+    rows = _rollout_rows(dataset_path, 192, 202)
+    out_201, ref_201 = rows[201]
+    out_202, ref_202 = rows[202]
+
+    assert int(ref_201["items"][0]["exists"]) == 1
+    assert int(ref_201["items"][0]["type"]) == 55
+    for fld in ("owner", "instance_id"):
+        assert int(out_201["items"][0][fld]) == int(ref_201["items"][0][fld])
+    assert float(out_201["items"][0]["direction"]) == float(ref_201["items"][0]["direction"]) == 1.0
+    assert float(out_201["items"][0]["vel_x"]) == float(ref_201["items"][0]["vel_x"]) == 5.0
+
+    assert int(out_202["action_id"][1]) == int(ref_202["action_id"][1]) == 181
+    assert int(out_202["hitlag"][1]) == int(ref_202["hitlag"][1]) == 3
+    assert float(out_202["shield_hp"][1]) == pytest.approx(float(ref_202["shield_hp"][1]), abs=1e-6)
+    assert int(out_202["items"][0]["exists"]) == int(ref_202["items"][0]["exists"]) == 0
+
+
+@pytest.mark.integration
+def test_laser_guardreflect_final_x14_boundary_rows_do_not_overbroaden_hitshield() -> None:
+    # Boundary locks for the final-x14 F19 split:
+    # - GAT:1287 is still a frozen GuardReflect keepalive row (`action_frame=-2`) and must not be
+    #   destroyed by the MAJ final-handoff fix.
+    # - GAT:2275 is another final-x14 keepalive row with no current shield-bubble overlap.
+    # - DCC:353 is a final-x14 row with current shield-bubble overlap and must still route through
+    #   HitShield / laser destruction.
+    # - MAJ:6341 is a GuardSetOff row carrying the powershield bit without a proven ReflectDesc
+    #   owner transfer; it keeps the projectile callback alive without staging a reflected owner.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80093BC0,ftCo_GuardReflect_Anim}
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076CBC,ftColl_80077464}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_missing_laser_artifacts(root)
+    cases = [
+        (
+            root
+            / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            1287,
+            0,
+            0,
+        ),
+        (
+            root
+            / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            2275,
+            0,
+            0,
+        ),
+        (
+            root
+            / "datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl",
+            353,
+            0,
+            0,
+        ),
+        (
+            root
+            / "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl",
+            6341,
+            1,
+            0,
+        ),
+    ]
+    for dataset_path, record, p, item_slot in cases:
+        if not dataset_path.exists():
+            pytest.skip(f"missing local dataset: {dataset_path.relative_to(root)}")
+        ds = read_dataset(str(dataset_path))
+        row = ds.samples[record : record + 1]
+        out = _one_step_out_compare(ds=ds, row=row)
+        ref = row["ref_t1"]
+        for field in ("action_id", "action_frame", "animation_index", "hitlag", "instance_id"):
+            assert int(out[field][0, p]) == int(ref[field][0, p]), (
+                f"{dataset_path.name}:{record} field={field}"
+            )
+        for field in ("exists", "type", "owner", "instance_id"):
+            assert int(out["items"][0, item_slot][field]) == int(ref["items"][0, item_slot][field]), (
+                f"{dataset_path.name}:{record} item field={field}"
+            )
 
 
 @pytest.mark.integration
