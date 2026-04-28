@@ -17,12 +17,16 @@ from tools.eval.dataset import COMPARE_DTYPE
 class IgnoredLane:
     field: str
     subindex: int
+    bitmask: int | None
     reason: str
     exception: str
 
     @property
     def label(self) -> str:
-        return f"{self.field}[{self.subindex}]" if self.subindex >= 0 else self.field
+        base = f"{self.field}[{self.subindex}]" if self.subindex >= 0 else self.field
+        if self.bitmask is None:
+            return base
+        return f"{base}&0x{self.bitmask:02X}"
 
 
 @dataclass(frozen=True)
@@ -31,13 +35,54 @@ class ValidationProfile:
     ignored_lanes: tuple[IgnoredLane, ...]
 
     def is_ignored(self, field: str, subindex: int) -> bool:
-        return any(lane.field == field and lane.subindex == subindex for lane in self.ignored_lanes)
+        return any(
+            lane.field == field and lane.subindex == subindex and lane.bitmask is None
+            for lane in self.ignored_lanes
+        )
+
+    def ignored_bitmask_for(self, field: str, subindex: int) -> int:
+        mask = 0
+        for lane in self.ignored_lanes:
+            if lane.field == field and lane.subindex == subindex and lane.bitmask is not None:
+                mask |= int(lane.bitmask)
+        return mask & 0xFFFFFFFF
 
     def ignored_label_for(self, field: str, subindex: int) -> str | None:
         for lane in self.ignored_lanes:
-            if lane.field == field and lane.subindex == subindex:
+            if lane.field == field and lane.subindex == subindex and lane.bitmask is None:
                 return lane.label
         return None
+
+    def scored_value(self, field: str, subindex: int, value: int) -> int:
+        if self.is_ignored(field, subindex):
+            return 0
+        ignored_mask = self.ignored_bitmask_for(field, subindex)
+        if ignored_mask == 0:
+            return int(value)
+        return int(value) & (~ignored_mask & 0xFFFFFFFF)
+
+    def ignored_value(self, field: str, subindex: int, value: int) -> int:
+        if self.is_ignored(field, subindex):
+            return int(value)
+        ignored_mask = self.ignored_bitmask_for(field, subindex)
+        if ignored_mask == 0:
+            return 0
+        return int(value) & ignored_mask
+
+    def scored_values_differ(self, field: str, subindex: int, out_value: int, ref_value: int) -> bool:
+        if self.is_ignored(field, subindex):
+            return False
+        return self.scored_value(field, subindex, out_value) != self.scored_value(
+            field, subindex, ref_value
+        )
+
+    def ignored_values_differ(self, field: str, subindex: int, out_value: int, ref_value: int) -> bool:
+        if self.is_ignored(field, subindex):
+            return int(out_value) != int(ref_value)
+        ignored_mask = self.ignored_bitmask_for(field, subindex)
+        if ignored_mask == 0:
+            return False
+        return (int(out_value) & ignored_mask) != (int(ref_value) & ignored_mask)
 
 
 STRICT_PROFILE = ValidationProfile(name="strict", ignored_lanes=())
@@ -48,15 +93,17 @@ RL1_GAMEPLAY_PROFILE = ValidationProfile(
         IgnoredLane(
             field="state_flags",
             subindex=4,
+            bitmask=0x80,
             reason=(
-                "Slippi fp+0x221F camera-subject visibility byte. The current RL1 target consumes "
-                "gameplay state, collision, damage, hitlag, shield, item, source, and identity "
-                "lanes, but not magnifying-glass/camera-box rendering."
+                "Slippi fp+0x221F camera-subject / magnifying-glass visibility bit. The current "
+                "RL1 target consumes gameplay state, collision, damage, hitlag, shield, item, "
+                "source, identity lanes, and the other fp+0x221F gameplay-adjacent bits, but not "
+                "camera-box rendering visibility."
             ),
             exception=(
-                "fp+0x221F bit3 gates source-clear timer derivation during dataset construction; "
-                "that semantic seed lane remains scored separately. Only the raw compare byte is "
-                "ignored for validation totals/rollout first-break ranking."
+                "Only bit 0x80 of the raw compare byte is ignored for validation totals/rollout "
+                "first-break ranking. Other state_flags[4] bits, including x221F_b1/x221F_b3, "
+                "remain scored."
             ),
         ),
     ),

@@ -289,6 +289,29 @@ def _lane_ignored(profile: ValidationProfile, field: str, subindex: int) -> bool
     return profile.is_ignored(field, subindex)
 
 
+def _scored_int_values_differ(
+    profile: ValidationProfile, field: str, subindex: int, out_v: int, ref_v: int
+) -> bool:
+    return profile.scored_values_differ(field, subindex, out_v, ref_v)
+
+
+def _scored_int_diff_array(
+    profile: ValidationProfile, field: str, subindex: int, out_values: np.ndarray, ref_values: np.ndarray
+) -> np.ndarray:
+    if profile.is_ignored(field, subindex):
+        return np.zeros(out_values.shape, dtype=bool)
+    ignored_mask = profile.ignored_bitmask_for(field, subindex)
+    if ignored_mask == 0:
+        return out_values != ref_values
+    dtype = np.asarray(out_values).dtype
+    try:
+        dtype_mask = int(np.iinfo(dtype).max)
+    except ValueError:
+        dtype_mask = 0xFFFFFFFF
+    mask = np.asarray((~ignored_mask) & dtype_mask, dtype=dtype)
+    return (out_values & mask) != (ref_values & mask)
+
+
 def _field_cluster(field: str) -> str:
     base = _base_field(field)
     if base in {"action_id", "animation_index", "action_frame", "instance_id"}:
@@ -334,14 +357,16 @@ def _compare_first_mismatch(
         if not hasattr(out, "ndim") or out.ndim == 0:
             if _lane_ignored(profile, field, -1):
                 continue
-            if int(np.asarray(out).item()) != int(np.asarray(ref).item()):
+            if _scored_int_values_differ(
+                profile, field, -1, int(np.asarray(out).item()), int(np.asarray(ref).item())
+            ):
                 return FirstMismatch(offset, -1, field, -1, _int_text(out), _int_text(ref))
             continue
         if out.ndim == 1:
             if _lane_ignored(profile, field, -1):
                 continue
             for p in players:
-                if int(out[p]) != int(ref[p]):
+                if _scored_int_values_differ(profile, field, -1, int(out[p]), int(ref[p])):
                     return FirstMismatch(offset, int(p), field, -1, _int_text(out[p]), _int_text(ref[p]))
             continue
         for p in players:
@@ -350,7 +375,9 @@ def _compare_first_mismatch(
             for sub in range(int(out_slice.size)):
                 if _lane_ignored(profile, field, sub):
                     continue
-                if int(out_slice.flat[sub]) != int(ref_slice.flat[sub]):
+                if _scored_int_values_differ(
+                    profile, field, sub, int(out_slice.flat[sub]), int(ref_slice.flat[sub])
+                ):
                     return FirstMismatch(
                         offset,
                         int(p),
@@ -447,7 +474,14 @@ def _compare_first_mismatches_batch(
         if field_shape == ():
             if _lane_ignored(profile, field, -1):
                 continue
-            if assign_int(out != ref, player=-1, field=field, subindex=-1, out_values=out, ref_values=ref):
+            if assign_int(
+                _scored_int_diff_array(profile, field, -1, out, ref),
+                player=-1,
+                field=field,
+                subindex=-1,
+                out_values=out,
+                ref_values=ref,
+            ):
                 return
             continue
         if len(field_shape) == 1:
@@ -457,7 +491,7 @@ def _compare_first_mismatches_batch(
                 out_values = out[:, p]
                 ref_values = ref[:, p]
                 if assign_int(
-                    out_values != ref_values,
+                    _scored_int_diff_array(profile, field, -1, out_values, ref_values),
                     player=int(p),
                     field=field,
                     subindex=-1,
@@ -473,7 +507,7 @@ def _compare_first_mismatches_batch(
                 out_values = out[:, p].reshape(out.shape[0], -1)[:, sub]
                 ref_values = ref[:, p].reshape(ref.shape[0], -1)[:, sub]
                 if assign_int(
-                    out_values != ref_values,
+                    _scored_int_diff_array(profile, field, sub, out_values, ref_values),
                     player=int(p),
                     field=f"{field}[{sub}]",
                     subindex=int(sub),
@@ -551,12 +585,17 @@ def _score_horizon_row(
         if not hasattr(out, "ndim") or out.ndim == 0:
             if _lane_ignored(profile, field, -1):
                 continue
-            discrete_score += _discrete_field_score(field, int(np.asarray(out).item()), int(np.asarray(ref).item()))
+            if _scored_int_values_differ(
+                profile, field, -1, int(np.asarray(out).item()), int(np.asarray(ref).item())
+            ):
+                discrete_score += _discrete_field_score(field, int(np.asarray(out).item()), int(np.asarray(ref).item()))
             continue
         if out.ndim == 1:
             if _lane_ignored(profile, field, -1):
                 continue
             for p in players:
+                if not _scored_int_values_differ(profile, field, -1, int(out[p]), int(ref[p])):
+                    continue
                 score = _discrete_field_score(field, int(out[p]), int(ref[p]))
                 player_scores[p] += score
                 discrete_score += score
@@ -567,7 +606,9 @@ def _score_horizon_row(
             for sub in range(int(out_slice.size)):
                 if _lane_ignored(profile, field, sub):
                     continue
-                if int(out_slice.flat[sub]) != int(ref_slice.flat[sub]):
+                if _scored_int_values_differ(
+                    profile, field, sub, int(out_slice.flat[sub]), int(ref_slice.flat[sub])
+                ):
                     player_scores[p] += 15.0
                     discrete_score += 15.0
 
@@ -647,21 +688,27 @@ def _score_horizon_rows_batch(
         if field_shape == ():
             if _lane_ignored(profile, field, -1):
                 continue
-            discrete_score += _discrete_field_score_array(field, out, ref)
+            discrete_score += np.where(
+                _scored_int_diff_array(profile, field, -1, out, ref),
+                _discrete_field_score_array(field, out, ref),
+                0.0,
+            )
             continue
         if len(field_shape) == 1:
             if _lane_ignored(profile, field, -1):
                 continue
             for p in players:
-                score = _discrete_field_score_array(field, out[:, p], ref[:, p])
+                diff = _scored_int_diff_array(profile, field, -1, out[:, p], ref[:, p])
+                score = np.where(diff, _discrete_field_score_array(field, out[:, p], ref[:, p]), 0.0)
                 player_scores[:, p] += score
                 discrete_score += score
             continue
         for p in players:
-            diff = out[:, p].reshape(n, -1) != ref[:, p].reshape(n, -1)
+            out_flat = out[:, p].reshape(n, -1)
+            ref_flat = ref[:, p].reshape(n, -1)
+            diff = out_flat != ref_flat
             for sub in range(diff.shape[1]):
-                if _lane_ignored(profile, field, sub):
-                    diff[:, sub] = False
+                diff[:, sub] = _scored_int_diff_array(profile, field, sub, out_flat[:, sub], ref_flat[:, sub])
             diff_count = np.count_nonzero(diff, axis=1).astype(np.float64)
             score = diff_count * 15.0
             player_scores[:, p] += score
@@ -720,7 +767,7 @@ def _mismatched_player_fields(
         if out.ndim == 1:
             if _lane_ignored(profile, field, -1):
                 continue
-            if int(out[player]) != int(ref[player]):
+            if _scored_int_values_differ(profile, field, -1, int(out[player]), int(ref[player])):
                 fields.append(field)
             continue
         out_slice = np.asarray(out[player])
@@ -728,7 +775,9 @@ def _mismatched_player_fields(
         for sub in range(int(out_slice.size)):
             if _lane_ignored(profile, field, sub):
                 continue
-            if int(out_slice.flat[sub]) != int(ref_slice.flat[sub]):
+            if _scored_int_values_differ(
+                profile, field, sub, int(out_slice.flat[sub]), int(ref_slice.flat[sub])
+            ):
                 fields.append(f"{field}[{sub}]")
     for field in float_fields:
         if abs(float(out_row[field][player]) - float(ref_row[field][player])) > float_epsilon:

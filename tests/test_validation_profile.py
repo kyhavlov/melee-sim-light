@@ -14,7 +14,7 @@ from tools.eval.discrete_compare_lanes import (
 from tools.eval.validation_profile import get_validation_profile
 
 
-def test_rl1_gameplay_ignores_state_flags_4_but_strict_scores_it() -> None:
+def test_rl1_gameplay_ignores_only_state_flags_4_camera_bit_but_strict_scores_it() -> None:
     seed = np.zeros(1, dtype=COMPARE_DTYPE)
     out = np.zeros(1, dtype=COMPARE_DTYPE)
     ref = np.zeros(1, dtype=COMPARE_DTYPE)
@@ -42,8 +42,48 @@ def test_rl1_gameplay_ignores_state_flags_4_but_strict_scores_it() -> None:
     assert first_mismatch_field(out_row=out[0], ref_row=ref[0], lanes=ignored_lanes) == "state_flags"
     assert (
         first_mismatch_field(out_row=out[0], ref_row=ref[0], lanes=ignored_lanes, label_subindex=True)
-        == "state_flags[4]"
+        == "state_flags[4]&0x80"
     )
+
+
+def test_rl1_gameplay_scores_other_state_flags_4_bits() -> None:
+    seed = np.zeros(1, dtype=COMPARE_DTYPE)
+    out = np.zeros(1, dtype=COMPARE_DTYPE)
+    ref = np.zeros(1, dtype=COMPARE_DTYPE)
+    ref["state_flags"][0, 1, 4] = 0x08
+
+    rl1_lanes = compile_discrete_compare_lanes(
+        ("action_id", "state_flags"), (0, 1), profile=get_validation_profile("rl1_gameplay")
+    )
+    mm = first_mismatch_values(seed_row=seed[0], out_row=out[0], ref_row=ref[0], lanes=rl1_lanes)
+    assert mm is not None
+    assert mm.field == "state_flags"
+    assert mm.player == 1
+    assert mm.subindex == 4
+
+    ignored_lanes = compile_discrete_compare_lanes(
+        ("action_id", "state_flags"), (0, 1), profile=get_validation_profile("rl1_gameplay"), ignored_only=True
+    )
+    assert first_mismatch_field(out_row=out[0], ref_row=ref[0], lanes=ignored_lanes) is None
+
+
+def test_rl1_gameplay_scores_non_camera_bits_even_when_camera_bit_differs() -> None:
+    seed = np.zeros(1, dtype=COMPARE_DTYPE)
+    out = np.zeros(1, dtype=COMPARE_DTYPE)
+    ref = np.zeros(1, dtype=COMPARE_DTYPE)
+    out["state_flags"][0, 1, 4] = 0x80
+    ref["state_flags"][0, 1, 4] = 0x81
+
+    rl1_lanes = compile_discrete_compare_lanes(
+        ("action_id", "state_flags"), (0, 1), profile=get_validation_profile("rl1_gameplay")
+    )
+    mm = first_mismatch_values(seed_row=seed[0], out_row=out[0], ref_row=ref[0], lanes=rl1_lanes)
+    assert mm is not None
+    assert mm.field == "state_flags"
+    assert mm.player == 1
+    assert mm.subindex == 4
+    assert mm.out == 0
+    assert mm.ref == 1
 
 
 def test_rollout_ignored_first_state_flags_4_does_not_break_scored_streak() -> None:
@@ -57,7 +97,7 @@ def test_rollout_ignored_first_state_flags_4_does_not_break_scored_streak() -> N
     def attempt_from_current(j: int):
         attempts.append(j)
         if j == 0:
-            return streaks._AttemptResult(scored_field=None, ignored_first_field="state_flags[4]")
+            return streaks._AttemptResult(scored_field=None, ignored_first_field="state_flags[4]&0x80")
         if j == 1:
             return streaks._AttemptResult(scored_field="action_id", ignored_first_field=None)
         return None
@@ -74,10 +114,66 @@ def test_rollout_ignored_first_state_flags_4_does_not_break_scored_streak() -> N
 
     assert attempts == [0, 1, 2]
     assert out.first_mismatch_field_counts == {"action_id": 1}
-    assert out.ignored_first_mismatch_field_counts == {"state_flags[4]": 1}
+    assert out.ignored_first_mismatch_field_counts == {"state_flags[4]&0x80": 1}
     assert out.best_start_record == 1
     assert out.best_end_record_excl == 3
     assert out.best_len == 2
+
+
+def test_disruptive_profile_scores_only_non_camera_state_flags_4_bits() -> None:
+    import tools.eval.disruptive_rollout_desyncs as disruptive
+
+    profile = get_validation_profile("rl1_gameplay")
+    out = np.zeros(1, dtype=COMPARE_DTYPE)
+    ref = np.zeros(1, dtype=COMPARE_DTYPE)
+
+    ref["state_flags"][0, 1, 4] = 0x80
+    first = disruptive._compare_first_mismatch(
+        out_row=out[0],
+        ref_row=ref[0],
+        players=(0, 1),
+        discrete_fields=("state_flags",),
+        float_fields=(),
+        offset=0,
+        float_epsilon=0.05,
+        profile=profile,
+    )
+    score = disruptive._score_horizon_row(
+        out_row=out[0],
+        ref_row=ref[0],
+        players=(0, 1),
+        discrete_fields=("state_flags",),
+        float_fields=(),
+        float_epsilon=0.05,
+        profile=profile,
+    )
+    assert first is None
+    assert score.discrete == 0.0
+
+    ref["state_flags"][0, 1, 4] = 0x81
+    first = disruptive._compare_first_mismatch(
+        out_row=out[0],
+        ref_row=ref[0],
+        players=(0, 1),
+        discrete_fields=("state_flags",),
+        float_fields=(),
+        offset=0,
+        float_epsilon=0.05,
+        profile=profile,
+    )
+    score = disruptive._score_horizon_row(
+        out_row=out[0],
+        ref_row=ref[0],
+        players=(0, 1),
+        discrete_fields=("state_flags",),
+        float_fields=(),
+        float_epsilon=0.05,
+        profile=profile,
+    )
+    assert first is not None
+    assert first.field == "state_flags[4]"
+    assert first.player == 1
+    assert score.discrete == 15.0
 
 
 @dataclass
@@ -109,7 +205,9 @@ class _FakeBinding:
         view[:] = self._out_compare[: view.shape[0]]
 
 
-def test_one_step_profile_counts_state_flags_4_as_ignored_only(monkeypatch, tmp_path: Path) -> None:
+def test_one_step_profile_counts_state_flags_4_camera_bit_as_ignored_only(
+    monkeypatch, tmp_path: Path
+) -> None:
     import tools.eval.run_one_step_eval as eval_mod
 
     samples = np.zeros((1,), dtype=SAMPLE_DTYPE)
@@ -125,9 +223,28 @@ def test_one_step_profile_counts_state_flags_4_as_ignored_only(monkeypatch, tmp_
     rl1 = eval_mod.evaluate_dataset(dataset_path=tmp_path / "synthetic.msl", chunk=1, profile="rl1_gameplay")
     assert rl1.mismatches["state_flags"] == 0
     assert rl1.strict_mismatches["state_flags"] == 1
-    assert rl1.ignored_mismatches["state_flags[4]"] == 1
+    assert rl1.ignored_mismatches["state_flags[4]&0x80"] == 1
 
     strict = eval_mod.evaluate_dataset(dataset_path=tmp_path / "synthetic.msl", chunk=1, profile="strict")
     assert strict.mismatches["state_flags"] == 1
     assert strict.strict_mismatches["state_flags"] == 1
     assert strict.ignored_mismatches == {}
+
+
+def test_one_step_profile_scores_other_state_flags_4_bits(monkeypatch, tmp_path: Path) -> None:
+    import tools.eval.run_one_step_eval as eval_mod
+
+    samples = np.zeros((1,), dtype=SAMPLE_DTYPE)
+    samples["seed_t"]["frame_id"][0] = 100
+    samples["ref_t1"]["frame_id"][0] = 101
+    samples["ref_t1"]["state_flags"][0, 1, 4] = 0x08
+    out_compare = samples["ref_t1"].copy()
+    out_compare["state_flags"][0, 1, 4] = 0
+
+    monkeypatch.setattr(eval_mod, "_load_binding", lambda: _FakeBinding(out_compare))
+    monkeypatch.setattr(eval_mod, "read_dataset", lambda _p: _FakeDataset(header={"num_players": 2}, samples=samples))
+
+    rl1 = eval_mod.evaluate_dataset(dataset_path=tmp_path / "synthetic.msl", chunk=1, profile="rl1_gameplay")
+    assert rl1.mismatches["state_flags"] == 1
+    assert rl1.strict_mismatches["state_flags"] == 1
+    assert rl1.ignored_mismatches["state_flags[4]&0x80"] == 0

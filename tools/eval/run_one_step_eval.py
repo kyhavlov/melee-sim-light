@@ -618,17 +618,29 @@ def evaluate_dataset(
             mismatches[field] += count
             strict_mismatches[field] += count
 
-        # state_flags is (players,5)
-        state_flags_diff = out_compare_view["state_flags"][:, active, :] != ref["state_flags"][:, active, :]
+        # state_flags is (players,5). Validation profiles may ignore whole bytes or individual
+        # bits inside a byte; scored counts keep the byte lane when any non-ignored bit differs.
+        state_flags_xor = (
+            out_compare_view["state_flags"][:, active, :].astype(np.uint16)
+            ^ ref["state_flags"][:, active, :].astype(np.uint16)
+        )
+        state_flags_diff = state_flags_xor != 0
         strict_state_flags = int(state_flags_diff.sum())
-        scored_state_flags_diff = state_flags_diff.copy()
+        scored_state_flags_xor = state_flags_xor.copy()
         for lane in validation_profile.ignored_lanes:
             if lane.field == "state_flags":
-                ignored = state_flags_diff[:, :, lane.subindex]
-                ignored_count = int(ignored.sum())
-                ignored_mismatches[lane.label] += ignored_count
-                scored_state_flags_diff[:, :, lane.subindex] = False
-        mismatches["state_flags"] += int(scored_state_flags_diff.sum())
+                if lane.bitmask is None:
+                    ignored = state_flags_diff[:, :, lane.subindex]
+                    ignored_count = int(ignored.sum())
+                    ignored_mismatches[lane.label] += ignored_count
+                    scored_state_flags_xor[:, :, lane.subindex] = 0
+                else:
+                    ignored_mask = int(lane.bitmask) & 0xFF
+                    ignored = (state_flags_xor[:, :, lane.subindex] & ignored_mask) != 0
+                    ignored_count = int(ignored.sum())
+                    ignored_mismatches[lane.label] += ignored_count
+                    scored_state_flags_xor[:, :, lane.subindex] &= np.uint16(~ignored_mask & 0xFF)
+        mismatches["state_flags"] += int((scored_state_flags_xor != 0).sum())
         strict_mismatches["state_flags"] += strict_state_flags
 
         # Items: compare all 15 slots (global), but only for exists-matched slots for float errors.
