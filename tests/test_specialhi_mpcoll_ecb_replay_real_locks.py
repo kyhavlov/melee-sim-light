@@ -28,6 +28,10 @@ MAJ = (
     "datasets/aggregate_recent/replays/validation/aggregate_recent/"
     "MotionlessAggressiveJay.msl"
 )
+HVG = (
+    "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+    "HilariousVillainousGiraffe.msl"
+)
 
 
 def _run_row(
@@ -71,6 +75,7 @@ def _run_row(
             ("ceiling_normal_y", ("<f4", (4,))),
             ("coll_env_flags", ("<u4", (4,))),
             ("coll_prev_env_flags", ("<u4", (4,))),
+            ("damage_hitlag_wall_asdi_latch", ("u1", (4,))),
         ],
         align=False,
     )
@@ -108,6 +113,7 @@ def _collision_contact_dtype() -> np.dtype:
             ("ceiling_normal_y", ("<f4", (4,))),
             ("coll_env_flags", ("<u4", (4,))),
             ("coll_prev_env_flags", ("<u4", (4,))),
+            ("damage_hitlag_wall_asdi_latch", ("u1", (4,))),
         ],
         align=False,
     )
@@ -179,6 +185,7 @@ def test_specialairhi_right_wall_jobj_ecb_envelope_matches_qgd_positive(
     assert int(got["hitlag"][1]) == int(ref["hitlag"][1])
     assert int(contacts["wall_kind"][0]) == 2
     assert int(contacts["wall_id"][0]) == wall_id
+    assert int(contacts["damage_hitlag_wall_asdi_latch"][0]) == 0
     assert float(got["pos_x"][0]) == pytest.approx(float(ref["pos_x"][0]), abs=1e-5)
     assert float(got["pos_y"][0]) == pytest.approx(float(ref["pos_y"][0]), abs=1e-6)
 
@@ -252,17 +259,90 @@ def test_specialairhi_left_wall_envelope_reduces_maj_rollout_escape() -> None:
     assert int(contacts_8918["wall_id"][1]) == 11
     assert float(contacts_8917["wall_contact_x"][1]) == pytest.approx(-85.5656967, abs=1e-5)
     assert float(contacts_8918["wall_contact_x"][1]) == pytest.approx(-85.5656967, abs=1e-5)
-    # The retained owner fixes the left-wall contact identity/envelope. The remaining X residual is
-    # a downstream rollout cascade, so pin the observed residual instead of using a broad tolerance
-    # that could hide losing the wall-envelope contact above.
+    # The retained live-JObj basis fixes the left-wall contact identity/envelope and removes the
+    # prior rollout X drift. Pin the tiny float residual instead of using a broad tolerance that
+    # could hide losing the wall-envelope contact above.
     assert float(got_8917["pos_x"][1] - ref_8917["pos_x"][1]) == pytest.approx(
-        -0.4532547, abs=1e-5
+        7.6293945e-06, abs=1e-6
     )
     assert float(got_8918["pos_x"][1] - ref_8918["pos_x"][1]) == pytest.approx(
-        0.41002655, abs=1e-5
+        1.5258789e-05, abs=1e-6
     )
     assert int(got_8922["action_id"][1]) == int(ref_8922["action_id"][1]) == 84
     assert int(contacts_8922["wall_kind"][1]) == 0
+
+
+@pytest.mark.integration
+def test_specialairhi_left_wall_hitlag_refresh_prevents_hvg_passivewall_cascade() -> None:
+    # HVG's left-wall Firefox/Firebird contact enters DamageFlyHi from a BODY hit while hitlag is
+    # active near the wall. Fighter_procMap still runs the collision callback during hitlag, so the
+    # DamageFly rows must refresh wall metadata and clear stale SpecialAirHi Hug before hitlag exit.
+    # Otherwise the rollout incorrectly enters PassiveWall at the former F04 cascade.
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procMap}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
+    rows = _run_rollout_rows(4780, 4829, HVG)
+
+    got_4795, ref_4795, contacts_4795 = rows[4795]
+    got_4796, ref_4796, contacts_4796 = rows[4796]
+    got_4801, ref_4801, contacts_4801 = rows[4801]
+    got_4804, ref_4804, contacts_4804 = rows[4804]
+    got_4829, ref_4829, contacts_4829 = rows[4829]
+
+    assert int(got_4795["action_id"][0]) == int(ref_4795["action_id"][0]) == 87
+    assert int(got_4795["hitlag"][0]) == int(ref_4795["hitlag"][0]) == 6
+    assert int(contacts_4795["wall_kind"][0]) == 1
+    assert int(contacts_4795["wall_id"][0]) == 11
+    assert int(contacts_4795["damage_hitlag_wall_asdi_latch"][0]) == 1
+    assert int(contacts_4795["coll_env_flags"][0]) & 0x20
+
+    assert int(got_4796["action_id"][0]) == int(ref_4796["action_id"][0]) == 87
+    assert int(got_4796["hitlag"][0]) == int(ref_4796["hitlag"][0]) == 5
+    assert int(contacts_4796["wall_kind"][0]) == 0
+    assert (int(contacts_4796["coll_env_flags"][0]) & 0x20) == 0
+
+    assert int(got_4801["action_id"][0]) == int(ref_4801["action_id"][0]) == 87
+    assert int(got_4801["hitlag"][0]) == int(ref_4801["hitlag"][0]) == 0
+    assert int(got_4801["hitstun"][0]) == int(ref_4801["hitstun"][0]) == 43
+    assert int(contacts_4801["wall_kind"][0]) == 0
+    assert int(contacts_4801["damage_hitlag_wall_asdi_latch"][0]) == 0
+    assert (int(contacts_4801["coll_env_flags"][0]) & 0x20) == 0
+    assert float(got_4801["pos_x"][0] - ref_4801["pos_x"][0]) == pytest.approx(
+        0.07463837, abs=1e-6
+    )
+
+    assert int(got_4804["action_id"][0]) == int(ref_4804["action_id"][0]) == 87
+    assert int(got_4804["hitstun"][0]) == int(ref_4804["hitstun"][0]) == 40
+    assert int(contacts_4804["wall_kind"][0]) == 0
+    assert (int(contacts_4804["coll_env_flags"][0]) & 0x20) == 0
+
+    assert int(got_4829["action_id"][0]) == int(ref_4829["action_id"][0]) == 0
+    assert int(got_4829["stocks"][0]) == int(ref_4829["stocks"][0]) == 2
+    assert int(contacts_4829["wall_kind"][0]) == 0
+
+
+@pytest.mark.integration
+def test_damagefly_stale_wall_id_without_wall_latch_does_not_project_asdi() -> None:
+    # `CollData.wall_id` persists after detach. Wall ASDI projection on DamageFly hitlag exit must
+    # require the phase-local wall-contact latch produced by the same hitlag/collision refresh, not
+    # a stale line id left in the seed.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+    #   ftCo_Damage_OnExitHitlag,ftCo_DamageFly_Coll}
+    rows = _run_rollout_rows(4780, 4804, HVG)
+    got_4801, ref_4801, contacts_4801 = rows[4801]
+    got_4804, ref_4804, contacts_4804 = rows[4804]
+    p = 0
+
+    assert int(got_4801["hitlag"][p]) == int(ref_4801["hitlag"][p]) == 0
+    assert int(contacts_4801["wall_kind"][p]) == 0
+    assert int(contacts_4801["wall_id"][p]) == 11
+    assert int(got_4804["hitlag"][p]) == int(ref_4804["hitlag"][p]) == 0
+    assert int(contacts_4804["wall_kind"][p]) == 0
+    assert int(contacts_4804["wall_id"][p]) == 11
+
+    first_exit_delta = float(got_4801["pos_x"][p] - ref_4801["pos_x"][p])
+    later_stale_delta = float(got_4804["pos_x"][p] - ref_4804["pos_x"][p])
+    assert first_exit_delta == pytest.approx(0.07463837, abs=1e-6)
+    assert later_stale_delta == pytest.approx(first_exit_delta, abs=1e-6)
 
 
 @pytest.mark.integration

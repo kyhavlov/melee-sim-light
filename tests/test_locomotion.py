@@ -137,6 +137,7 @@ COLLISION_CONTACTS_DTYPE = np.dtype(
         ("ceiling_normal_y", ("<f4", (MAX_PLAYERS,))),
         ("coll_env_flags", ("<u4", (MAX_PLAYERS,))),
         ("coll_prev_env_flags", ("<u4", (MAX_PLAYERS,))),
+        ("damage_hitlag_wall_asdi_latch", ("u1", (MAX_PLAYERS,))),
     ],
     align=False,
 )

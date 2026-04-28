@@ -118,6 +118,7 @@ def test_wall_contact_persists_across_frames_on_fd() -> None:
             ("ceiling_normal_y", ("<f4", (4,))),
             ("coll_env_flags", ("<u4", (4,))),
             ("coll_prev_env_flags", ("<u4", (4,))),
+            ("damage_hitlag_wall_asdi_latch", ("u1", (4,))),
         ],
         align=False,
     )
@@ -229,6 +230,7 @@ def test_ceiling_contact_persists_across_frames_on_fd() -> None:
             ("ceiling_normal_y", ("<f4", (4,))),
             ("coll_env_flags", ("<u4", (4,))),
             ("coll_prev_env_flags", ("<u4", (4,))),
+            ("damage_hitlag_wall_asdi_latch", ("u1", (4,))),
         ],
         align=False,
     )
@@ -325,6 +327,7 @@ def test_wall_contact_triggers_on_ecb_side_crossing_not_root_on_fd() -> None:
             ("ceiling_normal_y", ("<f4", (4,))),
             ("coll_env_flags", ("<u4", (4,))),
             ("coll_prev_env_flags", ("<u4", (4,))),
+            ("damage_hitlag_wall_asdi_latch", ("u1", (4,))),
         ],
         align=False,
     )
@@ -436,6 +439,7 @@ def test_bottom_wall_push_does_not_promote_common_air_walljump_on_fd() -> None:
             ("ceiling_normal_y", ("<f4", (4,))),
             ("coll_env_flags", ("<u4", (4,))),
             ("coll_prev_env_flags", ("<u4", (4,))),
+            ("damage_hitlag_wall_asdi_latch", ("u1", (4,))),
         ],
         align=False,
     )
@@ -543,6 +547,7 @@ def test_ceiling_contact_triggers_on_ecb_top_crossing_not_root_on_fd() -> None:
             ("ceiling_normal_y", ("<f4", (4,))),
             ("coll_env_flags", ("<u4", (4,))),
             ("coll_prev_env_flags", ("<u4", (4,))),
+            ("damage_hitlag_wall_asdi_latch", ("u1", (4,))),
         ],
         align=False,
     )

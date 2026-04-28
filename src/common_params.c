@@ -401,6 +401,7 @@ int common_params_init(void) {
       json_get_u8(buf, "sdi_tilt_max_frames", &g_params.sdi_tilt_max_frames) != 0 ||
       json_get_f32(buf, "sdi_step_mul", &g_params.sdi_step_mul) != 0 ||
       json_get_f32(buf, "asdi_step_mul", &g_params.asdi_step_mul) != 0 ||
+      json_get_f32(buf, "shield_sdi_mul", &g_params.shield_sdi_mul) != 0 ||
       json_get_f32(buf, "di_max_deg", &g_params.di_max_deg) != 0 ||
       json_get_f32(buf, "lsi_lr_held_mul", &g_params.lsi_lr_held_mul) != 0 ||
       json_get_f32(buf, "shield_attacker_ground_kb_mul", &g_params.shield_attacker_ground_kb_mul) !=

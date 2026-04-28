@@ -25,6 +25,7 @@ _CONTACTS_DTYPE = np.dtype(
         ("ceiling_normal_y", ("<f4", (4,))),
         ("coll_env_flags", ("<u4", (4,))),
         ("coll_prev_env_flags", ("<u4", (4,))),
+        ("damage_hitlag_wall_asdi_latch", ("u1", (4,))),
     ],
     align=False,
 )

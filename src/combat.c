@@ -1,6 +1,7 @@
 #include "combat.h"
 
 #include <errno.h>
+#include <float.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -27,6 +28,7 @@
 #include "msl_math.h"
 #include "mtx34.h"
 #include "move_tables.h"
+#include "shield_tilt_table.h"
 #include "staling.h"
 
 static inline size_t idx_hitbox(int bi, int p, int hb_i) {
@@ -660,6 +662,28 @@ static inline uint8_t combat_float_aobj_hurtcap_pose_owner(uint16_t action_id) {
   }
 }
 
+static inline uint8_t combat_guard_no_tilt_current_pose_gap(const MslBatch* batch, size_t d_idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  if (batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_GUARD) {
+    return 0u;
+  }
+  if (batch->state.animation_index[d_idx] != UINT32_MAX || batch->state.action_frame[d_idx] >= 0) {
+    return 0u;
+  }
+  const float mag = batch->state.guard_tilt_x4[d_idx];
+  if (!(mag == 0.0f || mag <= FLT_EPSILON)) {
+    return 0u;
+  }
+  MslShieldTiltTableView tv;
+  if (msl_shield_tilt_table_view(batch->state.char_id[d_idx], &tv) != 0 || tv.xyz == NULL ||
+      tv.frame_count == 0u) {
+    return 0u;
+  }
+  return batch->state.guard_tilt_x8[d_idx] == tv.neutral_frame ? 1u : 0u;
+}
+
 static inline uint8_t combat_body_overlap_lbColl_80006E58_matrix_radius(
     const MslBatch* batch, int bi, int attacker, int hb_id, int defender, int cap_id, float hx,
     float hy, float hz, float hr, float ax, float ay, float az, float bx, float by, float bz,
@@ -686,12 +710,17 @@ static inline uint8_t combat_body_overlap_lbColl_80006E58_matrix_radius(
   // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
   const uint8_t char_id = batch->state.char_id[d_idx];
   const uint32_t anim_u32 = batch->state.animation_index[d_idx];
-  if (anim_u32 > 0xFFFFu) {
-    return 0u;
-  }
-  const uint16_t msid = (uint16_t)anim_u32;
-  const float anim_frame_f32 = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[d_idx]);
   const uint16_t action_id = batch->state.action_id[d_idx];
+  uint16_t msid = 0u;
+  if (anim_u32 > 0xFFFFu) {
+    if (action_id != (uint16_t)MSL_ACT_GUARD) {
+      return 0u;
+    }
+    msid = (uint16_t)MSL_SM_GUARD;
+  } else {
+    msid = (uint16_t)anim_u32;
+  }
+  const float anim_frame_f32 = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[d_idx]);
   const uint16_t frame = msl_anim_frame_floor_u16(anim_frame_f32);
 
   const MslHurtCap* caps = NULL;
@@ -1111,8 +1140,8 @@ int combat_debug_body_matrix_overlap(const MslBatch* batch, int batch_index, int
 }
 
 static inline uint8_t combat_shield_overlap_ftcoll_80007bcc(
-    const MslBatch* batch, int bi, int attacker, int hb_id, float hx, float hy, float hz, float hr,
-    float shx, float shy, float shz, float shr, float shield_desc_radius,
+    const MslBatch* batch, int bi, int attacker, int defender, int hb_id, float hx, float hy,
+    float hz, float hr, float shx, float shy, float shz, float shr, float shield_desc_radius,
     float shield_owner_scale_y, uint8_t shield_desc_envelope_ready,
     uint8_t shield_extent_bridge_active, float* out_overlap_margin) {
   if (out_overlap_margin != NULL) {
@@ -1122,15 +1151,73 @@ static inline uint8_t combat_shield_overlap_ftcoll_80007bcc(
     return 0u;
   }
   const size_t hb_i = idx_hitbox(bi, attacker, hb_id);
+  const size_t d_idx = msl_idx_player(bi, defender);
   // Decomp geometry owner:
-  // - lbColl_80006E58 combines HitCapsule radius (`scl`) with ShieldDesc radius (`arg10`).
-  // - Guard path builds ShieldDesc via AbsorbDesc with `x10_size = 1` in ftCo_80092450.
+  // - ftCo_80091D58 scales the shield JObj from current shield health/lightshield state.
+  // - lbColl_80007BCC passes ShieldDesc.size=1 plus the scaled shield JObj matrix into
+  //   lbColl_80006E58. The simulator's `shield_radius` represents ftCo_80091D58's current
+  //   shield-bone scale (shield HP/lightshield/fp->x34_scale.y); lbColl_80006E58's final local
+  //   matrix test also carries the fighter model scale in the shield JObj matrix. Apply that
+  //   data-backed model-scale term here instead of adding a fixed world-space ShieldDesc radius,
+  //   or steady Guard rows over-admit shield before the BODY path can run.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091D58,ftCo_80092450}
   // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_80006E58}
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092450
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B1B8
+  const MslCharParams* defender_params = msl_char_params(batch->state.char_id[d_idx]);
+  const float shield_owner_model_scale =
+      (defender_params != NULL && isfinite(defender_params->model_scaling) &&
+       defender_params->model_scaling > 0.0f)
+          ? defender_params->model_scaling
+          : 1.0f;
+  const float shield_matrix_scale = shield_owner_scale_y * shield_owner_model_scale;
+
+  float eff_shx = shx;
+  float eff_shy = shy;
+  float eff_shz = shz;
+  if (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD) {
+    MslShieldTiltTableView tv;
+    if (msl_shield_tilt_table_view(batch->state.char_id[d_idx], &tv) == 0 && tv.xyz != NULL &&
+        tv.frame_count > 0u) {
+      const uint16_t frame_max = (uint16_t)(tv.frame_count - 1u);
+      const uint16_t f = (batch->state.guard_tilt_x8[d_idx] > frame_max)
+                             ? frame_max
+                             : batch->state.guard_tilt_x8[d_idx];
+      float mag = batch->state.guard_tilt_x4[d_idx];
+      if (mag < 0.0f) {
+        mag = 0.0f;
+      } else if (mag > 1.0f) {
+        mag = 1.0f;
+      }
+
+      // `ftCo_80091E78` only samples the angled Guard timeline when x4 is nonzero, then blends
+      // it against the current no-tilt pose through `ftAnim_80070108(..., 1 - x4, x4, x20)`.
+      // For fighter-vs-fighter ShieldDesc collision (`ftColl_8007B1B8 -> lbColl_80007BCC`) use
+      // that live frame-0 base locally. The shared shield center in shields_refresh() remains the
+      // replay-visible/item-shield owner; broadening it regresses projectile shield accepts.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091BC4,ftCo_80091E78}
+      // refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
+      const size_t n_i = 0u;
+      const size_t f_i = (size_t)f * 3u;
+      const float nx = tv.xyz[n_i + 0];
+      const float ny = tv.xyz[n_i + 1];
+      const float nz = tv.xyz[n_i + 2];
+      const float fx = tv.xyz[f_i + 0];
+      const float fy = tv.xyz[f_i + 1];
+      const float fz = tv.xyz[f_i + 2];
+      const float dx = nx + mag * (fx - nx);
+      const float dy = ny + mag * (fy - ny);
+      const float dz = nz + mag * (fz - nz);
+      const float facing_dir = batch->state.facing[d_idx] ? 1.0f : -1.0f;
+      const float pose_scale = shield_owner_scale_y * shield_owner_model_scale;
+      eff_shx = batch->state.pos_x[d_idx] + facing_dir * dz * pose_scale;
+      eff_shy = batch->state.pos_y[d_idx] + dy * pose_scale;
+      eff_shz = batch->state.pos_z[d_idx] - facing_dir * dx * pose_scale;
+    }
+  }
+
   float shield_desc_world_r = shield_desc_radius;
   if (shield_owner_scale_y > 0.0f) {
-    shield_desc_world_r *= shield_owner_scale_y;
+    shield_desc_world_r *= shield_matrix_scale;
   }
   // lbColl_80007BCC forwards an extra extent lane (`lbColl_804D7A34 * arg5`) into
   // lbColl_80006E58 (`arg11`) for shield overlap broadphase.
@@ -1148,7 +1235,19 @@ static inline uint8_t combat_shield_overlap_ftcoll_80007bcc(
        (batch->state.hitbox_enable_edge[hb_i] || !batch->state.hitbox_pose_create[hb_i]))
           ? 1u
           : 0u;
-  const float shield_desc_term = shield_desc_lane_active ? shield_desc_world_r : 0.0f;
+  const uint8_t guardon_entry_no_submotion =
+      (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_ON &&
+       batch->state.action_frame[d_idx] < 0 && batch->state.animation_index[d_idx] == UINT32_MAX)
+          ? 1u
+          : 0u;
+  // No-submotion GuardOn entry is the live `ftCo_800924C0 -> ftCo_800921DC ->
+  // ftCo_80091E78(..., 0)` snapshot where the ShieldDesc was just recreated and Slippi does not
+  // expose a settled Guard submotion frame. Keep the narrow ShieldDesc envelope there; steady Guard
+  // rows consume the current shield-bone scale already represented by `shield_radius`.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+  //   ftCo_800924C0,ftCo_800921DC,ftCo_80091E78}
+  const float shield_desc_term =
+      (shield_desc_lane_active && guardon_entry_no_submotion) ? shield_desc_world_r : 0.0f;
   const uint8_t shield_extent_lane_active =
       (shield_desc_envelope_ready &&
        (batch->state.hitbox_enable_edge[hb_i] || shield_extent_bridge_active))
@@ -1172,7 +1271,8 @@ static inline uint8_t combat_shield_overlap_ftcoll_80007bcc(
       (shield_extent_bridge_active || shine_start_enable_edge) ? 1.0f : 0.2f;
   const float shield_extent_env_r =
       shield_extent_lane_active ? (shield_desc_world_r * shield_extent_scale) : 0.0f;
-  const float rr = hr + shr + shield_desc_term + shield_extent_env_r;
+  const float shield_matrix_radius = shr * shield_owner_model_scale;
+  const float rr = hr + shield_matrix_radius + shield_desc_term + shield_extent_env_r;
   float d2 = 0.0f;
 
   // Decomp-owned geometry path:
@@ -1184,11 +1284,11 @@ static inline uint8_t combat_shield_overlap_ftcoll_80007bcc(
     const float px = batch->state.hitbox_prev_x[hb_i];
     const float py = batch->state.hitbox_prev_y[hb_i];
     const float pz = batch->state.hitbox_prev_z[hb_i];
-    combat_point_segment_dist2(shx, shy, shz, px, py, pz, hx, hy, hz, &d2, NULL);
+    combat_point_segment_dist2(eff_shx, eff_shy, eff_shz, px, py, pz, hx, hy, hz, &d2, NULL);
   } else {
-    const float dx = hx - shx;
-    const float dy = hy - shy;
-    const float dz = hz - shz;
+    const float dx = hx - eff_shx;
+    const float dy = hy - eff_shy;
+    const float dz = hz - eff_shz;
     d2 = dx * dx + dy * dy + dz * dz;
   }
 
@@ -2644,6 +2744,7 @@ static inline void combat_mutations_pass1_future_apply_body_hit(
     return;
   }
   batch->state.phantom_damage_pending_x1898[d_idx] = 0.0f;
+  batch->state.phantom_damage_timer_x189c[d_idx] = 0u;
   batch->state.phantom_damage_source_port[d_idx] = 0xFFu;
 
   // === GALE01 Fighter_ProcessHit/TakDamage ordering (write-site checklist) ===
@@ -3060,6 +3161,7 @@ static inline void combat_mutations_pass1_future_apply_body_phantom_hit(MslBatch
   }
 
   batch->state.phantom_damage_pending_x1898[d_idx] = phantom_dmg;
+  batch->state.phantom_damage_timer_x189c[d_idx] = d_hl;
   batch->state.phantom_damage_source_port[d_idx] =
       (attacker >= 0 && attacker < (int)batch->config.num_players) ? (uint8_t)attacker : 0xFFu;
   batch->state.instance_hit_by[d_idx] = batch->state.instance_id[a_idx];
@@ -4805,7 +4907,7 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
               (shield_seed_kind == 2u)
                   ? 1u
                   : combat_shield_overlap_ftcoll_80007bcc(
-                        batch, bi, attacker, hb_id, hx, hy, hz, hr, shx, shy, shz, shr,
+                        batch, bi, attacker, defender, hb_id, hx, hy, hz, hr, shx, shy, shz, shr,
                         /*shield_desc_radius=*/1.0f, batch->state.fighter_scale_y[d_idx],
                         shield_desc_envelope_ready, shield_extent_bridge_active, NULL);
           if (!overlaps_shield) {
@@ -5009,12 +5111,13 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
             batch->state
                 .combat_shield_contact_hb_kind[idx_hitbox_victim(bi, attacker, hb_id, defender)];
         const uint8_t body_blocked_by_shield =
-            shield_active && (shield_seed_kind == 2u ||
-                              (shield_seed_kind != 1u &&
-                               combat_shield_overlap_ftcoll_80007bcc(
-                                   batch, bi, attacker, hb_id, hx, hy, hz, hr, shx, shy, shz, shr,
-                                   /*shield_desc_radius=*/1.0f, batch->state.fighter_scale_y[d_idx],
-                                   shield_desc_envelope_ready, shield_extent_bridge_active, NULL)));
+            shield_active &&
+            (shield_seed_kind == 2u ||
+             (shield_seed_kind != 1u &&
+              combat_shield_overlap_ftcoll_80007bcc(
+                  batch, bi, attacker, defender, hb_id, hx, hy, hz, hr, shx, shy, shz, shr,
+                  /*shield_desc_radius=*/1.0f, batch->state.fighter_scale_y[d_idx],
+                  shield_desc_envelope_ready, shield_extent_bridge_active, NULL)));
         if (body_blocked_by_shield) {
           continue;
         }
@@ -5112,11 +5215,36 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
                   combat_calc_hitlag_frames(c, int_dmg, a_motion_id, 1.0f))) {
             continue;
           }
+          // Guard shield-poke phantom path keeps the decomp predicate:
+          // `0 < HitCapsule.coll_distance < p_ftCommonData->x7A8`. The one retained extra
+          // admission is restricted to the steady no-tilt Guard live-pose gap: source
+          // `ftCo_80091E78(..., 1)` applies the current/no-tilt Guard pose directly when x4 is
+          // zero, while the generic extracted Guard matrix path is still a coarse stand-in for
+          // that live JObj collision matrix. Do not use this as a broad Guard/no-hitstun tolerance
+          // bridge; nonzero-tilt, visible-submotion, enable-edge, and non-neutral Guard rows stay
+          // on the exact x7A8 scalar.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091E78
+          // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+          // refs/melee/src/melee/ft/ftcoll.c::{inlineB1,ftColl_80076ED8}
+          const uint8_t guard_no_tilt_live_pose_gap =
+              combat_guard_no_tilt_current_pose_gap(batch, d_idx);
+          const uint8_t guard_shield_poke_phantom_boundary =
+              (shield_active && batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD &&
+               batch->state.hitstun[d_idx] == 0u && batch->state.hitbox_enable_edge[hb_i] == 0u &&
+               lbcoll_overlap_valid && lbcoll_overlap_amount > 0.0f &&
+               (lbcoll_overlap_amount <= c->phantom_overlap_max_x7a8 ||
+                (guard_no_tilt_live_pose_gap &&
+                 lbcoll_overlap_amount <=
+                     (c->phantom_overlap_max_x7a8 + c->phantom_overlap_max_x7a8))))
+                  ? 1u
+                  : 0u;
           if (!attackairb_stale_owner_candidate && !defender_no_damage &&
-              batch->state.hitstun[d_idx] == 0u && !batch->state.on_ground[d_idx] &&
-              batch->state.hitbox_enable_edge[hb_i] && lbcoll_overlap_valid &&
-              lbcoll_overlap_amount > 0.0f &&
-              lbcoll_overlap_amount <= c->phantom_overlap_max_x7a8) {
+              batch->state.hitstun[d_idx] == 0u &&
+              ((!batch->state.on_ground[d_idx] && batch->state.hitbox_enable_edge[hb_i]) ||
+               guard_shield_poke_phantom_boundary) &&
+              lbcoll_overlap_valid && lbcoll_overlap_amount > 0.0f &&
+              (lbcoll_overlap_amount <= c->phantom_overlap_max_x7a8 ||
+               guard_shield_poke_phantom_boundary)) {
             // General fighter BODY phantom-hit lane:
             // - lbColl_8000805C writes HitCapsule.coll_distance from lbColl_80006E58.
             // - ftColl_80076ED8 routes 0 < coll_distance < p_ftCommonData->x7A8 through
@@ -5425,15 +5553,24 @@ static inline void combat_processhit_apply_expired_phantom_damage(MslBatch* batc
   float dmg = batch->state.phantom_damage_pending_x1898[idx];
   if (!(dmg > 0.0f) || !isfinite(dmg)) {
     batch->state.phantom_damage_pending_x1898[idx] = 0.0f;
+    batch->state.phantom_damage_timer_x189c[idx] = 0u;
     batch->state.phantom_damage_source_port[idx] = 0xFFu;
     return;
   }
-  if (!(batch->state.hitlag_pre_timer[idx] != 0u && batch->state.hitlag[idx] == 0u)) {
+  uint16_t timer = batch->state.phantom_damage_timer_x189c[idx];
+  if (timer == 0u) {
+    batch->state.phantom_damage_pending_x1898[idx] = 0.0f;
+    batch->state.phantom_damage_source_port[idx] = 0xFFu;
+    return;
+  }
+  timer--;
+  batch->state.phantom_damage_timer_x189c[idx] = timer;
+  if (timer != 0u) {
     return;
   }
 
   // Delayed fighter phantom/tip-log damage:
-  // - Fighter_ProcessHit decrements `dmg.x189C_unk_num_frames` after hitlag has reached zero.
+  // - Fighter_ProcessHit decrements `dmg.x189C_unk_num_frames` during the ProcessHit pass.
   // - If no knockback damage path has superseded it, ftColl_8007BE3C applies `dmg.x1898` to
   //   percent and runs stale/combo bookkeeping against the stored source gobj.
   // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
@@ -5455,6 +5592,7 @@ static inline void combat_processhit_apply_expired_phantom_damage(MslBatch* batc
   }
 
   batch->state.phantom_damage_pending_x1898[idx] = 0.0f;
+  batch->state.phantom_damage_timer_x189c[idx] = 0u;
   batch->state.phantom_damage_source_port[idx] = 0xFFu;
 }
 
@@ -5754,8 +5892,8 @@ int combat_debug_shield_candidate_decisions(MslBatch* batch, int batch_index,
               (shield_seed_kind == 2u)
                   ? 1u
                   : combat_shield_overlap_ftcoll_80007bcc(
-                        batch, bi, attacker, hb_id, out->hitbox_x, out->hitbox_y, out->hitbox_z,
-                        out->hitbox_radius, shx, shy, shz, shr,
+                        batch, bi, attacker, defender, hb_id, out->hitbox_x, out->hitbox_y,
+                        out->hitbox_z, out->hitbox_radius, shx, shy, shz, shr,
                         /*shield_desc_radius=*/1.0f, batch->state.fighter_scale_y[d_idx],
                         shield_desc_envelope_ready, shield_extent_bridge_active, &overlap_margin);
           out->overlap_shield = overlaps ? 1u : 0u;

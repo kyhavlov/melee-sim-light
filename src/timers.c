@@ -9,6 +9,7 @@
 #include "buttons.h"
 #include "common_params.h"
 #include "input_axis.h"
+#include "stage_collision.h"
 
 void timers_update(MslBatch* batch) {
   if (batch == NULL) {
@@ -149,6 +150,49 @@ static inline uint8_t damage_post_hitlag_cb_owner_action(uint16_t a) {
   }
 }
 
+static inline uint8_t damage_post_hitlag_cb_damagefly_action(uint16_t a) {
+  switch (a) {
+    case MSL_ACT_DAMAGE_FLY_HI:
+    case MSL_ACT_DAMAGE_FLY_N:
+    case MSL_ACT_DAMAGE_FLY_LW:
+    case MSL_ACT_DAMAGE_FLY_TOP:
+    case MSL_ACT_DAMAGE_FLY_ROLL:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
+static inline void damage_hitlag_exit_wall_project_asdi(const MslBatch* batch, size_t idx,
+                                                        float* dx, float* dy) {
+  if (batch == NULL || dx == NULL || dy == NULL ||
+      !damage_post_hitlag_cb_damagefly_action(batch->state.action_id[idx]) ||
+      batch->state.damage_hitlag_wall_asdi_latch[idx] == 0u ||
+      batch->state.wall_id[idx] == 0xFFFFu) {
+    return;
+  }
+
+  // Decomp ownership:
+  // - ftCo_Damage_OnExitHitlag applies ASDI displacement before ftCo_8008E5A4 DI.
+  // - Fighter_procMap still runs the DamageFly collision callback during hitlag; mpcoll_wall_ceil.c
+  //   latches that phase-local wall evidence because CollData.wall.index persists after detach and
+  //   cannot be used as provenance alone. Project the immediate ASDI displacement onto that wall
+  //   tangent instead of letting the normal component create a stale PassiveWall cascade.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+  //   ftCo_Damage_OnExitHitlag,ftCo_DamageFly_Coll}
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_procMap}
+  const int bi = (int)(idx / (size_t)batch->config.num_players);
+  const uint32_t stage_id = batch->state.stage_id[bi];
+  const uint16_t wall_id = batch->state.wall_id[idx];
+  if (stage_collision_left_wall_line_index(stage_id, wall_id) >= 0 && *dx > 0.0f) {
+    *dx = 0.0f;
+    return;
+  }
+  if (stage_collision_right_wall_line_index(stage_id, wall_id) >= 0 && *dx < 0.0f) {
+    *dx = 0.0f;
+  }
+}
+
 static inline uint8_t damage_every_hitlag_sdi_timer_window_action(uint16_t a) {
   switch (a) {
     // DownDamageD re-enters ftCo_8008DCE0 via ftCo_8009F184 and owns the same per-hitlag SDI
@@ -162,6 +206,10 @@ static inline uint8_t damage_every_hitlag_sdi_timer_window_action(uint16_t a) {
     default:
       return 0u;
   }
+}
+
+static inline uint8_t guard_setoff_post_hitlag_cb_owner_action(uint16_t a) {
+  return a == (uint16_t)MSL_ACT_GUARD_SET_OFF ? 1u : 0u;
 }
 
 void timers_consume_post_hitlag_callbacks_pre_input(MslBatch* batch) {
@@ -183,7 +231,37 @@ void timers_consume_post_hitlag_callbacks_pre_input(MslBatch* batch) {
       const size_t idx = msl_idx_player(bi, p);
       const uint16_t a = batch->state.action_id[idx];
 
-      if (!damage_post_hitlag_cb_owner_action(a)) {
+      if (!damage_post_hitlag_cb_owner_action(a) && !guard_setoff_post_hitlag_cb_owner_action(a)) {
+        continue;
+      }
+      if (!(batch->state.hitlag_pre_timer[idx] != 0u && batch->state.hitlag[idx] == 0u)) {
+        continue;
+      }
+
+      if (guard_setoff_post_hitlag_cb_owner_action(a)) {
+        // GuardSetOff post-hitlag callback:
+        // - ftCo_80092F2C installs `post_hitlag_cb = ftCo_800932DC` on GuardSetOff entry.
+        // - Fighter_8006A1BC calls Fighter_8006D10C when hitlag reaches zero, before
+        //   Fighter_procUpdate refreshes current-frame input, so this consumes the prior input
+        //   snapshot just like Damage_OnExitHitlag above.
+        // - ftCo_800932DC only moves grounded fighters and displaces along the floor tangent by
+        //   floor.normal * (lstick.x * x4BC * x4C0).
+        // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006D10C,Fighter_procUpdate}
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80092F2C,ftCo_800932DC}
+        // data/common/ft_common_data.json::{sdi_radius,asdi_step_mul,shield_sdi_mul}
+        if (!batch->state.on_ground[idx]) {
+          continue;
+        }
+        const float lstick_x = stick_i8_to_unit(batch->state.prev_input_main_x[idx]);
+        if (fabsf(lstick_x) < c->sdi_radius) {
+          continue;
+        }
+        const float nx = batch->state.ground_normal_x[idx];
+        const float ny =
+            (batch->state.ground_normal_y[idx] != 0.0f) ? batch->state.ground_normal_y[idx] : 1.0f;
+        const float scl = c->shield_sdi_mul * (lstick_x * c->asdi_step_mul);
+        batch->state.pos_x[idx] += ny * scl;
+        batch->state.pos_y[idx] += -nx * scl;
         continue;
       }
 
@@ -202,10 +280,6 @@ void timers_consume_post_hitlag_callbacks_pre_input(MslBatch* batch) {
           lstick_full_x * lstick_full_x + lstick_full_y * lstick_full_y;
       const float cstick_full_mag_sq =
           cstick_full_x * cstick_full_x + cstick_full_y * cstick_full_y;
-      if (!(batch->state.hitlag_pre_timer[idx] != 0u && batch->state.hitlag[idx] == 0u)) {
-        continue;
-      }
-
       const uint8_t use_cstick = (cstick_full_mag_sq >= sdi_radius_sq) ? 1u : 0u;
       const uint8_t use_lstick = (lstick_full_mag_sq >= sdi_radius_sq) ? 1u : 0u;
       if (!use_cstick && !use_lstick) {
@@ -213,9 +287,13 @@ void timers_consume_post_hitlag_callbacks_pre_input(MslBatch* batch) {
       } else {
         const float dx = (use_cstick ? cstick_full_x : lstick_full_x) * asdi_step_mul;
         const float dy = (use_cstick ? cstick_full_y : lstick_full_y) * asdi_step_mul;
-        batch->state.pos_x[idx] += dx;
-        batch->state.pos_y[idx] += dy;
+        float projected_dx = dx;
+        float projected_dy = dy;
+        damage_hitlag_exit_wall_project_asdi(batch, idx, &projected_dx, &projected_dy);
+        batch->state.pos_x[idx] += projected_dx;
+        batch->state.pos_y[idx] += projected_dy;
       }
+      batch->state.damage_hitlag_wall_asdi_latch[idx] = 0u;
 
       // DI: rotate kb velocity by up to x1A8 degrees based on L-stick and current kb direction.
       //

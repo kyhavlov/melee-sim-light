@@ -314,6 +314,7 @@ def test_modelplay_rerun11_passivestandb_releases_floor_adjacent_right_wall_latc
             ("ceiling_normal_y", ("<f4", (4,))),
             ("coll_env_flags", ("<u4", (4,))),
             ("coll_prev_env_flags", ("<u4", (4,))),
+            ("damage_hitlag_wall_asdi_latch", ("u1", (4,))),
         ],
         align=False,
     )

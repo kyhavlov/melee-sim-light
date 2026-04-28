@@ -1521,6 +1521,15 @@ Grounded motion-entry timing notes:
   `mv.co.kneebend.is_short_hop`; runtime must use only an earlier latched bit or the replay seed
   on that takeoff frame. Source: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::{
   ftCo_KneeBend_Anim,ftCo_KneeBend_IASA,ftCo_KneeBend_Check_ShortHop}`.
+- KneeBend startup-complete JumpF/B can still run destination Jump IASA in the same proc. After
+  `ftCo_KneeBend_Anim -> ftCo_Jump_Enter`, `ftCo_Jump_IASA` reaches `ftCo_800CB870`, so a fresh
+  current-frame jump edge/tap can immediately enter `JumpAerialF/B`. That path uses
+  `ftCo_JumpAerial_Enter_Basic` velocity/jump ownership, overwriting the ground-jump X/Y velocity
+  and consuming the remaining jump; it must observe the input/tap timer snapshot before
+  `ftCo_Jump_Enter` writes `x671=0xFE`. Sources:
+  `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_IASA` and
+  `refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::{ftCo_800CB870,
+  ftCo_JumpAerial_Enter_Basic}`.
 - Grounded AttackS4 frame-7 hold rows are owned by the extracted `start_smash_charge` action-script
   event (`data/moves/{fox,falco}.json::ftCo_SM_AttackS4`, hold_frames=60), not by a generic
   locomotion action-frame bridge.
@@ -1589,6 +1598,18 @@ GuardSetOff grounded motion note:
   - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C` consumes that lane to write `gr_vel`,
   - `refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate` does not collapse `self_vel.x` onto `gr_vel` on the same frozen entry row.
 - Practical implication: do not fit item shield-hit GuardSetOff motion from replay `speed_ground_x_self` alone. The remaining blocker is the item-side `specialn_facing_dir` sign owner for those rows.
+
+GuardSetOff post-hitlag ASDI:
+- `ftCo_80092F2C` installs `post_hitlag_cb = ftCo_800932DC` on `GuardSetOff` entry.
+- `Fighter_8006A1BC` calls `Fighter_8006D10C` when hitlag reaches zero before the next
+  `Fighter_procUpdate` input refresh, so the callback consumes the prior input snapshot in the
+  simulator's pre-input hitlag-exit phase.
+- `ftCo_800932DC` is grounded-only and applies floor-tangent displacement when
+  `abs(lstick.x) >= sdi_radius`: `floor.normal * (lstick.x * asdi_step_mul * shield_sdi_mul)`.
+- Data/constants: `data/common/ft_common_data.json::{sdi_radius,asdi_step_mul,shield_sdi_mul}`.
+- Replay-real locks: `AGN:4047` covers the positive last-hitlag displacement, `DCC:2235` covers
+  the no-horizontal-stick negative, and `AGN:4035..4059` covers the rollout-visible prevention of
+  the downstream AttackHi4 miss -> Catch/CaptureWait cascade.
 
 #### Combat geometry (hurtcaps/hitboxes/shields overlap classification)
 
@@ -2622,8 +2643,15 @@ Fox/Falco special-owner split (2026-04-17):
     - `ftCo_80091E78` updates `mv.co.guard.x8/x4` every active Guard frame, but only samples the
       angled Guard timeline (`ftAnim_80070710(..., x8)`) when `x4` is nonzero. For no-tilt Guard
       (`x4 == 0`), live ShieldDesc collision uses the current Guard pose, not the x8 neutral target.
-    - Runtime therefore uses `data/shields/{fox,falco}.bin` frame 0 plus both fighter scale and
-      `co_attrs.model_scaling` only for steady `Guard` with zero/subnormal x4.
+      For `0 < x4 < 1`, source blends that angled pose against the same current/no-tilt pose via
+      `ftAnim_80070108(..., 1 - x4, x4, ft_data->x20)`. Runtime applies this frame-0 base locally
+      inside the fighter-vs-fighter `lbColl_80007BCC` helper; the shared `shield_pos_*` bubble stays
+      with the replay-visible/item-shield owner. This keeps tiny x4 residues from over-admitting
+      BODY-vs-shield rim contacts without regressing projectile shield accepts.
+    - `lbColl_80007BCC` forwards the ShieldDesc JObj matrix into `lbColl_80006E58`; the final local
+      matrix radius term therefore carries the defender's extracted `co_attrs.model_scaling` in
+      addition to the live ftCo_80091D58 shield scale. Runtime applies that model-scale term to the
+      ShieldDesc overlap radius instead of a character proxy or fixed tolerance.
     - No-submotion `GuardOn` entry snapshots (`animation_index=-1`, `action_frame<0`) use
       `data/shields/{fox,falco}.bin::guard_on_xyz[0]` with the same live model-scaled ShieldDesc
       bone only when the previous post-frame owner is not already a shield action. Source path:
@@ -2639,7 +2667,8 @@ Fox/Falco special-owner split (2026-04-17):
       into BODY.
     - Replay-real runtime locks cover PRH `11336 -> 11352` accepted ShieldDesc, IAT
       `3831 -> 3847` no-submotion GuardOn accepted ShieldDesc, and IAT `3686 -> 3702` BODY
-      negative, so this is not a broad shield-rim suppressor.
+      negative, and DCC `9072 -> 9094` locks the steady-Guard BODY negative where a neutral-pose /
+      unscaled-radius proxy falsely entered GuardSetOff. This is not a broad shield-rim suppressor.
     Sources: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
       ftCo_80091BC4,ftCo_80091E78,ftCo_800924C0,ftCo_800921DC}`,
     `refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC`,
@@ -3864,6 +3893,21 @@ AttackAirLw no-damage contact-hitlag carry:
   - `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_800768A0}`
   - `refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80008688}`
 
+Active-hitlag create-frame per-HitCapsule carry:
+- `BHH:1390` proves the same frozen-callback owner applies to normal damage hits, not only
+  invincible no-damage contacts. Fox BAir is in hitlag on its create-frame pose, and the replay
+  seed carries authoritative per-HitCapsule `victims_1` entries for Falco. In vanilla,
+  `Fighter_8006A360` does not run `ftAnim_8006EBA4`/the animation callback while hitlag is active,
+  so the create-frame `ftAction_8007121C` clear does not replay on the frozen rows. Runtime
+  therefore treats a hitlag-started frame with matching previous action and authoritative
+  per-HitCapsule seeds as already-created capsules, preserving the victim rings until hitlag exits.
+  This prevents illegal post-hitlag re-hits from overlapping BAir capsules without weakening fresh
+  create-frame hits or authoritative-empty per-HitCapsule seeds.
+- Source anchors:
+  - `refs/melee/src/melee/ft/fighter.c::Fighter_8006A360`
+  - `refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C`
+  - `refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008440}`
+
 BODY damage admission seed owner:
 - `QGD:5868`, `GAT:9619`, and `TBK:1848` prove the same dense-hitlist failure mode can suppress
   real BODY damage hits, not only shield hits. The dense group lane carries `0xFFFF`, while `t+1`
@@ -4202,27 +4246,56 @@ BODY collision-space residual split and rejected seed bridge:
   `x1988 != 0 ? x1988 : x198C` emission and removes the old x1990-owned candidate-filter split
   without weakening DownBound sentinels.
 - SpecialHi/AirHi wall collision now uses the live JObj ECB owner for the supported Fox/Falco
-  right-wall domain when `ft_CheckGroundAndLedge` runs the airborne `mpColl_80044E10_RightWall`
-  path. The
+  wall domain when `ft_CheckGroundAndLedge` runs the airborne mpColl wall path. The
   collision ECB is rebuilt from the extracted ftData_x44_t `ecb_joints`
   (`data/characters/{fox,falco}.json`) through the collision-pose matrices, applies model scaling
-  and the same FtPart_XRotN `rotateModel` owner used by SpecialHi hit/hurt primitives, then applies
-  `mpColl_LoadECB_JObj`'s `x12C` horizontal recenter before a local
-  `mpColl_800454A4_RightWall`-style airborne envelope max. The retained candidate list is the
+  and the same FtPart_XRotN `rotateModel` owner used by SpecialHi hit/hurt primitives. Because
+  SSANIM01 matrices are facing-independent, the fighter root Y rotation maps extracted local Z into
+  stage X before `mpColl_LoadECB_JObj` reads the point; both wall sides use that faced-Z X basis
+  after XRotN, not the matrix-local X component. The helper then applies
+  `mpColl_LoadECB_JObj`'s `x12C` horizontal recenter before local
+  `mpColl_800454A4_RightWall` / `mpColl_80046224_LeftWall` airborne envelope resolution. The
+  retained candidate list is the
   decomp-ordered side, bottom, and top sweeps; a broader current side-edge sweep was tested and
-  rejected because it over-admitted non-target SpecialHi wall rows until the exact side-edge helper
-  predicate is represented. Wall sweep checks use raw `mpCheck{Left,Right}Wall` endpoints plus
+  only retained for the SpecialAirHi left-wall envelope where it matches HVG/MAJ without broadening
+  non-SpecialHi wall actions. Wall sweep checks use raw `mpCheck{Left,Right}Wall` endpoints plus
   `mpLineIntersectionV`'s local endpoint clamp, not `mpLib_8004ED5C` linked-line extension. QGD
   9372/9373/9374 are positive locks, QGD 9371 guards pre-contact, BHH 6392 guards horizontal
-  identity/recenter behavior, TCH 2601 guards the FD-lip endpoint boundary, and GAT 3099 guards
-  right-wall/left-wall separation.
+  identity/recenter behavior, TCH 2601 guards the FD-lip endpoint boundary, GAT 3099 guards
+  right-wall/left-wall separation, and HVG 4780..4801 guards the former left-wall -> PassiveWall
+  cascade.
 - SpecialAirHi's left-wall launch path now uses the source-shaped
   `mpColl_80045B74_LeftWall -> mpColl_80046224_LeftWall` side/bottom/top candidate list and
-  airborne ECB envelope min-X resolution for `ftFx_SpecialAirHi_Coll` rows. This is intentionally
-  narrower than all left-wall actions: a generic left-wall envelope was tested and regressed
-  unrelated rows until the remaining decomp side-edge helper predicates are represented. The
-  retained MAJ 8878 rollout lock protects the left-wall envelope by requiring the downstream
-  SpecialHiFall handoff and smaller X drift through the former F08b cascade.
+  airborne ECB envelope min-X resolution for `ftFx_SpecialAirHi_Coll` rows. It also refreshes
+  wall metadata while hitlag is active: `Fighter_8006A360` gates Anim/IASA/Phys, but
+  `Fighter_procMap` still calls the collision callback, so stale SpecialAirHi Hug bits must not
+  carry into DamageFly hitlag-exit wall-tech checks. This is intentionally narrower than all
+  left-wall actions: a generic left-wall envelope was tested and regressed unrelated rows. The
+  retained MAJ 8878 and HVG 4780 rollout locks protect the left-wall envelope and hitlag refresh
+  boundaries.
+- DamageFly hitlag-exit ASDI near a persisted wall uses the same CollData wall index provenance:
+  `ftCo_Damage_OnExitHitlag` applies ASDI before DI/LSI, while `Fighter_procMap` will run the
+  DamageFly collision callback later in the frame. When hitlag-refresh has cleared the Hug env bit
+  but CollData still carries a left/right wall index, runtime projects only the immediate ASDI
+  normal component away from that wall and preserves tangent ASDI plus `ftCo_8008E5A4` DI/LSI. It
+  must not re-stamp Hug or run a full wall envelope on the damage row; doing so over-admits
+  PassiveWall. HVG `4780..4829` locks the former F04 left-wall -> PassiveWall -> missed-death
+  cascade.
+- Fighter phantom/tip-log delayed damage now carries the explicit `dmg.x189C_unk_num_frames`
+  countdown alongside hidden `dmg.x1898` and source slot. `Fighter_ProcessHit_8006D1EC` decrements
+  x189C independently of the replay-visible hitlag timer and applies x1898 through
+  `ftColl_8007BE3C` when it expires, so a later shield hitlag source can overlap the delayed
+  phantom percent application. Seed derivation only stamps active x189C rows when the hitlag-start
+  frame had no immediate percent delta; full damage hits that apply percent as hitlag starts are
+  not x1898 carriers. PRH 6830..6834 is the replay-real guard shield-poke case: the first BODY
+  contact enters victim-only phantom hitlag, the next frame enters GuardSetOff from shield contact,
+  and x1898 applies while GuardSetOff hitlag is still active. The only runtime admission outside
+  the exact reconstructed `x7A8` scalar is scoped to the steady no-tilt Guard live-pose gap:
+  `ftCo_80091E78(..., 1)` uses the current/no-tilt Guard pose directly when `mv.co.guard.x4` is
+  effectively zero, while the generic extracted Guard matrix remains a coarse stand-in for that
+  live JObj collision matrix. Nonzero-tilt, visible-submotion, enable-edge, and non-neutral Guard
+  rows stay on the exact source `x7A8` predicate; PRH 6830 has a mutation lock proving the
+  no-tilt gap is not a broad Guard BODY suppressor.
 - Source anchors:
   - `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}`
   - `refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}`
@@ -4232,5 +4305,7 @@ BODY collision-space residual split and rejected seed bridge:
   - `refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC`
   - `refs/melee/src/melee/ft/fighter.c::Fighter_80068E64`
   - `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{ftFox_SpecialHi_RotateModel,ftFx_SpecialAirHi_Coll}`
+  - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_OnExitHitlag,ftCo_DamageFly_Coll,ftCo_8008E5A4}`
+  - `refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_procMap}`
   - `refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_JObj,mpColl_80044E10_RightWall,mpColl_800454A4_RightWall,mpColl_80045B74_LeftWall,mpColl_80046224_LeftWall}`
   - `refs/melee/src/melee/gr/forward.h::{FLATZONE,LAST}`
