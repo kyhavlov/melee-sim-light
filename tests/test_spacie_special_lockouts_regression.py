@@ -10,6 +10,7 @@ from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 ACT_KNEE_BEND = 24
 ACT_FALL_SPECIAL = 35
 ACT_DAMAGE_FALL = 38
+ACT_FX_SPECIAL_HI_HOLD = 353
 ACT_FX_SPECIAL_AIR_HI_HOLD = 354
 ACT_FX_SPECIAL_AIR_LW_START = 365
 ACT_FX_SPECIAL_LW_START = 360
@@ -92,15 +93,20 @@ def test_fallspecial_blocks_aerial_shine_and_bspecial_reentry() -> None:
     assert int(out["action_id"][0]) == ACT_FALL_SPECIAL
 
 
-def test_kneebend_blocks_grounded_shine_and_bspecial_reentry() -> None:
-  # KneeBend IASA checks Attack100, Catch, AttackHi4, then short-hop bookkeeping only.
-  # It does not route through grounded special dispatch, so fresh shield-origin KneeBend / jump
-  # startup cannot re-enter Shine or grounded B-specials.
+def test_kneebend_allows_only_grounded_specialhi_from_bspecial_edge() -> None:
+  # KneeBend_IASA's first helper is named ftCo_Attack100_CheckInput in decomp C, but its body
+  # dispatches ftData_SpecialHi when x686 was reset by the current B+Up edge. This is not the
+  # generic grounded B-special dispatcher: Shine, Side-B, and Neutral-B stay excluded.
   # refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_IASA
+  # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+  #   ftCo_Attack100_CheckInput,ftCo_800D6928}
   seed = _mk_seed(action_id=ACT_KNEE_BEND, on_ground=True)
   prev_input = _mk_input(stick_x=0.0, stick_y=0.0, b=False)
 
-  for stick_x, stick_y in ((0.0, -1.0), (0.0, 1.0), (1.0, 0.0)):
+  out = _run_step(seed, prev_input, _mk_input(stick_x=0.0, stick_y=1.0))
+  assert int(out["action_id"][0]) == ACT_FX_SPECIAL_HI_HOLD
+
+  for stick_x, stick_y in ((0.0, -1.0), (1.0, 0.0), (0.0, 0.0)):
     out = _run_step(seed, prev_input, _mk_input(stick_x=stick_x, stick_y=stick_y))
     assert int(out["action_id"][0]) == ACT_KNEE_BEND
 

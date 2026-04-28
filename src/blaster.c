@@ -432,10 +432,11 @@ static inline void enter_blaster_start(MslBatch* batch, size_t idx, const MslLas
     batch->state.speed_air_x_self[idx] = 0.0f;
     batch->state.speed_y_self[idx] = 0.0f;
   }
-  // Sim-owned attack-velocity lanes are not decomp state fields; keep enter behavior deterministic
-  // and neutral by clearing them on both grounded and aerial SpecialN enters.
-  batch->state.speed_x_attack[idx] = 0.0f;
-  batch->state.speed_y_attack[idx] = 0.0f;
+  // `speed_{x,y}_attack` are fp->x8c_kb_vel. Neither SpecialN enter path clears that lane:
+  // grounded entry clears gr_vel/self_vel only after Fighter_ChangeMotionState, and aerial entry
+  // leaves self/kb velocities intact. Preserve DamageFly/DamageFall knockback carry into blaster.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{ftFx_SpecialN_Enter,ftFx_SpecialAirN_Enter}
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
 }
 
 static inline void enter_side_special_start(MslBatch* batch, size_t idx, const MslCommonParams* c,
@@ -577,6 +578,46 @@ uint8_t blaster_try_enter_ground_from_wait_iasa(MslBatch* batch, const MslCommon
     return 0u;
   }
   return blaster_try_enter_ground_from_iasa_subset(batch, c, idx);
+}
+
+uint8_t blaster_try_enter_ground_specialhi_from_kneebend_iasa(MslBatch* batch,
+                                                              const MslCommonParams* c,
+                                                              size_t idx) {
+  if (batch == NULL || c == NULL) {
+    return 0u;
+  }
+  if (batch->state.action_id[idx] != (uint16_t)MSL_ACT_KNEE_BEND ||
+      batch->state.on_ground[idx] == 0u) {
+    return 0u;
+  }
+  const uint8_t cid = batch->state.char_id[idx];
+  if (!is_fox_falco(cid)) {
+    return 0u;
+  }
+  const uint16_t pressed = batch->state.input_buttons_pressed[idx];
+  if ((pressed & (uint16_t)MSL_BUTTON_B) == 0u) {
+    return 0u;
+  }
+  const float stick_y =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
+  if (stick_y < c->special_stick_y_threshold) {
+    return 0u;
+  }
+  const MslCharParams* ch = msl_char_params(cid);
+  const MslSpecialMsids* ms = msl_special_msids(cid);
+  if (ch == NULL || ms == NULL) {
+    return 0u;
+  }
+  // Source owner:
+  // - Fighter_UnkIncrementCounters_8006ABEC resets fp->x686 when ftCo_800D6928 sees a B+Up edge.
+  // - ftCo_KneeBend_IASA immediately calls ftCo_Attack100_CheckInput, which enters ftData_SpecialHi
+  //   only when x686 == 0. Do not admit Side/Neutral/Down-B from this KneeBend path.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_UnkIncrementCounters_8006ABEC
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+  //   ftCo_800D6928,ftCo_Attack100_CheckInput}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_IASA
+  enter_specialhi_hold(batch, idx, ms, ch, 1u);
+  return 1u;
 }
 
 uint8_t blaster_try_enter_air_from_iasa_subset(MslBatch* batch, const MslCommonParams* c,

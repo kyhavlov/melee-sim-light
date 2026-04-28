@@ -2357,11 +2357,13 @@ void knockdown_update_post_collision(MslBatch* batch) {
             transfer_air_to_ground_on_land(batch, ch, (size_t)bi, idx, a0);
           } else {
             // Low-KB DamageAir floor contact can keep the visible DamageAir motion while replay
-            // already exposes the jump refresh from the same grounding helper. Preserve the
-            // visible fastfall/state-flag lane here; full ftCommon_8007D7FC bookkeeping would clear
-            // fastfall on replay-real grounded DamageAir rows where Slippi still reports it.
+            // already exposes the jump refresh and gr_vel <- self_vel.x handoff from the same
+            // grounding helper. Preserve the visible fastfall/state-flag lane here; full
+            // ftCommon_8007D7FC bookkeeping would clear fastfall on replay-real grounded DamageAir
+            // rows where Slippi still reports it.
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Coll
             // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D7FC,ftCommon_8007D6A4}
+            batch->state.speed_ground_x_self[idx] = batch->state.speed_air_x_self[idx];
             batch->state.jumps_left[idx] = ch->max_jumps;
           }
           continue;

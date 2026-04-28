@@ -558,7 +558,13 @@ static inline void enter_shield_break_fly(MslBatch* batch, const MslCharParams* 
   batch->state.on_ground[idx] = 0u;
   // ftCommon_8007D5D4 flips `ground_or_air` and locks ECB, but it does not clear the previous
   // floor line id; Slippi still exposes the Guard floor id on the break-entry post-frame.
+  // ftCo_80098B20 then calls ftColl_8007B62C(..., 2), making the break state intangible through
+  // the replay-visible merged hit-status lane.
   // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B62C
+  batch->state.jumps_left[idx] =
+      (ch != NULL && ch->max_jumps > 0u) ? (uint8_t)(ch->max_jumps - 1u) : 0u;
+  batch->state.hurtbox_state[idx] = 2u;
   batch->state.ecb_lock_timer[idx] = MSL_ECB_LOCK_FRAMES_COMMON_GROUND_TO_AIR;
   batch->state.speed_air_x_self[idx] = 0.0f;
   batch->state.speed_ground_x_self[idx] = 0.0f;

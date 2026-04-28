@@ -65,7 +65,7 @@ def _step_one_row_with_rollout_at_record(
     rollout_handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
     try:
         seed_bytes[0, :] = samples_u8[start, seed_off : seed_off + seed_stride]
-        binding.reseed_seed(rollout_handle, seed_bytes)
+        binding.reseed_seed_rollout(rollout_handle, seed_bytes)
         for j in range(start, int(record) + 1):
             prev_input_bytes[0, :] = samples_u8[j, prev_input_off : prev_input_off + input_stride]
             input_bytes[0, :] = samples_u8[j, input_off : input_off + input_stride]
@@ -191,3 +191,72 @@ def test_blaster_airn_start_runtime_context_controls_stay_replay_real(
     assert int(out_roll["action_id"][p]) == int(rollout_action)
     assert abs(float(out["pos_y"][p]) - float(ref["pos_y"][p])) <= 2e-4
     assert abs(float(out_roll["pos_y"][p]) - float(out["pos_y"][p])) <= 1e-4
+
+
+@pytest.mark.integration
+def test_blaster_airn_start_preserves_damagefall_kb_velocity_on_entry() -> None:
+    # Decomp ownership:
+    # - ftFx_SpecialAirN_Enter calls Fighter_ChangeMotionState(..., flags=0), then spawns blaster.
+    # - Fighter_ChangeMotionState does not clear fp->x8c_kb_vel.
+    # Regression target: PPA rec1123 p0 DamageFall -> SpecialAirNStart after DamageFlyRoll carry.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    record = 1123
+    p = 0
+    seed, out, ref, out_roll = _step_one_row_with_rollout_at_record(
+        dataset_path, record, p, window_before=20
+    )
+
+    assert int(seed["action_id"][p]) == 38  # DamageFall
+    assert int(ref["action_id"][p]) == 344  # SpecialAirNStart
+    assert int(seed["on_ground"][p]) == 0
+    assert float(seed["speed_x_attack"][p]) != 0.0
+    assert float(seed["speed_y_attack"][p]) != 0.0
+
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == 344
+    assert float(out["speed_x_attack"][p]) == pytest.approx(float(ref["speed_x_attack"][p]), abs=1e-6)
+    assert float(out["speed_y_attack"][p]) == pytest.approx(float(ref["speed_y_attack"][p]), abs=1e-6)
+    assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=1e-5)
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-5)
+
+    assert int(out_roll["action_id"][p]) == int(ref["action_id"][p]) == 344
+    assert float(out_roll["speed_x_attack"][p]) == pytest.approx(
+        float(ref["speed_x_attack"][p]), abs=1e-6
+    )
+    assert float(out_roll["speed_y_attack"][p]) == pytest.approx(
+        float(ref["speed_y_attack"][p]), abs=1e-6
+    )
+    assert float(out_roll["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=1e-5)
+    assert float(out_roll["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-5)
+
+
+@pytest.mark.integration
+def test_blaster_airn_start_zero_kb_velocity_control_does_not_fabricate_carry() -> None:
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    record = 95
+    p = 0
+    seed, out, ref, _out_roll = _step_one_row_with_rollout_at_record(
+        dataset_path, record, p, window_before=4
+    )
+
+    assert int(seed["action_id"][p]) == 25  # JumpF
+    assert int(ref["action_id"][p]) == 344  # SpecialAirNStart
+    assert float(seed["speed_x_attack"][p]) == 0.0
+    assert float(seed["speed_y_attack"][p]) == 0.0
+
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == 344
+    assert float(out["speed_x_attack"][p]) == pytest.approx(0.0, abs=1e-7)
+    assert float(out["speed_y_attack"][p]) == pytest.approx(0.0, abs=1e-7)
+    assert float(out["speed_x_attack"][p]) == pytest.approx(float(ref["speed_x_attack"][p]), abs=1e-7)
+    assert float(out["speed_y_attack"][p]) == pytest.approx(float(ref["speed_y_attack"][p]), abs=1e-7)

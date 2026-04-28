@@ -21,6 +21,16 @@ uint8_t blaster_try_enter_ground_from_wait_iasa(MslBatch* batch, const struct Ms
 uint8_t blaster_try_enter_ground_from_iasa_subset(MslBatch* batch, const struct MslCommonParams* c,
                                                   size_t idx);
 
+// KneeBend_IASA's first helper is misnamed in the decomp C: ftCo_Attack100_CheckInput dispatches
+// ftData_SpecialHi when Fighter_UnkIncrementCounters_8006ABEC has just reset x686 from a B+Up edge.
+// This is not the generic grounded B-special dispatcher; Side/Neutral/Down-B remain excluded.
+// refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_IASA
+// refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+//   ftCo_Attack100_CheckInput,ftCo_800D6928}
+uint8_t blaster_try_enter_ground_specialhi_from_kneebend_iasa(MslBatch* batch,
+                                                              const struct MslCommonParams* c,
+                                                              size_t idx);
+
 // Aerial B-special subset without the ordinary Fall/Jump/Damage action gate.
 // Used by RebirthWait_IASA, which calls ftCo_SpecialAir_CheckInput directly before its Fall-enter
 // fallback.

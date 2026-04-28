@@ -372,6 +372,44 @@ static inline void rebirth_wait_apply_exit_colanim(MslBatch* batch, size_t idx,
       (batch->state.colanim_timer_x1990[idx] != 0u) ? 2u : 1u;
 }
 
+static inline int dead_up_star_total_timer(const MslCommonParams* c) {
+  if (c == NULL) {
+    return 0;
+  }
+  int total = (int)c->dead_up_star_initial_frames;
+  total += (int)c->dead_up_star_phase1_frames;
+  total += (int)c->dead_up_star_phase2_frames;
+  if (total < 0) {
+    return 0;
+  }
+  return total > 255 ? 255 : total;
+}
+
+static inline void dead_up_star_try_enter_phase1(MslBatch* batch, size_t idx,
+                                                 const MslCommonParams* c, uint8_t prev_t,
+                                                 uint32_t stage_id) {
+  if (batch == NULL || c == NULL || c->dead_up_star_phase1_frames == 0u) {
+    return;
+  }
+  if ((int)prev_t != dead_up_star_total_timer(c)) {
+    return;
+  }
+  MslStageBounds cam = {0};
+  if (!stage_collision_get_cam_bounds_world(stage_id, &cam)) {
+    return;
+  }
+  // DeadUpStar phase 0 -> 1 transition:
+  //   fp->self_vel.y = (x514 * Stage_GetCamBoundsTopOffset() - fp->cur_pos.y) / x508
+  //   fp->self_vel.z = x510 / x508
+  // This simulator has no self_vel.z lane, but Y is rollout-visible through position integration.
+  // refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s::ftCo_DeadUpStar_Anim
+  // data/common/ft_common_data.json:{dead_up_star_phase1_frames,dead_up_star_phase1_cam_top_mul}
+  // data/stages/final_destination.json:cam_bounds_world.top
+  const float frames = (float)c->dead_up_star_phase1_frames;
+  batch->state.speed_y_self[idx] =
+      (c->dead_up_star_phase1_cam_top_mul * cam.top - batch->state.pos_y[idx]) / frames;
+}
+
 void match_flow_update_pre_anim(MslBatch* batch) {
   if (batch == NULL) {
     return;
@@ -499,7 +537,9 @@ void match_flow_update_pre_anim(MslBatch* batch) {
           }
         }
         // Death -> Rebirth.
-        if (a != (uint16_t)MSL_ACT_DEAD_UP_STAR) {
+        if (a == (uint16_t)MSL_ACT_DEAD_UP_STAR) {
+          dead_up_star_try_enter_phase1(batch, idx, c, prev_t, stage_id);
+        } else {
           batch->state.speed_air_x_self[idx] = 0.0f;
           batch->state.speed_ground_x_self[idx] = 0.0f;
           batch->state.speed_y_self[idx] = 0.0f;
@@ -749,22 +789,7 @@ void match_flow_update_post_physics(MslBatch* batch) {
         // DeadUpStar enter initializes an internal timer from p_ftCommonData->x504, then runs two
         // phases (x508/x50C). Model this with a single countdown.
         // refs/melee/src/melee/ft/ft_0D31.c::ftCo_800D40B8
-        const int phase1 = (int)c->dead_up_star_phase1_frames;
-        const int phase2 = (int)c->dead_up_star_phase2_frames;
-        int total = (int)c->dead_up_star_initial_frames;
-        if (phase1 > 0) {
-          total += phase1;
-        }
-        if (phase2 > 0) {
-          total += phase2;
-        }
-        if (total < 0) {
-          total = 0;
-        }
-        if (total > 255) {
-          total = 255;
-        }
-        batch->state.match_flow_timer[idx] = (uint8_t)total;
+        batch->state.match_flow_timer[idx] = (uint8_t)dead_up_star_total_timer(c);
       } else {
         // See note in the DeadUpStar branch above: clear instance_id once on death entry.
         instance_id_reset_ft_800892D4(batch, idx);

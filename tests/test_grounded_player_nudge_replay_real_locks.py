@@ -6,7 +6,7 @@ import json
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
+from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE, read_dataset
 from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
@@ -16,12 +16,52 @@ ACT_WAIT = 0x000E
 SM_WAIT = 2
 STAGE_FD = 32
 CHAR_FOX = 1
+ACT_GUARD = 179
+ACT_GUARD_SET_OFF = 181
 
 
 def _size(sizes: dict[str, int], key: str) -> int:
     if key in sizes:
         return int(sizes[key])
     return int(sizes[f"{key}_v0"])
+
+
+def _run_rollout_window(dataset_path: Path, start: int, stop: int) -> tuple[np.void, np.void]:
+    binding = pytest.importorskip("msl_binding")
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    sizes = binding.sizes()
+    seed_stride = _size(sizes, "seed")
+    input_stride = _size(sizes, "input")
+    compare_stride = _size(sizes, "compare")
+    seed_off = int(samples.dtype.fields["seed_t"][1])
+    prev_off = int(samples.dtype.fields["prev_input_t"][1])
+    input_off = int(samples.dtype.fields["input_t"][1])
+    raw = samples.view(np.uint8).reshape(len(samples), -1)
+    out_bytes = np.zeros((1, compare_stride), dtype=np.uint8, order="C")
+
+    def field_bytes(record: int, off: int, stride: int) -> np.ndarray:
+        return np.array(
+            raw[record : record + 1, off : off + stride],
+            dtype=np.uint8,
+            order="C",
+            copy=True,
+        )
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        binding.reseed_seed_rollout(handle, field_bytes(start, seed_off, seed_stride))
+        for record in range(start, stop + 1):
+            binding.step_input(
+                handle,
+                field_bytes(record, prev_off, input_stride),
+                field_bytes(record, input_off, input_stride),
+            )
+            binding.write_compare(handle, out_bytes)
+        out = out_bytes.view(COMPARE_DTYPE).reshape(1)[0].copy()
+    finally:
+        binding.destroy(handle)
+    return samples["ref_t1"][stop].copy(), out
 
 
 @pytest.mark.integration
@@ -60,6 +100,42 @@ def test_common_grounded_player_nudge_before_grab_connect(record: int) -> None:
         assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-6), (
             f"p{p} pos_y"
         )
+
+
+@pytest.mark.integration
+def test_guardsetoff_turnover_nudge_uses_promoted_seed_prev_action_on_rollout() -> None:
+    # Replay-real rollout lock for a GuardSetOff_Anim -> Guard handoff:
+    # - Fighter_8006A360 runs GuardSetOff_Anim before ftCommon_8007E0E4.
+    # - When GuardSetOff_Anim enters Guard, the same frame still owns the common x450 pushbox nudge.
+    # - Rollout carries that source through seed_prev_action_id after prev_action_id has advanced to
+    #   Guard, so the turnover bridge must consume seed-prev provenance without double-counting
+    #   ordinary Guard nudge.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardSetOff_Anim,ftCo_800928CC}
+    # refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007DD7C,ftCommon_8007E0E4}
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    p = 1
+    handoff_record = 3860
+    seed = samples["seed_t"][handoff_record]
+    assert int(seed["action_id"][p]) == ACT_GUARD
+    assert int(seed["seed_prev_action_id"][p]) == ACT_GUARD_SET_OFF
+
+    ref, out = _run_rollout_window(dataset_path, 3851, handoff_record)
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_GUARD
+    assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=2e-6)
+
+    # The exact position guards both halves of the boundary: missing seed-prev provenance leaves the
+    # row +0.3000 too far right, while double-counting common + turnover nudge would overshoot left.
+    assert float(ref["pos_x"][p]) == pytest.approx(22.10211181640625, abs=2e-6)
 
 
 def test_common_grounded_player_nudge_exact_overlap_uses_player_order() -> None:

@@ -473,8 +473,17 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::ftCo_Walk_Anim
           // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
           //
-          // Keep the seeded 1.0 entry carry here; applying the scaled walk rate one frame early
-          // at action_frame==1 shifts Walk timebase ownership.
+          // Keep the seeded/source 1.0 entry carry here; applying the scaled walk rate one frame
+          // early at action_frame==1 shifts Walk timebase ownership. Runtime rollouts promote the
+          // frame-start source action into seed_prev_action_id, which preserves this same
+          // first-steady Walk entry owner after a same-frame Damage_IASA/Wait_IASA walk enter. A
+          // zero carry at action_frame==1 is also an entry-clamp artifact, not a valid Walk_Anim
+          // rate: source entry used anim_speed=1 and Walk_Anim has not yet supplied the consumed
+          // rate for this tick.
+          if (batch->state.seed_prev_action_id[idx] != a ||
+              batch->state.frame_speed_mul_fp_q16_16[idx] == 0) {
+            batch->state.frame_speed_mul_fp_q16_16[idx] = MSL_Q16_16_ONE;
+          }
         } else {
           // Walk callback-source ownership:
           // - ftCo_Walk_Anim runs after ftAnim advance and writes the rate used by the next frame.

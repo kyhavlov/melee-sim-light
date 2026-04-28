@@ -335,6 +335,16 @@ void hurtboxes_refresh(MslBatch* batch) {
       const uint16_t prev_action_id = batch->state.prev_action_id[idx];
       hurtboxes_apply_colanim_action_entry(batch, idx);
       uint8_t final_hurtbox_state = batch->state.colanim_hit_status_x198c[idx];
+      const uint8_t preserve_visible_shieldbreak_hit_status =
+          ((action_id == (uint16_t)MSL_ACT_SHIELD_BREAK_FLY ||
+            action_id == (uint16_t)MSL_ACT_SHIELD_BREAK_FALL ||
+            action_id == (uint16_t)MSL_ACT_SHIELD_BREAK_DOWN_U ||
+            action_id == (uint16_t)MSL_ACT_SHIELD_BREAK_DOWN_D ||
+            action_id == (uint16_t)MSL_ACT_SHIELD_BREAK_STAND_U ||
+            action_id == (uint16_t)MSL_ACT_SHIELD_BREAK_STAND_D) &&
+           batch->state.hurtbox_state[idx] == 2u)
+              ? 1u
+              : 0u;
       const uint8_t preserve_visible_downbound_colanim =
           (((action_id == (uint16_t)MSL_ACT_DOWN_BOUND_U ||
              action_id == (uint16_t)MSL_ACT_DOWN_BOUND_D) ||
@@ -355,6 +365,18 @@ void hurtboxes_refresh(MslBatch* batch) {
         // Preserve the visible compare lane and let combat read x198C directly.
         // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
         // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B868
+        final_hurtbox_state = batch->state.hurtbox_state[idx];
+      }
+      if (preserve_visible_shieldbreak_hit_status) {
+        // Shield-break hit-status owner:
+        // - ftCo_80098B20 calls `ftColl_8007B62C(gobj, 2)` after entering ShieldBreakFly.
+        // - ShieldBreakFall/Down/Stand transitions use motion flags that keep this hit status until
+        //   Furafura entry clears it. Current runtime has no separate x1988 state lane, so preserve
+        //   the replay-visible merged status for this source-owned family while still letting
+        //   Furafura's explicit entry clear reset it.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_ShieldBreakFly.c::ftCo_80098B20
+        // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B62C
+        // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
         final_hurtbox_state = batch->state.hurtbox_state[idx];
       }
 
@@ -466,18 +488,27 @@ void hurtboxes_refresh(MslBatch* batch) {
       }
       if ((action_id == (uint16_t)MSL_ACT_DOWN_BOUND_U ||
            action_id == (uint16_t)MSL_ACT_DOWN_BOUND_D) &&
-          batch->state.on_ground[idx] != 0u && batch->state.colanim_hit_status_x198c[idx] == 1u &&
+          (batch->state.prev_on_ground[idx] == 0u || batch->state.prev_action_frame[idx] > 0) &&
+          batch->state.on_ground[idx] != 0u && batch->state.hurtbox_state[idx] == 0u &&
           batch->state.colanim_timer_x1994[idx] != 0u) {
         // Narrow DownBound post-Anim hurtcaps pose bridge:
         // - DownBound callback ordering is Anim then Coll on the same frame.
-        // - On grounded x198C=1 / x1994>0 bounce rows, pre-combat hurtcaps need the post-Anim pose
-        //   to avoid a replay-false invincible BODY contact against the adjacent AttackDash frame.
+        // - Seed reseed preserves the hidden DownBound x1994 timer without globally raising
+        //   x198C; when an airborne-at-snapshot DownBound row floors before collision, or a
+        //   continuing DownBound row remains in that post-Anim collision-pose episode, pre-combat
+        //   hurtcaps and hit-status masks need the post-Anim frame. Already-grounded frame-0
+        //   DownBound rows keep their normal current pose, preserving real downed BODY contacts.
+        //   This fixes the replay-false high-hurtcap AttackDash BODY overlap without suppressing
+        //   real grounded DownDamage contacts.
         // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procMap}
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::{
         //   ftCo_DownBound_Anim,ftCo_DownBound_Coll
         // }
         if (frame != 0xFFFFu) {
           frame = (uint16_t)(frame + 1u);
+        }
+        if (pose_frame != 0xFFFFu) {
+          pose_frame = (uint16_t)(pose_frame + 1u);
         }
       }
       if (hurtboxes_side_special_end_uses_pre_anim_collision_pose(char_id, action_id) &&

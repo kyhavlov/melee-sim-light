@@ -21,6 +21,7 @@
 #include "jump_input.h"
 #include "move_tables.h"
 #include "mpcoll_ecb_points.h"
+#include "physics.h"
 #include "shine.h"
 #include "special_msids.h"
 #include "stage_collision.h"
@@ -1769,6 +1770,63 @@ static inline uint8_t action_is_grounded_guard_state(uint16_t a) {
                    a == (uint16_t)MSL_ACT_GUARD_REFLECT);
 }
 
+static inline uint8_t guard_floor_loss_should_missfoot(const MslBatch* batch, size_t idx,
+                                                       uint32_t stage_id) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  const uint16_t ground_id = batch->state.ground_id[idx];
+  if (ground_id == 0xFFFFu) {
+    return 0u;
+  }
+  const MslStageFloorGraph* g = stage_collision_get_floor_graph(stage_id);
+  const int line_idx = stage_collision_floor_line_index(stage_id, ground_id);
+  if (g == NULL || line_idx < 0 || (size_t)line_idx >= g->line_count) {
+    return 0u;
+  }
+  const MslStageFloorLine* line = &g->lines[(size_t)line_idx];
+  const float left = (line->x0 < line->x1) ? line->x0 : line->x1;
+  const float right = (line->x0 > line->x1) ? line->x0 : line->x1;
+  const float x = batch->state.pos_x[idx];
+  const uint8_t facing_right = batch->state.facing[idx] ? 1u : 0u;
+  // Decomp: GuardOn/Guard/GuardOff/GuardReflect Coll callbacks call ft_800845B4, which routes
+  // mpColl ledge-slip floor loss to ftCo_8009F39C only when the open endpoint is behind the
+  // fighter's facing direction; otherwise it falls normally.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+  //   ftCo_GuardOn_Coll,ftCo_Guard_Coll,ftCo_GuardOff_Coll,ftCo_GuardReflect_Coll}
+  // refs/melee/src/melee/ft/ft_081B.c::ft_800845B4
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_MissFoot.c::ftCo_8009F39C
+  // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
+  if (x < left && facing_right) {
+    return 1u;
+  }
+  if (x > right && !facing_right) {
+    return 1u;
+  }
+  return 0u;
+}
+
+static inline void enter_missfoot_from_ground_floor_loss(MslBatch* batch, const MslCharParams* ch,
+                                                         size_t idx) {
+  if (batch == NULL || ch == NULL) {
+    return;
+  }
+  batch->state.action_id[idx] = (uint16_t)MSL_ACT_MISS_FOOT;
+  batch->state.animation_index[idx] = (uint32_t)MSL_SM_MISS_FOOT;
+  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  batch->state.on_ground[idx] = 0u;
+  batch->state.fall_fast[idx] = 0u;
+  batch->state.jumps_left[idx] = ch->max_jumps > 0 ? (uint8_t)(ch->max_jumps - 1) : 0u;
+  batch->state.speed_y_self[idx] = 0.0f;
+  batch->state.speed_y_attack[idx] = 0.0f;
+  if (batch->state.speed_air_x_self[idx] > ch->air_drift_max) {
+    batch->state.speed_air_x_self[idx] = ch->air_drift_max;
+  } else if (batch->state.speed_air_x_self[idx] < -ch->air_drift_max) {
+    batch->state.speed_air_x_self[idx] = -ch->air_drift_max;
+  }
+  batch->state.speed_ground_x_self[idx] = 0.0f;
+}
+
 static inline uint8_t ottotto_edge_matches_facing(uint32_t stage_id, uint16_t ground_id,
                                                   uint8_t facing, float pos_x) {
   const int line_idx = stage_collision_floor_line_index(stage_id, ground_id);
@@ -2520,6 +2578,67 @@ static inline void enter_landing_action_from_air(MslBatch* batch, const MslCharP
       }
     }
   }
+}
+
+static inline uint8_t shieldbreak_down_faces_up(const MslBatch* batch, size_t idx,
+                                                uint16_t action_id) {
+  // Decomp: `ftCo_80098E3C` chooses ShieldBreakDownU/D via `ftCo_80097570`, which samples the
+  // live HipN matrix and checks row[1][1] (or row[1][2] under the alternate orientation flag).
+  // The alternate flag is not exposed in current RL1 seed state; for Fox/Falco ShieldBreakFly/Fall
+  // rows in the suite, the source path uses the ordinary HipN y-axis predicate.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_ShieldBreakDown.c::ftCo_80098E3C
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_80097570
+  enum { MSL_FTPART_HIP_N = 4 };
+  uint16_t msid = 0u;
+  if (action_id == (uint16_t)MSL_ACT_SHIELD_BREAK_FLY) {
+    msid = (uint16_t)MSL_SM_SHIELD_BREAK_FLY;
+  } else if (action_id == (uint16_t)MSL_ACT_SHIELD_BREAK_FALL) {
+    msid = (uint16_t)MSL_SM_SHIELD_BREAK_FALL;
+  } else {
+    return 1u;
+  }
+
+  float m[12] = {0};
+  if (anim_pose_get_collision_matrix_f32(batch, idx, msid, batch->state.anim_frame_f32[idx],
+                                         (uint16_t)MSL_FTPART_HIP_N, m) == 0) {
+    return (uint8_t)(m[5] > 0.0f);
+  }
+  return 1u;
+}
+
+static inline void enter_shieldbreak_down_from_floor_contact(MslBatch* batch,
+                                                             const MslCharParams* ch, size_t idx,
+                                                             uint16_t prev_action) {
+  // ShieldBreakFly/Fall floor contact:
+  // - `ft_80082C74(..., ftCo_80098E3C)` dispatches the landing callback.
+  // - `ftCo_80098E3C` refreshes grounded bookkeeping through `ftCommon_8007D7FC` when entered from
+  //   air, then changes motion to ShieldBreakDownU/D without an immediate animation tick.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_ShieldBreakFly.c::ftCo_ShieldBreakFly_Coll
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_ShieldBreakFall.c::ftCo_ShieldBreakFall_Coll
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_ShieldBreakDown.c::ftCo_80098E3C
+  // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D7FC,ftCommon_8007D6A4}
+  float gr = batch->state.speed_air_x_self[idx];
+  if (ch != NULL) {
+    const float gmax = ch->ground_max_horizontal_velocity;
+    if (gr > gmax) {
+      gr = gmax;
+    } else if (gr < -gmax) {
+      gr = -gmax;
+    }
+    batch->state.jumps_left[idx] = ch->max_jumps;
+  }
+  batch->state.on_ground[idx] = 1u;
+  batch->state.speed_ground_x_self[idx] = gr;
+  batch->state.speed_air_x_self[idx] = gr;
+  batch->state.ecb_lock_timer[idx] = 0u;
+  batch->state.hurtbox_state[idx] = 2u;
+
+  const uint8_t down_u = shieldbreak_down_faces_up(batch, idx, prev_action);
+  batch->state.action_id[idx] =
+      down_u ? (uint16_t)MSL_ACT_SHIELD_BREAK_DOWN_U : (uint16_t)MSL_ACT_SHIELD_BREAK_DOWN_D;
+  batch->state.animation_index[idx] =
+      down_u ? (uint32_t)MSL_SM_SHIELD_BREAK_DOWN_U : (uint32_t)MSL_SM_SHIELD_BREAK_DOWN_D;
+  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
 }
 
 static inline uint8_t locomotion_is_throw_release_pending_victim(const MslBatch* batch, int bi,
@@ -3937,6 +4056,17 @@ void locomotion_update_pre(MslBatch* batch) {
           if (grounded_a_attack_try_enter_from_iasa(batch, c, idx, buttons_pressed, stick_x,
                                                     stick_y, tilt_timer_x, tilt_timer_y, facing_dir,
                                                     1, 0)) {
+            if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_ATTACK_DASH) {
+              // Run/RunDirect IASA enters AttackDash before Phys in the same fighter proc.
+              // This simulator's locomotion IASA pass is post-physics, so restore the missed
+              // `ftCo_AttackDash_Phys -> ft_80085030` velocity handoff on the entry frame.
+              // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_Run.c,ftCo_RunDirect.c}
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::{
+              //   ftCo_AttackDash_SetMv0,ftCo_AttackDash_Phys}
+              batch->state.anim_defer_tick_once[idx] = 0u;
+              msl_anim_timebase_tick_once(batch, idx);
+              (void)physics_apply_attackdash_entry_phys_now(batch, idx, facing_dir);
+            }
             action_id = batch->state.action_id[idx];
           } else {
             const MslJumpInput j_in =
@@ -4058,6 +4188,17 @@ void locomotion_update_pre(MslBatch* batch) {
                                                            facing_dir, 1, 0)) {
             // Decomp: AttackDash input is only checked in Dash IASA while cur_anim_frame <= x4C.
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
+            if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_ATTACK_DASH) {
+              // Source ordering is Dash_IASA -> AttackDash enter -> AttackDash_Phys in one
+              // Fighter_procUpdate. This pass runs after physics, so apply the entry tick and
+              // root-motion Phys handoff here instead of leaving AttackDash stationary for one
+              // rollout frame.
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::{
+              //   doEnter,ftCo_AttackDash_Phys}
+              batch->state.anim_defer_tick_once[idx] = 0u;
+              msl_anim_timebase_tick_once(batch, idx);
+              (void)physics_apply_attackdash_entry_phys_now(batch, idx, facing_dir);
+            }
             action_id = batch->state.action_id[idx];
           } else if (!dash_iasa_early_x4 && cur_anim_frame <= c->dash_iasa_x4c &&
                      (stick_x * facing_dir) < 0.0f && msl_absf(stick_x) >= c->dash_flick_abs &&
@@ -4186,6 +4327,9 @@ void locomotion_update_pre(MslBatch* batch) {
           //   ftCo_KneeBend_Anim,ftCo_KneeBend_IASA
           // }
           if ((!startup_complete || opponent_active_catch_window) && !fresh_guard_jump_oos) {
+            if (blaster_try_enter_ground_specialhi_from_kneebend_iasa(batch, c, idx)) {
+              continue;
+            }
             if (grab_flow_try_enter_catch_from_iasa(batch, c, idx)) {
               continue;
             }
@@ -4755,6 +4899,10 @@ void locomotion_update_post_collision(MslBatch* batch) {
         //   ftCo_GuardOn_Coll,ftCo_Guard_Coll,ftCo_GuardOff_Coll,
         //   ftCo_GuardSetOff_Coll,ftCo_GuardReflect_Coll}
         // refs/melee/src/melee/ft/ft_081B.c::{ft_80084104,ft_800845B4}
+        if (guard_floor_loss_should_missfoot(batch, idx, batch->state.stage_id[(size_t)bi])) {
+          enter_missfoot_from_ground_floor_loss(batch, ch, idx);
+          continue;
+        }
         enter_fall_from_grounded_floor_loss(batch, ch, idx);
         continue;
       }
@@ -4819,6 +4967,11 @@ void locomotion_update_post_collision(MslBatch* batch) {
           // locomotion transition resolver runs. Preserve floor-contact Y for the same decomp-owned
           // Jump/SpecialAirN collision families used by the landing bridge helper above.
           batch->state.pos_y[idx] = batch->state.ground_contact_y[idx] + 0.0001f;
+        }
+
+        if (a == (uint16_t)MSL_ACT_SHIELD_BREAK_FLY || a == (uint16_t)MSL_ACT_SHIELD_BREAK_FALL) {
+          enter_shieldbreak_down_from_floor_contact(batch, ch, idx, a);
+          continue;
         }
 
         // Grounding transition: enter landing actions for supported airborne motion states.
