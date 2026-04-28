@@ -2029,10 +2029,10 @@ def derive_damage_jump_buffer_x14(
     - Resets on in-family fresh-hit boundaries (`hitstun` increase), matching that
       ftCo_8008DCE0 clears x14 on damage re-entry.
     - Slippi exposes replay-visible stick timers, not the callback-local hidden `x671` value that
-      `ftCo_Jump_GetInput` observes inside hitstun. Treat tap-jump as authoritative only on the
-      same replay-visible threshold edge (`x671 == 0`) used by the normal jump gate, and only outside
-      hitlag because Fighter_8006A360 / Fighter_procUpdate skip Anim/IASA callbacks while
-      fp->x2219_b5 is set. Stale held tilts are not seed producers.
+      `ftCo_Jump_GetInput` observes inside hitstun. Treat tap-jump as authoritative only inside the
+      same replay-visible x671 window (`x671 < p_ftCommonData->x74`) used by the normal jump gate,
+      and only outside hitlag because Fighter_8006A360 / Fighter_procUpdate skip Anim/IASA
+      callbacks while fp->x2219_b5 is set. Stale held tilts outside that window are not producers.
     """
     a = np.asarray(action_id, dtype=np.uint16).reshape(-1)
     hs = np.asarray(hitstun_u16, dtype=np.uint16).reshape(-1)
@@ -2086,11 +2086,11 @@ def derive_damage_jump_buffer_x14(
             jump_input = True
         # Decomp: doIasa calls ftCo_Jump_GetInput, which accepts both XY and tap-jump. Keep the
         # seed bridge prefix-causal by using only the current replay-visible stick/timer sample, and
-        # require the timer to be on the threshold edge so old held-up values do not refresh
-        # the hidden damage x14 lane.
+        # require the timer to be inside the decomp tap-jump window so old held-up values do not
+        # refresh the hidden damage x14 lane.
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::doIasa
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_GetInput
-        if float(sy[i]) >= float(tap_thr) and int(tty[i]) == 0:
+        if float(sy[i]) >= float(tap_thr) and int(tty[i]) < tilt_max:
             jump_input = True
 
         if int(hl[i]) == 0 and int(hs[i]) > 0 and jump_input:

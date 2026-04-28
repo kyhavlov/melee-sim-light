@@ -28,8 +28,8 @@ def test_damage_jump_buffer_x14_derivation_is_prefix_invariant() -> None:
     )
     hitstun = np.array([0, 0, 4, 3, 2, 1, 0, 0, 0], dtype=np.uint16)
     # Press XY on frame 3 (x14 snapshots the current damage timer and does not decrement with
-    # remaining hitstun). A later replay-visible tap-jump edge also goes through
-    # ftCo_Jump_GetInput and refreshes the hidden x14 snapshot.
+    # remaining hitstun). A later replay-visible tap-jump window also goes through
+    # ftCo_Jump_GetInput and refreshes the hidden x14 snapshot while x671 < x74.
     buttons_pressed = np.array([0, 0, 0, 0x0C00, 0, 0, 0, 0, 0], dtype=np.uint16)
     stick_y = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.8, 0.0, 0.0, 0.0], dtype=np.float32)
     tilt_timer_y = np.array([0xFE, 0xFE, 0, 0, 0, 0, 0, 0xFE, 0xFE], dtype=np.uint8)
@@ -66,6 +66,32 @@ def test_damage_jump_buffer_x14_derivation_is_prefix_invariant() -> None:
             damage_actions=(act_damage_air_1, act_damage_air_2),
         )
         assert np.array_equal(got, full[:k])
+
+
+def test_damage_jump_buffer_x14_tap_jump_uses_full_x671_window() -> None:
+    # ftCo_Jump_GetInput accepts tap jump while x671 < p_ftCommonData->x74, not only on x671==0.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_GetInput
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::doIasa
+    act_damage_air_3 = 0x0056
+    action_id = np.array([act_damage_air_3] * 6, dtype=np.uint16)
+    hitstun = np.array([22, 21, 20, 19, 18, 17], dtype=np.uint16)
+    buttons_pressed = np.zeros(action_id.size, dtype=np.uint16)
+    stick_y = np.array([0.0, 0.0, 0.0, 0.68, 0.72, 0.72], dtype=np.float32)
+    tilt_timer_y = np.array([0xFE, 0xFE, 0xFE, 0, 1, 4], dtype=np.uint8)
+
+    full = derive_damage_jump_buffer_x14(
+        action_id=action_id,
+        hitstun_u16=hitstun,
+        buttons_pressed=buttons_pressed,
+        stick_y_unit=stick_y,
+        tilt_timer_y=tilt_timer_y,
+        tap_jump_threshold=0.7,
+        tap_jump_tilt_max_frames=4,
+        button_mask_xy=0x0C00,
+        damage_actions=(act_damage_air_3,),
+    )
+
+    assert [int(x) for x in full] == [0, 0, 0, 0, 18, 18]
 
 
 def test_damage_jump_buffer_x14_persists_across_damagefly_to_damagefall() -> None:
