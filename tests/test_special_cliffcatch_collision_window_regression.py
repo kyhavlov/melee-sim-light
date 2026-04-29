@@ -143,6 +143,33 @@ def _assert_strict_transition_fields_match_ref_all_players(
             252,
             3,
         ),
+        (
+            "datasets/aggregate_recent/replays/debug/cardinal_1.0_recent/"
+            "Game_20250211T211709.msl",
+            9024,
+            0,
+            358,  # SpecialHiFall
+            252,  # CliffCatch
+            1,
+        ),
+        (
+            "datasets/aggregate_recent/replays/debug/cardinal_1.0_recent/"
+            "HungryImportantSnake.msl",
+            8669,
+            1,
+            358,  # SpecialHiFall
+            252,  # CliffCatch
+            1,
+        ),
+        (
+            "datasets/aggregate_recent/replays/debug/fd_mixed_recent/"
+            "TubbyCurlyHerring.msl",
+            6998,
+            1,
+            358,  # SpecialHiFall
+            252,  # CliffCatch
+            1,
+        ),
     ],
 )
 def test_special_cliffcatch_runtime_strict_rows(
@@ -167,8 +194,11 @@ def test_special_cliffcatch_runtime_strict_rows(
     # Decomp ownership:
     # - mpColl ledge-grab flags are resolved from collision-step prev/cur position pairs.
     # - Special fall / spacie special-air collision callbacks include ftCliffCommon_80081298.
+    # - SpecialHiFall runs ft_CheckGroundAndLedge first, then can still enter CliffCatch when mpColl
+    #   produced Collide_LedgeGrabMask and no floor/ledge landing transition was taken.
     # refs/melee/src/melee/mp/mpcoll.c::mpColl_80046904
-    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiHoldAir_Coll
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+    #   ftFx_SpecialHiHoldAir_Coll,ftFx_SpecialHiFall_Coll}
     # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialAirSEnd_Coll
     assert int(out["action_id"][p]) == int(ref["action_id"][p]) == int(ref_action)
     assert int(out["animation_index"][p]) == int(ref["animation_index"][p]) == 216

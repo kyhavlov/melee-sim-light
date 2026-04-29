@@ -36,7 +36,8 @@ enum {
   MSL_COLLIDE_FLOOR_HUG = 0x00010000u,   // Collide_FloorHug
   MSL_COLLIDE_FLOOR_MASK = (0x00008000u | 0x00010000u),
 
-  // Floor edge proximity (used as a ledge-grab suppression gate inside mpColl).
+  // Floor edge proximity. mpColl's ledge-grab admission gate suppresses on the side-specific
+  // LeftEdge/RightEdge bits before writing Collide_LedgeGrabMask.
   // refs/melee/src/common_structs.h
   MSL_COLLIDE_LEFT_EDGE = 0x00100000u,   // Collide_LeftEdge
   MSL_COLLIDE_RIGHT_EDGE = 0x00200000u,  // Collide_RightEdge

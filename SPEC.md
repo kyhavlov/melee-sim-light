@@ -2043,6 +2043,14 @@ Fox/Falco special-owner split (2026-04-17):
     `refs/melee/src/melee/ft/chara/ftCommon/forward.h`,
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c`, and
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffJump.c`.
+  - `SpecialHiFall -> CliffCatch` consumes the same `Collide_LedgeGrabMask` authority as other
+    cliff-check callbacks after `ftFx_SpecialHiFall_Coll` fails to take its prior
+    `ft_CheckGroundAndLedge` landing branch. The aggregate `Collide_Edge` bit alone is not a
+    post-mask CliffCatch veto; decomp suppresses ledge-grab generation only when side-specific
+    `Collide_LeftEdge/RightEdge` is already present inside `mpColl_80046904`. Sources:
+    `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiFall_Coll`,
+    `refs/melee/src/melee/mp/mpcoll.c::mpColl_80046904`, and
+    `refs/melee/src/melee/ft/ftcliffcommon.c::ftCliffCommon_80081298`.
   - `CliffJumpSlow2` and `CliffJumpQuick2` both use `ftCo_CliffJump2_Phys`: the same-frame
     `CliffJump1 -> CliffJump2` handoff skips `ft_80084DB0` through `mv.co.cliffjump.x0`, even
     though visible `action_frame` is already 1 from the immediate `ftAnim_8006EBA4` tick, and
