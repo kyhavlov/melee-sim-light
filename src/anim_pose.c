@@ -15,9 +15,12 @@ enum {
   ANIM_MAGIC_LEN = 8,
   ANIM_HDR_BASE_BYTES = 16,  // magic[8] + ver[u32] + joint_count[u16] + anim_count[u16]
   ANIM_VERSION_V4 = 4,
+  ANIM_DYN_VERSION_V3 = 3,
   MAT_BYTES = 12 * 4,              // float32[12] (3x4)
   TRANSN_BYTES_PER_FRAME = 3 * 4,  // float32[3] v4 tail (TransN/root translation)
 
+  // SSDYNN01 v3 is written by tools/extraction/extract_fighter_anims.py.
+  //
   // RL1.0 target data contract:
   // - Fox ftData.x2C has exactly one dynamic bone set rooted at part 17.
   // - Falco ftData.x2C has zero dynamic bone sets.
@@ -809,7 +812,7 @@ static int load_dynamics_into_table(const char* data_dir, const char* rel_path,
   static const uint8_t dyn_magic[ANIM_MAGIC_LEN] = {'S', 'S', 'D', 'Y', 'N', 'N', '0', '1'};
   const uint32_t ver = (sz >= ANIM_HDR_BASE_BYTES) ? read_u32_le(buf + 8) : 0u;
   if (sz < ANIM_HDR_BASE_BYTES || memcmp(buf, dyn_magic, ANIM_MAGIC_LEN) != 0 ||
-      (ver != 1u && ver != 2u)) {
+      ver != ANIM_DYN_VERSION_V3) {
     alloc_free(buf);
     return -1;
   }
@@ -858,28 +861,26 @@ static int load_dynamics_into_table(const char* data_dir, const char* rel_path,
     seen_nodes = (uint16_t)(seen_nodes + set->node_count);
   }
   uint8_t* dyn_collision_have_msid = NULL;
-  if (ver == 2u) {
-    if (off + 4u > sz) {
-      alloc_free(buf);
-      return -1;
-    }
-    const uint16_t collision_msid_count = read_u16_le(buf + off);
-    off += 4u;  // collision_msid_count + reserved
-    if (off + (size_t)collision_msid_count * 2u > sz) {
-      alloc_free(buf);
-      return -1;
-    }
-    dyn_collision_have_msid = (uint8_t*)alloc_calloc(65536, 1);
-    if (dyn_collision_have_msid == NULL) {
-      alloc_free(buf);
-      return -1;
-    }
-    for (uint16_t i = 0; i < collision_msid_count; i++) {
-      const uint16_t msid = read_u16_le(buf + off + (size_t)i * 2u);
-      dyn_collision_have_msid[msid] = 1u;
-    }
-    off += (size_t)collision_msid_count * 2u;
+  if (off + 4u > sz) {
+    alloc_free(buf);
+    return -1;
   }
+  const uint16_t collision_msid_count = read_u16_le(buf + off);
+  off += 4u;  // collision_msid_count + reserved
+  if (off + (size_t)collision_msid_count * 2u > sz) {
+    alloc_free(buf);
+    return -1;
+  }
+  dyn_collision_have_msid = (uint8_t*)alloc_calloc(65536, 1);
+  if (dyn_collision_have_msid == NULL) {
+    alloc_free(buf);
+    return -1;
+  }
+  for (uint16_t i = 0; i < collision_msid_count; i++) {
+    const uint16_t msid = read_u16_le(buf + off + (size_t)i * 2u);
+    dyn_collision_have_msid[msid] = 1u;
+  }
+  off += (size_t)collision_msid_count * 2u;
   alloc_free(buf);
   if (off != sz || seen_nodes != total_nodes) {
     alloc_free(dyn_collision_have_msid);
@@ -1831,7 +1832,12 @@ static void dynamic_state_step(MslBatch* batch, size_t idx, const MslAnimPoseTab
     batch->state.dynamic_pose_pos_z[root_di] = base_pos[0][2];
   }
 
-  uint8_t apply_collision_pose = 0u;
+  // SSDYNN01 v3's collision-owner index means this submotion consumes the live dynamic JObj
+  // matrix for BODY hurtcaps on every supported frame, even when the current lb_8001044C update
+  // resolves to the static segment vector with no nonzero correction carry.
+  // refs/melee/src/melee/ft/ftdynamics.c::{ftCo_8009DD94,ftCo_8009E318}
+  // refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
+  uint8_t apply_collision_pose = 1u;
   for (uint16_t ni = 0; ni + 1u < node_count; ni++) {
     const size_t di = dynamic_state_index(idx, ni);
     const size_t child_di = dynamic_state_index(idx, (uint16_t)(ni + 1u));

@@ -13,6 +13,7 @@
 #include "hurtcaps_tables.h"
 #include "msl_math.h"
 #include "mtx34.h"
+#include "specialhi_pose.h"
 
 enum { MSL_CHAR_FOX = 1, MSL_CHAR_FALCO = 22 };
 
@@ -156,6 +157,7 @@ static inline uint8_t hurtboxes_apply_specialhi_local_xrotn(const MslBatch* batc
   if (batch == NULL || io_x == NULL || io_y == NULL || io_z == NULL) {
     return 0u;
   }
+  (void)facing_dir;
   const uint16_t action_id = batch->state.action_id[idx];
   if (!hurtboxes_runtime_specialhi_pose_owner(char_id, action_id)) {
     return 0u;
@@ -167,9 +169,8 @@ static inline uint8_t hurtboxes_apply_specialhi_local_xrotn(const MslBatch* batc
     return 0u;
   }
 
-  const float vel_x = batch->state.speed_air_x_self[idx];
-  const float vel_y = batch->state.speed_y_self[idx];
-  if (!(fabsf(vel_x) > 0.0f || fabsf(vel_y) > 0.0f)) {
+  float rotate_model = 0.0f;
+  if (!msl_specialhi_rotate_model_get_or_velocity(batch, idx, &rotate_model)) {
     return 0u;
   }
 
@@ -202,7 +203,7 @@ static inline uint8_t hurtboxes_apply_specialhi_local_xrotn(const MslBatch* batc
   // Victim hurtcaps bound under that subtree inherit the same runtime local rotation.
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
   //   ftFox_SpecialHi_RotateModel,ftFx_SpecialAirHi_Enter,ftFx_SpecialAirHi_Coll}
-  const float angle = (2.0f * MSL_PI_F) - atan2f(vel_y, vel_x * facing_dir);
+  const float angle = msl_specialhi_xrotn_angle_from_rotate_model(rotate_model);
 
   const float px = *io_x - ax0;
   const float py = *io_y - ay0;
@@ -398,17 +399,24 @@ void hurtboxes_refresh(MslBatch* batch) {
 
       uint16_t msid = 0u;
       if (anim_u32 > 0xFFFFu) {
+        const uint8_t guard_reflect_from_guard_on =
+            (uint8_t)(batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_GUARD_ON ||
+                      batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_GUARD_ON);
         if (action_id == (uint16_t)MSL_ACT_GUARD_REFLECT &&
-            batch->state.action_frame[idx] <= (int16_t)-2 &&
-            batch->state.prev_action_id[idx] != (uint16_t)MSL_ACT_GUARD_ON) {
+            batch->state.action_frame[idx] <= (int16_t)-2 && !guard_reflect_from_guard_on) {
           // GuardReflect no-submotion late-phase snapshots are ordering-sensitive with shield
           // descriptor ownership (x221B_b0 via ftColl_8007B1B8). Preserve raw snapshot geometry on
           // the locomotion-entry lanes that still own shield desc, but let GuardOn_IASA powershield
-          // entry (ftCo_8009388C) fall through to the GuardReflect submotion fallback because that
-          // entry path already cleared shield desc and can take BODY damage on the same frame.
+          // entry (ftCo_8009388C) fall through to the GuardReflect submotion fallback. Same-step
+          // GuardOn entries are visible through live prev_action_id; already-seeded GuardReflect
+          // snapshots use the frame-start seed provenance because live prev can advance before
+          // hurtcaps refresh.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_8009388C
           // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B1B8
           // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+          //
+          // Catch selection has its own local grabbable fallback in combat.c for ftColl_80078A2C.
+          // Do not populate global BODY/debug hurtcap state for this no-submotion slice.
           if (hit_status != 0) {
             final_hurtbox_state = hit_status;
           }

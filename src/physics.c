@@ -10,6 +10,7 @@
 #include "input_axis.h"
 #include "move_tables.h"
 #include "stage_collision.h"
+#include "specialhi_pose.h"
 #include "state_flags.h"
 
 static inline uint8_t physics_action_skip_common_air_helper_first_frame(uint16_t action_id,
@@ -127,34 +128,27 @@ static inline float ground_accel_step_delta(float gr_vel, float accel, float tar
   return a;
 }
 
-static inline void physics_apply_specialhi_air_reverse_accel(const MslCharParams* ch,
-                                                             uint8_t facing, int16_t action_frame,
-                                                             float* io_vel_x, float* io_vel_y) {
+static inline void physics_apply_specialhi_air_reverse_accel(const MslBatch* batch, size_t idx,
+                                                             const MslCharParams* ch,
+                                                             int16_t action_frame, float* io_vel_x,
+                                                             float* io_vel_y) {
   if (ch == NULL || io_vel_x == NULL || io_vel_y == NULL) {
     return;
   }
   // Decomp: ftFx_SpecialAirHi_Phys increments `mv.fx.SpecialHi.unk`, then subtracts the x78
   // reverse-accel vector projected along `rotateModel` once `unk >= x70`.
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialAirHi_Phys
-  //
-  // Inference from source: this core does not persist `rotateModel` separately during launch, so
-  // derive the launch axis from the current self-velocity direction. Across uninterrupted launch
-  // frames, the decomp reverse-accel step remains colinear with that direction.
   if ((int16_t)(action_frame + 1) < (int16_t)ch->firefox_launch_reverse_accel_start_frames) {
     return;
   }
 
-  const float facing_dir = facing ? 1.0f : -1.0f;
-  float dir_x = (*io_vel_x) * facing_dir;
-  float dir_y = *io_vel_y;
-  const float mag = sqrtf(dir_x * dir_x + dir_y * dir_y);
-  if (!(mag > 0.0f)) {
+  float rotate_model = 0.0f;
+  if (!msl_specialhi_rotate_model_get_or_velocity(batch, idx, &rotate_model)) {
     return;
   }
-  dir_x /= mag;
-  dir_y /= mag;
-  *io_vel_x -= facing_dir * (ch->firefox_launch_reverse_accel * dir_x);
-  *io_vel_y -= ch->firefox_launch_reverse_accel * dir_y;
+  const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+  *io_vel_x = -((facing_dir * (ch->firefox_launch_reverse_accel * cosf(rotate_model))) - *io_vel_x);
+  *io_vel_y = -((ch->firefox_launch_reverse_accel * sinf(rotate_model)) - *io_vel_y);
 }
 
 static inline void physics_apply_knockback_decay(MslBatch* batch, size_t idx,
@@ -813,15 +807,25 @@ static inline void physics_compute_grounded_player_nudge(MslBatch* batch, int bi
         continue;
       }
       const size_t oidx = msl_idx_player(bi, q);
-      if (batch->state.stocks[oidx] == 0u || batch->state.on_ground[oidx] == 0u) {
+      // Fighter_8006A360 invokes ftCommon_8007E0E4 once per fighter after that fighter's Anim
+      // callback, not after every fighter's callback has completed. For later GObj/player slots,
+      // the current fighter's nudge still sees the peer's frame-start grounded state. This matters
+      // for KneeBend -> JumpF/B rows where the peer becomes airborne later in the same global pass.
+      // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+      // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007E0E4,ftCommon_8007DD7C}
+      const uint8_t other_on_ground_for_nudge =
+          (q > p) ? batch->state.frame_start_on_ground[oidx] : batch->state.on_ground[oidx];
+      const uint16_t other_action_for_nudge =
+          (q > p) ? batch->state.prev_action_id[oidx] : batch->state.action_id[oidx];
+      if (batch->state.stocks[oidx] == 0u || other_on_ground_for_nudge == 0u) {
         continue;
       }
-      if (msl_action_is_grabbed_victim(batch->state.action_id[oidx])) {
+      if (msl_action_is_grabbed_victim(other_action_for_nudge)) {
         continue;
       }
       if (physics_action_is_attackdash_knockdown_overlap_owner(batch->state.action_id[idx],
-                                                               batch->state.action_id[oidx]) ||
-          physics_action_is_attackdash_knockdown_overlap_owner(batch->state.action_id[oidx],
+                                                               other_action_for_nudge) ||
+          physics_action_is_attackdash_knockdown_overlap_owner(other_action_for_nudge,
                                                                batch->state.action_id[idx])) {
         // Existing replay-real seed bridge owns this family after collision/knockdown resolution.
         // Applying the common pre-physics approximation here double-counts the x450 lane for those
@@ -1557,8 +1561,8 @@ void physics_integrate(MslBatch* batch) {
           const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
           if (ch != NULL) {
             physics_apply_specialhi_air_reverse_accel(
-                ch, batch->state.facing[idx], batch->state.action_frame[idx],
-                &batch->state.speed_air_x_self[idx], &batch->state.speed_y_self[idx]);
+                batch, idx, ch, batch->state.action_frame[idx], &batch->state.speed_air_x_self[idx],
+                &batch->state.speed_y_self[idx]);
           }
         } else if (action_id == (uint16_t)MSL_ACT_FX_SPECIAL_HI_BOUND &&
                    batch->state.on_ground[idx] == 0) {

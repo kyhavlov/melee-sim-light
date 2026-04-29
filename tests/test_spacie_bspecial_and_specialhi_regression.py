@@ -62,6 +62,7 @@ def test_spacie_bspecial_entry_and_specialhi_progression_regression() -> None:
         "firefox_direction_stick_range_min",
         "firefox_launch_speed",
         "firefox_facing_stick_range_min",
+        "firefox_bound_angle_degrees",
     )
     for rel in ("data/characters/fox.json", "data/characters/falco.json"):
         attrs = json.loads((root / rel).read_text(encoding="utf-8"))

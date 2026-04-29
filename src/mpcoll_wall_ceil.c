@@ -14,6 +14,7 @@
 #include "mpcoll_ecb_points.h"
 #include "msl_math.h"
 #include "mtx34.h"
+#include "specialhi_pose.h"
 #include "stage_collision.h"
 
 static inline uint8_t mpcoll_is_pending_throw_release_victim(const MslBatch* batch, int bi, int p) {
@@ -199,6 +200,42 @@ static inline uint8_t mpcoll_wall_asdi_producer_action(uint16_t action_id) {
              : 0u;
 }
 
+static inline uint8_t mpcoll_active_hitlag_phase(const MslBatch* batch, size_t idx) {
+  return (batch != NULL &&
+          (batch->state.hitlag_pre_timer[idx] != 0u || batch->state.hitlag[idx] != 0u ||
+           batch->state.hitlag_started_frame[idx] != 0u))
+             ? 1u
+             : 0u;
+}
+
+static inline uint8_t mpcoll_action_uses_common_air_walljump_callback(uint16_t action_id) {
+  // These common-air Coll callbacks route through ft_081B helpers that call
+  // ftWallJump_8008169C after floor collision declines. If the side-point projection recovery
+  // observes the current side point inside a wall, the recovered contact owns WallHug for this
+  // callback family; DamageFly and other wall consumers remain Push-only unless their own side
+  // branch or seed lane proves Hug.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Coll
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_Coll
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Coll
+  // refs/melee/src/melee/ft/ft_081B.c::{ft_800831CC,ft_800835B0}
+  // refs/melee/src/melee/ft/ftwalljump.c::ftWallJump_8008169C
+  switch (action_id) {
+    case (uint16_t)MSL_ACT_JUMP_F:
+    case (uint16_t)MSL_ACT_JUMP_B:
+    case (uint16_t)MSL_ACT_JUMP_AERIAL_F:
+    case (uint16_t)MSL_ACT_JUMP_AERIAL_B:
+    case (uint16_t)MSL_ACT_FALL:
+    case (uint16_t)MSL_ACT_FALL_F:
+    case (uint16_t)MSL_ACT_FALL_B:
+    case (uint16_t)MSL_ACT_FALL_AERIAL:
+    case (uint16_t)MSL_ACT_FALL_AERIAL_F:
+    case (uint16_t)MSL_ACT_FALL_AERIAL_B:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
 static inline void ecb_update_rot_bounds(float x, float y, float* io_min_x, float* io_max_x,
                                          float* io_min_y, float* io_max_y) {
   if (x < *io_min_x) {
@@ -222,9 +259,9 @@ static inline uint8_t specialhi_rotate_collision_point_xrotn(
       !msl_anim_part_under_xrotn(char_id, part_id)) {
     return 0u;
   }
-  const float vel_x = batch->state.speed_air_x_self[idx];
-  const float vel_y = batch->state.speed_y_self[idx];
-  if (!(fabsf(vel_x) > 0.0f || fabsf(vel_y) > 0.0f)) {
+  (void)facing_dir;
+  float rotate_model = 0.0f;
+  if (!msl_specialhi_rotate_model_get_or_velocity(batch, idx, &rotate_model)) {
     return 0u;
   }
 
@@ -256,7 +293,7 @@ static inline uint8_t specialhi_rotate_collision_point_xrotn(
   axis_y /= axis_len;
   axis_z /= axis_len;
 
-  const float angle = (2.0f * MSL_PI_F) - atan2f(vel_y, vel_x * facing_dir);
+  const float angle = msl_specialhi_xrotn_angle_from_rotate_model(rotate_model);
   const float px = *io_x - ax0;
   const float py = *io_y - ay0;
   const float pz = *io_z - az0;
@@ -385,10 +422,41 @@ static inline void sample_collision_ecb_points(MslEcbWorldPoints* out, const Msl
                                                size_t idx, uint8_t char_id, uint32_t anim,
                                                uint16_t frame_u16, float facing_dir, float pos_x,
                                                float pos_y, uint8_t lock_bottom_to_zero) {
-  (void)batch;
-  (void)idx;
   msl_ecb_world_points_sample(out, char_id, anim, frame_u16, facing_dir, pos_x, pos_y,
                               lock_bottom_to_zero);
+  if (out == NULL || batch == NULL) {
+    return;
+  }
+
+  // Decomp: mpColl_LoadECB_JObj normalizes the sampled JObj ECB before wall/ceiling/floor tests.
+  // In particular, if horizontal span is below max(4, x12C), it recenters the existing span around
+  // zero, then enforces the final +/-2 minimum. This is not a wall projection tolerance: it is the
+  // source ECB shape consumed by mpColl_80044E10_RightWall / mpColl_80045B74_LeftWall.
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_JObj,mpColl_LoadECB_inline}
+  // refs/melee/src/melee/ft/ft_081B.c::ft_80081B38 (x12C = 10.0f * fp->x34_scale.y)
+  float left_rel_x = out->left_rel_x;
+  float right_rel_x = out->right_rel_x;
+  const float min_ecb_width = fmaxf(4.0f, 10.0f * batch->state.fighter_scale_y[idx]);
+  const float ecb_width = fabsf(right_rel_x - left_rel_x);
+  if (ecb_width < min_ecb_width) {
+    const float half_width = 0.5f * ecb_width;
+    left_rel_x = -half_width;
+    right_rel_x = half_width;
+  }
+  if (right_rel_x < 2.0f) {
+    right_rel_x = 2.0f;
+  }
+  if (left_rel_x > -2.0f) {
+    left_rel_x = -2.0f;
+  }
+
+  out->left_rel_x = left_rel_x;
+  out->right_rel_x = right_rel_x;
+  out->left_x = pos_x + left_rel_x;
+  out->right_x = pos_x + right_rel_x;
+  (void)char_id;
+  (void)anim;
+  (void)frame_u16;
 }
 
 static inline uint8_t is_cliff_hold_action(uint16_t a) {
@@ -552,6 +620,33 @@ static uint8_t intersect_segment(float x0, float y0, float x1, float y1, float a
   *ix_out = ax + rx * t;
   *iy_out = ay + ry * t;
   return 1;
+}
+
+static void remap2d(float ax0, float ay0, float ax1, float ay1, float bx0, float by0, float bx1,
+                    float by1, float px, float py, float* out_x, float* out_y) {
+  // Decomp: mpRemap2d remaps a point from segment A to segment B, clamping the projected segment
+  // parameter to [0,1].
+  // refs/melee/src/melee/mp/mplib.c::mpRemap2d
+  const double dx = (double)ax1 - (double)ax0;
+  const double dy = (double)ay1 - (double)ay0;
+  const double f30 = (double)px - (double)ax0;
+  const double f29 = (double)py - (double)ay0;
+  const double dist2 = dy * dy + dx * dx;
+  if (fabs(dist2) > 0.0001) {
+    double t = (dy * f29 + dx * f30) / dist2;
+    if (t > 1.0) {
+      t = 1.0;
+    } else if (t < 0.0) {
+      t = 0.0;
+    }
+    *out_x = (float)((double)px + (1.0 - t) * ((double)bx0 - (double)ax0) +
+                     t * ((double)bx1 - (double)ax1));
+    *out_y = (float)((double)py + (1.0 - t) * ((double)by0 - (double)ay0) +
+                     t * ((double)by1 - (double)ay1));
+  } else {
+    *out_x = px + (bx0 - ax0) + (bx1 - ax0);
+    *out_y = py + (by0 - ay0) + (by1 - ay0);
+  }
 }
 
 static uint8_t intersect_horiz_clamped(float x0, float y0, float x1, float ax, float ay, float bx,
@@ -1192,6 +1287,120 @@ static inline void left_wall_candidate_sweep(MslWallCandidateList* out, const Ms
   }
 }
 
+static inline void right_wall_candidate_quad(MslWallCandidateList* out, const MslStageWallGraph* g,
+                                             float prev_a_x, float prev_a_y, float prev_b_x,
+                                             float prev_b_y, float cur_a_x, float cur_a_y,
+                                             float cur_b_x, float cur_b_y) {
+  if (out == NULL || g == NULL || g->lines == NULL) {
+    return;
+  }
+  // Decomp: `mpLib_800511A4_RightWall` tests the two wall vertices against the swept ECB side
+  // quad. FD uses static stage vertices, so `CollVtx.x10/x14` are the same as `pos` from
+  // `mpLibLoad`; dynamic-stage remap data is not part of the current FD target domain.
+  // refs/melee/src/melee/mp/mplib.c::{mpLibLoad,mpLib_800511A4_RightWall}
+  float best_dist2 = FLT_MAX;
+  int best_line_idx = -1;
+  float best_ix = 0.0f;
+  float best_iy = 0.0f;
+
+  for (size_t li = 0; li < g->line_count; li++) {
+    const MslStageWallLine* l = &g->lines[li];
+    const float vx[2] = {l->x0, l->x1};
+    const float vy[2] = {l->y0, l->y1};
+    for (int vi = 0; vi < 2; vi++) {
+      float remap_x = 0.0f;
+      float remap_y = 0.0f;
+      remap2d(prev_a_x, prev_a_y, prev_b_x, prev_b_y, cur_a_x, cur_a_y, cur_b_x, cur_b_y, vx[vi],
+              vy[vi], &remap_x, &remap_y);
+
+      const float vdx = vx[vi] - remap_x;
+      const float vdy = vy[vi] - remap_y;
+      if (vdx * vdx + vdy * vdy <= 0.001f) {
+        continue;
+      }
+
+      float ix = 0.0f;
+      float iy = 0.0f;
+      if (!intersect_segment(cur_a_x, cur_a_y, cur_b_x, cur_b_y, remap_x, remap_y, vx[vi], vy[vi],
+                             &ix, &iy)) {
+        continue;
+      }
+
+      float dist2 = (ix - vx[vi]) * (ix - vx[vi]) + (iy - vy[vi]) * (iy - vy[vi]);
+      if (vdx * (ix - vx[vi]) + vdy * (iy - vy[vi]) < 0.0f) {
+        dist2 = -dist2;
+      }
+      if (best_line_idx < 0 || dist2 < best_dist2 ||
+          (dist2 == best_dist2 && l->segment_i < g->lines[(size_t)best_line_idx].segment_i)) {
+        best_dist2 = dist2;
+        best_line_idx = (int)li;
+        best_ix = ix;
+        best_iy = iy;
+      }
+    }
+  }
+
+  if (best_line_idx >= 0) {
+    right_wall_candidate_add(out, g, best_line_idx, 0u, best_ix, best_iy);
+  }
+}
+
+static inline void left_wall_candidate_quad(MslWallCandidateList* out, const MslStageWallGraph* g,
+                                            float prev_a_x, float prev_a_y, float prev_b_x,
+                                            float prev_b_y, float cur_a_x, float cur_a_y,
+                                            float cur_b_x, float cur_b_y) {
+  if (out == NULL || g == NULL || g->lines == NULL) {
+    return;
+  }
+  // Symmetric `mpLib_800515A0_LeftWall` representation for static FD walls.
+  // refs/melee/src/melee/mp/mplib.c::mpLib_800515A0_LeftWall
+  float best_dist2 = FLT_MAX;
+  int best_line_idx = -1;
+  float best_ix = 0.0f;
+  float best_iy = 0.0f;
+
+  for (size_t li = 0; li < g->line_count; li++) {
+    const MslStageWallLine* l = &g->lines[li];
+    const float vx[2] = {l->x0, l->x1};
+    const float vy[2] = {l->y0, l->y1};
+    for (int vi = 0; vi < 2; vi++) {
+      float remap_x = 0.0f;
+      float remap_y = 0.0f;
+      remap2d(prev_a_x, prev_a_y, prev_b_x, prev_b_y, cur_a_x, cur_a_y, cur_b_x, cur_b_y, vx[vi],
+              vy[vi], &remap_x, &remap_y);
+
+      const float vdx = vx[vi] - remap_x;
+      const float vdy = vy[vi] - remap_y;
+      if (vdx * vdx + vdy * vdy <= 0.001f) {
+        continue;
+      }
+
+      float ix = 0.0f;
+      float iy = 0.0f;
+      if (!intersect_segment(cur_a_x, cur_a_y, cur_b_x, cur_b_y, remap_x, remap_y, vx[vi], vy[vi],
+                             &ix, &iy)) {
+        continue;
+      }
+
+      float dist2 = (ix - vx[vi]) * (ix - vx[vi]) + (iy - vy[vi]) * (iy - vy[vi]);
+      if (vdx * (ix - vx[vi]) + vdy * (iy - vy[vi]) < 0.0f) {
+        dist2 = -dist2;
+      }
+      if (best_line_idx < 0 || dist2 < best_dist2 ||
+          (dist2 == best_dist2 && l->segment_i < g->lines[(size_t)best_line_idx].segment_i)) {
+        best_dist2 = dist2;
+        best_line_idx = (int)li;
+        best_ix = ix;
+        best_iy = iy;
+      }
+    }
+  }
+
+  if (best_line_idx >= 0) {
+    left_wall_candidate_add(out, g, best_line_idx, 0u, best_ix, best_iy);
+  }
+}
+
 static uint8_t left_wall_air_envelope_min_x(const MslStageWallGraph* g,
                                             const MslWallCandidateList* candidates,
                                             const MslEcbWorldPoints* ecb, float cur_pos_x,
@@ -1643,6 +1852,9 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
       const uint8_t grounded_now = batch->state.on_ground[idx] ? 1u : 0u;
       const uint8_t char_id = batch->state.char_id[idx];
       const uint32_t anim = batch->state.animation_index[idx];
+      const uint8_t damagefly_hitlag_wall_refresh =
+          (uint8_t)(mpcoll_damagefly_wall_asdi_latch_action(action_id) &&
+                    mpcoll_active_hitlag_phase(batch, idx));
       const uint16_t ecb_frame =
           msl_ecb_frame_u16_from_anim_frame(batch->state.anim_frame_f32[idx]);
       const uint16_t ecb_frame_prev = msl_ecb_prev_frame_u16(ecb_frame);
@@ -1674,6 +1886,8 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
       MslEcbWorldPoints prev_right_ecb = prev_ecb;
       MslEcbWorldPoints cur_specialhi_wall_ecb = cur_ecb;
       MslEcbWorldPoints prev_specialhi_wall_ecb = prev_ecb;
+      const uint8_t use_common_air_walljump_callback =
+          mpcoll_action_uses_common_air_walljump_callback(action_id);
       if (specialhi_launch_uses_runtime_xrotn_ecb(char_id, action_id)) {
         // SpecialHi uses a live JObj ECB source while the launch model rotates around XRotN.
         // The same sampled CollData.ecb feeds both wall sides; the right-wall path below was the
@@ -1714,6 +1928,9 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
         // refs/melee/src/melee/mp/mpcoll.c::mpColl_80046224_LeftWall
         const uint8_t use_specialhi_left_envelope =
             (uint8_t)(action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI);
+        const uint8_t use_common_air_left_envelope = use_common_air_walljump_callback;
+        const uint8_t use_left_air_envelope =
+            (uint8_t)(use_specialhi_left_envelope || use_common_air_left_envelope);
         const MslEcbWorldPoints* left_cur_ecb =
             use_specialhi_left_envelope ? &cur_specialhi_wall_ecb : &cur_ecb;
         const MslEcbWorldPoints* left_prev_ecb =
@@ -1732,7 +1949,8 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
         // Decomp: CollData.left_facing_wall.index persists; mpLib_8004E398_LeftWall stays attached.
         // refs/melee/src/melee/lb/types.h::CollData
         // refs/melee/src/melee/mp/mplib.c::mpLib_8004E398_LeftWall
-        if (!grounded_now && prev_wall_kind == MSL_WALL_LEFT && prefer_line_idx >= 0) {
+        if (!grounded_now && prev_wall_kind == MSL_WALL_LEFT && prefer_line_idx >= 0 &&
+            !use_left_air_envelope) {
           float x_corr = 0.0f;
           float nx = -1.0f, ny = 0.0f;
           const int out_line_idx =
@@ -1748,19 +1966,23 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
             batch->state.wall_contact_y[idx] = cur_ry;
             batch->state.wall_normal_x[idx] = nx;
             batch->state.wall_normal_y[idx] = ny;
-            mark_left_wall_contact(batch, idx, 1u);
+            const uint8_t prev_hug =
+                (batch->state.coll_prev_env_flags[idx] & (uint32_t)MSL_COLLIDE_LEFT_WALL_HUG) ? 1u
+                                                                                              : 0u;
+            mark_left_wall_contact(batch, idx, prev_hug);
           }
         }
 
         // Decomp: `mpColl_80045B74_LeftWall` collects a fixed-capacity candidate list from
         // side, bottom, and top sweeps; `mpColl_80046224_LeftWall` then resolves the full
-        // airborne ECB envelope against that list. This narrower retained domain is the
-        // SpecialAirHi launch path that calls the airborne mpColl callback every frame. It consumes
-        // the same live JObj ECB basis as the retained right-wall owner, while non-SpecialHi
-        // left-wall actions stay on the existing static ECB path.
+        // airborne ECB envelope against that list. Retain that envelope for source callbacks that
+        // immediately consume the airborne left-wall result: SpecialAirHi's launch collision and
+        // common-air Jump/Fall walljump callbacks. Other non-SpecialHi left-wall actions stay on
+        // the older point-local path until their callback-specific owners are closed.
         // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialAirHi_Coll
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Coll
         // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80045B74_LeftWall,mpColl_80046224_LeftWall}
-        if (batch->state.wall_kind[idx] == 0 && use_specialhi_left_envelope) {
+        if (batch->state.wall_kind[idx] == 0 && use_left_air_envelope) {
           MslWallCandidateList candidates;
           wall_candidate_list_init(&candidates);
           left_wall_candidate_sweep(&candidates, lwg, prev_rx, prev_ry, cur_rx, cur_ry,
@@ -1772,13 +1994,25 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
           left_wall_candidate_sweep(&candidates, lwg, left_prev_ecb->top_x, left_prev_ecb->top_y,
                                     left_cur_ecb->top_x, left_cur_ecb->top_y, prefer_line_idx, 0u,
                                     -1);
+          // Decomp: after the three point sweeps, mpColl_80045B74_LeftWall also checks the current
+          // bottom->right and top->right ECB edges with mpCheckLeftWall. These add Push-only
+          // candidates; Hug remains owned by the side-point sweep above.
+          // refs/melee/src/melee/mp/mpcoll.c::mpColl_80045B74_LeftWall
           left_wall_candidate_sweep(&candidates, lwg, left_cur_ecb->bottom_x,
                                     left_cur_ecb->bottom_y, left_cur_ecb->right_x,
                                     left_cur_ecb->right_y, prefer_line_idx, 0u,
                                     grounded_left_floor_adj_line_idx);
+          left_wall_candidate_quad(
+              &candidates, lwg, left_prev_ecb->bottom_x, left_prev_ecb->bottom_y,
+              left_prev_ecb->right_x, left_prev_ecb->right_y, left_cur_ecb->bottom_x,
+              left_cur_ecb->bottom_y, left_cur_ecb->right_x, left_cur_ecb->right_y);
           left_wall_candidate_sweep(&candidates, lwg, left_cur_ecb->top_x, left_cur_ecb->top_y,
                                     left_cur_ecb->right_x, left_cur_ecb->right_y, prefer_line_idx,
                                     0u, -1);
+          left_wall_candidate_quad(&candidates, lwg, left_prev_ecb->right_x, left_prev_ecb->right_y,
+                                   left_prev_ecb->top_x, left_prev_ecb->top_y,
+                                   left_cur_ecb->right_x, left_cur_ecb->right_y,
+                                   left_cur_ecb->top_x, left_cur_ecb->top_y);
 
           float envelope_x = 0.0f;
           int envelope_line_idx = -1;
@@ -1793,10 +2027,17 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
             batch->state.wall_contact_y[idx] = candidates.first_iy;
             batch->state.wall_normal_x[idx] = envelope_nx;
             batch->state.wall_normal_y[idx] = envelope_ny;
-            mark_left_wall_contact(batch, idx, candidates.has_hug);
+            // SpecialAirHi consumes the wall resolution for rebound/hitlag provenance, not the
+            // common-air PassiveWall/WallJump Hug consumer. Common Jump/Fall callbacks are the
+            // source-shaped owner that immediately calls ftWallJump_8008169C after this mpColl
+            // path, so preserve Hug only for that family.
+            // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialAirHi_Coll
+            // refs/melee/src/melee/ft/ft_081B.c::ft_800835B0
+            mark_left_wall_contact(batch, idx,
+                                   use_common_air_left_envelope ? candidates.has_hug : 0u);
           }
         }
-        if (batch->state.wall_kind[idx] == 0 && !use_specialhi_left_envelope) {
+        if (batch->state.wall_kind[idx] == 0 && !use_left_air_envelope) {
           float ix = 0.0f, iy = 0.0f;
           float nx = -1.0f, ny = 0.0f;
           int hit_line_idx = -1;
@@ -1816,7 +2057,14 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
               batch->state.wall_contact_y[idx] = iy;
               batch->state.wall_normal_x[idx] = nx;
               batch->state.wall_normal_y[idx] = ny;
-              mark_left_wall_contact(batch, idx, 1u);
+              // During active DamageFly hitlag, Fighter_procMap refreshes wall contact metadata
+              // for ftCo_Damage_OnExitHitlag ASDI provenance, but the same refresh must not arm
+              // the post-hitlag PassiveWall/WallJump Hug consumer. Non-hitlag DamageFly remains
+              // source-owned by the normal wall-callback Hug path.
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+              //   ftCo_Damage_OnExitHitlag,ftCo_DamageFly_Coll}
+              // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_procMap}
+              mark_left_wall_contact(batch, idx, damagefly_hitlag_wall_refresh ? 0u : 1u);
             }
           }
         }
@@ -1858,11 +2106,18 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
             batch->state.wall_contact_y[idx] = cur_ry;
             batch->state.wall_normal_x[idx] = best_nx;
             batch->state.wall_normal_y[idx] = best_ny;
-            mark_left_wall_contact(batch, idx, 1u);
+            // This side-point projection recovery reconstructs mpLib projection from a persisted
+            // line id or sub-frame overlap. It owns WallHug only for common-air callbacks that
+            // immediately consume ftWallJump_8008169C; DamageFly wall-tech/ASDI paths stay
+            // Push-only unless their own side branch or seed lane proves Hug.
+            // refs/melee/src/melee/mp/mpcoll.c::{
+            //   mpColl_80045B74_LeftWall,mpColl_80046224_LeftWall}
+            mark_left_wall_contact(batch, idx,
+                                   mpcoll_action_uses_common_air_walljump_callback(action_id));
           }
         }
 
-        if (batch->state.wall_kind[idx] == 0 && !use_specialhi_left_envelope) {
+        if (batch->state.wall_kind[idx] == 0 && !use_left_air_envelope) {
           const float cur_bx = cur_ecb.bottom_x;
           const float cur_by = cur_ecb.bottom_y;
           const float prev_bx = prev_ecb.bottom_x;
@@ -1893,7 +2148,7 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
           }
         }
 
-        if (batch->state.wall_kind[idx] == 0 && !use_specialhi_left_envelope) {
+        if (batch->state.wall_kind[idx] == 0 && !use_left_air_envelope) {
           const float cur_tx = cur_ecb.top_x;
           const float cur_ty = cur_ecb.top_y;
           const float prev_tx = prev_ecb.top_x;
@@ -1956,17 +2211,17 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
             batch->state.wall_contact_y[idx] = cur_ly;
             batch->state.wall_normal_x[idx] = nx;
             batch->state.wall_normal_y[idx] = ny;
-            mark_right_wall_contact(batch, idx, 1u);
+            const uint8_t prev_hug =
+                (batch->state.coll_prev_env_flags[idx] & (uint32_t)MSL_COLLIDE_RIGHT_WALL_HUG) ? 1u
+                                                                                               : 0u;
+            mark_right_wall_contact(batch, idx, prev_hug);
           }
         }
 
         if (batch->state.wall_kind[idx] == 0) {
           // Decomp: `mpColl_80044E10_RightWall` first collects a de-duplicated candidate wall list
-          // from ECB side, bottom, and top sweeps before `mpColl_800454A4_RightWall` resolves the
-          // maximum push X over the list. The later side-edge quad helpers are intentionally not
-          // folded into this partial owner yet: a broad side-edge sweep over-admitted non-target
-          // SpecialHi wall rows, so those helpers need their exact predicate before they can be
-          // represented here.
+          // from ECB side, bottom/top point sweeps, current bottom/top side edges, and the swept
+          // side-edge quad helpers before `mpColl_800454A4_RightWall` resolves the maximum push X.
           // Keep the same fixed nine-slot capacity and source ordering; no heap allocation.
           // refs/melee/src/melee/mp/mpcoll.c::{
           //   mpColl_80044E10_RightWall,mpColl_800454A4_RightWall}
@@ -1982,6 +2237,25 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
           right_wall_candidate_sweep(&candidates, rwg, prev_right_ecb.top_x, prev_right_ecb.top_y,
                                      cur_right_ecb.top_x, cur_right_ecb.top_y, prefer_line_idx, 0u,
                                      -1);
+          // Decomp: `mpColl_80044E10_RightWall` also checks the current bottom->left and top->left
+          // ECB edges before resolving the max-X envelope. These candidates are Push-only; only
+          // the side-point sweep sets Collide_RightWallHug for PassiveWall/WallJump callbacks.
+          // refs/melee/src/melee/mp/mpcoll.c::mpColl_80044E10_RightWall
+          right_wall_candidate_sweep(&candidates, rwg, cur_right_ecb.bottom_x,
+                                     cur_right_ecb.bottom_y, cur_right_ecb.left_x,
+                                     cur_right_ecb.left_y, prefer_line_idx, 0u,
+                                     grounded_right_floor_adj_line_idx);
+          right_wall_candidate_quad(
+              &candidates, rwg, prev_right_ecb.bottom_x, prev_right_ecb.bottom_y,
+              prev_right_ecb.left_x, prev_right_ecb.left_y, cur_right_ecb.bottom_x,
+              cur_right_ecb.bottom_y, cur_right_ecb.left_x, cur_right_ecb.left_y);
+          right_wall_candidate_sweep(&candidates, rwg, cur_right_ecb.top_x, cur_right_ecb.top_y,
+                                     cur_right_ecb.left_x, cur_right_ecb.left_y, prefer_line_idx,
+                                     0u, -1);
+          right_wall_candidate_quad(&candidates, rwg, prev_right_ecb.left_x, prev_right_ecb.left_y,
+                                    prev_right_ecb.top_x, prev_right_ecb.top_y,
+                                    cur_right_ecb.left_x, cur_right_ecb.left_y, cur_right_ecb.top_x,
+                                    cur_right_ecb.top_y);
 
           float envelope_x = 0.0f;
           int envelope_line_idx = -1;
@@ -1997,7 +2271,12 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
             batch->state.wall_contact_y[idx] = candidates.first_iy;
             batch->state.wall_normal_x[idx] = envelope_nx;
             batch->state.wall_normal_y[idx] = envelope_ny;
-            mark_right_wall_contact(batch, idx, candidates.has_hug);
+            const uint8_t specialhi_wall_refresh =
+                specialhi_launch_uses_runtime_xrotn_ecb(char_id, action_id);
+            mark_right_wall_contact(batch, idx,
+                                    (damagefly_hitlag_wall_refresh || specialhi_wall_refresh)
+                                        ? 0u
+                                        : candidates.has_hug);
           }
         }
         if (batch->state.wall_kind[idx] == 0 && !grounded_now) {
@@ -2033,7 +2312,11 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
             batch->state.wall_contact_y[idx] = cur_ly;
             batch->state.wall_normal_x[idx] = best_nx;
             batch->state.wall_normal_y[idx] = best_ny;
-            mark_right_wall_contact(batch, idx, 1u);
+            // Symmetric side-point projection recovery.
+            // refs/melee/src/melee/mp/mpcoll.c::{
+            //   mpColl_80044E10_RightWall,mpColl_800454A4_RightWall}
+            mark_right_wall_contact(batch, idx,
+                                    mpcoll_action_uses_common_air_walljump_callback(action_id));
           }
         }
       }
@@ -2104,22 +2387,26 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
 
       // Damage_OnExitHitlag wall-ASDI provenance:
       // `wall_id` persists after detach, so the hitlag-exit ASDI owner cannot key on that id alone.
-      // Latch only when the DamageFly collision callback observes a wall during active hitlag, or
-      // when SpecialAirHi's collision frame arms the same-frame combat hit that enters DamageFly
-      // hitlag later in the step. clear_seed_owned_transients_post_frame drops any SpecialAirHi
-      // contact that did not actually enter hitlag, so non-hitlag wall contacts cannot stale-arm a
-      // later ftCo_Damage_OnExitHitlag projection.
+      // Latch when the DamageFly collision callback observes a wall during active hitlag. The
+      // same-frame SpecialAirHi_Coll -> DamageFly bridge is kept only for continuing wall
+      // provenance: the previous frame's CollData already had a wall mask, and the current
+      // SpecialAirHi collision callback refreshes the same wall before combat starts hitlag. A
+      // first-touch SpecialHi wall contact on the damage-entry frame must not stale-arm
+      // hitlag-exit ASDI.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_OnExitHitlag,ftCo_DamageFly_Coll}
       // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_procMap}
-      const uint8_t active_hitlag_phase =
-          (batch->state.hitlag_pre_timer[idx] != 0u || batch->state.hitlag[idx] != 0u ||
-           batch->state.hitlag_started_frame[idx] != 0u)
+      const uint8_t active_hitlag_phase = mpcoll_active_hitlag_phase(batch, idx);
+      const uint32_t current_wall_mask =
+          (batch->state.wall_kind[idx] == MSL_WALL_LEFT)    ? (uint32_t)MSL_COLLIDE_LEFT_WALL_MASK
+          : (batch->state.wall_kind[idx] == MSL_WALL_RIGHT) ? (uint32_t)MSL_COLLIDE_RIGHT_WALL_MASK
+                                                            : 0u;
+      const uint8_t same_frame_specialhi_continuing_wall =
+          (action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI && current_wall_mask != 0u &&
+           (batch->state.coll_prev_env_flags[idx] & current_wall_mask) != 0u)
               ? 1u
               : 0u;
-      const uint8_t same_frame_specialhi_hitlag_candidate =
-          (action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI) ? 1u : 0u;
       if (mpcoll_wall_asdi_producer_action(action_id) &&
-          (active_hitlag_phase || same_frame_specialhi_hitlag_candidate)) {
+          (active_hitlag_phase || same_frame_specialhi_continuing_wall)) {
         if (batch->state.wall_kind[idx] == MSL_WALL_LEFT ||
             batch->state.wall_kind[idx] == MSL_WALL_RIGHT) {
           batch->state.damage_hitlag_wall_asdi_latch[idx] = 1u;
