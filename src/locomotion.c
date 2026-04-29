@@ -244,16 +244,19 @@ static inline uint8_t squat_wait_try_dash_or_rv(MslBatch* batch, const MslCommon
   return 0u;
 }
 
-static inline void enter_fall_special_from_specialhi(MslBatch* batch, size_t idx) {
+static inline void enter_fall_special_via_ftco_80096900(MslBatch* batch, size_t idx) {
   if (batch == NULL) {
     return;
   }
-  // Decomp: SpecialHi end states use ftCo_80096900(..., arg1=1, ...), which enters FallSpecial and
-  // sets mv.co.fallspecial.xC=1.
+  // Decomp: SpecialHi and aerial SpecialS end states use ftCo_80096900(..., arg1=1, unk=true),
+  // which enters FallSpecial, sets mv.co.fallspecial.xC=1, and consumes remaining jumps:
+  // - grounded source state: inline0 calls ftCommon_8007D60C (x1968_jumpsUsed=max_jumps);
+  // - airborne source state: inline0 calls ftCommon_UseAllJumps when unk=true.
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
   //   ftFx_SpecialHiLanding_Coll,ftFx_SpecialHiFall_Anim
   // }
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_80096900
+  // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D60C,ftCommon_UseAllJumps}
   const uint8_t keep_fastfall = batch->state.fall_fast[idx] ? 1u : 0u;
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL_SPECIAL;
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL_SPECIAL;
@@ -265,6 +268,7 @@ static inline void enter_fall_special_from_specialhi(MslBatch* batch, size_t idx
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{ftFx_SpecialHiFall_Anim,ftFx_SpecialHiBound_Anim}
   batch->state.fall_fast[idx] = keep_fastfall;
   batch->state.fallspecial_xc[idx] = 1u;
+  batch->state.jumps_left[idx] = 0u;
 }
 
 static inline void enter_specialhi_bound_from_airhi_collision(MslBatch* batch,
@@ -559,7 +563,7 @@ static inline uint8_t spacie_specialhi_update(MslBatch* batch, size_t idx, uint8
       // Decomp: ftFx_SpecialHiLanding_Coll falls back to FallSpecial when the state becomes airborne.
       // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiLanding_Coll
       if (!on_ground) {
-        enter_fall_special_from_specialhi(batch, idx);
+        enter_fall_special_via_ftco_80096900(batch, idx);
         return 1;
       }
       // Decomp: ftFx_SpecialHiLanding_Anim transitions to Wait on anim end.
@@ -584,7 +588,7 @@ static inline uint8_t spacie_specialhi_update(MslBatch* batch, size_t idx, uint8
       // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiFall_Anim
       if (anim_finished(char_id, (uint16_t)MSL_SM_FX_SPECIAL_HI_FALL,
                         batch->state.anim_frame_f32[idx])) {
-        enter_fall_special_from_specialhi(batch, idx);
+        enter_fall_special_via_ftco_80096900(batch, idx);
       }
       return 1;
     case MSL_ACT_FX_SPECIAL_HI_BOUND:
@@ -594,8 +598,7 @@ static inline uint8_t spacie_specialhi_update(MslBatch* batch, size_t idx, uint8
       // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiBound_Anim
       if (!on_ground && anim_finished(char_id, (uint16_t)MSL_SM_FX_SPECIAL_HI_BOUND,
                                       batch->state.anim_frame_f32[idx])) {
-        enter_fall_special_from_specialhi(batch, idx);
-        batch->state.jumps_left[idx] = 0u;
+        enter_fall_special_via_ftco_80096900(batch, idx);
       }
       return 1;
     default:
@@ -3080,7 +3083,25 @@ void locomotion_update_pre(MslBatch* batch) {
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
           const uint8_t turnrun_exit_prefers_wait =
               (stick_y < -c->crouch_stick_threshold) ? 1u : 0u;
-          if (!turnrun_exit_prefers_wait && (stick_x * facing_dir) >= c->run_stick_x_threshold) {
+          const float turnrun_entry_facing_dir = (batch->state.facing_dir1[idx] < 0) ? -1.0f : 1.0f;
+          const float turnrun_exit_facing_dir =
+              (turnrun_entry_facing_dir == facing_dir) ? -facing_dir : facing_dir;
+          const uint8_t turnrun_exit_prefers_run =
+              (!turnrun_exit_prefers_wait &&
+               (stick_x * turnrun_exit_facing_dir) >= c->run_stick_x_threshold)
+                  ? 1u
+                  : 0u;
+          if (turnrun_exit_prefers_run) {
+            // Decomp: ftCo_TurnRun_Enter copies entry `fp->facing_dir` into `fp->facing_dir1`.
+            // ftCo_TurnRun_Anim can later flip current facing before the animation-end Run gate.
+            // If the visible current facing still matches the entry copy, emulate the pending
+            // cmd_vars[1]/x14 final pivot; otherwise use the already-exposed current facing.
+            //
+            // Runtime scope: this block is only the final TurnRun animation-end handoff. Mid-state
+            // TurnRun pose/pause remains represented by the extracted animation/root motion.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_TurnRun.c::ftCo_TurnRun_Anim
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::fn_800CA644
+            batch->state.facing[idx] = (uint8_t)(turnrun_exit_facing_dir > 0.0f);
             batch->state.action_id[idx] = (uint16_t)MSL_ACT_RUN;
             batch->state.animation_index[idx] = (uint32_t)MSL_SM_RUN;
             // fn_800CA644 passes p_ftCommonData->x430 into ftCo_Run_Enter (mv.co.run.x0 init).
@@ -4726,7 +4747,7 @@ void locomotion_update_pre(MslBatch* batch) {
             // FallSpecial and setting mv.co.fallspecial.xC.
             // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialAirSEnd_Anim
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_80096900
-            enter_fall_special_from_specialhi(batch, idx);
+            enter_fall_special_via_ftco_80096900(batch, idx);
             action_id = (uint16_t)MSL_ACT_FALL_SPECIAL;
           }
 
@@ -5284,7 +5305,7 @@ void locomotion_update_post_collision(MslBatch* batch) {
           // Decomp: ftFx_SpecialHiLanding_Coll enters FallSpecial when no longer grounded.
           // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiLanding_Coll
           if (a == (uint16_t)MSL_ACT_FX_SPECIAL_HI_LANDING) {
-            enter_fall_special_from_specialhi(batch, idx);
+            enter_fall_special_via_ftco_80096900(batch, idx);
           }
           continue;
         }
