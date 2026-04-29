@@ -1,7 +1,7 @@
 import { GameCubeAdapterInput } from "./gamecube_adapter.js";
 import { installKeyboard, readKeyboardController } from "./keyboard.js";
 import { MslWasmSim } from "./sim.js";
-import { saveWebplayTrace, traceInputFromController } from "./trace_export.js";
+import { saveWebplayTrace, traceInputFromControllers } from "./trace_export.js";
 import { viewerFrameFromCompare, viewerSettingsFromCompare } from "./viewer_adapter.js";
 
 const viewer = document.querySelector("slippi-viewer");
@@ -11,6 +11,8 @@ const resetButton = document.querySelector("#reset");
 const saveTraceButton = document.querySelector("#save-trace");
 const connectAdapterButton = document.querySelector("#connect-adapter");
 const adapterPortSelect = document.querySelector("#adapter-port");
+const controlP1Button = document.querySelector("#control-p1");
+const controlP2Button = document.querySelector("#control-p2");
 const MAX_RENDER_FRAMES = 60 * 60 * 8 + 123;
 const STEP_MS = 1000 / 60;
 const MAX_STEPS_PER_PAINT = 5;
@@ -23,6 +25,7 @@ let accumulatorMs = 0;
 let frameCount = 0;
 let seed = 1;
 let inputTrace = [];
+let controlledPlayer = 0;
 const adapterInput = new GameCubeAdapterInput({
   onStatus(message) {
     inputStatusEl.textContent = message;
@@ -38,34 +41,68 @@ function neutralController() {
   return { buttons: 0, mainX: 0, mainY: 0, cX: 0, cY: 0, l: 0, r: 0 };
 }
 
-function readP1Controller() {
+function neutralControllers() {
+  return [neutralController(), neutralController()];
+}
+
+function readHumanController() {
   if (adapterInput.active) {
     return adapterInput.readController();
   }
   return readKeyboardController();
 }
 
+function controllersForHuman(controller) {
+  const controllers = neutralControllers();
+  controllers[controlledPlayer] = controller;
+  return controllers;
+}
+
+function controlledPlayerLabel() {
+  return `P${controlledPlayer + 1}`;
+}
+
 function inputSourceLabel() {
   if (adapterInput.active) {
-    return `P1 ${adapterInput.transportLabel()} port ${adapterInput.port + 1}`;
+    return `${controlledPlayerLabel()} ${adapterInput.transportLabel()} port ${adapterInput.port + 1}`;
   }
-  return "P1 keyboard";
+  return `${controlledPlayerLabel()} keyboard`;
 }
 
-function currentViewerFrame(frameNumber, controller) {
+function playerStatusSuffix() {
+  if (controlledPlayer === 0) {
+    return `${inputSourceLabel()}, P2 neutral.`;
+  }
+  return `P1 neutral, ${inputSourceLabel()}.`;
+}
+
+function setControlledPlayer(playerIndex) {
+  controlledPlayer = playerIndex;
+  controlP1Button.setAttribute("aria-pressed", controlledPlayer === 0 ? "true" : "false");
+  controlP2Button.setAttribute("aria-pressed", controlledPlayer === 1 ? "true" : "false");
+  if (sim) {
+    setStatus(`Running. Frame ${frameCount}. ${playerStatusSuffix()}`);
+  }
+}
+
+function currentViewerFrame(frameNumber, controllers) {
   const compare = sim.compareView();
-  return viewerFrameFromCompare(compare, frameNumber, [controller, neutralController()]);
+  return viewerFrameFromCompare(compare, frameNumber, controllers);
 }
 
-function appendCurrentFrame(controller, { render = true } = {}) {
+function frameHasDeadPlayer(frame) {
+  return frame.players.some((player) => player.state?.isDead);
+}
+
+function appendCurrentFrame(controllers, { render = true } = {}) {
   const frameNumber = frameCount + 1;
   if (frameNumber >= MAX_RENDER_FRAMES) {
     reset();
-    return;
+    return null;
   }
-  const frame = currentViewerFrame(frameNumber, controller);
+  const frame = currentViewerFrame(frameNumber, controllers);
   replayData.frames[frameNumber] = frame;
-  inputTrace[frameNumber] = traceInputFromController(frameNumber, controller);
+  inputTrace[frameNumber] = traceInputFromControllers(frameNumber, controllers);
   frameCount = frameNumber;
   window.__webplayFrameCount = frameCount;
   window.__webplayReplayData = replayData;
@@ -76,14 +113,16 @@ function appendCurrentFrame(controller, { render = true } = {}) {
   if (render && typeof viewer.setFrame === "function") {
     viewer.setFrame(frameNumber);
   }
+  return frame;
 }
 
 function reset() {
   if (!sim) return;
   seed = (seed + 1) >>> 0;
   const compare = sim.reset({ seed });
-  const firstFrame = currentViewerFrame(0, neutralController());
-  inputTrace = [traceInputFromController(0, neutralController())];
+  const firstControllers = neutralControllers();
+  const firstFrame = currentViewerFrame(0, firstControllers);
+  inputTrace = [traceInputFromControllers(0, firstControllers)];
   const frames = new Array(MAX_RENDER_FRAMES);
   frames[0] = firstFrame;
   replayData = {
@@ -104,7 +143,7 @@ function reset() {
   if (typeof viewer.setFrame === "function") {
     viewer.setFrame(0);
   }
-  setStatus(`Running. ${inputSourceLabel()}, P2 neutral.`);
+  setStatus(`Running. ${playerStatusSuffix()}`);
 }
 
 function tick(nowMs) {
@@ -116,11 +155,17 @@ function tick(nowMs) {
 
   let steps = 0;
   while (accumulatorMs >= STEP_MS && steps < MAX_STEPS_PER_PAINT) {
-    const controller = readP1Controller();
-    sim.step(controller);
-    appendCurrentFrame(controller, { render: false });
+    const controllers = controllersForHuman(readHumanController());
+    sim.step(controllers);
+    const frame = appendCurrentFrame(controllers, { render: false });
     accumulatorMs -= STEP_MS;
     steps += 1;
+    if (frame && frameHasDeadPlayer(frame)) {
+      reset();
+      accumulatorMs = 0;
+      steps = 0;
+      break;
+    }
   }
   if (steps === MAX_STEPS_PER_PAINT && accumulatorMs >= STEP_MS) {
     accumulatorMs = 0;
@@ -134,7 +179,7 @@ function tick(nowMs) {
       viewer.setFrame(frameCount);
     }
     if ((frameCount % 30) === 0) {
-      setStatus(`Running. Frame ${frameCount}. ${inputSourceLabel()}, P2 neutral.`);
+      setStatus(`Running. Frame ${frameCount}. ${playerStatusSuffix()}`);
     }
   }
   requestAnimationFrame(tick);
@@ -149,14 +194,20 @@ async function main() {
   resetButton.addEventListener("click", reset);
   saveTraceButton.addEventListener("click", () => {
     try {
+      const traceName = window.prompt("Trace name", `webplay_f${frameCount}`);
+      if (traceName === null) {
+        setStatus(`Trace save canceled. Frame ${frameCount}. ${playerStatusSuffix()}`);
+        return;
+      }
       const filename = saveWebplayTrace({
         replayData,
         frameCount,
         seed,
         inputTrace,
         sourceLabel: inputSourceLabel(),
+        traceName,
       });
-      setStatus(`Saved ${filename}. Frame ${frameCount}. ${inputSourceLabel()}, P2 neutral.`);
+      setStatus(`Saved ${filename}. Frame ${frameCount}. ${playerStatusSuffix()}`);
     } catch (error) {
       setStatus(error.message, true);
     }
@@ -164,6 +215,8 @@ async function main() {
   adapterPortSelect.addEventListener("change", () => {
     adapterInput.setPort(adapterPortSelect.value);
   });
+  controlP1Button.addEventListener("click", () => setControlledPlayer(0));
+  controlP2Button.addEventListener("click", () => setControlledPlayer(1));
   connectAdapterButton.addEventListener("click", async () => {
     connectAdapterButton.disabled = true;
     inputStatusEl.textContent = "GameCube adapter: checking browser gamepads / local bridge...";

@@ -122,6 +122,24 @@
         margin-bottom: 12px;
       }
 
+      .control-player {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+
+      .control-player span {
+        font-weight: 700;
+      }
+
+      .control-player button[aria-pressed="true"] {
+        background: #20211f;
+        color: #fff;
+        border-color: #20211f;
+      }
+
       .input-status {
         min-height: 40px;
         margin: 0 0 12px;
@@ -174,6 +192,11 @@
             <option value="2">Port 3</option>
             <option value="3">Port 4</option>
           </select>
+        </div>
+        <div class="control-player" aria-label="Controlled sim player">
+          <span>Control</span>
+          <button id="control-p1" type="button" aria-pressed="true">P1</button>
+          <button id="control-p2" type="button" aria-pressed="false">P2</button>
         </div>
         <p id="input-status" class="input-status">GameCube adapter: not connected.</p>
         <dl>

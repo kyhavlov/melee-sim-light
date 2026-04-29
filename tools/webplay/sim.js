@@ -84,14 +84,16 @@ export class MslWasmSim {
     return this.compareView();
   }
 
-  step(p1Controller) {
+  step(controllers) {
     this.module.HEAPU8.copyWithin(
       this.prevInputPtr,
       this.inputPtr,
       this.inputPtr + INPUT_SIZE
     );
     this.module.HEAPU8.fill(0, this.inputPtr, this.inputPtr + INPUT_SIZE);
-    this.#writeController(0, p1Controller);
+    const playerControllers = Array.isArray(controllers) ? controllers : [controllers];
+    this.#writeController(0, playerControllers[0] || {});
+    this.#writeController(1, playerControllers[1] || {});
 
     const err = this.module._msl_batch_step_input(
       this.handle,

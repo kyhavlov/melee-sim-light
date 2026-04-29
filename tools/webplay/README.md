@@ -69,10 +69,17 @@ to skip opening the browser:
 make webplay OPEN=0
 ```
 
-Click `Save Trace` to download a compact `webplay_input_trace_...json` from match start through the
-current frame. It stores the match settings, seed, and compact P1 inputs by frame for reproducing
-the same interactive prefix; P2 is neutral. Full modelplay viewer frames are intentionally omitted
-from this artifact to keep it small enough to send around.
+Use `make webplay-build` to rebuild both browser artifacts:
+
+```bash
+make webplay-build
+```
+
+Click `Save Trace`, enter a trace name, and it downloads a compact `<name>.json` from match start
+through the current frame. Spaces and unsafe filename characters are converted to underscores. It
+stores the match settings, seed, compact P1/P2 inputs by frame, and array-encoded debug rows for
+player/item state. Full modelplay viewer frame objects are intentionally omitted to avoid repeated
+per-frame JSON keys.
 
 The raw Wii U adapter protocol works through libusb/Dolphin-style access, but it is not available
 to a flat browser page: Chromium blocks WebUSB `claimInterface()` for HID-class interfaces, and

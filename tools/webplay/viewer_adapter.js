@@ -221,6 +221,7 @@ export function viewerFrameFromCompare(compare, frameNumber, controllersByPlayer
     }
     items.push({
       frameNumber,
+      slot: idx,
       typeId: u16(compare, off + itemOffsets.type),
       state: u8(compare, off + itemOffsets.state),
       facingDirection: f32(compare, off + itemOffsets.direction),

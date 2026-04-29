@@ -1,4 +1,4 @@
-.PHONY: build test test-parallel test-serial preprocess preprocess-aggregate validate validate-aggregate validate-rollout validate-rollout-aggregate validate-all rollout-capture rollout-summary rollout-diff rollout-locate rollout-locate-summary rollout-locate-diff rollout-disruptive rollout-disruptive-rerank build_data webplay fmt fmt-check check guardrail-preflight guardrail-preflight-full guardrail-baseline forensic-rows dolphin-engine-dump dolphin-extract dolphin-forensic-row build-bench-sim bench-sim FORCE
+.PHONY: build test test-parallel test-serial preprocess preprocess-aggregate validate validate-aggregate validate-rollout validate-rollout-aggregate validate-all rollout-capture rollout-summary rollout-diff rollout-locate rollout-locate-summary rollout-locate-diff rollout-disruptive rollout-disruptive-rerank build_data webplay-build webplay fmt fmt-check check guardrail-preflight guardrail-preflight-full guardrail-baseline forensic-rows dolphin-engine-dump dolphin-extract dolphin-forensic-row build-bench-sim bench-sim FORCE
 
 PY := uv run python
 DATASETS_DIR ?= datasets
@@ -145,6 +145,10 @@ rollout-disruptive-rerank:
 
 build_data:
 	@$(PY) -m tools.extraction.build_data --iso-dir _iso --stage grnla --chars fox,falco
+
+webplay-build:
+	@tools/webplay/build_wasm.sh
+	@npm --prefix tools/modelplay/viewer run build
 
 webplay:
 	@MSL_WEBPLAY_HOST="$(HOST)" MSL_WEBPLAY_PORT="$(WEBPLAY_PORT)" MSL_WEBPLAY_OPEN="$(OPEN)" node tools/webplay/webplay_server.mjs
