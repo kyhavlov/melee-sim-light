@@ -5,6 +5,7 @@
 #include "action_ids.h"
 #include "anim_frame.h"
 #include "anim_pose.h"
+#include "anim_table.h"
 #include "char_params.h"
 #include "common_params.h"
 #include "input_axis.h"
@@ -389,6 +390,13 @@ static inline uint8_t physics_try_get_transn_delta_xyz(const MslCharParams* ch, 
   return 1;
 }
 
+static inline uint8_t physics_action_anim_uses_root_motion(uint8_t char_id, uint32_t msid_u32) {
+  if (msid_u32 > 0xFFFFu) {
+    return 0u;
+  }
+  return msl_anim_uses_root_motion(char_id, (uint16_t)msid_u32);
+}
+
 uint8_t physics_apply_attackdash_entry_phys_now(MslBatch* batch, size_t idx, float facing_dir) {
   if (batch == NULL || idx >= (size_t)batch->batch_size * (size_t)MSL_MAX_PLAYERS) {
     return 0u;
@@ -402,7 +410,9 @@ uint8_t physics_apply_attackdash_entry_phys_now(MslBatch* batch, size_t idx, flo
     return 0u;
   }
   float dxyz[3];
-  if (!physics_try_get_transn_delta_xyz(
+  if (!physics_action_anim_uses_root_motion(batch->state.char_id[idx],
+                                            batch->state.animation_index[idx]) ||
+      !physics_try_get_transn_delta_xyz(
           ch, batch->state.char_id[idx], batch->state.animation_index[idx],
           physics_prev_anim_frame_f32(batch, idx), physics_cur_anim_frame_f32(batch, idx), dxyz)) {
     return 0u;
@@ -707,18 +717,34 @@ static inline uint8_t physics_floor_lines_adjacent_or_equal(const MslStageFloorG
   return (uint8_t)(la->prev == b || la->next == b);
 }
 
-static inline uint8_t physics_floor_line_contains_nudged_x(const MslStageFloorLine* line, float x) {
-  if (line == NULL) {
+static inline uint8_t physics_floor_line_contains_or_connects_to_nudged_x(
+    const MslStageFloorGraph* g, int line_idx, float x) {
+  if (g == NULL || line_idx < 0 || (size_t)line_idx >= g->line_count) {
     return 0u;
   }
+  const MslStageFloorLine* line = &g->lines[(size_t)line_idx];
   // Conservative safety gate for the reduced horizontal x450 nudge:
   // decomp computes xF8_playerNudgeVel before Fighter_procUpdate, but the full mpColl follow-up can
-  // preserve floor ownership at connected endpoints. Until that whole branch is modeled, do not let
-  // the common-nudge approximation push a grounded fighter beyond the current floor segment.
+  // preserve floor ownership at connected endpoints. Admit only current/adjacent connected floor
+  // segments here; the later motion-state collision callback owns the actual floor.index update.
   // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007E0E4
   // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
-  // refs/melee/src/melee/mp/mpcoll.c
-  return (uint8_t)(x >= line->x0 && x <= line->x1);
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004B108,mpColl_8004A45C_Floor}
+  if (x >= line->x0 && x <= line->x1) {
+    return 1u;
+  }
+  const int adj[2] = {line->prev, line->next};
+  for (size_t i = 0; i < 2; i++) {
+    const int adj_idx = adj[i];
+    if (adj_idx < 0 || (size_t)adj_idx >= g->line_count) {
+      continue;
+    }
+    const MslStageFloorLine* other = &g->lines[(size_t)adj_idx];
+    if (x >= other->x0 && x <= other->x1) {
+      return 1u;
+    }
+  }
+  return 0u;
 }
 
 static inline uint8_t physics_action_is_attackdash_knockdown_overlap_owner(uint16_t action_id,
@@ -800,7 +826,6 @@ static inline void physics_compute_grounded_player_nudge(MslBatch* batch, int bi
     if (self_line < 0) {
       continue;
     }
-    const MslStageFloorLine* self_floor_line = &floor_graph->lines[(size_t)self_line];
 
     const float self_center_x =
         batch->state.pos_x[idx] + self->pushbox_x * (float)batch->state.facing_dir1[idx];
@@ -865,8 +890,8 @@ static inline void physics_compute_grounded_player_nudge(MslBatch* batch, int bi
       } else {
         nudge_x = player_nudge_x_step;
       }
-      if (!physics_floor_line_contains_nudged_x(self_floor_line,
-                                                batch->state.pos_x[idx] + nudge_x)) {
+      if (!physics_floor_line_contains_or_connects_to_nudged_x(floor_graph, self_line,
+                                                               batch->state.pos_x[idx] + nudge_x)) {
         continue;
       }
       out_nudge_x[p] += nudge_x;
@@ -1526,7 +1551,9 @@ void physics_integrate(MslBatch* batch) {
           const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
           if (ch != NULL) {
             float dxyz[3];
-            if (physics_try_get_transn_delta_xyz(ch, batch->state.char_id[idx],
+            if (physics_action_anim_uses_root_motion(batch->state.char_id[idx],
+                                                     batch->state.animation_index[idx]) &&
+                physics_try_get_transn_delta_xyz(ch, batch->state.char_id[idx],
                                                  batch->state.animation_index[idx],
                                                  physics_prev_anim_frame_f32(batch, idx),
                                                  physics_cur_anim_frame_f32(batch, idx), dxyz)) {
@@ -1650,9 +1677,8 @@ void physics_integrate(MslBatch* batch) {
             // refs/melee/src/melee/ft/ft_081B.c::{ft_80085004,ft_80085030}
             //
             // Root motion signal:
-            // - Decomp ft_80085030 root-motion branch is gated by `if (fp->x594_b0)`.
-            // - This sim does not model fp->x594_b0; for this movement-only core, treat "TransN
-            //   present for (msid, frame)" as the decomp-shaped proxy.
+            // - Decomp ft_80085030 root-motion branch is gated by `if (fp->x594_b0)`, sourced
+            //   from the per-msid ftData_80085FD4_ret.x10_b0 byte in data/anims/*.tracks.bin.
             //
             // Direction:
             // - Decomp uses fp->facing_dir1, but it is normally a copy of facing_dir (engine init
@@ -1660,7 +1686,9 @@ void physics_integrate(MslBatch* batch) {
             //   refs/melee/src/melee/ft/fighter.c:264 and :955 (fp->facing_dir1 = fp->facing_dir)
             // - We use batch->state.facing-derived `facing_dir`.
             float dxyz[3];
-            if (physics_try_get_transn_delta_xyz(ch, batch->state.char_id[idx],
+            if (physics_action_anim_uses_root_motion(batch->state.char_id[idx],
+                                                     batch->state.animation_index[idx]) &&
+                physics_try_get_transn_delta_xyz(ch, batch->state.char_id[idx],
                                                  batch->state.animation_index[idx],
                                                  physics_prev_anim_frame_f32(batch, idx),
                                                  physics_cur_anim_frame_f32(batch, idx), dxyz)) {
@@ -1697,7 +1725,9 @@ void physics_integrate(MslBatch* batch) {
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_Phys
             // refs/melee/src/melee/ft/ft_081B.c::ft_80085030
             float dxyz[3];
-            if (physics_try_get_transn_delta_xyz(ch, batch->state.char_id[idx],
+            if (physics_action_anim_uses_root_motion(batch->state.char_id[idx],
+                                                     batch->state.animation_index[idx]) &&
+                physics_try_get_transn_delta_xyz(ch, batch->state.char_id[idx],
                                                  batch->state.animation_index[idx],
                                                  physics_prev_anim_frame_f32(batch, idx),
                                                  physics_cur_anim_frame_f32(batch, idx), dxyz)) {
@@ -1739,8 +1769,10 @@ void physics_integrate(MslBatch* batch) {
           } else if (physics_action_uses_ft_80084FA8(action_id)) {
             // ft_80084FA8 grounded Phys family:
             // - high-speed friction scale gate (walk_max_vel, p_ftCommonData->x6C)
-            // - ft_80085030 root-motion branch (transNOffset.z * facing_dir) or friction fallback
+            // - ft_80085030 root-motion branch only when `fp->x594_b0` is set for this motion,
+            //   otherwise friction fallback even if the FigaTree has TransN tracks.
             // refs/melee/src/melee/ft/ft_081B.c::{ft_80084FA8,ft_80085030}
+            // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::ftCo_Attack11_Phys
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveStand.c::ftCo_PassiveStand_Phys
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_CliffClimb_Phys
@@ -1749,22 +1781,17 @@ void physics_integrate(MslBatch* batch) {
               friction *= c->high_speed_friction_mul;
             }
             float dxyz[3];
-            const uint8_t landing_to_attack11_entry = (action_id == (uint16_t)MSL_ACT_ATTACK_11 &&
-                                                       prev_action_id == (uint16_t)MSL_ACT_LANDING)
-                                                          ? 1u
-                                                          : 0u;
-            if (physics_try_get_transn_delta_xyz(ch, batch->state.char_id[idx],
+            if (physics_action_anim_uses_root_motion(batch->state.char_id[idx],
+                                                     batch->state.animation_index[idx]) &&
+                physics_try_get_transn_delta_xyz(ch, batch->state.char_id[idx],
                                                  batch->state.animation_index[idx],
                                                  physics_prev_anim_frame_f32(batch, idx),
-                                                 physics_cur_anim_frame_f32(batch, idx), dxyz) &&
-                !landing_to_attack11_entry) {
+                                                 physics_cur_anim_frame_f32(batch, idx), dxyz)) {
               // Decomp root-motion gate:
               // - ft_80085030 takes the transN drive branch only when fp->x594_b0 is set.
-              // - this core does not carry x594_b0; keep Landing->Attack11 entry on the friction
-              //   fallback so landing-momentum rows do not spuriously zero `gr_vel` on jab entry.
+              // - `msl_anim_uses_root_motion` is the extracted ftData x10_b0 flag for the current
+              //   motion; do not infer the branch from TransN track presence alone.
               // refs/melee/src/melee/ft/ft_081B.c::ft_80085030
-              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_IASA
-              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::ftCo_Attack11_Phys
               gr_vel = dxyz[2] * facing_dir;
             } else {
               gr_vel += ground_friction_step_delta(gr_vel, friction);

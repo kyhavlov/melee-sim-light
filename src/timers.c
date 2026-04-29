@@ -348,6 +348,7 @@ void timers_consume_post_hitlag_callbacks_after_input(MslBatch* batch) {
   enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
   enum { MSL_STATE_FLAGS_221A_INDEX = 1 };
   enum { MSL_STATE_FLAG_221A_IS_HITLAG = 0x20 };
+  enum { MSL_STATE_FLAG_221A_B3 = 0x10 };
   const MslCommonParams* c = msl_common_params();
   if (c == NULL) {
     return;
@@ -411,13 +412,25 @@ void timers_consume_post_hitlag_callbacks_after_input(MslBatch* batch) {
                                           ? 1u
                                           : 0u;
       const uint8_t use_full_2d = (sdi_full_edge_x || sdi_full_edge_y);
-      const uint8_t use_timer_window = (damage_every_hitlag_sdi_timer_window_action(a) ||
+      const uint8_t flags_221a = batch->state.state_flags[flags_i];
+      // Source predicate:
+      // - ftCo_Damage_OnEveryHitlag's timer-window path is generic, but it is gated by hidden
+      //   `allow_sdi`; replay only exposes the surrounding 0x221A byte.
+      // - ProcessHit sets x221A_b3 on the ordinary hitlag-start path while also setting
+      //   `allow_sdi`, and Fighter_8006A1BC clears x221A_b3 at hitlag exit.
+      // - Therefore x221A_b3 is a narrow visible provenance signal for timer-window SDI on normal
+      //   damage hitlag rows. Keep existing explicit DownDamageD / phantom lanes for source paths
+      //   where allow_sdi can be true without x221A_b3.
+      // refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006A1BC}
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag
+      const uint8_t use_timer_window = ((flags_221a & (uint8_t)MSL_STATE_FLAG_221A_B3) != 0u ||
+                                        damage_every_hitlag_sdi_timer_window_action(a) ||
                                         batch->state.phantom_damage_pending_x1898[idx] > 0.0f)
                                            ? sdi_tilt_window
                                            : 0u;
       if (batch->state.hitlag_pre_timer[idx] != 0u && batch->state.hitlag[idx] != 0u &&
           (use_full_2d || use_timer_window) &&
-          (batch->state.state_flags[flags_i] & (uint8_t)MSL_STATE_FLAG_221A_IS_HITLAG) != 0u &&
+          (flags_221a & (uint8_t)MSL_STATE_FLAG_221A_IS_HITLAG) != 0u &&
           lstick_mag_sq >= sdi_radius_sq) {
         batch->state.pos_x[idx] += lstick_full_x * sdi_step_mul;
         batch->state.pos_y[idx] += lstick_full_y * sdi_step_mul;

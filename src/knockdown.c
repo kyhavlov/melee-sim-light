@@ -373,37 +373,6 @@ static inline uint8_t damage_ground_try_enter_kneebend_from_wait_iasa(MslBatch* 
   return 1u;
 }
 
-static inline uint8_t wait_iasa_try_enter_spotdodge_before_guard(MslBatch* batch,
-                                                                 const MslCommonParams* c,
-                                                                 size_t idx) {
-  if (batch == NULL || c == NULL) {
-    return 0u;
-  }
-  // Wait_IASA checks ftCo_80099794 before ftCo_80091A4C guard entry. This helper is used at
-  // knockdown/damage Anim-callback handoffs where the sim has just entered Wait in this same frame;
-  // steady Wait ownership remains in locomotion.c.
-  //
-  // ftCo_80099794 is narrower than Guard IASA's ftCo_8009980C: it requires held LR and the
-  // `inlineB0` down-stick gate, and it does not consume the c-stick spotdodge helper.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::{
-  //   ftCo_80099794,ftCo_80099894,ftCo_800998EC}
-  const uint16_t lr = (uint16_t)(MSL_BUTTON_L | MSL_BUTTON_R);
-  if ((batch->state.input_buttons[idx] & lr) == 0u) {
-    return 0u;
-  }
-  const float stick_y =
-      apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
-  if (!(stick_y <= c->spotdodge_stick_y_threshold &&
-        batch->state.tilt_timer_y[idx] < c->spotdodge_flick_tilt_max_frames)) {
-    return 0u;
-  }
-  batch->state.action_id[idx] = (uint16_t)MSL_ACT_ESCAPE_N;
-  batch->state.animation_index[idx] = (uint32_t)MSL_SM_ESCAPE_N;
-  msl_anim_timebase_enter_with_policy(batch, idx, 0.0f, 1.0f, MSL_ANIM_ENTER_TICK_IMMEDIATE);
-  return 1u;
-}
-
 static inline uint8_t damage_ground_try_enter_guard_from_wait_iasa(MslBatch* batch,
                                                                    const MslCommonParams* c,
                                                                    size_t idx) {

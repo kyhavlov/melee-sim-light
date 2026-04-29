@@ -5552,7 +5552,8 @@ void items_spawn_pre_physics(MslBatch* batch) {
                  batch->state.action_frame[msl_idx_player(bi, throwb_startup_carry_victim)] > 4)
                     ? 1u
                     : 0u;
-            if (throw_blaster_pulse_is_seed_stale_latch(action_id, lp->shot_itkind,
+            if (batch->state.throw_command_pending_seed_valid[idx] != 0u &&
+                throw_blaster_pulse_is_seed_stale_latch(action_id, lp->shot_itkind,
                                                         crossed_pulse_af, prev_frame_i) &&
                 !throwb_startup_carry) {
               if (action_id == (uint16_t)MSL_ACT_THROW_B) {

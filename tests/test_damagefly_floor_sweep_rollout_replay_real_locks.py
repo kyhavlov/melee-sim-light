@@ -9,6 +9,8 @@ from tools.eval.dataset import COMPARE_DTYPE, read_dataset
 
 
 ACT_DAMAGE_FLY_HI = 0x0057
+ACT_DAMAGE_FLY_N = 0x0058
+ACT_DOWN_BOUND_U = 0x00B7
 ACT_PASSIVE = 0x00C7
 
 
@@ -39,13 +41,23 @@ def _dataset_path(root: Path) -> Path:
     return dataset_path
 
 
+def _aggregate_dataset_path(root: Path, name: str) -> Path:
+    dataset_rel = f"datasets/aggregate_recent/replays/validation/aggregate_recent/{name}.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+    return dataset_path
+
+
 def _binding_sizes():
     binding = pytest.importorskip("msl_binding")
     sizes = binding.sizes()
     return binding, int(sizes["seed"]), int(sizes["input"]), int(sizes["compare"])
 
 
-def _run_one_step(dataset_path: Path, record: int) -> tuple[np.void, np.void, np.void]:
+def _run_one_step(
+    dataset_path: Path, record: int, *, ucf_cardinals_1_0_enabled: bool = False
+) -> tuple[np.void, np.void, np.void]:
     ds = read_dataset(str(dataset_path))
     row = ds.samples[record : record + 1]
     assert int(row.shape[0]) == 1
@@ -62,7 +74,12 @@ def _run_one_step(dataset_path: Path, record: int) -> tuple[np.void, np.void, np
     )
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=ucf_cardinals_1_0_enabled,
+        ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
+    )
     try:
         binding.reseed_seed(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)
@@ -75,7 +92,11 @@ def _run_one_step(dataset_path: Path, record: int) -> tuple[np.void, np.void, np
 
 
 def _run_rollout_records(
-    dataset_path: Path, start_record: int, target_records: tuple[int, ...]
+    dataset_path: Path,
+    start_record: int,
+    target_records: tuple[int, ...],
+    *,
+    ucf_cardinals_1_0_enabled: bool = False,
 ) -> dict[int, tuple[np.void, np.void]]:
     ds = read_dataset(str(dataset_path))
     samples = ds.samples
@@ -89,7 +110,12 @@ def _run_rollout_records(
     ).copy().reshape(1, seed_stride)
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=ucf_cardinals_1_0_enabled,
+        ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
+    )
     try:
         binding.reseed_seed_rollout(handle, seed_bytes)
         out_by_record: dict[int, tuple[np.void, np.void]] = {}
@@ -143,3 +169,47 @@ def test_damageflyhi_rollout_uses_prior_sweep_root_for_floor_tech_handoff() -> N
     assert int(out_5208["on_ground"][p]) == int(ref_5208["on_ground"][p]) == 1
     assert int(out_5208["hitstun"][p]) == int(ref_5208["hitstun"][p]) == 0
     assert float(out_5208["pos_y"][p]) == pytest.approx(float(ref_5208["pos_y"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
+def test_ground_to_air_damage_entry_ecb_lock_survives_hitlag_for_downbound_handoff() -> None:
+    # Replay-real lock for FSP rec=8343 -> 8349 p0:
+    # - AttackLw3 hits a grounded victim and ftCo_8008DCE0 launches via ftCommon_8007D5D4.
+    # - ftCommon_8007D5D4 sets CollData_X130_Locked / fp->ecb_lock=10; Fighter_procMap ticks it
+    #   during the frozen hitlag frames.
+    # - On the hitlag-exit frame, DamageFly_Coll still sees the locked-bottom floor callback and
+    #   reaches the DownBoundU handoff. Without the runtime ECB-lock producer, rollout samples the
+    #   pose bottom, misses floor contact, and falls through in DamageFlyN.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_8008DCE0,ftCo_DamageFly_Coll}
+    # refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
+    # refs/melee/src/melee/ft/fighter.c::Fighter_procMap
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = _aggregate_dataset_path(root, "FavorableSuperficialPig")
+
+    p = 0
+    seed, ref, out = _run_one_step(dataset_path, 8349, ucf_cardinals_1_0_enabled=True)
+    assert int(seed["action_id"][p]) == ACT_DAMAGE_FLY_N
+    assert int(seed["hitlag"][p]) == 1
+    assert int(seed["ecb_lock_timer"][p]) == 4
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_DOWN_BOUND_U
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 1
+    assert int(out["hitstun"][p]) == int(ref["hitstun"][p]) == 0
+    assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=2e-6)
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-6)
+
+    by_record = _run_rollout_records(
+        dataset_path, 8302, (8348, 8349), ucf_cardinals_1_0_enabled=True
+    )
+    ref_8348, out_8348 = by_record[8348]
+    assert int(out_8348["action_id"][p]) == int(ref_8348["action_id"][p]) == ACT_DAMAGE_FLY_N
+    assert int(out_8348["hitlag"][p]) == int(ref_8348["hitlag"][p]) == 1
+    assert int(out_8348["on_ground"][p]) == int(ref_8348["on_ground"][p]) == 0
+    assert float(out_8348["pos_y"][p]) == pytest.approx(float(ref_8348["pos_y"][p]), abs=2e-6)
+
+    ref_8349, out_8349 = by_record[8349]
+    assert int(out_8349["action_id"][p]) == int(ref_8349["action_id"][p]) == ACT_DOWN_BOUND_U
+    assert int(out_8349["on_ground"][p]) == int(ref_8349["on_ground"][p]) == 1
+    assert int(out_8349["hitstun"][p]) == int(ref_8349["hitstun"][p]) == 0
+    assert float(out_8349["pos_x"][p]) == pytest.approx(float(ref_8349["pos_x"][p]), abs=2e-6)
+    assert float(out_8349["pos_y"][p]) == pytest.approx(float(ref_8349["pos_y"][p]), abs=2e-6)

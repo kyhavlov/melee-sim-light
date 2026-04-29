@@ -220,6 +220,37 @@ def test_common_grounded_player_nudge_does_not_push_over_fd_right_floor_edge(rec
 
 
 @pytest.mark.integration
+def test_common_grounded_player_nudge_can_cross_connected_fd_floor_seam() -> None:
+    # Replay-real positive for the x450 nudge at a connected FD floor seam:
+    # - ftCommon_8007E0E4 computes xF8_playerNudgeVel before Fighter_procUpdate.
+    # - Squat_Coll then runs ft_80082708 -> mpColl_8004B108, which may resolve the new floor.index
+    #   after the nudge crosses the right-lip/main-floor endpoint.
+    # - This is not the same as pushing past the outer floor edge; that negative remains covered by
+    #   GracefulAttachedTurtle 8600..8606 above.
+    # refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007DD7C,ftCommon_8007E0E4}
+    # refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80082708
+    # refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    seed, ref, out = _run_one_step_row(dataset_path, 8338, 1)
+    p = 1
+    assert int(seed["action_id"][p]) == 39  # Squat
+    assert int(seed["ground_id"][p]) == 2  # FD right lip floor
+    assert int(ref["ground_id"][p]) == 1  # FD main floor after connected-seam nudge/collision
+    assert int(out["action_id"][p]) == int(ref["action_id"][p])
+    assert int(out["ground_id"][p]) == int(ref["ground_id"][p])
+    assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=2e-6)
+
+
+@pytest.mark.integration
 def test_ottotto_kneebend_floor_loss_carries_source_player_nudge() -> None:
     # Replay-real positive for the same x450 owner at the Ottotto edge-loss boundary:
     # - Ottotto_IASA enters KneeBend from a jump input.

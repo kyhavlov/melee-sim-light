@@ -70,7 +70,7 @@ def _tracks_end_frame(tracks_path: Path, msid: int) -> float:
         if magic != b"SSANIMT1":
             raise ValueError(f"bad tracks magic: {magic!r}")
         (version,) = struct.unpack("<I", f.read(4))
-        if version not in (1, 2):
+        if version != 3:
             raise ValueError(f"unsupported tracks version: {version}")
         local_count, anim_count = struct.unpack("<HH", f.read(4))
         f.read(local_count)  # local_parts
@@ -80,8 +80,8 @@ def _tracks_end_frame(tracks_path: Path, msid: int) -> float:
         for _ in range(anim_count):
             (mid,) = struct.unpack("<H", f.read(2))
             (end_frame,) = struct.unpack("<f", f.read(4))
-            if version >= 2:
-                f.read(1)  # aobj_loop
+            f.read(1)  # aobj_loop
+            f.read(1)  # uses_root_motion
             for _lp in range(local_count):
                 part_u8 = f.read(1)
                 if not part_u8:

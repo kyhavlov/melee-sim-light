@@ -424,6 +424,341 @@ def test_guardreflect_final_x14_shine_precombat_shield_candidate_is_rejected_tbk
 
 
 @pytest.mark.integration
+def test_guardreflect_expired_x14_no_submotion_body_uses_guardon_hurtcaps_gat_11085() -> None:
+    # Expired-x14 GuardReflect no-submotion BODY handoff:
+    # - ftCo_GuardReflect_Anim calls ftCo_80093BC0 before the fighter-vs-fighter collision pass.
+    # - Once mv.co.guard.x14 expires, ftCo_80093BC0 recreates ShieldDesc via ftCo_80092450 while
+    #   x18 can remain live. If the shield overlap misses, BODY still consumes the GuardReflect
+    #   motion-state submotion hurtcaps instead of an empty serialized snapshot.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80093BC0,ftCo_GuardReflect_Anim}
+    # refs/melee/src/melee/ft/ftmotionstates.c::ftCo_MS_GuardReflect
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007B1B8,ftColl_80076ED8}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / (
+        "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    record = 11085
+    defender = 0
+    attacker = 1
+    seed, out, ref = _step_one_row(dataset_path, record)
+
+    assert int(seed["action_id"][defender]) == 182  # GuardReflect
+    assert int(seed["animation_index"][defender]) == 0xFFFFFFFF
+    assert int(seed["action_frame"][defender]) == -2
+    assert int(seed["guard_reflect_timer_x14"][defender]) == 0
+    assert int(seed["guard_reflect_timer_x18"][defender]) > 0
+    assert int(seed["seed_prev_action_id"][defender]) == 182
+    assert int(seed["action_id"][attacker]) == 69  # AttackAirHi
+
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender]) == 87  # DamageFlyHi
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 7
+    assert int(out["hitstun"][defender]) == int(ref["hitstun"][defender]) == 45
+    assert int(out["instance_hit_by"][defender]) == int(ref["instance_hit_by"][defender])
+    assert float(out["percent"][defender]) == pytest.approx(float(ref["percent"][defender]), abs=1e-5)
+    assert int(out["hitlag"][attacker]) == int(ref["hitlag"][attacker]) == 7
+
+
+@pytest.mark.integration
+def test_guardreflect_active_x14_no_submotion_without_guardon_provenance_stays_no_body_gat_11085() -> None:
+    # Boundary for the expired-x14 owner above: active x14 remains a ReflectDesc/raw-snapshot phase
+    # unless the transition provenance is GuardOn. Mutating only x14 back to active must not turn
+    # this no-submotion snapshot into generic GuardReflect BODY hurtcaps.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / (
+        "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    record = 11085
+    defender = 0
+    attacker = 1
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples["seed_t"][record : record + 1].copy()
+    seed["guard_reflect_timer_x14"][0, defender] = np.uint8(1)
+    out, _ref = _step_one_row_with_seed(dataset_path, record, seed)
+
+    assert int(seed["action_id"][0, defender]) == 182
+    assert int(seed["seed_prev_action_id"][0, defender]) == 182
+    assert int(seed["guard_reflect_timer_x14"][0, defender]) == 1
+    assert int(out["action_id"][defender]) == 182
+    assert int(out["hitlag"][defender]) == 0
+    assert int(out["hitstun"][defender]) == 0
+    assert int(out["hitlag"][attacker]) == 0
+
+
+@pytest.mark.integration
+def test_guardreflect_expired_x14_rollout_orders_lower_body_before_later_shield_gat_11080() -> None:
+    # Rollout-real lock for the same expired-x14 GuardReflect handoff:
+    # - p1 AttackAirHi hitbox 0 misses ShieldDesc but overlaps p0's GuardOn hurtcap fallback.
+    # - hitbox 1 would overlap the shield bubble in the simulator proxy, but decomp processes
+    #   shield/BODY per HitCapsule in order, so the lower-index BODY hit commits first.
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardReflect_Anim,ftCo_80093BC0}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / (
+        "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    binding = _load_binding()
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    samples_u8, seed_off, prev_input_off, input_off = _dataset_byte_views(ds)
+
+    start = 11080
+    stop = 11086
+    defender = 0
+    attacker = 1
+    seed_bytes = samples_u8[start : start + 1, seed_off : seed_off + seed_stride].copy()
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+    out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(1)
+
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    try:
+        binding.reseed_seed_rollout(handle, seed_bytes)
+        for record in range(start, stop + 1):
+            prev_input_bytes = samples_u8[
+                record : record + 1, prev_input_off : prev_input_off + input_stride
+            ].copy()
+            input_bytes = samples_u8[record : record + 1, input_off : input_off + input_stride].copy()
+            binding.step_input(handle, prev_input_bytes, input_bytes)
+            binding.write_compare(handle, out_compare_bytes)
+            out = out_view[0].copy()
+            ref = samples["ref_t1"][record]
+            for field in ("action_id", "animation_index", "hitlag", "hitstun", "shield_hp"):
+                if out[field].dtype.kind in "iu":
+                    assert int(out[field][defender]) == int(ref[field][defender]), (
+                        f"record={record} field={field}"
+                    )
+                else:
+                    assert float(out[field][defender]) == pytest.approx(
+                        float(ref[field][defender]), abs=1e-5
+                    ), f"record={record} field={field}"
+        assert int(out_view[0]["action_id"][defender]) == 87  # DamageFlyHi
+        assert int(out_view[0]["hitlag"][attacker]) == int(samples["ref_t1"][stop]["hitlag"][attacker])
+    finally:
+        binding.destroy(handle)
+
+
+@pytest.mark.integration
+def test_guardreflect_expired_x14_later_shield_candidate_reports_earlier_body_gat_11085() -> None:
+    # Diagnostic boundary for the rollout owner above: at the pre-combat snapshot, hitbox 1 is not
+    # allowed to win as a shield hit because lower hitbox 0 has already reached BODY priority.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / (
+        "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    binding = _load_binding()
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    samples_u8, seed_off, prev_input_off, input_off = _dataset_byte_views(ds)
+
+    start = 11080
+    target = 11085
+    seed_bytes = samples_u8[start : start + 1, seed_off : seed_off + seed_stride].copy()
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    try:
+        binding.reseed_seed_rollout(handle, seed_bytes)
+        for record in range(start, target):
+            prev_input_bytes = samples_u8[
+                record : record + 1, prev_input_off : prev_input_off + input_stride
+            ].copy()
+            input_bytes = samples_u8[record : record + 1, input_off : input_off + input_stride].copy()
+            binding.step_input(handle, prev_input_bytes, input_bytes)
+
+        prev_input_bytes = samples_u8[
+            target : target + 1, prev_input_off : prev_input_off + input_stride
+        ].copy()
+        input_bytes = samples_u8[target : target + 1, input_off : input_off + input_stride].copy()
+        binding.debug_step_input_pre_combat(handle, prev_input_bytes, input_bytes)
+        raw_cand, count_cand = binding.debug_shield_candidate_decisions(handle, 0, 128)
+    finally:
+        binding.destroy(handle)
+
+    cand = raw_cand.reshape(-1).view(_DEBUG_SHIELD_CANDIDATE_DTYPE)[:count_cand]
+    hb1 = [
+        c
+        for c in cand
+        if int(c["attacker"]) == 1 and int(c["defender"]) == 0 and int(c["hitbox_id"]) == 1
+    ]
+    assert len(hb1) == 1
+    assert int(hb1[0]["reject_reason"]) == 12
+    assert int(hb1[0]["overlap_shield"]) == 0
+
+
+@pytest.mark.integration
+def test_guardreflect_x14_expiry_recreates_current_shielddesc_tch_5251() -> None:
+    # Active-x14 GuardReflect callback boundary:
+    # - p1 starts the frame on GuardReflect with x14==1 and x18 still live.
+    # - `ftCo_GuardReflect_Anim -> ftCo_80093BC0` expires x14, recreates ShieldDesc via
+    #   `ftCo_80092450`, then fighter-vs-fighter collision accepts p0 AttackAirHi into
+    #   GuardSetOff without shield HP depletion because x18/x221C_b2 remains active.
+    # - The direct one-step row locks the no-shield-damage side of that boundary; the rollout lock
+    #   below clears the seed dependence by reaching the same contact from live simulation.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardReflect_Anim,ftCo_80093BC0,ftCo_80092450}
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    record = 5251
+    attacker = 0
+    defender = 1
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples["seed_t"][record : record + 1].copy()
+    out, ref = _step_one_row_with_seed(dataset_path, record, seed)
+
+    assert int(seed["action_id"][0, attacker]) == 69  # AttackAirHi
+    assert int(seed["action_id"][0, defender]) == 182  # GuardReflect
+    assert int(seed["animation_index"][0, defender]) == 0xFFFFFFFF
+    assert int(seed["action_frame"][0, defender]) == -2
+    assert int(seed["guard_reflect_timer_x14"][0, defender]) == 1
+    assert int(seed["guard_reflect_timer_x18"][0, defender]) > 0
+
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender]) == 181  # GuardSetOff
+    assert int(out["hitlag"][attacker]) == int(ref["hitlag"][attacker]) == 6
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 6
+    assert float(out["shield_hp"][defender]) == pytest.approx(float(ref["shield_hp"][defender]), abs=1e-6)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("x14", [0, 2])
+def test_guardreflect_current_shielddesc_requires_x14_expiry_boundary_tch_5251(x14: int) -> None:
+    # Boundary negative for the TCH:5251 current-pose ShieldDesc owner:
+    # - x14==2 is still in the pre-expiry ReflectDesc-only phase for no-submotion GuardReflect.
+    # - x14==0 was already expired before this frame and lacks the x14 seed-to-zero callback.
+    # Neither case may borrow the current-pose ShieldDesc handoff when the teacher-forced
+    # ShieldDesc seed is absent.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    record = 5251
+    defender = 1
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples["seed_t"][record : record + 1].copy()
+    seed["combat_shield_contact_hb_kind"][:] = np.uint8(0)
+    seed["guard_reflect_timer_x14"][0, defender] = np.uint8(x14)
+    out, _ref = _step_one_row_with_seed(dataset_path, record, seed)
+
+    assert int(out["action_id"][defender]) == 182  # GuardReflect stays no-contact.
+    assert int(out["hitlag"][defender]) == 0
+
+
+@pytest.mark.integration
+def test_guardreflect_already_expired_x14_seed_does_not_suppress_shield_damage_tch_5251() -> None:
+    # Boundary negative for shield-damage suppression: replay-proven ShieldDesc contact can still
+    # be teacher-forced when x14 was already expired, but without the `x14_seed==1 -> x14==0`
+    # callback boundary it must not borrow x18 as a powershield no-damage owner.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    record = 5251
+    defender = 1
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples["seed_t"][record : record + 1].copy()
+    seed["guard_reflect_timer_x14"][0, defender] = np.uint8(0)
+    out, ref = _step_one_row_with_seed(dataset_path, record, seed)
+
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender]) == 181
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 6
+    assert float(out["shield_hp"][defender]) < float(ref["shield_hp"][defender])
+
+
+@pytest.mark.integration
+def test_guardreflect_x14_expiry_rollout_reaches_jumpf_tch_5224() -> None:
+    # Rollout-real lock for the disruptive TCH cluster:
+    # - Starting at TCH:5224, p1 reaches GuardReflect at 5250.
+    # - At 5251 the x14-expiry ShieldDesc handoff must accept p0 AttackAirHi into GuardSetOff.
+    # - The later row 5283 then remains replay-aligned as JumpF instead of the previous false
+    #   DamageAir3 divergence from the missed shield contact.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    binding = _load_binding()
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    samples_u8, seed_off, prev_input_off, input_off = _dataset_byte_views(ds)
+
+    start = 5224
+    stop = 5284
+    defender = 1
+    seed_bytes = samples_u8[start : start + 1, seed_off : seed_off + seed_stride].copy()
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+    out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(1)
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        binding.reseed_seed_rollout(handle, seed_bytes)
+        seen_5251 = False
+        for record in range(start, stop + 1):
+            prev_input_bytes = samples_u8[
+                record : record + 1, prev_input_off : prev_input_off + input_stride
+            ].copy()
+            input_bytes = samples_u8[record : record + 1, input_off : input_off + input_stride].copy()
+            binding.step_input(handle, prev_input_bytes, input_bytes)
+            binding.write_compare(handle, out_compare_bytes)
+            out = out_view[0].copy()
+            ref = samples["ref_t1"][record]
+            if record == 5251:
+                seen_5251 = True
+                assert int(out["action_id"][defender]) == int(ref["action_id"][defender]) == 181
+                assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 6
+                assert float(out["shield_hp"][defender]) == pytest.approx(
+                    float(ref["shield_hp"][defender]), abs=1e-6
+                )
+            if record == 5283:
+                assert int(out["action_id"][defender]) == int(ref["action_id"][defender]) == 25
+                assert int(out["hitstun"][defender]) == int(ref["hitstun"][defender]) == 0
+        assert seen_5251
+    finally:
+        binding.destroy(handle)
+
+
+@pytest.mark.integration
 def test_shieldbreakstand_furafura_entry_clears_colanim_hit_status_prh_11549_rollout() -> None:
     # Rollout-real lock for the disruptive former-F08b PRH cluster:
     # ShieldBreakStand keeps colanim hit status while standing up from shield break, but
@@ -979,9 +1314,11 @@ def test_late_attackairhi_hitcapsule_latch_rejects_false_wait_hit_fsp_7079() -> 
 def test_jumpf_tap_crossing_iasa_preempts_false_attacklw4_body_fsp_4852() -> None:
     # JumpF/B live-input IASA tap crossing:
     # - ftCo_Jump_IASA reaches ftCo_800CB870 before BODY collision.
-    # - FSP:4852 seeds Fox in JumpF frame 0 with post-entry x671=0xFE, but the live input snapshot
-    #   crosses the tap-jump threshold on this frame. Source enters JumpAerialF before Fox
-    #   AttackLw4 BODY selection, so the false hit must not be admitted.
+    # - FSP:4852 seeds Fox in JumpF frame 0 from a pre-input KneeBend Anim entry. The later
+    #   Fighter_Spaghetti input-history pass overwrites ftCo_Jump_Enter's transient x671=0xFE to a
+    #   low timer because the stick freshly crossed the tilt threshold, and the current frame then
+    #   crosses tap-jump threshold. Source enters JumpAerialF before Fox AttackLw4 BODY selection,
+    #   so the false hit must not be admitted.
     # refs/melee/src/melee/ft/fighter.c::{
     #   Fighter_Spaghetti_8006AD10,Fighter_procUpdate}
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_IASA
@@ -999,7 +1336,7 @@ def test_jumpf_tap_crossing_iasa_preempts_false_attacklw4_body_fsp_4852() -> Non
     defender = 1
     assert int(seed["action_id"][defender]) == 25  # JumpF
     assert int(seed["action_frame"][defender]) == 0
-    assert int(seed["tilt_timer_y"][defender]) == 0xFE
+    assert int(seed["tilt_timer_y"][defender]) < 4
     assert int(ref["action_id"][defender]) == 27  # JumpAerialF
     for field in ("action_id", "animation_index", "jumps_left", "hitlag", "hitstun"):
         assert int(out[field][defender]) == int(ref[field][defender]), f"field={field}"
@@ -1007,7 +1344,7 @@ def test_jumpf_tap_crossing_iasa_preempts_false_attacklw4_body_fsp_4852() -> Non
 
 
 @pytest.mark.integration
-def test_jumpf_tap_crossing_iasa_requires_fresh_tap_threshold_crossing_fsp_4852() -> None:
+def test_jumpf_tap_crossing_iasa_requires_fresh_tap_threshold_crossing_fsp_2123() -> None:
     # Negative boundary for the JumpF/B tap-crossing reconstruction: held-up snapshots whose
     # previous stick is already above the tap threshold must continue to rely on x671/XY edges,
     # not become a broad "JumpF plus high Y means double jump" shortcut.
@@ -1019,17 +1356,13 @@ def test_jumpf_tap_crossing_iasa_requires_fresh_tap_threshold_crossing_fsp_4852(
     if not dataset_path.exists():
         pytest.skip(f"missing local dataset: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[4852 : 4853]
-    prev_input = row["prev_input_t"].copy()
-    cur_input = row["input_t"].copy()
-    defender = 1
-    prev_input["p"]["main_y"][0, defender] = cur_input["p"]["main_y"][0, defender]
-
-    out, _ref = _step_one_row_with_inputs(dataset_path, 4852, prev_input, cur_input)
-    assert int(row["seed_t"][0]["action_id"][defender]) == 25  # JumpF
-    assert int(row["seed_t"][0]["tilt_timer_y"][defender]) == 0xFE
-    assert int(out["action_id"][defender]) != 27  # not JumpAerialF without a fresh crossing
+    seed, out, ref = _step_one_row(dataset_path, 2123)
+    defender = 0
+    assert int(seed["action_id"][defender]) == 25  # JumpF
+    assert int(seed["action_frame"][defender]) == 0
+    assert int(seed["tilt_timer_y"][defender]) == 0xFE
+    assert int(ref["action_id"][defender]) == 25
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender])
 
 
 @pytest.mark.integration

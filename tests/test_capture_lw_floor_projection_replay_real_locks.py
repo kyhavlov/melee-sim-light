@@ -10,6 +10,8 @@ from tools.eval.dataset import COMPARE_DTYPE, read_dataset
 
 ACT_WAIT = 0x000E
 SM_WAIT1_0 = 2
+ACT_ATTACK_HI4 = 0x003F
+ACT_CAPTURE_PULLED_LW = 0x00E2
 ACT_CAPTURE_WAIT_LW = 0x00E3
 SM_CAPTURE_WAIT_LW = 255
 ACT_THROW_B = 0x00DC
@@ -37,6 +39,14 @@ def _dataset_path(root: Path) -> Path:
     dataset_rel = (
         "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl"
     )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+    return dataset_path
+
+
+def _cardinal_dataset_path(root: Path, name: str) -> Path:
+    dataset_rel = f"datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/{name}"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
         pytest.skip(f"missing local dataset: {dataset_rel}")
@@ -278,3 +288,104 @@ def test_capturewaitlw_to_throwb_throw_laser_uses_motion_entry_root_facing() -> 
 
     _seed, _ref, mutated_out = _run_one_step_seed(dataset_path, 2518, mutate)
     assert float(mutated_out["items"][1]["vel_x"]) < 0.0
+
+
+@pytest.mark.integration
+def test_capturepulledlw_catchdash_connect_runs_immediate_floor_callbacks_qgd_rollout() -> None:
+    # Replay-real lock for catch-connect callback ordering:
+    # - Fighter_8006A360 can run the victim's startup-complete KneeBend Anim callback before a later
+    #   Fighter_UnkProcessGrab_8006CA5C catch-connect callback from the grab owner.
+    # - This row's vanilla order is victim KneeBend -> JumpF -> AttackAirHi, then owner CatchDash ->
+    #   CatchDashPull, then victim CapturePulledHi -> CapturePulledLw through the immediate Coll
+    #   callback (`fn_800DAADC` calling fp+0x21A8).
+    # - The current root-floor projection, not a stale grounded snap, owns the captured victim's first
+    #   replay-visible CapturePulledLw frame.
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_UnkProcessGrab_8006CA5C,Fighter_procUpdate}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_Anim
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+    #   ftCo_CapturePulledHi_Coll,ftCo_CapturePulledLw_Coll,fn_800DAADC,fn_800DAECC,fn_800DAEEC}
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_8008403C,ft_80083C00}
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004B108,mpColl_800477E0}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = _cardinal_dataset_path(root, "QuerulousGrandDinosaur.msl")
+
+    victim_p = 1
+    owner_p = 0
+    rollout = _run_rollout_records(dataset_path, 5366, (5369, 5370, 5371, 5372, 5373, 5374, 5375))
+
+    ref_5369, out_5369 = rollout[5369]
+    assert int(out_5369["action_id"][owner_p]) == int(ref_5369["action_id"][owner_p]) == 215
+    assert int(out_5369["instance_id"][owner_p]) == int(ref_5369["instance_id"][owner_p]) == 988
+    assert int(ref_5369["action_id"][victim_p]) == ACT_CAPTURE_PULLED_LW
+    assert int(out_5369["action_id"][victim_p]) == ACT_CAPTURE_PULLED_LW
+    assert int(out_5369["instance_id"][victim_p]) == int(ref_5369["instance_id"][victim_p]) == 990
+    assert int(out_5369["action_frame"][victim_p]) == int(ref_5369["action_frame"][victim_p]) == 1
+    assert int(out_5369["on_ground"][victim_p]) == int(ref_5369["on_ground"][victim_p]) == 1
+    assert int(out_5369["jumps_left"][victim_p]) == int(ref_5369["jumps_left"][victim_p]) == 2
+    assert float(out_5369["pos_x"][victim_p]) == pytest.approx(float(ref_5369["pos_x"][victim_p]), abs=1e-5)
+    assert float(out_5369["pos_y"][victim_p]) == pytest.approx(float(ref_5369["pos_y"][victim_p]), abs=1e-6)
+
+    ref_5370, out_5370 = rollout[5370]
+    assert int(out_5370["action_id"][owner_p]) == int(ref_5370["action_id"][owner_p]) == 215
+    assert int(out_5370["instance_id"][owner_p]) == int(ref_5370["instance_id"][owner_p]) == 988
+    assert int(out_5370["action_id"][victim_p]) == int(ref_5370["action_id"][victim_p]) == ACT_CAPTURE_PULLED_LW
+    assert int(out_5370["instance_id"][victim_p]) == int(ref_5370["instance_id"][victim_p]) == 990
+    assert int(out_5370["action_frame"][victim_p]) == int(ref_5370["action_frame"][victim_p]) == 2
+    assert float(out_5370["pos_x"][victim_p]) == pytest.approx(float(ref_5370["pos_x"][victim_p]), abs=1e-5)
+    assert float(out_5370["pos_y"][victim_p]) == pytest.approx(float(ref_5370["pos_y"][victim_p]), abs=1e-6)
+
+    # CapturePulled* -> CaptureWait* can be installed from the grab owner's callback after the
+    # victim's prio-1 Anim callback already ran for this frame. The rollout lock covers that live
+    # callback order; normal teacher-forced one-step still lacks the hidden current-AObj-rate
+    # snapshot for some later CaptureWait rows.
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_UnkProcessGrab_8006CA5C}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+    #   ftCo_CaptureWaitHi_Anim,ftCo_CatchPull_Anim,fn_800DA1D8,fn_800DB6C8}
+    expected_frames = {
+        5371: 1,
+        5372: 2,
+        5373: 3,
+        5374: 5,
+        5375: 7,
+    }
+    for record, expected_frame in expected_frames.items():
+        ref, out = rollout[record]
+        assert int(out["instance_id"][owner_p]) == int(ref["instance_id"][owner_p])
+        assert int(out["action_id"][victim_p]) == int(ref["action_id"][victim_p]) == ACT_CAPTURE_WAIT_LW
+        assert int(out["instance_id"][victim_p]) == int(ref["instance_id"][victim_p]) == 992
+        assert int(out["action_frame"][victim_p]) == int(ref["action_frame"][victim_p]) == expected_frame
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_name", "record", "victim_p", "seed_action"),
+    [
+        ("QuerulousGrandDinosaur.msl", 4063, 1, ACT_ATTACK_HI4),
+        ("GracefulAttachedTurtle.msl", 7721, 0, 178),
+        ("TreasuredBackKangaroo.msl", 5726, 1, 187),
+    ],
+)
+def test_capturepulledlw_immediate_floor_callback_rejects_ordinary_grounded_captures(
+    dataset_name: str, record: int, victim_p: int, seed_action: int
+) -> None:
+    # Negative controls for the root-floor probe above. Ordinary grounded capture connections and
+    # steady AttackHi4 victims keep floor contact in ft_8008403C and must not run the current-frame
+    # AttackHi4-entry Lw -> Hi -> Lw immediate root projection. Broad versions over-projected these
+    # victims' X position.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = _cardinal_dataset_path(root, dataset_name)
+
+    seed, ref, out = _run_one_step_seed(dataset_path, record)
+    assert int(seed["action_id"][victim_p]) == seed_action
+    if seed_action == ACT_ATTACK_HI4:
+        assert int(seed["action_frame"][victim_p]) == 1
+    else:
+        assert int(seed["action_id"][victim_p]) != ACT_ATTACK_HI4
+    assert int(ref["action_id"][victim_p]) == ACT_CAPTURE_PULLED_LW
+    assert int(out["action_id"][victim_p]) == ACT_CAPTURE_PULLED_LW
+    assert int(out["instance_id"][victim_p]) == int(ref["instance_id"][victim_p])
+    assert int(out["ground_id"][victim_p]) == int(ref["ground_id"][victim_p])
+    assert float(out["pos_x"][victim_p]) == pytest.approx(float(ref["pos_x"][victim_p]), abs=1e-5)
+    assert float(out["pos_y"][victim_p]) == pytest.approx(float(ref["pos_y"][victim_p]), abs=1e-6)

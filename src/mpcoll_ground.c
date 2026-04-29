@@ -940,6 +940,69 @@ uint8_t mpcoll_800477e0_floor_mask_probe(const MslBatch* batch, size_t idx,
   return 0u;
 }
 
+uint8_t mpcoll_800477e0_capture_root_floor_mask_probe(const MslBatch* batch, size_t idx,
+                                                      MslMpcollFloorMaskResult* out) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  const uint32_t stage_id = batch->state.stage_id[idx / (size_t)MSL_MAX_PLAYERS];
+  const MslStageFloorGraph* g = stage_collision_get_floor_graph(stage_id);
+  if (g == NULL || g->lines == NULL || g->line_count == 0) {
+    return 0u;
+  }
+
+  // CapturePulledLw immediate Coll callback owner:
+  // - fn_800DB230 switches Lw -> Hi through ftCommon_8007D5D4 / ftCommon_UnlockECB, applies
+  //   fn_800DAA40's root translation, then calls ft_80083C00.
+  // - ft_80083C00 snapshots `fp->cur_pos` into CollData before mpColl_800477E0.
+  // - For grounded capture victims, CollData.floor.index is still the authoritative nearby floor;
+  //   the immediate Hi root can sit below that floor even when extracted ECB-bottom data is above
+  //   it, so a bottom-only sweep misses a real floor-mask result.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{fn_800DB230,fn_800DAECC}
+  // refs/melee/src/melee/ft/ft_081B.c::{ft_80083C00,ft_80082578}
+  // refs/melee/src/melee/mp/mpcoll.c::mpColl_800477E0
+  int line_idx = -1;
+  const uint16_t ground_id = batch->state.ground_id[idx];
+  if (ground_id != 0xFFFFu) {
+    line_idx = stage_collision_floor_line_index(stage_id, ground_id);
+  }
+
+  float y_corr = 0.0f;
+  int out_line_idx = -1;
+  if (line_idx >= 0) {
+    out_line_idx = floor_dd90_project(g, line_idx, batch->state.pos_x[idx], batch->state.pos_y[idx],
+                                      &y_corr, NULL, NULL);
+    if (out_line_idx >= 0 && y_corr >= 0.0f) {
+      if (out != NULL) {
+        out->ground_id = g->lines[(size_t)out_line_idx].segment_i;
+        out->corrected_pos_y = batch->state.pos_y[idx] + y_corr;
+      }
+      return 1u;
+    }
+  }
+
+  uint8_t found = 0u;
+  float best_y_corr = FLT_MAX;
+  int best_line_idx = -1;
+  for (size_t li = 0; li < g->line_count; li++) {
+    out_line_idx = floor_dd90_project(g, (int)li, batch->state.pos_x[idx], batch->state.pos_y[idx],
+                                      &y_corr, NULL, NULL);
+    if (out_line_idx >= 0 && y_corr >= 0.0f && (!found || y_corr < best_y_corr)) {
+      found = 1u;
+      best_y_corr = y_corr;
+      best_line_idx = out_line_idx;
+    }
+  }
+  if (found && best_line_idx >= 0) {
+    if (out != NULL) {
+      out->ground_id = g->lines[(size_t)best_line_idx].segment_i;
+      out->corrected_pos_y = batch->state.pos_y[idx] + best_y_corr;
+    }
+    return 1u;
+  }
+  return 0u;
+}
+
 void mpcoll_ground_apply(MslBatch* batch) {
   if (batch == NULL) {
     return;

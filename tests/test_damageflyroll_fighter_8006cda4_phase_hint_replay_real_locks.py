@@ -341,6 +341,75 @@ def test_gat_top_f26_rollout_advances_replay_frame_rng_clock_to_delayed_damagefl
 
 
 @pytest.mark.integration
+def test_throwhi_capture_episode_rollout_clock_reaches_delayed_damageflyroll_gate() -> None:
+    # Replay-real rollout lock for the TBK capture -> ThrowHi -> throw-laser -> DamageFlyRoll
+    # episode selected from the F26 disruptive cluster.
+    #
+    # Source owner chain:
+    # - CatchAttack/CaptureDamageHi can enter ThrowHi/ThrownHi through the common throw owner.
+    # - ftCo_ThrowHi_Anim runs ftFx_Throw_Anim and keeps the victim-weight throw rate alive after
+    #   release; command-active ThrowHi frame crossings serialize throw-side state1 lasers.
+    # - The later item BODY hit reaches ftCo_8008DCE0's DamageFlyRoll RNG gate, which needs the
+    #   replay frame-start RNG clock during validation rollout.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD398,ftCo_ThrowHi_Anim,ftCo_800DD724}
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    # refs/slippi-ssbm-asm/Recording/SendFrameStart.s
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / (
+        "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
+        "TreasuredBackKangaroo.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    start_record = 2712
+    for rec in (start_record, 2743, 2748, 2751, 2752, 2754):
+        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+
+    start_seed = samples[start_record]["seed_t"]
+    assert int(start_seed["action_id"][0]) == 225  # CaptureDamageHi
+    assert int(start_seed["grab_owner_port"][0]) == 1
+    assert int(start_seed["action_id"][1]) == 217  # CatchAttack
+
+    rows = _run_rollout_window_rows_with_trace(
+        dataset_path,
+        start_record=start_record,
+        window_records=(2743, 2748, 2751, 2752, 2754),
+        rng_damage_fly_roll_gate=True,
+        trace_path=root / "reports/triage/tbk_throwhi_capture_damageflyroll_clock_lock.tsv",
+    )
+
+    ref_2743, out_2743, site_2743 = rows[2743]
+    assert site_2743 == 0
+    for row in (ref_2743, out_2743):
+        state1_count = sum(
+            1
+            for item in row["items"]
+            if int(item["exists"]) != 0
+            and int(item["type"]) == 55  # Falco laser shot
+            and int(item["state"]) == 1
+            and int(item["owner"]) == 1
+        )
+        assert state1_count == 2
+
+    for rec in (2748, 2751, 2754):
+        ref_row, out_row, site1_count = rows[rec]
+        assert site1_count == 0
+        assert int(out_row["action_id"][1]) == int(ref_row["action_id"][1]) == 221
+        assert int(out_row["action_frame"][1]) == int(ref_row["action_frame"][1])
+
+    ref_2752, out_2752, site_2752 = rows[2752]
+    assert site_2752 == 1
+    assert int(out_2752["action_id"][0]) == int(ref_2752["action_id"][0]) == 91
+    assert int(out_2752["animation_index"][0]) == int(ref_2752["animation_index"][0])
+    assert int(out_2752["hitlag"][0]) == int(ref_2752["hitlag"][0])
+
+
+@pytest.mark.integration
 def test_tbk_damageflytop_segment_carries_fighter_8006cda4_stream_phase_to_delayed_hit() -> None:
     # The TBK F26 cluster seeds long before the eventual AttackAirB contact. The hidden
     # Fighter_8006CDA4 held-item branch state belongs to the victim's DamageFlyTop segment, so the
@@ -383,6 +452,81 @@ def test_tbk_damageflytop_segment_carries_fighter_8006cda4_stream_phase_to_delay
 
     ref_target, out_target, _ = rows[3907]
     assert int(out_target["action_id"][1]) == int(ref_target["action_id"][1]) == 91
+
+
+@pytest.mark.integration
+def test_tbk_damageflyroll_live_xrotn_pose_selects_late_attackairb_height() -> None:
+    # DamageFlyRoll live XRotN hurtcap owner:
+    # - ftCo_8008DCE0 enters DamageFlyRoll and immediately calls inlineA1, rotating FtPart_XRotN
+    #   from current self+KB velocity.
+    # - ftCo_DamageFlyRoll_Phys calls doFlyRoll before/after physics, keeping that live XRotN
+    #   owner current for ftColl_80076ED8 BODY hurtcap selection.
+    # - The adjacent rows prove this is not a broad late-BAir admission: the same AttackAirB
+    #   hitboxes stay suppressed until the real high-hurtcap frame, which enters DamageFlyHi.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+    #   ftCo_8008DCE0,inlineA1,doFlyRoll,ftCo_DamageFlyRoll_Phys}
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80076ED8
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
+        "TreasuredBackKangaroo.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    for rec in (6993, 6994):
+        seed, ref_row, out_row = _run_one_step_row(dataset_path, rec, 1)
+        assert int(seed["action_id"][1]) == 91  # DamageFlyRoll
+        assert int(seed["action_id"][0]) == 67  # AttackAirB
+        assert int(out_row["action_id"][1]) == int(ref_row["action_id"][1]) == 91
+        assert int(out_row["hitlag"][1]) == int(ref_row["hitlag"][1]) == 0
+        assert int(out_row["hitstun"][1]) == int(ref_row["hitstun"][1])
+
+    seed, ref_row, out_row = _run_one_step_row(dataset_path, 6995, 1)
+    assert int(seed["action_id"][1]) == 91  # DamageFlyRoll
+    assert int(seed["action_id"][0]) == 67  # AttackAirB
+    assert int(out_row["action_id"][1]) == int(ref_row["action_id"][1]) == 87  # DamageFlyHi
+    assert int(out_row["hitlag"][1]) == int(ref_row["hitlag"][1]) == 5
+    assert int(out_row["hitstun"][1]) == int(ref_row["hitstun"][1]) == 45
+
+
+@pytest.mark.integration
+def test_tbk_damageflyroll_live_xrotn_rollout_waits_for_late_attackairb_height() -> None:
+    # Rollout lock for the same TBK F26 disruptive row. Starting at the disruptive seed frame must
+    # not admit the late BAir BODY hit early, but must still reach the DamageFlyHi transition once
+    # the live DamageFlyRoll XRotN pose and hitbox frame align.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
+        "TreasuredBackKangaroo.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    rows = _run_rollout_window_rows_with_trace(
+        dataset_path,
+        start_record=6941,
+        window_records=(6993, 6994, 6995, 6996),
+        rng_damage_fly_roll_gate=True,
+        trace_path=root / "reports/triage/tbk6941_damageflyroll_live_xrotn_rollout.tsv",
+    )
+    for rec in (6993, 6994):
+        ref_row, out_row, site1_count = rows[rec]
+        assert site1_count == 0
+        assert int(out_row["action_id"][1]) == int(ref_row["action_id"][1]) == 91
+        assert int(out_row["hitlag"][1]) == int(ref_row["hitlag"][1]) == 0
+        assert int(out_row["hitstun"][1]) == int(ref_row["hitstun"][1])
+
+    for rec, expected_hitlag in ((6995, 5), (6996, 4)):
+        ref_row, out_row, site1_count = rows[rec]
+        assert site1_count == 0
+        assert int(out_row["action_id"][1]) == int(ref_row["action_id"][1]) == 87
+        assert int(out_row["hitlag"][1]) == int(ref_row["hitlag"][1]) == expected_hitlag
+        assert int(out_row["hitstun"][1]) == int(ref_row["hitstun"][1]) == 45
 
 
 @pytest.mark.integration

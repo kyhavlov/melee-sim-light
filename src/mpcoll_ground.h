@@ -22,3 +22,11 @@ typedef struct MslMpcollFloorMaskResult {
 // the generic stage-collision pass mutates fighter state.
 uint8_t mpcoll_800477e0_floor_mask_probe(const MslBatch* batch, size_t idx,
                                          MslMpcollFloorMaskResult* out);
+
+// CapturePulled Lw->Hi immediate callback floor-mask subset:
+// `fn_800DB230` applies the capture anchor to the airborne Hi state, then calls ft_80083C00 /
+// mpColl_800477E0 before generic stage collision. In this path the replay-visible root can be
+// below the persisted floor while the extracted ECB bottom is above it, so use the CollData
+// floor-index/root projection lane rather than the ordinary bottom sweep approximation above.
+uint8_t mpcoll_800477e0_capture_root_floor_mask_probe(const MslBatch* batch, size_t idx,
+                                                      MslMpcollFloorMaskResult* out);

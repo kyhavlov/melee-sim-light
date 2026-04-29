@@ -106,6 +106,26 @@ static inline uint8_t hurtboxes_side_special_end_uses_pre_anim_collision_pose(ui
                    action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_END);
 }
 
+static inline uint8_t hurtboxes_damageflyroll_live_xrotn_pose_owner(uint16_t action_id) {
+  return (uint8_t)(action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL);
+}
+
+static inline uint8_t hurtboxes_damageflyroll_xrotn_angle_from_velocity(const MslBatch* batch,
+                                                                        size_t idx,
+                                                                        float* out_angle) {
+  if (batch == NULL || out_angle == NULL) {
+    return 0u;
+  }
+  const float vx = batch->state.speed_air_x_self[idx] + batch->state.speed_x_attack[idx];
+  const float vy = batch->state.speed_y_self[idx] + batch->state.speed_y_attack[idx];
+  if (!(isfinite(vx) && isfinite(vy)) || (vx == 0.0f && vy == 0.0f)) {
+    return 0u;
+  }
+  const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+  *out_angle = facing_dir * atan2f(vx, vy);
+  return 1u;
+}
+
 static inline uint8_t hurtboxes_common_action_to_msid(uint16_t action_id, uint16_t* out_msid) {
   if (out_msid == NULL) {
     return 0u;
@@ -205,6 +225,75 @@ static inline uint8_t hurtboxes_apply_specialhi_local_xrotn(const MslBatch* batc
   //   ftFox_SpecialHi_RotateModel,ftFx_SpecialAirHi_Enter,ftFx_SpecialAirHi_Coll}
   const float angle = msl_specialhi_xrotn_angle_from_rotate_model(rotate_model);
 
+  const float px = *io_x - ax0;
+  const float py = *io_y - ay0;
+  const float pz = *io_z - az0;
+  const float c = cosf(angle);
+  const float s = sinf(angle);
+  const float dot = axis_x * px + axis_y * py + axis_z * pz;
+  const float cross_x = axis_y * pz - axis_z * py;
+  const float cross_y = axis_z * px - axis_x * pz;
+  const float cross_z = axis_x * py - axis_y * px;
+  *io_x = ax0 + (px * c) + (cross_x * s) + (axis_x * dot * (1.0f - c));
+  *io_y = ay0 + (py * c) + (cross_y * s) + (axis_y * dot * (1.0f - c));
+  *io_z = az0 + (pz * c) + (cross_z * s) + (axis_z * dot * (1.0f - c));
+  return 1u;
+}
+
+static inline uint8_t hurtboxes_apply_damageflyroll_local_xrotn(
+    const MslBatch* batch, size_t idx, uint8_t char_id, uint16_t msid, uint16_t pose_frame,
+    uint16_t part_id, float model_scale, float* io_x, float* io_y, float* io_z) {
+  if (batch == NULL || io_x == NULL || io_y == NULL || io_z == NULL ||
+      !msl_anim_part_under_xrotn(char_id, part_id)) {
+    return 0u;
+  }
+  if (!hurtboxes_damageflyroll_live_xrotn_pose_owner(batch->state.action_id[idx])) {
+    return 0u;
+  }
+
+  float m[12];
+  if (anim_pose_get_matrix(char_id, msid, pose_frame, 2u, m) != 0) {  // FtPart_XRotN
+    return 0u;
+  }
+
+  float ax0 = 0.0f, ay0 = 0.0f, az0 = 0.0f;
+  float ax1 = 0.0f, ay1 = 0.0f, az1 = 0.0f;
+  const float origin[3] = {0.0f, 0.0f, 0.0f};
+  const float local_x[3] = {1.0f, 0.0f, 0.0f};
+  msl_mtx34_mul_point(m, origin, &ax0, &ay0, &az0);
+  msl_mtx34_mul_point(m, local_x, &ax1, &ay1, &az1);
+  ax0 *= model_scale;
+  ay0 *= model_scale;
+  az0 *= model_scale;
+  ax1 *= model_scale;
+  ay1 *= model_scale;
+  az1 *= model_scale;
+
+  float axis_x = ax1 - ax0;
+  float axis_y = ay1 - ay0;
+  float axis_z = az1 - az0;
+  const float axis_len = sqrtf(axis_x * axis_x + axis_y * axis_y + axis_z * axis_z);
+  if (!(axis_len > 0.0f)) {
+    return 0u;
+  }
+  axis_x /= axis_len;
+  axis_y /= axis_len;
+  axis_z /= axis_len;
+
+  float angle = 0.0f;
+  if (!hurtboxes_damageflyroll_xrotn_angle_from_velocity(batch, idx, &angle)) {
+    return 0u;
+  }
+
+  // DamageFlyRoll live pose owner:
+  // - ftCo_8008DCE0 enters DamageFlyRoll, immediately runs ftAnim_8006EBA4, then calls inlineA1
+  //   to set FtPart_XRotN from current self+KB velocity.
+  // - ftCo_DamageFlyRoll_Phys calls doFlyRoll before and after physics, rewriting that same XRotN
+  //   pose while the ordinary AObj timeline continues to own the local JObj SRT.
+  // - ftColl_80076ED8 consumes lb_8000B1CC world hurtcaps from the live JObjs.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+  //   ftCo_8008DCE0,inlineA1,doFlyRoll,ftCo_DamageFlyRoll_Phys}
+  // refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
   const float px = *io_x - ax0;
   const float py = *io_y - ay0;
   const float pz = *io_z - az0;
@@ -406,12 +495,14 @@ void hurtboxes_refresh(MslBatch* batch) {
             batch->state.action_frame[idx] <= (int16_t)-2 && !guard_reflect_from_guard_on) {
           // GuardReflect no-submotion late-phase snapshots are ordering-sensitive with shield
           // descriptor ownership (x221B_b0 via ftColl_8007B1B8). Preserve raw snapshot geometry on
-          // the locomotion-entry lanes that still own shield desc, but let GuardOn_IASA powershield
-          // entry (ftCo_8009388C) fall through to the GuardReflect submotion fallback. Same-step
-          // GuardOn entries are visible through live prev_action_id; already-seeded GuardReflect
-          // snapshots use the frame-start seed provenance because live prev can advance before
-          // hurtcaps refresh.
+          // the active-x14 ReflectDesc lanes, but let GuardOn_IASA powershield entry
+          // (ftCo_8009388C) fall through to the GuardReflect submotion fallback. Same-step GuardOn
+          // entries are visible through live prev_action_id; already-seeded GuardReflect snapshots
+          // use the frame-start seed provenance because live prev can advance before hurtcaps
+          // refresh. Expired-x14 fighter-vs-fighter BODY has a local combat.c fallback so item
+          // collision does not see broad synthetic GuardReflect hurtcaps.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_8009388C
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0
           // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B1B8
           // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
           //
@@ -647,7 +738,14 @@ void hurtboxes_refresh(MslBatch* batch) {
       const float model_scaling = (chp && isfinite(chp->model_scaling) && chp->model_scaling > 0.0f)
                                       ? chp->model_scaling
                                       : 1.0f;
-      const float model_scale = scale_y * model_scaling;
+      // DamageFlyRoll hurtcap scale follows the common hurt-capsule source path
+      // (`ftCo_800A0DA4`: capsule.scale * fp->x34_scale.y). Do not apply the generic
+      // collision-skeleton model-scaling compensation on this live XRotN damage pose.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_0A01.c::ftCo_800A0DA4
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::doFlyRoll
+      const float model_scale = hurtboxes_damageflyroll_live_xrotn_pose_owner(action_id)
+                                    ? scale_y
+                                    : (scale_y * model_scaling);
       float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
       if (action_id == (uint16_t)MSL_ACT_TURN && batch->state.turn_has_turned[idx] != 0u) {
         // Standing Turn has an internal facing owner that can lead the replay-visible facing lane.
@@ -717,6 +815,10 @@ void hurtboxes_refresh(MslBatch* batch) {
         (void)hurtboxes_apply_specialhi_local_xrotn(batch, idx, char_id, msid, frame,
                                                     caps[ci].bone_part_id, facing_dir, model_scale,
                                                     &bx, &by, &bz);
+        (void)hurtboxes_apply_damageflyroll_local_xrotn(
+            batch, idx, char_id, pose_msid, 0u, caps[ci].bone_part_id, model_scale, &ax, &ay, &az);
+        (void)hurtboxes_apply_damageflyroll_local_xrotn(
+            batch, idx, char_id, pose_msid, 0u, caps[ci].bone_part_id, model_scale, &bx, &by, &bz);
 
         // Decomp: apply root facing rotation (rotY = M_PI_2 * facing_dir), mixing X/Z.
         // refs/melee/src/melee/ft/fighter.c (ftPartSetRotY(fp, 0, (M_PI_2 * fp->facing_dir)))

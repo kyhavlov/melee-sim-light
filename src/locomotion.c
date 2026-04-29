@@ -36,6 +36,8 @@ static inline uint16_t walk_action_from_speed(const MslCommonParams* c, const Ms
 static inline uint32_t anim_for_walk_action(uint16_t a);
 static inline uint8_t is_dash_flick(const MslCommonParams* c, float stick_x, uint8_t tilt_timer_x);
 static inline uint8_t did_tap_jump(const MslCommonParams* c, float stick_y, uint8_t tilt_timer_y);
+static inline uint8_t jump_enter_pre_input_tilt_y_after_input(const MslCommonParams* c,
+                                                              float stick_y, float prev_stick_y);
 static inline MslJumpInput jump_input_from_edges(const MslCommonParams* c, uint16_t buttons_pressed,
                                                  float stick_y, uint8_t tilt_timer_y);
 static inline uint16_t jump_action_from_stick(const MslCommonParams* c, float stick_x,
@@ -911,6 +913,26 @@ static inline uint8_t attackair_cstick_edge(const MslCommonParams* c, int8_t pre
   return 0;
 }
 
+static inline uint8_t locomotion_kneebend_prepass_attackair_input_active(const MslBatch* batch,
+                                                                         const MslCommonParams* c,
+                                                                         size_t idx) {
+  if (batch == NULL || c == NULL) {
+    return 0u;
+  }
+  // In an active catch-connect window, only the Jump-family AttackAir IASA subpath needs to run in
+  // the global KneeBend Anim prepass. Plain JumpF/B rows can be resolved by the later catch-connect
+  // owner; broadening them through the prepass changes ordinary Catch/CatchDash victim outcomes.
+  // Source path: ftCo_KneeBend_Anim -> ftCo_Jump_Enter -> ftCo_Jump_IASA ->
+  // ftCo_AttackAir_CheckInput.
+  // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_KneeBend.c,ftCo_Jump.c,ftCo_AttackAir.c}
+  if (attackair_cstick_edge(c, batch->state.prev_input_c_x[idx], batch->state.prev_input_c_y[idx],
+                            batch->state.input_c_x[idx], batch->state.input_c_y[idx]) != 0u) {
+    return 1u;
+  }
+  const uint16_t pressed = batch->state.input_buttons_pressed[idx];
+  return ((pressed & (uint16_t)(MSL_BUTTON_A | MSL_BUTTON_Z)) != 0u) ? 1u : 0u;
+}
+
 static inline uint16_t attackair_action_from_stick(const MslCommonParams* c, float stick_x,
                                                    float stick_y, float facing_dir) {
   // Decomp: ftCo_AttackAir_GetMsidFromCStick chooses AttackAirN vs directional attacks based on
@@ -1252,10 +1274,15 @@ static inline uint8_t locomotion_has_opponent_active_catch_connect_window(const 
   if (batch == NULL) {
     return 0u;
   }
-  // Keep KneeBend startup-complete reordering out of active opponent CatchDash connect windows.
-  // In decomp, CatchDash connect resolution is keyed off CatchDash owner motion before Pull entry.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_CatchDash_Anim
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_CatchPull_Anim
+  // Main per-player KneeBend IASA still needs the opponent catch window predicate when a
+  // startup-complete KneeBend was not consumed by the global Anim prepass. The prepass itself must
+  // not use this as a suppressor: Fighter_8006A360 runs a victim's startup-complete KneeBend Anim
+  // callback before a later Fighter_UnkProcessGrab_8006CA5C catch-connect callback can install
+  // CapturePulled*. Engine-dump QGD 5247 shows KneeBend -> JumpF -> AttackAirHi before the opposing
+  // CatchDash owner enters CatchDashPull.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_UnkProcessGrab_8006CA5C}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_Anim
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_CatchDash_Coll
   for (int op = 0; op < num_players; op++) {
     if (op == self_p) {
       continue;
@@ -1283,8 +1310,13 @@ static inline uint8_t locomotion_try_kneebend_startup_complete_jump_prepass(
 
   const uint8_t startup_complete =
       (batch->state.action_frame[idx] >= (int16_t)ch->jump_startup_frames) ? 1u : 0u;
-  if (!startup_complete ||
-      locomotion_has_opponent_active_catch_connect_window(batch, bi, p, num_players)) {
+  if (!startup_complete) {
+    return 0u;
+  }
+  const uint8_t active_catch_window =
+      locomotion_has_opponent_active_catch_connect_window(batch, bi, p, num_players);
+  if (active_catch_window != 0u &&
+      locomotion_kneebend_prepass_attackair_input_active(batch, c, idx) == 0u) {
     return 0u;
   }
 
@@ -1306,7 +1338,8 @@ static inline uint8_t locomotion_try_kneebend_startup_complete_jump_prepass(
       apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
   const float iasa_prev_stick_y =
       apply_deadzone(stick_i8_to_unit(batch->state.prev_input_main_y[idx]), c->lstick_deadzone_y);
-  const uint16_t iasa_buttons = batch->state.input_buttons[idx];
+  const uint8_t jump_enter_post_input_tilt_timer_y =
+      jump_enter_pre_input_tilt_y_after_input(c, iasa_stick_y, iasa_prev_stick_y);
   const uint16_t iasa_buttons_pressed = batch->state.input_buttons_pressed[idx];
   const float jump_stick_x =
       apply_deadzone(stick_i8_to_unit(batch->state.prev_input_main_x[idx]), c->lstick_deadzone_x);
@@ -1337,14 +1370,14 @@ static inline uint8_t locomotion_try_kneebend_startup_complete_jump_prepass(
   }
   const uint8_t jump_aerial_input =
       ((iasa_buttons_pressed & (uint16_t)MSL_BUTTON_XY) != 0u ||
-       (((iasa_buttons & (uint16_t)MSL_BUTTON_XY) == 0u) &&
-        iasa_prev_stick_y < c->tap_jump_threshold && iasa_stick_y >= c->tap_jump_threshold))
+       did_tap_jump(c, iasa_stick_y, jump_enter_post_input_tilt_timer_y))
           ? 1u
           : 0u;
   if (locomotion_try_enter_jump_aerial_iasa(batch, c, ch, idx, jump_aerial_input, iasa_stick_x,
                                             facing_dir, 1u)) {
     return 1u;
   }
+  batch->state.tilt_timer_y[idx] = jump_enter_post_input_tilt_timer_y;
   return 1u;
 }
 
@@ -1737,19 +1770,25 @@ uint8_t locomotion_wait_iasa_locomotion_subset_try_enter(
                                                action_id_start);
 }
 
-static inline uint8_t grounded_attack_try_jab_chain_subset(MslBatch* batch, size_t idx,
-                                                           uint8_t char_id, uint16_t action_id,
-                                                           uint16_t buttons_pressed,
-                                                           float script_frame) {
+static inline uint8_t grounded_attack_try_jab_chain_subset(
+    MslBatch* batch, size_t idx, uint8_t char_id, uint16_t action_id_start, uint16_t action_id,
+    uint16_t buttons_pressed, float script_frame) {
   if (batch == NULL) {
+    return 0u;
+  }
+  if (action_id_start != (uint16_t)MSL_ACT_ATTACK_11 &&
+      action_id_start != (uint16_t)MSL_ACT_ATTACK_12) {
     return 0u;
   }
   if (action_id != (uint16_t)MSL_ACT_ATTACK_11 && action_id != (uint16_t)MSL_ACT_ATTACK_12) {
     return 0u;
   }
   // Decomp: Attack11_IASA and Attack12_IASA execute checkAttack12/checkAttack13 outside the
-  // fp->allow_interrupt gate.
+  // fp->allow_interrupt gate. Those callbacks belong to motion states that were active at frame
+  // start; Attack11 entry via checkAttack11 clears mv.co.attack1.x0 and does not reuse the same
+  // A edge for jab-chain intent in the entry frame.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::{ftCo_Attack11_IASA,ftCo_Attack12_IASA}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::checkAttack11
   //
   // checkAttack12/checkAttack13 gates:
   // - requires fp->x2218_b1 ("set jab combo" command timeline),
@@ -2328,6 +2367,25 @@ static inline uint8_t is_dash_flick(const MslCommonParams* c, float stick_x, uin
 static inline uint8_t did_tap_jump(const MslCommonParams* c, float stick_y, uint8_t tilt_timer_y) {
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_GetInput
   return (stick_y >= c->tap_jump_threshold && tilt_timer_y < c->tap_jump_tilt_max_frames) ? 1 : 0;
+}
+
+static inline uint8_t jump_enter_pre_input_tilt_y_after_input(const MslCommonParams* c,
+                                                              float stick_y, float prev_stick_y) {
+  if (c == NULL) {
+    return 0xFEu;
+  }
+  // ftCo_KneeBend_Anim -> ftCo_Jump_Enter writes x671=0xFE before Fighter_Spaghetti refreshes
+  // input history. The same-frame input pass only overwrites that transient on a fresh
+  // stick-threshold crossing; held-up rows remain 0xFE.
+  // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_KneeBend.c,ftCo_Jump.c}
+  // refs/melee/src/melee/ft/fighter.c::Fighter_Spaghetti_8006AD10
+  if (stick_y >= c->lstick_tilt_y_thresh) {
+    return prev_stick_y >= c->lstick_tilt_y_thresh ? 0xFEu : 0u;
+  }
+  if (stick_y <= -c->lstick_tilt_y_thresh) {
+    return prev_stick_y <= -c->lstick_tilt_y_thresh ? 0xFEu : 0u;
+  }
+  return 0xFEu;
 }
 
 static inline MslJumpInput jump_input_from_edges(const MslCommonParams* c, uint16_t buttons_pressed,
@@ -3248,7 +3306,8 @@ void locomotion_update_pre(MslBatch* batch) {
           }
           if (grounded_attack_submotion_from_action(action_id) != 0xFFFFFFFFu) {
             const float grounded_attack_script_frame = batch->state.anim_frame_f32[idx];
-            if (grounded_attack_try_jab_chain_subset(batch, idx, cid, action_id, buttons_pressed,
+            if (grounded_attack_try_jab_chain_subset(batch, idx, cid, action_id_start, action_id,
+                                                     buttons_pressed,
                                                      grounded_attack_script_frame)) {
               action_id = batch->state.action_id[idx];
             }
@@ -3566,6 +3625,15 @@ void locomotion_update_pre(MslBatch* batch) {
         if (action_id == MSL_ACT_WAIT &&
             grounded_a_attack_try_enter_from_iasa(batch, c, idx, buttons_pressed, stick_x, stick_y,
                                                   tilt_timer_x, tilt_timer_y, facing_dir, 0, 1)) {
+          continue;
+        }
+        if (action_id == MSL_ACT_WAIT &&
+            wait_iasa_try_enter_spotdodge_before_guard(batch, c, idx)) {
+          // LandingAir/Landing anim-end can enter Wait in the Anim callback phase, then dispatch
+          // Wait_IASA in the same frame. Wait_IASA runs ftCo_80099794 before ftCo_80091A4C guard
+          // entry; Walk/Turn/Squat do not take this pre-guard helper.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c::ftCo_LandingAir_Anim
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
           continue;
         }
         // Steady-state Walk_IASA also runs grounded attacks before guard.
@@ -4538,8 +4606,10 @@ void locomotion_update_pre(MslBatch* batch) {
           if (startup_complete) {
             const uint8_t is_short = batch->state.kneebend_is_short_hop[idx] ? 1 : 0;
             const uint8_t full = (uint8_t)(!is_short);
-            const float jump_iasa_prev_stick_y = apply_deadzone(
+            const float jump_enter_prev_stick_y = apply_deadzone(
                 stick_i8_to_unit(batch->state.prev_input_main_y[idx]), c->lstick_deadzone_y);
+            const uint8_t jump_enter_post_input_tilt_timer_y =
+                jump_enter_pre_input_tilt_y_after_input(c, stick_y, jump_enter_prev_stick_y);
 
             // KneeBend->Jump happens in Anim before the frame's input update, so ftCo_Jump_Enter
             // reads the prior frame's fp->input.lstick.x.
@@ -4582,7 +4652,7 @@ void locomotion_update_pre(MslBatch* batch) {
             // Decomp: fp->x671_timer_lstick_tilt_y = 0xFE;
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c:148
             batch->state.tilt_timer_y[idx] = 0xFEu;
-            tilt_timer_y = 0xFEu;
+            tilt_timer_y = jump_enter_post_input_tilt_timer_y;
 
             // Consume ground jump by setting jumps_used = 1 on takeoff.
             //
@@ -4611,21 +4681,21 @@ void locomotion_update_pre(MslBatch* batch) {
             // Jump IASA runs on the JumpF/B entered by KneeBend_Anim in the same proc. After
             // EscapeAir and AttackAir checks, ftCo_800CB870 can immediately consume a fresh
             // jump edge/tap into JumpAerial and overwrite the ground-jump velocity snapshot.
-            // Prior tap-jump state from the KneeBend entry is suppressed by ftCo_Jump_Enter's
-            // x671=0xFE write; a held X/Y jump source also remains the active jump input and does
-            // not create a second tap-jump edge on the same takeoff frame.
+            // ftCo_Jump_Enter's x671=0xFE write is pre-input Anim ownership here; the later
+            // Fighter_Spaghetti input-history pass can overwrite it before ftCo_Jump_IASA reads
+            // ft_did_jump, and that same post-input value is the post-frame seed unless this branch
+            // enters JumpAerial.
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_IASA
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_800CB870
             const uint8_t jump_aerial_input = ((buttons_pressed & (uint16_t)MSL_BUTTON_XY) != 0u ||
-                                               (((buttons & (uint16_t)MSL_BUTTON_XY) == 0u) &&
-                                                jump_iasa_prev_stick_y < c->tap_jump_threshold &&
-                                                stick_y >= c->tap_jump_threshold))
+                                               did_tap_jump(c, stick_y, tilt_timer_y))
                                                   ? 1u
                                                   : 0u;
             if (locomotion_try_enter_jump_aerial_iasa(batch, c, ch, idx, jump_aerial_input, stick_x,
                                                       facing_dir, 1u)) {
               continue;
             }
+            batch->state.tilt_timer_y[idx] = tilt_timer_y;
           }
         }
 

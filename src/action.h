@@ -7,6 +7,15 @@
 #include "char_params.h"
 #include "common_params.h"
 
+enum {
+  // Decomp: ftCommon_8007D5D4 writes fp->ecb_lock = 10 on ground->air transition.
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
+  MSL_ECB_LOCK_FRAMES_COMMON_GROUND_TO_AIR = 10u,
+  // Decomp: ftCommon_8007D60C writes fp->ecb_lock = 5 on the alternate ground->air helper path.
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D60C
+  MSL_ECB_LOCK_FRAMES_COMMON_GROUND_TO_AIR_ALT = 5u,
+};
+
 // Action/state transitions + per-action callbacks (non-physics).
 // Called once per frame in the scheduler, before physics.
 void action_update(MslBatch* batch);
@@ -67,6 +76,11 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
 // Called while shielding (GuardOn/Guard/GuardReflect) to attempt entering a grounded escape action.
 // Returns 1 if an escape action was entered.
 uint8_t escape_try_enter_from_guard(MslBatch* batch, const MslCommonParams* c, size_t idx);
+
+// Wait_IASA pre-guard spotdodge helper (`ftCo_80099794`): held L/R plus down-stick gate before
+// `ftCo_80091A4C` guard entry. Returns 1 if EscapeN was entered.
+uint8_t wait_iasa_try_enter_spotdodge_before_guard(MslBatch* batch, const MslCommonParams* c,
+                                                   size_t idx);
 
 // Per-frame grounded escape update (friction + anim-end return-to-Wait).
 void escape_update_grounded(MslBatch* batch, const MslCommonParams* c, const MslCharParams* ch,

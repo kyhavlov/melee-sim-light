@@ -1833,7 +1833,10 @@ Recommended sequence for the next deep passes:
 
 ### DamageFlyRoll admission / carry tails
 - Status: `residual cleanup`
-- Boundary: jump-aerial / `AttackAirB` carry behavior after the common damage-owner closure
+- Boundary: jump-aerial / `AttackAirB` carry behavior after the common damage-owner closure.
+  Current retained slices include the F26 RNG stream seed surface and the DamageFlyRoll live XRotN
+  hurtcap pose owner (`ftCo_8008DCE0 inlineA1` / `ftCo_DamageFlyRoll_Phys doFlyRoll`) used by late
+  AttackAirB hurtbox-height selection.
 
 ### Throw / item pulse tails
 - Status: `residual cleanup`

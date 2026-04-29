@@ -139,6 +139,104 @@ static inline uint8_t anim_timebase_attached_non_low_throw_pair_active(const Msl
   return 0u;
 }
 
+static inline int32_t anim_timebase_non_low_throw_rate_snap_delta(const MslBatch* batch, int bi,
+                                                                  int p, size_t idx,
+                                                                  int num_players, int32_t cur_fp,
+                                                                  int32_t rem) {
+  if (anim_timebase_attached_non_low_throw_pair_active(batch, bi, p, idx, num_players)) {
+    return (rem == (int32_t)MSL_Q16_16_ONE - 1) ? 1 : 0;
+  }
+  if (batch == NULL || batch->state.throw_anim_rate_fp_q16_16[idx] <= 0) {
+    return 0;
+  }
+  const uint16_t action = batch->state.action_id[idx];
+  if (action != (uint16_t)MSL_ACT_THROW_B && action != (uint16_t)MSL_ACT_THROW_HI) {
+    return 0;
+  }
+  if (rem < (int32_t)MSL_Q16_16_ONE - 8) {
+    return 0;
+  }
+  // Post-release thrower rate lifetime:
+  // - ftCo_800DD398 enters ThrowB/ThrowHi with the victim-weight throw anim rate.
+  // - ftCo_800DD724 consuming set_throw_flags(0) detaches/applies the throw hit, but it does not
+  //   call ftAnim_SetAnimRate(1.0f). The thrower keeps the same AObj rate until a later callback or
+  //   command-owned freeze changes it.
+  // - The stored throw rate is carried only from a source-owned attached episode. Normal one-step
+  //   reseed rows after detach have this lane cleared, so this cannot become a broad post-release
+  //   replay shortcut. The 8-LSB bound is a fixed-point representation guard for repeated 4/3-ish
+  //   throw rates; it is applied only at extracted projectile/throw events or after the extracted
+  //   projectile pulse family has completed and the throw script remains in an active command band.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{
+  //   ftCo_800DD398,ftCo_800DD724,fn_800DD568,fn_800DD5EC
+  // }
+  if (batch->state.frame_speed_mul_fp_q16_16[idx] != batch->state.throw_anim_rate_fp_q16_16[idx]) {
+    return 0;
+  }
+  const int32_t delta_to_integer = (int32_t)MSL_Q16_16_ONE - rem;
+  if (delta_to_integer <= 0 || delta_to_integer > 8) {
+    return 0;
+  }
+  const int32_t prev_fp = cur_fp - batch->state.frame_speed_mul_fp_q16_16[idx];
+  const float prev_frame = msl_f32_from_q16_16(prev_fp);
+  const float snapped_frame = msl_f32_from_q16_16(cur_fp + delta_to_integer);
+  const uint8_t char_id = batch->state.char_id[idx];
+  if (move_tables_throw_should_flip_facing(char_id, action, prev_frame, snapped_frame)) {
+    return delta_to_integer;
+  }
+  if (move_tables_throw_release_hit_idx(char_id, action, snapped_frame, NULL) &&
+      !move_tables_throw_release_hit_idx(char_id, action, prev_frame, NULL)) {
+    return delta_to_integer;
+  }
+  int16_t crossed_pulse_af = -1;
+  if (move_tables_throw_crossed_projectile_pulse_frame(char_id, action, prev_frame, snapped_frame,
+                                                       &crossed_pulse_af)) {
+    uint8_t pulse_ordinal = 0u;
+    const uint8_t has_ordinal = move_tables_throw_projectile_pulse_ordinal(
+        char_id, action, crossed_pulse_af, &pulse_ordinal);
+    if (action == (uint16_t)MSL_ACT_THROW_HI && has_ordinal && pulse_ordinal == 2u) {
+      const uint8_t source_port0 = batch->state.source_port0[idx];
+      const uint8_t prior_pulse_frame = batch->state.throw_pulse_crossed_prev_frame[idx];
+      uint8_t first_pulse_hit_provenance_active = 0u;
+      if (prior_pulse_frame != 0u && (int16_t)prior_pulse_frame < crossed_pulse_af) {
+        for (int vp = 0; vp < num_players; vp++) {
+          if (vp == p) {
+            continue;
+          }
+          const size_t v_idx = msl_idx_player(bi, vp);
+          if (batch->state.hitstun[v_idx] > 0u && batch->state.last_hit_by[v_idx] == source_port0 &&
+              batch->state.instance_hit_by[v_idx] == batch->state.instance_id[idx]) {
+            first_pulse_hit_provenance_active = 1u;
+            break;
+          }
+        }
+      }
+      if (first_pulse_hit_provenance_active) {
+        // ThrowHi mirror mid-pulse callback boundary:
+        // - Existing source-shaped item logic keeps frame-20 rows from serializing the second
+        //   article one callback early when the first state1 shot is already carrying victim
+        //   hitstun/source provenance from this thrower's raw source port and current instance,
+        //   and the previous replay step already recorded an earlier ThrowHi pulse crossing.
+        // - Preserve that boundary here too; the fixed-point snap must not manufacture an earlier
+        //   command crossing than ftAction/ftFx_Throw_Anim exposes.
+        // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
+        // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+        return 0;
+      }
+    }
+    return delta_to_integer;
+  }
+  int16_t last_pulse_af = -1;
+  const uint8_t past_last_projectile_pulse =
+      (move_tables_throw_projectile_last_pulse_frame(char_id, action, &last_pulse_af) &&
+       prev_frame > (float)last_pulse_af)
+          ? 1u
+          : 0u;
+  if (past_last_projectile_pulse && move_tables_throw_cmd1_active(char_id, action, snapped_frame)) {
+    return delta_to_integer;
+  }
+  return 0;
+}
+
 static inline uint8_t anim_timebase_apply_aobj_loop(MslBatch* batch, size_t idx) {
   // Fighter AObj loop semantics (AOBJ_LOOP) apply a deterministic rewind+wrap when
   // `end_frame <= curr_frame`.
@@ -750,19 +848,25 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
       }
 
       batch->state.anim_frame_fp_q16_16[idx] += batch->state.frame_speed_mul_fp_q16_16[idx];
-      if (anim_timebase_attached_non_low_throw_pair_active(batch, bi, p, idx, num_players)) {
+      {
         // Deterministic fixed-point representation guard for source float throw rates:
         // Fox/Falco attached back/up throws can use a data-backed 4/3 shared rate. Repeated Q16.16
-        // rounded advances can land exactly one LSB below an integer (for example 3.999984), which
-        // delays set_throw_flags script-frame checks by one frame even though the source float
-        // timebase crosses the integer. Snap only this one-LSB live attached ThrowB/Hi boundary;
-        // ThrowF/Lw have separate release/pulse residuals and remain outside this guard.
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD4B0,ftCo_800DD724}
+        // rounded advances can land exactly one LSB below an integer (for example 3.999984),
+        // delaying set_throw_flags / throw-side script-frame checks even though the source float
+        // timebase crosses the integer. During the attached window this mirrors the shared
+        // ThrowB/Hi source rate directly; after detach, keep it only on extracted throw command
+        // windows/events because ordinary fractional frames can legitimately remain just below an
+        // integer in Slippi.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{
+        //   ftCo_800DD4B0,ftCo_800DD398,ftCo_800DD724
+        // }
         const int32_t cur_fp = batch->state.anim_frame_fp_q16_16[idx];
         if (cur_fp > 0) {
           const int32_t rem = cur_fp % (int32_t)MSL_Q16_16_ONE;
-          if (rem == (int32_t)MSL_Q16_16_ONE - 1) {
-            batch->state.anim_frame_fp_q16_16[idx] = cur_fp + 1;
+          const int32_t throw_snap_delta = anim_timebase_non_low_throw_rate_snap_delta(
+              batch, bi, p, idx, num_players, cur_fp, rem);
+          if (throw_snap_delta > 0) {
+            batch->state.anim_frame_fp_q16_16[idx] = cur_fp + throw_snap_delta;
           }
         }
       }

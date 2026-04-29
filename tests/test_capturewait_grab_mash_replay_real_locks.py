@@ -89,8 +89,8 @@ def test_capturewait_owner_tick_uses_mash_buttons_sign_change_or_prev_button_car
     cur_view["p"]["buttons"][1, victim_p] = np.uint16(0x0200)
     cur_view["p"]["main_y"][1, victim_p] = np.int8(-99)
 
-    # Case 2: sign-latch-only extra-tick behavior is not replay-proven in this owner slice;
-    # keep it as a blocker control rather than asserting the extra-tick path.
+    # Case 2: ftCommon_GrabMash also treats a stick sign-latch change as mash-active, even without
+    # AB/XY/LR held.
     cur_view["p"]["main_x"][2, victim_p] = np.int8(127)
     cur_view["p"]["main_y"][2, victim_p] = np.int8(-99)
 
@@ -104,7 +104,7 @@ def test_capturewait_owner_tick_uses_mash_buttons_sign_change_or_prev_button_car
     assert int(out["action_id"][1, victim_p]) == 227
     assert int(out["action_frame"][1, victim_p]) == 3
     assert int(out["action_id"][2, victim_p]) == 227
-    assert int(out["action_frame"][2, victim_p]) == 2
+    assert int(out["action_frame"][2, victim_p]) == 3
     assert int(out["action_id"][3, victim_p]) == 227
     assert int(out["action_frame"][3, victim_p]) == 3
 

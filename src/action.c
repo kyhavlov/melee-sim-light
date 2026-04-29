@@ -22,15 +22,6 @@
 #include "grab_flow.h"
 #include "throw_flow.h"
 
-enum {
-  // Decomp: ftCommon_8007D5D4 writes fp->ecb_lock = 10 on ground->air transition.
-  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
-  MSL_ECB_LOCK_FRAMES_COMMON_GROUND_TO_AIR = 10u,
-  // Decomp: ftCommon_8007D60C writes fp->ecb_lock = 5 on the alternate ground->air helper path.
-  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D60C
-  MSL_ECB_LOCK_FRAMES_COMMON_GROUND_TO_AIR_ALT = 5u,
-};
-
 // -----------
 // EscapeAir.c
 // -----------
@@ -220,6 +211,32 @@ static inline uint8_t escape_try_enter_spotdodge_from_guard(MslBatch* batch,
       apply_deadzone(stick_i8_to_unit(batch->state.input_c_y[idx]), c->lstick_deadzone_y);
   const uint8_t tilt_timer_y = batch->state.tilt_timer_y[idx];
   return escape_try_enter_spotdodge_from_guard_y(batch, c, idx, stick_y, cstick_y, tilt_timer_y);
+}
+
+uint8_t wait_iasa_try_enter_spotdodge_before_guard(MslBatch* batch, const MslCommonParams* c,
+                                                   size_t idx) {
+  if (batch == NULL || c == NULL) {
+    return 0u;
+  }
+
+  // Wait_IASA checks ftCo_80099794 before ftCo_80091A4C guard entry. ftCo_80099794 is narrower
+  // than Guard IASA's ftCo_8009980C: it requires held L/R plus the inlineB0 down-stick gate and
+  // does not consume the c-stick spotdodge helper.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::{
+  //   ftCo_80099794,ftCo_80099894,ftCo_800998EC}
+  const uint16_t lr = (uint16_t)(MSL_BUTTON_L | MSL_BUTTON_R);
+  if ((batch->state.input_buttons[idx] & lr) == 0u) {
+    return 0u;
+  }
+  const float stick_y =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
+  if (!(stick_y <= c->spotdodge_stick_y_threshold &&
+        batch->state.tilt_timer_y[idx] < c->spotdodge_flick_tilt_max_frames)) {
+    return 0u;
+  }
+  enter_escape_n(batch, idx);
+  return 1u;
 }
 
 uint8_t escape_try_enter_from_guard(MslBatch* batch, const MslCommonParams* c, size_t idx) {
@@ -428,10 +445,13 @@ static inline void enter_guard_reflect_from_guard(MslBatch* batch, const MslComm
                                                   size_t idx) {
   // Decomp entry path while already guarding:
   // - ftCo_80093694 -> ftCo_80093850 -> ftCo_8009388C.
+  // - This already-shielding path is the GuardOn-origin provenance used by the final-x14
+  //   ShieldDesc handoff.
   // - ftCo_8009388C keeps the current anim frame and does not call ftAnim_8006EBA4.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_8009388C
   const float anim_start = batch->state.anim_frame_f32[idx];
   enter_guard_reflect_common_setup(batch, c, idx);
+  batch->state.guard_reflect_origin_guardon[idx] = 1u;
   msl_anim_timebase_enter(batch, idx, anim_start, 1.0f);
   // ftCo_8009388C keeps the current anim frame on Guard->GuardReflect entry. Under teacher-forced
   // no-submotion snapshots, preserve negative carry-through when present; otherwise fall back to
@@ -458,6 +478,7 @@ static inline void enter_guard_reflect_from_locomotion(MslBatch* batch, const Ms
   // - ftCo_80093A50 calls ftAnim_8006EBA4 immediately after ChangeMotionState.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093A50
   enter_guard_reflect_common_setup(batch, c, idx);
+  batch->state.guard_reflect_origin_guardon[idx] = 0u;
   msl_anim_timebase_enter_with_policy(batch, idx, 0.0f, 1.0f, MSL_ANIM_ENTER_TICK_IMMEDIATE);
   // Slippi no-submotion shield snapshots are commonly encoded with animation_index=-1 and
   // state_age/action_frame=-1. Keep GuardReflect entry on that frozen timebase shape.
@@ -944,6 +965,7 @@ static inline void guard_update_grounded_anim_callback_pre_input(MslBatch* batch
     //   ftCo_GuardReflect_Anim,ftCo_GuardSetOff_Anim,ftCo_80093BC0}
     batch->state.guard_reflect_timer_x14[idx] = 0;
     batch->state.guard_reflect_timer_x18[idx] = 0;
+    batch->state.guard_reflect_origin_guardon[idx] = 0u;
   }
 }
 
