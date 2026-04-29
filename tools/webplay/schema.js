@@ -67,6 +67,7 @@ export const compareOffsets = {
   hitlag: 205,
   hitstun: 213,
   hurtboxState: 225,
+  animationIndex: 237,
   stateFlags: 282,
   items: 302,
 };

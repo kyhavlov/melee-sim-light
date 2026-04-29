@@ -37,6 +37,7 @@ dist/
 target/
 reports/triage/
 reports/modelplay/
+manual_repros/
 tools/modelplay/__pycache__/
 __pycache__/
 *.pyc

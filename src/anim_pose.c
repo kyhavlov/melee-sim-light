@@ -2240,17 +2240,23 @@ int anim_pose_get_collision_matrix_f32(const MslBatch* batch, size_t player_idx,
   if (t == NULL) {
     return -1;
   }
-  if (fabsf(safe_frame - (float)frame) <= 1.0e-6f) {
+  const uint16_t frame_count = (t->have_msid[msid] != 0u) ? t->frame_count_by_msid[msid] : 0u;
+  if (fabsf(safe_frame - (float)frame) <= 1.0e-6f && frame < frame_count) {
     return anim_pose_get_collision_matrix(batch, player_idx, msid, frame, part_id, out_3x4);
   }
 
   // HSD_AObjInterpretAnim drives JObj local SRT from float `curr_frame`; lb_8000B1CC then samples
   // the updated JObj matrix for collision primitives before ftColl admission.
+  //
+  // Some non-looping AObjs have an extracted FObj `end_frame` longer than the baked SSANIM01
+  // integer matrix/local table (for example Falco Wait1_0: tracks end at 240 while matrices cover
+  // 120 frames). GALE01 still evaluates the live FObj tracks through the later frames; collision
+  // must use that source track pose instead of treating the BODY capsules as absent.
   // refs/melee/src/sysdolphin/baselib/aobj.c::HSD_AObjInterpretAnim
   // refs/melee/src/sysdolphin/baselib/fobj.c::HSD_FObjInterpretAnim
   // refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
   if (matrix_from_locals_f32(t, msid, safe_frame, part_id, out_3x4) != 0) {
-    if (anim_pose_get_matrix(char_id, msid, frame, part_id, out_3x4) != 0) {
+    if (frame >= frame_count || anim_pose_get_matrix(char_id, msid, frame, part_id, out_3x4) != 0) {
       return -1;
     }
   }
@@ -2299,9 +2305,7 @@ int anim_pose_get_collision_matrices_f32(const MslBatch* batch, size_t player_id
     return -1;
   }
   const uint16_t frame_count = t->frame_count_by_msid[msid];
-  if (frame >= frame_count) {
-    return -1;
-  }
+  const uint8_t have_baked_matrix_frame = (frame < frame_count) ? 1u : 0u;
 
   const uint8_t integer_frame = (fabsf(safe_frame - (float)frame) <= 1.0e-6f) ? 1u : 0u;
   const uint8_t dynamic_collision_pose =
@@ -2312,7 +2316,7 @@ int anim_pose_get_collision_matrices_f32(const MslBatch* batch, size_t player_id
           ? 1u
           : 0u;
 
-  if (integer_frame != 0u && dynamic_collision_pose == 0u) {
+  if (integer_frame != 0u && dynamic_collision_pose == 0u && have_baked_matrix_frame != 0u) {
     const uint32_t base_off = t->base_off_by_msid[msid];
     const uint64_t joint_count_u = (uint64_t)t->joint_count;
     const uint64_t frame_u = (uint64_t)frame;
@@ -2337,7 +2341,8 @@ int anim_pose_get_collision_matrices_f32(const MslBatch* batch, size_t player_id
     for (uint16_t i = 0; i < count; i++) {
       float* out = &out_mats_12[(size_t)i * 12u];
       if (matrix_from_locals_f32(t, msid, safe_frame, part_ids[i], out) != 0) {
-        if (anim_pose_get_matrix(char_id, msid, frame, part_ids[i], out) != 0) {
+        if (have_baked_matrix_frame == 0u ||
+            anim_pose_get_matrix(char_id, msid, frame, part_ids[i], out) != 0) {
           continue;
         }
       }

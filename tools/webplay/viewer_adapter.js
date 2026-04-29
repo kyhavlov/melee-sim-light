@@ -195,6 +195,7 @@ export function viewerFrameFromCompare(compare, frameNumber, controllersByPlayer
         jumpsRemaining: arrU8(compare, compareOffsets.jumpsLeft, idx),
         lCancelStatus: null,
         hurtboxCollisionState: HURTBOX_STATES[hurtboxState] ?? "vulnerable",
+        animationIndex: arrU32(compare, compareOffsets.animationIndex, idx),
         selfInducedAirXSpeed: 0.0,
         selfInducedAirYSpeed: 0.0,
         attackBasedXSpeed: 0.0,

@@ -119,10 +119,9 @@ rollout.streak_len.median: 97
 rollout.streak_len.p90: 382
 rollout.streak_len.p95: 597
 rollout.streak_len.max: 777
-rollout.first_mismatch_total: 83
-rollout.first_mismatch_seeded_total: 54
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:1520
-rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:1
+rollout.first_mismatch_total: 44
+rollout.first_mismatch_seeded_total: 14
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:1647
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/PutridJoyousOryx.msl ==
 rollout.best_len: 910
@@ -197,7 +196,6 @@ overall.rollout.streak_len.p90: 524
 overall.rollout.streak_len.p95: 651
 overall.rollout.streak_len.max: 1466
 overall.rollout.best_len.max: 1466
-overall.rollout.first_mismatch_total: 696
-overall.rollout.first_mismatch_seeded_total: 279
-overall.rollout.ignored_first_mismatch_top: state_flags[4]&0x80:20911
-overall.rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:1
+overall.rollout.first_mismatch_total: 657
+overall.rollout.first_mismatch_seeded_total: 239
+overall.rollout.ignored_first_mismatch_top: state_flags[4]&0x80:21038
