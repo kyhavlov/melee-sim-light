@@ -25,6 +25,7 @@ import {
   FodPlatformsEvent,
 } from "~/common/types";
 import { CharacterAnimations, fetchAnimations } from "~/viewer/animationCache";
+import { animationFrameIndex } from "~/viewer/animationFrame";
 import { actionMapByInternalId } from "~/viewer/characters";
 import { getPlayerOnFrame, getStartOfAction } from "~/viewer/viewerUtil";
 import { getPlayerColor } from "~/common/util";
@@ -497,11 +498,14 @@ function computeRenderData(
     actionName;
   const animationFrames = animations[animationName];
   // TODO: validate L cancels, other fractional frames, and one-indexed
-  // animations. I am currently just flooring. Converts - 1 to 0 and loops for
-  // Entry, Guard, etc.
-  const frameIndex =
-    Math.floor(Math.max(0, playerState.actionStateFrameCounter)) %
-    (animationFrames?.length ?? 1);
+  // animations. I am currently just flooring.
+  const frameIndex = animationFrameIndex({
+    animationName,
+    internalCharacterId: playerState.internalCharacterId,
+    animationIndex: playerState.animationIndex,
+    actionStateFrameCounter: playerState.actionStateFrameCounter,
+    frameCount: animationFrames?.length ?? 1,
+  });
   // To save animation file size, duplicate frames just reference earlier
   // matching frames such as "frame20".
   const animationPathOrFrameReference = animationFrames?.[frameIndex];
