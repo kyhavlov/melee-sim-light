@@ -1646,15 +1646,28 @@ def extract_one_character(
 
     order = sorted(closure_parts, key=lambda p: (depth(p), p))
 
+    if not native:
+        raise RuntimeError(
+            "pure-Python fighter animation extraction is disabled: never use this path. "
+            "Build/import msl_binding and use the native anim_bake_ssanim01 helper instead."
+        )
+    if debug_msid is not None or debug_frame is not None or debug_part is not None:
+        raise RuntimeError(
+            "debug fighter animation extraction would use the disabled pure-Python bake path. "
+            "Never use this for setup; build/import msl_binding and use native extraction instead."
+        )
+
     # Native path uses fixed arrays.
     use_native = bool(native) and debug_msid is None and debug_frame is None and debug_part is None
     msl = None
     if use_native:
         try:
             import msl_binding as msl  # type: ignore[import-not-found]
-        except Exception:
-            msl = None
-            use_native = False
+        except Exception as exc:
+            raise RuntimeError(
+                "msl_binding is required for fighter animation extraction. "
+                "Never use the pure-Python fallback; run `make build` and rerun extraction."
+            ) from exc
 
     rest_rot_np = np.asarray(part_rot, dtype=np.float32)
     rest_pos_np = np.asarray(part_pos, dtype=np.float32)
@@ -2171,7 +2184,7 @@ def main() -> None:
     ap.add_argument("--debug-frame", type=int, default=None, help="dump locals for this frame")
     ap.add_argument("--debug-part", type=int, default=None, help="dump locals for this part id and its ancestors")
     ap.add_argument("--timings", action="store_true", help="print wall-clock breakdown of extractor hot paths")
-    ap.add_argument("--no-native", action="store_true", help="force pure-Python bake (ignore native helper)")
+    ap.add_argument("--no-native", action="store_true", help="disabled: pure-Python bake is too slow for setup")
     ap.add_argument("--msid", type=int, action="append", default=None, help="only extract these submotion ids (repeatable)")
     ap.add_argument(
         "--add-msid",
@@ -2193,18 +2206,21 @@ def main() -> None:
         print(f"wrote {out}")
         return
 
-    out = extract_one_character(
-        character=args.character,
-        moves_path=moves,
-        out_dir=args.out_dir,
-        debug_msid=args.debug_msid,
-        debug_frame=args.debug_frame,
-        debug_part=args.debug_part,
-        native=not bool(args.no_native),
-        timings=bool(args.timings),
-        msids=args.msid,
-        add_msids=args.add_msid,
-    )
+    try:
+        out = extract_one_character(
+            character=args.character,
+            moves_path=moves,
+            out_dir=args.out_dir,
+            debug_msid=args.debug_msid,
+            debug_frame=args.debug_frame,
+            debug_part=args.debug_part,
+            native=not bool(args.no_native),
+            timings=bool(args.timings),
+            msids=args.msid,
+            add_msids=args.add_msid,
+        )
+    except RuntimeError as exc:
+        raise SystemExit(str(exc)) from None
     _write_anim_blend_data(args.character, args.out_dir)
     print(f"wrote {out}")
 

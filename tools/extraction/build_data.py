@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 
@@ -11,11 +13,19 @@ FTCO_SM_DAMAGEAIR2 = 175
 FTCO_SM_DAMAGEAIR3 = 176
 # Decomp: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCo_Submotion`.
 
+_RUN_TIMINGS: list[tuple[str, float]] | None = None
 
-def _run(mod: str, argv: list[str]) -> None:
+
+def _run(mod: str, argv: list[str], timings: list[tuple[str, float]] | None = None) -> None:
     cmd = [sys.executable, "-m", mod, *argv]
-    print("$", " ".join(str(x) for x in cmd))
+    print("$", " ".join(str(x) for x in cmd), flush=True)
+    t0 = time.perf_counter()
     subprocess.run(cmd, check=True)
+    dt = time.perf_counter() - t0
+    sink = _RUN_TIMINGS if timings is None else timings
+    if sink is not None:
+        sink.append((mod, dt))
+        print(f"[timing] {mod} {dt:.3f}s", flush=True)
 
 
 def _require(path: Path, hint: str) -> None:
@@ -24,7 +34,16 @@ def _require(path: Path, hint: str) -> None:
     raise SystemExit(f"missing required file: {path}\n\nhint:\n{hint}\n")
 
 
+def _copy_anim_outputs(character: str, *, src_dir: Path, out_dir: Path) -> None:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for suffix in (".bin", ".locals.bin", ".tracks.bin", ".blend.bin", ".dyn.bin"):
+        src = src_dir / f"{character}{suffix}"
+        if src.exists():
+            shutil.copyfile(src, out_dir / f"{character}{suffix}")
+
+
 def main() -> None:
+    global _RUN_TIMINGS
     ap = argparse.ArgumentParser(description="Build ISO-derived `data/` artifacts.")
     ap.add_argument("--iso-dir", type=Path, default=Path("_iso"), help="directory containing extracted *.dat files")
     ap.add_argument("--chars", type=str, default="fox,falco", help="comma-separated characters (fox,falco,...)")
@@ -35,10 +54,13 @@ def main() -> None:
         help="stage key (currently: grnla = Final Destination / GrNLa.dat; grnba = Battlefield / GrNBa.dat)",
     )
     ap.add_argument("--melee-decomp", type=Path, default=Path("refs/melee"), help="path to doldecomp/melee checkout")
+    ap.add_argument("--timings", action="store_true", help="print per-generator wall-clock timings")
     args = ap.parse_args()
 
     iso_dir = args.iso_dir
     chars = [c.strip() for c in args.chars.split(",") if c.strip()]
+    timings: list[tuple[str, float]] | None = [] if args.timings else None
+    _RUN_TIMINGS = timings
 
     # Sources we need in _iso.
     _require(
@@ -81,6 +103,26 @@ def main() -> None:
     }
     out_stage = out_stage_by_key[stage_key]
     out_common = Path("data/common/ft_common_data.json")
+    for d in (
+        out_stage.parent,
+        out_common.parent,
+        Path("data/airborne_state_events"),
+        Path("data/anims"),
+        Path("data/anims_ecb"),
+        Path("data/attack_id/move_id"),
+        Path("data/characters"),
+        Path("data/ecb"),
+        Path("data/hit_status"),
+        Path("data/hitboxes"),
+        Path("data/hurtbox_states"),
+        Path("data/hurtcaps"),
+        Path("data/items"),
+        Path("data/moves"),
+        Path("data/shields"),
+        Path("data/special_msids"),
+        Path("data/staling/move_id"),
+    ):
+        d.mkdir(parents=True, exist_ok=True)
 
     # Stage collision.
     _run(
@@ -262,19 +304,18 @@ def main() -> None:
     )
 
     # Anim matrices per needed msid (depends on data/moves + data/hurtcaps + data/characters).
+    #
+    # Bake the ECB-capable set once per character, then copy the byte-identical runtime anim files
+    # from that output. The regression test locks this assumption so adding a genuinely broader ECB
+    # set later must update this path instead of silently changing data/anims/<char>*.
     for ch in chars:
-        _run(
-            "tools.extraction.extract_fighter_anims",
-            ["--character", ch, "--out-dir", "data/anims"],
-        )
-
+        ecb_anim_dir = "data/anims_ecb"
         # ECB tables need broader msid coverage than the runtime pose/move subset.
         #
         # In particular, the canonical Fox/Falco suite includes DamageAir2/3 (ftCo_Submotion 175/176),
         # and missing ECB samples can spuriously ground (Landing) during hitstun.
         #
         # Decomp source: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCo_Submotion`.
-        ecb_anim_dir = "data/anims_ecb"
         _run(
             "tools.extraction.extract_fighter_anims",
             [
@@ -288,6 +329,12 @@ def main() -> None:
                 str(FTCO_SM_DAMAGEAIR3),
             ],
         )
+        t_copy0 = time.perf_counter()
+        _copy_anim_outputs(ch, src_dir=Path(ecb_anim_dir), out_dir=Path("data/anims"))
+        if timings is not None:
+            dt = time.perf_counter() - t_copy0
+            timings.append(("tools.extraction.copy_fighter_anims", dt))
+            print(f"[timing] tools.extraction.copy_fighter_anims {dt:.3f}s", flush=True)
         _run(
             "tools.extraction.extract_ecb_bottom",
             [
@@ -321,6 +368,11 @@ def main() -> None:
         "chars": chars,
     }
     print("built:", json.dumps(summary, indent=2))
+    if timings is not None:
+        print("[timing-summary]")
+        for mod, dt in sorted(timings, key=lambda x: x[1], reverse=True):
+            print(f"{dt:9.3f}s {mod}")
+        print(f"{sum(dt for _, dt in timings):9.3f}s total_subprocess")
 
 
 if __name__ == "__main__":
