@@ -447,8 +447,8 @@ overall.float_norm_mae_p95: 0.00019044
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl ==
 Records: 11980  Players/scored per record: 2  Total player-frames: 23960
-mismatch.action_id: 22 / 23960 (0.000918)
-mismatch.action_frame: 17 / 23960 (0.000710)
+mismatch.action_id: 21 / 23960 (0.000876)
+mismatch.action_frame: 16 / 23960 (0.000668)
 mismatch.on_ground: 5 / 23960 (0.000209)
 mismatch.facing: 1 / 23960 (0.000042)
 mismatch.stocks: 0 / 23960 (0.000000)
@@ -459,9 +459,9 @@ mismatch.hitstun: 5 / 23960 (0.000209)
 mismatch.l_cancel: 2 / 23960 (0.000083)
 mismatch.hurtbox_state: 6 / 23960 (0.000250)
 mismatch.ground_id: 1 / 23960 (0.000042)
-mismatch.animation_index: 22 / 23960 (0.000918)
+mismatch.animation_index: 21 / 23960 (0.000876)
 mismatch.instance_hit_by: 3 / 23960 (0.000125)
-mismatch.instance_id: 12 / 23960 (0.000501)
+mismatch.instance_id: 11 / 23960 (0.000459)
 mismatch.last_attack_landed: 1 / 23960 (0.000042)
 mismatch.combo_count: 3 / 23960 (0.000125)
 mismatch.last_hit_by: 11 / 23960 (0.000459)
@@ -480,15 +480,15 @@ err.speed_y_self: mae=0.000885 p95=0.000000 max=3.500000
 err.speed_x_attack: mae=0.000079 p95=0.000000 max=0.703333
 err.speed_y_attack: mae=0.000568 p95=0.000000 max=4.805520
 err.percent: mae=0.000424 p95=0.000000 max=3.000000
-err.shield_hp: mae=0.000821 p95=0.000000 max=6.299999
+err.shield_hp: mae=0.000716 p95=0.000000 max=6.299999
 err.item_pos_x: mae=0.138651 p95=0.000000 max=88.298080
 err.item_pos_y: mae=0.026647 p95=0.000000 max=16.942844
 err.item_vel_x: mae=0.005860 p95=0.000000 max=5.000000
 err.item_vel_y: mae=0.000863 p95=0.000000 max=2.799234
-overall.discrete_mismatch: 181 / 1449580
-overall.strict_discrete_mismatch: 211 / 1449580
+overall.discrete_mismatch: 177 / 1449580
+overall.strict_discrete_mismatch: 207 / 1449580
 overall.ignored_discrete_mismatch: 30
-overall.float_norm_mae_p95: 0.00018725
+overall.float_norm_mae_p95: 0.00018707
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl ==
 Records: 7937  Players/scored per record: 2  Total player-frames: 15874
@@ -716,7 +716,7 @@ overall.ignored_discrete_mismatch: 33
 overall.float_norm_mae_p95: 0.00011473
 
 == suite summary ==
-overall.discrete_mismatch: 1576 / 17965838
-overall.strict_discrete_mismatch: 1949 / 17965838
+overall.discrete_mismatch: 1572 / 17965838
+overall.strict_discrete_mismatch: 1945 / 17965838
 overall.ignored_discrete_mismatch: 373
-overall.float_norm_mae_p95: 0.00015204
+overall.float_norm_mae_p95: 0.00015203

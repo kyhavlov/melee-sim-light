@@ -4855,7 +4855,18 @@ void locomotion_update_pre(MslBatch* batch) {
              did_tap_jump(c, stick_y, tilt_timer_y) || jump_tap_crossed)
                 ? 1u
                 : 0u;
-        if (locomotion_try_enter_jump_aerial_iasa(batch, c, ch, idx, jump_aerial_input, stick_x,
+        // FallSpecial has no JumpAerial IASA owner. It remains in the air-locomotion set so
+        // physics/landing callbacks still run, but its input callback does not call
+        // ftCo_800CB870.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_800CB870
+        const uint8_t allow_jump_aerial =
+            (action_id == MSL_ACT_FALL_SPECIAL || action_id == MSL_ACT_FALL_SPECIAL_F ||
+             action_id == MSL_ACT_FALL_SPECIAL_B)
+                ? 0u
+                : 1u;
+        if (allow_jump_aerial &&
+            locomotion_try_enter_jump_aerial_iasa(batch, c, ch, idx, jump_aerial_input, stick_x,
                                                   facing_dir, 1u)) {
           tilt_timer_y = 0xFEu;
           action_id = batch->state.action_id[idx];

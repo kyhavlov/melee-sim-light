@@ -10,10 +10,12 @@ from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 
 # Button masks: src/buttons.h (Melee/HSD PAD bits)
 BUTTON_L = 0x0040
+BUTTON_X = 0x0400
 
 # Action ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 ACT_WAIT = 0x000E
 ACT_FALL = 0x001D
+ACT_JUMP_AERIAL_F = 0x001B
 ACT_FALL_SPECIAL = 0x0023
 ACT_ESCAPE_AIR = 0x00EC
 ACT_ENTRY_END = 0x0144
@@ -21,6 +23,7 @@ ACT_ENTRY_END = 0x0144
 # Submotion ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 SM_WAIT1_0 = 2
 SM_FALL = 20
+SM_JUMP_AERIAL_F = 18
 SM_FALL_SPECIAL = 26
 SM_ESCAPE_AIR = 44
 
@@ -352,6 +355,34 @@ def test_escape_air_anim_end_transitions_to_fall_special_not_fall() -> None:
     assert int(out["animation_index"][0]) == SM_FALL_SPECIAL
     assert int(out["action_frame"][0]) == 0
     assert int(out["action_id"][0]) != ACT_FALL
+
+
+def test_fall_special_does_not_allow_double_jump_even_with_jumps_left() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_air_base()
+    seed["action_id"][0, 0] = np.uint16(ACT_FALL_SPECIAL)
+    seed["action_frame"][0, 0] = np.int16(3)
+    seed["anim_frame_f32"][0, 0] = np.float32(3.0)
+    seed["frame_speed_mul_f32"][0, 0] = np.float32(1.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_FALL_SPECIAL)
+    seed["jumps_left"][0, 0] = np.uint8(1)
+    seed["pos_y"][0, 0] = np.float32(30.0)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    inp_view = inp.view(INPUT_DTYPE).reshape((1,))
+    inp_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_X)
+
+    out = _step_once(seed, prev_inp, inp)
+    assert int(out["action_id"][0]) == ACT_FALL_SPECIAL
+    assert int(out["animation_index"][0]) == SM_FALL_SPECIAL
+    assert int(out["action_id"][0]) != ACT_JUMP_AERIAL_F
+    assert int(out["animation_index"][0]) != SM_JUMP_AERIAL_F
+    assert int(out["jumps_left"][0]) == 1
 
 
 def test_fall_special_drift_cap_reduces_horizontal_speed_vs_fall() -> None:

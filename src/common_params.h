@@ -233,6 +233,14 @@ typedef struct MslCommonParams {
   float guard_stick_lerp_x44c;      // p_ftCommonData->guard_stick_lerp_x44c (0x44C)
   float start_shield_health;        // p_ftCommonData->x260 (start_shield_health)
   float shield_break_reset_health;  // p_ftCommonData->x280 (Furafura shield reset health)
+  // Shield-break dizzy (`Furafura`) timer.
+  // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Furafura.c
+  // - entry: ftCommon_InitGrab(fp, 0, MAX(x2F8 - percent, 0) + x2FC)
+  // - anim: fp->grab_timer -= x300; ftCommon_GrabMash(fp, x304); exit to Wait at <= 0
+  float furafura_timer_percent_base;  // p_ftCommonData->x2F8
+  float furafura_timer_base;          // p_ftCommonData->x2FC
+  float furafura_timer_decrement;     // p_ftCommonData->x300
+  float furafura_mash_decrement;      // p_ftCommonData->x304
   // Shield size scaling (refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::inlineB0)
   float shield_size_lightshield_min;  // p_ftCommonData->x2D4 (shield_size_lightshield_min)
   float shield_size_lightshield_max;  // p_ftCommonData->x2D8 (shield_size_lightshield_max)

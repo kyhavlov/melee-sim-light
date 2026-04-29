@@ -156,6 +156,17 @@ def main() -> None:
         #     radius = n3 * fp->co_attrs.initial_shield_size
         "start_shield_health": float(_f32_be(buf, ft_common_abs + 0x260)),
         "shield_break_reset_health": float(_f32_be(buf, ft_common_abs + 0x280)),
+        # Shield-break dizzy (`Furafura`) timer.
+        # Decomp:
+        # - ftCo_80099010 initializes fp->grab_timer =
+        #     MAX(p_ftCommonData->x2F8 - fp->dmg.x1830_percent, 0) + p_ftCommonData->x2FC.
+        # - ftCo_Furafura_Anim subtracts x300 each callback, applies ftCommon_GrabMash(..., x304),
+        #   and exits through ft_8008A2BC when the timer reaches zero.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Furafura.c
+        "furafura_timer_percent_base": float(_f32_be(buf, ft_common_abs + 0x2F8)),
+        "furafura_timer_base": float(_f32_be(buf, ft_common_abs + 0x2FC)),
+        "furafura_timer_decrement": float(_f32_be(buf, ft_common_abs + 0x300)),
+        "furafura_mash_decrement": float(_f32_be(buf, ft_common_abs + 0x304)),
         "shield_size_min_scale": float(_f32_be(buf, ft_common_abs + 0x264)),
         # Guard release lockout timer init (mv.co.guard.x10).
         #

@@ -357,6 +357,11 @@ int common_params_init(void) {
       json_get_f32(buf, "guard_stick_lerp_x44c", &g_params.guard_stick_lerp_x44c) != 0 ||
       json_get_f32(buf, "start_shield_health", &g_params.start_shield_health) != 0 ||
       json_get_f32(buf, "shield_break_reset_health", &g_params.shield_break_reset_health) != 0 ||
+      json_get_f32(buf, "furafura_timer_percent_base", &g_params.furafura_timer_percent_base) !=
+          0 ||
+      json_get_f32(buf, "furafura_timer_base", &g_params.furafura_timer_base) != 0 ||
+      json_get_f32(buf, "furafura_timer_decrement", &g_params.furafura_timer_decrement) != 0 ||
+      json_get_f32(buf, "furafura_mash_decrement", &g_params.furafura_mash_decrement) != 0 ||
       json_get_f32(buf, "shield_size_lightshield_min", &g_params.shield_size_lightshield_min) !=
           0 ||
       json_get_f32(buf, "shield_size_lightshield_max", &g_params.shield_size_lightshield_max) !=

@@ -584,6 +584,94 @@ static inline void guard_enter_wait(MslBatch* batch, size_t idx) {
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
 }
 
+static inline void shieldbreak_enter_stand(MslBatch* batch, size_t idx, uint16_t source_action) {
+  if (batch == NULL) {
+    return;
+  }
+  // ShieldBreakDown_Anim enters ShieldBreakStandU/D when its animation ends; the destination side
+  // follows the source down motion, and the transition keeps collision-animation hit status.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_ShieldBreakDown.c::ftCo_ShieldBreakDown_Anim
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_ShieldBreakStand.c::ftCo_80098F3C
+  const uint8_t up = (source_action == (uint16_t)MSL_ACT_SHIELD_BREAK_DOWN_U) ? 1u : 0u;
+  batch->state.action_id[idx] =
+      up ? (uint16_t)MSL_ACT_SHIELD_BREAK_STAND_U : (uint16_t)MSL_ACT_SHIELD_BREAK_STAND_D;
+  batch->state.animation_index[idx] =
+      up ? (uint32_t)MSL_SM_SHIELD_BREAK_STAND_U : (uint32_t)MSL_SM_SHIELD_BREAK_STAND_D;
+  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  batch->state.hurtbox_state[idx] = 2u;
+}
+
+static inline float furafura_timer_init(const MslBatch* batch, const MslCommonParams* c,
+                                        size_t idx) {
+  if (batch == NULL || c == NULL) {
+    return 0.0f;
+  }
+  // Decomp: ftCo_80099010 initializes the shared fp->grab_timer from percent.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Furafura.c::ftCo_80099010
+  float percent_term = c->furafura_timer_percent_base - batch->state.percent[idx];
+  if (percent_term < 0.0f) {
+    percent_term = 0.0f;
+  }
+  return percent_term + c->furafura_timer_base;
+}
+
+static inline void shieldbreak_enter_furafura(MslBatch* batch, const MslCommonParams* c,
+                                              size_t idx) {
+  if (batch == NULL || c == NULL) {
+    return;
+  }
+  // ShieldBreakStand_Anim enters Furafura through ftCo_80099010; this resets shield health and
+  // initializes the common grab_timer lane used by Furafura_Anim.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_ShieldBreakStand.c::ftCo_ShieldBreakStand_Anim
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Furafura.c::ftCo_80099010
+  batch->state.action_id[idx] = (uint16_t)MSL_ACT_FURAFURA;
+  batch->state.animation_index[idx] = (uint32_t)MSL_SM_FURAFURA;
+  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  batch->state.shield_hp[idx] = c->shield_break_reset_health;
+  batch->state.capture_grab_timer[idx] = furafura_timer_init(batch, c, idx);
+  // Furafura entry does not keep ShieldBreakStand's collision-animation hit status:
+  // ftCo_80099010 changes motion with only SkipModel | SkipMatAnim, while ShieldBreakStand used
+  // KeepColAnimHitStatus | SkipColAnim. Clear the hidden x198C timer/status lanes along with the
+  // replay-visible hurtbox state on the destination row.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_ShieldBreakStand.c::ftCo_80098F3C
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Furafura.c::ftCo_80099010
+  batch->state.colanim_hit_status_x198c[idx] = 0u;
+  batch->state.colanim_timer_x1990[idx] = 0u;
+  batch->state.colanim_timer_x1994[idx] = 0u;
+  batch->state.hurtbox_state[idx] = 0u;
+}
+
+static inline uint8_t furafura_grab_mash_active(MslBatch* batch, const MslCommonParams* c,
+                                                size_t idx) {
+  if (batch == NULL || c == NULL) {
+    return 0u;
+  }
+  float stick_x = stick_i8_to_unit(batch->state.input_main_x[idx]);
+  float stick_y = stick_i8_to_unit(batch->state.input_main_y[idx]);
+  stick_x = apply_deadzone(stick_x, c->lstick_deadzone_x);
+  stick_y = apply_deadzone(stick_y, c->lstick_deadzone_y);
+
+  int8_t next_x = batch->state.grab_mash_stick_x_sign[idx];
+  int8_t next_y = batch->state.grab_mash_stick_y_sign[idx];
+  if (stick_x < -c->grab_mash_stick_threshold) {
+    next_x = -1;
+  } else if (stick_x > c->grab_mash_stick_threshold) {
+    next_x = 1;
+  }
+  if (stick_y < -c->grab_mash_stick_threshold) {
+    next_y = -1;
+  } else if (stick_y > c->grab_mash_stick_threshold) {
+    next_y = 1;
+  }
+  if (batch->state.grab_mash_stick_x_sign[idx] != next_x ||
+      batch->state.grab_mash_stick_y_sign[idx] != next_y) {
+    batch->state.grab_mash_stick_x_sign[idx] = next_x;
+    batch->state.grab_mash_stick_y_sign[idx] = next_y;
+    return 1u;
+  }
+  return 0u;
+}
+
 static inline float clamp01(float x) {
   if (x < 0.0f) {
     return 0.0f;
@@ -1447,13 +1535,40 @@ static inline void shieldbreak_update_anim_callback_pre_input(MslBatch* batch,
     return;
   }
   const uint16_t a0 = batch->state.action_id[idx];
-  if (a0 != (uint16_t)MSL_ACT_SHIELD_BREAK_STAND_U &&
-      a0 != (uint16_t)MSL_ACT_SHIELD_BREAK_STAND_D) {
+  if (a0 != (uint16_t)MSL_ACT_SHIELD_BREAK_DOWN_U && a0 != (uint16_t)MSL_ACT_SHIELD_BREAK_DOWN_D &&
+      a0 != (uint16_t)MSL_ACT_SHIELD_BREAK_STAND_U &&
+      a0 != (uint16_t)MSL_ACT_SHIELD_BREAK_STAND_D && a0 != (uint16_t)MSL_ACT_FURAFURA) {
     return;
   }
   if (batch->state.hitlag_started_frame[idx] != 0) {
     return;
   }
+  if (a0 == (uint16_t)MSL_ACT_FURAFURA) {
+    // Furafura_Anim keeps shield health pinned to x280, decrements fp->grab_timer, applies mash,
+    // and exits to Wait through ft_8008A2BC when the timer expires.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Furafura.c::ftCo_Furafura_Anim
+    // refs/melee/src/melee/ft/ft_0892.c::ft_8008A2BC
+    batch->state.shield_hp[idx] = c->shield_break_reset_health;
+    float timer = batch->state.capture_grab_timer[idx];
+    if (!(timer > 0.0f)) {
+      timer = furafura_timer_init(batch, c, idx);
+      const int16_t af = batch->state.action_frame[idx];
+      if (af > 0) {
+        timer -= (float)af * c->furafura_timer_decrement;
+      }
+    }
+    timer -= c->furafura_timer_decrement;
+    if (furafura_grab_mash_active(batch, c, idx)) {
+      timer -= c->furafura_mash_decrement;
+    }
+    batch->state.capture_grab_timer[idx] = timer;
+    if (timer <= 0.0f) {
+      guard_enter_wait(batch, idx);
+      batch->state.capture_grab_timer[idx] = 0.0f;
+    }
+    return;
+  }
+
   const uint32_t anim_u32 = batch->state.animation_index[idx];
   if (anim_u32 > 0xFFFFu) {
     return;
@@ -1463,25 +1578,11 @@ static inline void shieldbreak_update_anim_callback_pre_input(MslBatch* batch,
     return;
   }
 
-  // ShieldBreakStand_Anim enters Furafura when ftAnim_IsFramesRemaining returns false.
-  // ftCo_80099010 resets shield health from p_ftCommonData->x280 and does not do an immediate
-  // animation tick; Fighter_ProcessHit's inactive-shield recharge runs later in this frame.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_ShieldBreakStand.c::ftCo_ShieldBreakStand_Anim
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Furafura.c::ftCo_80099010
-  batch->state.action_id[idx] = (uint16_t)MSL_ACT_FURAFURA;
-  batch->state.animation_index[idx] = (uint32_t)MSL_SM_FURAFURA;
-  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-  batch->state.shield_hp[idx] = c->shield_break_reset_health;
-  // Furafura entry does not keep ShieldBreakStand's collision-animation hit status:
-  // ftCo_80099010 changes motion with only SkipModel | SkipMatAnim, while ShieldBreakStand used
-  // KeepColAnimHitStatus | SkipColAnim. Clear the hidden x198C timer/status lanes along with the
-  // replay-visible hurtbox state on the destination row.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_ShieldBreakStand.c::ftCo_80098F3C
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Furafura.c::ftCo_80099010
-  batch->state.colanim_hit_status_x198c[idx] = 0u;
-  batch->state.colanim_timer_x1990[idx] = 0u;
-  batch->state.colanim_timer_x1994[idx] = 0u;
-  batch->state.hurtbox_state[idx] = 0u;
+  if (a0 == (uint16_t)MSL_ACT_SHIELD_BREAK_DOWN_U || a0 == (uint16_t)MSL_ACT_SHIELD_BREAK_DOWN_D) {
+    shieldbreak_enter_stand(batch, idx, a0);
+  } else {
+    shieldbreak_enter_furafura(batch, c, idx);
+  }
 }
 
 void action_update_anim_callbacks_pre_input(MslBatch* batch) {
