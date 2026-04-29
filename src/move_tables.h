@@ -63,6 +63,17 @@ uint8_t move_tables_grounded_smash_charge_crossed(uint8_t char_id, uint16_t grou
                                                   float cur_anim_frame_f32,
                                                   uint8_t* out_hold_frames);
 
+// Returns the damage multiplier argument from the grounded-smash start_smash_charge command.
+//
+// Decomp:
+// - ftAction_80073008 passes command damage_mul into ftCo_800DEE84.
+// - ftColl_8007ABD0 later calls ftCo_800DEEB8 to scale hitcapsule damage while
+//   smash_attrs.state == SmashState_Release.
+// refs/melee/src/melee/ft/ftaction.c::ftAction_80073008
+// refs/melee/src/melee/ft/ft_0DF0.c::{ftCo_800DEE84,ftCo_800DEEB8}
+// refs/melee/src/melee/ft/ftcoll.c::ftColl_8007ABD0
+float move_tables_grounded_smash_charge_damage_mul(uint8_t char_id, uint16_t grounded_action_id);
+
 // Returns whether EscapeN (spotdodge) can be interrupted (IASA) at the given cur_anim_frame.
 //
 // Decomp:

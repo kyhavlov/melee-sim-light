@@ -692,6 +692,8 @@ static inline uint8_t combat_is_damage_or_firefox_launch_victim_action(uint16_t 
     case MSL_ACT_DAMAGE_FLY_LW:
     case MSL_ACT_DAMAGE_FLY_TOP:
     case MSL_ACT_DAMAGE_FLY_ROLL:
+    case MSL_ACT_FLY_REFLECT_WALL:
+    case MSL_ACT_FLY_REFLECT_CEIL:
     case MSL_ACT_FX_SPECIAL_HI:
     case MSL_ACT_FX_SPECIAL_AIR_HI:
       return 1u;
@@ -1987,6 +1989,37 @@ static inline int combat_get_env_dmg(float dmg) {
   return (i != 0) ? i : 1;
 }
 
+static inline float combat_apply_attacker_smash_release_damage_mul(const MslBatch* batch,
+                                                                   size_t a_idx, float damage) {
+  if (batch == NULL || batch->state.smash_charge_state[a_idx] != 3u) {
+    return damage;
+  }
+  const uint8_t hold_frames = batch->state.smash_charge_hold_frames_max[a_idx];
+  if (hold_frames == 0u) {
+    return damage;
+  }
+  uint8_t charge_frames = batch->state.smash_charge_frames[a_idx];
+  if (charge_frames > hold_frames) {
+    charge_frames = hold_frames;
+  }
+  const float damage_mul = move_tables_grounded_smash_charge_damage_mul(
+      batch->state.char_id[a_idx], batch->state.action_id[a_idx]);
+  if (!(damage_mul > 0.0f)) {
+    return damage;
+  }
+  // Released-smash hitcapsule damage owner:
+  // - ftAction_80073008 stores command damage_mul in smash_attrs.x2120_damageMul.
+  // - ftCo_800DEF38 / ftCo_800DF0D0 set SmashState_Release on max-charge or A release.
+  // - ftColl_8007ABD0 calls ftCo_800DEEB8 before writing HitCapsule.{unk_count,damage}.
+  // Formula: damage * (((damage_mul - 1) * (frames / hold_frames)) + 1).
+  // refs/melee/src/melee/ft/ftaction.c::ftAction_80073008
+  // refs/melee/src/melee/ft/ft_0DF0.c::{ftCo_800DEF38,ftCo_800DF0D0,ftCo_800DEEB8}
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007ABD0
+  const float t = (float)charge_frames / (float)hold_frames;
+  const float mul = ((damage_mul - 1.0f) * t) + 1.0f;
+  return damage * mul;
+}
+
 static inline uint8_t combat_defender_hit_status_u8(const MslBatch* batch, size_t d_idx) {
   // Debug override (test-only): 0xFF means "use tables".
   if (batch->debug_hit_status_override != NULL) {
@@ -2941,7 +2974,8 @@ static inline void combat_mutations_pass1_future_apply_body_hit_invincible(
   const uint16_t move_id = staling_move_id_from_state(batch, a_idx);
   const float stale_mult = staling_multiplier_for_move(batch, a_idx, move_id);
 
-  float dmg_f = batch->state.hitbox_damage[hb_i];
+  float dmg_f = combat_apply_attacker_smash_release_damage_mul(batch, a_idx,
+                                                               batch->state.hitbox_damage[hb_i]);
   if (stale_mult != 1.0f) {
     dmg_f *= stale_mult;
   }
@@ -3056,7 +3090,10 @@ static inline void combat_mutations_pass1_future_apply_body_hit(
   const uint16_t move_id = attacker_attack_id;
   const float stale_mult = staling_multiplier_for_move(batch, a_idx, move_id);
 
-  float hb_dmg = batch->state.hitbox_damage[hb_i];
+  float hb_dmg = combat_apply_attacker_smash_release_damage_mul(batch, a_idx,
+                                                                batch->state.hitbox_damage[hb_i]);
+  const int hitcapsule_int_dmg =
+      (batch->state.smash_charge_state[a_idx] == 3u) ? (int)hb_dmg : int_dmg;
   if (stale_mult != 1.0f) {
     hb_dmg *= stale_mult;
   }
@@ -3196,6 +3233,7 @@ static inline void combat_mutations_pass1_future_apply_body_hit(
   const uint16_t hb_bkb = batch->state.hitbox_bkb[hb_i];
 
   const uint8_t defender_on_ground = batch->state.on_ground[d_idx] ? 1u : 0u;
+  const uint16_t pre_damage_action = batch->state.action_id[d_idx];
   const uint8_t hurt_height = batch->state.hurtcap_height[cap_i];
 
   const MslCharParams* d_ch = msl_char_params(batch->state.char_id[d_idx]);
@@ -3209,8 +3247,8 @@ static inline void combat_mutations_pass1_future_apply_body_hit(
     coll_kb_mul = 1.0f;
   }
   const float kb_applied = combat_damage_calc_kb_applied(
-      c, d_ch, d_motion_id, percent_pre, dmg_temp, int_dmg, hb_kbg, hb_wsk, hb_bkb, coll_kb_mul,
-      batch->state.dmg_x2225_b7[d_idx], batch->state.dmg_x2224_b2[d_idx],
+      c, d_ch, d_motion_id, percent_pre, dmg_temp, hitcapsule_int_dmg, hb_kbg, hb_wsk, hb_bkb,
+      coll_kb_mul, batch->state.dmg_x2225_b7[d_idx], batch->state.dmg_x2224_b2[d_idx],
       batch->state.kb_smashcharge_active[d_idx]);
   const float kb_angle_rad =
       combat_damage_calc_angle_radians(c, hb_angle, defender_on_ground, kb_applied);
@@ -3272,20 +3310,28 @@ static inline void combat_mutations_pass1_future_apply_body_hit(
   // - If victim_pos.x > src_pos.x => facing_dir_1 = -1
   // - Else                        => facing_dir_1 = +1
   // refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_8007A06C (0x8007A74C..0x8007A77C sets f24)
-  const uint16_t pre_damage_action = batch->state.action_id[d_idx];
   const uint8_t downed_damage_contact_facing_owner =
       (uint8_t)(combat_is_downed_damage_contact_action(pre_damage_action) &&
                 (batch->state.dmg_x2224_b2[d_idx] ||
                  batch->state.percent_temp[d_idx] < (float)c->down_damage_percent_threshold));
   const float one = combat_damage_ftColl_804D82EC_one();
-  const float defender_facing_dir_1 =
-      downed_damage_contact_facing_owner
-          ? (batch->state.facing[d_idx] ? one : -one)
-          : ((batch->state.pos_x[d_idx] > batch->state.pos_x[a_idx]) ? -one : one);
-  // DownDamage contact entry is a narrow exception to collision-derived facing:
-  // ftCo_8009F184 forwards the fighter's current `fp->facing_dir` into ftCo_8008DCE0.
+  const float collision_facing_dir_1 =
+      (batch->state.pos_x[d_idx] > batch->state.pos_x[a_idx]) ? -one : one;
+  // DownDamage contact entry has two separate facing owners:
+  // - collision still owns `dmg.facing_dir_1`, which ftCo_8008DCE0 uses for the KB x sign before
+  //   block_44;
+  // - ftCo_8009F184 passes the fighter's current `fp->facing_dir` as arg2 so block_44 restores the
+  //   visible facing after velocity calculation.
+  //
+  // Keep those lanes separate so downed reverse-shine / jab-reset-style contacts can launch by
+  // source position without turning the downed victim around.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::ftCo_8009F184
-  batch->state.facing[d_idx] = (uint8_t)(defender_facing_dir_1 > 0.0f);
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+  const float defender_facing_dir_1 = collision_facing_dir_1;
+  const float post_damage_facing_dir = downed_damage_contact_facing_owner
+                                           ? (batch->state.facing[d_idx] ? one : -one)
+                                           : collision_facing_dir_1;
+  batch->state.facing[d_idx] = (uint8_t)(post_damage_facing_dir > 0.0f);
 
   const float kb_x = -x * defender_facing_dir_1;
   const float kb_y = y;

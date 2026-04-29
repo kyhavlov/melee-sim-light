@@ -146,6 +146,10 @@ static inline uint32_t submotion_for_damage_action(uint16_t a) {
       return (uint32_t)MSL_SM_DAMAGE_FLY_TOP;
     case (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL:
       return (uint32_t)MSL_SM_DAMAGE_FLY_ROLL;
+    case (uint16_t)MSL_ACT_FLY_REFLECT_WALL:
+      return (uint32_t)MSL_SM_WALL_DAMAGE;
+    case (uint16_t)MSL_ACT_FLY_REFLECT_CEIL:
+      return (uint32_t)MSL_SM_STOP_CEIL;
     case (uint16_t)MSL_ACT_DAMAGE_FALL:
       return (uint32_t)MSL_SM_DAMAGE_FALL;
     default:
@@ -172,6 +176,8 @@ static inline uint8_t damage_landing_action_owns_root_floor_snap(uint16_t a) {
     case (uint16_t)MSL_ACT_DAMAGE_FLY_LW:
     case (uint16_t)MSL_ACT_DAMAGE_FLY_TOP:
     case (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL:
+    case (uint16_t)MSL_ACT_FLY_REFLECT_WALL:
+    case (uint16_t)MSL_ACT_FLY_REFLECT_CEIL:
     case (uint16_t)MSL_ACT_DAMAGE_FALL:
       return 1u;
     default:
@@ -1037,13 +1043,23 @@ void knockdown_update_pre_physics(MslBatch* batch) {
               // Hidden timer continuation:
               // ftCo_DownDamage_Anim decrements mv.co.downdamage.x0 and, when the animation ends
               // while that timer is still positive, enters DownWaitU/D through ftCo_80097F38.
+              // ftCo_80097F38 changes motion without reinitializing the motion-var union, so the
+              // remaining downdamage.x0 countdown becomes the new downwait.x0 instead of the full
+              // p_ftCommonData->x424 knockdown timer.
               // Fighter proc ordering then runs the newly-entered DownWait IASA in the same frame,
               // allowing buffered down-roll/getup options without waiting another replay row.
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::ftCo_DownDamage_Anim
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::{
               //   ftCo_80097F38,ftCo_DownWait_IASA}
+              uint16_t remaining = batch->state.hitstun[idx];
+              if (remaining == 0u) {
+                remaining = 1u;
+              }
+              const int16_t downwait_x0 =
+                  (remaining > (uint16_t)INT16_MAX) ? INT16_MAX : (int16_t)remaining;
               clear_downed_damage_state(batch, idx);
               enter_down_wait(batch, idx, down_wait_action_from_damage(a0));
+              batch->state.downwait_timer[idx] = downwait_x0;
               if (should_enter_down_attack_from_wait(batch, c, idx)) {
                 enter_down_attack(batch, idx, batch->state.action_id[idx]);
               } else {
@@ -1547,6 +1563,8 @@ static inline uint8_t is_damage_fly_action(uint16_t a) {
     case (uint16_t)MSL_ACT_DAMAGE_FLY_LW:
     case (uint16_t)MSL_ACT_DAMAGE_FLY_TOP:
     case (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL:
+    case (uint16_t)MSL_ACT_FLY_REFLECT_WALL:
+    case (uint16_t)MSL_ACT_FLY_REFLECT_CEIL:
       return 1u;
     default:
       return 0u;
@@ -1846,7 +1864,8 @@ static inline uint8_t is_damage_air_submotion(uint32_t smid) {
 static inline uint8_t is_damage_fly_submotion(uint32_t smid) {
   return (smid == (uint32_t)MSL_SM_DAMAGE_FLY_HI || smid == (uint32_t)MSL_SM_DAMAGE_FLY_N ||
           smid == (uint32_t)MSL_SM_DAMAGE_FLY_LW || smid == (uint32_t)MSL_SM_DAMAGE_FLY_TOP ||
-          smid == (uint32_t)MSL_SM_DAMAGE_FLY_ROLL)
+          smid == (uint32_t)MSL_SM_DAMAGE_FLY_ROLL || smid == (uint32_t)MSL_SM_WALL_DAMAGE ||
+          smid == (uint32_t)MSL_SM_STOP_CEIL)
              ? 1u
              : 0u;
 }
@@ -2077,6 +2096,110 @@ static inline void enter_passive_wall_from_damage_air(MslBatch* batch, size_t id
   batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN;
 }
 
+static inline uint8_t damagefly_reflect_lockout_active(const MslBatch* batch,
+                                                       const MslCommonParams* c, size_t idx) {
+  if (batch == NULL || c == NULL) {
+    return 0u;
+  }
+  const uint16_t a = batch->state.action_id[idx];
+  if (a != (uint16_t)MSL_ACT_FLY_REFLECT_WALL && a != (uint16_t)MSL_ACT_FLY_REFLECT_CEIL) {
+    return 0u;
+  }
+  // Decomp: ftCo_800C18A8 seeds mv.co.damage.x18 from p_ftCommonData->x1C0, and
+  // ftCo_FlyReflect_Anim decrements it once per frame before FlyReflect_Coll admits another
+  // wall-reflect branch. This core does not persist x18 separately yet; the action-frame age is
+  // the source-shaped local representation for the active FlyReflect lockout window.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FlyReflect.c::{
+  //   ftCo_800C18A8,ftCo_FlyReflect_Anim,ftCo_FlyReflect_Coll}
+  return (uint8_t)(batch->state.action_frame[idx] < (int16_t)c->damagefly_reflect_lockout_frames);
+}
+
+static inline uint8_t damagefly_try_enter_flyreflect(MslBatch* batch, const MslCommonParams* c,
+                                                     size_t idx) {
+  if (batch == NULL || c == NULL) {
+    return 0u;
+  }
+  const uint16_t a = batch->state.action_id[idx];
+  if (!is_damage_fly_action(a) || damagefly_reflect_lockout_active(batch, c, idx)) {
+    return 0u;
+  }
+
+  const uint32_t env = batch->state.coll_env_flags[idx];
+  const float threshold = c->damagefly_reflect_speed_threshold;
+  uint16_t target_action = 0u;
+  uint32_t target_submotion = 0u;
+
+  if (batch->state.speed_x_attack[idx] < -threshold &&
+      (env & (uint32_t)MSL_COLLIDE_RIGHT_WALL_HUG) != 0u) {
+    target_action = (uint16_t)MSL_ACT_FLY_REFLECT_WALL;
+    target_submotion = (uint32_t)MSL_SM_WALL_DAMAGE;
+  } else if (batch->state.speed_x_attack[idx] > threshold &&
+             (env & (uint32_t)MSL_COLLIDE_LEFT_WALL_HUG) != 0u) {
+    target_action = (uint16_t)MSL_ACT_FLY_REFLECT_WALL;
+    target_submotion = (uint32_t)MSL_SM_WALL_DAMAGE;
+  } else if (batch->state.speed_y_attack[idx] > threshold &&
+             (env & (uint32_t)MSL_COLLIDE_CEILING_HUG) != 0u) {
+    target_action = (uint16_t)MSL_ACT_FLY_REFLECT_CEIL;
+    target_submotion = (uint32_t)MSL_SM_STOP_CEIL;
+  } else {
+    return 0u;
+  }
+
+  float nx = (target_action == (uint16_t)MSL_ACT_FLY_REFLECT_CEIL)
+                 ? batch->state.ceiling_normal_x[idx]
+                 : batch->state.wall_normal_x[idx];
+  float ny = (target_action == (uint16_t)MSL_ACT_FLY_REFLECT_CEIL)
+                 ? batch->state.ceiling_normal_y[idx]
+                 : batch->state.wall_normal_y[idx];
+  const float normal_mag = sqrtf(nx * nx + ny * ny);
+  if (!(normal_mag > 0.0f)) {
+    if (target_action == (uint16_t)MSL_ACT_FLY_REFLECT_CEIL) {
+      nx = 0.0f;
+      ny = -1.0f;
+    } else if ((env & (uint32_t)MSL_COLLIDE_RIGHT_WALL_HUG) != 0u) {
+      nx = 1.0f;
+      ny = 0.0f;
+    } else {
+      nx = -1.0f;
+      ny = 0.0f;
+    }
+  } else {
+    nx /= normal_mag;
+    ny /= normal_mag;
+  }
+
+  // Decomp no-tech reflect owner:
+  // - ftCo_DamageFly_Coll runs wall tech, ceiling tech, then ftCo_800C17CC.
+  // - ftCo_800C17CC gates on KB velocity and the CollData Hug bit.
+  // - ftCo_800C18A8 mirrors self_vel + kb_vel across the collision normal, scales by
+  //   p_ftCommonData->x1BC, clears self velocity, enters FlyReflectWall/Ceil, and starts the
+  //   x1990 colanim hit-status window.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FlyReflect.c::{
+  //   ftCo_800C15F4,ftCo_800C1718,ftCo_800C17CC,ftCo_800C18A8}
+  // data/common/ft_common_data.json::{
+  //   damagefly_reflect_speed_threshold,damagefly_reflect_speed_mul,
+  //   damagefly_reflect_lockout_frames,colanim_flyreflect_x1990_frames}
+  float vx = batch->state.speed_air_x_self[idx] + batch->state.speed_x_attack[idx];
+  float vy = batch->state.speed_y_self[idx] + batch->state.speed_y_attack[idx];
+  const float dot = vx * nx + vy * ny;
+  vx = (vx - (2.0f * dot * nx)) * c->damagefly_reflect_speed_mul;
+  vy = (vy - (2.0f * dot * ny)) * c->damagefly_reflect_speed_mul;
+
+  batch->state.speed_air_x_self[idx] = 0.0f;
+  batch->state.speed_y_self[idx] = 0.0f;
+  batch->state.speed_x_attack[idx] = vx;
+  batch->state.speed_y_attack[idx] = vy;
+  batch->state.facing[idx] = (vx < 0.0f) ? 0u : 1u;
+  batch->state.action_id[idx] = target_action;
+  batch->state.animation_index[idx] = target_submotion;
+  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  batch->state.colanim_timer_x1990[idx] = c->colanim_flyreflect_x1990_frames;
+  batch->state.colanim_hit_status_x198c[idx] = 2u;
+  batch->state.hurtbox_state[idx] = 2u;
+  return 1u;
+}
+
 static inline void enter_passive_from_damage_land(MslBatch* batch, const MslCharParams* ch,
                                                   size_t bi, size_t idx, uint16_t passive_act,
                                                   uint16_t prev_action_id) {
@@ -2268,6 +2391,11 @@ void knockdown_update_post_collision(MslBatch* batch) {
                                          ? (uint16_t)MSL_ACT_PASSIVE_WALL_JUMP
                                          : (uint16_t)MSL_ACT_PASSIVE_WALL;
         enter_passive_wall_from_damage_air(batch, idx, a0, wall_action);
+        continue;
+      }
+
+      if (!was_ground && !now_ground && is_damage_fly_action(a0) &&
+          damagefly_try_enter_flyreflect(batch, c, idx)) {
         continue;
       }
 

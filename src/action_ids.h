@@ -154,13 +154,17 @@ typedef enum MslActionId {
   MSL_ACT_REBOUND_STOP = 0x00ED,  // ftCo_MS_ReboundStop (237)
   MSL_ACT_REBOUND = 0x00EE,       // ftCo_MS_Rebound (238)
 
-  MSL_ACT_THROWN_F = 0x00EF,         // ftCo_MS_ThrownF (239)
-  MSL_ACT_THROWN_B = 0x00F0,         // ftCo_MS_ThrownB (240)
-  MSL_ACT_THROWN_HI = 0x00F1,        // ftCo_MS_ThrownHi (241)
-  MSL_ACT_THROWN_LW = 0x00F2,        // ftCo_MS_ThrownLw (242)
-  MSL_ACT_THROWN_LW_WOMEN = 0x00F3,  // ftCo_MS_ThrownlwWomen (243)
-  MSL_ACT_OTTOTTO = 0x00F5,          // ftCo_MS_Ottotto (245)
-  MSL_ACT_OTTOTTO_WAIT = 0x00F6,     // ftCo_MS_OttottoWait (246)
+  MSL_ACT_THROWN_F = 0x00EF,          // ftCo_MS_ThrownF (239)
+  MSL_ACT_THROWN_B = 0x00F0,          // ftCo_MS_ThrownB (240)
+  MSL_ACT_THROWN_HI = 0x00F1,         // ftCo_MS_ThrownHi (241)
+  MSL_ACT_THROWN_LW = 0x00F2,         // ftCo_MS_ThrownLw (242)
+  MSL_ACT_THROWN_LW_WOMEN = 0x00F3,   // ftCo_MS_ThrownlwWomen (243)
+  MSL_ACT_OTTOTTO = 0x00F5,           // ftCo_MS_Ottotto (245)
+  MSL_ACT_OTTOTTO_WAIT = 0x00F6,      // ftCo_MS_OttottoWait (246)
+  MSL_ACT_FLY_REFLECT_WALL = 0x00F7,  // ftCo_MS_FlyReflectWall (247)
+  MSL_ACT_FLY_REFLECT_CEIL = 0x00F8,  // ftCo_MS_FlyReflectCeil (248)
+  MSL_ACT_STOP_WALL = 0x00F9,         // ftCo_MS_StopWall (249)
+  MSL_ACT_STOP_CEIL = 0x00FA,         // ftCo_MS_StopCeil (250)
 
   // Cliff / ledge (FD suite-present).
   // Source of truth: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCommon_MotionState`.
@@ -448,6 +452,9 @@ typedef enum MslSubmotionId {
   MSL_SM_PASSIVE_WALL = 202,       // ftCo_SM_PassiveWall
   MSL_SM_PASSIVE_WALL_JUMP = 203,  // ftCo_SM_PassiveWallJump
   MSL_SM_PASSIVE_CEIL = 204,       // ftCo_SM_PassiveCeil
+  MSL_SM_WALL_DAMAGE = 212,        // ftCo_SM_WallDamage
+  MSL_SM_STOP_WALL = 213,          // ftCo_SM_StopWall
+  MSL_SM_STOP_CEIL = 214,          // ftCo_SM_StopCeil
 
   // Grab / throw / capture / thrown (suite-present subset).
   // Source of truth: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCo_Submotion`.
@@ -588,6 +595,10 @@ static inline uint8_t msl_action_allows_fastfall(uint16_t action_id) {
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_Phys
     // refs/melee/src/melee/ft/ft_081B.c::ft_80084DB0
     case MSL_ACT_DAMAGE_FALL:
+    // FlyReflect Phys delegates to ft_80084DB0 after the wall/ceiling bounce entry.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FlyReflect.c::ftCo_FlyReflect_Phys
+    case MSL_ACT_FLY_REFLECT_WALL:
+    case MSL_ACT_FLY_REFLECT_CEIL:
     case MSL_ACT_ATTACK_AIR_N:
     case MSL_ACT_ATTACK_AIR_F:
     case MSL_ACT_ATTACK_AIR_B:

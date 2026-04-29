@@ -460,6 +460,18 @@ typedef struct MslCommonParams {
   float damage_jump_buffer_window_frames;      // p_ftCommonData->x1D0 (mv.co.damage.x14 gate)
   float damagefly_downbound_kb_vel_threshold;  // p_ftCommonData->x1E0
   float damagefly_landing_kb_vel_threshold;    // p_ftCommonData->x1E4
+  // DamageFly no-tech wall/ceiling reflect (FlyReflect).
+  //
+  // Decomp:
+  // - ftCo_800C17CC checks x1B0 before entering FlyReflectWall/FlyReflectCeil.
+  // - ftCo_800C18A8 mirrors self+KB velocity across the wall/ceiling normal, scales by x1BC,
+  //   starts the x18 repeat-reflect lockout from x1C0, and calls ftColl_8007B760(..., x1B8).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FlyReflect.c::{
+  //   ftCo_800C15F4,ftCo_800C1718,ftCo_800C17CC,ftCo_800C18A8}
+  float damagefly_reflect_speed_threshold;    // p_ftCommonData->x1B0
+  uint16_t colanim_flyreflect_x1990_frames;   // p_ftCommonData->x1B8
+  uint16_t damagefly_reflect_lockout_frames;  // p_ftCommonData->x1C0
+  float damagefly_reflect_speed_mul;          // p_ftCommonData->x1BC
 
   // Downed / knockdown thresholds + timers.
   // Decomp:

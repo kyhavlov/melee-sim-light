@@ -41,6 +41,7 @@ typedef struct MslThrowHitbox {
 
 typedef struct MslSmashChargeInfo {
   int16_t start_af;     // inclusive 0-based command frame
+  float damage_mul;     // ftCo_800DEE84 damage_mul / smash_attrs.x2120_damageMul
   uint8_t hold_frames;  // ftCo_800DEE84 arg2 / smash_attrs.x211C_holdFrame
   uint8_t loaded;
 } MslSmashChargeInfo;
@@ -683,10 +684,13 @@ static int parse_start_smash_charge_info(const char* buf, const char* buf_end, c
     if (json_get_str_eq_in_range(ev_start, ev_end, "kind", "start_smash_charge")) {
       int frame = 0;
       int hold_frames = 0;
+      float damage_mul = 0.0f;
       if (json_get_i32_in_range(ev_start, ev_end, "frame", &frame) == 0 &&
           json_get_i32_in_range(ev_start, ev_end, "hold_frames", &hold_frames) == 0 &&
-          hold_frames > 0 && hold_frames <= 255) {
+          json_get_f32_in_range(ev_start, ev_end, "damage_mul", &damage_mul) == 0 &&
+          hold_frames > 0 && hold_frames <= 255 && damage_mul > 0.0f) {
         out->start_af = (int16_t)frame;
+        out->damage_mul = damage_mul;
         out->hold_frames = (uint8_t)hold_frames;
         out->loaded = 1u;
         return 0;
@@ -2000,6 +2004,18 @@ uint8_t move_tables_grounded_smash_charge_crossed(uint8_t char_id, uint16_t grou
   }
   *out_hold_frames = info.hold_frames;
   return 1u;
+}
+
+float move_tables_grounded_smash_charge_damage_mul(uint8_t char_id, uint16_t grounded_action_id) {
+  const int kind = grounded_attack_kind_from_action(grounded_action_id);
+  if (kind < 0) {
+    return 1.0f;
+  }
+  const MslSmashChargeInfo info = g_smash_charge_by_char_grounded_attack[char_id][(size_t)kind];
+  if (!info.loaded || !(info.damage_mul > 0.0f)) {
+    return 1.0f;
+  }
+  return info.damage_mul;
 }
 
 uint8_t move_tables_escape_allow_interrupt(uint8_t char_id, uint16_t action_id,

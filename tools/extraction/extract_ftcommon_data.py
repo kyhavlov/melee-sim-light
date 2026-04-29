@@ -454,6 +454,20 @@ def main() -> None:
         # DamageFly landings (ftCo_DamageFly_Coll): thresholds on |kb_vel| for DownBound vs Landing.
         "damagefly_downbound_kb_vel_threshold": float(_f32_be(buf, ft_common_abs + 0x1E0)),
         "damagefly_landing_kb_vel_threshold": float(_f32_be(buf, ft_common_abs + 0x1E4)),
+        # DamageFly no-tech wall/ceiling reflect.
+        #
+        # Decomp:
+        # - ftCo_800C17CC uses x1B0 as the wall/ceiling KB threshold.
+        # - ftCo_800C18A8 scales mirrored velocity by x1BC, sets x18 from x1C0, and calls
+        #   ftColl_8007B760(gobj, x1B8).
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_FlyReflect.c::{
+        #   ftCo_800C15F4,ftCo_800C1718,ftCo_800C17CC,ftCo_800C18A8}
+        "damagefly_reflect_speed_threshold": float(_f32_be(buf, ft_common_abs + 0x1B0)),
+        "colanim_flyreflect_x1990_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x1B8))),
+        "damagefly_reflect_speed_mul": float(_f32_be(buf, ft_common_abs + 0x1BC)),
+        "damagefly_reflect_lockout_frames": int(
+            max(0, round(float(_f32_be(buf, ft_common_abs + 0x1C0))))
+        ),
         # Damage jump-buffer window (ftCo_Damage.c): when a jump input is detected during hitstun,
         # `mv.co.damage.x14` is set to the current timer `x0`, and subsequent IASA frames inject
         # `input.x668 |= HSD_PAD_XY` while `x14 <= x1D0`.

@@ -508,14 +508,14 @@ def _parse_subaction_events(
                 #
                 # GALE01 asm decodes:
                 # - hold_frames: low 10 bits of the upper halfword (word0 bits 16..25)
-                # - damage_mul : lower 16 bits of word0 scaled by 0.01
+                # - damage_mul : lower 16 bits of word0 scaled by 1/256.0
                 # - color_anim : top byte of word1
                 if n_words < 2:
                     pc += 4 * n_words
                     continue
                 w1 = _u32_be(archive.buf, pc + 4)
                 hold_frames = (w0 >> 16) & 0x3FF
-                damage_mul = float(w0 & 0xFFFF) * (1.0 / 100.0)
+                damage_mul = float(w0 & 0xFFFF) * (1.0 / 256.0)
                 color_anim = (w1 >> 24) & 0xFF
                 out.append(
                     Event(

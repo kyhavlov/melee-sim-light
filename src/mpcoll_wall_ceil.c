@@ -187,6 +187,8 @@ static inline uint8_t mpcoll_damagefly_wall_asdi_latch_action(uint16_t action_id
     case MSL_ACT_DAMAGE_FLY_LW:
     case MSL_ACT_DAMAGE_FLY_TOP:
     case MSL_ACT_DAMAGE_FLY_ROLL:
+    case MSL_ACT_FLY_REFLECT_WALL:
+    case MSL_ACT_FLY_REFLECT_CEIL:
       return 1u;
     default:
       return 0u;

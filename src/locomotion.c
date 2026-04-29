@@ -2053,7 +2053,13 @@ static inline uint8_t action_uses_ottotto_edge_callback(uint16_t a) {
 static inline uint8_t action_is_air_locomotion(uint16_t a) {
   if (a == MSL_ACT_JUMP_F || a == MSL_ACT_JUMP_B || a == MSL_ACT_JUMP_AERIAL_F ||
       a == MSL_ACT_JUMP_AERIAL_B || action_is_fall_like(a) || a == MSL_ACT_FALL_SPECIAL ||
-      a == MSL_ACT_FALL_SPECIAL_F || a == MSL_ACT_FALL_SPECIAL_B || a == MSL_ACT_DAMAGE_FALL) {
+      a == MSL_ACT_FALL_SPECIAL_F || a == MSL_ACT_FALL_SPECIAL_B || a == MSL_ACT_DAMAGE_FALL ||
+      // Decomp: both CliffJump2 variants use ft_800835B0(..., ft_80082B1C) for collision;
+      // floor contact therefore enters the basic Landing/Wait path instead of staying in
+      // CliffJump2 while grounded.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffJump.c::ftCo_CliffJump2_Coll
+      // refs/melee/src/melee/ft/ft_081B.c::{ft_800835B0,ft_80082B1C}
+      a == MSL_ACT_CLIFF_JUMP_SLOW2 || a == MSL_ACT_CLIFF_JUMP_QUICK2) {
     return 1;
   }
   return 0;

@@ -12,14 +12,18 @@ from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 # Action ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 ACT_WAIT = 0x000E
 ACT_ATTACK_AIR_N = 0x0041
+ACT_LANDING = 0x002A
 ACT_ESCAPE_AIR = 0x00EC
 ACT_LANDING_AIR_N = 0x0046
 ACT_LANDING_FALL_SPECIAL = 0x002B
+ACT_CLIFF_JUMP_QUICK2 = 0x0107
 
 # Submotion ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 SM_FALL = 20
+SM_LANDING = 35
 SM_LANDING_AIR_N = 73
 SM_LANDING_FALL_SPECIAL = 36
+SM_CLIFF_JUMP_QUICK2 = 228
 
 CHAR_FOX = 1
 STAGE_FD = 32
@@ -238,5 +242,43 @@ def test_escape_air_lands_enters_landing_fall_special_and_refreshes_jumps() -> N
     end_frame = _tracks_end_frame(tracks_path, SM_LANDING_FALL_SPECIAL)
     lag = float(_common_attr("landing_fall_special_lag_frames"))
     rate = (float(end_frame) + 0.1) / float(lag)
+    assert int(out["action_frame"][0]) == 0
+    assert int(out["jumps_left"][0]) == int(_fox_attr("max_jumps"))
+
+
+def test_cliffjumpquick2_floor_contact_enters_basic_landing() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["action_id"][0, 0] = np.uint16(ACT_CLIFF_JUMP_QUICK2)
+    seed["action_frame"][0, 0] = np.int16(20)
+    seed["anim_frame_f32"][0, 0] = np.float32(seed["action_frame"][0, 0])
+    seed["animation_index"][0, 0] = np.uint32(SM_CLIFF_JUMP_QUICK2)
+    seed["ground_id"][0, 0] = np.uint16(1)  # prefer main FD floor segment
+
+    # Decomp: CliffJump2_Coll delegates floor contact to ft_80082B1C through ft_800835B0, so a
+    # steady CliffJump2 sweep that reaches floor should enter basic Landing immediately.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffJump.c::ftCo_CliffJump2_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_800835B0,ft_80082B1C}
+    af0 = int(seed["action_frame"][0, 0])
+    af1 = af0 + 1
+    bot0 = _fox_ecb_bottom_rel_y(SM_CLIFF_JUMP_QUICK2, af0)
+    bot1 = _fox_ecb_bottom_rel_y(SM_CLIFF_JUMP_QUICK2, af1)
+    seed["pos_y"][0, 0] = np.float32(-bot0 + 0.10)
+    grav = np.float32(_fox_attr("grav"))
+    seed["speed_y_self"][0, 0] = np.float32(min(-0.05, -(0.20 + (bot1 - bot0)) + grav))
+    seed["jumps_left"][0, 0] = np.uint8(1)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+
+    out = _step_once(seed, prev_inp, inp)
+    assert int(out["on_ground"][0]) == 1
+    assert int(out["action_id"][0]) == ACT_LANDING
+    assert int(out["animation_index"][0]) == SM_LANDING
     assert int(out["action_frame"][0]) == 0
     assert int(out["jumps_left"][0]) == int(_fox_attr("max_jumps"))
