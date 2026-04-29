@@ -322,6 +322,7 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       "firefox_facing_stick_range_min",
       "firefox_freefall_mobility",
       "firefox_landing_lag_frames",
+      "firefox_bound_angle_degrees",
       "ecb_joints",
       "grab_capture_anchor_part_id",
       "laser_spawn_joint_part_id",
@@ -499,6 +500,7 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
           0 ||
       json_get_f32(buf, "firefox_freefall_mobility", &out.firefox_freefall_mobility) != 0 ||
       json_get_u8(buf, "firefox_landing_lag_frames", &out.firefox_landing_lag_frames) != 0 ||
+      json_get_f32(buf, "firefox_bound_angle_degrees", &out.firefox_bound_angle_degrees) != 0 ||
       json_get_f32(buf, "ledge_jump_horizontal_velocity", &out.ledge_jump_horizontal_velocity) !=
           0 ||
       json_get_f32(buf, "ledge_jump_vertical_velocity", &out.ledge_jump_vertical_velocity) != 0 ||

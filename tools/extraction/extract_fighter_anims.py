@@ -1377,7 +1377,7 @@ def _write_fighter_dynamics_data(
 ) -> Path:
     """Write extracted ftData.x2C dynamic-chain descriptors for runtime pose ownership.
 
-    Layout `SSDYNN01` v2:
+    Layout `SSDYNN01` v3:
     - set_count:u16, total_node_count:u16
     - per set: root_part:u16, node_count:u16, pos:vec3
     - per node: part:u16, pad:u16, constants[15]:f32
@@ -1386,7 +1386,7 @@ def _write_fighter_dynamics_data(
     The constants are the raw 0x3C-byte `lb_00F9_UnkDesc1Inner` entries copied by
     `lb_80011710`; runtime maps them onto the `lb_8001044C` dynamic-node fields. The
     collision msid index is the audited owner predicate for submotions whose BODY collision
-    matrices consume this dynamic-chain state.
+    matrices consume this dynamic-chain state on every supported frame.
     """
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"{character}.dyn.bin"
@@ -1410,7 +1410,7 @@ def _write_fighter_dynamics_data(
 
     with out_path.open("wb") as f:
         f.write(b"SSDYNN01")
-        f.write(struct.pack("<I", 2))
+        f.write(struct.pack("<I", 3))
         f.write(struct.pack("<H", len(encoded_sets)))
         f.write(struct.pack("<H", total_nodes))
         for root, pos, nodes in encoded_sets:
@@ -1433,11 +1433,11 @@ def _dynamic_collision_owner_msids(
 ) -> list[int]:
     """Return submotions whose BODY collision matrices consume fighter dynamics state.
 
-    This is deliberately data-owned rather than a C gameplay branch. Fox `AttackHi3` and
-    `AttackDash` are the audited RL1.0 dynamic-chain collision owners: Dolphin
+    This is deliberately data-owned rather than a C gameplay branch. Fox `AttackHi3`,
+    `AttackDash`, and `JumpB` are the audited RL1.0 dynamic-chain collision owners: Dolphin
     pre-`ftColl_80078C70` primitive probes show live hurtcap endpoints on the x2C chain consume
     `ftData.x2C` / `lb_8001044C`, while broad dynamic matrix application to other Fox common
-    attacks regressed BODY sentinels. Adding another submotion here requires the same owner
+    actions regressed BODY sentinels. Adding another submotion here requires the same owner
     evidence and keeps the runtime predicate in extracted data instead of hardcoding record ids or
     cap/frame slices in C.
     """
@@ -1445,7 +1445,7 @@ def _dynamic_collision_owner_msids(
         return []
     move_map = (moves.get("moves") or {}) if isinstance(moves, dict) else {}
     out: list[int] = []
-    for move_name in ("ftCo_SM_AttackHi3", "ftCo_SM_AttackDash"):
+    for move_name in ("ftCo_SM_AttackHi3", "ftCo_SM_AttackDash", "ftCo_SM_JumpB"):
         move_entry = move_map.get(move_name)
         if not isinstance(move_entry, dict):
             continue

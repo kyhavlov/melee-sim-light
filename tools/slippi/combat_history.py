@@ -33,6 +33,11 @@ ACT_ATTACK_AIR_LW = 0x0045
 ACT_DAMAGE_FALL = 0x0026
 ACT_DAMAGE_HI_1 = 0x004B
 ACT_DAMAGE_FLY_ROLL = 0x005B
+ACT_FX_SPECIAL_HI = 0x0163
+ACT_FX_SPECIAL_AIR_HI = 0x0164
+ACT_FX_SPECIAL_HI_LANDING = 0x0165
+ACT_FX_SPECIAL_HI_FALL = 0x0166
+ACT_FX_SPECIAL_HI_BOUND = 0x0167
 # Seed-bridge discriminator for early create-order stale carryover rows in current suite:
 # - falco msid=70 create frame 8 (data/hitboxes/falco.bin)
 # - fox   msid=72 create frame 8 (data/hitboxes/fox.bin)
@@ -455,7 +460,9 @@ def _read_hitbox_events(path: Path) -> dict[int, list[HitboxEvent]]:
 @dataclass(frozen=True)
 class _CharCombatData:
     key: str
+    char_id: int
     pose: AnimPoseDB
+    parts_under_xrotn: frozenset[int]
     hurtcaps: list[HurtCap]
     hitboxes_by_msid: dict[int, list[HitboxEvent]]
     initial_shield_size: float
@@ -517,11 +524,50 @@ def _read_shield_tilt_table(*, data_root: Path, key: str) -> _ShieldTiltTable | 
     return _ShieldTiltTable(neutral_frame=int(neutral_frame), xyz=xyz)
 
 
+def _read_parts_under_xrotn(path: Path) -> frozenset[int]:
+    # data/anims/<char>.tracks.bin (SSANIMT1). Mirror src/anim_table.c part_under_xrotn setup.
+    buf = path.read_bytes()
+    if len(buf) < 16:
+        raise ValueError(f"{path}: too small for SSANIMT1 header")
+    if buf[:8] != b"SSANIMT1":
+        raise ValueError(f"{path}: bad magic (want SSANIMT1)")
+    ver = int.from_bytes(buf[8:12], "little", signed=False)
+    if ver not in (1, 2):
+        raise ValueError(f"{path}: unsupported SSANIMT1 version={ver} (want 1 or 2)")
+    local_count = int.from_bytes(buf[12:14], "little", signed=False)
+    off = 16
+    local_parts_bytes = local_count
+    local_parent_bytes = local_count * 2
+    need = off + local_parts_bytes + local_parent_bytes
+    if len(buf) < need:
+        raise ValueError(f"{path}: truncated SSANIMT1 local table")
+    local_parts = [int(x) for x in buf[off : off + local_parts_bytes]]
+    parent_off = off + local_parts_bytes
+    parent_by_part = [-1] * 256
+    for i, part in enumerate(local_parts):
+        parent_by_part[part] = int.from_bytes(buf[parent_off + i * 2 : parent_off + i * 2 + 2], "little")
+    out: set[int] = set()
+    for part in local_parts:
+        cur = int(part)
+        for _ in range(256):
+            if cur == 2:  # FtPart_XRotN
+                out.add(int(part))
+                break
+            if cur < 0 or cur >= 256:
+                break
+            nxt = int(parent_by_part[cur])
+            if nxt == cur:
+                break
+            cur = nxt
+    return frozenset(out)
+
+
 def _load_char_data(*, char_id: int, data_root: Path) -> _CharCombatData | None:
     key = _char_key_from_char_id(char_id)
     if key is None:
         return None
     pose = AnimPoseDB((data_root / "anims" / f"{key}.bin").read_bytes())
+    parts_under_xrotn = _read_parts_under_xrotn(data_root / "anims" / f"{key}.tracks.bin")
     hurtcaps = _read_hurtcaps(data_root / "hurtcaps" / f"{key}.bin")
     hitboxes_by_msid = _read_hitbox_events(data_root / "hitboxes" / f"{key}.bin")
     attrs = json.loads((data_root / "characters" / f"{key}.json").read_text())
@@ -529,7 +575,9 @@ def _load_char_data(*, char_id: int, data_root: Path) -> _CharCombatData | None:
     model_scaling = float(attrs.get("model_scaling", 1.0))
     return _CharCombatData(
         key=key,
+        char_id=int(char_id),
         pose=pose,
+        parts_under_xrotn=parts_under_xrotn,
         hurtcaps=hurtcaps,
         hitboxes_by_msid=hitboxes_by_msid,
         initial_shield_size=initial_shield_size,
@@ -570,6 +618,85 @@ def _apply_root_facing_rot_y90(xyz: np.ndarray, facing_dir: float) -> np.ndarray
     return np.array([np.float32(facing_dir) * z, y, -np.float32(facing_dir) * x], dtype=np.float32)
 
 
+def _is_specialhi_xrotn_pose_owner(char_id: int, action_id: int) -> bool:
+    if int(char_id) not in (1, 22):
+        return False
+    return int(action_id) in (
+        ACT_FX_SPECIAL_HI,
+        ACT_FX_SPECIAL_AIR_HI,
+        ACT_FX_SPECIAL_HI_LANDING,
+        ACT_FX_SPECIAL_HI_FALL,
+        ACT_FX_SPECIAL_HI_BOUND,
+    )
+
+
+def _specialhi_xrotn_angle(rotate_model: float) -> np.float32:
+    two_pi = np.float32(6.28318530717958647692)
+    angle = np.float32(two_pi - np.float32(rotate_model))
+    if angle >= two_pi:
+        angle = np.float32(angle - two_pi)
+    if angle < np.float32(0.0):
+        angle = np.float32(angle + two_pi)
+    return angle
+
+
+def _apply_specialhi_local_xrotn_if_needed(
+    *,
+    ch: _CharCombatData,
+    action_id: int,
+    msid: int,
+    frame: int,
+    part_id: int,
+    model_scale: float,
+    rotate_model: float,
+    rotate_model_valid: bool,
+    xyz: np.ndarray,
+) -> np.ndarray:
+    # Decomp: Firefox/Firebird launch writes `mv.fx.SpecialHi.rotateModel` and applies it to
+    # FtPart_XRotN (`ftPartSetRotX(..., 2*pi - rotateModel)`). Seed-side hitlist derivation must
+    # use the same live XRotN pose as src/hitboxes.c/src/hurtboxes.c, otherwise dense HitCapsule
+    # seeds can be born from geometry that runtime will never test.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+    #   ftFox_SpecialHi_RotateModel,ftFx_SpecialAirHi_Enter,ftFx_SpecialAirHi_Phys,
+    #   ftFx_SpecialAirHi_Coll}
+    # data/anims/{fox,falco}.tracks.bin: FtPart_XRotN subtree
+    if not rotate_model_valid:
+        return xyz
+    if not _is_specialhi_xrotn_pose_owner(ch.char_id, action_id):
+        return xyz
+    if int(part_id) not in ch.parts_under_xrotn:
+        return xyz
+    m = ch.pose.try_get_matrix(msid=msid, frame=frame, part_id=2)  # FtPart_XRotN
+    if m is None:
+        return xyz
+
+    origin = _mtx34_mul_point(m, np.array([0.0, 0.0, 0.0], dtype=np.float32))
+    axis_pt = _mtx34_mul_point(m, np.array([1.0, 0.0, 0.0], dtype=np.float32))
+    origin = (origin * np.float32(model_scale)).astype(np.float32, copy=False)
+    axis_pt = (axis_pt * np.float32(model_scale)).astype(np.float32, copy=False)
+    axis = (axis_pt - origin).astype(np.float32, copy=False)
+    axis_len = float(np.sqrt(np.float32(axis[0] * axis[0] + axis[1] * axis[1] + axis[2] * axis[2])))
+    if not (axis_len > 0.0):
+        return xyz
+    axis = (axis * np.float32(1.0 / axis_len)).astype(np.float32, copy=False)
+
+    p = (xyz - origin).astype(np.float32, copy=False)
+    angle = _specialhi_xrotn_angle(float(rotate_model))
+    c = np.float32(np.cos(angle))
+    s = np.float32(np.sin(angle))
+    dot = np.float32(axis[0] * p[0] + axis[1] * p[1] + axis[2] * p[2])
+    cross = np.array(
+        [
+            np.float32(axis[1] * p[2] - axis[2] * p[1]),
+            np.float32(axis[2] * p[0] - axis[0] * p[2]),
+            np.float32(axis[0] * p[1] - axis[1] * p[0]),
+        ],
+        dtype=np.float32,
+    )
+    rotated = origin + (p * c) + (cross * s) + (axis * dot * np.float32(1.0 - c))
+    return rotated.astype(np.float32, copy=False)
+
+
 def _active_hitboxes_at_frame(events: list[HitboxEvent], frame: int) -> dict[int, HitboxEvent]:
     # Mirror src/hitboxes.c::hitboxes_refresh event application policy.
     active: dict[int, HitboxEvent] = {}
@@ -592,6 +719,7 @@ def derive_hitbox_prev_center_seed_fields(
     *,
     num_players: int,
     char_id: np.ndarray,
+    action_id: np.ndarray | None = None,
     animation_index: np.ndarray,
     action_frame: np.ndarray,
     anim_frame_f32: np.ndarray,
@@ -600,6 +728,8 @@ def derive_hitbox_prev_center_seed_fields(
     pos_z: np.ndarray | None = None,
     facing: np.ndarray,
     fighter_scale_y: np.ndarray,
+    specialhi_rotate_model_f32: np.ndarray | None = None,
+    specialhi_rotate_model_valid_u8: np.ndarray | None = None,
     data_root: str | Path = "data",
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Derive the hidden HitCapsule.x58 seed lane from replay-visible post-frame state.
@@ -620,6 +750,17 @@ def derive_hitbox_prev_center_seed_fields(
     out_z = np.zeros((n_frames, MAX_PLAYERS, MAX_HITBOXES), dtype=np.float32)
 
     data_root = Path(data_root)
+    action_arr = np.asarray(action_id, dtype=np.uint16) if action_id is not None else None
+    rotate_model_arr = (
+        np.asarray(specialhi_rotate_model_f32, dtype=np.float32)
+        if specialhi_rotate_model_f32 is not None
+        else None
+    )
+    rotate_model_valid_arr = (
+        np.asarray(specialhi_rotate_model_valid_u8, dtype=np.uint8)
+        if specialhi_rotate_model_valid_u8 is not None
+        else None
+    )
     char_cache: dict[int, _CharCombatData | None] = {}
 
     def get_char(cid: int) -> _CharCombatData | None:
@@ -669,6 +810,28 @@ def derive_hitbox_prev_center_seed_fields(
                     continue
                 c = _mtx34_mul_point(m, np.array([ev.x, ev.y, ev.z], dtype=np.float32))
                 c = (c * np.float32(model_scale)).astype(np.float32, copy=False)
+                cur_action = int(action_arr[fi, p]) if action_arr is not None else 0xFFFF
+                rotate_model = (
+                    float(rotate_model_arr[fi, p])
+                    if rotate_model_arr is not None and rotate_model_valid_arr is not None
+                    else 0.0
+                )
+                rotate_model_valid = (
+                    bool(int(rotate_model_valid_arr[fi, p]) != 0)
+                    if rotate_model_valid_arr is not None
+                    else False
+                )
+                c = _apply_specialhi_local_xrotn_if_needed(
+                    ch=ch,
+                    action_id=cur_action,
+                    msid=msid,
+                    frame=frame,
+                    part_id=ev.bone_part_id,
+                    model_scale=model_scale,
+                    rotate_model=rotate_model,
+                    rotate_model_valid=rotate_model_valid,
+                    xyz=c,
+                )
                 c = _apply_root_facing_rot_y90(c, facing_dir)
                 c[0] = np.float32(c[0] + np.float32(px))
                 c[1] = np.float32(c[1] + np.float32(py))
@@ -738,6 +901,8 @@ def derive_combat_hitlist_seed_fields(
     turn_has_turned: np.ndarray | None = None,  # [n_frames, MAX_PLAYERS] u8
     anim_frame_f32: np.ndarray | None = None,  # [n_frames, MAX_PLAYERS] f32
     frame_speed_mul_f32: np.ndarray | None = None,  # [n_frames, MAX_PLAYERS] f32
+    specialhi_rotate_model_f32: np.ndarray | None = None,  # [n_frames, MAX_PLAYERS] f32
+    specialhi_rotate_model_valid_u8: np.ndarray | None = None,  # [n_frames, MAX_PLAYERS] u8
     percent: np.ndarray | None = None,  # [n_frames, MAX_PLAYERS] f32
     include_per_hitbox: bool = False,
     include_replay_only_shield_admission: bool = False,
@@ -859,6 +1024,16 @@ def derive_combat_hitlist_seed_fields(
         frame_speed_arr = np.asarray(frame_speed_mul_f32, dtype=np.float32)
         if frame_speed_arr.shape[0] != n_frames:
             raise ValueError("frame_speed_mul_f32 must have the same number of frames as action_id")
+    rotate_model_arr: np.ndarray | None = None
+    rotate_model_valid_arr: np.ndarray | None = None
+    if specialhi_rotate_model_f32 is not None:
+        rotate_model_arr = np.asarray(specialhi_rotate_model_f32, dtype=np.float32)
+        if rotate_model_arr.shape[0] != n_frames:
+            raise ValueError("specialhi_rotate_model_f32 must have the same number of frames as action_id")
+    if specialhi_rotate_model_valid_u8 is not None:
+        rotate_model_valid_arr = np.asarray(specialhi_rotate_model_valid_u8, dtype=np.uint8)
+        if rotate_model_valid_arr.shape[0] != n_frames:
+            raise ValueError("specialhi_rotate_model_valid_u8 must have the same number of frames as action_id")
 
     # Outputs.
     out_cd = np.zeros((n_frames, MAX_PLAYERS, HITLIST_GROUPS, MAX_PLAYERS), dtype=np.uint16)
@@ -942,6 +1117,16 @@ def derive_combat_hitlist_seed_fields(
                     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::{ftCo_Turn_Enter,ftCo_Turn_Anim_Inner}
                     # refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
                     facing_dir = -facing_dir
+                rotate_model = (
+                    float(rotate_model_arr[fi, p])
+                    if rotate_model_arr is not None and rotate_model_valid_arr is not None
+                    else 0.0
+                )
+                rotate_model_valid = (
+                    bool(int(rotate_model_valid_arr[fi, p]) != 0)
+                    if rotate_model_valid_arr is not None
+                    else False
+                )
                 for cap in ch.hurtcaps[:MAX_HURTCAPS]:
                     m = ch.pose.try_get_matrix(msid=msid, frame=frame, part_id=cap.bone_part_id)
                     if m is None:
@@ -954,6 +1139,28 @@ def derive_combat_hitlist_seed_fields(
                     #   world = pos + local
                     a = (a * np.float32(model_scale)).astype(np.float32, copy=False)
                     b = (b * np.float32(model_scale)).astype(np.float32, copy=False)
+                    a = _apply_specialhi_local_xrotn_if_needed(
+                        ch=ch,
+                        action_id=int(action_id[fi, p]),
+                        msid=msid,
+                        frame=frame,
+                        part_id=cap.bone_part_id,
+                        model_scale=model_scale,
+                        rotate_model=rotate_model,
+                        rotate_model_valid=rotate_model_valid,
+                        xyz=a,
+                    )
+                    b = _apply_specialhi_local_xrotn_if_needed(
+                        ch=ch,
+                        action_id=int(action_id[fi, p]),
+                        msid=msid,
+                        frame=frame,
+                        part_id=cap.bone_part_id,
+                        model_scale=model_scale,
+                        rotate_model=rotate_model,
+                        rotate_model_valid=rotate_model_valid,
+                        xyz=b,
+                    )
                     a = _apply_root_facing_rot_y90(a, facing_dir)
                     b = _apply_root_facing_rot_y90(b, facing_dir)
                     a[0] = np.float32(a[0] + np.float32(px))
@@ -987,6 +1194,17 @@ def derive_combat_hitlist_seed_fields(
                         #   center = rotY90(center, facing_dir)
                         #   world = pos + center
                         c = (c * np.float32(model_scale)).astype(np.float32, copy=False)
+                        c = _apply_specialhi_local_xrotn_if_needed(
+                            ch=ch,
+                            action_id=int(action_id[fi, p]),
+                            msid=msid,
+                            frame=frame,
+                            part_id=ev.bone_part_id,
+                            model_scale=model_scale,
+                            rotate_model=rotate_model,
+                            rotate_model_valid=rotate_model_valid,
+                            xyz=c,
+                        )
                         c = _apply_root_facing_rot_y90(c, facing_dir)
                         c[0] = np.float32(c[0] + np.float32(px))
                         c[1] = np.float32(c[1] + np.float32(py))

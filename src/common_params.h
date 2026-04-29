@@ -58,10 +58,11 @@ typedef struct MslCommonParams {
   uint8_t _pad_u8_attack_lw4[3];
 
   // Walk gating / walk-type thresholds (see refs/melee/src/melee/ft/ftwalkcommon.c)
-  float walk_stick_threshold;  // p_ftCommonData->x24
-  float walk_mid_vel_mul;      // p_ftCommonData->x28
-  float walk_fast_vel_mul;     // p_ftCommonData->x2C
-  float walk_accel_scale_mul;  // p_ftCommonData->x30
+  float walk_stick_threshold;            // p_ftCommonData->x24
+  float walk_mid_vel_mul;                // p_ftCommonData->x28
+  float walk_fast_vel_mul;               // p_ftCommonData->x2C
+  float walk_accel_scale_mul;            // p_ftCommonData->x30
+  float ottotto_walk_stick_x_threshold;  // p_ftCommonData->x474 (ftCo_Walk_CheckInput_Ottotto)
 
   // Turn / run thresholds (see refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c / ftCo_Run.c)
   float turn_stick_x_threshold;  // p_ftCommonData->x34

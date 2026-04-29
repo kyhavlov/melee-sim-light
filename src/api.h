@@ -239,6 +239,26 @@ typedef struct MslSeed {
   float speed_y_self[MSL_MAX_PLAYERS];
   float speed_x_attack[MSL_MAX_PLAYERS];
   float speed_y_attack[MSL_MAX_PLAYERS];
+  // Hidden Firefox/Firebird `mv.fx.SpecialHi.rotateModel` seed lane.
+  //
+  // Decomp ownership:
+  // - ftFx_SpecialAirHi_Enter writes rotateModel from the launch stick/self_vel direction.
+  // - ftFx_SpecialAirHi_Phys reuses the stored rotateModel for reverse acceleration.
+  // - ftFx_SpecialAirHi_Coll can rewrite facing and recompute rotateModel from current self_vel.
+  // - SpecialHiLanding/Fall/Bound callbacks do not rewrite FtPart_XRotN, so the live pose can
+  //   persist into those followups until a non-Firefox motion state owns the model.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+  //   ftFox_SpecialHi_RotateModel,ftFx_SpecialAirHi_Enter,ftFx_SpecialAirHi_Phys,
+  //   ftFx_SpecialAirHi_Coll,ftFx_SpecialHiLanding_Anim,ftFx_SpecialHiFall_Anim,
+  //   ftFx_SpecialHiBound_Enter}
+  //
+  // Producer (tools/slippi/make_dataset_from_slp.py):
+  // - valid=1: current row is inside a continuous SpecialHi/AirHi/Landing/Fall/Bound pose episode,
+  //   and the value is the last source launch/collision rotateModel reconstructed from replay
+  //   history.
+  // - valid=0: reseed falls back to current visible self_vel/facing.
+  float specialhi_rotate_model_f32[MSL_MAX_PLAYERS];
+  uint8_t specialhi_rotate_model_valid_u8[MSL_MAX_PLAYERS];
   // Fighter model scale (decomp: fp->x34_scale.y). Slippi exposes this from the game-start block
   // (player.model_scale), but legacy datasets may still default it to 1.0.
   float fighter_scale_y[MSL_MAX_PLAYERS];

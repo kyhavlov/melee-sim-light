@@ -69,6 +69,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->speed_y_self = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->speed_x_attack = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->speed_y_attack = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->specialhi_rotate_model = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->specialhi_rotate_model_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->fighter_scale_y = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->facing = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->facing_dir1 = (int8_t*)alloc_aligned_64(sizeof(int8_t) * bp);
@@ -419,6 +421,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->coll_stage_prev_pos_y || !state->coll_stage_cur_pos_x ||
       !state->coll_stage_cur_pos_y || !state->speed_air_x_self || !state->speed_ground_x_self ||
       !state->speed_y_self || !state->speed_x_attack || !state->speed_y_attack ||
+      !state->specialhi_rotate_model || !state->specialhi_rotate_model_valid ||
       !state->fighter_scale_y || !state->facing || !state->facing_dir1 ||
       !state->ground_friction_mul || !state->kb_smashcharge_active || !state->smash_charge_state ||
       !state->smash_charge_frames || !state->smash_charge_hold_frames_max ||
@@ -578,6 +581,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   memset(state->smash_charge_hold_frames_max, 0, sizeof(uint8_t) * bp);
   memset(state->smash_charge_saved_rate_fp_q16_16, 0, sizeof(int32_t) * bp);
   memset(state->walljump_seed_phase_valid, 0, sizeof(uint8_t) * bp);
+  memset(state->specialhi_rotate_model, 0, sizeof(float) * bp);
+  memset(state->specialhi_rotate_model_valid, 0, sizeof(uint8_t) * bp);
   memset(state->walk_anim_source_vel, 0, sizeof(float) * bp);
   memset(state->walk_retarget_tick_source_vel, 0, sizeof(float) * bp);
   memset(state->run_anim_source_vel, 0, sizeof(float) * bp);
@@ -646,6 +651,8 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->speed_y_self);
   alloc_free(state->speed_x_attack);
   alloc_free(state->speed_y_attack);
+  alloc_free(state->specialhi_rotate_model);
+  alloc_free(state->specialhi_rotate_model_valid);
   alloc_free(state->fighter_scale_y);
   alloc_free(state->facing);
   alloc_free(state->facing_dir1);

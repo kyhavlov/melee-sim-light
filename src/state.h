@@ -90,6 +90,14 @@ typedef struct MslStateSoA {
   float* speed_y_self;
   float* speed_x_attack;
   float* speed_y_attack;
+  // Internal Firefox/Firebird launch pose owner (`mv.fx.SpecialHi.rotateModel`).
+  // Decomp writes this on launch entry and collision continuation; Phys and FtPart_XRotN pose
+  // consumers reuse the stored value instead of deriving a new angle from decelerated self_vel.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+  //   ftFox_SpecialHi_RotateModel,ftFx_SpecialAirHi_Enter,ftFx_SpecialAirHi_Phys,
+  //   ftFx_SpecialAirHi_Coll}
+  float* specialhi_rotate_model;
+  uint8_t* specialhi_rotate_model_valid;
   // Fighter model scale (decomp: fp->x34_scale.y). This is an external multiplier applied to
   // various collision/visual calculations; default is 1.0 in normal matches.
   float* fighter_scale_y;

@@ -342,6 +342,7 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
         out["firefox_landing_lag_frames"] = int(
             max(0, min(255, int(round(float(_f32_be(buf, ext_abs + 0x90))))))
         )
+        out["firefox_bound_angle_degrees"] = float(_f32_be(buf, ext_abs + 0x94))
         out["blaster_angle"] = float(_f32_be(buf, ext_abs + 0x10))
         out["blaster_vel"] = float(_f32_be(buf, ext_abs + 0x14))
         out["blaster_shot_itkind"] = int(_u32_be(buf, ext_abs + 0x1C))
@@ -510,6 +511,7 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
         "firefox_facing_stick_range_min",
         "firefox_freefall_mobility",
         "firefox_landing_lag_frames",
+        "firefox_bound_angle_degrees",
         "blaster_angle",
         "blaster_vel",
         "blaster_shot_itkind",

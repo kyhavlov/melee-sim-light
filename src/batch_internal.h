@@ -33,6 +33,9 @@ struct MslBatch {
   // replay-reseeded rollouts normally keep seed-owned metadata, with a narrow Slippi frame-start
   // clock mode for replay-carry rows that need the post-frame seed to advance.
   uint8_t* rollout_clock_rng_owned;  // [batch]
+  // Replay validation rollout reseed mode. This stays true for `reseed_seed_rollout` even when the
+  // RNG/frame-clock owner itself stays seed-owned.
+  uint8_t* replay_rollout_reseeded;  // [batch]
 
   // Debug-only per-fighter override for hit status eligibility (opcode 26).
   // Indexed like other per-player state arrays: [batch_size * MSL_MAX_PLAYERS].
