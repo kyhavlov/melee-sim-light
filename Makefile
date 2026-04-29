@@ -1,4 +1,4 @@
-.PHONY: build test test-parallel test-serial preprocess preprocess-aggregate validate validate-aggregate validate-rollout validate-rollout-aggregate validate-all rollout-capture rollout-summary rollout-diff rollout-locate rollout-locate-summary rollout-locate-diff rollout-disruptive rollout-disruptive-rerank build_data fmt fmt-check check guardrail-preflight guardrail-preflight-full guardrail-baseline forensic-rows dolphin-engine-dump dolphin-extract dolphin-forensic-row build-bench-sim bench-sim FORCE
+.PHONY: build test test-parallel test-serial preprocess preprocess-aggregate validate validate-aggregate validate-rollout validate-rollout-aggregate validate-all rollout-capture rollout-summary rollout-diff rollout-locate rollout-locate-summary rollout-locate-diff rollout-disruptive rollout-disruptive-rerank build_data webplay fmt fmt-check check guardrail-preflight guardrail-preflight-full guardrail-baseline forensic-rows dolphin-engine-dump dolphin-extract dolphin-forensic-row build-bench-sim bench-sim FORCE
 
 PY := uv run python
 DATASETS_DIR ?= datasets
@@ -40,6 +40,9 @@ BENCH_SIM_SRCS := $(wildcard src/*.c) src/decomp/lb/lb_00ce.c tools/bench/bench_
 BUILD_FORCE ?= 0
 BUILD_STAMP ?= build/msl_binding.stamp
 BUILD_SRCS := $(shell find src python -type f '(' -name '*.c' -o -name '*.h' -o -name 'setup.py' ')' -print)
+WEBPLAY_PORT ?= 8001
+HOST ?= 127.0.0.1
+OPEN ?= 1
 
 ifneq ($(strip $(OUT)),)
 VALIDATE_OUT := --out $(OUT)
@@ -142,6 +145,9 @@ rollout-disruptive-rerank:
 
 build_data:
 	@$(PY) -m tools.extraction.build_data --iso-dir _iso --stage grnla --chars fox,falco
+
+webplay:
+	@MSL_WEBPLAY_HOST="$(HOST)" MSL_WEBPLAY_PORT="$(WEBPLAY_PORT)" MSL_WEBPLAY_OPEN="$(OPEN)" node tools/webplay/webplay_server.mjs
 
 fmt:
 	@command -v "$(CLANG_FORMAT)" >/dev/null 2>&1 || (echo "Missing clang-format (set CLANG_FORMAT=... or install it)."; exit 1)

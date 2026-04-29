@@ -1,7 +1,7 @@
 import { createRoot, createSignal } from "solid-js";
 import { GameSettings } from "~/common/types";
 
-import { replayStore, setReplay, setReplayData } from "~/state/replayStore";
+import { replayStore, setLiveReplayData, setReplay, setReplayData, setRendererMode } from "~/state/replayStore";
 import { spectateStore, nonReactiveState, setWsUrl } from "~/state/spectateStore";
 
 type ReplayPointer = {
@@ -11,12 +11,15 @@ type ReplayPointer = {
   mode: "replay-data",
   replayData: unknown
 } | {
+  mode: "live-data",
+  replayData: unknown
+} | {
   mode: "spectate",
   url: string
 };
 
 type ViewerMode = "replay" | "spectate";
-type ViewerStateAttribute = "settings" | "ending" | "frames" | "replayFormatVersion" | "animations" | "isLoading" | "frame" | "renderDatas" | "framesPerTick" | "running" | "zoom" | "isDebug" | "isFullscreen" | "watchingLive" | "disconnected" | "currentFrame";
+type ViewerStateAttribute = "settings" | "ending" | "frames" | "replayFormatVersion" | "animations" | "isLoading" | "frame" | "renderDatas" | "framesPerTick" | "running" | "rendererMode" | "zoom" | "isDebug" | "isFullscreen" | "watchingLive" | "disconnected" | "currentFrame";
 
 type API = {
   replayPointer(): ReplayPointer | null,
@@ -29,14 +32,19 @@ export const { replayPointer, setReplayPointerWrapper } = createRoot<API>(() => 
   const setReplayPointerWrapper = (p: ReplayPointer | null) => {
     if (p === null) {
       setWsUrl(null);
+      setRendererMode(false);
     }
 
     if (p?.mode === "spectate") {
+      setRendererMode(false);
       setWsUrl(p.url);
     } else if (p?.mode === "replay") {
+      setRendererMode(false);
       setReplay(p.file);
     } else if (p?.mode === "replay-data") {
       setReplayData(p.replayData);
+    } else if (p?.mode === "live-data") {
+      setLiveReplayData(p.replayData);
     }
     setReplayPointer(p);
   }
@@ -101,6 +109,10 @@ export function access(attribute: ViewerStateAttribute): any {
     "running": {
       "replay": () => replayStore.running,
       "spectate": () => spectateStore.running
+    },
+    "rendererMode": {
+      "replay": () => replayStore.rendererMode,
+      "spectate": () => false
     },
     "zoom": {
       "replay": () => replayStore.zoom,

@@ -7,6 +7,7 @@ import {
   characterNameByInternalId,
 } from "~/common/ids";
 import {
+  Frame,
   PlayerInputs,
   PlayerSettings,
   PlayerState,
@@ -49,6 +50,7 @@ export interface ReplayStore {
   fps: number;
   framesPerTick: number;
   running: boolean;
+  rendererMode: boolean;
   zoom: number;
   isDebug: boolean;
   isFullscreen: boolean;
@@ -61,6 +63,7 @@ export const defaultReplayStoreState: ReplayStore = {
   fps: 60,
   framesPerTick: 1,
   running: false,
+  rendererMode: false,
   zoom: 1,
   isDebug: false,
   isFullscreen: false
@@ -111,8 +114,23 @@ export function pause(): void {
   stop();
 }
 
+export function setRendererMode(enabled: boolean): void {
+  setReplayState("rendererMode", enabled);
+  if (enabled) {
+    stop();
+  }
+}
+
 export function jump(target: number): void {
   setReplayState("frame", wrapFrame(replayState, target));
+}
+
+export function setFrameData(frameNumber: number, frame: Frame): void {
+  if (!replayState.replayData) return;
+  batch(() => {
+    setReplayState("replayData", "frames", frameNumber, frame);
+    setReplayState("frame", frameNumber);
+  });
 }
 
 // percent is [0,1]
@@ -146,12 +164,27 @@ export async function setReplay(replayFile: File): Promise<void> {
 }
 
 export function setReplayData(replayData: ReplayData | unknown): void {
-  setReplayState({
-    replayData: replayData as ReplayData,
-    frame: 0,
-    renderDatas: [],
+  batch(() => {
+    setReplayState({
+      replayData: replayData as ReplayData,
+      frame: 0,
+      renderDatas: [],
+      rendererMode: false,
+    });
   });
   start();
+}
+
+export function setLiveReplayData(replayData: ReplayData | unknown): void {
+  batch(() => {
+    setReplayState({
+      replayData: replayData as ReplayData,
+      frame: 0,
+      renderDatas: [],
+      rendererMode: true,
+    });
+  });
+  stop();
 }
 
 const animationResources: ResourceReturn<CharacterAnimations | undefined, unknown>[] = [];

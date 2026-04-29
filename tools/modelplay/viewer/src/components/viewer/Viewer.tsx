@@ -56,7 +56,9 @@ export function Viewer() {
                 <HUD />
               </g>
             </svg>
-            {replayPointer()?.mode === "spectate" ? <SpectateControls /> : <Controls />}
+            <Show when={!access("rendererMode")}>
+              {replayPointer()?.mode === "spectate" ? <SpectateControls /> : <Controls />}
+            </Show>
           </Show>
         </Show>
       </div>
