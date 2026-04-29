@@ -652,9 +652,12 @@ Recent deltas to reflect here (do not let these get “lost in chat logs”):
   DownBound refreshes persisted `floor.index` across connected FD floor seams; same-action
   DamageAir floor contact refreshes only the replay-visible jump count while preserving fastfall
   state; and Ottotto edge ownership now covers Walk/Landing-style `ft_80084280` teeter admission
-  plus the immediate L-stick Ottotto -> KneeBend edge-loss path. Broad EscapeAir ledge projection,
-  full DamageAir transfer, and broad DamageFly root projection experiments were rejected due
-  taxonomy or lock regressions.
+  plus the immediate L-stick Ottotto -> KneeBend edge-loss path. Ottotto / OttottoWait IASA also
+  follows the source Jump -> Dash -> crouch -> Turn -> Ottotto-walk tail: ordinary Turn uses
+  `ftCo_Turn_CheckInput`, while Ottotto walk uses the extracted `p_ftCommonData->x474` threshold
+  (`data/common/ft_common_data.json::ottotto_walk_stick_x_threshold`). Broad EscapeAir ledge
+  projection, full DamageAir transfer, and broad DamageFly root projection experiments were
+  rejected due taxonomy or lock regressions.
 - Ledge-grab mask ordering is now collision-stage prev/cur snapshot based (captured around `stage_collision_apply()` and consumed
   post-collision); regression locked for TreasuredBackKangaroo records 1806/1807 (`tests/test_ledge_grab_treasuredbackkangaroo_regression.py`).
 - Build now forces C extension rebuild to avoid stale `.so` issues (Makefile change).
@@ -2254,6 +2257,16 @@ Fox/Falco special-owner split (2026-04-17):
     Sources: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::{
     ftCo_Landing_IASA,ftCo_LandingFallSpecial_Enter}`,
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D68C0`.
+  - Opening input lock countdowns are replay post-frame "remaining locked steps" lanes. At seed
+    frame `-40`, value `1` represents the VS-overlay clear that runs before raw frame `-39` inputs,
+    so that current input is visible to `Fighter_procUpdate`. This lets
+    `Landing_IASA -> ftCo_Jump_CheckInput` consume the first legal jump edge at the VS-start
+    boundary and prevents a grounded/aerial SpecialN split one frame later. Other locked states
+    still blank inputs through
+    `Fighter_UnkInitLoad_80068914_Inner1`. Sources:
+    `refs/melee/src/melee/ft/fighter.c::{Fighter_procUpdate,Fighter_UnkInitLoad_80068914_Inner1}`,
+    `refs/melee/src/melee/gm/gm_16AE.c::fn_8016B7F8`,
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_IASA`.
   - SpecialLw Loop/Turn/End IASA can consume aerial jump into `JumpAerial*`; that same callback
     does not then run destination `JumpAerial` special dispatch again on the same B/up input edge.
     Runtime marks the Shine-owned JumpAerial handoff for the current step so the later generic
@@ -2457,6 +2470,10 @@ Fox/Falco special-owner split (2026-04-17):
       AttackHi3 item BODY rows that were missed by current-point probing. Early Dash remains
       excluded because it is still a proven false-positive slice until the full grounded
       hurt-status / pose discriminator is promoted.
+    - `it_8029C4D4` delegates to the generic item stage-collision helper `it_8026E9A4`; this is not
+      floor-only. Laser articles crossing FD wall or ceiling segments set `lifeTimer=1` through the
+      same callback path. PPA `1159 -> 1161` locks the left-wall-under-ledge boundary that otherwise
+      leaves an expired laser alive long enough to shift later item instance/slot identity.
     - Replay-real locks: `DistinctCaringCobra.msl:7619` covers late-Dash damage/clear,
       `BlondHardHippopotamus.msl:5148` covers Dash-to-Turn item clear without damage entry, and
       `HilariousVillainousGiraffe.msl:1024` covers AttackHi3 damage/clear. Adjacent no-hit
@@ -2469,6 +2486,7 @@ Fox/Falco special-owner split (2026-04-17):
       Section-6 and ledge/collision-env families remain closed
       (`F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`).
     Sources: `refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Phys,it_8029C4D4}`,
+    `refs/melee/src/melee/it/it_266F.c::it_8026E9A4`,
     `refs/melee/src/melee/it/itcoll.c::it_80272460`,
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::{ftCo_Dash_Anim,ftCo_Dash_IASA}`.
   - Laser item phantom / tip-log BODY slice:
@@ -2760,6 +2778,11 @@ Fox/Falco special-owner split (2026-04-17):
       matrix radius term therefore carries the defender's extracted `co_attrs.model_scaling` in
       addition to the live ftCo_80091D58 shield scale. Runtime applies that model-scale term to the
       ShieldDesc overlap radius instead of a character proxy or fixed tolerance.
+    - Final-x14 no-submotion `GuardReflect` is a narrower ShieldDesc handoff phase. The frozen
+      replay-visible shield radius already represents the live shield JObj scale after
+      `ftCo_80093BC0 -> ftCo_80092450`; fighter-vs-fighter shield admission must not add the
+      generic model-scale radius or enable-edge sweep proxy without explicit accepted ShieldDesc
+      provenance. TBK `1403 -> 1427` locks the near-rim shine BODY negative.
     - Active no-submotion `GuardReflect` has a split ShieldDesc/ReflectDesc owner. The
       `ftCo_8009388C` path clears `x221B_b0` and creates ReflectDesc only; `ftCo_80093BC0`
       recreates ShieldDesc after x14 expires. Without a teacher-forced ShieldDesc accept seed,
@@ -2767,6 +2790,19 @@ Fox/Falco special-owner split (2026-04-17):
       bubble to suppress BODY. PRH `1510` locks the negative boundary where a stale ShieldDesc
       proxy incorrectly takes `GuardSetOff`, while the source-shaped owner lets the later BODY path
       apply `DamageFlyHi`.
+    - The same `ftCo_8009388C` GuardOn -> GuardReflect path keeps the live GuardOn JObj pose for
+      fighter-vs-fighter BODY hurtcaps on no-submotion snapshots. Runtime admits the GuardReflect
+      submotion hurtcap fallback only when the transition provenance is GuardOn: live
+      `prev_action_id` for same-step GuardOn entries, or `seed_prev_action_id` for already-seeded
+      GuardReflect snapshots whose live prev has advanced before hurtcap refresh. Without that
+      provenance, active no-submotion GuardReflect remains on the raw snapshot geometry and cannot
+      become a broad BODY-contact shortcut.
+    - Catch selection is a separate GuardReflect no-submotion owner. `ftColl_80078A2C` selects
+      `Catch`/`CatchDash` victims from grabbable hurt capsules, not BODY-enabled capsules or the
+      ShieldDesc path. Late GuardReflect snapshots with no serialized submotion therefore compute
+      the GuardOn-table grabbable capsule pose locally inside catch selection only; they do not
+      populate global BODY/debug hurtcap state. PJO `4221 -> 4240` locks the positive catch
+      connection, while the same row's debug BODY candidates remain empty.
     - No-submotion `GuardOn` entry snapshots (`animation_index=-1`, `action_frame<0`) use
       `data/shields/{fox,falco}.bin::guard_on_xyz[0]` with the same live model-scaled ShieldDesc
       bone only when the previous post-frame owner is not already a shield action. Source path:
@@ -3270,6 +3306,17 @@ Fox/Falco special-owner split (2026-04-17):
     `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim`,
     `refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C6CC,it_8029C4D4}`,
     `tools/dolphin/patches/ishiiruka_throw_laser_event_probe.patch`.
+  - Falco ThrowHi same-frame state1 laser damage top-off:
+    - When multiple ThrowHi state1 articles overlap the same already-damaged victim in one item
+      pass, their HitCapsule damage contributes to the same `Fighter_ProcessHit` percent-temp
+      frame, but the first accepted hit owns the Damage entry and x2088 motion-state instance. Later
+      same-source top-offs can still run the `ftCo_Damage_CalcVel` merge, so X may take the larger
+      same-sign KB from the later article while Y preserves the larger existing DamageFly vertical
+      KB. PRH `6744` locks the two-article case and a mutation control proves removing the second
+      article loses only the extra percent/top-off.
+    Sources: `refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC`,
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_CalcVel,ftCo_8008DCE0}`,
+    `refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C6CC,it_8029C4D4}`.
   - Falco ThrowB startup same-frame callback and Fox/Fox ThrowHi later-hitbox carry:
     - Falco ThrowB frame-15 startup rows now run the same-frame state1 throw-laser
       spawn -> hb0 BODY/give_damage -> destroy lifecycle when the unique same-source victim is still
@@ -4249,8 +4296,8 @@ BODY collision-space residual split and rejected seed bridge:
   - Adding Fox `DamageFlyTop` (`submotion_id=180`) to the `SSDYNN01` dynamic-collision owner index
     was tested and rejected: it fixed no extra QGD phantom rows beyond the hitbox scale / x1898
     owner, and regressed earlier QGD active-hitstun BODY rows by applying the live x2C chain where
-    vanilla selects the SSANIM collision matrix. The retained dynamic-collision data remains
-    AttackDash/AttackHi3 only.
+    vanilla selects the SSANIM collision matrix. The retained dynamic-collision data remains the
+    audited Fox JumpB/AttackDash/AttackHi3 owner set.
 - The grounded fighter-overlap Z-depth runtime owner now mirrors the normal `ftCommon_8007E0E4`
   lane: `ftCommon_8007DD7C` contributes +/-`p_ftCommonData->x454` to `xF8_playerNudgeVel.y`,
   no-overlap grounded frames decay hidden depth toward zero, and the resulting non-transformed
@@ -4263,6 +4310,10 @@ BODY collision-space residual split and rejected seed bridge:
   without stale carry on airborne, damage, GuardSetOff, DownBound, Cliff, throw, and special
   states. `TCH:5649` protects the formerly false AttackDash BODY row whose vanilla probe shows
   hidden Z-depth separation before `lbColl_80006E58`.
+- Grounded player nudge is per-fighter callback ordered, not a global post-callback pass. When an
+  earlier fighter runs `ftCommon_8007E0E4`, later fighter slots can still contribute frame-start
+  grounded pushbox overlap even if their own later Anim callback will enter JumpF/B. TBK `1426`
+  locks the positive x450 nudge and an airborne-peer negative.
 - Taxonomy now records the victim's post-timebase/pre-combat action when splitting debug-selected
   false-positive rows. If the victim already diverged from the replay destination before BODY
   collision, the row is assigned to `F10l`; if there is no pre-combat candidate, it is assigned to
@@ -4332,11 +4383,11 @@ BODY collision-space residual split and rejected seed bridge:
   `data/anims/{fox,falco}.dyn.bin`, keeps runtime dynamic-node pose state in fixed-capacity
   per-player arrays, updates that state before hurtcap refresh, and lets hurtcap world endpoints
   sample a dynamic collision matrix before `lbColl_8000805C` runs. BODY admission still uses the
-  normal `ftColl_80078C70` -> `lbColl_8000805C` predicate. `SSDYNN01` v2 also carries the audited
+  normal `ftColl_80078C70` -> `lbColl_8000805C` predicate. `SSDYNN01` v3 also carries the audited
   dynamic-collision owner submotion index, so C gameplay no longer gates this owner on raw
-  Fox/AttackDash/AttackHi3 msid branches. Runtime keeps dynamic-node state validity separate from current-frame
-  collision-matrix substitution: valid state carries sequentially even on frames where the dynamic
-  matrix is not applied. The implemented runtime surface is intentionally one-set for Fox/Falco
+  Fox/JumpB/AttackDash/AttackHi3 msid branches. Runtime keeps dynamic-node state validity separate
+  from current-frame collision-matrix substitution: valid state carries sequentially even on frames
+  where the dynamic matrix is not applied. The implemented runtime surface is intentionally one-set for Fox/Falco
   (`Fox: [17,18,19,20]`, `Falco: []`) and the loader rejects present multi-set or oversized-chain
   `SSDYNN01` data until a set-indexed state surface is needed.
 - A runtime hardcoded primitive overlay for Fox `AttackHi3` / frame 4 / hurtcap 12 and a generated
@@ -4355,7 +4406,13 @@ BODY collision-space residual split and rejected seed bridge:
   is `O(action_frame)` on non-sequential reseed/pre-combat reconstruction only; normal sequential
   rollout carries the fixed dynamic state forward. No replay authority, record-id branch, cap/frame
   primitive injection, runtime overlay table, or broad permissive geometry sweep is used.
-- This closes the Fox AttackDash/AttackHi3 / `SSDYNN01` dynamic-chain collision-pose sub-owner.
+- This closes the Fox JumpB/AttackDash/AttackHi3 / `SSDYNN01` dynamic-chain collision-pose sub-owner.
+  JumpB was added after Dolphin pre-ftColl probes on `PPA:3182` showed Falco AttackAirB's hitbox
+  already matched runtime, while Fox hurtcap-12 endpoints consumed the live `ftData.x2C` dynamic
+  chain before `lb_8000B1CC`. The retained v3 contract treats the collision-owner index as
+  current-frame dynamic matrix ownership even when the `lb_8001044C` update has no nonzero
+  correction carry; a broad JumpB facing flip was rejected because it fixed `PPA:3182` but regressed
+  protected aggregate BODY rows and rollout totals.
   AttackDash was added to the extracted dynamic-collision predicate after Dolphin pre-ftColl probes
   on `FSP:7078` showed Fox part-18 hurtcap endpoints consuming the same `ftData.x2C` chain before
   `lb_8000B1CC`; the runtime still consumes only the `SSDYNN01` owner index and has no C row/msid
@@ -4467,6 +4524,12 @@ BODY collision-space residual split and rejected seed bridge:
   left-wall actions: a generic left-wall envelope was tested and regressed unrelated rows. The
   retained MAJ 8878 and HVG 4780 rollout locks protect the left-wall envelope and hitlag refresh
   boundaries.
+- The same `ftFx_SpecialAirHi_Coll` wall/ceiling contact path also owns collision-facing during
+  launch. If the contact normal is within `90 + ftFox_DatAttrs.x94_FOX_FIREFOX_BOUND_ANGLE` of
+  `self_vel`, source writes `fp->facing_dir = sign(fp->self_vel.x)` and recomputes rotateModel.
+  Runtime loads x94 from `data/characters/{fox,falco}.json::firefox_bound_angle_degrees`; TCH
+  6989/6990/6998 locks the angle boundary and later `SpecialHiFall -> CliffCatch` rollout
+  dependency.
 - DamageFly hitlag-exit ASDI near a persisted wall uses the same CollData wall index provenance:
   `ftCo_Damage_OnExitHitlag` applies ASDI before DI/LSI, while `Fighter_procMap` will run the
   DamageFly collision callback later in the frame. When hitlag-refresh has cleared the Hug env bit
@@ -4475,6 +4538,32 @@ BODY collision-space residual split and rejected seed bridge:
   must not re-stamp Hug or run a full wall envelope on the damage row; doing so over-admits
   PassiveWall. HVG `4780..4829` locks the former F04 left-wall -> PassiveWall -> missed-death
   cascade.
+- HIS `1673` remains a one-step strict-only facing residual after the retained Side-B / BODY
+  contact fixes: Fox correctly enters `DamageFlyTop` with matching hitlag, hitstun, percent, and
+  position, but the sim computes `dmg.facing_dir_1` from the current source root after the attacker
+  has crossed the victim. Replay keeps the contact-time source-facing sign from the accepted
+  hitbox collision. This is not a new gameplay branch; the source-shaped follow-up is a minimal
+  contact-time `dmg.facing_dir_1` provenance lane for delayed BODY damage entry, not a row-local
+  HIS special case.
+- Common DamageFly wall projection also consumes `mpColl_LoadECB_JObj`'s horizontal ECB recenter
+  before the wall candidate pass. For narrow JObj spans, decomp recenters the sampled left/right
+  x-extents around zero and then applies the final +/-2 clamp from `mpColl_LoadECB_inline`; this is
+  the shape used by `mpColl_80044E10_RightWall` / `mpColl_80045B74_LeftWall`, not a replay
+  tolerance. PPA `5576/5577` lock the right-wall case where the corrected side extent matches the
+  FD wall projection exactly. The current bottom/top side-edge candidates from
+  `mpLib_800511A4_RightWall` / `mpLib_800515A0_LeftWall` are Push-only; WallHug remains owned by
+  the side-point branch or by an explicit one-step `mpcoll_wall_*` seed lane for the narrow
+  DamageFlyTop wall-callback bridge. Persisted-index recovery is likewise Push-only, so PPA's
+  Push-only right-wall correction cannot manufacture PassiveWall, while DCC/HIS one-step
+  `DamageFlyTop -> PassiveWall{Jump}` rows still consume the seed-owned WallHug phase.
+- Common Jump/Fall walljump callbacks use the `ft_800831CC` / `ft_800835B0` path through
+  `ft_80083090_inline` and `mpColl_80047E14` flags-6 wall collision, not the `0xA`
+  PassiveWall timer helper. When that callback preserves WallHug on FD's left wall,
+  `ftWallJump_8008169C` still tests the frame-start `fp->pos_delta.x` written by
+  `Fighter_8006A360`, so runtime uses the previous post-frame position lane rather than the
+  post-collision wall projection displacement. HVG `4650..4672` locks the boundary: Hug is visible
+  at `4666` without early `PassiveWallJump`, and `4667` enters `PassiveWallJump`; the remaining
+  about `0.295` X residual belongs to the `ftCo_800C1E64` entry anchor / TransN snapshot owner.
 - Guard floor-loss ledge-slip uses the explicit `ft_800845B4` MissFoot branch, not a generic
   grounded floor-loss rule. A terminal LandingFallSpecial row can run
   `ftCo_Landing_Anim -> ft_8008A2BC` into Wait in the prio-1 Anim proc, then the later input proc
