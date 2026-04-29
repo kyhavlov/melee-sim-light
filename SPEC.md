@@ -1613,6 +1613,11 @@ Grounded motion-entry timing notes:
   `ftCo_TurnRun_Anim` checks `fn_800CA644`; when the hidden exit microphase rejects Run, it enters
   Wait through `ft_8008A2BC` and the destination `Wait_IASA` selector owns Squat. The runtime keeps
   this branch local to final TurnRun down-stick rows.
+- TurnRun final-frame Run handoff uses the post-pivot facing. `ftCo_TurnRun_Enter` leaves the
+  motion-entry sign in `facing_dir1`; `ftCo_TurnRun_Anim` may then flip current `facing_dir` when
+  its script-owned turn gate sees ground velocity cross the pivot. The animation-end `fn_800CA644`
+  check tests held stick against current facing if that pivot is already exposed, otherwise against
+  the pending final pivot.
 - Pure motion-entry `instance_id` ownership remains `ft_800895E0/x2073` plus the global
   `plAttack_80037B08` counter by default. Simultaneous fighter entries and hidden prior consumers
   use `motion_entry_instance_id_override_u16`, a non-causal teacher-forced replay seed lane that
@@ -1925,7 +1930,7 @@ Fox/Falco special-owner split (2026-04-17):
     ftFx_SpecialAirHi_Coll,ftFx_SpecialHiBound_Enter,ftFx_SpecialHiBound_Anim}`.
   - `SpecialHiFall` / `SpecialHiBound` exits that call `ftCo_80096900` preserve the pre-entry
     fastfall bit because the helper enters `FallSpecial` with `Ft_MF_KeepFastFall`. The common
-    motion-state table does not encode this callsite-specific flag, so `enter_fall_special_from_specialhi`
+    motion-state table does not encode this callsite-specific flag, so `enter_fall_special_via_ftco_80096900`
     restores `fall_fast` after the shared motion-entry bundle.
     Sources: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::inline0`,
     `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
@@ -4542,6 +4547,10 @@ BODY collision-space residual split and rejected seed bridge:
   Runtime loads x94 from `data/characters/{fox,falco}.json::firefox_bound_angle_degrees`; TCH
   6989/6990/6998 locks the angle boundary and later `SpecialHiFall -> CliffCatch` rollout
   dependency.
+- Up-B and aerial Side-B recovery exits consume all jumps through `ftCo_80096900(..., unk=true)`:
+  grounded source states take `ftCommon_8007D60C`, while airborne source states take
+  `ftCommon_UseAllJumps`. Recovery FallSpecial therefore must not allow a later X/Y press to become
+  JumpAerial.
 - DamageFly hitlag-exit ASDI near a persisted wall uses the same CollData wall index provenance:
   `ftCo_Damage_OnExitHitlag` applies ASDI before DI/LSI, while `Fighter_procMap` will run the
   DamageFly collision callback later in the frame. When hitlag-refresh has cleared the Hug env bit
