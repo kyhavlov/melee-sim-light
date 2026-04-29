@@ -24,13 +24,14 @@ STATE_FLAG_221C_DETECT_HITBOX_TOUCHING_SHIELD = 0x04
 HITLIST_CD_INDEFINITE = 0xFFFF
 
 # Action ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
+ACT_REBIRTH_WAIT = 0x000D
 ACT_WAIT = 0x000E
+ACT_DAMAGE_AIR1 = 0x0054
 ACT_SQUAT = 0x0027
 ACT_SQUAT_WAIT = 0x0028
 ACT_GUARD_REFLECT = 0x00B6
 ACT_GUARD_SET_OFF = 0x00B5
 ACT_DAMAGE_N1 = 0x004E
-ACT_DAMAGE_AIR1 = 0x0054
 
 # Submotion ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 SM_WAIT1_0 = 2
@@ -1460,6 +1461,116 @@ def test_debug_select_body_hits_defender_intangible_hit_status_blocks_body_selec
     finally:
         msl_binding.destroy(handle)
         del handle
+
+
+def test_debug_select_body_hits_rebirthwait_collision_skip_blocks_vulnerable_platform_target() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    assert seed_stride == SEED_DTYPE.itemsize
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        seed = _seed_base()
+        seed["action_id"][0, 1] = np.uint16(ACT_REBIRTH_WAIT)
+        seed["hurtbox_state"][0, 1] = np.uint8(0)
+        seed["colanim_hit_status_x198c"][0, 1] = np.uint8(0)
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+        msl_binding.reseed_seed(handle, seed_bytes)
+
+        # Force overlapping primitives. Visible hurtbox_state is vulnerable, but RebirthWait owns
+        # x2219_b1, so vanilla skips the defender's common collision pass:
+        # refs/melee/src/melee/ft/ft_0D4D.c::ftCo_800D5600
+        # refs/melee/src/melee/ft/fighter.c::Fighter_8006CB94
+        msl_binding.debug_clear_hitboxes_world(handle, 0, 0)
+        msl_binding.debug_set_hitbox_world(handle, 0, 0, 0, 0.0, 0.0, 0.0, 1.0, 5.0, 1)
+        msl_binding.debug_set_hitbox_flags(handle, 0, 0, 0, int(HIT_GROUNDED))
+        msl_binding.debug_clear_hurtcaps_world(handle, 0, 1)
+        msl_binding.debug_set_hurtcap_world(handle, 0, 1, 0, -0.5, 0.0, 0.0, 0.5, 0.0, 0.0, 0.5)
+
+        _, c0 = _read_selected_body_hits(handle)
+        assert c0 == 0
+
+        seed["action_id"][0, 1] = np.uint16(ACT_WAIT)
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+        msl_binding.reseed_seed(handle, seed_bytes)
+        msl_binding.debug_clear_hitboxes_world(handle, 0, 0)
+        msl_binding.debug_set_hitbox_world(handle, 0, 0, 0, 0.0, 0.0, 0.0, 1.0, 5.0, 1)
+        msl_binding.debug_set_hitbox_flags(handle, 0, 0, 0, int(HIT_GROUNDED))
+        msl_binding.debug_clear_hurtcaps_world(handle, 0, 1)
+        msl_binding.debug_set_hurtcap_world(handle, 0, 1, 0, -0.5, 0.0, 0.0, 0.5, 0.0, 0.0, 0.5)
+
+        _, c1 = _read_selected_body_hits(handle)
+        assert c1 == 1
+    finally:
+        msl_binding.destroy(handle)
+        del handle
+
+
+def test_falco_laser_rebirthwait_collision_skip_keeps_platform_target_unhit() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    assert seed_stride == SEED_DTYPE.itemsize
+    assert input_stride == INPUT_DTYPE.itemsize
+    assert compare_stride == COMPARE_DTYPE.itemsize
+
+    def run(defender_action: int) -> np.void:
+        handle = msl_binding.init(batch_size=1, num_players=2)
+        try:
+            seed = _seed_base()
+            seed["action_id"][0, 1] = np.uint16(defender_action)
+            seed["hurtbox_state"][0, 1] = np.uint8(0)
+            seed["colanim_hit_status_x198c"][0, 1] = np.uint8(0)
+            seed["pos_x"][0, 0] = np.float32(-10.0)
+            seed["pos_x"][0, 1] = np.float32(0.0)
+            seed["pos_y"][0, :2] = np.float32(45.0)
+            seed["on_ground"][0, :2] = np.uint8(0)
+            seed["ground_id"][0, :2] = np.uint16(0xFFFF)
+            seed["match_flow_timer"][0, 1] = np.uint16(200)
+            item = seed["items"][0, 0]
+            item["exists"] = np.uint8(1)
+            item["type"] = np.uint16(55)  # Falco laser.
+            item["state"] = np.uint8(0)
+            item["owner"] = np.int8(0)
+            item["instance_id"] = np.uint16(333)
+            item["attack_id"] = np.uint16(55)
+            item["attack_instance"] = np.uint16(333)
+            item["direction"] = np.float32(1.0)
+            item["pos_x"] = np.float32(-1.0)
+            item["pos_y"] = np.float32(45.0)
+            item["vel_x"] = np.float32(0.0)
+            item["vel_y"] = np.float32(0.0)
+            item["damage"] = np.uint16(3)
+            item["timer"] = np.float32(30.0)
+
+            seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+            neutral = np.zeros((1, input_stride), dtype=np.uint8)
+            out_bytes = np.zeros((1, compare_stride), dtype=np.uint8)
+            msl_binding.reseed_seed(handle, seed_bytes)
+            msl_binding.step_input(handle, neutral, neutral)
+            msl_binding.write_compare(handle, out_bytes)
+            return out_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()
+        finally:
+            msl_binding.destroy(handle)
+
+    # Positive control: the same seeded laser hits a normal vulnerable Wait target.
+    wait_out = run(ACT_WAIT)
+    assert int(wait_out["items"][0]["exists"]) == 0
+    assert float(wait_out["percent"][1]) == pytest.approx(3.0)
+    assert int(wait_out["hitlag"][1]) > 0
+    assert int(wait_out["action_id"][1]) == ACT_DAMAGE_AIR1
+
+    # RebirthWait owns x2219_b1, so item collision rejects it despite visible vulnerable status.
+    rebirth_out = run(ACT_REBIRTH_WAIT)
+    assert int(rebirth_out["items"][0]["exists"]) == 1
+    assert float(rebirth_out["percent"][1]) == pytest.approx(0.0)
+    assert int(rebirth_out["hitlag"][1]) == 0
+    assert int(rebirth_out["action_id"][1]) == ACT_REBIRTH_WAIT
 
 
 def test_debug_select_body_hits_rehit_suppression_blocks_repeat_until_clear() -> None:

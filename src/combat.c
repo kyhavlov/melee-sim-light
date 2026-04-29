@@ -4934,6 +4934,16 @@ static void combat_select_catch_hits_one_mutating(MslBatch* batch, int bi) {
       if (batch->state.is_teams[bi] && batch->state.team_id[a_idx] == batch->state.team_id[d_idx]) {
         continue;
       }
+      if (msl_action_owns_respawn_collision_skip(batch->state.action_id[d_idx])) {
+        // Rebirth/RebirthWait set fp->x2219_b1. In vanilla, Fighter_8006CB94 does not call the
+        // common collision pass for that fighter while the bit is set, and catch selection also
+        // rejects x2219_b1 victims. Keep this separate from visible Slippi hurtbox_state: the
+        // platform row can still report Wait1/vulnerable hit status while being collision-skipped.
+        // refs/melee/src/melee/ft/ft_0D4D.c::{ftCo_800D4FF4,ftCo_800D5600}
+        // refs/melee/src/melee/ft/fighter.c::Fighter_8006CB94
+        // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078A2C
+        continue;
+      }
 
       // Catch eligibility mirrors decomp vulnerable gate (x1988==0 && x198C==0): unlike BODY hits,
       // invincible victims are not catch-selectable.
@@ -5174,6 +5184,11 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
       }
       const size_t d_idx = msl_idx_player(bi, defender);
       if (batch->state.stocks[d_idx] == 0) {
+        continue;
+      }
+      if (msl_action_owns_respawn_collision_skip(batch->state.action_id[d_idx])) {
+        // See combat_select_catch_hits_one_mutating(): Rebirth/RebirthWait own x2219_b1, so the
+        // defender's common collision pass is skipped even when visible hurtbox_state is vulnerable.
         continue;
       }
 
@@ -6070,6 +6085,10 @@ static void combat_select_body_hits_one_debug(MslBatch* batch, int bi,
       }
       const size_t d_idx = msl_idx_player(bi, defender);
       if (batch->state.stocks[d_idx] == 0) {
+        continue;
+      }
+      if (msl_action_owns_respawn_collision_skip(batch->state.action_id[d_idx])) {
+        // Debug BODY selection mirrors the runtime x2219_b1 collision skip for Rebirth/RebirthWait.
         continue;
       }
       const uint16_t defender_iid = batch->state.instance_id[d_idx];
