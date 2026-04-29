@@ -1,0 +1,51 @@
+{
+  "source_trace": "manual_repros/respawn_odd_location_after_up_b_below_wall.json",
+  "description": "P1 Fox Up-B below the FD wall, dies, then holds down through Rebirth platform exit.",
+  "seed": 9,
+  "stage_id": 32,
+  "players": [
+    {
+      "slot": 0,
+      "internal_char_id": 1,
+      "team_id": 0,
+      "facing": 1
+    },
+    {
+      "slot": 1,
+      "internal_char_id": 22,
+      "team_id": 1,
+      "facing": 0
+    }
+  ],
+  "input_fields": ["buttons", "mainX", "mainY", "cX", "cY", "l", "r"],
+  "windows": [
+    {
+      "start_frame": 202,
+      "end_frame": 313,
+      "note": "Fox Up-Bs below the left FD underside, then dies from the bottom blastzone."
+    },
+    {
+      "start_frame": 373,
+      "end_frame": 432,
+      "note": "Rebirth descends from camera top to the respawn platform."
+    },
+    {
+      "start_frame": 433,
+      "end_frame": 448,
+      "note": "Down-held RebirthWait exit enters Fall and lands without stale underside ceiling projection."
+    }
+  ],
+  "input_ranges": [
+    [20, 40, [0, 1, 0, 0, 0, 0, 0]],
+    [83, 96, [0, -1, 0, 0, 0, 0, 0]],
+    [97, 102, [0, 1, 0, 0, 0, 0, 0]],
+    [110, 134, [0, -1, 0, 0, 0, 0, 0]],
+    [135, 177, [0, 1, 0, 0, 0, 0, 0]],
+    [178, 192, [1024, 1, 0, 0, 0, 0, 0]],
+    [193, 199, [0, 1, 0, 0, 0, 0, 0]],
+    [200, 201, [0, 1, 1, 0, 0, 0, 0]],
+    [202, 204, [512, 1, 1, 0, 0, 0, 0]],
+    [205, 260, [512, 0, 1, 0, 0, 0, 0]],
+    [267, 448, [0, 0, -1, 0, 0, 0, 0]]
+  ]
+}

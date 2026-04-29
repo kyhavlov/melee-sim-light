@@ -1448,7 +1448,7 @@ update the row rather than re-deriving the same plan again.
 |---|---|---|
 | `refs/melee/src/melee/ft/fighter.c::Fighter_UnkProcessDeath_80068354` | `data/stages/final_destination.json` (collision segments; includes `unit_scale`) | `src/match_flow.c` (new), `src/stage_collision.c` |
 | `refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState` | `data/common/ft_common_data.json` (common timers/constants; see `docs/DATA_CONTRACT.md`) | `src/action.c` (state transitions), `src/timers.c` |
-| `refs/melee/src/melee/ft/ft_0D4D.c::ftCo_800D4FF4` (Rebirth entry) | `data/stages/final_destination.json` (`respawn_points`, `cam_bounds_world`) plus replay raw player slot (`seed_t.source_port0`) | `src/match_flow.c` |
+| `refs/melee/src/melee/ft/ft_0D4D.c::ftCo_800D4FF4` (Rebirth entry) | Vanilla `Player_GetSpawnPlatformPos` / `Player_GetFacingDirection`, currently backed by `data/stages/final_destination.json` (`respawn_points`, `cam_bounds_world`) plus replay raw player slot (`seed_t.source_port0`) | `src/match_flow.c` |
 | `refs/melee/src/melee/mp/mplib.c::mpLib_DrawZones` (blast/camera zone sources) | (Need) explicit blast zone rect for FD extracted into `data/stages/final_destination.json` (or a `data/stages/*.bin` v2) | Implemented for suite; remaining gap is extracting and consuming the canonical blastzone rect(s) from stage data. |
 
 Match-flow closure notes:
@@ -1456,6 +1456,16 @@ Match-flow closure notes:
   compact local p0/p1 index is not always the raw replay player slot in aggregate suites, so
   Rebirth respawn position/facing uses `seed_t.source_port0` before falling back to local player
   index. This is locked by `tests/test_match_flow_rebirth_owner_replay_real_locks.py`.
+- Match-start neutral spawn is separate from stock respawn. The only Slippi neutral-spawn ASM path
+  in runtime setup is the 4-player teams `init_match` branch; Rebirth stays on the vanilla
+  `Player_GetSpawnPlatformPos` owner and must not inherit neutral-start coordinates.
+- Current FD `respawn_points` are extractor-owned stage data, not Slippi neutral-start data. The
+  extractor still uses an FD-only stage-point heuristic until the canonical `stage_info.x280`
+  point-id mapping is extracted directly (see `tools/extraction/extract_stage_collision.py`).
+- Dead*/Rebirth*/Entry* skip common stage-collision callbacks. Wall/ceiling `CollData` provenance
+  is cleared while in those match-flow states so a pre-death underside contact cannot project the
+  first post-Rebirth Fall frame back to FD's underside. This is locked by
+  `tests/test_modelplay_manual_respawn_collision_provenance_regression.py`.
 - `ftCo_RebirthWait_IASA` runs priority aerial special checks before fallback Fall-style exits and
   still applies `ftColl_8007B7A4(gobj, p_ftCommonData->x5D8)` on exit. That x1994/x198C write is
   visible as Slippi `hurtbox_state=1` on RebirthWait -> SpecialAirNStart rows.

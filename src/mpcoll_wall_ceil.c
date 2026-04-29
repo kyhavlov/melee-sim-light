@@ -208,6 +208,40 @@ static inline uint8_t mpcoll_active_hitlag_phase(const MslBatch* batch, size_t i
              : 0u;
 }
 
+static inline void mpcoll_clear_wall_ceiling_contacts(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  batch->state.wall_kind[idx] = 0;
+  batch->state.damage_hitlag_wall_asdi_latch[idx] = 0u;
+  batch->state.ceiling_contact_x[idx] = 0.0f;
+  batch->state.ceiling_contact_y[idx] = 0.0f;
+  batch->state.ceiling_normal_x[idx] = 0.0f;
+  batch->state.ceiling_normal_y[idx] = 0.0f;
+  batch->state.wall_contact_x[idx] = 0.0f;
+  batch->state.wall_contact_y[idx] = 0.0f;
+  batch->state.wall_normal_x[idx] = 0.0f;
+  batch->state.wall_normal_y[idx] = 0.0f;
+}
+
+static inline void mpcoll_clear_wall_ceiling_provenance(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  mpcoll_clear_wall_ceiling_contacts(batch, idx);
+  batch->state.wall_id[idx] = 0xFFFFu;
+  batch->state.ceiling_id[idx] = 0xFFFFu;
+}
+
+static inline void mpcoll_clear_wall_ceiling_and_env_provenance(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  mpcoll_clear_wall_ceiling_provenance(batch, idx);
+  batch->state.coll_env_flags[idx] = 0u;
+  batch->state.coll_prev_env_flags[idx] = 0u;
+}
+
 static inline uint8_t mpcoll_action_uses_common_air_walljump_callback(uint16_t action_id) {
   // These common-air Coll callbacks route through ft_081B helpers that call
   // ftWallJump_8008169C after floor collision declines. If the side-point projection recovery
@@ -1771,42 +1805,28 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
       // stale SpecialHi Hug bits cannot survive into DamageFly_Coll on the hitlag-exit frame.
       // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procMap}
       if (!match_flow_should_stage_collide(action_id)) {
-        batch->state.wall_kind[idx] = 0;
-        batch->state.damage_hitlag_wall_asdi_latch[idx] = 0u;
-        batch->state.ceiling_contact_x[idx] = 0.0f;
-        batch->state.ceiling_contact_y[idx] = 0.0f;
-        batch->state.ceiling_normal_x[idx] = 0.0f;
-        batch->state.ceiling_normal_y[idx] = 0.0f;
-        batch->state.wall_contact_x[idx] = 0.0f;
-        batch->state.wall_contact_y[idx] = 0.0f;
-        batch->state.wall_normal_x[idx] = 0.0f;
-        batch->state.wall_normal_y[idx] = 0.0f;
+        // Match-flow states (Dead*/Rebirth*/Entry*) do not run the generic stage-collision
+        // callbacks. Treat this as a CollData provenance reset, not just a visible contact clear,
+        // so a stale wall/ceiling index from the pre-death action cannot arm persistence when
+        // RebirthWait exits back to Fall.
+        //
+        // Source shape:
+        // - Dead* -> Rebirth runs Fighter_UnkProcessDeath_80068354 /
+        //   Fighter_UnkInitReset_80067C98 before Rebirth.
+        // - Rebirth/RebirthWait have dedicated collision callbacks, not the common Fall collision
+        //   persistence path.
+        // refs/melee/src/melee/ft/fighter.c::{
+        //   Fighter_UnkProcessDeath_80068354,Fighter_UnkInitReset_80067C98}
+        // refs/melee/src/melee/ft/ft_0D4D.c::{ftCo_Rebirth_Coll,ftCo_RebirthWait_Coll}
+        mpcoll_clear_wall_ceiling_and_env_provenance(batch, idx);
         continue;
       }
       if (is_cliff_hold_action(action_id)) {
-        batch->state.wall_kind[idx] = 0;
-        batch->state.damage_hitlag_wall_asdi_latch[idx] = 0u;
-        batch->state.ceiling_contact_x[idx] = 0.0f;
-        batch->state.ceiling_contact_y[idx] = 0.0f;
-        batch->state.ceiling_normal_x[idx] = 0.0f;
-        batch->state.ceiling_normal_y[idx] = 0.0f;
-        batch->state.wall_contact_x[idx] = 0.0f;
-        batch->state.wall_contact_y[idx] = 0.0f;
-        batch->state.wall_normal_x[idx] = 0.0f;
-        batch->state.wall_normal_y[idx] = 0.0f;
+        mpcoll_clear_wall_ceiling_contacts(batch, idx);
         continue;
       }
       if (is_grounded_cliff_option_action(action_id, batch->state.on_ground[idx])) {
-        batch->state.wall_kind[idx] = 0;
-        batch->state.damage_hitlag_wall_asdi_latch[idx] = 0u;
-        batch->state.ceiling_contact_x[idx] = 0.0f;
-        batch->state.ceiling_contact_y[idx] = 0.0f;
-        batch->state.ceiling_normal_x[idx] = 0.0f;
-        batch->state.ceiling_normal_y[idx] = 0.0f;
-        batch->state.wall_contact_x[idx] = 0.0f;
-        batch->state.wall_contact_y[idx] = 0.0f;
-        batch->state.wall_normal_x[idx] = 0.0f;
-        batch->state.wall_normal_y[idx] = 0.0f;
+        mpcoll_clear_wall_ceiling_contacts(batch, idx);
         continue;
       }
       if (msl_action_is_thrown_victim(action_id)) {
@@ -1817,34 +1837,12 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::{
           //   ftCo_ThrownF_Coll,ftCo_ThrownB_Coll,ftCo_ThrownHi_Coll,ftCo_ThrownLw_Coll
           // }
-          batch->state.wall_kind[idx] = 0;
-          batch->state.wall_id[idx] = 0xFFFFu;
-          batch->state.damage_hitlag_wall_asdi_latch[idx] = 0u;
-          batch->state.ceiling_id[idx] = 0xFFFFu;
-          batch->state.ceiling_contact_x[idx] = 0.0f;
-          batch->state.ceiling_contact_y[idx] = 0.0f;
-          batch->state.ceiling_normal_x[idx] = 0.0f;
-          batch->state.ceiling_normal_y[idx] = 0.0f;
-          batch->state.wall_contact_x[idx] = 0.0f;
-          batch->state.wall_contact_y[idx] = 0.0f;
-          batch->state.wall_normal_x[idx] = 0.0f;
-          batch->state.wall_normal_y[idx] = 0.0f;
+          mpcoll_clear_wall_ceiling_provenance(batch, idx);
           continue;
         }
       }
       if (mpcoll_is_pending_throw_release_victim(batch, bi, p)) {
-        batch->state.wall_kind[idx] = 0;
-        batch->state.wall_id[idx] = 0xFFFFu;
-        batch->state.damage_hitlag_wall_asdi_latch[idx] = 0u;
-        batch->state.ceiling_id[idx] = 0xFFFFu;
-        batch->state.ceiling_contact_x[idx] = 0.0f;
-        batch->state.ceiling_contact_y[idx] = 0.0f;
-        batch->state.ceiling_normal_x[idx] = 0.0f;
-        batch->state.ceiling_normal_y[idx] = 0.0f;
-        batch->state.wall_contact_x[idx] = 0.0f;
-        batch->state.wall_contact_y[idx] = 0.0f;
-        batch->state.wall_normal_x[idx] = 0.0f;
-        batch->state.wall_normal_y[idx] = 0.0f;
+        mpcoll_clear_wall_ceiling_provenance(batch, idx);
         continue;
       }
 
