@@ -22,6 +22,7 @@
 #include "physics.h"
 #include "shields.h"
 #include "shine.h"
+#include "specialhi_pose.h"
 #include "stage_collision.h"
 #include "mpcoll_env.h"
 #include "timers.h"
@@ -153,6 +154,10 @@ static inline void clear_seed_owned_transients_post_frame(MslBatch* batch) {
       // Runtime after that step must require live mpColl WallHug bits again.
       // refs/melee/src/melee/ft/ftwalljump.c::ftWallJump_8008169C
       batch->state.walljump_seed_phase_valid[idx] = 0u;
+      if (!msl_specialhi_rotate_model_action(batch->state.action_id[idx])) {
+        batch->state.specialhi_rotate_model_valid[idx] = 0u;
+        batch->state.specialhi_rotate_model[idx] = 0.0f;
+      }
     }
     // Teacher-forced shield-contact lanes are one-step reseed surfaces. Normal rollouts must
     // return to live shield geometry / collision ordering after the seeded frame.

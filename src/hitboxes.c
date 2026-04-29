@@ -13,6 +13,7 @@
 #include "hitlist.h"
 #include "msl_math.h"
 #include "mtx34.h"
+#include "specialhi_pose.h"
 #include "trigger_input.h"
 
 static inline size_t idx_hitbox(int bi, int p, int hb_i) {
@@ -239,6 +240,7 @@ static inline uint8_t hitboxes_apply_specialhi_local_xrotn(const MslBatch* batch
   if (batch == NULL || io_x == NULL || io_y == NULL || io_z == NULL) {
     return 0u;
   }
+  (void)facing_dir;
   const uint16_t action_id = batch->state.action_id[idx];
   if (!hitboxes_runtime_specialhi_pose_owner(char_id, action_id) ||
       !msl_anim_part_under_xrotn(char_id, part_id)) {
@@ -250,9 +252,8 @@ static inline uint8_t hitboxes_apply_specialhi_local_xrotn(const MslBatch* batch
     return 0u;
   }
 
-  const float vel_x = batch->state.speed_air_x_self[idx];
-  const float vel_y = batch->state.speed_y_self[idx];
-  if (!(fabsf(vel_x) > 0.0f || fabsf(vel_y) > 0.0f)) {
+  float rotate_model = 0.0f;
+  if (!msl_specialhi_rotate_model_get_or_velocity(batch, idx, &rotate_model)) {
     return 0u;
   }
 
@@ -284,7 +285,7 @@ static inline uint8_t hitboxes_apply_specialhi_local_xrotn(const MslBatch* batch
   // and applies it with `ftPartSetRotX(..., 2*pi - rotateModel)`.
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
   //   ftFox_SpecialHi_RotateModel,ftFx_SpecialAirHi_Enter,ftFx_SpecialAirHi_Coll}
-  const float angle = (2.0f * MSL_PI_F) - atan2f(vel_y, vel_x * facing_dir);
+  const float angle = msl_specialhi_xrotn_angle_from_rotate_model(rotate_model);
 
   const float px = *io_x - ax0;
   const float py = *io_y - ay0;

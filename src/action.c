@@ -760,7 +760,27 @@ void guard_update_shield_recharge(MslBatch* batch, const MslCommonParams* c, siz
   // Empirically (and in replays), shield recharge can happen during GuardOff.
   //
   // Minimal sim approximation: block recharge only during states where the shield bubble is active.
-  if (is_shield_active_action(batch->state.action_id[idx])) {
+  const uint8_t fresh_guardon_to_guardreflect_no_submotion =
+      (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
+       batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_GUARD_ON &&
+       batch->state.action_frame[idx] < 0 && batch->state.animation_index[idx] == UINT32_MAX)
+          ? 1u
+          : 0u;
+  const uint8_t guardreflect_active_timer_no_submotion =
+      (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
+       batch->state.action_frame[idx] < 0 && batch->state.animation_index[idx] == UINT32_MAX &&
+       batch->state.guard_reflect_timer_x14[idx] > 0u &&
+       (batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_GUARD_ON ||
+        batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_GUARD_ON))
+          ? 1u
+          : 0u;
+  // GuardOn -> GuardReflect via ftCo_8009388C clears fp+0x221B_b0 while installing ReflectDesc;
+  // despite the GuardReflect action id, the shield-health recharge gate observes the cleared shield
+  // descriptor on this fresh no-submotion row. The same applies while ftCo_80093BC0 leaves x14
+  // active; GuardOn_Anim shield drain resumes once x14 reaches zero.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_IASA,ftCo_8009388C,ftCo_8009370C,ftCo_80093BC0,ftCo_GuardReflect_Anim}
+  if (is_shield_active_action(batch->state.action_id[idx]) &&
+      !fresh_guardon_to_guardreflect_no_submotion && !guardreflect_active_timer_no_submotion) {
     return;
   }
   if (batch->state.stocks[idx] == 0) {
@@ -1096,7 +1116,15 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
       }
       // Decomp: ftCo_800925A4 updates lightshield_amount + drains shield HP + decrements x10 while
       // the shield is active (fp->x221B_b0). Approximate shield-active as (shield_hp > 0).
-      if (batch->state.shield_hp[idx] > 0.0f) {
+      const uint8_t guardreflect_active_timer_no_submotion =
+          (a0 == (uint16_t)MSL_ACT_GUARD_REFLECT && batch->state.action_frame[idx] < 0 &&
+           batch->state.animation_index[idx] == UINT32_MAX &&
+           batch->state.guard_reflect_timer_x14[idx] > 0u &&
+           (batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_GUARD_ON ||
+            batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_GUARD_ON))
+              ? 1u
+              : 0u;
+      if (batch->state.shield_hp[idx] > 0.0f && !guardreflect_active_timer_no_submotion) {
         const uint8_t guard_jump_pending = guard_jump_oos_has_input(batch, c, idx) ? 1u : 0u;
         const uint8_t guard_no_submotion_snapshot =
             (a0 == (uint16_t)MSL_ACT_GUARD_ON && batch->state.animation_index[idx] == 0xFFFFFFFFu &&
