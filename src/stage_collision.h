@@ -138,7 +138,7 @@ uint8_t stage_collision_get_ledge_point(uint32_t stage_id, int side, MslStagePoi
 const MslStageFloorLine* stage_collision_get_ledge_floor_line(uint32_t stage_id, int side);
 
 // Item collision helper (lasers v1): returns 1 if the segment from (x0,y0)->(x1,y1) intersects a
-// stage floor segment for the given stage_id.
+// stage collision segment for the given stage_id.
 //
 // Decomp shape: itfoxlaser.c::itFoxlaser_UnkMotion1_Coll calls a stage collision helper
 // (it_8029C4D4) and, on hit, sets lifetime=1 and restores the pre-coll position.

@@ -1550,6 +1550,24 @@ static inline float stage_cross2(float ax, float ay, float bx, float by) {
   return ax * by - ay * bx;
 }
 
+static inline uint8_t stage_segment_intersects(float ax0, float ay0, float ax1, float ay1,
+                                               float bx0, float by0, float bx1, float by1) {
+  const float rx = ax1 - ax0;
+  const float ry = ay1 - ay0;
+  const float sx = bx1 - bx0;
+  const float sy = by1 - by0;
+  const float denom = stage_cross2(rx, ry, sx, sy);
+  if (denom == 0.0f) {
+    return 0u;
+  }
+
+  const float qpx = bx0 - ax0;
+  const float qpy = by0 - ay0;
+  const float t = stage_cross2(qpx, qpy, sx, sy) / denom;
+  const float u = stage_cross2(qpx, qpy, rx, ry) / denom;
+  return (uint8_t)(t >= 0.0f && t <= 1.0f && u >= 0.0f && u <= 1.0f);
+}
+
 uint8_t stage_collision_item_line_hits_floor(uint32_t stage_id, float x0, float y0, float x1,
                                              float y1) {
   if (!g_fd_loaded) {
@@ -1564,40 +1582,34 @@ uint8_t stage_collision_item_line_hits_floor(uint32_t stage_id, float x0, float 
     return 0;
   }
 
-  const float rx = x1 - x0;
-  const float ry = y1 - y0;
-
-  // Treat the projectile as a point and intersect against floor segments.
-  // This is a minimal decomp-shaped approximation for itfoxlaser.c::it_8029C4D4 as used by
-  // itFoxlaser_UnkMotion1_Coll.
+  // Treat the projectile as a point and intersect against stage collision segments.
+  // Decomp laser collision calls it_8029C4D4 -> it_8026E9A4, not a floor-only helper; FD ledge
+  // lasers can hit vertical wall segments below the floor before crossing the floor y.
+  // refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Coll,it_8029C4D4}
+  // refs/melee/src/melee/it/it_266F.c::it_8026E9A4
   for (size_t si = 0; si < n; si++) {
     const MslStageFloorLine* seg = &segs[si];
-    const float sx0 = seg->x0;
-    const float sy0 = seg->y0;
-    const float sx1 = seg->x1;
-    const float sy1 = seg->y1;
-
-    const float sx = sx1 - sx0;
-    const float sy = sy1 - sy0;
-    const float denom = stage_cross2(rx, ry, sx, sy);
-    if (denom == 0.0f) {
-      continue;
+    if (stage_segment_intersects(x0, y0, x1, y1, seg->x0, seg->y0, seg->x1, seg->y1)) {
+      return 1;
     }
-
-    const float qpx = sx0 - x0;
-    const float qpy = sy0 - y0;
-    const float t = stage_cross2(qpx, qpy, sx, sy) / denom;
-    const float u = stage_cross2(qpx, qpy, rx, ry) / denom;
-
-    if (!(t >= 0.0f && t <= 1.0f && u >= 0.0f && u <= 1.0f)) {
-      continue;
+  }
+  for (size_t si = 0; si < g_fd_left_wall_line_count; si++) {
+    const MslStageWallLine* seg = &g_fd_left_wall_lines[si];
+    if (stage_segment_intersects(x0, y0, x1, y1, seg->x0, seg->y0, seg->x1, seg->y1)) {
+      return 1;
     }
-
-    const float ix = x0 + rx * t;
-    if (!stage_line_x_contains_closed(seg, ix)) {
-      continue;
+  }
+  for (size_t si = 0; si < g_fd_right_wall_line_count; si++) {
+    const MslStageWallLine* seg = &g_fd_right_wall_lines[si];
+    if (stage_segment_intersects(x0, y0, x1, y1, seg->x0, seg->y0, seg->x1, seg->y1)) {
+      return 1;
     }
-    return 1;
+  }
+  for (size_t si = 0; si < g_fd_ceiling_line_count; si++) {
+    const MslStageCeilingLine* seg = &g_fd_ceiling_lines[si];
+    if (stage_segment_intersects(x0, y0, x1, y1, seg->x0, seg->y0, seg->x1, seg->y1)) {
+      return 1;
+    }
   }
   return 0;
 }

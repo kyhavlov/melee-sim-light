@@ -163,6 +163,20 @@ static inline uint8_t damage_post_hitlag_cb_damagefly_action(uint16_t a) {
   }
 }
 
+static inline uint8_t damage_every_hitlag_sdi_timer_window_action(uint16_t a) {
+  switch (a) {
+    // DownDamageD re-enters ftCo_8008DCE0 via ftCo_8009F184 and owns the same per-hitlag SDI
+    // callback, but it is not part of the common Damage* / DamageFly* action-id block above.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::{
+    //   ftCo_8009F184,ftCo_DownDamage_Phys}
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag
+    case MSL_ACT_DOWN_DAMAGE_D:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
 static inline void damage_hitlag_exit_wall_project_asdi(const MslBatch* batch, size_t idx,
                                                         float* dx, float* dy) {
   if (batch == NULL || dx == NULL || dy == NULL ||
@@ -190,21 +204,6 @@ static inline void damage_hitlag_exit_wall_project_asdi(const MslBatch* batch, s
   }
   if (stage_collision_right_wall_line_index(stage_id, wall_id) >= 0 && *dx < 0.0f) {
     *dx = 0.0f;
-  }
-}
-
-static inline uint8_t damage_every_hitlag_sdi_timer_window_action(uint16_t a) {
-  switch (a) {
-    // DownDamageD re-enters ftCo_8008DCE0 via ftCo_8009F184 and owns the same per-hitlag SDI
-    // callback, but it is not part of the common Damage* / DamageFly* action-id block above.
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::{
-    //   ftCo_8009F184,ftCo_DownDamage_Phys
-    // }
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag
-    case MSL_ACT_DOWN_DAMAGE_D:
-      return 1u;
-    default:
-      return 0u;
   }
 }
 

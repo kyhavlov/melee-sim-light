@@ -1531,6 +1531,157 @@ static inline float item_reflected_damage_lane(const MslBatch* batch, size_t ite
   return (float)dmg_i;
 }
 
+static inline void item_guard_reflect_apply_recharge(MslBatch* batch, size_t d_idx) {
+  if (batch == NULL) {
+    return;
+  }
+  const MslCommonParams* c = msl_common_params();
+  if (c == NULL) {
+    return;
+  }
+  float hp = batch->state.shield_hp[d_idx];
+  if (hp < c->start_shield_health) {
+    hp += c->shield_recharge_per_frame;
+    if (hp > c->start_shield_health) {
+      hp = c->start_shield_health;
+    }
+    batch->state.shield_hp[d_idx] = hp;
+  }
+}
+
+static inline void item_guard_reflect_restore_anim_drain(MslBatch* batch, size_t d_idx) {
+  if (batch == NULL) {
+    return;
+  }
+  const MslCommonParams* c = msl_common_params();
+  if (c == NULL) {
+    return;
+  }
+  // GuardReflect item-BODY handoff:
+  // - GuardReflect_Anim runs ftCo_80093BC0 then GuardOn_Anim before IASA / item collision,
+  // - item collision can consume the live GuardReflect/Escape owner into Damage after that
+  //   shield-state callback phase,
+  // - replay post-frame shield HP does not retain the same-frame shield-hold drain from the
+  //   consumed shield state. If Fighter_ProcessHit owns a recharge tick, that recharge has already
+  //   been applied inside combat_apply_item_hit().
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardReflect_Anim
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardReflect_IASA
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  // The caller snapshots the GuardReflect/no-submotion predicate before combat_apply_item_hit(),
+  // because a successful BODY hit immediately changes the fighter into Damage*. Do not re-read the
+  // action predicate here after the owner has already been consumed.
+  const float light = batch->state.lightshield_amount[d_idx];
+  const float drain_factor =
+      (light * (c->shield_hold_drain_max - c->shield_hold_drain_base)) + c->shield_hold_drain_base;
+  const float drain = c->shield_hold_drain_mul * drain_factor;
+  float hp = batch->state.shield_hp[d_idx] + drain;
+  if (hp > c->start_shield_health) {
+    hp = c->start_shield_health;
+  }
+  batch->state.shield_hp[d_idx] = hp;
+}
+
+static inline uint8_t item_guard_reflect_body_hit_consumes_shield_state(const MslBatch* batch,
+                                                                        size_t d_idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  const uint16_t action_id = batch->state.action_id[d_idx];
+  // Only restore consumed shield-state drain when GuardReflect was already the frame-start owner.
+  // GuardOn -> GuardReflect -> BODY in one item pass keeps the GuardOn_Anim drain before
+  // Fighter_ProcessHit recharge.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_Anim,ftCo_GuardOn_IASA,ftCo_8009388C}
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  const uint8_t frozen_guard_reflect =
+      (action_id == (uint16_t)MSL_ACT_GUARD_REFLECT && batch->state.action_frame[d_idx] < 0 &&
+       batch->state.animation_index[d_idx] == UINT32_MAX &&
+       batch->state.prev_action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
+       (batch->state.guard_reflect_timer_x14[d_idx] != 0u ||
+        batch->state.guard_reflect_timer_x14_seed[d_idx] != 0u))
+          ? 1u
+          : 0u;
+  const uint8_t guard_reflect_iasa_escape =
+      ((action_id == (uint16_t)MSL_ACT_ESCAPE_F || action_id == (uint16_t)MSL_ACT_ESCAPE_B ||
+        action_id == (uint16_t)MSL_ACT_ESCAPE_N) &&
+       batch->state.prev_action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
+       batch->state.guard_reflect_timer_x14_seed[d_idx] != 0u &&
+       batch->state.action_frame[d_idx] <= 1)
+          ? 1u
+          : 0u;
+  return (frozen_guard_reflect || guard_reflect_iasa_escape) ? 1u : 0u;
+}
+
+static inline uint8_t item_guardon_reflect_body_hit_undoes_action_recharge(const MslBatch* batch,
+                                                                           size_t d_idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  // The action-level recharge path admits fresh GuardOn -> GuardReflect rows because
+  // ftCo_8009388C clears the shield descriptor. If item BODY contact immediately consumes that
+  // same hidden GuardReflect owner, Fighter_ProcessHit owns the visible recharge instead; remove
+  // the pre-item approximation after the accepted BODY hit.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_IASA,ftCo_8009388C}
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  return (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
+          batch->state.prev_action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_ON &&
+          batch->state.action_frame[d_idx] < 0 && batch->state.animation_index[d_idx] == UINT32_MAX)
+             ? 1u
+             : 0u;
+}
+
+static inline void item_guardon_reflect_undo_action_recharge(MslBatch* batch, size_t d_idx) {
+  if (batch == NULL) {
+    return;
+  }
+  const MslCommonParams* c = msl_common_params();
+  if (c == NULL) {
+    return;
+  }
+  float hp = batch->state.shield_hp[d_idx] - c->shield_recharge_per_frame;
+  if (hp < 0.0f) {
+    hp = 0.0f;
+  }
+  batch->state.shield_hp[d_idx] = hp;
+}
+
+static inline uint8_t item_guardreflect_active_timer_shield_contact_needs_drain(
+    const MslBatch* batch, size_t d_idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  return (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
+          batch->state.action_frame[d_idx] < 0 &&
+          batch->state.animation_index[d_idx] == UINT32_MAX &&
+          batch->state.guard_reflect_timer_x14[d_idx] > 0u &&
+          (batch->state.prev_action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_ON ||
+           batch->state.seed_prev_action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_ON))
+             ? 1u
+             : 0u;
+}
+
+static inline void item_guardreflect_apply_contact_drain(MslBatch* batch, size_t d_idx) {
+  if (batch == NULL) {
+    return;
+  }
+  const MslCommonParams* c = msl_common_params();
+  if (c == NULL) {
+    return;
+  }
+  // Active-x14 GuardReflect no-contact rows leave the shield descriptor cleared and recharge at
+  // action level. Once Item_80269DC8 owns a shield contact, the GuardOn_Anim shield drain is
+  // visible before shield-hit depletion/bounce resolution.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardReflect_Anim,ftCo_80093BC0,ftCo_GuardOn_Anim,ftCo_800925A4}
+  // refs/melee/src/melee/it/item.c::Item_80269DC8
+  const float light = batch->state.lightshield_amount[d_idx];
+  const float drain_factor =
+      (light * (c->shield_hold_drain_max - c->shield_hold_drain_base)) + c->shield_hold_drain_base;
+  float hp = batch->state.shield_hp[d_idx] - (c->shield_hold_drain_mul * drain_factor);
+  if (hp < 0.0f) {
+    hp = 0.0f;
+  }
+  batch->state.shield_hp[d_idx] = hp;
+}
+
 static inline void item_apply_pending_powershield_reflect_speed(MslBatch* batch, size_t ii) {
   if (batch == NULL) {
     return;
@@ -1887,8 +2038,10 @@ static inline uint8_t item_should_commit_guardon_followup_powershield_reflect_ow
     return 0u;
   }
 
+  float reflect_x = 0.0f;
   float reflect_y = 0.0f;
-  if (!item_guard_reflect_bone_y(batch, d_idx, &reflect_y)) {
+  float reflect_z = 0.0f;
+  if (!item_guard_reflect_center_xyz(batch, d_idx, &reflect_x, &reflect_y, &reflect_z)) {
     return 0u;
   }
   const float reflect_r = common->powershield_reflect_size * batch->state.fighter_scale_y[d_idx];
@@ -1898,12 +2051,14 @@ static inline uint8_t item_should_commit_guardon_followup_powershield_reflect_ow
   //   ftCo_8009370C.
   // - Teacher-forced rows seed the prior GuardOn post-frame before the hidden same-step
   //   GuardReflect entry has exposed x14/x18. The source-backed discriminator is therefore the
-  //   fresh frozen GuardReflect row whose previous visible owner is GuardOn, not a timer-only
-  //   replay fit.
+  //   fresh frozen GuardReflect row whose previous visible owner is GuardOn plus full
+  //   ReflectDesc sphere overlap, not a timer-only replay fit or a Y-only band.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_IASA,ftCo_8009388C,ftCo_8009370C}
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_CreateReflectHit,ftColl_80077464}
+  // refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
   // refs/melee/src/melee/it/item.c::Item_80269F14
-  return fabsf(y - reflect_y) <= (laser_radius + reflect_r) ? 1u : 0u;
+  return item_sphere_sphere_intersects_3d(x, y, 0.0f, laser_radius, reflect_x, reflect_y, reflect_z,
+                                          reflect_r);
 }
 
 typedef enum MslLaserCollisionSpaceLane {
@@ -2670,6 +2825,9 @@ static void illusion_items_update_and_collide(MslBatch* batch, int bi) {
         }
         if (item_swept_sphere_sphere_intersects_3d(x0, y0, 0.0f, x1, y1, 0.0f, hp.radius, shx, shy,
                                                    shz, shr + shield_desc_world_r)) {
+          if (item_guardreflect_active_timer_shield_contact_needs_drain(batch, d_idx)) {
+            item_guardreflect_apply_contact_drain(batch, d_idx);
+          }
           const float dmg = item_reflected_damage_lane(batch, ii, hp.damage);
           int8_t shield_damage = hp.shield_damage;
           // Data extraction uses -128 as the unset sentinel for shield-damage delta in this lane.
@@ -2716,6 +2874,10 @@ static void illusion_items_update_and_collide(MslBatch* batch, int bi) {
         continue;
       }
 
+      const uint8_t defender_guard_reflect_no_submotion_body_handoff =
+          item_guard_reflect_body_hit_consumes_shield_state(batch, d_idx);
+      const uint8_t defender_guardon_reflect_body_undo_recharge =
+          item_guardon_reflect_body_hit_undoes_action_recharge(batch, d_idx);
       const float dmg = item_reflected_damage_lane(batch, ii, hp.damage);
       const MslItemHitResult res = combat_apply_item_hit(
           batch, bi, owner, def, batch->state.item_attack_id[ii],
@@ -2726,11 +2888,23 @@ static void illusion_items_update_and_collide(MslBatch* batch, int bi) {
         continue;
       }
       if (res == MSL_ITEM_HIT_APPLIED_CONSUME_ITEM) {
+        if (defender_guard_reflect_no_submotion_body_handoff) {
+          item_guard_reflect_restore_anim_drain(batch, d_idx);
+        }
+        if (defender_guardon_reflect_body_undo_recharge) {
+          item_guardon_reflect_undo_action_recharge(batch, d_idx);
+        }
         item_slot_clear(batch, ii);
         consumed_item = 1u;
         break;
       }
       if (res == MSL_ITEM_HIT_APPLIED_DONT_CONSUME) {
+        if (defender_guard_reflect_no_submotion_body_handoff) {
+          item_guard_reflect_restore_anim_drain(batch, d_idx);
+        }
+        if (defender_guardon_reflect_body_undo_recharge) {
+          item_guardon_reflect_undo_action_recharge(batch, d_idx);
+        }
         // Illusion/Phantasm BODY hits persist but do not enter generic item hitlag:
         // OnGiveDamageThink first copies xC34_damageDealt into xCA8, then the item-specific
         // dmg_dealt callback clears xCA8. The later checkHitLag(xCA8) branch is therefore skipped,
@@ -3655,6 +3829,18 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
                    batch, d_idx, def, x, y, vx, laser_age_frames, sr))
                   ? 1u
                   : 0u;
+          const uint8_t guardon_followup_reflect_miss_keepalive =
+              (can_powershield_reflect && !guardon_followup_reflect_owner_commit &&
+               batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
+               batch->state.animation_index[d_idx] == UINT32_MAX &&
+               batch->state.action_frame[d_idx] < 0 &&
+               batch->state.guard_reflect_timer_x14_seed[d_idx] == 0u &&
+               batch->state.guard_reflect_timer_x18_seed[d_idx] == 0u &&
+               (batch->state.prev_action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_ON ||
+                batch->state.seed_prev_action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_ON) &&
+               laser_age_frames > 1.0f)
+                  ? 1u
+                  : 0u;
           const uint8_t aged_reflect_owner_commit =
               (can_powershield_reflect && item_should_commit_aged_powershield_reflect_owner(
                                               batch, d_idx, def, x, y, vx, laser_age_frames, sr))
@@ -3761,15 +3947,28 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
             // ftCommonData x2B0 directly (or identity) for these rows.
             break;
           }
+          const uint8_t shield_bounce_seed_valid =
+              batch->state.item_shield_bounce_seed_valid[ii] ? 1u : 0u;
           if ((guard_reflect_active_window_no_submotion_snapshot ||
+               guardon_followup_reflect_miss_keepalive ||
                (guard_reflect_frozen_final_seed_keepalive_snapshot &&
-                !guard_reflect_frozen_final_seed_shield_overlap)) &&
+                !guard_reflect_frozen_final_seed_shield_overlap && !shield_bounce_seed_valid)) &&
               !powershield_reflect_hitshield_handoff) {
             // The active/frozen reflect window owns this GuardReflect row, but the reflect geometry
             // above may reject the projectile. In that case do not fall through into regular
-            // GuardSetOff shield-hit ownership until the x14 handoff has fully expired. Frozen
-            // final-x14 rows with current shield-bubble overlap can hand off to Item_80269DC8 below.
+            // GuardSetOff shield-hit ownership until the x14 handoff has fully expired. Fresh
+            // GuardOn->GuardReflect followups use the same owner: ftCo_8009388C installs ReflectDesc
+            // in the current step, but a ReflectDesc miss remains powershield-window keepalive, not
+            // a generic shield-hit transfer. Active x14 timer rows have already paid the
+            // GuardReflect_Anim shield drain; fresh GuardOn->GuardReflect recharge is owned by the
+            // action-level shield descriptor gate, while final frozen handoff rows need the replay-
+            // visible recharge here. Frozen final-x14 rows with current shield-bubble overlap or
+            // explicit ShieldBounced seed provenance can hand off to Item_80269DC8 below.
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardReflect_Anim,ftCo_80093BC0}
+            // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80077464,ftColl_80077688}
+            if (guard_reflect_frozen_final_seed_keepalive_snapshot) {
+              item_guard_reflect_apply_recharge(batch, d_idx);
+            }
             break;
           }
 
@@ -3795,20 +3994,18 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
                batch->state.guard_reflect_timer_x18_seed[d_idx] != 0u)
                   ? 1u
                   : 0u;
-          const uint8_t shield_bounce_seed_valid =
-              batch->state.item_shield_bounce_seed_valid[ii] ? 1u : 0u;
           const uint8_t shield_bounce_hp_allows =
               (guard_reflect_seeded_snapshot || common == NULL ||
                batch->state.shield_hp[d_idx] >= common->start_shield_health - (lp->damage + 0.5f))
                   ? 1u
                   : 0u;
           uint8_t can_shield_bounce = 0u;
-          if (shield_bounce_contact_found && shield_bounce_seed_valid &&
-              !guard_reflect_pure_final_x14_hitshield) {
+          if (shield_bounce_contact_found && shield_bounce_seed_valid) {
             // Seeded hidden xC58/xDCE shield-bounce result:
             // Slippi exposes the surviving bounced laser velocity but not the intra-frame
             // ftColl_80077688 fields consumed by Item_80269DC8. Use the explicit seed lane as the
-            // authoritative general ShieldBounced predicate on current shield-contact rows.
+            // authoritative general ShieldBounced predicate on current shield-contact rows,
+            // including final-x14 GuardReflect handoff ticks where keepalive otherwise wins.
             // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077688
             // refs/melee/src/melee/it/item.c::Item_80269DC8
             // refs/melee/src/melee/it/items/itfoxlaser.c::itFoxLaser_Logic94_ShieldBounced
@@ -3843,6 +4040,9 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
             can_shield_bounce = 1u;
           }
           // Regular shield hit: apply defender-side shield effects and despawn the laser.
+          if (item_guardreflect_active_timer_shield_contact_needs_drain(batch, d_idx)) {
+            item_guardreflect_apply_contact_drain(batch, d_idx);
+          }
           float dmg = (laser_state == 0u) ? lp->damage : lp->state1_damage;
           dmg = item_reflected_damage_lane(batch, ii, dmg);
           const int8_t shd = (laser_state == 0u) ? lp->shield_damage : lp->state1_shield_damage;
@@ -4412,6 +4612,10 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       const uint16_t wsk = (laser_state == 0u) ? lp->wsk : lp->state1_wsk;
       const uint16_t bkb = (laser_state == 0u) ? lp->bkb : lp->state1_bkb;
       const uint8_t element = (laser_state == 0u) ? lp->element : lp->state1_element;
+      const uint8_t defender_guard_reflect_no_submotion_body_handoff =
+          item_guard_reflect_body_hit_consumes_shield_state(batch, d_idx);
+      const uint8_t defender_guardon_reflect_body_undo_recharge =
+          item_guardon_reflect_body_hit_undoes_action_recharge(batch, d_idx);
       const MslItemHitResult res =
           combat_apply_item_hit(batch, bi, owner, def, batch->state.item_attack_id[ii],
                                 batch->state.item_attack_instance[ii],
@@ -4421,8 +4625,22 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         continue;
       }
       if (res == MSL_ITEM_HIT_APPLIED_CONSUME_ITEM) {
+        if (defender_guard_reflect_no_submotion_body_handoff) {
+          item_guard_reflect_restore_anim_drain(batch, d_idx);
+        }
+        if (defender_guardon_reflect_body_undo_recharge) {
+          item_guardon_reflect_undo_action_recharge(batch, d_idx);
+        }
         item_slot_clear(batch, ii);
         break;
+      }
+      if (res == MSL_ITEM_HIT_APPLIED_DONT_CONSUME) {
+        if (defender_guard_reflect_no_submotion_body_handoff) {
+          item_guard_reflect_restore_anim_drain(batch, d_idx);
+        }
+        if (defender_guardon_reflect_body_undo_recharge) {
+          item_guardon_reflect_undo_action_recharge(batch, d_idx);
+        }
       }
       // Rehit suppression latch for this item (runtime): insert the post-mutation victim identity.
       const uint16_t def_iid_post = batch->state.instance_id[d_idx];

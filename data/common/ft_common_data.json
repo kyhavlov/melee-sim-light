@@ -136,6 +136,7 @@
   "lstick_tilt_x_thresh": 0.25,
   "lstick_tilt_y_thresh": 0.25,
   "metal_armor": 30.0,
+  "ottotto_walk_stick_x_threshold": 0.75,
   "pass_stick_threshold": 0.6600000262260437,
   "pass_tilt_max_frames": 6,
   "pass_vel_y": -0.5,

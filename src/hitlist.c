@@ -34,6 +34,13 @@ static inline size_t idx_fighter_hitlist(int bi, int p, int hb_id) {
          (size_t)hb_id;
 }
 
+static inline uint8_t hitlist_specialhi_action(uint16_t action_id) {
+  return ((uint16_t)MSL_ACT_FX_SPECIAL_HI_HOLD <= action_id &&
+          action_id <= (uint16_t)MSL_ACT_FX_SPECIAL_HI_BOUND)
+             ? 1u
+             : 0u;
+}
+
 static inline size_t idx_item_hitlist(int bi, int item_slot) {
   return ((size_t)bi * (size_t)MSL_MAX_ITEMS + (size_t)item_slot) * (size_t)MSL_MAX_HITBOXES;
 }
@@ -501,6 +508,9 @@ void hitlist_seed_init_fighter_hitbox_from_group(MslBatch* batch, int bi, int at
   const size_t hb = (size_t)hb_id;
   const size_t valid_i = ((size_t)bi * (size_t)MSL_MAX_PLAYERS + a) * (size_t)MSL_MAX_HITBOXES + hb;
   const uint8_t use_hitbox_seed = batch->state.combat_hitlist_hb_valid[valid_i] ? 1u : 0u;
+  const uint8_t is_replay_rollout =
+      (batch->replay_rollout_reseeded != NULL && batch->replay_rollout_reseeded[bi] != 0u) ? 1u
+                                                                                           : 0u;
 
   size_t out_i = 0;
   for (int v = 0; v < (int)batch->config.num_players && out_i < (size_t)MSL_HITLIST_VICTIM_CAP;
@@ -520,6 +530,36 @@ void hitlist_seed_init_fighter_hitbox_from_group(MslBatch* batch, int bi, int at
         use_hitbox_seed ? batch->state.combat_hitlist_hb_cd[i] : batch->state.combat_hitlist_cd[i];
     if (cd_seed == 0) {
       continue;
+    }
+    if (is_replay_rollout && !use_hitbox_seed) {
+      // Dense group seeds are a compatibility surface for replay-derived HitCapsule victims_1.
+      // For SpecialHi rollout rows, materialize that coarse lane only when replay-visible state
+      // proves the current victim is still in the accepted-hit episode from this attacker:
+      // the stored victim instance is current, the victim is still in hitlag/hitstun, and
+      // instance_hit_by names the attacker instance. Otherwise the dense lane may be a geometry
+      // approximation from an inactive gap; binding it into the current HitCapsule would over-admit
+      // lbColl_8000ACFC suppression before the real launch BODY callback.
+      //
+      // Authoritative per-hitbox seeds stay exact and normal teacher-forced reseeds preserve strict
+      // compatibility.
+      // refs/melee/src/melee/ft/ftcoll.c::ftColl_800768A0
+      // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+      const uint16_t stored_iid = batch->state.combat_hitlist_victim_iid[i];
+      const size_t v_idx = msl_idx_player(bi, v);
+      const size_t a_idx = msl_idx_player(bi, attacker);
+      if (hitlist_specialhi_action(batch->state.action_id[a_idx])) {
+        if (stored_iid == 0u || stored_iid != batch->state.instance_id[v_idx]) {
+          continue;
+        }
+        if (batch->state.instance_hit_by[v_idx] != batch->state.instance_id[a_idx]) {
+          continue;
+        }
+        if (batch->state.hitlag[v_idx] == 0u && batch->state.hitstun[v_idx] == 0u) {
+          continue;
+        }
+      } else if (stored_iid != 0u && stored_iid != batch->state.instance_id[v_idx]) {
+        continue;
+      }
     }
     MslHitlistVictimEntry* e = &hit->victims_1[out_i++];
     e->id32 = 0;

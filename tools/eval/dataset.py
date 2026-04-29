@@ -103,6 +103,12 @@ SEED_DTYPE = np.dtype(
         ("speed_y_self", _arr("<f4", MAX_PLAYERS)),
         ("speed_x_attack", _arr("<f4", MAX_PLAYERS)),
         ("speed_y_attack", _arr("<f4", MAX_PLAYERS)),
+        # Hidden Firefox/Firebird mv.fx.SpecialHi.rotateModel lane.
+        # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+        #   ftFox_SpecialHi_RotateModel,ftFx_SpecialAirHi_Enter,ftFx_SpecialAirHi_Phys,
+        #   ftFx_SpecialAirHi_Coll}
+        ("specialhi_rotate_model_f32", _arr("<f4", MAX_PLAYERS)),
+        ("specialhi_rotate_model_valid_u8", _arr("u1", MAX_PLAYERS)),
         ("fighter_scale_y", _arr("<f4", MAX_PLAYERS)),
         ("facing", _arr("u1", MAX_PLAYERS)),
         ("facing_dir1", _arr("i1", MAX_PLAYERS)),

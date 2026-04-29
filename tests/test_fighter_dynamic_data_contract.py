@@ -19,7 +19,7 @@ def _parse_ssdynn01(path: Path) -> dict[str, object]:
     if buf[:8] != b"SSDYNN01":
         raise ValueError(f"SSDYNN01: bad magic {buf[:8]!r}")
     version, set_count, total_nodes = struct.unpack_from("<IHH", buf, 8)
-    if version not in (1, 2):
+    if version != 3:
         raise ValueError(f"SSDYNN01: bad version {version}")
     off = 16
     sets: list[dict[str, object]] = []
@@ -46,17 +46,16 @@ def _parse_ssdynn01(path: Path) -> dict[str, object]:
             }
         )
     collision_msids: list[int] = []
-    if version >= 2:
-        if off + 4 > len(buf):
-            raise ValueError("SSDYNN01: truncated collision owner index")
-        collision_msid_count, _reserved = struct.unpack_from("<HH", buf, off)
-        off += 4
-        for _ in range(int(collision_msid_count)):
-            if off + 2 > len(buf):
-                raise ValueError("SSDYNN01: truncated collision owner msid")
-            (msid,) = struct.unpack_from("<H", buf, off)
-            off += 2
-            collision_msids.append(int(msid))
+    if off + 4 > len(buf):
+        raise ValueError("SSDYNN01: truncated collision owner index")
+    collision_msid_count, _reserved = struct.unpack_from("<HH", buf, off)
+    off += 4
+    for _ in range(int(collision_msid_count)):
+        if off + 2 > len(buf):
+            raise ValueError("SSDYNN01: truncated collision owner msid")
+        (msid,) = struct.unpack_from("<H", buf, off)
+        off += 2
+        collision_msids.append(int(msid))
     if off != len(buf):
         raise ValueError("SSDYNN01: trailing bytes")
     return {
@@ -100,11 +99,17 @@ def _write_minimal_locals(path: Path, *, msid: int = 2, part_id: int = 17) -> No
     )
 
 
-def _write_dyn(path: Path, sets: list[tuple[int, list[int]]]) -> None:
+def _write_dyn(
+    path: Path,
+    sets: list[tuple[int, list[int]]],
+    *,
+    version: int = 3,
+    collision_msids: list[int] | None = None,
+) -> None:
     total_nodes = sum(len(parts) for _root, parts in sets)
     buf = bytearray()
     buf += b"SSDYNN01"
-    buf += struct.pack("<IHH", 1, len(sets), total_nodes)
+    buf += struct.pack("<IHH", int(version), len(sets), total_nodes)
     constants = (1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.7853981852531433, 3.1415927410125732,
                  3.1415927410125732, 3.1415927410125732, -3.1415927410125732,
                  -3.1415927410125732, -3.1415927410125732, 0.008726646192371845,
@@ -113,6 +118,11 @@ def _write_dyn(path: Path, sets: list[tuple[int, list[int]]]) -> None:
         buf += struct.pack("<HH3f", int(root) & 0xFFFF, len(parts), 1.0, 1.0, 0.04363323003053665)
         for part in parts:
             buf += struct.pack("<HH15f", int(part) & 0xFFFF, 0, *constants)
+    if version >= 2:
+        owner_msids = sorted({int(msid) & 0xFFFF for msid in (collision_msids or [])})
+        buf += struct.pack("<HH", len(owner_msids), 0)
+        for msid in owner_msids:
+            buf += struct.pack("<H", msid)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(bytes(buf))
 
@@ -195,6 +205,44 @@ def test_runtime_rejects_stale_ssanim01_v3_artifacts() -> None:
             msl_binding.debug_reset_pose_and_hitboxes_tables()
 
 
+def test_runtime_rejects_stale_ssdynn01_v2_artifacts() -> None:
+    import msl_binding
+
+    exclude = {
+        Path("anims/fox.bin"),
+        Path("anims/fox.locals.bin"),
+        Path("anims/fox.dyn.bin"),
+        Path("anims/falco.bin"),
+        Path("anims/falco.locals.bin"),
+        Path("anims/falco.dyn.bin"),
+    }
+
+    build_dir = Path("build")
+    build_dir.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="ssdynn-v2-stale-", dir=build_dir) as tmp_raw:
+        data_dir = Path(tmp_raw) / "data"
+        _populate_data_dir(data_dir, exclude=exclude)
+        _write_minimal_ssanim(data_dir / "anims/fox.bin")
+        _write_minimal_ssanim(data_dir / "anims/falco.bin")
+        _write_minimal_locals(data_dir / "anims/fox.locals.bin")
+        _write_minimal_locals(data_dir / "anims/falco.locals.bin")
+        _write_dyn(data_dir / "anims/fox.dyn.bin", [(17, [17, 18, 19, 20])], version=2, collision_msids=[52, 58])
+        _write_dyn(data_dir / "anims/falco.dyn.bin", [], version=2)
+
+        old_data_dir = os.environ.get("MSL_DATA_DIR")
+        try:
+            os.environ["MSL_DATA_DIR"] = str(data_dir)
+            msl_binding.debug_reset_pose_and_hitboxes_tables()
+            with pytest.raises(MemoryError):
+                msl_binding.init(batch_size=1, num_players=2)
+        finally:
+            if old_data_dir is None:
+                os.environ.pop("MSL_DATA_DIR", None)
+            else:
+                os.environ["MSL_DATA_DIR"] = old_data_dir
+            msl_binding.debug_reset_pose_and_hitboxes_tables()
+
+
 @pytest.mark.integration
 def test_committed_fox_falco_dynamic_contract_matches_supported_loader_surface() -> None:
     paths = [Path("data/anims/fox.dyn.bin"), Path("data/anims/falco.dyn.bin")]
@@ -204,8 +252,8 @@ def test_committed_fox_falco_dynamic_contract_matches_supported_loader_surface()
 
     assert fox["set_count"] == 1
     assert fox["total_nodes"] == 4
-    assert fox["version"] == 2
-    assert fox["collision_msids"] == [52, 58]
+    assert fox["version"] == 3
+    assert fox["collision_msids"] == [17, 52, 58]
     fox_set = fox["sets"][0]  # type: ignore[index]
     assert fox_set["root_part"] == 17
     assert fox_set["node_count"] == 4
@@ -215,7 +263,7 @@ def test_committed_fox_falco_dynamic_contract_matches_supported_loader_surface()
     assert c0[13] == pytest.approx(0.008726646192371845)
     assert c0[14] == pytest.approx(0.05235987901687622)
 
-    assert falco == {"version": 2, "set_count": 0, "total_nodes": 0, "sets": [], "collision_msids": []}
+    assert falco == {"version": 3, "set_count": 0, "total_nodes": 0, "sets": [], "collision_msids": []}
 
 
 @pytest.mark.integration
@@ -250,12 +298,12 @@ def test_extract_fighter_anims_emits_fox_falco_dynamic_contract(tmp_path: Path) 
 
     fox = _parse_ssdynn01(tmp_path / "fox.dyn.bin")
     falco = _parse_ssdynn01(tmp_path / "falco.dyn.bin")
-    assert fox["version"] == 2
+    assert fox["version"] == 3
     assert fox["set_count"] == 1
     assert fox["total_nodes"] == 4
-    assert fox["collision_msids"] == [52, 58]
+    assert fox["collision_msids"] == [17, 52, 58]
     assert [n["part"] for n in fox["sets"][0]["nodes"]] == [17, 18, 19, 20]  # type: ignore[index]
-    assert falco == {"version": 2, "set_count": 0, "total_nodes": 0, "sets": [], "collision_msids": []}
+    assert falco == {"version": 3, "set_count": 0, "total_nodes": 0, "sets": [], "collision_msids": []}
 
 
 def test_dynamic_collision_owner_predicate_is_data_driven_not_raw_msid_gate() -> None:

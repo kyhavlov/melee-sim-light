@@ -8,6 +8,7 @@ from tests.test_items_spawn_joint_replay_real_locks import (
     _skip_if_required_artifacts_missing,
     _step_one_row,
 )
+from tests.test_combat_ownership_seed_guardrail_locks import _DEBUG_SHIELD_CANDIDATE_DTYPE
 from tools.eval.dataset import COMPARE_DTYPE, read_dataset
 from tools.eval.run_longest_rollout_streaks import _load_binding
 
@@ -40,6 +41,18 @@ def _step_one_row_with_seed(dataset_path: Path, record: int, seed: np.ndarray) -
         binding.destroy(handle)
 
     return out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0], ref
+
+
+def _dataset_byte_views(ds):
+    samples = ds.samples
+    sample_stride = int(samples.dtype.itemsize)
+    samples_u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), sample_stride)
+    return (
+        samples_u8,
+        int(samples.dtype.fields["seed_t"][1]),
+        int(samples.dtype.fields["prev_input_t"][1]),
+        int(samples.dtype.fields["input_t"][1]),
+    )
 
 
 def _step_one_row_with_inputs(
@@ -251,6 +264,163 @@ def test_rebirth_fall_x1994_seed_fixes_gat_9063_rollout_window() -> None:
                 assert int(out[field][defender]) == int(ref[field][defender]), f"record={record} field={field}"
     finally:
         binding.destroy(handle)
+
+
+@pytest.mark.integration
+def test_guardreflect_peer_kneebend_nudge_requires_frame_start_grounded_tbk_1426() -> None:
+    # Fighter_8006A360 runs ftCommon_8007E0E4 per fighter after that fighter's Anim callback.
+    # On TBK:1426 p0 GuardReflect still sees p1's frame-start grounded KneeBend pushbox before
+    # p1's later KneeBend_Anim enters JumpF. Mutating the peer to start airborne must remove that
+    # x450 player-nudge lane rather than applying it from a broad current-action shortcut.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+    # refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007E0E4,ftCommon_8007DD7C}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
+        "TreasuredBackKangaroo.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples[1426:1427]["seed_t"].copy()
+    assert int(seed[0]["action_id"][0]) == 182  # GuardReflect
+    assert int(seed[0]["action_id"][1]) == 24  # KneeBend
+    assert int(seed[0]["on_ground"][1]) == 1
+
+    out, ref = _step_one_row_with_seed(dataset_path, 1426, seed)
+    assert int(out["action_id"][0]) == int(ref["action_id"][0]) == 182
+    assert float(out["pos_x"][0]) == pytest.approx(float(ref["pos_x"][0]), abs=3e-5)
+
+    seed[0]["on_ground"][1] = np.uint8(0)
+    seed[0]["ground_id"][1] = np.uint16(0xFFFF)
+    out_air, _ = _step_one_row_with_seed(dataset_path, 1426, seed)
+    assert float(out_air["pos_x"][0]) == pytest.approx(float(ref["pos_x"][0]) + 0.3, abs=3e-5)
+
+
+@pytest.mark.integration
+def test_guardreflect_final_x14_shine_body_rollout_rejects_broad_shield_extent_tbk_1403() -> None:
+    # Rollout-real lock for the TBK F08b disruptive row:
+    # - p0's GuardReflect final-x14 no-submotion ShieldDesc is near the p1 shine hitbox rim.
+    # - The broad ShieldDesc extent/model-scale proxy falsely turns the row into GuardSetOff.
+    # - Source-shaped final-x14 fighter-vs-fighter shield admission must reject that shield
+    #   candidate so the BODY contact enters DamageFlyTop.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80093BC0,ftCo_80092450}
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_80006E58}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
+        "TreasuredBackKangaroo.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    binding = _load_binding()
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    samples_u8, seed_off, prev_input_off, input_off = _dataset_byte_views(ds)
+
+    start = 1403
+    stop = 1427
+    seed_bytes = samples_u8[start : start + 1, seed_off : seed_off + seed_stride].copy()
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+    out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(1)
+
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    try:
+        binding.reseed_seed_rollout(handle, seed_bytes)
+        for record in range(start, stop + 1):
+            prev_input_bytes = samples_u8[
+                record : record + 1, prev_input_off : prev_input_off + input_stride
+            ].copy()
+            input_bytes = samples_u8[record : record + 1, input_off : input_off + input_stride].copy()
+            binding.step_input(handle, prev_input_bytes, input_bytes)
+            binding.write_compare(handle, out_compare_bytes)
+
+        out = out_view[0].copy()
+        ref = samples["ref_t1"][stop]
+        assert int(ref["action_id"][0]) == 90  # DamageFlyTop
+        for field in ("action_id", "animation_index", "hitlag", "hitstun"):
+            assert int(out[field][0]) == int(ref[field][0]), f"field={field}"
+        assert float(out["percent"][0]) == pytest.approx(float(ref["percent"][0]), abs=1e-6)
+        assert float(out["shield_hp"][0]) == pytest.approx(float(ref["shield_hp"][0]), abs=1e-6)
+    finally:
+        binding.destroy(handle)
+
+
+@pytest.mark.integration
+def test_guardreflect_final_x14_shine_precombat_shield_candidate_is_rejected_tbk_1427() -> None:
+    # Negative boundary for the same owner: at the collision snapshot, the p1 shine hitbox is a
+    # valid BODY candidate but must not be accepted as a GuardReflect shield hit.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
+        "TreasuredBackKangaroo.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    binding = _load_binding()
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    samples_u8, seed_off, prev_input_off, input_off = _dataset_byte_views(ds)
+
+    start = 1403
+    target = 1427
+    seed_bytes = samples_u8[start : start + 1, seed_off : seed_off + seed_stride].copy()
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    try:
+        binding.reseed_seed_rollout(handle, seed_bytes)
+        for record in range(start, target):
+            prev_input_bytes = samples_u8[
+                record : record + 1, prev_input_off : prev_input_off + input_stride
+            ].copy()
+            input_bytes = samples_u8[record : record + 1, input_off : input_off + input_stride].copy()
+            binding.step_input(handle, prev_input_bytes, input_bytes)
+
+        prev_input_bytes = samples_u8[
+            target : target + 1, prev_input_off : prev_input_off + input_stride
+        ].copy()
+        input_bytes = samples_u8[target : target + 1, input_off : input_off + input_stride].copy()
+        binding.debug_step_input_pre_combat(handle, prev_input_bytes, input_bytes)
+        raw_cand, count_cand = binding.debug_shield_candidate_decisions(handle, 0, 128)
+    finally:
+        binding.destroy(handle)
+
+    cand = raw_cand.reshape(-1).view(_DEBUG_SHIELD_CANDIDATE_DTYPE)[:count_cand]
+    accepted = [
+        c
+        for c in cand
+        if int(c["attacker"]) == 1
+        and int(c["defender"]) == 0
+        and int(c["hitbox_id"]) == 0
+        and int(c["reject_reason"]) == 0
+        and int(c["overlap_shield"]) == 1
+    ]
+    assert not accepted
 
 
 @pytest.mark.integration
@@ -717,6 +887,62 @@ def test_fox_attackdash_dynamic_chain_rejects_false_attackairhi_fsp_7078() -> No
     _seed, out, ref = _step_one_row(dataset_path, 7078)
     defender = 1
     for field in ("action_id", "animation_index", "hitlag", "hitstun", "instance_hit_by", "last_hit_by"):
+        assert int(out[field][defender]) == int(ref[field][defender]), f"field={field}"
+
+
+@pytest.mark.integration
+def test_fox_jumpb_dynamic_chain_selects_attackairb_body_ppa_3182() -> None:
+    # Fox JumpB dynamic-chain collision pose:
+    # - Dolphin pre-ftColl primitive probes on PPA:3182 show Falco AttackAirB's hitbox already
+    #   matches runtime, while Fox hurtcap-12 endpoints consume the live ftData.x2C dynamic JObj
+    #   chain before lb_8000B1CC/lbColl_80006E58.
+    # - SSDYNN01 v3's data-owned collision-msid predicate includes JumpB; this is not a broad
+    #   JumpB facing, distance, or row-local BODY admission shortcut.
+    # refs/melee/src/melee/ft/ftdynamics.c::{ftCo_8009DD94,ftCo_8009E318}
+    # refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    seed, out, ref = _step_one_row(dataset_path, 3182)
+    defender = 0
+    attacker = 1
+    assert int(seed["action_id"][defender]) == 26  # JumpB
+    assert int(seed["animation_index"][defender]) == 17
+    assert int(seed["action_id"][attacker]) == 67  # AttackAirB
+    assert int(ref["action_id"][defender]) == 85  # DamageAir3
+    for field in ("action_id", "animation_index", "hitlag", "hitstun", "instance_hit_by", "last_hit_by"):
+        assert int(out[field][defender]) == int(ref[field][defender]), f"field={field}"
+    assert int(out["hitlag"][attacker]) == int(ref["hitlag"][attacker]) == 7
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_name", "record", "defender"),
+    [
+        ("FavorableSuperficialPig.msl", 1499, 1),
+        ("ImpassionedAlarmedTarsier.msl", 2161, 0),
+        ("ImpassionedAlarmedTarsier.msl", 6196, 1),
+        ("TubbyCurlyHerring.msl", 5740, 1),
+    ],
+)
+def test_fox_jumpb_dynamic_chain_does_not_broaden_body_admission_controls(
+    dataset_name: str, record: int, defender: int
+) -> None:
+    # Negative controls from the rejected broad JumpB-facing experiment. These rows were exact
+    # before the retained SSDYNN01 data predicate and must stay exact, proving the owner is not a
+    # generic JumpF/B pose flip or BODY tolerance.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent" / dataset_name
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    _seed, out, ref = _step_one_row(dataset_path, record)
+    for field in ("action_id", "animation_index", "hitlag", "hitstun"):
         assert int(out[field][defender]) == int(ref[field][defender]), f"field={field}"
 
 

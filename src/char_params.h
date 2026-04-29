@@ -225,13 +225,14 @@ typedef struct MslCharParams {
   // - firefox_facing_stick_range_min
   // - firefox_freefall_mobility
   // - firefox_landing_lag_frames
+  // - firefox_bound_angle_degrees
   //
   // Decomp:
   // - refs/melee/src/melee/ft/chara/ftFox/types.h
   // - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
   //     ftFx_SpecialHiHoldAir_Phys,ftFx_SpecialAirHi_Enter,ftFx_SpecialHi_Anim,
   //     ftFx_SpecialAirHi_Anim,ftFx_SpecialAirHi_Phys,ftFx_SpecialHiLanding_Phys,
-  //     ftFx_SpecialHiFall_Anim,ftFx_SpecialHiBound_Enter
+  //     ftFx_SpecialAirHi_Coll,ftFx_SpecialHiFall_Anim,ftFx_SpecialHiBound_Enter
   //   }
   uint8_t firefox_hold_gravity_delay_frames;  // ftFox_DatAttrs.x54
   uint8_t _pad_u8_firefox_hold_0[3];
@@ -249,6 +250,7 @@ typedef struct MslCharParams {
   float firefox_bound_vel_x;             // ftFox_DatAttrs.x84
   float firefox_facing_stick_range_min;  // ftFox_DatAttrs.x88
   float firefox_freefall_mobility;       // ftFox_DatAttrs.x8C
+  float firefox_bound_angle_degrees;     // ftFox_DatAttrs.x94
 
   // Cliff / ledge (ftCo_Cliff*).
   //

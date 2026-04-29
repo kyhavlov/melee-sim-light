@@ -67,6 +67,26 @@ static inline float trigger_unit_from_input(uint16_t buttons, uint8_t l, uint8_t
   return trigger_u8_to_unit(m);
 }
 
+static inline uint8_t opening_input_lock_active_for_step(const MslBatch* batch, int bi) {
+  if (batch == NULL || batch->state.opening_input_lock_timer[bi] == 0u) {
+    return 0u;
+  }
+  // Replay-derived opening lock countdowns are post-frame remaining-step lanes. The VS overlay
+  // clear callback runs before raw frame -39 inputs are processed, so the final replay-seeded
+  // countdown tick should not blank the current input for t+1. Teacher-forced rows and validation
+  // rollouts expose that boundary as frame -40; replay rollouts with an active opening timer own
+  // the replay frame clock until this boundary. Other timer=1 states, including fresh init_match /
+  // modelplay episodes or mutated rollout seeds, keep the ordinary Fighter_UnkInitLoad lock
+  // semantics.
+  // refs/melee/src/melee/gm/gm_16AE.c::fn_8016B7F8
+  // refs/melee/src/melee/if/ifstatus.c::ifStatus_802F6EA4
+  // refs/melee-disc/files/IfAll.dat::ScInfCnt_scene_models[3]
+  if (batch->state.opening_input_lock_timer[bi] == 1u && batch->state.frame_id[bi] == -40) {
+    return 0u;
+  }
+  return 1u;
+}
+
 static inline float msl_ucf_popo_to_nana(float x) {
   // refs/ucf/include/util/melee/pad.h::popo_to_nana
   if (x >= 0.0f) {
@@ -488,10 +508,12 @@ int input_apply(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev_in
       const float prev_stick_y =
           apply_deadzone(stick_i8_to_unit(prev_main.y), com->lstick_deadzone_y);
 
-      const uint8_t tilt_timer_x_next = tilt_timer_update(batch->state.tilt_timer_x[idx], stick_x,
-                                                          prev_stick_x, com->lstick_tilt_x_thresh);
-      const uint8_t tilt_timer_y_next = tilt_timer_update(batch->state.tilt_timer_y[idx], stick_y,
-                                                          prev_stick_y, com->lstick_tilt_y_thresh);
+      uint8_t prev_tilt_timer_x = batch->state.tilt_timer_x[idx];
+      uint8_t prev_tilt_timer_y = batch->state.tilt_timer_y[idx];
+      const uint8_t tilt_timer_x_next =
+          tilt_timer_update(prev_tilt_timer_x, stick_x, prev_stick_x, com->lstick_tilt_x_thresh);
+      const uint8_t tilt_timer_y_next =
+          tilt_timer_update(prev_tilt_timer_y, stick_y, prev_stick_y, com->lstick_tilt_y_thresh);
 
       batch->state.tilt_timer_x[idx] = tilt_timer_x_next;
       batch->state.tilt_timer_y[idx] = tilt_timer_y_next;
@@ -715,7 +737,7 @@ int input_apply(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev_in
         batch->state.x680[idx] = clamp_inc_u8_ff(batch->state.x680[idx]);
       }
 
-      if (batch->state.opening_input_lock_timer[bi] > 0u) {
+      if (opening_input_lock_active_for_step(batch, bi)) {
         opening_input_lock_apply_Fighter_UnkInitLoad_80068914_Inner1_subset(batch, idx);
       }
 

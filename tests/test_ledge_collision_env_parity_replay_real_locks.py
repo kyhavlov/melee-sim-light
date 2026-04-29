@@ -211,6 +211,22 @@ _CASES = [
         246,
         211,  # ftCo_SM_OttottoWait
     ),
+    _Case(
+        f"{_AGG_VALID}/PriceyPartialAlbatross.msl",
+        1597,
+        0,
+        245,  # Ottotto held-stick below turn threshold stays teetering
+        245,
+        210,  # ftCo_SM_Ottotto
+    ),
+    _Case(
+        f"{_AGG_VALID}/PriceyPartialAlbatross.msl",
+        1598,
+        0,
+        245,  # Ottotto ordinary Turn IASA after Dash/crouch checks
+        18,
+        10,   # ftCo_SM_Turn
+    ),
 ]
 
 
@@ -238,6 +254,7 @@ def test_missfoot_and_slow_ledge_options_replay_real_rows_exact(case: _Case) -> 
     # - Ottotto edge handoffs cover Walk/Landing-style ft_80084280 teeter admission and the
     #   immediate L-stick jump-squat edge-loss path through KneeBend_Coll.
     # - Ottotto IASA crouch uses ftCo_800D5FB0, and Ottotto_Anim enters OttottoWait at anim end.
+    # - Ottotto / OttottoWait ordinary Turn IASA uses ftCo_Turn_CheckInput after Dash/crouch.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_MissFoot.c::ftCo_MissFoot_Coll
     # refs/melee/src/melee/ft/ft_081B.c::ft_80082F28
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::{

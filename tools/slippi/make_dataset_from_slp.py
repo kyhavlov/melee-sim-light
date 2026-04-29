@@ -3320,6 +3320,134 @@ def _derive_facing_dir1_sign(*, facing_u8: np.ndarray, action_id_u16: np.ndarray
     return out
 
 
+def _derive_specialhi_rotate_model_seed_lane(
+    *,
+    action_id_u16: np.ndarray,
+    facing_u8: np.ndarray,
+    pos_x_f32: np.ndarray,
+    pos_y_f32: np.ndarray,
+    speed_air_x_self_f32: np.ndarray,
+    speed_y_self_f32: np.ndarray,
+    stage_id_u32: int,
+    stage_segments: list[dict],
+    act_fx_special_hi: int,
+    act_fx_special_air_hi: int,
+    act_fx_special_hi_landing: int,
+    act_fx_special_hi_fall: int,
+    act_fx_special_hi_bound: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Reconstruct the hidden Firefox/Firebird rotateModel over continuous launch episodes.
+
+    Decomp:
+    - ftFx_SpecialAirHi_Enter writes `mv.fx.SpecialHi.rotateModel` from launch self_vel/facing.
+    - ftFx_SpecialAirHi_Phys consumes that stored angle for reverse acceleration.
+    - ftFx_SpecialAirHi_Coll can rewrite facing and recompute rotateModel from current self_vel.
+    - SpecialHiLanding/Fall/Bound callbacks do not rewrite FtPart_XRotN, so the live JObj pose can
+      persist into those followups until another motion state owns the model.
+    refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+      ftFox_SpecialHi_RotateModel,ftFx_SpecialAirHi_Enter,ftFx_SpecialAirHi_Phys,
+      ftFx_SpecialAirHi_Coll,ftFx_SpecialHiLanding_Anim,ftFx_SpecialHiFall_Anim,
+      ftFx_SpecialHiBound_Enter}
+    """
+
+    action = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
+    facing = np.asarray(facing_u8, dtype=np.uint8).reshape(-1)
+    pos_x = np.asarray(pos_x_f32, dtype=np.float32).reshape(-1)
+    pos_y = np.asarray(pos_y_f32, dtype=np.float32).reshape(-1)
+    vx = np.asarray(speed_air_x_self_f32, dtype=np.float32).reshape(-1)
+    vy = np.asarray(speed_y_self_f32, dtype=np.float32).reshape(-1)
+    if not (action.shape == facing.shape == pos_x.shape == pos_y.shape == vx.shape == vy.shape):
+        raise ValueError("SpecialHi rotateModel seed inputs must have matching length")
+
+    special_actions = {
+        int(act_fx_special_hi),
+        int(act_fx_special_air_hi),
+        int(act_fx_special_hi_landing),
+        int(act_fx_special_hi_fall),
+        int(act_fx_special_hi_bound),
+    }
+    collision_refresh_actions = {int(act_fx_special_hi), int(act_fx_special_air_hi)}
+    left_segments = [seg for seg in stage_segments if seg.get("kind") == "left_wall"]
+    right_segments = [seg for seg in stage_segments if seg.get("kind") == "right_wall"]
+
+    def _wall_contact_kind_for_rotate_model(i: int) -> int:
+        if int(stage_id_u32) != 32:
+            return 0
+        y = float(pos_y[i])
+        x = float(pos_x[i])
+        if not (np.isfinite(x) and np.isfinite(y)):
+            return 0
+        # Public replay frames expose post-projection position, not CollData env_flags. For the
+        # FD SpecialAirHi wall-collision rotateModel refresh, require the root to be outside a
+        # concrete wall segment at this Y; merely being near the wall from inside is not enough.
+        # This is a seed-history discriminator only. Runtime still uses live mpColl env flags.
+        # The 6u window is not a gameplay constant. It is a conservative replay-history window for
+        # rows already post-projected outside the FD wall after mpColl; replay-real positives and
+        # negatives live in tests/test_specialhi_mpcoll_ecb_replay_real_locks.py.
+        max_replay_history_outside_wall_delta = 6.0
+
+        def segment_x_at_y(seg: dict) -> float | None:
+            y0 = float(seg["y0"])
+            y1 = float(seg["y1"])
+            lo = min(y0, y1) - 0.25
+            hi = max(y0, y1) + 0.25
+            if y < lo or y > hi:
+                return None
+            if abs(y1 - y0) < 1e-6:
+                return float(seg["x0"])
+            t = (y - y0) / (y1 - y0)
+            if t < 0.0:
+                t = 0.0
+            elif t > 1.0:
+                t = 1.0
+            return float(seg["x0"]) + (float(seg["x1"]) - float(seg["x0"])) * t
+
+        for seg in left_segments:
+            sx = segment_x_at_y(seg)
+            if sx is not None and 0.0 <= (sx - x) <= max_replay_history_outside_wall_delta:
+                return 1
+        for seg in right_segments:
+            sx = segment_x_at_y(seg)
+            if sx is not None and 0.0 <= (x - sx) <= max_replay_history_outside_wall_delta:
+                return 2
+        return 0
+
+    n = int(action.shape[0])
+    out = np.zeros(n, dtype=np.float32)
+    valid = np.zeros(n, dtype=np.uint8)
+    cur = np.float32(0.0)
+    cur_valid = False
+    prev_action = -1
+    prev_facing = 0
+
+    for i in range(n):
+        a = int(action[i])
+        if a not in special_actions:
+            cur_valid = False
+            prev_action = a
+            prev_facing = int(facing[i])
+            continue
+        fx = np.float32(1.0 if int(facing[i]) != 0 else -1.0)
+        has_vel = bool(np.isfinite(vx[i]) and np.isfinite(vy[i]) and (abs(float(vx[i])) > 0.0 or abs(float(vy[i])) > 0.0))
+        collision_refresh = a in collision_refresh_actions and _wall_contact_kind_for_rotate_model(i) != 0
+        recompute = (
+            (not cur_valid)
+            or (prev_action not in special_actions)
+            or (int(facing[i]) != prev_facing)
+            or collision_refresh
+        )
+        if recompute and has_vel:
+            cur = np.float32(np.arctan2(np.float32(vy[i]), np.float32(vx[i] * fx)))
+            cur_valid = True
+        if cur_valid:
+            out[i] = cur
+            valid[i] = np.uint8(1)
+        prev_action = a
+        prev_facing = int(facing[i])
+
+    return out, valid
+
+
 def _derive_kb_smashcharge_active_from_post(*, post) -> np.ndarray:
     """Extract smash-charge active signal from replay post-frame when available.
 
@@ -3687,6 +3815,11 @@ def _main_impl(args) -> None:
     act_landing_fall_special = 0x002B
     act_fx_special_n_loop = 0x0156
     act_fx_special_air_n_loop = 0x0159
+    act_fx_special_hi = 0x0163
+    act_fx_special_air_hi = 0x0164
+    act_fx_special_hi_landing = 0x0165
+    act_fx_special_hi_fall = 0x0166
+    act_fx_special_hi_bound = 0x0167
     act_fx_special_lw_start = 0x0168
     act_fx_special_lw_loop = 0x0169
     act_fx_special_lw_hit = 0x016A
@@ -3848,6 +3981,8 @@ def _main_impl(args) -> None:
     post_pos_y_all = np.zeros((n_frames, 4), dtype=np.float32)
     post_percent_all = np.zeros((n_frames, 4), dtype=np.float32)
     frame_speed_mul_all = np.zeros((n_frames, 4), dtype=np.float32)
+    specialhi_rotate_model_all = np.zeros((n_frames, 4), dtype=np.float32)
+    specialhi_rotate_model_valid_all = np.zeros((n_frames, 4), dtype=np.uint8)
     post_hitlag_u16_all = np.zeros((n_frames, 4), dtype=np.uint16)
     post_shield_f32_all = np.zeros((n_frames, 4), dtype=np.float32)
     post_animation_index_u32_all = np.zeros((n_frames, 4), dtype=np.uint32)
@@ -4134,6 +4269,25 @@ def _main_impl(args) -> None:
         samples["ref_t1"]["speed_x_attack"][:, slot] = speed_x_attack[1:]
         samples["seed_t"]["speed_y_attack"][:, slot] = speed_y_attack[:-1]
         samples["ref_t1"]["speed_y_attack"][:, slot] = speed_y_attack[1:]
+        specialhi_rotate_model, specialhi_rotate_model_valid = _derive_specialhi_rotate_model_seed_lane(
+            action_id_u16=post_state,
+            facing_u8=post_dir,
+            pos_x_f32=post_pos_x,
+            pos_y_f32=post_pos_y,
+            speed_air_x_self_f32=speed_air_x_self,
+            speed_y_self_f32=speed_y_self,
+            stage_id_u32=int(stage_id),
+            stage_segments=stage_segments,
+            act_fx_special_hi=act_fx_special_hi,
+            act_fx_special_air_hi=act_fx_special_air_hi,
+            act_fx_special_hi_landing=act_fx_special_hi_landing,
+            act_fx_special_hi_fall=act_fx_special_hi_fall,
+            act_fx_special_hi_bound=act_fx_special_hi_bound,
+        )
+        specialhi_rotate_model_all[:, slot] = specialhi_rotate_model
+        specialhi_rotate_model_valid_all[:, slot] = specialhi_rotate_model_valid
+        samples["seed_t"]["specialhi_rotate_model_f32"][:, slot] = specialhi_rotate_model[:-1]
+        samples["seed_t"]["specialhi_rotate_model_valid_u8"][:, slot] = specialhi_rotate_model_valid[:-1]
 
         samples["seed_t"]["facing"][:, slot] = post_dir[:-1]
         samples["ref_t1"]["facing"][:, slot] = post_dir[1:]
@@ -5606,6 +5760,8 @@ def _main_impl(args) -> None:
         turn_has_turned=post_turn_has_turned_u8,
         anim_frame_f32=post_anim_frame,
         frame_speed_mul_f32=frame_speed_mul_all,
+        specialhi_rotate_model_f32=specialhi_rotate_model_all,
+        specialhi_rotate_model_valid_u8=specialhi_rotate_model_valid_all,
         include_per_hitbox=True,
         include_replay_only_shield_admission=True,
         include_replay_only_body_admission=True,
@@ -5863,6 +6019,7 @@ def _main_impl(args) -> None:
     ) = derive_hitbox_prev_center_seed_fields(
         num_players=num_players,
         char_id=post_char_id,
+        action_id=post_action_id,
         animation_index=post_animation_index,
         action_frame=post_action_frame,
         anim_frame_f32=post_anim_frame,
@@ -5871,6 +6028,8 @@ def _main_impl(args) -> None:
         pos_z=hidden_pos_z,
         facing=post_facing,
         fighter_scale_y=post_scale_y,
+        specialhi_rotate_model_f32=specialhi_rotate_model_all,
+        specialhi_rotate_model_valid_u8=specialhi_rotate_model_valid_all,
         data_root="data",
     )
     samples["seed_t"]["combat_hitbox_prev_valid"] = hitbox_prev_valid[:-1]

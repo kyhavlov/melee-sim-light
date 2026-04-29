@@ -4,10 +4,12 @@ import json
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from tools.eval.dataset import SAMPLE_DTYPE, SEED_DTYPE
 from tools.slippi.make_dataset_from_slp import (
     _derive_landing_fallspecial_allow_interrupt_seed_lane,
+    _derive_specialhi_rotate_model_seed_lane,
     _derive_walljump_phase_seed_lanes,
 )
 
@@ -107,6 +109,9 @@ def test_seed_schema_includes_staling_fields() -> None:
     assert "combat_hitbox_prev_x" in SEED_DTYPE.fields
     assert "combat_hitbox_prev_y" in SEED_DTYPE.fields
     assert "combat_hitbox_prev_z" in SEED_DTYPE.fields
+    # Firefox/Firebird hidden XRotN pose owner.
+    assert "specialhi_rotate_model_f32" in SEED_DTYPE.fields
+    assert "specialhi_rotate_model_valid_u8" in SEED_DTYPE.fields
 
 
 def test_dataset_dtype_sizes_match_c_structs() -> None:
@@ -199,3 +204,42 @@ def test_walljump_phase_seed_lane_rejects_generic_wall_hug_rows() -> None:
     )
     assert timer.tolist() == [254, 254, 254, 254, 254, 254, 254]
     assert side.tolist() == [0, 0, 0, 0, 0, 0, 0]
+
+
+def test_specialhi_rotate_model_seed_lane_persists_and_recomputes_same_facing_wall_contact() -> None:
+    # The hidden mv.fx.SpecialHi.rotateModel lane persists through Fall/Landing/Bound because those
+    # callbacks do not rewrite FtPart_XRotN. A same-facing wall contact in SpecialAirHi still
+    # recomputes the stored angle from current self_vel; it is not just a facing-change signal.
+    stage_segments = [
+        {"i": 11, "kind": "left_wall", "x0": -85.5656967, "y0": -10.0, "x1": -85.5656967, "y1": 0.0}
+    ]
+    action = np.array([0x0164, 0x0164, 0x0164, 0x0166, 0x0165, 0x0167, 0x001D], dtype=np.uint16)
+    facing = np.ones(action.shape, dtype=np.uint8)
+    pos_x = np.array([0.0, 0.0, -86.0, -86.0, -86.0, -86.0, -86.0], dtype=np.float32)
+    pos_y = np.array([-5.0, -5.0, -5.0, -5.0, -5.0, -5.0, -5.0], dtype=np.float32)
+    vx = np.array([1.0, 3.0, 3.0, 0.5, 0.5, 0.5, 0.5], dtype=np.float32)
+    vy = np.array([1.0, 0.0, 0.0, 2.0, 2.0, 2.0, 2.0], dtype=np.float32)
+
+    angle, valid = _derive_specialhi_rotate_model_seed_lane(
+        action_id_u16=action,
+        facing_u8=facing,
+        pos_x_f32=pos_x,
+        pos_y_f32=pos_y,
+        speed_air_x_self_f32=vx,
+        speed_y_self_f32=vy,
+        stage_id_u32=32,
+        stage_segments=stage_segments,
+        act_fx_special_hi=0x0163,
+        act_fx_special_air_hi=0x0164,
+        act_fx_special_hi_landing=0x0165,
+        act_fx_special_hi_fall=0x0166,
+        act_fx_special_hi_bound=0x0167,
+    )
+
+    assert valid.tolist() == [1, 1, 1, 1, 1, 1, 0]
+    assert float(angle[0]) == pytest.approx(float(np.arctan2(np.float32(1.0), np.float32(1.0))))
+    assert float(angle[1]) == pytest.approx(float(angle[0]))
+    assert float(angle[2]) == pytest.approx(0.0)
+    assert float(angle[3]) == pytest.approx(0.0)
+    assert float(angle[4]) == pytest.approx(0.0)
+    assert float(angle[5]) == pytest.approx(0.0)

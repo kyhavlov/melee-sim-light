@@ -3,12 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from tests.test_items_spawn_joint_replay_real_locks import (
     _skip_if_required_artifacts_missing,
     _step_one_row,
 )
+from tools.eval.dataset import COMPARE_DTYPE, read_dataset
 
 
 @dataclass(frozen=True)
@@ -135,6 +137,152 @@ def test_landing_guardreflect_laser_no_contact_row_stays_replay_real() -> None:
             assert int(out_t["items"][slot][field]) == int(ref_t["items"][slot][field]), (
                 f"{dataset_rel}: slot={slot} field={field}"
             )
+
+
+@pytest.mark.integration
+def test_landing_turn_guardon_followup_reflect_miss_preserves_laser_for_body_hit() -> None:
+    # Replay-real lock for the PPA GuardOn -> GuardReflect follow-up miss:
+    # - Landing -> Turn can enter GuardOn through ftCo_80091A4C before the next item pass.
+    # - The following GuardOn IASA enters GuardReflect through ftCo_8009388C, but the aged laser
+    #   misses the live ReflectDesc. That row remains powershield-window keepalive, not a false
+    #   reflect owner or GuardSetOff shield hit.
+    # - On the next row, the same laser reaches BODY ownership and puts Fox into DamageFlyTop.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_GuardOn_IASA,ftCo_8009388C,ftCo_8009370C}
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_CreateReflectHit,ftColl_80077464}
+    # refs/melee/src/melee/it/items/itfoxlaser.c::itFoxLaser_Logic94_PickedUp
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    p = 0
+
+    seed_2341, out_2341, ref_2341 = _step_one_row(dataset_path, 2341)
+    assert int(seed_2341["action_id"][p]) == 18  # Turn
+    assert int(ref_2341["action_id"][p]) == 178  # GuardOn
+    for field in ("action_id", "action_frame", "animation_index", "hitlag", "hitstun"):
+        assert int(out_2341[field][p]) == int(ref_2341[field][p]), field
+
+    seed_2342, out_2342, ref_2342 = _step_one_row(dataset_path, 2342)
+    assert int(seed_2342["action_id"][p]) == 178  # GuardOn
+    assert int(ref_2342["action_id"][p]) == 182  # GuardReflect
+    assert int(ref_2342["hitlag"][p]) == 0
+    for field in ("action_id", "action_frame", "animation_index", "hitlag", "hitstun"):
+        assert int(out_2342[field][p]) == int(ref_2342[field][p]), field
+    assert [int(x) for x in out_2342["state_flags"][p]] == [int(x) for x in ref_2342["state_flags"][p]]
+    assert float(out_2342["shield_hp"][p]) == pytest.approx(float(ref_2342["shield_hp"][p]), abs=1e-3)
+    assert int(out_2342["items"][0]["exists"]) == int(ref_2342["items"][0]["exists"]) == 1
+    assert int(out_2342["items"][0]["owner"]) == int(ref_2342["items"][0]["owner"]) == 1
+    assert float(out_2342["items"][0]["vel_x"]) == pytest.approx(-5.0, abs=1e-6)
+
+    seed_2343, out_2343, ref_2343 = _step_one_row(dataset_path, 2343)
+    assert int(seed_2343["action_id"][p]) == 182  # GuardReflect
+    assert int(ref_2343["action_id"][p]) == 75  # DamageFlyTop
+    for field in ("action_id", "action_frame", "animation_index", "hitlag", "hitstun"):
+        assert int(out_2343[field][p]) == int(ref_2343[field][p]), field
+    assert float(out_2343["percent"][p]) == pytest.approx(float(ref_2343["percent"][p]), abs=1e-6)
+    assert int(out_2343["items"][0]["exists"]) == int(ref_2343["items"][0]["exists"]) == 0
+
+
+def _step_one_row_with_seed_prev_action(
+    dataset_path: Path, record: int, *, player: int, seed_prev_action_id: int
+) -> tuple[np.void, np.void, np.void]:
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    assert int(samples.shape[0]) > int(record), f"dataset too short for lock row: record={record}"
+    row = samples[record : record + 1].copy()
+    row["seed_t"]["seed_prev_action_id"][0, player] = np.uint16(seed_prev_action_id)
+    seed = row["seed_t"][0].copy()
+    ref = row["ref_t1"][0].copy()
+
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    seed_bytes = (
+        np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8)
+        .copy()
+        .reshape(1, seed_stride)
+    )
+    prev_input_bytes = (
+        np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8)
+        .copy()
+        .reshape(1, input_stride)
+    )
+    input_bytes = (
+        np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8)
+        .copy()
+        .reshape(1, input_stride)
+    )
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+    finally:
+        binding.destroy(handle)
+
+    out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()
+    return seed, out, ref
+
+
+@pytest.mark.integration
+def test_guardon_guardreflect_no_submotion_hurtcaps_allow_shine_body_hit() -> None:
+    # Replay-real BODY lock for the GuardOn -> GuardReflect (`ftCo_8009388C`) no-submotion path:
+    # - Slippi exposes GuardReflect with animation_index=-1/action_frame=-2, but this source path
+    #   keeps a live GuardOn JObj pose for fighter-vs-fighter BODY collision.
+    # - The seeded frame-start previous action is the provenance lane; live prev_action_id has been
+    #   advanced by the time hurtcaps refresh runs.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_8009388C,ftCo_GuardReflect_Anim}
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80076ED8
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root / "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    record = 7531
+    defender = 0
+    attacker = 1
+
+    seed, out, ref = _step_one_row(dataset_path, record)
+    assert int(seed["action_id"][defender]) == 182  # GuardReflect
+    assert int(seed["seed_prev_action_id"][defender]) == 178  # GuardOn
+    assert int(seed["animation_index"][defender]) == 0xFFFFFFFF
+    assert int(seed["action_frame"][defender]) == -2
+    assert int(seed["action_id"][attacker]) == 39  # Squat
+    assert int(ref["action_id"][attacker]) == 360  # SpecialLwStart
+
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender]) == 90
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 7
+    assert int(out["hitstun"][defender]) == int(ref["hitstun"][defender]) == 52
+    assert int(out["instance_hit_by"][defender]) == int(ref["instance_hit_by"][defender])
+    assert float(out["percent"][defender]) == pytest.approx(float(ref["percent"][defender]), abs=1e-5)
+    assert int(out["hitlag"][attacker]) == int(ref["hitlag"][attacker]) == 5
+    assert int(out["last_attack_landed"][attacker]) == int(ref["last_attack_landed"][attacker])
+
+    # Boundary: without the frame-start GuardOn provenance, the same no-submotion snapshot must not
+    # materialize generic GuardReflect hurtcaps and turn every active-x14 row into BODY contact.
+    mut_seed, mut_out, _mut_ref = _step_one_row_with_seed_prev_action(
+        dataset_path, record, player=defender, seed_prev_action_id=16
+    )
+    assert int(mut_seed["seed_prev_action_id"][defender]) == 16  # WalkMiddle control
+    assert int(mut_out["action_id"][defender]) == 182  # GuardReflect stays no-contact
+    assert int(mut_out["hitlag"][defender]) == 0
+    assert int(mut_out["hitstun"][defender]) == 0
+    assert float(mut_out["percent"][defender]) == pytest.approx(float(mut_seed["percent"][defender]), abs=1e-6)
+    assert int(mut_out["hitlag"][attacker]) == 0
 
 
 @pytest.mark.integration

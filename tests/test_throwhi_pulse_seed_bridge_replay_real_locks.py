@@ -898,3 +898,58 @@ def test_falco_throwhi_frame24_carried_body_locks(case: _ThrowHiFrame24CarryCase
         ref_live = sum(1 for item in ref_row["items"] if int(item["exists"]) != 0)
         out_live = sum(1 for item in out_row["items"] if int(item["exists"]) != 0)
         assert out_live != ref_live, f"{case.note}: negative unexpectedly matched live item count"
+
+
+@pytest.mark.integration
+def test_throwhi_same_frame_laser_topoff_merges_kb_without_second_damage_entry() -> None:
+    # PRH 6744 has two live Falco ThrowHi state1 laser articles hitting the same victim in one
+    # item pass. Both contribute percent, but only the first owns the Damage entry/x2088 bump; the
+    # second contributes the ftCo_Damage_CalcVel merge without replacing the larger existing Y KB.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_CalcVel,ftCo_8008DCE0}
+    # refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C6CC,it_8029C4D4}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    target_record = 6744
+    thrower = 0
+    victim = 1
+    seed, ref_row, out_row = _run_one_step_row(dataset_path, target_record, thrower)
+    assert int(seed["action_id"][thrower]) == 221  # ThrowHi
+    assert int(seed["char_id"][thrower]) == 22  # Falco
+    assert int(seed["action_id"][victim]) == 90  # DamageFlyTop
+    assert int(seed["hitlag"][victim]) == 0
+    assert int(seed["hitstun"][victim]) > 0
+
+    for field in ("action_id", "action_frame", "hitlag", "hitstun", "percent", "instance_id"):
+        assert out_row[field][victim] == ref_row[field][victim], field
+    assert float(out_row["speed_x_attack"][victim]) == pytest.approx(
+        float(ref_row["speed_x_attack"][victim]), abs=1e-6
+    )
+    assert float(out_row["speed_y_attack"][victim]) == pytest.approx(
+        float(ref_row["speed_y_attack"][victim]), abs=1e-6
+    )
+
+    def clear_second_topoff_article(seed_t: np.ndarray) -> None:
+        item = seed_t[0]["items"][2]
+        item["exists"] = np.uint8(0)
+        item["type"] = np.uint16(0)
+        item["state"] = np.uint8(0)
+        item["owner"] = np.int8(-1)
+        item["instance_id"] = np.uint16(0)
+        item["attack_id"] = np.uint16(1)
+        item["attack_instance"] = np.uint16(0)
+
+    _, ref_mut, out_mut = _run_one_step_row(
+        dataset_path, target_record, thrower, seed_mutator=clear_second_topoff_article
+    )
+    assert int(out_mut["instance_id"][victim]) == int(ref_mut["instance_id"][victim])
+    assert float(out_mut["speed_y_attack"][victim]) == pytest.approx(
+        float(ref_mut["speed_y_attack"][victim]), abs=1e-6
+    )
+    assert float(out_mut["percent"][victim]) < float(ref_mut["percent"][victim])

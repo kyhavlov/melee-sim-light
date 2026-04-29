@@ -870,10 +870,15 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
           // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
           f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B1;
         }
+        const uint8_t guardsetoff_first_steady_x10_phase =
+            (batch->state.guard_x10[idx] == 7u ||
+             (batch->state.guard_x10[idx] == 8u && batch->state.hitlag_pre_timer[idx] == 0u))
+                ? 1u
+                : 0u;
         if (action_id == (uint16_t)MSL_ACT_GUARD_SET_OFF && batch->state.hitlag[idx] == 0u &&
             batch->state.prev_action_frame[idx] == 0 &&
             batch->state.guard_reflect_timer_x14[idx] == 0u &&
-            batch->state.guard_reflect_timer_x18[idx] == 0u && batch->state.guard_x10[idx] == 7u &&
+            batch->state.guard_reflect_timer_x18[idx] == 0u && guardsetoff_first_steady_x10_phase &&
             f221c == (uint8_t)(MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2)) {
           // GuardSetOff first-steady reflect-window expiry:
           // - after prio-0 hitlag decrement, GuardSetOff_Anim / ftCo_80093BC0 owns the first steady
@@ -882,7 +887,10 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
           //   timer has expired,
           // - keep this restricted to rows where the separate powershield-active x18 lane is also
           //   expired, so the destination no longer owns either GuardReflect timer,
-          // - and where mv.co.guard.x10 is on the first steady countdown tick after entry.
+          // - and where mv.co.guard.x10 is on the first steady countdown tick after entry. The
+          //   canonical gx10==7 lane may be reached on the last hitlag-decrement row; the rollout
+          //   gx10==8 variant must have started outside hitlag because last frozen gx10==8 rows
+          //   retain x221C_b1 until the next steady callback tick.
           // - so on the first steady GuardSetOff row, clear the stale x221C_b1 carry whenever the
           //   destination still exposes both bits after both timer owners have ended.
           // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}

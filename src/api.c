@@ -17,6 +17,7 @@
 #include "combat.h"
 #include "combat_geom.h"
 #include "char_params.h"
+#include "coll_env_flags.h"
 #include "common_params.h"
 #include "config.h"
 #include "special_msids.h"
@@ -41,6 +42,7 @@
 #include "staling.h"
 #include "staling_tables.h"
 #include "attack_id_tables.h"
+#include "specialhi_pose.h"
 #include "state.h"
 #include "state_flags.h"
 #include "step.h"
@@ -323,6 +325,12 @@ MslBatch* msl_batch_create(int batch_size, int num_players) {
     return NULL;
   }
   memset(batch->rollout_clock_rng_owned, 0, (size_t)batch_size * sizeof(uint8_t));
+  batch->replay_rollout_reseeded = (uint8_t*)alloc_malloc((size_t)batch_size * sizeof(uint8_t));
+  if (batch->replay_rollout_reseeded == NULL) {
+    msl_batch_destroy(batch);
+    return NULL;
+  }
+  memset(batch->replay_rollout_reseeded, 0, (size_t)batch_size * sizeof(uint8_t));
 
   // Debug-only per-fighter hit status override table (0xFF = none).
   batch->debug_hit_status_override =
@@ -482,6 +490,7 @@ void msl_batch_destroy(MslBatch* batch) {
   alloc_free(batch->debug_rng_seed_in);
   alloc_free(batch->debug_rng_shadow_seed);
   alloc_free(batch->debug_hit_status_override);
+  alloc_free(batch->replay_rollout_reseeded);
   alloc_free(batch->rollout_clock_rng_owned);
   alloc_free(batch->match_init_seed_scratch);
   state_free(&batch->state);
@@ -621,6 +630,17 @@ static inline uint8_t msl_reseed_seed_uses_rollout_replay_frame_clock(const MslS
                                                                       int active_players) {
   if (seed == NULL) {
     return 0u;
+  }
+  for (int p = 0; p < active_players; p++) {
+    if (seed->opening_input_lock_timer[p] != 0u) {
+      // Opening-countdown rollout rows need the replay frame clock so the final timer=1 step
+      // reaches the source VS-overlay clear boundary at frame -40 instead of using a broad
+      // `reseed_seed_rollout && timer==1` input unlock.
+      // refs/slippi-ssbm-asm/Recording/SendFrameStart.s
+      // refs/melee/src/melee/gm/gm_16AE.c::fn_8016B7F8
+      // refs/melee/src/melee/if/ifstatus.c::ifStatus_802F6EA4
+      return 1u;
+    }
   }
   for (int victim = 0; victim < active_players; victim++) {
     const int attacker =
@@ -1022,6 +1042,15 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.damage_hitlag_floorhug_latch[idx] = 0u;
 
       batch->state.action_id[idx] = seed->action_id[p];
+      batch->state.specialhi_rotate_model_valid[idx] = 0u;
+      batch->state.specialhi_rotate_model[idx] = 0.0f;
+      if (msl_specialhi_rotate_model_action(seed->action_id[p]) &&
+          seed->specialhi_rotate_model_valid_u8[p] != 0u &&
+          isfinite(seed->specialhi_rotate_model_f32[p])) {
+        msl_specialhi_rotate_model_set(batch, idx, seed->specialhi_rotate_model_f32[p]);
+      } else if (msl_specialhi_rotate_model_action(seed->action_id[p])) {
+        msl_specialhi_rotate_model_set_from_velocity(batch, idx);
+      }
       batch->state.seed_prev_action_id[idx] = seed->seed_prev_action_id[p];
       batch->state.seed_prev_action_frame[idx] = seed->seed_prev_action_frame[p];
       batch->state.illusion_ghost_pos0_x[idx] = seed->illusion_ghost_pos0_x[p];
@@ -1100,6 +1129,19 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       if (seed->mpcoll_wall_kind_seed_u8[p] == 1u || seed->mpcoll_wall_kind_seed_u8[p] == 2u) {
         batch->state.wall_kind[idx] = seed->mpcoll_wall_kind_seed_u8[p];
         batch->state.wall_id[idx] = seed->mpcoll_wall_id_seed_u16[p];
+        // One-step teacher-forced DamageFlyTop wall-callback bridge:
+        // seed_t.mpcoll_wall_* represents CollData wall side/index plus the WallHug env phase
+        // that public Slippi rows do not expose. mpcoll_ground.c moves coll_env_flags to
+        // coll_prev_env_flags at frame start, so the normal wall persistence path consumes this
+        // only for the reseeded frame; runtime rollouts must produce live WallHug again.
+        // refs/melee/src/melee/lb/types.h::CollData
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::ftCo_800C1D38
+        if (seed->mpcoll_wall_kind_seed_u8[p] == 1u) {
+          batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_LEFT_WALL_HUG;
+        } else {
+          batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_RIGHT_WALL_HUG;
+        }
       }
       batch->state.damage_hitlag_wall_asdi_latch[idx] = 0u;
       batch->state.guard_jump_oos_entered_this_frame[idx] = 0u;
@@ -1396,18 +1438,32 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
           batch->state.colanim_timer_x1990[idx] = seed->colanim_timer_x1990[p];
           batch->state.colanim_hit_status_x198c[idx] = 2u;
         }
+        const uint8_t cliff_x1990_only_seed =
+            (seed->action_id[p] == (uint16_t)MSL_ACT_CLIFF_CATCH ||
+             seed->action_id[p] == (uint16_t)MSL_ACT_CLIFF_WAIT)
+                ? 1u
+                : 0u;
         if (((seed->hitlag[p] == 0u && seed->hitstun[p] == 0u) || shine_start_x1990_reseed) &&
             seed->colanim_hit_status_x198c[p] == 2u && seed->colanim_timer_x1990[p] != 0u &&
             seed->colanim_timer_x1994[p] != 0u && seed->colanim_lock_x2221_b0[p] == 0u) {
           // Paired hidden timers: x1990 owns the visible x198C=2 status while x1994 remains queued
           // underneath. Trust the explicit seed-history lane on non-hitlag rows so
           // Fighter_8006A360 can expire x1990 to x198C=1 before the same frame's BODY pass; keep
-          // Shine Start hitlag rows covered by the existing entry exception.
+          // Shine Start hitlag rows covered by the existing entry exception. CliffCatch/CliffWait
+          // are excluded below because their source entry only calls ftColl_8007B760(..., x49C);
+          // the queued x1994 lane can be a stale/provenance-free damage OnExitHitlag seed and
+          // should not be promoted behind the ledge x1990 owner without an explicit producer.
           // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
           // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007B760,ftColl_8007B7A4}
-          batch->state.colanim_timer_x1990[idx] = seed->colanim_timer_x1990[p];
-          batch->state.colanim_timer_x1994[idx] = seed->colanim_timer_x1994[p];
-          batch->state.colanim_hit_status_x198c[idx] = 2u;
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::ftCo_8009A804
+          if (cliff_x1990_only_seed) {
+            batch->state.colanim_timer_x1990[idx] = seed->colanim_timer_x1990[p];
+            batch->state.colanim_hit_status_x198c[idx] = 2u;
+          } else {
+            batch->state.colanim_timer_x1990[idx] = seed->colanim_timer_x1990[p];
+            batch->state.colanim_timer_x1994[idx] = seed->colanim_timer_x1994[p];
+            batch->state.colanim_hit_status_x198c[idx] = 2u;
+          }
         }
         if (seed->hitlag[p] == 0u && seed->hitstun[p] != 0u &&
             seed->colanim_hit_status_x198c[p] == 1u && seed->colanim_timer_x1994[p] != 0u &&
@@ -2169,6 +2225,10 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       }
       batch->rollout_clock_rng_owned[bi] = clock_owner;
     }
+    if (batch->replay_rollout_reseeded != NULL) {
+      batch->replay_rollout_reseeded[bi] =
+          (rollout_owned_after == (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED) ? 1u : 0u;
+    }
   }
 
   return 0;
@@ -2764,9 +2824,8 @@ static uint8_t debug_sample_hitbox_center_proxy(const MslBatch* batch, size_t id
       msl_anim_part_under_xrotn(char_id, def->bone_part_id)) {
     float xrotn_m[12];
     if (anim_pose_get_matrix(char_id, msid, pose_frame, 2u, xrotn_m) == 0) {
-      const float vel_x = batch->state.speed_air_x_self[idx];
-      const float vel_y = batch->state.speed_y_self[idx];
-      if (fabsf(vel_x) > 0.0f || fabsf(vel_y) > 0.0f) {
+      float rotate_model = 0.0f;
+      if (msl_specialhi_rotate_model_get_or_velocity(batch, idx, &rotate_model)) {
         float ax0 = 0.0f, ay0 = 0.0f, az0 = 0.0f;
         float ax1 = 0.0f, ay1 = 0.0f, az1 = 0.0f;
         const float origin[3] = {0.0f, 0.0f, 0.0f};
@@ -2793,7 +2852,7 @@ static uint8_t debug_sample_hitbox_center_proxy(const MslBatch* batch, size_t id
           // where `rotateModel = atan2f(self_vel.y, self_vel.x * facing_dir)`.
           // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
           //   ftFox_SpecialHi_RotateModel,ftFx_SpecialAirHi_Enter,ftFx_SpecialAirHi_Coll}
-          const float angle = (2.0f * MSL_PI_F) - atan2f(vel_y, vel_x * facing_dir);
+          const float angle = msl_specialhi_xrotn_angle_from_rotate_model(rotate_model);
           const float px = cx - ax0;
           const float py = cy - ay0;
           const float pz = cz - az0;

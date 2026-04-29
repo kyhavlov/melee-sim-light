@@ -24,6 +24,13 @@ def _laser_ids(items_row: np.ndarray) -> list[int]:
     return out
 
 
+def _item_by_instance(items_row: np.ndarray, instance_id: int) -> np.void | None:
+    for it in items_row:
+        if int(it["exists"]) and int(it["instance_id"]) == int(instance_id):
+            return it
+    return None
+
+
 def _one_step_out_compare(*, ds, row) -> np.ndarray:
     binding = pytest.importorskip("msl_binding")
     sizes = binding.sizes()
@@ -94,6 +101,48 @@ def _rollout_rows(dataset_path: Path, start_record: int, end_record_inclusive: i
         return rows
     finally:
         binding.destroy(handle)
+
+
+@pytest.mark.integration
+def test_laser_stage_wall_collision_sets_expiry_before_slot_lifecycle_shift() -> None:
+    # Replay-real lock for the PPA F00 item lifecycle cluster:
+    # - itFoxlaser_UnkMotion1_Coll calls it_8029C4D4 -> it_8026E9A4, which checks stage collision,
+    #   not floor-only collision.
+    # - The laser with instance 186 crosses FD's left wall under the ledge on record 1160. It must
+    #   get lifeTimer=1 so it is gone before later slot sorting/spawn-id comparisons.
+    # - The preceding row is the negative boundary: same laser below the floor but not yet crossing
+    #   a stage line must keep normal lifetime countdown.
+    # refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Coll,it_8029C4D4}
+    # refs/melee/src/melee/it/it_266F.c::it_8026E9A4
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_missing_laser_artifacts(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    rows = _rollout_rows(dataset_path, start_record=1153, end_record_inclusive=1162)
+
+    out_1159, ref_1159 = rows[1159]
+    neg_out = _item_by_instance(out_1159["items"], 186)
+    neg_ref = _item_by_instance(ref_1159["items"], 186)
+    assert neg_out is not None and neg_ref is not None
+    assert float(neg_out["timer"]) == pytest.approx(float(neg_ref["timer"]), abs=1e-6)
+    assert float(neg_out["timer"]) > 1.0
+
+    out_1160, ref_1160 = rows[1160]
+    hit_out = _item_by_instance(out_1160["items"], 186)
+    hit_ref = _item_by_instance(ref_1160["items"], 186)
+    assert hit_out is not None and hit_ref is not None
+    assert float(hit_out["timer"]) == pytest.approx(float(hit_ref["timer"]), abs=1e-6)
+    assert float(hit_out["timer"]) == pytest.approx(1.0, abs=1e-6)
+
+    out_1161, ref_1161 = rows[1161]
+    assert _item_by_instance(out_1161["items"], 186) is None
+    assert _item_by_instance(ref_1161["items"], 186) is None
+    assert _laser_ids(out_1161["items"]) == _laser_ids(ref_1161["items"])
 
 
 @dataclass(frozen=True)
@@ -877,6 +926,57 @@ def test_laser_guardreflect_final_x14_boundary_rows_do_not_overbroaden_hitshield
             assert int(out["items"][0, item_slot][field]) == int(ref["items"][0, item_slot][field]), (
                 f"{dataset_path.name}:{record} item field={field}"
             )
+
+
+@pytest.mark.integration
+def test_final_x14_seeded_shield_bounce_overrides_guardreflect_keepalive() -> None:
+    # Replay-real positive/negative for the final-x14 ShieldBounced handoff:
+    # - GAT:9479 has explicit hidden item_shield_bounce seed provenance from ftColl_80077688 /
+    #   Item_80269DC8, so it must enter GuardSetOff and preserve the bounced laser velocity.
+    # - GAT:1287 has the same frozen GuardReflect shape but no ShieldBounced seed, so it remains
+    #   on the keepalive path with straight laser velocity.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardReflect_Anim,ftCo_80093BC0}
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80077688
+    # refs/melee/src/melee/it/item.c::Item_80269DC8
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_missing_laser_artifacts(root)
+    dataset_path = (
+        root
+        / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path.relative_to(root)}")
+
+    ds = read_dataset(str(dataset_path))
+
+    row_pos = ds.samples[9479 : 9480]
+    assert int(row_pos["seed_t"]["action_id"][0, 0]) == 182  # GuardReflect
+    assert int(row_pos["seed_t"]["guard_reflect_timer_x14"][0, 0]) == 1
+    assert int(row_pos["seed_t"]["item_shield_bounce_valid"][0, 0]) == 1
+    out_pos = _one_step_out_compare(ds=ds, row=row_pos)
+    ref_pos = row_pos["ref_t1"]
+    for field in ("action_id", "action_frame", "animation_index", "hitlag"):
+        assert int(out_pos[field][0, 0]) == int(ref_pos[field][0, 0]), field
+    assert float(out_pos["shield_hp"][0, 0]) == pytest.approx(float(ref_pos["shield_hp"][0, 0]), abs=1e-6)
+    for field in ("exists", "type", "owner", "instance_id"):
+        assert int(out_pos["items"][0, 0][field]) == int(ref_pos["items"][0, 0][field]), field
+    assert float(out_pos["items"][0, 0]["vel_x"]) == pytest.approx(
+        float(ref_pos["items"][0, 0]["vel_x"]), abs=1e-6
+    )
+    assert float(out_pos["items"][0, 0]["vel_y"]) == pytest.approx(
+        float(ref_pos["items"][0, 0]["vel_y"]), abs=1e-6
+    )
+
+    row_neg = ds.samples[1287 : 1288]
+    assert int(row_neg["seed_t"]["action_id"][0, 0]) == 182  # GuardReflect
+    assert int(row_neg["seed_t"]["guard_reflect_timer_x14"][0, 0]) == 1
+    assert int(row_neg["seed_t"]["item_shield_bounce_valid"][0, 0]) == 0
+    out_neg = _one_step_out_compare(ds=ds, row=row_neg)
+    ref_neg = row_neg["ref_t1"]
+    assert int(out_neg["action_id"][0, 0]) == int(ref_neg["action_id"][0, 0]) == 182
+    assert int(out_neg["hitlag"][0, 0]) == int(ref_neg["hitlag"][0, 0]) == 0
+    assert float(out_neg["items"][0, 0]["vel_x"]) == pytest.approx(5.0, abs=1e-6)
+    assert float(out_neg["items"][0, 0]["vel_y"]) == pytest.approx(0.0, abs=1e-6)
 
 
 @pytest.mark.integration

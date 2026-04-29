@@ -32,6 +32,10 @@ HVG = (
     "datasets/aggregate_recent/replays/validation/aggregate_recent/"
     "HilariousVillainousGiraffe.msl"
 )
+HIS = (
+    "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+    "HungryImportantSnake.msl"
+)
 
 
 def _run_row(
@@ -120,7 +124,7 @@ def _collision_contact_dtype() -> np.dtype:
 
 
 def _run_rollout_rows(
-    start_record: int, end_record: int, dataset_rel: str = QGD
+    start_record: int, end_record: int, dataset_rel: str = QGD, *, rollout_seed: bool = False
 ) -> dict[int, tuple[np.void, np.void, np.void]]:
     binding = pytest.importorskip("msl_binding")
     sizes = binding.sizes()
@@ -143,7 +147,10 @@ def _run_rollout_rows(
     got_by_record: dict[int, tuple[np.void, np.void, np.void]] = {}
     handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
     try:
-        binding.reseed_seed(handle, _bytes("seed_t", 0, seed_stride))
+        if rollout_seed:
+            binding.reseed_seed_rollout(handle, _bytes("seed_t", 0, seed_stride))
+        else:
+            binding.reseed_seed(handle, _bytes("seed_t", 0, seed_stride))
         for i, record in enumerate(range(start_record, end_record + 1)):
             binding.step_input(
                 handle,
@@ -273,6 +280,61 @@ def test_specialairhi_left_wall_envelope_reduces_maj_rollout_escape() -> None:
 
 
 @pytest.mark.integration
+def test_specialairhi_left_wall_collision_facing_enables_tch_cliffcatch_rollout() -> None:
+    # SpecialAirHi_Coll does more than resolve the wall envelope: after a wall/ceiling/floor
+    # collision whose normal is within `90 + da->x94_FOX_FIREFOX_BOUND_ANGLE` of self_vel, it writes
+    # facing from sign(self_vel.x) and recomputes rotateModel. TCH exposes the owner because the
+    # wall contact is exact but the rollout later misses CliffCatch unless the facing flip happens
+    # during launch.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialAirHi_Coll
+    # data/characters/{fox,falco}.json::firefox_bound_angle_degrees
+    _, ref_6989, got_6989, contacts_6989 = _run_row(6989, TCH)
+    _, ref_6990, got_6990, contacts_6990 = _run_row(6990, TCH)
+    p = 1
+
+    assert int(contacts_6989["wall_kind"][p]) == 1
+    assert int(got_6989["action_id"][p]) == int(ref_6989["action_id"][p]) == 356
+    assert int(got_6989["facing"][p]) == int(ref_6989["facing"][p]) == 0
+
+    assert int(contacts_6990["wall_kind"][p]) == 1
+    assert int(contacts_6990["wall_id"][p]) == 11
+    assert int(got_6990["action_id"][p]) == int(ref_6990["action_id"][p]) == 356
+    assert int(got_6990["facing"][p]) == int(ref_6990["facing"][p]) == 1
+
+    rows = _run_rollout_rows(6864, 6998, TCH)
+    got_6990_r, ref_6990_r, _ = rows[6990]
+    got_6998_r, ref_6998_r, contacts_6998_r = rows[6998]
+
+    assert int(got_6990_r["action_id"][p]) == int(ref_6990_r["action_id"][p]) == 356
+    assert int(got_6990_r["facing"][p]) == int(ref_6990_r["facing"][p]) == 1
+    assert int(got_6998_r["action_id"][p]) == int(ref_6998_r["action_id"][p]) == 252
+    assert int(got_6998_r["facing"][p]) == int(ref_6998_r["facing"][p]) == 1
+    assert int(contacts_6998_r["coll_env_flags"][p]) & 0x01000000
+
+
+@pytest.mark.integration
+def test_specialhi_rotate_model_seed_persists_into_fall_landing_and_bound_rows() -> None:
+    # Replay-real seed-lane boundary for the shared SpecialHi XRotN owner. Source writes
+    # rotateModel during launch/collision callbacks; Fall/Landing/Bound do not rewrite the JObj
+    # rotation, so the hidden pose lane remains valid until a non-SpecialHi motion owns the model.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+    #   ftFox_SpecialHi_RotateModel,ftFx_SpecialAirHi_Coll,ftFx_SpecialHiFall_Anim,
+    #   ftFx_SpecialHiLanding_Anim,ftFx_SpecialHiBound_Enter}
+    root = Path(__file__).resolve().parents[1]
+    cases = (
+        (HVG, 4085, 1, 358),  # SpecialHiFall after SpecialAirHi collision
+        (HVG, 6545, 1, 357),  # SpecialHiLanding after SpecialHiFall
+        (HIS, 561, 1, 359),   # SpecialHiBound after SpecialAirHi rebound entry
+    )
+    for dataset_rel, record, player, action_id in cases:
+        ds = read_dataset(str(root / dataset_rel))
+        seed = ds.samples[record]["seed_t"]
+        assert int(seed["action_id"][player]) == action_id
+        assert int(seed["specialhi_rotate_model_valid_u8"][player]) == 1
+        assert np.isfinite(float(seed["specialhi_rotate_model_f32"][player]))
+
+
+@pytest.mark.integration
 def test_specialairhi_left_wall_hitlag_refresh_prevents_hvg_passivewall_cascade() -> None:
     # HVG's left-wall Firefox/Firebird contact enters DamageFlyHi from a BODY hit while hitlag is
     # active near the wall. Fighter_procMap still runs the collision callback during hitlag, so the
@@ -293,7 +355,8 @@ def test_specialairhi_left_wall_hitlag_refresh_prevents_hvg_passivewall_cascade(
     assert int(contacts_4795["wall_kind"][0]) == 1
     assert int(contacts_4795["wall_id"][0]) == 11
     assert int(contacts_4795["damage_hitlag_wall_asdi_latch"][0]) == 1
-    assert int(contacts_4795["coll_env_flags"][0]) & 0x20
+    assert int(contacts_4795["coll_env_flags"][0]) & 0x1
+    assert (int(contacts_4795["coll_env_flags"][0]) & 0x20) == 0
 
     assert int(got_4796["action_id"][0]) == int(ref_4796["action_id"][0]) == 87
     assert int(got_4796["hitlag"][0]) == int(ref_4796["hitlag"][0]) == 5
@@ -303,21 +366,21 @@ def test_specialairhi_left_wall_hitlag_refresh_prevents_hvg_passivewall_cascade(
     assert int(got_4801["action_id"][0]) == int(ref_4801["action_id"][0]) == 87
     assert int(got_4801["hitlag"][0]) == int(ref_4801["hitlag"][0]) == 0
     assert int(got_4801["hitstun"][0]) == int(ref_4801["hitstun"][0]) == 43
-    assert int(contacts_4801["wall_kind"][0]) == 0
-    assert int(contacts_4801["damage_hitlag_wall_asdi_latch"][0]) == 0
+    assert int(contacts_4801["wall_kind"][0]) == 1
+    assert int(contacts_4801["damage_hitlag_wall_asdi_latch"][0]) == 1
     assert (int(contacts_4801["coll_env_flags"][0]) & 0x20) == 0
-    assert float(got_4801["pos_x"][0] - ref_4801["pos_x"][0]) == pytest.approx(
-        0.07463837, abs=1e-6
-    )
+    assert float(got_4801["pos_x"][0]) == pytest.approx(float(ref_4801["pos_x"][0]), abs=1e-6)
 
     assert int(got_4804["action_id"][0]) == int(ref_4804["action_id"][0]) == 87
     assert int(got_4804["hitstun"][0]) == int(ref_4804["hitstun"][0]) == 40
-    assert int(contacts_4804["wall_kind"][0]) == 0
+    assert int(contacts_4804["wall_kind"][0]) == 1
+    assert int(contacts_4804["damage_hitlag_wall_asdi_latch"][0]) == 0
     assert (int(contacts_4804["coll_env_flags"][0]) & 0x20) == 0
+    assert float(got_4804["pos_x"][0]) == pytest.approx(float(ref_4804["pos_x"][0]), abs=1e-6)
 
     assert int(got_4829["action_id"][0]) == int(ref_4829["action_id"][0]) == 0
     assert int(got_4829["stocks"][0]) == int(ref_4829["stocks"][0]) == 2
-    assert int(contacts_4829["wall_kind"][0]) == 0
+    assert (int(contacts_4829["coll_env_flags"][0]) & 0x20) == 0
 
 
 @pytest.mark.integration
@@ -333,16 +396,47 @@ def test_damagefly_stale_wall_id_without_wall_latch_does_not_project_asdi() -> N
     p = 0
 
     assert int(got_4801["hitlag"][p]) == int(ref_4801["hitlag"][p]) == 0
-    assert int(contacts_4801["wall_kind"][p]) == 0
+    assert int(contacts_4801["wall_kind"][p]) == 1
     assert int(contacts_4801["wall_id"][p]) == 11
+    assert int(contacts_4801["damage_hitlag_wall_asdi_latch"][p]) == 1
+    assert (int(contacts_4801["coll_env_flags"][p]) & 0x20) == 0
     assert int(got_4804["hitlag"][p]) == int(ref_4804["hitlag"][p]) == 0
-    assert int(contacts_4804["wall_kind"][p]) == 0
-    assert int(contacts_4804["wall_id"][p]) == 11
+    assert int(contacts_4804["wall_kind"][p]) == 1
+    assert int(contacts_4804["wall_id"][p]) == 13
+    assert int(contacts_4804["damage_hitlag_wall_asdi_latch"][p]) == 0
+    assert (int(contacts_4804["coll_env_flags"][p]) & 0x20) == 0
 
     first_exit_delta = float(got_4801["pos_x"][p] - ref_4801["pos_x"][p])
     later_stale_delta = float(got_4804["pos_x"][p] - ref_4804["pos_x"][p])
-    assert first_exit_delta == pytest.approx(0.07463837, abs=1e-6)
-    assert later_stale_delta == pytest.approx(first_exit_delta, abs=1e-6)
+    assert first_exit_delta == pytest.approx(0.0, abs=1e-6)
+    assert later_stale_delta == pytest.approx(0.0, abs=1e-6)
+
+
+@pytest.mark.integration
+def test_same_frame_specialairhi_wall_contact_does_not_stale_project_damagefly_asdi() -> None:
+    # HIS has a SpecialAirHi right-wall contact on the same frame Falco is hit into DamageFlyHi.
+    # That pre-damage SpecialAirHi_Coll contact must not arm Damage_OnExitHitlag wall-ASDI
+    # projection unless DamageFly_Coll observes a wall during active hitlag.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+    #   ftCo_Damage_OnExitHitlag,ftCo_DamageFly_Coll}
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialAirHi_Coll
+    rows = _run_rollout_rows(8513, 8519, HIS, rollout_seed=True)
+    got_8513, ref_8513, contacts_8513 = rows[8513]
+    got_8519, ref_8519, contacts_8519 = rows[8519]
+    p = 1
+
+    assert int(got_8513["action_id"][p]) == int(ref_8513["action_id"][p]) == 87
+    assert int(got_8513["hitlag"][p]) == int(ref_8513["hitlag"][p]) == 6
+    assert int(contacts_8513["wall_kind"][p]) == 2
+    assert int(contacts_8513["wall_id"][p]) == 9
+    assert int(contacts_8513["damage_hitlag_wall_asdi_latch"][p]) == 0
+
+    assert int(got_8519["hitlag"][p]) == int(ref_8519["hitlag"][p]) == 0
+    assert int(contacts_8519["wall_kind"][p]) == 0
+    assert int(contacts_8519["wall_id"][p]) == 9
+    assert int(contacts_8519["damage_hitlag_wall_asdi_latch"][p]) == 0
+    assert float(got_8519["pos_x"][p]) == pytest.approx(float(ref_8519["pos_x"][p]), abs=1e-6)
+    assert float(got_8519["pos_y"][p]) == pytest.approx(float(ref_8519["pos_y"][p]), abs=1e-6)
 
 
 @pytest.mark.integration
