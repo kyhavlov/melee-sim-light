@@ -1,4 +1,4 @@
-Work on the current branch/worktree. Do not commit.
+Work on the current branch/worktree. Do not commit. Do not be confused by prior messages - only a stop message given AFTER this one should cause you to stop and wrap up your work for review)
 
 I'm giving you an open-ended long-work prompt so you can work for hours while I'm away. Keep an incremental scratch worklog of improvements as you accumulate them and leave retained changes uncommitted in the tree.
 
