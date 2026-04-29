@@ -1473,6 +1473,13 @@ Match-flow closure notes:
   is cleared while in those match-flow states so a pre-death underside contact cannot project the
   first post-Rebirth Fall frame back to FD's underside. This is locked by
   `tests/test_modelplay_manual_respawn_collision_provenance_regression.py`.
+- Rebirth/RebirthWait also set `fp->x2219_b1`, which makes `Fighter_8006CB94` skip the common
+  fighter collision pass and makes item collision reject the respawning fighter as a target. This is
+  a combat eligibility gate, not a visible `hurtbox_state` rewrite: Slippi can still report the
+  Wait1 hurtbox state while the platform bit prevents BODY/catch/item hits. Sources:
+  `refs/melee/src/melee/ft/ft_0D4D.c::{ftCo_800D4FF4,ftCo_800D5600}`,
+  `refs/melee/src/melee/ft/fighter.c::Fighter_8006CB94`,
+  `refs/melee/src/melee/it/itcoll.c::it_80272460`.
 - `ftCo_RebirthWait_IASA` runs priority aerial special checks before fallback Fall-style exits and
   still applies `ftColl_8007B7A4(gobj, p_ftCommonData->x5D8)` on exit. That x1994/x198C write is
   visible as Slippi `hurtbox_state=1` on RebirthWait -> SpecialAirNStart rows.

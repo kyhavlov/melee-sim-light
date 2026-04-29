@@ -2792,6 +2792,13 @@ static void illusion_items_update_and_collide(MslBatch* batch, int bi) {
         continue;
       }
       const size_t d_idx = msl_idx_player(bi, def);
+      if (msl_action_owns_respawn_collision_skip(batch->state.action_id[d_idx])) {
+        // Rebirth/RebirthWait set fp->x2219_b1. Item-vs-fighter collision rejects x2219_b1 targets,
+        // so a respawning fighter must not be illusion-hit while the platform bit is live.
+        // refs/melee/src/melee/ft/ft_0D4D.c::{ftCo_800D4FF4,ftCo_800D5600}
+        // refs/melee/src/melee/it/itcoll.c::it_80272460
+        continue;
+      }
       // Hitlag gating: item collision acceptance is frozen while either participant is in hitlag.
       // Decomp ordering applies hitlag before collision callbacks in the per-frame fighter/item loop.
       // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
@@ -3159,6 +3166,13 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       }
 
       const size_t d_idx = msl_idx_player(bi, def);
+      if (msl_action_owns_respawn_collision_skip(batch->state.action_id[d_idx])) {
+        // Rebirth/RebirthWait own x2219_b1; laser item collision rejects that target before
+        // shield/BODY admission.
+        // refs/melee/src/melee/ft/ft_0D4D.c::{ftCo_800D4FF4,ftCo_800D5600}
+        // refs/melee/src/melee/it/itcoll.c::it_80272460
+        continue;
+      }
 
       const uint16_t def_iid = batch->state.instance_id[d_idx];
       // Rehit suppression (HitCapsule victim rings): do not rehurt the same fighter repeatedly

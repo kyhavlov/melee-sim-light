@@ -188,6 +188,17 @@ typedef enum MslActionId {
   MSL_ACT_ENTRY_END = 0x0144,    // ftCo_MS_EntryEnd
 } MslActionId;
 
+static inline uint8_t msl_action_owns_respawn_collision_skip(uint16_t action_id) {
+  // Rebirth/RebirthWait set fp->x2219_b1, and Fighter_8006CB94 skips the common fighter collision
+  // pass while that bit is live. Item-vs-fighter collision also rejects x2219_b1 targets.
+  // refs/melee/src/melee/ft/ft_0D4D.c::{ftCo_800D4FF4,ftCo_800D5600}
+  // refs/melee/src/melee/ft/fighter.c::Fighter_8006CB94
+  // refs/melee/src/melee/it/itcoll.c::it_80272460
+  return (action_id == (uint16_t)MSL_ACT_REBIRTH || action_id == (uint16_t)MSL_ACT_REBIRTH_WAIT)
+             ? 1u
+             : 0u;
+}
+
 // Additional GALE01 common action ids needed for fastfall gating.
 //
 // Source of truth: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCommon_MotionState`.
