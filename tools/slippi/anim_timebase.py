@@ -25,7 +25,7 @@ def _char_key_from_char_id(char_id: int) -> str | None:
 
 def _read_end_frames_from_tracks_bin(path: Path) -> dict[int, float]:
     """
-    Parse `data/anims/<char>.tracks.bin` (SSANIMT1 v1/v2) and return msid->end_frame.
+    Parse `data/anims/<char>.tracks.bin` (SSANIMT1 v3) and return msid->end_frame.
 
     Format is mirrored in `src/anim_table.c::load_tracks_for_char`.
     """
@@ -35,8 +35,8 @@ def _read_end_frames_from_tracks_bin(path: Path) -> dict[int, float]:
     if buf[:8] != b"SSANIMT1":
         raise ValueError(f"{path}: bad magic {buf[:8]!r}")
     (ver,) = struct.unpack_from("<I", buf, 8)
-    if int(ver) not in (1, 2):
-        raise ValueError(f"{path}: unsupported version {ver} (want 1 or 2)")
+    if int(ver) != 3:
+        raise ValueError(f"{path}: unsupported version {ver} (want 3)")
 
     local_count, anim_count = struct.unpack_from("<HH", buf, 12)
     off = 16
@@ -49,14 +49,14 @@ def _read_end_frames_from_tracks_bin(path: Path) -> dict[int, float]:
 
     out: dict[int, float] = {}
     for _ in range(int(anim_count)):
-        extra = 1 if int(ver) >= 2 else 0
+        extra = 2
         if off + 2 + 4 + extra > len(buf):
             raise ValueError(f"{path}: truncated anim table")
         (msid,) = struct.unpack_from("<H", buf, off)
         (end_frame,) = struct.unpack_from("<f", buf, off + 2)
         off += 6
-        if int(ver) >= 2:
-            off += 1  # aobj_loop (u8)
+        off += 1  # aobj_loop (u8)
+        off += 1  # uses_root_motion (u8)
 
         out[int(msid)] = float(np.float32(end_frame))
 

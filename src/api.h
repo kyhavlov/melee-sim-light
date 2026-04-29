@@ -690,6 +690,10 @@ typedef struct MslSeed {
   // Seed representation:
   // - Store `x18 + 1` clamped to [0..255] (same +1-bias contract as x14).
   uint8_t guard_reflect_timer_x18[MSL_MAX_PLAYERS];
+  // GuardReflect entry provenance for the final-x14 ShieldDesc handoff:
+  // - 1: entered via ftCo_8009388C from an already-shielding Guard/GuardOn path.
+  // - 0: entered via ftCo_80093A50 direct locomotion powershield path.
+  uint8_t guard_reflect_origin_guardon_u8[MSL_MAX_PLAYERS];
   // Guard release lockout (seeded; strictly causal in preprocessing).
   //
   // Decomp (GALE01):
@@ -1486,6 +1490,7 @@ typedef struct MslDebugCombatContactClassified {
 //  9  = REJECT_SHIELD_GEOM_NO_OVERLAP
 //  10 = REJECT_INERT_ELEMENT
 //  11 = REJECT_NONPOS_DAMAGE
+//  12 = REJECT_EARLIER_BODY_HITCAPSULE
 enum {
   MSL_DEBUG_SHIELD_SOURCE_FIGHTER_HITBOX = 0,
   MSL_DEBUG_SHIELD_SOURCE_PAIR_GATE = 1,
@@ -1504,6 +1509,7 @@ enum {
   MSL_DEBUG_SHIELD_REJECT_SHIELD_GEOM_NO_OVERLAP = 9,
   MSL_DEBUG_SHIELD_REJECT_INERT_ELEMENT = 10,
   MSL_DEBUG_SHIELD_REJECT_NONPOS_DAMAGE = 11,
+  MSL_DEBUG_SHIELD_REJECT_EARLIER_BODY_HITCAPSULE = 12,
 };
 
 typedef struct MslDebugShieldCandidateDecision {

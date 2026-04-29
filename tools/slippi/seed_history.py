@@ -402,6 +402,7 @@ def compute_tilt_timer_axis_pre_post(
     tilt_thresh: float,
     override_post_mask: np.ndarray | None = None,
     override_post_value: int = 0xFE,
+    reset_post_mask: np.ndarray | None = None,
     start_timer_post: int = 0xFE,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
@@ -425,6 +426,12 @@ def compute_tilt_timer_axis_pre_post(
         override = np.asarray(override_post_mask, dtype=bool).reshape(-1)
         if int(override.size) != n:
             raise ValueError("override_post_mask must match axis_unit length")
+    if reset_post_mask is None:
+        reset = None
+    else:
+        reset = np.asarray(reset_post_mask, dtype=bool).reshape(-1)
+        if int(reset.size) != n:
+            raise ValueError("reset_post_mask must match axis_unit length")
 
     prev_axis = np.float32(0.0)
     timer_post = int(start_timer_post) & 0xFF
@@ -454,12 +461,162 @@ def compute_tilt_timer_axis_pre_post(
         timer_post = timer_pre
         if override is not None and bool(override[i]):
             timer_post = override_value
+        if reset is not None and bool(reset[i]):
+            # ftCo_Damage_OnEveryHitlag resets both x670/x671 after consuming an SDI pulse.
+            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag
+            timer_post = 0xFE
 
         out_pre[i] = np.uint8(timer_pre)
         out_post[i] = np.uint8(timer_post)
         prev_axis = a
 
     return out_pre, out_post
+
+
+def derive_damage_hitlag_sdi_reset_post_mask(
+    *,
+    action_id: np.ndarray,
+    hitlag_u16: np.ndarray,
+    state_flags_u8: np.ndarray,
+    pos_x: np.ndarray,
+    pos_y: np.ndarray,
+    stick_x_unit: np.ndarray,
+    stick_y_unit: np.ndarray,
+    damage_actions: tuple[int, ...],
+    sdi_step_mul: float,
+) -> np.ndarray:
+    """
+    Infer post-frame x670/x671 resets caused by ftCo_Damage_OnEveryHitlag SDI.
+
+    The reset is hidden: Slippi exposes the state-flags byte around `allow_sdi`, but not
+    `allow_sdi` itself or the callback-local x670/x671 reset. This mask is still prefix-causal for
+    seed row i: a reset observed in the transition i-1 -> i only changes the timer state seeded at
+    row i and later.
+
+    Source:
+    - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag
+    - refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006A1BC}
+    """
+    a = np.asarray(action_id, dtype=np.uint16).reshape(-1)
+    hl = np.asarray(hitlag_u16, dtype=np.uint16).reshape(-1)
+    sf = np.asarray(state_flags_u8, dtype=np.uint8)
+    x = np.asarray(pos_x, dtype=np.float32).reshape(-1)
+    y = np.asarray(pos_y, dtype=np.float32).reshape(-1)
+    sx = np.asarray(stick_x_unit, dtype=np.float32).reshape(-1)
+    sy = np.asarray(stick_y_unit, dtype=np.float32).reshape(-1)
+    n = int(a.size)
+    if (
+        int(hl.size) != n
+        or int(x.size) != n
+        or int(y.size) != n
+        or int(sx.size) != n
+        or int(sy.size) != n
+    ):
+        raise ValueError("damage SDI reset inputs must have the same length")
+    if sf.shape != (n, 5):
+        raise ValueError("state_flags_u8 must have shape [n,5]")
+
+    out = np.zeros(n, dtype=np.bool_)
+    if n < 2:
+        return out
+
+    damage_set = {int(v) & 0xFFFF for v in damage_actions}
+    step = np.float32(sdi_step_mul)
+    # Keep the detector intentionally local: ordinary SDI displacement is a large, same-frame
+    # position jump during hitlag. The tolerance allows float/collision projection noise without
+    # treating normal DamageFly velocity drift as an SDI reset.
+    min_component = np.float32(0.25)
+    loose_abs_tol = np.float32(0.20)
+
+    for i in range(1, n):
+        prev = i - 1
+        if int(a[prev]) not in damage_set:
+            continue
+        # Fighter_8006A1BC decrements hitlag before the hitlag callback; a seed with one frame left
+        # exits hitlag and does not run OnEveryHitlag.
+        if int(hl[prev]) <= 1:
+            continue
+        flags_221a = int(sf[prev, 1])
+        if (flags_221a & 0x20) == 0:
+            continue
+        dx = np.float32(x[i] - x[prev])
+        dy = np.float32(y[i] - y[prev])
+        if abs(float(dx)) < float(min_component) and abs(float(dy)) < float(min_component):
+            continue
+
+        expected_x = np.float32(sx[i] * step)
+        expected_y = np.float32(sy[i] * step)
+        # Most rows expose the exact SDI displacement. Some floor/wall projection rows clamp one
+        # component after SDI; a large movement in the same direction as an eligible stick component
+        # still proves that OnEveryHitlag consumed the timer and reset x670/x671.
+        x_matches = abs(float(expected_x)) >= float(min_component) and (
+            abs(float(dx - expected_x)) <= float(loose_abs_tol) or dx * expected_x > 0.0
+        )
+        y_matches = abs(float(expected_y)) >= float(min_component) and (
+            abs(float(dy - expected_y)) <= float(loose_abs_tol) or dy * expected_y > 0.0
+        )
+        if x_matches or y_matches:
+            out[i] = True
+
+    return out
+
+
+def derive_damage_entry_tilt_timer_reset_post_mask(
+    *,
+    action_id: np.ndarray,
+    action_frame: np.ndarray,
+    hitlag_u16: np.ndarray,
+    percent: np.ndarray,
+    instance_hit_by: np.ndarray,
+    damage_actions: tuple[int, ...],
+) -> np.ndarray:
+    """
+    Infer post-frame x670/x671 resets caused by fresh ftCo_8008DCE0 damage entry.
+
+    `ftCo_8008DCE0` installs the damage motion and writes both tilt timers to 0xFE. Replay-visible
+    entry can be an action-id change into a Damage state or a same-action re-entry where
+    `state_age`/action_frame resets, but natural damage-family transitions such as
+    DamageFly* -> DamageFall do not call this owner. Require fresh damage evidence: active hitlag,
+    percent movement, or a new `instance_hit_by` source.
+    """
+    a = np.asarray(action_id, dtype=np.uint16).reshape(-1)
+    af = np.asarray(action_frame, dtype=np.int16).reshape(-1)
+    hl = np.asarray(hitlag_u16, dtype=np.uint16).reshape(-1)
+    pct = np.asarray(percent, dtype=np.float32).reshape(-1)
+    iid_hit = np.asarray(instance_hit_by, dtype=np.uint32).reshape(-1)
+    n = int(a.size)
+    if int(af.size) != n or int(hl.size) != n or int(pct.size) != n or int(iid_hit.size) != n:
+        raise ValueError("damage entry reset inputs must have the same length")
+
+    out = np.zeros(n, dtype=np.bool_)
+    if n == 0:
+        return out
+
+    damage_set = {int(v) & 0xFFFF for v in damage_actions}
+    prev_a = int(a[0])
+    prev_af = int(af[0])
+    prev_pct = np.float32(pct[0])
+    prev_iid_hit = int(iid_hit[0])
+    for i in range(n):
+        cur_a = int(a[i])
+        cur_af = int(af[i])
+        if cur_a in damage_set:
+            prev_in_damage = i > 0 and prev_a in damage_set
+            fresh_action = i == 0 or not prev_in_damage or cur_a != prev_a
+            same_action_reentry = i > 0 and cur_a == prev_a and cur_af <= 1 and prev_af > cur_af
+            fresh_damage_provenance = (
+                int(hl[i]) > 0
+                or (i > 0 and np.float32(pct[i]) != prev_pct)
+                or (i > 0 and int(iid_hit[i]) != prev_iid_hit)
+            )
+            if (fresh_action or same_action_reentry) and fresh_damage_provenance:
+                out[i] = True
+        prev_a = cur_a
+        prev_af = cur_af
+        prev_pct = np.float32(pct[i])
+        prev_iid_hit = int(iid_hit[i])
+
+    return out
 
 
 def _derive_guard_reflect_timer_plus1(
@@ -563,6 +720,39 @@ def derive_guard_reflect_timer_x18(
         act_guard_reflect=act_guard_reflect,
         init_frames=reflect_total_frames_x2b4,
     )
+
+
+def derive_guard_reflect_origin_guardon(
+    *,
+    action_id_u16: np.ndarray,
+    act_guard_reflect: int,
+    act_guard_on: int,
+    act_guard: int,
+) -> np.ndarray:
+    """
+    Derive the GuardReflect entry provenance lane.
+
+    Decomp paths:
+    - Already-shielding Guard/GuardOn -> GuardReflect uses ftCo_8009388C. It keeps the current
+      Guard/GuardOn pose owner and creates only ReflectDesc until ftCo_80093BC0 recreates
+      ShieldDesc at x14 expiry.
+    - Direct locomotion powershield uses ftCo_80093A50, which enters GuardReflect from locomotion.
+
+    The lane is prefix-causal and persists only for the current contiguous GuardReflect episode.
+    """
+    action = np.asarray(action_id_u16, dtype=np.uint16)
+    out = np.zeros(action.shape, dtype=np.uint8)
+    carry = 0
+    for i, a in enumerate(action):
+        in_reflect = int(a) == int(act_guard_reflect)
+        if not in_reflect:
+            carry = 0
+            continue
+        prev = int(action[i - 1]) if i > 0 else -1
+        if i == 0 or prev != int(act_guard_reflect):
+            carry = 1 if prev in (int(act_guard_on), int(act_guard)) else 0
+        out[i] = np.uint8(carry)
+    return out
 
 
 def load_shield_tilt_table_meta(*, data_dir: str = "data") -> dict[int, tuple[int, int]]:
@@ -1386,11 +1576,13 @@ def compute_tilt_timer_y_pre_post_with_fall_fast(
     *,
     tilt_thresh: float,
     jump_entry: np.ndarray,
+    pre_input_jump_entry: np.ndarray | None = None,
     fastfall_ok: np.ndarray,
     speed_y_self_post: np.ndarray,
     on_ground_post: np.ndarray,
     fastfall_stick_threshold: float,
     fastfall_tilt_max_frames: int,
+    reset_post_mask: np.ndarray | None = None,
     start_timer_post: int = 0xFE,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
@@ -1398,7 +1590,10 @@ def compute_tilt_timer_y_pre_post_with_fall_fast(
 
     Modeled decomp behaviors:
     - x671 per-frame update from inputs: refs/melee/src/melee/ft/fighter.c:1908-2008
-    - Jump entry override: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump*.c (sets x671=0xFE)
+    - Post-input JumpAerial entry override:
+      refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c (sets x671=0xFE)
+    - Pre-input JumpF/B entry from KneeBend Anim:
+      refs/melee/src/melee/ft/chara/ftCommon/{ftCo_KneeBend.c,ftCo_Jump.c}
     - Fastfall latch + x671 override: refs/melee/src/melee/ft/ftcommon.c:505-520 (ftCommon_CheckFallFast)
 
     Notes:
@@ -1412,6 +1607,12 @@ def compute_tilt_timer_y_pre_post_with_fall_fast(
     jump_entry_b = np.asarray(jump_entry, dtype=bool).reshape(-1)
     if int(jump_entry_b.size) != n:
         raise ValueError("jump_entry must match stick_y_unit length")
+    if pre_input_jump_entry is None:
+        pre_input_jump_entry_b = np.zeros(n, dtype=bool)
+    else:
+        pre_input_jump_entry_b = np.asarray(pre_input_jump_entry, dtype=bool).reshape(-1)
+        if int(pre_input_jump_entry_b.size) != n:
+            raise ValueError("pre_input_jump_entry must match stick_y_unit length")
 
     fastfall_ok_b = np.asarray(fastfall_ok, dtype=bool).reshape(-1)
     if int(fastfall_ok_b.size) != n:
@@ -1424,6 +1625,12 @@ def compute_tilt_timer_y_pre_post_with_fall_fast(
     on_ground_post_b = np.asarray(on_ground_post, dtype=bool).reshape(-1)
     if int(on_ground_post_b.size) != n:
         raise ValueError("on_ground_post must match stick_y_unit length")
+    if reset_post_mask is None:
+        reset = None
+    else:
+        reset = np.asarray(reset_post_mask, dtype=bool).reshape(-1)
+        if int(reset.size) != n:
+            raise ValueError("reset_post_mask must match stick_y_unit length")
 
     out_pre = np.empty(n, dtype=np.uint8)
     out_post = np.empty(n, dtype=np.uint8)
@@ -1468,10 +1675,20 @@ def compute_tilt_timer_y_pre_post_with_fall_fast(
 
         # Start with post==pre, then apply per-action overrides.
         t_post = t_pre
+        if bool(pre_input_jump_entry_b[i]):
+            # Common JumpF/B entry is an Anim callback before Fighter_Spaghetti refreshes input
+            # history. ftCo_Jump_Enter writes x671=0xFE first; the later same-frame input-history
+            # update can overwrite that transient only for a fresh stick-threshold crossing.
+            fall_fast_start = np.uint8(0)
+            if a >= thresh:
+                t_post = 0xFE if prev_axis >= thresh else 0
+            elif a <= -thresh:
+                t_post = 0xFE if prev_axis <= -thresh else 0
+            else:
+                t_post = 0xFE
         if bool(jump_entry_b[i]):
             t_post = 0xFE
-            # Jump entry clears fall_fast in our core model (motion state transition does not keep it).
-            # This matches the intent of keeping upward motion from being overridden by FallFast.
+            # Post-input JumpAerial entry clears fall_fast and owns the post-frame x671 override.
             fall_fast_start = np.uint8(0)
 
         # ftCommon_CheckFallFast (causal gate).
@@ -1483,6 +1700,10 @@ def compute_tilt_timer_y_pre_post_with_fall_fast(
             ):
                 ff_after = np.uint8(1)
                 t_post = 0xFE
+        if reset is not None and bool(reset[i]):
+            # ftCo_Damage_OnEveryHitlag resets both x670/x671 after consuming an SDI pulse.
+            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag
+            t_post = 0xFE
 
         # Clear fall_fast when grounded in the post snapshot.
         ff_post = np.uint8(0) if bool(on_ground_post_b[i]) else ff_after

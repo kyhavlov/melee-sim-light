@@ -24,7 +24,7 @@ def _report_header(*, root: Path, suite: str, suite_name: str, datasets_dir: str
         "# Regenerate ISO-derived data artifacts (if missing/stale):",
         "# - Moves (data/moves/*.json):",
         "#     uv run python -m tools.extraction.extract_fighter_moves --iso_dir _iso --out_dir data/moves --chars fox,falco",
-        "# - Anim tracks (data/anims/{fox,falco}.tracks.bin; SSANIMT1 v2 w/ AOBJ loop flags):",
+        "# - Anim tracks (data/anims/{fox,falco}.tracks.bin; SSANIMT1 v3 w/ AOBJ/root-motion flags):",
         "#     uv run python -m tools.extraction.extract_fighter_anims --character fox --out-dir data/anims",
         "#     uv run python -m tools.extraction.extract_fighter_anims --character falco --out-dir data/anims",
         "# - ECB tables (data/ecb/*):",

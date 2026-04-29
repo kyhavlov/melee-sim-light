@@ -109,6 +109,26 @@ static inline uint8_t reseed_action_is_attackair(uint16_t action) {
   }
 }
 
+static inline uint8_t reseed_action_is_cliff_any(uint16_t action) {
+  switch (action) {
+    case MSL_ACT_CLIFF_CATCH:
+    case MSL_ACT_CLIFF_WAIT:
+    case MSL_ACT_CLIFF_CLIMB_SLOW:
+    case MSL_ACT_CLIFF_CLIMB_QUICK:
+    case MSL_ACT_CLIFF_ATTACK_SLOW:
+    case MSL_ACT_CLIFF_ATTACK_QUICK:
+    case MSL_ACT_CLIFF_ESCAPE_SLOW:
+    case MSL_ACT_CLIFF_ESCAPE_QUICK:
+    case MSL_ACT_CLIFF_JUMP_SLOW1:
+    case MSL_ACT_CLIFF_JUMP_SLOW2:
+    case MSL_ACT_CLIFF_JUMP_QUICK1:
+    case MSL_ACT_CLIFF_JUMP_QUICK2:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
 static inline uint16_t item_seed_bridge_attack_id(const MslBatch* batch, int bi,
                                                   const MslItem* item) {
   if (batch == NULL || item == NULL) {
@@ -641,6 +661,38 @@ static inline uint8_t msl_reseed_seed_uses_rollout_replay_frame_clock(const MslS
       // refs/slippi-ssbm-asm/Recording/SendFrameStart.s
       // refs/melee/src/melee/gm/gm_16AE.c::fn_8016B7F8
       // refs/melee/src/melee/if/ifstatus.c::ifStatus_802F6EA4
+      return 1u;
+    }
+  }
+  for (int victim = 0; victim < active_players; victim++) {
+    const uint16_t victim_action = seed->action_id[victim];
+    if (!msl_action_is_grabbed_victim(victim_action)) {
+      continue;
+    }
+    const uint8_t owner_u8 = seed->grab_owner_port[victim];
+    if (owner_u8 >= (uint8_t)active_players || owner_u8 == (uint8_t)victim) {
+      continue;
+    }
+    const int owner = (int)owner_u8;
+    const uint16_t owner_action = seed->action_id[owner];
+    const MslLaserParams* lp = laser_params_get(seed->char_id[owner]);
+    if (lp == NULL || lp->shot_itkind == 0u) {
+      continue;
+    }
+    if (owner_action == (uint16_t)MSL_ACT_CATCH_WAIT ||
+        owner_action == (uint16_t)MSL_ACT_CATCH_ATTACK || msl_action_is_throw_owner(owner_action)) {
+      // Replay rollout clock ownership for blaster throw/capture episodes:
+      // - A grabbed victim can enter ThrowHi/ThrowB/ThrowLw and later be hit by throw-side
+      //   blaster articles before the next DamageFlyRoll RNG gate.
+      // - Slippi records a frame-start RNG seed, not the full HSD stream state after every
+      //   unmodeled command/item callback. For replay-seeded rollouts through this source-owned
+      //   capture/throw article family, advance the replay frame-start clock until the delayed gate
+      //   rather than freezing the initial seed frame.
+      // refs/slippi-ssbm-asm/Recording/SendFrameStart.s
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_ThrowHi_Anim
+      // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+      // data/items/lasers.bin / data/characters/{fox,falco}.json blaster shot params.
       return 1u;
     }
   }
@@ -1194,6 +1246,8 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.guard_tilt_x4[idx] = seed->guard_tilt_x4[p];
       batch->state.guard_reflect_timer_x14[idx] = seed->guard_reflect_timer_x14[p];
       batch->state.guard_reflect_timer_x18[idx] = seed->guard_reflect_timer_x18[p];
+      batch->state.guard_reflect_origin_guardon[idx] =
+          seed->guard_reflect_origin_guardon_u8[p] ? 1u : 0u;
       batch->state.guard_release_latched_xc[idx] = seed->guard_release_latched_xc[p] ? 1 : 0;
       batch->state.guard_x10[idx] = seed->guard_x10[p];
       batch->state.lightshield_amount[idx] = seed->lightshield_amount[p];
@@ -1440,18 +1494,14 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
           batch->state.colanim_timer_x1990[idx] = seed->colanim_timer_x1990[p];
           batch->state.colanim_hit_status_x198c[idx] = 2u;
         }
-        const uint8_t cliff_x1990_only_seed =
-            (seed->action_id[p] == (uint16_t)MSL_ACT_CLIFF_CATCH ||
-             seed->action_id[p] == (uint16_t)MSL_ACT_CLIFF_WAIT)
-                ? 1u
-                : 0u;
+        const uint8_t cliff_x1990_only_seed = reseed_action_is_cliff_any(seed->action_id[p]);
         if (((seed->hitlag[p] == 0u && seed->hitstun[p] == 0u) || shine_start_x1990_reseed) &&
             seed->colanim_hit_status_x198c[p] == 2u && seed->colanim_timer_x1990[p] != 0u &&
             seed->colanim_timer_x1994[p] != 0u && seed->colanim_lock_x2221_b0[p] == 0u) {
           // Paired hidden timers: x1990 owns the visible x198C=2 status while x1994 remains queued
           // underneath. Trust the explicit seed-history lane on non-hitlag rows so
           // Fighter_8006A360 can expire x1990 to x198C=1 before the same frame's BODY pass; keep
-          // Shine Start hitlag rows covered by the existing entry exception. CliffCatch/CliffWait
+          // Shine Start hitlag rows covered by the existing entry exception. Cliff action episodes
           // are excluded below because their source entry only calls ftColl_8007B760(..., x49C);
           // the queued x1994 lane can be a stale/provenance-free damage OnExitHitlag seed and
           // should not be promoted behind the ledge x1990 owner without an explicit producer.

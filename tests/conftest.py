@@ -96,12 +96,8 @@ def _tracks_missing_msids(path: Path, want: set[int]) -> set[int]:
         if magic != b"SSANIMT1":
             raise ValueError(f"bad tracks magic: {magic!r}")
         (version,) = struct.unpack("<I", f.read(4))
-        if version not in (1, 2):
+        if version != 3:
             raise ValueError(f"unsupported tracks version: {version}")
-        # SSANIMT1 v2 adds per-msid aobj_loop after end_frame; require v2 so loop semantics are
-        # available to the sim (used by locomotion loop wrap tests and timebase correctness).
-        if version < 2:
-            return set(want)
         local_count, anim_count = struct.unpack("<HH", f.read(4))
         f.read(local_count)  # local_parts
         f.read(2 * local_count)  # local_parent
@@ -112,6 +108,7 @@ def _tracks_missing_msids(path: Path, want: set[int]) -> set[int]:
             (msid,) = struct.unpack("<H", f.read(2))
             f.read(4)  # end_frame
             f.read(1)  # aobj_loop
+            f.read(1)  # uses_root_motion
             missing.discard(int(msid))
             for _lp in range(local_count):
                 part_u8 = f.read(1)

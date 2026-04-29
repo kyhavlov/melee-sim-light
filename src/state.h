@@ -421,6 +421,10 @@ typedef struct MslStateSoA {
   // ownership updates). Used by collision/item lanes that need seed-lifetime ownership boundaries.
   uint8_t* guard_reflect_timer_x14_seed;  // [batch * players]
   uint8_t* guard_reflect_timer_x18_seed;  // [batch * players]
+  // GuardReflect entry provenance:
+  // - 1: ftCo_8009388C path from GuardOn/Guard (already shielding; ReflectDesc-only until expiry)
+  // - 0: ftCo_80093A50 direct locomotion powershield path.
+  uint8_t* guard_reflect_origin_guardon;
   // Guard release lockout + shield-drain latch (seeded; decomp-shaped).
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092BCC and ::ftCo_800925A4.
   uint8_t* guard_release_latched_xc;  // mv.co.guard.xC (0/1)

@@ -1708,7 +1708,7 @@ def extract_one_character(
         #
         # Layout:
         # - magic: 8 bytes "SSANIMT1"
-        # - version: u32 little-endian (2)
+        # - version: u32 little-endian (3)
         # - local_count: u16
         # - anim_count: u16
         # - local_parts: [u8; local_count] (common FtPart ids)
@@ -1718,8 +1718,11 @@ def extract_one_character(
         #   - msid: u16
         #   - end_frame: f32 (FigaTree.frames)
         #   - aobj_loop: u8 (1 if ftData_80085FD4_ret.x10_b1 (loop) is set for this anim id, else 0)
+        #   - uses_root_motion: u8 (1 if ftData_80085FD4_ret.x10_b0 is set for this anim id, else 0)
         #     Decomp:
-        #     - refs/melee/src/melee/ft/types.h::ftData_80085FD4_ret (+0x10 bit1)
+        #     - refs/melee/src/melee/ft/types.h::ftData_80085FD4_ret (+0x10 bit0/bit1)
+        #     - refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState (loads fp->x594_s32)
+        #     - refs/melee/src/melee/ft/ft_081B.c::{ft_80085030,ft_800850E0}
         #     - refs/melee/src/melee/ft/ftanim.c::ftAnim_8006EBE8 (sets AOBJ_LOOP when fp->x594_b1_loop)
         #   - For each local part (local_count):
         #     - part: u8 (must match local_parts[i])
@@ -1733,7 +1736,7 @@ def extract_one_character(
         #       - length: u16 (bytes)
         #       - ad_bytes: [u8; length]
         f_tr.write(b"SSANIMT1")
-        f_tr.write(struct.pack("<I", 2))
+        f_tr.write(struct.pack("<I", 3))
         f_tr.write(struct.pack("<H", len(local_parts)))
         f_tr.write(struct.pack("<H", len(wanted_msids)))
         f_tr.write(bytes([p & 0xFF for p in local_parts]))
@@ -1754,6 +1757,7 @@ def extract_one_character(
                 f_tr.write(struct.pack("<H", int(msid) & 0xFFFF))
                 f_tr.write(struct.pack("<f", 0.0))
                 f_tr.write(struct.pack("<B", 0))
+                f_tr.write(struct.pack("<B", 0))
                 for part in local_parts:
                     f_tr.write(struct.pack("<BB", int(part) & 0xFF, 0))
                 if _TIMINGS is not None:
@@ -1771,6 +1775,7 @@ def extract_one_character(
                 f_loc.write(struct.pack("<H", 0))
                 f_tr.write(struct.pack("<H", int(msid) & 0xFFFF))
                 f_tr.write(struct.pack("<f", 0.0))
+                f_tr.write(struct.pack("<B", 0))
                 f_tr.write(struct.pack("<B", 0))
                 for part in local_parts:
                     f_tr.write(struct.pack("<BB", int(part) & 0xFF, 0))
@@ -1794,6 +1799,7 @@ def extract_one_character(
                 f_loc.write(struct.pack("<H", 0))
                 f_tr.write(struct.pack("<H", int(msid) & 0xFFFF))
                 f_tr.write(struct.pack("<f", 0.0))
+                f_tr.write(struct.pack("<B", 0))
                 f_tr.write(struct.pack("<B", 0))
                 for part in local_parts:
                     f_tr.write(struct.pack("<BB", int(part) & 0xFF, 0))
@@ -1830,6 +1836,9 @@ def extract_one_character(
             # NOTE: The decomp bitfield `u8 x10_b1 : 1` corresponds to 0x40 in the raw byte on
             # big-endian (PPC) builds.
             f_tr.write(struct.pack("<B", 1 if (int(msid_flags_u8) & 0x40) != 0 else 0))
+            # The adjacent bitfield `u8 x10_b0 : 1` corresponds to 0x80 in the raw big-endian byte
+            # and owns `fp->x594_b0` TransN root motion in ft_80085030/ft_800850E0.
+            f_tr.write(struct.pack("<B", 1 if (int(msid_flags_u8) & 0x80) != 0 else 0))
             for part in local_parts:
                 part_tracks = tracks_by_part.get(int(part), [])
                 f_tr.write(struct.pack("<BB", int(part) & 0xFF, len(part_tracks) & 0xFF))

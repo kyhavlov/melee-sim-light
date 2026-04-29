@@ -13,7 +13,7 @@ def _read_tracks_msids(path: Path) -> list[int]:
         if magic != b"SSANIMT1":
             raise ValueError(f"bad tracks magic: {magic!r}")
         (version,) = struct.unpack("<I", f.read(4))
-        if version not in (1, 2):
+        if version != 3:
             raise ValueError(f"unsupported tracks version: {version}")
         local_count, anim_count = struct.unpack("<HH", f.read(4))
         f.read(local_count)  # local_parts
@@ -24,8 +24,8 @@ def _read_tracks_msids(path: Path) -> list[int]:
         for _ in range(anim_count):
             (msid,) = struct.unpack("<H", f.read(2))
             f.read(4)  # end_frame
-            if version >= 2:
-                f.read(1)  # aobj_loop
+            f.read(1)  # aobj_loop
+            f.read(1)  # uses_root_motion
             msids.append(int(msid))
             for _lp in range(local_count):
                 part_u8 = f.read(1)

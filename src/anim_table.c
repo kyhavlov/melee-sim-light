@@ -16,6 +16,7 @@ typedef struct {
   // Submotion ids in GALE01 exceed 255 (e.g. Fox/Falco specials are in the ~295+ range).
   // Keep this as a fixed array for hot-path lookup without allocations.
   float end_frame_by_smid[1024];
+  uint8_t root_motion_by_smid[1024];
   uint8_t loop_by_smid[1024];
   uint8_t have_smid[1024];
   uint8_t part_under_xrotn[256];
@@ -98,7 +99,7 @@ static int load_tracks_for_char(const char* data_dir, const char* rel_path, uint
   }
   const uint32_t format_version = read_u32_le(p);
   p += 4;
-  if (format_version != 1 && format_version != 2) {
+  if (format_version != 3) {
     alloc_free(buf);
     return -1;
   }
@@ -151,7 +152,7 @@ static int load_tracks_for_char(const char* data_dir, const char* rel_path, uint
   p += skip_hdr;
 
   for (uint16_t ai = 0; ai < anim_count; ai++) {
-    if ((size_t)(end - p) < 2 + 4 + (format_version >= 2 ? 1u : 0u)) {
+    if ((size_t)(end - p) < 2 + 4 + 2u) {
       alloc_free(buf);
       return -1;
     }
@@ -159,13 +160,14 @@ static int load_tracks_for_char(const char* data_dir, const char* rel_path, uint
     p += 2;
     const float end_frame = read_f32_le(p);
     p += 4;
-    const uint8_t aobj_loop = (format_version >= 2) ? *(const uint8_t*)p : 0;
-    if (format_version >= 2) {
-      p += 1;
-    }
+    const uint8_t aobj_loop = *(const uint8_t*)p;
+    p += 1;
+    const uint8_t uses_root_motion = *(const uint8_t*)p;
+    p += 1;
 
     if (msid < 1024) {
       tbl.end_frame_by_smid[msid] = end_frame;
+      tbl.root_motion_by_smid[msid] = (uint8_t)(uses_root_motion ? 1 : 0);
       tbl.loop_by_smid[msid] = (uint8_t)(aobj_loop ? 1 : 0);
       tbl.have_smid[msid] = 1;
     }
@@ -232,6 +234,20 @@ float msl_anim_end_frame(uint8_t char_id, uint16_t submotion_id) {
     return 0.0f;
   }
   return t->end_frame_by_smid[submotion_id];
+}
+
+uint8_t msl_anim_uses_root_motion(uint8_t char_id, uint16_t submotion_id) {
+  if (!g_loaded || !g_have_char[char_id]) {
+    return 0;
+  }
+  if (submotion_id >= 1024) {
+    return 0;
+  }
+  const MslAnimTable* t = &g_table_by_char[char_id];
+  if (!t->have_smid[submotion_id]) {
+    return 0;
+  }
+  return (uint8_t)(t->root_motion_by_smid[submotion_id] ? 1 : 0);
 }
 
 uint8_t msl_anim_is_looping(uint8_t char_id, uint16_t submotion_id) {

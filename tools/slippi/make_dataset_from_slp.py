@@ -3535,6 +3535,8 @@ def _main_impl(args) -> None:
         derive_colanim_internals,
         derive_downwait_timer,
         derive_damage_jump_buffer_x14,
+        derive_damage_entry_tilt_timer_reset_post_mask,
+        derive_damage_hitlag_sdi_reset_post_mask,
         derive_damage_post_hitlag_cb_kind,
         derive_camera_box_visible_x221f_b0,
         derive_camera_target_point_inside_stage_cam_bounds,
@@ -3546,6 +3548,7 @@ def _main_impl(args) -> None:
         derive_seed_prev_action_post,
         derive_guard_reflect_timer_x14,
         derive_guard_reflect_timer_x18,
+        derive_guard_reflect_origin_guardon,
         derive_guard_release_lockout_and_lightshield,
         derive_guard_setoff_hitlag_damage_min,
         derive_guard_setoff_hitlag_exit_phase,
@@ -3849,6 +3852,9 @@ def _main_impl(args) -> None:
     act_damage_fly_lw = 0x0059
     act_damage_fly_top = 0x005A
     act_damage_fly_roll = 0x005B
+    act_fly_reflect_wall = 0x00F7
+    act_fly_reflect_ceil = 0x00F8
+    act_down_damage_d = 0x00C1
     act_attack_11 = 0x002C
     act_attack_12 = 0x002D
     act_attack_13 = 0x002E
@@ -4653,17 +4659,25 @@ def _main_impl(args) -> None:
         # - JumpAerial: refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c:140-180
         is_dash = post_state == np.uint16(act_dash)
         dash_entry = is_dash & ~np.concatenate(([False], is_dash[:-1]))
+        is_jump_ground = (post_state == np.uint16(act_jump_f)) | (post_state == np.uint16(act_jump_b))
+        is_jump_aerial = (post_state == np.uint16(act_jump_aerial_f)) | (
+            post_state == np.uint16(act_jump_aerial_b)
+        )
         is_jump = (
             (post_state == np.uint16(act_jump_f))
             | (post_state == np.uint16(act_jump_b))
             | (post_state == np.uint16(act_jump_aerial_f))
             | (post_state == np.uint16(act_jump_aerial_b))
         )
-        # Jump entry is per-motion-state, not "any jump group":
-        # treat JumpF->JumpB, JumpF->JumpAerialF, etc as fresh entries.
-        # This matches the action-entry override behavior (x671=0xFE) and keeps the derivation causal.
         prev_state = np.concatenate(([post_state[0]], post_state[:-1]))
-        jump_entry = is_jump & (post_state != prev_state)
+        # Jump entry is per-motion-state, not "any jump group": treat JumpF->JumpB,
+        # JumpF->JumpAerialF, etc as fresh entries. Common JumpF/B entry is pre-input
+        # KneeBend Anim ownership, so the post-frame x671 value is still the same-frame
+        # input-history result. JumpAerial entry is post-input IASA ownership and keeps
+        # the x671=0xFE action-entry override.
+        # refs/melee/src/melee/ft/chara/ftCommon/{ftCo_KneeBend.c,ftCo_Jump.c,ftCo_JumpAerial.c}
+        pre_input_jump_entry = is_jump_ground & (post_state != prev_state)
+        jump_entry = is_jump_aerial & (post_state != prev_state)
         fastfall_ok = (
             is_jump
             | (post_state == np.uint16(act_fall))
@@ -4683,18 +4697,88 @@ def _main_impl(args) -> None:
             | (post_state == np.uint16(act_attack_air_lw))
             | (post_state == np.uint16(act_escape_air))
         )
+        damage_sdi_reset_post = derive_damage_hitlag_sdi_reset_post_mask(
+            action_id=post_state,
+            hitlag_u16=post_hitlag,
+            state_flags_u8=state_flags,
+            pos_x=post_pos_x,
+            pos_y=post_pos_y,
+            stick_x_unit=stick_x,
+            stick_y_unit=stick_y,
+            damage_actions=(
+                act_damage_hi_1,
+                act_damage_hi_2,
+                act_damage_hi_3,
+                act_damage_n_1,
+                act_damage_n_2,
+                act_damage_n_3,
+                act_damage_lw_1,
+                act_damage_lw_2,
+                act_damage_lw_3,
+                act_damage_air_1,
+                act_damage_air_2,
+                act_damage_air_3,
+                act_damage_fly_hi,
+                act_damage_fly_n,
+                act_damage_fly_lw,
+                act_damage_fly_top,
+                act_damage_fly_roll,
+                act_fly_reflect_wall,
+                act_fly_reflect_ceil,
+                act_damage_fall,
+                act_down_damage_d,
+            ),
+            sdi_step_mul=float(common["sdi_step_mul"]),
+        )
+        damage_entry_reset_post = derive_damage_entry_tilt_timer_reset_post_mask(
+            action_id=post_state,
+            action_frame=post_state_age,
+            hitlag_u16=post_hitlag,
+            percent=post_percent,
+            instance_hit_by=instance_hit_by,
+            damage_actions=(
+                act_damage_hi_1,
+                act_damage_hi_2,
+                act_damage_hi_3,
+                act_damage_n_1,
+                act_damage_n_2,
+                act_damage_n_3,
+                act_damage_lw_1,
+                act_damage_lw_2,
+                act_damage_lw_3,
+                act_damage_air_1,
+                act_damage_air_2,
+                act_damage_air_3,
+                act_damage_fly_hi,
+                act_damage_fly_n,
+                act_damage_fly_lw,
+                act_damage_fly_top,
+                act_damage_fly_roll,
+                act_fly_reflect_wall,
+                act_fly_reflect_ceil,
+                act_damage_fall,
+                act_down_damage_d,
+            ),
+        )
+        damage_tilt_timer_reset_post = damage_sdi_reset_post | damage_entry_reset_post
         tilt_timer_x_pre, tilt_timer_x_post = compute_tilt_timer_axis_pre_post(
-            stick_x, tilt_thresh=lstick_tilt_x_thresh, override_post_mask=dash_entry, override_post_value=0xFE
+            stick_x,
+            tilt_thresh=lstick_tilt_x_thresh,
+            override_post_mask=dash_entry,
+            override_post_value=0xFE,
+            reset_post_mask=damage_tilt_timer_reset_post,
         )
         tilt_timer_y_pre, tilt_timer_y_post, fall_fast_post = compute_tilt_timer_y_pre_post_with_fall_fast(
             stick_y,
             tilt_thresh=lstick_tilt_y_thresh,
             jump_entry=jump_entry,
+            pre_input_jump_entry=pre_input_jump_entry,
             fastfall_ok=fastfall_ok,
             speed_y_self_post=speed_y_self,
             on_ground_post=(post_on_ground != 0),
             fastfall_stick_threshold=fastfall_stick_threshold,
             fastfall_tilt_max_frames=fastfall_tilt_max_frames,
+            reset_post_mask=damage_tilt_timer_reset_post,
         )
 
         # UCF 0.84 pad buffer state (strictly causal).
@@ -4867,6 +4951,13 @@ def _main_impl(args) -> None:
             reflect_total_frames_x2b4=int(common["powershield_reflect_total_frames"]),
         )
         samples["seed_t"]["guard_reflect_timer_x18"][:, slot] = guard_reflect_timer_x18[:-1]
+        guard_reflect_origin_guardon = derive_guard_reflect_origin_guardon(
+            action_id_u16=post_state,
+            act_guard_reflect=act_guard_reflect,
+            act_guard_on=act_guard_on,
+            act_guard=act_guard,
+        )
+        samples["seed_t"]["guard_reflect_origin_guardon_u8"][:, slot] = guard_reflect_origin_guardon[:-1]
 
         # Fighter per-frame input counters block.
         # Decomp: refs/melee/src/melee/ft/fighter.c:1897-2094 (lb helper: refs/melee/src/melee/lb/lb_00CE.c:163-225).

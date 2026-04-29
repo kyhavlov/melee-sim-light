@@ -24,6 +24,7 @@ from tools.slippi.seed_history import (
     derive_capture_grab_hidden_post,
     derive_rebirth_camera_anchor_y,
     derive_damage_post_hitlag_cb_kind,
+    derive_guard_reflect_origin_guardon,
     derive_guard_reflect_timer_x14,
     derive_guard_reflect_timer_x18,
     derive_guard_release_lockout_and_lightshield,
@@ -133,6 +134,46 @@ def test_derive_instance_id_counter_prefix_invariant() -> None:
             item_instance_id_u16_2d=item_iid[:k],
         )
         assert np.array_equal(got, full[:k])
+
+
+def test_guard_reflect_origin_guardon_tracks_entry_path_prefix_causal() -> None:
+    # Guard/GuardOn -> GuardReflect uses ftCo_8009388C and carries GuardOn-origin provenance.
+    # Direct locomotion -> GuardReflect uses ftCo_80093A50 and must not set the same lane.
+    act_run = np.uint16(40)
+    act_guard_on = np.uint16(178)
+    act_guard = np.uint16(179)
+    act_guard_reflect = np.uint16(182)
+    action = np.array(
+        [
+            act_run,
+            act_guard_reflect,
+            act_guard_reflect,
+            act_run,
+            act_guard_on,
+            act_guard_reflect,
+            act_guard_reflect,
+            act_guard,
+            act_guard_reflect,
+        ],
+        dtype=np.uint16,
+    )
+
+    full = derive_guard_reflect_origin_guardon(
+        action_id_u16=action,
+        act_guard_reflect=int(act_guard_reflect),
+        act_guard_on=int(act_guard_on),
+        act_guard=int(act_guard),
+    )
+    assert full.tolist() == [0, 0, 0, 0, 0, 1, 1, 0, 1]
+
+    for end in range(1, action.shape[0] + 1):
+        got = derive_guard_reflect_origin_guardon(
+            action_id_u16=action[:end],
+            act_guard_reflect=int(act_guard_reflect),
+            act_guard_on=int(act_guard_on),
+            act_guard=int(act_guard),
+        )
+        assert np.array_equal(got, full[:end])
 
 
 def test_derive_illusion_ghost_pos01_tracks_decomp_ring_order() -> None:
@@ -2512,7 +2553,7 @@ def test_fighter_button_timers_preserve_pre_hitlag_lr_debounce_for_floor_tech() 
 
 
 def test_jump_to_jump_aerial_entry_clears_fall_fast_and_overrides_x671() -> None:
-    # When transitioning between Jump* motion states (e.g. JumpF -> JumpAerialF), treat it as a fresh
+    # When transitioning into JumpAerial (e.g. JumpF -> JumpAerialF), treat it as a post-input fresh
     # entry: clear fall_fast and set x671_post=0xFE on that entry frame.
     #
     # Decomp refs:
@@ -2522,9 +2563,9 @@ def test_jump_to_jump_aerial_entry_clears_fall_fast_and_overrides_x671() -> None
     act_jump_aerial_f = np.uint16(0x001B)
 
     post_state = np.array([act_jump_f, act_jump_f, act_jump_aerial_f, act_jump_aerial_f], dtype=np.uint16)
-    is_jump = (post_state == act_jump_f) | (post_state == act_jump_aerial_f)
     prev_state = np.concatenate(([post_state[0]], post_state[:-1]))
-    jump_entry = is_jump & (post_state != prev_state)
+    pre_input_jump_entry = (post_state == act_jump_f) & (post_state != prev_state)
+    jump_entry = (post_state == act_jump_aerial_f) & (post_state != prev_state)
 
     # Create a fastfall latch at frame 1, then ensure the JumpF->JumpAerialF transition at frame 2
     # clears it and forces x671_post=0xFE.
@@ -2537,6 +2578,7 @@ def test_jump_to_jump_aerial_entry_clears_fall_fast_and_overrides_x671() -> None
         stick_y,
         tilt_thresh=0.25,
         jump_entry=jump_entry,
+        pre_input_jump_entry=pre_input_jump_entry,
         fastfall_ok=fastfall_ok,
         speed_y_self_post=speed_y_self_post,
         on_ground_post=on_ground_post,
@@ -2547,6 +2589,44 @@ def test_jump_to_jump_aerial_entry_clears_fall_fast_and_overrides_x671() -> None
     assert int(ff_post[1]) == 1
     assert int(t_post[2]) == 0xFE
     assert int(ff_post[2]) == 0
+
+
+def test_pre_input_jumpf_entry_clears_fall_fast_without_forcing_x671_post() -> None:
+    # KneeBend Anim enters JumpF/B before Fighter_Spaghetti refreshes input history. The jump entry
+    # clears fall_fast, but a same-frame stick threshold crossing still leaves x671_post=0 rather
+    # than ftCo_Jump_Enter's transient 0xFE write.
+    # refs/melee/src/melee/ft/chara/ftCommon/{ftCo_KneeBend.c,ftCo_Jump.c}
+    stick_y = np.array([0.0, 0.30], dtype=np.float32)
+    _, t_post, ff_post = compute_tilt_timer_y_pre_post_with_fall_fast(
+        stick_y,
+        tilt_thresh=0.25,
+        jump_entry=np.array([False, False]),
+        pre_input_jump_entry=np.array([False, True]),
+        fastfall_ok=np.array([True, True]),
+        speed_y_self_post=np.array([-1.0, -1.0], dtype=np.float32),
+        on_ground_post=np.array([False, False]),
+        fastfall_stick_threshold=0.6,
+        fastfall_tilt_max_frames=4,
+    )
+
+    assert int(t_post[1]) == 0
+    assert int(ff_post[1]) == 0
+
+    # If stick Y was already past the tilt threshold, Fighter_Spaghetti increments from the
+    # transient 0xFE write and clamps back to 0xFE. It must not carry the previous low timer.
+    _, held_post, _ = compute_tilt_timer_y_pre_post_with_fall_fast(
+        np.array([0.30, 0.30], dtype=np.float32),
+        tilt_thresh=0.25,
+        jump_entry=np.array([False, False]),
+        pre_input_jump_entry=np.array([False, True]),
+        fastfall_ok=np.array([True, True]),
+        speed_y_self_post=np.array([-1.0, -1.0], dtype=np.float32),
+        on_ground_post=np.array([False, False]),
+        fastfall_stick_threshold=0.6,
+        fastfall_tilt_max_frames=4,
+        start_timer_post=1,
+    )
+    assert int(held_post[1]) == 0xFE
 
 
 def test_derive_ucf_pad_buffer_state_is_causal_wrt_future_frames() -> None:

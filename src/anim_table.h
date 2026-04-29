@@ -16,6 +16,16 @@ int anim_table_init(void);
 // Returns 0.0f if unknown/unloaded.
 float msl_anim_end_frame(uint8_t char_id, uint16_t submotion_id);
 
+// Return 1 if the fighter animation is configured to drive TransN root motion (`fp->x594_b0`).
+//
+// Source of truth: `data/anims/<character>.tracks.bin` (ISO-derived), per-msid
+// `uses_root_motion` extracted from `ftData_80085FD4_ret.x10_b0` in the ftData msid table.
+// Decomp:
+// - refs/melee/src/melee/ft/types.h::ftData_80085FD4_ret (+0x10 bit0)
+// - refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState (loads fp->x594_s32)
+// - refs/melee/src/melee/ft/ft_081B.c::{ft_80085030,ft_800850E0} (root-motion branch)
+uint8_t msl_anim_uses_root_motion(uint8_t char_id, uint16_t submotion_id);
+
 // Return 1 if the fighter animation is configured to loop (AOBJ_LOOP).
 //
 // Source of truth: `data/anims/<character>.tracks.bin` (ISO-derived), per-msid `aobj_loop`

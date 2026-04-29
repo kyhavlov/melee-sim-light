@@ -940,7 +940,7 @@ static int load_tracks_into_table(const char* data_dir, const char* rel_path, Ms
     return -1;
   }
   const uint32_t ver = read_u32_le(buf + 8);
-  if (ver != 2u) {
+  if (ver != 3u) {
     alloc_free(buf);
     return -1;
   }
@@ -991,7 +991,7 @@ static int load_tracks_into_table(const char* data_dir, const char* rel_path, Ms
   off += (size_t)local_count + (size_t)local_count * 2u + (size_t)local_count * 4u;
 
   for (uint16_t ai = 0; ai < anim_count; ai++) {
-    if (off + 7u > sz) {
+    if (off + 8u > sz) {
       alloc_free(track_part_to_index);
       alloc_free(track_msid_to_anim_index);
       alloc_free(record_off_by_anim_li);
@@ -1002,6 +1002,7 @@ static int load_tracks_into_table(const char* data_dir, const char* rel_path, Ms
     off += 2u;
     off += 4u;  // end_frame
     off += 1u;  // aobj_loop
+    off += 1u;  // uses_root_motion
     if (track_msid_to_anim_index[msid] != 0xFFFFu) {
       alloc_free(track_part_to_index);
       alloc_free(track_msid_to_anim_index);

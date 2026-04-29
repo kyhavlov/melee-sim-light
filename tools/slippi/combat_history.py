@@ -538,8 +538,8 @@ def _read_parts_under_xrotn(path: Path) -> frozenset[int]:
     if buf[:8] != b"SSANIMT1":
         raise ValueError(f"{path}: bad magic (want SSANIMT1)")
     ver = int.from_bytes(buf[8:12], "little", signed=False)
-    if ver not in (1, 2):
-        raise ValueError(f"{path}: unsupported SSANIMT1 version={ver} (want 1 or 2)")
+    if ver != 3:
+        raise ValueError(f"{path}: unsupported SSANIMT1 version={ver} (want 3)")
     local_count = int.from_bytes(buf[12:14], "little", signed=False)
     off = 16
     local_parts_bytes = local_count
