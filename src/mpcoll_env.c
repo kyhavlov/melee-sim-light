@@ -468,7 +468,12 @@ static inline uint32_t ledge_grab_flags_for_fighter(uint32_t stage_id, float col
   // refs/melee/src/melee/mp/mpcoll.c::mpCollInterpolateECB
   // refs/melee/src/melee/mp/mpcoll.c::mpColl_80044164
   // refs/melee/src/melee/mp/mpcoll.c::mpColl_800443C4
-  msl_ecb_world_points_sample(&ecb, char_id, animation_index, ecb_frame, facing_dir, coll_cur_x,
+  // mpCollSetFacingDir can write 0 for CLIFFCATCH_BOTH. The ledge side gates then test both
+  // sides, but mpColl_LoadECB_JObj's point mapping treats any non-+1 facing as the mirrored
+  // branch rather than multiplying extents by zero.
+  // refs/melee/src/melee/mp/mpcoll.c::{mpCollSetFacingDir,mpColl_LoadECB_JObj}
+  const float ecb_facing_dir = (facing_dir == 0.0f) ? -1.0f : facing_dir;
+  msl_ecb_world_points_sample(&ecb, char_id, animation_index, ecb_frame, ecb_facing_dir, coll_cur_x,
                               coll_cur_y,
                               /*lock_bottom_to_zero=*/0u);
 
@@ -543,7 +548,7 @@ static inline uint32_t ledge_grab_flags_for_fighter(uint32_t stage_id, float col
   // Left ledge grab (must be facing toward +X / into stage).
   // Decomp: mpColl_80047E14 checks left ledge when facing_dir==1 (or 0).
   // refs/melee/src/melee/mp/mpcoll.c::mpColl_80047E14
-  if (facing_dir > 0.0f) {
+  if (facing_dir >= 0.0f) {
     // Decomp AABB build (mpColl_80044164):
     // left = min(prev_x, cur_x)
     // right = ledge_snap_x + (max(prev_x, cur_x) + ecb.right.x)
@@ -594,7 +599,7 @@ static inline uint32_t ledge_grab_flags_for_fighter(uint32_t stage_id, float col
   // Right ledge grab (must be facing toward -X / into stage).
   // Decomp: mpColl_80047E14 checks right ledge when facing_dir==-1 (or 0).
   // refs/melee/src/melee/mp/mpcoll.c::mpColl_80047E14
-  if (facing_dir < 0.0f) {
+  if (facing_dir <= 0.0f) {
     // Decomp AABB build (mpColl_800443C4), with snap_x negated:
     // right = max(prev_x, cur_x)
     // left = (-ledge_snap_x) + (min(prev_x, cur_x) + ecb.left.x)
@@ -697,7 +702,20 @@ void mpcoll_env_update_ledge_grab(MslBatch* batch) {
       // refs/melee/src/melee/mp/mpcoll.c::mpColl_80043754
       // refs/melee/src/melee/mp/mpcoll.c::mpColl_80044164
       // refs/melee/src/melee/mp/mpcoll.c::mpColl_800443C4
-      const float fd = batch->state.facing[idx] ? 1.0f : -1.0f;
+      float fd = batch->state.facing[idx] ? 1.0f : -1.0f;
+      // Fox/Falco SpecialAirHi and SpecialHiFall collision callbacks pass CLIFFCATCH_BOTH (0)
+      // into ft_CheckGroundAndLedge, which makes mpColl_80046904 test both ledge sides instead of
+      // only the fighter's current facing. This owns the vertical Firefox/Firebird case where the
+      // wall collision has turned the model away from stage but the recovery fall can still grab
+      // ledge after down-stick is released.
+      // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+      //   ftFx_SpecialAirHi_Coll,ftFx_SpecialHiFall_Coll}
+      // refs/melee/src/melee/ft/ft_081B.c::ft_CheckGroundAndLedge
+      // refs/melee/src/melee/mp/mpcoll.c::mpColl_80046904
+      if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI ||
+          batch->state.action_id[idx] == (uint16_t)MSL_ACT_FX_SPECIAL_HI_FALL) {
+        fd = 0.0f;
+      }
       // Decomp: mpColl_80046904 runs inside the mpColl_80043754 substep loop, which updates:
       // - cd->prev_pos (previous substep position)
       // - cd->cur_pos  (current substep position after collision correction)

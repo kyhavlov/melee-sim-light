@@ -221,6 +221,9 @@ def main() -> None:
             ",".join(chars),
         ],
     )
+    # The MSLACID1 binary is the data contract for move_id, x4_flags, and MotionState +0x8/x9
+    # lanes. Debug JSON from extract_attack_id_move_id is optional inspection output only and is
+    # intentionally not produced by build_data.
 
     # Hitbox event tables (moves.json → hitboxes.bin; compact binary for init-time load).
     #

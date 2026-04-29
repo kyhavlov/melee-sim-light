@@ -2071,6 +2071,7 @@ static inline float ottotto_floor_loss_player_nudge_x(const MslBatch* batch,
 
 static inline uint8_t action_uses_ottotto_edge_callback(uint16_t a) {
   switch (a) {
+    case MSL_ACT_WAIT:
     case MSL_ACT_WALK_SLOW:
     case MSL_ACT_WALK_MIDDLE:
     case MSL_ACT_WALK_FAST:
@@ -2087,6 +2088,53 @@ static inline uint8_t action_uses_ottotto_edge_callback(uint16_t a) {
     default:
       return 0u;
   }
+}
+
+static inline uint8_t ft80084280_ottotto_edge_admits(const MslBatch* batch,
+                                                     const MslCommonParams* c, int bi, int p,
+                                                     uint16_t action_id) {
+  if (batch == NULL || c == NULL || bi < 0 || bi >= batch->batch_size || p < 0 ||
+      p >= (int)batch->config.num_players || !action_uses_ottotto_edge_callback(action_id)) {
+    return 0u;
+  }
+
+  const size_t idx = msl_idx_player(bi, p);
+  if ((batch->state.coll_env_flags[idx] & (uint32_t)MSL_COLLIDE_EDGE) == 0u) {
+    return 0u;
+  }
+
+  // Decomp: ft_80084280 first routes inward xF8_playerNudgeVel through ft_800827A0 instead of
+  // ft_80084280_inline. That branch uses mpColl_8004B2DC / mpColl_8004A45C_Floor, which does not
+  // set Collide_Edge for ftCo_8009A3C8.
+  // refs/melee/src/melee/ft/ft_081B.c::ft_80084280
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004B2DC,mpColl_8004A45C_Floor}
+  const float nudge_x = ottotto_floor_loss_player_nudge_x(batch, c, bi, p);
+  const float facing_sign = batch->state.facing[idx] ? 1.0f : -1.0f;
+  if (nudge_x != 0.0f && nudge_x * facing_sign < 0.0f) {
+    return 0u;
+  }
+
+  const int line_idx = stage_collision_floor_line_index(batch->state.stage_id[(size_t)bi],
+                                                        batch->state.ground_id[idx]);
+  if (line_idx < 0) {
+    return 0u;
+  }
+  const MslStageFloorGraph* g = stage_collision_get_floor_graph(batch->state.stage_id[(size_t)bi]);
+  if (g == NULL || (size_t)line_idx >= g->line_count) {
+    return 0u;
+  }
+  const MslStageFloorLine* line = &g->lines[(size_t)line_idx];
+
+  // Decomp: ft_80084280_inline sets coll->lstick_x and calls mpColl_8004B4B0. Its edge fallback
+  // (`mpColl_8004A678_Floor`) admits teeter only when the fighter has crossed the endpoint they
+  // are facing and the stick is not held hard outward (left edge: x > -0.75, right edge: x < 0.75).
+  // refs/melee/src/melee/ft/ft_081B.c::ft_80084280_inline
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004B4B0,mpColl_8004A678_Floor}
+  const float stick_x = stick_i8_to_unit(batch->state.input_main_x[idx]);
+  if (batch->state.facing[idx]) {
+    return (uint8_t)(batch->state.pos_x[idx] >= line->x1 && stick_x < 0.75f);
+  }
+  return (uint8_t)(batch->state.pos_x[idx] <= line->x0 && stick_x > -0.75f);
 }
 
 static inline uint8_t action_is_air_locomotion(uint16_t a) {
@@ -5304,53 +5352,20 @@ void locomotion_update_post_collision(MslBatch* batch) {
       } else if (was_ground && !now_ground) {
         batch->state.fall_fast[idx] = 0;
 
-        // Ottotto (teeter) entry on common grounded edge walk-off:
-        // - ftCo_8009A3C8 enters Ottotto through ftCo_8009A410 when Collide_Edge is set and the
-        //   fighter is not on the teeter-suppressed branch.
-        // - ft_80084280 runs the same edge gate for Wait/Walk/Landing-style grounded callbacks
-        //   before generic Fall conversion. Clamp to the facing endpoint selected by
-        //   Ottotto_Coll's `mpFloorGet{Left,Right}` branch.
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::{ftCo_8009A3C8,ftCo_8009A410}
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::ftCo_Ottotto_Coll
-        // refs/melee/src/melee/ft/ft_081B.c::ft_80084280
-        if (batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_WAIT &&
-            batch->state.prev_action_frame[idx] <= 0 &&
-            ottotto_edge_matches_facing(batch->state.stage_id[(size_t)bi],
-                                        batch->state.ground_id[idx], batch->state.facing[idx],
-                                        batch->state.pos_x[idx])) {
-          batch->state.on_ground[idx] = 1u;
-          batch->state.action_id[idx] = (uint16_t)MSL_ACT_OTTOTTO;
-          batch->state.animation_index[idx] = (uint32_t)MSL_SM_OTTOTTO;
-          batch->state.pos_x[idx] = batch->state.prev_pos_x[idx];
-          batch->state.pos_y[idx] = batch->state.prev_pos_y[idx];
-          batch->state.speed_air_x_self[idx] = 0.0f;
-          batch->state.speed_ground_x_self[idx] = 0.0f;
-          batch->state.speed_y_self[idx] = 0.0f;
-          msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-          continue;
-        }
-
         float ottotto_x = 0.0f;
         float ottotto_y = 0.0f;
-        const float edge_stick_y =
-            apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
-        // RunBrake_Coll delegates to ft_80084280, which runs ftCo_8009A3C8 on Collide_Edge
-        // before generic Fall without a stick-Y/action-frame admission gate. The remaining
-        // grounded edge callback users keep the narrower modeled subset until their x2228_b2
-        // teeter-suppression provenance is represented.
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::ftCo_RunBrake_Coll
-        // refs/melee/src/melee/ft/ft_081B.c::ft_80084280
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::ftCo_8009A3C8
-        const uint8_t ottotto_entry_allowed =
-            (uint8_t)(a == MSL_ACT_RUN_BRAKE || edge_stick_y < 0.0f ||
-                      batch->state.action_frame[idx] <= 0);
-        if (action_uses_ottotto_edge_callback(a) && ottotto_entry_allowed &&
-            ottotto_edge_matches_facing(batch->state.stage_id[(size_t)bi],
-                                        batch->state.ground_id[idx], batch->state.facing[idx],
-                                        batch->state.pos_x[idx]) &&
+        if (ft80084280_ottotto_edge_admits(batch, c, bi, p, a) &&
             ottotto_edge_point_for_facing(batch->state.stage_id[(size_t)bi],
                                           batch->state.ground_id[idx], batch->state.facing[idx],
                                           &ottotto_x, &ottotto_y)) {
+          // Ottotto (teeter) entry on common grounded edge walk-off:
+          // - ft_80084280_inline calls mpColl_8004B4B0, whose `mpColl_8004A678_Floor` fallback
+          //   sets Collide_Edge only for the facing endpoint and non-hard-out stick range.
+          // - ft_80084280 then lets ftCo_8009A3C8 consume that Collide_Edge before generic Fall.
+          // - ftCo_8009A410 enters Ottotto and zeros self/ground velocity.
+          // refs/melee/src/melee/ft/ft_081B.c::ft_80084280
+          // refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004B4B0,mpColl_8004A678_Floor}
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::{ftCo_8009A3C8,ftCo_8009A410}
           batch->state.on_ground[idx] = 1u;
           batch->state.action_id[idx] = (uint16_t)MSL_ACT_OTTOTTO;
           batch->state.animation_index[idx] = (uint32_t)MSL_SM_OTTOTTO;

@@ -15,18 +15,18 @@ enum { MSL_CHAR_FOX = 1, MSL_CHAR_FALCO = 22 };
 
 enum {
   TABLE_MAGIC_LEN = 8,
-  TABLE_HDR_BYTES_V1 = 8 + 4 + 2 + 2 + 4 + 4,
-  TABLE_HDR_BYTES_V2 = 8 + 4 + 2 + 2 + 4 + 4 + 4,
+  TABLE_HDR_BYTES_V3 = 8 + 4 + 2 + 2 + 4 + 4 + 4 + 4,
 };
 
 static const uint8_t k_magic[TABLE_MAGIC_LEN] = {'M', 'S', 'L', 'A', 'C', 'I', 'D', '1'};
-static const uint32_t k_format_version = 2;
+static const uint32_t k_format_version = 3;
 
 typedef struct {
   uint8_t* buf;
   size_t sz;
   uint16_t* move_id_by_action;
   uint32_t* x4_flags_by_action;
+  uint32_t* motion_state_word_by_action;
   uint16_t action_count;
   uint8_t have;
 } MslActionMoveIdTable;
@@ -171,7 +171,7 @@ static int load_table_for_char_into(uint8_t char_id, const char* rel_name,
     print_generate_hint(data_dir);
     return -1;
   }
-  if (sz < (size_t)TABLE_HDR_BYTES_V2) {
+  if (sz < (size_t)TABLE_HDR_BYTES_V3) {
     fprintf(stderr, "msl: attack_id move_id table header too small for char_id=%u: %s (sz=%zu)\n",
             (unsigned)char_id, path, sz);
     print_generate_hint(data_dir);
@@ -198,7 +198,8 @@ static int load_table_for_char_into(uint8_t char_id, const char* rel_name,
   const uint16_t action_count = read_u16_le(buf + 12);
   const uint32_t move_toc_off = read_u32_le(buf + 16);
   const uint32_t flags_toc_off = read_u32_le(buf + 20);
-  const uint32_t file_bytes = read_u32_le(buf + 24);
+  const uint32_t motion_word_toc_off = read_u32_le(buf + 24);
+  const uint32_t file_bytes = read_u32_le(buf + 28);
   if (file_bytes != (uint32_t)sz) {
     fprintf(
         stderr,
@@ -208,7 +209,7 @@ static int load_table_for_char_into(uint8_t char_id, const char* rel_name,
     alloc_free(buf);
     return -1;
   }
-  if (move_toc_off < (uint32_t)TABLE_HDR_BYTES_V2) {
+  if (move_toc_off < (uint32_t)TABLE_HDR_BYTES_V3) {
     fprintf(stderr,
             "msl: attack_id move_id table move_toc_off too small for char_id=%u: %s "
             "(move_toc_off=%u)\n",
@@ -235,12 +236,22 @@ static int load_table_for_char_into(uint8_t char_id, const char* rel_name,
     alloc_free(buf);
     return -1;
   }
+  if (motion_word_toc_off + (uint32_t)action_count * 4u > (uint32_t)sz) {
+    fprintf(stderr,
+            "msl: attack_id MotionState word table out of bounds for char_id=%u: %s "
+            "(motion_word_toc_off=%u count=%u sz=%zu)\n",
+            (unsigned)char_id, path, (unsigned)motion_word_toc_off, (unsigned)action_count, sz);
+    print_generate_hint(data_dir);
+    alloc_free(buf);
+    return -1;
+  }
 
   *out = (MslActionMoveIdTable){
       .buf = buf,
       .sz = sz,
       .move_id_by_action = (uint16_t*)(void*)(buf + move_toc_off),
       .x4_flags_by_action = (uint32_t*)(void*)(buf + flags_toc_off),
+      .motion_state_word_by_action = (uint32_t*)(void*)(buf + motion_word_toc_off),
       .action_count = action_count,
       .have = 1,
   };
@@ -303,4 +314,15 @@ uint32_t attack_id_x4_flags_from_action(uint8_t char_id, uint16_t action_id) {
     return 0;
   }
   return t->x4_flags_by_action[action_id];
+}
+
+uint32_t attack_id_motion_state_word_from_action(uint8_t char_id, uint16_t action_id) {
+  const MslActionMoveIdTable* t = &g_table_by_char[char_id];
+  if (!t->have || t->motion_state_word_by_action == NULL || t->action_count == 0) {
+    return 0;
+  }
+  if (action_id >= t->action_count) {
+    return 0;
+  }
+  return t->motion_state_word_by_action[action_id];
 }

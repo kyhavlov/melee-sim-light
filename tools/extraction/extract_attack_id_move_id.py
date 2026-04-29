@@ -388,25 +388,92 @@ def _parse_action_id_to_motion_flags_u32(src: Path, motion_flags_expr_by_name: d
     return out
 
 
-def _write_action_move_id_bin(out_path: Path, move_id_by_action: dict[int, int], flags_by_action: dict[int, int]) -> None:
-    # File format v2:
+def _parse_action_id_to_motion_state_word_u32(
+    src: Path, ft_move_id: dict[str, int], motion_flags_expr_by_name: dict[str, str]
+) -> dict[int, int]:
+    """Parse decomp MotionState tables into action_id -> raw MotionState +0x8 word.
+
+    The +0x8 word stores FtMoveId in the high byte plus MotionState x9 bitfields. Dataset
+    preprocessing needs x9_b1 for the Fighter_ChangeMotionState source-clear timer owner.
+
+    Decomp pointers (GALE01):
+    - refs/melee/src/melee/ft/types.h::MotionState (move_id / x9 bitfields at +0x8)
+    - refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+    """
+    lines = src.read_text(encoding="utf-8", errors="replace").splitlines()
+
+    act_pat = re.compile(r"^\s*//\s*(?P<sym>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?P<id>[0-9]+)\s*$")
+    symbols: dict[str, str] = dict(motion_flags_expr_by_name)
+    symbols.update({name: str(value) for name, value in ft_move_id.items()})
+
+    pending_action_id: int | None = None
+    pending_field_index = 0
+    out: dict[int, int] = {}
+
+    for line in lines:
+        m = act_pat.match(line)
+        if m is not None:
+            pending_action_id = int(m.group("id"), 10)
+            pending_field_index = 0
+            continue
+
+        if pending_action_id is None:
+            continue
+
+        code = line.split("//", 1)[0].strip()
+        if not code:
+            continue
+        if code.startswith("{") or code.startswith("}"):
+            continue
+
+        tok = code.split(",", 1)[0].strip()
+        if not tok:
+            continue
+
+        if pending_field_index < 2:
+            pending_field_index += 1
+            continue
+
+        out[pending_action_id] = int(_eval_motion_flags_expr(tok, symbols))
+        pending_action_id = None
+        pending_field_index = 0
+
+    if not out:
+        raise RuntimeError(f"failed to parse any action_id->MotionState +0x8 words from {src}")
+    return out
+
+
+def _write_action_move_id_bin(
+    out_path: Path,
+    move_id_by_action: dict[int, int],
+    flags_by_action: dict[int, int],
+    motion_word_by_action: dict[int, int],
+) -> None:
+    # File format v3:
     #   u8  magic[8] = "MSLACID1"
-    #   u32 version = 2
+    #   u32 version = 3
     #   u16 action_count          (table length; action_id is the index)
     #   u16 reserved = 0
     #   u32 move_toc_off          (byte offset to u16 move_id table)
     #   u32 flags_toc_off         (byte offset to u32 x4_flags table)
+    #   u32 motion_word_toc_off   (byte offset to u32 MotionState +0x8 word table)
     #   u32 file_bytes
     #   u16 move_id[action_count] (0xFFFF means "unknown/absent"; runtime should treat as Default)
     #   u32 x4_flags[action_count] (decomp MotionState.x4_flags)
+    #   u32 motion_state_word[action_count] (decomp MotionState +0x8 word: move_id + x9 bits)
     magic = b"MSLACID1"
-    version = 2
-    max_action = max(max(move_id_by_action.keys(), default=0), max(flags_by_action.keys(), default=0))
+    version = 3
+    max_action = max(
+        max(move_id_by_action.keys(), default=0),
+        max(flags_by_action.keys(), default=0),
+        max(motion_word_by_action.keys(), default=0),
+    )
     action_count = int(max_action) + 1
-    hdr_bytes = 8 + 4 + 2 + 2 + 4 + 4 + 4
+    hdr_bytes = 8 + 4 + 2 + 2 + 4 + 4 + 4 + 4
     move_toc_off = hdr_bytes
     flags_toc_off = move_toc_off + action_count * 2
-    file_bytes = flags_toc_off + action_count * 4
+    motion_word_toc_off = flags_toc_off + action_count * 4
+    file_bytes = motion_word_toc_off + action_count * 4
 
     table = [_U16_MAX] * action_count
     for action_id, move_id in move_id_by_action.items():
@@ -419,6 +486,11 @@ def _write_action_move_id_bin(out_path: Path, move_id_by_action: dict[int, int],
         if action_id < 0 or action_id >= action_count:
             raise ValueError(f"action_id out of range: {action_id}")
         flags[int(action_id)] = int(mf) & _U32_MAX
+    motion_words = [0] * action_count
+    for action_id, word in motion_word_by_action.items():
+        if action_id < 0 or action_id >= action_count:
+            raise ValueError(f"action_id out of range: {action_id}")
+        motion_words[int(action_id)] = int(word) & _U32_MAX
 
     buf = bytearray()
     buf += magic
@@ -427,11 +499,14 @@ def _write_action_move_id_bin(out_path: Path, move_id_by_action: dict[int, int],
     buf += _u16_le(0)
     buf += _u32_le(move_toc_off)
     buf += _u32_le(flags_toc_off)
+    buf += _u32_le(motion_word_toc_off)
     buf += _u32_le(file_bytes)
     for mv in table:
         buf += _u16_le(mv)
     for mf in flags:
         buf += _u32_le(mf)
+    for word in motion_words:
+        buf += _u32_le(word)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_bytes(bytes(buf))
@@ -474,6 +549,9 @@ def main() -> None:
         raise SystemExit(f"missing common MotionState table: {common_src}")
     common = _parse_action_id_to_move_id(common_src, ft_move_id)
     common_flags = _parse_action_id_to_motion_flags_u32(common_src, motion_flags_expr_by_name)
+    common_motion_words = _parse_action_id_to_motion_state_word_u32(
+        common_src, ft_move_id, motion_flags_expr_by_name
+    )
 
     specs = {
         "fox": _TableSpec(
@@ -497,8 +575,12 @@ def main() -> None:
 
         self_tab = _parse_action_id_to_move_id(spec.src, ft_move_id)
         self_flags = _parse_action_id_to_motion_flags_u32(spec.src, motion_flags_expr_by_name)
+        self_motion_words = _parse_action_id_to_motion_state_word_u32(
+            spec.src, ft_move_id, motion_flags_expr_by_name
+        )
         merged: dict[int, int] = dict(common)
         merged_flags: dict[int, int] = dict(common_flags)
+        merged_motion_words: dict[int, int] = dict(common_motion_words)
         for k, v in self_tab.items():
             if k in merged and merged[k] != v:
                 raise SystemExit(f"conflicting move_id for action_id={k} ({merged[k]} != {v}) in {spec.src}")
@@ -509,16 +591,31 @@ def main() -> None:
                     f"conflicting x4_flags for action_id={k} ({merged_flags[k]:#x} != {v:#x}) in {spec.src}"
                 )
             merged_flags[k] = v
+        for k, v in self_motion_words.items():
+            if k in merged_motion_words and merged_motion_words[k] != v:
+                raise SystemExit(
+                    f"conflicting MotionState +0x8 word for action_id={k} "
+                    f"({merged_motion_words[k]:#x} != {v:#x}) in {spec.src}"
+                )
+            merged_motion_words[k] = v
 
         out_bin = args.out_dir / f"{spec.rel_name}.bin"
-        _write_action_move_id_bin(out_bin, merged, merged_flags)
+        _write_action_move_id_bin(out_bin, merged, merged_flags, merged_motion_words)
 
         if args.debug_json:
             out_json = args.out_dir / f"{spec.rel_name}.json"
             out_json.write_text(
                 json.dumps(
                     {
-                        str(k): {"move_id": int(merged[k]), "x4_flags": int(merged_flags.get(k, 0))}
+                        str(k): {
+                            "move_id": int(merged[k]),
+                            "x4_flags": int(merged_flags.get(k, 0)),
+                            "motion_state_word": int(merged_motion_words.get(k, 0)),
+                            # Big-endian MotionState bitfield packing: x9_b0 is bit 23 and
+                            # x9_b1 is bit 22 in the decomp initializer's raw +0x8 word.
+                            # refs/melee/src/melee/ft/types.h::MotionState
+                            "x9_b1": int((int(merged_motion_words.get(k, 0)) & (1 << 22)) != 0),
+                        }
                         for k in sorted(merged.keys())
                     },
                     indent=2,

@@ -308,6 +308,8 @@ static inline uint8_t action_allows_floor_edge_snap(uint16_t a) {
   // - Down* (except DownBound, which uses ft_80082708 -> mpColl_8004B108)
   // - EscapeF/EscapeB/EscapeN (rolls / spotdodge)
   // - Grounded attacks (Attack11..AttackLw4), including AttackDash and AttackS4S.
+  // - Fox/Falco grounded SpecialSEnd, whose collision callback uses ft_800827A0 after the main
+  //   Side-B travel phase has already converted through ft_80082708 when floor is lost.
   // - PassiveStandF/B tech-roll grounded continuation.
   //
   // Implementation note: we gate by action_id here as a proxy for "this motion state uses the
@@ -354,6 +356,7 @@ static inline uint8_t action_allows_floor_edge_snap(uint16_t a) {
     case MSL_ACT_ESCAPE_N:
     case MSL_ACT_PASSIVE_STAND_F:
     case MSL_ACT_PASSIVE_STAND_B:
+    case MSL_ACT_FX_SPECIAL_S_END:
       return 1;
     default:
       return 0;

@@ -19,20 +19,28 @@ ACT_FX_SPECIAL_LW_START = 0x0168
 CHAR_FOX = 1
 
 
-def _write_mslacid1_v2(*, path, action_count: int, x4_flags_low_by_action: dict[int, int]) -> None:
+def _write_mslacid1_v3(*, path, action_count: int, x4_flags_low_by_action: dict[int, int]) -> None:
     """
-    Write a minimal MSLACID1 v2 file that satisfies tools.slippi.seed_history's reader.
+    Write a minimal MSLACID1 v3 file that satisfies tools.slippi.seed_history's reader.
 
     The file stores u32 x4_flags per action id, and the derivation uses only the low byte.
     """
     if action_count <= 0:
         raise ValueError("action_count must be positive")
-    flags_off = 24
-    buf = bytearray(flags_off + action_count * 4)
+    header_bytes = 32
+    move_off = header_bytes
+    flags_off = move_off + action_count * 2
+    motion_word_off = flags_off + action_count * 4
+    buf = bytearray(motion_word_off + action_count * 4)
     buf[0:8] = b"MSLACID1"
-    struct.pack_into("<I", buf, 8, 2)  # version
+    struct.pack_into("<I", buf, 8, 3)  # version
     struct.pack_into("<H", buf, 12, int(action_count))
+    struct.pack_into("<I", buf, 16, int(move_off))
     struct.pack_into("<I", buf, 20, int(flags_off))
+    struct.pack_into("<I", buf, 24, int(motion_word_off))
+    struct.pack_into("<I", buf, 28, len(buf))
+    for a in range(action_count):
+        struct.pack_into("<H", buf, move_off + a * 2, 1)
     for a, low in x4_flags_low_by_action.items():
         if a < 0 or a >= action_count:
             raise ValueError(f"action_id {a} out of range for action_count={action_count}")
@@ -55,8 +63,8 @@ def test_seed_instance_id_x2073_derivation_is_prefix_invariant(tmp_path: Path) -
         ACT_WAIT: ACT_WAIT & 0xFF,
         ACT_FX_SPECIAL_LW_START: ACT_FX_SPECIAL_LW_START & 0xFF,
     }
-    _write_mslacid1_v2(path=base / "fox.bin", action_count=count, x4_flags_low_by_action=mapping)
-    _write_mslacid1_v2(path=base / "falco.bin", action_count=count, x4_flags_low_by_action=mapping)
+    _write_mslacid1_v3(path=base / "fox.bin", action_count=count, x4_flags_low_by_action=mapping)
+    _write_mslacid1_v3(path=base / "falco.bin", action_count=count, x4_flags_low_by_action=mapping)
 
     # Build a sequence with multiple action transitions.
     action_id = np.array(

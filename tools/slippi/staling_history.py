@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-import struct
 from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
 import pyarrow as pa
+
+from tools.slippi.action_state_tables import FT_MOVE_ID_DEFAULT, U16_MAX, load_action_state_tables
 
 
 # Decomp trail (GALE01) for stale queue + duplicate suppression + multiplier:
@@ -27,8 +28,6 @@ import pyarrow as pa
 # - refs/melee/src/melee/ft/ft_0D31.c::ftCo_800D34E0 (calls plStale_ResetStaleMoveTableForPlayer)
 
 
-_U16_MAX = 0xFFFF
-_FT_MOVE_ID_DEFAULT = 1  # refs/melee/src/melee/ft/forward.h::FtMoveId (Default is value 1)
 _STALE_QUEUE_SIZE = 10
 
 
@@ -61,22 +60,16 @@ def _load_action_move_id_table_for_char(char_id: int, *, data_dir: Path = Path("
     if cached is not None:
         return cached
 
-    # Match the runtime binary format written by tools/extraction/extract_attack_id_move_id.py.
-    # data/attack_id/move_id/{fox,falco}.bin use magic "MSLACID1".
-    name_by_char = {1: "fox", 22: "falco"}
-    rel = name_by_char.get(int(char_id))
-    if rel is None:
+    if int(char_id) not in (1, 22):
         _action_move_id_tables[int(char_id)] = []
         return []
-
-    path = data_dir / "attack_id" / "move_id" / f"{rel}.bin"
     try:
-        buf = path.read_bytes()
+        table = load_action_state_tables(str(data_dir))[int(char_id)]
     except FileNotFoundError as e:
         raise FileNotFoundError(
             "\n".join(
                 [
-                    f"Missing action_id->move_id table: {path}",
+                    f"Missing action_id->move_id table under: {data_dir / 'attack_id' / 'move_id'}",
                     "",
                     "Fighter attack identity preprocessing requires these generated artifacts.",
                     "Generate them from the decomp refs with:",
@@ -85,36 +78,7 @@ def _load_action_move_id_table_for_char(char_id: int, *, data_dir: Path = Path("
                 ]
             )
         ) from e
-    if len(buf) < 24:
-        raise ValueError(f"action move_id table too small: {path}")
-    if buf[:8] != b"MSLACID1":
-        raise ValueError(f"bad action move_id magic: {path}")
-    (ver,) = struct.unpack_from("<I", buf, 8)
-    if ver not in (1, 2):
-        raise ValueError(f"unsupported action move_id table version {ver} in {path}")
-    (count,) = struct.unpack_from("<H", buf, 12)
-    if ver == 1:
-        (toc_off,) = struct.unpack_from("<I", buf, 16)
-        (file_bytes,) = struct.unpack_from("<I", buf, 20)
-    else:
-        # v2 adds a second table (MotionState.x4_flags) after move_id.
-        # Layout is documented in docs/DATA_CONTRACT.md under MSLACID1 v2.
-        if len(buf) < 28:
-            raise ValueError(f"action move_id table header too small for v2: {path}")
-        (toc_off,) = struct.unpack_from("<I", buf, 16)
-        (_flags_off,) = struct.unpack_from("<I", buf, 20)
-        (file_bytes,) = struct.unpack_from("<I", buf, 24)
-    if file_bytes != len(buf):
-        raise ValueError(f"action move_id file_bytes mismatch in {path}: {file_bytes} != {len(buf)}")
-    if toc_off + count * 2 > len(buf):
-        raise ValueError(f"action move_id toc out of range in {path}")
-
-    out: list[int] = []
-    off = toc_off
-    for _ in range(int(count)):
-        (mv,) = struct.unpack_from("<H", buf, off)
-        off += 2
-        out.append(int(mv))
+    out = [int(v) for v in table.move_id]
 
     _action_move_id_tables[int(char_id)] = out
     return out
@@ -122,17 +86,17 @@ def _load_action_move_id_table_for_char(char_id: int, *, data_dir: Path = Path("
 
 def _move_id_from_char_action(char_id: int, action_id_u16: int) -> int:
     if action_id_u16 < 0 or action_id_u16 > 0xFFFF:
-        return _FT_MOVE_ID_DEFAULT
+        return FT_MOVE_ID_DEFAULT
     action_id = int(action_id_u16) & 0xFFFF
     tab = _load_action_move_id_table_for_char(int(char_id))
     if action_id >= len(tab):
-        return _FT_MOVE_ID_DEFAULT
+        return FT_MOVE_ID_DEFAULT
     mv = int(tab[action_id])
     # The extracted table uses 0xFFFF as a sentinel for "unknown/absent". For fighter-side
     # `x2068_attackID`, prefer the decomp-default `FtMoveId_Default` (1).
     # refs/melee/src/melee/ft/forward.h::FtMoveId
-    if mv == _U16_MAX:
-        return _FT_MOVE_ID_DEFAULT
+    if mv == U16_MAX:
+        return FT_MOVE_ID_DEFAULT
     return mv
 
 
@@ -213,7 +177,7 @@ def derive_staling_history(frames: pa.StructArray, *, src_ports: list[int]) -> S
     table_inst = np.zeros((num_players, _STALE_QUEUE_SIZE), dtype=np.uint16)
 
     # Derived fighter-side attack_id + attack_instance (x2068/x206C), per player.
-    cur_attack_id = np.full(num_players, _FT_MOVE_ID_DEFAULT, dtype=np.uint16)
+    cur_attack_id = np.full(num_players, FT_MOVE_ID_DEFAULT, dtype=np.uint16)
     cur_attack_inst = np.zeros(num_players, dtype=np.uint16)
     stale_attack_counter = 1  # plStale_InitAttackInstance initializes to 1.
 
@@ -257,13 +221,13 @@ def derive_staling_history(frames: pa.StructArray, *, src_ports: list[int]) -> S
     def _reset_player_attack_identity(p: int) -> None:
         # Decomp: fighter reset/default is (attackID=1, instance=0).
         # refs/melee/src/melee/ft/ft_0881.c::ft_800890BC
-        cur_attack_id[p] = np.uint16(_FT_MOVE_ID_DEFAULT)
+        cur_attack_id[p] = np.uint16(FT_MOVE_ID_DEFAULT)
         cur_attack_inst[p] = np.uint16(0)
         prev_action_id[p] = np.uint16(0xFFFF)
         prev_state_iid[p] = np.uint16(0)
 
     def _queue_update(p: int, move_id: int, attack_instance: int) -> None:
-        if move_id in (_U16_MAX, _FT_MOVE_ID_DEFAULT) or attack_instance == 0:
+        if move_id in (U16_MAX, FT_MOVE_ID_DEFAULT) or attack_instance == 0:
             return
         # Duplicate suppression: ignore if exact (move_id, attack_instance) already present.
         if np.any((table_mid[p, :] == np.uint16(move_id)) & (table_inst[p, :] == np.uint16(attack_instance))):
@@ -299,14 +263,14 @@ def derive_staling_history(frames: pa.StructArray, *, src_ports: list[int]) -> S
                 # Slippi spec: instance_id resets to 0 temporarily on death.
                 # Keep the fighter's derived x206C at 0 until the next observable state transition.
                 _reset_player_attack_identity(p)
-                attack_id_out[t, p] = np.uint16(_FT_MOVE_ID_DEFAULT)
+                attack_id_out[t, p] = np.uint16(FT_MOVE_ID_DEFAULT)
                 continue
 
             act = int(action_id[t, p])
             if act != int(prev_action_id[p]):
                 move_id = _move_id_from_char_action(int(char_id[t, p]), act)
                 # Decomp: ft_800890D0 increments x206C when move_id==1 OR move_id != current attackID.
-                if move_id == _FT_MOVE_ID_DEFAULT or move_id != int(cur_attack_id[p]):
+                if move_id == FT_MOVE_ID_DEFAULT or move_id != int(cur_attack_id[p]):
                     cur_attack_id[p] = np.uint16(move_id)
                     cur_attack_inst[p] = np.uint16(_inc_attack_instance())
                 prev_action_id[p] = np.uint16(act)
@@ -349,7 +313,7 @@ def derive_staling_history(frames: pa.StructArray, *, src_ports: list[int]) -> S
                     continue
 
                 hit_iid = int(last_hit_by_instance[t, victim])
-                att_move_id = _U16_MAX
+                att_move_id = U16_MAX
                 att_attack_inst = 0
                 if hit_iid != 0:
                     v = by_state_iid[attacker].get(hit_iid)
@@ -357,7 +321,7 @@ def derive_staling_history(frames: pa.StructArray, *, src_ports: list[int]) -> S
                         att_move_id, att_attack_inst = v
 
                 # Fallback to the attacker's current state (best-effort).
-                if att_move_id == _U16_MAX or att_attack_inst == 0:
+                if att_move_id == U16_MAX or att_attack_inst == 0:
                     att_move_id = int(cur_attack_id[attacker])
                     att_attack_inst = int(cur_attack_inst[attacker])
 

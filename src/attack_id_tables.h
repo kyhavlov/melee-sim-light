@@ -9,6 +9,7 @@
 //
 // This module loads a compact decomp-derived mapping:
 //   (char_id, action_id) -> FtMoveId (aka "move_id")
+// and adjacent MotionState lanes from the same decomp table.
 //
 // Artifacts:
 //   data/attack_id/move_id/{fox,falco}.bin
@@ -21,3 +22,7 @@ uint16_t attack_id_move_id_from_action(uint8_t char_id, uint16_t action_id);
 // Return decomp MotionState.x4_flags (GALE01) for the fighter's current action_id.
 // If the character is unknown or the table is missing/out-of-range, returns 0.
 uint32_t attack_id_x4_flags_from_action(uint8_t char_id, uint16_t action_id);
+
+// Return decomp MotionState +0x8 word (move_id in high byte plus x9 bitfields) for the fighter's
+// current action_id. If the character is unknown or the table is missing/out-of-range, returns 0.
+uint32_t attack_id_motion_state_word_from_action(uint8_t char_id, uint16_t action_id);

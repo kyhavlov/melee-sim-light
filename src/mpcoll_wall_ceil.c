@@ -1928,9 +1928,17 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
         // refs/melee/src/melee/mp/mpcoll.c::mpColl_80046224_LeftWall
         const uint8_t use_specialhi_left_envelope =
             (uint8_t)(action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI);
+        // DamageFly consumes left-wall Hug for FlyReflectWall only while knockback is moving into
+        // the left-facing wall. Keep stale/negative-kb DamageFly rows on the point-local
+        // provenance path so they can refresh wall ids without arming Hug.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FlyReflect.c::ftCo_800C15F4
+        const uint8_t use_damagefly_left_envelope =
+            (uint8_t)(mpcoll_damagefly_wall_asdi_latch_action(action_id) &&
+                      !damagefly_hitlag_wall_refresh && batch->state.speed_x_attack[idx] > 0.0f);
         const uint8_t use_common_air_left_envelope = use_common_air_walljump_callback;
         const uint8_t use_left_air_envelope =
-            (uint8_t)(use_specialhi_left_envelope || use_common_air_left_envelope);
+            (uint8_t)(use_specialhi_left_envelope || use_damagefly_left_envelope ||
+                      use_common_air_left_envelope);
         const MslEcbWorldPoints* left_cur_ecb =
             use_specialhi_left_envelope ? &cur_specialhi_wall_ecb : &cur_ecb;
         const MslEcbWorldPoints* left_prev_ecb =
@@ -2028,16 +2036,23 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
             batch->state.wall_normal_x[idx] = envelope_nx;
             batch->state.wall_normal_y[idx] = envelope_ny;
             // SpecialAirHi consumes the wall resolution for rebound/hitlag provenance, not the
-            // common-air PassiveWall/WallJump Hug consumer. Common Jump/Fall callbacks are the
-            // source-shaped owner that immediately calls ftWallJump_8008169C after this mpColl
-            // path, so preserve Hug only for that family.
+            // common-air PassiveWall/WallJump Hug consumer. DamageFly and common Jump/Fall
+            // callbacks do immediately consume Collide_LeftWallHug after this mpColl path:
+            // DamageFly for FlyReflect/PassiveWall, Jump/Fall for walljump.
             // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialAirHi_Coll
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FlyReflect.c::ftCo_800C15F4
             // refs/melee/src/melee/ft/ft_081B.c::ft_800835B0
-            mark_left_wall_contact(batch, idx,
-                                   use_common_air_left_envelope ? candidates.has_hug : 0u);
+            mark_left_wall_contact(
+                batch, idx,
+                (uint8_t)((use_common_air_left_envelope ||
+                           (use_damagefly_left_envelope && !damagefly_hitlag_wall_refresh))
+                              ? candidates.has_hug
+                              : 0u));
           }
         }
-        if (batch->state.wall_kind[idx] == 0 && !use_left_air_envelope) {
+        if (batch->state.wall_kind[idx] == 0 &&
+            (!use_left_air_envelope || use_damagefly_left_envelope)) {
           float ix = 0.0f, iy = 0.0f;
           float nx = -1.0f, ny = 0.0f;
           int hit_line_idx = -1;
@@ -2059,12 +2074,16 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
               batch->state.wall_normal_y[idx] = ny;
               // During active DamageFly hitlag, Fighter_procMap refreshes wall contact metadata
               // for ftCo_Damage_OnExitHitlag ASDI provenance, but the same refresh must not arm
-              // the post-hitlag PassiveWall/WallJump Hug consumer. Non-hitlag DamageFly remains
-              // source-owned by the normal wall-callback Hug path.
+              // the post-hitlag PassiveWall/WallJump Hug consumer. DamageFly rows that already
+              // tried the full left-wall envelope may still need this point-local projection for
+              // stale wall-id provenance, but Hug remains owned by the envelope side candidate.
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
               //   ftCo_Damage_OnExitHitlag,ftCo_DamageFly_Coll}
               // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_procMap}
-              mark_left_wall_contact(batch, idx, damagefly_hitlag_wall_refresh ? 0u : 1u);
+              mark_left_wall_contact(
+                  batch, idx,
+                  (uint8_t)((damagefly_hitlag_wall_refresh || use_damagefly_left_envelope) ? 0u
+                                                                                           : 1u));
             }
           }
         }

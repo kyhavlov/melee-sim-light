@@ -13,6 +13,7 @@ import pyarrow as pa
 from peppi_py import _read_slippi
 
 from tools.eval.dataset import SAMPLE_DTYPE, write_dataset
+from tools.slippi.action_state_tables import load_action_state_tables
 from tools.slippi.hitstun import hitstun_u16_from_misc_as_and_state_flags3
 from tools.slippi.rollback import finalized_frame_indices
 
@@ -973,27 +974,15 @@ def _load_source_clear_terminal_followup_tables(
 
 
 def _load_action_x9_b1_tables(*, data_root) -> dict[int, np.ndarray]:
-    """Load decomp MotionState.x9_b1 tables for supported chars.
+    """Load decomp MotionState.x9_b1 tables for supported chars from MSLACID1 v3.
 
     Source of truth:
-    - data/attack_id/move_id/{fox,falco}.json key `x9_b1`
-    - derived from decomp MotionState initializers.
+    - data/attack_id/move_id/{fox,falco}.bin `motion_state_word` table.
+    - Derived from decomp MotionState initializers.
+    - refs/melee/src/melee/ft/types.h::MotionState
+    - refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
     """
-    out: dict[int, np.ndarray] = {}
-    for char_id, key in ((1, "fox"), (22, "falco")):
-        rows = json.loads((data_root / "attack_id" / "move_id" / f"{key}.json").read_text())
-        if not rows:
-            out[int(char_id)] = np.zeros(0, dtype=np.uint8)
-            continue
-        max_action = max(int(k) for k in rows.keys())
-        table = np.zeros(max_action + 1, dtype=np.uint8)
-        for k, v in rows.items():
-            a = int(k)
-            if a < 0 or a >= table.shape[0]:
-                continue
-            table[a] = np.uint8(1 if int((v or {}).get("x9_b1", 0)) != 0 else 0)
-        out[int(char_id)] = table
-    return out
+    return {char_id: table.x9_b1 for char_id, table in load_action_state_tables(str(data_root)).items()}
 
 
 def _derive_source_clear_timer_x18c8_and_owner_phase_seed_lanes(

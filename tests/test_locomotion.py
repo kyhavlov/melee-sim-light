@@ -47,8 +47,11 @@ ACT_ATTACK_AIR_B = 0x0043
 ACT_DAMAGE_AIR_2 = 0x0055
 ACT_DAMAGE_FLY_N = 0x0058
 ACT_FX_SPECIAL_S_START = 0x015B
+ACT_FX_SPECIAL_S = 0x015C
+ACT_FX_SPECIAL_S_END = 0x015D
 ACT_FX_SPECIAL_LW_START = 0x0168
 ACT_FX_SPECIAL_AIR_S_START = 0x015E
+ACT_FX_SPECIAL_AIR_S = 0x015F
 ACT_FX_SPECIAL_AIR_LW_START = 0x016D
 ACT_CATCH_DASH = 0x00D6
 ACT_PASSIVE_WALL_JUMP = 0x00CB
@@ -85,6 +88,8 @@ SM_OTTOTTO = 210
 SM_CATCH_DASH = 243
 SM_LANDING_FALL_SPECIAL = 36
 SM_FX_SPECIAL_S_START = 301
+SM_FX_SPECIAL_S = 302
+SM_FX_SPECIAL_S_END = 303
 SM_FX_SPECIAL_AIR_S_START = 304
 SM_FX_SPECIAL_AIR_LW_START = 313
 
@@ -2492,6 +2497,105 @@ def test_wait_walk_off_enters_ottotto_grounded_without_consuming_jump() -> None:
     assert int(out["jumps_left"][0]) == 2
 
 
+def test_walk_hard_out_edge_exit_falls_instead_of_teetering() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["pos_x"][0, 0] = np.float32(85.4)  # FD right floor edge is at ~85.5657.
+    seed["pos_y"][0, 0] = np.float32(0.0)
+    seed["speed_ground_x_self"][0, 0] = np.float32(1.0)
+    seed["action_id"][0, 0] = np.uint16(ACT_WALK_SLOW)
+    seed["action_frame"][0, 0] = np.int16(4)
+    seed["animation_index"][0, 0] = np.uint32(SM_WALK_SLOW)
+    seed["jumps_left"][0, 0] = np.uint8(2)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    inp.view(INPUT_DTYPE).reshape(1)["p"]["main_x"][0, 0] = np.int8(80)
+    out = _step_once(seed, prev_inp, inp)
+
+    # Decomp: ft_80084280_inline passes lstick_x to mpColl_8004B4B0. At the right edge,
+    # mpColl_8004A678_Floor only sets Collide_Edge when lstick_x < 0.75, so hard outward stick
+    # takes the generic Fall path instead of ftCo_8009A3C8 -> Ottotto.
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80084280_inline
+    # refs/melee/src/melee/mp/mpcoll.c::mpColl_8004A678_Floor
+    assert int(out["action_id"][0]) == ACT_FALL
+    assert int(out["on_ground"][0]) == 0
+    assert int(out["jumps_left"][0]) == 1
+
+
+def test_grounded_sideb_end_edge_snap_stays_in_specialsend_at_ledge() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["facing"][0, 0] = np.uint8(0)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(0)
+    seed["pos_x"][0, 0] = np.float32(-84.0)
+    seed["pos_y"][0, 0] = np.float32(0.0001)
+    seed["speed_ground_x_self"][0, 0] = np.float32(-2.1)
+    seed["speed_air_x_self"][0, 0] = np.float32(-2.1)
+    seed["action_id"][0, 0] = np.uint16(ACT_FX_SPECIAL_S_END)
+    seed["action_frame"][0, 0] = np.int16(0)
+    seed["animation_index"][0, 0] = np.uint32(SM_FX_SPECIAL_S_END)
+    seed["anim_frame_f32"][0, 0] = np.float32(0.0)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    out = _step_once(seed, prev_inp, inp)
+
+    # Decomp: grounded Fox/Falco SpecialSEnd_Coll uses ft_800827A0, unlike SpecialSStart/Main's
+    # ft_80082708 ground-to-air callbacks. ft_800827A0 calls mpColl_8004B2DC, whose
+    # mpColl_8004A45C_Floor edge fallback keeps this endpoint case grounded in SpecialSEnd.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialSEnd_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_800827A0
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004B2DC,mpColl_8004A45C_Floor}
+    assert int(out["action_id"][0]) == ACT_FX_SPECIAL_S_END
+    assert int(out["on_ground"][0]) == 1
+    assert float(out["pos_x"][0]) == pytest.approx(-85.5657, abs=0.01)
+
+
+def test_grounded_sideb_main_floor_loss_enters_aerial_sideb_not_fall() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["facing"][0, 0] = np.uint8(0)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(0)
+    seed["pos_x"][0, 0] = np.float32(-83.0)
+    seed["pos_y"][0, 0] = np.float32(0.0001)
+    seed["speed_ground_x_self"][0, 0] = np.float32(-18.72)
+    seed["speed_air_x_self"][0, 0] = np.float32(-18.72)
+    seed["action_id"][0, 0] = np.uint16(ACT_FX_SPECIAL_S)
+    seed["action_frame"][0, 0] = np.int16(0)
+    seed["animation_index"][0, 0] = np.uint32(SM_FX_SPECIAL_S)
+    seed["anim_frame_f32"][0, 0] = np.float32(0.0)
+    seed["jumps_left"][0, 0] = np.uint8(1)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    out = _step_once(seed, prev_inp, inp)
+
+    # Decomp: grounded SpecialS main uses ft_80082708 and then
+    # ftFx_SpecialS_GroundToAir when the allow-ground-to-air helper reports floor loss.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
+    #   ftFx_SpecialS_Coll,ftFx_SpecialS_GroundToAir}
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80082708
+    assert int(out["action_id"][0]) == ACT_FX_SPECIAL_AIR_S
+    assert int(out["on_ground"][0]) == 0
+    assert int(out["jumps_left"][0]) == 0
+
+
 def test_run_off_does_not_snap_to_floor_edge() -> None:
     # Regression/safety guard for FD floor-edge handling: floor-edge snap behavior is intended to be
     # scoped to Down* states (mpColl_8004A45C_Floor-style) and must not keep normal locomotion
@@ -2792,9 +2896,12 @@ def test_fall_fast_clears_on_landing_and_does_not_persist_off_stage() -> None:
         out1 = out.view(COMPARE_DTYPE).reshape((1,))[0].copy()
         assert int(out1["on_ground"][0]) == 1
 
-        # Step 2: grounded movement carries us off the right edge.
+        # Step 2: grounded movement carries us off the right edge. Hold hard outward so this
+        # stays on the generic Fall path instead of ft_80084280 -> Ottotto.
         prev1 = cur0
         cur1 = np.zeros((1, input_stride), dtype=np.uint8)
+        cur1_v = cur1.view(INPUT_DTYPE).reshape((1,))
+        cur1_v["p"]["main_x"][0, 0] = np.int8(80)
         msl_binding.step_input(handle, prev1, cur1)
         msl_binding.write_compare(handle, out)
         out2 = out.view(COMPARE_DTYPE).reshape((1,))[0].copy()

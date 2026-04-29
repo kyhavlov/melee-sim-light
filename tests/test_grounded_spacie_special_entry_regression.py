@@ -251,7 +251,7 @@ def test_grounded_side_special_walkoff_promotes_to_air_side_special_next_frame()
     assert int(out1["action_id"][0]) == ACT_FX_SPECIAL_AIR_S
 
 
-def test_grounded_side_special_end_walkoff_falls_next_frame() -> None:
+def test_grounded_side_special_end_edge_snap_stays_grounded_next_frame() -> None:
     seed = _seed_base()
     seed["action_id"][0, 0] = np.uint16(ACT_FX_SPECIAL_S_END)
     seed["animation_index"][0, 0] = np.uint32(_fox_special_msid("side_ground.end.default"))
@@ -263,5 +263,13 @@ def test_grounded_side_special_end_walkoff_falls_next_frame() -> None:
     input_stride = int(binding.sizes()["input"])
     z = _mk_input_bytes(1, input_stride)
     out0, out1 = _step_twice(seed, z, z, z, z)
-    assert int(out0["on_ground"][0]) == 0
-    assert int(out1["action_id"][0]) == ACT_FALL
+    # Decomp: grounded Fox/Falco SpecialSEnd_Coll uses ft_800827A0 -> mpColl_8004B2DC, whose
+    # mpColl_8004A45C_Floor edge fallback can keep this endpoint case grounded instead of
+    # converting directly to Fall.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialSEnd_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_800827A0
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004B2DC,mpColl_8004A45C_Floor}
+    assert int(out0["on_ground"][0]) == 1
+    assert int(out0["action_id"][0]) == ACT_FX_SPECIAL_S_END
+    assert int(out1["on_ground"][0]) == 1
+    assert int(out1["action_id"][0]) == ACT_FX_SPECIAL_S_END

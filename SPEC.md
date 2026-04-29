@@ -4062,13 +4062,13 @@ Current residual labels:
     `ftCo_Fall_Coll` / `ftCo_Landing_Enter_Basic` callback timing.
   - `F10o_ottotto_teeter_edge_handoff`: common teeter entry vs Fall handoff through
     `ftCo_8009A3C8`; the safe retained runtime slice covers Ottotto crouch IASA and Ottotto anim-end
-    to OttottoWait, steady `RunBrake_Coll -> ft_80084280` edge entry, and the
+    to OttottoWait, Wait/Walk/Landing/RunBrake `ft_80084280` edge entry, and the
     `Ottotto_IASA -> KneeBend -> Fall` floor-loss edge carrying the source
-    `ftCommon_8007E0E4` / `xF8_playerNudgeVel.x` overlap displacement. RunBrake does not apply
-    the simulator's older stick-Y/action-frame admission gate before `ftCo_8009A3C8`; it enters
-    Ottotto from `Collide_Edge` when the teeter-suppression bit is clear. Other edge-callback
-    actions remain on the narrower modeled subset until their `x2228_b2` provenance is represented.
-    Broad teeter-entry for all walk/run states was rejected by walk-off sentinels.
+    `ftCommon_8007E0E4` / `xF8_playerNudgeVel.x` overlap displacement. The entry gate follows
+    `mpColl_8004A678_Floor`: the fighter must cross the endpoint they are facing, not be on the
+    inward `xF8_playerNudgeVel.x -> ft_800827A0` branch, and must not hold the stick hard outward
+    (right edge requires `lstick_x < 0.75`, left edge requires `lstick_x > -0.75`). This replaces
+    the older stick-Y/action-frame simulator gate and keeps hard-out walk-off sentinels falling.
   - `F10p_specialhi_bound_collision_callback`: `SpecialAirHi` <-> `SpecialHiBound` one-frame
     collision callback timing. These rows stay outside `F22_specialhi_firefox_firebird` so section 6
     remains closed.
@@ -4620,6 +4620,15 @@ BODY collision-space residual split and rejected seed bridge:
   grounded source states take `ftCommon_8007D60C`, while airborne source states take
   `ftCommon_UseAllJumps`. Recovery FallSpecial therefore must not allow a later X/Y press to become
   JumpAerial.
+- Grounded Fox/Falco Side-B collision has two different floor-loss owners. `SpecialSStart_Coll` and
+  `SpecialS_Coll` call `ft_80082708 -> mpColl_8004B108`, so leaving the floor during start/main
+  converts to `SpecialAirSStart` / `SpecialAirS` while preserving animation frame. `SpecialSEnd_Coll`
+  calls `ft_800827A0 -> mpColl_8004B2DC`; at a floor endpoint that path can use
+  `mpColl_8004A45C_Floor` and keep the fighter grounded/snapped at the ledge in `SpecialSEnd`
+  instead of entering actionable Fall. Sources:
+  `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{ftFx_SpecialSStart_Coll,ftFx_SpecialS_Coll,ftFx_SpecialSEnd_Coll}`,
+  `refs/melee/src/melee/ft/ft_081B.c::{ft_80082708,ft_800827A0}`, and
+  `refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004B108,mpColl_8004B2DC,mpColl_8004A45C_Floor}`.
 - DamageFly hitlag-exit ASDI near a persisted wall uses the same CollData wall index provenance:
   `ftCo_Damage_OnExitHitlag` applies ASDI before DI/LSI, while `Fighter_procMap` will run the
   DamageFly collision callback later in the frame. When hitlag-refresh has cleared the Hug env bit

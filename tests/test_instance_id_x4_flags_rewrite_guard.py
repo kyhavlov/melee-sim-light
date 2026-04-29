@@ -1,25 +1,12 @@
 from __future__ import annotations
 
-import struct
 import json
 from pathlib import Path
 
-import numpy as np
 import pytest
 
 from tools.eval.dataset import read_dataset
-
-
-def _read_mslacid1_v2_x4_flags_low_bytes(path: Path) -> np.ndarray:
-    buf = path.read_bytes()
-    assert buf[:8] == b"MSLACID1"
-    (ver,) = struct.unpack_from("<I", buf, 8)
-    assert ver == 2
-    (count,) = struct.unpack_from("<H", buf, 12)
-    (flags_off,) = struct.unpack_from("<I", buf, 20)
-    assert flags_off + int(count) * 4 <= len(buf)
-    lows = np.frombuffer(buf, dtype="<u4", offset=int(flags_off), count=int(count)) & np.uint32(0xFF)
-    return lows.astype(np.uint8, copy=False)
+from tools.slippi.action_state_tables import read_mslacid1_v3
 
 
 @pytest.mark.integration
@@ -55,8 +42,8 @@ def test_suite_observed_actions_do_not_require_ft_800895E0_rewrite_paths() -> No
     if not msl_paths:
         pytest.skip("no .msl files found under datasets/fox_falco_fd_ucf084_recent")
 
-    fox_low = _read_mslacid1_v2_x4_flags_low_bytes(Path("data/attack_id/move_id/fox.bin"))
-    falco_low = _read_mslacid1_v2_x4_flags_low_bytes(Path("data/attack_id/move_id/falco.bin"))
+    fox_low = read_mslacid1_v3(Path("data/attack_id/move_id/fox.bin")).x4_flags_low
+    falco_low = read_mslacid1_v3(Path("data/attack_id/move_id/falco.bin")).x4_flags_low
 
     bad: set[tuple[int, int, int]] = set()
 

@@ -372,26 +372,37 @@ Characters (Fox/Falco):
       **action transitions** using MotionState `move_id` (not msid→move_id fallbacks).
     - Drive fighter action-state `instance_id` updates (`fp->x2088`) from MotionState `x4_flags`
       (see ft_800895E0 callsite in `Fighter_ChangeMotionState`).
+    - Drive source-owner clear seed reconstruction from MotionState `x9_b1`
+      (`Fighter_ChangeMotionState` seeds `dmg.x18C8` under grounded + `x9_b1`).
   - Sources:
     - `refs/melee/src/melee/ft/ftmotionstates.c::ftData_MotionStateList` (common motion states)
     - `refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c::ftFx_Init_MotionStateTable` (Fox self states)
     - `refs/melee/src/melee/ft/chara/ftFalco/ftFc_Init.c::ftFc_Init_MotionStateTable` (Falco self states)
-  - Binary layout: `MSLACID1` v2 (little-endian, dense tables indexed by GALE01 `action_id`)
+  - Binary layout: `MSLACID1` v3 (little-endian, dense tables indexed by GALE01 `action_id`)
     - `u8  magic[8] = "MSLACID1"`
-    - `u32 version = 2`
+    - `u32 version = 3`
     - `u16 action_count` (table length; `action_id` is the index)
     - `u16 reserved = 0`
     - `u32 move_toc_off` (byte offset to `move_id[action_count]`; currently fixed to header size)
     - `u32 flags_toc_off` (byte offset to `x4_flags[action_count]`)
+    - `u32 motion_word_toc_off` (byte offset to `motion_state_word[action_count]`)
     - `u32 file_bytes` (total file size in bytes; must match on-disk length)
     - `u16 move_id[action_count]`
       - `0xFFFF` = unknown/absent; loaders must treat this as `FtMoveId_Default` (decomp value 1)
     - `u32 x4_flags[action_count]` (decomp MotionState `x4_flags`)
+    - `u32 motion_state_word[action_count]` (decomp MotionState +0x8 word: `move_id` in the high
+      byte plus x9 bitfields; preprocessing derives `x9_b1` from bit 22)
+  - Older `MSLACID1` v1/v2 tables are stale and must be rejected by readers; regenerate with
+    `uv run python -m tools.extraction.extract_attack_id_move_id --melee_decomp refs/melee --out_dir data/attack_id/move_id --chars fox,falco`.
+    The extractor's `--debug-json` output is optional human-readable inspection data and is not part
+    of the runtime or preprocessing contract.
   - Runtime update rule:
     - `Fighter_ChangeMotionState` calls `ft_800890D0(fp, new_motion_state->move_id)`.
       Decomp: `refs/melee/src/melee/ft/fighter.c`, `refs/melee/src/melee/ft/ft_0881.c::ft_800890D0`.
     - `Fighter_ChangeMotionState` calls `ft_800895E0(fp, new_motion_state->x4_flags)`.
       Decomp: `refs/melee/src/melee/ft/fighter.c`, `refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_800895E0`.
+    - `Fighter_ChangeMotionState` reads `new_motion_state->x9_b1` for source-owner clear timer setup.
+      Decomp: `refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState`.
 - `data/shields/fox.bin`, `data/shields/falco.bin` (guard-tilt shield bubble centers; decomp-first, compact binary)
 - `data/hurtcaps/fox.bin`, `data/hurtcaps/falco.bin` (hurt capsule init tables; decomp-first, compact binary)
 - `data/hurtcaps/fox.json`, `data/hurtcaps/falco.json` (hurt capsule init tables; debug-friendly mirror; C loads `.bin` only)
