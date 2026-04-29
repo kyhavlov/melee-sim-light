@@ -193,6 +193,11 @@ class SimFrameState:
     char_id: np.ndarray
     pos_x: np.ndarray
     pos_y: np.ndarray
+    speed_air_x_self: np.ndarray
+    speed_ground_x_self: np.ndarray
+    speed_y_self: np.ndarray
+    speed_x_attack: np.ndarray
+    speed_y_attack: np.ndarray
     facing: np.ndarray
     on_ground: np.ndarray
     is_dead: np.ndarray
@@ -221,6 +226,11 @@ def frame_state_from_seed(seed: np.void) -> SimFrameState:
         char_id=np.array(seed["char_id"], copy=True),
         pos_x=np.array(seed["pos_x"], copy=True),
         pos_y=np.array(seed["pos_y"], copy=True),
+        speed_air_x_self=np.array(seed["speed_air_x_self"], copy=True),
+        speed_ground_x_self=np.array(seed["speed_ground_x_self"], copy=True),
+        speed_y_self=np.array(seed["speed_y_self"], copy=True),
+        speed_x_attack=np.array(seed["speed_x_attack"], copy=True),
+        speed_y_attack=np.array(seed["speed_y_attack"], copy=True),
         facing=np.array(seed["facing"], copy=True),
         on_ground=np.array(seed["on_ground"], copy=True),
         is_dead=np.array(seed["stocks"] == 0, dtype=np.uint8),
@@ -249,6 +259,11 @@ def frame_state_from_compare(compare: np.void) -> SimFrameState:
         char_id=np.array(compare["char_id"], copy=True),
         pos_x=np.array(compare["pos_x"], copy=True),
         pos_y=np.array(compare["pos_y"], copy=True),
+        speed_air_x_self=np.array(compare["speed_air_x_self"], copy=True),
+        speed_ground_x_self=np.array(compare["speed_ground_x_self"], copy=True),
+        speed_y_self=np.array(compare["speed_y_self"], copy=True),
+        speed_x_attack=np.array(compare["speed_x_attack"], copy=True),
+        speed_y_attack=np.array(compare["speed_y_attack"], copy=True),
         facing=np.array(compare["facing"], copy=True),
         on_ground=np.array(compare["on_ground"], copy=True),
         is_dead=np.array(compare["is_dead"], copy=True),
@@ -506,11 +521,11 @@ def viewer_frame_from_state(state: SimFrameState, controllers: Mapping[int, obje
             "jumpsRemaining": int(state.jumps_left[idx]),
             "lCancelStatus": None,
             "hurtboxCollisionState": ["vulnerable", "invulnerable", "intangible"][int(state.hurtbox_state[idx])],
-            "selfInducedAirXSpeed": 0.0,
-            "selfInducedAirYSpeed": 0.0,
-            "attackBasedXSpeed": 0.0,
-            "attackBasedYSpeed": 0.0,
-            "selfInducedGroundXSpeed": 0.0,
+            "selfInducedAirXSpeed": float(np.float32(state.speed_air_x_self[idx])),
+            "selfInducedAirYSpeed": float(np.float32(state.speed_y_self[idx])),
+            "attackBasedXSpeed": float(np.float32(state.speed_x_attack[idx])),
+            "attackBasedYSpeed": float(np.float32(state.speed_y_attack[idx])),
+            "selfInducedGroundXSpeed": float(np.float32(state.speed_ground_x_self[idx])),
             "hitlagRemaining": int(state.hitlag[idx]),
             "isReflectActive": bool(flags_2218 & state_flag_2218_reflecting),
             "isFastfalling": bool(flags_221a & state_flag_221a_is_fastfall),

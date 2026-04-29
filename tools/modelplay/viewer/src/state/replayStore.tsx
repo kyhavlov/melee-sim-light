@@ -393,6 +393,10 @@ function getSpacieUpBRotation(
   replayState: ReplayStore,
   playerState: PlayerState
 ): number {
+  const velocityRotation = spacieUpBRotationFromCurrentVelocity(playerState);
+  if (velocityRotation !== undefined) {
+    return velocityRotation;
+  }
   const startOfActionPlayer = getPlayerOnFrame(
     playerState.playerIndex,
     getStartOfAction(playerState)
@@ -417,6 +421,32 @@ function getSpacieUpBRotation(
   );
 }
 
+function spacieUpBRotationFromCurrentVelocity(
+  playerState: PlayerState
+): number | undefined {
+  const velocityX =
+    (playerState.isGrounded
+      ? playerState.selfInducedGroundXSpeed
+      : playerState.selfInducedAirXSpeed) + playerState.attackBasedXSpeed;
+  const velocityY = playerState.selfInducedAirYSpeed + playerState.attackBasedYSpeed;
+  if (
+    !Number.isFinite(velocityX) ||
+    !Number.isFinite(velocityY) ||
+    (velocityX === 0 && velocityY === 0)
+  ) {
+    return undefined;
+  }
+
+  // Decomp: ftFx_SpecialAirHi_Coll can rewrite facing and recompute
+  // mv.fx.SpecialHi.rotateModel from current self_vel after wall/floor/ceiling contact.
+  // The SVG path is mirrored by facingDirection, so compute the visible rotation in that mirrored
+  // basis instead of reusing the launch-stick direction across a mid-Up-B facing flip.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+  //   ftFx_SpecialAirHi_Enter,ftFx_SpecialAirHi_Coll,ftFox_SpecialHi_RotateModel}
+  const facing = playerState.facingDirection === -1 ? -1 : 1;
+  return (Math.atan2(velocityY * facing, velocityX * facing) * 180) / Math.PI;
+}
+
 // All jumps and upBs either 1) Need to follow the current frame's
 // facingDirection, or 2) Won't have facingDirection change during the action.
 // In either case we can grab the facingDirection from the current frame.
@@ -431,7 +461,7 @@ function isSpacieUpB(playerState: PlayerState): boolean {
   const character = characterNameByInternalId[playerState.internalCharacterId];
   return (
     ["Fox", "Falco"].includes(character) &&
-    [355, 356].includes(playerState.actionStateId)
+    [355, 356, 357, 358, 359].includes(playerState.actionStateId)
   );
 }
 
