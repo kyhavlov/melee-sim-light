@@ -473,6 +473,14 @@ int common_params_init(void) {
                    &g_params.damagefly_downbound_kb_vel_threshold) != 0 ||
       json_get_f32(buf, "damagefly_landing_kb_vel_threshold",
                    &g_params.damagefly_landing_kb_vel_threshold) != 0 ||
+      json_get_f32(buf, "damagefly_reflect_speed_threshold",
+                   &g_params.damagefly_reflect_speed_threshold) != 0 ||
+      json_get_u16(buf, "colanim_flyreflect_x1990_frames",
+                   &g_params.colanim_flyreflect_x1990_frames) != 0 ||
+      json_get_u16(buf, "damagefly_reflect_lockout_frames",
+                   &g_params.damagefly_reflect_lockout_frames) != 0 ||
+      json_get_f32(buf, "damagefly_reflect_speed_mul", &g_params.damagefly_reflect_speed_mul) !=
+          0 ||
       json_get_f32(buf, "down_stand_stick_y_threshold", &g_params.down_stand_stick_y_threshold) !=
           0 ||
       json_get_f32(buf, "down_stick_x_threshold", &g_params.down_stick_x_threshold) != 0 ||

@@ -4607,6 +4607,24 @@ BODY collision-space residual split and rejected seed bridge:
   live JObj collision matrix. Nonzero-tilt, visible-submotion, enable-edge, and non-neutral Guard
   rows stay on the exact source `x7A8` predicate; PRH 6830 has a mutation lock proving the
   no-tilt gap is not a broad Guard BODY suppressor.
+- Released grounded smash attacks keep the smash-charge state through the hitbox release frame.
+  `ftAction_80073008` extracts the start-smash-charge scalar from the action script as the low
+  16-bit argument multiplied by `0.00390625`, while `ftCo_800DEF38/ftCo_800DF0D0` preserve the
+  held-frame count until release and `ftColl_8007ABD0` scales the released HitCapsule damage.
+  This is attacker release-state ownership, not defender-side `kb_smashcharge_mul` ownership.
+- Grounded DownDamage with remaining hidden x0 on animation end enters DownWait through
+  `ftCo_80097F38` and preserves that remaining timer into `mv.co.downwait.x0`; it must not
+  reinitialize the full p_ftCommonData->x424 DownWait duration. This is the jab-reset path for
+  weak hits on downed victims.
+- DownDamage contact preserves the downed victim's visible facing from `ftCo_8009F184`, but
+  `ftCo_8008DCE0` uses the collision-owned `dmg.facing_dir_1` lane for knockback velocity. Reverse
+  shine on a downed victim therefore can launch opposite the victim's visible downed facing.
+- DamageFly no-tech wall/ceiling contact now follows the FlyReflect owner:
+  `ftCo_DamageFly_Coll` checks wall tech first, then `ftCo_800C17CC`; `ftCo_800C18A8` mirrors
+  self+KB velocity across the wall/ceiling normal, scales by p_ftCommonData->x1BC, enters
+  FlyReflectWall/Ceil, seeds the x18 repeat-reflect lockout from x1C0, and starts the x1990
+  colanim hit-status timer from x1B8. Runtime loads x1B0/x1B8/x1BC/x1C0 from
+  `data/common/ft_common_data.json`.
 - Source anchors:
   - `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}`
   - `refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}`
@@ -4617,6 +4635,12 @@ BODY collision-space residual split and rejected seed bridge:
   - `refs/melee/src/melee/ft/fighter.c::Fighter_80068E64`
   - `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{ftFox_SpecialHi_RotateModel,ftFx_SpecialAirHi_Coll}`
   - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_OnExitHitlag,ftCo_DamageFly_Coll,ftCo_8008E5A4}`
+  - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_FlyReflect.c::{ftCo_800C15F4,ftCo_800C17CC,ftCo_800C18A8}`
+  - `refs/melee/src/melee/ft/ft_0DF0.c::{ftCo_800DEF38,ftCo_800DF0D0}`
+  - `refs/melee/src/melee/ft/ftaction.c::ftAction_80073008`
+  - `refs/melee/src/melee/ft/ftcoll.c::ftColl_8007ABD0`
+  - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::{ftCo_DownDamage_Anim,ftCo_8009F184}`
+  - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::{ftCo_80097F38,ftCo_DownWait_IASA}`
   - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Anim`
   - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardOn_Coll`
   - `refs/melee/src/melee/ft/ft_081B.c::ft_800845B4`

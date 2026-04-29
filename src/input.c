@@ -203,6 +203,16 @@ static inline void grounded_smash_charge_clear(MslBatch* batch, size_t idx) {
   batch->state.smash_charge_saved_rate_fp_q16_16[idx] = 0;
 }
 
+static inline void grounded_smash_charge_release(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  const int32_t saved_rate = batch->state.smash_charge_saved_rate_fp_q16_16[idx];
+  batch->state.frame_speed_mul_fp_q16_16[idx] = (saved_rate != 0) ? saved_rate : (1 << 16);
+  batch->state.kb_smashcharge_active[idx] = 0u;
+  batch->state.smash_charge_state[idx] = 3u;  // SmashState_Release
+}
+
 static inline void grounded_smash_charge_update_ftCo_800DF0D0_subset(MslBatch* batch, size_t idx) {
   if (batch == NULL) {
     return;
@@ -233,9 +243,10 @@ static inline void grounded_smash_charge_update_ftCo_800DF0D0_subset(MslBatch* b
     batch->state.smash_charge_frames[idx] = frames;
     const uint8_t hold_max = batch->state.smash_charge_hold_frames_max[idx];
     if (held_a == 0u || (hold_max != 0u && frames >= hold_max)) {
-      const int32_t saved_rate = batch->state.smash_charge_saved_rate_fp_q16_16[idx];
-      batch->state.frame_speed_mul_fp_q16_16[idx] = (saved_rate != 0) ? saved_rate : (1 << 16);
-      grounded_smash_charge_clear(batch, idx);
+      if (hold_max != 0u && frames > hold_max) {
+        batch->state.smash_charge_frames[idx] = hold_max;
+      }
+      grounded_smash_charge_release(batch, idx);
       return;
     }
     batch->state.kb_smashcharge_active[idx] = 1u;

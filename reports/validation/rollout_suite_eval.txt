@@ -37,14 +37,14 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:1128
 
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl ==
 rollout.best_len: 851
-rollout.streak_count: 46
-rollout.streak_len.median: 185
+rollout.streak_count: 44
+rollout.streak_len.median: 240
 rollout.streak_len.p90: 586
 rollout.streak_len.p95: 778
 rollout.streak_len.max: 851
-rollout.first_mismatch_total: 45
-rollout.first_mismatch_seeded_total: 9
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:1380
+rollout.first_mismatch_total: 43
+rollout.first_mismatch_seeded_total: 8
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:1372
 
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
 rollout.best_len: 1075
@@ -59,22 +59,22 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:1543
 
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.msl ==
 rollout.best_len: 959
-rollout.streak_count: 33
-rollout.streak_len.median: 155
-rollout.streak_len.p90: 492
+rollout.streak_count: 32
+rollout.streak_len.median: 154
+rollout.streak_len.p90: 667
 rollout.streak_len.p95: 850
 rollout.streak_len.max: 959
-rollout.first_mismatch_total: 33
+rollout.first_mismatch_total: 32
 rollout.first_mismatch_seeded_total: 7
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:1218
 
 == suite summary ==
-overall.rollout.streak_count: 138
-overall.rollout.streak_len.median: 185
-overall.rollout.streak_len.p90: 587
+overall.rollout.streak_count: 135
+overall.rollout.streak_len.median: 214
+overall.rollout.streak_len.p90: 619
 overall.rollout.streak_len.p95: 844
 overall.rollout.streak_len.max: 1466
 overall.rollout.best_len.max: 1466
-overall.rollout.first_mismatch_total: 135
-overall.rollout.first_mismatch_seeded_total: 25
-overall.rollout.ignored_first_mismatch_top: state_flags[4]&0x80:5269
+overall.rollout.first_mismatch_total: 132
+overall.rollout.first_mismatch_seeded_total: 24
+overall.rollout.ignored_first_mismatch_top: state_flags[4]&0x80:5261

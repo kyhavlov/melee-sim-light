@@ -118,7 +118,7 @@ typedef struct MslStateSoA {
   //   script-provided hold limit.
   // refs/melee/src/melee/ft/ftaction.c::ftAction_80073008
   // refs/melee/src/melee/ft/ft_0DF0.c::{ftCo_800DEE84,ftCo_800DEF38,ftCo_800DF0D0}
-  uint8_t* smash_charge_state;                 // 0=None, 1=PreCharge, 2=Charging
+  uint8_t* smash_charge_state;                 // 0=None, 1=PreCharge, 2=Charging, 3=Release
   uint8_t* smash_charge_frames;                // elapsed Charging frames
   uint8_t* smash_charge_hold_frames_max;       // ftCo_800DEE84 arg2 / x211C_holdFrame
   int32_t* smash_charge_saved_rate_fp_q16_16;  // x2124_frameSpeedMul

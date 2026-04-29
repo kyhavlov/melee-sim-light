@@ -33,6 +33,8 @@ ACT_ATTACK_AIR_LW = 0x0045
 ACT_DAMAGE_FALL = 0x0026
 ACT_DAMAGE_HI_1 = 0x004B
 ACT_DAMAGE_FLY_ROLL = 0x005B
+ACT_FLY_REFLECT_WALL = 0x00F7
+ACT_FLY_REFLECT_CEIL = 0x00F8
 ACT_FX_SPECIAL_HI = 0x0163
 ACT_FX_SPECIAL_AIR_HI = 0x0164
 ACT_FX_SPECIAL_HI_LANDING = 0x0165
@@ -175,7 +177,11 @@ def _is_shield_active_action(action_id: int) -> bool:
 
 def _is_damage_destination_action(action_id: int) -> bool:
     a = int(action_id)
-    return a == ACT_DAMAGE_FALL or ACT_DAMAGE_HI_1 <= a <= ACT_DAMAGE_FLY_ROLL
+    return (
+        a == ACT_DAMAGE_FALL
+        or ACT_DAMAGE_HI_1 <= a <= ACT_DAMAGE_FLY_ROLL
+        or a in {ACT_FLY_REFLECT_WALL, ACT_FLY_REFLECT_CEIL}
+    )
 
 
 def _is_attackair_action(action_id: int) -> bool:

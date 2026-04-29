@@ -68,6 +68,8 @@ static inline uint8_t reseed_action_is_damage_or_firefox_launch_victim(uint16_t 
     case MSL_ACT_DAMAGE_FLY_LW:
     case MSL_ACT_DAMAGE_FLY_TOP:
     case MSL_ACT_DAMAGE_FLY_ROLL:
+    case MSL_ACT_FLY_REFLECT_WALL:
+    case MSL_ACT_FLY_REFLECT_CEIL:
     case MSL_ACT_FX_SPECIAL_HI:
     case MSL_ACT_FX_SPECIAL_AIR_HI:
       return 1u;

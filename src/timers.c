@@ -142,6 +142,8 @@ static inline uint8_t damage_post_hitlag_cb_owner_action(uint16_t a) {
     case MSL_ACT_DAMAGE_FLY_LW:
     case MSL_ACT_DAMAGE_FLY_TOP:
     case MSL_ACT_DAMAGE_FLY_ROLL:
+    case MSL_ACT_FLY_REFLECT_WALL:
+    case MSL_ACT_FLY_REFLECT_CEIL:
     case MSL_ACT_DAMAGE_FALL:
     case MSL_ACT_DOWN_DAMAGE_D:
       return 1u;
@@ -157,6 +159,8 @@ static inline uint8_t damage_post_hitlag_cb_damagefly_action(uint16_t a) {
     case MSL_ACT_DAMAGE_FLY_LW:
     case MSL_ACT_DAMAGE_FLY_TOP:
     case MSL_ACT_DAMAGE_FLY_ROLL:
+    case MSL_ACT_FLY_REFLECT_WALL:
+    case MSL_ACT_FLY_REFLECT_CEIL:
       return 1u;
     default:
       return 0u;

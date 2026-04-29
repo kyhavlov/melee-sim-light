@@ -123,6 +123,8 @@ def _derive_grounded_overlap_hidden_pos_z(
         # families and were the source of broad hidden-pos_z regressions during F08b cleanup.
         if 0x004B <= a <= 0x005B:  # Damage*/DamageFly*
             return False
+        if a in {0x00F7, 0x00F8}:  # FlyReflectWall/FlyReflectCeil.
+            return False
         if a in {0x00B5, 0x00B7, 0x00BF, 0x00FC, 0x00FD}:  # GuardSetOff/DownBound/Cliff
             return False
         if 0x00DB <= a <= 0x00E2:  # Throw*
