@@ -8,16 +8,24 @@ import importlib
 import numpy as np
 import pytest
 
-from tests.test_modelplay_rerun5_collision_regressions import _input_bytes_from_trace_frame, _require_local_data_or_skip, _seed_from_trace_frame
+from tests.test_modelplay_rerun5_collision_regressions import (
+    _buttons_mask,
+    _input_bytes_from_trace_frame,
+    _processed_to_stick_i8,
+    _require_local_data_or_skip,
+    _seed_from_trace_frame,
+)
 from tests.test_stage_collision_fd_grounding import _fd_floor_pick_line_at_x
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE, read_dataset
 
 RERUN11 = "reports/modelplay/20260410_rl_doubles_v27_7000_rerun11/trace.json"
 RERUN11_PASSIVESTAND_INPUT_FIXTURE = "tests/fixtures/modelplay/rerun11_input_prefix_0_289.json"
 RERUN11_DAMAGE_HITLAG_INPUT_FIXTURE = "tests/fixtures/modelplay/rerun11_input_prefix_0_305.json"
 RERUN11_GUARD_INPUT_FIXTURE = "tests/fixtures/modelplay/rerun11_input_prefix_0_321.json"
 RERUN11_SQUATWAIT_GUARD_INPUT_FIXTURE = "tests/fixtures/modelplay/rerun11_input_prefix_0_665.json"
+RERUN11_GUARD_ORDER_LASER_SEED_FIXTURE = "tests/fixtures/modelplay/rerun11_guard_order_laser_compact_seed.json"
 
+STAGE_FD = 32
 ACT_DASH = 20
 ACT_KNEE_BEND = 24
 ACT_SQUAT_WAIT = 40
@@ -74,6 +82,118 @@ def _load_input_fixture(fixture_path: Path) -> dict[int, dict[str, Any]]:
             players.append({"inputs": {"processed": dict(zip(input_fields, input_values, strict=True))}})
         frames[int(frame_i)] = {"players": players}
     return frames
+
+
+def _load_guard_order_seed_case(name: str) -> dict[str, Any]:
+    fixture = json.loads((_root() / RERUN11_GUARD_ORDER_LASER_SEED_FIXTURE).read_text(encoding="utf-8"))
+    assert fixture["schema"] == "modelplay_compact_seed_v1"
+    for case in fixture["cases"]:
+        if case["name"] == name:
+            return case
+    raise AssertionError(f"missing fixture case: {name}")
+
+
+def _compact_processed_input(players: list[dict[str, Any]], input_stride: int) -> np.ndarray:
+    input_t = np.zeros((1,), dtype=INPUT_DTYPE)
+    for p, processed in enumerate(players):
+        merged = {
+            "a": False,
+            "b": False,
+            "x": False,
+            "y": False,
+            "z": False,
+            "lTriggerDigital": False,
+            "rTriggerDigital": False,
+            "start": False,
+            "joystickX": 0.0,
+            "joystickY": 0.0,
+            "cStickX": 0.0,
+            "cStickY": 0.0,
+            "anyTrigger": 0.0,
+        }
+        merged.update(processed)
+        input_t["p"]["buttons"][0, p] = np.uint16(_buttons_mask(merged))
+        input_t["p"]["main_x"][0, p] = _processed_to_stick_i8(float(merged["joystickX"]))
+        input_t["p"]["main_y"][0, p] = _processed_to_stick_i8(float(merged["joystickY"]))
+        input_t["p"]["c_x"][0, p] = _processed_to_stick_i8(float(merged["cStickX"]))
+        input_t["p"]["c_y"][0, p] = _processed_to_stick_i8(float(merged["cStickY"]))
+        input_t["p"]["l"][0, p] = np.uint8(int(round(max(0.0, min(1.0, float(merged["anyTrigger"]))) * 140.0)))
+    return np.frombuffer(input_t.tobytes(order="C"), dtype=np.uint8).reshape(1, input_stride).copy()
+
+
+def _compact_seed(case: dict[str, Any]) -> np.ndarray:
+    seed = np.zeros((1,), dtype=SEED_DTYPE)
+    seed["stage_id"][0] = np.uint32(STAGE_FD)
+    seed["num_players"][0] = np.uint8(2)
+    seed["match_damage_ratio"][0] = np.float32(1.0)
+    seed["stocks"][0, :2] = np.uint8(4)
+    seed["frame_speed_mul_f32"][0, :2] = np.float32(1.0)
+    seed["fighter_scale_y"][0, :2] = np.float32(1.0)
+    seed["attack_ratio"][0, :2] = np.float32(1.0)
+    seed["defense_ratio"][0, :2] = np.float32(1.0)
+    seed["ground_friction_mul"][0, :2] = np.float32(1.0)
+
+    for p, player in enumerate(case["players"]):
+        facing = float(player["facing"])
+        seed["char_id"][0, p] = np.uint8(int(player["char_id"]))
+        seed["facing"][0, p] = np.uint8(0 if facing < 0.0 else 1)
+        seed["facing_dir1"][0, p] = seed["facing"][0, p]
+        seed["pos_x"][0, p] = np.float32(float(player["pos_x"]))
+        seed["pos_y"][0, p] = np.float32(float(player["pos_y"]))
+        seed["on_ground"][0, p] = np.uint8(1 if bool(player["on_ground"]) else 0)
+        seed["ground_id"][0, p] = np.uint16(0 if bool(player["on_ground"]) else 0xFFFF)
+        seed["action_id"][0, p] = np.uint16(int(player["action_id"]))
+        seed["action_frame"][0, p] = np.int16(int(player["action_frame"]))
+        seed["animation_index"][0, p] = np.uint32(int(player["animation_index"]))
+        seed["anim_frame_f32"][0, p] = np.float32(float(player["action_frame"]))
+        seed["shield_hp"][0, p] = np.float32(float(player["shield_hp"]))
+        seed["jumps_left"][0, p] = np.uint8(int(player["jumps_left"]))
+        seed["hurtbox_state"][0, p] = np.uint8(0)
+
+    for item in case.get("items", []):
+        slot = int(item["slot"])
+        dst = seed["items"][0, slot]
+        dst["exists"] = np.uint8(1 if bool(item["exists"]) else 0)
+        dst["type"] = np.uint16(int(item["type"]))
+        dst["owner"] = np.int8(int(item["owner"]))
+        dst["instance_id"] = np.uint16(int(item["instance_id"]))
+        dst["attack_id"] = np.uint16(int(item.get("attack_id", item["type"])))
+        dst["attack_instance"] = np.uint16(int(item.get("attack_instance", item["instance_id"])))
+        dst["direction"] = np.float32(float(item["direction"]))
+        dst["vel_x"] = np.float32(float(item["vel_x"]))
+        dst["vel_y"] = np.float32(float(item["vel_y"]))
+        dst["pos_x"] = np.float32(float(item["pos_x"]))
+        dst["pos_y"] = np.float32(float(item["pos_y"]))
+        dst["damage"] = np.uint16(int(item.get("damage", 0)))
+        dst["timer"] = np.float32(float(item["timer"]))
+        dst["spawn_id"] = np.uint32(int(item["spawn_id"]))
+    return seed
+
+
+def _run_compact_seed_case(case_name: str) -> np.void:
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    assert seed_stride == SEED_DTYPE.itemsize
+    assert input_stride == INPUT_DTYPE.itemsize
+    assert compare_stride == COMPARE_DTYPE.itemsize
+
+    case = _load_guard_order_seed_case(case_name)
+    seed_bytes = _compact_seed(case).view(np.uint8).reshape((1, seed_stride)).copy()
+    prev_input = _compact_processed_input(case["prev_inputs"], input_stride)
+    input_t = _compact_processed_input(case["inputs"], input_stride)
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+    handle = binding.init(batch_size=1, num_players=2, ucf_enabled=1, ucf_cardinals_1_0_enabled=1)
+    try:
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input, input_t)
+        binding.write_compare(handle, out_compare_bytes)
+        return out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()
+    finally:
+        binding.destroy(handle)
 
 
 @pytest.mark.integration
@@ -635,61 +755,12 @@ def test_modelplay_rerun11_squatwait_guard_preempts_jump_cancel_catch() -> None:
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_SquatWait.c::ftCo_SquatWait_IASA
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_SquatRv.c::ftCo_SquatRv_IASA
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_800923B4}
-    _require_local_data_or_skip()
-    root = _root()
-    rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-        "AttachedGoodNaturedGuanaco.msl"
-    )
-    dataset_path = root / rel
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {rel}")
-    trace_frames = _load_input_fixture(root / RERUN11_SQUATWAIT_GUARD_INPUT_FIXTURE)
-
-    binding = importlib.import_module("msl_binding")
-    sizes = binding.sizes()
-    seed_stride = int(sizes["seed"])
-    input_stride = int(sizes["input"])
-    compare_stride = int(sizes["compare"])
-
-    ds = read_dataset(str(dataset_path))
-    seed_bytes = np.frombuffer(ds.samples[0:1]["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
-        1, seed_stride
-    )
-    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
-
-    history: dict[int, np.void] = {}
-    handle = binding.init(batch_size=1, num_players=2, ucf_enabled=1, ucf_cardinals_1_0_enabled=1)
-    try:
-        binding.reseed_seed(handle, seed_bytes)
-        prev_input = _input_bytes_from_trace_frame(trace_frames[0], input_stride)
-        for frame_i in range(1, 666):
-            input_t = _input_bytes_from_trace_frame(trace_frames[frame_i], input_stride)
-            binding.step_input(handle, prev_input, input_t)
-            if frame_i >= 659:
-                binding.write_compare(handle, out_compare_bytes)
-                history[frame_i] = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()
-            prev_input = input_t
-    finally:
-        binding.destroy(handle)
-
-    out_659 = history[659]
-    assert int(out_659["action_id"][1]) == ACT_SQUAT_WAIT
-    assert int(out_659["action_frame"][1]) == 0
-    assert int(out_659["on_ground"][1]) == 1
-
-    out_660 = history[660]
-    assert int(out_660["action_id"][1]) == ACT_GUARD_ON
-    assert int(out_660["action_frame"][1]) == -1
-    assert int(out_660["on_ground"][1]) == 1
-    assert float(out_660["shield_hp"][1]) == pytest.approx(60.0, abs=0.001)
-
-    out_661 = history[661]
-    assert int(out_661["action_id"][1]) == ACT_GUARD_ON
-    assert int(out_661["action_frame"][1]) == -1
-    assert int(out_661["on_ground"][1]) == 1
-    assert float(out_661["shield_hp"][1]) == pytest.approx(59.986000061035156, abs=0.001)
-    assert int(out_661["action_id"][1]) != ACT_CATCH
+    out = _run_compact_seed_case("squatwait_guard_preempts_jump")
+    assert int(out["action_id"][1]) == ACT_GUARD_ON
+    assert int(out["action_frame"][1]) == -1
+    assert int(out["on_ground"][1]) == 1
+    assert float(out["shield_hp"][1]) == pytest.approx(60.0, abs=0.001)
+    assert int(out["action_id"][1]) != ACT_CATCH
 
 
 @pytest.mark.integration
@@ -704,63 +775,20 @@ def test_modelplay_rerun11_guardon_laser_hits_after_entry_blend_not_on_fresh_fra
     #   blend advances.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
     #   ftCo_800921DC,ftCo_GuardOn_Anim,ftCo_80091E78}
-    _require_local_data_or_skip()
-    root = _root()
-    rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
-        "AttachedGoodNaturedGuanaco.msl"
-    )
-    dataset_path = root / rel
-    if not dataset_path.exists():
-        pytest.skip(f"missing local dataset: {rel}")
-    trace_frames = _load_input_fixture(root / RERUN11_SQUATWAIT_GUARD_INPUT_FIXTURE)
+    fresh = _run_compact_seed_case("fresh_guardon_laser_misses")
+    assert int(fresh["action_id"][0]) == ACT_GUARD_ON
+    assert int(fresh["action_frame"][0]) == -1
+    assert float(fresh["shield_hp"][0]) == pytest.approx(60.0, abs=0.001)
+    assert int(fresh["hitlag"][0]) == 0
+    assert int(fresh["items"][0]["exists"]) == 1
 
-    binding = pytest.importorskip("msl_binding")
-    sizes = binding.sizes()
-    seed_stride = int(sizes["seed"])
-    input_stride = int(sizes["input"])
-    compare_stride = int(sizes["compare"])
-
-    ds = read_dataset(str(dataset_path))
-    seed_bytes = np.frombuffer(ds.samples[0:1]["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
-        1, seed_stride
-    )
-    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
-
-    history: dict[int, np.void] = {}
-    handle = binding.init(batch_size=1, num_players=2, ucf_enabled=1, ucf_cardinals_1_0_enabled=1)
-    try:
-        binding.reseed_seed(handle, seed_bytes)
-        prev_input = _input_bytes_from_trace_frame(trace_frames[0], input_stride)
-        for frame_i in range(1, 666):
-            input_t = _input_bytes_from_trace_frame(trace_frames[frame_i], input_stride)
-            binding.step_input(handle, prev_input, input_t)
-            if frame_i >= 660:
-                binding.write_compare(handle, out_compare_bytes)
-                history[frame_i] = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()
-            prev_input = input_t
-    finally:
-        binding.destroy(handle)
-
-    out_660 = history[660]
-    assert int(out_660["action_id"][1]) == ACT_GUARD_ON
-    assert int(out_660["action_frame"][1]) == -1
-    assert float(out_660["shield_hp"][1]) == pytest.approx(60.0, abs=0.001)
-    assert int(out_660["hitlag"][1]) == 0
-    assert int(out_660["items"][0]["exists"]) == 1
-
-    out_661 = history[661]
-    assert int(out_661["action_id"][1]) == ACT_GUARD_ON
-    assert int(out_661["action_frame"][1]) == -1
-    assert float(out_661["shield_hp"][1]) == pytest.approx(59.986000061035156, abs=0.001)
-    assert int(out_661["hitlag"][1]) == 0
-    assert int(out_661["items"][0]["exists"]) == 1
-
-    out_662 = history[662]
-    assert int(out_662["action_id"][1]) == ACT_GUARD_SET_OFF
-    assert int(out_662["action_frame"][1]) == 0
-    assert float(out_662["shield_hp"][1]) == pytest.approx(57.27199935913086, abs=0.001)
-    assert int(out_662["hitlag"][1]) == 4
+    # Compact one-tick-later guard entry side: the same laser now reaches the shield descriptor
+    # and item collision owns GuardSetOff.
+    hit = _run_compact_seed_case("guardon_laser_after_entry_hits")
+    assert int(hit["action_id"][0]) == ACT_GUARD_SET_OFF
+    assert int(hit["action_frame"][0]) == 0
+    assert int(hit["hitlag"][0]) == 4
+    assert int(hit["items"][0]["exists"]) == 0
 
 
 @pytest.mark.integration
