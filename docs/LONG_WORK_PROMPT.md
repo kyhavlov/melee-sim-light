@@ -64,6 +64,9 @@ Prioritization:
 - Prioritize rollout-visible impact, but do not over-bias toward easy fixability.
 - Start from disruptive rollout reports and one-step taxonomy.
 - Use disruptive rollout clusters as the primary target selector.
+- Before patching a selected disruptive row/cluster, run
+  `uv run python -m tools.eval.next_desync_investigation --suite <suite> --datasets-dir datasets`
+  and record the packet path in the worklog.
 - Treat high repeated float residuals as first-class signals, especially:
   - early float divergence before discrete mismatch
   - repeated same-owner float deltas

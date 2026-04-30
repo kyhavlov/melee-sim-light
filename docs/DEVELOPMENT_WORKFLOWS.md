@@ -157,6 +157,21 @@ weighted sum over action/grounding/combat discrete fields, position/velocity/
 percent/shield float deltas, and item identity/position differences; the exact
 weights are recorded in `summary.json`.
 
+Build a repeatable packet for the next investigation target:
+
+```bash
+uv run python -m tools.eval.next_desync_investigation \
+  --suite replays/suites/aggregate_recent.json \
+  --datasets-dir datasets \
+  --out-dir reports/triage/next_desync
+```
+
+By default this reuses a current disruptive `rows.tsv` when available and writes
+`summary.md`, `ranked.tsv`, `clusters.tsv`, `top_packet.json`, and
+`top_packet.md`. Use `--refresh` to rerun disruptive rollout first. Long-work
+cycles should put the packet path in the worklog before patching the selected
+row/cluster.
+
 ## Modelplay Viewer Traces
 
 Primary doc:
