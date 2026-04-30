@@ -29,6 +29,10 @@ from tools.slippi.action_state_tables import FT_MOVE_ID_DEFAULT, U16_MAX, load_a
 
 
 _STALE_QUEUE_SIZE = 10
+_ACT_GUARD_ON = 178
+_ACT_GUARD = 179
+_ACT_GUARD_OFF = 180
+_NO_SUBMOTION_INDEX = 0xFFFFFFFF
 
 
 @dataclass(frozen=True)
@@ -197,6 +201,10 @@ def derive_staling_history(frames: pa.StructArray, *, src_ports: list[int]) -> S
 
     char_id = np.stack([_to_numpy(p.field("character")).astype(np.uint8) for p in post], axis=1)
     action_id = np.stack([_to_numpy(p.field("state")).astype(np.uint16) for p in post], axis=1)
+    action_frame = np.stack([_to_numpy(p.field("state_age")).astype(np.float32) for p in post], axis=1)
+    animation_index = np.stack(
+        [_to_numpy(p.field("animation_index")).astype(np.uint32) for p in post], axis=1
+    )
     percent = np.stack([_to_numpy(p.field("percent")).astype(np.float32) for p in post], axis=1)
     stocks = np.stack([_to_numpy(p.field("stocks")).astype(np.uint8) for p in post], axis=1)
     state_iid = np.stack([_to_numpy(p.field("instance_id")).astype(np.uint16) for p in post], axis=1)
@@ -268,6 +276,28 @@ def derive_staling_history(frames: pa.StructArray, *, src_ports: list[int]) -> S
 
             act = int(action_id[t, p])
             if act != int(prev_action_id[p]):
+                if (
+                    act == _ACT_GUARD_OFF
+                    and int(prev_action_id[p]) == _ACT_GUARD_ON
+                    and t > 0
+                    and int(action_id[t - 1, p]) == _ACT_GUARD_ON
+                    and int(animation_index[t - 1, p]) == _NO_SUBMOTION_INDEX
+                    and float(action_frame[t - 1, p]) < 0.0
+                ):
+                    # Hidden GuardOn -> Guard -> GuardOff same-frame handoff:
+                    # - GuardOn_Anim can enter Guard through ftCo_800928CC/ftCo_80092908 before
+                    #   GuardOn_IASA's release gate enters GuardOff.
+                    # - Slippi exposes only final GuardOff, but both default-move
+                    #   Fighter_ChangeMotionState bundles consume plStale_IncrementAttackInstance.
+                    # Keep the derived global attack-instance counter aligned for later item-spawn
+                    # copies without inventing a runtime replay row branch.
+                    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+                    #   ftCo_GuardOn_Anim,ftCo_800928CC,ftCo_80092908,ftCo_GuardOn_IASA,
+                    #   ftCo_80092C54}
+                    hidden_guard_inst = _inc_attack_instance()
+                    cur_attack_id[p] = np.uint16(_move_id_from_char_action(int(char_id[t, p]), _ACT_GUARD))
+                    cur_attack_inst[p] = np.uint16(hidden_guard_inst)
+
                 move_id = _move_id_from_char_action(int(char_id[t, p]), act)
                 # Decomp: ft_800890D0 increments x206C when move_id==1 OR move_id != current attackID.
                 if move_id == FT_MOVE_ID_DEFAULT or move_id != int(cur_attack_id[p]):

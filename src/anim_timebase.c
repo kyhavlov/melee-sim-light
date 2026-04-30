@@ -674,10 +674,22 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
       }
 
       if (a == (uint16_t)MSL_ACT_REBOUND && action_frame_pre == 0) {
-        float rebound_rate = 0.0f;
-        if (anim_timebase_try_rebound_anim_speed_from_ground_vel(
-                c, ch, batch->state.speed_ground_x_self[idx], &rebound_rate)) {
-          batch->state.frame_speed_mul_fp_q16_16[idx] = msl_q16_16_from_f32(rebound_rate);
+        const int32_t hidden_rebound_rate_fp = batch->state.rebound_anim_rate_fp_q16_16[idx];
+        if (hidden_rebound_rate_fp > 0) {
+          // Rebound callback-source ownership:
+          // - ftCo_80099D9C stores `mv.co.rebound.anim_start` from `dmg.x191C`.
+          // - ftCo_80099E44 consumes that hidden rate when entering Rebound.
+          // - On first-Rebound replay seeds, `mv.co.rebound.x0` may already be consumed by
+          //   Rebound_Phys, so the ground-velocity reconstruction is only a fallback.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Rebound.c::{
+          //   ftCo_80099D9C,ftCo_80099E44,ftCo_Rebound_Phys}
+          batch->state.frame_speed_mul_fp_q16_16[idx] = hidden_rebound_rate_fp;
+        } else {
+          float rebound_rate = 0.0f;
+          if (anim_timebase_try_rebound_anim_speed_from_ground_vel(
+                  c, ch, batch->state.speed_ground_x_self[idx], &rebound_rate)) {
+            batch->state.frame_speed_mul_fp_q16_16[idx] = msl_q16_16_from_f32(rebound_rate);
+          }
         }
       }
 

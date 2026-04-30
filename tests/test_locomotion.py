@@ -14,6 +14,7 @@ BUTTON_Y = 0x0800
 BUTTON_A = 0x0100
 BUTTON_B = 0x0200
 BUTTON_L = 0x0040
+BUTTON_Z = 0x0010
 
 # Action ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 ACT_WAIT = 0x000E
@@ -30,6 +31,7 @@ ACT_ATTACK_DASH = 0x0032
 ACT_ATTACK_S3_LW = 0x0037
 ACT_ATTACK_S3_HI = 0x0033
 ACT_ATTACK_HI3 = 0x0038
+ACT_ATTACK_LW3 = 0x0039
 ACT_ATTACK_HI4 = 0x003F
 ACT_ATTACK_LW4 = 0x0040
 ACT_DAMAGEFALL = 0x0026
@@ -37,6 +39,7 @@ ACT_LANDING_FALL_SPECIAL = 0x002B
 ACT_GUARD_ON = 0x00B2
 ACT_GUARD = 0x00B3
 ACT_GUARD_OFF = 0x00B4
+ACT_SQUAT_WAIT = 0x0028
 ACT_ESCAPE_F = 0x00E9
 ACT_ESCAPE_B = 0x00EA
 ACT_ESCAPE_N = 0x00EB
@@ -70,10 +73,12 @@ SM_KNEEBEND = 15
 SM_JUMPF = 16
 SM_FALL = 20
 SM_SQUAT = 30
+SM_SQUAT_WAIT = 31
 SM_ATTACK_DASH = 52
 SM_ATTACK_S3_LW = 57
 SM_ATTACK_S3_HI = 53
 SM_ATTACK_HI3 = 58
+SM_ATTACK_LW3 = 59
 SM_ATTACK_HI4 = 66
 SM_ATTACK_LW4 = 67
 SM_GUARD_ON = 37
@@ -116,6 +121,7 @@ INTERNALS_DTYPE = np.dtype(
         ("instance_id_x2073", ("u1", (MAX_PLAYERS,))),
         ("instance_identity_last_action_id", ("<u2", (MAX_PLAYERS,))),
         ("instance_id_counter", "<u2"),
+        ("item_spawn_id_counter", "<u4"),
         ("throw_pulse_consumed", ("u1", (MAX_PLAYERS,))),
         ("throw_pulse_crossed_prev_frame", ("u1", (MAX_PLAYERS,))),
         ("throw_pending_victim_port", ("u1", (MAX_PLAYERS,))),
@@ -1402,6 +1408,94 @@ def test_squat_grounded_neutral_special_beats_guardon_on_exact_trace_inputs() ->
     out0 = _step_once(seed, prev_inp, inp)
     assert int(out0["action_id"][0]) == ACT_FX_SPECIAL_N_START
     assert int(out0["action_frame"][0]) == 1
+
+
+def test_squatwait_z_down_synthetic_a_enters_down_tilt_before_guardon() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_SQUAT_WAIT)
+    seed["action_frame"][0, 0] = np.int16(16)
+    seed["anim_frame_f32"][0, 0] = np.float32(16.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_SQUAT_WAIT)
+    seed["facing"][0, 0] = np.uint8(1)  # right
+    seed["shield_hp"][0, 0] = np.float32(_common_attr("start_shield_health"))
+    seed["tilt_timer_y"][0, 0] = np.uint8(23)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    prev_view = prev_inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    prev_view["p"]["main_x"][0, 0] = np.int8(-11)
+    prev_view["p"]["main_y"][0, 0] = np.int8(-99)
+    cur_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_Z | BUTTON_Y)
+    cur_view["p"]["main_x"][0, 0] = np.int8(-11)
+    cur_view["p"]["main_y"][0, 0] = np.int8(-100)
+
+    # Decomp:
+    # - Fighter input synthesis maps raw Z into `held_inputs |= HSD_PAD_LR | HSD_PAD_A` before
+    #   building fp->input.x668.
+    # - SquatWait_IASA omits the Catch check and checks AttackLw3 before GuardOn.
+    # A fresh Z+down edge is therefore an AttackLw3 A-edge, not a GuardOn-only shield entry.
+    # refs/melee/src/melee/ft/fighter.c:1868-1896
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_SquatWait.c::ftCo_SquatWait_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackLw3.c::ftCo_AttackLw3_CheckInput
+    out0 = _step_once(seed, prev_inp, inp)
+    assert int(out0["action_id"][0]) == ACT_ATTACK_LW3
+    assert int(out0["action_frame"][0]) == 1
+    assert int(out0["animation_index"][0]) == SM_ATTACK_LW3
+
+    # Boundary: without the source down-tilt stick predicate, the same synthetic Z-as-A lane must not
+    # be treated as a blanket AttackLw3 shortcut.
+    cur_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_Z)
+    cur_view["p"]["main_y"][0, 0] = np.int8(0)
+    out1 = _step_once(seed, prev_inp, inp)
+    assert int(out1["action_id"][0]) != ACT_ATTACK_LW3
+
+
+def test_attacklw3_terminal_squatwait_destination_iasa_can_jump() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_ATTACK_LW3)
+    seed["action_frame"][0, 0] = np.int16(29)
+    seed["anim_frame_f32"][0, 0] = np.float32(29.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_ATTACK_LW3)
+    seed["jumps_left"][0, 0] = np.uint8(2)
+    seed["tilt_timer_y"][0, 0] = np.uint8(57)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    prev_view = prev_inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    prev_view["p"]["main_x"][0, 0] = np.int8(-7)
+    prev_view["p"]["main_y"][0, 0] = np.int8(-101)
+    cur_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_Y)
+    cur_view["p"]["main_x"][0, 0] = np.int8(-7)
+    cur_view["p"]["main_y"][0, 0] = np.int8(-101)
+
+    # Decomp: AttackLw3_Anim exits through ftCo_800D638C into SquatWait, then the same proc can
+    # dispatch SquatWait_IASA. A fresh jump edge must therefore enter KneeBend instead of leaving the
+    # frame at the intermediate SquatWait destination.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackLw3.c::ftCo_AttackLw3_Anim
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_SquatWait.c::ftCo_SquatWait_IASA
+    out0 = _step_once(seed, prev_inp, inp)
+    assert int(out0["action_id"][0]) == ACT_KNEEBEND
+    assert int(out0["action_frame"][0]) == 0
+    assert int(out0["animation_index"][0]) == SM_KNEEBEND
+
+    # Boundary: without a jump edge, the terminal owner remains SquatWait.
+    cur_view["p"]["buttons"][0, 0] = np.uint16(0)
+    out1 = _step_once(seed, prev_inp, inp)
+    assert int(out1["action_id"][0]) == ACT_SQUAT_WAIT
 
 
 def test_attackhi3_allow_interrupt_attackhi4_beats_guardon_on_exact_trace_inputs() -> None:

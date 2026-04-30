@@ -63,7 +63,7 @@ def _step_one_row_with_rollout_at_record(
     rollout_handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
     try:
         seed_bytes[0, :] = samples_u8[start, seed_off : seed_off + seed_stride]
-        binding.reseed_seed(rollout_handle, seed_bytes)
+        binding.reseed_seed_rollout(rollout_handle, seed_bytes)
         for j in range(start, int(record) + 1):
             prev_input_bytes[0, :] = samples_u8[j, prev_input_off : prev_input_off + input_stride]
             input_bytes[0, :] = samples_u8[j, input_off : input_off + input_stride]
@@ -146,8 +146,9 @@ def test_specialhi_holdair_launch_rows_clear_hold_velocity_and_improve_pos_y_err
     seed, out, ref, out_roll = _step_one_row_with_rollout_at_record(dataset_path, record, p)
 
     # Decomp ownership:
-    # - HoldAir anim end enters launch (`ftFx_SpecialAirHi_Enter`) in-air.
-    # - Launch enter derives launch angle from current stick and ftFox_DatAttrs.{x64,x88},
+    # - HoldAir anim end enters launch (`ftFx_SpecialAirHi_Enter`) in-air before the current-frame
+    #   input proc installs new pad state.
+    # - Launch enter derives launch angle from the pre-input stick and ftFox_DatAttrs.{x64,x88},
     #   then overwrites `fp->self_vel.{x,y}` from x74 launch speed.
     # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
     #   ftFx_SpecialHiHoldAir_Anim,ftFx_SpecialAirHi_Enter
@@ -169,6 +170,83 @@ def test_specialhi_holdair_launch_rows_clear_hold_velocity_and_improve_pos_y_err
 
     abs_pos_y_err = abs(float(out["pos_y"][p]) - float(ref["pos_y"][p]))
     assert abs_pos_y_err <= (float(baseline_abs_pos_y) - 0.25)
+
+
+@pytest.mark.integration
+def test_specialhi_holdair_launch_uses_pre_input_stick_tch_3849() -> None:
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+        "TubbyCurlyHerring.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    record = 3849
+    p = 1
+
+    sample_stride = int(samples.dtype.itemsize)
+    samples_u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), sample_stride)
+    seed_off = int(samples.dtype.fields["seed_t"][1])
+    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
+    input_off = int(samples.dtype.fields["input_t"][1])
+
+    seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
+    prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+    input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+    out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
+
+    seed = samples["seed_t"][record]
+    ref = samples["ref_t1"][record]
+    assert int(seed["action_id"][p]) == 354  # ftFx_MS_SpecialHiHoldAir
+    assert int(ref["action_id"][p]) == 356  # ftFx_MS_SpecialAirHi
+    assert int(samples["prev_input_t"]["p"][record]["main_x"][p]) == 48
+    assert int(samples["prev_input_t"]["p"][record]["main_y"][p]) == 88
+    assert int(samples["input_t"]["p"][record]["main_x"][p]) == 57
+    assert int(samples["input_t"]["p"][record]["main_y"][p]) == 86
+
+    def run_with_current_input(main_x: int, main_y: int) -> np.void:
+        handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+        try:
+            seed_bytes[0, :] = samples_u8[record, seed_off : seed_off + seed_stride]
+            prev_input_bytes[0, :] = samples_u8[
+                record, prev_input_off : prev_input_off + input_stride
+            ]
+            input_bytes[0, :] = samples_u8[record, input_off : input_off + input_stride]
+            input_view = input_bytes.view(samples["input_t"].dtype).reshape((1,))
+            input_view["p"][0]["main_x"][p] = np.int8(main_x)
+            input_view["p"][0]["main_y"][p] = np.int8(main_y)
+            binding.reseed_seed(handle, seed_bytes)
+            binding.step_input(handle, prev_input_bytes, input_bytes)
+            binding.write_compare(handle, out_compare_bytes)
+            return out_view[0].copy()
+        finally:
+            binding.destroy(handle)
+
+    got = run_with_current_input(57, 86)
+    got_mutated_current = run_with_current_input(80, -80)
+
+    # Decomp ordering: this is a prio-1 Anim callback path, so the launch vector must be unchanged
+    # when only the later current-frame input is mutated.
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_Spaghetti_8006AD10}
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+    #   ftFx_SpecialHiHoldAir_Anim,ftFx_SpecialAirHi_Enter}
+    for field in ("pos_x", "pos_y", "speed_air_x_self", "speed_y_self"):
+        assert float(got[field][p]) == pytest.approx(float(ref[field][p]), abs=1e-5), field
+        assert float(got_mutated_current[field][p]) == pytest.approx(
+            float(got[field][p]), abs=1e-6
+        ), field
 
 
 @pytest.mark.integration

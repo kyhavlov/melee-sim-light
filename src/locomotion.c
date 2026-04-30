@@ -298,16 +298,21 @@ static inline void specialhi_apply_air_launch_ownership(MslBatch* batch, size_t 
   if (batch == NULL || ch == NULL) {
     return;
   }
-  // Decomp: ftFx_SpecialAirHi_Enter derives launch direction from current fp->input.lstick and
+  // Decomp: ftFx_SpecialHiHold{Air}_Anim runs in Fighter_8006A360 (proc priority 1), before
+  // Fighter_Spaghetti_8006AD10 installs current-frame input (priority 3). Therefore the anim-end
+  // ftFx_SpecialAirHi_Enter launch reads the pre-input `fp->input.lstick` snapshot.
+  //
+  // ftFx_SpecialAirHi_Enter derives launch direction from `fp->input.lstick` and
   // ftFox_DatAttrs.{x64,x88}, then overwrites self_vel using x74 launch speed.
   // It also consumes all jumps through `x1968_jumpsUsed = co_attrs.max_jumps` on aerial launch
   // entry; Slippi post-frame stores the inverse `jumps_left`, so the sim lane writes zero here.
-  // - Fighter_Spaghetti_8006AD10 applies common lstick deadzone before action callbacks read
-  //   fp->input.lstick; apply the same deadzoned lane before `stickGetDir(..., 0.0f)`.
+  // - Read `prev_input_main_*` here because step.c loads that lane as the pre-input snapshot for
+  //   prio-1 Anim callback ownership.
   // - facing updates when |stick_x| > x88 before atan2f.
   // - rotateModel defaults to HALF_PI32 when below direction threshold.
-  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialAirHi_Enter
-  // refs/melee/src/melee/ft/fighter.c::Fighter_Spaghetti_8006AD10
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+  //   ftFx_SpecialHiHold_Anim,ftFx_SpecialHiHoldAir_Anim,ftFx_SpecialAirHi_Enter}
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_Spaghetti_8006AD10}
   // refs/melee/src/melee/ft/chara/ftFox/types.h::ftFox_DatAttrs
   // Source keys: data/characters/{fox,falco}.json
   // - firefox_direction_stick_range_min
@@ -317,8 +322,8 @@ static inline void specialhi_apply_air_launch_ownership(MslBatch* batch, size_t 
   // - lstick_deadzone_x
   // - lstick_deadzone_y
   const MslCommonParams* c = msl_common_params();
-  float stick_x = stick_i8_to_unit(batch->state.input_main_x[idx]);
-  float stick_y = stick_i8_to_unit(batch->state.input_main_y[idx]);
+  float stick_x = stick_i8_to_unit(batch->state.prev_input_main_x[idx]);
+  float stick_y = stick_i8_to_unit(batch->state.prev_input_main_y[idx]);
   if (c != NULL) {
     stick_x = apply_deadzone(stick_x, c->lstick_deadzone_x);
     stick_y = apply_deadzone(stick_y, c->lstick_deadzone_y);
@@ -346,8 +351,13 @@ static inline uint8_t specialhi_try_ground_launch_from_hold(MslBatch* batch, siz
   if (batch == NULL || ch == NULL) {
     return 0u;
   }
-  const float stick_x = stick_i8_to_unit(batch->state.input_main_x[idx]);
-  const float stick_y = stick_i8_to_unit(batch->state.input_main_y[idx]);
+  // This is the grounded branch of the same Hold/HoldAir Anim callback as
+  // specialhi_apply_air_launch_ownership(), so use the pre-input stick snapshot here too.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+  //   ftFx_SpecialHiHold_Anim,ftFx_SpecialHiHoldAir_Anim,ftFx_SpecialAirHi_AirToGround}
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_Spaghetti_8006AD10}
+  const float stick_x = stick_i8_to_unit(batch->state.prev_input_main_x[idx]);
+  const float stick_y = stick_i8_to_unit(batch->state.prev_input_main_y[idx]);
   const float abs_x = msl_absf(stick_x);
   const float abs_y = msl_absf(stick_y);
 
@@ -1095,7 +1105,15 @@ static inline uint16_t grounded_a_attack_select_action(
   // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_Dash.c,ftCo_Run.c,ftCo_RunDirect.c,ftCo_Wait.c,ftCo_Walk.c,ftCo_Turn.c}
   // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_AttackDash.c,ftCo_AttackS4.c,ftCo_AttackHi4.c,ftCo_AttackLw4.c,ftCo_AttackS3.c,ftCo_AttackHi3.c,ftCo_AttackLw3.c,ftCo_Attack1.c}
   // refs/melee/src/melee/ft/ft_0DF1.c::{ftCo_800DF1C8,ftCo_800DF2D8,ftCo_800DF3A8}
-  const uint8_t a_pressed = ((buttons_pressed & (uint16_t)MSL_BUTTON_A) != 0u) ? 1u : 0u;
+  // Decomp input synthesis maps raw Z into `held_inputs |= HSD_PAD_LR | HSD_PAD_A` before
+  // `input.x668` is built. Grounded Attack* checks read `fp->input.x668 & HSD_PAD_A`, so a fresh Z
+  // edge is also an A-edge for these selectors. This is especially visible in SquatWait_IASA, which
+  // has no Catch check before AttackLw3 and therefore lets Z+down enter down-tilt before GuardOn.
+  // refs/melee/src/melee/ft/fighter.c:1868-1896
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackLw3.c::ftCo_AttackLw3_CheckInput
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SquatWait.c::ftCo_SquatWait_IASA
+  const uint8_t a_pressed =
+      ((buttons_pressed & (uint16_t)(MSL_BUTTON_A | MSL_BUTTON_Z)) != 0u) ? 1u : 0u;
   if (allow_attack_dash && a_pressed) {
     return (uint16_t)MSL_ACT_ATTACK_DASH;
   }
@@ -1437,7 +1455,8 @@ static inline uint8_t grounded_a_attack_try_enter_from_iasa(
   const uint8_t c_side_edge = cstick_side_smash_edge(c, batch, idx);
   const uint8_t c_up_edge = cstick_up_smash_edge(c, batch, idx);
   const uint8_t c_down_edge = cstick_down_smash_edge(c, batch, idx);
-  if ((buttons_pressed & (uint16_t)MSL_BUTTON_A) == 0 && c_side_edge == 0u && c_up_edge == 0u &&
+  const uint16_t attack_button_pressed_mask = (uint16_t)(MSL_BUTTON_A | MSL_BUTTON_Z);
+  if ((buttons_pressed & attack_button_pressed_mask) == 0 && c_side_edge == 0u && c_up_edge == 0u &&
       c_down_edge == 0u) {
     return 0;
   }
@@ -1463,7 +1482,7 @@ static inline uint8_t grounded_a_attack_try_enter_from_iasa(
     //   ftCo_AttackS4_CheckInput,ftCo_AttackS4_8008C114,decideFighter
     // }
     const uint8_t a_side_smash =
-        (((buttons_pressed & (uint16_t)MSL_BUTTON_A) != 0u) &&
+        (((buttons_pressed & attack_button_pressed_mask) != 0u) &&
          msl_absf(stick_x) >= c->dash_flick_abs && tilt_timer_x < c->dash_flick_tilt_max_frames)
             ? 1u
             : 0u;
@@ -1546,8 +1565,9 @@ static inline uint8_t attackhi3_wait_attack_try_enter(MslBatch* batch, const Msl
 }
 
 static inline uint8_t grounded_attack_update(MslBatch* batch, const MslCommonParams* c, size_t idx,
-                                             uint8_t char_id, float stick_x, float stick_y,
-                                             uint8_t tilt_timer_x, float facing_dir) {
+                                             uint8_t char_id, uint16_t buttons_pressed,
+                                             float stick_x, float stick_y, uint8_t tilt_timer_x,
+                                             uint8_t tilt_timer_y, float facing_dir) {
   if (batch == NULL) {
     return 0;
   }
@@ -1576,12 +1596,33 @@ static inline uint8_t grounded_attack_update(MslBatch* batch, const MslCommonPar
 
   if (anim_finished(char_id, (uint16_t)sm, batch->state.anim_frame_f32[idx])) {
     if (action_id == (uint16_t)MSL_ACT_ATTACK_LW3) {
-      // Decomp: AttackLw3_Anim exits through ftCo_800D638C (SquatWait), then SquatWait_IASA can
-      // immediately route to Dash or SquatRv on the same frame.
+      // Decomp: AttackLw3_Anim exits through ftCo_800D638C (SquatWait). The later input callback
+      // dispatches destination SquatWait_IASA in the same Fighter proc, whose order is:
+      // specials/attacks -> guard -> jump -> dash -> SquatRv.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackLw3.c::ftCo_AttackLw3_Anim
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SquatWait.c::{ftCo_800D638C,ftCo_SquatWait_IASA}
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SquatRv.c::ftCo_SquatRv_CheckInput
       enter_squat_wait_from_anim_end(batch, idx);
+      if (grounded_a_attack_try_enter_from_iasa(batch, c, idx, buttons_pressed, stick_x, stick_y,
+                                                tilt_timer_x, tilt_timer_y, facing_dir, 0u, 1u)) {
+        return 1;
+      }
+      {
+        const uint16_t action_before_guard = batch->state.action_id[idx];
+        guard_update_grounded(batch, c, idx, 1u);
+        if (batch->state.action_id[idx] != action_before_guard) {
+          return 1;
+        }
+      }
+      const MslJumpInput j_in = jump_input_from_edges(c, buttons_pressed, stick_y, tilt_timer_y);
+      if (j_in != MSL_JUMP_INPUT_NONE && batch->state.jumps_left[idx] > 0) {
+        batch->state.action_id[idx] = (uint16_t)MSL_ACT_KNEE_BEND;
+        batch->state.animation_index[idx] = (uint32_t)MSL_SM_KNEE_BEND;
+        msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+        batch->state.kneebend_jump_input[idx] = (uint8_t)j_in;
+        batch->state.kneebend_is_short_hop[idx] = 0;
+        return 1;
+      }
       (void)squat_wait_try_dash_or_rv(batch, c, idx, stick_x, stick_y, tilt_timer_x, facing_dir);
     } else {
       // Decomp grounded attack anim callbacks resolve to Wait on animation end.
@@ -3297,8 +3338,8 @@ void locomotion_update_pre(MslBatch* batch) {
         // - Grounded Attack* motion states run *_Anim before *_IASA each frame.
         // - *_Anim resolves to Wait when the attack animation finishes.
         // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_AttackDash.c,ftCo_AttackS4.c,ftCo_AttackHi4.c,ftCo_AttackLw4.c,ftCo_AttackS3.c,ftCo_AttackHi3.c,ftCo_AttackLw3.c,ftCo_Attack1.c}
-        if (grounded_attack_update(batch, c, idx, cid, stick_x, stick_y, tilt_timer_x,
-                                   facing_dir)) {
+        if (grounded_attack_update(batch, c, idx, cid, buttons_pressed, stick_x, stick_y,
+                                   tilt_timer_x, tilt_timer_y, facing_dir)) {
           action_id = batch->state.action_id[idx];
           if (action_id == (uint16_t)MSL_ACT_WAIT) {
             // Grounded attack anim-end -> Wait destination bridge:

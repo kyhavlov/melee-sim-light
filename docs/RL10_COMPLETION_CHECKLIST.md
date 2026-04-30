@@ -698,15 +698,14 @@ Recommended sequence for the next deep passes:
   - hitbox-vs-hitbox clank overlap now uses the decomp swept HitCapsule predicate
     (`lbColl_80007AFC` -> `lbColl_80006094`) over x58->x4C segments instead of current-center
     sphere/sphere overlap, including degenerate `x58 == x4C` create/enable-edge capsules as
-    point-vs-segment tests. It then suppresses active same-group HitCapsules at or after the
-    clanking slot as `ftColl_80078C70` / `ftColl_8007699C` does through the per-HitCapsule
-    collision loop and `inlineA0`/`inlineA1`. A later same-group clank cannot retroactively
-    suppress an earlier BODY hitbox. The clank path also ignores
-    replay-reconstructed BODY victim rings as a prefilter, because those rings are seed
+    point-vs-segment tests. It then follows the same-group HitVictim refresh from
+    `ftColl_80078C70` / `ftColl_8007699C` / `inlineA0` / `inlineA1`: the first accepted same-group
+    clank owns the group's hitlag/rebound damage for that fighter pair, and later same-group clank
+    candidates plus BODY admission are suppressed by the refreshed HitVictim entries. The clank path
+    also ignores replay-reconstructed BODY victim rings as a prefilter, because those rings are seed
     reconstruction for BODY admission and can otherwise mask a live hitbox-vs-hitbox clank; the
     HHG:8674 and FSP:467 locks protect this distinction. This removes the ReboundStop/clank split
-    without a BODY admission bridge, though scalar hitlag residuals remain outside the BODY
-    admission decision.
+    and FSP:467 hitlag residual without a BODY admission bridge.
   - the parent former `F08b_body_contact_geometry_residual` bucket is split into concrete
     non-parent owners rather than hidden under new BODY labels. Current aggregate residual map is
     `F10k=24`, `F10l=23`, and `F05b=8`, with former special-entry rows absorbed by existing

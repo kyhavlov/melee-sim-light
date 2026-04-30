@@ -1790,13 +1790,14 @@ def _derive_fighter_8006cda4_pre_gate_consume_count_seed_lane(
     # contact must therefore carry the pending pre-gate phase from the same DamageFlyTop segment,
     # instead of reconstructing it from the later AttackAirB row in runtime C.
     #
-    # Keep this to nonzero pre-gate consumes (1..3). Marker 4 means "source-proven zero-consume gate"
-    # for the immediate row, not persistent hidden item/x197C state.
+    # Counts 1..3 carry hidden pre-gate consume phase. Marker 4 carries only source-proven
+    # DamageFlyTop gate-admission provenance for a later same-source AttackAirB hit; it is still not
+    # persistent stream phase and the AttackAirN pre-action backfill below must not carry it.
     # refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
     for i in range(n):
         consume = int(out[i])
-        if consume <= 0 or consume > 3:
+        if consume <= 0 or consume > 4:
             continue
         if (
             action_id[i] != ACT_DAMAGE_FLY_TOP
@@ -3521,6 +3522,7 @@ def _main_impl(args) -> None:
         compute_lr_press_timer_x67f,
         derive_instance_id_counter,
         derive_instance_id_x2073,
+        derive_item_spawn_id_counter,
         derive_colanim_internals,
         derive_downwait_timer,
         derive_damage_jump_buffer_x14,
@@ -3685,6 +3687,7 @@ def _main_impl(args) -> None:
     char_walk_max: dict[int, float] = {}
     char_run_scaling: dict[int, float] = {}
     char_gr_friction: dict[int, float] = {}
+    char_rebound_anim_numerator_frames: dict[int, float] = {}
     char_active_shield_hit_int_damage: dict[int, dict[int, dict[int, int]]] = {}
 
     def _get_env_dmg_local(dmg: float) -> int:
@@ -3735,6 +3738,7 @@ def _main_impl(args) -> None:
         char_walk_max[int(cid)] = float(attrs["walk_max_vel"])
         char_run_scaling[int(cid)] = float(attrs["run_animation_scaling"])
         char_gr_friction[int(cid)] = float(attrs["gr_friction"])
+        char_rebound_anim_numerator_frames[int(cid)] = float(attrs["rebound_anim_numerator_frames"])
         active_int_damage_by_anim: dict[int, dict[int, int]] = {}
         for move in move_data.values():
             submotion_id = int(move.get("submotion_id", -1))
@@ -3860,6 +3864,8 @@ def _main_impl(args) -> None:
     act_guard_off = 0x00B4
     act_guard_set_off = 0x00B5
     act_guard_reflect = 0x00B6
+    act_rebound_stop = 0x00ED
+    act_rebound = 0x00EE
     act_throw_f = 0x00DB
     act_throw_b = 0x00DC
     act_throw_hi = 0x00DD
@@ -5052,6 +5058,9 @@ def _main_impl(args) -> None:
     shield_hit_base = float(common["shield_hit_damage_base"])
     shield_hit_ls_min = float(common["shield_hit_lightshield_min"])
     shield_hit_ls_max = float(common["shield_hit_lightshield_max"])
+    shield_hold_drain_mul = float(common["shield_hold_drain_mul"])
+    shield_hold_drain_base = float(common["shield_hold_drain_base"])
+    shield_hold_drain_max = float(common["shield_hold_drain_max"])
     shield_stun_mul = float(common["shield_stun_mul"])
     shield_stun_base = float(common["shield_stun_base"])
     shield_stun_ls_min = float(common["shield_stun_lightshield_min"])
@@ -5526,6 +5535,17 @@ def _main_impl(args) -> None:
         item_instance_id_u16_2d=items_fixed["instance_id"],
     )
     samples["seed_t"]["instance_id_counter"] = counter_post[:-1]
+    # Seed bridge: item->x1C global spawn-id counter (`it_804D6D10`).
+    #
+    # Slippi exposes item spawn_id after spawn but not the hidden global counter. Derive a strictly
+    # causal next-id lane from item history so replay rollouts seeded after itemless gaps keep the
+    # same future item fixed-slot ordering as vanilla.
+    # refs/melee/src/melee/it/item.c::Item_80267AA8
+    item_spawn_counter_post = derive_item_spawn_id_counter(
+        item_exists_u8_2d=items_fixed["exists"],
+        item_spawn_id_u32_2d=items_fixed["spawn_id"],
+    )
+    samples["seed_t"]["item_spawn_id_counter"] = item_spawn_counter_post[:-1]
 
     # Same-frame fighter-proc order lane for plAttack_80037B08.
     #
@@ -5998,6 +6018,9 @@ def _main_impl(args) -> None:
     shield_hit_int_damage = np.zeros(
         (n_frames, samples["seed_t"]["combat_shield_hit_int_damage"].shape[1]), dtype=np.uint8
     )
+    shield_damage_taken = np.zeros(
+        (n_frames, samples["seed_t"]["combat_shield_damage_taken"].shape[1]), dtype=np.uint8
+    )
 
     def _invert_hitlag_min_damage_for_seed(hitlag_frames: int) -> int:
         if hitlag_frames <= 0:
@@ -6010,6 +6033,42 @@ def _main_impl(args) -> None:
                 return dmg
             dmg += 1
         return 0xFF
+
+    def _infer_shield_damage_taken_for_seed(frame_i: int, defender: int) -> int:
+        if frame_i < 0 or frame_i + 1 >= n_frames or shield_hit_mul <= 0.0:
+            return 0
+        shield_drop = float(post_shield_f32_all[frame_i, defender]) - float(
+            post_shield_f32_all[frame_i + 1, defender]
+        )
+        if shield_drop <= 0.0:
+            return 0
+        light = float(lightshield_amount_all[frame_i, defender])
+        light = min(max(light, 0.0), 1.0)
+        if int(post_action_id[frame_i, defender]) in guard_family_actions:
+            drain_factor = light * (shield_hold_drain_max - shield_hold_drain_base) + shield_hold_drain_base
+            shield_drop -= shield_hold_drain_mul * drain_factor
+        light_term = light * (shield_hit_ls_max - shield_hit_ls_min) + shield_hit_ls_min
+        denom = shield_hit_mul * (1.0 - light_term)
+        if denom <= 0.0:
+            return 0
+        raw = (shield_drop - shield_hit_base) / denom
+        if not np.isfinite(raw):
+            return 0
+        dmg = int(round(raw))
+        if dmg <= 0:
+            return 0
+        if dmg > 0xFF:
+            return 0xFF
+        predicted = shield_hit_mul * (float(dmg) * (1.0 - light_term)) + shield_hit_base
+        # This lane is x19A0_shieldDamageTaken, not an exact shield-HP output shortcut. It is a
+        # non-causal teacher-forced one-step lane derived from t->t+1 shield HP. Accept only
+        # replay-visible deltas that round back to the decomp Fighter_ProcessHit formula after
+        # subtracting the normal Guard shield drain.
+        # refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+        # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+        if abs(predicted - shield_drop) > 0.35:
+            return 0
+        return dmg
 
     def _attacker_has_same_frame_shield_contact_owner(frame_i: int, attacker: int) -> bool:
         cur_action = post_action_id[frame_i, attacker]
@@ -6059,14 +6118,33 @@ def _main_impl(args) -> None:
                     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
                     # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
                     shield_contact_hb_kind[i, attacker, :, defender] = np.uint8(2)
+                    hitlag_int_dmg = _invert_hitlag_min_damage_for_seed(
+                        int(post_hitlag[i + 1, defender])
+                    )
                     active_int_dmg = _guardsetoff_active_int_damage(i + 1, defender)
-                    if active_int_dmg <= 0:
-                        active_int_dmg = _invert_hitlag_min_damage_for_seed(
-                            int(post_hitlag[i + 1, defender])
-                        )
+                    if active_int_dmg > 0 and hitlag_int_dmg > 0:
+                        # This seed lane is consumed by runtime for the current collision frame's
+                        # x19A4/x1924 hitlag scalar. The GuardSetOff anim-rate backsolve can be an
+                        # over-estimate when shield-rate/lightshield quantization is ambiguous, so
+                        # do not let it exceed the damage proven by the replay-visible hitlag.
+                        # refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+                        # refs/melee/src/melee/ft/ftcommon.c::ftCommon_CalcHitlag
+                        active_int_dmg = min(active_int_dmg, hitlag_int_dmg)
+                    elif active_int_dmg <= 0:
+                        active_int_dmg = hitlag_int_dmg
                     shield_hit_int_damage[i, defender] = np.uint8(
                         max(int(shield_hit_int_damage[i, defender]), active_int_dmg)
                     )
+                    shield_taken = _infer_shield_damage_taken_for_seed(i, defender)
+                    if shield_taken > int(shield_hit_int_damage[i, defender]):
+                        # x19A0 can exceed x19A4 when hit0->x34 shield-damage contributes to
+                        # shieldDamageTaken while x19A4 remains getEnvDmg(hit0->damage). Rows where
+                        # x19A0 <= x19A4 are multi-contact ordering cases; keep those on runtime
+                        # selected-contact ownership until the exact per-HitCapsule order is exposed.
+                        # refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+                        shield_damage_taken[i, defender] = np.uint8(
+                            max(int(shield_damage_taken[i, defender]), shield_taken)
+                        )
                 elif (
                     (
                         int(post_hitlag[i + 1, defender]) == 0
@@ -6092,6 +6170,88 @@ def _main_impl(args) -> None:
                     shield_contact_hb_kind[i, attacker, :, defender] = np.uint8(1)
     samples["seed_t"]["combat_shield_contact_hb_kind"] = shield_contact_hb_kind[:-1]
     samples["seed_t"]["combat_shield_hit_int_damage"] = shield_hit_int_damage[:-1]
+    samples["seed_t"]["combat_shield_damage_taken"] = shield_damage_taken[:-1]
+
+    rebound_ground_accel_2 = np.zeros(
+        (n_frames, samples["seed_t"]["rebound_ground_accel_2_f32"].shape[1]), dtype=np.float32
+    )
+    rebound_anim_rate = np.zeros(
+        (n_frames, samples["seed_t"]["rebound_anim_rate_f32"].shape[1]), dtype=np.float32
+    )
+
+    def _rebound_anim_rate_from_pending_xe8(frame_i: int, player: int, pending_xe8: float) -> float:
+        # Prefer the replay-visible Rebound frame_speed once Slippi has exposed it. On the first
+        # Rebound row this lane is one row late, so fall back to the source formula using xE8.
+        if (
+            frame_i + 2 < n_frames - 1
+            and int(post_action_id[frame_i + 2, player]) == int(act_rebound)
+        ):
+            later_rate = float(samples["seed_t"]["frame_speed_mul_f32"][frame_i + 2, player])
+            if np.isfinite(later_rate) and later_rate > 0.0 and later_rate < 20.0:
+                return later_rate
+        mul = float(common.get("rebound_ground_x0_mul", 0.0))
+        base = float(common.get("rebound_ground_x0_base", 0.0))
+        if not (mul > 0.0):
+            return 0.0
+        rebound_x191c = (abs(float(pending_xe8)) - base) / mul
+        if not (rebound_x191c > 0.0):
+            return 0.0
+        char_id = int(post_char_id[frame_i, player])
+        numerator = float(char_rebound_anim_numerator_frames.get(char_id, 0.0))
+        if not (numerator > 0.0):
+            return 0.0
+        rate = (numerator + 0.1) / rebound_x191c
+        return rate if np.isfinite(rate) and rate > 0.0 and rate < 20.0 else 0.0
+
+    for p in range(num_players):
+        for i in range(max(0, n_frames - 1)):
+            if (
+                int(post_action_id[i, p]) != int(act_rebound_stop)
+                or int(post_hitlag[i, p]) <= 0
+                or int(post_action_id[i + 1, p]) != int(act_rebound)
+                or int(post_hitlag[i + 1, p]) != 0
+                or int(post_on_ground[i, p]) == 0
+                or int(post_on_ground[i + 1, p]) == 0
+            ):
+                continue
+            pending_xe8 = float(samples["ref_t1"]["speed_ground_x_self"][i, p]) - float(
+                samples["seed_t"]["speed_ground_x_self"][i, p]
+            )
+            if not np.isfinite(pending_xe8) or abs(pending_xe8) <= 1e-6:
+                continue
+            # Teacher-forced ReboundStop seeds need the hidden `fp->xE8_ground_accel_2` value
+            # queued by ftCo_80099D9C -> ftCommon_800804A0. This is intentionally non-causal:
+            # the source value is frozen during ReboundStop hitlag and applied on the first Rebound
+            # Phys frame; Slippi only exposes it once that transition has happened, so backfill
+            # across the contiguous hitlag tail.
+            # The bound keeps this reconstruction in the normal Rebound speed domain extracted from
+            # ftCommonData instead of admitting unrelated ground-speed edits.
+            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Rebound.c::{
+            #   ftCo_80099D9C,ftCo_ReboundStop_Anim,ftCo_Rebound_Phys}
+            # refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804A0
+            if abs(pending_xe8) > 2.0:
+                continue
+            pending_rate = _rebound_anim_rate_from_pending_xe8(i, p, pending_xe8)
+            j = i
+            while (
+                j >= 0
+                and int(post_action_id[j, p]) == int(act_rebound_stop)
+                and int(post_hitlag[j, p]) > 0
+                and int(post_on_ground[j, p]) != 0
+            ):
+                rebound_ground_accel_2[j, p] = np.float32(pending_xe8)
+                if pending_rate > 0.0:
+                    rebound_anim_rate[j, p] = np.float32(pending_rate)
+                j -= 1
+            if (
+                pending_rate > 0.0
+                and i + 1 < n_frames
+                and int(post_action_id[i + 1, p]) == int(act_rebound)
+                and int(post_hitlag[i + 1, p]) == 0
+            ):
+                rebound_anim_rate[i + 1, p] = np.float32(pending_rate)
+    samples["seed_t"]["rebound_ground_accel_2_f32"] = rebound_ground_accel_2[:-1]
+    samples["seed_t"]["rebound_anim_rate_f32"] = rebound_anim_rate[:-1]
 
     (
         hitbox_prev_valid,

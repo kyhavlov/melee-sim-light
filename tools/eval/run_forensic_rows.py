@@ -156,6 +156,7 @@ _DEBUG_INTERNALS_DTYPE = np.dtype(
         ("instance_id_x2073", ("u1", (4,))),
         ("instance_identity_last_action_id", ("<u2", (4,))),
         ("instance_id_counter", "<u2"),
+        ("item_spawn_id_counter", "<u4"),
         ("throw_pulse_consumed", ("u1", (4,))),
         ("throw_pulse_crossed_prev_frame", ("u1", (4,))),
         ("throw_pending_victim_port", ("u1", (4,))),

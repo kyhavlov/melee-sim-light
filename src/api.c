@@ -995,9 +995,14 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
     // - stale_attack_instance_counter: seeded as next after max observed attack_instance lanes.
     // - instance_id_counter: prefer explicit seed lane (derived strictly causally in tooling);
     //   fallback to next after max observed instance_id lanes for backward compatibility.
+    // - item_spawn_id_counter: prefer explicit seed lane (derived strictly causally in tooling);
+    //   fallback to next after max live item spawn_id for older datasets/tests.
     uint16_t max_attack_inst = 0;
     uint16_t max_instance_id = 0;
+    uint32_t max_item_spawn_id = 0u;
+    uint8_t any_item_spawn_id = 0u;
     uint16_t seeded_instance_id_counter = seed->instance_id_counter;
+    uint32_t seeded_item_spawn_id_counter = seed->item_spawn_id_counter;
 
     batch->state.frame_id[bi] = seed->frame_id;
     batch->state.frame_pre_random_seed[bi] = seed->frame_pre_random_seed;
@@ -1239,6 +1244,22 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         run_anim_source_vel = 0.0f;
       }
       batch->state.run_anim_source_vel[idx] = run_anim_source_vel;
+      float rebound_ground_accel_2 = seed->rebound_ground_accel_2_f32[p];
+      if (!isfinite(rebound_ground_accel_2)) {
+        rebound_ground_accel_2 = 0.0f;
+      }
+      batch->state.rebound_ground_accel_2[idx] = rebound_ground_accel_2;
+      float rebound_anim_rate = seed->rebound_anim_rate_f32[p];
+      if (!isfinite(rebound_anim_rate) || rebound_anim_rate <= 0.0f) {
+        rebound_anim_rate = 0.0f;
+      }
+      batch->state.rebound_anim_rate_fp_q16_16[idx] =
+          (rebound_anim_rate > 0.0f) ? msl_q16_16_from_f32(rebound_anim_rate) : 0;
+      if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_REBOUND &&
+          batch->state.action_frame[idx] == 0 &&
+          batch->state.rebound_anim_rate_fp_q16_16[idx] > 0) {
+        batch->state.frame_speed_mul_fp_q16_16[idx] = batch->state.rebound_anim_rate_fp_q16_16[idx];
+      }
       const uint8_t turn_kb_face = seed->turn_kneebend_facing_override_u8[p];
       batch->state.turn_kneebend_facing_override[idx] = (turn_kb_face <= 2u) ? turn_kb_face : 0u;
       batch->state.anim_defer_tick_once[idx] = 0;
@@ -1253,6 +1274,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.lightshield_amount[idx] = seed->lightshield_amount[p];
       batch->state.guard_setoff_hitlag_damage_min[idx] = seed->guard_setoff_hitlag_damage_min[p];
       batch->state.combat_shield_hit_int_damage[idx] = seed->combat_shield_hit_int_damage[p];
+      batch->state.combat_shield_damage_taken[idx] = seed->combat_shield_damage_taken[p];
       batch->state.guard_setoff_hitlag_exit_phase_u8[idx] =
           seed->guard_setoff_hitlag_exit_phase_u8[p];
       batch->state.guard_setoff_post_hitlag_owner_u8[idx] =
@@ -1885,6 +1907,12 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.item_timer[ii] = item->timer;
       batch->state.item_hitlag[ii] = 0u;
       batch->state.item_spawn_id[ii] = item->spawn_id;
+      if (item->exists) {
+        if (!any_item_spawn_id || item->spawn_id > max_item_spawn_id) {
+          max_item_spawn_id = item->spawn_id;
+        }
+        any_item_spawn_id = 1u;
+      }
       batch->state.item_misc0[ii] = item->misc0;
       batch->state.item_misc1[ii] = item->misc1;
       batch->state.item_misc2[ii] = item->misc2;
@@ -2157,6 +2185,22 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       next_iid = min_next_iid;
     }
     batch->state.instance_id_counter[bi] = next_iid;
+
+    // Next value for item->x1C spawn ids (global `it_804D6D10`).
+    // Decomp: Item_80267AA8 assigns from the global item-spawn counter, then increments.
+    //
+    // Seed bridge:
+    // - Prefer the explicit seed lane, which preprocessing derives strictly causally from
+    //   replay-visible item spawn_id history.
+    // - Enforce a lower bound from live items so older datasets/tests with no seed lane cannot
+    //   reuse an already-live spawn_id.
+    // refs/melee/src/melee/it/item.c::Item_80267AA8
+    uint32_t next_item_spawn_id = seeded_item_spawn_id_counter;
+    const uint32_t min_next_item_spawn_id = any_item_spawn_id ? (max_item_spawn_id + 1u) : 0u;
+    if (next_item_spawn_id < min_next_item_spawn_id) {
+      next_item_spawn_id = min_next_item_spawn_id;
+    }
+    batch->state.item_spawn_id_counter[bi] = next_item_spawn_id;
 
     // Combat hitlists are part of the reseed schema (teacher-forced one-step eval).
     const size_t base =
@@ -2619,6 +2663,7 @@ int msl_batch_debug_write_internals(const MslBatch* batch, uint8_t* out_bytes,
     memset(out, 0, sizeof(*out));
 
     out->instance_id_counter = batch->state.instance_id_counter[bi];
+    out->item_spawn_id_counter = batch->state.item_spawn_id_counter[bi];
 
     for (int p = 0; p < MSL_MAX_PLAYERS; p++) {
       const size_t idx = msl_idx_player(bi, p);
@@ -4099,6 +4144,28 @@ int msl_batch_debug_set_hitlag(MslBatch* batch, int batch_index, int player_inde
 
   const size_t idx = msl_idx_player(batch_index, player_index);
   batch->state.hitlag[idx] = hitlag_frames;
+  return 0;
+}
+
+int msl_batch_debug_set_smash_charge_state(MslBatch* batch, int batch_index, int player_index,
+                                           uint8_t state, uint8_t frames, uint8_t hold_frames_max) {
+  if (batch == NULL) {
+    return EINVAL;
+  }
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return EINVAL;
+  }
+  if (player_index < 0 || player_index >= MSL_MAX_PLAYERS) {
+    return EINVAL;
+  }
+  if (state > 3u) {
+    return EINVAL;
+  }
+
+  const size_t idx = msl_idx_player(batch_index, player_index);
+  batch->state.smash_charge_state[idx] = state;
+  batch->state.smash_charge_frames[idx] = frames;
+  batch->state.smash_charge_hold_frames_max[idx] = hold_frames_max;
   return 0;
 }
 

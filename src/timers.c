@@ -390,28 +390,32 @@ void timers_consume_post_hitlag_callbacks_after_input(MslBatch* batch) {
       const float prev_lstick_y = stick_i8_to_unit(batch->state.prev_input_main_y[idx]);
       const float lstick_full_x = apply_deadzone(lstick_x, c->lstick_deadzone_x);
       const float lstick_full_y = apply_deadzone(lstick_y, c->lstick_deadzone_y);
-      const float prev_lstick_full_x = apply_deadzone(prev_lstick_x, c->lstick_deadzone_x);
-      const float prev_lstick_full_y = apply_deadzone(prev_lstick_y, c->lstick_deadzone_y);
       const float lstick_mag_sq = lstick_x * lstick_x + lstick_y * lstick_y;
+      const float prev_lstick_mag_sq =
+          prev_lstick_x * prev_lstick_x + prev_lstick_y * prev_lstick_y;
       const size_t flags_i =
           idx * (size_t)MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221A_INDEX;
-      const uint8_t sdi_full_edge_x = (lstick_full_x >= c->lstick_tilt_x_thresh &&
-                                       prev_lstick_full_x < c->lstick_tilt_x_thresh) ||
-                                              (lstick_full_x <= -c->lstick_tilt_x_thresh &&
-                                               prev_lstick_full_x > -c->lstick_tilt_x_thresh)
-                                          ? 1u
-                                          : 0u;
-      const uint8_t sdi_full_edge_y = (lstick_full_y >= c->lstick_tilt_y_thresh &&
-                                       prev_lstick_full_y < c->lstick_tilt_y_thresh) ||
-                                              (lstick_full_y <= -c->lstick_tilt_y_thresh &&
-                                               prev_lstick_full_y > -c->lstick_tilt_y_thresh)
-                                          ? 1u
-                                          : 0u;
       const uint8_t sdi_tilt_window = (batch->state.tilt_timer_x[idx] < c->sdi_tilt_max_frames ||
                                        batch->state.tilt_timer_y[idx] < c->sdi_tilt_max_frames)
                                           ? 1u
                                           : 0u;
-      const uint8_t use_full_2d = (sdi_full_edge_x || sdi_full_edge_y);
+      // OnEveryHitlag's first gate is the full stick magnitude against `sdi_radius`. Replay rows
+      // can expose action-entry hitlag pulses where the replay-visible x670/x671 seeds are already
+      // reset by damage entry, but vanilla still consumes the newly radius-eligible stick at the
+      // first callback. Require previous-action provenance so the bridge cannot fire on later
+      // frozen action_frame==1 callbacks; those must use the ordinary x670/x671 timer-window path.
+      //
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag
+      const uint8_t use_first_active_radius_crossing =
+          (batch->state.action_frame[idx] == 1 && batch->state.tilt_timer_x[idx] == 254u &&
+           batch->state.tilt_timer_y[idx] == 254u && batch->state.seed_prev_action_id[idx] != a)
+              ? 1u
+              : 0u;
+      const uint8_t use_full_2d =
+          (use_first_active_radius_crossing && lstick_mag_sq >= sdi_radius_sq &&
+           prev_lstick_mag_sq < sdi_radius_sq)
+              ? 1u
+              : 0u;
       const uint8_t flags_221a = batch->state.state_flags[flags_i];
       // Source predicate:
       // - ftCo_Damage_OnEveryHitlag's timer-window path is generic, but it is gated by hidden
@@ -421,16 +425,29 @@ void timers_consume_post_hitlag_callbacks_after_input(MslBatch* batch) {
       // - Therefore x221A_b3 is a narrow visible provenance signal for timer-window SDI on normal
       //   damage hitlag rows. Keep existing explicit DownDamageD / phantom lanes for source paths
       //   where allow_sdi can be true without x221A_b3.
+      // - DamageFly/FlyReflect actions keep the existing DamageFly callback-owner path: these
+      //   actions are entered through ftCo_8008DCE0 and run the same OnEveryHitlag callback, and
+      //   replay rows have existing locks proving SDI without requiring x221A_b3.
       // refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006A1BC}
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag
       const uint8_t use_timer_window = ((flags_221a & (uint8_t)MSL_STATE_FLAG_221A_B3) != 0u ||
+                                        damage_post_hitlag_cb_damagefly_action(a) ||
                                         damage_every_hitlag_sdi_timer_window_action(a) ||
                                         batch->state.phantom_damage_pending_x1898[idx] > 0.0f)
                                            ? sdi_tilt_window
                                            : 0u;
+      // This callback runs before the end-of-frame state-flag refresh that mirrors active hitlag
+      // into Slippi's fp+0x221A 0x20 byte. Use the runtime hitlag timers as the current-frame
+      // derived hitlag-active owner; keep the allow-SDI provenance above separate.
+      //
+      // refs/melee/src/melee/ft/fighter.c::{Fighter_procUpdate,Fighter_8006A1BC}
+      const uint8_t is_current_hitlag_active =
+          ((flags_221a & (uint8_t)MSL_STATE_FLAG_221A_IS_HITLAG) != 0u ||
+           batch->state.hitlag[idx] != 0u)
+              ? 1u
+              : 0u;
       if (batch->state.hitlag_pre_timer[idx] != 0u && batch->state.hitlag[idx] != 0u &&
-          (use_full_2d || use_timer_window) &&
-          (flags_221a & (uint8_t)MSL_STATE_FLAG_221A_IS_HITLAG) != 0u &&
+          (use_full_2d || use_timer_window) && is_current_hitlag_active &&
           lstick_mag_sq >= sdi_radius_sq) {
         batch->state.pos_x[idx] += lstick_full_x * sdi_step_mul;
         batch->state.pos_y[idx] += lstick_full_y * sdi_step_mul;

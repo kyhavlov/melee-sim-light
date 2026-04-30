@@ -73,6 +73,13 @@ uint8_t hitlist_allows_item_hitbox_fighter(MslBatch* batch, int bi, int item_slo
 void hitlist_seed_init_fighter_hitbox_from_group(MslBatch* batch, int bi, int attacker, int hb_id,
                                                  uint8_t hit_group);
 
+// Narrow seed bridge for a proven same-fighter-object dense seed lane whose Slippi-visible
+// instance_id changed before the current HitCapsule create edge. Normal dense seeds fail closed on
+// stale instance ids because ftColl_800768A0 create edges clear/copy concrete HitCapsule state.
+void hitlist_seed_init_fighter_hitbox_from_group_allow_stale_iid(MslBatch* batch, int bi,
+                                                                 int attacker, int hb_id,
+                                                                 uint8_t hit_group);
+
 // Debug helper: clear victim lists for all hitboxes on (attacker).
 void hitlist_debug_clear_fighter_attacker(MslBatch* batch, int bi, int attacker);
 

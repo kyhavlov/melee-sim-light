@@ -57,7 +57,7 @@ def _run_rollout_window(binding, samples: np.ndarray, start_record: int, end_rec
         seed_bytes = np.frombuffer(start_row["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
             1, seed_stride
         )
-        binding.reseed_seed(handle, seed_bytes)
+        binding.reseed_seed_rollout(handle, seed_bytes)
 
         for rec in range(start_record, end_record):
             row = samples[rec : rec + 1]
@@ -169,7 +169,10 @@ def test_attackhi3_shield_pushback_rollout_closes_agn_5167_front_door() -> None:
     assert counts_5167 == (0, 0, 0)
     assert counts_5168 == (2, 2, 1)
 
-    outs = _run_rollout_window(binding, samples, 5128, 5170)
+    # The earlier 5133..5140 one-step rows lock the grounded shield-pushback scalar. This rollout
+    # starts at the local AttackAir contact boundary so the lock remains scoped to the intended
+    # pre-combat hurtcap owner instead of depending on unrelated earlier rollout drift.
+    outs = _run_rollout_window(binding, samples, 5167, 5170)
     for record in (5167, 5168, 5169):
         out = outs[record]
         ref = samples[record]["ref_t1"]

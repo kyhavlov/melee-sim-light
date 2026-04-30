@@ -1217,8 +1217,11 @@ void knockdown_update_pre_physics(MslBatch* batch) {
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter
             //
             // ftCo_Fall_Enter does not call ftAnim_8006EBA4, so keep the previous DamageAir pose
-            // for this frame's collision/hurtbox updates and commit Fall animation/timebase later.
+            // for this frame's collision/hurtbox updates and commit only Fall animation/timebase
+            // later. Fighter_ChangeMotionState identity side effects still run now, before other
+            // fighters' later input callbacks and before ProcessHit can overwrite the action.
             batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
+            msl_motion_state_enter_side_effects(batch, idx);
           }
         }
         continue;
@@ -1520,7 +1523,7 @@ void knockdown_update_post_combat(MslBatch* batch) {
       }
 
       batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL;
-      msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+      msl_anim_timebase_enter_raw(batch, idx, 0.0f, 1.0f);
     }
   }
 }
@@ -1699,12 +1702,14 @@ static inline void enter_fall_from_damagefall_iasa(MslBatch* batch, size_t idx) 
   // directly from DamageFall and indirectly from DamageFly_IASA when x221C_b6 is clear.
   //
   // The DamageFly caller runs before same-frame collision. Match the existing DamageAir_Anim
-  // ordering model by publishing the Fall action for collision, but deferring Fall identity/timebase
-  // until knockdown_update_post_combat if ProcessHit did not overwrite the state.
+  // ordering model by publishing the Fall action for collision, but deferring only Fall
+  // pose/timebase until knockdown_update_post_combat if ProcessHit did not overwrite the state.
+  // Fighter_ChangeMotionState side effects still happen here in source order.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_IASA
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
+  msl_motion_state_enter_side_effects(batch, idx);
 }
 
 static inline uint8_t damagefall_iasa_try_stick_fall(MslBatch* batch, const MslCommonParams* c,

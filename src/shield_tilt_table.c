@@ -20,6 +20,7 @@ enum {
   SHIELD_VERSION_V1 = 1,
   SHIELD_VERSION_V2 = 2,
   SHIELD_VERSION_V3 = 3,
+  SHIELD_VERSION_V4 = 4,
 };
 
 static const uint8_t k_magic[SHIELD_MAGIC_LEN] = {'M', 'S', 'L', 'S', 'H', 'L', 'D', '1'};
@@ -106,8 +107,7 @@ static int load_for_char(const char* data_dir, const char* rel_path, uint8_t cha
     return -1;
   }
   const uint32_t ver = read_u32_le(buf + 8);
-  if (!(ver == (uint32_t)SHIELD_VERSION_V1 || ver == (uint32_t)SHIELD_VERSION_V2 ||
-        ver == (uint32_t)SHIELD_VERSION_V3)) {
+  if (ver != (uint32_t)SHIELD_VERSION_V4) {
     alloc_free(buf);
     return -1;
   }
@@ -121,10 +121,7 @@ static int load_for_char(const char* data_dir, const char* rel_path, uint8_t cha
   size_t hdr_bytes = (size_t)SHIELD_HDR_BYTES_V1;
   uint16_t guard_on_frame_count = 0u;
   const float* guard_on_xyz = NULL;
-  if (ver == (uint32_t)SHIELD_VERSION_V2) {
-    hdr_bytes = (size_t)SHIELD_HDR_BYTES_V2;
-    memcpy(guard_on_x20_xyz, buf + SHIELD_HDR_BYTES_V1, sizeof(guard_on_x20_xyz));
-  } else if (ver == (uint32_t)SHIELD_VERSION_V3) {
+  if (ver == (uint32_t)SHIELD_VERSION_V4) {
     hdr_bytes = (size_t)SHIELD_HDR_BYTES_V3;
     memcpy(guard_on_x20_xyz, buf + SHIELD_HDR_BYTES_V1, sizeof(guard_on_x20_xyz));
     guard_on_frame_count = read_u16_le(buf + SHIELD_HDR_BYTES_V2);
@@ -135,14 +132,14 @@ static int load_for_char(const char* data_dir, const char* rel_path, uint8_t cha
   }
 
   size_t need = hdr_bytes + (size_t)frame_count * 3u * 4u;
-  if (ver == (uint32_t)SHIELD_VERSION_V3) {
+  if (ver == (uint32_t)SHIELD_VERSION_V4) {
     need += (size_t)guard_on_frame_count * 3u * 4u;
   }
   if (need != sz) {
     alloc_free(buf);
     return -1;
   }
-  if (ver == (uint32_t)SHIELD_VERSION_V3) {
+  if (ver == (uint32_t)SHIELD_VERSION_V4) {
     guard_on_xyz = (const float*)(buf + hdr_bytes + (size_t)frame_count * 3u * 4u);
   }
 

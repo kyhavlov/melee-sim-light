@@ -705,6 +705,33 @@ static inline uint8_t physics_action_is_guardsetoff_turnover_owner(uint16_t acti
                    prev_action_id == (uint16_t)MSL_ACT_GUARD_SET_OFF);
 }
 
+static inline uint8_t physics_action_suppresses_self_player_nudge_x221d_b5(
+    uint16_t action_id, uint16_t prev_action_id) {
+  // Decomp: Escape entry (`ftCo_80099314`) sets `fp->x221D_b5 = true`; common grounded
+  // fighter-overlap nudge (`ftCommon_8007E0E4`) skips the self `ftCommon_8007DD7C` pass while that
+  // bit is set. The peer can still nudge away because `ftCommon_8007DD7C` does not filter the
+  // other fighter on x221D_b5.
+  //
+  // Source ordering boundary:
+  // - Fighter_8006A360 runs Anim + ftCommon_8007E0E4 before the later IASA/input proc.
+  // - Same-frame Guard_IASA -> Escape* entries set x221D_b5 after the current frame's common
+  //   nudge pass, so only continuous Escape frames suppress the self pass here.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_80099314
+  // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+  // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007E0E4,ftCommon_8007DD7C}
+  const uint8_t current_escape =
+      (action_id == (uint16_t)MSL_ACT_ESCAPE_N || action_id == (uint16_t)MSL_ACT_ESCAPE_F ||
+       action_id == (uint16_t)MSL_ACT_ESCAPE_B)
+          ? 1u
+          : 0u;
+  const uint8_t prev_escape =
+      (prev_action_id == (uint16_t)MSL_ACT_ESCAPE_N ||
+       prev_action_id == (uint16_t)MSL_ACT_ESCAPE_F || prev_action_id == (uint16_t)MSL_ACT_ESCAPE_B)
+          ? 1u
+          : 0u;
+  return (uint8_t)(current_escape && prev_escape);
+}
+
 static inline uint8_t physics_floor_lines_adjacent_or_equal(const MslStageFloorGraph* g, int a,
                                                             int b) {
   if (g == NULL || a < 0 || b < 0 || (size_t)a >= g->line_count || (size_t)b >= g->line_count) {
@@ -827,100 +854,104 @@ static inline void physics_compute_grounded_player_nudge(MslBatch* batch, int bi
       continue;
     }
 
-    const float self_center_x =
-        batch->state.pos_x[idx] + self->pushbox_x * (float)batch->state.facing_dir1[idx];
-    for (int q = 0; q < num_players; q++) {
-      if (q == p) {
-        continue;
-      }
-      const size_t oidx = msl_idx_player(bi, q);
-      // Fighter_8006A360 invokes ftCommon_8007E0E4 once per fighter after that fighter's Anim
-      // callback, not after every fighter's callback has completed. For later GObj/player slots,
-      // the current fighter's nudge still sees the peer's frame-start grounded state. This matters
-      // for KneeBend -> JumpF/B rows where the peer becomes airborne later in the same global pass.
-      // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
-      // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007E0E4,ftCommon_8007DD7C}
-      const uint8_t other_on_ground_for_nudge =
-          (q > p) ? batch->state.frame_start_on_ground[oidx] : batch->state.on_ground[oidx];
-      const uint16_t other_action_for_nudge =
-          (q > p) ? batch->state.prev_action_id[oidx] : batch->state.action_id[oidx];
-      if (batch->state.stocks[oidx] == 0u || other_on_ground_for_nudge == 0u) {
-        continue;
-      }
-      if (msl_action_is_grabbed_victim(other_action_for_nudge)) {
-        continue;
-      }
-      if (physics_action_is_attackdash_knockdown_overlap_owner(batch->state.action_id[idx],
-                                                               other_action_for_nudge) ||
-          physics_action_is_attackdash_knockdown_overlap_owner(other_action_for_nudge,
-                                                               batch->state.action_id[idx])) {
-        // Existing replay-real seed bridge owns this family after collision/knockdown resolution.
-        // Applying the common pre-physics approximation here double-counts the x450 lane for those
-        // rows. Keep that narrower owner until the full ftCommon_8007E0E4 Z/ceiling branch is
-        // modeled.
-        // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007E0E4
-        // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007DD7C
-        continue;
-      }
+    if (!physics_action_suppresses_self_player_nudge_x221d_b5(batch->state.action_id[idx],
+                                                              batch->state.prev_action_id[idx])) {
+      const float self_center_x =
+          batch->state.pos_x[idx] + self->pushbox_x * (float)batch->state.facing_dir1[idx];
+      for (int q = 0; q < num_players; q++) {
+        if (q == p) {
+          continue;
+        }
+        const size_t oidx = msl_idx_player(bi, q);
+        // Fighter_8006A360 invokes ftCommon_8007E0E4 once per fighter after that fighter's Anim
+        // callback, not after every fighter's callback has completed. For later GObj/player slots,
+        // the current fighter's nudge still sees the peer's frame-start grounded state. This
+        // matters for KneeBend -> JumpF/B rows where the peer becomes airborne later in the same
+        // global pass.
+        // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+        // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007E0E4,ftCommon_8007DD7C}
+        const uint8_t other_on_ground_for_nudge =
+            (q > p) ? batch->state.frame_start_on_ground[oidx] : batch->state.on_ground[oidx];
+        const uint16_t other_action_for_nudge =
+            (q > p) ? batch->state.prev_action_id[oidx] : batch->state.action_id[oidx];
+        if (batch->state.stocks[oidx] == 0u || other_on_ground_for_nudge == 0u) {
+          continue;
+        }
+        if (msl_action_is_grabbed_victim(other_action_for_nudge)) {
+          continue;
+        }
+        if (physics_action_is_attackdash_knockdown_overlap_owner(batch->state.action_id[idx],
+                                                                 other_action_for_nudge) ||
+            physics_action_is_attackdash_knockdown_overlap_owner(other_action_for_nudge,
+                                                                 batch->state.action_id[idx])) {
+          // Existing replay-real seed bridge owns this family after collision/knockdown resolution.
+          // Applying the common pre-physics approximation here double-counts the x450 lane for
+          // those rows. Keep that narrower owner until the full ftCommon_8007E0E4 Z/ceiling branch
+          // is modeled.
+          // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007E0E4
+          // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007DD7C
+          continue;
+        }
 
-      const MslCharParams* other = msl_char_params(batch->state.char_id[oidx]);
-      if (other == NULL) {
-        continue;
-      }
+        const MslCharParams* other = msl_char_params(batch->state.char_id[oidx]);
+        if (other == NULL) {
+          continue;
+        }
 
-      const int other_line =
-          stage_collision_floor_line_index(stage_id, batch->state.ground_id[oidx]);
-      if (!physics_floor_lines_adjacent_or_equal(floor_graph, self_line, other_line)) {
-        continue;
-      }
+        const int other_line =
+            stage_collision_floor_line_index(stage_id, batch->state.ground_id[oidx]);
+        if (!physics_floor_lines_adjacent_or_equal(floor_graph, self_line, other_line)) {
+          continue;
+        }
 
-      const float other_center_x =
-          batch->state.pos_x[oidx] + other->pushbox_x * (float)batch->state.facing_dir1[oidx];
-      const float delta_x = self_center_x - other_center_x;
-      if (msl_absf(delta_x) >= self->pushbox_y + other->pushbox_y) {
-        continue;
-      }
-      float nudge_x = 0.0f;
-      if (delta_x < 0.0f) {
-        nudge_x = -player_nudge_x_step;
-      } else if (delta_x > 0.0f) {
-        nudge_x = player_nudge_x_step;
-      } else if (q < p) {
-        nudge_x = -player_nudge_x_step;
-      } else {
-        nudge_x = player_nudge_x_step;
-      }
-      if (!physics_floor_line_contains_or_connects_to_nudged_x(floor_graph, self_line,
-                                                               batch->state.pos_x[idx] + nudge_x)) {
-        continue;
-      }
-      out_nudge_x[p] += nudge_x;
+        const float other_center_x =
+            batch->state.pos_x[oidx] + other->pushbox_x * (float)batch->state.facing_dir1[oidx];
+        const float delta_x = self_center_x - other_center_x;
+        if (msl_absf(delta_x) >= self->pushbox_y + other->pushbox_y) {
+          continue;
+        }
+        float nudge_x = 0.0f;
+        if (delta_x < 0.0f) {
+          nudge_x = -player_nudge_x_step;
+        } else if (delta_x > 0.0f) {
+          nudge_x = player_nudge_x_step;
+        } else if (q < p) {
+          nudge_x = -player_nudge_x_step;
+        } else {
+          nudge_x = player_nudge_x_step;
+        }
+        if (!physics_floor_line_contains_or_connects_to_nudged_x(
+                floor_graph, self_line, batch->state.pos_x[idx] + nudge_x)) {
+          continue;
+        }
+        out_nudge_x[p] += nudge_x;
 
-      // Grounded fighter-overlap depth nudge:
-      // - ftCommon_8007DD7C writes xF8_playerNudgeVel.y from p_ftCommonData->x454.
-      // - If fighters already differ in z, it pushes along that signed depth delta; otherwise it
-      //   uses the same horizontal/tie-break sign as the x450 lane.
-      // - Fighter_procUpdate applies the resulting Vec2 to cur_pos before collision primitives are
-      //   refreshed, so BODY lbColl sees the separated depth lane even though Slippi commonly
-      //   leaves replay seed pos_z at 0.
-      // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007DD7C,ftCommon_8007E0E4}
-      // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
-      float nudge_z = 0.0f;
-      const float delta_z = batch->state.pos_z[idx] - batch->state.pos_z[oidx];
-      if (delta_z < 0.0f) {
-        nudge_z = -c->player_nudge_z;
-      } else if (delta_z > 0.0f) {
-        nudge_z = c->player_nudge_z;
-      } else if (delta_x < 0.0f) {
-        nudge_z = -c->player_nudge_z;
-      } else if (delta_x > 0.0f) {
-        nudge_z = c->player_nudge_z;
-      } else if (q < p) {
-        nudge_z = -c->player_nudge_z;
-      } else {
-        nudge_z = c->player_nudge_z;
+        // Grounded fighter-overlap depth nudge:
+        // - ftCommon_8007DD7C writes xF8_playerNudgeVel.y from p_ftCommonData->x454.
+        // - If fighters already differ in z, it pushes along that signed depth delta; otherwise it
+        //   uses the same horizontal/tie-break sign as the x450 lane.
+        // - Fighter_procUpdate applies the resulting Vec2 to cur_pos before collision primitives
+        //   are refreshed, so BODY lbColl sees the separated depth lane even though Slippi commonly
+        //   leaves replay seed pos_z at 0.
+        // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007DD7C,ftCommon_8007E0E4}
+        // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+        float nudge_z = 0.0f;
+        const float delta_z = batch->state.pos_z[idx] - batch->state.pos_z[oidx];
+        if (delta_z < 0.0f) {
+          nudge_z = -c->player_nudge_z;
+        } else if (delta_z > 0.0f) {
+          nudge_z = c->player_nudge_z;
+        } else if (delta_x < 0.0f) {
+          nudge_z = -c->player_nudge_z;
+        } else if (delta_x > 0.0f) {
+          nudge_z = c->player_nudge_z;
+        } else if (q < p) {
+          nudge_z = -c->player_nudge_z;
+        } else {
+          nudge_z = c->player_nudge_z;
+        }
+        out_nudge_z[p] += nudge_z;
       }
-      out_nudge_z[p] += nudge_z;
     }
 
     // ftCommon_8007E0E4 post-processes the depth lane after ftCommon_8007DD7C:
@@ -1797,11 +1828,24 @@ void physics_integrate(MslBatch* batch) {
               gr_vel += ground_friction_step_delta(gr_vel, friction);
             }
           } else if (physics_action_is_common_ground_friction_only(action_id)) {
-            float friction = ch->gr_friction;
-            if (msl_absf(gr_vel) > ch->walk_max_vel) {
-              friction *= c->high_speed_friction_mul;
+            if (action_id == (uint16_t)MSL_ACT_REBOUND &&
+                batch->state.rebound_ground_accel_2[idx] != 0.0f) {
+              // Rebound's first Phys frame skips ft_80084F3C while mv.co.rebound.x0 is still live.
+              // The queued xE8_ground_accel_2 from ftCommon_800804A0 applies to post-frame gr_vel
+              // after movement for this frame has used the old ground speed.
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Rebound.c::ftCo_Rebound_Phys
+              // refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804A0
+              grounded_self_vel_for_frame = gr_vel;
+              use_grounded_self_vel_for_frame = 1u;
+              gr_vel += batch->state.rebound_ground_accel_2[idx];
+              batch->state.rebound_ground_accel_2[idx] = 0.0f;
+            } else {
+              float friction = ch->gr_friction;
+              if (msl_absf(gr_vel) > ch->walk_max_vel) {
+                friction *= c->high_speed_friction_mul;
+              }
+              gr_vel += ground_friction_step_delta(gr_vel, friction);
             }
-            gr_vel += ground_friction_step_delta(gr_vel, friction);
           } else if (physics_action_is_walk(action_id)) {
             const float accel_mul = 1.0f;
             float walk_stick_x = stick_x;

@@ -2356,6 +2356,36 @@ static PyObject* msl_debug_set_hitlag_py(PyObject* self, PyObject* args) {
   Py_RETURN_NONE;
 }
 
+static PyObject* msl_debug_set_smash_charge_state_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  int batch_index = 0;
+  int player_index = 0;
+  unsigned int state = 0;
+  unsigned int frames = 0;
+  unsigned int hold_frames_max = 0;
+  if (!PyArg_ParseTuple(args, "OiiIII", &handle_obj, &batch_index, &player_index, &state, &frames,
+                        &hold_frames_max)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+  if (state > 0xFFu || frames > 0xFFu || hold_frames_max > 0xFFu) {
+    PyErr_SetString(PyExc_ValueError, "smash charge values out of range");
+    return NULL;
+  }
+  const int err =
+      msl_batch_debug_set_smash_charge_state(h->batch, batch_index, player_index, (uint8_t)state,
+                                             (uint8_t)frames, (uint8_t)hold_frames_max);
+  if (err != 0) {
+    PyErr_Format(PyExc_ValueError, "msl_batch_debug_set_smash_charge_state failed: %d", err);
+    return NULL;
+  }
+  Py_RETURN_NONE;
+}
+
 static PyObject* msl_debug_set_hit_status_override_py(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* handle_obj = NULL;
@@ -3197,6 +3227,9 @@ static PyMethodDef methods[] = {
      "debug_combat_resolve(handle) -> run combat_resolve() only"},
     {"debug_set_hitlag", msl_debug_set_hitlag_py, METH_VARARGS,
      "debug_set_hitlag(handle, batch_index, player_index, hitlag_frames_u16)"},
+    {"debug_set_smash_charge_state", msl_debug_set_smash_charge_state_py, METH_VARARGS,
+     "debug_set_smash_charge_state(handle, batch_index, player_index, state_u8, frames_u8, "
+     "hold_frames_max_u8)"},
     {"debug_set_hit_status_override", msl_debug_set_hit_status_override_py, METH_VARARGS,
      "debug_set_hit_status_override(handle, batch_index, player_index, status_i32)"},
     {"debug_point_segment_dist2", msl_debug_point_segment_dist2_py, METH_VARARGS,

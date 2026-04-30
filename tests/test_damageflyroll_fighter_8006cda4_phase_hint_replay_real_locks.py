@@ -455,6 +455,54 @@ def test_tbk_damageflytop_segment_carries_fighter_8006cda4_stream_phase_to_delay
 
 
 @pytest.mark.integration
+def test_prh_damageflytop_segment_carries_zero_consume_gate_marker_to_delayed_hit() -> None:
+    # The PRH F26 cluster seeds before a DamageFlyTop segment whose later AttackAirB hit uses the
+    # source-proven zero-consume DamageFlyRoll gate marker. Marker 4 must carry gate-admission
+    # provenance across the same-source DamageFlyTop segment, but it still does not advance the RNG
+    # stream before the HSD_Randf gate.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+        "PositiveRevolvingHyena.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    start_seed = ds.samples[1593]["seed_t"]
+    target_seed = ds.samples[1612]["seed_t"]
+    assert int(start_seed["action_id"][1]) == 90
+    assert int(start_seed["fighter_8006cda4_pre_gate_consume_count"][1]) == 4
+    assert int(target_seed["action_id"][1]) == 90
+    assert int(target_seed["fighter_8006cda4_pre_gate_consume_count"][1]) == 4
+
+    rows = _run_rollout_window_rows_with_trace(
+        dataset_path,
+        start_record=1593,
+        window_records=(1611, 1612, 1613),
+        rng_damage_fly_roll_gate=True,
+        trace_path=root / "reports/triage/prh1593_damageflytop_zero_consume_rollout.tsv",
+    )
+    for rec in (1611, 1612, 1613):
+        ref_row, out_row, site1_count = rows[rec]
+        for p in (0, 1):
+            _assert_transition_identity_lock_fields_match_ref(
+                out_row=out_row,
+                ref_row=ref_row,
+                record=rec,
+                p=p,
+            )
+        assert site1_count == (1 if rec == 1612 else 0), f"unexpected DamageFlyRoll gate pulse at {rec}"
+
+    ref_target, out_target, _ = rows[1612]
+    assert int(out_target["action_id"][1]) == int(ref_target["action_id"][1]) == 91
+
+
+@pytest.mark.integration
 def test_tbk_damageflyroll_live_xrotn_pose_selects_late_attackairb_height() -> None:
     # DamageFlyRoll live XRotN hurtcap owner:
     # - ftCo_8008DCE0 enters DamageFlyRoll and immediately calls inlineA1, rotating FtPart_XRotN

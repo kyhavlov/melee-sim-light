@@ -266,6 +266,10 @@ SEED_DTYPE = np.dtype(
         # Run callback source velocity lane (`vel` consumed by ftCo_Run_Anim).
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::ftCo_Run_Anim
         ("run_anim_source_vel_f32", _arr("<f4", MAX_PLAYERS)),
+        # ReboundStop queued xE8_ground_accel_2 lane from ftCo_80099D9C -> ftCommon_800804A0.
+        ("rebound_ground_accel_2_f32", _arr("<f4", MAX_PLAYERS)),
+        # ReboundStop queued anim rate (`mv.co.rebound.anim_start`) from the same owner.
+        ("rebound_anim_rate_f32", _arr("<f4", MAX_PLAYERS)),
         # Narrow replay-facing Turn->KneeBend hidden-facing owner lane.
         ("turn_kneebend_facing_override_u8", _arr("u1", MAX_PLAYERS)),
         ("guard_tilt_x8", _arr("<u2", MAX_PLAYERS)),
@@ -387,6 +391,9 @@ SEED_DTYPE = np.dtype(
         # Seeded next value for plAttack_80037B08 (global instance_id counter).
         # Slippi does not expose this directly; preprocessing derives it causally from replay history.
         ("instance_id_counter", "<u2"),
+        # Seeded next value for the global item spawn-id counter (`it_804D6D10` -> item->x1C).
+        # Slippi exposes item->x1C as item spawn_id; preprocessing derives it causally.
+        ("item_spawn_id_counter", "<u4"),
         # Narrow replay-facing same-frame fighter-proc order lane for simultaneous instance_id
         # counter consumers. 0 = no override; nonzero = replay-visible fp->x2088 for this entry.
         ("motion_entry_instance_id_override_u16", _arr("<u2", MAX_PLAYERS)),
@@ -417,6 +424,9 @@ SEED_DTYPE = np.dtype(
         # Teacher-forced shield-hit max integer damage (`fp->x19A4`) for accepted GuardSetOff
         # entries whose exact ShieldDesc/HitCapsule ordering is hidden at the seed boundary.
         ("combat_shield_hit_int_damage", _arr("u1", MAX_PLAYERS)),
+        # Teacher-forced shield-hit damage-taken accumulator (`fp->x19A0`) for accepted GuardSetOff
+        # entries. x19A4 owns hitlag/stun; x19A0 owns shield HP depletion.
+        ("combat_shield_damage_taken", _arr("u1", MAX_PLAYERS)),
         # Hidden HitCapsule.x58 seed lane for teacher-forced one-step starts.
         # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007AD18
         # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}

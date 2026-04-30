@@ -565,7 +565,10 @@ Recent deltas to reflect here (do not let these get “lost in chat logs”):
   matching `ftCo_Jump_GetInput`; Damage hitlag now carries the `ftCo_8008DCE0` damage-entry and
   `ftCo_Damage_OnEveryHitlag` SDI-consume x670/x671 resets into replay seeds, inferred from action
   entry and prior hitlag SDI displacement so adjacent teacher-forced rows do not reuse stale timer
-  windows; AttackAir
+  windows. First active-hitlag rows also allow the narrow callback-local SDI-radius crossing where
+  damage entry has reset replay-visible x670/x671 to `0xFE` but vanilla consumes the newly
+  radius-eligible stick; held high-magnitude sticks are negative controls and do not retrigger the
+  bridge. AttackAir
   same-frame IASA checks aerial B-special admission before JumpAerial (`ftCo_AttackAir.c::DO_IASA`,
   `ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput`); JumpF/JumpB -> EscapeAir floor handoff
   projects through the decomp floor wrapper (`ftCo_EscapeAir_Coll`, `ft_80082C74`,
@@ -948,6 +951,17 @@ Prefer completing these projects in order rather than “patching symptoms” in
      Source anchors:
      `refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}`,
      `refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}`.
+   - Late AttackAirB shield/body contact vs stale dense group seed:
+     dense group seeds materialized from legacy `combat_hitlist_cd` now carry an internal provenance
+     marker in fighter `HitVictim.id32`; true runtime or authoritative per-HitCapsule entries keep
+     that field clear. This lets rollout trim only stale dense-seed entries on later active-snapshot
+     frames when a neutral Guard victim is otherwise blocked by a replay seed that cannot prove the
+     current `HitCapsule.victims_1` owner. It does not erase authoritative per-HitCapsule victims_1
+     seeds. Positive/negative locks: `PositiveRevolvingHyena.msl:6822..6831`.
+     Source anchors:
+     `refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076CBC,ftColl_80076ED8}`,
+     `refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}`,
+     `refs/melee/src/melee/lb/types.h::HitCapsule`.
    - Grounded SpecialLwStart -> terminal DamageFlyTop dense-hitlist boundary:
      a grounded Shine entry can overlap a terminal same-port DamageFlyTop victim while the replay
      seed still carries three hidden proofs: dense group-0 `HitCapsule.victims_1`, explicit
@@ -2044,14 +2058,15 @@ Fox/Falco special-owner split (2026-04-17):
     Runtime now writes the equivalent Slippi `jumps_left=0` on `SpecialHiHoldAir` ->
     `SpecialAirHi` launch entry. Bound/Fall/cliff-catch timing rows remain in `F22`.
     Source: `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialAirHi_Enter`.
-  - `ftFx_SpecialAirHi_Enter` reads the current `fp->input.lstick` after the common input
-    preprocessing/deadzone owner, then applies `stickGetDir` for the `x64` direction gate and
-    writes launch velocity from `x74`. Runtime applies `data/common/ft_common_data.json`
-    `lstick_deadzone_{x,y}` before the Firefox/Firebird launch angle. This fixes HVG's
-    right-plus-small-down launch where UCF clamp puts Y inside the common deadzone; replay launches
-    horizontally instead of drifting downward into a later false cliff path.
-    Sources: `refs/melee/src/melee/ft/fighter.c::Fighter_Spaghetti_8006AD10`,
-    `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialAirHi_Enter`,
+  - `ftFx_SpecialHiHold{Air}_Anim -> ftFx_SpecialAirHi_Enter` is a prio-1 Anim callback path, so
+    launch direction reads the pre-input `fp->input.lstick` snapshot before
+    `Fighter_Spaghetti_8006AD10` installs current-frame input. Runtime uses `prev_input_main_*`
+    for this anim-end launch direction, still applying `data/common/ft_common_data.json`
+    `lstick_deadzone_{x,y}` and `data/characters/{fox,falco}.json` Firefox/Firebird launch attrs.
+    This preserves the older HVG deadzone fix and closes TCH's changed-input HoldAir launch split.
+    Sources: `refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_Spaghetti_8006AD10}`,
+    `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+    ftFx_SpecialHiHold_Anim,ftFx_SpecialHiHoldAir_Anim,ftFx_SpecialAirHi_Enter}`,
     `data/common/ft_common_data.json`, `data/characters/{fox,falco}.json`.
   - `ftFx_SpecialHiBound_Enter` enters `SpecialHiBound`, immediately ticks anim via
     `ftAnim_8006EBA4`, then scales horizontal self velocity by `ftFox_DatAttrs.x84`
@@ -2750,6 +2765,12 @@ Fox/Falco special-owner split (2026-04-17):
       command/interrupt bits). This closes primary `TBK:2323` while aggregate controls with
       `0x20/0x40/0x80` high bits remain live GuardReflect articles instead of false HitShield
       destroys.
+    - Post-callback final-x14 handoff can also occur when the seed-visible x14 is still `2` but
+      `ftCo_GuardReflect_Anim -> ftCo_80093BC0` has ticked the live x14 lane to `1` before item
+      collision. That seed>1 extension is narrower than the seeded-final lane: it still requires
+      the pure reflect-state byte and ReflectDesc vertical lane, and additionally requires live
+      ShieldDesc bubble overlap so same-shaped GuardReflect keepalive rows do not become broad
+      HitShield destroys. This closes aggregate `MAJ:259`.
     - Replay-real locks: GuardOn-follow-up positive `GAT:6207`, final-x14 HitShield positive
       `TBK:2323`, adjacent keepalive control `TBK:2322`, aged positives `GAT:4828`/`TBK:7448`,
       and broad-transfer negatives `GAT:2274`/`GAT:2275`/`GAT:9479`.
@@ -3061,6 +3082,29 @@ Fox/Falco special-owner split (2026-04-17):
       `PRH:8053` remains the nonterminal x1990/x1994 keepalive control.
     Sources: `refs/melee/src/melee/ft/fighter.c::Fighter_8006A360`,
     `refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C`.
+  - Global item spawn-id counter:
+    - Slippi exposes live `item->x1C` as `item.spawn_id`, but vanilla assigns it from the global
+      item counter `it_804D6D10` in `Item_80267AA8`. The counter persists through itemless gaps, so
+      rollouts seeded after all items despawn must not reconstruct the next spawn id from currently
+      live items.
+    - Runtime seeds `item_spawn_id_counter` from a strictly causal replay history and consumes it
+      for blaster guns, laser shots, and illusion articles. Reseed keeps a live-item lower-bound
+      fallback only for old/local data that lacks the explicit lane.
+    - Replay-real locks cover `HIS:6584` (itemless gap -> blaster gun spawn_id 34) and the
+      `HIS:6548..6604` rollout window where overlapping SpecialN lasers keep spawn ids 35/36.
+    Sources: `refs/melee/src/melee/it/item.c::Item_80267AA8`,
+    `refs/slippi-ssbm-asm/Recording/SendItemInfo.s`.
+  - Disabled-contact-only laser BODY scale cap:
+    - The retained disabled-contact lane models item lifetime/contact when hit status blocks
+      `Fighter_ProcessHit`; it is not the ordinary damaging BODY owner. Keep this lane in the same
+      reduced collision space used by shield-adjacent BODY until the full item HitCapsule transform
+      and hidden hit-status owner is extracted end-to-end.
+    - This prevents fully scaled laser visual beam extension from falsely consuming carried shots
+      against disabled-contact JumpF targets while preserving replay-real disabled-contact consume
+      controls (`PRH:4757`) and terminal x1990/x1994 handoffs.
+    Sources: `refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C`,
+    `refs/melee/src/melee/it/itcoll.c::it_80272460`,
+    `refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Anim,itFoxlaser_UnkMotion1_Phys}`.
   - Final-x14 GuardReflect HitShield no-bounce handoff:
     - The pure final-x14 `GuardReflect` HitShield discriminator now also disables
       `ShieldBounced` keepalive when ordinary shield geometry already selected the shield hit.
@@ -3451,13 +3495,25 @@ Fox/Falco special-owner split (2026-04-17):
       `data/items/item_common.json`, not hardcoded in runtime. This closes the `GAT:5223 -> 5280`
       rollout item-exists branch without reopening `IAT:3552` high-shield HitShield destruction.
       Same-step locomotion -> GuardReflect -> GuardSetOff ShieldBounced also consumes the live
-      ShieldDesc bubble center, the collision-time shield bubble for the bounce normal, the previous
-      laser `HitCapsule.x58` endpoint scale, the current `HitCapsule.x4C` endpoint scale, and the
-      current item scale for the shield radius. This keeps `MAJ:751 -> 763/766` and
-      `AGN:4036 -> 4044/4045` alive through the bounce so later item slots do not compact over the
-      laser. The exact native `xC58` normal still carries a velocity residual on GAT/MAJ/AGN because
-      the runtime has a reduced ShieldDesc matrix proxy rather than the live `fp->shield_hit` JObj
-      matrix state.
+      ShieldDesc bubble center and, for the `xC58` bounce normal, a source-shaped shield-bone center
+      split. Fresh GuardOn and GuardOff -> GuardReflect no-submotion entries use the model-scaled
+      GuardOn current-pose shield bone from `ftCo_800921DC/ftCo_80091E78(0)` /
+      `ftCo_80093694 -> ftCo_8009388C`; true locomotion -> GuardReflect entries retain the
+      collision-time shield-bubble normal owned by `ftCo_80093A50`. The previous laser
+      `HitCapsule.x58` endpoint uses prior visual scaleZ, the current `HitCapsule.x4C` endpoint uses
+      current visual scaleZ, and the item HitCapsule radius uses the current item scale. This keeps
+      `GAT:5223 -> 5280`, `MAJ:751 -> 763/766`, and `AGN:4036 -> 4044/4045` alive through the bounce
+      so later item slots do not compact over the laser. The exact native `xC58` normal still carries
+      a small velocity/angle-byte residual on GAT/MAJ/AGN because the runtime has a reduced
+      ShieldDesc matrix proxy rather than the full live `fp->shield_hit` JObj matrix state.
+      The runtime still serializes the Slippi metadata low bytes for laser `foxlaser.scale`
+      (`item+0xDD7`) and `foxlaser.angle` (`item+0xDDB`) from the live item-var model, so rollout
+      does not rely on teacher-forced item metadata after spawn/bounce.
+    - Blaster gun parented spawn copies the fighter attack identity through the generic item spawn
+      path (`it_8027B070`). The strictly causal staling-history derivation also accounts for the
+      hidden frozen GuardOn -> Guard -> GuardOff double default-move increment before subsequent
+      SpecialN gun/shot identity copies, matching `ftCo_GuardOn_Anim` -> `ftCo_800928CC` ->
+      `ftCo_80092908` -> `ftCo_GuardOn_IASA` -> `ftCo_80092C54`.
     - Replay-real lock:
       `tests/test_laser_shield_contact_replay_real_locks.py::test_guardreflect_shield_bounce_keepalive_uses_hidden_item_bounce_owner`.
       Runtime rollout lock:
@@ -4341,7 +4397,10 @@ BODY collision-space residual split and rejected seed bridge:
   For early
   AttackAirB `DamageFlyTop` carry, the seed lane also has an explicit zero-consume marker: this
   admits replay-proven frame-start RNG gates without broadening ordinary unseeded rollouts where
-  visible action shape alone cannot prove the hidden `Fighter_8006CDA4` phase.
+  visible action shape alone cannot prove the hidden `Fighter_8006CDA4` phase. On same-source
+  `DamageFlyTop` hitstun segments, that marker carries backward as gate-admission provenance for
+  zero pre-gate consumes (`PRH:1593 -> 1612`); it still does not represent persistent stream phase
+  and is not backfilled for AttackAirN pre-action segments.
   Capture/throw blaster episodes use the same rollout-only frame-start RNG clock owner when a
   grabbed victim is still attached to a data-backed blaster thrower. TBK `2712 -> 2752` proves the
   path: `CatchAttack/CaptureDamageHi` enters `ThrowHi/ThrownHi`, frame-20/24 throw-side lasers are
@@ -4529,6 +4588,16 @@ BODY collision-space residual split and rejected seed bridge:
   paths: `refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008A5C}`,
   `refs/melee/src/melee/lb/types.h::HitCapsule`, and
   `refs/melee/src/melee/ft/ftcoll.c::ftColl_80076ED8`.
+- AttackAirF dense-latch carry into grounded GuardOn admission uses the same victim-pointer owner
+  on rollout create edges: if a replay rollout starts before the exact per-HitCapsule victims_1
+  state is active, the dense group seed can still prove a live victim latch. When the later
+  AttackAirF create edge reaches a grounded shield-input admission frame before ShieldDesc
+  ownership is installed, materialize that latch and rebind the stale Slippi `instance_id` proxy
+  unless the victim crossed a death/rebirth pointer boundary. `HVG:7959 -> 7970` proves this must
+  suppress the otherwise false GuardSetOff shield hit; clearing the dense seed admits that hit.
+  Source paths: `refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80078C70}`,
+  `refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}`, and
+  `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardOn_Enter`.
 - Late AttackAirHi dense-latch preservation applies the same HitCapsule owner to the UpAir
   late-window recreate surface: Fox/Falco UpAir clears early hitboxes and recreates same-group late
   hitboxes at frame 11. After that recreate edge, `lbColl_8000ACFC` suppresses by victim pointer;
@@ -4547,6 +4616,16 @@ BODY collision-space residual split and rejected seed bridge:
   Source paths: `refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}`,
   `refs/melee/src/melee/ft/ftanim.c::ftAnim_8006EBA4`, and
   `refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC`.
+- Common airborne `Damage_Anim -> ftCo_Fall_Enter` splits motion-state side effects from the Fall
+  pose/timebase commit. `Fighter_ChangeMotionState` side effects (`ft_800890D0`,
+  `ft_800895E0`, facing_dir1, smash attr clears) run immediately in callback order, but
+  `ftCo_Fall_Enter` does not call an immediate `ftAnim_8006EBA4`, so the previous DamageAir pose is
+  still used for same-frame collision until the post-combat deferred Fall timebase commit.
+  `HVG:7959 -> 7964` proves this ordering: p0's Fall instance id advances before p1's same-frame
+  AttackAirF entry. Source paths:
+  `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Anim`,
+  `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter`, and
+  `refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState`.
 - The hidden HitCapsule shield/body lineage sub-owner is also now represented on the
   per-HitCapsule seed lane rather than as a geometry bridge:
   - accepted shield/body contacts register `HitCapsule.victims_1` across all active same-group
@@ -4573,14 +4652,36 @@ BODY collision-space residual split and rejected seed bridge:
     tests, matching `ftColl_8007AD18` instead of falling back to endpoint distance;
   - `ftColl_8007699C` writes the clank victim across active HitCapsules sharing the same
     `HitCapsule.x4` group via `inlineA0`/`inlineA1`, but `ftColl_80078C70` runs that inside the
-    per-HitCapsule loop, so later same-group clanks suppress only the current/subsequent slots and
-    cannot retroactively cancel an earlier BODY admission;
+    per-HitCapsule loop. The first accepted same-group clank owns the group's hitlag/rebound
+    damage for that fighter pair; later same-group clank candidates and BODY admission for that
+    pair are suppressed by the refreshed HitVictim entries;
   - clank geometry is allowed to run before replay-reconstructed BODY victim rings prefilter the
     pair. HHG:8674 proves a stale BODY ring can otherwise mask a live AttackDash/AttackHi3 clank,
     while FSP:467 protects the degenerate enable-edge point-capsule side; this is a
     seed-reconstruction boundary, not a replay-authority admission branch.
-  This fixes FSP:5466, HHG:8674, and FSP:467's ReboundStop action selection without a BODY
-  admission bridge or row-id branch, though clank-hitlag scalar residuals remain.
+  ReboundStop entry runs from the post-physics collision pass; `ftCo_80099D9C` writes the
+  `mv.co.rebound.x0` value through `ftCommon_800804A0` (`xE8_ground_accel_2`), so the entry frame
+  does not overwrite the already-reported ground velocity. The same source owner stores
+  `mv.co.rebound.anim_start = (co_attrs.x9C + 0.1) / dmg.x191C`, which must survive frozen
+  ReboundStop hitlag until `ReboundStop_Anim -> ftCo_80099E44` enters Rebound. The queued xE8 lane
+  is consumed by the first Rebound physics frame: movement uses old `gr_vel`, then post-frame
+  ground velocity receives xE8. The xE8 sign is owned by clank-local `dmg.facing_dir`, written from
+  relative fighter root positions in `ftColl_8007699C` inlineA0/inlineA1, not by replay-visible
+  scalar facing. Teacher-forced ReboundStop hitlag-tail seeds reconstruct the pending xE8/rate
+  lanes from the future visible Rebound transition; these are explicit non-causal one-step lanes.
+  Runtime clank entry writes both causally from `dmg.x191C`. This fixes FSP:5466, HHG:8674,
+  FSP:467, and the FSP:472/473 Rebound transition without a BODY admission bridge or row-id branch.
+- GuardSetOff shield hits split the hidden shield-damage owners:
+  `ftColl_80076CBC` writes `x19A4` as the max integer hit damage for hitlag/shieldstun, while
+  `Fighter_ProcessHit_8006D1EC` consumes the separate `x19A0_shieldDamageTaken` accumulator for
+  shield HP. Teacher-forced rows seed x19A4 from replay-visible GuardSetOff + both-fighter hitlag,
+  and seed x19A0 only when replay t->t+1 shield HP proves `x19A0 > x19A4`; this is an explicit
+  non-causal one-step lane. x19A0<=x19A4 multi-contact rows remain runtime-selected-contact
+  ownership until exact per-HitCapsule shield-contact order is extracted. Replay-real positives:
+  FSP:3100, HHG:5544, PRH:7124. Negative: QGD:3938.
+  Sources: `refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC`,
+  `refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC`,
+  `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C`.
 - Hidden color-animation x1990 seed ownership now treats replay-visible vulnerable snapshots as an
   observable clear of stale cliff/ledge x1990, while preserving the hidden x1994 invincible-contact
   lane used by DownBound/Damage OnExitHitlag rows. This follows Slippi's post-frame

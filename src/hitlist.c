@@ -469,8 +469,9 @@ void hitlist_register_item_fighter(MslBatch* batch, int bi, int item_slot, int v
   }
 }
 
-void hitlist_seed_init_fighter_hitbox_from_group(MslBatch* batch, int bi, int attacker, int hb_id,
-                                                 uint8_t hit_group) {
+static void hitlist_seed_init_fighter_hitbox_from_group_impl(MslBatch* batch, int bi, int attacker,
+                                                             int hb_id, uint8_t hit_group,
+                                                             uint8_t allow_stale_iid_rebind) {
   if (batch == NULL) {
     return;
   }
@@ -558,11 +559,23 @@ void hitlist_seed_init_fighter_hitbox_from_group(MslBatch* batch, int bi, int at
           continue;
         }
       } else if (stored_iid != 0u && stored_iid != batch->state.instance_id[v_idx]) {
-        continue;
+        // Dense group seeds carry a Slippi-visible instance_id proxy for decomp's raw victim
+        // pointer, not the raw pointer itself. On a normal HitCapsule create edge,
+        // ftColl_800768A0 clears/copies concrete victims_1 state; a stale dense seed must fail
+        // closed instead of suppressing a new hit after the victim entered a new motion state.
+        //
+        // The only retained stale-iid rebind is an explicit higher-level bridge where the caller
+        // has already proven the source phase still owns the same hidden victim pointer.
+        // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+        if (!allow_stale_iid_rebind ||
+            hitlist_victim_pointer_may_change(batch->state.stocks[v_idx],
+                                              batch->state.action_id[v_idx])) {
+          continue;
+        }
       }
     }
     MslHitlistVictimEntry* e = &hit->victims_1[out_i++];
-    e->id32 = 0;
+    e->id32 = use_hitbox_seed ? 0u : MSL_HITLIST_FIGHTER_ID32_SEED_DENSE;
     e->id16 = use_hitbox_seed ? batch->state.combat_hitlist_hb_victim_iid[i]
                               : batch->state.combat_hitlist_victim_iid[i];
     e->kind_slot = hitlist_fighter_key((uint8_t)v);
@@ -575,6 +588,17 @@ void hitlist_seed_init_fighter_hitbox_from_group(MslBatch* batch, int bi, int at
   const uint32_t gen = batch->state.hitlist_reseed_gen[bi];
   const size_t init_i = idx_fighter_hitlist(bi, attacker, hb_id);
   batch->state.fighter_hitlist_init_gen[init_i] = gen;
+}
+
+void hitlist_seed_init_fighter_hitbox_from_group(MslBatch* batch, int bi, int attacker, int hb_id,
+                                                 uint8_t hit_group) {
+  hitlist_seed_init_fighter_hitbox_from_group_impl(batch, bi, attacker, hb_id, hit_group, 0u);
+}
+
+void hitlist_seed_init_fighter_hitbox_from_group_allow_stale_iid(MslBatch* batch, int bi,
+                                                                 int attacker, int hb_id,
+                                                                 uint8_t hit_group) {
+  hitlist_seed_init_fighter_hitbox_from_group_impl(batch, bi, attacker, hb_id, hit_group, 1u);
 }
 
 void hitlist_debug_clear_fighter_attacker(MslBatch* batch, int bi, int attacker) {
