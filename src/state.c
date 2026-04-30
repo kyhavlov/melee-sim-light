@@ -196,6 +196,9 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->fall_fast = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->attackdash_x0 = (int16_t*)alloc_aligned_64(sizeof(int16_t) * bp);
   state->jab_x0 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->jab_rapid_count = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->attack100_x0 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->attack100_x4 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->run_x0 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->runbrake_cmd0 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->dash_x4 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
@@ -346,6 +349,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->combo_victim_port = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->combo_victim_instance_id = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->combo_timer_x2098 = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
+  state->combo_push_timer_x2092 = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->source_port0 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->last_hit_by = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->state_flags = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp * MSL_STATE_FLAGS_BYTES);
@@ -476,10 +480,11 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->guard_setoff_post_hitlag_owner_u8 || !state->kneebend_jump_input ||
       !state->guard_reflect_entry_dash_terminal_scalar || !state->kneebend_is_short_hop ||
       !state->tilt_timer_x || !state->tilt_timer_y || !state->fall_fast || !state->attackdash_x0 ||
-      !state->jab_x0 || !state->run_x0 || !state->runbrake_cmd0 || !state->dash_x4 ||
-      !state->shine_release_lag || !state->shine_is_release || !state->ecb_lock_timer ||
-      !state->ledge_side || !state->stage_ledge_occupant_left ||
-      !state->stage_ledge_occupant_right || !state->ledge_cooldown || !state->fallspecial_xc ||
+      !state->jab_x0 || !state->jab_rapid_count || !state->attack100_x0 || !state->attack100_x4 ||
+      !state->run_x0 || !state->runbrake_cmd0 || !state->dash_x4 || !state->shine_release_lag ||
+      !state->shine_is_release || !state->ecb_lock_timer || !state->ledge_side ||
+      !state->stage_ledge_occupant_left || !state->stage_ledge_occupant_right ||
+      !state->ledge_cooldown || !state->fallspecial_xc ||
       !state->landing_fallspecial_allow_interrupt || !state->turn_has_turned ||
       !state->turn_frames_to_turn || !state->walk_use_raw_input_once || !state->turn_x8 ||
       !state->lr_press_timer || !state->x672_input_timer || !state->x673 || !state->x674 ||
@@ -525,8 +530,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->instance_identity_last_action_id || !state->attack_id || !state->attack_instance ||
       !state->attack_identity_last_action_id || !state->last_attack_landed || !state->combo_count ||
       !state->combo_victim_port || !state->combo_victim_instance_id || !state->combo_timer_x2098 ||
-      !state->source_port0 || !state->last_hit_by || !state->state_flags ||
-      !state->combat_hitlist_cd || !state->combat_hitlist_victim_iid ||
+      !state->combo_push_timer_x2092 || !state->source_port0 || !state->last_hit_by ||
+      !state->state_flags || !state->combat_hitlist_cd || !state->combat_hitlist_victim_iid ||
       !state->combat_hitlist_hb_valid || !state->combat_hitlist_hb_cd ||
       !state->combat_hitlist_hb_victim_iid || !state->combat_shield_contact_hb_kind ||
       !state->combat_shield_hit_int_damage || !state->combat_shield_damage_taken ||
@@ -781,6 +786,9 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->fall_fast);
   alloc_free(state->attackdash_x0);
   alloc_free(state->jab_x0);
+  alloc_free(state->jab_rapid_count);
+  alloc_free(state->attack100_x0);
+  alloc_free(state->attack100_x4);
   alloc_free(state->run_x0);
   alloc_free(state->runbrake_cmd0);
   alloc_free(state->dash_x4);
@@ -931,6 +939,7 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->combo_victim_port);
   alloc_free(state->combo_victim_instance_id);
   alloc_free(state->combo_timer_x2098);
+  alloc_free(state->combo_push_timer_x2092);
   alloc_free(state->source_port0);
   alloc_free(state->last_hit_by);
   alloc_free(state->state_flags);

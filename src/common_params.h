@@ -421,14 +421,21 @@ typedef struct MslCommonParams {
   float grounded_tumble_bounce_angle_extra_radians;  // p_ftCommonData->0x1E8
   float grounded_tumble_bounce_y_mul;                // p_ftCommonData->0x1EC
 
-  // Combo timer window after hitstun ends (used by combo victim clear logic).
+  // Combo timer/window constants (combo victim clear + repeated-hit attacker push).
   // Decomp:
+  // - repeated same-attack combo count can arm `fp->x2092`; ftColl_80076528 applies a small
+  //   grounded push along the floor normal while the timer is nonzero.
+  //   refs/melee/src/melee/ft/ftcoll.c::{ftColl_800763C0,ftColl_80076528}
   // - fp->x2098 = p_ftCommonData->x4CC when hitstun ends:
   //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008F744
   // - decremented and used for clearing attacker fp->x2094 (combo victim):
   //   refs/melee/src/melee/ft/ftcoll.c::ftColl_800764DC
-  uint16_t combo_timer_post_hitstun_frames;  // p_ftCommonData->x4CC
-  uint16_t _pad_u16_combo_0;
+  uint16_t combo_push_count_threshold;           // p_ftCommonData->x4C4
+  uint16_t combo_push_stronger_count_threshold;  // p_ftCommonData->x4C8
+  uint16_t combo_timer_post_hitstun_frames;      // p_ftCommonData->x4CC
+  uint16_t combo_push_timer_frames;              // p_ftCommonData->x4D8
+  float combo_push_low_speed;                    // p_ftCommonData->x4D0
+  float combo_push_high_speed;                   // p_ftCommonData->x4D4
 
   // DamageFlyTop angle window (radians) (ftCo_8008DCE0 block_33).
   float damagefly_top_angle_min_radians;  // p_ftCommonData->0x234

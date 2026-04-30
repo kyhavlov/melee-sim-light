@@ -8,11 +8,13 @@ import pytest
 
 from tools.eval.dataset import SAMPLE_DTYPE, SEED_DTYPE
 from tools.slippi.make_dataset_from_slp import (
+    _derive_jab_rapid_count_seed_lane,
     _derive_landing_fallspecial_allow_interrupt_seed_lane,
     _derive_specialhi_rotate_model_seed_lane,
     _derive_walljump_phase_seed_lanes,
 )
 from tools.slippi.seed_history import derive_item_spawn_id_counter
+from tests.test_hitboxes_pose import _read_hitbox_events
 
 
 def test_seed_schema_includes_staling_fields() -> None:
@@ -120,6 +122,10 @@ def test_seed_schema_includes_staling_fields() -> None:
     # Firefox/Firebird hidden XRotN pose owner.
     assert "specialhi_rotate_model_f32" in SEED_DTYPE.fields
     assert "specialhi_rotate_model_valid_u8" in SEED_DTYPE.fields
+    # Attack100 rapid-jab counter (`fp+0x1A54`) for mid-jab teacher-forced seeds.
+    assert "jab_rapid_count" in SEED_DTYPE.fields
+    # Repeated-hit combo push timer (`fp->x2092`) for grounded attacker drift after x2090 reaches x4C4.
+    assert "combo_push_timer_x2092" in SEED_DTYPE.fields
 
 
 def test_dataset_dtype_sizes_match_c_structs() -> None:
@@ -181,9 +187,55 @@ def test_character_attrs_include_ordered_walljump_setup_threshold() -> None:
     for character in ("fox", "falco"):
         data = json.loads((root / "data" / "characters" / f"{character}.json").read_text())
         keys = list(data.keys())
+        assert data["rapid_jab_window"] == 4
         assert data["walljump_setup_x_delta_threshold"] == 0.5
+        assert keys.index("rebound_anim_numerator_frames") < keys.index("rapid_jab_window")
+        assert keys.index("rapid_jab_window") < keys.index("wall_jump_horizontal_velocity")
         assert keys.index("wall_jump_vertical_velocity") < keys.index("walljump_setup_x_delta_threshold")
         assert keys.index("walljump_setup_x_delta_threshold") < keys.index("camera_zoom_target_bone_part_id")
+
+
+def test_move_data_exports_attack100_loop_checkpoint() -> None:
+    root = Path(__file__).resolve().parents[1]
+    for character in ("fox", "falco"):
+        data = json.loads((root / "data" / "moves" / f"{character}.json").read_text())
+        events = data["moves"]["ftCo_SM_Attack100Loop"]["events"]
+        assert any(
+            ev.get("kind") == "set_throw_flags" and ev.get("data", {}).get("hit_idx") == 0
+            for ev in events
+        )
+
+
+def test_runtime_hitbox_tables_export_attack100_loop_hitboxes() -> None:
+    # Attack100Loop hitboxes are consumed from generated MSLHITB1 tables at runtime. This guard
+    # catches stale derived tables after move-script extraction changes.
+    root = Path(__file__).resolve().parents[1]
+    for character in ("fox", "falco"):
+        path = root / "data" / "hitboxes" / f"{character}.bin"
+        assert path.exists(), f"missing generated runtime hitbox table: {path}"
+        events = _read_hitbox_events(path)[50]
+        assert any(int(ev["kind"]) == 0 and int(ev["frame"]) == 2 for ev in events)
+        assert any(int(ev["kind"]) == 0 and int(ev["frame"]) == 9 for ev in events)
+        assert any(int(ev["kind"]) == 0 and int(ev["frame"]) == 16 for ev in events)
+        assert any(int(ev["kind"]) == 1 and int(ev["hitbox_id"]) == 0xFF for ev in events)
+
+
+def test_jab_rapid_count_seed_lane_resets_on_attack11_entry_and_counts_iasa_frames() -> None:
+    # Action ids: Wait=14, Attack11=44, Attack12=45, Attack100Start=47.
+    action = np.array([14, 44, 44, 44, 45, 45, 47, 14, 44, 44], dtype=np.uint16)
+    held = np.array([0, 0x100, 0x100, 0, 0x100, 0, 0, 0, 0x100, 0], dtype=np.uint16)
+    prev_held = np.concatenate(([np.uint16(0)], held[:-1]))
+    released = prev_held & ~held
+    pressed = np.array([0, 0x100, 0, 0, 0x100, 0, 0, 0, 0x100, 0], dtype=np.uint16)
+
+    got = _derive_jab_rapid_count_seed_lane(
+        action_id_u16=action,
+        buttons_released_u16=released,
+        buttons_pressed_u16=pressed,
+        button_mask_a=0x100,
+    )
+
+    assert got.tolist() == [0, 0, 0, 1, 2, 3, 0, 0, 0, 1]
 
 
 def test_walljump_phase_seed_lane_is_prefix_causal() -> None:

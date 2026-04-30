@@ -191,6 +191,9 @@ SEED_DTYPE = np.dtype(
         # Slippi source lane: SendGamePostFrame emits fp+0x2340 as `misc_as`.
         # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
         ("jab_x0", _arr("u1", MAX_PLAYERS)),
+        # fp+0x1A54 Attack100 mash counter; prefix-causal hidden state for mid-jab reseeds.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Attack_800D6A50
+        ("jab_rapid_count", _arr("u1", MAX_PLAYERS)),
         ("match_flow_timer", _arr("u1", MAX_PLAYERS)),
         # Match-start fighter input lock countdown (`fp->x221D_b4`).
         # refs/melee/src/melee/ft/ftlib.c::{ftLib_800867E8,ftLib_800868A4}
@@ -404,6 +407,7 @@ SEED_DTYPE = np.dtype(
         ("combo_victim_port", _arr("u1", MAX_PLAYERS)),
         ("combo_victim_instance_id", _arr("<u2", MAX_PLAYERS)),
         ("combo_timer_x2098", _arr("<u2", MAX_PLAYERS)),
+        ("combo_push_timer_x2092", _arr("<u2", MAX_PLAYERS)),
         # Raw Slippi 0-based controller port for each selected local slot. `last_hit_by` is
         # recorded in this domain; most other fighter ownership lanes use local slot order.
         ("source_port0", _arr("u1", MAX_PLAYERS)),

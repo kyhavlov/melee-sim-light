@@ -128,11 +128,18 @@ def main() -> None:
         # Combo timer window after hitstun ends (GALE01 fp->x2098 reset).
         #
         # Decomp trail:
+        # - repeated same-attack combo count can arm the attacker push timer (`fp->x2092`):
+        #   refs/melee/src/melee/ft/ftcoll.c::{ftColl_800763C0,ftColl_80076528}
         # - set when hitstun ends:
         #   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008F744 (fp->x2098 = p_ftCommonData->x4CC)
         # - decremented and used for clearing attacker combo victim (fp->x2094):
         #   refs/melee/src/melee/ft/ftcoll.c::ftColl_800764DC
+        "combo_push_count_threshold": int(max(0, _i32_be(buf, ft_common_abs + 0x4C4))),
+        "combo_push_stronger_count_threshold": int(max(0, _i32_be(buf, ft_common_abs + 0x4C8))),
         "combo_timer_post_hitstun_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x4CC))),
+        "combo_push_low_speed": float(_f32_be(buf, ft_common_abs + 0x4D0)),
+        "combo_push_high_speed": float(_f32_be(buf, ft_common_abs + 0x4D4)),
+        "combo_push_timer_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x4D8))),
         # PassiveWall / PassiveWallJump startup timer (`fp->mv.co.passivewall.timer`).
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::{ftCo_800C1D38,ftCo_800C1E64}
         "passivewall_timer_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x760))),

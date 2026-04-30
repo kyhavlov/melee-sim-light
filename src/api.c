@@ -1323,6 +1323,12 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::{checkAttack12,checkAttack13}
       // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (misc AS variable @ fp+0x2340)
       batch->state.jab_x0[idx] = seed->jab_x0[p] ? 1u : 0u;
+      // Attack100 mash counter (fp+0x1A54), reset on Attack11 entry and carried through the
+      // Attack11/12/13 IASA path until the extracted rapid gate admits Attack100Start.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Attack_800D6A50
+      batch->state.jab_rapid_count[idx] = seed->jab_rapid_count[p];
+      batch->state.attack100_x0[idx] = 0u;
+      batch->state.attack100_x4[idx] = 0u;
       batch->state.run_x0[idx] = seed->run_x0[p];
       batch->state.runbrake_cmd0[idx] = seed->runbrake_cmd0[p] ? 1u : 0u;
       batch->state.dash_x4[idx] = seed->dash_x4[p];
@@ -1699,6 +1705,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.combo_victim_port[idx] = seed->combo_victim_port[p];
       batch->state.combo_victim_instance_id[idx] = seed->combo_victim_instance_id[p];
       batch->state.combo_timer_x2098[idx] = seed->combo_timer_x2098[p];
+      batch->state.combo_push_timer_x2092[idx] = seed->combo_push_timer_x2092[p];
       batch->state.source_port0[idx] =
           (seed->source_port0[p] < (uint8_t)MSL_MAX_PLAYERS) ? seed->source_port0[p] : (uint8_t)p;
       batch->state.last_hit_by[idx] = seed->last_hit_by[p];

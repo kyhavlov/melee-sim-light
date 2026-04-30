@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import numpy as np
 
-from tools.slippi.combo_history import derive_combo_seed_fields
+from tools.slippi.combo_history import derive_combo_push_timer_seed, derive_combo_seed_fields
 
 
 def test_combo_history_prefix_invariance() -> None:
@@ -58,3 +61,64 @@ def test_combo_history_prefix_invariance() -> None:
         assert np.array_equal(pref_iid, full_iid[:k])
         assert np.array_equal(pref_timer, full_timer[:k])
 
+
+def test_combo_push_timer_seed_tracks_combo_count_increment_prefix_invariant() -> None:
+    common = json.loads(Path("data/common/ft_common_data.json").read_text())
+    threshold = int(common["combo_push_count_threshold"])
+    frames = int(common["combo_push_timer_frames"])
+    assert threshold == 5
+    assert frames == 20
+
+    combo_count = np.zeros((10, 4), dtype=np.uint8)
+    combo_count[:, 0] = np.array([0, 1, 2, 3, 4, 5, 5, 5, 6, 6], dtype=np.uint8)
+    last_attack_landed = np.zeros((10, 4), dtype=np.uint8)
+    last_attack_landed[:, 0] = 7
+    combo_victim_port = np.full((10, 4), 0xFF, dtype=np.uint8)
+    combo_victim_port[:, 0] = 1
+
+    full = derive_combo_push_timer_seed(
+        combo_count=combo_count,
+        last_attack_landed=last_attack_landed,
+        combo_victim_port=combo_victim_port,
+        data_root="data",
+    )
+    assert full[:, 0].tolist() == [0, 0, 0, 0, 0, 20, 19, 18, 20, 19]
+    assert not np.any(full[:, 1:])
+
+    for k in range(1, combo_count.shape[0] + 1):
+        pref = derive_combo_push_timer_seed(
+            combo_count=combo_count[:k].copy(),
+            last_attack_landed=last_attack_landed[:k].copy(),
+            combo_victim_port=combo_victim_port[:k].copy(),
+            data_root="data",
+        )
+        assert np.array_equal(pref, full[:k])
+
+
+def test_combo_push_timer_seed_rejects_mixed_attack_or_victim_count_increase() -> None:
+    combo_count = np.zeros((8, 4), dtype=np.uint8)
+    combo_count[:, 0] = np.array([0, 1, 2, 3, 4, 5, 6, 7], dtype=np.uint8)
+
+    mixed_attack = np.zeros((8, 4), dtype=np.uint8)
+    mixed_attack[:, 0] = np.array([7, 7, 7, 7, 7, 8, 8, 8], dtype=np.uint8)
+    same_victim = np.full((8, 4), 0xFF, dtype=np.uint8)
+    same_victim[:, 0] = 1
+    mixed_attack_timer = derive_combo_push_timer_seed(
+        combo_count=combo_count,
+        last_attack_landed=mixed_attack,
+        combo_victim_port=same_victim,
+        data_root="data",
+    )
+    assert not np.any(mixed_attack_timer[:, 0])
+
+    same_attack = np.zeros((8, 4), dtype=np.uint8)
+    same_attack[:, 0] = 7
+    mixed_victim = np.full((8, 4), 0xFF, dtype=np.uint8)
+    mixed_victim[:, 0] = np.array([1, 1, 1, 1, 1, 2, 2, 2], dtype=np.uint8)
+    mixed_victim_timer = derive_combo_push_timer_seed(
+        combo_count=combo_count,
+        last_attack_landed=same_attack,
+        combo_victim_port=mixed_victim,
+        data_root="data",
+    )
+    assert not np.any(mixed_victim_timer[:, 0])

@@ -460,6 +460,17 @@ typedef struct MslSeed {
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::{checkAttack12,checkAttack13}
   // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (misc AS variable @ fp+0x2340)
   uint8_t jab_x0[MSL_MAX_PLAYERS];
+  // fp+0x1A54 Attack100 mash counter.
+  //
+  // Producer:
+  // - runtime increments while Attack11/12/13 IASA sees A pressed/released.
+  // - preprocessing reconstructs the prefix-causal counter from replay action/input history for
+  //   teacher-forced mid-jab seeds.
+  //
+  // Decomp:
+  // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Attack_800D6A50
+  // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::checkAttack11 (entry reset)
+  uint8_t jab_rapid_count[MSL_MAX_PLAYERS];
   // Reseed-only match-flow countdown timer (teacher-forcing aid).
   // Used for match-start entry / KO / respawn states where Slippi post-frames do not expose a
   // useful per-frame counter (action_frame is often -1).
@@ -1083,6 +1094,12 @@ typedef struct MslSeed {
   uint8_t combo_victim_port[MSL_MAX_PLAYERS];
   uint16_t combo_victim_instance_id[MSL_MAX_PLAYERS];
   uint16_t combo_timer_x2098[MSL_MAX_PLAYERS];
+  // Hidden attacker push timer (GALE01 fp->x2092), armed by repeated same-attack combo hits once
+  // `fp->x2090 >= p_ftCommonData->x4C4` and consumed by ftColl_80076528 after position
+  // integration. This is seeded from replay-visible combo_count history because Slippi does not
+  // expose x2092 directly.
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800763C0,ftColl_80076528}
+  uint16_t combo_push_timer_x2092[MSL_MAX_PLAYERS];
   // Slippi raw source port for each local dataset/sim slot.
   //
   // Decomp/recording boundary:

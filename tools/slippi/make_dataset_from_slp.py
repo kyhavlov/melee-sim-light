@@ -2468,6 +2468,50 @@ def _derive_landing_fallspecial_allow_interrupt_seed_lane(*, action_id_u16: np.n
     return out
 
 
+def _derive_jab_rapid_count_seed_lane(
+    *,
+    action_id_u16: np.ndarray,
+    buttons_released_u16: np.ndarray,
+    buttons_pressed_u16: np.ndarray,
+    button_mask_a: int,
+) -> np.ndarray:
+    """Reconstruct fp+0x1A54 for teacher-forced mid-jab seeds.
+
+    The counter is runtime-causal: checkAttack11 resets it on Attack11 entry, then
+    ftCo_Attack_800D6A50 increments once per Attack11/12/13 IASA frame when A is pressed or
+    released.
+    refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::checkAttack11
+    refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Attack_800D6A50
+    """
+
+    n = int(action_id_u16.shape[0])
+    out = np.zeros(n, dtype=np.uint8)
+    count = 0
+    prev_action = np.uint16(0xFFFF)
+    attack_11 = np.uint16(0x002C)
+    attack_12 = np.uint16(0x002D)
+    attack_13 = np.uint16(0x002E)
+    jab_actions = {int(attack_11), int(attack_12), int(attack_13)}
+    for i in range(n):
+        action = np.uint16(action_id_u16[i])
+        entered_attack11 = action == attack_11 and prev_action != attack_11
+        if entered_attack11:
+            count = 0
+        elif int(action) not in jab_actions:
+            count = 0
+
+        if int(action) in jab_actions and not entered_attack11:
+            if (
+                (int(buttons_released_u16[i]) | int(buttons_pressed_u16[i]))
+                & int(button_mask_a)
+            ) != 0:
+                count = min(255, count + 1)
+            out[i] = np.uint8(count)
+
+        prev_action = action
+    return out
+
+
 def _derive_walk_anim_source_vel_seed_lane(
     *,
     action_id_u16: np.ndarray,
@@ -3993,6 +4037,8 @@ def _main_impl(args) -> None:
     post_instance_hit_by_u16_all = np.zeros((n_frames, 4), dtype=np.uint16)
     post_state_flags_u8 = np.zeros((n_frames, 4, 5), dtype=np.uint8)
     post_turn_has_turned_u8 = np.zeros((n_frames, 4), dtype=np.uint8)
+    post_combo_count_u8_all = np.zeros((n_frames, 4), dtype=np.uint8)
+    post_last_attack_landed_u8_all = np.zeros((n_frames, 4), dtype=np.uint8)
     ports_struct = frames.field("ports")
     available_ports = set(f.name for f in ports_struct.type)
     for slot, port_name in enumerate(src_port_names):
@@ -4075,6 +4121,8 @@ def _main_impl(args) -> None:
         instance_id = _to_numpy(post.field("instance_id")).astype(np.uint16)
         last_attack_landed = _to_numpy(post.field("last_attack_landed")).astype(np.uint8)
         combo_count = _to_numpy(post.field("combo_count")).astype(np.uint8)
+        post_combo_count_u8_all[:, slot] = combo_count
+        post_last_attack_landed_u8_all[:, slot] = last_attack_landed
         last_hit_by = _to_numpy(post.field("last_hit_by")).astype(np.uint8)
 
         sf = post.field("state_flags")
@@ -4151,6 +4199,14 @@ def _main_impl(args) -> None:
         )
         post_jab_x0[jab_mask] = (post_misc_as[jab_mask] > 0.0).astype(np.uint8)
         samples["seed_t"]["jab_x0"][:, slot] = post_jab_x0[:-1]
+        samples["seed_t"]["jab_rapid_count"][:, slot] = _derive_jab_rapid_count_seed_lane(
+            action_id_u16=post_state,
+            buttons_released_u16=(np.concatenate(([np.uint16(0)], pre_buttons_physical[:-1]))
+                                  & ~pre_buttons_physical),
+            buttons_pressed_u16=pre_buttons_physical
+            & ~np.concatenate(([np.uint16(0)], pre_buttons_physical[:-1])),
+            button_mask_a=button_mask_a,
+        )[:-1]
         port0 = int(src_ports[slot]) - 1
         samples["seed_t"]["match_flow_timer"][:, slot] = _derive_match_flow_timer(
             action_id_u16=post_state, port0=port0, common=common
@@ -6285,7 +6341,7 @@ def _main_impl(args) -> None:
     #
     # These seed fields support decomp-shaped ftColl_800763C0/ftColl_800764DC combo tracking in the
     # simulator core by reconstructing the missing fp->x2094/x2098 state from replay prefix history.
-    from tools.slippi.combo_history import derive_combo_seed_fields
+    from tools.slippi.combo_history import derive_combo_push_timer_seed, derive_combo_seed_fields
 
     combo_victim_port, combo_victim_iid, combo_timer = derive_combo_seed_fields(
         num_players=num_players,
@@ -6300,6 +6356,13 @@ def _main_impl(args) -> None:
     samples["seed_t"]["combo_victim_port"][:, :num_players] = combo_victim_port[:-1, :num_players]
     samples["seed_t"]["combo_victim_instance_id"][:, :num_players] = combo_victim_iid[:-1, :num_players]
     samples["seed_t"]["combo_timer_x2098"][:, :num_players] = combo_timer[:-1, :num_players]
+    combo_push_timer = derive_combo_push_timer_seed(
+        combo_count=post_combo_count_u8_all,
+        last_attack_landed=post_last_attack_landed_u8_all,
+        combo_victim_port=combo_victim_port,
+        data_root="data",
+    )
+    samples["seed_t"]["combo_push_timer_x2092"][:, :num_players] = combo_push_timer[:-1, :num_players]
 
     write_dataset(args.out, num_players=num_players, samples=samples)
     print(f"Wrote {n_samples} samples to {args.out} from {args.slp}")

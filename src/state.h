@@ -475,6 +475,19 @@ typedef struct MslStateSoA {
   // - mv.co.attack1.x0 latched intent consumed by checkAttack12/checkAttack13.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::{checkAttack12,checkAttack13}
   uint8_t* jab_x0;  // [batch * players], 0/1
+  // fp+0x1A54 Attack100 mash counter:
+  // - incremented by ftCo_Attack_800D6A50 while A is pressed/released during Attack11/12/13.
+  // - compared against co_attrs.rapid_jab_window when x2218_b2 is set.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Attack_800D6A50
+  uint8_t* jab_rapid_count;  // [batch * players], clamped to 0..255
+  // mv.co.attack100.x4 continue-loop latch, set by Attack100Loop_IASA and consumed by
+  // Attack100Loop_Anim's throw_flags_b3 checkpoint.
+  // mv.co.attack100.x0 loop-start latch, set by Attack100Loop_Anim before item pickup and
+  // checkpoint handling.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+  //   ftCo_Attack100Loop_IASA,ftCo_Attack100Loop_Anim}
+  uint8_t* attack100_x0;  // [batch * players], 0/1
+  uint8_t* attack100_x4;  // [batch * players], 0/1
   // Run IASA lockout countdown (decomp: fp->mv.co.run.x0).
   // - Decremented in Run_Anim.
   // - Gates TurnRun/RunBrake in Run_IASA.
@@ -829,6 +842,7 @@ typedef struct MslStateSoA {
   uint8_t* combo_victim_port;
   uint16_t* combo_victim_instance_id;
   uint16_t* combo_timer_x2098;
+  uint16_t* combo_push_timer_x2092;
   // Raw Slippi 0-based controller port for each local sim slot. Source-owner compare lanes
   // (`last_hit_by`) are recorded in this raw-port domain, while gameplay ownership keeps local
   // slot indices.
