@@ -1,30 +1,26 @@
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
 import numpy as np
 
 from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
+from tests.stage_metadata_helpers import fd_stage_segments
 
 # Action ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 ACT_WAIT = 0x000E
 
 
 def _fd_main_floor_and_right_shared_endpoint() -> tuple[int, float, float]:
-    fd = json.loads(Path("data/stages/final_destination.json").read_text())
-    unit_scale = float(fd.get("unit_scale", 1.0))
     floors: list[tuple[int, float, float, float, float]] = []
-    for seg in fd["segments"]:
+    for seg in fd_stage_segments():
         if seg.get("kind") != "floor" or bool(seg.get("platform")):
             continue
         floors.append(
             (
                 int(seg["i"]),
-                unit_scale * float(seg["x0"]),
-                unit_scale * float(seg["y0"]),
-                unit_scale * float(seg["x1"]),
-                unit_scale * float(seg["y1"]),
+                float(seg["x0"]),
+                float(seg["y0"]),
+                float(seg["x1"]),
+                float(seg["y1"]),
             )
         )
     assert floors

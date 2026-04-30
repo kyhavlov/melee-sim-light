@@ -191,43 +191,6 @@ static const char* json_expect_char(const char* s, char c) {
   return s + 1;
 }
 
-static const char* json_parse_bool(const char* s, uint8_t* out) {
-  s = json_skip_ws(s);
-  if (s == NULL) {
-    return NULL;
-  }
-  if (strncmp(s, "true", 4) == 0) {
-    if (out) {
-      *out = 1;
-    }
-    return s + 4;
-  }
-  if (strncmp(s, "false", 5) == 0) {
-    if (out) {
-      *out = 0;
-    }
-    return s + 5;
-  }
-  return NULL;
-}
-
-static const char* json_parse_int32(const char* s, int32_t* out) {
-  s = json_skip_ws(s);
-  if (s == NULL) {
-    return NULL;
-  }
-  char* end = NULL;
-  errno = 0;
-  long v = strtol(s, &end, 10);
-  if (end == s || errno != 0) {
-    return NULL;
-  }
-  if (out) {
-    *out = (int32_t)v;
-  }
-  return end;
-}
-
 static const char* json_parse_double(const char* s, double* out) {
   s = json_skip_ws(s);
   if (s == NULL) {
@@ -372,10 +335,9 @@ static int fd_load_match_flow_from_json(const char* json) {
   const char* cb = strstr(json, "\"cam_bounds_world\"");
   const char* sp = strstr(json, "\"spawn_points\"");
   const char* rp = strstr(json, "\"respawn_points\"");
-  if (bb == NULL || cb == NULL || rp == NULL) {
-    // Optional: allow stage collision to load even if match-flow points are absent.
+  if (bb == NULL || cb == NULL || sp == NULL || rp == NULL) {
     g_fd_match_flow_loaded = 0;
-    return 0;
+    return -1;
   }
 
   // Parse bounds objects.
@@ -383,13 +345,13 @@ static int fd_load_match_flow_from_json(const char* json) {
   cb = strchr(cb, '{');
   if (bb == NULL || cb == NULL) {
     g_fd_match_flow_loaded = 0;
-    return 0;
+    return -1;
   }
   MslStageBoundsWorld blast = {0};
   MslStageBoundsWorld cam = {0};
   if (json_parse_bounds_world(bb, &blast) == NULL || json_parse_bounds_world(cb, &cam) == NULL) {
     g_fd_match_flow_loaded = 0;
-    return 0;
+    return -1;
   }
 
   // Parse 4-entry point arrays.
@@ -467,7 +429,11 @@ static int fd_load_match_flow_from_json(const char* json) {
 
   if (!have_respawn) {
     g_fd_match_flow_loaded = 0;
-    return 0;
+    return -1;
+  }
+  if (!have_spawn) {
+    g_fd_match_flow_loaded = 0;
+    return -1;
   }
 
   g_fd_blast_bounds_world = blast;
@@ -675,318 +641,67 @@ typedef struct {
   float y1;
 } FdSegTmp;
 
-static int fd_load_floor_lines_from_json(const char* json) {
-  if (json == NULL) {
-    return -1;
-  }
-
-  // Reset FD ledge points (derived from ISO-extracted stage collision segments).
-  g_fd_have_ledge_points[0] = 0;
-  g_fd_have_ledge_points[1] = 0;
-  g_fd_ledge_points[0] = (MslStagePoint2){0};
-  g_fd_ledge_points[1] = (MslStagePoint2){0};
-  g_fd_ledge_floor_line_idx[0] = -1;
-  g_fd_ledge_floor_line_idx[1] = -1;
-
-  // Temporary loader: parse ISO-extracted `data/stages/*.json` at init-time only.
-  // We will switch to a compact binary stage collision artifact later to avoid JSON parsing entirely.
-  //
-  // IMPORTANT: this function is init-only and may allocate; stage_collision_apply() must remain alloc-free.
-
-  // Extract `line_count` to size our temporary segment buffer deterministically.
-  const char* lc = strstr(json, "\"line_count\"");
-  if (lc == NULL) {
-    return -1;
-  }
-  lc = strchr(lc, ':');
-  if (lc == NULL) {
-    return -1;
-  }
-  lc++;
-  int32_t line_count = 0;
-  if (json_parse_int32(lc, &line_count) == NULL) {
-    return -1;
-  }
-  // Safety guard: cap allocations for malformed/untrusted files. Real Melee stages are far below this.
-  // (FD currently reports `line_count`=16 in `data/stages/final_destination.json`.)
-  if (line_count <= 0 || line_count > 4096) {
-    return -1;
-  }
-
-  // Extracted stage coordinates are unscaled `coll_data->verts` from the stage DAT.
-  // (See `tools/extraction/extract_stage_collision.py` and decomp notes there.)
-  //
-  // Note: `data/stages/*.json` also stores `unit_scale` (aka `grGroundParam.x0` / `Ground_801C0498()`),
-  // which `mpLibLoad()` uses to build the runtime scaled collision vertices:
-  // - `f31 = Ground_801C0498()` reads `stage_info.param->x0` (`grGroundParam.x0`)
-  //   refs/melee/src/melee/gr/ground.c:270
-  // - `groundCollVtx[i].pos = f31 * coll_data->verts[i]`
-  //   refs/melee/src/melee/mp/mplib.c:174,252-263
-  //
-  // Slippi post-frame positions are in the runtime/world coordinate system, so we apply `unit_scale`
-  // to the extracted segment coordinates here at init-time.
-
-  double unit_scale = 1.0;
-  const char* us = strstr(json, "\"unit_scale\"");
-  if (us != NULL) {
-    us = strchr(us, ':');
-    if (us != NULL) {
-      us++;
-      (void)json_parse_double(us, &unit_scale);
+static FdSegTmp fd_seg_tmp_normalized(FdSegKind kind, uint8_t ledge, uint16_t segment_i, float fx0,
+                                      float fy0, float fx1, float fy1) {
+  // Normalize orientation to match mplib assumptions for each line kind:
+  // - floor: x0 <= x1
+  //   refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+  // - ceiling: x0 >= x1
+  //   refs/melee/src/melee/mp/mplib.c::mpLib_8004E090_Ceiling
+  // - left_wall: y0 <= y1
+  //   refs/melee/src/melee/mp/mplib.c::mpLib_8004E398_LeftWall
+  // - right_wall: y0 >= y1
+  //   refs/melee/src/melee/mp/mplib.c::mpLib_8004E684_RightWall
+  if (kind == FD_SEG_FLOOR) {
+    if (fx1 < fx0) {
+      const float tx = fx0;
+      const float ty = fy0;
+      fx0 = fx1;
+      fy0 = fy1;
+      fx1 = tx;
+      fy1 = ty;
+    }
+  } else if (kind == FD_SEG_CEILING) {
+    if (fx1 > fx0) {
+      const float tx = fx0;
+      const float ty = fy0;
+      fx0 = fx1;
+      fy0 = fy1;
+      fx1 = tx;
+      fy1 = ty;
+    }
+  } else if (kind == FD_SEG_LEFT_WALL) {
+    if (fy1 < fy0) {
+      const float tx = fx0;
+      const float ty = fy0;
+      fx0 = fx1;
+      fy0 = fy1;
+      fx1 = tx;
+      fy1 = ty;
+    }
+  } else if (kind == FD_SEG_RIGHT_WALL) {
+    if (fy1 > fy0) {
+      const float tx = fx0;
+      const float ty = fy0;
+      fx0 = fx1;
+      fy0 = fy1;
+      fx1 = tx;
+      fy1 = ty;
     }
   }
-  if (!(unit_scale > 0.0)) {
-    unit_scale = 1.0;
-  }
+  return (FdSegTmp){
+      .kind = kind,
+      .ledge = ledge,
+      .segment_i = segment_i,
+      .x0 = fx0,
+      .y0 = fy0,
+      .x1 = fx1,
+      .y1 = fy1,
+  };
+}
 
-  const char* segs = strstr(json, "\"segments\"");
-  if (segs == NULL) {
-    return -1;
-  }
-  segs = strchr(segs, '[');
-  if (segs == NULL) {
-    return -1;
-  }
-
-  // Parse collision segments once (init-only). We build separate fixed arrays for floor/ceiling/walls.
-  FdSegTmp* seg_tmp = (FdSegTmp*)alloc_calloc((size_t)line_count, sizeof(FdSegTmp));
-  if (seg_tmp == NULL) {
-    return -1;
-  }
-  size_t seg_n = 0;
-
-  const char* p = segs + 1;
-  for (;;) {
-    p = json_skip_ws(p);
-    if (p == NULL) {
-      break;
-    }
-    if (*p == ']') {
-      p++;
-      break;
-    }
-    if (*p == ',') {
-      p++;
-      continue;
-    }
-    if (*p != '{') {
-      alloc_free(seg_tmp);
-      return -1;
-    }
-    p++;
-
-    uint8_t platform = 0;
-    FdSegKind kind = FD_SEG_UNKNOWN;
-    uint8_t ledge = 0;
-    int32_t seg_i = -1;
-    double x0 = 0.0, x1 = 0.0, y0 = 0.0, y1 = 0.0;
-    uint8_t have_i = 0, have_x0 = 0, have_x1 = 0, have_y0 = 0, have_y1 = 0, have_platform = 0,
-            have_kind = 0, have_ledge = 0;
-
-    for (;;) {
-      p = json_skip_ws(p);
-      if (p == NULL) {
-        alloc_free(seg_tmp);
-        return -1;
-      }
-      if (*p == '}') {
-        p++;
-        break;
-      }
-      if (*p == ',') {
-        p++;
-        continue;
-      }
-
-      const char* key = NULL;
-      size_t key_len = 0;
-      p = json_parse_string_view(p, &key, &key_len);
-      if (p == NULL) {
-        alloc_free(seg_tmp);
-        return -1;
-      }
-      p = json_expect_char(p, ':');
-      if (p == NULL) {
-        alloc_free(seg_tmp);
-        return -1;
-      }
-
-      if (key_len == 4 && strncmp(key, "kind", 4) == 0) {
-        const char* val = NULL;
-        size_t val_len = 0;
-        p = json_parse_string_view(p, &val, &val_len);
-        if (p == NULL) {
-          alloc_free(seg_tmp);
-          return -1;
-        }
-        if (val_len == 5 && strncmp(val, "floor", 5) == 0) {
-          kind = FD_SEG_FLOOR;
-        } else if (val_len == 7 && strncmp(val, "ceiling", 7) == 0) {
-          kind = FD_SEG_CEILING;
-        } else if (val_len == 9 && strncmp(val, "left_wall", 9) == 0) {
-          kind = FD_SEG_LEFT_WALL;
-        } else if (val_len == 10 && strncmp(val, "right_wall", 10) == 0) {
-          kind = FD_SEG_RIGHT_WALL;
-        } else {
-          kind = FD_SEG_UNKNOWN;
-        }
-        have_kind = 1;
-      } else if (key_len == 8 && strncmp(key, "platform", 8) == 0) {
-        p = json_parse_bool(p, &platform);
-        if (p == NULL) {
-          alloc_free(seg_tmp);
-          return -1;
-        }
-        have_platform = 1;
-      } else if (key_len == 5 && strncmp(key, "ledge", 5) == 0) {
-        p = json_parse_bool(p, &ledge);
-        if (p == NULL) {
-          alloc_free(seg_tmp);
-          return -1;
-        }
-        have_ledge = 1;
-      } else if (key_len == 1 && *key == 'i') {
-        p = json_parse_int32(p, &seg_i);
-        if (p == NULL) {
-          alloc_free(seg_tmp);
-          return -1;
-        }
-        have_i = 1;
-      } else if (key_len == 2 && strncmp(key, "x0", 2) == 0) {
-        p = json_parse_double(p, &x0);
-        if (p == NULL) {
-          alloc_free(seg_tmp);
-          return -1;
-        }
-        have_x0 = 1;
-      } else if (key_len == 2 && strncmp(key, "x1", 2) == 0) {
-        p = json_parse_double(p, &x1);
-        if (p == NULL) {
-          alloc_free(seg_tmp);
-          return -1;
-        }
-        have_x1 = 1;
-      } else if (key_len == 2 && strncmp(key, "y0", 2) == 0) {
-        p = json_parse_double(p, &y0);
-        if (p == NULL) {
-          alloc_free(seg_tmp);
-          return -1;
-        }
-        have_y0 = 1;
-      } else if (key_len == 2 && strncmp(key, "y1", 2) == 0) {
-        p = json_parse_double(p, &y1);
-        if (p == NULL) {
-          alloc_free(seg_tmp);
-          return -1;
-        }
-        have_y1 = 1;
-      } else {
-        // Skip unknown value (primitive/object/array) by scanning until the next ',' or '}' at depth 0.
-        p = json_skip_ws(p);
-        if (p == NULL) {
-          alloc_free(seg_tmp);
-          return -1;
-        }
-        int depth = 0;
-        for (; *p; p++) {
-          if (*p == '"') {
-            // skip string
-            const char* dummy = NULL;
-            size_t dummy_len = 0;
-            const char* next = json_parse_string_view(p, &dummy, &dummy_len);
-            if (next == NULL) {
-              alloc_free(seg_tmp);
-              return -1;
-            }
-            p = next - 1;
-            continue;
-          }
-          if (*p == '{' || *p == '[') {
-            depth++;
-          } else if (*p == '}' || *p == ']') {
-            if (depth == 0) {
-              break;
-            }
-            depth--;
-          } else if (*p == ',' && depth == 0) {
-            break;
-          }
-        }
-      }
-    }
-
-    if (have_kind && have_platform && !platform && have_i && have_x0 && have_x1 && have_y0 &&
-        have_y1 &&
-        (kind == FD_SEG_FLOOR || kind == FD_SEG_CEILING || kind == FD_SEG_LEFT_WALL ||
-         kind == FD_SEG_RIGHT_WALL)) {
-      if (seg_n < (size_t)line_count) {
-        float fx0 = (float)(unit_scale * x0);
-        float fx1 = (float)(unit_scale * x1);
-        float fy0 = (float)(unit_scale * y0);
-        float fy1 = (float)(unit_scale * y1);
-        // Normalize orientation to match mplib assumptions for each line kind:
-        // - floor: x0 <= x1
-        //   refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
-        // - ceiling: x0 >= x1
-        //   refs/melee/src/melee/mp/mplib.c::mpLib_8004E090_Ceiling
-        // - left_wall: y0 <= y1
-        //   refs/melee/src/melee/mp/mplib.c::mpLib_8004E398_LeftWall
-        // - right_wall: y0 >= y1
-        //   refs/melee/src/melee/mp/mplib.c::mpLib_8004E684_RightWall
-        if (kind == FD_SEG_FLOOR) {
-          if (fx1 < fx0) {
-            const float tx = fx0;
-            const float ty = fy0;
-            fx0 = fx1;
-            fy0 = fy1;
-            fx1 = tx;
-            fy1 = ty;
-          }
-        } else if (kind == FD_SEG_CEILING) {
-          if (fx1 > fx0) {
-            const float tx = fx0;
-            const float ty = fy0;
-            fx0 = fx1;
-            fy0 = fy1;
-            fx1 = tx;
-            fy1 = ty;
-          }
-        } else if (kind == FD_SEG_LEFT_WALL) {
-          if (fy1 < fy0) {
-            const float tx = fx0;
-            const float ty = fy0;
-            fx0 = fx1;
-            fy0 = fy1;
-            fx1 = tx;
-            fy1 = ty;
-          }
-        } else if (kind == FD_SEG_RIGHT_WALL) {
-          if (fy1 > fy0) {
-            const float tx = fx0;
-            const float ty = fy0;
-            fx0 = fx1;
-            fy0 = fy1;
-            fx1 = tx;
-            fy1 = ty;
-          }
-        }
-
-        seg_tmp[seg_n] = (FdSegTmp){
-            .kind = kind,
-            .ledge = (uint8_t)(have_ledge && ledge),
-            .segment_i = (uint16_t)seg_i,
-            .x0 = fx0,
-            .y0 = fy0,
-            .x1 = fx1,
-            .y1 = fy1,
-        };
-        seg_n++;
-      }
-    }
-  }
-
-  if (seg_n == 0) {
-    alloc_free(seg_tmp);
+static int fd_install_stage_segments(const FdSegTmp* seg_tmp, size_t seg_n) {
+  if (seg_tmp == NULL || seg_n == 0) {
     return -1;
   }
 
@@ -1013,7 +728,6 @@ static int fd_load_floor_lines_from_json(const char* json) {
     }
   }
   if (floor_n == 0) {
-    alloc_free(seg_tmp);
     return -1;
   }
 
@@ -1037,7 +751,6 @@ static int fd_load_floor_lines_from_json(const char* json) {
     alloc_free(ceil_lines);
     alloc_free(lw_lines);
     alloc_free(rw_lines);
-    alloc_free(seg_tmp);
     return -1;
   }
 
@@ -1115,11 +828,17 @@ static int fd_load_floor_lines_from_json(const char* json) {
     fd_build_wall_prev_next(rw_lines, rw_n);
   }
 
-  // FD ledge candidates are floor segments with `"ledge": true` (ISO-derived line flag).
+  // FD ledge candidates are floor segments with the ISO-derived LINE_FLAG_LEDGE bit.
   //
   // Decomp context: fighter cliff physics snaps each frame to the cliff point obtained from
   // `mpLib_80053ECC_Floor` / `mpLib_80053DA4_Floor`.
   // refs/melee/src/melee/ft/ftcliffcommon.c::ftCo_CliffCatch_Phys
+  g_fd_have_ledge_points[0] = 0;
+  g_fd_have_ledge_points[1] = 0;
+  g_fd_ledge_points[0] = (MslStagePoint2){0};
+  g_fd_ledge_points[1] = (MslStagePoint2){0};
+  g_fd_ledge_floor_line_idx[0] = -1;
+  g_fd_ledge_floor_line_idx[1] = -1;
   float best_left_x = FLT_MAX;
   float best_right_x = -FLT_MAX;
   for (size_t i = 0; i < floor_n; i++) {
@@ -1269,8 +988,143 @@ static int fd_load_floor_lines_from_json(const char* json) {
   g_fd_right_wall_graph.line_count = g_fd_right_wall_line_count;
   fd_stage_wall_graph_set_bounds(&g_fd_right_wall_graph);
 
-  alloc_free(seg_tmp);
   return 0;
+}
+
+enum {
+  MSLSTG01_VERSION = 1,
+  MSLSTG01_HEADER_BYTES = 56,
+  MSLSTG01_SEGMENT_BYTES = 24,
+  MSLSTG01_FLAG_PLATFORM = 1,
+  MSLSTG01_FLAG_LEDGE = 2,
+  MSLSTG01_KIND_FLOOR = 0,
+  MSLSTG01_KIND_CEILING = 1,
+  MSLSTG01_KIND_RIGHT_WALL = 2,
+  MSLSTG01_KIND_LEFT_WALL = 3,
+  MSLSTG01_KIND_DYNAMIC = 4,
+};
+
+static uint16_t stage_read_u16_le(const uint8_t* p) {
+  uint16_t v = 0;
+  memcpy(&v, p, sizeof(v));
+  return v;
+}
+
+static uint32_t stage_read_u32_le(const uint8_t* p) {
+  uint32_t v = 0;
+  memcpy(&v, p, sizeof(v));
+  return v;
+}
+
+static float stage_read_f32_le(const uint8_t* p) {
+  float v = 0.0f;
+  memcpy(&v, p, sizeof(v));
+  return v;
+}
+
+static FdSegKind fd_seg_kind_from_mslstg(uint8_t kind_id) {
+  switch (kind_id) {
+    case MSLSTG01_KIND_FLOOR:
+      return FD_SEG_FLOOR;
+    case MSLSTG01_KIND_CEILING:
+      return FD_SEG_CEILING;
+    case MSLSTG01_KIND_LEFT_WALL:
+      return FD_SEG_LEFT_WALL;
+    case MSLSTG01_KIND_RIGHT_WALL:
+      return FD_SEG_RIGHT_WALL;
+    default:
+      return FD_SEG_UNKNOWN;
+  }
+}
+
+static int fd_load_floor_lines_from_mslstg01(const uint8_t* buf, size_t sz) {
+  if (buf == NULL || sz < (size_t)MSLSTG01_HEADER_BYTES || memcmp(buf, "MSLSTG01", 8) != 0) {
+    return -1;
+  }
+  const uint32_t version = stage_read_u32_le(buf + 8);
+  if (version != (uint32_t)MSLSTG01_VERSION) {
+    return -1;
+  }
+  const uint16_t segment_count = stage_read_u16_le(buf + 12);
+  const uint16_t stage_point_count = stage_read_u16_le(buf + 14);
+  const uint16_t spawn_count = stage_read_u16_le(buf + 16);
+  const uint16_t respawn_count = stage_read_u16_le(buf + 18);
+  const size_t expected =
+      (size_t)MSLSTG01_HEADER_BYTES + (size_t)segment_count * (size_t)MSLSTG01_SEGMENT_BYTES +
+      (size_t)stage_point_count * 12u + (size_t)spawn_count * 8u + (size_t)respawn_count * 8u;
+  if (sz != expected || segment_count == 0u || segment_count > 4096u) {
+    return -1;
+  }
+
+  FdSegTmp* seg_tmp = (FdSegTmp*)alloc_calloc((size_t)segment_count, sizeof(FdSegTmp));
+  if (seg_tmp == NULL) {
+    return -1;
+  }
+  size_t seg_n = 0;
+  const uint8_t* p = buf + MSLSTG01_HEADER_BYTES;
+  for (uint16_t i = 0; i < segment_count; i++, p += MSLSTG01_SEGMENT_BYTES) {
+    const uint16_t line_id = stage_read_u16_le(p + 0);
+    const uint8_t kind_id = p[2];
+    const uint8_t flags = p[3];
+    if ((flags & (uint8_t)MSLSTG01_FLAG_PLATFORM) != 0u ||
+        kind_id == (uint8_t)MSLSTG01_KIND_DYNAMIC) {
+      continue;
+    }
+    const FdSegKind kind = fd_seg_kind_from_mslstg(kind_id);
+    if (!(kind == FD_SEG_FLOOR || kind == FD_SEG_CEILING || kind == FD_SEG_LEFT_WALL ||
+          kind == FD_SEG_RIGHT_WALL)) {
+      continue;
+    }
+    // MSLSTG01 v1 stores exactly the source collision segment endpoints used by the previous
+    // JSON path; FD's stage scale is 1.0. Keep match-flow roles on JSON because MSLSTG01 marks
+    // spawn/respawn/camera/blast roles reserved until the DAT -> stage_info.x280 mapping is known.
+    // docs/DATA_CONTRACT.md::MSLSTG01
+    seg_tmp[seg_n++] =
+        fd_seg_tmp_normalized(kind, (uint8_t)((flags & (uint8_t)MSLSTG01_FLAG_LEDGE) != 0u),
+                              line_id, stage_read_f32_le(p + 8), stage_read_f32_le(p + 12),
+                              stage_read_f32_le(p + 16), stage_read_f32_le(p + 20));
+  }
+  const int err = fd_install_stage_segments(seg_tmp, seg_n);
+  alloc_free(seg_tmp);
+  return err;
+}
+
+static int fd_load_floor_lines_from_mslstg01_file(const char* path) {
+  if (path == NULL) {
+    return -1;
+  }
+  FILE* f = fopen(path, "rb");
+  if (f == NULL) {
+    return -1;
+  }
+  if (fseek(f, 0, SEEK_END) != 0) {
+    fclose(f);
+    return -1;
+  }
+  const long sz = ftell(f);
+  if (sz <= 0) {
+    fclose(f);
+    return -1;
+  }
+  if (fseek(f, 0, SEEK_SET) != 0) {
+    fclose(f);
+    return -1;
+  }
+
+  uint8_t* buf = (uint8_t*)alloc_malloc((size_t)sz);
+  if (buf == NULL) {
+    fclose(f);
+    return -1;
+  }
+  const size_t got = fread(buf, 1, (size_t)sz, f);
+  fclose(f);
+  if (got != (size_t)sz) {
+    alloc_free(buf);
+    return -1;
+  }
+  const int err = fd_load_floor_lines_from_mslstg01(buf, (size_t)sz);
+  alloc_free(buf);
+  return err;
 }
 
 int stage_collision_init(void) {
@@ -1287,11 +1141,20 @@ int stage_collision_init(void) {
   }
 
   char path[512];
-  const int n = snprintf(path, sizeof(path), "%s/stages/final_destination.json", data_dir);
+  int n = snprintf(path, sizeof(path), "%s/stages/bin/grnla.bin", data_dir);
   if (n <= 0 || (size_t)n >= sizeof(path)) {
     return -1;
   }
+  if (fd_load_floor_lines_from_mslstg01_file(path) != 0) {
+    return -1;
+  }
 
+  // Match-flow roles remain on the legacy JSON until MSLSTG01 has a source-backed stage point
+  // role mapping. Collision segments above are loaded from MSLSTG01.
+  n = snprintf(path, sizeof(path), "%s/stages/final_destination.json", data_dir);
+  if (n <= 0 || (size_t)n >= sizeof(path)) {
+    return -1;
+  }
   FILE* f = fopen(path, "rb");
   if (f == NULL) {
     return -1;
@@ -1323,12 +1186,11 @@ int stage_collision_init(void) {
   }
   buf[sz] = '\0';
 
-  const int err = fd_load_floor_lines_from_json(buf);
-  (void)fd_load_match_flow_from_json(buf);
-  alloc_free(buf);
-  if (err != 0) {
+  if (fd_load_match_flow_from_json(buf) != 0) {
+    alloc_free(buf);
     return -1;
   }
+  alloc_free(buf);
 
   g_fd_loaded = 1;
   return 0;

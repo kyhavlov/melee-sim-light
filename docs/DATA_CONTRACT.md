@@ -590,18 +590,28 @@ Characters (Fox/Falco):
 - `data/stages/bin/grnla.bin` (stage collision/metadata; decomp-first, compact binary)
   - Purpose:
     - Pack the stable, source-backed Final Destination stage data currently emitted by
-      `data/stages/final_destination.json` into a versioned artifact for future runtime/tooling consumers.
+      `data/stages/final_destination.json` into a versioned artifact. Runtime stage collision
+      consumes collision segments from this binary table; match-flow roles still use the JSON
+      role labels until the source-backed DAT -> `stage_info.x280` point mapping is known.
     - Preserve source collision line IDs, floor/wall/ceiling class, line flags, ledge/platform bits,
       and raw stage-point positions.
     - Named spawn/respawn/camera/blast point roles are deliberately not packed in v1 because the
       current JSON labels those roles through an FD coordinate heuristic; the source-backed
       DAT -> `stage_info.x280` point mapping remains future extraction work.
+    - Decomp identifies the consumers (`Stage_80224E64` for spawn, `Stage_80224E38` for respawn,
+      `Ground_801C39C0` for camera, and `Ground_801C3BB4` for blast/dead range) and debug vertex
+      id arrays such as `mpLib_SpawnVtxIds` / `mpLib_RespawnVtxIds`, but not yet the DAT setup path
+      that maps each `stage_info.x280[id]` slot to a specific `map_head` JObj. Until that mapping is
+      extracted, runtime match-flow roles remain on the legacy `data/stages/final_destination.json`
+      labels.
     - This does **not** encode procedural mpColl branch outcomes or inferred behavior categories.
   - Sources:
     - `_iso/GrNLa.dat` public symbols `coll_data`, `grGroundParam`, and `map_head`
     - `refs/melee/src/melee/mp/types.h::MapCollData`
-    - `refs/melee/src/melee/gr/ground.c::Ground_801C126C`, `Ground_801C39C0`, `Ground_801C3BB4`
+    - `refs/melee/src/melee/gr/ground.c::Ground_801C126C`, `Ground_801C2D24`, `Ground_801C39C0`,
+      `Ground_801C3BB4`
     - `refs/melee/src/melee/gr/stage.c::Stage_80224E64`, `Stage_80224E38`
+    - `refs/melee/src/melee/mp/mplib.c::mpLib_SpawnVtxIds`, `mpLib_RespawnVtxIds`
   - Binary layout: `MSLSTG01` v1
     - `u8 magic[8] = "MSLSTG01"`
     - `u32 version = 1`
@@ -660,6 +670,8 @@ Characters (Fox/Falco):
   - Purpose:
     - Canonical packed/indexed representation of already decoded move-script events from
       `data/moves/<char>.json`.
+    - Runtime `move_tables_*` exact script helpers consume this binary artifact at init; the
+      debug JSON remains extractor input/audit data, not the runtime owner for command windows.
     - Include only known decoded events such as hitbox create/modify/clear, IASA, cmd vars,
       throw flags/hitboxes/projectile pulses, airborne state, hit/hurt status, jab combo/rapid
       flags, x221C_y flags, bone physics toggles, smash charge, and pseudo-random SFX.

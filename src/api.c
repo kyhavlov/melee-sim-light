@@ -99,16 +99,9 @@ static inline uint8_t reseed_action_uses_basic_fall_ledge_cooldown_tick(uint16_t
 }
 
 static inline uint8_t reseed_action_is_attackair(uint16_t action) {
-  switch (action) {
-    case MSL_ACT_ATTACK_AIR_N:
-    case MSL_ACT_ATTACK_AIR_F:
-    case MSL_ACT_ATTACK_AIR_B:
-    case MSL_ACT_ATTACK_AIR_HI:
-    case MSL_ACT_ATTACK_AIR_LW:
-      return 1u;
-    default:
-      return 0u;
-  }
+  // Generated from MotionState callback symbols ftCo_AttackAir_* for the five common aerial
+  // attacks. Exhaustive Fox/Falco equivalence is covered by tests/test_motion_state_owners_table.py.
+  return msl_motion_state_common_class_has(action, MSL_MS_CLASS_ATTACK_AIR);
 }
 
 static inline uint8_t reseed_action_is_cliff_any(uint16_t action) {

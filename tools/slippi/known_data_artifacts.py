@@ -58,7 +58,15 @@ class PartMetadata:
     char_id: int
     local_part_count: int
     anchor_count: int
+    parts: tuple["PartRecord", ...]
     anchors: tuple["PartAnchor", ...]
+
+
+@dataclass(frozen=True)
+class PartRecord:
+    part_id: int
+    parent_part_id: int
+    jobj_flags: int
 
 
 @dataclass(frozen=True)
@@ -186,7 +194,12 @@ def read_mslpart1_v1(path: Path) -> PartMetadata:
     expected = 20 + local_part_count * 12 + anchor_count * 8
     if len(buf) != expected:
         raise ValueError(f"MSLPART1 size mismatch in {path}: header-derived {expected} != {len(buf)}")
-    off = 20 + local_part_count * 12
+    off = 20
+    parts: list[PartRecord] = []
+    for _ in range(local_part_count):
+        part, parent, flags, _reserved = struct.unpack_from("<HhII", buf, off)
+        off += 12
+        parts.append(PartRecord(part_id=int(part), parent_part_id=int(parent), jobj_flags=int(flags)))
     anchors: list[PartAnchor] = []
     for _ in range(anchor_count):
         kind, part, aux, _reserved = struct.unpack_from("<HHHH", buf, off)
@@ -196,6 +209,7 @@ def read_mslpart1_v1(path: Path) -> PartMetadata:
         char_id=int(char_id),
         local_part_count=int(local_part_count),
         anchor_count=int(anchor_count),
+        parts=tuple(parts),
         anchors=tuple(anchors),
     )
 

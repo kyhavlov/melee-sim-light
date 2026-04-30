@@ -32,7 +32,7 @@ uint8_t move_tables_attackair_cmd0_active(uint8_t char_id, uint16_t attackair_ac
 // Decomp: AttackAir IASA is gated by fp->allow_interrupt (DO_IASA macro).
 // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c
 //
-// Source of truth: data/moves/{fox,falco}.json moves["ftCo_SM_AttackAir*"]["events"] allow_interrupt.
+// Source of truth: data/scripts/{fox,falco}.bin (MSLFTSC1) moves["ftCo_SM_AttackAir*"]["events"] allow_interrupt.
 uint8_t move_tables_attackair_allow_interrupt(uint8_t char_id, uint16_t attackair_action_id,
                                               float cur_anim_frame_f32);
 
@@ -42,7 +42,7 @@ uint8_t move_tables_attackair_allow_interrupt(uint8_t char_id, uint16_t attackai
 // - Most grounded Attack* IASA handlers gate on fp->allow_interrupt and then delegate to Wait IASA.
 // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_AttackDash.c,ftCo_AttackS3.c,ftCo_AttackHi3.c,ftCo_AttackHi4.c,ftCo_AttackLw4.c}
 //
-// Source of truth: data/moves/{fox,falco}.json moves["ftCo_SM_Attack*"]["events"] allow_interrupt.
+// Source of truth: data/scripts/{fox,falco}.bin (MSLFTSC1) moves["ftCo_SM_Attack*"]["events"] allow_interrupt.
 uint8_t move_tables_grounded_attack_allow_interrupt(uint8_t char_id, uint16_t grounded_action_id,
                                                     float cur_anim_frame_f32);
 
@@ -56,7 +56,7 @@ uint8_t move_tables_grounded_attack_allow_interrupt(uint8_t char_id, uint16_t gr
 // refs/melee/src/melee/ft/ft_0DF0.c::{ftCo_800DEE84,ftCo_800DF0D0}
 //
 // Source of truth:
-// data/moves/{fox,falco}.json moves["ftCo_SM_AttackS4"/"ftCo_SM_AttackHi4"/"ftCo_SM_AttackLw4"]
+// data/scripts/{fox,falco}.bin (MSLFTSC1) moves["ftCo_SM_AttackS4"/"ftCo_SM_AttackHi4"/"ftCo_SM_AttackLw4"]
 // .events start_smash_charge.
 uint8_t move_tables_grounded_smash_charge_crossed(uint8_t char_id, uint16_t grounded_action_id,
                                                   float prev_anim_frame_f32,
@@ -81,7 +81,7 @@ float move_tables_grounded_smash_charge_damage_mul(uint8_t char_id, uint16_t gro
 // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_EscapeN_Anim
 // refs/melee/src/melee/ft/ftaction.c::ftAction_80071950
 //
-// Source of truth: data/moves/{fox,falco}.json moves["ftCo_SM_EscapeN"]["events"] allow_interrupt.
+// Source of truth: data/scripts/{fox,falco}.bin (MSLFTSC1) moves["ftCo_SM_EscapeN"]["events"] allow_interrupt.
 uint8_t move_tables_escape_allow_interrupt(uint8_t char_id, uint16_t action_id,
                                            float cur_anim_frame_f32);
 
@@ -93,7 +93,7 @@ uint8_t move_tables_escape_allow_interrupt(uint8_t char_id, uint16_t action_id,
 // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Phys
 // refs/melee/src/melee/ft/ftaction.c::ftAction_80071820
 //
-// Source of truth: data/moves/{fox,falco}.json moves["ftCo_SM_EscapeAir"]["events"] set_cmd_var(idx=0).
+// Source of truth: data/scripts/{fox,falco}.bin (MSLFTSC1) moves["ftCo_SM_EscapeAir"]["events"] set_cmd_var(idx=0).
 uint8_t move_tables_escapeair_cmd0_active(uint8_t char_id, float cur_anim_frame_f32);
 
 // Returns whether a Special* command-script cmd_var[0] window contains `action_frame`.
@@ -105,7 +105,7 @@ uint8_t move_tables_escapeair_cmd0_active(uint8_t char_id, float cur_anim_frame_
 //   ftFx_SpecialNLoop_IASA,ftFx_SpecialAirNLoop_IASA}
 // refs/melee/src/melee/ft/ftaction.c::ftAction_80071820
 //
-// Source of truth: data/moves/{fox,falco}.json specials_by_msid["<msid>"].events set_cmd_var(idx=0).
+// Source of truth: data/scripts/{fox,falco}.bin (MSLFTSC1) specials_by_msid["<msid>"].events set_cmd_var(idx=0).
 uint8_t move_tables_special_cmd0_active_at_frame(uint8_t char_id, uint16_t msid, int action_frame);
 
 // Returns whether EscapeF should consume a script-driven facing flip this frame.
@@ -116,7 +116,7 @@ uint8_t move_tables_special_cmd0_active_at_frame(uint8_t char_id, uint16_t msid,
 // refs/melee/src/melee/ft/inlines.h::ftCheckThrowB3
 //
 // Source of truth:
-// - data/moves/{fox,falco}.json moves["ftCo_SM_EscapeF"]["events"] set_throw_flags(hit_idx=0).
+// - data/scripts/{fox,falco}.bin (MSLFTSC1) moves["ftCo_SM_EscapeF"]["events"] set_throw_flags(hit_idx=0).
 uint8_t move_tables_escapef_should_flip_facing(uint8_t char_id, int16_t prev_action_frame,
                                                int16_t cur_action_frame);
 
@@ -128,7 +128,7 @@ uint8_t move_tables_escapef_should_flip_facing(uint8_t char_id, int16_t prev_act
 // refs/melee/build/GALE01/asm/melee/ft/ftaction.s::ftAction_80071AE8
 //
 // Source of truth:
-// data/moves/{fox,falco}.json moves["ftCo_SM_Attack11"/"ftCo_SM_Attack12"]["events"] set_jab_combo.
+// data/scripts/{fox,falco}.bin (MSLFTSC1) moves["ftCo_SM_Attack11"/"ftCo_SM_Attack12"]["events"] set_jab_combo.
 uint8_t move_tables_jab_combo_active(uint8_t char_id, uint16_t grounded_action_id,
                                      float cur_anim_frame_f32);
 
@@ -140,7 +140,7 @@ uint8_t move_tables_jab_combo_active(uint8_t char_id, uint16_t grounded_action_i
 // refs/melee/build/GALE01/asm/melee/ft/ftaction.s::ftAction_80071B28
 //
 // Source of truth:
-// data/moves/{fox,falco}.json moves["ftCo_SM_Attack12"]["events"] set_jab_rapid.
+// data/scripts/{fox,falco}.bin (MSLFTSC1) moves["ftCo_SM_Attack12"]["events"] set_jab_rapid.
 uint8_t move_tables_jab_rapid_active(uint8_t char_id, uint16_t grounded_action_id,
                                      float cur_anim_frame_f32);
 
@@ -152,7 +152,7 @@ uint8_t move_tables_jab_rapid_active(uint8_t char_id, uint16_t grounded_action_i
 // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
 //   ftCo_Attack100Loop_Anim,ftCo_Attack100Loop_IASA}
 //
-// Source of truth: data/moves/{fox,falco}.json moves["ftCo_SM_Attack100Loop"]["events"]
+// Source of truth: data/scripts/{fox,falco}.bin (MSLFTSC1) moves["ftCo_SM_Attack100Loop"]["events"]
 // set_throw_flags(hit_idx=0).
 uint8_t move_tables_attack100_loop_end_check_crossed(uint8_t char_id, int16_t prev_action_frame,
                                                      int16_t cur_action_frame);
@@ -163,7 +163,7 @@ uint8_t move_tables_attack100_loop_end_check_crossed(uint8_t char_id, int16_t pr
 // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
 // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_Enter (cmd_vars[0] reset on entry)
 //
-// Source of truth: data/moves/{fox,falco}.json moves["ftCo_SM_Dash"]["events"] set_cmd_var(idx=0).
+// Source of truth: data/scripts/{fox,falco}.bin (MSLFTSC1) moves["ftCo_SM_Dash"]["events"] set_cmd_var(idx=0).
 uint8_t move_tables_dash_cmd0_active(uint8_t char_id, float cur_anim_frame_f32);
 
 // Returns whether cmd_var[0] is set at the given cur_anim_frame for RunBrake.
@@ -173,7 +173,7 @@ uint8_t move_tables_dash_cmd0_active(uint8_t char_id, float cur_anim_frame_f32);
 // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::ftCo_RunBrake_IASA
 // refs/melee/src/melee/ft/ftaction.c::ftAction_80071820
 //
-// Source of truth: data/moves/{fox,falco}.json moves["ftCo_SM_RunBrake"]["events"] set_cmd_var(idx=0).
+// Source of truth: data/scripts/{fox,falco}.bin (MSLFTSC1) moves["ftCo_SM_RunBrake"]["events"] set_cmd_var(idx=0).
 uint8_t move_tables_runbrake_cmd0_active(uint8_t char_id, float cur_anim_frame_f32);
 
 // Returns whether CatchPull/CatchDashPull should enter CatchWait due to the move script setting
@@ -183,7 +183,7 @@ uint8_t move_tables_runbrake_cmd0_active(uint8_t char_id, float cur_anim_frame_f
 // throw/capture setup point has been reached.
 // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::ftCo_CatchPull_Anim
 //
-// Source of truth: data/moves/{fox,falco}.json moves["ftCo_SM_Catch*"]["events"] set_throw_flags.
+// Source of truth: data/scripts/{fox,falco}.bin (MSLFTSC1) moves["ftCo_SM_Catch*"]["events"] set_throw_flags.
 uint8_t move_tables_catchpull_should_enter_wait(uint8_t char_id, uint16_t catch_action_id,
                                                 float cur_anim_frame_f32);
 
@@ -197,36 +197,36 @@ uint8_t move_tables_catchpull_should_enter_wait(uint8_t char_id, uint16_t catch_
 //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{ftCo_800DC284,ftCo_800DC3A4}
 //
 // Source of truth:
-// - data/moves/{fox,falco}.json moves["ftCo_SM_CatchAttack"]["events"] create_hitbox
+// - data/scripts/{fox,falco}.bin (MSLFTSC1) moves["ftCo_SM_CatchAttack"]["events"] create_hitbox
 //   (only_hit_grabbed=true) and clear_hitboxes.
 uint8_t move_tables_catchattack_grabbed_hit_active(uint8_t char_id, float cur_anim_frame_f32);
 
 // Returns whether a throw release frame is known (parsed from set_throw_flags timing).
 //
-// Source of truth: data/moves/{fox,falco}.json moves["ftCo_SM_Throw*"]["events"] set_throw_flags.
+// Source of truth: data/scripts/{fox,falco}.bin (MSLFTSC1) moves["ftCo_SM_Throw*"]["events"] set_throw_flags.
 uint8_t move_tables_throw_has_release(uint8_t char_id, uint16_t throw_action_id);
 
 // Returns 1 and outputs the parsed throw release action-frame threshold.
 //
-// Source of truth: data/moves/{fox,falco}.json moves["ftCo_SM_Throw*"]["events"] set_throw_flags.
+// Source of truth: data/scripts/{fox,falco}.bin (MSLFTSC1) moves["ftCo_SM_Throw*"]["events"] set_throw_flags.
 uint8_t move_tables_throw_release_frame(uint8_t char_id, uint16_t throw_action_id,
                                         float* out_release_af);
 
 // Returns 1 and outputs the released hit_idx if cur_anim_frame_f32 is at/after the throw release frame.
 //
-// Source of truth: data/moves/{fox,falco}.json moves["ftCo_SM_Throw*"]["events"] set_throw_flags.
+// Source of truth: data/scripts/{fox,falco}.bin (MSLFTSC1) moves["ftCo_SM_Throw*"]["events"] set_throw_flags.
 uint8_t move_tables_throw_release_hit_idx(uint8_t char_id, uint16_t throw_action_id,
                                           float cur_anim_frame_f32, uint8_t* out_hit_idx);
 
 // Returns 1 and outputs throw hitbox parameters for the requested hit_idx.
 //
-// Source of truth: data/moves/{fox,falco}.json moves["ftCo_SM_Throw*"]["events"] set_throw_hitbox.
+// Source of truth: data/scripts/{fox,falco}.bin (MSLFTSC1) moves["ftCo_SM_Throw*"]["events"] set_throw_hitbox.
 uint8_t move_tables_throw_hitbox_params(uint8_t char_id, uint16_t throw_action_id, uint8_t hit_idx,
                                         MslThrowHitboxParams* out);
 
 // Returns whether a throw should flip the thrower's facing this frame.
 //
-// Source of truth: data/moves/{fox,falco}.json moves["ftCo_SM_Throw*"]["events"] set_throw_flags(hit_idx=1),
+// Source of truth: data/scripts/{fox,falco}.bin (MSLFTSC1) moves["ftCo_SM_Throw*"]["events"] set_throw_flags(hit_idx=1),
 // which maps to throw_flags_b4 in decomp:
 // refs/melee/src/melee/ft/ftaction.c::ftAction_800718A4 (case 1).
 uint8_t move_tables_throw_should_flip_facing(uint8_t char_id, uint16_t throw_action_id,
@@ -239,7 +239,7 @@ uint8_t move_tables_throw_should_flip_facing(uint8_t char_id, uint16_t throw_act
 //   case 1 owns spawn/update, case 2 clears pointer, case 0 disables.
 // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
 //
-// Source of truth: data/moves/{fox,falco}.json moves["ftCo_SM_Throw*"]["events"] set_cmd_var(idx=1).
+// Source of truth: data/scripts/{fox,falco}.bin (MSLFTSC1) moves["ftCo_SM_Throw*"]["events"] set_cmd_var(idx=1).
 uint8_t move_tables_throw_cmd1_active(uint8_t char_id, uint16_t throw_action_id,
                                       float cur_anim_frame_f32);
 
@@ -252,13 +252,13 @@ uint8_t move_tables_throw_cmd1_active(uint8_t char_id, uint16_t throw_action_id,
 // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
 //
 // Source of truth:
-// data/moves/{fox,falco}.json moves["ftCo_SM_Throw*"]["events"] set_throw_spawn_projectile.
+// data/scripts/{fox,falco}.bin (MSLFTSC1) moves["ftCo_SM_Throw*"]["events"] set_throw_spawn_projectile.
 uint8_t move_tables_throw_should_spawn_projectile(uint8_t char_id, uint16_t throw_action_id,
                                                   float prev_anim_frame_f32,
                                                   float cur_anim_frame_f32);
 
 // Return the first crossed throw projectile pulse frame in (prev, cur], if any.
-// Output frame is sourced from data/moves/{fox,falco}.json set_throw_spawn_projectile events.
+// Output frame is sourced from data/scripts/{fox,falco}.bin (MSLFTSC1) set_throw_spawn_projectile events.
 uint8_t move_tables_throw_crossed_projectile_pulse_frame(uint8_t char_id, uint16_t throw_action_id,
                                                          float prev_anim_frame_f32,
                                                          float cur_anim_frame_f32,
@@ -268,7 +268,7 @@ uint8_t move_tables_throw_crossed_projectile_pulse_frame(uint8_t char_id, uint16
 // `set_throw_spawn_projectile` events) for the throw action.
 //
 // Source of truth:
-// data/moves/{fox,falco}.json moves["ftCo_SM_Throw*"]["events"] set_throw_spawn_projectile.
+// data/scripts/{fox,falco}.bin (MSLFTSC1) moves["ftCo_SM_Throw*"]["events"] set_throw_spawn_projectile.
 uint8_t move_tables_throw_projectile_first_pulse_frame(uint8_t char_id, uint16_t throw_action_id,
                                                        int16_t* out_first_pulse_frame);
 
@@ -276,14 +276,14 @@ uint8_t move_tables_throw_projectile_first_pulse_frame(uint8_t char_id, uint16_t
 // `set_throw_spawn_projectile` events) for the throw action.
 //
 // Source of truth:
-// data/moves/{fox,falco}.json moves["ftCo_SM_Throw*"]["events"] set_throw_spawn_projectile.
+// data/scripts/{fox,falco}.bin (MSLFTSC1) moves["ftCo_SM_Throw*"]["events"] set_throw_spawn_projectile.
 uint8_t move_tables_throw_projectile_last_pulse_frame(uint8_t char_id, uint16_t throw_action_id,
                                                       int16_t* out_last_pulse_frame);
 
 // Returns the 1-based ordinal of a throw projectile pulse frame for this throw action.
 //
 // Source of truth:
-// data/moves/{fox,falco}.json moves["ftCo_SM_Throw*"]["events"] set_throw_spawn_projectile.
+// data/scripts/{fox,falco}.bin (MSLFTSC1) moves["ftCo_SM_Throw*"]["events"] set_throw_spawn_projectile.
 uint8_t move_tables_throw_projectile_pulse_ordinal(uint8_t char_id, uint16_t throw_action_id,
                                                    int16_t pulse_frame, uint8_t* out_ordinal);
 
@@ -297,7 +297,7 @@ uint8_t move_tables_throw_projectile_pulse_ordinal(uint8_t char_id, uint16_t thr
 // refs/melee/src/sysdolphin/baselib/random.c::HSD_Randi
 //
 // Source of truth:
-// - data/moves/{fox,falco}.json specials_by_msid["<msid>"].events pseudo_random_sfx.
+// - data/scripts/{fox,falco}.bin (MSLFTSC1) specials_by_msid["<msid>"].events pseudo_random_sfx.
 //
 // Returns the number of crossed pulses copied to `out_random_ranges` (up to `max_out`).
 uint8_t move_tables_special_pseudo_random_sfx_ranges_crossed(uint8_t char_id, uint16_t msid,

@@ -11,6 +11,7 @@
 #include "common_params.h"
 #include "hitboxes_tables.h"
 #include "hitlist.h"
+#include "motion_state_owners.h"
 #include "msl_math.h"
 #include "mtx34.h"
 #include "specialhi_pose.h"
@@ -111,19 +112,11 @@ static inline uint8_t hitboxes_seed_bridge_is_guard_transition_owner(uint16_t ac
 }
 
 static inline uint8_t hitboxes_seed_bridge_is_attackair_owner(uint16_t action_id) {
-  switch (action_id) {
-    case MSL_ACT_ATTACK_AIR_N:
-    case MSL_ACT_ATTACK_AIR_F:
-    case MSL_ACT_ATTACK_AIR_B:
-    case MSL_ACT_ATTACK_AIR_HI:
-    // Decomp owner map for aerial AttackAir windows in stale hitlist trim bridge.
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim
-    // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008A5C,lbColl_8000ACFC}
-    case MSL_ACT_ATTACK_AIR_LW:
-      return 1u;
-    default:
-      return 0u;
-  }
+  // Decomp owner map for aerial AttackAir windows in stale hitlist trim bridge. The generated
+  // class is backed by MotionState callback symbols ftCo_AttackAir_*.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008A5C,lbColl_8000ACFC}
+  return msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_ATTACK_AIR);
 }
 
 static inline uint8_t hitboxes_seed_bridge_is_attackair_guard_shield_reentry_owner(

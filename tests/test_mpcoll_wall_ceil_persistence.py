@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 
 from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
+from tests.stage_metadata_helpers import fd_stage_segments
 
 # Action ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 ACT_WAIT = 0x000E
@@ -31,12 +32,10 @@ def _ecb_side_y_offset_for_char_id(char_id: int) -> float:
 
 
 def _fd_pick_right_wall_segment() -> tuple[int, float, float, float, float]:
-    fd = json.loads(Path("data/stages/final_destination.json").read_text())
-    unit_scale = float(fd.get("unit_scale", 1.0))
     # Prefer a deep (under-stage) right wall segment to avoid interacting with floor.
     walls = [
         seg
-        for seg in fd["segments"]
+        for seg in fd_stage_segments()
         if seg.get("kind") == "right_wall" and not bool(seg.get("platform"))
     ]
     if not walls:
@@ -46,28 +45,25 @@ def _fd_pick_right_wall_segment() -> tuple[int, float, float, float, float]:
     seg = min(walls, key=lambda s: max(float(s["y0"]), float(s["y1"])))
     return (
         int(seg["i"]),
-        unit_scale * float(seg["x0"]),
-        unit_scale * float(seg["y0"]),
-        unit_scale * float(seg["x1"]),
-        unit_scale * float(seg["y1"]),
+        float(seg["x0"]),
+        float(seg["y0"]),
+        float(seg["x1"]),
+        float(seg["y1"]),
     )
 
 
 def _fd_right_wall_segment_ids() -> set[int]:
-    fd = json.loads(Path("data/stages/final_destination.json").read_text())
     return {
         int(seg["i"])
-        for seg in fd["segments"]
+        for seg in fd_stage_segments()
         if seg.get("kind") == "right_wall" and not bool(seg.get("platform"))
     }
 
 
 def _fd_pick_horizontal_ceiling_segment() -> tuple[int, float, float, float, float]:
-    fd = json.loads(Path("data/stages/final_destination.json").read_text())
-    unit_scale = float(fd.get("unit_scale", 1.0))
     ceils = [
         seg
-        for seg in fd["segments"]
+        for seg in fd_stage_segments()
         if seg.get("kind") == "ceiling" and not bool(seg.get("platform"))
     ]
     if not ceils:
@@ -77,10 +73,10 @@ def _fd_pick_horizontal_ceiling_segment() -> tuple[int, float, float, float, flo
     seg = min(ceils, key=lambda s: abs(float(s["y0"]) - float(s["y1"])))
     return (
         int(seg["i"]),
-        unit_scale * float(seg["x0"]),
-        unit_scale * float(seg["y0"]),
-        unit_scale * float(seg["x1"]),
-        unit_scale * float(seg["y1"]),
+        float(seg["x0"]),
+        float(seg["y0"]),
+        float(seg["x1"]),
+        float(seg["y1"]),
     )
 
 

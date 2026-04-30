@@ -16,6 +16,7 @@
 #include "../src/hitlist.h"
 #include "../src/item_article_params.h"
 #include "../src/move_tables.h"
+#include "../src/stage_collision.h"
 
 typedef struct {
   MslBatch* batch;
@@ -1656,6 +1657,45 @@ static PyObject* msl_char_params_ecb_joints_py(PyObject* self, PyObject* args) {
   return out;
 }
 
+static PyObject* msl_char_params_part_anchors_py(PyObject* self, PyObject* args) {
+  (void)self;
+  unsigned int char_id_u = 0;
+  if (!PyArg_ParseTuple(args, "I", &char_id_u)) {
+    return NULL;
+  }
+  if (char_id_u > 255u) {
+    PyErr_SetString(PyExc_ValueError, "char_id out of range");
+    return NULL;
+  }
+  if (char_params_init() != 0) {
+    PyErr_SetString(PyExc_RuntimeError, "char_params_init failed");
+    return NULL;
+  }
+  const MslCharParams* ch = msl_char_params((uint8_t)char_id_u);
+  if (ch == NULL) {
+    PyErr_SetString(PyExc_ValueError, "unknown char_id");
+    return NULL;
+  }
+  PyObject* ecb = PyList_New((Py_ssize_t)ch->ecb_joint_count);
+  if (ecb == NULL) {
+    return NULL;
+  }
+  for (uint8_t i = 0; i < ch->ecb_joint_count; i++) {
+    PyObject* v = PyLong_FromUnsignedLong((unsigned long)ch->ecb_joints[i]);
+    if (v == NULL) {
+      Py_DECREF(ecb);
+      return NULL;
+    }
+    PyList_SET_ITEM(ecb, (Py_ssize_t)i, v);
+  }
+  PyObject* out = Py_BuildValue(
+      "{s:N,s:i,s:i,s:i,s:i}", "ecb_joints", ecb, "laser_spawn_joint_part_id",
+      (int)ch->laser_spawn_joint_part_id, "reflector_bone_part_id", (int)ch->reflector_bone_part_id,
+      "camera_zoom_target_bone_part_id", (int)ch->camera_zoom_target_bone_part_id,
+      "grab_capture_anchor_part_id", (int)ch->grab_capture_anchor_part_id);
+  return out;
+}
+
 static PyObject* msl_item_article_params_py(PyObject* self, PyObject* args) {
   (void)self;
   unsigned int char_id_u = 0;
@@ -1684,6 +1724,31 @@ static PyObject* msl_item_article_params_py(PyObject* self, PyObject* args) {
       (double)p->laser_size, "illusion_item_state0_damage", (double)p->illusion_item_state0_damage,
       "illusion_item_state1_damage", (double)p->illusion_item_state1_damage,
       "shield_bounce_extra_degrees", (double)p->shield_bounce_extra_degrees);
+}
+
+static PyObject* msl_stage_floor_segment_py(PyObject* self, PyObject* args) {
+  (void)self;
+  unsigned int stage_id_u = 0;
+  unsigned int segment_i_u = 0;
+  if (!PyArg_ParseTuple(args, "II", &stage_id_u, &segment_i_u)) {
+    return NULL;
+  }
+  if (stage_collision_init() != 0) {
+    PyErr_SetString(PyExc_RuntimeError, "stage_collision_init failed");
+    return NULL;
+  }
+  const MslStageFloorGraph* graph = stage_collision_get_floor_graph((uint32_t)stage_id_u);
+  if (graph == NULL) {
+    Py_RETURN_NONE;
+  }
+  const int idx = stage_collision_floor_line_index((uint32_t)stage_id_u, (uint16_t)segment_i_u);
+  if (idx < 0 || (size_t)idx >= graph->line_count) {
+    Py_RETURN_NONE;
+  }
+  const MslStageFloorLine* line = &graph->lines[(size_t)idx];
+  return Py_BuildValue("{s:i,s:f,s:f,s:f,s:f,s:i,s:i}", "segment_i", (int)line->segment_i, "x0",
+                       (double)line->x0, "y0", (double)line->y0, "x1", (double)line->x1, "y1",
+                       (double)line->y1, "is_ledge", (int)line->is_ledge, "line_index", idx);
 }
 
 static PyObject* msl_debug_reset_pose_and_hitboxes_tables_py(PyObject* self, PyObject* args) {
@@ -2915,11 +2980,99 @@ static PyObject* msl_destroy(PyObject* self, PyObject* args) {
   Py_RETURN_NONE;
 }
 
+static PyObject* msl_move_tables_debug_query_py(PyObject* self, PyObject* args) {
+  (void)self;
+  const char* kind = NULL;
+  int char_id = 0;
+  int action_or_msid = 0;
+  double a = 0.0;
+  double b = 0.0;
+  if (!PyArg_ParseTuple(args, "siidd", &kind, &char_id, &action_or_msid, &a, &b)) {
+    return NULL;
+  }
+  if (move_tables_init() != 0) {
+    PyErr_SetString(PyExc_RuntimeError, "move_tables_init failed");
+    return NULL;
+  }
+  if (strcmp(kind, "attackair_cmd0") == 0) {
+    return PyLong_FromLong((long)move_tables_attackair_cmd0_active(
+        (uint8_t)char_id, (uint16_t)action_or_msid, f32_from_double(a)));
+  }
+  if (strcmp(kind, "attackair_allow_interrupt") == 0) {
+    return PyLong_FromLong((long)move_tables_attackair_allow_interrupt(
+        (uint8_t)char_id, (uint16_t)action_or_msid, f32_from_double(a)));
+  }
+  if (strcmp(kind, "grounded_attack_allow_interrupt") == 0) {
+    return PyLong_FromLong((long)move_tables_grounded_attack_allow_interrupt(
+        (uint8_t)char_id, (uint16_t)action_or_msid, f32_from_double(a)));
+  }
+  if (strcmp(kind, "grounded_smash_charge_crossed") == 0) {
+    uint8_t hold = 0u;
+    const uint8_t ok = move_tables_grounded_smash_charge_crossed(
+        (uint8_t)char_id, (uint16_t)action_or_msid, f32_from_double(a), f32_from_double(b), &hold);
+    return Py_BuildValue("(ii)", (int)ok, (int)hold);
+  }
+  if (strcmp(kind, "grounded_smash_charge_damage_mul") == 0) {
+    return PyFloat_FromDouble((double)move_tables_grounded_smash_charge_damage_mul(
+        (uint8_t)char_id, (uint16_t)action_or_msid));
+  }
+  if (strcmp(kind, "escape_allow_interrupt") == 0) {
+    return PyLong_FromLong((long)move_tables_escape_allow_interrupt(
+        (uint8_t)char_id, (uint16_t)action_or_msid, f32_from_double(a)));
+  }
+  if (strcmp(kind, "escapeair_cmd0") == 0) {
+    return PyLong_FromLong(
+        (long)move_tables_escapeair_cmd0_active((uint8_t)char_id, f32_from_double(a)));
+  }
+  if (strcmp(kind, "special_cmd0") == 0) {
+    return PyLong_FromLong((long)move_tables_special_cmd0_active_at_frame(
+        (uint8_t)char_id, (uint16_t)action_or_msid, (int)a));
+  }
+  if (strcmp(kind, "escapef_flip") == 0) {
+    return PyLong_FromLong(
+        (long)move_tables_escapef_should_flip_facing((uint8_t)char_id, (int16_t)a, (int16_t)b));
+  }
+  if (strcmp(kind, "jab_combo") == 0) {
+    return PyLong_FromLong((long)move_tables_jab_combo_active(
+        (uint8_t)char_id, (uint16_t)action_or_msid, f32_from_double(a)));
+  }
+  if (strcmp(kind, "jab_rapid") == 0) {
+    return PyLong_FromLong((long)move_tables_jab_rapid_active(
+        (uint8_t)char_id, (uint16_t)action_or_msid, f32_from_double(a)));
+  }
+  if (strcmp(kind, "attack100_loop_end") == 0) {
+    return PyLong_FromLong((long)move_tables_attack100_loop_end_check_crossed(
+        (uint8_t)char_id, (int16_t)a, (int16_t)b));
+  }
+  if (strcmp(kind, "dash_cmd0") == 0) {
+    return PyLong_FromLong(
+        (long)move_tables_dash_cmd0_active((uint8_t)char_id, f32_from_double(a)));
+  }
+  if (strcmp(kind, "runbrake_cmd0") == 0) {
+    return PyLong_FromLong(
+        (long)move_tables_runbrake_cmd0_active((uint8_t)char_id, f32_from_double(a)));
+  }
+  if (strcmp(kind, "catchpull_enter_wait") == 0) {
+    return PyLong_FromLong((long)move_tables_catchpull_should_enter_wait(
+        (uint8_t)char_id, (uint16_t)action_or_msid, f32_from_double(a)));
+  }
+  if (strcmp(kind, "catchattack_grabbed_hit") == 0) {
+    return PyLong_FromLong(
+        (long)move_tables_catchattack_grabbed_hit_active((uint8_t)char_id, f32_from_double(a)));
+  }
+  PyErr_Format(PyExc_ValueError, "unknown move_tables debug query: %s", kind);
+  return NULL;
+}
+
 static PyObject* msl_move_tables_throw_has_release_py(PyObject* self, PyObject* args) {
   (void)self;
   int char_id = 0;
   int throw_action_id = 0;
   if (!PyArg_ParseTuple(args, "ii", &char_id, &throw_action_id)) {
+    return NULL;
+  }
+  if (move_tables_init() != 0) {
+    PyErr_SetString(PyExc_RuntimeError, "move_tables_init failed");
     return NULL;
   }
   const uint8_t has = move_tables_throw_has_release((uint8_t)char_id, (uint16_t)throw_action_id);
@@ -2931,6 +3084,10 @@ static PyObject* msl_move_tables_throw_release_frame_py(PyObject* self, PyObject
   int char_id = 0;
   int throw_action_id = 0;
   if (!PyArg_ParseTuple(args, "ii", &char_id, &throw_action_id)) {
+    return NULL;
+  }
+  if (move_tables_init() != 0) {
+    PyErr_SetString(PyExc_RuntimeError, "move_tables_init failed");
     return NULL;
   }
 
@@ -2951,6 +3108,10 @@ static PyObject* msl_move_tables_throw_release_hit_idx_py(PyObject* self, PyObje
   if (!PyArg_ParseTuple(args, "iid", &char_id, &throw_action_id, &cur_anim_frame)) {
     return NULL;
   }
+  if (move_tables_init() != 0) {
+    PyErr_SetString(PyExc_RuntimeError, "move_tables_init failed");
+    return NULL;
+  }
 
   uint8_t hit_idx = 0;
   const uint8_t released = move_tables_throw_release_hit_idx(
@@ -2967,6 +3128,10 @@ static PyObject* msl_move_tables_throw_hitbox_params_py(PyObject* self, PyObject
   int throw_action_id = 0;
   int hit_idx = 0;
   if (!PyArg_ParseTuple(args, "iii", &char_id, &throw_action_id, &hit_idx)) {
+    return NULL;
+  }
+  if (move_tables_init() != 0) {
+    PyErr_SetString(PyExc_RuntimeError, "move_tables_init failed");
     return NULL;
   }
 
@@ -2990,6 +3155,10 @@ static PyObject* msl_move_tables_throw_cmd1_active_py(PyObject* self, PyObject* 
   if (!PyArg_ParseTuple(args, "iid", &char_id, &throw_action_id, &cur_anim_frame)) {
     return NULL;
   }
+  if (move_tables_init() != 0) {
+    PyErr_SetString(PyExc_RuntimeError, "move_tables_init failed");
+    return NULL;
+  }
   const uint8_t active = move_tables_throw_cmd1_active((uint8_t)char_id, (uint16_t)throw_action_id,
                                                        f32_from_double(cur_anim_frame));
   return PyLong_FromLong((long)active);
@@ -3005,10 +3174,165 @@ static PyObject* msl_move_tables_throw_should_spawn_projectile_py(PyObject* self
                         &cur_anim_frame)) {
     return NULL;
   }
+  if (move_tables_init() != 0) {
+    PyErr_SetString(PyExc_RuntimeError, "move_tables_init failed");
+    return NULL;
+  }
   const uint8_t should = move_tables_throw_should_spawn_projectile(
       (uint8_t)char_id, (uint16_t)throw_action_id, f32_from_double(prev_anim_frame),
       f32_from_double(cur_anim_frame));
   return PyLong_FromLong((long)should);
+}
+
+enum { MSL_BINDING_MOVE_TABLES_PULSE_MAX = 16 };
+
+static PyObject* msl_move_tables_throw_should_flip_facing_py(PyObject* self, PyObject* args) {
+  (void)self;
+  int char_id = 0;
+  int throw_action_id = 0;
+  double prev_anim_frame = 0.0;
+  double cur_anim_frame = 0.0;
+  if (!PyArg_ParseTuple(args, "iidd", &char_id, &throw_action_id, &prev_anim_frame,
+                        &cur_anim_frame)) {
+    return NULL;
+  }
+  if (move_tables_init() != 0) {
+    PyErr_SetString(PyExc_RuntimeError, "move_tables_init failed");
+    return NULL;
+  }
+  const uint8_t should = move_tables_throw_should_flip_facing(
+      (uint8_t)char_id, (uint16_t)throw_action_id, f32_from_double(prev_anim_frame),
+      f32_from_double(cur_anim_frame));
+  return PyLong_FromLong((long)should);
+}
+
+static PyObject* msl_move_tables_throw_crossed_projectile_pulse_frame_py(PyObject* self,
+                                                                         PyObject* args) {
+  (void)self;
+  int char_id = 0;
+  int throw_action_id = 0;
+  double prev_anim_frame = 0.0;
+  double cur_anim_frame = 0.0;
+  if (!PyArg_ParseTuple(args, "iidd", &char_id, &throw_action_id, &prev_anim_frame,
+                        &cur_anim_frame)) {
+    return NULL;
+  }
+  if (move_tables_init() != 0) {
+    PyErr_SetString(PyExc_RuntimeError, "move_tables_init failed");
+    return NULL;
+  }
+  int16_t pulse_frame = 0;
+  const uint8_t crossed = move_tables_throw_crossed_projectile_pulse_frame(
+      (uint8_t)char_id, (uint16_t)throw_action_id, f32_from_double(prev_anim_frame),
+      f32_from_double(cur_anim_frame), &pulse_frame);
+  if (!crossed) {
+    return Py_BuildValue("(ii)", 0, -1);
+  }
+  return Py_BuildValue("(ii)", 1, (int)pulse_frame);
+}
+
+static PyObject* msl_move_tables_throw_projectile_first_pulse_frame_py(PyObject* self,
+                                                                       PyObject* args) {
+  (void)self;
+  int char_id = 0;
+  int throw_action_id = 0;
+  if (!PyArg_ParseTuple(args, "ii", &char_id, &throw_action_id)) {
+    return NULL;
+  }
+  if (move_tables_init() != 0) {
+    PyErr_SetString(PyExc_RuntimeError, "move_tables_init failed");
+    return NULL;
+  }
+  int16_t pulse_frame = 0;
+  const uint8_t ok = move_tables_throw_projectile_first_pulse_frame(
+      (uint8_t)char_id, (uint16_t)throw_action_id, &pulse_frame);
+  if (!ok) {
+    return Py_BuildValue("(ii)", 0, -1);
+  }
+  return Py_BuildValue("(ii)", 1, (int)pulse_frame);
+}
+
+static PyObject* msl_move_tables_throw_projectile_last_pulse_frame_py(PyObject* self,
+                                                                      PyObject* args) {
+  (void)self;
+  int char_id = 0;
+  int throw_action_id = 0;
+  if (!PyArg_ParseTuple(args, "ii", &char_id, &throw_action_id)) {
+    return NULL;
+  }
+  if (move_tables_init() != 0) {
+    PyErr_SetString(PyExc_RuntimeError, "move_tables_init failed");
+    return NULL;
+  }
+  int16_t pulse_frame = 0;
+  const uint8_t ok = move_tables_throw_projectile_last_pulse_frame(
+      (uint8_t)char_id, (uint16_t)throw_action_id, &pulse_frame);
+  if (!ok) {
+    return Py_BuildValue("(ii)", 0, -1);
+  }
+  return Py_BuildValue("(ii)", 1, (int)pulse_frame);
+}
+
+static PyObject* msl_move_tables_throw_projectile_pulse_ordinal_py(PyObject* self, PyObject* args) {
+  (void)self;
+  int char_id = 0;
+  int throw_action_id = 0;
+  int pulse_frame = 0;
+  if (!PyArg_ParseTuple(args, "iii", &char_id, &throw_action_id, &pulse_frame)) {
+    return NULL;
+  }
+  if (move_tables_init() != 0) {
+    PyErr_SetString(PyExc_RuntimeError, "move_tables_init failed");
+    return NULL;
+  }
+  uint8_t ordinal = 0;
+  const uint8_t ok = move_tables_throw_projectile_pulse_ordinal(
+      (uint8_t)char_id, (uint16_t)throw_action_id, (int16_t)pulse_frame, &ordinal);
+  if (!ok) {
+    return Py_BuildValue("(ii)", 0, -1);
+  }
+  return Py_BuildValue("(ii)", 1, (int)ordinal);
+}
+
+static PyObject* msl_move_tables_special_pseudo_random_sfx_ranges_crossed_py(PyObject* self,
+                                                                             PyObject* args) {
+  (void)self;
+  int char_id = 0;
+  int msid = 0;
+  double prev_anim_frame = 0.0;
+  double cur_anim_frame = 0.0;
+  int max_out = 8;
+  if (!PyArg_ParseTuple(args, "iidd|i", &char_id, &msid, &prev_anim_frame, &cur_anim_frame,
+                        &max_out)) {
+    return NULL;
+  }
+  if (max_out < 0) {
+    max_out = 0;
+  }
+  if (max_out > MSL_BINDING_MOVE_TABLES_PULSE_MAX) {
+    max_out = MSL_BINDING_MOVE_TABLES_PULSE_MAX;
+  }
+  if (move_tables_init() != 0) {
+    PyErr_SetString(PyExc_RuntimeError, "move_tables_init failed");
+    return NULL;
+  }
+  uint8_t ranges[MSL_BINDING_MOVE_TABLES_PULSE_MAX] = {0};
+  const uint8_t n = move_tables_special_pseudo_random_sfx_ranges_crossed(
+      (uint8_t)char_id, (uint16_t)msid, f32_from_double(prev_anim_frame),
+      f32_from_double(cur_anim_frame), ranges, (uint8_t)max_out);
+  PyObject* out = PyTuple_New((Py_ssize_t)n);
+  if (out == NULL) {
+    return NULL;
+  }
+  for (uint8_t i = 0; i < n; i++) {
+    PyObject* v = PyLong_FromLong((long)ranges[i]);
+    if (v == NULL) {
+      Py_DECREF(out);
+      return NULL;
+    }
+    PyTuple_SET_ITEM(out, (Py_ssize_t)i, v);
+  }
+  return out;
 }
 
 static PyObject* msl_debug_hitlist_fighter_contains_py(PyObject* self, PyObject* args) {
@@ -3173,8 +3497,12 @@ static PyMethodDef methods[] = {
      "Get C allocation counters (debug/perf guardrail)."},
     {"char_params_ecb_joints", msl_char_params_ecb_joints_py, METH_VARARGS,
      "char_params_ecb_joints(char_id) -> list[int] loaded from data/characters/<char>.json."},
+    {"char_params_part_anchors", msl_char_params_part_anchors_py, METH_VARARGS,
+     "char_params_part_anchors(char_id) -> dict of runtime part anchors from character data."},
     {"item_article_params", msl_item_article_params_py, METH_VARARGS,
      "item_article_params(char_id) -> dict loaded from MSLITAR1."},
+    {"stage_floor_segment", msl_stage_floor_segment_py, METH_VARARGS,
+     "stage_floor_segment(stage_id, segment_i) -> dict from runtime stage collision tables."},
     {"hitlist_ring_demo", msl_hitlist_ring_demo_py, METH_VARARGS,
      "hitlist_ring_demo(inserts) -> (ring, ids_u32[12]) (test-only)"},
     {"debug_reset_pose_and_hitboxes_tables", msl_debug_reset_pose_and_hitboxes_tables_py,
@@ -3185,6 +3513,8 @@ static PyMethodDef methods[] = {
      "ecb_extents_rel(char_id, animation_index, action_frame) -> (min_x, max_x, min_y, max_y)"},
     {"anim_pose_matrix", msl_anim_pose_matrix_py, METH_VARARGS,
      "anim_pose_matrix(char_id, msid, frame, part_id) -> np.ndarray[float32] shape=(12,)"},
+    {"move_tables_debug_query", msl_move_tables_debug_query_py, METH_VARARGS,
+     "move_tables_debug_query(kind, char_id, action_or_msid, a, b) -> test helper"},
     {"move_tables_throw_has_release", msl_move_tables_throw_has_release_py, METH_VARARGS,
      "move_tables_throw_has_release(char_id, throw_action_id) -> 0/1"},
     {"move_tables_throw_release_frame", msl_move_tables_throw_release_frame_py, METH_VARARGS,
@@ -3201,6 +3531,30 @@ static PyMethodDef methods[] = {
      METH_VARARGS,
      "move_tables_throw_should_spawn_projectile(char_id, throw_action_id, prev_anim_frame, "
      "cur_anim_frame) -> 0/1"},
+    {"move_tables_throw_should_flip_facing", msl_move_tables_throw_should_flip_facing_py,
+     METH_VARARGS,
+     "move_tables_throw_should_flip_facing(char_id, throw_action_id, prev_anim_frame, "
+     "cur_anim_frame) -> 0/1"},
+    {"move_tables_throw_crossed_projectile_pulse_frame",
+     msl_move_tables_throw_crossed_projectile_pulse_frame_py, METH_VARARGS,
+     "move_tables_throw_crossed_projectile_pulse_frame(char_id, throw_action_id, prev_anim_frame, "
+     "cur_anim_frame) -> (ok, pulse_frame)"},
+    {"move_tables_throw_projectile_first_pulse_frame",
+     msl_move_tables_throw_projectile_first_pulse_frame_py, METH_VARARGS,
+     "move_tables_throw_projectile_first_pulse_frame(char_id, throw_action_id) -> "
+     "(ok, pulse_frame)"},
+    {"move_tables_throw_projectile_last_pulse_frame",
+     msl_move_tables_throw_projectile_last_pulse_frame_py, METH_VARARGS,
+     "move_tables_throw_projectile_last_pulse_frame(char_id, throw_action_id) -> "
+     "(ok, pulse_frame)"},
+    {"move_tables_throw_projectile_pulse_ordinal",
+     msl_move_tables_throw_projectile_pulse_ordinal_py, METH_VARARGS,
+     "move_tables_throw_projectile_pulse_ordinal(char_id, throw_action_id, pulse_frame) -> "
+     "(ok, ordinal)"},
+    {"move_tables_special_pseudo_random_sfx_ranges_crossed",
+     msl_move_tables_special_pseudo_random_sfx_ranges_crossed_py, METH_VARARGS,
+     "move_tables_special_pseudo_random_sfx_ranges_crossed(char_id, msid, prev_anim_frame, "
+     "cur_anim_frame, max_out=8) -> tuple[int, ...]"},
     {"hurtcaps_world", msl_hurtcaps_world_py, METH_VARARGS,
      "hurtcaps_world(handle, batch_index, player_index) -> (caps[MSL_MAX_HURTCAPS,7], count)"},
     {"hitboxes_world", msl_hitboxes_world_py, METH_VARARGS,

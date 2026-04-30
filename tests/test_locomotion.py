@@ -2935,10 +2935,9 @@ def test_fastfall_latched_sets_vy_to_minus_fast_fall_velocity_each_frame() -> No
 
 
 def test_fall_fast_clears_on_landing_and_does_not_persist_off_stage() -> None:
-    import json
-    from pathlib import Path
-
     import msl_binding
+
+    from tests.stage_metadata_helpers import fd_stage_segments
 
     sizes = msl_binding.sizes()
     seed_stride = int(sizes["seed"])
@@ -2946,12 +2945,10 @@ def test_fall_fast_clears_on_landing_and_does_not_persist_off_stage() -> None:
     compare_stride = int(sizes["compare"])
 
     right_edge = -1.0
-    fd = json.loads(Path("data/stages/final_destination.json").read_text())
-    unit_scale = float(fd.get("unit_scale", 1.0))
-    for s in fd["segments"]:
+    for s in fd_stage_segments():
         if s["kind"] != "floor" or bool(s["platform"]):
             continue
-        right_edge = max(right_edge, unit_scale * float(max(s["x0"], s["x1"])))
+        right_edge = max(right_edge, float(max(s["x0"], s["x1"])))
     assert right_edge > 0.0
 
     vx = np.float32(5.0)
