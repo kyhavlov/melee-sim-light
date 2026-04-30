@@ -12,8 +12,17 @@ from tools.extraction.extract_motion_state_owners import (
     CLASS_ATTACK_AIR,
     CLASS_ATTACK_S3,
     CLASS_ATTACK_S4,
+    CLASS_COMMON_AIR_COLL,
+    CLASS_COMMON_AIR_PHYS,
+    CLASS_COMMON_AIR_WALLJUMP_COLL,
     CLASS_DAMAGE_COMMON,
+    CLASS_DAMAGE_COMMON_COLL,
+    CLASS_DAMAGE_FALL_COLL,
     CLASS_DAMAGE_FLY,
+    CLASS_DAMAGE_FLY_COLL,
+    CLASS_LANDING_AIR,
+    CLASS_LANDING_AIR_COLL,
+    CLASS_LANDING_COLL,
     CLASS_SPECIALHI,
 )
 from tools.slippi.motion_state_owners import VERSION, read_callback_manifest, read_mslmso01_v1
@@ -46,6 +55,28 @@ def test_motion_state_owner_tables_cover_known_callbacks_and_flags() -> None:
     assert cb_name(0x0163, "anim") == "ftFx_SpecialHi_Anim"
     assert cb_name(0x0163, "coll") == "ftFx_SpecialHi_Coll"
     assert int(fox.class_bits[0x0163]) & CLASS_SPECIALHI
+
+    assert cb_name(0x0019, "phys") == "ftCo_Jump_Phys"  # JumpF
+    assert cb_name(0x0019, "coll") == "ftCo_Jump_Coll"
+    assert int(fox.class_bits[0x0019]) & CLASS_COMMON_AIR_PHYS
+    assert int(fox.class_bits[0x0019]) & CLASS_COMMON_AIR_COLL
+    assert int(fox.class_bits[0x0019]) & CLASS_COMMON_AIR_WALLJUMP_COLL
+
+    assert cb_name(0x0023, "phys") == "ftCo_FallSpecial_Phys"  # FallSpecial
+    assert cb_name(0x0023, "coll") == "ftCo_FallSpecial_Coll"
+    assert int(fox.class_bits[0x0023]) & CLASS_COMMON_AIR_PHYS
+    assert int(fox.class_bits[0x0023]) & CLASS_COMMON_AIR_COLL
+    assert not int(fox.class_bits[0x0023]) & CLASS_COMMON_AIR_WALLJUMP_COLL
+
+    assert cb_name(0x002A, "coll") == "ftCo_Landing_Coll"  # Landing
+    assert int(fox.class_bits[0x002A]) & CLASS_LANDING_COLL
+    assert cb_name(0x0046, "coll") == "ftCo_LandingAir_Coll"  # LandingAirN
+    assert int(fox.class_bits[0x0046]) & CLASS_LANDING_AIR
+    assert int(fox.class_bits[0x0046]) & CLASS_LANDING_AIR_COLL
+    assert cb_name(0x0026, "coll") == "ftCo_DamageFall_Coll"  # DamageFall
+    assert int(fox.class_bits[0x0026]) & CLASS_DAMAGE_FALL_COLL
+    assert cb_name(0x005B, "coll") == "ftCo_DamageFlyRoll_Coll"  # DamageFlyRoll
+    assert int(fox.class_bits[0x005B]) & CLASS_DAMAGE_FLY_COLL
 
     # GuardOn carries x9_b1 in the raw MotionState +0x8 word, matching MSLACID1 continuity.
     # refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
@@ -81,6 +112,36 @@ def test_motion_state_class_equivalence_for_migrated_predicates() -> None:
         0x00C1,
     }
     damage_fly = {0x0057, 0x0058, 0x0059, 0x005A, 0x005B, 0x00F7, 0x00F8}
+    landing_air = {0x0046, 0x0047, 0x0048, 0x0049, 0x004A}
+    common_air_phys = {
+        0x0019,
+        0x001A,
+        0x001B,
+        0x001C,
+        0x001D,
+        0x001E,
+        0x001F,
+        0x0020,
+        0x0021,
+        0x0022,
+        0x0023,
+        0x0024,
+        0x0025,
+    }
+    common_air_coll = set(common_air_phys)
+    common_air_walljump_coll = {
+        0x0019,
+        0x001A,
+        0x001B,
+        0x001C,
+        0x001D,
+        0x001E,
+        0x001F,
+        0x0021,
+        0x0022,
+    }
+    landing_coll = {0x002A, 0x002B}
+    damagefall_coll = {0x0026}
 
     for action_id in range(max_action):
         assert both_have(action_id, CLASS_ATTACK_AIR) == (action_id in attack_air)
@@ -88,6 +149,17 @@ def test_motion_state_class_equivalence_for_migrated_predicates() -> None:
         assert both_have(action_id, CLASS_ATTACK_S4) == (action_id in attack_s4)
         assert both_have(action_id, CLASS_DAMAGE_COMMON) == (action_id in common_damage)
         assert both_have(action_id, CLASS_DAMAGE_FLY) == (action_id in damage_fly)
+        assert both_have(action_id, CLASS_LANDING_AIR) == (action_id in landing_air)
+        assert both_have(action_id, CLASS_COMMON_AIR_PHYS) == (action_id in common_air_phys)
+        assert both_have(action_id, CLASS_COMMON_AIR_COLL) == (action_id in common_air_coll)
+        assert both_have(action_id, CLASS_COMMON_AIR_WALLJUMP_COLL) == (
+            action_id in common_air_walljump_coll
+        )
+        assert both_have(action_id, CLASS_LANDING_COLL) == (action_id in landing_coll)
+        assert both_have(action_id, CLASS_LANDING_AIR_COLL) == (action_id in landing_air)
+        assert both_have(action_id, CLASS_DAMAGE_COMMON_COLL) == (action_id in common_damage)
+        assert both_have(action_id, CLASS_DAMAGE_FLY_COLL) == (action_id in damage_fly)
+        assert both_have(action_id, CLASS_DAMAGE_FALL_COLL) == (action_id in damagefall_coll)
 
 
 def test_motion_state_owner_reader_rejects_stale_versions(tmp_path: Path) -> None:

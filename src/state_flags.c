@@ -8,6 +8,7 @@
 #include "anim_pose.h"
 #include "common_params.h"
 #include "char_params.h"
+#include "motion_state_owners.h"
 #include "move_tables.h"
 #include "stage_collision.h"
 #include "state_flags_221c_y_tables.h"
@@ -28,16 +29,7 @@ static inline uint8_t state_flags_221a_b7_action_uses_guard_shield(uint16_t acti
 }
 
 static inline uint8_t state_flags_2218_allow_interrupt_attackair_action(uint16_t action_id) {
-  switch (action_id) {
-    case MSL_ACT_ATTACK_AIR_N:
-    case MSL_ACT_ATTACK_AIR_F:
-    case MSL_ACT_ATTACK_AIR_B:
-    case MSL_ACT_ATTACK_AIR_HI:
-    case MSL_ACT_ATTACK_AIR_LW:
-      return 1u;
-    default:
-      return 0u;
-  }
+  return msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_ATTACK_AIR);
 }
 
 static inline uint8_t state_flags_is_damage_action(uint16_t action_id) {
@@ -68,18 +60,7 @@ static inline uint8_t state_flags_is_damage_action(uint16_t action_id) {
 }
 
 static inline uint8_t state_flags_is_damage_fly_action(uint16_t action_id) {
-  switch (action_id) {
-    case MSL_ACT_DAMAGE_FLY_HI:
-    case MSL_ACT_DAMAGE_FLY_N:
-    case MSL_ACT_DAMAGE_FLY_LW:
-    case MSL_ACT_DAMAGE_FLY_TOP:
-    case MSL_ACT_DAMAGE_FLY_ROLL:
-    case MSL_ACT_FLY_REFLECT_WALL:
-    case MSL_ACT_FLY_REFLECT_CEIL:
-      return 1u;
-    default:
-      return 0u;
-  }
+  return msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_DAMAGE_FLY);
 }
 
 static inline uint8_t state_flags_221a_b5_capture_action(uint16_t action_id) {
@@ -124,16 +105,7 @@ static inline uint8_t state_flags_2218_attack12_allow_interrupt_action(uint16_t 
 }
 
 static inline uint8_t state_flags_2218_attack_s3_action(uint16_t action_id) {
-  switch (action_id) {
-    case MSL_ACT_ATTACK_S3_HI:
-    case MSL_ACT_ATTACK_S3_HI_S:
-    case MSL_ACT_ATTACK_S3_S:
-    case MSL_ACT_ATTACK_S3_LW_S:
-    case MSL_ACT_ATTACK_S3_LW:
-      return 1u;
-    default:
-      return 0u;
-  }
+  return msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_ATTACK_S3);
 }
 
 static inline uint8_t state_flags_2218_wait_iasa_grounded_destination(uint16_t action_id) {

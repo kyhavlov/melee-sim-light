@@ -755,21 +755,7 @@ static inline uint8_t action_uses_common_air_walljump_callback(uint16_t a) {
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_Coll
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Coll
   // refs/melee/src/melee/ft/ft_081B.c::{ft_800831CC,ft_800835B0}
-  switch (a) {
-    case (uint16_t)MSL_ACT_JUMP_F:
-    case (uint16_t)MSL_ACT_JUMP_B:
-    case (uint16_t)MSL_ACT_JUMP_AERIAL_F:
-    case (uint16_t)MSL_ACT_JUMP_AERIAL_B:
-    case (uint16_t)MSL_ACT_FALL:
-    case (uint16_t)MSL_ACT_FALL_F:
-    case (uint16_t)MSL_ACT_FALL_B:
-    case (uint16_t)MSL_ACT_FALL_AERIAL:
-    case (uint16_t)MSL_ACT_FALL_AERIAL_F:
-    case (uint16_t)MSL_ACT_FALL_AERIAL_B:
-      return 1u;
-    default:
-      return 0u;
-  }
+  return msl_motion_state_common_class_has(a, MSL_MS_CLASS_COMMON_AIR_WALLJUMP_COLL);
 }
 
 static inline void align_passivewalljump_entry_x(MslBatch* batch, size_t idx) {
@@ -1226,16 +1212,7 @@ static inline uint32_t grounded_attack_submotion_from_action(uint16_t action_id)
 }
 
 static inline uint8_t action_is_attack_s3_family(uint16_t action_id) {
-  switch (action_id) {
-    case MSL_ACT_ATTACK_S3_HI:
-    case MSL_ACT_ATTACK_S3_HI_S:
-    case MSL_ACT_ATTACK_S3_S:
-    case MSL_ACT_ATTACK_S3_LW_S:
-    case MSL_ACT_ATTACK_S3_LW:
-      return 1;
-    default:
-      return 0;
-  }
+  return msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_ATTACK_S3);
 }
 
 static inline uint8_t grounded_attack_wait_iasa_specials_action(uint16_t action_id) {

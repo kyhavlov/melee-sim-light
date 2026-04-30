@@ -17,7 +17,7 @@ from tools.extraction.extract_attack_id_move_id import (
 
 
 FORMAT_MAGIC = b"MSLMSO01"
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2
 U16_ABSENT = 0xFFFF
 
 CLASS_ATTACK_AIR = 1 << 0
@@ -28,6 +28,14 @@ CLASS_DAMAGE_FLY = 1 << 4
 CLASS_LANDING_AIR = 1 << 5
 CLASS_COMMON_FALL = 1 << 6
 CLASS_SPECIALHI = 1 << 7
+CLASS_COMMON_AIR_PHYS = 1 << 8
+CLASS_COMMON_AIR_COLL = 1 << 9
+CLASS_COMMON_AIR_WALLJUMP_COLL = 1 << 10
+CLASS_LANDING_COLL = 1 << 11
+CLASS_LANDING_AIR_COLL = 1 << 12
+CLASS_DAMAGE_COMMON_COLL = 1 << 13
+CLASS_DAMAGE_FLY_COLL = 1 << 14
+CLASS_DAMAGE_FALL_COLL = 1 << 15
 
 
 @dataclass(frozen=True)
@@ -106,6 +114,8 @@ def _parse_submotion_ids(melee_decomp_root: Path) -> dict[str, int]:
 
 def _class_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
     bits = 0
+    phys_cb = callbacks[2]
+    coll_cb = callbacks[3]
     if any(cb.startswith("ftCo_AttackAir") for cb in callbacks):
         bits |= CLASS_ATTACK_AIR
     if any(cb.startswith("ftCo_AttackS3") for cb in callbacks):
@@ -122,6 +132,34 @@ def _class_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
         bits |= CLASS_COMMON_FALL
     if any(cb.startswith("ftFx_SpecialHi") or cb.startswith("ftFx_SpecialAirHi") for cb in callbacks):
         bits |= CLASS_SPECIALHI
+    if phys_cb in {
+        "ftCo_Jump_Phys",
+        "ftCo_JumpAerial_Phys",
+        "ftCo_Fall_Phys",
+        "ftCo_FallAerial_Phys",
+        "ftCo_FallSpecial_Phys",
+    }:
+        bits |= CLASS_COMMON_AIR_PHYS
+    if coll_cb in {
+        "ftCo_Jump_Coll",
+        "ftCo_JumpAerial_Coll",
+        "ftCo_Fall_Coll",
+        "ftCo_FallAerial_Coll",
+        "ftCo_FallSpecial_Coll",
+    }:
+        bits |= CLASS_COMMON_AIR_COLL
+    if coll_cb in {"ftCo_Jump_Coll", "ftCo_JumpAerial_Coll", "ftCo_Fall_Coll"}:
+        bits |= CLASS_COMMON_AIR_WALLJUMP_COLL
+    if coll_cb == "ftCo_Landing_Coll":
+        bits |= CLASS_LANDING_COLL
+    if coll_cb == "ftCo_LandingAir_Coll":
+        bits |= CLASS_LANDING_AIR_COLL
+    if coll_cb in {"ftCo_Damage_Coll", "ftCo_DownDamage_Coll"}:
+        bits |= CLASS_DAMAGE_COMMON_COLL
+    if coll_cb in {"ftCo_DamageFly_Coll", "ftCo_DamageFlyRoll_Coll", "ftCo_FlyReflect_Coll"}:
+        bits |= CLASS_DAMAGE_FLY_COLL
+    if coll_cb == "ftCo_DamageFall_Coll":
+        bits |= CLASS_DAMAGE_FALL_COLL
     return bits
 
 
@@ -288,6 +326,14 @@ def _write_manifest(out_path: Path, callback_ids: dict[str, int]) -> None:
         "LANDING_AIR": CLASS_LANDING_AIR,
         "COMMON_FALL": CLASS_COMMON_FALL,
         "SPECIALHI": CLASS_SPECIALHI,
+        "COMMON_AIR_PHYS": CLASS_COMMON_AIR_PHYS,
+        "COMMON_AIR_COLL": CLASS_COMMON_AIR_COLL,
+        "COMMON_AIR_WALLJUMP_COLL": CLASS_COMMON_AIR_WALLJUMP_COLL,
+        "LANDING_COLL": CLASS_LANDING_COLL,
+        "LANDING_AIR_COLL": CLASS_LANDING_AIR_COLL,
+        "DAMAGE_COMMON_COLL": CLASS_DAMAGE_COMMON_COLL,
+        "DAMAGE_FLY_COLL": CLASS_DAMAGE_FLY_COLL,
+        "DAMAGE_FALL_COLL": CLASS_DAMAGE_FALL_COLL,
     }
     symbols = [{"id": int(i), "symbol": sym} for sym, i in sorted(callback_ids.items(), key=lambda kv: kv[1])]
     payload = {

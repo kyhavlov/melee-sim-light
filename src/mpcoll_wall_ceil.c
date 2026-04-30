@@ -12,6 +12,7 @@
 #include "coll_env_flags.h"
 #include "match_flow.h"
 #include "mpcoll_ecb_points.h"
+#include "motion_state_owners.h"
 #include "msl_math.h"
 #include "mtx34.h"
 #include "specialhi_pose.h"
@@ -181,18 +182,7 @@ static inline uint8_t specialhi_launch_uses_runtime_xrotn_ecb(uint8_t char_id, u
 }
 
 static inline uint8_t mpcoll_damagefly_wall_asdi_latch_action(uint16_t action_id) {
-  switch (action_id) {
-    case MSL_ACT_DAMAGE_FLY_HI:
-    case MSL_ACT_DAMAGE_FLY_N:
-    case MSL_ACT_DAMAGE_FLY_LW:
-    case MSL_ACT_DAMAGE_FLY_TOP:
-    case MSL_ACT_DAMAGE_FLY_ROLL:
-    case MSL_ACT_FLY_REFLECT_WALL:
-    case MSL_ACT_FLY_REFLECT_CEIL:
-      return 1u;
-    default:
-      return 0u;
-  }
+  return msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_DAMAGE_FLY_COLL);
 }
 
 static inline uint8_t mpcoll_wall_asdi_producer_action(uint16_t action_id) {
@@ -255,21 +245,7 @@ static inline uint8_t mpcoll_action_uses_common_air_walljump_callback(uint16_t a
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Coll
   // refs/melee/src/melee/ft/ft_081B.c::{ft_800831CC,ft_800835B0}
   // refs/melee/src/melee/ft/ftwalljump.c::ftWallJump_8008169C
-  switch (action_id) {
-    case (uint16_t)MSL_ACT_JUMP_F:
-    case (uint16_t)MSL_ACT_JUMP_B:
-    case (uint16_t)MSL_ACT_JUMP_AERIAL_F:
-    case (uint16_t)MSL_ACT_JUMP_AERIAL_B:
-    case (uint16_t)MSL_ACT_FALL:
-    case (uint16_t)MSL_ACT_FALL_F:
-    case (uint16_t)MSL_ACT_FALL_B:
-    case (uint16_t)MSL_ACT_FALL_AERIAL:
-    case (uint16_t)MSL_ACT_FALL_AERIAL_F:
-    case (uint16_t)MSL_ACT_FALL_AERIAL_B:
-      return 1u;
-    default:
-      return 0u;
-  }
+  return msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_COMMON_AIR_WALLJUMP_COLL);
 }
 
 static inline void ecb_update_rot_bounds(float x, float y, float* io_min_x, float* io_max_x,

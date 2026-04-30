@@ -9,6 +9,7 @@
 #include "buttons.h"
 #include "common_params.h"
 #include "input_axis.h"
+#include "motion_state_owners.h"
 #include "stage_collision.h"
 
 void timers_update(MslBatch* batch) {
@@ -153,18 +154,7 @@ static inline uint8_t damage_post_hitlag_cb_owner_action(uint16_t a) {
 }
 
 static inline uint8_t damage_post_hitlag_cb_damagefly_action(uint16_t a) {
-  switch (a) {
-    case MSL_ACT_DAMAGE_FLY_HI:
-    case MSL_ACT_DAMAGE_FLY_N:
-    case MSL_ACT_DAMAGE_FLY_LW:
-    case MSL_ACT_DAMAGE_FLY_TOP:
-    case MSL_ACT_DAMAGE_FLY_ROLL:
-    case MSL_ACT_FLY_REFLECT_WALL:
-    case MSL_ACT_FLY_REFLECT_CEIL:
-      return 1u;
-    default:
-      return 0u;
-  }
+  return msl_motion_state_common_class_has(a, MSL_MS_CLASS_DAMAGE_FLY);
 }
 
 static inline uint8_t damage_every_hitlag_sdi_timer_window_action(uint16_t a) {

@@ -419,7 +419,7 @@ def _ensure_motion_state_owner_bins() -> None:
                 with out.open("rb") as f:
                     magic = f.read(8)
                     ver = int.from_bytes(f.read(4), "little", signed=False)
-                if magic == b"MSLMSO01" and ver == 1:
+                if magic == b"MSLMSO01" and ver == 2:
                     continue
             except OSError:
                 pass

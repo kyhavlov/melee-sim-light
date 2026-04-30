@@ -12,6 +12,7 @@
 #include "hurtbox_modes_tables.h"
 #include "hurtcaps_tables.h"
 #include "items.h"
+#include "motion_state_owners.h"
 #include "msl_math.h"
 #include "mtx34.h"
 #include "specialhi_pose.h"
@@ -106,16 +107,7 @@ static inline uint8_t hurtboxes_runtime_specialhi_pose_owner(uint8_t char_id, ui
 }
 
 static inline uint8_t hurtboxes_float_aobj_pose_owner(uint16_t action_id) {
-  switch (action_id) {
-    case MSL_ACT_LANDING_AIR_N:
-    case MSL_ACT_LANDING_AIR_F:
-    case MSL_ACT_LANDING_AIR_B:
-    case MSL_ACT_LANDING_AIR_HI:
-    case MSL_ACT_LANDING_AIR_LW:
-      return 1u;
-    default:
-      return 0u;
-  }
+  return msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_LANDING_AIR);
 }
 
 static inline uint8_t hurtboxes_side_special_end_uses_pre_anim_collision_pose(uint8_t char_id,

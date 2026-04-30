@@ -10,6 +10,7 @@
 #include "common_params.h"
 #include "match_flow.h"
 #include "mpcoll_ecb_points.h"
+#include "motion_state_owners.h"
 #include "state_flags.h"
 #include "stage_collision.h"
 #include "input_axis.h"
@@ -92,48 +93,13 @@ static inline uint8_t is_damage_collision_landing_action(uint16_t a) {
   // - ftCo_DownDamage_Coll (air path calls ft_80081DD4 before downed follow-up handling)
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_Coll,ftCo_DamageFly_Coll}
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::ftCo_DownDamage_Coll
-  switch (a) {
-    case MSL_ACT_DAMAGE_HI_1:
-    case MSL_ACT_DAMAGE_HI_2:
-    case MSL_ACT_DAMAGE_HI_3:
-    case MSL_ACT_DAMAGE_N_1:
-    case MSL_ACT_DAMAGE_N_2:
-    case MSL_ACT_DAMAGE_N_3:
-    case MSL_ACT_DAMAGE_LW_1:
-    case MSL_ACT_DAMAGE_LW_2:
-    case MSL_ACT_DAMAGE_LW_3:
-    case MSL_ACT_DAMAGE_AIR_1:
-    case MSL_ACT_DAMAGE_AIR_2:
-    case MSL_ACT_DAMAGE_AIR_3:
-    case MSL_ACT_DAMAGE_FLY_HI:
-    case MSL_ACT_DAMAGE_FLY_N:
-    case MSL_ACT_DAMAGE_FLY_LW:
-    case MSL_ACT_DAMAGE_FLY_TOP:
-    case MSL_ACT_DAMAGE_FLY_ROLL:
-    case MSL_ACT_FLY_REFLECT_WALL:
-    case MSL_ACT_FLY_REFLECT_CEIL:
-    case MSL_ACT_DAMAGE_FALL:
-    case MSL_ACT_DOWN_DAMAGE_U:
-    case MSL_ACT_DOWN_DAMAGE_D:
-      return 1;
-    default:
-      return 0;
-  }
+  return (uint8_t)(msl_motion_state_common_class_has(a, MSL_MS_CLASS_DAMAGE_COMMON_COLL) ||
+                   msl_motion_state_common_class_has(a, MSL_MS_CLASS_DAMAGE_FLY_COLL) ||
+                   msl_motion_state_common_class_has(a, MSL_MS_CLASS_DAMAGE_FALL_COLL));
 }
 
 static inline uint8_t is_damage_fly_collision_action(uint16_t a) {
-  switch (a) {
-    case MSL_ACT_DAMAGE_FLY_HI:
-    case MSL_ACT_DAMAGE_FLY_N:
-    case MSL_ACT_DAMAGE_FLY_LW:
-    case MSL_ACT_DAMAGE_FLY_TOP:
-    case MSL_ACT_DAMAGE_FLY_ROLL:
-    case MSL_ACT_FLY_REFLECT_WALL:
-    case MSL_ACT_FLY_REFLECT_CEIL:
-      return 1u;
-    default:
-      return 0u;
-  }
+  return msl_motion_state_common_class_has(a, MSL_MS_CLASS_DAMAGE_FLY_COLL);
 }
 
 static inline uint8_t is_damage_ground_collision_action(uint16_t a) {
@@ -172,16 +138,7 @@ static inline uint8_t is_capture_lw_allow_ground_to_air_collision_action(uint16_
 }
 
 static inline uint8_t is_attackair_action(uint16_t a) {
-  switch (a) {
-    case MSL_ACT_ATTACK_AIR_N:
-    case MSL_ACT_ATTACK_AIR_F:
-    case MSL_ACT_ATTACK_AIR_B:
-    case MSL_ACT_ATTACK_AIR_HI:
-    case MSL_ACT_ATTACK_AIR_LW:
-      return 1u;
-    default:
-      return 0u;
-  }
+  return msl_motion_state_common_class_has(a, MSL_MS_CLASS_ATTACK_AIR);
 }
 
 static inline uint8_t is_spacie_air_special_floor_collision_action(uint16_t a) {

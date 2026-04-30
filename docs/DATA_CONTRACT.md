@@ -558,17 +558,22 @@ Characters (Fox/Falco):
       new local action-family lists.
     - Store callback IDs generated from decomp symbol names; raw function pointers are not part of
       the contract.
-    - Store explicit class bits only when backed by callback symbol names, e.g. `ftCo_AttackAir_*`,
-      `ftCo_DamageFly_*`, or `ftFx_SpecialHi*`.
+    - Store explicit class bits only when backed by MotionState callback symbol names. Current
+      classes cover `ftCo_AttackAir_*`, `ftCo_AttackS3_*`, `ftCo_AttackS4_*`,
+      `ftCo_Damage*`, `ftCo_DownDamage*`, `ftCo_DamageFly*`, `ftCo_FlyReflect*`,
+      `ftCo_LandingAir*`, `ftCo_Jump*`, `ftCo_JumpAerial*`, `ftCo_Fall*`,
+      `ftCo_Landing*`, and `ftFx_SpecialHi*` callback-symbol families. They are callback-owner
+      classifications only; procedural behavior such as edge-snap branch results, ledge
+      eligibility, or hidden descriptor provenance is not inferred by this artifact.
   - Sources:
     - `refs/melee/src/melee/ft/types.h::MotionState`
     - `refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState`
     - `refs/melee/src/melee/ft/ftmotionstates.c::ftData_MotionStateList`
     - `refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c::ftFx_Init_MotionStateTable`
     - `refs/melee/src/melee/ft/chara/ftFalco/ftFc_Init.c::ftFc_Init_MotionStateTable`
-  - Binary layout: `MSLMSO01` v1 (little-endian, dense tables indexed by GALE01 `action_id`)
+  - Binary layout: `MSLMSO01` v2 (little-endian, dense tables indexed by GALE01 `action_id`)
     - `u8  magic[8] = "MSLMSO01"`
-    - `u32 version = 1`
+    - `u32 version = 2`
     - `u16 action_count`
     - `u16 reserved = 0`
     - `u32` offsets for `submotion_id`, `x4_flags`, `motion_state_word`, `anim_cb_id`,
@@ -580,7 +585,7 @@ Characters (Fox/Falco):
     - `u32 class_bits[action_count]`
   - `data/motion_state/owners/callback_symbols.json` is review/debug metadata mapping callback IDs
     back to decomp symbol names. Runtime loads only the binary tables.
-  - Stale/non-v1 `MSLMSO01` tables must be rejected; regenerate with
+  - Stale/non-v2 `MSLMSO01` tables must be rejected; regenerate with
     `uv run python -m tools.extraction.extract_motion_state_owners --melee_decomp refs/melee --out_dir data/motion_state/owners --chars fox,falco`.
 - `data/stages/bin/grnla.bin` (stage collision/metadata; decomp-first, compact binary)
   - Purpose:

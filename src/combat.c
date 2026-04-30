@@ -26,6 +26,7 @@
 #include "hurtcaps_tables.h"
 #include "input_axis.h"
 #include "laser_params.h"
+#include "motion_state_owners.h"
 #include "msl_math.h"
 #include "mtx34.h"
 #include "move_tables.h"
@@ -910,16 +911,7 @@ static inline uint32_t combat_down_damage_submotion_from_action(uint16_t action_
 }
 
 static inline uint8_t combat_float_aobj_hurtcap_pose_owner(uint16_t action_id) {
-  switch (action_id) {
-    case MSL_ACT_LANDING_AIR_N:
-    case MSL_ACT_LANDING_AIR_F:
-    case MSL_ACT_LANDING_AIR_B:
-    case MSL_ACT_LANDING_AIR_HI:
-    case MSL_ACT_LANDING_AIR_LW:
-      return 1u;
-    default:
-      return 0u;
-  }
+  return msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_LANDING_AIR);
 }
 
 static inline uint8_t combat_guard_no_tilt_current_pose_gap(const MslBatch* batch, size_t d_idx) {
