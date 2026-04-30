@@ -42,6 +42,7 @@
 #include "staling.h"
 #include "staling_tables.h"
 #include "attack_id_tables.h"
+#include "motion_state_owners.h"
 #include "specialhi_pose.h"
 #include "state.h"
 #include "state_flags.h"
@@ -445,6 +446,13 @@ MslBatch* msl_batch_create(int batch_size, int num_players) {
   // Fighter attack identity (x2068/x206C) uses decomp-derived MotionState move_id tables.
   // Require these tables at init: attack identity and staling attribution depend on them.
   if (attack_id_tables_init() != 0) {
+    msl_batch_destroy(batch);
+    return NULL;
+  }
+
+  // Decomp MotionState callback/owner tables; kept adjacent to MSLACID1 because both artifacts
+  // are generated from the same MotionState rows.
+  if (motion_state_owners_init() != 0) {
     msl_batch_destroy(batch);
     return NULL;
   }

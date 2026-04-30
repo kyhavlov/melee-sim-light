@@ -117,6 +117,7 @@ def main() -> None:
         Path("data/hurtbox_states"),
         Path("data/hurtcaps"),
         Path("data/items"),
+        Path("data/motion_state/owners"),
         Path("data/moves"),
         Path("data/shields"),
         Path("data/special_msids"),
@@ -224,6 +225,19 @@ def main() -> None:
     # The MSLACID1 binary is the data contract for move_id, x4_flags, and MotionState +0x8/x9
     # lanes. Debug JSON from extract_attack_id_move_id is optional inspection output only and is
     # intentionally not produced by build_data.
+    _run(
+        "tools.extraction.extract_motion_state_owners",
+        [
+            "--melee_decomp",
+            str(args.melee_decomp),
+            "--out_dir",
+            "data/motion_state/owners",
+            "--chars",
+            ",".join(chars),
+        ],
+    )
+    # The MSLMSO01 binary is the MotionState owner/callback contract. Its callback_symbols.json
+    # manifest is review/debug metadata mapping generated callback ids back to decomp symbols.
 
     # Hitbox event tables (moves.json → hitboxes.bin; compact binary for init-time load).
     #

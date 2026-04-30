@@ -409,7 +409,46 @@ def _ensure_shield_tilt_bins() -> None:
         if not out.exists():
             raise RuntimeError(f"failed to generate required shield tilt bin for tests: {out}")
 
+
+def _ensure_motion_state_owner_bins() -> None:
+    stale = False
+    for ch in ("fox", "falco"):
+        out = ROOT / "data" / "motion_state" / "owners" / f"{ch}.bin"
+        if out.exists():
+            try:
+                with out.open("rb") as f:
+                    magic = f.read(8)
+                    ver = int.from_bytes(f.read(4), "little", signed=False)
+                if magic == b"MSLMSO01" and ver == 1:
+                    continue
+            except OSError:
+                pass
+        stale = True
+        break
+    manifest = ROOT / "data" / "motion_state" / "owners" / "callback_symbols.json"
+    if stale or not manifest.exists():
+        subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "tools.extraction.extract_motion_state_owners",
+                "--melee_decomp",
+                str(ROOT / "refs" / "melee"),
+                "--out_dir",
+                str(ROOT / "data" / "motion_state" / "owners"),
+                "--chars",
+                "fox,falco",
+            ],
+            check=True,
+        )
+    for ch in ("fox", "falco"):
+        out = ROOT / "data" / "motion_state" / "owners" / f"{ch}.bin"
+        if not out.exists():
+            raise RuntimeError(f"failed to generate required MotionState owner table: {out}")
+
+
 def pytest_sessionstart(session) -> None:  # type: ignore[no-untyped-def]
+    _ensure_motion_state_owner_bins()
     _ensure_tracks_bins()
     _ensure_ecb_bottom_tables()
     _ensure_ecb_extents_tables()

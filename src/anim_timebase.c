@@ -10,6 +10,7 @@
 #include "char_params.h"
 #include "combat.h"
 #include "common_params.h"
+#include "motion_state_owners.h"
 #include "move_tables.h"
 
 enum { Ft_MF_KeepFastFall = 1 << 0 };
@@ -325,16 +326,10 @@ static inline void anim_timebase_apply_capture_loop(MslBatch* batch, size_t idx)
 }
 
 static inline uint8_t anim_timebase_is_attackair(uint16_t a) {
-  switch (a) {
-    case MSL_ACT_ATTACK_AIR_N:
-    case MSL_ACT_ATTACK_AIR_F:
-    case MSL_ACT_ATTACK_AIR_B:
-    case MSL_ACT_ATTACK_AIR_HI:
-    case MSL_ACT_ATTACK_AIR_LW:
-      return 1;
-    default:
-      return 0;
-  }
+  // Generated from decomp MotionState callback symbols ftCo_AttackAir_* for the five common
+  // aerial attacks.
+  // refs/melee/src/melee/ft/ftmotionstates.c::ftData_MotionStateList
+  return msl_motion_state_common_class_has(a, MSL_MS_CLASS_ATTACK_AIR);
 }
 
 static inline uint8_t anim_timebase_is_walk(uint16_t a) {

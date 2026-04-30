@@ -9,6 +9,7 @@
 #include "char_params.h"
 #include "common_params.h"
 #include "input_axis.h"
+#include "motion_state_owners.h"
 #include "move_tables.h"
 #include "stage_collision.h"
 #include "specialhi_pose.h"
@@ -556,18 +557,11 @@ static inline uint8_t physics_action_is_shine_air(uint16_t action_id) {
 }
 
 static inline uint8_t physics_action_is_damage_fly(uint16_t action_id) {
-  switch (action_id) {
-    case MSL_ACT_DAMAGE_FLY_HI:
-    case MSL_ACT_DAMAGE_FLY_N:
-    case MSL_ACT_DAMAGE_FLY_LW:
-    case MSL_ACT_DAMAGE_FLY_TOP:
-    case MSL_ACT_DAMAGE_FLY_ROLL:
-    case MSL_ACT_FLY_REFLECT_WALL:
-    case MSL_ACT_FLY_REFLECT_CEIL:
-      return 1u;
-    default:
-      return 0u;
-  }
+  // Generated from decomp MotionState callback symbols:
+  // - ftCo_DamageFly_* for DamageFlyHi/N/Lw/Top/Roll
+  // - ftCo_FlyReflect_* for wall/ceiling reflect follow-up states
+  // refs/melee/src/melee/ft/ftmotionstates.c::ftData_MotionStateList
+  return msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_DAMAGE_FLY);
 }
 
 static inline uint8_t physics_is_pending_throw_release_victim(const MslBatch* batch, int bi,
@@ -593,28 +587,12 @@ static inline uint8_t physics_is_pending_throw_release_victim(const MslBatch* ba
 }
 
 static inline uint8_t physics_action_is_common_damage(uint16_t action_id) {
-  switch (action_id) {
-    case MSL_ACT_DAMAGE_HI_1:
-    case MSL_ACT_DAMAGE_HI_2:
-    case MSL_ACT_DAMAGE_HI_3:
-    case MSL_ACT_DAMAGE_N_1:
-    case MSL_ACT_DAMAGE_N_2:
-    case MSL_ACT_DAMAGE_N_3:
-    case MSL_ACT_DAMAGE_LW_1:
-    case MSL_ACT_DAMAGE_LW_2:
-    case MSL_ACT_DAMAGE_LW_3:
-    case MSL_ACT_DAMAGE_AIR_1:
-    case MSL_ACT_DAMAGE_AIR_2:
-    case MSL_ACT_DAMAGE_AIR_3:
-    case MSL_ACT_DOWN_DAMAGE_U:
-    case MSL_ACT_DOWN_DAMAGE_D:
-      // DownDamage Phys delegates to the common Damage Phys callback.
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::ftCo_DownDamage_Phys
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Phys
-      return 1u;
-    default:
-      return 0u;
-  }
+  // Generated from decomp MotionState callback symbols:
+  // - ftCo_Damage_* for DamageHi/N/Lw/Air
+  // - ftCo_DownDamage_* for DownDamageU/D, whose Phys delegates to common Damage Phys
+  // refs/melee/src/melee/ft/ftmotionstates.c::ftData_MotionStateList
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::ftCo_DownDamage_Phys
+  return msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_DAMAGE_COMMON);
 }
 
 static inline uint8_t physics_action_is_passivewall(uint16_t action_id) {

@@ -84,6 +84,7 @@ ext = Extension(
         str((ROOT / "src" / "locomotion.c").resolve()),
         str((ROOT / "src" / "move_tables.c").resolve()),
         str((ROOT / "src" / "attack_id_tables.c").resolve()),
+        str((ROOT / "src" / "motion_state_owners.c").resolve()),
         str((ROOT / "src" / "attack_identity.c").resolve()),
         str((ROOT / "src" / "instance_id.c").resolve()),
         str((ROOT / "src" / "hurtcaps_tables.c").resolve()),

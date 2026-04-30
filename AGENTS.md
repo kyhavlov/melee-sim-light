@@ -36,6 +36,9 @@ Current target domain:
   - tooling / probes / locks
   - promoting a minimal explicit internal
   - documenting the blocker
+- When extracted/decomp table data can express an owner or action-family distinction, use that
+  table-backed predicate instead of adding a new local action-id list. If a manual semantic
+  predicate is still needed, document why the table data is insufficient.
 - Core/shared systems must not branch on character id as a proxy for missing collision, timer, or callback state.
   Character-specific branches are allowed only for actual character-specific mechanics or data-table lookups, with nearby
   decomp or extracted-data backing.

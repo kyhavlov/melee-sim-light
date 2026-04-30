@@ -21,6 +21,7 @@
 #include "input_axis.h"
 #include "jump_input.h"
 #include "move_tables.h"
+#include "motion_state_owners.h"
 #include "mpcoll_ecb_points.h"
 #include "msl_math.h"
 #include "physics.h"
@@ -2372,10 +2373,10 @@ static inline void enter_fall_from_grounded_floor_loss(MslBatch* batch, const Ms
 }
 
 static inline uint8_t action_is_attackair(uint16_t a) {
-  return (a == MSL_ACT_ATTACK_AIR_N || a == MSL_ACT_ATTACK_AIR_F || a == MSL_ACT_ATTACK_AIR_B ||
-          a == MSL_ACT_ATTACK_AIR_HI || a == MSL_ACT_ATTACK_AIR_LW)
-             ? 1
-             : 0;
+  // Generated from decomp MotionState callback symbols ftCo_AttackAir_* for the five common
+  // aerial attacks.
+  // refs/melee/src/melee/ft/ftmotionstates.c::ftData_MotionStateList
+  return msl_motion_state_common_class_has(a, MSL_MS_CLASS_ATTACK_AIR);
 }
 
 static inline uint16_t walk_action_from_speed(const MslCommonParams* c, const MslCharParams* ch,
