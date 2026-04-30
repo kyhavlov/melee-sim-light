@@ -195,16 +195,6 @@ Use the docs for detailed workflows instead of expanding this file:
 - Dolphin playback / forensic workflow: `tools/dolphin/README.md`
 - Legacy probe notes: `docs/legacy_melee_sim/`
 
-Useful commands:
-
-```bash
-make test
-make fmt-check
-make validate-all
-uv run python -m tools.eval.run_one_step_suite_eval --suite replays/suites/fox_falco_fd_ucf084_recent.json --datasets-dir datasets
-uv run python -m tools.eval.run_rollout_suite_eval --suite replays/suites/fox_falco_fd_ucf084_recent.json --datasets-dir datasets --fields action_id,animation_index,on_ground,hitlag,hitstun,state_flags --out reports/validation/rollout_suite_eval.txt
-```
-
 ## Handoff Standard
 
 For active checklist burn-down work, hand off only when the checklist item is closed. A final handoff should say:

@@ -44,7 +44,6 @@ Process details to keep in mind:
   - rejected experiments and what they proved
   - current unresolved local path, if interrupted
   - packaging notes for shared-file hunks
-- If taking a lightweight patch snapshot, write it under reports/triage/, but do not treat snapshots as a substitute for the worklog manifest.
 - After each retained owner, run a validation diff against the cycle baseline, for example
   `uv run python -m tools.eval.validation_report_diff --before <baseline> --after reports/validation`.
   If any one-step, rollout, or float validation metric regresses, fix it or explicitly document the
@@ -52,7 +51,7 @@ Process details to keep in mind:
   existing disruptive rerun/rerank workflow when that report is part of the owner.
 - Once the owner is validation-clean, save a binary patch snapshot, for example
   `git diff --binary > reports/triage/itemNN_owner_name.patch`, so later review can recover or
-  bisect owner-specific changes.
+  bisect owner-specific changes. Do not treat snapshots as a substitute for the worklog manifest.
 - Validation reports should be generator-produced only, and the worklog should note which retained owner refreshed them.
 - When touching shared files, record hunk ownership in the worklog immediately.
 - Runtime-required generated data must get a data-contract decision immediately:

@@ -5,16 +5,8 @@ not gameplay specification; use `SPEC.md` for source-backed mechanics.
 
 ## Long-Work Cycle Hygiene
 
-- Keep a live worklog as a review manifest, not just a narrative:
-  - selected owner/system
-  - source/decomp/data basis
-  - changed files and owner-specific hunks in shared files
-  - tests/locks added
-  - SPEC/docs notes added
-  - before/after one-step, rollout, disruptive score, and float metrics
-  - rejected experiments and what they proved
-  - current unresolved local path, if interrupted
-  - packaging notes
+- Keep a live worklog as a review manifest, not just a narrative. The canonical field list lives in
+  `docs/LONG_WORK_PROMPT.md`; do not duplicate or drift it here.
 - Snapshot each completed owner immediately. Do not rely on reconstructing intent from a large
   dirty diff later.
 - After each retained owner, run a validation diff against the cycle baseline before selecting the
@@ -39,17 +31,10 @@ not gameplay specification; use `SPEC.md` for source-backed mechanics.
 
 ## Target Selection
 
-- Use disruptive rollout clusters as the primary target selector, but treat high repeated float
-  residuals as first-class signals.
-- Max float error alone is a poor ranker because downstream rollout divergence can create huge
-  late-position/velocity errors after an earlier owner break.
-- Prefer float targets when the divergence is:
-  - early, before discrete mismatch
-  - repeated across a coherent action/mechanic family
-  - tied to a top rollout/disruptive owner
-  - modelplay-visible
-- Low-priority float spikes are one-off max errors that occur only after an already-diverged
-  rollout branch, unless they expose a coherent owner.
+- Use disruptive rollout clusters as the primary target selector, but treat repeated, early,
+  coherent, or modelplay-visible float residuals as first-class signals.
+- Max float error alone is usually a poor ranker because downstream rollout divergence can create
+  huge late-position/velocity errors after an earlier owner break.
 
 ## Data-Backed Owner Workflow
 
