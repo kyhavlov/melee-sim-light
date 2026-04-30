@@ -515,6 +515,38 @@ static inline uint8_t combat_catch_overlap_lbColl_80007ECC(const MslBatch* batch
   return (uint8_t)(d2 <= rr * rr);
 }
 
+static inline void combat_catch_hitbox_center_model_scale_compensated(const MslBatch* batch, int bi,
+                                                                      int attacker, float* io_hx,
+                                                                      float* io_hy, float* io_hz) {
+  if (batch == NULL || io_hx == NULL || io_hy == NULL || io_hz == NULL) {
+    return;
+  }
+  const size_t a_idx = msl_idx_player(bi, attacker);
+  const MslCharParams* chp = msl_char_params(batch->state.char_id[a_idx]);
+  const float model_scaling = (chp && isfinite(chp->model_scaling) && chp->model_scaling > 0.0f)
+                                  ? chp->model_scaling
+                                  : 1.0f;
+  if (!(model_scaling > 1.0f)) {
+    return;
+  }
+
+  // Catch selection forwards HitCapsule.x58/x4C to lbColl_80007ECC with this_fp->x34_scale.y as
+  // the hit-side scalar. HitCapsule.x4C is produced from lb_8000B1CC's JObj point before the catch
+  // narrowphase; remove the simulator's generic pose-space model_scaling expansion for enlarged
+  // models so the catch bubble uses that collision-skeleton point. Do not use this helper to extend
+  // reach for model_scaling < 1; the reviewed generic hitbox path remains the source for those
+  // rows until the broader hitbox geometry owner is replaced.
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078A2C,ftColl_8007AD18}
+  // refs/melee/src/melee/lb/lbcollision.c::lbColl_80007ECC
+  // refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
+  const float pos_x = batch->state.pos_x[a_idx];
+  const float pos_y = batch->state.pos_y[a_idx];
+  const float pos_z = batch->state.pos_z[a_idx];
+  *io_hx = pos_x + ((*io_hx - pos_x) / model_scaling);
+  *io_hy = pos_y + ((*io_hy - pos_y) / model_scaling);
+  *io_hz = pos_z + ((*io_hz - pos_z) / model_scaling);
+}
+
 static inline uint8_t combat_guardreflect_no_submotion_catch_fallback_applies(const MslBatch* batch,
                                                                               size_t d_idx) {
   if (batch == NULL) {
@@ -935,6 +967,63 @@ static inline uint8_t combat_guard_no_tilt_current_pose_gap(const MslBatch* batc
     return 0u;
   }
   return batch->state.guard_tilt_x8[d_idx] == tv.neutral_frame ? 1u : 0u;
+}
+
+static inline uint8_t combat_shield_active_action(uint16_t action_id) {
+  switch (action_id) {
+    case (uint16_t)MSL_ACT_GUARD_ON:
+    case (uint16_t)MSL_ACT_GUARD:
+    case (uint16_t)MSL_ACT_GUARD_REFLECT:
+    case (uint16_t)MSL_ACT_GUARD_SET_OFF:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
+static inline uint8_t combat_guard_x10_raw_init_u8(const MslCommonParams* c) {
+  if (c == NULL || !(c->guard_x10_init_frames > 0.0f)) {
+    return 0u;
+  }
+  uint16_t t = (uint16_t)c->guard_x10_init_frames;
+  if (t > 255u) {
+    t = 255u;
+  }
+  return (uint8_t)t;
+}
+
+static inline void combat_preserve_guard_x10_for_immediate_setoff(MslBatch* batch, size_t d_idx,
+                                                                  uint16_t d_motion_id_pre,
+                                                                  const MslCommonParams* c) {
+  if (batch == NULL) {
+    return;
+  }
+
+  if (d_motion_id_pre == (uint16_t)MSL_ACT_GUARD_ON &&
+      batch->state.guard_on_entered_this_frame[d_idx] != 0u) {
+    // Immediate GuardOn -> GuardSetOff contact is still in the ftCo_800924C0 entry callback phase:
+    // x10 has been initialized from p_ftCommonData->x268, but the ordinary GuardOn/Guard
+    // ftCo_800925A4 owner tick has not produced a replay-visible GuardOn hold snapshot. The
+    // no-submotion GuardOn snapshot lane stores x10 after that first hold tick; do not carry that
+    // representation into same-frame GuardSetOff, or rollout exits Guard one frame early after
+    // shieldstun.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    //   ftCo_80091A4C,ftCo_800924C0,ftCo_800925A4,ftCo_80092F2C}
+    batch->state.guard_x10[d_idx] = combat_guard_x10_raw_init_u8(c);
+    return;
+  }
+
+  if (!combat_shield_active_action(d_motion_id_pre)) {
+    return;
+  }
+
+  // Fighter_ProcessHit shield contact consumes the guard move variables that were live before the
+  // per-frame GuardOn/Guard hold tick. This sim runs the Guard action callback before combat, so
+  // restore the frame-start x10 owner when the same frame transitions into GuardSetOff.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_800925A4,ftCo_80092F2C}
+  if (batch->state.guard_x10_frame_start[d_idx] > batch->state.guard_x10[d_idx]) {
+    batch->state.guard_x10[d_idx] = batch->state.guard_x10_frame_start[d_idx];
+  }
 }
 
 static inline uint8_t combat_body_overlap_lbColl_80006E58_matrix_radius(
@@ -1522,7 +1611,15 @@ static inline uint8_t combat_shield_overlap_ftcoll_80007bcc(
           : 0u;
   const uint8_t guardon_entry_no_submotion =
       (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_ON &&
-       batch->state.action_frame[d_idx] < 0 && batch->state.animation_index[d_idx] == UINT32_MAX)
+       batch->state.action_frame[d_idx] < 0 && batch->state.animation_index[d_idx] == UINT32_MAX &&
+       batch->state.guard_on_entered_this_frame[d_idx] == 0u &&
+       !combat_shield_active_action(batch->state.seed_prev_action_id[d_idx]))
+          ? 1u
+          : 0u;
+  const uint8_t guardon_already_shielding_no_submotion =
+      (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_ON &&
+       batch->state.action_frame[d_idx] < 0 && batch->state.animation_index[d_idx] == UINT32_MAX &&
+       combat_shield_active_action(batch->state.seed_prev_action_id[d_idx]))
           ? 1u
           : 0u;
   const uint8_t guardreflect_final_x14_no_submotion =
@@ -1531,23 +1628,29 @@ static inline uint8_t combat_shield_overlap_ftcoll_80007bcc(
        batch->state.guard_reflect_timer_x14_seed[d_idx] == 0u)
           ? 1u
           : 0u;
-  // No-submotion GuardOn entry is the live `ftCo_800924C0 -> ftCo_800921DC ->
-  // ftCo_80091E78(..., 0)` snapshot where the ShieldDesc was just recreated and Slippi does not
-  // expose a settled Guard submotion frame. Keep the narrow ShieldDesc envelope there; steady Guard
-  // rows consume the current shield-bone scale already represented by `shield_radius`.
+  // No-submotion GuardOn entry seeds are the non-shield -> `ftCo_800924C0 -> ftCo_800921DC ->
+  // ftCo_80091E78(..., 0)` snapshots where ShieldDesc was recreated but Slippi does not expose a
+  // settled Guard submotion frame. Keep the narrow ShieldDesc envelope there. Live same-step
+  // GuardOn entries already have the ordinary shield radius, but their hidden
+  // lbColl_80007BCC/0ACFC result can still be a miss on active HitCapsules; do not promote the
+  // extra reconstructed envelope until the entry is replay-visible.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
   //   ftCo_800924C0,ftCo_800921DC,ftCo_80091E78}
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_8000ACFC}
   const float shield_desc_term =
       (shield_desc_lane_active && guardon_entry_no_submotion) ? shield_desc_world_r : 0.0f;
   const uint8_t shield_extent_lane_active =
       (shield_desc_envelope_ready && !guardreflect_final_x14_no_submotion &&
+       !guardon_already_shielding_no_submotion &&
        (batch->state.hitbox_enable_edge[hb_i] || shield_extent_bridge_active))
           ? 1u
           : 0u;
   // Enable-edge capsules are exactly the create/copy/clear lane that lbColl_80007BCC receives
   // after ftAction_8007121C/ftColl_8007AD18 ownership. Use the full ShieldDesc extent term there;
   // the reduced 0.2 bridge remains only for steady capsules where this sim's shield proxy otherwise
-  // over-accepts broadphase-only grazes.
+  // over-accepts broadphase-only grazes. Already-shielding no-submotion GuardOn rows consume the
+  // live shield JObj scale represented by `shield_radius`; Dolphin probes show the broadphase
+  // extent lane must not be promoted into a final ShieldDesc accept there.
   // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007AD18,ftColl_80078C70}
   // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_80006E58}
@@ -1767,6 +1870,32 @@ static inline void combat_state_flags_clear_guard_reflecting(MslBatch* batch, si
   batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_REFLECTING;
 }
 
+static inline void combat_state_flags_clear_stale_guard_timer_bits_on_setoff_entry(MslBatch* batch,
+                                                                                   size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
+  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
+  enum { MSL_STATE_FLAG_221C_GUARD_REFLECT_X14 = 0x40 };
+  enum { MSL_STATE_FLAG_221C_GUARD_REFLECT_X18 = 0x20 };
+
+  if (batch->state.guard_reflect_timer_x14[idx] != 0u ||
+      batch->state.guard_reflect_timer_x18[idx] != 0u) {
+    return;
+  }
+
+  // GuardSetOff entry through shield contact does not create GuardReflect timer bits. Those bits
+  // are written by GuardReflect / powershield entry (`ftCo_8009388C` / `ftCo_80093A50`) and ticked
+  // by `ftCo_80093BC0`; when both timers are already expired, a repeated GuardSetOff shield-hit
+  // entry must not carry a stale seeded x221C_b1/b2 post-frame lane.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+  //   ftCo_80092F2C,ftCo_8009388C,ftCo_80093A50,ftCo_80093BC0}
+  const size_t flags_i = idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221C_INDEX;
+  batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)(MSL_STATE_FLAG_221C_GUARD_REFLECT_X14 |
+                                                            MSL_STATE_FLAG_221C_GUARD_REFLECT_X18);
+}
+
 static inline void combat_state_flags_set_guard_reflect_timer_bits(MslBatch* batch, size_t idx) {
   if (batch == NULL) {
     return;
@@ -1917,13 +2046,14 @@ static inline uint8_t combat_prev_action_is_guard_reflect_locomotion_source(uint
     case (uint16_t)MSL_ACT_SQUAT:
     case (uint16_t)MSL_ACT_SQUAT_WAIT:
     case (uint16_t)MSL_ACT_SQUAT_RV:
+    case (uint16_t)MSL_ACT_LANDING:
       return 1u;
     default:
       return 0u;
   }
 }
 
-static inline uint8_t combat_is_guard_reflect_fresh_locomotion_snapshot_idx(const MslBatch* batch,
+static inline uint8_t combat_is_guard_reflect_locomotion_entry_snapshot_idx(const MslBatch* batch,
                                                                             size_t idx) {
   if (batch == NULL) {
     return 0u;
@@ -1931,8 +2061,6 @@ static inline uint8_t combat_is_guard_reflect_fresh_locomotion_snapshot_idx(cons
   const uint16_t prev_action = batch->state.seed_prev_action_id[idx];
   return (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
           batch->state.action_frame[idx] < 0 && batch->state.animation_index[idx] == UINT32_MAX &&
-          batch->state.guard_reflect_timer_x14_seed[idx] == 0u &&
-          batch->state.guard_reflect_timer_x18_seed[idx] == 0u &&
           combat_prev_action_is_guard_reflect_locomotion_source(prev_action) &&
           prev_action != (uint16_t)MSL_ACT_GUARD_ON && prev_action != (uint16_t)MSL_ACT_GUARD &&
           prev_action != (uint16_t)MSL_ACT_GUARD_REFLECT &&
@@ -1967,8 +2095,49 @@ static inline uint8_t combat_guard_reflect_no_submotion_reflectdesc_only_lane(co
           (batch->state.guard_reflect_timer_x14_seed[idx] != 0u ||
            batch->state.guard_reflect_timer_x14[idx] != 0u) &&
           !expired_this_callback &&
-          !combat_is_guard_reflect_fresh_locomotion_snapshot_idx(batch, idx) &&
+          !combat_is_guard_reflect_locomotion_entry_snapshot_idx(batch, idx) &&
           batch->state.hitlag[idx] == 0u && batch->state.hitstun[idx] == 0u)
+             ? 1u
+             : 0u;
+}
+
+static inline uint8_t combat_guard_reflect_active_x14_reflectdesc_blocks_hitshield(
+    const MslBatch* batch, size_t idx, float overlap_margin) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  // Carried GuardReflect rows with an active x14 reflect timer are still in the ReflectDesc-owned
+  // window when fighter-vs-fighter collision runs. Do not let the simulator's reconstructed
+  // ShieldDesc overlap hand off to GuardSetOff until ftCo_80093BC0 has consumed x14. Same-frame
+  // locomotion / landing powershield entries have x14_seed==0 and are not this carried phase:
+  // ftCo_80093A50 creates ShieldDesc before collision in that entry frame. While x14 is still
+  // active, only accept reconstructed ShieldDesc hits whose sphere/segment overlap penetrates by
+  // at least the source ShieldDesc size lane (`lbColl_80007BCC` arg4=1 scaled by the shield JObj);
+  // shallower contacts are the reduced-proxy grazes that the live ReflectDesc owner would keep out
+  // of GuardSetOff.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+  //   ftCo_80093A50,ftCo_80093BC0,ftCo_GuardReflect_Anim}
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_80006E58}
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
+  const MslCharParams* chp = msl_char_params(batch->state.char_id[idx]);
+  const float model_scale =
+      (chp != NULL && isfinite(chp->model_scaling) && chp->model_scaling > 0.0f)
+          ? chp->model_scaling
+          : 1.0f;
+  if (model_scale > 1.0f) {
+    // Enlarged collision models carry the ShieldDesc JObj scale in the lbColl_80007BCC matrix
+    // path; the current sphere proxy already admits the retained Falco landing/Wait front-door
+    // contacts there. The grazing false positives guarded below are the non-expanded-model carried
+    // ReflectDesc rows.
+    // refs/melee/src/melee/ft/fighter.c::Fighter_UpdateModelScale
+    return 0u;
+  }
+  const float shield_desc_size_world = batch->state.fighter_scale_y[idx] * model_scale;
+  return (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
+          batch->state.guard_reflect_timer_x14_seed[idx] != 0u &&
+          batch->state.guard_reflect_timer_x14[idx] != 0u &&
+          overlap_margin < shield_desc_size_world && batch->state.hitlag[idx] == 0u &&
+          batch->state.hitstun[idx] == 0u)
              ? 1u
              : 0u;
 }
@@ -4779,6 +4948,8 @@ void combat_apply_item_shield_hit(MslBatch* batch, int batch_index, int attacker
   batch->state.animation_index[d_idx] = (uint32_t)MSL_SM_GUARD_DAMAGE;
   batch->state.tilt_timer_x[d_idx] = 0xFEu;
   combat_state_flags_clear_guard_reflecting(batch, d_idx);
+  combat_state_flags_clear_stale_guard_timer_bits_on_setoff_entry(batch, d_idx);
+  combat_preserve_guard_x10_for_immediate_setoff(batch, d_idx, d_motion_id_pre, c);
 
   const float ls_stun =
       (light * (c->shield_stun_lightshield_max - c->shield_stun_lightshield_min)) +
@@ -4904,6 +5075,8 @@ static inline void combat_mutations_pass1_future_apply_shield_hit(MslBatch* batc
   // refs/melee/src/melee/ft/ftmotionstates.c (GuardSetOff motion-state entry uses ftCo_SM_GuardDamage)
   batch->state.animation_index[d_idx] = (uint32_t)MSL_SM_GUARD_DAMAGE;
   combat_state_flags_clear_guard_reflecting(batch, d_idx);
+  combat_state_flags_clear_stale_guard_timer_bits_on_setoff_entry(batch, d_idx);
+  combat_preserve_guard_x10_for_immediate_setoff(batch, d_idx, d_motion_id_pre, c);
 
   // Decomp: fp->x670_timer_lstick_tilt_x = -2.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
@@ -5137,10 +5310,11 @@ static void combat_select_catch_hits_one_mutating(MslBatch* batch, int bi) {
         const uint8_t rehit_frames =
             hitlist_rehit_frames_from_u16_7(batch->state.hitbox_u16_7[hb_i]);
 
-        const float hx = batch->state.hitbox_x[hb_i];
-        const float hy = batch->state.hitbox_y[hb_i];
-        const float hz = batch->state.hitbox_z[hb_i];
+        float hx = batch->state.hitbox_x[hb_i];
+        float hy = batch->state.hitbox_y[hb_i];
+        float hz = batch->state.hitbox_z[hb_i];
         const float hr = batch->state.hitbox_radius[hb_i];
+        combat_catch_hitbox_center_model_scale_compensated(batch, bi, attacker, &hx, &hy, &hz);
 
         uint8_t found_grab_contact = 0u;
         for (uint8_t cap_id = 0; cap_id < hurtcap_count; cap_id++) {
@@ -5588,14 +5762,21 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
       // GuardReflect no-submotion entry (`action_frame<0`, sentinel anim index) is the ambiguous
       // ordering frame between ftCo_8009388C clear and ftCo_80092450 recreate.
       // Keep shield-active ownership from the live ShieldDesc radius (x221B_b0 lane) and only
-      // suppress ShieldDesc envelope expansion lanes on that entry snapshot.
+      // suppress ShieldDesc envelope expansion lanes on guard-origin entry snapshots. Direct
+      // ftCo_80091A4C powershield entry (including Landing_IASA) calls ftCo_80092450 before
+      // creating ReflectDesc, so its same-frame fighter-vs-fighter shield path still has
+      // ShieldDesc.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
       //   ftCo_80093694,ftCo_8009388C,ftCo_80093A50,ftCo_80092450}
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_IASA
+      const uint8_t guard_reflect_locomotion_entry_snapshot =
+          combat_is_guard_reflect_locomotion_entry_snapshot_idx(batch, d_idx);
       const uint8_t guard_reflect_entry_no_submotion =
           (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
            batch->state.action_frame[d_idx] < 0 &&
            batch->state.animation_index[d_idx] == UINT32_MAX &&
-           batch->state.guard_reflect_timer_x14[d_idx] != 0u)
+           batch->state.guard_reflect_timer_x14[d_idx] != 0u &&
+           !guard_reflect_locomotion_entry_snapshot)
               ? 1u
               : 0u;
       const uint8_t shield_active = (shr > 0.0f) ? 1u : 0u;
@@ -5745,16 +5926,33 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           if (shield_seed_kind == 1u) {
             continue;
           }
+          if (shield_seed_kind == 0u && guard_reflect_entry_no_submotion) {
+            // Guard-origin GuardReflect no-submotion rows with x14 still active expose ReflectDesc,
+            // not a normal ShieldDesc HitShield accept. Keep BODY/clank candidates live, but do not
+            // let the simulator's proxy shield sphere enter GuardSetOff before ftCo_80093BC0 has
+            // expired the x14 reflect window. Locomotion/Landing powershield entries are excluded
+            // by guard_reflect_entry_no_submotion and retain their source-backed same-frame
+            // ShieldDesc boundary.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+            //   ftCo_8009388C,ftCo_80093A50,ftCo_80093BC0}
+            continue;
+          }
           uint8_t overlaps_shield = 0u;
+          float shield_overlap_margin = 0.0f;
           if (shield_seed_kind == 2u) {
             overlaps_shield = 1u;
           } else if (!guard_reflect_reflectdesc_only) {
             overlaps_shield = combat_shield_overlap_ftcoll_80007bcc(
                 batch, bi, attacker, defender, hb_id, hx, hy, hz, hr, shx, shy, shz, shr,
                 /*shield_desc_radius=*/1.0f, batch->state.fighter_scale_y[d_idx],
-                shield_desc_envelope_ready, shield_extent_bridge_active, NULL);
+                shield_desc_envelope_ready, shield_extent_bridge_active, &shield_overlap_margin);
           }
           if (!overlaps_shield) {
+            continue;
+          }
+          if (shield_seed_kind == 0u &&
+              combat_guard_reflect_active_x14_reflectdesc_blocks_hitshield(batch, d_idx,
+                                                                           shield_overlap_margin)) {
             continue;
           }
 
@@ -6648,20 +6846,26 @@ int combat_debug_shield_candidate_decisions(MslBatch* batch, int batch_index,
       const float shy = batch->state.shield_y[d_idx];
       const float shz = batch->state.shield_z[d_idx];
       const float shr = batch->state.shield_radius[d_idx];
+      const uint8_t guard_reflect_locomotion_entry_snapshot =
+          combat_is_guard_reflect_locomotion_entry_snapshot_idx(batch, d_idx);
       const uint8_t guard_reflect_entry_no_submotion =
           (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
            batch->state.action_frame[d_idx] < 0 &&
            batch->state.animation_index[d_idx] == UINT32_MAX &&
-           batch->state.guard_reflect_timer_x14[d_idx] != 0u)
+           batch->state.guard_reflect_timer_x14[d_idx] != 0u &&
+           !guard_reflect_locomotion_entry_snapshot)
               ? 1u
               : 0u;
       const uint8_t shield_active = (shr > 0.0f) ? 1u : 0u;
       // GuardReflect no-submotion entry snapshots (action_frame<0, msid sentinel) carry
       // ambiguous ordering between ftCo_8009388C clear and ftCo_80092450 recreate.
       // Keep shield-active ownership from x221B_b0, but disable ShieldDesc envelope expansion
-      // lanes only for that entry frame.
+      // lanes only for guard-origin entry frames. Direct ftCo_80091A4C powershield entry
+      // (including Landing_IASA) runs ftCo_80092450 before ReflectDesc creation and keeps
+      // ShieldDesc for fighter-vs-fighter shield collision.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
       //   ftCo_80093694,ftCo_8009388C,ftCo_80093A50,ftCo_80092450}
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_IASA
       const uint8_t shield_desc_envelope_ready = !guard_reflect_entry_no_submotion;
       const uint8_t shield_extent_bridge_active = 0u;
       const uint8_t guard_reflect_reflectdesc_only =

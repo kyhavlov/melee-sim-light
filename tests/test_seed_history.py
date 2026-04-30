@@ -816,6 +816,7 @@ def test_derive_guard_release_lightshield_persists_through_guard_set_off() -> No
         hitlag=hitlag,
         buttons_held=buttons_held,
         button_mask_lr=button_mask_lr,
+        button_mask_z=0x0010,
         trigger_unit=trigger,
         trigger_deadzone=0.3,
         guard_x10_init_frames=8,
@@ -857,6 +858,7 @@ def test_derive_guard_release_lockout_guard_setoff_to_guard_carries_lanes() -> N
         hitlag=hitlag,
         buttons_held=buttons_held,
         button_mask_lr=button_mask_lr,
+        button_mask_z=0x0010,
         trigger_unit=trigger,
         trigger_deadzone=0.3,
         guard_x10_init_frames=8,
@@ -869,6 +871,53 @@ def test_derive_guard_release_lockout_guard_setoff_to_guard_carries_lanes() -> N
     assert x_c.tolist() == [0, 0, 0, 0, 0, 1, 1, 0]
     assert x10.tolist() == [0, 7, 6, 6, 6, 5, 4, 0]
     assert light.tolist() == [0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0]
+
+
+def test_derive_guard_release_lockout_direct_setoff_seeds_current_trigger_lightshield() -> None:
+    # Direct non-guard -> GuardSetOff snapshots are missing the preceding shield-hit owner at the
+    # replay surface. ftCo_80092F2C consumes the already-current lightshield_amount from the
+    # collision frame. These arrays are post-frame indexed, so seed it from the direct GuardSetOff
+    # row's x650 trigger lane.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    #   ftCo_800925A4,ftCo_80092F2C}
+    act_guard_on = 0x00B2
+    act_guard = 0x00B3
+    act_guard_set_off = 0x00B5
+    act_guard_reflect = 0x00B6
+    act_attack_air_n = 0x004F
+    button_mask_lr = 0x0060
+
+    action_id = np.array(
+        [act_attack_air_n, act_guard_set_off, act_guard_set_off, act_guard],
+        dtype=np.uint16,
+    )
+    shield_hp = np.array([56.9, 46.2, 46.2, 46.2], dtype=np.float32)
+    hitlag = np.array([0, 7, 6, 0], dtype=np.uint16)
+    trigger = np.array([0.0, 0.32156864, 1.0, 0.0], dtype=np.float32)
+    buttons_held = np.zeros(action_id.shape[0], dtype=np.uint16)
+
+    x_c, x10, light = derive_guard_release_lockout_and_lightshield(
+        action_id=action_id,
+        shield_hp=shield_hp,
+        hitlag=hitlag,
+        buttons_held=buttons_held,
+        button_mask_lr=button_mask_lr,
+        button_mask_z=0x0010,
+        trigger_unit=trigger,
+        trigger_deadzone=0.3,
+        guard_x10_init_frames=8,
+        act_guard_on=act_guard_on,
+        act_guard=act_guard,
+        act_guard_reflect=act_guard_reflect,
+        act_guard_set_off=act_guard_set_off,
+    )
+
+    expected_light = (np.float32(0.32156864) - np.float32(0.3)) / np.float32(0.7)
+    assert x_c.tolist() == [0, 0, 0, 0]
+    assert x10.tolist() == [0, 8, 8, 8]
+    assert abs(float(light[1]) - float(expected_light)) < 1e-6
+    assert abs(float(light[2]) - float(expected_light)) < 1e-6
+    assert abs(float(light[3]) - float(expected_light)) < 1e-6
 
 
 def test_derive_guard_release_lockout_reinitializes_on_non_setoff_snapshot_guard_entry_bridge() -> None:
@@ -893,6 +942,7 @@ def test_derive_guard_release_lockout_reinitializes_on_non_setoff_snapshot_guard
         hitlag=hitlag,
         buttons_held=buttons_held,
         button_mask_lr=button_mask_lr,
+        button_mask_z=0x0010,
         trigger_unit=trigger,
         trigger_deadzone=0.3,
         guard_x10_init_frames=8,
@@ -929,6 +979,46 @@ def test_derive_guard_release_lockout_uses_buttons_held_lr_proxy() -> None:
         hitlag=hitlag,
         buttons_held=buttons_held,
         button_mask_lr=button_mask_lr,
+        button_mask_z=0x0010,
+        trigger_unit=trigger,
+        trigger_deadzone=0.3,
+        guard_x10_init_frames=8,
+        act_guard_on=act_guard_on,
+        act_guard=act_guard,
+        act_guard_reflect=act_guard_reflect,
+        act_guard_set_off=act_guard_set_off,
+    )
+
+    assert x_c.tolist() == [0, 0, 0, 1, 0]
+    assert x10.tolist() == [0, 7, 6, 5, 0]
+
+
+def test_derive_guard_release_lockout_uses_z_mapped_lr_proxy() -> None:
+    # Fighter input synthesis maps Z into the same held LR lane that ftCo_80092BCC checks. A
+    # Z-held no-submotion Guard snapshot must not seed a fake release latch.
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_Spaghetti_8006AD10_Inner1}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092BCC
+    act_guard_on = 0x00B2
+    act_guard = 0x00B3
+    act_guard_set_off = 0x00B5
+    act_guard_reflect = 0x00B6
+    act_wait = 0x000E
+    button_mask_lr = 0x0060
+    button_mask_z = 0x0010
+
+    action_id = np.array([act_wait, act_guard_on, act_guard, act_guard, act_wait], dtype=np.uint16)
+    shield_hp = np.array([60.0, 60.0, 60.0, 60.0, 60.0], dtype=np.float32)
+    hitlag = np.zeros(action_id.shape[0], dtype=np.uint16)
+    trigger = np.zeros(action_id.shape[0], dtype=np.float32)
+    buttons_held = np.array([0, button_mask_z, button_mask_z, 0, 0], dtype=np.uint16)
+
+    x_c, x10, _light = derive_guard_release_lockout_and_lightshield(
+        action_id=action_id,
+        shield_hp=shield_hp,
+        hitlag=hitlag,
+        buttons_held=buttons_held,
+        button_mask_lr=button_mask_lr,
+        button_mask_z=button_mask_z,
         trigger_unit=trigger,
         trigger_deadzone=0.3,
         guard_x10_init_frames=8,
@@ -967,6 +1057,7 @@ def test_derive_guard_release_lockout_analog_only_hold_falls_back_to_trigger() -
         hitlag=hitlag,
         buttons_held=buttons_held,
         button_mask_lr=button_mask_lr,
+        button_mask_z=0x0010,
         trigger_unit=trigger,
         trigger_deadzone=0.3,
         guard_x10_init_frames=8,
@@ -1003,6 +1094,7 @@ def test_derive_guard_release_lockout_is_prefix_invariant() -> None:
         hitlag=hitlag_prefix,
         buttons_held=buttons_prefix,
         button_mask_lr=button_mask_lr,
+        button_mask_z=0x0010,
         trigger_unit=trigger_prefix,
         trigger_deadzone=0.3,
         guard_x10_init_frames=8,
@@ -1023,6 +1115,7 @@ def test_derive_guard_release_lockout_is_prefix_invariant() -> None:
         hitlag=hitlag_ext,
         buttons_held=buttons_ext,
         button_mask_lr=button_mask_lr,
+        button_mask_z=0x0010,
         trigger_unit=trigger_ext,
         trigger_deadzone=0.3,
         guard_x10_init_frames=8,
@@ -1781,6 +1874,43 @@ def test_derive_colanim_seed_lanes_are_prefix_invariant() -> None:
             assert np.array_equal(got, lane_by_name[lane][:cut]), lane
 
 
+def test_derive_colanim_passivewall_x1990_tracks_episode_not_action_frame() -> None:
+    # PassiveWall / PassiveWallJump freezes action_frame while mv.co.passivewall.timer counts down,
+    # but ftCo_800C1E64 still starts the x198C=2/x1990 timer on entry through
+    # ftColl_8007B760(..., p_ftCommonData->x764). Reconstruct the timer causally from the action
+    # episode, not from action_frame.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::ftCo_800C1E64
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+    act_wait = 0x000E
+    act_passive_wall_jump = 0x00CB
+    action = np.array(
+        [act_wait, act_passive_wall_jump, act_passive_wall_jump, act_passive_wall_jump],
+        dtype=np.uint16,
+    )
+    action_frame = np.array([1, 0, 0, 1], dtype=np.int16)
+    zero_u16 = np.zeros(action.size, dtype=np.uint16)
+    hurt = np.array([0, 2, 2, 2], dtype=np.uint8)
+
+    x198c, x1990, *_ = derive_colanim_internals(
+        action_id_u16=action,
+        action_frame_i16=action_frame,
+        hitlag_u16=zero_u16,
+        hitstun_u16=zero_u16,
+        hurtbox_state_u8=hurt,
+        colanim_throw_x1994_frames=8,
+        colanim_cliff_x1990_frames=30,
+        colanim_damage_x1994_frames=5,
+        colanim_passivewall_x1990_frames=14,
+        throw_actions=(),
+        cliff_actions=(),
+        passivewall_actions=(act_passive_wall_jump,),
+        damage_actions=(),
+    )
+
+    assert x1990.tolist() == [0, 14, 13, 12]
+    assert x198c.tolist() == [0, 2, 2, 2]
+
+
 def test_x672_trigger_timer_is_causal_wrt_future_frames() -> None:
     import json
     from pathlib import Path
@@ -2481,6 +2611,43 @@ def test_fighter_button_timers_are_causal_and_capture_previous_on_press() -> Non
     assert np.array_equal(x682_0, x682_1[: x682_0.size])
     assert np.array_equal(x683_0, x683_1[: x683_0.size])
     assert np.array_equal(x684_0, x684_1[: x684_0.size])
+
+
+def test_fighter_button_timers_map_z_edge_to_a_macro_without_physical_lr() -> None:
+    A = np.uint16(0x0100)
+    Z = np.uint16(0x0010)
+    L = np.uint16(0x0040)
+    R = np.uint16(0x0020)
+    XY = np.uint16(0x0C00)
+    D_UP = np.uint16(0x0008)
+    D_DOWN = np.uint16(0x0004)
+    LR = np.uint16(L | R)
+
+    x67C, x67D, x67E, x680, x681, x682, x683, x684 = compute_fighter_button_timers(
+        buttons_pressed=np.array([0, Z, 0, 0], dtype=np.uint16),
+        mask_a=int(A),
+        mask_b=0x0200,
+        mask_xy=int(XY),
+        mask_dpad_up=int(D_UP),
+        mask_dpad_down=int(D_DOWN),
+        mask_lr=int(LR),
+        mask_z=int(Z),
+        start_timer=0xFF,
+    )
+
+    # Fighter_Spaghetti_8006AD10 maps Z onto HSD_PAD_A plus the LR macro before x668 is consumed.
+    # The compact MSL button domain does not have the synthetic HSD_PAD_LR bit, so this seed lane
+    # maps only the A timer; B/XY/DPad/physical-LR timers remain unrelated.
+    # refs/melee/src/melee/ft/fighter.c::{
+    #   Fighter_Spaghetti_8006AD10_Inner1,Fighter_Spaghetti_8006AD10}
+    assert [int(v) for v in x67C] == [0xFF, 0, 1, 2]
+    assert [int(v) for v in x680] == [0xFF, 0xFF, 0xFF, 0xFF]
+    assert int(x683[1]) == 0xFF
+    assert int(x684[1]) == 0xFF
+    assert [int(v) for v in x67D] == [0xFF, 0xFF, 0xFF, 0xFF]
+    assert [int(v) for v in x67E] == [0xFF, 0xFF, 0xFF, 0xFF]
+    assert [int(v) for v in x681] == [0xFF, 0xFF, 0xFF, 0xFF]
+    assert [int(v) for v in x682] == [0xFF, 0xFF, 0xFF, 0xFF]
 
 
 def test_fighter_button_timers_latch_x668_during_hitlag_for_tech_debounce() -> None:

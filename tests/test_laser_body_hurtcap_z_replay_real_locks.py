@@ -96,3 +96,61 @@ def test_falco_laser_airborne_fall_z_lane_respects_same_attack_hitlist_carry() -
     assert int(out["action_id"][p]) == int(ref["action_id"][p]) == 29
     assert int(out["hitlag"][p]) == int(ref["hitlag"][p]) == 0
     assert int(out["hitstun"][p]) == int(ref["hitstun"][p]) == 0
+
+
+@pytest.mark.integration
+def test_fox_laser_specialairn_landing_damagefall_body_uses_lbcoll_radius() -> None:
+    # SpecialAirNLoop -> Landing handoff positive:
+    # ftColl_8007925C routes item BODY through lbColl_8000805C, whose hurt-radius argument is
+    # lbColl_804D7A38 * defender scale. PJO:2235 is the narrow landing handoff where the old Fox
+    # laser hits an airborne DamageFall defender and consumes before the newer shot compacts slots.
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C
+    # refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialN_GetBlasterAction
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/PutridJoyousOryx.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    seed, ref, out = _run_one_step_row(dataset_path, 2235, 1)
+    shooter = 0
+    defender = 1
+
+    assert int(seed["action_id"][shooter]) == 345  # FxSpecialAirNLoop
+    assert int(ref["action_id"][shooter]) == 42  # Landing
+    assert int(seed["action_id"][defender]) == 38  # DamageFall
+    assert int(seed["items"][1]["type"]) == 54  # Fox laser
+
+    assert float(out["percent"][defender]) == pytest.approx(float(ref["percent"][defender]))
+    assert int(out["instance_hit_by"][defender]) == int(ref["instance_hit_by"][defender]) == 452
+    assert int(out["last_attack_landed"][shooter]) == int(ref["last_attack_landed"][shooter]) == 18
+    assert int(out["items"][1]["type"]) == int(ref["items"][1]["type"]) == 54
+    assert int(out["items"][1]["instance_id"]) == int(ref["items"][1]["instance_id"]) == 454
+
+
+@pytest.mark.integration
+def test_fox_laser_specialairn_loop_damagefall_radius_lane_keeps_adjacent_no_hit_alive() -> None:
+    # Adjacent negative: one frame earlier the shooter is still in SpecialAirNLoop. The promoted
+    # lbColl hurt-radius lane must not admit the old laser before the landing handoff.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/PutridJoyousOryx.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    seed, ref, out = _run_one_step_row(dataset_path, 2234, 1)
+    shooter = 0
+    defender = 1
+
+    assert int(seed["action_id"][shooter]) == 345
+    assert int(ref["action_id"][shooter]) == 345
+    assert int(seed["action_id"][defender]) == 38
+    assert int(seed["items"][1]["type"]) == 54
+
+    assert float(out["percent"][defender]) == pytest.approx(float(ref["percent"][defender]))
+    assert int(out["instance_hit_by"][defender]) == int(ref["instance_hit_by"][defender]) == 445
+    assert int(out["items"][1]["exists"]) == int(ref["items"][1]["exists"]) == 1
+    assert int(out["items"][1]["instance_id"]) == int(ref["items"][1]["instance_id"]) == 452

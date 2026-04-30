@@ -146,6 +146,95 @@ def test_passivewall_timer_allows_specialairs_after_hold_distinctcaringcobra_loc
 
 
 @pytest.mark.integration
+def test_passivewall_entry_uses_source_wall_anchor_and_clears_kb_distinctcaringcobra_lock() -> None:
+    # Replay-real lock for PassiveWall entry placement after DamageFlyTop wall-tech:
+    # - ftCo_800C1E64 snapshots the outgoing wall ECB side before the PassiveWall motion change,
+    #   then ft_80081F2C runs the target-state 0xA wall projection.
+    # - ftCommon_8007E2FC clears attack/self velocities on entry.
+    # - The adjacent pre-Hug row proves the clear/projection is not a broad DamageFly shortcut.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::ftCo_800C1E64
+    # refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007E2FC
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80081F2C
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl"
+    if not dataset_path.exists():
+        pytest.skip("missing aggregate validation dataset: DistinctCaringCobra.msl")
+
+    pre_record = 4809
+    entry_record = 4810
+    p = 1
+
+    _seed, ref_pre, out_pre = _run_one_step_row(dataset_path, pre_record, p)
+    assert int(ref_pre["action_id"][p]) == 90  # DamageFlyTop
+    assert int(out_pre["action_id"][p]) == int(ref_pre["action_id"][p])
+    assert float(out_pre["speed_x_attack"][p]) == pytest.approx(float(ref_pre["speed_x_attack"][p]), abs=1e-6)
+    assert float(out_pre["speed_y_attack"][p]) == pytest.approx(float(ref_pre["speed_y_attack"][p]), abs=1e-6)
+
+    seed, ref_entry, out_entry = _run_one_step_row(dataset_path, entry_record, p)
+    assert int(seed["action_id"][p]) == 90  # DamageFlyTop
+    assert int(seed["mpcoll_wall_kind_seed_u8"][p]) == 1
+    assert int(seed["mpcoll_wall_id_seed_u16"][p]) == 13
+    assert int(ref_entry["action_id"][p]) == 202  # PassiveWall
+
+    for field in ("action_id", "animation_index", "action_frame", "facing", "hitstun"):
+        assert int(out_entry[field][p]) == int(ref_entry[field][p]), (
+            f"field={field} expected={int(ref_entry[field][p])} got={int(out_entry[field][p])}"
+        )
+    for field in ("pos_x", "pos_y", "speed_x_attack", "speed_y_attack", "speed_air_x_self", "speed_y_self"):
+        assert float(out_entry[field][p]) == pytest.approx(float(ref_entry[field][p]), abs=1e-5), (
+            f"field={field} expected={float(ref_entry[field][p])} got={float(out_entry[field][p])}"
+        )
+
+
+@pytest.mark.integration
+def test_passivewalljump_terminal_x1990_clears_hurtbox_state_hvg_lock() -> None:
+    # Replay-real lock for PassiveWallJump x198C/x1990 terminal ownership:
+    # - ftCo_800C1E64 starts x1990 via ftColl_8007B760(..., p_ftCommonData->x764) on entry.
+    # - Fighter_8006A360 decrements x1990 every frame even while mv.co.passivewall.timer freezes
+    #   action_frame; the terminal x1990=1 row clears x198C before the post-frame snapshot.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::ftCo_800C1E64
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/HilariousVillainousGiraffe.msl"
+    if not dataset_path.exists():
+        pytest.skip("missing aggregate validation dataset: HilariousVillainousGiraffe.msl")
+
+    p = 0
+    pre_record = 4680
+    terminal_record = 4681
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    assert int(samples.shape[0]) > terminal_record
+
+    pre_seed = samples[pre_record]["seed_t"]
+    assert int(pre_seed["action_id"][p]) == 203  # PassiveWallJump
+    assert int(pre_seed["action_frame"][p]) == 7
+    assert int(pre_seed["colanim_timer_x1990"][p]) == 2
+    _, pre_ref, pre_out = _run_one_step_row(dataset_path, pre_record, p)
+    assert int(pre_out["hurtbox_state"][p]) == int(pre_ref["hurtbox_state"][p]) == 2
+
+    seed = samples[terminal_record]["seed_t"]
+    ref = samples[terminal_record]["ref_t1"]
+    assert int(seed["action_id"][p]) == 203  # PassiveWallJump
+    assert int(seed["action_frame"][p]) == 8
+    assert int(seed["colanim_timer_x1990"][p]) == 1
+    assert int(seed["colanim_hit_status_x198c"][p]) == 2
+    assert int(ref["action_id"][p]) == 203
+    assert int(ref["action_frame"][p]) == 9
+    assert int(ref["hurtbox_state"][p]) == 0
+
+    _, ref_row, out_row = _run_one_step_row(dataset_path, terminal_record, p)
+    for field in ("action_id", "action_frame", "animation_index", "hurtbox_state"):
+        assert int(out_row[field][p]) == int(ref_row[field][p]), (
+            f"field={field} expected={int(ref_row[field][p])} got={int(out_row[field][p])}"
+        )
+
+
+@pytest.mark.integration
 def test_common_air_walljump_hidden_phase_seed_qgd_replay_real_lock() -> None:
     # Replay-real positive/negative controls for the common-air walljump hidden phase seed:
     # - Slippi exposes neither `fp->wall_jump_input_timer` nor `fp->x2110_walljumpWallSide`.

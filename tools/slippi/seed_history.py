@@ -917,6 +917,7 @@ def derive_guard_release_lockout_and_lightshield(
     hitlag: np.ndarray,
     buttons_held: np.ndarray,
     button_mask_lr: int,
+    button_mask_z: int,
     trigger_unit: np.ndarray,
     trigger_deadzone: float,
     guard_x10_init_frames: int,
@@ -940,9 +941,12 @@ def derive_guard_release_lockout_and_lightshield(
         - decrements mv.co.guard.x10 once per frame (under !hitlag)
       refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_800925A4
     - GuardOn/Guard/GuardReflect IASA latches mv.co.guard.xC on trigger release and exits to GuardOff
-      only once (xC && x10==0) OR the shield is no longer active.
+      only once (xC && x10==0) OR the shield is no longer active. The held-input LR lane includes
+      Z-mapped shield ownership from Fighter_Spaghetti_8006AD10_Inner1, matching runtime
+      msl_trigger_unit_from_input / shield-held gating.
       refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092BCC
       refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_Guard_IASA (inlineC0)
+      refs/melee/src/melee/ft/fighter.c::{Fighter_Spaghetti_8006AD10_Inner1}
     - GuardSetOff entry consumes the existing fp->lightshield_amount when computing anim rate, and
       does not reset that fighter field on entry.
     - GuardSetOff -> Guard path uses ftCo_800928CC (via ftCo_GuardSetOff_Anim) and does not call
@@ -958,7 +962,7 @@ def derive_guard_release_lockout_and_lightshield(
     hl = np.asarray(hitlag, dtype=np.uint16).reshape(-1)
     buttons = np.asarray(buttons_held, dtype=np.uint16).reshape(-1)
     trig = np.asarray(trigger_unit, dtype=np.float32).reshape(-1)
-    mask_lr = int(button_mask_lr) & 0xFFFF
+    mask_lr = (int(button_mask_lr) | int(button_mask_z)) & 0xFFFF
 
     n = int(aid.size)
     if int(hp.size) != n or int(hl.size) != n or int(buttons.size) != n or int(trig.size) != n:
@@ -1043,13 +1047,22 @@ def derive_guard_release_lockout_and_lightshield(
             if prev_a != int(act_guard_set_off) and not prev_in_guard and x10 == 0:
                 # Snapshot bridge: replay post-frames can show direct non-guard -> GuardSetOff
                 # boundaries when the preceding GuardOn/Guard/GuardReflect context is absent.
-                # Decomp GuardSetOff itself does not call ftCo_800921DC, but the missing guard-entry
-                # context would have initialized x10 earlier in-frame before ftCo_80092F2C.
-                # Seed a fresh lockout window so GuardSetOff->Guard carry does not collapse into an
-                # immediate GuardOff on the next no-submotion Guard snapshot.
-                # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_800921DC,ftCo_80092F2C,ftCo_GuardSetOff_Anim}
+                # Decomp GuardSetOff itself does not call ftCo_800921DC, but the missing
+                # shield-hit entry context would have initialized x10 earlier in-frame before
+                # ftCo_80092F2C, and ftCo_80092F2C consumes the already-current
+                # fp->lightshield_amount. These arrays are post-frame indexed, so the input frame
+                # that produced the direct GuardSetOff post-frame is the current index's x650 lane.
+                # Seed a fresh lockout window plus that x650-derived lightshield amount for direct
+                # non-guard -> GuardSetOff snapshots.
+                # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+                #   ftCo_800921DC,ftCo_800925A4,ftCo_80092F2C,ftCo_GuardSetOff_Anim}
                 xC = False
                 x10 = init
+                t = np.float32((np.float32(trig[i]) - dz) / denom)
+                if float(t) >= 0.0:
+                    if float(t) > 1.0:
+                        t = np.float32(1.0)
+                    light = t
 
             # GuardSetOff consumes the already-latched fp->lightshield_amount for entry anim-rate
             # shaping and does not reinitialize guard lockout lanes on the SetOff->Guard path.
@@ -1074,9 +1087,10 @@ def derive_guard_release_lockout_and_lightshield(
         hl_prev = int(hl[i - 1]) if i > 0 else 0
         hl_after_prio0 = hl_prev - 1 if hl_prev > 0 else 0
         # held_inputs proxy for ftCo_80092BCC:
-        # - prefer replay-visible held digital bits (buttons_held & LR),
+        # - prefer replay-visible held digital bits (buttons_held & LR/Z-mapped LR lane),
         # - fall back to analog trigger deadzone when digital bits are absent.
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092BCC
+        # refs/melee/src/melee/ft/fighter.c::{Fighter_Spaghetti_8006AD10_Inner1}
         held = ((int(buttons[i]) & mask_lr) != 0) or (float(trig[i]) >= float(dz))
         # Only update these when guard callbacks can run and shield is still active.
         if hl_after_prio0 == 0 and float(hp[i]) > 0.0:
@@ -2598,9 +2612,11 @@ def derive_colanim_internals(
     colanim_throw_x1994_frames: int,
     colanim_cliff_x1990_frames: int,
     colanim_damage_x1994_frames: int,
+    colanim_passivewall_x1990_frames: int = 0,
     colanim_rebirth_fall_x1994_frames: int = 0,
     throw_actions: tuple[int, ...],
     cliff_actions: tuple[int, ...],
+    passivewall_actions: tuple[int, ...] = (),
     damage_actions: tuple[int, ...],
     fall_actions: tuple[int, ...] = (),
     rebirth_actions: tuple[int, ...] = (),
@@ -2616,6 +2632,8 @@ def derive_colanim_internals(
     - refs/melee/src/melee/ft/fighter.c::Fighter_8006A360 (x1990/x1994 decrements + x198C updates)
     - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD398 (ftColl_8007B7A4, x1994)
     - refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::ftCo_8009A77C (ftColl_8007B760, x1990)
+    - refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::ftCo_800C1E64
+      (ftColl_8007B760 with p_ftCommonData->x764, x1990)
     - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnExitHitlag (x1994)
     - refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s::ftCo_RebirthWait_{Anim,IASA}
       (ftColl_8007B7A4 with p_ftCommonData->x5D8 before Fall)
@@ -2635,6 +2653,7 @@ def derive_colanim_internals(
 
     throw_set = {int(x) & 0xFFFF for x in throw_actions}
     cliff_set = {int(x) & 0xFFFF for x in cliff_actions}
+    passivewall_set = {int(x) & 0xFFFF for x in passivewall_actions}
     damage_set = {int(x) & 0xFFFF for x in damage_actions}
     fall_set = {int(x) & 0xFFFF for x in fall_actions}
     rebirth_set = {int(x) & 0xFFFF for x in rebirth_actions}
@@ -2687,6 +2706,19 @@ def derive_colanim_internals(
 
         if entered and cur_a in cliff_set:
             rem = _colanim_timer_remaining_from_action_frame(int(colanim_cliff_x1990_frames), cur_afr)
+            if rem > x1990:
+                x1990 = rem
+
+        if entered and cur_a in passivewall_set:
+            # PassiveWall / PassiveWallJump entry starts the x198C=2 timer through
+            # ftColl_8007B760(..., p_ftCommonData->x764). Unlike CliffWait, the action_frame can
+            # stay frozen while mv.co.passivewall.timer counts down, so this lane must be
+            # reconstructed causally from the replay action episode instead of from action_frame.
+            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::ftCo_800C1E64
+            # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+            rem = int(colanim_passivewall_x1990_frames)
+            if rem > 0xFFFF:
+                rem = 0xFFFF
             if rem > x1990:
                 x1990 = rem
 
@@ -3123,6 +3155,7 @@ def compute_fighter_button_timers(
     mask_dpad_up: int,
     mask_dpad_down: int,
     mask_lr: int,
+    mask_z: int = 0,
     start_timer: int = 0xFF,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
@@ -3138,6 +3171,12 @@ def compute_fighter_button_timers(
 
     Decomp reference: refs/melee/src/melee/ft/fighter.c:2052-2094
     Init values: refs/melee/src/melee/ft/fighter.c:608-691 (reset/init to 0xFF).
+
+    Fighter_Spaghetti_8006AD10 maps held Z onto the effective input lane as HSD_PAD_A plus the
+    HSD_PAD_LR macro before building x668 and updating these timers. MSL's compact u16 button
+    domain has only physical L/R bits and handles Z/LR trigger ownership in a separate lane, so
+    only map Z press edges into the A timer domain here. B/X/Y/DPad/L/R physical timers still use
+    their raw domains.
 
     When `hitlag_frames` is provided, model Fighter_Spaghetti_8006AD10_Inner1's x668
     OR-latch while fp->x2219_b5 remains active. This is causal from Slippi post-frame
@@ -3167,6 +3206,7 @@ def compute_fighter_button_timers(
     m_a = int(mask_a) & 0xFFFF
     m_b = int(mask_b) & 0xFFFF
     m_xy = int(mask_xy) & 0xFFFF
+    m_z = int(mask_z) & 0xFFFF
     m_du = int(mask_dpad_up) & 0xFFFF
     m_dd = int(mask_dpad_down) & 0xFFFF
     m_lr = int(mask_lr) & 0xFFFF
@@ -3183,6 +3223,8 @@ def compute_fighter_button_timers(
     x668_latched = 0
     for i in range(n):
         raw_bpi = int(bp[i])
+        if (raw_bpi & m_z) != 0:
+            raw_bpi |= m_a
         if int(hl[i]) > 0:
             x668_latched |= raw_bpi
             bpi = x668_latched

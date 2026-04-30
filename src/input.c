@@ -67,6 +67,19 @@ static inline float trigger_unit_from_input(uint16_t buttons, uint8_t l, uint8_t
   return trigger_u8_to_unit(m);
 }
 
+static inline uint16_t input_edge_with_z_macro(uint16_t edge) {
+  // Decomp: Fighter_Spaghetti_8006AD10 maps held Z onto the effective input lane as
+  // HSD_PAD_A plus the HSD_PAD_LR macro before the button-history timer block consumes x668.
+  // MSL has only physical L/R bits and models the Z/LR trigger lane separately; do not translate
+  // the synthetic LR macro into physical L/R button edges here.
+  // refs/melee/src/melee/ft/fighter.c::{
+  //   Fighter_Spaghetti_8006AD10_Inner1,Fighter_Spaghetti_8006AD10}
+  if ((edge & (uint16_t)MSL_BUTTON_Z) != 0u) {
+    edge = (uint16_t)(edge | (uint16_t)MSL_BUTTON_A);
+  }
+  return edge;
+}
+
 static inline uint8_t opening_input_lock_active_for_step(const MslBatch* batch, int bi) {
   if (batch == NULL || batch->state.opening_input_lock_timer[bi] == 0u) {
     return 0u;
@@ -707,9 +720,10 @@ int input_apply(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev_in
         batch->state.x675[idx] = 0xFEu;
       }
 
-      // Button timers (saturating at 0xFF, reset to 0 on press).
-      // Note: `input_buttons_pressed` is the per-frame rising-edge mask (decomp: fp->input.x668).
-      const uint16_t pressed = batch->state.input_buttons_pressed[idx];
+      // Button timers (saturating at 0xFF, reset to 0 on press). The MSL-visible
+      // `input_buttons_pressed` lane stays in compact replay-button domain; this local view applies
+      // the source Z->A macro only where the fighter input-history timers consume x668.
+      const uint16_t pressed = input_edge_with_z_macro(batch->state.input_buttons_pressed[idx]);
       if ((pressed & A) != 0) {
         batch->state.x683[idx] = batch->state.x67C[idx];
         batch->state.x67C[idx] = 0;

@@ -95,6 +95,24 @@ static inline uint8_t is_guard_tilt_action(uint16_t a) {
   }
 }
 
+static inline uint8_t guard_reflect_entry_uses_guardon_pose_source(uint16_t action_id) {
+  // Narrow proven source boundary: Dash/Landing -> GuardReflect enter through ftCo_80091A4C and
+  // can use the immediate GuardOn current-pose ShieldDesc lane. Walk -> GuardReflect has a
+  // replay-real ShieldBounced keepalive control and must remain on the normal descriptor source
+  // until its callback phase is separately proven.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_800939B4}
+  return (action_id == (uint16_t)MSL_ACT_DASH || action_id == (uint16_t)MSL_ACT_LANDING) ? 1u : 0u;
+}
+
+static inline float sanitize_lightshield_amount(float light) {
+  if (!isfinite(light)) {
+    return 0.0f;
+  }
+  return clamp01(light);
+}
+
 void shields_refresh(MslBatch* batch) {
   if (batch == NULL) {
     return;
@@ -239,6 +257,19 @@ void shields_refresh(MslBatch* batch) {
                  tv.guard_on_xyz != NULL && tv.guard_on_frame_count > 0u)
                     ? 1u
                     : 0u;
+            const uint16_t guard_reflect_prev_action = batch->state.seed_prev_action_id[idx];
+            const uint8_t guard_reflect_locomotion_no_submotion_entry =
+                (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
+                 batch->state.animation_index[idx] == UINT32_MAX &&
+                 batch->state.action_frame[idx] < 0 &&
+                 guard_reflect_entry_uses_guardon_pose_source(guard_reflect_prev_action) &&
+                 guard_reflect_prev_action != (uint16_t)MSL_ACT_GUARD_ON &&
+                 guard_reflect_prev_action != (uint16_t)MSL_ACT_GUARD &&
+                 guard_reflect_prev_action != (uint16_t)MSL_ACT_GUARD_REFLECT &&
+                 guard_reflect_prev_action != (uint16_t)MSL_ACT_GUARD_SET_OFF &&
+                 tv.guard_on_xyz != NULL && tv.guard_on_frame_count > 0u)
+                    ? 1u
+                    : 0u;
             const uint8_t steady_guard_no_tilt =
                 (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD &&
                  (mag == 0.0f || mag < FLT_MIN))
@@ -257,17 +288,18 @@ void shields_refresh(MslBatch* batch) {
             float dx = 0.0f;
             float dy = 0.0f;
             float dz = 0.0f;
-            if (guard_on_no_submotion_entry) {
+            if (guard_on_no_submotion_entry || guard_reflect_locomotion_no_submotion_entry) {
               // GuardOn entry creates ShieldDesc after ftAnim_8006EBA4 but then ftCo_800921DC
-              // zeroes the guard joint translate and calls ftCo_80091E78(..., 0). While Slippi
-              // exposes the first visible GuardOn snapshot with animation_index=-1/action_frame=-1,
-              // lbColl_80007BCC still consumes that live current-pose shield bone rather than the
-              // settled steady-Guard neutral target. Scope this to real non-shield -> GuardOn
-              // entry snapshots using the previous post-frame owner lane; later no-submotion
-              // GuardOn rows are already in shield ownership and keep their normal tilt/neutral
-              // placement.
+              // zeroes the guard joint translate and calls ftCo_80091E78(..., 0). Locomotion-origin
+              // GuardReflect (`ftCo_80091A4C -> ftCo_80093A50`) calls the same ftCo_800921DC after
+              // installing ShieldDesc and ReflectDesc. While Slippi exposes these first visible
+              // snapshots with animation_index=-1/action_frame=-1, lbColl_80007BCC still consumes
+              // that live current-pose shield bone rather than the settled steady-Guard neutral
+              // target. Scope this to real non-shield entry snapshots using the previous post-frame
+              // owner lane; later no-submotion GuardOn/GuardReflect rows keep their normal
+              // tilt/neutral placement.
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
-              //   ftCo_800924C0,ftCo_800921DC,ftCo_80091E78}
+              //   ftCo_800924C0,ftCo_80093A50,ftCo_800921DC,ftCo_80091E78}
               // data/shields/{fox,falco}.bin::guard_on_xyz[0]
               dx = tv.guard_on_xyz[0];
               dy = tv.guard_on_xyz[1];
@@ -313,10 +345,25 @@ void shields_refresh(MslBatch* batch) {
             sz = pos_z + off_z;
           }
 
+          float light = sanitize_lightshield_amount(batch->state.lightshield_amount[idx]);
           const float trig =
               trigger_unit_from_input(batch->state.input_buttons[idx], batch->state.input_l[idx],
                                       batch->state.input_r[idx]);
-          const float light = (denom > 0.0f) ? clamp01((trig - c->trigger_deadzone) / denom) : 0.0f;
+          if (is_guard_tilt_action(batch->state.action_id[idx])) {
+            // Decomp owner: `ftCo_800925A4` snapshots `fp->lightshield_amount` into
+            // `mv.co.guard.x2C`, then only overwrites it when the current trigger is above the
+            // shield deadzone. Released-trigger Guard/GuardOn/GuardReflect frames therefore keep
+            // the previous lightshield bubble scale. GuardSetOff does not run this update and
+            // consumes the preserved entry amount.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_800921DC,ftCo_800925A4}
+            if (denom > 0.0f) {
+              const float candidate = (trig - c->trigger_deadzone) / denom;
+              if (candidate >= 0.0f) {
+                light = clamp01(candidate);
+              }
+            }
+            batch->state.lightshield_amount[idx] = light;
+          }
           const float hp_ratio = clamp01(batch->state.shield_hp[idx] / c->start_shield_health);
           const float light_scale =
               (light * (c->shield_size_lightshield_max - c->shield_size_lightshield_min)) +

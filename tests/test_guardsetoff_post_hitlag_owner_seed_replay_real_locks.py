@@ -104,11 +104,10 @@ def test_guardsetoff_post_hitlag_owner_seed_negative_control_outside_handoff() -
 
 
 @pytest.mark.integration
-def test_guardsetoff_exit_frame_speed_lane_does_not_weaken_causal_frame_speed() -> None:
-    # This row needs the explicit GuardSetOff exit-rate lane: the strictly causal
-    # frame_speed_mul_f32 seed is the best current/past reconstruction, while the exact hidden
-    # x19A4/lightshield-owned rate is only replay-visible on the next non-hitlag GuardSetOff row.
-    # Runtime must consume the explicit GuardSetOff lane and leave frame_speed_mul_f32 causal.
+def test_guardsetoff_exit_frame_speed_lane_preserves_hitlag_exit_rate() -> None:
+    # This row needs the explicit GuardSetOff exit-rate lane. The retained seed derivation can now
+    # also make frame_speed_mul_f32 exact for this row, but runtime still consumes the explicit
+    # GuardSetOff lane so the x19A4/lightshield-owned exit rate remains locked.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80092F2C,ftCo_GuardSetOff_Anim}
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
@@ -126,8 +125,10 @@ def test_guardsetoff_exit_frame_speed_lane_does_not_weaken_causal_frame_speed() 
     assert int(seed["action_id"][p]) == 181
     assert int(seed["hitlag"][p]) == 1
     assert int(seed["guard_setoff_hitlag_exit_phase_u8"][p]) == 2
-    assert float(seed["frame_speed_mul_f32"][p]) == pytest.approx(5.868613243103027)
     assert float(seed["guard_setoff_exit_frame_speed_mul_f32"][p]) == pytest.approx(6.931034564971924)
+    assert float(seed["frame_speed_mul_f32"][p]) == pytest.approx(
+        float(seed["guard_setoff_exit_frame_speed_mul_f32"][p])
+    )
 
     _, ref_target, out_target = _run_one_step_row(dataset_path, record, p)
     assert int(ref_target["action_frame"][p]) == 6

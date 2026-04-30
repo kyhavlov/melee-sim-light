@@ -245,7 +245,7 @@ def test_seeded_kneebend_still_allows_attack_hi4_iasa() -> None:
         msl_binding.destroy(handle)
 
 
-def test_guard_snapshot_with_held_shield_does_not_force_guardoff() -> None:
+def test_guard_snapshot_with_held_shield_and_no_release_latch_stays_guard() -> None:
     import msl_binding
 
     sizes = msl_binding.sizes()
@@ -259,7 +259,7 @@ def test_guard_snapshot_with_held_shield_does_not_force_guardoff() -> None:
     seed["animation_index"][0, 0] = np.uint32(0xFFFFFFFF)
     seed["anim_frame_f32"][0, 0] = np.float32(-1.0)
     seed["guard_x10"][0, 0] = np.uint8(0)
-    seed["guard_release_latched_xc"][0, 0] = np.uint8(1)
+    seed["guard_release_latched_xc"][0, 0] = np.uint8(0)
 
     handle = msl_binding.init(batch_size=1, num_players=2)
     try:

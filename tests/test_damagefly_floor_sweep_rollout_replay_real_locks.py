@@ -10,6 +10,7 @@ from tools.eval.dataset import COMPARE_DTYPE, read_dataset
 
 ACT_DAMAGE_FLY_HI = 0x0057
 ACT_DAMAGE_FLY_N = 0x0058
+ACT_DAMAGE_FLY_TOP = 0x005A
 ACT_DOWN_BOUND_U = 0x00B7
 ACT_PASSIVE = 0x00C7
 
@@ -213,3 +214,48 @@ def test_ground_to_air_damage_entry_ecb_lock_survives_hitlag_for_downbound_hando
     assert int(out_8349["hitstun"][p]) == int(ref_8349["hitstun"][p]) == 0
     assert float(out_8349["pos_x"][p]) == pytest.approx(float(ref_8349["pos_x"][p]), abs=2e-6)
     assert float(out_8349["pos_y"][p]) == pytest.approx(float(ref_8349["pos_y"][p]), abs=2e-6)
+
+
+@pytest.mark.integration
+def test_throwlw_release_damageflytop_uses_pose_bottom_for_next_floor_handoff() -> None:
+    # Replay-real lock for PRH rec=5628 -> rec=5648 p0:
+    # - ThrowLw release enters DamageFlyTop with an active ECB lock and a persisted floor.index.
+    # - The first post-release DamageFly_Coll floor pass uses the live DamageFlyTop ECB bottom,
+    #   not a root-locked bottom, so the downward sweep reaches ftCo_80090184 -> DownBoundU.
+    # - This remains separate from active-hitlag ground-to-air damage rows, which keep the
+    #   zero-bottom lock owner covered by the FSP control above.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+    #   ftCo_DamageFly_Coll,ftCo_80090184}
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800473CC,mpColl_LoadECB_JObj}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = _aggregate_dataset_path(root, "PositiveRevolvingHyena")
+
+    p = 0
+    seed, ref, out = _run_one_step(dataset_path, 5648, ucf_cardinals_1_0_enabled=True)
+    assert int(seed["action_id"][p]) == ACT_DAMAGE_FLY_TOP
+    assert int(seed["seed_prev_action_id"][p]) == 242  # ThrownLw
+    assert int(seed["ecb_lock_timer"][p]) == 9
+    assert int(seed["floor_sweep_prev_pos_valid_u8"][p]) == 1
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_DOWN_BOUND_U
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 1
+    assert int(out["hitstun"][p]) == int(ref["hitstun"][p]) == 0
+    assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=2e-6)
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-6)
+    assert float(out["speed_y_attack"][p]) == pytest.approx(float(ref["speed_y_attack"][p]))
+
+    by_record = _run_rollout_records(
+        dataset_path, 5628, (5647, 5648), ucf_cardinals_1_0_enabled=True
+    )
+    ref_5647, out_5647 = by_record[5647]
+    assert int(out_5647["action_id"][p]) == int(ref_5647["action_id"][p]) == ACT_DAMAGE_FLY_TOP
+    assert int(out_5647["on_ground"][p]) == int(ref_5647["on_ground"][p]) == 0
+    assert float(out_5647["pos_y"][p]) == pytest.approx(float(ref_5647["pos_y"][p]), abs=1e-5)
+
+    ref_5648, out_5648 = by_record[5648]
+    assert int(out_5648["action_id"][p]) == int(ref_5648["action_id"][p]) == ACT_DOWN_BOUND_U
+    assert int(out_5648["on_ground"][p]) == int(ref_5648["on_ground"][p]) == 1
+    assert int(out_5648["hitstun"][p]) == int(ref_5648["hitstun"][p]) == 0
+    assert float(out_5648["pos_x"][p]) == pytest.approx(float(ref_5648["pos_x"][p]), abs=2e-6)
+    assert float(out_5648["pos_y"][p]) == pytest.approx(float(ref_5648["pos_y"][p]), abs=2e-6)

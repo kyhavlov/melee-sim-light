@@ -83,10 +83,10 @@ def test_reciprocal_body_hit_received_hitlag_survives_later_outgoing_hit(
 
 
 @pytest.mark.integration
-def test_reciprocal_body_hit_stale_owner_negative_extra_contact_stays_outside_slice() -> None:
-    # TBK:5247 is still an extra BODY contact/geometry residual, not stale-damage or reciprocal
-    # received-hitlag ownership. This lock prevents the reciprocal-hit patch from being used as a
-    # broad extra-contact suppressor.
+def test_reciprocal_body_hit_negative_extra_contact_is_owned_by_hitcapsule_latch() -> None:
+    # TBK:5247 used to be the reciprocal-hit negative control because runtime admitted an extra BODY
+    # hit here. That row is now closed by the AttackAirHi create-edge HitCapsule latch, so keep this
+    # test as a guard that the row is exact without broadening reciprocal-hit stale ownership.
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / _CARDINAL / "TreasuredBackKangaroo.msl"
@@ -95,5 +95,6 @@ def test_reciprocal_body_hit_stale_owner_negative_extra_contact_stays_outside_sl
 
     _, ref_row, out_row = _run_one_step_row(dataset_path, 5247, 0)
     assert int(ref_row["hitlag"][0]) == 0
-    assert int(out_row["hitlag"][0]) > 0
-    assert float(out_row["percent"][0]) > float(ref_row["percent"][0])
+    assert int(out_row["hitlag"][0]) == int(ref_row["hitlag"][0])
+    assert int(out_row["action_id"][0]) == int(ref_row["action_id"][0])
+    assert float(out_row["percent"][0]) == pytest.approx(float(ref_row["percent"][0]))

@@ -54,6 +54,11 @@ def _assert_live_laser_set_matches_ref(*, out_row, ref_row, record: int) -> None
             7294,
             1,
         ),
+        (
+            "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl",
+            7327,
+            1,
+        ),
     ],
 )
 def test_falco_laser_shield_contact_enters_guardsetoff_and_despawns_laser(
@@ -67,6 +72,8 @@ def test_falco_laser_shield_contact_enters_guardsetoff_and_despawns_laser(
     #   selected; the pure reflect-descriptor x2218 byte must still disable ShieldBounced keepalive.
     # - MAJ:259 covers the post-GuardReflect_Anim timer boundary: seed x14=2 has already ticked to
     #   live x14=1 by item collision, so ReflectDesc misses must hand off to HitShield.
+    # - MAJ:7327 covers same-step Wait -> GuardReflect where the already-live laser uses the fresh
+    #   ShieldDesc center and must go to HitShield/GuardSetOff rather than reflect owner transfer.
     # refs/melee/src/melee/it/items/itfoxlaser.c::{
     #   itFoxlaser_UnkMotion1_Phys,it_8029C4D4,itFoxLaser_Logic94_HitShield}
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardReflect_Anim
@@ -88,6 +95,11 @@ def test_falco_laser_shield_contact_enters_guardsetoff_and_despawns_laser(
         assert int(seed_row["action_id"][p]) == 182  # GuardReflect
         assert int(seed_row["seed_prev_action_id"][p]) == 20  # Dash
         assert int(seed_row["guard_reflect_timer_x14"][p]) == 2
+    if record == 7327:
+        assert int(seed_row["action_id"][p]) == 14  # Wait
+        assert int(seed_row["seed_prev_action_id"][p]) == 14
+        assert int(seed_row["items"][0]["exists"]) == 1
+        assert int(seed_row["items"][0]["timer"]) < 95
 
     assert int(ref_row["action_id"][p]) == 181
     assert int(out_row["action_id"][p]) == 181
@@ -101,6 +113,47 @@ def test_falco_laser_shield_contact_enters_guardsetoff_and_despawns_laser(
                 f"expected={int(ref_row['items'][i][field])} got={int(out_row['items'][i][field])}"
             )
     _assert_live_laser_set_matches_ref(out_row=out_row, ref_row=ref_row, record=record)
+
+
+@pytest.mark.integration
+def test_wait_guardreflect_hitshield_requires_wait_entry_and_laser_overlap() -> None:
+    # Negative controls for the MAJ:7327 same-step Wait -> GuardReflect handoff:
+    # the retained path is the Wait_IASA -> ftCo_80091A4C digital-powershield owner plus real
+    # ShieldDesc overlap, not a broad no-submotion GuardReflect shield-hit suppressor.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_80093A50}
+    # refs/melee/src/melee/it/item.c::Item_80269DC8
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    p = 1
+
+    def _force_non_wait_entry(seed_t) -> None:
+        seed_t["seed_prev_action_id"][0, p] = np.uint16(15)  # WalkSlow
+
+    seed_row, ref_row, out_row = _run_one_step_row(dataset_path, 7327, p, seed_mutator=_force_non_wait_entry)
+    assert int(seed_row["action_id"][p]) == 14
+    assert int(seed_row["seed_prev_action_id"][p]) == 15
+    assert int(ref_row["action_id"][p]) == 181
+    assert int(out_row["action_id"][p]) == 182
+    assert int(out_row["hitlag"][p]) == 0
+    assert int(out_row["items"][0]["exists"]) == 1
+
+    def _move_laser_outside_shield(seed_t) -> None:
+        seed_t["items"][0]["pos_x"][0] = np.float32(float(seed_t["items"][0]["pos_x"][0]) - 20.0)
+
+    seed_row, ref_row, out_row = _run_one_step_row(dataset_path, 7327, p, seed_mutator=_move_laser_outside_shield)
+    assert int(seed_row["seed_prev_action_id"][p]) == 14
+    assert int(ref_row["action_id"][p]) == 181
+    assert int(out_row["action_id"][p]) == 182
+    assert int(out_row["hitlag"][p]) == 0
+    assert int(out_row["items"][0]["exists"]) == 1
 
 
 @pytest.mark.integration

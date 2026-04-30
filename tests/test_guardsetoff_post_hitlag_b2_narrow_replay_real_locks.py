@@ -465,3 +465,80 @@ def test_guardsetoff_carry_snapshot_controls_keep_b2(case: _Case) -> None:
 
     _, ref_row, out_row = _run_one_step_row(dataset_path, case.target_record, p)
     assert int(out_row["state_flags"][p, 3]) == int(ref_row["state_flags"][p, 3]) == 32, case.note
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "case,expected_flag3",
+    [
+        (
+            _Case(
+                dataset_rel=(
+                    "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
+                    "AttachedGoodNaturedGuanaco.msl"
+                ),
+                target_record=2395,
+                port=0,
+                note="repeated GuardSetOff shield-hit entry clears stale x221C_b2 when no timer owner is live",
+            ),
+            0,
+        ),
+        (
+            _Case(
+                dataset_rel=(
+                    "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
+                    "GracefulAttachedTurtle.msl"
+                ),
+                target_record=4899,
+                port=0,
+                note="GuardSetOff->Guard carry snapshot clears stale x221C_b2 after countdown has advanced",
+            ),
+            0,
+        ),
+        (
+            _Case(
+                dataset_rel=(
+                    "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
+                    "AttachedGoodNaturedGuanaco.msl"
+                ),
+                target_record=4049,
+                port=1,
+                note="GuardSetOff->Guard init-tick carry snapshot keeps x221C_b2",
+            ),
+            32,
+        ),
+        (
+            _Case(
+                dataset_rel=(
+                    "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
+                    "GracefulAttachedTurtle.msl"
+                ),
+                target_record=852,
+                port=0,
+                note="mirrored GuardSetOff->Guard init-tick carry snapshot keeps x221C_b2",
+            ),
+            32,
+        ),
+    ],
+    ids=lambda v: v.note if isinstance(v, _Case) else f"flag{v}",
+)
+def test_guardsetoff_validation_carry_rows_match_b2_owner_boundary(
+    case: _Case, expected_flag3: int
+) -> None:
+    # Validation-suite lock for the primary rollout regression:
+    # - in-place/re-entered GuardSetOff rows are owned by GuardSetOff_Anim / ftCo_80093BC0,
+    # - destination Guard carry rows are owned by ftCo_800928CC after GuardSetOff_Anim, and
+    # - stale x221C_b2 must clear only when no GuardReflect timer owner remains for that phase.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    #   ftCo_GuardSetOff_Anim,ftCo_80093BC0,ftCo_800928CC,ftCo_80092F2C}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / case.dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+
+    _, ref_row, out_row = _run_one_step_row(dataset_path, case.target_record, case.port)
+    assert int(ref_row["state_flags"][case.port, 3]) == expected_flag3, case.note
+    assert int(out_row["action_id"][case.port]) == int(ref_row["action_id"][case.port]), case.note
+    assert int(out_row["action_frame"][case.port]) == int(ref_row["action_frame"][case.port]), case.note
+    assert int(out_row["state_flags"][case.port, 3]) == expected_flag3, case.note

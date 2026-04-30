@@ -5012,6 +5012,69 @@ def test_damageflyroll_damageflytop_attackairb_steady_admission_rows_and_adjacen
 
 
 @pytest.mark.integration
+def test_damageflyroll_damageflytop_hitlag_continuity_rollout_rows_are_replay_exact() -> None:
+    # DamageFlyTop same-source active-hitlag continuity for the explicit Fighter_8006CDA4 stream
+    # phase:
+    # - ftCo_DamageFly_Coll/Anim keep the victim in the same common-damage owner family while
+    #   frozen hitlag counts down.
+    # - A rollout seeded before that hitlag interval must preserve the explicit pre-gate phase and
+    #   replay frame-start RNG clock until the later ftCo_8008DCE0 DamageFlyRoll gate consumes it.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+    #   ftCo_DamageFly_Anim,ftCo_DamageFly_Coll,ftCo_8008DCE0}
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
+        "TreasuredBackKangaroo.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    start_record = 6343
+    target_record = 6380
+    rows = (target_record - 1, target_record, target_record + 1)
+    for rec in (start_record, 6367, 6373, *rows):
+        assert int(samples.shape[0]) > rec, f"dataset too short for lock row: record={rec}"
+
+    # Seed producer backfills the same source-proven phase through the active-hitlag part of the
+    # DamageFlyTop episode; this is the narrow regression that a normal one-step lock cannot see.
+    start_seed = samples[start_record : start_record + 1]["seed_t"][0]
+    hitlag_seed = samples[6367 : 6368]["seed_t"][0]
+    assert int(start_seed["action_id"][0]) == 90  # DamageFlyTop
+    assert int(start_seed["hitlag"][0]) == 0
+    assert int(start_seed["fighter_8006cda4_pre_gate_consume_count"][0]) == 2
+    assert int(hitlag_seed["action_id"][0]) == 90
+    assert int(hitlag_seed["hitlag"][0]) > 0
+    assert int(hitlag_seed["fighter_8006cda4_pre_gate_consume_count"][0]) == 2
+
+    trace_on = root / "reports/triage/rng_damageflytop_hitlag_continuity_tbk_6343.tsv"
+    on_rows = _run_rollout_window_rows_with_trace(
+        dataset_path,
+        start_record=start_record,
+        window_records=rows,
+        rng_damage_fly_roll_gate=True,
+        trace_path=trace_on,
+    )
+    for rec in rows:
+        ref_row, out_row, site1_count = on_rows[rec]
+        _assert_transition_identity_lock_fields_match_ref(
+            out_row=out_row,
+            ref_row=ref_row,
+            record=rec,
+            p=0,
+        )
+        if rec == target_record:
+            assert int(out_row["action_id"][0]) == 91  # DamageFlyRoll, not DamageFlyHi
+            assert site1_count == 1, f"expected one site-1 pulse at target row {rec}"
+        else:
+            assert site1_count == 0, f"unexpected site-1 pulse on adjacent control row {rec}"
+
+
+@pytest.mark.integration
 def test_specialhi_upground_pseudo_random_sfx_rng_pulse_row_and_adjacent_controls_are_replay_exact() -> None:
     # Pseudo-random SFX command RNG consumer lane (opcode 38):
     # - ftAction_80071FC8 consumes one HSD_Randi(random_range) when the event executes.

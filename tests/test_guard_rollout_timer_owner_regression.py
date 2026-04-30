@@ -12,12 +12,14 @@ from tools.eval.dataset import COMPARE_DTYPE, read_dataset
 ACT_GUARD_ON = 0x00B2
 ACT_GUARD = 0x00B3
 ACT_GUARD_OFF = 0x00B4
+ACT_GUARD_SET_OFF = 0x00B5
 ACT_GUARD_REFLECT = 0x00B6
 
 _BASE = (
     "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
     "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
 )
+_PJO = "datasets/aggregate_recent/replays/validation/aggregate_recent/PutridJoyousOryx.msl"
 
 
 def _skip_if_required_artifacts_missing(root: Path) -> None:
@@ -185,3 +187,45 @@ def test_guard_no_submotion_x10_rollout_owner_windows(case: _RolloutCase) -> Non
     )
     assert int(out["action_id"][p]) == int(case.ref_action), case.note
 
+
+@pytest.mark.integration
+def test_guardsetoff_to_guard_release_latch_survives_late_trigger_repress_pjo_lock() -> None:
+    binding = pytest.importorskip("msl_binding")
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / _PJO
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {_PJO}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    start_record = 901
+    target_record = 926
+    p = 0
+
+    # Source owner:
+    # - GuardSetOff_Anim enters Guard when GuardDamage completes.
+    # - Destination Guard_IASA runs later in the same frame and ftCo_80092BCC latches xC while
+    #   shield is released.
+    # - Once x10 reaches zero, inlineC0 exits to GuardOff even if shield has been pressed again;
+    #   held shield does not clear an already-latched xC.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    #   ftCo_GuardSetOff_Anim,ftCo_800928CC,ftCo_Guard_IASA,ftCo_80092BCC,inlineC0}
+    assert int(samples[start_record]["seed_t"]["action_id"][p]) == ACT_GUARD_SET_OFF
+    assert int(samples[919]["seed_t"]["action_id"][p]) == ACT_GUARD
+    assert int(samples[919]["seed_t"]["guard_release_latched_xc"][p]) == 1
+    assert int(samples[target_record]["seed_t"]["action_id"][p]) == ACT_GUARD
+    assert int(samples[target_record]["seed_t"]["guard_release_latched_xc"][p]) == 1
+    assert int(samples[target_record]["seed_t"]["guard_x10"][p]) == 0
+    assert int(samples[target_record]["input_t"]["p"][p]["buttons"]) != 0
+    assert int(samples[target_record]["ref_t1"]["action_id"][p]) == ACT_GUARD_OFF
+
+    out = _rollout_to_record(
+        binding,
+        samples,
+        start_record=start_record,
+        target_record=target_record,
+        num_players=int(ds.header["num_players"]),
+    )
+    assert int(out["action_id"][p]) == ACT_GUARD_OFF
+    assert abs(float(out["shield_hp"][p]) - float(samples[target_record]["ref_t1"]["shield_hp"][p])) < 0.01

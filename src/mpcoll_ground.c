@@ -5,7 +5,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "action.h"
 #include "action_ids.h"
+#include "char_params.h"
 #include "coll_env_flags.h"
 #include "common_params.h"
 #include "match_flow.h"
@@ -1111,7 +1113,22 @@ void mpcoll_ground_apply(MslBatch* batch) {
       uint8_t lock_bottom_to_prev_frame = 0u;
       const uint8_t spacie_air_special_floor_owner =
           is_spacie_air_special_floor_collision_action(action_id) && prev_action_id == action_id;
-      if (!lock_bottom_to_zero && (ecb_lock_active || damage_collision_uses_seeded_lock_bottom) &&
+      const uint8_t damagefly_release_entry_uses_pose_bottom =
+          // Throw release can enter DamageFly with an ECB-lock countdown still active, but the
+          // next DamageFly_Coll floor pass uses the current DamageFly ECB source. Keeping the
+          // generic ground->air zero-bottom approximation here hides the floor crossing on low
+          // release rows where CollData.floor.index is still valid.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
+          // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800473CC,mpColl_LoadECB_JObj}
+          (is_damage_fly_collision_action(action_id) && ecb_lock_active &&
+           batch->state.hitlag[idx] == 0u && batch->state.hitlag_pre_timer[idx] == 0u &&
+           batch->state.action_frame[idx] <= 2 &&
+           msl_action_is_thrown_victim(batch->state.seed_prev_action_id[idx]))
+              ? 1u
+              : 0u;
+      if (!lock_bottom_to_zero && !damagefly_release_entry_uses_pose_bottom &&
+          (ecb_lock_active || damage_collision_uses_seeded_lock_bottom) &&
           (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR ||
            is_damage_collision_landing_action(action_id) || spacie_air_special_floor_owner)) {
         // ECB lock-bottom semantics while CollData_X130_Locked is active:
@@ -1828,6 +1845,33 @@ void mpcoll_ground_apply(MslBatch* batch) {
                batch->state.prev_action_frame[idx] == 3 && batch->state.speed_y_self[idx] < 0.0f)
                   ? 1u
                   : 0u;
+          const MslCharParams* floor_cross_chp = msl_char_params(char_id);
+          const uint8_t fall_ledge_floor_uses_expanded_collision_model =
+              (floor_cross_chp != NULL && isfinite(floor_cross_chp->model_scaling) &&
+               floor_cross_chp->model_scaling > 1.0f)
+                  ? 1u
+                  : 0u;
+          const uint8_t suppress_fall_ledge_floor_first_root_crossing =
+              // Ordinary Fall_Coll routes through ft_800831CC -> mpColl_80047E14(flags=6), whose
+              // floor check consumes live CollData.ecb after mpColl_LoadECB_inline/interpolation.
+              // This lite sim samples raw SSANIM ECB extents before the live collision-model scale
+              // and CollData interpolation used by mpColl_LoadECB_inline. On enlarged collision
+              // models, a first ledge-floor root crossing can therefore report a landing while the
+              // live ECB still remains above the floor. Suppress only that expanded-model first
+              // root-crossing frame and let the next below-floor Fall_Coll frame land. Do not key
+              // this on character id: Fox/Falco controls are distinguished by extracted
+              // ftCo_DatAttrs::model_scaling in `data/characters/*.json`.
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Coll
+              // refs/melee/src/melee/ft/fighter.c::Fighter_UpdateModelScale
+              // refs/melee/src/melee/ft/ft_081B.c::ft_800831CC
+              // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047E14,mpColl_LoadECB_inline,mpCollInterpolateECB,mpColl_80044628_Floor}
+              (fall_ledge_floor_uses_expanded_collision_model &&
+               action_id == (uint16_t)MSL_ACT_FALL && prev_action_id == (uint16_t)MSL_ACT_FALL &&
+               hit_line_idx >= 0 && g->lines[(size_t)hit_line_idx].is_ledge &&
+               batch->state.action_frame[idx] == 3 && batch->state.speed_y_self[idx] < 0.0f &&
+               prev_y > k_floor_y_bias && batch->state.pos_y[idx] < 0.0f)
+                  ? 1u
+                  : 0u;
           // Sustained EscapeAir floor-hug lock:
           // - Dolphin probe `reports/triage/20260418T081729Z_dolphin_forensic_row` confirms
           //   ImpassionedAlarmedTarsier rec=5809 remains `ground_or_air=Air` in EscapeAir while
@@ -1873,8 +1917,9 @@ void mpcoll_ground_apply(MslBatch* batch) {
                   : 0u;
           if (suppress_locked_ledge_land || suppress_locked_vertical_af3_land ||
               suppress_escapeair_no_lock_vertical_af3_land || suppress_fallspecial_entry_af3_land ||
-              escapeair_locked_floorhug_airborne || specialhi_bound_entry_airborne ||
-              suppress_damageflyroll_shallow_land || suppress_damageair_attackair_entry_land) {
+              suppress_fall_ledge_floor_first_root_crossing || escapeair_locked_floorhug_airborne ||
+              specialhi_bound_entry_airborne || suppress_damageflyroll_shallow_land ||
+              suppress_damageair_attackair_entry_land) {
             floor_write_edge_suppression_flags(batch, idx, stage_id, g, hit_line_idx, char_id, anim,
                                                ecb_frame, was_grounded);
           } else {

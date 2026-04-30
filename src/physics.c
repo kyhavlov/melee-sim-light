@@ -397,6 +397,38 @@ static inline uint8_t physics_try_get_transn_delta_xyz(const MslCharParams* ch, 
   return 1;
 }
 
+static inline uint8_t physics_try_get_transn_delta_xyz_f32(const MslCharParams* ch, uint8_t char_id,
+                                                           uint32_t msid_u32,
+                                                           float prev_anim_frame_f32,
+                                                           float anim_frame_f32,
+                                                           float out_delta_xyz[3]) {
+  if (ch == NULL || out_delta_xyz == NULL) {
+    return 0;
+  }
+  if (!(msid_u32 <= 0xFFFFu)) {
+    return 0;
+  }
+  const uint16_t msid = (uint16_t)msid_u32;
+
+  // Weighted throws can advance the live AObj by fractional frames. ft_80085030 consumes the
+  // current HSD_AObjInterpretAnim TransN offset, so sample the SSANIMT1 FObj stream instead of
+  // flooring to the integer SSANIM01 tail.
+  // refs/melee/src/sysdolphin/baselib/aobj.c::HSD_AObjInterpretAnim
+  // refs/melee/src/sysdolphin/baselib/fobj.c::HSD_FObjInterpretAnim
+  // refs/melee/src/melee/ft/ft_081B.c::ft_80085030
+  float t_cur[3];
+  float t_prev[3];
+  if (anim_pose_get_transn_f32(char_id, msid, anim_frame_f32, t_cur) != 0 ||
+      anim_pose_get_transn_f32(char_id, msid, prev_anim_frame_f32, t_prev) != 0) {
+    return 0;
+  }
+
+  out_delta_xyz[0] = (t_cur[0] - t_prev[0]) * ch->model_scaling;
+  out_delta_xyz[1] = (t_cur[1] - t_prev[1]) * ch->model_scaling;
+  out_delta_xyz[2] = (t_cur[2] - t_prev[2]) * ch->model_scaling;
+  return 1;
+}
+
 static inline uint8_t physics_action_anim_uses_root_motion(uint8_t char_id, uint32_t msid_u32) {
   if (msid_u32 > 0xFFFFu) {
     return 0u;
@@ -1806,6 +1838,31 @@ void physics_integrate(MslBatch* batch) {
             //   ftCo_CatchCut_Phys
             // }
             gr_vel += ground_friction_step_delta(gr_vel, c->catch_friction_mul * ch->gr_friction);
+          } else if (msl_action_is_throw_owner(action_id)) {
+            // Grounded ThrowF/B/Hi/Lw Phys all use ft_80085004 -> ft_80085030. The root-motion
+            // branch is gated by the extracted ftData x10_b0 root-motion bit for the current
+            // throw submotion; otherwise ft_80085030 falls back to ground friction.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{
+            //   ftCo_ThrowF_Phys,ftCo_ThrowB_Phys,ftCo_ThrowHi_Phys,ftCo_ThrowLw_Phys}
+            // refs/melee/src/melee/ft/ft_081B.c::{ft_80085004,ft_80085030}
+            // data/anims/{fox,falco}.tracks.bin SSANIMT1 root-motion flag
+            float dxyz[3];
+            if (physics_action_anim_uses_root_motion(batch->state.char_id[idx],
+                                                     batch->state.animation_index[idx]) &&
+                physics_try_get_transn_delta_xyz_f32(
+                    ch, batch->state.char_id[idx], batch->state.animation_index[idx],
+                    physics_prev_anim_frame_f32(batch, idx), physics_cur_anim_frame_f32(batch, idx),
+                    dxyz)) {
+              float throw_facing_dir = (batch->state.facing_dir1[idx] < 0) ? -1.0f : 1.0f;
+              if (action_id != prev_action_id) {
+                // Fighter_ChangeMotionState copies current facing into facing_dir1 on entry.
+                // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+                throw_facing_dir = facing_dir;
+              }
+              gr_vel = dxyz[2] * throw_facing_dir;
+            } else {
+              gr_vel += ground_friction_step_delta(gr_vel, ch->gr_friction);
+            }
           } else if (action_id == (uint16_t)MSL_ACT_FX_SPECIAL_HI) {
             // Decomp: ftFx_SpecialHi_Phys increments `mv.fx.SpecialHi.unk`, then applies ground
             // reverse friction x78 once `unk >= x70`.
@@ -1942,13 +1999,15 @@ void physics_integrate(MslBatch* batch) {
                 (stick_x > 0.0f ? +ch->dash_run_acceleration_b : -ch->dash_run_acceleration_b);
             const float target = stick_x * ch->dash_run_terminal_velocity;
             const float friction = ch->gr_friction * c->run_friction_mul;
+            const float turnrun_accel_mul = (batch->state.facing_dir1[idx] < 0.0f) ? -1.0f : 1.0f;
             if (target == 0.0f) {
               gr_vel += ground_friction_step_delta(gr_vel, friction);
-            } else if ((facing_dir * accel) < 0.0f) {
+            } else if ((turnrun_accel_mul * accel) < 0.0f) {
               // Decomp: TurnRun_Phys calls getAccelAndTarget, then only applies accel while
               // `mv.co.turnrun.accel_mul * accel < 0`; otherwise it falls back to grounded friction.
               // On TurnRun_Enter, accel_mul is initialized from the pre-turn facing_dir and x14 is
-              // cleared.
+              // cleared. It is not current facing: TurnRun_Anim can flip facing before later Phys
+              // callbacks continue accelerating toward the original opposite-stick target.
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_TurnRun.c::{
               //   ftCo_TurnRun_Enter,ftCo_TurnRun_Phys}
               float accel_step = accel;

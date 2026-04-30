@@ -882,37 +882,63 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
             batch->state.guard_reflect_timer_x18[idx] == 0u && guard_x10_init != 0u &&
             (uint16_t)batch->state.guard_x10[idx] + 1u < (uint16_t)guard_x10_init &&
             f221c == (uint8_t)MSL_STATE_FLAG_221C_B2) {
-          // GuardSetOff second steady powershield-active expiry:
+          // GuardSetOff steady powershield-active expiry:
           // - ftCo_80092F2C seeds mv.co.guard.x10 from ftCommonData on GuardSetOff entry,
           // - after the initial af0 carry snapshot has already self-looped back into GuardSetOff,
           //   the next steady callback pass carries a positive prev_action_frame into
           //   ftCo_GuardSetOff_Anim / ftCo_80093BC0 ownership, and
-          // - the first steady countdown tick after entry is still the x221C_b2 carry lane
-          //   (`guard_x10 == guard_x10_init_frames - 1`), but once the countdown has progressed
-          //   beyond that first steady tick and both GuardReflect timers are already expired,
-          //   x221C_b2 no longer has a live owner and should not persist from the seeded carry row.
+          // - when both GuardReflect timers are already expired, x221C_b2 no longer has a live
+          //   owner on that in-place GuardSetOff steady row and should not persist from the seeded
+          //   carry row.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
           //   ftCo_80092F2C,ftCo_GuardSetOff_Anim,ftCo_80093BC0,ftCo_800925A4}
           // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
           // data/common/ft_common_data.json: guard_x10_init_frames
           f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B2;
         }
-        if (prev_action == (uint16_t)MSL_ACT_GUARD_SET_OFF &&
-            batch->state.prev_action_frame[idx] > 0 && batch->state.action_frame[idx] <= 0 &&
+        if (action_id == (uint16_t)MSL_ACT_GUARD_SET_OFF &&
+            (prev_action == (uint16_t)MSL_ACT_GUARD_SET_OFF ||
+             batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_GUARD_SET_OFF) &&
+            (batch->state.prev_action_frame[idx] > 0 ||
+             batch->state.seed_prev_action_frame[idx] > 0) &&
+            batch->state.action_frame[idx] <= 0 &&
             batch->state.guard_reflect_timer_x14[idx] == 0u &&
             batch->state.guard_reflect_timer_x18[idx] == 0u && guard_x10_init != 0u &&
-            (uint16_t)batch->state.guard_x10[idx] + 1u == (uint16_t)guard_x10_init &&
+            ((uint16_t)batch->state.guard_x10[idx] + 1u == (uint16_t)guard_x10_init ||
+             batch->state.guard_x10[idx] == guard_x10_init) &&
             f221c == (uint8_t)MSL_STATE_FLAG_221C_B2) {
           // GuardSetOff carry-snapshot powershield-active expiry:
           // - the prior steady GuardSetOff callback pass has already advanced (prev_action_frame>0),
-          // - the destination snapshot has re-entered the first carry countdown tick
-          //   (`guard_x10 == guard_x10_init_frames - 1`) with a nonpositive action_frame, and
+          // - the destination snapshot has re-entered a carry/entry tick with nonpositive
+          //   action_frame (`guard_x10 == guard_x10_init_frames - 1`, or a fresh GuardSetOff entry
+          //   reset back to init), and
           // - once both GuardReflect timers are already expired, x221C_b2 no longer has a live
-          //   owner on that carry snapshot regardless of whether the destination still reports
-          //   GuardSetOff or has already advanced into the next motion-state entry.
+          //   owner on that in-place GuardSetOff carry snapshot.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
           //   ftCo_80092F2C,ftCo_GuardSetOff_Anim,ftCo_80093BC0,ftCo_800925A4}
           // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360,Fighter_ChangeMotionState}
+          // data/common/ft_common_data.json: guard_x10_init_frames
+          f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B2;
+        }
+        if (action_id == (uint16_t)MSL_ACT_GUARD &&
+            prev_action == (uint16_t)MSL_ACT_GUARD_SET_OFF &&
+            batch->state.prev_action_frame[idx] > 0 && batch->state.action_frame[idx] <= 0 &&
+            batch->state.guard_reflect_timer_x14[idx] == 0u &&
+            batch->state.guard_reflect_timer_x18[idx] == 0u && guard_x10_init != 0u &&
+            (uint16_t)batch->state.guard_x10[idx] + 2u == (uint16_t)guard_x10_init &&
+            f221c == (uint8_t)MSL_STATE_FLAG_221C_B2) {
+          // GuardSetOff -> Guard destination carry-snapshot expiry:
+          // - ftCo_GuardSetOff_Anim first calls ftCo_80093BC0, then enters Guard through
+          //   ftCo_800928CC when GuardDamage has ended.
+          // - The destination Guard row can still expose the no-submotion carry snapshot, but once
+          //   the GuardSetOff countdown had already advanced past the init tick before transition
+          //   and both GuardReflect timers are expired, x221C_b2 has no live owner on that
+          //   destination snapshot.
+          // - The init-tick transition remains a valid carry lane; do not apply the in-place
+          //   GuardSetOff first-steady clear after the state has already changed to Guard.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+          //   ftCo_GuardSetOff_Anim,ftCo_80093BC0,ftCo_800928CC}
+          // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_ChangeMotionState}
           // data/common/ft_common_data.json: guard_x10_init_frames
           f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B2;
         }

@@ -1561,10 +1561,16 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
           //   hidden color-animation status (`fp->x198C`) and x1994 timer.
           // - Do not raise generic colanim_hit_status_x198c here; invincible BODY contact has
           //   broader hitlag semantics and regresses unrelated rows. Preserve only a proof bit for
-          //   narrow consumers that also require an explicit HitCapsule victim-list seed.
+          //   consumers that require explicit HitCapsule victim-list seed provenance.
+          // - DamageFlyRoll can floor-contact into DownBound while the same x1994 countdown still
+          //   owns the adjacent post-Anim collision-pose bridge; keep the timer for that source
+          //   episode only. Broad damage-action x1994 carry regresses unrelated one-step rows.
           // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
           // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007B7A4,ftColl_8007B868,ftColl_80076ED8}
           // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+          if (seed->action_id[p] == (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL) {
+            batch->state.colanim_timer_x1994[idx] = seed->colanim_timer_x1994[p];
+          }
           batch->state.colanim_hitstun_x198c1_seed[idx] = 1u;
         }
         // Narrow explicit DownBound x1994 seed bridge:

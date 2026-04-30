@@ -340,8 +340,8 @@ Source/generation:
 - `last_hit_by` is raw Slippi source-port domain; generation and runtime map it through
   `source_port0` before reading local attacker state.
 - For DamageFlyTop delayed gates, counts `1..3` and marker `4` may be carried backward only across
-  the same-source airborne hitstun segment. Counts `1..3` carry hidden stream phase; marker `4`
-  carries only zero-consume gate-admission provenance.
+  the same-source airborne hitstun episode, including same-source active-hitlag rows. Counts
+  `1..3` carry hidden stream phase; marker `4` carries only zero-consume gate-admission provenance.
 - For replay-proven AttackAirN pre-action delayed gates, only nonzero consume counts `1..3` may be
   carried backward. AttackAirN carry stops at action/source/ground/hitlag/hitstun boundaries and
   never backfills marker `4`, which is an immediate zero-consume gate marker rather than persistent

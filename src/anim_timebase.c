@@ -41,6 +41,32 @@ static inline uint8_t anim_timebase_try_rebound_anim_speed_from_ground_vel(const
   return 1u;
 }
 
+static inline uint8_t anim_timebase_turnrun_entry_facing_bit(const MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  return (batch->state.facing_dir1[idx] > 0) ? 1u : 0u;
+}
+
+static inline uint8_t anim_timebase_turnrun_zero_speed_pause(const MslBatch* batch, size_t idx,
+                                                             uint16_t action_id) {
+  if (batch == NULL || action_id != (uint16_t)MSL_ACT_TURN_RUN) {
+    return 0u;
+  }
+  // TurnRun mid-state pivot owner:
+  // - ftCo_TurnRun_Anim freezes rate once `cmd_vars[1]` first fires, then on the next Anim
+  //   callback resumes rate and flips facing when `mv.co.walk.middle_anim_frame * gr_vel <= 0.01`.
+  // - Slippi exposes neither `cmd_vars[1]` nor `mv.co.turnrun.x14`. A seeded zero rate plus exact
+  //   zero ground velocity is the replay-visible post-freeze owner; no MSLFTSC1 event exists for
+  //   this common-state command today.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_TurnRun.c::{
+  //   ftCo_TurnRun_Enter,ftCo_TurnRun_Anim}
+  return (batch->state.on_ground[idx] != 0u && batch->state.frame_speed_mul_fp_q16_16[idx] == 0 &&
+          batch->state.speed_ground_x_self[idx] == 0.0f)
+             ? 1u
+             : 0u;
+}
+
 static inline int anim_timebase_throw_index_from_action(uint16_t action_id) {
   switch (action_id) {
     case (uint16_t)MSL_ACT_THROW_F:
@@ -621,6 +647,21 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
         }
       }
 
+      uint8_t turnrun_flip_after_zero_tick = 0u;
+      if (anim_timebase_turnrun_zero_speed_pause(batch, idx, a)) {
+        const uint8_t entry_facing = anim_timebase_turnrun_entry_facing_bit(batch, idx);
+        if (batch->state.facing[idx] == entry_facing) {
+          // Source order: this tick consumes the zero rate written by the prior TurnRun Anim
+          // callback, then the same callback flips facing and restores rate for the next tick.
+          turnrun_flip_after_zero_tick = 1u;
+        } else {
+          // Teacher-forced one-step seeds can start on the first post-flip row: facing already
+          // exposes the callback result, but the causal frame_speed seed still carries the prior
+          // zero rate. Restore the callback-owned rate before this tick advances.
+          batch->state.frame_speed_mul_fp_q16_16[idx] = MSL_Q16_16_ONE;
+        }
+      }
+
       // Grounded smash early-hold replay bridge:
       // - The live current-sim owner is opcode 56 / `smash_attrs` in input.c
       //   (`ftAction_80073008` -> `ftCo_800DEE84` / `ftCo_800DF0D0`).
@@ -910,6 +951,12 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
             }
           }
         }
+      }
+
+      if (turnrun_flip_after_zero_tick != 0u && batch->state.action_id[idx] == a) {
+        const uint8_t entry_facing = anim_timebase_turnrun_entry_facing_bit(batch, idx);
+        batch->state.facing[idx] = entry_facing ? 0u : 1u;
+        batch->state.frame_speed_mul_fp_q16_16[idx] = MSL_Q16_16_ONE;
       }
 
       msl_anim_timebase_recompute_derived(batch, idx);

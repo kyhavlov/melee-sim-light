@@ -12,7 +12,14 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
 )
 
 
-def _run_rollout_window(dataset_path: Path, start: int, stop: int):
+def _run_rollout_window(
+    dataset_path: Path,
+    start: int,
+    stop: int,
+    *,
+    ucf_enabled: bool = False,
+    ucf_cardinals_1_0_enabled: bool = False,
+):
     import msl_binding
 
     ds = read_dataset(str(dataset_path))
@@ -29,7 +36,12 @@ def _run_rollout_window(dataset_path: Path, start: int, stop: int):
         raw = samples[record : record + 1].view(np.uint8).reshape(1, -1)
         return np.array(raw[:, off : off + stride], dtype=np.uint8, order="C", copy=True)
 
-    handle = msl_binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = msl_binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=int(ucf_enabled),
+        ucf_cardinals_1_0_enabled=int(ucf_cardinals_1_0_enabled),
+    )
     try:
         msl_binding.reseed_seed_rollout(handle, field_bytes(start, seed_off, seed_stride))
         out_bytes = np.zeros((1, compare_stride), dtype=np.uint8, order="C")
@@ -47,7 +59,15 @@ def _run_rollout_window(dataset_path: Path, start: int, stop: int):
     return samples["ref_t1"][stop], out
 
 
-def _run_rollout_window_with_seed_mutator(dataset_path: Path, start: int, stop: int, seed_mutator):
+def _run_rollout_window_with_seed_mutator(
+    dataset_path: Path,
+    start: int,
+    stop: int,
+    seed_mutator,
+    *,
+    ucf_enabled: bool = False,
+    ucf_cardinals_1_0_enabled: bool = False,
+):
     import msl_binding
 
     ds = read_dataset(str(dataset_path))
@@ -69,7 +89,12 @@ def _run_rollout_window_with_seed_mutator(dataset_path: Path, start: int, stop: 
         raw = samples[record : record + 1].view(np.uint8).reshape(1, -1)
         return np.array(raw[:, off : off + stride], dtype=np.uint8, order="C", copy=True)
 
-    handle = msl_binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = msl_binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=int(ucf_enabled),
+        ucf_cardinals_1_0_enabled=int(ucf_cardinals_1_0_enabled),
+    )
     try:
         msl_binding.reseed_seed_rollout(handle, seed_bytes)
         out_bytes = np.zeros((1, compare_stride), dtype=np.uint8, order="C")
@@ -168,6 +193,83 @@ def test_guard_shielddesc_runtime_pose_accepts_prh_rollout_contact() -> None:
 
 
 @pytest.mark.integration
+def test_guardon_lightshield_latch_rejects_fsp_shine_rollout_contact() -> None:
+    # Runtime-negative ShieldDesc boundary for the lightshield amount latch:
+    # - `ftCo_800925A4` updates `fp->lightshield_amount` only when the current trigger is above the
+    #   shield deadzone. When a GuardOn fighter releases L/R, the previous lightshield scale stays
+    #   live and `lbColl_80007BCC` consumes the smaller ShieldDesc bubble.
+    # - FSP 3874..3875 has p1 in GuardOn with trigger released and lightshield_amount already
+    #   latched to 1.0. Fox's shine starts next frame; vanilla keeps p1 in GuardOn instead of
+    #   accepting a false ShieldDesc hit.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_800925A4,ftCo_80091E78}
+    # refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    attacker = 0
+    defender = 1
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples["seed_t"][3874]
+    assert int(seed["action_id"][defender]) == 178  # GuardOn.
+    assert float(seed["lightshield_amount"][defender]) == pytest.approx(1.0)
+    assert int(ds.samples["ref_t1"][3875]["action_id"][attacker]) == 365  # Shine start.
+
+    ref, out = _run_rollout_window(
+        dataset_path,
+        3874,
+        3875,
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+
+    assert int(ref["action_id"][attacker]) == 365
+    assert int(out["action_id"][attacker]) == 365
+    assert int(ref["action_id"][defender]) == 178  # GuardOn, not GuardSetOff.
+    assert int(out["action_id"][defender]) == 178
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 0
+    assert float(out["shield_hp"][defender]) == pytest.approx(float(ref["shield_hp"][defender]))
+
+
+@pytest.mark.integration
+def test_guardon_lightshield_latch_boundary_requires_latched_amount() -> None:
+    # Mutation negative for the retained latch boundary. Clearing the hidden lightshield amount on
+    # the same already-GuardOn seed restores the old broad hard-shield bubble and admits the shine
+    # hit, proving the positive lock is not a broad "shine cannot hit GuardOn" suppressor.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_800925A4
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    defender = 1
+
+    def clear_lightshield_latch(seed_t: np.ndarray) -> None:
+        seed_t["lightshield_amount"][0, defender] = np.float32(0.0)
+
+    _ref, out = _run_rollout_window_with_seed_mutator(
+        dataset_path,
+        3874,
+        3875,
+        clear_lightshield_latch,
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+
+    assert int(out["action_id"][defender]) == 181  # GuardSetOff.
+    assert int(out["hitlag"][defender]) > 0
+
+
+@pytest.mark.integration
 def test_attackairf_dense_hitlist_rollout_suppresses_guardon_reentry_hvg() -> None:
     # AttackAirF -> GuardOn dense HitCapsule carry:
     # - HVG:7959 starts before p1 Fair reaches p0's GuardOn admission frame.
@@ -175,7 +277,9 @@ def test_attackairf_dense_hitlist_rollout_suppresses_guardon_reentry_hvg() -> No
     #   GuardOn at HVG:7970, the visible instance_id proxy has advanced but the decomp victim
     #   pointer is still the same fighter object.
     # - Runtime must materialize that hidden HitCapsule latch at the create edge so
-    #   lbColl_8000ACFC suppresses the otherwise false shield hit.
+    #   lbColl_8000ACFC suppresses the otherwise false contact. Later shield/body ownership fixes
+    #   can change whether the unlatched control manifests as GuardSetOff or direct damage; the
+    #   boundary is that clearing the latch must no longer preserve the replay GuardOn state.
     # refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80078C70}
     # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
     root = Path(__file__).resolve().parents[1]
@@ -212,9 +316,8 @@ def test_attackairf_dense_hitlist_rollout_suppresses_guardon_reentry_hvg() -> No
     _ref, out_without_latch = _run_rollout_window_with_seed_mutator(
         dataset_path, start, target, clear_dense
     )
-    assert int(out_without_latch["action_id"][defender]) == 181  # GuardSetOff.
-    assert int(out_without_latch["hitlag"][defender]) > 0
-    assert int(out_without_latch["hitlag"][attacker]) > 0
+    assert int(out_without_latch["action_id"][defender]) != int(ref["action_id"][defender])
+    assert int(out_without_latch["hitlag"][defender]) > 0 or int(out_without_latch["hitlag"][attacker]) > 0
 
 
 @pytest.mark.integration
@@ -310,6 +413,191 @@ def test_locomotion_guardreflect_entry_keeps_shielddesc_for_same_frame_dair_cont
     assert int(out["on_ground"][defender]) == int(ref["on_ground"][defender]) == 1
     assert float(out["shield_hp"][defender]) == pytest.approx(float(ref["shield_hp"][defender]))
     assert int(out["state_flags"][defender][3]) == int(ref["state_flags"][defender][3])
+
+
+@pytest.mark.integration
+def test_dash_guardreflect_entry_keeps_shielddesc_for_same_frame_attackairb_contact() -> None:
+    # Runtime-positive ShieldDesc boundary for Dash -> GuardReflect. Direct locomotion powershield
+    # entry runs ftCo_80093A50, which calls ftCo_80092450 before creating ReflectDesc, so a
+    # same-frame fighter HitShield overlap can still enter GuardSetOff. This complements the
+    # guard-origin negative above, where ftCo_8009388C clears ShieldDesc until x14 expiry.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    #   ftCo_80091A4C,ftCo_800939B4,ftCo_80093A50,ftCo_80092450,ftCo_8009370C}
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    defender = 0
+    attacker = 1
+    ref, out = _run_rollout_window(
+        dataset_path,
+        3111,
+        3148,
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+
+    assert int(ref["action_id"][defender]) == 181  # GuardSetOff
+    assert int(out["action_id"][defender]) == 181
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 5
+    assert int(out["hitlag"][attacker]) == int(ref["hitlag"][attacker]) == 5
+    assert int(out["state_flags"][defender][2]) == int(ref["state_flags"][defender][2])
+    assert int(out["state_flags"][defender][3]) == int(ref["state_flags"][defender][3])
+
+
+@pytest.mark.integration
+def test_landing_guardreflect_entry_keeps_shielddesc_for_same_frame_attackairhi_contact() -> None:
+    # Runtime-positive ShieldDesc boundary for Landing -> GuardReflect. Landing_IASA can enter
+    # powershield through the same ftCo_80091A4C -> ftCo_800939B4 -> ftCo_80093A50 front door as
+    # Dash, and ftCo_80093A50 creates ShieldDesc before ReflectDesc. The first no-submotion
+    # GuardReflect snapshot therefore must let the p1 AttackAirHi shield contact enter GuardSetOff
+    # rather than falling through to BODY DamageN.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    #   ftCo_80091A4C,ftCo_800939B4,ftCo_80093A50,ftCo_80092450,ftCo_8009370C}
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
+        / "AttachedGoodNaturedGuanaco.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    defender = 0
+    attacker = 1
+    ref, out = _run_rollout_window(
+        dataset_path,
+        2369,
+        2390,
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+
+    assert int(ref["action_id"][defender]) == 181  # GuardSetOff
+    assert int(out["action_id"][defender]) == 181
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 3
+    assert int(out["hitstun"][defender]) == int(ref["hitstun"][defender]) == 0
+    assert float(out["percent"][defender]) == pytest.approx(float(ref["percent"][defender]))
+    assert float(out["shield_hp"][defender]) == pytest.approx(float(ref["shield_hp"][defender]))
+    assert int(out["hitlag"][attacker]) == int(ref["hitlag"][attacker]) == 3
+
+
+@pytest.mark.integration
+def test_carried_guardreflect_powershield_window_blocks_early_attackairb_hitshield() -> None:
+    # Runtime-negative/positive boundary for a carried GuardReflect powershield window. QGD 9104
+    # starts from GuardReflect with x18 still live; ftCo_80093BC0 has not yet cleared x221C_b2, so
+    # the p0 AttackAirB HitCapsules must not enter GuardSetOff through the simulator's reconstructed
+    # ShieldDesc. By QGD 9107 the x18 callback has expired and the same attack may take the normal
+    # GuardSetOff path.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    #   ftCo_80093A50,ftCo_80093BC0,ftCo_GuardReflect_Anim}
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
+        / "QuerulousGrandDinosaur.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    defender = 1
+
+    ref_blocked, out_blocked = _run_rollout_window(dataset_path, 8636, 9104)
+    assert int(ref_blocked["action_id"][defender]) == 182
+    assert int(out_blocked["action_id"][defender]) == 182
+    assert int(out_blocked["hitlag"][defender]) == int(ref_blocked["hitlag"][defender]) == 0
+
+    ref_accept, out_accept = _run_rollout_window(dataset_path, 8636, 9107)
+    assert int(ref_accept["action_id"][defender]) == 181
+    assert int(out_accept["action_id"][defender]) == 181
+    assert int(out_accept["hitlag"][defender]) > 0
+    assert int(ref_accept["hitlag"][defender]) == 5
+    assert float(out_accept["shield_hp"][defender]) < float(ref_blocked["shield_hp"][defender])
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_name", "record", "defender", "expected_prev", "expected_owner"),
+    [
+        ("GracefulAttachedTurtle.msl", 943, 0, 14, 1),  # Wait -> GuardOn.
+        ("AttachedGoodNaturedGuanaco.msl", 3127, 1, 18, 0),  # Turn -> GuardOn.
+        ("AttachedGoodNaturedGuanaco.msl", 428, 1, 21, 1),  # Run -> GuardOn.
+    ],
+)
+def test_guardon_spawn_frame_laser_reflect_owner_uses_entry_source(
+    dataset_name: str, record: int, defender: int, expected_prev: int, expected_owner: int
+) -> None:
+    # Spawn-frame laser reflect transfer boundary:
+    # - Wait/Turn -> GuardOn snapshots can enter GuardReflect by post-frame, but the newly spawned
+    #   laser remains shooter-owned for that item pass.
+    # - Run -> GuardOn reaches the source-owned powershield transfer and commits the reflected
+    #   owner/xDA8 snapshot.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::ftCo_Run_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_800939B4}
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent" / dataset_name
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    seed, ref, out = _run_one_step_row(dataset_path, record, defender)
+
+    assert int(seed["action_id"][defender]) == 178  # GuardOn.
+    assert int(seed["seed_prev_action_id"][defender]) == expected_prev
+    assert int(ref["action_id"][defender]) == 182  # GuardReflect.
+    assert int(out["action_id"][defender]) == 182
+    assert int(ref["items"][1]["exists"]) == 1
+    assert int(ref["items"][1]["type"]) == 55
+    assert int(out["items"][1]["owner"]) == int(ref["items"][1]["owner"]) == expected_owner
+    assert int(out["items"][1]["instance_id"]) == int(ref["items"][1]["instance_id"])
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_name", "record", "defender", "expected_prev"),
+    [
+        ("GracefulAttachedTurtle.msl", 9412, 0, 178),  # steady GuardOn.
+        ("QuerulousGrandDinosaur.msl", 3060, 1, 63),  # AttackAir -> GuardOn.
+    ],
+)
+def test_guardon_spawn_frame_laser_non_reflect_source_does_not_block_hitshield(
+    dataset_name: str, record: int, defender: int, expected_prev: int
+) -> None:
+    # Negative controls for the spawn-frame non-reflect boundary above: only the proven Wait/Turn
+    # entry sources keep a newly spawned laser shooter-owned. Steady GuardOn and AttackAir->GuardOn
+    # rows still resolve through Item_80269DC8 shield contact into GuardSetOff.
+    # refs/melee/src/melee/it/item.c::Item_80269DC8
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_80092F2C}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent" / dataset_name
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    seed, ref, out = _run_one_step_row(dataset_path, record, defender)
+
+    assert int(seed["action_id"][defender]) == 178  # GuardOn.
+    assert int(seed["seed_prev_action_id"][defender]) == expected_prev
+    assert int(ref["action_id"][defender]) == 181  # GuardSetOff.
+    assert int(out["action_id"][defender]) == 181
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 3
+    assert float(out["shield_hp"][defender]) == pytest.approx(float(ref["shield_hp"][defender]))
 
 
 @pytest.mark.integration
@@ -524,6 +812,47 @@ def test_guardon_entry_shielddesc_current_pose_accepts_iat_attackairlw_rollout_c
     assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 6
     assert int(out["hitstun"][defender]) == int(ref["hitstun"][defender]) == 0
     assert float(out["shield_hp"][defender]) == pytest.approx(float(ref["shield_hp"][defender]))
+
+
+@pytest.mark.integration
+def test_same_step_landing_guardon_does_not_overextend_shielddesc_iat_attackairn() -> None:
+    # Runtime-negative boundary for the GuardOn current-pose envelope:
+    # - IAT 1602 reaches Landing -> GuardOn from analog trigger during the same rollout frame that
+    #   Falco AttackAirN's active HitCapsules are near the new shield bubble.
+    # - The replay seed for that row carries explicit missed ShieldDesc provenance
+    #   (`combat_shield_contact_hb_kind=1`) for those capsules; runtime must not replace that with a
+    #   broad reconstructed ShieldDesc envelope on the same entry frame.
+    # - The following BODY hit at 1604 proves this is not a general AttackAirN suppressor.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    #   ftCo_80091A4C,ftCo_800924C0,ftCo_800921DC,ftCo_80091E78}
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_8000ACFC}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    defender = 0
+    attacker = 1
+
+    ref_guard, out_guard = _run_rollout_window(dataset_path, 1593, 1602)
+    assert int(ref_guard["action_id"][defender]) == 178  # GuardOn, no shield hit yet.
+    assert int(out_guard["action_id"][defender]) == 178
+    assert int(out_guard["hitlag"][defender]) == int(ref_guard["hitlag"][defender]) == 0
+    assert int(out_guard["hitlag"][attacker]) == int(ref_guard["hitlag"][attacker]) == 0
+    assert float(out_guard["shield_hp"][defender]) == pytest.approx(
+        float(ref_guard["shield_hp"][defender])
+    )
+
+    ref_hit, out_hit = _run_rollout_window(dataset_path, 1593, 1604)
+    assert int(ref_hit["action_id"][defender]) == 87  # DamageAir3 from the later BODY path.
+    assert int(out_hit["action_id"][defender]) == 87
+    assert int(out_hit["hitlag"][defender]) == int(ref_hit["hitlag"][defender]) == 6
+    assert int(out_hit["hitlag"][attacker]) == int(ref_hit["hitlag"][attacker]) == 6
 
 
 @pytest.mark.integration

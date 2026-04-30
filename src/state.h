@@ -391,6 +391,11 @@ typedef struct MslStateSoA {
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091AD8,ftCo_800923B4}
   uint8_t* guard_entry_via_dash_91ad8;
+  // Runtime-only snapshot of mv.co.guard.x10 at the beginning of the current fighter action
+  // callback. Shield contact can enter GuardSetOff later in the same frame; that contact preserves
+  // the pre-GuardOn/Guard hold-tick x10 owner rather than the post-callback decremented value.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_800925A4,ftCo_80092F2C}
+  uint8_t* guard_x10_frame_start;
   // Runtime-only marker for the Dash IASA locomotion -> GuardReflect entry slice that also reaches
   // Dash's terminal gr_vel scalar in the same callback. Item reflect ownership uses this to keep
   // same-frame xDA8 transfer on the source callback phase that exposed it, without replay ids.

@@ -86,6 +86,17 @@ int anim_pose_get_collision_matrices_f32(const MslBatch* batch, size_t player_id
 // Returns 0 on success; nonzero on missing/invalid inputs.
 int anim_pose_get_transn(uint8_t char_id, uint16_t msid, uint16_t frame, float out_xyz[3]);
 
+// Float-frame TransN/root translation sampler.
+//
+// Uses the extracted SSANIMT1 FObj track stream for the live AObj/JObj local SRT owner. Falls back
+// to linear interpolation of the SSANIM01 v4 TransN tail when track data is unavailable.
+//
+// Decomp owner path:
+// - refs/melee/src/sysdolphin/baselib/aobj.c::HSD_AObjInterpretAnim
+// - refs/melee/src/sysdolphin/baselib/fobj.c::HSD_FObjInterpretAnim
+// - refs/melee/src/melee/ft/ft_081B.c::ft_80085030
+int anim_pose_get_transn_f32(uint8_t char_id, uint16_t msid, float anim_frame, float out_xyz[3]);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif

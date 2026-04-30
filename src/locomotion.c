@@ -987,15 +987,19 @@ uint8_t locomotion_attackair_try_enter_from_air_iasa(MslBatch* batch, const MslC
   // Decomp input synthesis maps raw Z into held HSD_PAD_A before x668 edge construction; the
   // Jump-family AttackAir input owner then reads `fp->input.x668 & HSD_PAD_A`.
   //
-  // Keep this promoted only on JumpF/JumpB source rows for now. Other aerial IASA owners share
+  // Keep this promoted only on Jump/JumpAerial source rows for now. Other aerial IASA owners share
   // ftCo_AttackAir_CheckItemThrowInput, but modelplay shield/projectile locks still need the
   // broader synthesized x668-A provenance separated from raw replay buttons before enabling it
   // globally.
   // refs/melee/src/melee/ft/fighter.c:1868-1890
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_800CB870
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_CheckItemThrowInput
   const uint8_t jump_z_as_a =
-      (a0 == (uint16_t)MSL_ACT_JUMP_F || a0 == (uint16_t)MSL_ACT_JUMP_B) ? 1u : 0u;
+      (a0 == (uint16_t)MSL_ACT_JUMP_F || a0 == (uint16_t)MSL_ACT_JUMP_B ||
+       a0 == (uint16_t)MSL_ACT_JUMP_AERIAL_F || a0 == (uint16_t)MSL_ACT_JUMP_AERIAL_B)
+          ? 1u
+          : 0u;
   const uint8_t attack_pressed = ((pressed & (uint16_t)MSL_BUTTON_A) != 0u ||
                                   (jump_z_as_a && (pressed & (uint16_t)MSL_BUTTON_Z) != 0u))
                                      ? 1u

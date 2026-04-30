@@ -2393,3 +2393,59 @@ int anim_pose_get_transn(uint8_t char_id, uint16_t msid, uint16_t frame, float o
   memcpy(out_xyz, t->buf + (size_t)transn_off_u, (size_t)TRANSN_BYTES_PER_FRAME);
   return 0;
 }
+
+int anim_pose_get_transn_f32(uint8_t char_id, uint16_t msid, float anim_frame, float out_xyz[3]) {
+  enum { MSL_FTPART_TRANSN = 1 };
+  if (out_xyz == NULL) {
+    return -1;
+  }
+  const MslAnimPoseTable* t = table_for_char(char_id);
+  if (t == NULL || !t->have_msid[msid]) {
+    return -1;
+  }
+
+  const float safe_frame = msl_anim_frame_sanitize_f32(anim_frame);
+  if (t->track_buf != NULL && t->track_msid_to_anim_index != NULL &&
+      t->track_part_to_index != NULL && t->track_part_record_off_by_anim_li != NULL) {
+    const uint16_t ai = t->track_msid_to_anim_index[msid];
+    const uint16_t li = t->track_part_to_index[(uint16_t)MSL_FTPART_TRANSN];
+    if (ai != 0xFFFFu && ai < t->track_anim_count && li != 0xFFFFu && li < t->track_local_count) {
+      const uint32_t rec_off =
+          t->track_part_record_off_by_anim_li[(size_t)ai * (size_t)t->track_local_count +
+                                              (size_t)li];
+      if ((uint64_t)rec_off + 2u <= (uint64_t)t->track_sz &&
+          t->track_buf[(size_t)rec_off + 0u] == (uint8_t)MSL_FTPART_TRANSN) {
+        float rot[3], pos[3], scl[3];
+        if (local_srt_for_part_f32(t, msid, safe_frame, (uint16_t)MSL_FTPART_TRANSN, rot, pos, scl,
+                                   NULL, NULL) == 0) {
+          (void)rot;
+          (void)scl;
+          out_xyz[0] = pos[0];
+          out_xyz[1] = pos[1];
+          out_xyz[2] = pos[2];
+          return 0;
+        }
+      }
+    }
+  }
+
+  const float f0 = floorf(safe_frame);
+  const float frac = safe_frame - f0;
+  const uint16_t frame0 = msl_anim_frame_floor_u16(safe_frame);
+  float t0[3];
+  if (anim_pose_get_transn(char_id, msid, frame0, t0) != 0) {
+    return -1;
+  }
+  float t1[3] = {t0[0], t0[1], t0[2]};
+  if (frac > 0.0f) {
+    const uint16_t frame1 = (uint16_t)(frame0 + 1u);
+    if (frame1 != 0u) {
+      (void)anim_pose_get_transn(char_id, msid, frame1, t1);
+    }
+  }
+  const float a = (frac <= 0.0f) ? 0.0f : ((frac >= 1.0f) ? 1.0f : frac);
+  out_xyz[0] = t0[0] + (t1[0] - t0[0]) * a;
+  out_xyz[1] = t0[1] + (t1[1] - t0[1]) * a;
+  out_xyz[2] = t0[2] + (t1[2] - t0[2]) * a;
+  return 0;
+}

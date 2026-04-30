@@ -101,6 +101,74 @@ def test_throwlw_frame25_post_hitlag_attached_callback_positive_lock() -> None:
 
 
 @pytest.mark.integration
+def test_throwlw_frame25_post_hitlag_falco_laser_keeps_transn_tail_spawn_height() -> None:
+    # Positive lock for the post-hitlag frame-25 Falco ThrowLw article position:
+    # - the same source-rate/post-hitlag predicate that admits the immediate BODY callback also
+    #   needs the SSANIM01 TransN tail restored for the state1 laser hold-joint position.
+    # - without the tail, the spawned laser starts below FD floor, collides immediately, and
+    #   serializes with lifetime 1 instead of the normal state1 lifetime.
+    #
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD4B0
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+    # refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C6CC,it_8029C504}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+        / "PositiveRevolvingHyena.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    rec = 5631
+    owner_p = 1
+    victim_p = 0
+    sample = read_dataset(str(dataset_path)).samples[rec]
+    seed = sample["seed_t"]
+    assert int(seed["action_id"][owner_p]) == 222  # ThrowLw
+    assert int(seed["action_id"][victim_p]) == 242  # ThrownLw
+    assert int(seed["hitlag"][victim_p]) == 1
+    assert int(seed["items"][1]["exists"]) == 0
+
+    _, ref_row, out_row = _run_one_step_row(dataset_path, rec, owner_p)
+    for p in (owner_p, victim_p):
+        _assert_transition_lock_fields_match_ref(out_row=out_row, ref_row=ref_row, record=rec, p=p)
+    assert int(out_row["items"][1]["exists"]) == 1
+    assert int(out_row["items"][1]["type"]) == int(ref_row["items"][1]["type"]) == 55
+    assert float(out_row["items"][1]["timer"]) == pytest.approx(float(ref_row["items"][1]["timer"]))
+    assert float(out_row["items"][1]["pos_x"]) == pytest.approx(float(ref_row["items"][1]["pos_x"]))
+    assert float(out_row["items"][1]["pos_y"]) == pytest.approx(float(ref_row["items"][1]["pos_y"]))
+    assert float(out_row["items"][1]["pos_y"]) > 0.0
+
+
+@pytest.mark.integration
+def test_throwlw_frame25_post_hitlag_falco_laser_rollout_keeps_spawn_height() -> None:
+    # Rollout lock for the same PRH family selected by next-desync: starting at rec 5628 reaches the
+    # frame-25 post-hitlag pulse at rec 5631. The item position is the first disruptive diff.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+        / "PositiveRevolvingHyena.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ref_row, out_row = _run_rollout_row(dataset_path, start_record=5628, target_record=5631)
+    assert int(ref_row["items"][1]["exists"]) == 1
+    assert int(out_row["items"][1]["exists"]) == 1
+    assert int(out_row["items"][1]["type"]) == int(ref_row["items"][1]["type"]) == 55
+    assert float(out_row["items"][1]["timer"]) == pytest.approx(float(ref_row["items"][1]["timer"]))
+    assert float(out_row["items"][1]["pos_y"]) == pytest.approx(float(ref_row["items"][1]["pos_y"]))
+    assert float(out_row["items"][1]["pos_y"]) > 0.0
+
+
+@pytest.mark.integration
 @pytest.mark.parametrize("rec", [442, 4093, 8110])
 def test_throwlw_frame25_post_hitlag_qgd_phase_controls_do_not_hit_immediately(rec: int) -> None:
     # Adjacent phase controls: QGD frame 24.0 -> 25.x serializes the state1 article at t+1, but

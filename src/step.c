@@ -84,11 +84,21 @@ static inline uint8_t step_keep_fighter_8006cda4_pre_gate_count(const MslBatch* 
   }
 
   if (count <= 4u && action == (uint16_t)MSL_ACT_DAMAGE_FLY_TOP &&
-      batch->state.on_ground[idx] == 0u && batch->state.hitlag[idx] == 0u &&
-      batch->state.hitstun[idx] != 0u && batch->state.instance_hit_by[idx] != 0u) {
+      batch->state.on_ground[idx] == 0u && batch->state.hitstun[idx] != 0u &&
+      batch->state.instance_hit_by[idx] != 0u) {
     const int attacker =
         step_local_slot_from_source_port0(batch, bi, num_players, batch->state.last_hit_by[idx]);
     if (attacker >= 0 && attacker != p) {
+      // DamageFlyTop hitlag-continuity owner:
+      // - The explicit Fighter_8006CDA4 stream phase is replay-seeded for delayed
+      //   ftCo_8008DCE0 DamageFlyRoll gates that can occur after a same-source active-hitlag
+      //   interval.
+      // - Hitlag is still part of the same common-damage source episode; dropping the lane while
+      //   frozen makes rollouts seeded before the later hit lose both the replay frame-start RNG
+      //   clock and the hidden pre-gate consume count before the source-owned gate runs.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+      //   ftCo_DamageFly_Anim,ftCo_DamageFly_Coll,ftCo_8008DCE0}
+      // refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
       return 1u;
     }
   }

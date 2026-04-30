@@ -145,6 +145,9 @@ static inline uint8_t hitboxes_hitlist_victim_pointer_may_change(uint8_t stocks,
              : 0u;
 }
 
+static inline uint8_t hitboxes_source_port0_for_attacker(const MslBatch* batch, size_t a_idx,
+                                                         int attacker);
+
 static inline uint8_t hitboxes_seed_bridge_create_edge_guard_admission_dense_applies(
     const MslBatch* batch, int bi, int attacker, uint8_t hit_group) {
   if (batch == NULL || bi < 0 || attacker < 0 || attacker >= (int)MSL_MAX_PLAYERS ||
@@ -206,6 +209,55 @@ static inline uint8_t hitboxes_seed_bridge_create_edge_guard_admission_dense_app
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardOn_Enter
       return 1u;
     }
+  }
+  return 0u;
+}
+
+static inline uint8_t hitboxes_seed_bridge_attackairhi_damageflytop_create_dense_applies(
+    const MslBatch* batch, int bi, int attacker, uint8_t hit_group, float hitbox_damage,
+    uint16_t create_frame) {
+  if (batch == NULL || bi < 0 || attacker < 0 || attacker >= (int)MSL_MAX_PLAYERS ||
+      hit_group >= (uint8_t)MSL_HITLIST_GROUPS) {
+    return 0u;
+  }
+  const size_t a_idx = msl_idx_player(bi, attacker);
+  if (batch->state.action_id[a_idx] != (uint16_t)MSL_ACT_ATTACK_AIR_HI ||
+      batch->state.hitlag[a_idx] != 0u || batch->state.hitstun[a_idx] != 0u) {
+    return 0u;
+  }
+
+  const MslCommonParams* c = msl_common_params();
+  const uint16_t expected_hitlag = hitboxes_seed_bridge_shield_hitlag_frames(c, hitbox_damage);
+  if (expected_hitlag == 0u) {
+    return 0u;
+  }
+  const uint8_t attacker_source_port0 = hitboxes_source_port0_for_attacker(batch, a_idx, attacker);
+
+  const size_t group_base =
+      (size_t)bi * (size_t)MSL_MAX_PLAYERS * (size_t)MSL_HITLIST_GROUPS * (size_t)MSL_MAX_PLAYERS;
+  for (int victim = 0; victim < (int)batch->config.num_players; victim++) {
+    if (victim == attacker) {
+      continue;
+    }
+    const size_t cd_i =
+        group_base + (((size_t)attacker * (size_t)MSL_HITLIST_GROUPS + (size_t)hit_group) *
+                          (size_t)MSL_MAX_PLAYERS +
+                      (size_t)victim);
+    if (batch->state.combat_hitlist_cd[cd_i] == 0u) {
+      continue;
+    }
+    const size_t v_idx = msl_idx_player(bi, victim);
+    if (batch->state.action_id[v_idx] != (uint16_t)MSL_ACT_DAMAGE_FLY_TOP ||
+        batch->state.hitlag[v_idx] != 0u || batch->state.hitstun[v_idx] == 0u ||
+        batch->state.hitstun[v_idx] > expected_hitlag ||
+        batch->state.last_hit_by[v_idx] != attacker_source_port0 ||
+        batch->state.combat_hitlist_victim_iid[cd_i] != batch->state.instance_id[v_idx]) {
+      continue;
+    }
+    if (create_frame == 0xFFFFu) {
+      continue;
+    }
+    return 1u;
   }
   return 0u;
 }
@@ -603,6 +655,7 @@ static void hitboxes_seed_bridge_trim_impossible_indefinite(
     const uint16_t attacker_action = batch->state.action_id[a_idx];
     const uint8_t attacker_source_port0 =
         hitboxes_source_port0_for_attacker(batch, a_idx, attacker);
+    const uint16_t v_action = batch->state.action_id[v_idx];
     // Shield-ownership guard for this trim:
     // - ftColl_80078C70 gates shield collision by live ShieldDesc ownership (`fp->x221B_b0`), then
     //   calls lbColl_80007BCC with the shield descriptor.
@@ -611,7 +664,6 @@ static void hitboxes_seed_bridge_trim_impossible_indefinite(
     // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
     // refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
     const uint8_t shield_desc_active = (batch->state.shield_radius[v_idx] > 0.0f) ? 1u : 0u;
-    const uint16_t v_action = batch->state.action_id[v_idx];
     const float v_trigger_unit =
         msl_trigger_unit_from_input(batch->state.input_buttons[v_idx], batch->state.input_l[v_idx],
                                     batch->state.input_r[v_idx]);
@@ -1219,6 +1271,21 @@ void hitboxes_refresh(MslBatch* batch) {
                                                                                  new_g)) {
                 hitlist_seed_init_fighter_hitbox_from_group_allow_stale_iid(batch, bi, p, (int)hb,
                                                                             new_g);
+              } else if (ev->frame == first_create_frame[hb] &&
+                         hitboxes_seed_bridge_attackairhi_damageflytop_create_dense_applies(
+                             batch, bi, p, new_g, ev->damage, first_create_frame[hb])) {
+                // AttackAirHi create-frame same-source DamageFlyTop latch:
+                // - This is the create-edge counterpart to the normal dense hitlist materialization
+                //   path. The hitbox was not active at pose_frame-1, so the generic active-snapshot
+                //   seed path cannot populate victims_1 before lbColl_8000ACFC.
+                // - A terminal same-source DamageFlyTop victim can still be present in vanilla's
+                //   HitCapsule victim list even though Slippi BODY attribution names the previous
+                //   same-port source instance. The following authoritative per-HitCapsule empty
+                //   seed owns the clear/admit boundary.
+                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim
+                // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008A5C}
+                // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}
+                hitlist_seed_init_fighter_hitbox_from_group(batch, bi, p, (int)hb, new_g);
               } else {
                 hitlist_capsule_clear(&batch->state.fighter_hitlist[dst_i]);
                 batch->state.fighter_hitlist_init_gen[dst_i] = hitlist_gen;

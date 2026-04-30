@@ -322,3 +322,44 @@ def test_damageflytop_same_source_backfill_carries_zero_consume_gate_marker() ->
     )
 
     assert out.tolist() == [4, 4, 4]
+
+
+def test_damageflytop_same_source_backfill_crosses_active_hitlag_episode() -> None:
+    # Same-source active hitlag remains inside the DamageFlyTop source episode for delayed
+    # ftCo_8008DCE0 DamageFlyRoll admission. The explicit Fighter_8006CDA4 phase must backfill
+    # through those frozen rows so rollouts seeded before the hitlag interval keep the replay
+    # frame-start RNG clock and the pending pre-gate consume count.
+    n = 5
+    source_port0 = np.array([[0, 1]] * n, dtype=np.uint8)
+    action_id = np.array([90, 90, 90, 90, 90], dtype=np.uint16)
+    action_frame = np.array([20, 1, 1, 2, 3], dtype=np.int16)
+    ref_action_id = np.array([90, 90, 90, 90, 91], dtype=np.uint16)
+    on_ground = np.zeros(n, dtype=np.uint8)
+    hitlag = np.array([0, 2, 1, 0, 0], dtype=np.uint16)
+    hitstun = np.array([10, 67, 67, 66, 65], dtype=np.uint16)
+    all_action_id = np.zeros((n, 2), dtype=np.uint16)
+    all_action_frame = np.zeros((n, 2), dtype=np.int16)
+    all_action_id[:, 0] = action_id
+    all_action_frame[:, 0] = action_frame
+    all_action_id[:, 1] = np.array([67, 27, 27, 67, 67], dtype=np.uint16)
+    all_action_frame[:, 1] = np.array([5, 0, 1, 3, 3], dtype=np.int16)
+
+    out = _derive_fighter_8006cda4_pre_gate_consume_count_seed_lane(
+        action_id_u16=action_id,
+        action_frame_i16=action_frame,
+        ref_action_id_u16=ref_action_id,
+        on_ground_u8=on_ground,
+        hitlag_u16=hitlag,
+        hitstun_u16=hitstun,
+        state_flags_u8=np.zeros((n, 5), dtype=np.uint8),
+        last_hit_by_u8=np.ones(n, dtype=np.uint8),
+        all_source_port0_u8=source_port0,
+        all_action_id_u16=all_action_id,
+        all_action_frame_i16=all_action_frame,
+        frame_pre_random_seed_u32=np.full(n, 1, dtype=np.uint32),
+        damagefly_roll_prob=1.0,
+        victim_port=0,
+        num_players=2,
+    )
+
+    assert out.tolist() == [4, 4, 4, 4, 4]

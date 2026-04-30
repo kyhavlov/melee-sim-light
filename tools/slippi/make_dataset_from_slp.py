@@ -1822,14 +1822,16 @@ def _derive_fighter_8006cda4_pre_gate_consume_count_seed_lane(
     # Rollout seed continuity for the same hidden owner:
     # DamageFlyTop can carry the hidden Fighter_8006CDA4 held-item/x197C stream phase for many
     # frames before the next accepted hit re-enters ftCo_8008DCE0. A rollout seeded before that
-    # contact must therefore carry the pending pre-gate phase from the same DamageFlyTop segment,
-    # instead of reconstructing it from the later AttackAirB row in runtime C.
+    # contact must therefore carry the pending pre-gate phase from the same DamageFlyTop source
+    # episode, including same-source active-hitlag rows, instead of reconstructing it from the
+    # later AttackAirB row in runtime C.
     #
     # Counts 1..3 carry hidden pre-gate consume phase. Marker 4 carries only source-proven
     # DamageFlyTop gate-admission provenance for a later same-source AttackAirB hit; it is still not
     # persistent stream phase and the AttackAirN pre-action backfill below must not carry it.
     # refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
-    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+    #   ftCo_DamageFly_Anim,ftCo_DamageFly_Coll,ftCo_8008DCE0}
     for i in range(n):
         consume = int(out[i])
         if consume <= 0 or consume > 4:
@@ -1850,7 +1852,7 @@ def _derive_fighter_8006cda4_pre_gate_consume_count_seed_lane(
         while j >= 0:
             if action_id[j] != ACT_DAMAGE_FLY_TOP:
                 break
-            if int(on_ground[j]) != 0 or int(hitlag[j]) != 0 or int(hitstun[j]) <= 0:
+            if int(on_ground[j]) != 0 or int(hitstun[j]) <= 0:
                 break
             if local_slot_from_source_port(j, int(last_hit_by[j])) != attacker:
                 break
@@ -3953,6 +3955,8 @@ def _main_impl(args) -> None:
     act_throw_lw = 0x00DE
     act_cliff_catch = 0x00FC
     act_cliff_wait = 0x00FD
+    act_passive_wall = 0x00CA
+    act_passive_wall_jump = 0x00CB
     act_down_bound_u = 0x00B7
     act_down_wait_u = 0x00B8
     act_down_bound_d = 0x00BF
@@ -4489,9 +4493,11 @@ def _main_impl(args) -> None:
             colanim_throw_x1994_frames=int(common["colanim_throw_x1994_frames"]),
             colanim_cliff_x1990_frames=int(common["colanim_cliff_x1990_frames"]),
             colanim_damage_x1994_frames=int(common["colanim_damage_x1994_frames"]),
+            colanim_passivewall_x1990_frames=int(common["colanim_passivewall_x1990_frames"]),
             colanim_rebirth_fall_x1994_frames=int(common["colanim_rebirth_fall_x1994_frames"]),
             throw_actions=(act_throw_f, act_throw_b, act_throw_hi, act_throw_lw),
             cliff_actions=(act_cliff_catch, act_cliff_wait),
+            passivewall_actions=(act_passive_wall, act_passive_wall_jump),
             damage_actions=(
                 act_damage_hi_1,
                 act_damage_hi_2,
@@ -4605,6 +4611,7 @@ def _main_impl(args) -> None:
             hitlag=post_hitlag,
             buttons_held=pre_buttons_physical,
             button_mask_lr=int(button_mask_lr),
+            button_mask_z=int(button_mask_z),
             trigger_unit=trigger_unit,
             trigger_deadzone=float(common["trigger_deadzone"]),
             guard_x10_init_frames=int(common["guard_x10_init_frames"]),
@@ -5082,6 +5089,7 @@ def _main_impl(args) -> None:
             mask_dpad_up=button_mask_dpad_up,
             mask_dpad_down=button_mask_dpad_down,
             mask_lr=button_mask_lr,
+            mask_z=button_mask_z,
             start_timer=0xFF,
         )
         samples["seed_t"]["x67C"][:, slot] = x67C[:-1]

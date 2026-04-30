@@ -126,6 +126,7 @@ _AGG_BASE = "datasets/aggregate_recent/replays/validation/aggregate_recent"
         # Raw Z maps into the fighter x668 A lane before common Jump-family AttackAir checks.
         _Case(f"{_AGG_BASE}/BlondHardHippopotamus.msl", 6234, 1, 25, 65, 68, "attackair_z_a_lane"),
         _Case(f"{_AGG_BASE}/BlondHardHippopotamus.msl", 7585, 1, 24, 65, 68, "attackair_z_a_lane"),
+        _Case(f"{_AGG_BASE}/HungryImportantSnake.msl", 7994, 1, 27, 69, 72, "jumpaerial_z_a_lane"),
     ],
 )
 def test_attackair_direction_and_jump_selection_cluster_records(case: _Case) -> None:
@@ -184,7 +185,7 @@ def test_attackair_direction_and_jump_selection_cluster_records(case: _Case) -> 
         assert (int(inp["buttons"]) & _BUTTON_A) != 0
         assert (int(prev_inp["buttons"]) & _BUTTON_A) == 0
 
-    if case.cluster == "attackair_z_a_lane":
+    if case.cluster in ("attackair_z_a_lane", "jumpaerial_z_a_lane"):
         # Decomp: fighter input synthesis maps raw Z into held HSD_PAD_A before x668 edge
         # construction, and ftCo_AttackAir_CheckItemThrowInput gates on `input.x668 & HSD_PAD_A`.
         # refs/melee/src/melee/ft/fighter.c:1868-1890
@@ -233,6 +234,37 @@ def test_attackair_direction_and_jump_selection_cluster_records(case: _Case) -> 
     out = _step_one_record(binding=binding, row=row, num_players=int(ds.header["num_players"]))
     assert int(out["action_id"][p]) == int(ref["action_id"][p])
     assert int(out["animation_index"][p]) == int(ref["animation_index"][p])
+
+
+@pytest.mark.integration
+def test_jumpaerial_z_as_a_lane_requires_fresh_edge() -> None:
+    # Same source row as the HIS rollout break, but mutate previous input to hold Z. The fighter
+    # preprocessing owner only promotes a fresh Z edge into x668/A; held Z must not enter AttackAir.
+    binding = pytest.importorskip("msl_binding")
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_missing_local_artifacts(root)
+
+    dataset_rel = f"{_AGG_BASE}/HungryImportantSnake.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    record = 7994
+    p = 1
+    row = ds.samples[record : record + 1].copy()
+
+    assert int(row["seed_t"]["action_id"][0, p]) == 27  # JumpAerialF
+    assert int(row["ref_t1"]["action_id"][0, p]) == 69  # AttackAirLw from fresh Z edge
+    assert (int(row["input_t"]["p"][0, p]["buttons"]) & _BUTTON_Z) != 0
+    assert (int(row["prev_input_t"]["p"][0, p]["buttons"]) & _BUTTON_Z) == 0
+
+    row["prev_input_t"]["p"][0, p]["buttons"] = np.uint16(
+        int(row["prev_input_t"]["p"][0, p]["buttons"]) | _BUTTON_Z
+    )
+    out = _step_one_record(binding=binding, row=row, num_players=int(ds.header["num_players"]))
+    assert int(out["action_id"][p]) == 27
+    assert int(out["animation_index"][p]) == 18
 
 
 @pytest.mark.integration

@@ -190,3 +190,140 @@ def test_grounded_damage_hitstun_jumpbuffer_rollout_enters_kneebend() -> None:
                 break
     finally:
         binding.destroy(handle)
+
+
+@pytest.mark.integration
+def test_grounded_damage_x14_live_lstick_keeps_full_hop_rollout_gat_9358() -> None:
+    # Damage_IASA's x14 gate injects XY before delegating to Wait_IASA, but ftCo_Jump_GetInput
+    # still checks a live tap-jump first. GAT 9355 exits grounded DamageHi1 with x14 active and
+    # the stick still held high; classifying that entry as XY latches a false short hop before
+    # JumpF.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_GetInput
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_path = root / (
+        "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
+        "GracefulAttachedTurtle.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path.relative_to(root)}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    binding = _load_binding()
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    sample_stride = int(samples.dtype.itemsize)
+    samples_u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), sample_stride)
+    seed_off = int(samples.dtype.fields["seed_t"][1])
+    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
+    input_off = int(samples.dtype.fields["input_t"][1])
+
+    seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
+    prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+    input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+    out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(1)
+
+    start_record = 9346
+    target_record = 9358
+    p = 0
+    assert int(samples["seed_t"][9355]["action_id"][p]) == 75  # DamageHi1
+    assert int(samples["seed_t"][9355]["damage_jump_buffer_x14"][p]) == 1
+    assert int(samples["seed_t"][9355]["tilt_timer_y"][p]) == 2
+    assert int(samples["input_t"][9355]["p"]["main_y"][p]) == 99
+
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    try:
+        seed_bytes[0, :] = samples_u8[start_record, seed_off : seed_off + seed_stride]
+        binding.reseed_seed_rollout(handle, seed_bytes)
+        for record in range(start_record, target_record + 1):
+            prev_input_bytes[0, :] = samples_u8[
+                record, prev_input_off : prev_input_off + input_stride
+            ]
+            input_bytes[0, :] = samples_u8[record, input_off : input_off + input_stride]
+            binding.step_input(handle, prev_input_bytes, input_bytes)
+            binding.write_compare(handle, out_compare_bytes)
+        out_row = out_view[0].copy()
+        ref_row = samples["ref_t1"][target_record]
+    finally:
+        binding.destroy(handle)
+
+    assert int(out_row["action_id"][p]) == int(ref_row["action_id"][p]) == 25  # JumpF
+    assert int(out_row["jumps_left"][p]) == int(ref_row["jumps_left"][p]) == 1
+    assert float(out_row["speed_y_self"][p]) == pytest.approx(float(ref_row["speed_y_self"][p]))
+    assert float(out_row["pos_y"][p]) == pytest.approx(float(ref_row["pos_y"][p]))
+
+
+@pytest.mark.integration
+def test_grounded_damage_x14_without_live_lstick_still_uses_injected_xy_short_hop_control() -> None:
+    # Negative/control for the GAT full-hop fix above: x14 still owns the injected XY path when
+    # no live tap-jump is present. With neutral inputs and no held XY on following KneeBend frames,
+    # the source KneeBend short-hop check must still produce Fox's short-hop velocity.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_path = root / (
+        "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
+        "GracefulAttachedTurtle.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path.relative_to(root)}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    binding = _load_binding()
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    sample_stride = int(samples.dtype.itemsize)
+    samples_u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), sample_stride)
+    seed_off = int(samples.dtype.fields["seed_t"][1])
+    zero_prev = np.zeros((1,), dtype=samples["prev_input_t"].dtype)
+    zero_input = np.zeros((1,), dtype=samples["input_t"].dtype)
+    zero_prev_bytes = np.frombuffer(zero_prev.tobytes(order="C"), dtype=np.uint8).copy().reshape(
+        1, input_stride
+    )
+    zero_input_bytes = np.frombuffer(zero_input.tobytes(order="C"), dtype=np.uint8).copy().reshape(
+        1, input_stride
+    )
+
+    seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+    out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(1)
+
+    p = 0
+    assert int(samples["seed_t"][9355]["action_id"][p]) == 75  # DamageHi1
+    assert int(samples["seed_t"][9355]["damage_jump_buffer_x14"][p]) == 1
+
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    try:
+        seed_bytes[0, :] = samples_u8[9355, seed_off : seed_off + seed_stride]
+        binding.reseed_seed_rollout(handle, seed_bytes)
+        for _ in range(4):
+            binding.step_input(handle, zero_prev_bytes, zero_input_bytes)
+            binding.write_compare(handle, out_compare_bytes)
+        out_row = out_view[0].copy()
+    finally:
+        binding.destroy(handle)
+
+    assert int(out_row["action_id"][p]) == 25  # JumpF
+    assert int(out_row["jumps_left"][p]) == 1
+    assert float(out_row["speed_y_self"][p]) == pytest.approx(2.1, abs=1e-6)

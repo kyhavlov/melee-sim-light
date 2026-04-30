@@ -140,6 +140,141 @@ def test_turnrun_exit_downstick_feeds_wait_squat_selector_replay_real_lock() -> 
     _assert_transition_lock_fields_match_ref(out_row=out_row, ref_row=ref_row, record=record, p=p)
 
 
+def _run_turnrun_rollout_records(
+    dataset_path: Path,
+    *,
+    start_record: int,
+    target_records: tuple[int, ...],
+    ucf_enabled: bool = False,
+    ucf_cardinals_1_0_enabled: bool = False,
+) -> dict[int, tuple[np.void, np.void]]:
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    target_max = max(target_records)
+    assert int(samples.shape[0]) > target_max, f"dataset too short for record={target_max}"
+
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    seed_bytes = (
+        samples[start_record : start_record + 1]["seed_t"]
+        .copy()
+        .reshape((1,))
+        .view(np.uint8)
+        .reshape((1, seed_stride))
+        .copy()
+    )
+    out_compare = np.zeros((1, compare_stride), dtype=np.uint8)
+    targets = set(target_records)
+
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=int(ucf_enabled),
+        ucf_cardinals_1_0_enabled=int(ucf_cardinals_1_0_enabled),
+    )
+    try:
+        binding.reseed_seed_rollout(handle, seed_bytes)
+        out_by_record: dict[int, tuple[np.void, np.void]] = {}
+        for record in range(start_record, target_max + 1):
+            row = samples[record : record + 1]
+            prev_input_bytes = (
+                row["prev_input_t"].copy().reshape((1,)).view(np.uint8).reshape((1, input_stride)).copy()
+            )
+            input_bytes = row["input_t"].copy().reshape((1,)).view(np.uint8).reshape((1, input_stride)).copy()
+            binding.step_input(handle, prev_input_bytes, input_bytes)
+            binding.write_compare(handle, out_compare)
+            if record in targets:
+                out_by_record[record] = (
+                    samples[record]["ref_t1"].copy(),
+                    out_compare.view(COMPARE_DTYPE).reshape((1,))[0].copy(),
+                )
+        return out_by_record
+    finally:
+        binding.destroy(handle)
+
+
+@pytest.mark.integration
+def test_turnrun_midstate_pause_flips_and_resumes_after_ground_speed_stops_replay_real_lock() -> None:
+    # Replay-real lock for the mid-state TurnRun pause owner:
+    # - ftCo_TurnRun_Anim freezes rate when hidden cmd_vars[1] first fires.
+    # - On the next Anim callback, if mv.co.walk.middle_anim_frame * gr_vel <= 0.01, it restores
+    #   rate and flips facing.
+    # - MSLFTSC1 has no decoded common-action event for ftCo_SM_TurnRun today, so this stays a
+    #   narrow decomp callback model rather than a generated script-table query.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_TurnRun.c::{
+    #   ftCo_TurnRun_Enter,ftCo_TurnRun_Anim}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = f"{_AGG_VALID}/FavorableSuperficialPig.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    p = 1
+
+    pre_stop = ds.samples[9682]
+    assert int(pre_stop["seed_t"]["action_id"][p]) == 19  # TurnRun
+    assert int(pre_stop["seed_t"]["action_frame"][p]) == 13
+    assert float(pre_stop["seed_t"]["speed_ground_x_self"][p]) != pytest.approx(0.0)
+    _, pre_ref, pre_out = _run_one_step_row(dataset_path, 9682, p)
+    _assert_transition_lock_fields_match_ref(out_row=pre_out, ref_row=pre_ref, record=9682, p=p)
+    assert int(pre_out["facing"][p]) == int(pre_ref["facing"][p]) == 1
+
+    flip_seed = ds.samples[9683]
+    assert int(flip_seed["seed_t"]["action_id"][p]) == 19
+    assert int(flip_seed["seed_t"]["action_frame"][p]) == 13
+    assert int(flip_seed["seed_t"]["facing"][p]) == 1
+    assert int(flip_seed["seed_t"]["facing_dir1"][p]) == 1
+    assert float(flip_seed["seed_t"]["speed_ground_x_self"][p]) == pytest.approx(0.0)
+    _, flip_ref, flip_out = _run_one_step_row(dataset_path, 9683, p)
+    _assert_transition_lock_fields_match_ref(out_row=flip_out, ref_row=flip_ref, record=9683, p=p)
+    assert int(flip_out["action_frame"][p]) == int(flip_ref["action_frame"][p]) == 13
+    assert int(flip_out["facing"][p]) == int(flip_ref["facing"][p]) == 0
+
+    resume_seed = ds.samples[9684]
+    assert int(resume_seed["seed_t"]["action_id"][p]) == 19
+    assert int(resume_seed["seed_t"]["action_frame"][p]) == 13
+    assert int(resume_seed["seed_t"]["facing"][p]) == 0
+    assert int(resume_seed["seed_t"]["facing_dir1"][p]) == 1
+    _, resume_ref, resume_out = _run_one_step_row(dataset_path, 9684, p)
+    _assert_transition_lock_fields_match_ref(out_row=resume_out, ref_row=resume_ref, record=9684, p=p)
+    assert int(resume_out["action_frame"][p]) == int(resume_ref["action_frame"][p]) == 14
+    assert int(resume_out["facing"][p]) == int(resume_ref["facing"][p]) == 0
+
+    post_flip_accel_seed = ds.samples[9687]
+    assert int(post_flip_accel_seed["seed_t"]["action_id"][p]) == 19
+    assert int(post_flip_accel_seed["seed_t"]["facing"][p]) == 0
+    assert int(post_flip_accel_seed["seed_t"]["facing_dir1"][p]) == 1
+    assert float(post_flip_accel_seed["seed_t"]["speed_ground_x_self"][p]) == pytest.approx(0.0)
+    _, accel_ref, accel_out = _run_one_step_row(dataset_path, 9687, p)
+    _assert_transition_lock_fields_match_ref(out_row=accel_out, ref_row=accel_ref, record=9687, p=p)
+    assert float(accel_out["speed_ground_x_self"][p]) == pytest.approx(
+        float(accel_ref["speed_ground_x_self"][p])
+    )
+    assert float(accel_out["speed_air_x_self"][p]) == pytest.approx(
+        float(accel_ref["speed_air_x_self"][p])
+    )
+
+    rollout = _run_turnrun_rollout_records(
+        dataset_path,
+        start_record=9671,
+        target_records=(9683, 9684, 9688),
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    for record, (ref_row, out_row) in rollout.items():
+        _assert_transition_lock_fields_match_ref(out_row=out_row, ref_row=ref_row, record=record, p=p)
+        assert int(out_row["facing"][p]) == int(ref_row["facing"][p]), f"record={record}"
+        assert float(out_row["speed_ground_x_self"][p]) == pytest.approx(
+            float(ref_row["speed_ground_x_self"][p])
+        ), f"record={record}"
+
+
 @pytest.mark.integration
 @pytest.mark.parametrize(
     "case",
