@@ -234,6 +234,10 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Rebound.c::{ftCo_80099D9C,ftCo_80099E44}
         # refs/melee/src/melee/ft/types.h::ftCo_DatAttrs
         "rebound_anim_numerator_frames": f(0x9C),
+        # Rapid-jab mash threshold consumed by ftCo_Attack_800D6A50 (`fp->x1A54 >= rapid_jab_window`).
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Attack_800D6A50
+        # refs/melee/src/melee/ft/types.h::ftCo_DatAttrs (+0x98)
+        "rapid_jab_window": int(max(0, min(255, i(0x98)))),
         "landing_lag_frames": int(max(1, landing_lag_frames)),
         "landing_airn_lag_frames": int(max(1, landing_airn_lag_frames)),
         "landing_airf_lag_frames": int(max(1, landing_airf_lag_frames)),
@@ -456,6 +460,7 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
         "ground_max_horizontal_velocity",
         "turn_frames",
         "rebound_anim_numerator_frames",
+        "rapid_jab_window",
         "jump_startup_frames",
         "jump_h_initial_velocity",
         "jump_v_initial_velocity",

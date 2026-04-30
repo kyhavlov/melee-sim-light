@@ -1843,6 +1843,7 @@ static inline void combat_apply_ftCommon_8007D5D4_ground_to_air(MslBatch* batch,
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
   batch->state.on_ground[idx] = 0u;
+  batch->state.ecb_lock_timer[idx] = MSL_ECB_LOCK_FRAMES_COMMON_GROUND_TO_AIR;
   // Narrow ownership parity for this lane: keep existing velocity ownership in its current
   // systems and source jumpsUsed parity here (jumps_left=max_jumps-1).
   // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
@@ -2077,6 +2078,7 @@ static inline void combat_combo_ftColl_800763C0(MslBatch* batch, size_t a_idx, i
   if (batch == NULL) {
     return;
   }
+  const MslCommonParams* c = msl_common_params();
   const int num_players = (int)batch->config.num_players;
   if (defender < 0 || defender >= num_players) {
     return;
@@ -2102,6 +2104,14 @@ static inline void combat_combo_ftColl_800763C0(MslBatch* batch, size_t a_idx, i
     if (attack_id_u16 != (uint16_t)MSL_FT_MOVE_ID_DEFAULT &&
         batch->state.last_attack_landed[a_idx] == attack_id_u8) {
       batch->state.combo_count[a_idx] = (uint8_t)(batch->state.combo_count[a_idx] + 1u);
+      if (c != NULL && c->combo_push_count_threshold != 0u &&
+          batch->state.combo_count[a_idx] >= (uint8_t)c->combo_push_count_threshold) {
+        // Decomp: ftColl_800763C0 arms fp->x2092 = p_ftCommonData->x4D8 once repeated
+        // same-attack combo count reaches x4C4; ftColl_80076528 consumes it later as a grounded
+        // attacker push along the floor normal.
+        // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800763C0,ftColl_80076528}
+        batch->state.combo_push_timer_x2092[a_idx] = c->combo_push_timer_frames;
+      }
     } else {
       batch->state.combo_count[a_idx] = 0u;
       batch->state.last_attack_landed[a_idx] = attack_id_u8;

@@ -85,6 +85,7 @@ static MslFrameWindow g_allow_interrupt_by_char_escape_n[256];
 static MslFrameWindow g_throw_flags_by_char_escape_f[256];
 static MslFrameWindow g_jab_combo_by_char_grounded_attack[256][MSL_GROUNDED_ATTACK_KIND_COUNT];
 static MslFrameWindow g_jab_rapid_by_char_grounded_attack[256][MSL_GROUNDED_ATTACK_KIND_COUNT];
+static MslFramePulses g_attack100_loop_end_check_by_char[256];
 static MslFrameWindow g_cmd0_by_char_dash[256];
 static MslFrameWindow g_cmd0_by_char_runbrake[256];
 static MslFrameWindow g_cmd0_by_char_escapeair[256];
@@ -1271,6 +1272,71 @@ static int parse_special_pseudo_random_sfx_ranges(const char* move_obj_start,
   return 0;
 }
 
+static int parse_set_throw_flags_hit_idx_pulses(const char* buf, const char* buf_end,
+                                                const char* move_key, int want_hit_idx,
+                                                MslFramePulses* out_pulses) {
+  if (buf == NULL || buf_end == NULL || move_key == NULL || out_pulses == NULL) {
+    return -1;
+  }
+  char pat[128];
+  const int pn = snprintf(pat, sizeof(pat), "\"%s\"", move_key);
+  if (pn <= 0 || (size_t)pn >= sizeof(pat)) {
+    return -1;
+  }
+  const char* key_pos = strstr_range(buf, buf_end, pat);
+  if (key_pos == NULL) {
+    return -1;
+  }
+  const char* obj_start = (const char*)memchr(key_pos, '{', (size_t)(buf_end - key_pos));
+  if (obj_start == NULL) {
+    return -1;
+  }
+  const char* obj_end = json_find_matching_delim(obj_start, buf_end, '{', '}');
+  if (obj_end == NULL) {
+    return -1;
+  }
+  const char* events_key = strstr_range(obj_start, obj_end, "\"events\"");
+  if (events_key == NULL) {
+    return -1;
+  }
+  const char* arr_start = (const char*)memchr(events_key, '[', (size_t)(obj_end - events_key));
+  if (arr_start == NULL) {
+    return -1;
+  }
+  const char* arr_end = json_find_matching_delim(arr_start, obj_end, '[', ']');
+  if (arr_end == NULL) {
+    return -1;
+  }
+
+  MslFramePulses pulses = {0};
+  const char* p = arr_start;
+  while (p && p < arr_end) {
+    const char* ev_start = (const char*)memchr(p, '{', (size_t)(arr_end - p));
+    if (ev_start == NULL) {
+      break;
+    }
+    const char* ev_end = json_find_matching_delim(ev_start, arr_end, '{', '}');
+    if (ev_end == NULL) {
+      break;
+    }
+    if (json_get_str_eq_in_range(ev_start, ev_end, "kind", "set_throw_flags")) {
+      int frame = 0;
+      int hit_idx = -1;
+      if (json_get_i32_in_range(ev_start, ev_end, "frame", &frame) == 0 &&
+          json_get_i32_in_range(ev_start, ev_end, "hit_idx", &hit_idx) == 0 &&
+          hit_idx == want_hit_idx) {
+        frame_pulses_push(&pulses, frame);
+      }
+    }
+    p = ev_end + 1;
+  }
+  if (pulses.count > 0u) {
+    pulses.loaded = 1u;
+  }
+  *out_pulses = pulses;
+  return pulses.loaded ? 0 : -1;
+}
+
 static int parse_specials_by_msid_pseudo_random_sfx(const char* buf, const char* buf_end,
                                                     uint8_t char_id) {
   if (buf == NULL || buf_end == NULL) {
@@ -1686,6 +1752,11 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
   if (parse_jab_rapid_window_open_end(buf, buf_end, "ftCo_SM_Attack12", &win) == 0) {
     g_jab_rapid_by_char_grounded_attack[char_id][MSL_GROUNDED_ATTACK_KIND_12] = win;
   }
+  MslFramePulses attack100_loop_end = {0};
+  if (parse_set_throw_flags_hit_idx_pulses(buf, buf_end, "ftCo_SM_Attack100Loop", 0,
+                                           &attack100_loop_end) == 0) {
+    g_attack100_loop_end_check_by_char[char_id] = attack100_loop_end;
+  }
 
   // Dash cmd_var[0] window (used for Dash IASA late transitions).
   //
@@ -2078,6 +2149,25 @@ uint8_t move_tables_jab_rapid_active(uint8_t char_id, uint16_t grounded_action_i
   // refs/melee/src/melee/ft/ftaction.c::ftAction_80071B28
   return (cur_anim_frame_f32 >= (float)win.start_af && cur_anim_frame_f32 < (float)win.end_af) ? 1
                                                                                                : 0;
+}
+
+uint8_t move_tables_attack100_loop_end_check_crossed(uint8_t char_id, int16_t prev_action_frame,
+                                                     int16_t cur_action_frame) {
+  const MslFramePulses pulses = g_attack100_loop_end_check_by_char[char_id];
+  if (!pulses.loaded || pulses.count == 0u) {
+    return 0u;
+  }
+  for (uint8_t i = 0; i < pulses.count; i++) {
+    const int16_t on = pulses.frame[i];
+    if (cur_action_frame >= prev_action_frame) {
+      if (prev_action_frame < on && cur_action_frame >= on) {
+        return 1u;
+      }
+    } else if (prev_action_frame < on || cur_action_frame >= on) {
+      return 1u;
+    }
+  }
+  return 0u;
 }
 
 uint8_t move_tables_dash_cmd0_active(uint8_t char_id, float cur_anim_frame_f32) {

@@ -18,6 +18,7 @@
 // - locomotion_update_post_collision() runs after stage_collision_apply().
 
 void locomotion_update_pre(MslBatch* batch);
+void locomotion_update_anim_callbacks_pre_input(MslBatch* batch);
 
 // Common airborne AttackAir input owner used by Fall/Jump/JumpAerial and reused by DamageFall-
 // shaped IASA ladders.

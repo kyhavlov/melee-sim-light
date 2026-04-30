@@ -144,6 +144,19 @@ uint8_t move_tables_jab_combo_active(uint8_t char_id, uint16_t grounded_action_i
 uint8_t move_tables_jab_rapid_active(uint8_t char_id, uint16_t grounded_action_id,
                                      float cur_anim_frame_f32);
 
+// Returns whether Attack100Loop crossed the script checkpoint that consumes mv.co.attack100.x4.
+//
+// Decomp:
+// - Attack100Loop_Anim consumes throw_flags_b3; when the loop-start latch is set and x4 is false,
+//   it enters Attack100End. Attack100Loop_IASA sets x4 from A pressed/held.
+// refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+//   ftCo_Attack100Loop_Anim,ftCo_Attack100Loop_IASA}
+//
+// Source of truth: data/moves/{fox,falco}.json moves["ftCo_SM_Attack100Loop"]["events"]
+// set_throw_flags(hit_idx=0).
+uint8_t move_tables_attack100_loop_end_check_crossed(uint8_t char_id, int16_t prev_action_frame,
+                                                     int16_t cur_action_frame);
+
 // Returns whether cmd_var[0] is set at the given cur_anim_frame for Dash.
 //
 // Decomp: Dash IASA gates late transitions on `fp->cmd_vars[0]`.

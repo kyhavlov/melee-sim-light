@@ -231,12 +231,15 @@ static inline uint8_t physics_action_uses_ft_80084FA8(uint16_t action_id) {
   // Decomp callback ownership:
   // - ftCo_Attack11/12/13 all use ftCo_Attack11_Phys.
   // - ftCo_Attack11_Phys calls ft_80084FA8.
+  // - ftCo_Attack100Start/Loop/End_Phys call ft_80084FA8.
   // - ftCo_AttackS4_Phys also calls ft_80084FA8 for all AttackS4* variants.
   // - PassiveStandF/B Phys calls ft_80084FA8.
   // - CliffClimb/Attack/Escape quick grounded Phys paths share ftCo_CliffClimb_Phys, which calls
   //   ft_80084FA8 once the option has reached the stage.
   // refs/melee/src/melee/ft/ftmotionstates.c (Attack11/12/13 entries)
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::ftCo_Attack11_Phys
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+  //   ftCo_Attack100Start_Phys,ftCo_Attack100Loop_Phys,ftCo_Attack100End_Phys}
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackS4.c::ftCo_AttackS4_Phys
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveStand.c::ftCo_PassiveStand_Phys
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_CliffClimb_Phys
@@ -244,6 +247,9 @@ static inline uint8_t physics_action_uses_ft_80084FA8(uint16_t action_id) {
     case MSL_ACT_ATTACK_11:
     case MSL_ACT_ATTACK_12:
     case MSL_ACT_ATTACK_13:
+    case MSL_ACT_ATTACK_100_START:
+    case MSL_ACT_ATTACK_100_LOOP:
+    case MSL_ACT_ATTACK_100_END:
     case MSL_ACT_ATTACK_S4_HI:
     case MSL_ACT_ATTACK_S4_HI_S:
     case MSL_ACT_ATTACK_S4_S:
@@ -1242,6 +1248,38 @@ static inline uint8_t ftCommon_CheckFallFast(const MslCommonParams* c, float sti
   return 1;
 }
 
+static inline void physics_apply_combo_push_timer(MslBatch* batch, const MslCommonParams* c,
+                                                  size_t idx) {
+  if (batch == NULL || c == NULL || batch->state.combo_push_timer_x2092[idx] == 0u) {
+    return;
+  }
+
+  uint16_t timer = batch->state.combo_push_timer_x2092[idx];
+  if (batch->state.stocks[idx] != 0u && batch->state.on_ground[idx] != 0u &&
+      batch->state.attached_victim_port[idx] == 0xFFu) {
+    const float speed =
+        (batch->state.combo_count[idx] < (uint8_t)c->combo_push_stronger_count_threshold)
+            ? c->combo_push_low_speed
+            : c->combo_push_high_speed;
+    const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+    const float nx = batch->state.ground_normal_x[idx];
+    const float ny =
+        (batch->state.ground_normal_y[idx] != 0.0f) ? batch->state.ground_normal_y[idx] : 1.0f;
+
+    // Decomp: ftColl_80076528 decrements fp->x2092 and, while grounded with no victim_gobj,
+    // applies comboCount_Push:
+    //   cur_pos.x -= floor.normal.y * facing_dir * x4D0/x4D4
+    //   cur_pos.y += floor.normal.x * facing_dir * x4D0/x4D4
+    // The timer is armed by ftColl_800763C0 when repeated same-attack combo_count reaches x4C4.
+    // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800763C0,ftColl_80076528}
+    batch->state.pos_x[idx] -= ny * facing_dir * speed;
+    batch->state.pos_y[idx] += nx * facing_dir * speed;
+  }
+
+  timer--;
+  batch->state.combo_push_timer_x2092[idx] = timer;
+}
+
 void physics_integrate(MslBatch* batch) {
   if (batch == NULL) {
     return;
@@ -1281,6 +1319,7 @@ void physics_integrate(MslBatch* batch) {
       // - refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate runs its main integration block only
       //   under `if (!fp->x2219_b5)`.
       if (batch->state.hitlag_started_frame[idx] != 0) {
+        physics_apply_combo_push_timer(batch, c, idx);
         continue;
       }
 
@@ -2040,6 +2079,7 @@ void physics_integrate(MslBatch* batch) {
       batch->state.pos_y[idx] += vy_kb;
       batch->state.pos_x[idx] += atk_shield_kb_x;
       batch->state.pos_y[idx] += atk_shield_kb_y;
+      physics_apply_combo_push_timer(batch, c, idx);
 
       // Post-integration gravity update for states we intentionally keep "seed-driven" for current
       // frame displacement (notably DamageFall; see helper docs above).

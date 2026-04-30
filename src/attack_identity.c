@@ -64,3 +64,20 @@ void attack_identity_on_motion_state_change_ft_800890D0(MslBatch* batch, size_t 
         inc_attack_instance_plStale_IncrementAttackInstance(batch, bi);
   }
 }
+
+void attack_identity_restart_same_move_ft_800892A0(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  const uint16_t move_id = batch->state.attack_id[idx];
+  if (move_id == 0xFFFFu || move_id == (uint16_t)MSL_FT_MOVE_ID_DEFAULT) {
+    return;
+  }
+  const int bi = (int)(idx / (size_t)MSL_MAX_PLAYERS);
+  // Decomp: ft_800892A0 calls inlineC0(fp, fp->x2068_attackID); inlineC0 calls inlineB0 only when
+  // the argument equals the current attack id. Since the source argument is exactly x2068, any
+  // non-default current move id receives a fresh attack instance.
+  // refs/melee/src/melee/ft/ft_0881.c::{ft_800892A0,inlineC0}
+  batch->state.attack_instance[idx] =
+      inc_attack_instance_plStale_IncrementAttackInstance(batch, bi);
+}

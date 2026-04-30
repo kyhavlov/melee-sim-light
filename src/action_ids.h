@@ -383,6 +383,9 @@ typedef enum MslSubmotionId {
   MSL_SM_ATTACK_11 = 46,              // ftCo_SM_Attack11
   MSL_SM_ATTACK_12 = 47,              // ftCo_SM_Attack12
   MSL_SM_ATTACK_13 = 48,              // ftCo_SM_Attack13
+  MSL_SM_ATTACK_100_START = 49,       // ftCo_SM_Attack100Start
+  MSL_SM_ATTACK_100_LOOP = 50,        // ftCo_SM_Attack100Loop
+  MSL_SM_ATTACK_100_END = 51,         // ftCo_SM_Attack100End
   // Grounded attacks (subset) used by the grounded A-attack selector.
   // Source of truth: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCo_Submotion`.
   MSL_SM_ATTACK_DASH = 52,     // ftCo_SM_AttackDash

@@ -1689,6 +1689,7 @@ void action_update_anim_callbacks_pre_input(MslBatch* batch) {
       guard_update_grounded_anim_callback_pre_input(batch, idx);
     }
   }
+  locomotion_update_anim_callbacks_pre_input(batch);
   blaster_update_anim_callbacks_pre_input(batch);
   grab_flow_update_anim_callbacks_pre_input(batch);
 }

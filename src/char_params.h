@@ -62,6 +62,16 @@ typedef struct MslCharParams {
   // Rebound anim-speed numerator from ftCo_80099D9C / ftCo_80099E44.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Rebound.c::{ftCo_80099D9C,ftCo_80099E44}
   float rebound_anim_numerator_frames;  // fp->co_attrs.x9C
+  // Rapid-jab mash threshold.
+  //
+  // Decomp: ftCo_Attack_800D6A50 increments fp->x1A54 while A is pressed/released, then enters
+  // Attack100Start when `x1A54 >= fp->co_attrs.rapid_jab_window` and x2218_b2 is set.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Attack_800D6A50
+  // refs/melee/src/melee/ft/types.h::ftCo_DatAttrs (+0x98)
+  //
+  // Source of truth: ISO-extracted `data/characters/*.json` `rapid_jab_window`.
+  uint8_t rapid_jab_window;
+  uint8_t _pad_u8_rapid_jab_window[3];
 
   float jump_h_initial_velocity;
   float jump_v_initial_velocity;

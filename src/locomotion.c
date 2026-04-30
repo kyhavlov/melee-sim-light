@@ -9,6 +9,7 @@
 #include "anim_pose.h"
 #include "anim_timebase.h"
 #include "anim_table.h"
+#include "attack_identity.h"
 #include "buttons.h"
 #include "blaster.h"
 #include "char_params.h"
@@ -1182,6 +1183,12 @@ static inline uint32_t grounded_attack_submotion_from_action(uint16_t action_id)
       return (uint32_t)MSL_SM_ATTACK_12;
     case MSL_ACT_ATTACK_13:
       return (uint32_t)MSL_SM_ATTACK_13;
+    case MSL_ACT_ATTACK_100_START:
+      return (uint32_t)MSL_SM_ATTACK_100_START;
+    case MSL_ACT_ATTACK_100_LOOP:
+      return (uint32_t)MSL_SM_ATTACK_100_LOOP;
+    case MSL_ACT_ATTACK_100_END:
+      return (uint32_t)MSL_SM_ATTACK_100_END;
     case MSL_ACT_ATTACK_DASH:
       return (uint32_t)MSL_SM_ATTACK_DASH;
     case MSL_ACT_ATTACK_S3_HI:
@@ -1499,6 +1506,10 @@ static inline uint8_t grounded_a_attack_try_enter_from_iasa(
   if (act == (uint16_t)MSL_ACT_ATTACK_11 || act == (uint16_t)MSL_ACT_ATTACK_12 ||
       act == (uint16_t)MSL_ACT_ATTACK_13) {
     batch->state.jab_x0[idx] = 0;
+    batch->state.jab_rapid_count[idx] = 0;
+  } else if (act != (uint16_t)MSL_ACT_ATTACK_100_LOOP) {
+    batch->state.attack100_x0[idx] = 0;
+    batch->state.attack100_x4[idx] = 0;
   }
   // Decomp attack enters call Fighter_ChangeMotionState(..., anim_start=0, anim_speed=1) then
   // ftAnim_8006EBA4. This slice keeps the common enter timebase call and state-local update logic.
@@ -1584,6 +1595,11 @@ static inline uint8_t grounded_attack_update(MslBatch* batch, const MslCommonPar
   if (action_id != (uint16_t)MSL_ACT_ATTACK_11 && action_id != (uint16_t)MSL_ACT_ATTACK_12 &&
       action_id != (uint16_t)MSL_ACT_ATTACK_13) {
     batch->state.jab_x0[idx] = 0;
+    batch->state.jab_rapid_count[idx] = 0;
+  }
+  if (action_id != (uint16_t)MSL_ACT_ATTACK_100_LOOP) {
+    batch->state.attack100_x0[idx] = 0;
+    batch->state.attack100_x4[idx] = 0;
   }
 
   // Keep attack submotion stable while in the motion state.
@@ -1594,6 +1610,23 @@ static inline uint8_t grounded_attack_update(MslBatch* batch, const MslCommonPar
     return 1;
   }
 
+  if (action_id == (uint16_t)MSL_ACT_ATTACK_100_LOOP) {
+    // Attack100Loop_IASA latches A pressed/released into mv.co.attack100.x4. The pre-input Anim
+    // callback consumes script-owned throw_flags_b3 checkpoints before this current-frame input
+    // edge can rescue a loop cycle.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Attack100Loop_IASA
+    const uint16_t buttons_released =
+        (uint16_t)(batch->state.prev_input_buttons[idx] & ~batch->state.input_buttons[idx]);
+    if ((buttons_pressed & (uint16_t)MSL_BUTTON_A) != 0u ||
+        (buttons_released & (uint16_t)MSL_BUTTON_A) != 0u) {
+      batch->state.attack100_x4[idx] = 1u;
+    }
+    return 1u;
+  }
+  if (action_id == (uint16_t)MSL_ACT_ATTACK_100_START ||
+      action_id == (uint16_t)MSL_ACT_ATTACK_100_END) {
+    return 1u;
+  }
   if (anim_finished(char_id, (uint16_t)sm, batch->state.anim_frame_f32[idx])) {
     if (action_id == (uint16_t)MSL_ACT_ATTACK_LW3) {
       // Decomp: AttackLw3_Anim exits through ftCo_800D638C (SquatWait). The later input callback
@@ -1799,6 +1832,72 @@ static inline uint8_t wait_iasa_locomotion_subset_try_enter(
   return 0u;
 }
 
+void locomotion_update_anim_callbacks_pre_input(MslBatch* batch) {
+  if (batch == NULL) {
+    return;
+  }
+  const int num_players = (int)batch->config.num_players;
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    for (int p = 0; p < num_players; p++) {
+      const size_t idx = msl_idx_player(bi, p);
+      if (batch->state.hitlag[idx] != 0u) {
+        continue;
+      }
+      const uint16_t action_id = batch->state.action_id[idx];
+      const uint8_t char_id = batch->state.char_id[idx];
+      if (action_id == (uint16_t)MSL_ACT_ATTACK_100_START) {
+        // Attack100Start_Anim transitions to Attack100Loop during Fighter_8006A360, before
+        // Fighter_procUpdate runs the current-frame IASA callback.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Attack100Start_Anim
+        if (anim_finished(char_id, (uint16_t)MSL_SM_ATTACK_100_START,
+                          batch->state.anim_frame_f32[idx])) {
+          batch->state.action_id[idx] = (uint16_t)MSL_ACT_ATTACK_100_LOOP;
+          batch->state.animation_index[idx] = (uint32_t)MSL_SM_ATTACK_100_LOOP;
+          batch->state.attack100_x0[idx] = 0u;
+          batch->state.attack100_x4[idx] = 0u;
+          msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+        }
+      } else if (action_id == (uint16_t)MSL_ACT_ATTACK_100_LOOP) {
+        // Attack100Loop_Anim consumes the script-owned throw_flags_b3 checkpoint before the IASA
+        // callback can latch current-frame A input into mv.co.attack100.x4.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Attack100Loop_Anim
+        const float cur_anim = batch->state.anim_frame_f32[idx];
+        const float rate = msl_f32_from_q16_16(batch->state.frame_speed_mul_fp_q16_16[idx]);
+        if (cur_anim >= 0.0f && cur_anim < rate) {
+          batch->state.attack100_x0[idx] = 1u;
+          // Attack100Loop_Anim refreshes attack identity at the loop restart before script hitboxes
+          // are interpreted: ft_800892A0 bumps x206C for the same move id and ft_80089824 refreshes
+          // the action-state instance bookkeeping. The x206C bump is required so repeated rapid-jab
+          // hits can enter the stale queue as separate same-move instances.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Attack100Loop_Anim
+          // refs/melee/src/melee/ft/ft_0881.c::ft_800892A0
+          // refs/melee/src/melee/ft/ft_0892.c::ft_80089824
+          attack_identity_restart_same_move_ft_800892A0(batch, idx);
+        }
+        if (move_tables_attack100_loop_end_check_crossed(
+                char_id, batch->state.prev_action_frame[idx], batch->state.action_frame[idx])) {
+          if (batch->state.attack100_x0[idx] != 0u && batch->state.attack100_x4[idx] == 0u) {
+            batch->state.action_id[idx] = (uint16_t)MSL_ACT_ATTACK_100_END;
+            batch->state.animation_index[idx] = (uint32_t)MSL_SM_ATTACK_100_END;
+            msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+          } else {
+            batch->state.attack100_x4[idx] = 0u;
+          }
+        }
+      } else if (action_id == (uint16_t)MSL_ACT_ATTACK_100_END) {
+        // Attack100End_Anim resolves through ft_8008A2BC when the ending animation finishes.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Attack100End_Anim
+        if (anim_finished(char_id, (uint16_t)MSL_SM_ATTACK_100_END,
+                          batch->state.anim_frame_f32[idx])) {
+          batch->state.action_id[idx] = (uint16_t)MSL_ACT_WAIT;
+          batch->state.animation_index[idx] = (uint32_t)MSL_SM_WAIT1_0;
+          msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+        }
+      }
+    }
+  }
+}
+
 uint8_t locomotion_wait_iasa_locomotion_subset_try_enter(
     MslBatch* batch, const MslCommonParams* c, const MslCharParams* ch, size_t idx,
     uint16_t buttons, uint16_t buttons_pressed, float stick_x, float stick_y, uint8_t tilt_timer_x,
@@ -1812,8 +1911,8 @@ uint8_t locomotion_wait_iasa_locomotion_subset_try_enter(
 }
 
 static inline uint8_t grounded_attack_try_jab_chain_subset(
-    MslBatch* batch, size_t idx, uint8_t char_id, uint16_t action_id_start, uint16_t action_id,
-    uint16_t buttons_pressed, float script_frame) {
+    MslBatch* batch, const MslCharParams* ch, size_t idx, uint8_t char_id, uint16_t action_id_start,
+    uint16_t action_id, uint16_t buttons, uint16_t buttons_pressed, float script_frame) {
   if (batch == NULL) {
     return 0u;
   }
@@ -1840,6 +1939,43 @@ static inline uint8_t grounded_attack_try_jab_chain_subset(
   // Runtime ownership in this lane is command-timeline driven from extracted move events.
   // refs/melee/src/melee/ft/ftaction.c::ftAction_80071AE8
   // data/moves/{fox,falco}.json moves["ftCo_SM_Attack11"]["events"] set_jab_combo
+  //
+  // Rapid-jab pre-gate:
+  // - Attack11/12/13 IASA calls ftCo_Attack_800D6A50 before normal jab-chain checks.
+  // - That helper increments fp->x1A54 while A is pressed/released, then enters Attack100Start when
+  //   x2218_b2 is active and the per-character co_attrs.rapid_jab_window threshold is reached.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::{ftCo_Attack11_IASA,ftCo_Attack12_IASA}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Attack_800D6A50
+  // data/characters/{fox,falco}.json::rapid_jab_window
+  // data/moves/{fox,falco}.json moves["ftCo_SM_Attack12"]["events"] set_jab_rapid
+  const uint16_t buttons_released = (uint16_t)(batch->state.prev_input_buttons[idx] & ~buttons);
+  if (((buttons_pressed | buttons_released) & (uint16_t)MSL_BUTTON_A) != 0u &&
+      batch->state.jab_rapid_count[idx] < 255u) {
+    batch->state.jab_rapid_count[idx] = (uint8_t)(batch->state.jab_rapid_count[idx] + 1u);
+  }
+  if (ch != NULL && ch->rapid_jab_window > 0u &&
+      batch->state.jab_rapid_count[idx] >= ch->rapid_jab_window &&
+      move_tables_jab_rapid_active(char_id, action_id, script_frame)) {
+    batch->state.action_id[idx] = (uint16_t)MSL_ACT_ATTACK_100_START;
+    batch->state.animation_index[idx] = (uint32_t)MSL_SM_ATTACK_100_START;
+    batch->state.jab_x0[idx] = 0u;
+    batch->state.attack100_x0[idx] = 0u;
+    batch->state.attack100_x4[idx] = 0u;
+    enum { MSL_ATTACK100_FLAGS_2218_INDEX = 0 };
+    enum { MSL_ATTACK100_FLAG_2218_ALLOW_INTERRUPT = 0x80 };
+    enum { MSL_ATTACK100_FLAG_2218_JAB_COMBO = 0x40 };
+    enum { MSL_ATTACK100_FLAG_2218_JAB_RAPID = 0x20 };
+    const size_t flags_i =
+        idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_ATTACK100_FLAGS_2218_INDEX;
+    batch->state.state_flags[flags_i] &=
+        (uint8_t) ~(uint8_t)(MSL_ATTACK100_FLAG_2218_ALLOW_INTERRUPT |
+                             MSL_ATTACK100_FLAG_2218_JAB_COMBO | MSL_ATTACK100_FLAG_2218_JAB_RAPID);
+    // Attack100Start entry goes through ftCo_800D6B00, which calls ftAnim_8006EBA4
+    // immediately after Fighter_ChangeMotionState; the first visible start row is frame 1.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D6B00
+    msl_anim_timebase_enter_with_policy(batch, idx, 0.0f, 1.0f, MSL_ANIM_ENTER_TICK_IMMEDIATE);
+    return 1u;
+  }
   const uint8_t jab_combo_active = move_tables_jab_combo_active(char_id, action_id, script_frame);
   // Input edge -> jab intent latch (mv.co.attack1.x0 = true) in checkAttack12/checkAttack13.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::{checkAttack12,checkAttack13}
@@ -3395,8 +3531,8 @@ void locomotion_update_pre(MslBatch* batch) {
           }
           if (grounded_attack_submotion_from_action(action_id) != 0xFFFFFFFFu) {
             const float grounded_attack_script_frame = batch->state.anim_frame_f32[idx];
-            if (grounded_attack_try_jab_chain_subset(batch, idx, cid, action_id_start, action_id,
-                                                     buttons_pressed,
+            if (grounded_attack_try_jab_chain_subset(batch, ch, idx, cid, action_id_start,
+                                                     action_id, buttons, buttons_pressed,
                                                      grounded_attack_script_frame)) {
               action_id = batch->state.action_id[idx];
             }
