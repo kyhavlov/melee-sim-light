@@ -284,10 +284,11 @@ function computeRenderData(
     .replayData!.settings.playerSettings.filter(Boolean)
     .find((settings) => settings.playerIndex === playerUpdate.playerIndex)!;
 
+  const startOfActionFrame = getStartOfAction(playerState);
   const startOfActionPlayerState: PlayerState = (
     getPlayerOnFrame(
       playerUpdate.playerIndex,
-      getStartOfAction(playerState),
+      startOfActionFrame,
     ) as PlayerUpdateWithNana
   )[isNana ? "nanaState" : "state"];
   const actionName = actionNameById[playerState.actionStateId];
@@ -297,14 +298,23 @@ function computeRenderData(
     characterData.specialsMap.get(playerState.actionStateId) ??
     actionName;
   const animationFrames = animations[animationName];
+  // RebirthWait calls the common wait-animation callback, which can restart/select a wait anim
+  // after the AObj ends while the action-state timer continues.
+  // refs/melee/src/melee/ft/ft_0D4D.c::ftCo_RebirthWait_Anim
+  // refs/melee/src/melee/ft/ftwaitanim.c::ftCo_8008A7A8
+  const visualActionFrameCounter =
+    actionName === "RebirthWait"
+      ? playerState.frameNumber - startOfActionFrame
+      : playerState.actionStateFrameCounter;
   // TODO: validate L cancels, other fractional frames, and one-indexed
   // animations. I am currently just flooring.
   const frameIndex = animationFrameIndex({
     animationName,
     internalCharacterId: playerState.internalCharacterId,
     animationIndex: playerState.animationIndex,
-    actionStateFrameCounter: playerState.actionStateFrameCounter,
-    frameCount: animationFrames?.length ?? 1,
+    actionStateFrameCounter: visualActionFrameCounter,
+    animationFrames,
+    loopAfterSourceEnd: actionName === "RebirthWait",
   });
   // To save animation file size, duplicate frames just reference earlier
   // matching frames such as "frame20".

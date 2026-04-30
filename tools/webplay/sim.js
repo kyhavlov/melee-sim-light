@@ -47,6 +47,12 @@ export class MslWasmSim {
       throw new Error("failed to allocate WASM IO buffers");
     }
     this.displayFrame = 0;
+    this.lastTimings = {
+      inputMs: 0,
+      stepInputMs: 0,
+      writeCompareMs: 0,
+      totalMs: 0,
+    };
   }
 
   destroy() {
@@ -85,6 +91,8 @@ export class MslWasmSim {
   }
 
   step(controllers) {
+    const totalStartMs = performance.now();
+    const inputStartMs = totalStartMs;
     this.module.HEAPU8.copyWithin(
       this.prevInputPtr,
       this.inputPtr,
@@ -94,7 +102,9 @@ export class MslWasmSim {
     const playerControllers = Array.isArray(controllers) ? controllers : [controllers];
     this.#writeController(0, playerControllers[0] || {});
     this.#writeController(1, playerControllers[1] || {});
+    const inputMs = performance.now() - inputStartMs;
 
+    const stepInputStartMs = performance.now();
     const err = this.module._msl_batch_step_input(
       this.handle,
       this.prevInputPtr,
@@ -102,11 +112,18 @@ export class MslWasmSim {
       this.inputPtr,
       INPUT_SIZE
     );
+    const stepInputMs = performance.now() - stepInputStartMs;
     if (err !== 0) {
       throw new Error(`msl_batch_step_input failed: ${err}`);
     }
+    const writeCompareStartMs = performance.now();
     this.#writeCompare();
+    const writeCompareMs = performance.now() - writeCompareStartMs;
     this.displayFrame += 1;
+    this.lastTimings.inputMs = inputMs;
+    this.lastTimings.stepInputMs = stepInputMs;
+    this.lastTimings.writeCompareMs = writeCompareMs;
+    this.lastTimings.totalMs = performance.now() - totalStartMs;
     return this.compareView();
   }
 

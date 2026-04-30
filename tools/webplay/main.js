@@ -16,6 +16,11 @@ const controlP2Button = document.querySelector("#control-p2");
 const MAX_RENDER_FRAMES = 60 * 60 * 8 + 123;
 const STEP_MS = 1000 / 60;
 const MAX_STEPS_PER_PAINT = 5;
+const MAX_TICK_WORK_MS = STEP_MS;
+const SLOW_STEP_MS = 8;
+const SLOW_TICK_MS = 50;
+const SLOW_PHASE_MS = 8;
+const SLOW_STEP_LOG_CAP = 128;
 
 let sim = null;
 let replayData = null;
@@ -94,6 +99,42 @@ function frameHasDeadPlayer(frame) {
   return frame.players.some((player) => player.state?.isDead);
 }
 
+function recordSlowTick(entry) {
+  const log = window.__webplaySlowSteps || [];
+  log.push(entry);
+  if (log.length > SLOW_STEP_LOG_CAP) {
+    log.splice(0, log.length - SLOW_STEP_LOG_CAP);
+  }
+  window.__webplaySlowSteps = log;
+  console.warn("webplay slow sim tick", entry);
+}
+
+function snapshotWasmTimings() {
+  const timings = sim?.lastTimings;
+  if (!timings) {
+    return null;
+  }
+  return {
+    inputMs: timings.inputMs,
+    stepInputMs: timings.stepInputMs,
+    writeCompareMs: timings.writeCompareMs,
+    totalMs: timings.totalMs,
+  };
+}
+
+function renderViewerFrame(frameNumber, frame) {
+  const renderStartMs = performance.now();
+  // `replayData.frames[frameNumber]` has already been mutated by webplay.
+  // Advancing the viewer is enough, and avoids a second Solid-store write into
+  // the large live frames array every RAF.
+  if (typeof viewer.setFrame === "function") {
+    viewer.setFrame(frameNumber);
+  } else if (typeof viewer.setFrameData === "function") {
+    viewer.setFrameData(frameNumber, frame);
+  }
+  return performance.now() - renderStartMs;
+}
+
 function appendCurrentFrame(controllers, { render = true } = {}) {
   const frameNumber = frameCount + 1;
   if (frameNumber >= MAX_RENDER_FRAMES) {
@@ -106,8 +147,8 @@ function appendCurrentFrame(controllers, { render = true } = {}) {
   frameCount = frameNumber;
   window.__webplayFrameCount = frameCount;
   window.__webplayReplayData = replayData;
-  if (render && typeof viewer.setFrameData === "function") {
-    viewer.setFrameData(frameNumber, frame);
+  if (render && (typeof viewer.setFrame === "function" || typeof viewer.setFrameData === "function")) {
+    renderViewerFrame(frameNumber, frame);
     return;
   }
   if (render && typeof viewer.setFrame === "function") {
@@ -154,29 +195,109 @@ function tick(nowMs) {
   lastTickMs = nowMs;
 
   let steps = 0;
+  const tickStartMs = performance.now();
+  let slowStep = null;
+  let slowPhase = null;
   while (accumulatorMs >= STEP_MS && steps < MAX_STEPS_PER_PAINT) {
     const controllers = controllersForHuman(readHumanController());
+    const stepStartMs = performance.now();
     sim.step(controllers);
+    const stepMs = performance.now() - stepStartMs;
+    const appendStartMs = performance.now();
     const frame = appendCurrentFrame(controllers, { render: false });
+    const appendMs = performance.now() - appendStartMs;
     accumulatorMs -= STEP_MS;
     steps += 1;
+    if (stepMs >= SLOW_STEP_MS && frame) {
+      slowStep = {
+        frame: frameCount,
+        stepMs,
+        wasmTimings: snapshotWasmTimings(),
+        controlledPlayer,
+        players: frame.players.map((player) => ({
+          actionStateId: player.state?.actionStateId,
+          actionStateFrameCounter: player.state?.actionStateFrameCounter,
+          animationIndex: player.state?.animationIndex,
+          stocksRemaining: player.state?.stocksRemaining,
+          isDead: player.state?.isDead,
+          xPosition: player.state?.xPosition,
+          yPosition: player.state?.yPosition,
+        })),
+      };
+    }
+    if (appendMs >= SLOW_PHASE_MS && frame) {
+      slowPhase = {
+        frame: frameCount,
+        phase: "appendFrame",
+        phaseMs: appendMs,
+        wasmTimings: snapshotWasmTimings(),
+        controlledPlayer,
+        players: frame.players.map((player) => ({
+          actionStateId: player.state?.actionStateId,
+          actionStateFrameCounter: player.state?.actionStateFrameCounter,
+          animationIndex: player.state?.animationIndex,
+          stocksRemaining: player.state?.stocksRemaining,
+          isDead: player.state?.isDead,
+          xPosition: player.state?.xPosition,
+          yPosition: player.state?.yPosition,
+        })),
+      };
+    }
     if (frame && frameHasDeadPlayer(frame)) {
+      const resetStartMs = performance.now();
       reset();
+      const resetMs = performance.now() - resetStartMs;
+      if (resetMs >= SLOW_PHASE_MS) {
+        slowPhase = {
+          frame: frameCount,
+          phase: "reset",
+          phaseMs: resetMs,
+          controlledPlayer,
+        };
+      }
       accumulatorMs = 0;
       steps = 0;
+      break;
+    }
+    if (performance.now() - tickStartMs >= MAX_TICK_WORK_MS) {
+      accumulatorMs = 0;
       break;
     }
   }
   if (steps === MAX_STEPS_PER_PAINT && accumulatorMs >= STEP_MS) {
     accumulatorMs = 0;
   }
+  const tickWorkMs = performance.now() - tickStartMs;
+  if (slowStep || slowPhase || tickWorkMs >= SLOW_TICK_MS) {
+    recordSlowTick({
+      ...(slowStep || slowPhase || { frame: frameCount, controlledPlayer }),
+      wasmTimings: snapshotWasmTimings(),
+      tickWorkMs,
+      steps,
+    });
+  }
 
   if (steps > 0) {
     const frame = replayData.frames[frameCount];
-    if (typeof viewer.setFrameData === "function") {
-      viewer.setFrameData(frameCount, frame);
-    } else if (typeof viewer.setFrame === "function") {
-      viewer.setFrame(frameCount);
+    const renderMs = renderViewerFrame(frameCount, frame);
+    if (renderMs >= SLOW_PHASE_MS) {
+      recordSlowTick({
+        frame: frameCount,
+        phase: "renderViewerFrame",
+        phaseMs: renderMs,
+        controlledPlayer,
+        tickWorkMs,
+        steps,
+        players: frame?.players?.map((player) => ({
+          actionStateId: player.state?.actionStateId,
+          actionStateFrameCounter: player.state?.actionStateFrameCounter,
+          animationIndex: player.state?.animationIndex,
+          stocksRemaining: player.state?.stocksRemaining,
+          isDead: player.state?.isDead,
+          xPosition: player.state?.xPosition,
+          yPosition: player.state?.yPosition,
+        })),
+      });
     }
     if ((frameCount % 30) === 0) {
       setStatus(`Running. Frame ${frameCount}. ${playerStatusSuffix()}`);
