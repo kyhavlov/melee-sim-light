@@ -102,6 +102,9 @@ A family is only “closed” when:
 ## Required Last-Mile Behavior
 
 - Treat a mismatch as a **triage entry point**, not the patch boundary.
+- For disruptive rollout targets, run `tools.eval.next_desync_investigation` before patching and
+  include the packet path in the worklog/handoff. Use the packet as evidence, not as an
+  authoritative diagnosis.
 - For each selected mismatch, first identify the shared data-backed owner family when possible:
   MotionState callbacks, script events, item/article kind, stage segment, part/anchor, or explicit
   seed/provenance lane. Prefer closing that owner family over fitting the motivating row.

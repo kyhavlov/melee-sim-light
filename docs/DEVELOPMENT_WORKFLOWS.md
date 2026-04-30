@@ -167,10 +167,11 @@ uv run python -m tools.eval.next_desync_investigation \
 ```
 
 By default this reuses a current disruptive `rows.tsv` when available and writes
-`summary.md`, `ranked.tsv`, `clusters.tsv`, `top_packet.json`, and
-`top_packet.md`. Use `--refresh` to rerun disruptive rollout first. Long-work
-cycles should put the packet path in the worklog before patching the selected
-row/cluster.
+`summary.md`, `ranked.tsv`, `clusters.tsv`, `packet_001.json/.md`, and
+`top_packet.json/.md` as aliases for the first packet. Use `--refresh` to rerun
+disruptive rollout first, `--rows-in <rows.tsv>` to inspect an explicit report,
+and `--top-packets N` to write multiple cluster packets. Long-work cycles should
+put the packet path in the worklog before patching the selected row/cluster.
 
 ## Modelplay Viewer Traces
 

@@ -67,6 +67,9 @@ not gameplay specification; use `SPEC.md` for source-backed mechanics.
   source-owner modeling unless a table actually expresses the distinction.
 - If a table is used only as a guard or diagnostic, say so in the worklog. Do not imply it closes a
   gameplay owner until runtime behavior uses it.
+- For rollout-disruptive targets, start with `tools.eval.next_desync_investigation` and keep the
+  packet path in the worklog. The packet should frame the first hypothesis and evidence sources,
+  but source/decomp/data ownership still decides the fix.
 
 ## Investigation Discipline
 
