@@ -21,9 +21,21 @@ _ACT_CATCH = 212
 _ACT_CATCH_PULL = 213
 _ACT_CATCH_DASH = 214
 _ACT_CATCH_DASH_PULL = 215
+_ACT_DOWN_BOUND_U = 183
+_ACT_DOWN_WAIT_U = 184
+_ACT_DOWN_DAMAGE_U = 185
+_ACT_DOWN_BOUND_D = 191
+_ACT_DOWN_WAIT_D = 192
+_ACT_DOWN_DAMAGE_D = 193
 _ACT_GUARD_ON = 178
 _ACT_CAPTURE_PULLED_HI = 223
 _ACT_CAPTURE_PULLED_LW = 226
+_SM_DOWN_BOUND_U = 183
+_SM_DOWN_WAIT_U = 184
+_SM_DOWN_DAMAGE_U = 185
+_SM_DOWN_BOUND_D = 191
+_SM_DOWN_WAIT_D = 192
+_SM_DOWN_DAMAGE_D = 193
 _SM_WAIT1_0 = 2
 _SM_CATCH_DASH = 243
 
@@ -332,5 +344,80 @@ def test_catchdash_connect_enters_catchdashpull_and_capture_variant(
 
         assert int(out["action_id"][0]) == _ACT_CATCH_DASH_PULL
         assert int(out["action_id"][1]) == expected_victim_action
+    finally:
+        binding.destroy(handle)
+
+
+@pytest.mark.parametrize(
+    ("victim_action", "victim_anim"),
+    [
+        (_ACT_DOWN_BOUND_U, _SM_DOWN_BOUND_U),
+        (_ACT_DOWN_WAIT_U, _SM_DOWN_WAIT_U),
+        (_ACT_DOWN_DAMAGE_U, _SM_DOWN_DAMAGE_U),
+        (_ACT_DOWN_BOUND_D, _SM_DOWN_BOUND_D),
+        (_ACT_DOWN_WAIT_D, _SM_DOWN_WAIT_D),
+        (_ACT_DOWN_DAMAGE_D, _SM_DOWN_DAMAGE_D),
+    ],
+)
+def test_catchdash_overlap_does_not_grab_downed_victim(
+    victim_action: int,
+    victim_anim: int,
+) -> None:
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    compare_stride = int(sizes["compare"])
+
+    handle = binding.init(batch_size=1, num_players=2)
+    try:
+        seed_bytes = np.zeros((1, seed_stride), dtype=np.uint8)
+        seed = seed_bytes.view(SEED_DTYPE).reshape(-1)
+
+        seed["num_players"][0] = np.uint8(2)
+        seed["char_id"][0, 0] = np.uint8(1)  # Fox
+        seed["char_id"][0, 1] = np.uint8(22)  # Falco
+        seed["stocks"][0, :2] = np.uint8(4)
+        seed["instance_id"][0, 0] = np.uint16(1001)
+        seed["instance_id"][0, 1] = np.uint16(2002)
+        seed["grab_owner_port"][0, :] = np.uint8(0xFF)
+
+        seed["action_id"][0, 0] = np.uint16(_ACT_CATCH_DASH)
+        seed["animation_index"][0, 0] = np.uint32(_SM_CATCH_DASH)
+        seed["on_ground"][0, 0] = np.uint8(1)
+        seed["pos_x"][0, 0] = np.float32(0.0)
+        seed["pos_y"][0, 0] = np.float32(0.0)
+
+        seed["action_id"][0, 1] = np.uint16(victim_action)
+        seed["animation_index"][0, 1] = np.uint32(victim_anim)
+        seed["on_ground"][0, 1] = np.uint8(1)
+        seed["pos_x"][0, 1] = np.float32(0.0)
+        seed["pos_y"][0, 1] = np.float32(0.0)
+
+        binding.reseed_seed(handle, seed_bytes)
+        binding.debug_refresh_combat_geometry(handle)
+
+        # Force a catch bubble and a grabbable victim capsule to overlap. Vanilla still rejects this
+        # before capsule narrowphase through the x1A6A/x1A68 catch-mask gate:
+        # Catch installs x1A68=1, and DownBound/DownWait/DownDamage install x1A6A=0x1FF or 1.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D8C54
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::{ftCo_8009794C,ftCo_80097E8C,ftCo_80097F38}
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::ftCo_8009F184
+        # refs/melee/src/melee/ft/ftcoll.c::ftColl_80078A2C
+        binding.debug_clear_hitboxes_world(handle, 0, 0)
+        binding.debug_set_hitbox_world(handle, 0, 0, 0, 0.0, 0.0, 0.0, 3.0, 0.0, 1)
+        binding.debug_set_hitbox_element(handle, 0, 0, 0, _HIT_ELEMENT_CATCH)
+        binding.debug_set_hitbox_flags(handle, 0, 0, 0, _HIT_GROUNDED | _HIT_AERIAL)
+        binding.debug_set_hurtcap_world(handle, 0, 1, 0, -0.5, 0.0, 0.0, 0.5, 0.0, 0.0, 1.0)
+
+        binding.debug_combat_resolve(handle)
+
+        out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+        binding.write_compare(handle, out_bytes)
+        out = out_bytes.view(COMPARE_DTYPE).reshape(-1)[0]
+
+        assert int(out["action_id"][0]) == _ACT_CATCH_DASH
+        assert int(out["action_id"][1]) == victim_action
     finally:
         binding.destroy(handle)

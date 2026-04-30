@@ -626,6 +626,20 @@ static inline uint8_t combat_guardreflect_catch_hurtcap_world(const MslBatch* ba
   return (uint8_t)(*out_r > 0.0f);
 }
 
+static inline uint8_t combat_defender_downed_catch_mask_blocks(uint16_t action_id) {
+  switch (action_id) {
+    case MSL_ACT_DOWN_BOUND_U:
+    case MSL_ACT_DOWN_WAIT_U:
+    case MSL_ACT_DOWN_DAMAGE_U:
+    case MSL_ACT_DOWN_BOUND_D:
+    case MSL_ACT_DOWN_WAIT_D:
+    case MSL_ACT_DOWN_DAMAGE_D:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
 static inline uint8_t combat_guardreflect_body_hurtcap_world(const MslBatch* batch, size_t d_idx,
                                                              const MslHurtCap* cap, uint8_t cap_id,
                                                              uint16_t cap_count, float* out_ax,
@@ -4942,6 +4956,20 @@ static void combat_select_catch_hits_one_mutating(MslBatch* batch, int bi) {
         // refs/melee/src/melee/ft/ft_0D4D.c::{ftCo_800D4FF4,ftCo_800D5600}
         // refs/melee/src/melee/ft/fighter.c::Fighter_8006CB94
         // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078A2C
+        continue;
+      }
+      // Decomp catch target mask:
+      // - Catch entry calls ftCommon_8007E2D0(fp, 1, ...), installing attacker fp->x1A68 = 1.
+      // - DownBound entry calls ftCommon_8007E2F4(fp, 0x1FF); DownBound/DownDamage -> DownWait
+      //   handoffs call ftCommon_8007E2F4(fp, 1).
+      // - ftColl_80078A2C rejects victims when `(victim_fp->x1A6A & this_fp->x1A68) != 0`,
+      //   before grabbable capsule overlap. This is why knocked-down victims are not catchable
+      //   even when their ordinary hurt capsules overlap the grab bubble.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D8C54
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::{ftCo_8009794C,ftCo_80097E8C,ftCo_80097F38}
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::ftCo_8009F184
+      // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078A2C
+      if (combat_defender_downed_catch_mask_blocks(batch->state.action_id[d_idx])) {
         continue;
       }
 
