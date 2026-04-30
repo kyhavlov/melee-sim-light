@@ -692,6 +692,17 @@ void hurtboxes_refresh(MslBatch* batch) {
       }
       batch->state.hurtbox_state[idx] = final_hurtbox_state;
 
+      if (msl_action_owns_respawn_collision_skip(action_id)) {
+        // Rebirth/RebirthWait set fp->x2219_b1. Fighter_8006CB94 skips the common fighter
+        // collision pass while that bit is live, and item-vs-fighter collision rejects x2219_b1
+        // targets. Preserve the visible Slippi hurtbox_state above, but do not build BODY/catch
+        // capsules that vanilla collision will not consume.
+        // refs/melee/src/melee/ft/ft_0D4D.c::{ftCo_800D4FF4,ftCo_800D5600}
+        // refs/melee/src/melee/ft/fighter.c::Fighter_8006CB94
+        // refs/melee/src/melee/it/itcoll.c::it_80272460
+        continue;
+      }
+
       const MslHurtCap* caps = NULL;
       uint16_t cap_count_u16 = 0;
       if (hurtcaps_get(char_id, &caps, &cap_count_u16) != 0 || caps == NULL || cap_count_u16 == 0) {

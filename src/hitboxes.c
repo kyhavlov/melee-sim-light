@@ -820,6 +820,15 @@ void hitboxes_refresh(MslBatch* batch) {
 
       batch->state.hitbox_count[idx] = 0;
 
+      if (msl_action_owns_respawn_collision_skip(batch->state.action_id[idx])) {
+        // Rebirth/RebirthWait set fp->x2219_b1, so Fighter_8006CB94 skips common fighter
+        // collision while the platform bit is live. These states have no BODY hitbox owner in the
+        // consumed collision path; leave slots cleared instead of sampling the terminal Wait1 pose.
+        // refs/melee/src/melee/ft/ft_0D4D.c::{ftCo_800D4FF4,ftCo_800D5600}
+        // refs/melee/src/melee/ft/fighter.c::Fighter_8006CB94
+        continue;
+      }
+
       // Same-frame motion-state entry ownership:
       // - Entry paths such as ftFx_SpecialLw_Enter call ftAnim_8006EBA4 after
       //   Fighter_ChangeMotionState, so frame-0 create_hitbox commands can have fired even when
