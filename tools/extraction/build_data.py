@@ -117,11 +117,15 @@ def main() -> None:
         Path("data/hurtbox_states"),
         Path("data/hurtcaps"),
         Path("data/items"),
+        Path("data/items/articles"),
+        Path("data/model_parts"),
         Path("data/motion_state/owners"),
         Path("data/moves"),
         Path("data/shields"),
+        Path("data/scripts"),
         Path("data/special_msids"),
         Path("data/staling/move_id"),
+        Path("data/stages/bin"),
     ):
         d.mkdir(parents=True, exist_ok=True)
 
@@ -129,6 +133,17 @@ def main() -> None:
     _run(
         "tools.extraction.extract_stage_collision",
         ["--dat", str(iso_dir / stage_dat), "--out", str(out_stage)],
+    )
+    _run(
+        "tools.extraction.extract_stage_metadata",
+        [
+            "--dat",
+            str(iso_dir / stage_dat),
+            "--out",
+            str(Path("data/stages/bin") / f"{stage_key}.bin"),
+            "--audit",
+            str(Path("data/stages/bin") / f"{stage_key}.json"),
+        ],
     )
 
     # Common constants.
@@ -238,6 +253,19 @@ def main() -> None:
     )
     # The MSLMSO01 binary is the MotionState owner/callback contract. Its callback_symbols.json
     # manifest is review/debug metadata mapping generated callback ids back to decomp symbols.
+
+    for ch in chars:
+        _run(
+            "tools.extraction.extract_fighter_script_timeline",
+            [
+                "--moves",
+                f"data/moves/{ch}.json",
+                "--out",
+                f"data/scripts/{ch}.bin",
+                "--manifest",
+                f"data/scripts/{ch}_manifest.json",
+            ],
+        )
 
     # Hitbox event tables (moves.json → hitboxes.bin; compact binary for init-time load).
     #
@@ -353,6 +381,21 @@ def main() -> None:
             timings.append(("tools.extraction.copy_fighter_anims", dt))
             print(f"[timing] tools.extraction.copy_fighter_anims {dt:.3f}s", flush=True)
         _run(
+            "tools.extraction.extract_fighter_parts",
+            [
+                "--character",
+                ch,
+                "--attrs",
+                f"data/characters/{ch}.json",
+                "--tracks",
+                f"data/anims/{ch}.tracks.bin",
+                "--out",
+                f"data/model_parts/{ch}.bin",
+                "--audit",
+                f"data/model_parts/{ch}.json",
+            ],
+        )
+        _run(
             "tools.extraction.extract_ecb_bottom",
             [
                 "--character",
@@ -365,6 +408,7 @@ def main() -> None:
                 f"data/ecb/{ch}_bottom.bin",
             ],
         )
+
         _run(
             "tools.extraction.extract_ecb_extents",
             [
@@ -378,6 +422,22 @@ def main() -> None:
                 f"data/ecb/{ch}_extents.bin",
             ],
         )
+
+    _run(
+        "tools.extraction.extract_item_articles",
+        [
+            "--attrs-dir",
+            "data/characters",
+            "--item-common",
+            "data/items/item_common.json",
+            "--out",
+            "data/items/articles/fox_falco.bin",
+            "--manifest",
+            "data/items/articles/manifest.json",
+            "--chars",
+            ",".join(chars),
+        ],
+    )
 
     summary = {
         "stage": str(out_stage),

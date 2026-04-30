@@ -582,6 +582,94 @@ Characters (Fox/Falco):
     back to decomp symbol names. Runtime loads only the binary tables.
   - Stale/non-v1 `MSLMSO01` tables must be rejected; regenerate with
     `uv run python -m tools.extraction.extract_motion_state_owners --melee_decomp refs/melee --out_dir data/motion_state/owners --chars fox,falco`.
+- `data/stages/bin/grnla.bin` (stage collision/metadata; decomp-first, compact binary)
+  - Purpose:
+    - Pack the stable, source-backed Final Destination stage data currently emitted by
+      `data/stages/final_destination.json` into a versioned artifact for future runtime/tooling consumers.
+    - Preserve source collision line IDs, floor/wall/ceiling class, line flags, ledge/platform bits,
+      and raw stage-point positions.
+    - Named spawn/respawn/camera/blast point roles are deliberately not packed in v1 because the
+      current JSON labels those roles through an FD coordinate heuristic; the source-backed
+      DAT -> `stage_info.x280` point mapping remains future extraction work.
+    - This does **not** encode procedural mpColl branch outcomes or inferred behavior categories.
+  - Sources:
+    - `_iso/GrNLa.dat` public symbols `coll_data`, `grGroundParam`, and `map_head`
+    - `refs/melee/src/melee/mp/types.h::MapCollData`
+    - `refs/melee/src/melee/gr/ground.c::Ground_801C126C`, `Ground_801C39C0`, `Ground_801C3BB4`
+    - `refs/melee/src/melee/gr/stage.c::Stage_80224E64`, `Stage_80224E38`
+  - Binary layout: `MSLSTG01` v1
+    - `u8 magic[8] = "MSLSTG01"`
+    - `u32 version = 1`
+    - `u16 segment_count`, `stage_point_count`, reserved spawn/respawn counts currently `0`, reserved lanes
+    - reserved `f32 cam_bounds_world[left,right,top,bottom]` currently unset and encoded as zeros
+    - reserved `f32 blast_bounds_world[left,right,top,bottom]` currently unset and encoded as zeros
+    - segment records: `line_id`, `kind_id`, `flags(platform/ledge)`, raw `hi_flags/lo_flags`,
+      unscaled DAT endpoints `(x0,y0,x1,y1)`
+    - raw stage-point coordinate payloads
+  - Stale/non-v1 `MSLSTG01` tables must be rejected; regenerate with
+    `uv run python -m tools.extraction.extract_stage_metadata --dat _iso/GrNLa.dat --out data/stages/bin/grnla.bin --audit data/stages/bin/grnla.json`.
+- `data/model_parts/fox.bin`, `data/model_parts/falco.bin` (fighter part/anchor descriptors; compact binary)
+  - Purpose:
+    - Expose known static part metadata and named gameplay anchors without live pose solving.
+    - Include SSANIMT1 local part order, parent links, JObj flags, ECB source joints,
+      laser spawn joint, reflector bone, camera target, and grab/capture anchor parts.
+  - Sources:
+    - `data/anims/<char>.tracks.bin` (`SSANIMT1` local-part tables)
+    - `data/characters/<char>.json` attrs extracted from `PlCo.dat`, `PlFx.dat`, and `PlFc.dat`
+    - `refs/melee/src/sysdolphin/baselib/jobj.h`
+    - `refs/melee/src/melee/ft/forward.h` fighter part ID domain
+  - Binary layout: `MSLPART1` v1
+    - `u8 magic[8] = "MSLPART1"`
+    - `u32 version = 1`
+    - `u16 char_id`, `local_part_count`, `anchor_count`, reserved
+    - local-part records: `part_id`, `parent_part_id`, `jobj_flags`
+    - anchor records: `anchor_kind`, `part_id`, `aux`
+  - This artifact is generated/ignored data. Stale/non-v1 tables must be rejected by tooling readers;
+    regenerate through `tools.extraction.build_data`.
+- `data/items/articles/fox_falco.bin` (known common/Fox/Falco item article fields; `MSLITAR1` compact binary)
+  - Purpose:
+    - Collect stable, named item/article constants for Fox/Falco blaster, laser, illusion/phantasm,
+      and item-common shield bounce data.
+    - This is a known-field table only; it does not classify item behavior from replay observations.
+  - Sources:
+    - `data/characters/{fox,falco}.json`
+    - `data/items/item_common.json`
+    - `refs/melee/src/melee/it/types.h`
+    - `refs/melee/src/melee/it/item.c::Item_80269DC8`
+    - `refs/melee/src/melee/it/items/itfoxblaster.c`
+    - `refs/melee/src/melee/it/items/itfoxillusion.c`
+  - Character id domain: GALE01 internal `FighterKind` enum (`Fox=2`, `Falco=20`), not the
+    Slippi/sim external character id domain.
+  - Binary layout: `MSLITAR1` v1
+    - `u8 magic[8] = "MSLITAR1"`
+    - `u32 version = 1`
+    - `u32 record_count`
+    - records: `char_id`, `char_domain`, `value_type`, generated `field_id`, `unit_id`,
+      `u32_value`, `f32_value`, reserved bytes
+    - `data/items/articles/manifest.json` maps generated field IDs, value types, units, and
+      character domain to names for review/tooling.
+  - Generated/ignored; regenerate through `tools.extraction.build_data`.
+- `data/scripts/fox.bin`, `data/scripts/falco.bin` (unified decoded fighter script timeline; compact binary)
+  - Purpose:
+    - Canonical packed/indexed representation of already decoded move-script events from
+      `data/moves/<char>.json`.
+    - Include only known decoded events such as hitbox create/modify/clear, IASA, cmd vars,
+      throw flags/hitboxes/projectile pulses, airborne state, hit/hurt status, jab combo/rapid
+      flags, x221C_y flags, bone physics toggles, smash charge, and pseudo-random SFX.
+    - Unknown events are counted in the manifest for diagnostics and are not exposed as gameplay
+      event IDs.
+  - Sources:
+    - `data/moves/<char>.json`
+    - `refs/melee/src/melee/ft/ftaction.c` command handlers
+    - `refs/melee/src/melee/ft/types.h::gmScriptEventDefault`
+  - Binary layout: `MSLFTSC1` v1
+    - `u8 magic[8] = "MSLFTSC1"`
+    - `u32 version = 1`
+    - `u32 entry_count`, `event_count`, `index_off`, `event_off`
+    - index records: `msid`, reserved, first-event index, event count
+    - event records: `frame`, generated `event_kind_id`, payload byte length, canonical JSON payload
+    - `data/scripts/<char>_manifest.json` maps event IDs to names and reports unknown event counts.
+  - Generated/ignored; stale/non-v1 tables must be rejected by tooling readers.
 - `data/shields/fox.bin`, `data/shields/falco.bin` (guard-tilt shield bubble centers; decomp-first, compact binary)
 - `data/hurtcaps/fox.bin`, `data/hurtcaps/falco.bin` (hurt capsule init tables; decomp-first, compact binary)
 - `data/hurtcaps/fox.json`, `data/hurtcaps/falco.json` (hurt capsule init tables; debug-friendly mirror; C loads `.bin` only)

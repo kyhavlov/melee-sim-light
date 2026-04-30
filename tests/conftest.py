@@ -447,6 +447,58 @@ def _ensure_motion_state_owner_bins() -> None:
             raise RuntimeError(f"failed to generate required MotionState owner table: {out}")
 
 
+def _ensure_known_data_artifacts() -> None:
+    expected = [
+        (ROOT / "data" / "stages" / "bin" / "grnla.bin", b"MSLSTG01", 1),
+        (ROOT / "data" / "model_parts" / "fox.bin", b"MSLPART1", 1),
+        (ROOT / "data" / "model_parts" / "falco.bin", b"MSLPART1", 1),
+        (ROOT / "data" / "items" / "articles" / "fox_falco.bin", b"MSLITAR1", 1),
+        (ROOT / "data" / "scripts" / "fox.bin", b"MSLFTSC1", 1),
+        (ROOT / "data" / "scripts" / "falco.bin", b"MSLFTSC1", 1),
+    ]
+    stale = False
+    for path, magic, version in expected:
+        if not path.exists():
+            stale = True
+            break
+        try:
+            with path.open("rb") as f:
+                got_magic = f.read(8)
+                got_version = int.from_bytes(f.read(4), "little", signed=False)
+            if got_magic != magic or got_version != version:
+                stale = True
+                break
+        except OSError:
+            stale = True
+            break
+    if not stale:
+        return
+
+    missing_iso = [p for p in (ROOT / "_iso" / "GrNLa.dat", ROOT / "_iso" / "PlCo.dat", ROOT / "_iso" / "PlFx.dat", ROOT / "_iso" / "PlFc.dat") if not p.exists()]
+    if missing_iso:
+        raise RuntimeError(
+            "missing required known-data artifact(s), and cannot rebuild because _iso inputs are missing: "
+            f"{missing_iso}. Run: `uv run python -m tools.extraction.build_data --iso-dir _iso --stage grnla --chars fox,falco`"
+        )
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "tools.extraction.build_data",
+            "--iso-dir",
+            str(ROOT / "_iso"),
+            "--stage",
+            "grnla",
+            "--chars",
+            "fox,falco",
+        ],
+        check=True,
+    )
+    for path, _magic, _version in expected:
+        if not path.exists():
+            raise RuntimeError(f"failed to generate required known-data artifact: {path}")
+
+
 def pytest_sessionstart(session) -> None:  # type: ignore[no-untyped-def]
     _ensure_motion_state_owner_bins()
     _ensure_tracks_bins()
@@ -456,3 +508,4 @@ def pytest_sessionstart(session) -> None:  # type: ignore[no-untyped-def]
     _ensure_hurtbox_states_bins()
     _ensure_hit_status_bins()
     _ensure_shield_tilt_bins()
+    _ensure_known_data_artifacts()
