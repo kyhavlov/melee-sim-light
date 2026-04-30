@@ -17,6 +17,12 @@ not gameplay specification; use `SPEC.md` for source-backed mechanics.
   - packaging notes
 - Snapshot each completed owner immediately. Do not rely on reconstructing intent from a large
   dirty diff later.
+- After each retained owner, run a validation diff against the cycle baseline before selecting the
+  next owner. Keep a short regression ledger in the worklog; every local one-step, rollout, or
+  float regression must be fixed or explicitly justified before moving on.
+- Once an owner is validation-clean, save a binary patch snapshot such as
+  `git diff --binary > reports/triage/itemNN_owner_name.patch`. Snapshots are for
+  recovery/bisection only; the worklog remains the review manifest.
 - Packaging is a real risk area. Shared files such as `SPEC.md`, `src/items.c`, `src/combat.c`,
   `src/action.c`, validation reports, and schema/data files accumulate unrelated hunks quickly.
 - Runtime-required generated data must get a data-contract decision immediately:
@@ -113,5 +119,7 @@ not gameplay specification; use `SPEC.md` for source-backed mechanics.
 - Fresh disruptive rollout simulation/ranking remains the main slow loop when raw rows must be
   regenerated. Use rerank when existing rows are still valid.
 - Validation reports should remain generator-produced only.
+- Use `uv run python -m tools.eval.validation_report_diff --before <baseline> --after reports/validation`
+  to summarize long validation reports and catch replay-level regressions hidden by suite wins.
 - For modelplay-visible regressions, use compact fixtures under `tests/fixtures/modelplay/`, not
   full `reports/modelplay/**/trace.json` artifacts.

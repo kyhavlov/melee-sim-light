@@ -41,6 +41,17 @@ make validate-all
 after the incremental build check. It uses worker subprocesses by default; set
 `VALIDATE_WORKERS=1` for serial output/debugging.
 
+Diff validation reports against a baseline:
+
+```bash
+uv run python -m tools.eval.validation_report_diff \
+  --before HEAD \
+  --after reports/validation
+```
+
+Use `--fail-on-regression` in long-work checkpoints when a nonzero exit should
+flag any suite or replay-level validation regression for investigation.
+
 Guardrail convenience targets:
 
 ```bash
