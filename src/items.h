@@ -3,17 +3,14 @@
 #include <stdint.h>
 
 #include "batch_internal.h"
-
-enum {
-  MSL_ITEM_TYPE_FOX_ILLUSION = 56u,    // refs/melee/src/melee/it/items/itfoxillusion.c
-  MSL_ITEM_TYPE_FALCO_ILLUSION = 57u,  // refs/melee/src/melee/it/items/itflillusion.c
-};
+#include "item_article_params.h"
 
 static inline uint8_t item_type_is_illusion_article(uint16_t type) {
-  return (type == (uint16_t)MSL_ITEM_TYPE_FOX_ILLUSION ||
-          type == (uint16_t)MSL_ITEM_TYPE_FALCO_ILLUSION)
-             ? 1u
-             : 0u;
+  // MSLITAR1 side_special_illusion_itkind, loaded at init:
+  // refs/melee/src/melee/it/forward.h::ItemKind
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c::ftFx_Init_OnLoad
+  // refs/melee/src/melee/ft/chara/ftFalco/ftFc_Init.c::ftFc_Init_OnLoad
+  return item_article_params_is_illusion_item_type(type);
 }
 
 void items_update(MslBatch* batch);

@@ -18,6 +18,13 @@ from tools.slippi.known_data_artifacts import (
 
 
 CHAR_IDS = {"fox": 2, "falco": 20}
+ILLUSION_ITEM_KINDS = {
+    # refs/melee/src/melee/it/forward.h::ItemKind
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c::ftFx_Init_OnLoad
+    "fox": 56,
+    # refs/melee/src/melee/ft/chara/ftFalco/ftFc_Init.c::ftFc_Init_OnLoad
+    "falco": 57,
+}
 
 UNIT_ITEM_KIND = 1
 UNIT_PART_ID = 2
@@ -46,6 +53,7 @@ FIELD_SPECS = {
     "illusion_item_state0_damage": FieldSpec(9, ITEM_ARTICLE_VALUE_F32, UNIT_DAMAGE),
     "illusion_item_state1_damage": FieldSpec(10, ITEM_ARTICLE_VALUE_F32, UNIT_DAMAGE),
     "shield_bounce_extra_degrees": FieldSpec(11, ITEM_ARTICLE_VALUE_F32, UNIT_DEGREES),
+    "side_special_illusion_itkind": FieldSpec(12, ITEM_ARTICLE_VALUE_U16, UNIT_ITEM_KIND),
 }
 
 
@@ -83,6 +91,9 @@ def _records(chars: list[str], attrs_dir: Path, item_common: Path) -> list[tuple
         char_id = CHAR_IDS[ch]
         for key, spec in FIELD_SPECS.items():
             if key == "shield_bounce_extra_degrees":
+                continue
+            if key == "side_special_illusion_itkind":
+                out.append((char_id, spec, float(ILLUSION_ITEM_KINDS[ch])))
                 continue
             if key in attrs:
                 out.append((char_id, spec, float(attrs[key])))

@@ -37,6 +37,7 @@
 #include "mtx34.h"
 #include "shield_tilt_table.h"
 #include "laser_params.h"
+#include "item_article_params.h"
 #include "item_common_params.h"
 #include "stage_collision.h"
 #include "staling.h"
@@ -431,6 +432,11 @@ MslBatch* msl_batch_create(int batch_size, int num_players) {
   }
 
   if (item_common_params_init() != 0) {
+    msl_batch_destroy(batch);
+    return NULL;
+  }
+
+  if (item_article_params_init() != 0) {
     msl_batch_destroy(batch);
     return NULL;
   }

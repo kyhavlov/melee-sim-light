@@ -13,6 +13,7 @@
 #include "common_params.h"
 #include "char_params.h"
 #include "hitlist.h"
+#include "item_article_params.h"
 #include "item_common_params.h"
 #include "laser_params.h"
 #include "move_tables.h"
@@ -578,16 +579,34 @@ static inline uint8_t laser_grounded_body_landing_fall_special_aabb_bridge(
 }
 
 enum {
-  // GALE01 ItKind enum values for spacie laser shots.
-  // refs/melee/src/melee/it/forward.h::ItemKind
-  // data/characters/{fox,falco}.json {blaster_shot_itkind,side_special_illusion_item_kind}
+  // Runtime state uses Slippi/sim external character ids. MSLITAR1 stores item-kind data by
+  // GALE01 internal FighterKind and maps to this domain at init.
+  // docs/DATA_CONTRACT.md::MSLITAR1
   MSL_CHAR_FOX = 1,
   MSL_CHAR_FALCO = 22,
-  MSL_IT_KIND_FOX_LASER_SHOT = 54,
-  MSL_IT_KIND_FALCO_LASER_SHOT = 55,
-  MSL_IT_KIND_FOX_ILLUSION = 56,
-  MSL_IT_KIND_FALCO_PHANTASM = 57,
 };
+
+static inline uint16_t item_article_laser_shot_kind(uint8_t char_id) {
+  const MslItemArticleParams* ap = item_article_params_get(char_id);
+  return ap != NULL ? ap->blaster_shot_itkind : 0u;
+}
+
+static inline uint16_t item_article_illusion_kind(uint8_t char_id) {
+  const MslItemArticleParams* ap = item_article_params_get(char_id);
+  return ap != NULL ? ap->side_special_illusion_itkind : 0u;
+}
+
+static inline uint8_t item_type_is_fox_laser(uint16_t item_type) {
+  return item_type == item_article_laser_shot_kind((uint8_t)MSL_CHAR_FOX) ? 1u : 0u;
+}
+
+static inline uint8_t item_type_is_falco_laser(uint16_t item_type) {
+  return item_type == item_article_laser_shot_kind((uint8_t)MSL_CHAR_FALCO) ? 1u : 0u;
+}
+
+static inline uint8_t item_type_is_fox_illusion(uint16_t item_type) {
+  return item_type == item_article_illusion_kind((uint8_t)MSL_CHAR_FOX) ? 1u : 0u;
+}
 
 enum {
   // Throw pulse frames from extracted move scripts:
@@ -696,8 +715,7 @@ static inline uint8_t throw_blaster_pulse_is_seed_stale_latch(uint16_t action_id
   // - ftFx_Throw_Anim consumes throw_flags_b0 once to spawn throw-side laser shots.
   // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
-  if (action_id_u16 == (uint16_t)MSL_ACT_THROW_HI &&
-      shot_itkind == (uint16_t)MSL_IT_KIND_FALCO_LASER_SHOT &&
+  if (action_id_u16 == (uint16_t)MSL_ACT_THROW_HI && item_type_is_falco_laser(shot_itkind) &&
       crossed_pulse_af == (int16_t)MSL_THROWHI_PULSE_MID_AF &&
       prev_frame_i == (uint16_t)MSL_THROWHI_PREV_PHASE_AF) {
     return 1u;
@@ -797,15 +815,8 @@ static void illusion_spawn_from_fighter(MslBatch* batch, int bi, int owner) {
   }
   const size_t o_idx = msl_idx_player(bi, owner);
   const uint8_t char_id = batch->state.char_id[o_idx];
-  uint16_t illusion_itkind = 0u;
-  // Slippi char IDs: Fox=1, Falco=22 (owner-gated to spacies only).
-  // data/characters/{fox,falco}.json (character payloads and side-special item kinds)
-  // refs/melee/src/melee/it/forward.h::ItemKind
-  if (char_id == 1u) {
-    illusion_itkind = (uint16_t)MSL_IT_KIND_FOX_ILLUSION;
-  } else if (char_id == 22u) {
-    illusion_itkind = (uint16_t)MSL_IT_KIND_FALCO_PHANTASM;
-  } else {
+  const uint16_t illusion_itkind = item_article_illusion_kind(char_id);
+  if (illusion_itkind == 0u) {
     return;
   }
   if (items_find_illusion_slot(batch, bi, owner, illusion_itkind) >= 0) {
@@ -1256,7 +1267,7 @@ static inline uint8_t laser_grounded_body_uses_lbcoll_hurt_radius(const MslBatch
   if (batch == NULL) {
     return 0u;
   }
-  if (laser_state != 0u || item_type != (uint16_t)MSL_IT_KIND_FALCO_LASER_SHOT ||
+  if (laser_state != 0u || item_type_is_falco_laser(item_type) == 0u ||
       !(laser_age_frames > 1.0f)) {
     return 0u;
   }
@@ -1409,14 +1420,7 @@ enum {
 };
 
 static inline uint8_t item_type_is_spacie_illusion(uint16_t type) {
-  // GALE01 ItKind enum order:
-  // - It_Kind_Fox_Illusion
-  // - It_Kind_Falco_Phantasm
-  // refs/melee/src/melee/it/forward.h::ItemKind
-  return (type == (uint16_t)MSL_IT_KIND_FOX_ILLUSION ||
-          type == (uint16_t)MSL_IT_KIND_FALCO_PHANTASM)
-             ? 1u
-             : 0u;
+  return item_article_params_is_illusion_item_type(type);
 }
 
 uint8_t items_row_has_fighter_collision_demand(const MslBatch* batch, int bi) {
@@ -2452,10 +2456,7 @@ static int laser_spawn_from_fighter(MslBatch* batch, int bi, int owner, const Ms
   float pos_x = batch->state.pos_x[o_idx] + lx;
   float pos_y = batch->state.pos_y[o_idx] + ly;
   const uint8_t throw_lw_late_pulse_uses_transn_tail =
-      (throw_lw_late_pulse_transn_y != 0u &&
-       lp->shot_itkind == (uint16_t)MSL_IT_KIND_FOX_LASER_SHOT)
-          ? 1u
-          : 0u;
+      (throw_lw_late_pulse_transn_y != 0u && item_type_is_fox_laser(lp->shot_itkind)) ? 1u : 0u;
   if (throw_lw_late_pulse_uses_transn_tail != 0u) {
     // ThrowLw later-pulse persistent shot subset:
     // - SSANIM01 baked joint matrices strip TransN/root translation into the v4 tail.
@@ -2699,7 +2700,7 @@ static void laser_spawn_apply_falco_throwb_startup_body_callback(MslBatch* batch
   const size_t ii = msl_idx_item(bi, slot);
   if (batch->state.item_exists[ii] == 0u || batch->state.item_state[ii] != 1u ||
       batch->state.item_owner[ii] != (int8_t)owner ||
-      batch->state.item_type[ii] != (uint16_t)MSL_IT_KIND_FALCO_LASER_SHOT) {
+      item_type_is_falco_laser(batch->state.item_type[ii]) == 0u) {
     return;
   }
 
@@ -2816,7 +2817,7 @@ static void illusion_items_update_and_collide(MslBatch* batch, int bi) {
       base_y1 = batch->state.illusion_ghost_pos1_y[o_idx];
       base_x0 = base_x1;
       base_y0 = base_y1;
-      if (type == (uint16_t)MSL_IT_KIND_FOX_ILLUSION &&
+      if (item_type_is_fox_illusion(type) &&
           action_is_illusion_end(batch->state.action_id[o_idx])) {
         base_x0 = batch->state.illusion_ghost_pos2_x[o_idx];
         base_y0 = batch->state.illusion_ghost_pos2_y[o_idx];
@@ -3116,7 +3117,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       continue;
     }
     const size_t o_idx = msl_idx_player(bi, owner);
-    if (laser_state == 1u && batch->state.item_type[ii] == (uint16_t)MSL_IT_KIND_FALCO_LASER_SHOT &&
+    if (laser_state == 1u && item_type_is_falco_laser(batch->state.item_type[ii]) &&
         batch->state.action_id[o_idx] == (uint16_t)MSL_ACT_THROW_LW &&
         batch->state.action_frame[o_idx] > 28 &&
         fabsf(batch->state.item_timer[ii] - ((float)lp->lifetime_frames - 1.0f)) <= 1.0e-5f) {
@@ -4313,7 +4314,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           (laser_state == 0u && batch->state.on_ground[d_idx] == 0u &&
            batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_FALL &&
            batch->state.hurtbox_state[d_idx] == 0u && batch->state.shield_radius[d_idx] <= 0.0f &&
-           batch->state.item_type[ii] == (uint16_t)MSL_IT_KIND_FALCO_LASER_SHOT &&
+           item_type_is_falco_laser(batch->state.item_type[ii]) &&
            batch->state.last_attack_landed[d_idx] != batch->state.item_attack_id[ii])
               ? 1u
               : 0u;
@@ -4458,7 +4459,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           }
         }
         if (!throwhi_first_pulse_callback_clear &&
-            batch->state.item_type[ii] == (uint16_t)MSL_IT_KIND_FOX_LASER_SHOT &&
+            item_type_is_fox_laser(batch->state.item_type[ii]) &&
             batch->state.char_id[d_idx] == batch->state.char_id[o_idx] &&
             batch->state.last_attack_landed[d_idx] == 15u &&
             ((batch->state.pos_x[d_idx] - batch->state.pos_x[o_idx]) * vx > 0.0f)) {
@@ -4516,10 +4517,10 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           continue;
         }
         uint8_t throwlw_victim_ring_blocks = 0u;
-        if (batch->state.item_type[ii] == (uint16_t)MSL_IT_KIND_FALCO_LASER_SHOT) {
+        if (item_type_is_falco_laser(batch->state.item_type[ii])) {
           // Falco ThrowLw callback-phase split:
-          // v10 dumps show kind-55 attached rows can carry victims_1 on hitboxes 2/3 while the
-          // next BODY callback still uses hitboxes 0/1. Do not let hb2/3 suppress the miss bridge;
+          // v10 dumps show Falco-laser attached rows can carry victims_1 on hitboxes 2/3 while
+          // the next BODY callback still uses hitboxes 0/1. Do not let hb2/3 suppress the miss bridge;
           // only block when both BODY-phase lanes are already in the victim ring.
           // refs/melee/src/melee/it/itcoll.c::{it_8026FAC4,it_80272460}
           // refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
@@ -4559,14 +4560,14 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         continue;
       }
 
-      if (batch->state.item_type[ii] == (uint16_t)MSL_IT_KIND_FOX_LASER_SHOT &&
+      if (item_type_is_fox_laser(batch->state.item_type[ii]) &&
           batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_PASSIVE) {
         // Passive hidden-colanim BODY guard (Fox laser):
         // - Passive keeps colanim hit status (`Ft_MF_KeepColAnimHitStatus`) across the tech motion;
         //   on replay-proven Fox-laser contacts, a same-frame Passive overlap can be hidden
         //   invulnerability ownership rather than an item BODY consume.
-        // - Keep this scoped to Fox laser type-54 rows; Falco type-55 Passive contacts remain on
-        //   the normal BODY consume path.
+        // - Keep this scoped to Fox laser rows; Falco Passive contacts remain on the normal BODY
+        //   consume path.
         // refs/melee/src/melee/ft/chara/ftCommon/forward.h::ftCo_MF_Passive
         // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
         // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B868
@@ -4813,7 +4814,7 @@ void items_update(MslBatch* batch) {
         }
         const uint8_t cid = batch->state.char_id[o_idx];
         const MslLaserParams* lp = laser_params_get(cid);
-        if (lp == NULL || lp->shot_itkind != (uint16_t)MSL_IT_KIND_FALCO_LASER_SHOT) {
+        if (lp == NULL || !item_type_is_falco_laser(lp->shot_itkind)) {
           continue;
         }
         const float af_cur = items_cur_anim_frame_f32(batch, o_idx);
@@ -5177,7 +5178,7 @@ void items_spawn_pre_physics(MslBatch* batch) {
               throw_command_authoritative = 1u;
             }
             if (!suppress_pending_article && is_first_throwb_pending &&
-                lp->shot_itkind == (uint16_t)MSL_IT_KIND_FOX_LASER_SHOT) {
+                item_type_is_fox_laser(lp->shot_itkind)) {
               const int callback_victim = throw_laser_unique_same_source_victim(batch, bi, p);
               if (callback_victim >= 0) {
                 // ThrowB first-command callback consume:
@@ -5236,8 +5237,8 @@ void items_spawn_pre_physics(MslBatch* batch) {
                   : 0u;
           const uint8_t pending_throwlw_mid_attached_spawn_callback =
               (!suppress_pending_article && action_id == (uint16_t)MSL_ACT_THROW_LW &&
-               lp->shot_itkind == (uint16_t)MSL_IT_KIND_FALCO_LASER_SHOT &&
-               pending_pulse_af == 28u && throw_seed_shot_count[p] == 0u &&
+               item_type_is_falco_laser(lp->shot_itkind) && pending_pulse_af == 28u &&
+               throw_seed_shot_count[p] == 0u &&
                throwlw_attached_victim_for_owner(batch, bi, p) >= 0)
                   ? 1u
                   : 0u;
@@ -5383,7 +5384,7 @@ void items_spawn_pre_physics(MslBatch* batch) {
         }
         if (!should_shoot) {
           if (action_id == (uint16_t)MSL_ACT_THROW_HI && cid == (uint8_t)MSL_CHAR_FALCO &&
-              lp->shot_itkind == (uint16_t)MSL_IT_KIND_FALCO_LASER_SHOT &&
+              item_type_is_falco_laser(lp->shot_itkind) &&
               batch->state.throw_pulse_crossed_prev_frame[idx] ==
                   (uint8_t)MSL_THROWHI_PREV_PHASE_AF &&
               throw_seed_shot_count[p] == 1u &&
@@ -5714,8 +5715,7 @@ void items_spawn_pre_physics(MslBatch* batch) {
                 crossed_pulse_af == (int16_t)MSL_THROWHI_PULSE_MID_AF &&
                 batch->state.throw_command_pending_pulse_frame[idx] == 0u &&
                 batch->state.throw_command_pending_seed_valid[idx] != 0u &&
-                throw_seed_shot_count[p] == 1u &&
-                lp->shot_itkind == (uint16_t)MSL_IT_KIND_FOX_LASER_SHOT) {
+                throw_seed_shot_count[p] == 1u && item_type_is_fox_laser(lp->shot_itkind)) {
               uint8_t same_character_first_pulse_carry = 0u;
               for (int vp = 0; vp < num_players; vp++) {
                 if (vp == p) {
@@ -5829,7 +5829,7 @@ void items_spawn_pre_physics(MslBatch* batch) {
         }
       }
       if (is_blaster_throw && action_id == (uint16_t)MSL_ACT_THROW_B &&
-          lp->shot_itkind == (uint16_t)MSL_IT_KIND_FALCO_LASER_SHOT && shoot_spawn_state == 1u) {
+          item_type_is_falco_laser(lp->shot_itkind) && shoot_spawn_state == 1u) {
         int16_t first_throwb_pulse_af = -1;
         if (move_tables_throw_projectile_first_pulse_frame(cid, action_id,
                                                            &first_throwb_pulse_af) &&
@@ -5859,14 +5859,13 @@ void items_spawn_pre_physics(MslBatch* batch) {
                                    shoot_seed_hitlist_victim_iid, shoot_seed_hitlist_mask);
       (void)spawned_slot;
       if (is_blaster_throw && action_id == (uint16_t)MSL_ACT_THROW_LW &&
-          shoot_throw_lw_late_pulse_transn_y != 0u &&
-          lp->shot_itkind == (uint16_t)MSL_IT_KIND_FOX_LASER_SHOT &&
+          shoot_throw_lw_late_pulse_transn_y != 0u && item_type_is_fox_laser(lp->shot_itkind) &&
           throw_seed_shot_count[p] == 0u) {
         laser_spawn_apply_throwlw_attached_body_callback(batch, bi, p, spawned_slot, lp, 0u,
                                                          shoot_throw_lw_late_pulse_transn_y);
       }
       if (is_blaster_throw && action_id == (uint16_t)MSL_ACT_THROW_LW &&
-          lp->shot_itkind == (uint16_t)MSL_IT_KIND_FALCO_LASER_SHOT &&
+          item_type_is_falco_laser(lp->shot_itkind) &&
           batch->state.throw_pulse_crossed_curr_frame[idx] == 28u &&
           batch->state.action_frame[idx] <= 28 && throw_seed_shot_count[p] == 0u) {
         // Falco ThrowLw frame-28 attached BODY callback:
@@ -5919,7 +5918,7 @@ void items_spawn_pre_physics(MslBatch* batch) {
         }
       }
       if (is_blaster_throw && action_id == (uint16_t)MSL_ACT_THROW_B &&
-          lp->shot_itkind == (uint16_t)MSL_IT_KIND_FALCO_LASER_SHOT) {
+          item_type_is_falco_laser(lp->shot_itkind)) {
         laser_spawn_apply_falco_throwb_startup_body_callback(batch, bi, p, spawned_slot, lp);
       }
     }

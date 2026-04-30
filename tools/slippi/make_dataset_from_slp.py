@@ -15,6 +15,8 @@ from peppi_py import _read_slippi
 from tools.eval.dataset import SAMPLE_DTYPE, write_dataset
 from tools.slippi.action_state_tables import load_action_state_tables
 from tools.slippi.hitstun import hitstun_u16_from_misc_as_and_state_flags3
+from tools.slippi.item_article_data import item_article_kind_set, item_article_values_by_sim_char
+from tools.slippi.known_data_artifacts import read_mslstg01_v1
 from tools.slippi.rollback import finalized_frame_indices
 
 
@@ -33,6 +35,38 @@ def _to_numpy(arr) -> np.ndarray:
     if isinstance(x, np.ndarray) and x.dtype.kind == "f":
         x = np.nan_to_num(x, nan=0.0, posinf=0.0, neginf=0.0)
     return x
+
+
+_STAGE_KIND_BY_ID = {
+    0: "floor",
+    1: "ceiling",
+    2: "right_wall",
+    3: "left_wall",
+    4: "dynamic",
+}
+
+
+def _load_stage_segments_for_seed(*, stage_id: int, data_root: Path) -> list[dict]:
+    if int(stage_id) != 32:
+        return []
+    stage = read_mslstg01_v1(data_root / "stages" / "bin" / "grnla.bin")
+    out: list[dict] = []
+    for seg in stage.segments:
+        out.append(
+            {
+                "i": int(seg.line_id),
+                "kind": _STAGE_KIND_BY_ID.get(int(seg.kind_id), "dynamic"),
+                "platform": bool(int(seg.flags) & 1),
+                "ledge": bool(int(seg.flags) & 2),
+                "hi_flags": int(seg.hi_flags),
+                "lo_flags": int(seg.lo_flags),
+                "x0": float(seg.x0),
+                "y0": float(seg.y0),
+                "x1": float(seg.x1),
+                "y1": float(seg.y1),
+            }
+        )
+    return out
 
 
 def _dir_to_facing(direction: np.ndarray) -> np.ndarray:
@@ -863,8 +897,9 @@ def _load_throw_pulse_seed_tables(
     shot_itkind_by_char: dict[int, int] = {}
     for char_id, key in ((1, "fox"), (22, "falco")):
         moves = json.loads((data_root / "moves" / f"{key}.json").read_text())["moves"]
-        attrs = json.loads((data_root / "characters" / f"{key}.json").read_text())
-        shot_itkind_by_char[int(char_id)] = int(attrs.get("blaster_shot_itkind", 0))
+        shot_itkind_by_char[int(char_id)] = int(
+            item_article_values_by_sim_char(data_root, "blaster_shot_itkind").get(int(char_id), 0)
+        )
         for action_id, move_name in throw_action_to_move.items():
             events = moves.get(move_name, {}).get("events", [])
             pulses = sorted(
@@ -2306,6 +2341,7 @@ def _derive_throw_laser_item_hitlist_seed_lanes(
     seed_instance_id_u16: np.ndarray,
     seed_items: np.ndarray,
     num_players: int,
+    throw_laser_hitbox_masks: dict[int, np.uint8],
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Derive a compact per-item victims_1 seed lane for throw-side laser articles.
@@ -2363,10 +2399,7 @@ def _derive_throw_laser_item_hitlist_seed_lanes(
     # - Falco kind 55 attached ThrowLw controls/positives (QGD:443/454, PRH:527/533/539): victims_1
     #   entries on hitboxes 2/3 coexist with still-eligible BODY callbacks on hitboxes 0/1. Runtime
     #   therefore treats the hitbox mask as a per-HitCapsule suppressor, not an item-wide latch.
-    laser_hitbox_masks = {
-        54: np.uint8(0x03),
-        55: np.uint8(0x0C),
-    }
+    laser_hitbox_masks = dict(throw_laser_hitbox_masks)
     # Replay-real item hitlist dumps for throw lasers show x40_b4 cooldown 16 on populated
     # victims_1 entries. The exact remaining value is not gameplay-critical for one-step reseed,
     # but a nonzero decomp-shaped cooldown preserves tick semantics across the current frame.
@@ -2816,6 +2849,7 @@ def _materialize_illusion_seed_positions(
     post_hitlag_u8: np.ndarray,
     post_instance_hit_by_u16: np.ndarray,
     num_players: int,
+    illusion_item_kinds: tuple[int, ...],
 ) -> np.ndarray:
     """Materialize Illusion/Phantasm seed positions causally from replay history.
 
@@ -2836,13 +2870,10 @@ def _materialize_illusion_seed_positions(
     if n_frames <= 1:
         return out
 
-    # GALE01 item/action ids:
-    # - It_Kind_Fox_Illusion = 56
-    # - It_Kind_Falco_Phantasm = 57
+    # GALE01 item ids come from MSLITAR1 side_special_illusion_itkind:
     # refs/melee/src/melee/it/forward.h::ItemKind
-    IT_KIND_FOX_ILLUSION = 56
-    IT_KIND_FALCO_PHANTASM = 57
-    illusion_item_kinds = (IT_KIND_FOX_ILLUSION, IT_KIND_FALCO_PHANTASM)
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c::ftFx_Init_OnLoad
+    # refs/melee/src/melee/ft/chara/ftFalco/ftFc_Init.c::ftFc_Init_OnLoad
     # - ftFx_MS_SpecialS        = 0x015C (348)
     # - ftFx_MS_SpecialSEnd     = 0x015D (349)
     # - ftFx_MS_SpecialAirS     = 0x015F (351)
@@ -3237,6 +3268,7 @@ def _derive_item_hidden_callback_seed_lanes(
     ref_hitstun_u16: np.ndarray,
     ref_instance_hit_by_u16: np.ndarray,
     num_players: int,
+    laser_types: tuple[int, ...],
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Derive hidden item callback/collision seed lanes for teacher-forced replay reseed.
 
@@ -3259,7 +3291,7 @@ def _derive_item_hidden_callback_seed_lanes(
     body_height = np.zeros((n, slots), dtype=np.uint8)
     callback_flags = np.zeros((n, slots), dtype=np.uint8)
 
-    laser_types = {54, 55}
+    laser_type_set = set(int(t) for t in laser_types)
     guard_actions = {178, 179, 180, 181, 182}
 
     for i in range(n):
@@ -3274,7 +3306,7 @@ def _derive_item_hidden_callback_seed_lanes(
             if int(seed["exists"]) == 0:
                 continue
             item_type = int(seed["type"])
-            if item_type not in laser_types:
+            if item_type not in laser_type_set:
                 continue
 
             seed_iid = int(seed["instance_id"])
@@ -3720,11 +3752,16 @@ def _main_impl(args) -> None:
     landing_fall_special_lag_frames = float(common["landing_fall_special_lag_frames"])
 
     data_root = Path("data")
+    laser_item_types = item_article_kind_set(data_root, "blaster_shot_itkind")
+    laser_kind_by_char = item_article_values_by_sim_char(data_root, "blaster_shot_itkind")
+    throw_laser_hitbox_masks = {
+        int(laser_kind_by_char[1]): np.uint8(0x03),
+        int(laser_kind_by_char[22]): np.uint8(0x0C),
+    }
+    illusion_item_kinds = item_article_kind_set(data_root, "side_special_illusion_itkind")
     end_frames = load_end_frame_tables(data_root)
     stage_segments: list[dict] = []
-    stage_path = data_root / "stages" / "final_destination.json"
-    if stage_path.exists():
-        stage_segments = list(json.loads(stage_path.read_text()).get("segments", []))
+    stage_segments = _load_stage_segments_for_seed(stage_id=stage_id, data_root=data_root)
     char_landing_air_lag_frames: dict[int, dict[str, int]] = {}
     char_fallspecial_landing_lag_frames: dict[int, dict[str, int]] = {}
     char_walk_divisors: dict[int, tuple[float, float, float]] = {}
@@ -5425,6 +5462,7 @@ def _main_impl(args) -> None:
         post_hitlag_u8=post_hitlag_u16_all,
         post_instance_hit_by_u16=post_instance_hit_by_u16_all,
         num_players=num_players,
+        illusion_item_kinds=illusion_item_kinds,
     )
     item_reflect_damage_mul = _derive_item_reflect_damage_mul(
         items_fixed,
@@ -5744,6 +5782,7 @@ def _main_impl(args) -> None:
         seed_instance_id_u16=samples["seed_t"]["instance_id"],
         seed_items=samples["seed_t"]["items"],
         num_players=num_players,
+        throw_laser_hitbox_masks=throw_laser_hitbox_masks,
     )
     samples["seed_t"]["item_hitlist_victim_port"] = item_hitlist_victim_port
     samples["seed_t"]["item_hitlist_victim_cd"] = item_hitlist_victim_cd
@@ -5769,6 +5808,7 @@ def _main_impl(args) -> None:
         ref_hitstun_u16=samples["ref_t1"]["hitstun"],
         ref_instance_hit_by_u16=samples["ref_t1"]["instance_hit_by"],
         num_players=num_players,
+        laser_types=laser_item_types,
     )
     samples["seed_t"]["item_reflect_transfer_port"] = item_reflect_transfer_port
     samples["seed_t"]["item_reflect_transfer_iid"] = item_reflect_transfer_iid

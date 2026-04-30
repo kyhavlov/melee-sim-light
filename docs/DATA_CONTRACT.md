@@ -640,14 +640,16 @@ Characters (Fox/Falco):
     - `data/characters/{fox,falco}.json`
     - `data/items/item_common.json`
     - `refs/melee/src/melee/it/types.h`
+    - `refs/melee/src/melee/it/forward.h::ItemKind`
     - `refs/melee/src/melee/it/item.c::Item_80269DC8`
     - `refs/melee/src/melee/it/items/itfoxblaster.c`
     - `refs/melee/src/melee/it/items/itfoxillusion.c`
+    - `refs/melee/src/melee/ft/chara/ft{Fox,Falco}/ftF{c,x}_Init.c` item-list registration
   - Character id domain: GALE01 internal `FighterKind` enum (`Fox=2`, `Falco=20`), not the
     Slippi/sim external character id domain.
-  - Binary layout: `MSLITAR1` v1
+  - Binary layout: `MSLITAR1` v2
     - `u8 magic[8] = "MSLITAR1"`
-    - `u32 version = 1`
+    - `u32 version = 2`
     - `u32 record_count`
     - records: `char_id`, `char_domain`, `value_type`, generated `field_id`, `unit_id`,
       `u32_value`, `f32_value`, reserved bytes

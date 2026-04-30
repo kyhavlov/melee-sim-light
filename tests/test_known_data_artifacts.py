@@ -11,6 +11,11 @@ import pytest
 from tools.extraction.extract_fighter_parts import ANCHOR_IDS
 from tools.extraction.extract_fighter_script_timeline import EVENT_IDS
 from tools.extraction.extract_item_articles import FIELD_SPECS, UNIT_DEGREES, UNIT_FRAMES, UNIT_ITEM_KIND, UNIT_PART_ID
+from tools.slippi.item_article_data import (
+    SIM_CHAR_TO_GALE01_FIGHTER_KIND,
+    item_article_kind_set,
+    item_article_values_by_sim_char,
+)
 from tools.slippi.known_data_artifacts import (
     ITEM_ARTICLE_CHAR_DOMAIN_GALE01_FIGHTER_KIND,
     ITEM_ARTICLE_MAGIC,
@@ -25,10 +30,11 @@ from tools.slippi.known_data_artifacts import (
     STAGE_MAGIC,
     STAGE_VERSION,
     read_mslftsc1_v1,
-    read_mslitar1_v1,
+    read_mslitar1,
     read_mslpart1_v1,
     read_mslstg01_v1,
 )
+from tools.slippi.make_dataset_from_slp import _load_stage_segments_for_seed
 
 
 @pytest.mark.integration
@@ -74,11 +80,12 @@ def test_fighter_part_metadata_known_anchors() -> None:
 
 @pytest.mark.integration
 def test_item_article_metadata_known_records_and_manifest() -> None:
-    table = read_mslitar1_v1(Path("data/items/articles/fox_falco.bin"))
+    table = read_mslitar1(Path("data/items/articles/fox_falco.bin"))
     assert table.record_count >= 20
     manifest = json.loads(Path("data/items/articles/manifest.json").read_text(encoding="utf-8"))
     fields = {row["name"] for row in manifest["fields"]}
     assert "blaster_shot_itkind" in fields
+    assert "side_special_illusion_itkind" in fields
     assert "laser_lifetime_frames" in fields
     assert "illusion_item_state0_damage" in fields
     assert "shield_bounce_extra_degrees" in fields
@@ -98,6 +105,13 @@ def test_item_article_metadata_known_records_and_manifest() -> None:
     assert fox_laser_kind.u32_value == 54
     falco_laser_kind = rec(20, "blaster_shot_itkind")
     assert falco_laser_kind.u32_value == 55
+    fox_illusion_kind = rec(2, "side_special_illusion_itkind")
+    assert fox_illusion_kind.value_type == ITEM_ARTICLE_VALUE_U16
+    assert fox_illusion_kind.unit_id == UNIT_ITEM_KIND
+    assert fox_illusion_kind.u32_value == 56
+    falco_illusion_kind = rec(20, "side_special_illusion_itkind")
+    assert falco_illusion_kind.value_type == ITEM_ARTICLE_VALUE_U16
+    assert falco_illusion_kind.u32_value == 57
 
     fox_spawn_joint = rec(2, "laser_spawn_joint_part_id")
     assert fox_spawn_joint.unit_id == UNIT_PART_ID
@@ -116,6 +130,30 @@ def test_item_article_metadata_known_records_and_manifest() -> None:
     bounce = rec(2, "shield_bounce_extra_degrees")
     assert bounce.unit_id == UNIT_DEGREES
     assert bounce.f32_value == pytest.approx(45.0)
+
+
+@pytest.mark.integration
+def test_item_article_tooling_accessors_map_to_sim_char_domain() -> None:
+    assert SIM_CHAR_TO_GALE01_FIGHTER_KIND == {1: 2, 22: 20}
+    assert item_article_kind_set(Path("data"), "blaster_shot_itkind") == (54, 55)
+    assert item_article_kind_set(Path("data"), "side_special_illusion_itkind") == (56, 57)
+    by_char = item_article_values_by_sim_char(Path("data"), "laser_lifetime_frames")
+    assert by_char[1] == 35
+    assert by_char[22] == 100
+
+
+@pytest.mark.integration
+def test_stage_seed_segments_are_loaded_from_mslstg01() -> None:
+    segments = _load_stage_segments_for_seed(stage_id=32, data_root=Path("data"))
+    assert len(segments) == 16
+    assert segments[0]["i"] == 0
+    assert segments[0]["kind"] == "floor"
+    assert segments[0]["ledge"] is True
+    assert segments[0]["hi_flags"] == 1
+    assert segments[0]["lo_flags"] == 0x0200
+    assert segments[0]["x0"] == pytest.approx(-85.5656967163086)
+    assert segments[0]["y0"] == pytest.approx(0.0)
+    assert _load_stage_segments_for_seed(stage_id=31, data_root=Path("data")) == []
 
 
 @pytest.mark.integration
@@ -148,7 +186,7 @@ def test_script_timeline_known_decoded_events() -> None:
     [
         (STAGE_MAGIC, STAGE_VERSION, read_mslstg01_v1, "unsupported MSLSTG01 version"),
         (PART_MAGIC, PART_VERSION, read_mslpart1_v1, "unsupported MSLPART1 version"),
-        (ITEM_ARTICLE_MAGIC, ITEM_ARTICLE_VERSION, read_mslitar1_v1, "unsupported MSLITAR1 version"),
+        (ITEM_ARTICLE_MAGIC, ITEM_ARTICLE_VERSION, read_mslitar1, "unsupported MSLITAR1 version"),
         (SCRIPT_MAGIC, SCRIPT_VERSION, read_mslftsc1_v1, "unsupported MSLFTSC1 version"),
     ],
 )

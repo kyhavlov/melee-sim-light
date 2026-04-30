@@ -12,6 +12,7 @@
 #include "common_params.h"
 #include "input_axis.h"
 #include "laser_params.h"
+#include "motion_state_owners.h"
 #include "move_tables.h"
 #include "special_msids.h"
 
@@ -151,16 +152,9 @@ static inline uint8_t action_is_damage_air_or_fly_special_iasa(uint16_t action_i
 }
 
 static inline uint8_t action_is_attackair_special_iasa(uint16_t action_id) {
-  switch (action_id) {
-    case MSL_ACT_ATTACK_AIR_N:
-    case MSL_ACT_ATTACK_AIR_F:
-    case MSL_ACT_ATTACK_AIR_B:
-    case MSL_ACT_ATTACK_AIR_HI:
-    case MSL_ACT_ATTACK_AIR_LW:
-      return 1u;
-    default:
-      return 0u;
-  }
+  // Generated from MotionState callback symbols ftCo_AttackAir_* for the five common aerial
+  // attacks. Exhaustive Fox/Falco equivalence is covered by tests/test_motion_state_owners_table.py.
+  return msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_ATTACK_AIR);
 }
 
 static inline uint8_t damage_air_or_fly_allows_special_air_iasa(const MslBatch* batch, size_t idx) {

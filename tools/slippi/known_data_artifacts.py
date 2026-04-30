@@ -11,7 +11,7 @@ STAGE_VERSION = 1
 PART_MAGIC = b"MSLPART1"
 PART_VERSION = 1
 ITEM_ARTICLE_MAGIC = b"MSLITAR1"
-ITEM_ARTICLE_VERSION = 1
+ITEM_ARTICLE_VERSION = 2
 SCRIPT_MAGIC = b"MSLFTSC1"
 SCRIPT_VERSION = 1
 
@@ -200,7 +200,7 @@ def read_mslpart1_v1(path: Path) -> PartMetadata:
     )
 
 
-def read_mslitar1_v1(path: Path) -> ItemArticleMetadata:
+def read_mslitar1(path: Path) -> ItemArticleMetadata:
     buf = _require_header(path, ITEM_ARTICLE_MAGIC, ITEM_ARTICLE_VERSION, 16)
     (record_count,) = struct.unpack_from("<I", buf, 12)
     expected = 16 + record_count * 24

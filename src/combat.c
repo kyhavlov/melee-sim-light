@@ -25,6 +25,7 @@
 #include "hurtbox_modes_tables.h"
 #include "hurtcaps_tables.h"
 #include "input_axis.h"
+#include "item_article_params.h"
 #include "laser_params.h"
 #include "motion_state_owners.h"
 #include "msl_math.h"
@@ -3976,14 +3977,7 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
     return MSL_ITEM_HIT_NONE;
   }
 
-  enum {
-    MSL_COMBAT_IT_KIND_FOX_ILLUSION = 56,
-    MSL_COMBAT_IT_KIND_FALCO_PHANTASM = 57,
-  };
-  const uint8_t item_is_illusion = (item_type == (uint16_t)MSL_COMBAT_IT_KIND_FOX_ILLUSION ||
-                                    item_type == (uint16_t)MSL_COMBAT_IT_KIND_FALCO_PHANTASM)
-                                       ? 1u
-                                       : 0u;
+  const uint8_t item_is_illusion = item_article_params_is_illusion_item_type(item_type);
 
   // Decomp (GALE01): item-vs-fighter BODY apply stores both:
   // - `HitCapsule.unk_count` (raw/base integer lane from it_80272460),
@@ -4456,9 +4450,9 @@ static inline uint8_t combat_apply_throw_hit_core(MslBatch* batch, int batch_ind
 
   // Throw-hit damage ownership:
   // - set_throw_hitbox writes HitCapsule.damage through ft_80089228(fp->x2068, fp->x206c, raw_damage).
-  // - On ThrowLw release rows in this family, the live attack-id lane is already the throw-laser
-  //   item-domain id (`56`), so use that seeded/runtime identity when present instead of forcing a
-  //   state-based ThrowLw move id.
+  // - On ThrowLw release rows in this family, the live attack-id lane can already be the
+  //   side-special article item-domain id, so use that seeded/runtime identity when present instead
+  //   of forcing a state-based ThrowLw move id.
   // refs/melee/build/GALE01/asm/melee/ft/ftaction.s::ftAction_80071E04
   // refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_8007ABD0
   uint16_t move_id = batch->state.attack_id[a_idx];

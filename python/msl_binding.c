@@ -14,6 +14,7 @@
 #include "../src/char_params.h"
 #include "../src/ecb_tables.h"
 #include "../src/hitlist.h"
+#include "../src/item_article_params.h"
 #include "../src/move_tables.h"
 
 typedef struct {
@@ -1655,6 +1656,36 @@ static PyObject* msl_char_params_ecb_joints_py(PyObject* self, PyObject* args) {
   return out;
 }
 
+static PyObject* msl_item_article_params_py(PyObject* self, PyObject* args) {
+  (void)self;
+  unsigned int char_id_u = 0;
+  if (!PyArg_ParseTuple(args, "I", &char_id_u)) {
+    return NULL;
+  }
+  if (char_id_u > 255u) {
+    PyErr_SetString(PyExc_ValueError, "char_id out of range");
+    return NULL;
+  }
+  if (item_article_params_init() != 0) {
+    PyErr_SetString(PyExc_RuntimeError, "item_article_params_init failed");
+    return NULL;
+  }
+  const MslItemArticleParams* p = item_article_params_get((uint8_t)char_id_u);
+  if (p == NULL) {
+    PyErr_SetString(PyExc_ValueError, "unknown char_id");
+    return NULL;
+  }
+  return Py_BuildValue(
+      "{s:i,s:i,s:i,s:i,s:i,s:f,s:f,s:f,s:f,s:f}", "blaster_shot_itkind",
+      (int)p->blaster_shot_itkind, "blaster_gun_itkind", (int)p->blaster_gun_itkind,
+      "laser_spawn_joint_part_id", (int)p->laser_spawn_joint_part_id, "laser_lifetime_frames",
+      (int)p->laser_lifetime_frames, "side_special_illusion_itkind",
+      (int)p->side_special_illusion_itkind, "laser_damage", (double)p->laser_damage, "laser_size",
+      (double)p->laser_size, "illusion_item_state0_damage", (double)p->illusion_item_state0_damage,
+      "illusion_item_state1_damage", (double)p->illusion_item_state1_damage,
+      "shield_bounce_extra_degrees", (double)p->shield_bounce_extra_degrees);
+}
+
 static PyObject* msl_debug_reset_pose_and_hitboxes_tables_py(PyObject* self, PyObject* args) {
   (void)self;
   (void)args;
@@ -3142,6 +3173,8 @@ static PyMethodDef methods[] = {
      "Get C allocation counters (debug/perf guardrail)."},
     {"char_params_ecb_joints", msl_char_params_ecb_joints_py, METH_VARARGS,
      "char_params_ecb_joints(char_id) -> list[int] loaded from data/characters/<char>.json."},
+    {"item_article_params", msl_item_article_params_py, METH_VARARGS,
+     "item_article_params(char_id) -> dict loaded from MSLITAR1."},
     {"hitlist_ring_demo", msl_hitlist_ring_demo_py, METH_VARARGS,
      "hitlist_ring_demo(inserts) -> (ring, ids_u32[12]) (test-only)"},
     {"debug_reset_pose_and_hitboxes_tables", msl_debug_reset_pose_and_hitboxes_tables_py,
