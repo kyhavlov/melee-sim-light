@@ -366,7 +366,7 @@ def _ensure_shield_tilt_bins() -> None:
                 with out.open("rb") as f:
                     magic = f.read(8)
                     ver = int.from_bytes(f.read(4), "little", signed=False)
-                if magic == b"MSLSHLD1" and ver in (1, 2, 3):
+                if magic == b"MSLSHLD1" and ver == 4:
                     continue
             except OSError:
                 pass

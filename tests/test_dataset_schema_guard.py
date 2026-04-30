@@ -12,6 +12,7 @@ from tools.slippi.make_dataset_from_slp import (
     _derive_specialhi_rotate_model_seed_lane,
     _derive_walljump_phase_seed_lanes,
 )
+from tools.slippi.seed_history import derive_item_spawn_id_counter
 
 
 def test_seed_schema_includes_staling_fields() -> None:
@@ -63,6 +64,8 @@ def test_seed_schema_includes_staling_fields() -> None:
     assert "guard_setoff_exit_frame_speed_mul_f32" in SEED_DTYPE.fields
     # Same-frame fighter-proc order lane for plAttack_80037B08 instance_id entries.
     assert "motion_entry_instance_id_override_u16" in SEED_DTYPE.fields
+    # Item spawn-id global counter (`it_804D6D10` -> item->x1C).
+    assert "item_spawn_id_counter" in SEED_DTYPE.fields
     # Raw Slippi/controller source-owner domain for replay-facing last_hit_by parity.
     assert "source_port0" in SEED_DTYPE.fields
     # Hidden FallSpecial -> LandingFallSpecial interrupt carry bit.
@@ -91,6 +94,10 @@ def test_seed_schema_includes_staling_fields() -> None:
     assert "attacker_shield_ground_kb_vel" in SEED_DTYPE.fields
     assert "combat_shield_contact_hb_kind" in SEED_DTYPE.fields
     assert "combat_shield_hit_int_damage" in SEED_DTYPE.fields
+    assert "combat_shield_damage_taken" in SEED_DTYPE.fields
+    # ReboundStop queued xE8 ground-accel lane.
+    assert "rebound_ground_accel_2_f32" in SEED_DTYPE.fields
+    assert "rebound_anim_rate_f32" in SEED_DTYPE.fields
     assert "guard_reflect_origin_guardon_u8" in SEED_DTYPE.fields
     assert "floor_sweep_prev_pos_x_f32" in SEED_DTYPE.fields
     assert "floor_sweep_prev_pos_y_f32" in SEED_DTYPE.fields
@@ -129,6 +136,31 @@ def test_item_common_data_exports_shield_bounce_threshold_source() -> None:
     # the extracted ItCo.dat item common file instead of a naked gameplay constant.
     data = json.loads(Path("data/items/item_common.json").read_text())
     assert data["shield_bounce_extra_degrees"] == 45.0
+
+
+def test_item_spawn_id_counter_survives_itemless_gaps() -> None:
+    exists = np.array(
+        [
+            [0, 0, 0],
+            [1, 0, 0],
+            [0, 0, 0],
+            [0, 1, 0],
+            [0, 0, 0],
+        ],
+        dtype=np.uint8,
+    )
+    spawn_id = np.array(
+        [
+            [0, 0, 0],
+            [0, 0, 0],
+            [0, 0, 0],
+            [0, 7, 0],
+            [0, 0, 0],
+        ],
+        dtype=np.uint32,
+    )
+    got = derive_item_spawn_id_counter(item_exists_u8_2d=exists, item_spawn_id_u32_2d=spawn_id)
+    assert got.tolist() == [0, 1, 1, 8, 8]
 
 
 def test_landing_fallspecial_allow_interrupt_lane_is_prefix_causal() -> None:

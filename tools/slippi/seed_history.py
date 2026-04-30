@@ -179,6 +179,39 @@ def derive_instance_id_counter(
     return out
 
 
+def derive_item_spawn_id_counter(
+    *, item_exists_u8_2d: np.ndarray, item_spawn_id_u32_2d: np.ndarray
+) -> np.ndarray:
+    """
+    Derive the global item spawn-id counter (`it_804D6D10`) strictly causally from replay items.
+
+    Slippi exposes item->x1C as `item.spawn_id`, but not the global next counter used by
+    Item_80267AA8. Return the next id after the running max observed spawn_id so a rollout seeded
+    after an itemless gap does not reset future item ordering identity.
+    """
+    exists = np.asarray(item_exists_u8_2d, dtype=np.uint8)
+    it = np.asarray(item_spawn_id_u32_2d, dtype=np.uint32)
+    if exists.ndim != 2:
+        raise ValueError("item_exists_u8_2d must be 2D [n_frames, max_items]")
+    if it.ndim != 2:
+        raise ValueError("item_spawn_id_u32_2d must be 2D [n_frames, max_items]")
+    n = int(it.shape[0])
+    if int(exists.shape[0]) != n or int(exists.shape[1]) != int(it.shape[1]):
+        raise ValueError("item exists/spawn_id arrays must have the same shape")
+    out = np.empty(n, dtype=np.uint32)
+    max_seen = 0
+    any_seen = False
+    for i in range(n):
+        live = exists[i] != np.uint8(0)
+        if np.any(live):
+            row_max = int(np.max(it[i][live]))
+            any_seen = True
+            if row_max > max_seen:
+                max_seen = row_max
+        out[i] = np.uint32(max_seen + 1 if any_seen else 0)
+    return out
+
+
 def ucf_process_stick_i8(
     raw_x: np.ndarray,
     raw_y: np.ndarray,
@@ -782,8 +815,8 @@ def load_shield_tilt_table_meta(*, data_dir: str = "data") -> dict[int, tuple[in
             raise ValueError(f"{p}: bad magic (want MSLSHLD1)")
 
         ver = struct.unpack_from("<I", buf, 8)[0]
-        if ver not in (1, 2, 3):
-            raise ValueError(f"{p}: unsupported MSLSHLD1 version={ver} (want 1, 2, or 3)")
+        if ver != 4:
+            raise ValueError(f"{p}: unsupported MSLSHLD1 version={ver} (want 4)")
 
         frame_count, neutral_frame = struct.unpack_from("<HH", buf, 12)
         if frame_count == 0:
@@ -793,11 +826,10 @@ def load_shield_tilt_table_meta(*, data_dir: str = "data") -> dict[int, tuple[in
                 f"{p}: neutral_frame out of range (neutral_frame={neutral_frame}, frame_count={frame_count})"
             )
 
-        hdr = 16 if ver == 1 else (28 if ver == 2 else 32)
+        hdr = 32
         want = hdr + int(frame_count) * 3 * 4
-        if ver == 3:
-            guard_on_frame_count = struct.unpack_from("<H", buf, 28)[0]
-            want += int(guard_on_frame_count) * 3 * 4
+        guard_on_frame_count = struct.unpack_from("<H", buf, 28)[0]
+        want += int(guard_on_frame_count) * 3 * 4
         if len(buf) != want:
             raise ValueError(f"{p}: size mismatch (got {len(buf)}, want {want})")
 

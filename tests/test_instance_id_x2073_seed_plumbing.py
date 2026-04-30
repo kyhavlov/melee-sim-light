@@ -58,15 +58,16 @@ def test_dataset_seeds_instance_id_x2073_and_reseed_respects_it() -> None:
             ("instance_id", ("<u2", (MAX_PLAYERS,))),
             ("instance_id_x2073", ("u1", (MAX_PLAYERS,))),
             ("instance_identity_last_action_id", ("<u2", (MAX_PLAYERS,))),
-                ("instance_id_counter", "<u2"),
-                ("throw_pulse_consumed", ("u1", (MAX_PLAYERS,))),
-                ("throw_pulse_crossed_prev_frame", ("u1", (MAX_PLAYERS,))),
-                ("throw_pending_victim_port", ("u1", (MAX_PLAYERS,))),
-                ("throw_pending_hit_idx", ("u1", (MAX_PLAYERS,))),
-                ("attached_victim_port", ("u1", (MAX_PLAYERS,))),
-            ],
-            align=False,
-        )
+            ("instance_id_counter", "<u2"),
+            ("item_spawn_id_counter", "<u4"),
+            ("throw_pulse_consumed", ("u1", (MAX_PLAYERS,))),
+            ("throw_pulse_crossed_prev_frame", ("u1", (MAX_PLAYERS,))),
+            ("throw_pending_victim_port", ("u1", (MAX_PLAYERS,))),
+            ("throw_pending_hit_idx", ("u1", (MAX_PLAYERS,))),
+            ("attached_victim_port", ("u1", (MAX_PLAYERS,))),
+        ],
+        align=False,
+    )
     assert int(INTERNALS_DTYPE.itemsize) == internals_stride
 
     # Mutate the seed field to a distinct nonzero value and ensure reseed preserves it.

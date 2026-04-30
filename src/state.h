@@ -37,13 +37,17 @@ typedef struct MslStateSoA {
   // One per environment in the batch (per-match global counter).
   // refs/melee/src/melee/pl/plattack.c::plAttack_80037B08
   uint16_t* instance_id_counter;  // [batch]
-  float* match_damage_ratio;      // [batch] (decomp: gm_8016B248 -> StartMeleeRules.x30)
-  uint8_t* is_teams;              // [batch]
-  uint8_t* team_id;               // [batch * MSL_MAX_PLAYERS]
-  uint8_t* char_id;               // [batch * MSL_MAX_PLAYERS]
-  uint8_t* handicap;              // [batch * MSL_MAX_PLAYERS] (decomp: Player_GetHandicap)
-  float* attack_ratio;            // [batch * MSL_MAX_PLAYERS] (decomp: Player_GetAttackRatio)
-  float* defense_ratio;           // [batch * MSL_MAX_PLAYERS] (decomp: Player_GetDefenseRatio)
+  // Global item spawn-id counter (`it_804D6D10`, copied to item->x1C on spawn).
+  // One per environment in the batch. Slippi exposes item->x1C as item spawn_id.
+  // refs/melee/src/melee/it/item.c::Item_80267AA8
+  uint32_t* item_spawn_id_counter;  // [batch]
+  float* match_damage_ratio;        // [batch] (decomp: gm_8016B248 -> StartMeleeRules.x30)
+  uint8_t* is_teams;                // [batch]
+  uint8_t* team_id;                 // [batch * MSL_MAX_PLAYERS]
+  uint8_t* char_id;                 // [batch * MSL_MAX_PLAYERS]
+  uint8_t* handicap;                // [batch * MSL_MAX_PLAYERS] (decomp: Player_GetHandicap)
+  float* attack_ratio;              // [batch * MSL_MAX_PLAYERS] (decomp: Player_GetAttackRatio)
+  float* defense_ratio;             // [batch * MSL_MAX_PLAYERS] (decomp: Player_GetDefenseRatio)
 
   // Kinematics
   float* pos_x;
@@ -90,6 +94,12 @@ typedef struct MslStateSoA {
   float* speed_y_self;
   float* speed_x_attack;
   float* speed_y_attack;
+  // Hidden ReboundStop xE8_ground_accel_2 carry from ftCo_80099D9C -> ftCommon_800804A0.
+  // Runtime clank entry writes it; physics consumes it on the first Rebound frame after hitlag.
+  float* rebound_ground_accel_2;
+  // Hidden ReboundStop `mv.co.rebound.anim_start` rate from the same ftCo_80099D9C owner.
+  // ReboundStop_Anim consumes it when entering Rebound after hitlag.
+  int32_t* rebound_anim_rate_fp_q16_16;
   // Internal Firefox/Firebird launch pose owner (`mv.fx.SpecialHi.rotateModel`).
   // Decomp writes this on launch entry and collision continuation; Phys and FtPart_XRotN pose
   // consumers reuse the stored value instead of deriving a new angle from decelerated self_vel.
@@ -436,6 +446,10 @@ typedef struct MslStateSoA {
   // Per-defender teacher-forced shield-hit x19A4 max int damage for accepted GuardSetOff entries.
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
   uint8_t* combat_shield_hit_int_damage;
+  // Per-defender teacher-forced shield-hit x19A0 shieldDamageTaken for accepted GuardSetOff entries.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  uint8_t* combat_shield_damage_taken;
   // GuardSetOff hitlag-exit ownership phase discriminator for future F02 runtime fixes.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80092F2C,ftCo_GuardSetOff_Anim}
   // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360

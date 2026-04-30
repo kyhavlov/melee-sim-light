@@ -649,6 +649,33 @@ typedef struct MslSeed {
   //   exposed Run rate, leaving the general frame_speed_mul_f32 lane causal.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::ftCo_Run_Anim
   float run_anim_source_vel_f32[MSL_MAX_PLAYERS];
+  // ReboundStop queued ground-accel lane (`fp->xE8_ground_accel_2`) for clank Rebound entry.
+  //
+  // Decomp:
+  // - ftCo_80099D9C computes mv.co.rebound.x0 from dmg.x191C and writes it through
+  //   ftCommon_800804A0.
+  // - Hitlag freezes the queued xE8 lane; the first Rebound physics frame uses old gr_vel for
+  //   current-frame movement, then Fighter_procUpdate applies xE8 to the reported post-frame
+  //   ground velocity.
+  //
+  // Seed/runtime representation:
+  // - Runtime clank/ReboundStop entry writes this lane.
+  // - Teacher-forced ReboundStop hitlag-tail seeds are explicitly non-causal: preprocessing
+  //   backsolves them from the future Rebound transition ground-speed delta because public replay
+  //   post-frames do not expose frozen xE8 while still in ReboundStop hitlag.
+  // - Normal rollouts leave the seed zero and compute the lane from live clank; 0.0 means no
+  //   pending lane.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Rebound.c::ftCo_80099D9C
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804A0
+  float rebound_ground_accel_2_f32[MSL_MAX_PLAYERS];
+  // ReboundStop queued anim rate (`mv.co.rebound.anim_start`) from the same clank owner.
+  //
+  // Runtime clank/ReboundStop entry computes this from `dmg.x191C`; teacher-forced first-Rebound
+  // seeds are explicitly non-causal and may read the replay-visible Rebound timeline rate from a
+  // later row when Slippi's post-frame frame_speed lane is one row late for this owner.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Rebound.c::{
+  //   ftCo_80099D9C,ftCo_ReboundStop_Anim,ftCo_80099E44}
+  float rebound_anim_rate_f32[MSL_MAX_PLAYERS];
   // Narrow replay-facing Turn->KneeBend hidden-facing owner lane.
   //
   // Decomp:
@@ -1009,6 +1036,12 @@ typedef struct MslSeed {
   // from replay-visible instance_id history (fighters + items).
   // refs/melee/src/melee/pl/plattack.c::plAttack_80037B08
   uint16_t instance_id_counter;
+  // Seeded next value for the global item spawn-id counter (`it_804D6D10` -> item->x1C).
+  // Slippi exposes item->x1C as item spawn_id; preprocessing derives this strictly causally from
+  // replay-visible item spawn_id history so rollouts seeded after itemless gaps do not reset the
+  // item ordering identity.
+  // refs/melee/src/melee/it/item.c::Item_80267AA8
+  uint32_t item_spawn_id_counter;
   // Narrow replay-facing same-frame fighter-proc order lane for plAttack_80037B08.
   //
   // Decomp:
@@ -1153,6 +1186,19 @@ typedef struct MslSeed {
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
   uint8_t combat_shield_hit_int_damage[MSL_MAX_PLAYERS];
+
+  // Teacher-forced shield-hit damage-taken accumulator (`fp->x19A0`) for accepted GuardSetOff
+  // entries. x19A4 owns hitlag/shieldstun; x19A0 is a separate collision accumulator consumed by
+  // Fighter_ProcessHit for shield HP depletion.
+  //
+  // Encoding: 0 unknown/use runtime selected contact; N>0 authoritative shieldDamageTaken for this
+  // defender on the current collision frame. Preprocessing derives this from the t->t+1 shield HP
+  // drop, so it is a non-causal teacher-forced one-step lane. It is populated only when replay
+  // shield HP proves x19A0 > seeded x19A4; x19A0 <= x19A4 rows stay on runtime contact selection
+  // until exact per-HitCapsule shield-contact order is exposed.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  uint8_t combat_shield_damage_taken[MSL_MAX_PLAYERS];
 
   // HitCapsule x58 seed lane for teacher-forced one-step replay starts.
   //
@@ -1363,6 +1409,8 @@ typedef struct MslDebugInternals {
   uint16_t instance_identity_last_action_id[MSL_MAX_PLAYERS];
   // Per-environment global counter backing plAttack_80037B08 (unk_804D6480).
   uint16_t instance_id_counter;
+  // Per-environment global item spawn-id counter (`it_804D6D10` -> item->x1C).
+  uint32_t item_spawn_id_counter;
   // One-step seed bridge lane for throw_flags_b0 pulse-consume ownership.
   uint8_t throw_pulse_consumed[MSL_MAX_PLAYERS];
   // One-step seed bridge lane carrying previous-step throw pulse crossing frame (0 = none).
@@ -1972,6 +2020,8 @@ int msl_batch_debug_set_hurtcap_enabled(MslBatch* batch, int batch_index, int pl
                                         int hurtcap_id, int enabled);
 int msl_batch_debug_set_hitlag(MslBatch* batch, int batch_index, int player_index,
                                uint16_t hitlag_frames);
+int msl_batch_debug_set_smash_charge_state(MslBatch* batch, int batch_index, int player_index,
+                                           uint8_t state, uint8_t frames, uint8_t hold_frames_max);
 // Debug/testing helper: override movescript-derived hit status (opcode 26) eligibility.
 // - Pass status=-1 to clear the override (use extracted tables).
 // - Otherwise status must fit in u8 (0=normal, 1=invincible, 2=intangible in current decomp domain).

@@ -36,6 +36,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->opening_input_lock_timer = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * b);
   state->stale_attack_instance_counter = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * b);
   state->instance_id_counter = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * b);
+  state->item_spawn_id_counter = (uint32_t*)alloc_aligned_64(sizeof(uint32_t) * b);
   state->match_damage_ratio = (float*)alloc_aligned_64(sizeof(float) * b);
   state->is_teams = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * b);
   state->team_id = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
@@ -69,6 +70,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->speed_y_self = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->speed_x_attack = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->speed_y_attack = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->rebound_ground_accel_2 = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->rebound_anim_rate_fp_q16_16 = (int32_t*)alloc_aligned_64(sizeof(int32_t) * bp);
   state->specialhi_rotate_model = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->specialhi_rotate_model_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->fighter_scale_y = (float*)alloc_aligned_64(sizeof(float) * bp);
@@ -183,6 +186,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->lightshield_amount = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->guard_setoff_hitlag_damage_min = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->combat_shield_hit_int_damage = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->combat_shield_damage_taken = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->guard_setoff_hitlag_exit_phase_u8 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->guard_setoff_post_hitlag_owner_u8 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->kneebend_jump_input = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
@@ -410,10 +414,10 @@ int state_alloc(MslStateSoA* state, int batch_size) {
 
   if (!state->frame_id || !state->frame_pre_random_seed || !state->stage_id ||
       !state->opening_input_lock_timer || !state->stale_attack_instance_counter ||
-      !state->instance_id_counter || !state->match_damage_ratio || !state->is_teams ||
-      !state->team_id || !state->char_id || !state->handicap || !state->attack_ratio ||
-      !state->defense_ratio || !state->pos_x || !state->pos_y || !state->pos_z ||
-      !state->illusion_ghost_pos0_x || !state->illusion_ghost_pos0_y ||
+      !state->instance_id_counter || !state->item_spawn_id_counter || !state->match_damage_ratio ||
+      !state->is_teams || !state->team_id || !state->char_id || !state->handicap ||
+      !state->attack_ratio || !state->defense_ratio || !state->pos_x || !state->pos_y ||
+      !state->pos_z || !state->illusion_ghost_pos0_x || !state->illusion_ghost_pos0_y ||
       !state->illusion_ghost_pos1_x || !state->illusion_ghost_pos1_y ||
       !state->illusion_ghost_pos2_x || !state->illusion_ghost_pos2_y || !state->prev_pos_x ||
       !state->prev_pos_y || !state->floor_sweep_prev_pos_x || !state->floor_sweep_prev_pos_y ||
@@ -454,6 +458,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->walljump_seed_phase_valid || !state->anim_frame_f32 || !state->anim_frame_fp_q16_16 ||
       !state->frame_speed_mul_fp_q16_16 || !state->walk_anim_source_vel ||
       !state->walk_retarget_tick_source_vel || !state->run_anim_source_vel ||
+      !state->rebound_ground_accel_2 || !state->rebound_anim_rate_fp_q16_16 ||
       !state->turn_kneebend_facing_override || !state->capture_grab_timer ||
       !state->capture_wait_counter || !state->capture_wait_anim_rate_timer ||
       !state->capture_wait_jump_latch || !state->capture_breakout_pending ||
@@ -523,12 +528,12 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->combat_hitlist_victim_iid || !state->combat_hitlist_hb_valid ||
       !state->combat_hitlist_hb_cd || !state->combat_hitlist_hb_victim_iid ||
       !state->combat_shield_contact_hb_kind || !state->combat_shield_hit_int_damage ||
-      !state->hitlist_reseed_gen || !state->fighter_hitlist || !state->fighter_hitlist_init_gen ||
-      !state->stale_queue_index || !state->stale_move_id || !state->stale_attack_instance ||
-      !state->input_buttons || !state->prev_input_buttons || !state->input_buttons_pressed ||
-      !state->input_buttons_released || !state->input_main_x || !state->input_main_y ||
-      !state->prev_input_main_x || !state->prev_input_main_y || !state->input_c_x ||
-      !state->input_c_y || !state->prev_input_c_x || !state->prev_input_c_y ||
+      !state->combat_shield_damage_taken || !state->hitlist_reseed_gen || !state->fighter_hitlist ||
+      !state->fighter_hitlist_init_gen || !state->stale_queue_index || !state->stale_move_id ||
+      !state->stale_attack_instance || !state->input_buttons || !state->prev_input_buttons ||
+      !state->input_buttons_pressed || !state->input_buttons_released || !state->input_main_x ||
+      !state->input_main_y || !state->prev_input_main_x || !state->prev_input_main_y ||
+      !state->input_c_x || !state->input_c_y || !state->prev_input_c_x || !state->prev_input_c_y ||
       !state->prev_input_l || !state->prev_input_r || !state->input_l || !state->input_r ||
       !state->item_exists || !state->item_state || !state->item_type || !state->item_owner ||
       !state->item_instance_id || !state->item_attack_id || !state->item_attack_instance ||
@@ -550,6 +555,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
     state->hitlist_reseed_gen[i] = 1u;
   }
   memset(state->frame_id, 0, sizeof(int32_t) * b);
+  memset(state->item_spawn_id_counter, 0, sizeof(uint32_t) * b);
   memset(state->dynamic_pose_state_valid, 0, sizeof(uint8_t) * bp);
   memset(state->dynamic_pose_apply_collision_matrix, 0, sizeof(uint8_t) * bp);
   memset(state->dynamic_pose_node_count, 0, sizeof(uint8_t) * bp);
@@ -619,6 +625,7 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->opening_input_lock_timer);
   alloc_free(state->stale_attack_instance_counter);
   alloc_free(state->instance_id_counter);
+  alloc_free(state->item_spawn_id_counter);
   alloc_free(state->match_damage_ratio);
   alloc_free(state->is_teams);
   alloc_free(state->team_id);
@@ -732,6 +739,8 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->walk_anim_source_vel);
   alloc_free(state->walk_retarget_tick_source_vel);
   alloc_free(state->run_anim_source_vel);
+  alloc_free(state->rebound_ground_accel_2);
+  alloc_free(state->rebound_anim_rate_fp_q16_16);
   alloc_free(state->turn_kneebend_facing_override);
   alloc_free(state->capture_grab_timer);
   alloc_free(state->capture_wait_counter);
@@ -929,6 +938,7 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->combat_hitlist_hb_victim_iid);
   alloc_free(state->combat_shield_contact_hb_kind);
   alloc_free(state->combat_shield_hit_int_damage);
+  alloc_free(state->combat_shield_damage_taken);
   alloc_free(state->hitlist_reseed_gen);
   alloc_free(state->fighter_hitlist);
   alloc_free(state->fighter_hitlist_init_gen);

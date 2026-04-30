@@ -95,10 +95,17 @@ static inline uint8_t msl_hitlist_victim_is_empty(uint8_t kind_slot) {
   return kind_slot == 0xFFu ? 1u : 0u;
 }
 
+// Internal provenance marker for fighter victims_1 entries materialized from the legacy dense
+// per-(attacker, hit_group, victim) seed lane. Decomp HitVictim identity for fighters is the
+// victim pointer; this simulator keys that by kind_slot/id16, so id32 remains available for this
+// runtime-only seed provenance bit.
+#define MSL_HITLIST_FIGHTER_ID32_SEED_DENSE 0xFFFFFFFFu
+
 // A single victim list entry (compact analogue to refs/melee/src/melee/lb/types.h::HitVictim).
 typedef struct MslHitlistVictimEntry {
   // Identity discriminator:
-  // - kind==FIGHTER: slot = fighter port; id16 = fighter instance_id proxy; id32 unused.
+  // - kind==FIGHTER: slot = fighter port; id16 = fighter instance_id proxy; id32 is runtime-only
+  //   provenance for dense seed materialization.
   // - kind==ITEM: slot = item slot (debug); id32 = item spawn_id (identity); id16 optional (instance_id).
   uint32_t id32;
   uint16_t id16;

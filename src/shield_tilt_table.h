@@ -5,8 +5,8 @@
 // Init-time loader for decomp-shaped guard tilt shield-bubble centers.
 //
 // Source of truth: `data/shields/<character>.bin` (ISO-derived MSLSHLD1 artifact).
-// MSLSHLD1 v3 extends the earlier steady Guard tilt table with GuardOn entry/current-pose data
-// used by the fresh GuardOn projectile-shield owner in items.c.
+// MSLSHLD1 v4 extends the steady Guard tilt table with the ftCo_80091E78
+// `ftData.x20->x8` GuardOn target and GuardOn current-pose data.
 //
 // The simulator consumes this table on the per-frame hot path in shields_refresh() to compute a
 // shield bubble center that depends on guard tilt (stick direction) instead of approximating at
@@ -17,7 +17,7 @@
 
 typedef struct MslShieldTiltTableView {
   const float* xyz;           // length = frame_count * 3 (steady Guard tilt target)
-  float guard_on_x20_xyz[3];  // decomp: ftCo_80091E78 x20-tree target for GuardOn blend
+  float guard_on_x20_xyz[3];  // decomp: ftCo_80091E78 ftData.x20->x0->x8 target
   const float* guard_on_xyz;  // length = guard_on_frame_count * 3 (live GuardOn pose trajectory)
   uint16_t frame_count;       // number of frames in the steady Guard tilt table
   uint16_t neutral_frame;     // decomp: mv.co.guard.x8 initial value (e.g. 10)

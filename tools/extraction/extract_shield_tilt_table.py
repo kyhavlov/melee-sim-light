@@ -41,15 +41,17 @@ def _entry_anchor_xyz_from_pldat(
     part_flags: list[int],
     model_scaling: float,
     inv_scale_part: int,
+    skip_parts: list[int],
     joint_to_part: list[int],
 ) -> tuple[float, float, float]:
     """
-    Extract the GuardOn x20-tree target from fighter data (`ftData.x20` consumed by
+    Extract the GuardOn x20-tree target from fighter data (`ftData.x20->x8` consumed by
     ftCo_80091E78 / ftAnim_80070010 / ftAnim_80070108 in decomp).
 
     Archive-layout note:
-    - In Pl*.dat the `ftData.x20` blob stores the HSD_Joint* tree consumed by ftCo_80091E78 as the
-      target-side pose input for the GuardOn blend helpers.
+    - In Pl*.dat `ftData.x20` points to a small wrapper whose `x0` is an HSD_Joint root;
+      ftCo_80091E78 loads `ftData.x20->x0->x8` and passes that root child to the
+      target-side GuardOn blend helpers.
     - The resulting shield-part world position lives in the same collision-subtree space as the
       Guard tilt table, so the runtime can consume it with the same facing/model-scale policy.
     """
@@ -71,7 +73,17 @@ def _entry_anchor_xyz_from_pldat(
     if x20_abs + 4 > len(buf):
         raise ValueError(f"{pl_dat.name}: ftData.x20 out of bounds")
 
-    root_ptr = _u32_be(buf, x20_abs + 0x00)
+    # Decomp/asm: ftCo_80091E78 calls ftAnim_80070010/80070108 with
+    # `fp->ft_data->x20->x0->x8`, so the payload starts at the root child rather
+    # than at the wrapper or root object.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091E78
+    # refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Guard.s::ftCo_80091E78
+    # refs/melee/src/melee/ft/ftanim.c::ftAnim_80070010
+    root_obj_ptr = _u32_be(buf, x20_abs + 0x00)
+    root_obj_abs = arc.data_base + root_obj_ptr
+    if root_obj_abs + 0x0C > len(buf):
+        raise ValueError(f"{pl_dat.name}: ftData.x20 root object out of bounds")
+    root_ptr = _u32_be(buf, root_obj_abs + 0x08)
     root_abs = arc.data_base + root_ptr
     if root_abs + 0x38 > len(buf):
         raise ValueError(f"{pl_dat.name}: ftData.x20 root out of bounds")
@@ -113,12 +125,21 @@ def _entry_anchor_xyz_from_pldat(
         if child_ptr:
             stack.append((arc.data_base + child_ptr, -1))
 
-    part_to_node = [-1] * parts_num
-    for node_i, part_i in enumerate(joint_to_part):
-        if node_i >= len(node_pos):
-            break
+    is_skip = [False] * parts_num
+    for part_i in skip_parts:
         if 0 <= part_i < parts_num:
-            part_to_node[int(part_i)] = node_i
+            is_skip[int(part_i)] = True
+    # ftAnim_80070010 is called with FtPart_TransN (asm r4 = 1), so node 0 maps to the
+    # first non-skipped part at or after part 1.
+    part_to_node = [-1] * parts_num
+    part_i = 1
+    for node_i in range(len(node_pos)):
+        while part_i < parts_num and is_skip[part_i]:
+            part_i += 1
+        if part_i >= parts_num:
+            break
+        part_to_node[part_i] = node_i
+        part_i += 1
 
     closure_set: set[int] = set()
     p = shield_part
@@ -205,7 +226,7 @@ def _write_table(
         raise ValueError("bad guard_on_frame_count")
     with out_path.open("wb") as f:
         f.write(b"MSLSHLD1")
-        f.write(struct.pack("<I", 3))
+        f.write(struct.pack("<I", 4))
         f.write(struct.pack("<HH", int(frame_count) & 0xFFFF, int(neutral_frame) & 0xFFFF))
         f.write(
             struct.pack(
@@ -450,6 +471,7 @@ def main() -> None:
         part_flags=part_flags,
         model_scaling=model_scaling,
         inv_scale_part=inv_scale_part,
+        skip_parts=skip_parts,
         joint_to_part=joint_to_part,
     )
     guard_on_xyz_by_frame = _extract_shield_part_xyz_by_frame(
@@ -592,10 +614,12 @@ def main() -> None:
         m = world_mtx[shield_part]
         out_xyz.append((float(m[3]), float(m[7]), float(m[11])))
 
-    # MSLSHLD1 v3 carries:
+    # MSLSHLD1 v4 carries:
     # - steady Guard tilt centers,
-    # - ftCo_80091E78 x20-tree GuardOn target,
+    # - ftCo_80091E78 `ftData.x20->x0->x8` GuardOn target,
     # - live GuardOn pose trajectory used by the fresh GuardOn projectile-shield owner.
+    # v4 is required because older tables accidentally read the ftData.x20 root object instead of
+    # the x0->x8 child consumed by ftCo_80091E78.
     _write_table(
         args.out,
         neutral_frame=neutral_frame,

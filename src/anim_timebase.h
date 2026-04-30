@@ -217,15 +217,13 @@ void attack_identity_on_motion_state_change_ft_800890D0(MslBatch* batch, size_t 
 // Defined in src/instance_id.c.
 void instance_id_on_motion_state_change_ft_800895E0(MslBatch* batch, size_t idx);
 
-static inline void msl_anim_timebase_enter(MslBatch* batch, size_t idx, float anim_start_f32,
-                                           float anim_speed_f32) {
-  // Decomp: Fighter_ChangeMotionState sets the anim timebase then invokes motion-state identity
-  // updates (ft_800890D0 / ft_800895E0). This helper models that full "enter motion state" bundle.
-  // refs/melee/src/melee/ft/fighter.c (Fighter_ChangeMotionState)
+static inline void msl_motion_state_enter_side_effects(MslBatch* batch, size_t idx) {
+  // Decomp: Fighter_ChangeMotionState updates motion-state-owned identity/bookkeeping after
+  // installing the destination motion. Some simulator paths intentionally delay only the animation
+  // timebase/pose commit for collision parity; they still need these side effects at source-time.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
   // refs/melee/src/melee/ft/ft_0881.c::ft_800890D0
   // refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_800895E0
-  msl_anim_timebase_enter_raw(batch, idx, anim_start_f32, anim_speed_f32);
-
   if (batch != NULL) {
     // Decomp: Fighter_UnkInitReset and Fighter_ChangeMotionState copy fp->facing_dir into
     // fp->facing_dir1 on motion-state entry. Root-motion helpers such as ft_80085030 consume
@@ -268,6 +266,17 @@ static inline void msl_anim_timebase_enter(MslBatch* batch, size_t idx, float an
   attack_identity_on_motion_state_change_ft_800890D0(batch, idx);
 
   instance_id_on_motion_state_change_ft_800895E0(batch, idx);
+}
+
+static inline void msl_anim_timebase_enter(MslBatch* batch, size_t idx, float anim_start_f32,
+                                           float anim_speed_f32) {
+  // Decomp: Fighter_ChangeMotionState sets the anim timebase then invokes motion-state identity
+  // updates (ft_800890D0 / ft_800895E0). This helper models that full "enter motion state" bundle.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+  // refs/melee/src/melee/ft/ft_0881.c::ft_800890D0
+  // refs/melee/build/GALE01/asm/melee/ft/ft_0892.s::ft_800895E0
+  msl_anim_timebase_enter_raw(batch, idx, anim_start_f32, anim_speed_f32);
+  msl_motion_state_enter_side_effects(batch, idx);
 }
 
 static inline void msl_anim_timebase_enter_with_policy(MslBatch* batch, size_t idx,

@@ -83,7 +83,7 @@ static inline uint8_t step_keep_fighter_8006cda4_pre_gate_count(const MslBatch* 
     return 1u;
   }
 
-  if (count <= 3u && action == (uint16_t)MSL_ACT_DAMAGE_FLY_TOP &&
+  if (count <= 4u && action == (uint16_t)MSL_ACT_DAMAGE_FLY_TOP &&
       batch->state.on_ground[idx] == 0u && batch->state.hitlag[idx] == 0u &&
       batch->state.hitstun[idx] != 0u && batch->state.instance_hit_by[idx] != 0u) {
     const int attacker =
@@ -130,8 +130,9 @@ static inline void clear_seed_owned_transients_post_frame(MslBatch* batch) {
       batch->state.source_clear_processhit_damage_pending_phase[idx] = 0u;
       // `seed_t.fighter_8006cda4_pre_gate_consume_count` is usually a one-step pre-gate owner.
       // Keep rollout continuity only across the source-owned airborne AttackAir*/DamageFlyTop
-      // episode that can still reach ftCo_8008DCE0. Marker 4 is an immediate zero-consume gate
-      // marker and is not allowed to persist across DamageFlyTop hitstun segments.
+      // episode that can still reach ftCo_8008DCE0. Marker 4 is still not stream phase, but for
+      // DamageFlyTop same-source AttackAirB segments it carries gate-admission provenance until the
+      // delayed hit consumes the zero-pre-gate DamageFlyRoll decision.
       // refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
       if (!step_keep_fighter_8006cda4_pre_gate_count(batch, bi, p, num_players)) {
@@ -150,6 +151,12 @@ static inline void clear_seed_owned_transients_post_frame(MslBatch* batch) {
       batch->state.turn_kneebend_facing_override[idx] = 0u;
       batch->state.motion_entry_instance_id_override[idx] = 0u;
       batch->state.combat_shield_hit_int_damage[idx] = 0u;
+      batch->state.combat_shield_damage_taken[idx] = 0u;
+      if (batch->state.action_id[idx] != (uint16_t)MSL_ACT_REBOUND_STOP &&
+          batch->state.action_id[idx] != (uint16_t)MSL_ACT_REBOUND) {
+        batch->state.rebound_ground_accel_2[idx] = 0.0f;
+        batch->state.rebound_anim_rate_fp_q16_16[idx] = 0;
+      }
       // `seed_t.walljump_*` can bridge a hidden CollData WallHug phase for one-step replay rows.
       // Runtime after that step must require live mpColl WallHug bits again.
       // refs/melee/src/melee/ft/ftwalljump.c::ftWallJump_8008169C
