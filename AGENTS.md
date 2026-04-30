@@ -39,6 +39,16 @@ Current target domain:
 - When extracted/decomp table data can express an owner or action-family distinction, use that
   table-backed predicate instead of adding a new local action-id list. If a manual semantic
   predicate is still needed, document why the table data is insufficient.
+- Before adding row-local gameplay logic, check whether the owner is already expressible through
+  the generated data substrates:
+  - `MSLMSO01` MotionState callback/owner classes
+  - `MSLSTG01` stage collision/line metadata
+  - `MSLPART1` fighter part/anchor metadata
+  - `MSLITAR1` item/article constants
+  - `MSLFTSC1` decoded script timeline events
+- If the needed distinction is present in those tables, use or extend the table-backed helper.
+  If the needed table field is missing but source data is available, prefer extraction/table
+  promotion over another hardcoded branch.
 - Core/shared systems must not branch on character id as a proxy for missing collision, timer, or callback state.
   Character-specific branches are allowed only for actual character-specific mechanics or data-table lookups, with nearby
   decomp or extracted-data backing.
@@ -92,6 +102,9 @@ A family is only “closed” when:
 ## Required Last-Mile Behavior
 
 - Treat a mismatch as a **triage entry point**, not the patch boundary.
+- For each selected mismatch, first identify the shared data-backed owner family when possible:
+  MotionState callbacks, script events, item/article kind, stage segment, part/anchor, or explicit
+  seed/provenance lane. Prefer closing that owner family over fitting the motivating row.
 - For assigned multi-item work, the handoff bar applies to the whole list, not the first completed item.
 - Do not stop at the first motivating row or one small owner slice during checklist burn-down.
 - Investigation, tooling, extraction, replay probes, seed-surface work, and final gameplay code are all part of the same task.
@@ -135,7 +148,15 @@ uv run python -m tools.slippi.preprocess_suite \
   --suite replays/suites/fox_falco_fd_ucf084_recent.json \
   --datasets-dir datasets \
   --force
+uv run python -m tools.slippi.preprocess_suite \
+  --suite replays/suites/aggregate_recent.json \
+  --datasets-dir datasets \
+  --force
 ```
+
+If you touch extraction code or generated data contracts, also run `make build_data` and ensure
+stale-version/data-contract tests cover the artifact. Behavior-equivalent extraction/table changes
+should not refresh validation reports unless generated report content actually changes.
 
 ### Validation Reports
 - Test-only changes should not refresh committed validation reports.

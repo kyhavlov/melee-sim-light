@@ -1,4 +1,4 @@
-Work on the current branch/worktree. Do not commit. Do not be confused by prior messages - only a stop message given AFTER this one should cause you to stop and wrap up your work for review)
+Work on the current branch/worktree. Do not commit. Do not be confused by prior messages: only a stop message given AFTER this one should cause you to stop and wrap up your work for review.
 
 I'm giving you an open-ended long-work prompt so you can work for hours while I'm away. Keep an incremental scratch worklog of improvements as you accumulate them and leave retained changes uncommitted in the tree.
 
@@ -6,6 +6,7 @@ Before choosing the first target, read:
 - AGENTS.md
 - docs/AGENT_META_NOTES.md
 - docs/RL10_COMPLETION_CHECKLIST.md
+- docs/DATA_CONTRACT.md
 - SPEC.md
 
 Use docs/AGENT_META_NOTES.md as persistent process guidance, not as gameplay authority. Gameplay logic still needs source/decomp/data backing.
@@ -24,7 +25,10 @@ Repeat this loop indefinitely until I come back and stop you, or until the retai
 3. Write the completed item into the worklog with updated baselines and packaging notes.
 4. When the item is done to our rules, return to step 1 and pick a new target area.
 
-Done means no regressions on mismatch, float error, or rollout metrics for the retained changes.
+Done means retained changes have no unexplained regressions on mismatch, float error, or rollout
+metrics. If a narrow metric tradeoff remains after investigation, keep it only when the owner fix is
+source-backed, broader distributions improve, and the worklog explains why the tradeoff is real
+rather than an unresolved local regression.
 
 Process details to keep in mind:
 
@@ -32,6 +36,7 @@ Process details to keep in mind:
 - The worklog should include, for each selected owner/system:
   - selected owner/system
   - source/decomp/data basis
+  - generated data substrates checked, and why they did or did not express the owner
   - changed files and owner-specific hunks in shared files
   - tests/locks added
   - SPEC/docs notes added
@@ -50,6 +55,8 @@ Process details to keep in mind:
   - carries/provenance are scoped per source owner, hitbox, victim, or phase as appropriate
   - stale collision/contact IDs are not used as current provenance without a latch
   - gameplay constants are data/source-backed
+  - any new action-family, item-kind, part/anchor, stage-segment, or script-frame predicate uses
+    generated tables where possible, or documents why the table data is insufficient
   - tests are behavioral locks, not source-text grep checks when runtime coverage is possible
 
 Prioritization:
@@ -64,13 +71,28 @@ Prioritization:
   - modelplay-visible float/position/velocity bugs
 - Prefer large blast-radius/high-score clusters.
 - Prefer coherent shared owners over isolated row wins.
-- Prefer decomp/data-backed mechanics.
+- Prefer decomp/data-backed mechanics and generated-table owner predicates.
 - Stay on a major selected owner until fixed.
 - Only take adjacent smaller wins when they naturally belong to the same owner family.
 
 Investigation rules:
 
 - Treat a mismatch as an entry point, not the patch boundary.
+- Before patching a row, do a data-backed owner autopsy:
+  - `MSLMSO01` MotionState callback/classes for action-family and callback-owner identity
+  - `MSLFTSC1` script timeline events for frame/script-owned transitions and pulses
+  - `MSLSTG01` stage segment ids, kinds, flags, ledges/platforms, endpoints, and raw stage points
+  - `MSLPART1` fighter part order, parent links, JObj flags, and named anchors
+  - `MSLITAR1` item/article constants and item-kind ownership
+  - explicit seed/provenance lanes where the source owner is hidden at replay surface
+- If the owner distinction exists in generated data, use or extend the table-backed helper instead
+  of adding a local action-id list, item-kind list, part id, stage id, or magic frame condition.
+- If source data exists but the current artifact does not expose it, prefer extraction/table
+  promotion plus known-row guards over a hardcoded branch.
+- Do not encode procedural behavior as fake table data. Ledge eligibility, mpColl ordering,
+  capture/throw provenance, GuardReflect descriptor state, SpecialHi pose lifetime, and similar
+  callback-local mechanics still need source-owner modeling unless a table actually expresses the
+  distinction.
 - Do not hop between unrelated clusters after a failed experiment.
 - Use failed experiments to refine the source predicate, seed surface, callback order, probe need, extraction need, or hidden-state need.
 - If an experiment fails, do not immediately revert it unless it is truly a dead end. Continue investigating the same owner with deeper evidence: decomp C, raw game asm, Slippi asm/labels, probes, extraction, instrumentation, or minimal seed/internal lanes.

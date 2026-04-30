@@ -45,6 +45,29 @@ not gameplay specification; use `SPEC.md` for source-backed mechanics.
 - Low-priority float spikes are one-off max errors that occur only after an already-diverged
   rollout branch, unless they expose a coherent owner.
 
+## Data-Backed Owner Workflow
+
+- Treat the generated data substrates as part of the first-pass autopsy for every serious
+  mismatch:
+  - `MSLMSO01`: MotionState Anim/IASA/Phys/Coll/Cam callback owner classes.
+  - `MSLSTG01`: stage collision line ids, line kinds, flags, ledge/platform bits, endpoints, and
+    raw stage points. Reserved spawn/respawn/camera/blast fields are not source-backed yet.
+  - `MSLPART1`: static fighter part order, parent links, JObj flags, and named anchors.
+  - `MSLITAR1`: Fox/Falco item/article constants and sim-char to GALE01 FighterKind mapping.
+  - `MSLFTSC1`: decoded, stable fighter script events.
+- A replay row is usually only the symptom. Before adding a local branch, ask which table-backed
+  owner family the action/item/stage/part/script event belongs to and whether the same owner should
+  fix adjacent rows.
+- Prefer table promotion over hardcoding when the source data exists. Adding a small extractor,
+  class bit, helper, or known-row test is part of the fix, not scope creep.
+- Use exact table migrations when equivalence can be proven exhaustively across supported
+  Fox/Falco actions or known data rows.
+- Do not turn procedural behavior into fake data. Ledge eligibility, mpColl branch ordering,
+  capture/throw provenance, GuardReflect descriptor state, and SpecialHi pose lifetime still require
+  source-owner modeling unless a table actually expresses the distinction.
+- If a table is used only as a guard or diagnostic, say so in the worklog. Do not imply it closes a
+  gameplay owner until runtime behavior uses it.
+
 ## Investigation Discipline
 
 - Treat each mismatch as an entry point, not the patch boundary.
@@ -60,6 +83,9 @@ not gameplay specification; use `SPEC.md` for source-backed mechanics.
     hack in gameplay code
   - broadening is allowed only when source-shaped
   - narrowing must use decomp/data predicates or explicit seed/probe evidence
+- For any new action-family predicate, item-kind distinction, part/anchor id, stage segment query,
+  or script-frame condition, either use the generated data tables or document why they do not
+  express the needed owner.
 - Add positive and negative replay-real locks around each retained owner boundary.
 
 ## Current Hard Parts
