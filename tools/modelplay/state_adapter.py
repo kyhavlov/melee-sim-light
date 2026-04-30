@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import importlib
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Mapping
 
 import numpy as np
@@ -213,6 +213,8 @@ class SimFrameState:
     hurtbox_state: np.ndarray
     items: np.ndarray
     frame_pre_random_seed: int
+    anim_frame_f32: np.ndarray | None = None
+    frame_speed_mul_f32: np.ndarray | None = None
 
 
 def frame_state_from_seed(seed: np.void) -> SimFrameState:
@@ -279,6 +281,17 @@ def frame_state_from_compare(compare: np.void) -> SimFrameState:
         hurtbox_state=np.array(compare["hurtbox_state"], copy=True),
         items=np.array(compare["items"], copy=True),
         frame_pre_random_seed=int(compare["frame_pre_random_seed"]),
+    )
+
+
+def frame_state_with_timebase(state: SimFrameState, timebase_rows: np.ndarray) -> SimFrameState:
+    rows = np.asarray(timebase_rows, dtype=np.float32)
+    if rows.ndim != 2 or rows.shape[0] < state.num_players or rows.shape[1] < 5:
+        raise ValueError(f"unexpected debug_timebase shape: {rows.shape!r}")
+    return replace(
+        state,
+        anim_frame_f32=np.array(rows[: state.num_players, 3], dtype=np.float32, copy=True),
+        frame_speed_mul_f32=np.array(rows[: state.num_players, 4], dtype=np.float32, copy=True),
     )
 
 
@@ -514,7 +527,16 @@ def viewer_frame_from_state(state: SimFrameState, controllers: Mapping[int, obje
             "currentComboCount": 0,
             "lastHitBy": 0,
             "stocksRemaining": int(state.stocks[idx]),
-            "actionStateFrameCounter": float(np.float32(state.action_frame[idx])),
+            # Slippi's action-state counter is fp->cur_anim_frame, not the floored integer
+            # action_frame compare lane. Fractional Walk/Run rates need this for vanilla smoke
+            # comparisons and viewer animation cadence.
+            "actionStateFrameCounter": float(
+                np.float32(
+                    state.anim_frame_f32[idx]
+                    if state.anim_frame_f32 is not None and int(state.action_frame[idx]) >= 0
+                    else state.action_frame[idx]
+                )
+            ),
             "hitstunRemaining": int(state.hitstun[idx]),
             "isGrounded": bool(state.on_ground[idx]),
             "lastGroundId": 0,

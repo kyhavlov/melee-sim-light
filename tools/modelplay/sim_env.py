@@ -14,6 +14,7 @@ from tools.modelplay.state_adapter import (
     controllers_to_input_array,
     frame_state_from_compare,
     frame_state_from_seed,
+    frame_state_with_timebase,
     input_array_to_controllers,
 )
 
@@ -219,7 +220,9 @@ class SimSession:
             self._prev_input[...] = np.zeros(1, dtype=INPUT_DTYPE)
             self._input[...] = np.zeros(1, dtype=INPUT_DTYPE)
             self._refresh_processed_controllers()
-            self._state = frame_state_from_compare(self._compare[0])
+            self._state = frame_state_with_timebase(
+                frame_state_from_compare(self._compare[0]), self._binding.debug_timebase(self._handle, 0)
+            )
             self._needs_reset = True
             return self.current_state()
 
@@ -284,7 +287,9 @@ class SimSession:
         )
         self._binding.write_compare(self._handle, self._compare_bytes)
         self._refresh_processed_controllers()
-        self._state = frame_state_from_compare(self._compare[0])
+        self._state = frame_state_with_timebase(
+            frame_state_from_compare(self._compare[0]), self._binding.debug_timebase(self._handle, 0)
+        )
         self._record += 1
         return self.current_state()
 

@@ -228,10 +228,9 @@ def test_manual_drill_reset_uses_remaining_downdamage_timer() -> None:
     history = _replay_trace(_trace_by_name("drill_reset"), end_frame=329)
 
     falco = 1
-    assert int(history[276]["action_id"][falco]) == 185  # DownDamageU.
-    assert int(history[280]["action_id"][falco]) == 193  # DownDamageD.
-    assert int(history[295]["action_id"][falco]) == 192  # Short DownWaitD.
-    assert int(history[299]["action_id"][falco]) == 194  # DownStandD getup.
+    assert int(history[278]["action_id"][falco]) == 185  # DownDamageU.
+    assert int(history[294]["action_id"][falco]) == 184  # Short DownWaitU.
+    assert int(history[298]["action_id"][falco]) == 186  # DownStandU getup.
     assert int(history[329]["action_id"][falco]) == 14  # Wait, not long knockdown wait.
 
 

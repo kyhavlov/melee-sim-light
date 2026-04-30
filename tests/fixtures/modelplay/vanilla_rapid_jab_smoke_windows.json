@@ -1,0 +1,5400 @@
+{
+  "input_fields": [
+    "buttons",
+    "mainX",
+    "mainY",
+    "cX",
+    "cY",
+    "l",
+    "r"
+  ],
+  "note": "Compact vanilla-derived rapid-jab smoke locks. Source trace/dump paths are metadata only; tests use input_ranges and vanilla_rows. Rows intentionally start after ordinary opening/landing setup so the lock targets rapid-jab behavior.",
+  "players": [
+    {
+      "facing": 1,
+      "internal_char_id": 1,
+      "port": 1,
+      "slot": 0,
+      "team_id": 0
+    },
+    {
+      "facing": 0,
+      "internal_char_id": 22,
+      "port": 2,
+      "slot": 1,
+      "team_id": 1
+    }
+  ],
+  "scenarios": [
+    {
+      "end_frame": 260,
+      "input_ranges": [
+        {
+          "end": 130,
+          "player": 0,
+          "start": 130,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 133,
+          "player": 0,
+          "start": 133,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 136,
+          "player": 0,
+          "start": 136,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 139,
+          "player": 0,
+          "start": 139,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 142,
+          "player": 0,
+          "start": 142,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 145,
+          "player": 0,
+          "start": 145,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 148,
+          "player": 0,
+          "start": 148,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 151,
+          "player": 0,
+          "start": 151,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 154,
+          "player": 0,
+          "start": 154,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 157,
+          "player": 0,
+          "start": 157,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 160,
+          "player": 0,
+          "start": 160,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 163,
+          "player": 0,
+          "start": 163,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 166,
+          "player": 0,
+          "start": 166,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 169,
+          "player": 0,
+          "start": 169,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "name": "short_rapid_jab",
+      "reference_frame_min": 104,
+      "source_compare_summary": "reports/triage/rapid_jab_vanilla_smoke/short_rapid_jab_compare_final/summary.txt",
+      "source_trace": "reports/triage/rapid_jab_vanilla_smoke/short_rapid_jab/trace.json",
+      "source_vanilla_dump": "reports/triage/rapid_jab_vanilla_smoke/short_rapid_jab_compare_final/vanilla_engine_dump.bin",
+      "vanilla_rows": [
+        {
+          "action_frame": 0.0,
+          "action_id": 14,
+          "facing": 1.0,
+          "frame": 104,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": -60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 23.0,
+          "action_id": 42,
+          "facing": -1.0,
+          "frame": 104,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 1,
+          "pos_x": 60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 7.0,
+          "action_id": 14,
+          "facing": 1.0,
+          "frame": 111,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": -60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 0.0,
+          "action_id": 14,
+          "facing": -1.0,
+          "frame": 111,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 1,
+          "pos_x": 60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 1.0,
+          "action_id": 44,
+          "facing": 1.0,
+          "frame": 130,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": -60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 19.0,
+          "action_id": 14,
+          "facing": -1.0,
+          "frame": 130,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 1,
+          "pos_x": 60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 0.0,
+          "action_id": 45,
+          "facing": 1.0,
+          "frame": 135,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": -60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 24.0,
+          "action_id": 14,
+          "facing": -1.0,
+          "frame": 135,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 1,
+          "pos_x": 60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 1.0,
+          "action_id": 47,
+          "facing": 1.0,
+          "frame": 141,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": -53.279999,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 30.0,
+          "action_id": 14,
+          "facing": -1.0,
+          "frame": 141,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 1,
+          "pos_x": 60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 0.0,
+          "action_id": 48,
+          "facing": 1.0,
+          "frame": 147,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": -53.279999,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 36.0,
+          "action_id": 14,
+          "facing": -1.0,
+          "frame": 147,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 1,
+          "pos_x": 60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 13.0,
+          "action_id": 48,
+          "facing": 1.0,
+          "frame": 160,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": -53.279999,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 49.0,
+          "action_id": 14,
+          "facing": -1.0,
+          "frame": 160,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 1,
+          "pos_x": 60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 0.0,
+          "action_id": 49,
+          "facing": 1.0,
+          "frame": 187,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": -53.279999,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 76.0,
+          "action_id": 14,
+          "facing": -1.0,
+          "frame": 187,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 1,
+          "pos_x": 60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 0.0,
+          "action_id": 14,
+          "facing": 1.0,
+          "frame": 196,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": -53.279999,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 85.0,
+          "action_id": 14,
+          "facing": -1.0,
+          "frame": 196,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 1,
+          "pos_x": 60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 24.0,
+          "action_id": 14,
+          "facing": 1.0,
+          "frame": 220,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": -53.279999,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 109.0,
+          "action_id": 14,
+          "facing": -1.0,
+          "frame": 220,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 1,
+          "pos_x": 60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 64.0,
+          "action_id": 14,
+          "facing": 1.0,
+          "frame": 260,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": -53.279999,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 149.0,
+          "action_id": 14,
+          "facing": -1.0,
+          "frame": 260,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 1,
+          "pos_x": 60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        }
+      ]
+    },
+    {
+      "end_frame": 520,
+      "input_ranges": [
+        {
+          "end": 130,
+          "player": 0,
+          "start": 130,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 133,
+          "player": 0,
+          "start": 133,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 136,
+          "player": 0,
+          "start": 136,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 139,
+          "player": 0,
+          "start": 139,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 142,
+          "player": 0,
+          "start": 142,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 145,
+          "player": 0,
+          "start": 145,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 148,
+          "player": 0,
+          "start": 148,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 151,
+          "player": 0,
+          "start": 151,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 154,
+          "player": 0,
+          "start": 154,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 157,
+          "player": 0,
+          "start": 157,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 160,
+          "player": 0,
+          "start": 160,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 163,
+          "player": 0,
+          "start": 163,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 166,
+          "player": 0,
+          "start": 166,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 169,
+          "player": 0,
+          "start": 169,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 172,
+          "player": 0,
+          "start": 172,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 175,
+          "player": 0,
+          "start": 175,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 178,
+          "player": 0,
+          "start": 178,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 181,
+          "player": 0,
+          "start": 181,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 184,
+          "player": 0,
+          "start": 184,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 187,
+          "player": 0,
+          "start": 187,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 190,
+          "player": 0,
+          "start": 190,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 193,
+          "player": 0,
+          "start": 193,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 196,
+          "player": 0,
+          "start": 196,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 199,
+          "player": 0,
+          "start": 199,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 202,
+          "player": 0,
+          "start": 202,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 205,
+          "player": 0,
+          "start": 205,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 208,
+          "player": 0,
+          "start": 208,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 211,
+          "player": 0,
+          "start": 211,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 214,
+          "player": 0,
+          "start": 214,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 217,
+          "player": 0,
+          "start": 217,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 220,
+          "player": 0,
+          "start": 220,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 223,
+          "player": 0,
+          "start": 223,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 226,
+          "player": 0,
+          "start": 226,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 229,
+          "player": 0,
+          "start": 229,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 232,
+          "player": 0,
+          "start": 232,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 235,
+          "player": 0,
+          "start": 235,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 238,
+          "player": 0,
+          "start": 238,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 241,
+          "player": 0,
+          "start": 241,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 244,
+          "player": 0,
+          "start": 244,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 247,
+          "player": 0,
+          "start": 247,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 250,
+          "player": 0,
+          "start": 250,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 253,
+          "player": 0,
+          "start": 253,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 256,
+          "player": 0,
+          "start": 256,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 259,
+          "player": 0,
+          "start": 259,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 262,
+          "player": 0,
+          "start": 262,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 265,
+          "player": 0,
+          "start": 265,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 268,
+          "player": 0,
+          "start": 268,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 271,
+          "player": 0,
+          "start": 271,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 274,
+          "player": 0,
+          "start": 274,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 277,
+          "player": 0,
+          "start": 277,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 280,
+          "player": 0,
+          "start": 280,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 283,
+          "player": 0,
+          "start": 283,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 286,
+          "player": 0,
+          "start": 286,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 289,
+          "player": 0,
+          "start": 289,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 292,
+          "player": 0,
+          "start": 292,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 295,
+          "player": 0,
+          "start": 295,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 298,
+          "player": 0,
+          "start": 298,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 301,
+          "player": 0,
+          "start": 301,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 304,
+          "player": 0,
+          "start": 304,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 307,
+          "player": 0,
+          "start": 307,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 310,
+          "player": 0,
+          "start": 310,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 313,
+          "player": 0,
+          "start": 313,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 316,
+          "player": 0,
+          "start": 316,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 319,
+          "player": 0,
+          "start": 319,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 322,
+          "player": 0,
+          "start": 322,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 325,
+          "player": 0,
+          "start": 325,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 328,
+          "player": 0,
+          "start": 328,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 331,
+          "player": 0,
+          "start": 331,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 334,
+          "player": 0,
+          "start": 334,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 337,
+          "player": 0,
+          "start": 337,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 340,
+          "player": 0,
+          "start": 340,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 343,
+          "player": 0,
+          "start": 343,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 346,
+          "player": 0,
+          "start": 346,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 349,
+          "player": 0,
+          "start": 349,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 352,
+          "player": 0,
+          "start": 352,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 355,
+          "player": 0,
+          "start": 355,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 358,
+          "player": 0,
+          "start": 358,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 361,
+          "player": 0,
+          "start": 361,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 364,
+          "player": 0,
+          "start": 364,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 367,
+          "player": 0,
+          "start": 367,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 370,
+          "player": 0,
+          "start": 370,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 373,
+          "player": 0,
+          "start": 373,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 376,
+          "player": 0,
+          "start": 376,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 379,
+          "player": 0,
+          "start": 379,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 382,
+          "player": 0,
+          "start": 382,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 385,
+          "player": 0,
+          "start": 385,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 388,
+          "player": 0,
+          "start": 388,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 391,
+          "player": 0,
+          "start": 391,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 394,
+          "player": 0,
+          "start": 394,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 397,
+          "player": 0,
+          "start": 397,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 400,
+          "player": 0,
+          "start": 400,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 403,
+          "player": 0,
+          "start": 403,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 406,
+          "player": 0,
+          "start": 406,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 409,
+          "player": 0,
+          "start": 409,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 412,
+          "player": 0,
+          "start": 412,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 415,
+          "player": 0,
+          "start": 415,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 418,
+          "player": 0,
+          "start": 418,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 421,
+          "player": 0,
+          "start": 421,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 424,
+          "player": 0,
+          "start": 424,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 427,
+          "player": 0,
+          "start": 427,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 430,
+          "player": 0,
+          "start": 430,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "name": "long_rapid_jab",
+      "reference_frame_min": 104,
+      "source_compare_summary": "reports/triage/rapid_jab_vanilla_smoke/long_rapid_jab_compare_final/summary.txt",
+      "source_trace": "reports/triage/rapid_jab_vanilla_smoke/long_rapid_jab/trace.json",
+      "source_vanilla_dump": "reports/triage/rapid_jab_vanilla_smoke/long_rapid_jab_compare_final/vanilla_engine_dump.bin",
+      "vanilla_rows": [
+        {
+          "action_frame": 0.0,
+          "action_id": 14,
+          "facing": 1.0,
+          "frame": 104,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": -60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 23.0,
+          "action_id": 42,
+          "facing": -1.0,
+          "frame": 104,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 1,
+          "pos_x": 60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 7.0,
+          "action_id": 14,
+          "facing": 1.0,
+          "frame": 111,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": -60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 0.0,
+          "action_id": 14,
+          "facing": -1.0,
+          "frame": 111,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 1,
+          "pos_x": 60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 1.0,
+          "action_id": 44,
+          "facing": 1.0,
+          "frame": 130,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": -60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 19.0,
+          "action_id": 14,
+          "facing": -1.0,
+          "frame": 130,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 1,
+          "pos_x": 60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 0.0,
+          "action_id": 45,
+          "facing": 1.0,
+          "frame": 135,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": -60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 24.0,
+          "action_id": 14,
+          "facing": -1.0,
+          "frame": 135,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 1,
+          "pos_x": 60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 1.0,
+          "action_id": 47,
+          "facing": 1.0,
+          "frame": 141,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": -53.279999,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 30.0,
+          "action_id": 14,
+          "facing": -1.0,
+          "frame": 141,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 1,
+          "pos_x": 60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 0.0,
+          "action_id": 48,
+          "facing": 1.0,
+          "frame": 147,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": -53.279999,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 36.0,
+          "action_id": 14,
+          "facing": -1.0,
+          "frame": 147,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 1,
+          "pos_x": 60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 13.0,
+          "action_id": 48,
+          "facing": 1.0,
+          "frame": 160,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": -53.279999,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 49.0,
+          "action_id": 14,
+          "facing": -1.0,
+          "frame": 160,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 1,
+          "pos_x": 60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 1.0,
+          "action_id": 48,
+          "facing": 1.0,
+          "frame": 220,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": -53.279999,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 109.0,
+          "action_id": 14,
+          "facing": -1.0,
+          "frame": 220,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 1,
+          "pos_x": 60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 9.0,
+          "action_id": 48,
+          "facing": 1.0,
+          "frame": 300,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": -53.279999,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 189.0,
+          "action_id": 14,
+          "facing": -1.0,
+          "frame": 300,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 1,
+          "pos_x": 60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 33.0,
+          "action_id": 48,
+          "facing": 1.0,
+          "frame": 360,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": -53.279999,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 9.0,
+          "action_id": 14,
+          "facing": -1.0,
+          "frame": 360,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 1,
+          "pos_x": 60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 21.0,
+          "action_id": 48,
+          "facing": 1.0,
+          "frame": 420,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": -53.279999,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 69.0,
+          "action_id": 14,
+          "facing": -1.0,
+          "frame": 420,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 1,
+          "pos_x": 60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 0.0,
+          "action_id": 49,
+          "facing": 1.0,
+          "frame": 446,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": -53.279999,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 95.0,
+          "action_id": 14,
+          "facing": -1.0,
+          "frame": 446,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 1,
+          "pos_x": 60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 0.0,
+          "action_id": 14,
+          "facing": 1.0,
+          "frame": 455,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": -53.279999,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 104.0,
+          "action_id": 14,
+          "facing": -1.0,
+          "frame": 455,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 1,
+          "pos_x": 60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 45.0,
+          "action_id": 14,
+          "facing": 1.0,
+          "frame": 500,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": -53.279999,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 149.0,
+          "action_id": 14,
+          "facing": -1.0,
+          "frame": 500,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 1,
+          "pos_x": 60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 65.0,
+          "action_id": 14,
+          "facing": 1.0,
+          "frame": 520,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": -53.279999,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 169.0,
+          "action_id": 14,
+          "facing": -1.0,
+          "frame": 520,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 1,
+          "pos_x": 60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        }
+      ]
+    },
+    {
+      "end_frame": 380,
+      "input_ranges": [
+        {
+          "end": 183,
+          "player": 0,
+          "start": 130,
+          "values": [
+            0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 205,
+          "player": 0,
+          "start": 205,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 208,
+          "player": 0,
+          "start": 208,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 211,
+          "player": 0,
+          "start": 211,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 214,
+          "player": 0,
+          "start": 214,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 217,
+          "player": 0,
+          "start": 217,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 220,
+          "player": 0,
+          "start": 220,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 223,
+          "player": 0,
+          "start": 223,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 226,
+          "player": 0,
+          "start": 226,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 229,
+          "player": 0,
+          "start": 229,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 232,
+          "player": 0,
+          "start": 232,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 235,
+          "player": 0,
+          "start": 235,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 238,
+          "player": 0,
+          "start": 238,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 241,
+          "player": 0,
+          "start": 241,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 244,
+          "player": 0,
+          "start": 244,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 247,
+          "player": 0,
+          "start": 247,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 250,
+          "player": 0,
+          "start": 250,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 253,
+          "player": 0,
+          "start": 253,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 256,
+          "player": 0,
+          "start": 256,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 259,
+          "player": 0,
+          "start": 259,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 262,
+          "player": 0,
+          "start": 262,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 265,
+          "player": 0,
+          "start": 265,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 268,
+          "player": 0,
+          "start": 268,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 271,
+          "player": 0,
+          "start": 271,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 274,
+          "player": 0,
+          "start": 274,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 277,
+          "player": 0,
+          "start": 277,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 280,
+          "player": 0,
+          "start": 280,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 283,
+          "player": 0,
+          "start": 283,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 286,
+          "player": 0,
+          "start": 286,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 289,
+          "player": 0,
+          "start": 289,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 292,
+          "player": 0,
+          "start": 292,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 295,
+          "player": 0,
+          "start": 295,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 298,
+          "player": 0,
+          "start": 298,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 301,
+          "player": 0,
+          "start": 301,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 304,
+          "player": 0,
+          "start": 304,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 307,
+          "player": 0,
+          "start": 307,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 310,
+          "player": 0,
+          "start": 310,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 313,
+          "player": 0,
+          "start": 313,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 316,
+          "player": 0,
+          "start": 316,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 319,
+          "player": 0,
+          "start": 319,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 322,
+          "player": 0,
+          "start": 322,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 325,
+          "player": 0,
+          "start": 325,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 328,
+          "player": 0,
+          "start": 328,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "name": "short_run_to_falco_rapid_jab",
+      "reference_frame_min": 104,
+      "source_compare_summary": "reports/triage/rapid_jab_vanilla_smoke/short_run_to_falco_rapid_jab_compare_final/summary.txt",
+      "source_trace": "reports/triage/rapid_jab_vanilla_smoke/short_run_to_falco_rapid_jab/trace.json",
+      "source_vanilla_dump": "reports/triage/rapid_jab_vanilla_smoke/short_run_to_falco_rapid_jab_compare_final/vanilla_engine_dump.bin",
+      "vanilla_rows": [
+        {
+          "action_frame": 0.0,
+          "action_id": 14,
+          "facing": 1.0,
+          "frame": 104,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": -60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 23.0,
+          "action_id": 42,
+          "facing": -1.0,
+          "frame": 104,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 1,
+          "pos_x": 60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 7.0,
+          "action_id": 14,
+          "facing": 1.0,
+          "frame": 111,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": -60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 0.0,
+          "action_id": 14,
+          "facing": -1.0,
+          "frame": 111,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 1,
+          "pos_x": 60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 1.0,
+          "action_id": 20,
+          "facing": 1.0,
+          "frame": 130,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": -60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 19.0,
+          "action_id": 14,
+          "facing": -1.0,
+          "frame": 130,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 1,
+          "pos_x": 60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 0.0,
+          "action_id": 21,
+          "facing": 1.0,
+          "frame": 141,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": -36.039993,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 30.0,
+          "action_id": 14,
+          "facing": -1.0,
+          "frame": 141,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 1,
+          "pos_x": 60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 3.916666,
+          "action_id": 21,
+          "facing": 1.0,
+          "frame": 160,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": 5.760012,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 49.0,
+          "action_id": 14,
+          "facing": -1.0,
+          "frame": 160,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 1,
+          "pos_x": 60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 0.0,
+          "action_id": 23,
+          "facing": 1.0,
+          "frame": 184,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": 57.880024,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 73.0,
+          "action_id": 14,
+          "facing": -1.0,
+          "frame": 184,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 1,
+          "pos_x": 60.599998,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 0.0,
+          "action_id": 14,
+          "facing": 1.0,
+          "frame": 202,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": 82.660027,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 91.0,
+          "action_id": 14,
+          "facing": -1.0,
+          "frame": 202,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 1,
+          "pos_x": 60.299999,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 1.0,
+          "action_id": 44,
+          "facing": 1.0,
+          "frame": 205,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": 84.220024,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 94.0,
+          "action_id": 14,
+          "facing": -1.0,
+          "frame": 205,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 1,
+          "pos_x": 60.299999,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 0.0,
+          "action_id": 45,
+          "facing": 1.0,
+          "frame": 210,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": 85.180023,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 99.0,
+          "action_id": 14,
+          "facing": -1.0,
+          "frame": 210,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 1,
+          "pos_x": 60.299999,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 1.0,
+          "action_id": 47,
+          "facing": 1.0,
+          "frame": 216,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": 85.565697,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 105.0,
+          "action_id": 14,
+          "facing": -1.0,
+          "frame": 216,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 1,
+          "pos_x": 60.299999,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 5.0,
+          "action_id": 47,
+          "facing": 1.0,
+          "frame": 220,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": 85.565697,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 109.0,
+          "action_id": 14,
+          "facing": -1.0,
+          "frame": 220,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 1,
+          "pos_x": 60.299999,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 0.0,
+          "action_id": 48,
+          "facing": 1.0,
+          "frame": 222,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": 85.565697,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 111.0,
+          "action_id": 14,
+          "facing": -1.0,
+          "frame": 222,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 1,
+          "pos_x": 60.299999,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 6.0,
+          "action_id": 48,
+          "facing": 1.0,
+          "frame": 300,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": 85.565697,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 189.0,
+          "action_id": 14,
+          "facing": -1.0,
+          "frame": 300,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 1,
+          "pos_x": 60.299999,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 0.0,
+          "action_id": 49,
+          "facing": 1.0,
+          "frame": 341,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": 85.565697,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 230.0,
+          "action_id": 14,
+          "facing": -1.0,
+          "frame": 341,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 1,
+          "pos_x": 60.299999,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 0.0,
+          "action_id": 14,
+          "facing": 1.0,
+          "frame": 350,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": 85.565697,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 239.0,
+          "action_id": 14,
+          "facing": -1.0,
+          "frame": 350,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 1,
+          "pos_x": 60.299999,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 10.0,
+          "action_id": 14,
+          "facing": 1.0,
+          "frame": 360,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": 85.565697,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 9.0,
+          "action_id": 14,
+          "facing": -1.0,
+          "frame": 360,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 1,
+          "pos_x": 60.299999,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 30.0,
+          "action_id": 14,
+          "facing": 1.0,
+          "frame": 380,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": 85.565697,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 29.0,
+          "action_id": 14,
+          "facing": -1.0,
+          "frame": 380,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 1,
+          "pos_x": 60.299999,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        }
+      ]
+    },
+    {
+      "end_frame": 560,
+      "input_ranges": [
+        {
+          "end": 319,
+          "player": 0,
+          "start": 130,
+          "values": [
+            0,
+            0.3625,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 340,
+          "player": 0,
+          "start": 340,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 343,
+          "player": 0,
+          "start": 343,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 346,
+          "player": 0,
+          "start": 346,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 349,
+          "player": 0,
+          "start": 349,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 352,
+          "player": 0,
+          "start": 352,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 355,
+          "player": 0,
+          "start": 355,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 358,
+          "player": 0,
+          "start": 358,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 361,
+          "player": 0,
+          "start": 361,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 364,
+          "player": 0,
+          "start": 364,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 367,
+          "player": 0,
+          "start": 367,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 370,
+          "player": 0,
+          "start": 370,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 373,
+          "player": 0,
+          "start": 373,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 376,
+          "player": 0,
+          "start": 376,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 379,
+          "player": 0,
+          "start": 379,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 382,
+          "player": 0,
+          "start": 382,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 385,
+          "player": 0,
+          "start": 385,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 388,
+          "player": 0,
+          "start": 388,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 391,
+          "player": 0,
+          "start": 391,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 394,
+          "player": 0,
+          "start": 394,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 397,
+          "player": 0,
+          "start": 397,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 400,
+          "player": 0,
+          "start": 400,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 403,
+          "player": 0,
+          "start": 403,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 406,
+          "player": 0,
+          "start": 406,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 409,
+          "player": 0,
+          "start": 409,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 412,
+          "player": 0,
+          "start": 412,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 415,
+          "player": 0,
+          "start": 415,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 418,
+          "player": 0,
+          "start": 418,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 421,
+          "player": 0,
+          "start": 421,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 424,
+          "player": 0,
+          "start": 424,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 427,
+          "player": 0,
+          "start": 427,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 430,
+          "player": 0,
+          "start": 430,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 433,
+          "player": 0,
+          "start": 433,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 436,
+          "player": 0,
+          "start": 436,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 439,
+          "player": 0,
+          "start": 439,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 442,
+          "player": 0,
+          "start": 442,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 445,
+          "player": 0,
+          "start": 445,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 448,
+          "player": 0,
+          "start": 448,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 451,
+          "player": 0,
+          "start": 451,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 454,
+          "player": 0,
+          "start": 454,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 457,
+          "player": 0,
+          "start": 457,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 460,
+          "player": 0,
+          "start": 460,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 463,
+          "player": 0,
+          "start": 463,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 466,
+          "player": 0,
+          "start": 466,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 469,
+          "player": 0,
+          "start": 469,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 472,
+          "player": 0,
+          "start": 472,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 475,
+          "player": 0,
+          "start": 475,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 478,
+          "player": 0,
+          "start": 478,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 481,
+          "player": 0,
+          "start": 481,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 484,
+          "player": 0,
+          "start": 484,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 487,
+          "player": 0,
+          "start": 487,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "end": 490,
+          "player": 0,
+          "start": 490,
+          "values": [
+            256,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "name": "walk068_to_falco_rapid_hit",
+      "reference_frame_min": 104,
+      "source_compare_summary": "reports/triage/rapid_jab_vanilla_smoke/walk068_to_falco_rapid_hit_compare_final/summary.txt",
+      "source_trace": "reports/triage/rapid_jab_vanilla_smoke/walk068_to_falco_rapid_hit/trace.json",
+      "source_vanilla_dump": "reports/triage/rapid_jab_vanilla_smoke/walk068_to_falco_rapid_hit_compare_final/vanilla_engine_dump.bin",
+      "vanilla_rows": [
+        {
+          "action_frame": 0.0,
+          "action_id": 14,
+          "facing": 1.0,
+          "frame": 104,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": -60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 23.0,
+          "action_id": 42,
+          "facing": -1.0,
+          "frame": 104,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 1,
+          "pos_x": 60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 7.0,
+          "action_id": 14,
+          "facing": 1.0,
+          "frame": 111,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": -60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 0.0,
+          "action_id": 14,
+          "facing": -1.0,
+          "frame": 111,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 1,
+          "pos_x": 60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 1.0,
+          "action_id": 15,
+          "facing": 1.0,
+          "frame": 130,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": -59.827499,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 19.0,
+          "action_id": 14,
+          "facing": -1.0,
+          "frame": 130,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 1,
+          "pos_x": 60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 13.327895,
+          "action_id": 15,
+          "facing": 1.0,
+          "frame": 160,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": -44.741665,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 49.0,
+          "action_id": 14,
+          "facing": -1.0,
+          "frame": 160,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 1,
+          "pos_x": 60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 14.520451,
+          "action_id": 15,
+          "facing": 1.0,
+          "frame": 220,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": -9.960314,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 109.0,
+          "action_id": 14,
+          "facing": -1.0,
+          "frame": 220,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 1,
+          "pos_x": 60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 16.259434,
+          "action_id": 15,
+          "facing": 1.0,
+          "frame": 300,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": 36.439663,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 189.0,
+          "action_id": 14,
+          "facing": -1.0,
+          "frame": 300,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 1,
+          "pos_x": 60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 0.0,
+          "action_id": 14,
+          "facing": 1.0,
+          "frame": 320,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": 47.959625,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 209.0,
+          "action_id": 14,
+          "facing": -1.0,
+          "frame": 320,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 1,
+          "pos_x": 60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 1.0,
+          "action_id": 44,
+          "facing": 1.0,
+          "frame": 340,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": 49.279621,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 229.0,
+          "action_id": 14,
+          "facing": -1.0,
+          "frame": 340,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 1,
+          "pos_x": 60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 2.0,
+          "action_id": 44,
+          "facing": 1.0,
+          "frame": 341,
+          "hitlag": 4.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": 49.279621,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 1.0,
+          "action_id": 78,
+          "facing": -1.0,
+          "frame": 341,
+          "hitlag": 4.0,
+          "on_ground": 0,
+          "percent": 4.0,
+          "player": 1,
+          "pos_x": 60.0,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 0.0,
+          "action_id": 45,
+          "facing": 1.0,
+          "frame": 348,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": 49.279621,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 5.0,
+          "action_id": 78,
+          "facing": -1.0,
+          "frame": 348,
+          "hitlag": 0.0,
+          "on_ground": 0,
+          "percent": 4.0,
+          "player": 1,
+          "pos_x": 60.640945,
+          "pos_y": 0.061084,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 1.0,
+          "action_id": 45,
+          "facing": 1.0,
+          "frame": 349,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": 52.639622,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 6.0,
+          "action_id": 78,
+          "facing": -1.0,
+          "frame": 349,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 4.0,
+          "player": 1,
+          "pos_x": 60.757576,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 2.0,
+          "action_id": 45,
+          "facing": 1.0,
+          "frame": 350,
+          "hitlag": 4.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": 55.999622,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 1.0,
+          "action_id": 78,
+          "facing": -1.0,
+          "frame": 350,
+          "hitlag": 4.0,
+          "on_ground": 0,
+          "percent": 8.0,
+          "player": 1,
+          "pos_x": 60.794205,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 1.0,
+          "action_id": 47,
+          "facing": 1.0,
+          "frame": 357,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": 55.999622,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 5.0,
+          "action_id": 78,
+          "facing": -1.0,
+          "frame": 357,
+          "hitlag": 0.0,
+          "on_ground": 0,
+          "percent": 8.0,
+          "player": 1,
+          "pos_x": 61.511765,
+          "pos_y": 0.271575,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 2.0,
+          "action_id": 47,
+          "facing": 1.0,
+          "frame": 358,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": 55.999622,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 6.0,
+          "action_id": 78,
+          "facing": -1.0,
+          "frame": 358,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 8.0,
+          "player": 1,
+          "pos_x": 61.647545,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 4.0,
+          "action_id": 47,
+          "facing": 1.0,
+          "frame": 360,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": 55.399624,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 8.0,
+          "action_id": 78,
+          "facing": -1.0,
+          "frame": 360,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 8.0,
+          "player": 1,
+          "pos_x": 62.303326,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 0.0,
+          "action_id": 48,
+          "facing": 1.0,
+          "frame": 363,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": 55.399624,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 11.0,
+          "action_id": 78,
+          "facing": -1.0,
+          "frame": 363,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 8.0,
+          "player": 1,
+          "pos_x": 62.303326,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 1.0,
+          "action_id": 48,
+          "facing": 1.0,
+          "frame": 364,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": 55.399624,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 0.0,
+          "action_id": 14,
+          "facing": -1.0,
+          "frame": 364,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 8.0,
+          "player": 1,
+          "pos_x": 62.303326,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 2.0,
+          "action_id": 48,
+          "facing": 1.0,
+          "frame": 365,
+          "hitlag": 3.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": 55.399624,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 1.0,
+          "action_id": 79,
+          "facing": -1.0,
+          "frame": 365,
+          "hitlag": 3.0,
+          "on_ground": 0,
+          "percent": 9.0,
+          "player": 1,
+          "pos_x": 62.303326,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 8.0,
+          "action_id": 48,
+          "facing": 1.0,
+          "frame": 373,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": 55.399624,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 7.0,
+          "action_id": 79,
+          "facing": -1.0,
+          "frame": 373,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 9.0,
+          "player": 1,
+          "pos_x": 63.056671,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 9.0,
+          "action_id": 48,
+          "facing": 1.0,
+          "frame": 374,
+          "hitlag": 3.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": 55.399624,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 1.0,
+          "action_id": 79,
+          "facing": -1.0,
+          "frame": 374,
+          "hitlag": 3.0,
+          "on_ground": 0,
+          "percent": 9.91,
+          "player": 1,
+          "pos_x": 63.075722,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 16.0,
+          "action_id": 48,
+          "facing": 1.0,
+          "frame": 383,
+          "hitlag": 3.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": 55.399624,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 1.0,
+          "action_id": 79,
+          "facing": -1.0,
+          "frame": 383,
+          "hitlag": 3.0,
+          "on_ground": 0,
+          "percent": 10.82,
+          "player": 1,
+          "pos_x": 63.924931,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 23.0,
+          "action_id": 48,
+          "facing": 1.0,
+          "frame": 392,
+          "hitlag": 3.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": 55.399624,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 1.0,
+          "action_id": 76,
+          "facing": -1.0,
+          "frame": 392,
+          "hitlag": 3.0,
+          "on_ground": 0,
+          "percent": 11.73,
+          "player": 1,
+          "pos_x": 64.774139,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 30.0,
+          "action_id": 48,
+          "facing": 1.0,
+          "frame": 401,
+          "hitlag": 3.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": 55.399624,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 1.0,
+          "action_id": 82,
+          "facing": -1.0,
+          "frame": 401,
+          "hitlag": 3.0,
+          "on_ground": 0,
+          "percent": 12.639999,
+          "player": 1,
+          "pos_x": 65.6315,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 1.0,
+          "action_id": 48,
+          "facing": 1.0,
+          "frame": 410,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": 55.17461,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 8.0,
+          "action_id": 82,
+          "facing": -1.0,
+          "frame": 410,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 12.639999,
+          "player": 1,
+          "pos_x": 66.497009,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 2.0,
+          "action_id": 48,
+          "facing": 1.0,
+          "frame": 411,
+          "hitlag": 3.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": 55.149609,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 1.0,
+          "action_id": 76,
+          "facing": -1.0,
+          "frame": 411,
+          "hitlag": 3.0,
+          "on_ground": 0,
+          "percent": 13.549999,
+          "player": 1,
+          "pos_x": 66.508842,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 9.0,
+          "action_id": 48,
+          "facing": 1.0,
+          "frame": 420,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": 54.924595,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 8.0,
+          "action_id": 76,
+          "facing": -1.0,
+          "frame": 420,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 13.549999,
+          "player": 1,
+          "pos_x": 67.3825,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 16.0,
+          "action_id": 48,
+          "facing": 1.0,
+          "frame": 427,
+          "hitlag": 3.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": 54.749584,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 1.0,
+          "action_id": 79,
+          "facing": -1.0,
+          "frame": 427,
+          "hitlag": 3.0,
+          "on_ground": 0,
+          "percent": 14.379999,
+          "player": 1,
+          "pos_x": 67.3955,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 23.0,
+          "action_id": 48,
+          "facing": 1.0,
+          "frame": 436,
+          "hitlag": 3.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": 54.649578,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 1.0,
+          "action_id": 79,
+          "facing": -1.0,
+          "frame": 436,
+          "hitlag": 3.0,
+          "on_ground": 0,
+          "percent": 15.209999,
+          "player": 1,
+          "pos_x": 68.276657,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 30.0,
+          "action_id": 48,
+          "facing": 1.0,
+          "frame": 445,
+          "hitlag": 3.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": 54.649578,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 1.0,
+          "action_id": 82,
+          "facing": -1.0,
+          "frame": 445,
+          "hitlag": 3.0,
+          "on_ground": 0,
+          "percent": 16.039999,
+          "player": 1,
+          "pos_x": 69.165962,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 1.0,
+          "action_id": 48,
+          "facing": 1.0,
+          "frame": 454,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": 54.649578,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 8.0,
+          "action_id": 82,
+          "facing": -1.0,
+          "frame": 454,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 16.039999,
+          "player": 1,
+          "pos_x": 70.063423,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 2.0,
+          "action_id": 48,
+          "facing": 1.0,
+          "frame": 455,
+          "hitlag": 3.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": 54.649578,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 1.0,
+          "action_id": 76,
+          "facing": -1.0,
+          "frame": 455,
+          "hitlag": 3.0,
+          "on_ground": 0,
+          "percent": 16.869999,
+          "player": 1,
+          "pos_x": 70.079819,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 9.0,
+          "action_id": 48,
+          "facing": 1.0,
+          "frame": 464,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": 54.649578,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 8.0,
+          "action_id": 76,
+          "facing": -1.0,
+          "frame": 464,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 16.869999,
+          "player": 1,
+          "pos_x": 70.985428,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 16.0,
+          "action_id": 48,
+          "facing": 1.0,
+          "frame": 471,
+          "hitlag": 3.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": 54.649578,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 1.0,
+          "action_id": 82,
+          "facing": -1.0,
+          "frame": 471,
+          "hitlag": 3.0,
+          "on_ground": 0,
+          "percent": 17.629999,
+          "player": 1,
+          "pos_x": 71.002991,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 23.0,
+          "action_id": 48,
+          "facing": 1.0,
+          "frame": 480,
+          "hitlag": 3.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": 54.649578,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 1.0,
+          "action_id": 79,
+          "facing": -1.0,
+          "frame": 480,
+          "hitlag": 3.0,
+          "on_ground": 0,
+          "percent": 18.389999,
+          "player": 1,
+          "pos_x": 71.908028,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 30.0,
+          "action_id": 48,
+          "facing": 1.0,
+          "frame": 489,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": 54.649578,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 8.0,
+          "action_id": 79,
+          "facing": -1.0,
+          "frame": 489,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 18.389999,
+          "player": 1,
+          "pos_x": 72.82122,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 5.0,
+          "action_id": 48,
+          "facing": 1.0,
+          "frame": 500,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": 54.649578,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 19.0,
+          "action_id": 79,
+          "facing": -1.0,
+          "frame": 500,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 18.389999,
+          "player": 1,
+          "pos_x": 72.839867,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 9.0,
+          "action_id": 48,
+          "facing": 1.0,
+          "frame": 504,
+          "hitlag": 3.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": 54.649578,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 1.0,
+          "action_id": 76,
+          "facing": -1.0,
+          "frame": 504,
+          "hitlag": 3.0,
+          "on_ground": 0,
+          "percent": 19.15,
+          "player": 1,
+          "pos_x": 72.839867,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 0.0,
+          "action_id": 49,
+          "facing": 1.0,
+          "frame": 508,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": 54.649578,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 3.0,
+          "action_id": 76,
+          "facing": -1.0,
+          "frame": 508,
+          "hitlag": 0.0,
+          "on_ground": 0,
+          "percent": 19.15,
+          "player": 1,
+          "pos_x": 73.15612,
+          "pos_y": 0.977972,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 5.0,
+          "action_id": 49,
+          "facing": 1.0,
+          "frame": 513,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": 54.649578,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 8.0,
+          "action_id": 76,
+          "facing": -1.0,
+          "frame": 513,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 19.15,
+          "player": 1,
+          "pos_x": 73.7612,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 0.0,
+          "action_id": 14,
+          "facing": 1.0,
+          "frame": 517,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": 54.649578,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 12.0,
+          "action_id": 76,
+          "facing": -1.0,
+          "frame": 517,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 19.15,
+          "player": 1,
+          "pos_x": 73.781006,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 12.0,
+          "action_id": 14,
+          "facing": 1.0,
+          "frame": 529,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": 54.649578,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 0.0,
+          "action_id": 14,
+          "facing": -1.0,
+          "frame": 529,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 19.15,
+          "player": 1,
+          "pos_x": 73.781006,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 43.0,
+          "action_id": 14,
+          "facing": 1.0,
+          "frame": 560,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 0.0,
+          "player": 0,
+          "pos_x": 54.649578,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        },
+        {
+          "action_frame": 31.0,
+          "action_id": 14,
+          "facing": -1.0,
+          "frame": 560,
+          "hitlag": 0.0,
+          "on_ground": 1,
+          "percent": 19.15,
+          "player": 1,
+          "pos_x": 73.781006,
+          "pos_y": 0.0001,
+          "shield_hp": 60.0,
+          "stocks": 4
+        }
+      ]
+    }
+  ],
+  "seed": 0,
+  "stage_id": 32
+}

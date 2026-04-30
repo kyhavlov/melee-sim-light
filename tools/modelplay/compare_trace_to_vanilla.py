@@ -380,10 +380,13 @@ def _input_array_from_trace_frame(frame: dict[str, Any], input_stride: int) -> A
     return arr.view(np.uint8).reshape((1, input_stride)).copy()
 
 
-def _compare_row_to_sim(row: Any, player: int) -> dict[str, Any]:
+def _compare_row_to_sim(row: Any, player: int, timebase: Any | None = None) -> dict[str, Any]:
+    action_frame = float(row["action_frame"][player])
+    if timebase is not None and action_frame >= 0.0:
+        action_frame = float(timebase[player, 3])
     return {
         "action_id": int(row["action_id"][player]),
-        "action_frame": float(row["action_frame"][player]),
+        "action_frame": action_frame,
         "pos_x": float(row["pos_x"][player]),
         "pos_y": float(row["pos_y"][player]),
         "facing": 1.0 if int(row["facing"][player]) else -1.0,
@@ -456,9 +459,10 @@ def _run_current_sim_rows(
         if start_mode == "sim-init":
             msl_binding.init_match(handle, config_bytes)
             msl_binding.write_compare(handle, out_bytes)
+            timebase = msl_binding.debug_timebase(handle, 0)
             row = out_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()
             for p in range(2):
-                out[(0, p)] = _compare_row_to_sim(row, p)
+                out[(0, p)] = _compare_row_to_sim(row, p, timebase)
         else:
             msl_binding.reseed_seed(handle, seed_bytes)
             seed_row = sample["seed_t"][0]
@@ -483,9 +487,10 @@ def _run_current_sim_rows(
             current_input = _input_array_from_trace_frame(trace_frames[frame_i], input_stride)
             msl_binding.step_input(handle, prev_input, current_input)
             msl_binding.write_compare(handle, out_bytes)
+            timebase = msl_binding.debug_timebase(handle, 0)
             row = out_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()
             for p in range(2):
-                out[(frame_i, p)] = _compare_row_to_sim(row, p)
+                out[(frame_i, p)] = _compare_row_to_sim(row, p, timebase)
             prev_input = current_input
     finally:
         msl_binding.destroy(handle)
