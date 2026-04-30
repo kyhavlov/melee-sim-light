@@ -133,6 +133,8 @@ def test_next_desync_investigation_writes_packet_from_rows_in(tmp_path: Path) ->
         json.dumps(
             {
                 "name": "tiny_next_desync",
+                "ucf_enabled": True,
+                "ucf_cardinals_1_0_enabled": True,
                 "replays": [{"replay": "replays/tiny.slp", "ports": [1, 2], "stage_id": 32}],
             }
         ),
@@ -161,6 +163,10 @@ def test_next_desync_investigation_writes_packet_from_rows_in(tmp_path: Path) ->
     packet = json.loads((out_dir / "top_packet.json").read_text(encoding="utf-8"))
     assert packet["tool"] == "tools.eval.next_desync_investigation"
     assert packet["record"] == 1
+    assert packet["simulation_config"] == {
+        "ucf_enabled": True,
+        "ucf_cardinals_1_0_enabled": True,
+    }
     assert packet["candidate"]["first_mismatch_field"] == "action_id"
     assert "one_step" in packet
     assert "active_profile_diff" in packet["one_step"]
@@ -222,11 +228,21 @@ def test_rollout_first_mismatch_falls_back_to_disruptive_context_when_one_step_i
     dataset = next_desync.read_dataset(str(dataset_path)).samples
     row = DisruptiveRow(**_row(dataset_path, record=1, score=140.0, family="F00_test", field="instance_id", offset=2))
 
-    monkeypatch.setattr(next_desync, "_simulate_one_step", lambda samples, record, num_players: (samples[record]["ref_t1"], None))
+    def fake_one_step(samples, record, num_players, *, ucf_enabled, ucf_cardinals_1_0_enabled):
+        assert ucf_enabled is True
+        assert ucf_cardinals_1_0_enabled is False
+        return samples[record]["ref_t1"], None
+
+    def fake_rollout(samples, record, offset, num_players, *, ucf_enabled, ucf_cardinals_1_0_enabled):
+        assert ucf_enabled is True
+        assert ucf_cardinals_1_0_enabled is False
+        return samples[record + offset - 1]["ref_t1"], None
+
+    monkeypatch.setattr(next_desync, "_simulate_one_step", fake_one_step)
     monkeypatch.setattr(
         next_desync,
         "_simulate_rollout_to_offset",
-        lambda samples, record, offset, num_players: (samples[record + offset - 1]["ref_t1"], None),
+        fake_rollout,
     )
 
     packet = next_desync._build_packet(
@@ -235,6 +251,8 @@ def test_rollout_first_mismatch_falls_back_to_disruptive_context_when_one_step_i
         rows_path=rows_path,
         profile=get_validation_profile("rl1_gameplay"),
         action_names={14: "Wait"},
+        suite_ucf_enabled=True,
+        suite_ucf_cardinals_1_0_enabled=False,
     )
 
     assert packet["one_step"]["first_differing_scored_field"] == {"status": "none"}

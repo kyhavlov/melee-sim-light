@@ -485,14 +485,41 @@ def _item_snapshot(row: np.void) -> list[dict[str, Any]]:
     return out[:8]
 
 
-def _simulate_one_step(dataset: np.ndarray, record: int, num_players: int) -> tuple[np.void | None, str | None]:
+def _init_binding_for_suite(
+    binding: Any,
+    *,
+    num_players: int,
+    ucf_enabled: bool | None,
+    ucf_cardinals_1_0_enabled: bool | None,
+) -> Any:
+    kwargs: dict[str, Any] = {"batch_size": 1, "num_players": int(num_players)}
+    if ucf_enabled is not None:
+        kwargs["ucf_enabled"] = int(bool(ucf_enabled))
+    if ucf_cardinals_1_0_enabled is not None:
+        kwargs["ucf_cardinals_1_0_enabled"] = int(bool(ucf_cardinals_1_0_enabled))
+    return binding.init(**kwargs)
+
+
+def _simulate_one_step(
+    dataset: np.ndarray,
+    record: int,
+    num_players: int,
+    *,
+    ucf_enabled: bool | None,
+    ucf_cardinals_1_0_enabled: bool | None,
+) -> tuple[np.void | None, str | None]:
     try:
         binding = importlib.import_module("msl_binding")
         sizes = binding.sizes()
         seed_stride = int(sizes["seed"])
         input_stride = int(sizes["input"])
         compare_stride = int(sizes["compare"])
-        handle = binding.init(batch_size=1, num_players=int(num_players))
+        handle = _init_binding_for_suite(
+            binding,
+            num_players=int(num_players),
+            ucf_enabled=ucf_enabled,
+            ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
+        )
         try:
             seed = np.frombuffer(dataset[record]["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
                 1, seed_stride
@@ -518,7 +545,13 @@ def _simulate_one_step(dataset: np.ndarray, record: int, num_players: int) -> tu
 
 
 def _simulate_rollout_to_offset(
-    dataset: np.ndarray, record: int, offset: int, num_players: int
+    dataset: np.ndarray,
+    record: int,
+    offset: int,
+    num_players: int,
+    *,
+    ucf_enabled: bool | None,
+    ucf_cardinals_1_0_enabled: bool | None,
 ) -> tuple[np.void | None, str | None]:
     if offset <= 0:
         return None, f"invalid first_mismatch_offset {offset}"
@@ -528,7 +561,12 @@ def _simulate_rollout_to_offset(
         seed_stride = int(sizes["seed"])
         input_stride = int(sizes["input"])
         compare_stride = int(sizes["compare"])
-        handle = binding.init(batch_size=1, num_players=int(num_players))
+        handle = _init_binding_for_suite(
+            binding,
+            num_players=int(num_players),
+            ucf_enabled=ucf_enabled,
+            ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
+        )
         try:
             seed = np.frombuffer(dataset[record]["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
                 1, seed_stride
@@ -901,6 +939,8 @@ def _build_packet(
     rows_path: Path,
     profile: ValidationProfile,
     action_names: dict[int, str],
+    suite_ucf_enabled: bool | None = None,
+    suite_ucf_cardinals_1_0_enabled: bool | None = None,
 ) -> dict[str, Any]:
     dataset_path = Path(row.dataset)
     if not dataset_path.is_absolute():
@@ -915,7 +955,13 @@ def _build_packet(
     players = tuple(range(num_players))
     seed = samples[record]["seed_t"]
     ref = samples[record]["ref_t1"]
-    out, sim_error = _simulate_one_step(samples, record, num_players)
+    out, sim_error = _simulate_one_step(
+        samples,
+        record,
+        num_players,
+        ucf_enabled=suite_ucf_enabled,
+        ucf_cardinals_1_0_enabled=suite_ucf_cardinals_1_0_enabled,
+    )
     strict = get_validation_profile("strict")
     first_offset = int(row.first_mismatch_offset)
     rollout_ref_index = record + first_offset - 1
@@ -929,7 +975,14 @@ def _build_packet(
     rollout_first_strict: dict[str, Any] | None = None
     if 0 <= rollout_ref_index < int(samples.shape[0]):
         rollout_ref = samples[rollout_ref_index]["ref_t1"]
-        rollout_out, rollout_error = _simulate_rollout_to_offset(samples, record, first_offset, num_players)
+        rollout_out, rollout_error = _simulate_rollout_to_offset(
+            samples,
+            record,
+            first_offset,
+            num_players,
+            ucf_enabled=suite_ucf_enabled,
+            ucf_cardinals_1_0_enabled=suite_ucf_cardinals_1_0_enabled,
+        )
         if rollout_out is not None:
             rollout_profile_diffs, rollout_grouped, rollout_first_scored = _profile_diff(
                 out_row=rollout_out, ref_row=rollout_ref, players=players, profile=profile
@@ -975,6 +1028,10 @@ def _build_packet(
         "dataset_path": _repo_relative(dataset_path, root),
         "record": record,
         "player": player,
+        "simulation_config": {
+            "ucf_enabled": suite_ucf_enabled,
+            "ucf_cardinals_1_0_enabled": suite_ucf_cardinals_1_0_enabled,
+        },
         "frame_context": {
             "seed_frame": int(seed["frame_id"]),
             "ref_frame": int(ref["frame_id"]),
@@ -1249,6 +1306,8 @@ def main() -> None:
             rows_path=rows_path,
             profile=profile,
             action_names=action_names,
+            suite_ucf_enabled=suite.ucf_enabled,
+            suite_ucf_cardinals_1_0_enabled=suite.ucf_cardinals_1_0_enabled,
         )
         packet["packet_index"] = int(packet_idx)
         packet["cluster"] = asdict(cluster)
