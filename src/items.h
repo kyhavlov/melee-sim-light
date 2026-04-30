@@ -18,6 +18,11 @@ static inline uint8_t item_type_is_illusion_article(uint16_t type) {
 
 void items_update(MslBatch* batch);
 
+// Runtime collision-demand predicate for consumers that need fighter hurtcap geometry before
+// items_update() runs. This shares the item-kind source of truth with item-vs-fighter collision:
+// supported blaster shots from data/items/lasers.bin plus Fox/Falco side-special ghost articles.
+uint8_t items_row_has_fighter_collision_demand(const MslBatch* batch, int bi);
+
 // Post-combat cleanup for item lanes that are owned by motion-state exits caused by combat
 // transitions in the same frame.
 void items_update_post_combat(MslBatch* batch);

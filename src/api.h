@@ -1866,6 +1866,8 @@ int msl_batch_debug_dynamic_pose_state(const MslBatch* batch, int batch_index, i
 // Debug-only helper: inspect one hurtcap slot's runtime eligibility for a fighter on this step.
 int msl_batch_debug_hurtcap_slot_flags(const MslBatch* batch, int batch_index, int player_index,
                                        int cap_id, MslDebugHurtcapSlotFlags* out_flags);
+int msl_batch_debug_hurtcap_geometry_valid(const MslBatch* batch, int batch_index, int player_index,
+                                           uint8_t* out_valid);
 // Debug/testing helper: return the current exact AttackAirB continuation overlap amount for one
 // attacker hitbox / defender hurtcap pair.
 int msl_batch_debug_attackairb_continuation_overlap(const MslBatch* batch, int batch_index,
@@ -1875,10 +1877,14 @@ int msl_batch_debug_body_matrix_overlap(const MslBatch* batch, int batch_index, 
                                         int hb_id, int defender, int cap_id, float* out_overlap);
 
 // Debug/validation helper: read pose-driven world-space hurt capsules for a single fighter.
+//
+// Normal runtime may skip endpoint sampling for players with no current collision demand. This
+// debug helper materializes skipped hurtcap geometry on demand before reading it, so it mutates the
+// batch and is not logically const.
 // Writes `MSL_MAX_HURTCAPS * 7` floats into out_caps_7 as rows:
 //   [ax, ay, az, bx, by, bz, radius]
 // and returns the active capsule count in out_count.
-int msl_batch_debug_hurtcaps_world(const MslBatch* batch, int batch_index, int player_index,
+int msl_batch_debug_hurtcaps_world(MslBatch* batch, int batch_index, int player_index,
                                    float* out_caps_7, uint8_t* out_count);
 
 // Debug/validation helper: read pose-driven world-space hitbox centers for a single fighter.

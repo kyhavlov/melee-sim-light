@@ -672,7 +672,8 @@ typedef struct MslStateSoA {
   uint8_t* colanim_terminal_x1990_item_body_guard;  // [batch * players] (0/1/2)
   // Pose-driven world-space hurt capsule endpoints (computed each frame in hurtboxes_refresh).
   uint8_t* hurtcap_count;  // [batch * players]
-  float* hurtcap_a_x;      // [batch * players * caps]
+  uint8_t* hurtcap_geometry_valid;
+  float* hurtcap_a_x;  // [batch * players * caps]
   float* hurtcap_a_y;
   float* hurtcap_a_z;
   float* hurtcap_b_x;

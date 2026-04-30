@@ -3233,7 +3233,7 @@ int msl_batch_debug_hitbox_sweep_proxy(const MslBatch* batch, int batch_index, i
   return 0;
 }
 
-int msl_batch_debug_hurtcaps_world(const MslBatch* batch, int batch_index, int player_index,
+int msl_batch_debug_hurtcaps_world(MslBatch* batch, int batch_index, int player_index,
                                    float* out_caps_7, uint8_t* out_count) {
   if (batch == NULL || out_caps_7 == NULL || out_count == NULL) {
     return EINVAL;
@@ -3245,10 +3245,17 @@ int msl_batch_debug_hurtcaps_world(const MslBatch* batch, int batch_index, int p
     return EINVAL;
   }
 
+  const size_t idx = msl_idx_player(batch_index, player_index);
+  if (batch->state.hurtcap_geometry_valid[idx] == 0u) {
+    // Runtime step can skip lb_8000B1CC-style endpoint sampling when no collision consumer exists
+    // for the row. Debug readback preserves the old "world capsules are available after step"
+    // forensic contract by materializing the full geometry on demand.
+    hurtboxes_refresh(batch);
+  }
+
   // Zero-fill the full fixed-size output for stable test snapshots.
   memset(out_caps_7, 0, sizeof(float) * (size_t)MSL_MAX_HURTCAPS * 7u);
 
-  const size_t idx = msl_idx_player(batch_index, player_index);
   uint8_t count = batch->state.hurtcap_count[idx];
   if (count > (uint8_t)MSL_MAX_HURTCAPS) {
     count = (uint8_t)MSL_MAX_HURTCAPS;
@@ -3421,6 +3428,22 @@ int msl_batch_debug_hurtcap_slot_flags(const MslBatch* batch, int batch_index, i
   out_flags->can_hit_mask = can_hit_mask;
   out_flags->mode_can_hit_bit = (uint8_t)((can_hit_mask >> cap_id) & 0x1u);
 
+  return 0;
+}
+
+int msl_batch_debug_hurtcap_geometry_valid(const MslBatch* batch, int batch_index, int player_index,
+                                           uint8_t* out_valid) {
+  if (batch == NULL || out_valid == NULL) {
+    return EINVAL;
+  }
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return EINVAL;
+  }
+  if (player_index < 0 || player_index >= MSL_MAX_PLAYERS) {
+    return EINVAL;
+  }
+  const size_t idx = msl_idx_player(batch_index, player_index);
+  *out_valid = batch->state.hurtcap_geometry_valid[idx] ? 1u : 0u;
   return 0;
 }
 
@@ -3967,6 +3990,7 @@ int msl_batch_debug_clear_hurtcaps_world(MslBatch* batch, int batch_index, int p
 
   const size_t idx = msl_idx_player(batch_index, player_index);
   batch->state.hurtcap_count[idx] = 0;
+  batch->state.hurtcap_geometry_valid[idx] = 1u;
   for (int cap_id = 0; cap_id < MSL_MAX_HURTCAPS; cap_id++) {
     const size_t cap_i = debug_idx_hurtcap(batch_index, player_index, cap_id);
     batch->state.hurtcap_enabled[cap_i] = 0;
@@ -4017,6 +4041,7 @@ int msl_batch_debug_set_hurtcap_world(MslBatch* batch, int batch_index, int play
     count = want;
   }
   batch->state.hurtcap_count[idx] = count;
+  batch->state.hurtcap_geometry_valid[idx] = 1u;
 
   return 0;
 }

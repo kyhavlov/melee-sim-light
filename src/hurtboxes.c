@@ -11,6 +11,7 @@
 #include "hit_status_tables.h"
 #include "hurtbox_modes_tables.h"
 #include "hurtcaps_tables.h"
+#include "items.h"
 #include "msl_math.h"
 #include "mtx34.h"
 #include "specialhi_pose.h"
@@ -20,6 +21,26 @@ enum { MSL_CHAR_FOX = 1, MSL_CHAR_FALCO = 22 };
 static inline size_t idx_hurtcap(int bi, int p, int cap_i) {
   return ((size_t)bi * (size_t)MSL_MAX_PLAYERS + (size_t)p) * (size_t)MSL_MAX_HURTCAPS +
          (size_t)cap_i;
+}
+
+static inline uint8_t hurtboxes_player_has_contact_geometry_demand(const MslBatch* batch, int bi,
+                                                                   int p, int num_players) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  if (items_row_has_fighter_collision_demand(batch, bi) != 0u) {
+    return 1u;
+  }
+  for (int attacker = 0; attacker < num_players; attacker++) {
+    if (attacker == p) {
+      continue;
+    }
+    const size_t a_idx = msl_idx_player(bi, attacker);
+    if (batch->state.hitbox_count[a_idx] != 0u) {
+      return 1u;
+    }
+  }
+  return 0u;
 }
 
 static inline uint8_t hurtboxes_guard_fallback_submotion(uint16_t action_id, uint16_t* out_msid) {
@@ -382,7 +403,7 @@ static inline void hurtboxes_apply_colanim_action_entry(MslBatch* batch, size_t 
   }
 }
 
-void hurtboxes_refresh(MslBatch* batch) {
+static void hurtboxes_refresh_impl(MslBatch* batch, uint8_t geometry_mode) {
   if (batch == NULL) {
     return;
   }
@@ -402,7 +423,14 @@ void hurtboxes_refresh(MslBatch* batch) {
   for (int bi = 0; bi < batch->batch_size; bi++) {
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
+      const uint8_t build_geometry =
+          (geometry_mode == 0u)
+              ? 1u
+              : ((geometry_mode == 1u)
+                     ? 0u
+                     : hurtboxes_player_has_contact_geometry_demand(batch, bi, p, num_players));
       batch->state.hurtcap_count[idx] = 0;
+      batch->state.hurtcap_geometry_valid[idx] = 0u;
       // Clear fixed slots for stable debug readback (and to avoid stale values when pose lookups
       // or script masks disable/skip specific capsules).
       for (int ci = 0; ci < MSL_MAX_HURTCAPS; ci++) {
@@ -692,6 +720,10 @@ void hurtboxes_refresh(MslBatch* batch) {
       }
       batch->state.hurtbox_state[idx] = final_hurtbox_state;
 
+      if (geometry_mode == 1u) {
+        continue;
+      }
+
       if (msl_action_owns_respawn_collision_skip(action_id)) {
         // Rebirth/RebirthWait set fp->x2219_b1. Fighter_8006CB94 skips the common fighter
         // collision pass while that bit is live, and item-vs-fighter collision rejects x2219_b1
@@ -785,6 +817,18 @@ void hurtboxes_refresh(MslBatch* batch) {
       for (uint16_t ci = 0; ci < cap_count; ci++) {
         cap_part_ids[ci] = caps[ci].bone_part_id;
       }
+      if (build_geometry == 0u) {
+        for (uint16_t ci = 0; ci < cap_count; ci++) {
+          const size_t hi = idx_hurtcap(bi, p, (int)ci);
+          const uint8_t can_body_hit = (uint8_t)((can_hit_mask >> ci) & 0x1u);
+          batch->state.hurtcap_enabled[hi] = can_body_hit;
+          batch->state.hurtcap_radius[hi] = caps[ci].scale * model_scale;
+          batch->state.hurtcap_is_grabbable[hi] = caps[ci].is_grabbable ? 1 : 0;
+          batch->state.hurtcap_height[hi] = caps[ci].height;
+        }
+        batch->state.hurtcap_count[idx] = (uint8_t)cap_count;
+        continue;
+      }
       // HSD_AObjInterpretAnim owns JObj local SRT at float `cur_anim_frame`; landing-aerial
       // states can run non-integer animation rates, and lb_8000B1CC consumes the live matrix for
       // hurtcap endpoints before BODY admission. Keep integer SSANIM01 for actions whose
@@ -867,6 +911,13 @@ void hurtboxes_refresh(MslBatch* batch) {
       }
 
       batch->state.hurtcap_count[idx] = (uint8_t)cap_count;
+      batch->state.hurtcap_geometry_valid[idx] = 1u;
     }
   }
 }
+
+void hurtboxes_refresh(MslBatch* batch) { hurtboxes_refresh_impl(batch, 0u); }
+
+void hurtboxes_refresh_metadata(MslBatch* batch) { hurtboxes_refresh_impl(batch, 1u); }
+
+void hurtboxes_refresh_contact_geometry(MslBatch* batch) { hurtboxes_refresh_impl(batch, 2u); }

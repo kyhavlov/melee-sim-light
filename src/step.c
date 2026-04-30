@@ -493,8 +493,20 @@ static int step_one_frame_core(MslBatch* batch, const uint8_t* prev_input_bytes,
   // refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009DD94
   // refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
   anim_pose_update_dynamic_state(batch);
-  hurtboxes_refresh(batch);
-  hitboxes_refresh(batch);
+  if (run_combat) {
+    // Fighter hitbox refresh needs the current-frame merged hurtbox state for no-damage contact
+    // carry, but BODY/catch/item collision only consumes endpoint geometry when an item or opposing
+    // HitCapsule exists. Keep the decomp-shaped state/mode pass unconditional and defer the
+    // lb_8000B1CC-style endpoint matrix sampling until the current frame has contact demand.
+    // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007B868,ftColl_80076ED8,ftColl_80078A2C}
+    // refs/melee/src/melee/it/itcoll.c::it_80272460
+    hurtboxes_refresh_metadata(batch);
+    hitboxes_refresh(batch);
+    hurtboxes_refresh_contact_geometry(batch);
+  } else {
+    hurtboxes_refresh(batch);
+    hitboxes_refresh(batch);
+  }
   hitlist_tick(batch);
   shields_refresh(batch);
   reflector_bubbles_refresh(batch);

@@ -1411,6 +1411,23 @@ static inline uint8_t item_type_is_spacie_illusion(uint16_t type) {
              : 0u;
 }
 
+uint8_t items_row_has_fighter_collision_demand(const MslBatch* batch, int bi) {
+  if (batch == NULL || bi < 0 || bi >= batch->batch_size) {
+    return 0u;
+  }
+  for (int it = 0; it < MSL_MAX_ITEMS; it++) {
+    const size_t ii = msl_idx_item(bi, it);
+    if (batch->state.item_exists[ii] == 0u) {
+      continue;
+    }
+    const uint16_t type = batch->state.item_type[ii];
+    if (laser_params_for_item_type(type) != NULL || item_type_is_spacie_illusion(type) != 0u) {
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
 static inline uint8_t illusion_item_hit_params_from_state(const MslCharParams* chp,
                                                           uint8_t item_state,
                                                           MslIllusionItemHitParams* out) {

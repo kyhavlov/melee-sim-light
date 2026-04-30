@@ -1365,6 +1365,29 @@ static PyObject* msl_debug_hurtcap_slot_flags_py(PyObject* self, PyObject* args)
   return (PyObject*)arr;
 }
 
+static PyObject* msl_debug_hurtcap_geometry_valid_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  int batch_index = 0;
+  int player_index = 0;
+  if (!PyArg_ParseTuple(args, "Oii", &handle_obj, &batch_index, &player_index)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+
+  uint8_t valid = 0u;
+  const int err =
+      msl_batch_debug_hurtcap_geometry_valid(h->batch, batch_index, player_index, &valid);
+  if (err != 0) {
+    PyErr_Format(PyExc_ValueError, "msl_batch_debug_hurtcap_geometry_valid failed: %d", err);
+    return NULL;
+  }
+  return PyLong_FromLong((long)valid);
+}
+
 static PyObject* msl_debug_dynamic_pose_state_py(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* handle_obj = NULL;
@@ -3071,6 +3094,8 @@ static PyMethodDef methods[] = {
     {"debug_hurtcap_slot_flags", msl_debug_hurtcap_slot_flags_py, METH_VARARGS,
      "debug_hurtcap_slot_flags(handle, batch_index, player_index, cap_id) -> "
      "bytes[1,sizeof(MslDebugHurtcapSlotFlags)]"},
+    {"debug_hurtcap_geometry_valid", msl_debug_hurtcap_geometry_valid_py, METH_VARARGS,
+     "debug_hurtcap_geometry_valid(handle, batch_index, player_index) -> 0/1"},
     {"debug_dynamic_pose_state", msl_debug_dynamic_pose_state_py, METH_VARARGS,
      "debug_dynamic_pose_state(handle, batch_index, player_index) -> "
      "bytes[1,sizeof(MslDebugDynamicPoseState)]"},

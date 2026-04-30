@@ -260,6 +260,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->colanim_hitstun_x198c1_seed = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->colanim_terminal_x1990_item_body_guard = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->hurtcap_count = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->hurtcap_geometry_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->hurtcap_a_x = (float*)alloc_aligned_64(sizeof(float) * bpc);
   state->hurtcap_a_y = (float*)alloc_aligned_64(sizeof(float) * bpc);
   state->hurtcap_a_z = (float*)alloc_aligned_64(sizeof(float) * bpc);
@@ -492,40 +493,41 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->colanim_hit_status_x198c || !state->colanim_timer_x1990 ||
       !state->colanim_timer_x1994 || !state->colanim_lock_x2221_b0 ||
       !state->colanim_hitstun_x198c1_seed || !state->colanim_terminal_x1990_item_body_guard ||
-      !state->hurtcap_count || !state->hurtcap_a_x || !state->hurtcap_a_y || !state->hurtcap_a_z ||
-      !state->hurtcap_b_x || !state->hurtcap_b_y || !state->hurtcap_b_z || !state->hurtcap_radius ||
-      !state->hurtcap_enabled || !state->hurtcap_is_grabbable || !state->hurtcap_height ||
-      !state->hitbox_count || !state->hitbox_enabled || !state->hitbox_prev_enabled ||
-      !state->hitbox_prev_x || !state->hitbox_prev_y || !state->hitbox_prev_z ||
-      !state->hitbox_pose_create || !state->hitbox_enable_edge || !state->hitbox_x43_b2 ||
-      !state->hitbox_prev_bootstrap || !state->hitbox_x || !state->hitbox_y || !state->hitbox_z ||
-      !state->hitbox_radius || !state->hitbox_damage || !state->hitbox_bone_part_id ||
-      !state->hitbox_u16_0 || !state->hitbox_u16_1 || !state->hitbox_u16_2 ||
-      !state->hitbox_u16_3 || !state->hitbox_u16_4 || !state->hitbox_u16_5 ||
-      !state->hitbox_u16_6 || !state->hitbox_u16_7 || !state->hitbox_angle || !state->hitbox_kbg ||
-      !state->hitbox_wsk || !state->hitbox_bkb || !state->hitbox_element ||
-      !state->hitbox_shield_damage || !state->hitbox_sfx_severity || !state->hitbox_sfx_kind ||
-      !state->hitbox_flags || !state->shield_x || !state->shield_y || !state->shield_z ||
-      !state->shield_radius || !state->reflector_x || !state->reflector_y ||
-      !state->reflector_radius || !state->ground_id || !state->animation_index ||
-      !state->dynamic_pose_state_valid || !state->dynamic_pose_apply_collision_matrix ||
-      !state->dynamic_pose_node_count || !state->dynamic_pose_char_id ||
-      !state->dynamic_pose_msid || !state->dynamic_pose_frame || !state->dynamic_pose_rot_x ||
-      !state->dynamic_pose_rot_y || !state->dynamic_pose_rot_z || !state->dynamic_pose_pos_x ||
-      !state->dynamic_pose_pos_y || !state->dynamic_pose_pos_z || !state->dynamic_pose_axis_x ||
-      !state->dynamic_pose_axis_y || !state->dynamic_pose_axis_z || !state->dynamic_pose_angle ||
-      !state->instance_hit_by || !state->instance_id || !state->instance_id_x2073 ||
-      !state->motion_entry_instance_id_override || !state->instance_identity_last_action_id ||
-      !state->attack_id || !state->attack_instance || !state->attack_identity_last_action_id ||
-      !state->last_attack_landed || !state->combo_count || !state->combo_victim_port ||
-      !state->combo_victim_instance_id || !state->combo_timer_x2098 || !state->source_port0 ||
-      !state->last_hit_by || !state->state_flags || !state->combat_hitlist_cd ||
-      !state->combat_hitlist_victim_iid || !state->combat_hitlist_hb_valid ||
-      !state->combat_hitlist_hb_cd || !state->combat_hitlist_hb_victim_iid ||
-      !state->combat_shield_contact_hb_kind || !state->combat_shield_hit_int_damage ||
-      !state->hitlist_reseed_gen || !state->fighter_hitlist || !state->fighter_hitlist_init_gen ||
-      !state->stale_queue_index || !state->stale_move_id || !state->stale_attack_instance ||
-      !state->input_buttons || !state->prev_input_buttons || !state->input_buttons_pressed ||
+      !state->hurtcap_count || !state->hurtcap_geometry_valid || !state->hurtcap_a_x ||
+      !state->hurtcap_a_y || !state->hurtcap_a_z || !state->hurtcap_b_x || !state->hurtcap_b_y ||
+      !state->hurtcap_b_z || !state->hurtcap_radius || !state->hurtcap_enabled ||
+      !state->hurtcap_is_grabbable || !state->hurtcap_height || !state->hitbox_count ||
+      !state->hitbox_enabled || !state->hitbox_prev_enabled || !state->hitbox_prev_x ||
+      !state->hitbox_prev_y || !state->hitbox_prev_z || !state->hitbox_pose_create ||
+      !state->hitbox_enable_edge || !state->hitbox_x43_b2 || !state->hitbox_prev_bootstrap ||
+      !state->hitbox_x || !state->hitbox_y || !state->hitbox_z || !state->hitbox_radius ||
+      !state->hitbox_damage || !state->hitbox_bone_part_id || !state->hitbox_u16_0 ||
+      !state->hitbox_u16_1 || !state->hitbox_u16_2 || !state->hitbox_u16_3 ||
+      !state->hitbox_u16_4 || !state->hitbox_u16_5 || !state->hitbox_u16_6 ||
+      !state->hitbox_u16_7 || !state->hitbox_angle || !state->hitbox_kbg || !state->hitbox_wsk ||
+      !state->hitbox_bkb || !state->hitbox_element || !state->hitbox_shield_damage ||
+      !state->hitbox_sfx_severity || !state->hitbox_sfx_kind || !state->hitbox_flags ||
+      !state->shield_x || !state->shield_y || !state->shield_z || !state->shield_radius ||
+      !state->reflector_x || !state->reflector_y || !state->reflector_radius || !state->ground_id ||
+      !state->animation_index || !state->dynamic_pose_state_valid ||
+      !state->dynamic_pose_apply_collision_matrix || !state->dynamic_pose_node_count ||
+      !state->dynamic_pose_char_id || !state->dynamic_pose_msid || !state->dynamic_pose_frame ||
+      !state->dynamic_pose_rot_x || !state->dynamic_pose_rot_y || !state->dynamic_pose_rot_z ||
+      !state->dynamic_pose_pos_x || !state->dynamic_pose_pos_y || !state->dynamic_pose_pos_z ||
+      !state->dynamic_pose_axis_x || !state->dynamic_pose_axis_y || !state->dynamic_pose_axis_z ||
+      !state->dynamic_pose_angle || !state->instance_hit_by || !state->instance_id ||
+      !state->instance_id_x2073 || !state->motion_entry_instance_id_override ||
+      !state->instance_identity_last_action_id || !state->attack_id || !state->attack_instance ||
+      !state->attack_identity_last_action_id || !state->last_attack_landed || !state->combo_count ||
+      !state->combo_victim_port || !state->combo_victim_instance_id || !state->combo_timer_x2098 ||
+      !state->source_port0 || !state->last_hit_by || !state->state_flags ||
+      !state->combat_hitlist_cd || !state->combat_hitlist_victim_iid ||
+      !state->combat_hitlist_hb_valid || !state->combat_hitlist_hb_cd ||
+      !state->combat_hitlist_hb_victim_iid || !state->combat_shield_contact_hb_kind ||
+      !state->combat_shield_hit_int_damage || !state->hitlist_reseed_gen ||
+      !state->fighter_hitlist || !state->fighter_hitlist_init_gen || !state->stale_queue_index ||
+      !state->stale_move_id || !state->stale_attack_instance || !state->input_buttons ||
+      !state->prev_input_buttons || !state->input_buttons_pressed ||
       !state->input_buttons_released || !state->input_main_x || !state->input_main_y ||
       !state->prev_input_main_x || !state->prev_input_main_y || !state->input_c_x ||
       !state->input_c_y || !state->prev_input_c_x || !state->prev_input_c_y ||
@@ -838,6 +840,7 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->colanim_hitstun_x198c1_seed);
   alloc_free(state->colanim_terminal_x1990_item_body_guard);
   alloc_free(state->hurtcap_count);
+  alloc_free(state->hurtcap_geometry_valid);
   alloc_free(state->hurtcap_a_x);
   alloc_free(state->hurtcap_a_y);
   alloc_free(state->hurtcap_a_z);
