@@ -248,3 +248,77 @@ def test_damageflytop_hitlag_sdi_target_and_neighbors_are_replay_exact() -> None
         assert int(out["hitstun"][p]) == int(ref["hitstun"][p])
         assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=1e-6)
         assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
+def test_first_active_hitlag_radius_crossing_sdi_applies_ppa_2185() -> None:
+    # Replay-real lock for a first active-hitlag SDI pulse where damage entry reset the
+    # replay-visible x670/x671 seeds to 0xFE, but callback-time vanilla still consumes the
+    # current stick after it newly crosses the ftCo_Damage_OnEveryHitlag radius gate.
+    #
+    # Dolphin probe: reports/triage/damage_sdi_probe/ppa.jsonl (local scratch)
+    #   frame 2063: lstick=(0.975,0), lstick1=(0.475,0), pos_x +5.85
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+        "PriceyPartialAlbatross.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[2185:2186]
+    p = 0
+    assert int(row["seed_t"]["action_id"][0, p]) == 78
+    assert int(row["seed_t"]["hitlag"][0, p]) == 4
+    assert int(row["seed_t"]["tilt_timer_x"][0, p]) == 0xFE
+    assert float(row["ref_t1"]["pos_x"][0, p] - row["seed_t"]["pos_x"][0, p]) == pytest.approx(
+        5.8499999, abs=1e-5
+    )
+
+    out, ref = _run_one_step(dataset_path, 2185)
+    assert int(out["action_id"][p]) == int(ref["action_id"][p])
+    assert int(out["hitlag"][p]) == int(ref["hitlag"][p])
+    assert int(out["hitstun"][p]) == int(ref["hitstun"][p])
+    assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=1e-6)
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
+def test_held_radius_stick_does_not_retrigger_first_hitlag_sdi_prh_659() -> None:
+    # Negative for the radius-crossing bridge: PRH has active hitlag and a high-magnitude stick,
+    # but callback-time vanilla already had a high-magnitude lstick1 from the previous frame and
+    # applies no new SDI displacement.
+    #
+    # Dolphin probe: reports/triage/damage_sdi_probe/prh.jsonl (local scratch)
+    #   frame 537: lstick=(0,-0.9875), lstick1=(0,-0.9875), pos unchanged
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+        "PositiveRevolvingHyena.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[659:660]
+    p = 0
+    assert int(row["seed_t"]["action_id"][0, p]) == 90
+    assert int(row["seed_t"]["hitlag"][0, p]) == 7
+    assert int(row["seed_t"]["tilt_timer_x"][0, p]) == 0xFE
+    assert int(row["seed_t"]["tilt_timer_y"][0, p]) == 0xFE
+    assert float(row["ref_t1"]["pos_x"][0, p]) == pytest.approx(
+        float(row["seed_t"]["pos_x"][0, p]), abs=1e-6
+    )
+    assert float(row["ref_t1"]["pos_y"][0, p]) == pytest.approx(
+        float(row["seed_t"]["pos_y"][0, p]), abs=1e-6
+    )
+
+    out, ref = _run_one_step(dataset_path, 659)
+    assert int(out["action_id"][p]) == int(ref["action_id"][p])
+    assert int(out["hitlag"][p]) == int(ref["hitlag"][p])
+    assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=1e-6)
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)

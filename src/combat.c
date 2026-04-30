@@ -741,6 +741,17 @@ static inline uint8_t combat_hitbox_hitbox_overlap_lbColl_80007AFC(const MslBatc
   return (uint8_t)(d2 <= rr * rr);
 }
 
+static inline uint8_t combat_hitbox_targets_fighter_ground_state(uint16_t hitbox_flags,
+                                                                 uint8_t defender_on_ground) {
+  // Fighter-vs-fighter collision filters each HitCapsule by the opponent's ground/air state before
+  // the hitbox-vs-hitbox clank owner runs.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+  if (defender_on_ground) {
+    return (hitbox_flags & (uint16_t)MSL_HITBOX_FLAG_HIT_GROUNDED) != 0 ? 1u : 0u;
+  }
+  return (hitbox_flags & (uint16_t)MSL_HITBOX_FLAG_HIT_AERIAL) != 0 ? 1u : 0u;
+}
+
 static inline void combat_clank_skip_same_hit_group(
     const MslBatch* batch, int bi, int attacker, int defender, int hb_id,
     uint8_t clank_skip_hb[MSL_MAX_PLAYERS][MSL_MAX_PLAYERS][MSL_MAX_HITBOXES]) {
@@ -750,19 +761,31 @@ static inline void combat_clank_skip_same_hit_group(
   const size_t src_i = idx_hitbox(bi, attacker, hb_id);
   const uint8_t group = hitlist_hit_group_from_u16_7(batch->state.hitbox_u16_7[src_i]);
   for (int hb = 0; hb < MSL_MAX_HITBOXES; hb++) {
-    if (hb < hb_id) {
-      // ftColl_80078C70 interleaves clank and BODY checks inside the per-HitCapsule loop. A later
-      // same-group clank can register the group for subsequent hitboxes, but it cannot retroactively
-      // suppress earlier hitboxes whose BODY admission would already have run.
-      // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_8007699C,ftColl_80076808}
-      continue;
-    }
     const size_t cur_i = idx_hitbox(bi, attacker, hb);
     if (!batch->state.hitbox_enabled[cur_i]) {
       continue;
     }
     if (hitlist_hit_group_from_u16_7(batch->state.hitbox_u16_7[cur_i]) == group) {
       clank_skip_hb[attacker][defender][hb] = 1u;
+    }
+  }
+}
+
+static inline void combat_clank_candidate_skip_same_hit_group_all(
+    const MslBatch* batch, int bi, int attacker, int defender, int hb_id,
+    uint8_t clank_candidate_skip_hb[MSL_MAX_PLAYERS][MSL_MAX_PLAYERS][MSL_MAX_HITBOXES]) {
+  if (batch == NULL || hb_id < 0 || hb_id >= MSL_MAX_HITBOXES) {
+    return;
+  }
+  const size_t src_i = idx_hitbox(bi, attacker, hb_id);
+  const uint8_t group = hitlist_hit_group_from_u16_7(batch->state.hitbox_u16_7[src_i]);
+  for (int hb = 0; hb < MSL_MAX_HITBOXES; hb++) {
+    const size_t cur_i = idx_hitbox(bi, attacker, hb);
+    if (!batch->state.hitbox_enabled[cur_i]) {
+      continue;
+    }
+    if (hitlist_hit_group_from_u16_7(batch->state.hitbox_u16_7[cur_i]) == group) {
+      clank_candidate_skip_hb[attacker][defender][hb] = 1u;
     }
   }
 }
@@ -2310,6 +2333,103 @@ static inline float combat_apply_attacker_smash_release_damage_mul(const MslBatc
   const float t = (float)charge_frames / (float)hold_frames;
   const float mul = ((damage_mul - 1.0f) * t) + 1.0f;
   return damage * mul;
+}
+
+static inline float combat_hitcapsule_collision_damage(const MslBatch* batch, size_t a_idx,
+                                                       size_t hb_i) {
+  if (batch == NULL) {
+    return 0.0f;
+  }
+  // HitCapsule.damage is collision-time damage, not the raw movescript value:
+  // - ftColl_8007ABD0 calls ftCo_800DEEB8 for smash-release damage and ft_80089228 for stale
+  //   damage before writing HitCapsule.damage.
+  // - ftColl_8007699C then consumes HitCapsule.damage for reciprocal clank thresholds and the
+  //   per-fighter int damage later used by Fighter_ProcessHit hitlag/rebound.
+  // - Replay seeds can already include a same-attack stale entry from an earlier contact in this
+  //   attack instance. That entry must not retroactively stale the live HitCapsule; older instances
+  //   of the same move still stale normally.
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007ABD0,ftColl_8007699C,inlineA0,inlineA1}
+  // refs/melee/src/melee/ft/ft_0DF0.c::ftCo_800DEEB8
+  // refs/melee/src/melee/ft/ft_0881.c::ft_80089228
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  const uint16_t move_id = staling_move_id_from_state(batch, a_idx);
+  const uint16_t attack_instance = batch->state.attack_instance[a_idx];
+  const float stale_mult =
+      staling_multiplier_for_move_excluding_instance(batch, a_idx, move_id, attack_instance);
+  float dmg = combat_apply_attacker_smash_release_damage_mul(batch, a_idx,
+                                                             batch->state.hitbox_damage[hb_i]);
+  if (stale_mult != 1.0f) {
+    dmg *= stale_mult;
+  }
+  return dmg;
+}
+
+static inline float combat_rebound_x191c_from_int_dmg(const MslCommonParams* c, int int_dmg) {
+  if (c == NULL || int_dmg <= 0) {
+    return 0.0f;
+  }
+  // Rebound clank setup:
+  // - ftColl inlineA0/inlineA1 write `fp->dmg.x191C = int_dmg * x3D0 + x3D4` for grounded
+  //   rebound-requesting clanks.
+  // refs/melee/src/melee/ft/ftcoll.c::{inlineA0,inlineA1}
+  return (float)int_dmg * c->rebound_damage_x191c_mul + c->rebound_damage_x191c_base;
+}
+
+static inline float combat_clank_damage_facing_dir(const MslBatch* batch, size_t self_idx,
+                                                   size_t opponent_idx) {
+  if (batch == NULL) {
+    return 1.0f;
+  }
+  // Clank damage-facing owner:
+  // - ftColl_8007699C inlineA0/inlineA1 write `fp->dmg.facing_dir` from the two fighter root X
+  //   positions before ftCo_80099D9C consumes it.
+  // - This is not necessarily the replay-visible scalar facing byte; cross-up/back-facing clanks
+  //   still rebound away from the opponent's current root position.
+  // Source shape matches BODY damage facing ownership used by ftCo_8008DCE0:
+  //   self.x > opponent.x => -1, else +1.
+  // refs/melee/src/melee/ft/ftcoll.c::{inlineA0,inlineA1}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Rebound.c::ftCo_80099D9C
+  return (batch->state.pos_x[self_idx] > batch->state.pos_x[opponent_idx]) ? -1.0f : 1.0f;
+}
+
+static inline float combat_rebound_ground_accel_2_from_int_dmg(const MslBatch* batch,
+                                                               const MslCommonParams* c, size_t idx,
+                                                               int int_dmg,
+                                                               float damage_facing_dir) {
+  const float rebound_x191c = combat_rebound_x191c_from_int_dmg(c, int_dmg);
+  if (!(rebound_x191c > 0.0f)) {
+    return 0.0f;
+  }
+  // Rebound xE8 ownership:
+  // - ftCo_80099D9C derives `mv.co.rebound.x0 = -facing_dir * (x191C * x3D8 + x3DC)`.
+  // - ftCommon_800804A0 writes that through xE8_ground_accel_2, scaled by
+  //   ft_GetGroundFrictionMultiplier only when the multiplier is below 1.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Rebound.c::ftCo_80099D9C
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804A0
+  float x0 =
+      -damage_facing_dir * (rebound_x191c * c->rebound_ground_x0_mul + c->rebound_ground_x0_base);
+  const float friction_mul = batch->state.ground_friction_mul[idx];
+  if (friction_mul < 1.0f) {
+    x0 *= friction_mul;
+  }
+  return x0;
+}
+
+static inline int32_t combat_rebound_anim_rate_from_int_dmg(const MslBatch* batch,
+                                                            const MslCommonParams* c, size_t idx,
+                                                            int int_dmg) {
+  const float rebound_x191c = combat_rebound_x191c_from_int_dmg(c, int_dmg);
+  const MslCharParams* ch = (batch != NULL) ? msl_char_params(batch->state.char_id[idx]) : NULL;
+  if (!(rebound_x191c > 0.0f) || ch == NULL) {
+    return 0;
+  }
+  // Rebound anim-rate ownership:
+  // - ftCo_80099D9C stores `mv.co.rebound.anim_start = (fp->co_attrs.x9C + 0.1f) / fp->dmg.x191C`.
+  // - ftCo_ReboundStop_Anim -> ftCo_80099E44 later enters Rebound with that stored rate.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Rebound.c::{
+  //   ftCo_80099D9C,ftCo_ReboundStop_Anim,ftCo_80099E44}
+  const float rate = (ch->rebound_anim_numerator_frames + 0.1f) / rebound_x191c;
+  return (rate > 0.0f) ? msl_q16_16_from_f32(rate) : 0;
 }
 
 static inline uint8_t combat_defender_hit_status_u8(const MslBatch* batch, size_t d_idx) {
@@ -4571,31 +4691,6 @@ static inline void combat_throw_release_apply_immediate_di(MslBatch* batch, size
   batch->state.speed_y_attack[victim_idx] = kb_y;
 }
 
-static inline float combat_rebound_x191c_from_int_dmg(const MslCommonParams* c, int int_dmg) {
-  if (c == NULL || int_dmg <= 0) {
-    return 0.0f;
-  }
-  // Rebound clank setup:
-  // - ftColl inlineA0/inlineA1 write `fp->dmg.x191C = int_dmg * x3D0 + x3D4` for grounded
-  //   rebound-requesting clanks.
-  // refs/melee/src/melee/ft/ftcoll.c::{inlineA0,inlineA1}
-  return (float)int_dmg * c->rebound_damage_x191c_mul + c->rebound_damage_x191c_base;
-}
-
-static inline float combat_rebound_ground_x0_from_int_dmg(const MslCommonParams* c, int int_dmg,
-                                                          float facing_dir) {
-  const float rebound_x191c = combat_rebound_x191c_from_int_dmg(c, int_dmg);
-  if (!(rebound_x191c > 0.0f)) {
-    return 0.0f;
-  }
-  // Rebound ground-velocity ownership:
-  // - ftCo_80099D9C derives `mv.co.rebound.x0 = -facing_dir * (x191C * x3D8 + x3DC)`, then writes
-  //   it through ftCommon_800804A0 on ReboundStop entry.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Rebound.c::ftCo_80099D9C
-  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804A0
-  return -facing_dir * (rebound_x191c * c->rebound_ground_x0_mul + c->rebound_ground_x0_base);
-}
-
 void combat_apply_item_shield_hit(MslBatch* batch, int batch_index, int attacker, int defender,
                                   uint16_t item_attack_id, uint16_t item_attack_instance,
                                   float damage, int8_t hitbox_shield_damage, uint8_t hit_element,
@@ -5151,6 +5246,7 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_8007699C}
   uint8_t clank_pair_done[MSL_MAX_PLAYERS][MSL_MAX_PLAYERS] = {{0}};
   uint8_t clank_skip_hb[MSL_MAX_PLAYERS][MSL_MAX_PLAYERS][MSL_MAX_HITBOXES] = {{{0}}};
+  uint8_t clank_candidate_skip_hb[MSL_MAX_PLAYERS][MSL_MAX_PLAYERS][MSL_MAX_HITBOXES] = {{{0}}};
   uint16_t pre_combat_attack_id[MSL_MAX_PLAYERS] = {0};
 
   // Collision attack-id snapshot:
@@ -5201,7 +5297,12 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
       //
       // Bounded v1 policy (decomp-shaped ordering):
       // - Resolve clank hitlag/rebound once per unordered fighter pair.
-      // - Suppress only the clanked attacker hitboxes on each directional pass (attacker->defender).
+      // - Iterate lower-slot/current-owner hitboxes against higher-slot/victim hitboxes in the same
+      //   nested order as the two-player fighter list. Once ftColl_8007699C accepts a clank, it
+      //   registers the victim across same-group HitCapsules immediately; later same-group clank
+      //   candidates cannot raise max hitlag damage.
+      // - Suppress only the clanked attacker hitboxes on each directional BODY pass
+      //   (attacker->defender).
       // - Apply per-fighter hitlag using decomp ftCommon_CalcHitlag inputs derived from each
       //   fighter's max int damage among the clanking hitboxes.
       // - If a fighter has any clanking hitbox with the `rebound` flag set, enter ReboundStop for
@@ -5241,48 +5342,61 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           const int clank_damage_diff_threshold = c->clank_damage_diff_threshold;
           int max_int_dmg[2] = {0, 0};
           int max_rebound_int_dmg[2] = {0, 0};
-          uint8_t max_elem[2] = {0, 0};
+          float rebound_damage_facing_dir[2] = {0.0f, 0.0f};
           uint8_t want_rebound_stop[2] = {0, 0};
           uint8_t did_clank = 0;
 
-          for (int hb0 = 0; hb0 < MSL_MAX_HITBOXES; hb0++) {
-            const size_t hb0_i = idx_hitbox(bi, p0, hb0);
-            if (!batch->state.hitbox_enabled[hb0_i]) {
+          for (int hb1 = 0; hb1 < MSL_MAX_HITBOXES; hb1++) {
+            const size_t hb1_i = idx_hitbox(bi, p1, hb1);
+            if (!batch->state.hitbox_enabled[hb1_i]) {
+              continue;
+            }
+            if (clank_candidate_skip_hb[p1][p0][hb1]) {
               continue;
             }
             // Clank is a hitbox-vs-hitbox collision owner. Do not let replay-reconstructed BODY
             // victim rings suppress the clank predicate before ftColl_8007699C can refresh the
             // same-group victims for this collision pass.
             // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007699C,inlineA0,inlineA1}
-            const uint16_t f0 = batch->state.hitbox_flags[hb0_i];
-            if ((f0 & (uint16_t)MSL_HITBOX_FLAG_CLANK) == 0) {
+            const uint16_t f1 = batch->state.hitbox_flags[hb1_i];
+            if ((f1 & (uint16_t)MSL_HITBOX_FLAG_CLANK) == 0) {
               continue;
             }
-            const uint8_t e0 = batch->state.hitbox_element[hb0_i];
-            if (e0 == (uint8_t)MSL_HIT_ELEMENT_INERT) {
+            if (!combat_hitbox_targets_fighter_ground_state(f1, p0_grounded)) {
               continue;
             }
-            const float d0 = batch->state.hitbox_damage[hb0_i];
-            if (!(d0 > 0.0f)) {
+            const uint8_t e1 = batch->state.hitbox_element[hb1_i];
+            if (e1 == (uint8_t)MSL_HIT_ELEMENT_INERT) {
               continue;
             }
-            for (int hb1 = 0; hb1 < MSL_MAX_HITBOXES; hb1++) {
-              const size_t hb1_i = idx_hitbox(bi, p1, hb1);
-              if (!batch->state.hitbox_enabled[hb1_i]) {
+            const float d1 = combat_hitcapsule_collision_damage(batch, p1_idx, hb1_i);
+            if (!(d1 > 0.0f)) {
+              continue;
+            }
+
+            for (int hb0 = 0; hb0 < MSL_MAX_HITBOXES; hb0++) {
+              const size_t hb0_i = idx_hitbox(bi, p0, hb0);
+              if (!batch->state.hitbox_enabled[hb0_i]) {
+                continue;
+              }
+              if (clank_candidate_skip_hb[p0][p1][hb0]) {
                 continue;
               }
               // See the p0-side note above: hitbox-vs-hitbox clank uses live HitCapsule geometry,
               // then writes victim rings; replay-reconstructed BODY rings are not a safe prefilter.
-              const uint16_t f1 = batch->state.hitbox_flags[hb1_i];
-              if ((f1 & (uint16_t)MSL_HITBOX_FLAG_CLANK) == 0) {
+              const uint16_t f0 = batch->state.hitbox_flags[hb0_i];
+              if ((f0 & (uint16_t)MSL_HITBOX_FLAG_CLANK) == 0) {
                 continue;
               }
-              const uint8_t e1 = batch->state.hitbox_element[hb1_i];
-              if (e1 == (uint8_t)MSL_HIT_ELEMENT_INERT) {
+              if (!combat_hitbox_targets_fighter_ground_state(f0, p1_grounded)) {
                 continue;
               }
-              const float d1 = batch->state.hitbox_damage[hb1_i];
-              if (!(d1 > 0.0f)) {
+              const uint8_t e0 = batch->state.hitbox_element[hb0_i];
+              if (e0 == (uint8_t)MSL_HIT_ELEMENT_INERT) {
+                continue;
+              }
+              const float d0 = combat_hitcapsule_collision_damage(batch, p0_idx, hb0_i);
+              if (!(d0 > 0.0f)) {
                 continue;
               }
 
@@ -5306,6 +5420,10 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
               // overlapped in lbColl_80007AFC.
               // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007699C,inlineA0,inlineA1}
               // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008688,lbColl_8000ACFC}
+              combat_clank_candidate_skip_same_hit_group_all(batch, bi, p0, p1, hb0,
+                                                             clank_candidate_skip_hb);
+              combat_clank_candidate_skip_same_hit_group_all(batch, bi, p1, p0, hb1,
+                                                             clank_candidate_skip_hb);
               combat_clank_skip_same_hit_group(batch, bi, p0, p1, hb0, clank_skip_hb);
               combat_clank_skip_same_hit_group(batch, bi, p1, p0, hb1, clank_skip_hb);
               // Electric-vs-electric clank SFX lane consumes HSD_Randi(3) to pick one of three
@@ -5321,26 +5439,29 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
               const int int0 = combat_get_env_dmg(d0);
               if (int0 > max_int_dmg[0]) {
                 max_int_dmg[0] = int0;
-                max_elem[0] = e0;
               }
               if ((f0 & (uint16_t)MSL_HITBOX_FLAG_REBOUND) != 0) {
                 want_rebound_stop[0] = 1u;
                 if (int0 > max_rebound_int_dmg[0]) {
                   max_rebound_int_dmg[0] = int0;
+                  rebound_damage_facing_dir[0] =
+                      combat_clank_damage_facing_dir(batch, p0_idx, p1_idx);
                 }
               }
 
               const int int1 = combat_get_env_dmg(d1);
               if (int1 > max_int_dmg[1]) {
                 max_int_dmg[1] = int1;
-                max_elem[1] = e1;
               }
               if ((f1 & (uint16_t)MSL_HITBOX_FLAG_REBOUND) != 0) {
                 want_rebound_stop[1] = 1u;
                 if (int1 > max_rebound_int_dmg[1]) {
                   max_rebound_int_dmg[1] = int1;
+                  rebound_damage_facing_dir[1] =
+                      combat_clank_damage_facing_dir(batch, p1_idx, p0_idx);
                 }
               }
+              break;
             }
           }
 
@@ -5351,16 +5472,20 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
             const uint16_t m0 = batch->state.action_id[p0_idx];
             const uint16_t m1 = batch->state.action_id[p1_idx];
             if (max_int_dmg[0] > 0) {
-              const float mul0 = combat_hitlag_mul_from_element(c, max_elem[0]);
-              const uint16_t hl0 = combat_calc_hitlag_frames(c, max_int_dmg[0], m0, mul0);
+              // Clank/ReboundStop uses the collision-produced `dmg.int_value` from
+              // ftColl_8007699C. The electric element has a separate clank-SFX RNG path
+              // (ftColl_800784B4); it does not install the BODY hitlag vibrate multiplier
+              // (`x1960`) that Fighter_ProcessHit applies for damaging BODY contacts.
+              // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007699C,ftColl_800784B4}
+              // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+              const uint16_t hl0 = combat_calc_hitlag_frames(c, max_int_dmg[0], m0, 1.0f);
               if (hl0 > batch->state.hitlag[p0_idx]) {
                 batch->state.hitlag[p0_idx] = hl0;
                 combat_state_flags_set_is_hitlag(batch, p0_idx, hl0);
               }
             }
             if (max_int_dmg[1] > 0) {
-              const float mul1 = combat_hitlag_mul_from_element(c, max_elem[1]);
-              const uint16_t hl1 = combat_calc_hitlag_frames(c, max_int_dmg[1], m1, mul1);
+              const uint16_t hl1 = combat_calc_hitlag_frames(c, max_int_dmg[1], m1, 1.0f);
               if (hl1 > batch->state.hitlag[p1_idx]) {
                 batch->state.hitlag[p1_idx] = hl1;
                 combat_state_flags_set_is_hitlag(batch, p1_idx, hl1);
@@ -5370,14 +5495,18 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
             // ReboundStop transitions for hitboxes that request rebound on clank.
             if (want_rebound_stop[0]) {
               if (max_rebound_int_dmg[0] > 0) {
-                // Rebound x0 ownership:
-                // - ftCo_80099D9C uses the rebounding fighter's own `fp->facing_dir` when writing
-                //   `mv.co.rebound.x0`; it is not derived from the opponent's relative position.
-                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Rebound.c::ftCo_80099D9C
-                const float facing_dir = batch->state.facing[p0_idx] ? 1.0f : -1.0f;
-                batch->state.speed_ground_x_self[p0_idx] =
-                    combat_rebound_ground_x0_from_int_dmg(c, max_rebound_int_dmg[0], facing_dir);
+                batch->state.rebound_ground_accel_2[p0_idx] =
+                    combat_rebound_ground_accel_2_from_int_dmg(
+                        batch, c, p0_idx, max_rebound_int_dmg[0], rebound_damage_facing_dir[0]);
+                batch->state.rebound_anim_rate_fp_q16_16[p0_idx] =
+                    combat_rebound_anim_rate_from_int_dmg(batch, c, p0_idx, max_rebound_int_dmg[0]);
               }
+              // ReboundStop entry is post-physics in this simulator's collision pass. Decomp
+              // ftCo_80099D9C writes `mv.co.rebound.x0` through ftCommon_800804A0, i.e. the
+              // transient xE8_ground_accel_2 lane consumed by the next Fighter_procUpdate, not the
+              // already-reported current-frame ground velocity.
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Rebound.c::ftCo_80099D9C
+              // refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804A0
               batch->state.action_id[p0_idx] = (uint16_t)MSL_ACT_REBOUND_STOP;
               batch->state.animation_index[p0_idx] = 0xFFFFFFFFu;
               msl_anim_timebase_enter(batch, p0_idx, 0.0f, 1.0f);
@@ -5391,13 +5520,11 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
             }
             if (want_rebound_stop[1]) {
               if (max_rebound_int_dmg[1] > 0) {
-                // Rebound x0 ownership:
-                // - ftCo_80099D9C uses the rebounding fighter's own `fp->facing_dir` when writing
-                //   `mv.co.rebound.x0`; it is not derived from the opponent's relative position.
-                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Rebound.c::ftCo_80099D9C
-                const float facing_dir = batch->state.facing[p1_idx] ? 1.0f : -1.0f;
-                batch->state.speed_ground_x_self[p1_idx] =
-                    combat_rebound_ground_x0_from_int_dmg(c, max_rebound_int_dmg[1], facing_dir);
+                batch->state.rebound_ground_accel_2[p1_idx] =
+                    combat_rebound_ground_accel_2_from_int_dmg(
+                        batch, c, p1_idx, max_rebound_int_dmg[1], rebound_damage_facing_dir[1]);
+                batch->state.rebound_anim_rate_fp_q16_16[p1_idx] =
+                    combat_rebound_anim_rate_from_int_dmg(batch, c, p1_idx, max_rebound_int_dmg[1]);
               }
               batch->state.action_id[p1_idx] = (uint16_t)MSL_ACT_REBOUND_STOP;
               batch->state.animation_index[p1_idx] = 0xFFFFFFFFu;
@@ -5667,12 +5794,25 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
             //   hitlag and shieldstun anim rate.
             // - When reseed supplies a hidden ShieldDesc contact result but not exact capsule
             //   ordering, runtime geometry may over-include active slots. Keep the accepted
-            //   shield-hit entry, but consume the explicit x19A4 max if preprocessing recovered it.
+            //   shield-hit entry, but consume the explicit current-frame x19A4 damage scalar if
+            //   preprocessing recovered it. shieldDamageTaken keeps the selected hit's damage;
+            //   this hidden lane is only the GuardSetOff hitlag/shieldstun scalar.
             // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
             max_int_dmg = (int)seeded_x19a4;
           }
           int tmp_dmg = sel_int_dmg + (int)sel_shield_dmg_s8;
+          const uint8_t seeded_x19a0 = batch->state.combat_shield_damage_taken[d_idx];
+          if (seeded_x19a0 != 0u) {
+            // Teacher-forced shield HP accumulator:
+            // - ftColl_80076CBC accumulates `fp->x19A0_shieldDamageTaken` separately from x19A4.
+            // - Fighter_ProcessHit later consumes x19A0 for shield HP depletion.
+            // Use the explicit hidden x19A0 lane only for replay-proven accepted shield contacts;
+            // normal rollouts leave it zero and consume the selected runtime contact.
+            // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+            // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+            tmp_dmg = (int)seeded_x19a0;
+          }
           if (tmp_dmg < 0) {
             tmp_dmg = 0;
           }

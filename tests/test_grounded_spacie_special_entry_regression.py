@@ -180,8 +180,8 @@ def test_grounded_specialhi_hold_end_on_flat_ground_seeds_ground_launch_speed() 
     input_stride = int(binding.sizes()["input"])
     prev_inp = _mk_input_bytes(1, input_stride)
     inp = _mk_input_bytes(1, input_stride)
-    inp_view = inp.view(INPUT_DTYPE).reshape((1,))
-    inp_view["p"]["main_x"][0, 0] = np.int8(-80)
+    prev_view = prev_inp.view(INPUT_DTYPE).reshape((1,))
+    prev_view["p"]["main_x"][0, 0] = np.int8(-80)
 
     out = _step_once(seed, prev_inp, inp)
     assert int(out["action_id"][0]) == ACT_FX_SPECIAL_HI
@@ -202,8 +202,8 @@ def test_grounded_specialhi_hold_end_with_up_input_enters_air_launch() -> None:
     input_stride = int(binding.sizes()["input"])
     prev_inp = _mk_input_bytes(1, input_stride)
     inp = _mk_input_bytes(1, input_stride)
-    inp_view = inp.view(INPUT_DTYPE).reshape((1,))
-    inp_view["p"]["main_y"][0, 0] = np.int8(80)
+    prev_view = prev_inp.view(INPUT_DTYPE).reshape((1,))
+    prev_view["p"]["main_y"][0, 0] = np.int8(80)
 
     out = _step_once(seed, prev_inp, inp)
     assert int(out["action_id"][0]) == ACT_FX_SPECIAL_AIR_HI

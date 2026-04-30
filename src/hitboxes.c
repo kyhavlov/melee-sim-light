@@ -79,6 +79,25 @@ static inline void hitboxes_seed_bridge_entry_clear(MslHitlistVictimEntry* e) {
   e->cd = 0;
 }
 
+static inline uint8_t hitboxes_hitlist_has_dense_seed_entry(const MslHitlistCapsule* hit) {
+  if (hit == NULL) {
+    return 0u;
+  }
+  for (size_t i = 0; i < (size_t)MSL_HITLIST_VICTIM_CAP; i++) {
+    const MslHitlistVictimEntry* e = &hit->victims_1[i];
+    if (msl_hitlist_victim_is_empty(e->kind_slot)) {
+      continue;
+    }
+    if (msl_hitlist_victim_kind(e->kind_slot) != (uint8_t)MSL_HITLIST_VICTIM_KIND_FIGHTER) {
+      continue;
+    }
+    if (e->id32 == MSL_HITLIST_FIGHTER_ID32_SEED_DENSE) {
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
 static inline uint8_t hitboxes_seed_bridge_is_guard_transition_owner(uint16_t action_id) {
   switch (action_id) {
     case MSL_ACT_GUARD_ON:
@@ -116,6 +135,86 @@ static inline uint8_t hitboxes_seed_bridge_is_attackair_guard_shield_reentry_own
     default:
       return 0u;
   }
+}
+
+static inline uint8_t hitboxes_seed_bridge_is_guard_admission_source(uint16_t action_id);
+
+static inline uint8_t hitboxes_hitlist_victim_pointer_may_change(uint8_t stocks,
+                                                                 uint16_t action_id) {
+  if (stocks == 0) {
+    return 1u;
+  }
+  return (action_id == (uint16_t)MSL_ACT_DEAD_DOWN || action_id == (uint16_t)MSL_ACT_DEAD_LEFT ||
+          action_id == (uint16_t)MSL_ACT_DEAD_RIGHT ||
+          action_id == (uint16_t)MSL_ACT_DEAD_UP_STAR || action_id == (uint16_t)MSL_ACT_REBIRTH ||
+          action_id == (uint16_t)MSL_ACT_REBIRTH_WAIT)
+             ? 1u
+             : 0u;
+}
+
+static inline uint8_t hitboxes_seed_bridge_create_edge_guard_admission_dense_applies(
+    const MslBatch* batch, int bi, int attacker, uint8_t hit_group) {
+  if (batch == NULL || bi < 0 || attacker < 0 || attacker >= (int)MSL_MAX_PLAYERS ||
+      hit_group >= (uint8_t)MSL_HITLIST_GROUPS) {
+    return 0u;
+  }
+  if (batch->replay_rollout_reseeded == NULL || batch->replay_rollout_reseeded[bi] == 0u) {
+    return 0u;
+  }
+  const size_t a_idx = msl_idx_player(bi, attacker);
+  if (batch->state.action_id[a_idx] != (uint16_t)MSL_ACT_ATTACK_AIR_F ||
+      batch->state.hitlag[a_idx] != 0u || batch->state.hitstun[a_idx] != 0u) {
+    return 0u;
+  }
+
+  const MslCommonParams* c = msl_common_params();
+  if (c == NULL) {
+    return 0u;
+  }
+  const size_t group_base =
+      (size_t)bi * (size_t)MSL_MAX_PLAYERS * (size_t)MSL_HITLIST_GROUPS * (size_t)MSL_MAX_PLAYERS;
+  for (int victim = 0; victim < (int)batch->config.num_players; victim++) {
+    if (victim == attacker) {
+      continue;
+    }
+    const size_t cd_i =
+        group_base + (((size_t)attacker * (size_t)MSL_HITLIST_GROUPS + (size_t)hit_group) *
+                          (size_t)MSL_MAX_PLAYERS +
+                      (size_t)victim);
+    if (batch->state.combat_hitlist_cd[cd_i] == 0u) {
+      continue;
+    }
+    const size_t v_idx = msl_idx_player(bi, victim);
+    const uint16_t stored_iid = batch->state.combat_hitlist_victim_iid[cd_i];
+    if (stored_iid != 0u && stored_iid != batch->state.instance_id[v_idx] &&
+        hitboxes_hitlist_victim_pointer_may_change(batch->state.stocks[v_idx],
+                                                   batch->state.action_id[v_idx])) {
+      continue;
+    }
+    const float v_trigger_unit =
+        msl_trigger_unit_from_input(batch->state.input_buttons[v_idx], batch->state.input_l[v_idx],
+                                    batch->state.input_r[v_idx]);
+    const uint8_t shield_input_held = (v_trigger_unit > c->trigger_deadzone) ? 1u : 0u;
+    if (batch->state.on_ground[v_idx] != 0u && batch->state.hitlag[v_idx] == 0u &&
+        batch->state.hitstun[v_idx] == 0u && batch->state.shield_radius[v_idx] <= 0.0f &&
+        shield_input_held &&
+        hitboxes_seed_bridge_is_guard_admission_source(batch->state.action_id[v_idx])) {
+      // Rollout seed bridge for hidden HitCapsule victims_1 on AttackAirF -> GuardOn admission:
+      // replay rollouts can start before the exact HitCapsule state is active, with only the dense
+      // victims_1 seed map available. When a later create edge happens in the same attack and the
+      // defender is in the decomp GuardOn admission path, materialize that hidden victim pointer so
+      // the subsequent ftColl_80078C70/lbColl_8000ACFC shield predicate sees the same latch.
+      //
+      // This does not suppress by action shape alone: the dense seed must exist, the victim object
+      // must not have crossed a death/rebirth pointer boundary, and the defender must be in a live
+      // grounded shield-input admission frame before ShieldDesc ownership is installed.
+      // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80078C70}
+      // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardOn_Enter
+      return 1u;
+    }
+  }
+  return 0u;
 }
 
 static inline uint8_t hitboxes_seed_bridge_is_guard_admission_source(uint16_t action_id) {
@@ -344,9 +443,13 @@ static void hitboxes_seed_bridge_trim_impossible_indefinite(
   // lanes and the slot came from the pose_frame-1 active snapshot lane (not a pose-frame
   // create/enable-edge path).
   //
-  // Defensive guardrail: keep this path impossible to trigger unless seed materialization happened
-  // this frame, even if a future refactor broadens callsites.
-  if (!seed_materialized_now) {
+  const size_t hl_i = idx_hitbox(bi, attacker, hb_id);
+  MslHitlistCapsule* hit = &batch->state.fighter_hitlist[hl_i];
+  const uint8_t has_dense_seed_entry = hitboxes_hitlist_has_dense_seed_entry(hit);
+  // Defensive guardrail: keep this path limited to dense seed materialization. On rollouts, a
+  // dense seed entry can survive several active frames before the stale overlap becomes visible;
+  // runtime-inserted HitCapsule victims_1 entries keep id32 clear and are not trimmed here.
+  if (!seed_materialized_now && !has_dense_seed_entry) {
     return;
   }
   if (!from_prev_active_snapshot) {
@@ -411,14 +514,15 @@ static void hitboxes_seed_bridge_trim_impossible_indefinite(
   // At this tail lane, if defender is neutral (hitlag==0 && hitstun==0), any seeded indefinite
   // entry is stale for the current overlap window and must be cleared so ftColl_800768A0 ownership
   // can proceed from real runtime contacts.
-  const size_t hl_i = idx_hitbox(bi, attacker, hb_id);
-  MslHitlistCapsule* hit = &batch->state.fighter_hitlist[hl_i];
   for (size_t i = 0; i < (size_t)MSL_HITLIST_VICTIM_CAP; i++) {
     MslHitlistVictimEntry* e = &hit->victims_1[i];
     if (msl_hitlist_victim_is_empty(e->kind_slot)) {
       continue;
     }
     if (msl_hitlist_victim_kind(e->kind_slot) != (uint8_t)MSL_HITLIST_VICTIM_KIND_FIGHTER) {
+      continue;
+    }
+    if (!seed_materialized_now && e->id32 != MSL_HITLIST_FIGHTER_ID32_SEED_DENSE) {
       continue;
     }
     const uint8_t victim_port = msl_hitlist_victim_slot(e->kind_slot);
@@ -567,8 +671,8 @@ static void hitboxes_seed_bridge_trim_impossible_indefinite(
     // artifacts temporarily expose no-submotion/no-desc windows; do not clear reseed suppression
     // there from BODY attribution mismatch alone.
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0
-    if (stale_clear_window && !shield_desc_active &&
-        !hitboxes_seed_bridge_is_guard_transition_owner(v_action) &&
+    if (stale_clear_window && !shield_desc_active && !guard_admission_pending &&
+        !guard_entry_desc_pending && !hitboxes_seed_bridge_is_guard_transition_owner(v_action) &&
         batch->state.hitlag[v_idx] == 0u &&
         (attacker_is_attackair_window || batch->state.hitstun[v_idx] == 0u) &&
         batch->state.instance_hit_by[v_idx] != attacker_iid) {
@@ -1032,6 +1136,10 @@ void hitboxes_refresh(MslBatch* batch) {
                 hitboxes_seed_bridge_trim_impossible_indefinite(
                     batch, bi, p, hi, &def[hi], first_create_frame[hi], second_create_frame[hi],
                     first_create_damage[hi], pose_frame, seed_materialized_now, 1u);
+              } else {
+                hitboxes_seed_bridge_trim_impossible_indefinite(
+                    batch, bi, p, hi, &def[hi], first_create_frame[hi], second_create_frame[hi],
+                    first_create_damage[hi], pose_frame, 0u, 1u);
               }
             }
           }
@@ -1105,8 +1213,14 @@ void hitboxes_refresh(MslBatch* batch) {
             }
             if (!copied) {
               const size_t dst_i = idx_hitbox(bi, p, hb);
-              hitlist_capsule_clear(&batch->state.fighter_hitlist[dst_i]);
-              batch->state.fighter_hitlist_init_gen[dst_i] = hitlist_gen;
+              if (hitboxes_seed_bridge_create_edge_guard_admission_dense_applies(batch, bi, p,
+                                                                                 new_g)) {
+                hitlist_seed_init_fighter_hitbox_from_group_allow_stale_iid(batch, bi, p, (int)hb,
+                                                                            new_g);
+              } else {
+                hitlist_capsule_clear(&batch->state.fighter_hitlist[dst_i]);
+                batch->state.fighter_hitlist_init_gen[dst_i] = hitlist_gen;
+              }
               // ftColl_800768A0 clear lane delegates to lbColl_80008440, which leaves x43_b2 unchanged
               // inside the struct, but ftAction_8007121C immediately rewrites x43_b2=0 on create.
               // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
@@ -1148,6 +1262,10 @@ void hitboxes_refresh(MslBatch* batch) {
               hitboxes_seed_bridge_trim_impossible_indefinite(
                   batch, bi, p, hi, &def[hi], first_create_frame[hi], second_create_frame[hi],
                   first_create_damage[hi], pose_frame, seed_materialized_now, 1u);
+            } else {
+              hitboxes_seed_bridge_trim_impossible_indefinite(
+                  batch, bi, p, hi, &def[hi], first_create_frame[hi], second_create_frame[hi],
+                  first_create_damage[hi], pose_frame, 0u, 1u);
             }
           }
         }

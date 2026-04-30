@@ -120,8 +120,8 @@ def _char_key_for_shield_data(char_id: int) -> str:
     raise AssertionError(f"unsupported char_id={char_id} for shield data")
 
 
-def _load_shield_pose_table(char_id_target: int) -> tuple[np.ndarray, np.ndarray, int]:
-    # data/shields/<char>.bin layout: tools/extraction/extract_shield_tilt_table.py (MSLSHLD1 v3).
+def _load_shield_pose_table(char_id_target: int) -> tuple[np.ndarray, np.ndarray, np.ndarray, int]:
+    # data/shields/<char>.bin layout: tools/extraction/extract_shield_tilt_table.py (MSLSHLD1 v4).
     key = _char_key_for_shield_data(char_id_target)
     path = Path("data/shields") / f"{key}.bin"
     if not path.exists():
@@ -130,12 +130,13 @@ def _load_shield_pose_table(char_id_target: int) -> tuple[np.ndarray, np.ndarray
     if buf[:8] != b"MSLSHLD1":
         raise AssertionError(f"{path}: bad magic")
     (ver,) = struct.unpack_from("<I", buf, 8)
-    if int(ver) != 3:
-        raise AssertionError(f"{path}: unsupported ver={ver} (want v3 guard_on pose data)")
+    if int(ver) != 4:
+        raise AssertionError(f"{path}: unsupported ver={ver} (want v4 guard_on pose data)")
     frame_count = int(struct.unpack_from("<H", buf, 12)[0])
     neutral_frame = int(struct.unpack_from("<H", buf, 14)[0])
     guard_on_frame_count = int(struct.unpack_from("<H", buf, 28)[0])
     hdr = 32
+    guard_on_x20_xyz = np.frombuffer(buf, dtype="<f4", count=3, offset=16).copy()
     steady_xyz = np.frombuffer(buf, dtype="<f4", count=frame_count * 3, offset=hdr).reshape((frame_count, 3))
     guard_on_xyz = np.frombuffer(
         buf, dtype="<f4", count=guard_on_frame_count * 3, offset=hdr + (frame_count * 3 * 4)
@@ -144,7 +145,7 @@ def _load_shield_pose_table(char_id_target: int) -> tuple[np.ndarray, np.ndarray
         raise AssertionError(f"{path}: neutral_frame out of range")
     if guard_on_frame_count <= 0:
         raise AssertionError(f"{path}: missing guard_on pose data")
-    return steady_xyz, guard_on_xyz, neutral_frame
+    return steady_xyz, guard_on_x20_xyz, guard_on_xyz, neutral_frame
 
 
 def _full_shield_radius(char_id: int) -> float:
@@ -548,6 +549,12 @@ def test_guardreflect_late_locomotion_shield_hit_keeps_one_frame_old_laser_alive
         seed2["items"][0, 0]["pos_y"] = np.float32(13.752838)
         seed2["items"][0, 0]["timer"] = np.float32(94.0)
         seed2["items"][0, 0]["spawn_id"] = np.uint32(123)
+        # This synthetic row is a teacher-forced frozen GuardReflect contact, so preserve the
+        # hidden Item_80269DC8 ShieldBounced result explicitly instead of depending on reduced
+        # collision geometry to reconstruct xDCE/xC54/xC58.
+        seed2["item_shield_bounce_valid"][0, 0] = np.uint8(1)
+        seed2["item_shield_bounce_vel_x"][0, 0] = np.float32(-0.5)
+        seed2["item_shield_bounce_vel_y"][0, 0] = np.float32(4.9)
 
         seed2_bytes = seed2.view(np.uint8).reshape((1, seed_stride))
         msl_binding.reseed_seed(handle, seed2_bytes)
@@ -594,7 +601,7 @@ def test_fresh_locomotion_guardreflect_front_door_uses_entry_pose_shield_math() 
     #   itFoxlaser_UnkMotion1_Phys,it_8029C4D4,itFoxLaser_Logic94_HitShield}
     shot_itkind, _, _ = _load_laser_shot_itkind_and_first_offset_x_and_lifetime(CHAR_FALCO)
     laser_radius, laser_offsets_x = _load_laser_shot_size_and_offsets_x(CHAR_FALCO)
-    steady_xyz, guard_on_xyz, neutral_frame = _load_shield_pose_table(CHAR_FALCO)
+    steady_xyz, guard_on_x20_xyz, guard_on_xyz, neutral_frame = _load_shield_pose_table(CHAR_FALCO)
 
     seed = np.zeros((1,), dtype=SEED_DTYPE)
     seed["stage_id"][0] = np.uint32(STAGE_FD)
@@ -680,8 +687,7 @@ def test_fresh_locomotion_guardreflect_front_door_uses_entry_pose_shield_math() 
 
         # Vanilla probe row (raw -10 -> -9): the Falco laser keeps traveling from x=4.341 to
         # x=9.341 at y=17.253 with no shield hit on the fresh GuardReflect entry. The settled steady
-        # bubble would overlap this beam segment, while the entry-pose center from guard_on_xyz[0]
-        # does not.
+        # bubble would overlap this beam segment, while the GuardOn current-pose center does not.
         laser_x0 = 4.341033935546875
         laser_y0 = 17.252840042114258
         laser_vx = 5.0

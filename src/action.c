@@ -983,18 +983,24 @@ static inline void rebound_update_anim_callback_pre_input(MslBatch* batch, size_
     return;
   }
 
-  float rebound_anim_speed = 1.0f;
+  float rebound_anim_speed = msl_f32_from_q16_16(batch->state.rebound_anim_rate_fp_q16_16[idx]);
+  if (!(rebound_anim_speed > 0.0f)) {
+    rebound_anim_speed = 1.0f;
+  }
   if (c != NULL && ch != NULL) {
-    const float rebound_speed_abs = msl_absf(batch->state.speed_ground_x_self[idx]);
+    const float source_x0 = (batch->state.rebound_ground_accel_2[idx] != 0.0f)
+                                ? batch->state.rebound_ground_accel_2[idx]
+                                : batch->state.speed_ground_x_self[idx];
+    const float rebound_speed_abs = msl_absf(source_x0);
     // Rebound anim-rate ownership:
     // - ftCo_80099D9C stores `mv.co.rebound.anim_start = (fp->co_attrs.x9C + 0.1f) / fp->dmg.x191C`.
-    // - The rebound ground-speed lane written in the same callback is
-    //   `fp->dmg.x191C * p_ftCommonData->x3D8 + p_ftCommonData->x3DC`.
-    // - On replay-visible ReboundStop/Rebound seeds, we can reconstruct the same x191C from the
-    //   live rebound ground speed before the first Rebound tick.
+    // - Runtime clank entry carries that exact hidden rate. Replay-facing ReboundStop hitlag-tail
+    //   seeds may still only have xE8, so fall back to reconstructing x191C from the queued
+    //   `mv.co.rebound.x0` lane before it is consumed.
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Rebound.c::{ftCo_80099D9C,ftCo_80099E44}
     // refs/melee/src/melee/ft/ftcoll.c::{inlineA0,inlineA1}
-    if (c->rebound_ground_x0_mul > 0.0f && rebound_speed_abs > c->rebound_ground_x0_base) {
+    if (batch->state.rebound_anim_rate_fp_q16_16[idx] <= 0 && c->rebound_ground_x0_mul > 0.0f &&
+        rebound_speed_abs > c->rebound_ground_x0_base) {
       const float rebound_x191c =
           (rebound_speed_abs - c->rebound_ground_x0_base) / c->rebound_ground_x0_mul;
       if (rebound_x191c > 0.0f) {
@@ -1017,10 +1023,12 @@ static inline void rebound_update_anim_callback_pre_input(MslBatch* batch, size_
     batch->state.action_id[idx] = (uint16_t)MSL_ACT_REBOUND;
     batch->state.animation_index[idx] = (uint32_t)MSL_SM_REBOUND;
     msl_anim_timebase_enter(batch, idx, 0.0f, rebound_anim_speed);
+    batch->state.rebound_anim_rate_fp_q16_16[idx] = msl_q16_16_from_f32(rebound_anim_speed);
     return;
   }
 
-  if (batch->state.action_frame[idx] == 0 && rebound_anim_speed > 0.0f) {
+  if (batch->state.action_frame[idx] == 0 && rebound_anim_speed > 0.0f &&
+      batch->state.rebound_anim_rate_fp_q16_16[idx] > 0) {
     batch->state.frame_speed_mul_fp_q16_16[idx] = msl_q16_16_from_f32(rebound_anim_speed);
   }
 

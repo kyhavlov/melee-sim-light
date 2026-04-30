@@ -9,9 +9,11 @@ import pytest
 from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 
 ACT_WAIT = 0x000E
+ACT_ATTACK_HI4 = 0x003F
 ACT_REBOUND_STOP = 0x00ED
 ACT_REBOUND = 0x00EE
 SM_WAIT1_0 = 2
+SM_ATTACK_HI4 = 66
 SM_REBOUND = 45
 
 # src/hitboxes_tables.h (MSLHITB1 u16_6 bits)
@@ -79,6 +81,51 @@ def _resolve_rebound_clank(seed: np.ndarray, *, damage: float = 4.0) -> np.ndarr
         msl_binding.debug_combat_resolve(handle)
         msl_binding.write_compare(handle, out)
         return out.view(COMPARE_DTYPE).reshape((1,))[0]
+    finally:
+        msl_binding.destroy(handle)
+
+
+def _resolve_rebound_clank_to_first_rebound(
+    seed: np.ndarray,
+    *,
+    damage_p0: float = 4.0,
+    damage_p1: float = 4.0,
+    p0_smash_release: tuple[int, int] | None = None,
+) -> np.ndarray:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+        prev_inp = np.zeros((1, input_stride), dtype=np.uint8)
+        inp = np.zeros((1, input_stride), dtype=np.uint8)
+        out = np.zeros((1, compare_stride), dtype=np.uint8)
+
+        msl_binding.reseed_seed(handle, seed_bytes)
+        if p0_smash_release is not None:
+            frames, hold_frames_max = p0_smash_release
+            msl_binding.debug_set_smash_charge_state(handle, 0, 0, 3, frames, hold_frames_max)
+
+        for p, damage in ((0, damage_p0), (1, damage_p1)):
+            msl_binding.debug_clear_hitboxes_world(handle, 0, p)
+            msl_binding.debug_set_hitbox_world(handle, 0, p, 0, 12.0, 0.0, 0.0, 3.0, damage, 1)
+            msl_binding.debug_set_hitbox_flags(
+                handle, 0, p, 0, int(HIT_GROUNDED | HIT_CLANK | HIT_REBOUND)
+            )
+
+        msl_binding.debug_combat_resolve(handle)
+        for _ in range(16):
+            msl_binding.step_input(handle, prev_inp, inp)
+            msl_binding.write_compare(handle, out)
+            row = out.view(COMPARE_DTYPE).reshape((1,))[0].copy()
+            if int(row["action_id"][0]) == ACT_REBOUND and int(row["action_id"][1]) == ACT_REBOUND:
+                return row
+        raise AssertionError("clank did not reach first Rebound frame")
     finally:
         msl_binding.destroy(handle)
 
@@ -170,9 +217,15 @@ def test_rebound_frame0_uses_callback_rate_and_ground_friction() -> None:
         (14.0, 10.0, 1, 1),  # crossed up / both facing right
     ],
 )
-def test_rebound_clank_entry_uses_each_fighters_own_facing_not_relative_pos_x(
+def test_rebound_clank_entry_does_not_publish_hidden_rebound_x0_on_entry(
     p0_pos_x: float, p1_pos_x: float, p0_facing: int, p1_facing: int
 ) -> None:
+    # ReboundStop entry runs inside the collision pass after the reported ground-velocity owner for
+    # the frame. Decomp ftCo_80099D9C writes the rebound x0 through ftCommon_800804A0's transient
+    # xE8 lane; the visible `speed_ground_x_self` row remains unchanged until ReboundStop_Anim /
+    # Rebound consumes the lane on a later procUpdate.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Rebound.c::ftCo_80099D9C
+    # refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804A0
     seed = _seed_base()
     seed["pos_x"][0, 0] = np.float32(p0_pos_x)
     seed["pos_x"][0, 1] = np.float32(p1_pos_x)
@@ -181,15 +234,61 @@ def test_rebound_clank_entry_uses_each_fighters_own_facing_not_relative_pos_x(
 
     out = _resolve_rebound_clank(seed, damage=4.0)
 
-    p0_facing_dir = 1.0 if p0_facing else -1.0
-    p1_facing_dir = 1.0 if p1_facing else -1.0
     assert int(out["action_id"][0]) == ACT_REBOUND_STOP
     assert int(out["action_id"][1]) == ACT_REBOUND_STOP
     assert int(out["animation_index"][0]) == 0xFFFFFFFF
     assert int(out["animation_index"][1]) == 0xFFFFFFFF
-    assert float(out["speed_ground_x_self"][0]) == pytest.approx(
-        _rebound_speed(4, p0_facing_dir), abs=2e-6
+    assert float(out["speed_ground_x_self"][0]) == pytest.approx(0.0, abs=2e-6)
+    assert float(out["speed_ground_x_self"][1]) == pytest.approx(0.0, abs=2e-6)
+
+
+def test_rebound_clank_uses_collision_damage_facing_not_visible_facing_for_xe8() -> None:
+    # Cross-up/back-facing Rebound clanks must queue xE8 from the clank-local `dmg.facing_dir`,
+    # not from replay-visible scalar facing. Here p0 is to the right of p1 but is visibly facing
+    # right; using scalar facing would push p0 left on first Rebound, while decomp pushes away from
+    # the opponent.
+    # refs/melee/src/melee/ft/ftcoll.c::{inlineA0,inlineA1}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Rebound.c::ftCo_80099D9C
+    seed = _seed_base()
+    seed["pos_x"][0, 0] = np.float32(14.0)
+    seed["pos_x"][0, 1] = np.float32(10.0)
+    seed["facing"][0, 0] = np.uint8(1)
+    seed["facing"][0, 1] = np.uint8(0)
+
+    out = _resolve_rebound_clank_to_first_rebound(seed, damage_p0=4.0, damage_p1=4.0)
+
+    assert float(out["speed_ground_x_self"][0]) == pytest.approx(_rebound_speed(4, -1.0), abs=2e-6)
+    assert float(out["speed_ground_x_self"][1]) == pytest.approx(_rebound_speed(4, 1.0), abs=2e-6)
+
+
+def test_rebound_clank_damage_uses_smash_release_damage_before_stale_scalar() -> None:
+    # ftColl_8007ABD0 writes HitCapsule.damage after ftCo_800DEEB8 applies released-smash damage.
+    # The ReboundStop clank path then consumes that same HitCapsule.damage for dmg.x191C/xE8.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007ABD0,ftColl_8007699C}
+    # refs/melee/src/melee/ft/ft_0DF0.c::ftCo_800DEEB8
+    seed = _seed_base()
+    seed["action_id"][0, 0] = np.uint16(ACT_ATTACK_HI4)
+    seed["animation_index"][0, 0] = np.uint32(SM_ATTACK_HI4)
+    seed["pos_x"][0, 0] = np.float32(10.0)
+    seed["pos_x"][0, 1] = np.float32(14.0)
+    seed["facing"][0, 0] = np.uint8(1)
+    seed["facing"][0, 1] = np.uint8(0)
+
+    raw_damage = 18.0
+    charged_damage = raw_damage * 1.3671875
+    expected_int_damage = int(charged_damage)
+    assert expected_int_damage > int(raw_damage)
+
+    out = _resolve_rebound_clank_to_first_rebound(
+        seed,
+        damage_p0=raw_damage,
+        damage_p1=raw_damage,
+        p0_smash_release=(60, 60),
     )
-    assert float(out["speed_ground_x_self"][1]) == pytest.approx(
-        _rebound_speed(4, p1_facing_dir), abs=2e-6
+
+    assert float(out["speed_ground_x_self"][0]) == pytest.approx(
+        _rebound_speed(expected_int_damage, 1.0), abs=2e-6
+    )
+    assert float(out["speed_ground_x_self"][0]) != pytest.approx(
+        _rebound_speed(int(raw_damage), 1.0), abs=2e-6
     )
