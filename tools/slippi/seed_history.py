@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 
 from tools.slippi.action_state_tables import load_action_state_tables
+from tools.slippi.known_data_artifacts import read_mslstg01_v2, stage_metadata_path_for_stage_id
 
 
 def _sign_i16(x: np.ndarray) -> np.ndarray:
@@ -1575,16 +1576,16 @@ def derive_rebirth_camera_anchor_y(
 
     Decomp / data anchors:
     - refs/melee/src/melee/ft/ft_0D31.c::ftCo_Rebirth_Cam
-    - data/stages/final_destination.json: respawn_points
+    - data/stages/bin/{grnla,grnba}.bin::MSLSTG01 respawn_points
     """
     action = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
     out = np.zeros(action.shape[0], dtype=np.float32)
 
-    # Final Destination only in the current suite; unsupported stages leave the foundational lane
-    # zero until their ISO-derived respawn points are wired.
+    # Unsupported stages leave the foundational lane zero until their ISO-derived respawn points are
+    # wired into MSLSTG01.
     # refs/melee/src/melee/ft/chara/ftCommon/forward.h::ftCo_MS_Rebirth
-    # data/stages/final_destination.json: respawn_points
-    if int(stage_id_u32) != 32:
+    # data/stages/bin/{grnla,grnba}.bin::MSLSTG01 respawn_points
+    if respawn_point_y == 0.0:
         return out
 
     act_rebirth = 0x000C
@@ -1594,19 +1595,20 @@ def derive_rebirth_camera_anchor_y(
     return out
 
 
-@functools.lru_cache(maxsize=1)
-def _fd_stage_cam_bounds_world(*, data_dir: str = "data") -> tuple[float, float, float, float]:
-    stage_path = Path(str(data_dir)) / "stages" / "final_destination.json"
-    data = json.loads(stage_path.read_text())
-    cam = data.get("cam_bounds_world")
-    if not isinstance(cam, dict):
-        raise ValueError(f"{stage_path}: missing cam_bounds_world")
-    return (
-        float(cam["left"]),
-        float(cam["right"]),
-        float(cam["bottom"]),
-        float(cam["top"]),
-    )
+@functools.lru_cache(maxsize=8)
+def _stage_cam_bounds_world(
+    *,
+    stage_id: int,
+    data_dir: str = "data",
+) -> tuple[float, float, float, float] | None:
+    stage_path = stage_metadata_path_for_stage_id(int(stage_id), Path(str(data_dir)))
+    if stage_path is None:
+        return None
+    stage = read_mslstg01_v2(stage_path)
+    left, right, top, bottom = stage.cam_bounds_world
+    if not (left < right and bottom < top):
+        return None
+    return (float(left), float(right), float(bottom), float(top))
 
 
 @functools.lru_cache(maxsize=1)
@@ -1769,7 +1771,7 @@ def derive_camera_target_point_inside_stage_cam_bounds(
     Decomp / data anchors:
     - refs/melee/src/melee/ft/ftlib.c::ftLib_80086A8C
     - refs/melee/src/melee/cm/camera.c::{Camera_80030CD8,Camera_80030BBC}
-    - data/stages/final_destination.json: cam_bounds_world
+    - data/stages/bin/{grnla,grnba}.bin::MSLSTG01 cam_bounds_world
     """
     x = np.asarray(camera_target_world_x_f32, dtype=np.float32).reshape(-1)
     y = np.asarray(camera_target_world_y_f32, dtype=np.float32).reshape(-1)
@@ -1778,13 +1780,11 @@ def derive_camera_target_point_inside_stage_cam_bounds(
         raise ValueError("camera target point-inside derivation inputs must share length")
 
     out = np.zeros(x.shape[0], dtype=np.uint8)
-    # Final Destination only in the current suite; unsupported stages remain zero until their
-    # ISO-derived camera bounds are wired.
-    # data/stages/final_destination.json: cam_bounds_world
-    if int(stage_id_u32) != 32:
+    bounds = _stage_cam_bounds_world(stage_id=int(stage_id_u32), data_dir=str(data_dir))
+    if bounds is None:
         return out
 
-    left, right, bottom, top = _fd_stage_cam_bounds_world(data_dir=str(data_dir))
+    left, right, bottom, top = bounds
     valid = (r > np.float32(0.0)) & np.isfinite(x) & np.isfinite(y)
     inside = valid & (x >= np.float32(left)) & (x < np.float32(right)) & (y >= np.float32(bottom)) & (
         y < np.float32(top)

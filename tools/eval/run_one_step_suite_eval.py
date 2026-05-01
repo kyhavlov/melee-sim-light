@@ -50,7 +50,7 @@ def _report_header(*, root: Path, suite: str, suite_name: str, datasets_dir: str
         "#   Note: runtime degrades safely when these bins are missing, but state_flags parity/suite totals can differ.",
         "#",
         "# (Optional) One-shot build for stage+chars:",
-        "#     uv run python -m tools.extraction.build_data --iso-dir _iso --stage grnla --chars fox,falco",
+        "#     uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba --chars fox,falco",
     ]
 
 

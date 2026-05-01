@@ -23,7 +23,9 @@ from tools.slippi.known_data_artifacts import (
     read_mslftsc1_v1,
     read_mslitar1,
     read_mslpart1_v1,
-    read_mslstg01_v1,
+    read_mslstg01_v2,
+    stage_metadata_bin_name_for_stage_id,
+    stage_metadata_path_for_stage_id,
 )
 from tools.slippi.motion_state_owners import read_callback_manifest, read_mslmso01_v1
 from tools.slippi.suite_io import dataset_path_for_suite_replay, load_suite, repo_root
@@ -781,8 +783,12 @@ def _script_context(root: Path, motion_ctx: dict[str, Any], action_frame: int) -
 
 
 def _stage_context(root: Path, row: np.void, player: int) -> dict[str, Any]:
-    if "stage_id" not in (row.dtype.names or ()) or int(row["stage_id"]) != 32:
-        return {"status": "unavailable", "reason": "only FD MSLSTG01 context is currently available"}
+    if "stage_id" not in (row.dtype.names or ()):
+        return {"status": "unavailable", "reason": "stage_id unavailable"}
+    stage_id = int(row["stage_id"])
+    stage_bin = stage_metadata_bin_name_for_stage_id(stage_id)
+    if stage_bin is None:
+        return {"status": "unavailable", "reason": f"no MSLSTG01 context for stage_id {stage_id}"}
     ids: set[int] = set()
     for field in ("ground_id", "wall_id", "ceiling_id"):
         if field in (row.dtype.names or ()):
@@ -792,7 +798,10 @@ def _stage_context(root: Path, row: np.void, player: int) -> dict[str, Any]:
     if not ids:
         return {"status": "unavailable", "reason": "no current ground/wall/ceiling id on selected row"}
     try:
-        stage = read_mslstg01_v1(root / "data" / "stages" / "bin" / "grnla.bin")
+        stage_path = stage_metadata_path_for_stage_id(stage_id, root / "data")
+        if stage_path is None:
+            return {"status": "unavailable", "reason": f"no MSLSTG01 context for stage_id {stage_id}"}
+        stage = read_mslstg01_v2(stage_path)
         kind_names = {0: "floor", 1: "ceiling", 2: "right_wall", 3: "left_wall", 4: "dynamic"}
         segments = [
             {
@@ -809,7 +818,7 @@ def _stage_context(root: Path, row: np.void, player: int) -> dict[str, Any]:
             for seg in stage.segments
             if int(seg.line_id) in ids
         ]
-        return {"status": "ok", "segments": segments}
+        return {"status": "ok", "stage_id": stage_id, "stage_bin": stage_bin, "segments": segments}
     except Exception as exc:
         return {"status": "unavailable", "reason": f"{type(exc).__name__}: {exc}"}
 

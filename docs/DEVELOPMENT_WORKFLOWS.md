@@ -40,6 +40,9 @@ make validate-all
 `make validate-all` runs the standard one-step and rollout report generators
 after the incremental build check. It uses worker subprocesses by default; set
 `VALIDATE_WORKERS=1` for serial output/debugging.
+The standard aggregate suite is `replays/suites/aggregate_recent.json`; it
+includes the current FD validation set plus Battlefield coverage. Use
+`replays/suites/battlefield_recent.json` for focused stage/platform work.
 
 Diff validation reports against a baseline:
 
@@ -231,7 +234,7 @@ Then run the same dump/extract flow from `tools/dolphin/README.md`.
 Rebuild ISO-derived data artifacts:
 
 ```bash
-uv run python -m tools.extraction.build_data --iso-dir _iso --stage grnla --chars fox,falco
+uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba --chars fox,falco
 ```
 
 Data contract:

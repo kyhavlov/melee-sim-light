@@ -724,42 +724,44 @@ Characters (Fox/Falco):
     back to decomp symbol names. Runtime loads only the binary tables.
   - Stale/non-v2 `MSLMSO01` tables must be rejected; regenerate with
     `uv run python -m tools.extraction.extract_motion_state_owners --melee_decomp refs/melee --out_dir data/motion_state/owners --chars fox,falco`.
-- `data/stages/bin/grnla.bin` (stage collision/metadata; decomp-first, compact binary)
+- `data/stages/bin/{grnla,grnba}.bin` (stage collision/metadata; decomp-first, compact binary)
   - Purpose:
-    - Pack the stable, source-backed Final Destination stage data currently emitted by
-      `data/stages/final_destination.json` into a versioned artifact. Runtime stage collision
-      consumes collision segments from this binary table; match-flow roles still use the JSON
-      role labels until the source-backed DAT -> `stage_info.x280` point mapping is known.
+    - Pack the stable, source-backed stage data currently emitted by
+      `data/stages/{final_destination,battlefield}.json` into versioned artifacts. Runtime stage
+      collision and match-flow stage roles consume these binary tables.
     - Preserve source collision line IDs, floor/wall/ceiling class, line flags, ledge/platform bits,
-      and raw stage-point positions.
-    - Named spawn/respawn/camera/blast point roles are deliberately not packed in v1 because the
-      current JSON labels those roles through an FD coordinate heuristic; the source-backed
-      DAT -> `stage_info.x280` point mapping remains future extraction work.
-    - Decomp identifies the consumers (`Stage_80224E64` for spawn, `Stage_80224E38` for respawn,
-      `Ground_801C39C0` for camera, and `Ground_801C3BB4` for blast/dead range) and debug vertex
-      id arrays such as `mpLib_SpawnVtxIds` / `mpLib_RespawnVtxIds`, but not yet the DAT setup path
-      that maps each `stage_info.x280[id]` slot to a specific `map_head` JObj. Until that mapping is
-      extracted, runtime match-flow roles remain on the legacy `data/stages/final_destination.json`
-      labels.
+      world-scaled stage-point positions, and source-mapped spawn/respawn/camera/blast roles.
+    - Named spawn/respawn/camera/blast roles are derived from the same `map_head` stage-point table
+      that `Ground_801C34AC` walks to populate `stage_info.x280[id]`.
+    - Decomp consumers: `Stage_80224E64` for spawn, `Stage_80224E38` for respawn,
+      `Ground_801C39C0` for camera, and `Ground_801C3BB4` for blast/dead range.
     - This does **not** encode procedural mpColl branch outcomes or inferred behavior categories.
   - Sources:
-    - `_iso/GrNLa.dat` public symbols `coll_data`, `grGroundParam`, and `map_head`
+    - `_iso/GrNLa.dat` / `_iso/GrNBa.dat` public symbols `coll_data`, `grGroundParam`, and
+      `map_head`
     - `refs/melee/src/melee/mp/types.h::MapCollData`
+    - `refs/melee/build/GALE01/asm/melee/gr/ground.s::Ground_801C34AC`
     - `refs/melee/src/melee/gr/ground.c::Ground_801C126C`, `Ground_801C2D24`, `Ground_801C39C0`,
       `Ground_801C3BB4`
     - `refs/melee/src/melee/gr/stage.c::Stage_80224E64`, `Stage_80224E38`
-    - `refs/melee/src/melee/mp/mplib.c::mpLib_SpawnVtxIds`, `mpLib_RespawnVtxIds`
-  - Binary layout: `MSLSTG01` v1
+  - Binary layout: `MSLSTG01` v2
     - `u8 magic[8] = "MSLSTG01"`
-    - `u32 version = 1`
-    - `u16 segment_count`, `stage_point_count`, reserved spawn/respawn counts currently `0`, reserved lanes
-    - reserved `f32 cam_bounds_world[left,right,top,bottom]` currently unset and encoded as zeros
-    - reserved `f32 blast_bounds_world[left,right,top,bottom]` currently unset and encoded as zeros
+    - `u32 version = 2`
+    - `u16 segment_count`, `stage_point_count`, `spawn_count`, `respawn_count`, reserved lanes
+    - `f32 cam_bounds_world[left,right,top,bottom]`
+    - `f32 blast_bounds_world[left,right,top,bottom]`
     - segment records: `line_id`, `kind_id`, `flags(platform/ledge)`, raw `hi_flags/lo_flags`,
-      unscaled DAT endpoints `(x0,y0,x1,y1)`
-    - raw stage-point coordinate payloads
-  - Stale/non-v1 `MSLSTG01` tables must be rejected; regenerate with
-    `uv run python -m tools.extraction.extract_stage_metadata --dat _iso/GrNLa.dat --out data/stages/bin/grnla.bin --audit data/stages/bin/grnla.json`.
+      world-scaled endpoints `(x0,y0,x1,y1)` after applying `grGroundParam.x0`
+    - world-scaled raw stage-point coordinate payloads
+    - world-scaled spawn point payloads `(x,y)` for stage point ids `0..3`
+    - world-scaled respawn point payloads `(x,y)` for stage point ids `4..7`
+  - Stale/non-v2 `MSLSTG01` tables must be rejected. Version 2 is the first version where
+    spawn/respawn/camera/blast roles are populated, not reserved/unset. Regenerate supported stage
+    artifacts with
+    `uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba --chars fox,falco`.
+  - Battlefield (`stage_id=31`) is currently supported for replay-seeded/eval data paths. New-match
+    initialization remains Final Destination-only until Slippi neutral-start ownership is mapped for
+    non-FD stages.
 - `data/model_parts/fox.bin`, `data/model_parts/falco.bin` (fighter part/anchor descriptors; compact binary)
   - Purpose:
     - Expose known static part metadata and named gameplay anchors without live pose solving.
@@ -1418,7 +1420,7 @@ Generate all required artifacts for the current target domain:
 ```bash
 uv run python -m tools.extraction.build_data \
   --iso-dir _iso \
-  --stage grnla \
+  --stages grnla,grnba \
   --chars fox,falco
 ```
 

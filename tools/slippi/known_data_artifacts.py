@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 STAGE_MAGIC = b"MSLSTG01"
-STAGE_VERSION = 1
+STAGE_VERSION = 2
 PART_MAGIC = b"MSLPART1"
 PART_VERSION = 1
 ITEM_ARTICLE_MAGIC = b"MSLITAR1"
@@ -20,6 +20,14 @@ ITEM_ARTICLE_VALUE_U16 = 1
 ITEM_ARTICLE_VALUE_U32 = 2
 ITEM_ARTICLE_VALUE_F32 = 3
 
+STAGE_BATTLEFIELD = 31
+STAGE_FINAL_DESTINATION = 32
+
+STAGE_METADATA_BIN_BY_STAGE_ID = {
+    STAGE_BATTLEFIELD: "grnba.bin",  # Battlefield / GrNBa.dat
+    STAGE_FINAL_DESTINATION: "grnla.bin",  # Final Destination / GrNLa.dat
+}
+
 
 @dataclass(frozen=True)
 class StageMetadata:
@@ -31,6 +39,8 @@ class StageMetadata:
     blast_bounds_world: tuple[float, float, float, float]
     segments: tuple["StageSegment", ...]
     stage_points: tuple["StagePoint", ...]
+    spawn_points: tuple["StagePoint2", ...]
+    respawn_points: tuple["StagePoint2", ...]
 
 
 @dataclass(frozen=True)
@@ -51,6 +61,23 @@ class StagePoint:
     x: float
     y: float
     z: float
+
+
+@dataclass(frozen=True)
+class StagePoint2:
+    x: float
+    y: float
+
+
+def stage_metadata_bin_name_for_stage_id(stage_id: int) -> str | None:
+    return STAGE_METADATA_BIN_BY_STAGE_ID.get(int(stage_id))
+
+
+def stage_metadata_path_for_stage_id(stage_id: int, data_root: Path | str = Path("data")) -> Path | None:
+    name = stage_metadata_bin_name_for_stage_id(stage_id)
+    if name is None:
+        return None
+    return Path(data_root) / "stages" / "bin" / name
 
 
 @dataclass(frozen=True)
@@ -127,7 +154,7 @@ def _require_header(path: Path, magic: bytes, version: int, min_size: int) -> by
     return buf
 
 
-def read_mslstg01_v1(path: Path) -> StageMetadata:
+def read_mslstg01_v2(path: Path) -> StageMetadata:
     buf = _require_header(path, STAGE_MAGIC, STAGE_VERSION, 56)
     (
         segment_count,
@@ -171,9 +198,16 @@ def read_mslstg01_v1(path: Path) -> StageMetadata:
         x, y, z = struct.unpack_from("<fff", buf, off)
         off += 12
         stage_points.append(StagePoint(float(x), float(y), float(z)))
-    # Reserved spawn/respawn payloads are not emitted in v1, but keep the parser shaped for the
-    # documented forward-compatible counts.
-    off += spawn_count * 8 + respawn_count * 8
+    spawn_points: list[StagePoint2] = []
+    for _ in range(spawn_count):
+        x, y = struct.unpack_from("<ff", buf, off)
+        off += 8
+        spawn_points.append(StagePoint2(float(x), float(y)))
+    respawn_points: list[StagePoint2] = []
+    for _ in range(respawn_count):
+        x, y = struct.unpack_from("<ff", buf, off)
+        off += 8
+        respawn_points.append(StagePoint2(float(x), float(y)))
     if off != len(buf):
         raise ValueError(f"MSLSTG01 trailing bytes in {path}: parsed {off} != {len(buf)}")
     return StageMetadata(
@@ -185,6 +219,8 @@ def read_mslstg01_v1(path: Path) -> StageMetadata:
         blast_bounds_world=(float(blast_l), float(blast_r), float(blast_t), float(blast_b)),
         segments=tuple(segments),
         stage_points=tuple(stage_points),
+        spawn_points=tuple(spawn_points),
+        respawn_points=tuple(respawn_points),
     )
 
 

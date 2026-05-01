@@ -15,6 +15,7 @@ required_data=(
   "$ROOT/data/characters/falco.json"
   "$ROOT/data/stages/final_destination.json"
   "$ROOT/data/stages/bin/grnla.bin"
+  "$ROOT/data/stages/bin/grnba.bin"
   "$ROOT/data/scripts/fox.bin"
   "$ROOT/data/scripts/falco.bin"
   "$ROOT/data/motion_state/owners/fox.bin"

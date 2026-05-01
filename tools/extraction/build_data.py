@@ -50,8 +50,17 @@ def main() -> None:
     ap.add_argument(
         "--stage",
         type=str,
-        default="grnla",
-        help="stage key (currently: grnla = Final Destination / GrNLa.dat; grnba = Battlefield / GrNBa.dat)",
+        default=None,
+        help=(
+            "partial/debug-only single stage key alias for --stages "
+            "(grnla = Final Destination, grnba = Battlefield)"
+        ),
+    )
+    ap.add_argument(
+        "--stages",
+        type=str,
+        default="grnla,grnba",
+        help="comma-separated stage keys (currently: grnla,grnba)",
     )
     ap.add_argument("--melee-decomp", type=Path, default=Path("refs/melee"), help="path to doldecomp/melee checkout")
     ap.add_argument("--timings", action="store_true", help="print per-generator wall-clock timings")
@@ -80,7 +89,6 @@ def main() -> None:
             f"uv run python -m tools.extraction.iso_extract --iso SSBM.iso --glob '*{dat}' --out-dir _iso",
         )
 
-    stage_key = args.stage.lower()
     stage_dat_by_key = {
         # Decomp:
         # - Battlefield: refs/melee/src/melee/gr/grbattle.c:127 uses "/GrNBa.dat"
@@ -88,23 +96,30 @@ def main() -> None:
         "grnba": "GrNBa.dat",
         "grnla": "GrNLa.dat",
     }
-    stage_dat = stage_dat_by_key.get(stage_key)
-    if stage_dat is None:
-        raise SystemExit(f"unsupported stage key: {args.stage!r}")
-    _require(
-        iso_dir / stage_dat,
-        f"uv run python -m tools.extraction.iso_extract --iso SSBM.iso --glob '*{stage_dat}' --out-dir _iso",
-    )
+    if args.stage is not None:
+        stage_keys = [args.stage.lower()]
+    else:
+        stage_keys = [s.strip().lower() for s in args.stages.split(",") if s.strip()]
+    if not stage_keys:
+        raise SystemExit("--stages must contain at least one stage key")
+    unknown = [s for s in stage_keys if s not in stage_dat_by_key]
+    if unknown:
+        raise SystemExit(f"unsupported stage key(s): {unknown!r}")
+    for stage_key in stage_keys:
+        stage_dat = stage_dat_by_key[stage_key]
+        _require(
+            iso_dir / stage_dat,
+            f"uv run python -m tools.extraction.iso_extract --iso SSBM.iso --glob '*{stage_dat}' --out-dir _iso",
+        )
 
     # Outputs.
     out_stage_by_key = {
         "grnla": Path("data/stages/final_destination.json"),
         "grnba": Path("data/stages/battlefield.json"),
     }
-    out_stage = out_stage_by_key[stage_key]
     out_common = Path("data/common/ft_common_data.json")
     for d in (
-        out_stage.parent,
+        Path("data/stages"),
         out_common.parent,
         Path("data/airborne_state_events"),
         Path("data/anims"),
@@ -130,21 +145,23 @@ def main() -> None:
         d.mkdir(parents=True, exist_ok=True)
 
     # Stage collision.
-    _run(
-        "tools.extraction.extract_stage_collision",
-        ["--dat", str(iso_dir / stage_dat), "--out", str(out_stage)],
-    )
-    _run(
-        "tools.extraction.extract_stage_metadata",
-        [
-            "--dat",
-            str(iso_dir / stage_dat),
-            "--out",
-            str(Path("data/stages/bin") / f"{stage_key}.bin"),
-            "--audit",
-            str(Path("data/stages/bin") / f"{stage_key}.json"),
-        ],
-    )
+    for stage_key in stage_keys:
+        stage_dat = stage_dat_by_key[stage_key]
+        _run(
+            "tools.extraction.extract_stage_collision",
+            ["--dat", str(iso_dir / stage_dat), "--out", str(out_stage_by_key[stage_key])],
+        )
+        _run(
+            "tools.extraction.extract_stage_metadata",
+            [
+                "--dat",
+                str(iso_dir / stage_dat),
+                "--out",
+                str(Path("data/stages/bin") / f"{stage_key}.bin"),
+                "--audit",
+                str(Path("data/stages/bin") / f"{stage_key}.json"),
+            ],
+        )
 
     # Common constants.
     _run(
@@ -440,7 +457,7 @@ def main() -> None:
     )
 
     summary = {
-        "stage": str(out_stage),
+        "stages": [str(out_stage_by_key[key]) for key in stage_keys],
         "common": str(out_common),
         "chars": chars,
     }

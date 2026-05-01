@@ -1,0 +1,26 @@
+{
+  "name": "battlefield_recent",
+  "notes": "Fox/Falco Battlefield validation replays for stage hookup and platform mechanics work.",
+  "ucf_enabled": true,
+  "ucf_cardinals_1_0_enabled": true,
+  "replays": [
+    {
+      "replay": "replays/validation/battlefield_recent/DelayedSuperbGuanaco.slp",
+      "ports": [1, 2],
+      "stage_id": 31,
+      "characters": { "1": "Fox", "2": "Falco" }
+    },
+    {
+      "replay": "replays/validation/battlefield_recent/LoyalDishonestWren.slp",
+      "ports": [2, 4],
+      "stage_id": 31,
+      "characters": { "2": "Falco", "4": "Fox" }
+    },
+    {
+      "replay": "replays/validation/battlefield_recent/MediumVirtualPig.slp",
+      "ports": [1, 2],
+      "stage_id": 31,
+      "characters": { "1": "Fox", "2": "Falco" }
+    }
+  ]
+}

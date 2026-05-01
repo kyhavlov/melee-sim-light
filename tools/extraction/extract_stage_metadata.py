@@ -25,13 +25,14 @@ def _f32(v: float) -> float:
 def _write_stage_bin(out: Path, data: dict) -> None:
     segments = list(data.get("segments", []))
     stage_points = list(data.get("stage_points_joint_positions", []))
-    # Keep MSLSTG01 source-backed. The legacy JSON currently labels FD spawn/respawn/camera/blast
-    # roles through coordinate heuristics because the DAT -> stage_info.x280 point mapping is not
-    # extracted yet. Pack only raw stage-point positions here until that mapping is source-backed.
-    spawn_points: list[dict] = []
-    respawn_points: list[dict] = []
-    cam: dict = {}
-    blast: dict = {}
+    unit_scale = _f32(data.get("unit_scale", 1.0))
+    # Stage-point roles are source-backed by the same map_head table that Ground_801C34AC uses to
+    # populate stage_info.x280. Pack role coordinates in world units, matching Ground_801C2D24
+    # after the stage root scale is applied.
+    spawn_points: list[dict] = list(data.get("spawn_points", []))
+    respawn_points: list[dict] = list(data.get("respawn_points", []))
+    cam: dict = dict(data.get("cam_bounds_world", {}))
+    blast: dict = dict(data.get("blast_bounds_world", {}))
 
     buf = bytearray()
     buf += STAGE_MAGIC
@@ -44,14 +45,14 @@ def _write_stage_bin(out: Path, data: dict) -> None:
         len(respawn_points),
         0,
         0,
-        _f32(cam.get("left", 0.0)),
-        _f32(cam.get("right", 0.0)),
-        _f32(cam.get("top", 0.0)),
-        _f32(cam.get("bottom", 0.0)),
-        _f32(blast.get("left", 0.0)),
-        _f32(blast.get("right", 0.0)),
-        _f32(blast.get("top", 0.0)),
-        _f32(blast.get("bottom", 0.0)),
+        _f32(float(cam.get("left", 0.0)) * unit_scale),
+        _f32(float(cam.get("right", 0.0)) * unit_scale),
+        _f32(float(cam.get("top", 0.0)) * unit_scale),
+        _f32(float(cam.get("bottom", 0.0)) * unit_scale),
+        _f32(float(blast.get("left", 0.0)) * unit_scale),
+        _f32(float(blast.get("right", 0.0)) * unit_scale),
+        _f32(float(blast.get("top", 0.0)) * unit_scale),
+        _f32(float(blast.get("bottom", 0.0)) * unit_scale),
     )
     for seg in segments:
         flags = (1 if seg.get("platform") else 0) | (2 if seg.get("ledge") else 0)
@@ -62,17 +63,22 @@ def _write_stage_bin(out: Path, data: dict) -> None:
             flags & 0xFF,
             int(seg.get("hi_flags", 0)) & 0xFFFF,
             int(seg.get("lo_flags", 0)) & 0xFFFF,
-            _f32(seg["x0"]),
-            _f32(seg["y0"]),
-            _f32(seg["x1"]),
-            _f32(seg["y1"]),
+            _f32(float(seg["x0"]) * unit_scale),
+            _f32(float(seg["y0"]) * unit_scale),
+            _f32(float(seg["x1"]) * unit_scale),
+            _f32(float(seg["y1"]) * unit_scale),
         )
     for pt in stage_points:
-        buf += struct.pack("<fff", _f32(pt.get("x", 0.0)), _f32(pt.get("y", 0.0)), _f32(pt.get("z", 0.0)))
+        buf += struct.pack(
+            "<fff",
+            _f32(float(pt.get("x", 0.0)) * unit_scale),
+            _f32(float(pt.get("y", 0.0)) * unit_scale),
+            _f32(float(pt.get("z", 0.0)) * unit_scale),
+        )
     for pt in spawn_points:
-        buf += struct.pack("<ff", _f32(pt["x"]), _f32(pt["y"]))
+        buf += struct.pack("<ff", _f32(float(pt["x"]) * unit_scale), _f32(float(pt["y"]) * unit_scale))
     for pt in respawn_points:
-        buf += struct.pack("<ff", _f32(pt["x"]), _f32(pt["y"]))
+        buf += struct.pack("<ff", _f32(float(pt["x"]) * unit_scale), _f32(float(pt["y"]) * unit_scale))
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_bytes(bytes(buf))
 

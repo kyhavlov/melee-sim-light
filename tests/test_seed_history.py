@@ -3260,12 +3260,15 @@ def test_derive_rebirth_camera_anchor_y_prefix_invariant() -> None:
     )
     np.testing.assert_allclose(ext[: action_prefix.shape[0]], full)
 
-    unsupported_stage = derive_rebirth_camera_anchor_y(
+    battlefield_stage = derive_rebirth_camera_anchor_y(
         action_id_u16=action_prefix,
         stage_id_u32=np.uint32(31),
-        respawn_point_y=45.0,
+        respawn_point_y=80.0,
     )
-    np.testing.assert_allclose(unsupported_stage, np.zeros(action_prefix.shape[0], dtype=np.float32))
+    np.testing.assert_allclose(
+        battlefield_stage,
+        np.array([0.0, 80.0, 80.0, 80.0, 0.0], dtype=np.float32),
+    )
 
 
 def test_derive_camera_target_world_prefix_invariant() -> None:
@@ -3357,10 +3360,10 @@ def test_derive_camera_target_point_inside_stage_cam_bounds_prefix_invariant() -
     )
     assert np.array_equal(ext[: x_prefix.shape[0]], full)
 
-    unsupported = derive_camera_target_point_inside_stage_cam_bounds(
+    battlefield = derive_camera_target_point_inside_stage_cam_bounds(
         stage_id_u32=np.uint32(31),
         camera_target_world_x_f32=x_prefix,
         camera_target_world_y_f32=y_prefix,
         camera_box_radius_f32=r_prefix,
     )
-    assert np.array_equal(unsupported, np.zeros(x_prefix.shape[0], dtype=np.uint8))
+    assert battlefield.tolist() == [1, 1, 1, 0]

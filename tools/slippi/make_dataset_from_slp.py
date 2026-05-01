@@ -16,7 +16,7 @@ from tools.eval.dataset import SAMPLE_DTYPE, write_dataset
 from tools.slippi.action_state_tables import load_action_state_tables
 from tools.slippi.hitstun import hitstun_u16_from_misc_as_and_state_flags3
 from tools.slippi.item_article_data import item_article_kind_set, item_article_values_by_sim_char
-from tools.slippi.known_data_artifacts import read_mslstg01_v1
+from tools.slippi.known_data_artifacts import read_mslstg01_v2, stage_metadata_path_for_stage_id
 from tools.slippi.rollback import finalized_frame_indices
 
 
@@ -47,9 +47,10 @@ _STAGE_KIND_BY_ID = {
 
 
 def _load_stage_segments_for_seed(*, stage_id: int, data_root: Path) -> list[dict]:
-    if int(stage_id) != 32:
+    stage_path = stage_metadata_path_for_stage_id(int(stage_id), data_root)
+    if stage_path is None:
         return []
-    stage = read_mslstg01_v1(data_root / "stages" / "bin" / "grnla.bin")
+    stage = read_mslstg01_v2(stage_path)
     out: list[dict] = []
     for seg in stage.segments:
         out.append(
@@ -847,36 +848,33 @@ def _derive_opening_input_lock_timer(*, frame_id_i32: np.ndarray) -> np.ndarray:
     return out
 
 
-@functools.lru_cache(maxsize=1)
-def _fd_respawn_points_y(*, data_dir: str = "data") -> np.ndarray:
+@functools.lru_cache(maxsize=8)
+def _stage_respawn_points_y(*, stage_id: int, data_dir: str = "data") -> np.ndarray | None:
     """
-    Load Final Destination respawn-point Y values from the ISO-derived stage artifact.
+    Load respawn-point Y values from the ISO-derived MSLSTG01 stage artifact.
 
-    data/stages/final_destination.json: respawn_points
+    data/stages/bin/{grnla,grnba}.bin::MSLSTG01 respawn_points
     """
-    stage_path = Path(data_dir) / "stages" / "final_destination.json"
-    data = json.loads(stage_path.read_text())
-    points = data.get("respawn_points")
-    if not isinstance(points, list) or len(points) < 4:
+    stage_path = stage_metadata_path_for_stage_id(int(stage_id), Path(data_dir))
+    if stage_path is None:
+        return None
+    stage = read_mslstg01_v2(stage_path)
+    if len(stage.respawn_points) < 4:
         raise ValueError(f"{stage_path}: expected 4 respawn_points entries")
 
     out = np.zeros(4, dtype=np.float32)
     for port0 in range(4):
-        point = points[port0]
-        if not isinstance(point, dict) or "y" not in point:
-            raise ValueError(f"{stage_path}: respawn_points[{port0}] missing y")
-        out[port0] = np.float32(point["y"])
+        out[port0] = np.float32(stage.respawn_points[port0].y)
     return out
 
 
 def _respawn_point_y_for_stage_port(*, stage_id: int, port0: int, data_dir: str = "data") -> float:
-    # FD-only current suite support. Unsupported stages keep the foundational blocker lane at zero.
-    # data/stages/final_destination.json: respawn_points
-    if int(stage_id) != 32:
-        return 0.0
     if port0 < 0 or port0 >= 4:
         raise ValueError(f"port0 must be in [0,3], got {port0}")
-    return float(_fd_respawn_points_y(data_dir=data_dir)[port0])
+    points = _stage_respawn_points_y(stage_id=int(stage_id), data_dir=data_dir)
+    if points is None:
+        return 0.0
+    return float(points[port0])
 
 
 def _load_throw_pulse_seed_tables(
@@ -4288,10 +4286,10 @@ def _main_impl(args) -> None:
             state_flags_u8=state_flags
         )[:-1]
         # Rebirth camera subject anchor Y (`fp->mv.co.common.x8`) is a hidden match-flow lane owned
-        # by ftCo_Rebirth_Cam. On Final Destination it comes from the stage respawn-point Y rather
-        # than the fighter's replay-visible cur_pos.y.
+        # by ftCo_Rebirth_Cam. It comes from the stage respawn-point Y rather than the fighter's
+        # replay-visible cur_pos.y.
         # refs/melee/src/melee/ft/ft_0D31.c::ftCo_Rebirth_Cam
-        # data/stages/final_destination.json: respawn_points
+        # data/stages/bin/{grnla,grnba}.bin::MSLSTG01 respawn_points
         samples["seed_t"]["rebirth_camera_anchor_y_f32"][:, slot] = derive_rebirth_camera_anchor_y(
             action_id_u16=post_state,
             stage_id_u32=int(stage_id),

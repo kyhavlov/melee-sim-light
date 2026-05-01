@@ -177,7 +177,7 @@ def _parse_ssdynn01_or_skip(path: Path) -> dict[str, object]:
     except ValueError as exc:
         pytest.skip(
             f"stale or unsupported local dynamic artifact: {path}: {exc}. "
-            "Run `uv run python -m tools.extraction.build_data --iso-dir _iso --stage grnla --chars fox,falco`."
+            "Run `uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba --chars fox,falco`."
         )
 
 

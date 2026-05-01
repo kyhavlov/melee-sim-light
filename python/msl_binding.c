@@ -1746,9 +1746,60 @@ static PyObject* msl_stage_floor_segment_py(PyObject* self, PyObject* args) {
     Py_RETURN_NONE;
   }
   const MslStageFloorLine* line = &graph->lines[(size_t)idx];
-  return Py_BuildValue("{s:i,s:f,s:f,s:f,s:f,s:i,s:i}", "segment_i", (int)line->segment_i, "x0",
+  return Py_BuildValue("{s:i,s:f,s:f,s:f,s:f,s:i,s:i,s:i}", "segment_i", (int)line->segment_i, "x0",
                        (double)line->x0, "y0", (double)line->y0, "x1", (double)line->x1, "y1",
-                       (double)line->y1, "is_ledge", (int)line->is_ledge, "line_index", idx);
+                       (double)line->y1, "is_ledge", (int)line->is_ledge, "is_platform",
+                       (int)line->is_platform, "line_index", idx);
+}
+
+static PyObject* msl_stage_match_flow_roles_py(PyObject* self, PyObject* args) {
+  (void)self;
+  unsigned int stage_id_u = 0;
+  if (!PyArg_ParseTuple(args, "I", &stage_id_u)) {
+    return NULL;
+  }
+  if (stage_collision_init() != 0) {
+    PyErr_SetString(PyExc_RuntimeError, "stage_collision_init failed");
+    return NULL;
+  }
+  MslStageBounds cam = {0};
+  MslStageBounds blast = {0};
+  if (!stage_collision_get_cam_bounds_world((uint32_t)stage_id_u, &cam) ||
+      !stage_collision_get_blast_bounds_world((uint32_t)stage_id_u, &blast)) {
+    Py_RETURN_NONE;
+  }
+  PyObject* spawn = PyList_New((Py_ssize_t)MSL_MAX_PLAYERS);
+  PyObject* respawn = PyList_New((Py_ssize_t)MSL_MAX_PLAYERS);
+  if (spawn == NULL || respawn == NULL) {
+    Py_XDECREF(spawn);
+    Py_XDECREF(respawn);
+    return NULL;
+  }
+  for (int i = 0; i < MSL_MAX_PLAYERS; i++) {
+    MslStagePoint2 sp = {0};
+    MslStagePoint2 rp = {0};
+    if (!stage_collision_get_spawn_point((uint32_t)stage_id_u, i, &sp) ||
+        !stage_collision_get_respawn_point((uint32_t)stage_id_u, i, &rp)) {
+      Py_DECREF(spawn);
+      Py_DECREF(respawn);
+      Py_RETURN_NONE;
+    }
+    PyObject* sp_obj = Py_BuildValue("(ff)", (double)sp.x, (double)sp.y);
+    PyObject* rp_obj = Py_BuildValue("(ff)", (double)rp.x, (double)rp.y);
+    if (sp_obj == NULL || rp_obj == NULL) {
+      Py_XDECREF(sp_obj);
+      Py_XDECREF(rp_obj);
+      Py_DECREF(spawn);
+      Py_DECREF(respawn);
+      return NULL;
+    }
+    PyList_SET_ITEM(spawn, i, sp_obj);
+    PyList_SET_ITEM(respawn, i, rp_obj);
+  }
+  return Py_BuildValue("{s:(ffff),s:(ffff),s:N,s:N}", "cam_bounds", (double)cam.left,
+                       (double)cam.right, (double)cam.top, (double)cam.bottom, "blast_bounds",
+                       (double)blast.left, (double)blast.right, (double)blast.top,
+                       (double)blast.bottom, "spawn_points", spawn, "respawn_points", respawn);
 }
 
 static PyObject* msl_debug_reset_pose_and_hitboxes_tables_py(PyObject* self, PyObject* args) {
@@ -3507,6 +3558,8 @@ static PyMethodDef methods[] = {
      "item_article_params(char_id) -> dict loaded from MSLITAR1."},
     {"stage_floor_segment", msl_stage_floor_segment_py, METH_VARARGS,
      "stage_floor_segment(stage_id, segment_i) -> dict from runtime stage collision tables."},
+    {"stage_match_flow_roles", msl_stage_match_flow_roles_py, METH_VARARGS,
+     "stage_match_flow_roles(stage_id) -> dict of runtime MSLSTG01 match-flow role data."},
     {"hitlist_ring_demo", msl_hitlist_ring_demo_py, METH_VARARGS,
      "hitlist_ring_demo(inserts) -> (ring, ids_u32[12]) (test-only)"},
     {"debug_reset_pose_and_hitboxes_tables", msl_debug_reset_pose_and_hitboxes_tables_py,

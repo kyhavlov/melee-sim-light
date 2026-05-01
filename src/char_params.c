@@ -372,13 +372,14 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       const int pn = snprintf(pat, sizeof(pat), "\"%s\"", k);
       if (pn <= 0 || (size_t)pn >= sizeof(pat) || strstr(buf, pat) == NULL) {
         fprintf(stderr, "msl: missing required key %s in %s\n", pat, path);
-        fprintf(stderr,
-                "hint: regenerate ISO-derived character attrs (gitignored). For Fox/Falco:\n"
-                "  uv run python -m tools.extraction.extract_character_attrs --pl-dir _iso "
-                "--out-dir data/characters --chars fox,falco\n"
-                "or run the full data pipeline:\n"
-                "  uv run python -m tools.extraction.build_data --iso-dir _iso --stage grnla "
-                "--chars fox,falco\n");
+        fprintf(
+            stderr,
+            "hint: regenerate ISO-derived character attrs (gitignored). For Fox/Falco:\n"
+            "  uv run python -m tools.extraction.extract_character_attrs --pl-dir _iso "
+            "--out-dir data/characters --chars fox,falco\n"
+            "or run the full data pipeline:\n"
+            "  uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba "
+            "--chars fox,falco\n");
         alloc_free(buf);
         return -1;
       }

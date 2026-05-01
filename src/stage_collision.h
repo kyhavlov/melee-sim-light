@@ -11,6 +11,11 @@ typedef struct MslStageFloorLine {
   // ISO-derived ledge flag for this floor segment (LINE_FLAG_LEDGE / `"segments[*].ledge"`).
   // Used by ledge-grab mask computation.
   uint8_t is_ledge;
+  // ISO-derived soft platform flag (LINE_FLAG_PLATFORM / `"segments[*].platform"`). Current
+  // platform mechanics are first-pass: platforms are present in the floor graph for from-above
+  // landing/floor collision, while drop-through/pass-through ownership remains a separate mpColl
+  // owner.
+  uint8_t is_platform;
   // Connectivity hints for mpLib_8004ED5C-style endpoint extension:
   // - has_prev_link: there exists some collision segment connected to (x0,y0)
   // - has_next_link: there exists some collision segment connected to (x1,y1)
@@ -20,10 +25,10 @@ typedef struct MslStageFloorLine {
   // refs/melee/src/melee/mp/mplib.c::mpLib_8004ED5C
   uint8_t has_prev_link;
   uint8_t has_next_link;
-  uint8_t _pad0;
+  uint8_t _pad0[2];
   // Stable `ground_id` mapping (ISO-derived segment index).
   uint16_t segment_i;
-  // Floor-only line graph connectivity (FD-only v1): indices into the stage's floor line array,
+  // Floor-only line graph connectivity: indices into the stage's floor line array,
   // or -1 for none.
   int16_t prev;
   int16_t next;
@@ -105,16 +110,16 @@ int stage_collision_init(void);
 
 void stage_collision_apply(MslBatch* batch);
 
-// Floor graph view for the given stage_id (FD-only v1). Returns NULL if unsupported/unloaded.
+// Floor graph view for the given stage_id. Returns NULL if unsupported/unloaded.
 const MslStageFloorGraph* stage_collision_get_floor_graph(uint32_t stage_id);
 
 // Map a stable ISO-derived `segment_i` (ground_id) to a floor-graph line index, or -1 if unknown.
 int stage_collision_floor_line_index(uint32_t stage_id, uint16_t segment_i);
 
-// Ceiling graph view for the given stage_id (FD-only v1). Returns NULL if unsupported/unloaded.
+// Ceiling graph view for the given stage_id. Returns NULL if unsupported/unloaded.
 const MslStageCeilingGraph* stage_collision_get_ceiling_graph(uint32_t stage_id);
 
-// Left/right wall graph views for the given stage_id (FD-only v1). Returns NULL if unsupported/unloaded.
+// Left/right wall graph views for the given stage_id. Returns NULL if unsupported/unloaded.
 const MslStageWallGraph* stage_collision_get_left_wall_graph(uint32_t stage_id);
 const MslStageWallGraph* stage_collision_get_right_wall_graph(uint32_t stage_id);
 
@@ -129,11 +134,11 @@ uint8_t stage_collision_get_cam_bounds_world(uint32_t stage_id, MslStageBounds* 
 uint8_t stage_collision_get_spawn_point(uint32_t stage_id, int port, MslStagePoint2* out);
 uint8_t stage_collision_get_respawn_point(uint32_t stage_id, int port, MslStagePoint2* out);
 
-// Ledge points (FD only v1): returns 1 if the stage has a ledge on the given side.
+// Ledge points: returns 1 if the stage has a ledge on the given side.
 // side: 0 = left, 1 = right.
 uint8_t stage_collision_get_ledge_point(uint32_t stage_id, int side, MslStagePoint2* out);
 
-// Ledge floor line (FD only v1): returns the floor segment that carries the exterior ledge point for
+// Ledge floor line: returns the floor segment that carries the exterior ledge point for
 // the given side, or NULL if unavailable.
 const MslStageFloorLine* stage_collision_get_ledge_floor_line(uint32_t stage_id, int side);
 
