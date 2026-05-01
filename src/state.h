@@ -440,6 +440,16 @@ typedef struct MslStateSoA {
   // - 1: ftCo_8009388C path from GuardOn/Guard (already shielding; ReflectDesc-only until expiry)
   // - 0: ftCo_80093A50 direct locomotion powershield path.
   uint8_t* guard_reflect_origin_guardon;
+  // GuardOff special/attack enable timer (decomp: mv.co.guard.x1C).
+  //
+  // Runtime owner:
+  // - Fighter-vs-fighter shield collision calls ftCo_80094138 when powershield-active x221C_b2 is
+  //   live, arming x1C from p_ftCommonData->x2B8 and clearing x10.
+  // - GuardOn/Guard/GuardReflect inlineC0 decrements x1C when it does not exit to GuardOff.
+  // - GuardOff_IASA only routes the special/attack chain while x1C is non-zero.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{inlineC0,ftCo_80094138,ftCo_GuardOff_IASA}
+  uint8_t* guard_special_enable_timer_x1c;
   // Guard release lockout + shield-drain latch (seeded; decomp-shaped).
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092BCC and ::ftCo_800925A4.
   uint8_t* guard_release_latched_xc;  // mv.co.guard.xC (0/1)

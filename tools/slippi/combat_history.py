@@ -30,8 +30,10 @@ ACT_ATTACK_AIR_F = 0x0042
 ACT_ATTACK_AIR_B = 0x0043
 ACT_ATTACK_AIR_HI = 0x0044
 ACT_ATTACK_AIR_LW = 0x0045
+ACT_ATTACK_HI3 = 0x0038
 ACT_DAMAGE_FALL = 0x0026
 ACT_DAMAGE_HI_1 = 0x004B
+ACT_DAMAGE_FLY_LW = 0x0059
 ACT_DAMAGE_FLY_ROLL = 0x005B
 ACT_FLY_REFLECT_WALL = 0x00F7
 ACT_FLY_REFLECT_CEIL = 0x00F8
@@ -1318,31 +1320,47 @@ def derive_combat_hitlist_seed_fields(
                 prev_group_active[attacker, :] = False
                 continue
             a_hitboxes = hitboxes[attacker]
-            if a_hitboxes:
-                # Legacy fallback bridge: preserve the previous group-indexed derivation for old and
-                # synthetic seeds. This intentionally remains coarser than the authoritative
-                # per-hitbox lane below.
-                group_active = [False] * HITLIST_GROUPS
-                for hb in a_hitboxes.values():
-                    g = int(hb.get("hit_group", 0)) & 0x7
-                    group_active[g] = True
-                for g in range(HITLIST_GROUPS):
-                    if group_active[g] and not bool(prev_group_active[attacker, g]):
-                        hitlist_cd[attacker, g, :] = np.uint16(0)
-                        hitlist_iid[attacker, g, :] = np.uint16(0)
-                for g in range(HITLIST_GROUPS):
-                    prev_group_active[attacker, g] = group_active[g]
-                for g in range(HITLIST_GROUPS):
-                    if not group_active[g]:
-                        continue
+            # Legacy fallback bridge: preserve the previous group-indexed derivation for old and
+            # synthetic seeds. This intentionally remains coarser than the authoritative per-hitbox
+            # lane below.
+            #
+            # AttackHi3 has a same-group re-enable edge after an inactive gap. In the proven
+            # active-hitstun DamageFlyLw rehit slice, ftColl_800768A0 clears/copies the concrete
+            # HitCapsule victims_1 list for that new capsule, so the coarse dense fallback must see
+            # a fresh edge for that victim. Other victims/families keep the legacy dense bridge
+            # until their per-HitCapsule lineage is proven; clearing every re-enable edge loses
+            # intentional stale-latch seeds for aerials, shield re-entry, getup attacks, and normal
+            # AttackHi3 contacts.
+            # data/scripts/{fox,falco}.bin (MSLFTSC1) ftCo_SM_AttackHi3 create/clear events
+            # refs/melee/src/melee/ft/ftcoll.c::ftColl_800768A0
+            # refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008440,lbColl_CopyHitCapsule}
+            clear_dense_on_enable_edge = int(action_id[fi, attacker]) == ACT_ATTACK_HI3
+            group_active = [False] * HITLIST_GROUPS
+            for hb in a_hitboxes.values():
+                g = int(hb.get("hit_group", 0)) & 0x7
+                group_active[g] = True
+            for g in range(HITLIST_GROUPS):
+                if clear_dense_on_enable_edge and group_active[g] and not bool(prev_group_active[attacker, g]):
                     for victim in range(num_players):
-                        cd = int(hitlist_cd[attacker, g, victim])
-                        if cd == 0 or cd == HITLIST_CD_INDEFINITE:
+                        if int(action_id[fi, victim]) != ACT_DAMAGE_FLY_LW:
                             continue
-                        cd2 = int(cd - 1)
-                        hitlist_cd[attacker, g, victim] = np.uint16(cd2)
-                        if cd2 == 0:
-                            hitlist_iid[attacker, g, victim] = np.uint16(0)
+                        if hitlag_arr is not None and int(hitlag_arr[fi, victim]) != 0:
+                            continue
+                        hitlist_cd[attacker, g, victim] = np.uint16(0)
+                        hitlist_iid[attacker, g, victim] = np.uint16(0)
+            for g in range(HITLIST_GROUPS):
+                prev_group_active[attacker, g] = group_active[g]
+            for g in range(HITLIST_GROUPS):
+                if not group_active[g]:
+                    continue
+                for victim in range(num_players):
+                    cd = int(hitlist_cd[attacker, g, victim])
+                    if cd == 0 or cd == HITLIST_CD_INDEFINITE:
+                        continue
+                    cd2 = int(cd - 1)
+                    hitlist_cd[attacker, g, victim] = np.uint16(cd2)
+                    if cd2 == 0:
+                        hitlist_iid[attacker, g, victim] = np.uint16(0)
             # Hitlist clear/copy-on-enable and decrement finite cooldowns per HitCapsule.
             #
             # Decomp ownership:

@@ -207,6 +207,13 @@ def main() -> None:
         "powershield_reflect_damage_mul": float(_f32_be(buf, ft_common_abs + 0x2AC)),
         "powershield_reflect_speed_mul": float(_f32_be(buf, ft_common_abs + 0x2B0)),
         "powershield_reflect_total_frames": int(round(float(_f32_be(buf, ft_common_abs + 0x2B4)))),
+        # GuardOff special/attack enable after powershield shield contact:
+        # - ftColl_80076CBC calls ftCo_80094138 when `fp->x221C_b2` is set.
+        # - ftCo_80094138 stores p_ftCommonData->x2B8 into mv.co.guard.x1C and clears x10.
+        # - GuardOff_IASA runs the full special/attack chain only when x1C is non-zero.
+        # refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80094138,ftCo_GuardOff_IASA}
+        "guard_special_enable_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x2B8))),
         # GuardSetOff pushback (ftCo_80092F2C): var_f2 = f * x294; if !x221C_b2 then *= x2BC; clamp to x298.
         "shield_setoff_push_mul": float(_f32_be(buf, ft_common_abs + 0x294)),
         "shield_setoff_push_max": float(_f32_be(buf, ft_common_abs + 0x298)),

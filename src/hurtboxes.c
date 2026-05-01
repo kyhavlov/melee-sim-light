@@ -15,6 +15,7 @@
 #include "motion_state_owners.h"
 #include "msl_math.h"
 #include "mtx34.h"
+#include "move_tables.h"
 #include "specialhi_pose.h"
 
 enum { MSL_CHAR_FOX = 1, MSL_CHAR_FALCO = 22 };
@@ -119,6 +120,39 @@ static inline uint8_t hurtboxes_side_special_end_uses_pre_anim_collision_pose(ui
                    action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_END);
 }
 
+static inline uint8_t hurtboxes_attackdash_post_hitbox_collision_pose_owner(const MslBatch* batch,
+                                                                            int bi, size_t idx,
+                                                                            uint16_t action_id,
+                                                                            uint8_t char_id,
+                                                                            float anim_frame_f32) {
+  (void)bi;
+  if (batch == NULL || action_id != (uint16_t)MSL_ACT_ATTACK_DASH) {
+    return 0u;
+  }
+  if (batch->replay_rollout_reseeded != NULL && bi >= 0 &&
+      batch->replay_rollout_reseeded[bi] != 0u) {
+    return 0u;
+  }
+  // Replay post-frame rows do not expose the live JObj/AObj phase for AttackDash's immediate
+  // post-hitbox-clear collision frame. Teacher-forced one-step uses this post-clear pose bridge for
+  // BODY contacts on sampled frame 34; replay-seeded rollout carries the live phase and must not
+  // apply the global hurtcap shift. Applying the offset later over-admits frame-38 AttackDash BODY
+  // rows. The boundary is data-backed by MSLFTSC1's AttackDash hitbox-clear timing.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::{
+  //   ftCo_AttackDash_Anim,ftCo_AttackDash_IASA,ftCo_AttackDash_Coll}
+  if (batch->state.hitbox_count[idx] != 0u) {
+    return 0u;
+  }
+  const uint16_t frame = msl_anim_frame_floor_u16(anim_frame_f32);
+  if (frame != 34u) {
+    return 0u;
+  }
+  if (move_tables_grounded_attack_allow_interrupt(char_id, action_id, anim_frame_f32) != 0u) {
+    return 0u;
+  }
+  return 1u;
+}
+
 static inline uint8_t hurtboxes_damageflyroll_live_xrotn_pose_owner(uint16_t action_id) {
   return (uint8_t)(action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL);
 }
@@ -150,6 +184,9 @@ static inline uint8_t hurtboxes_common_action_to_msid(uint16_t action_id, uint16
     case MSL_ACT_WALK_SLOW:
       *out_msid = (uint16_t)MSL_SM_WALK_SLOW;
       return 1u;
+    case MSL_ACT_TURN:
+      *out_msid = (uint16_t)MSL_SM_TURN;
+      return 1u;
     case MSL_ACT_DASH:
       *out_msid = (uint16_t)MSL_SM_DASH;
       return 1u;
@@ -176,7 +213,8 @@ static inline uint8_t hurtboxes_action_entry_carries_previous_jobj_pose(uint16_t
     case MSL_ACT_RUN:
       return (uint8_t)(prev_action == (uint16_t)MSL_ACT_DASH);
     case MSL_ACT_WALK_SLOW:
-      return (uint8_t)(prev_action == (uint16_t)MSL_ACT_SQUAT_RV);
+      return (uint8_t)(prev_action == (uint16_t)MSL_ACT_SQUAT_RV ||
+                       prev_action == (uint16_t)MSL_ACT_TURN);
     default:
       return 0u;
   }
@@ -568,7 +606,18 @@ static void hurtboxes_refresh_impl(MslBatch* batch, uint8_t geometry_mode) {
           uint16_t prev_frame = 0u;
           if (batch->state.prev_action_frame[idx] >= 0) {
             prev_frame = (uint16_t)batch->state.prev_action_frame[idx];
-            if (prev_frame != 0xFFFFu) {
+            // Turn can enter Walk from ftCo_Turn_IASA after ftCo_Turn_Anim has already interpreted
+            // the live JObj pose for this frame. Unlike the generic entry carry, the collision
+            // pass still consumes that serialized Turn pose rather than a projected next Turn
+            // frame. IAT:5092 is a replay-real negative: projecting +1 admits a false Shine BODY
+            // hit against WalkSlow entry.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::{
+            //   ftCo_Turn_Anim,ftCo_Turn_IASA}
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::ftCo_Walk_Enter
+            // refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
+            if (prev_frame != 0xFFFFu &&
+                !(batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_TURN &&
+                  action_id == (uint16_t)MSL_ACT_WALK_SLOW)) {
               prev_frame = (uint16_t)(prev_frame + 1u);
             }
           }
@@ -646,6 +695,22 @@ static void hurtboxes_refresh_impl(MslBatch* batch, uint8_t geometry_mode) {
         // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076ED8
         // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
         pose_frame = (uint16_t)(pose_frame - 1u);
+      }
+      if (hurtboxes_attackdash_post_hitbox_collision_pose_owner(batch, bi, idx, action_id, char_id,
+                                                                anim_frame_f32) &&
+          pose_frame != 0xFFFFu) {
+        // AttackDash late teacher-forced collision-pose phase:
+        // - ftCo_AttackDash_Anim owns the command-script hitbox clear before collision.
+        // - While the action is still before its command-script allow_interrupt frame, BODY
+        //   collision consumes the post-clear JObj pose that is one AObj step ahead of the
+        //   replay-visible action-frame lane. This helper is disabled for replay-seeded rollout
+        //   handles so live timebase state, not a reseed bridge, owns later frames. Do not apply
+        //   this after allow_interrupt, where IASA can hand ownership to Wait/Walk on the same
+        //   frame.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::{
+        //   ftCo_AttackDash_Anim,ftCo_AttackDash_IASA,ftCo_AttackDash_Coll}
+        // Source of timing windows: data/scripts/{fox,falco}.bin (MSLFTSC1).
+        pose_frame = (uint16_t)(pose_frame + 1u);
       }
       if (!have_hit_status_override && !preserve_visible_downbound_colanim) {
         (void)hit_status_get(char_id, msid, frame, &hit_status);

@@ -27,7 +27,7 @@
 // -----------
 
 static inline void enter_fall_special(MslBatch* batch, size_t idx) {
-  // Decomp: ftCo_EscapeAir_Anim -> ftCo_80096900 (FallSpecial entry).
+  // Decomp: ftCo_EscapeAir_Anim -> ftCo_80096900(..., allow_interrupt=false, ...).
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Anim
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_80096900
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL_SPECIAL;
@@ -36,6 +36,7 @@ static inline void enter_fall_special(MslBatch* batch, size_t idx) {
   // Decomp: EscapeAir enters FallSpecial via ftCo_80096900(..., arg1=1, ...), which sets xC=1.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c and ftCo_FallSpecial.c
   batch->state.fallspecial_xc[idx] = 1;
+  batch->state.landing_fallspecial_allow_interrupt[idx] = 0u;
 }
 
 uint8_t escape_air_try_enter_from_air_locomotion(MslBatch* batch, const MslCommonParams* c,
@@ -436,6 +437,7 @@ static inline void enter_guard_reflect_common_setup(MslBatch* batch, const MslCo
   batch->state.animation_index[idx] = 0xFFFFFFFFu;
   batch->state.guard_reflect_timer_x14[idx] = guard_reflect_timer_x14_init(c);
   batch->state.guard_reflect_timer_x18[idx] = guard_reflect_timer_x18_init(c);
+  batch->state.guard_special_enable_timer_x1c[idx] = 0u;
   batch->state.guard_release_latched_xc[idx] = 0;
   batch->state.guard_x10[idx] = guard_x10_init_u8(c);
   batch->state.lightshield_amount[idx] = 0.0f;
@@ -537,6 +539,7 @@ static inline void enter_guard_on(MslBatch* batch, const MslCommonParams* c, siz
       uint8_t)(MSL_STATE_FLAG_221C_B3 | MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2);
   batch->state.guard_on_entered_this_frame[idx] = 1u;
   batch->state.guard_entry_via_wait_callback[idx] = entered_via_wait_callback ? 1u : 0u;
+  batch->state.guard_special_enable_timer_x1c[idx] = 0u;
   batch->state.guard_release_latched_xc[idx] = 0;
   batch->state.guard_x10[idx] = guard_x10_init_u8(c);
   batch->state.lightshield_amount[idx] = 0.0f;
@@ -594,6 +597,7 @@ static inline void enter_shield_break_fly(MslBatch* batch, const MslCharParams* 
   batch->state.speed_y_self[idx] = (ch != NULL) ? ch->shield_break_initial_velocity : 0.0f;
   batch->state.guard_release_latched_xc[idx] = 0;
   batch->state.guard_x10[idx] = 0;
+  batch->state.guard_special_enable_timer_x1c[idx] = 0u;
   batch->state.lightshield_amount[idx] = 0.0f;
 }
 
@@ -603,6 +607,7 @@ static inline void guard_enter_wait(MslBatch* batch, size_t idx) {
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_WAIT;
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_WAIT1_0;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  batch->state.guard_special_enable_timer_x1c[idx] = 0u;
 }
 
 static inline void shieldbreak_enter_stand(MslBatch* batch, size_t idx, uint16_t source_action) {
@@ -1328,6 +1333,15 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
         return;
       }
 
+      // Decomp: inlineC0 decrements mv.co.guard.x1C only when GuardOn/Guard/GuardReflect IASA
+      // does not exit to GuardOff. GuardOff_IASA then uses the non-zero timer to allow the full
+      // special/attack chain after a powershield shield contact.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{inlineC0,ftCo_GuardOff_IASA}
+      if (batch->state.guard_special_enable_timer_x1c[idx] > 0u) {
+        batch->state.guard_special_enable_timer_x1c[idx] =
+            (uint8_t)(batch->state.guard_special_enable_timer_x1c[idx] - 1u);
+      }
+
       if (x10_pre > 0 && batch->state.shield_hp[idx] > 0.0f) {
         batch->state.guard_x10[idx] = (uint8_t)(x10_pre - 1u);
       }
@@ -1458,18 +1472,29 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
   // GuardOff: wait for animation end then go back to Wait.
   if (a0 == MSL_ACT_GUARD_OFF) {
     batch->state.animation_index[idx] = (uint32_t)MSL_SM_GUARD_OFF;
-    // GuardOff IASA: allow spotdodge + jump, but not rolls.
+    // GuardOff IASA: when mv.co.guard.x1C is live, decomp tries the special/attack chain before
+    // the spotdodge/jump fallback. Specials are modeled in the later B-special passes, so do not
+    // let the fallback consume B-press rows first.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardOff_IASA
+    const uint8_t guardoff_special_chain_pending =
+        (batch->state.guard_special_enable_timer_x1c[idx] != 0u &&
+         (batch->state.input_buttons_pressed[idx] & (uint16_t)MSL_BUTTON_B) != 0u)
+            ? 1u
+            : 0u;
+    // GuardOff fallback IASA: allow spotdodge + jump, but not rolls.
     //
     // Decomp: ftCo_GuardOff_IASA calls spotdodge check (ftCo_8009980C) and jump check (ftCo_800CB024),
     // but does *not* call the roll check (ftCo_8009917C). Allowing EscapeF/B here causes a dominant
     // GuardOff->EscapeB mismatch cluster in teacher-forced one-step eval.
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardOff_IASA
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_8009917C
-    if (escape_try_enter_spotdodge_from_guard(batch, c, idx)) {
-      return;
-    }
-    if (guard_try_enter_jump_oos(batch, c, idx)) {
-      return;
+    if (!guardoff_special_chain_pending) {
+      if (escape_try_enter_spotdodge_from_guard(batch, c, idx)) {
+        return;
+      }
+      if (guard_try_enter_jump_oos(batch, c, idx)) {
+        return;
+      }
     }
     const float end_frame =
         msl_anim_end_frame(batch->state.char_id[idx], (uint16_t)MSL_SM_GUARD_OFF);

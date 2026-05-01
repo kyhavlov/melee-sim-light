@@ -346,7 +346,7 @@ Recommended sequence for the next deep passes:
     `0x18` stride, includes the dynamic child chain rooted at part 17, and emits dynamic-chain data
     consumed by `src/anim_pose.c`. Runtime carries fixed-capacity dynamic-node pose state, updates it
     before hurtcap refresh, and samples dynamic collision matrices for BODY hurtcap endpoints before
-    `lbColl_8000805C`. `SSDYNN01` v3 owns the dynamic-collision submotion predicate, and runtime
+    `lbColl_8000805C`. `SSDYNN01` v4 owns the dynamic-collision submotion predicate, and runtime
     separates dynamic state carry from current-frame collision-matrix application. A broad static
     grounded-common-attack application
     was tested and rejected: it fixed `BHH:1599` but regressed suite totals and introduced Fox
@@ -631,7 +631,7 @@ Recommended sequence for the next deep passes:
 - Roadmap family: former `F08b_body_contact_geometry_residual` no longer emits as one broad bucket
   in the refreshed taxonomy, and no parent-owned collision/pose residual bucket remains.
   The implemented runtime/seed sub-owners cover the shared BODY primitive surface: SSDYNN01
-  dynamic-chain collision pose (Fox JumpB/AttackDash/AttackHi3 owner predicate), Turn internal-facing hurtcaps, per-HitCapsule `victims_1`
+  dynamic-chain collision pose (Fox JumpB/AttackHi3 owner predicate), Turn internal-facing hurtcaps, per-HitCapsule `victims_1`
   preservation, GuardSetOff onset lineage, swept/same-group clank, Escape floor-edge pose
   selection, same-frame/enable-edge HitCapsule x58/x4C continuity, CliffAttack hitbox extraction,
   enable-edge phantom/tip-log handling, narrowed AttackAirN dense-latch preservation,
@@ -656,7 +656,7 @@ Recommended sequence for the next deep passes:
     `lbColl_8000805C` path. The runtime update follows the supported `lb_8001044C`
     segment-vector owner: previous child position, current animation segment vector, descriptor
     follow/down/cone/decay constants, and carried correction axis/angle produce the next
-    dynamic-chain collision matrix. Dynamic collision applicability is an extracted `SSDYNN01` v3
+    dynamic-chain collision matrix. Dynamic collision applicability is an extracted `SSDYNN01` v4
     owner predicate, not a C-side raw `msid=58` gate, and sequential state carry uses a separate
     state-valid flag from the collision-apply flag. The rejected hardcoded runtime primitive
     overlay, generated one-slice overlay, broad grounded-attack bake, and matrix-primary /
@@ -685,7 +685,7 @@ Recommended sequence for the next deep passes:
   - the broad grounded-attack dynamic-descriptor bake is rejected; regression artifacts live under
     `reports/triage/20260416_hsd_dynamic_regression_broad/` and show new Fox msid-59 BODY false
     negatives (`AGN:1471`, `QGD:7589`, `TBK:870`);
-  - the Fox JumpB/AttackDash/AttackHi3 / SSDYNN01 dynamic-chain collision-pose sub-owner covers the target-domain
+  - the Fox JumpB/AttackHi3 / SSDYNN01 dynamic-chain collision-pose sub-owner covers the target-domain
     one-set data surface without widening BODY
     admission. Refreshed validation for the current local implementation is non-regressing relative
     to the starting review reports: primary/cardinal one-step `715 -> 699`, primary rollout

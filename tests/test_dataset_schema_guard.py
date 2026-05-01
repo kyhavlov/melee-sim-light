@@ -101,6 +101,7 @@ def test_seed_schema_includes_staling_fields() -> None:
     assert "rebound_ground_accel_2_f32" in SEED_DTYPE.fields
     assert "rebound_anim_rate_f32" in SEED_DTYPE.fields
     assert "guard_reflect_origin_guardon_u8" in SEED_DTYPE.fields
+    assert "guard_special_enable_timer_x1c" in SEED_DTYPE.fields
     assert "floor_sweep_prev_pos_x_f32" in SEED_DTYPE.fields
     assert "floor_sweep_prev_pos_y_f32" in SEED_DTYPE.fields
     assert "floor_sweep_prev_pos_valid_u8" in SEED_DTYPE.fields
@@ -175,7 +176,7 @@ def test_landing_fallspecial_allow_interrupt_lane_is_prefix_causal() -> None:
     # non-EscapeAir FallSpecial sources use the common true-carry path.
     action = np.array([236, 35, 35, 43, 43, 14, 358, 35, 43, 14, 236, 43], dtype=np.uint16)
     got = _derive_landing_fallspecial_allow_interrupt_seed_lane(action_id_u16=action)
-    assert got.tolist() == [0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0]
+    assert got.tolist() == [0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0]
 
     extended = np.concatenate([action, np.array([35, 43, 43], dtype=np.uint16)])
     got_extended = _derive_landing_fallspecial_allow_interrupt_seed_lane(action_id_u16=extended)

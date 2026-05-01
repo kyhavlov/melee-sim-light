@@ -15,6 +15,7 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
 # Button masks: src/buttons.h (Melee/HSD PAD bits)
 BUTTON_L = 0x0040
 BUTTON_Z = 0x0010
+BUTTON_B = 0x0200
 
 # Action ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 ACT_WAIT = 0x000E
@@ -22,6 +23,8 @@ ACT_GUARD_ON = 0x00B2
 ACT_GUARD = 0x00B3
 ACT_GUARD_OFF = 0x00B4
 ACT_GUARD_REFLECT = 0x00B6
+ACT_FX_SPECIAL_LW_START = 0x0168
+ACT_ESCAPE_N = 0x00EB
 ACT_KNEE_BEND = 0x0018
 ACT_ATTACK_HI4 = 0x003F
 
@@ -169,6 +172,51 @@ def test_guard_state_does_not_reenter_guard_reflect_on_lr_edge() -> None:
 
         got = out.view(COMPARE_DTYPE).reshape((1,))[0]
         assert int(got["action_id"][0]) == ACT_GUARD
+    finally:
+        msl_binding.destroy(handle)
+
+
+def test_guardoff_special_chain_requires_seeded_x1c_timer() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    inp_view = inp.view(INPUT_DTYPE).reshape((1,))
+    inp_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_B)
+    inp_view["p"]["main_y"][0, 0] = np.int8(-80)
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        out = np.zeros((1, compare_stride), dtype=np.uint8)
+        for x1c, expected_action in ((0, ACT_ESCAPE_N), (1, ACT_FX_SPECIAL_LW_START)):
+            seed = _seed_base()
+            seed["match_damage_ratio"][0] = np.float32(1.0)
+            seed["attack_ratio"][0, :2] = np.float32(1.0)
+            seed["defense_ratio"][0, :2] = np.float32(1.0)
+            seed["fighter_scale_y"][0, :2] = np.float32(1.0)
+            seed["char_id"][0, 1] = np.uint8(CHAR_FOX)
+            seed["stocks"][0, 1] = np.uint8(4)
+            seed["action_id"][0, 0] = np.uint16(ACT_GUARD_OFF)
+            seed["action_frame"][0, 0] = np.int16(9)
+            seed["animation_index"][0, 0] = np.uint32(SM_GUARD_OFF)
+            seed["anim_frame_f32"][0, 0] = np.float32(9.0)
+            seed["frame_speed_mul_f32"][0, 0] = np.float32(1.0)
+            seed["guard_special_enable_timer_x1c"][0, 0] = np.uint8(x1c)
+
+            seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+            msl_binding.reseed_seed(handle, seed_bytes)
+            msl_binding.step_input(handle, prev_inp, inp)
+            msl_binding.write_compare(handle, out)
+
+            got = out.view(COMPARE_DTYPE).reshape((1,))[0]
+            assert int(got["action_id"][0]) == expected_action
+            if x1c == 0:
+                assert int(got["action_id"][0]) != ACT_FX_SPECIAL_LW_START
     finally:
         msl_binding.destroy(handle)
 

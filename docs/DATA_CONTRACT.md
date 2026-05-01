@@ -259,6 +259,29 @@ Decomp contract:
 - Direct locomotion path: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093A50`.
 - Final-x14 recreation: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0`.
 
+## Replay Seed Contract: GuardOff Special Enable
+
+The replay seed contains `guard_special_enable_timer_x1c[player]`, the hidden Guard move-var that
+allows GuardOff to run the special/attack IASA chain after a powershield shield contact.
+
+Domain:
+- `0`: GuardOff can only use its spotdodge/jump fallback chain.
+- `1..255`: remaining frames in `mv.co.guard.x1C`.
+
+Source/generation:
+- Runtime arms the timer from `data/common/ft_common_data.json::guard_special_enable_frames`
+  (`p_ftCommonData->x2B8`) in fighter-vs-fighter shield collision when `x221C_b2` is active.
+- Preprocessing derives the seed lane from replay-visible powershield-active GuardSetOff rows
+  (`state_flags[3] & 0x20`) and the same guard callback countdown used by the x10 release lane.
+
+Decomp contract:
+- `refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC` calls `ftCo_80094138` on the
+  powershield-active shield-hit branch.
+- `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80094138` sets x1C and clears x10.
+- `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::inlineC0` decrements x1C.
+- `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardOff_IASA` gates the
+  special/attack chain on non-zero x1C.
+
 ## Replay Seed Contract: x670/x671 Damage SDI Reset
 
 The replay seed contains `tilt_timer_x[player]` / `tilt_timer_y[player]`, the hidden
@@ -433,10 +456,11 @@ Why this exists:
 
 Source/generation:
 - `tools/slippi/make_dataset_from_slp.py::_derive_landing_fallspecial_allow_interrupt_seed_lane`
-  derives the lane strictly from replay-prefix visible action history. It carries the bit across
-  a visible `FallSpecial` run and copies it onto a following `LandingFallSpecial` run.
+  derives the lane strictly from replay-prefix visible action history. It writes the bit on visible
+  `FallSpecial` rows and copies it onto a following `LandingFallSpecial` run.
 - Runtime consumes it only during reseed and in `src/locomotion.c` LandingFallSpecial IASA; normal
-  rollout transitions set/clear the same internal bit from their decomp-owned entry paths.
+  rollout transitions set/clear the same internal bit from their decomp-owned FallSpecial and
+  LandingFallSpecial entry paths.
 
 Decomp contract:
 - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_80099D70`.
@@ -833,7 +857,7 @@ Loader contract:
 - The loader allocates lookup tables only during initialization; normal gameplay sampling is fixed
   capacity and allocation-free.
 
-## `data/anims/<char>.dyn.bin` (SSDYNN01 v3)
+## `data/anims/<char>.dyn.bin` (SSDYNN01 v4)
 
 Purpose: compact, init-time-loadable fighter dynamic-chain descriptors from `ftData.x2C`. These are
 the descriptor inputs to the live collision-pose owner that feeds `lb_8000B1CC` hurtcap endpoints.
@@ -859,7 +883,7 @@ Source and generation:
 Binary layout (little-endian):
 - Header:
   - `magic[8] = "SSDYNN01"`
-  - `version: u32 = 3`
+  - `version: u32 = 4`
   - `set_count: u16`
   - `total_node_count: u16`
 - Per dynamic set:
@@ -879,13 +903,14 @@ Supported runtime contract:
 - Current Fox/Falco RL1.0 data has one supported surface: Fox has one dynamic set rooted at part 17
   with nodes `[17, 18, 19, 20]`; Falco has zero sets.
 - The collision-owner index is the only runtime predicate for dynamic matrix substitution. Current
-  generated data marks Fox `ftCo_SM_JumpB` (`submotion_id=17`), `ftCo_SM_AttackDash`
-  (`submotion_id=52`), and `ftCo_SM_AttackHi3` (`submotion_id=58`) because
-  pre-`ftColl_80078C70` Dolphin primitive probes show those BODY hurtcap endpoints consume the live
-  dynamic chain, while broad application to other common actions regressed protected BODY rows. C
-  gameplay must not hardcode these msids; adding another dynamic collision submotion is an
+  generated data marks Fox `ftCo_SM_JumpB` (`submotion_id=17`) and `ftCo_SM_AttackHi3`
+  (`submotion_id=58`) because pre-`ftColl_80078C70` Dolphin primitive probes show those BODY
+  hurtcap endpoints consume the live dynamic chain. Fox `ftCo_SM_AttackDash` is intentionally not
+  marked in v4: the HIS:5029 AttackDash/AttackLw4 primitive probe selects the static-chain low
+  hurtcap contact and rejects the false tail-chain contact produced by applying the dynamic matrix.
+  C gameplay must not hardcode these msids; adding another dynamic collision submotion is an
   extraction/data contract change backed by the same primitive evidence.
-- In v3, a collision-owner msid means the runtime applies the reconstructed dynamic matrix on every
+- In v4, a collision-owner msid means the runtime applies the reconstructed dynamic matrix on every
   supported frame for that submotion. It is not contingent on a nonzero current-frame
   `lb_8001044C` correction carry; `JumpB` rows proved vanilla can consume the dynamic chain even
   when the segment resolves close to the static pose.
@@ -896,8 +921,7 @@ Supported runtime contract:
   pose reconstruction. Present `.dyn.bin` files require the matching `.locals.bin` file; dynamic
   descriptors without local SRT are invalid because the runtime cannot reconstruct the JObj subtree
   that feeds `lb_8000B1CC`. Present-but-invalid `.dyn.bin` files fail initialization. Stale v1/v2
-  dynamic artifacts are rejected because they do not carry the v3 current-frame matrix-application
-  contract.
+  dynamic artifacts are rejected because they do not carry the v4 collision-owner predicate.
 - Reseed contract: non-sequential teacher-forced seeds rebuild supported dynamic-chain state by
   initializing from frame 0 local SRT and replaying the deterministic dynamic update through the
   seeded integer animation frame. This is `O(action_frame)` on reseed/pre-combat reconstruction

@@ -38,6 +38,8 @@ void hitlist_tick(MslBatch* batch);
 // Decomp anchor: refs/melee/src/melee/lb/lbcollision.c::lbColl_8000ACFC
 uint8_t hitlist_allows_fighter(MslBatch* batch, int bi, int attacker, int hb_id, int victim,
                                uint16_t victim_iid);
+uint8_t hitlist_allows_fighter_live_collision(MslBatch* batch, int bi, int attacker, int hb_id,
+                                              int victim, uint16_t victim_iid);
 // Returns 1 if the phantom/tip-log lane (victims_2) does not already contain (victim).
 // Decomp anchor: refs/melee/src/melee/ft/ftcoll.c::checkTipLog
 uint8_t hitlist_allows_fighter_v2(MslBatch* batch, int bi, int attacker, int hb_id, int victim,
@@ -79,6 +81,11 @@ void hitlist_seed_init_fighter_hitbox_from_group(MslBatch* batch, int bi, int at
 void hitlist_seed_init_fighter_hitbox_from_group_allow_stale_iid(MslBatch* batch, int bi,
                                                                  int attacker, int hb_id,
                                                                  uint8_t hit_group);
+
+// Replay-rollout bridge for dense seed maps whose Slippi instance-id proxy changed even though
+// decomp's raw fighter object pointer is still the same victim object.
+uint8_t hitlist_rollout_dense_seed_same_object_rebind_applies(const MslBatch* batch, int bi,
+                                                              int attacker, int victim);
 
 // Debug helper: clear victim lists for all hitboxes on (attacker).
 void hitlist_debug_clear_fighter_attacker(MslBatch* batch, int bi, int attacker);

@@ -1121,6 +1121,83 @@ def derive_guard_release_lockout_and_lightshield(
     return out_xc, out_x10, out_light
 
 
+def derive_guard_special_enable_timer_x1c(
+    *,
+    action_id: np.ndarray,
+    hitlag: np.ndarray,
+    state_flags_u8: np.ndarray,
+    guard_special_enable_frames: int,
+    act_guard_on: int,
+    act_guard: int,
+    act_guard_off: int,
+    act_guard_reflect: int,
+    act_guard_set_off: int,
+) -> np.ndarray:
+    """
+    Derive GuardOff's hidden special/attack enable timer (mv.co.guard.x1C) from replay history.
+
+    Decomp:
+    - Fighter-vs-fighter shield collision calls ftCo_80094138 when defender x221C_b2 is active,
+      setting `mv.co.guard.x1C = p_ftCommonData->x2B8` and clearing x10.
+    - GuardOn/Guard/GuardReflect inlineC0 decrements x1C only when it does not exit to GuardOff.
+    - GuardOff_IASA runs the special/attack chain only while x1C is non-zero.
+
+    Replay surface:
+    - Slippi exposes x221C_b2 in state_flags[3] bit 0x20 but not x1C directly.
+    - A GuardSetOff post-frame with x221C_b2 live is the visible result of the powershield-active
+      shield-hit branch that arms x1C.
+
+    Returns a post-frame-indexed uint8 countdown.
+    """
+    aid = np.asarray(action_id, dtype=np.uint16).reshape(-1)
+    hl = np.asarray(hitlag, dtype=np.uint16).reshape(-1)
+    flags = np.asarray(state_flags_u8, dtype=np.uint8)
+    if flags.ndim != 2 or flags.shape[0] != aid.size or flags.shape[1] < 4:
+        raise ValueError("state_flags_u8 must have shape [n, >=4]")
+    if hl.size != aid.size:
+      raise ValueError("action_id and hitlag arrays must have the same length")
+
+    init = int(guard_special_enable_frames)
+    if init < 0:
+        init = 0
+    if init > 255:
+        init = 255
+
+    out = np.zeros(aid.size, dtype=np.uint8)
+    x1c = 0
+
+    def _is_guard(a: int) -> bool:
+        return a == int(act_guard_on) or a == int(act_guard) or a == int(act_guard_reflect)
+
+    for i in range(int(aid.size)):
+        a = int(aid[i])
+        prev_a = int(aid[i - 1]) if i > 0 else a
+
+        if (a == int(act_guard_on) and prev_a != int(act_guard_on)) or (
+            a == int(act_guard_reflect) and prev_a != int(act_guard_reflect)
+        ):
+            x1c = 0
+
+        if a == int(act_guard_set_off) and (int(flags[i, 3]) & 0x20) != 0:
+            x1c = init
+        elif _is_guard(a):
+            # Match inlineC0's hitlag/update gate used by the existing guard lockout derivation.
+            hl_prev = int(hl[i - 1]) if i > 0 else 0
+            hl_after_prio0 = hl_prev - 1 if hl_prev > 0 else 0
+            if hl_after_prio0 == 0 and x1c > 0:
+                x1c -= 1
+        elif a == int(act_guard_off):
+            pass
+        elif a != int(act_guard_set_off):
+            # GuardOff preserves x1C for its IASA gate; leaving shield-family or entering a fresh
+            # non-guard state makes the hidden lane irrelevant.
+            x1c = 0
+
+        out[i] = np.uint8(x1c & 0xFF)
+
+    return out
+
+
 def derive_guard_setoff_hitlag_damage_min(
     *,
     action_id: np.ndarray,

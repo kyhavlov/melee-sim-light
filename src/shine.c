@@ -84,7 +84,8 @@ static inline uint8_t shine_is_dash_flick(const MslCommonParams* c, float stick_
   return (ax >= c->dash_flick_abs && tilt_timer_x < c->dash_flick_tilt_max_frames) ? 1u : 0u;
 }
 
-static inline uint8_t action_allows_shine_entry_ground(uint16_t action_id) {
+static inline uint8_t action_allows_shine_entry_ground(const MslBatch* batch, size_t idx,
+                                                       uint16_t action_id) {
   // Decomp: specials (including SpecialLw / shine) are dispatched from per-state IASA callbacks via
   // `ftCo_800D68C0` ("special move input" dispatcher). If a state does not call into that chain,
   // SpecialLw cannot be entered regardless of input.
@@ -117,10 +118,11 @@ static inline uint8_t action_allows_shine_entry_ground(uint16_t action_id) {
   //   RunBrake on the same frame.
   //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::ftCo_RunBrake_IASA
   // - GuardOn / Guard / GuardReflect do not route through ftCo_800D68C0, and GuardSetOff_IASA is
-  //   empty. GuardOff is the shield-family state whose IASA can call ftCo_800D68C0.
+  //   empty. GuardOff is the shield-family state whose IASA can call ftCo_800D68C0, but only while
+  //   mv.co.guard.x1C is non-zero after powershield shield contact.
   //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
   //     ftCo_GuardOn_IASA,ftCo_Guard_IASA,ftCo_GuardSetOff_IASA,ftCo_GuardReflect_IASA,
-  //     ftCo_GuardOff_IASA}
+  //     ftCo_GuardOff_IASA,ftCo_80094138}
   switch (action_id) {
     case MSL_ACT_WAIT:
     case MSL_ACT_WALK_SLOW:
@@ -139,8 +141,9 @@ static inline uint8_t action_allows_shine_entry_ground(uint16_t action_id) {
     case MSL_ACT_SQUAT:
     case MSL_ACT_SQUAT_WAIT:
     case MSL_ACT_SQUAT_RV:
-    case MSL_ACT_GUARD_OFF:
       return 1u;
+    case MSL_ACT_GUARD_OFF:
+      return (batch != NULL && batch->state.guard_special_enable_timer_x1c[idx] != 0u) ? 1u : 0u;
     default:
       return 0u;
   }
@@ -635,7 +638,7 @@ void shine_update_pre_physics(MslBatch* batch) {
               //   ftCo_SpecialS_CheckInput,ftCo_800D68C0}
               (fabsf(stick_x) >= c->special_stick_x_threshold_side) ? 1u : 0u;
           if (!grounded_side_special_preempts_down_special &&
-              (action_allows_shine_entry_ground(a) || landing_specials_open ||
+              (action_allows_shine_entry_ground(batch, idx, a) || landing_specials_open ||
                shine_entry_allowed_by_run_to_runbrake_transition(batch, idx, a)) &&
               !shine_entry_blocked_by_runbrake_squat_transition(batch, idx, a)) {
             // Turn IASA ownership:

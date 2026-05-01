@@ -28,6 +28,7 @@ from tools.slippi.seed_history import (
     derive_guard_reflect_timer_x14,
     derive_guard_reflect_timer_x18,
     derive_guard_release_lockout_and_lightshield,
+    derive_guard_special_enable_timer_x1c,
     derive_guard_setoff_hitlag_damage_min,
     derive_guard_setoff_hitlag_exit_phase,
     derive_guard_setoff_post_hitlag_owner,
@@ -954,6 +955,69 @@ def test_derive_guard_release_lockout_reinitializes_on_non_setoff_snapshot_guard
 
     assert x_c.tolist() == [0, 0, 1, 1, 0]
     assert x10.tolist() == [0, 0, 7, 6, 0]
+
+
+def test_derive_guard_special_enable_timer_x1c_arms_on_powershield_setoff() -> None:
+    # ftColl_80076CBC -> ftCo_80094138 arms mv.co.guard.x1C from p_ftCommonData->x2B8 on the
+    # powershield-active shield-hit branch. GuardOff preserves that timer for its IASA gate.
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80094138,ftCo_GuardOff_IASA}
+    act_wait = 0x000E
+    act_guard = 0x00B3
+    act_guard_off = 0x00B4
+    act_guard_set_off = 0x00B5
+    act_guard_reflect = 0x00B6
+
+    action_id = np.array(
+        [act_wait, act_guard_reflect, act_guard_set_off, act_guard_off, act_wait],
+        dtype=np.uint16,
+    )
+    hitlag = np.zeros(action_id.shape[0], dtype=np.uint16)
+    state_flags = np.zeros((action_id.shape[0], 5), dtype=np.uint8)
+    state_flags[2, 3] = np.uint8(0x20)
+
+    out = derive_guard_special_enable_timer_x1c(
+        action_id=action_id,
+        hitlag=hitlag,
+        state_flags_u8=state_flags,
+        guard_special_enable_frames=4,
+        act_guard_on=0x00B2,
+        act_guard=act_guard,
+        act_guard_off=act_guard_off,
+        act_guard_reflect=act_guard_reflect,
+        act_guard_set_off=act_guard_set_off,
+    )
+
+    assert out.tolist() == [0, 0, 4, 4, 0]
+
+
+def test_derive_guard_special_enable_timer_x1c_decrements_only_on_guard_continue() -> None:
+    # inlineC0 decrements x1C when GuardOn/Guard/GuardReflect continue shielding, but exits to
+    # GuardOff before decrementing. Hitlag freezes the callback owner.
+    act_guard = 0x00B3
+    act_guard_off = 0x00B4
+    act_guard_set_off = 0x00B5
+    action_id = np.array(
+        [act_guard_set_off, act_guard, act_guard, act_guard, act_guard_off],
+        dtype=np.uint16,
+    )
+    hitlag = np.array([0, 0, 2, 0, 0], dtype=np.uint16)
+    state_flags = np.zeros((action_id.shape[0], 5), dtype=np.uint8)
+    state_flags[0, 3] = np.uint8(0x20)
+
+    out = derive_guard_special_enable_timer_x1c(
+        action_id=action_id,
+        hitlag=hitlag,
+        state_flags_u8=state_flags,
+        guard_special_enable_frames=4,
+        act_guard_on=0x00B2,
+        act_guard=act_guard,
+        act_guard_off=act_guard_off,
+        act_guard_reflect=0x00B6,
+        act_guard_set_off=act_guard_set_off,
+    )
+
+    assert out.tolist() == [4, 3, 2, 2, 2]
 
 
 def test_derive_guard_release_lockout_uses_buttons_held_lr_proxy() -> None:

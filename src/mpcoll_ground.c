@@ -1226,24 +1226,19 @@ void mpcoll_ground_apply(MslBatch* batch) {
           int resolved_line_idx = out_line_idx;
           if (prefer_line_idx >= 0 && out_line_idx != prefer_line_idx &&
               floor_lines_connected(g, prefer_line_idx, out_line_idx)) {
-            const MslStageFloorLine* pl = &g->lines[(size_t)prefer_line_idx];
-            const MslStageFloorLine* ol = &g->lines[(size_t)out_line_idx];
             // Decomp-shaped tie-break:
-            // - floor.index persists across connected floor seams,
-            // - edge floor segments (ledge=true) tend to keep ownership until contact fully exits
-            //   that segment's endpoint clamp window.
-            // Restrict persistence to ledge->non-ledge handoff to avoid center-line stickiness.
+            // mpLib_8004DD90_Floor traverses connected prev/next floor links immediately when the
+            // bottom point crosses an endpoint. Keep the pre-entry floor.index only for the
+            // Dash-entry callback slice that has replay-real coverage; ordinary Damage/Landing/etc.
+            // rows should accept the traversed line id.
             // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
-            // refs/melee/src/melee/lb/types.h::CollData (floor.index persistence)
-            // Dash entry coll callback still uses generic floor projection (ft_80084104 path), so
-            // floor.index persistence across connected seams should hold for the entry frame.
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_Coll
-            // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
             const uint8_t dash_entry_keep_prev_line =
                 (action_id == (uint16_t)MSL_ACT_DASH && prev_action_id != (uint16_t)MSL_ACT_DASH)
                     ? 1u
                     : 0u;
-            if ((pl->is_ledge && !ol->is_ledge) || dash_entry_keep_prev_line) {
+            if (dash_entry_keep_prev_line) {
+              const MslStageFloorLine* pl = &g->lines[(size_t)prefer_line_idx];
               const float min_x = (pl->x0 < pl->x1) ? pl->x0 : pl->x1;
               const float max_x = (pl->x0 > pl->x1) ? pl->x0 : pl->x1;
               if (cur_bottom_x >= (min_x - k_floor_x_end_clamp) &&

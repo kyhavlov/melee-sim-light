@@ -32,7 +32,12 @@ def _step_one_row_with_seed(dataset_path: Path, record: int, seed: np.ndarray) -
     input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
     try:
         binding.reseed_seed_rollout(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)
@@ -74,7 +79,12 @@ def _step_one_row_with_inputs(
     input_bytes = np.frombuffer(cur_input.tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
     try:
         binding.reseed_seed_rollout(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)
@@ -730,7 +740,12 @@ def test_guardreflect_x14_expiry_rollout_reaches_jumpf_tch_5224() -> None:
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(1)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
     try:
         binding.reseed_seed_rollout(handle, seed_bytes)
         seen_5251 = False
@@ -1039,7 +1054,12 @@ def test_enable_edge_x58_x4c_no_translation_sweep_tch_5010() -> None:
     )
     input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
     try:
         binding.reseed_seed(handle, seed_bytes)
         binding.debug_step_input_pre_combat(handle, prev_input_bytes, input_bytes)
@@ -1181,7 +1201,12 @@ def test_landingairn_float_aobj_hurtcaps_reject_false_attackdash_tch_1816() -> N
     )
     input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
     try:
         binding.reseed_seed(handle, seed_bytes)
         binding.debug_step_input_pre_combat(handle, prev_input_bytes, input_bytes)
@@ -1201,13 +1226,12 @@ def test_landingairn_float_aobj_hurtcaps_reject_false_attackdash_tch_1816() -> N
 
 
 @pytest.mark.integration
-def test_fox_attackdash_dynamic_chain_rejects_false_attackairhi_fsp_7078() -> None:
-    # Fox AttackDash dynamic-chain collision pose:
-    # - Fox part 18 is in ftData.x2C's dynamic chain. Dolphin pre-ftColl primitive probes on
-    #   FSP:7078 show the defender's live AttackDash hurtcap-12 endpoints consume that dynamic
-    #   JObj state before lb_8000B1CC/lbColl_80006E58, rejecting the false AttackAirHi overlap.
-    # - This is data-owned via SSDYNN01's collision-msid predicate; runtime gameplay does not branch
-    #   on this replay row or on a hardcoded C msid gate.
+def test_fox_attackdash_static_collision_pose_rejects_false_attackairhi_fsp_7078() -> None:
+    # Fox AttackDash is a negative control for SSDYNN01 v4's collision-owner index:
+    # - Fox part 18 is in ftData.x2C's dynamic chain, but AttackDash is not marked as a dynamic
+    #   collision-owner submotion in the generated table.
+    # - This row stays exact with the static SSANIM collision matrix, proving the runtime does not
+    #   hardcode AttackDash into the dynamic-chain owner outside extracted data.
     # refs/melee/src/melee/ft/ftdynamics.c::{ftCo_8009DD94,lb_8001044C}
     # refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
     # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
@@ -1226,12 +1250,43 @@ def test_fox_attackdash_dynamic_chain_rejects_false_attackairhi_fsp_7078() -> No
 
 
 @pytest.mark.integration
+def test_attackdash_post_hitbox_pre_iasa_pose_selects_downsmash_body_fsp_5765() -> None:
+    # AttackDash late collision-pose phase:
+    # - Fox AttackDash has already run its script hitbox clear, but has not crossed its
+    #   command-script allow_interrupt frame.
+    # - BODY collision consumes the post-clear JObj collision pose for the defender capsules; the
+    #   ordinary replay-visible frame pose misses this DownSmash low hit.
+    # - The adjacent FSP:7078 negative above is after the AttackDash allow_interrupt frame and
+    #   stays exact, proving this is not a broad AttackDash pose offset.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::{
+    #   ftCo_AttackDash_Anim,ftCo_AttackDash_IASA,ftCo_AttackDash_Coll}
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80076ED8
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    seed, out, ref = _step_one_row(dataset_path, 5765)
+    attacker = 0
+    defender = 1
+    assert int(seed["action_id"][attacker]) == 67  # AttackLw4
+    assert int(seed["action_id"][defender]) == 50  # AttackDash
+    assert int(ref["action_id"][defender]) == 80  # DamageHi1
+    for field in ("action_id", "animation_index", "hitlag", "hitstun", "percent"):
+        np.testing.assert_array_equal(out[field], ref[field], err_msg=f"field={field}")
+
+
+@pytest.mark.integration
 def test_fox_jumpb_dynamic_chain_selects_attackairb_body_ppa_3182() -> None:
     # Fox JumpB dynamic-chain collision pose:
     # - Dolphin pre-ftColl primitive probes on PPA:3182 show Falco AttackAirB's hitbox already
     #   matches runtime, while Fox hurtcap-12 endpoints consume the live ftData.x2C dynamic JObj
     #   chain before lb_8000B1CC/lbColl_80006E58.
-    # - SSDYNN01 v3's data-owned collision-msid predicate includes JumpB; this is not a broad
+    # - SSDYNN01 v4's data-owned collision-msid predicate includes JumpB; this is not a broad
     #   JumpB facing, distance, or row-local BODY admission shortcut.
     # refs/melee/src/melee/ft/ftdynamics.c::{ftCo_8009DD94,ftCo_8009E318}
     # refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
@@ -1505,3 +1560,72 @@ def test_same_frame_locomotion_entry_hurtcaps_use_previous_jobj_pose_for_body_co
     assert int(ref["hitlag"][defender]) == 0
     for field in ("action_id", "animation_index", "hitlag", "hitstun", "instance_hit_by"):
         assert int(out[field][defender]) == int(ref[field][defender]), f"field={field}"
+
+
+@pytest.mark.integration
+def test_turn_to_walkslow_entry_hurtcaps_use_turn_pose_for_shine_body_iat_5052_rollout() -> None:
+    # Turn -> WalkSlow entry boundary:
+    # - ftCo_Turn_Anim has already interpreted the live Turn JObj pose for the frame.
+    # - ftCo_Turn_IASA can then enter WalkSlow before BODY collision, but the collision pass still
+    #   consumes the serialized Turn pose rather than a projected next Turn frame or WalkSlow frame.
+    # - IAT:5052 rolls to IAT:5092, where projecting Turn+1 admits a false Shine BODY hit.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::{ftCo_Turn_Anim,ftCo_Turn_IASA}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::ftCo_Walk_Enter
+    # refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+        "ImpassionedAlarmedTarsier.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    binding = _load_binding()
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    samples_u8, seed_off, prev_input_off, input_off = _dataset_byte_views(ds)
+
+    start = 5052
+    target = 5092
+    attacker = 0
+    defender = 1
+    seed_bytes = samples_u8[start : start + 1, seed_off : seed_off + seed_stride].copy()
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+    out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(1)
+
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    try:
+        binding.reseed_seed_rollout(handle, seed_bytes)
+        for record in range(start, target + 1):
+            prev_input_bytes = samples_u8[
+                record : record + 1, prev_input_off : prev_input_off + input_stride
+            ].copy()
+            input_bytes = samples_u8[record : record + 1, input_off : input_off + input_stride].copy()
+            binding.step_input(handle, prev_input_bytes, input_bytes)
+            binding.write_compare(handle, out_compare_bytes)
+    finally:
+        binding.destroy(handle)
+
+    out = out_view[0].copy()
+    ref = samples["ref_t1"][target]
+    assert int(ref["action_id"][attacker]) == 360  # Fox SpecialLwStart
+    assert int(ref["action_id"][defender]) == 15  # WalkSlow
+    assert int(ref["hitlag"][attacker]) == 0
+    assert int(ref["hitlag"][defender]) == 0
+    assert int(ref["hitstun"][defender]) == 0
+    for field in ("action_id", "animation_index", "hitlag", "hitstun", "instance_hit_by"):
+        assert int(out[field][attacker]) == int(ref[field][attacker]), f"attacker field={field}"
+        assert int(out[field][defender]) == int(ref[field][defender]), f"defender field={field}"
+    assert float(out["percent"][defender]) == pytest.approx(float(ref["percent"][defender]), abs=1e-6)
+    assert float(out["pos_x"][defender]) == pytest.approx(float(ref["pos_x"][defender]), abs=3e-5)

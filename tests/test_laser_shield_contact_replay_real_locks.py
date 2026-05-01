@@ -116,6 +116,57 @@ def test_falco_laser_shield_contact_enters_guardsetoff_and_despawns_laser(
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize(
+    ("record", "should_transfer"),
+    [
+        (118, True),
+        (294, True),
+        (201, False),
+    ],
+)
+def test_dash_guardreflect_high_laser_reflectdesc_transfer_is_runtime_owned(
+    record: int, should_transfer: bool
+) -> None:
+    # MAJ:118/294 are high-Falco-laser GuardReflect rows where Dolphin probes show
+    # ftColl_80077464 writing reflected owner/xDA8 before Item_80269F14 consumes it. Clear the
+    # teacher-forced transfer seed so the test proves runtime ReflectDesc ownership; MAJ:201 is the
+    # adjacent high-laser control that has not crossed the ReflectDesc center.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077464}
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_80006E58}
+    # refs/melee/src/melee/it/item.c::Item_80269F14
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    def _clear_seeded_transfer(seed_t) -> None:
+        seed_t["item_reflect_transfer_port"][0, 0] = 0xFF
+        seed_t["item_reflect_transfer_iid"][0, 0] = 0
+
+    seed_row, ref_row, out_row = _run_one_step_row(
+        dataset_path, record, 1, seed_mutator=_clear_seeded_transfer
+    )
+
+    assert int(seed_row["action_id"][1]) == 182  # GuardReflect
+    assert int(seed_row["seed_prev_action_id"][1]) in (14, 20)  # Fall/Dash source rows.
+    assert int(seed_row["guard_reflect_timer_x14"][1]) == 2
+    assert int(seed_row["items"][0]["type"]) == 55
+    if should_transfer:
+        assert int(ref_row["items"][0]["owner"]) == 1
+        assert int(out_row["items"][0]["owner"]) == int(ref_row["items"][0]["owner"])
+        assert int(out_row["items"][0]["instance_id"]) == int(ref_row["items"][0]["instance_id"])
+        assert float(out_row["items"][0]["direction"]) == float(ref_row["items"][0]["direction"])
+    else:
+        assert int(ref_row["items"][0]["owner"]) == 0
+        assert int(out_row["items"][0]["owner"]) == 0
+        assert int(out_row["items"][0]["instance_id"]) == int(ref_row["items"][0]["instance_id"])
+
+
+@pytest.mark.integration
 def test_wait_guardreflect_hitshield_requires_wait_entry_and_laser_overlap() -> None:
     # Negative controls for the MAJ:7327 same-step Wait -> GuardReflect handoff:
     # the retained path is the Wait_IASA -> ftCo_80091A4C digital-powershield owner plus real

@@ -36,7 +36,7 @@ def _load_fixture() -> dict[str, Any]:
         {
             "start_frame": 433,
             "end_frame": 448,
-            "note": "Down-held RebirthWait exit enters Fall and lands without stale underside ceiling projection.",
+            "note": "Down-held RebirthWait exit enters Fall without stale underside ceiling projection.",
         },
     ]
     return fixture
@@ -140,6 +140,10 @@ def test_rebirthwait_drop_does_not_reuse_pre_death_ceiling_contact() -> None:
         assert float(history[frame]["pos_y"][fox]) > -5.0
         assert int(history[frame]["on_ground"][fox]) == 0
 
-    assert int(history[448]["action_id"][fox]) == 42  # Landing on FD floor.
-    assert float(history[448]["pos_y"][fox]) == pytest.approx(0.0001, abs=1e-5)
-    assert int(history[448]["on_ground"][fox]) == 1
+    # The input is held down long before respawn, so the source x671 tilt timer is stale and Fall
+    # must not latch fastfall immediately after RebirthWait. The important regression lock is that
+    # the first Fall frames remain above stage rather than reusing stale underside ceiling contact.
+    assert int(history[448]["action_id"][fox]) == 29
+    assert float(history[448]["pos_y"][fox]) > 0.0
+    assert int(history[448]["state_flags"][fox][1]) & 0x08 == 0
+    assert int(history[448]["on_ground"][fox]) == 0

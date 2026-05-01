@@ -272,6 +272,7 @@ static inline void enter_fall_special_via_ftco_80096900(MslBatch* batch, size_t 
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{ftFx_SpecialHiFall_Anim,ftFx_SpecialHiBound_Anim}
   batch->state.fall_fast[idx] = keep_fastfall;
   batch->state.fallspecial_xc[idx] = 1u;
+  batch->state.landing_fallspecial_allow_interrupt[idx] = 1u;
   batch->state.jumps_left[idx] = 0u;
 }
 
@@ -2229,6 +2230,15 @@ static inline float ottotto_floor_loss_player_nudge_x(const MslBatch* batch,
 }
 
 static inline uint8_t action_uses_ottotto_edge_callback(uint16_t a) {
+  if (msl_motion_state_common_class_has(a, MSL_MS_CLASS_LANDING_AIR_COLL)) {
+    // Decomp: ftCo_LandingAir_Coll delegates to ftCo_Landing_Coll, which calls ft_80084280.
+    // That common collision callback lets ftCo_8009A3C8 consume Collide_Edge and enter Ottotto
+    // before the generic Fall handoff.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c::ftCo_LandingAir_Coll
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Coll
+    // refs/melee/src/melee/ft/ft_081B.c::ft_80084280
+    return 1u;
+  }
   switch (a) {
     case MSL_ACT_WAIT:
     case MSL_ACT_WALK_SLOW:
@@ -2832,11 +2842,12 @@ static inline void enter_landing_action_from_air(MslBatch* batch, const MslCharP
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_80099D70
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_80096D28
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_LandingFallSpecial_Enter
+    const uint8_t fallspecial_allow = batch->state.landing_fallspecial_allow_interrupt[idx];
     batch->state.landing_fallspecial_allow_interrupt[idx] =
         (source_act == (uint16_t)MSL_ACT_FALL_SPECIAL ||
          source_act == (uint16_t)MSL_ACT_FALL_SPECIAL_F ||
          source_act == (uint16_t)MSL_ACT_FALL_SPECIAL_B)
-            ? 1u
+            ? fallspecial_allow
             : 0u;
   } else {
     batch->state.landing_fallspecial_allow_interrupt[idx] = 0u;

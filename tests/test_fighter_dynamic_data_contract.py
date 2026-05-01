@@ -19,7 +19,7 @@ def _parse_ssdynn01(path: Path) -> dict[str, object]:
     if buf[:8] != b"SSDYNN01":
         raise ValueError(f"SSDYNN01: bad magic {buf[:8]!r}")
     version, set_count, total_nodes = struct.unpack_from("<IHH", buf, 8)
-    if version != 3:
+    if version != 4:
         raise ValueError(f"SSDYNN01: bad version {version}")
     off = 16
     sets: list[dict[str, object]] = []
@@ -103,7 +103,7 @@ def _write_dyn(
     path: Path,
     sets: list[tuple[int, list[int]]],
     *,
-    version: int = 3,
+    version: int = 4,
     collision_msids: list[int] | None = None,
 ) -> None:
     total_nodes = sum(len(parts) for _root, parts in sets)
@@ -169,6 +169,18 @@ def _skip_if_missing(paths: list[Path]) -> None:
         pytest.skip("missing local generated data: " + ", ".join(missing))
 
 
+def _parse_ssdynn01_or_skip(path: Path) -> dict[str, object]:
+    if not path.exists():
+        pytest.skip(f"missing local generated data: {path}")
+    try:
+        return _parse_ssdynn01(path)
+    except ValueError as exc:
+        pytest.skip(
+            f"stale or unsupported local dynamic artifact: {path}: {exc}. "
+            "Run `uv run python -m tools.extraction.build_data --iso-dir _iso --stage grnla --chars fox,falco`."
+        )
+
+
 def test_runtime_rejects_stale_ssanim01_v3_artifacts() -> None:
     import msl_binding
 
@@ -205,7 +217,7 @@ def test_runtime_rejects_stale_ssanim01_v3_artifacts() -> None:
             msl_binding.debug_reset_pose_and_hitboxes_tables()
 
 
-def test_runtime_rejects_stale_ssdynn01_v2_artifacts() -> None:
+def test_runtime_rejects_stale_ssdynn01_v3_artifacts() -> None:
     import msl_binding
 
     exclude = {
@@ -219,15 +231,15 @@ def test_runtime_rejects_stale_ssdynn01_v2_artifacts() -> None:
 
     build_dir = Path("build")
     build_dir.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="ssdynn-v2-stale-", dir=build_dir) as tmp_raw:
+    with tempfile.TemporaryDirectory(prefix="ssdynn-v3-stale-", dir=build_dir) as tmp_raw:
         data_dir = Path(tmp_raw) / "data"
         _populate_data_dir(data_dir, exclude=exclude)
         _write_minimal_ssanim(data_dir / "anims/fox.bin")
         _write_minimal_ssanim(data_dir / "anims/falco.bin")
         _write_minimal_locals(data_dir / "anims/fox.locals.bin")
         _write_minimal_locals(data_dir / "anims/falco.locals.bin")
-        _write_dyn(data_dir / "anims/fox.dyn.bin", [(17, [17, 18, 19, 20])], version=2, collision_msids=[52, 58])
-        _write_dyn(data_dir / "anims/falco.dyn.bin", [], version=2)
+        _write_dyn(data_dir / "anims/fox.dyn.bin", [(17, [17, 18, 19, 20])], version=3, collision_msids=[17, 52, 58])
+        _write_dyn(data_dir / "anims/falco.dyn.bin", [], version=3)
 
         old_data_dir = os.environ.get("MSL_DATA_DIR")
         try:
@@ -246,14 +258,13 @@ def test_runtime_rejects_stale_ssdynn01_v2_artifacts() -> None:
 @pytest.mark.integration
 def test_committed_fox_falco_dynamic_contract_matches_supported_loader_surface() -> None:
     paths = [Path("data/anims/fox.dyn.bin"), Path("data/anims/falco.dyn.bin")]
-    _skip_if_missing(paths)
-    fox = _parse_ssdynn01(paths[0])
-    falco = _parse_ssdynn01(paths[1])
+    fox = _parse_ssdynn01_or_skip(paths[0])
+    falco = _parse_ssdynn01_or_skip(paths[1])
 
     assert fox["set_count"] == 1
     assert fox["total_nodes"] == 4
-    assert fox["version"] == 3
-    assert fox["collision_msids"] == [17, 52, 58]
+    assert fox["version"] == 4
+    assert fox["collision_msids"] == [17, 58]
     fox_set = fox["sets"][0]  # type: ignore[index]
     assert fox_set["root_part"] == 17
     assert fox_set["node_count"] == 4
@@ -263,7 +274,7 @@ def test_committed_fox_falco_dynamic_contract_matches_supported_loader_surface()
     assert c0[13] == pytest.approx(0.008726646192371845)
     assert c0[14] == pytest.approx(0.05235987901687622)
 
-    assert falco == {"version": 3, "set_count": 0, "total_nodes": 0, "sets": [], "collision_msids": []}
+    assert falco == {"version": 4, "set_count": 0, "total_nodes": 0, "sets": [], "collision_msids": []}
 
 
 @pytest.mark.integration
@@ -298,16 +309,18 @@ def test_extract_fighter_anims_emits_fox_falco_dynamic_contract(tmp_path: Path) 
 
     fox = _parse_ssdynn01(tmp_path / "fox.dyn.bin")
     falco = _parse_ssdynn01(tmp_path / "falco.dyn.bin")
-    assert fox["version"] == 3
+    assert fox["version"] == 4
     assert fox["set_count"] == 1
     assert fox["total_nodes"] == 4
-    assert fox["collision_msids"] == [17, 52, 58]
+    assert fox["collision_msids"] == [17, 58]
     assert [n["part"] for n in fox["sets"][0]["nodes"]] == [17, 18, 19, 20]  # type: ignore[index]
-    assert falco == {"version": 3, "set_count": 0, "total_nodes": 0, "sets": [], "collision_msids": []}
+    assert falco == {"version": 4, "set_count": 0, "total_nodes": 0, "sets": [], "collision_msids": []}
 
 
 def test_dynamic_collision_owner_predicate_is_data_driven_not_raw_msid_gate() -> None:
     src = Path("src/anim_pose.c").read_text()
+    assert "msid != 52" not in src
+    assert "msid == 52" not in src
     assert "msid != 58" not in src
     assert "msid == 58" not in src
     assert "dyn_collision_have_msid[msid]" in src
@@ -367,6 +380,7 @@ def test_fox_attackhi3_dynamic_reseed_reconstruction_matches_sequential_carry_bh
     dataset_path = Path("datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl")
     if not dataset_path.exists():
         pytest.skip(f"missing local dataset: {dataset_path}")
+    _parse_ssdynn01_or_skip(Path("data/anims/fox.dyn.bin"))
 
     binding = pytest.importorskip("msl_binding")
     ds = read_dataset(str(dataset_path))

@@ -63,6 +63,7 @@ def test_data_contract_is_self_consistent_if_present() -> None:
         "attack_angle_threshold_radians",
         "cliff_drop_stick_threshold",
         "crouch_stick_threshold",
+        "guard_special_enable_frames",
         "ottotto_walk_stick_x_threshold",
     ):
         assert k in common

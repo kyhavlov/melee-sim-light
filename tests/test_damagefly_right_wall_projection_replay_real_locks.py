@@ -64,7 +64,12 @@ def _step_one(dataset_path: Path, record: int) -> tuple[np.void, np.void, np.voi
     input_bytes = np.empty((1, input_stride), dtype=np.uint8)
     out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
     try:
         seed_bytes[0, :] = samples_u8[record, seed_off : seed_off + seed_stride]
         prev_input_bytes[0, :] = samples_u8[record, prev_input_off : prev_input_off + input_stride]
@@ -96,7 +101,12 @@ def _rollout_rows(dataset_path: Path, start_record: int, end_record: int) -> dic
     contact_bytes = np.zeros((1, contact_dtype.itemsize), dtype=np.uint8)
 
     rows: dict[int, tuple[np.void, np.void, np.void]] = {}
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
     try:
         seed_bytes[0, :] = samples_u8[start_record, seed_off : seed_off + seed_stride]
         binding.reseed_seed_rollout(handle, seed_bytes)

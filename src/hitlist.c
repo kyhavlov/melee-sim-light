@@ -41,6 +41,55 @@ static inline uint8_t hitlist_specialhi_action(uint16_t action_id) {
              : 0u;
 }
 
+static inline uint8_t hitlist_source_port0_for_attacker(const MslBatch* batch, size_t a_idx,
+                                                        int attacker) {
+  if (batch == NULL || attacker < 0 || attacker >= MSL_MAX_PLAYERS) {
+    return 6u;
+  }
+  const uint8_t source_port0 = batch->state.source_port0[a_idx];
+  return (source_port0 < (uint8_t)MSL_MAX_PLAYERS) ? source_port0 : (uint8_t)attacker;
+}
+
+uint8_t hitlist_rollout_dense_seed_same_object_rebind_applies(const MslBatch* batch, int bi,
+                                                              int attacker, int victim) {
+  if (batch == NULL || bi < 0 || attacker < 0 || victim < 0 ||
+      attacker >= (int)batch->config.num_players || victim >= (int)batch->config.num_players ||
+      attacker == victim) {
+    return 0u;
+  }
+  if (batch->replay_rollout_reseeded == NULL || batch->replay_rollout_reseeded[bi] == 0u) {
+    return 0u;
+  }
+  const size_t a_idx = msl_idx_player(bi, attacker);
+  const size_t v_idx = msl_idx_player(bi, victim);
+  if (hitlist_victim_pointer_may_change(batch->state.stocks[v_idx],
+                                        batch->state.action_id[v_idx])) {
+    return 0u;
+  }
+  if (batch->state.prev_action_id[a_idx] != batch->state.action_id[a_idx]) {
+    return 0u;
+  }
+  if (batch->state.hitlag[a_idx] != 0u || batch->state.hitstun[a_idx] != 0u) {
+    return 0u;
+  }
+  if (batch->state.instance_hit_by[v_idx] != batch->state.instance_id[a_idx]) {
+    return 0u;
+  }
+  if (batch->state.last_hit_by[v_idx] !=
+      hitlist_source_port0_for_attacker(batch, a_idx, attacker)) {
+    return 0u;
+  }
+  // Replay rollout dense seeds store Slippi-visible instance_id as a proxy for decomp's raw
+  // HitVictim fighter object pointer. That object pointer survives normal motion-state changes
+  // (for example Landing -> AttackLw4) while Slippi instance_id advances. Preserve the dense
+  // victim only when same-source attribution proves the active attacker still owns the hidden
+  // HitCapsule victim pointer; death/rebirth/object-lifetime boundaries fail closed above.
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+  // refs/melee/src/melee/lb/types.h::HitCapsule
+  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (instance_id/last_hit_by export)
+  return 1u;
+}
+
 static inline size_t idx_item_hitlist(int bi, int item_slot) {
   return ((size_t)bi * (size_t)MSL_MAX_ITEMS + (size_t)item_slot) * (size_t)MSL_MAX_HITBOXES;
 }
@@ -296,6 +345,57 @@ uint8_t hitlist_allows_fighter(MslBatch* batch, int bi, int attacker, int hb_id,
   size_t found = 0;
   if (hitlist_capsule_find_fighter_entry(batch, bi, hit->victims_1, (size_t)MSL_HITLIST_VICTIM_CAP,
                                          (uint8_t)victim, victim_iid, &found)) {
+    return 0u;
+  }
+  return 1u;
+}
+
+uint8_t hitlist_allows_fighter_live_collision(MslBatch* batch, int bi, int attacker, int hb_id,
+                                              int victim, uint16_t victim_iid) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  if (bi < 0 || bi >= batch->batch_size) {
+    return 0u;
+  }
+  if (attacker < 0 || attacker >= (int)batch->config.num_players) {
+    return 0u;
+  }
+  if (hb_id < 0 || hb_id >= MSL_MAX_HITBOXES) {
+    return 0u;
+  }
+  if (victim < 0 || victim >= (int)batch->config.num_players) {
+    return 0u;
+  }
+
+  const size_t hb_i = idx_fighter_hitlist(bi, attacker, hb_id);
+  MslHitlistCapsule* hit = &batch->state.fighter_hitlist[hb_i];
+  const uint8_t key = hitlist_fighter_key((uint8_t)victim);
+  for (size_t i = 0; i < (size_t)MSL_HITLIST_VICTIM_CAP; i++) {
+    MslHitlistVictimEntry* e = &hit->victims_1[i];
+    if (entry_is_empty(e)) {
+      continue;
+    }
+    if (e->kind_slot != key) {
+      continue;
+    }
+    if (e->id32 == MSL_HITLIST_FIGHTER_ID32_SEED_DENSE) {
+      // Dense seed fallback is a teacher-forced compatibility surface, not concrete
+      // collision-pass HitCapsule provenance. Exact per-HitCapsule seeds remain covered by
+      // hitlist_allows_fighter(), and clank's replay-seed prefilter has its own narrow bridge.
+      // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+      // refs/melee/src/melee/lb/lbcollision.c::lbColl_8000ACFC
+      continue;
+    }
+    if (e->id16 != victim_iid) {
+      const size_t v_idx = msl_idx_player(bi, victim);
+      if (hitlist_victim_pointer_may_change(batch->state.stocks[v_idx],
+                                            batch->state.action_id[v_idx])) {
+        entry_clear(e);
+        return 1u;
+      }
+      e->id16 = victim_iid;
+    }
     return 0u;
   }
   return 1u;
@@ -561,15 +661,22 @@ static void hitlist_seed_init_fighter_hitbox_from_group_impl(MslBatch* batch, in
       } else if (stored_iid != 0u && stored_iid != batch->state.instance_id[v_idx]) {
         // Dense group seeds carry a Slippi-visible instance_id proxy for decomp's raw victim
         // pointer, not the raw pointer itself. On a normal HitCapsule create edge,
-        // ftColl_800768A0 clears/copies concrete victims_1 state; a stale dense seed must fail
+        // ftColl_800768A0 clears/copies concrete victims_1 state; a stale dense seed usually fails
         // closed instead of suppressing a new hit after the victim entered a new motion state.
         //
-        // The only retained stale-iid rebind is an explicit higher-level bridge where the caller
-        // has already proven the source phase still owns the same hidden victim pointer.
+        // Retained stale-iid rebinds are explicit source-proven bridges where either the caller or
+        // the rollout same-source lane below proves the source phase still owns the same hidden
+        // victim pointer.
         // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
-        if (!allow_stale_iid_rebind ||
-            hitlist_victim_pointer_may_change(batch->state.stocks[v_idx],
-                                              batch->state.action_id[v_idx])) {
+        const uint8_t rollout_same_object_rebind =
+            (is_replay_rollout && !use_hitbox_seed &&
+             hitlist_rollout_dense_seed_same_object_rebind_applies(batch, bi, attacker, v))
+                ? 1u
+                : 0u;
+        if (!rollout_same_object_rebind &&
+            (!allow_stale_iid_rebind ||
+             hitlist_victim_pointer_may_change(batch->state.stocks[v_idx],
+                                               batch->state.action_id[v_idx]))) {
           continue;
         }
       }

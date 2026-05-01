@@ -218,6 +218,15 @@ typedef struct MslCommonParams {
   float powershield_reflect_damage_mul;       // p_ftCommonData->x2AC
   float powershield_reflect_speed_mul;        // p_ftCommonData->x2B0
   uint8_t powershield_reflect_total_frames;   // p_ftCommonData->x2B4 (rounded)
+  // GuardOff special/attack enable timer set by powershield shield contact.
+  //
+  // Decomp:
+  // - ftColl_80076CBC calls ftCo_80094138 when the defender has x221C_b2 active.
+  // - ftCo_80094138 stores p_ftCommonData->x2B8 into mv.co.guard.x1C and clears x10.
+  // - ftCo_GuardOff_IASA only runs the special/attack chain while x1C is non-zero.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80094138,ftCo_GuardOff_IASA}
+  uint8_t guard_special_enable_frames;  // p_ftCommonData->x2B8
   uint8_t _pad_u8_2[1];
 
   // Shield defensive options (grounded) (refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c)

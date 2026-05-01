@@ -108,6 +108,30 @@ static inline uint8_t state_flags_2218_attack_s3_action(uint16_t action_id) {
   return msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_ATTACK_S3);
 }
 
+static inline uint8_t state_flags_2218_action_owns_reflecting(const MslBatch* batch, size_t idx,
+                                                              uint16_t action_id) {
+  switch (action_id) {
+    case MSL_ACT_FX_SPECIAL_LW_LOOP:
+    case MSL_ACT_FX_SPECIAL_LW_HIT:
+    case MSL_ACT_FX_SPECIAL_LW_TURN:
+    case MSL_ACT_FX_SPECIAL_AIR_LW_LOOP:
+    case MSL_ACT_FX_SPECIAL_AIR_LW_HIT:
+    case MSL_ACT_FX_SPECIAL_AIR_LW_TURN:
+      // Fox/Falco reflector Loop/Hit/Turn states create ReflectDesc and set fp->reflecting.
+      // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{
+      //   ftFx_SpecialLwLoop_Enter,ftFx_SpecialLwHit_Enter,ftFx_SpecialLwTurn_Enter,
+      //   ftFx_SpecialAirLwLoop_Enter,ftFx_SpecialAirLwHit_Enter,ftFx_SpecialAirLwTurn_Enter}
+      return 1u;
+    case MSL_ACT_GUARD_REFLECT:
+      // GuardReflect keeps the reflecting lane only while mv.co.guard.x14 is active.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+      //   ftCo_8009370C,ftCo_80093BC0}
+      return (batch != NULL && batch->state.guard_reflect_timer_x14[idx] != 0u) ? 1u : 0u;
+    default:
+      return 0u;
+  }
+}
+
 static inline uint8_t state_flags_2218_wait_iasa_grounded_destination(uint16_t action_id) {
   switch (action_id) {
     case MSL_ACT_WAIT:
@@ -539,6 +563,16 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
         // refs/melee/src/melee/ft/ftaction.c::ftAction_80071950
         f2218 |= (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
+      }
+      if (action_id != prev_action_2218 &&
+          state_flags_2218_action_owns_reflecting(batch, idx, action_id) == 0u) {
+        // Fighter_ChangeMotionState clears fp->reflecting on motion changes before the destination
+        // callback can recreate a new reflector. Preserve this as a motion-change reset rather
+        // than seed-carrying a stale Shine/GuardReflect descriptor into unrelated destinations
+        // such as Damage*.
+        // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState (fp->reflecting = false)
+        // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (fp+0x2218 -> state_flags[0])
+        f2218 &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_REFLECTING;
       }
       if (action_id == (uint16_t)MSL_ACT_GUARD_REFLECT) {
         // GuardReflect reflecting-owner lane:

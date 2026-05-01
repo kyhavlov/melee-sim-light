@@ -732,6 +732,20 @@ typedef struct MslSeed {
   // - 1: entered via ftCo_8009388C from an already-shielding Guard/GuardOn path.
   // - 0: entered via ftCo_80093A50 direct locomotion powershield path.
   uint8_t guard_reflect_origin_guardon_u8[MSL_MAX_PLAYERS];
+  // GuardOff special/attack enable timer (seeded; strictly causal in preprocessing).
+  //
+  // Decomp:
+  // - ftColl_80076CBC calls ftCo_80094138 on powershield-active shield contact.
+  // - ftCo_80094138 sets `mv.co.guard.x1C = p_ftCommonData->x2B8` and clears x10.
+  // - `inlineC0` decrements x1C while GuardOn/Guard/GuardReflect continue shielding.
+  // - GuardOff_IASA routes specials/attacks only while x1C is non-zero.
+  //
+  // Seed representation:
+  // - remaining frames in mv.co.guard.x1C, clamped to [0..255].
+  // - 0 means GuardOff can only use its spotdodge/jump fallback chain.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{inlineC0,ftCo_80094138,ftCo_GuardOff_IASA}
+  uint8_t guard_special_enable_timer_x1c[MSL_MAX_PLAYERS];
   // Guard release lockout (seeded; strictly causal in preprocessing).
   //
   // Decomp (GALE01):
@@ -900,7 +914,8 @@ typedef struct MslSeed {
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_8009AAFC
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::ftCo_8009A9AC
   uint8_t ledge_cooldown[MSL_MAX_PLAYERS];  // fp->x2064_ledgeCooldown (clamped to 0..255)
-  // Hidden LandingFallSpecial interrupt permission (`mv.co.landing.allow_interrupt`).
+  // Hidden FallSpecial -> LandingFallSpecial interrupt permission carry
+  // (`mv.co.fallspecial.allow_interrupt` / `mv.co.landing.allow_interrupt`).
   //
   // Decomp:
   // - EscapeAir_Coll enters LandingFallSpecial with allow_interrupt=false.

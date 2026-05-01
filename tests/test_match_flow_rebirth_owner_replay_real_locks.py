@@ -54,6 +54,48 @@ def _step_one_row(*, dataset_path: Path, record: int) -> tuple[np.void, np.void,
         binding.destroy(handle)
 
 
+def _rollout_to_record(*, dataset_path: Path, start: int, target: int) -> tuple[np.void, np.void]:
+    binding = pytest.importorskip("msl_binding")
+    ds = read_dataset(str(dataset_path))
+    assert int(ds.samples.shape[0]) > target, f"dataset too short for record={target}"
+    samples = ds.samples
+    sample_stride = int(samples.dtype.itemsize)
+    samples_u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), sample_stride)
+    seed_off = int(samples.dtype.fields["seed_t"][1])
+    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
+    input_off = int(samples.dtype.fields["input_t"][1])
+
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    seed_bytes = samples_u8[start : start + 1, seed_off : seed_off + seed_stride].copy()
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    try:
+        binding.reseed_seed_rollout(handle, seed_bytes)
+        for record in range(start, target + 1):
+            prev_input_bytes = samples_u8[
+                record : record + 1, prev_input_off : prev_input_off + input_stride
+            ].copy()
+            input_bytes = samples_u8[
+                record : record + 1, input_off : input_off + input_stride
+            ].copy()
+            binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+        out = out_compare_bytes.view(COMPARE_DTYPE).reshape((1,))[0]
+        return out.copy(), samples["ref_t1"][target].copy()
+    finally:
+        binding.destroy(handle)
+
+
 @dataclass(frozen=True)
 class _RespawnCase:
     dataset: str
@@ -150,3 +192,33 @@ def test_rebirthwait_specialairn_exit_applies_x5d8_colanim() -> None:
     assert int(out["action_id"][p]) == int(ref["action_id"][p])
     assert int(out["action_frame"][p]) == int(ref["action_frame"][p])
     assert int(out["hurtbox_state"][p]) == int(ref["hurtbox_state"][p])
+
+
+@pytest.mark.integration
+def test_rebirthwait_exit_preserves_tilt_timer_for_fastfall_gate() -> None:
+    # RebirthWait -> Fall uses ftCo_Fall_Enter, which passes Ft_MF_KeepFastFall to
+    # Fighter_ChangeMotionState and does not reset fp->x671_timer_lstick_tilt_y. A down-held
+    # respawn exit must therefore preserve the stale held-down timer and avoid synthesizing a fresh
+    # fastfall flick on the first Fall frame.
+    # refs/melee/src/melee/ft/ft_0D4D.c::{ftCo_RebirthWait_Anim,ftCo_RebirthWait_IASA}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset = f"{_AGG}/PositiveRevolvingHyena.msl"
+    dataset_path = root / dataset
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset}")
+
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples["seed_t"][8945]
+    p = 0
+    assert int(seed["action_id"][p]) == 12
+    assert int(seed["tilt_timer_y"][p]) == 254
+
+    out, ref = _rollout_to_record(dataset_path=dataset_path, start=8945, target=8990)
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == 29
+    assert int(out["action_frame"][p]) == int(ref["action_frame"][p]) == 1
+    assert int(out["state_flags"][p][1]) & 0x08 == 0
+    assert int(out["state_flags"][p][1]) == int(ref["state_flags"][p][1])
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-5)
+    assert float(out["speed_y_self"][p]) == pytest.approx(float(ref["speed_y_self"][p]), abs=1e-6)

@@ -21,6 +21,7 @@
 #include "msl_math.h"
 #include "stage_collision.h"
 #include "state_flags.h"
+#include "turn.h"
 
 enum { MSL_FTPART_HIPN = 4 };  // refs/melee/src/melee/ft/forward.h::Fighter_Part (FtPart_HipN)
 
@@ -552,7 +553,7 @@ static inline uint8_t damage_ground_try_wait_iasa_locomotion_subset(MslBatch* ba
     batch->state.action_id[idx] = (uint16_t)MSL_ACT_TURN;
     batch->state.animation_index[idx] = (uint32_t)MSL_SM_TURN;
     batch->state.turn_has_turned[idx] = 0;
-    batch->state.turn_frames_to_turn[idx] = ch->turn_frames;
+    batch->state.turn_frames_to_turn[idx] = msl_turn_basic_frames_to_turn_for_entry(ch);
     batch->state.turn_x8[idx] = 0;
     msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
     msl_anim_timebase_tick_once(batch, idx);

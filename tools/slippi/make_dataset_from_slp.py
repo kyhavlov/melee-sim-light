@@ -2466,7 +2466,7 @@ def _derive_landing_fallspecial_allow_interrupt_seed_lane(*, action_id_u16: np.n
 
     Seed policy:
     - Strictly prefix-causal over visible action ids.
-    - Carry the hidden FallSpecial allow bit across a FallSpecial run, then copy it onto the
+    - Carry the hidden FallSpecial allow bit across a FallSpecial run, and copy it onto the
       subsequent LandingFallSpecial run.
     """
     action = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
@@ -2497,7 +2497,9 @@ def _derive_landing_fallspecial_allow_interrupt_seed_lane(*, action_id_u16: np.n
             else:
                 fallspecial_allow = 0
                 lfs_allow = 0
-        if cur == ACT_LANDING_FALL_SPECIAL:
+        if cur in fall_actions:
+            out[i] = np.uint8(1 if fallspecial_allow != 0 else 0)
+        elif cur == ACT_LANDING_FALL_SPECIAL:
             out[i] = np.uint8(1 if lfs_allow != 0 else 0)
         prev = cur
     return out
@@ -3619,6 +3621,7 @@ def _main_impl(args) -> None:
         derive_guard_reflect_timer_x18,
         derive_guard_reflect_origin_guardon,
         derive_guard_release_lockout_and_lightshield,
+        derive_guard_special_enable_timer_x1c,
         derive_guard_setoff_hitlag_damage_min,
         derive_guard_setoff_hitlag_exit_phase,
         derive_guard_setoff_post_hitlag_owner,
@@ -4624,6 +4627,20 @@ def _main_impl(args) -> None:
         samples["seed_t"]["guard_x10"][:, slot] = guard_x10[:-1]
         samples["seed_t"]["lightshield_amount"][:, slot] = lightshield_amount[:-1]
         lightshield_amount_all[:, slot] = lightshield_amount
+        guard_special_enable_timer_x1c = derive_guard_special_enable_timer_x1c(
+            action_id=post_state,
+            hitlag=post_hitlag,
+            state_flags_u8=post_state_flags_u8[:, slot, :],
+            guard_special_enable_frames=int(common["guard_special_enable_frames"]),
+            act_guard_on=act_guard_on,
+            act_guard=act_guard,
+            act_guard_off=act_guard_off,
+            act_guard_reflect=act_guard_reflect,
+            act_guard_set_off=act_guard_set_off,
+        )
+        samples["seed_t"]["guard_special_enable_timer_x1c"][:, slot] = (
+            guard_special_enable_timer_x1c[:-1]
+        )
         guard_setoff_hitlag_damage_min = derive_guard_setoff_hitlag_damage_min(
             action_id=post_state,
             action_frame_i16=post_state_age,

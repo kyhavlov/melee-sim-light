@@ -4,8 +4,9 @@ import json
 from pathlib import Path
 
 import numpy as np
+import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
+from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE, read_dataset
 
 
 # Fox/Falco Shine action ids (GALE01):
@@ -14,6 +15,7 @@ from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 ACT_FX_SPECIAL_LW_LOOP = 0x0169
 ACT_FX_SPECIAL_LW_END = 0x016B
 ACT_FX_SPECIAL_LW_TURN = 0x016C
+ACT_DAMAGE_HI_1 = 0x0050
 
 ACT_WAIT = 0x000E
 
@@ -35,6 +37,46 @@ def _char_attr(char_id: int, name: str) -> int:
 
 def _mk_input_bytes(batch: int, input_stride: int) -> np.ndarray:
     return np.zeros((batch, input_stride), dtype=np.uint8)
+
+
+def _rollout_to_record(dataset_path: Path, *, start_record: int, target_record: int) -> np.void:
+    import msl_binding
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    assert int(samples.shape[0]) > target_record
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    sample_stride = int(samples.dtype.itemsize)
+    samples_u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), sample_stride)
+    seed_off = int(samples.dtype.fields["seed_t"][1])
+    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
+    input_off = int(samples.dtype.fields["input_t"][1])
+
+    seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
+    prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+    input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+    handle = msl_binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        seed_bytes[0, :] = samples_u8[start_record, seed_off : seed_off + seed_stride]
+        msl_binding.reseed_seed_rollout(handle, seed_bytes)
+        for record in range(start_record, target_record + 1):
+            prev_input_bytes[0, :] = samples_u8[
+                record, prev_input_off : prev_input_off + input_stride
+            ]
+            input_bytes[0, :] = samples_u8[record, input_off : input_off + input_stride]
+            msl_binding.step_input(handle, prev_input_bytes, input_bytes)
+        msl_binding.write_compare(handle, out_compare_bytes)
+    finally:
+        msl_binding.destroy(handle)
+
+    return out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()
 
 
 def test_shine_reflect_active_bit_is_set_in_loop() -> None:
@@ -217,3 +259,42 @@ def test_shine_reflect_active_bit_set_when_turn_transitions_to_loop() -> None:
             assert (got & STATE_FLAG_2218_REFLECT_ACTIVE) != 0
     finally:
         msl_binding.destroy(handle)
+
+
+@pytest.mark.integration
+def test_shine_reflect_active_bit_clears_when_combat_changes_motion_state() -> None:
+    # Replay-real rollout lock for a Shine -> Damage motion change:
+    # - p0 enters SpecialLwLoop and owns fp->reflecting,
+    # - p1's AttackDash hits p0 later in the rollout,
+    # - Fighter_ChangeMotionState clears fp->reflecting on the DamageHi1 destination row.
+    #
+    # Regression target: HIS rollout from 4991 first differed at 5013 because the sim carried
+    # state_flags[0] bit 0x10 from Shine into DamageHi1.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    p = 0
+    start_record = 4991
+    target_record = 5013
+    assert int(ds.samples[start_record]["seed_t"]["action_id"][p]) == 65  # AttackAirN.
+    assert int(ds.samples[5011]["ref_t1"]["action_id"][p]) == ACT_FX_SPECIAL_LW_LOOP
+    assert (
+        int(ds.samples[5011]["ref_t1"]["state_flags"][p, 0]) & STATE_FLAG_2218_REFLECT_ACTIVE
+    ) != 0
+    assert int(ds.samples[target_record]["ref_t1"]["action_id"][p]) == ACT_DAMAGE_HI_1
+    assert (
+        int(ds.samples[target_record]["ref_t1"]["state_flags"][p, 0])
+        & STATE_FLAG_2218_REFLECT_ACTIVE
+    ) == 0
+
+    out = _rollout_to_record(dataset_path, start_record=start_record, target_record=target_record)
+    assert int(out["action_id"][p]) == int(ds.samples[target_record]["ref_t1"]["action_id"][p])
+    assert int(out["hitlag"][p]) == int(ds.samples[target_record]["ref_t1"]["hitlag"][p])
+    assert int(out["hitstun"][p]) == int(ds.samples[target_record]["ref_t1"]["hitstun"][p])
+    assert int(out["state_flags"][p, 0]) == int(ds.samples[target_record]["ref_t1"]["state_flags"][p, 0])

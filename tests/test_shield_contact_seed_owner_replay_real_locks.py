@@ -884,6 +884,96 @@ def test_guardon_entry_shielddesc_current_pose_rejects_steady_guardon_negative()
 
 
 @pytest.mark.integration
+def test_guardon_no_submotion_persistent_attackairb_sweep_does_not_use_entry_size_term() -> None:
+    # Negative boundary for the GuardOn no-submotion ShieldDesc.size lane:
+    # - Fox entered the no-submotion GuardOn snapshot on the prior frame.
+    # - Falco AttackAirB's persistent late HitCapsule sweep passes near the shield edge, but this
+    #   is not a create/copy/clear edge owned by ftColl_800768A0.
+    # - Vanilla keeps GuardOn with ordinary shield drain only, so the runtime must not apply the
+    #   entry ShieldDesc.size term broadly to persistent HitCapsules.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_8007AD18,ftColl_80078C70}
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_80006E58}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/HilariousVillainousGiraffe.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    defender = 0
+    attacker = 1
+    ref, out = _run_rollout_window(dataset_path, 842, 857)
+
+    assert int(ref["action_id"][defender]) == 178  # GuardOn, no shield hit yet.
+    assert int(out["action_id"][defender]) == 178
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 0
+    assert int(out["hitlag"][attacker]) == int(ref["hitlag"][attacker]) == 0
+    assert float(out["shield_hp"][defender]) == pytest.approx(float(ref["shield_hp"][defender]))
+
+
+@pytest.mark.integration
+def test_guardon_fresh_hitcapsule_shielddesc_size_accepts_prh_attackairlw_rollout_contact() -> None:
+    # Runtime-positive boundary for fresh HitCapsule shield overlap:
+    # - Falco AttackAirLw creates its first active HitCapsules on this frame.
+    # - Fox is already in the replay-visible no-submotion GuardOn snapshot, so this is not the
+    #   GuardOn-entry pose bridge.
+    # - lbColl_80007BCC still passes ShieldDesc.size into lbColl_80006E58 for the fresh
+    #   HitCapsule/ShieldDesc overlap, producing GuardSetOff and shared hitlag.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007AD18,ftColl_80078C70,ftColl_80076CBC}
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_80006E58}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    defender = 0
+    attacker = 1
+    ref, out = _run_rollout_window(
+        dataset_path, 10692, 10746, ucf_enabled=True, ucf_cardinals_1_0_enabled=True
+    )
+
+    assert int(ref["action_id"][defender]) == 181
+    assert int(out["action_id"][defender]) == 181
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 6
+    assert int(out["hitlag"][attacker]) == int(ref["hitlag"][attacker]) == 6
+    assert float(out["shield_hp"][defender]) == pytest.approx(float(ref["shield_hp"][defender]))
+    assert float(out["speed_ground_x_self"][defender]) == pytest.approx(
+        float(ref["speed_ground_x_self"][defender])
+    )
+
+
+@pytest.mark.integration
+def test_guardon_fresh_hitcapsule_shielddesc_size_keeps_far_attackairlw_negative() -> None:
+    # Negative boundary for the fresh-HitCapsule ShieldDesc.size lane: adding the source-owned
+    # size term must not become a generic "AttackAirLw near GuardOn" shield-hit shortcut.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    defender = 0
+    seed, ref, out = _run_one_step_row(dataset_path, 1136, defender)
+
+    assert int(seed["action_id"][defender]) == 178
+    assert int(seed["seed_prev_action_id"][defender]) == 178
+    assert int(seed["action_id"][1]) == 69
+    assert int(ref["action_id"][defender]) == 178
+    assert int(out["action_id"][defender]) == 178
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 0
+    assert float(out["shield_hp"][defender]) == pytest.approx(float(ref["shield_hp"][defender]))
+
+
+@pytest.mark.integration
 def test_guard_shielddesc_runtime_pose_keeps_iat_body_negative() -> None:
     # Runtime-negative boundary: the same live Guard pose correction must not become a broad
     # shield-rim suppressor. This window was the false GuardSetOff control for the rejected broad

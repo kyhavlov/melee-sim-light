@@ -84,7 +84,11 @@ static inline void enter_fall(MslBatch* batch, size_t idx) {
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
   batch->state.fall_fast[idx] = 0;
-  batch->state.tilt_timer_y[idx] = 0;
+  // Decomp: ftCo_Fall_Enter calls Fighter_ChangeMotionState with Ft_MF_KeepFastFall, then clamps
+  // air drift; it does not reset fp->x671_timer_lstick_tilt_y. Preserve the existing tilt timer so
+  // RebirthWait/EntryEnd exits while holding down do not synthesize a fresh fastfall flick.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
 }
 
 static inline float entry_x20(const MslBatch* batch, size_t idx) {

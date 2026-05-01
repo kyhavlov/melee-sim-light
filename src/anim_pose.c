@@ -15,11 +15,11 @@ enum {
   ANIM_MAGIC_LEN = 8,
   ANIM_HDR_BASE_BYTES = 16,  // magic[8] + ver[u32] + joint_count[u16] + anim_count[u16]
   ANIM_VERSION_V4 = 4,
-  ANIM_DYN_VERSION_V3 = 3,
+  ANIM_DYN_VERSION_V4 = 4,
   MAT_BYTES = 12 * 4,              // float32[12] (3x4)
   TRANSN_BYTES_PER_FRAME = 3 * 4,  // float32[3] v4 tail (TransN/root translation)
 
-  // SSDYNN01 v3 is written by tools/extraction/extract_fighter_anims.py.
+  // SSDYNN01 v4 is written by tools/extraction/extract_fighter_anims.py.
   //
   // RL1.0 target data contract:
   // - Fox ftData.x2C has exactly one dynamic bone set rooted at part 17.
@@ -812,7 +812,7 @@ static int load_dynamics_into_table(const char* data_dir, const char* rel_path,
   static const uint8_t dyn_magic[ANIM_MAGIC_LEN] = {'S', 'S', 'D', 'Y', 'N', 'N', '0', '1'};
   const uint32_t ver = (sz >= ANIM_HDR_BASE_BYTES) ? read_u32_le(buf + 8) : 0u;
   if (sz < ANIM_HDR_BASE_BYTES || memcmp(buf, dyn_magic, ANIM_MAGIC_LEN) != 0 ||
-      ver != ANIM_DYN_VERSION_V3) {
+      ver != ANIM_DYN_VERSION_V4) {
     alloc_free(buf);
     return -1;
   }
@@ -1833,7 +1833,7 @@ static void dynamic_state_step(MslBatch* batch, size_t idx, const MslAnimPoseTab
     batch->state.dynamic_pose_pos_z[root_di] = base_pos[0][2];
   }
 
-  // SSDYNN01 v3's collision-owner index means this submotion consumes the live dynamic JObj
+  // SSDYNN01 v4's collision-owner index means this submotion consumes the live dynamic JObj
   // matrix for BODY hurtcaps on every supported frame, even when the current lb_8001044C update
   // resolves to the static segment vector with no nonzero correction carry.
   // refs/melee/src/melee/ft/ftdynamics.c::{ftCo_8009DD94,ftCo_8009E318}

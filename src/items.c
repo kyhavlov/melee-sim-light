@@ -1981,6 +1981,25 @@ static inline void item_commit_powershield_reflect_owner_snapshot_defer_speed(Ms
   batch->state.item_pending_reflect_instance_id[ii] = batch->state.instance_id[reflector_idx];
 }
 
+static inline uint8_t item_reflect_transfer_flips_direction_now(const MslBatch* batch, size_t ii,
+                                                                size_t reflector_idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  const float vx = batch->state.item_vel_x[ii];
+  if (!(vx > 0.0f || vx < 0.0f)) {
+    return 0u;
+  }
+  // Visual reflect orientation is item-callback owned (`it_2725_Logic94_Reflected`) and can lag
+  // the owner/xDA8 transfer from `Item_80269F14` after the laser has already crossed the fighter
+  // origin. Keep the same-frame direction flip on the still-approaching side; late crossed
+  // ReflectDesc transfers retain the current visual direction until the next item callback.
+  // refs/melee/src/melee/it/items/itfoxlaser.c::it_2725_Logic94_Reflected
+  // refs/melee/src/melee/it/item.c::Item_80269F14
+  return (((batch->state.item_pos_x[ii] - batch->state.pos_x[reflector_idx]) * vx) < 0.0f) ? 1u
+                                                                                           : 0u;
+}
+
 static inline void item_apply_seeded_reflect_transfer_after_collision(MslBatch* batch, size_t ii) {
   if (batch == NULL) {
     return;
@@ -1998,7 +2017,10 @@ static inline void item_apply_seeded_reflect_transfer_after_collision(MslBatch* 
   // Shine/reflector callbacks incorrectly treat the projectile as already owned by the reflector.
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
   // refs/melee/src/melee/it/item.c::Item_80269F14
-  if (batch->state.item_owner[ii] != (int8_t)seed_port) {
+  const int bi = (int)(ii / (size_t)MSL_MAX_ITEMS);
+  const size_t reflector_idx = msl_idx_player(bi, (int)seed_port);
+  if (batch->state.item_owner[ii] != (int8_t)seed_port &&
+      item_reflect_transfer_flips_direction_now(batch, ii, reflector_idx)) {
     const float vx = batch->state.item_vel_x[ii];
     if (vx > 0.0f) {
       batch->state.item_direction[ii] = -1.0f;
@@ -2126,11 +2148,22 @@ static inline uint8_t item_guard_seed_shield_desc_active(const MslBatch* batch, 
   return batch->state.guard_seed_shield_desc_active[idx] ? 1u : 0u;
 }
 
-static inline uint8_t item_should_commit_aged_powershield_reflect_owner(const MslBatch* batch,
-                                                                        size_t d_idx, int def,
-                                                                        float x, float y, float vx,
-                                                                        float laser_age_frames,
-                                                                        float laser_radius) {
+static inline float item_laser_reflect_hit_radius(float laser_radius, float laser_scale_z) {
+  // `lbColl_80007BCC` passes `item->scl` into the item HitCapsule distance offset unless the
+  // capsule opts out (`x43_b1`). Fox/Falco laser HitCapsules use the ordinary scaled lane, while
+  // the beam endpoints carry the same item-owned scaleZ ramp.
+  // refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
+  // refs/melee/src/melee/it/items/itfoxlaser.c::itFoxlaser_UnkMotion1_Anim
+  float s = laser_scale_z;
+  if (!(s > 0.0f)) {
+    s = 1.0f;
+  }
+  return laser_radius * s;
+}
+
+static inline uint8_t item_should_commit_aged_powershield_reflect_owner(
+    const MslBatch* batch, size_t d_idx, int def, float x0, float y0, float x, float y, float vx,
+    float laser_age_frames, float laser_radius, float laser_scale_z) {
   (void)def;
   if (batch == NULL || !(laser_age_frames > 1.0f)) {
     return 0u;
@@ -2146,29 +2179,55 @@ static inline uint8_t item_should_commit_aged_powershield_reflect_owner(const Ms
       batch->state.guard_reflect_timer_x14_seed[d_idx] <= 1u) {
     return 0u;
   }
-  if (!(((x - batch->state.pos_x[d_idx]) * vx) < 0.0f)) {
+  if ((batch->state.state_flags[d_idx * (size_t)MSL_STATE_FLAGS_BYTES] & 0xE4u) != 0x04u) {
+    // Raw fp+0x2218 command/interrupt bits split the same no-submotion GuardReflect geometry:
+    // pure behavior (`0x04`) can commit the ReflectDesc owner transfer, while high-bit rows stay
+    // on the live article / HitShield owner lane until their hidden item callback state is exposed.
+    // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (fp+0x2218 byte)
+    // refs/melee/src/melee/ft/ftcoll.c::{ftColl_CreateReflectHit,ftColl_80077464}
     return 0u;
   }
+  float reflect_x = 0.0f;
   float reflect_y = 0.0f;
-  if (!item_guard_reflect_bone_y(batch, d_idx, &reflect_y)) {
+  float reflect_z = 0.0f;
+  if (!item_guard_reflect_center_xyz(batch, d_idx, &reflect_x, &reflect_y, &reflect_z)) {
     return 0u;
   }
   const float y_delta = fabsf(y - reflect_y);
   const float reflect_r = common->powershield_reflect_size * batch->state.fighter_scale_y[d_idx];
-  // The remaining aged-transfer rows are on the ReflectDesc vertical lane, while rejected
-  // shield-bounce / HitShield rows are below the shield-bone lane or on the final x14 handoff.
-  // This is still item-owned geometry, not visible shield HP/timer fitting:
+  const float hit_r = item_laser_reflect_hit_radius(laser_radius, laser_scale_z);
+  const float raw_lane_r = laser_radius + reflect_r;
+  // `lbColl_80007BCC` passes `shield_hit->size` and `lbColl_804D7A34 * fighter_scale`
+  // into `lbColl_80006E58`; the latter uses that extent in the descriptor broad phase before the
+  // exact matrix-space distance solve. Keep this reduced owner predicate on the same source extent
+  // instead of a replay-fit vertical band.
+  enum { MSL_LBCOLL_HIT_RESULT_EXTENT = 20 };
+  const float reflect_extent = reflect_r * (float)MSL_LBCOLL_HIT_RESULT_EXTENT;
+  const float scaled_lane_r = hit_r + reflect_extent;
+  if (y_delta <= raw_lane_r || y_delta > scaled_lane_r) {
+    return 0u;
+  }
+  if (!item_swept_sphere_sphere_intersects_3d(x0, y0, 0.0f, x, y, 0.0f, hit_r, reflect_x, reflect_y,
+                                              reflect_z, reflect_extent)) {
+    return 0u;
+  }
+  if (!(((x - reflect_x) * vx) > 0.0f)) {
+    return 0u;
+  }
+  // The remaining aged-transfer rows are on the scaled item-HitCapsule vs ReflectDesc lane, while
+  // rejected shield-bounce / HitShield rows remain in the unscaled ShieldDesc or final-x14 handoff
+  // owners. This is still item-owned geometry, not visible shield HP/timer fitting:
   // - aged GuardReflect transfer requires a live ShieldDesc (`fp+0x221B_b0` / Slippi
   //   `isShieldActive`) so rows whose GuardReflect timer bits are carried without the shield
   //   descriptor stay on Item_80269DC8 shield/hit ownership,
   // - ReflectDesc.x14_size comes from p_ftCommonData->x2A8,
-  // - laser_radius is the ISO-extracted item HitCapsule radius,
+  // - `lbColl_80007BCC` scales the ISO-extracted item HitCapsule radius by `item->scl`,
   // - x14 final-tick exclusion keeps Item_80269DC8 HitShield destruction on its owner lane.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_8009370C,ftCo_80093BC0}
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_CreateReflectHit,ftColl_80077464}
   // refs/melee/src/melee/it/item.c::{Item_80269F14,Item_80269DC8}
   // refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C4D4
-  return (y_delta <= (laser_radius + reflect_r)) ? 1u : 0u;
+  return 1u;
 }
 
 static inline uint8_t item_should_commit_same_frame_locomotion_powershield_reflect_owner(
@@ -3903,6 +3962,20 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
              item_sphere_sphere_intersects_2d(x, y, sr, shx, shy, shr))
                 ? 1u
                 : 0u;
+        if (!shield_hit && batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
+            batch->state.guard_reflect_timer_x14_seed[d_idx] > 1u &&
+            item_should_commit_aged_powershield_reflect_owner(
+                batch, d_idx, def, x0, y0, x, y, vx, laser_age_frames, sr, laser_scale_z)) {
+          // ReflectDesc collision runs before the ordinary shield/HitShield branch in
+          // ftColl_8007925C. The reduced shield proxy above can miss high scaled laser
+          // HitCapsules that still overlap `fp->reflect_hit`, so admit the branch here with the
+          // source-shaped ReflectDesc predicate rather than requiring ShieldDesc contact first.
+          // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C
+          // refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
+          shield_hit = 1u;
+          shield_bounce_source_allows = 0u;
+          shield_bounce_contact_found = 0u;
+        }
         if (shield_hit) {
           // Powershield reflect: on a reflected hit, reverse the velocity vector and transfer owner.
           //
@@ -4180,8 +4253,9 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
                   ? 1u
                   : 0u;
           const uint8_t aged_reflect_owner_commit =
-              (can_powershield_reflect && item_should_commit_aged_powershield_reflect_owner(
-                                              batch, d_idx, def, x, y, vx, laser_age_frames, sr))
+              (can_powershield_reflect &&
+               item_should_commit_aged_powershield_reflect_owner(
+                   batch, d_idx, def, x0, y0, x, y, vx, laser_age_frames, sr, laser_scale_z))
                   ? 1u
                   : 0u;
           const uint8_t powershield_non_reflect_keepalive =
@@ -4225,6 +4299,12 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
             const float dmg_mul = (c != NULL && c->powershield_reflect_damage_mul > 0.0f)
                                       ? c->powershield_reflect_damage_mul
                                       : 1.0f;
+            const uint8_t aged_reflect_preserve_direction =
+                (aged_reflect_owner_commit &&
+                 !item_reflect_transfer_flips_direction_now(batch, ii, d_idx))
+                    ? 1u
+                    : 0u;
+            const float aged_reflect_old_direction = batch->state.item_direction[ii];
             if (same_frame_locomotion_reflect_owner_commit) {
               // Same-frame locomotion -> GuardReflect owner/xDA8 transfer:
               // - ftCo_80091A4C -> ftCo_800939B4 -> ftCo_80093A50 installs ReflectDesc before
@@ -4243,6 +4323,9 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
               item_commit_powershield_reflect_owner_snapshot_defer_speed(batch, ii, def);
             } else {
               item_apply_powershield_reflect_snapshot(batch, ii, def, dmg_mul);
+              if (aged_reflect_preserve_direction) {
+                batch->state.item_direction[ii] = aged_reflect_old_direction;
+              }
             }
             if (spawn_frame_powershield_reflect_owner) {
               // Spawn-frame powershield reflect ownership:

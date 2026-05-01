@@ -83,7 +83,8 @@ static inline uint8_t specialn_is_blaster_loop_requested(const MslBatch* batch, 
                                                   b_press_af);
 }
 
-static inline uint8_t action_allows_special_entry_ground(uint16_t action_id) {
+static inline uint8_t action_allows_special_entry_ground(const MslBatch* batch, size_t idx,
+                                                         uint16_t action_id) {
   // Spotdodge / roll IASA do not route through grounded special checks in decomp:
   // - EscapeN_IASA is empty.
   // - EscapeF_IASA / EscapeB_IASA only call ftCo_8009563C (item-throw family), not grounded
@@ -109,12 +110,19 @@ static inline uint8_t action_allows_special_entry_ground(uint16_t action_id) {
     case (uint16_t)MSL_ACT_KNEE_BEND:
     case (uint16_t)MSL_ACT_GUARD_ON:
     case (uint16_t)MSL_ACT_GUARD:
-      // Decomp: GuardOn/Guard IASA never route through grounded special checks; they only admit
-      // shield-family options, catch, and jump/spotdodge-style exits.
+    case (uint16_t)MSL_ACT_GUARD_SET_OFF:
+    case (uint16_t)MSL_ACT_GUARD_REFLECT:
+      // Decomp: these guard-family IASA callbacks do not route through the grounded special
+      // dispatch; GuardSetOff_IASA is empty.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
-      //   ftCo_GuardOn_IASA,ftCo_Guard_IASA
+      //   ftCo_GuardOn_IASA,ftCo_Guard_IASA,ftCo_GuardReflect_IASA,ftCo_GuardSetOff_IASA}
       // }
       return 0;
+    case (uint16_t)MSL_ACT_GUARD_OFF:
+      // GuardOff_IASA runs the special/attack chain only while mv.co.guard.x1C is non-zero. x1C
+      // is armed by ftCo_80094138 on powershield-active shield contact.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOff_IASA,ftCo_80094138}
+      return (batch != NULL && batch->state.guard_special_enable_timer_x1c[idx] != 0u) ? 1u : 0u;
     case (uint16_t)MSL_ACT_ATTACK_DASH:
     case (uint16_t)MSL_ACT_ATTACK_S3_HI:
     case (uint16_t)MSL_ACT_ATTACK_S3_HI_S:
@@ -871,7 +879,7 @@ void blaster_update_pre_physics(MslBatch* batch) {
           //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_LandingFallSpecial_Enter_Basic
           // - LandingAir* IASA is empty, so those landing-lag actions cannot be interrupted at all.
           //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c::ftCo_LandingAir_IASA
-          allow = action_allows_special_entry_ground(a);
+          allow = action_allows_special_entry_ground(batch, idx, a);
           if (allow) {
             switch (a) {
               case (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL:

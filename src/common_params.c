@@ -347,6 +347,7 @@ int common_params_init(void) {
           0 ||
       json_get_u8(buf, "powershield_reflect_total_frames",
                   &g_params.powershield_reflect_total_frames) != 0 ||
+      json_get_u8(buf, "guard_special_enable_frames", &g_params.guard_special_enable_frames) != 0 ||
       json_get_f32(buf, "spotdodge_stick_y_threshold", &g_params.spotdodge_stick_y_threshold) !=
           0 ||
       json_get_f32(buf, "escape_stick_x_threshold", &g_params.escape_stick_x_threshold) != 0 ||

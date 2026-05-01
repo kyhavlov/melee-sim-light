@@ -1377,7 +1377,7 @@ def _write_fighter_dynamics_data(
 ) -> Path:
     """Write extracted ftData.x2C dynamic-chain descriptors for runtime pose ownership.
 
-    Layout `SSDYNN01` v3:
+    Layout `SSDYNN01` v4:
     - set_count:u16, total_node_count:u16
     - per set: root_part:u16, node_count:u16, pos:vec3
     - per node: part:u16, pad:u16, constants[15]:f32
@@ -1410,7 +1410,7 @@ def _write_fighter_dynamics_data(
 
     with out_path.open("wb") as f:
         f.write(b"SSDYNN01")
-        f.write(struct.pack("<I", 3))
+        f.write(struct.pack("<I", 4))
         f.write(struct.pack("<H", len(encoded_sets)))
         f.write(struct.pack("<H", total_nodes))
         for root, pos, nodes in encoded_sets:
@@ -1433,19 +1433,19 @@ def _dynamic_collision_owner_msids(
 ) -> list[int]:
     """Return submotions whose BODY collision matrices consume fighter dynamics state.
 
-    This is deliberately data-owned rather than a C gameplay branch. Fox `AttackHi3`,
-    `AttackDash`, and `JumpB` are the audited RL1.0 dynamic-chain collision owners: Dolphin
-    pre-`ftColl_80078C70` primitive probes show live hurtcap endpoints on the x2C chain consume
-    `ftData.x2C` / `lb_8001044C`, while broad dynamic matrix application to other Fox common
-    actions regressed BODY sentinels. Adding another submotion here requires the same owner
-    evidence and keeps the runtime predicate in extracted data instead of hardcoding record ids or
-    cap/frame slices in C.
+    This is deliberately data-owned rather than a C gameplay branch. Fox `AttackHi3` and `JumpB`
+    are the audited RL1.0 dynamic-chain collision owners: Dolphin pre-`ftColl_80078C70`
+    primitive probes show live hurtcap endpoints on the x2C chain consume `ftData.x2C` /
+    `lb_8001044C`, while the HIS:5029 AttackDash/AttackLw4 primitive probe selects a static-chain
+    low hurtcap and rejects the tail-chain contact when AttackDash dynamic matrices are applied.
+    Adding another submotion here requires the same owner evidence and keeps the runtime predicate
+    in extracted data instead of hardcoding record ids or cap/frame slices in C.
     """
     if character != "fox" or not dynamic_sets:
         return []
     move_map = (moves.get("moves") or {}) if isinstance(moves, dict) else {}
     out: list[int] = []
-    for move_name in ("ftCo_SM_AttackHi3", "ftCo_SM_AttackDash", "ftCo_SM_JumpB"):
+    for move_name in ("ftCo_SM_AttackHi3", "ftCo_SM_JumpB"):
         move_entry = move_map.get(move_name)
         if not isinstance(move_entry, dict):
             continue

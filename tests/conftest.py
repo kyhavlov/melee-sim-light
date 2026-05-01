@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import warnings
 from pathlib import Path
 
 # Make the repo root importable so `tools.*` modules can be imported in tests.
@@ -172,6 +173,82 @@ def _ensure_tracks_bins() -> None:
         missing = sorted(_tracks_missing_msids(tracks, need_msids))
         if missing:
             raise RuntimeError(f"tracks file missing required msids for tests: {tracks} missing={missing}")
+
+
+def _dyn_contract_ok(path: Path, want_collision_msids: set[int]) -> bool:
+    try:
+        with path.open("rb") as f:
+            magic = f.read(8)
+            version = int.from_bytes(f.read(4), "little", signed=False)
+            set_count = int.from_bytes(f.read(2), "little", signed=False)
+            total_nodes = int.from_bytes(f.read(2), "little", signed=False)
+            if magic != b"SSDYNN01" or version != 4:
+                return False
+            for _set_i in range(set_count):
+                f.read(2)  # root_part
+                node_count = int.from_bytes(f.read(2), "little", signed=False)
+                f.read(12)  # pos
+                f.read(64 * node_count)
+            count = int.from_bytes(f.read(2), "little", signed=False)
+            f.read(2)  # reserved
+            got = {int.from_bytes(f.read(2), "little", signed=False) for _ in range(count)}
+            return got == want_collision_msids and total_nodes <= 4
+    except OSError:
+        return False
+
+
+def _ensure_dyn_bins() -> None:
+    expected = {
+        "fox": {17, 58},
+        "falco": set(),
+    }
+    stale = False
+    for ch, want in expected.items():
+        if not _dyn_contract_ok(ROOT / "data" / "anims" / f"{ch}.dyn.bin", want):
+            stale = True
+            break
+    if not stale:
+        return
+
+    required = [
+        ROOT / "_iso" / "PlCo.dat",
+        ROOT / "_iso" / "PlFx.dat",
+        ROOT / "_iso" / "PlFxNr.dat",
+        ROOT / "_iso" / "PlFxAJ.dat",
+        ROOT / "_iso" / "PlFc.dat",
+        ROOT / "_iso" / "PlFcNr.dat",
+        ROOT / "_iso" / "PlFcAJ.dat",
+    ]
+    missing_iso = [p for p in required if not p.exists()]
+    if missing_iso:
+        warnings.warn(
+            "missing/stale optional dynamic pose artifact(s), and cannot rebuild because _iso inputs "
+            "are missing: "
+            f"{missing_iso}. Dynamic-pose-specific tests should skip unless these artifacts are "
+            "available. Run: `uv run python -m tools.extraction.build_data --iso-dir _iso --stage "
+            "grnla --chars fox,falco`",
+            RuntimeWarning,
+        )
+        return
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "tools.extraction.build_data",
+            "--iso-dir",
+            str(ROOT / "_iso"),
+            "--stage",
+            "grnla",
+            "--chars",
+            "fox,falco",
+        ],
+        check=True,
+    )
+    for ch, want in expected.items():
+        path = ROOT / "data" / "anims" / f"{ch}.dyn.bin"
+        if not _dyn_contract_ok(path, want):
+            raise RuntimeError(f"failed to generate required dynamic pose artifact: {path}")
+
 
 def _ensure_hurtcaps_bins() -> None:
     for ch in ("fox", "falco"):
@@ -501,6 +578,7 @@ def _ensure_known_data_artifacts() -> None:
 
 def pytest_sessionstart(session) -> None:  # type: ignore[no-untyped-def]
     _ensure_motion_state_owner_bins()
+    _ensure_dyn_bins()
     _ensure_tracks_bins()
     _ensure_ecb_bottom_tables()
     _ensure_ecb_extents_tables()

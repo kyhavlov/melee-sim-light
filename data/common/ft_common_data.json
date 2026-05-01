@@ -116,6 +116,7 @@
   "ground_kb_friction_mul": 1.0,
   "grounded_tumble_bounce_angle_extra_radians": 0.1745329201221466,
   "grounded_tumble_bounce_y_mul": 0.800000011920929,
+  "guard_special_enable_frames": 4,
   "guard_stick_lerp_x44c": 0.5,
   "guard_x10_init_frames": 8.0,
   "high_speed_friction_mul": 2.0,
