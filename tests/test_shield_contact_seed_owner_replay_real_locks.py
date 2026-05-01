@@ -321,6 +321,52 @@ def test_attackairf_dense_hitlist_rollout_suppresses_guardon_reentry_hvg() -> No
 
 
 @pytest.mark.integration
+def test_attackairlw_dense_hitlist_rollout_allows_fresh_guardon_shield_hit_prh() -> None:
+    # AttackAirLw -> GuardOn dense HitCapsule stale-clear:
+    # - PRH:8342 starts from a rollout seed with only a coarse dense hit_group victim latch for
+    #   Falco's active DAir.
+    # - On the next frame vanilla accepts Fox's fresh GuardOn ShieldDesc hit. The dense group lane
+    #   cannot prove that this specific HitCapsule's victims_1 list still contains the shield
+    #   owner, so the AttackAir guard re-entry trim must clear it before lbColl_8000ACFC.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC,ftColl_80076808}
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    start = 8342
+    target = 8343
+    attacker = 1
+    defender = 0
+    seed = ds.samples["seed_t"][start]
+    assert int(seed["action_id"][attacker]) == 69  # AttackAirLw.
+    assert int(seed["action_id"][defender]) == 178  # GuardOn.
+    assert int(seed["combat_hitlist_cd"][attacker, 0, defender]) == 0xFFFF
+    assert int(seed["combat_hitlist_victim_iid"][attacker, 0, defender]) == int(
+        seed["instance_id"][defender]
+    )
+
+    ref, out = _run_rollout_window(
+        dataset_path,
+        start,
+        target,
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    assert int(ref["action_id"][defender]) == 181  # GuardSetOff.
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender])
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 7
+    assert int(out["hitlag"][attacker]) == int(ref["hitlag"][attacker]) == 7
+    assert float(out["shield_hp"][defender]) == pytest.approx(float(ref["shield_hp"][defender]))
+
+
+@pytest.mark.integration
 def test_attackairn_stale_dense_hitlist_create_edge_clears_for_new_hit_agn() -> None:
     # AttackAirN stale dense HitCapsule boundary:
     # - AGN:5167 seeds p1 NAir with a coarse dense victims_1 latch against p0's old JumpF

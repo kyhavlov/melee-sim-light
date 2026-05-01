@@ -144,6 +144,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->camera_box_radius_f32 = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->camera_target_point_inside_stage_cam_bounds_u8 =
       (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->magnify_damage_counter_x1910 = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->downwait_timer = (int16_t*)alloc_aligned_64(sizeof(int16_t) * bp);
   state->passivewall_timer = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->walljump_input_timer = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
@@ -460,8 +461,9 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->camera_box_visible_x221f_b0 || !state->rebirth_camera_anchor_y_f32 ||
       !state->camera_target_world_x_f32 || !state->camera_target_world_y_f32 ||
       !state->camera_target_world_z_f32 || !state->camera_box_radius_f32 ||
-      !state->camera_target_point_inside_stage_cam_bounds_u8 || !state->downwait_timer ||
-      !state->passivewall_timer || !state->walljump_input_timer || !state->walljump_wall_side_i8 ||
+      !state->camera_target_point_inside_stage_cam_bounds_u8 ||
+      !state->magnify_damage_counter_x1910 || !state->downwait_timer || !state->passivewall_timer ||
+      !state->walljump_input_timer || !state->walljump_wall_side_i8 ||
       !state->walljump_seed_phase_valid || !state->anim_frame_f32 || !state->anim_frame_fp_q16_16 ||
       !state->frame_speed_mul_fp_q16_16 || !state->walk_anim_source_vel ||
       !state->walk_retarget_tick_source_vel || !state->run_anim_source_vel ||
@@ -594,6 +596,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   memset(state->throw_command_pending_pulse_frame, 0, sizeof(uint8_t) * bp);
   memset(state->throw_command_pending_seed_valid, 0, sizeof(uint8_t) * bp);
   memset(state->throw_pulse_crossed_curr_frame, 0, sizeof(uint8_t) * bp);
+  memset(state->magnify_damage_counter_x1910, 0, sizeof(uint16_t) * bp);
   memset(state->smash_charge_state, 0, sizeof(uint8_t) * bp);
   memset(state->smash_charge_frames, 0, sizeof(uint8_t) * bp);
   memset(state->smash_charge_hold_frames_max, 0, sizeof(uint8_t) * bp);
@@ -739,6 +742,7 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->camera_target_world_z_f32);
   alloc_free(state->camera_box_radius_f32);
   alloc_free(state->camera_target_point_inside_stage_cam_bounds_u8);
+  alloc_free(state->magnify_damage_counter_x1910);
   alloc_free(state->downwait_timer);
   alloc_free(state->passivewall_timer);
   alloc_free(state->walljump_input_timer);

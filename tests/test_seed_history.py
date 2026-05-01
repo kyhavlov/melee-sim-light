@@ -22,6 +22,7 @@ from tools.slippi.seed_history import (
     derive_camera_target_point_inside_stage_cam_bounds,
     derive_camera_target_world,
     derive_capture_grab_hidden_post,
+    derive_magnify_damage_counter_x1910,
     derive_rebirth_camera_anchor_y,
     derive_damage_post_hitlag_cb_kind,
     derive_guard_reflect_origin_guardon,
@@ -2987,6 +2988,112 @@ def test_derive_camera_box_visible_x221f_b0_prefix_invariant() -> None:
     )
     ext = derive_camera_box_visible_x221f_b0(state_flags_u8=state_flags_ext)
     assert np.array_equal(ext[: state_flags_prefix.shape[0]], full)
+
+
+def test_derive_magnify_damage_counter_x1910_prefix_invariant_and_resets() -> None:
+    wait = np.uint16(14)
+    rebirth = np.uint16(12)
+    action = np.array([wait, wait, wait, wait, wait, rebirth, wait], dtype=np.uint16)
+    state_flags = np.array(
+        [
+            [0, 0, 0, 0, 0x80],
+            [0, 0, 0, 0, 0x80],
+            [0, 0, 0, 0, 0x80],
+            [0, 0, 0, 0, 0x80],
+            [0, 0, 0, 0, 0x00],
+            [0, 0, 0, 0, 0x80],
+            [0, 0, 0, 0, 0x80],
+        ],
+        dtype=np.uint8,
+    )
+    percent = np.array([7.0, 7.0, 7.0, 8.0, 8.0, 0.0, 8.0], dtype=np.float32)
+    outside = np.array([0, 0, 0, 1, 0, 0, 0], dtype=np.uint8)
+    hitlag = np.zeros(action.shape[0], dtype=np.uint16)
+    hitstun = np.zeros(action.shape[0], dtype=np.uint16)
+    instance_hit_by = np.zeros(action.shape[0], dtype=np.uint16)
+    last_hit_by = np.full(action.shape[0], 0xFF, dtype=np.uint8)
+    full = derive_magnify_damage_counter_x1910(
+        action_id_u16=action,
+        state_flags_u8=state_flags,
+        camera_target_point_inside_stage_cam_bounds_u8=outside,
+        percent_f32=percent,
+        hitlag_u16=hitlag,
+        hitstun_u16=hitstun,
+        instance_hit_by_u16=instance_hit_by,
+        last_hit_by_u8=last_hit_by,
+        interval_frames=3,
+        percent_limit=150,
+        damage_amount=1,
+    )
+    # The third visible live-fighter row reaches the interval during the step, so the next seed
+    # counter is reset. Inside-camera and match-flow camera bits do not count as magnifying-glass
+    # damage time.
+    assert full.tolist() == [0, 1, 2, 0, 0, 0, 0]
+
+    ext = derive_magnify_damage_counter_x1910(
+        action_id_u16=np.concatenate([action, np.array([wait, wait], dtype=np.uint16)]),
+        state_flags_u8=np.concatenate(
+            [state_flags, np.array([[0, 0, 0, 0, 0x80], [0, 0, 0, 0, 0x80]], dtype=np.uint8)],
+            axis=0,
+        ),
+        camera_target_point_inside_stage_cam_bounds_u8=np.concatenate(
+            [outside, np.array([0, 0], dtype=np.uint8)]
+        ),
+        percent_f32=np.concatenate([percent, np.array([8.0, 8.0], dtype=np.float32)]),
+        hitlag_u16=np.concatenate([hitlag, np.zeros(2, dtype=np.uint16)]),
+        hitstun_u16=np.concatenate([hitstun, np.zeros(2, dtype=np.uint16)]),
+        instance_hit_by_u16=np.concatenate([instance_hit_by, np.zeros(2, dtype=np.uint16)]),
+        last_hit_by_u8=np.concatenate([last_hit_by, np.full(2, 0xFF, dtype=np.uint8)]),
+        interval_frames=3,
+        percent_limit=150,
+        damage_amount=1,
+    )
+    assert np.array_equal(ext[: action.shape[0]], full)
+
+    no_tick = derive_magnify_damage_counter_x1910(
+        action_id_u16=np.array([wait, wait, wait, wait], dtype=np.uint16),
+        state_flags_u8=np.array([[0, 0, 0, 0, 0x80]] * 4, dtype=np.uint8),
+        camera_target_point_inside_stage_cam_bounds_u8=np.zeros(4, dtype=np.uint8),
+        percent_f32=np.array([7.0, 7.0, 7.0, 7.0], dtype=np.float32),
+        hitlag_u16=np.zeros(4, dtype=np.uint16),
+        hitstun_u16=np.zeros(4, dtype=np.uint16),
+        instance_hit_by_u16=np.zeros(4, dtype=np.uint16),
+        last_hit_by_u8=np.full(4, 0xFF, dtype=np.uint8),
+        interval_frames=3,
+        percent_limit=150,
+        damage_amount=1,
+    )
+    assert no_tick.tolist() == [0, 1, 1, 1]
+
+    disabled = derive_magnify_damage_counter_x1910(
+        action_id_u16=np.array([wait, wait, wait, wait], dtype=np.uint16),
+        state_flags_u8=np.array([[0, 0, 0, 0, 0x88]] * 4, dtype=np.uint8),
+        camera_target_point_inside_stage_cam_bounds_u8=np.zeros(4, dtype=np.uint8),
+        percent_f32=np.array([7.0, 7.0, 7.0, 8.0], dtype=np.float32),
+        hitlag_u16=np.zeros(4, dtype=np.uint16),
+        hitstun_u16=np.zeros(4, dtype=np.uint16),
+        instance_hit_by_u16=np.zeros(4, dtype=np.uint16),
+        last_hit_by_u8=np.full(4, 0xFF, dtype=np.uint8),
+        interval_frames=3,
+        percent_limit=150,
+        damage_amount=1,
+    )
+    assert disabled.tolist() == [0, 0, 0, 0]
+
+    contact_percent_gain = derive_magnify_damage_counter_x1910(
+        action_id_u16=np.array([wait, wait, wait, wait], dtype=np.uint16),
+        state_flags_u8=np.array([[0, 0, 0, 0, 0x80]] * 4, dtype=np.uint8),
+        camera_target_point_inside_stage_cam_bounds_u8=np.zeros(4, dtype=np.uint8),
+        percent_f32=np.array([7.0, 7.0, 7.0, 8.0], dtype=np.float32),
+        hitlag_u16=np.array([0, 0, 0, 1], dtype=np.uint16),
+        hitstun_u16=np.zeros(4, dtype=np.uint16),
+        instance_hit_by_u16=np.array([0, 0, 0, 17], dtype=np.uint16),
+        last_hit_by_u8=np.array([0xFF, 0xFF, 0xFF, 1], dtype=np.uint8),
+        interval_frames=3,
+        percent_limit=150,
+        damage_amount=1,
+    )
+    assert contact_percent_gain.tolist() == [0, 1, 1, 1]
 
 
 def test_derive_rebirth_camera_anchor_y_prefix_invariant() -> None:

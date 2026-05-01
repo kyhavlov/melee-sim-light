@@ -296,6 +296,11 @@ typedef struct MslStateSoA {
   // refs/melee/src/melee/ft/ftlib.c::ftLib_80086A8C
   // refs/melee/src/melee/cm/camera.c::{Camera_80030CD8,Camera_80030BBC}
   uint8_t* camera_target_point_inside_stage_cam_bounds_u8;
+  // Hidden magnifying-glass/offscreen damage counter (`fp->dmg.x1910`).
+  // Seeded from replay-visible camera/magnify history; runtime updates it with the source-owned
+  // Fighter_procUpdate interval damage path.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+  uint16_t* magnify_damage_counter_x1910;
   int16_t* downwait_timer;  // fp->mv.co.downwait.x0 (seeded; decomp: ftCo_DownWait_Anim)
   // PassiveWall / PassiveWallJump hidden startup timer (`fp->mv.co.passivewall.timer`).
   // Slippi post-frame keeps action_frame at 0 through the frozen wall-tech startup, so this owner

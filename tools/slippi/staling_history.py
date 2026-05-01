@@ -32,6 +32,8 @@ _STALE_QUEUE_SIZE = 10
 _ACT_GUARD_ON = 178
 _ACT_GUARD = 179
 _ACT_GUARD_OFF = 180
+_ACT_FX_SPECIAL_N_LOOP = 0x0156
+_ACT_FX_SPECIAL_AIR_N_LOOP = 0x0159
 _NO_SUBMOTION_INDEX = 0xFFFFFFFF
 
 
@@ -138,8 +140,10 @@ def derive_staling_history(frames: pa.StructArray, *, src_ports: list[int]) -> S
 
     Notes / limitations (decomp-first, conservative):
     - We model the fighter-side bump on motion-state change (ft_800890D0) using Slippi post-frame
-      action-state changes. We do not currently model additional bump sites like ft_800892A0 because
-      they are not unambiguously observable from Slippi post-frames in general.
+      action-state changes. We also model the Fox/Falco SpecialN Loop -> Loop restart callback
+      (`ftFx_SpecialN_OnChangeAction -> ft_800892A0`) because it is visible as same-action
+      SpecialNLoop instance-id changes with action_frame reset and is needed for laser stale queue
+      duplicate suppression.
     - If the victim's `last_hit_by` does not map to a known source port (attacker unknown), we
       fall back to inferring the attacker from a unique match on `last_hit_by_instance` against the
       current frame's action-state instance_id set (no lookahead; skip if ambiguous).
@@ -304,6 +308,20 @@ def derive_staling_history(frames: pa.StructArray, *, src_ports: list[int]) -> S
                     cur_attack_id[p] = np.uint16(move_id)
                     cur_attack_inst[p] = np.uint16(_inc_attack_instance())
                 prev_action_id[p] = np.uint16(act)
+            elif (
+                act in (_ACT_FX_SPECIAL_N_LOOP, _ACT_FX_SPECIAL_AIR_N_LOOP)
+                and iid != int(prev_state_iid[p])
+                and float(action_frame[t, p]) == 0.0
+            ):
+                # Fox/Falco SpecialN Loop -> Loop restart keeps the same visible action id but
+                # runs the OnChangeAction callback. That callback calls ft_800892A0, which bumps
+                # fp->x206C_attack_instance for the current move id so repeated laser hits with
+                # the same move id are not duplicate-suppressed in the stale table.
+                # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
+                #   ftFx_SpecialNLoop_Anim,ftFx_SpecialAirNLoop_Anim,
+                #   ftFx_SpecialN_OnChangeAction}
+                # refs/melee/src/melee/ft/ft_0881.c::ft_800892A0
+                cur_attack_inst[p] = np.uint16(_inc_attack_instance())
 
             if iid != int(prev_state_iid[p]):
                 by_state_iid[p].setdefault(iid, (int(cur_attack_id[p]), int(cur_attack_inst[p])))

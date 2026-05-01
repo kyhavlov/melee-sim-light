@@ -286,14 +286,16 @@ def test_guardon_guardreflect_no_submotion_hurtcaps_allow_shine_body_hit() -> No
 
 
 @pytest.mark.integration
-def test_dash_91ad8_guardon_defers_same_step_laser_shield_contact() -> None:
+def test_dash_91ad8_guardon_stale_trailing_laser_misses_same_step_shield() -> None:
     # Replay-real lock for Dash_IASA's mid guard helper:
     # - `dash.x4 != 0 && cur_anim_frame <= x44` stays in the early Dash_IASA branch and must not
     #   enter GuardReflect.
-    # - the following mid branch enters GuardOn through ftCo_80091AD8 -> ftCo_800923B4, but item
-    #   collision for that frame has already passed, so the laser shield hit appears one row later.
+    # - the following mid branch enters GuardOn through ftCo_80091AD8 -> ftCo_800923B4, and the
+    #   live ShieldDesc can participate in item collision. This row is the scaleZ endpoint negative:
+    #   the reduced identity-cap proxy would over-admit a stale trailing laser sample here.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
-    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091AD8,ftCo_800923B4}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091AD8,ftCo_800923B4,ftCo_800924C0}
+    # refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Anim,it_8029C4D4}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
@@ -328,6 +330,33 @@ def test_dash_91ad8_guardon_defers_same_step_laser_shield_contact() -> None:
     assert int(ref_735["action_id"][p]) == 181  # GuardSetOff
     for field in ("action_id", "action_frame", "animation_index", "hitlag", "hitstun"):
         assert int(out_735[field][p]) == int(ref_735[field][p]), field
+
+
+@pytest.mark.integration
+def test_dash_91ad8_guardon_same_step_laser_shield_contact_uses_scaled_endpoint() -> None:
+    # Positive counterpart to the MAJ stale-trailing-laser negative above:
+    # held-shield Dash `x4` enters GuardOn via ftCo_80091AD8, and the Falco laser's real scaleZ
+    # endpoint lane overlaps the newly installed ShieldDesc in the same item pass.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    p = 0
+    seed_t, out_t, ref_t = _step_one_row(dataset_path, 5142)
+    assert int(seed_t["action_id"][p]) == 20  # Dash
+    assert int(seed_t["dash_x4"][p]) == 1
+    assert int(seed_t["action_frame"][p]) == 4
+    assert int(ref_t["action_id"][p]) == 181  # GuardSetOff
+    for field in ("action_id", "action_frame", "animation_index", "hitlag", "hitstun"):
+        assert int(out_t[field][p]) == int(ref_t[field][p]), field
+    assert float(out_t["shield_hp"][p]) == pytest.approx(float(ref_t["shield_hp"][p]), abs=1e-5)
+    assert float(out_t["percent"][p]) == pytest.approx(float(ref_t["percent"][p]), abs=1e-5)
+    assert int(out_t["items"]["exists"][0]) == int(ref_t["items"]["exists"][0]) == 0
 
 
 @pytest.mark.integration

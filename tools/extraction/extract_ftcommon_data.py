@@ -224,6 +224,16 @@ def main() -> None:
         # refs/melee/src/melee/ft/ftcoll.c::{inlineB1,ftColl_80076ED8}
         # refs/datasheet/plco_offsets.txt
         "phantom_overlap_max_x7a8": float(_f32_be(buf, ft_common_abs + 0x7A8)),
+        # Magnifying-glass/offscreen damage counter in Fighter_procUpdate:
+        # - `fp->dmg.x1910` increments while ifMagnify reports the player offscreen,
+        #   Player_GetMoreFlagsBit3 is enabled, percent is below x7B0, and x221F_b4 is clear.
+        # - When the counter reaches x7AC, Fighter_TakeDamage_8006CC7C applies x7B4 damage and
+        #   resets the counter.
+        # refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+        # refs/melee/src/melee/if/ifmagnify.c::{ifMagnify_802FC998,ifMagnify_802FB6E8}
+        "magnify_damage_interval_frames": int(_i32_be(buf, ft_common_abs + 0x7AC)),
+        "magnify_damage_percent_limit": int(_i32_be(buf, ft_common_abs + 0x7B0)),
+        "magnify_damage_amount": int(_i32_be(buf, ft_common_abs + 0x7B4)),
         # Smash stick / flick gating.
         # - Grounded dash / side-smash checks consume p_ftCommonData->x3C/x40.
         # - Grounded c-stick smash edges in ft_0DF1.c::{ftCo_800DF1C8,ftCo_800DF2D8,ftCo_800DF3A8}

@@ -115,16 +115,19 @@ def test_run_turnaround_finishes_into_run_with_post_flip_facing() -> None:
     # animation-end path calls fn_800CA644 against that post-flip facing before falling back to Wait.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_TurnRun.c::ftCo_TurnRun_Anim
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::fn_800CA644
-    history = _replay_fixture(_load_fixture(), end_frame=340)
+    history = _replay_fixture(_load_fixture(), end_frame=350)
 
     fox = 0
     assert int(history[316]["action_id"][fox]) == 19  # TurnRun entry from Run.
     assert int(history[316]["facing"][fox]) == 0
     assert int(history[335]["action_id"][fox]) == 19
+    assert int(history[335]["facing"][fox]) == 1
 
-    assert int(history[336]["action_id"][fox]) == 21  # Run, not Wait -> Turn.
-    assert int(history[336]["facing"][fox]) == 1
-    assert int(history[337]["action_id"][fox]) == 21
+    # The script-owned pivot freeze delays the animation-end handoff, but the destination remains
+    # post-flip Run rather than Wait -> Turn.
+    assert int(history[345]["action_id"][fox]) == 21
+    assert int(history[345]["facing"][fox]) == 1
+    assert int(history[346]["action_id"][fox]) == 21
 
 
 @pytest.mark.integration

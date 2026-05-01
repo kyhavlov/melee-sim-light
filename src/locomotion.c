@@ -4923,19 +4923,19 @@ void locomotion_update_pre(MslBatch* batch) {
           if (anim != 0xFFFFFFFFu && anim <= 0xFFFFu) {
             if (anim_finished(batch->state.char_id[idx], (uint16_t)anim,
                               batch->state.anim_frame_f32[idx])) {
+              // RunBrake_Anim resolves through ft_8008A2BC when the motion has no frames remaining.
+              // The destination Wait input callback can then run in the same fighter proc; use the
+              // existing Wait_IASA locomotion tail instead of a squat-only bridge so Turn/Walk/Dash
+              // ownership stays in source order.
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::ftCo_RunBrake_Anim
+              // refs/melee/src/melee/ft/ft_0892.c::ft_8008A2BC
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
               batch->state.action_id[idx] = (uint16_t)MSL_ACT_WAIT;
               batch->state.animation_index[idx] = (uint32_t)MSL_SM_WAIT1_0;
               msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-              if ((buttons_pressed & (uint16_t)MSL_BUTTON_B) == 0 &&
-                  (action_id_start != MSL_ACT_WAIT || (buttons & (uint16_t)MSL_BUTTON_B) == 0) &&
-                  stick_y < -c->crouch_stick_threshold) {
-                // Decomp ordering: RunBrake anim-end -> Wait, then Wait IASA can enter Squat.
-                // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_RunBrake.c,ftCo_Wait.c,ftCo_Squat.c}
-                // Squat threshold source:
-                // - c->crouch_stick_threshold is p_ftCommonData->x90 loaded from
-                //   data/common/ft_common_data.json via src/common_params.c.
-                enter_squat_immediate(batch, idx);
-              }
+              (void)wait_iasa_locomotion_subset_try_enter(
+                  batch, c, ch, idx, buttons, buttons_pressed, stick_x, stick_y, tilt_timer_x,
+                  tilt_timer_y, facing_dir, action_id_start);
             }
           }
         }

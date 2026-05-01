@@ -558,6 +558,27 @@ typedef struct MslSeed {
   // refs/melee/src/melee/cm/camera.c::{Camera_80030CD8,Camera_80030BBC}
   // data/stages/final_destination.json: cam_bounds_world
   uint8_t camera_target_point_inside_stage_cam_bounds_u8[MSL_MAX_PLAYERS];
+  // Hidden magnifying-glass/offscreen damage counter (`fp->dmg.x1910`).
+  //
+  // Producer:
+  // - tools/slippi/seed_history.py derives the counter from replay `fp->x221F_b0`
+  //   camera/magnify visibility rows, `fp->x221F_b4` magnify-disable rows, the
+  //   camera-target-inside stage-cam predicate, `data/common/ft_common_data.json` x7AC/x7B0/x7B4
+  //   constants, and contact/action-stable next replay percent rows for terminal one-step ticks.
+  //   `Camera_80031144` and `Player_GetMoreFlagsBit3` are hidden replay state, so this is
+  //   explicitly a teacher-forced seed lane.
+  //
+  // Consumer:
+  // - Runtime Fighter_procUpdate model increments this counter while offscreen and applies the
+  //   source-owned 1% magnifying-glass damage when it reaches the interval. Replay-seeded rollout
+  //   validation clears/skips the lane because RL1 ignores the camera-box visibility bit that would
+  //   otherwise drive this approximation.
+  //
+  // Fallback:
+  // - 0 means no elapsed offscreen frames; live/non-replay starts build the counter causally.
+  //
+  // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+  uint16_t magnify_damage_counter_x1910[MSL_MAX_PLAYERS];
   // DownWait countdown timer (seeded; decomp-shaped).
   //
   // Decomp:

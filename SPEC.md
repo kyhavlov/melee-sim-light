@@ -196,6 +196,11 @@ sim-owned**:
   - Not modeled yet: EscapeF/EscapeB root-motion (`fp->x6A4_transNOffset`) and mid-roll facing flip (`ftCheckThrowB3`); we currently apply friction-only and use anim-end to return to Wait.
   - Not modeled yet: escape invincibility / hurtbox state changes during EscapeN/EscapeF/EscapeB.
 - Shield bubble center is **data-driven** from ISO-derived shield-tilt tables and sim guard-tilt state.
+  - Dash `x4` held-shield entry through `ftCo_Dash_IASA -> ftCo_80091AD8 -> ftCo_800923B4`
+    installs `ShieldDesc` before item collision; same-step laser shield contact uses the live
+    laser scaleZ endpoint lane and, without explicit hidden `ShieldBounced` seed provenance, takes
+    the laser `HitShield` destroy path. Fresh Dash powershield `GuardReflect` remains on the
+    ReflectDesc no-hit snapshot owner.
   Remaining approximations:
   - We do not yet model the full `shield_hit.bone` + `shield_hit.offset` semantics used in collision (`ftColl_8007B1B8`; refs/melee/src/melee/ft/ftcoll.c:1370-1383).
   - We do not yet model full 3D rotation/TransN/root-motion for shield placement (see `docs/SSANIM_AXIS_BASIS.md`).
@@ -1624,6 +1629,10 @@ Grounded motion-entry timing notes:
   `ftCo_Jump.c::fn_800CAF78` (`p_ftCommonData->x80` stick-y threshold). Walk, Turn, Squat,
   Ottotto, and Landing continue to use the narrower `ftCo_Jump_CheckInput` edge path unless their
   own decomp owner says otherwise.
+- RunBrake animation-end dispatches the destination Wait input callback in the same fighter proc.
+  `ftCo_RunBrake_Anim` exits through `ft_8008A2BC`; the following `ftCo_Wait_IASA` locomotion tail
+  can immediately consume current stick into Turn/Walk/Dash/Squat/Jump. Runtime uses the shared
+  Wait_IASA locomotion subset at this boundary instead of a squat-only terminal bridge.
 - KneeBend short-hop ownership follows callback phase order. `ftCo_KneeBend_Anim` enters JumpF/B
   when `cur_anim_frame >= jump_startup_time`; `ftCo_KneeBend_IASA` calls
   `ftCo_KneeBend_Check_ShortHop` only while the state remains KneeBend after Anim. A jump-button or
@@ -1677,14 +1686,14 @@ Grounded motion-entry timing notes:
   its script-owned turn gate sees ground velocity cross the pivot. The animation-end `fn_800CA644`
   check tests held stick against current facing if that pivot is already exposed, otherwise against
   the pending final pivot.
-- TurnRun mid-state pivot freeze is callback-owned rather than MSLFTSC1-owned today. When
-  `ftCo_TurnRun_Anim` sees hidden `cmd_vars[1]`, it first writes `frame_speed_mul=0` and marks
-  `mv.co.turnrun.x14`; on the next Anim callback, exact stopped ground velocity satisfies the
-  source `middle_anim_frame * gr_vel <= 0.01` check, so the callback restores rate and flips facing
-  without advancing `action_frame` on that tick. Teacher-forced seeds that already expose the
-  post-flip facing but still carry the prior zero rate resume before advancing the next tick
-  (`src/anim_timebase.c`; refs/melee/src/melee/ft/chara/ftCommon/ftCo_TurnRun.c::{
-  ftCo_TurnRun_Enter,ftCo_TurnRun_Anim}).
+- TurnRun mid-state pivot freeze is script-triggered and callback-consumed. MSLFTSC1 exposes the
+  common `ftCo_SM_TurnRun` `set_cmd_var(idx=1)` event; `ftCo_TurnRun_Anim` consumes it by writing
+  `frame_speed_mul=0` and marking `mv.co.turnrun.x14`. RunBrake -> TurnRun can enter with a
+  preserved anim frame past the script event, but the freeze is consumed on the next steady TurnRun
+  Anim callback, not on the entry row. Teacher-forced seeds that already expose the post-flip facing
+  but still carry the prior zero rate resume before advancing the next tick (`src/anim_timebase.c`,
+  `src/move_tables.c`; refs/melee/src/melee/ft/chara/ftCommon/ftCo_TurnRun.c::{
+  ftCo_TurnRun_Enter,ftCo_TurnRun_Anim}; data/scripts/{fox,falco}.bin::ftCo_SM_TurnRun).
 - TurnRun Phys keeps using the entry-facing `mv.co.turnrun.accel_mul`, not current facing after
   the mid-state pivot. `ftCo_TurnRun_Enter` copies the pre-turn `facing_dir` into
   `accel_mul`; `ftCo_TurnRun_Phys` tests `accel_mul * accel < 0` on later callbacks. Runtime maps
@@ -1882,9 +1891,11 @@ When a mismatch strongly suggests a missing internal that cannot be reconstructe
 - `fp->frame_speed_mul` fractional carry / true `cur_anim_frame` accumulator (hitlag coupling).
 - “Allow interrupt” / IASA gating latches beyond AttackAir* (many actions use DO_IASA with additional internal gates).
 - Hitbox hitlists / per-hitbox rehit timers (replacing conservative pair latch).
-- Stale-move queue (staling) + damage multipliers: seeded via replay-history derivation, but `fp->x206C_attack_instance` is not
-  exposed by Slippi. We conservatively model the `ft_800890D0` bump (on action-state transitions) but do not model additional bump
-  sites like `ft_800892A0`, which can change duplicate suppression in the stale table (see `tools/slippi/staling_history.py`).
+- Stale-move queue (staling) + damage multipliers: seeded via replay-history derivation, but
+  `fp->x206C_attack_instance` is not exposed by Slippi. The derivation models the `ft_800890D0`
+  action-transition bump and the Fox/Falco SpecialN Loop -> Loop `ft_800892A0` bump that gives
+  repeated blaster shots distinct stale-table identities. Other `ft_800892A0` callsites remain
+  owner-specific until they become suite-visible.
 - Ledge occupancy + ledge refresh timer(s) + per-action ledge regrab restrictions.
 - Ledge option `mv.co.cliff.x8` gate is currently approximated via a “previous-stick neutral reset” check for climb/drop on CliffWait
   (`src/ledge.c`); same-proc CliffCatch -> CliffWait IASA intentionally excludes climb/drop because
@@ -4692,6 +4703,11 @@ BODY collision-space residual split and rejected seed bridge:
     This fixes replay-real AttackDash/AttackAirLw shield-lineage rows such as
     `PRH:1830..1834`, `IAT:11146..11147`, and the GuardSetOff shield-damage onset rows
     `BHH:1803..1804` without a replay-proof BODY admission bridge.
+  - Retained bridge: the AttackAirLw -> fresh GuardOn replay-seeded rollout dense-hitlist trim is
+    validation-mode/provenance-specific. It exists because the dense group seed still cannot encode
+    the exact per-HitCapsule `victims_1` clear/copy provenance for this boundary. Delete it when
+    the replay seed carries the needed per-HitCapsule provenance owner instead of relying on dense
+    same-group materialization.
   - GuardSetOff onset provenance is replay-visible when the defender enters GuardSetOff hitlag and
     shield HP drops, even if the previous visible action was not Guard-family (for example
     DownStandD). That proves the prior shield branch `ftColl_80076CBC` wrote the same-group

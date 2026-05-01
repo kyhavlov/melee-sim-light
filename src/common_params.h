@@ -289,6 +289,12 @@ typedef struct MslCommonParams {
   // Decomp: refs/melee/src/melee/ft/ftcoll.c::{inlineB1,ftColl_80076ED8}
   // Datasheet: refs/datasheet/plco_offsets.txt (x7A8 = max overlap amount that still counts as phantom)
   float phantom_overlap_max_x7a8;  // p_ftCommonData->x7A8
+  // Magnifying-glass/offscreen damage counter.
+  // Decomp: refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+  uint16_t magnify_damage_interval_frames;  // p_ftCommonData->x7AC
+  uint16_t magnify_damage_percent_limit;    // p_ftCommonData->x7B0
+  uint16_t magnify_damage_amount;           // p_ftCommonData->x7B4
+  uint16_t _pad_u16_magnify_damage;
 
   // L-cancel window / lag divisor (refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c)
   uint8_t lcancel_window_frames;  // p_ftCommonData->xE4

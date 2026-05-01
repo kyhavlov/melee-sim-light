@@ -54,17 +54,42 @@ static inline uint8_t anim_timebase_turnrun_zero_speed_pause(const MslBatch* bat
     return 0u;
   }
   // TurnRun mid-state pivot owner:
-  // - ftCo_TurnRun_Anim freezes rate once `cmd_vars[1]` first fires, then on the next Anim
-  //   callback resumes rate and flips facing when `mv.co.walk.middle_anim_frame * gr_vel <= 0.01`.
-  // - Slippi exposes neither `cmd_vars[1]` nor `mv.co.turnrun.x14`. A seeded zero rate plus exact
-  //   zero ground velocity is the replay-visible post-freeze owner; no MSLFTSC1 event exists for
-  //   this common-state command today.
+  // - ftCo_TurnRun_Anim freezes rate once `cmd_vars[1]` first fires, then on a later Anim callback
+  //   resumes rate and flips facing when `mv.co.turnrun.accel_mul * gr_vel <= 0.01`.
+  // - `mv.co.turnrun.accel_mul` is initialized from the pre-turn facing direction; runtime maps it
+  //   to `facing_dir1`, the same source used by TurnRun_Phys.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_TurnRun.c::{
   //   ftCo_TurnRun_Enter,ftCo_TurnRun_Anim}
+  const float entry_facing_dir = (batch->state.facing_dir1[idx] < 0.0f) ? -1.0f : 1.0f;
   return (batch->state.on_ground[idx] != 0u && batch->state.frame_speed_mul_fp_q16_16[idx] == 0 &&
-          batch->state.speed_ground_x_self[idx] == 0.0f)
+          (entry_facing_dir * batch->state.speed_ground_x_self[idx]) <= 0.01f)
              ? 1u
              : 0u;
+}
+
+static inline uint8_t anim_timebase_turnrun_cmd1_freeze_due(const MslBatch* batch, size_t idx,
+                                                            uint16_t action_id,
+                                                            int16_t action_frame_pre) {
+  if (batch == NULL || action_id != (uint16_t)MSL_ACT_TURN_RUN ||
+      batch->state.on_ground[idx] == 0u || batch->state.hitlag[idx] != 0u ||
+      batch->state.seed_prev_action_id[idx] != (uint16_t)MSL_ACT_TURN_RUN ||
+      batch->state.frame_speed_mul_fp_q16_16[idx] == 0) {
+    return 0u;
+  }
+  const uint8_t entry_facing = anim_timebase_turnrun_entry_facing_bit(batch, idx);
+  if (batch->state.facing[idx] != entry_facing) {
+    return 0u;
+  }
+  // TurnRun mid-state pivot owner, live rollout path:
+  // - The common TurnRun script sets cmd_vars[1] (MSLFTSC1 set_cmd_var idx=1).
+  // - ftCo_TurnRun_Anim responds by setting anim rate to 0 and arming mv.co.turnrun.x14.
+  // - Skip the first TurnRun row after Run/RunBrake entry: source can enter TurnRun with a
+  //   preserved anim_start past the command frame, but the command-owned freeze is only consumed
+  //   on the next steady TurnRun Anim callback.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_TurnRun.c::{
+  //   ftCo_TurnRun_Enter,ftCo_TurnRun_Anim}
+  // refs/melee/src/melee/ft/ftaction.c::ftAction_80071820
+  return move_tables_turnrun_cmd1_active(batch->state.char_id[idx], (float)action_frame_pre);
 }
 
 static inline int anim_timebase_throw_index_from_action(uint16_t action_id) {
@@ -660,6 +685,8 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
           // zero rate. Restore the callback-owned rate before this tick advances.
           batch->state.frame_speed_mul_fp_q16_16[idx] = MSL_Q16_16_ONE;
         }
+      } else if (anim_timebase_turnrun_cmd1_freeze_due(batch, idx, a, action_frame_pre)) {
+        batch->state.frame_speed_mul_fp_q16_16[idx] = 0;
       }
 
       // Grounded smash early-hold replay bridge:

@@ -388,6 +388,11 @@ int common_params_init(void) {
       json_get_f32(buf, "shield_setoff_push_mul_non_yoshi",
                    &g_params.shield_setoff_push_mul_non_yoshi) != 0 ||
       json_get_f32(buf, "phantom_overlap_max_x7a8", &g_params.phantom_overlap_max_x7a8) != 0 ||
+      json_get_u16(buf, "magnify_damage_interval_frames",
+                   &g_params.magnify_damage_interval_frames) != 0 ||
+      json_get_u16(buf, "magnify_damage_percent_limit", &g_params.magnify_damage_percent_limit) !=
+          0 ||
+      json_get_u16(buf, "magnify_damage_amount", &g_params.magnify_damage_amount) != 0 ||
       json_get_u8(buf, "lcancel_window_frames", &g_params.lcancel_window_frames) != 0 ||
       json_get_f32(buf, "lcancel_lag_div", &g_params.lcancel_lag_div) != 0 ||
       json_get_f32(buf, "landing_fall_special_lag_frames",

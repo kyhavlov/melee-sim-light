@@ -3612,6 +3612,7 @@ def _main_impl(args) -> None:
         derive_camera_box_visible_x221f_b0,
         derive_camera_target_point_inside_stage_cam_bounds,
         derive_camera_target_world,
+        derive_magnify_damage_counter_x1910,
         derive_rebirth_camera_anchor_y,
         derive_capture_grab_hidden_post,
         derive_grab_mash_stick_sign_post,
@@ -4293,14 +4294,28 @@ def _main_impl(args) -> None:
         samples["seed_t"]["camera_target_world_y_f32"][:, slot] = camera_target_world_y[:-1]
         samples["seed_t"]["camera_target_world_z_f32"][:, slot] = camera_target_world_z[:-1]
         samples["seed_t"]["camera_box_radius_f32"][:, slot] = camera_box_radius[:-1]
-        samples["seed_t"]["camera_target_point_inside_stage_cam_bounds_u8"][:, slot] = (
-            derive_camera_target_point_inside_stage_cam_bounds(
-                stage_id_u32=int(stage_id),
-                camera_target_world_x_f32=camera_target_world_x,
-                camera_target_world_y_f32=camera_target_world_y,
-                camera_box_radius_f32=camera_box_radius,
-            )[:-1]
+        camera_target_inside_stage_cam_bounds = derive_camera_target_point_inside_stage_cam_bounds(
+            stage_id_u32=int(stage_id),
+            camera_target_world_x_f32=camera_target_world_x,
+            camera_target_world_y_f32=camera_target_world_y,
+            camera_box_radius_f32=camera_box_radius,
         )
+        samples["seed_t"]["camera_target_point_inside_stage_cam_bounds_u8"][:, slot] = (
+            camera_target_inside_stage_cam_bounds[:-1]
+        )
+        samples["seed_t"]["magnify_damage_counter_x1910"][:, slot] = derive_magnify_damage_counter_x1910(
+            action_id_u16=post_state,
+            state_flags_u8=state_flags,
+            camera_target_point_inside_stage_cam_bounds_u8=camera_target_inside_stage_cam_bounds,
+            percent_f32=post_percent,
+            hitlag_u16=post_hitlag,
+            hitstun_u16=post_hitstun,
+            instance_hit_by_u16=instance_hit_by,
+            last_hit_by_u8=last_hit_by,
+            interval_frames=int(common["magnify_damage_interval_frames"]),
+            percent_limit=int(common["magnify_damage_percent_limit"]),
+            damage_amount=int(common["magnify_damage_amount"]),
+        )[:-1]
         samples["seed_t"]["downwait_timer"][:, slot] = derive_downwait_timer(
             action_id_u16=post_state,
             hitstun_u16=post_hitstun,

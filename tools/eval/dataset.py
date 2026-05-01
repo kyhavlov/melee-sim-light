@@ -236,6 +236,11 @@ SEED_DTYPE = np.dtype(
         # refs/melee/src/melee/cm/camera.c::{Camera_80030CD8,Camera_80030BBC}
         # data/stages/final_destination.json: cam_bounds_world
         ("camera_target_point_inside_stage_cam_bounds_u8", _arr("u1", MAX_PLAYERS)),
+        # Hidden magnifying-glass/offscreen damage counter (`fp->dmg.x1910`). Teacher-forced from
+        # camera visibility, camera-target-inside, and next replay percent because Camera_80031144
+        # / Player_GetMoreFlagsBit3 are hidden replay state.
+        # refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+        ("magnify_damage_counter_x1910", _arr("<u2", MAX_PLAYERS)),
         ("downwait_timer", _arr("<i2", MAX_PLAYERS)),
         # PassiveWall / PassiveWallJump hidden startup timer (`fp->mv.co.passivewall.timer`).
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::{ftCo_800C1E64,ftCo_PassiveWall_Anim}

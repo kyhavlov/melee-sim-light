@@ -537,6 +537,7 @@ static int step_one_frame_core(MslBatch* batch, const uint8_t* prev_input_bytes,
   anim_timebase_apply_deferred_tick_once_post_combat(batch);
   sync_runbrake_cmd0_post_frame(batch);
   state_flags_refresh_post_frame(batch);
+  timers_update_magnify_damage_post_frame(batch);
   promote_floor_sweep_prev_pos_post_frame(batch);
   promote_seed_prev_action_snapshot_post_frame(batch);
   clear_seed_owned_transients_post_frame(batch);

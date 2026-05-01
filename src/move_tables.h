@@ -176,6 +176,18 @@ uint8_t move_tables_dash_cmd0_active(uint8_t char_id, float cur_anim_frame_f32);
 // Source of truth: data/scripts/{fox,falco}.bin (MSLFTSC1) moves["ftCo_SM_RunBrake"]["events"] set_cmd_var(idx=0).
 uint8_t move_tables_runbrake_cmd0_active(uint8_t char_id, float cur_anim_frame_f32);
 
+// Returns whether cmd_var[1] is set at the given cur_anim_frame for TurnRun.
+//
+// Decomp:
+// - TurnRun_Anim freezes anim rate once cmd_vars[1] is set, then later resumes and flips facing
+//   when the hidden turnrun x14 latch has already been armed and ground velocity reaches the pivot.
+// refs/melee/src/melee/ft/chara/ftCommon/ftCo_TurnRun.c::ftCo_TurnRun_Anim
+// refs/melee/src/melee/ft/ftaction.c::ftAction_80071820
+//
+// Source of truth: data/scripts/{fox,falco}.bin (MSLFTSC1)
+// moves["ftCo_SM_TurnRun"]["events"] set_cmd_var(idx=1).
+uint8_t move_tables_turnrun_cmd1_active(uint8_t char_id, float cur_anim_frame_f32);
+
 // Returns whether CatchPull/CatchDashPull should enter CatchWait due to the move script setting
 // fp->throw_flags (x2210) via the `set_throw_flags` command.
 //

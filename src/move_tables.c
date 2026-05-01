@@ -88,6 +88,7 @@ static MslFrameWindow g_jab_rapid_by_char_grounded_attack[256][MSL_GROUNDED_ATTA
 static MslFramePulses g_attack100_loop_end_check_by_char[256];
 static MslFrameWindow g_cmd0_by_char_dash[256];
 static MslFrameWindow g_cmd0_by_char_runbrake[256];
+static MslFrameWindow g_cmd1_by_char_turnrun[256];
 static MslFrameWindow g_cmd0_by_char_escapeair[256];
 static MslFrameWindow g_throw_flags_by_char_catch[256];
 static MslFrameWindow g_throw_flags_by_char_catchdash[256];
@@ -510,8 +511,9 @@ static const MslScriptEventRaw* script_entry_event(const MslScriptTableRaw* tabl
   return &table->events[entry->first_event + i];
 }
 
-static int parse_entry_cmd0_window(const MslScriptTableRaw* table, const MslScriptEntryRaw* entry,
-                                   uint8_t open_end, MslFrameWindow* out) {
+static int parse_entry_cmd_var_window(const MslScriptTableRaw* table,
+                                      const MslScriptEntryRaw* entry, int want_idx,
+                                      uint8_t open_end, MslFrameWindow* out) {
   if (table == NULL || entry == NULL || out == NULL) {
     return -1;
   }
@@ -526,7 +528,7 @@ static int parse_entry_cmd0_window(const MslScriptTableRaw* table, const MslScri
     int idx = -1;
     int value = 0;
     if (json_get_i32_in_range(ev->payload, end, "idx", &idx) == 0 &&
-        json_get_i32_in_range(ev->payload, end, "value", &value) == 0 && idx == 0) {
+        json_get_i32_in_range(ev->payload, end, "value", &value) == 0 && idx == want_idx) {
       if (value != 0 && on_frame < 0) {
         on_frame = (int)ev->frame;
       } else if (value == 0 && on_frame >= 0 && off_frame < 0) {
@@ -550,6 +552,11 @@ static int parse_entry_cmd0_window(const MslScriptTableRaw* table, const MslScri
   out->end_af = (int16_t)off_frame;
   out->loaded = 1;
   return 0;
+}
+
+static int parse_entry_cmd0_window(const MslScriptTableRaw* table, const MslScriptEntryRaw* entry,
+                                   uint8_t open_end, MslFrameWindow* out) {
+  return parse_entry_cmd_var_window(table, entry, 0, open_end, out);
 }
 
 static int parse_entry_allow_interrupt_window(const MslScriptTableRaw* table,
@@ -1001,6 +1008,11 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
 
   load_if_cmd0(&script, char_id, (uint16_t)MSL_SM_DASH, 1, &g_cmd0_by_char_dash[char_id]);
   load_if_cmd0(&script, char_id, (uint16_t)MSL_SM_RUN_BRAKE, 1, &g_cmd0_by_char_runbrake[char_id]);
+  entry = script_table_raw_find_entry(&script, (uint16_t)MSL_SM_TURN_RUN);
+  win = (MslFrameWindow){0};
+  if (entry != NULL && parse_entry_cmd_var_window(&script, entry, 1, 1, &win) == 0) {
+    g_cmd1_by_char_turnrun[char_id] = win;
+  }
   load_if_cmd0(&script, char_id, (uint16_t)MSL_SM_ESCAPE_AIR, 1,
                &g_cmd0_by_char_escapeair[char_id]);
 
@@ -1352,6 +1364,17 @@ uint8_t move_tables_dash_cmd0_active(uint8_t char_id, float cur_anim_frame_f32) 
 
 uint8_t move_tables_runbrake_cmd0_active(uint8_t char_id, float cur_anim_frame_f32) {
   const MslFrameWindow win = g_cmd0_by_char_runbrake[char_id];
+  if (!win.loaded) {
+    return 0;
+  }
+  // Command-script frame events are evaluated on fp->cur_anim_frame (float).
+  // refs/melee/src/melee/ft/ftaction.c::ftAction_80071820
+  return (cur_anim_frame_f32 >= (float)win.start_af && cur_anim_frame_f32 < (float)win.end_af) ? 1
+                                                                                               : 0;
+}
+
+uint8_t move_tables_turnrun_cmd1_active(uint8_t char_id, float cur_anim_frame_f32) {
+  const MslFrameWindow win = g_cmd1_by_char_turnrun[char_id];
   if (!win.loaded) {
     return 0;
   }

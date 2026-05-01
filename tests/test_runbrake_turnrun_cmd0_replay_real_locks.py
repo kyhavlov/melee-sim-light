@@ -16,7 +16,12 @@ def _one_step_out_compare(*, ds, row) -> np.ndarray:
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
     try:
         seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
         prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
@@ -93,4 +98,35 @@ def test_runbrake_turnrun_cmd0_replay_rows(case: _Case) -> None:
     exp_flags = [int(x) for x in ref["state_flags"][p]]
     assert got_flags == exp_flags, (
         f"{case.dataset} rec{case.record} p{p}: state_flags expected={exp_flags} got={got_flags}"
+    )
+
+
+@pytest.mark.integration
+def test_runbrake_anim_end_wait_iasa_turns_same_frame() -> None:
+    # Replay-real lock for RunBrake_Anim -> Wait -> Wait_IASA in one fighter proc:
+    # - RunBrake_Anim exits through ft_8008A2BC when the motion ends.
+    # - The destination Wait_IASA can then consume the current stick into Turn on the same frame.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::ftCo_RunBrake_Anim
+    # refs/melee/src/melee/ft/ft_0892.c::ft_8008A2BC
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[901:902]
+    seed = row["seed_t"][0]
+    ref = row["ref_t1"][0]
+    p = 0
+    assert int(seed["action_id"][p]) == 23  # RunBrake
+    assert int(seed["action_frame"][p]) == 17
+    assert int(ref["action_id"][p]) == 18  # Turn
+    assert int(ref["action_frame"][p]) == 1
+
+    out = _one_step_out_compare(ds=ds, row=row)[0]
+    for field in ("action_id", "action_frame", "animation_index"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    assert float(out["speed_ground_x_self"][p]) == pytest.approx(
+        float(ref["speed_ground_x_self"][p]), abs=1e-6
     )

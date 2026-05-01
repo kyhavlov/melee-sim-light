@@ -676,6 +676,15 @@ static void hitboxes_seed_bridge_trim_impossible_indefinite(
     const uint8_t guard_entry_desc_pending =
         (!shield_desc_active && v_action == (uint16_t)MSL_ACT_GUARD_ON && shield_input_held) ? 1u
                                                                                              : 0u;
+    const uint8_t is_replay_rollout =
+        (batch->replay_rollout_reseeded != NULL && batch->replay_rollout_reseeded[bi] != 0u) ? 1u
+                                                                                             : 0u;
+    const uint8_t attackair_guard_reentry_owner =
+        (hitboxes_seed_bridge_is_attackair_guard_shield_reentry_owner(attacker_action) ||
+         (is_replay_rollout && attacker_action == (uint16_t)MSL_ACT_ATTACK_AIR_LW &&
+          v_action == (uint16_t)MSL_ACT_GUARD_ON))
+            ? 1u
+            : 0u;
     if (attacker_action == (uint16_t)MSL_ACT_ATTACK_AIR_N && v_action == (uint16_t)MSL_ACT_WAIT &&
         batch->state.action_frame[v_idx] <= 1 && batch->state.hitlag[v_idx] == 0u &&
         batch->state.hitstun[v_idx] == 0u && e->id16 == batch->state.instance_id[v_idx]) {
@@ -727,9 +736,9 @@ static void hitboxes_seed_bridge_trim_impossible_indefinite(
 
     if (((shield_desc_active && hitboxes_seed_bridge_is_guard_transition_owner(v_action)) ||
          guard_admission_pending || guard_entry_desc_pending) &&
-        hitboxes_seed_bridge_is_attackair_guard_shield_reentry_owner(attacker_action) &&
-        batch->state.hitlag[a_idx] == 0u && batch->state.hitlag[v_idx] == 0u &&
-        batch->state.hitstun[a_idx] == 0u && batch->state.hitstun[v_idx] == 0u && e->cd == 0u) {
+        attackair_guard_reentry_owner && batch->state.hitlag[a_idx] == 0u &&
+        batch->state.hitlag[v_idx] == 0u && batch->state.hitstun[a_idx] == 0u &&
+        batch->state.hitstun[v_idx] == 0u && e->cd == 0u) {
       // Reseed-only dense shield re-entry trim:
       // - ftColl_80078C70 checks lbColl_8000ACFC(victim_fp, hitcapsule) before the shield
       //   overlap branch and then calls ftColl_80076CBC for the accepted shield hit.
@@ -743,6 +752,10 @@ static void hitboxes_seed_bridge_trim_impossible_indefinite(
       // Keep this bridge out of authoritative per-HitCapsule seeds (guarded above) and out of
       // active hitlag/hitstun rows; real prior shield contact would still carry shield-hit hitlag
       // through Fighter_ProcessHit.
+      // - AttackAirLw is admitted only for replay-seeded rollout starts on GuardOn entry: normal
+      //   one-step rows have explicit ShieldDesc/per-HitCapsule seed lanes for this boundary, while
+      //   rollouts can only carry the coarser dense hit_group map from the seed frame into the live
+      //   GuardOn entry. Established Guard rows keep the dense suppression latch.
       // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC,ftColl_80076808}
       // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C

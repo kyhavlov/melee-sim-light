@@ -1664,6 +1664,118 @@ static inline uint8_t down_bound_airborne_ledge_cross_to_fall(const MslBatch* ba
                      : (next_x < edge_x - endpoint_clamp ? 1u : 0u);
 }
 
+static inline uint8_t down_bound_grounded_overlap_nudge_crosses_ledge(const MslBatch* batch,
+                                                                      const MslCommonParams* c,
+                                                                      size_t bi, int p,
+                                                                      uint32_t stage_id,
+                                                                      float* out_nudge_x) {
+  if (batch == NULL || c == NULL || out_nudge_x == NULL) {
+    return 0u;
+  }
+  *out_nudge_x = 0.0f;
+
+  const size_t idx = msl_idx_player((int)bi, p);
+  if (!is_down_bound(batch->state.action_id[idx]) || batch->state.stocks[idx] == 0u ||
+      batch->state.on_ground[idx] == 0u || batch->state.hitlag_started_frame[idx] != 0u) {
+    return 0u;
+  }
+
+  const MslStageFloorGraph* floor_graph = stage_collision_get_floor_graph(stage_id);
+  if (floor_graph == NULL) {
+    return 0u;
+  }
+  const int self_line = stage_collision_floor_line_index(stage_id, batch->state.ground_id[idx]);
+  if (self_line < 0 || (size_t)self_line >= floor_graph->line_count) {
+    return 0u;
+  }
+  const MslStageFloorLine* line = &floor_graph->lines[(size_t)self_line];
+  if (line->is_ledge == 0u) {
+    return 0u;
+  }
+
+  const MslCharParams* self = msl_char_params(batch->state.char_id[idx]);
+  if (self == NULL) {
+    return 0u;
+  }
+
+  float nudge_x = 0.0f;
+  const int num_players = (int)batch->config.num_players;
+  const float self_center_x =
+      batch->state.pos_x[idx] + self->pushbox_x * (float)batch->state.facing_dir1[idx];
+  for (int q = 0; q < num_players; q++) {
+    if (q == p) {
+      continue;
+    }
+
+    const size_t oidx = msl_idx_player((int)bi, q);
+    if (batch->state.stocks[oidx] == 0u || batch->state.on_ground[oidx] == 0u ||
+        batch->state.hitlag_started_frame[oidx] != 0u) {
+      continue;
+    }
+    if (msl_action_is_grabbed_victim(batch->state.action_id[oidx])) {
+      continue;
+    }
+
+    const int other_line = stage_collision_floor_line_index(stage_id, batch->state.ground_id[oidx]);
+    if (other_line < 0 || (size_t)other_line >= floor_graph->line_count) {
+      continue;
+    }
+    const MslStageFloorLine* self_floor = &floor_graph->lines[(size_t)self_line];
+    if (!(other_line == self_line || self_floor->prev == other_line ||
+          self_floor->next == other_line)) {
+      continue;
+    }
+
+    const MslCharParams* other = msl_char_params(batch->state.char_id[oidx]);
+    if (other == NULL) {
+      continue;
+    }
+    const float other_center_x =
+        batch->state.pos_x[oidx] + other->pushbox_x * (float)batch->state.facing_dir1[oidx];
+    const float delta_x = self_center_x - other_center_x;
+    if (msl_absf(delta_x) >= self->pushbox_y + other->pushbox_y) {
+      continue;
+    }
+
+    // Decomp owner:
+    // - Fighter_8006A360 runs ftCommon_8007E0E4 before Fighter_procUpdate.
+    // - ftCommon_8007DD7C writes +/-p_ftCommonData->x450 into xF8_playerNudgeVel.x on grounded
+    //   fighter-overlap, and Fighter_procUpdate applies it before the later Coll callback.
+    // - DownBound_Coll then uses ft_80082708 -> mpColl_8004B108, so a same-frame ledge-floor
+    //   contact that is pushed outside the ledge must be consumed before selecting Fall.
+    // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+    // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007DD7C,ftCommon_8007E0E4}
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Coll
+    if (delta_x < 0.0f) {
+      nudge_x -= c->player_nudge_x;
+    } else if (delta_x > 0.0f) {
+      nudge_x += c->player_nudge_x;
+    } else if (q < p) {
+      nudge_x -= c->player_nudge_x;
+    } else {
+      nudge_x += c->player_nudge_x;
+    }
+  }
+
+  if (!(nudge_x > 0.0f || nudge_x < 0.0f)) {
+    return 0u;
+  }
+
+  const float edge_x = (nudge_x > 0.0f) ? ((line->x0 > line->x1) ? line->x0 : line->x1)
+                                        : ((line->x0 < line->x1) ? line->x0 : line->x1);
+  enum { MSL_DOWNBOUND_FLOOR_ENDPOINT_CLAMP_MILLI = 100 };
+  const float endpoint_clamp = (float)MSL_DOWNBOUND_FLOOR_ENDPOINT_CLAMP_MILLI * 0.001f;
+  const float nudged_x = batch->state.pos_x[idx] + nudge_x;
+  const uint8_t crosses = (nudge_x > 0.0f) ? (nudged_x > edge_x + endpoint_clamp ? 1u : 0u)
+                                           : (nudged_x < edge_x - endpoint_clamp ? 1u : 0u);
+  if (crosses == 0u) {
+    return 0u;
+  }
+
+  *out_nudge_x = nudge_x;
+  return 1u;
+}
+
 static inline uint8_t damage_iasa_lockout_x221c_b6(const MslBatch* batch, size_t idx) {
   if (batch == NULL) {
     return 0u;
@@ -2514,6 +2626,26 @@ void knockdown_update_post_collision(MslBatch* batch) {
       if (!was_ground && !now_ground && is_damage_fly_action(a0) &&
           damagefly_try_enter_flyreflect(batch, c, idx)) {
         continue;
+      }
+
+      if (now_ground && is_down_bound(a0) && batch->state.frame_start_on_ground[idx] == 0u) {
+        float nudge_x = 0.0f;
+        if (down_bound_grounded_overlap_nudge_crosses_ledge(batch, c, (size_t)bi, p, stage_id,
+                                                            &nudge_x)) {
+          // Source applies the common grounded overlap displacement before DownBound_Coll's
+          // allow-ground-to-air test. Consume only the ledge-crossing slice here; ordinary
+          // non-edge DownBound floor contacts keep the existing collision result.
+          batch->state.pos_x[idx] += nudge_x;
+          batch->state.on_ground[idx] = 0u;
+          batch->state.fall_fast[idx] = 0;
+          batch->state.jumps_left[idx] = ch->max_jumps > 0 ? (uint8_t)(ch->max_jumps - 1) : 0;
+          batch->state.speed_air_x_self[idx] = batch->state.speed_ground_x_self[idx];
+          batch->state.speed_ground_x_self[idx] = 0.0f;
+          batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
+          batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL;
+          msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+          continue;
+        }
       }
 
       if (!was_ground && now_ground) {

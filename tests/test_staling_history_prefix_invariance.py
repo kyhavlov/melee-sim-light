@@ -51,6 +51,45 @@ def test_staling_history_accounts_hidden_guardon_guard_guardoff_default_bump() -
     idx_by_frame = {int(frame_id): i for i, frame_id in enumerate(frame_ids)}
 
     hist = derive_staling_history(frames, src_ports=[1, 2])
-    assert int(hist.attack_instance[idx_by_frame[5139], 0]) == 1127
-    assert int(hist.attack_instance[idx_by_frame[5140], 0]) == 1132
-    assert int(hist.attack_instance[idx_by_frame[5142], 1]) == 1133
+    assert int(hist.attack_instance[idx_by_frame[5139], 0]) == 1132
+    assert int(hist.attack_instance[idx_by_frame[5140], 0]) == 1137
+    assert int(hist.attack_instance[idx_by_frame[5142], 1]) == 1138
+
+
+def test_staling_history_specialn_loop_restart_bumps_laser_stale_instance() -> None:
+    # PPA has two Falco SpecialAirNLoop shots in one visible loop family before a later laser hit.
+    # Vanilla runs ftFx_SpecialN_OnChangeAction on the same-action Loop restart; that callback calls
+    # ft_800892A0 and gives the second laser a distinct x206C/xD8C stale identity. Without this,
+    # the second move-18 laser is duplicate-suppressed and later laser damage is over-staled.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
+    #   ftFx_SpecialNLoop_Anim,ftFx_SpecialAirNLoop_Anim,ftFx_SpecialN_OnChangeAction}
+    # refs/melee/src/melee/ft/ft_0881.c::ft_800892A0
+    path = "replays/validation/aggregate_recent/PriceyPartialAlbatross.slp"
+    game = _read_slippi(path, False)
+    frames_all = game.frames
+    assert frames_all is not None
+
+    keep = finalized_frame_indices(frames_all.field("id").to_numpy(zero_copy_only=False))
+    frames = frames_all.take(pa.array(keep))
+    frame_ids = frames.field("id").to_numpy(zero_copy_only=False)
+    idx_by_frame = {int(frame_id): i for i, frame_id in enumerate(frame_ids)}
+
+    hist = derive_staling_history(frames, src_ports=[1, 2])
+    row = idx_by_frame[4988]
+    falco = 1
+    assert int(hist.stale_queue_index[row, falco]) == 7
+    assert [int(x) for x in hist.stale_move_id[row, falco]] == [
+        18,
+        18,
+        15,
+        2,
+        13,
+        15,
+        50,
+        15,
+        21,
+        15,
+    ]
+    assert int(hist.stale_attack_instance[row, falco, 0]) != int(
+        hist.stale_attack_instance[row, falco, 1]
+    )

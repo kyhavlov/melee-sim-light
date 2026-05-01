@@ -3490,24 +3490,22 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_800939B4,ftCo_80093A50,ftCo_80092450}
       // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B1B8
       const uint16_t seed_prev_action = batch->state.seed_prev_action_id[d_idx];
-      const uint8_t shield_fresh_dash_full_shield_snapshot =
+      const uint8_t shield_fresh_dash_guardreflect_full_shield_snapshot =
           (batch->state.prev_action_id[d_idx] == (uint16_t)MSL_ACT_DASH &&
            batch->state.action_frame[d_idx] < 0 &&
            batch->state.animation_index[d_idx] == UINT32_MAX &&
-           // Dash IASA shield admission can enter GuardOn through ftCo_80091AD8 ->
-           // ftCo_800923B4 after the `dash.x4 != 0` early-branch handoff, or GuardReflect through
-           // ftCo_80091A4C -> ftCo_800939B4 -> ftCo_80093A50 (digital powershield path). Keep the
-           // full-shield no-hit snapshot suppression aligned to those fresh entry owners, but do
-           // not suppress Dash `x4 == 0` GuardOn rows that can take same-step shield contact.
+           // Dash IASA digital powershield admission enters GuardReflect through ftCo_80091A4C ->
+           // ftCo_800939B4 -> ftCo_80093A50. Keep the full-shield no-hit snapshot suppression
+           // aligned to that fresh ReflectDesc owner. Held-shield GuardOn admission through
+           // ftCo_80091AD8 -> ftCo_800923B4 installs ShieldDesc before item callbacks, so it must
+           // stay on normal geometry-driven shield precedence.
            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
-           //   ftCo_80091AD8,ftCo_800923B4,ftCo_80091A4C,ftCo_800939B4,ftCo_80093A50}
-           ((batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_ON &&
-             batch->state.guard_entry_via_dash_91ad8[d_idx] != 0u) ||
-            (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
-             batch->state.guard_reflect_timer_x14_seed[d_idx] == 0u &&
-             batch->state.guard_reflect_timer_x18_seed[d_idx] == 0u)) &&
-           common != NULL && batch->state.shield_hp[d_idx] >= common->start_shield_health)
+           //   ftCo_80091A4C,ftCo_800939B4,ftCo_80093A50}
+           batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
+           batch->state.guard_reflect_timer_x14_seed[d_idx] == 0u &&
+           batch->state.guard_reflect_timer_x18_seed[d_idx] == 0u && common != NULL &&
+           batch->state.shield_hp[d_idx] >= common->start_shield_health)
               ? 1u
               : 0u;
       // GuardOn_Anim -> GuardOn_IASA -> GuardReflect followup:
@@ -3528,15 +3526,16 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
            batch->state.guard_reflect_timer_x18_seed[d_idx] == 0u)
               ? 1u
               : 0u;
-      // Dash_IASA `dash.x4 != 0` handoff into GuardOn:
-      // - After the early `dash.x4 && cur_anim_frame <= x44` slice, ftCo_Dash_IASA can reach held
+      // Dash_IASA `dash.x4 != 0` handoff into held-shield GuardOn:
+      // - After the early `dash.x4 && cur_anim_frame <= x44` slice, ftCo_Dash_IASA can reach
       //   GuardOn through ftCo_80091AD8 -> ftCo_800923B4.
-      // - The current frame's item collision has already passed for this handoff, so the newly
-      //   created GuardOn shield descriptor is not eligible for same-step item shield precedence.
-      // - Dash `x4 == 0` rows that reach ftCo_80091AD8 directly are not tagged and keep normal
-      //   same-step shield contact.
+      // - ftCo_800924C0 installs ShieldDesc before item callbacks, so same-step item shield
+      //   contact is geometry-owned rather than globally deferred.
+      // - This fresh entry must use the article's actual scaleZ endpoint lane; the reduced
+      //   identity-cap proxy over-admits stale trailing laser samples on Dash controls.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091AD8,ftCo_800923B4}
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091AD8,ftCo_800923B4,ftCo_800924C0}
+      // refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Anim,it_8029C4D4}
       const uint8_t shield_dash_91ad8_guardon_same_step =
           (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_ON &&
            batch->state.guard_on_entered_this_frame[d_idx] != 0u &&
@@ -3586,9 +3585,8 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         shr = item_guard_shield_radius_from_state(batch, common, d_idx);
       }
       if (shr > 0.0f && !guard_on_entry_from_landing && !guard_reflect_entry_from_landing &&
-          !shield_fresh_dash_full_shield_snapshot &&
-          !shield_dash_guardon_followup_guard_reflect_snapshot &&
-          !shield_dash_91ad8_guardon_same_step) {
+          !shield_fresh_dash_guardreflect_full_shield_snapshot &&
+          !shield_dash_guardon_followup_guard_reflect_snapshot) {
         // Use derived shield bubble center from shields_refresh() (same geometry used by the
         // fighter-vs-fighter combat pass).
         float shx = batch->state.shield_x[d_idx];
@@ -3768,8 +3766,9 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         // refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Anim,it_8029C4D4}
         // refs/melee/src/melee/it/itcoll.c::it_8027137C
         const uint8_t shield_cap_enabled =
-            (defender_guard_reflect_no_submotion_snapshot &&
-             !(guard_reflect_late_nonshield_snapshot && laser_state == 0u))
+            (shield_dash_91ad8_guardon_same_step ||
+             (defender_guard_reflect_no_submotion_snapshot &&
+              !(guard_reflect_late_nonshield_snapshot && laser_state == 0u)))
                 ? 0u
                 : 1u;
         // Shield HitCapsule endpoint ownership:
@@ -4434,6 +4433,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
             shield_bounce_vy = batch->state.item_shield_bounce_seed_vel_y[ii];
             can_shield_bounce = 1u;
           } else if (shield_bounce_contact_found && shield_bounce_source_allows &&
+                     !shield_dash_91ad8_guardon_same_step &&
                      !guard_reflect_stale_x18_hitshield_snapshot &&
                      !guard_reflect_pure_final_x14_hitshield &&
                      // Late locomotion->GuardReflect frozen snapshots can already resolve

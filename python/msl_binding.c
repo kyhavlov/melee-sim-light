@@ -3052,6 +3052,10 @@ static PyObject* msl_move_tables_debug_query_py(PyObject* self, PyObject* args) 
     return PyLong_FromLong(
         (long)move_tables_runbrake_cmd0_active((uint8_t)char_id, f32_from_double(a)));
   }
+  if (strcmp(kind, "turnrun_cmd1") == 0) {
+    return PyLong_FromLong(
+        (long)move_tables_turnrun_cmd1_active((uint8_t)char_id, f32_from_double(a)));
+  }
   if (strcmp(kind, "catchpull_enter_wait") == 0) {
     return PyLong_FromLong((long)move_tables_catchpull_should_enter_wait(
         (uint8_t)char_id, (uint16_t)action_or_msid, f32_from_double(a)));

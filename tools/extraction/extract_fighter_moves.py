@@ -729,6 +729,10 @@ def main() -> None:
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::ftCo_RunBrake_IASA
         # refs/melee/src/melee/ft/ftaction.c::ftAction_80071820
         "ftCo_SM_RunBrake",
+        # TurnRun cmd_var[1] gates the mid-state pivot freeze in TurnRun_Anim.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_TurnRun.c::ftCo_TurnRun_Anim
+        # refs/melee/src/melee/ft/ftaction.c::ftAction_80071820
+        "ftCo_SM_TurnRun",
         # Grounded->airborne jump transitions:
         # - ftCo_Jump* scripts own ftcmd var / allow_interrupt timing for jump followups.
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c

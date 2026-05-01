@@ -1418,6 +1418,139 @@ def derive_camera_box_visible_x221f_b0(*, state_flags_u8: np.ndarray) -> np.ndar
     return ((sf[:, state_flags_221f_index] & np.uint8(state_flag_221f_b0_mask)) != 0).astype(np.uint8)
 
 
+def derive_magnify_damage_counter_x1910(
+    *,
+    action_id_u16: np.ndarray,
+    state_flags_u8: np.ndarray,
+    camera_target_point_inside_stage_cam_bounds_u8: np.ndarray,
+    percent_f32: np.ndarray,
+    hitlag_u16: np.ndarray | None = None,
+    hitstun_u16: np.ndarray | None = None,
+    instance_hit_by_u16: np.ndarray | None = None,
+    last_hit_by_u8: np.ndarray | None = None,
+    interval_frames: int,
+    percent_limit: int,
+    damage_amount: int,
+) -> np.ndarray:
+    """
+    Derive the hidden magnifying-glass damage counter (`fp->dmg.x1910`) at seed time.
+
+    Purpose:
+    - Fighter_procUpdate increments `dmg.x1910` while the player is offscreen in the magnifying
+      display and applies `p_ftCommonData->x7B4` damage every `x7AC` frames below the `x7B0`
+      percent limit.
+    - Slippi exposes the camera/magnify visibility bit (`fp->x221F_b0`) and percent, while the
+      seed pipeline derives the decomp-shaped camera-target-inside predicate. `Camera_80031144`
+      and `Player_GetMoreFlagsBit3` are hidden, so the terminal counter value is teacher-forced
+      only when the next replay row shows the source-shaped magnify percent tick. This avoids
+      turning ordinary camera-subject visibility or contact-attributed damage into percent damage.
+
+    Causality / prefix-invariance:
+    - Non-causal one-step hidden lane: uses `percent[i + 1]` only to decide whether row `i`
+      should carry the terminal counter that causes the vanilla tick. Replay-seeded rollout clears
+      this lane; live starts build it causally in runtime.
+
+    Decomp / data anchors:
+    - refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate (`fp->dmg.x1910`)
+    - refs/melee/src/melee/if/ifmagnify.c::ifMagnify_802FC998
+    - data/common/ft_common_data.json::{
+      magnify_damage_interval_frames,magnify_damage_percent_limit,magnify_damage_amount}
+    """
+    action = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
+    sf = np.asarray(state_flags_u8, dtype=np.uint8)
+    inside = np.asarray(camera_target_point_inside_stage_cam_bounds_u8, dtype=np.uint8).reshape(-1)
+    pct = np.asarray(percent_f32, dtype=np.float32).reshape(-1)
+    hitlag = None if hitlag_u16 is None else np.asarray(hitlag_u16, dtype=np.uint16).reshape(-1)
+    hitstun = None if hitstun_u16 is None else np.asarray(hitstun_u16, dtype=np.uint16).reshape(-1)
+    hit_by = (
+        None
+        if instance_hit_by_u16 is None
+        else np.asarray(instance_hit_by_u16, dtype=np.uint16).reshape(-1)
+    )
+    last_hit_by = None if last_hit_by_u8 is None else np.asarray(last_hit_by_u8, dtype=np.uint8).reshape(-1)
+    if sf.ndim != 2 or int(sf.shape[1]) < 5:
+        raise ValueError("magnify_damage_counter_x1910 requires state_flags_u8 shape [n,5]")
+    if int(sf.shape[0]) != int(pct.size) or int(action.size) != int(pct.size) or int(inside.size) != int(pct.size):
+        raise ValueError("magnify_damage_counter_x1910 inputs must share length")
+    for name, arr in (
+        ("hitlag_u16", hitlag),
+        ("hitstun_u16", hitstun),
+        ("instance_hit_by_u16", hit_by),
+        ("last_hit_by_u8", last_hit_by),
+    ):
+        if arr is not None and int(arr.size) != int(pct.size):
+            raise ValueError(f"{name} must match magnify_damage_counter_x1910 length")
+    interval = int(interval_frames)
+    if interval <= 0:
+        return np.zeros(pct.shape[0], dtype=np.uint16)
+    amount = int(damage_amount)
+    if amount <= 0:
+        return np.zeros(pct.shape[0], dtype=np.uint16)
+
+    state_flags_221f_index = 4
+    state_flag_221f_b0_mask = 0x80
+    state_flag_221f_b4_disable_mask = 0x08
+    excluded_actions = {
+        0x0000,  # DeadDown
+        0x0001,  # DeadLeft
+        0x0002,  # DeadRight
+        0x0004,  # DeadUpStar
+        0x000C,  # Rebirth
+        0x000D,  # RebirthWait
+        0x0142,  # Entry
+        0x0143,  # EntryStart
+        0x0144,  # EntryEnd
+    }
+    out = np.zeros(pct.shape[0], dtype=np.uint16)
+    counter = 0
+    for i in range(int(pct.shape[0])):
+        flags_221f = int(sf[i, state_flags_221f_index])
+        visible = (flags_221f & state_flag_221f_b0_mask) != 0
+        disabled = (flags_221f & state_flag_221f_b4_disable_mask) != 0
+        offscreen = int(inside[i]) == 0
+        live_fighter = int(action[i]) not in excluded_actions
+        percent = float(pct[i])
+        eligible = (
+            live_fighter
+            and visible
+            and not disabled
+            and offscreen
+            and np.isfinite(percent)
+            and percent < float(percent_limit)
+        )
+        observed_tick = False
+        if eligible and i + 1 < int(pct.shape[0]):
+            next_percent = float(pct[i + 1])
+            no_contact = True
+            if hitlag is not None:
+                no_contact = no_contact and int(hitlag[i]) == 0 and int(hitlag[i + 1]) == 0
+            if hitstun is not None:
+                no_contact = no_contact and int(hitstun[i]) == 0 and int(hitstun[i + 1]) == 0
+            if hit_by is not None:
+                no_contact = no_contact and int(hit_by[i]) == int(hit_by[i + 1])
+            if last_hit_by is not None:
+                no_contact = no_contact and int(last_hit_by[i]) == int(last_hit_by[i + 1])
+            observed_tick = (
+                np.isfinite(next_percent)
+                and abs((next_percent - percent) - float(amount)) <= 1e-4
+                and int(action[i + 1]) == int(action[i])
+                and no_contact
+            )
+        if observed_tick:
+            out[i] = np.uint16(min(interval - 1, np.iinfo(np.uint16).max))
+            counter = 0
+            continue
+        out[i] = np.uint16(min(counter, np.iinfo(np.uint16).max))
+        if eligible:
+            # Without `Camera_80031144` / `Player_GetMoreFlagsBit3`, a purely causal replay-surface
+            # count can falsely arm the terminal value. Keep non-tick rows below terminal and let
+            # the observed-tick branch above arm exact one-step rows.
+            counter = min(counter + 1, interval - 2 if interval > 1 else 0)
+        else:
+            counter = 0
+    return out
+
+
 def derive_rebirth_camera_anchor_y(
     *,
     action_id_u16: np.ndarray,

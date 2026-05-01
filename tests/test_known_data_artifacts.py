@@ -363,6 +363,12 @@ def test_script_timeline_known_decoded_events() -> None:
         e.frame == 6 and e.kind_id == EVENT_IDS["set_jab_rapid"] and e.payload == {"state": 1}
         for e in attack12_events
     )
+    turnrun = next(e for e in fox.entries if e.msid == 11)
+    turnrun_events = fox.events[turnrun.first_event : turnrun.first_event + turnrun.event_count]
+    assert any(
+        e.frame == 9 and e.kind_id == EVENT_IDS["set_cmd_var"] and e.payload == {"idx": 1, "value": 1}
+        for e in turnrun_events
+    )
 
 
 @pytest.mark.integration
@@ -408,14 +414,14 @@ def _special_events(moves: dict, msid: int) -> list[dict]:
     return list(moves.get("specials_by_msid", {}).get(str(msid), {}).get("events", []))
 
 
-def _cmd0_window(events: list[dict], *, open_end: bool) -> tuple[int, int] | None:
+def _cmd_var_window(events: list[dict], idx: int, *, open_end: bool) -> tuple[int, int] | None:
     on = None
     off = None
     for ev in events:
         if ev.get("kind") != "set_cmd_var":
             continue
         data = dict(ev.get("data", {}))
-        if int(data.get("idx", -1)) != 0:
+        if int(data.get("idx", -1)) != idx:
             continue
         frame = int(ev["frame"])
         value = int(data.get("value", 0))
@@ -430,6 +436,10 @@ def _cmd0_window(events: list[dict], *, open_end: bool) -> tuple[int, int] | Non
     if off is None:
         return None
     return (on, off)
+
+
+def _cmd0_window(events: list[dict], *, open_end: bool) -> tuple[int, int] | None:
+    return _cmd_var_window(events, 0, open_end=open_end)
 
 
 def _allow_interrupt_window(events: list[dict]) -> tuple[int, int] | None:
@@ -601,6 +611,7 @@ def test_runtime_move_tables_mslftsc1_matches_legacy_json_queries() -> None:
         escape_air_cmd0 = _cmd0_window(_move_events(moves, "ftCo_SM_EscapeAir"), open_end=True)
         dash_cmd0 = _cmd0_window(_move_events(moves, "ftCo_SM_Dash"), open_end=True)
         runbrake_cmd0 = _cmd0_window(_move_events(moves, "ftCo_SM_RunBrake"), open_end=True)
+        turnrun_cmd1 = _cmd_var_window(_move_events(moves, "ftCo_SM_TurnRun"), 1, open_end=True)
         catch_attack = _move_events(moves, "ftCo_SM_CatchAttack")
         catch_on = min(
             [
@@ -628,6 +639,9 @@ def test_runtime_move_tables_mslftsc1_matches_legacy_json_queries() -> None:
             assert msl_binding.move_tables_debug_query(
                 "runbrake_cmd0", char_id, 0, float(frame), 0.0
             ) == _active(runbrake_cmd0, float(frame))
+            assert msl_binding.move_tables_debug_query(
+                "turnrun_cmd1", char_id, 0, float(frame), 0.0
+            ) == _active(turnrun_cmd1, float(frame))
             assert msl_binding.move_tables_debug_query(
                 "catchattack_grabbed_hit", char_id, 0, float(frame), 0.0
             ) == _active((catch_on, catch_off) if catch_on is not None and catch_off is not None else None, float(frame))

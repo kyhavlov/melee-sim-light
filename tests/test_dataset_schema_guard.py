@@ -82,6 +82,7 @@ def test_seed_schema_includes_staling_fields() -> None:
     assert "camera_target_world_z_f32" in SEED_DTYPE.fields
     assert "camera_box_radius_f32" in SEED_DTYPE.fields
     assert "camera_target_point_inside_stage_cam_bounds_u8" in SEED_DTYPE.fields
+    assert "magnify_damage_counter_x1910" in SEED_DTYPE.fields
     assert "passivewall_timer" in SEED_DTYPE.fields
     assert "walljump_input_timer" in SEED_DTYPE.fields
     assert "walljump_wall_side_i8" in SEED_DTYPE.fields
@@ -143,6 +144,13 @@ def test_item_common_data_exports_shield_bounce_threshold_source() -> None:
     # the extracted ItCo.dat item common file instead of a naked gameplay constant.
     data = json.loads(Path("data/items/item_common.json").read_text())
     assert data["shield_bounce_extra_degrees"] == 45.0
+
+
+def test_ft_common_data_exports_magnify_damage_source_constants() -> None:
+    data = json.loads(Path("data/common/ft_common_data.json").read_text())
+    assert int(data["magnify_damage_interval_frames"]) == 60
+    assert int(data["magnify_damage_percent_limit"]) == 150
+    assert int(data["magnify_damage_amount"]) == 1
 
 
 def test_item_spawn_id_counter_survives_itemless_gaps() -> None:

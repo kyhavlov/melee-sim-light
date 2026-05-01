@@ -20,3 +20,6 @@ void timers_update_post_anim(MslBatch* batch);
 // Current modeled subset:
 // - `ftCo_Damage_OnEveryHitlag` SDI stick displacement
 void timers_consume_post_hitlag_callbacks_after_input(MslBatch* batch);
+
+// Post-frame Fighter_procUpdate magnifying-glass/offscreen damage counter (`fp->dmg.x1910`).
+void timers_update_magnify_damage_post_frame(MslBatch* batch);

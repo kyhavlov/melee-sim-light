@@ -932,6 +932,7 @@ static int msl_batch_init_match_impl(MslBatch* batch, const uint8_t* config_byte
       seed->camera_box_radius_f32[p] = 0.0f;
       seed->camera_target_point_inside_stage_cam_bounds_u8[p] =
           msl_match_init_point_inside_bounds(&cam_bounds, spawn.x, spawn.y);
+      seed->magnify_damage_counter_x1910[p] = 0u;
     }
   }
 
@@ -1186,6 +1187,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.camera_box_radius_f32[idx] = camera_box_radius;
       batch->state.camera_target_point_inside_stage_cam_bounds_u8[idx] =
           seed->camera_target_point_inside_stage_cam_bounds_u8[p] ? 1u : 0u;
+      batch->state.magnify_damage_counter_x1910[idx] = seed->magnify_damage_counter_x1910[p];
       batch->state.downwait_timer[idx] = seed->downwait_timer[p];
       batch->state.passivewall_timer[idx] = seed->passivewall_timer[p];
       batch->state.walljump_input_timer[idx] = seed->walljump_input_timer[p];
@@ -1895,6 +1897,13 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       const size_t base = ((size_t)bi * (size_t)MSL_MAX_PLAYERS) * (size_t)MSL_MAX_HITBOXES;
       for (size_t i = 0; i < (size_t)MSL_MAX_PLAYERS * (size_t)MSL_MAX_HITBOXES; i++) {
         batch->state.fighter_hitlist_init_gen[base + i] = 0u;
+        // Reseed owns the hidden HitCapsule victim rings. Clear resident runtime rings here, then
+        // let hitboxes_refresh materialize the explicit dense/per-HitCapsule seed lanes for active
+        // slots. Otherwise a retry after a failed rollout can inherit a live ring from the previous
+        // attempt when the newly seeded frame has no materialization edge for that slot.
+        // refs/melee/src/melee/lb/types.h::HitCapsule
+        // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008440,lbColl_8000ACFC}
+        hitlist_capsule_clear(&batch->state.fighter_hitlist[base + i]);
       }
     }
 

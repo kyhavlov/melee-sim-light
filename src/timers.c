@@ -448,6 +448,77 @@ void timers_consume_post_hitlag_callbacks_after_input(MslBatch* batch) {
   }
 }
 
+static inline uint8_t timers_magnify_live_fighter_action(uint16_t action_id) {
+  // `fp->x221F_b0` is also used by match-flow/dead-flow camera-subject owners. The magnifying
+  // damage branch gates on ifMagnify's offscreen state, so keep the x221F approximation to live
+  // fighter states and exclude actions where the bit is camera/dead-flow bookkeeping.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+  // refs/melee/src/melee/if/ifmagnify.c::ifMagnify_802FC998
+  switch (action_id) {
+    case (uint16_t)MSL_ACT_DEAD_DOWN:
+    case (uint16_t)MSL_ACT_DEAD_LEFT:
+    case (uint16_t)MSL_ACT_DEAD_RIGHT:
+    case (uint16_t)MSL_ACT_DEAD_UP_STAR:
+    case (uint16_t)MSL_ACT_REBIRTH:
+    case (uint16_t)MSL_ACT_REBIRTH_WAIT:
+    case (uint16_t)MSL_ACT_ENTRY:
+    case (uint16_t)MSL_ACT_ENTRY_START:
+    case (uint16_t)MSL_ACT_ENTRY_END:
+      return 0u;
+    default:
+      return 1u;
+  }
+}
+
+void timers_update_magnify_damage_post_frame(MslBatch* batch) {
+  if (batch == NULL) {
+    return;
+  }
+  const MslCommonParams* c = msl_common_params();
+  if (c == NULL || c->magnify_damage_interval_frames == 0u || c->magnify_damage_amount == 0u) {
+    return;
+  }
+
+  enum { MSL_STATE_FLAGS_STRIDE_LOCAL = MSL_STATE_FLAGS_BYTES };
+  enum { MSL_STATE_FLAGS_221F_INDEX_LOCAL = 4 };
+  enum { MSL_STATE_FLAG_221F_B0_LOCAL = 0x80 };
+  enum { MSL_STATE_FLAG_221F_B4_LOCAL = 0x08 };
+
+  const int num_players = (int)batch->config.num_players;
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    if (batch->replay_rollout_reseeded != NULL && batch->replay_rollout_reseeded[bi] != 0u) {
+      for (int p = 0; p < num_players; p++) {
+        const size_t idx = msl_idx_player(bi, p);
+        batch->state.magnify_damage_counter_x1910[idx] = 0u;
+      }
+      continue;
+    }
+    for (int p = 0; p < num_players; p++) {
+      const size_t idx = msl_idx_player(bi, p);
+      const uint8_t flags_221f = batch->state.state_flags[idx * MSL_STATE_FLAGS_STRIDE_LOCAL +
+                                                          (size_t)MSL_STATE_FLAGS_221F_INDEX_LOCAL];
+      const uint8_t visible = (flags_221f & (uint8_t)MSL_STATE_FLAG_221F_B0_LOCAL) != 0u;
+      const uint8_t disabled = (flags_221f & (uint8_t)MSL_STATE_FLAG_221F_B4_LOCAL) != 0u;
+      const uint8_t offscreen =
+          batch->state.camera_target_point_inside_stage_cam_bounds_u8[idx] == 0u ? 1u : 0u;
+      if (!visible || !offscreen || disabled ||
+          timers_magnify_live_fighter_action(batch->state.action_id[idx]) == 0u ||
+          !(batch->state.percent[idx] < (float)c->magnify_damage_percent_limit)) {
+        batch->state.magnify_damage_counter_x1910[idx] = 0u;
+        continue;
+      }
+
+      uint32_t counter = (uint32_t)batch->state.magnify_damage_counter_x1910[idx] + 1u;
+      if (counter >= (uint32_t)c->magnify_damage_interval_frames) {
+        batch->state.percent[idx] += (float)c->magnify_damage_amount;
+        counter = 0u;
+      }
+      batch->state.magnify_damage_counter_x1910[idx] =
+          (uint16_t)(counter > 0xFFFFu ? 0xFFFFu : counter);
+    }
+  }
+}
+
 void timers_update_post_anim(MslBatch* batch) {
   if (batch == NULL) {
     return;
