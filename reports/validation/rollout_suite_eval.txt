@@ -37,44 +37,44 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:1792
 
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl ==
 rollout.best_len: 1169
-rollout.streak_count: 27
-rollout.streak_len.median: 393
+rollout.streak_count: 25
+rollout.streak_len.median: 459
 rollout.streak_len.p90: 974
 rollout.streak_len.p95: 1019
 rollout.streak_len.max: 1169
-rollout.first_mismatch_total: 26
-rollout.first_mismatch_seeded_total: 6
+rollout.first_mismatch_total: 24
+rollout.first_mismatch_seeded_total: 5
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:2864
 
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
 rollout.best_len: 2269
-rollout.streak_count: 27
+rollout.streak_count: 26
 rollout.streak_len.median: 290
-rollout.streak_len.p90: 658
+rollout.streak_len.p90: 668
 rollout.streak_len.p95: 1075
 rollout.streak_len.max: 2269
-rollout.first_mismatch_total: 26
+rollout.first_mismatch_total: 25
 rollout.first_mismatch_seeded_total: 4
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:1543
 
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.msl ==
 rollout.best_len: 1131
-rollout.streak_count: 19
-rollout.streak_len.median: 211
+rollout.streak_count: 18
+rollout.streak_len.median: 250
 rollout.streak_len.p90: 1104
 rollout.streak_len.p95: 1131
 rollout.streak_len.max: 1131
-rollout.first_mismatch_total: 18
+rollout.first_mismatch_total: 17
 rollout.first_mismatch_seeded_total: 4
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:1615
 
 == suite summary ==
-overall.rollout.streak_count: 88
-overall.rollout.streak_len.median: 341
+overall.rollout.streak_count: 84
+overall.rollout.streak_len.median: 351
 overall.rollout.streak_len.p90: 985
 overall.rollout.streak_len.p95: 1131
 overall.rollout.streak_len.max: 2269
 overall.rollout.best_len.max: 2269
-overall.rollout.first_mismatch_total: 84
-overall.rollout.first_mismatch_seeded_total: 16
+overall.rollout.first_mismatch_total: 80
+overall.rollout.first_mismatch_seeded_total: 15
 overall.rollout.ignored_first_mismatch_top: state_flags[4]&0x80:7814
