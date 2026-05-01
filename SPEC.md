@@ -151,6 +151,10 @@ and decomp-motivated rather than arbitrary heuristics.
   - Victim identity: decomp stores a raw victim pointer; the sim uses Slippi `instance_id` as a proxy but intentionally does
     **not** treat an `instance_id` bump on motion-state entry (`ft_800895E0`) as a “new victim” (rebinding proxy identity instead).
     True “pointer changed” is approximated by death/respawn states (heuristic boundary; see `src/hitlist.c`).
+  - Replay-seeded shield-hit hitlag rows can carry accepted per-HitCapsule victims from the
+    previous GuardSetOff onset. The proof is the replay-visible ShieldDesc admission lanes plus
+    both-fighter hitlag; the seed is stamped onto the following frozen hitlag episode, not the
+    pre-contact row.
 - Remaining decomp pieces: exact countdown timing/order (`lbColl_80008A5C`) relative to collision acceptance, “type” code
   semantics (`lbColl_80008688`/`lbColl_80008820`), fighter-vs-item clanks/trades, and full hurtbox eligibility (intangibility,
   thrown-fighter rules, etc.). These are required to make BODY/SHIELD mutations (percent/KB/hitstun/shield HP) consistently correct.
@@ -577,7 +581,11 @@ Recent deltas to reflect here (do not let these get “lost in chat logs”):
   windows. First active-hitlag rows also allow the narrow callback-local SDI-radius crossing where
   damage entry has reset replay-visible x670/x671 to `0xFE` but vanilla consumes the newly
   radius-eligible stick; held high-magnitude sticks are negative controls and do not retrigger the
-  bridge. AttackAir
+  bridge. Fresh airborne `DamageAir*` entry from same-frame BODY contact publishes the root already
+  resolved by the pre-hit motion-state collision callback (`Fighter_procMap`) before
+  `Fighter_ProcessHit -> ftCo_8008DCE0`; later active-hitlag floorhug projection requires actual
+  `ftCo_Damage_OnEveryHitlag` SDI-consume provenance, so a held downward stick after x670/x671 reset
+  cannot repeatedly snap the frozen DamageAir root to floor bias. AttackAir
   same-frame IASA checks aerial B-special admission before JumpAerial (`ftCo_AttackAir.c::DO_IASA`,
   `ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput`); JumpF/JumpB -> EscapeAir floor handoff
   projects through the decomp floor wrapper (`ftCo_EscapeAir_Coll`, `ft_80082C74`,
@@ -1490,6 +1498,10 @@ Match-flow closure notes:
 - Match-start neutral spawn is separate from stock respawn. The only Slippi neutral-spawn ASM path
   in runtime setup is the 4-player teams `init_match` branch; Rebirth stays on the vanilla
   `Player_GetSpawnPlatformPos` owner and must not inherit neutral-start coordinates.
+- Dead* -> Rebirth runs `Fighter_UnkProcessDeath_80068354 ->
+  Fighter_UnkInitReset_80067C98` before `Fighter_ChangeMotionState(Rebirth)`. That reset clears
+  percent/temp percent and reloads shield HP from `ftCommonData.x260_startShieldHealth`; rollout
+  must not carry depleted shield HP onto the first Rebirth row.
 - Current FD `respawn_points` are extractor-owned stage data, not Slippi neutral-start data. The
   extractor still uses an FD-only stage-point heuristic until the canonical `stage_info.x280`
   point-id mapping is extracted directly (see `tools/extraction/extract_stage_collision.py`).
@@ -1640,6 +1652,10 @@ Grounded motion-entry timing notes:
   `mv.co.kneebend.is_short_hop`; runtime must use only an earlier latched bit or the replay seed
   on that takeoff frame. Source: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::{
   ftCo_KneeBend_Anim,ftCo_KneeBend_IASA,ftCo_KneeBend_Check_ShortHop}`.
+- Mid-KneeBend seed derivation must preserve the entry callback that created
+  `mv.co.kneebend.jump_input`. Dash/Run-family entries use `ftCo_Jump.c::fn_800CAF78`, so an
+  L-stick jump can be sourced by `p_ftCommonData->x80` even when the stick is below the ordinary
+  tap-jump `x74` threshold. Non-Dash/Run entries keep the normal `ftCo_Jump_GetInput` ordering.
 - KneeBend startup-complete JumpF/B can still run destination Jump IASA in the same proc. After
   `ftCo_KneeBend_Anim -> ftCo_Jump_Enter`, `ftCo_Jump_IASA` reaches `ftCo_800CB870`, so a fresh
   current-frame jump edge/tap can immediately enter `JumpAerialF/B`. That path uses
@@ -1997,6 +2013,13 @@ Fox/Falco special-owner split (2026-04-17):
     on the shallow post-entry floor row, so the runtime adds a bounded root projection only for
     `FallSpecial` rows whose frame-start action frame is already past the entry frame and whose
     lift is within current downward velocity.
+  - `ftCo_EscapeAir_Anim` enters `FallSpecial` through `ftCo_80096900`, whose `inline0` calls
+    `Fighter_ChangeMotionState(..., Ft_MF_KeepFastFall)`. Runtime preserves the fastfall bit and
+    keeps the same first `FallSpecial` entry row out of the bounded root-projection bridge; the
+    following `FallSpecial_Coll` frame owns `LandingFallSpecial` (`FSP:9883->9898`). The same
+    `ftCo_80096900` call writes `mv.co.fallspecial.landing_lag`; runtime carries that scalar
+    (EscapeAir common `x344`, Illusion/Phantasm `da->x50`, Firefox/Firebird `da->x90`) into
+    `ftCo_LandingFallSpecial_Enter` so the entry row advances at `(end_frame + 0.1) / landing_lag`.
   - `EscapeAir_Coll` uses `ft_80082C74` and can enter `LandingFallSpecial` from the persisted
     CollData floor index. One-step reseeds can start after the previous ECB bottom has already
     crossed that floor, so runtime adds a bounded projection only when the frame-start previous ECB
@@ -4488,11 +4511,16 @@ BODY collision-space residual split and rejected seed bridge:
   only under the explicit `Fighter_8006CDA4` stream-phase seed. Replay-seeded rollouts keep that
   phase and the Slippi frame-start RNG clock until the later damage-entry row; visible AttackAirN
   action shape alone does not admit the gate because Slippi does not expose `item_gobj` / `x197C`
-  branch inputs. TBK `2276 -> 2367` protects the delayed double-consume segment.
+  branch inputs. The nonzero stream phase may also survive the same-source `DamageFlyTop ->
+  DamageFall_IASA -> AttackAirN` handoff: `ftCo_DamageFly_IASA` can enter `DamageFall`, and
+  `ftCo_DamageFall_IASA` can admit AttackAir before the delayed damage-entry gate. TBK
+  `2276 -> 2367` protects the delayed double-consume AttackAirN segment; PRH `10169 -> 10207`
+  protects the DamageFall IASA handoff. Marker `4` remains excluded from this AttackAirN backfill.
   Source anchors:
   - `refs/slippi-ssbm-asm/Recording/SendFrameStart.s`
   - `refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4`
   - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0`
+  - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA`
 - The same QGD path exposed two data/pose boundaries:
   - Fighter hitbox radius and offsets use GALE01's single-precision `ftAction_804D82A0`
     `.float 0.003906` literal, not exact `1/256`; this keeps the `p_ftCommonData->x7A8`
@@ -4745,23 +4773,28 @@ BODY collision-space residual split and rejected seed bridge:
 - GuardSetOff shield hits split the hidden shield-damage owners:
   `ftColl_80076CBC` writes `x19A4` as the max integer hit damage for hitlag/shieldstun, while
   `Fighter_ProcessHit_8006D1EC` consumes the separate `x19A0_shieldDamageTaken` accumulator for
-  shield HP. Teacher-forced rows seed x19A4 from replay-visible GuardSetOff + both-fighter hitlag,
-  and seed x19A0 only when replay t->t+1 shield HP proves `x19A0 > x19A4`; this is an explicit
-  non-causal one-step lane. x19A0<=x19A4 multi-contact rows remain runtime-selected-contact
-  ownership until exact per-HitCapsule shield-contact order is extracted. Replay-real positives:
-  FSP:3100, HHG:5544, PRH:7124. Negative: QGD:3938.
+  shield HP. Teacher-forced rows seed x19A4 from replay-visible GuardSetOff + both-fighter hitlag;
+  same-frame special contact owners such as shine may use extracted active HitCapsule damage because
+  hitlag alone is only a lower bound for x19A4. Multi-hitbox attack contacts keep the hitlag lower
+  bound until exact per-HitCapsule shield-contact order is extracted. They seed x19A0 only when
+  replay t->t+1 shield HP proves `x19A0 > x19A4`; this is an explicit non-causal one-step lane.
+  x19A0<=x19A4 multi-contact rows remain runtime-selected-contact ownership. Replay-real positives:
+  FSP:3100, HHG:5544, PRH:7124, HVG:4489. Negative: QGD:3938.
   Sources: `refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC`,
   `refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC`,
   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C`.
 - Hidden color-animation x1990 seed ownership now treats replay-visible vulnerable snapshots as an
   observable clear of stale cliff/ledge x1990, while preserving the hidden x1994 invincible-contact
-  lane used by DownBound/Damage OnExitHitlag rows. This follows Slippi's post-frame
+  lane only for source-proven Damage/DownBound consumers. A visible vulnerable non-damage /
+  non-DownBound row clears replay-history x1994 provenance before later cliff/EscapeAir masking can
+  hide it. This follows Slippi's post-frame
   `x1988 != 0 ? x1988 : x198C` emission and removes the old x1990-owned candidate-filter split
   without weakening DownBound sentinels.
   CliffCatch/Wait and derived cliff-option episodes remain x1990-only at reseed unless a real
   x1994 producer is proven separately: the source ledge path calls `ftColl_8007B760(..., x49C)`,
   not `ftColl_8007B7A4`. This prevents stale damage x1994 reconstruction from surfacing as
-  invincible-contact status when CliffJumpQuick2 x1990 expires (`HVG:5101`).
+  invincible-contact status when CliffJumpQuick2 x1990 expires (`HVG:5101`) or when EscapeAir lands
+  into LandingFallSpecial after a cliff-invulnerability episode (`PJO:2718->2738`).
 - SpecialHi/AirHi wall collision now uses the live JObj ECB owner for the supported Fox/Falco
   wall domain when `ft_CheckGroundAndLedge` runs the airborne mpColl wall path. The
   collision ECB is rebuilt from the extracted ftData_x44_t `ecb_joints`
@@ -4814,9 +4847,13 @@ BODY collision-space residual split and rejected seed bridge:
   DamageFly collision callback later in the frame. When hitlag-refresh has cleared the Hug env bit
   but CollData still carries a left/right wall index, runtime projects only the immediate ASDI
   normal component away from that wall and preserves tangent ASDI plus `ftCo_8008E5A4` DI/LSI. It
-  must not re-stamp Hug or run a full wall envelope on the damage row; doing so over-admits
-  PassiveWall. HVG `4780..4829` locks the former F04 left-wall -> PassiveWall -> missed-death
-  cascade.
+  must not re-stamp Hug or run a full wall envelope while hitlag is still frozen; doing so
+  over-admits PassiveWall. On the actual hitlag-exit frame, however, decomp keeps the
+  pre-`ftCo_Damage_OnExitHitlag` CollData.prev_pos sweep root and then lets DamageFlyRoll_Coll
+  consume the post-ASDI cur_pos for WallHug / FlyReflectWall. GAT `3107..3113` locks this boundary:
+  the active-hitlag refresh remains Push-only, but the exit-frame sweep can enter FlyReflectWall
+  via `ftCo_800C15F4`. HVG `4780..4829` locks the former F04 left-wall -> PassiveWall ->
+  missed-death cascade.
 - HIS `1673` remains a one-step strict-only facing residual after the retained Side-B / BODY
   contact fixes: Fox correctly enters `DamageFlyTop` with matching hitlag, hitstun, percent, and
   position, but the sim computes `dmg.facing_dir_1` from the current source root after the attacker
@@ -4895,6 +4932,12 @@ BODY collision-space residual split and rejected seed bridge:
   FlyReflectWall/Ceil, seeds the x18 repeat-reflect lockout from x1C0, and starts the x1990
   colanim hit-status timer from x1B8. Runtime loads x1B0/x1B8/x1BC/x1C0 from
   `data/common/ft_common_data.json`.
+- Common grounded Appeal/Taunt admission is a normal IASA edge owner, not a match-flow special case.
+  Wait/Walk/Turn/Squat/Landing/Ottotto callbacks call `ftCo_800DE9D8` after guard and before
+  jump/dash/locomotion; `ftCo_800DE9B8` consumes `input.x668 & HSD_PAD_DPADUP`, so held D-Pad Up
+  without a fresh edge does not enter Appeal. `ftCo_800DEAE8` selects AppealSL only when the left
+  animation exists; Fox/Falco FD extracted anim data has no common AppealSL timeline, so facing-left
+  rows still enter common AppealSR. HVG `588..619` locks the rollout branch.
 - Source anchors:
   - `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}`
   - `refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}`
@@ -4917,6 +4960,7 @@ BODY collision-space residual split and rejected seed bridge:
   - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardOn_Coll`
   - `refs/melee/src/melee/ft/ft_081B.c::ft_800845B4`
   - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_MissFoot.c::ftCo_8009F39C`
+  - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_AppealS.c::{ftCo_800DE9B8,ftCo_800DE9D8,ftCo_800DEAE8,ftCo_AppealS_Anim}`
   - `refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_procMap}`
   - `refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_JObj,mpColl_80044E10_RightWall,mpColl_800454A4_RightWall,mpColl_80045B74_LeftWall,mpColl_80046224_LeftWall}`
   - `refs/melee/src/melee/gr/forward.h::{FLATZONE,LAST}`

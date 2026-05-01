@@ -102,8 +102,10 @@ def _step_one_row(dataset_path: Path, record: int) -> tuple[np.void, np.void, np
 @pytest.mark.integration
 def test_cliff_x1990_seed_does_not_promote_unproven_damage_x1994_rollout() -> None:
     # PPA rollout lock for ledge colanim ownership:
-    # - Fox enters CliffCatch with a replay-history x1990 ledge intangible timer plus a stale
-    #   damage x1994 seed candidate from the prior laser hitlag-exit derivation.
+    # - Fox enters CliffCatch with a replay-history x1990 ledge intangible timer.
+    # - Earlier versions also carried a stale damage x1994 seed candidate from prior laser
+    #   hitlag-exit derivation; seed history now clears that stale x1994 at the earlier visible
+    #   vulnerable non-damage row.
     # - The source CliffCatch/CliffWait entry path only calls ftColl_8007B760(..., x49C), so the
     #   unproven x1994 lane must not be queued behind ledge x1990.
     # - When CliffAttackQuick reaches Falco's AttackAirN BODY contact, Fox is vulnerable and enters
@@ -128,7 +130,7 @@ def test_cliff_x1990_seed_does_not_promote_unproven_damage_x1994_rollout() -> No
     seed, ref, out = _rollout_one_row(dataset_path, start_record, target_record)
     assert int(seed["action_id"][p]) == 252  # CliffCatch
     assert int(seed["colanim_timer_x1990"][p]) > 0
-    assert int(seed["colanim_timer_x1994"][p]) > 0
+    assert int(seed["colanim_timer_x1994"][p]) == 0
 
     assert int(out["action_id"][p]) == int(ref["action_id"][p]) == 86  # DamageAir3
     assert int(out["hitlag"][p]) == int(ref["hitlag"][p]) == 6

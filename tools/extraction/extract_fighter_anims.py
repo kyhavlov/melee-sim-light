@@ -1433,23 +1433,29 @@ def _dynamic_collision_owner_msids(
 ) -> list[int]:
     """Return submotions whose BODY collision matrices consume fighter dynamics state.
 
-    This is deliberately data-owned rather than a C gameplay branch. Fox `AttackHi3` and `JumpB`
-    are the audited RL1.0 dynamic-chain collision owners: Dolphin pre-`ftColl_80078C70`
-    primitive probes show live hurtcap endpoints on the x2C chain consume `ftData.x2C` /
-    `lb_8001044C`, while the HIS:5029 AttackDash/AttackLw4 primitive probe selects a static-chain
-    low hurtcap and rejects the tail-chain contact when AttackDash dynamic matrices are applied.
-    Adding another submotion here requires the same owner evidence and keeps the runtime predicate
-    in extracted data instead of hardcoding record ids or cap/frame slices in C.
+    This is deliberately data-owned rather than a C gameplay branch. Fox `AttackHi3`, `JumpB`, and
+    `LandingFallSpecial` are the audited RL1.0 dynamic-chain collision owners: Dolphin
+    pre-`ftColl_80078C70` primitive probes show live hurtcap endpoints on the x2C chain consume
+    `ftData.x2C` / `lb_8001044C`, while the HIS:5029 AttackDash/AttackLw4 primitive probe selects a
+    static-chain low hurtcap and rejects the tail-chain contact when AttackDash dynamic matrices are
+    applied. Adding another submotion here requires the same owner evidence and keeps the runtime
+    predicate in extracted data instead of hardcoding record ids or cap/frame slices in C.
     """
     if character != "fox" or not dynamic_sets:
         return []
     move_map = (moves.get("moves") or {}) if isinstance(moves, dict) else {}
+    # `data/moves` only contains action move-script states; some common animation states that are
+    # baked through `_extra_anim_msids()` are source-backed by `ftCommon/forward.h` instead.
+    # refs/melee/src/melee/ft/chara/ftCommon/forward.h::ftCo_Submotion
+    common_submotion_id = {
+        "ftCo_SM_LandingFallSpecial": 36,
+    }
     out: list[int] = []
-    for move_name in ("ftCo_SM_AttackHi3", "ftCo_SM_JumpB"):
+    for move_name in ("ftCo_SM_JumpB", "ftCo_SM_LandingFallSpecial", "ftCo_SM_AttackHi3"):
         move_entry = move_map.get(move_name)
-        if not isinstance(move_entry, dict):
-            continue
-        msid = move_entry.get("submotion_id")
+        msid = move_entry.get("submotion_id") if isinstance(move_entry, dict) else None
+        if msid is None:
+            msid = common_submotion_id.get(move_name)
         if isinstance(msid, int) and 0 <= msid <= 0xFFFF:
             out.append(int(msid))
     return out

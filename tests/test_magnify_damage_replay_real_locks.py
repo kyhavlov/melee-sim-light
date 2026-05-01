@@ -41,6 +41,42 @@ def _run_one_step(ds, row, *, rollout: bool = False) -> np.void:
     return out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0]
 
 
+def _field_bytes(samples: np.ndarray, record: int, field: str, stride: int) -> np.ndarray:
+    return np.frombuffer(samples[record : record + 1][field].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+        1, stride
+    )
+
+
+def _run_rollout(ds, start: int, stop: int) -> np.void:
+    binding = pytest.importorskip("msl_binding")
+    samples = ds.samples
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    try:
+        binding.reseed_seed_rollout(handle, _field_bytes(samples, start, "seed_t", seed_stride))
+        for record in range(start, stop + 1):
+            binding.step_input(
+                handle,
+                _field_bytes(samples, record, "prev_input_t", input_stride),
+                _field_bytes(samples, record, "input_t", input_stride),
+            )
+            binding.write_compare(handle, out_compare_bytes)
+    finally:
+        binding.destroy(handle)
+
+    return out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0]
+
+
 @pytest.mark.integration
 def test_magnify_damage_counter_applies_offscreen_percent_tick_replay_real_lock() -> None:
     # Fighter_procUpdate increments fp->dmg.x1910 while the player is in the offscreen magnifying
@@ -78,7 +114,12 @@ def test_magnify_damage_counter_applies_offscreen_percent_tick_replay_real_lock(
     assert float(out["percent"][p]) == pytest.approx(float(ref["percent"][p]), abs=1e-5)
 
     rollout_out = _run_one_step(ds, row, rollout=True)
-    assert float(rollout_out["percent"][p]) == pytest.approx(float(seed["percent"][p]), abs=1e-5)
+    assert float(rollout_out["percent"][p]) == pytest.approx(float(ref["percent"][p]), abs=1e-5)
+
+    # Starting earlier in the same backfilled magnify episode must carry the seeded hidden counter
+    # forward until the real tick row.
+    early_out = _run_rollout(ds, 588, 614)
+    assert float(early_out["percent"][p]) == pytest.approx(float(ref["percent"][p]), abs=1e-5)
 
 
 @pytest.mark.integration
@@ -111,4 +152,29 @@ def test_magnify_damage_counter_does_not_tick_match_flow_camera_bits() -> None:
     assert int(seed["magnify_damage_counter_x1910"][p]) == 0
 
     out = _run_one_step(ds, row)
+    assert float(out["percent"][p]) == pytest.approx(float(ref["percent"][p]), abs=1e-5)
+
+
+@pytest.mark.integration
+def test_magnify_rollout_does_not_start_from_unproven_camera_rows() -> None:
+    # DCC has long x221F_b0/offscreen camera runs with no source-shaped 1% magnify tick in replay.
+    # The seed derivation must not turn those rows into a rollout-startable magnify episode.
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    start = 2582
+    stop = 2641
+    p = 1
+    seed = ds.samples[start]["seed_t"]
+    ref = ds.samples[stop]["ref_t1"]
+    assert int(seed["state_flags"][p, 4]) & 0x80
+    assert int(seed["camera_target_point_inside_stage_cam_bounds_u8"][p]) == 0
+    assert int(seed["magnify_damage_counter_x1910"][p]) == 0
+
+    out = _run_rollout(ds, start, stop)
     assert float(out["percent"][p]) == pytest.approx(float(ref["percent"][p]), abs=1e-5)

@@ -934,6 +934,17 @@ static inline uint8_t combat_is_damage_or_firefox_launch_victim_action(uint16_t 
   }
 }
 
+static inline uint8_t combat_is_damage_air_action(uint16_t action_id) {
+  switch (action_id) {
+    case MSL_ACT_DAMAGE_AIR_1:
+    case MSL_ACT_DAMAGE_AIR_2:
+    case MSL_ACT_DAMAGE_AIR_3:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
 static inline uint8_t combat_hitlist_victim_pointer_may_change(uint8_t stocks, uint16_t action_id) {
   // Decomp hitlists store a victim pointer inside HitVictim; the simulator uses Slippi instance_id as
   // a proxy and only treats mismatches as a new victim when the object pointer can actually change.
@@ -1792,9 +1803,28 @@ static inline uint8_t combat_shield_overlap_ftcoll_80007bcc(
   // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_80006E58}
   const uint8_t guardon_entry_enable_edge_size_lane =
       (guardon_entry_no_submotion && batch->state.hitbox_enable_edge[hb_i]) ? 1u : 0u;
+  // Expired GuardReflect no-submotion ShieldDesc lane:
+  // - once x14 has expired, ftCo_80093BC0 has recreated ShieldDesc through ftCo_80092450 and the
+  //   current shield radius remains live for the collision pass,
+  // - script create/copy/clear HitCapsules are on the ftColl_8007AD18 create-edge path that
+  //   forwards ShieldDesc.size into lbColl_80007BCC/lbColl_80006E58.
+  // Keep this off active x18 powershield windows and persistent/non-script-special capsules; QGD
+  // AttackAirB and TBK shine controls prove those rows are still ReflectDesc/powershield-owned or
+  // steady-hitbox rows near the shield rim.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80093BC0,ftCo_80092450}
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007AD18,ftColl_80078C70}
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_80006E58}
+  const uint8_t guardreflect_expired_no_submotion_enable_edge_size_lane =
+      (guardreflect_final_x14_no_submotion && batch->state.action_frame[d_idx] == -1 &&
+       batch->state.guard_reflect_timer_x18_seed[d_idx] == 0u &&
+       batch->state.guard_reflect_timer_x18[d_idx] == 0u && shr > 0.0f &&
+       batch->state.hitbox_pose_create[hb_i])
+          ? 1u
+          : 0u;
   const float shield_desc_term =
       (shield_desc_lane_active &&
-       (guardon_entry_enable_edge_size_lane || attackairlw_fresh_guardon_shielddesc_size_lane))
+       (guardon_entry_enable_edge_size_lane || attackairlw_fresh_guardon_shielddesc_size_lane ||
+        guardreflect_expired_no_submotion_enable_edge_size_lane))
           ? shield_desc_world_r
           : 0.0f;
   const uint8_t shield_extent_lane_active =
@@ -1863,34 +1893,21 @@ static inline float combat_clamp01(float x) {
   return x;
 }
 
-static inline float combat_trigger_u8_to_unit(uint8_t v) { return (float)v * (1.0f / 255.0f); }
-
-static inline float combat_trigger_unit_from_input(uint16_t buttons, uint8_t l, uint8_t r) {
-  // Decomp reference: refs/melee/src/melee/ft/fighter.c:1868-1890 and :2019-2050.
-  // - If digital L/R is held, Melee treats shield trigger as fully pressed (`x650 = 1.0f`).
-  // - Otherwise use the analog max of L/R.
-  enum { LR = (uint16_t)MSL_BUTTON_L | (uint16_t)MSL_BUTTON_R };
-  if ((buttons & LR) != 0) {
-    return 1.0f;
-  }
-  const uint8_t m = l > r ? l : r;
-  return combat_trigger_u8_to_unit(m);
-}
-
-static inline float combat_lightshield_amount(const MslCommonParams* c, uint16_t buttons, uint8_t l,
-                                              uint8_t r) {
-  if (c == NULL) {
+static inline float combat_latched_lightshield_amount_idx(const MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
     return 0.0f;
   }
 
-  // Decomp: fp->lightshield_amount = (x650 - x10)/(1-x10) (clamped) under trigger deadzone.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c:333-350.
-  const float denom = 1.0f - c->trigger_deadzone;
-  if (denom <= 0.0f) {
+  // Decomp: shield-hit HP depletion, GuardSetOff shieldstun/recoil, and attacker shield push read
+  // `fp->lightshield_amount`, a latched Guard callback lane. Do not recompute it from current
+  // trigger input here: ftCo_800925A4 preserves the previous non-negative squeeze when trigger
+  // input is below deadzone, and ftCo_80092F2C consumes that stored value on same-frame shield hits.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_800925A4,ftCo_80092F2C}
+  const float light = batch->state.lightshield_amount[idx];
+  if (!isfinite(light)) {
     return 0.0f;
   }
-  const float trig = combat_trigger_unit_from_input(buttons, l, r);
-  const float light = (trig - c->trigger_deadzone) / denom;
   return combat_clamp01(light);
 }
 
@@ -5075,14 +5092,7 @@ void combat_apply_item_shield_hit(MslBatch* batch, int batch_index, int attacker
   int shield_damage_taken =
       (int_dmg + (int)hitbox_shield_damage > 0) ? (int_dmg + (int)hitbox_shield_damage) : 0;
 
-  // Guard-owned lightshield transform:
-  // - shield depletion and GuardSetOff stun both consume the current guard lightshield lane,
-  // - ftCo_800921DC / ftCo_800925A4 derive that lane from trigger input (`x650`) via the same
-  //   deadzone/clamp transform mirrored by combat_lightshield_amount().
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_800921DC,ftCo_800925A4,ftCo_80092F2C}
-  const float light =
-      combat_lightshield_amount(c, batch->state.input_buttons[d_idx], batch->state.input_l[d_idx],
-                                batch->state.input_r[d_idx]);
+  const float light = combat_latched_lightshield_amount_idx(batch, d_idx);
   const float ls = (light * (c->shield_hit_lightshield_max - c->shield_hit_lightshield_min)) +
                    c->shield_hit_lightshield_min;
   const float depletion = c->shield_hit_damage_mul * ((float)shield_damage_taken * (1.0f - ls)) +
@@ -5213,9 +5223,7 @@ static inline void combat_mutations_pass1_future_apply_shield_hit(MslBatch* batc
     shield_damage_taken = 0;
   }
 
-  const float light =
-      combat_lightshield_amount(c, batch->state.input_buttons[d_idx], batch->state.input_l[d_idx],
-                                batch->state.input_r[d_idx]);
+  const float light = combat_latched_lightshield_amount_idx(batch, d_idx);
   const float ls = (light * (c->shield_hit_lightshield_max - c->shield_hit_lightshield_min)) +
                    c->shield_hit_lightshield_min;
   const float depletion = c->shield_hit_damage_mul * ((float)shield_damage_taken * (1.0f - ls)) +
@@ -6943,6 +6951,41 @@ void combat_processhit_consume(MslBatch* batch) {
   }
 }
 
+static inline void combat_preserve_fresh_air_damage_entry_root_y(MslBatch* batch) {
+  if (batch == NULL) {
+    return;
+  }
+  const int num_players = (int)batch->config.num_players;
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    for (int p = 0; p < num_players; p++) {
+      const size_t idx = msl_idx_player(bi, p);
+      const uint16_t action_id = batch->state.action_id[idx];
+      if (!combat_is_damage_air_action(action_id)) {
+        continue;
+      }
+      const uint16_t prev_action = batch->state.prev_action_id[idx];
+      if (combat_is_damage_air_action(prev_action)) {
+        continue;
+      }
+      if (batch->state.on_ground[idx] != 0u || batch->state.hitlag[idx] == 0u ||
+          batch->state.hitlag_pre_timer[idx] != 0u ||
+          !isfinite(batch->state.coll_stage_prev_pos_y[idx])) {
+        continue;
+      }
+
+      // Fresh airborne DamageAir entry root ownership:
+      // - The current frame's motion-state Coll/map callback has already run under the pre-hit
+      //   action before Fighter_ProcessHit enters ftCo_8008DCE0.
+      // - Continued active-hitlag Damage rows still use the Damage/OnEveryHitlag collision owner
+      //   through mpcoll_ground.c, but a same-frame low/med airborne damage entry must publish the
+      //   pre-ProcessHit root instead of inheriting a persisted floor id snap.
+      // refs/melee/src/melee/ft/fighter.c::{Fighter_procUpdate,Fighter_ProcessHit_8006D1EC}
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+      batch->state.pos_y[idx] = batch->state.coll_stage_prev_pos_y[idx];
+    }
+  }
+}
+
 void combat_resolve(MslBatch* batch) {
   if (batch == NULL) {
     return;
@@ -6970,6 +7013,8 @@ void combat_resolve(MslBatch* batch) {
       batch->state.percent_temp[idx] = 0.0f;
     }
   }
+
+  combat_preserve_fresh_air_damage_entry_root_y(batch);
 }
 
 int combat_debug_select_body_hits(MslBatch* batch, int batch_index,

@@ -1107,6 +1107,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.coll_env_flags[idx] = 0u;
       batch->state.coll_prev_env_flags[idx] = 0u;
       batch->state.damage_hitlag_floorhug_latch[idx] = 0u;
+      batch->state.damage_hitlag_downward_sdi_consumed[idx] = 0u;
 
       batch->state.action_id[idx] = seed->action_id[p];
       batch->state.specialhi_rotate_model_valid[idx] = 0u;
@@ -1365,6 +1366,23 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.ledge_side[idx] = -1;
       batch->state.landing_fallspecial_allow_interrupt[idx] =
           seed->landing_fallspecial_allow_interrupt[p] ? 1u : 0u;
+      {
+        const MslCommonParams* common = msl_common_params();
+        float landing_lag = (common != NULL) ? common->landing_fall_special_lag_frames : 0.0f;
+        const MslCharParams* phys = msl_char_params(seed->char_id[p]);
+        const uint16_t src = seed->seed_prev_action_id[p];
+        if (phys != NULL) {
+          if (src == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_END) {
+            landing_lag = (float)phys->illusion_landing_lag_frames;
+          } else if (src == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI ||
+                     src == (uint16_t)MSL_ACT_FX_SPECIAL_HI_FALL ||
+                     src == (uint16_t)MSL_ACT_FX_SPECIAL_HI_BOUND ||
+                     src == (uint16_t)MSL_ACT_FX_SPECIAL_HI_LANDING) {
+            landing_lag = (float)phys->firefox_landing_lag_frames;
+          }
+        }
+        batch->state.fallspecial_landing_lag[idx] = landing_lag;
+      }
       // FallSpecial xC mode is not exposed by Slippi directly; derive it deterministically from
       // seeded post-frame velocities when possible.
       //

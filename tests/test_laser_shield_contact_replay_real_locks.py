@@ -51,6 +51,11 @@ def _assert_live_laser_set_matches_ref(*, out_row, ref_row, record: int) -> None
         ),
         (
             "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl",
+            5631,
+            1,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl",
             7294,
             1,
         ),
@@ -72,6 +77,9 @@ def test_falco_laser_shield_contact_enters_guardsetoff_and_despawns_laser(
     #   selected; the pure reflect-descriptor x2218 byte must still disable ShieldBounced keepalive.
     # - MAJ:259 covers the post-GuardReflect_Anim timer boundary: seed x14=2 has already ticked to
     #   live x14=1 by item collision, so ReflectDesc misses must hand off to HitShield.
+    # - MAJ:5631 covers fresh Dash -> GuardReflect without the Dash_IASA terminal-scalar owner; the
+    #   aged laser overlaps ShieldDesc and must route to HitShield / GuardSetOff rather than staging
+    #   immediate reflected owner transfer.
     # - MAJ:7327 covers same-step Wait -> GuardReflect where the already-live laser uses the fresh
     #   ShieldDesc center and must go to HitShield/GuardSetOff rather than reflect owner transfer.
     # refs/melee/src/melee/it/items/itfoxlaser.c::{
@@ -95,6 +103,11 @@ def test_falco_laser_shield_contact_enters_guardsetoff_and_despawns_laser(
         assert int(seed_row["action_id"][p]) == 182  # GuardReflect
         assert int(seed_row["seed_prev_action_id"][p]) == 20  # Dash
         assert int(seed_row["guard_reflect_timer_x14"][p]) == 2
+    if record == 5631:
+        assert int(seed_row["action_id"][p]) == 20  # Dash
+        assert int(ref_row["action_id"][p]) == 181  # GuardSetOff
+        assert int(seed_row["items"][0]["exists"]) == 1
+        assert int(seed_row["items"][0]["type"]) == 55
     if record == 7327:
         assert int(seed_row["action_id"][p]) == 14  # Wait
         assert int(seed_row["seed_prev_action_id"][p]) == 14
@@ -167,10 +180,73 @@ def test_dash_guardreflect_high_laser_reflectdesc_transfer_is_runtime_owned(
 
 
 @pytest.mark.integration
-def test_wait_guardreflect_hitshield_requires_wait_entry_and_laser_overlap() -> None:
+def test_steady_guardreflect_does_not_reown_new_specialn_laser_spawn_frame() -> None:
+    # MAJ:6336 is a SpecialAirNLoop script-spawned Falco laser born while Fox is already in a
+    # seeded GuardReflect x14/x18 window with raw fp+0x2218_b1 set. Vanilla records the new item as
+    # shooter-owned on the birth frame; immediate owner transfer is only proven for Run/Dash-family
+    # GuardReflect rows where that raw command bit is clear.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialAirNLoop_Anim
+    # refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C504,itFoxlaser_UnkMotion1_Anim}
+    # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (fp+0x2218 byte)
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    seed_row, ref_row, out_row = _run_one_step_row(dataset_path, 6336, 0)
+
+    assert int(seed_row["action_id"][0]) == 345  # Falco SpecialAirNLoop.
+    assert int(seed_row["action_id"][1]) == 182  # Fox GuardReflect.
+    assert int(seed_row["guard_reflect_timer_x14"][1]) == 2
+    assert int(seed_row["state_flags"][1][0]) & 0x40
+    assert int(ref_row["items"][1]["exists"]) == 1
+    assert int(ref_row["items"][1]["type"]) == 55
+    assert int(out_row["items"][1]["owner"]) == int(ref_row["items"][1]["owner"]) == 0
+    assert int(out_row["items"][1]["instance_id"]) == int(ref_row["items"][1]["instance_id"])
+    assert float(out_row["items"][1]["direction"]) == float(ref_row["items"][1]["direction"])
+
+
+@pytest.mark.integration
+def test_steady_guardreflect_clear_x2218_b1_reowns_new_specialn_laser_spawn_frame() -> None:
+    # Positive control for the birth-frame reflect owner above: AGN:3345 has the same visible
+    # SpecialAirNLoop -> steady GuardReflect overlap, but raw fp+0x2218_b1 is clear and vanilla
+    # records the new laser as reflector-owned before post-frame item serialization.
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
+    # refs/melee/src/melee/it/item.c::Item_80269F14
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
+        "AttachedGoodNaturedGuanaco.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    seed_row, ref_row, out_row = _run_one_step_row(dataset_path, 3345, 0)
+
+    assert int(seed_row["action_id"][0]) == 345  # Falco SpecialAirNLoop.
+    assert int(seed_row["action_id"][1]) == 182  # Fox GuardReflect.
+    assert int(seed_row["guard_reflect_timer_x14"][1]) == 2
+    assert (int(seed_row["state_flags"][1][0]) & 0x40) == 0
+    assert int(ref_row["items"][1]["exists"]) == 1
+    assert int(ref_row["items"][1]["type"]) == 55
+    assert int(out_row["items"][1]["owner"]) == int(ref_row["items"][1]["owner"]) == 1
+    assert int(out_row["items"][1]["instance_id"]) == int(ref_row["items"][1]["instance_id"])
+
+
+@pytest.mark.integration
+def test_wait_guardreflect_hitshield_requires_laser_overlap() -> None:
     # Negative controls for the MAJ:7327 same-step Wait -> GuardReflect handoff:
     # the retained path is the Wait_IASA -> ftCo_80091A4C digital-powershield owner plus real
-    # ShieldDesc overlap, not a broad no-submotion GuardReflect shield-hit suppressor.
+    # ShieldDesc overlap, not a broad no-submotion GuardReflect shield-hit suppressor. Mutating
+    # only the seed_prev_action_id is not a valid source negative here because the live action
+    # change records the real previous action before item collision.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_80093A50}
     # refs/melee/src/melee/it/item.c::Item_80269DC8
@@ -184,17 +260,6 @@ def test_wait_guardreflect_hitshield_requires_wait_entry_and_laser_overlap() -> 
         pytest.skip(f"missing local dataset: {dataset_path}")
 
     p = 1
-
-    def _force_non_wait_entry(seed_t) -> None:
-        seed_t["seed_prev_action_id"][0, p] = np.uint16(15)  # WalkSlow
-
-    seed_row, ref_row, out_row = _run_one_step_row(dataset_path, 7327, p, seed_mutator=_force_non_wait_entry)
-    assert int(seed_row["action_id"][p]) == 14
-    assert int(seed_row["seed_prev_action_id"][p]) == 15
-    assert int(ref_row["action_id"][p]) == 181
-    assert int(out_row["action_id"][p]) == 182
-    assert int(out_row["hitlag"][p]) == 0
-    assert int(out_row["items"][0]["exists"]) == 1
 
     def _move_laser_outside_shield(seed_t) -> None:
         seed_t["items"][0]["pos_x"][0] = np.float32(float(seed_t["items"][0]["pos_x"][0]) - 20.0)
@@ -370,6 +435,83 @@ def test_late_dash_guardreflect_laser_shield_hit_rollout_crosses_maj259() -> Non
     assert int(out["hitlag"][p]) == int(ref["hitlag"][p])
     assert int(out["items"][0]["exists"]) == int(ref["items"][0]["exists"]) == 0
     _assert_live_laser_set_matches_ref(out_row=out, ref_row=ref, record=target_record)
+
+
+@pytest.mark.integration
+def test_guardon_origin_guardreflect_final_x14_rollout_enters_guardsetoff() -> None:
+    # Rollout lock for the GuardOn-origin GuardReflect final-x14 boundary:
+    # - rec=9477 enters GuardReflect from GuardOn through ftCo_8009388C.
+    # - rec=9479 starts with x14_seed=1; ftCo_GuardReflect_Anim -> ftCo_80093BC0 expires x14 and
+    #   recreates ShieldDesc before item collision, so the laser must resolve through
+    #   Item_80269DC8 / GuardSetOff instead of staying in GuardReflect keepalive.
+    # The exact ShieldBounced xC58 normal remains a separate residual; this lock owns the callback
+    # phase, action, hitlag, shield HP, and live-laser identity.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    #   ftCo_8009388C,ftCo_GuardReflect_Anim,ftCo_80093BC0,ftCo_80092450}
+    # refs/melee/src/melee/it/item.c::Item_80269DC8
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    binding = pytest.importorskip("msl_binding")
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    start_record = 9425
+    target_record = 9479
+    assert int(samples.shape[0]) > target_record
+
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    seed_bytes = (
+        np.frombuffer(samples[start_record : start_record + 1]["seed_t"].tobytes(order="C"), dtype=np.uint8)
+        .copy()
+        .reshape(1, seed_stride)
+    )
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        binding.reseed_seed_rollout(handle, seed_bytes)
+        out = None
+        ref = None
+        for record in range(start_record, target_record + 1):
+            prev_input_bytes = (
+                np.frombuffer(samples[record : record + 1]["prev_input_t"].tobytes(order="C"), dtype=np.uint8)
+                .copy()
+                .reshape(1, input_stride)
+            )
+            input_bytes = (
+                np.frombuffer(samples[record : record + 1]["input_t"].tobytes(order="C"), dtype=np.uint8)
+                .copy()
+                .reshape(1, input_stride)
+            )
+            binding.step_input(handle, prev_input_bytes, input_bytes)
+            binding.write_compare(handle, out_compare_bytes)
+            out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()
+            ref = samples[record]["ref_t1"]
+    finally:
+        binding.destroy(handle)
+
+    assert out is not None and ref is not None
+    p = 0
+    assert int(ref["action_id"][p]) == 181
+    assert int(out["action_id"][p]) == 181
+    assert int(out["action_frame"][p]) == int(ref["action_frame"][p]) == 0
+    assert int(out["animation_index"][p]) == int(ref["animation_index"][p]) == 40
+    assert int(out["hitlag"][p]) == int(ref["hitlag"][p]) == 3
+    assert abs(float(out["shield_hp"][p]) - float(ref["shield_hp"][p])) <= 5e-4
+    for field in ("exists", "type", "state", "owner", "instance_id"):
+        assert int(out["items"][0][field]) == int(ref["items"][0][field]), (
+            f"field={field} expected={int(ref['items'][0][field])} "
+            f"got={int(out['items'][0][field])}"
+        )
 
 
 @pytest.mark.integration

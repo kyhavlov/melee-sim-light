@@ -237,6 +237,7 @@ static inline uint8_t physics_action_uses_ft_80084FA8(uint16_t action_id) {
   // - PassiveStandF/B Phys calls ft_80084FA8.
   // - CliffClimb/Attack/Escape quick grounded Phys paths share ftCo_CliffClimb_Phys, which calls
   //   ft_80084FA8 once the option has reached the stage.
+  // - Common AppealS Phys calls ft_80084FA8.
   // refs/melee/src/melee/ft/ftmotionstates.c (Attack11/12/13 entries)
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::ftCo_Attack11_Phys
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
@@ -244,6 +245,7 @@ static inline uint8_t physics_action_uses_ft_80084FA8(uint16_t action_id) {
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackS4.c::ftCo_AttackS4_Phys
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveStand.c::ftCo_PassiveStand_Phys
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_CliffClimb_Phys
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AppealS.c::ftCo_AppealS_Phys
   switch (action_id) {
     case MSL_ACT_ATTACK_11:
     case MSL_ACT_ATTACK_12:
@@ -264,6 +266,8 @@ static inline uint8_t physics_action_uses_ft_80084FA8(uint16_t action_id) {
     case MSL_ACT_CLIFF_ATTACK_QUICK:
     case MSL_ACT_CLIFF_ESCAPE_SLOW:
     case MSL_ACT_CLIFF_ESCAPE_QUICK:
+    case MSL_ACT_APPEAL_SR:
+    case MSL_ACT_APPEAL_SL:
       return 1;
     default:
       return 0;
@@ -1309,12 +1313,27 @@ void physics_integrate(MslBatch* batch) {
     physics_compute_guardsetoff_turnover_player_nudge(batch, bi, guardsetoff_turnover_nudge_x);
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
+      const uint16_t action_id = batch->state.action_id[idx];
+      const uint8_t is_damage_fly = physics_action_is_damage_fly(action_id);
+      const uint8_t preserve_hitlag_exit_prev_pos =
+          (uint8_t)(is_damage_fly && batch->state.hitlag_pre_timer[idx] != 0u &&
+                    batch->state.hitlag[idx] == 0u);
 
       // Record pre-integration position for physics/collision rollback helpers.
       // Floor sweeps that need the frame-start CollData.prev_pos use floor_sweep_prev_pos_*.
       // refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpCheckFloor}
-      batch->state.prev_pos_x[idx] = batch->state.pos_x[idx];
-      batch->state.prev_pos_y[idx] = batch->state.pos_y[idx];
+      //
+      // DamageFly hitlag-exit frames are the exception: ftCo_Damage_OnExitHitlag can move cur_pos
+      // before Phys/Coll, while ft_80081DD4 still consumes the pre-callback CollData.prev_pos
+      // cached before Fighter_8006A1BC's hitlag-exit callbacks. step.c seeds prev_pos_* for that
+      // frame; do not overwrite it here with the post-ASDI position.
+      // refs/melee/src/melee/ft/fighter.c::Fighter_8006A1BC
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnExitHitlag
+      // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+      if (!preserve_hitlag_exit_prev_pos) {
+        batch->state.prev_pos_x[idx] = batch->state.pos_x[idx];
+        batch->state.prev_pos_y[idx] = batch->state.pos_y[idx];
+      }
       batch->state.prev_on_ground[idx] = batch->state.on_ground[idx] ? 1 : 0;
 
       const float player_nudge_x = grounded_player_nudge_x[p] + guardsetoff_turnover_nudge_x[p];
@@ -1340,11 +1359,9 @@ void physics_integrate(MslBatch* batch) {
       }
 
       const uint8_t on_ground = batch->state.on_ground[idx] ? 1 : 0;
-      const uint16_t action_id = batch->state.action_id[idx];
       const float vy_self_pre = batch->state.speed_y_self[idx];
       const int16_t action_frame = batch->state.action_frame[idx];
       const uint8_t is_passivewall = physics_action_is_passivewall(action_id);
-      const uint8_t is_damage_fly = physics_action_is_damage_fly(action_id);
       const uint8_t is_common_damage = physics_action_is_common_damage(action_id);
       const uint8_t damage_iasa_lockout = (is_damage_fly || is_common_damage)
                                               ? physics_damage_iasa_lockout_x221c_b6(batch, idx)

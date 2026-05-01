@@ -434,6 +434,75 @@ def test_guardreflect_final_x14_shine_precombat_shield_candidate_is_rejected_tbk
 
 
 @pytest.mark.integration
+def test_guardreflect_expired_x14_attackhi3_enable_edge_reaches_guardsetoff_tbk_3585() -> None:
+    # Rollout-real positive for the expired-x14 no-submotion ShieldDesc create-edge lane:
+    # - p1 is a GuardReflect no-submotion snapshot whose x14 has expired and whose ShieldDesc is
+    #   replay-visible before collision.
+    # - p0 AttackHi3 creates fresh HitCapsules this frame; ftColl_8007AD18 forwards ShieldDesc.size
+    #   to the lbColl overlap helper for that create-edge capsule.
+    # - Persistent capsules near the same GuardReflect rim stay covered by the TBK:1427 shine
+    #   negative above, which must not borrow this lane.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80093BC0,ftCo_80092450}
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007AD18,ftColl_80078C70}
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_80006E58}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
+        "TreasuredBackKangaroo.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    binding = _load_binding()
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    samples_u8, seed_off, prev_input_off, input_off = _dataset_byte_views(ds)
+
+    start = 3585
+    stop = 3610
+    attacker = 0
+    defender = 1
+    seed_bytes = samples_u8[start : start + 1, seed_off : seed_off + seed_stride].copy()
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+    out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(1)
+
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    try:
+        binding.reseed_seed_rollout(handle, seed_bytes)
+        for record in range(start, stop + 1):
+            prev_input_bytes = samples_u8[
+                record : record + 1, prev_input_off : prev_input_off + input_stride
+            ].copy()
+            input_bytes = samples_u8[record : record + 1, input_off : input_off + input_stride].copy()
+            binding.step_input(handle, prev_input_bytes, input_bytes)
+            binding.write_compare(handle, out_compare_bytes)
+
+        out = out_view[0].copy()
+        ref = samples["ref_t1"][stop]
+        assert int(samples["seed_t"][stop]["action_id"][attacker]) == 56  # AttackHi3
+        assert int(samples["seed_t"][stop]["action_id"][defender]) == 182  # GuardReflect
+        assert int(ref["action_id"][defender]) == 181  # GuardSetOff
+        for field in ("action_id", "animation_index", "hitlag", "hitstun"):
+            assert int(out[field][defender]) == int(ref[field][defender]), f"field={field}"
+        assert float(out["shield_hp"][defender]) == pytest.approx(
+            float(ref["shield_hp"][defender]), abs=1e-5
+        )
+    finally:
+        binding.destroy(handle)
+
+
+@pytest.mark.integration
 def test_guardreflect_expired_x14_no_submotion_body_uses_guardon_hurtcaps_gat_11085() -> None:
     # Expired-x14 GuardReflect no-submotion BODY handoff:
     # - ftCo_GuardReflect_Anim calls ftCo_80093BC0 before the fighter-vs-fighter collision pass.

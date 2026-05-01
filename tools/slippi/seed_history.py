@@ -1501,8 +1501,9 @@ def derive_magnify_damage_counter_x1910(
         0x0143,  # EntryStart
         0x0144,  # EntryEnd
     }
-    out = np.zeros(pct.shape[0], dtype=np.uint16)
-    counter = 0
+    n = int(pct.shape[0])
+    eligible_rows = np.zeros(n, dtype=np.bool_)
+    observed_tick_rows = np.zeros(n, dtype=np.bool_)
     for i in range(int(pct.shape[0])):
         flags_221f = int(sf[i, state_flags_221f_index])
         visible = (flags_221f & state_flag_221f_b0_mask) != 0
@@ -1518,7 +1519,7 @@ def derive_magnify_damage_counter_x1910(
             and np.isfinite(percent)
             and percent < float(percent_limit)
         )
-        observed_tick = False
+        eligible_rows[i] = eligible
         if eligible and i + 1 < int(pct.shape[0]):
             next_percent = float(pct[i + 1])
             no_contact = True
@@ -1530,24 +1531,25 @@ def derive_magnify_damage_counter_x1910(
                 no_contact = no_contact and int(hit_by[i]) == int(hit_by[i + 1])
             if last_hit_by is not None:
                 no_contact = no_contact and int(last_hit_by[i]) == int(last_hit_by[i + 1])
-            observed_tick = (
+            observed_tick_rows[i] = (
                 np.isfinite(next_percent)
                 and abs((next_percent - percent) - float(amount)) <= 1e-4
                 and int(action[i + 1]) == int(action[i])
                 and no_contact
             )
-        if observed_tick:
-            out[i] = np.uint16(min(interval - 1, np.iinfo(np.uint16).max))
-            counter = 0
-            continue
-        out[i] = np.uint16(min(counter, np.iinfo(np.uint16).max))
-        if eligible:
-            # Without `Camera_80031144` / `Player_GetMoreFlagsBit3`, a purely causal replay-surface
-            # count can falsely arm the terminal value. Keep non-tick rows below terminal and let
-            # the observed-tick branch above arm exact one-step rows.
-            counter = min(counter + 1, interval - 2 if interval > 1 else 0)
-        else:
-            counter = 0
+
+    out = np.zeros(pct.shape[0], dtype=np.uint16)
+    max_counter = min(interval - 1, int(np.iinfo(np.uint16).max))
+    for tick_i in np.flatnonzero(observed_tick_rows):
+        for delta in range(interval):
+            j = int(tick_i) - delta
+            if j < 0 or not bool(eligible_rows[j]):
+                break
+            value = max_counter - delta
+            if value < 0:
+                break
+            if value > int(out[j]):
+                out[j] = np.uint16(value)
     return out
 
 
@@ -2626,9 +2628,15 @@ def derive_kneebend_internals(
     cstick_y_unit: np.ndarray,
     tilt_timer_y: np.ndarray,
     tap_jump_threshold: float,
+    dash_run_jump_stick_y_threshold: float,
     tap_jump_tilt_max_frames: int,
     tap_jump_release_threshold: float,
     act_kneebend: int,
+    act_dash: int,
+    act_run: int,
+    act_run_direct: int,
+    act_run_brake: int,
+    act_turn_run: int,
     button_mask_xy: int,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
@@ -2636,6 +2644,9 @@ def derive_kneebend_internals(
 
     Decomp references:
     - Jump input selection (L-stick vs XY): refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c:34-63
+    - Dash/Run-family jump IASA path uses `fn_800CAF78`, whose L-stick path compares against
+      `p_ftCommonData->x80` instead of the ordinary tap-jump `x74` threshold:
+      refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c:107-129
     - C-stick "jump input" path:
       - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c:90-104 (ftCo_800CB024)
       - refs/melee/src/melee/ft/ft_0DF1.c:239-249 (ftCo_800DF910)
@@ -2662,9 +2673,17 @@ def derive_kneebend_internals(
     prev_in_kneebend = False
 
     thr = np.float32(tap_jump_threshold)
+    dash_run_thr = np.float32(dash_run_jump_stick_y_threshold)
     rel = np.float32(tap_jump_release_threshold)
     tilt_max = int(tap_jump_tilt_max_frames)
     xy = int(button_mask_xy) & 0xFFFF
+    dash_run_sources = {
+        int(act_dash) & 0xFFFF,
+        int(act_run) & 0xFFFF,
+        int(act_run_direct) & 0xFFFF,
+        int(act_run_brake) & 0xFFFF,
+        int(act_turn_run) & 0xFFFF,
+    }
 
     for i in range(n):
         cur_in_kneebend = int(a[i]) == int(act_kneebend)
@@ -2677,13 +2696,24 @@ def derive_kneebend_internals(
         if not prev_in_kneebend:
             # Entry into KneeBend: pick jump_input causally using current inputs.
             # ftCo_Jump_GetInput checks L-stick before XY; C-stick is a separate fallback check.
+            # Dash/Run/RunBrake/TurnRun IASA uses fn_800CAF78 instead, which checks XY first
+            # and then the lower p_ftCommonData->x80 stick threshold.
             jump_input = 0
-            if sy[i] >= thr and int(tty[i]) < tilt_max:
-                jump_input = 1  # JumpInput_LStick
-            elif (int(bp[i]) & xy) != 0:
-                jump_input = 3  # JumpInput_XY
-            elif cy[i] >= thr:
-                jump_input = 2  # JumpInput_CStick
+            prev_action = int(a[i - 1]) & 0xFFFF if i > 0 else 0xFFFF
+            if prev_action in dash_run_sources:
+                if (int(bp[i]) & xy) != 0:
+                    jump_input = 3  # JumpInput_XY
+                elif sy[i] >= dash_run_thr and int(tty[i]) < tilt_max:
+                    jump_input = 1  # JumpInput_LStick
+                elif cy[i] >= thr:
+                    jump_input = 2  # JumpInput_CStick
+            else:
+                if sy[i] >= thr and int(tty[i]) < tilt_max:
+                    jump_input = 1  # JumpInput_LStick
+                elif (int(bp[i]) & xy) != 0:
+                    jump_input = 3  # JumpInput_XY
+                elif cy[i] >= thr:
+                    jump_input = 2  # JumpInput_CStick
             is_short_hop = 0
 
         if not is_short_hop:
@@ -2994,7 +3024,8 @@ def derive_colanim_internals(
         if shine_start_masked_x198c:
             x198c = 1
 
-        downbound_hidden_x1990_visible_zero = cur_a in {0x00BE, 0x00BF} and x1990 > 0
+        downbound_set = {0x00BE, 0x00BF}
+        downbound_hidden_x1990_visible_zero = cur_a in downbound_set and x1990 > 0
         if int(hurt[i]) == 0 and x1990 > 0 and not downbound_hidden_x1990_visible_zero:
             # Slippi post-frame emits `x1988` when nonzero, otherwise `x198C`; a replay-visible
             # hurtbox_state of 0 therefore proves move-induced status and the intangible x1990 lane
@@ -3006,6 +3037,18 @@ def derive_colanim_internals(
             x1990 = 0
             x2221_b0 = 0
             x198c = 1 if x1994 > 0 else 0
+
+        if int(hurt[i]) == 0 and x1994 > 0 and cur_a not in damage_set and cur_a not in downbound_set:
+            # A visible vulnerable snapshot outside the source-proven damage/DownBound x1994
+            # consumers clears replay-history x1994 provenance. Otherwise an old damage-exit
+            # timer can stale-carry under later cliff/EscapeAir x1988/x1990 visibility and leak as
+            # invincible x198C when the masking state changes motion.
+            # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+            # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+            x1994 = 0
+            x1994_rebirth_fall = False
+            if x1990 == 0 and not x2221_b0:
+                x198c = 0
 
         out_x198c[i] = np.uint8(x198c)
         out_x1990[i] = np.uint16(x1990)

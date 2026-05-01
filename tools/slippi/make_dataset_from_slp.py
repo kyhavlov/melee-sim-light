@@ -1560,6 +1560,7 @@ def _derive_fighter_8006cda4_pre_gate_consume_count_seed_lane(
 
     ACT_ATTACK_AIR_B = np.uint16(67)
     ACT_ATTACK_AIR_N = np.uint16(65)
+    ACT_DAMAGE_FALL = np.uint16(38)
     ACT_LANDING_AIR_LW = np.uint16(74)
     ACT_ATTACK_LW3 = np.uint16(57)
     ACT_DAMAGE_FLY_TOP = np.uint16(90)
@@ -1863,15 +1864,18 @@ def _derive_fighter_8006cda4_pre_gate_consume_count_seed_lane(
     # Rollout seed continuity for AttackAirN pre-action stream phase:
     # The same hidden Fighter_8006CDA4 branch state can be needed by a later airborne AttackAirN
     # damage-entry gate. Seed rollouts before that hit need the explicit stream phase plus replay
-    # frame-start RNG clock, but only within the contiguous source episode: same victim action,
-    # same mapped attacker action, airborne, no hitlag, no active hitstun. Ground/action/source/
-    # hitlag boundaries can already have consumed or reset the hidden owner.
+    # frame-start RNG clock, but only within the contiguous source episode: AttackAirN pre-action
+    # rows and the DamageFlyTop -> DamageFall_IASA handoff that can enter AttackAirN on the next
+    # frame. Ground/source/hitlag/action-family boundaries can already have consumed or reset the
+    # hidden owner.
     #
     # This is intentionally limited to rows where the target gate itself was replay-proven above,
     # and only for nonzero consume counts. Marker 4 is a source-proven zero-consume immediate gate,
     # not persistent hidden branch state.
     # refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
-    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+    #   ftCo_DamageFly_IASA,ftCo_8008DCE0}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
     for i in range(n):
         consume = int(out[i])
         if consume <= 0 or consume > 3:
@@ -1890,14 +1894,28 @@ def _derive_fighter_8006cda4_pre_gate_consume_count_seed_lane(
             continue
         attacker_action = all_action_id[i, attacker]
         j = i - 1
+        seen_damagefall_handoff = False
         while j >= 0:
-            if action_id[j] != ACT_ATTACK_AIR_N:
-                break
-            if int(on_ground[j]) != 0 or int(hitlag[j]) != 0 or int(hitstun[j]) != 0:
+            cur = action_id[j]
+            if cur == ACT_ATTACK_AIR_N:
+                if int(on_ground[j]) != 0 or int(hitlag[j]) != 0 or int(hitstun[j]) != 0:
+                    break
+            elif cur == ACT_DAMAGE_FALL:
+                if seen_damagefall_handoff:
+                    break
+                if int(on_ground[j]) != 0 or int(hitlag[j]) != 0 or int(hitstun[j]) != 0:
+                    break
+                seen_damagefall_handoff = True
+            elif cur == ACT_DAMAGE_FLY_TOP:
+                if not seen_damagefall_handoff:
+                    break
+                if int(on_ground[j]) != 0 or int(hitlag[j]) != 0 or int(hitstun[j]) <= 0:
+                    break
+            else:
                 break
             if local_slot_from_source_port(j, source_port) != attacker:
                 break
-            if all_action_id[j, attacker] != attacker_action:
+            if cur != ACT_DAMAGE_FLY_TOP and all_action_id[j, attacker] != attacker_action:
                 break
             if int(out[j]) == 0:
                 out[j] = np.uint8(consume)
@@ -3589,6 +3607,7 @@ def main() -> None:
 
 def _main_impl(args) -> None:
     from tools.slippi.combat_history import (
+        HITLIST_CD_INDEFINITE,
         derive_combat_hitlist_seed_fields,
         derive_hitbox_prev_center_seed_fields,
     )
@@ -3747,6 +3766,7 @@ def _main_impl(args) -> None:
     dash_flick_abs = float(common["dash_flick_abs"])
     dash_flick_tilt_max_frames = int(common["dash_flick_tilt_max_frames"])
     tap_jump_threshold = float(common["tap_jump_threshold"])
+    dash_run_jump_stick_y_threshold = float(common["dash_run_jump_stick_y_threshold"])
     tap_jump_release_threshold = float(common["tap_jump_release_threshold"])
     tap_jump_tilt_max_frames = int(common["tap_jump_tilt_max_frames"])
     grab_mash_stick_threshold = float(common["grab_mash_stick_threshold"])
@@ -3805,7 +3825,9 @@ def _main_impl(args) -> None:
     for cid in (1, 22):
         key = "fox" if cid == 1 else "falco"
         attrs = json.loads((data_root / "characters" / f"{key}.json").read_text())
-        move_data = json.loads((data_root / "moves" / f"{key}.json").read_text())["moves"]
+        move_file = json.loads((data_root / "moves" / f"{key}.json").read_text())
+        move_data = move_file["moves"]
+        special_move_data = move_file.get("specials_by_msid", {})
         char_landing_air_lag_frames[int(cid)] = {
             "airn": int(attrs["landing_airn_lag_frames"]),
             "airf": int(attrs["landing_airf_lag_frames"]),
@@ -3827,7 +3849,7 @@ def _main_impl(args) -> None:
         char_gr_friction[int(cid)] = float(attrs["gr_friction"])
         char_rebound_anim_numerator_frames[int(cid)] = float(attrs["rebound_anim_numerator_frames"])
         active_int_damage_by_anim: dict[int, dict[int, int]] = {}
-        for move in move_data.values():
+        for move in [*move_data.values(), *special_move_data.values()]:
             submotion_id = int(move.get("submotion_id", -1))
             if submotion_id < 0:
                 continue
@@ -5144,9 +5166,15 @@ def _main_impl(args) -> None:
             cstick_y_unit=cstick_y,
             tilt_timer_y=tilt_timer_y_pre,
             tap_jump_threshold=tap_jump_threshold,
+            dash_run_jump_stick_y_threshold=dash_run_jump_stick_y_threshold,
             tap_jump_tilt_max_frames=tap_jump_tilt_max_frames,
             tap_jump_release_threshold=tap_jump_release_threshold,
             act_kneebend=act_kneebend,
+            act_dash=act_dash,
+            act_run=act_run,
+            act_run_direct=act_run_direct,
+            act_run_brake=act_run_brake,
+            act_turn_run=act_turn_run,
             button_mask_xy=button_mask_xy,
         )
         samples["seed_t"]["kneebend_jump_input"][:, slot] = kb_jump_in[:-1]
@@ -6113,11 +6141,6 @@ def _main_impl(args) -> None:
                 ):
                     continue
 
-    samples["seed_t"]["combat_hitlist_cd"] = hitlist_cd[:-1]
-    samples["seed_t"]["combat_hitlist_victim_iid"] = hitlist_iid[:-1]
-    samples["seed_t"]["combat_hitlist_hb_valid"] = hitlist_hb_valid[:-1]
-    samples["seed_t"]["combat_hitlist_hb_cd"] = hitlist_hb_cd[:-1]
-    samples["seed_t"]["combat_hitlist_hb_victim_iid"] = hitlist_hb_iid[:-1]
     # Replay-visible shield-contact result for common aerials:
     # - The pose-local combat_history derivation only emits this lane when it can reconstruct the
     #   active HitCapsule. Some GuardReflect/AttackAir rows still rely on runtime action-frame
@@ -6133,23 +6156,21 @@ def _main_impl(args) -> None:
         dtype=np.uint16,
     )
     attack_contact_actions = np.arange(int(act_attack_11), int(act_attack_air_lw) + 1, dtype=np.uint16)
+    same_frame_special_contact_entry_actions = np.array(
+        [
+            act_fx_special_lw_start,
+            act_fx_special_lw_loop,
+            act_fx_special_lw_hit,
+            act_fx_special_lw_turn,
+            act_fx_special_air_lw_start,
+            act_fx_special_air_lw_loop,
+            act_fx_special_air_lw_hit,
+            act_fx_special_air_lw_turn,
+        ],
+        dtype=np.uint16,
+    )
     same_frame_contact_entry_actions = np.concatenate(
-        (
-            attack_contact_actions,
-            np.array(
-                [
-                    act_fx_special_lw_start,
-                    act_fx_special_lw_loop,
-                    act_fx_special_lw_hit,
-                    act_fx_special_lw_turn,
-                    act_fx_special_air_lw_start,
-                    act_fx_special_air_lw_loop,
-                    act_fx_special_air_lw_hit,
-                    act_fx_special_air_lw_turn,
-                ],
-                dtype=np.uint16,
-            ),
-        )
+        (attack_contact_actions, same_frame_special_contact_entry_actions)
     )
     shield_hit_int_damage = np.zeros(
         (n_frames, samples["seed_t"]["combat_shield_hit_int_damage"].shape[1]), dtype=np.uint8
@@ -6227,6 +6248,49 @@ def _main_impl(args) -> None:
             or np.isin(next_action, same_frame_contact_entry_actions)
         )
 
+    def _seed_guardsetoff_shield_hitlist_episode(frame_i: int, attacker: int, defender: int) -> None:
+        if frame_i < 0 or frame_i + 1 >= n_frames:
+            return
+        proven_hbs = [
+            hb
+            for hb in range(samples["seed_t"]["combat_hitlist_hb_valid"].shape[2])
+            if int(shield_contact_hb_kind[frame_i, attacker, hb, defender]) == 2
+        ]
+        if not proven_hbs:
+            return
+        if int(post_hitlag[frame_i, attacker]) != 0 or int(post_hitlag[frame_i, defender]) != 0:
+            return
+        if int(post_action_id[frame_i + 1, defender]) != int(act_guard_set_off):
+            return
+        if int(post_hitlag[frame_i + 1, attacker]) <= 0 or int(post_hitlag[frame_i + 1, defender]) <= 0:
+            return
+
+        # The ShieldDesc seed at frame_i proves ftColl_80076CBC accepted the shield hit during
+        # that frame. The accepted HitCapsule victims_1 list is post-mutation state, so it belongs
+        # to the following GuardSetOff hitlag segment. Stamp only the per-HitCapsule lanes whose
+        # ShieldDesc contact was replay-proven, and only while the same action/hitlag episode is
+        # frozen. Runtime materializes these exact slots lazily during hitlag; it does not consume
+        # inactive slots.
+        # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076CBC,ftColl_80076808}
+        # refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
+        defender_iid = np.uint16(int(post_instance_id[frame_i + 1, defender]))
+        attacker_action = int(post_action_id[frame_i + 1, attacker])
+        defender_action = int(post_action_id[frame_i + 1, defender])
+        j = frame_i + 1
+        while (
+            j < n_frames
+            and int(post_action_id[j, attacker]) == attacker_action
+            and int(post_action_id[j, defender]) == defender_action
+            and int(post_hitlag[j, attacker]) > 0
+            and int(post_hitlag[j, defender]) > 0
+            and int(post_instance_id[j, defender]) == int(defender_iid)
+        ):
+            for hb in proven_hbs:
+                hitlist_hb_valid[j, attacker, hb] = np.uint8(1)
+                hitlist_hb_cd[j, attacker, hb, defender] = np.uint16(HITLIST_CD_INDEFINITE)
+                hitlist_hb_iid[j, attacker, hb, defender] = defender_iid
+            j += 1
+
     for i in range(max(0, n_frames - 1)):
         for defender in range(num_players):
             defender_guard_now = post_action_id[i, defender] in guard_family_actions
@@ -6258,14 +6322,24 @@ def _main_impl(args) -> None:
                         int(post_hitlag[i + 1, defender])
                     )
                     active_int_dmg = _guardsetoff_active_int_damage(i + 1, defender)
+                    use_active_upper = np.isin(
+                        post_action_id[i + 1, attacker], same_frame_special_contact_entry_actions
+                    )
                     if active_int_dmg > 0 and hitlag_int_dmg > 0:
                         # This seed lane is consumed by runtime for the current collision frame's
-                        # x19A4/x1924 hitlag scalar. The GuardSetOff anim-rate backsolve can be an
-                        # over-estimate when shield-rate/lightshield quantization is ambiguous, so
-                        # do not let it exceed the damage proven by the replay-visible hitlag.
+                        # x19A4/x1924 shield-hit scalar. Replay-visible hitlag is only a lower
+                        # bound because ftCommon_CalcHitlag maps damage ranges to the same integer
+                        # hitlag value. The active lookup is currently a per-frame max over active
+                        # HitCapsules, so it is only safe as an upper source for same-frame special
+                        # contact owners such as shine. Multi-hitbox attacks stay on the hitlag
+                        # lower bound until exact per-HitCapsule shield provenance is exposed.
                         # refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
                         # refs/melee/src/melee/ft/ftcommon.c::ftCommon_CalcHitlag
-                        active_int_dmg = min(active_int_dmg, hitlag_int_dmg)
+                        active_int_dmg = (
+                            max(active_int_dmg, hitlag_int_dmg)
+                            if use_active_upper
+                            else hitlag_int_dmg
+                        )
                     elif active_int_dmg <= 0:
                         active_int_dmg = hitlag_int_dmg
                     shield_hit_int_damage[i, defender] = np.uint8(
@@ -6304,6 +6378,18 @@ def _main_impl(args) -> None:
                     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
                     # refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
                     shield_contact_hb_kind[i, attacker, :, defender] = np.uint8(1)
+    for i in range(max(0, n_frames - 1)):
+        for defender in range(num_players):
+            for attacker in range(num_players):
+                if attacker == defender:
+                    continue
+                _seed_guardsetoff_shield_hitlist_episode(i, attacker, defender)
+
+    samples["seed_t"]["combat_hitlist_cd"] = hitlist_cd[:-1]
+    samples["seed_t"]["combat_hitlist_victim_iid"] = hitlist_iid[:-1]
+    samples["seed_t"]["combat_hitlist_hb_valid"] = hitlist_hb_valid[:-1]
+    samples["seed_t"]["combat_hitlist_hb_cd"] = hitlist_hb_cd[:-1]
+    samples["seed_t"]["combat_hitlist_hb_victim_iid"] = hitlist_hb_iid[:-1]
     samples["seed_t"]["combat_shield_contact_hb_kind"] = shield_contact_hb_kind[:-1]
     samples["seed_t"]["combat_shield_hit_int_damage"] = shield_hit_int_damage[:-1]
     samples["seed_t"]["combat_shield_damage_taken"] = shield_damage_taken[:-1]

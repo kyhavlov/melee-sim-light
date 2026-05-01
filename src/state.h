@@ -546,6 +546,9 @@ typedef struct MslStateSoA {
   // FallSpecial internals (seeded/derived).
   // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c
   uint8_t* fallspecial_xc;  // fp->mv.co.fallspecial.xC (arg1 to ftCo_80096900)
+  // fp->mv.co.fallspecial.landing_lag, forwarded by FallSpecial_Coll into
+  // ftCo_LandingFallSpecial_Enter.
+  float* fallspecial_landing_lag;
   // LandingFallSpecial carries mv.co.landing.allow_interrupt from ftCo_LandingFallSpecial_Enter.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_LandingFallSpecial_Enter
   uint8_t* landing_fallspecial_allow_interrupt;
@@ -682,6 +685,11 @@ typedef struct MslStateSoA {
   // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
   // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800477E0,mpColl_80044628_Floor,mpColl_80044948_Floor,mpColl_800473CC}
   uint8_t* damage_hitlag_floorhug_latch;
+  // Runtime one-frame owner bit set when ftCo_Damage_OnEveryHitlag consumed a downward SDI input
+  // before the collision callback. The x670/x671 tilt timers are reset by that consume before
+  // mpColl runs, so collision cannot rediscover this from the post-callback timer values.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag
+  uint8_t* damage_hitlag_downward_sdi_consumed;
   uint16_t* hitstun;
   // Damage jump-buffer snapshot (decomp: fp->mv.co.damage.x14, set from x0 on jump input while in
   // hitstun; used by Damage_Anim inlineC0 gate vs p_ftCommonData->x1D0).

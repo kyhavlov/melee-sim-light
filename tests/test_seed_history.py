@@ -437,12 +437,18 @@ def test_derive_kneebend_internals_is_causal_wrt_future_frames() -> None:
     from pathlib import Path
 
     act_wait = 0x000E
+    act_turn_run = 0x0013
+    act_dash = 0x0014
+    act_run = 0x0015
+    act_run_direct = 0x0016
+    act_run_brake = 0x0017
     act_kneebend = 0x0018
     button_x = 0x0400
     button_xy = 0x0400 | 0x0800
 
     common = json.loads(Path("data/common/ft_common_data.json").read_text())
     tap_jump_threshold = float(common["tap_jump_threshold"])
+    dash_run_jump_stick_y_threshold = float(common["dash_run_jump_stick_y_threshold"])
     tap_jump_release_threshold = float(common["tap_jump_release_threshold"])
     tap_jump_tilt_max_frames = int(common["tap_jump_tilt_max_frames"])
 
@@ -462,9 +468,15 @@ def test_derive_kneebend_internals_is_causal_wrt_future_frames() -> None:
         cstick_y_unit=cstick_y_prefix,
         tilt_timer_y=tilt_timer_y_prefix,
         tap_jump_threshold=tap_jump_threshold,
+        dash_run_jump_stick_y_threshold=dash_run_jump_stick_y_threshold,
         tap_jump_tilt_max_frames=tap_jump_tilt_max_frames,
         tap_jump_release_threshold=tap_jump_release_threshold,
         act_kneebend=act_kneebend,
+        act_dash=act_dash,
+        act_run=act_run,
+        act_run_direct=act_run_direct,
+        act_run_brake=act_run_brake,
+        act_turn_run=act_turn_run,
         button_mask_xy=button_xy,
     )
 
@@ -486,14 +498,93 @@ def test_derive_kneebend_internals_is_causal_wrt_future_frames() -> None:
         cstick_y_unit=cstick_y_ext,
         tilt_timer_y=tilt_timer_y_ext,
         tap_jump_threshold=tap_jump_threshold,
+        dash_run_jump_stick_y_threshold=dash_run_jump_stick_y_threshold,
         tap_jump_tilt_max_frames=tap_jump_tilt_max_frames,
         tap_jump_release_threshold=tap_jump_release_threshold,
         act_kneebend=act_kneebend,
+        act_dash=act_dash,
+        act_run=act_run,
+        act_run_direct=act_run_direct,
+        act_run_brake=act_run_brake,
+        act_turn_run=act_turn_run,
         button_mask_xy=button_xy,
     )
 
     assert np.array_equal(j0, j1[: j0.size])
     assert np.array_equal(s0, s1[: s0.size])
+
+
+def test_derive_kneebend_internals_uses_dash_run_jump_threshold_on_source_entry() -> None:
+    import json
+    from pathlib import Path
+
+    act_wait = 0x000E
+    act_turn_run = 0x0013
+    act_dash = 0x0014
+    act_run = 0x0015
+    act_run_direct = 0x0016
+    act_run_brake = 0x0017
+    act_kneebend = 0x0018
+    button_xy = 0x0400 | 0x0800
+
+    common = json.loads(Path("data/common/ft_common_data.json").read_text())
+    tap_jump_threshold = float(common["tap_jump_threshold"])
+    dash_run_jump_stick_y_threshold = float(common["dash_run_jump_stick_y_threshold"])
+    tap_jump_release_threshold = float(common["tap_jump_release_threshold"])
+    tap_jump_tilt_max_frames = int(common["tap_jump_tilt_max_frames"])
+
+    mid_stick_jump = np.float32((tap_jump_threshold + dash_run_jump_stick_y_threshold) * 0.5)
+    actions = np.array([act_wait, act_dash, act_kneebend, act_kneebend, act_kneebend], dtype=np.uint16)
+    buttons = np.zeros(actions.size, dtype=np.uint16)
+    buttons_pressed = np.zeros(actions.size, dtype=np.uint16)
+    stick_y = np.array([0.0, 0.0, mid_stick_jump, 0.0, 0.0], dtype=np.float32)
+    cstick_y = np.zeros(actions.size, dtype=np.float32)
+    tilt_timer_y = np.zeros(actions.size, dtype=np.uint8)
+
+    jump_input, short_hop = derive_kneebend_internals(
+        action_id=actions,
+        buttons=buttons,
+        buttons_pressed=buttons_pressed,
+        stick_y_unit=stick_y,
+        cstick_y_unit=cstick_y,
+        tilt_timer_y=tilt_timer_y,
+        tap_jump_threshold=tap_jump_threshold,
+        dash_run_jump_stick_y_threshold=dash_run_jump_stick_y_threshold,
+        tap_jump_tilt_max_frames=tap_jump_tilt_max_frames,
+        tap_jump_release_threshold=tap_jump_release_threshold,
+        act_kneebend=act_kneebend,
+        act_dash=act_dash,
+        act_run=act_run,
+        act_run_direct=act_run_direct,
+        act_run_brake=act_run_brake,
+        act_turn_run=act_turn_run,
+        button_mask_xy=button_xy,
+    )
+    assert jump_input.tolist() == [0, 0, 1, 1, 1]
+    assert short_hop.tolist() == [0, 0, 0, 1, 1]
+
+    actions[1] = np.uint16(act_wait)
+    jump_input, short_hop = derive_kneebend_internals(
+        action_id=actions,
+        buttons=buttons,
+        buttons_pressed=buttons_pressed,
+        stick_y_unit=stick_y,
+        cstick_y_unit=cstick_y,
+        tilt_timer_y=tilt_timer_y,
+        tap_jump_threshold=tap_jump_threshold,
+        dash_run_jump_stick_y_threshold=dash_run_jump_stick_y_threshold,
+        tap_jump_tilt_max_frames=tap_jump_tilt_max_frames,
+        tap_jump_release_threshold=tap_jump_release_threshold,
+        act_kneebend=act_kneebend,
+        act_dash=act_dash,
+        act_run=act_run,
+        act_run_direct=act_run_direct,
+        act_run_brake=act_run_brake,
+        act_turn_run=act_turn_run,
+        button_mask_xy=button_xy,
+    )
+    assert jump_input.tolist() == [0, 0, 0, 0, 0]
+    assert short_hop.tolist() == [0, 0, 0, 0, 0]
 
 
 def test_derive_frame_speed_mul_is_prefix_invariant() -> None:
@@ -1814,6 +1905,62 @@ def test_derive_colanim_internals_preserves_downbound_hidden_x1990_visible_zero(
     assert rebirth_fall_x1994.tolist() == [0, 0, 0]
 
 
+def test_derive_colanim_internals_clears_stale_damage_x1994_before_cliff_escapeair() -> None:
+    # PJO-style provenance negative:
+    # - Damage hitlag exit can seed x1994.
+    # - A later visible-vulnerable non-damage/non-DownBound row proves that replay-history x1994 is
+    #   no longer a source-proven hidden timer.
+    # - Do not carry that stale x1994 underneath CliffWait x1990 or EscapeAir x1988, where it would
+    #   leak as visible invincible status when EscapeAir lands into LandingFallSpecial.
+    # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+    act_damage_n1 = 0x004E
+    act_damage_fly_roll = 0x005B
+    act_fall = 0x001D
+    act_cliff_wait = 0x00FD
+    act_escape_air = 0x00EC
+    act_landing_fall_special = 0x002B
+
+    action = np.array(
+        [
+            act_damage_n1,
+            act_damage_fly_roll,
+            act_damage_fly_roll,
+            act_fall,
+            act_cliff_wait,
+            act_cliff_wait,
+            act_escape_air,
+            act_escape_air,
+            act_landing_fall_special,
+        ],
+        dtype=np.uint16,
+    )
+    action_frame = np.array([1, 1, 2, 0, 1, 2, 4, 5, 0], dtype=np.int16)
+    hitlag = np.array([2, 0, 0, 0, 0, 0, 0, 0, 0], dtype=np.uint16)
+    hitstun = np.array([8, 7, 6, 0, 0, 0, 0, 0, 0], dtype=np.uint16)
+    hurt = np.array([0, 0, 0, 0, 2, 2, 2, 2, 0], dtype=np.uint8)
+
+    x198c, x1990, x1994, x2221, rebirth_fall_x1994 = derive_colanim_internals(
+        action_id_u16=action,
+        action_frame_i16=action_frame,
+        hitlag_u16=hitlag,
+        hitstun_u16=hitstun,
+        hurtbox_state_u8=hurt,
+        colanim_throw_x1994_frames=8,
+        colanim_cliff_x1990_frames=30,
+        colanim_damage_x1994_frames=5,
+        throw_actions=(),
+        cliff_actions=(act_cliff_wait,),
+        damage_actions=(act_damage_n1, act_damage_fly_roll),
+    )
+
+    assert x1994.tolist() == [0, 5, 4, 0, 0, 0, 0, 0, 0]
+    assert x1990.tolist() == [0, 0, 0, 0, 30, 29, 28, 27, 0]
+    assert x198c.tolist() == [0, 1, 1, 0, 2, 2, 2, 2, 0]
+    assert x2221.tolist() == [0] * action.size
+    assert rebirth_fall_x1994.tolist() == [0] * action.size
+
+
 def test_derive_colanim_internals_is_causal_wrt_future_frames() -> None:
     act_wait = 0x000E
     act_damage_n1 = 0x004E
@@ -2990,7 +3137,7 @@ def test_derive_camera_box_visible_x221f_b0_prefix_invariant() -> None:
     assert np.array_equal(ext[: state_flags_prefix.shape[0]], full)
 
 
-def test_derive_magnify_damage_counter_x1910_prefix_invariant_and_resets() -> None:
+def test_derive_magnify_damage_counter_x1910_backfills_observed_ticks_and_resets() -> None:
     wait = np.uint16(14)
     rebirth = np.uint16(12)
     action = np.array([wait, wait, wait, wait, wait, rebirth, wait], dtype=np.uint16)
@@ -3063,7 +3210,7 @@ def test_derive_magnify_damage_counter_x1910_prefix_invariant_and_resets() -> No
         percent_limit=150,
         damage_amount=1,
     )
-    assert no_tick.tolist() == [0, 1, 1, 1]
+    assert no_tick.tolist() == [0, 0, 0, 0]
 
     disabled = derive_magnify_damage_counter_x1910(
         action_id_u16=np.array([wait, wait, wait, wait], dtype=np.uint16),
@@ -3093,7 +3240,7 @@ def test_derive_magnify_damage_counter_x1910_prefix_invariant_and_resets() -> No
         percent_limit=150,
         damage_amount=1,
     )
-    assert contact_percent_gain.tolist() == [0, 1, 1, 1]
+    assert contact_percent_gain.tolist() == [0, 0, 0, 0]
 
 
 def test_derive_rebirth_camera_anchor_y_prefix_invariant() -> None:

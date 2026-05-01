@@ -18,6 +18,7 @@
 #include "locomotion.h"
 #include "mpcoll_ecb_points.h"
 #include "mpcoll_ground.h"
+#include "mtx34.h"
 #include "msl_math.h"
 #include "stage_collision.h"
 #include "state_flags.h"
@@ -2343,6 +2344,159 @@ static inline uint8_t damagefly_reflect_lockout_active(const MslBatch* batch,
   return (uint8_t)(batch->state.action_frame[idx] < (int16_t)c->damagefly_reflect_lockout_frames);
 }
 
+static inline void damagefly_sample_reflect_ecb(MslEcbWorldPoints* out, const MslBatch* batch,
+                                                size_t idx) {
+  if (out == NULL || batch == NULL) {
+    return;
+  }
+  const float fd = batch->state.facing[idx] ? 1.0f : -1.0f;
+  const uint16_t frame = msl_ecb_frame_u16_from_anim_frame(batch->state.anim_frame_f32[idx]);
+  const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+  if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL && ch != NULL &&
+      ch->ecb_joint_count != 0u) {
+    const uint16_t msid = (uint16_t)batch->state.animation_index[idx];
+    const float model_scaling =
+        (isfinite(ch->model_scaling) && ch->model_scaling > 0.0f) ? ch->model_scaling : 1.0f;
+    const float model_scale = batch->state.fighter_scale_y[idx] * model_scaling;
+    float xrotn_m[12];
+    uint8_t have_xrotn =
+        (anim_pose_get_matrix(batch->state.char_id[idx], msid, frame, 2u, xrotn_m) == 0) ? 1u : 0u;
+    float axis_x = 0.0f, axis_y = 0.0f, axis_z = 0.0f;
+    float xrotn_origin_x = 0.0f, xrotn_origin_y = 0.0f, xrotn_origin_z = 0.0f;
+    if (have_xrotn) {
+      const float origin[3] = {0.0f, 0.0f, 0.0f};
+      const float local_x[3] = {1.0f, 0.0f, 0.0f};
+      float ax1 = 0.0f, ay1 = 0.0f, az1 = 0.0f;
+      msl_mtx34_mul_point(xrotn_m, origin, &xrotn_origin_x, &xrotn_origin_y, &xrotn_origin_z);
+      msl_mtx34_mul_point(xrotn_m, local_x, &ax1, &ay1, &az1);
+      xrotn_origin_x *= model_scale;
+      xrotn_origin_y *= model_scale;
+      xrotn_origin_z *= model_scale;
+      ax1 *= model_scale;
+      ay1 *= model_scale;
+      az1 *= model_scale;
+      axis_x = ax1 - xrotn_origin_x;
+      axis_y = ay1 - xrotn_origin_y;
+      axis_z = az1 - xrotn_origin_z;
+      const float axis_len = sqrtf(axis_x * axis_x + axis_y * axis_y + axis_z * axis_z);
+      if (axis_len > 0.0f) {
+        axis_x /= axis_len;
+        axis_y /= axis_len;
+        axis_z /= axis_len;
+      } else {
+        have_xrotn = 0u;
+      }
+    }
+
+    const float vx = batch->state.speed_air_x_self[idx] + batch->state.speed_x_attack[idx];
+    const float vy = batch->state.speed_y_self[idx] + batch->state.speed_y_attack[idx];
+    const uint8_t have_angle =
+        (uint8_t)(isfinite(vx) && isfinite(vy) && !(vx == 0.0f && vy == 0.0f) && have_xrotn);
+    const float angle = have_angle ? fd * atan2f(vx, vy) : 0.0f;
+    const float c_rot = cosf(angle);
+    const float s_rot = sinf(angle);
+
+    float min_x = 0.0f, max_x = 0.0f, min_y = 0.0f, max_y = 0.0f;
+    uint8_t have = 0u;
+    for (uint16_t pi = 0; pi < ch->ecb_joint_count; pi++) {
+      const uint16_t part_id = ch->ecb_joints[pi];
+      float m[12];
+      if (anim_pose_get_collision_matrix(batch, idx, msid, frame, part_id, m) != 0) {
+        have = 0u;
+        break;
+      }
+      const float origin[3] = {0.0f, 0.0f, 0.0f};
+      float x = 0.0f, y = 0.0f, z = 0.0f;
+      msl_mtx34_mul_point(m, origin, &x, &y, &z);
+      x *= model_scale;
+      y *= model_scale;
+      z *= model_scale;
+      if (have_angle && msl_anim_part_under_xrotn(batch->state.char_id[idx], part_id)) {
+        const float px = x - xrotn_origin_x;
+        const float py = y - xrotn_origin_y;
+        const float pz = z - xrotn_origin_z;
+        const float dot = axis_x * px + axis_y * py + axis_z * pz;
+        const float cross_x = axis_y * pz - axis_z * py;
+        const float cross_y = axis_z * px - axis_x * pz;
+        const float cross_z = axis_x * py - axis_y * px;
+        x = xrotn_origin_x + (px * c_rot) + (cross_x * s_rot) + (axis_x * dot * (1.0f - c_rot));
+        y = xrotn_origin_y + (py * c_rot) + (cross_y * s_rot) + (axis_y * dot * (1.0f - c_rot));
+        z = xrotn_origin_z + (pz * c_rot) + (cross_z * s_rot) + (axis_z * dot * (1.0f - c_rot));
+      }
+      const float rel_x = fd * z;
+      const float rel_y = y;
+      if (!have) {
+        min_x = max_x = rel_x;
+        min_y = max_y = rel_y;
+        have = 1u;
+      } else {
+        if (rel_x < min_x) {
+          min_x = rel_x;
+        }
+        if (rel_x > max_x) {
+          max_x = rel_x;
+        }
+        if (rel_y < min_y) {
+          min_y = rel_y;
+        }
+        if (rel_y > max_y) {
+          max_y = rel_y;
+        }
+      }
+    }
+    if (have) {
+      out->left_rel_x = min_x;
+      out->right_rel_x = max_x;
+      out->bottom_rel_y = min_y;
+      out->top_rel_y = max_y;
+      out->side_rel_y = ch->ecb_side_y_offset + 0.5f * (min_y + max_y);
+      out->frame_u16 = frame;
+      out->bottom_x = batch->state.pos_x[idx];
+      out->bottom_y = batch->state.pos_y[idx] + min_y;
+      out->top_x = batch->state.pos_x[idx];
+      out->top_y = batch->state.pos_y[idx] + max_y;
+      out->left_x = batch->state.pos_x[idx] + min_x;
+      out->left_y = batch->state.pos_y[idx] + out->side_rel_y;
+      out->right_x = batch->state.pos_x[idx] + max_x;
+      out->right_y = batch->state.pos_y[idx] + out->side_rel_y;
+    } else {
+      msl_ecb_world_points_sample(out, batch->state.char_id[idx], batch->state.animation_index[idx],
+                                  frame, fd, batch->state.pos_x[idx], batch->state.pos_y[idx],
+                                  batch->state.prev_on_ground[idx]);
+    }
+  } else {
+    msl_ecb_world_points_sample(out, batch->state.char_id[idx], batch->state.animation_index[idx],
+                                frame, fd, batch->state.pos_x[idx], batch->state.pos_y[idx],
+                                batch->state.prev_on_ground[idx]);
+  }
+
+  // Decomp: ftCo_800C15F4 passes CollData.ecb.{left,right,top} into ftCo_800C18A8.
+  // CollData.ecb is the normalized mpColl ECB, so mirror mpColl_LoadECB_inline's horizontal
+  // minimum-width / +/-2 clamp before using the local side offset.
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_JObj,mpColl_LoadECB_inline}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FlyReflect.c::{
+  //   ftCo_800C15F4,ftCo_800C18A8}
+  float left_rel_x = out->left_rel_x;
+  float right_rel_x = out->right_rel_x;
+  const float min_ecb_width = fmaxf(4.0f, 10.0f * batch->state.fighter_scale_y[idx]);
+  const float ecb_width = fabsf(right_rel_x - left_rel_x);
+  if (ecb_width < min_ecb_width) {
+    const float half_width = 0.5f * ecb_width;
+    left_rel_x = -half_width;
+    right_rel_x = half_width;
+  }
+  if (right_rel_x < 2.0f) {
+    right_rel_x = 2.0f;
+  }
+  if (left_rel_x > -2.0f) {
+    left_rel_x = -2.0f;
+  }
+  out->left_rel_x = left_rel_x;
+  out->right_rel_x = right_rel_x;
+  out->left_x = batch->state.pos_x[idx] + left_rel_x;
+  out->right_x = batch->state.pos_x[idx] + right_rel_x;
+}
+
 static inline uint8_t damagefly_try_enter_flyreflect(MslBatch* batch, const MslCommonParams* c,
                                                      size_t idx) {
   if (batch == NULL || c == NULL) {
@@ -2357,19 +2511,33 @@ static inline uint8_t damagefly_try_enter_flyreflect(MslBatch* batch, const MslC
   const float threshold = c->damagefly_reflect_speed_threshold;
   uint16_t target_action = 0u;
   uint32_t target_submotion = 0u;
+  float reflect_offset_x = 0.0f;
+  float reflect_offset_y = 0.0f;
 
   if (batch->state.speed_x_attack[idx] < -threshold &&
       (env & (uint32_t)MSL_COLLIDE_RIGHT_WALL_HUG) != 0u) {
     target_action = (uint16_t)MSL_ACT_FLY_REFLECT_WALL;
     target_submotion = (uint32_t)MSL_SM_WALL_DAMAGE;
+    MslEcbWorldPoints ecb = {0};
+    damagefly_sample_reflect_ecb(&ecb, batch, idx);
+    reflect_offset_x = ecb.left_rel_x;
+    reflect_offset_y = ecb.side_rel_y;
   } else if (batch->state.speed_x_attack[idx] > threshold &&
              (env & (uint32_t)MSL_COLLIDE_LEFT_WALL_HUG) != 0u) {
     target_action = (uint16_t)MSL_ACT_FLY_REFLECT_WALL;
     target_submotion = (uint32_t)MSL_SM_WALL_DAMAGE;
+    MslEcbWorldPoints ecb = {0};
+    damagefly_sample_reflect_ecb(&ecb, batch, idx);
+    reflect_offset_x = ecb.right_rel_x;
+    reflect_offset_y = ecb.side_rel_y;
   } else if (batch->state.speed_y_attack[idx] > threshold &&
              (env & (uint32_t)MSL_COLLIDE_CEILING_HUG) != 0u) {
     target_action = (uint16_t)MSL_ACT_FLY_REFLECT_CEIL;
     target_submotion = (uint32_t)MSL_SM_STOP_CEIL;
+    MslEcbWorldPoints ecb = {0};
+    damagefly_sample_reflect_ecb(&ecb, batch, idx);
+    reflect_offset_x = 0.0f;
+    reflect_offset_y = ecb.top_rel_y;
   } else {
     return 0u;
   }
@@ -2423,6 +2591,20 @@ static inline uint8_t damagefly_try_enter_flyreflect(MslBatch* batch, const MslC
   batch->state.action_id[idx] = target_action;
   batch->state.animation_index[idx] = target_submotion;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  {
+    float transn[3] = {0.0f, 0.0f, 0.0f};
+    (void)anim_pose_get_transn(batch->state.char_id[idx], target_submotion, 0u, transn);
+    // Decomp: ftCo_800C18A8 enters FlyReflect*, then snaps the fighter to the current
+    // collision ECB offset plus the new motion's TransNPos. For wall reflection, TransN.z is
+    // applied along post-reflect facing; for ceiling reflection, TransN.y is added vertically.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FlyReflect.c::ftCo_800C18A8
+    if (target_action == (uint16_t)MSL_ACT_FLY_REFLECT_WALL) {
+      const float fd = batch->state.facing[idx] ? 1.0f : -1.0f;
+      batch->state.pos_x[idx] = batch->state.pos_x[idx] + reflect_offset_x + transn[2] * fd;
+    } else {
+      batch->state.pos_y[idx] = transn[1] + batch->state.pos_y[idx] + reflect_offset_y;
+    }
+  }
   batch->state.colanim_timer_x1990[idx] = c->colanim_flyreflect_x1990_frames;
   batch->state.colanim_hit_status_x198c[idx] = 2u;
   batch->state.hurtbox_state[idx] = 2u;
@@ -2433,7 +2615,9 @@ static inline void enter_passive_from_damage_land(MslBatch* batch, const MslChar
                                                   size_t bi, size_t idx, uint16_t passive_act,
                                                   uint16_t prev_action_id) {
   transfer_air_to_ground_on_land(batch, ch, bi, idx, prev_action_id);
-  damage_land_project_kb_to_ground_tangent(batch, idx);
+  if (passive_act == (uint16_t)MSL_ACT_PASSIVE) {
+    damage_land_project_kb_to_ground_tangent(batch, idx);
+  }
   batch->state.action_id[idx] = passive_act;
   batch->state.animation_index[idx] = submotion_for_down_action(passive_act);
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
@@ -2449,7 +2633,10 @@ static inline void enter_passive_from_damage_land(MslBatch* batch, const MslChar
   batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN;
   // Passive/PassiveStand entry in ftCo_80090184 uses Fighter_ChangeMotionState via
   // ftCo_80098928 / ftCo_8009872C and does not do a local immediate ftAnim_8006EBA4 tick.
+  // Only neutral Passive calls ftCommon_8007CCE8 on entry; PassiveStandF/B keep the decayed
+  // airborne KB vector until the next grounded procUpdate frame.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_80090184
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Passive.c::ftCo_800987D0
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveStand.c::ftCo_80098928
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownAttack.c::ftCo_8009872C
 }

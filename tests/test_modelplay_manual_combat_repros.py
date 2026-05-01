@@ -181,38 +181,37 @@ def test_manual_damagefly_wall_hit_enters_flyreflectwall() -> None:
     )
 
     falco = 1
-    out_824, contacts_824 = history[824]
-    out_825, contacts_825 = history[825]
-    out_826, contacts_826 = history[826]
+    out_821, contacts_821 = history[821]
+    out_822, contacts_822 = history[822]
+    out_823, contacts_823 = history[823]
     out_840, _ = history[840]
-    assert int(out_824["action_id"][falco]) == 88  # DamageFlyN before wall reflect.
-    assert int(contacts_824["wall_kind"][falco]) == 2
-    assert int(contacts_824["wall_id"][falco]) == 9
+    assert int(out_821["action_id"][falco]) == 88  # DamageFlyN before wall reflect.
+    assert int(contacts_821["wall_kind"][falco]) == 0
 
-    assert int(out_825["action_id"][falco]) == 247  # FlyReflectWall.
-    assert int(out_825["animation_index"][falco]) == 212  # WallDamage.
+    assert int(out_822["action_id"][falco]) == 247  # FlyReflectWall.
+    assert int(out_822["animation_index"][falco]) == 212  # WallDamage.
     # Keep the decomp-shaped projection honest: FlyReflect is entered from the right-wall hug
     # contact, and the root has already been projected to the post-collision position before the
     # reflected velocity is applied.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_FlyReflect.c::ftCo_800C18A8
-    assert float(out_825["pos_x"][falco]) == pytest.approx(87.68855, abs=1e-4)
-    assert float(out_825["pos_y"][falco]) == pytest.approx(-8.28212, abs=1e-4)
-    assert int(contacts_825["wall_kind"][falco]) == 2
-    assert int(contacts_825["wall_id"][falco]) == 9
-    assert float(contacts_825["wall_contact_x"][falco]) == pytest.approx(85.56570, abs=1e-4)
-    assert float(contacts_825["wall_contact_y"][falco]) == pytest.approx(-1.36025, abs=1e-4)
-    assert float(contacts_825["wall_normal_x"][falco]) == pytest.approx(1.0, abs=1e-6)
-    assert float(contacts_825["wall_normal_y"][falco]) == pytest.approx(0.0, abs=1e-6)
-    assert int(contacts_825["coll_env_flags"][falco]) & MSL_COLLIDE_RIGHT_WALL_PUSH
-    assert int(contacts_825["coll_env_flags"][falco]) & MSL_COLLIDE_RIGHT_WALL_HUG
-    assert float(out_825["speed_x_attack"][falco]) > 1.0
-    assert int(out_825["hurtbox_state"][falco]) == 2
+    assert float(out_822["pos_x"][falco]) == pytest.approx(88.11599, abs=1e-4)
+    assert float(out_822["pos_y"][falco]) == pytest.approx(-14.13644, abs=1e-4)
+    assert int(contacts_822["wall_kind"][falco]) == 2
+    assert int(contacts_822["wall_id"][falco]) == 9
+    assert float(contacts_822["wall_contact_x"][falco]) == pytest.approx(85.56570, abs=1e-4)
+    assert float(contacts_822["wall_contact_y"][falco]) == pytest.approx(-7.80649, abs=1e-4)
+    assert float(contacts_822["wall_normal_x"][falco]) == pytest.approx(1.0, abs=1e-6)
+    assert float(contacts_822["wall_normal_y"][falco]) == pytest.approx(0.0, abs=1e-6)
+    assert int(contacts_822["coll_env_flags"][falco]) & MSL_COLLIDE_RIGHT_WALL_PUSH
+    assert int(contacts_822["coll_env_flags"][falco]) & MSL_COLLIDE_RIGHT_WALL_HUG
+    assert float(out_822["speed_x_attack"][falco]) > 1.0
+    assert int(out_822["hurtbox_state"][falco]) == 2
 
-    assert int(out_826["action_id"][falco]) == 247
-    assert float(out_826["pos_x"][falco]) == pytest.approx(89.58746, abs=1e-4)
-    assert float(out_826["pos_y"][falco]) == pytest.approx(-7.08561, abs=1e-4)
-    assert int(contacts_826["wall_kind"][falco]) == 0
+    assert int(out_823["action_id"][falco]) == 247
+    assert float(out_823["pos_x"][falco]) == pytest.approx(90.10555, abs=1e-4)
+    assert float(out_823["pos_y"][falco]) == pytest.approx(-12.45038, abs=1e-4)
+    assert int(contacts_823["wall_kind"][falco]) == 2
     assert int(out_840["action_id"][falco]) == 247
     assert int(out_840["hurtbox_state"][falco]) == 0
 

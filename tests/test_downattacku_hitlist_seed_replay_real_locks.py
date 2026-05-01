@@ -207,7 +207,7 @@ def test_downattacku_rollout_preserves_dense_seed_through_live_instance_rebind()
 
 
 @pytest.mark.integration
-def test_downattacku_create_edge_without_dense_seed_still_admits_body_hit() -> None:
+def test_downattacku_landingfallspecial_dynamic_pose_prevents_false_body_without_dense_seed() -> None:
     root = Path(__file__).resolve().parents[1]
     ds_path = root / _PJO
     if not ds_path.exists():
@@ -218,19 +218,54 @@ def test_downattacku_create_edge_without_dense_seed_still_admits_body_hit() -> N
     record = 4092
     row = ds.samples[record : record + 1].copy()
     seed = row["seed_t"]
-    seed_percent = float(seed["percent"][0, 0])
+    ref = ds.samples["ref_t1"][record]
 
-    # Synthetic negative/control: clearing only the explicit dense victims_1 seed removes the
-    # lbColl_8000ACFC suppression proof, so the same geometry is still allowed to apply a BODY hit.
-    # This keeps the bridge from becoming a broad "create-edge DownAttackU cannot hit" shortcut.
+    # Dynamic-pose owner lock:
+    # PJO:4092 originally looked like a dense-hitlist carry problem, but a vanilla
+    # pre-ftColl engine dump showed Fox LandingFallSpecial hurtcap 12 lower/back from the static
+    # SSANIM pose. Clearing the explicit dense hitlist seed must still avoid the false DownAttackU
+    # BODY hit because SSDYNN01 marks Fox LandingFallSpecial as consuming the x2C dynamic chain.
+    # refs/melee/src/melee/ft/ftdynamics.c::{ftCo_8009DD94,ftCo_8009E318}
+    # refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
+    # reports/triage/item19_pjo4092_downattack_p1_engine_dump/
     seed["combat_hitlist_cd"][0, 1, :, 0] = np.uint16(0)
 
     assert _precombat_hitlist(binding, row, num_players=int(ds.header["num_players"])) == [0, 0, 0, 0]
 
     out = _run_one_step(binding, row, num_players=int(ds.header["num_players"]))
-    assert float(out["percent"][0]) > seed_percent
-    assert int(out["hitlag"][0]) > 0
-    assert int(out["hitlag"][1]) > 0
+    for field in ("action_id", "action_frame", "hitlag", "hitstun", "percent"):
+        assert out[field][0] == ref[field][0], f"field={field}"
+        assert out[field][1] == ref[field][1], f"field={field}"
+
+
+@pytest.mark.integration
+def test_downattacku_landingfallspecial_dynamic_pose_rollout_pjo_4057() -> None:
+    root = Path(__file__).resolve().parents[1]
+    ds_path = root / _PJO
+    if not ds_path.exists():
+        pytest.skip(f"missing local dataset: {ds_path}")
+
+    binding = pytest.importorskip("msl_binding")
+    ds = read_dataset(str(ds_path))
+    start = 4057
+    target = 4092
+
+    # Replay-real rollout positive:
+    # starting at LandingAirHi frame 16 previously reached PJO:4092 with a static
+    # LandingFallSpecial tail pose and false-hit p0 into DamageFlyN. The fix is data-owned by the
+    # SSDYNN01 collision-msid index rather than a row-local DownAttackU suppression.
+    seed_start = ds.samples["seed_t"][start]
+    assert int(seed_start["action_id"][0]) == 73  # ftCo_SM_LandingAirHi
+    assert int(ds.samples["seed_t"][target]["action_id"][0]) == 43  # ftCo_SM_LandingFallSpecial
+    assert int(ds.samples["seed_t"][target]["action_id"][1]) == 187  # ftCo_SM_DownAttackU
+
+    out = _run_rollout_until(
+        binding, ds.samples, start=start, stop=target, num_players=int(ds.header["num_players"])
+    )[target]
+    ref = ds.samples["ref_t1"][target]
+    for field in ("action_id", "animation_index", "hitlag", "hitstun", "percent"):
+        assert out[field][0] == ref[field][0], f"field={field}"
+        assert out[field][1] == ref[field][1], f"field={field}"
 
 
 @pytest.mark.integration

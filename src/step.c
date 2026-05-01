@@ -18,6 +18,7 @@
 #include "locomotion.h"
 #include "match_flow.h"
 #include "move_tables.h"
+#include "motion_state_owners.h"
 #include "knockdown.h"
 #include "physics.h"
 #include "shields.h"
@@ -83,6 +84,24 @@ static inline uint8_t step_keep_fighter_8006cda4_pre_gate_count(const MslBatch* 
     return 1u;
   }
 
+  if (count <= 3u && action == (uint16_t)MSL_ACT_DAMAGE_FALL && batch->state.on_ground[idx] == 0u &&
+      batch->state.hitlag[idx] == 0u && batch->state.hitstun[idx] == 0u) {
+    const int attacker =
+        step_local_slot_from_source_port0(batch, bi, num_players, batch->state.last_hit_by[idx]);
+    if (attacker >= 0 && attacker != p) {
+      // DamageFall IASA handoff owner:
+      // - DamageFly_IASA can enter DamageFall, then DamageFall_IASA can immediately admit
+      //   AttackAir through ftCo_AttackAir_CheckItemThrowInput.
+      // - The hidden Fighter_8006CDA4 stream phase belongs to the same damage-entry source
+      //   episode and must survive this one-frame IASA handoff until ftCo_8008DCE0 consumes it on
+      //   the accepted hit. Marker 4 is not stream phase and is intentionally excluded.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_IASA
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
+      // refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
+      return 1u;
+    }
+  }
+
   if (count <= 4u && action == (uint16_t)MSL_ACT_DAMAGE_FLY_TOP &&
       batch->state.on_ground[idx] == 0u && batch->state.hitstun[idx] != 0u &&
       batch->state.instance_hit_by[idx] != 0u) {
@@ -139,10 +158,10 @@ static inline void clear_seed_owned_transients_post_frame(MslBatch* batch) {
       // refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC
       batch->state.source_clear_processhit_damage_pending_phase[idx] = 0u;
       // `seed_t.fighter_8006cda4_pre_gate_consume_count` is usually a one-step pre-gate owner.
-      // Keep rollout continuity only across the source-owned airborne AttackAir*/DamageFlyTop
-      // episode that can still reach ftCo_8008DCE0. Marker 4 is still not stream phase, but for
-      // DamageFlyTop same-source AttackAirB segments it carries gate-admission provenance until the
-      // delayed hit consumes the zero-pre-gate DamageFlyRoll decision.
+      // Keep rollout continuity only across the source-owned airborne AttackAir*/DamageFall/
+      // DamageFlyTop episode that can still reach ftCo_8008DCE0. Marker 4 is still not stream
+      // phase, but for DamageFlyTop same-source AttackAirB segments it carries gate-admission
+      // provenance until the delayed hit consumes the zero-pre-gate DamageFlyRoll decision.
       // refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
       if (!step_keep_fighter_8006cda4_pre_gate_count(batch, bi, p, num_players)) {
@@ -182,13 +201,36 @@ static inline void clear_seed_owned_transients_post_frame(MslBatch* batch) {
     const size_t shield_base =
         ((size_t)bi * (size_t)MSL_MAX_PLAYERS * (size_t)MSL_MAX_HITBOXES * (size_t)MSL_MAX_PLAYERS);
     for (int attacker = 0; attacker < num_players; attacker++) {
+      const size_t a_idx = msl_idx_player(bi, attacker);
+      // Authoritative per-HitCapsule seed-valid lanes are teacher-forced visibility for the
+      // reseeded frame. Runtime rollout should then use live `fighter_hitlist` state, except when
+      // the attacker remains hitlag-frozen and Fighter_8006A360 skips the script/update path that
+      // would otherwise materialize or clear the live capsule. Leaving old per-HitCapsule seed
+      // lanes valid after the source episode can make ftColl_80078C70 reject a later unrelated
+      // hitbox-vs-hitbox clank candidate.
+      // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+      // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80078C70}
+      // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+      const uint8_t preserve_hitlag_frozen_hitbox_seed =
+          (batch->state.hitlag_pre_timer[a_idx] != 0u || batch->state.hitlag[a_idx] != 0u) ? 1u
+                                                                                           : 0u;
       for (int hb = 0; hb < MSL_MAX_HITBOXES; hb++) {
+        const size_t hb_valid_i =
+            ((size_t)bi * (size_t)MSL_MAX_PLAYERS + (size_t)attacker) * (size_t)MSL_MAX_HITBOXES +
+            (size_t)hb;
+        if (!preserve_hitlag_frozen_hitbox_seed) {
+          batch->state.combat_hitlist_hb_valid[hb_valid_i] = 0u;
+        }
         for (int victim = 0; victim < num_players; victim++) {
           const size_t si =
               shield_base + (((size_t)attacker * (size_t)MSL_MAX_HITBOXES + (size_t)hb) *
                                  (size_t)MSL_MAX_PLAYERS +
                              (size_t)victim);
           batch->state.combat_shield_contact_hb_kind[si] = 0u;
+          if (!preserve_hitlag_frozen_hitbox_seed) {
+            batch->state.combat_hitlist_hb_cd[si] = 0u;
+            batch->state.combat_hitlist_hb_victim_iid[si] = 0u;
+          }
         }
       }
     }
@@ -371,6 +413,34 @@ static inline void cache_frame_start_state_flags_2218(MslBatch* batch) {
   }
 }
 
+static inline void cache_damagefly_hitlag_exit_sweep_root(MslBatch* batch) {
+  if (batch == NULL) {
+    return;
+  }
+  const int num_players = (int)batch->config.num_players;
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    for (int p = 0; p < num_players; p++) {
+      const size_t idx = msl_idx_player(bi, p);
+      if (batch->state.hitlag[idx] == 0u ||
+          !msl_motion_state_common_class_has(batch->state.action_id[idx],
+                                             MSL_MS_CLASS_DAMAGE_FLY)) {
+        continue;
+      }
+      // Hitlag-exit ownership:
+      // - Fighter_8006A1BC ends hitlag and ftCo_Damage_OnExitHitlag applies ASDI before Phys/Coll.
+      // - ft_80081DD4 then copies the fighter's post-callback cur_pos into CollData.cur_pos while
+      //   retaining CollData.prev_pos as the pre-callback sweep root for mpColl.
+      // Cache that root before timer callbacks mutate position; physics_integrate preserves it on
+      // the exit frame so DamageFlyRoll_Coll can see wall Hug from the ASDI displacement.
+      // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_procUpdate}
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnExitHitlag
+      // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+      batch->state.prev_pos_x[idx] = batch->state.pos_x[idx];
+      batch->state.prev_pos_y[idx] = batch->state.pos_y[idx];
+    }
+  }
+}
+
 static int step_one_frame_core(MslBatch* batch, const uint8_t* prev_input_bytes,
                                size_t prev_input_stride_bytes, const uint8_t* input_bytes,
                                size_t input_stride_bytes, uint8_t run_combat) {
@@ -386,6 +456,7 @@ static int step_one_frame_core(MslBatch* batch, const uint8_t* prev_input_bytes,
   cache_floor_sweep_prev_pos(batch);
   cache_guard_reflect_timer_seed_snapshots(batch);
   cache_frame_start_state_flags_2218(batch);
+  cache_damagefly_hitlag_exit_sweep_root(batch);
 
   // Decomp callback ordering: pre-input anim callbacks (prio1) run before input_cb (prio3), so
   // snapshot prior-frame inputs for pre-input gameplay ownership.

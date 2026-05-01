@@ -181,6 +181,8 @@ typedef enum MslActionId {
   MSL_ACT_CLIFF_JUMP_SLOW2 = 0x0105,    // ftCo_MS_CliffJumpSlow2 (261)
   MSL_ACT_CLIFF_JUMP_QUICK1 = 0x0106,   // ftCo_MS_CliffJumpQuick1 (262)
   MSL_ACT_CLIFF_JUMP_QUICK2 = 0x0107,   // ftCo_MS_CliffJumpQuick2 (263)
+  MSL_ACT_APPEAL_SR = 0x0108,           // ftCo_MS_AppealSR (264)
+  MSL_ACT_APPEAL_SL = 0x0109,           // ftCo_MS_AppealSL (265)
 
   // Match start entry states (ft_0C31.c / ftCo_Entry.c).
   MSL_ACT_ENTRY = 0x0142,        // ftCo_MS_Entry
@@ -514,6 +516,8 @@ typedef enum MslSubmotionId {
 
   // Match-start entry: ftCo_Submotion::ftCo_SM_EntryStart (suite present).
   MSL_SM_ENTRY_START = 238,
+  MSL_SM_APPEAL_SR = 239,  // ftCo_SM_AppealSR
+  MSL_SM_APPEAL_SL = 240,  // ftCo_SM_AppealSL
 } MslSubmotionId;
 
 static inline uint8_t msl_action_is_ground_locomotion(uint16_t action_id) {

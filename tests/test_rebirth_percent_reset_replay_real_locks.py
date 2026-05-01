@@ -6,8 +6,11 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tests.test_combat_ownership_seed_guardrail_locks import _run_one_step_row
-from tools.eval.dataset import read_dataset
+from tests.test_combat_ownership_seed_guardrail_locks import (
+    _run_one_step_row,
+    _skip_if_required_artifacts_missing,
+)
+from tools.eval.dataset import COMPARE_DTYPE, read_dataset
 
 
 @dataclass(frozen=True)
@@ -17,6 +20,45 @@ class _RebirthPercentCase:
     p: int
     seed_action: int
     note: str
+
+
+def _run_rollout_window(dataset_path: Path, start: int, stop: int):
+    import msl_binding
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    seed_off = int(samples.dtype.fields["seed_t"][1])
+    prev_off = int(samples.dtype.fields["prev_input_t"][1])
+    input_off = int(samples.dtype.fields["input_t"][1])
+
+    def field_bytes(record: int, off: int, stride: int) -> np.ndarray:
+        raw = samples[record : record + 1].view(np.uint8).reshape(1, -1)
+        return np.array(raw[:, off : off + stride], dtype=np.uint8, order="C", copy=True)
+
+    handle = msl_binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    out_bytes = np.zeros((1, compare_stride), dtype=np.uint8, order="C")
+    try:
+        msl_binding.reseed_seed_rollout(handle, field_bytes(start, seed_off, seed_stride))
+        for record in range(start, stop + 1):
+            msl_binding.step_input(
+                handle,
+                field_bytes(record, prev_off, input_stride),
+                field_bytes(record, input_off, input_stride),
+            )
+            msl_binding.write_compare(handle, out_bytes)
+    finally:
+        msl_binding.destroy(handle)
+
+    return samples["ref_t1"][stop], out_bytes.view(COMPARE_DTYPE).reshape(1)[0].copy()
 
 
 @pytest.mark.integration
@@ -89,3 +131,39 @@ def test_rebirth_percent_reset_target_pm1_replay_real(case: _RebirthPercentCase)
     _, ref_prev, out_prev = _run_one_step_row(dataset_path, case.target_record - 1, p)
     assert float(ref_prev["percent"][p]) > 0.0, case.note
     assert float(out_prev["percent"][p]) == pytest.approx(float(ref_prev["percent"][p])), case.note
+
+
+@pytest.mark.integration
+def test_rebirth_resets_shield_health_and_damage_lanes_rollout() -> None:
+    # `Fighter_UnkProcessDeath_80068354 -> Fighter_UnkInitReset_80067C98` resets percent and
+    # shield state before Rebirth entry. Rollout from DeadDown must not carry the old depleted
+    # shield HP to the first Rebirth frame.
+    # refs/melee/src/melee/ft/fighter.c::{
+    #   Fighter_UnkProcessDeath_80068354,Fighter_UnkInitReset_80067C98
+    # }
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    p = 1
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples["seed_t"][1889]
+    ref = ds.samples["ref_t1"][1889]
+    assert int(seed["action_id"][p]) == 0  # DeadDown.
+    assert int(ref["action_id"][p]) == 12  # Rebirth.
+    assert float(seed["shield_hp"][p]) < 60.0
+    assert float(ref["shield_hp"][p]) == pytest.approx(60.0)
+    _, ref_row, out_row = _run_one_step_row(dataset_path, 1889, p)
+    assert int(out_row["action_id"][p]) == int(ref_row["action_id"][p]) == 12
+    assert float(out_row["percent"][p]) == pytest.approx(0.0)
+    assert float(out_row["shield_hp"][p]) == pytest.approx(float(ref_row["shield_hp"][p]))
+
+    ref_roll, out_roll = _run_rollout_window(dataset_path, 1830, 1889)
+    assert int(out_roll["action_id"][p]) == int(ref_roll["action_id"][p]) == 12
+    assert float(out_roll["percent"][p]) == pytest.approx(0.0)
+    assert float(out_roll["shield_hp"][p]) == pytest.approx(float(ref_roll["shield_hp"][p]))

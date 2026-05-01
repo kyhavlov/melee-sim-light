@@ -570,9 +570,10 @@ typedef struct MslSeed {
   //
   // Consumer:
   // - Runtime Fighter_procUpdate model increments this counter while offscreen and applies the
-  //   source-owned 1% magnifying-glass damage when it reaches the interval. Replay-seeded rollout
-  //   validation clears/skips the lane because RL1 ignores the camera-box visibility bit that would
-  //   otherwise drive this approximation.
+  //   source-owned 1% magnifying-glass damage when it reaches the interval. Replay-seeded rollouts
+  //   consume only nonzero backfilled counter episodes; they do not start new magnify episodes from
+  //   replay-visible camera bits alone because `Camera_80031144`/`Player_GetMoreFlagsBit3` remain
+  //   hidden.
   //
   // Fallback:
   // - 0 means no elapsed offscreen frames; live/non-replay starts build the counter causally.

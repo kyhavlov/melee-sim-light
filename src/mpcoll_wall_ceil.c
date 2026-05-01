@@ -200,6 +200,13 @@ static inline uint8_t mpcoll_active_hitlag_phase(const MslBatch* batch, size_t i
              : 0u;
 }
 
+static inline uint8_t mpcoll_frozen_hitlag_phase(const MslBatch* batch, size_t idx) {
+  return (batch != NULL &&
+          (batch->state.hitlag[idx] != 0u || batch->state.hitlag_started_frame[idx] != 0u))
+             ? 1u
+             : 0u;
+}
+
 static inline void mpcoll_clear_wall_ceiling_contacts(MslBatch* batch, size_t idx) {
   if (batch == NULL) {
     return;
@@ -1830,7 +1837,7 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
       const uint32_t anim = batch->state.animation_index[idx];
       const uint8_t damagefly_hitlag_wall_refresh =
           (uint8_t)(mpcoll_damagefly_wall_asdi_latch_action(action_id) &&
-                    mpcoll_active_hitlag_phase(batch, idx));
+                    mpcoll_frozen_hitlag_phase(batch, idx));
       const uint16_t ecb_frame =
           msl_ecb_frame_u16_from_anim_frame(batch->state.anim_frame_f32[idx]);
       const uint16_t ecb_frame_prev = msl_ecb_prev_frame_u16(ecb_frame);

@@ -193,6 +193,55 @@ def test_guard_shielddesc_runtime_pose_accepts_prh_rollout_contact() -> None:
 
 
 @pytest.mark.integration
+def test_guardsetoff_hitlag_reseed_carries_replay_proven_shield_hitlist() -> None:
+    # Replay-proven GuardSetOff shield-hit onset must seed the accepted HitCapsule victims_1 list
+    # through the frozen hitlag episode. Without this post-hit seed, rollout reseeds inside hitlag
+    # can re-accept the same AttackAirF capsule at hitlag exit and incorrectly reset GuardSetOff.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076CBC,ftColl_80076808}
+    # refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    attacker = 1
+    defender = 0
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples["seed_t"][10269]
+    assert int(seed["action_id"][attacker]) == 65  # AttackAirF.
+    assert int(seed["action_id"][defender]) == 181  # GuardSetOff.
+    assert int(seed["hitlag"][attacker]) == int(seed["hitlag"][defender]) == 2
+    assert all(int(seed["combat_hitlist_hb_valid"][attacker, hb]) == 1 for hb in range(4))
+    assert all(
+        int(seed["combat_hitlist_hb_cd"][attacker, hb, defender]) == 0xFFFF
+        for hb in range(4)
+    )
+    assert all(
+        int(seed["combat_hitlist_hb_victim_iid"][attacker, hb, defender])
+        == int(seed["instance_id"][defender])
+        for hb in range(4)
+    )
+
+    ref, out = _run_rollout_window(
+        dataset_path,
+        10269,
+        10270,
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+
+    assert int(ref["action_id"][defender]) == 181
+    assert int(out["action_id"][defender]) == 181
+    assert int(out["action_frame"][defender]) == int(ref["action_frame"][defender]) == 3
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 0
+    assert float(out["shield_hp"][defender]) == pytest.approx(float(ref["shield_hp"][defender]))
+
+
+@pytest.mark.integration
 def test_guardon_lightshield_latch_rejects_fsp_shine_rollout_contact() -> None:
     # Runtime-negative ShieldDesc boundary for the lightshield amount latch:
     # - `ftCo_800925A4` updates `fp->lightshield_amount` only when the current trigger is above the
@@ -1153,3 +1202,51 @@ def test_guardsetoff_post_hitlag_asdi_keeps_agn_rollout_from_capture_cascade() -
     assert int(out["hitlag"][victim]) == int(ref["hitlag"][victim]) == 9
     assert int(out["hitstun"][victim]) == int(ref["hitstun"][victim]) == 48
     assert float(out["pos_x"][attacker]) == pytest.approx(float(ref["pos_x"][attacker]), abs=0.06)
+
+
+@pytest.mark.integration
+def test_guardsetoff_uses_latched_lightshield_for_released_trigger_shine_hvg_4489() -> None:
+    # GuardSetOff consumes the stored fp->lightshield_amount, not current trigger input. In this
+    # aggregate replay the defender has released shield by the same-frame shine contact, but the
+    # source lightshield latch is still high; recomputing from input over-depletes shield HP and
+    # over-pushes GuardSetOff.
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_800925A4,ftCo_80092F2C}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/HilariousVillainousGiraffe.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    defender = 0
+    attacker = 1
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples[4489]["seed_t"]
+    assert int(seed["action_id"][defender]) == 182  # GuardReflect
+    assert int(seed["action_id"][attacker]) == 39  # Squat -> same-frame shine start
+    assert float(seed["lightshield_amount"][defender]) == pytest.approx(0.9159664, abs=1e-6)
+    assert int(seed["combat_shield_hit_int_damage"][defender]) == 8
+    # x19A0 is left to the live selected hit because it does not exceed x19A4 on this row.
+    assert int(seed["combat_shield_damage_taken"][defender]) == 0
+
+    _, ref_direct, out_direct = _run_one_step_row(dataset_path, 4489, defender)
+    assert int(out_direct["action_id"][defender]) == int(ref_direct["action_id"][defender]) == 181
+    assert int(out_direct["hitlag"][defender]) == int(ref_direct["hitlag"][defender]) == 5
+    assert float(out_direct["shield_hp"][defender]) == pytest.approx(
+        float(ref_direct["shield_hp"][defender]), abs=0.01
+    )
+    assert float(out_direct["speed_ground_x_self"][defender]) == pytest.approx(
+        float(ref_direct["speed_ground_x_self"][defender]), abs=0.01
+    )
+
+    ref_roll, out_roll = _run_rollout_window(
+        dataset_path, 4472, 4489, ucf_enabled=True, ucf_cardinals_1_0_enabled=True
+    )
+    assert int(out_roll["action_id"][defender]) == int(ref_roll["action_id"][defender]) == 181
+    assert int(out_roll["hitlag"][defender]) == int(ref_roll["hitlag"][defender]) == 5
+    assert float(out_roll["shield_hp"][defender]) == pytest.approx(
+        float(ref_roll["shield_hp"][defender]), abs=0.04
+    )
+    assert float(out_roll["speed_ground_x_self"][defender]) == pytest.approx(
+        float(ref_roll["speed_ground_x_self"][defender]), abs=0.01
+    )

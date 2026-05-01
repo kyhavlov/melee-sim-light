@@ -305,7 +305,8 @@ typedef struct MslCommonParams {
   // Decomp: EscapeAir_Coll -> callback -> ftCo_LandingFallSpecial_Enter(..., p_ftCommonData->x344).
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c:117
   //
-  // Note: currently loaded for upcoming LandingFallSpecial timing modeling (not yet consumed in core logic).
+  // Runtime stores this through mv.co.fallspecial.landing_lag on EscapeAir -> FallSpecial and
+  // forwards it into LandingFallSpecial's entry frame speed.
   float landing_fall_special_lag_frames;  // p_ftCommonData->x344
 
   // Air dodge (EscapeAir) constants.

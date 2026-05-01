@@ -376,6 +376,8 @@ def test_damagefly_pre_hitlag_lr_tech_seed_preserves_passive_selector_replay_rea
     assert int(out["action_id"][p]) == int(ref["action_id"][p]) == expected_ref_action
     assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 1
     assert int(out["hitstun"][p]) == int(ref["hitstun"][p]) == 0
+    np.testing.assert_allclose(float(out["speed_x_attack"][p]), float(ref["speed_x_attack"][p]), atol=1e-6)
+    np.testing.assert_allclose(float(out["speed_y_attack"][p]), float(ref["speed_y_attack"][p]), atol=1e-6)
 
 
 @pytest.mark.integration

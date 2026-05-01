@@ -26,16 +26,21 @@
 // EscapeAir.c
 // -----------
 
-static inline void enter_fall_special(MslBatch* batch, size_t idx) {
+static inline void enter_fall_special(MslBatch* batch, const MslCommonParams* c, size_t idx) {
   // Decomp: ftCo_EscapeAir_Anim -> ftCo_80096900(..., allow_interrupt=false, ...).
+  // ftCo_80096900 routes through inline0, which enters FallSpecial with Ft_MF_KeepFastFall.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Anim
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_80096900
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::{inline0,ftCo_80096900}
+  const uint8_t keep_fastfall = batch->state.fall_fast[idx] ? 1u : 0u;
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL_SPECIAL;
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL_SPECIAL;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  batch->state.fall_fast[idx] = keep_fastfall;
   // Decomp: EscapeAir enters FallSpecial via ftCo_80096900(..., arg1=1, ...), which sets xC=1.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c and ftCo_FallSpecial.c
   batch->state.fallspecial_xc[idx] = 1;
+  batch->state.fallspecial_landing_lag[idx] =
+      (c != NULL) ? c->landing_fall_special_lag_frames : 0.0f;
   batch->state.landing_fallspecial_allow_interrupt[idx] = 0u;
 }
 
@@ -103,7 +108,7 @@ void escape_air_update(MslBatch* batch, const MslCommonParams* c, size_t idx) {
   const float end_frame =
       msl_anim_end_frame(batch->state.char_id[idx], (uint16_t)MSL_SM_ESCAPE_AIR);
   if (end_frame > 0.0f && (batch->state.anim_frame_f32[idx] >= end_frame)) {
-    enter_fall_special(batch, idx);
+    enter_fall_special(batch, c, idx);
   }
 }
 

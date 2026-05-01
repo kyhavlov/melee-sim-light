@@ -619,6 +619,86 @@ def test_tbk_attackairn_segment_carries_fighter_8006cda4_stream_phase_to_delayed
 
 
 @pytest.mark.integration
+def test_prh_damageflytop_damagefall_iasa_carries_attackairn_stream_phase_to_delayed_hit() -> None:
+    # This PRH F26 segment seeds during DamageFlyTop, exits hitstun through DamageFall_IASA into
+    # AttackAirN, then takes the next AttackAirB hit through ftCo_8008DCE0. The hidden
+    # Fighter_8006CDA4 stream phase belongs to the same source-owned damage episode and must
+    # survive the one-frame DamageFall IASA handoff into AttackAirN.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+    #   ftCo_DamageFly_IASA,ftCo_8008DCE0}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+        "PositiveRevolvingHyena.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    start_seed = ds.samples[10169]["seed_t"]
+    damagefall_seed = ds.samples[10206]["seed_t"]
+    target_seed = ds.samples[10207]["seed_t"]
+    assert int(start_seed["action_id"][0]) == 90  # DamageFlyTop
+    assert int(start_seed["hitstun"][0]) > 0
+    assert int(start_seed["fighter_8006cda4_pre_gate_consume_count"][0]) == 3
+    assert int(damagefall_seed["action_id"][0]) == 38  # DamageFall
+    assert int(damagefall_seed["fighter_8006cda4_pre_gate_consume_count"][0]) == 3
+    assert int(target_seed["action_id"][0]) == 65  # AttackAirN
+    assert int(target_seed["fighter_8006cda4_pre_gate_consume_count"][0]) == 3
+
+    rows = _run_rollout_window_rows_with_trace(
+        dataset_path,
+        start_record=10169,
+        window_records=(10205, 10206, 10207, 10208),
+        rng_damage_fly_roll_gate=True,
+        trace_path=root / "reports/triage/prh10169_damagefall_attackairn_stream_rollout.tsv",
+    )
+    for rec in (10205, 10206, 10207, 10208):
+        ref_row, out_row, site1_count = rows[rec]
+        for p in (0, 1):
+            _assert_transition_identity_lock_fields_match_ref(
+                out_row=out_row,
+                ref_row=ref_row,
+                record=rec,
+                p=p,
+            )
+        assert site1_count == (1 if rec == 10207 else 0), f"unexpected DamageFlyRoll gate pulse at {rec}"
+
+    ref_target, out_target, _ = rows[10207]
+    assert int(out_target["action_id"][0]) == int(ref_target["action_id"][0]) == 91
+
+
+@pytest.mark.integration
+def test_damagefall_iasa_stream_phase_does_not_arm_unproven_damageflytop_controls() -> None:
+    # Negative boundary for the same source-family: DamageFlyTop rows with AttackAirB nearby do not
+    # receive the explicit stream lane unless a later replay-proven DamageFlyRoll gate identifies
+    # the hidden Fighter_8006CDA4 phase. This keeps ordinary DamageFlyN controls outside the bridge.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
+        "TreasuredBackKangaroo.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    for rec in (1656, 1657, 1658):
+        seed = ds.samples[rec]["seed_t"]
+        assert int(seed["action_id"][0]) == 90  # DamageFlyTop
+        assert int(seed["fighter_8006cda4_pre_gate_consume_count"][0]) == 0
+
+    _, ref_row, out_row = _run_one_step_row(dataset_path, 1658, 0)
+    assert int(ref_row["action_id"][0]) == 88  # DamageFlyN, not DamageFlyRoll.
+    assert int(out_row["action_id"][0]) == 88
+
+
+@pytest.mark.integration
 def test_damageflytop_f26_runtime_maps_raw_source_port_before_attacker_lookup() -> None:
     # Runtime source-owner lanes store raw Slippi source port, not compact local slot. A non-compact
     # source_port0 mapping must still find the local attacker before applying the F26 stream-phase

@@ -170,15 +170,15 @@ def test_left_ledge_damagefly_wall_contact_enters_flyreflectwall() -> None:
     history = _replay_trace(_trace_by_name("falco_left_ledge_damagefly_wall_reflect"))
 
     falco = 1
-    out_1651, _ = history[1651]
-    out_1652, contacts_1652 = history[1652]
-    assert int(out_1651["action_id"][falco]) == 88  # DamageFlyN before reflect.
-    assert int(out_1652["action_id"][falco]) == 247  # FlyReflectWall.
-    assert int(out_1652["animation_index"][falco]) == 212  # WallDamage.
-    assert int(contacts_1652["wall_kind"][falco]) == 1
-    assert int(contacts_1652["coll_env_flags"][falco]) & MSL_COLLIDE_LEFT_WALL_HUG
-    assert float(out_1652["speed_x_attack"][falco]) < -1.0
-    assert float(out_1652["speed_y_attack"][falco]) > 1.0
+    out_1650, _ = history[1650]
+    out_1651, contacts_1651 = history[1651]
+    assert int(out_1650["action_id"][falco]) == 88  # DamageFlyN before reflect.
+    assert int(out_1651["action_id"][falco]) == 247  # FlyReflectWall.
+    assert int(out_1651["animation_index"][falco]) == 212  # WallDamage.
+    assert int(contacts_1651["wall_kind"][falco]) == 1
+    assert int(contacts_1651["coll_env_flags"][falco]) & MSL_COLLIDE_LEFT_WALL_HUG
+    assert float(out_1651["speed_x_attack"][falco]) < -1.0
+    assert float(out_1651["speed_y_attack"][falco]) > 1.0
 
 
 @pytest.mark.integration

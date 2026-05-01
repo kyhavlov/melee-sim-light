@@ -631,7 +631,7 @@ Recommended sequence for the next deep passes:
 - Roadmap family: former `F08b_body_contact_geometry_residual` no longer emits as one broad bucket
   in the refreshed taxonomy, and no parent-owned collision/pose residual bucket remains.
   The implemented runtime/seed sub-owners cover the shared BODY primitive surface: SSDYNN01
-  dynamic-chain collision pose (Fox JumpB/AttackHi3 owner predicate), Turn internal-facing hurtcaps, per-HitCapsule `victims_1`
+  dynamic-chain collision pose (Fox JumpB/LandingFallSpecial/AttackHi3 owner predicate), Turn internal-facing hurtcaps, per-HitCapsule `victims_1`
   preservation, GuardSetOff onset lineage, swept/same-group clank, Escape floor-edge pose
   selection, same-frame/enable-edge HitCapsule x58/x4C continuity, CliffAttack hitbox extraction,
   enable-edge phantom/tip-log handling, narrowed AttackAirN dense-latch preservation,

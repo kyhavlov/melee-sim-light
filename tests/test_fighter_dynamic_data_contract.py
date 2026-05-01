@@ -264,7 +264,7 @@ def test_committed_fox_falco_dynamic_contract_matches_supported_loader_surface()
     assert fox["set_count"] == 1
     assert fox["total_nodes"] == 4
     assert fox["version"] == 4
-    assert fox["collision_msids"] == [17, 58]
+    assert fox["collision_msids"] == [17, 36, 58]
     fox_set = fox["sets"][0]  # type: ignore[index]
     assert fox_set["root_part"] == 17
     assert fox_set["node_count"] == 4
@@ -312,7 +312,7 @@ def test_extract_fighter_anims_emits_fox_falco_dynamic_contract(tmp_path: Path) 
     assert fox["version"] == 4
     assert fox["set_count"] == 1
     assert fox["total_nodes"] == 4
-    assert fox["collision_msids"] == [17, 58]
+    assert fox["collision_msids"] == [17, 36, 58]
     assert [n["part"] for n in fox["sets"][0]["nodes"]] == [17, 18, 19, 20]  # type: ignore[index]
     assert falco == {"version": 4, "set_count": 0, "total_nodes": 0, "sets": [], "collision_msids": []}
 

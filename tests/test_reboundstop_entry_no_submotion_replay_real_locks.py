@@ -282,6 +282,51 @@ def test_reboundstop_same_group_clank_suppresses_enable_edge_body_fsp_467() -> N
 
 
 @pytest.mark.integration
+def test_reboundstop_rollout_clears_stale_seed_hitlists_before_shine_jab_clank_qgd_2732() -> None:
+    # Replay-real rollout lock for teacher-forced HitCapsule seed-lane lifetime:
+    # - The start row carries per-HitCapsule/dense hitlist seeds from an unrelated prior hitbox
+    #   episode.
+    # - Runtime rollout must return to live HitCapsule victims_1 after the reseeded frame; stale
+    #   seed lanes must not suppress the later ftColl_80078C70 hitbox-vs-hitbox clank.
+    # - At QGD:2732 Falco Shine and Fox Jab visibly overlap. Vanilla resolves clank/ReboundStop
+    #   before BODY, so p1 takes no Shine percent and enters ReboundStop.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80078C70,ftColl_8007699C}
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
+        "QuerulousGrandDinosaur.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    start_record = 2683
+    target_record = 2732
+    ds = read_dataset(str(dataset_path))
+    assert int(ds.samples.shape[0]) > target_record, (
+        f"dataset too short for lock row: record={target_record}"
+    )
+
+    seed_start = ds.samples[start_record]["seed_t"]
+    ref_t1 = ds.samples[target_record]["ref_t1"]
+    assert int(seed_start["combat_hitlist_hb_valid"][1, 0]) == 1
+    assert int(seed_start["combat_hitlist_hb_cd"][1, 0, 0]) != 0
+    assert int(ref_t1["action_id"][1]) == 237  # ReboundStop
+    assert int(ref_t1["hitlag"][1]) == 4
+
+    ref_row, out_row = _run_rollout_to_record(dataset_path, start_record, target_record)
+    for field in ("action_id", "hitlag", "hitstun"):
+        got = int(out_row[field][1])
+        exp = int(ref_row[field][1])
+        assert got == exp, f"record={target_record} p=1 field={field} expected={exp} got={got}"
+    assert float(out_row["percent"][1]) == pytest.approx(float(ref_row["percent"][1]), abs=1e-5)
+
+
+@pytest.mark.integration
 def test_reboundstop_clank_damage_stale_excludes_current_attack_instance_gat_10025() -> None:
     # Replay-real negative for clank/ReboundStop stale provenance:
     # - GAT:10025 has the current AttackS3 instance already in the stale queue from an earlier

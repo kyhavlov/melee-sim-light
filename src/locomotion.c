@@ -248,7 +248,8 @@ static inline uint8_t squat_wait_try_dash_or_rv(MslBatch* batch, const MslCommon
   return 0u;
 }
 
-static inline void enter_fall_special_via_ftco_80096900(MslBatch* batch, size_t idx) {
+static inline void enter_fall_special_via_ftco_80096900(MslBatch* batch, size_t idx,
+                                                        float landing_lag) {
   if (batch == NULL) {
     return;
   }
@@ -272,6 +273,7 @@ static inline void enter_fall_special_via_ftco_80096900(MslBatch* batch, size_t 
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{ftFx_SpecialHiFall_Anim,ftFx_SpecialHiBound_Anim}
   batch->state.fall_fast[idx] = keep_fastfall;
   batch->state.fallspecial_xc[idx] = 1u;
+  batch->state.fallspecial_landing_lag[idx] = landing_lag;
   batch->state.landing_fallspecial_allow_interrupt[idx] = 1u;
   batch->state.jumps_left[idx] = 0u;
 }
@@ -578,7 +580,9 @@ static inline uint8_t spacie_specialhi_update(MslBatch* batch, size_t idx, uint8
       // Decomp: ftFx_SpecialHiLanding_Coll falls back to FallSpecial when the state becomes airborne.
       // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiLanding_Coll
       if (!on_ground) {
-        enter_fall_special_via_ftco_80096900(batch, idx);
+        const MslCharParams* ch = msl_char_params(char_id);
+        enter_fall_special_via_ftco_80096900(
+            batch, idx, ch != NULL ? (float)ch->firefox_landing_lag_frames : 0.0f);
         return 1;
       }
       // Decomp: ftFx_SpecialHiLanding_Anim transitions to Wait on anim end.
@@ -603,7 +607,9 @@ static inline uint8_t spacie_specialhi_update(MslBatch* batch, size_t idx, uint8
       // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiFall_Anim
       if (anim_finished(char_id, (uint16_t)MSL_SM_FX_SPECIAL_HI_FALL,
                         batch->state.anim_frame_f32[idx])) {
-        enter_fall_special_via_ftco_80096900(batch, idx);
+        const MslCharParams* ch = msl_char_params(char_id);
+        enter_fall_special_via_ftco_80096900(
+            batch, idx, ch != NULL ? (float)ch->firefox_landing_lag_frames : 0.0f);
       }
       return 1;
     case MSL_ACT_FX_SPECIAL_HI_BOUND:
@@ -613,7 +619,9 @@ static inline uint8_t spacie_specialhi_update(MslBatch* batch, size_t idx, uint8
       // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiBound_Anim
       if (!on_ground && anim_finished(char_id, (uint16_t)MSL_SM_FX_SPECIAL_HI_BOUND,
                                       batch->state.anim_frame_f32[idx])) {
-        enter_fall_special_via_ftco_80096900(batch, idx);
+        const MslCharParams* ch = msl_char_params(char_id);
+        enter_fall_special_via_ftco_80096900(
+            batch, idx, ch != NULL ? (float)ch->firefox_landing_lag_frames : 0.0f);
       }
       return 1;
     default:
@@ -1815,6 +1823,73 @@ static inline uint8_t wait_iasa_locomotion_subset_try_enter(
   return 0u;
 }
 
+static inline uint8_t common_appeal_try_enter_from_grounded_iasa(MslBatch* batch, size_t idx,
+                                                                 uint16_t buttons_pressed) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  if ((buttons_pressed & (uint16_t)MSL_BUTTON_D_UP) == 0u) {
+    return 0u;
+  }
+
+  // Common grounded taunt admission:
+  // - Wait/Walk/Turn/Squat/Landing/Ottotto IASA callbacks call ftCo_800DE9D8 after guard and
+  //   before jump/dash/locomotion.
+  // - Dash and Run/RunDirect also call ftCo_800DE9D8, but use this helper from their branch-local
+  //   IASA paths so their earlier attack/guard/special priority remains source-shaped.
+  // - ftCo_800DE9B8 gates on `fp->input.x668 & HSD_PAD_DPADUP`, i.e. the pressed-edge lane.
+  // - ftCo_800DEAE8 selects AppealSR unless the fighter faces left and the left animation exists.
+  //   For Fox/Falco FD, extracted anim data has no common AppealSL anim (end_frame=0), so left
+  //   facing common taunts still enter AppealSR.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AppealS.c::{
+  //   ftCo_800DE9B8,ftCo_800DE9D8,ftCo_800DEAE8}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+  const uint8_t facing_left = batch->state.facing[idx] ? 0u : 1u;
+  const uint8_t have_left_anim =
+      (msl_anim_end_frame(batch->state.char_id[idx], (uint16_t)MSL_SM_APPEAL_SL) > 0.0f) ? 1u : 0u;
+  const uint8_t use_left = (uint8_t)(facing_left && have_left_anim);
+  batch->state.action_id[idx] =
+      use_left ? (uint16_t)MSL_ACT_APPEAL_SL : (uint16_t)MSL_ACT_APPEAL_SR;
+  batch->state.animation_index[idx] =
+      use_left ? (uint32_t)MSL_SM_APPEAL_SL : (uint32_t)MSL_SM_APPEAL_SR;
+  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  // ftCo_800DEAE8 clears fp->allow_interrupt before Fighter_ChangeMotionState. The replay-visible
+  // proxy for that lane is state_flags[0] bit 0x80 (fp+0x2218_b7); clear it on Appeal entry so
+  // stale seeded grounded-attack interrupt state cannot leak onto the taunt destination.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AppealS.c::ftCo_800DEAE8
+  enum { MSL_STATE_FLAGS_2218_INDEX = 0 };
+  enum { MSL_STATE_FLAG_2218_ALLOW_INTERRUPT = 0x80 };
+  const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX;
+  batch->state.state_flags[flags_i] &= (uint8_t)~MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
+  return 1u;
+}
+
+static inline uint8_t common_appeal_update(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  const uint16_t action_id = batch->state.action_id[idx];
+  if (action_id != (uint16_t)MSL_ACT_APPEAL_SR && action_id != (uint16_t)MSL_ACT_APPEAL_SL) {
+    return 0u;
+  }
+  const uint16_t sm = (action_id == (uint16_t)MSL_ACT_APPEAL_SR) ? (uint16_t)MSL_SM_APPEAL_SR
+                                                                 : (uint16_t)MSL_SM_APPEAL_SL;
+  batch->state.animation_index[idx] = (uint32_t)sm;
+  // Decomp: common AppealS Anim exits through ft_8008A2BC when no frames remain.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AppealS.c::ftCo_AppealS_Anim
+  if (anim_finished(batch->state.char_id[idx], sm, batch->state.anim_frame_f32[idx])) {
+    batch->state.action_id[idx] = (uint16_t)MSL_ACT_WAIT;
+    batch->state.animation_index[idx] = (uint32_t)MSL_SM_WAIT1_0;
+    msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  }
+  // AppealS_IASA is gated by fp->allow_interrupt, but the current Fox/Falco script artifact has no
+  // AppealSR/SL command timeline entries and therefore no data-backed allow_interrupt event for
+  // this state. Keep current scope anim-end-only until MSLFTSC1 exposes a real Appeal allow window.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AppealS.c::ftCo_AppealS_IASA
+  // data/scripts/{fox,falco}.bin (MSLFTSC1): no entries for msid 239/240.
+  return 1u;
+}
+
 void locomotion_update_anim_callbacks_pre_input(MslBatch* batch) {
   if (batch == NULL) {
     return;
@@ -2872,13 +2947,17 @@ static inline void enter_landing_action_from_air(MslBatch* batch, const MslCharP
       // Source-specific LandingFallSpecial rate:
       // - EscapeAir_Coll enters LandingFallSpecial with p_ftCommonData->x344.
       // - SpecialAirSEnd_Coll enters LandingFallSpecial with the Illusion/Phantasm landing lag.
-      // - FallSpecial_Coll forwards mv.co.fallspecial.landing_lag; suite FallSpecial sources here
-      //   carry a 1.0 frame-speed lane, so do not apply the EscapeAir x344 rate to them.
+      // - FallSpecial_Coll forwards mv.co.fallspecial.landing_lag written by ftCo_80096900.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_80099D70
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_80096D28
       // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialAirSEnd_Coll
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_LandingFallSpecial_Enter
       speed = (landing_lag > 0.0f && end_frame > 0.0f) ? ((end_frame + 0.1f) / landing_lag) : 1.0f;
+    } else if (source_act == (uint16_t)MSL_ACT_FALL_SPECIAL ||
+               source_act == (uint16_t)MSL_ACT_FALL_SPECIAL_F ||
+               source_act == (uint16_t)MSL_ACT_FALL_SPECIAL_B) {
+      const float source_lag = batch->state.fallspecial_landing_lag[idx];
+      speed = (source_lag > 0.0f && end_frame > 0.0f) ? ((end_frame + 0.1f) / source_lag) : 1.0f;
     }
     msl_anim_timebase_enter(batch, idx, 0.0f, speed);
   } else {
@@ -3133,6 +3212,10 @@ void locomotion_update_pre(MslBatch* batch) {
         }
         if (action_id != MSL_ACT_RUN && action_id != MSL_ACT_RUN_DIRECT) {
           batch->state.run_x0[idx] = 0;
+        }
+
+        if (common_appeal_update(batch, idx)) {
+          continue;
         }
 
         // Squat/SquatWait/SquatRv updates.
@@ -3928,6 +4011,18 @@ void locomotion_update_pre(MslBatch* batch) {
           batch->state.facing[idx] = batch->state.facing[idx] ? 0u : 1u;
           facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
         }
+        if ((action_id == MSL_ACT_WAIT || action_is_walk(action_id) || action_id == MSL_ACT_TURN ||
+             action_id == MSL_ACT_SQUAT || action_id == MSL_ACT_SQUAT_WAIT ||
+             action_id == MSL_ACT_SQUAT_RV) &&
+            common_appeal_try_enter_from_grounded_iasa(batch, idx, buttons_pressed)) {
+          // Common Appeal admission is the ftCo_800DE9D8 tail, not generic locomotion:
+          // catch / special / attack / guard have already had priority, and jump/dash/locomotion
+          // remain below it. Supported decomp callers here are Wait/Walk/Turn/Squat/SquatWait/
+          // SquatRv. Dash/Run have different branch-local priority gates and stay out of this
+          // shared bucket until those full IASA chains are modeled.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_{Wait,Walk,Turn,Squat}.c
+          continue;
+        }
 
         // Escape actions (from shield): friction + end->Wait.
         // If Escape ended this frame, allow the destination state's IASA to run in the same frame.
@@ -4006,6 +4101,15 @@ void locomotion_update_pre(MslBatch* batch) {
                                                     0, 1)) {
             action_id = batch->state.action_id[idx];
           }
+        }
+
+        if ((action_id == (uint16_t)MSL_ACT_OTTOTTO ||
+             action_id == (uint16_t)MSL_ACT_OTTOTTO_WAIT) &&
+            common_appeal_try_enter_from_grounded_iasa(batch, idx, buttons_pressed)) {
+          // Ottotto/OttottoWait IASA also calls ftCo_800DE9D8 before Jump/Dash/Turn/Walk.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::{
+          //   ftCo_Ottotto_IASA,ftCo_OttottoWait_IASA}
+          continue;
         }
 
         // Ottotto / OttottoWait jump IASA:
@@ -4166,6 +4270,10 @@ void locomotion_update_pre(MslBatch* batch) {
             if (action_id == MSL_ACT_GUARD_ON || action_id == MSL_ACT_GUARD ||
                 action_id == MSL_ACT_GUARD_REFLECT || action_id == MSL_ACT_GUARD_SET_OFF ||
                 action_id == MSL_ACT_GUARD_OFF) {
+              continue;
+            }
+            if ((action_id == MSL_ACT_LANDING || action_id == MSL_ACT_LANDING_FALL_SPECIAL) &&
+                common_appeal_try_enter_from_grounded_iasa(batch, idx, buttons_pressed)) {
               continue;
             }
             const MslJumpInput j_in =
@@ -4523,6 +4631,12 @@ void locomotion_update_pre(MslBatch* batch) {
               (void)physics_apply_attackdash_entry_phys_now(batch, idx, facing_dir);
             }
             action_id = batch->state.action_id[idx];
+          } else if (!run_iasa_has_spacie_b_special_intent(cid, buttons_pressed) &&
+                     common_appeal_try_enter_from_grounded_iasa(batch, idx, buttons_pressed)) {
+            // Run/RunDirect IASA calls ftCo_800DE9D8 after attack/catch/guard and before
+            // fn_800CAF78 jump, TurnRun, and RunBrake checks.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::ftCo_Run_IASA
+            continue;
           } else {
             const MslJumpInput j_in =
                 jump_input_from_fn_800CAF78(c, buttons_pressed, stick_y, tilt_timer_y);
@@ -4676,11 +4790,17 @@ void locomotion_update_pre(MslBatch* batch) {
             dash_iasa_apply_terminal_velocity_scalar(batch, c, idx);
             action_id = (uint16_t)MSL_ACT_TURN;
           } else {
-            // Dash -> KneeBend (Jump).
+            // Dash -> Common Appeal, then KneeBend (Jump).
             //
-            // Decomp: Dash IASA can enter KneeBend via fn_800CAF78.
+            // Decomp: Dash IASA reaches block_42 after catch/attack/guard and calls
+            // ftCo_800DE9D8 before fn_800CAF78.
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AppealS.c::ftCo_800DE9D8
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::fn_800CAF78
+            if (!run_iasa_has_spacie_b_special_intent(cid, buttons_pressed) &&
+                common_appeal_try_enter_from_grounded_iasa(batch, idx, buttons_pressed)) {
+              continue;
+            }
             const MslJumpInput j_in =
                 jump_input_from_fn_800CAF78(c, buttons_pressed, stick_y, tilt_timer_y);
             if (j_in != MSL_JUMP_INPUT_NONE && batch->state.jumps_left[idx] > 0) {
@@ -5041,7 +5161,8 @@ void locomotion_update_pre(MslBatch* batch) {
             // FallSpecial and setting mv.co.fallspecial.xC.
             // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialAirSEnd_Anim
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_80096900
-            enter_fall_special_via_ftco_80096900(batch, idx);
+            enter_fall_special_via_ftco_80096900(
+                batch, idx, ch != NULL ? (float)ch->illusion_landing_lag_frames : 0.0f);
             action_id = (uint16_t)MSL_ACT_FALL_SPECIAL;
           }
 
@@ -5577,7 +5698,8 @@ void locomotion_update_post_collision(MslBatch* batch) {
           // Decomp: ftFx_SpecialHiLanding_Coll enters FallSpecial when no longer grounded.
           // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiLanding_Coll
           if (a == (uint16_t)MSL_ACT_FX_SPECIAL_HI_LANDING) {
-            enter_fall_special_via_ftco_80096900(batch, idx);
+            enter_fall_special_via_ftco_80096900(
+                batch, idx, ch != NULL ? (float)ch->firefox_landing_lag_frames : 0.0f);
           }
           continue;
         }

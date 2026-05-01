@@ -199,7 +199,7 @@ def _dyn_contract_ok(path: Path, want_collision_msids: set[int]) -> bool:
 
 def _ensure_dyn_bins() -> None:
     expected = {
-        "fox": {17, 58},
+        "fox": {17, 36, 58},
         "falco": set(),
     }
     stale = False

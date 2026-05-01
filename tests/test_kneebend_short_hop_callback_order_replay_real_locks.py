@@ -19,7 +19,12 @@ def _step_one_row(dataset_path: Path, record: int) -> tuple[np.void, np.void, np
     row = ds.samples[record : record + 1]
     assert int(row.shape[0]) == 1
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
     try:
         seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).reshape(
             1, seed_stride
@@ -145,3 +150,40 @@ def test_kneebend_seeded_short_hop_still_uses_hop_velocity_his_154() -> None:
     assert int(out["action_frame"][p]) == int(ref["action_frame"][p])
     assert np.isclose(float(out["speed_y_self"][p]), float(ref["speed_y_self"][p]))
     assert np.isclose(float(out["pos_y"][p]), float(ref["pos_y"][p]))
+
+
+@pytest.mark.integration
+def test_kneebend_dash_run_stick_threshold_seed_latches_short_hop_dcc_1989() -> None:
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    # Seed bridge lock:
+    # - p1 entered KneeBend from the Dash/Run-family IASA path. That path calls fn_800CAF78,
+    #   which uses p_ftCommonData->x80 for L-stick jump detection instead of the ordinary
+    #   ftCo_Jump_GetInput tap-jump x74 threshold.
+    # - The replay-visible stick is between those thresholds, so mid-KneeBend reseeds must carry
+    #   the latched LStick jump input and short-hop flag rather than guessing from current input.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::fn_800CAF78
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::{
+    #   ftCo_KneeBend_Enter,ftCo_KneeBend_Check_ShortHop
+    # }
+    seed, ref, out = _step_one_row(dataset_path, 1989)
+    p = 1
+
+    assert int(seed["action_id"][p]) == 24  # KneeBend
+    assert int(seed["action_frame"][p]) == 4
+    assert int(seed["kneebend_jump_input"][p]) == 1  # JumpInput_LStick
+    assert int(seed["kneebend_is_short_hop"][p]) == 1
+
+    assert int(ref["action_id"][p]) == 26  # JumpB
+    assert int(ref["action_frame"][p]) == 0
+    assert np.isclose(float(ref["speed_y_self"][p]), 1.899999976158142, atol=1e-6)
+
+    assert int(out["action_id"][p]) == int(ref["action_id"][p])
+    assert int(out["action_frame"][p]) == int(ref["action_frame"][p])
+    assert np.isclose(float(out["speed_y_self"][p]), float(ref["speed_y_self"][p]), atol=1e-6)
+    assert np.isclose(float(out["pos_y"][p]), float(ref["pos_y"][p]), atol=1e-6)

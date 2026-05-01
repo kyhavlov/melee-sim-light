@@ -369,6 +369,7 @@ void timers_consume_post_hitlag_callbacks_after_input(MslBatch* batch) {
   for (int bi = 0; bi < batch->batch_size; bi++) {
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
+      batch->state.damage_hitlag_downward_sdi_consumed[idx] = 0u;
       const uint16_t a = batch->state.action_id[idx];
       if (!damage_post_hitlag_cb_owner_action(a)) {
         continue;
@@ -441,6 +442,9 @@ void timers_consume_post_hitlag_callbacks_after_input(MslBatch* batch) {
           lstick_mag_sq >= sdi_radius_sq) {
         batch->state.pos_x[idx] += lstick_full_x * sdi_step_mul;
         batch->state.pos_y[idx] += lstick_full_y * sdi_step_mul;
+        if (lstick_full_y < 0.0f) {
+          batch->state.damage_hitlag_downward_sdi_consumed[idx] = 1u;
+        }
         batch->state.tilt_timer_x[idx] = 254u;
         batch->state.tilt_timer_y[idx] = 254u;
       }
@@ -486,15 +490,14 @@ void timers_update_magnify_damage_post_frame(MslBatch* batch) {
 
   const int num_players = (int)batch->config.num_players;
   for (int bi = 0; bi < batch->batch_size; bi++) {
-    if (batch->replay_rollout_reseeded != NULL && batch->replay_rollout_reseeded[bi] != 0u) {
-      for (int p = 0; p < num_players; p++) {
-        const size_t idx = msl_idx_player(bi, p);
-        batch->state.magnify_damage_counter_x1910[idx] = 0u;
-      }
-      continue;
-    }
+    const uint8_t replay_rollout =
+        (batch->replay_rollout_reseeded != NULL && batch->replay_rollout_reseeded[bi] != 0u) ? 1u
+                                                                                             : 0u;
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
+      if (replay_rollout != 0u && batch->state.magnify_damage_counter_x1910[idx] == 0u) {
+        continue;
+      }
       const uint8_t flags_221f = batch->state.state_flags[idx * MSL_STATE_FLAGS_STRIDE_LOCAL +
                                                           (size_t)MSL_STATE_FLAGS_221F_INDEX_LOCAL];
       const uint8_t visible = (flags_221f & (uint8_t)MSL_STATE_FLAG_221F_B0_LOCAL) != 0u;
