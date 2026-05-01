@@ -34,9 +34,9 @@
 #   Note: runtime degrades safely when these bins are missing, but state_flags parity/suite totals can differ.
 #
 # (Optional) One-shot build for stage+chars:
-#     uv run python -m tools.extraction.build_data --iso-dir _iso --stage grnla --chars fox,falco
+#     uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba --chars fox,falco
 
-suite: aggregate_recent  datasets: 15  ucf_enabled: True  ucf_cardinals_1_0_enabled: True
+suite: aggregate_recent  datasets: 18  ucf_enabled: True  ucf_cardinals_1_0_enabled: True
 validation.profile: rl1_gameplay
 validation.profile.ignored: state_flags[4]&0x80 reason=Slippi fp+0x221F camera-subject / magnifying-glass visibility bit. The current RL1 target consumes gameplay state, collision, damage, hitlag, shield, item, source, identity lanes, and the other fp+0x221F gameplay-adjacent bits, but not camera-box rendering visibility. exception=Only bit 0x80 of the raw compare byte is ignored for validation totals/rollout first-break ranking. Other state_flags[4] bits, including x221F_b1/x221F_b3, remain scored.
 
@@ -715,8 +715,143 @@ overall.strict_discrete_mismatch: 132 / 1502336
 overall.ignored_discrete_mismatch: 33
 overall.float_norm_mae_p95: 0.00006026
 
+== datasets/aggregate_recent/replays/validation/battlefield_recent/DelayedSuperbGuanaco.msl ==
+Records: 12914  Players/scored per record: 2  Total player-frames: 25828
+mismatch.action_id: 172 / 25828 (0.006659)
+mismatch.action_frame: 162 / 25828 (0.006272)
+mismatch.on_ground: 168 / 25828 (0.006505)
+mismatch.facing: 10 / 25828 (0.000387)
+mismatch.stocks: 1 / 25828 (0.000039)
+mismatch.jumps_left: 115 / 25828 (0.004453)
+mismatch.is_dead: 0 / 25828 (0.000000)
+mismatch.hitlag: 25 / 25828 (0.000968)
+mismatch.hitstun: 16 / 25828 (0.000619)
+mismatch.l_cancel: 0 / 25828 (0.000000)
+mismatch.hurtbox_state: 6 / 25828 (0.000232)
+mismatch.ground_id: 42 / 25828 (0.001626)
+mismatch.animation_index: 170 / 25828 (0.006582)
+mismatch.instance_hit_by: 20 / 25828 (0.000774)
+mismatch.instance_id: 138 / 25828 (0.005343)
+mismatch.last_attack_landed: 15 / 25828 (0.000581)
+mismatch.combo_count: 7 / 25828 (0.000271)
+mismatch.last_hit_by: 29 / 25828 (0.001123)
+mismatch.state_flags: 113 / 129140 (0.000875)
+mismatch.item_exists: 29 / 193710 (0.000150)
+mismatch.item_type: 29 / 193710 (0.000150)
+mismatch.item_state: 15 / 193710 (0.000077)
+mismatch.item_owner: 29 / 193710 (0.000150)
+mismatch.item_instance_id: 29 / 193710 (0.000150)
+ignored_mismatch.state_flags[4]&0x80: 18 / 25828 (0.000697)
+err.pos_x: mae=0.008304 p95=0.000000 max=96.037529
+err.pos_y: mae=0.045033 p95=0.000000 max=101.041428
+err.speed_air_x_self: mae=0.000922 p95=0.000000 max=2.060625
+err.speed_ground_x_self: mae=0.002117 p95=0.000000 max=2.060625
+err.speed_y_self: mae=0.003431 p95=0.000000 max=5.033999
+err.speed_x_attack: mae=0.000532 p95=0.000000 max=3.470095
+err.speed_y_attack: mae=0.001170 p95=0.000000 max=8.379270
+err.percent: mae=0.009645 p95=0.000000 max=148.860001
+err.shield_hp: mae=0.000594 p95=0.000000 max=8.400002
+err.item_pos_x: mae=0.380531 p95=0.000000 max=55.080002
+err.item_pos_y: mae=0.167749 p95=0.000000 max=47.830105
+err.item_vel_x: mae=0.018097 p95=0.000000 max=7.000000
+err.item_vel_y: mae=0.000084 p95=0.000000 max=0.240240
+overall.discrete_mismatch: 1340 / 1562594
+overall.strict_discrete_mismatch: 1358 / 1562594
+overall.ignored_discrete_mismatch: 18
+overall.float_norm_mae_p95: 1.61103875
+
+== datasets/aggregate_recent/replays/validation/battlefield_recent/LoyalDishonestWren.msl ==
+Records: 4655  Players/scored per record: 2  Total player-frames: 9310
+mismatch.action_id: 48 / 9310 (0.005156)
+mismatch.action_frame: 44 / 9310 (0.004726)
+mismatch.on_ground: 51 / 9310 (0.005478)
+mismatch.facing: 3 / 9310 (0.000322)
+mismatch.stocks: 0 / 9310 (0.000000)
+mismatch.jumps_left: 39 / 9310 (0.004189)
+mismatch.is_dead: 0 / 9310 (0.000000)
+mismatch.hitlag: 5 / 9310 (0.000537)
+mismatch.hitstun: 5 / 9310 (0.000537)
+mismatch.l_cancel: 1 / 9310 (0.000107)
+mismatch.hurtbox_state: 1 / 9310 (0.000107)
+mismatch.ground_id: 14 / 9310 (0.001504)
+mismatch.animation_index: 48 / 9310 (0.005156)
+mismatch.instance_hit_by: 3 / 9310 (0.000322)
+mismatch.instance_id: 41 / 9310 (0.004404)
+mismatch.last_attack_landed: 2 / 9310 (0.000215)
+mismatch.combo_count: 7 / 9310 (0.000752)
+mismatch.last_hit_by: 16 / 9310 (0.001719)
+mismatch.state_flags: 42 / 46550 (0.000902)
+mismatch.item_exists: 5 / 69825 (0.000072)
+mismatch.item_type: 5 / 69825 (0.000072)
+mismatch.item_state: 5 / 69825 (0.000072)
+mismatch.item_owner: 5 / 69825 (0.000072)
+mismatch.item_instance_id: 5 / 69825 (0.000072)
+ignored_mismatch.state_flags[4]&0x80: 16 / 9310 (0.001719)
+err.pos_x: mae=0.003300 p95=0.000000 max=2.798012
+err.pos_y: mae=0.026269 p95=0.000000 max=26.259789
+err.speed_air_x_self: mae=0.000833 p95=0.000000 max=2.097987
+err.speed_ground_x_self: mae=0.001584 p95=0.000000 max=2.265523
+err.speed_y_self: mae=0.004368 p95=0.000000 max=3.170000
+err.speed_x_attack: mae=0.000561 p95=0.000000 max=2.453333
+err.speed_y_attack: mae=0.000458 p95=0.000000 max=2.373939
+err.percent: mae=0.002825 p95=0.000000 max=8.189999
+err.shield_hp: mae=0.000015 p95=0.000000 max=0.070000
+err.item_pos_x: mae=0.065097 p95=0.000000 max=7.558097
+err.item_pos_y: mae=0.016667 p95=0.000000 max=4.864048
+err.item_vel_x: mae=0.008219 p95=0.000000 max=2.756694
+err.item_vel_y: mae=0.000717 p95=0.000000 max=0.240240
+overall.discrete_mismatch: 395 / 563255
+overall.strict_discrete_mismatch: 411 / 563255
+overall.ignored_discrete_mismatch: 16
+overall.float_norm_mae_p95: 0.00037790
+
+== datasets/aggregate_recent/replays/validation/battlefield_recent/MediumVirtualPig.msl ==
+Records: 8080  Players/scored per record: 2  Total player-frames: 16160
+mismatch.action_id: 105 / 16160 (0.006498)
+mismatch.action_frame: 95 / 16160 (0.005879)
+mismatch.on_ground: 106 / 16160 (0.006559)
+mismatch.facing: 3 / 16160 (0.000186)
+mismatch.stocks: 0 / 16160 (0.000000)
+mismatch.jumps_left: 85 / 16160 (0.005260)
+mismatch.is_dead: 0 / 16160 (0.000000)
+mismatch.hitlag: 15 / 16160 (0.000928)
+mismatch.hitstun: 7 / 16160 (0.000433)
+mismatch.l_cancel: 0 / 16160 (0.000000)
+mismatch.hurtbox_state: 8 / 16160 (0.000495)
+mismatch.ground_id: 31 / 16160 (0.001918)
+mismatch.animation_index: 105 / 16160 (0.006498)
+mismatch.instance_hit_by: 3 / 16160 (0.000186)
+mismatch.instance_id: 90 / 16160 (0.005569)
+mismatch.last_attack_landed: 4 / 16160 (0.000248)
+mismatch.combo_count: 5 / 16160 (0.000309)
+mismatch.last_hit_by: 19 / 16160 (0.001176)
+mismatch.state_flags: 62 / 80800 (0.000767)
+mismatch.item_exists: 7 / 121200 (0.000058)
+mismatch.item_type: 7 / 121200 (0.000058)
+mismatch.item_state: 6 / 121200 (0.000050)
+mismatch.item_owner: 7 / 121200 (0.000058)
+mismatch.item_instance_id: 7 / 121200 (0.000058)
+ignored_mismatch.state_flags[4]&0x80: 31 / 16160 (0.001918)
+err.pos_x: mae=0.002363 p95=0.000000 max=4.842353
+err.pos_y: mae=0.029690 p95=0.000000 max=13.624020
+err.speed_air_x_self: mae=0.000585 p95=0.000000 max=1.216250
+err.speed_ground_x_self: mae=0.002591 p95=0.000000 max=2.568040
+err.speed_y_self: mae=0.002844 p95=0.000000 max=6.986000
+err.speed_x_attack: mae=0.000321 p95=0.000000 max=2.296021
+err.speed_y_attack: mae=0.000448 p95=0.000000 max=2.296021
+err.percent: mae=0.003451 p95=0.000000 max=12.000000
+err.shield_hp: mae=0.000624 p95=0.000000 max=5.599998
+err.item_pos_x: mae=0.352731 p95=0.000000 max=57.435001
+err.item_pos_y: mae=0.185234 p95=0.000000 max=25.690100
+err.item_vel_x: mae=0.000000 p95=0.000000 max=0.000208
+err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000061
+overall.discrete_mismatch: 777 / 977680
+overall.strict_discrete_mismatch: 808 / 977680
+overall.ignored_discrete_mismatch: 31
+overall.float_norm_mae_p95: 0.00136502
+
 == suite summary ==
-overall.discrete_mismatch: 1099 / 17965838
-overall.strict_discrete_mismatch: 1471 / 17965838
-overall.ignored_discrete_mismatch: 372
-overall.float_norm_mae_p95: 0.00006689
+overall.discrete_mismatch: 3611 / 21069367
+overall.strict_discrete_mismatch: 4048 / 21069367
+overall.ignored_discrete_mismatch: 437
+overall.float_norm_mae_p95: 0.11980297
