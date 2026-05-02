@@ -116,7 +116,7 @@ static int load_file_buf(const char* path, uint8_t** out_buf, size_t* out_sz, in
   }
 
   const size_t sz = (size_t)sz_long;
-  uint8_t* buf = (uint8_t*)alloc_malloc(sz);
+  uint8_t* buf = (uint8_t*)alloc_malloc_uninit(sz);
   if (buf == NULL) {
     if (out_errno != NULL) {
       *out_errno = errno;

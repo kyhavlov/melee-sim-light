@@ -1,12 +1,94 @@
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
+import os
 from pathlib import Path
 
-from tools.eval.run_one_step_eval import EvalSummary, Reporter, _discrete_mismatch_total, evaluate_dataset
+import numpy as np
+
+from tools.eval.dataset import HEADER_DTYPE, MAGIC, SAMPLE_DTYPE
+from tools.eval.run_one_step_eval import (
+    EvalSummary,
+    Reporter,
+    _discrete_mismatch_total,
+    create_one_step_eval_runtime,
+    evaluate_dataset,
+)
 from tools.eval.run_one_step_eval import _strict_discrete_mismatch_total
 from tools.eval.validation_profile import get_validation_profile, validation_profile_names
 from tools.slippi.suite_io import dataset_path_for_suite_replay, load_suite, repo_root
+
+
+def _dataset_refresh_hint(path: Path) -> str:
+    return (
+        f"{path}: dataset header is missing, stale, or incompatible. Refresh cached datasets with "
+        "`uv run python -m tools.slippi.preprocess_suite --suite <suite> --datasets-dir datasets --force`."
+    )
+
+
+def _read_dataset_shape(path: Path) -> tuple[int, int]:
+    try:
+        with path.open("rb") as f:
+            header_bytes = f.read(HEADER_DTYPE.itemsize)
+        if len(header_bytes) != HEADER_DTYPE.itemsize:
+            raise ValueError("file too small for header")
+        header = np.frombuffer(header_bytes, dtype=HEADER_DTYPE, count=1)[0]
+        if bytes(header["magic"]) != MAGIC:
+            raise ValueError(f"bad magic: {header['magic']!r}")
+        record_size = int(header["record_size"])
+        if record_size != SAMPLE_DTYPE.itemsize:
+            raise ValueError(f"record_size mismatch: file={record_size} dtype={SAMPLE_DTYPE.itemsize}")
+        return int(header["num_records"]), int(header["num_players"])
+    except Exception as exc:
+        raise ValueError(f"{_dataset_refresh_hint(path)} Original error: {exc}") from exc
+
+
+class _CaptureReporter:
+    def __init__(self) -> None:
+        self.lines: list[str] = []
+
+    def print(self, *args) -> None:
+        self.lines.append(" ".join(str(a) for a in args))
+
+    def close(self) -> None:
+        return None
+
+
+def _resolve_worker_count(requested: int, task_count: int) -> int:
+    if int(requested) > 0:
+        return max(1, int(requested))
+    return max(1, min(8, int(os.cpu_count() or 1), int(task_count) if task_count else 1))
+
+
+def _evaluate_dataset_task(task: dict) -> tuple[list[str], EvalSummary]:
+    ds_path = Path(str(task["dataset_path"]))
+    records, num_players = _read_dataset_shape(ds_path)
+    runtime = create_one_step_eval_runtime(
+        batch_size=max(1, min(int(task["chunk"]), max(1, records))),
+        num_players=int(num_players),
+        ucf_enabled=bool(task["ucf_enabled"]),
+        ucf_cardinals_1_0_enabled=bool(task["ucf_cardinals_1_0_enabled"]),
+    )
+    capture = _CaptureReporter()
+    try:
+        summary = evaluate_dataset(
+            dataset_path=ds_path,
+            chunk=int(task["chunk"]),
+            runtime=runtime,
+            profile=str(task["profile"]),
+            ucf_enabled=bool(task["ucf_enabled"]),
+            ucf_cardinals_1_0_enabled=bool(task["ucf_cardinals_1_0_enabled"]),
+            reporter=capture,  # type: ignore[arg-type]
+            print_profile=False,
+            debug_mismatch=tuple(task["debug_mismatch"]),
+            debug_limit=int(task["debug_limit"]),
+            debug_float=tuple(task["debug_float"]),
+            debug_float_limit=int(task["debug_float_limit"]),
+        )
+    finally:
+        runtime.close()
+    return capture.lines, summary
 
 
 def _report_header(*, root: Path, suite: str, suite_name: str, datasets_dir: str) -> list[str]:
@@ -92,6 +174,17 @@ def main() -> None:
         default=10,
         help="max top-error rows to print per dataset per debug float field",
     )
+    ap.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Write --out report without echoing the full report to stdout.",
+    )
+    ap.add_argument(
+        "--workers",
+        type=int,
+        default=0,
+        help="Parallel dataset eval workers (0 = auto, capped at 8).",
+    )
     args = ap.parse_args()
 
     root = repo_root()
@@ -120,7 +213,9 @@ def main() -> None:
         print(f"  uv run python -m tools.slippi.preprocess_suite --suite {args.suite} --datasets-dir {args.datasets_dir}")
         raise SystemExit(2)
 
-    reporter = Reporter(args.out)
+    dataset_shapes = [_read_dataset_shape(ds_path) for ds_path in dataset_paths]
+
+    reporter = Reporter(args.out, echo=not bool(args.quiet))
     try:
         if args.out is not None:
             for line in _report_header(
@@ -148,26 +243,62 @@ def main() -> None:
             "float_norm_count": 0,
         }
 
-        for ds in dataset_paths:
-            reporter.print()
-            reporter.print(f"== {ds.relative_to(root)} ==")
-            summary = evaluate_dataset(
-                dataset_path=ds,
-                chunk=args.chunk,
-                profile=validation_profile,
+        num_players = int(dataset_shapes[0][1]) if dataset_shapes else 2
+        if any(players != num_players for _records, players in dataset_shapes):
+            raise SystemExit("error: mixed num_players suites are not supported by shared one-step eval runtime")
+        tasks = [
+            {
+                "dataset_path": str(ds),
+                "chunk": int(args.chunk),
+                "profile": validation_profile.name,
+                "ucf_enabled": bool(suite.ucf_enabled),
+                "ucf_cardinals_1_0_enabled": bool(suite.ucf_cardinals_1_0_enabled),
+                "debug_mismatch": tuple(s.strip() for s in args.debug_mismatch.split(",") if s.strip() != ""),
+                "debug_limit": int(args.debug_limit),
+                "debug_float": tuple(s.strip() for s in args.debug_float.split(",") if s.strip() != ""),
+                "debug_float_limit": int(args.debug_float_limit),
+            }
+            for ds in dataset_paths
+        ]
+        workers = _resolve_worker_count(int(args.workers), len(tasks))
+        if workers == 1 or len(tasks) <= 1:
+            task_results = []
+            max_records = max((records for records, _players in dataset_shapes), default=1)
+            runtime = create_one_step_eval_runtime(
+                batch_size=max(1, min(int(args.chunk), max_records)),
+                num_players=num_players,
                 ucf_enabled=suite.ucf_enabled,
                 ucf_cardinals_1_0_enabled=suite.ucf_cardinals_1_0_enabled,
-                reporter=reporter,
-                print_profile=False,
-                debug_mismatch=tuple(
-                    s.strip() for s in args.debug_mismatch.split(",") if s.strip() != ""
-                ),
-                debug_limit=int(args.debug_limit),
-                debug_float=tuple(
-                    s.strip() for s in args.debug_float.split(",") if s.strip() != ""
-                ),
-                debug_float_limit=int(args.debug_float_limit),
             )
+            try:
+                for ds, task in zip(dataset_paths, tasks, strict=True):
+                    capture = _CaptureReporter()
+                    summary = evaluate_dataset(
+                        dataset_path=ds,
+                        chunk=args.chunk,
+                        runtime=runtime,
+                        profile=validation_profile,
+                        ucf_enabled=suite.ucf_enabled,
+                        ucf_cardinals_1_0_enabled=suite.ucf_cardinals_1_0_enabled,
+                        reporter=capture,  # type: ignore[arg-type]
+                        print_profile=False,
+                        debug_mismatch=tuple(task["debug_mismatch"]),
+                        debug_limit=int(args.debug_limit),
+                        debug_float=tuple(task["debug_float"]),
+                        debug_float_limit=int(args.debug_float_limit),
+                    )
+                    task_results.append((capture.lines, summary))
+            finally:
+                runtime.close()
+        else:
+            with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as executor:
+                task_results = list(executor.map(_evaluate_dataset_task, tasks))
+
+        for ds, (lines, summary) in zip(dataset_paths, task_results, strict=True):
+            reporter.print()
+            reporter.print(f"== {ds.relative_to(root)} ==")
+            for line in lines:
+                reporter.print(line)
 
             if suite_mismatches is None:
                 suite_mismatches = {k: 0 for k in summary.mismatches.keys()}

@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pytest
 
+from tools.extraction.extract_fighter_anims import validate_ssanimt1_file
+
 
 def _read_tracks_msids(path: Path) -> list[int]:
     with path.open("rb") as f:
@@ -89,3 +91,4 @@ def test_data_contract_is_self_consistent_if_present() -> None:
         tracks_msids = set(_read_tracks_msids(tracks_path))
         missing = sorted(referenced_msids - tracks_msids)
         assert not missing, f"msids referenced by moves missing from tracks.bin: {missing[:20]}"
+        validate_ssanimt1_file(tracks_path)

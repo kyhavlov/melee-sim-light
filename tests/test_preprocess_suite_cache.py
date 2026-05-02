@@ -140,3 +140,11 @@ def test_trust_legacy_cache_opt_in_stamps_without_rebuild(tmp_path: Path) -> Non
         )
         == "trust_legacy"
     )
+
+
+def test_preprocess_suite_auto_workers_uses_parallel_default(monkeypatch) -> None:
+    monkeypatch.setattr(preprocess_suite.os, "cpu_count", lambda: 16)
+
+    assert preprocess_suite._resolve_worker_count(0, 3) == 3
+    assert preprocess_suite._resolve_worker_count(0, 20) == 16
+    assert preprocess_suite._resolve_worker_count(1, 20) == 1

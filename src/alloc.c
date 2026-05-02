@@ -50,6 +50,15 @@ void* alloc_malloc(size_t bytes) {
   return ptr;
 }
 
+void* alloc_malloc_uninit(size_t bytes) {
+  void* ptr = malloc(bytes);
+  if (ptr == NULL) {
+    return NULL;
+  }
+  alloc_record(bytes);
+  return ptr;
+}
+
 void* alloc_calloc(size_t nmemb, size_t size) {
   if (nmemb == 0 || size == 0) {
     // Match calloc behavior: return either NULL or a unique pointer; not important here.

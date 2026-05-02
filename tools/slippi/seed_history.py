@@ -1611,24 +1611,6 @@ def _stage_cam_bounds_world(
     return (float(left), float(right), float(bottom), float(top))
 
 
-@functools.lru_cache(maxsize=1)
-def _camera_target_seed_tables(*, data_dir: str = "data") -> dict[int, dict[str, object]]:
-    from tools.slippi.combat_history import AnimPoseDB
-
-    base = Path(str(data_dir))
-    out: dict[int, dict[str, object]] = {}
-    for char_id, key in ((1, "fox"), (22, "falco")):
-        meta = json.loads((base / "characters" / f"{key}.json").read_text())
-        out[int(char_id)] = {
-            "pose": AnimPoseDB((base / "anims" / f"{key}.bin").read_bytes()),
-            "bone_part_id": int(meta["camera_zoom_target_bone_part_id"]),
-            "offset": np.asarray(meta["camera_zoom_target_offset"], dtype=np.float32).reshape(3),
-            "radius": float(meta["camera_box_radius"]),
-            "model_scaling": float(meta.get("model_scaling", 1.0)),
-        }
-    return out
-
-
 def derive_camera_target_world(
     *,
     char_id_u8: np.ndarray,
@@ -1684,64 +1666,28 @@ def derive_camera_target_world(
     ):
         raise ValueError("camera target world derivation inputs must share length")
 
-    out_x = np.zeros(n, dtype=np.float32)
-    out_y = np.zeros(n, dtype=np.float32)
-    out_z = np.zeros(n, dtype=np.float32)
-    out_radius = np.zeros(n, dtype=np.float32)
+    if str(data_dir) not in ("data", "./data"):
+        raise ValueError(
+            "derive_camera_target_world now uses the native data-table path; set MSL_DATA_DIR for "
+            "non-default data roots instead of running the removed Python AnimPoseDB fallback"
+        )
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.derive_camera_target_world is required for preprocessing; run `make build`"
+        ) from exc
 
-    tables = _camera_target_seed_tables(data_dir=str(data_dir))
-    for i in range(n):
-        entry = tables.get(int(char[i]))
-        if entry is None:
-            continue
-        msid = int(anim[i])
-        if msid < 0 or msid > 0xFFFF:
-            continue
-        frame_f = float(anim_frame[i])
-        if not np.isfinite(frame_f):
-            continue
-        frame = int(np.floor(frame_f))
-        if frame < 0:
-            continue
-
-        pose = entry["pose"]
-        bone_part_id = int(entry["bone_part_id"])
-        m = pose.try_get_matrix(msid=msid, frame=frame, part_id=bone_part_id)
-        if m is None:
-            continue
-
-        off = entry["offset"]
-        lx = float(m[0] * off[0] + m[1] * off[1] + m[2] * off[2] + m[3])
-        ly = float(m[4] * off[0] + m[5] * off[1] + m[6] * off[2] + m[7])
-        lz = float(m[8] * off[0] + m[9] * off[1] + m[10] * off[2] + m[11])
-
-        scale = float(scale_y[i])
-        if not np.isfinite(scale) or scale <= 0.0:
-            scale = 1.0
-        model_scaling = float(entry["model_scaling"])
-        if not np.isfinite(model_scaling) or model_scaling <= 0.0:
-            model_scaling = 1.0
-
-        # Runtime HSD joint matrices used by ftLib_800866DC include fighter scale and the character
-        # model-scaling chain. Our SSANIM pose matrices omit those runtime scalars, so apply the same
-        # scale policy here before the decomp-shaped root facing rotation.
-        # refs/melee/src/melee/ft/ftlib.c::ftLib_800866DC
-        # refs/melee/src/melee/ft/ftparts.c::ftParts_80074B8C
-        pose_scale = scale * model_scaling
-        lx *= pose_scale
-        ly *= pose_scale
-        lz *= pose_scale
-
-        facing_dir = 1.0 if int(facing[i]) else -1.0
-        out_x[i] = np.float32(float(pos_x[i]) + facing_dir * lz)
-        out_y[i] = np.float32(float(pos_y[i]) + ly)
-        out_z[i] = np.float32(float(pos_z[i]) - facing_dir * lx)
-
-        # ftCamera_80076018 scales the camera-box extents from fighter camera data by fp->x34_scale.y.
-        # refs/melee/src/melee/ft/ftcamera.c::ftCamera_80076018
-        out_radius[i] = np.float32(float(entry["radius"]) * scale)
-
-    return out_x, out_y, out_z, out_radius
+    return msl_binding.derive_camera_target_world(
+        char,
+        anim,
+        anim_frame,
+        scale_y,
+        facing,
+        pos_x,
+        pos_y,
+        pos_z,
+    )
 
 
 def derive_camera_target_point_inside_stage_cam_bounds(
@@ -3145,66 +3091,6 @@ def compute_x672_trigger_timer_pre_post(
     return out_pre, out_post
 
 
-def lb_8000D148(
-    point0_x: float,
-    point0_y: float,
-    point1_x: float,
-    point1_y: float,
-    point2_x: float,
-    point2_y: float,
-    threshold: float,
-) -> bool:
-    """
-    Port of lb_8000D148 (segment/threshold helper used by fighter input counters).
-
-    Source: refs/melee/src/melee/lb/lb_00CE.c:163-225
-    """
-    # Keep float math and branching structure close to decomp for easier auditing.
-    diff_01_y = np.float32(point0_y) - np.float32(point1_y)
-    diff_01_x = np.float32(point1_x) - np.float32(point0_x)
-    dist_squared_01 = (diff_01_x * diff_01_x) + (diff_01_y * diff_01_y)
-    if dist_squared_01 < np.float32(0.00001):
-        return False
-    dist_01 = np.sqrt(dist_squared_01)
-
-    var_f0 = ((np.float32(point0_x) * np.float32(point1_y)) - (np.float32(point0_y) * np.float32(point1_x))) + (
-        (diff_01_x * np.float32(point2_x)) + (diff_01_y * np.float32(point2_y))
-    )
-    if var_f0 < np.float32(0.0):
-        var_f0 = -var_f0
-
-    thr = np.float32(threshold)
-    if (var_f0 / dist_01) <= thr:
-        diff_02_x = np.float32(point0_x) - np.float32(point2_x)
-        diff_02_y = np.float32(point0_y) - np.float32(point2_y)
-        diff_12_x = np.float32(point1_x) - np.float32(point2_x)
-        diff_12_y = np.float32(point1_y) - np.float32(point2_y)
-        threshold_squared = thr * thr
-        dist_squared_02 = (diff_02_x * diff_02_x) + (diff_02_y * diff_02_y)
-        dist_squared_12 = (diff_12_x * diff_12_x) + (diff_12_y * diff_12_y)
-        if dist_squared_02 < threshold_squared:
-            if dist_squared_12 > threshold_squared:
-                return True
-            if dist_squared_12 < threshold_squared:
-                return False
-            return True
-        if dist_squared_02 > threshold_squared:
-            if dist_squared_12 > threshold_squared:
-                if (
-                    ((point0_x > point2_x) and (point1_x < point2_x))
-                    or ((point0_x < point2_x) and (point1_x > point2_x))
-                    or ((point0_y > point2_y) and (point1_y < point2_y))
-                    or ((point0_y < point2_y) and (point1_y > point2_y))
-                ):
-                    return True
-                return False
-            if dist_squared_12 < threshold_squared:
-                return True
-            return True
-        return True
-    return False
-
-
 def compute_fighter_stick_input_counters(
     *,
     stick_x_unit: np.ndarray,
@@ -3213,131 +3099,25 @@ def compute_fighter_stick_input_counters(
     tilt_thresh_y: float,
     start_timer: int = 0xFE,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Compute stick-driven fighter input counters through the required native path.
+
+    Source: refs/melee/src/melee/ft/fighter.c:1897-2019, including lb_8000D148 zeroing.
+    The old Python loop was removed so preprocessing cannot silently fall back to the slow path.
     """
-    Compute the stick-driven fighter input counters block (u8, saturating at 0xFE), causally.
-
-    Outputs are per-frame post-update values for:
-    - x673, x679_x, x676_x (lstick x companions + age counter)
-    - x2228_b7 (most-recent fresh X-entry sign: 1 right / 0 left)
-    - x674, x67A_y, x677_y (lstick y companions + age counter)
-
-    Decomp reference: refs/melee/src/melee/ft/fighter.c:1897-2019
-      (including lb_8000D148 zeroing at :2011-2017).
-    """
-    sx = np.asarray(stick_x_unit, dtype=np.float32).reshape(-1)
-    sy = np.asarray(stick_y_unit, dtype=np.float32).reshape(-1)
-    if int(sy.size) != int(sx.size):
-        raise ValueError("stick_y_unit must match stick_x_unit length")
-    n = int(sx.size)
-
-    out_x673 = np.empty(n, dtype=np.uint8)
-    out_x676_x = np.empty(n, dtype=np.uint8)
-    out_x2228_b7 = np.empty(n, dtype=np.uint8)
-    out_x679_x = np.empty(n, dtype=np.uint8)
-    out_x674 = np.empty(n, dtype=np.uint8)
-    out_x677_y = np.empty(n, dtype=np.uint8)
-    out_x67A_y = np.empty(n, dtype=np.uint8)
-
-    thr_x = np.float32(tilt_thresh_x)
-    thr_y = np.float32(tilt_thresh_y)
-
-    x673 = int(start_timer) & 0xFF
-    x676_x = int(start_timer) & 0xFF
-    x2228_b7 = int(0) & 0xFF
-    x679_x = int(start_timer) & 0xFF
-    x674 = int(start_timer) & 0xFF
-    x677_y = int(start_timer) & 0xFF
-    x67A_y = int(start_timer) & 0xFF
-
-    prev_x = np.float32(0.0)
-    prev_y = np.float32(0.0)
-
-    for i in range(n):
-        cur_x = np.float32(sx[i])
-        cur_y = np.float32(sy[i])
-
-        # x676_x++
-        x676_x += 1
-        if x676_x > 0xFE:
-            x676_x = 0xFE
-
-        # lstick x block (x670 + x673 + x679_x) with x676_x reset on fresh entry.
-        if cur_x >= thr_x:
-            if prev_x >= thr_x:
-                x673 += 1
-                if x673 > 0xFE:
-                    x673 = 0xFE
-                x679_x += 1
-                if x679_x > 0xFE:
-                    x679_x = 0xFE
-            else:
-                x676_x = 0
-                x673 = 0
-                x2228_b7 = 1
-        elif cur_x <= -thr_x:
-            if prev_x <= -thr_x:
-                x673 += 1
-                if x673 > 0xFE:
-                    x673 = 0xFE
-                x679_x += 1
-                if x679_x > 0xFE:
-                    x679_x = 0xFE
-            else:
-                x676_x = 0
-                x673 = 0
-                x2228_b7 = 0
-        else:
-            x679_x = 0xFE
-            x673 = 0xFE
-
-        # x677_y++
-        x677_y += 1
-        if x677_y > 0xFE:
-            x677_y = 0xFE
-
-        # lstick y block (x671 + x674 + x67A_y) with x677_y reset on fresh entry.
-        if cur_y >= thr_y:
-            if prev_y >= thr_y:
-                x674 += 1
-                if x674 > 0xFE:
-                    x674 = 0xFE
-                x67A_y += 1
-                if x67A_y > 0xFE:
-                    x67A_y = 0xFE
-            else:
-                x677_y = 0
-                x674 = 0
-        elif cur_y <= -thr_y:
-            if prev_y <= -thr_y:
-                x674 += 1
-                if x674 > 0xFE:
-                    x674 = 0xFE
-                x67A_y += 1
-                if x67A_y > 0xFE:
-                    x67A_y = 0xFE
-            else:
-                x677_y = 0
-                x674 = 0
-        else:
-            x67A_y = 0xFE
-            x674 = 0xFE
-
-        if lb_8000D148(float(prev_x), float(prev_y), float(cur_x), float(cur_y), 0.0, 0.0, float(thr_x)):
-            x67A_y = 0
-            x679_x = 0
-
-        out_x673[i] = np.uint8(x673)
-        out_x676_x[i] = np.uint8(x676_x)
-        out_x2228_b7[i] = np.uint8(x2228_b7)
-        out_x679_x[i] = np.uint8(x679_x)
-        out_x674[i] = np.uint8(x674)
-        out_x677_y[i] = np.uint8(x677_y)
-        out_x67A_y[i] = np.uint8(x67A_y)
-
-        prev_x = cur_x
-        prev_y = cur_y
-
-    return out_x673, out_x674, out_x676_x, out_x2228_b7, out_x677_y, out_x679_x, out_x67A_y
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.compute_fighter_stick_input_counters is required for preprocessing; "
+            "run `make build`"
+        ) from exc
+    return msl_binding.compute_fighter_stick_input_counters(
+        np.ascontiguousarray(stick_x_unit, dtype=np.float32).reshape(-1),
+        np.ascontiguousarray(stick_y_unit, dtype=np.float32).reshape(-1),
+        float(tilt_thresh_x),
+        float(tilt_thresh_y),
+        int(start_timer),
+    )
 
 
 def compute_fighter_trigger_input_counters(
@@ -3346,56 +3126,22 @@ def compute_fighter_trigger_input_counters(
     trigger_min: float,
     start_timer: int = 0xFE,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Compute trigger-driven fighter input counters through the required native path.
+
+    Source: refs/melee/src/melee/ft/fighter.c:2020-2050.
     """
-    Compute the trigger-driven fighter input counters block (u8, saturating at 0xFE), causally.
-
-    Outputs are per-frame post-update values for:
-    - x675, x67B (companion timers)
-    - x678 ("age since last change" counter)
-
-    Decomp reference: refs/melee/src/melee/ft/fighter.c:2020-2050.
-    """
-    trig = np.asarray(trigger_unit, dtype=np.float32).reshape(-1)
-    n = int(trig.size)
-    out_x675 = np.empty(n, dtype=np.uint8)
-    out_x67B = np.empty(n, dtype=np.uint8)
-    out_x678 = np.empty(n, dtype=np.uint8)
-
-    thr = np.float32(trigger_min)
-    x675 = int(start_timer) & 0xFF
-    x67B = int(start_timer) & 0xFF
-    x678 = int(start_timer) & 0xFF
-    prev = np.float32(0.0)
-
-    for i in range(n):
-        cur = np.float32(trig[i])
-
-        x678 += 1
-        if x678 > 0xFE:
-            x678 = 0xFE
-
-        if cur >= thr:
-            if prev >= thr:
-                x675 += 1
-                if x675 > 0xFE:
-                    x675 = 0xFE
-                x67B += 1
-                if x67B > 0xFE:
-                    x67B = 0xFE
-            else:
-                x67B = 0
-                x678 = 0
-                x675 = 0
-        else:
-            x67B = 0xFE
-            x675 = 0xFE
-
-        out_x675[i] = np.uint8(x675)
-        out_x67B[i] = np.uint8(x67B)
-        out_x678[i] = np.uint8(x678)
-        prev = cur
-
-    return out_x675, out_x67B, out_x678
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.compute_fighter_trigger_input_counters is required for preprocessing; "
+            "run `make build`"
+        ) from exc
+    return msl_binding.compute_fighter_trigger_input_counters(
+        np.ascontiguousarray(trigger_unit, dtype=np.float32).reshape(-1),
+        float(trigger_min),
+        int(start_timer),
+    )
 
 
 def compute_fighter_button_timers(
@@ -3411,123 +3157,28 @@ def compute_fighter_button_timers(
     mask_z: int = 0,
     start_timer: int = 0xFF,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Compute fighter button timers through the required native path.
+
+    Source: refs/melee/src/melee/ft/fighter.c:2052-2094.
     """
-    Compute fighter button timers (u8, saturating at 0xFF), causally.
-
-    Outputs are per-frame post-update values for:
-    - x67C (A) and x683 (capture previous x67C on A press)
-    - x67D (B)
-    - x67E (X/Y)
-    - x681 (DPad Up)
-    - x682 (DPad Down)
-    - x680 (L/R) and x684 (capture previous x680 on L/R press)
-
-    Decomp reference: refs/melee/src/melee/ft/fighter.c:2052-2094
-    Init values: refs/melee/src/melee/ft/fighter.c:608-691 (reset/init to 0xFF).
-
-    Fighter_Spaghetti_8006AD10 maps held Z onto the effective input lane as HSD_PAD_A plus the
-    HSD_PAD_LR macro before building x668 and updating these timers. MSL's compact u16 button
-    domain has only physical L/R bits and handles Z/LR trigger ownership in a separate lane, so
-    only map Z press edges into the A timer domain here. B/X/Y/DPad/L/R physical timers still use
-    their raw domains.
-
-    When `hitlag_frames` is provided, model Fighter_Spaghetti_8006AD10_Inner1's x668
-    OR-latch while fp->x2219_b5 remains active. This is causal from Slippi post-frame
-    hitlag: post_hitlag[i] > 0 means the input pass for frame i still ran under the hitlag gate.
-    The latch starts from edges observed while the fighter is already in hitlag; a pre-hitlag L/R
-    press keeps its first x684 debounce value for later DamageFly floor tech callbacks instead of
-    being replay-latched into every subsequent hitlag frame.
-    """
-    bp = np.asarray(buttons_pressed, dtype=np.uint16).reshape(-1)
-    n = int(bp.size)
-    if hitlag_frames is None:
-        hl = np.zeros(n, dtype=np.uint16)
-    else:
-        hl = np.asarray(hitlag_frames, dtype=np.uint16).reshape(-1)
-        if int(hl.size) != n:
-            raise ValueError("hitlag_frames must match buttons_pressed length")
-
-    out_x67C = np.empty(n, dtype=np.uint8)
-    out_x67D = np.empty(n, dtype=np.uint8)
-    out_x67E = np.empty(n, dtype=np.uint8)
-    out_x680 = np.empty(n, dtype=np.uint8)
-    out_x681 = np.empty(n, dtype=np.uint8)
-    out_x682 = np.empty(n, dtype=np.uint8)
-    out_x683 = np.empty(n, dtype=np.uint8)
-    out_x684 = np.empty(n, dtype=np.uint8)
-
-    m_a = int(mask_a) & 0xFFFF
-    m_b = int(mask_b) & 0xFFFF
-    m_xy = int(mask_xy) & 0xFFFF
-    m_z = int(mask_z) & 0xFFFF
-    m_du = int(mask_dpad_up) & 0xFFFF
-    m_dd = int(mask_dpad_down) & 0xFFFF
-    m_lr = int(mask_lr) & 0xFFFF
-
-    x67C = int(start_timer) & 0xFF
-    x67D = int(start_timer) & 0xFF
-    x67E = int(start_timer) & 0xFF
-    x680 = int(start_timer) & 0xFF
-    x681 = int(start_timer) & 0xFF
-    x682 = int(start_timer) & 0xFF
-    x683 = int(start_timer) & 0xFF
-    x684 = int(start_timer) & 0xFF
-
-    x668_latched = 0
-    for i in range(n):
-        raw_bpi = int(bp[i])
-        if (raw_bpi & m_z) != 0:
-            raw_bpi |= m_a
-        if int(hl[i]) > 0:
-            x668_latched |= raw_bpi
-            bpi = x668_latched
-        else:
-            x668_latched = 0
-            bpi = raw_bpi
-
-        if (bpi & m_a) != 0:
-            x683 = x67C
-            x67C = 0
-        elif x67C < 0xFF:
-            x67C += 1
-
-        if (bpi & m_b) != 0:
-            x67D = 0
-        elif x67D < 0xFF:
-            x67D += 1
-
-        if (bpi & m_xy) != 0:
-            x67E = 0
-        elif x67E < 0xFF:
-            x67E += 1
-
-        if (bpi & m_du) != 0:
-            x681 = 0
-        elif x681 < 0xFF:
-            x681 += 1
-
-        if (bpi & m_dd) != 0:
-            x682 = 0
-        elif x682 < 0xFF:
-            x682 += 1
-
-        if (bpi & m_lr) != 0:
-            x684 = x680
-            x680 = 0
-        elif x680 < 0xFF:
-            x680 += 1
-
-        out_x67C[i] = np.uint8(x67C)
-        out_x67D[i] = np.uint8(x67D)
-        out_x67E[i] = np.uint8(x67E)
-        out_x680[i] = np.uint8(x680)
-        out_x681[i] = np.uint8(x681)
-        out_x682[i] = np.uint8(x682)
-        out_x683[i] = np.uint8(x683)
-        out_x684[i] = np.uint8(x684)
-
-    return out_x67C, out_x67D, out_x67E, out_x680, out_x681, out_x682, out_x683, out_x684
-
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.compute_fighter_button_timers is required for preprocessing; run `make build`"
+        ) from exc
+    return msl_binding.compute_fighter_button_timers(
+        np.ascontiguousarray(buttons_pressed, dtype=np.uint16).reshape(-1),
+        np.ascontiguousarray(hitlag_frames, dtype=np.uint16).reshape(-1) if hitlag_frames is not None else None,
+        int(mask_a),
+        int(mask_b),
+        int(mask_xy),
+        int(mask_dpad_up),
+        int(mask_dpad_down),
+        int(mask_lr),
+        int(mask_z),
+        int(start_timer),
+    )
 
 def derive_downwait_timer(
     *,

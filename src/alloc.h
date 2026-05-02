@@ -18,6 +18,7 @@ void* alloc_aligned_64(size_t bytes);
 
 // Heap wrappers used by the core (to make allocations measurable).
 void* alloc_malloc(size_t bytes);
+void* alloc_malloc_uninit(size_t bytes);
 void* alloc_calloc(size_t nmemb, size_t size);
 void alloc_free(void* ptr);
 

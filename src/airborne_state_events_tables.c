@@ -83,7 +83,7 @@ static int load_for_char(const char* data_dir, const char* rel_path, uint8_t cha
   }
 
   const size_t sz = (size_t)sz_long;
-  uint8_t* buf = (uint8_t*)alloc_malloc(sz);
+  uint8_t* buf = (uint8_t*)alloc_malloc_uninit(sz);
   if (buf == NULL) {
     fclose(f);
     return -1;

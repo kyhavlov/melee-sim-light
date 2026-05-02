@@ -100,12 +100,19 @@ Use `--force` only when you intentionally want to rebuild every dataset in the
 suite. Datasets created before per-dataset cache metadata are rebuilt by
 default once so source/data signatures are guaranteed; `--trust-legacy-cache`
 is only for explicit local migration when you know those artifacts are current.
-Stale/forced rebuilds can run in parallel:
+Stale/forced rebuilds run in parallel by default (`--workers 0`, capped at 32).
+Pin the worker count only when profiling or isolating a local issue:
 
 ```bash
-make preprocess PREPROCESS_WORKERS=4
-make preprocess-aggregate PREPROCESS_WORKERS=4
+make preprocess
+make preprocess-aggregate
+make preprocess-aggregate PREPROCESS_WORKERS=1
 ```
+
+Native preprocessing derivations use process-wide generated table roots. For non-default generated
+data, set `MSL_DATA_DIR` before importing/initializing the native binding; compatibility
+`data_root`/`data_dir` wrapper parameters intentionally reject non-default paths so the old Python
+fallbacks cannot run accidentally.
 
 ## Rollout Triage
 

@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 
-from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE, read_dataset
+from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE, Dataset, read_dataset
 from tools.eval.validation_profile import ValidationProfile, get_validation_profile, scored_lane_count_for_field
 
 
@@ -50,16 +50,78 @@ class EvalSummary:
     float_norm_count: int
 
 
+@dataclass
+class OneStepEvalRuntime:
+    binding: object
+    handle: object
+    capacity: int
+    num_players: int
+    seed_stride: int
+    input_stride: int
+    compare_stride: int
+    seed_bytes: np.ndarray
+    prev_input_bytes: np.ndarray
+    input_bytes: np.ndarray
+    out_compare_bytes: np.ndarray
+    out_compare_view: np.ndarray
+
+    def close(self) -> None:
+        try:
+            self.binding.destroy(self.handle)
+        except Exception:
+            pass
+
+
+def create_one_step_eval_runtime(
+    *,
+    batch_size: int,
+    num_players: int,
+    ucf_enabled: bool | None = None,
+    ucf_cardinals_1_0_enabled: bool | None = None,
+) -> OneStepEvalRuntime:
+    binding = _load_binding()
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    capacity = max(1, int(batch_size))
+
+    init_kwargs = {"batch_size": capacity, "num_players": int(num_players)}
+    if ucf_enabled is not None:
+        init_kwargs["ucf_enabled"] = int(bool(ucf_enabled))
+    if ucf_cardinals_1_0_enabled is not None:
+        init_kwargs["ucf_cardinals_1_0_enabled"] = int(bool(ucf_cardinals_1_0_enabled))
+
+    handle = binding.init(**init_kwargs)
+    out_compare_bytes = np.empty((capacity, compare_stride), dtype=np.uint8)
+    return OneStepEvalRuntime(
+        binding=binding,
+        handle=handle,
+        capacity=capacity,
+        num_players=int(num_players),
+        seed_stride=seed_stride,
+        input_stride=input_stride,
+        compare_stride=compare_stride,
+        seed_bytes=np.empty((capacity, seed_stride), dtype=np.uint8),
+        prev_input_bytes=np.empty((capacity, input_stride), dtype=np.uint8),
+        input_bytes=np.empty((capacity, input_stride), dtype=np.uint8),
+        out_compare_bytes=out_compare_bytes,
+        out_compare_view=out_compare_bytes.view(COMPARE_DTYPE).reshape(-1),
+    )
+
+
 class Reporter:
-    def __init__(self, out_path: Path | None = None) -> None:
+    def __init__(self, out_path: Path | None = None, *, echo: bool = True) -> None:
         self._fh = None
+        self._echo = bool(echo)
         if out_path is not None:
             out_path.parent.mkdir(parents=True, exist_ok=True)
             self._fh = out_path.open("w", encoding="utf-8")
 
     def print(self, *args) -> None:
         line = " ".join(str(a) for a in args)
-        print(line)
+        if self._echo:
+            print(line)
         if self._fh is not None:
             self._fh.write(line + "\n")
 
@@ -220,6 +282,8 @@ def evaluate_dataset(
     *,
     dataset_path: Path,
     chunk: int,
+    dataset: Dataset | None = None,
+    runtime: OneStepEvalRuntime | None = None,
     profile: str | ValidationProfile | None = None,
     ucf_enabled: bool | None = None,
     ucf_cardinals_1_0_enabled: bool | None = None,
@@ -233,38 +297,52 @@ def evaluate_dataset(
     if reporter is None:
         reporter = Reporter()
     validation_profile = get_validation_profile(profile)
+    chunk = max(1, int(chunk))
 
-    try:
-        ds = read_dataset(str(dataset_path))
-    except ValueError as e:
-        msg = str(e)
-        if "record_size mismatch" in msg:
-            reporter.print(f"error: {msg}")
-            reporter.print("hint: dataset schema changed; refresh cached datasets:")
-            reporter.print(
-                "  uv run python -m tools.slippi.preprocess_suite --suite <suite.json> --datasets-dir <dir>"
-            )
+    if dataset is None:
+        try:
+            ds = read_dataset(str(dataset_path))
+        except ValueError as e:
+            msg = str(e)
+            if "record_size mismatch" in msg:
+                reporter.print(f"error: {msg}")
+                reporter.print("hint: dataset schema changed; refresh cached datasets:")
+                reporter.print(
+                    "  uv run python -m tools.slippi.preprocess_suite --suite <suite.json> --datasets-dir <dir>"
+                )
+                raise
             raise
-        raise
+    else:
+        ds = dataset
     samples = ds.samples
     num_records = samples.shape[0]
     num_players = int(ds.header["num_players"])
     max_items = int(samples.dtype["seed_t"]["items"].shape[0])
 
-    binding = _load_binding()
-    sizes = binding.sizes()
+    owns_runtime = runtime is None
+    if runtime is None:
+        runtime = create_one_step_eval_runtime(
+            batch_size=min(max(1, chunk), max(1, num_records)),
+            num_players=num_players,
+            ucf_enabled=ucf_enabled,
+            ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
+        )
+    elif runtime.capacity < min(max(1, chunk), max(1, num_records)):
+        raise ValueError(
+            f"shared one-step runtime capacity {runtime.capacity} is too small for "
+            f"chunk={chunk} records={num_records}"
+        )
+    elif runtime.num_players != num_players:
+        raise ValueError(
+            f"shared one-step runtime num_players={runtime.num_players} does not match "
+            f"dataset num_players={num_players}"
+        )
 
-    seed_stride = int(sizes["seed"])
-    input_stride = int(sizes["input"])
-    compare_stride = int(sizes["compare"])
-
-    init_kwargs = {"batch_size": min(chunk, num_records), "num_players": num_players}
-    if ucf_enabled is not None:
-        init_kwargs["ucf_enabled"] = int(bool(ucf_enabled))
-    if ucf_cardinals_1_0_enabled is not None:
-        init_kwargs["ucf_cardinals_1_0_enabled"] = int(bool(ucf_cardinals_1_0_enabled))
-
-    handle = binding.init(**init_kwargs)
+    binding = runtime.binding
+    handle = runtime.handle
+    seed_stride = runtime.seed_stride
+    input_stride = runtime.input_stride
+    compare_stride = runtime.compare_stride
 
     total_records = 0
     total_player_frames = 0
@@ -317,13 +395,18 @@ def evaluate_dataset(
     ref_abs = {k: [] for k in float_err}
 
     # Preallocated buffers (bytes) that C reads/writes.
-    seed_bytes = np.empty((min(chunk, num_records), seed_stride), dtype=np.uint8)
-    prev_input_bytes = np.empty((min(chunk, num_records), input_stride), dtype=np.uint8)
-    input_bytes = np.empty((min(chunk, num_records), input_stride), dtype=np.uint8)
-    out_compare_bytes = np.empty((min(chunk, num_records), compare_stride), dtype=np.uint8)
+    seed_bytes = runtime.seed_bytes
+    prev_input_bytes = runtime.prev_input_bytes
+    input_bytes = runtime.input_bytes
+    out_compare_bytes = runtime.out_compare_bytes
 
     # Views for vectorized comparisons.
-    out_compare_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
+    out_compare_view_full = runtime.out_compare_view
+    sample_stride = int(samples.dtype.itemsize)
+    samples_u8 = samples.view(np.uint8).reshape(num_records, sample_stride)
+    seed_off = int(samples.dtype.fields["seed_t"][1])
+    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
+    input_off = int(samples.dtype.fields["input_t"][1])
 
     debug_fields: tuple[str, ...] = ()
     debug_left: dict[str, int] = {}
@@ -350,42 +433,29 @@ def evaluate_dataset(
                 f"debug: will print top abs float errors for {', '.join(debug_float_fields)} (limit={debug_float_limit})"
             )
 
-    # Iterate in chunks, resizing the handle buffers as needed by re-init.
+    # Iterate in chunks. The C runtime batch size is fixed, so shared suite runtimes pad
+    # tail lanes with a valid sample and ignore them in Python-side comparisons.
     offset = 0
     while offset < num_records:
         chunk_n = min(chunk, num_records - offset)
-        if chunk_n != seed_bytes.shape[0]:
-            # Re-init for the last partial chunk (keeps binding simple).
-            init_kwargs = {"batch_size": chunk_n, "num_players": num_players}
-            if ucf_enabled is not None:
-                init_kwargs["ucf_enabled"] = int(bool(ucf_enabled))
-            if ucf_cardinals_1_0_enabled is not None:
-                init_kwargs["ucf_cardinals_1_0_enabled"] = int(bool(ucf_cardinals_1_0_enabled))
-            handle = binding.init(**init_kwargs)
-            seed_bytes = np.empty((chunk_n, seed_stride), dtype=np.uint8)
-            prev_input_bytes = np.empty((chunk_n, input_stride), dtype=np.uint8)
-            input_bytes = np.empty((chunk_n, input_stride), dtype=np.uint8)
-            out_compare_bytes = np.empty((chunk_n, compare_stride), dtype=np.uint8)
-            out_compare_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
 
         chunk_view = samples[offset : offset + chunk_n]
+        chunk_u8 = samples_u8[offset : offset + chunk_n]
 
-        # Pack seed/input into byte buffers.
-        # Structured dtypes don't always permit a zero-copy uint8 view depending on layout;
-        # use a contiguous bytes pack per chunk (still fast and keeps Python gameplay-free).
-        seed_bytes[:] = np.frombuffer(chunk_view["seed_t"].tobytes(order="C"), dtype=np.uint8).reshape(
-            chunk_n, seed_stride
-        )
-        prev_input_bytes[:] = np.frombuffer(
-            chunk_view["prev_input_t"].tobytes(order="C"), dtype=np.uint8
-        ).reshape(chunk_n, input_stride)
-        input_bytes[:] = np.frombuffer(chunk_view["input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
-            chunk_n, input_stride
-        )
+        # Copy seed/input field bytes directly from the AoS dataset buffer. This avoids the
+        # per-chunk `.tobytes()` allocation path while preserving the C runtime byte ABI.
+        seed_bytes[:chunk_n] = chunk_u8[:, seed_off : seed_off + seed_stride]
+        prev_input_bytes[:chunk_n] = chunk_u8[:, prev_input_off : prev_input_off + input_stride]
+        input_bytes[:chunk_n] = chunk_u8[:, input_off : input_off + input_stride]
+        if chunk_n < runtime.capacity:
+            seed_bytes[chunk_n : runtime.capacity] = seed_bytes[0]
+            prev_input_bytes[chunk_n : runtime.capacity] = prev_input_bytes[0]
+            input_bytes[chunk_n : runtime.capacity] = input_bytes[0]
 
         binding.reseed_seed(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)
         binding.write_compare(handle, out_compare_bytes)
+        out_compare_view = out_compare_view_full[:chunk_n]
 
         seed = chunk_view["seed_t"]
         ref = chunk_view["ref_t1"]
@@ -672,6 +742,9 @@ def evaluate_dataset(
         total_records += chunk_n
         total_player_frames += chunk_n * num_players
         offset += chunk_n
+
+    if owns_runtime and runtime is not None:
+        runtime.close()
 
     total_state_flags = total_player_frames * 5
     total_item_slots = total_records * max_items

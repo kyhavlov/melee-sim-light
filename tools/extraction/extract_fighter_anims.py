@@ -671,6 +671,75 @@ class _FObj:
             return out
 
 
+def validate_ssanimt1_file(path: Path) -> None:
+    """Validate SSANIMT1 structural records and FObj payload readability.
+
+    Runtime startup only validates SSANIMT1 offsets so sim/eval startup stays cheap. The extractor
+    and data-contract tests own the deeper HSD FObj bytecode validation that catches stale or
+    corrupt payloads before generated data is accepted.
+    """
+
+    buf = path.read_bytes()
+    if len(buf) < 16 or buf[:8] != b"SSANIMT1":
+        raise ValueError(f"{path}: bad SSANIMT1 header")
+    version, local_count, anim_count = struct.unpack_from("<IHH", buf, 8)
+    if int(version) != 3:
+        raise ValueError(f"{path}: unsupported SSANIMT1 version {version}")
+    off = 16
+    local_bytes = int(local_count) + 2 * int(local_count) + 4 * int(local_count)
+    if off + local_bytes > len(buf):
+        raise ValueError(f"{path}: truncated SSANIMT1 local tables")
+    off += local_bytes
+
+    for _anim_i in range(int(anim_count)):
+        if off + 8 > len(buf):
+            raise ValueError(f"{path}: truncated SSANIMT1 anim header")
+        msid, _end_frame = struct.unpack_from("<Hf", buf, off)
+        off += 8
+        for _part_i in range(int(local_count)):
+            if off + 2 > len(buf):
+                raise ValueError(f"{path}: truncated SSANIMT1 part track header msid={msid}")
+            part = int(buf[off])
+            n_tracks = int(buf[off + 1])
+            off += 2
+            for track_i in range(n_tracks):
+                if off + 8 > len(buf):
+                    raise ValueError(
+                        f"{path}: truncated SSANIMT1 FObj header msid={msid} part={part} track={track_i}"
+                    )
+                obj_type, frac_value, frac_slope, _pad, startframe, length = struct.unpack_from(
+                    "<BBBBHH", buf, off
+                )
+                off += 8
+                if off + int(length) > len(buf):
+                    raise ValueError(
+                        f"{path}: truncated SSANIMT1 FObj payload msid={msid} part={part} track={track_i}"
+                    )
+                ad = memoryview(buf)[off : off + int(length)]
+                off += int(length)
+                if int(length) == 0:
+                    continue
+                fo = _FObj(
+                    ad=ad,
+                    ad_head=0,
+                    length=int(length),
+                    startframe=int(startframe),
+                    obj_type=int(obj_type),
+                    frac_value=int(frac_value),
+                    frac_slope=int(frac_slope),
+                )
+                fo.req_anim(0.0)
+                try:
+                    fo.interpret(0.0)
+                except IndexError as exc:
+                    raise ValueError(
+                        f"{path}: corrupt SSANIMT1 FObj payload msid={msid} part={part} "
+                        f"track={track_i}"
+                    ) from exc
+    if off != len(buf):
+        raise ValueError(f"{path}: trailing SSANIMT1 bytes")
+
+
 @dataclass(frozen=True)
 class _FigaTrack:
     length: int
@@ -2182,6 +2251,7 @@ def extract_one_character(
     if _TIMINGS is not None:
         print(_TIMINGS.report(character=character, native=use_native))
     _TIMINGS = prev_timings
+    validate_ssanimt1_file(tracks_path)
     return out_path
 
 

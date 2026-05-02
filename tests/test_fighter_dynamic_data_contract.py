@@ -131,14 +131,13 @@ def _write_truncated_ssanimt1_varint(path: Path, *, msid: int = 2, part_id: int 
     path.parent.mkdir(parents=True, exist_ok=True)
     buf = bytearray()
     buf += b"SSANIMT1"
-    buf += struct.pack("<IHH", 2, 1, 1)
+    buf += struct.pack("<IHH", 3, 1, 1)
     buf += bytes([int(part_id) & 0xFF])
     buf += struct.pack("<hI", -1, 0)
-    buf += struct.pack("<HfB", int(msid) & 0xFFFF, 1.0, 0)
+    buf += struct.pack("<HfBB", int(msid) & 0xFFFF, 1.0, 0, 0)
     buf += bytes([int(part_id) & 0xFF, 1])  # part, n_tracks
-    # Track payload is one unterminated variable-length pack-info byte. Present SSANIMT1 files are
-    # init-time C-core inputs; the runtime loader must reject this instead of allowing an FObj read
-    # past the track payload during collision-pose sampling.
+    # Track payload is one unterminated variable-length pack-info byte. The extractor/data-contract
+    # path must reject this before generated SSANIMT1 inputs are accepted.
     # refs/melee/src/sysdolphin/baselib/fobj.c::HSD_FObjInterpretAnim
     buf += struct.pack("<BBBBHH", 5, 0, 0, 0, 0, 1)  # obj_type, frac*, pad, startframe, len
     buf += bytes([0x81])
@@ -551,38 +550,13 @@ def test_runtime_dynamic_loader_allows_missing_dyn_and_locals_for_synthetic_pose
             msl_binding.debug_reset_pose_and_hitboxes_tables()
 
 
-def test_runtime_tracks_loader_rejects_truncated_variable_length_records() -> None:
-    import msl_binding
-
-    exclude = {
-        Path("anims/fox.bin"),
-        Path("anims/fox.locals.bin"),
-        Path("anims/fox.dyn.bin"),
-        Path("anims/fox.tracks.bin"),
-        Path("anims/falco.bin"),
-        Path("anims/falco.locals.bin"),
-        Path("anims/falco.dyn.bin"),
-        Path("anims/falco.tracks.bin"),
-    }
+def test_tracks_data_contract_rejects_truncated_variable_length_records() -> None:
+    from tools.extraction.extract_fighter_anims import validate_ssanimt1_file
 
     build_dir = Path("build")
     build_dir.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="tracks-contract-truncated-varint-", dir=build_dir) as tmp_raw:
-        data_dir = Path(tmp_raw) / "data"
-        _populate_data_dir(data_dir, exclude=exclude)
-        _write_minimal_ssanim(data_dir / "anims/fox.bin")
-        _write_minimal_ssanim(data_dir / "anims/falco.bin")
-        _write_truncated_ssanimt1_varint(data_dir / "anims/fox.tracks.bin")
-
-        old_data_dir = os.environ.get("MSL_DATA_DIR")
-        try:
-            os.environ["MSL_DATA_DIR"] = str(data_dir)
-            msl_binding.debug_reset_pose_and_hitboxes_tables()
-            with pytest.raises(MemoryError):
-                msl_binding.init(batch_size=1, num_players=2)
-        finally:
-            if old_data_dir is None:
-                os.environ.pop("MSL_DATA_DIR", None)
-            else:
-                os.environ["MSL_DATA_DIR"] = old_data_dir
-            msl_binding.debug_reset_pose_and_hitboxes_tables()
+        tracks_path = Path(tmp_raw) / "data" / "anims" / "fox.tracks.bin"
+        _write_truncated_ssanimt1_varint(tracks_path)
+        with pytest.raises(ValueError, match="corrupt SSANIMT1 FObj payload"):
+            validate_ssanimt1_file(tracks_path)

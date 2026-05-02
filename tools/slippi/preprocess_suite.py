@@ -4,6 +4,7 @@ import argparse
 import concurrent.futures
 import hashlib
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -101,7 +102,13 @@ def _cache_signature(
     ports: list[int],
     ucf_enabled: bool,
     ucf_cardinals_1_0_enabled: bool,
+    source_inputs: list[dict[str, Any]] | None = None,
+    data_inputs: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
+    if source_inputs is None:
+        source_inputs = _source_input_fingerprints(root)
+    if data_inputs is None:
+        data_inputs = _tree_fingerprint(root, "data")
     return {
         "cache_version": _CACHE_VERSION,
         "suite": str(suite_path.relative_to(root)),
@@ -114,8 +121,8 @@ def _cache_signature(
         "seed_dtype_itemsize": int(SEED_DTYPE.itemsize),
         "sample_dtype_itemsize": int(SAMPLE_DTYPE.itemsize),
         "sample_dtype_descr": repr(SAMPLE_DTYPE.descr),
-        "source_inputs": _source_input_fingerprints(root),
-        "data_inputs": _tree_fingerprint(root, "data"),
+        "source_inputs": source_inputs,
+        "data_inputs": data_inputs,
     }
 
 
@@ -179,6 +186,12 @@ def _write_dataset_cache_meta(meta_path: Path, signature: dict[str, Any], *, reb
     )
 
 
+def _resolve_worker_count(requested: int, task_count: int) -> int:
+    if int(requested) > 0:
+        return max(1, int(requested))
+    return max(1, min(32, int(os.cpu_count() or 1), int(task_count) if task_count else 1))
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--suite", required=True, help="Path to suite JSON (e.g. replays/suites/...)")
@@ -196,12 +209,19 @@ def main() -> None:
             "Default is to rebuild no-meta datasets so source/data signatures are guaranteed."
         ),
     )
-    ap.add_argument("--workers", type=int, default=1, help="Parallel rebuild workers for stale/forced datasets.")
+    ap.add_argument(
+        "--workers",
+        type=int,
+        default=0,
+        help="Parallel rebuild workers for stale/forced datasets (0 = auto, capped at 32).",
+    )
     args = ap.parse_args()
 
     root = repo_root()
     suite_path = (root / args.suite).resolve()
     suite = load_suite(suite_path)
+    source_inputs = _source_input_fingerprints(root)
+    data_inputs = _tree_fingerprint(root, "data")
 
     built = 0
     skipped = 0
@@ -234,6 +254,8 @@ def main() -> None:
             ports=ports,
             ucf_enabled=bool(suite.ucf_enabled),
             ucf_cardinals_1_0_enabled=bool(suite.ucf_cardinals_1_0_enabled),
+            source_inputs=source_inputs,
+            data_inputs=data_inputs,
         )
         dataset_meta_path = _dataset_cache_meta_path(out_path)
         cache_action = _dataset_cache_action(
@@ -267,7 +289,7 @@ def main() -> None:
             }
         )
 
-    workers = max(1, int(args.workers))
+    workers = _resolve_worker_count(int(args.workers), len(build_tasks))
     if workers == 1 or len(build_tasks) <= 1:
         for task in build_tasks:
             _build_dataset_task(task)

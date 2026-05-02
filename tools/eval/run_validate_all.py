@@ -68,25 +68,25 @@ def main() -> None:
             name="run_one_step_suite_eval",
             module="tools.eval.run_one_step_suite_eval",
             main=run_one_step_suite_eval.main,
-            args=["--suite", args.suite, *one_step_common, "--out", args.one_step_out],
+            args=["--suite", args.suite, *one_step_common, "--out", args.one_step_out, "--quiet"],
         ),
         _ReportJob(
             name="run_rollout_suite_eval",
             module="tools.eval.run_rollout_suite_eval",
             main=run_rollout_suite_eval.main,
-            args=["--suite", args.suite, *rollout_common, "--out", args.rollout_out],
+            args=["--suite", args.suite, *rollout_common, "--out", args.rollout_out, "--quiet"],
         ),
         _ReportJob(
             name="run_one_step_suite_eval",
             module="tools.eval.run_one_step_suite_eval",
             main=run_one_step_suite_eval.main,
-            args=["--suite", args.agg_suite, *one_step_common, "--out", args.agg_one_step_out],
+            args=["--suite", args.agg_suite, *one_step_common, "--out", args.agg_one_step_out, "--quiet"],
         ),
         _ReportJob(
             name="run_rollout_suite_eval",
             module="tools.eval.run_rollout_suite_eval",
             main=run_rollout_suite_eval.main,
-            args=["--suite", args.agg_suite, *rollout_common, "--out", args.agg_rollout_out],
+            args=["--suite", args.agg_suite, *rollout_common, "--out", args.agg_rollout_out, "--quiet"],
         ),
     ]
 

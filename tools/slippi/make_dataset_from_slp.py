@@ -2972,92 +2972,25 @@ def derive_illusion_ghost_pos012(
     post_pos_x: np.ndarray,
     post_pos_y: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """Derive post-frame `mv.fx.SpecialS.ghostEffectPos[0..2]` strictly causally.
+    """Derive post-frame `mv.fx.SpecialS.ghostEffectPos[0..2]` through native C.
 
     Decomp ownership:
-    - main-state Enter initializes ghostEffectPos[0..3] = cur_pos via ftFox_SpecialS_SetVars.
-    - the main/end Phys callbacks advance the ring through ftFox_SpecialS_SetPhys:
-        ghost3 = ghost2; ghost2 = ghost1; ghost1 = ghost0; ghost0 = cur_pos
-    - item Phys later consumes ghostEffectPos[1] through ftFx_SpecialS_CopyGhostPosIndexed(1).
-    - item collision preserves the previous HitCapsule endpoint in x58; at a replay seed boundary
-      for an active Illusion/Phantasm article, that endpoint is ghostEffectPos[2].
-    refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
-      ftFox_SpecialS_SetVars,ftFox_SpecialS_SetPhys,ftFx_SpecialS_CopyGhostPosIndexed
-    }
-    refs/melee/src/melee/it/itcoll.c::it_8027137C
-    refs/melee/src/melee/it/items/itfoxillusion.c::{
-      itFoxillusion_UnkMotion0_Phys,itFoxillusion_UnkMotion1_Phys
-    }
+    - ftFox_SpecialS_SetVars initializes ghostEffectPos[0..3] = cur_pos.
+    - ftFox_SpecialS_SetPhys advances ghost3 <- ghost2 <- ghost1 <- ghost0 <- cur_pos.
+    - Illusion item Phys consumes ghostEffectPos[1]; item collision preserves x58 from [2].
+    refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c
+    refs/melee/src/melee/it/items/itfoxillusion.c
     """
-    aid = np.asarray(post_action_id_u16, dtype=np.uint16)
-    afr = np.asarray(post_action_frame_i16, dtype=np.int16)
-    px = np.asarray(post_pos_x, dtype=np.float32)
-    py = np.asarray(post_pos_y, dtype=np.float32)
-    n_frames, n_players = aid.shape
-
-    ACT_FX_SPECIAL_S = 348
-    ACT_FX_SPECIAL_S_END = 349
-    ACT_FX_SPECIAL_AIR_S = 351
-    ACT_FX_SPECIAL_AIR_S_END = 352
-    main_actions = {ACT_FX_SPECIAL_S, ACT_FX_SPECIAL_AIR_S}
-    setphys_actions = {
-        ACT_FX_SPECIAL_S,
-        ACT_FX_SPECIAL_S_END,
-        ACT_FX_SPECIAL_AIR_S,
-        ACT_FX_SPECIAL_AIR_S_END,
-    }
-
-    out0_x = np.array(px, copy=True)
-    out0_y = np.array(py, copy=True)
-    out1_x = np.array(px, copy=True)
-    out1_y = np.array(py, copy=True)
-    out2_x = np.array(px, copy=True)
-    out2_y = np.array(py, copy=True)
-
-    for p in range(n_players):
-        ghost0_x = float(px[0, p])
-        ghost0_y = float(py[0, p])
-        ghost1_x = ghost0_x
-        ghost1_y = ghost0_y
-        ghost2_x = ghost0_x
-        ghost2_y = ghost0_y
-        for fi in range(n_frames):
-            cur_a = int(aid[fi, p])
-            cur_x = float(px[fi, p])
-            cur_y = float(py[fi, p])
-            entry_main = False
-            if cur_a in main_actions:
-                if fi == 0:
-                    entry_main = True
-                else:
-                    prev_a = int(aid[fi - 1, p])
-                    prev_af = int(afr[fi - 1, p])
-                    cur_af = int(afr[fi, p])
-                    if prev_a != cur_a or cur_af < prev_af:
-                        entry_main = True
-            if entry_main:
-                ghost0_x = cur_x
-                ghost0_y = cur_y
-                ghost1_x = cur_x
-                ghost1_y = cur_y
-                ghost2_x = cur_x
-                ghost2_y = cur_y
-            elif cur_a in setphys_actions:
-                ghost2_x = ghost1_x
-                ghost2_y = ghost1_y
-                ghost1_x = ghost0_x
-                ghost1_y = ghost0_y
-                ghost0_x = cur_x
-                ghost0_y = cur_y
-            out0_x[fi, p] = np.float32(ghost0_x)
-            out0_y[fi, p] = np.float32(ghost0_y)
-            out1_x[fi, p] = np.float32(ghost1_x)
-            out1_y[fi, p] = np.float32(ghost1_y)
-            out2_x[fi, p] = np.float32(ghost2_x)
-            out2_y[fi, p] = np.float32(ghost2_y)
-
-    return out0_x, out0_y, out1_x, out1_y, out2_x, out2_y
-
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError("native msl_binding.derive_illusion_ghost_pos012 is required; run `make build`") from exc
+    return msl_binding.derive_illusion_ghost_pos012(
+        np.ascontiguousarray(post_action_id_u16, dtype=np.uint16),
+        np.ascontiguousarray(post_action_frame_i16, dtype=np.int16),
+        np.ascontiguousarray(post_pos_x, dtype=np.float32),
+        np.ascontiguousarray(post_pos_y, dtype=np.float32),
+    )
 
 def derive_illusion_ghost_pos01(
     *,

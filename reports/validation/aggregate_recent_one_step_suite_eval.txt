@@ -177,7 +177,7 @@ overall.float_norm_mae_p95: 0.00005386
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl ==
 Records: 12185  Players/scored per record: 2  Total player-frames: 24370
-mismatch.action_id: 5 / 24370 (0.000205)
+mismatch.action_id: 4 / 24370 (0.000164)
 mismatch.action_frame: 5 / 24370 (0.000205)
 mismatch.on_ground: 1 / 24370 (0.000041)
 mismatch.facing: 2 / 24370 (0.000082)
@@ -189,7 +189,7 @@ mismatch.hitstun: 0 / 24370 (0.000000)
 mismatch.l_cancel: 0 / 24370 (0.000000)
 mismatch.hurtbox_state: 0 / 24370 (0.000000)
 mismatch.ground_id: 0 / 24370 (0.000000)
-mismatch.animation_index: 5 / 24370 (0.000205)
+mismatch.animation_index: 4 / 24370 (0.000164)
 mismatch.instance_hit_by: 1 / 24370 (0.000041)
 mismatch.instance_id: 1 / 24370 (0.000041)
 mismatch.last_attack_landed: 0 / 24370 (0.000000)
@@ -215,8 +215,8 @@ err.item_pos_x: mae=0.090159 p95=0.000301 max=4.100000
 err.item_pos_y: mae=0.000002 p95=0.000000 max=0.000114
 err.item_vel_x: mae=0.000006 p95=0.000000 max=0.000234
 err.item_vel_y: mae=0.000001 p95=0.000000 max=0.000060
-overall.discrete_mismatch: 50 / 1474385
-overall.strict_discrete_mismatch: 97 / 1474385
+overall.discrete_mismatch: 48 / 1474385
+overall.strict_discrete_mismatch: 95 / 1474385
 overall.ignored_discrete_mismatch: 47
 overall.float_norm_mae_p95: 0.00002530
 
@@ -851,7 +851,7 @@ overall.ignored_discrete_mismatch: 31
 overall.float_norm_mae_p95: 0.00136502
 
 == suite summary ==
-overall.discrete_mismatch: 3611 / 21069367
-overall.strict_discrete_mismatch: 4048 / 21069367
+overall.discrete_mismatch: 3609 / 21069367
+overall.strict_discrete_mismatch: 4046 / 21069367
 overall.ignored_discrete_mismatch: 437
 overall.float_norm_mae_p95: 0.11980297

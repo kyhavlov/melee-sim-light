@@ -34,13 +34,6 @@ def _load_combo_timer_reset_frames(*, data_root: Path) -> int:
     return max(0, v)
 
 
-def _load_combo_push_params(*, data_root: Path) -> tuple[int, int]:
-    common = json.loads((data_root / "common" / "ft_common_data.json").read_text())
-    threshold = int(common.get("combo_push_count_threshold", 0))
-    frames = int(common.get("combo_push_timer_frames", 0))
-    return max(0, threshold), max(0, frames)
-
-
 def derive_combo_push_timer_seed(
     *,
     combo_count: np.ndarray,  # [n_frames, MAX_PLAYERS] u8
@@ -60,51 +53,26 @@ def derive_combo_push_timer_seed(
     visible same-attack count increments. When the combo-victim lane is available, require the
     attacker's current victim provenance to stay on the same non-NULL player.
     """
-    data_root = Path(data_root)
-    threshold, frames = _load_combo_push_params(data_root=data_root)
-    counts = np.asarray(combo_count, dtype=np.uint8)
-    attacks = np.asarray(last_attack_landed, dtype=np.uint8)
-    victims = None if combo_victim_port is None else np.asarray(combo_victim_port, dtype=np.uint8)
-    n_frames = int(counts.shape[0])
-    out = np.zeros((n_frames, MAX_PLAYERS), dtype=np.uint16)
-    timer = np.zeros((MAX_PLAYERS,), dtype=np.uint16)
-    prev_count = np.zeros((MAX_PLAYERS,), dtype=np.uint8)
-    prev_attack = np.zeros((MAX_PLAYERS,), dtype=np.uint8)
-    prev_victim = np.full((MAX_PLAYERS,), 0xFF, dtype=np.uint8)
-    repeated_same_attack_count = np.zeros((MAX_PLAYERS,), dtype=np.uint8)
-    if threshold <= 0 or frames <= 0:
-        return out
-
-    players = min(MAX_PLAYERS, int(counts.shape[1]), int(attacks.shape[1]))
-    for fi in range(n_frames):
-        for p in range(players):
-            cur = int(counts[fi, p])
-            attack = int(attacks[fi, p])
-            victim = 0xFF if victims is None else int(victims[fi, p])
-            same_victim = victims is None or (victim != 0xFF and victim == int(prev_victim[p]))
-            same_attack = attack != 0 and attack == int(prev_attack[p])
-            increment = cur > int(prev_count[p])
-            if cur == 0 or attack == 0:
-                repeated_same_attack_count[p] = np.uint8(0)
-            elif increment:
-                if same_attack and same_victim:
-                    repeated_same_attack_count[p] = np.uint8(
-                        min(255, int(repeated_same_attack_count[p]) + 1)
-                    )
-                else:
-                    repeated_same_attack_count[p] = np.uint8(1)
-            elif not (same_attack and same_victim):
-                repeated_same_attack_count[p] = np.uint8(1)
-
-            if increment and cur >= threshold and int(repeated_same_attack_count[p]) >= threshold:
-                timer[p] = np.uint16(frames)
-            elif int(timer[p]) != 0:
-                timer[p] = np.uint16(int(timer[p]) - 1)
-            prev_count[p] = np.uint8(cur)
-            prev_attack[p] = np.uint8(attack)
-            prev_victim[p] = np.uint8(victim)
-        out[fi, :] = timer
-    return out
+    if str(data_root) not in ("data", "./data"):
+        raise ValueError(
+            "derive_combo_push_timer_seed now uses native common-data tables; set MSL_DATA_DIR for "
+            "non-default data roots instead of running the removed Python fallback"
+        )
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.derive_combo_push_timer_seed is required for preprocessing; run `make build`"
+        ) from exc
+    return msl_binding.derive_combo_push_timer_seed(
+        np.ascontiguousarray(combo_count, dtype=np.uint8),
+        np.ascontiguousarray(last_attack_landed, dtype=np.uint8),
+        (
+            np.ascontiguousarray(combo_victim_port, dtype=np.uint8)
+            if combo_victim_port is not None
+            else None
+        ),
+    )
 
 
 def derive_combo_seed_fields(

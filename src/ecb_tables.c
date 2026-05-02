@@ -85,7 +85,7 @@ static int load_table_for_char(const char* data_dir, const char* rel_path, uint8
   }
 
   const size_t sz = (size_t)sz_long;
-  uint8_t* buf = (uint8_t*)alloc_malloc(sz);
+  uint8_t* buf = (uint8_t*)alloc_malloc_uninit(sz);
   if (buf == NULL) {
     fclose(f);
     return -1;
@@ -342,7 +342,7 @@ static int load_extents_table_for_char(const char* data_dir, const char* rel_pat
   }
 
   const size_t sz = (size_t)sz_long;
-  uint8_t* buf = (uint8_t*)alloc_malloc(sz);
+  uint8_t* buf = (uint8_t*)alloc_malloc_uninit(sz);
   if (buf == NULL) {
     fclose(f);
     return -1;

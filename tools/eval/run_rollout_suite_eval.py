@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
+import os
 from pathlib import Path
 
 from tools.eval.rollout_metrics import summarize_rollout_payload
@@ -41,6 +43,46 @@ def _report_header(*, root: Path, suite: str, suite_name: str, datasets_dir: str
     ]
 
 
+def _resolve_worker_count(requested: int, task_count: int) -> int:
+    if int(requested) > 0:
+        return max(1, int(requested))
+    return max(1, min(8, int(os.cpu_count() or 1), int(task_count) if task_count else 1))
+
+
+def _scan_dataset_payload_task(task: dict) -> dict:
+    root = Path(str(task["root"]))
+    ds_path = Path(str(task["dataset_path"]))
+    ds = read_dataset(str(ds_path))
+    num_players = int(ds.header["num_players"])
+    players = _parse_players(task["players_csv"], num_players=num_players)
+    s = _scan_dataset_streaks(
+        dataset_path=ds_path,
+        ds=ds,
+        fields=tuple(task["fields"]),
+        players=players,
+        max_records=int(task["max_records"]),
+        ucf_enabled=bool(task["ucf_enabled"]),
+        ucf_cardinals_1_0_enabled=bool(task["ucf_cardinals_1_0_enabled"]),
+        profile=str(task["profile"]),
+    )
+    return {
+        "dataset": str(Path(s.dataset).resolve().relative_to(root)),
+        "num_records": s.num_records,
+        "max_records_used": s.max_records_used,
+        "players": list(s.players),
+        "best_len": s.best_len,
+        "best_start_record": s.best_start_record,
+        "best_end_record_excl": s.best_end_record_excl,
+        "best_start_seed_frame_id": s.best_start_seed_frame_id,
+        "best_end_ref_frame_id_inclusive": s.best_end_ref_frame_id_inclusive,
+        "streak_histogram": s.streak_histogram,
+        "first_mismatch_field_counts": s.first_mismatch_field_counts,
+        "first_mismatch_field_counts_seeded": s.first_mismatch_field_counts_seeded,
+        "ignored_first_mismatch_field_counts": s.ignored_first_mismatch_field_counts,
+        "ignored_first_mismatch_field_counts_seeded": s.ignored_first_mismatch_field_counts_seeded,
+    }
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Rollout suite evaluator (generator-owned text report).")
     ap.add_argument("--suite", required=True, help="Path to suite JSON (e.g. replays/suites/...)")
@@ -67,6 +109,17 @@ def main() -> None:
         help="Validation scoring profile. strict scores every compare lane; rl1_gameplay ignores RL1-irrelevant lanes.",
     )
     ap.add_argument("--out", type=Path, default=None, help="optional output path to write the report")
+    ap.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Write --out report without echoing the full report to stdout.",
+    )
+    ap.add_argument(
+        "--workers",
+        type=int,
+        default=0,
+        help="Parallel dataset scan workers (0 = auto, capped at 8).",
+    )
     args = ap.parse_args()
 
     root = repo_root()
@@ -97,39 +150,25 @@ def main() -> None:
         print(f"  uv run python -m tools.slippi.preprocess_suite --suite {args.suite} --datasets-dir {args.datasets_dir}")
         raise SystemExit(2)
 
-    per_dataset_payload = []
-    for ds_path in dataset_paths:
-        ds = read_dataset(str(ds_path))
-        num_players = int(ds.header["num_players"])
-        players = _parse_players(args.players, num_players=num_players)
-        s = _scan_dataset_streaks(
-            dataset_path=ds_path,
-            ds=ds,
-            fields=fields,
-            players=players,
-            max_records=int(args.max_records),
-            ucf_enabled=suite.ucf_enabled,
-            ucf_cardinals_1_0_enabled=suite.ucf_cardinals_1_0_enabled,
-            profile=validation_profile,
-        )
-        per_dataset_payload.append(
-            {
-                "dataset": str(Path(s.dataset).resolve().relative_to(root)),
-                "num_records": s.num_records,
-                "max_records_used": s.max_records_used,
-                "players": list(s.players),
-                "best_len": s.best_len,
-                "best_start_record": s.best_start_record,
-                "best_end_record_excl": s.best_end_record_excl,
-                "best_start_seed_frame_id": s.best_start_seed_frame_id,
-                "best_end_ref_frame_id_inclusive": s.best_end_ref_frame_id_inclusive,
-                "streak_histogram": s.streak_histogram,
-                "first_mismatch_field_counts": s.first_mismatch_field_counts,
-                "first_mismatch_field_counts_seeded": s.first_mismatch_field_counts_seeded,
-                "ignored_first_mismatch_field_counts": s.ignored_first_mismatch_field_counts,
-                "ignored_first_mismatch_field_counts_seeded": s.ignored_first_mismatch_field_counts_seeded,
-            }
-        )
+    tasks = [
+        {
+            "root": str(root),
+            "dataset_path": str(ds_path),
+            "fields": list(fields),
+            "players_csv": args.players,
+            "max_records": int(args.max_records),
+            "ucf_enabled": bool(suite.ucf_enabled),
+            "ucf_cardinals_1_0_enabled": bool(suite.ucf_cardinals_1_0_enabled),
+            "profile": validation_profile.name,
+        }
+        for ds_path in dataset_paths
+    ]
+    workers = _resolve_worker_count(int(args.workers), len(tasks))
+    if workers == 1 or len(tasks) <= 1:
+        per_dataset_payload = [_scan_dataset_payload_task(task) for task in tasks]
+    else:
+        with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as executor:
+            per_dataset_payload = list(executor.map(_scan_dataset_payload_task, tasks))
 
     payload = {
         "suite": suite.name,
@@ -147,7 +186,7 @@ def main() -> None:
     summary = summarize_rollout_payload(payload)
     suite_summary = summary["suite_summary"]
 
-    reporter = Reporter(args.out)
+    reporter = Reporter(args.out, echo=not bool(args.quiet))
     try:
         if args.out is not None:
             for line in _report_header(

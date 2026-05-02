@@ -30,6 +30,9 @@ from tools.eval.validation_profile import ValidationProfile, get_validation_prof
 from tools.slippi.suite_io import dataset_path_for_suite_replay, load_suite, repo_root
 
 
+_STANDARD_ROLLOUT_FIELDS = ("action_id", "animation_index", "on_ground", "hitlag", "hitstun", "state_flags")
+
+
 def _load_binding():
     # Built by `uv pip install -e python` (or similar).
     return importlib.import_module("msl_binding")
@@ -78,6 +81,55 @@ def _validate_discrete_fields(fields: tuple[str, ...]) -> tuple[str, ...]:
             + ", ".join(floaty)
         )
     return fields
+
+
+def _first_mismatch_standard_rollout(
+    *,
+    out_row: np.void,
+    ref_row: np.void,
+    players: tuple[int, ...],
+    profile_name: str,
+) -> str | None:
+    for field in ("action_id", "animation_index", "on_ground", "hitlag", "hitstun"):
+        out_v = out_row[field]
+        ref_v = ref_row[field]
+        for p in players:
+            if int(out_v[p]) != int(ref_v[p]):
+                return field
+
+    out_sf = out_row["state_flags"]
+    ref_sf = ref_row["state_flags"]
+    if profile_name == "rl1_gameplay":
+        for p in players:
+            for sub in range(4):
+                if int(out_sf[p, sub]) != int(ref_sf[p, sub]):
+                    return "state_flags"
+            if ((int(out_sf[p, 4]) ^ int(ref_sf[p, 4])) & 0x7F) != 0:
+                return "state_flags"
+        return None
+
+    for p in players:
+        for sub in range(5):
+            if int(out_sf[p, sub]) != int(ref_sf[p, sub]):
+                return "state_flags"
+    return None
+
+
+def _first_ignored_standard_rollout(
+    *,
+    out_row: np.void,
+    ref_row: np.void,
+    players: tuple[int, ...],
+    profile_name: str,
+) -> str | None:
+    if profile_name != "rl1_gameplay":
+        return None
+    out_sf = out_row["state_flags"]
+    ref_sf = ref_row["state_flags"]
+    for p in players:
+        if ((int(out_sf[p, 4]) ^ int(ref_sf[p, 4])) & 0x80) != 0:
+            return "state_flags[4]&0x80"
+    return None
 
 
 @dataclass(frozen=True)
@@ -259,6 +311,10 @@ def _scan_dataset_streaks(
     ignored_lanes = compile_discrete_compare_lanes(
         fields, players, profile=validation_profile, ignored_only=True
     )
+    use_standard_rollout_compare = (
+        tuple(fields) == _STANDARD_ROLLOUT_FIELDS
+        and validation_profile.name in ("rl1_gameplay", "strict")
+    )
 
     def reseed_at(j: int) -> None:
         seed_bytes[0, :] = samples_u8[j, seed_off : seed_off + seed_stride]
@@ -269,14 +325,28 @@ def _scan_dataset_streaks(
         input_bytes[0, :] = samples_u8[j, input_off : input_off + input_stride]
         binding.step_input(handle, prev_input_bytes, input_bytes)
         binding.write_compare(handle, out_compare_bytes)
-        scored = first_mismatch_field(
-            out_row=out_view[0],
-            ref_row=ref[j],
-            lanes=compare_lanes,
-        )
-        ignored = first_mismatch_field(
-            out_row=out_view[0], ref_row=ref[j], lanes=ignored_lanes, label_subindex=True
-        )
+        if use_standard_rollout_compare:
+            scored = _first_mismatch_standard_rollout(
+                out_row=out_view[0],
+                ref_row=ref[j],
+                players=players,
+                profile_name=validation_profile.name,
+            )
+            ignored = _first_ignored_standard_rollout(
+                out_row=out_view[0],
+                ref_row=ref[j],
+                players=players,
+                profile_name=validation_profile.name,
+            )
+        else:
+            scored = first_mismatch_field(
+                out_row=out_view[0],
+                ref_row=ref[j],
+                lanes=compare_lanes,
+            )
+            ignored = first_mismatch_field(
+                out_row=out_view[0], ref_row=ref[j], lanes=ignored_lanes, label_subindex=True
+            )
         return _AttemptResult(scored_field=scored, ignored_first_field=ignored)
 
     def step_seeded_and_compare(j: int) -> _AttemptResult:
