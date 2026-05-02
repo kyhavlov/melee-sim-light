@@ -19,6 +19,11 @@ typedef struct MslStateSoA {
   uint8_t* stage_fod_platform_valid;           // [batch * 2]
   float* stage_fod_platform_velocity;          // [batch * 2]
   uint8_t* stage_fod_platform_velocity_valid;  // [batch * 2]
+  // Yoshi's Story Shy Guy stage-object scheduler.
+  // refs/melee/src/melee/gr/grstory.c::grStory_801E3418
+  uint16_t* stage_yoshi_shyguy_timer;   // [batch]
+  uint8_t* stage_yoshi_shyguy_pattern;  // [batch]
+  uint8_t* stage_yoshi_shyguy_valid;    // [batch]
   // Match-start fighter input lock (`fp->x221D_b4`) countdown, one per environment.
   //
   // Decomp / asset anchors:
@@ -1014,6 +1019,16 @@ typedef struct MslStateSoA {
   uint8_t* item_hidden_body_hit_victim_port;   // [batch * MSL_MAX_ITEMS], 0xFF = none
   uint8_t* item_hidden_body_hit_hurt_height;   // [batch * MSL_MAX_ITEMS]
   uint8_t* item_hidden_callback_flags;         // [batch * MSL_MAX_ITEMS]
+  // Prefix-causal Shy Guy dynamic-bone velocity scratch.
+  // refs/melee/src/melee/it/items/itheiho.c::it_802D98C4
+  float* item_shyguy_prev_vel_y;          // [batch * MSL_MAX_ITEMS]
+  uint8_t* item_shyguy_prev_vel_y_valid;  // [batch * MSL_MAX_ITEMS]
+  // Shy Guy itemVar internals.
+  // refs/melee/src/melee/it/items/itheiho.c::{it_802D8618,itHeiho_UnkMotion0_Phys}
+  uint8_t* item_shyguy_speed_index;        // [batch * MSL_MAX_ITEMS]
+  uint8_t* item_shyguy_speed_index_valid;  // [batch * MSL_MAX_ITEMS]
+  uint16_t* item_shyguy_delay;             // [batch * MSL_MAX_ITEMS]
+  uint8_t* item_shyguy_delay_valid;        // [batch * MSL_MAX_ITEMS]
 
   // Item hitbox victim rings (HitCapsule victim lists per item slot and hitbox).
   // Decomp anchor (tick): refs/melee/src/melee/it/itcoll.c::it_8027146C

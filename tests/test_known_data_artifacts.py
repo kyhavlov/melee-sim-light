@@ -29,13 +29,17 @@ from tools.slippi.known_data_artifacts import (
     SCRIPT_MAGIC,
     SCRIPT_VERSION,
     STAGE_MAGIC,
+    STAGE_ITEM_OBJECT_MAGIC,
+    STAGE_ITEM_OBJECT_VERSION,
     STAGE_VERSION,
     read_mslftsc1_v1,
     read_mslitar1,
     read_mslpart1_v1,
     read_mslstg01_v5,
+    read_mslstio1_yoshi_shyguy,
     stage_metadata_bin_name_for_stage_id,
     stage_metadata_path_for_stage_id,
+    yoshi_shyguy_metadata,
 )
 from tools.slippi.make_dataset_from_slp import _load_stage_segments_for_seed
 
@@ -258,6 +262,33 @@ def test_stage_metadata_contains_fod_platform_transform_records() -> None:
     assert int(by_line[2].kind_id) == 2
     assert (float(by_line[2].x0), float(by_line[2].x1), float(by_line[2].y_const)) == pytest.approx(
         (-14.25, 14.25, 42.75)
+    )
+
+
+def test_stage_item_yoshi_shyguy_known_rows() -> None:
+    params = yoshi_shyguy_metadata(Path("data"))
+    assert params.stage_id == 8
+    assert params.item_kind == 0xD2
+    assert params.timer_min == 600
+    assert params.timer_rand == 1800
+    assert params.timer_reset == 120
+    assert params.spawnmany_rarity == 8
+    assert params.spawn_delay_step == 25
+    assert params.fall_accel == pytest.approx(0.12)
+    assert params.spawn_left_x == pytest.approx(-292.0)
+    assert params.spawn_right_x == pytest.approx(304.0)
+    assert params.state4_speed_mul == pytest.approx(1.5)
+    assert params.jitter_y_amp == pytest.approx(3.0)
+    assert params.vpos == pytest.approx((30.0, 45.0, 60.0, 75.0, 90.0, 0.0))
+    assert params.speed == pytest.approx((0.3, 0.5, 0.75))
+    assert len(params.dyn_y_vel) == 128
+    assert params.dyn_y_vel[:4] == pytest.approx(
+        (0.7028961182, 0.7015228271, 0.6987762451, 0.6946563721),
+        abs=1e-7,
+    )
+    assert params.dyn_y_vel[63:66] == pytest.approx(
+        (-0.7028961182, -0.7028961182, -0.7015228271),
+        abs=1e-7,
     )
 
 
@@ -1091,6 +1122,12 @@ def test_runtime_move_tables_mslftsc1_matches_legacy_json_queries() -> None:
         (STAGE_MAGIC, STAGE_VERSION, read_mslstg01_v5, "unsupported MSLSTG01 version"),
         (PART_MAGIC, PART_VERSION, read_mslpart1_v1, "unsupported MSLPART1 version"),
         (ITEM_ARTICLE_MAGIC, ITEM_ARTICLE_VERSION, read_mslitar1, "unsupported MSLITAR1 version"),
+        (
+            STAGE_ITEM_OBJECT_MAGIC,
+            STAGE_ITEM_OBJECT_VERSION,
+            read_mslstio1_yoshi_shyguy,
+            "unsupported MSLSTIO1 version",
+        ),
         (SCRIPT_MAGIC, SCRIPT_VERSION, read_mslftsc1_v1, "unsupported MSLFTSC1 version"),
     ],
 )
@@ -1171,3 +1208,21 @@ def test_known_data_artifact_extractors_regenerate_stable_outputs(tmp_path: Path
         check=True,
     )
     assert (tmp_path / "articles.bin").read_bytes() == Path("data/items/articles/fox_falco.bin").read_bytes()
+
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "tools.extraction.extract_stage_item_objects",
+            "--grst",
+            "_iso/GrSt.dat",
+            "--out",
+            str(tmp_path / "yoshi_shyguy.bin"),
+            "--audit",
+            str(tmp_path / "yoshi_shyguy.json"),
+        ],
+        check=True,
+    )
+    assert (tmp_path / "yoshi_shyguy.bin").read_bytes() == Path(
+        "data/stage_items/yoshi_shyguy.bin"
+    ).read_bytes()

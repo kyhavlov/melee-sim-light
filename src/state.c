@@ -38,6 +38,9 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->stage_fod_platform_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * b2);
   state->stage_fod_platform_velocity = (float*)alloc_aligned_64(sizeof(float) * b2);
   state->stage_fod_platform_velocity_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * b2);
+  state->stage_yoshi_shyguy_timer = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * b);
+  state->stage_yoshi_shyguy_pattern = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * b);
+  state->stage_yoshi_shyguy_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * b);
   state->opening_input_lock_timer = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * b);
   state->stale_attack_instance_counter = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * b);
   state->instance_id_counter = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * b);
@@ -424,17 +427,25 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->item_hidden_body_hit_victim_port = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bi);
   state->item_hidden_body_hit_hurt_height = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bi);
   state->item_hidden_callback_flags = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bi);
+  state->item_shyguy_prev_vel_y = (float*)alloc_aligned_64(sizeof(float) * bi);
+  state->item_shyguy_prev_vel_y_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bi);
+  state->item_shyguy_speed_index = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bi);
+  state->item_shyguy_speed_index_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bi);
+  state->item_shyguy_delay = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bi);
+  state->item_shyguy_delay_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bi);
   state->item_hitlist = (MslHitlistCapsule*)alloc_aligned_64(sizeof(MslHitlistCapsule) * bi *
                                                              (size_t)MSL_MAX_HITBOXES);
 
   if (!state->frame_id || !state->frame_pre_random_seed || !state->stage_id ||
       !state->stage_fod_platform_height || !state->stage_fod_platform_valid ||
       !state->stage_fod_platform_velocity || !state->stage_fod_platform_velocity_valid ||
-      !state->opening_input_lock_timer || !state->stale_attack_instance_counter ||
-      !state->instance_id_counter || !state->item_spawn_id_counter || !state->match_damage_ratio ||
-      !state->is_teams || !state->team_id || !state->char_id || !state->handicap ||
-      !state->attack_ratio || !state->defense_ratio || !state->pos_x || !state->pos_y ||
-      !state->pos_z || !state->illusion_ghost_pos0_x || !state->illusion_ghost_pos0_y ||
+      !state->stage_yoshi_shyguy_timer || !state->stage_yoshi_shyguy_pattern ||
+      !state->stage_yoshi_shyguy_valid || !state->opening_input_lock_timer ||
+      !state->stale_attack_instance_counter || !state->instance_id_counter ||
+      !state->item_spawn_id_counter || !state->match_damage_ratio || !state->is_teams ||
+      !state->team_id || !state->char_id || !state->handicap || !state->attack_ratio ||
+      !state->defense_ratio || !state->pos_x || !state->pos_y || !state->pos_z ||
+      !state->illusion_ghost_pos0_x || !state->illusion_ghost_pos0_y ||
       !state->illusion_ghost_pos1_x || !state->illusion_ghost_pos1_y ||
       !state->illusion_ghost_pos2_x || !state->illusion_ghost_pos2_y || !state->prev_pos_x ||
       !state->prev_pos_y || !state->floor_sweep_prev_pos_x || !state->floor_sweep_prev_pos_y ||
@@ -568,7 +579,9 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->item_shield_bounce_seed_valid || !state->item_shield_bounce_seed_vel_x ||
       !state->item_shield_bounce_seed_vel_y || !state->item_hidden_body_hit_victim_port ||
       !state->item_hidden_body_hit_hurt_height || !state->item_hidden_callback_flags ||
-      !state->item_hitlist) {
+      !state->item_shyguy_prev_vel_y || !state->item_shyguy_prev_vel_y_valid ||
+      !state->item_shyguy_speed_index || !state->item_shyguy_speed_index_valid ||
+      !state->item_shyguy_delay || !state->item_shyguy_delay_valid || !state->item_hitlist) {
     return -1;
   }
 
@@ -652,6 +665,9 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->stage_fod_platform_valid);
   alloc_free(state->stage_fod_platform_velocity);
   alloc_free(state->stage_fod_platform_velocity_valid);
+  alloc_free(state->stage_yoshi_shyguy_timer);
+  alloc_free(state->stage_yoshi_shyguy_pattern);
+  alloc_free(state->stage_yoshi_shyguy_valid);
   alloc_free(state->opening_input_lock_timer);
   alloc_free(state->stale_attack_instance_counter);
   alloc_free(state->instance_id_counter);
@@ -1034,6 +1050,12 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->item_hidden_body_hit_victim_port);
   alloc_free(state->item_hidden_body_hit_hurt_height);
   alloc_free(state->item_hidden_callback_flags);
+  alloc_free(state->item_shyguy_prev_vel_y);
+  alloc_free(state->item_shyguy_prev_vel_y_valid);
+  alloc_free(state->item_shyguy_speed_index);
+  alloc_free(state->item_shyguy_speed_index_valid);
+  alloc_free(state->item_shyguy_delay);
+  alloc_free(state->item_shyguy_delay_valid);
   alloc_free(state->item_hitlist);
 
   state_zero_ptrs(state);

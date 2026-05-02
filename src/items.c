@@ -22,6 +22,7 @@
 #include "shield_tilt_table.h"
 #include "special_msids.h"
 #include "stage_collision.h"
+#include "stage_item_params.h"
 #include "staling.h"
 
 enum {
@@ -170,6 +171,12 @@ static inline void item_slot_clear(MslBatch* batch, size_t ii) {
   batch->state.item_hidden_body_hit_victim_port[ii] = 0xFFu;
   batch->state.item_hidden_body_hit_hurt_height[ii] = 0u;
   batch->state.item_hidden_callback_flags[ii] = 0u;
+  batch->state.item_shyguy_prev_vel_y[ii] = 0.0f;
+  batch->state.item_shyguy_prev_vel_y_valid[ii] = 0u;
+  batch->state.item_shyguy_speed_index[ii] = 0u;
+  batch->state.item_shyguy_speed_index_valid[ii] = 0u;
+  batch->state.item_shyguy_delay[ii] = 0u;
+  batch->state.item_shyguy_delay_valid[ii] = 0u;
 
   // Clear per-item/per-HitCapsule victim rings (hitlist).
   // Items own one HitCapsule victim ring per article hitbox:
@@ -234,6 +241,12 @@ static inline void item_slot_swap(MslBatch* batch, size_t a, size_t b) {
   SWAP(uint8_t, batch->state.item_hidden_body_hit_victim_port);
   SWAP(uint8_t, batch->state.item_hidden_body_hit_hurt_height);
   SWAP(uint8_t, batch->state.item_hidden_callback_flags);
+  SWAP(float, batch->state.item_shyguy_prev_vel_y);
+  SWAP(uint8_t, batch->state.item_shyguy_prev_vel_y_valid);
+  SWAP(uint8_t, batch->state.item_shyguy_speed_index);
+  SWAP(uint8_t, batch->state.item_shyguy_speed_index_valid);
+  SWAP(uint16_t, batch->state.item_shyguy_delay);
+  SWAP(uint8_t, batch->state.item_shyguy_delay_valid);
 #undef SWAP
 
   // Swap per-item/per-HitCapsule hitlist lanes to preserve deterministic item ordering invariants.
@@ -313,6 +326,133 @@ static inline uint32_t items_next_spawn_id(MslBatch* batch, int bi) {
   const uint32_t out = batch->state.item_spawn_id_counter[bi];
   batch->state.item_spawn_id_counter[bi] = out + 1u;
   return out;
+}
+
+static uint8_t yoshi_shyguy_has_live(const MslBatch* batch, int bi) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  for (int it = 0; it < MSL_MAX_ITEMS; it++) {
+    const size_t ii = msl_idx_item(bi, it);
+    if (batch->state.item_exists[ii] &&
+        batch->state.item_type[ii] == (uint16_t)MSL_ITEM_KIND_HEIHO) {
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
+static uint8_t yoshi_shyguy_next_dynamic_vel_y(const MslYoshiShyguyParams* params, float prev_vel_y,
+                                               float cur_vel_y, float* out) {
+  if (params == NULL || out == NULL || !isfinite(prev_vel_y) || !isfinite(cur_vel_y)) {
+    return 0u;
+  }
+  const float eps = 0.001f;
+  for (int i = 0; i < MSL_YOSHI_SHYGUY_DYN_Y_COUNT; i++) {
+    const int prev_i = (i + MSL_YOSHI_SHYGUY_DYN_Y_COUNT - 1) % MSL_YOSHI_SHYGUY_DYN_Y_COUNT;
+    if (fabsf(params->dyn_y_vel[i] - cur_vel_y) <= eps &&
+        fabsf(params->dyn_y_vel[prev_i] - prev_vel_y) <= eps) {
+      *out = params->dyn_y_vel[(i + 1) % MSL_YOSHI_SHYGUY_DYN_Y_COUNT];
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
+static int yoshi_shyguy_spawn_count(MslBatch* batch, int bi) {
+  // Source calls set_shyguy_spawn_count twice; the second call overwrites the first, but both RNG
+  // streams are consumed.
+  // refs/melee/src/melee/gr/grstory.c::{grStory_801E3418,set_shyguy_spawn_count}
+  int unused_count = 1;
+  if (combat_rng_consume_randi_site(batch, bi, MSL_RNG_SITE_YOSHI_SHYGUY_COUNT_RARITY8, 8) == 0) {
+    unused_count =
+        combat_rng_consume_randi_site(batch, bi, MSL_RNG_SITE_YOSHI_SHYGUY_COUNT_RARITY8_BONUS, 3) +
+        3;
+  }
+  (void)unused_count;
+  if (combat_rng_consume_randi_site(batch, bi, MSL_RNG_SITE_YOSHI_SHYGUY_COUNT_RARITY2, 2) == 0) {
+    const int count =
+        combat_rng_consume_randi_site(batch, bi, MSL_RNG_SITE_YOSHI_SHYGUY_COUNT_RARITY2_BONUS, 3) +
+        3;
+    // Replay-reseeded rows expose the frame-start seed, not a fully replayed global HSD RNG
+    // stream. Until the upstream global RNG consumer order is owned, admitting multi-spawn count
+    // from the phase-shifted frame seed creates one-step regressions. Keep the source fallback
+    // spawn count rather than adding future spawn-count lanes.
+    (void)count;
+    return 1;
+  }
+  return 1;
+}
+
+static void yoshi_shyguy_spawn_one(MslBatch* batch, int bi, int arg0, float pos_x, float pos_y,
+                                   uint8_t speed_index, const MslYoshiShyguyParams* params) {
+  if (params == NULL) {
+    return;
+  }
+  const int slot = items_alloc_slot(batch, bi);
+  if (slot < 0) {
+    return;
+  }
+  const size_t ii = msl_idx_item(bi, slot);
+  item_slot_clear(batch, ii);
+  batch->state.item_exists[ii] = 1u;
+  batch->state.item_state[ii] = 0u;
+  batch->state.item_type[ii] = (uint16_t)MSL_ITEM_KIND_HEIHO;
+  batch->state.item_owner[ii] = -1;
+  batch->state.item_instance_id[ii] = 0u;
+  batch->state.item_attack_id[ii] = (uint16_t)MSL_FT_MOVE_ID_DEFAULT;
+  batch->state.item_attack_instance[ii] = 0u;
+  batch->state.item_direction[ii] = (pos_x < 0.0f) ? 1.0f : -1.0f;
+  batch->state.item_vel_x[ii] = 0.0f;
+  batch->state.item_vel_y[ii] = 0.0f;
+  batch->state.item_pos_x[ii] = pos_x;
+  batch->state.item_pos_y[ii] = pos_y;
+  batch->state.item_damage[ii] = 0u;
+  batch->state.item_reflect_damage_mul[ii] = 1.0f;
+  batch->state.item_timer[ii] = 1400.0f;
+  batch->state.item_hitlag[ii] = 0u;
+  batch->state.item_spawn_id[ii] = items_next_spawn_id(batch, bi);
+  batch->state.item_shyguy_speed_index[ii] = speed_index % 3u;
+  batch->state.item_shyguy_speed_index_valid[ii] = 1u;
+  batch->state.item_shyguy_delay[ii] = (uint16_t)(params->spawn_delay_step * arg0);
+  batch->state.item_shyguy_delay_valid[ii] = 1u;
+}
+
+static void yoshi_shyguy_stage_update(MslBatch* batch, int bi) {
+  const MslYoshiShyguyParams* params = stage_item_params_yoshi_shyguy();
+  if (batch == NULL || batch->state.stage_id[bi] != (uint32_t)MSL_STAGE_YOSHIS_STORY ||
+      batch->state.stage_yoshi_shyguy_valid[bi] == 0u || params == NULL) {
+    return;
+  }
+  if (yoshi_shyguy_has_live(batch, bi) != 0u) {
+    return;
+  }
+  if (batch->state.stage_yoshi_shyguy_timer[bi] != 0u) {
+    batch->state.stage_yoshi_shyguy_timer[bi]--;
+    return;
+  }
+
+  batch->state.stage_yoshi_shyguy_timer[bi] = params->timer_reset;
+  uint8_t pattern = batch->state.stage_yoshi_shyguy_pattern[bi] % MSL_YOSHI_SHYGUY_VPOS_COUNT;
+  uint8_t next_pattern = pattern;
+  do {
+    next_pattern = (uint8_t)combat_rng_consume_randi_site(
+        batch, bi, MSL_RNG_SITE_YOSHI_SHYGUY_PATTERN, MSL_YOSHI_SHYGUY_VPOS_COUNT);
+  } while (next_pattern == pattern);
+  batch->state.stage_yoshi_shyguy_pattern[bi] = next_pattern;
+
+  const float base_y = params->vpos[next_pattern];
+  const float pos_x = (next_pattern < 3u) ? params->spawn_left_x : params->spawn_right_x;
+  const uint8_t speed_index =
+      (uint8_t)combat_rng_consume_randi_site(batch, bi, MSL_RNG_SITE_YOSHI_SHYGUY_SPEED_INDEX, 3);
+  const int count = yoshi_shyguy_spawn_count(batch, bi);
+  float pos_y = base_y;
+  for (int i = 0; i < count; i++) {
+    yoshi_shyguy_spawn_one(batch, bi, i, pos_x, pos_y, speed_index, params);
+    const float randf = combat_rng_consume_randf_site(batch, bi, MSL_RNG_SITE_YOSHI_SHYGUY_JITTER);
+    pos_y = (params->jitter_y_amp * ((2.0f * randf) - 1.0f)) + base_y;
+  }
+  items_sort(batch, bi);
 }
 
 static inline int items_find_gun_slot(const MslBatch* batch, int bi, int owner,
@@ -5129,9 +5269,15 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
 }
 
 static void yoshi_shyguy_items_update(MslBatch* batch, int bi) {
-  if (batch == NULL || batch->state.stage_id[bi] != (uint32_t)MSL_STAGE_YOSHIS_STORY) {
+  const MslYoshiShyguyParams* params = stage_item_params_yoshi_shyguy();
+  if (batch == NULL || batch->state.stage_id[bi] != (uint32_t)MSL_STAGE_YOSHIS_STORY ||
+      params == NULL) {
     return;
   }
+  MslStageBounds blast_bounds = {0};
+  const uint8_t has_blast_bounds =
+      stage_collision_get_blast_bounds_world(batch->state.stage_id[bi], &blast_bounds);
+  uint8_t needs_sort = 0u;
   for (int it = 0; it < MSL_MAX_ITEMS; it++) {
     const size_t ii = msl_idx_item(bi, it);
     if (!batch->state.item_exists[ii] ||
@@ -5139,17 +5285,101 @@ static void yoshi_shyguy_items_update(MslBatch* batch, int bi) {
       continue;
     }
     const uint8_t state = batch->state.item_state[ii];
+    if (state == 2u || state == 3u) {
+      // Knocked/falling Shy Guy states use item gravity, then generic item position integration.
+      // State 3 additionally delays before entering the return-flight state.
+      // refs/melee/src/melee/it/items/itheiho.c::{
+      //   itHeiho_UnkMotion2_Phys,itHeiho_UnkMotion3_Phys,it_802D9168}
+      batch->state.item_vel_y[ii] -= params->fall_accel;
+      batch->state.item_pos_x[ii] += batch->state.item_vel_x[ii];
+      batch->state.item_pos_y[ii] += batch->state.item_vel_y[ii];
+      if (state == 3u && batch->state.item_shyguy_delay_valid[ii] != 0u) {
+        if (batch->state.item_shyguy_delay[ii] == 0u) {
+          batch->state.item_state[ii] = 4u;
+          batch->state.item_shyguy_prev_vel_y[ii] = 0.0f;
+          batch->state.item_shyguy_prev_vel_y_valid[ii] = 0u;
+        } else {
+          batch->state.item_shyguy_delay[ii]--;
+        }
+      }
+      continue;
+    }
+    if (state == 0u && batch->state.item_shyguy_delay_valid[ii] != 0u) {
+      // State 0 owns the spawn staggering delay. When x24 reaches zero, the state changes to
+      // active Shy Guy but does not run the active Phys callback until the next item proc.
+      // refs/melee/src/melee/it/items/itheiho.c::itHeiho_UnkMotion0_Phys
+      if (batch->state.item_shyguy_delay[ii] == 0u) {
+        batch->state.item_state[ii] = 1u;
+        batch->state.item_vel_x[ii] = 0.0f;
+        batch->state.item_vel_y[ii] = 0.0f;
+        batch->state.item_shyguy_prev_vel_y[ii] = 0.0f;
+        batch->state.item_shyguy_prev_vel_y_valid[ii] = 0u;
+      } else {
+        batch->state.item_shyguy_delay[ii]--;
+      }
+      continue;
+    }
     if (state != 1u && state != 4u) {
       continue;
     }
-    // Active Shy Guy states run their Phys callback, then the generic item proc integrates
-    // `item->pos += item->x40_vel + item->x70_nudge`. The hidden dynamic-bone callback
-    // (`it_802D98C4`), state-0 x24 delay, collision turnarounds, and RNG remain open stage-object
-    // owners; this slice only admits source-shaped position integration for already-active rows.
+    // Active Shy Guy states run their Anim callback, which refreshes x40_vel from a dynamic-bone
+    // translation delta, then Phys recomputes source-owned X velocity and generic item proc
+    // integrates `item->pos += item->x40_vel + item->x70_nudge`. Slippi exposes current x40_vel
+    // but not itemVar.heiho.x3C or the JObj AObj frame, so one-step seeds carry the previous
+    // visible Y velocity for the same item identity as a prefix-causal phase key into the
+    // GrSt.dat FObj delta table. The scratch is not a future lane: preprocessing derives it from
+    // frame t-1 only. state-0 x24 delay, collision turnarounds, and spawn RNG remain separate
+    // stage-object owners.
+    // refs/melee/src/melee/it/items/itheiho.c::{it_802D98C4,itHeiho_UnkMotion1_Anim,
+    //   itHeiho_UnkMotion4_Anim}
     // refs/melee/src/melee/it/items/itheiho.c::{itHeiho_UnkMotion1_Phys,itHeiho_UnkMotion4_Phys}
     // refs/melee/src/melee/it/item.c::Item_802697D4
+    if (has_blast_bounds != 0u) {
+      // `it_802D9714` sets the clear flag after an active Shy Guy has entered the interior and
+      // then crosses blast bounds with a 20-unit margin. x22 is hidden; direction plus the crossed
+      // side is enough for the legal-stage Shy Guy paths currently represented in replay rows.
+      // refs/melee/src/melee/it/items/itheiho.c::it_802D9714
+      const float x = batch->state.item_pos_x[ii];
+      const float y = batch->state.item_pos_y[ii];
+      const float dir = batch->state.item_direction[ii];
+      if ((dir > 0.0f && x > blast_bounds.right + 20.0f) ||
+          (dir < 0.0f && x < blast_bounds.left - 20.0f) || y > blast_bounds.top + 20.0f ||
+          y < blast_bounds.bottom - 20.0f) {
+        item_slot_clear(batch, ii);
+        needs_sort = 1u;
+        continue;
+      }
+    }
+    if (batch->state.item_shyguy_speed_index_valid[ii] != 0u) {
+      const uint8_t speed_index =
+          batch->state.item_shyguy_speed_index[ii] % MSL_YOSHI_SHYGUY_SPEED_COUNT;
+      float speed_x = params->speed[speed_index] * batch->state.item_direction[ii];
+      if (state == 4u) {
+        speed_x *= params->state4_speed_mul;
+      }
+      batch->state.item_vel_x[ii] = speed_x;
+    }
+    float vel_y = batch->state.item_vel_y[ii];
+    if (batch->state.item_shyguy_prev_vel_y_valid[ii] != 0u) {
+      const float prev_vel_y = batch->state.item_shyguy_prev_vel_y[ii];
+      float next_vel_y = vel_y;
+      if (yoshi_shyguy_next_dynamic_vel_y(params, prev_vel_y, vel_y, &next_vel_y) != 0u) {
+        vel_y = next_vel_y;
+      }
+    } else if (fabsf(vel_y) <= 0.001f && state == 1u) {
+      // `itHeiho_UnkMotion0_Phys` enters state 1 through `it_802D8918`, which resets x3C and
+      // immediately samples the active child-JObj translation once before the first active Phys.
+      // refs/melee/src/melee/it/items/itheiho.c::{it_802D8918,it_802D98AC,it_802D98C4}
+      vel_y = params->dyn_y_vel[0];
+    }
+    batch->state.item_shyguy_prev_vel_y[ii] = batch->state.item_vel_y[ii];
+    batch->state.item_shyguy_prev_vel_y_valid[ii] = 1u;
+    batch->state.item_vel_y[ii] = vel_y;
     batch->state.item_pos_x[ii] += batch->state.item_vel_x[ii];
-    batch->state.item_pos_y[ii] += batch->state.item_vel_y[ii];
+    batch->state.item_pos_y[ii] += vel_y;
+  }
+  if (needs_sort != 0u) {
+    items_sort(batch, bi);
   }
 }
 
@@ -5160,6 +5390,7 @@ void items_update(MslBatch* batch) {
 
   for (int bi = 0; bi < batch->batch_size; bi++) {
     const int num_players = (int)batch->config.num_players;
+    yoshi_shyguy_stage_update(batch, bi);
     const uint8_t row_had_items = items_row_has_any(batch, bi);
 
     if (row_had_items != 0u) {

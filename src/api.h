@@ -216,6 +216,14 @@ typedef struct MslSeed {
   float stage_fod_platform_velocity_f32[2];
   uint8_t stage_fod_platform_velocity_valid_u8[2];
   uint8_t _pad_stage_fod[2];
+  // Yoshi's Story Shy Guy stage-object scheduler state.
+  //
+  // The stage callback decrements `gp->u.shyguys.timer` only while no Heiho items are live, then
+  // samples a spawn pattern/count and calls `it_802D8618`.
+  // refs/melee/src/melee/gr/grstory.c::grStory_801E3418
+  uint16_t stage_yoshi_shyguy_timer_u16;
+  uint8_t stage_yoshi_shyguy_pattern_u8;
+  uint8_t stage_yoshi_shyguy_valid_u8;
   uint8_t num_players;  // 2 or 4 (<= MSL_MAX_PLAYERS)
   uint8_t is_teams;     // 0/1
   uint8_t _pad0[2];
@@ -1397,6 +1405,23 @@ typedef struct MslSeed {
   uint8_t item_hidden_body_hit_victim_port[MSL_MAX_ITEMS];
   uint8_t item_hidden_body_hit_hurt_height[MSL_MAX_ITEMS];
   uint8_t item_hidden_callback_flags[MSL_MAX_ITEMS];
+  // Prefix-causal dynamic-bone velocity scratch for Yoshi Shy Guys.
+  //
+  // `it_802D98C4` derives item->x40_vel from the current JObj translation minus
+  // itemVar.heiho.x3C. Slippi exposes item velocity after that callback, but not x3C. This lane
+  // stores the previous replay-visible Shy Guy Y velocity for the same item identity so
+  // replay-seeded/eval runtime can advance the hidden dynamic-bone delta without reading t+1.
+  // refs/melee/src/melee/it/items/itheiho.c::it_802D98C4
+  float item_shyguy_prev_vel_y[MSL_MAX_ITEMS];
+  uint8_t item_shyguy_prev_vel_y_valid[MSL_MAX_ITEMS];
+  // Shy Guy itemVar internals:
+  // - speed_index is itemVar.heiho.x21 from `it_802D8618`.
+  // - delay is itemVar.heiho.x24, consumed by `itHeiho_UnkMotion0_Phys`.
+  // refs/melee/src/melee/it/items/itheiho.c::{it_802D8618,itHeiho_UnkMotion0_Phys}
+  uint8_t item_shyguy_speed_index_u8[MSL_MAX_ITEMS];
+  uint8_t item_shyguy_speed_index_valid_u8[MSL_MAX_ITEMS];
+  uint16_t item_shyguy_delay_u16[MSL_MAX_ITEMS];
+  uint8_t item_shyguy_delay_valid_u8[MSL_MAX_ITEMS];
 
   MslItem items[MSL_MAX_ITEMS];
 } MslSeed;

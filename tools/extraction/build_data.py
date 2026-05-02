@@ -152,6 +152,7 @@ def main() -> None:
         Path("data/shields"),
         Path("data/scripts"),
         Path("data/special_msids"),
+        Path("data/stage_items"),
         Path("data/staling/move_id"),
         Path("data/stages/bin"),
     ):
@@ -200,6 +201,17 @@ def main() -> None:
     _run(
         "tools.extraction.extract_item_common_data",
         ["--itco", str(iso_dir / "ItCo.dat"), "--out", "data/items/item_common.json"],
+    )
+    _run(
+        "tools.extraction.extract_stage_item_objects",
+        [
+            "--grst",
+            str(iso_dir / "GrSt.dat"),
+            "--out",
+            "data/stage_items/yoshi_shyguy.bin",
+            "--audit",
+            "data/stage_items/yoshi_shyguy.json",
+        ],
     )
 
     # Guard-tilt shield bubble placement tables (used by shields_refresh for debug geometry).

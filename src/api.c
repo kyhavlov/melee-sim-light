@@ -39,6 +39,7 @@
 #include "laser_params.h"
 #include "item_article_params.h"
 #include "item_common_params.h"
+#include "stage_item_params.h"
 #include "stage_collision.h"
 #include "staling.h"
 #include "staling_tables.h"
@@ -430,6 +431,11 @@ MslBatch* msl_batch_create(int batch_size, int num_players) {
   }
 
   if (item_article_params_init() != 0) {
+    msl_batch_destroy(batch);
+    return NULL;
+  }
+
+  if (stage_item_params_init() != 0) {
     msl_batch_destroy(batch);
     return NULL;
   }
@@ -1036,6 +1042,9 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.stage_fod_platform_velocity_valid[pidx] =
           (seed->stage_fod_platform_velocity_valid_u8[pi] && isfinite(v)) ? 1u : 0u;
     }
+    batch->state.stage_yoshi_shyguy_timer[bi] = seed->stage_yoshi_shyguy_timer_u16;
+    batch->state.stage_yoshi_shyguy_pattern[bi] = seed->stage_yoshi_shyguy_pattern_u8 % 6u;
+    batch->state.stage_yoshi_shyguy_valid[bi] = seed->stage_yoshi_shyguy_valid_u8 ? 1u : 0u;
     batch->state.opening_input_lock_timer[bi] = 0u;
     float match_damage_ratio = seed->match_damage_ratio;
     if (!(match_damage_ratio > 0.0f)) {
@@ -1998,6 +2007,14 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.item_hidden_body_hit_hurt_height[ii] =
           seed->item_hidden_body_hit_hurt_height[it];
       batch->state.item_hidden_callback_flags[ii] = seed->item_hidden_callback_flags[it];
+      batch->state.item_shyguy_prev_vel_y[ii] = seed->item_shyguy_prev_vel_y[it];
+      batch->state.item_shyguy_prev_vel_y_valid[ii] =
+          seed->item_shyguy_prev_vel_y_valid[it] ? 1u : 0u;
+      batch->state.item_shyguy_speed_index[ii] = seed->item_shyguy_speed_index_u8[it] % 3u;
+      batch->state.item_shyguy_speed_index_valid[ii] =
+          seed->item_shyguy_speed_index_valid_u8[it] ? 1u : 0u;
+      batch->state.item_shyguy_delay[ii] = seed->item_shyguy_delay_u16[it];
+      batch->state.item_shyguy_delay_valid[ii] = seed->item_shyguy_delay_valid_u8[it] ? 1u : 0u;
 
       // Item hitlists are explicit runtime state. Clear on reseed so reused item slots do not
       // inherit stale victim rings; seed bridges below re-materialize selected victims_1 entries.

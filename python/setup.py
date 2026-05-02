@@ -67,6 +67,7 @@ ext = Extension(
         str((ROOT / "src" / "laser_params.c").resolve()),
         str((ROOT / "src" / "item_common_params.c").resolve()),
         str((ROOT / "src" / "item_article_params.c").resolve()),
+        str((ROOT / "src" / "stage_item_params.c").resolve()),
         str((ROOT / "src" / "state.c").resolve()),
         str((ROOT / "src" / "step.c").resolve()),
         str((ROOT / "src" / "input.c").resolve()),

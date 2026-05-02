@@ -12,6 +12,8 @@ PART_MAGIC = b"MSLPART1"
 PART_VERSION = 1
 ITEM_ARTICLE_MAGIC = b"MSLITAR1"
 ITEM_ARTICLE_VERSION = 2
+STAGE_ITEM_OBJECT_MAGIC = b"MSLSTIO1"
+STAGE_ITEM_OBJECT_VERSION = 1
 SCRIPT_MAGIC = b"MSLFTSC1"
 SCRIPT_VERSION = 1
 
@@ -144,6 +146,25 @@ class ItemArticleRecord:
     unit_id: int
     u32_value: int
     f32_value: float
+
+
+@dataclass(frozen=True)
+class YoshiShyguyMetadata:
+    stage_id: int
+    item_kind: int
+    timer_min: int
+    timer_rand: int
+    timer_reset: int
+    spawnmany_rarity: int
+    spawn_delay_step: int
+    fall_accel: float
+    spawn_left_x: float
+    spawn_right_x: float
+    state4_speed_mul: float
+    jitter_y_amp: float
+    vpos: tuple[float, ...]
+    speed: tuple[float, ...]
+    dyn_y_vel: tuple[float, ...]
 
 
 @dataclass(frozen=True)
@@ -381,6 +402,68 @@ def read_mslitar1(path: Path) -> ItemArticleMetadata:
             )
         )
     return ItemArticleMetadata(record_count=int(record_count), records=tuple(records))
+
+
+def read_mslstio1_yoshi_shyguy(path: Path) -> YoshiShyguyMetadata:
+    buf = _require_header(path, STAGE_ITEM_OBJECT_MAGIC, STAGE_ITEM_OBJECT_VERSION, 52)
+    (
+        stage_id,
+        item_kind,
+        vpos_count,
+        speed_count,
+        dyn_y_count,
+        timer_min,
+        timer_rand,
+        timer_reset,
+        spawnmany_rarity,
+        spawn_delay_step,
+        fall_accel,
+        spawn_left_x,
+        spawn_right_x,
+        state4_speed_mul,
+        jitter_y_amp,
+    ) = struct.unpack_from("<HHHHHHHHHHfffff", buf, 12)
+    expected = 52 + int(vpos_count) * 4 + int(speed_count) * 4 + int(dyn_y_count) * 4
+    if len(buf) != expected:
+        raise ValueError(f"MSLSTIO1 size mismatch in {path}: header-derived {expected} != {len(buf)}")
+    off = 52
+    vpos = struct.unpack_from("<" + "f" * int(vpos_count), buf, off)
+    off += int(vpos_count) * 4
+    speed = struct.unpack_from("<" + "f" * int(speed_count), buf, off)
+    off += int(speed_count) * 4
+    dyn_y_vel = struct.unpack_from("<" + "f" * int(dyn_y_count), buf, off)
+    off += int(dyn_y_count) * 4
+    if off != len(buf):
+        raise ValueError(f"MSLSTIO1 trailing bytes in {path}: parsed {off} != {len(buf)}")
+    return YoshiShyguyMetadata(
+        stage_id=int(stage_id),
+        item_kind=int(item_kind),
+        timer_min=int(timer_min),
+        timer_rand=int(timer_rand),
+        timer_reset=int(timer_reset),
+        spawnmany_rarity=int(spawnmany_rarity),
+        spawn_delay_step=int(spawn_delay_step),
+        fall_accel=float(fall_accel),
+        spawn_left_x=float(spawn_left_x),
+        spawn_right_x=float(spawn_right_x),
+        state4_speed_mul=float(state4_speed_mul),
+        jitter_y_amp=float(jitter_y_amp),
+        vpos=tuple(float(x) for x in vpos),
+        speed=tuple(float(x) for x in speed),
+        dyn_y_vel=tuple(float(x) for x in dyn_y_vel),
+    )
+
+
+def yoshi_shyguy_metadata(data_root: Path | str = Path("data")) -> YoshiShyguyMetadata:
+    """Return generated Yoshi's Story Shy Guy stage-owned item data.
+
+    Source data:
+    - `_iso/GrSt.dat::yakumono_param`
+    - `_iso/GrSt.dat::itemdata` Heiho Article attrs and child-JObj FObjDesc
+    refs/melee/src/melee/gr/grstory.c::{reset_shyguy_timer,grStory_801E3418}
+    refs/melee/src/melee/it/items/itheiho.c::{it_802D8618,itHeiho_UnkMotion*_Phys,it_802D98C4}
+    """
+    return read_mslstio1_yoshi_shyguy(Path(data_root) / "stage_items" / "yoshi_shyguy.bin")
 
 
 def read_mslftsc1_v1(path: Path) -> ScriptTimelineMetadata:

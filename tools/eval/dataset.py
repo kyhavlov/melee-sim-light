@@ -87,6 +87,11 @@ SEED_DTYPE = np.dtype(
         ("stage_fod_platform_velocity_f32", _arr("<f4", 2)),
         ("stage_fod_platform_velocity_valid_u8", _arr("u1", 2)),
         ("_pad_stage_fod", "V2"),
+        # Prefix-causal Yoshi's Story Shy Guy stage-object scheduler state.
+        # refs/melee/src/melee/gr/grstory.c::grStory_801E3418
+        ("stage_yoshi_shyguy_timer_u16", "<u2"),
+        ("stage_yoshi_shyguy_pattern_u8", "u1"),
+        ("stage_yoshi_shyguy_valid_u8", "u1"),
         ("num_players", "u1"),
         ("is_teams", "u1"),
         ("_pad0", "V2"),
@@ -477,6 +482,16 @@ SEED_DTYPE = np.dtype(
         ("item_hidden_body_hit_victim_port", _arr("u1", MAX_ITEMS)),
         ("item_hidden_body_hit_hurt_height", _arr("u1", MAX_ITEMS)),
         ("item_hidden_callback_flags", _arr("u1", MAX_ITEMS)),
+        # Prefix-causal Shy Guy dynamic-bone velocity scratch.
+        # refs/melee/src/melee/it/items/itheiho.c::it_802D98C4
+        ("item_shyguy_prev_vel_y", _arr("<f4", MAX_ITEMS)),
+        ("item_shyguy_prev_vel_y_valid", _arr("u1", MAX_ITEMS)),
+        # Prefix-causal Shy Guy itemVar internals.
+        # refs/melee/src/melee/it/items/itheiho.c::{it_802D8618,itHeiho_UnkMotion0_Phys}
+        ("item_shyguy_speed_index_u8", _arr("u1", MAX_ITEMS)),
+        ("item_shyguy_speed_index_valid_u8", _arr("u1", MAX_ITEMS)),
+        ("item_shyguy_delay_u16", _arr("<u2", MAX_ITEMS)),
+        ("item_shyguy_delay_valid_u8", _arr("u1", MAX_ITEMS)),
         # NOTE (PP#4): these staling fields are populated by replay-history preprocessing:
         # tools/slippi/staling_history.py (derive) and tools/slippi/make_dataset_from_slp.py (wire).
         # They seed the per-player `StaleMoveTable` ring buffer and `attack_instance`.

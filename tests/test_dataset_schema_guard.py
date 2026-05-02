@@ -140,6 +140,16 @@ def test_seed_schema_includes_staling_fields() -> None:
     assert "stage_fod_platform_height_valid_u8" in SEED_DTYPE.fields
     assert "stage_fod_platform_velocity_f32" in SEED_DTYPE.fields
     assert "stage_fod_platform_velocity_valid_u8" in SEED_DTYPE.fields
+    # Prefix-causal Yoshi Shy Guy dynamic-bone velocity scratch.
+    assert "item_shyguy_prev_vel_y" in SEED_DTYPE.fields
+    assert "item_shyguy_prev_vel_y_valid" in SEED_DTYPE.fields
+    assert "stage_yoshi_shyguy_timer_u16" in SEED_DTYPE.fields
+    assert "stage_yoshi_shyguy_pattern_u8" in SEED_DTYPE.fields
+    assert "stage_yoshi_shyguy_valid_u8" in SEED_DTYPE.fields
+    assert "item_shyguy_speed_index_u8" in SEED_DTYPE.fields
+    assert "item_shyguy_speed_index_valid_u8" in SEED_DTYPE.fields
+    assert "item_shyguy_delay_u16" in SEED_DTYPE.fields
+    assert "item_shyguy_delay_valid_u8" in SEED_DTYPE.fields
 
 
 def test_dataset_dtype_sizes_match_c_structs() -> None:

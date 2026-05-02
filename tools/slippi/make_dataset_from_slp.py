@@ -22,6 +22,7 @@ from tools.slippi.known_data_artifacts import (
     fountain_of_dreams_platform_motion_params,
     read_mslstg01_v5,
     stage_metadata_path_for_stage_id,
+    yoshi_shyguy_metadata,
 )
 from tools.slippi.rollback import finalized_frame_indices
 
@@ -1809,6 +1810,165 @@ def _fill_items_fixed(frames: pa.StructArray, n_frames: int, *, src_ports: list[
             out[fi, slot]["misc3"] = np.uint8(int(misc.get("3", 0)))
 
     return out
+
+
+def _derive_yoshi_shyguy_prev_vel_y(items_fixed: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Derive prefix-causal Shy Guy dynamic-bone Y velocity scratch.
+
+    Decomp owner:
+    - refs/melee/src/melee/it/items/itheiho.c::it_802D98C4 computes item->x40_vel from a JObj
+      translation delta against itemVar.heiho.x3C.
+    - Slippi post-frame exposes item velocity, but not x3C. For a one-step seed at frame t, the
+      previous replay-visible velocity for the same item identity is causal replay history and
+      provides the runtime scratch needed to advance the dynamic-bone delta without reading t+1.
+    """
+    n_frames = int(items_fixed.shape[0])
+    n_items = int(items_fixed.shape[1])
+    prev_vel_y = np.zeros((n_frames, n_items), dtype=np.float32)
+    valid = np.zeros((n_frames, n_items), dtype=np.uint8)
+    if n_frames <= 1:
+        return prev_vel_y, valid
+
+    heiho_kind = np.uint16(0xD2)
+    for fi in range(1, n_frames):
+        prev = items_fixed[fi - 1]
+        cur = items_fixed[fi]
+        for slot in range(n_items):
+            item = cur[slot]
+            if (
+                int(item["exists"]) == 0
+                or int(item["type"]) != int(heiho_kind)
+                or int(item["owner"]) != -1
+                or int(item["state"]) not in (1, 4)
+            ):
+                continue
+            spawn_id = int(item["spawn_id"])
+            instance_id = int(item["instance_id"])
+            match_slot = -1
+            for prev_slot in range(n_items):
+                prev_item = prev[prev_slot]
+                if (
+                    int(prev_item["exists"]) == 0
+                    or int(prev_item["type"]) != int(heiho_kind)
+                    or int(prev_item["owner"]) != -1
+                    or int(prev_item["state"]) not in (1, 4)
+                ):
+                    continue
+                if spawn_id != 0:
+                    if int(prev_item["spawn_id"]) != spawn_id:
+                        continue
+                elif int(prev_item["instance_id"]) != instance_id:
+                    continue
+                match_slot = prev_slot
+                break
+            if match_slot < 0:
+                continue
+            prev_vel_y[fi, slot] = np.float32(prev[match_slot]["vel_y"])
+            valid[fi, slot] = np.uint8(1)
+    return prev_vel_y, valid
+
+
+@functools.lru_cache(maxsize=1)
+def _yoshi_shyguy_params():
+    return yoshi_shyguy_metadata(Path("data"))
+
+
+def _shyguy_pattern_from_item(item: np.void) -> int:
+    vpos = _yoshi_shyguy_params().vpos
+    y = float(item["pos_y"])
+    if float(item["pos_x"]) < 0.0:
+        candidates = range(0, 3)
+    else:
+        candidates = range(3, 6)
+    return min(candidates, key=lambda idx: abs(y - vpos[idx]))
+
+
+def _shyguy_speed_index_from_item(item: np.void) -> int:
+    speed = abs(float(item["vel_x"]))
+    if int(item["state"]) == 4:
+        speed /= float(_yoshi_shyguy_params().state4_speed_mul)
+    speeds = _yoshi_shyguy_params().speed
+    return min(range(len(speeds)), key=lambda idx: abs(speed - speeds[idx]))
+
+
+def _derive_yoshi_shyguy_seed_lanes(
+    items_fixed: np.ndarray, *, stage_id: int
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Derive causal Yoshi Shy Guy stage/item internals from replay prefix state.
+
+    The stage timer/pattern mirror `grStory_801E3418`. Item delay/speed lanes mirror Heiho
+    itemVar fields when they are already replay-visible or carried by an existing spawn group.
+    The derivation intentionally does not inspect t+1 to infer first-frame spawn RNG choices.
+    """
+    n_frames = int(items_fixed.shape[0])
+    n_items = int(items_fixed.shape[1])
+    timer = np.zeros((n_frames,), dtype=np.uint16)
+    pattern = np.zeros((n_frames,), dtype=np.uint8)
+    stage_valid = np.zeros((n_frames,), dtype=np.uint8)
+    speed_index = np.zeros((n_frames, n_items), dtype=np.uint8)
+    speed_valid = np.zeros((n_frames, n_items), dtype=np.uint8)
+    delay = np.zeros((n_frames, n_items), dtype=np.uint16)
+    delay_valid = np.zeros((n_frames, n_items), dtype=np.uint8)
+    params = _yoshi_shyguy_params()
+    if int(stage_id) != int(params.stage_id):
+        return timer, pattern, stage_valid, speed_index, speed_valid, delay, delay_valid
+
+    cur_timer = max(0, int(params.timer_reset) - 1)
+    cur_pattern = 0
+    first_seen: dict[int, int] = {}
+    group_base_by_spawn: dict[int, int] = {}
+    speed_by_group_base: dict[int, int] = {}
+
+    for fi in range(n_frames):
+        frame_items = items_fixed[fi]
+        shyguy_slots = [
+            slot
+            for slot, item in enumerate(frame_items)
+            if int(item["exists"]) and int(item["type"]) == int(params.item_kind) and int(item["owner"]) == -1
+        ]
+        timer[fi] = np.uint16(cur_timer)
+        pattern[fi] = np.uint8(cur_pattern)
+        stage_valid[fi] = np.uint8(1)
+
+        if shyguy_slots:
+            cur_timer = int(params.timer_reset)
+            cur_pattern = _shyguy_pattern_from_item(frame_items[shyguy_slots[0]])
+            pattern[fi] = np.uint8(cur_pattern)
+            spawn_ids = [int(frame_items[slot]["spawn_id"]) for slot in shyguy_slots]
+            new_spawn_ids = [spawn_id for spawn_id in spawn_ids if spawn_id not in first_seen]
+            if new_spawn_ids:
+                group_base = min(new_spawn_ids)
+                for spawn_id in new_spawn_ids:
+                    first_seen[spawn_id] = fi
+                    group_base_by_spawn[spawn_id] = group_base
+            for slot in shyguy_slots:
+                item = frame_items[slot]
+                spawn_id = int(item["spawn_id"])
+                first = first_seen.setdefault(spawn_id, fi)
+                group_base = group_base_by_spawn.setdefault(spawn_id, spawn_id)
+                if int(item["state"]) in (1, 4) and abs(float(item["vel_x"])) > 0.05:
+                    speed_by_group_base[group_base] = _shyguy_speed_index_from_item(item)
+            for slot in shyguy_slots:
+                item = frame_items[slot]
+                spawn_id = int(item["spawn_id"])
+                first = first_seen.setdefault(spawn_id, fi)
+                group_base = group_base_by_spawn.setdefault(spawn_id, spawn_id)
+                arg0 = max(0, spawn_id - group_base)
+                if group_base in speed_by_group_base:
+                    speed_index[fi, slot] = np.uint8(speed_by_group_base[group_base])
+                    speed_valid[fi, slot] = np.uint8(1)
+                if int(item["state"]) == 0:
+                    age = fi - first
+                    remaining = max(0, (int(params.spawn_delay_step) * arg0) - age - 1)
+                    delay[fi, slot] = np.uint16(remaining)
+                    delay_valid[fi, slot] = np.uint8(1)
+                elif int(item["state"]) in (1, 4):
+                    delay[fi, slot] = np.uint16(0)
+                    delay_valid[fi, slot] = np.uint8(1)
+        elif cur_timer > 0:
+            cur_timer -= 1
+
+    return timer, pattern, stage_valid, speed_index, speed_valid, delay, delay_valid
 
 
 def _materialize_illusion_seed_positions(
@@ -4132,6 +4292,25 @@ def _main_impl(args) -> Dataset:
         num_players=num_players,
     )
     samples["seed_t"]["item_reflect_damage_mul"] = item_reflect_damage_mul[:-1]
+    shyguy_prev_vel_y, shyguy_prev_vel_y_valid = _derive_yoshi_shyguy_prev_vel_y(items_fixed)
+    samples["seed_t"]["item_shyguy_prev_vel_y"] = shyguy_prev_vel_y[:-1]
+    samples["seed_t"]["item_shyguy_prev_vel_y_valid"] = shyguy_prev_vel_y_valid[:-1]
+    (
+        shyguy_timer,
+        shyguy_pattern,
+        shyguy_stage_valid,
+        shyguy_speed_index,
+        shyguy_speed_valid,
+        shyguy_delay,
+        shyguy_delay_valid,
+    ) = _derive_yoshi_shyguy_seed_lanes(items_fixed, stage_id=int(stage_id))
+    samples["seed_t"]["stage_yoshi_shyguy_timer_u16"] = shyguy_timer[:-1]
+    samples["seed_t"]["stage_yoshi_shyguy_pattern_u8"] = shyguy_pattern[:-1]
+    samples["seed_t"]["stage_yoshi_shyguy_valid_u8"] = shyguy_stage_valid[:-1]
+    samples["seed_t"]["item_shyguy_speed_index_u8"] = shyguy_speed_index[:-1]
+    samples["seed_t"]["item_shyguy_speed_index_valid_u8"] = shyguy_speed_valid[:-1]
+    samples["seed_t"]["item_shyguy_delay_u16"] = shyguy_delay[:-1]
+    samples["seed_t"]["item_shyguy_delay_valid_u8"] = shyguy_delay_valid[:-1]
     samples["seed_t"]["items"] = items_seed[:-1]
     # Throw pulse-consume seed lane (causal producer):
     # - runtime consumes this lane in src/items.c throw-side pulse reconstruction suppressor.

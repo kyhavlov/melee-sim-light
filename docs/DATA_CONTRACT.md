@@ -836,6 +836,29 @@ Characters (Fox/Falco):
     - `data/items/articles/manifest.json` maps generated field IDs, value types, units, and
       character domain to names for review/tooling.
   - Generated/ignored; regenerate through `tools.extraction.build_data`.
+- `data/stage_items/yoshi_shyguy.bin` (Yoshi's Story Shy Guy stage-object item data; `MSLSTIO1` compact binary)
+  - Purpose:
+    - Store source-backed stage-owned item constants for `It_Kind_Heiho` so runtime item code
+      consumes generated data instead of embedding DAT/FObj tables in gameplay C.
+    - Covers the replay-seeded/eval active-motion/state-delay slice only; it does not by itself
+      close global HSD RNG consumer order before `grStory_801E3418`.
+  - Sources:
+    - `_iso/GrSt.dat::yakumono_param` (`timer_min`, `timer_rand`, `spawnmany_rarity`, `vpos`)
+    - `_iso/GrSt.dat::itemdata` Heiho `Article` common attrs / special attrs
+    - `_iso/GrSt.dat` Heiho state-0 child `HSD_A_J_TRAY` FObjDesc interpreted through the
+      extractor FObj port
+    - `refs/melee/src/melee/gr/grstory.c::{reset_shyguy_timer,grStory_801E3418}`
+    - `refs/melee/src/melee/it/items/itheiho.c::{it_802D8618,itHeiho_UnkMotion*_Phys,it_802D98C4}`
+    - `refs/melee/src/sysdolphin/baselib/{aobj.c,fobj.c,jobj.c}`
+  - Binary layout: `MSLSTIO1` v1
+    - `u8 magic[8] = "MSLSTIO1"`
+    - `u32 version = 1`
+    - header: `stage_id`, `item_kind`, table counts, timer/count/delay fields, fall accel,
+      spawn X positions, state-4 speed multiplier, jitter amplitude
+    - payload: `vpos[6]`, active speed attrs `[3]`, dynamic-bone Y velocity deltas `[128]`
+  - Stale/non-v1 tables must be rejected by tooling readers; regenerate with
+    `uv run python -m tools.extraction.extract_stage_item_objects --grst _iso/GrSt.dat --out data/stage_items/yoshi_shyguy.bin --audit data/stage_items/yoshi_shyguy.json`
+    or through `tools.extraction.build_data`.
 - `data/scripts/fox.bin`, `data/scripts/falco.bin` (unified decoded fighter script timeline; compact binary)
   - Purpose:
     - Canonical packed/indexed representation of already decoded move-script events from
