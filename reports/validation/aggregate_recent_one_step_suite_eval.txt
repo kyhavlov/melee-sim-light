@@ -1202,14 +1202,14 @@ err.speed_x_attack: mae=0.000801 p95=0.000000 max=2.009857
 err.speed_y_attack: mae=0.001574 p95=0.000000 max=3.872669
 err.percent: mae=0.005799 p95=0.000000 max=13.000000
 err.shield_hp: mae=0.000491 p95=0.000000 max=4.200001
-err.item_pos_x: mae=1.074496 p95=0.750000 max=427.469604
-err.item_pos_y: mae=0.520043 p95=0.701523 max=76.907867
+err.item_pos_x: mae=0.479666 p95=0.000000 max=427.469604
+err.item_pos_y: mae=0.120421 p95=0.042572 max=76.907867
 err.item_vel_x: mae=0.004055 p95=0.000000 max=7.000000
 err.item_vel_y: mae=0.028231 p95=0.042572 max=14.735870
 overall.discrete_mismatch: 1600 / 1023539
 overall.strict_discrete_mismatch: 1661 / 1023539
 overall.ignored_discrete_mismatch: 61
-overall.float_norm_mae_p95: 0.00647231
+overall.float_norm_mae_p95: 0.00575722
 
 == datasets/aggregate_recent/replays/validation/yoshis_story_recent/DependentSteelGrouse.msl ==
 Records: 344  Players/scored per record: 2  Total player-frames: 688
@@ -1247,14 +1247,14 @@ err.speed_x_attack: mae=0.000000 p95=0.000000 max=0.000000
 err.speed_y_attack: mae=0.000000 p95=0.000000 max=0.000000
 err.percent: mae=0.010174 p95=0.000000 max=7.000000
 err.shield_hp: mae=0.000000 p95=0.000000 max=0.000000
-err.item_pos_x: mae=1.306579 p95=0.300003 max=304.000000
-err.item_pos_y: mae=0.627178 p95=0.700699 max=75.000000
+err.item_pos_x: mae=1.073484 p95=0.000000 max=304.000000
+err.item_pos_y: mae=0.280841 p95=0.041199 max=75.000000
 err.item_vel_x: mae=0.001045 p95=0.000000 max=0.300000
 err.item_vel_y: mae=0.019517 p95=0.041199 max=0.702896
 overall.discrete_mismatch: 66 / 41624
 overall.strict_discrete_mismatch: 70 / 41624
 overall.ignored_discrete_mismatch: 4
-overall.float_norm_mae_p95: 0.00265646
+overall.float_norm_mae_p95: 0.00247502
 
 == datasets/aggregate_recent/replays/validation/yoshis_story_recent/LawfulInsistentMeerkat.msl ==
 Records: 5984  Players/scored per record: 2  Total player-frames: 11968
@@ -1292,14 +1292,14 @@ err.speed_x_attack: mae=0.000711 p95=0.000000 max=2.453333
 err.speed_y_attack: mae=0.001537 p95=0.000000 max=6.505510
 err.percent: mae=0.005363 p95=0.000000 max=13.000000
 err.shield_hp: mae=0.000082 p95=0.000000 max=0.279999
-err.item_pos_x: mae=0.688812 p95=0.500000 max=304.000000
-err.item_pos_y: mae=0.499153 p95=0.701523 max=157.210541
+err.item_pos_x: mae=0.302318 p95=0.000000 max=304.000000
+err.item_pos_y: mae=0.087137 p95=0.042572 max=157.065201
 err.item_vel_x: mae=0.001168 p95=0.000000 max=2.474090
 err.item_vel_y: mae=0.030859 p95=0.042572 max=14.992218
 overall.discrete_mismatch: 845 / 724064
 overall.strict_discrete_mismatch: 888 / 724064
 overall.ignored_discrete_mismatch: 43
-overall.float_norm_mae_p95: 0.00528444
+overall.float_norm_mae_p95: 0.00475777
 
 == datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl ==
 Records: 9439  Players/scored per record: 2  Total player-frames: 18878
@@ -1337,17 +1337,17 @@ err.speed_x_attack: mae=0.000591 p95=0.000000 max=2.410532
 err.speed_y_attack: mae=0.001315 p95=0.000000 max=4.369796
 err.percent: mae=0.004898 p95=0.000000 max=12.000000
 err.shield_hp: mae=0.000446 p95=0.000000 max=2.099998
-err.item_pos_x: mae=0.547865 p95=0.449997 max=304.000000
-err.item_pos_y: mae=0.499608 p95=0.702896 max=415.632568
+err.item_pos_x: mae=0.257277 p95=0.000000 max=304.000000
+err.item_pos_y: mae=0.088726 p95=0.043488 max=416.191284
 err.item_vel_x: mae=0.001983 p95=0.000000 max=5.000000
 err.item_vel_y: mae=0.035089 p95=0.042572 max=13.446121
 overall.discrete_mismatch: 1300 / 1142119
 overall.strict_discrete_mismatch: 1369 / 1142119
 overall.ignored_discrete_mismatch: 69
-overall.float_norm_mae_p95: 0.00598172
+overall.float_norm_mae_p95: 0.00548140
 
 == suite summary ==
 overall.discrete_mismatch: 18457 / 33581735
 overall.strict_discrete_mismatch: 19827 / 33581735
 overall.ignored_discrete_mismatch: 1370
-overall.float_norm_mae_p95: 5.07548110
+overall.float_norm_mae_p95: 5.07540599
