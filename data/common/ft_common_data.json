@@ -175,6 +175,7 @@
   "pass_vel_y": -0.5,
   "passivewall_timer_frames": 5,
   "phantom_overlap_max_x7a8": 0.009999999776482582,
+  "platform_air_land_stick_y_threshold": -0.5600000023841858,
   "player_nudge_x": 0.30000001192092896,
   "player_nudge_z": 0.10000000149011612,
   "player_nudge_z_max": 1.399999976158142,

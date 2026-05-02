@@ -518,6 +518,8 @@ int common_params_init(void) {
       json_get_f32(buf, "down_stick_x_threshold", &g_params.down_stick_x_threshold) != 0 ||
       json_get_f32(buf, "down_attack_button_window_frames",
                    &g_params.down_attack_button_window_frames) != 0 ||
+      json_get_f32(buf, "platform_air_land_stick_y_threshold",
+                   &g_params.platform_air_land_stick_y_threshold) != 0 ||
       json_get_f32(buf, "down_attack_cstick_up_threshold",
                    &g_params.down_attack_cstick_up_threshold) != 0 ||
       json_get_u16(buf, "combo_push_count_threshold", &g_params.combo_push_count_threshold) != 0 ||

@@ -3026,6 +3026,37 @@ static PyObject* msl_stage_fighter_floor_segment_py(PyObject* self, PyObject* ar
                        (int)line->prev, "next", (int)line->next, "line_index", idx);
 }
 
+static PyObject* msl_stage_raw_line_non_kind_py(PyObject* self, PyObject* args) {
+  (void)self;
+  unsigned int stage_id_u = 0;
+  unsigned int segment_i_u = 0;
+  unsigned int skip_kind_u = 0;
+  int forward = 0;
+  if (!PyArg_ParseTuple(args, "IIIp", &stage_id_u, &segment_i_u, &skip_kind_u, &forward)) {
+    return NULL;
+  }
+  if (stage_collision_init() != 0) {
+    PyErr_SetString(PyExc_RuntimeError, "stage_collision_init failed");
+    return NULL;
+  }
+  if (!stage_collision_require_stage((uint32_t)stage_id_u)) {
+    PyErr_SetString(PyExc_RuntimeError, "requested stage collision artifact is unavailable");
+    return NULL;
+  }
+  MslStageRawLineKind kind = MSL_STAGE_RAW_LINE_UNKNOWN;
+  uint16_t out_segment_i = 0xFFFFu;
+  const uint8_t ok = forward ? stage_collision_raw_line_next_non_kind(
+                                   (uint32_t)stage_id_u, (uint16_t)segment_i_u,
+                                   (MslStageRawLineKind)skip_kind_u, &kind, &out_segment_i)
+                             : stage_collision_raw_line_prev_non_kind(
+                                   (uint32_t)stage_id_u, (uint16_t)segment_i_u,
+                                   (MslStageRawLineKind)skip_kind_u, &kind, &out_segment_i);
+  if (!ok) {
+    Py_RETURN_NONE;
+  }
+  return Py_BuildValue("{s:i,s:i}", "kind", (int)kind, "segment_i", (int)out_segment_i);
+}
+
 static PyObject* msl_stage_match_flow_roles_py(PyObject* self, PyObject* args) {
   (void)self;
   unsigned int stage_id_u = 0;
@@ -4906,6 +4937,8 @@ static PyMethodDef methods[] = {
      "stage_floor_segment(stage_id, segment_i) -> dict from runtime stage collision tables."},
     {"stage_fighter_floor_segment", msl_stage_fighter_floor_segment_py, METH_VARARGS,
      "stage_fighter_floor_segment(stage_id, segment_i) -> dict from fighter-solid floor tables."},
+    {"stage_raw_line_non_kind", msl_stage_raw_line_non_kind_py, METH_VARARGS,
+     "stage_raw_line_non_kind(stage_id, segment_i, skip_kind, forward) -> raw MapLine neighbor."},
     {"stage_match_flow_roles", msl_stage_match_flow_roles_py, METH_VARARGS,
      "stage_match_flow_roles(stage_id) -> dict of runtime MSLSTG01 match-flow role data."},
     {"hitlist_ring_demo", msl_hitlist_ring_demo_py, METH_VARARGS,

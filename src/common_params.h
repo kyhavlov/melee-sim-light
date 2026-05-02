@@ -531,9 +531,12 @@ typedef struct MslCommonParams {
   float down_stand_stick_y_threshold;      // p_ftCommonData->x244
   float down_stick_x_threshold;            // p_ftCommonData->x248 (Down/roll stick gate)
   float down_attack_button_window_frames;  // p_ftCommonData->x24C
-  float down_attack_cstick_up_threshold;   // p_ftCommonData->x7F4
-  float down_wait_frames;                  // p_ftCommonData->x424
-  int32_t down_damage_percent_threshold;   // p_ftCommonData->x428
+  // Soft-platform admission callback used by common-air collision owners.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_80096CC8
+  float platform_air_land_stick_y_threshold;  // p_ftCommonData->x25C
+  float down_attack_cstick_up_threshold;      // p_ftCommonData->x7F4
+  float down_wait_frames;                     // p_ftCommonData->x424
+  int32_t down_damage_percent_threshold;      // p_ftCommonData->x428
 } MslCommonParams;
 
 int common_params_init(void);

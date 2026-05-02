@@ -120,6 +120,11 @@ def main() -> None:
         "down_attack_button_window_frames": float(_f32_be(buf, ft_common_abs + 0x24C)),
         "down_attack_cstick_up_threshold": float(_f32_be(buf, ft_common_abs + 0x7F4)),
         "down_wait_frames": float(_f32_be(buf, ft_common_abs + 0x424)),
+        # Soft-platform callback gate shared by ftCo_80096CC8 users:
+        # - platform floors are accepted only when `fp->input.lstick.y > p_ftCommonData->x25C`;
+        #   otherwise mpColl_80044628_Floor continues searching / rejects that platform.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_80096CC8
+        "platform_air_land_stick_y_threshold": float(_f32_be(buf, ft_common_abs + 0x25C)),
         # Downed low-damage contact gate:
         # - ftCo_8009F0F0 routes DownBound/DownWait/DownDamage into DownDamage when
         #   `fp->x2224_b2 || fp->dmg.x1838_percentTemp < p_ftCommonData->x428`.

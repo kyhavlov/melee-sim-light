@@ -206,12 +206,15 @@ typedef struct MslSeed {
   // - valid=1: height is the current replay-visible platform owner value for platform id
   //   0=right, 1=left. Runtime converts it to world collision coordinates before floor checks.
   // - valid=0: use extracted/default startup platform heights.
-  // This seed closes replay-seeded FoD floor geometry; free-running grIzumi phase/timer/RNG
-  // scheduling is not modeled by this field.
+  // Velocity is the current per-frame platform-height delta when recoverable from prefix events or
+  // grounded platform contact. It advances the hidden grIzumi current-height state during rollout;
+  // free-running phase/timer/RNG target selection remains out of this seed field.
   // refs/melee/src/melee/gr/grizumi.c::{grIzumi_801CC358,grIzumi_801CCBDC}
   // refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
   float stage_fod_platform_height_f32[2];
   uint8_t stage_fod_platform_height_valid_u8[2];
+  float stage_fod_platform_velocity_f32[2];
+  uint8_t stage_fod_platform_velocity_valid_u8[2];
   uint8_t _pad_stage_fod[2];
   uint8_t num_players;  // 2 or 4 (<= MSL_MAX_PLAYERS)
   uint8_t is_teams;     // 0/1

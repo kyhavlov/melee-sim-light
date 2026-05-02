@@ -13,22 +13,99 @@ LINE_FLAG_EMPTY = 1 << 7
 LINE_FLAG_PLATFORM = 1 << 8
 LINE_FLAG_LEDGE = 1 << 9
 
+# Generator-only current-domain seed for frozen Pokemon Stadium's active floor component. Runtime
+# code consumes the generated `fighter_solid` bit from MSLSTG01 and must not duplicate these ids.
+# The active set is the base stadium floor plus frozen platform tops; non-floor active collision is
+# discovered below by walking source MapLine links from active non-platform floors.
+# refs/slippi-ssbm-asm/Online/Core/Hacks/Stadium/IngameCheckIfFrozen.asm
+# refs/melee/src/melee/gr/grpstadium.c::{grStadium_OnInit,grStadium_801D10F0}
+# refs/melee/src/melee/mp/mplib.c::{mpLineGetPrev,mpLineGetNext}
 PS_FROZEN_FIGHTER_SOLID_FLOORS = frozenset({34, 35, 36, 51, 52, 53, 54})
 
 
 def _fighter_solid_for_current_legal_policy(stage_dat: Path, kind: str, line_id: int) -> bool:
-    if kind != "floor":
-        return True
+    del kind, line_id
+    return stage_dat.name.lower() != "grps.dat"
+
+
+def _line_by_id(segments: list[dict], line_id: int) -> dict | None:
+    for seg in segments:
+        if int(seg["i"]) == int(line_id):
+            return seg
+    return None
+
+
+def _link_is_endpoint_match(a: dict, b: dict, *, next_link: bool) -> bool:
+    if next_link:
+        dx = float(a["x1"]) - float(b["x0"])
+        dy = float(a["y1"]) - float(b["y0"])
+    else:
+        dx = float(a["x0"]) - float(b["x1"])
+        dy = float(a["y0"]) - float(b["y1"])
+    return (dx * dx + dy * dy) < 4.0
+
+
+def _resolve_source_link(seg: dict, segments: list[dict], *, next_link: bool) -> int:
+    # Decomp: mpLineGetPrev/Next prefer the secondary source link only when the named endpoint is
+    # actually adjacent, otherwise they fall back to the primary link.
+    # refs/melee/src/melee/mp/mplib.c::{mpLineGetPrev,mpLineGetNext}
+    primary_key = "next_id0" if next_link else "prev_id0"
+    secondary_key = "next_id1" if next_link else "prev_id1"
+    secondary = int(seg.get(secondary_key, -1))
+    if secondary >= 0:
+        target = _line_by_id(segments, secondary)
+        if target is not None and _link_is_endpoint_match(seg, target, next_link=next_link):
+            return secondary
+    return int(seg.get(primary_key, -1))
+
+
+def _apply_fighter_solid_for_current_legal_policy(stage_dat: Path, segments: list[dict]) -> None:
     if stage_dat.name.lower() != "grps.dat":
-        return True
-    # Current legal Pokemon Stadium support is frozen/base geometry. The frozen policy suppresses
-    # transformation ground objects but keeps base body/platform floors active for fighter collision.
-    # Store that active mask in MSLSTG01 so runtime consumes data rather than a gameplay line-id
-    # switch.
+        return
+
+    # Current legal Pokemon Stadium support is frozen/base geometry. Store the active
+    # fighter-solid mask in MSLSTG01 so runtime consumes data instead of a gameplay line-id switch.
+    # The ids above are extraction-time current-domain metadata only.
+    #
+    # Floors: base hard floors and the two frozen platform tops stay active.
+    # Walls/ceilings: active non-floor collision is the raw MapLine component reached from active
+    # non-platform base floors through source mpLineGetPrev/Next links. Platform tops 35/36 have no
+    # raw links to their side shell, so their platform side walls remain debug-visible but inactive
+    # for fighter wall collision.
     # refs/slippi-ssbm-asm/Online/Core/Hacks/Stadium/IngameCheckIfFrozen.asm
     # refs/melee/src/melee/gr/grpstadium.c::{grStadium_OnInit,grStadium_801D10F0}
-    # data/stages/pokemon_stadium.json::segments
-    return line_id in PS_FROZEN_FIGHTER_SOLID_FLOORS
+    # refs/melee/src/melee/mp/mplib.c::{mpLineGetPrev,mpLineGetNext}
+    for seg in segments:
+        seg["fighter_solid"] = False
+
+    queue: list[int] = []
+    seen: set[int] = set()
+    for line_id in sorted(PS_FROZEN_FIGHTER_SOLID_FLOORS):
+        seg = _line_by_id(segments, line_id)
+        if seg is None or seg.get("kind") != "floor":
+            continue
+        seg["fighter_solid"] = True
+        if seg.get("platform"):
+            continue
+        for next_link in (False, True):
+            linked_id = _resolve_source_link(seg, segments, next_link=next_link)
+            linked = _line_by_id(segments, linked_id)
+            if linked is not None and linked.get("kind") != "floor" and linked_id not in seen:
+                seen.add(linked_id)
+                queue.append(linked_id)
+
+    while queue:
+        line_id = queue.pop(0)
+        seg = _line_by_id(segments, line_id)
+        if seg is None or seg.get("kind") == "floor":
+            continue
+        seg["fighter_solid"] = True
+        for next_link in (False, True):
+            linked_id = _resolve_source_link(seg, segments, next_link=next_link)
+            linked = _line_by_id(segments, linked_id)
+            if linked is not None and linked.get("kind") != "floor" and linked_id not in seen:
+                seen.add(linked_id)
+                queue.append(linked_id)
 
 
 def _stage_platform_transforms(stage_dat: Path) -> list[dict]:
@@ -69,6 +146,38 @@ def _stage_platform_transforms(stage_dat: Path) -> list[dict]:
             "height_coeff": 0.0,
         },
     ]
+
+
+def _stage_platform_motion(stage_dat: Path) -> dict:
+    if stage_dat.name.lower() != "griz.dat":
+        return {}
+    arc = parse_hsd_archive(stage_dat.read_bytes())
+    off = arc.get_public_offset("yakumono_param")
+    if off is None:
+        return {}
+    buf = arc.buf
+
+    def f32(rel: int) -> float:
+        return float(_f32_be(buf, off + rel))
+
+    # refs/melee/src/melee/gr/grizumi.c::{FountainParams,grIzumi_801CC358}
+    # public symbol `yakumono_param` in GrIz.dat
+    return {
+        "fountain_platform": {
+            "left_initial_height": f32(0x00),
+            "right_initial_height": f32(0x08),
+            "home_height": f32(0x0C),
+            "hidden_target_height": f32(0x04),
+            "max_height": f32(0x20),
+            "min_visible_height": f32(0x24),
+            "up_speed": f32(0x28),
+            "down_speed": f32(0x2C),
+            "wait_min_frames": f32(0x38),
+            "wait_max_frames": f32(0x3C),
+            "hidden_wait_min_frames": f32(0x4C),
+            "hidden_wait_max_frames": f32(0x50),
+        }
+    }
 
 
 def _u16_be(buf: bytes, off: int) -> int:
@@ -436,6 +545,8 @@ def _extract_segments(stage_dat: Path) -> dict:
             }
         )
 
+    _apply_fighter_solid_for_current_legal_policy(stage_dat, segments)
+
     return {
         "stage_dat": stage_dat.name,
         "unit_scale": scale,
@@ -443,6 +554,7 @@ def _extract_segments(stage_dat: Path) -> dict:
         "line_count": line_count,
         "segments": segments,
         "platform_transforms": _stage_platform_transforms(stage_dat),
+        "platform_motion": _stage_platform_motion(stage_dat),
         **(_extract_stage_points(stage_dat, arc) or {}),
     }
 

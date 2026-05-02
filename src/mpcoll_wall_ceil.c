@@ -814,7 +814,8 @@ static int ceiling_e090_project(const MslStageCeilingGraph* g, int line_idx, flo
   // Decomp: mpLib_8004E090_Ceiling traverses prev/next for ceiling-only lines, then returns a signed
   // correction and normal for the ceiling line above vec->x.
   // refs/melee/src/melee/mp/mplib.c::mpLib_8004E090_Ceiling
-  if (g == NULL || line_idx < 0 || (size_t)line_idx >= g->line_count) {
+  if (g == NULL || line_idx < 0 || (size_t)line_idx >= g->line_count ||
+      !g->lines[(size_t)line_idx].fighter_solid) {
     return -1;
   }
   int dir = 0;
@@ -874,7 +875,8 @@ static int ceiling_e090_project(const MslStageCeilingGraph* g, int line_idx, flo
 static int left_wall_e398_project(const MslStageWallGraph* g, int line_idx, float x_in, float y_in,
                                   float* x_out, float* nx_out, float* ny_out) {
   // refs/melee/src/melee/mp/mplib.c::mpLib_8004E398_LeftWall
-  if (g == NULL || line_idx < 0 || (size_t)line_idx >= g->line_count) {
+  if (g == NULL || line_idx < 0 || (size_t)line_idx >= g->line_count ||
+      !g->lines[(size_t)line_idx].fighter_solid) {
     return -1;
   }
   int dir = 0;
@@ -931,7 +933,8 @@ static int left_wall_e398_project(const MslStageWallGraph* g, int line_idx, floa
 static int right_wall_e684_project(const MslStageWallGraph* g, int line_idx, float x_in, float y_in,
                                    float* x_out, float* nx_out, float* ny_out) {
   // refs/melee/src/melee/mp/mplib.c::mpLib_8004E684_RightWall
-  if (g == NULL || line_idx < 0 || (size_t)line_idx >= g->line_count) {
+  if (g == NULL || line_idx < 0 || (size_t)line_idx >= g->line_count ||
+      !g->lines[(size_t)line_idx].fighter_solid) {
     return -1;
   }
   int dir = 0;
@@ -1011,6 +1014,9 @@ static uint8_t ceiling_sweep_check(const MslStageCeilingGraph* g, float ax, floa
 
   for (size_t li = 0; li < g->line_count; li++) {
     const MslStageCeilingLine* l = &g->lines[li];
+    if (!l->fighter_solid) {
+      continue;
+    }
     float x0 = 0.0f, y0 = 0.0f, x1 = 0.0f, y1 = 0.0f;
     ed5c_endpoints_generic(l->x0, l->y0, l->x1, l->y1, l->has_prev_link, l->has_next_link, &x0, &y0,
                            &x1, &y1);
@@ -1102,6 +1108,9 @@ static uint8_t wall_sweep_check(const MslStageWallGraph* g, uint8_t is_left_wall
 
   for (size_t li = 0; li < g->line_count; li++) {
     const MslStageWallLine* l = &g->lines[li];
+    if (!l->fighter_solid) {
+      continue;
+    }
     // Decomp: mpCheck{Left,Right}Wall tests the raw wall segment endpoints, then
     // mpLineIntersectionV applies only its local +/-0.1 endpoint clamp for vertical walls. Do not
     // use the broader mpLib_8004ED5C endpoint extension here; that helper belongs to other
@@ -1177,7 +1186,8 @@ static inline void right_wall_envelope_consider(float cand_x, int line_idx,
                                                 const MslStageWallGraph* g, float* io_best_x,
                                                 int* io_best_line_idx, float* io_best_nx,
                                                 float* io_best_ny) {
-  if (g == NULL || line_idx < 0 || (size_t)line_idx >= g->line_count) {
+  if (g == NULL || line_idx < 0 || (size_t)line_idx >= g->line_count ||
+      !g->lines[(size_t)line_idx].fighter_solid) {
     return;
   }
   if (*io_best_line_idx < 0 || cand_x > *io_best_x) {
@@ -1195,7 +1205,8 @@ static inline void left_wall_envelope_consider(float cand_x, int line_idx,
                                                const MslStageWallGraph* g, float* io_best_x,
                                                int* io_best_line_idx, float* io_best_nx,
                                                float* io_best_ny) {
-  if (g == NULL || line_idx < 0 || (size_t)line_idx >= g->line_count) {
+  if (g == NULL || line_idx < 0 || (size_t)line_idx >= g->line_count ||
+      !g->lines[(size_t)line_idx].fighter_solid) {
     return;
   }
   if (*io_best_line_idx < 0 || cand_x < *io_best_x) {
@@ -1226,7 +1237,8 @@ static inline void wall_candidate_list_init(MslWallCandidateList* out) {
 
 static inline void right_wall_candidate_add(MslWallCandidateList* out, const MslStageWallGraph* g,
                                             int line_idx, uint8_t is_hug, float ix, float iy) {
-  if (out == NULL || g == NULL || line_idx < 0 || (size_t)line_idx >= g->line_count) {
+  if (out == NULL || g == NULL || line_idx < 0 || (size_t)line_idx >= g->line_count ||
+      !g->lines[(size_t)line_idx].fighter_solid) {
     return;
   }
   for (uint8_t i = 0u; i < out->count; i++) {
@@ -1253,7 +1265,8 @@ static inline void right_wall_candidate_add(MslWallCandidateList* out, const Msl
 
 static inline void left_wall_candidate_add(MslWallCandidateList* out, const MslStageWallGraph* g,
                                            int line_idx, uint8_t is_hug, float ix, float iy) {
-  if (out == NULL || g == NULL || line_idx < 0 || (size_t)line_idx >= g->line_count) {
+  if (out == NULL || g == NULL || line_idx < 0 || (size_t)line_idx >= g->line_count ||
+      !g->lines[(size_t)line_idx].fighter_solid) {
     return;
   }
   for (uint8_t i = 0u; i < out->count; i++) {
@@ -1324,6 +1337,9 @@ static inline void right_wall_candidate_quad(MslWallCandidateList* out, const Ms
 
   for (size_t li = 0; li < g->line_count; li++) {
     const MslStageWallLine* l = &g->lines[li];
+    if (!l->fighter_solid) {
+      continue;
+    }
     const float vx[2] = {l->x0, l->x1};
     const float vy[2] = {l->y0, l->y1};
     for (int vi = 0; vi < 2; vi++) {
@@ -1380,6 +1396,9 @@ static inline void left_wall_candidate_quad(MslWallCandidateList* out, const Msl
 
   for (size_t li = 0; li < g->line_count; li++) {
     const MslStageWallLine* l = &g->lines[li];
+    if (!l->fighter_solid) {
+      continue;
+    }
     const float vx[2] = {l->x0, l->x1};
     const float vy[2] = {l->y0, l->y1};
     for (int vi = 0; vi < 2; vi++) {

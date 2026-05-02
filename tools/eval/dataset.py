@@ -84,6 +84,8 @@ SEED_DTYPE = np.dtype(
         ("match_damage_ratio", "<f4"),
         ("stage_fod_platform_height_f32", _arr("<f4", 2)),
         ("stage_fod_platform_height_valid_u8", _arr("u1", 2)),
+        ("stage_fod_platform_velocity_f32", _arr("<f4", 2)),
+        ("stage_fod_platform_velocity_valid_u8", _arr("u1", 2)),
         ("_pad_stage_fod", "V2"),
         ("num_players", "u1"),
         ("is_teams", "u1"),

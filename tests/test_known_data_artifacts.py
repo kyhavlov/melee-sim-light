@@ -636,6 +636,12 @@ def test_runtime_frozen_ps_preserves_raw_links_but_uses_fighter_solid_mask() -> 
     finally:
         msl_binding.destroy(handle)
 
+    stage = read_mslstg01_v5(Path("data/stages/bin/grps.bin"))
+    seg_by_id = {int(seg.line_id): seg for seg in stage.segments}
+    assert seg_by_id[35].fighter_solid is True
+    assert seg_by_id[81].kind_id == 2  # right_wall
+    assert seg_by_id[81].fighter_solid is False
+
 
 def test_runtime_move_tables_reject_stale_mslftsc1(tmp_path: Path) -> None:
     root_data = Path("data").resolve()

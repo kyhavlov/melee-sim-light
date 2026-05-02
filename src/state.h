@@ -15,8 +15,10 @@ typedef struct MslStateSoA {
   // Fountain of Dreams dynamic platform heights, one pair per environment.
   // Platform id domain matches Slippi/grIzumi: 0=right, 1=left.
   // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
-  float* stage_fod_platform_height;   // [batch * 2]
-  uint8_t* stage_fod_platform_valid;  // [batch * 2]
+  float* stage_fod_platform_height;            // [batch * 2]
+  uint8_t* stage_fod_platform_valid;           // [batch * 2]
+  float* stage_fod_platform_velocity;          // [batch * 2]
+  uint8_t* stage_fod_platform_velocity_valid;  // [batch * 2]
   // Match-start fighter input lock (`fp->x221D_b4`) countdown, one per environment.
   //
   // Decomp / asset anchors:

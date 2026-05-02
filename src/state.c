@@ -36,6 +36,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->stage_id = (uint32_t*)alloc_aligned_64(sizeof(uint32_t) * b);
   state->stage_fod_platform_height = (float*)alloc_aligned_64(sizeof(float) * b2);
   state->stage_fod_platform_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * b2);
+  state->stage_fod_platform_velocity = (float*)alloc_aligned_64(sizeof(float) * b2);
+  state->stage_fod_platform_velocity_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * b2);
   state->opening_input_lock_timer = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * b);
   state->stale_attack_instance_counter = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * b);
   state->instance_id_counter = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * b);
@@ -427,6 +429,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
 
   if (!state->frame_id || !state->frame_pre_random_seed || !state->stage_id ||
       !state->stage_fod_platform_height || !state->stage_fod_platform_valid ||
+      !state->stage_fod_platform_velocity || !state->stage_fod_platform_velocity_valid ||
       !state->opening_input_lock_timer || !state->stale_attack_instance_counter ||
       !state->instance_id_counter || !state->item_spawn_id_counter || !state->match_damage_ratio ||
       !state->is_teams || !state->team_id || !state->char_id || !state->handicap ||
@@ -647,6 +650,8 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->stage_id);
   alloc_free(state->stage_fod_platform_height);
   alloc_free(state->stage_fod_platform_valid);
+  alloc_free(state->stage_fod_platform_velocity);
+  alloc_free(state->stage_fod_platform_velocity_valid);
   alloc_free(state->opening_input_lock_timer);
   alloc_free(state->stale_attack_instance_counter);
   alloc_free(state->instance_id_counter);

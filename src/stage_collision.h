@@ -57,7 +57,8 @@ typedef struct MslStageCeilingLine {
   float y1;
   uint8_t has_prev_link;  // connected at (x0,y0)
   uint8_t has_next_link;  // connected at (x1,y1)
-  uint8_t _pad0[2];
+  uint8_t fighter_solid;
+  uint8_t _pad0[1];
   uint16_t segment_i;  // ISO-derived segment index
   int16_t raw_prev_id;
   int16_t raw_next_id;
@@ -84,7 +85,8 @@ typedef struct MslStageWallLine {
   float y1;
   uint8_t has_prev_link;  // connected at (x0,y0)
   uint8_t has_next_link;  // connected at (x1,y1)
-  uint8_t _pad0[2];
+  uint8_t fighter_solid;
+  uint8_t _pad0[1];
   uint16_t segment_i;  // ISO-derived segment index
   int16_t raw_prev_id;
   int16_t raw_next_id;
@@ -107,6 +109,14 @@ typedef struct MslStageBounds {
   float top;
   float bottom;
 } MslStageBounds;
+
+typedef enum MslStageRawLineKind {
+  MSL_STAGE_RAW_LINE_UNKNOWN = 0,
+  MSL_STAGE_RAW_LINE_FLOOR = 1,
+  MSL_STAGE_RAW_LINE_CEILING = 2,
+  MSL_STAGE_RAW_LINE_LEFT_WALL = 3,
+  MSL_STAGE_RAW_LINE_RIGHT_WALL = 4,
+} MslStageRawLineKind;
 
 typedef struct MslStagePoint2 {
   float x;
@@ -148,10 +158,25 @@ const MslStageFloorGraph* stage_collision_get_fighter_floor_graph(uint32_t stage
 int stage_collision_fighter_floor_line_index(uint32_t stage_id, uint16_t segment_i);
 uint8_t stage_collision_floor_line_is_platform(uint32_t stage_id, uint16_t segment_i);
 uint8_t stage_collision_floor_line_is_runtime_fighter_solid(uint32_t stage_id, uint16_t segment_i);
+uint8_t stage_collision_floor_line_has_platform_transform(uint32_t stage_id, uint16_t segment_i);
 // Resolve a floor line to current world coordinates for the given batch environment. Static lines
 // copy through unchanged. Dynamic FoD platform lines consume causal stage platform state.
 uint8_t stage_collision_floor_line_world(const MslBatch* batch, int bi,
                                          const MslStageFloorLine* line, MslStageFloorLine* out);
+
+// Source MapLine raw graph helpers. `segment_i` is the stable ISO line id carried in MSLSTG01.
+// These mirror mplib's mpLineGetPrev/Next plus the Non* traversal families without exposing
+// gameplay code to stage-specific line-id policy.
+uint8_t stage_collision_raw_line_kind(uint32_t stage_id, uint16_t segment_i,
+                                      MslStageRawLineKind* out_kind);
+uint8_t stage_collision_raw_line_next_non_kind(uint32_t stage_id, uint16_t segment_i,
+                                               MslStageRawLineKind skip_kind,
+                                               MslStageRawLineKind* out_kind,
+                                               uint16_t* out_segment_i);
+uint8_t stage_collision_raw_line_prev_non_kind(uint32_t stage_id, uint16_t segment_i,
+                                               MslStageRawLineKind skip_kind,
+                                               MslStageRawLineKind* out_kind,
+                                               uint16_t* out_segment_i);
 
 // Ceiling graph view for the given stage_id. Returns NULL if unsupported/unloaded.
 const MslStageCeilingGraph* stage_collision_get_ceiling_graph(uint32_t stage_id);

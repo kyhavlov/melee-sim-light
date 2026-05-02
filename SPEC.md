@@ -691,14 +691,23 @@ Recent deltas to reflect here (do not let these get “lost in chat logs”):
   can land from above through `mpColl_80046904` with `CollisionFlagAir_PlatformPassCallback`,
   grounded fighters remain on their current platform through `mpLib_8004DD90_Floor`, and
   down-input Pass uses the extracted `p_ftCommonData->{x464,x468,x470,x46C}` thresholds/velocity
-  plus `mpUpdateFloorSkip`-shaped skip gating. FoD uses source-local/static platform positions until
-  live platform transforms are modeled. Frozen Pokemon Stadium keeps an explicit current-domain
-  fighter-solid allowlist for base/no-transform line ids `34,35,36,51..54`; the deletion path is
-  extracted ground-object activation/transform data. Moving platform transforms and Pokemon Stadium
-  transformation ownership remain explicit residual work, not `MSLSTG01` table facts
+  plus `mpUpdateFloorSkip`-shaped skip gating. FoD replay/eval floor collision consumes seeded
+  platform heights and prefix-derived height velocity through MSLSTG01 v5 platform transform
+  records, with generated `yakumono_param` target constants preventing stale prefix velocity from
+  running past source movement targets; the free-running grIzumi RNG/wait scheduler remains
+  separate stage-object work. Frozen Pokemon Stadium fighter-solid policy is
+  data-backed by MSLSTG01 current-domain metadata, keeping transformation lines visible for
+  debug/data APIs while suppressing them from fighter collision.
   (`src/mpcoll_ground.c`, `src/locomotion.c`; refs/melee/src/melee/mp/mpcoll.c::{
   `mpColl_80046904`,`mpUpdateFloorSkip`,`mpColl_80044628_Floor`},
   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c).
+- MSLSTG01 v5 raw `MapLine` links are exposed as runtime substrate for source-shaped
+  `mpLineGetPrev/Next` and non-kind traversal. Frozen Pokemon Stadium applies the active
+  fighter-solid mask to walls/ceilings as well as floors, so inactive transformation/platform-side
+  shell lines remain visible in data/debug output but do not participate in fighter wall collision.
+  (`src/stage_collision.c`, `src/mpcoll_wall_ceil.c`; refs/melee/src/melee/mp/mplib.c::{
+  `mpLineGetPrev`,`mpLineGetNext`,`mpCheckLeftWall`,`mpCheckRightWall`},
+  refs/slippi-ssbm-asm/Online/Core/Hacks/Stadium/IngameCheckIfFrozen.asm).
 - Yoshi's Story Shy Guys (`It_Kind_Heiho`) are admitted as stage-owned item objects, not Fox/Falco
   articles. Their source callback recomputes `item->x40_vel` from item-animation dynamic-bone state
   before generic item integration; state 0 waits on hidden `itemVar.heiho.x24` initialized from the

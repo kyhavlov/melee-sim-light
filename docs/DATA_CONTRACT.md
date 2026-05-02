@@ -773,16 +773,22 @@ Characters (Fox/Falco):
     platform flags are consumed by runtime fighter collision through source-shaped Pass/floor-skip
     gating. FoD moving platform world Y is driven by Slippi's current FoD platform height event
     stream and MSLSTG01 platform transform records derived from `grIzumi`/stage geometry data.
+    The generated stage audit JSON also carries `platform_motion.fountain_platform` constants from
+    `GrIz.dat::yakumono_param` (`home_height`, hidden target, min/max, and source speed fields)
+    for causal prefix-state target clamping.
     Frozen Pokemon Stadium fighter collision uses the generated `fighter_solid` mask for the
-    base/frozen legal-stage policy while keeping transformation geometry inspectable through debug
-    and data APIs.
+    base/frozen legal-stage policy across floor/wall/ceiling collision while keeping
+    transformation geometry inspectable through debug and data APIs.
   - FoD seed lanes:
     - `stage_fod_platform_height_f32[2]`, `stage_fod_platform_height_valid_u8[2]`
+    - `stage_fod_platform_velocity_f32[2]`, `stage_fod_platform_velocity_valid_u8[2]`
     - Platform ids match Slippi/grIzumi (`0=right`, `1=left`). Missing events use source-backed
       default current heights from `MSLSTG01` platform transform records; present events carry
-      forward by replay prefix only. These lanes close replay-seeded/eval FoD moving-platform
-      world-floor geometry. Free-running/new-match `grIzumi_801CC358` phase/timer/RNG scheduling is
-      not yet simulated.
+      forward by replay prefix only. Consecutive prefix events or grounded platform contact derive
+      the current per-frame height delta so rollout advances transformed world floors causally.
+      These lanes close replay-seeded/eval FoD moving-platform world-floor geometry.
+      Free-running/new-match `grIzumi_801CC358` phase/timer/RNG target scheduling is not yet
+      simulated.
   - Runtime keeps two floor views: the full debug/data graph, and a non-platform-only graph for
     hard-floor checks. Fighter grounding consumes static platform lines through the full floor graph
     when the source callback admits them, with `ftCo_Pass`/`mpUpdateFloorSkip`-shaped pass-through

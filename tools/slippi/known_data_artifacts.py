@@ -311,6 +311,25 @@ def fountain_of_dreams_default_platform_heights(
     return (float(heights[0]), float(heights[1]))
 
 
+def fountain_of_dreams_platform_motion_params(
+    data_root: Path | str = Path("data"),
+) -> dict[str, float]:
+    """Return generated GrIz platform scheduler constants from `yakumono_param`.
+
+    refs/melee/src/melee/gr/grizumi.c::{FountainParams,grIzumi_801CC358}
+    data/stages/bin/griz.json::platform_motion
+    """
+    stage_path = stage_metadata_path_for_stage_id(STAGE_FOUNTAIN_OF_DREAMS, data_root)
+    if stage_path is None:
+        raise ValueError("missing Fountain of Dreams stage metadata path")
+    audit_path = stage_path.with_suffix(".json")
+    data = json.loads(audit_path.read_text())
+    params = data.get("platform_motion", {}).get("fountain_platform")
+    if not isinstance(params, dict):
+        raise ValueError(f"{audit_path}: missing FoD platform motion params")
+    return {str(k): float(v) for k, v in params.items()}
+
+
 def read_mslpart1_v1(path: Path) -> PartMetadata:
     buf = _require_header(path, PART_MAGIC, PART_VERSION, 20)
     char_id, local_part_count, anchor_count, _reserved = struct.unpack_from("<HHHH", buf, 12)
