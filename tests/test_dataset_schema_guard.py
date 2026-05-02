@@ -139,6 +139,22 @@ def test_dataset_dtype_sizes_match_c_structs() -> None:
     assert int(sizes["sample"]) == SAMPLE_DTYPE.itemsize
 
 
+def test_removed_nonfd_bridge_seed_lanes_stay_absent() -> None:
+    removed_lanes = (
+        "deadupfall_pos_delta_x_f32",
+        "deadupfall_pos_delta_y_f32",
+        "deadupfall_pos_delta_valid_u8",
+        "stage_platform_floor_y_f32",
+        "stage_platform_floor_y_valid_u8",
+        "stage_item_next_vel_valid",
+        "stage_item_next_vel_x",
+        "stage_item_next_vel_y",
+        "stage_item_heiho_delay_x24",
+    )
+    for lane in removed_lanes:
+        assert lane not in SEED_DTYPE.fields
+
+
 def test_item_common_data_exports_shield_bounce_threshold_source() -> None:
     # Item_80269DC8 uses 90 + it_804D6D28->unk_degrees; keep the runtime predicate data-backed by
     # the extracted ItCo.dat item common file instead of a naked gameplay constant.
