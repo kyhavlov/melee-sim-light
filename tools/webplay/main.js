@@ -1,5 +1,6 @@
 import { GameCubeAdapterInput } from "./gamecube_adapter.js";
 import { installKeyboard, readKeyboardController } from "./keyboard.js";
+import { STAGE_FINAL_DESTINATION, SUPPORTED_STAGES } from "./schema.js";
 import { MslWasmSim } from "./sim.js";
 import { saveWebplayTrace, traceInputFromControllers } from "./trace_export.js";
 import { viewerFrameFromCompare, viewerSettingsFromCompare } from "./viewer_adapter.js";
@@ -13,6 +14,7 @@ const connectAdapterButton = document.querySelector("#connect-adapter");
 const adapterPortSelect = document.querySelector("#adapter-port");
 const controlP1Button = document.querySelector("#control-p1");
 const controlP2Button = document.querySelector("#control-p2");
+const stageSelectorEl = document.querySelector("#stage-selector");
 const MAX_RENDER_FRAMES = 60 * 60 * 8 + 123;
 const STEP_MS = 1000 / 60;
 const MAX_STEPS_PER_PAINT = 5;
@@ -31,6 +33,7 @@ let frameCount = 0;
 let seed = 1;
 let inputTrace = [];
 let controlledPlayer = 0;
+let selectedStageId = STAGE_FINAL_DESTINATION;
 const adapterInput = new GameCubeAdapterInput({
   onStatus(message) {
     inputStatusEl.textContent = message;
@@ -75,10 +78,16 @@ function inputSourceLabel() {
 }
 
 function playerStatusSuffix() {
+  const stage = selectedStage();
+  const stagePrefix = stage ? `${stage.name}. ` : "";
   if (controlledPlayer === 0) {
-    return `${inputSourceLabel()}, P2 neutral.`;
+    return `${stagePrefix}${inputSourceLabel()}, P2 neutral.`;
   }
-  return `P1 neutral, ${inputSourceLabel()}.`;
+  return `${stagePrefix}P1 neutral, ${inputSourceLabel()}.`;
+}
+
+function selectedStage() {
+  return SUPPORTED_STAGES.find((stage) => stage.id === selectedStageId) || SUPPORTED_STAGES[0];
 }
 
 function setControlledPlayer(playerIndex) {
@@ -87,6 +96,34 @@ function setControlledPlayer(playerIndex) {
   controlP2Button.setAttribute("aria-pressed", controlledPlayer === 1 ? "true" : "false");
   if (sim) {
     setStatus(`Running. Frame ${frameCount}. ${playerStatusSuffix()}`);
+  }
+}
+
+function updateStageButtons() {
+  for (const button of stageSelectorEl.querySelectorAll("button[data-stage-id]")) {
+    const isSelected = Number(button.dataset.stageId) === selectedStageId;
+    button.setAttribute("aria-pressed", isSelected ? "true" : "false");
+  }
+}
+
+function setSelectedStage(stageId) {
+  selectedStageId = stageId >>> 0;
+  updateStageButtons();
+  reset();
+}
+
+function installStageSelector() {
+  stageSelectorEl.textContent = "";
+  for (const stage of SUPPORTED_STAGES) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.stageId = String(stage.id);
+    button.textContent = stage.label;
+    button.title = stage.name;
+    button.setAttribute("aria-label", stage.name);
+    button.setAttribute("aria-pressed", stage.id === selectedStageId ? "true" : "false");
+    button.addEventListener("click", () => setSelectedStage(stage.id));
+    stageSelectorEl.appendChild(button);
   }
 }
 
@@ -160,7 +197,7 @@ function appendCurrentFrame(controllers, { render = true } = {}) {
 function reset() {
   if (!sim) return;
   seed = (seed + 1) >>> 0;
-  const compare = sim.reset({ seed });
+  const compare = sim.reset({ seed, stageId: selectedStageId });
   const firstControllers = neutralControllers();
   const firstFrame = currentViewerFrame(0, firstControllers);
   inputTrace = [traceInputFromControllers(0, firstControllers)];
@@ -312,6 +349,7 @@ async function main() {
   }
   sim = await MslWasmSim.create();
   installKeyboard(reset);
+  installStageSelector();
   resetButton.addEventListener("click", reset);
   saveTraceButton.addEventListener("click", () => {
     try {

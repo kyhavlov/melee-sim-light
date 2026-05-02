@@ -140,6 +140,25 @@
         border-color: #20211f;
       }
 
+      .stage-selector {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+
+      .stage-selector button {
+        min-width: 0;
+        padding: 6px 4px;
+        white-space: nowrap;
+      }
+
+      .stage-selector button[aria-pressed="true"] {
+        background: #20211f;
+        color: #fff;
+        border-color: #20211f;
+      }
+
       .input-status {
         min-height: 40px;
         margin: 0 0 12px;
@@ -198,6 +217,7 @@
           <button id="control-p1" type="button" aria-pressed="true">P1</button>
           <button id="control-p2" type="button" aria-pressed="false">P2</button>
         </div>
+        <div id="stage-selector" class="stage-selector" aria-label="Stage selector"></div>
         <p id="input-status" class="input-status">GameCube adapter: not connected.</p>
         <dl>
           <dt>Stick</dt>

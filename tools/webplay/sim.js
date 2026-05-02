@@ -65,14 +65,20 @@ export class MslWasmSim {
     }
   }
 
-  reset({ p1Char = CHAR_FOX, p2Char = CHAR_FALCO, seed = 1, stocks = 4 } = {}) {
+  reset({
+    p1Char = CHAR_FOX,
+    p2Char = CHAR_FALCO,
+    seed = 1,
+    stocks = 4,
+    stageId = STAGE_FINAL_DESTINATION,
+  } = {}) {
     this.displayFrame = 0;
     this.module.HEAPU8.fill(0, this.matchPtr, this.matchPtr + MATCH_CONFIG_SIZE);
     this.module.HEAPU8.fill(0, this.prevInputPtr, this.prevInputPtr + INPUT_SIZE);
     this.module.HEAPU8.fill(0, this.inputPtr, this.inputPtr + INPUT_SIZE);
 
     const view = new DataView(this.module.HEAPU8.buffer, this.matchPtr, MATCH_CONFIG_SIZE);
-    view.setUint32(matchConfigOffsets.stageId, STAGE_FINAL_DESTINATION, true);
+    view.setUint32(matchConfigOffsets.stageId, stageId >>> 0, true);
     view.setInt32(matchConfigOffsets.frameId, 0, true);
     view.setUint32(matchConfigOffsets.randomSeed, seed >>> 0, true);
     view.setFloat32(matchConfigOffsets.damageRatio, 1.0, true);

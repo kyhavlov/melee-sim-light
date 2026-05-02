@@ -6,9 +6,10 @@ GameCube adapter input.
 The first stage is intentionally narrow:
 
 - compile the existing C sim API to WASM
-- run Fox vs Falco on Final Destination from C-owned match init
-- control P1 with keyboard mappings or a GameCube adapter
-- keep P2 neutral
+- run Fox vs Falco on the supported runtime stages from C-owned match init
+- switch stages from the browser controls, restarting the match on selection
+- control P1 or P2 with keyboard mappings or a GameCube adapter
+- keep the non-controlled player neutral
 - display live sim frames through the existing modelplay viewer bundle
 
 The sim and viewer run in the page. `make webplay` starts the one local process needed for static
@@ -50,7 +51,8 @@ Open:
 
 ## GameCube Adapter
 
-Start webplay, then click `Connect GC Adapter` and select the adapter port to use for P1:
+Start webplay, then click `Connect GC Adapter` and select the adapter port to use for the
+currently controlled player:
 
 ```bash
 make webplay
