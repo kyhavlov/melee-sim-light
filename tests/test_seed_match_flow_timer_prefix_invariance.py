@@ -19,6 +19,8 @@ def test_match_flow_timer_derivation_is_prefix_invariant() -> None:
     act_wait = 0x000E
     act_dead_down = 0x0000
     act_dead_up_star = 0x0004
+    act_dead_up_fall = 0x0006
+    act_dead_up_fall_hitcamera = 0x0007
     act_rebirth = 0x000C
     act_rebirth_wait = 0x000D
     act_entry = 0x0142
@@ -42,6 +44,8 @@ def test_match_flow_timer_derivation_is_prefix_invariant() -> None:
             # Death states.
             *([act_dead_down] * 6),
             *([act_dead_up_star] * 5),
+            *([act_dead_up_fall] * 4),
+            *([act_dead_up_fall_hitcamera] * 5),
             # Respawn states.
             *([act_rebirth] * 8),
             # RebirthWait often exits early (input-based), so we intentionally stop the run early.
@@ -56,4 +60,3 @@ def test_match_flow_timer_derivation_is_prefix_invariant() -> None:
     for k in (1, 2, 3, 5, 6, 9, 13, 17, 23, 31, 47, int(action_id.size)):
         got = _derive_match_flow_timer(action_id_u16=action_id[:k], port0=port0, common=common)
         assert np.array_equal(got, full[:k])
-

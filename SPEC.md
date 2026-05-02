@@ -1558,13 +1558,15 @@ Match-flow closure notes:
   cur_pos.y` divided by `p_ftCommonData->x508`. The sim models that boundary from the total
   DeadUpStar countdown and extracted FD camera top; it does not recompute the velocity after phase 1
   has started. Source: `refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s::ftCo_DeadUpStar_Anim`.
-- DeadUpFallHitCamera uses `p_ftCommonData->x52C/x550/x554/x558` for the transition from camera-hit
-  hold into the falling phase. The visible `speed_y_self` lane is source-owned by
-  `ftCo_DeadUpFall_Anim` + `ftCo_DeadUpFall_Phys`, but visible `cur_pos` during DeadUpFall* also
-  depends on hidden `mv.co.unk_deadup.x50/x5C`, `xD4_unk_vel`, and `ftAnim_80070FD0` release
-  state. Until that owner is modeled causally, replay seeds must not teacher-force future
-  `cur_pos` deltas; the current runtime intentionally leaves that hidden owner open rather than
-  applying only half of the DeadUpFall pipeline.
+- DeadUpFall/HitCamera phase timing is source-owned by `p_ftCommonData->x520`. The sim derives the
+  existing `match_flow_timer` lane causally from action-prefix history for DeadUpFall actions
+  `6/7/8/9/10`, uses `x524/x528` for the DeadUpFall -> HitCamera countdown, and uses
+  `x52C/x530/x534` plus `x550/x554/x558` for the HitCamera hold -> phase-3 self-velocity/fall
+  update. The visible `speed_y_self` lane is now source-owned by `ftCo_DeadUpFall_Anim` +
+  `ftCo_DeadUpFall_Phys`, but visible `cur_pos` during DeadUpFall* still also depends on hidden
+  `mv.co.unk_deadup.x50/x5C`, `xD4_unk_vel`, and `ftAnim_80070FD0` release state. Until that owner is
+  modeled causally, replay seeds must not teacher-force future `cur_pos` deltas; the runtime leaves
+  that hidden offset owner open rather than reintroducing a future-position bridge.
   Sources: `refs/melee/src/melee/ft/ft_0D31.c::{ftCo_DeadUpFall_Anim,ftCo_DeadUpFall_Phys}`,
   `refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate`,
   `refs/melee/src/melee/ft/ftanim.c::ftAnim_80070FD0`.

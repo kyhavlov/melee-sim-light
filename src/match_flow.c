@@ -20,6 +20,11 @@ static inline uint8_t match_flow_is_dead_action(uint16_t a) {
     case MSL_ACT_DEAD_LEFT:
     case MSL_ACT_DEAD_RIGHT:
     case MSL_ACT_DEAD_UP_STAR:
+    case MSL_ACT_DEAD_UP_FALL:
+    case MSL_ACT_DEAD_UP_FALL_HIT_CAMERA:
+    case MSL_ACT_DEAD_UP_FALL_HIT_CAMERA_FLAT:
+    case MSL_ACT_DEAD_UP_FALL_ICE:
+    case MSL_ACT_DEAD_UP_FALL_HIT_CAMERA_ICE:
       return 1;
     default:
       return 0;
@@ -39,6 +44,16 @@ static inline uint8_t match_flow_is_entry_action(uint16_t a) {
 
 static inline uint8_t match_flow_is_respawn_action(uint16_t a) {
   return (uint8_t)(a == MSL_ACT_REBIRTH || a == MSL_ACT_REBIRTH_WAIT);
+}
+
+static inline uint8_t match_flow_is_dead_up_fall_entry_action(uint16_t a) {
+  return (uint8_t)(a == MSL_ACT_DEAD_UP_FALL || a == MSL_ACT_DEAD_UP_FALL_ICE);
+}
+
+static inline uint8_t match_flow_is_dead_up_fall_hitcamera_action(uint16_t a) {
+  return (uint8_t)(a == MSL_ACT_DEAD_UP_FALL_HIT_CAMERA ||
+                   a == MSL_ACT_DEAD_UP_FALL_HIT_CAMERA_FLAT ||
+                   a == MSL_ACT_DEAD_UP_FALL_HIT_CAMERA_ICE);
 }
 
 static inline void match_flow_identity_reset_Fighter_UnkInitReset_80067C98_subset(MslBatch* batch,
@@ -395,6 +410,84 @@ static inline int dead_up_star_total_timer(const MslCommonParams* c) {
   return total > 255 ? 255 : total;
 }
 
+static inline int match_flow_clamp_timer_int(int total) {
+  if (total < 0) {
+    return 0;
+  }
+  return total > 255 ? 255 : total;
+}
+
+static inline int dead_up_fall_entry_total_timer(const MslCommonParams* c) {
+  if (c == NULL) {
+    return 0;
+  }
+  return match_flow_clamp_timer_int((int)c->dead_up_fall_entry_hold_frames +
+                                    (int)c->dead_up_fall_lerp_frames);
+}
+
+static inline int dead_up_fall_hitcamera_total_timer(const MslCommonParams* c) {
+  if (c == NULL) {
+    return 0;
+  }
+  return match_flow_clamp_timer_int((int)c->dead_up_fall_hitcamera_hold_frames +
+                                    (int)c->dead_up_fall_phase3_frames +
+                                    (int)c->dead_up_fall_phase4_frames);
+}
+
+static inline uint16_t dead_up_fall_hitcamera_action(uint16_t from_action) {
+  if (from_action == (uint16_t)MSL_ACT_DEAD_UP_FALL_ICE) {
+    return (uint16_t)MSL_ACT_DEAD_UP_FALL_HIT_CAMERA_ICE;
+  }
+  return (uint16_t)MSL_ACT_DEAD_UP_FALL_HIT_CAMERA;
+}
+
+static inline uint32_t dead_up_fall_hitcamera_submotion(uint16_t action_id) {
+  if (action_id == (uint16_t)MSL_ACT_DEAD_UP_FALL_HIT_CAMERA) {
+    return (uint32_t)MSL_SM_DEAD_UP_FALL_HIT_CAMERA;
+  }
+  if (action_id == (uint16_t)MSL_ACT_DEAD_UP_FALL_HIT_CAMERA_FLAT) {
+    return (uint32_t)MSL_SM_DEAD_UP_FALL_HIT_CAMERA_FLAT;
+  }
+  return MSL_ANIM_NONE_U32;
+}
+
+static inline void enter_dead_up_fall_hitcamera(MslBatch* batch, size_t idx,
+                                                const MslCommonParams* c, uint16_t from_action) {
+  if (batch == NULL || c == NULL) {
+    return;
+  }
+  // Source transition: ftCo_DeadUpFall_Anim case 1 calls ftCo_800D481C and selects
+  // DeadUpFallHitCamera / DeadUpFallHitCameraIce from the current DeadUpFall variant.
+  // The Flat variant depends on hidden scale.z; target Fox/Falco non-metal rows use the normal branch.
+  // refs/melee/src/melee/ft/ft_0D31.c::{ftCo_DeadUpFall_Anim,ftCo_800D481C}
+  const uint16_t next_action = dead_up_fall_hitcamera_action(from_action);
+  batch->state.action_id[idx] = next_action;
+  batch->state.animation_index[idx] = dead_up_fall_hitcamera_submotion(next_action);
+  batch->state.match_flow_timer[idx] = (uint8_t)dead_up_fall_hitcamera_total_timer(c);
+  batch->state.speed_air_x_self[idx] = 0.0f;
+  batch->state.speed_ground_x_self[idx] = 0.0f;
+  batch->state.speed_x_attack[idx] = 0.0f;
+  batch->state.speed_y_attack[idx] = 0.0f;
+  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  msl_anim_timebase_seed(batch, idx, -1.0f, 1.0f);
+}
+
+static inline void dead_up_fall_apply_phase3_fall(MslBatch* batch, size_t idx,
+                                                  const MslCommonParams* c) {
+  if (batch == NULL || c == NULL) {
+    return;
+  }
+  // ftCo_DeadUpFall_Phys case 3 applies ftCommon_Fall with p_ftCommonData x554/x558 after
+  // ftCo_DeadUpFall_Anim has optionally written self_vel from x550/x55C.
+  // refs/melee/src/melee/ft/ft_0D31.c::ftCo_DeadUpFall_Phys
+  float vy = batch->state.speed_y_self[idx] - c->dead_up_fall_phase3_gravity;
+  const float terminal = c->dead_up_fall_phase3_terminal_vel;
+  if (terminal > 0.0f && vy < -terminal) {
+    vy = -terminal;
+  }
+  batch->state.speed_y_self[idx] = vy;
+}
+
 static inline void dead_up_star_try_enter_phase1(MslBatch* batch, size_t idx,
                                                  const MslCommonParams* c, uint8_t prev_t,
                                                  uint32_t stage_id) {
@@ -533,7 +626,9 @@ void match_flow_update_pre_anim(MslBatch* batch) {
           enter_entry_start(batch, idx, c);
         }
       } else if (a == (uint16_t)MSL_ACT_DEAD_DOWN || a == (uint16_t)MSL_ACT_DEAD_LEFT ||
-                 a == (uint16_t)MSL_ACT_DEAD_RIGHT || a == (uint16_t)MSL_ACT_DEAD_UP_STAR) {
+                 a == (uint16_t)MSL_ACT_DEAD_RIGHT || a == (uint16_t)MSL_ACT_DEAD_UP_STAR ||
+                 match_flow_is_dead_up_fall_entry_action(a) ||
+                 match_flow_is_dead_up_fall_hitcamera_action(a)) {
         if (a == (uint16_t)MSL_ACT_DEAD_UP_STAR) {
           // DeadUpStar stock loss is delayed until late in the animation.
           // Assembly shows the stock-loss event happens when the internal phase-1 timer expires,
@@ -545,10 +640,43 @@ void match_flow_update_pre_anim(MslBatch* batch) {
               batch->state.stocks[idx] = (uint8_t)(batch->state.stocks[idx] - 1);
             }
           }
+        } else if (match_flow_is_dead_up_fall_hitcamera_action(a)) {
+          const int phase4 = (int)c->dead_up_fall_phase4_frames;
+          const int phase3_phase4 =
+              (int)c->dead_up_fall_phase3_frames + (int)c->dead_up_fall_phase4_frames;
+          if (phase3_phase4 > 0 && (int)t == phase3_phase4) {
+            // ftCo_DeadUpFall_Anim case 2 writes self_vel before same-frame Phys.
+            // refs/melee/src/melee/ft/ft_0D31.c::ftCo_DeadUpFall_Anim
+            batch->state.speed_y_self[idx] = c->dead_up_fall_initial_self_vel_y;
+          }
+          if ((int)t > phase4 && (int)t <= phase3_phase4) {
+            dead_up_fall_apply_phase3_fall(batch, idx, c);
+          }
+          if (phase4 > 0 && (int)prev_t == phase4 + 1) {
+            // ftCo_DeadUpFall_Anim case 3 performs the stock-loss side effect at phase-3 expiry.
+            // refs/melee/src/melee/ft/ft_0D31.c::{ftCo_DeadUpFall_Anim,ftCo_800D34E0}
+            if (batch->state.stocks[idx] > 0) {
+              batch->state.stocks[idx] = (uint8_t)(batch->state.stocks[idx] - 1);
+            }
+          }
         }
         // Death -> Rebirth.
         if (a == (uint16_t)MSL_ACT_DEAD_UP_STAR) {
           dead_up_star_try_enter_phase1(batch, idx, c, prev_t, stage_id);
+        } else if (match_flow_is_dead_up_fall_entry_action(a)) {
+          batch->state.speed_air_x_self[idx] = 0.0f;
+          batch->state.speed_ground_x_self[idx] = 0.0f;
+          batch->state.speed_y_self[idx] = 0.0f;
+          batch->state.speed_x_attack[idx] = 0.0f;
+          batch->state.speed_y_attack[idx] = 0.0f;
+          if (t == 0) {
+            enter_dead_up_fall_hitcamera(batch, idx, c, a);
+          }
+        } else if (match_flow_is_dead_up_fall_hitcamera_action(a)) {
+          batch->state.speed_air_x_self[idx] = 0.0f;
+          batch->state.speed_ground_x_self[idx] = 0.0f;
+          batch->state.speed_x_attack[idx] = 0.0f;
+          batch->state.speed_y_attack[idx] = 0.0f;
         } else {
           batch->state.speed_air_x_self[idx] = 0.0f;
           batch->state.speed_ground_x_self[idx] = 0.0f;
@@ -556,7 +684,7 @@ void match_flow_update_pre_anim(MslBatch* batch) {
           batch->state.speed_x_attack[idx] = 0.0f;
           batch->state.speed_y_attack[idx] = 0.0f;
         }
-        if (t == 0) {
+        if (t == 0 && !match_flow_is_dead_up_fall_entry_action(a)) {
           enter_rebirth(batch, idx, c, stage_id, match_flow_respawn_port0(batch, idx, p));
         }
       } else if (a == (uint16_t)MSL_ACT_REBIRTH) {

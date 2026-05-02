@@ -1214,6 +1214,11 @@ static inline uint8_t physics_is_match_flow_airborne(uint16_t action_id) {
     case MSL_ACT_DEAD_LEFT:
     case MSL_ACT_DEAD_RIGHT:
     case MSL_ACT_DEAD_UP_STAR:
+    case MSL_ACT_DEAD_UP_FALL:
+    case MSL_ACT_DEAD_UP_FALL_HIT_CAMERA:
+    case MSL_ACT_DEAD_UP_FALL_HIT_CAMERA_FLAT:
+    case MSL_ACT_DEAD_UP_FALL_ICE:
+    case MSL_ACT_DEAD_UP_FALL_HIT_CAMERA_ICE:
     case MSL_ACT_REBIRTH:
     case MSL_ACT_REBIRTH_WAIT:
     case MSL_ACT_ENTRY:

@@ -287,6 +287,11 @@ _MATCH_FLOW_ACTION_IDS = {
     1,  # ftCo_MS_DeadLeft
     2,  # ftCo_MS_DeadRight
     4,  # ftCo_MS_DeadUpStar
+    6,  # ftCo_MS_DeadUpFall
+    7,  # ftCo_MS_DeadUpFallHitCamera
+    8,  # ftCo_MS_DeadUpFallHitCameraFlat
+    9,  # ftCo_MS_DeadUpFallIce
+    10,  # ftCo_MS_DeadUpFallHitCameraIce
     # Rebirth*
     12,  # ftCo_MS_Rebirth
     13,  # ftCo_MS_RebirthWait
@@ -350,6 +355,11 @@ def _derive_match_flow_timer(*, action_id_u16: np.ndarray, port0: int, common: d
         int(common["dead_up_star_initial_frames"]),
         int(common["dead_up_star_phase1_frames"]),
         int(common["dead_up_star_phase2_frames"]),
+        int(common["dead_up_fall_entry_hold_frames"]),
+        int(common["dead_up_fall_lerp_frames"]),
+        int(common["dead_up_fall_hitcamera_hold_frames"]),
+        int(common["dead_up_fall_phase3_frames"]),
+        int(common["dead_up_fall_phase4_frames"]),
         int(common["rebirth_timer_frames"]),
         int(common["rebirth_wait_timer_frames"]),
         int(common["entry_start_frames"]),

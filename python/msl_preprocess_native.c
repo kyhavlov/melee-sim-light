@@ -3398,12 +3398,19 @@ PyObject* msl_derive_match_flow_timer_py(PyObject* self, PyObject* args) {
   int dead_up_star_initial = 0;
   int dead_up_star_phase1 = 0;
   int dead_up_star_phase2 = 0;
+  int dead_up_fall_entry = 0;
+  int dead_up_fall_lerp = 0;
+  int dead_up_fall_hitcamera = 0;
+  int dead_up_fall_phase3 = 0;
+  int dead_up_fall_phase4 = 0;
   int rebirth_timer = 0;
   int rebirth_wait_timer = 0;
   int entry_start_frames = 0;
   int entry_end_frames = 0;
-  if (!PyArg_ParseTuple(args, "Oiiiiiiiii", &action_obj, &port0, &dead_timer, &dead_up_star_initial,
-                        &dead_up_star_phase1, &dead_up_star_phase2, &rebirth_timer,
+  if (!PyArg_ParseTuple(args, "Oiiiiiiiiiiiiii", &action_obj, &port0, &dead_timer,
+                        &dead_up_star_initial, &dead_up_star_phase1, &dead_up_star_phase2,
+                        &dead_up_fall_entry, &dead_up_fall_lerp, &dead_up_fall_hitcamera,
+                        &dead_up_fall_phase3, &dead_up_fall_phase4, &rebirth_timer,
                         &rebirth_wait_timer, &entry_start_frames, &entry_end_frames)) {
     return NULL;
   }
@@ -3418,6 +3425,12 @@ PyObject* msl_derive_match_flow_timer_py(PyObject* self, PyObject* args) {
   const int dead_up_star_total = (dead_up_star_initial > 0 ? dead_up_star_initial : 0) +
                                  (dead_up_star_phase1 > 0 ? dead_up_star_phase1 : 0) +
                                  (dead_up_star_phase2 > 0 ? dead_up_star_phase2 : 0);
+  const int dead_up_fall_total = (dead_up_fall_entry > 0 ? dead_up_fall_entry : 0) +
+                                 (dead_up_fall_lerp > 0 ? dead_up_fall_lerp : 0);
+  const int dead_up_fall_hitcamera_total =
+      (dead_up_fall_hitcamera > 0 ? dead_up_fall_hitcamera : 0) +
+      (dead_up_fall_phase3 > 0 ? dead_up_fall_phase3 : 0) +
+      (dead_up_fall_phase4 > 0 ? dead_up_fall_phase4 : 0);
   const int entry_total = 5 * (port0 + 1);
   uint16_t prev = 0xFFFFu;
   int run_len = 0;
@@ -3434,6 +3447,10 @@ PyObject* msl_derive_match_flow_timer_py(PyObject* self, PyObject* args) {
       total = dead_timer;
     } else if (ai == 4u) {
       total = dead_up_star_total;
+    } else if (ai == 6u || ai == 9u) {
+      total = dead_up_fall_total;
+    } else if (ai == 7u || ai == 8u || ai == 10u) {
+      total = dead_up_fall_hitcamera_total;
     } else if (ai == 12u) {
       total = rebirth_timer;
     } else if (ai == 13u) {

@@ -192,11 +192,22 @@ typedef struct MslCommonParams {
   uint16_t dead_up_star_phase2_frames;          // p_ftCommonData->x50C
   float dead_up_star_phase1_z_vel_total;        // p_ftCommonData->x510
   float dead_up_star_phase1_cam_top_mul;        // p_ftCommonData->x514
+  uint16_t dead_up_fall_entry_hold_frames;      // p_ftCommonData->x524
+  uint16_t dead_up_fall_lerp_frames;            // p_ftCommonData->x528
   uint16_t dead_up_fall_hitcamera_hold_frames;  // p_ftCommonData->x52C
+  uint16_t dead_up_fall_phase3_frames;          // p_ftCommonData->x530
+  uint16_t dead_up_fall_phase4_frames;          // p_ftCommonData->x534
+  float dead_up_fall_lerp_start_x;              // p_ftCommonData->x538
+  float dead_up_fall_lerp_start_y;              // p_ftCommonData->x53C
+  float dead_up_fall_lerp_start_z;              // p_ftCommonData->x540
+  float dead_up_fall_lerp_end_x;                // p_ftCommonData->x544
+  float dead_up_fall_lerp_end_y;                // p_ftCommonData->x548
+  float dead_up_fall_lerp_end_z;                // p_ftCommonData->x54C
   float dead_up_fall_initial_self_vel_y;        // p_ftCommonData->x550
   float dead_up_fall_phase3_gravity;            // p_ftCommonData->x554
   float dead_up_fall_phase3_terminal_vel;       // p_ftCommonData->x558
   float dead_up_fall_initial_self_vel_z;        // p_ftCommonData->x55C
+  float dead_up_fall_ice_rot_speed;             // p_ftCommonData->x560
   uint16_t rebirth_timer_frames;                // p_ftCommonData->0x5D0
   uint16_t rebirth_wait_timer_frames;           // p_ftCommonData->0x5D4
   uint16_t

@@ -309,8 +309,19 @@ int common_params_init(void) {
                    &g_params.dead_up_star_phase1_z_vel_total) != 0 ||
       json_get_f32(buf, "dead_up_star_phase1_cam_top_mul",
                    &g_params.dead_up_star_phase1_cam_top_mul) != 0 ||
+      json_get_u16(buf, "dead_up_fall_entry_hold_frames",
+                   &g_params.dead_up_fall_entry_hold_frames) != 0 ||
+      json_get_u16(buf, "dead_up_fall_lerp_frames", &g_params.dead_up_fall_lerp_frames) != 0 ||
       json_get_u16(buf, "dead_up_fall_hitcamera_hold_frames",
                    &g_params.dead_up_fall_hitcamera_hold_frames) != 0 ||
+      json_get_u16(buf, "dead_up_fall_phase3_frames", &g_params.dead_up_fall_phase3_frames) != 0 ||
+      json_get_u16(buf, "dead_up_fall_phase4_frames", &g_params.dead_up_fall_phase4_frames) != 0 ||
+      json_get_f32(buf, "dead_up_fall_lerp_start_x", &g_params.dead_up_fall_lerp_start_x) != 0 ||
+      json_get_f32(buf, "dead_up_fall_lerp_start_y", &g_params.dead_up_fall_lerp_start_y) != 0 ||
+      json_get_f32(buf, "dead_up_fall_lerp_start_z", &g_params.dead_up_fall_lerp_start_z) != 0 ||
+      json_get_f32(buf, "dead_up_fall_lerp_end_x", &g_params.dead_up_fall_lerp_end_x) != 0 ||
+      json_get_f32(buf, "dead_up_fall_lerp_end_y", &g_params.dead_up_fall_lerp_end_y) != 0 ||
+      json_get_f32(buf, "dead_up_fall_lerp_end_z", &g_params.dead_up_fall_lerp_end_z) != 0 ||
       json_get_f32(buf, "dead_up_fall_initial_self_vel_y",
                    &g_params.dead_up_fall_initial_self_vel_y) != 0 ||
       json_get_f32(buf, "dead_up_fall_phase3_gravity", &g_params.dead_up_fall_phase3_gravity) !=
@@ -319,6 +330,7 @@ int common_params_init(void) {
                    &g_params.dead_up_fall_phase3_terminal_vel) != 0 ||
       json_get_f32(buf, "dead_up_fall_initial_self_vel_z",
                    &g_params.dead_up_fall_initial_self_vel_z) != 0 ||
+      json_get_f32(buf, "dead_up_fall_ice_rot_speed", &g_params.dead_up_fall_ice_rot_speed) != 0 ||
       json_get_u16(buf, "rebirth_timer_frames", &g_params.rebirth_timer_frames) != 0 ||
       json_get_u16(buf, "rebirth_wait_timer_frames", &g_params.rebirth_wait_timer_frames) != 0 ||
       json_get_u16(buf, "colanim_rebirth_fall_x1994_frames",

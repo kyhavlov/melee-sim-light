@@ -27,11 +27,11 @@ Current staged state:
 Useful next stage work before deeper dynamic stage mechanics:
 - Decide when to admit four-player local Pokemon Stadium repros into validation; current aggregate
   remains a two-player suite because shared one-step eval requires one `num_players` shape.
-- Pokemon Stadium's current top disruptive packet
-  (`reports/triage/next_desync_ps/top_packet.md`) is `DeadUpFallHitCamera` position drift, not a
-  missing stage role lookup. Decomp `ftCo_DeadUpFall_Phys` advances that action from hidden
-  `mv.co.unk_deadup` vectors/timers, so closing it belongs to match-flow DeadUpFall physics/seed
-  ownership rather than MSLSTG01 spawn/respawn/camera/blast hookup.
+- Pokemon Stadium DeadUpFallHitCamera packets are match-flow/hidden-offset work, not missing stage
+  role lookup. The source timers and visible `speed_y_self` phase-3 update are now runtime-owned from
+  `p_ftCommonData->x520`, but full `cur_pos` parity still requires causal `mv.co.unk_deadup.x50/x5C`,
+  `xD4_unk_vel`, and `ftAnim_80070FD0` release ownership rather than MSLSTG01 spawn/respawn/camera
+  hookup.
 - Model moving-platform transform / stage-object ownership. Pokemon Stadium validation is currently
   restricted to frozen-stadium replays; transformation ownership remains out of scope for the
   foreseeable runtime target.
