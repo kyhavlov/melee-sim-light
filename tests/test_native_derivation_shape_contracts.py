@@ -38,6 +38,57 @@ def test_native_combo_push_rejects_extra_column_attack_arrays() -> None:
         )
 
 
+def test_native_combo_seed_rejects_extra_column_side_arrays() -> None:
+    import msl_binding
+
+    n = 2
+    w = 4
+    with pytest.raises(ValueError, match="instance_id"):
+        msl_binding.derive_combo_seed_fields(
+            2,
+            [1, 2],
+            np.zeros((n, w), dtype=np.uint16),
+            np.zeros((n, w, 5), dtype=np.uint8),
+            np.zeros((n, w + 1), dtype=np.uint16),
+            np.full((n, w), 0xFF, dtype=np.uint8),
+            None,
+        )
+
+
+def test_native_instance_and_item_counters_require_2d_inputs() -> None:
+    import msl_binding
+
+    with pytest.raises(ValueError, match="fighter_instance_id"):
+        msl_binding.derive_instance_id_counter(
+            np.zeros((2, 4, 1), dtype=np.uint16),
+            np.zeros((2, 8), dtype=np.uint16),
+        )
+    with pytest.raises(ValueError, match="item_exists"):
+        msl_binding.derive_item_spawn_id_counter(
+            np.zeros((2, 8, 1), dtype=np.uint8),
+            np.zeros((2, 8), dtype=np.uint32),
+        )
+
+
+def test_native_staling_history_rejects_non_matching_widths() -> None:
+    import msl_binding
+
+    n = 2
+    with pytest.raises(ValueError, match="width"):
+        msl_binding.derive_staling_history(
+            [1, 2],
+            np.zeros((n, 2), dtype=np.uint8),
+            np.zeros((n, 3), dtype=np.uint16),
+            np.zeros((n, 2), dtype=np.float32),
+            np.zeros((n, 2), dtype=np.uint32),
+            np.zeros((n, 2), dtype=np.float32),
+            np.zeros((n, 2), dtype=np.uint8),
+            np.zeros((n, 2), dtype=np.uint16),
+            np.full((n, 2), 0xFF, dtype=np.uint8),
+            np.zeros((n, 2), dtype=np.uint16),
+        )
+
+
 def test_native_combat_hitlist_rejects_extra_column_side_arrays() -> None:
     from tools.slippi.combat_history import derive_combat_hitlist_seed_fields
 

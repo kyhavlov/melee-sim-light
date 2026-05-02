@@ -38,7 +38,9 @@ make validate-all
 ```
 
 `make validate-all` runs the standard one-step and rollout report generators
-after the incremental build check. It uses worker subprocesses by default; set
+after the incremental build check. Suite eval builds datasets directly from
+`.slp` files by default, so a separate preprocess step is not required for
+normal validation. It uses worker subprocesses by default; set
 `VALIDATE_WORKERS=1` for serial output/debugging.
 The standard aggregate suite is `replays/suites/aggregate_recent.json`; it
 includes the current FD validation set plus Battlefield coverage. Use
@@ -76,6 +78,9 @@ uv run python -m tools.eval.run_rollout_suite_eval \
   --out reports/validation/rollout_suite_eval.txt
 ```
 
+Pass `--cached-datasets` only when intentionally reading existing `.msl` cache
+files from `--datasets-dir`.
+
 ## Seed / Schema Changes
 
 If you touch seed/state/schema surfaces such as:
@@ -85,7 +90,9 @@ If you touch seed/state/schema surfaces such as:
 - `tools/slippi/seed_history.py`
 - `tools/slippi/make_dataset_from_slp.py`
 
-then refresh cached datasets before validation. `preprocess_suite` tracks
+then run validation normally; it rebuilds the seed rows in memory from the
+suite `.slp` files. Use `preprocess_suite` only when you specifically need to
+refresh or inspect persistent `.msl` cache files. `preprocess_suite` tracks
 dataset schema, preprocessing source files, replay stat metadata, and extracted
 `data/` artifacts, so unchanged datasets are skipped while stale datasets are
 rebuilt:
@@ -113,6 +120,20 @@ Native preprocessing derivations use process-wide generated table roots. For non
 data, set `MSL_DATA_DIR` before importing/initializing the native binding; compatibility
 `data_root`/`data_dir` wrapper parameters intentionally reject non-default paths so the old Python
 fallbacks cannot run accidentally.
+
+For profiling the default no-cache path explicitly:
+
+```bash
+uv run python -m tools.eval.run_one_step_suite_eval \
+  --suite replays/suites/fox_falco_fd_ucf084_recent.json \
+  --datasets-dir datasets
+
+uv run python -m tools.eval.run_rollout_suite_eval \
+  --suite replays/suites/fox_falco_fd_ucf084_recent.json \
+  --datasets-dir datasets
+```
+
+To compare against the persistent cache path, add `--cached-datasets`.
 
 ## Rollout Triage
 

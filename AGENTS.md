@@ -137,14 +137,14 @@ When broadening is justified:
 - Core sim logic changes: `make validate-all`
 
 ### Seed / Schema Changes
-If you touch any of:
-- `src/api.h`, `src/api.c`
-- `src/state.h`, `src/state.c`
-- `tools/eval/dataset.py`
-- `tools/slippi/seed_history.py`
-- `tools/slippi/make_dataset_from_slp.py`
+Suite validation builds seed rows directly from `.slp` files by default, so
+`make validate-all` does not require a prior `preprocess_suite` run. If you
+touch persistent dataset cache/schema surfaces, or you need to verify `.msl`
+cache regeneration, also run forced cache refreshes:
 
-then also run:
+- `tools/eval/dataset.py`
+- `tools/slippi/preprocess_suite.py`
+- cache writer/reader paths in `tools/slippi/make_dataset_from_slp.py`
 
 ```bash
 uv run python -m tools.slippi.preprocess_suite \
@@ -156,6 +156,16 @@ uv run python -m tools.slippi.preprocess_suite \
   --datasets-dir datasets \
   --force
 ```
+
+For gameplay seed/runtime changes such as:
+- `src/api.h`, `src/api.c`
+- `src/state.h`, `src/state.c`
+- `tools/slippi/seed_history.py`
+- `tools/slippi/make_dataset_from_slp.py`
+
+run `make validate-all` after focused tests. Use forced cache refresh as an
+additional cache-contract check when those changes affect persistent `.msl`
+encoding or metadata.
 
 If you touch extraction code or generated data contracts, also run `make build_data` and ensure
 stale-version/data-contract tests cover the artifact. Behavior-equivalent extraction/table changes

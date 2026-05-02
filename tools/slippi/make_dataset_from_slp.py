@@ -12,7 +12,7 @@ import numpy as np
 import pyarrow as pa
 from peppi_py import _read_slippi
 
-from tools.eval.dataset import SAMPLE_DTYPE, write_dataset
+from tools.eval.dataset import Dataset, HEADER_DTYPE, MAGIC, SAMPLE_DTYPE, write_dataset
 from tools.slippi.action_state_tables import load_action_state_tables
 from tools.slippi.hitstun import hitstun_u16_from_misc_as_and_state_flags3
 from tools.slippi.item_article_data import item_article_kind_set, item_article_values_by_sim_char
@@ -131,8 +131,6 @@ def _derive_grounded_overlap_hidden_pos_z(
     ):
         raise ValueError("hidden pos_z inputs must have matching shape")
 
-    n_frames = int(char.shape[0])
-    out = np.array(pos_z, dtype=np.float32, copy=True)
     push_x = np.zeros(256, dtype=np.float32)
     push_y = np.zeros(256, dtype=np.float32)
     char_files = {
@@ -150,88 +148,26 @@ def _derive_grounded_overlap_hidden_pos_z(
 
     step = np.float32(float(common.get("player_nudge_z", 0.0)))
     z_max = np.float32(float(common.get("player_nudge_z_max", 0.0)))
-    if not (float(step) > 0.0 and float(z_max) > 0.0):
-        return out
-
-    def action_allows_depth(a: int) -> bool:
-        # Keep this reconstruction on ordinary grounded/current-control states. Damage, downbound,
-        # capture, cliff, guard-setoff turnover, and special-state residuals have separate owner
-        # families and were the source of broad hidden-pos_z regressions during F08b cleanup.
-        if 0x004B <= a <= 0x005B:  # Damage*/DamageFly*
-            return False
-        if a in {0x00F7, 0x00F8}:  # FlyReflectWall/FlyReflectCeil.
-            return False
-        if a in {0x00B5, 0x00B7, 0x00BF, 0x00FC, 0x00FD}:  # GuardSetOff/DownBound/Cliff
-            return False
-        if 0x00DB <= a <= 0x00E2:  # Throw*
-            return False
-        if a >= 0x012C:  # character specials
-            return False
-        return True
-
-    def slot_allows_depth(fi: int, p: int) -> bool:
-        if int(stocks[fi, p]) == 0 or int(on_ground[fi, p]) == 0:
-            return False
-        if not action_allows_depth(int(action[fi, p])):
-            return False
-        cid = int(char[fi, p])
-        return bool(float(push_y[cid]) > 0.0)
-
-    for fi in range(1, n_frames):
-        # Hidden depth is only written on the proven ordinary grounded-overlap surface. Airborne,
-        # damage, DownBound, Cliff, throw, GuardSetOff, and special rows keep the replay-visible
-        # Slippi pos_z instead of receiving stale hidden-depth carry.
-        out[fi, :] = pos_z[fi, :]
-        z_step = np.zeros(4, dtype=np.float32)
-        for p in range(num_players):
-            if not slot_allows_depth(fi - 1, p) or not slot_allows_depth(fi, p):
-                continue
-            cid = int(char[fi - 1, p])
-            p_push = float(push_y[cid])
-            p_face = 1.0 if int(facing[fi - 1, p]) else -1.0
-            p_center = float(pos_x[fi - 1, p]) + float(push_x[cid]) * p_face
-            for q in range(num_players):
-                if q == p:
-                    continue
-                if not slot_allows_depth(fi - 1, q) or not slot_allows_depth(fi, q):
-                    continue
-                qid = int(char[fi - 1, q])
-                q_push = float(push_y[qid])
-                q_face = 1.0 if int(facing[fi - 1, q]) else -1.0
-                q_center = float(pos_x[fi - 1, q]) + float(push_x[qid]) * q_face
-                delta_x = p_center - q_center
-                if abs(delta_x) >= p_push + q_push:
-                    continue
-                delta_z = float(out[fi - 1, p]) - float(out[fi - 1, q])
-                if delta_z < 0.0:
-                    z_step[p] = np.float32(float(z_step[p]) - float(step))
-                elif delta_z > 0.0:
-                    z_step[p] = np.float32(float(z_step[p]) + float(step))
-                elif delta_x < 0.0:
-                    z_step[p] = np.float32(float(z_step[p]) - float(step))
-                elif delta_x > 0.0:
-                    z_step[p] = np.float32(float(z_step[p]) + float(step))
-                elif q < p:
-                    z_step[p] = np.float32(float(z_step[p]) - float(step))
-                else:
-                    z_step[p] = np.float32(float(z_step[p]) + float(step))
-        for p in range(num_players):
-            if not slot_allows_depth(fi - 1, p) or not slot_allows_depth(fi, p):
-                continue
-            z = float(out[fi - 1, p])
-            dz = float(z_step[p])
-            if dz == 0.0 and z != 0.0:
-                dz = float(step) if z < 0.0 else -float(step)
-            if (dz > 0.0 and z < 0.0 and z + dz >= 0.0) or (
-                dz < 0.0 and z > 0.0 and z + dz <= 0.0
-            ):
-                dz = -z
-            if z + dz > float(z_max):
-                dz = float(z_max) - z
-            elif z + dz < -float(z_max):
-                dz = -float(z_max) - z
-            out[fi, p] = np.float32(z + dz)
-    return out
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.derive_grounded_overlap_hidden_pos_z is required; run `make build`"
+        ) from exc
+    return msl_binding.derive_grounded_overlap_hidden_pos_z(
+        int(num_players),
+        char,
+        action,
+        on_ground,
+        stocks,
+        pos_x,
+        pos_z,
+        facing,
+        push_x,
+        push_y,
+        float(step),
+        float(z_max),
+    )
 
 
 def _u8_from_float01(x: np.ndarray) -> np.ndarray:
@@ -373,47 +309,15 @@ def _derive_ledge_cooldown(*, action_id_u16: np.ndarray, hitlag_u16: np.ndarray,
       refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::ftCo_8009A9AC
     """
 
-    n = int(action_id_u16.shape[0])
-    out = np.zeros(n, dtype=np.uint8)
-    if n == 0:
-        return out
-
-    cooldown_frames = int(common.get("ledge_cooldown_frames", 0))
-    cooldown_frames = int(np.clip(cooldown_frames, 0, 255))
-    # Decomp ordering note:
-    # - CliffWait release paths assign fp->x2064_ledgeCooldown = p_ftCommonData->ledge_cooldown.
-    # - Fighter_procUpdate decrements x2064 once per !hitlag frame.
-    # - Replay post-frames are end-of-frame snapshots, so the first visible seeded value on the
-    #   release frame is effectively one tick after assignment.
-    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::ftCo_8009A9AC
-    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_8009AAFC
-    # refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
-    cooldown_seed_frames = max(cooldown_frames - 1, 0)
-
-    # GALE01 action ids:
-    # - CliffWait is 0x00FD (253).
-    # - Fall-like states: 29..38 (Fall..DamageFall).
-    CLIFF_WAIT = 0x00FD
-    FALL_MIN = 0x001D
-    FALL_MAX = 0x0026
-
-    for t in range(1, n):
-        cd = int(out[t - 1])
-        if int(hitlag_u16[t - 1]) == 0 and cd > 0:
-            cd -= 1
-
-        prev_a = int(action_id_u16[t - 1])
-        cur_a = int(action_id_u16[t])
-        # Decomp ownership: x2064_ledgeCooldown is explicitly set on CliffWait release paths
-        # (manual drop / timeout), not on generic "any Cliff* -> Fall*" transitions.
-        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_8009AAFC
-        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::ftCo_8009A9AC
-        if prev_a == CLIFF_WAIT and FALL_MIN <= cur_a <= FALL_MAX:
-            cd = cooldown_seed_frames
-
-        out[t] = np.uint8(cd)
-
-    return out
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError("native msl_binding.derive_ledge_cooldown is required; run `make build`") from exc
+    return msl_binding.derive_ledge_cooldown(
+        np.ascontiguousarray(np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)),
+        np.asarray(hitlag_u16, dtype=np.uint16).reshape(-1),
+        int(common.get("ledge_cooldown_frames", 0)),
+    )
 
 
 def _derive_match_flow_timer(*, action_id_u16: np.ndarray, port0: int, common: dict) -> np.ndarray:
@@ -435,67 +339,22 @@ def _derive_match_flow_timer(*, action_id_u16: np.ndarray, port0: int, common: d
     - Values are clamped to 255 and are 0 for non-match-flow action_ids.
     - Only populated for match-flow action_ids (Dead*/Rebirth*/Entry*); 0 for other motions.
     """
-    a = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
-    n = int(a.shape[0])
-    out = np.zeros(n, dtype=np.uint8)
-
-    dead_timer = int(common["dead_timer_frames"])
-    dead_up_star_initial = int(common["dead_up_star_initial_frames"])
-    dead_up_star_phase1 = int(common["dead_up_star_phase1_frames"])
-    dead_up_star_phase2 = int(common["dead_up_star_phase2_frames"])
-    rebirth_timer = int(common["rebirth_timer_frames"])
-    rebirth_wait_timer = int(common["rebirth_wait_timer_frames"])
-    entry_start_frames = int(common["entry_start_frames"])
-    entry_end_frames = int(common["entry_end_frames"])
-
-    dead_up_star_total = max(0, dead_up_star_initial) + max(0, dead_up_star_phase1) + max(0, dead_up_star_phase2)
-
-    # Match start entry delay is per-port and is driven by a Player "unk4C" counter that is set in
-    # increments of 5 during match init, then consumed by ftCo_800C61B0.
-    # refs/melee/src/melee/gm/gm_16AE.c::fn_8016D8AC (adds 5, calls Player_SetUnk4C)
-    # refs/melee/src/melee/pl/player.c::Player_GetUnk4C (read)
-    # refs/melee/src/melee/ft/ft_0C31.c::ftCo_800C61B0 (Entry uses unk4C)
-    entry_total = 5 * int(port0 + 1)
-
-    prev_ai: int | None = None
-    run_len = 0
-    for i in range(n):
-        ai = int(a[i])
-        if prev_ai is not None and ai == prev_ai:
-            run_len += 1
-        else:
-            prev_ai = ai
-            run_len = 1
-
-        total: int | None = None
-        if ai == 0 or ai == 1 or ai == 2:
-            total = dead_timer
-        elif ai == 4:
-            total = dead_up_star_total
-        elif ai == 12:
-            total = rebirth_timer
-        elif ai == 13:
-            total = rebirth_wait_timer
-        elif ai == 322:
-            total = entry_total
-        elif ai == 323:
-            # EntryStart enter sets timer=x6BC then immediately decrements it in Anim before Phys,
-            # so the first observable frame has (x6BC - 1) remaining.
-            total = max(0, entry_start_frames - 1)
-        elif ai == 324:
-            total = entry_end_frames
-
-        if total is None or ai not in _MATCH_FLOW_ACTION_IDS:
-            continue
-
-        t = total - run_len + 1
-        if t < 0:
-            t = 0
-        if t > 255:
-            t = 255
-        out[i] = np.uint8(t)
-
-    return out
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError("native msl_binding.derive_match_flow_timer is required; run `make build`") from exc
+    return msl_binding.derive_match_flow_timer(
+        np.ascontiguousarray(np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)),
+        int(port0),
+        int(common["dead_timer_frames"]),
+        int(common["dead_up_star_initial_frames"]),
+        int(common["dead_up_star_phase1_frames"]),
+        int(common["dead_up_star_phase2_frames"]),
+        int(common["rebirth_timer_frames"]),
+        int(common["rebirth_wait_timer_frames"]),
+        int(common["entry_start_frames"]),
+        int(common["entry_end_frames"]),
+    )
 
 
 def _derive_passivewall_timer(*, action_id_u16: np.ndarray, action_frame_i16: np.ndarray, common: dict) -> np.ndarray:
@@ -510,35 +369,15 @@ def _derive_passivewall_timer(*, action_id_u16: np.ndarray, action_frame_i16: np
       insufficient to distinguish "still held" from "ready to launch".
     refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::{ftCo_800C1E64,ftCo_PassiveWall_Anim}
     """
-    action_id = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
-    action_frame = np.asarray(action_frame_i16, dtype=np.int16).reshape(-1)
-    n = int(action_id.shape[0])
-    out = np.zeros(n, dtype=np.uint8)
-    total = int(common["passivewall_timer_frames"])
-    if total <= 0:
-        return out
-
-    prev_ai: int | None = None
-    run_len = 0
-    for i in range(n):
-        ai = int(action_id[i])
-        if ai not in (202, 203) or int(action_frame[i]) != 0:
-            prev_ai = ai
-            run_len = 0
-            continue
-        if prev_ai == ai:
-            run_len += 1
-        else:
-            prev_ai = ai
-            run_len = 1
-        timer = total - run_len + 1
-        if timer < 0:
-            timer = 0
-        if timer > 255:
-            timer = 255
-        out[i] = np.uint8(timer)
-
-    return out
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError("native msl_binding.derive_passivewall_timer is required; run `make build`") from exc
+    return msl_binding.derive_passivewall_timer(
+        np.asarray(action_id_u16, dtype=np.uint16).reshape(-1),
+        np.asarray(action_frame_i16, dtype=np.int16).reshape(-1),
+        int(common["passivewall_timer_frames"]),
+    )
 
 
 def _derive_walljump_phase_seed_lanes(
@@ -574,71 +413,17 @@ def _derive_walljump_phase_seed_lanes(
     refs/melee/src/melee/ft/ft_081B.c::{ft_800831CC,ft_800835B0}
     data/stages/final_destination.json
     """
-    action_id = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
-    action_frame = np.asarray(action_frame_i16, dtype=np.int16).reshape(-1)
-    pos_x = np.asarray(pos_x_f32, dtype=np.float32).reshape(-1)
-    pos_y = np.asarray(pos_y_f32, dtype=np.float32).reshape(-1)
-    raw_main_x = np.asarray(raw_main_x_i8, dtype=np.int8).reshape(-1)
-    n = int(action_id.shape[0])
-    if (
-        int(action_frame.shape[0]) != n
-        or int(pos_x.shape[0]) != n
-        or int(pos_y.shape[0]) != n
-        or int(raw_main_x.shape[0]) != n
-    ):
-        raise ValueError("walljump phase derivation lanes must have equal lengths")
-
-    common_air_walljump_actions = {
-        27,  # JumpAerialF
-        28,  # JumpAerialB
-        29,  # Fall
-        30,  # FallF
-        31,  # FallB
-        32,  # FallAerial
-        33,  # FallAerialF
-        34,  # FallAerialB
-    }
-    timer = np.full(n, 254, dtype=np.uint8)
-    side = np.zeros(n, dtype=np.int8)
-    fd_wall_neighborhood_abs_x = 60.0
-    fd_wall_neighborhood_max_y = -5.0
-    stick_away_i8 = 64
-    left_edge_min_action_frame = 19
-    right_edge_min_action_frame = 17
-    mature_hold_min_action_frame = 20
-    hidden_timer_action_frame_bias = 8
-    for i in range(n):
-        if int(action_id[i]) not in common_air_walljump_actions:
-            continue
-        if int(action_frame[i]) < 12:
-            continue
-        x = float(pos_x[i])
-        y = float(pos_y[i])
-        if not np.isfinite(x) or not np.isfinite(y) or y >= fd_wall_neighborhood_max_y:
-            continue
-        cur_x = int(raw_main_x[i + 1]) if (i + 1) < n else int(raw_main_x[i])
-        prev_x = int(raw_main_x[i])
-        af = int(action_frame[i])
-        if x <= -fd_wall_neighborhood_abs_x:
-            # Left wall side (+1): the replay-real common-air rows enter only after either a
-            # mature stick-away hold or the first leftward stick-away edge in the late setup window.
-            # Earlier left-wall holds remain covered by the ordinary CollData wall-hug callback.
-            if not (
-                (af >= mature_hold_min_action_frame and cur_x <= -stick_away_i8)
-                or (af >= left_edge_min_action_frame and prev_x > -stick_away_i8 and cur_x <= -stick_away_i8)
-            ):
-                continue
-            timer[i] = np.uint8(min(max(af - hidden_timer_action_frame_bias, 0), 120))
-            side[i] = np.int8(1)
-        elif x >= fd_wall_neighborhood_abs_x:
-            if not (
-                (af >= mature_hold_min_action_frame and cur_x >= stick_away_i8)
-                or (af >= right_edge_min_action_frame and prev_x < stick_away_i8 and cur_x >= stick_away_i8)
-            ):
-                continue
-            timer[i] = np.uint8(min(max(af - hidden_timer_action_frame_bias, 0), 120))
-            side[i] = np.int8(-1)
-    return timer, side
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError("native msl_binding.derive_walljump_phase_seed_lanes is required; run `make build`") from exc
+    return msl_binding.derive_walljump_phase_seed_lanes(
+        np.asarray(action_id_u16, dtype=np.uint16).reshape(-1),
+        np.asarray(action_frame_i16, dtype=np.int16).reshape(-1),
+        np.asarray(pos_x_f32, dtype=np.float32).reshape(-1),
+        np.asarray(pos_y_f32, dtype=np.float32).reshape(-1),
+        np.asarray(raw_main_x_i8, dtype=np.int8).reshape(-1),
+    )
 
 
 def _derive_mpcoll_wall_seed_lanes(
@@ -674,107 +459,34 @@ def _derive_mpcoll_wall_seed_lanes(
     refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::ftCo_DownDamage_Coll
     data/stages/final_destination.json
     """
-    action_id = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
-    action_frame = np.asarray(action_frame_i16, dtype=np.int16).reshape(-1)
-    hitlag = np.asarray(hitlag_u16, dtype=np.uint16).reshape(-1)
-    hitstun = np.asarray(hitstun_u16, dtype=np.uint16).reshape(-1)
-    pos_x = np.asarray(pos_x_f32, dtype=np.float32).reshape(-1)
-    pos_y = np.asarray(pos_y_f32, dtype=np.float32).reshape(-1)
-    n = int(action_id.shape[0])
-    if (
-        int(action_frame.shape[0]) != n
-        or int(hitlag.shape[0]) != n
-        or int(hitstun.shape[0]) != n
-        or int(pos_x.shape[0]) != n
-        or int(pos_y.shape[0]) != n
-    ):
-        raise ValueError("mpcoll wall seed derivation lanes must have equal lengths")
-
-    kind = np.zeros(n, dtype=np.uint8)
-    wall_id = np.full(n, 0xFFFF, dtype=np.uint16)
-    if int(stage_id_u32) != 32:
-        return kind, wall_id
-
-    # Current decomp-backed seed surface is only the observed DamageFlyTop wall-tech callback
-    # phase. DamageFlyHi/N/Lw and DownDamage wall rows have adjacent negative controls where
-    # visible wall proximity is insufficient, so leave those on runtime mpColl until a hidden
-    # CollData provenance lane is available for them too.
-    damage_wall_actions = {
-        90,  # DamageFlyTop
-    }
-    left_segments = [seg for seg in stage_segments if seg.get("kind") == "left_wall"]
-    right_segments = [seg for seg in stage_segments if seg.get("kind") == "right_wall"]
-    # FD DamageFly/DownDamage wall-tech rows can carry a root several units outside the wall after
-    # mpColl projection and PassiveWall entry alignment. Keep this seed-only window smaller than
-    # fighter width and require the point to be outside a concrete wall segment, not merely near it.
-    max_outside_delta = 6.0
-    y_endpoint_clamp = 0.25
-    vertical_wall_lower_endpoint_window = 1.0
-
-    def _segment_x_at_y(seg: dict, y: float) -> float | None:
-        y0 = float(seg["y0"])
-        y1 = float(seg["y1"])
-        if abs(float(seg["x1"]) - float(seg["x0"])) < 1e-6:
-            # Upper FD side-wall rows do not all own a same-frame wall hug; vanilla waits until the
-            # collision path reaches the lower endpoint neighborhood before this persisted-index
-            # seed is authoritative. Angled lower wall segments remain handled by their own y-range.
-            if y > min(y0, y1) + vertical_wall_lower_endpoint_window:
-                return None
-        lo = min(y0, y1) - y_endpoint_clamp
-        hi = max(y0, y1) + y_endpoint_clamp
-        if y < lo or y > hi:
-            return None
-        if abs(y1 - y0) < 1e-6:
-            return float(seg["x0"])
-        t = (y - y0) / (y1 - y0)
-        if t < 0.0:
-            t = 0.0
-        elif t > 1.0:
-            t = 1.0
-        return float(seg["x0"]) + (float(seg["x1"]) - float(seg["x0"])) * t
-
-    for i in range(n):
-        if int(action_id[i]) not in damage_wall_actions:
-            continue
-        if int(hitlag[i]) != 0 or int(hitstun[i]) == 0:
-            continue
-        if int(action_frame[i]) < 10:
-            continue
-        x = float(pos_x[i])
-        y = float(pos_y[i])
-        if not np.isfinite(x) or not np.isfinite(y):
-            continue
-
-        best_kind = 0
-        best_id = 0xFFFF
-        best_delta = max_outside_delta + 1.0
-        for seg in left_segments:
-            sx = _segment_x_at_y(seg, y)
-            if sx is None:
-                continue
-            delta = sx - x
-            if delta < 0.0 or delta > max_outside_delta:
-                continue
-            if delta < best_delta:
-                best_kind = 1
-                best_id = int(seg["i"])
-                best_delta = delta
-        for seg in right_segments:
-            sx = _segment_x_at_y(seg, y)
-            if sx is None:
-                continue
-            delta = x - sx
-            if delta < 0.0 or delta > max_outside_delta:
-                continue
-            if delta < best_delta:
-                best_kind = 2
-                best_id = int(seg["i"])
-                best_delta = delta
-        if best_kind != 0:
-            kind[i] = np.uint8(best_kind)
-            wall_id[i] = np.uint16(best_id)
-
-    return kind, wall_id
+    line_id = np.array([int(seg["i"]) for seg in stage_segments], dtype=np.uint16)
+    kind_id = np.array(
+        [3 if seg.get("kind") == "left_wall" else 2 if seg.get("kind") == "right_wall" else 0 for seg in stage_segments],
+        dtype=np.uint8,
+    )
+    x0 = np.array([float(seg["x0"]) for seg in stage_segments], dtype=np.float32)
+    y0 = np.array([float(seg["y0"]) for seg in stage_segments], dtype=np.float32)
+    x1 = np.array([float(seg["x1"]) for seg in stage_segments], dtype=np.float32)
+    y1 = np.array([float(seg["y1"]) for seg in stage_segments], dtype=np.float32)
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError("native msl_binding.derive_mpcoll_wall_seed_lanes is required; run `make build`") from exc
+    return msl_binding.derive_mpcoll_wall_seed_lanes(
+        np.asarray(action_id_u16, dtype=np.uint16).reshape(-1),
+        np.asarray(action_frame_i16, dtype=np.int16).reshape(-1),
+        np.asarray(hitlag_u16, dtype=np.uint16).reshape(-1),
+        np.asarray(hitstun_u16, dtype=np.uint16).reshape(-1),
+        np.asarray(pos_x_f32, dtype=np.float32).reshape(-1),
+        np.asarray(pos_y_f32, dtype=np.float32).reshape(-1),
+        int(stage_id_u32),
+        line_id,
+        kind_id,
+        x0,
+        y0,
+        x1,
+        y1,
+    )
 
 
 def _derive_entry_end_fall_lock(
@@ -793,32 +505,16 @@ def _derive_entry_end_fall_lock(
     refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D92C
     refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::{ftCo_Fall_IASA,ftCo_Fall_Phys}
     """
-    action_id = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
-    on_ground = np.asarray(on_ground_u8, dtype=np.uint8).reshape(-1)
-    n = int(action_id.size)
-    out = np.zeros(n, dtype=np.uint8)
-    if int(on_ground.size) != n:
-        raise ValueError("on_ground_u8 must match action_id_u16 length")
-
-    act_entry_end_u16 = int(act_entry_end) & 0xFFFF
-    act_fall_u16 = int(act_fall) & 0xFFFF
-    prev_action: int | None = None
-    lock = 0
-    for i in range(n):
-        cur_action = int(action_id[i])
-        grounded = int(on_ground[i]) != 0
-        if cur_action == act_fall_u16 and not grounded:
-            if prev_action == act_entry_end_u16:
-                lock = 1
-            elif lock != 0:
-                lock = 1
-            else:
-                lock = 0
-        else:
-            lock = 0
-        out[i] = np.uint8(lock)
-        prev_action = cur_action
-    return out
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError("native msl_binding.derive_entry_end_fall_lock is required; run `make build`") from exc
+    return msl_binding.derive_entry_end_fall_lock(
+        np.asarray(action_id_u16, dtype=np.uint16).reshape(-1),
+        np.asarray(on_ground_u8, dtype=np.uint8).reshape(-1),
+        int(act_entry_end),
+        int(act_fall),
+    )
 
 
 def _derive_opening_input_lock_timer(*, frame_id_i32: np.ndarray) -> np.ndarray:
@@ -1055,70 +751,26 @@ def _derive_source_clear_timer_x18c8_and_owner_phase_seed_lanes(
     refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
     refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
     """
-    a = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
-    c = np.asarray(char_id_u8, dtype=np.uint8).reshape(-1)
-    g = np.asarray(on_ground_u8, dtype=np.uint8).reshape(-1)
-    sf = np.asarray(state_flags_u8, dtype=np.uint8)
-    src = np.asarray(last_hit_by_u8, dtype=np.uint8).reshape(-1)
-    n = int(a.shape[0])
-    if int(c.shape[0]) != n or int(g.shape[0]) != n or int(src.shape[0]) != n:
-        raise ValueError("source_clear_timer derivation lanes must have equal lengths")
-    if sf.ndim != 2 or int(sf.shape[0]) != n or int(sf.shape[1]) < 5:
-        raise ValueError("source_clear_timer derivation requires state_flags_u8 shape [n,5]")
-
-    out_timer = np.zeros(n, dtype=np.uint8)
-    out_owner_phase = np.zeros(n, dtype=np.uint8)
-    # Decomp uses signed int timer with -1 as inactive sentinel.
-    timer = -1
-    init_frames = int(np.clip(int(source_clear_init_frames), 0, 255))
-    # Slippi packs fp+0x221F at state_flags[..., 4]. Bitfield b3 maps to mask 0x10.
-    # refs/melee/src/melee/ft/types.h (fp+0x221F bit layout)
-    # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
-    STATE_FLAGS_221F_INDEX = 4
-    STATE_FLAG_221F_B3_MASK = 0x10
-
-    owner_set_edge_pending = 0
-    owner_phase_active = 0
-    for i in range(n):
-        cur_a = int(a[i])
-        cur_c = int(c[i])
-        cur_grounded = int(g[i]) != 0
-        cur_221f_b3 = (int(sf[i, STATE_FLAGS_221F_INDEX]) & STATE_FLAG_221F_B3_MASK) != 0
-        cur_src = int(src[i])
-        source_set_edge = i > 0 and int(src[i - 1]) == 6 and cur_src != 6
-        if source_set_edge:
-            owner_set_edge_pending = 1
-
-        if i > 0 and cur_a != int(a[i - 1]):
-            x9_b1 = 0
-            tbl = x9_b1_by_char.get(cur_c)
-            if tbl is not None and cur_a >= 0 and cur_a < int(tbl.shape[0]):
-                x9_b1 = int(tbl[cur_a])
-            if cur_grounded and x9_b1 != 0 and timer < 0 and cur_src != 6:
-                timer = init_frames
-                owner_phase_active = 1 if owner_set_edge_pending != 0 else 0
-
-        # Decomp reset owner path:
-        # - ftCommon_800804FC clears x18c4_source_ply to 6 and sets x18C8 to -1 on grounded paths.
-        # refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC
-        if cur_src == 6:
-            timer = -1
-            owner_set_edge_pending = 0
-            owner_phase_active = 0
-
-        # Fighter_8006A360 ownership is gated by !fp->x221F_b3.
-        if (not cur_221f_b3) and timer >= 0:
-            timer -= 1
-
-        if timer >= 0:
-            out_timer[i] = np.uint8(min(timer + 1, 255))
-            out_owner_phase[i] = np.uint8(1 if owner_phase_active != 0 else 0)
-        else:
-            out_timer[i] = np.uint8(0)
-            out_owner_phase[i] = np.uint8(0)
-            owner_phase_active = 0
-
-    return out_timer, out_owner_phase
+    max_actions = max((int(tbl.shape[0]) for tbl in x9_b1_by_char.values()), default=0)
+    x9_lut = np.zeros((256, max_actions), dtype=np.uint8)
+    for cid, tbl in x9_b1_by_char.items():
+        arr = np.asarray(tbl, dtype=np.uint8).reshape(-1)
+        x9_lut[int(cid) & 0xFF, : int(arr.shape[0])] = arr
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.derive_source_clear_timer_x18c8_and_owner_phase_seed_lanes is required; run `make build`"
+        ) from exc
+    return msl_binding.derive_source_clear_timer_x18c8_and_owner_phase_seed_lanes(
+        np.asarray(action_id_u16, dtype=np.uint16).reshape(-1),
+        np.asarray(char_id_u8, dtype=np.uint8).reshape(-1),
+        np.asarray(on_ground_u8, dtype=np.uint8).reshape(-1),
+        np.ascontiguousarray(state_flags_u8, dtype=np.uint8),
+        np.asarray(last_hit_by_u8, dtype=np.uint8).reshape(-1),
+        x9_lut,
+        int(source_clear_init_frames),
+    )
 
 
 def _derive_source_clear_grounded_damage_clear_phase_seed_lane(
@@ -1150,82 +802,24 @@ def _derive_source_clear_grounded_damage_clear_phase_seed_lane(
     Causality:
     - Strictly causal: uses only t and (t-1 -> t) lanes.
     """
-    action_id = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
-    action_frame = np.asarray(action_frame_i16, dtype=np.int16).reshape(-1)
-    on_ground = np.asarray(on_ground_u8, dtype=np.uint8).reshape(-1)
-    hitlag = np.asarray(hitlag_u16, dtype=np.uint16).reshape(-1)
-    hitstun = np.asarray(hitstun_u16, dtype=np.uint16).reshape(-1)
-    combo_count = np.asarray(combo_count_u8, dtype=np.uint8).reshape(-1)
-    timer = np.asarray(source_clear_timer_x18c8_u8, dtype=np.uint8).reshape(-1)
-    owner_phase = np.asarray(source_clear_owner_set_phase_u8, dtype=np.uint8).reshape(-1)
-    sf = np.asarray(state_flags_u8, dtype=np.uint8)
-    src = np.asarray(last_hit_by_u8, dtype=np.uint8).reshape(-1)
-    n = int(action_id.shape[0])
-    if (
-        int(action_frame.shape[0]) != n
-        or int(on_ground.shape[0]) != n
-        or int(hitlag.shape[0]) != n
-        or int(hitstun.shape[0]) != n
-        or int(combo_count.shape[0]) != n
-        or int(timer.shape[0]) != n
-        or int(owner_phase.shape[0]) != n
-        or int(src.shape[0]) != n
-    ):
-        raise ValueError("source_clear_grounded_damage_clear_phase derivation lanes must have equal lengths")
-    if sf.ndim != 2 or int(sf.shape[0]) != n or int(sf.shape[1]) < 5:
-        raise ValueError(
-            "source_clear_grounded_damage_clear_phase derivation requires state_flags_u8 shape [n,5]"
-        )
-
-    out = np.zeros(n, dtype=np.uint8)
-    STATE_FLAGS_221F_INDEX = 4
-    STATE_FLAG_221F_B3_MASK = 0x10
-    SOURCE_NONE = 6
-    # Grounded locomotion transition subset where source-owner clear can hand off to grounded
-    # ProcessHit ownership in the same frame:
-    # - WalkMiddle -> Wait entry (combo context already ended),
-    # - WalkSlow -> Dash entry at terminal timer tick.
-    # refs/melee/src/melee/ft/chara/ftCommon/{ftCo_Walk.c,ftCo_Dash.c,ftCo_Wait.c}
-    # refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC
-    ACT_WAIT = 0x000E  # ftCo_MS_Wait
-    ACT_WALK_SLOW = 0x000F  # ftCo_MS_WalkSlow
-    ACT_WALK_MIDDLE = 0x0010  # ftCo_MS_WalkMiddle
-    ACT_DASH = 0x0014  # ftCo_MS_Dash
-    for i in range(1, n):
-        if int(src[i]) >= SOURCE_NONE:
-            continue
-        if int(timer[i]) == 0 or int(owner_phase[i]) == 0:
-            continue
-        if int(hitlag[i]) != 0 or int(hitstun[i]) != 0:
-            continue
-        if (int(sf[i, STATE_FLAGS_221F_INDEX]) & STATE_FLAG_221F_B3_MASK) != 0:
-            continue
-        if int(on_ground[i]) == 0:
-            continue
-        cur_act = int(action_id[i])
-        prev_act = int(action_id[i - 1])
-        cur_af = int(action_frame[i])
-        # Rule A: WalkMiddle -> Wait grounded handoff after combo context ended.
-        if (
-            prev_act == ACT_WALK_MIDDLE
-            and cur_act == ACT_WAIT
-            and cur_af == 0
-            and int(combo_count[i]) == 0
-            and int(timer[i - 1]) == int(timer[i]) + 1
-        ):
-            out[i] = np.uint8(1)
-            continue
-        # Rule B: WalkSlow -> Dash grounded handoff on terminal timer tick.
-        if (
-            prev_act == ACT_WALK_SLOW
-            and cur_act == ACT_DASH
-            and cur_af == 1
-            and int(timer[i]) == 1
-            and int(timer[i - 1]) == 2
-        ):
-            out[i] = np.uint8(1)
-
-    return out
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.derive_source_clear_grounded_damage_clear_phase_seed_lane is required; run `make build`"
+        ) from exc
+    return msl_binding.derive_source_clear_grounded_damage_clear_phase_seed_lane(
+        np.asarray(action_id_u16, dtype=np.uint16).reshape(-1),
+        np.asarray(action_frame_i16, dtype=np.int16).reshape(-1),
+        np.asarray(on_ground_u8, dtype=np.uint8).reshape(-1),
+        np.asarray(hitlag_u16, dtype=np.uint16).reshape(-1),
+        np.asarray(hitstun_u16, dtype=np.uint16).reshape(-1),
+        np.asarray(combo_count_u8, dtype=np.uint8).reshape(-1),
+        np.asarray(source_clear_timer_x18c8_u8, dtype=np.uint8).reshape(-1),
+        np.asarray(source_clear_owner_set_phase_u8, dtype=np.uint8).reshape(-1),
+        np.ascontiguousarray(state_flags_u8, dtype=np.uint8),
+        np.asarray(last_hit_by_u8, dtype=np.uint8).reshape(-1),
+    )
 
 
 def _derive_source_clear_processhit_damage_pending_phase_seed_lane(
@@ -1265,58 +859,16 @@ def _derive_source_clear_processhit_damage_pending_phase_seed_lane(
     Causality:
     - Strictly causal: validate current-row preconditions only, never future frames.
     """
-    action_id = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
-    action_frame = np.asarray(action_frame_i16, dtype=np.int16).reshape(-1)
-    on_ground = np.asarray(on_ground_u8, dtype=np.uint8).reshape(-1)
-    hitlag = np.asarray(hitlag_u16, dtype=np.uint16).reshape(-1)
-    hitstun = np.asarray(hitstun_u16, dtype=np.uint16).reshape(-1)
-    combo_count = np.asarray(combo_count_u8, dtype=np.uint8).reshape(-1)
-    last_attack_landed = np.asarray(last_attack_landed_u8, dtype=np.uint8).reshape(-1)
-    timer = np.asarray(source_clear_timer_x18c8_u8, dtype=np.uint8).reshape(-1)
-    owner_phase = np.asarray(source_clear_owner_set_phase_u8, dtype=np.uint8).reshape(-1)
-    colanim_hit_status = np.asarray(colanim_hit_status_x198c_u8, dtype=np.uint8).reshape(-1)
-    sf = np.asarray(state_flags_u8, dtype=np.uint8)
-    src = np.asarray(last_hit_by_u8, dtype=np.uint8).reshape(-1)
-    n = int(action_id.shape[0])
-    if (
-        int(action_frame.shape[0]) != n
-        or int(on_ground.shape[0]) != n
-        or int(hitlag.shape[0]) != n
-        or int(hitstun.shape[0]) != n
-        or int(combo_count.shape[0]) != n
-        or int(last_attack_landed.shape[0]) != n
-        or int(timer.shape[0]) != n
-        or int(owner_phase.shape[0]) != n
-        or int(colanim_hit_status.shape[0]) != n
-        or int(src.shape[0]) != n
-    ):
-        raise ValueError("source_clear_processhit_damage_pending_phase derivation lanes must have equal lengths")
-    if sf.ndim != 2 or int(sf.shape[0]) != n or int(sf.shape[1]) < 5:
-        raise ValueError(
-            "source_clear_processhit_damage_pending_phase derivation requires state_flags_u8 shape [n,5]"
-        )
-
-    out = np.zeros(n, dtype=np.uint8)
-    STATE_FLAGS_221F_INDEX = 4
-    STATE_FLAG_221F_B3_MASK = 0x10
-    SOURCE_NONE = 6
-    for i in range(n):
-        # Foundational lane only: validate current-row hidden-source-clear preconditions and keep
-        # the explicit seed inactive until a generic owner-side rule is available.
-        # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
-        # refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC
-        if int(src[i]) >= SOURCE_NONE:
-            continue
-        if int(timer[i]) == 0 or int(owner_phase[i]) == 0:
-            continue
-        if int(hitlag[i]) != 0 or int(hitstun[i]) != 0:
-            continue
-        if int(on_ground[i]) == 0:
-            continue
-        if (int(sf[i, STATE_FLAGS_221F_INDEX]) & STATE_FLAG_221F_B3_MASK) != 0:
-            continue
-
-    return out
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.derive_source_clear_processhit_damage_pending_phase_seed_lane is required; run `make build`"
+        ) from exc
+    return msl_binding.derive_source_clear_processhit_damage_pending_phase_seed_lane(
+        np.ascontiguousarray(np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)),
+        np.ascontiguousarray(state_flags_u8, dtype=np.uint8),
+    )
 
 
 def _derive_phantom_damage_pending_seed_lanes(
@@ -1348,70 +900,18 @@ def _derive_phantom_damage_pending_seed_lanes(
     This is intentionally a hidden-state seed lane, not a gameplay row branch. Runtime rollouts
     produce the same lane directly when a modeled phantom contact occurs.
     """
-    percent = np.asarray(percent_f32, dtype=np.float32)
-    hitlag = np.asarray(hitlag_u16, dtype=np.uint16)
-    action_id = np.asarray(action_id_u16, dtype=np.uint16)
-    hit_by = np.asarray(instance_hit_by_u16, dtype=np.uint16)
-    iid = np.asarray(instance_id_u16, dtype=np.uint16)
-    if (
-        percent.ndim != 2
-        or hitlag.shape != percent.shape
-        or action_id.shape != percent.shape
-        or hit_by.shape != percent.shape
-        or iid.shape != percent.shape
-    ):
-        raise ValueError("phantom damage pending derivation expects matching [frames, players] arrays")
-
-    n_frames, slots = percent.shape
-    out_damage = np.zeros((n_frames, 4), dtype=np.float32)
-    out_timer = np.zeros((n_frames, 4), dtype=np.uint16)
-    out_source = np.full((n_frames, 4), np.uint8(0xFF), dtype=np.uint8)
-    players = min(int(num_players), int(slots), 4)
-    for i in range(max(0, n_frames - 1)):
-        for defender in range(players):
-            if int(action_id[i, defender]) != int(action_id[i + 1, defender]):
-                continue
-            dmg = np.float32(percent[i + 1, defender] - percent[i, defender])
-            if not (float(dmg) > 0.0 and np.isfinite(float(dmg))):
-                continue
-            source_iid = int(hit_by[i, defender])
-            if source_iid == 0:
-                continue
-            source_slot = 0xFF
-            for attacker in range(players):
-                if attacker == defender:
-                    continue
-                if int(iid[i, attacker]) == source_iid:
-                    source_slot = attacker
-                    break
-            if source_slot == 0xFF:
-                continue
-            j = i
-            pending_rows: list[int] = []
-            while j >= 0:
-                if int(hitlag[j, defender]) == 0:
-                    break
-                if int(hit_by[j, defender]) != source_iid:
-                    break
-                if abs(float(percent[j, defender] - percent[i, defender])) > 1e-5:
-                    break
-                pending_rows.append(j)
-                j -= 1
-            if not pending_rows:
-                continue
-            start = pending_rows[-1]
-            if start <= 0 or int(hitlag[start - 1, defender]) != 0:
-                continue
-            if abs(float(percent[start, defender] - percent[start - 1, defender])) > 1e-5:
-                continue
-            for j in pending_rows:
-                timer = i - j + 1
-                if timer > 0xFFFF:
-                    continue
-                out_damage[j, defender] = dmg
-                out_timer[j, defender] = np.uint16(timer)
-                out_source[j, defender] = np.uint8(source_slot)
-    return out_damage, out_timer, out_source
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError("native msl_binding.derive_phantom_damage_pending_seed_lanes is required; run `make build`") from exc
+    return msl_binding.derive_phantom_damage_pending_seed_lanes(
+        np.asarray(percent_f32, dtype=np.float32),
+        np.asarray(hitlag_u16, dtype=np.uint16),
+        np.asarray(action_id_u16, dtype=np.uint16),
+        np.asarray(instance_hit_by_u16, dtype=np.uint16),
+        np.asarray(instance_id_u16, dtype=np.uint16),
+        int(num_players),
+    )
 
 
 def _derive_fighter_8006cda4_pre_gate_consume_count_seed_lane(
@@ -1480,446 +980,60 @@ def _derive_fighter_8006cda4_pre_gate_consume_count_seed_lane(
     - Dataset derivation uses `ref_t1.action_id` only to infer hidden Fighter_8006CDA4 stream phase
       where Slippi does not expose the consume-critical held-item/x197C internals.
     """
-    action_id = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
-    action_frame = np.asarray(action_frame_i16, dtype=np.int16).reshape(-1)
-    ref_action_id = np.asarray(ref_action_id_u16, dtype=np.uint16).reshape(-1)
-    on_ground = np.asarray(on_ground_u8, dtype=np.uint8).reshape(-1)
-    hitlag = np.asarray(hitlag_u16, dtype=np.uint16).reshape(-1)
-    hitstun = np.asarray(hitstun_u16, dtype=np.uint16).reshape(-1)
-    last_hit_by = np.asarray(last_hit_by_u8, dtype=np.uint8).reshape(-1)
-    all_source_port0 = np.asarray(all_source_port0_u8, dtype=np.uint8)
-    all_action_id = np.asarray(all_action_id_u16, dtype=np.uint16)
-    all_action_frame = np.asarray(all_action_frame_i16, dtype=np.int16)
-    all_ref_action_id = (
-        None
-        if all_ref_action_id_u16 is None
-        else np.asarray(all_ref_action_id_u16, dtype=np.uint16)
+    if all_ref_action_id_u16 is None:
+        all_ref_action_id_u16 = np.asarray(all_action_id_u16, dtype=np.uint16)
+    if all_on_ground_u8 is None:
+        all_on_ground_u8 = np.broadcast_to(
+            np.asarray(on_ground_u8, dtype=np.uint8).reshape(-1, 1),
+            np.asarray(all_action_id_u16).shape,
+        )
+    if all_hitlag_u16 is None:
+        all_hitlag_u16 = np.broadcast_to(
+            np.asarray(hitlag_u16, dtype=np.uint16).reshape(-1, 1),
+            np.asarray(all_action_id_u16).shape,
+        )
+    if all_hitstun_u16 is None:
+        all_hitstun_u16 = np.broadcast_to(
+            np.asarray(hitstun_u16, dtype=np.uint16).reshape(-1, 1),
+            np.asarray(all_action_id_u16).shape,
+        )
+    if all_last_hit_by_u8 is None:
+        all_last_hit_by_u8 = np.broadcast_to(
+            np.asarray(last_hit_by_u8, dtype=np.uint8).reshape(-1, 1),
+            np.asarray(all_action_id_u16).shape,
+        )
+    if all_ref_last_hit_by_u8 is None:
+        all_ref_last_hit_by_u8 = all_last_hit_by_u8
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.derive_fighter_8006cda4_pre_gate_consume_count is required; run `make build`"
+        ) from exc
+    return msl_binding.derive_fighter_8006cda4_pre_gate_consume_count(
+        np.ascontiguousarray(np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)),
+        np.ascontiguousarray(np.asarray(action_frame_i16, dtype=np.int16).reshape(-1)),
+        np.ascontiguousarray(np.asarray(ref_action_id_u16, dtype=np.uint16).reshape(-1)),
+        np.ascontiguousarray(np.asarray(on_ground_u8, dtype=np.uint8).reshape(-1)),
+        np.ascontiguousarray(np.asarray(hitlag_u16, dtype=np.uint16).reshape(-1)),
+        np.ascontiguousarray(np.asarray(hitstun_u16, dtype=np.uint16).reshape(-1)),
+        np.ascontiguousarray(state_flags_u8, dtype=np.uint8),
+        np.ascontiguousarray(np.asarray(last_hit_by_u8, dtype=np.uint8).reshape(-1)),
+        np.ascontiguousarray(all_source_port0_u8, dtype=np.uint8),
+        np.ascontiguousarray(all_action_id_u16, dtype=np.uint16),
+        np.ascontiguousarray(all_action_frame_i16, dtype=np.int16),
+        np.ascontiguousarray(all_ref_action_id_u16, dtype=np.uint16),
+        np.ascontiguousarray(all_on_ground_u8, dtype=np.uint8),
+        np.ascontiguousarray(all_hitlag_u16, dtype=np.uint16),
+        np.ascontiguousarray(all_hitstun_u16, dtype=np.uint16),
+        np.ascontiguousarray(all_last_hit_by_u8, dtype=np.uint8),
+        np.ascontiguousarray(all_ref_last_hit_by_u8, dtype=np.uint8),
+        np.ascontiguousarray(np.asarray(frame_pre_random_seed_u32, dtype=np.uint32).reshape(-1)),
+        float(damagefly_roll_prob),
+        int(victim_port),
+        int(num_players),
     )
-    all_on_ground = None if all_on_ground_u8 is None else np.asarray(all_on_ground_u8, dtype=np.uint8)
-    all_hitlag = None if all_hitlag_u16 is None else np.asarray(all_hitlag_u16, dtype=np.uint16)
-    all_hitstun = None if all_hitstun_u16 is None else np.asarray(all_hitstun_u16, dtype=np.uint16)
-    all_last_hit_by = (
-        None if all_last_hit_by_u8 is None else np.asarray(all_last_hit_by_u8, dtype=np.uint8)
-    )
-    all_ref_last_hit_by = (
-        None if all_ref_last_hit_by_u8 is None else np.asarray(all_ref_last_hit_by_u8, dtype=np.uint8)
-    )
-    frame_pre_random_seed = np.asarray(frame_pre_random_seed_u32, dtype=np.uint32).reshape(-1)
-    sf = np.asarray(state_flags_u8, dtype=np.uint8)
-    n = int(action_id.shape[0])
-    if (
-        int(on_ground.shape[0]) != n
-        or int(action_frame.shape[0]) != n
-        or int(ref_action_id.shape[0]) != n
-        or int(hitlag.shape[0]) != n
-        or int(hitstun.shape[0]) != n
-        or int(last_hit_by.shape[0]) != n
-        or int(frame_pre_random_seed.shape[0]) != n
-    ):
-        raise ValueError("fighter_8006cda4_pre_gate_consume_count derivation lanes must have equal lengths")
-    if sf.ndim != 2 or int(sf.shape[0]) != n or int(sf.shape[1]) < 5:
-        raise ValueError("fighter_8006cda4_pre_gate_consume_count requires state_flags_u8 shape [n,5]")
-    if (
-        all_source_port0.ndim != 2
-        or int(all_source_port0.shape[0]) != n
-        or int(all_source_port0.shape[1]) < int(num_players)
-    ):
-        raise ValueError(
-            "fighter_8006cda4_pre_gate_consume_count requires all_source_port0_u8 shape [n,num_players]"
-        )
-    if all_action_id.ndim != 2 or int(all_action_id.shape[0]) != n or int(all_action_id.shape[1]) < int(num_players):
-        raise ValueError("fighter_8006cda4_pre_gate_consume_count requires all_action_id_u16 shape [n,num_players]")
-    if (
-        all_action_frame.ndim != 2
-        or int(all_action_frame.shape[0]) != n
-        or int(all_action_frame.shape[1]) < int(num_players)
-    ):
-        raise ValueError(
-            "fighter_8006cda4_pre_gate_consume_count requires all_action_frame_i16 shape [n,num_players]"
-        )
-    for name, arr in (
-        ("all_ref_action_id_u16", all_ref_action_id),
-        ("all_on_ground_u8", all_on_ground),
-        ("all_hitlag_u16", all_hitlag),
-        ("all_hitstun_u16", all_hitstun),
-        ("all_last_hit_by_u8", all_last_hit_by),
-        ("all_ref_last_hit_by_u8", all_ref_last_hit_by),
-    ):
-        if arr is not None and (
-            arr.ndim != 2 or int(arr.shape[0]) != n or int(arr.shape[1]) < int(num_players)
-        ):
-            raise ValueError(
-                f"fighter_8006cda4_pre_gate_consume_count requires {name} shape [n,num_players]"
-            )
-    if int(victim_port) < 0 or int(victim_port) >= int(num_players):
-        raise ValueError(
-            f"fighter_8006cda4_pre_gate_consume_count victim_port out of range: {victim_port} for num_players={num_players}"
-        )
 
-    ACT_ATTACK_AIR_B = np.uint16(67)
-    ACT_ATTACK_AIR_N = np.uint16(65)
-    ACT_DAMAGE_FALL = np.uint16(38)
-    ACT_LANDING_AIR_LW = np.uint16(74)
-    ACT_ATTACK_LW3 = np.uint16(57)
-    ACT_DAMAGE_FLY_TOP = np.uint16(90)
-    ACT_DAMAGE_FLY_ROLL = np.uint16(91)
-    ACT_FX_SPECIAL_LW_END = np.uint16(363)
-    ACT_THROWN_F = np.uint16(239)
-    STATE_FLAGS_221A_INDEX = 1
-    STATE_FLAG_221A_B3_MASK = 0x10
-
-    def randf_after_pre_gate_consumes(seed_in: int, consume_count: int) -> float:
-        return randf_after_stream_offset_and_pre_gate_consumes(seed_in, 0, consume_count)
-
-    def randf_after_stream_offset_and_pre_gate_consumes(
-        seed_in: int, stream_offset_steps: int, consume_count: int
-    ) -> float:
-        # HSD_Randi/HSD_Randf share the same LCG step. After `consume_count` pre-gate Randi
-        # consumers, the next step is ftCo_8008DCE0 block_33's HSD_Randf sample.
-        # refs/melee/src/sysdolphin/baselib/random.c::{HSD_Randi,HSD_Randf}
-        seed = int(seed_in)
-        for _ in range(int(stream_offset_steps) + int(consume_count) + 1):
-            seed = (seed * 214013 + 2531011) & 0xFFFFFFFF
-        return float((seed >> 16) & 0xFFFF) * (1.0 / 65536.0)
-
-    def local_slot_from_source_port(row_index: int, source_port0: int) -> int:
-        for p in range(int(num_players)):
-            if int(all_source_port0[row_index, p]) == int(source_port0):
-                return p
-        return -1
-
-    def source_port_from_row(arr: np.ndarray | None, row_index: int, p: int) -> int:
-        if arr is None:
-            return -1
-        source = int(arr[row_index, p])
-        return source if local_slot_from_source_port(row_index, source) >= 0 else -1
-
-    def row_value_for_player(arr: np.ndarray | None, fallback: np.ndarray, row_index: int, p: int):
-        if p == int(victim_port):
-            return fallback[row_index]
-        if arr is None:
-            return None
-        return arr[row_index, p]
-
-    def current_pre_action_marker(row_index: int, p: int, stream_offset_steps: int) -> int:
-        cur_act_p = row_value_for_player(all_action_id, action_id, row_index, p)
-        ref_act_p = row_value_for_player(all_ref_action_id, ref_action_id, row_index, p)
-        on_ground_p = row_value_for_player(all_on_ground, on_ground, row_index, p)
-        hitlag_p = row_value_for_player(all_hitlag, hitlag, row_index, p)
-        hitstun_p = row_value_for_player(all_hitstun, hitstun, row_index, p)
-        if (
-            cur_act_p is None
-            or ref_act_p is None
-            or on_ground_p is None
-            or hitlag_p is None
-            or hitstun_p is None
-        ):
-            return 0
-        if int(on_ground_p) != 0 or int(hitlag_p) != 0 or int(hitstun_p) != 0:
-            return 0
-        cur_act_p = np.uint16(cur_act_p)
-        if cur_act_p not in (ACT_ATTACK_AIR_N, ACT_ATTACK_AIR_B):
-            return 0
-        rolls = tuple(
-            randf_after_stream_offset_and_pre_gate_consumes(
-                int(frame_pre_random_seed[row_index]), int(stream_offset_steps), consume_count
-            )
-            for consume_count in range(4)
-        )
-        if np.uint16(ref_act_p) == ACT_DAMAGE_FLY_ROLL:
-            for consume_count, roll in enumerate(rolls):
-                if roll < float(damagefly_roll_prob):
-                    return consume_count if consume_count > 0 else 4
-            return 0
-        if rolls[0] < float(damagefly_roll_prob):
-            for consume_count in (1, 2, 3):
-                if rolls[consume_count] >= float(damagefly_roll_prob):
-                    return consume_count
-        return 0
-
-    def marker_stream_steps(marker: int) -> int:
-        if marker <= 0:
-            return 0
-        return (0 if int(marker) == 4 else int(marker)) + 1
-
-    def prior_same_frame_damageflyroll_stream_steps(row_index: int, p: int) -> int:
-        if all_last_hit_by is None and all_ref_last_hit_by is None:
-            return 0
-
-        def source_port_for_player(q: int) -> int:
-            if all_last_hit_by is not None:
-                source = int(all_last_hit_by[row_index, q])
-                if local_slot_from_source_port(row_index, source) >= 0:
-                    return source
-            if all_ref_last_hit_by is not None:
-                return int(all_ref_last_hit_by[row_index, q])
-            return -1
-
-        cur_attacker = local_slot_from_source_port(row_index, source_port_for_player(p))
-        if cur_attacker < 0:
-            return 0
-        stream_steps = 0
-        # Fighter hit processing is attacker ordered; same-frame reciprocal contacts share the HSD
-        # stream, so later victims derive their explicit pre-gate phase after earlier attacker gates.
-        # refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006CDA4}
-        # refs/melee/src/sysdolphin/baselib/random.c::{HSD_Randi,HSD_Randf}
-        for q in range(int(num_players)):
-            if q == p:
-                continue
-            other_attacker = local_slot_from_source_port(row_index, source_port_for_player(q))
-            if other_attacker < 0 or other_attacker >= cur_attacker:
-                continue
-            marker = current_pre_action_marker(row_index, q, stream_steps)
-            stream_steps += marker_stream_steps(marker)
-        return stream_steps
-
-    out = np.zeros(n, dtype=np.uint8)
-    for i in range(n):
-        cur_act = action_id[i]
-        if cur_act == ACT_LANDING_AIR_LW:
-            # Replay-real consume-count split:
-            # - LandingAirLw rows at entry and late landing lag can reach ftCo_8008DCE0 after two
-            #   hidden Fighter_8006CDA4 random consumers; early steady landing-lag controls keep
-            #   the single-consume lane.
-            # - The hidden consume-critical owner is still the same held-item/x197C state surfaced
-            #   by the explicit seed count; action_frame only bounds the decomp callback window that
-            #   Slippi exposes.
-            # refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
-            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-            out[i] = np.uint8(2 if int(action_frame[i]) == 0 or int(action_frame[i]) >= 16 else 1)
-            continue
-        if cur_act == ACT_FX_SPECIAL_LW_END:
-            # Replay-real consume-count split:
-            # - Fox/Falco SpecialLwEnd entry rows can reach the damage gate before the hidden
-            #   Fighter_8006CDA4 consume site has fired; later exit rows carry the single consume.
-            # refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
-            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-            if int(action_frame[i]) > 3:
-                out[i] = np.uint8(1)
-            continue
-        if cur_act == ACT_ATTACK_LW3:
-            # Replay-real single-consume carry family:
-            # - these current-row pre-actions reach the same ftCo_8008DCE0 DamageFlyRoll gate
-            #   after Fighter_8006CDA4's hidden held-item/x197C owner can advance the RNG stream
-            #   once.
-            # - The seed lane remains explicit because the consume-critical hidden fields are not
-            #   exported by Slippi; the visible action only identifies the causal damage-entry
-            #   window where the hidden owner was observed.
-            # refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
-            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-            out[i] = np.uint8(1)
-            continue
-        if (
-            cur_act == ACT_ATTACK_AIR_N
-            and int(on_ground[i]) == 0
-            and int(hitlag[i]) == 0
-            and int(hitstun[i]) == 0
-        ):
-            # Current replay-real AttackAirN pre-action family:
-            # - ftCo_8008DCE0 still evaluates the same severe-airborne DamageFlyRoll gate on the
-            #   victim pre-action, after Fighter_8006CDA4's hidden held-item/x197C consumers.
-            # - Slippi does not expose those hidden branch inputs, so use the explicit stream phase
-            #   only when the replay-proven destination and frame-start RNG window identify the
-            #   exact gate position. Count 4 remains the explicit zero-consume gate marker.
-            # refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
-            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-            if ref_action_id[i] == ACT_DAMAGE_FLY_ROLL:
-                marker = current_pre_action_marker(
-                    i,
-                    int(victim_port),
-                    prior_same_frame_damageflyroll_stream_steps(i, int(victim_port)),
-                )
-                out[i] = np.uint8(marker)
-            continue
-        if (
-            cur_act == ACT_ATTACK_AIR_B
-            and int(on_ground[i]) == 0
-            and int(hitlag[i]) == 0
-            and int(hitstun[i]) == 0
-        ):
-            # Current replay-real single-consume carry family:
-            # - airborne AttackAirB pre-action rows can still need a single hidden Fighter_8006CDA4
-            #   pre-gate consume before ftCo_8008DCE0 block_33.
-            # refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
-            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-            marker = current_pre_action_marker(
-                i,
-                int(victim_port),
-                prior_same_frame_damageflyroll_stream_steps(i, int(victim_port)),
-            )
-            if marker != 0:
-                out[i] = np.uint8(marker)
-            continue
-        if (
-            cur_act == ACT_THROWN_F
-            and int(on_ground[i]) != 0
-            and int(hitlag[i]) > 0
-            and int(hitstun[i]) == 0
-            and (int(sf[i, STATE_FLAGS_221A_INDEX]) & STATE_FLAG_221A_B3_MASK) != 0
-        ):
-            # Current replay-real double-consume carry family:
-            # - grounded ThrownF rows still in hitlag can require a two-step pre-gate RNG advance
-            #   before the DamageFlyRoll HSD_Randf gate.
-            # refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
-            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-            out[i] = np.uint8(2)
-            continue
-        if (
-            cur_act == ACT_DAMAGE_FLY_TOP
-            and int(on_ground[i]) == 0
-            and int(hitlag[i]) == 0
-            and int(hitstun[i]) > 0
-        ):
-            attacker = local_slot_from_source_port(i, int(last_hit_by[i]))
-            if attacker < 0 or attacker == int(victim_port):
-                continue
-            attacker_action = all_action_id[i, attacker]
-            attacker_action_frame = int(all_action_frame[i, attacker])
-            if attacker_action == ACT_ATTACK_AIR_B and attacker_action_frame in (3, 4):
-                roll0 = randf_after_pre_gate_consumes(int(frame_pre_random_seed[i]), 0)
-                roll1 = randf_after_pre_gate_consumes(int(frame_pre_random_seed[i]), 1)
-                roll2 = randf_after_pre_gate_consumes(int(frame_pre_random_seed[i]), 2)
-                roll3 = randf_after_pre_gate_consumes(int(frame_pre_random_seed[i]), 3)
-                rolls = (roll0, roll1, roll2, roll3)
-                # Early AttackAirB DamageFlyTop carry:
-                # - the ftCo_8008DCE0 gate is real on this contact family, but the hidden
-                #   Fighter_8006CDA4 held-item/x197C consumers can place the gate on either side
-                #   of x240. Preserve that stream phase explicitly rather than suppressing the
-                #   gate by action frame.
-                # - Count 4 means the source gate uses the frame-start sample directly. Keep that
-                #   distinct from count 0 ("no seed lane") so unseeded rollouts do not broaden
-                #   early AttackAirB carry based only on visible action shape.
-                # refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
-                # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-                if ref_action_id[i] == ACT_DAMAGE_FLY_ROLL:
-                    for consume_count, roll in enumerate(rolls):
-                        if roll < float(damagefly_roll_prob):
-                            out[i] = np.uint8(consume_count if consume_count > 0 else 4)
-                            break
-                    continue
-                if roll0 < float(damagefly_roll_prob):
-                    for consume_count in (1, 2, 3):
-                        if rolls[consume_count] >= float(damagefly_roll_prob):
-                            out[i] = np.uint8(consume_count)
-                            break
-                    continue
-            if attacker_action == ACT_ATTACK_AIR_B and attacker_action_frame >= 6:
-                # Replay-real explicit two-consume carry family:
-                # - the hidden `Fighter_8006CDA4` held-item/x197C owner still resolves before the
-                #   same ftCo_8008DCE0 DamageFlyRoll gate, but on these carry rows the current-row
-                #   attacker steady-window context is the minimal causal discriminator available in
-                #   replay-derived seed state.
-                # - AttackAirB creates hitcapsules at script frame 4, but replay-real early
-                #   stale-suppression controls at action_frame 4 still resolve outside
-                #   DamageFlyRoll after the same-frame tick. Keep the explicit carry on the first
-                #   replay-visible post-create steady row that remains post-edge after that tick.
-                # refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
-                # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-                # data/moves/{fox,falco}.json: moves.ftCo_SM_AttackAirB.events.create_hitbox
-                out[i] = np.uint8(2)
-
-    # Rollout seed continuity for the same hidden owner:
-    # DamageFlyTop can carry the hidden Fighter_8006CDA4 held-item/x197C stream phase for many
-    # frames before the next accepted hit re-enters ftCo_8008DCE0. A rollout seeded before that
-    # contact must therefore carry the pending pre-gate phase from the same DamageFlyTop source
-    # episode, including same-source active-hitlag rows, instead of reconstructing it from the
-    # later AttackAirB row in runtime C.
-    #
-    # Counts 1..3 carry hidden pre-gate consume phase. Marker 4 carries only source-proven
-    # DamageFlyTop gate-admission provenance for a later same-source AttackAirB hit; it is still not
-    # persistent stream phase and the AttackAirN pre-action backfill below must not carry it.
-    # refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
-    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
-    #   ftCo_DamageFly_Anim,ftCo_DamageFly_Coll,ftCo_8008DCE0}
-    for i in range(n):
-        consume = int(out[i])
-        if consume <= 0 or consume > 4:
-            continue
-        if (
-            action_id[i] != ACT_DAMAGE_FLY_TOP
-            or int(on_ground[i]) != 0
-            or int(hitlag[i]) != 0
-            or int(hitstun[i]) <= 0
-        ):
-            continue
-        attacker = local_slot_from_source_port(i, int(last_hit_by[i]))
-        if attacker < 0 or attacker == int(victim_port):
-            continue
-        if all_action_id[i, attacker] != ACT_ATTACK_AIR_B:
-            continue
-        j = i - 1
-        while j >= 0:
-            if action_id[j] != ACT_DAMAGE_FLY_TOP:
-                break
-            if int(on_ground[j]) != 0 or int(hitstun[j]) <= 0:
-                break
-            if local_slot_from_source_port(j, int(last_hit_by[j])) != attacker:
-                break
-            if int(out[j]) == 0:
-                out[j] = np.uint8(consume)
-            j -= 1
-
-    # Rollout seed continuity for AttackAirN pre-action stream phase:
-    # The same hidden Fighter_8006CDA4 branch state can be needed by a later airborne AttackAirN
-    # damage-entry gate. Seed rollouts before that hit need the explicit stream phase plus replay
-    # frame-start RNG clock, but only within the contiguous source episode: AttackAirN pre-action
-    # rows and the DamageFlyTop -> DamageFall_IASA handoff that can enter AttackAirN on the next
-    # frame. Ground/source/hitlag/action-family boundaries can already have consumed or reset the
-    # hidden owner.
-    #
-    # This is intentionally limited to rows where the target gate itself was replay-proven above,
-    # and only for nonzero consume counts. Marker 4 is a source-proven zero-consume immediate gate,
-    # not persistent hidden branch state.
-    # refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
-    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
-    #   ftCo_DamageFly_IASA,ftCo_8008DCE0}
-    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
-    for i in range(n):
-        consume = int(out[i])
-        if consume <= 0 or consume > 3:
-            continue
-        if (
-            action_id[i] != ACT_ATTACK_AIR_N
-            or int(on_ground[i]) != 0
-            or int(hitlag[i]) != 0
-            or int(hitstun[i]) != 0
-            or ref_action_id[i] != ACT_DAMAGE_FLY_ROLL
-        ):
-            continue
-        source_port = source_port_from_row(all_ref_last_hit_by, i, int(victim_port))
-        attacker = local_slot_from_source_port(i, source_port)
-        if attacker < 0 or attacker == int(victim_port):
-            continue
-        attacker_action = all_action_id[i, attacker]
-        j = i - 1
-        seen_damagefall_handoff = False
-        while j >= 0:
-            cur = action_id[j]
-            if cur == ACT_ATTACK_AIR_N:
-                if int(on_ground[j]) != 0 or int(hitlag[j]) != 0 or int(hitstun[j]) != 0:
-                    break
-            elif cur == ACT_DAMAGE_FALL:
-                if seen_damagefall_handoff:
-                    break
-                if int(on_ground[j]) != 0 or int(hitlag[j]) != 0 or int(hitstun[j]) != 0:
-                    break
-                seen_damagefall_handoff = True
-            elif cur == ACT_DAMAGE_FLY_TOP:
-                if not seen_damagefall_handoff:
-                    break
-                if int(on_ground[j]) != 0 or int(hitlag[j]) != 0 or int(hitstun[j]) <= 0:
-                    break
-            else:
-                break
-            if local_slot_from_source_port(j, source_port) != attacker:
-                break
-            if cur != ACT_DAMAGE_FLY_TOP and all_action_id[j, attacker] != attacker_action:
-                break
-            if int(out[j]) == 0:
-                out[j] = np.uint8(consume)
-            j -= 1
-
-    return out
 
 
 def _derive_source_clear_terminal_phase_seed_lane(
@@ -1964,228 +1078,41 @@ def _derive_source_clear_terminal_phase_seed_lane(
     responsibilities across ftColl combo accounting and Fighter_8006A360 timer ordering.
     refs/melee/src/melee/ft/ftcoll.c::ftColl_800764DC
     """
-    char_id = np.asarray(char_id_u8, dtype=np.uint8).reshape(-1)
-    action_id = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
-    action_frame = np.asarray(action_frame_i16, dtype=np.int16).reshape(-1)
-    hitlag = np.asarray(hitlag_u16, dtype=np.uint16).reshape(-1)
-    hitstun = np.asarray(hitstun_u16, dtype=np.uint16).reshape(-1)
-    combo_count = np.asarray(combo_count_u8, dtype=np.uint8).reshape(-1)
-    last_attack_landed = np.asarray(last_attack_landed_u8, dtype=np.uint8).reshape(-1)
-    timer = np.asarray(source_clear_timer_x18c8_u8, dtype=np.uint8).reshape(-1)
-    owner_phase = np.asarray(source_clear_owner_set_phase_u8, dtype=np.uint8).reshape(-1)
-    sf = np.asarray(state_flags_u8, dtype=np.uint8)
-    src = np.asarray(last_hit_by_u8, dtype=np.uint8).reshape(-1)
-    n = int(timer.shape[0])
-    if (
-        int(src.shape[0]) != n
-        or int(char_id.shape[0]) != n
-        or int(action_id.shape[0]) != n
-        or int(action_frame.shape[0]) != n
-        or int(hitlag.shape[0]) != n
-        or int(hitstun.shape[0]) != n
-        or int(combo_count.shape[0]) != n
-        or int(last_attack_landed.shape[0]) != n
-        or int(owner_phase.shape[0]) != n
-    ):
-        raise ValueError("source_clear_terminal_phase derivation lanes must have equal lengths")
-    if sf.ndim != 2 or int(sf.shape[0]) != n or int(sf.shape[1]) < 5:
-        raise ValueError("source_clear_terminal_phase derivation requires state_flags_u8 shape [n,5]")
+    max_action = max(
+        [
+            *(int(action) for _, action in terminal_followup_cmd0_on_by_char_action.keys()),
+            *(int(action) for _, action in terminal_followup_cmd0_off_by_char_action.keys()),
+            0,
+        ]
+    )
+    cmd0_on = np.full((256, max_action + 1), -1, dtype=np.int16)
+    cmd0_off = np.full((256, max_action + 1), -1, dtype=np.int16)
+    for (cid, action), frame in terminal_followup_cmd0_on_by_char_action.items():
+        cmd0_on[int(cid) & 0xFF, int(action)] = np.int16(int(frame))
+    for (cid, action), frame in terminal_followup_cmd0_off_by_char_action.items():
+        cmd0_off[int(cid) & 0xFF, int(action)] = np.int16(int(frame))
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.derive_source_clear_terminal_phase_seed_lane is required; run `make build`"
+        ) from exc
+    return msl_binding.derive_source_clear_terminal_phase_seed_lane(
+        np.ascontiguousarray(np.asarray(char_id_u8, dtype=np.uint8).reshape(-1)),
+        np.ascontiguousarray(np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)),
+        np.ascontiguousarray(np.asarray(action_frame_i16, dtype=np.int16).reshape(-1)),
+        np.ascontiguousarray(np.asarray(hitlag_u16, dtype=np.uint16).reshape(-1)),
+        np.ascontiguousarray(np.asarray(hitstun_u16, dtype=np.uint16).reshape(-1)),
+        np.ascontiguousarray(np.asarray(combo_count_u8, dtype=np.uint8).reshape(-1)),
+        np.ascontiguousarray(np.asarray(last_attack_landed_u8, dtype=np.uint8).reshape(-1)),
+        np.ascontiguousarray(np.asarray(source_clear_timer_x18c8_u8, dtype=np.uint8).reshape(-1)),
+        np.ascontiguousarray(np.asarray(source_clear_owner_set_phase_u8, dtype=np.uint8).reshape(-1)),
+        np.ascontiguousarray(state_flags_u8, dtype=np.uint8),
+        np.ascontiguousarray(np.asarray(last_hit_by_u8, dtype=np.uint8).reshape(-1)),
+        cmd0_on,
+        cmd0_off,
+    )
 
-    out = np.zeros(n, dtype=np.uint8)
-    STATE_FLAGS_221F_INDEX = 4
-    STATE_FLAG_221F_B3_MASK = 0x10
-    SOURCE_NONE = 6
-    # GALE01 action ids (ftCommon_MotionState): downed + passive recovery subset.
-    # refs/melee/src/melee/ft/chara/ftCommon/forward.h
-    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c (down/passive recovery ownership flow)
-    #
-    # Also allow a narrow set of immediate grounded recovery/match-flow followups where the same
-    # callback-owned ownership phase can run through the terminal tick:
-    # - Wait/EscapeF in common motion-state flow,
-    # - DeadUpStar stock-loss flow before the Rebirth reset clears attribution.
-    # refs/melee/src/melee/ft/chara/ftCommon/forward.h
-    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c
-    # refs/melee/src/melee/ft/ft_0D31.c::ftCo_DeadUpStar_Anim
-    #
-    # Fox/Falco side-B end state is included as a character motion-state followup where
-    # terminal source-owner clear can lag by one post-frame in replay rows under this same
-    # strict predicate.
-    # refs/melee/src/melee/ft/chara/ftFox/forward.h::ftFox_MotionState
-    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c
-    ACT_ATTACK_AIR_N = 0x0041  # ftCo_MS_AttackAirN
-    ACT_ATTACK_AIR_LW = 0x0045  # ftCo_MS_AttackAirLw
-    ACT_GUARD = 0x00B3  # ftCo_MS_Guard
-    ACT_ESCAPE_AIR = 0x00EC  # ftCo_MS_EscapeAir
-    ACT_FOX_FALCO_SPECIAL_AIR_S_START = 0x015E  # ftFx_MS_SpecialAirSStart
-    ACT_TURN = 0x0012  # ftCo_MS_Turn
-    ACT_KNEE_BEND = 0x0018  # ftCo_MS_KneeBend
-    ACT_JUMP_F = 0x0019  # ftCo_MS_JumpF
-    ACT_JUMP_B = 0x001A  # ftCo_MS_JumpB
-    ACT_SQUAT = 0x0027  # ftCo_MS_Squat
-    ACT_ATTACK_HI3 = 0x0038  # ftCo_MS_AttackHi3
-    ACT_DEAD_UP_STAR = 0x0004  # ftCo_MS_DeadUpStar
-    DOWN_PASSIVE_RECOVERY_ACTIONS = {
-        0x000E,  # ftCo_MS_Wait
-        ACT_GUARD,
-        0x00B7,  # ftCo_MS_DownBoundU
-        0x00B8,  # ftCo_MS_DownWaitU
-        0x00BA,  # ftCo_MS_DownStandU
-        0x00BB,  # ftCo_MS_DownAttackU
-        0x00BC,  # ftCo_MS_DownFowardU
-        0x00BD,  # ftCo_MS_DownBackU
-        0x00BF,  # ftCo_MS_DownBoundD
-        0x00C0,  # ftCo_MS_DownWaitD
-        0x00C2,  # ftCo_MS_DownStandD
-        0x00C3,  # ftCo_MS_DownAttackD
-        0x00C4,  # ftCo_MS_DownFowardD
-        0x00C5,  # ftCo_MS_DownBackD
-        0x00C7,  # ftCo_MS_Passive
-        0x00C8,  # ftCo_MS_PassiveStandF
-        0x00C9,  # ftCo_MS_PassiveStandB
-        0x00E9,  # ftCo_MS_EscapeF
-        ACT_FOX_FALCO_SPECIAL_AIR_S_START,
-        ACT_DEAD_UP_STAR,
-    }
-    # Causal followup states where decomp callback ownership can keep x18C4 through the terminal
-    # x18C8 tick after down/passive recovery handoff. Keep this narrow and transition-gated.
-    # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
-    # refs/melee/src/melee/ft/chara/ftCommon/{ftCo_AttackAir.c,ftCo_EscapeAir.c}
-    # data/moves/{fox,falco}.json moves["ftCo_SM_AttackAirN"/"ftCo_SM_AttackAirLw"/"ftCo_SM_EscapeAir"]["events"]
-    TERMINAL_FOLLOWUP_ACTIONS = {
-        ACT_ATTACK_AIR_N,
-        ACT_ATTACK_AIR_LW,
-        ACT_ESCAPE_AIR,
-    }
-    # Additional terminal continuation actions reached from grounded common IASA/transition flow
-    # while source-owner clear countdown ownership is still callback-owned.
-    # refs/melee/src/melee/ft/chara/ftCommon/{ftCo_Wait.c,ftCo_Turn.c,ftCo_Jump.c,ftCo_Squat.c,ftCo_AttackHi3.c}
-    # refs/melee/src/melee/ft/chara/ftCommon/forward.h
-    TERMINAL_CONTINUATION_ACTIONS = {
-        ACT_TURN,
-        ACT_KNEE_BEND,
-        ACT_JUMP_F,
-        ACT_JUMP_B,
-        ACT_SQUAT,
-        ACT_ATTACK_HI3,
-    }
-    for i in range(n):
-        if i == 0:
-            continue
-        if int(timer[i]) != 1:
-            continue
-        act = int(action_id[i])
-        if (
-            act not in DOWN_PASSIVE_RECOVERY_ACTIONS
-            and act not in TERMINAL_FOLLOWUP_ACTIONS
-            and act not in TERMINAL_CONTINUATION_ACTIONS
-        ):
-            continue
-        if act in TERMINAL_CONTINUATION_ACTIONS and int(owner_phase[i]) == 0:
-            continue
-        cur_af = int(action_frame[i])
-        if act == ACT_JUMP_F:
-            # Common jump-forward continuation under callback-owned source-clear phase:
-            # keep only mid-window JumpF progression rows where terminal ownership persistence
-            # is observed in replay-causal rows.
-            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::{ftCo_Jump_Anim,ftCo_Jump_IASA}
-            if cur_af < 10 or cur_af > 20:
-                continue
-        elif act == ACT_JUMP_B:
-            # Jump-back continuation appears only in late airborne progression for this lane.
-            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::{ftCo_Jump_Anim,ftCo_Jump_IASA}
-            if cur_af < 30:
-                continue
-        elif act == ACT_KNEE_BEND:
-            # Keep KneeBend continuation at takeoff crossover only.
-            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_KneeBend_Anim
-            if cur_af != 1:
-                continue
-            # fp+0x221E lane carries jump-transition side bits in this crossover snapshot.
-            # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (state_flags lane)
-            if (int(sf[i, 3]) & 0x60) == 0:
-                continue
-        owner = int(src[i])
-        if owner >= SOURCE_NONE:
-            continue
-        if int(hitlag[i]) != 0 or int(hitstun[i]) != 0:
-            continue
-        # Combo provenance normally guards this bridge to active hit ownership contexts
-        # (ftColl combo counters), but side-B end can keep source-owner continuity through
-        # terminal timer rows even when combo counters are zero in replay snapshots. The same
-        # applies to narrow jump-continuation rows where source-owner set phase ownership is
-        # still active through the terminal countdown tick.
-        # refs/melee/src/melee/ft/ftcoll.c::ftColl_800764DC
-        # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c
-        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_Anim
-        if int(combo_count[i]) == 0 or int(last_attack_landed[i]) == 0:
-            if act not in (
-                ACT_FOX_FALCO_SPECIAL_AIR_S_START,
-                ACT_ATTACK_AIR_LW,
-                ACT_KNEE_BEND,
-                ACT_JUMP_F,
-                ACT_JUMP_B,
-            ):
-                continue
-            if act in (ACT_KNEE_BEND, ACT_JUMP_F, ACT_JUMP_B) and int(last_attack_landed[i]) == 0:
-                continue
-        if (int(sf[i, STATE_FLAGS_221F_INDEX]) & STATE_FLAG_221F_B3_MASK) != 0:
-            continue
-        # Guard hold keeps shield-state bits in 0x221A/0x221B while still running under the same
-        # terminal source-owner tick ordering.
-        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c
-        if (
-            act != ACT_GUARD
-            and act not in TERMINAL_CONTINUATION_ACTIONS
-            and (int(sf[i, 1]) != 0 or int(sf[i, 2]) != 0)
-        ):
-            continue
-        # Strictly-causal continuity guard (t-1 -> t):
-        # - countdown is in terminal progression from 2 to 1
-        # - ownership has not changed
-        # - action progression is continuous (with modeled transition exceptions)
-        if int(timer[i - 1]) != 2:
-            continue
-        if int(src[i - 1]) != owner:
-            continue
-        prev_act = int(action_id[i - 1])
-        prev_af = int(action_frame[i - 1])
-        same_action_progress = (act == prev_act and cur_af == prev_af + 1)
-        guard_hold_progress = (act == ACT_GUARD and prev_act == ACT_GUARD and cur_af == -1 and prev_af == -1)
-        continuation_entry_progress = (
-            act in TERMINAL_CONTINUATION_ACTIONS and cur_af == 1 and prev_af >= 0
-        )
-        if not (same_action_progress or guard_hold_progress or continuation_entry_progress):
-            continue
-        # Followup actions use extracted script phase gates instead of hardcoded
-        # action-frame windows:
-        # - AttackAirN defer only before first cmd_var[0]=1 startup tick.
-        # - EscapeAir defer only before cmd_var[0]=1 (cmd_skip_decay) is set.
-        # - AttackAirLw defer only before cmd_var[0]=0 clear and under active combo provenance.
-        # - AttackHi3 continuation defer only before extracted clear_hitboxes cutoff.
-        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c
-        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackHi3.c
-        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::cmd_skip_decay
-        # refs/melee/src/melee/ft/ftaction.c::ftAction_80071974
-        if act in TERMINAL_FOLLOWUP_ACTIONS or act == ACT_ATTACK_HI3:
-            cid = int(char_id[i])
-            cmd0_on = int(terminal_followup_cmd0_on_by_char_action.get((cid, act), -1))
-            cmd0_off = int(terminal_followup_cmd0_off_by_char_action.get((cid, act), -1))
-            if act == ACT_ATTACK_AIR_N:
-                if cmd0_on < 0 or cur_af >= cmd0_on:
-                    continue
-            elif act == ACT_ESCAPE_AIR:
-                if cmd0_on < 0 or cur_af >= cmd0_on:
-                    continue
-            elif act == ACT_ATTACK_AIR_LW:
-                if cmd0_off < 0 or cur_af >= cmd0_off:
-                    continue
-                if int(combo_count[i]) != 0:
-                    continue
-            elif act == ACT_ATTACK_HI3:
-                if cmd0_off < 0 or cur_af >= cmd0_off:
-                    continue
-        out[i] = np.uint8(1)
-    return out
 
 
 def _derive_throw_pulse_seed_lanes(
@@ -2223,132 +1150,50 @@ def _derive_throw_pulse_seed_lanes(
       - 0 means no crossing in (t-1 -> t),
       - N is the crossed pulse frame from extracted throw move events.
     """
-    n_samples = int(seed_action_id_u16.shape[0])
-    out_consumed = np.zeros((n_samples, 4), dtype=np.uint8)
-    out_crossed_prev = np.zeros((n_samples, 4), dtype=np.uint8)
-    out_pending = np.zeros((n_samples, 4), dtype=np.uint8)
-    if n_samples == 0:
-        return out_consumed, out_crossed_prev, out_pending
+    max_action = max((int(action) for _, action in pulse_frames_by_char_action.keys()), default=0)
+    max_pulses = max((len(v) for v in pulse_frames_by_char_action.values()), default=0)
+    if max_pulses <= 0:
+        shape = (int(seed_action_id_u16.shape[0]), 4)
+        return (
+            np.zeros(shape, dtype=np.uint8),
+            np.zeros(shape, dtype=np.uint8),
+            np.zeros(shape, dtype=np.uint8),
+        )
+    pulse_lut = np.zeros((256, max_action + 1, max_pulses), dtype=np.int16)
+    pulse_count_lut = np.zeros((256, max_action + 1), dtype=np.uint8)
+    cmd1_lut = np.full((256, max_action + 1), -1, dtype=np.int16)
+    shot_lut = np.zeros(256, dtype=np.uint16)
+    for (cid, action), pulses in pulse_frames_by_char_action.items():
+        cid_i = int(cid) & 0xFF
+        action_i = int(action)
+        pulse_count_lut[cid_i, action_i] = np.uint8(len(pulses))
+        for k, pulse in enumerate(pulses):
+            pulse_lut[cid_i, action_i, k] = np.int16(int(pulse))
+    for (cid, action), frame in cmd1_start_by_char_action.items():
+        cmd1_lut[int(cid) & 0xFF, int(action)] = np.int16(int(frame))
+    for cid, kind in shot_itkind_by_char.items():
+        shot_lut[int(cid) & 0xFF] = np.uint16(int(kind))
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError("native msl_binding.derive_throw_pulse_seed_lanes is required; run `make build`") from exc
+    return msl_binding.derive_throw_pulse_seed_lanes(
+        np.ascontiguousarray(seed_action_id_u16, dtype=np.uint16),
+        np.ascontiguousarray(seed_char_id_u8, dtype=np.uint8),
+        np.ascontiguousarray(seed_anim_frame_f32, dtype=np.float32),
+        np.ascontiguousarray(seed_frame_speed_mul_f32, dtype=np.float32),
+        np.ascontiguousarray(seed_hitstun_u16, dtype=np.uint16),
+        np.ascontiguousarray(seed_last_attack_landed_u8, dtype=np.uint8),
+        pulse_lut,
+        pulse_count_lut,
+        cmd1_lut,
+        shot_lut,
+        int(num_players),
+        int(act_throw_b),
+        int(act_throw_hi),
+        int(falco_char_id),
+    )
 
-    # Prefix-causal throw command cursor model:
-    # - ftAction_80073354 subtracts frame_speed_mul from the command timer and executes command
-    #   events when that timer reaches <=0.
-    # - ftAction_80071974 writes a bool throw_flags_b0, and ftFx_Throw_Anim consumes at most one
-    #   such bool in the same Anim callback, so multiple projectile commands crossed by one large
-    #   visual frame advance collapse to a single pending shot.
-    # - This stateful cursor avoids treating visible post-frame action_frame crossings as fresh
-    #   commands when the command timer still has a positive delta to the next event.
-    # refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
-    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
-    cursor_char = [-1, -1, -1, -1]
-    cursor_action = [-1, -1, -1, -1]
-    cursor_next_idx = [0, 0, 0, 0]
-    cursor_timer = [0.0, 0.0, 0.0, 0.0]
-    cursor_active = [False, False, False, False]
-
-    for i in range(n_samples):
-        for p in range(int(num_players)):
-            action_id = int(seed_action_id_u16[i, p])
-            char_id = int(seed_char_id_u8[i, p])
-            pulses = pulse_frames_by_char_action.get((char_id, action_id), ())
-            if not pulses:
-                cursor_active[p] = False
-                cursor_char[p] = char_id
-                cursor_action[p] = action_id
-                continue
-            af = float(seed_anim_frame_f32[i, p])
-            rate = float(seed_frame_speed_mul_f32[i, p])
-            if not np.isfinite(af) or not np.isfinite(rate) or rate <= 0.0:
-                cursor_active[p] = False
-                continue
-
-            if (
-                not cursor_active[p]
-                or cursor_char[p] != char_id
-                or cursor_action[p] != action_id
-                or (i > 0 and float(seed_anim_frame_f32[i - 1, p]) > af)
-            ):
-                cursor_char[p] = char_id
-                cursor_action[p] = action_id
-                cursor_active[p] = True
-                next_idx = 0
-                while next_idx < len(pulses) and float(pulses[next_idx]) <= af:
-                    next_idx += 1
-                cursor_next_idx[p] = next_idx
-                if next_idx < len(pulses):
-                    cursor_timer[p] = max(float(pulses[next_idx]) - af, 0.0)
-                else:
-                    cursor_timer[p] = float("inf")
-
-            if cursor_active[p] and cursor_next_idx[p] < len(pulses):
-                timer_after = cursor_timer[p] - rate
-                if timer_after <= 1.0e-4:
-                    pulse = int(pulses[cursor_next_idx[p]])
-                    if 0 < pulse <= 255:
-                        out_pending[i, p] = np.uint8(pulse)
-                    cursor_next_idx[p] += 1
-                    if cursor_next_idx[p] < len(pulses):
-                        # Command timers are relative deltas between command events. Do not carry
-                        # the overshoot into the next command; the bool throw_flags_b0 consume is
-                        # the one-shot output for this Anim callback.
-                        cursor_timer[p] = float(pulses[cursor_next_idx[p]] - pulse)
-                    else:
-                        cursor_timer[p] = float("inf")
-                else:
-                    cursor_timer[p] = timer_after
-
-            af_prev = af - rate
-            crossed_pulse = -1
-            for pulse_frame in pulses:
-                pulse_f = float(pulse_frame)
-                if af_prev < pulse_f <= af:
-                    crossed_pulse = int(pulse_frame)
-                    break
-            if crossed_pulse < 0:
-                continue
-            if 0 < crossed_pulse <= 255:
-                out_crossed_prev[i, p] = np.uint8(crossed_pulse)
-
-            # Data-driven stale-window mirrors of previously hardcoded ThrowB/ThrowHi pulse windows:
-            # - ThrowB: crossing first pulse from cmd1-start phase.
-            # - ThrowHi(Falco): crossing mid pulse from first-pulse phase.
-            # refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
-            # data/moves/{fox,falco}.json moves["ftCo_SM_ThrowB"/"ftCo_SM_ThrowHi"]["events"]
-            prev_frame_i = int(np.floor(np.float32(af_prev)))
-            stale_window = False
-            if action_id == int(act_throw_b) and len(pulses) >= 1:
-                cmd1_start = int(cmd1_start_by_char_action.get((char_id, action_id), -1))
-                first_pulse = int(pulses[0])
-                if cmd1_start >= 0 and crossed_pulse == first_pulse and prev_frame_i == cmd1_start:
-                    stale_window = True
-            elif action_id == int(act_throw_hi) and char_id == int(falco_char_id) and len(pulses) >= 2:
-                first_pulse = int(pulses[0])
-                mid_pulse = int(pulses[1])
-                if crossed_pulse == mid_pulse and prev_frame_i == first_pulse:
-                    stale_window = True
-            # ThrowB ongoing-hitstun stale pulse context (moved from runtime heuristic):
-            # - throw_flags_b0 pulses are one-shot and consumed in ftFx_Throw_Anim.
-            # - if victim is already in ongoing hitstun from this throw-side projectile owner,
-            #   one-step pulse reconstruction should be suppressed.
-            # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
-            # refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
-            # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by / hitstun lanes)
-            if not stale_window and action_id == int(act_throw_b):
-                shot_itkind = int(shot_itkind_by_char.get(char_id, 0))
-                if shot_itkind != 0:
-                    for vp in range(int(num_players)):
-                        if vp == p:
-                            continue
-                        if (
-                            int(seed_hitstun_u16[i, vp]) > 0
-                            and int(seed_last_attack_landed_u8[i, vp]) == shot_itkind
-                        ):
-                            stale_window = True
-                            break
-            if stale_window:
-                out_consumed[i, p] = np.uint8(1)
-
-    return out_consumed, out_crossed_prev, out_pending
 
 
 def _derive_throw_laser_item_hitlist_seed_lanes(
@@ -2388,83 +1233,43 @@ def _derive_throw_laser_item_hitlist_seed_lanes(
     tools/dolphin/patches/ishiiruka_engine_dump_item_hitlist_v10.patch
     """
     n_samples = int(seed_action_id_u16.shape[0])
-    victim_port = np.full((n_samples, 15), 0xFF, dtype=np.uint8)
-    victim_cd = np.zeros((n_samples, 15), dtype=np.uint8)
-    victim_hitbox_mask = np.zeros((n_samples, 15), dtype=np.uint8)
-    victim_iid = np.zeros((n_samples, 15), dtype=np.uint16)
     if n_samples == 0:
-        return victim_port, victim_cd, victim_hitbox_mask, victim_iid
+        shape = (0, 15)
+        return (
+            np.full(shape, 0xFF, dtype=np.uint8),
+            np.zeros(shape, dtype=np.uint8),
+            np.zeros(shape, dtype=np.uint8),
+            np.zeros(shape, dtype=np.uint16),
+        )
 
-    act_throw_lw = 222
-    throw_actions = {219, 220, 221, act_throw_lw}
-    grabbed_victim_actions = {
-        223,
-        224,
-        225,
-        226,
-        227,
-        228,
-        231,
-        232,
-        239,
-        240,
-        241,
-        242,
-        243,
-    }
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.derive_throw_laser_item_hitlist_seed_lanes is required; run `make build`"
+        ) from exc
+
     # Reviewable v10 dump evidence:
     # - Fox kind 54 attached ThrowLw (FSP:9182/9185): populated victims_1 entries on hitboxes 0/1.
     # - Falco kind 55 attached ThrowLw controls/positives (QGD:443/454, PRH:527/533/539): victims_1
     #   entries on hitboxes 2/3 coexist with still-eligible BODY callbacks on hitboxes 0/1. Runtime
     #   therefore treats the hitbox mask as a per-HitCapsule suppressor, not an item-wide latch.
-    laser_hitbox_masks = dict(throw_laser_hitbox_masks)
-    # Replay-real item hitlist dumps for throw lasers show x40_b4 cooldown 16 on populated
-    # victims_1 entries. The exact remaining value is not gameplay-critical for one-step reseed,
-    # but a nonzero decomp-shaped cooldown preserves tick semantics across the current frame.
-    throw_laser_rehit_cd = np.uint8(16)
-
-    for i in range(n_samples):
-        for it in range(min(15, int(seed_items.shape[1]))):
-            item = seed_items[i, it]
-            if int(item["exists"]) == 0:
-                continue
-            if int(item["state"]) != 1:
-                continue
-            item_type = int(item["type"])
-            if item_type not in laser_hitbox_masks:
-                continue
-            owner = int(item["owner"])
-            if owner < 0 or owner >= int(num_players):
-                continue
-            if int(seed_action_id_u16[i, owner]) not in throw_actions:
-                continue
-            item_iid = int(item["instance_id"])
-            if item_iid == 0:
-                continue
-
-            candidate = -1
-            for victim in range(int(num_players)):
-                if victim == owner:
-                    continue
-                if int(seed_grab_owner_port_u8[i, victim]) != owner:
-                    continue
-                if int(seed_action_id_u16[i, victim]) not in grabbed_victim_actions:
-                    continue
-                if int(seed_instance_hit_by_u16[i, victim]) != item_iid:
-                    continue
-                if candidate >= 0:
-                    candidate = -1
-                    break
-                candidate = victim
-            if candidate < 0:
-                continue
-
-            victim_port[i, it] = np.uint8(candidate)
-            victim_cd[i, it] = throw_laser_rehit_cd
-            victim_hitbox_mask[i, it] = laser_hitbox_masks[item_type]
-            victim_iid[i, it] = np.uint16(seed_instance_id_u16[i, candidate])
-
-    return victim_port, victim_cd, victim_hitbox_mask, victim_iid
+    hitbox_mask_lut = np.zeros(65536, dtype=np.uint8)
+    for item_kind, mask in throw_laser_hitbox_masks.items():
+        hitbox_mask_lut[int(item_kind) & 0xFFFF] = np.uint8(mask)
+    return msl_binding.derive_throw_laser_item_hitlist_seed_lanes(
+        np.ascontiguousarray(seed_action_id_u16, dtype=np.uint16),
+        np.ascontiguousarray(seed_grab_owner_port_u8, dtype=np.uint8),
+        np.ascontiguousarray(seed_instance_hit_by_u16, dtype=np.uint16),
+        np.ascontiguousarray(seed_instance_id_u16, dtype=np.uint16),
+        np.ascontiguousarray(seed_items["exists"], dtype=np.uint8),
+        np.ascontiguousarray(seed_items["state"], dtype=np.uint8),
+        np.ascontiguousarray(seed_items["type"], dtype=np.uint16),
+        np.ascontiguousarray(seed_items["owner"], dtype=np.int8),
+        np.ascontiguousarray(seed_items["instance_id"], dtype=np.uint16),
+        hitbox_mask_lut,
+        int(num_players),
+    )
 
 
 def _derive_landing_fallspecial_allow_interrupt_seed_lane(*, action_id_u16: np.ndarray) -> np.ndarray:
@@ -2537,32 +1342,16 @@ def _derive_jab_rapid_count_seed_lane(
     refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Attack_800D6A50
     """
 
-    n = int(action_id_u16.shape[0])
-    out = np.zeros(n, dtype=np.uint8)
-    count = 0
-    prev_action = np.uint16(0xFFFF)
-    attack_11 = np.uint16(0x002C)
-    attack_12 = np.uint16(0x002D)
-    attack_13 = np.uint16(0x002E)
-    jab_actions = {int(attack_11), int(attack_12), int(attack_13)}
-    for i in range(n):
-        action = np.uint16(action_id_u16[i])
-        entered_attack11 = action == attack_11 and prev_action != attack_11
-        if entered_attack11:
-            count = 0
-        elif int(action) not in jab_actions:
-            count = 0
-
-        if int(action) in jab_actions and not entered_attack11:
-            if (
-                (int(buttons_released_u16[i]) | int(buttons_pressed_u16[i]))
-                & int(button_mask_a)
-            ) != 0:
-                count = min(255, count + 1)
-            out[i] = np.uint8(count)
-
-        prev_action = action
-    return out
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError("native msl_binding.derive_jab_rapid_count is required; run `make build`") from exc
+    return msl_binding.derive_jab_rapid_count(
+        np.asarray(action_id_u16, dtype=np.uint16).reshape(-1),
+        np.asarray(buttons_released_u16, dtype=np.uint16).reshape(-1),
+        np.asarray(buttons_pressed_u16, dtype=np.uint16).reshape(-1),
+        int(button_mask_a),
+    )
 
 
 def _derive_walk_anim_source_vel_seed_lane(
@@ -2590,38 +1379,26 @@ def _derive_walk_anim_source_vel_seed_lane(
     refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::ftCo_Walk_Anim
     refs/melee/src/melee/ft/ftwalkcommon.c::ftWalkCommon_800DFDDC
     """
-    ACT_WALK_SLOW = 0x000F
-    ACT_WALK_MIDDLE = 0x0010
-    ACT_WALK_FAST = 0x0011
-
-    n = int(action_id_u16.shape[0])
-    out = np.zeros(n, dtype=np.float32)
-    for i in range(n):
-        action = int(action_id_u16[i])
-        if action not in (ACT_WALK_SLOW, ACT_WALK_MIDDLE, ACT_WALK_FAST):
-            continue
-        char_id = int(char_id_u8[i])
-        divs = walk_divisors_by_char.get(char_id)
-        if divs is None:
-            continue
-        if action == ACT_WALK_SLOW:
-            denom = float(divs[0])
-        elif action == ACT_WALK_MIDDLE:
-            denom = float(divs[1])
-        else:
-            denom = float(divs[2])
-        if not np.isfinite(denom) or denom <= 0.0:
-            continue
-        rate_index = i
-        next_i = i + 1
-        if next_i < n and int(action_id_u16[next_i]) == action:
-            rate_index = next_i
-        rate = float(frame_speed_mul_f32[rate_index])
-        if not np.isfinite(rate) or rate <= 0.0:
-            continue
-        facing_dir = -1.0 if int(facing_dir1_i8[i]) < 0 else 1.0
-        out[i] = np.float32(facing_dir * rate * denom)
-    return out
+    slow = np.zeros(256, dtype=np.float32)
+    middle = np.zeros(256, dtype=np.float32)
+    fast = np.zeros(256, dtype=np.float32)
+    for cid, divs in walk_divisors_by_char.items():
+        slow[int(cid) & 0xFF] = np.float32(float(divs[0]))
+        middle[int(cid) & 0xFF] = np.float32(float(divs[1]))
+        fast[int(cid) & 0xFF] = np.float32(float(divs[2]))
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError("native msl_binding.derive_walk_anim_source_vel is required; run `make build`") from exc
+    return msl_binding.derive_walk_anim_source_vel(
+        np.asarray(action_id_u16, dtype=np.uint16).reshape(-1),
+        np.asarray(char_id_u8, dtype=np.uint8).reshape(-1),
+        np.asarray(facing_dir1_i8, dtype=np.int8).reshape(-1),
+        np.asarray(frame_speed_mul_f32, dtype=np.float32).reshape(-1),
+        slow,
+        middle,
+        fast,
+    )
 
 
 def _derive_walk_retarget_tick_source_vel_seed_lane(
@@ -2651,97 +1428,44 @@ def _derive_walk_retarget_tick_source_vel_seed_lane(
     narrow replay-facing reconstruction for rows where the two candidate sources produce different
     destination action_frame parity. Runtime keeps the causal walk source lane.
     """
-    ACT_WALK_SLOW = 0x000F
-    ACT_WALK_MIDDLE = 0x0010
-    ACT_WALK_FAST = 0x0011
-    SM_WALK_SLOW = 7
-    SM_WALK_MIDDLE = 8
-    SM_WALK_FAST = 9
-
-    walk_actions = (ACT_WALK_SLOW, ACT_WALK_MIDDLE, ACT_WALK_FAST)
-    action_to_msid = {
-        ACT_WALK_SLOW: SM_WALK_SLOW,
-        ACT_WALK_MIDDLE: SM_WALK_MIDDLE,
-        ACT_WALK_FAST: SM_WALK_FAST,
-    }
-
-    def _walk_action_from_speed(char_id: int, gr_vel: float) -> int:
-        walk_max = float(walk_max_by_char.get(char_id, 0.0))
-        if not np.isfinite(walk_max) or walk_max <= 0.0:
-            return ACT_WALK_SLOW
-        # Same thresholds as ftWalkCommon_GetWalkType for the target domain.
-        v = abs(float(gr_vel))
-        if v >= float(walk_fast_vel_mul) * walk_max:
-            return ACT_WALK_FAST
-        if v >= float(walk_mid_vel_mul) * walk_max:
-            return ACT_WALK_MIDDLE
-        return ACT_WALK_SLOW
-
-    def _rate_from_source(action: int, char_id: int, facing_dir: float, source_vel: float) -> float | None:
-        divs = walk_divisors_by_char.get(char_id)
-        if divs is None:
-            return None
-        if action == ACT_WALK_SLOW:
-            denom = float(divs[0])
-        elif action == ACT_WALK_MIDDLE:
-            denom = float(divs[1])
-        elif action == ACT_WALK_FAST:
-            denom = float(divs[2])
-        else:
-            return None
-        if not np.isfinite(denom) or denom <= 0.0:
-            return None
-        if float(source_vel) * facing_dir <= 0.0:
-            return 0.0
-        return abs(float(source_vel)) / denom
-
-    def _predict_retarget_af(char_id: int, cur_action: int, dst_action: int, anim_frame: float, rate: float) -> int | None:
-        cur_cycle = end_frames.by_char_id.get(char_id, {}).get(action_to_msid[cur_action])
-        dst_cycle = end_frames.by_char_id.get(char_id, {}).get(action_to_msid[dst_action])
-        if cur_cycle is None or dst_cycle is None or not (cur_cycle > 0.0 and dst_cycle > 0.0):
-            return None
-        post_tick = float(anim_frame) + float(rate)
-        quotient = int(post_tick / float(cur_cycle))
-        adjusted = post_tick - float(cur_cycle) * float(quotient)
-        final_frame = int(float(dst_cycle) * (adjusted / float(cur_cycle)))
-        out_af = final_frame + 1
-        if out_af >= int(float(dst_cycle)):
-            # Walk AObj timelines loop in-game; this mirrors the runtime table behavior closely
-            # enough for choosing between the two decomp candidate sources.
-            out_af = 0
-        return int(out_af)
-
-    n = int(action_id_u16.shape[0])
-    out = np.zeros(n, dtype=np.float32)
-    for i in range(n - 1):
-        action = int(action_id_u16[i])
-        if action not in walk_actions:
-            continue
-        char_id = int(char_id_u8[i])
-        target = _walk_action_from_speed(char_id, float(speed_ground_x_self_f32[i]))
-        if target == action or target not in walk_actions:
-            continue
-        facing_dir = -1.0 if int(facing_dir1_i8[i]) < 0 else 1.0
-        ref_af = int(np.int16(ref_action_frame_i16[i + 1]))
-        hidden_source = float(walk_anim_source_vel_f32[i])
-        ground_source = float(speed_ground_x_self_f32[i])
-        hidden_rate = _rate_from_source(action, char_id, facing_dir, hidden_source)
-        ground_rate = _rate_from_source(action, char_id, facing_dir, ground_source)
-        hidden_af = (
-            None
-            if hidden_rate is None
-            else _predict_retarget_af(char_id, action, target, float(anim_frame_f32[i]), hidden_rate)
-        )
-        ground_af = (
-            None
-            if ground_rate is None
-            else _predict_retarget_af(char_id, action, target, float(anim_frame_f32[i]), ground_rate)
-        )
-        if ground_af == ref_af and hidden_af != ref_af:
-            out[i] = np.float32(ground_source)
-        elif hidden_af == ref_af and ground_af != ref_af:
-            out[i] = np.float32(hidden_source)
-    return out
+    slow = np.zeros(256, dtype=np.float32)
+    middle = np.zeros(256, dtype=np.float32)
+    fast = np.zeros(256, dtype=np.float32)
+    for cid, divs in walk_divisors_by_char.items():
+        slow[int(cid) & 0xFF] = np.float32(float(divs[0]))
+        middle[int(cid) & 0xFF] = np.float32(float(divs[1]))
+        fast[int(cid) & 0xFF] = np.float32(float(divs[2]))
+    walk_max = np.zeros(256, dtype=np.float32)
+    for cid, value in walk_max_by_char.items():
+        walk_max[int(cid) & 0xFF] = np.float32(float(value))
+    cycle_width = 16
+    end_lut = np.zeros((256, cycle_width), dtype=np.float32)
+    for cid, by_msid in end_frames.by_char_id.items():
+        for msid, end_frame in by_msid.items():
+            if 0 <= int(msid) < cycle_width:
+                end_lut[int(cid) & 0xFF, int(msid)] = np.float32(float(end_frame))
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.derive_walk_retarget_tick_source_vel is required; run `make build`"
+        ) from exc
+    return msl_binding.derive_walk_retarget_tick_source_vel(
+        np.ascontiguousarray(np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)),
+        np.ascontiguousarray(np.asarray(char_id_u8, dtype=np.uint8).reshape(-1)),
+        np.ascontiguousarray(np.asarray(facing_dir1_i8, dtype=np.int8).reshape(-1)),
+        np.ascontiguousarray(np.asarray(anim_frame_f32, dtype=np.float32).reshape(-1)),
+        np.ascontiguousarray(np.asarray(ref_action_frame_i16, dtype=np.int16).reshape(-1)),
+        np.ascontiguousarray(np.asarray(speed_ground_x_self_f32, dtype=np.float32).reshape(-1)),
+        np.ascontiguousarray(np.asarray(walk_anim_source_vel_f32, dtype=np.float32).reshape(-1)),
+        slow,
+        middle,
+        fast,
+        walk_max,
+        end_lut,
+        float(walk_mid_vel_mul),
+        float(walk_fast_vel_mul),
+    )
 
 
 def _derive_run_anim_source_vel_seed_lane(
@@ -2766,28 +1490,20 @@ def _derive_run_anim_source_vel_seed_lane(
     refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::ftCo_Run_Anim
     refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunDirect.c::ftCo_RunDirect_Anim
     """
-    ACT_RUN = 0x0015
-    ACT_RUN_DIRECT = 0x0016
-
-    n = int(action_id_u16.shape[0])
-    out = np.zeros(n, dtype=np.float32)
-    for i in range(n):
-        action = int(action_id_u16[i])
-        if action not in (ACT_RUN, ACT_RUN_DIRECT):
-            continue
-        scaling = float(run_scaling_by_char.get(int(char_id_u8[i]), 0.0))
-        if not np.isfinite(scaling) or scaling <= 0.0:
-            continue
-        rate_index = i
-        next_i = i + 1
-        if next_i < n and int(action_id_u16[next_i]) == action:
-            rate_index = next_i
-        rate = float(frame_speed_mul_f32[rate_index])
-        if not np.isfinite(rate) or rate <= 0.0:
-            continue
-        facing_dir = -1.0 if int(facing_dir1_i8[i]) < 0 else 1.0
-        out[i] = np.float32(facing_dir * rate * scaling)
-    return out
+    scaling = np.zeros(256, dtype=np.float32)
+    for cid, value in run_scaling_by_char.items():
+        scaling[int(cid) & 0xFF] = np.float32(float(value))
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError("native msl_binding.derive_run_anim_source_vel is required; run `make build`") from exc
+    return msl_binding.derive_run_anim_source_vel(
+        np.asarray(action_id_u16, dtype=np.uint16).reshape(-1),
+        np.asarray(char_id_u8, dtype=np.uint8).reshape(-1),
+        np.asarray(facing_dir1_i8, dtype=np.int8).reshape(-1),
+        np.asarray(frame_speed_mul_f32, dtype=np.float32).reshape(-1),
+        scaling,
+    )
 
 
 def _team_id_from_start_player(p: dict) -> int:
@@ -2890,77 +1606,31 @@ def _materialize_illusion_seed_positions(
     if n_frames <= 1:
         return out
 
-    # GALE01 item ids come from MSLITAR1 side_special_illusion_itkind:
-    # refs/melee/src/melee/it/forward.h::ItemKind
-    # refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c::ftFx_Init_OnLoad
-    # refs/melee/src/melee/ft/chara/ftFalco/ftFc_Init.c::ftFc_Init_OnLoad
-    # - ftFx_MS_SpecialS        = 0x015C (348)
-    # - ftFx_MS_SpecialSEnd     = 0x015D (349)
-    # - ftFx_MS_SpecialAirS     = 0x015F (351)
-    # - ftFx_MS_SpecialAirSEnd  = 0x0160 (352)
-    # refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c::ftFx_Init_MotionStateTable
-    # refs/melee/src/melee/ft/chara/ftFalco/ftFc_Init.c::ftFc_Init_MotionStateTable
-    ACT_FX_SPECIAL_S = 348
-    ACT_FX_SPECIAL_S_END = 349
-    ACT_FX_SPECIAL_AIR_S = 351
-    ACT_FX_SPECIAL_AIR_S_END = 352
-    ACT_GUARD_SET_OFF = 181
-    setphys_action_ids = (
-        ACT_FX_SPECIAL_S,
-        ACT_FX_SPECIAL_S_END,
-        ACT_FX_SPECIAL_AIR_S,
-        ACT_FX_SPECIAL_AIR_S_END,
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.derive_illusion_seed_position_updates is required; run `make build`"
+        ) from exc
+    illusion_lut = np.zeros(65536, dtype=np.uint8)
+    for item_kind in illusion_item_kinds:
+        illusion_lut[int(item_kind) & 0xFFFF] = np.uint8(1)
+    update_mask, update_x, update_y = msl_binding.derive_illusion_seed_position_updates(
+        np.ascontiguousarray(out["exists"], dtype=np.uint8),
+        np.ascontiguousarray(out["type"], dtype=np.uint16),
+        np.ascontiguousarray(out["owner"], dtype=np.int8),
+        np.ascontiguousarray(out["instance_id"], dtype=np.uint16),
+        np.ascontiguousarray(post_action_id_u16, dtype=np.uint16),
+        np.ascontiguousarray(post_hitlag_u8, dtype=np.uint8),
+        np.ascontiguousarray(post_instance_hit_by_u16, dtype=np.uint16),
+        np.ascontiguousarray(illusion_ghost_pos1_x, dtype=np.float32),
+        np.ascontiguousarray(illusion_ghost_pos1_y, dtype=np.float32),
+        illusion_lut,
+        int(num_players),
     )
-
-    for fi in range(1, n_frames):
-        for slot in range(out.shape[1]):
-            it = out[fi, slot]
-            if int(it["exists"]) == 0:
-                continue
-            if int(it["type"]) not in illusion_item_kinds:
-                continue
-            owner = int(it["owner"])
-            if owner < 0 or owner >= int(num_players):
-                continue
-            ongoing_guardsetoff_hitlag = False
-            ongoing_body_hitlag = False
-            if int(post_action_id_u16[fi, owner]) in setphys_action_ids:
-                candidate_victim = -1
-                for p in range(int(num_players)):
-                    if int(post_hitlag_u8[fi, p]) == 0:
-                        continue
-                    if int(post_action_id_u16[fi, p]) != ACT_GUARD_SET_OFF:
-                        continue
-                    if candidate_victim >= 0:
-                        candidate_victim = -2
-                        break
-                    candidate_victim = p
-                if candidate_victim >= 0:
-                    illusion_candidates = 0
-                    for other_slot in range(out.shape[1]):
-                        other_it = out[fi, other_slot]
-                        if int(other_it["exists"]) == 0:
-                            continue
-                        if int(other_it["type"]) not in illusion_item_kinds:
-                            continue
-                        illusion_candidates += 1
-                        if illusion_candidates > 1:
-                            break
-                    ongoing_guardsetoff_hitlag = illusion_candidates == 1
-                if not ongoing_guardsetoff_hitlag:
-                    for p in range(int(num_players)):
-                        if int(post_hitlag_u8[fi, p]) == 0:
-                            continue
-                        if int(post_instance_hit_by_u16[fi, p]) != int(it["instance_id"]):
-                            continue
-                        ongoing_body_hitlag = True
-                        break
-            if ongoing_guardsetoff_hitlag or ongoing_body_hitlag:
-                continue
-            if int(post_action_id_u16[fi, owner]) not in setphys_action_ids:
-                continue
-            out[fi, slot]["pos_x"] = np.float32(float(illusion_ghost_pos1_x[fi, owner]))
-            out[fi, slot]["pos_y"] = np.float32(float(illusion_ghost_pos1_y[fi, owner]))
+    mask = update_mask != 0
+    out["pos_x"][mask] = update_x[mask]
+    out["pos_y"][mask] = update_y[mask]
 
     return out
 
@@ -3034,52 +1704,21 @@ def _derive_item_attack_fields(
     """
     if "attack_id" not in items_fixed.dtype.names or "attack_instance" not in items_fixed.dtype.names:
         return
-
-    # Live mapping for active items keyed by the stable item identity:
-    # (spawn_id, type) == (Slippi item.id, item.type).
-    #
-    # IMPORTANT: Slippi `item.instance_id` is item->xDA8_short, which can change on reflect
-    # (and other owner transfers) without the underlying item despawning. Using instance_id as
-    # part of the map key would spuriously treat a reflected item as a new item and would break
-    # one-step reseed expectations.
-    active: dict[tuple[int, int], tuple[int, int]] = {}
-    default_attack_id = 1  # FtMoveId_Default (do not stale)
-
-    n_frames = int(items_fixed.shape[0])
-    for fi in range(n_frames):
-        keys_this_frame: set[tuple[int, int]] = set()
-
-        for slot in range(15):
-            if int(items_fixed[fi, slot]["exists"]) == 0:
-                continue
-
-            key = (
-                int(items_fixed[fi, slot]["spawn_id"]),
-                int(items_fixed[fi, slot]["type"]),
-            )
-            keys_this_frame.add(key)
-
-            owner = int(items_fixed[fi, slot]["owner"])
-
-            v = active.get(key)
-            if v is None:
-                if 0 <= owner < int(num_players):
-                    aid = int(fighter_attack_id[fi, owner])
-                    ainst = int(fighter_attack_instance[fi, owner])
-                else:
-                    aid = default_attack_id
-                    ainst = 0
-                v = (aid, ainst)
-                active[key] = v
-
-            items_fixed[fi, slot]["attack_id"] = np.uint16(v[0])
-            items_fixed[fi, slot]["attack_instance"] = np.uint16(v[1])
-
-        # Drop inactive keys to keep the active map bounded.
-        if active:
-            for k in list(active.keys()):
-                if k not in keys_this_frame:
-                    del active[k]
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError("native msl_binding.derive_item_attack_fields is required; run `make build`") from exc
+    attack_id, attack_instance = msl_binding.derive_item_attack_fields(
+        np.ascontiguousarray(items_fixed["exists"], dtype=np.uint8),
+        np.ascontiguousarray(items_fixed["type"], dtype=np.uint16),
+        np.ascontiguousarray(items_fixed["owner"], dtype=np.int8),
+        np.ascontiguousarray(items_fixed["spawn_id"], dtype=np.uint32),
+        np.ascontiguousarray(fighter_attack_id, dtype=np.uint16),
+        np.ascontiguousarray(fighter_attack_instance, dtype=np.uint16),
+        int(num_players),
+    )
+    items_fixed["attack_id"] = attack_id
+    items_fixed["attack_instance"] = attack_instance
 
 
 def _derive_item_reflect_damage_mul(
@@ -3108,91 +1747,27 @@ def _derive_item_reflect_damage_mul(
     - Carry the value forward while the item stays alive.
     """
     n_frames = int(items_fixed.shape[0])
-    out = np.ones((n_frames, int(items_fixed.shape[1])), dtype=np.float32)
     if n_frames == 0:
-        return out
-
-    ACT_GUARD_REFLECT = 0x00B6
-    STATE_FLAGS_221C_INDEX = 3
-    STATE_FLAG_221C_POWERSHIELD_ACTIVE = 0x20
-
-    active_mul: dict[tuple[int, int], float] = {}
-    active_owner: dict[tuple[int, int], int] = {}
-    active_instance_id: dict[tuple[int, int], int] = {}
-    active_vel: dict[tuple[int, int], tuple[float, float]] = {}
-
-    for fi in range(n_frames):
-        keys_this_frame: set[tuple[int, int]] = set()
-        for slot in range(int(items_fixed.shape[1])):
-            if int(items_fixed[fi, slot]["exists"]) == 0:
-                continue
-
-            key = (int(items_fixed[fi, slot]["spawn_id"]), int(items_fixed[fi, slot]["type"]))
-            keys_this_frame.add(key)
-
-            owner = int(items_fixed[fi, slot]["owner"])
-            instance_id = int(items_fixed[fi, slot]["instance_id"])
-            vel_x = float(items_fixed[fi, slot]["vel_x"])
-            vel_y = float(items_fixed[fi, slot]["vel_y"])
-            mul = float(active_mul.get(key, 1.0))
-            prev_owner = int(active_owner.get(key, owner))
-            prev_instance_id = int(active_instance_id.get(key, instance_id))
-            prev_vel_x, prev_vel_y = active_vel.get(key, (vel_x, vel_y))
-
-            # Reflect-event observability:
-            # - Owner transfer is a direct signal from Item_80269F14-style reflect apply.
-            # - Even when owner does not change, reflect apply rewrites item->xDA8_short from the
-            #   reflecting fighter snapshot; Slippi exports this as item.instance_id.
-            #   refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
-            #   refs/melee/src/melee/it/item.c::Item_80269F14
-            # refs/melee/src/melee/it/items/itfoxlaser.c::it_2725_Logic94_Reflected
-            # refs/melee/src/melee/it/item.c::Item_80269F14
-            owner_changed = owner != prev_owner
-            instance_transfer = instance_id != prev_instance_id
-            prev_speed_sq = prev_vel_x * prev_vel_x + prev_vel_y * prev_vel_y
-            cur_speed_sq = vel_x * vel_x + vel_y * vel_y
-            # Tight fallback for replay rows where reflect apply is observable via direction flip
-            # but owner/xDA8 transfer is not visible in post-frame lanes at this key.
-            # refs/melee/src/melee/it/items/itfoxlaser.c::it_2725_Logic94_Reflected
-            reversed_vel_same_owner = (
-                owner == prev_owner
-                and not instance_transfer
-                and prev_speed_sq > 1e-6
-                and cur_speed_sq > 1e-6
-                and (prev_vel_x * vel_x + prev_vel_y * vel_y) < 0.0
-                and abs(cur_speed_sq - prev_speed_sq) <= (0.25 * max(prev_speed_sq, cur_speed_sq))
-            )
-
-            if (owner_changed or instance_transfer or reversed_vel_same_owner) and 0 <= owner < int(num_players):
-                act = int(post_action_id_u16[fi, owner])
-                flags3 = int(post_state_flags_u8[fi, owner, STATE_FLAGS_221C_INDEX])
-                if act == ACT_GUARD_REFLECT and (flags3 & STATE_FLAG_221C_POWERSHIELD_ACTIVE):
-                    mul = (
-                        float(powershield_reflect_damage_mul)
-                        if float(powershield_reflect_damage_mul) > 0.0
-                        else 1.0
-                    )
-                else:
-                    char_id = int(post_char_id_u8[fi, owner])
-                    ch_mul = float(reflector_damage_mul_lut[np.uint8(char_id)])
-                    if ch_mul > 0.0:
-                        mul = ch_mul
-
-            active_mul[key] = float(mul)
-            active_owner[key] = int(owner)
-            active_instance_id[key] = int(instance_id)
-            active_vel[key] = (vel_x, vel_y)
-            out[fi, slot] = np.float32(mul)
-
-        if active_mul:
-            for key in list(active_mul.keys()):
-                if key not in keys_this_frame:
-                    del active_mul[key]
-                    active_owner.pop(key, None)
-                    active_instance_id.pop(key, None)
-                    active_vel.pop(key, None)
-
-    return out
+        return np.ones((0, int(items_fixed.shape[1])), dtype=np.float32)
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError("native msl_binding.derive_item_reflect_damage_mul is required; run `make build`") from exc
+    return msl_binding.derive_item_reflect_damage_mul(
+        np.ascontiguousarray(items_fixed["exists"], dtype=np.uint8),
+        np.ascontiguousarray(items_fixed["type"], dtype=np.uint16),
+        np.ascontiguousarray(items_fixed["owner"], dtype=np.int8),
+        np.ascontiguousarray(items_fixed["instance_id"], dtype=np.uint16),
+        np.ascontiguousarray(items_fixed["vel_x"], dtype=np.float32),
+        np.ascontiguousarray(items_fixed["vel_y"], dtype=np.float32),
+        np.ascontiguousarray(items_fixed["spawn_id"], dtype=np.uint32),
+        np.ascontiguousarray(post_action_id_u16, dtype=np.uint16),
+        np.ascontiguousarray(post_char_id_u8, dtype=np.uint8),
+        np.ascontiguousarray(post_state_flags_u8, dtype=np.uint8),
+        np.ascontiguousarray(reflector_damage_mul_lut, dtype=np.float32),
+        float(powershield_reflect_damage_mul),
+        int(num_players),
+    )
 
 
 def _damage_hurt_height_from_action(action_id: int, on_ground: int) -> int:
@@ -3235,82 +1810,45 @@ def _derive_item_hidden_callback_seed_lanes(
     """
     n = int(seed_items.shape[0])
     slots = int(seed_items.shape[1])
-    reflect_port = np.full((n, slots), 0xFF, dtype=np.uint8)
-    reflect_iid = np.zeros((n, slots), dtype=np.uint16)
-    bounce_valid = np.zeros((n, slots), dtype=np.uint8)
-    bounce_vx = np.zeros((n, slots), dtype=np.float32)
-    bounce_vy = np.zeros((n, slots), dtype=np.float32)
-    body_victim = np.full((n, slots), 0xFF, dtype=np.uint8)
-    body_height = np.zeros((n, slots), dtype=np.uint8)
-    callback_flags = np.zeros((n, slots), dtype=np.uint8)
-
-    laser_type_set = set(int(t) for t in laser_types)
-    guard_actions = {178, 179, 180, 181, 182}
-
-    for i in range(n):
-        guard_context = any(
-            int(seed_action_id_u16[i, p]) in guard_actions
-            or int(ref_action_id_u16[i, p]) in guard_actions
-            for p in range(int(num_players))
+    if n == 0:
+        return (
+            np.full((0, slots), 0xFF, dtype=np.uint8),
+            np.zeros((0, slots), dtype=np.uint16),
+            np.zeros((0, slots), dtype=np.uint8),
+            np.zeros((0, slots), dtype=np.float32),
+            np.zeros((0, slots), dtype=np.float32),
+            np.full((0, slots), 0xFF, dtype=np.uint8),
+            np.zeros((0, slots), dtype=np.uint8),
+            np.zeros((0, slots), dtype=np.uint8),
         )
-        for it in range(slots):
-            seed = seed_items[i, it]
-            ref = ref_items[i, it]
-            if int(seed["exists"]) == 0:
-                continue
-            item_type = int(seed["type"])
-            if item_type not in laser_type_set:
-                continue
-
-            seed_iid = int(seed["instance_id"])
-            seed_owner = int(seed["owner"])
-            ref_exists = int(ref["exists"]) != 0
-            ref_same_item = (
-                ref_exists
-                and int(ref["type"]) == item_type
-                and int(ref["instance_id"]) == seed_iid
-                and int(ref["spawn_id"]) == int(seed["spawn_id"])
-            )
-
-            if guard_context:
-                if (
-                    ref_exists
-                    and int(ref["type"]) == item_type
-                    and int(ref["spawn_id"]) == int(seed["spawn_id"])
-                ):
-                    ref_owner = int(ref["owner"])
-                    ref_iid = int(ref["instance_id"])
-                    if 0 <= ref_owner < int(num_players) and (
-                        ref_owner != seed_owner or ref_iid != seed_iid
-                    ):
-                        reflect_port[i, it] = np.uint8(ref_owner)
-                        reflect_iid[i, it] = np.uint16(ref_iid & 0xFFFF)
-
-                if ref_same_item and int(ref["owner"]) == seed_owner:
-                    svx = float(seed["vel_x"])
-                    svy = float(seed["vel_y"])
-                    rvx = float(ref["vel_x"])
-                    rvy = float(ref["vel_y"])
-                    if (
-                        np.isfinite(svx)
-                        and np.isfinite(svy)
-                        and np.isfinite(rvx)
-                        and np.isfinite(rvy)
-                        and ((rvx - svx) * (rvx - svx) + (rvy - svy) * (rvy - svy)) > 0.25
-                    ):
-                        bounce_valid[i, it] = np.uint8(1)
-                        bounce_vx[i, it] = np.float32(rvx)
-                        bounce_vy[i, it] = np.float32(rvy)
-
-    return (
-        reflect_port,
-        reflect_iid,
-        bounce_valid,
-        bounce_vx,
-        bounce_vy,
-        body_victim,
-        body_height,
-        callback_flags,
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.derive_item_hidden_callback_seed_lanes is required; run `make build`"
+        ) from exc
+    laser_lut = np.zeros(65536, dtype=np.uint8)
+    for item_kind in laser_types:
+        laser_lut[int(item_kind) & 0xFFFF] = np.uint8(1)
+    return msl_binding.derive_item_hidden_callback_seed_lanes(
+        np.ascontiguousarray(seed_items["exists"], dtype=np.uint8),
+        np.ascontiguousarray(seed_items["type"], dtype=np.uint16),
+        np.ascontiguousarray(seed_items["owner"], dtype=np.int8),
+        np.ascontiguousarray(seed_items["instance_id"], dtype=np.uint16),
+        np.ascontiguousarray(seed_items["spawn_id"], dtype=np.uint32),
+        np.ascontiguousarray(seed_items["vel_x"], dtype=np.float32),
+        np.ascontiguousarray(seed_items["vel_y"], dtype=np.float32),
+        np.ascontiguousarray(ref_items["exists"], dtype=np.uint8),
+        np.ascontiguousarray(ref_items["type"], dtype=np.uint16),
+        np.ascontiguousarray(ref_items["owner"], dtype=np.int8),
+        np.ascontiguousarray(ref_items["instance_id"], dtype=np.uint16),
+        np.ascontiguousarray(ref_items["spawn_id"], dtype=np.uint32),
+        np.ascontiguousarray(ref_items["vel_x"], dtype=np.float32),
+        np.ascontiguousarray(ref_items["vel_y"], dtype=np.float32),
+        np.ascontiguousarray(seed_action_id_u16, dtype=np.uint16),
+        np.ascontiguousarray(ref_action_id_u16, dtype=np.uint16),
+        laser_lut,
+        int(num_players),
     )
 
 
@@ -3323,22 +1861,14 @@ def _derive_facing_dir1_sign(*, facing_u8: np.ndarray, action_id_u16: np.ndarray
     - Escape/root-motion helpers consume fp->facing_dir1.
       refs/melee/src/melee/ft/ft_081B.c::ft_80085030
     """
-    facing = np.asarray(facing_u8, dtype=np.uint8).reshape(-1)
-    action = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
-    n = int(facing.shape[0])
-    if int(action.shape[0]) != n:
-        raise ValueError("facing_u8 and action_id_u16 must have same length")
-    out = np.zeros(n, dtype=np.int8)
-    prev_action = None
-    cur_sign = np.int8(1)
-    for i in range(n):
-        face_sign = np.int8(1 if int(facing[i]) != 0 else -1)
-        a = int(action[i])
-        if i == 0 or prev_action is None or a != prev_action:
-            cur_sign = face_sign
-        out[i] = cur_sign
-        prev_action = a
-    return out
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError("native msl_binding.derive_facing_dir1_sign is required; run `make build`") from exc
+    return msl_binding.derive_facing_dir1_sign(
+        np.asarray(facing_u8, dtype=np.uint8).reshape(-1),
+        np.asarray(action_id_u16, dtype=np.uint16).reshape(-1),
+    )
 
 
 def _derive_specialhi_rotate_model_seed_lane(
@@ -3370,103 +1900,40 @@ def _derive_specialhi_rotate_model_seed_lane(
       ftFx_SpecialAirHi_Coll,ftFx_SpecialHiLanding_Anim,ftFx_SpecialHiFall_Anim,
       ftFx_SpecialHiBound_Enter}
     """
-
-    action = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
-    facing = np.asarray(facing_u8, dtype=np.uint8).reshape(-1)
-    pos_x = np.asarray(pos_x_f32, dtype=np.float32).reshape(-1)
-    pos_y = np.asarray(pos_y_f32, dtype=np.float32).reshape(-1)
-    vx = np.asarray(speed_air_x_self_f32, dtype=np.float32).reshape(-1)
-    vy = np.asarray(speed_y_self_f32, dtype=np.float32).reshape(-1)
-    if not (action.shape == facing.shape == pos_x.shape == pos_y.shape == vx.shape == vy.shape):
-        raise ValueError("SpecialHi rotateModel seed inputs must have matching length")
-
-    special_actions = {
+    kind_id = np.array(
+        [3 if seg.get("kind") == "left_wall" else 2 if seg.get("kind") == "right_wall" else 0 for seg in stage_segments],
+        dtype=np.uint8,
+    )
+    x0 = np.array([float(seg["x0"]) for seg in stage_segments], dtype=np.float32)
+    y0 = np.array([float(seg["y0"]) for seg in stage_segments], dtype=np.float32)
+    x1 = np.array([float(seg["x1"]) for seg in stage_segments], dtype=np.float32)
+    y1 = np.array([float(seg["y1"]) for seg in stage_segments], dtype=np.float32)
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.derive_specialhi_rotate_model_seed_lane is required; run `make build`"
+        ) from exc
+    return msl_binding.derive_specialhi_rotate_model_seed_lane(
+        np.ascontiguousarray(np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)),
+        np.ascontiguousarray(np.asarray(facing_u8, dtype=np.uint8).reshape(-1)),
+        np.ascontiguousarray(np.asarray(pos_x_f32, dtype=np.float32).reshape(-1)),
+        np.ascontiguousarray(np.asarray(pos_y_f32, dtype=np.float32).reshape(-1)),
+        np.ascontiguousarray(np.asarray(speed_air_x_self_f32, dtype=np.float32).reshape(-1)),
+        np.ascontiguousarray(np.asarray(speed_y_self_f32, dtype=np.float32).reshape(-1)),
+        int(stage_id_u32),
+        kind_id,
+        x0,
+        y0,
+        x1,
+        y1,
         int(act_fx_special_hi),
         int(act_fx_special_air_hi),
         int(act_fx_special_hi_landing),
         int(act_fx_special_hi_fall),
         int(act_fx_special_hi_bound),
-    }
-    collision_refresh_actions = {int(act_fx_special_hi), int(act_fx_special_air_hi)}
-    left_segments = [seg for seg in stage_segments if seg.get("kind") == "left_wall"]
-    right_segments = [seg for seg in stage_segments if seg.get("kind") == "right_wall"]
+    )
 
-    def _wall_contact_kind_for_rotate_model(i: int) -> int:
-        if int(stage_id_u32) != 32:
-            return 0
-        y = float(pos_y[i])
-        x = float(pos_x[i])
-        if not (np.isfinite(x) and np.isfinite(y)):
-            return 0
-        # Public replay frames expose post-projection position, not CollData env_flags. For the
-        # FD SpecialAirHi wall-collision rotateModel refresh, require the root to be outside a
-        # concrete wall segment at this Y; merely being near the wall from inside is not enough.
-        # This is a seed-history discriminator only. Runtime still uses live mpColl env flags.
-        # The 6u window is not a gameplay constant. It is a conservative replay-history window for
-        # rows already post-projected outside the FD wall after mpColl; replay-real positives and
-        # negatives live in tests/test_specialhi_mpcoll_ecb_replay_real_locks.py.
-        max_replay_history_outside_wall_delta = 6.0
-
-        def segment_x_at_y(seg: dict) -> float | None:
-            y0 = float(seg["y0"])
-            y1 = float(seg["y1"])
-            lo = min(y0, y1) - 0.25
-            hi = max(y0, y1) + 0.25
-            if y < lo or y > hi:
-                return None
-            if abs(y1 - y0) < 1e-6:
-                return float(seg["x0"])
-            t = (y - y0) / (y1 - y0)
-            if t < 0.0:
-                t = 0.0
-            elif t > 1.0:
-                t = 1.0
-            return float(seg["x0"]) + (float(seg["x1"]) - float(seg["x0"])) * t
-
-        for seg in left_segments:
-            sx = segment_x_at_y(seg)
-            if sx is not None and 0.0 <= (sx - x) <= max_replay_history_outside_wall_delta:
-                return 1
-        for seg in right_segments:
-            sx = segment_x_at_y(seg)
-            if sx is not None and 0.0 <= (x - sx) <= max_replay_history_outside_wall_delta:
-                return 2
-        return 0
-
-    n = int(action.shape[0])
-    out = np.zeros(n, dtype=np.float32)
-    valid = np.zeros(n, dtype=np.uint8)
-    cur = np.float32(0.0)
-    cur_valid = False
-    prev_action = -1
-    prev_facing = 0
-
-    for i in range(n):
-        a = int(action[i])
-        if a not in special_actions:
-            cur_valid = False
-            prev_action = a
-            prev_facing = int(facing[i])
-            continue
-        fx = np.float32(1.0 if int(facing[i]) != 0 else -1.0)
-        has_vel = bool(np.isfinite(vx[i]) and np.isfinite(vy[i]) and (abs(float(vx[i])) > 0.0 or abs(float(vy[i])) > 0.0))
-        collision_refresh = a in collision_refresh_actions and _wall_contact_kind_for_rotate_model(i) != 0
-        recompute = (
-            (not cur_valid)
-            or (prev_action not in special_actions)
-            or (int(facing[i]) != prev_facing)
-            or collision_refresh
-        )
-        if recompute and has_vel:
-            cur = np.float32(np.arctan2(np.float32(vy[i]), np.float32(vx[i] * fx)))
-            cur_valid = True
-        if cur_valid:
-            out[i] = cur
-            valid[i] = np.uint8(1)
-        prev_action = a
-        prev_facing = int(facing[i])
-
-    return out, valid
 
 
 def _derive_kb_smashcharge_active_from_post(*, post) -> np.ndarray:
@@ -3490,16 +1957,15 @@ def _derive_kb_smashcharge_active_from_post(*, post) -> np.ndarray:
     return np.zeros(len(post), dtype=np.uint8)
 
 
-def write_dataset_from_slp(
+def build_dataset_from_slp(
     *,
     slp_path: str,
-    out_path: str,
     ports: list[int] | None = None,
     ucf_enabled: bool = True,
     ucf_cardinals_1_0_enabled: bool = False,
-) -> None:
+) -> Dataset:
     """
-    Build a dataset from a single .slp by reseeding with post(i-1),
+    Build an in-memory dataset from a single .slp by reseeding with post(i-1),
     applying inputs from pre(i), and comparing to post(i).
 
     ports: optional list of 1-based ports to include (e.g. [1,2]).
@@ -3509,12 +1975,35 @@ def write_dataset_from_slp(
 
     a = Args()
     a.slp = slp_path
-    a.out = out_path
+    a.out = None
     a.ports = None if ports is None else ",".join(str(p) for p in ports)
     a.ucf_enabled = bool(ucf_enabled)
     a.ucf_cardinals_1_0_enabled = bool(ucf_cardinals_1_0_enabled)
 
-    _main_impl(a)
+    return _main_impl(a)
+
+
+def write_dataset_from_slp(
+    *,
+    slp_path: str,
+    out_path: str,
+    ports: list[int] | None = None,
+    ucf_enabled: bool = True,
+    ucf_cardinals_1_0_enabled: bool = False,
+) -> None:
+    """
+    Build a dataset from a single .slp and write it to the `.msl` cache format.
+
+    ports: optional list of 1-based ports to include (e.g. [1,2]).
+    """
+    ds = build_dataset_from_slp(
+        slp_path=slp_path,
+        ports=ports,
+        ucf_enabled=ucf_enabled,
+        ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
+    )
+    write_dataset(out_path, num_players=int(ds.header["num_players"]), samples=ds.samples)
+    print(f"Wrote {ds.samples.shape[0]} samples to {out_path} from {slp_path}")
 
 
 def main() -> None:
@@ -3536,7 +2025,7 @@ def main() -> None:
     args = ap.parse_args()
     _main_impl(args)
 
-def _main_impl(args) -> None:
+def _main_impl(args) -> Dataset:
     from tools.slippi.combat_history import (
         HITLIST_CD_INDEFINITE,
         derive_combat_hitlist_seed_fields,
@@ -3545,7 +2034,6 @@ def _main_impl(args) -> None:
     from tools.slippi.damage_history import derive_damage_time_since_hit_x18ac
     from tools.slippi.anim_timebase import derive_frame_speed_mul_f32, load_end_frame_tables
     from tools.slippi.seed_history import (
-        apply_deadzone,
         compute_fighter_button_timers,
         compute_fighter_stick_input_counters,
         compute_fighter_trigger_input_counters,
@@ -3589,8 +2077,7 @@ def _main_impl(args) -> None:
         derive_ucf_pad_buffer_state,
         derive_kneebend_internals,
         derive_turn_internals,
-        stick_i8_to_unit,
-        ucf_process_stick_i8,
+        process_stick_i8_units,
     )
 
     game = _read_slippi(args.slp, False)
@@ -4531,21 +3018,22 @@ def _main_impl(args) -> None:
         # - x670/x671 tilt timers (dash flick / tap jump gates)
         # - TURN countdown + flip latch
         # -----------------------------
-        main_x_proc, main_y_proc = ucf_process_stick_i8(
+        main_x_proc, main_y_proc, stick_x, stick_y = process_stick_i8_units(
             pre_main_x,
             pre_main_y,
             ucf_enabled=ucf_enabled,
             ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
+            deadzone_x=float(lstick_deadzone_x),
+            deadzone_y=float(lstick_deadzone_y),
         )
-        c_x_proc, c_y_proc = ucf_process_stick_i8(
+        c_x_proc, c_y_proc, _, cstick_y = process_stick_i8_units(
             pre_c_x,
             pre_c_y,
             ucf_enabled=ucf_enabled,
             ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
+            deadzone_x=float(lstick_deadzone_x),
+            deadzone_y=float(lstick_deadzone_y),
         )
-        stick_x = apply_deadzone(stick_i8_to_unit(main_x_proc), lstick_deadzone_x)
-        stick_y = apply_deadzone(stick_i8_to_unit(main_y_proc), lstick_deadzone_y)
-        cstick_y = apply_deadzone(stick_i8_to_unit(c_y_proc), lstick_deadzone_y)
 
         # Guard (shield) tilt state (mv.co.guard.x8 + mv.co.guard.x4) is seeded so shield bubble
         # placement becomes stateful (tilt smoothing/inertia) under teacher-forced one-step eval.
@@ -5157,90 +3645,62 @@ def _main_impl(args) -> None:
     shield_stun_base = float(common["shield_stun_base"])
     shield_stun_ls_min = float(common["shield_stun_lightshield_min"])
     shield_stun_ls_max = float(common["shield_stun_lightshield_max"])
-
-    def _guardsetoff_infer_hidden_light(i: int, defender: int, int_dmg: int) -> tuple[bool, float]:
-        light = float(lightshield_amount_all[i, defender])
-        if light > 0.0:
-            return True, min(max(light, 0.0), 1.0)
-        if i <= 0 or int_dmg <= 0 or shield_hit_mul <= 0.0:
-            return False, min(max(light, 0.0), 1.0)
-        shield_drop = float(post_shield_f32_all[i - 1, defender]) - float(post_shield_f32_all[i, defender])
-        if shield_drop <= 0.0:
-            return False, min(max(light, 0.0), 1.0)
-        hit_den = shield_hit_mul * float(int_dmg)
-        if hit_den <= 0.0:
-            return False, min(max(light, 0.0), 1.0)
-        hit_light_term = 1.0 - ((shield_drop - shield_hit_base) / hit_den)
-        if not np.isfinite(hit_light_term):
-            return False, min(max(light, 0.0), 1.0)
-        if shield_hit_ls_max == shield_hit_ls_min:
-            return False, min(max(light, 0.0), 1.0)
-        inferred = (hit_light_term - shield_hit_ls_min) / (shield_hit_ls_max - shield_hit_ls_min)
-        if inferred < -0.001 or inferred > 1.001:
-            return False, min(max(light, 0.0), 1.0)
-        return True, min(max(float(inferred), 0.0), 1.0)
-
-    def _guardsetoff_active_int_damage(i: int, defender: int) -> int:
-        best = 0
-        for attacker in range(num_players):
-            if attacker == defender or int(post_hitlag_u16_all[i, attacker]) == 0:
-                continue
-            anim_idx = int(post_animation_index_u32_all[i, attacker])
-            anim_frame = int(post_state_age_all[i, attacker])
-            if anim_frame < 0:
-                anim_frame = 0
-            int_dmg = (
-                char_active_shield_hit_int_damage.get(int(post_char_id_u8[i, attacker]), {})
-                .get(anim_idx, {})
-                .get(anim_frame, 0)
-            )
-            if int_dmg <= 0:
-                continue
-            move_id = int(hist.attack_id[i, attacker])
-            stale_mult = _stale_multiplier_from_seed_queue(
-                int(hist.stale_queue_index[i, attacker]),
-                hist.stale_move_id[i, attacker],
-                move_id,
-            )
-            int_dmg = _get_env_dmg_local(float(int_dmg) * stale_mult)
-            if int_dmg > best:
-                best = int_dmg
-        return best
-
-    for defender in range(num_players):
-        carry_rate = np.float32(0.0)
-        for i in range(n_frames):
-            if int(post_action_id_u16[i, defender]) != int(act_guard_set_off):
-                carry_rate = np.float32(0.0)
-                continue
-            cur_hl = int(post_hitlag_u16_all[i, defender])
-            prev_action = int(post_action_id_u16[i - 1, defender]) if i > 0 else -1
-            prev_hl = int(post_hitlag_u16_all[i - 1, defender]) if i > 0 else 0
-            prev_af = int(post_state_age_all[i - 1, defender]) if i > 0 else 0
-            cur_af = int(post_state_age_all[i, defender])
-            segment_entry = (
-                i == 0
-                or prev_action != int(act_guard_set_off)
-                or cur_hl > prev_hl
-                or cur_af < prev_af
-            )
-            if segment_entry and cur_hl > 0:
-                int_dmg = _guardsetoff_active_int_damage(i, defender)
-                if int_dmg > 0:
-                    inferred_light_ok, hidden_light = _guardsetoff_infer_hidden_light(i, defender, int_dmg)
-                    powershield_active = (int(post_state_flags_u8[i, defender, 3]) & 0x20) != 0
-                    if not (powershield_active or inferred_light_ok):
-                        carry_rate = np.float32(0.0)
-                        continue
-                    stun_light_term = hidden_light * (shield_stun_ls_max - shield_stun_ls_min) + shield_stun_ls_min
-                    stun_frames = shield_stun_mul * (float(int_dmg) * (1.0 - stun_light_term)) + shield_stun_base
-                    # GuardSetOff uses ftCo_SM_GuardDamage as its submotion.
-                    end_frame = end_frames.by_char_id.get(int(post_char_id_u8[i, defender]), {}).get(40)
-                    if end_frame is not None and stun_frames > 0.0:
-                        carry_rate = np.float32((np.float32(end_frame) + np.float32(0.1)) / np.float32(stun_frames))
-            if cur_hl > 0 and float(carry_rate) > 0.0:
-                frame_speed_mul_all[i, defender] = carry_rate
-        samples["seed_t"]["frame_speed_mul_f32"][:, defender] = frame_speed_mul_all[:-1, defender]
+    max_anim_idx = max((max(v.keys(), default=0) for v in char_active_shield_hit_int_damage.values()), default=0)
+    max_active_frame = 0
+    for by_anim in char_active_shield_hit_int_damage.values():
+        for by_frame in by_anim.values():
+            if by_frame:
+                max_active_frame = max(max_active_frame, max(by_frame.keys()))
+    active_shield_hit_lut = np.zeros((256, max_anim_idx + 1, max_active_frame + 1), dtype=np.uint16)
+    for cid, by_anim in char_active_shield_hit_int_damage.items():
+        for anim_idx, by_frame in by_anim.items():
+            for frame, dmg in by_frame.items():
+                active_shield_hit_lut[int(cid) & 0xFF, int(anim_idx), int(frame)] = np.uint16(int(dmg))
+    max_end_msid = max((max(v.keys(), default=0) for v in end_frames.by_char_id.values()), default=40)
+    end_frame_lut = np.zeros((256, max(max_end_msid, 40) + 1), dtype=np.float32)
+    for cid, by_msid in end_frames.by_char_id.items():
+        for msid, end_frame in by_msid.items():
+            end_frame_lut[int(cid) & 0xFF, int(msid)] = np.float32(float(end_frame))
+    char_gr_friction_lut = np.zeros(256, dtype=np.float32)
+    for cid, value in char_gr_friction.items():
+        char_gr_friction_lut[int(cid) & 0xFF] = np.float32(float(value))
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.derive_guardsetoff_frame_speed_overrides is required; run `make build`"
+        ) from exc
+    guardsetoff_rate = msl_binding.derive_guardsetoff_frame_speed_overrides(
+        np.ascontiguousarray(post_action_id_u16, dtype=np.uint16),
+        np.ascontiguousarray(post_hitlag_u16_all, dtype=np.uint16),
+        np.ascontiguousarray(post_state_age_all, dtype=np.int16),
+        np.ascontiguousarray(post_animation_index_u32_all, dtype=np.uint32),
+        np.ascontiguousarray(post_char_id_u8, dtype=np.uint8),
+        np.ascontiguousarray(post_state_flags_u8, dtype=np.uint8),
+        np.ascontiguousarray(post_shield_f32_all, dtype=np.float32),
+        np.ascontiguousarray(lightshield_amount_all, dtype=np.float32),
+        np.ascontiguousarray(hist.attack_id, dtype=np.uint16),
+        np.ascontiguousarray(hist.stale_queue_index, dtype=np.uint8),
+        np.ascontiguousarray(hist.stale_move_id, dtype=np.uint16),
+        active_shield_hit_lut,
+        end_frame_lut,
+        np.asarray(stale_weights, dtype=np.float32),
+        int(num_players),
+        int(act_guard_set_off),
+        shield_hit_mul,
+        shield_hit_base,
+        shield_hit_ls_min,
+        shield_hit_ls_max,
+        shield_stun_mul,
+        shield_stun_base,
+        shield_stun_ls_min,
+        shield_stun_ls_max,
+    )
+    guardsetoff_rate_mask = guardsetoff_rate[:, :num_players] > np.float32(0.0)
+    frame_speed_mul_all[:, :num_players][guardsetoff_rate_mask] = guardsetoff_rate[:, :num_players][
+        guardsetoff_rate_mask
+    ]
+    samples["seed_t"]["frame_speed_mul_f32"][:, :num_players] = frame_speed_mul_all[:-1, :num_players]
 
     # GuardSetOff hidden exit-rate reconstruction (intentionally non-causal, explicit lane):
     # Some GuardSetOff last-hitlag rows do not contain enough current/past replay-visible state to
@@ -5252,20 +3712,21 @@ def _main_impl(args) -> None:
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80092F2C,ftCo_GuardSetOff_Anim}
     # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
     guard_setoff_exit_frame_speed = np.zeros((n_frames, 4), dtype=np.float32)
-    for defender in range(num_players):
-        for i in range(0, max(0, n_frames - 1)):
-            if (
-                int(post_action_id_u16[i, defender]) == int(act_guard_set_off)
-                and int(post_hitlag_u16_all[i, defender]) == 1
-                and int(post_action_id_u16[i + 1, defender]) == int(act_guard_set_off)
-                and int(post_hitlag_u16_all[i + 1, defender]) == 0
-            ):
-                rate = np.float32(frame_speed_mul_all[i + 1, defender])
-                if float(rate) > 0.0 and np.isfinite(float(rate)):
-                    guard_setoff_exit_frame_speed[i, defender] = rate
-        samples["seed_t"]["guard_setoff_exit_frame_speed_mul_f32"][:, defender] = (
-            guard_setoff_exit_frame_speed[:-1, defender]
+    if n_frames > 1 and num_players > 0:
+        exit_mask = (
+            (post_action_id_u16[:-1, :num_players] == np.uint16(act_guard_set_off))
+            & (post_hitlag_u16_all[:-1, :num_players] == np.uint16(1))
+            & (post_action_id_u16[1:, :num_players] == np.uint16(act_guard_set_off))
+            & (post_hitlag_u16_all[1:, :num_players] == np.uint16(0))
+            & np.isfinite(frame_speed_mul_all[1:, :num_players])
+            & (frame_speed_mul_all[1:, :num_players] > np.float32(0.0))
         )
+        guard_setoff_exit_frame_speed[:-1, :num_players][exit_mask] = frame_speed_mul_all[
+            1:, :num_players
+        ][exit_mask]
+    samples["seed_t"]["guard_setoff_exit_frame_speed_mul_f32"][:, :num_players] = (
+        guard_setoff_exit_frame_speed[:-1, :num_players]
+    )
 
     # Owner-indexed ProcessHit source-clear bridge depends on current source-owner seed-visible
     # motion state from the other port, so derive it after all per-port seed arrays are populated.
@@ -5365,83 +3826,39 @@ def _main_impl(args) -> None:
     seed_guard_setoff_hitlag_damage_min = samples["seed_t"]["guard_setoff_hitlag_damage_min"]
     seed_stale_queue_index = samples["seed_t"]["stale_queue_index"]
     seed_stale_move_id = samples["seed_t"]["stale_move_id"]
-    attacker_shield_ground_kb_vel = np.zeros((n_samples, 4), dtype=np.float32)
     shield_kb_mul = float(common["shield_attacker_ground_kb_mul"])
     shield_kb_base = float(common["shield_attacker_ground_kb_base"])
     shield_kb_friction_mul = float(common["shield_attacker_ground_friction_mul"])
-    for attacker in range(num_players):
-        kb = np.float32(0.0)
-        for i in range(n_samples):
-            if int(seed_on_ground[i, attacker]) == 0:
-                kb = np.float32(0.0)
-                attacker_shield_ground_kb_vel[i, attacker] = kb
-                continue
-
-            onset_kb: np.float32 | None = None
-            if int(seed_hitlag[i, attacker]) > 0:
-                for defender in range(num_players):
-                    if defender == attacker:
-                        continue
-                    if int(seed_hitlag[i, defender]) == 0:
-                        continue
-                    defender_action = int(seed_action_id[i, defender])
-                    if defender_action not in (act_guard_set_off, act_guard_reflect):
-                        continue
-                    prev_attacker_hitlag = int(seed_hitlag[i - 1, attacker]) if i > 0 else 0
-                    prev_defender_hitlag = int(seed_hitlag[i - 1, defender]) if i > 0 else 0
-                    prev_defender_dmg = int(seed_guard_setoff_hitlag_damage_min[i - 1, defender]) if i > 0 else 0
-                    if prev_attacker_hitlag != 0 and prev_defender_hitlag != 0 and prev_defender_dmg > 0:
-                        continue
-
-                    int_dmg = 0
-                    anim_idx = int(seed_animation_index[i, attacker])
-                    anim_frame = int(np.floor(float(seed_anim_frame_f32[i, attacker])))
-                    if anim_frame < 0:
-                        anim_frame = 0
-                    int_dmg = (
-                        char_active_shield_hit_int_damage.get(int(seed_char_id[i, attacker]), {})
-                        .get(anim_idx, {})
-                        .get(anim_frame, 0)
-                    )
-                    if int_dmg > 0:
-                        move_id = int(seed_attack_id[i, attacker])
-                        stale_mult = _stale_multiplier_from_seed_queue(
-                            int(seed_stale_queue_index[i, attacker]),
-                            seed_stale_move_id[i, attacker],
-                            move_id,
-                        )
-                        int_dmg = _get_env_dmg_local(float(int_dmg) * stale_mult)
-                    if int_dmg <= 0:
-                        int_dmg = int(seed_guard_setoff_hitlag_damage_min[i, defender])
-                    if int_dmg <= 0:
-                        continue
-
-                    eval_kb = (
-                        float(seed_lightshield_amount[i, defender]) * float(int_dmg) * shield_kb_mul
-                        + shield_kb_base
-                    )
-                    onset_kb = np.float32(
-                        -eval_kb if float(seed_pos_x[i, defender]) > float(seed_pos_x[i, attacker]) else eval_kb
-                    )
-                    break
-
-            if onset_kb is not None:
-                kb = onset_kb
-
-            attacker_shield_ground_kb_vel[i, attacker] = kb
-
-            cur_hitlag = int(seed_hitlag[i, attacker])
-            if cur_hitlag > 1 or kb == np.float32(0.0):
-                continue
-
-            gr_friction = char_gr_friction.get(int(seed_char_id[i, attacker]), 0.0)
-            friction = float(seed_ground_friction_mul[i, attacker]) * gr_friction * shield_kb_friction_mul
-            if friction <= 0.0 or abs(friction) >= abs(float(kb)):
-                kb = np.float32(0.0)
-            elif kb < 0.0:
-                kb = np.float32(float(kb) + friction)
-            else:
-                kb = np.float32(float(kb) - friction)
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.derive_attacker_shield_ground_kb_vel is required; run `make build`"
+        ) from exc
+    attacker_shield_ground_kb_vel = msl_binding.derive_attacker_shield_ground_kb_vel(
+        np.ascontiguousarray(seed_action_id, dtype=np.uint16),
+        np.ascontiguousarray(seed_attack_id, dtype=np.uint16),
+        np.ascontiguousarray(seed_anim_frame_f32, dtype=np.float32),
+        np.ascontiguousarray(seed_animation_index, dtype=np.uint32),
+        np.ascontiguousarray(seed_on_ground, dtype=np.uint8),
+        np.ascontiguousarray(seed_hitlag, dtype=np.uint16),
+        np.ascontiguousarray(seed_pos_x, dtype=np.float32),
+        np.ascontiguousarray(seed_char_id, dtype=np.uint8),
+        np.ascontiguousarray(seed_ground_friction_mul, dtype=np.float32),
+        np.ascontiguousarray(seed_lightshield_amount, dtype=np.float32),
+        np.ascontiguousarray(seed_guard_setoff_hitlag_damage_min, dtype=np.uint8),
+        np.ascontiguousarray(seed_stale_queue_index, dtype=np.uint8),
+        np.ascontiguousarray(seed_stale_move_id, dtype=np.uint16),
+        active_shield_hit_lut,
+        char_gr_friction_lut,
+        np.asarray(stale_weights, dtype=np.float32),
+        int(num_players),
+        int(act_guard_set_off),
+        int(act_guard_reflect),
+        shield_kb_mul,
+        shield_kb_base,
+        shield_kb_friction_mul,
+    )
 
     samples["seed_t"]["attacker_shield_ground_kb_vel"] = attacker_shield_ground_kb_vel
 
@@ -5823,14 +4240,14 @@ def _main_impl(args) -> None:
     grab_mash_x_sign_post = np.zeros((n_frames, 4), dtype=np.int8)
     grab_mash_y_sign_post = np.zeros((n_frames, 4), dtype=np.int8)
     for slot in range(num_players):
-        main_x_proc, main_y_proc = ucf_process_stick_i8(
+        _, _, stick_x, stick_y = process_stick_i8_units(
             pre_main_x_2d[:, slot],
             pre_main_y_2d[:, slot],
             ucf_enabled=ucf_enabled,
             ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
+            deadzone_x=float(lstick_deadzone_x),
+            deadzone_y=float(lstick_deadzone_y),
         )
-        stick_x = apply_deadzone(stick_i8_to_unit(main_x_proc), lstick_deadzone_x)
-        stick_y = apply_deadzone(stick_i8_to_unit(main_y_proc), lstick_deadzone_y)
         pre_stick_x_unit_2d[:, slot] = stick_x
         pre_stick_y_unit_2d[:, slot] = stick_y
         mash_x, mash_y = derive_grab_mash_stick_sign_post(
@@ -5976,101 +4393,33 @@ def _main_impl(args) -> None:
     #   refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
     # - Hitlist ownership container:
     #   refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
-    guard_family = {
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError("native msl_binding.trim_stale_hitlist_seed_bridge is required; run `make build`") from exc
+    msl_binding.trim_stale_hitlist_seed_bridge(
+        hitlist_cd,
+        hitlist_iid,
+        hitlist_hb_valid,
+        hitlist_hb_cd,
+        hitlist_hb_iid,
+        np.ascontiguousarray(post_instance_id, dtype=np.uint16),
+        np.ascontiguousarray(post_instance_hit_by, dtype=np.uint16),
+        np.ascontiguousarray(post_last_hit_by, dtype=np.uint8),
+        np.ascontiguousarray(post_hitlag, dtype=np.uint16),
+        np.ascontiguousarray(post_hitstun, dtype=np.uint16),
+        np.ascontiguousarray(post_action_id, dtype=np.uint16),
+        int(num_players),
+        int(act_attack_11),
+        int(act_attack_lw4),
+        int(act_damage_fly_top),
+        int(act_landing_fall_special),
         int(act_guard_on),
         int(act_guard),
         int(act_guard_set_off),
         int(act_guard_reflect),
         int(act_guard_off),
-    }
-    for fi in range(n_frames):
-        for attacker in range(num_players):
-            attacker_iid = int(post_instance_id[fi, attacker])
-            for defender in range(num_players):
-                if int(post_instance_hit_by[fi, defender]) == attacker_iid:
-                    continue
-                # Attribution corroboration: only trim stale suppression for attacker/defender pairs
-                # where replay-visible ownership points to this attacker port.
-                #
-                # Slippi post-frame ownership lanes:
-                # - `last_hit_by` mirrors fighter->x2088 (port index):
-                #   refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
-                # - `last_hit_by_instance` mirrors fighter->x18EC (instance id):
-                #   refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
-                #
-                # For the singles (2p) target domain, allow a narrow fallback when `last_hit_by`
-                # is unmapped and `last_hit_by_instance` does not map to any live fighter iid this
-                # frame (stale owner lane). In 2p, the non-defender slot is the only valid attacker.
-                #
-                # Keep this fallback out of early/common grounded action space (<= AttackLw4), where
-                # seeded suppression frequently represents valid same-victim rehit blocking.
-                # refs/melee/src/melee/ft/chara/ftCommon/forward.h (ftCommon_MotionState)
-                # src/action_ids.h::MSL_ACT_ATTACK_LW4 (0x0040)
-                defender_action = int(post_action_id[fi, defender])
-                last_hit_by_owner = int(post_last_hit_by[fi, defender])
-                owner_iid = int(post_instance_hit_by[fi, defender])
-                if not _seed_bridge_owner_matches_attacker(
-                    num_players=num_players,
-                    attacker=attacker,
-                    defender=defender,
-                    defender_action=defender_action,
-                    act_attack_lw4=int(act_attack_lw4),
-                    last_hit_by_owner=last_hit_by_owner,
-                    owner_iid=owner_iid,
-                    live_instance_ids=post_instance_id[fi, :num_players],
-                ):
-                    continue
-                hitlag_pre = int(post_hitlag[fi, defender])
-                if hitlag_pre > 0:
-                    hitlag_pre -= 1
-                hitstun_pre = int(post_hitstun[fi, defender])
-                if hitstun_pre > 0:
-                    hitstun_pre -= 1
-                # Neutral non-guard stale suppression (existing bridge policy).
-                neutral_non_guard = (
-                    hitlag_pre == 0
-                    and hitstun_pre == 0
-                    and defender_action not in guard_family
-                    and defender_action != int(act_landing_fall_special)
-                )
-
-                # DamageFlyTop stale suppression (grounded-attack ownership lane):
-                # - Decomp ownership for suppression gate is lbColl_8000ACFC victim presence, not
-                #   defender hitstun state itself.
-                # - When replay-visible attribution disagrees on instance identity for this attacker
-                #   while defender remains in DamageFlyTop, stale dense-seeded suppression can block
-                #   first valid grounded re-contacts in one-step reseed.
-                # refs/melee/src/melee/lb/lbcollision.c::lbColl_8000ACFC
-                # refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
-                # Grounded attack action-id range (ftCo_MS_Attack11..ftCo_MS_AttackLw4) is
-                # contiguous in GALE01:
-                # refs/melee/src/melee/ft/chara/ftCommon/forward.h::ftCommon_MotionState
-                attacker_action = int(post_action_id[fi, attacker])
-                damage_state_bridge = (
-                    hitlag_pre == 0
-                    and defender_action == int(act_damage_fly_top)
-                    and int(act_attack_11) <= attacker_action <= int(act_attack_lw4)
-                )
-
-                if not (neutral_non_guard or damage_state_bridge):
-                    continue
-                # Only trim stale indefinite suppression lanes (0xFFFF). Finite cooldown lanes are
-                # replay-causal and should decay naturally.
-                #
-                # Hitlist cooldown ownership:
-                # - 0xFFFF is the "indefinite" sentinel used by hitlist victim suppression.
-                #   refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
-                if not _seed_bridge_trim_indefinite_lanes(
-                    hitlist_cd=hitlist_cd,
-                    hitlist_iid=hitlist_iid,
-                    hitlist_hb_valid=hitlist_hb_valid,
-                    hitlist_hb_cd=hitlist_hb_cd,
-                    hitlist_hb_iid=hitlist_hb_iid,
-                    fi=fi,
-                    attacker=attacker,
-                    defender=defender,
-                ):
-                    continue
+    )
 
     # Replay-visible shield-contact result for common aerials:
     # - The pose-local combat_history derivation only emits this lane when it can reconstruct the
@@ -6110,211 +4459,52 @@ def _main_impl(args) -> None:
         (n_frames, samples["seed_t"]["combat_shield_damage_taken"].shape[1]), dtype=np.uint8
     )
 
-    def _invert_hitlag_min_damage_for_seed(hitlag_frames: int) -> int:
-        if hitlag_frames <= 0:
-            return 0
-        dmg = 1
-        slope = float(common["hitlag_dmg_mul"])
-        base = float(common["hitlag_base"])
-        while dmg < 0xFF:
-            if int((float(dmg) * slope) + base) >= hitlag_frames:
-                return dmg
-            dmg += 1
-        return 0xFF
-
-    def _infer_shield_damage_taken_for_seed(frame_i: int, defender: int) -> int:
-        if frame_i < 0 or frame_i + 1 >= n_frames or shield_hit_mul <= 0.0:
-            return 0
-        shield_drop = float(post_shield_f32_all[frame_i, defender]) - float(
-            post_shield_f32_all[frame_i + 1, defender]
-        )
-        if shield_drop <= 0.0:
-            return 0
-        light = float(lightshield_amount_all[frame_i, defender])
-        light = min(max(light, 0.0), 1.0)
-        if int(post_action_id[frame_i, defender]) in guard_family_actions:
-            drain_factor = light * (shield_hold_drain_max - shield_hold_drain_base) + shield_hold_drain_base
-            shield_drop -= shield_hold_drain_mul * drain_factor
-        light_term = light * (shield_hit_ls_max - shield_hit_ls_min) + shield_hit_ls_min
-        denom = shield_hit_mul * (1.0 - light_term)
-        if denom <= 0.0:
-            return 0
-        raw = (shield_drop - shield_hit_base) / denom
-        if not np.isfinite(raw):
-            return 0
-        dmg = int(round(raw))
-        if dmg <= 0:
-            return 0
-        if dmg > 0xFF:
-            return 0xFF
-        predicted = shield_hit_mul * (float(dmg) * (1.0 - light_term)) + shield_hit_base
-        # This lane is x19A0_shieldDamageTaken, not an exact shield-HP output shortcut. It is a
-        # non-causal teacher-forced one-step lane derived from t->t+1 shield HP. Accept only
-        # replay-visible deltas that round back to the decomp Fighter_ProcessHit formula after
-        # subtracting the normal Guard shield drain.
-        # refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
-        # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
-        if abs(predicted - shield_drop) > 0.35:
-            return 0
-        return dmg
-
-    def _attacker_has_same_frame_shield_contact_owner(frame_i: int, attacker: int) -> bool:
-        cur_action = post_action_id[frame_i, attacker]
-        next_action = post_action_id[frame_i + 1, attacker]
-        # Same-frame shield contact can be produced by:
-        # - an already-visible attack action at seed t, or
-        # - a post-input motion entry that creates/activates a HitCapsule before ftColl runs.
-        #
-        # Keep this seed bridge to actions with decomp-backed same-frame contact callbacks. Fox/Falco
-        # reflector start/loop/hit/turn install reflect-hit callbacks and create reflector hitboxes
-        # in their action callbacks; End is deliberately excluded because it clears reflector
-        # ownership instead of creating a fresh contact candidate.
-        # refs/melee/src/melee/ft/fighter.c::{Fighter_ChangeMotionState,Fighter_procUpdate}
-        # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{
-        #   ftFx_SpecialLw_Enter,ftFx_SpecialAirLw_Enter,ftFx_SpecialLw_CreateReflectHit,
-        #   ftFx_SpecialLwHit_Enter,ftFx_SpecialLwEnd_Anim}
-        # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
-        return bool(
-            np.isin(cur_action, attack_contact_actions)
-            or np.isin(next_action, same_frame_contact_entry_actions)
-        )
-
-    def _seed_guardsetoff_shield_hitlist_episode(frame_i: int, attacker: int, defender: int) -> None:
-        if frame_i < 0 or frame_i + 1 >= n_frames:
-            return
-        proven_hbs = [
-            hb
-            for hb in range(samples["seed_t"]["combat_hitlist_hb_valid"].shape[2])
-            if int(shield_contact_hb_kind[frame_i, attacker, hb, defender]) == 2
-        ]
-        if not proven_hbs:
-            return
-        if int(post_hitlag[frame_i, attacker]) != 0 or int(post_hitlag[frame_i, defender]) != 0:
-            return
-        if int(post_action_id[frame_i + 1, defender]) != int(act_guard_set_off):
-            return
-        if int(post_hitlag[frame_i + 1, attacker]) <= 0 or int(post_hitlag[frame_i + 1, defender]) <= 0:
-            return
-
-        # The ShieldDesc seed at frame_i proves ftColl_80076CBC accepted the shield hit during
-        # that frame. The accepted HitCapsule victims_1 list is post-mutation state, so it belongs
-        # to the following GuardSetOff hitlag segment. Stamp only the per-HitCapsule lanes whose
-        # ShieldDesc contact was replay-proven, and only while the same action/hitlag episode is
-        # frozen. Runtime materializes these exact slots lazily during hitlag; it does not consume
-        # inactive slots.
-        # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076CBC,ftColl_80076808}
-        # refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
-        defender_iid = np.uint16(int(post_instance_id[frame_i + 1, defender]))
-        attacker_action = int(post_action_id[frame_i + 1, attacker])
-        defender_action = int(post_action_id[frame_i + 1, defender])
-        j = frame_i + 1
-        while (
-            j < n_frames
-            and int(post_action_id[j, attacker]) == attacker_action
-            and int(post_action_id[j, defender]) == defender_action
-            and int(post_hitlag[j, attacker]) > 0
-            and int(post_hitlag[j, defender]) > 0
-            and int(post_instance_id[j, defender]) == int(defender_iid)
-        ):
-            for hb in proven_hbs:
-                hitlist_hb_valid[j, attacker, hb] = np.uint8(1)
-                hitlist_hb_cd[j, attacker, hb, defender] = np.uint16(HITLIST_CD_INDEFINITE)
-                hitlist_hb_iid[j, attacker, hb, defender] = defender_iid
-            j += 1
-
-    for i in range(max(0, n_frames - 1)):
-        for defender in range(num_players):
-            defender_guard_now = post_action_id[i, defender] in guard_family_actions
-            defender_guard_next = post_action_id[i + 1, defender] in guard_family_actions
-            if not (defender_guard_now or defender_guard_next):
-                continue
-            if int(post_hitlag[i, defender]) != 0:
-                continue
-            for attacker in range(num_players):
-                if attacker == defender:
-                    continue
-                if not _attacker_has_same_frame_shield_contact_owner(i, attacker):
-                    continue
-                if int(post_hitlag[i, attacker]) != 0:
-                    continue
-                if (
-                    int(post_action_id[i + 1, defender]) == int(act_guard_set_off)
-                    and int(post_hitlag[i + 1, defender]) > 0
-                    and int(post_hitlag[i + 1, attacker]) > 0
-                ):
-                    # Guard admission can be the same collision frame as the shield hit: at the
-                    # seed boundary the defender may still be Landing/Wait/etc., while t+1 exposes
-                    # GuardSetOff + both-fighter hitlag. That replay-visible outcome proves the
-                    # hidden lbColl_80007BCC ShieldDesc contact for teacher-forced one-step.
-                    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
-                    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
-                    shield_contact_hb_kind[i, attacker, :, defender] = np.uint8(2)
-                    hitlag_int_dmg = _invert_hitlag_min_damage_for_seed(
-                        int(post_hitlag[i + 1, defender])
-                    )
-                    active_int_dmg = _guardsetoff_active_int_damage(i + 1, defender)
-                    use_active_upper = np.isin(
-                        post_action_id[i + 1, attacker], same_frame_special_contact_entry_actions
-                    )
-                    if active_int_dmg > 0 and hitlag_int_dmg > 0:
-                        # This seed lane is consumed by runtime for the current collision frame's
-                        # x19A4/x1924 shield-hit scalar. Replay-visible hitlag is only a lower
-                        # bound because ftCommon_CalcHitlag maps damage ranges to the same integer
-                        # hitlag value. The active lookup is currently a per-frame max over active
-                        # HitCapsules, so it is only safe as an upper source for same-frame special
-                        # contact owners such as shine. Multi-hitbox attacks stay on the hitlag
-                        # lower bound until exact per-HitCapsule shield provenance is exposed.
-                        # refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
-                        # refs/melee/src/melee/ft/ftcommon.c::ftCommon_CalcHitlag
-                        active_int_dmg = (
-                            max(active_int_dmg, hitlag_int_dmg)
-                            if use_active_upper
-                            else hitlag_int_dmg
-                        )
-                    elif active_int_dmg <= 0:
-                        active_int_dmg = hitlag_int_dmg
-                    shield_hit_int_damage[i, defender] = np.uint8(
-                        max(int(shield_hit_int_damage[i, defender]), active_int_dmg)
-                    )
-                    shield_taken = _infer_shield_damage_taken_for_seed(i, defender)
-                    if shield_taken > int(shield_hit_int_damage[i, defender]):
-                        # x19A0 can exceed x19A4 when hit0->x34 shield-damage contributes to
-                        # shieldDamageTaken while x19A4 remains getEnvDmg(hit0->damage). Rows where
-                        # x19A0 <= x19A4 are multi-contact ordering cases; keep those on runtime
-                        # selected-contact ownership until the exact per-HitCapsule order is exposed.
-                        # refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
-                        shield_damage_taken[i, defender] = np.uint8(
-                            max(int(shield_damage_taken[i, defender]), shield_taken)
-                        )
-                elif (
-                    (
-                        int(post_hitlag[i + 1, defender]) == 0
-                        and int(post_hitlag[i + 1, attacker]) == 0
-                    )
-                    or (
-                        int(post_hitlag[i + 1, defender]) > 0
-                        and int(post_hitlag[i + 1, attacker]) > 0
-                        and int(post_action_id[i + 1, defender]) != int(act_guard_set_off)
-                    )
-                ):
-                    # Conversely, a same-frame GuardOn/Guard handoff proves the hidden
-                    # ShieldDesc path did not accept this attacker's live HitCapsule when either:
-                    # - t+1 has no attacker/defender hitlag, or
-                    # - t+1 has attacker/defender hitlag but the defender enters BODY damage,
-                    #   because ftColl_80078C70 tests ShieldDesc first and accepted shield contact
-                    #   would have suppressed the BODY path.
-                    #
-                    # This keeps one-step reseeds from turning a replay-proven BODY hit into a
-                    # false shield hit when live pose geometry is near the shield rim.
-                    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
-                    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
-                    shield_contact_hb_kind[i, attacker, :, defender] = np.uint8(1)
-    for i in range(max(0, n_frames - 1)):
-        for defender in range(num_players):
-            for attacker in range(num_players):
-                if attacker == defender:
-                    continue
-                _seed_guardsetoff_shield_hitlist_episode(i, attacker, defender)
+    guard_lut = np.zeros(65536, dtype=np.uint8)
+    guard_lut[guard_family_actions] = np.uint8(1)
+    attack_lut = np.zeros(65536, dtype=np.uint8)
+    attack_lut[attack_contact_actions] = np.uint8(1)
+    same_frame_lut = np.zeros(65536, dtype=np.uint8)
+    same_frame_lut[same_frame_contact_entry_actions] = np.uint8(1)
+    same_frame_special_lut = np.zeros(65536, dtype=np.uint8)
+    same_frame_special_lut[same_frame_special_contact_entry_actions] = np.uint8(1)
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError("native msl_binding.derive_shield_contact_seed_bridge is required; run `make build`") from exc
+    shield_hit_int_damage, shield_damage_taken = msl_binding.derive_shield_contact_seed_bridge(
+        shield_contact_hb_kind,
+        hitlist_hb_valid,
+        hitlist_hb_cd,
+        hitlist_hb_iid,
+        np.ascontiguousarray(post_action_id, dtype=np.uint16),
+        np.ascontiguousarray(post_hitlag, dtype=np.uint16),
+        np.ascontiguousarray(post_instance_id, dtype=np.uint16),
+        np.ascontiguousarray(post_shield_f32_all, dtype=np.float32),
+        np.ascontiguousarray(lightshield_amount_all, dtype=np.float32),
+        np.ascontiguousarray(post_animation_index_u32_all, dtype=np.uint32),
+        np.ascontiguousarray(post_state_age_all, dtype=np.int16),
+        np.ascontiguousarray(post_char_id_u8, dtype=np.uint8),
+        np.ascontiguousarray(hist.attack_id, dtype=np.uint16),
+        np.ascontiguousarray(hist.stale_queue_index, dtype=np.uint8),
+        np.ascontiguousarray(hist.stale_move_id, dtype=np.uint16),
+        np.ascontiguousarray(active_shield_hit_lut, dtype=np.uint16),
+        np.ascontiguousarray(stale_weights, dtype=np.float32),
+        guard_lut,
+        attack_lut,
+        same_frame_lut,
+        same_frame_special_lut,
+        int(num_players),
+        int(act_guard_set_off),
+        float(common["hitlag_dmg_mul"]),
+        float(common["hitlag_base"]),
+        float(shield_hit_mul),
+        float(shield_hit_base),
+        float(shield_hit_ls_min),
+        float(shield_hit_ls_max),
+        float(shield_hold_drain_mul),
+        float(shield_hold_drain_base),
+        float(shield_hold_drain_max),
+    )
 
     samples["seed_t"]["combat_hitlist_cd"] = hitlist_cd[:-1]
     samples["seed_t"]["combat_hitlist_victim_iid"] = hitlist_iid[:-1]
@@ -6331,78 +4521,28 @@ def _main_impl(args) -> None:
     rebound_anim_rate = np.zeros(
         (n_frames, samples["seed_t"]["rebound_anim_rate_f32"].shape[1]), dtype=np.float32
     )
-
-    def _rebound_anim_rate_from_pending_xe8(frame_i: int, player: int, pending_xe8: float) -> float:
-        # Prefer the replay-visible Rebound frame_speed once Slippi has exposed it. On the first
-        # Rebound row this lane is one row late, so fall back to the source formula using xE8.
-        if (
-            frame_i + 2 < n_frames - 1
-            and int(post_action_id[frame_i + 2, player]) == int(act_rebound)
-        ):
-            later_rate = float(samples["seed_t"]["frame_speed_mul_f32"][frame_i + 2, player])
-            if np.isfinite(later_rate) and later_rate > 0.0 and later_rate < 20.0:
-                return later_rate
-        mul = float(common.get("rebound_ground_x0_mul", 0.0))
-        base = float(common.get("rebound_ground_x0_base", 0.0))
-        if not (mul > 0.0):
-            return 0.0
-        rebound_x191c = (abs(float(pending_xe8)) - base) / mul
-        if not (rebound_x191c > 0.0):
-            return 0.0
-        char_id = int(post_char_id[frame_i, player])
-        numerator = float(char_rebound_anim_numerator_frames.get(char_id, 0.0))
-        if not (numerator > 0.0):
-            return 0.0
-        rate = (numerator + 0.1) / rebound_x191c
-        return rate if np.isfinite(rate) and rate > 0.0 and rate < 20.0 else 0.0
-
-    for p in range(num_players):
-        for i in range(max(0, n_frames - 1)):
-            if (
-                int(post_action_id[i, p]) != int(act_rebound_stop)
-                or int(post_hitlag[i, p]) <= 0
-                or int(post_action_id[i + 1, p]) != int(act_rebound)
-                or int(post_hitlag[i + 1, p]) != 0
-                or int(post_on_ground[i, p]) == 0
-                or int(post_on_ground[i + 1, p]) == 0
-            ):
-                continue
-            pending_xe8 = float(samples["ref_t1"]["speed_ground_x_self"][i, p]) - float(
-                samples["seed_t"]["speed_ground_x_self"][i, p]
-            )
-            if not np.isfinite(pending_xe8) or abs(pending_xe8) <= 1e-6:
-                continue
-            # Teacher-forced ReboundStop seeds need the hidden `fp->xE8_ground_accel_2` value
-            # queued by ftCo_80099D9C -> ftCommon_800804A0. This is intentionally non-causal:
-            # the source value is frozen during ReboundStop hitlag and applied on the first Rebound
-            # Phys frame; Slippi only exposes it once that transition has happened, so backfill
-            # across the contiguous hitlag tail.
-            # The bound keeps this reconstruction in the normal Rebound speed domain extracted from
-            # ftCommonData instead of admitting unrelated ground-speed edits.
-            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Rebound.c::{
-            #   ftCo_80099D9C,ftCo_ReboundStop_Anim,ftCo_Rebound_Phys}
-            # refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804A0
-            if abs(pending_xe8) > 2.0:
-                continue
-            pending_rate = _rebound_anim_rate_from_pending_xe8(i, p, pending_xe8)
-            j = i
-            while (
-                j >= 0
-                and int(post_action_id[j, p]) == int(act_rebound_stop)
-                and int(post_hitlag[j, p]) > 0
-                and int(post_on_ground[j, p]) != 0
-            ):
-                rebound_ground_accel_2[j, p] = np.float32(pending_xe8)
-                if pending_rate > 0.0:
-                    rebound_anim_rate[j, p] = np.float32(pending_rate)
-                j -= 1
-            if (
-                pending_rate > 0.0
-                and i + 1 < n_frames
-                and int(post_action_id[i + 1, p]) == int(act_rebound)
-                and int(post_hitlag[i + 1, p]) == 0
-            ):
-                rebound_anim_rate[i + 1, p] = np.float32(pending_rate)
+    rebound_numerator_lut = np.zeros(256, dtype=np.float32)
+    for cid, numerator in char_rebound_anim_numerator_frames.items():
+        rebound_numerator_lut[int(cid) & 0xFF] = np.float32(float(numerator))
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError("native msl_binding.derive_rebound_seed_lanes is required; run `make build`") from exc
+    rebound_ground_accel_2, rebound_anim_rate = msl_binding.derive_rebound_seed_lanes(
+        np.ascontiguousarray(post_action_id, dtype=np.uint16),
+        np.ascontiguousarray(post_hitlag, dtype=np.uint16),
+        np.ascontiguousarray(post_on_ground, dtype=np.uint8),
+        np.ascontiguousarray(post_char_id, dtype=np.uint8),
+        np.ascontiguousarray(samples["seed_t"]["speed_ground_x_self"], dtype=np.float32),
+        np.ascontiguousarray(samples["ref_t1"]["speed_ground_x_self"], dtype=np.float32),
+        np.ascontiguousarray(samples["seed_t"]["frame_speed_mul_f32"], dtype=np.float32),
+        rebound_numerator_lut,
+        int(num_players),
+        int(act_rebound_stop),
+        int(act_rebound),
+        float(common.get("rebound_ground_x0_mul", 0.0)),
+        float(common.get("rebound_ground_x0_base", 0.0)),
+    )
     samples["seed_t"]["rebound_ground_accel_2_f32"] = rebound_ground_accel_2[:-1]
     samples["seed_t"]["rebound_anim_rate_f32"] = rebound_anim_rate[:-1]
 
@@ -6461,8 +4601,16 @@ def _main_impl(args) -> None:
     )
     samples["seed_t"]["combo_push_timer_x2092"][:, :num_players] = combo_push_timer[:-1, :num_players]
 
-    write_dataset(args.out, num_players=num_players, samples=samples)
-    print(f"Wrote {n_samples} samples to {args.out} from {args.slp}")
+    header = np.zeros((), dtype=HEADER_DTYPE)
+    header["magic"] = MAGIC
+    header["record_size"] = samples.dtype.itemsize
+    header["num_records"] = samples.shape[0]
+    header["num_players"] = num_players
+
+    if getattr(args, "out", None):
+        write_dataset(str(args.out), num_players=num_players, samples=samples)
+        print(f"Wrote {n_samples} samples to {args.out} from {args.slp}")
+    return Dataset(header=header, samples=samples)
 
 
 if __name__ == "__main__":

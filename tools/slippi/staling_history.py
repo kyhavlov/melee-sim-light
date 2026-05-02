@@ -1,13 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 
 import numpy as np
 import pyarrow as pa
-
-from tools.slippi.action_state_tables import FT_MOVE_ID_DEFAULT, U16_MAX, load_action_state_tables
-
 
 # Decomp trail (GALE01) for stale queue + duplicate suppression + multiplier:
 # - Stale queue update + dup suppression:
@@ -26,15 +22,6 @@ from tools.slippi.action_state_tables import FT_MOVE_ID_DEFAULT, U16_MAX, load_a
 #
 # Stale table reset on stock loss:
 # - refs/melee/src/melee/ft/ft_0D31.c::ftCo_800D34E0 (calls plStale_ResetStaleMoveTableForPlayer)
-
-
-_STALE_QUEUE_SIZE = 10
-_ACT_GUARD_ON = 178
-_ACT_GUARD = 179
-_ACT_GUARD_OFF = 180
-_ACT_FX_SPECIAL_N_LOOP = 0x0156
-_ACT_FX_SPECIAL_AIR_N_LOOP = 0x0159
-_NO_SUBMOTION_INDEX = 0xFFFFFFFF
 
 
 @dataclass(frozen=True)
@@ -58,74 +45,18 @@ def _to_numpy(arr) -> np.ndarray:
     return x
 
 
-_action_move_id_tables: dict[int, list[int]] = {}
-
-
-def _load_action_move_id_table_for_char(char_id: int, *, data_dir: Path = Path("data")) -> list[int]:
-    cached = _action_move_id_tables.get(int(char_id))
-    if cached is not None:
-        return cached
-
-    if int(char_id) not in (1, 22):
-        _action_move_id_tables[int(char_id)] = []
-        return []
-    try:
-        table = load_action_state_tables(str(data_dir))[int(char_id)]
-    except FileNotFoundError as e:
-        raise FileNotFoundError(
-            "\n".join(
-                [
-                    f"Missing action_id->move_id table under: {data_dir / 'attack_id' / 'move_id'}",
-                    "",
-                    "Fighter attack identity preprocessing requires these generated artifacts.",
-                    "Generate them from the decomp refs with:",
-                    "  uv run python -m tools.extraction.extract_attack_id_move_id "
-                    "--melee_decomp refs/melee --out_dir data/attack_id/move_id --chars fox,falco",
-                ]
-            )
-        ) from e
-    out = [int(v) for v in table.move_id]
-
-    _action_move_id_tables[int(char_id)] = out
-    return out
-
-
-def _move_id_from_char_action(char_id: int, action_id_u16: int) -> int:
-    if action_id_u16 < 0 or action_id_u16 > 0xFFFF:
-        return FT_MOVE_ID_DEFAULT
-    action_id = int(action_id_u16) & 0xFFFF
-    tab = _load_action_move_id_table_for_char(int(char_id))
-    if action_id >= len(tab):
-        return FT_MOVE_ID_DEFAULT
-    mv = int(tab[action_id])
-    # The extracted table uses 0xFFFF as a sentinel for "unknown/absent". For fighter-side
-    # `x2068_attackID`, prefer the decomp-default `FtMoveId_Default` (1).
-    # refs/melee/src/melee/ft/forward.h::FtMoveId
-    if mv == U16_MAX:
-        return FT_MOVE_ID_DEFAULT
-    return mv
-
-
 def _infer_attacker_slot_from_last_hit_by_instance(
     *,
     state_iid_row: np.ndarray,
     last_hit_by_instance: int,
 ) -> int:
-    """Infer attacker slot when `last_hit_by` is unknown.
-
-    Uses only same-frame (t) state:
-    - `last_hit_by_instance` is the victim's Slippi `last_hit_by_instance` at t.
-    - `state_iid_row` is the per-player Slippi `instance_id` (action-state iid) at t.
-
-    Returns the unique matching player slot, or -1 if unknown/ambiguous.
-    """
+    """Test-visible mirror of the native unique same-frame instance-id fallback."""
     hit_iid = int(last_hit_by_instance)
     if hit_iid == 0:
         return -1
-    matches = np.flatnonzero(state_iid_row.astype(np.int64) == hit_iid)
-    if matches.size != 1:
-        return -1
-    return int(matches[0])
+    row = np.asarray(state_iid_row, dtype=np.uint16).reshape(-1)
+    matches = np.flatnonzero(row.astype(np.int64) == hit_iid)
+    return int(matches[0]) if matches.size == 1 else -1
 
 
 def derive_staling_history(frames: pa.StructArray, *, src_ports: list[int]) -> StalingHistory:
@@ -163,40 +94,11 @@ def derive_staling_history(frames: pa.StructArray, *, src_ports: list[int]) -> S
     src_port_names = [f"P{p}" for p in src_ports]
     num_players = len(src_port_names)
 
-    # Map Slippi's 0-based port indices (P1->0, ...) to our contiguous [0..num_players) slots.
-    slot_by_port0: dict[int, int] = {p - 1: i for i, p in enumerate(src_ports)}
-
     ports_struct = frames.field("ports")
     available_ports = set(f.name for f in ports_struct.type)
     for name in src_port_names:
         if name not in available_ports:
             raise ValueError(f"Replay missing port {name}; available ports: {sorted(available_ports)}")
-
-    n_frames = int(len(frames))
-    qi_out = np.zeros((n_frames, num_players), dtype=np.uint8)
-    stale_mid_out = np.zeros((n_frames, num_players, _STALE_QUEUE_SIZE), dtype=np.uint16)
-    stale_inst_out = np.zeros((n_frames, num_players, _STALE_QUEUE_SIZE), dtype=np.uint16)
-    attack_inst_out = np.zeros((n_frames, num_players), dtype=np.uint16)
-    attack_id_out = np.zeros((n_frames, num_players), dtype=np.uint16)
-
-    # Per-player live stale tables.
-    qi = np.zeros(num_players, dtype=np.uint8)
-    table_mid = np.zeros((num_players, _STALE_QUEUE_SIZE), dtype=np.uint16)
-    table_inst = np.zeros((num_players, _STALE_QUEUE_SIZE), dtype=np.uint16)
-
-    # Derived fighter-side attack_id + attack_instance (x2068/x206C), per player.
-    cur_attack_id = np.full(num_players, FT_MOVE_ID_DEFAULT, dtype=np.uint16)
-    cur_attack_inst = np.zeros(num_players, dtype=np.uint16)
-    stale_attack_counter = 1  # plStale_InitAttackInstance initializes to 1.
-
-    # Map from Slippi action-state instance_id (fp+0x2088) to the derived (attack_id, attack_instance)
-    # for that state, per player.
-    # Used to attribute hits that reference an older state instance_id (e.g. projectiles inheriting owner).
-    by_state_iid: list[dict[int, tuple[int, int]]] = [dict() for _ in range(num_players)]
-
-    # Cache previous action_id + action-state instance_id for causality and hit attribution.
-    prev_action_id = np.full(num_players, 0xFFFF, dtype=np.uint16)
-    prev_state_iid = np.zeros(num_players, dtype=np.uint16)
 
     # Pull all post-frame arrays we need (for vectorized indexing).
     post = []
@@ -216,168 +118,30 @@ def derive_staling_history(frames: pa.StructArray, *, src_ports: list[int]) -> S
     last_hit_by_instance = np.stack(
         [_to_numpy(p.field("last_hit_by_instance")).astype(np.uint16) for p in post], axis=1
     )
-
-    def _inc_attack_instance() -> int:
-        nonlocal stale_attack_counter
-        before = stale_attack_counter & 0xFFFF
-        stale_attack_counter = (stale_attack_counter + 1) & 0xFFFF
-        if stale_attack_counter == 0:
-            stale_attack_counter = 1
-        return before
-
-    def _reset_player_stale_table(p: int) -> None:
-        qi[p] = 0
-        table_mid[p, :] = 0
-        table_inst[p, :] = 0
-
-    def _reset_player_attack_identity(p: int) -> None:
-        # Decomp: fighter reset/default is (attackID=1, instance=0).
-        # refs/melee/src/melee/ft/ft_0881.c::ft_800890BC
-        cur_attack_id[p] = np.uint16(FT_MOVE_ID_DEFAULT)
-        cur_attack_inst[p] = np.uint16(0)
-        prev_action_id[p] = np.uint16(0xFFFF)
-        prev_state_iid[p] = np.uint16(0)
-
-    def _queue_update(p: int, move_id: int, attack_instance: int) -> None:
-        if move_id in (U16_MAX, FT_MOVE_ID_DEFAULT) or attack_instance == 0:
-            return
-        # Duplicate suppression: ignore if exact (move_id, attack_instance) already present.
-        if np.any((table_mid[p, :] == np.uint16(move_id)) & (table_inst[p, :] == np.uint16(attack_instance))):
-            return
-        pos = int(qi[p])
-        if pos >= _STALE_QUEUE_SIZE:
-            pos = 0
-        table_mid[p, pos] = np.uint16(move_id)
-        table_inst[p, pos] = np.uint16(attack_instance)
-        qi[p] = np.uint8(0 if pos == (_STALE_QUEUE_SIZE - 1) else (pos + 1))
-
-    # Main causal pass.
-    for t in range(n_frames):
-        # Per-player: detect stock loss and reset stale tables + fighter attack identity.
-        if t > 0:
-            for p in range(num_players):
-                if stocks[t, p] < stocks[t - 1, p]:
-                    # Decomp: stale table reset happens on stock loss.
-                    # refs/melee/src/melee/ft/ft_0D31.c::ftCo_800D34E0 (calls plStale_ResetStaleMoveTableForPlayer)
-                    _reset_player_stale_table(p)
-                    _reset_player_attack_identity(p)
-
-        # Per-player: update derived attack_id / attack_instance on motion-state changes.
-        #
-        # Decomp trail (GALE01):
-        # - Reset/default: refs/melee/src/melee/ft/ft_0881.c::ft_800890BC
-        # - Update on motion change: refs/melee/src/melee/ft/ft_0881.c::ft_800890D0
-        # - Call site: refs/melee/src/melee/ft/fighter.c inside Fighter_ChangeMotionState calls
-        #   ft_800890D0(fp, new_motion_state->move_id).
-        for p in range(num_players):
-            iid = int(state_iid[t, p])
-            if iid == 0:
-                # Slippi spec: instance_id resets to 0 temporarily on death.
-                # Keep the fighter's derived x206C at 0 until the next observable state transition.
-                _reset_player_attack_identity(p)
-                attack_id_out[t, p] = np.uint16(FT_MOVE_ID_DEFAULT)
-                continue
-
-            act = int(action_id[t, p])
-            if act != int(prev_action_id[p]):
-                if (
-                    act == _ACT_GUARD_OFF
-                    and int(prev_action_id[p]) == _ACT_GUARD_ON
-                    and t > 0
-                    and int(action_id[t - 1, p]) == _ACT_GUARD_ON
-                    and int(animation_index[t - 1, p]) == _NO_SUBMOTION_INDEX
-                    and float(action_frame[t - 1, p]) < 0.0
-                ):
-                    # Hidden GuardOn -> Guard -> GuardOff same-frame handoff:
-                    # - GuardOn_Anim can enter Guard through ftCo_800928CC/ftCo_80092908 before
-                    #   GuardOn_IASA's release gate enters GuardOff.
-                    # - Slippi exposes only final GuardOff, but both default-move
-                    #   Fighter_ChangeMotionState bundles consume plStale_IncrementAttackInstance.
-                    # Keep the derived global attack-instance counter aligned for later item-spawn
-                    # copies without inventing a runtime replay row branch.
-                    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
-                    #   ftCo_GuardOn_Anim,ftCo_800928CC,ftCo_80092908,ftCo_GuardOn_IASA,
-                    #   ftCo_80092C54}
-                    hidden_guard_inst = _inc_attack_instance()
-                    cur_attack_id[p] = np.uint16(_move_id_from_char_action(int(char_id[t, p]), _ACT_GUARD))
-                    cur_attack_inst[p] = np.uint16(hidden_guard_inst)
-
-                move_id = _move_id_from_char_action(int(char_id[t, p]), act)
-                # Decomp: ft_800890D0 increments x206C when move_id==1 OR move_id != current attackID.
-                if move_id == FT_MOVE_ID_DEFAULT or move_id != int(cur_attack_id[p]):
-                    cur_attack_id[p] = np.uint16(move_id)
-                    cur_attack_inst[p] = np.uint16(_inc_attack_instance())
-                prev_action_id[p] = np.uint16(act)
-            elif (
-                act in (_ACT_FX_SPECIAL_N_LOOP, _ACT_FX_SPECIAL_AIR_N_LOOP)
-                and iid != int(prev_state_iid[p])
-                and float(action_frame[t, p]) == 0.0
-            ):
-                # Fox/Falco SpecialN Loop -> Loop restart keeps the same visible action id but
-                # runs the OnChangeAction callback. That callback calls ft_800892A0, which bumps
-                # fp->x206C_attack_instance for the current move id so repeated laser hits with
-                # the same move id are not duplicate-suppressed in the stale table.
-                # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
-                #   ftFx_SpecialNLoop_Anim,ftFx_SpecialAirNLoop_Anim,
-                #   ftFx_SpecialN_OnChangeAction}
-                # refs/melee/src/melee/ft/ft_0881.c::ft_800892A0
-                cur_attack_inst[p] = np.uint16(_inc_attack_instance())
-
-            if iid != int(prev_state_iid[p]):
-                by_state_iid[p].setdefault(iid, (int(cur_attack_id[p]), int(cur_attack_inst[p])))
-                prev_state_iid[p] = np.uint16(iid)
-
-            attack_inst_out[t, p] = cur_attack_inst[p]
-            attack_id_out[t, p] = cur_attack_id[p]
-
-        # Damaging hits: detect via percent delta.
-        if t > 0:
-            for victim in range(num_players):
-                dp = float(percent[t, victim] - percent[t - 1, victim])
-                if not (dp > 0.0):
-                    continue
-
-                # Identify attacker slot (0-based port index in Slippi post is stored in last_hit_by).
-                a_port0 = int(last_hit_by[t, victim])
-                attacker = slot_by_port0.get(a_port0, -1)
-                if attacker < 0:
-                    # Fallback: infer attacker from the victim's `last_hit_by_instance` by matching
-                    # it against a unique player's action-state instance_id at this frame.
-                    #
-                    # Rationale:
-                    # - Some item/projectile damage events (notably "attached victim" edge cases)
-                    #   can leave `last_hit_by` unmapped while still populating `last_hit_by_instance`.
-                    # - Staling tables are attacker-owned and *do* update in-game for those hits,
-                    #   so skipping the enqueue here causes stale table drift and percent mismatches
-                    #   under teacher-forced reseed.
-                    hit_iid = int(last_hit_by_instance[t, victim])
-                    attacker = _infer_attacker_slot_from_last_hit_by_instance(
-                        state_iid_row=state_iid[t, :],
-                        last_hit_by_instance=hit_iid,
-                    )
-                    if attacker < 0:
-                        continue
-                if attacker == victim:
-                    continue
-
-                hit_iid = int(last_hit_by_instance[t, victim])
-                att_move_id = U16_MAX
-                att_attack_inst = 0
-                if hit_iid != 0:
-                    v = by_state_iid[attacker].get(hit_iid)
-                    if v is not None:
-                        att_move_id, att_attack_inst = v
-
-                # Fallback to the attacker's current state (best-effort).
-                if att_move_id == U16_MAX or att_attack_inst == 0:
-                    att_move_id = int(cur_attack_id[attacker])
-                    att_attack_inst = int(cur_attack_inst[attacker])
-
-                _queue_update(attacker, att_move_id, att_attack_inst)
-
-        qi_out[t, :] = qi
-        stale_mid_out[t, :, :] = table_mid
-        stale_inst_out[t, :, :] = table_inst
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.derive_staling_history is required for preprocessing; run `make build`"
+        ) from exc
+    (
+        attack_id_out,
+        attack_inst_out,
+        qi_out,
+        stale_mid_out,
+        stale_inst_out,
+    ) = msl_binding.derive_staling_history(
+        [int(p) for p in src_ports],
+        np.ascontiguousarray(char_id, dtype=np.uint8),
+        np.ascontiguousarray(action_id, dtype=np.uint16),
+        np.ascontiguousarray(action_frame, dtype=np.float32),
+        np.ascontiguousarray(animation_index, dtype=np.uint32),
+        np.ascontiguousarray(percent, dtype=np.float32),
+        np.ascontiguousarray(stocks, dtype=np.uint8),
+        np.ascontiguousarray(state_iid, dtype=np.uint16),
+        np.ascontiguousarray(last_hit_by, dtype=np.uint8),
+        np.ascontiguousarray(last_hit_by_instance, dtype=np.uint16),
+    )
 
     return StalingHistory(
         attack_id=attack_id_out,

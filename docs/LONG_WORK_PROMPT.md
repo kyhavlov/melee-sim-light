@@ -120,7 +120,9 @@ Validation cadence:
 
 - After each retained owner, run focused tests and cheap checks.
 - Run full validation before handoff, before packaging, and after schema/data-contract changes.
-- If seed/schema/data contract changes, force preprocess primary + aggregate.
+- Suite validation builds seed rows directly from `.slp` files by default; force preprocess primary
+  + aggregate only when persistent `.msl` cache encoding/metadata or cache regeneration is part of
+  the change being validated.
 - Before final handoff, run the appropriate full validation set for the retained dirty stack.
 
 Hard rule:

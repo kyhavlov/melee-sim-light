@@ -7,19 +7,7 @@ from pathlib import Path
 
 import numpy as np
 
-from tools.slippi.action_state_tables import load_action_state_tables
 from tools.slippi.known_data_artifacts import read_mslstg01_v2, stage_metadata_path_for_stage_id
-
-
-def _sign_i16(x: np.ndarray) -> np.ndarray:
-    # Match src/ucf.c::msl_sign_s8: returns +1 for 0 (though we never call it with 0).
-    return np.where(x < 0, np.int16(-1), np.int16(1))
-
-
-@functools.lru_cache(maxsize=1)
-def _action_x4_flags_low_bytes_tables(*, data_dir: str = "data") -> dict[int, np.ndarray]:
-    # Character ids (GALE01): Fox=1, Falco=22.
-    return {char_id: table.x4_flags_low for char_id, table in load_action_state_tables(str(data_dir)).items()}
 
 
 def derive_instance_id_x2073(
@@ -48,51 +36,22 @@ def derive_instance_id_x2073(
     x4_flags mapping source:
     - data/attack_id/move_id/{fox,falco}.bin (ISO-derived; also used by C via src/attack_id_tables.c)
     """
-    char = np.asarray(char_id_u8, dtype=np.uint8).reshape(-1)
-    aid = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
-    afr = np.asarray(action_frame_i16, dtype=np.int16).reshape(-1)
-    n = int(aid.size)
-    if int(char.size) != n or int(afr.size) != n:
-        raise ValueError("char_id_u8/action_id_u16/action_frame_i16 must have the same length")
-
-    tables = _action_x4_flags_low_bytes_tables(data_dir=str(data_dir))
-
-    out = np.zeros(n, dtype=np.uint8)
-    x2073 = int(0)
-
-    def _flags_low(c: int, a: int) -> int:
-        t = tables.get(int(c))
-        if t is None:
-            return 0
-        if a < 0 or a >= int(t.shape[0]):
-            return 0
-        return int(t[np.int64(a)])
-
-    for i in range(n):
-        cur_a = int(aid[i])
-        cur_c = int(char[i])
-        cur_flags_low = _flags_low(cur_c, cur_a)
-
-        entry = False
-        if i == 0:
-            entry = True
-        else:
-            prev_a = int(aid[i - 1])
-            if cur_a != prev_a:
-                entry = True
-            else:
-                # Detect same-action timebase restarts (e.g. loop restarts) by a causal action_frame drop.
-                # This mirrors "Fighter_ChangeMotionState to same action_id" patterns where Slippi state_age
-                # resets, but avoids consulting future frames.
-                if int(afr[i]) < int(afr[i - 1]):
-                    entry = True
-
-        if entry:
-            x2073 = cur_flags_low & 0xFF
-
-        out[i] = np.uint8(x2073)
-
-    return out
+    if str(data_dir) not in ("data", "./data"):
+        raise ValueError(
+            "derive_instance_id_x2073 now uses native action-id tables; set MSL_DATA_DIR for "
+            "non-default data roots instead of running the removed Python fallback"
+        )
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.derive_instance_id_x2073 is required for preprocessing; run `make build`"
+        ) from exc
+    return msl_binding.derive_instance_id_x2073(
+        np.ascontiguousarray(char_id_u8, dtype=np.uint8).reshape(-1),
+        np.ascontiguousarray(action_id_u16, dtype=np.uint16).reshape(-1),
+        np.ascontiguousarray(action_frame_i16, dtype=np.int16).reshape(-1),
+    )
 
 
 def derive_instance_id_counter(
@@ -121,27 +80,16 @@ def derive_instance_id_counter(
     Decomp anchors:
     - refs/melee/src/melee/pl/plattack.c::plAttack_80037B08 (monotonic u16 counter; skips 0)
     """
-    f = np.asarray(fighter_instance_id_u16_2d, dtype=np.uint16)
-    it = np.asarray(item_instance_id_u16_2d, dtype=np.uint16)
-    if f.ndim != 2:
-        raise ValueError("fighter_instance_id_u16_2d must be 2D [n_frames, num_players]")
-    if it.ndim != 2:
-        raise ValueError("item_instance_id_u16_2d must be 2D [n_frames, max_items]")
-    n = int(f.shape[0])
-    if int(it.shape[0]) != n:
-        raise ValueError("fighter/item instance_id arrays must have the same frame length")
-
-    out = np.empty(n, dtype=np.uint16)
-    max_seen = 0
-    for i in range(n):
-        cur_max = int(max(int(np.max(f[i])), int(np.max(it[i]))))
-        if cur_max > max_seen:
-            max_seen = cur_max
-        next_id = (max_seen + 1) & 0xFFFF
-        if next_id == 0:
-            next_id = 1
-        out[i] = np.uint16(next_id)
-    return out
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.derive_instance_id_counter is required for preprocessing; run `make build`"
+        ) from exc
+    return msl_binding.derive_instance_id_counter(
+        np.ascontiguousarray(fighter_instance_id_u16_2d, dtype=np.uint16),
+        np.ascontiguousarray(item_instance_id_u16_2d, dtype=np.uint16),
+    )
 
 
 def derive_item_spawn_id_counter(
@@ -154,27 +102,16 @@ def derive_item_spawn_id_counter(
     Item_80267AA8. Return the next id after the running max observed spawn_id so a rollout seeded
     after an itemless gap does not reset future item ordering identity.
     """
-    exists = np.asarray(item_exists_u8_2d, dtype=np.uint8)
-    it = np.asarray(item_spawn_id_u32_2d, dtype=np.uint32)
-    if exists.ndim != 2:
-        raise ValueError("item_exists_u8_2d must be 2D [n_frames, max_items]")
-    if it.ndim != 2:
-        raise ValueError("item_spawn_id_u32_2d must be 2D [n_frames, max_items]")
-    n = int(it.shape[0])
-    if int(exists.shape[0]) != n or int(exists.shape[1]) != int(it.shape[1]):
-        raise ValueError("item exists/spawn_id arrays must have the same shape")
-    out = np.empty(n, dtype=np.uint32)
-    max_seen = 0
-    any_seen = False
-    for i in range(n):
-        live = exists[i] != np.uint8(0)
-        if np.any(live):
-            row_max = int(np.max(it[i][live]))
-            any_seen = True
-            if row_max > max_seen:
-                max_seen = row_max
-        out[i] = np.uint32(max_seen + 1 if any_seen else 0)
-    return out
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.derive_item_spawn_id_counter is required for preprocessing; run `make build`"
+        ) from exc
+    return msl_binding.derive_item_spawn_id_counter(
+        np.ascontiguousarray(item_exists_u8_2d, dtype=np.uint8),
+        np.ascontiguousarray(item_spawn_id_u32_2d, dtype=np.uint32),
+    )
 
 
 def ucf_process_stick_i8(
@@ -190,47 +127,47 @@ def ucf_process_stick_i8(
     Returns int8 arrays in Melee-legalized range (radius-clamped to 80),
     optionally with UCF 1.0 cardinals snap applied.
     """
-    x0 = np.asarray(raw_x, dtype=np.int8).astype(np.int16)
-    y0 = np.asarray(raw_y, dtype=np.int8).astype(np.int16)
-
-    x = x0.copy()
-    y = y0.copy()
-
-    if ucf_enabled and ucf_cardinals_1_0_enabled:
-        snap_range = np.int16(6)  # src/ucf.c::SNAP_RANGE
-
-        cond_x = ((x0 <= -80) | (x0 >= 80)) & (y0 >= -snap_range) & (y0 <= snap_range)
-        x = np.where(cond_x, _sign_i16(x0) * np.int16(80), x)
-        y = np.where(cond_x, np.int16(0), y)
-
-        cond_y = (~cond_x) & ((y0 <= -80) | (y0 >= 80)) & (x0 >= -snap_range) & (x0 <= snap_range)
-        x = np.where(cond_y, np.int16(0), x)
-        y = np.where(cond_y, _sign_i16(y0) * np.int16(80), y)
-
-    fx = x.astype(np.float32)
-    fy = y.astype(np.float32)
-    r = np.sqrt((fx * fx) + (fy * fy))
-
-    scale = np.ones_like(r, dtype=np.float32)
-    mask = r > np.float32(80.0)
-    scale[mask] = np.float32(80.0) / r[mask]
-
-    x_clamped = np.trunc(fx * scale).astype(np.int16)
-    y_clamped = np.trunc(fy * scale).astype(np.int16)
-
-    return x_clamped.astype(np.int8), y_clamped.astype(np.int8)
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.process_stick_i8_units is required for preprocessing; run `make build`"
+        ) from exc
+    proc_x, proc_y, _, _ = msl_binding.process_stick_i8_units(
+        np.ascontiguousarray(raw_x, dtype=np.int8).reshape(-1),
+        np.ascontiguousarray(raw_y, dtype=np.int8).reshape(-1),
+        int(bool(ucf_enabled)),
+        int(bool(ucf_cardinals_1_0_enabled)),
+        0.0,
+        0.0,
+    )
+    return proc_x, proc_y
 
 
-def apply_deadzone(v: np.ndarray, dz: float) -> np.ndarray:
-    v = np.asarray(v, dtype=np.float32)
-    out = v.copy()
-    out[np.abs(out) < np.float32(dz)] = np.float32(0.0)
-    return out
-
-
-def stick_i8_to_unit(v: np.ndarray) -> np.ndarray:
-    # Match src/locomotion.c::stick_i8_to_unit (MSL_STICK_MAX_I8=80).
-    return np.asarray(v, dtype=np.float32) / np.float32(80.0)
+def process_stick_i8_units(
+    raw_x: np.ndarray,
+    raw_y: np.ndarray,
+    *,
+    ucf_enabled: bool,
+    ucf_cardinals_1_0_enabled: bool,
+    deadzone_x: float,
+    deadzone_y: float,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Native bulk stick processing plus per-axis deadzone to unit coordinates."""
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.process_stick_i8_units is required for preprocessing; run `make build`"
+        ) from exc
+    return msl_binding.process_stick_i8_units(
+        np.ascontiguousarray(raw_x, dtype=np.int8).reshape(-1),
+        np.ascontiguousarray(raw_y, dtype=np.int8).reshape(-1),
+        int(bool(ucf_enabled)),
+        int(bool(ucf_cardinals_1_0_enabled)),
+        float(deadzone_x),
+        float(deadzone_y),
+    )
 
 
 def compute_tilt_timer_axis(
@@ -244,45 +181,17 @@ def compute_tilt_timer_axis(
 
     Decomp reference: refs/melee/src/melee/ft/fighter.c:1908-2008.
     """
-    axis = np.asarray(axis_unit, dtype=np.float32).reshape(-1)
-    n = int(axis.size)
-    out = np.empty(n, dtype=np.uint8)
-
-    prev_axis = np.float32(0.0)
-    timer = int(start_timer) & 0xFF
-
-    thresh = np.float32(tilt_thresh)
-
-    for i in range(n):
-        a = np.float32(axis[i])
-        if a >= thresh:
-            if prev_axis >= thresh:
-                timer += 1
-                if timer > 0xFE:
-                    timer = 0xFE
-            else:
-                timer = 0
-        elif a <= -thresh:
-            if prev_axis <= -thresh:
-                timer += 1
-                if timer > 0xFE:
-                    timer = 0xFE
-            else:
-                timer = 0
-        else:
-            timer = 0xFE
-
-        out[i] = np.uint8(timer)
-        prev_axis = a
-
-    return out
-
-
-def _ucf_popo_to_nana(x: float) -> float:
-    # refs/ucf/include/util/melee/pad.h::popo_to_nana
-    if x >= 0:
-        return float(np.int8(np.float32(x) * np.float32(127.0))) / 127.0
-    return float(np.int8(np.float32(x) * np.float32(128.0))) / 128.0
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.compute_tilt_timer_axis is required for preprocessing; run `make build`"
+        ) from exc
+    return msl_binding.compute_tilt_timer_axis(
+        np.ascontiguousarray(axis_unit, dtype=np.float32).reshape(-1),
+        float(tilt_thresh),
+        int(start_timer),
+    )
 
 
 def derive_ucf_pad_buffer_state(
@@ -322,76 +231,21 @@ def derive_ucf_pad_buffer_state(
       (refs/ucf/src/pad_buffer/pad_buffer.cpp), but we haven't proven whether Melee updates
       `stick_y_hold_time` using pre- or post-injection stick values.
     """
-    rx = np.asarray(raw_x, dtype=np.int8).reshape(-1)
-    ry = np.asarray(raw_y, dtype=np.int8).reshape(-1)
-    hold_y = np.asarray(stick_y_hold_time, dtype=np.uint8).reshape(-1)
-    if rx.shape != ry.shape:
-        raise ValueError("raw_x and raw_y must have the same shape")
-    n = int(rx.size)
-    if int(hold_y.size) != n:
-        raise ValueError("stick_y_hold_time must match raw_x/raw_y length")
-
-    # Precompute the Melee-legalized stick used by UCF's sdrop-up gate.
-    proc_x_i8, proc_y_i8 = ucf_process_stick_i8(
-        rx,
-        ry,
-        ucf_enabled=ucf_enabled,
-        ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.derive_ucf_pad_buffer_state is required for preprocessing; run `make build`"
+        ) from exc
+    return msl_binding.derive_ucf_pad_buffer_state(
+        np.ascontiguousarray(raw_x, dtype=np.int8).reshape(-1),
+        np.ascontiguousarray(raw_y, dtype=np.int8).reshape(-1),
+        np.ascontiguousarray(stick_y_hold_time, dtype=np.uint8).reshape(-1),
+        int(bool(ucf_enabled)),
+        int(bool(ucf_cardinals_1_0_enabled)),
+        float(lstick_deadzone_x),
+        float(lstick_deadzone_y),
     )
-    stick_x_unit = apply_deadzone(stick_i8_to_unit(proc_x_i8), float(lstick_deadzone_x))
-    stick_y_unit = apply_deadzone(stick_i8_to_unit(proc_y_i8), float(lstick_deadzone_y))
-
-    # Vectorized rim test for each frame.
-    # refs/ucf/include/util/melee/pad.h::is_rim_coord
-    bias = np.float32(0.0001)  # abs_coord_to_int
-    ix = np.trunc(np.abs(stick_x_unit) * np.float32(80.0) - bias).astype(np.int32) + 2
-    iy = np.trunc(np.abs(stick_y_unit) * np.float32(80.0) - bias).astype(np.int32) + 2
-    is_rim = (ix * ix + iy * iy) > (80 * 80)
-
-    # UCF check_ucf_sdrop uses delta between current and -2 raw y.
-    dy = ry.astype(np.int16) - np.concatenate((np.int16([0, 0]), ry[:-2].astype(np.int16)))
-    dy_sq = (dy * dy).astype(np.int32)
-
-    index_post = np.empty(n, dtype=np.uint8)
-    sdrop_up_frames_post = np.empty(n, dtype=np.uint8)
-    stick_x_post = np.empty((n, 4), dtype=np.int8)
-    stick_y_post = np.empty((n, 4), dtype=np.int8)
-
-    # Local ring buffer state (packed like UCF's shared struct).
-    entries_x = np.zeros(4, dtype=np.int8)
-    entries_y = np.zeros(4, dtype=np.int8)
-    index = np.uint8(0)
-    sdrop = np.uint8(0)
-
-    # Constants from UCF pad-buffer implementation.
-    sdrop_y_thresh = _ucf_popo_to_nana(-0.6125)  # refs/ucf/src/pad_buffer/pad_buffer.cpp::check_sdrop_up
-    sdrop_delta_sq_thresh = 44 * 44  # refs/ucf/src/pad_buffer/pad_buffer.cpp::check_ucf_sdrop
-
-    for i in range(n):
-        index = np.uint8((int(index) + 1) & 3)  # UCF_PAD_BUFFER_MASK
-        entries_x[int(index)] = rx[i]
-        entries_y[int(index)] = ry[i]
-
-        # UCF check_sdrop_up.
-        if float(stick_y_unit[i]) > float(sdrop_y_thresh):
-            sdrop = np.uint8(0)
-        elif not bool(is_rim[i]):
-            sdrop = np.uint8(0)
-        else:
-            if int(sdrop) != 0:
-                sdrop = np.uint8((int(sdrop) + 1) & 0xFF)
-            else:
-                if int(hold_y[i]) < 2 and int(dy_sq[i]) > sdrop_delta_sq_thresh:
-                    sdrop = np.uint8(1)
-                else:
-                    sdrop = np.uint8(0)
-
-        index_post[i] = index
-        sdrop_up_frames_post[i] = sdrop
-        stick_x_post[i, :] = entries_x
-        stick_y_post[i, :] = entries_y
-
-    return index_post, sdrop_up_frames_post, stick_x_post, stick_y_post
 
 
 def compute_tilt_timer_axis_pre_post(
@@ -413,62 +267,28 @@ def compute_tilt_timer_axis_pre_post(
     - fighter input update: refs/melee/src/melee/ft/fighter.c:1908-2008
     - action-entry overrides vary by action (e.g. Dash/Jump)
     """
-    axis = np.asarray(axis_unit, dtype=np.float32).reshape(-1)
-    n = int(axis.size)
-    out_pre = np.empty(n, dtype=np.uint8)
-    out_post = np.empty(n, dtype=np.uint8)
-
-    if override_post_mask is None:
-        override = None
-    else:
-        override = np.asarray(override_post_mask, dtype=bool).reshape(-1)
-        if int(override.size) != n:
-            raise ValueError("override_post_mask must match axis_unit length")
-    if reset_post_mask is None:
-        reset = None
-    else:
-        reset = np.asarray(reset_post_mask, dtype=bool).reshape(-1)
-        if int(reset.size) != n:
-            raise ValueError("reset_post_mask must match axis_unit length")
-
-    prev_axis = np.float32(0.0)
-    timer_post = int(start_timer_post) & 0xFF
-    thresh = np.float32(tilt_thresh)
-    override_value = int(override_post_value) & 0xFF
-
-    for i in range(n):
-        a = np.float32(axis[i])
-        timer_pre = timer_post
-        if a >= thresh:
-            if prev_axis >= thresh:
-                timer_pre += 1
-                if timer_pre > 0xFE:
-                    timer_pre = 0xFE
-            else:
-                timer_pre = 0
-        elif a <= -thresh:
-            if prev_axis <= -thresh:
-                timer_pre += 1
-                if timer_pre > 0xFE:
-                    timer_pre = 0xFE
-            else:
-                timer_pre = 0
-        else:
-            timer_pre = 0xFE
-
-        timer_post = timer_pre
-        if override is not None and bool(override[i]):
-            timer_post = override_value
-        if reset is not None and bool(reset[i]):
-            # ftCo_Damage_OnEveryHitlag resets both x670/x671 after consuming an SDI pulse.
-            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag
-            timer_post = 0xFE
-
-        out_pre[i] = np.uint8(timer_pre)
-        out_post[i] = np.uint8(timer_post)
-        prev_axis = a
-
-    return out_pre, out_post
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.compute_tilt_timer_axis_pre_post is required for preprocessing; run `make build`"
+        ) from exc
+    return msl_binding.compute_tilt_timer_axis_pre_post(
+        np.ascontiguousarray(axis_unit, dtype=np.float32).reshape(-1),
+        float(tilt_thresh),
+        (
+            np.ascontiguousarray(override_post_mask, dtype=np.bool_).reshape(-1)
+            if override_post_mask is not None
+            else None
+        ),
+        int(override_post_value),
+        (
+            np.ascontiguousarray(reset_post_mask, dtype=np.bool_).reshape(-1)
+            if reset_post_mask is not None
+            else None
+        ),
+        int(start_timer_post),
+    )
 
 
 def derive_damage_hitlag_sdi_reset_post_mask(
@@ -495,68 +315,24 @@ def derive_damage_hitlag_sdi_reset_post_mask(
     - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag
     - refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006A1BC}
     """
-    a = np.asarray(action_id, dtype=np.uint16).reshape(-1)
-    hl = np.asarray(hitlag_u16, dtype=np.uint16).reshape(-1)
-    sf = np.asarray(state_flags_u8, dtype=np.uint8)
-    x = np.asarray(pos_x, dtype=np.float32).reshape(-1)
-    y = np.asarray(pos_y, dtype=np.float32).reshape(-1)
-    sx = np.asarray(stick_x_unit, dtype=np.float32).reshape(-1)
-    sy = np.asarray(stick_y_unit, dtype=np.float32).reshape(-1)
-    n = int(a.size)
-    if (
-        int(hl.size) != n
-        or int(x.size) != n
-        or int(y.size) != n
-        or int(sx.size) != n
-        or int(sy.size) != n
-    ):
-        raise ValueError("damage SDI reset inputs must have the same length")
-    if sf.shape != (n, 5):
-        raise ValueError("state_flags_u8 must have shape [n,5]")
-
-    out = np.zeros(n, dtype=np.bool_)
-    if n < 2:
-        return out
-
-    damage_set = {int(v) & 0xFFFF for v in damage_actions}
-    step = np.float32(sdi_step_mul)
-    # Keep the detector intentionally local: ordinary SDI displacement is a large, same-frame
-    # position jump during hitlag. The tolerance allows float/collision projection noise without
-    # treating normal DamageFly velocity drift as an SDI reset.
-    min_component = np.float32(0.25)
-    loose_abs_tol = np.float32(0.20)
-
-    for i in range(1, n):
-        prev = i - 1
-        if int(a[prev]) not in damage_set:
-            continue
-        # Fighter_8006A1BC decrements hitlag before the hitlag callback; a seed with one frame left
-        # exits hitlag and does not run OnEveryHitlag.
-        if int(hl[prev]) <= 1:
-            continue
-        flags_221a = int(sf[prev, 1])
-        if (flags_221a & 0x20) == 0:
-            continue
-        dx = np.float32(x[i] - x[prev])
-        dy = np.float32(y[i] - y[prev])
-        if abs(float(dx)) < float(min_component) and abs(float(dy)) < float(min_component):
-            continue
-
-        expected_x = np.float32(sx[i] * step)
-        expected_y = np.float32(sy[i] * step)
-        # Most rows expose the exact SDI displacement. Some floor/wall projection rows clamp one
-        # component after SDI; a large movement in the same direction as an eligible stick component
-        # still proves that OnEveryHitlag consumed the timer and reset x670/x671.
-        x_matches = abs(float(expected_x)) >= float(min_component) and (
-            abs(float(dx - expected_x)) <= float(loose_abs_tol) or dx * expected_x > 0.0
-        )
-        y_matches = abs(float(expected_y)) >= float(min_component) and (
-            abs(float(dy - expected_y)) <= float(loose_abs_tol) or dy * expected_y > 0.0
-        )
-        if x_matches or y_matches:
-            out[i] = True
-
-    return out
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.derive_damage_hitlag_sdi_reset_post_mask is required for "
+            "preprocessing; run `make build`"
+        ) from exc
+    return msl_binding.derive_damage_hitlag_sdi_reset_post_mask(
+        np.ascontiguousarray(action_id, dtype=np.uint16).reshape(-1),
+        np.ascontiguousarray(hitlag_u16, dtype=np.uint16).reshape(-1),
+        np.ascontiguousarray(state_flags_u8, dtype=np.uint8),
+        np.ascontiguousarray(pos_x, dtype=np.float32).reshape(-1),
+        np.ascontiguousarray(pos_y, dtype=np.float32).reshape(-1),
+        np.ascontiguousarray(stick_x_unit, dtype=np.float32).reshape(-1),
+        np.ascontiguousarray(stick_y_unit, dtype=np.float32).reshape(-1),
+        tuple(int(v) for v in damage_actions),
+        float(sdi_step_mul),
+    )
 
 
 def derive_damage_entry_tilt_timer_reset_post_mask(
@@ -577,44 +353,21 @@ def derive_damage_entry_tilt_timer_reset_post_mask(
     DamageFly* -> DamageFall do not call this owner. Require fresh damage evidence: active hitlag,
     percent movement, or a new `instance_hit_by` source.
     """
-    a = np.asarray(action_id, dtype=np.uint16).reshape(-1)
-    af = np.asarray(action_frame, dtype=np.int16).reshape(-1)
-    hl = np.asarray(hitlag_u16, dtype=np.uint16).reshape(-1)
-    pct = np.asarray(percent, dtype=np.float32).reshape(-1)
-    iid_hit = np.asarray(instance_hit_by, dtype=np.uint32).reshape(-1)
-    n = int(a.size)
-    if int(af.size) != n or int(hl.size) != n or int(pct.size) != n or int(iid_hit.size) != n:
-        raise ValueError("damage entry reset inputs must have the same length")
-
-    out = np.zeros(n, dtype=np.bool_)
-    if n == 0:
-        return out
-
-    damage_set = {int(v) & 0xFFFF for v in damage_actions}
-    prev_a = int(a[0])
-    prev_af = int(af[0])
-    prev_pct = np.float32(pct[0])
-    prev_iid_hit = int(iid_hit[0])
-    for i in range(n):
-        cur_a = int(a[i])
-        cur_af = int(af[i])
-        if cur_a in damage_set:
-            prev_in_damage = i > 0 and prev_a in damage_set
-            fresh_action = i == 0 or not prev_in_damage or cur_a != prev_a
-            same_action_reentry = i > 0 and cur_a == prev_a and cur_af <= 1 and prev_af > cur_af
-            fresh_damage_provenance = (
-                int(hl[i]) > 0
-                or (i > 0 and np.float32(pct[i]) != prev_pct)
-                or (i > 0 and int(iid_hit[i]) != prev_iid_hit)
-            )
-            if (fresh_action or same_action_reentry) and fresh_damage_provenance:
-                out[i] = True
-        prev_a = cur_a
-        prev_af = cur_af
-        prev_pct = np.float32(pct[i])
-        prev_iid_hit = int(iid_hit[i])
-
-    return out
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.derive_damage_entry_tilt_timer_reset_post_mask is required for "
+            "preprocessing; run `make build`"
+        ) from exc
+    return msl_binding.derive_damage_entry_tilt_timer_reset_post_mask(
+        np.ascontiguousarray(action_id, dtype=np.uint16).reshape(-1),
+        np.ascontiguousarray(action_frame, dtype=np.int16).reshape(-1),
+        np.ascontiguousarray(hitlag_u16, dtype=np.uint16).reshape(-1),
+        np.ascontiguousarray(percent, dtype=np.float32).reshape(-1),
+        np.ascontiguousarray(instance_hit_by, dtype=np.uint32).reshape(-1),
+        tuple(int(v) for v in damage_actions),
+    )
 
 
 def _derive_guard_reflect_timer_plus1(
@@ -625,45 +378,19 @@ def _derive_guard_reflect_timer_plus1(
     init_frames: int,
 ) -> np.ndarray:
     """Shared +1-biased GuardReflect timer derivation (strictly causal)."""
-    a = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
-    hl = np.asarray(hitlag_u16, dtype=np.uint16).reshape(-1)
-    if a.shape != hl.shape:
-        raise ValueError("action_id_u16 and hitlag_u16 must have the same shape")
-    n = int(a.size)
-    out = np.empty(n, dtype=np.uint8)
-
-    act = np.uint16(int(act_guard_reflect) & 0xFFFF)
-    init = int(init_frames) + 1
-    if init < 0:
-        init = 0
-    if init > 255:
-        init = 255
-
-    t = 0
-    prev_in = False
-    for i in range(n):
-        in_gr = bool(a[i] == act)
-        if not in_gr:
-            t = 0
-        else:
-            if not prev_in:
-                t = init
-            else:
-                # Decomp: GuardReflect_Anim runs after Fighter_8006A1BC prio-0 hitlag decrement and
-                # is gated by the post-decrement lane (`!fp->x2219_b5`).
-                # refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
-                #
-                # Replay input lane here is post-frame hitlag, so for frame i the callback gate is
-                # determined by frame-(i-1) post hitlag after prio-0 decrement:
-                #   can_tick = (max(post_hitlag[i-1] - 1, 0) == 0)
-                hl_prev = int(hl[i - 1]) if i > 0 else 0
-                hl_after_prio0 = hl_prev - 1 if hl_prev > 0 else 0
-                if t > 0 and hl_after_prio0 == 0:
-                    t -= 1
-        out[i] = np.uint8(t & 0xFF)
-        prev_in = in_gr
-
-    return out
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.derive_guard_reflect_timer_plus1 is required for preprocessing; "
+            "run `make build`"
+        ) from exc
+    return msl_binding.derive_guard_reflect_timer_plus1(
+        np.ascontiguousarray(action_id_u16, dtype=np.uint16).reshape(-1),
+        np.ascontiguousarray(hitlag_u16, dtype=np.uint16).reshape(-1),
+        int(act_guard_reflect),
+        int(init_frames),
+    )
 
 
 def derive_guard_reflect_timer_x14(
@@ -738,19 +465,19 @@ def derive_guard_reflect_origin_guardon(
 
     The lane is prefix-causal and persists only for the current contiguous GuardReflect episode.
     """
-    action = np.asarray(action_id_u16, dtype=np.uint16)
-    out = np.zeros(action.shape, dtype=np.uint8)
-    carry = 0
-    for i, a in enumerate(action):
-        in_reflect = int(a) == int(act_guard_reflect)
-        if not in_reflect:
-            carry = 0
-            continue
-        prev = int(action[i - 1]) if i > 0 else -1
-        if i == 0 or prev != int(act_guard_reflect):
-            carry = 1 if prev in (int(act_guard_on), int(act_guard)) else 0
-        out[i] = np.uint8(carry)
-    return out
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.derive_guard_reflect_origin_guardon is required for preprocessing; "
+            "run `make build`"
+        ) from exc
+    return msl_binding.derive_guard_reflect_origin_guardon(
+        np.ascontiguousarray(action_id_u16, dtype=np.uint16).reshape(-1),
+        int(act_guard_reflect),
+        int(act_guard_on),
+        int(act_guard),
+    )
 
 
 def load_shield_tilt_table_meta(*, data_dir: str = "data") -> dict[int, tuple[int, int]]:
@@ -827,88 +554,23 @@ def derive_guard_tilt_state(
 
     Returns arrays (x8_post_u16, x4_post_f32) with length N, where "post" means after the per-frame update.
     """
-    sx = np.asarray(stick_x_unit, dtype=np.float32).reshape(-1)
-    sy = np.asarray(stick_y_unit, dtype=np.float32).reshape(-1)
-    fac = np.asarray(facing, dtype=np.uint8).reshape(-1)
-    aid = np.asarray(action_id, dtype=np.uint16).reshape(-1)
-    afr = np.asarray(action_frame, dtype=np.int16).reshape(-1)
-    neu = np.asarray(neutral_frame, dtype=np.uint16).reshape(-1)
-    fmax = np.asarray(frame_max, dtype=np.uint16).reshape(-1)
-
-    n = int(sx.size)
-    if int(sy.size) != n or int(fac.size) != n or int(aid.size) != n or int(afr.size) != n:
-        raise ValueError("input arrays must have the same length")
-    if int(neu.size) != n or int(fmax.size) != n:
-        raise ValueError("neutral_frame/frame_max must have the same length as stick arrays")
-
-    out_x8 = np.empty(n, dtype=np.uint16)
-    out_x4 = np.empty(n, dtype=np.float32)
-
-    # Persistent state (seeded across frames).
-    x8 = np.uint16(0)
-    x4 = np.float32(0.0)
-
-    lerp = np.float32(float(guard_stick_lerp_x44c))
-    pi = np.float32(3.14159265358979323846)
-    rad_to_deg = np.float32(180.0) / pi
-
-    for i in range(n):
-        a = int(aid[i])
-        neutral_i = np.uint16(neu[i])
-        frame_max_i = np.uint16(fmax[i])
-
-        # Decomp init on GuardOn entry.
-        if a == int(act_guard_on) and int(afr[i]) == 0:
-            x8 = neutral_i
-            x4 = np.float32(0.0)
-
-        if a == int(act_guard_on) or a == int(act_guard) or a == int(act_guard_reflect):
-            facing_dir = np.float32(1.0) if int(fac[i]) != 0 else np.float32(-1.0)
-            x = np.float32(sx[i]) * facing_dir
-            y = np.float32(sy[i])
-
-            rad = np.float32(np.arctan2(y, x))
-            if rad < np.float32(0.0):
-                rad = rad + np.float32(2.0) * pi
-
-            deg = np.float32(rad * rad_to_deg)
-            if deg < np.float32(0.0):
-                deg = np.float32(0.0)
-            if deg > np.float32(359.0):
-                deg = np.float32(359.0)
-
-            offset = np.float32(np.float32(x8) - np.float32(neutral_i))
-            delta = np.float32(deg - offset)
-            if delta > np.float32(180.0):
-                delta = delta - np.float32(360.0)
-            elif delta < np.float32(-180.0):
-                delta = delta + np.float32(360.0)
-
-            next_offset = np.float32(delta * lerp + offset)
-            if next_offset > np.float32(360.0):
-                next_offset = next_offset - np.float32(360.0)
-            elif next_offset < np.float32(0.0):
-                next_offset = next_offset + np.float32(360.0)
-
-            next_x8_f = np.float32(np.float32(neutral_i) + next_offset)
-            next_x8 = int(next_x8_f)  # truncation toward 0 (matches C cast for nonnegative values)
-            if next_x8 < 0:
-                next_x8 = 0
-            if next_x8 > int(frame_max_i):
-                next_x8 = int(frame_max_i)
-            x8 = np.uint16(next_x8)
-
-            mag = np.sqrt(np.float32(sx[i] * sx[i] + sy[i] * sy[i])).astype(np.float32)
-            if mag > np.float32(1.0):
-                mag = np.float32(1.0)
-            if mag < np.float32(0.0):
-                mag = np.float32(0.0)
-            x4 = np.float32(lerp * (mag - x4) + x4)
-
-        out_x8[i] = x8
-        out_x4[i] = x4
-
-    return out_x8, out_x4
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError("native msl_binding.derive_guard_tilt_state is required; run `make build`") from exc
+    return msl_binding.derive_guard_tilt_state(
+        np.ascontiguousarray(stick_x_unit, dtype=np.float32).reshape(-1),
+        np.ascontiguousarray(stick_y_unit, dtype=np.float32).reshape(-1),
+        np.ascontiguousarray(facing, dtype=np.uint8).reshape(-1),
+        np.ascontiguousarray(action_id, dtype=np.uint16).reshape(-1),
+        np.ascontiguousarray(action_frame, dtype=np.int16).reshape(-1),
+        np.ascontiguousarray(neutral_frame, dtype=np.uint16).reshape(-1),
+        np.ascontiguousarray(frame_max, dtype=np.uint16).reshape(-1),
+        float(guard_stick_lerp_x44c),
+        int(act_guard_on),
+        int(act_guard),
+        int(act_guard_reflect),
+    )
 
 
 def derive_guard_release_lockout_and_lightshield(
@@ -958,168 +620,28 @@ def derive_guard_release_lockout_and_lightshield(
     Returns (guard_release_latched_xc_u8, guard_x10_u8, lightshield_amount_f32) arrays with length N,
     where the values represent the *post-frame* state for each frame index.
     """
-    aid = np.asarray(action_id, dtype=np.uint16).reshape(-1)
-    hp = np.asarray(shield_hp, dtype=np.float32).reshape(-1)
-    hl = np.asarray(hitlag, dtype=np.uint16).reshape(-1)
-    buttons = np.asarray(buttons_held, dtype=np.uint16).reshape(-1)
-    trig = np.asarray(trigger_unit, dtype=np.float32).reshape(-1)
-    mask_lr = (int(button_mask_lr) | int(button_mask_z)) & 0xFFFF
-
-    n = int(aid.size)
-    if int(hp.size) != n or int(hl.size) != n or int(buttons.size) != n or int(trig.size) != n:
-        raise ValueError("input arrays must have the same length")
-    if mask_lr == 0:
-        raise ValueError("button_mask_lr must be non-zero")
-
-    out_xc = np.zeros(n, dtype=np.uint8)
-    out_x10 = np.zeros(n, dtype=np.uint8)
-    out_light = np.zeros(n, dtype=np.float32)
-
-    dz = np.float32(float(trigger_deadzone))
-    denom = np.float32(1.0) - dz
-    if not (float(denom) > 0.0):
-        raise ValueError(f"invalid trigger_deadzone={trigger_deadzone} (1-deadzone must be >0)")
-
-    init = int(guard_x10_init_frames)
-    if init < 0:
-        init = 0
-    if init > 255:
-        init = 255
-
-    # Persistent per-fighter state.
-    xC = False
-    x10 = int(0)
-    light = np.float32(0.0)
-
-    def _is_guard(a: int) -> bool:
-        return a == int(act_guard_on) or a == int(act_guard) or a == int(act_guard_reflect)
-
-    for i in range(n):
-        a = int(aid[i])
-        prev_a = int(aid[i - 1]) if i > 0 else a
-
-        in_guard = _is_guard(a)
-        prev_in_guard = _is_guard(prev_a)
-        in_guard_set_off = a == int(act_guard_set_off)
-
-        # Reset on GuardOn/GuardReflect entry (ftCo_800921DC call sites).
-        if (a == int(act_guard_on) and prev_a != int(act_guard_on)) or (
-            a == int(act_guard_reflect) and prev_a != int(act_guard_reflect)
-        ):
-            xC = False
-            x10 = init
-            light = np.float32(0.0)
-
-        if not in_guard and not in_guard_set_off:
-            # Outside of guard states, these internals are irrelevant; seed them as 0 to keep
-            # reseeding deterministic and schema-minimal.
-            xC = False
-            x10 = 0
-            light = np.float32(0.0)
-            out_xc[i] = np.uint8(0)
-            out_x10[i] = np.uint8(0)
-            out_light[i] = np.float32(0.0)
-            continue
-
-        if in_guard and not prev_in_guard and a == int(act_guard) and prev_a != int(act_guard_set_off):
-            # Snapshot bridge for teacher-forced reseed:
-            # Guard entry can appear without an explicit GuardOn/GuardReflect predecessor in replay
-            # snapshots (no submotion timeline at the boundary). Seed conservatively with a fresh
-            # lockout window to avoid synthesizing immediate Guard->GuardOff exits from stale xC/x10.
-            #
-            # Decomp exception: GuardSetOff -> Guard uses ftCo_800928CC and does not call
-            # ftCo_800921DC, so xC/x10 must carry through (do not reinitialize on this path).
-            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_Anim,ftCo_800928CC}
-            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardSetOff_Anim,ftCo_800928CC,ftCo_800921DC}
-            # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
-            xC = False
-            x10 = init
-            light = np.float32(0.0)
-
-        if in_guard_set_off:
-            # GuardSetOff exit is owned by the hidden mv.co.guard.xC latch:
-            # ftCo_GuardSetOff_Anim reads xC directly when the GuardDamage animation completes.
-            # Slippi post-frames do not expose that move-var, and GuardSetOff_IASA is empty, so
-            # visible LR release during shieldstun must not synthesize a new xC latch. Preserve only
-            # the latch value that existed before GuardSetOff entry.
-            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
-            #   ftCo_GuardSetOff_Anim,ftCo_GuardSetOff_IASA,ftCo_80092BCC}
-
-            if prev_a != int(act_guard_set_off) and not prev_in_guard and x10 == 0:
-                # Snapshot bridge: replay post-frames can show direct non-guard -> GuardSetOff
-                # boundaries when the preceding GuardOn/Guard/GuardReflect context is absent.
-                # Decomp GuardSetOff itself does not call ftCo_800921DC, but the missing
-                # shield-hit entry context would have initialized x10 earlier in-frame before
-                # ftCo_80092F2C, and ftCo_80092F2C consumes the already-current
-                # fp->lightshield_amount. These arrays are post-frame indexed, so the input frame
-                # that produced the direct GuardSetOff post-frame is the current index's x650 lane.
-                # Seed a fresh lockout window plus that x650-derived lightshield amount for direct
-                # non-guard -> GuardSetOff snapshots.
-                # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
-                #   ftCo_800921DC,ftCo_800925A4,ftCo_80092F2C,ftCo_GuardSetOff_Anim}
-                xC = False
-                x10 = init
-                t = np.float32((np.float32(trig[i]) - dz) / denom)
-                if float(t) >= 0.0:
-                    if float(t) > 1.0:
-                        t = np.float32(1.0)
-                    light = t
-
-            # GuardSetOff consumes the already-latched fp->lightshield_amount for entry anim-rate
-            # shaping and does not reinitialize guard lockout lanes on the SetOff->Guard path.
-            # Preserve xC/x10 across GuardSetOff snapshots.
-            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80092F2C,ftCo_GuardSetOff_Anim,ftCo_800928CC}
-            out_xc[i] = np.uint8(1 if xC else 0)
-            out_x10[i] = np.uint8(x10 & 0xFF)
-            out_light[i] = np.float32(light)
-            continue
-
-        # Hitlag gate for Guard anim/IASA ownership:
-        # - Fighter_8006A1BC decrements hitlag at proc prio 0.
-        # - Guard callbacks run later in Fighter_8006A360 / Fighter_procUpdate and are gated on
-        #   the post-decrement hitlag lane (`!fp->x2219_b5`).
-        # refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
-        #
-        # Replay input here is post-frame hitlag. For frame `i`, callback gating is controlled by
-        # frame-`i-1` post hitlag after the prio-0 decrement:
-        #   can_update = (max(post_hitlag[i-1] - 1, 0) == 0).
-        # Using current-frame post hitlag over-freezes Guard internals on frames where hitlag is
-        # newly applied later in the frame by collision callbacks.
-        hl_prev = int(hl[i - 1]) if i > 0 else 0
-        hl_after_prio0 = hl_prev - 1 if hl_prev > 0 else 0
-        # held_inputs proxy for ftCo_80092BCC:
-        # - prefer replay-visible held digital bits (buttons_held & LR/Z-mapped LR lane),
-        # - fall back to analog trigger deadzone when digital bits are absent.
-        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092BCC
-        # refs/melee/src/melee/ft/fighter.c::{Fighter_Spaghetti_8006AD10_Inner1}
-        held = ((int(buttons[i]) & mask_lr) != 0) or (float(trig[i]) >= float(dz))
-        # Only update these when guard callbacks can run and shield is still active.
-        if hl_after_prio0 == 0 and float(hp[i]) > 0.0:
-            # Lightshield amount latch (ftCo_800925A4):
-            # lightshield_amount = (x650 - deadzone)/(1-deadzone) if >=0 else reuse previous.
-            t = np.float32((np.float32(trig[i]) - dz) / denom)
-            if float(t) >= 0.0:
-                if float(t) > 1.0:
-                    t = np.float32(1.0)
-                light = t
-
-            # x10 countdown tick (ftCo_800925A4).
-            if x10 > 0:
-                x10 -= 1
-                if x10 < 0:
-                    x10 = 0
-
-            # xC latch (ftCo_80092BCC): level-held check, not edge-triggered.
-            # if (!(fp->input.held_inputs & HSD_PAD_LR)) fp->mv.co.guard.xC = true;
-            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092BCC
-            if not held:
-                xC = True
-
-        out_xc[i] = np.uint8(1 if xC else 0)
-        out_x10[i] = np.uint8(x10 & 0xFF)
-        out_light[i] = np.float32(light)
-
-    return out_xc, out_x10, out_light
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.derive_guard_release_lockout_and_lightshield is required for "
+            "preprocessing; run `make build`"
+        ) from exc
+    return msl_binding.derive_guard_release_lockout_and_lightshield(
+        np.ascontiguousarray(action_id, dtype=np.uint16).reshape(-1),
+        np.ascontiguousarray(shield_hp, dtype=np.float32).reshape(-1),
+        np.ascontiguousarray(hitlag, dtype=np.uint16).reshape(-1),
+        np.ascontiguousarray(buttons_held, dtype=np.uint16).reshape(-1),
+        np.ascontiguousarray(trigger_unit, dtype=np.float32).reshape(-1),
+        int(button_mask_lr),
+        int(button_mask_z),
+        float(trigger_deadzone),
+        int(guard_x10_init_frames),
+        int(act_guard_on),
+        int(act_guard),
+        int(act_guard_reflect),
+        int(act_guard_set_off),
+    )
 
 
 def derive_guard_special_enable_timer_x1c(
@@ -1150,53 +672,24 @@ def derive_guard_special_enable_timer_x1c(
 
     Returns a post-frame-indexed uint8 countdown.
     """
-    aid = np.asarray(action_id, dtype=np.uint16).reshape(-1)
-    hl = np.asarray(hitlag, dtype=np.uint16).reshape(-1)
-    flags = np.asarray(state_flags_u8, dtype=np.uint8)
-    if flags.ndim != 2 or flags.shape[0] != aid.size or flags.shape[1] < 4:
-        raise ValueError("state_flags_u8 must have shape [n, >=4]")
-    if hl.size != aid.size:
-      raise ValueError("action_id and hitlag arrays must have the same length")
-
-    init = int(guard_special_enable_frames)
-    if init < 0:
-        init = 0
-    if init > 255:
-        init = 255
-
-    out = np.zeros(aid.size, dtype=np.uint8)
-    x1c = 0
-
-    def _is_guard(a: int) -> bool:
-        return a == int(act_guard_on) or a == int(act_guard) or a == int(act_guard_reflect)
-
-    for i in range(int(aid.size)):
-        a = int(aid[i])
-        prev_a = int(aid[i - 1]) if i > 0 else a
-
-        if (a == int(act_guard_on) and prev_a != int(act_guard_on)) or (
-            a == int(act_guard_reflect) and prev_a != int(act_guard_reflect)
-        ):
-            x1c = 0
-
-        if a == int(act_guard_set_off) and (int(flags[i, 3]) & 0x20) != 0:
-            x1c = init
-        elif _is_guard(a):
-            # Match inlineC0's hitlag/update gate used by the existing guard lockout derivation.
-            hl_prev = int(hl[i - 1]) if i > 0 else 0
-            hl_after_prio0 = hl_prev - 1 if hl_prev > 0 else 0
-            if hl_after_prio0 == 0 and x1c > 0:
-                x1c -= 1
-        elif a == int(act_guard_off):
-            pass
-        elif a != int(act_guard_set_off):
-            # GuardOff preserves x1C for its IASA gate; leaving shield-family or entering a fresh
-            # non-guard state makes the hidden lane irrelevant.
-            x1c = 0
-
-        out[i] = np.uint8(x1c & 0xFF)
-
-    return out
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.derive_guard_special_enable_timer_x1c is required for "
+            "preprocessing; run `make build`"
+        ) from exc
+    return msl_binding.derive_guard_special_enable_timer_x1c(
+        np.ascontiguousarray(action_id, dtype=np.uint16).reshape(-1),
+        np.ascontiguousarray(hitlag, dtype=np.uint16).reshape(-1),
+        np.ascontiguousarray(state_flags_u8, dtype=np.uint8),
+        int(guard_special_enable_frames),
+        int(act_guard_on),
+        int(act_guard),
+        int(act_guard_off),
+        int(act_guard_reflect),
+        int(act_guard_set_off),
+    )
 
 
 def derive_guard_setoff_hitlag_damage_min(
@@ -1228,60 +721,21 @@ def derive_guard_setoff_hitlag_damage_min(
     - refs/melee/src/melee/ft/ftcommon.c::ftCommon_CalcHitlag
     - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
     """
-    aid = np.asarray(action_id, dtype=np.uint16).reshape(-1)
-    afr = np.asarray(action_frame_i16, dtype=np.int16).reshape(-1)
-    hl = np.asarray(hitlag, dtype=np.uint16).reshape(-1)
-
-    n = int(aid.size)
-    if int(afr.size) != n or int(hl.size) != n:
-        raise ValueError("action_id/action_frame_i16/hitlag must have the same length")
-
-    out = np.zeros(n, dtype=np.uint8)
-    carried = 0
-    slope = float(hitlag_dmg_mul)
-    base = float(hitlag_base)
-    if not (slope > 0.0):
-        raise ValueError("hitlag_dmg_mul must be > 0")
-
-    def _invert_min_damage(hitlag_frames: int) -> int:
-        if hitlag_frames <= 0:
-            return 0
-        # Find the smallest non-negative integer damage whose decomp hitlag result matches or
-        # exceeds the observed frame count. getEnvDmg returns at least 1 for nonzero float damage,
-        # so clamp positive hitlag to at least 1.
-        dmg = 1
-        while dmg < 0xFF:
-            result = int((float(dmg) * slope) + base)
-            if result >= hitlag_frames:
-                return dmg
-            dmg += 1
-        return 0xFF
-
-    for i in range(n):
-        a = int(aid[i])
-        if a != int(act_guard_set_off):
-            carried = 0
-            out[i] = np.uint8(0)
-            continue
-
-        prev_a = int(aid[i - 1]) if i > 0 else -1
-        prev_afr = int(afr[i - 1]) if i > 0 else 0
-        prev_hl = int(hl[i - 1]) if i > 0 else 0
-        cur_afr = int(afr[i])
-        cur_hl = int(hl[i])
-
-        segment_entry = (
-            i == 0
-            or prev_a != int(act_guard_set_off)
-            or cur_afr < prev_afr
-            or cur_hl > prev_hl
-        )
-        if segment_entry and cur_hl > 0:
-            carried = _invert_min_damage(cur_hl)
-
-        out[i] = np.uint8(carried & 0xFF)
-
-    return out
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.derive_guard_setoff_hitlag_damage_min is required for "
+            "preprocessing; run `make build`"
+        ) from exc
+    return msl_binding.derive_guard_setoff_hitlag_damage_min(
+        np.ascontiguousarray(action_id, dtype=np.uint16).reshape(-1),
+        np.ascontiguousarray(action_frame_i16, dtype=np.int16).reshape(-1),
+        np.ascontiguousarray(hitlag, dtype=np.uint16).reshape(-1),
+        float(hitlag_dmg_mul),
+        float(hitlag_base),
+        int(act_guard_set_off),
+    )
 
 
 def derive_guard_setoff_hitlag_exit_phase(
@@ -1315,31 +769,18 @@ def derive_guard_setoff_hitlag_exit_phase(
     - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardSetOff_Anim
     - refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
     """
-    aid = np.asarray(action_id, dtype=np.uint16).reshape(-1)
-    hl = np.asarray(hitlag, dtype=np.uint16).reshape(-1)
-
-    n = int(aid.size)
-    if int(hl.size) != n:
-        raise ValueError("action_id/hitlag must have the same length")
-
-    out = np.zeros(n, dtype=np.uint8)
-    guard_set_off = int(act_guard_set_off)
-    for i in range(n):
-        if int(aid[i]) != guard_set_off:
-            out[i] = np.uint8(0)
-            continue
-        cur_hl = int(hl[i])
-        prev_a = int(aid[i - 1]) if i > 0 else -1
-        prev_hl = int(hl[i - 1]) if i > 0 else 0
-        if cur_hl > 1:
-            out[i] = np.uint8(1)
-        elif cur_hl == 1:
-            out[i] = np.uint8(2)
-        elif prev_a == guard_set_off and prev_hl > 0:
-            out[i] = np.uint8(3)
-        else:
-            out[i] = np.uint8(0)
-    return out
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.derive_guard_setoff_hitlag_exit_phase is required for "
+            "preprocessing; run `make build`"
+        ) from exc
+    return msl_binding.derive_guard_setoff_hitlag_exit_phase(
+        np.ascontiguousarray(action_id, dtype=np.uint16).reshape(-1),
+        np.ascontiguousarray(hitlag, dtype=np.uint16).reshape(-1),
+        int(act_guard_set_off),
+    )
 
 
 def derive_guard_setoff_post_hitlag_owner(
@@ -1372,24 +813,19 @@ def derive_guard_setoff_post_hitlag_owner(
     - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0
     - refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
     """
-    aid = np.asarray(action_id, dtype=np.uint16).reshape(-1)
-    phase = np.asarray(guard_setoff_hitlag_exit_phase_u8, dtype=np.uint8).reshape(-1)
-    flags_221c = np.asarray(state_flags_221c_u8, dtype=np.uint8).reshape(-1)
-
-    n = int(aid.size)
-    if int(phase.size) != n or int(flags_221c.size) != n:
-      raise ValueError("action_id/phase/state_flags_221c must have the same length")
-
-    out = np.zeros(n, dtype=np.uint8)
-    guard_set_off = int(act_guard_set_off)
-    for i in range(n):
-        if int(aid[i]) != guard_set_off:
-            continue
-        cur_phase = int(phase[i])
-        if cur_phase != 2 and cur_phase != 3:
-            continue
-        out[i] = np.uint8(2 if (int(flags_221c[i]) & 0x20) != 0 else 1)
-    return out
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.derive_guard_setoff_post_hitlag_owner is required for "
+            "preprocessing; run `make build`"
+        ) from exc
+    return msl_binding.derive_guard_setoff_post_hitlag_owner(
+        np.ascontiguousarray(action_id, dtype=np.uint16).reshape(-1),
+        np.ascontiguousarray(guard_setoff_hitlag_exit_phase_u8, dtype=np.uint8).reshape(-1),
+        np.ascontiguousarray(state_flags_221c_u8, dtype=np.uint8).reshape(-1),
+        int(act_guard_set_off),
+    )
 
 
 def derive_camera_box_visible_x221f_b0(*, state_flags_u8: np.ndarray) -> np.ndarray:
@@ -1457,101 +893,29 @@ def derive_magnify_damage_counter_x1910(
     - data/common/ft_common_data.json::{
       magnify_damage_interval_frames,magnify_damage_percent_limit,magnify_damage_amount}
     """
-    action = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
-    sf = np.asarray(state_flags_u8, dtype=np.uint8)
-    inside = np.asarray(camera_target_point_inside_stage_cam_bounds_u8, dtype=np.uint8).reshape(-1)
-    pct = np.asarray(percent_f32, dtype=np.float32).reshape(-1)
-    hitlag = None if hitlag_u16 is None else np.asarray(hitlag_u16, dtype=np.uint16).reshape(-1)
-    hitstun = None if hitstun_u16 is None else np.asarray(hitstun_u16, dtype=np.uint16).reshape(-1)
-    hit_by = (
-        None
-        if instance_hit_by_u16 is None
-        else np.asarray(instance_hit_by_u16, dtype=np.uint16).reshape(-1)
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.derive_magnify_damage_counter_x1910 is required; run `make build`"
+        ) from exc
+    return msl_binding.derive_magnify_damage_counter_x1910(
+        np.ascontiguousarray(action_id_u16, dtype=np.uint16).reshape(-1),
+        np.ascontiguousarray(state_flags_u8, dtype=np.uint8),
+        np.ascontiguousarray(camera_target_point_inside_stage_cam_bounds_u8, dtype=np.uint8).reshape(-1),
+        np.ascontiguousarray(percent_f32, dtype=np.float32).reshape(-1),
+        None if hitlag_u16 is None else np.ascontiguousarray(hitlag_u16, dtype=np.uint16).reshape(-1),
+        None if hitstun_u16 is None else np.ascontiguousarray(hitstun_u16, dtype=np.uint16).reshape(-1),
+        (
+            None
+            if instance_hit_by_u16 is None
+            else np.ascontiguousarray(instance_hit_by_u16, dtype=np.uint16).reshape(-1)
+        ),
+        None if last_hit_by_u8 is None else np.ascontiguousarray(last_hit_by_u8, dtype=np.uint8).reshape(-1),
+        int(interval_frames),
+        int(percent_limit),
+        int(damage_amount),
     )
-    last_hit_by = None if last_hit_by_u8 is None else np.asarray(last_hit_by_u8, dtype=np.uint8).reshape(-1)
-    if sf.ndim != 2 or int(sf.shape[1]) < 5:
-        raise ValueError("magnify_damage_counter_x1910 requires state_flags_u8 shape [n,5]")
-    if int(sf.shape[0]) != int(pct.size) or int(action.size) != int(pct.size) or int(inside.size) != int(pct.size):
-        raise ValueError("magnify_damage_counter_x1910 inputs must share length")
-    for name, arr in (
-        ("hitlag_u16", hitlag),
-        ("hitstun_u16", hitstun),
-        ("instance_hit_by_u16", hit_by),
-        ("last_hit_by_u8", last_hit_by),
-    ):
-        if arr is not None and int(arr.size) != int(pct.size):
-            raise ValueError(f"{name} must match magnify_damage_counter_x1910 length")
-    interval = int(interval_frames)
-    if interval <= 0:
-        return np.zeros(pct.shape[0], dtype=np.uint16)
-    amount = int(damage_amount)
-    if amount <= 0:
-        return np.zeros(pct.shape[0], dtype=np.uint16)
-
-    state_flags_221f_index = 4
-    state_flag_221f_b0_mask = 0x80
-    state_flag_221f_b4_disable_mask = 0x08
-    excluded_actions = {
-        0x0000,  # DeadDown
-        0x0001,  # DeadLeft
-        0x0002,  # DeadRight
-        0x0004,  # DeadUpStar
-        0x000C,  # Rebirth
-        0x000D,  # RebirthWait
-        0x0142,  # Entry
-        0x0143,  # EntryStart
-        0x0144,  # EntryEnd
-    }
-    n = int(pct.shape[0])
-    eligible_rows = np.zeros(n, dtype=np.bool_)
-    observed_tick_rows = np.zeros(n, dtype=np.bool_)
-    for i in range(int(pct.shape[0])):
-        flags_221f = int(sf[i, state_flags_221f_index])
-        visible = (flags_221f & state_flag_221f_b0_mask) != 0
-        disabled = (flags_221f & state_flag_221f_b4_disable_mask) != 0
-        offscreen = int(inside[i]) == 0
-        live_fighter = int(action[i]) not in excluded_actions
-        percent = float(pct[i])
-        eligible = (
-            live_fighter
-            and visible
-            and not disabled
-            and offscreen
-            and np.isfinite(percent)
-            and percent < float(percent_limit)
-        )
-        eligible_rows[i] = eligible
-        if eligible and i + 1 < int(pct.shape[0]):
-            next_percent = float(pct[i + 1])
-            no_contact = True
-            if hitlag is not None:
-                no_contact = no_contact and int(hitlag[i]) == 0 and int(hitlag[i + 1]) == 0
-            if hitstun is not None:
-                no_contact = no_contact and int(hitstun[i]) == 0 and int(hitstun[i + 1]) == 0
-            if hit_by is not None:
-                no_contact = no_contact and int(hit_by[i]) == int(hit_by[i + 1])
-            if last_hit_by is not None:
-                no_contact = no_contact and int(last_hit_by[i]) == int(last_hit_by[i + 1])
-            observed_tick_rows[i] = (
-                np.isfinite(next_percent)
-                and abs((next_percent - percent) - float(amount)) <= 1e-4
-                and int(action[i + 1]) == int(action[i])
-                and no_contact
-            )
-
-    out = np.zeros(pct.shape[0], dtype=np.uint16)
-    max_counter = min(interval - 1, int(np.iinfo(np.uint16).max))
-    for tick_i in np.flatnonzero(observed_tick_rows):
-        for delta in range(interval):
-            j = int(tick_i) - delta
-            if j < 0 or not bool(eligible_rows[j]):
-                break
-            value = max_counter - delta
-            if value < 0:
-                break
-            if value > int(out[j]):
-                out[j] = np.uint16(value)
-    return out
 
 
 def derive_rebirth_camera_anchor_y(
@@ -1769,125 +1133,34 @@ def compute_tilt_timer_y_pre_post_with_fall_fast(
     - ftCommon_CheckFallFast uses start-of-frame `self_vel.y`, which we model as `speed_y_self_post[i-1]`.
     - `on_ground_post` is Slippi post-frame grounding; we clear fall_fast in the post snapshot when grounded.
     """
-    axis = np.asarray(stick_y_unit, dtype=np.float32).reshape(-1)
-    n = int(axis.size)
-
-    jump_entry_b = np.asarray(jump_entry, dtype=bool).reshape(-1)
-    if int(jump_entry_b.size) != n:
-        raise ValueError("jump_entry must match stick_y_unit length")
-    if pre_input_jump_entry is None:
-        pre_input_jump_entry_b = np.zeros(n, dtype=bool)
-    else:
-        pre_input_jump_entry_b = np.asarray(pre_input_jump_entry, dtype=bool).reshape(-1)
-        if int(pre_input_jump_entry_b.size) != n:
-            raise ValueError("pre_input_jump_entry must match stick_y_unit length")
-
-    fastfall_ok_b = np.asarray(fastfall_ok, dtype=bool).reshape(-1)
-    if int(fastfall_ok_b.size) != n:
-        raise ValueError("fastfall_ok must match stick_y_unit length")
-
-    vy_post = np.asarray(speed_y_self_post, dtype=np.float32).reshape(-1)
-    if int(vy_post.size) != n:
-        raise ValueError("speed_y_self_post must match stick_y_unit length")
-
-    on_ground_post_b = np.asarray(on_ground_post, dtype=bool).reshape(-1)
-    if int(on_ground_post_b.size) != n:
-        raise ValueError("on_ground_post must match stick_y_unit length")
-    if reset_post_mask is None:
-        reset = None
-    else:
-        reset = np.asarray(reset_post_mask, dtype=bool).reshape(-1)
-        if int(reset.size) != n:
-            raise ValueError("reset_post_mask must match stick_y_unit length")
-
-    out_pre = np.empty(n, dtype=np.uint8)
-    out_post = np.empty(n, dtype=np.uint8)
-    fall_fast_post = np.empty(n, dtype=np.uint8)
-
-    thresh = np.float32(tilt_thresh)
-    stick_thresh = np.float32(fastfall_stick_threshold)
-    tilt_max = int(fastfall_tilt_max_frames)
-
-    prev_axis = np.float32(0.0)
-    timer_post = int(start_timer_post) & 0xFF
-    fall_fast_prev_post = np.uint8(0)
-    vy_prev_post = np.float32(0.0)
-    on_ground_prev_post = bool(on_ground_post_b[0]) if n > 0 else False
-
-    for i in range(n):
-        a = np.float32(axis[i])
-
-        # Start-of-frame values for ftCommon_CheckFallFast for this frame i.
-        on_ground_start = on_ground_prev_post
-        vy_start = vy_prev_post
-        fall_fast_start = fall_fast_prev_post
-
-        # x671 input update (timer_pre) from the previous post value.
-        t_pre = int(timer_post) & 0xFF
-        if a >= thresh:
-            if prev_axis >= thresh:
-                t_pre += 1
-                if t_pre > 0xFE:
-                    t_pre = 0xFE
-            else:
-                t_pre = 0
-        elif a <= -thresh:
-            if prev_axis <= -thresh:
-                t_pre += 1
-                if t_pre > 0xFE:
-                    t_pre = 0xFE
-            else:
-                t_pre = 0
-        else:
-            t_pre = 0xFE
-
-        # Start with post==pre, then apply per-action overrides.
-        t_post = t_pre
-        if bool(pre_input_jump_entry_b[i]):
-            # Common JumpF/B entry is an Anim callback before Fighter_Spaghetti refreshes input
-            # history. ftCo_Jump_Enter writes x671=0xFE first; the later same-frame input-history
-            # update can overwrite that transient only for a fresh stick-threshold crossing.
-            fall_fast_start = np.uint8(0)
-            if a >= thresh:
-                t_post = 0xFE if prev_axis >= thresh else 0
-            elif a <= -thresh:
-                t_post = 0xFE if prev_axis <= -thresh else 0
-            else:
-                t_post = 0xFE
-        if bool(jump_entry_b[i]):
-            t_post = 0xFE
-            # Post-input JumpAerial entry clears fall_fast and owns the post-frame x671 override.
-            fall_fast_start = np.uint8(0)
-
-        # ftCommon_CheckFallFast (causal gate).
-        # refs/melee/src/melee/ft/ftcommon.c:505-520
-        ff_after = fall_fast_start
-        if (not on_ground_start) and bool(fastfall_ok_b[i]):
-            if (not fall_fast_start) and (vy_start < np.float32(0.0)) and (a <= -stick_thresh) and (
-                t_post < tilt_max
-            ):
-                ff_after = np.uint8(1)
-                t_post = 0xFE
-        if reset is not None and bool(reset[i]):
-            # ftCo_Damage_OnEveryHitlag resets both x670/x671 after consuming an SDI pulse.
-            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag
-            t_post = 0xFE
-
-        # Clear fall_fast when grounded in the post snapshot.
-        ff_post = np.uint8(0) if bool(on_ground_post_b[i]) else ff_after
-
-        out_pre[i] = np.uint8(t_pre)
-        out_post[i] = np.uint8(t_post)
-        fall_fast_post[i] = ff_post
-
-        # Next frame.
-        prev_axis = a
-        timer_post = t_post
-        fall_fast_prev_post = ff_post
-        vy_prev_post = np.float32(vy_post[i])
-        on_ground_prev_post = bool(on_ground_post_b[i])
-
-    return out_pre, out_post, fall_fast_post
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.compute_tilt_timer_y_pre_post_with_fall_fast is required for preprocessing; "
+            "run `make build`"
+        ) from exc
+    return msl_binding.compute_tilt_timer_y_pre_post_with_fall_fast(
+        np.ascontiguousarray(stick_y_unit, dtype=np.float32).reshape(-1),
+        float(tilt_thresh),
+        np.ascontiguousarray(jump_entry, dtype=np.bool_).reshape(-1),
+        (
+            np.ascontiguousarray(pre_input_jump_entry, dtype=np.bool_).reshape(-1)
+            if pre_input_jump_entry is not None
+            else None
+        ),
+        np.ascontiguousarray(fastfall_ok, dtype=np.bool_).reshape(-1),
+        np.ascontiguousarray(speed_y_self_post, dtype=np.float32).reshape(-1),
+        np.ascontiguousarray(on_ground_post, dtype=np.bool_).reshape(-1),
+        float(fastfall_stick_threshold),
+        int(fastfall_tilt_max_frames),
+        (
+            np.ascontiguousarray(reset_post_mask, dtype=np.bool_).reshape(-1)
+            if reset_post_mask is not None
+            else None
+        ),
+        int(start_timer_post),
+    )
 
 
 def derive_turn_internals(
@@ -1919,94 +1192,22 @@ def derive_turn_internals(
     - This assumption is expected to be revisited once we seed more complete entry history
       (notably KneeBend/jump-squat entry history), rather than being "trained" against outcomes.
     """
-    a = np.asarray(action_id, dtype=np.uint16).reshape(-1)
-    afr = np.asarray(action_frame_i16, dtype=np.int16).reshape(-1)
-    facing_u8 = np.asarray(facing, dtype=np.uint8).reshape(-1)
-    stick_x = np.asarray(stick_x_unit, dtype=np.float32).reshape(-1)
-    ttx = np.asarray(tilt_timer_x, dtype=np.uint8).reshape(-1)
-    tf = np.asarray(turn_frames, dtype=np.uint8).reshape(-1)
-
-    n = int(a.size)
-    out_frames = np.zeros(n, dtype=np.uint8)
-    out_has = np.zeros(n, dtype=np.uint8)
-    out_x8 = np.zeros(n, dtype=np.int8)
-
-    frames_to_turn = 0
-    has_turned = 0
-    x8 = 0
-    prev_in_turn = False
-
-    dash_max = int(dash_flick_tilt_max_frames)
-    dash_abs = np.float32(dash_flick_abs)
-
-    for i in range(n):
-        cur_act = int(a[i])
-        # Decomp: fp->mv.co.turn.* is used by AS_Turn (not AS_TurnRun).
-        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c
-        cur_in_turn = cur_act == act_turn
-        if not cur_in_turn:
-            frames_to_turn = 0
-            has_turned = 0
-            x8 = 0
-            prev_in_turn = False
-            continue
-
-        same_action_restart = bool(prev_in_turn and i > 0 and int(afr[i]) < int(afr[i - 1]))
-        if not prev_in_turn or same_action_restart:
-            # TURN entry (action transition into TURN).
-            #
-            # Determine standing turn vs smash turn (dash-flick opposite-facing) using current input
-            # and the previous frame's facing_dir (causal).
-            is_smash = False
-            if cur_act == act_turn and i > 0:
-                facing_before = int(facing_u8[i - 1])
-                facing_dir = np.float32(1.0 if facing_before else -1.0)
-                if (
-                    np.abs(stick_x[i]) >= dash_abs
-                    and int(ttx[i]) < dash_max
-                    and (stick_x[i] * facing_dir) < np.float32(0.0)
-                ):
-                    is_smash = True
-
-            frames_to_turn = 0 if is_smash else int(tf[i])
-            if frames_to_turn < 0:
-                frames_to_turn = 0
-            if frames_to_turn > 0xFE:
-                frames_to_turn = 0xFE
-            has_turned = 0
-            # Decomp:
-            # - Basic Turn: x8 init is 0 (ftCo_Turn_Enter arg3=0.0).
-            # - Smash Turn: ftCo_Turn_Enter_Smash sets x8 = facing_dir (non-zero).
-            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::{ftCo_Turn_Enter_Basic,ftCo_Turn_Enter_Smash}
-            if is_smash:
-                x8 = 1 if facing_dir > 0 else -1
-            else:
-                x8 = 0
-            out_frames[i] = np.uint8(frames_to_turn)
-            out_has[i] = np.uint8(has_turned)
-            out_x8[i] = np.int8(x8)
-            prev_in_turn = True
-            continue
-
-        # Apply one ftCo_Turn_Anim_Inner tick for this frame (post-frame snapshot semantics).
-        if frames_to_turn > 0:
-            frames_to_turn -= 1
-        elif not has_turned:
-            has_turned = 1
-
-        # Apply ftCo_Turn_IASA's fn_800C9C2C latch update (post-frame snapshot semantics).
-        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::fn_800C9C2C
-        facing_dir_i = np.float32(1.0 if int(facing_u8[i]) else -1.0)
-        facing_after = facing_dir_i if has_turned else -facing_dir_i
-        if (stick_x[i] * facing_after) >= dash_abs and int(ttx[i]) < dash_max:
-            x8 = 1 if facing_after > 0 else -1
-
-        out_frames[i] = np.uint8(frames_to_turn)
-        out_has[i] = np.uint8(has_turned)
-        out_x8[i] = np.int8(x8)
-        prev_in_turn = True
-
-    return out_frames, out_has, out_x8
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError("native msl_binding.derive_turn_internals is required; run `make build`") from exc
+    return msl_binding.derive_turn_internals(
+        np.ascontiguousarray(action_id, dtype=np.uint16).reshape(-1),
+        np.ascontiguousarray(action_frame_i16, dtype=np.int16).reshape(-1),
+        np.ascontiguousarray(facing, dtype=np.uint8).reshape(-1),
+        np.ascontiguousarray(stick_x_unit, dtype=np.float32).reshape(-1),
+        np.ascontiguousarray(tilt_timer_x, dtype=np.uint8).reshape(-1),
+        float(dash_flick_abs),
+        int(dash_flick_tilt_max_frames),
+        np.ascontiguousarray(turn_frames, dtype=np.uint8).reshape(-1),
+        int(act_turn),
+        int(act_turn_run),
+    )
 
 
 def derive_run_x0(
@@ -2038,38 +1239,18 @@ def derive_run_x0(
     - Store a reseed-friendly u8 countdown (clamped to 0..255).
     - Interpret it as "frames remaining while x0 > 0" for the simulator's Run IASA gate.
     """
-    a = np.asarray(action_id, dtype=np.uint16).reshape(-1)
-    hitlag = np.asarray(hitlag_u16, dtype=np.uint16).reshape(-1)
-    n = int(a.size)
-    out = np.zeros(n, dtype=np.uint8)
-    if n == 0:
-        return out
-
-    init = int(run_x0_init_x430)
-    init = int(np.clip(init, 0, 255))
-
-    for i in range(1, n):
-        prev_a = int(a[i - 1])
-        cur_a = int(a[i])
-        prev_x0 = int(out[i - 1])
-
-        x0 = 0
-        if cur_a == act_run or cur_a == act_run_direct:
-            if prev_a == act_turn_run:
-                # TurnRun -> Run: ftCo_Run_Enter called via fn_800CA644 with arg0=p_ftCommonData->x430.
-                x0 = init
-            elif prev_a == cur_a:
-                x0 = prev_x0
-                # Decrement once per frame when not in hitlag (Run_Anim is skipped under hitlag).
-                if int(hitlag[i - 1]) == 0 and x0 > 0:
-                    x0 -= 1
-            else:
-                # Other Run entries (e.g. Dash->Run via fn_800CA5F0) initialize x0=0.
-                x0 = 0
-
-        out[i] = np.uint8(x0)
-
-    return out
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError("native msl_binding.derive_run_x0 is required; run `make build`") from exc
+    return msl_binding.derive_run_x0(
+        np.ascontiguousarray(action_id, dtype=np.uint16).reshape(-1),
+        np.ascontiguousarray(hitlag_u16, dtype=np.uint16).reshape(-1),
+        float(run_x0_init_x430),
+        int(act_run),
+        int(act_run_direct),
+        int(act_turn_run),
+    )
 
 
 def derive_runbrake_cmd0(
@@ -2099,26 +1280,18 @@ def derive_runbrake_cmd0(
     - 0: RunBrake TurnRun gate disabled on this post-frame.
     - 1: RunBrake TurnRun gate enabled on this post-frame.
     """
-    action_id = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
-    anim_frame = np.asarray(anim_frame_f32, dtype=np.float32).reshape(-1)
-    char_id = np.asarray(char_id_u8, dtype=np.uint8).reshape(-1)
-    n = int(action_id.size)
-    if int(anim_frame.size) != n or int(char_id.size) != n:
-        raise ValueError("action_id_u16/anim_frame_f32/char_id_u8 must have the same length")
-
-    out = np.zeros(n, dtype=np.uint8)
-    for i in range(n):
-        if int(action_id[i]) != int(act_run_brake):
-            continue
-        cid = int(char_id[i])
-        start_af = int(cmd0_on_by_char.get(cid, -1))
-        end_af = int(cmd0_off_by_char.get(cid, -1))
-        if start_af < 0 or end_af < 0 or end_af < start_af:
-            continue
-        af = float(anim_frame[i])
-        if np.isfinite(af) and af >= float(start_af) and af < float(end_af):
-            out[i] = np.uint8(1)
-    return out
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError("native msl_binding.derive_runbrake_cmd0 is required; run `make build`") from exc
+    return msl_binding.derive_runbrake_cmd0(
+        np.ascontiguousarray(action_id_u16, dtype=np.uint16).reshape(-1),
+        np.ascontiguousarray(anim_frame_f32, dtype=np.float32).reshape(-1),
+        np.ascontiguousarray(char_id_u8, dtype=np.uint8).reshape(-1),
+        {int(k): int(v) for k, v in cmd0_on_by_char.items()},
+        {int(k): int(v) for k, v in cmd0_off_by_char.items()},
+        int(act_run_brake),
+    )
 
 
 def derive_dash_x4(
@@ -2147,38 +1320,16 @@ def derive_dash_x4(
     - Dash entry is detected from post-frame action transitions and same-action frame resets
       (`action_frame` drop while staying in Dash).
     """
-    a = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
-    af = np.asarray(action_frame_i16, dtype=np.int16).reshape(-1)
-    n = int(a.size)
-    out = np.zeros(n, dtype=np.uint8)
-    if n == 0:
-        return out
-    if int(af.size) != n:
-        raise ValueError("action_frame_i16 must match action_id_u16 length")
-
-    act_dash_u = int(act_dash) & 0xFFFF
-    act_turn_u = int(act_turn) & 0xFFFF
-
-    x4 = 0
-    for i in range(n):
-        cur_a = int(a[i]) & 0xFFFF
-        cur_af = int(af[i])
-
-        if cur_a != act_dash_u:
-            x4 = 0
-            out[i] = np.uint8(0)
-            continue
-
-        prev_a = int(a[i - 1]) & 0xFFFF if i > 0 else cur_a
-        prev_af = int(af[i - 1]) if i > 0 else cur_af
-        dash_entry = i == 0 or cur_a != prev_a or cur_af < prev_af
-        if dash_entry:
-            # Decomp: Turn_IASA enters Dash with arg1=0; Dash_CheckInput paths use arg1=1.
-            x4 = 0 if prev_a == act_turn_u else 1
-
-        out[i] = np.uint8(x4)
-
-    return out
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError("native msl_binding.derive_dash_x4 is required; run `make build`") from exc
+    return msl_binding.derive_dash_x4(
+        np.ascontiguousarray(action_id_u16, dtype=np.uint16).reshape(-1),
+        np.ascontiguousarray(action_frame_i16, dtype=np.int16).reshape(-1),
+        int(act_dash),
+        int(act_turn),
+    )
 
 
 def derive_shine_release_state(
@@ -2217,101 +1368,30 @@ def derive_shine_release_state(
     - Loop/Turn/Hit end-vs-loop gating uses (releaseLag <= 0 && isRelease).
       refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLwHit_Check
     """
-    a = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
-    af = np.asarray(action_frame_i16, dtype=np.int16).reshape(-1)
-    held = np.asarray(buttons_held_u16, dtype=np.uint16).reshape(-1)
-    hitlag = np.asarray(hitlag_u16, dtype=np.uint16).reshape(-1)
-    lag_init = np.asarray(release_lag_init_u8, dtype=np.uint8).reshape(-1)
-    n = int(a.size)
-
-    out_lag = np.zeros(n, dtype=np.uint8)
-    out_is_release = np.zeros(n, dtype=np.uint8)
-    if n == 0:
-        return out_lag, out_is_release
-    if int(af.size) != n or int(held.size) != n or int(hitlag.size) != n or int(lag_init.size) != n:
-        raise ValueError("all shine release inputs must have matching length")
-
-    act_start_set = {
-        int(act_special_lw_start) & 0xFFFF,
-        int(act_special_air_lw_start) & 0xFFFF,
-    }
-    act_latch_set = {
-        int(act_special_lw_start) & 0xFFFF,
-        int(act_special_air_lw_start) & 0xFFFF,
-        int(act_special_lw_loop) & 0xFFFF,
-        int(act_special_lw_hit) & 0xFFFF,
-        int(act_special_lw_turn) & 0xFFFF,
-        int(act_special_air_lw_loop) & 0xFFFF,
-        int(act_special_air_lw_hit) & 0xFFFF,
-        int(act_special_air_lw_turn) & 0xFFFF,
-    }
-    act_tick_set = {
-        int(act_special_lw_loop) & 0xFFFF,
-        int(act_special_lw_hit) & 0xFFFF,
-        int(act_special_lw_turn) & 0xFFFF,
-        int(act_special_air_lw_loop) & 0xFFFF,
-        int(act_special_air_lw_hit) & 0xFFFF,
-        int(act_special_air_lw_turn) & 0xFFFF,
-    }
-    act_shine_all = {
-        int(act_special_lw_start) & 0xFFFF,
-        int(act_special_lw_loop) & 0xFFFF,
-        int(act_special_lw_hit) & 0xFFFF,
-        int(act_special_lw_end) & 0xFFFF,
-        int(act_special_lw_turn) & 0xFFFF,
-        int(act_special_air_lw_start) & 0xFFFF,
-        int(act_special_air_lw_loop) & 0xFFFF,
-        int(act_special_air_lw_hit) & 0xFFFF,
-        int(act_special_air_lw_end) & 0xFFFF,
-        int(act_special_air_lw_turn) & 0xFFFF,
-    }
-    mask_b = int(button_mask_b) & 0xFFFF
-
-    lag = 0
-    is_release = 0
-    for i in range(n):
-        cur_a = int(a[i]) & 0xFFFF
-        cur_af = int(af[i])
-        cur_lag_init = int(lag_init[i]) & 0xFF
-        prev_a = int(a[i - 1]) & 0xFFFF if i > 0 else cur_a
-        prev_af = int(af[i - 1]) if i > 0 else cur_af
-
-        if cur_a not in act_shine_all:
-            lag = 0
-            is_release = 0
-            out_lag[i] = np.uint8(0)
-            out_is_release[i] = np.uint8(0)
-            continue
-
-        shine_start_entry = False
-        skip_tick_this_frame = False
-        if cur_a in act_start_set:
-            if i == 0 or prev_a not in act_shine_all:
-                shine_start_entry = True
-            elif cur_a == prev_a and cur_af < prev_af:
-                # Same-action restart safety for causal replay slices.
-                shine_start_entry = True
-        if shine_start_entry:
-            lag = cur_lag_init
-            is_release = 0
-            # Entry frame uses SetVars only; Start_Anim ticking begins on subsequent frames.
-            skip_tick_this_frame = True
-        elif i == 0:
-            # Best-effort initialization for first-frame mid-shine slices.
-            lag = max(0, cur_lag_init - max(0, cur_af + 1))
-            is_release = 0
-
-        if cur_a in act_latch_set and not skip_tick_this_frame and int(hitlag[i]) == 0:
-            if (int(held[i]) & mask_b) == 0:
-                is_release = 1
-        if cur_a in act_tick_set and not skip_tick_this_frame and int(hitlag[i]) == 0:
-            if lag > 0:
-                lag -= 1
-
-        out_lag[i] = np.uint8(lag)
-        out_is_release[i] = np.uint8(is_release)
-
-    return out_lag, out_is_release
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.derive_shine_release_state is required; run `make build`"
+        ) from exc
+    return msl_binding.derive_shine_release_state(
+        np.ascontiguousarray(action_id_u16, dtype=np.uint16).reshape(-1),
+        np.ascontiguousarray(action_frame_i16, dtype=np.int16).reshape(-1),
+        np.ascontiguousarray(buttons_held_u16, dtype=np.uint16).reshape(-1),
+        np.ascontiguousarray(hitlag_u16, dtype=np.uint16).reshape(-1),
+        np.ascontiguousarray(release_lag_init_u8, dtype=np.uint8).reshape(-1),
+        int(button_mask_b),
+        int(act_special_lw_start),
+        int(act_special_lw_loop),
+        int(act_special_lw_hit),
+        int(act_special_lw_end),
+        int(act_special_lw_turn),
+        int(act_special_air_lw_start),
+        int(act_special_air_lw_loop),
+        int(act_special_air_lw_hit),
+        int(act_special_air_lw_end),
+        int(act_special_air_lw_turn),
+    )
 
 
 def derive_ecb_lock_timer(
@@ -2342,43 +1422,19 @@ def derive_ecb_lock_timer(
     - On a detected post-frame grounded->air transition, write `(lock_frames_ground_to_air - 1)`
       for that frame to account for the same-frame procMap decrement.
     """
-    on_ground = np.asarray(on_ground_u8, dtype=np.uint8).reshape(-1)
-    action_id = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
-    n = int(on_ground.size)
-    out = np.zeros(n, dtype=np.uint8)
-    if n == 0:
-        return out
-    if int(action_id.size) != n:
-        raise ValueError("action_id_u16 must match on_ground_u8 length")
-
-    lock_frames = int(lock_frames_ground_to_air)
-    lock_frames = int(np.clip(lock_frames, 0, 255))
-    set_post = max(0, lock_frames - 1)
-    jump_set = {
-        int(act_jump_f) & 0xFFFF,
-        int(act_jump_b) & 0xFFFF,
-        int(act_jump_aerial_f) & 0xFFFF,
-        int(act_jump_aerial_b) & 0xFFFF,
-    }
-
-    timer = 0
-    prev_ground = bool(int(on_ground[0]) != 0)
-    for i in range(n):
-        cur_ground = bool(int(on_ground[i]) != 0)
-        cur_action = int(action_id[i]) & 0xFFFF
-        prev_action = int(action_id[i - 1]) & 0xFFFF if i > 0 else cur_action
-        jump_entry = (i > 0) and (cur_action in jump_set) and (cur_action != prev_action)
-        if cur_ground:
-            timer = 0
-        else:
-            if jump_entry or (i > 0 and prev_ground):
-                timer = set_post
-            elif timer > 0:
-                timer -= 1
-        out[i] = np.uint8(timer)
-        prev_ground = cur_ground
-
-    return out
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError("native msl_binding.derive_ecb_lock_timer is required; run `make build`") from exc
+    return msl_binding.derive_ecb_lock_timer(
+        np.ascontiguousarray(on_ground_u8, dtype=np.uint8).reshape(-1),
+        np.ascontiguousarray(action_id_u16, dtype=np.uint16).reshape(-1),
+        int(lock_frames_ground_to_air),
+        int(act_jump_f),
+        int(act_jump_b),
+        int(act_jump_aerial_f),
+        int(act_jump_aerial_b),
+    )
 
 
 def derive_damage_jump_buffer_x14(
@@ -2423,78 +1479,24 @@ def derive_damage_jump_buffer_x14(
       and only outside hitlag because Fighter_8006A360 / Fighter_procUpdate skip Anim/IASA
       callbacks while fp->x2219_b5 is set. Stale held tilts outside that window are not producers.
     """
-    a = np.asarray(action_id, dtype=np.uint16).reshape(-1)
-    hs = np.asarray(hitstun_u16, dtype=np.uint16).reshape(-1)
-    hl = (
-        np.zeros_like(hs, dtype=np.uint16)
-        if hitlag_u16 is None
-        else np.asarray(hitlag_u16, dtype=np.uint16).reshape(-1)
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.derive_damage_jump_buffer_x14 is required; run `make build`"
+        ) from exc
+    return msl_binding.derive_damage_jump_buffer_x14(
+        np.ascontiguousarray(action_id, dtype=np.uint16).reshape(-1),
+        np.ascontiguousarray(hitstun_u16, dtype=np.uint16).reshape(-1),
+        np.ascontiguousarray(buttons_pressed, dtype=np.uint16).reshape(-1),
+        np.ascontiguousarray(stick_y_unit, dtype=np.float32).reshape(-1),
+        np.ascontiguousarray(tilt_timer_y, dtype=np.uint8).reshape(-1),
+        None if hitlag_u16 is None else np.ascontiguousarray(hitlag_u16, dtype=np.uint16).reshape(-1),
+        float(tap_jump_threshold),
+        int(tap_jump_tilt_max_frames),
+        int(button_mask_xy),
+        tuple(int(v) for v in damage_actions),
     )
-    bp = np.asarray(buttons_pressed, dtype=np.uint16).reshape(-1)
-    sy = np.asarray(stick_y_unit, dtype=np.float32).reshape(-1)
-    tty = np.asarray(tilt_timer_y, dtype=np.uint8).reshape(-1)
-    n = int(a.size)
-    if (
-        int(hs.size) != n
-        or int(hl.size) != n
-        or int(bp.size) != n
-        or int(sy.size) != n
-        or int(tty.size) != n
-    ):
-        raise ValueError("all derive_damage_jump_buffer_x14 inputs must have the same length")
-
-    out = np.zeros(n, dtype=np.uint16)
-    if n == 0:
-        return out
-
-    damage_set = {int(x) & 0xFFFF for x in damage_actions}
-    xy = int(button_mask_xy) & 0xFFFF
-    tap_thr = np.float32(tap_jump_threshold)
-    tilt_max = int(tap_jump_tilt_max_frames)
-
-    x14 = 0
-    for i in range(n):
-        cur_a = int(a[i])
-        in_damage = cur_a in damage_set
-        if not in_damage:
-            x14 = 0
-            out[i] = np.uint16(0)
-            continue
-
-        prev_in_damage = i > 0 and (int(a[i - 1]) in damage_set)
-        if i == 0 or not prev_in_damage:
-            x14 = 0
-        elif int(hs[i]) > int(hs[i - 1]):
-            # Decomp: ftCo_8008DCE0 clears mv.co.damage.x14 on fresh damage entry.
-            # Within the damage-family seed bridge, rising hitstun is the causal replay-visible
-            # boundary for that re-entry while preserving <=t prefix-invariance.
-            x14 = 0
-
-        jump_input = False
-        if (int(bp[i]) & xy) != 0:
-            jump_input = True
-        # Decomp: doIasa calls ftCo_Jump_GetInput, which accepts both XY and tap-jump. Keep the
-        # seed bridge prefix-causal by using only the current replay-visible stick/timer sample, and
-        # require the timer to be inside the decomp tap-jump window so old held-up values do not
-        # refresh the hidden damage x14 lane.
-        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::doIasa
-        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_GetInput
-        if float(sy[i]) >= float(tap_thr) and int(tty[i]) < tilt_max:
-            jump_input = True
-
-        if int(hl[i]) == 0 and int(hs[i]) > 0 and jump_input:
-            x14 = int(hs[i])
-        # `mv.co.damage.x14` is a snapshot of `mv.co.damage.x0` taken by doIasa when the jump
-        # input is seen. ftCo_8008F744 decrements x0, but the decomp never decrements x14; the
-        # later inlineC0 / Damage_IASA gates compare the original snapshot against
-        # p_ftCommonData->x1D0. Keeping the snapshot fixed prevents old high-hitstun XY presses
-        # from turning into terminal-frame JumpAerial entries just because visible hitstun counted
-        # down to a small value.
-        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{doIasa,ftCo_8008F744,inlineC0}
-
-        out[i] = np.uint16(max(0, min(x14, 0xFFFF)))
-
-    return out
 
 
 def derive_damage_post_hitlag_cb_kind(
@@ -2527,42 +1529,17 @@ def derive_damage_post_hitlag_cb_kind(
     - Uses a damage-family ownership latch and fresh-hit boundaries (`hitstun` increase) as causal
       re-entry markers.
     """
-    a = np.asarray(action_id, dtype=np.uint16).reshape(-1)
-    hs = np.asarray(hitstun_u16, dtype=np.uint16).reshape(-1)
-    n = int(a.size)
-    if int(hs.size) != n:
-        raise ValueError("action_id and hitstun_u16 must have same length")
-
-    out = np.zeros(n, dtype=np.uint8)
-    if n == 0:
-        return out
-
-    damage_set = {int(x) & 0xFFFF for x in damage_actions}
-    kind = 0
-    prev_in_damage = False
-    prev_hs = int(hs[0])
-
-    for i in range(n):
-        cur_a = int(a[i]) & 0xFFFF
-        cur_hs = int(hs[i])
-        in_damage = cur_a in damage_set
-
-        if not in_damage:
-            kind = 0
-        else:
-            entered_damage = (i == 0) or (not prev_in_damage)
-            fresh_hit_reentry = (i > 0) and (cur_hs > prev_hs)
-            if entered_damage or fresh_hit_reentry:
-                kind = 1
-            elif kind == 0:
-                # Defensive latch restore for synthetic partial histories.
-                kind = 1
-
-        out[i] = np.uint8(kind)
-        prev_in_damage = in_damage
-        prev_hs = cur_hs
-
-    return out
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.derive_damage_post_hitlag_cb_kind is required; run `make build`"
+        ) from exc
+    return msl_binding.derive_damage_post_hitlag_cb_kind(
+        np.ascontiguousarray(action_id, dtype=np.uint16).reshape(-1),
+        np.ascontiguousarray(hitstun_u16, dtype=np.uint16).reshape(-1),
+        tuple(int(v) for v in damage_actions),
+    )
 
 
 def derive_kneebend_internals(
@@ -2603,82 +1580,31 @@ def derive_kneebend_internals(
     Causality: strictly causal; uses only current and past frames to detect KneeBend entry and to
     latch the short-hop flag while remaining in KneeBend.
     """
-    a = np.asarray(action_id, dtype=np.uint16).reshape(-1)
-    b = np.asarray(buttons, dtype=np.uint16).reshape(-1)
-    bp = np.asarray(buttons_pressed, dtype=np.uint16).reshape(-1)
-    sy = np.asarray(stick_y_unit, dtype=np.float32).reshape(-1)
-    cy = np.asarray(cstick_y_unit, dtype=np.float32).reshape(-1)
-    tty = np.asarray(tilt_timer_y, dtype=np.uint8).reshape(-1)
-
-    n = int(a.size)
-    out_jump = np.zeros(n, dtype=np.uint8)
-    out_short = np.zeros(n, dtype=np.uint8)
-
-    jump_input = 0  # ftCo_JumpInput enum: 0 None, 1 LStick, 2 CStick, 3 XY.
-    is_short_hop = 0
-    prev_in_kneebend = False
-
-    thr = np.float32(tap_jump_threshold)
-    dash_run_thr = np.float32(dash_run_jump_stick_y_threshold)
-    rel = np.float32(tap_jump_release_threshold)
-    tilt_max = int(tap_jump_tilt_max_frames)
-    xy = int(button_mask_xy) & 0xFFFF
-    dash_run_sources = {
-        int(act_dash) & 0xFFFF,
-        int(act_run) & 0xFFFF,
-        int(act_run_direct) & 0xFFFF,
-        int(act_run_brake) & 0xFFFF,
-        int(act_turn_run) & 0xFFFF,
-    }
-
-    for i in range(n):
-        cur_in_kneebend = int(a[i]) == int(act_kneebend)
-        if not cur_in_kneebend:
-            jump_input = 0
-            is_short_hop = 0
-            prev_in_kneebend = False
-            continue
-
-        if not prev_in_kneebend:
-            # Entry into KneeBend: pick jump_input causally using current inputs.
-            # ftCo_Jump_GetInput checks L-stick before XY; C-stick is a separate fallback check.
-            # Dash/Run/RunBrake/TurnRun IASA uses fn_800CAF78 instead, which checks XY first
-            # and then the lower p_ftCommonData->x80 stick threshold.
-            jump_input = 0
-            prev_action = int(a[i - 1]) & 0xFFFF if i > 0 else 0xFFFF
-            if prev_action in dash_run_sources:
-                if (int(bp[i]) & xy) != 0:
-                    jump_input = 3  # JumpInput_XY
-                elif sy[i] >= dash_run_thr and int(tty[i]) < tilt_max:
-                    jump_input = 1  # JumpInput_LStick
-                elif cy[i] >= thr:
-                    jump_input = 2  # JumpInput_CStick
-            else:
-                if sy[i] >= thr and int(tty[i]) < tilt_max:
-                    jump_input = 1  # JumpInput_LStick
-                elif (int(bp[i]) & xy) != 0:
-                    jump_input = 3  # JumpInput_XY
-                elif cy[i] >= thr:
-                    jump_input = 2  # JumpInput_CStick
-            is_short_hop = 0
-
-        if not is_short_hop:
-            # ftCo_KneeBend_Check_ShortHop: latch when the original jump input is released.
-            if jump_input == 3:
-                if (int(b[i]) & xy) == 0:
-                    is_short_hop = 1
-            elif jump_input == 1:
-                if sy[i] < rel:
-                    is_short_hop = 1
-            elif jump_input == 2:
-                if cy[i] < rel:
-                    is_short_hop = 1
-
-        out_jump[i] = np.uint8(jump_input)
-        out_short[i] = np.uint8(is_short_hop)
-        prev_in_kneebend = True
-
-    return out_jump, out_short
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.derive_kneebend_internals is required; run `make build`"
+        ) from exc
+    return msl_binding.derive_kneebend_internals(
+        np.ascontiguousarray(action_id, dtype=np.uint16).reshape(-1),
+        np.ascontiguousarray(buttons, dtype=np.uint16).reshape(-1),
+        np.ascontiguousarray(buttons_pressed, dtype=np.uint16).reshape(-1),
+        np.ascontiguousarray(stick_y_unit, dtype=np.float32).reshape(-1),
+        np.ascontiguousarray(cstick_y_unit, dtype=np.float32).reshape(-1),
+        np.ascontiguousarray(tilt_timer_y, dtype=np.uint8).reshape(-1),
+        float(tap_jump_threshold),
+        float(dash_run_jump_stick_y_threshold),
+        int(tap_jump_tilt_max_frames),
+        float(tap_jump_release_threshold),
+        int(act_kneebend),
+        int(act_dash),
+        int(act_run),
+        int(act_run_direct),
+        int(act_run_brake),
+        int(act_turn_run),
+        int(button_mask_xy),
+    )
 
 
 def compute_press_timer_u8(
@@ -2697,21 +1623,15 @@ def compute_press_timer_u8(
     - per-frame update example (x67F): refs/melee/src/melee/ft/fighter.c:2078-2086
       (`if (fp->input.x668 & HSD_PAD_LR) fp->x67F = 0; else if (fp->x67F < 0xFF) fp->x67F++;`)
     """
-    bp = np.asarray(buttons_pressed, dtype=np.uint16).reshape(-1)
-    n = int(bp.size)
-    out = np.empty(n, dtype=np.uint8)
-
-    mask = int(press_mask) & 0xFFFF
-    timer = int(start_timer) & 0xFF
-
-    for i in range(n):
-        if (int(bp[i]) & mask) != 0:
-            timer = 0
-        elif timer < 0xFF:
-            timer += 1
-        out[i] = np.uint8(timer)
-
-    return out
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError("native msl_binding.compute_press_timer_u8 is required; run `make build`") from exc
+    return msl_binding.compute_press_timer_u8(
+        np.ascontiguousarray(buttons_pressed, dtype=np.uint16).reshape(-1),
+        int(press_mask),
+        int(start_timer),
+    )
 
 
 def compute_lr_press_timer_x67f(
@@ -2740,39 +1660,23 @@ def compute_lr_press_timer_x67f(
       overwritten, so an LR edge persists for the rest of that hitlag window.
       refs/melee/src/melee/ft/fighter.c::{Fighter_Spaghetti_8006AD10_Inner1}
     """
-    b = np.asarray(buttons, dtype=np.uint16).reshape(-1)
-    trig = np.asarray(trigger_unit, dtype=np.float32).reshape(-1)
-    if int(b.size) != int(trig.size):
-        raise ValueError("buttons and trigger_unit must match length")
-    if hitlag_frames is None:
-        hl = np.zeros(int(b.size), dtype=np.uint16)
-    else:
-        hl = np.asarray(hitlag_frames, dtype=np.uint16).reshape(-1)
-        if int(hl.size) != int(b.size):
-            raise ValueError("hitlag_frames must match buttons length")
-
-    n = int(b.size)
-    out = np.empty(n, dtype=np.uint8)
-    timer = int(start_timer) & 0xFF
-    prev_held = False
-    x668_lr_latched = False
-    mask = (int(button_mask_lr) | int(button_mask_z)) & 0xFFFF
-    deadzone = np.float32(trigger_deadzone)
-
-    for i in range(n):
-        held = ((int(b[i]) & mask) != 0) or (np.float32(trig[i]) > deadzone)
-        pressed_edge = held and (not prev_held)
-        if int(hl[i]) > 0:
-            x668_lr_latched = x668_lr_latched or pressed_edge
-        else:
-            x668_lr_latched = pressed_edge
-        if x668_lr_latched:
-            timer = 0
-        elif timer < 0xFF:
-            timer += 1
-        out[i] = np.uint8(timer)
-        prev_held = held
-    return out
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError("native msl_binding.compute_lr_press_timer_x67f is required; run `make build`") from exc
+    return msl_binding.compute_lr_press_timer_x67f(
+        np.ascontiguousarray(buttons, dtype=np.uint16).reshape(-1),
+        np.ascontiguousarray(trigger_unit, dtype=np.float32).reshape(-1),
+        (
+            None
+            if hitlag_frames is None
+            else np.ascontiguousarray(hitlag_frames, dtype=np.uint16).reshape(-1)
+        ),
+        float(trigger_deadzone),
+        int(button_mask_lr),
+        int(button_mask_z),
+        int(start_timer),
+    )
 
 
 def _colanim_timer_remaining_from_action_frame(init_frames: int, action_frame: int) -> int:
@@ -2828,186 +1732,30 @@ def derive_colanim_internals(
     - `x2221_b0` currently has no reliable Slippi-exposed signal in this replay path; we keep it 0.
     - This is a seed bridge over missing internals, not a claim that every x198C source is modeled.
     """
-    aid = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
-    afr = np.asarray(action_frame_i16, dtype=np.int16).reshape(-1)
-    hl = np.asarray(hitlag_u16, dtype=np.uint16).reshape(-1)
-    hs = np.asarray(hitstun_u16, dtype=np.uint16).reshape(-1)
-    hurt = np.asarray(hurtbox_state_u8, dtype=np.uint8).reshape(-1)
-    n = int(aid.size)
-    if int(afr.size) != n or int(hl.size) != n or int(hs.size) != n or int(hurt.size) != n:
-        raise ValueError("action/action_frame/hitlag/hitstun/hurtbox_state arrays must match length")
-
-    throw_set = {int(x) & 0xFFFF for x in throw_actions}
-    cliff_set = {int(x) & 0xFFFF for x in cliff_actions}
-    passivewall_set = {int(x) & 0xFFFF for x in passivewall_actions}
-    damage_set = {int(x) & 0xFFFF for x in damage_actions}
-    fall_set = {int(x) & 0xFFFF for x in fall_actions}
-    rebirth_set = {int(x) & 0xFFFF for x in rebirth_actions}
-
-    out_x198c = np.zeros(n, dtype=np.uint8)
-    out_x1990 = np.zeros(n, dtype=np.uint16)
-    out_x1994 = np.zeros(n, dtype=np.uint16)
-    out_x2221_b0 = np.zeros(n, dtype=np.uint8)
-    out_rebirth_fall_x1994 = np.zeros(n, dtype=np.uint8)
-
-    x1990 = 0
-    x1994 = 0
-    x1994_rebirth_fall = False
-    x2221_b0 = 0
-    shine_start_masked_x198c = 0
-    prev_a = int(aid[0]) if n > 0 else 0
-    prev_afr = int(afr[0]) if n > 0 else 0
-    prev_hl = int(hl[0]) if n > 0 else 0
-    prev_hs = int(hs[0]) if n > 0 else 0
-
-    for i in range(n):
-        cur_a = int(aid[i])
-        cur_afr = int(afr[i])
-        cur_hl = int(hl[i])
-        cur_hs = int(hs[i])
-
-        # Decomp ordering: x1990/x1994 decrement once per frame in Fighter_8006A360.
-        if i > 0:
-            if x1990 > 0:
-                x1990 -= 1
-            if x1994 > 0:
-                x1994 -= 1
-                if x1994 == 0:
-                    x1994_rebirth_fall = False
-
-        entered = False
-        if i == 0:
-            entered = True
-        elif cur_a != prev_a:
-            entered = True
-        elif cur_afr < prev_afr:
-            # Same-action restart (e.g., self-transition with reset state_age).
-            entered = True
-
-        if entered and cur_a in throw_set:
-            rem = _colanim_timer_remaining_from_action_frame(int(colanim_throw_x1994_frames), cur_afr)
-            if rem > x1994:
-                x1994 = rem
-                x1994_rebirth_fall = False
-
-        if entered and cur_a in cliff_set:
-            rem = _colanim_timer_remaining_from_action_frame(int(colanim_cliff_x1990_frames), cur_afr)
-            if rem > x1990:
-                x1990 = rem
-
-        if entered and cur_a in passivewall_set:
-            # PassiveWall / PassiveWallJump entry starts the x198C=2 timer through
-            # ftColl_8007B760(..., p_ftCommonData->x764). Unlike CliffWait, the action_frame can
-            # stay frozen while mv.co.passivewall.timer counts down, so this lane must be
-            # reconstructed causally from the replay action episode instead of from action_frame.
-            # refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::ftCo_800C1E64
-            # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
-            rem = int(colanim_passivewall_x1990_frames)
-            if rem > 0xFFFF:
-                rem = 0xFFFF
-            if rem > x1990:
-                x1990 = rem
-
-        if entered and cur_a in fall_set and int(prev_a) in rebirth_set:
-            rem = _colanim_timer_remaining_from_action_frame(
-                int(colanim_rebirth_fall_x1994_frames), cur_afr
-            )
-            if rem > x1994:
-                x1994 = rem
-                x1994_rebirth_fall = True
-
-        # Damage hitlag-exit hook: ftCo_Damage_OnExitHitlag sets x1994 via p_ftCommonData->x130.
-        if i > 0 and prev_hl > 0 and cur_hl == 0:
-            if cur_a in damage_set or prev_a in damage_set or cur_hs > 0 or prev_hs > 0:
-                rem = int(colanim_damage_x1994_frames)
-                if rem > 0xFFFF:
-                    rem = 0xFFFF
-                if rem > x1994:
-                    x1994 = rem
-                    x1994_rebirth_fall = False
-
-        # Causal bootstrap for first frame when replay starts in an unobserved prior timer window.
-        if i == 0 and x1990 == 0 and x1994 == 0:
-            h0 = int(hurt[0])
-            if h0 == 2:
-                x1990 = 1
-            elif h0 == 1:
-                x1994 = 1
-
-        if x1990 > 0 or x2221_b0:
-            x198c = 2
-        elif x1994 > 0:
-            x198c = 1
-        else:
-            x198c = 0
-
-        shine_entry_masks_x198c = (
-            entered
-            and i > 0
-            and cur_a in {0x0168, 0x016D}
-            and cur_afr == 1
-            and int(hurt[i]) == 2
-            and int(hurt[i - 1]) == 1
-            and x1990 == 0
-            and x1994 == 0
-            and not x2221_b0
-        )
-        if shine_entry_masks_x198c:
-            # Fox/Falco Shine Start entry masks the prior visible x198C=1 lane with the
-            # movescript x1988=2 set by the entry script. Slippi exposes only x1988 while it is
-            # nonzero; when the Shine script clears x1988 on the following frame, replay falls back
-            # to the still-live x198C=1 lane. Preserve only this causal entry-origin shape so
-            # same-action hitlag-frozen Shine starts that clear to vulnerable remain unbridged.
-            # Actions: ftFx_MS_SpecialLwStart=0x168, ftFx_MS_SpecialAirLwStart=0x16D.
-            # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
-            # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007B62C,ftColl_8007B868}
-            # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{
-            #   ftFx_SpecialLw_Enter,ftFx_SpecialAirLw_Enter}
-            shine_start_masked_x198c = 1
-        elif not (cur_a in {0x0168, 0x016D} and cur_afr == 1 and int(hurt[i]) == 2):
-            shine_start_masked_x198c = 0
-
-        if shine_start_masked_x198c:
-            x198c = 1
-
-        downbound_set = {0x00BE, 0x00BF}
-        downbound_hidden_x1990_visible_zero = cur_a in downbound_set and x1990 > 0
-        if int(hurt[i]) == 0 and x1990 > 0 and not downbound_hidden_x1990_visible_zero:
-            # Slippi post-frame emits `x1988` when nonzero, otherwise `x198C`; a replay-visible
-            # hurtbox_state of 0 therefore proves move-induced status and the intangible x1990 lane
-            # are clear at this snapshot. Do not let strictly-causal cliff/ledge x1990 reconstruction
-            # stale-carry past that observable clear. Preserve x1994: DownBound/Damage OnExitHitlag
-            # rows can expose visible 0 while the hidden invincible-contact x1994 lane remains active.
-            # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
-            # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
-            x1990 = 0
-            x2221_b0 = 0
-            x198c = 1 if x1994 > 0 else 0
-
-        if int(hurt[i]) == 0 and x1994 > 0 and cur_a not in damage_set and cur_a not in downbound_set:
-            # A visible vulnerable snapshot outside the source-proven damage/DownBound x1994
-            # consumers clears replay-history x1994 provenance. Otherwise an old damage-exit
-            # timer can stale-carry under later cliff/EscapeAir x1988/x1990 visibility and leak as
-            # invincible x198C when the masking state changes motion.
-            # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
-            # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
-            x1994 = 0
-            x1994_rebirth_fall = False
-            if x1990 == 0 and not x2221_b0:
-                x198c = 0
-
-        out_x198c[i] = np.uint8(x198c)
-        out_x1990[i] = np.uint16(x1990)
-        out_x1994[i] = np.uint16(x1994)
-        out_x2221_b0[i] = np.uint8(1 if x2221_b0 else 0)
-        out_rebirth_fall_x1994[i] = np.uint8(1 if x1994_rebirth_fall and x1994 > 0 else 0)
-
-        prev_a = cur_a
-        prev_afr = cur_afr
-        prev_hl = cur_hl
-        prev_hs = cur_hs
-
-    return out_x198c, out_x1990, out_x1994, out_x2221_b0, out_rebirth_fall_x1994
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.derive_colanim_internals is required; run `make build`"
+        ) from exc
+    return msl_binding.derive_colanim_internals(
+        np.ascontiguousarray(action_id_u16, dtype=np.uint16).reshape(-1),
+        np.ascontiguousarray(action_frame_i16, dtype=np.int16).reshape(-1),
+        np.ascontiguousarray(hitlag_u16, dtype=np.uint16).reshape(-1),
+        np.ascontiguousarray(hitstun_u16, dtype=np.uint16).reshape(-1),
+        np.ascontiguousarray(hurtbox_state_u8, dtype=np.uint8).reshape(-1),
+        int(colanim_throw_x1994_frames),
+        int(colanim_cliff_x1990_frames),
+        int(colanim_damage_x1994_frames),
+        int(colanim_passivewall_x1990_frames),
+        int(colanim_rebirth_fall_x1994_frames),
+        tuple(int(v) for v in throw_actions),
+        tuple(int(v) for v in cliff_actions),
+        tuple(int(v) for v in passivewall_actions),
+        tuple(int(v) for v in damage_actions),
+        tuple(int(v) for v in fall_actions),
+        tuple(int(v) for v in rebirth_actions),
+    )
 
 
 def compute_x672_trigger_timer_pre_post(
@@ -3035,60 +1783,27 @@ def compute_x672_trigger_timer_pre_post(
     - `trigger_unit` corresponds to `fp->input.x650` (max of analog L/R, with digital L/R treated as 1.0).
     - If `prev_trigger_unit` is omitted, we model `fp->input.x654` as the previous frame's `trigger_unit`.
     """
-    trig = np.asarray(trigger_unit, dtype=np.float32).reshape(-1)
-    n = int(trig.size)
-
-    if prev_trigger_unit is None:
-        prev_trig = None
-    else:
-        prev_trig = np.asarray(prev_trigger_unit, dtype=np.float32).reshape(-1)
-        if int(prev_trig.size) != n:
-            raise ValueError("prev_trigger_unit must match trigger_unit length")
-
-    if guard_reflect_entry is None:
-        guard_entry = None
-    else:
-        guard_entry = np.asarray(guard_reflect_entry, dtype=bool).reshape(-1)
-        if int(guard_entry.size) != n:
-            raise ValueError("guard_reflect_entry must match trigger_unit length")
-
-    out_pre = np.empty(n, dtype=np.uint8)
-    out_post = np.empty(n, dtype=np.uint8)
-
-    thr = np.float32(trigger_min)
-    timer_post = int(start_timer_post) & 0xFF
-    prev_t = np.float32(0.0)
-
-    for i in range(n):
-        cur = np.float32(trig[i])
-        if prev_trig is None:
-            prev = prev_t
-        else:
-            prev = np.float32(prev_trig[i])
-
-        # Fighter input update (timer_pre).
-        t_pre = int(timer_post) & 0xFF
-        if cur >= thr:
-            if prev >= thr:
-                t_pre += 1
-                if t_pre > 0xFE:
-                    t_pre = 0xFE
-            else:
-                t_pre = 0
-        else:
-            t_pre = 0xFE
-
-        t_post = t_pre
-        if guard_entry is not None and bool(guard_entry[i]):
-            t_post = 0xFE
-
-        out_pre[i] = np.uint8(t_pre)
-        out_post[i] = np.uint8(t_post)
-
-        timer_post = t_post
-        prev_t = cur
-
-    return out_pre, out_post
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.compute_x672_trigger_timer_pre_post is required; run `make build`"
+        ) from exc
+    return msl_binding.compute_x672_trigger_timer_pre_post(
+        np.ascontiguousarray(trigger_unit, dtype=np.float32).reshape(-1),
+        (
+            None
+            if prev_trigger_unit is None
+            else np.ascontiguousarray(prev_trigger_unit, dtype=np.float32).reshape(-1)
+        ),
+        float(trigger_min),
+        (
+            None
+            if guard_reflect_entry is None
+            else np.ascontiguousarray(guard_reflect_entry, dtype=np.bool_).reshape(-1)
+        ),
+        int(start_timer_post),
+    )
 
 
 def compute_fighter_stick_input_counters(
@@ -3214,61 +1929,19 @@ def derive_downwait_timer(
     previous replay row's visible hitstun is the prefix-causal exposed countdown paired with
     `mv.co.damage.x0`; the entered DownWait seed receives that timer after the entering Anim tick.
     """
-    aid = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
-    n = int(aid.size)
-    hitstun = None
-    if hitstun_u16 is not None:
-        hitstun = np.asarray(hitstun_u16, dtype=np.uint16).reshape(-1)
-        if int(hitstun.size) != n:
-            raise ValueError("hitstun_u16 must match action_id_u16 length")
-    out = np.zeros(n, dtype=np.int16)
-
-    dw_u = np.uint16(int(act_down_wait_u) & 0xFFFF)
-    dw_d = np.uint16(int(act_down_wait_d) & 0xFFFF)
-    dd_u = np.uint16(int(act_down_damage_u) & 0xFFFF) if act_down_damage_u is not None else None
-    dd_d = np.uint16(int(act_down_damage_d) & 0xFFFF) if act_down_damage_d is not None else None
-    start = int(down_wait_frames)
-    if start < 0:
-        start = 0
-    if start > 0x7FFF:
-        start = 0x7FFF
-
-    timer = 0
-    prev_is_dw = False
-    for i in range(n):
-        is_dw = bool(aid[i] == dw_u or aid[i] == dw_d)
-        if not is_dw:
-            timer = 0
-            out[i] = np.int16(0)
-            prev_is_dw = False
-            continue
-
-        if not prev_is_dw:
-            prev_a = aid[i - 1] if i > 0 else np.uint16(0)
-            prev_was_down_damage = (
-                i > 0
-                and dd_u is not None
-                and dd_d is not None
-                and (prev_a == dd_u or prev_a == dd_d)
-            )
-            if prev_was_down_damage and hitstun is not None:
-                # `ftCo_DownDamage_Anim` has already consumed the entering-frame tick before
-                # `ftCo_80097F38` exposes DownWait in the next post-frame row.
-                timer = int(hitstun[i - 1]) - 1
-                if timer < 1:
-                    timer = 1
-                if timer > start:
-                    timer = start
-            else:
-                timer = start
-        else:
-            if timer > 0:
-                timer -= 1
-
-        out[i] = np.int16(timer)
-        prev_is_dw = True
-
-    return out
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError("native msl_binding.derive_downwait_timer is required; run `make build`") from exc
+    return msl_binding.derive_downwait_timer(
+        np.ascontiguousarray(action_id_u16, dtype=np.uint16).reshape(-1),
+        None if hitstun_u16 is None else np.ascontiguousarray(hitstun_u16, dtype=np.uint16).reshape(-1),
+        int(down_wait_frames),
+        -1 if act_down_damage_u is None else int(act_down_damage_u),
+        -1 if act_down_damage_d is None else int(act_down_damage_d),
+        int(act_down_wait_u),
+        int(act_down_wait_d),
+    )
 
 
 # Grab/throw victim attachment owner identity (seeded; suite-focused).
@@ -3403,27 +2076,18 @@ def derive_grab_mash_stick_sign_post(
     grab_mash_stick_threshold: float,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Derive post-frame ftCommon_GrabMash stick-sign latches (`x1A50` / `x1A51`)."""
-    sx = np.asarray(stick_x_unit, dtype=np.float32).reshape(-1)
-    sy = np.asarray(stick_y_unit, dtype=np.float32).reshape(-1)
-    if sx.shape != sy.shape:
-        raise ValueError(f"stick_x_unit and stick_y_unit must match, got {sx.shape} vs {sy.shape}")
-    thresh = np.float32(float(grab_mash_stick_threshold))
-    out_x = np.zeros(sx.shape[0], dtype=np.int8)
-    out_y = np.zeros(sy.shape[0], dtype=np.int8)
-    latch_x = np.int8(0)
-    latch_y = np.int8(0)
-    for i in range(sx.shape[0]):
-        if sx[i] < -thresh:
-            latch_x = np.int8(-1)
-        elif sx[i] > thresh:
-            latch_x = np.int8(1)
-        if sy[i] < -thresh:
-            latch_y = np.int8(-1)
-        elif sy[i] > thresh:
-            latch_y = np.int8(1)
-        out_x[i] = latch_x
-        out_y[i] = latch_y
-    return out_x, out_y
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.derive_grab_mash_stick_sign_post is required for preprocessing; "
+            "run `make build`"
+        ) from exc
+    return msl_binding.derive_grab_mash_stick_sign_post(
+        np.ascontiguousarray(stick_x_unit, dtype=np.float32).reshape(-1),
+        np.ascontiguousarray(stick_y_unit, dtype=np.float32).reshape(-1),
+        float(grab_mash_stick_threshold),
+    )
 
 
 def derive_capture_grab_hidden_post(
@@ -3457,161 +2121,34 @@ def derive_capture_grab_hidden_post(
     Output row `i` corresponds to the post-frame replay row `i` and is suitable for seeding the
     next one-step transition from replay row `i` to replay row `i+1`.
     """
-    action_id = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
-    action_frame = np.asarray(action_frame_i16, dtype=np.int16).reshape(-1)
-    owner = np.asarray(grab_owner_port_u8, dtype=np.uint8).reshape(-1)
-    percent = np.asarray(percent_f32, dtype=np.float32).reshape(-1)
-    buttons = np.asarray(buttons_held_u16, dtype=np.uint16).reshape(-1)
-    stick_x = np.asarray(stick_x_unit, dtype=np.float32).reshape(-1)
-    stick_y = np.asarray(stick_y_unit, dtype=np.float32).reshape(-1)
-    frame_speed = np.asarray(frame_speed_mul_f32, dtype=np.float32).reshape(-1)
-    mash_x = np.asarray(grab_mash_stick_x_sign_post, dtype=np.int8).reshape(-1)
-    mash_y = np.asarray(grab_mash_stick_y_sign_post, dtype=np.int8).reshape(-1)
-    if (
-        action_id.shape != action_frame.shape
-        or action_id.shape != owner.shape
-        or action_id.shape != percent.shape
-        or action_id.shape != buttons.shape
-        or action_id.shape != stick_x.shape
-        or action_id.shape != stick_y.shape
-        or action_id.shape != frame_speed.shape
-        or action_id.shape != mash_x.shape
-        or action_id.shape != mash_y.shape
-    ):
-        raise ValueError("capture/grab hidden derivation inputs must all match")
-
-    n = action_id.shape[0]
-    out_grab_timer = np.zeros(n, dtype=np.float32)
-    out_counter = np.zeros(n, dtype=np.float32)
-    out_anim_timer = np.zeros(n, dtype=np.float32)
-    out_jump_latch = np.zeros(n, dtype=np.uint8)
-    out_breakout_pending = np.zeros(n, dtype=np.uint8)
-    if n == 0:
-        return (
-            out_grab_timer,
-            out_counter,
-            out_anim_timer,
-            out_jump_latch,
-            out_breakout_pending,
-        )
-
-    def _is_attach_action(a: np.uint16) -> bool:
-        return int(a) in {int(v) for v in _CAPTURE_ATTACH_ACTIONS}
-
-    def _is_wait_action(a: np.uint16) -> bool:
-        return int(a) in {int(v) for v in _CAPTURE_WAIT_ACTIONS}
-
-    def _is_wait_or_damage_action(a: np.uint16) -> bool:
-        return int(a) in {int(v) for v in _CAPTURE_WAIT_OR_DAMAGE_ACTIONS}
-
-    def _grab_timer_init(i: int) -> np.float32:
-        slot = np.float32(float(slot_index + 1))
-        hcap = np.float32(float(handicap))
-        return np.float32(
-            capture_grab_timer_base
-            + capture_grab_timer_handicap_mul * (capture_grab_timer_handicap_base - hcap)
-            + capture_grab_timer_slot_mul * (capture_grab_timer_slot_base - slot)
-            + percent[i] * capture_grab_timer_percent_mul
-        )
-
-    def _seed_mid_segment_row(i: int) -> tuple[np.float32, np.float32, np.float32, np.uint8]:
-        timer = _grab_timer_init(i)
-        counter = np.float32(0.0)
-        anim_timer = np.float32(0.0)
-        jump_latch = np.uint8(0)
-        # Dataset windows can start mid-capture segment. Use the replay-visible state only to
-        # restore the shared owner lanes, without reintroducing cross-row rate bridges.
-        if _is_wait_or_damage_action(action_id[i]):
-          callbacks = max(0, int(action_frame[i]))
-          if callbacks > 0:
-              counter = np.float32(float(callbacks))
-              timer = np.float32(max(0.0, float(timer) - callbacks * capture_wait_grab_timer_decrement))
-          if frame_speed[i] > np.float32(1.0):
-              anim_timer = np.float32(capture_wait_anim_rate_hold_frames)
-        return timer, counter, anim_timer, jump_latch
-
-    if _is_attach_action(action_id[0]) and owner[0] != np.uint8(0xFF):
-        (
-            out_grab_timer[0],
-            out_counter[0],
-            out_anim_timer[0],
-            out_jump_latch[0],
-        ) = _seed_mid_segment_row(0)
-
-    for i in range(n - 1):
-        timer = float(out_grab_timer[i])
-        counter = float(out_counter[i])
-        anim_timer = float(out_anim_timer[i])
-        jump_latch = int(out_jump_latch[i])
-        next_timer = np.float32(0.0)
-        next_counter = np.float32(0.0)
-        next_anim_timer = np.float32(0.0)
-        next_jump_latch = np.uint8(0)
-        if _is_attach_action(action_id[i]) and owner[i] != np.uint8(0xFF):
-            if _is_wait_or_damage_action(action_id[i]):
-                counter += 1.0
-                timer -= float(capture_wait_grab_timer_decrement)
-
-                held = buttons[i + 1]
-                mash_active = (
-                    held & (_BTN_A | _BTN_B | _BTN_X | _BTN_Y | _BTN_L | _BTN_R)
-                ) != 0
-                next_x = mash_x[i]
-                next_y = mash_y[i]
-                if stick_x[i + 1] < -np.float32(grab_mash_stick_threshold):
-                    next_x = np.int8(-1)
-                elif stick_x[i + 1] > np.float32(grab_mash_stick_threshold):
-                    next_x = np.int8(1)
-                if stick_y[i + 1] < -np.float32(grab_mash_stick_threshold):
-                    next_y = np.int8(-1)
-                elif stick_y[i + 1] > np.float32(grab_mash_stick_threshold):
-                    next_y = np.int8(1)
-                if next_x != mash_x[i] or next_y != mash_y[i]:
-                    mash_active = True
-                if mash_active:
-                    timer -= float(capture_wait_grab_mash_damage)
-
-                if timer > 0.0:
-                    if anim_timer != 0.0:
-                        anim_timer -= 1.0
-                        if anim_timer <= 0.0 and not mash_active:
-                            anim_timer = 0.0
-                    if anim_timer <= 0.0 and mash_active:
-                        anim_timer = float(capture_wait_anim_rate_hold_frames)
-
-            if _is_wait_action(action_id[i]):
-                if counter < float(capture_wait_jump_latch_window_frames) and (
-                    buttons[i + 1] & _BTN_XY
-                ) != 0:
-                    jump_latch = 1
-
-            if _is_wait_action(action_id[i]) and action_id[i + 1] in (
-                _ACT_CAPTURE_CUT,
-                _ACT_CAPTURE_JUMP,
-            ):
-                out_breakout_pending[i] = np.uint8(1)
-
-            if _is_attach_action(action_id[i + 1]) and owner[i + 1] == owner[i]:
-                next_timer = np.float32(max(0.0, timer))
-                next_counter = np.float32(max(0.0, counter))
-                next_anim_timer = np.float32(max(0.0, anim_timer))
-                next_jump_latch = np.uint8(1 if jump_latch else 0)
-                if _is_wait_action(action_id[i]) and action_id[i + 1] in _CAPTURE_DAMAGE_ACTIONS:
-                    next_anim_timer = np.float32(0.0)
-
-        if next_timer == np.float32(0.0) and next_counter == np.float32(0.0) and (
-            _is_attach_action(action_id[i + 1]) and owner[i + 1] != np.uint8(0xFF)
-        ):
-            next_timer, next_counter, next_anim_timer, next_jump_latch = _seed_mid_segment_row(i + 1)
-
-        out_grab_timer[i + 1] = next_timer
-        out_counter[i + 1] = next_counter
-        out_anim_timer[i + 1] = next_anim_timer
-        out_jump_latch[i + 1] = next_jump_latch
-    return (
-        out_grab_timer,
-        out_counter,
-        out_anim_timer,
-        out_jump_latch,
-        out_breakout_pending,
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.derive_capture_grab_hidden_post is required; run `make build`"
+        ) from exc
+    return msl_binding.derive_capture_grab_hidden_post(
+        np.ascontiguousarray(action_id_u16, dtype=np.uint16).reshape(-1),
+        np.ascontiguousarray(action_frame_i16, dtype=np.int16).reshape(-1),
+        np.ascontiguousarray(grab_owner_port_u8, dtype=np.uint8).reshape(-1),
+        np.ascontiguousarray(percent_f32, dtype=np.float32).reshape(-1),
+        np.ascontiguousarray(buttons_held_u16, dtype=np.uint16).reshape(-1),
+        np.ascontiguousarray(stick_x_unit, dtype=np.float32).reshape(-1),
+        np.ascontiguousarray(stick_y_unit, dtype=np.float32).reshape(-1),
+        np.ascontiguousarray(frame_speed_mul_f32, dtype=np.float32).reshape(-1),
+        np.ascontiguousarray(grab_mash_stick_x_sign_post, dtype=np.int8).reshape(-1),
+        np.ascontiguousarray(grab_mash_stick_y_sign_post, dtype=np.int8).reshape(-1),
+        int(slot_index),
+        int(handicap),
+        float(capture_grab_timer_base),
+        float(capture_grab_timer_handicap_mul),
+        float(capture_grab_timer_handicap_base),
+        float(capture_grab_timer_slot_mul),
+        float(capture_grab_timer_slot_base),
+        float(capture_grab_timer_percent_mul),
+        float(capture_wait_grab_timer_decrement),
+        float(capture_wait_grab_mash_damage),
+        float(capture_wait_anim_rate_hold_frames),
+        float(capture_wait_jump_latch_window_frames),
+        float(grab_mash_stick_threshold),
     )

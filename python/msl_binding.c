@@ -1,4 +1,5 @@
 #define PY_SSIZE_T_CLEAN
+#define PY_ARRAY_UNIQUE_SYMBOL MSL_BINDING_ARRAY_API
 #include <Python.h>
 
 #include <math.h>
@@ -8,21 +9,27 @@
 
 #include <numpy/arrayobject.h>
 
+#include "msl_preprocess_native.h"
+
 #include "../src/alloc.h"
 #include "../src/api.h"
 #include "../src/anim_table.h"
 #include "../src/anim_pose.h"
+#include "../src/attack_id_tables.h"
 #include "../src/char_params.h"
 #include "../src/common_params.h"
 #include "../src/ecb_tables.h"
 #include "../src/hitboxes_tables.h"
 #include "../src/hurtcaps_tables.h"
 #include "../src/hitlist.h"
+#include "../src/input_axis.h"
 #include "../src/item_article_params.h"
 #include "../src/move_tables.h"
 #include "../src/shield_tilt_table.h"
 #include "../src/specialhi_pose.h"
+#include "../src/staling.h"
 #include "../src/stage_collision.h"
+#include "../src/ucf.h"
 
 typedef struct {
   MslBatch* batch;
@@ -40,8 +47,8 @@ static void pymsl_capsule_destructor(PyObject* capsule) {
   PyMem_Free(h);
 }
 
-static PyArrayObject* require_contiguous_array(PyObject* obj, int typenum, int min_ndim,
-                                               const char* name) {
+PyArrayObject* require_contiguous_array(PyObject* obj, int typenum, int min_ndim,
+                                        const char* name) {
   if (!PyObject_TypeCheck(obj, &PyArray_Type)) {
     PyErr_Format(PyExc_TypeError, "%s must be a NumPy array", name);
     return NULL;
@@ -62,8 +69,7 @@ static PyArrayObject* require_contiguous_array(PyObject* obj, int typenum, int m
   return arr;
 }
 
-static int require_exact_2d_shape(PyArrayObject* arr, npy_intp rows, npy_intp cols,
-                                  const char* name) {
+int require_exact_2d_shape(PyArrayObject* arr, npy_intp rows, npy_intp cols, const char* name) {
   if (PyArray_NDIM(arr) != 2 || PyArray_DIM(arr, 0) != rows || PyArray_DIM(arr, 1) != cols) {
     PyErr_Format(PyExc_ValueError,
                  "%s must share exact [frames, players] shape: expected [%zd, %zd], got [%zd, %zd]",
@@ -2660,1947 +2666,6 @@ static PyObject* msl_pose_points_world_py(PyObject* self, PyObject* args) {
   Py_RETURN_NONE;
 }
 
-static PyObject* msl_derive_camera_target_world_py(PyObject* self, PyObject* args) {
-  (void)self;
-  PyObject* char_obj = NULL;
-  PyObject* anim_obj = NULL;
-  PyObject* anim_frame_obj = NULL;
-  PyObject* scale_y_obj = NULL;
-  PyObject* facing_obj = NULL;
-  PyObject* pos_x_obj = NULL;
-  PyObject* pos_y_obj = NULL;
-  PyObject* pos_z_obj = NULL;
-  if (!PyArg_ParseTuple(args, "OOOOOOOO", &char_obj, &anim_obj, &anim_frame_obj, &scale_y_obj,
-                        &facing_obj, &pos_x_obj, &pos_y_obj, &pos_z_obj)) {
-    return NULL;
-  }
-
-  PyArrayObject* char_id = require_contiguous_array(char_obj, NPY_UINT8, 1, "char_id_u8");
-  if (char_id == NULL) {
-    return NULL;
-  }
-  PyArrayObject* anim = require_contiguous_array(anim_obj, NPY_UINT32, 1, "animation_index_u32");
-  if (anim == NULL) {
-    return NULL;
-  }
-  PyArrayObject* anim_frame =
-      require_contiguous_array(anim_frame_obj, NPY_FLOAT32, 1, "anim_frame_f32");
-  if (anim_frame == NULL) {
-    return NULL;
-  }
-  PyArrayObject* scale_y =
-      require_contiguous_array(scale_y_obj, NPY_FLOAT32, 1, "fighter_scale_y_f32");
-  if (scale_y == NULL) {
-    return NULL;
-  }
-  PyArrayObject* facing = require_contiguous_array(facing_obj, NPY_UINT8, 1, "facing_u8");
-  if (facing == NULL) {
-    return NULL;
-  }
-  PyArrayObject* pos_x = require_contiguous_array(pos_x_obj, NPY_FLOAT32, 1, "pos_x_f32");
-  if (pos_x == NULL) {
-    return NULL;
-  }
-  PyArrayObject* pos_y = require_contiguous_array(pos_y_obj, NPY_FLOAT32, 1, "pos_y_f32");
-  if (pos_y == NULL) {
-    return NULL;
-  }
-  PyArrayObject* pos_z = require_contiguous_array(pos_z_obj, NPY_FLOAT32, 1, "pos_z_f32");
-  if (pos_z == NULL) {
-    return NULL;
-  }
-
-  const npy_intp n = PyArray_DIM(char_id, 0);
-  if (PyArray_DIM(anim, 0) != n || PyArray_DIM(anim_frame, 0) != n ||
-      PyArray_DIM(scale_y, 0) != n || PyArray_DIM(facing, 0) != n || PyArray_DIM(pos_x, 0) != n ||
-      PyArray_DIM(pos_y, 0) != n || PyArray_DIM(pos_z, 0) != n) {
-    PyErr_SetString(PyExc_ValueError, "camera target world derivation inputs must share length");
-    return NULL;
-  }
-
-  if (char_params_init() != 0 || anim_pose_init() != 0) {
-    PyErr_SetString(PyExc_RuntimeError, "camera target native tables failed to initialize");
-    return NULL;
-  }
-
-  npy_intp dims[1] = {n};
-  PyArrayObject* out_x = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_FLOAT32, 0);
-  PyArrayObject* out_y = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_FLOAT32, 0);
-  PyArrayObject* out_z = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_FLOAT32, 0);
-  PyArrayObject* out_r = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_FLOAT32, 0);
-  if (out_x == NULL || out_y == NULL || out_z == NULL || out_r == NULL) {
-    Py_XDECREF(out_x);
-    Py_XDECREF(out_y);
-    Py_XDECREF(out_z);
-    Py_XDECREF(out_r);
-    return NULL;
-  }
-
-  const uint8_t* char_p = (const uint8_t*)PyArray_DATA(char_id);
-  const uint32_t* anim_p = (const uint32_t*)PyArray_DATA(anim);
-  const float* anim_frame_p = (const float*)PyArray_DATA(anim_frame);
-  const float* scale_y_p = (const float*)PyArray_DATA(scale_y);
-  const uint8_t* facing_p = (const uint8_t*)PyArray_DATA(facing);
-  const float* pos_x_p = (const float*)PyArray_DATA(pos_x);
-  const float* pos_y_p = (const float*)PyArray_DATA(pos_y);
-  const float* pos_z_p = (const float*)PyArray_DATA(pos_z);
-  float* out_x_p = (float*)PyArray_DATA(out_x);
-  float* out_y_p = (float*)PyArray_DATA(out_y);
-  float* out_z_p = (float*)PyArray_DATA(out_z);
-  float* out_r_p = (float*)PyArray_DATA(out_r);
-
-  for (npy_intp i = 0; i < n; i++) {
-    const uint8_t cid = char_p[i];
-    const MslCharParams* ch = msl_char_params(cid);
-    if (ch == NULL) {
-      continue;
-    }
-    const uint32_t anim_u32 = anim_p[i];
-    if (anim_u32 > 0xFFFFu) {
-      continue;
-    }
-    const float frame_f = anim_frame_p[i];
-    if (!isfinite(frame_f)) {
-      continue;
-    }
-    const int frame_i = (int)floorf(frame_f);
-    if (frame_i < 0 || frame_i > 0xFFFF) {
-      continue;
-    }
-    float m[12];
-    if (anim_pose_get_matrix(cid, (uint16_t)anim_u32, (uint16_t)frame_i,
-                             ch->camera_zoom_target_bone_part_id, m) != 0) {
-      continue;
-    }
-
-    const float ox = ch->camera_zoom_target_offset_x;
-    const float oy = ch->camera_zoom_target_offset_y;
-    const float oz = ch->camera_zoom_target_offset_z;
-    float lx = (float)(m[0] * ox + m[1] * oy + m[2] * oz + m[3]);
-    float ly = (float)(m[4] * ox + m[5] * oy + m[6] * oz + m[7]);
-    float lz = (float)(m[8] * ox + m[9] * oy + m[10] * oz + m[11]);
-
-    float scale = scale_y_p[i];
-    if (!isfinite(scale) || !(scale > 0.0f)) {
-      scale = 1.0f;
-    }
-    float model_scaling = ch->model_scaling;
-    if (!isfinite(model_scaling) || !(model_scaling > 0.0f)) {
-      model_scaling = 1.0f;
-    }
-    const float pose_scale = (float)(scale * model_scaling);
-    lx = (float)(lx * pose_scale);
-    ly = (float)(ly * pose_scale);
-    lz = (float)(lz * pose_scale);
-
-    const float facing_dir = facing_p[i] ? 1.0f : -1.0f;
-    out_x_p[i] = (float)(pos_x_p[i] + facing_dir * lz);
-    out_y_p[i] = (float)(pos_y_p[i] + ly);
-    out_z_p[i] = (float)(pos_z_p[i] - facing_dir * lx);
-    out_r_p[i] = (float)(ch->camera_box_radius * scale);
-  }
-
-  return Py_BuildValue("NNNN", out_x, out_y, out_z, out_r);
-}
-
-static inline void msl_py_mtx34_mul_point(const float m[12], float x, float y, float z,
-                                          float* out_x, float* out_y, float* out_z) {
-  *out_x = (float)(m[0] * x + m[1] * y + m[2] * z + m[3]);
-  *out_y = (float)(m[4] * x + m[5] * y + m[6] * z + m[7]);
-  *out_z = (float)(m[8] * x + m[9] * y + m[10] * z + m[11]);
-}
-
-static inline uint8_t msl_py_apply_specialhi_xrotn(uint8_t char_id, uint16_t action_id,
-                                                   uint16_t msid, uint16_t frame, uint16_t part_id,
-                                                   float model_scale, float rotate_model,
-                                                   uint8_t rotate_model_valid, float* io_x,
-                                                   float* io_y, float* io_z) {
-  if (rotate_model_valid == 0u || !msl_specialhi_rotate_model_action(action_id) ||
-      !msl_anim_part_under_xrotn(char_id, part_id) || !isfinite(rotate_model)) {
-    return 0u;
-  }
-  float m[12];
-  if (anim_pose_get_matrix(char_id, msid, frame, 2u, m) != 0) {
-    return 0u;
-  }
-
-  float ax0 = 0.0f, ay0 = 0.0f, az0 = 0.0f;
-  float ax1 = 0.0f, ay1 = 0.0f, az1 = 0.0f;
-  msl_py_mtx34_mul_point(m, 0.0f, 0.0f, 0.0f, &ax0, &ay0, &az0);
-  msl_py_mtx34_mul_point(m, 1.0f, 0.0f, 0.0f, &ax1, &ay1, &az1);
-  ax0 *= model_scale;
-  ay0 *= model_scale;
-  az0 *= model_scale;
-  ax1 *= model_scale;
-  ay1 *= model_scale;
-  az1 *= model_scale;
-
-  float axis_x = ax1 - ax0;
-  float axis_y = ay1 - ay0;
-  float axis_z = az1 - az0;
-  const float axis_len = sqrtf(axis_x * axis_x + axis_y * axis_y + axis_z * axis_z);
-  if (!(axis_len > 0.0f)) {
-    return 0u;
-  }
-  axis_x /= axis_len;
-  axis_y /= axis_len;
-  axis_z /= axis_len;
-
-  const float angle = msl_specialhi_xrotn_angle_from_rotate_model(rotate_model);
-  const float px = *io_x - ax0;
-  const float py = *io_y - ay0;
-  const float pz = *io_z - az0;
-  const float c = cosf(angle);
-  const float s = sinf(angle);
-  const float dot = axis_x * px + axis_y * py + axis_z * pz;
-  const float cross_x = axis_y * pz - axis_z * py;
-  const float cross_y = axis_z * px - axis_x * pz;
-  const float cross_z = axis_x * py - axis_y * px;
-  *io_x = ax0 + (px * c) + (cross_x * s) + (axis_x * dot * (1.0f - c));
-  *io_y = ay0 + (py * c) + (cross_y * s) + (axis_y * dot * (1.0f - c));
-  *io_z = az0 + (pz * c) + (cross_z * s) + (axis_z * dot * (1.0f - c));
-  return 1u;
-}
-
-static PyObject* msl_derive_hitbox_prev_centers_py(PyObject* self, PyObject* args) {
-  (void)self;
-  PyObject* char_obj = NULL;
-  PyObject* action_obj = NULL;
-  PyObject* anim_obj = NULL;
-  PyObject* action_frame_obj = NULL;
-  PyObject* anim_frame_obj = NULL;
-  PyObject* pos_x_obj = NULL;
-  PyObject* pos_y_obj = NULL;
-  PyObject* pos_z_obj = NULL;
-  PyObject* facing_obj = NULL;
-  PyObject* scale_y_obj = NULL;
-  PyObject* rotate_model_obj = NULL;
-  PyObject* rotate_valid_obj = NULL;
-  int num_players = 0;
-  if (!PyArg_ParseTuple(args, "iOOOOOOOOOOOO", &num_players, &char_obj, &action_obj, &anim_obj,
-                        &action_frame_obj, &anim_frame_obj, &pos_x_obj, &pos_y_obj, &pos_z_obj,
-                        &facing_obj, &scale_y_obj, &rotate_model_obj, &rotate_valid_obj)) {
-    return NULL;
-  }
-  if (num_players != 2 && num_players != 4) {
-    PyErr_SetString(PyExc_ValueError, "num_players must be 2 or 4");
-    return NULL;
-  }
-
-  PyArrayObject* char_id = require_contiguous_array(char_obj, NPY_UINT8, 2, "char_id");
-  PyArrayObject* action_id = require_contiguous_array(action_obj, NPY_UINT16, 2, "action_id");
-  PyArrayObject* anim = require_contiguous_array(anim_obj, NPY_UINT32, 2, "animation_index");
-  PyArrayObject* action_frame =
-      require_contiguous_array(action_frame_obj, NPY_INT16, 2, "action_frame");
-  PyArrayObject* anim_frame =
-      require_contiguous_array(anim_frame_obj, NPY_FLOAT32, 2, "anim_frame_f32");
-  PyArrayObject* pos_x = require_contiguous_array(pos_x_obj, NPY_FLOAT32, 2, "pos_x");
-  PyArrayObject* pos_y = require_contiguous_array(pos_y_obj, NPY_FLOAT32, 2, "pos_y");
-  PyArrayObject* pos_z = NULL;
-  if (pos_z_obj != Py_None) {
-    pos_z = require_contiguous_array(pos_z_obj, NPY_FLOAT32, 2, "pos_z");
-  }
-  PyArrayObject* facing = require_contiguous_array(facing_obj, NPY_UINT8, 2, "facing");
-  PyArrayObject* scale_y = require_contiguous_array(scale_y_obj, NPY_FLOAT32, 2, "fighter_scale_y");
-  PyArrayObject* rotate_model = NULL;
-  if (rotate_model_obj != Py_None) {
-    rotate_model =
-        require_contiguous_array(rotate_model_obj, NPY_FLOAT32, 2, "specialhi_rotate_model_f32");
-  }
-  PyArrayObject* rotate_valid = NULL;
-  if (rotate_valid_obj != Py_None) {
-    rotate_valid =
-        require_contiguous_array(rotate_valid_obj, NPY_UINT8, 2, "specialhi_rotate_model_valid_u8");
-  }
-  if (char_id == NULL || action_id == NULL || anim == NULL || action_frame == NULL ||
-      anim_frame == NULL || pos_x == NULL || pos_y == NULL ||
-      (pos_z_obj != Py_None && pos_z == NULL) || facing == NULL || scale_y == NULL ||
-      (rotate_model_obj != Py_None && rotate_model == NULL) ||
-      (rotate_valid_obj != Py_None && rotate_valid == NULL)) {
-    return NULL;
-  }
-
-  const npy_intp n = PyArray_DIM(char_id, 0);
-  const npy_intp width = PyArray_DIM(char_id, 1);
-  if (width < num_players) {
-    PyErr_SetString(PyExc_ValueError, "char_id width smaller than num_players");
-    return NULL;
-  }
-  if (require_exact_2d_shape(action_id, n, width, "action_id") != 0 ||
-      require_exact_2d_shape(anim, n, width, "animation_index") != 0 ||
-      require_exact_2d_shape(action_frame, n, width, "action_frame") != 0 ||
-      require_exact_2d_shape(anim_frame, n, width, "anim_frame_f32") != 0 ||
-      require_exact_2d_shape(pos_x, n, width, "pos_x") != 0 ||
-      require_exact_2d_shape(pos_y, n, width, "pos_y") != 0 ||
-      (pos_z != NULL && require_exact_2d_shape(pos_z, n, width, "pos_z") != 0) ||
-      require_exact_2d_shape(facing, n, width, "facing") != 0 ||
-      require_exact_2d_shape(scale_y, n, width, "fighter_scale_y") != 0 ||
-      (rotate_model != NULL &&
-       require_exact_2d_shape(rotate_model, n, width, "specialhi_rotate_model_f32") != 0) ||
-      (rotate_valid != NULL &&
-       require_exact_2d_shape(rotate_valid, n, width, "specialhi_rotate_model_valid_u8") != 0)) {
-    return NULL;
-  }
-
-  if (char_params_init() != 0 || anim_pose_init() != 0 || anim_table_init() != 0 ||
-      hitboxes_tables_init() != 0) {
-    PyErr_SetString(PyExc_RuntimeError, "hitbox prev center native tables failed to initialize");
-    return NULL;
-  }
-
-  npy_intp dims_valid[3] = {n, (npy_intp)MSL_MAX_PLAYERS, (npy_intp)MSL_MAX_HITBOXES};
-  npy_intp dims_xyz[3] = {n, (npy_intp)MSL_MAX_PLAYERS, (npy_intp)MSL_MAX_HITBOXES};
-  PyArrayObject* out_valid = (PyArrayObject*)PyArray_ZEROS(3, dims_valid, NPY_UINT8, 0);
-  PyArrayObject* out_x = (PyArrayObject*)PyArray_ZEROS(3, dims_xyz, NPY_FLOAT32, 0);
-  PyArrayObject* out_y = (PyArrayObject*)PyArray_ZEROS(3, dims_xyz, NPY_FLOAT32, 0);
-  PyArrayObject* out_z = (PyArrayObject*)PyArray_ZEROS(3, dims_xyz, NPY_FLOAT32, 0);
-  if (out_valid == NULL || out_x == NULL || out_y == NULL || out_z == NULL) {
-    Py_XDECREF(out_valid);
-    Py_XDECREF(out_x);
-    Py_XDECREF(out_y);
-    Py_XDECREF(out_z);
-    return NULL;
-  }
-
-  const uint8_t* char_p = (const uint8_t*)PyArray_DATA(char_id);
-  const uint16_t* action_p = (const uint16_t*)PyArray_DATA(action_id);
-  const uint32_t* anim_p = (const uint32_t*)PyArray_DATA(anim);
-  const int16_t* action_frame_p = (const int16_t*)PyArray_DATA(action_frame);
-  const float* anim_frame_p = (const float*)PyArray_DATA(anim_frame);
-  const float* pos_x_p = (const float*)PyArray_DATA(pos_x);
-  const float* pos_y_p = (const float*)PyArray_DATA(pos_y);
-  const float* pos_z_p = pos_z != NULL ? (const float*)PyArray_DATA(pos_z) : NULL;
-  const uint8_t* facing_p = (const uint8_t*)PyArray_DATA(facing);
-  const float* scale_y_p = (const float*)PyArray_DATA(scale_y);
-  const float* rotate_model_p =
-      rotate_model != NULL ? (const float*)PyArray_DATA(rotate_model) : NULL;
-  const uint8_t* rotate_valid_p =
-      rotate_valid != NULL ? (const uint8_t*)PyArray_DATA(rotate_valid) : NULL;
-  uint8_t* valid_p = (uint8_t*)PyArray_DATA(out_valid);
-  float* out_x_p = (float*)PyArray_DATA(out_x);
-  float* out_y_p = (float*)PyArray_DATA(out_y);
-  float* out_z_p = (float*)PyArray_DATA(out_z);
-
-  for (npy_intp fi = 0; fi < n; fi++) {
-    for (int p = 0; p < num_players; p++) {
-      const npy_intp pi = fi * width + p;
-      if (action_frame_p[pi] < 0 || anim_p[pi] > 0xFFFFu) {
-        continue;
-      }
-      const float af = anim_frame_p[pi];
-      if (!isfinite(af) || af < 0.0f) {
-        continue;
-      }
-      const uint16_t frame = (uint16_t)floorf(af);
-      const uint8_t cid = char_p[pi];
-      const MslCharParams* ch = msl_char_params(cid);
-      if (ch == NULL) {
-        continue;
-      }
-      const MslHitboxEvent* events = NULL;
-      uint16_t event_count = 0;
-      if (hitboxes_get_events(cid, (uint16_t)anim_p[pi], &events, &event_count) != 0 ||
-          events == NULL || event_count == 0) {
-        continue;
-      }
-      const MslHitboxEvent* active[MSL_MAX_HITBOXES] = {0};
-      for (uint16_t ei = 0; ei < event_count; ei++) {
-        const MslHitboxEvent* ev = &events[ei];
-        if (ev->frame > frame) {
-          continue;
-        }
-        if (ev->kind == 1u) {
-          if (ev->hitbox_id == 0xFFu) {
-            memset(active, 0, sizeof(active));
-          } else if (ev->hitbox_id < MSL_MAX_HITBOXES) {
-            active[ev->hitbox_id] = NULL;
-          }
-        } else if (ev->hitbox_id < MSL_MAX_HITBOXES) {
-          active[ev->hitbox_id] = ev;
-        }
-      }
-
-      const float scale_y_val = scale_y_p[pi];
-      const float model_scaling =
-          (isfinite(ch->model_scaling) && ch->model_scaling > 0.0f) ? ch->model_scaling : 1.0f;
-      const float model_scale = (float)(scale_y_val * model_scaling);
-      const float facing_dir = facing_p[pi] ? 1.0f : -1.0f;
-      const float px = pos_x_p[pi];
-      const float py = pos_y_p[pi];
-      const float pz = pos_z_p != NULL ? pos_z_p[pi] : 0.0f;
-      const uint16_t action = action_p[pi];
-      const float rotate_model_val = rotate_model_p != NULL ? rotate_model_p[pi] : 0.0f;
-      const uint8_t rotate_valid_val = rotate_valid_p != NULL ? rotate_valid_p[pi] : 0u;
-
-      for (int hb_id = 0; hb_id < MSL_MAX_HITBOXES; hb_id++) {
-        const MslHitboxEvent* ev = active[hb_id];
-        if (ev == NULL) {
-          continue;
-        }
-        float m[12];
-        if (anim_pose_get_matrix(cid, (uint16_t)anim_p[pi], frame, ev->bone_part_id, m) != 0) {
-          continue;
-        }
-        float lx = 0.0f, ly = 0.0f, lz = 0.0f;
-        msl_py_mtx34_mul_point(m, ev->x, ev->y, ev->z, &lx, &ly, &lz);
-        lx = (float)(lx * model_scale);
-        ly = (float)(ly * model_scale);
-        lz = (float)(lz * model_scale);
-        (void)msl_py_apply_specialhi_xrotn(cid, action, (uint16_t)anim_p[pi], frame,
-                                           ev->bone_part_id, model_scale, rotate_model_val,
-                                           rotate_valid_val, &lx, &ly, &lz);
-        const npy_intp oi =
-            (fi * (npy_intp)MSL_MAX_PLAYERS + p) * (npy_intp)MSL_MAX_HITBOXES + hb_id;
-        valid_p[oi] = 1u;
-        out_x_p[oi] = (float)(facing_dir * lz + px);
-        out_y_p[oi] = (float)(ly + py);
-        out_z_p[oi] = (float)(-facing_dir * lx + pz);
-      }
-    }
-  }
-
-  return Py_BuildValue("NNNN", out_valid, out_x, out_y, out_z);
-}
-
-static PyObject* msl_derive_combo_push_timer_seed_py(PyObject* self, PyObject* args) {
-  (void)self;
-  PyObject* combo_count_obj = NULL;
-  PyObject* last_attack_obj = NULL;
-  PyObject* victim_obj = Py_None;
-  if (!PyArg_ParseTuple(args, "OO|O", &combo_count_obj, &last_attack_obj, &victim_obj)) {
-    return NULL;
-  }
-  PyArrayObject* counts = require_contiguous_array(combo_count_obj, NPY_UINT8, 2, "combo_count");
-  PyArrayObject* attacks =
-      require_contiguous_array(last_attack_obj, NPY_UINT8, 2, "last_attack_landed");
-  PyArrayObject* victims = NULL;
-  if (victim_obj != Py_None) {
-    victims = require_contiguous_array(victim_obj, NPY_UINT8, 2, "combo_victim_port");
-  }
-  if (counts == NULL || attacks == NULL || (victim_obj != Py_None && victims == NULL)) {
-    return NULL;
-  }
-  const npy_intp n = PyArray_DIM(counts, 0);
-  const npy_intp count_w = PyArray_DIM(counts, 1);
-  if (count_w > (npy_intp)MSL_MAX_PLAYERS) {
-    PyErr_SetString(PyExc_ValueError, "combo_count width exceeds MSL_MAX_PLAYERS");
-    return NULL;
-  }
-  if (require_exact_2d_shape(attacks, n, count_w, "last_attack_landed") != 0 ||
-      (victims != NULL && require_exact_2d_shape(victims, n, count_w, "combo_victim_port") != 0)) {
-    return NULL;
-  }
-  if (common_params_init() != 0) {
-    PyErr_SetString(PyExc_RuntimeError, "common_params_init failed");
-    return NULL;
-  }
-  const MslCommonParams* common = msl_common_params();
-  if (common == NULL) {
-    PyErr_SetString(PyExc_RuntimeError, "common params unavailable");
-    return NULL;
-  }
-
-  npy_intp dims[2] = {n, (npy_intp)MSL_MAX_PLAYERS};
-  PyArrayObject* out = (PyArrayObject*)PyArray_ZEROS(2, dims, NPY_UINT16, 0);
-  if (out == NULL) {
-    return NULL;
-  }
-  uint16_t* out_p = (uint16_t*)PyArray_DATA(out);
-  if (common->combo_push_count_threshold == 0u || common->combo_push_timer_frames == 0u) {
-    return (PyObject*)out;
-  }
-
-  const uint8_t* counts_p = (const uint8_t*)PyArray_DATA(counts);
-  const uint8_t* attacks_p = (const uint8_t*)PyArray_DATA(attacks);
-  const uint8_t* victims_p = victims != NULL ? (const uint8_t*)PyArray_DATA(victims) : NULL;
-  uint16_t timer[MSL_MAX_PLAYERS] = {0};
-  uint8_t prev_count[MSL_MAX_PLAYERS] = {0};
-  uint8_t prev_attack[MSL_MAX_PLAYERS] = {0};
-  uint8_t prev_victim[MSL_MAX_PLAYERS];
-  uint8_t repeated[MSL_MAX_PLAYERS] = {0};
-  for (int i = 0; i < MSL_MAX_PLAYERS; i++) {
-    prev_victim[i] = 0xFFu;
-  }
-  const int players = (count_w < (npy_intp)MSL_MAX_PLAYERS) ? (int)count_w : MSL_MAX_PLAYERS;
-  for (npy_intp fi = 0; fi < n; fi++) {
-    for (int p = 0; p < players; p++) {
-      const npy_intp pi = fi * count_w + p;
-      const uint8_t cur = counts_p[pi];
-      const uint8_t attack = attacks_p[pi];
-      const uint8_t victim = victims_p != NULL ? victims_p[pi] : 0xFFu;
-      const uint8_t same_victim =
-          victims_p == NULL || (victim != 0xFFu && victim == prev_victim[p]) ? 1u : 0u;
-      const uint8_t same_attack = (attack != 0u && attack == prev_attack[p]) ? 1u : 0u;
-      const uint8_t increment = (cur > prev_count[p]) ? 1u : 0u;
-      if (cur == 0u || attack == 0u) {
-        repeated[p] = 0u;
-      } else if (increment) {
-        if (same_attack && same_victim) {
-          repeated[p] = repeated[p] == 0xFFu ? 0xFFu : (uint8_t)(repeated[p] + 1u);
-        } else {
-          repeated[p] = 1u;
-        }
-      } else if (!(same_attack && same_victim)) {
-        repeated[p] = 1u;
-      }
-
-      if (increment && cur >= common->combo_push_count_threshold &&
-          repeated[p] >= common->combo_push_count_threshold) {
-        timer[p] = common->combo_push_timer_frames;
-      } else if (timer[p] != 0u) {
-        timer[p] = (uint16_t)(timer[p] - 1u);
-      }
-      prev_count[p] = cur;
-      prev_attack[p] = attack;
-      prev_victim[p] = victim;
-    }
-    for (int p = 0; p < MSL_MAX_PLAYERS; p++) {
-      out_p[fi * (npy_intp)MSL_MAX_PLAYERS + p] = timer[p];
-    }
-  }
-  return (PyObject*)out;
-}
-
-static inline uint8_t msl_py_u8_sat_inc_fe(uint8_t v) {
-  return v < 0xFEu ? (uint8_t)(v + 1u) : 0xFEu;
-}
-
-static inline uint8_t msl_py_u8_sat_inc_ff(uint8_t v) {
-  return v < 0xFFu ? (uint8_t)(v + 1u) : 0xFFu;
-}
-
-static inline uint8_t msl_py_lb_8000D148(float point0_x, float point0_y, float point1_x,
-                                         float point1_y, float point2_x, float point2_y,
-                                         float threshold) {
-  const float diff_01_y = point0_y - point1_y;
-  const float diff_01_x = point1_x - point0_x;
-  const float dist_squared_01 = diff_01_x * diff_01_x + diff_01_y * diff_01_y;
-  if (dist_squared_01 < 0.00001f) {
-    return 0u;
-  }
-  const float dist_01 = sqrtf(dist_squared_01);
-  float var_f0 = ((point0_x * point1_y) - (point0_y * point1_x)) +
-                 ((diff_01_x * point2_x) + (diff_01_y * point2_y));
-  if (var_f0 < 0.0f) {
-    var_f0 = -var_f0;
-  }
-  const float thr = threshold;
-  if ((var_f0 / dist_01) <= thr) {
-    const float diff_02_x = point0_x - point2_x;
-    const float diff_02_y = point0_y - point2_y;
-    const float diff_12_x = point1_x - point2_x;
-    const float diff_12_y = point1_y - point2_y;
-    const float threshold_squared = thr * thr;
-    const float dist_squared_02 = diff_02_x * diff_02_x + diff_02_y * diff_02_y;
-    const float dist_squared_12 = diff_12_x * diff_12_x + diff_12_y * diff_12_y;
-    if (dist_squared_02 < threshold_squared) {
-      if (dist_squared_12 > threshold_squared) {
-        return 1u;
-      }
-      if (dist_squared_12 < threshold_squared) {
-        return 0u;
-      }
-      return 1u;
-    }
-    if (dist_squared_02 > threshold_squared) {
-      if (dist_squared_12 > threshold_squared) {
-        if (((point0_x > point2_x) && (point1_x < point2_x)) ||
-            ((point0_x < point2_x) && (point1_x > point2_x)) ||
-            ((point0_y > point2_y) && (point1_y < point2_y)) ||
-            ((point0_y < point2_y) && (point1_y > point2_y))) {
-          return 1u;
-        }
-        return 0u;
-      }
-      if (dist_squared_12 < threshold_squared) {
-        return 1u;
-      }
-      return 1u;
-    }
-    return 1u;
-  }
-  return 0u;
-}
-
-static PyObject* msl_compute_fighter_stick_input_counters_py(PyObject* self, PyObject* args) {
-  (void)self;
-  PyObject* sx_obj = NULL;
-  PyObject* sy_obj = NULL;
-  double tilt_thresh_x = 0.0;
-  double tilt_thresh_y = 0.0;
-  int start_timer = 0xFE;
-  if (!PyArg_ParseTuple(args, "OOddi", &sx_obj, &sy_obj, &tilt_thresh_x, &tilt_thresh_y,
-                        &start_timer)) {
-    return NULL;
-  }
-  PyArrayObject* sx_arr = require_contiguous_array(sx_obj, NPY_FLOAT32, 1, "stick_x_unit");
-  PyArrayObject* sy_arr = require_contiguous_array(sy_obj, NPY_FLOAT32, 1, "stick_y_unit");
-  if (sx_arr == NULL || sy_arr == NULL) {
-    return NULL;
-  }
-  const npy_intp n = PyArray_SIZE(sx_arr);
-  if (PyArray_SIZE(sy_arr) != n) {
-    PyErr_SetString(PyExc_ValueError, "stick_y_unit must match stick_x_unit length");
-    return NULL;
-  }
-  npy_intp dims[1] = {n};
-  PyArrayObject* out_x673 = (PyArrayObject*)PyArray_EMPTY(1, dims, NPY_UINT8, 0);
-  PyArrayObject* out_x674 = (PyArrayObject*)PyArray_EMPTY(1, dims, NPY_UINT8, 0);
-  PyArrayObject* out_x676_x = (PyArrayObject*)PyArray_EMPTY(1, dims, NPY_UINT8, 0);
-  PyArrayObject* out_x2228_b7 = (PyArrayObject*)PyArray_EMPTY(1, dims, NPY_UINT8, 0);
-  PyArrayObject* out_x677_y = (PyArrayObject*)PyArray_EMPTY(1, dims, NPY_UINT8, 0);
-  PyArrayObject* out_x679_x = (PyArrayObject*)PyArray_EMPTY(1, dims, NPY_UINT8, 0);
-  PyArrayObject* out_x67A_y = (PyArrayObject*)PyArray_EMPTY(1, dims, NPY_UINT8, 0);
-  if (out_x673 == NULL || out_x674 == NULL || out_x676_x == NULL || out_x2228_b7 == NULL ||
-      out_x677_y == NULL || out_x679_x == NULL || out_x67A_y == NULL) {
-    Py_XDECREF(out_x673);
-    Py_XDECREF(out_x674);
-    Py_XDECREF(out_x676_x);
-    Py_XDECREF(out_x2228_b7);
-    Py_XDECREF(out_x677_y);
-    Py_XDECREF(out_x679_x);
-    Py_XDECREF(out_x67A_y);
-    return NULL;
-  }
-  const float* sx = (const float*)PyArray_DATA(sx_arr);
-  const float* sy = (const float*)PyArray_DATA(sy_arr);
-  uint8_t* ox673 = (uint8_t*)PyArray_DATA(out_x673);
-  uint8_t* ox674 = (uint8_t*)PyArray_DATA(out_x674);
-  uint8_t* ox676 = (uint8_t*)PyArray_DATA(out_x676_x);
-  uint8_t* ox2228 = (uint8_t*)PyArray_DATA(out_x2228_b7);
-  uint8_t* ox677 = (uint8_t*)PyArray_DATA(out_x677_y);
-  uint8_t* ox679 = (uint8_t*)PyArray_DATA(out_x679_x);
-  uint8_t* ox67A = (uint8_t*)PyArray_DATA(out_x67A_y);
-  const float thr_x = (float)tilt_thresh_x;
-  const float thr_y = (float)tilt_thresh_y;
-  uint8_t x673 = (uint8_t)start_timer;
-  uint8_t x676 = (uint8_t)start_timer;
-  uint8_t x2228 = 0u;
-  uint8_t x679 = (uint8_t)start_timer;
-  uint8_t x674 = (uint8_t)start_timer;
-  uint8_t x677 = (uint8_t)start_timer;
-  uint8_t x67A = (uint8_t)start_timer;
-  float prev_x = 0.0f;
-  float prev_y = 0.0f;
-  for (npy_intp i = 0; i < n; i++) {
-    const float cur_x = sx[i];
-    const float cur_y = sy[i];
-    x676 = msl_py_u8_sat_inc_fe(x676);
-    if (cur_x >= thr_x) {
-      if (prev_x >= thr_x) {
-        x673 = msl_py_u8_sat_inc_fe(x673);
-        x679 = msl_py_u8_sat_inc_fe(x679);
-      } else {
-        x676 = 0u;
-        x673 = 0u;
-        x2228 = 1u;
-      }
-    } else if (cur_x <= -thr_x) {
-      if (prev_x <= -thr_x) {
-        x673 = msl_py_u8_sat_inc_fe(x673);
-        x679 = msl_py_u8_sat_inc_fe(x679);
-      } else {
-        x676 = 0u;
-        x673 = 0u;
-        x2228 = 0u;
-      }
-    } else {
-      x679 = 0xFEu;
-      x673 = 0xFEu;
-    }
-    x677 = msl_py_u8_sat_inc_fe(x677);
-    if (cur_y >= thr_y) {
-      if (prev_y >= thr_y) {
-        x674 = msl_py_u8_sat_inc_fe(x674);
-        x67A = msl_py_u8_sat_inc_fe(x67A);
-      } else {
-        x677 = 0u;
-        x674 = 0u;
-      }
-    } else if (cur_y <= -thr_y) {
-      if (prev_y <= -thr_y) {
-        x674 = msl_py_u8_sat_inc_fe(x674);
-        x67A = msl_py_u8_sat_inc_fe(x67A);
-      } else {
-        x677 = 0u;
-        x674 = 0u;
-      }
-    } else {
-      x67A = 0xFEu;
-      x674 = 0xFEu;
-    }
-    if (msl_py_lb_8000D148(prev_x, prev_y, cur_x, cur_y, 0.0f, 0.0f, thr_x)) {
-      x67A = 0u;
-      x679 = 0u;
-    }
-    ox673[i] = x673;
-    ox674[i] = x674;
-    ox676[i] = x676;
-    ox2228[i] = x2228;
-    ox677[i] = x677;
-    ox679[i] = x679;
-    ox67A[i] = x67A;
-    prev_x = cur_x;
-    prev_y = cur_y;
-  }
-  return Py_BuildValue("NNNNNNN", out_x673, out_x674, out_x676_x, out_x2228_b7, out_x677_y,
-                       out_x679_x, out_x67A_y);
-}
-
-static PyObject* msl_compute_fighter_trigger_input_counters_py(PyObject* self, PyObject* args) {
-  (void)self;
-  PyObject* trig_obj = NULL;
-  double trigger_min = 0.0;
-  int start_timer = 0xFE;
-  if (!PyArg_ParseTuple(args, "Odi", &trig_obj, &trigger_min, &start_timer)) {
-    return NULL;
-  }
-  PyArrayObject* trig_arr = require_contiguous_array(trig_obj, NPY_FLOAT32, 1, "trigger_unit");
-  if (trig_arr == NULL) {
-    return NULL;
-  }
-  const npy_intp n = PyArray_SIZE(trig_arr);
-  npy_intp dims[1] = {n};
-  PyArrayObject* out_x675 = (PyArrayObject*)PyArray_EMPTY(1, dims, NPY_UINT8, 0);
-  PyArrayObject* out_x67B = (PyArrayObject*)PyArray_EMPTY(1, dims, NPY_UINT8, 0);
-  PyArrayObject* out_x678 = (PyArrayObject*)PyArray_EMPTY(1, dims, NPY_UINT8, 0);
-  if (out_x675 == NULL || out_x67B == NULL || out_x678 == NULL) {
-    Py_XDECREF(out_x675);
-    Py_XDECREF(out_x67B);
-    Py_XDECREF(out_x678);
-    return NULL;
-  }
-  const float* trig = (const float*)PyArray_DATA(trig_arr);
-  uint8_t* ox675 = (uint8_t*)PyArray_DATA(out_x675);
-  uint8_t* ox67B = (uint8_t*)PyArray_DATA(out_x67B);
-  uint8_t* ox678 = (uint8_t*)PyArray_DATA(out_x678);
-  const float thr = (float)trigger_min;
-  uint8_t x675 = (uint8_t)start_timer;
-  uint8_t x67B = (uint8_t)start_timer;
-  uint8_t x678 = (uint8_t)start_timer;
-  float prev = 0.0f;
-  for (npy_intp i = 0; i < n; i++) {
-    const float cur = trig[i];
-    x678 = msl_py_u8_sat_inc_fe(x678);
-    if (cur >= thr) {
-      if (prev >= thr) {
-        x675 = msl_py_u8_sat_inc_fe(x675);
-        x67B = msl_py_u8_sat_inc_fe(x67B);
-      } else {
-        x67B = 0u;
-        x678 = 0u;
-        x675 = 0u;
-      }
-    } else {
-      x67B = 0xFEu;
-      x675 = 0xFEu;
-    }
-    ox675[i] = x675;
-    ox67B[i] = x67B;
-    ox678[i] = x678;
-    prev = cur;
-  }
-  return Py_BuildValue("NNN", out_x675, out_x67B, out_x678);
-}
-
-static PyObject* msl_compute_fighter_button_timers_py(PyObject* self, PyObject* args) {
-  (void)self;
-  PyObject* buttons_obj = NULL;
-  PyObject* hitlag_obj = Py_None;
-  int mask_a = 0;
-  int mask_b = 0;
-  int mask_xy = 0;
-  int mask_dpad_up = 0;
-  int mask_dpad_down = 0;
-  int mask_lr = 0;
-  int mask_z = 0;
-  int start_timer = 0xFF;
-  if (!PyArg_ParseTuple(args, "OOiiiiiiii", &buttons_obj, &hitlag_obj, &mask_a, &mask_b, &mask_xy,
-                        &mask_dpad_up, &mask_dpad_down, &mask_lr, &mask_z, &start_timer)) {
-    return NULL;
-  }
-  PyArrayObject* buttons_arr =
-      require_contiguous_array(buttons_obj, NPY_UINT16, 1, "buttons_pressed");
-  if (buttons_arr == NULL) {
-    return NULL;
-  }
-  PyArrayObject* hitlag_arr = NULL;
-  if (hitlag_obj != Py_None) {
-    hitlag_arr = require_contiguous_array(hitlag_obj, NPY_UINT16, 1, "hitlag_frames");
-    if (hitlag_arr == NULL) {
-      return NULL;
-    }
-  }
-  const npy_intp n = PyArray_SIZE(buttons_arr);
-  if (hitlag_arr != NULL && PyArray_SIZE(hitlag_arr) != n) {
-    PyErr_SetString(PyExc_ValueError, "hitlag_frames must match buttons_pressed length");
-    return NULL;
-  }
-  npy_intp dims[1] = {n};
-  PyArrayObject* out_x67C = (PyArrayObject*)PyArray_EMPTY(1, dims, NPY_UINT8, 0);
-  PyArrayObject* out_x67D = (PyArrayObject*)PyArray_EMPTY(1, dims, NPY_UINT8, 0);
-  PyArrayObject* out_x67E = (PyArrayObject*)PyArray_EMPTY(1, dims, NPY_UINT8, 0);
-  PyArrayObject* out_x680 = (PyArrayObject*)PyArray_EMPTY(1, dims, NPY_UINT8, 0);
-  PyArrayObject* out_x681 = (PyArrayObject*)PyArray_EMPTY(1, dims, NPY_UINT8, 0);
-  PyArrayObject* out_x682 = (PyArrayObject*)PyArray_EMPTY(1, dims, NPY_UINT8, 0);
-  PyArrayObject* out_x683 = (PyArrayObject*)PyArray_EMPTY(1, dims, NPY_UINT8, 0);
-  PyArrayObject* out_x684 = (PyArrayObject*)PyArray_EMPTY(1, dims, NPY_UINT8, 0);
-  if (out_x67C == NULL || out_x67D == NULL || out_x67E == NULL || out_x680 == NULL ||
-      out_x681 == NULL || out_x682 == NULL || out_x683 == NULL || out_x684 == NULL) {
-    Py_XDECREF(out_x67C);
-    Py_XDECREF(out_x67D);
-    Py_XDECREF(out_x67E);
-    Py_XDECREF(out_x680);
-    Py_XDECREF(out_x681);
-    Py_XDECREF(out_x682);
-    Py_XDECREF(out_x683);
-    Py_XDECREF(out_x684);
-    return NULL;
-  }
-  const uint16_t* bp = (const uint16_t*)PyArray_DATA(buttons_arr);
-  const uint16_t* hl = hitlag_arr != NULL ? (const uint16_t*)PyArray_DATA(hitlag_arr) : NULL;
-  uint8_t* ox67C = (uint8_t*)PyArray_DATA(out_x67C);
-  uint8_t* ox67D = (uint8_t*)PyArray_DATA(out_x67D);
-  uint8_t* ox67E = (uint8_t*)PyArray_DATA(out_x67E);
-  uint8_t* ox680 = (uint8_t*)PyArray_DATA(out_x680);
-  uint8_t* ox681 = (uint8_t*)PyArray_DATA(out_x681);
-  uint8_t* ox682 = (uint8_t*)PyArray_DATA(out_x682);
-  uint8_t* ox683 = (uint8_t*)PyArray_DATA(out_x683);
-  uint8_t* ox684 = (uint8_t*)PyArray_DATA(out_x684);
-  uint8_t x67C = (uint8_t)start_timer;
-  uint8_t x67D = (uint8_t)start_timer;
-  uint8_t x67E = (uint8_t)start_timer;
-  uint8_t x680 = (uint8_t)start_timer;
-  uint8_t x681 = (uint8_t)start_timer;
-  uint8_t x682 = (uint8_t)start_timer;
-  uint8_t x683 = (uint8_t)start_timer;
-  uint8_t x684 = (uint8_t)start_timer;
-  uint16_t x668_latched = 0u;
-  const uint16_t m_a = (uint16_t)mask_a;
-  const uint16_t m_b = (uint16_t)mask_b;
-  const uint16_t m_xy = (uint16_t)mask_xy;
-  const uint16_t m_du = (uint16_t)mask_dpad_up;
-  const uint16_t m_dd = (uint16_t)mask_dpad_down;
-  const uint16_t m_lr = (uint16_t)mask_lr;
-  const uint16_t m_z = (uint16_t)mask_z;
-  for (npy_intp i = 0; i < n; i++) {
-    uint16_t raw = bp[i];
-    if ((raw & m_z) != 0u) {
-      raw = (uint16_t)(raw | m_a);
-    }
-    uint16_t bpi = raw;
-    if (hl != NULL && hl[i] > 0u) {
-      x668_latched = (uint16_t)(x668_latched | raw);
-      bpi = x668_latched;
-    } else {
-      x668_latched = 0u;
-    }
-    if ((bpi & m_a) != 0u) {
-      x683 = x67C;
-      x67C = 0u;
-    } else {
-      x67C = msl_py_u8_sat_inc_ff(x67C);
-    }
-    if ((bpi & m_b) != 0u) {
-      x67D = 0u;
-    } else {
-      x67D = msl_py_u8_sat_inc_ff(x67D);
-    }
-    if ((bpi & m_xy) != 0u) {
-      x67E = 0u;
-    } else {
-      x67E = msl_py_u8_sat_inc_ff(x67E);
-    }
-    if ((bpi & m_du) != 0u) {
-      x681 = 0u;
-    } else {
-      x681 = msl_py_u8_sat_inc_ff(x681);
-    }
-    if ((bpi & m_dd) != 0u) {
-      x682 = 0u;
-    } else {
-      x682 = msl_py_u8_sat_inc_ff(x682);
-    }
-    if ((bpi & m_lr) != 0u) {
-      x684 = x680;
-      x680 = 0u;
-    } else {
-      x680 = msl_py_u8_sat_inc_ff(x680);
-    }
-    ox67C[i] = x67C;
-    ox67D[i] = x67D;
-    ox67E[i] = x67E;
-    ox680[i] = x680;
-    ox681[i] = x681;
-    ox682[i] = x682;
-    ox683[i] = x683;
-    ox684[i] = x684;
-  }
-  return Py_BuildValue("NNNNNNNN", out_x67C, out_x67D, out_x67E, out_x680, out_x681, out_x682,
-                       out_x683, out_x684);
-}
-
-static PyObject* msl_derive_illusion_ghost_pos012_py(PyObject* self, PyObject* args) {
-  (void)self;
-  PyObject* action_obj = NULL;
-  PyObject* action_frame_obj = NULL;
-  PyObject* pos_x_obj = NULL;
-  PyObject* pos_y_obj = NULL;
-  if (!PyArg_ParseTuple(args, "OOOO", &action_obj, &action_frame_obj, &pos_x_obj, &pos_y_obj)) {
-    return NULL;
-  }
-  PyArrayObject* action = require_contiguous_array(action_obj, NPY_UINT16, 2, "post_action_id_u16");
-  PyArrayObject* action_frame =
-      require_contiguous_array(action_frame_obj, NPY_INT16, 2, "post_action_frame_i16");
-  PyArrayObject* pos_x = require_contiguous_array(pos_x_obj, NPY_FLOAT32, 2, "post_pos_x");
-  PyArrayObject* pos_y = require_contiguous_array(pos_y_obj, NPY_FLOAT32, 2, "post_pos_y");
-  if (action == NULL || action_frame == NULL || pos_x == NULL || pos_y == NULL) {
-    return NULL;
-  }
-  const npy_intp n = PyArray_DIM(action, 0);
-  const npy_intp players = PyArray_DIM(action, 1);
-  if (PyArray_DIM(action_frame, 0) != n || PyArray_DIM(action_frame, 1) != players ||
-      PyArray_DIM(pos_x, 0) != n || PyArray_DIM(pos_x, 1) != players ||
-      PyArray_DIM(pos_y, 0) != n || PyArray_DIM(pos_y, 1) != players) {
-    PyErr_SetString(PyExc_ValueError, "illusion ghost inputs must share [frames, players]");
-    return NULL;
-  }
-  npy_intp dims[2] = {n, players};
-  PyArrayObject* out0_x = (PyArrayObject*)PyArray_EMPTY(2, dims, NPY_FLOAT32, 0);
-  PyArrayObject* out0_y = (PyArrayObject*)PyArray_EMPTY(2, dims, NPY_FLOAT32, 0);
-  PyArrayObject* out1_x = (PyArrayObject*)PyArray_EMPTY(2, dims, NPY_FLOAT32, 0);
-  PyArrayObject* out1_y = (PyArrayObject*)PyArray_EMPTY(2, dims, NPY_FLOAT32, 0);
-  PyArrayObject* out2_x = (PyArrayObject*)PyArray_EMPTY(2, dims, NPY_FLOAT32, 0);
-  PyArrayObject* out2_y = (PyArrayObject*)PyArray_EMPTY(2, dims, NPY_FLOAT32, 0);
-  if (out0_x == NULL || out0_y == NULL || out1_x == NULL || out1_y == NULL || out2_x == NULL ||
-      out2_y == NULL) {
-    Py_XDECREF(out0_x);
-    Py_XDECREF(out0_y);
-    Py_XDECREF(out1_x);
-    Py_XDECREF(out1_y);
-    Py_XDECREF(out2_x);
-    Py_XDECREF(out2_y);
-    return NULL;
-  }
-  const uint16_t* action_p = (const uint16_t*)PyArray_DATA(action);
-  const int16_t* frame_p = (const int16_t*)PyArray_DATA(action_frame);
-  const float* px = (const float*)PyArray_DATA(pos_x);
-  const float* py = (const float*)PyArray_DATA(pos_y);
-  float* o0x = (float*)PyArray_DATA(out0_x);
-  float* o0y = (float*)PyArray_DATA(out0_y);
-  float* o1x = (float*)PyArray_DATA(out1_x);
-  float* o1y = (float*)PyArray_DATA(out1_y);
-  float* o2x = (float*)PyArray_DATA(out2_x);
-  float* o2y = (float*)PyArray_DATA(out2_y);
-  for (npy_intp p = 0; p < players; p++) {
-    float ghost0_x = n > 0 ? px[p] : 0.0f;
-    float ghost0_y = n > 0 ? py[p] : 0.0f;
-    float ghost1_x = ghost0_x;
-    float ghost1_y = ghost0_y;
-    float ghost2_x = ghost0_x;
-    float ghost2_y = ghost0_y;
-    for (npy_intp fi = 0; fi < n; fi++) {
-      const npy_intp idx = fi * players + p;
-      const uint16_t cur_a = action_p[idx];
-      const float cur_x = px[idx];
-      const float cur_y = py[idx];
-      uint8_t entry_main = 0u;
-      if (cur_a == 348u || cur_a == 351u) {
-        if (fi == 0) {
-          entry_main = 1u;
-        } else {
-          const npy_intp prev = (fi - 1) * players + p;
-          if (action_p[prev] != cur_a || frame_p[idx] < frame_p[prev]) {
-            entry_main = 1u;
-          }
-        }
-      }
-      if (entry_main) {
-        ghost0_x = cur_x;
-        ghost0_y = cur_y;
-        ghost1_x = cur_x;
-        ghost1_y = cur_y;
-        ghost2_x = cur_x;
-        ghost2_y = cur_y;
-      } else if (cur_a == 348u || cur_a == 349u || cur_a == 351u || cur_a == 352u) {
-        ghost2_x = ghost1_x;
-        ghost2_y = ghost1_y;
-        ghost1_x = ghost0_x;
-        ghost1_y = ghost0_y;
-        ghost0_x = cur_x;
-        ghost0_y = cur_y;
-      }
-      o0x[idx] = ghost0_x;
-      o0y[idx] = ghost0_y;
-      o1x[idx] = ghost1_x;
-      o1y[idx] = ghost1_y;
-      o2x[idx] = ghost2_x;
-      o2y[idx] = ghost2_y;
-    }
-  }
-  return Py_BuildValue("NNNNNN", out0_x, out0_y, out1_x, out1_y, out2_x, out2_y);
-}
-
-typedef struct MslPyHbPrim {
-  uint8_t valid;
-  uint16_t flags;
-  int16_t def_frame;
-  uint8_t group;
-  uint8_t rehit;
-  float x;
-  float y;
-  float z;
-  float r;
-  float damage;
-} MslPyHbPrim;
-
-typedef struct MslPyCapPrim {
-  uint8_t valid;
-  float ax;
-  float ay;
-  float az;
-  float bx;
-  float by;
-  float bz;
-  float r;
-} MslPyCapPrim;
-
-static inline uint8_t msl_py_is_shield_active_action(uint16_t action_id) {
-  return (action_id == MSL_ACT_GUARD_ON || action_id == MSL_ACT_GUARD ||
-          action_id == MSL_ACT_GUARD_REFLECT || action_id == MSL_ACT_GUARD_SET_OFF)
-             ? 1u
-             : 0u;
-}
-
-static inline uint8_t msl_py_is_attackair_action(uint16_t action_id) {
-  return (action_id >= MSL_ACT_ATTACK_AIR_N && action_id <= MSL_ACT_ATTACK_AIR_LW) ? 1u : 0u;
-}
-
-static inline uint8_t msl_py_hitlist_victim_pointer_may_change(uint8_t stocks, uint16_t action_id) {
-  if (stocks == 0u) {
-    return 1u;
-  }
-  return (action_id == MSL_ACT_DEAD_DOWN || action_id == MSL_ACT_DEAD_LEFT ||
-          action_id == MSL_ACT_DEAD_RIGHT || action_id == MSL_ACT_DEAD_UP_STAR ||
-          action_id == MSL_ACT_REBIRTH || action_id == MSL_ACT_REBIRTH_WAIT)
-             ? 1u
-             : 0u;
-}
-
-static inline uint8_t msl_py_sphere_sphere_intersects(float ax, float ay, float az, float ar,
-                                                      float bx, float by, float bz, float br) {
-  const float dx = ax - bx;
-  const float dy = ay - by;
-  const float dz = az - bz;
-  const float rr = ar + br;
-  return (dx * dx + dy * dy + dz * dz) <= (rr * rr) ? 1u : 0u;
-}
-
-static inline float msl_py_point_segment_dist2(float px, float py, float pz, float ax, float ay,
-                                               float az, float bx, float by, float bz) {
-  const float abx = bx - ax;
-  const float aby = by - ay;
-  const float abz = bz - az;
-  const float apx = px - ax;
-  const float apy = py - ay;
-  const float apz = pz - az;
-  const float denom = abx * abx + aby * aby + abz * abz;
-  float t = 0.0f;
-  if (denom > 0.0f) {
-    t = (apx * abx + apy * aby + apz * abz) / denom;
-    if (t < 0.0f) {
-      t = 0.0f;
-    } else if (t > 1.0f) {
-      t = 1.0f;
-    }
-  }
-  const float qx = ax + t * abx;
-  const float qy = ay + t * aby;
-  const float qz = az + t * abz;
-  const float dx = px - qx;
-  const float dy = py - qy;
-  const float dz = pz - qz;
-  return dx * dx + dy * dy + dz * dz;
-}
-
-static inline uint8_t msl_py_sphere_capsule_intersects(float sx, float sy, float sz, float r_sphere,
-                                                       float ax, float ay, float az, float bx,
-                                                       float by, float bz, float r_capsule) {
-  const float d2 = msl_py_point_segment_dist2(sx, sy, sz, ax, ay, az, bx, by, bz);
-  const float r = r_sphere + r_capsule;
-  return d2 <= (r * r) ? 1u : 0u;
-}
-
-static inline float msl_py_clamp01(float x) {
-  if (x < 0.0f) {
-    return 0.0f;
-  }
-  if (x > 1.0f) {
-    return 1.0f;
-  }
-  return x;
-}
-
-static inline float msl_py_trigger_unit_from_input(uint16_t buttons, uint8_t l, uint8_t r) {
-  if ((buttons & (uint16_t)(0x0040u | 0x0020u)) != 0u) {
-    return 1.0f;
-  }
-  const uint8_t m = l > r ? l : r;
-  return (float)m * (1.0f / 255.0f);
-}
-
-static inline int msl_py_get_env_dmg(float dmg) {
-  if (dmg == 0.0f) {
-    return 0;
-  }
-  const int i = (int)dmg;
-  return i != 0 ? i : 1;
-}
-
-static inline uint16_t msl_py_calc_hitlag_frames(const MslCommonParams* common, int dmg_int) {
-  float tmp_f = (float)dmg_int * common->hitlag_dmg_mul + common->hitlag_base;
-  int tmp = (int)tmp_f;
-  if (tmp < 0) {
-    tmp = 0;
-  }
-  if (tmp > 0xFFFF) {
-    tmp = 0xFFFF;
-  }
-  return (uint16_t)tmp;
-}
-
-static PyObject* msl_derive_combat_hitlist_seed_fields_py(PyObject* self, PyObject* args) {
-  (void)self;
-  int num_players = 0;
-  int is_teams = 0;
-  int include_per_hitbox = 0;
-  int include_replay_only_shield_admission = 0;
-  int include_replay_only_body_admission = 0;
-  PyObject* team_obj = NULL;
-  PyObject* char_obj = NULL;
-  PyObject* action_obj = NULL;
-  PyObject* action_frame_obj = NULL;
-  PyObject* anim_obj = NULL;
-  PyObject* facing_obj = NULL;
-  PyObject* on_ground_obj = NULL;
-  PyObject* pos_x_obj = NULL;
-  PyObject* pos_y_obj = NULL;
-  PyObject* scale_y_obj = NULL;
-  PyObject* guard_x8_obj = NULL;
-  PyObject* guard_x4_obj = NULL;
-  PyObject* stocks_obj = NULL;
-  PyObject* shield_hp_obj = NULL;
-  PyObject* hurtbox_state_obj = NULL;
-  PyObject* hitlag_obj = Py_None;
-  PyObject* last_hit_by_obj = Py_None;
-  PyObject* instance_hit_by_obj = Py_None;
-  PyObject* instance_id_obj = NULL;
-  PyObject* input_buttons_obj = NULL;
-  PyObject* input_l_obj = NULL;
-  PyObject* input_r_obj = NULL;
-  PyObject* turn_has_turned_obj = Py_None;
-  PyObject* anim_frame_obj = Py_None;
-  PyObject* frame_speed_obj = Py_None;
-  PyObject* rotate_model_obj = Py_None;
-  PyObject* rotate_valid_obj = Py_None;
-  PyObject* percent_obj = Py_None;
-  if (!PyArg_ParseTuple(
-          args, "iiOOOOOOOOOOOOOOOOOOOOOOOOOOOOiii", &num_players, &is_teams, &team_obj, &char_obj,
-          &action_obj, &action_frame_obj, &anim_obj, &facing_obj, &on_ground_obj, &pos_x_obj,
-          &pos_y_obj, &scale_y_obj, &guard_x8_obj, &guard_x4_obj, &stocks_obj, &shield_hp_obj,
-          &hurtbox_state_obj, &hitlag_obj, &last_hit_by_obj, &instance_hit_by_obj, &instance_id_obj,
-          &input_buttons_obj, &input_l_obj, &input_r_obj, &turn_has_turned_obj, &anim_frame_obj,
-          &frame_speed_obj, &rotate_model_obj, &rotate_valid_obj, &percent_obj, &include_per_hitbox,
-          &include_replay_only_shield_admission, &include_replay_only_body_admission)) {
-    return NULL;
-  }
-  if (num_players != 2 && num_players != 4) {
-    PyErr_SetString(PyExc_ValueError, "num_players must be 2 or 4");
-    return NULL;
-  }
-
-#define REQ_ARR(name, obj, typenum, label)                                      \
-  PyArrayObject* name = require_contiguous_array((obj), (typenum), 2, (label)); \
-  if ((name) == NULL) {                                                         \
-    return NULL;                                                                \
-  }
-  REQ_ARR(team, team_obj, NPY_UINT8, "team_id");
-  REQ_ARR(char_id, char_obj, NPY_UINT8, "char_id");
-  REQ_ARR(action_id, action_obj, NPY_UINT16, "action_id");
-  REQ_ARR(action_frame, action_frame_obj, NPY_INT16, "action_frame");
-  REQ_ARR(anim, anim_obj, NPY_UINT32, "animation_index");
-  REQ_ARR(facing, facing_obj, NPY_UINT8, "facing");
-  REQ_ARR(on_ground, on_ground_obj, NPY_UINT8, "on_ground");
-  REQ_ARR(pos_x, pos_x_obj, NPY_FLOAT32, "pos_x");
-  REQ_ARR(pos_y, pos_y_obj, NPY_FLOAT32, "pos_y");
-  REQ_ARR(scale_y, scale_y_obj, NPY_FLOAT32, "fighter_scale_y");
-  REQ_ARR(guard_x8, guard_x8_obj, NPY_UINT16, "guard_tilt_x8");
-  REQ_ARR(guard_x4, guard_x4_obj, NPY_FLOAT32, "guard_tilt_x4");
-  REQ_ARR(stocks, stocks_obj, NPY_UINT8, "stocks");
-  REQ_ARR(shield_hp, shield_hp_obj, NPY_FLOAT32, "shield_hp");
-  REQ_ARR(hurtbox_state, hurtbox_state_obj, NPY_UINT8, "hurtbox_state");
-  REQ_ARR(instance_id, instance_id_obj, NPY_UINT16, "instance_id");
-  REQ_ARR(input_buttons, input_buttons_obj, NPY_UINT16, "input_buttons");
-  REQ_ARR(input_l, input_l_obj, NPY_UINT8, "input_l");
-  REQ_ARR(input_r, input_r_obj, NPY_UINT8, "input_r");
-#undef REQ_ARR
-
-#define OPT_ARR(name, obj, typenum, label)                         \
-  PyArrayObject* name = NULL;                                      \
-  if ((obj) != Py_None) {                                          \
-    name = require_contiguous_array((obj), (typenum), 2, (label)); \
-    if ((name) == NULL) {                                          \
-      return NULL;                                                 \
-    }                                                              \
-  }
-  OPT_ARR(hitlag, hitlag_obj, NPY_UINT16, "hitlag");
-  OPT_ARR(last_hit_by, last_hit_by_obj, NPY_UINT8, "last_hit_by");
-  OPT_ARR(instance_hit_by, instance_hit_by_obj, NPY_UINT16, "instance_hit_by");
-  OPT_ARR(turn_has_turned, turn_has_turned_obj, NPY_UINT8, "turn_has_turned");
-  OPT_ARR(anim_frame, anim_frame_obj, NPY_FLOAT32, "anim_frame_f32");
-  OPT_ARR(frame_speed, frame_speed_obj, NPY_FLOAT32, "frame_speed_mul_f32");
-  OPT_ARR(rotate_model, rotate_model_obj, NPY_FLOAT32, "specialhi_rotate_model_f32");
-  OPT_ARR(rotate_valid, rotate_valid_obj, NPY_UINT8, "specialhi_rotate_model_valid_u8");
-  OPT_ARR(percent, percent_obj, NPY_FLOAT32, "percent");
-#undef OPT_ARR
-
-  const npy_intp n = PyArray_DIM(action_id, 0);
-  const npy_intp width = PyArray_DIM(action_id, 1);
-  if (width < num_players) {
-    PyErr_SetString(PyExc_ValueError, "action_id width smaller than num_players");
-    return NULL;
-  }
-#define CHECK_DIMS(arr, label)                                 \
-  if (require_exact_2d_shape((arr), n, width, (label)) != 0) { \
-    return NULL;                                               \
-  }
-  CHECK_DIMS(team, "team_id");
-  CHECK_DIMS(char_id, "char_id");
-  CHECK_DIMS(action_frame, "action_frame");
-  CHECK_DIMS(anim, "animation_index");
-  CHECK_DIMS(facing, "facing");
-  CHECK_DIMS(on_ground, "on_ground");
-  CHECK_DIMS(pos_x, "pos_x");
-  CHECK_DIMS(pos_y, "pos_y");
-  CHECK_DIMS(scale_y, "fighter_scale_y");
-  CHECK_DIMS(guard_x8, "guard_tilt_x8");
-  CHECK_DIMS(guard_x4, "guard_tilt_x4");
-  CHECK_DIMS(stocks, "stocks");
-  CHECK_DIMS(shield_hp, "shield_hp");
-  CHECK_DIMS(hurtbox_state, "hurtbox_state");
-  CHECK_DIMS(instance_id, "instance_id");
-  CHECK_DIMS(input_buttons, "input_buttons");
-  CHECK_DIMS(input_l, "input_l");
-  CHECK_DIMS(input_r, "input_r");
-  if (hitlag != NULL) CHECK_DIMS(hitlag, "hitlag");
-  if (last_hit_by != NULL) CHECK_DIMS(last_hit_by, "last_hit_by");
-  if (instance_hit_by != NULL) CHECK_DIMS(instance_hit_by, "instance_hit_by");
-  if (turn_has_turned != NULL) CHECK_DIMS(turn_has_turned, "turn_has_turned");
-  if (anim_frame != NULL) CHECK_DIMS(anim_frame, "anim_frame_f32");
-  if (frame_speed != NULL) CHECK_DIMS(frame_speed, "frame_speed_mul_f32");
-  if (rotate_model != NULL) CHECK_DIMS(rotate_model, "specialhi_rotate_model_f32");
-  if (rotate_valid != NULL) CHECK_DIMS(rotate_valid, "specialhi_rotate_model_valid_u8");
-  if (percent != NULL) CHECK_DIMS(percent, "percent");
-#undef CHECK_DIMS
-
-  if (common_params_init() != 0 || char_params_init() != 0 || anim_pose_init() != 0 ||
-      anim_table_init() != 0 || hitboxes_tables_init() != 0 || hurtcaps_tables_init() != 0 ||
-      shield_tilt_table_init() != 0) {
-    PyErr_SetString(PyExc_RuntimeError, "combat hitlist native tables failed to initialize");
-    return NULL;
-  }
-  const MslCommonParams* common = msl_common_params();
-  if (common == NULL) {
-    PyErr_SetString(PyExc_RuntimeError, "common params unavailable");
-    return NULL;
-  }
-
-  npy_intp dims_dense[4] = {n, (npy_intp)MSL_MAX_PLAYERS, (npy_intp)MSL_HITLIST_GROUPS,
-                            (npy_intp)MSL_MAX_PLAYERS};
-  npy_intp dims_hb_valid[3] = {n, (npy_intp)MSL_MAX_PLAYERS, (npy_intp)MSL_MAX_HITBOXES};
-  npy_intp dims_hb[4] = {n, (npy_intp)MSL_MAX_PLAYERS, (npy_intp)MSL_MAX_HITBOXES,
-                         (npy_intp)MSL_MAX_PLAYERS};
-  PyArrayObject* out_cd = (PyArrayObject*)PyArray_ZEROS(4, dims_dense, NPY_UINT16, 0);
-  PyArrayObject* out_iid = (PyArrayObject*)PyArray_ZEROS(4, dims_dense, NPY_UINT16, 0);
-  PyArrayObject* out_hb_valid = (PyArrayObject*)PyArray_ZEROS(3, dims_hb_valid, NPY_UINT8, 0);
-  PyArrayObject* out_hb_cd = (PyArrayObject*)PyArray_ZEROS(4, dims_hb, NPY_UINT16, 0);
-  PyArrayObject* out_hb_iid = (PyArrayObject*)PyArray_ZEROS(4, dims_hb, NPY_UINT16, 0);
-  PyArrayObject* out_shield_kind = (PyArrayObject*)PyArray_ZEROS(4, dims_hb, NPY_UINT8, 0);
-  if (out_cd == NULL || out_iid == NULL || out_hb_valid == NULL || out_hb_cd == NULL ||
-      out_hb_iid == NULL || out_shield_kind == NULL) {
-    Py_XDECREF(out_cd);
-    Py_XDECREF(out_iid);
-    Py_XDECREF(out_hb_valid);
-    Py_XDECREF(out_hb_cd);
-    Py_XDECREF(out_hb_iid);
-    Py_XDECREF(out_shield_kind);
-    return NULL;
-  }
-
-#define PTR(name, type, arr) const type* name = (const type*)PyArray_DATA(arr)
-  PTR(team_p, uint8_t, team);
-  PTR(char_p, uint8_t, char_id);
-  PTR(action_p, uint16_t, action_id);
-  PTR(action_frame_p, int16_t, action_frame);
-  PTR(anim_p, uint32_t, anim);
-  PTR(facing_p, uint8_t, facing);
-  PTR(on_ground_p, uint8_t, on_ground);
-  PTR(pos_x_p, float, pos_x);
-  PTR(pos_y_p, float, pos_y);
-  PTR(scale_y_p, float, scale_y);
-  PTR(guard_x8_p, uint16_t, guard_x8);
-  PTR(guard_x4_p, float, guard_x4);
-  PTR(stocks_p, uint8_t, stocks);
-  PTR(shield_hp_p, float, shield_hp);
-  PTR(hurtbox_state_p, uint8_t, hurtbox_state);
-  PTR(instance_id_p, uint16_t, instance_id);
-  PTR(input_buttons_p, uint16_t, input_buttons);
-  PTR(input_l_p, uint8_t, input_l);
-  PTR(input_r_p, uint8_t, input_r);
-#undef PTR
-  const uint16_t* hitlag_p = hitlag != NULL ? (const uint16_t*)PyArray_DATA(hitlag) : NULL;
-  const uint8_t* last_hit_by_p =
-      last_hit_by != NULL ? (const uint8_t*)PyArray_DATA(last_hit_by) : NULL;
-  const uint16_t* instance_hit_by_p =
-      instance_hit_by != NULL ? (const uint16_t*)PyArray_DATA(instance_hit_by) : NULL;
-  const uint8_t* turn_has_turned_p =
-      turn_has_turned != NULL ? (const uint8_t*)PyArray_DATA(turn_has_turned) : NULL;
-  const float* anim_frame_p = anim_frame != NULL ? (const float*)PyArray_DATA(anim_frame) : NULL;
-  const float* frame_speed_p = frame_speed != NULL ? (const float*)PyArray_DATA(frame_speed) : NULL;
-  const float* rotate_model_p =
-      rotate_model != NULL ? (const float*)PyArray_DATA(rotate_model) : NULL;
-  const uint8_t* rotate_valid_p =
-      rotate_valid != NULL ? (const uint8_t*)PyArray_DATA(rotate_valid) : NULL;
-  const float* percent_p = percent != NULL ? (const float*)PyArray_DATA(percent) : NULL;
-
-  uint16_t* out_cd_p = (uint16_t*)PyArray_DATA(out_cd);
-  uint16_t* out_iid_p = (uint16_t*)PyArray_DATA(out_iid);
-  uint8_t* out_hb_valid_p = (uint8_t*)PyArray_DATA(out_hb_valid);
-  uint16_t* out_hb_cd_p = (uint16_t*)PyArray_DATA(out_hb_cd);
-  uint16_t* out_hb_iid_p = (uint16_t*)PyArray_DATA(out_hb_iid);
-  uint8_t* out_shield_kind_p = (uint8_t*)PyArray_DATA(out_shield_kind);
-
-  uint16_t hitlist_cd[MSL_MAX_PLAYERS][MSL_HITLIST_GROUPS][MSL_MAX_PLAYERS] = {{{0}}};
-  uint16_t hitlist_iid[MSL_MAX_PLAYERS][MSL_HITLIST_GROUPS][MSL_MAX_PLAYERS] = {{{0}}};
-  uint16_t hitlist_hb_cd[MSL_MAX_PLAYERS][MSL_MAX_HITBOXES][MSL_MAX_PLAYERS] = {{{0}}};
-  uint16_t hitlist_hb_iid[MSL_MAX_PLAYERS][MSL_MAX_HITBOXES][MSL_MAX_PLAYERS] = {{{0}}};
-  uint8_t hitlist_hb_authoritative[MSL_MAX_PLAYERS][MSL_MAX_HITBOXES] = {{0}};
-  uint16_t sim_hitlag[MSL_MAX_PLAYERS] = {0};
-  uint8_t prev_group_active[MSL_MAX_PLAYERS][MSL_HITLIST_GROUPS] = {{0}};
-  uint8_t prev_hb_active[MSL_MAX_PLAYERS][MSL_MAX_HITBOXES] = {{0}};
-  uint8_t prev_hb_group[MSL_MAX_PLAYERS][MSL_MAX_HITBOXES] = {{0}};
-
-  const float denom = 1.0f - common->trigger_deadzone;
-
-  for (npy_intp fi = 0; fi < n; fi++) {
-    for (int p = 0; p < num_players; p++) {
-      if (sim_hitlag[p] != 0u) {
-        sim_hitlag[p] = (uint16_t)(sim_hitlag[p] - 1u);
-      }
-    }
-
-    MslPyHbPrim hitboxes[MSL_MAX_PLAYERS][MSL_MAX_HITBOXES];
-    MslPyCapPrim caps[MSL_MAX_PLAYERS][MSL_MAX_HURTCAPS];
-    uint16_t cap_counts[MSL_MAX_PLAYERS] = {0};
-    float shield_x[MSL_MAX_PLAYERS] = {0.0f};
-    float shield_y[MSL_MAX_PLAYERS] = {0.0f};
-    float shield_z[MSL_MAX_PLAYERS] = {0.0f};
-    float shield_r[MSL_MAX_PLAYERS] = {0.0f};
-    uint8_t replay_only_hb_valid_frame[MSL_MAX_PLAYERS][MSL_MAX_HITBOXES] = {{0}};
-    memset(hitboxes, 0, sizeof(hitboxes));
-    memset(caps, 0, sizeof(caps));
-
-    for (int p = 0; p < num_players; p++) {
-      const npy_intp pi = fi * width + p;
-      const uint8_t cid = char_p[pi];
-      const MslCharParams* ch = msl_char_params(cid);
-      if (ch == NULL || action_frame_p[pi] < 0 || anim_p[pi] > 0xFFFFu) {
-        continue;
-      }
-      uint16_t frame = (uint16_t)action_frame_p[pi];
-      if (anim_frame_p != NULL) {
-        float af_f = anim_frame_p[pi];
-        if (isfinite(af_f) && af_f >= 0.0f) {
-          if (frame_speed_p != NULL && (hitlag_p == NULL || hitlag_p[pi] == 0u)) {
-            af_f += frame_speed_p[pi];
-          }
-          if (af_f < 0.0f) {
-            af_f = 0.0f;
-          }
-          if (af_f > 65535.0f) {
-            af_f = 65535.0f;
-          }
-          frame = (uint16_t)floorf(af_f);
-        }
-      }
-
-      const uint16_t msid = (uint16_t)anim_p[pi];
-      const float model_scaling =
-          (isfinite(ch->model_scaling) && ch->model_scaling > 0.0f) ? ch->model_scaling : 1.0f;
-      const float model_scale = scale_y_p[pi] * model_scaling;
-      const float scale_y_val = scale_y_p[pi];
-      const float px = pos_x_p[pi];
-      const float py = pos_y_p[pi];
-      float facing_dir = facing_p[pi] ? 1.0f : -1.0f;
-      if (action_p[pi] == MSL_ACT_TURN && turn_has_turned_p != NULL &&
-          turn_has_turned_p[pi] != 0u) {
-        facing_dir = -facing_dir;
-      }
-      const float rotate_model_val = rotate_model_p != NULL ? rotate_model_p[pi] : 0.0f;
-      const uint8_t rotate_valid_val = rotate_valid_p != NULL ? rotate_valid_p[pi] : 0u;
-
-      const MslHurtCap* hc = NULL;
-      uint16_t hc_count = 0;
-      if (hurtcaps_get(cid, &hc, &hc_count) == 0 && hc != NULL) {
-        if (hc_count > MSL_MAX_HURTCAPS) {
-          hc_count = MSL_MAX_HURTCAPS;
-        }
-        for (uint16_t ci = 0; ci < hc_count; ci++) {
-          float m[12];
-          if (anim_pose_get_matrix(cid, msid, frame, hc[ci].bone_part_id, m) != 0) {
-            continue;
-          }
-          float ax = 0.0f, ay = 0.0f, az = 0.0f;
-          float bx = 0.0f, by = 0.0f, bz = 0.0f;
-          msl_py_mtx34_mul_point(m, hc[ci].a_offset[0], hc[ci].a_offset[1], hc[ci].a_offset[2], &ax,
-                                 &ay, &az);
-          msl_py_mtx34_mul_point(m, hc[ci].b_offset[0], hc[ci].b_offset[1], hc[ci].b_offset[2], &bx,
-                                 &by, &bz);
-          ax *= model_scale;
-          ay *= model_scale;
-          az *= model_scale;
-          bx *= model_scale;
-          by *= model_scale;
-          bz *= model_scale;
-          (void)msl_py_apply_specialhi_xrotn(cid, action_p[pi], msid, frame, hc[ci].bone_part_id,
-                                             model_scale, rotate_model_val, rotate_valid_val, &ax,
-                                             &ay, &az);
-          (void)msl_py_apply_specialhi_xrotn(cid, action_p[pi], msid, frame, hc[ci].bone_part_id,
-                                             model_scale, rotate_model_val, rotate_valid_val, &bx,
-                                             &by, &bz);
-          MslPyCapPrim* out = &caps[p][cap_counts[p]++];
-          out->valid = 1u;
-          out->ax = facing_dir * az + px;
-          out->ay = ay + py;
-          out->az = -facing_dir * ax;
-          out->bx = facing_dir * bz + px;
-          out->by = by + py;
-          out->bz = -facing_dir * bx;
-          out->r = hc[ci].scale * model_scale;
-        }
-      }
-
-      const MslHitboxEvent* events = NULL;
-      uint16_t event_count = 0;
-      if (hitboxes_get_events(cid, msid, &events, &event_count) == 0 && events != NULL) {
-        const MslHitboxEvent* active[MSL_MAX_HITBOXES] = {0};
-        for (uint16_t ei = 0; ei < event_count; ei++) {
-          const MslHitboxEvent* ev = &events[ei];
-          if (ev->frame > frame) {
-            continue;
-          }
-          if (ev->kind == 1u) {
-            if (ev->hitbox_id == 0xFFu) {
-              memset(active, 0, sizeof(active));
-            } else if (ev->hitbox_id < MSL_MAX_HITBOXES) {
-              active[ev->hitbox_id] = NULL;
-            }
-          } else if (ev->hitbox_id < MSL_MAX_HITBOXES) {
-            active[ev->hitbox_id] = ev;
-          }
-        }
-        for (int hb_id = 0; hb_id < MSL_MAX_HITBOXES; hb_id++) {
-          const MslHitboxEvent* ev = active[hb_id];
-          if (ev == NULL) {
-            continue;
-          }
-          float m[12];
-          if (anim_pose_get_matrix(cid, msid, frame, ev->bone_part_id, m) != 0) {
-            continue;
-          }
-          float lx = 0.0f, ly = 0.0f, lz = 0.0f;
-          msl_py_mtx34_mul_point(m, ev->x, ev->y, ev->z, &lx, &ly, &lz);
-          lx *= model_scale;
-          ly *= model_scale;
-          lz *= model_scale;
-          (void)msl_py_apply_specialhi_xrotn(cid, action_p[pi], msid, frame, ev->bone_part_id,
-                                             model_scale, rotate_model_val, rotate_valid_val, &lx,
-                                             &ly, &lz);
-          MslPyHbPrim* hb = &hitboxes[p][hb_id];
-          hb->valid = 1u;
-          hb->x = facing_dir * lz + px;
-          hb->y = ly + py;
-          hb->z = -facing_dir * lx;
-          hb->r = ev->radius;
-          if ((ev->u16_6 & (uint16_t)MSL_HITBOX_FLAG_IGNORE_FIGHTER_SCALE) == 0u) {
-            hb->r *= scale_y_val;
-          }
-          hb->damage = ev->damage;
-          hb->flags = ev->u16_6;
-          hb->def_frame = (int16_t)ev->frame;
-          hb->group = (uint8_t)((ev->u16_7 >> 8) & 0x7u);
-          hb->rehit = (uint8_t)(ev->u16_7 & 0xFFu);
-        }
-      }
-
-      shield_x[p] = px;
-      shield_y[p] = py;
-      shield_z[p] = 0.0f;
-      shield_r[p] = 0.0f;
-      if (stocks_p[pi] != 0u && msl_py_is_shield_active_action(action_p[pi])) {
-        const float hp = shield_hp_p[pi];
-        if (hp > 0.0f && common->start_shield_health > 0.0f) {
-          const float trig =
-              msl_py_trigger_unit_from_input(input_buttons_p[pi], input_l_p[pi], input_r_p[pi]);
-          const float light =
-              denom > 0.0f ? msl_py_clamp01((trig - common->trigger_deadzone) / denom) : 0.0f;
-          const float hp_ratio = msl_py_clamp01(hp / common->start_shield_health);
-          const float light_scale = (light * (common->shield_size_lightshield_max -
-                                              common->shield_size_lightshield_min)) +
-                                    common->shield_size_lightshield_min;
-          const float n1 = hp_ratio * light_scale;
-          const float n2 = 1.0f - common->shield_size_min_scale;
-          const float s = (n2 * n1) + common->shield_size_min_scale;
-          shield_r[p] = s * ch->initial_shield_size * scale_y_val;
-          MslShieldTiltTableView tv;
-          if (msl_shield_tilt_table_view(cid, &tv) == 0 && tv.xyz != NULL && tv.frame_count != 0u) {
-            uint16_t f = guard_x8_p[pi];
-            if (f >= tv.frame_count) {
-              f = (uint16_t)(tv.frame_count - 1u);
-            }
-            float mag = msl_py_clamp01(guard_x4_p[pi]);
-            const uint8_t steady_guard_no_tilt =
-                (action_p[pi] == MSL_ACT_GUARD && (mag == 0.0f || mag < 1.1754943508222875e-38f))
-                    ? 1u
-                    : 0u;
-            const uint16_t neutral = steady_guard_no_tilt ? 0u : tv.neutral_frame;
-            const float* nxyz = tv.xyz + (size_t)neutral * 3u;
-            const float* fxyz = tv.xyz + (size_t)f * 3u;
-            const float dx = nxyz[0] + mag * (fxyz[0] - nxyz[0]);
-            const float dy = nxyz[1] + mag * (fxyz[1] - nxyz[1]);
-            const float dz = nxyz[2] + mag * (fxyz[2] - nxyz[2]);
-            float pose_scale = scale_y_val;
-            if (steady_guard_no_tilt) {
-              pose_scale *= model_scaling;
-            }
-            const float fd = facing_p[pi] ? 1.0f : -1.0f;
-            shield_x[p] = px + dz * pose_scale * fd;
-            shield_y[p] = py + dy * pose_scale;
-            shield_z[p] = -dx * pose_scale * fd;
-          }
-        }
-      }
-    }
-
-    int pending_count = 0;
-    struct {
-      int attacker, group, defender, rehit, iid, hl;
-    } pending[16];
-
-    for (int attacker = 0; attacker < num_players; attacker++) {
-      const npy_intp ai = fi * width + attacker;
-      if (stocks_p[ai] == 0u) {
-        memset(hitlist_hb_cd[attacker], 0, sizeof(hitlist_hb_cd[attacker]));
-        memset(hitlist_hb_iid[attacker], 0, sizeof(hitlist_hb_iid[attacker]));
-        memset(prev_hb_active[attacker], 0, sizeof(prev_hb_active[attacker]));
-        memset(prev_group_active[attacker], 0, sizeof(prev_group_active[attacker]));
-        continue;
-      }
-
-      uint8_t group_active[MSL_HITLIST_GROUPS] = {0};
-      uint8_t any_hitboxes = 0u;
-      for (int hb_id = 0; hb_id < MSL_MAX_HITBOXES; hb_id++) {
-        if (hitboxes[attacker][hb_id].valid) {
-          any_hitboxes = 1u;
-          group_active[hitboxes[attacker][hb_id].group & 0x7u] = 1u;
-        }
-      }
-      const uint8_t clear_dense_on_enable_edge = action_p[ai] == MSL_ACT_ATTACK_HI3 ? 1u : 0u;
-      if (clear_dense_on_enable_edge) {
-        for (int g = 0; g < MSL_HITLIST_GROUPS; g++) {
-          if (group_active[g] && !prev_group_active[attacker][g]) {
-            for (int victim = 0; victim < num_players; victim++) {
-              const npy_intp vi = fi * width + victim;
-              if (action_p[vi] != MSL_ACT_DAMAGE_FLY_LW) {
-                continue;
-              }
-              if (hitlag_p != NULL && hitlag_p[vi] != 0u) {
-                continue;
-              }
-              hitlist_cd[attacker][g][victim] = 0u;
-              hitlist_iid[attacker][g][victim] = 0u;
-            }
-          }
-        }
-      }
-      memcpy(prev_group_active[attacker], group_active, sizeof(group_active));
-      for (int g = 0; g < MSL_HITLIST_GROUPS; g++) {
-        if (!group_active[g]) {
-          continue;
-        }
-        for (int victim = 0; victim < num_players; victim++) {
-          uint16_t cd = hitlist_cd[attacker][g][victim];
-          if (cd == 0u || cd == 0xFFFFu) {
-            continue;
-          }
-          cd = (uint16_t)(cd - 1u);
-          hitlist_cd[attacker][g][victim] = cd;
-          if (cd == 0u) {
-            hitlist_iid[attacker][g][victim] = 0u;
-          }
-        }
-      }
-
-      uint16_t prev_cd[MSL_MAX_HITBOXES][MSL_MAX_PLAYERS];
-      uint16_t prev_iid[MSL_MAX_HITBOXES][MSL_MAX_PLAYERS];
-      memcpy(prev_cd, hitlist_hb_cd[attacker], sizeof(prev_cd));
-      memcpy(prev_iid, hitlist_hb_iid[attacker], sizeof(prev_iid));
-      uint8_t cur_active[MSL_MAX_HITBOXES] = {0};
-      uint8_t cur_group[MSL_MAX_HITBOXES] = {0};
-      for (int hb_id = 0; hb_id < MSL_MAX_HITBOXES; hb_id++) {
-        if (hitboxes[attacker][hb_id].valid) {
-          cur_active[hb_id] = 1u;
-          cur_group[hb_id] = hitboxes[attacker][hb_id].group & 0x7u;
-        }
-      }
-      for (int hb_id = 0; hb_id < MSL_MAX_HITBOXES; hb_id++) {
-        if (!cur_active[hb_id]) {
-          memset(hitlist_hb_cd[attacker][hb_id], 0, sizeof(hitlist_hb_cd[attacker][hb_id]));
-          memset(hitlist_hb_iid[attacker][hb_id], 0, sizeof(hitlist_hb_iid[attacker][hb_id]));
-          hitlist_hb_authoritative[attacker][hb_id] = 0u;
-          continue;
-        }
-        const uint8_t g = cur_group[hb_id];
-        const uint8_t enable_edge =
-            (!prev_hb_active[attacker][hb_id] || prev_hb_group[attacker][hb_id] != g) ? 1u : 0u;
-        if (enable_edge) {
-          uint8_t copied = 0u;
-          for (int src = 0; src < MSL_MAX_HITBOXES; src++) {
-            if (src == hb_id || !prev_hb_active[attacker][src] ||
-                prev_hb_group[attacker][src] != g) {
-              continue;
-            }
-            memcpy(hitlist_hb_cd[attacker][hb_id], prev_cd[src],
-                   sizeof(hitlist_hb_cd[attacker][hb_id]));
-            memcpy(hitlist_hb_iid[attacker][hb_id], prev_iid[src],
-                   sizeof(hitlist_hb_iid[attacker][hb_id]));
-            hitlist_hb_authoritative[attacker][hb_id] = hitlist_hb_authoritative[attacker][src];
-            copied = 1u;
-            break;
-          }
-          if (!copied) {
-            memset(hitlist_hb_cd[attacker][hb_id], 0, sizeof(hitlist_hb_cd[attacker][hb_id]));
-            memset(hitlist_hb_iid[attacker][hb_id], 0, sizeof(hitlist_hb_iid[attacker][hb_id]));
-            hitlist_hb_authoritative[attacker][hb_id] = 0u;
-          }
-        }
-        if (sim_hitlag[attacker] != 0u) {
-          continue;
-        }
-        for (int victim = 0; victim < num_players; victim++) {
-          uint16_t cd = hitlist_hb_cd[attacker][hb_id][victim];
-          if (cd == 0u || cd == 0xFFFFu) {
-            continue;
-          }
-          cd = (uint16_t)(cd - 1u);
-          hitlist_hb_cd[attacker][hb_id][victim] = cd;
-          if (cd == 0u) {
-            hitlist_hb_iid[attacker][hb_id][victim] = 0u;
-          }
-        }
-      }
-      memcpy(prev_hb_active[attacker], cur_active, sizeof(cur_active));
-      memcpy(prev_hb_group[attacker], cur_group, sizeof(cur_group));
-
-      if (!any_hitboxes) {
-        continue;
-      }
-
-      for (int defender = 0; defender < num_players; defender++) {
-        if (defender == attacker) {
-          continue;
-        }
-        const npy_intp di = fi * width + defender;
-        if (stocks_p[di] == 0u || hurtbox_state_p[di] == 2u) {
-          continue;
-        }
-        const uint8_t defender_no_damage = hurtbox_state_p[di] != 0u ? 1u : 0u;
-        if (is_teams && team_p[ai] == team_p[di]) {
-          continue;
-        }
-        if (sim_hitlag[attacker] != 0u || sim_hitlag[defender] != 0u) {
-          continue;
-        }
-        const uint8_t defender_on_ground = on_ground_p[di] != 0u ? 1u : 0u;
-        const uint8_t defender_hitlag_seen = hitlag_p != NULL ? (hitlag_p[di] > 0u ? 1u : 0u) : 1u;
-        const uint8_t attacker_hitlag_seen = hitlag_p != NULL ? (hitlag_p[ai] > 0u ? 1u : 0u) : 1u;
-        const uint8_t shield_active = shield_r[defender] > 0.0f ? 1u : 0u;
-        uint8_t did_hit = 0u;
-
-        for (int hb_id = 0; hb_id < MSL_MAX_HITBOXES; hb_id++) {
-          MslPyHbPrim* hb = &hitboxes[attacker][hb_id];
-          if (!hb->valid) {
-            continue;
-          }
-          if (defender_on_ground) {
-            if ((hb->flags & (uint16_t)MSL_HITBOX_FLAG_HIT_GROUNDED) == 0u) {
-              continue;
-            }
-          } else if ((hb->flags & (uint16_t)MSL_HITBOX_FLAG_HIT_AERIAL) == 0u) {
-            continue;
-          }
-
-          uint8_t shield_contact_seed_kind = 0u;
-          if (include_replay_only_shield_admission && shield_active && hitlag_p != NULL &&
-              fi + 1 < n && msl_py_is_attackair_action(action_p[ai]) && hb->damage > 0.0f &&
-              hitlag_p[di] == 0u && hitlag_p[ai] == 0u) {
-            const npy_intp ni_a = (fi + 1) * width + attacker;
-            const npy_intp ni_d = (fi + 1) * width + defender;
-            if (action_p[ni_d] == MSL_ACT_GUARD_SET_OFF && hitlag_p[ni_d] > 0u &&
-                hitlag_p[ni_a] > 0u) {
-              shield_contact_seed_kind = 2u;
-            } else if (hitlag_p[ni_d] == 0u && hitlag_p[ni_a] == 0u) {
-              shield_contact_seed_kind = 1u;
-            }
-          }
-          if (shield_contact_seed_kind) {
-            const npy_intp oi =
-                (((fi * (npy_intp)MSL_MAX_PLAYERS + attacker) * MSL_MAX_HITBOXES + hb_id) *
-                 MSL_MAX_PLAYERS) +
-                defender;
-            out_shield_kind_p[oi] = shield_contact_seed_kind;
-          }
-
-          const uint8_t hit_group = hb->group & 0x7u;
-          uint8_t prune_guard_stale_seed_bridge = 0u;
-          if (hitlag_p != NULL && last_hit_by_p != NULL && instance_hit_by_p != NULL &&
-              action_p[di] == MSL_ACT_GUARD && hitlag_p[di] == 0u &&
-              last_hit_by_p[di] == (uint8_t)attacker &&
-              instance_hit_by_p[di] != instance_id_p[ai] && hb->def_frame == action_frame_p[ai] &&
-              action_frame_p[ai] <= 8) {
-            prune_guard_stale_seed_bridge = 1u;
-          }
-
-          const uint16_t cd = hitlist_cd[attacker][hit_group][defender];
-          if (cd != 0u) {
-            const uint8_t first_guardsetoff =
-                (hitlag_p != NULL && action_p[di] == MSL_ACT_GUARD_SET_OFF && hitlag_p[di] > 0u &&
-                 (fi == 0 ||
-                  (hitlag_p[(fi - 1) * width + defender] == 0u &&
-                   msl_py_is_shield_active_action(action_p[(fi - 1) * width + defender]))))
-                    ? 1u
-                    : 0u;
-            const uint8_t guardsetoff_damage_onset =
-                (hitlag_p != NULL && fi > 0 && action_p[di] == MSL_ACT_GUARD_SET_OFF &&
-                 hitlag_p[di] > 0u && hitlag_p[(fi - 1) * width + defender] == 0u &&
-                 shield_hp_p[di] < shield_hp_p[(fi - 1) * width + defender])
-                    ? 1u
-                    : 0u;
-            if (first_guardsetoff || guardsetoff_damage_onset) {
-              const uint16_t seeded = hb->rehit == 0u ? 0xFFFFu : (uint16_t)hb->rehit;
-              for (int reg = 0; reg < MSL_MAX_HITBOXES; reg++) {
-                if (hitboxes[attacker][reg].valid &&
-                    (hitboxes[attacker][reg].group & 0x7u) == hit_group) {
-                  hitlist_hb_cd[attacker][reg][defender] = seeded;
-                  hitlist_hb_iid[attacker][reg][defender] = instance_id_p[di];
-                  hitlist_hb_authoritative[attacker][reg] = 1u;
-                }
-              }
-            }
-            if (include_replay_only_shield_admission && hitlag_p != NULL && fi + 1 < n &&
-                msl_py_is_attackair_action(action_p[ai]) && hb->damage > 0.0f &&
-                hitlag_p[di] == 0u && hitlag_p[ai] == 0u &&
-                action_p[(fi + 1) * width + defender] == MSL_ACT_GUARD_SET_OFF &&
-                hitlag_p[(fi + 1) * width + defender] > 0u &&
-                hitlag_p[(fi + 1) * width + attacker] > 0u) {
-              for (int reg = 0; reg < MSL_MAX_HITBOXES; reg++) {
-                if (hitboxes[attacker][reg].valid &&
-                    (hitboxes[attacker][reg].group & 0x7u) == hit_group) {
-                  hitlist_hb_cd[attacker][reg][defender] = 0u;
-                  hitlist_hb_iid[attacker][reg][defender] = 0u;
-                  replay_only_hb_valid_frame[attacker][reg] = 1u;
-                }
-              }
-            } else if (include_replay_only_body_admission && hitlag_p != NULL &&
-                       percent_p != NULL && fi + 1 < n && hb->damage > 0.0f && hitlag_p[di] == 0u &&
-                       hitlag_p[ai] == 0u && hitlag_p[(fi + 1) * width + defender] > 0u &&
-                       hitlag_p[(fi + 1) * width + attacker] > 0u &&
-                       percent_p[(fi + 1) * width + defender] > percent_p[di] &&
-                       (last_hit_by_p == NULL ||
-                        last_hit_by_p[(fi + 1) * width + defender] == (uint8_t)attacker) &&
-                       (instance_hit_by_p == NULL ||
-                        instance_hit_by_p[(fi + 1) * width + defender] == instance_id_p[ai])) {
-              for (int reg = 0; reg < MSL_MAX_HITBOXES; reg++) {
-                if (hitboxes[attacker][reg].valid &&
-                    (hitboxes[attacker][reg].group & 0x7u) == hit_group) {
-                  hitlist_hb_cd[attacker][reg][defender] = 0u;
-                  hitlist_hb_iid[attacker][reg][defender] = 0u;
-                  replay_only_hb_valid_frame[attacker][reg] = 1u;
-                }
-              }
-            } else {
-              const uint16_t def_iid = instance_id_p[di];
-              if (hitlist_iid[attacker][hit_group][defender] == def_iid) {
-                if (prune_guard_stale_seed_bridge) {
-                  hitlist_cd[attacker][hit_group][defender] = 0u;
-                  hitlist_iid[attacker][hit_group][defender] = 0u;
-                } else {
-                  continue;
-                }
-              } else if (prune_guard_stale_seed_bridge) {
-                hitlist_cd[attacker][hit_group][defender] = 0u;
-                hitlist_iid[attacker][hit_group][defender] = 0u;
-              } else if (msl_py_hitlist_victim_pointer_may_change(stocks_p[di], action_p[di])) {
-                hitlist_cd[attacker][hit_group][defender] = 0u;
-                hitlist_iid[attacker][hit_group][defender] = 0u;
-              } else {
-                hitlist_iid[attacker][hit_group][defender] = def_iid;
-                continue;
-              }
-            }
-          }
-
-          const uint8_t shield_contact =
-              shield_active && (shield_contact_seed_kind == 2u ||
-                                (shield_contact_seed_kind != 1u &&
-                                 msl_py_sphere_sphere_intersects(
-                                     hb->x, hb->y, hb->z, hb->r, shield_x[defender],
-                                     shield_y[defender], shield_z[defender], shield_r[defender])))
-                  ? 1u
-                  : 0u;
-          if (shield_contact) {
-            if (hb->damage > 0.0f && defender_hitlag_seen) {
-              const uint16_t seeded = hb->rehit == 0u ? 0xFFFFu : (uint16_t)hb->rehit;
-              for (int reg = 0; reg < MSL_MAX_HITBOXES; reg++) {
-                if (hitboxes[attacker][reg].valid &&
-                    (hitboxes[attacker][reg].group & 0x7u) == hit_group) {
-                  hitlist_hb_cd[attacker][reg][defender] = seeded;
-                  hitlist_hb_iid[attacker][reg][defender] = instance_id_p[di];
-                  hitlist_hb_authoritative[attacker][reg] = 1u;
-                }
-              }
-              hitlist_cd[attacker][hit_group][defender] = seeded;
-              hitlist_iid[attacker][hit_group][defender] = instance_id_p[di];
-              const uint16_t hl = msl_py_calc_hitlag_frames(common, msl_py_get_env_dmg(hb->damage));
-              sim_hitlag[attacker] = hl;
-              sim_hitlag[defender] = hl;
-              did_hit = 1u;
-              break;
-            }
-            continue;
-          }
-
-          if (cap_counts[defender] == 0u) {
-            continue;
-          }
-          for (uint16_t ci = 0; ci < cap_counts[defender]; ci++) {
-            MslPyCapPrim* cap = &caps[defender][ci];
-            if (!cap->valid ||
-                !msl_py_sphere_capsule_intersects(hb->x, hb->y, hb->z, hb->r, cap->ax, cap->ay,
-                                                  cap->az, cap->bx, cap->by, cap->bz, cap->r)) {
-              continue;
-            }
-            const uint8_t no_damage_contact_seen =
-                (defender_no_damage && attacker_hitlag_seen) ? 1u : 0u;
-            if (!defender_hitlag_seen && !no_damage_contact_seen) {
-              if (!(include_replay_only_body_admission && hitlag_p != NULL && percent_p != NULL &&
-                    fi + 1 < n && hitlag_p[di] == 0u && hitlag_p[ai] == 0u &&
-                    hitlag_p[(fi + 1) * width + defender] > 0u &&
-                    hitlag_p[(fi + 1) * width + attacker] > 0u &&
-                    percent_p[(fi + 1) * width + defender] > percent_p[di] &&
-                    (last_hit_by_p == NULL ||
-                     last_hit_by_p[(fi + 1) * width + defender] == (uint8_t)attacker) &&
-                    (instance_hit_by_p == NULL ||
-                     instance_hit_by_p[(fi + 1) * width + defender] == instance_id_p[ai]))) {
-                continue;
-              }
-              if (pending_count < (int)(sizeof(pending) / sizeof(pending[0]))) {
-                pending[pending_count].attacker = attacker;
-                pending[pending_count].group = hit_group;
-                pending[pending_count].defender = defender;
-                pending[pending_count].rehit = hb->rehit;
-                pending[pending_count].iid = instance_id_p[(fi + 1) * width + defender];
-                pending[pending_count].hl =
-                    msl_py_calc_hitlag_frames(common, msl_py_get_env_dmg(hb->damage));
-                pending_count++;
-              }
-              did_hit = 1u;
-              break;
-            }
-            const uint16_t seeded = hb->rehit == 0u ? 0xFFFFu : (uint16_t)hb->rehit;
-            for (int reg = 0; reg < MSL_MAX_HITBOXES; reg++) {
-              if (hitboxes[attacker][reg].valid &&
-                  (hitboxes[attacker][reg].group & 0x7u) == hit_group) {
-                hitlist_hb_cd[attacker][reg][defender] = seeded;
-                hitlist_hb_iid[attacker][reg][defender] = instance_id_p[di];
-                hitlist_hb_authoritative[attacker][reg] = 1u;
-              }
-            }
-            hitlist_cd[attacker][hit_group][defender] = seeded;
-            hitlist_iid[attacker][hit_group][defender] = instance_id_p[di];
-            const uint16_t hl = msl_py_calc_hitlag_frames(common, msl_py_get_env_dmg(hb->damage));
-            if (defender_no_damage) {
-              if (hitlag_p != NULL) {
-                sim_hitlag[attacker] = hitlag_p[ai];
-              }
-            } else {
-              sim_hitlag[attacker] = hl;
-              sim_hitlag[defender] = hl;
-            }
-            did_hit = 1u;
-            break;
-          }
-          if (did_hit) {
-            break;
-          }
-        }
-      }
-    }
-
-    for (int attacker = 0; attacker < num_players; attacker++) {
-      for (int hb_id = 0; hb_id < MSL_MAX_HITBOXES; hb_id++) {
-        if (!hitboxes[attacker][hb_id].valid) {
-          continue;
-        }
-        const npy_intp oi = (fi * (npy_intp)MSL_MAX_PLAYERS + attacker) * MSL_MAX_HITBOXES + hb_id;
-        out_hb_valid_p[oi] = replay_only_hb_valid_frame[attacker][hb_id]
-                                 ? 1u
-                                 : (hitlist_hb_authoritative[attacker][hb_id] ? 1u : 0u);
-      }
-    }
-
-    memcpy(out_cd_p + fi * (npy_intp)MSL_MAX_PLAYERS * MSL_HITLIST_GROUPS * MSL_MAX_PLAYERS,
-           hitlist_cd, sizeof(hitlist_cd));
-    memcpy(out_iid_p + fi * (npy_intp)MSL_MAX_PLAYERS * MSL_HITLIST_GROUPS * MSL_MAX_PLAYERS,
-           hitlist_iid, sizeof(hitlist_iid));
-    memcpy(out_hb_cd_p + fi * (npy_intp)MSL_MAX_PLAYERS * MSL_MAX_HITBOXES * MSL_MAX_PLAYERS,
-           hitlist_hb_cd, sizeof(hitlist_hb_cd));
-    memcpy(out_hb_iid_p + fi * (npy_intp)MSL_MAX_PLAYERS * MSL_MAX_HITBOXES * MSL_MAX_PLAYERS,
-           hitlist_hb_iid, sizeof(hitlist_hb_iid));
-
-    for (int pi = 0; pi < pending_count; pi++) {
-      const uint16_t seeded = pending[pi].rehit == 0 ? 0xFFFFu : (uint16_t)pending[pi].rehit;
-      for (int reg = 0; reg < MSL_MAX_HITBOXES; reg++) {
-        if (hitboxes[pending[pi].attacker][reg].valid &&
-            (hitboxes[pending[pi].attacker][reg].group & 0x7u) == (uint8_t)pending[pi].group) {
-          hitlist_hb_cd[pending[pi].attacker][reg][pending[pi].defender] = seeded;
-          hitlist_hb_iid[pending[pi].attacker][reg][pending[pi].defender] =
-              (uint16_t)pending[pi].iid;
-          hitlist_hb_authoritative[pending[pi].attacker][reg] = 1u;
-        }
-      }
-      hitlist_cd[pending[pi].attacker][pending[pi].group][pending[pi].defender] = seeded;
-      hitlist_iid[pending[pi].attacker][pending[pi].group][pending[pi].defender] =
-          (uint16_t)pending[pi].iid;
-      sim_hitlag[pending[pi].attacker] = (uint16_t)pending[pi].hl;
-      sim_hitlag[pending[pi].defender] = (uint16_t)pending[pi].hl;
-    }
-  }
-
-  return Py_BuildValue("NNNNNN", out_cd, out_iid, out_hb_valid, out_hb_cd, out_hb_iid,
-                       out_shield_kind);
-}
-
 static PyObject* msl_anim_bake_ssanim01_py(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* rest_rot_obj = NULL;
@@ -5601,6 +3666,206 @@ static PyMethodDef methods[] = {
     {"derive_combo_push_timer_seed", msl_derive_combo_push_timer_seed_py, METH_VARARGS,
      "derive_combo_push_timer_seed(combo_count, last_attack_landed, combo_victim_port=None) -> "
      "uint16[:,4]"},
+    {"derive_combo_seed_fields", msl_derive_combo_seed_fields_py, METH_VARARGS,
+     "derive_combo_seed_fields(num_players, src_ports, hitlag, state_flags, instance_id, "
+     "last_hit_by, instance_hit_by=None) -> (victim_port, victim_iid, timer)"},
+    {"derive_instance_id_x2073", msl_derive_instance_id_x2073_py, METH_VARARGS,
+     "derive_instance_id_x2073(char_id, action_id, action_frame) -> uint8[:]"},
+    {"derive_instance_id_counter", msl_derive_instance_id_counter_py, METH_VARARGS,
+     "derive_instance_id_counter(fighter_instance_id, item_instance_id) -> uint16[:]"},
+    {"derive_item_spawn_id_counter", msl_derive_item_spawn_id_counter_py, METH_VARARGS,
+     "derive_item_spawn_id_counter(item_exists, item_spawn_id) -> uint32[:]"},
+    {"derive_staling_history", msl_derive_staling_history_py, METH_VARARGS,
+     "derive_staling_history(src_ports, char_id, action_id, action_frame, animation_index, "
+     "percent, stocks, instance_id, last_hit_by, last_hit_by_instance) -> "
+     "(attack_id, attack_instance, stale_queue_index, stale_move_id, stale_attack_instance)"},
+    {"process_stick_i8_units", msl_process_stick_i8_units_py, METH_VARARGS,
+     "process_stick_i8_units(raw_x, raw_y, ucf_enabled, cardinals_enabled, deadzone_x, "
+     "deadzone_y) -> (proc_x_i8, proc_y_i8, unit_x_f32, unit_y_f32)"},
+    {"derive_ucf_pad_buffer_state", msl_derive_ucf_pad_buffer_state_py, METH_VARARGS,
+     "derive_ucf_pad_buffer_state(raw_x, raw_y, stick_y_hold_time, ucf_enabled, "
+     "cardinals_enabled, deadzone_x, deadzone_y) -> (index, sdrop_up, stick_x[:,4], stick_y[:,4])"},
+    {"compute_tilt_timer_axis", msl_compute_tilt_timer_axis_py, METH_VARARGS,
+     "compute_tilt_timer_axis(axis_unit, tilt_thresh, start_timer) -> uint8[:]"},
+    {"compute_tilt_timer_axis_pre_post", msl_compute_tilt_timer_axis_pre_post_py, METH_VARARGS,
+     "compute_tilt_timer_axis_pre_post(axis_unit, tilt_thresh, override_or_None, "
+     "override_value, reset_or_None, start_timer_post) -> (pre, post)"},
+    {"compute_tilt_timer_y_pre_post_with_fall_fast",
+     msl_compute_tilt_timer_y_pre_post_with_fall_fast_py, METH_VARARGS,
+     "compute_tilt_timer_y_pre_post_with_fall_fast(stick_y, tilt_thresh, jump_entry, "
+     "pre_input_jump_entry_or_None, fastfall_ok, speed_y, on_ground, fastfall_stick_threshold, "
+     "fastfall_tilt_max_frames, reset_or_None, start_timer_post) -> (pre, post, fall_fast)"},
+    {"derive_damage_hitlag_sdi_reset_post_mask", msl_derive_damage_hitlag_sdi_reset_post_mask_py,
+     METH_VARARGS,
+     "derive_damage_hitlag_sdi_reset_post_mask(action, hitlag, flags, pos_x, pos_y, stick_x, "
+     "stick_y, damage_actions, sdi_step_mul) -> bool[:]"},
+    {"derive_damage_entry_tilt_timer_reset_post_mask",
+     msl_derive_damage_entry_tilt_timer_reset_post_mask_py, METH_VARARGS,
+     "derive_damage_entry_tilt_timer_reset_post_mask(action, frame, hitlag, percent, "
+     "instance_hit_by, damage_actions) -> bool[:]"},
+    {"derive_guard_reflect_timer_plus1", msl_derive_guard_reflect_timer_plus1_py, METH_VARARGS,
+     "derive_guard_reflect_timer_plus1(action, hitlag, act_guard_reflect, init_frames) -> "
+     "uint8[:]"},
+    {"derive_guard_reflect_origin_guardon", msl_derive_guard_reflect_origin_guardon_py,
+     METH_VARARGS,
+     "derive_guard_reflect_origin_guardon(action, act_guard_reflect, act_guard_on, act_guard) -> "
+     "uint8[:]"},
+    {"derive_grab_mash_stick_sign_post", msl_derive_grab_mash_stick_sign_post_py, METH_VARARGS,
+     "derive_grab_mash_stick_sign_post(stick_x, stick_y, threshold) -> (x_sign, y_sign)"},
+    {"derive_guard_release_lockout_and_lightshield",
+     msl_derive_guard_release_lockout_and_lightshield_py, METH_VARARGS,
+     "derive_guard_release_lockout_and_lightshield(action_id, shield_hp, hitlag, buttons_held, "
+     "trigger_unit, button_mask_lr, button_mask_z, trigger_deadzone, guard_x10_init_frames, "
+     "act_guard_on, act_guard, act_guard_reflect, act_guard_set_off) -> (xc, x10, light)"},
+    {"derive_guard_special_enable_timer_x1c", msl_derive_guard_special_enable_timer_x1c_py,
+     METH_VARARGS,
+     "derive_guard_special_enable_timer_x1c(action, hitlag, flags, init, guard_on, guard, "
+     "guard_off, guard_reflect, guard_set_off) -> uint8[:]"},
+    {"derive_guard_setoff_hitlag_damage_min", msl_derive_guard_setoff_hitlag_damage_min_py,
+     METH_VARARGS,
+     "derive_guard_setoff_hitlag_damage_min(action, frame, hitlag, mul, base, guard_set_off) -> "
+     "uint8[:]"},
+    {"derive_guard_setoff_hitlag_exit_phase", msl_derive_guard_setoff_hitlag_exit_phase_py,
+     METH_VARARGS,
+     "derive_guard_setoff_hitlag_exit_phase(action, hitlag, guard_set_off) -> uint8[:]"},
+    {"derive_guard_setoff_post_hitlag_owner", msl_derive_guard_setoff_post_hitlag_owner_py,
+     METH_VARARGS,
+     "derive_guard_setoff_post_hitlag_owner(action, phase, flags_221c, guard_set_off) -> uint8[:]"},
+    {"derive_run_x0", msl_derive_run_x0_py, METH_VARARGS,
+     "derive_run_x0(action, hitlag, init, run, run_direct, turn_run) -> uint8[:]"},
+    {"derive_runbrake_cmd0", msl_derive_runbrake_cmd0_py, METH_VARARGS,
+     "derive_runbrake_cmd0(action, anim_frame, char_id, on_by_char, off_by_char, run_brake) -> "
+     "uint8[:]"},
+    {"derive_dash_x4", msl_derive_dash_x4_py, METH_VARARGS,
+     "derive_dash_x4(action, action_frame, dash, turn) -> uint8[:]"},
+    {"derive_ecb_lock_timer", msl_derive_ecb_lock_timer_py, METH_VARARGS,
+     "derive_ecb_lock_timer(on_ground, action, lock_frames, jump_f, jump_b, aerial_f, aerial_b) -> "
+     "uint8[:]"},
+    {"derive_turn_internals", msl_derive_turn_internals_py, METH_VARARGS,
+     "derive_turn_internals(action, frame, facing, stick_x, tilt_x, dash_abs, dash_max, "
+     "turn_frames, turn, turn_run) -> (frames, has_turned, x8)"},
+    {"compute_press_timer_u8", msl_compute_press_timer_u8_py, METH_VARARGS,
+     "compute_press_timer_u8(buttons_pressed, press_mask, start_timer) -> uint8[:]"},
+    {"compute_lr_press_timer_x67f", msl_compute_lr_press_timer_x67f_py, METH_VARARGS,
+     "compute_lr_press_timer_x67f(buttons, trigger, hitlag_or_None, deadzone, lr_mask, z_mask, "
+     "start_timer) -> uint8[:]"},
+    {"compute_x672_trigger_timer_pre_post", msl_compute_x672_trigger_timer_pre_post_py,
+     METH_VARARGS,
+     "compute_x672_trigger_timer_pre_post(trigger, prev_or_None, min, guard_or_None, start) -> "
+     "(pre, post)"},
+    {"derive_downwait_timer", msl_derive_downwait_timer_py, METH_VARARGS,
+     "derive_downwait_timer(action, hitstun_or_None, frames, down_damage_u, down_damage_d, "
+     "down_wait_u, down_wait_d) -> int16[:]"},
+    {"derive_damage_jump_buffer_x14", msl_derive_damage_jump_buffer_x14_py, METH_VARARGS,
+     "derive_damage_jump_buffer_x14(action, hitstun, buttons_pressed, stick_y, tilt_y, "
+     "hitlag_or_None, tap_threshold, tilt_max, xy_mask, damage_actions) -> uint16[:]"},
+    {"derive_damage_post_hitlag_cb_kind", msl_derive_damage_post_hitlag_cb_kind_py, METH_VARARGS,
+     "derive_damage_post_hitlag_cb_kind(action, hitstun, damage_actions) -> uint8[:]"},
+    {"derive_guard_tilt_state", msl_derive_guard_tilt_state_py, METH_VARARGS,
+     "derive_guard_tilt_state(stick_x, stick_y, facing, action, frame, neutral, frame_max, lerp, "
+     "guard_on, guard, guard_reflect) -> (x8, x4)"},
+    {"derive_shine_release_state", msl_derive_shine_release_state_py, METH_VARARGS,
+     "derive_shine_release_state(action, frame, held, hitlag, lag_init, b_mask, shine actions...) "
+     "-> "
+     "(release_lag, is_release)"},
+    {"derive_kneebend_internals", msl_derive_kneebend_internals_py, METH_VARARGS,
+     "derive_kneebend_internals(action, buttons, pressed, stick_y, cstick_y, tilt_y, thresholds, "
+     "actions...) -> (jump_input, is_short_hop)"},
+    {"derive_magnify_damage_counter_x1910", msl_derive_magnify_damage_counter_x1910_py,
+     METH_VARARGS,
+     "derive_magnify_damage_counter_x1910(action, flags, inside, percent, optional contact lanes, "
+     "interval, limit, amount) -> uint16[:]"},
+    {"derive_colanim_internals", msl_derive_colanim_internals_py, METH_VARARGS,
+     "derive_colanim_internals(action, frame, hitlag, hitstun, hurtbox, timers, action sets) -> "
+     "(x198c, x1990, x1994, x2221_b0, rebirth_fall_x1994)"},
+    {"derive_capture_grab_hidden_post", msl_derive_capture_grab_hidden_post_py, METH_VARARGS,
+     "derive_capture_grab_hidden_post(action, frame, owner, percent, buttons, sticks, frame_speed, "
+     "mash signs, constants...) -> hidden capture lanes"},
+    {"derive_ledge_cooldown", msl_derive_ledge_cooldown_py, METH_VARARGS,
+     "derive_ledge_cooldown(action, hitlag, cooldown_frames) -> uint8[:]"},
+    {"derive_match_flow_timer", msl_derive_match_flow_timer_py, METH_VARARGS,
+     "derive_match_flow_timer(action, port0, common timers...) -> uint8[:]"},
+    {"derive_passivewall_timer", msl_derive_passivewall_timer_py, METH_VARARGS,
+     "derive_passivewall_timer(action, frame, total_frames) -> uint8[:]"},
+    {"derive_walljump_phase_seed_lanes", msl_derive_walljump_phase_seed_lanes_py, METH_VARARGS,
+     "derive_walljump_phase_seed_lanes(action, frame, pos_x, pos_y, raw_main_x) -> "
+     "(timer, side)"},
+    {"derive_entry_end_fall_lock", msl_derive_entry_end_fall_lock_py, METH_VARARGS,
+     "derive_entry_end_fall_lock(action, on_ground, entry_end, fall) -> uint8[:]"},
+    {"derive_jab_rapid_count", msl_derive_jab_rapid_count_py, METH_VARARGS,
+     "derive_jab_rapid_count(action, buttons_released, buttons_pressed, a_mask) -> uint8[:]"},
+    {"derive_walk_anim_source_vel", msl_derive_walk_anim_source_vel_py, METH_VARARGS,
+     "derive_walk_anim_source_vel(action, char, facing_dir1, frame_speed, divisor LUTs) -> "
+     "float32[:]"},
+    {"derive_walk_retarget_tick_source_vel", msl_derive_walk_retarget_tick_source_vel_py,
+     METH_VARARGS,
+     "derive_walk_retarget_tick_source_vel(action, char, facing, anim, ref_af, velocities, LUTs) "
+     "-> float32[:]"},
+    {"derive_run_anim_source_vel", msl_derive_run_anim_source_vel_py, METH_VARARGS,
+     "derive_run_anim_source_vel(action, char, facing_dir1, frame_speed, scaling LUT) -> "
+     "float32[:]"},
+    {"derive_facing_dir1_sign", msl_derive_facing_dir1_sign_py, METH_VARARGS,
+     "derive_facing_dir1_sign(facing, action) -> int8[:]"},
+    {"derive_specialhi_rotate_model_seed_lane", msl_derive_specialhi_rotate_model_seed_lane_py,
+     METH_VARARGS, "derive_specialhi_rotate_model_seed_lane(...) -> (angle, valid)"},
+    {"derive_throw_pulse_seed_lanes", msl_derive_throw_pulse_seed_lanes_py, METH_VARARGS,
+     "derive_throw_pulse_seed_lanes(...) -> (consumed,crossed_prev,pending)"},
+    {"derive_throw_laser_item_hitlist_seed_lanes",
+     msl_derive_throw_laser_item_hitlist_seed_lanes_py, METH_VARARGS,
+     "derive_throw_laser_item_hitlist_seed_lanes(...) -> "
+     "(victim_port,victim_cd,victim_hitbox_mask,victim_iid)"},
+    {"derive_item_attack_fields", msl_derive_item_attack_fields_py, METH_VARARGS,
+     "derive_item_attack_fields(item fields, fighter attack fields, players) -> "
+     "(attack_id,attack_instance)"},
+    {"derive_item_reflect_damage_mul", msl_derive_item_reflect_damage_mul_py, METH_VARARGS,
+     "derive_item_reflect_damage_mul(item fields, fighter fields, powershield_mul, players) -> "
+     "float32[:,slots]"},
+    {"derive_item_hidden_callback_seed_lanes", msl_derive_item_hidden_callback_seed_lanes_py,
+     METH_VARARGS,
+     "derive_item_hidden_callback_seed_lanes(seed/ref item fields, action fields, laser LUT) -> "
+     "item hidden callback arrays"},
+    {"derive_illusion_seed_position_updates", msl_derive_illusion_seed_position_updates_py,
+     METH_VARARGS,
+     "derive_illusion_seed_position_updates(item fields, fighter fields, illusion LUT) -> "
+     "(mask,pos_x,pos_y)"},
+    {"trim_stale_hitlist_seed_bridge", msl_trim_stale_hitlist_seed_bridge_py, METH_VARARGS,
+     "trim_stale_hitlist_seed_bridge(hitlist arrays, replay fields, constants) -> None"},
+    {"derive_attacker_shield_ground_kb_vel", msl_derive_attacker_shield_ground_kb_vel_py,
+     METH_VARARGS,
+     "derive_attacker_shield_ground_kb_vel(replay fields, LUTs, constants) -> float32[:,4]"},
+    {"derive_guardsetoff_frame_speed_overrides", msl_derive_guardsetoff_frame_speed_overrides_py,
+     METH_VARARGS,
+     "derive_guardsetoff_frame_speed_overrides(replay fields, LUTs, constants) -> float32[:,4]"},
+    {"derive_shield_contact_seed_bridge", msl_derive_shield_contact_seed_bridge_py, METH_VARARGS,
+     "derive_shield_contact_seed_bridge(hitlist arrays, replay fields, LUTs, constants) -> "
+     "(shield_hit_int_damage, shield_damage_taken)"},
+    {"derive_rebound_seed_lanes", msl_derive_rebound_seed_lanes_py, METH_VARARGS,
+     "derive_rebound_seed_lanes(replay fields, speeds, constants) -> (ground_accel_2, anim_rate)"},
+    {"derive_mpcoll_wall_seed_lanes", msl_derive_mpcoll_wall_seed_lanes_py, METH_VARARGS,
+     "derive_mpcoll_wall_seed_lanes(action, frame, hitlag, hitstun, pos_x, pos_y, stage, "
+     "segment arrays...) -> (kind, wall_id)"},
+    {"derive_source_clear_timer_x18c8_and_owner_phase_seed_lanes", msl_derive_source_clear_timer_py,
+     METH_VARARGS,
+     "derive_source_clear_timer_x18c8_and_owner_phase_seed_lanes(...) -> (timer, phase)"},
+    {"derive_source_clear_grounded_damage_clear_phase_seed_lane",
+     msl_derive_source_clear_grounded_damage_clear_phase_py, METH_VARARGS,
+     "derive_source_clear_grounded_damage_clear_phase_seed_lane(...) -> uint8[:]"},
+    {"derive_source_clear_terminal_phase_seed_lane", msl_derive_source_clear_terminal_phase_py,
+     METH_VARARGS, "derive_source_clear_terminal_phase_seed_lane(...) -> uint8[:]"},
+    {"derive_fighter_8006cda4_pre_gate_consume_count",
+     msl_derive_fighter_8006cda4_pre_gate_count_py, METH_VARARGS,
+     "derive_fighter_8006cda4_pre_gate_consume_count(...) -> uint8[:]"},
+    {"derive_source_clear_processhit_damage_pending_phase_seed_lane",
+     msl_derive_source_clear_processhit_damage_pending_phase_py, METH_VARARGS,
+     "derive_source_clear_processhit_damage_pending_phase_seed_lane(action, flags) -> uint8[:]"},
+    {"derive_phantom_damage_pending_seed_lanes", msl_derive_phantom_damage_pending_seed_lanes_py,
+     METH_VARARGS,
+     "derive_phantom_damage_pending_seed_lanes(percent, hitlag, action, hit_by, iid, players) -> "
+     "(damage,timer,source)"},
+    {"derive_grounded_overlap_hidden_pos_z", msl_derive_grounded_overlap_hidden_pos_z_py,
+     METH_VARARGS,
+     "derive_grounded_overlap_hidden_pos_z(num_players, char, action, ground, stocks, pos_x, "
+     "pos_z, facing, push_x_lut, push_y_lut, step, z_max) -> float32[:, :]"},
     {"compute_fighter_stick_input_counters", msl_compute_fighter_stick_input_counters_py,
      METH_VARARGS,
      "compute_fighter_stick_input_counters(stick_x, stick_y, tilt_thresh_x, tilt_thresh_y, "

@@ -42,12 +42,17 @@ class _BuildExt(build_ext):
 
 
 ROOT = Path(__file__).resolve().parent.parent
-DEPENDS = sorted(str(p.resolve()) for p in (ROOT / "src").rglob("*.h"))
+DEPENDS = sorted(
+    str(p.resolve())
+    for base in (ROOT / "src", ROOT / "python")
+    for p in base.rglob("*.h")
+)
 
 ext = Extension(
     name="msl_binding",
     sources=[
         str((ROOT / "python" / "msl_binding.c").resolve()),
+        str((ROOT / "python" / "msl_preprocess_native.c").resolve()),
         str((ROOT / "src" / "api.c").resolve()),
         str((ROOT / "src" / "alloc.c").resolve()),
         str((ROOT / "src" / "config.c").resolve()),
