@@ -730,8 +730,9 @@ Characters (Fox/Falco):
       `data/stages/{final_destination,battlefield,fountain_of_dreams,pokemon_stadium,yoshis_story,dream_land_n64}.json`
       into versioned artifacts. Runtime stage
       collision and match-flow stage roles consume these binary tables.
-    - Preserve source collision line IDs, floor/wall/ceiling class, line flags, ledge/platform bits,
-      world-scaled stage-point positions, and source-mapped spawn/respawn/camera/blast roles.
+    - Preserve source collision line IDs, raw `MapLine` graph links, floor/wall/ceiling class, line
+      flags, ledge/platform bits, world-scaled stage-point positions, and source-mapped
+      spawn/respawn/camera/blast roles.
     - Named spawn/respawn/camera/blast roles are derived from the same `map_head` stage-point table
       that `Ground_801C34AC` walks to populate `stage_info.x280[id]`.
     - Decomp consumers: `Stage_80224E64` for spawn, `Stage_80224E38` for respawn,
@@ -745,29 +746,43 @@ Characters (Fox/Falco):
     - `refs/melee/src/melee/gr/ground.c::Ground_801C126C`, `Ground_801C2D24`, `Ground_801C39C0`,
       `Ground_801C3BB4`
     - `refs/melee/src/melee/gr/stage.c::Stage_80224E64`, `Stage_80224E38`
-  - Binary layout: `MSLSTG01` v2
+  - Binary layout: `MSLSTG01` v5
     - `u8 magic[8] = "MSLSTG01"`
-    - `u32 version = 2`
-    - `u16 segment_count`, `stage_point_count`, `spawn_count`, `respawn_count`, reserved lanes
+    - `u32 version = 5`
+    - `u16 segment_count`, `stage_point_count`, `spawn_count`, `respawn_count`,
+      `platform_transform_count`, `platform_transform_record_bytes`, reserved lanes
     - `f32 cam_bounds_world[left,right,top,bottom]`
     - `f32 blast_bounds_world[left,right,top,bottom]`
-    - segment records: `line_id`, `kind_id`, `flags(platform/ledge)`, raw `hi_flags/lo_flags`,
-      world-scaled endpoints `(x0,y0,x1,y1)` after applying `grGroundParam.x0`
+    - segment records: `line_id`, `kind_id`, `flags(platform/ledge/fighter_solid)`,
+      raw `hi_flags/lo_flags`, raw `MapLine` links `prev_id0/next_id0/prev_id1/next_id1`,
+      world-scaled endpoints
+      `(x0,y0,x1,y1)` after applying `grGroundParam.x0`
     - world-scaled raw stage-point coordinate payloads
     - world-scaled spawn point payloads `(x,y)` for stage point ids `0..3`
     - world-scaled respawn point payloads `(x,y)` for stage point ids `4..7`; missing ids `5..7`
       follow `Ground_801C2D24` and fall back to id `4`
-  - Stale/non-v2 `MSLSTG01` tables must be rejected. Version 2 is the first version where
-    spawn/respawn/camera/blast roles are populated, not reserved/unset. Regenerate supported stage
-    artifacts with
+    - platform transform records: source line id, transform kind, platform id, source-local X span,
+      source-local static Y, and source-backed height coefficient for live moving platform lines
+  - Stale/non-v5 `MSLSTG01` tables must be rejected. Version 3 added the raw `MapLine` graph links
+    used by source-shaped `mpLineGetPrev/Next` traversal. Version 4 added generated fighter-solid
+    line policy. Version 5 adds source/data-backed platform transform records for live platform
+    world endpoints. Regenerate supported stage artifacts with
     `uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba,griz,grps,grst,grop --chars fox,falco`.
   - Supported runtime stage ids: `2` Fountain of Dreams, `3` Pokemon Stadium base, `8` Yoshi's
     Story, `28` Dream Land N64, `31` Battlefield, `32` Final Destination. Static pass-through
     platform flags are consumed by runtime fighter collision through source-shaped Pass/floor-skip
-    gating. FoD platform lines are source-local/static until stage-object transforms are modeled.
-    Frozen Pokemon Stadium uses a narrow runtime fighter-solid allowlist for base/no-transform line
-    ids; Pokemon Stadium transformations and moving-platform transforms remain runtime owner work,
-    not encoded MSLSTG01 behavior categories.
+    gating. FoD moving platform world Y is driven by Slippi's current FoD platform height event
+    stream and MSLSTG01 platform transform records derived from `grIzumi`/stage geometry data.
+    Frozen Pokemon Stadium fighter collision uses the generated `fighter_solid` mask for the
+    base/frozen legal-stage policy while keeping transformation geometry inspectable through debug
+    and data APIs.
+  - FoD seed lanes:
+    - `stage_fod_platform_height_f32[2]`, `stage_fod_platform_height_valid_u8[2]`
+    - Platform ids match Slippi/grIzumi (`0=right`, `1=left`). Missing events use source-backed
+      default current heights from `MSLSTG01` platform transform records; present events carry
+      forward by replay prefix only. These lanes close replay-seeded/eval FoD moving-platform
+      world-floor geometry. Free-running/new-match `grIzumi_801CC358` phase/timer/RNG scheduling is
+      not yet simulated.
   - Runtime keeps two floor views: the full debug/data graph, and a non-platform-only graph for
     hard-floor checks. Fighter grounding consumes static platform lines through the full floor graph
     when the source callback admits them, with `ftCo_Pass`/`mpUpdateFloorSkip`-shaped pass-through

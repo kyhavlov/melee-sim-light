@@ -23,7 +23,7 @@ from tools.slippi.known_data_artifacts import (
     read_mslftsc1_v1,
     read_mslitar1,
     read_mslpart1_v1,
-    read_mslstg01_v2,
+    read_mslstg01_v5,
     stage_metadata_bin_name_for_stage_id,
     stage_metadata_path_for_stage_id,
 )
@@ -801,7 +801,7 @@ def _stage_context(root: Path, row: np.void, player: int) -> dict[str, Any]:
         stage_path = stage_metadata_path_for_stage_id(stage_id, root / "data")
         if stage_path is None:
             return {"status": "unavailable", "reason": f"no MSLSTG01 context for stage_id {stage_id}"}
-        stage = read_mslstg01_v2(stage_path)
+        stage = read_mslstg01_v5(stage_path)
         kind_names = {0: "floor", 1: "ceiling", 2: "right_wall", 3: "left_wall", 4: "dynamic"}
         segments = [
             {

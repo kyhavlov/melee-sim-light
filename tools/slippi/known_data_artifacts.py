@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 STAGE_MAGIC = b"MSLSTG01"
-STAGE_VERSION = 2
+STAGE_VERSION = 5
 PART_MAGIC = b"MSLPART1"
 PART_VERSION = 1
 ITEM_ARTICLE_MAGIC = b"MSLITAR1"
@@ -26,6 +26,7 @@ STAGE_YOSHIS_STORY = 8
 STAGE_DREAM_LAND_N64 = 28
 STAGE_BATTLEFIELD = 31
 STAGE_FINAL_DESTINATION = 32
+STAGE_PLATFORM_TRANSFORM_KIND_HEIGHT = 1
 
 STAGE_METADATA_BIN_BY_STAGE_ID = {
     STAGE_FOUNTAIN_OF_DREAMS: "griz.bin",  # Fountain of Dreams / GrIz.dat
@@ -49,6 +50,7 @@ class StageMetadata:
     stage_points: tuple["StagePoint", ...]
     spawn_points: tuple["StagePoint2", ...]
     respawn_points: tuple["StagePoint2", ...]
+    platform_transforms: tuple["StagePlatformTransform", ...]
 
 
 @dataclass(frozen=True)
@@ -56,12 +58,28 @@ class StageSegment:
     line_id: int
     kind_id: int
     flags: int
+    fighter_solid: bool
     hi_flags: int
     lo_flags: int
+    prev_id0: int
+    next_id0: int
+    prev_id1: int
+    next_id1: int
     x0: float
     y0: float
     x1: float
     y1: float
+
+
+@dataclass(frozen=True)
+class StagePlatformTransform:
+    line_id: int
+    kind_id: int
+    platform_id: int
+    x0: float
+    x1: float
+    y_const: float
+    height_coeff: float
 
 
 @dataclass(frozen=True)
@@ -162,15 +180,15 @@ def _require_header(path: Path, magic: bytes, version: int, min_size: int) -> by
     return buf
 
 
-def read_mslstg01_v2(path: Path) -> StageMetadata:
+def read_mslstg01_v5(path: Path) -> StageMetadata:
     buf = _require_header(path, STAGE_MAGIC, STAGE_VERSION, 56)
     (
         segment_count,
         stage_point_count,
         spawn_count,
         respawn_count,
-        _reserved,
-        _reserved2,
+        platform_transform_count,
+        platform_transform_record_bytes,
         cam_l,
         cam_r,
         cam_t,
@@ -180,21 +198,35 @@ def read_mslstg01_v2(path: Path) -> StageMetadata:
         blast_t,
         blast_b,
     ) = struct.unpack_from("<HHHHHHffffffff", buf, 12)
-    expected = 56 + segment_count * 24 + stage_point_count * 12 + spawn_count * 8 + respawn_count * 8
+    expected = (
+        56
+        + segment_count * 32
+        + stage_point_count * 12
+        + spawn_count * 8
+        + respawn_count * 8
+        + platform_transform_count * platform_transform_record_bytes
+    )
     if len(buf) != expected:
         raise ValueError(f"MSLSTG01 size mismatch in {path}: header-derived {expected} != {len(buf)}")
     off = 56
     segments: list[StageSegment] = []
     for _ in range(segment_count):
-        line_id, kind_id, flags, hi_flags, lo_flags, x0, y0, x1, y1 = struct.unpack_from("<HBBHHffff", buf, off)
-        off += 24
+        line_id, kind_id, flags, hi_flags, lo_flags, prev_id0, next_id0, prev_id1, next_id1, x0, y0, x1, y1 = (
+            struct.unpack_from("<HBBHHhhhhffff", buf, off)
+        )
+        off += 32
         segments.append(
             StageSegment(
                 line_id=int(line_id),
                 kind_id=int(kind_id),
                 flags=int(flags),
+                fighter_solid=bool(int(flags) & 4),
                 hi_flags=int(hi_flags),
                 lo_flags=int(lo_flags),
+                prev_id0=int(prev_id0),
+                next_id0=int(next_id0),
+                prev_id1=int(prev_id1),
+                next_id1=int(next_id1),
                 x0=float(x0),
                 y0=float(y0),
                 x1=float(x1),
@@ -216,6 +248,27 @@ def read_mslstg01_v2(path: Path) -> StageMetadata:
         x, y = struct.unpack_from("<ff", buf, off)
         off += 8
         respawn_points.append(StagePoint2(float(x), float(y)))
+    platform_transforms: list[StagePlatformTransform] = []
+    for _ in range(platform_transform_count):
+        if platform_transform_record_bytes != 20:
+            raise ValueError(
+                f"MSLSTG01 unsupported platform transform record size in {path}: {platform_transform_record_bytes}"
+            )
+        line_id, kind_id, platform_id, x0, x1, y_const, height_coeff = struct.unpack_from(
+            "<HBBffff", buf, off
+        )
+        off += platform_transform_record_bytes
+        platform_transforms.append(
+            StagePlatformTransform(
+                line_id=int(line_id),
+                kind_id=int(kind_id),
+                platform_id=int(platform_id),
+                x0=float(x0),
+                x1=float(x1),
+                y_const=float(y_const),
+                height_coeff=float(height_coeff),
+            )
+        )
     if off != len(buf):
         raise ValueError(f"MSLSTG01 trailing bytes in {path}: parsed {off} != {len(buf)}")
     return StageMetadata(
@@ -229,7 +282,33 @@ def read_mslstg01_v2(path: Path) -> StageMetadata:
         stage_points=tuple(stage_points),
         spawn_points=tuple(spawn_points),
         respawn_points=tuple(respawn_points),
+        platform_transforms=tuple(platform_transforms),
     )
+
+
+def fountain_of_dreams_default_platform_heights(
+    data_root: Path | str = Path("data"),
+) -> tuple[float, float]:
+    """Return source-backed FoD platform initial heights by Slippi platform id.
+
+    Platform ids follow Slippi `fod_platform` events: 0=right, 1=left. The defaults come from the
+    generated MSLSTG01 v5 transform records rather than seed-generation local constants.
+    refs/melee/src/melee/gr/grizumi.c::{grIzumi_801CC358,grIzumi_801CCBDC}
+    data/stages/bin/griz.bin::MSLSTG01 platform_transforms
+    """
+    stage_path = stage_metadata_path_for_stage_id(STAGE_FOUNTAIN_OF_DREAMS, data_root)
+    if stage_path is None:
+        raise ValueError("missing Fountain of Dreams stage metadata path")
+    stage = read_mslstg01_v5(stage_path)
+    heights: list[float | None] = [None, None]
+    for rec in stage.platform_transforms:
+        if rec.kind_id != STAGE_PLATFORM_TRANSFORM_KIND_HEIGHT:
+            continue
+        if 0 <= rec.platform_id < 2:
+            heights[int(rec.platform_id)] = float(rec.y_const)
+    if heights[0] is None or heights[1] is None:
+        raise ValueError(f"{stage_path}: missing FoD platform height defaults")
+    return (float(heights[0]), float(heights[1]))
 
 
 def read_mslpart1_v1(path: Path) -> PartMetadata:

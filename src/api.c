@@ -1025,6 +1025,13 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
     batch->state.frame_id[bi] = seed->frame_id;
     batch->state.frame_pre_random_seed[bi] = seed->frame_pre_random_seed;
     batch->state.stage_id[bi] = seed->stage_id;
+    for (int pi = 0; pi < 2; pi++) {
+      const size_t pidx = (size_t)bi * 2u + (size_t)pi;
+      const float h = seed->stage_fod_platform_height_f32[pi];
+      batch->state.stage_fod_platform_height[pidx] = isfinite(h) ? h : 0.0f;
+      batch->state.stage_fod_platform_valid[pidx] =
+          (seed->stage_fod_platform_height_valid_u8[pi] && isfinite(h)) ? 1u : 0u;
+    }
     batch->state.opening_input_lock_timer[bi] = 0u;
     float match_damage_ratio = seed->match_damage_ratio;
     if (!(match_damage_ratio > 0.0f)) {

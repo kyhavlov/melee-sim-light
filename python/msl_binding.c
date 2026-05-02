@@ -2981,10 +2981,14 @@ static PyObject* msl_stage_floor_segment_py(PyObject* self, PyObject* args) {
     Py_RETURN_NONE;
   }
   const MslStageFloorLine* line = &graph->lines[(size_t)idx];
-  return Py_BuildValue("{s:i,s:f,s:f,s:f,s:f,s:i,s:i,s:i}", "segment_i", (int)line->segment_i, "x0",
-                       (double)line->x0, "y0", (double)line->y0, "x1", (double)line->x1, "y1",
-                       (double)line->y1, "is_ledge", (int)line->is_ledge, "is_platform",
-                       (int)line->is_platform, "line_index", idx);
+  return Py_BuildValue("{s:i,s:f,s:f,s:f,s:f,s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:i}", "segment_i",
+                       (int)line->segment_i, "x0", (double)line->x0, "y0", (double)line->y0, "x1",
+                       (double)line->x1, "y1", (double)line->y1, "is_ledge", (int)line->is_ledge,
+                       "is_platform", (int)line->is_platform, "fighter_solid",
+                       (int)line->fighter_solid, "raw_prev_id", (int)line->raw_prev_id,
+                       "raw_next_id", (int)line->raw_next_id, "has_prev_link",
+                       (int)line->has_prev_link, "has_next_link", (int)line->has_next_link, "prev",
+                       (int)line->prev, "next", (int)line->next, "line_index", idx);
 }
 
 static PyObject* msl_stage_fighter_floor_segment_py(PyObject* self, PyObject* args) {
@@ -3012,10 +3016,14 @@ static PyObject* msl_stage_fighter_floor_segment_py(PyObject* self, PyObject* ar
     Py_RETURN_NONE;
   }
   const MslStageFloorLine* line = &graph->lines[(size_t)idx];
-  return Py_BuildValue("{s:i,s:f,s:f,s:f,s:f,s:i,s:i,s:i}", "segment_i", (int)line->segment_i, "x0",
-                       (double)line->x0, "y0", (double)line->y0, "x1", (double)line->x1, "y1",
-                       (double)line->y1, "is_ledge", (int)line->is_ledge, "is_platform",
-                       (int)line->is_platform, "line_index", idx);
+  return Py_BuildValue("{s:i,s:f,s:f,s:f,s:f,s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:i}", "segment_i",
+                       (int)line->segment_i, "x0", (double)line->x0, "y0", (double)line->y0, "x1",
+                       (double)line->x1, "y1", (double)line->y1, "is_ledge", (int)line->is_ledge,
+                       "is_platform", (int)line->is_platform, "fighter_solid",
+                       (int)line->fighter_solid, "raw_prev_id", (int)line->raw_prev_id,
+                       "raw_next_id", (int)line->raw_next_id, "has_prev_link",
+                       (int)line->has_prev_link, "has_next_link", (int)line->has_next_link, "prev",
+                       (int)line->prev, "next", (int)line->next, "line_index", idx);
 }
 
 static PyObject* msl_stage_match_flow_roles_py(PyObject* self, PyObject* args) {

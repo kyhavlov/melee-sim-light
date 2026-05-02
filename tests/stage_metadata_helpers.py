@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from tools.slippi.known_data_artifacts import read_mslstg01_v2
+from tools.slippi.known_data_artifacts import read_mslstg01_v5
 
 _STAGE_KIND_BY_ID = {
     0: "floor",
@@ -14,7 +14,7 @@ _STAGE_KIND_BY_ID = {
 
 
 def fd_stage_segments() -> list[dict]:
-    stage = read_mslstg01_v2(Path("data/stages/bin/grnla.bin"))
+    stage = read_mslstg01_v5(Path("data/stages/bin/grnla.bin"))
     return [
         {
             "i": int(seg.line_id),
@@ -30,4 +30,3 @@ def fd_stage_segments() -> list[dict]:
         }
         for seg in stage.segments
     ]
-

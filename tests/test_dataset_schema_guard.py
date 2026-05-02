@@ -7,9 +7,11 @@ import numpy as np
 import pytest
 
 from tools.eval.dataset import SAMPLE_DTYPE, SEED_DTYPE
+from tools.slippi.known_data_artifacts import fountain_of_dreams_default_platform_heights
 from tools.slippi.make_dataset_from_slp import (
     _derive_jab_rapid_count_seed_lane,
     _derive_landing_fallspecial_allow_interrupt_seed_lane,
+    _fod_platform_heights_from_frames,
     _derive_specialhi_rotate_model_seed_lane,
     _derive_walljump_phase_seed_lanes,
 )
@@ -128,6 +130,9 @@ def test_seed_schema_includes_staling_fields() -> None:
     assert "jab_rapid_count" in SEED_DTYPE.fields
     # Repeated-hit combo push timer (`fp->x2092`) for grounded attacker drift after x2090 reaches x4C4.
     assert "combo_push_timer_x2092" in SEED_DTYPE.fields
+    # FoD current platform heights are causal current-stage state for transformed platform floors.
+    assert "stage_fod_platform_height_f32" in SEED_DTYPE.fields
+    assert "stage_fod_platform_height_valid_u8" in SEED_DTYPE.fields
 
 
 def test_dataset_dtype_sizes_match_c_structs() -> None:
@@ -153,6 +158,72 @@ def test_removed_nonfd_bridge_seed_lanes_stay_absent() -> None:
     )
     for lane in removed_lanes:
         assert lane not in SEED_DTYPE.fields
+
+
+class _FakeFrameType:
+    def __init__(self, *, has_fod_platform: bool) -> None:
+        self._has_fod_platform = has_fod_platform
+
+    def get_field_index(self, name: str) -> int:
+        return 0 if name == "fod_platform" and self._has_fod_platform else -1
+
+
+class _FakeFrameField:
+    def __init__(self, events: list[list[dict]]) -> None:
+        self._events = events
+
+    def to_pylist(self) -> list[list[dict]]:
+        return self._events
+
+
+class _FakeFrames:
+    def __init__(self, events: list[list[dict]] | None) -> None:
+        self.type = _FakeFrameType(has_fod_platform=events is not None)
+        self._events = events or []
+
+    def field(self, name: str) -> _FakeFrameField:
+        assert name == "fod_platform"
+        return _FakeFrameField(self._events)
+
+
+def test_fod_platform_seed_defaults_are_stage_artifact_backed() -> None:
+    defaults = fountain_of_dreams_default_platform_heights(Path("data"))
+    heights, valid = _fod_platform_heights_from_frames(
+        _FakeFrames(None),
+        4,
+        default_heights=defaults,
+    )
+    assert heights.shape == (4, 2)
+    assert np.all(heights == np.asarray(defaults, dtype=np.float32).reshape(1, 2))
+    assert np.all(valid == 0)
+
+
+def test_fod_platform_seed_derivation_uses_no_future_events() -> None:
+    defaults = fountain_of_dreams_default_platform_heights(Path("data"))
+    events = [
+        [],
+        [{"platform": 1, "height": 18.5}],
+        [],
+        [{"platform": 0, "height": 25.25}],
+    ]
+    full_heights, full_valid = _fod_platform_heights_from_frames(
+        _FakeFrames(events),
+        len(events),
+        default_heights=defaults,
+    )
+    prefix_heights, prefix_valid = _fod_platform_heights_from_frames(
+        _FakeFrames(events[:3]),
+        3,
+        default_heights=defaults,
+    )
+    assert full_heights[:3].tolist() == prefix_heights.tolist()
+    assert full_valid[:3].tolist() == prefix_valid.tolist()
+    assert float(full_heights[1, 1]) == pytest.approx(18.5)
+    assert int(full_valid[1, 1]) == 1
+    assert float(full_heights[2, 1]) == pytest.approx(18.5)
+    assert int(full_valid[2, 0]) == 0
+    assert float(full_heights[3, 0]) == pytest.approx(25.25)
+    assert int(full_valid[3, 0]) == 1
 
 
 def test_item_common_data_exports_shield_bounce_threshold_source() -> None:

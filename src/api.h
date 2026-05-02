@@ -196,6 +196,23 @@ typedef struct MslSeed {
   // elsewhere in the engine, if such scaling exists.
   // refs/melee/src/melee/gm/gm_16AE.c::gm_8016B248
   float match_damage_ratio;
+  // Fountain of Dreams dynamic platform height state for the two moving platforms.
+  //
+  // Decomp owner:
+  // - grIzumi_801CC358 updates platform ground-object JObjs and calls mpLib_80055E9C(platform_id).
+  // - Slippi 3.18+ exposes FoD platform height events as current stage-object state.
+  //
+  // Seed representation:
+  // - valid=1: height is the current replay-visible platform owner value for platform id
+  //   0=right, 1=left. Runtime converts it to world collision coordinates before floor checks.
+  // - valid=0: use extracted/default startup platform heights.
+  // This seed closes replay-seeded FoD floor geometry; free-running grIzumi phase/timer/RNG
+  // scheduling is not modeled by this field.
+  // refs/melee/src/melee/gr/grizumi.c::{grIzumi_801CC358,grIzumi_801CCBDC}
+  // refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
+  float stage_fod_platform_height_f32[2];
+  uint8_t stage_fod_platform_height_valid_u8[2];
+  uint8_t _pad_stage_fod[2];
   uint8_t num_players;  // 2 or 4 (<= MSL_MAX_PLAYERS)
   uint8_t is_teams;     // 0/1
   uint8_t _pad0[2];

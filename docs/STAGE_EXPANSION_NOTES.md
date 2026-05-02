@@ -5,19 +5,22 @@ Current staged state:
   Stadium, Yoshi's Story, and Dream Land N64 replays.
 - Focused suites exist for Battlefield, Fountain of Dreams, Pokemon Stadium, Yoshi's Story, and
   Dream Land N64.
-- `MSLSTG01` v2 extracts FD/Battlefield/Fountain/Pokemon/Yoshi/Dream Land collision segments,
-  platform/ledge flags, stage points, spawn/respawn points, and camera/blast bounds.
+- `MSLSTG01` v5 extracts FD/Battlefield/Fountain/Pokemon/Yoshi/Dream Land collision segments, raw
+  `MapLine` graph links, platform/ledge/fighter-solid flags, stage points, spawn/respawn points,
+  camera/blast bounds, and source-backed platform transform records.
 - Runtime/eval can load all six supported legal-stage artifacts. New-match init uses MSLSTG01
   spawn/respawn/camera/blast roles for all supported stages; Slippi neutral-spawn teams mode
   remains FD-only because that patch table is FD-specific.
-- Platform line data is admitted for inspection, and fighter grounding now consumes static
-  platform floors through source-shaped Pass/floor-skip gating. FoD platform lines are admitted in
-  their source-local/static positions for now; live FoD platform transforms remain stage-object
-  residual work.
-- Frozen Pokemon Stadium is a current-domain bridge: fighter-solid runtime collision is allowlisted
-  to base/frozen line ids `34,35,36,51..54` while all GrPs platform lines remain visible through
-  debug/data APIs. Deletion path: expose ground-object activation/transform state in MSLSTG01 or an
-  adjacent stage-object artifact and replace the allowlist with active object metadata.
+- Platform line data is admitted for inspection, and fighter grounding consumes admitted platform
+  floors through source-shaped Pass/floor-skip gating. FoD side-platform floor endpoints are
+  transformed at runtime from the current Slippi FoD platform-height event stream plus generated
+  MSLSTG01 transform records backed by `grIzumi` platform geometry. This closes replay-seeded/eval
+  FoD moving-platform world-floor admission; it does not yet free-run the full `grIzumi_801CC358`
+  phase/timer/RNG scheduler for new-match runtime.
+- Frozen Pokemon Stadium fighter-solid policy is generated into MSLSTG01 as line metadata for the
+  base/frozen legal-stage domain. Transformation geometry remains visible through debug/data APIs,
+  but fighter collision and floor traversal query the generated active/fighter-solid mask instead
+  of a runtime line-id allowlist.
 - Yoshi's Story Shy Guys (`It_Kind_Heiho`) are stage-owned item objects, not fighter articles.
   Runtime admits active state 1/4 generic item-position integration from visible `x40_vel`, but
   still does not model item-animation/dynamic-bone velocity, hidden spawn delay, RNG, or collision
@@ -32,8 +35,10 @@ Useful next stage work before deeper dynamic stage mechanics:
   `p_ftCommonData->x520`, but full `cur_pos` parity still requires causal `mv.co.unk_deadup.x50/x5C`,
   `xD4_unk_vel`, and `ftAnim_80070FD0` release ownership rather than MSLSTG01 spawn/respawn/camera
   hookup.
-- Model moving-platform transform / stage-object ownership. Pokemon Stadium validation is currently
-  restricted to frozen-stadium replays; transformation ownership remains out of scope for the
-  foreseeable runtime target.
-- Keep procedural mechanics out of `MSLSTG01`: moving platforms, ledge behavior, and mpColl branch
-  ordering remain runtime owner work, not table facts.
+- Free-running FoD platform scheduling remains stage-object runtime work if non-teacher-forced FoD
+  rollouts need platform motion without Slippi's current-height event stream.
+- Pokemon Stadium validation is currently restricted to frozen-stadium replays; transformation
+  ownership remains out of scope for the foreseeable runtime target.
+- Keep procedural mechanics out of `MSLSTG01`: random hazards, ledge behavior, and mpColl branch
+  ordering remain runtime owner work, not table facts. Stage geometry policy and static transform
+  metadata that come directly from source/data belong in generated artifacts.

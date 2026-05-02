@@ -13,6 +13,63 @@ LINE_FLAG_EMPTY = 1 << 7
 LINE_FLAG_PLATFORM = 1 << 8
 LINE_FLAG_LEDGE = 1 << 9
 
+PS_FROZEN_FIGHTER_SOLID_FLOORS = frozenset({34, 35, 36, 51, 52, 53, 54})
+
+
+def _fighter_solid_for_current_legal_policy(stage_dat: Path, kind: str, line_id: int) -> bool:
+    if kind != "floor":
+        return True
+    if stage_dat.name.lower() != "grps.dat":
+        return True
+    # Current legal Pokemon Stadium support is frozen/base geometry. The frozen policy suppresses
+    # transformation ground objects but keeps base body/platform floors active for fighter collision.
+    # Store that active mask in MSLSTG01 so runtime consumes data rather than a gameplay line-id
+    # switch.
+    # refs/slippi-ssbm-asm/Online/Core/Hacks/Stadium/IngameCheckIfFrozen.asm
+    # refs/melee/src/melee/gr/grpstadium.c::{grStadium_OnInit,grStadium_801D10F0}
+    # data/stages/pokemon_stadium.json::segments
+    return line_id in PS_FROZEN_FIGHTER_SOLID_FLOORS
+
+
+def _stage_platform_transforms(stage_dat: Path) -> list[dict]:
+    if stage_dat.name.lower() != "griz.dat":
+        return []
+    # FoD platform collision lines are source-local MapLine records whose world transform is owned
+    # by GrIz ground-object JObjs. The two side platforms use Slippi/grIzumi platform ids
+    # 0=right, 1=left; the top platform is static.
+    # refs/melee/src/melee/gr/grizumi.c::{grIzumi_801CC358,grIzumi_801CCBDC}
+    # refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
+    # tools/modelplay/viewer/src/components/viewer/Stage.tsx::FountainOfDreams
+    return [
+        {
+            "line_id": 0,
+            "kind": "height",
+            "platform_id": 1,
+            "x0": -49.5,
+            "x1": -21.0,
+            "y_const": 20.0,
+            "height_coeff": 0.80625,
+        },
+        {
+            "line_id": 1,
+            "kind": "height",
+            "platform_id": 0,
+            "x0": 21.0,
+            "x1": 49.5,
+            "y_const": 27.44186047,
+            "height_coeff": 0.80625,
+        },
+        {
+            "line_id": 2,
+            "kind": "static_y",
+            "platform_id": 255,
+            "x0": -14.25,
+            "x1": 14.25,
+            "y_const": 42.75,
+            "height_coeff": 0.0,
+        },
+    ]
+
 
 def _u16_be(buf: bytes, off: int) -> int:
     return int.from_bytes(buf[off : off + 2], "big", signed=False)
@@ -343,6 +400,10 @@ def _extract_segments(stage_dat: Path) -> dict:
         off = lines_abs + i * 0x10
         v0 = int(_u16_be(buf, off + 0x00))
         v1 = int(_u16_be(buf, off + 0x02))
+        prev_id0 = int(_s16_be(buf, off + 0x04))
+        next_id0 = int(_s16_be(buf, off + 0x06))
+        prev_id1 = int(_s16_be(buf, off + 0x08))
+        next_id1 = int(_s16_be(buf, off + 0x0A))
         hi_flags = int(_u16_be(buf, off + 0x0C))
         lo_flags = int(_u16_be(buf, off + 0x0E))
 
@@ -361,8 +422,15 @@ def _extract_segments(stage_dat: Path) -> dict:
                 "y0": y0,
                 "x1": x1,
                 "y1": y1,
+                "v0_idx": v0,
+                "v1_idx": v1,
+                "prev_id0": prev_id0,
+                "next_id0": next_id0,
+                "prev_id1": prev_id1,
+                "next_id1": next_id1,
                 "platform": bool(lo_flags & LINE_FLAG_PLATFORM),
                 "ledge": bool(lo_flags & LINE_FLAG_LEDGE),
+                "fighter_solid": _fighter_solid_for_current_legal_policy(stage_dat, kind, i),
                 "hi_flags": hi_flags,
                 "lo_flags": lo_flags,
             }
@@ -374,6 +442,7 @@ def _extract_segments(stage_dat: Path) -> dict:
         "vert_count": vert_count,
         "line_count": line_count,
         "segments": segments,
+        "platform_transforms": _stage_platform_transforms(stage_dat),
         **(_extract_stage_points(stage_dat, arc) or {}),
     }
 

@@ -16,7 +16,11 @@ from tools.eval.dataset import Dataset, HEADER_DTYPE, MAGIC, SAMPLE_DTYPE, write
 from tools.slippi.action_state_tables import load_action_state_tables
 from tools.slippi.hitstun import hitstun_u16_from_misc_as_and_state_flags3
 from tools.slippi.item_article_data import item_article_kind_set, item_article_values_by_sim_char
-from tools.slippi.known_data_artifacts import read_mslstg01_v2, stage_metadata_path_for_stage_id
+from tools.slippi.known_data_artifacts import (
+    fountain_of_dreams_default_platform_heights,
+    read_mslstg01_v5,
+    stage_metadata_path_for_stage_id,
+)
 from tools.slippi.rollback import finalized_frame_indices
 
 
@@ -50,7 +54,7 @@ def _load_stage_segments_for_seed(*, stage_id: int, data_root: Path) -> list[dic
     stage_path = stage_metadata_path_for_stage_id(int(stage_id), data_root)
     if stage_path is None:
         return []
-    stage = read_mslstg01_v2(stage_path)
+    stage = read_mslstg01_v5(stage_path)
     out: list[dict] = []
     for seg in stage.segments:
         out.append(
@@ -59,6 +63,7 @@ def _load_stage_segments_for_seed(*, stage_id: int, data_root: Path) -> list[dic
                 "kind": _STAGE_KIND_BY_ID.get(int(seg.kind_id), "dynamic"),
                 "platform": bool(int(seg.flags) & 1),
                 "ledge": bool(int(seg.flags) & 2),
+                "fighter_solid": bool(seg.fighter_solid),
                 "hi_flags": int(seg.hi_flags),
                 "lo_flags": int(seg.lo_flags),
                 "x0": float(seg.x0),
@@ -68,6 +73,43 @@ def _load_stage_segments_for_seed(*, stage_id: int, data_root: Path) -> list[dic
             }
         )
     return out
+
+
+def _fod_platform_heights_from_frames(
+    frames,
+    n_frames: int,
+    *,
+    default_heights: tuple[float, float],
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return replay-visible FoD platform heights, carried forward per frame.
+
+    Slippi 3.18+ emits `fod_platform` events with platform id 0=right, 1=left and the current
+    grIzumi platform height. Missing frames carry the previous height, matching the viewer parser's
+    stage-state handling.
+    refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+    tools/modelplay/viewer/src/parse/parser.ts::handleFodPlatformsEvent
+    """
+    default = np.asarray(default_heights, dtype=np.float32)
+    if default.shape != (2,):
+        raise ValueError(f"expected two FoD platform defaults, got shape {default.shape}")
+    heights = np.zeros((n_frames, 2), dtype=np.float32)
+    valid = np.zeros((n_frames, 2), dtype=np.uint8)
+    heights[:, :] = default.reshape(1, 2)
+    if frames.type.get_field_index("fod_platform") == -1:
+        return heights, valid
+    events = frames.field("fod_platform").to_pylist()
+    cur = default.copy()
+    cur_valid = np.zeros(2, dtype=np.uint8)
+    for fi, lst in enumerate(events):
+        if lst:
+            for ev in lst:
+                platform = int(ev.get("platform", -1))
+                if 0 <= platform < 2:
+                    cur[platform] = np.float32(float(ev.get("height", cur[platform])))
+                    cur_valid[platform] = np.uint8(1)
+        heights[fi, :] = cur
+        valid[fi, :] = cur_valid
+    return heights, valid
 
 
 def _dir_to_facing(direction: np.ndarray) -> np.ndarray:
@@ -564,7 +606,7 @@ def _stage_respawn_points_y(*, stage_id: int, data_dir: str = "data") -> np.ndar
     stage_path = stage_metadata_path_for_stage_id(int(stage_id), Path(data_dir))
     if stage_path is None:
         return None
-    stage = read_mslstg01_v2(stage_path)
+    stage = read_mslstg01_v5(stage_path)
     if len(stage.respawn_points) < 4:
         raise ValueError(f"{stage_path}: expected 4 respawn_points entries")
 
@@ -2486,6 +2528,13 @@ def _main_impl(args) -> Dataset:
     samples["seed_t"]["num_players"] = num_players
     samples["seed_t"]["is_teams"] = is_teams
     samples["seed_t"]["match_damage_ratio"] = np.float32(float(game.start.get("damage_ratio", 1.0)))
+    if int(stage_id) == 2:
+        fod_defaults = fountain_of_dreams_default_platform_heights(data_root)
+        fod_height, fod_valid = _fod_platform_heights_from_frames(
+            frames, n_frames, default_heights=fod_defaults
+        )
+        samples["seed_t"]["stage_fod_platform_height_f32"] = fod_height[:-1]
+        samples["seed_t"]["stage_fod_platform_height_valid_u8"] = fod_valid[:-1]
 
     # Staling seed schema (PP#4):
     # - Derive stale queue state strictly causally from replay history so one-step reseed can

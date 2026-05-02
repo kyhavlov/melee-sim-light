@@ -19,6 +19,16 @@ typedef struct {
   float bottom;
 } MslStageBoundsWorld;
 
+typedef struct {
+  uint16_t line_id;
+  uint8_t kind_id;
+  uint8_t platform_id;
+  float x0;
+  float x1;
+  float y_const;
+  float height_coeff;
+} MslStagePlatformTransform;
+
 static inline uint8_t stage_line_x_contains_closed(const MslStageFloorLine* line, float x) {
   return (uint8_t)(x >= line->x0 && x <= line->x1);
 }
@@ -54,6 +64,8 @@ typedef struct {
   size_t left_wall_line_count;
   MslStageWallLine* right_wall_lines;
   size_t right_wall_line_count;
+  MslStagePlatformTransform* platform_transforms;
+  size_t platform_transform_count;
   int loaded;
   uint8_t match_flow_loaded;
   MslStageFloorGraph floor_graph;
@@ -235,141 +247,30 @@ static void fd_sort_wall_lines_by_id(MslStageWallLine* lines, size_t n) {
   }
 }
 
-static inline uint8_t fd_f32_eq_ulps1(float a, float b) {
-  // Stage connectivity should come from shared vertices and thus be bit-identical after extraction
-  // + unit scaling. Accept a 1-ULP difference to reduce brittleness from float parsing while
-  // remaining deterministic.
-  union {
-    float f;
-    uint32_t u;
-  } ua = {a}, ub = {b};
-  if (ua.u == ub.u) {
-    return 1;
-  }
-  // Reject NaNs deterministically (not expected in stage data).
-  if (((ua.u & 0x7F800000u) == 0x7F800000u && (ua.u & 0x007FFFFFu) != 0) ||
-      ((ub.u & 0x7F800000u) == 0x7F800000u && (ub.u & 0x007FFFFFu) != 0)) {
-    return 0;
-  }
-  // Map float bits to an order-preserving integer space (so ULP distance is meaningful).
-  uint32_t ia = ua.u;
-  uint32_t ib = ub.u;
-  if (ia & 0x80000000u) {
-    ia = 0x80000000u - ia;
-  }
-  if (ib & 0x80000000u) {
-    ib = 0x80000000u - ib;
-  }
-  const uint32_t diff = (ia > ib) ? (ia - ib) : (ib - ia);
-  return (uint8_t)(diff <= 1u);
-}
-
-static void fd_build_floor_prev_next(MslStageFloorLine* lines, size_t n) {
-  if (lines == NULL) {
-    return;
-  }
-  for (size_t i = 0; i < n; i++) {
-    lines[i].prev = -1;
-    lines[i].next = -1;
-  }
-  for (size_t i = 0; i < n; i++) {
-    for (size_t j = 0; j < n; j++) {
-      if (i == j) {
-        continue;
-      }
-      // prev: a line whose right endpoint equals our left endpoint.
-      if (fd_f32_eq_ulps1(lines[j].x1, lines[i].x0) && fd_f32_eq_ulps1(lines[j].y1, lines[i].y0)) {
-        lines[i].prev = (int16_t)j;
-        break;
-      }
-    }
-    for (size_t j = 0; j < n; j++) {
-      if (i == j) {
-        continue;
-      }
-      // next: a line whose left endpoint equals our right endpoint.
-      if (fd_f32_eq_ulps1(lines[j].x0, lines[i].x1) && fd_f32_eq_ulps1(lines[j].y0, lines[i].y1)) {
-        lines[i].next = (int16_t)j;
-        break;
-      }
-    }
-  }
-}
-
-static void fd_build_ceiling_prev_next(MslStageCeilingLine* lines, size_t n) {
-  if (lines == NULL) {
-    return;
-  }
-  for (size_t i = 0; i < n; i++) {
-    lines[i].prev = -1;
-    lines[i].next = -1;
-  }
-  for (size_t i = 0; i < n; i++) {
-    for (size_t j = 0; j < n; j++) {
-      if (i == j) {
-        continue;
-      }
-      if (fd_f32_eq_ulps1(lines[j].x1, lines[i].x0) && fd_f32_eq_ulps1(lines[j].y1, lines[i].y0)) {
-        lines[i].prev = (int16_t)j;
-        break;
-      }
-    }
-    for (size_t j = 0; j < n; j++) {
-      if (i == j) {
-        continue;
-      }
-      if (fd_f32_eq_ulps1(lines[j].x0, lines[i].x1) && fd_f32_eq_ulps1(lines[j].y0, lines[i].y1)) {
-        lines[i].next = (int16_t)j;
-        break;
-      }
-    }
-  }
-}
-
-static void fd_build_wall_prev_next(MslStageWallLine* lines, size_t n) {
-  if (lines == NULL) {
-    return;
-  }
-  for (size_t i = 0; i < n; i++) {
-    lines[i].prev = -1;
-    lines[i].next = -1;
-  }
-  for (size_t i = 0; i < n; i++) {
-    for (size_t j = 0; j < n; j++) {
-      if (i == j) {
-        continue;
-      }
-      if (fd_f32_eq_ulps1(lines[j].x1, lines[i].x0) && fd_f32_eq_ulps1(lines[j].y1, lines[i].y0)) {
-        lines[i].prev = (int16_t)j;
-        break;
-      }
-    }
-    for (size_t j = 0; j < n; j++) {
-      if (i == j) {
-        continue;
-      }
-      if (fd_f32_eq_ulps1(lines[j].x0, lines[i].x1) && fd_f32_eq_ulps1(lines[j].y0, lines[i].y1)) {
-        lines[i].next = (int16_t)j;
-        break;
-      }
-    }
-  }
-}
-
 typedef enum {
   FD_SEG_UNKNOWN = 0,
   FD_SEG_FLOOR = 1,
   FD_SEG_CEILING = 2,
   FD_SEG_LEFT_WALL = 3,
   FD_SEG_RIGHT_WALL = 4,
+  FD_SEG_DYNAMIC = 5,
 } FdSegKind;
 
 typedef struct {
   FdSegKind kind;
   uint8_t ledge;
   uint8_t platform;
-  uint8_t _pad0;
+  uint8_t fighter_solid;
+  uint8_t reversed;
   uint16_t segment_i;
+  int16_t prev_id0;
+  int16_t next_id0;
+  int16_t prev_id1;
+  int16_t next_id1;
+  float raw_x0;
+  float raw_y0;
+  float raw_x1;
+  float raw_y1;
   float x0;
   float y0;
   float x1;
@@ -377,8 +278,9 @@ typedef struct {
 } FdSegTmp;
 
 static FdSegTmp fd_seg_tmp_normalized(FdSegKind kind, uint8_t ledge, uint8_t platform,
-                                      uint16_t segment_i, float fx0, float fy0, float fx1,
-                                      float fy1) {
+                                      uint8_t fighter_solid, uint16_t segment_i, int16_t prev_id0,
+                                      int16_t next_id0, int16_t prev_id1, int16_t next_id1,
+                                      float fx0, float fy0, float fx1, float fy1) {
   // Normalize orientation to match mplib assumptions for each line kind:
   // - floor: x0 <= x1
   //   refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
@@ -388,6 +290,11 @@ static FdSegTmp fd_seg_tmp_normalized(FdSegKind kind, uint8_t ledge, uint8_t pla
   //   refs/melee/src/melee/mp/mplib.c::mpLib_8004E398_LeftWall
   // - right_wall: y0 >= y1
   //   refs/melee/src/melee/mp/mplib.c::mpLib_8004E684_RightWall
+  uint8_t reversed = 0;
+  const float raw_x0 = fx0;
+  const float raw_y0 = fy0;
+  const float raw_x1 = fx1;
+  const float raw_y1 = fy1;
   if (kind == FD_SEG_FLOOR) {
     if (fx1 < fx0) {
       const float tx = fx0;
@@ -396,6 +303,7 @@ static FdSegTmp fd_seg_tmp_normalized(FdSegKind kind, uint8_t ledge, uint8_t pla
       fy0 = fy1;
       fx1 = tx;
       fy1 = ty;
+      reversed = 1;
     }
   } else if (kind == FD_SEG_CEILING) {
     if (fx1 > fx0) {
@@ -405,6 +313,7 @@ static FdSegTmp fd_seg_tmp_normalized(FdSegKind kind, uint8_t ledge, uint8_t pla
       fy0 = fy1;
       fx1 = tx;
       fy1 = ty;
+      reversed = 1;
     }
   } else if (kind == FD_SEG_LEFT_WALL) {
     if (fy1 < fy0) {
@@ -414,6 +323,7 @@ static FdSegTmp fd_seg_tmp_normalized(FdSegKind kind, uint8_t ledge, uint8_t pla
       fy0 = fy1;
       fx1 = tx;
       fy1 = ty;
+      reversed = 1;
     }
   } else if (kind == FD_SEG_RIGHT_WALL) {
     if (fy1 > fy0) {
@@ -423,18 +333,336 @@ static FdSegTmp fd_seg_tmp_normalized(FdSegKind kind, uint8_t ledge, uint8_t pla
       fy0 = fy1;
       fx1 = tx;
       fy1 = ty;
+      reversed = 1;
     }
   }
   return (FdSegTmp){
       .kind = kind,
       .ledge = ledge,
       .platform = platform,
+      .fighter_solid = fighter_solid,
+      .reversed = reversed,
       .segment_i = segment_i,
+      .prev_id0 = prev_id0,
+      .next_id0 = next_id0,
+      .prev_id1 = prev_id1,
+      .next_id1 = next_id1,
+      .raw_x0 = raw_x0,
+      .raw_y0 = raw_y0,
+      .raw_x1 = raw_x1,
+      .raw_y1 = raw_y1,
       .x0 = fx0,
       .y0 = fy0,
       .x1 = fx1,
       .y1 = fy1,
   };
+}
+
+static int fd_seg_tmp_index_by_line_id(const FdSegTmp* seg_tmp, size_t seg_n, int16_t line_id) {
+  if (seg_tmp == NULL || line_id < 0) {
+    return -1;
+  }
+  for (size_t i = 0; i < seg_n; i++) {
+    if (seg_tmp[i].segment_i == (uint16_t)line_id) {
+      return (int)i;
+    }
+  }
+  return -1;
+}
+
+static int16_t fd_resolve_source_prev_id(const FdSegTmp* seg_tmp, size_t seg_n, size_t i) {
+  // Decomp: mpLineGetPrev first tries prev_id1 when the linked line is enabled/visible and its v1 is
+  // within 2 units of this line's v0, otherwise it falls back to prev_id0.
+  // refs/melee/src/melee/mp/mplib.c::mpLineGetPrev
+  const FdSegTmp* line = &seg_tmp[i];
+  if (line->prev_id1 >= 0) {
+    const int target_i = fd_seg_tmp_index_by_line_id(seg_tmp, seg_n, line->prev_id1);
+    if (target_i >= 0) {
+      const FdSegTmp* target = &seg_tmp[(size_t)target_i];
+      const float dx = line->raw_x0 - target->raw_x1;
+      const float dy = line->raw_y0 - target->raw_y1;
+      if ((dx * dx + dy * dy) < 4.0f) {
+        return line->prev_id1;
+      }
+    }
+  }
+  return line->prev_id0;
+}
+
+static int16_t fd_resolve_source_next_id(const FdSegTmp* seg_tmp, size_t seg_n, size_t i) {
+  // Decomp: mpLineGetNext mirrors mpLineGetPrev at v1/v0.
+  // refs/melee/src/melee/mp/mplib.c::mpLineGetNext
+  const FdSegTmp* line = &seg_tmp[i];
+  if (line->next_id1 >= 0) {
+    const int target_i = fd_seg_tmp_index_by_line_id(seg_tmp, seg_n, line->next_id1);
+    if (target_i >= 0) {
+      const FdSegTmp* target = &seg_tmp[(size_t)target_i];
+      const float dx = line->raw_x1 - target->raw_x0;
+      const float dy = line->raw_y1 - target->raw_y0;
+      if ((dx * dx + dy * dy) < 4.0f) {
+        return line->next_id1;
+      }
+    }
+  }
+  return line->next_id0;
+}
+
+static void fd_oriented_source_links(const FdSegTmp* seg_tmp, size_t seg_n, size_t i,
+                                     int16_t* prev_out, int16_t* next_out) {
+  int16_t prev_id = fd_resolve_source_prev_id(seg_tmp, seg_n, i);
+  int16_t next_id = fd_resolve_source_next_id(seg_tmp, seg_n, i);
+  if (seg_tmp[i].reversed) {
+    const int16_t tmp = prev_id;
+    prev_id = next_id;
+    next_id = tmp;
+  }
+  if (prev_out) {
+    *prev_out = prev_id;
+  }
+  if (next_out) {
+    *next_out = next_id;
+  }
+}
+
+static uint8_t fd_seg_tmp_line_active_for_floor_graph(const FdSegTmp* seg_tmp, size_t seg_n,
+                                                      int16_t line_id) {
+  const int target_i = fd_seg_tmp_index_by_line_id(seg_tmp, seg_n, line_id);
+  if (target_i < 0) {
+    return 0u;
+  }
+  const FdSegTmp* target = &seg_tmp[(size_t)target_i];
+  return (uint8_t)(target->kind == FD_SEG_FLOOR && target->fighter_solid);
+}
+
+static int16_t fd_resolve_active_floor_prev_id(const FdSegTmp* seg_tmp, size_t seg_n, size_t i) {
+  const FdSegTmp* line = &seg_tmp[i];
+  if (line->prev_id1 >= 0 &&
+      fd_seg_tmp_line_active_for_floor_graph(seg_tmp, seg_n, line->prev_id1)) {
+    const int target_i = fd_seg_tmp_index_by_line_id(seg_tmp, seg_n, line->prev_id1);
+    const FdSegTmp* target = &seg_tmp[(size_t)target_i];
+    const float dx = line->raw_x0 - target->raw_x1;
+    const float dy = line->raw_y0 - target->raw_y1;
+    if ((dx * dx + dy * dy) < 4.0f) {
+      return line->prev_id1;
+    }
+  }
+  return fd_seg_tmp_line_active_for_floor_graph(seg_tmp, seg_n, line->prev_id0) ? line->prev_id0
+                                                                                : -1;
+}
+
+static int16_t fd_resolve_active_floor_next_id(const FdSegTmp* seg_tmp, size_t seg_n, size_t i) {
+  const FdSegTmp* line = &seg_tmp[i];
+  if (line->next_id1 >= 0 &&
+      fd_seg_tmp_line_active_for_floor_graph(seg_tmp, seg_n, line->next_id1)) {
+    const int target_i = fd_seg_tmp_index_by_line_id(seg_tmp, seg_n, line->next_id1);
+    const FdSegTmp* target = &seg_tmp[(size_t)target_i];
+    const float dx = line->raw_x1 - target->raw_x0;
+    const float dy = line->raw_y1 - target->raw_y0;
+    if ((dx * dx + dy * dy) < 4.0f) {
+      return line->next_id1;
+    }
+  }
+  return fd_seg_tmp_line_active_for_floor_graph(seg_tmp, seg_n, line->next_id0) ? line->next_id0
+                                                                                : -1;
+}
+
+static void fd_oriented_active_floor_links(const FdSegTmp* seg_tmp, size_t seg_n, size_t i,
+                                           int16_t* prev_out, int16_t* next_out) {
+  int16_t prev_id = fd_resolve_active_floor_prev_id(seg_tmp, seg_n, i);
+  int16_t next_id = fd_resolve_active_floor_next_id(seg_tmp, seg_n, i);
+  if (seg_tmp[i].reversed) {
+    const int16_t tmp = prev_id;
+    prev_id = next_id;
+    next_id = tmp;
+  }
+  if (prev_out) {
+    *prev_out = prev_id;
+  }
+  if (next_out) {
+    *next_out = next_id;
+  }
+}
+
+static int16_t fd_floor_index_by_segment_i(const MslStageFloorLine* lines, size_t n,
+                                           int16_t segment_i) {
+  if (lines == NULL || segment_i < 0) {
+    return -1;
+  }
+  for (size_t i = 0; i < n; i++) {
+    if (lines[i].segment_i == (uint16_t)segment_i) {
+      return (int16_t)i;
+    }
+  }
+  return -1;
+}
+
+static int16_t fd_ceiling_index_by_segment_i(const MslStageCeilingLine* lines, size_t n,
+                                             int16_t segment_i) {
+  if (lines == NULL || segment_i < 0) {
+    return -1;
+  }
+  for (size_t i = 0; i < n; i++) {
+    if (lines[i].segment_i == (uint16_t)segment_i) {
+      return (int16_t)i;
+    }
+  }
+  return -1;
+}
+
+static int16_t fd_wall_index_by_segment_i(const MslStageWallLine* lines, size_t n,
+                                          int16_t segment_i) {
+  if (lines == NULL || segment_i < 0) {
+    return -1;
+  }
+  for (size_t i = 0; i < n; i++) {
+    if (lines[i].segment_i == (uint16_t)segment_i) {
+      return (int16_t)i;
+    }
+  }
+  return -1;
+}
+
+static void fd_apply_floor_raw_links(uint32_t stage_id, MslStageFloorLine* lines, size_t n,
+                                     const FdSegTmp* seg_tmp, size_t seg_n) {
+  if (lines == NULL || seg_tmp == NULL) {
+    return;
+  }
+  for (size_t i = 0; i < n; i++) {
+    lines[i].raw_prev_id = -1;
+    lines[i].raw_next_id = -1;
+    lines[i].prev = -1;
+    lines[i].next = -1;
+    lines[i].has_prev_link = 0;
+    lines[i].has_next_link = 0;
+    const int tmp_i = fd_seg_tmp_index_by_line_id(seg_tmp, seg_n, (int16_t)lines[i].segment_i);
+    if (tmp_i < 0) {
+      continue;
+    }
+    int16_t prev_id = -1;
+    int16_t next_id = -1;
+    fd_oriented_source_links(seg_tmp, seg_n, (size_t)tmp_i, &prev_id, &next_id);
+    lines[i].raw_prev_id = prev_id;
+    lines[i].raw_next_id = next_id;
+    int16_t graph_prev_id = -1;
+    int16_t graph_next_id = -1;
+    fd_oriented_active_floor_links(seg_tmp, seg_n, (size_t)tmp_i, &graph_prev_id, &graph_next_id);
+    const int prev_tmp_i = fd_seg_tmp_index_by_line_id(seg_tmp, seg_n, graph_prev_id);
+    const int next_tmp_i = fd_seg_tmp_index_by_line_id(seg_tmp, seg_n, graph_next_id);
+    (void)stage_id;
+    const uint8_t current_active = lines[i].fighter_solid;
+    const uint8_t prev_active = (prev_tmp_i >= 0) ? seg_tmp[(size_t)prev_tmp_i].fighter_solid : 0u;
+    const uint8_t next_active = (next_tmp_i >= 0) ? seg_tmp[(size_t)next_tmp_i].fighter_solid : 0u;
+    if (current_active && prev_active && prev_tmp_i >= 0 &&
+        seg_tmp[(size_t)prev_tmp_i].kind == FD_SEG_FLOOR) {
+      lines[i].prev = fd_floor_index_by_segment_i(lines, n, graph_prev_id);
+    }
+    if (current_active && next_active && next_tmp_i >= 0 &&
+        seg_tmp[(size_t)next_tmp_i].kind == FD_SEG_FLOOR) {
+      lines[i].next = fd_floor_index_by_segment_i(lines, n, graph_next_id);
+    }
+    lines[i].has_prev_link = (uint8_t)(lines[i].prev >= 0);
+    lines[i].has_next_link = (uint8_t)(lines[i].next >= 0);
+  }
+
+  // Active floor graph remap:
+  // Frozen PS suppresses transformation ground objects. When a suppressed line sits between two
+  // active floor records, the direct mpLineGetPrev/Next result can be absent from the active graph
+  // even though the reverse source link on the neighboring active line still names this line.
+  // Preserve raw links for debug above, then build the runtime active graph from source adjacency in
+  // both directions instead of falling back to endpoint heuristics.
+  // refs/melee/src/melee/mp/mplib.c::{mpLineGetPrev,mpLineGetNext,mpCheckFloorRemap}
+  // refs/slippi-ssbm-asm/Online/Core/Hacks/Stadium/IngameCheckIfFrozen.asm
+  for (size_t i = 0; i < n; i++) {
+    if (!lines[i].fighter_solid) {
+      continue;
+    }
+    if (lines[i].prev < 0) {
+      for (size_t j = 0; j < n; j++) {
+        if (lines[j].fighter_solid && lines[j].next == (int16_t)i) {
+          lines[i].prev = (int16_t)j;
+          break;
+        }
+      }
+    }
+    if (lines[i].next < 0) {
+      for (size_t j = 0; j < n; j++) {
+        if (lines[j].fighter_solid && lines[j].prev == (int16_t)i) {
+          lines[i].next = (int16_t)j;
+          break;
+        }
+      }
+    }
+    lines[i].has_prev_link = (uint8_t)(lines[i].prev >= 0);
+    lines[i].has_next_link = (uint8_t)(lines[i].next >= 0);
+  }
+}
+
+static void fd_apply_ceiling_raw_links(MslStageCeilingLine* lines, size_t n,
+                                       const FdSegTmp* seg_tmp, size_t seg_n) {
+  if (lines == NULL || seg_tmp == NULL) {
+    return;
+  }
+  for (size_t i = 0; i < n; i++) {
+    lines[i].raw_prev_id = -1;
+    lines[i].raw_next_id = -1;
+    lines[i].prev = -1;
+    lines[i].next = -1;
+    lines[i].has_prev_link = 0;
+    lines[i].has_next_link = 0;
+    const int tmp_i = fd_seg_tmp_index_by_line_id(seg_tmp, seg_n, (int16_t)lines[i].segment_i);
+    if (tmp_i < 0) {
+      continue;
+    }
+    int16_t prev_id = -1;
+    int16_t next_id = -1;
+    fd_oriented_source_links(seg_tmp, seg_n, (size_t)tmp_i, &prev_id, &next_id);
+    lines[i].raw_prev_id = prev_id;
+    lines[i].raw_next_id = next_id;
+    lines[i].has_prev_link = (uint8_t)(prev_id >= 0);
+    lines[i].has_next_link = (uint8_t)(next_id >= 0);
+    const int prev_tmp_i = fd_seg_tmp_index_by_line_id(seg_tmp, seg_n, prev_id);
+    const int next_tmp_i = fd_seg_tmp_index_by_line_id(seg_tmp, seg_n, next_id);
+    if (prev_tmp_i >= 0 && seg_tmp[(size_t)prev_tmp_i].kind == FD_SEG_CEILING) {
+      lines[i].prev = fd_ceiling_index_by_segment_i(lines, n, prev_id);
+    }
+    if (next_tmp_i >= 0 && seg_tmp[(size_t)next_tmp_i].kind == FD_SEG_CEILING) {
+      lines[i].next = fd_ceiling_index_by_segment_i(lines, n, next_id);
+    }
+  }
+}
+
+static void fd_apply_wall_raw_links(MslStageWallLine* lines, size_t n, FdSegKind kind,
+                                    const FdSegTmp* seg_tmp, size_t seg_n) {
+  if (lines == NULL || seg_tmp == NULL) {
+    return;
+  }
+  for (size_t i = 0; i < n; i++) {
+    lines[i].raw_prev_id = -1;
+    lines[i].raw_next_id = -1;
+    lines[i].prev = -1;
+    lines[i].next = -1;
+    lines[i].has_prev_link = 0;
+    lines[i].has_next_link = 0;
+    const int tmp_i = fd_seg_tmp_index_by_line_id(seg_tmp, seg_n, (int16_t)lines[i].segment_i);
+    if (tmp_i < 0) {
+      continue;
+    }
+    int16_t prev_id = -1;
+    int16_t next_id = -1;
+    fd_oriented_source_links(seg_tmp, seg_n, (size_t)tmp_i, &prev_id, &next_id);
+    lines[i].raw_prev_id = prev_id;
+    lines[i].raw_next_id = next_id;
+    lines[i].has_prev_link = (uint8_t)(prev_id >= 0);
+    lines[i].has_next_link = (uint8_t)(next_id >= 0);
+    const int prev_tmp_i = fd_seg_tmp_index_by_line_id(seg_tmp, seg_n, prev_id);
+    const int next_tmp_i = fd_seg_tmp_index_by_line_id(seg_tmp, seg_n, next_id);
+    if (prev_tmp_i >= 0 && seg_tmp[(size_t)prev_tmp_i].kind == kind) {
+      lines[i].prev = fd_wall_index_by_segment_i(lines, n, prev_id);
+    }
+    if (next_tmp_i >= 0 && seg_tmp[(size_t)next_tmp_i].kind == kind) {
+      lines[i].next = fd_wall_index_by_segment_i(lines, n, next_id);
+    }
+  }
 }
 
 static int fd_install_stage_segments(uint32_t stage_id, const FdSegTmp* seg_tmp, size_t seg_n) {
@@ -510,10 +738,13 @@ static int fd_install_stage_segments(uint32_t stage_id, const FdSegTmp* seg_tmp,
           .y1 = s->y1,
           .is_ledge = s->ledge,
           .is_platform = s->platform,
+          .fighter_solid = s->fighter_solid,
           .has_prev_link = 0,
           .has_next_link = 0,
-          ._pad0 = {0, 0},
+          ._pad0 = {0},
           .segment_i = s->segment_i,
+          .raw_prev_id = -1,
+          .raw_next_id = -1,
           .prev = -1,
           .next = -1,
       };
@@ -526,6 +757,8 @@ static int fd_install_stage_segments(uint32_t stage_id, const FdSegTmp* seg_tmp,
           .has_prev_link = 0,
           .has_next_link = 0,
           .segment_i = s->segment_i,
+          .raw_prev_id = -1,
+          .raw_next_id = -1,
           .prev = -1,
           .next = -1,
       };
@@ -538,6 +771,8 @@ static int fd_install_stage_segments(uint32_t stage_id, const FdSegTmp* seg_tmp,
           .has_prev_link = 0,
           .has_next_link = 0,
           .segment_i = s->segment_i,
+          .raw_prev_id = -1,
+          .raw_next_id = -1,
           .prev = -1,
           .next = -1,
       };
@@ -550,6 +785,8 @@ static int fd_install_stage_segments(uint32_t stage_id, const FdSegTmp* seg_tmp,
           .has_prev_link = 0,
           .has_next_link = 0,
           .segment_i = s->segment_i,
+          .raw_prev_id = -1,
+          .raw_next_id = -1,
           .prev = -1,
           .next = -1,
       };
@@ -557,10 +794,10 @@ static int fd_install_stage_segments(uint32_t stage_id, const FdSegTmp* seg_tmp,
   }
 
   fd_sort_floor_lines_by_id(floor_lines, floor_n);
-  fd_build_floor_prev_next(floor_lines, floor_n);
+  fd_apply_floor_raw_links(stage_id, floor_lines, floor_n, seg_tmp, seg_n);
   size_t fighter_floor_n = 0;
   for (size_t i = 0; i < floor_n; i++) {
-    if (!floor_lines[i].is_platform) {
+    if (!floor_lines[i].is_platform && floor_lines[i].fighter_solid) {
       fighter_floor_n++;
     }
   }
@@ -582,7 +819,7 @@ static int fd_install_stage_segments(uint32_t stage_id, const FdSegTmp* seg_tmp,
   }
   size_t oi_fighter_floor = 0;
   for (size_t i = 0; i < floor_n; i++) {
-    if (!floor_lines[i].is_platform) {
+    if (!floor_lines[i].is_platform && floor_lines[i].fighter_solid) {
       fighter_floor_lines[oi_fighter_floor++] = floor_lines[i];
     }
   }
@@ -590,18 +827,18 @@ static int fd_install_stage_segments(uint32_t stage_id, const FdSegTmp* seg_tmp,
   // hard floors only. Runtime fighter platform collision uses the full floor graph with
   // pass-through/floor-skip gating in mpcoll_ground.c.
   // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
-  fd_build_floor_prev_next(fighter_floor_lines, fighter_floor_n);
+  fd_apply_floor_raw_links(stage_id, fighter_floor_lines, fighter_floor_n, seg_tmp, seg_n);
   if (ceil_n) {
     fd_sort_ceiling_lines_by_id(ceil_lines, ceil_n);
-    fd_build_ceiling_prev_next(ceil_lines, ceil_n);
+    fd_apply_ceiling_raw_links(ceil_lines, ceil_n, seg_tmp, seg_n);
   }
   if (lw_n) {
     fd_sort_wall_lines_by_id(lw_lines, lw_n);
-    fd_build_wall_prev_next(lw_lines, lw_n);
+    fd_apply_wall_raw_links(lw_lines, lw_n, FD_SEG_LEFT_WALL, seg_tmp, seg_n);
   }
   if (rw_n) {
     fd_sort_wall_lines_by_id(rw_lines, rw_n);
-    fd_build_wall_prev_next(rw_lines, rw_n);
+    fd_apply_wall_raw_links(rw_lines, rw_n, FD_SEG_RIGHT_WALL, seg_tmp, seg_n);
   }
 
   // Ledge candidates are floor segments with the ISO-derived LINE_FLAG_LEDGE bit.
@@ -636,109 +873,9 @@ static int fd_install_stage_segments(uint32_t stage_id, const FdSegTmp* seg_tmp,
     }
   }
 
-  // Compute endpoint connectivity hints (mpLib_8004ED5C uses prev/next only as boolean checks).
+  // Raw source graph links above provide endpoint connectivity hints for
+  // mpLib_8004ED5C-style endpoint extension.
   // refs/melee/src/melee/mp/mplib.c::mpLib_8004ED5C
-  //
-  // IMPORTANT: for floor grounding, keep the legacy behavior of extending endpoints only when
-  // connected to other floor segments (floor graph prev/next), not when connected to walls/ceilings.
-  // This avoids introducing floor-only collision behavior changes when we add wall/ceiling graphs.
-  for (size_t i = 0; i < floor_n; i++) {
-    floor_lines[i].has_prev_link = (uint8_t)(floor_lines[i].prev >= 0);
-    floor_lines[i].has_next_link = (uint8_t)(floor_lines[i].next >= 0);
-  }
-  for (size_t i = 0; i < ceil_n; i++) {
-    const uint16_t seg_i = ceil_lines[i].segment_i;
-    const float sx0 = ceil_lines[i].x0;
-    const float sy0 = ceil_lines[i].y0;
-    const float sx1 = ceil_lines[i].x1;
-    const float sy1 = ceil_lines[i].y1;
-    uint8_t c0 = 0;
-    uint8_t c1 = 0;
-    for (size_t j = 0; j < seg_n; j++) {
-      if (seg_tmp[j].segment_i == seg_i) {
-        continue;
-      }
-      const float ax0 = seg_tmp[j].x0;
-      const float ay0 = seg_tmp[j].y0;
-      const float ax1 = seg_tmp[j].x1;
-      const float ay1 = seg_tmp[j].y1;
-      if ((fd_f32_eq_ulps1(ax0, sx0) && fd_f32_eq_ulps1(ay0, sy0)) ||
-          (fd_f32_eq_ulps1(ax1, sx0) && fd_f32_eq_ulps1(ay1, sy0))) {
-        c0 = 1;
-      }
-      if ((fd_f32_eq_ulps1(ax0, sx1) && fd_f32_eq_ulps1(ay0, sy1)) ||
-          (fd_f32_eq_ulps1(ax1, sx1) && fd_f32_eq_ulps1(ay1, sy1))) {
-        c1 = 1;
-      }
-      if (c0 && c1) {
-        break;
-      }
-    }
-    ceil_lines[i].has_prev_link = c0;
-    ceil_lines[i].has_next_link = c1;
-  }
-  for (size_t i = 0; i < lw_n; i++) {
-    const uint16_t seg_i = lw_lines[i].segment_i;
-    const float sx0 = lw_lines[i].x0;
-    const float sy0 = lw_lines[i].y0;
-    const float sx1 = lw_lines[i].x1;
-    const float sy1 = lw_lines[i].y1;
-    uint8_t c0 = 0;
-    uint8_t c1 = 0;
-    for (size_t j = 0; j < seg_n; j++) {
-      if (seg_tmp[j].segment_i == seg_i) {
-        continue;
-      }
-      const float ax0 = seg_tmp[j].x0;
-      const float ay0 = seg_tmp[j].y0;
-      const float ax1 = seg_tmp[j].x1;
-      const float ay1 = seg_tmp[j].y1;
-      if ((fd_f32_eq_ulps1(ax0, sx0) && fd_f32_eq_ulps1(ay0, sy0)) ||
-          (fd_f32_eq_ulps1(ax1, sx0) && fd_f32_eq_ulps1(ay1, sy0))) {
-        c0 = 1;
-      }
-      if ((fd_f32_eq_ulps1(ax0, sx1) && fd_f32_eq_ulps1(ay0, sy1)) ||
-          (fd_f32_eq_ulps1(ax1, sx1) && fd_f32_eq_ulps1(ay1, sy1))) {
-        c1 = 1;
-      }
-      if (c0 && c1) {
-        break;
-      }
-    }
-    lw_lines[i].has_prev_link = c0;
-    lw_lines[i].has_next_link = c1;
-  }
-  for (size_t i = 0; i < rw_n; i++) {
-    const uint16_t seg_i = rw_lines[i].segment_i;
-    const float sx0 = rw_lines[i].x0;
-    const float sy0 = rw_lines[i].y0;
-    const float sx1 = rw_lines[i].x1;
-    const float sy1 = rw_lines[i].y1;
-    uint8_t c0 = 0;
-    uint8_t c1 = 0;
-    for (size_t j = 0; j < seg_n; j++) {
-      if (seg_tmp[j].segment_i == seg_i) {
-        continue;
-      }
-      const float ax0 = seg_tmp[j].x0;
-      const float ay0 = seg_tmp[j].y0;
-      const float ax1 = seg_tmp[j].x1;
-      const float ay1 = seg_tmp[j].y1;
-      if ((fd_f32_eq_ulps1(ax0, sx0) && fd_f32_eq_ulps1(ay0, sy0)) ||
-          (fd_f32_eq_ulps1(ax1, sx0) && fd_f32_eq_ulps1(ay1, sy0))) {
-        c0 = 1;
-      }
-      if ((fd_f32_eq_ulps1(ax0, sx1) && fd_f32_eq_ulps1(ay0, sy1)) ||
-          (fd_f32_eq_ulps1(ax1, sx1) && fd_f32_eq_ulps1(ay1, sy1))) {
-        c1 = 1;
-      }
-      if (c0 && c1) {
-        break;
-      }
-    }
-    rw_lines[i].has_prev_link = c0;
-    rw_lines[i].has_next_link = c1;
-  }
 
   alloc_free(slot->floor_lines);
   alloc_free(slot->fighter_floor_lines);
@@ -773,20 +910,29 @@ static int fd_install_stage_segments(uint32_t stage_id, const FdSegTmp* seg_tmp,
 }
 
 enum {
-  MSLSTG01_VERSION = 2,
+  MSLSTG01_VERSION = 5,
   MSLSTG01_HEADER_BYTES = 56,
-  MSLSTG01_SEGMENT_BYTES = 24,
+  MSLSTG01_SEGMENT_BYTES = 32,
   MSLSTG01_FLAG_PLATFORM = 1,
   MSLSTG01_FLAG_LEDGE = 2,
+  MSLSTG01_FLAG_FIGHTER_SOLID = 4,
   MSLSTG01_KIND_FLOOR = 0,
   MSLSTG01_KIND_CEILING = 1,
   MSLSTG01_KIND_RIGHT_WALL = 2,
   MSLSTG01_KIND_LEFT_WALL = 3,
   MSLSTG01_KIND_DYNAMIC = 4,
+  MSLSTG01_PLATFORM_TRANSFORM_HEIGHT = 1,
+  MSLSTG01_PLATFORM_TRANSFORM_STATIC_Y = 2,
 };
 
 static uint16_t stage_read_u16_le(const uint8_t* p) {
   uint16_t v = 0;
+  memcpy(&v, p, sizeof(v));
+  return v;
+}
+
+static int16_t stage_read_s16_le(const uint8_t* p) {
+  int16_t v = 0;
   memcpy(&v, p, sizeof(v));
   return v;
 }
@@ -813,6 +959,8 @@ static FdSegKind fd_seg_kind_from_mslstg(uint8_t kind_id) {
       return FD_SEG_LEFT_WALL;
     case MSLSTG01_KIND_RIGHT_WALL:
       return FD_SEG_RIGHT_WALL;
+    case MSLSTG01_KIND_DYNAMIC:
+      return FD_SEG_DYNAMIC;
     default:
       return FD_SEG_UNKNOWN;
   }
@@ -867,6 +1015,48 @@ static void stage_install_match_flow_from_mslstg01(uint32_t stage_id, const uint
   slot->match_flow_loaded = 1u;
 }
 
+static int stage_install_platform_transforms_from_mslstg01(
+    uint32_t stage_id, const uint8_t* buf, uint16_t segment_count, uint16_t stage_point_count,
+    uint16_t spawn_count, uint16_t respawn_count, uint16_t transform_count,
+    uint16_t transform_record_bytes) {
+  MslStageSlot* slot = stage_slot_mut(stage_id);
+  if (slot == NULL) {
+    return -1;
+  }
+  if (transform_count == 0u) {
+    alloc_free(slot->platform_transforms);
+    slot->platform_transforms = NULL;
+    slot->platform_transform_count = 0u;
+    return 0;
+  }
+  if (transform_record_bytes != 20u) {
+    return -1;
+  }
+  MslStagePlatformTransform* recs = (MslStagePlatformTransform*)alloc_calloc(
+      (size_t)transform_count, sizeof(MslStagePlatformTransform));
+  if (recs == NULL) {
+    return -1;
+  }
+  const uint8_t* p =
+      buf + MSLSTG01_HEADER_BYTES + (size_t)segment_count * (size_t)MSLSTG01_SEGMENT_BYTES +
+      (size_t)stage_point_count * 12u + (size_t)spawn_count * 8u + (size_t)respawn_count * 8u;
+  for (uint16_t i = 0; i < transform_count; i++, p += 20u) {
+    recs[i] = (MslStagePlatformTransform){
+        .line_id = stage_read_u16_le(p + 0),
+        .kind_id = p[2],
+        .platform_id = p[3],
+        .x0 = stage_read_f32_le(p + 4),
+        .x1 = stage_read_f32_le(p + 8),
+        .y_const = stage_read_f32_le(p + 12),
+        .height_coeff = stage_read_f32_le(p + 16),
+    };
+  }
+  alloc_free(slot->platform_transforms);
+  slot->platform_transforms = recs;
+  slot->platform_transform_count = transform_count;
+  return 0;
+}
+
 static int fd_load_floor_lines_from_mslstg01(uint32_t stage_id, const uint8_t* buf, size_t sz) {
   if (buf == NULL || sz < (size_t)MSLSTG01_HEADER_BYTES || memcmp(buf, "MSLSTG01", 8) != 0) {
     return -1;
@@ -879,9 +1069,12 @@ static int fd_load_floor_lines_from_mslstg01(uint32_t stage_id, const uint8_t* b
   const uint16_t stage_point_count = stage_read_u16_le(buf + 14);
   const uint16_t spawn_count = stage_read_u16_le(buf + 16);
   const uint16_t respawn_count = stage_read_u16_le(buf + 18);
+  const uint16_t platform_transform_count = stage_read_u16_le(buf + 20);
+  const uint16_t platform_transform_record_bytes = stage_read_u16_le(buf + 22);
   const size_t expected =
       (size_t)MSLSTG01_HEADER_BYTES + (size_t)segment_count * (size_t)MSLSTG01_SEGMENT_BYTES +
-      (size_t)stage_point_count * 12u + (size_t)spawn_count * 8u + (size_t)respawn_count * 8u;
+      (size_t)stage_point_count * 12u + (size_t)spawn_count * 8u + (size_t)respawn_count * 8u +
+      (size_t)platform_transform_count * (size_t)platform_transform_record_bytes;
   if (sz != expected || segment_count == 0u || segment_count > 4096u) {
     return -1;
   }
@@ -896,25 +1089,29 @@ static int fd_load_floor_lines_from_mslstg01(uint32_t stage_id, const uint8_t* b
     const uint16_t line_id = stage_read_u16_le(p + 0);
     const uint8_t kind_id = p[2];
     const uint8_t flags = p[3];
-    if (kind_id == (uint8_t)MSLSTG01_KIND_DYNAMIC) {
-      continue;
-    }
     const FdSegKind kind = fd_seg_kind_from_mslstg(kind_id);
     if (!(kind == FD_SEG_FLOOR || kind == FD_SEG_CEILING || kind == FD_SEG_LEFT_WALL ||
-          kind == FD_SEG_RIGHT_WALL)) {
+          kind == FD_SEG_RIGHT_WALL || kind == FD_SEG_DYNAMIC)) {
       continue;
     }
-    // MSLSTG01 v2 stores world-scaled source collision segment endpoints.
+    // MSLSTG01 stores source MapLine links and world-scaled source collision segment endpoints.
     // docs/DATA_CONTRACT.md::MSLSTG01
-    seg_tmp[seg_n++] =
-        fd_seg_tmp_normalized(kind, (uint8_t)((flags & (uint8_t)MSLSTG01_FLAG_LEDGE) != 0u),
-                              (uint8_t)((flags & (uint8_t)MSLSTG01_FLAG_PLATFORM) != 0u), line_id,
-                              stage_read_f32_le(p + 8), stage_read_f32_le(p + 12),
-                              stage_read_f32_le(p + 16), stage_read_f32_le(p + 20));
+    seg_tmp[seg_n++] = fd_seg_tmp_normalized(
+        kind, (uint8_t)((flags & (uint8_t)MSLSTG01_FLAG_LEDGE) != 0u),
+        (uint8_t)((flags & (uint8_t)MSLSTG01_FLAG_PLATFORM) != 0u),
+        (uint8_t)((flags & (uint8_t)MSLSTG01_FLAG_FIGHTER_SOLID) != 0u), line_id,
+        stage_read_s16_le(p + 8), stage_read_s16_le(p + 10), stage_read_s16_le(p + 12),
+        stage_read_s16_le(p + 14), stage_read_f32_le(p + 16), stage_read_f32_le(p + 20),
+        stage_read_f32_le(p + 24), stage_read_f32_le(p + 28));
   }
   stage_install_match_flow_from_mslstg01(stage_id, buf, segment_count, stage_point_count,
                                          spawn_count, respawn_count);
-  const int err = fd_install_stage_segments(stage_id, seg_tmp, seg_n);
+  int err = stage_install_platform_transforms_from_mslstg01(
+      stage_id, buf, segment_count, stage_point_count, spawn_count, respawn_count,
+      platform_transform_count, platform_transform_record_bytes);
+  if (err == 0) {
+    err = fd_install_stage_segments(stage_id, seg_tmp, seg_n);
+  }
   alloc_free(seg_tmp);
   return err;
 }
@@ -1085,32 +1282,59 @@ uint8_t stage_collision_floor_line_is_platform(uint32_t stage_id, uint16_t segme
 }
 
 uint8_t stage_collision_floor_line_is_runtime_fighter_solid(uint32_t stage_id, uint16_t segment_i) {
-  if (stage_id != (uint32_t)MSL_STAGE_POKEMON_STADIUM) {
+  const MslStageFloorGraph* g = stage_collision_get_floor_graph(stage_id);
+  if (g == NULL) {
+    return 0u;
+  }
+  for (size_t i = 0; i < g->line_count; i++) {
+    if (g->lines[i].segment_i == segment_i) {
+      return g->lines[i].fighter_solid ? 1u : 0u;
+    }
+  }
+  return 0u;
+}
+
+uint8_t stage_collision_floor_line_world(const MslBatch* batch, int bi,
+                                         const MslStageFloorLine* line, MslStageFloorLine* out) {
+  if (line == NULL || out == NULL) {
+    return 0u;
+  }
+  *out = *line;
+  if (batch == NULL || bi < 0 || bi >= batch->batch_size) {
     return 1u;
   }
-  // Current PS validation domain is frozen Stadium. Slippi's Frozen PS toggle makes the engine
-  // take the vanilla Training Mode no-transformation branch, so transformation object collision
-  // lines from GrPs.dat must not become fighter-solid merely because they are present in MSLSTG01.
-  //
-  // MSLSTG01 v2 does not yet expose per-ground-object activation, so keep this explicit
-  // current-domain guard to the base/frozen collision line ids observed in the source stage data:
-  // main floor + ledge floor pieces (34,51..54) and the two frozen side platforms (35,36).
-  //
-  // refs/slippi-ssbm-asm/Online/Core/Hacks/Stadium/IngameCheckIfFrozen.asm
-  // refs/melee/src/melee/gr/grpstadium.c::{grStadium_OnInit,grStadium_801D10F0}
-  // data/stages/bin/grps.bin::MSLSTG01 line ids
-  switch (segment_i) {
-    case 34u:
-    case 35u:
-    case 36u:
-    case 51u:
-    case 52u:
-    case 53u:
-    case 54u:
-      return 1u;
-    default:
-      return 0u;
+  const MslStageSlot* slot = stage_slot(batch->state.stage_id[bi]);
+  if (slot == NULL || slot->platform_transforms == NULL || slot->platform_transform_count == 0u) {
+    return 1u;
   }
+
+  // Dynamic/static platform transform records are extracted from stage data/source owner notes.
+  // FoD uses grIzumi JObj height records; other stages currently have no transform records.
+  // refs/melee/src/melee/gr/grizumi.c::{grIzumi_801CC358,grIzumi_801CCBDC}
+  // refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
+  // data/stages/bin/*.bin::MSLSTG01 platform transform records
+  for (size_t i = 0; i < slot->platform_transform_count; i++) {
+    const MslStagePlatformTransform* rec = &slot->platform_transforms[i];
+    if (rec->line_id != line->segment_i) {
+      continue;
+    }
+    out->x0 = rec->x0;
+    out->x1 = rec->x1;
+    if (rec->kind_id == (uint8_t)MSLSTG01_PLATFORM_TRANSFORM_STATIC_Y) {
+      out->y0 = rec->y_const;
+      out->y1 = rec->y_const;
+    } else if (rec->kind_id == (uint8_t)MSLSTG01_PLATFORM_TRANSFORM_HEIGHT &&
+               rec->platform_id < 2u) {
+      const size_t idx = (size_t)bi * 2u + (size_t)rec->platform_id;
+      const float h = batch->state.stage_fod_platform_valid[idx]
+                          ? batch->state.stage_fod_platform_height[idx]
+                          : rec->y_const;
+      out->y0 = h * rec->height_coeff;
+      out->y1 = out->y0;
+    }
+    return 1u;
+  }
+  return 1u;
 }
 
 const MslStageCeilingGraph* stage_collision_get_ceiling_graph(uint32_t stage_id) {

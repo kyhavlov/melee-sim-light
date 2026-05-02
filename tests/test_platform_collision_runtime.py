@@ -9,10 +9,21 @@ from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE, read_data
 
 
 ACT_WAIT = 0x000E
+ACT_WALK_MIDDLE = 0x0010
+ACT_DASH = 0x0014
+ACT_RUN = 0x0015
+ACT_RUN_BRAKE = 0x0017
 ACT_FALL = 0x001D
 ACT_SQUAT_WAIT = 0x0028
+ACT_LANDING_FALL_SPECIAL = 0x002B
+ACT_GUARD_ON = 0x00B2
 ACT_DAMAGE_FALL = 0x0026
 ACT_GUARD = 0x00B3
+ACT_GUARD_SET_OFF = 0x00B5
+ACT_GUARD_REFLECT = 0x00B6
+ACT_DOWN_BOUND_U = 0x00B7
+ACT_DOWN_WAIT_U = 0x00B8
+ACT_PASSIVE = 0x00C7
 ACT_PASS = 0x00F4
 
 SM_WAIT1_0 = 2
@@ -30,7 +41,7 @@ ACT_FX_SPECIAL_AIR_LW_START = 0x016D
 @pytest.mark.parametrize(
     ("stage_id", "line_id", "x", "y"),
     [
-        (2, 0, 0.0, 1.125),  # FoD source-local platform; live moving transforms are residual
+        (2, 0, 0.0, 1.125),  # FoD source-local platform; runtime transforms live lines.
         (31, 2, -40.0, 27.200000762939453),  # Battlefield left platform
         (8, 4, 0.0, 42.0),  # Yoshi's Story top platform
         (28, 2, 0.0, 51.42530059814453),  # Dream Land top platform
@@ -108,7 +119,7 @@ def _step_once(seed: np.ndarray, prev_input: np.ndarray | None = None, input_t: 
 @pytest.mark.parametrize(
     ("stage_id", "line_id", "x", "y"),
     [
-        (2, 0, 0.0, 1.125),
+        (2, 2, 0.0, 42.75),
         (31, 2, -40.0, 27.200000762939453),
         (8, 4, 0.0, 42.0),
         (28, 2, 0.0, 51.42530059814453),
@@ -128,6 +139,55 @@ def test_grounded_fighter_stays_on_static_platform(stage_id: int, line_id: int, 
     assert float(out["pos_y"][0]) == pytest.approx(y + 0.0001, abs=1e-5)
 
 
+@pytest.mark.parametrize(
+    "action_id",
+    [
+        ACT_WAIT,
+        ACT_WALK_MIDDLE,
+        ACT_DASH,
+        ACT_RUN,
+        ACT_RUN_BRAKE,
+        ACT_SQUAT_WAIT,
+        ACT_GUARD_ON,
+        ACT_GUARD,
+        ACT_GUARD_SET_OFF,
+        ACT_GUARD_REFLECT,
+        ACT_DOWN_BOUND_U,
+        ACT_DOWN_WAIT_U,
+        ACT_PASSIVE,
+        ACT_LANDING_FALL_SPECIAL,
+    ],
+)
+def test_battlefield_platform_persistence_covers_grounded_action_families(action_id: int) -> None:
+    seed = _seed_base(31, action_id, 0, -40.0, 27.200000762939453)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(2)
+
+    out = _step_once(seed)
+
+    assert int(out["on_ground"][0]) == 1
+    assert int(out["ground_id"][0]) == 2
+
+
+def test_fountain_left_moving_platform_uses_seeded_stage_height() -> None:
+    # FoD platform state is owned by grIzumi_801CC358 and exposed by Slippi fod_platform events.
+    # Runtime must transform the stable source line id instead of grounding on the source-local
+    # MSLSTG01 y=1.125 platform row.
+    height = np.float32(19.899999618530273)
+    world_y = np.float32(float(height) * 0.80625)
+    seed = _seed_base(2, ACT_WAIT, SM_WAIT1_0, -35.0, float(world_y))
+    seed["stage_fod_platform_height_f32"][0, 1] = height  # platform id 1 = left
+    seed["stage_fod_platform_height_valid_u8"][0, 1] = np.uint8(1)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(0)
+
+    out = _step_once(seed)
+
+    assert int(out["on_ground"][0]) == 1
+    assert int(out["ground_id"][0]) == 0
+    assert float(out["pos_y"][0]) == pytest.approx(float(world_y) + 0.0001, abs=1e-5)
+
+
 def test_guard_on_yoshi_platform_stays_grounded() -> None:
     seed = _seed_base(8, ACT_GUARD, 0, 0.0, 42.0)
     seed["on_ground"][0, 0] = np.uint8(1)
@@ -143,7 +203,7 @@ def test_guard_on_yoshi_platform_stays_grounded() -> None:
 @pytest.mark.parametrize(
     ("stage_id", "line_id", "x", "y"),
     [
-        (2, 0, 0.0, 1.125),
+        (2, 2, 0.0, 42.75),
         (31, 2, -40.0, 27.200000762939453),
         (8, 4, 0.0, 42.0),
         (28, 2, 0.0, 51.42530059814453),

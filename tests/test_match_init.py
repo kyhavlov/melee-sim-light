@@ -16,7 +16,7 @@ from tools.modelplay.sim_env import (
 )
 from tools.modelplay.state_adapter import MSL_STAGE_FINAL_DESTINATION
 from tools.modelplay.sim_env import SimSession
-from tools.slippi.known_data_artifacts import read_mslstg01_v2, stage_metadata_path_for_stage_id
+from tools.slippi.known_data_artifacts import read_mslstg01_v5, stage_metadata_path_for_stage_id
 
 
 ACT_ENTRY = 0x0142
@@ -118,7 +118,7 @@ def test_init_match_uses_mslstg01_spawn_roles_for_supported_non_fd_stage(stage_i
     stage_path = stage_metadata_path_for_stage_id(stage_id)
     if stage_path is None or not stage_path.exists():
         pytest.skip(f"missing local stage artifact: {stage_path}")
-    stage = read_mslstg01_v2(stage_path)
+    stage = read_mslstg01_v5(stage_path)
     handle = _init_handle_or_skip(binding)
     try:
         config = build_match_config_array(

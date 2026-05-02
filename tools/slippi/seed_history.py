@@ -7,7 +7,7 @@ from pathlib import Path
 
 import numpy as np
 
-from tools.slippi.known_data_artifacts import read_mslstg01_v2, stage_metadata_path_for_stage_id
+from tools.slippi.known_data_artifacts import read_mslstg01_v5, stage_metadata_path_for_stage_id
 
 
 def derive_instance_id_x2073(
@@ -968,7 +968,7 @@ def _stage_cam_bounds_world(
     stage_path = stage_metadata_path_for_stage_id(int(stage_id), Path(str(data_dir)))
     if stage_path is None:
         return None
-    stage = read_mslstg01_v2(stage_path)
+    stage = read_mslstg01_v5(stage_path)
     left, right, top, bottom = stage.cam_bounds_world
     if not (left < right and bottom < top):
         return None

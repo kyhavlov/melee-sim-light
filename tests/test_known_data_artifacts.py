@@ -33,7 +33,7 @@ from tools.slippi.known_data_artifacts import (
     read_mslftsc1_v1,
     read_mslitar1,
     read_mslpart1_v1,
-    read_mslstg01_v2,
+    read_mslstg01_v5,
     stage_metadata_bin_name_for_stage_id,
     stage_metadata_path_for_stage_id,
 )
@@ -86,7 +86,7 @@ def test_stage_metadata_registry_covers_supported_domain() -> None:
 
 @pytest.mark.integration
 def test_stage_metadata_fd_known_rows() -> None:
-    stage = read_mslstg01_v2(Path("data/stages/bin/grnla.bin"))
+    stage = read_mslstg01_v5(Path("data/stages/bin/grnla.bin"))
     assert stage.segment_count == 16
     assert stage.stage_point_count == 22
     assert stage.spawn_count == 4
@@ -102,9 +102,11 @@ def test_stage_metadata_fd_known_rows() -> None:
     seg0 = stage.segments[0]
     assert seg0.line_id == 0
     assert seg0.kind_id == 0  # floor
-    assert seg0.flags == 0x2  # ledge
+    assert (seg0.flags & 0x3) == 0x2  # ledge
+    assert seg0.fighter_solid is True
     assert seg0.hi_flags == 1
     assert seg0.lo_flags == 0x200
+    assert (seg0.prev_id0, seg0.next_id0, seg0.prev_id1, seg0.next_id1) == (11, 1, -1, -1)
     assert (seg0.x0, seg0.y0, seg0.x1, seg0.y1) == pytest.approx((-85.5656967, 0.0, -75.0, 0.0))
     assert (stage.stage_points[1].x, stage.stage_points[1].y, stage.stage_points[1].z) == pytest.approx(
         (0.0, 12.0, 0.0)
@@ -113,7 +115,7 @@ def test_stage_metadata_fd_known_rows() -> None:
 
 @pytest.mark.integration
 def test_stage_metadata_segments_match_legacy_fd_json() -> None:
-    stage = read_mslstg01_v2(Path("data/stages/bin/grnla.bin"))
+    stage = read_mslstg01_v5(Path("data/stages/bin/grnla.bin"))
     fd = json.loads(Path("data/stages/final_destination.json").read_text(encoding="utf-8"))
     unit_scale = float(fd.get("unit_scale", 1.0))
     json_by_id = {int(seg["i"]): seg for seg in fd["segments"]}
@@ -126,6 +128,10 @@ def test_stage_metadata_segments_match_legacy_fd_json() -> None:
         assert bool(int(seg.flags) & 0x2) == bool(legacy.get("ledge"))
         assert int(seg.hi_flags) == int(legacy["hi_flags"])
         assert int(seg.lo_flags) == int(legacy["lo_flags"])
+        assert int(seg.prev_id0) == int(legacy["prev_id0"])
+        assert int(seg.next_id0) == int(legacy["next_id0"])
+        assert int(seg.prev_id1) == int(legacy["prev_id1"])
+        assert int(seg.next_id1) == int(legacy["next_id1"])
         assert (seg.x0, seg.y0, seg.x1, seg.y1) == pytest.approx(
             (
                 unit_scale * float(legacy["x0"]),
@@ -138,7 +144,7 @@ def test_stage_metadata_segments_match_legacy_fd_json() -> None:
 
 @pytest.mark.integration
 def test_stage_metadata_battlefield_known_platform_rows() -> None:
-    stage = read_mslstg01_v2(Path("data/stages/bin/grnba.bin"))
+    stage = read_mslstg01_v5(Path("data/stages/bin/grnba.bin"))
     assert stage.segment_count == 23
     assert stage.stage_point_count == 22
     assert stage.spawn_count == 4
@@ -169,7 +175,7 @@ def test_stage_metadata_battlefield_known_platform_rows() -> None:
 
 @pytest.mark.integration
 def test_stage_metadata_remaining_legal_stages_known_rows() -> None:
-    fountain = read_mslstg01_v2(Path("data/stages/bin/griz.bin"))
+    fountain = read_mslstg01_v5(Path("data/stages/bin/griz.bin"))
     assert fountain.segment_count == 34
     assert fountain.spawn_count == 4
     assert fountain.respawn_count == 4
@@ -181,7 +187,7 @@ def test_stage_metadata_remaining_legal_stages_known_rows() -> None:
         (-14.25, 1.125, 14.25)
     )
 
-    pokemon = read_mslstg01_v2(Path("data/stages/bin/grps.bin"))
+    pokemon = read_mslstg01_v5(Path("data/stages/bin/grps.bin"))
     assert pokemon.segment_count == 136
     assert pokemon.spawn_count == 4
     assert pokemon.respawn_count == 4
@@ -195,7 +201,7 @@ def test_stage_metadata_remaining_legal_stages_known_rows() -> None:
         abs=1e-3,
     )
 
-    yoshis = read_mslstg01_v2(Path("data/stages/bin/grst.bin"))
+    yoshis = read_mslstg01_v5(Path("data/stages/bin/grst.bin"))
     assert yoshis.segment_count == 29
     assert yoshis.spawn_count == 4
     assert yoshis.respawn_count == 4
@@ -204,7 +210,7 @@ def test_stage_metadata_remaining_legal_stages_known_rows() -> None:
     yoshis_platforms = [seg for seg in yoshis.segments if int(seg.flags) & 0x1]
     assert [int(seg.line_id) for seg in yoshis_platforms[:4]] == [0, 1, 4, 5]
 
-    dream = read_mslstg01_v2(Path("data/stages/bin/grop.bin"))
+    dream = read_mslstg01_v5(Path("data/stages/bin/grop.bin"))
     assert dream.segment_count == 11
     assert dream.spawn_count == 4
     assert dream.respawn_count == 4
@@ -214,6 +220,45 @@ def test_stage_metadata_remaining_legal_stages_known_rows() -> None:
     assert [p.y for p in dream.respawn_points] == pytest.approx([84.2214966] * 4)
     dream_platforms = [seg for seg in dream.segments if int(seg.flags) & 0x1]
     assert [int(seg.line_id) for seg in dream_platforms] == [0, 1, 2]
+
+
+@pytest.mark.integration
+def test_stage_metadata_preserves_raw_mapline_links_for_supported_stages() -> None:
+    # Raw MapLine graph fields are source data used by mpLineGetPrev/Next. These fixture rows cover
+    # same-kind chains and cross-kind endpoint links; runtime code may not reconstruct them from
+    # normalized endpoints.
+    # refs/melee/src/melee/mp/types.h::MapLine
+    # refs/melee/src/melee/mp/mplib.c::{mpLineGetPrev,mpLineGetNext}
+    cases = [
+        ("grnla.bin", 0, (11, 1, -1, -1)),
+        ("grnba.bin", 0, (17, 1, -1, -1)),
+        ("griz.bin", 3, (23, 4, -1, -1)),
+        ("grps.bin", 0, (-1, 1, 52, -1)),
+        ("grst.bin", 2, (18, 3, -1, -1)),
+        ("grop.bin", 3, (9, 4, -1, -1)),
+    ]
+    for bin_name, line_id, expected_links in cases:
+        stage = read_mslstg01_v5(Path("data/stages/bin") / bin_name)
+        seg = next(seg for seg in stage.segments if int(seg.line_id) == line_id)
+        assert (int(seg.prev_id0), int(seg.next_id0), int(seg.prev_id1), int(seg.next_id1)) == expected_links
+
+
+def test_stage_metadata_contains_fod_platform_transform_records() -> None:
+    stage = read_mslstg01_v5(Path("data/stages/bin/griz.bin"))
+    by_line = {int(rec.line_id): rec for rec in stage.platform_transforms}
+    assert sorted(by_line) == [0, 1, 2]
+    assert int(by_line[0].platform_id) == 1  # left
+    assert (float(by_line[0].x0), float(by_line[0].x1), float(by_line[0].height_coeff)) == pytest.approx(
+        (-49.5, -21.0, 0.80625)
+    )
+    assert int(by_line[1].platform_id) == 0  # right
+    assert (float(by_line[1].x0), float(by_line[1].x1), float(by_line[1].height_coeff)) == pytest.approx(
+        (21.0, 49.5, 0.80625)
+    )
+    assert int(by_line[2].kind_id) == 2
+    assert (float(by_line[2].x0), float(by_line[2].x1), float(by_line[2].y_const)) == pytest.approx(
+        (-14.25, 14.25, 42.75)
+    )
 
 
 @pytest.mark.integration
@@ -453,15 +498,15 @@ def test_runtime_stage_collision_reads_mslstg01_segments(tmp_path: Path) -> None
     root_data = Path("data").resolve()
     data_dir = _symlink_data_tree_with_private_dirs(tmp_path, ("stages",))
     (data_dir / "stages" / "bin").mkdir(parents=True)
-    stage = read_mslstg01_v2(root_data / "stages" / "bin" / "grnla.bin")
+    stage = read_mslstg01_v5(root_data / "stages" / "bin" / "grnla.bin")
     record_i, floor_seg = next(
         (i, seg) for i, seg in enumerate(stage.segments) if int(seg.kind_id) == 0 and int(seg.line_id) == 1
     )
     buf = bytearray((root_data / "stages" / "bin" / "grnla.bin").read_bytes())
-    # Segment record layout: <HBBHHffff>, records start after the 56-byte MSLSTG01 header.
-    rec_off = 56 + record_i * 24
-    struct.pack_into("<f", buf, rec_off + 12, 5.0)
+    # Segment record layout: <HBBHHhhhhffff>, records start after the 56-byte MSLSTG01 header.
+    rec_off = 56 + record_i * 32
     struct.pack_into("<f", buf, rec_off + 20, 5.0)
+    struct.pack_into("<f", buf, rec_off + 28, 5.0)
     _copy_stage_bins(data_dir)
     (data_dir / "stages" / "bin" / "grnla.bin").write_bytes(bytes(buf))
 
@@ -569,6 +614,27 @@ raise SystemExit(0)
 """
     proc = subprocess.run([sys.executable, "-c", code], text=True, capture_output=True)
     assert proc.returncode == 0, proc.stderr + proc.stdout
+
+
+def test_runtime_frozen_ps_preserves_raw_links_but_uses_fighter_solid_mask() -> None:
+    # GrPs raw MapLine links include transformation topology. The current runtime domain is frozen
+    # Stadium, so raw ids remain inspectable while fighter collision is governed by the generated
+    # active/fighter-solid mask in MSLSTG01 rather than a runtime line-id allowlist.
+    # refs/slippi-ssbm-asm/Online/Core/Hacks/Stadium/IngameCheckIfFrozen.asm
+    # refs/melee/src/melee/gr/grpstadium.c::{grStadium_OnInit,grStadium_801D10F0}
+    import msl_binding
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        line_52 = msl_binding.stage_floor_segment(3, 52)
+        assert line_52 is not None
+        assert int(line_52["raw_next_id"]) == 55
+        assert int(line_52["fighter_solid"]) == 1
+        assert int(line_52["next"]) == int(msl_binding.stage_floor_segment(3, 34)["line_index"])
+        assert int(msl_binding.stage_floor_segment(3, 55)["fighter_solid"]) == 0
+        assert msl_binding.stage_fighter_floor_segment(3, 55) is None
+    finally:
+        msl_binding.destroy(handle)
 
 
 def test_runtime_move_tables_reject_stale_mslftsc1(tmp_path: Path) -> None:
@@ -1016,7 +1082,7 @@ def test_runtime_move_tables_mslftsc1_matches_legacy_json_queries() -> None:
 @pytest.mark.parametrize(
     ("magic", "version", "reader", "match"),
     [
-        (STAGE_MAGIC, STAGE_VERSION, read_mslstg01_v2, "unsupported MSLSTG01 version"),
+        (STAGE_MAGIC, STAGE_VERSION, read_mslstg01_v5, "unsupported MSLSTG01 version"),
         (PART_MAGIC, PART_VERSION, read_mslpart1_v1, "unsupported MSLPART1 version"),
         (ITEM_ARTICLE_MAGIC, ITEM_ARTICLE_VERSION, read_mslitar1, "unsupported MSLITAR1 version"),
         (SCRIPT_MAGIC, SCRIPT_VERSION, read_mslftsc1_v1, "unsupported MSLFTSC1 version"),

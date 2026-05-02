@@ -526,12 +526,12 @@ def _ensure_motion_state_owner_bins() -> None:
 
 def _ensure_known_data_artifacts() -> None:
     expected = [
-        (ROOT / "data" / "stages" / "bin" / "grnla.bin", b"MSLSTG01", 2),
-        (ROOT / "data" / "stages" / "bin" / "grnba.bin", b"MSLSTG01", 2),
-        (ROOT / "data" / "stages" / "bin" / "griz.bin", b"MSLSTG01", 2),
-        (ROOT / "data" / "stages" / "bin" / "grps.bin", b"MSLSTG01", 2),
-        (ROOT / "data" / "stages" / "bin" / "grst.bin", b"MSLSTG01", 2),
-        (ROOT / "data" / "stages" / "bin" / "grop.bin", b"MSLSTG01", 2),
+        (ROOT / "data" / "stages" / "bin" / "grnla.bin", b"MSLSTG01", 5),
+        (ROOT / "data" / "stages" / "bin" / "grnba.bin", b"MSLSTG01", 5),
+        (ROOT / "data" / "stages" / "bin" / "griz.bin", b"MSLSTG01", 5),
+        (ROOT / "data" / "stages" / "bin" / "grps.bin", b"MSLSTG01", 5),
+        (ROOT / "data" / "stages" / "bin" / "grst.bin", b"MSLSTG01", 5),
+        (ROOT / "data" / "stages" / "bin" / "grop.bin", b"MSLSTG01", 5),
         (ROOT / "data" / "model_parts" / "fox.bin", b"MSLPART1", 1),
         (ROOT / "data" / "model_parts" / "falco.bin", b"MSLPART1", 1),
         (ROOT / "data" / "items" / "articles" / "fox_falco.bin", b"MSLITAR1", 2),

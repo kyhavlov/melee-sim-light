@@ -15,6 +15,12 @@ typedef struct MslStageFloorLine {
   // fighter collision uses the full floor graph for static pass-through platform ownership, while
   // the filtered fighter graph remains available for debug/tests and non-platform-only checks.
   uint8_t is_platform;
+  // MSLSTG01 active/fighter-solid policy for the current legal-stage mode. For frozen Pokemon
+  // Stadium, this keeps transformation lines visible in debug/data APIs while suppressing inactive
+  // transformation ground objects from fighter collision.
+  // refs/slippi-ssbm-asm/Online/Core/Hacks/Stadium/IngameCheckIfFrozen.asm
+  // data/stages/bin/grps.bin::MSLSTG01 flags
+  uint8_t fighter_solid;
   // Connectivity hints for mpLib_8004ED5C-style endpoint extension:
   // - has_prev_link: there exists some collision segment connected to (x0,y0)
   // - has_next_link: there exists some collision segment connected to (x1,y1)
@@ -24,9 +30,13 @@ typedef struct MslStageFloorLine {
   // refs/melee/src/melee/mp/mplib.c::mpLib_8004ED5C
   uint8_t has_prev_link;
   uint8_t has_next_link;
-  uint8_t _pad0[2];
+  uint8_t _pad0[1];
   // Stable `ground_id` mapping (ISO-derived segment index).
   uint16_t segment_i;
+  // Source MapLine links from refs/melee/src/melee/mp/types.h::MapLine, resolved to this
+  // line's runtime endpoint orientation. These are stable ISO line ids, not graph indices.
+  int16_t raw_prev_id;
+  int16_t raw_next_id;
   // Floor-only line graph connectivity: indices into the stage's floor line array,
   // or -1 for none.
   int16_t prev;
@@ -49,8 +59,10 @@ typedef struct MslStageCeilingLine {
   uint8_t has_next_link;  // connected at (x1,y1)
   uint8_t _pad0[2];
   uint16_t segment_i;  // ISO-derived segment index
-  int16_t prev;        // neighbor whose end == our start, or -1
-  int16_t next;        // neighbor whose start == our end, or -1
+  int16_t raw_prev_id;
+  int16_t raw_next_id;
+  int16_t prev;  // neighbor whose end == our start, or -1
+  int16_t next;  // neighbor whose start == our end, or -1
 } MslStageCeilingLine;
 
 typedef struct MslStageCeilingGraph {
@@ -74,8 +86,10 @@ typedef struct MslStageWallLine {
   uint8_t has_next_link;  // connected at (x1,y1)
   uint8_t _pad0[2];
   uint16_t segment_i;  // ISO-derived segment index
-  int16_t prev;        // neighbor whose end == our start, or -1
-  int16_t next;        // neighbor whose start == our end, or -1
+  int16_t raw_prev_id;
+  int16_t raw_next_id;
+  int16_t prev;  // neighbor whose end == our start, or -1
+  int16_t next;  // neighbor whose start == our end, or -1
 } MslStageWallLine;
 
 typedef struct MslStageWallGraph {
@@ -134,6 +148,10 @@ const MslStageFloorGraph* stage_collision_get_fighter_floor_graph(uint32_t stage
 int stage_collision_fighter_floor_line_index(uint32_t stage_id, uint16_t segment_i);
 uint8_t stage_collision_floor_line_is_platform(uint32_t stage_id, uint16_t segment_i);
 uint8_t stage_collision_floor_line_is_runtime_fighter_solid(uint32_t stage_id, uint16_t segment_i);
+// Resolve a floor line to current world coordinates for the given batch environment. Static lines
+// copy through unchanged. Dynamic FoD platform lines consume causal stage platform state.
+uint8_t stage_collision_floor_line_world(const MslBatch* batch, int bi,
+                                         const MslStageFloorLine* line, MslStageFloorLine* out);
 
 // Ceiling graph view for the given stage_id. Returns NULL if unsupported/unloaded.
 const MslStageCeilingGraph* stage_collision_get_ceiling_graph(uint32_t stage_id);
