@@ -230,6 +230,7 @@ static inline uint8_t action_allows_shine_entry_air(const MslBatch* batch, size_
   // - AttackAir DO_IASA runs EscapeAir, then ftCo_800D7100 / ftCo_SpecialAir_CheckInput, then
   //   item / attack / jump branches, gated by script-owned allow_interrupt.
   // - DamageFall_IASA also routes through ftCo_SpecialAir_CheckInput.
+  // - Pass_IASA routes through the same aerial special gate after platform drop-through.
   // - FallSpecial_IASA does not; it only checks attack/item/jump-owned branches.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_IASA
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_IASA
@@ -248,6 +249,7 @@ static inline uint8_t action_allows_shine_entry_air(const MslBatch* batch, size_
     case MSL_ACT_FALL_AERIAL_F:
     case MSL_ACT_FALL_AERIAL_B:
     case MSL_ACT_DAMAGE_FALL:
+    case MSL_ACT_PASS:
       return 1u;
     case MSL_ACT_PASSIVE_WALL:
     case MSL_ACT_PASSIVE_WALL_JUMP:

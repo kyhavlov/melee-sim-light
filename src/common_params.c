@@ -270,7 +270,11 @@ int common_params_init(void) {
       json_get_f32(buf, "crouch_stick_threshold", &g_params.crouch_stick_threshold) != 0 ||
       json_get_f32(buf, "crouch_release_stick_threshold",
                    &g_params.crouch_release_stick_threshold) != 0 ||
-      json_get_u8(buf, "tap_jump_tilt_max_frames", &g_params.tap_jump_tilt_max_frames) != 0) {
+      json_get_u8(buf, "tap_jump_tilt_max_frames", &g_params.tap_jump_tilt_max_frames) != 0 ||
+      json_get_f32(buf, "pass_stick_threshold", &g_params.pass_stick_threshold) != 0 ||
+      json_get_u8(buf, "pass_tilt_max_frames", &g_params.pass_tilt_max_frames) != 0 ||
+      json_get_u8(buf, "floor_skip_frames", &g_params.floor_skip_frames) != 0 ||
+      json_get_f32(buf, "pass_vel_y", &g_params.pass_vel_y) != 0) {
     alloc_free(buf);
     return -1;
   }

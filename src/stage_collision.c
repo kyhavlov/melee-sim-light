@@ -586,9 +586,9 @@ static int fd_install_stage_segments(uint32_t stage_id, const FdSegTmp* seg_tmp,
       fighter_floor_lines[oi_fighter_floor++] = floor_lines[i];
     }
   }
-  // Fighter grounding excludes soft platforms until the platform pass-through/drop-through owner is
-  // modeled. Rebuild graph connectivity inside the filtered static-floor set rather than preserving
-  // links that traverse removed platform lines.
+  // Keep a non-platform-only graph for debug/tests and for callers that intentionally need static
+  // hard floors only. Runtime fighter platform collision uses the full floor graph with
+  // pass-through/floor-skip gating in mpcoll_ground.c.
   // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
   fd_build_floor_prev_next(fighter_floor_lines, fighter_floor_n);
   if (ceil_n) {
@@ -1082,6 +1082,35 @@ uint8_t stage_collision_floor_line_is_platform(uint32_t stage_id, uint16_t segme
     }
   }
   return 0u;
+}
+
+uint8_t stage_collision_floor_line_is_runtime_fighter_solid(uint32_t stage_id, uint16_t segment_i) {
+  if (stage_id != (uint32_t)MSL_STAGE_POKEMON_STADIUM) {
+    return 1u;
+  }
+  // Current PS validation domain is frozen Stadium. Slippi's Frozen PS toggle makes the engine
+  // take the vanilla Training Mode no-transformation branch, so transformation object collision
+  // lines from GrPs.dat must not become fighter-solid merely because they are present in MSLSTG01.
+  //
+  // MSLSTG01 v2 does not yet expose per-ground-object activation, so keep this explicit
+  // current-domain guard to the base/frozen collision line ids observed in the source stage data:
+  // main floor + ledge floor pieces (34,51..54) and the two frozen side platforms (35,36).
+  //
+  // refs/slippi-ssbm-asm/Online/Core/Hacks/Stadium/IngameCheckIfFrozen.asm
+  // refs/melee/src/melee/gr/grpstadium.c::{grStadium_OnInit,grStadium_801D10F0}
+  // data/stages/bin/grps.bin::MSLSTG01 line ids
+  switch (segment_i) {
+    case 34u:
+    case 35u:
+    case 36u:
+    case 51u:
+    case 52u:
+    case 53u:
+    case 54u:
+      return 1u;
+    default:
+      return 0u;
+  }
 }
 
 const MslStageCeilingGraph* stage_collision_get_ceiling_graph(uint32_t stage_id) {

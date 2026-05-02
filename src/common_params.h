@@ -142,6 +142,18 @@ typedef struct MslCommonParams {
   uint8_t tap_jump_tilt_max_frames;      // p_ftCommonData->x74 (tap_jump_tilt_max_frames)
   uint8_t _pad_u8_1[2];
 
+  // Soft-platform pass/drop-through common parameters.
+  //
+  // Decomp:
+  // - ftCo_Pass.c::ftCo_80099F1C: stick/timer gate, plus mpColl_IsOnPlatform.
+  // - ftCo_Pass.c::ftCo_80099F9C: pass latch + floor-skip delay.
+  // - ftCo_Pass.c::{ftCo_8009A184,ftCo_8009A228}: pass vertical velocity.
+  float pass_stick_threshold;    // p_ftCommonData->x464
+  uint8_t pass_tilt_max_frames;  // p_ftCommonData->x468
+  uint8_t floor_skip_frames;     // p_ftCommonData->x470
+  uint8_t _pad_u8_pass[2];
+  float pass_vel_y;  // p_ftCommonData->x46C
+
   // Cliff / ledge common behavior (ftCo_Cliff*).
   //
   // Decomp pointers:

@@ -686,6 +686,19 @@ Recent deltas to reflect here (do not let these get “lost in chat logs”):
   (`data/common/ft_common_data.json::ottotto_walk_stick_x_threshold`). Broad EscapeAir ledge
   projection, full DamageAir transfer, and broad DamageFly root projection experiments were
   rejected due taxonomy or lock regressions.
+- Static pass-through platform floors are now part of the runtime fighter floor graph for supported
+  non-FD stages. Platform admission follows the source split: airborne/common collision callbacks
+  can land from above through `mpColl_80046904` with `CollisionFlagAir_PlatformPassCallback`,
+  grounded fighters remain on their current platform through `mpLib_8004DD90_Floor`, and
+  down-input Pass uses the extracted `p_ftCommonData->{x464,x468,x470,x46C}` thresholds/velocity
+  plus `mpUpdateFloorSkip`-shaped skip gating. FoD uses source-local/static platform positions until
+  live platform transforms are modeled. Frozen Pokemon Stadium keeps an explicit current-domain
+  fighter-solid allowlist for base/no-transform line ids `34,35,36,51..54`; the deletion path is
+  extracted ground-object activation/transform data. Moving platform transforms and Pokemon Stadium
+  transformation ownership remain explicit residual work, not `MSLSTG01` table facts
+  (`src/mpcoll_ground.c`, `src/locomotion.c`; refs/melee/src/melee/mp/mpcoll.c::{
+  `mpColl_80046904`,`mpUpdateFloorSkip`,`mpColl_80044628_Floor`},
+  refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c).
 - Ledge-grab mask ordering is now collision-stage prev/cur snapshot based (captured around `stage_collision_apply()` and consumed
   post-collision); regression locked for TreasuredBackKangaroo records 1806/1807 (`tests/test_ledge_grab_treasuredbackkangaroo_regression.py`).
 - Build now forces C extension rebuild to avoid stale `.so` issues (Makefile change).

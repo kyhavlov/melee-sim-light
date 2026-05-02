@@ -11,10 +11,9 @@ typedef struct MslStageFloorLine {
   // ISO-derived ledge flag for this floor segment (LINE_FLAG_LEDGE / `"segments[*].ledge"`).
   // Used by ledge-grab mask computation.
   uint8_t is_ledge;
-  // ISO-derived soft platform flag (LINE_FLAG_PLATFORM / `"segments[*].platform"`). Platform
-  // lines remain visible through debug/data APIs, but fighter grounding currently uses the
-  // non-platform floor graph until pass-through/drop-through/moving-platform mpColl ownership is
-  // implemented.
+  // ISO-derived soft platform flag (LINE_FLAG_PLATFORM / `"segments[*].platform"`). Runtime
+  // fighter collision uses the full floor graph for static pass-through platform ownership, while
+  // the filtered fighter graph remains available for debug/tests and non-platform-only checks.
   uint8_t is_platform;
   // Connectivity hints for mpLib_8004ED5C-style endpoint extension:
   // - has_prev_link: there exists some collision segment connected to (x0,y0)
@@ -128,11 +127,13 @@ const MslStageFloorGraph* stage_collision_get_floor_graph(uint32_t stage_id);
 // Map a stable ISO-derived `segment_i` (ground_id) to a floor-graph line index, or -1 if unknown.
 int stage_collision_floor_line_index(uint32_t stage_id, uint16_t segment_i);
 
-// Fighter-solid floor graph view for the given stage_id. Excludes ISO soft-platform lines until
-// platform pass-through/drop-through/moving-platform ownership is implemented.
+// Non-platform-only floor graph view for the given stage_id. Runtime fighter platform collision
+// uses the full floor graph plus Pass/floor-skip gating; this filtered view is retained for
+// tests/debug callers that intentionally need static non-platform floors only.
 const MslStageFloorGraph* stage_collision_get_fighter_floor_graph(uint32_t stage_id);
 int stage_collision_fighter_floor_line_index(uint32_t stage_id, uint16_t segment_i);
 uint8_t stage_collision_floor_line_is_platform(uint32_t stage_id, uint16_t segment_i);
+uint8_t stage_collision_floor_line_is_runtime_fighter_solid(uint32_t stage_id, uint16_t segment_i);
 
 // Ceiling graph view for the given stage_id. Returns NULL if unsupported/unloaded.
 const MslStageCeilingGraph* stage_collision_get_ceiling_graph(uint32_t stage_id);

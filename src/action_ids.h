@@ -159,6 +159,7 @@ typedef enum MslActionId {
   MSL_ACT_THROWN_HI = 0x00F1,         // ftCo_MS_ThrownHi (241)
   MSL_ACT_THROWN_LW = 0x00F2,         // ftCo_MS_ThrownLw (242)
   MSL_ACT_THROWN_LW_WOMEN = 0x00F3,   // ftCo_MS_ThrownlwWomen (243)
+  MSL_ACT_PASS = 0x00F4,              // ftCo_MS_Pass (244)
   MSL_ACT_OTTOTTO = 0x00F5,           // ftCo_MS_Ottotto (245)
   MSL_ACT_OTTOTTO_WAIT = 0x00F6,      // ftCo_MS_OttottoWait (246)
   MSL_ACT_FLY_REFLECT_WALL = 0x00F7,  // ftCo_MS_FlyReflectWall (247)
@@ -468,6 +469,7 @@ typedef enum MslSubmotionId {
   MSL_SM_PASSIVE_WALL = 202,       // ftCo_SM_PassiveWall
   MSL_SM_PASSIVE_WALL_JUMP = 203,  // ftCo_SM_PassiveWallJump
   MSL_SM_PASSIVE_CEIL = 204,       // ftCo_SM_PassiveCeil
+  MSL_SM_PASS = 209,               // ftCo_SM_Pass
   MSL_SM_WALL_DAMAGE = 212,        // ftCo_SM_WallDamage
   MSL_SM_STOP_WALL = 213,          // ftCo_SM_StopWall
   MSL_SM_STOP_CEIL = 214,          // ftCo_SM_StopCeil
@@ -590,6 +592,7 @@ static inline uint8_t msl_action_is_air_locomotion(uint16_t action_id) {
     case MSL_ACT_FALL_SPECIAL:
     case MSL_ACT_FALL_SPECIAL_F:
     case MSL_ACT_FALL_SPECIAL_B:
+    case MSL_ACT_PASS:
       return 1;
     default:
       return 0;
@@ -613,6 +616,9 @@ static inline uint8_t msl_action_allows_fastfall(uint16_t action_id) {
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_Phys
     // refs/melee/src/melee/ft/ft_081B.c::ft_80084DB0
     case MSL_ACT_DAMAGE_FALL:
+    // Pass Phys delegates to the common airborne fall helper.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_Pass_Phys
+    case MSL_ACT_PASS:
     // FlyReflect Phys delegates to ft_80084DB0 after the wall/ceiling bounce entry.
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FlyReflect.c::ftCo_FlyReflect_Phys
     case MSL_ACT_FLY_REFLECT_WALL:

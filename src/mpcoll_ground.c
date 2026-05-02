@@ -564,6 +564,52 @@ static int floor_dd90_project(const MslStageFloorGraph* g, int line_idx, float x
   return cur;
 }
 
+static inline uint16_t platform_floor_skip_segment_id(const MslBatch* batch, size_t idx,
+                                                      uint32_t stage_id) {
+  if (batch == NULL) {
+    return 0xFFFFu;
+  }
+  const uint16_t ground_id = batch->state.ground_id[idx];
+  if (ground_id == 0xFFFFu || !stage_collision_floor_line_is_platform(stage_id, ground_id)) {
+    return 0xFFFFu;
+  }
+
+  const uint16_t action_id = batch->state.action_id[idx];
+  if (action_id == (uint16_t)MSL_ACT_PASS ||
+      batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_PASS) {
+    // Platform floor-skip ownership:
+    // - ftCo_8009A228 / ftCo_8009A184 call mpUpdateFloorSkip after entering Pass or an
+    //   action-specific air pass state.
+    // - mpColl_80044628_Floor rejects a platform when `floor.index == floor_skip`.
+    // This sim does not carry CollData.floor_skip as a seed lane yet, so keep the skip scoped to
+    // the source-owned Pass episode and the platform ground_id carried by CollData.floor.index.
+    // Deletion path: promote floor_skip itself as an explicit hidden CollData seed/internal lane so
+    // the skip lifetime no longer has to be represented by Pass/previous-Pass action ownership.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::{ftCo_8009A184,ftCo_8009A228}
+    // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpUpdateFloorSkip}
+    return ground_id;
+  }
+  return 0xFFFFu;
+}
+
+static inline uint8_t floor_line_is_skipped_platform(const MslStageFloorGraph* g, int line_idx,
+                                                     uint16_t skip_segment_i) {
+  if (g == NULL || line_idx < 0 || (size_t)line_idx >= g->line_count || skip_segment_i == 0xFFFFu) {
+    return 0u;
+  }
+  const MslStageFloorLine* line = &g->lines[(size_t)line_idx];
+  return (uint8_t)(line->is_platform && line->segment_i == skip_segment_i);
+}
+
+static inline uint8_t floor_line_is_runtime_fighter_solid(const MslStageFloorGraph* g,
+                                                          uint32_t stage_id, int line_idx) {
+  if (g == NULL || line_idx < 0 || (size_t)line_idx >= g->line_count) {
+    return 0u;
+  }
+  return stage_collision_floor_line_is_runtime_fighter_solid(stage_id,
+                                                             g->lines[(size_t)line_idx].segment_i);
+}
+
 static uint8_t floor_intersect_horiz(float x0, float y0, float x1, float ax, float ay, float bx,
                                      float by, float* ix_out, float* iy_out) {
   // Decomp: mpLineIntersectionH (used by mpCheckFloor on horizontal-ish floor lines).
@@ -783,8 +829,9 @@ static inline void floor_write_edge_suppression_flags(MslBatch* batch, size_t id
   }
 }
 
-static uint8_t floor_sweep_check(const MslStageFloorGraph* g, float ax, float ay, float bx,
-                                 float by, int prefer_line_idx, int* out_line_idx, float* out_ix,
+static uint8_t floor_sweep_check(const MslStageFloorGraph* g, uint32_t stage_id, float ax, float ay,
+                                 float bx, float by, uint16_t skip_platform_segment_i,
+                                 int prefer_line_idx, int* out_line_idx, float* out_ix,
                                  float* out_iy, float* out_nx, float* out_ny) {
   // Decomp: mpCheckFloor iterates floor lines, intersects segment A->B with each, and chooses the
   // closest intersection to A (min dist^2), with stage-defined deterministic ordering on ties.
@@ -801,6 +848,12 @@ static uint8_t floor_sweep_check(const MslStageFloorGraph* g, float ax, float ay
   float best_nx = 0.0f, best_ny = 1.0f;
 
   for (size_t li = 0; li < g->line_count; li++) {
+    if (!floor_line_is_runtime_fighter_solid(g, stage_id, (int)li)) {
+      continue;
+    }
+    if (floor_line_is_skipped_platform(g, (int)li, skip_platform_segment_i)) {
+      continue;
+    }
     float x0 = 0.0f, y0 = 0.0f, x1 = 0.0f, y1 = 0.0f;
     floor_ed5c_endpoints(g, (int)li, &x0, &y0, &x1, &y1);
 
@@ -882,7 +935,7 @@ uint8_t mpcoll_800477e0_floor_mask_probe(const MslBatch* batch, size_t idx,
     return 0u;
   }
   const uint32_t stage_id = batch->state.stage_id[idx / (size_t)MSL_MAX_PLAYERS];
-  const MslStageFloorGraph* g = stage_collision_get_fighter_floor_graph(stage_id);
+  const MslStageFloorGraph* g = stage_collision_get_floor_graph(stage_id);
   if (g == NULL) {
     return 0u;
   }
@@ -909,8 +962,10 @@ uint8_t mpcoll_800477e0_floor_mask_probe(const MslBatch* batch, size_t idx,
   int line_idx = -1;
   float ix = 0.0f;
   float iy = 0.0f;
-  if (cur_bot.y <= prev_bot.y && floor_sweep_check(g, prev_bot.x, prev_bot.y, cur_bot.x, cur_bot.y,
-                                                   -1, &line_idx, &ix, &iy, NULL, NULL)) {
+  const uint16_t skip_platform_segment_i = platform_floor_skip_segment_id(batch, idx, stage_id);
+  if (cur_bot.y <= prev_bot.y &&
+      floor_sweep_check(g, stage_id, prev_bot.x, prev_bot.y, cur_bot.x, cur_bot.y,
+                        skip_platform_segment_i, -1, &line_idx, &ix, &iy, NULL, NULL)) {
     float y_corr = 0.0f;
     const int out_line_idx = floor_dd90_project(g, line_idx, ix, cur_bot.y, &y_corr, NULL, NULL);
     if (out_line_idx >= 0) {
@@ -933,6 +988,12 @@ uint8_t mpcoll_800477e0_floor_mask_probe(const MslBatch* batch, size_t idx,
     int best_line_idx = -1;
     float y_corr = 0.0f;
     for (size_t li = 0; li < g->line_count; li++) {
+      if (!floor_line_is_runtime_fighter_solid(g, stage_id, (int)li)) {
+        continue;
+      }
+      if (g->lines[li].is_platform) {
+        continue;
+      }
       const int out_line_idx =
           floor_dd90_project(g, (int)li, cur_bot.x, cur_bot.y, &y_corr, NULL, NULL);
       if (out_line_idx >= 0 && y_corr >= 0.0f && (!found || y_corr < best_y_corr)) {
@@ -959,7 +1020,7 @@ uint8_t mpcoll_800477e0_capture_root_floor_mask_probe(const MslBatch* batch, siz
     return 0u;
   }
   const uint32_t stage_id = batch->state.stage_id[idx / (size_t)MSL_MAX_PLAYERS];
-  const MslStageFloorGraph* g = stage_collision_get_fighter_floor_graph(stage_id);
+  const MslStageFloorGraph* g = stage_collision_get_floor_graph(stage_id);
   if (g == NULL || g->lines == NULL || g->line_count == 0) {
     return 0u;
   }
@@ -977,7 +1038,10 @@ uint8_t mpcoll_800477e0_capture_root_floor_mask_probe(const MslBatch* batch, siz
   int line_idx = -1;
   const uint16_t ground_id = batch->state.ground_id[idx];
   if (ground_id != 0xFFFFu) {
-    line_idx = stage_collision_fighter_floor_line_index(stage_id, ground_id);
+    line_idx = stage_collision_floor_line_index(stage_id, ground_id);
+    if (!floor_line_is_runtime_fighter_solid(g, stage_id, line_idx)) {
+      line_idx = -1;
+    }
   }
 
   float y_corr = 0.0f;
@@ -998,6 +1062,12 @@ uint8_t mpcoll_800477e0_capture_root_floor_mask_probe(const MslBatch* batch, siz
   float best_y_corr = FLT_MAX;
   int best_line_idx = -1;
   for (size_t li = 0; li < g->line_count; li++) {
+    if (!floor_line_is_runtime_fighter_solid(g, stage_id, (int)li)) {
+      continue;
+    }
+    if (g->lines[li].is_platform) {
+      continue;
+    }
     out_line_idx = floor_dd90_project(g, (int)li, batch->state.pos_x[idx], batch->state.pos_y[idx],
                                       &y_corr, NULL, NULL);
     if (out_line_idx >= 0 && y_corr >= 0.0f && (!found || y_corr < best_y_corr)) {
@@ -1025,7 +1095,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
   const int num_players = (int)batch->config.num_players;
   for (int bi = 0; bi < batch->batch_size; bi++) {
     const uint32_t stage_id = batch->state.stage_id[bi];
-    const MslStageFloorGraph* g = stage_collision_get_fighter_floor_graph(stage_id);
+    const MslStageFloorGraph* g = stage_collision_get_floor_graph(stage_id);
     if (g == NULL || g->lines == NULL || g->line_count == 0) {
       continue;
     }
@@ -1248,8 +1318,12 @@ void mpcoll_ground_apply(MslBatch* batch) {
 
       int prefer_line_idx = -1;
       if (ground_id != 0xFFFFu) {
-        prefer_line_idx = stage_collision_fighter_floor_line_index(stage_id, ground_id);
+        prefer_line_idx = stage_collision_floor_line_index(stage_id, ground_id);
+        if (!floor_line_is_runtime_fighter_solid(g, stage_id, prefer_line_idx)) {
+          prefer_line_idx = -1;
+        }
       }
+      const uint16_t skip_platform_segment_i = platform_floor_skip_segment_id(batch, idx, stage_id);
 
       if (was_grounded && prefer_line_idx >= 0) {
         float y_corr = 0.0f;
@@ -1390,8 +1464,9 @@ void mpcoll_ground_apply(MslBatch* batch) {
             int hit_line_idx = -1;
             float ix = 0.0f, iy = 0.0f;
             if (!landing_release_skip_floor_sweep && can_sweep &&
-                floor_sweep_check(g, prev_bottom_x, prev_bottom_y, cur_bottom_x, cur_bottom_y,
-                                  prefer_line_idx, &hit_line_idx, &ix, &iy, &floor_nx, &floor_ny)) {
+                floor_sweep_check(g, stage_id, prev_bottom_x, prev_bottom_y, cur_bottom_x,
+                                  cur_bottom_y, skip_platform_segment_i, prefer_line_idx,
+                                  &hit_line_idx, &ix, &iy, &floor_nx, &floor_ny)) {
               // Decomp: desired_ecb.bottom.x is always 0.0, so clamping the ECB bottom contact X
               // corresponds to clamping the fighter position X.
               // refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_JObj
@@ -1936,8 +2011,9 @@ void mpcoll_ground_apply(MslBatch* batch) {
                 ? 1u
                 : 0u;
         if (!on_ground && !active_damage_hitlag_airborne_floor_contact && can_sweep &&
-            floor_sweep_check(g, prev_bottom_x, prev_bottom_y, cur_bottom_x, cur_bottom_y,
-                              prefer_line_idx, &hit_line_idx, &ix, &iy, &floor_nx, &floor_ny)) {
+            floor_sweep_check(g, stage_id, prev_bottom_x, prev_bottom_y, cur_bottom_x, cur_bottom_y,
+                              skip_platform_segment_i, prefer_line_idx, &hit_line_idx, &ix, &iy,
+                              &floor_nx, &floor_ny)) {
           // EscapeAir lock semantics:
           // - keep shallow crossings on ledge floor segments airborne while lock is active;
           // - allow deep-penetration fallback above to ground deterministically.
@@ -2225,9 +2301,9 @@ void mpcoll_ground_apply(MslBatch* batch) {
         // refs/melee/src/melee/mp/mpcoll.c::mpColl_80046F78
         batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_FLOOR_MASK;
 
-        floor_write_edge_suppression_flags(
-            batch, idx, stage_id, g, stage_collision_fighter_floor_line_index(stage_id, ground_id),
-            char_id, anim, ecb_frame, was_grounded);
+        floor_write_edge_suppression_flags(batch, idx, stage_id, g,
+                                           stage_collision_floor_line_index(stage_id, ground_id),
+                                           char_id, anim, ecb_frame, was_grounded);
 
         batch->state.ground_id[idx] = ground_id;
         batch->state.ground_normal_x[idx] = floor_nx;

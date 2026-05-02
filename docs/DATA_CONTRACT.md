@@ -762,13 +762,16 @@ Characters (Fox/Falco):
     artifacts with
     `uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba,griz,grps,grst,grop --chars fox,falco`.
   - Supported runtime stage ids: `2` Fountain of Dreams, `3` Pokemon Stadium base, `8` Yoshi's
-    Story, `28` Dream Land N64, `31` Battlefield, `32` Final Destination. Pokemon Stadium
-    transformations and moving/pass-through platform mechanics remain runtime owner work, not
-    encoded MSLSTG01 behavior categories.
-  - Runtime keeps two floor views: the full debug/data graph, and a fighter-solid graph that
-    excludes `platform` lines until platform pass-through/drop-through/moving-platform ownership is
-    modeled. Platform lines remain inspectable through debug accessors and must not be treated as
-    solved fighter grounding parity.
+    Story, `28` Dream Land N64, `31` Battlefield, `32` Final Destination. Static pass-through
+    platform flags are consumed by runtime fighter collision through source-shaped Pass/floor-skip
+    gating. FoD platform lines are source-local/static until stage-object transforms are modeled.
+    Frozen Pokemon Stadium uses a narrow runtime fighter-solid allowlist for base/no-transform line
+    ids; Pokemon Stadium transformations and moving-platform transforms remain runtime owner work,
+    not encoded MSLSTG01 behavior categories.
+  - Runtime keeps two floor views: the full debug/data graph, and a non-platform-only graph for
+    hard-floor checks. Fighter grounding consumes static platform lines through the full floor graph
+    when the source callback admits them, with `ftCo_Pass`/`mpUpdateFloorSkip`-shaped pass-through
+    gating. Platform lines remain inspectable through debug accessors.
 - `data/model_parts/fox.bin`, `data/model_parts/falco.bin` (fighter part/anchor descriptors; compact binary)
   - Purpose:
     - Expose known static part metadata and named gameplay anchors without live pose solving.

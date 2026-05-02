@@ -2389,6 +2389,7 @@ static inline uint8_t action_is_air_locomotion(uint16_t a) {
   if (a == MSL_ACT_JUMP_F || a == MSL_ACT_JUMP_B || a == MSL_ACT_JUMP_AERIAL_F ||
       a == MSL_ACT_JUMP_AERIAL_B || action_is_fall_like(a) || a == MSL_ACT_FALL_SPECIAL ||
       a == MSL_ACT_FALL_SPECIAL_F || a == MSL_ACT_FALL_SPECIAL_B || a == MSL_ACT_DAMAGE_FALL ||
+      a == MSL_ACT_PASS ||
       // Decomp: both CliffJump2 variants use ft_800835B0(..., ft_80082B1C) for collision;
       // floor contact therefore enters the basic Landing/Wait path instead of staying in
       // CliffJump2 while grounded.
@@ -2595,15 +2596,49 @@ static inline void locomotion_apply_jump_enter_ground_to_air(MslBatch* batch, si
   if (batch == NULL) {
     return;
   }
-  // ftCo_Jump_Enter and ftCo_JumpAerial_Enter_Basic route through ftCommon_8007D5D4, which clears
-  // ground state, shield-kb z, cur_pos.z, and locks ECB. Keep jump impulse, self-velocity, and
-  // jumps-used ownership in the callers because ground jumps and air jumps consume different counts.
+  // Ground-to-air common entry paths route through ftCommon_8007D5D4, which clears ground state,
+  // shield-kb z, cur_pos.z, and locks ECB. Keep jump/pass impulse, self-velocity, and jumps-used
+  // ownership in callers because each entry owns different followup lanes.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_Enter
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Enter_Basic
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::{ftCo_8009A184,ftCo_8009A228}
   // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
   batch->state.on_ground[idx] = 0u;
   batch->state.pos_z[idx] = 0.0f;
   batch->state.ecb_lock_timer[idx] = 10u;
+}
+
+static inline uint8_t common_pass_input_gate(const MslBatch* batch, const MslCommonParams* c,
+                                             size_t idx, float stick_y, uint8_t tilt_timer_y) {
+  if (batch == NULL || c == NULL) {
+    return 0u;
+  }
+  const uint32_t stage_id = batch->state.stage_id[idx / (size_t)MSL_MAX_PLAYERS];
+  const uint16_t ground_id = batch->state.ground_id[idx];
+  return (uint8_t)(ground_id != 0xFFFFu &&
+                   stage_collision_floor_line_is_platform(stage_id, ground_id) &&
+                   stick_y <= -c->pass_stick_threshold && tilt_timer_y < c->pass_tilt_max_frames);
+}
+
+static inline void common_pass_enter(MslBatch* batch, const MslCommonParams* c,
+                                     const MslCharParams* ch, size_t idx) {
+  if (batch == NULL || c == NULL || ch == NULL) {
+    return;
+  }
+  // Soft-platform Pass entry:
+  // - ftCo_8009A228 calls ftCommon_8007D5D4, ftCommon_ClampAirDrift, writes self_vel.y=x46C,
+  //   enters ftCo_MS_Pass, and calls mpUpdateFloorSkip.
+  // - The floor-skip itself is consumed by mpcoll_ground.c via the carried platform ground_id.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::{ftCo_8009A228,ftCo_Pass_Anim}
+  // refs/melee/src/melee/mp/mpcoll.c::{mpUpdateFloorSkip,mpColl_80044628_Floor}
+  locomotion_apply_jump_enter_ground_to_air(batch, idx);
+  batch->state.action_id[idx] = (uint16_t)MSL_ACT_PASS;
+  batch->state.animation_index[idx] = (uint32_t)MSL_SM_PASS;
+  batch->state.speed_ground_x_self[idx] = 0.0f;
+  batch->state.speed_y_self[idx] = c->pass_vel_y;
+  batch->state.jumps_left[idx] = ch->max_jumps > 0 ? (uint8_t)(ch->max_jumps - 1) : 0u;
+  batch->state.tilt_timer_y[idx] = 0xFEu;
+  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
 }
 
 static inline uint16_t jump_aerial_action_from_stick(const MslCommonParams* c, float stick_x,
@@ -2793,6 +2828,8 @@ static inline uint32_t submotion_for_action(uint16_t a) {
       return (uint32_t)MSL_SM_FALL_SPECIAL_B;
     case MSL_ACT_DAMAGE_FALL:
       return (uint32_t)MSL_SM_DAMAGE_FALL;
+    case MSL_ACT_PASS:
+      return (uint32_t)MSL_SM_PASS;
     case MSL_ACT_LANDING:
       return (uint32_t)MSL_SM_LANDING;
     case MSL_ACT_LANDING_FALL_SPECIAL:
@@ -3292,6 +3329,17 @@ void locomotion_update_pre(MslBatch* batch) {
               batch->state.kneebend_jump_input[idx] = (uint8_t)j_in;
               batch->state.kneebend_is_short_hop[idx] = 0;
               action_id = (uint16_t)MSL_ACT_KNEE_BEND;
+            } else if ((action_id == MSL_ACT_SQUAT || action_id == MSL_ACT_SQUAT_WAIT) &&
+                       batch->state.action_frame[idx] >= (int16_t)c->floor_skip_frames &&
+                       common_pass_input_gate(batch, c, idx, stick_y, tilt_timer_y)) {
+              // Squat/SquatWait platform pass:
+              // ftCo_80099F9C arms mv.co.pass.x4 with p_ftCommonData->x470, then Squat_Anim
+              // enters Pass once the countdown reaches zero while still on a platform.
+              // Model that hidden countdown with the current Squat/SquatWait action age.
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_80099F9C
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_Anim
+              common_pass_enter(batch, c, ch, idx);
+              action_id = (uint16_t)MSL_ACT_PASS;
             } else if (action_id == MSL_ACT_SQUAT_WAIT &&
                        squat_wait_try_dash_or_rv(batch, c, idx, stick_x, stick_y, tilt_timer_x,
                                                  facing_dir)) {
@@ -4008,6 +4056,19 @@ void locomotion_update_pre(MslBatch* batch) {
             action_id == MSL_ACT_SQUAT || action_id == MSL_ACT_SQUAT_WAIT ||
             action_id == MSL_ACT_SQUAT_RV) {
           allow_guard_entry = 1;
+        }
+        if (action_is_grounded_guard_state(action_id) &&
+            (buttons & (uint16_t)(MSL_BUTTON_L | MSL_BUTTON_R)) != 0u &&
+            common_pass_input_gate(batch, c, idx, stick_y, tilt_timer_y)) {
+          // Guard/GuardOn/GuardReflect platform pass:
+          // source Guard IASA admits ftCo_8009A080 from the shield callback while L/R is held and
+          // the fighter is on a platform. This must run before this sim's broad defensive
+          // `guard_update_grounded()` fallback can consume the same down input as EscapeN.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+          //   ftCo_GuardOn_IASA,ftCo_Guard_IASA,ftCo_GuardReflect_IASA}
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_8009A080
+          common_pass_enter(batch, c, ch, idx);
+          continue;
         }
         guard_update_grounded(batch, c, idx, allow_guard_entry);
         action_id = batch->state.action_id[idx];
@@ -5212,6 +5273,17 @@ void locomotion_update_pre(MslBatch* batch) {
         }
       }
 
+      if (action_id == (uint16_t)MSL_ACT_PASS) {
+        batch->state.animation_index[idx] = (uint32_t)MSL_SM_PASS;
+        if (anim_finished(cid, (uint16_t)MSL_SM_PASS, batch->state.anim_frame_f32[idx])) {
+          // Pass_Anim exits through ftCo_Fall_Enter when the short pass-through animation ends.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_Pass_Anim
+          enter_fall_keep_fastfall_ftco_fall_enter(batch, idx);
+          action_id = (uint16_t)MSL_ACT_FALL;
+          is_air_loco = 1u;
+        }
+      }
+
       // EscapeAir per-frame update (decay + anim-end -> FallSpecial).
       if (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR) {
         escape_air_update(batch, c, idx);
@@ -5240,7 +5312,7 @@ void locomotion_update_pre(MslBatch* batch) {
         const uint8_t allow_escape_air =
             (action_id == MSL_ACT_JUMP_F || action_id == MSL_ACT_JUMP_B ||
              action_id == MSL_ACT_JUMP_AERIAL_F || action_id == MSL_ACT_JUMP_AERIAL_B ||
-             action_is_fall_like(action_id))
+             action_is_fall_like(action_id) || action_id == (uint16_t)MSL_ACT_PASS)
                 ? 1
                 : 0;
         if (allow_escape_air && escape_air_try_enter_from_air_locomotion(batch, c, idx)) {
