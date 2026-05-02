@@ -35,7 +35,7 @@
 #   Note: runtime degrades safely when these bins are missing, but state_flags parity/suite totals can differ.
 #
 # (Optional) One-shot build for stage+chars:
-#     uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba --chars fox,falco
+#     uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba,griz,grps,grst,grop --chars fox,falco
 
 suite: fox_falco_fd_ucf084_recent  datasets: 4  ucf_enabled: True  ucf_cardinals_1_0_enabled: True
 validation.profile: rl1_gameplay
