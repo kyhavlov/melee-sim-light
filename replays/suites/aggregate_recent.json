@@ -1,6 +1,6 @@
 {
   "name": "aggregate_recent",
-  "notes": "Mixed Fox/Fox, Fox/Falco, and Falco/Falco Final Destination human replays across occupied port combinations. Secondary aggregate suite; keep fox_falco_fd_ucf084_recent as the primary regression gate. Excludes the MeatyExtraneousGoldfish outlier and de-duplicates the HungryImportantSnake/ElaborateEverlastingGerbil duplicate pair.",
+  "notes": "Mixed Fox/Fox, Fox/Falco, and Falco/Falco human replays across occupied port combinations and supported legal stages. Secondary aggregate suite; keep fox_falco_fd_ucf084_recent as the primary FD regression gate. Pokemon Stadium entries are frozen-stadium replays only. Excludes the MeatyExtraneousGoldfish outlier, de-duplicates the HungryImportantSnake/ElaborateEverlastingGerbil duplicate pair, and omits four-player local stage repros until 4p validation is in scope.",
   "ucf_enabled": true,
   "ucf_cardinals_1_0_enabled": true,
   "replays": [
@@ -218,6 +218,138 @@
       "characters": {
         "1": "Fox",
         "2": "Falco"
+      }
+    },
+    {
+      "replay": "replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.slp",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 2,
+      "characters": {
+        "1": "Fox",
+        "2": "Falco"
+      }
+    },
+    {
+      "replay": "replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.slp",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 2,
+      "characters": {
+        "1": "Fox",
+        "2": "Falco"
+      }
+    },
+    {
+      "replay": "replays/validation/pokemon_stadium_recent/CornyDelayedOkapi.slp",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 3,
+      "characters": {
+        "1": "Fox",
+        "2": "Falco"
+      }
+    },
+    {
+      "replay": "replays/validation/pokemon_stadium_recent/SweatyThisMallard.slp",
+      "ports": [
+        2,
+        4
+      ],
+      "stage_id": 3,
+      "characters": {
+        "2": "Falco",
+        "4": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/pokemon_stadium_recent/ThisVioletRaccoon.slp",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 3,
+      "characters": {
+        "1": "Fox",
+        "2": "Falco"
+      }
+    },
+    {
+      "replay": "replays/validation/dream_land_recent/FlippantEnchantedHorse.slp",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 28,
+      "characters": {
+        "1": "Fox",
+        "2": "Falco"
+      }
+    },
+    {
+      "replay": "replays/validation/dream_land_recent/ShadyDecimalStarling.slp",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 28,
+      "characters": {
+        "1": "Fox",
+        "2": "Falco"
+      }
+    },
+    {
+      "replay": "replays/validation/yoshis_story_recent/CheeryNumbMonkey.slp",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 8,
+      "characters": {
+        "1": "Fox",
+        "2": "Falco"
+      }
+    },
+    {
+      "replay": "replays/validation/yoshis_story_recent/DependentSteelGrouse.slp",
+      "ports": [
+        2,
+        4
+      ],
+      "stage_id": 8,
+      "characters": {
+        "2": "Falco",
+        "4": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/yoshis_story_recent/LawfulInsistentMeerkat.slp",
+      "ports": [
+        2,
+        4
+      ],
+      "stage_id": 8,
+      "characters": {
+        "2": "Falco",
+        "4": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/yoshis_story_recent/PhysicalElectricCapybara.slp",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 8,
+      "characters": {
+        "1": "Falco",
+        "2": "Fox"
       }
     }
   ]

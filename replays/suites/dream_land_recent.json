@@ -1,0 +1,20 @@
+{
+  "name": "dream_land_recent",
+  "notes": "Fox/Falco Dream Land N64 validation replays for stage data/platform-surface admission for future platform mechanics.",
+  "ucf_enabled": true,
+  "ucf_cardinals_1_0_enabled": true,
+  "replays": [
+    {
+      "replay": "replays/validation/dream_land_recent/FlippantEnchantedHorse.slp",
+      "ports": [1, 2],
+      "stage_id": 28,
+      "characters": { "1": "Fox", "2": "Falco" }
+    },
+    {
+      "replay": "replays/validation/dream_land_recent/ShadyDecimalStarling.slp",
+      "ports": [1, 2],
+      "stage_id": 28,
+      "characters": { "1": "Fox", "2": "Falco" }
+    }
+  ]
+}

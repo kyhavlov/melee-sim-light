@@ -1,20 +1,28 @@
 # Stage Expansion Notes
 
-Current committed state:
-- `aggregate_recent` includes three Battlefield replays.
-- `battlefield_recent` exists as the focused stage/platform suite.
-- `MSLSTG01` v2 extracts FD/Battlefield collision segments, platform/ledge flags, stage points,
-  spawn/respawn points, and camera/blast bounds.
-- Runtime/eval can load FD and Battlefield stage data, but new-match init is still FD-only until
-  non-FD Slippi neutral-start ownership is modeled.
+Current staged state:
+- `aggregate_recent` includes selected two-player Battlefield, Fountain of Dreams, frozen Pokemon
+  Stadium, Yoshi's Story, and Dream Land N64 replays.
+- Focused suites exist for Battlefield, Fountain of Dreams, Pokemon Stadium, Yoshi's Story, and
+  Dream Land N64.
+- `MSLSTG01` v2 extracts FD/Battlefield/Fountain/Pokemon/Yoshi/Dream Land collision segments,
+  platform/ledge flags, stage points, spawn/respawn points, and camera/blast bounds.
+- Runtime/eval can load all six supported legal-stage artifacts. New-match init uses MSLSTG01
+  spawn/respawn/camera/blast roles for all supported stages; Slippi neutral-spawn teams mode
+  remains FD-only because that patch table is FD-specific.
+- Platform line data is admitted for inspection and future owner work, but fighter grounding uses a
+  non-platform floor graph until drop-through/pass-through/moving-platform mechanics are modeled.
 
-Useful next stage-prep work before platform mechanics:
-- Add a small stage-registry path for remaining legal stages so adding stages is mostly data/config:
-  DAT key, stage id, suite name, and known expected role rows.
-- Promote one additional stage at a time through `MSLSTG01` known-row tests before adding replays.
-- Verify spawn/respawn/camera/blast role extraction against each new stage's `map_head` layout.
-- Add focused suites per stage, then include selected replays in `aggregate_recent` only after the
-  stage artifact and clean-checkout generation path are solid.
+Useful next stage work before deeper platform mechanics:
+- Decide when to admit four-player local Pokemon Stadium repros into validation; current aggregate
+  remains a two-player suite because shared one-step eval requires one `num_players` shape.
+- Pokemon Stadium's current top disruptive packet
+  (`reports/triage/next_desync_ps/top_packet.md`) is `DeadUpFallHitCamera` position drift, not a
+  missing stage role lookup. Decomp `ftCo_DeadUpFall_Phys` advances that action from hidden
+  `mv.co.unk_deadup` vectors/timers, so closing it belongs to match-flow DeadUpFall physics/seed
+  ownership rather than MSLSTG01 spawn/respawn/camera/blast hookup.
+- Model pass-through/moving platform mechanics. Pokemon Stadium validation is currently restricted
+  to frozen-stadium replays; transformation ownership remains out of scope for the foreseeable
+  runtime target.
 - Keep procedural mechanics out of `MSLSTG01`: platforms/drop-through/pass-through, ledge behavior,
   and mpColl branch ordering remain runtime owner work, not table facts.
-
