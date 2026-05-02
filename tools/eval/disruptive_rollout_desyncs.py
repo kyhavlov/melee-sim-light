@@ -19,7 +19,7 @@ from typing import Any, Iterable
 
 import numpy as np
 
-from tools.eval.dataset import COMPARE_DTYPE, MAX_ITEMS, read_dataset
+from tools.eval.dataset import COMPARE_DTYPE, read_dataset
 from tools.eval.facing_residual_blocker_report import load_action_id_names
 from tools.eval.mismatch_taxonomy import PlayerRow, _action_name, _classify_player_row
 from tools.eval.run_longest_rollout_streaks import _parse_csv, _parse_players, _validate_discrete_fields
@@ -150,35 +150,116 @@ SCORE_FORMULA = {
     },
 }
 
+NATIVE_FIELD_CODE_TO_NAME = {
+    0: "none",
+    1: "action_id",
+    2: "animation_index",
+    3: "action_frame",
+    4: "on_ground",
+    5: "hitlag",
+    6: "hitstun",
+    7: "state_flags",
+    8: "jumps_left",
+    9: "stocks",
+    10: "is_dead",
+    11: "hurtbox_state",
+    12: "ground_id",
+    13: "instance_id",
+    14: "instance_hit_by",
+    15: "last_attack_landed",
+    16: "combo_count",
+    17: "last_hit_by",
+    18: "l_cancel",
+    19: "facing",
+    20: "pos_x",
+    21: "pos_y",
+    22: "speed_air_x_self",
+    23: "speed_ground_x_self",
+    24: "speed_y_self",
+    25: "speed_x_attack",
+    26: "speed_y_attack",
+    27: "percent",
+    28: "shield_hp",
+    100: "state_flags[0]",
+    101: "state_flags[1]",
+    102: "state_flags[2]",
+    103: "state_flags[3]",
+    104: "state_flags[4]",
+    200: "item_exists",
+    201: "item_state",
+    202: "item_type",
+    203: "item_owner",
+    204: "item_instance_id",
+    205: "item_pos_x",
+    206: "item_pos_y",
+    207: "item_vel_x",
+    208: "item_vel_y",
+}
 
-@dataclass(frozen=True)
-class FirstMismatch:
-    offset: int
-    player: int
-    field: str
-    subindex: int
-    out: str
-    ref: str
+NATIVE_MASK_FIELDS = (
+    "action_id",
+    "animation_index",
+    "action_frame",
+    "on_ground",
+    "hitlag",
+    "hitstun",
+    "state_flags[0]",
+    "state_flags[1]",
+    "state_flags[2]",
+    "state_flags[3]",
+    "state_flags[4]",
+    "jumps_left",
+    "stocks",
+    "is_dead",
+    "hurtbox_state",
+    "ground_id",
+    "instance_id",
+    "instance_hit_by",
+    "last_attack_landed",
+    "combo_count",
+    "last_hit_by",
+    "l_cancel",
+    "facing",
+    "pos_x",
+    "pos_y",
+    "speed_air_x_self",
+    "speed_ground_x_self",
+    "speed_y_self",
+    "speed_x_attack",
+    "speed_y_attack",
+    "percent",
+    "shield_hp",
+)
 
+NATIVE_INT_RECORD = 0
+NATIVE_INT_SEED_FRAME = 1
+NATIVE_INT_HORIZON = 2
+NATIVE_INT_REF_FRAME = 3
+NATIVE_INT_PLAYER = 4
+NATIVE_INT_FIRST_OFFSET = 5
+NATIVE_INT_FIRST_FIELD_CODE = 6
+NATIVE_INT_FIRST_SUBINDEX = 7
+NATIVE_INT_FIRST_PLAYER = 8
+NATIVE_INT_FIRST_KIND = 9
+NATIVE_INT_FIRST_OUT_I = 10
+NATIVE_INT_FIRST_REF_I = 11
+NATIVE_INT_SEED_ACTION_ID = 12
+NATIVE_INT_OUT_ACTION_ID = 13
+NATIVE_INT_REF_ACTION_ID = 14
+NATIVE_INT_SEED_ACTION_FRAME = 15
+NATIVE_INT_OUT_ACTION_FRAME = 16
+NATIVE_INT_REF_ACTION_FRAME = 17
+NATIVE_INT_ON_GROUND = 18
+NATIVE_INT_HITLAG = 19
+NATIVE_INT_HITSTUN = 20
+NATIVE_INT_FAMILY_FIELD_MASK = 21
 
-@dataclass(frozen=True)
-class ScoreBreakdown:
-    total: float
-    discrete: float
-    floats: float
-    items: float
-    player_scores: tuple[float, ...]
-    item_score: float
-
-
-@dataclass(frozen=True)
-class BatchScoreBreakdown:
-    total: np.ndarray
-    discrete: np.ndarray
-    floats: np.ndarray
-    items: np.ndarray
-    player_scores: np.ndarray
-    item_score: np.ndarray
+NATIVE_FLOAT_FIRST_OUT_F = 0
+NATIVE_FLOAT_FIRST_REF_F = 1
+NATIVE_FLOAT_SCORE_TOTAL = 2
+NATIVE_FLOAT_SCORE_DISCRETE = 3
+NATIVE_FLOAT_SCORE_FLOAT = 4
+NATIVE_FLOAT_SCORE_ITEM = 5
 
 
 @dataclass(frozen=True)
@@ -241,40 +322,8 @@ def _load_binding():
     return importlib.import_module("msl_binding")
 
 
-def _clamp(value: float, lo: float, hi: float) -> float:
-    return max(lo, min(hi, value))
-
-
 def _float_text(value: Any) -> str:
     return f"{float(np.asarray(value).item()):.6g}"
-
-
-def _int_text(value: Any) -> str:
-    return str(int(np.asarray(value).item()))
-
-
-def _float_weight(field: str) -> tuple[float, float]:
-    if field in {"pos_x", "pos_y"}:
-        return 12.0, 20.0
-    if field == "percent":
-        return 40.0, 30.0
-    if field == "shield_hp":
-        return 20.0, 15.0
-    return 4.0, 20.0
-
-
-def _discrete_field_score(field: str, out_v: int, ref_v: int) -> float:
-    if out_v == ref_v:
-        return 0.0
-    if field == "action_frame":
-        return 6.0 * _clamp(float(abs(out_v - ref_v)), 0.0, 10.0)
-    if field == "hitlag":
-        return 25.0 * _clamp(float(abs(out_v - ref_v)), 0.0, 10.0)
-    if field == "hitstun":
-        return 12.0 * _clamp(float(abs(out_v - ref_v)), 0.0, 20.0)
-    if field == "stocks":
-        return 1000.0 * float(abs(out_v - ref_v))
-    return float(SCORE_FORMULA["discrete"].get(field, 10.0))
 
 
 def _base_field(field: str) -> str:
@@ -283,33 +332,6 @@ def _base_field(field: str) -> str:
     if field.startswith("item_"):
         return field
     return field
-
-
-def _lane_ignored(profile: ValidationProfile, field: str, subindex: int) -> bool:
-    return profile.is_ignored(field, subindex)
-
-
-def _scored_int_values_differ(
-    profile: ValidationProfile, field: str, subindex: int, out_v: int, ref_v: int
-) -> bool:
-    return profile.scored_values_differ(field, subindex, out_v, ref_v)
-
-
-def _scored_int_diff_array(
-    profile: ValidationProfile, field: str, subindex: int, out_values: np.ndarray, ref_values: np.ndarray
-) -> np.ndarray:
-    if profile.is_ignored(field, subindex):
-        return np.zeros(out_values.shape, dtype=bool)
-    ignored_mask = profile.ignored_bitmask_for(field, subindex)
-    if ignored_mask == 0:
-        return out_values != ref_values
-    dtype = np.asarray(out_values).dtype
-    try:
-        dtype_mask = int(np.iinfo(dtype).max)
-    except ValueError:
-        dtype_mask = 0xFFFFFFFF
-    mask = np.asarray((~ignored_mask) & dtype_mask, dtype=dtype)
-    return (out_values & mask) != (ref_values & mask)
 
 
 def _field_cluster(field: str) -> str:
@@ -338,509 +360,6 @@ def _field_cluster(field: str) -> str:
     if base.startswith("item_"):
         return "items"
     return "other"
-
-
-def _compare_first_mismatch(
-    *,
-    out_row: np.void,
-    ref_row: np.void,
-    players: tuple[int, ...],
-    discrete_fields: tuple[str, ...],
-    float_fields: tuple[str, ...],
-    offset: int,
-    float_epsilon: float,
-    profile: ValidationProfile,
-) -> FirstMismatch | None:
-    for field in discrete_fields:
-        out = out_row[field]
-        ref = ref_row[field]
-        if not hasattr(out, "ndim") or out.ndim == 0:
-            if _lane_ignored(profile, field, -1):
-                continue
-            if _scored_int_values_differ(
-                profile, field, -1, int(np.asarray(out).item()), int(np.asarray(ref).item())
-            ):
-                return FirstMismatch(offset, -1, field, -1, _int_text(out), _int_text(ref))
-            continue
-        if out.ndim == 1:
-            if _lane_ignored(profile, field, -1):
-                continue
-            for p in players:
-                if _scored_int_values_differ(profile, field, -1, int(out[p]), int(ref[p])):
-                    return FirstMismatch(offset, int(p), field, -1, _int_text(out[p]), _int_text(ref[p]))
-            continue
-        for p in players:
-            out_slice = np.asarray(out[p])
-            ref_slice = np.asarray(ref[p])
-            for sub in range(int(out_slice.size)):
-                if _lane_ignored(profile, field, sub):
-                    continue
-                if _scored_int_values_differ(
-                    profile, field, sub, int(out_slice.flat[sub]), int(ref_slice.flat[sub])
-                ):
-                    return FirstMismatch(
-                        offset,
-                        int(p),
-                        f"{field}[{sub}]",
-                        int(sub),
-                        _int_text(out_slice.flat[sub]),
-                        _int_text(ref_slice.flat[sub]),
-                    )
-
-    for field in float_fields:
-        out = out_row[field]
-        ref = ref_row[field]
-        for p in players:
-            if abs(float(out[p]) - float(ref[p])) > float_epsilon:
-                return FirstMismatch(offset, int(p), field, -1, _float_text(out[p]), _float_text(ref[p]))
-
-    out_items = out_row["items"]
-    ref_items = ref_row["items"]
-    for slot in range(MAX_ITEMS):
-        out_item = out_items[slot]
-        ref_item = ref_items[slot]
-        for subfield in ("exists", "state", "type", "owner", "instance_id"):
-            if int(out_item[subfield]) != int(ref_item[subfield]):
-                return FirstMismatch(
-                    offset,
-                    -1,
-                    f"item_{subfield}",
-                    slot,
-                    _int_text(out_item[subfield]),
-                    _int_text(ref_item[subfield]),
-                )
-        if int(out_item["exists"]) or int(ref_item["exists"]):
-            for subfield in ("pos_x", "pos_y", "vel_x", "vel_y"):
-                if abs(float(out_item[subfield]) - float(ref_item[subfield])) > float_epsilon:
-                    return FirstMismatch(
-                        offset,
-                        -1,
-                        f"item_{subfield}",
-                        slot,
-                        _float_text(out_item[subfield]),
-                        _float_text(ref_item[subfield]),
-                    )
-    return None
-
-
-def _compare_first_mismatches_batch(
-    *,
-    out_rows: np.ndarray,
-    ref_rows: np.ndarray,
-    first_mismatches: list[FirstMismatch | None],
-    players: tuple[int, ...],
-    discrete_fields: tuple[str, ...],
-    float_fields: tuple[str, ...],
-    offset: int,
-    float_epsilon: float,
-    profile: ValidationProfile,
-) -> None:
-    unresolved = np.fromiter((m is None for m in first_mismatches), dtype=bool, count=len(first_mismatches))
-    if not bool(unresolved.any()):
-        return
-
-    def assign_int(mask: np.ndarray, *, player: int, field: str, subindex: int, out_values, ref_values) -> bool:
-        lanes = np.flatnonzero(mask & unresolved)
-        for lane in lanes:
-            first_mismatches[int(lane)] = FirstMismatch(
-                offset,
-                player,
-                field,
-                subindex,
-                _int_text(out_values[int(lane)]),
-                _int_text(ref_values[int(lane)]),
-            )
-        unresolved[lanes] = False
-        return not bool(unresolved.any())
-
-    def assign_float(mask: np.ndarray, *, player: int, field: str, subindex: int, out_values, ref_values) -> bool:
-        lanes = np.flatnonzero(mask & unresolved)
-        for lane in lanes:
-            first_mismatches[int(lane)] = FirstMismatch(
-                offset,
-                player,
-                field,
-                subindex,
-                _float_text(out_values[int(lane)]),
-                _float_text(ref_values[int(lane)]),
-            )
-        unresolved[lanes] = False
-        return not bool(unresolved.any())
-
-    for field in discrete_fields:
-        field_shape = COMPARE_DTYPE.fields[field][0].shape
-        out = out_rows[field]
-        ref = ref_rows[field]
-        if field_shape == ():
-            if _lane_ignored(profile, field, -1):
-                continue
-            if assign_int(
-                _scored_int_diff_array(profile, field, -1, out, ref),
-                player=-1,
-                field=field,
-                subindex=-1,
-                out_values=out,
-                ref_values=ref,
-            ):
-                return
-            continue
-        if len(field_shape) == 1:
-            if _lane_ignored(profile, field, -1):
-                continue
-            for p in players:
-                out_values = out[:, p]
-                ref_values = ref[:, p]
-                if assign_int(
-                    _scored_int_diff_array(profile, field, -1, out_values, ref_values),
-                    player=int(p),
-                    field=field,
-                    subindex=-1,
-                    out_values=out_values,
-                    ref_values=ref_values,
-                ):
-                    return
-            continue
-        for p in players:
-            for sub in range(int(np.prod(field_shape[1:]))):
-                if _lane_ignored(profile, field, sub):
-                    continue
-                out_values = out[:, p].reshape(out.shape[0], -1)[:, sub]
-                ref_values = ref[:, p].reshape(ref.shape[0], -1)[:, sub]
-                if assign_int(
-                    _scored_int_diff_array(profile, field, sub, out_values, ref_values),
-                    player=int(p),
-                    field=f"{field}[{sub}]",
-                    subindex=int(sub),
-                    out_values=out_values,
-                    ref_values=ref_values,
-                ):
-                    return
-
-    for field in float_fields:
-        out = out_rows[field]
-        ref = ref_rows[field]
-        for p in players:
-            out_values = out[:, p]
-            ref_values = ref[:, p]
-            if assign_float(
-                np.abs(out_values - ref_values) > float_epsilon,
-                player=int(p),
-                field=field,
-                subindex=-1,
-                out_values=out_values,
-                ref_values=ref_values,
-            ):
-                return
-
-    out_items = out_rows["items"]
-    ref_items = ref_rows["items"]
-    for slot in range(MAX_ITEMS):
-        out_item = out_items[:, slot]
-        ref_item = ref_items[:, slot]
-        for subfield in ("exists", "state", "type", "owner", "instance_id"):
-            out_values = out_item[subfield]
-            ref_values = ref_item[subfield]
-            if assign_int(
-                out_values != ref_values,
-                player=-1,
-                field=f"item_{subfield}",
-                subindex=slot,
-                out_values=out_values,
-                ref_values=ref_values,
-            ):
-                return
-        exists = (out_item["exists"] != 0) | (ref_item["exists"] != 0)
-        for subfield in ("pos_x", "pos_y", "vel_x", "vel_y"):
-            out_values = out_item[subfield]
-            ref_values = ref_item[subfield]
-            if assign_float(
-                exists & (np.abs(out_values - ref_values) > float_epsilon),
-                player=-1,
-                field=f"item_{subfield}",
-                subindex=slot,
-                out_values=out_values,
-                ref_values=ref_values,
-            ):
-                return
-
-
-def _score_horizon_row(
-    *,
-    out_row: np.void,
-    ref_row: np.void,
-    players: tuple[int, ...],
-    discrete_fields: tuple[str, ...],
-    float_fields: tuple[str, ...],
-    float_epsilon: float,
-    profile: ValidationProfile,
-) -> ScoreBreakdown:
-    player_scores = [0.0 for _ in range(max(players) + 1 if players else 0)]
-    discrete_score = 0.0
-    float_score = 0.0
-    item_score = 0.0
-
-    for field in discrete_fields:
-        out = out_row[field]
-        ref = ref_row[field]
-        if not hasattr(out, "ndim") or out.ndim == 0:
-            if _lane_ignored(profile, field, -1):
-                continue
-            if _scored_int_values_differ(
-                profile, field, -1, int(np.asarray(out).item()), int(np.asarray(ref).item())
-            ):
-                discrete_score += _discrete_field_score(field, int(np.asarray(out).item()), int(np.asarray(ref).item()))
-            continue
-        if out.ndim == 1:
-            if _lane_ignored(profile, field, -1):
-                continue
-            for p in players:
-                if not _scored_int_values_differ(profile, field, -1, int(out[p]), int(ref[p])):
-                    continue
-                score = _discrete_field_score(field, int(out[p]), int(ref[p]))
-                player_scores[p] += score
-                discrete_score += score
-            continue
-        for p in players:
-            out_slice = np.asarray(out[p])
-            ref_slice = np.asarray(ref[p])
-            for sub in range(int(out_slice.size)):
-                if _lane_ignored(profile, field, sub):
-                    continue
-                if _scored_int_values_differ(
-                    profile, field, sub, int(out_slice.flat[sub]), int(ref_slice.flat[sub])
-                ):
-                    player_scores[p] += 15.0
-                    discrete_score += 15.0
-
-    for field in float_fields:
-        out = out_row[field]
-        ref = ref_row[field]
-        weight, cap = _float_weight(field)
-        for p in players:
-            delta = abs(float(out[p]) - float(ref[p]))
-            if delta > float_epsilon:
-                score = weight * _clamp(delta, 0.0, cap)
-                player_scores[p] += score
-                float_score += score
-
-    out_items = out_row["items"]
-    ref_items = ref_row["items"]
-    for slot in range(MAX_ITEMS):
-        out_item = out_items[slot]
-        ref_item = ref_items[slot]
-        out_exists = int(out_item["exists"])
-        ref_exists = int(ref_item["exists"])
-        if out_exists != ref_exists:
-            item_score += 100.0
-        for subfield, weight in (("state", 60.0), ("type", 60.0), ("owner", 50.0)):
-            if int(out_item[subfield]) != int(ref_item[subfield]):
-                item_score += weight
-        if out_exists or ref_exists:
-            for subfield in ("pos_x", "pos_y"):
-                delta = abs(float(out_item[subfield]) - float(ref_item[subfield]))
-                if delta > float_epsilon:
-                    item_score += 8.0 * _clamp(delta, 0.0, 20.0)
-
-    total = discrete_score + float_score + item_score
-    return ScoreBreakdown(
-        total=total,
-        discrete=discrete_score,
-        floats=float_score,
-        items=item_score,
-        player_scores=tuple(player_scores),
-        item_score=item_score,
-    )
-
-
-def _discrete_field_score_array(field: str, out: np.ndarray, ref: np.ndarray) -> np.ndarray:
-    if field == "action_frame":
-        return 6.0 * np.clip(np.abs(out.astype(np.float64) - ref.astype(np.float64)), 0.0, 10.0)
-    if field == "hitlag":
-        return 25.0 * np.clip(np.abs(out.astype(np.float64) - ref.astype(np.float64)), 0.0, 10.0)
-    if field == "hitstun":
-        return 12.0 * np.clip(np.abs(out.astype(np.float64) - ref.astype(np.float64)), 0.0, 20.0)
-    if field == "stocks":
-        return 1000.0 * np.abs(out.astype(np.float64) - ref.astype(np.float64))
-    weight = float(SCORE_FORMULA["discrete"].get(field, 10.0))
-    return (out != ref).astype(np.float64) * weight
-
-
-def _score_horizon_rows_batch(
-    *,
-    out_rows: np.ndarray,
-    ref_rows: np.ndarray,
-    players: tuple[int, ...],
-    discrete_fields: tuple[str, ...],
-    float_fields: tuple[str, ...],
-    float_epsilon: float,
-    profile: ValidationProfile,
-) -> BatchScoreBreakdown:
-    n = int(out_rows.shape[0])
-    player_scores = np.zeros((n, max(players) + 1 if players else 0), dtype=np.float64)
-    discrete_score = np.zeros(n, dtype=np.float64)
-    float_score = np.zeros(n, dtype=np.float64)
-    item_score = np.zeros(n, dtype=np.float64)
-
-    for field in discrete_fields:
-        field_shape = COMPARE_DTYPE.fields[field][0].shape
-        out = out_rows[field]
-        ref = ref_rows[field]
-        if field_shape == ():
-            if _lane_ignored(profile, field, -1):
-                continue
-            discrete_score += np.where(
-                _scored_int_diff_array(profile, field, -1, out, ref),
-                _discrete_field_score_array(field, out, ref),
-                0.0,
-            )
-            continue
-        if len(field_shape) == 1:
-            if _lane_ignored(profile, field, -1):
-                continue
-            for p in players:
-                diff = _scored_int_diff_array(profile, field, -1, out[:, p], ref[:, p])
-                score = np.where(diff, _discrete_field_score_array(field, out[:, p], ref[:, p]), 0.0)
-                player_scores[:, p] += score
-                discrete_score += score
-            continue
-        for p in players:
-            out_flat = out[:, p].reshape(n, -1)
-            ref_flat = ref[:, p].reshape(n, -1)
-            diff = out_flat != ref_flat
-            for sub in range(diff.shape[1]):
-                diff[:, sub] = _scored_int_diff_array(profile, field, sub, out_flat[:, sub], ref_flat[:, sub])
-            diff_count = np.count_nonzero(diff, axis=1).astype(np.float64)
-            score = diff_count * 15.0
-            player_scores[:, p] += score
-            discrete_score += score
-
-    for field in float_fields:
-        out = out_rows[field]
-        ref = ref_rows[field]
-        weight, cap = _float_weight(field)
-        for p in players:
-            delta = np.abs(out[:, p].astype(np.float64) - ref[:, p].astype(np.float64))
-            score = np.where(delta > float_epsilon, weight * np.clip(delta, 0.0, cap), 0.0)
-            player_scores[:, p] += score
-            float_score += score
-
-    out_items = out_rows["items"]
-    ref_items = ref_rows["items"]
-    for slot in range(MAX_ITEMS):
-        out_item = out_items[:, slot]
-        ref_item = ref_items[:, slot]
-        item_score += (out_item["exists"] != ref_item["exists"]).astype(np.float64) * 100.0
-        for subfield, weight in (("state", 60.0), ("type", 60.0), ("owner", 50.0)):
-            item_score += (out_item[subfield] != ref_item[subfield]).astype(np.float64) * weight
-        exists = (out_item["exists"] != 0) | (ref_item["exists"] != 0)
-        for subfield in ("pos_x", "pos_y"):
-            delta = np.abs(out_item[subfield].astype(np.float64) - ref_item[subfield].astype(np.float64))
-            item_score += np.where(exists & (delta > float_epsilon), 8.0 * np.clip(delta, 0.0, 20.0), 0.0)
-
-    total = discrete_score + float_score + item_score
-    return BatchScoreBreakdown(
-        total=total,
-        discrete=discrete_score,
-        floats=float_score,
-        items=item_score,
-        player_scores=player_scores,
-        item_score=item_score,
-    )
-
-
-def _mismatched_player_fields(
-    *,
-    out_row: np.void,
-    ref_row: np.void,
-    player: int,
-    discrete_fields: tuple[str, ...],
-    float_fields: tuple[str, ...],
-    float_epsilon: float,
-    profile: ValidationProfile,
-) -> tuple[str, ...]:
-    fields: list[str] = []
-    for field in discrete_fields:
-        out = out_row[field]
-        ref = ref_row[field]
-        if not hasattr(out, "ndim") or out.ndim == 0:
-            continue
-        if out.ndim == 1:
-            if _lane_ignored(profile, field, -1):
-                continue
-            if _scored_int_values_differ(profile, field, -1, int(out[player]), int(ref[player])):
-                fields.append(field)
-            continue
-        out_slice = np.asarray(out[player])
-        ref_slice = np.asarray(ref[player])
-        for sub in range(int(out_slice.size)):
-            if _lane_ignored(profile, field, sub):
-                continue
-            if _scored_int_values_differ(
-                profile, field, sub, int(out_slice.flat[sub]), int(ref_slice.flat[sub])
-            ):
-                fields.append(f"{field}[{sub}]")
-    for field in float_fields:
-        if abs(float(out_row[field][player]) - float(ref_row[field][player])) > float_epsilon:
-            fields.append(field)
-    return tuple(fields)
-
-
-def _taxonomy_family(
-    *,
-    dataset: str,
-    record: int,
-    seed_row: np.void,
-    out_row: np.void,
-    ref_row: np.void,
-    player: int,
-    fields: tuple[str, ...],
-    action_names: dict[int, str],
-) -> str:
-    taxonomy_fields = tuple(field for field in fields if not field.startswith("item_"))
-    if not taxonomy_fields:
-        cluster = _field_cluster(fields[0] if fields else "other")
-        return f"F00_rollout_{cluster}"
-    row = PlayerRow(
-        dataset=dataset,
-        record=int(record),
-        p=int(player),
-        seed_frame=int(seed_row["frame_id"]),
-        ref_frame=int(ref_row["frame_id"]),
-        seed_action_id=int(seed_row["action_id"][player]),
-        ref_action_id=int(ref_row["action_id"][player]),
-        out_action_id=int(out_row["action_id"][player]),
-        prev_action_id=int(seed_row["seed_prev_action_id"][player]),
-        seed_action_frame=int(seed_row["action_frame"][player]),
-        ref_action_frame=int(ref_row["action_frame"][player]),
-        out_action_frame=int(out_row["action_frame"][player]),
-        on_ground=int(seed_row["on_ground"][player]),
-        hitlag=int(seed_row["hitlag"][player]),
-        hitstun=int(seed_row["hitstun"][player]),
-        fields=taxonomy_fields,
-        family_id="",
-    )
-    return _classify_player_row(row, action_names)
-
-
-def _action_state(
-    *,
-    seed_row: np.void,
-    out_row: np.void,
-    ref_row: np.void,
-    player: int,
-    action_names: dict[int, str],
-) -> str:
-    seed_id = int(seed_row["action_id"][player])
-    out_id = int(out_row["action_id"][player])
-    ref_id = int(ref_row["action_id"][player])
-    return (
-        f"seed={_action_name(action_names, seed_id)}"
-        f"|out={_action_name(action_names, out_id)}"
-        f"|ref={_action_name(action_names, ref_id)}"
-        f"|ground={int(ref_row['on_ground'][player])}"
-        f"|hitlag={int(ref_row['hitlag'][player]) > 0}"
-        f"|hitstun={int(ref_row['hitstun'][player]) > 0}"
-    )
 
 
 def _cluster_key(
@@ -921,235 +440,112 @@ def _read_rows_tsv(path: Path) -> list[DisruptiveRow]:
     return rows
 
 
-def _row_for_scored_horizon(
+def _native_mask_fields(mask: int) -> tuple[str, ...]:
+    return tuple(field for bit, field in enumerate(NATIVE_MASK_FIELDS) if int(mask) & (1 << bit))
+
+
+def _row_from_native(
     *,
     suite_name: str,
     dataset_label: str,
-    record: int,
-    horizon: int,
-    seed_row: np.void,
-    out_row: np.void,
-    ref_row: np.void,
-    score: ScoreBreakdown,
-    first_mismatch: FirstMismatch | None,
-    players: tuple[int, ...],
+    samples: np.ndarray,
+    ints: np.ndarray,
+    floats: np.ndarray,
+    row_i: int,
     discrete_fields: tuple[str, ...],
     float_fields: tuple[str, ...],
     float_epsilon: float,
     action_names: dict[int, str],
     profile: ValidationProfile,
 ) -> DisruptiveRow:
-    player = max(players, key=lambda p: (score.player_scores[p], -p))
-    if score.player_scores[player] <= 0.0 and score.item_score > 0.0:
-        player = -1
-    family_fields = (
-        (first_mismatch.field,) if player < 0 else _mismatched_player_fields(
-            out_row=out_row,
-            ref_row=ref_row,
-            player=player,
-            discrete_fields=discrete_fields,
-            float_fields=float_fields,
-            float_epsilon=float_epsilon,
-            profile=profile,
-        )
-    )
-    if not family_fields and first_mismatch is not None:
-        family_fields = (first_mismatch.field,)
-    first = first_mismatch or FirstMismatch(horizon, player, "none", -1, "", "")
-    field_cluster = _field_cluster(first.field if first.field != "none" else family_fields[0])
-    family_id = (
-        "F00_rollout_items"
-        if player < 0
-        else _taxonomy_family(
+    _ = (discrete_fields, float_fields, float_epsilon, profile)
+    raw_i = ints[row_i]
+    raw_f = floats[row_i]
+    record = int(raw_i[NATIVE_INT_RECORD])
+    player = int(raw_i[NATIVE_INT_PLAYER])
+    first_field = NATIVE_FIELD_CODE_TO_NAME.get(int(raw_i[NATIVE_INT_FIRST_FIELD_CODE]), "none")
+    first_kind = int(raw_i[NATIVE_INT_FIRST_KIND])
+    first_out = _float_text(raw_f[NATIVE_FLOAT_FIRST_OUT_F]) if first_kind == 1 else str(int(raw_i[NATIVE_INT_FIRST_OUT_I]))
+    first_ref = _float_text(raw_f[NATIVE_FLOAT_FIRST_REF_F]) if first_kind == 1 else str(int(raw_i[NATIVE_INT_FIRST_REF_I]))
+
+    if player < 0:
+        family_id = "F00_rollout_items"
+        action_state = "item_slot"
+        family_fields = (first_field,) if first_field != "none" else ()
+    else:
+        mask_fields = _native_mask_fields(int(raw_i[NATIVE_INT_FAMILY_FIELD_MASK]))
+        family_fields = mask_fields or ((first_field,) if first_field != "none" else ())
+        seed_row = samples["seed_t"][record]
+        row = PlayerRow(
             dataset=dataset_label,
             record=record,
-            seed_row=seed_row,
-            out_row=out_row,
-            ref_row=ref_row,
-            player=player,
-            fields=family_fields,
-            action_names=action_names,
+            p=player,
+            seed_frame=int(raw_i[NATIVE_INT_SEED_FRAME]),
+            ref_frame=int(raw_i[NATIVE_INT_REF_FRAME]),
+            seed_action_id=int(raw_i[NATIVE_INT_SEED_ACTION_ID]),
+            ref_action_id=int(raw_i[NATIVE_INT_REF_ACTION_ID]),
+            out_action_id=int(raw_i[NATIVE_INT_OUT_ACTION_ID]),
+            prev_action_id=int(seed_row["seed_prev_action_id"][player]),
+            seed_action_frame=int(raw_i[NATIVE_INT_SEED_ACTION_FRAME]),
+            ref_action_frame=int(raw_i[NATIVE_INT_REF_ACTION_FRAME]),
+            out_action_frame=int(raw_i[NATIVE_INT_OUT_ACTION_FRAME]),
+            on_ground=int(seed_row["on_ground"][player]),
+            hitlag=int(seed_row["hitlag"][player]),
+            hitstun=int(seed_row["hitstun"][player]),
+            fields=tuple(field for field in family_fields if not field.startswith("item_")),
+            family_id="",
         )
-    )
-    action_state = (
-        "item_slot"
-        if player < 0
-        else _action_state(
-            seed_row=seed_row,
-            out_row=out_row,
-            ref_row=ref_row,
-            player=player,
-            action_names=action_names,
+        family_id = _classify_player_row(row, action_names)
+        action_state = (
+            f"seed={_action_name(action_names, int(raw_i[NATIVE_INT_SEED_ACTION_ID]))}"
+            f"|out={_action_name(action_names, int(raw_i[NATIVE_INT_OUT_ACTION_ID]))}"
+            f"|ref={_action_name(action_names, int(raw_i[NATIVE_INT_REF_ACTION_ID]))}"
+            f"|ground={int(raw_i[NATIVE_INT_ON_GROUND])}"
+            f"|hitlag={int(raw_i[NATIVE_INT_HITLAG]) > 0}"
+            f"|hitstun={int(raw_i[NATIVE_INT_HITSTUN]) > 0}"
         )
-    )
+
+    field_cluster = _field_cluster(first_field if first_field != "none" else family_fields[0])
     cluster_key = _cluster_key(
-        horizon=horizon,
+        horizon=int(raw_i[NATIVE_INT_HORIZON]),
         family_id=family_id,
         action_state=action_state,
         dataset=dataset_label,
         player=player,
         field_cluster=field_cluster,
     )
-    action_player = 0 if player < 0 else player
     return DisruptiveRow(
         suite=suite_name,
         dataset=dataset_label,
         record=record,
-        seed_frame=int(seed_row["frame_id"]),
-        horizon=horizon,
-        ref_frame=int(ref_row["frame_id"]),
-        player=int(player),
+        seed_frame=int(raw_i[NATIVE_INT_SEED_FRAME]),
+        horizon=int(raw_i[NATIVE_INT_HORIZON]),
+        ref_frame=int(raw_i[NATIVE_INT_REF_FRAME]),
+        player=player,
         family_id=family_id,
         action_state=action_state,
         field_cluster=field_cluster,
-        first_mismatch_offset=int(first.offset),
-        first_mismatch_field=first.field,
-        first_mismatch_subindex=int(first.subindex),
-        first_mismatch_player=int(first.player),
-        first_out=first.out,
-        first_ref=first.ref,
-        score_total=float(score.total),
-        score_discrete=float(score.discrete),
-        score_float=float(score.floats),
-        score_item=float(score.items),
-        seed_action_id=int(seed_row["action_id"][action_player]),
-        out_action_id=int(out_row["action_id"][action_player]),
-        ref_action_id=int(ref_row["action_id"][action_player]),
-        seed_action_frame=int(seed_row["action_frame"][action_player]),
-        out_action_frame=int(out_row["action_frame"][action_player]),
-        ref_action_frame=int(ref_row["action_frame"][action_player]),
-        on_ground=int(ref_row["on_ground"][action_player]),
-        hitlag=int(ref_row["hitlag"][action_player]),
-        hitstun=int(ref_row["hitstun"][action_player]),
+        first_mismatch_offset=int(raw_i[NATIVE_INT_FIRST_OFFSET]),
+        first_mismatch_field=first_field,
+        first_mismatch_subindex=int(raw_i[NATIVE_INT_FIRST_SUBINDEX]),
+        first_mismatch_player=int(raw_i[NATIVE_INT_FIRST_PLAYER]),
+        first_out=first_out,
+        first_ref=first_ref,
+        score_total=float(raw_f[NATIVE_FLOAT_SCORE_TOTAL]),
+        score_discrete=float(raw_f[NATIVE_FLOAT_SCORE_DISCRETE]),
+        score_float=float(raw_f[NATIVE_FLOAT_SCORE_FLOAT]),
+        score_item=float(raw_f[NATIVE_FLOAT_SCORE_ITEM]),
+        seed_action_id=int(raw_i[NATIVE_INT_SEED_ACTION_ID]),
+        out_action_id=int(raw_i[NATIVE_INT_OUT_ACTION_ID]),
+        ref_action_id=int(raw_i[NATIVE_INT_REF_ACTION_ID]),
+        seed_action_frame=int(raw_i[NATIVE_INT_SEED_ACTION_FRAME]),
+        out_action_frame=int(raw_i[NATIVE_INT_OUT_ACTION_FRAME]),
+        ref_action_frame=int(raw_i[NATIVE_INT_REF_ACTION_FRAME]),
+        on_ground=int(raw_i[NATIVE_INT_ON_GROUND]),
+        hitlag=int(raw_i[NATIVE_INT_HITLAG]),
+        hitstun=int(raw_i[NATIVE_INT_HITSTUN]),
         cluster_key=cluster_key,
     )
-
-
-def _scan_dataset_scalar(
-    *,
-    suite_name: str,
-    dataset_path: Path,
-    dataset_label: str,
-    horizons: tuple[int, ...],
-    discrete_fields: tuple[str, ...],
-    float_fields: tuple[str, ...],
-    players: tuple[int, ...],
-    max_records: int,
-    stride: int,
-    float_epsilon: float,
-    ucf_enabled: bool | None,
-    ucf_cardinals_1_0_enabled: bool | None,
-    action_names: dict[int, str],
-    profile: ValidationProfile,
-    start_record: int = 0,
-    stop_record: int = 0,
-) -> list[DisruptiveRow]:
-    ds = read_dataset(str(dataset_path))
-    samples = ds.samples
-    total_records = int(samples.shape[0])
-    max_horizon = max(horizons)
-    usable_records = max(0, total_records - max_horizon + 1)
-    if max_records > 0:
-        usable_records = min(usable_records, int(max_records))
-    record_start = max(0, int(start_record))
-    record_stop = usable_records if stop_record <= 0 else min(usable_records, int(stop_record))
-
-    binding = _load_binding()
-    sizes = binding.sizes()
-    seed_stride = int(sizes["seed"])
-    input_stride = int(sizes["input"])
-    compare_stride = int(sizes["compare"])
-
-    init_kwargs = {"batch_size": 1, "num_players": int(ds.header["num_players"])}
-    if ucf_enabled is not None:
-        init_kwargs["ucf_enabled"] = int(bool(ucf_enabled))
-    if ucf_cardinals_1_0_enabled is not None:
-        init_kwargs["ucf_cardinals_1_0_enabled"] = int(bool(ucf_cardinals_1_0_enabled))
-    handle = binding.init(**init_kwargs)
-
-    seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
-    prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
-    input_bytes = np.empty((1, input_stride), dtype=np.uint8)
-    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
-    out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(1)
-
-    sample_stride = int(samples.dtype.itemsize)
-    samples_u8 = samples.view(np.uint8).reshape(total_records, sample_stride)
-    seed_off = int(samples.dtype.fields["seed_t"][1])
-    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
-    input_off = int(samples.dtype.fields["input_t"][1])
-
-    horizon_set = set(horizons)
-    rows: list[DisruptiveRow] = []
-    try:
-        for start in range(record_start, record_stop, max(1, int(stride))):
-            seed_bytes[0, :] = samples_u8[start, seed_off : seed_off + seed_stride]
-            binding.reseed_seed_rollout(handle, seed_bytes)
-            first_mismatch: FirstMismatch | None = None
-            for offset in range(1, max_horizon + 1):
-                j = start + offset - 1
-                prev_input_bytes[0, :] = samples_u8[j, prev_input_off : prev_input_off + input_stride]
-                input_bytes[0, :] = samples_u8[j, input_off : input_off + input_stride]
-                binding.step_input(handle, prev_input_bytes, input_bytes)
-                binding.write_compare(handle, out_compare_bytes)
-                ref_row = samples["ref_t1"][j]
-                if first_mismatch is None:
-                    first_mismatch = _compare_first_mismatch(
-                        out_row=out_view[0],
-                        ref_row=ref_row,
-                        players=players,
-                        discrete_fields=discrete_fields,
-                        float_fields=float_fields,
-                        offset=offset,
-                        float_epsilon=float_epsilon,
-                        profile=profile,
-                    )
-                if offset not in horizon_set:
-                    continue
-
-                score = _score_horizon_row(
-                    out_row=out_view[0],
-                    ref_row=ref_row,
-                    players=players,
-                    discrete_fields=discrete_fields,
-                    float_fields=float_fields,
-                    float_epsilon=float_epsilon,
-                    profile=profile,
-                )
-                if score.total <= 0.0:
-                    continue
-
-                seed_row = samples["seed_t"][start]
-                rows.append(
-                    _row_for_scored_horizon(
-                        suite_name=suite_name,
-                        dataset_label=dataset_label,
-                        record=start,
-                        horizon=offset,
-                        seed_row=seed_row,
-                        out_row=out_view[0],
-                        ref_row=ref_row,
-                        score=score,
-                        first_mismatch=first_mismatch,
-                        players=players,
-                        discrete_fields=discrete_fields,
-                        float_fields=float_fields,
-                        float_epsilon=float_epsilon,
-                        action_names=action_names,
-                        profile=profile,
-                    )
-                )
-    finally:
-        try:
-            binding.destroy(handle)
-        except Exception:
-            pass
-    return rows
-
-
-def _fill_inactive_lanes(arr: np.ndarray, active_count: int) -> None:
-    if 0 < active_count < int(arr.shape[0]):
-        arr[active_count:, :] = arr[active_count - 1, :]
 
 
 def _scan_dataset(
@@ -1172,154 +568,43 @@ def _scan_dataset(
     start_record: int = 0,
     stop_record: int = 0,
 ) -> list[DisruptiveRow]:
-    if batch_size <= 1:
-        return _scan_dataset_scalar(
-            suite_name=suite_name,
-            dataset_path=dataset_path,
-            dataset_label=dataset_label,
-            horizons=horizons,
-            discrete_fields=discrete_fields,
-            float_fields=float_fields,
-            players=players,
-            max_records=max_records,
-            stride=stride,
-            float_epsilon=float_epsilon,
-            ucf_enabled=ucf_enabled,
-            ucf_cardinals_1_0_enabled=ucf_cardinals_1_0_enabled,
-            action_names=action_names,
-            profile=profile,
-            start_record=start_record,
-            stop_record=stop_record,
-        )
-
+    binding = _load_binding()
     ds = read_dataset(str(dataset_path))
     samples = ds.samples
-    total_records = int(samples.shape[0])
-    max_horizon = max(horizons)
-    usable_records = max(0, total_records - max_horizon + 1)
-    if max_records > 0:
-        usable_records = min(usable_records, int(max_records))
-    record_start = max(0, int(start_record))
-    record_stop = usable_records if stop_record <= 0 else min(usable_records, int(stop_record))
-
-    binding = _load_binding()
-    sizes = binding.sizes()
-    seed_stride = int(sizes["seed"])
-    input_stride = int(sizes["input"])
-    compare_stride = int(sizes["compare"])
-    batch_size = max(1, int(batch_size))
-
-    init_kwargs = {"batch_size": batch_size, "num_players": int(ds.header["num_players"])}
-    if ucf_enabled is not None:
-        init_kwargs["ucf_enabled"] = int(bool(ucf_enabled))
-    if ucf_cardinals_1_0_enabled is not None:
-        init_kwargs["ucf_cardinals_1_0_enabled"] = int(bool(ucf_cardinals_1_0_enabled))
-    handle = binding.init(**init_kwargs)
-
-    seed_bytes = np.empty((batch_size, seed_stride), dtype=np.uint8)
-    prev_input_bytes = np.empty((batch_size, input_stride), dtype=np.uint8)
-    input_bytes = np.empty((batch_size, input_stride), dtype=np.uint8)
-    out_compare_bytes = np.empty((batch_size, compare_stride), dtype=np.uint8)
-    out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(batch_size)
-
-    sample_stride = int(samples.dtype.itemsize)
-    samples_u8 = samples.view(np.uint8).reshape(total_records, sample_stride)
-    seed_off = int(samples.dtype.fields["seed_t"][1])
-    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
-    input_off = int(samples.dtype.fields["input_t"][1])
-
-    starts_all = np.arange(record_start, record_stop, max(1, int(stride)), dtype=np.int64)
-    horizon_set = set(horizons)
-    rows: list[DisruptiveRow] = []
-    try:
-        for chunk_lo in range(0, int(starts_all.shape[0]), batch_size):
-            starts = starts_all[chunk_lo : chunk_lo + batch_size]
-            active_count = int(starts.shape[0])
-            if active_count <= 0:
-                continue
-
-            seed_bytes[:active_count, :] = samples_u8[starts, seed_off : seed_off + seed_stride]
-            _fill_inactive_lanes(seed_bytes, active_count)
-            binding.reseed_seed_rollout(handle, seed_bytes)
-
-            first_mismatches: list[FirstMismatch | None] = [None for _ in range(active_count)]
-            chunk_rows: list[list[DisruptiveRow]] = [[] for _ in range(active_count)]
-            for offset in range(1, max_horizon + 1):
-                ref_indices = starts + offset - 1
-                prev_input_bytes[:active_count, :] = samples_u8[
-                    ref_indices, prev_input_off : prev_input_off + input_stride
-                ]
-                input_bytes[:active_count, :] = samples_u8[ref_indices, input_off : input_off + input_stride]
-                _fill_inactive_lanes(prev_input_bytes, active_count)
-                _fill_inactive_lanes(input_bytes, active_count)
-
-                binding.step_input(handle, prev_input_bytes, input_bytes)
-                binding.write_compare(handle, out_compare_bytes)
-                ref_rows = samples["ref_t1"][ref_indices]
-
-                _compare_first_mismatches_batch(
-                    out_rows=out_view[:active_count],
-                    ref_rows=ref_rows,
-                    first_mismatches=first_mismatches,
-                    players=players,
-                    discrete_fields=discrete_fields,
-                    float_fields=float_fields,
-                    offset=offset,
-                    float_epsilon=float_epsilon,
-                    profile=profile,
-                )
-
-                if offset not in horizon_set:
-                    continue
-
-                batch_score = _score_horizon_rows_batch(
-                    out_rows=out_view[:active_count],
-                    ref_rows=ref_rows,
-                    players=players,
-                    discrete_fields=discrete_fields,
-                    float_fields=float_fields,
-                    float_epsilon=float_epsilon,
-                    profile=profile,
-                )
-                for lane in np.flatnonzero(batch_score.total > 0.0):
-                    lane_i = int(lane)
-                    score = ScoreBreakdown(
-                        total=float(batch_score.total[lane_i]),
-                        discrete=float(batch_score.discrete[lane_i]),
-                        floats=float(batch_score.floats[lane_i]),
-                        items=float(batch_score.items[lane_i]),
-                        player_scores=tuple(float(v) for v in batch_score.player_scores[lane_i]),
-                        item_score=float(batch_score.item_score[lane_i]),
-                    )
-                    start = int(starts[lane_i])
-                    chunk_rows[lane_i].append(
-                        _row_for_scored_horizon(
-                            suite_name=suite_name,
-                            dataset_label=dataset_label,
-                            record=start,
-                            horizon=offset,
-                            seed_row=samples["seed_t"][start],
-                            out_row=out_view[lane_i],
-                            ref_row=ref_rows[lane_i],
-                            score=score,
-                            first_mismatch=first_mismatches[lane_i],
-                            players=players,
-                            discrete_fields=discrete_fields,
-                            float_fields=float_fields,
-                            float_epsilon=float_epsilon,
-                            action_names=action_names,
-                            profile=profile,
-                        )
-                    )
-
-            for lane_rows in chunk_rows:
-                rows.extend(lane_rows)
-    finally:
-        try:
-            binding.destroy(handle)
-        except Exception:
-            pass
-    return rows
+    samples_u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), int(samples.dtype.itemsize))
+    ints, floats = binding.disruptive_scan(
+        samples_u8,
+        tuple(int(v) for v in horizons),
+        tuple(str(v) for v in discrete_fields),
+        tuple(str(v) for v in float_fields),
+        tuple(int(v) for v in players),
+        int(ds.header["num_players"]),
+        int(max_records),
+        int(stride),
+        float(float_epsilon),
+        -1 if ucf_enabled is None else int(bool(ucf_enabled)),
+        -1 if ucf_cardinals_1_0_enabled is None else int(bool(ucf_cardinals_1_0_enabled)),
+        int(batch_size),
+        int(start_record),
+        int(stop_record),
+        1 if profile.name == "rl1_gameplay" else 0,
+    )
+    return [
+        _row_from_native(
+            suite_name=suite_name,
+            dataset_label=dataset_label,
+            samples=samples,
+            ints=ints,
+            floats=floats,
+            row_i=i,
+            discrete_fields=discrete_fields,
+            float_fields=float_fields,
+            float_epsilon=float_epsilon,
+            action_names=action_names,
+            profile=profile,
+        )
+        for i in range(int(ints.shape[0]))
+    ]
 
 
 def _scan_dataset_task(task: dict[str, Any]) -> list[DisruptiveRow]:
@@ -1546,7 +831,7 @@ def main() -> None:
         if int(args.max_records) > 0:
             usable_records = min(usable_records, int(args.max_records))
         starts = np.arange(0, usable_records, max(1, int(args.stride)), dtype=np.int64)
-        task_count = max(1, (int(starts.shape[0]) + chunk_records - 1) // chunk_records)
+        task_count = (int(starts.shape[0]) + chunk_records - 1) // chunk_records
         print(f"scan: {rel} records={total_records} tasks={task_count}")
         for chunk_lo in range(0, int(starts.shape[0]), chunk_records):
             chunk_starts = starts[chunk_lo : chunk_lo + chunk_records]

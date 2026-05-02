@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SAMPLE_DTYPE, SEED_DTYPE
 from tools.eval.discrete_compare_lanes import (
@@ -124,56 +125,98 @@ def test_disruptive_profile_scores_only_non_camera_state_flags_4_bits() -> None:
     import tools.eval.disruptive_rollout_desyncs as disruptive
 
     profile = get_validation_profile("rl1_gameplay")
-    out = np.zeros(1, dtype=COMPARE_DTYPE)
-    ref = np.zeros(1, dtype=COMPARE_DTYPE)
+    assert not hasattr(disruptive, "_compare_first_mismatch")
+    assert not hasattr(disruptive, "_score_horizon_row")
+    assert not profile.scored_values_differ("state_flags", 4, 0x00, 0x80)
+    assert profile.scored_values_differ("state_flags", 4, 0x00, 0x81)
+    assert disruptive._native_mask_fields(1 << 10) == ("state_flags[4]",)
 
-    ref["state_flags"][0, 1, 4] = 0x80
-    first = disruptive._compare_first_mismatch(
-        out_row=out[0],
-        ref_row=ref[0],
-        players=(0, 1),
-        discrete_fields=("state_flags",),
-        float_fields=(),
-        offset=0,
-        float_epsilon=0.05,
-        profile=profile,
-    )
-    score = disruptive._score_horizon_row(
-        out_row=out[0],
-        ref_row=ref[0],
-        players=(0, 1),
-        discrete_fields=("state_flags",),
-        float_fields=(),
-        float_epsilon=0.05,
-        profile=profile,
-    )
-    assert first is None
-    assert score.discrete == 0.0
 
-    ref["state_flags"][0, 1, 4] = 0x81
-    first = disruptive._compare_first_mismatch(
-        out_row=out[0],
-        ref_row=ref[0],
-        players=(0, 1),
-        discrete_fields=("state_flags",),
-        float_fields=(),
-        offset=0,
-        float_epsilon=0.05,
-        profile=profile,
+def test_native_disruptive_scan_honors_rl1_state_flags_4_camera_bit() -> None:
+    import tools.eval.disruptive_rollout_desyncs as disruptive
+    from tools.eval.dataset import read_dataset
+
+    msl_binding = pytest.importorskip("msl_binding")
+    dataset_path = Path(
+        "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
+        "AttachedGoodNaturedGuanaco.msl"
     )
-    score = disruptive._score_horizon_row(
-        out_row=out[0],
-        ref_row=ref[0],
-        players=(0, 1),
-        discrete_fields=("state_flags",),
-        float_fields=(),
-        float_epsilon=0.05,
-        profile=profile,
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+
+    camera_only = ds.samples[:4].copy()
+    camera_only["ref_t1"]["state_flags"][0, 1, 4] ^= 0x80
+    camera_samples = camera_only.view(np.uint8).reshape(camera_only.shape[0], camera_only.dtype.itemsize)
+
+    rl1_ints, rl1_floats = msl_binding.disruptive_scan(
+        camera_samples,
+        (1,),
+        ("state_flags",),
+        (),
+        (0, 1),
+        int(ds.header["num_players"]),
+        1,
+        1,
+        0.05,
+        -1,
+        -1,
+        1,
+        0,
+        1,
+        1,
     )
-    assert first is not None
-    assert first.field == "state_flags[4]"
-    assert first.player == 1
-    assert score.discrete == 15.0
+    strict_ints, strict_floats = msl_binding.disruptive_scan(
+        camera_samples,
+        (1,),
+        ("state_flags",),
+        (),
+        (0, 1),
+        int(ds.header["num_players"]),
+        1,
+        1,
+        0.05,
+        -1,
+        -1,
+        1,
+        0,
+        1,
+        0,
+    )
+    assert rl1_ints.shape == (0, 22)
+    assert rl1_floats.shape == (0, 6)
+    assert strict_ints.shape == (1, 22)
+    assert strict_ints[0, disruptive.NATIVE_INT_FIRST_FIELD_CODE] == 104
+    assert strict_ints[0, disruptive.NATIVE_INT_FIRST_SUBINDEX] == 4
+    assert strict_ints[0, disruptive.NATIVE_INT_FIRST_PLAYER] == 1
+    assert strict_floats[0, disruptive.NATIVE_FLOAT_SCORE_DISCRETE] == 15.0
+
+    scored = ds.samples[:4].copy()
+    scored["ref_t1"]["state_flags"][0, 1, 4] ^= 0x81
+    scored_samples = scored.view(np.uint8).reshape(scored.shape[0], scored.dtype.itemsize)
+    rl1_scored_ints, rl1_scored_floats = msl_binding.disruptive_scan(
+        scored_samples,
+        (1,),
+        ("state_flags",),
+        (),
+        (0, 1),
+        int(ds.header["num_players"]),
+        1,
+        1,
+        0.05,
+        -1,
+        -1,
+        1,
+        0,
+        1,
+        1,
+    )
+    assert rl1_scored_ints.shape == (1, 22)
+    assert rl1_scored_ints[0, disruptive.NATIVE_INT_FIRST_FIELD_CODE] == 104
+    assert rl1_scored_ints[0, disruptive.NATIVE_INT_FIRST_SUBINDEX] == 4
+    assert rl1_scored_ints[0, disruptive.NATIVE_INT_FIRST_PLAYER] == 1
+    assert rl1_scored_floats[0, disruptive.NATIVE_FLOAT_SCORE_DISCRETE] == 15.0
 
 
 @dataclass

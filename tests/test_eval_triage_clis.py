@@ -481,7 +481,7 @@ def test_disruptive_rollout_desyncs_workers_match_serial_outputs(tmp_path: Path)
         "3",
     ]
 
-    subprocess.run(
+    serial = subprocess.run(
         [
             sys.executable,
             "-m",
@@ -497,7 +497,7 @@ def test_disruptive_rollout_desyncs_workers_match_serial_outputs(tmp_path: Path)
         stderr=subprocess.PIPE,
         text=True,
     )
-    subprocess.run(
+    worker = subprocess.run(
         [
             sys.executable,
             "-m",
@@ -516,6 +516,8 @@ def test_disruptive_rollout_desyncs_workers_match_serial_outputs(tmp_path: Path)
         text=True,
     )
 
+    assert "tasks=1" in serial.stdout
+    assert "tasks=4" in worker.stdout
     assert (worker_dir / "rows.tsv").read_text(encoding="utf-8") == (scalar_dir / "rows.tsv").read_text(
         encoding="utf-8"
     )
