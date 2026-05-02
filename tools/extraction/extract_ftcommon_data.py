@@ -394,6 +394,10 @@ def main() -> None:
         #   - fn_800D5A30 (RebirthWait_Coll helper) calls ftColl_8007B7A4(gobj, p_ftCommonData->x5D8) before
         #     ft_8008A2BC (usually Fall enter).
         #     refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s::fn_800D5A30
+        # - DeadUpFallHitCamera / DeadUpFallHitCameraFlat phase-3 physics:
+        #   ftCo_DeadUpFall_Anim uses the x52C hold timer, then writes self_vel.y/z from
+        #   x550/x55C before ftCo_DeadUpFall_Phys applies ftCommon_Fall with x554/x558.
+        #   refs/melee/src/melee/ft/ft_0D31.c::{ftCo_DeadUpFall_Anim,ftCo_DeadUpFall_Phys}
         "dead_up_kb_vel_threshold": float(_f32_be(buf, ft_common_abs + 0x4F0)),
         "dead_timer_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x500))),
         "dead_up_star_initial_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x504))),
@@ -401,6 +405,11 @@ def main() -> None:
         "dead_up_star_phase2_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x50C))),
         "dead_up_star_phase1_z_vel_total": float(_f32_be(buf, ft_common_abs + 0x510)),
         "dead_up_star_phase1_cam_top_mul": float(_f32_be(buf, ft_common_abs + 0x514)),
+        "dead_up_fall_hitcamera_hold_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x52C))),
+        "dead_up_fall_initial_self_vel_y": float(_f32_be(buf, ft_common_abs + 0x550)),
+        "dead_up_fall_phase3_gravity": float(_f32_be(buf, ft_common_abs + 0x554)),
+        "dead_up_fall_phase3_terminal_vel": float(_f32_be(buf, ft_common_abs + 0x558)),
+        "dead_up_fall_initial_self_vel_z": float(_f32_be(buf, ft_common_abs + 0x55C)),
         "rebirth_timer_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x5D0))),
         "rebirth_wait_timer_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x5D4))),
         "colanim_rebirth_fall_x1994_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x5D8))),

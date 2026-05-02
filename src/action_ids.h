@@ -7,13 +7,20 @@
 // Source of truth: refs/melee/src/melee/ft/chara/ftCommon/forward.h `ftCommon_MotionState`.
 typedef enum MslActionId {
   // Match flow (suite-present).
-  MSL_ACT_DEAD_DOWN = 0x0000,     // ftCo_MS_DeadDown
-  MSL_ACT_DEAD_LEFT = 0x0001,     // ftCo_MS_DeadLeft
-  MSL_ACT_DEAD_RIGHT = 0x0002,    // ftCo_MS_DeadRight
-  MSL_ACT_DEAD_UP_STAR = 0x0004,  // ftCo_MS_DeadUpStar
-  MSL_ACT_REBIRTH = 0x000C,       // ftCo_MS_Rebirth
-  MSL_ACT_REBIRTH_WAIT = 0x000D,  // ftCo_MS_RebirthWait
-  MSL_ACT_DAMAGE_ICE = 0x0145,    // ftCo_MS_DamageIce
+  MSL_ACT_DEAD_DOWN = 0x0000,                     // ftCo_MS_DeadDown
+  MSL_ACT_DEAD_LEFT = 0x0001,                     // ftCo_MS_DeadLeft
+  MSL_ACT_DEAD_RIGHT = 0x0002,                    // ftCo_MS_DeadRight
+  MSL_ACT_DEAD_UP = 0x0003,                       // ftCo_MS_DeadUp
+  MSL_ACT_DEAD_UP_STAR = 0x0004,                  // ftCo_MS_DeadUpStar
+  MSL_ACT_DEAD_UP_STAR_ICE = 0x0005,              // ftCo_MS_DeadUpStarIce
+  MSL_ACT_DEAD_UP_FALL = 0x0006,                  // ftCo_MS_DeadUpFall
+  MSL_ACT_DEAD_UP_FALL_HIT_CAMERA = 0x0007,       // ftCo_MS_DeadUpFallHitCamera
+  MSL_ACT_DEAD_UP_FALL_HIT_CAMERA_FLAT = 0x0008,  // ftCo_MS_DeadUpFallHitCameraFlat
+  MSL_ACT_DEAD_UP_FALL_ICE = 0x0009,              // ftCo_MS_DeadUpFallIce
+  MSL_ACT_DEAD_UP_FALL_HIT_CAMERA_ICE = 0x000A,   // ftCo_MS_DeadUpFallHitCameraIce
+  MSL_ACT_REBIRTH = 0x000C,                       // ftCo_MS_Rebirth
+  MSL_ACT_REBIRTH_WAIT = 0x000D,                  // ftCo_MS_RebirthWait
+  MSL_ACT_DAMAGE_ICE = 0x0145,                    // ftCo_MS_DamageIce
 
   MSL_ACT_WAIT = 0x000E,            // ftCo_MS_Wait
   MSL_ACT_WALK_SLOW = 0x000F,       // ftCo_MS_WalkSlow

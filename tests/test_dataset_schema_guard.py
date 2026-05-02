@@ -169,6 +169,17 @@ def test_ft_common_data_exports_magnify_damage_source_constants() -> None:
     assert int(data["magnify_damage_amount"]) == 1
 
 
+def test_ft_common_data_exports_deadupfall_hitcamera_source_constants() -> None:
+    # ftCo_DeadUpFall_Anim/Phys use p_ftCommonData x52C/x550/x554/x558/x55C for the
+    # DeadUpFallHitCamera hold -> falling phase velocity owner.
+    data = json.loads(Path("data/common/ft_common_data.json").read_text())
+    assert int(data["dead_up_fall_hitcamera_hold_frames"]) == 3
+    assert float(data["dead_up_fall_initial_self_vel_y"]) == pytest.approx(1.0)
+    assert float(data["dead_up_fall_phase3_gravity"]) == pytest.approx(0.2)
+    assert float(data["dead_up_fall_phase3_terminal_vel"]) == pytest.approx(1.7)
+    assert float(data["dead_up_fall_initial_self_vel_z"]) == pytest.approx(-1.0)
+
+
 def test_item_spawn_id_counter_survives_itemless_gaps() -> None:
     exists = np.array(
         [

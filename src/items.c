@@ -28,6 +28,14 @@ enum {
   MSL_ITEM_HIDDEN_CALLBACK_CLEAR = 1u << 0u,
 };
 
+enum {
+  // Slippi stage id / GALE01 ItemKind constants for Yoshi's Story Shy Guys.
+  // Stage id source: tools/slippi/known_data_artifacts.py::STAGE_YOSHIS_STORY.
+  // Item kind source: refs/melee/src/melee/it/forward.h::It_Kind_Heiho.
+  MSL_STAGE_YOSHIS_STORY = 8,
+  MSL_ITEM_KIND_HEIHO = 0xD2,
+};
+
 static inline uint8_t slippi_metadata_low_byte_from_f32(float v) {
   uint32_t bits = 0;
   memcpy(&bits, &v, sizeof(bits));
@@ -5120,6 +5128,31 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
   }
 }
 
+static void yoshi_shyguy_items_update(MslBatch* batch, int bi) {
+  if (batch == NULL || batch->state.stage_id[bi] != (uint32_t)MSL_STAGE_YOSHIS_STORY) {
+    return;
+  }
+  for (int it = 0; it < MSL_MAX_ITEMS; it++) {
+    const size_t ii = msl_idx_item(bi, it);
+    if (!batch->state.item_exists[ii] ||
+        batch->state.item_type[ii] != (uint16_t)MSL_ITEM_KIND_HEIHO) {
+      continue;
+    }
+    const uint8_t state = batch->state.item_state[ii];
+    if (state != 1u && state != 4u) {
+      continue;
+    }
+    // Active Shy Guy states run their Phys callback, then the generic item proc integrates
+    // `item->pos += item->x40_vel + item->x70_nudge`. The hidden dynamic-bone callback
+    // (`it_802D98C4`), state-0 x24 delay, collision turnarounds, and RNG remain open stage-object
+    // owners; this slice only admits source-shaped position integration for already-active rows.
+    // refs/melee/src/melee/it/items/itheiho.c::{itHeiho_UnkMotion1_Phys,itHeiho_UnkMotion4_Phys}
+    // refs/melee/src/melee/it/item.c::Item_802697D4
+    batch->state.item_pos_x[ii] += batch->state.item_vel_x[ii];
+    batch->state.item_pos_y[ii] += batch->state.item_vel_y[ii];
+  }
+}
+
 void items_update(MslBatch* batch) {
   if (batch == NULL) {
     return;
@@ -5130,6 +5163,10 @@ void items_update(MslBatch* batch) {
     const uint8_t row_had_items = items_row_has_any(batch, bi);
 
     if (row_had_items != 0u) {
+      // Stage-owned Shy Guys are not fighter articles; run their admitted stage-item slice before
+      // fighter article updates so fixed-slot compare observes the same item proc phase ordering.
+      yoshi_shyguy_items_update(batch, bi);
+
       // Motion + collision/hit apply for Illusion/Phantasm ghost items.
       illusion_items_update_and_collide(batch, bi);
 

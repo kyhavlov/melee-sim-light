@@ -309,6 +309,16 @@ int common_params_init(void) {
                    &g_params.dead_up_star_phase1_z_vel_total) != 0 ||
       json_get_f32(buf, "dead_up_star_phase1_cam_top_mul",
                    &g_params.dead_up_star_phase1_cam_top_mul) != 0 ||
+      json_get_u16(buf, "dead_up_fall_hitcamera_hold_frames",
+                   &g_params.dead_up_fall_hitcamera_hold_frames) != 0 ||
+      json_get_f32(buf, "dead_up_fall_initial_self_vel_y",
+                   &g_params.dead_up_fall_initial_self_vel_y) != 0 ||
+      json_get_f32(buf, "dead_up_fall_phase3_gravity", &g_params.dead_up_fall_phase3_gravity) !=
+          0 ||
+      json_get_f32(buf, "dead_up_fall_phase3_terminal_vel",
+                   &g_params.dead_up_fall_phase3_terminal_vel) != 0 ||
+      json_get_f32(buf, "dead_up_fall_initial_self_vel_z",
+                   &g_params.dead_up_fall_initial_self_vel_z) != 0 ||
       json_get_u16(buf, "rebirth_timer_frames", &g_params.rebirth_timer_frames) != 0 ||
       json_get_u16(buf, "rebirth_wait_timer_frames", &g_params.rebirth_wait_timer_frames) != 0 ||
       json_get_u16(buf, "colanim_rebirth_fall_x1994_frames",

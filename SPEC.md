@@ -699,6 +699,16 @@ Recent deltas to reflect here (do not let these get “lost in chat logs”):
   (`src/mpcoll_ground.c`, `src/locomotion.c`; refs/melee/src/melee/mp/mpcoll.c::{
   `mpColl_80046904`,`mpUpdateFloorSkip`,`mpColl_80044628_Floor`},
   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c).
+- Yoshi's Story Shy Guys (`It_Kind_Heiho`) are admitted as stage-owned item objects, not Fox/Falco
+  articles. Their source callback recomputes `item->x40_vel` from item-animation dynamic-bone state
+  before generic item integration; state 0 waits on hidden `itemVar.heiho.x24` initialized from the
+  spawn-group ordinal by `it_802D8618`. Runtime now admits the causal generic item-position
+  integration for already-active state 1/4 Shy Guys using the visible current `x40_vel`, but does
+  not yet model the item animation/dynamic-bone velocity recompute, x24 delay, RNG, collision
+  turnaround, or spawn-timer owner, and must not substitute replay-next velocity lanes for them
+  (`src/items.c`; refs/melee/src/melee/gr/grstory.c::grStory_801E3418,
+  refs/melee/src/melee/it/items/itheiho.c::{
+  it_802D8618,itHeiho_UnkMotion0_Phys,itHeiho_UnkMotion1_Phys,itHeiho_UnkMotion4_Phys,it_802D98C4}).
 - Ledge-grab mask ordering is now collision-stage prev/cur snapshot based (captured around `stage_collision_apply()` and consumed
   post-collision); regression locked for TreasuredBackKangaroo records 1806/1807 (`tests/test_ledge_grab_treasuredbackkangaroo_regression.py`).
 - Build now forces C extension rebuild to avoid stale `.so` issues (Makefile change).
@@ -1548,6 +1558,16 @@ Match-flow closure notes:
   cur_pos.y` divided by `p_ftCommonData->x508`. The sim models that boundary from the total
   DeadUpStar countdown and extracted FD camera top; it does not recompute the velocity after phase 1
   has started. Source: `refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s::ftCo_DeadUpStar_Anim`.
+- DeadUpFallHitCamera uses `p_ftCommonData->x52C/x550/x554/x558` for the transition from camera-hit
+  hold into the falling phase. The visible `speed_y_self` lane is source-owned by
+  `ftCo_DeadUpFall_Anim` + `ftCo_DeadUpFall_Phys`, but visible `cur_pos` during DeadUpFall* also
+  depends on hidden `mv.co.unk_deadup.x50/x5C`, `xD4_unk_vel`, and `ftAnim_80070FD0` release
+  state. Until that owner is modeled causally, replay seeds must not teacher-force future
+  `cur_pos` deltas; the current runtime intentionally leaves that hidden owner open rather than
+  applying only half of the DeadUpFall pipeline.
+  Sources: `refs/melee/src/melee/ft/ft_0D31.c::{ftCo_DeadUpFall_Anim,ftCo_DeadUpFall_Phys}`,
+  `refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate`,
+  `refs/melee/src/melee/ft/ftanim.c::ftAnim_80070FD0`.
 
 #### Locomotion core (ground/air, jumps, fastfall, landing, airdodge/escapes)
 
