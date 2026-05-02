@@ -148,14 +148,14 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:2304
 
 == datasets/aggregate_recent/replays/validation/battlefield_recent/DelayedSuperbGuanaco.msl ==
 rollout.best_len: 656
-rollout.streak_count: 117
-rollout.streak_len.median: 73
+rollout.streak_count: 115
+rollout.streak_len.median: 76
 rollout.streak_len.p90: 263
 rollout.streak_len.p95: 343
 rollout.streak_len.max: 656
-rollout.first_mismatch_total: 158
-rollout.first_mismatch_seeded_total: 138
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:1400
+rollout.first_mismatch_total: 156
+rollout.first_mismatch_seeded_total: 136
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:1444
 
 == datasets/aggregate_recent/replays/validation/battlefield_recent/LoyalDishonestWren.msl ==
 rollout.best_len: 460
@@ -272,14 +272,14 @@ rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:6
 
 == datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/CornyDelayedOkapi.msl ==
 rollout.best_len: 369
-rollout.streak_count: 184
+rollout.streak_count: 182
 rollout.streak_len.median: 49
 rollout.streak_len.p90: 173
-rollout.streak_len.p95: 203
+rollout.streak_len.p95: 213
 rollout.streak_len.max: 369
-rollout.first_mismatch_total: 196
-rollout.first_mismatch_seeded_total: 76
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:2326
+rollout.first_mismatch_total: 194
+rollout.first_mismatch_seeded_total: 74
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:2370
 rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:2
 
 == datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/SweatyThisMallard.msl ==
@@ -352,13 +352,13 @@ rollout.first_mismatch_seeded_total: 176
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:1317
 
 == suite summary ==
-overall.rollout.streak_count: 1953
-overall.rollout.streak_len.median: 64
-overall.rollout.streak_len.p90: 344
+overall.rollout.streak_count: 1949
+overall.rollout.streak_len.median: 65
+overall.rollout.streak_len.p90: 346
 overall.rollout.streak_len.p95: 566
 overall.rollout.streak_len.max: 2427
 overall.rollout.best_len.max: 2427
-overall.rollout.first_mismatch_total: 3397
-overall.rollout.first_mismatch_seeded_total: 2538
-overall.rollout.ignored_first_mismatch_top: state_flags[4]&0x80:49724
+overall.rollout.first_mismatch_total: 3393
+overall.rollout.first_mismatch_seeded_total: 2534
+overall.rollout.ignored_first_mismatch_top: state_flags[4]&0x80:49812
 overall.rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:18
