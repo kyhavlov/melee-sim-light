@@ -134,7 +134,7 @@ def _extract_stage_points(stage_dat: Path, arc) -> dict | None:
     if map_count <= 0:
         return None
 
-    entry0_abs = unk8_arr_abs  # map_id==0 for the stage root (single-map FD)
+    entry0_abs = unk8_arr_abs  # map_id==0 for the base stage root used by current legal-stage bins.
     root_joint_abs = _ptr32_or_none(arc, entry0_abs + 0x00)
     if root_joint_abs is None:
         return None
@@ -185,17 +185,47 @@ def _extract_stage_points(stage_dat: Path, arc) -> dict | None:
             str(pid): {"x": x, "y": y, "z": z} for pid, (x, y, z) in sorted(point_id_map.items())
         }
 
-        def _xy(pid: int) -> tuple[float, float] | None:
+        def _raw_xy(pid: int) -> tuple[float, float] | None:
             point = point_id_map.get(pid)
             if point is None:
                 return None
             return (float(point[0]), float(point[1]))
 
-        spawn_points = [_xy(pid) for pid in range(4)]
-        respawn_points = [_xy(pid) for pid in range(4, 8)]
-        cam_offset = _xy(0x94)
-        cam_range = [_xy(0x95), _xy(0x96)]
-        dead_range = [_xy(0x97), _xy(0x98)]
+        def _ground_xy(pid: int) -> tuple[float, float] | None:
+            # Mirror Ground_801C2D24's source fallback rules for stage-point roles:
+            # - missing spawn ids 1..3 fall back to id 0
+            # - missing respawn ids 5..7 fall back to id 4
+            # - id 8/9 are midpoint helpers for 4/5 and 6/7
+            # refs/melee/src/melee/gr/ground.c::Ground_801C2D24
+            point = _raw_xy(pid)
+            if point is not None:
+                return point
+            if 1 <= pid <= 3:
+                return _ground_xy(0)
+            if 5 <= pid <= 7:
+                return _ground_xy(4)
+            if pid == 8:
+                a = _ground_xy(4)
+                b = _ground_xy(5)
+                if a is not None and b is not None:
+                    return ((a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5)
+            if pid == 9:
+                a = _ground_xy(6)
+                b = _ground_xy(7)
+                if a is not None and b is not None:
+                    return ((a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5)
+            if pid == 0x7F:
+                a = _ground_xy(0x94)
+                if a is not None:
+                    return (a[0], a[1] + 50.0)
+                return _ground_xy(0)
+            return None
+
+        spawn_points = [_ground_xy(pid) for pid in range(4)]
+        respawn_points = [_ground_xy(pid) for pid in range(4, 8)]
+        cam_offset = _ground_xy(0x94)
+        cam_range = [_ground_xy(0x95), _ground_xy(0x96)]
+        dead_range = [_ground_xy(0x97), _ground_xy(0x98)]
 
         if all(point is not None for point in spawn_points):
             out["spawn_points"] = [{"x": x, "y": y} for (x, y) in spawn_points if x is not None]
@@ -218,6 +248,11 @@ def _extract_stage_points(stage_dat: Path, arc) -> dict | None:
                     "cam_bounds_world": {"left": cam_l, "right": cam_r, "top": cam_t, "bottom": cam_b},
                 }
             )
+        elif stage_dat.name == "GrPs.dat":
+            # Pokemon Stadium lacks the full 0x94..0x96 camera point role set in map_head. The
+            # engine falls back to Ground_801C39C0's dummy camera range for internal stage 3.
+            # refs/melee/src/melee/gr/ground.c::Ground_801C39C0
+            out["cam_bounds_world"] = {"left": -200.0, "right": 200.0, "top": 150.0, "bottom": -160.0}
         if dead_range[0] is not None and dead_range[1] is not None:
             p0 = dead_range[0]
             p1 = dead_range[1]

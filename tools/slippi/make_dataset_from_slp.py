@@ -549,7 +549,7 @@ def _stage_respawn_points_y(*, stage_id: int, data_dir: str = "data") -> np.ndar
     """
     Load respawn-point Y values from the ISO-derived MSLSTG01 stage artifact.
 
-    data/stages/bin/{grnla,grnba}.bin::MSLSTG01 respawn_points
+    data/stages/bin/*.bin::MSLSTG01 respawn_points
     """
     stage_path = stage_metadata_path_for_stage_id(int(stage_id), Path(data_dir))
     if stage_path is None:
@@ -2709,7 +2709,7 @@ def _main_impl(args) -> Dataset:
         # by ftCo_Rebirth_Cam. It comes from the stage respawn-point Y rather than the fighter's
         # replay-visible cur_pos.y.
         # refs/melee/src/melee/ft/ft_0D31.c::ftCo_Rebirth_Cam
-        # data/stages/bin/{grnla,grnba}.bin::MSLSTG01 respawn_points
+        # data/stages/bin/*.bin::MSLSTG01 respawn_points
         samples["seed_t"]["rebirth_camera_anchor_y_f32"][:, slot] = derive_rebirth_camera_anchor_y(
             action_id_u16=post_state,
             stage_id_u32=int(stage_id),

@@ -20,6 +20,7 @@ def test_combat_smoke_forced_overlap_reports_contacts() -> None:
 
     seed = np.zeros((1, seed_stride), dtype=np.uint8)
     seed_view = seed.view(SEED_DTYPE).reshape(-1)
+    seed_view["stage_id"][0] = np.uint32(32)
     seed_view["num_players"][0] = np.uint8(2)
     seed_view["instance_id"][0, 0] = np.uint16(111)
     seed_view["instance_id"][0, 1] = np.uint16(222)

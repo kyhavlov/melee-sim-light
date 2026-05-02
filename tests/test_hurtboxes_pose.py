@@ -160,7 +160,7 @@ def test_hurtboxes_refresh_matches_pose_bytes() -> None:
     assert input_stride == INPUT_DTYPE.itemsize
 
     seed = np.zeros((1,), dtype=SEED_DTYPE)
-    seed["stage_id"][0] = np.uint32(0)  # skip stage collision for this test
+    seed["stage_id"][0] = np.uint32(32)
     seed["num_players"][0] = np.uint8(2)
     seed["stocks"][0, :2] = np.uint8(4)
     seed["char_id"][0, 0] = np.uint8(1)  # Fox
@@ -218,7 +218,7 @@ def test_hurtboxes_refresh_falls_back_on_missing_msid() -> None:
     assert input_stride == INPUT_DTYPE.itemsize
 
     seed = np.zeros((1,), dtype=SEED_DTYPE)
-    seed["stage_id"][0] = np.uint32(0)
+    seed["stage_id"][0] = np.uint32(32)
     seed["num_players"][0] = np.uint8(2)
     seed["stocks"][0, :2] = np.uint8(4)
     seed["char_id"][0, 0] = np.uint8(1)
@@ -321,7 +321,7 @@ def test_hurtboxes_refresh_applies_fighter_scale_y() -> None:
     assert input_stride == INPUT_DTYPE.itemsize
 
     seed = np.zeros((1,), dtype=SEED_DTYPE)
-    seed["stage_id"][0] = np.uint32(0)
+    seed["stage_id"][0] = np.uint32(32)
     seed["num_players"][0] = np.uint8(2)
     seed["stocks"][0, :2] = np.uint8(4)
     seed["char_id"][0, 0] = np.uint8(1)  # Fox

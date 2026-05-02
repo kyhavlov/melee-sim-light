@@ -64,7 +64,7 @@ Current scheduler lives in `src/step.c` and calls passes in-order:
 1. `input_apply` (input sampling / UCF legalization / edge detection)
 2. `action_update` (action/state transitions + per-action callbacks)
 3. `physics_integrate` (kinematics integration; gravity/traction/etc)
-4. `stage_collision_apply` (FD collision + ECB/grounding/ledge gating)
+4. `stage_collision_apply` (MSLSTG01 stage collision + ECB/grounding/ledge gating)
 5. `hurtboxes_refresh` (hurtboxes/hitboxes attached to bones/ECB)
 6. `combat_resolve` (hit resolution: hitlag/hitstun/KB/shield, etc)
 7. `items_update` (projectiles/items update/collision)

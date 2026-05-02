@@ -163,7 +163,7 @@ def test_hitboxes_refresh_applies_fighter_scale_y_and_respects_ignore_flag() -> 
             assert input_stride == INPUT_DTYPE.itemsize
 
             seed = np.zeros((1,), dtype=SEED_DTYPE)
-            seed["stage_id"][0] = np.uint32(0)
+            seed["stage_id"][0] = np.uint32(32)
             seed["num_players"][0] = np.uint8(2)
             seed["stocks"][0, :2] = np.uint8(4)
             seed["char_id"][0, :2] = np.uint8(1)  # Fox

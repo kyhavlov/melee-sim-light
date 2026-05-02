@@ -197,7 +197,7 @@ def test_ground_id_unchanged_when_airborne() -> None:
     assert int(out["ground_id"][0]) == 3333
 
 
-def test_unsupported_stage_is_noop_for_on_ground() -> None:
+def test_unsupported_stage_reseed_is_rejected() -> None:
     seed = _seed_base(stage_id=1)
     seed["pos_x"][0, 0] = np.float32(0.0)
     seed["pos_y"][0, 0] = np.float32(0.0)
@@ -205,6 +205,8 @@ def test_unsupported_stage_is_noop_for_on_ground() -> None:
     seed["on_ground"][0, 0] = np.uint8(1)
     seed["ground_id"][0, 0] = np.uint16(4444)
 
-    out = _step_once(seed)
-    assert int(out["on_ground"][0]) == 1
-    assert int(out["ground_id"][0]) == 4444
+    try:
+        _step_once(seed)
+    except RuntimeError:
+        return
+    raise AssertionError("unsupported stage reseed unexpectedly succeeded")

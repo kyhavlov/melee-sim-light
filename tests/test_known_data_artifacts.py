@@ -39,6 +39,8 @@ from tools.slippi.known_data_artifacts import (
 )
 from tools.slippi.make_dataset_from_slp import _load_stage_segments_for_seed
 
+SUPPORTED_STAGE_BINS = ("griz.bin", "grps.bin", "grst.bin", "grop.bin", "grnba.bin", "grnla.bin")
+
 
 def _symlink_data_tree_with_private_dirs(tmp_path: Path, private_dirs: tuple[str, ...]) -> Path:
     data_dir = tmp_path / "data"
@@ -54,14 +56,32 @@ def _symlink_data_tree_with_private_dirs(tmp_path: Path, private_dirs: tuple[str
     return data_dir
 
 
+def _copy_stage_bins(data_dir: Path, *, corrupt: str | None = None) -> None:
+    root_data = Path("data").resolve()
+    (data_dir / "stages" / "bin").mkdir(parents=True, exist_ok=True)
+    for name in SUPPORTED_STAGE_BINS:
+        buf = bytearray((root_data / "stages" / "bin" / name).read_bytes())
+        if name == corrupt:
+            buf[8:12] = (STAGE_VERSION - 1).to_bytes(4, "little")
+        (data_dir / "stages" / "bin" / name).write_bytes(bytes(buf))
+
+
 @pytest.mark.integration
 def test_stage_metadata_registry_covers_supported_domain() -> None:
+    assert stage_metadata_bin_name_for_stage_id(2) == "griz.bin"
+    assert stage_metadata_bin_name_for_stage_id(3) == "grps.bin"
+    assert stage_metadata_bin_name_for_stage_id(8) == "grst.bin"
+    assert stage_metadata_bin_name_for_stage_id(28) == "grop.bin"
     assert stage_metadata_bin_name_for_stage_id(31) == "grnba.bin"
     assert stage_metadata_bin_name_for_stage_id(32) == "grnla.bin"
-    assert stage_metadata_bin_name_for_stage_id(8) is None
+    assert stage_metadata_bin_name_for_stage_id(4) is None
+    assert stage_metadata_path_for_stage_id(2, Path("data")) == Path("data/stages/bin/griz.bin")
+    assert stage_metadata_path_for_stage_id(3, Path("data")) == Path("data/stages/bin/grps.bin")
+    assert stage_metadata_path_for_stage_id(8, Path("data")) == Path("data/stages/bin/grst.bin")
+    assert stage_metadata_path_for_stage_id(28, Path("data")) == Path("data/stages/bin/grop.bin")
     assert stage_metadata_path_for_stage_id(31, Path("data")) == Path("data/stages/bin/grnba.bin")
     assert stage_metadata_path_for_stage_id(32, Path("data")) == Path("data/stages/bin/grnla.bin")
-    assert stage_metadata_path_for_stage_id(8, Path("data")) is None
+    assert stage_metadata_path_for_stage_id(4, Path("data")) is None
 
 
 @pytest.mark.integration
@@ -145,6 +165,55 @@ def test_stage_metadata_battlefield_known_platform_rows() -> None:
     assert (top.x0, top.y0, top.x1, top.y1) == pytest.approx(
         (-18.800001, 54.400002, 18.800001, 54.400002)
     )
+
+
+@pytest.mark.integration
+def test_stage_metadata_remaining_legal_stages_known_rows() -> None:
+    fountain = read_mslstg01_v2(Path("data/stages/bin/griz.bin"))
+    assert fountain.segment_count == 34
+    assert fountain.spawn_count == 4
+    assert fountain.respawn_count == 4
+    assert fountain.cam_bounds_world == pytest.approx((-123.75, 123.75, 112.5, -84.75))
+    assert [(p.x, p.y) for p in fountain.respawn_points] == pytest.approx([(0.0, 63.75)] * 4)
+    fountain_platforms = [seg for seg in fountain.segments if int(seg.flags) & 0x1]
+    assert [int(seg.line_id) for seg in fountain_platforms[:3]] == [0, 1, 2]
+    assert (fountain_platforms[0].x0, fountain_platforms[0].y0, fountain_platforms[0].x1) == pytest.approx(
+        (-14.25, 1.125, 14.25)
+    )
+
+    pokemon = read_mslstg01_v2(Path("data/stages/bin/grps.bin"))
+    assert pokemon.segment_count == 136
+    assert pokemon.spawn_count == 4
+    assert pokemon.respawn_count == 4
+    assert pokemon.cam_bounds_world == pytest.approx((-200.0, 200.0, 150.0, -160.0))
+    assert pokemon.blast_bounds_world == pytest.approx((-230.0, 230.0, 180.0, -111.0))
+    assert [(p.x, p.y) for p in pokemon.respawn_points] == pytest.approx([(0.0, 60.0)] * 4)
+    pokemon_platforms = [seg for seg in pokemon.segments if int(seg.flags) & 0x1]
+    assert pokemon_platforms[0].line_id == 11
+    assert (pokemon_platforms[0].x0, pokemon_platforms[0].y0, pokemon_platforms[0].x1) == pytest.approx(
+        (7.75, 26.002, 53.75),
+        abs=1e-3,
+    )
+
+    yoshis = read_mslstg01_v2(Path("data/stages/bin/grst.bin"))
+    assert yoshis.segment_count == 29
+    assert yoshis.spawn_count == 4
+    assert yoshis.respawn_count == 4
+    assert yoshis.cam_bounds_world == pytest.approx((-126.0, 125.3, 118.3, -49.7), abs=1e-4)
+    assert [(p.x, p.y) for p in yoshis.respawn_points] == pytest.approx([(0.0, 52.5)] * 4)
+    yoshis_platforms = [seg for seg in yoshis.segments if int(seg.flags) & 0x1]
+    assert [int(seg.line_id) for seg in yoshis_platforms[:4]] == [0, 1, 4, 5]
+
+    dream = read_mslstg01_v2(Path("data/stages/bin/grop.bin"))
+    assert dream.segment_count == 11
+    assert dream.spawn_count == 4
+    assert dream.respawn_count == 4
+    assert dream.cam_bounds_world == pytest.approx((-165.0, 165.0, 190.0, -81.0))
+    assert dream.blast_bounds_world == pytest.approx((-255.0, 255.0, 250.0, -123.0))
+    assert [p.x for p in dream.respawn_points] == pytest.approx([0.0] * 4)
+    assert [p.y for p in dream.respawn_points] == pytest.approx([84.2214966] * 4)
+    dream_platforms = [seg for seg in dream.segments if int(seg.flags) & 0x1]
+    assert [int(seg.line_id) for seg in dream_platforms] == [0, 1, 2]
 
 
 @pytest.mark.integration
@@ -289,18 +358,16 @@ def test_stage_seed_segments_are_loaded_from_mslstg01() -> None:
     assert [seg["i"] for seg in platforms] == [2, 3, 4]
     assert platforms[0]["x0"] == pytest.approx(-57.600002)
     assert platforms[0]["y0"] == pytest.approx(27.200001)
+    pokemon = _load_stage_segments_for_seed(stage_id=3, data_root=Path("data"))
+    assert len(pokemon) == 136
+    assert pokemon[0]["i"] == 0
+    assert pokemon[0]["kind"] == "floor"
+    assert [seg["i"] for seg in pokemon if seg["platform"]][:3] == [11, 17, 18]
 
 
 def test_runtime_stage_collision_rejects_stale_mslstg01(tmp_path: Path) -> None:
-    root_data = Path("data").resolve()
     data_dir = _symlink_data_tree_with_private_dirs(tmp_path, ("stages",))
-    (data_dir / "stages" / "bin").mkdir(parents=True)
-    buf = bytearray((root_data / "stages" / "bin" / "grnla.bin").read_bytes())
-    buf[8:12] = (STAGE_VERSION - 1).to_bytes(4, "little")
-    (data_dir / "stages" / "bin" / "grnla.bin").write_bytes(bytes(buf))
-    (data_dir / "stages" / "bin" / "grnba.bin").write_bytes(
-        (root_data / "stages" / "bin" / "grnba.bin").read_bytes()
-    )
+    _copy_stage_bins(data_dir, corrupt="grnla.bin")
 
     code = """
 import msl_binding
@@ -322,25 +389,63 @@ raise SystemExit(2)
     assert proc.returncode == 0, proc.stderr + proc.stdout
 
 
-def test_runtime_stage_collision_requires_registered_battlefield_artifact(tmp_path: Path) -> None:
+def test_runtime_stage_collision_does_not_require_unused_registered_battlefield_artifact(
+    tmp_path: Path,
+) -> None:
     root_data = Path("data").resolve()
     data_dir = _symlink_data_tree_with_private_dirs(tmp_path, ("stages",))
     (data_dir / "stages" / "bin").mkdir(parents=True)
-    (data_dir / "stages" / "bin" / "grnla.bin").write_bytes(
-        (root_data / "stages" / "bin" / "grnla.bin").read_bytes()
-    )
+    for name in SUPPORTED_STAGE_BINS:
+        if name != "grnba.bin":
+            (data_dir / "stages" / "bin" / name).write_bytes(
+                (root_data / "stages" / "bin" / name).read_bytes()
+            )
 
     code = """
 import msl_binding
+import numpy as np
+from tools.eval.dataset import SEED_DTYPE
 try:
-    msl_binding.init(batch_size=1, num_players=2)
+    handle = msl_binding.init(batch_size=1, num_players=2)
+except Exception:
+    raise SystemExit(1)
+try:
+    msl_binding.stage_match_flow_roles(31)
+except Exception:
+    pass
+else:
+    raise SystemExit(2)
+seed = np.zeros((1,), dtype=SEED_DTYPE)
+seed["stage_id"][0] = np.uint32(31)
+seed["num_players"][0] = np.uint8(2)
+try:
+    msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, int(msl_binding.sizes()["seed"]))))
 except Exception:
     raise SystemExit(0)
-raise SystemExit(1)
+raise SystemExit(3)
 """
     env = dict(os.environ)
     env["MSL_DATA_DIR"] = str(data_dir)
     proc = subprocess.run([sys.executable, "-c", code], env=env, text=True, capture_output=True)
+    assert proc.returncode == 0, proc.stderr + proc.stdout
+
+
+def test_runtime_reseed_rejects_unsupported_stage_id() -> None:
+    code = """
+import msl_binding
+import numpy as np
+from tools.eval.dataset import SEED_DTYPE
+handle = msl_binding.init(batch_size=1, num_players=2)
+seed = np.zeros((1,), dtype=SEED_DTYPE)
+seed["stage_id"][0] = np.uint32(4)
+seed["num_players"][0] = np.uint8(2)
+try:
+    msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, int(msl_binding.sizes()["seed"]))))
+except Exception:
+    raise SystemExit(0)
+raise SystemExit(1)
+"""
+    proc = subprocess.run([sys.executable, "-c", code], text=True, capture_output=True)
     assert proc.returncode == 0, proc.stderr + proc.stdout
 
 
@@ -357,10 +462,8 @@ def test_runtime_stage_collision_reads_mslstg01_segments(tmp_path: Path) -> None
     rec_off = 56 + record_i * 24
     struct.pack_into("<f", buf, rec_off + 12, 5.0)
     struct.pack_into("<f", buf, rec_off + 20, 5.0)
+    _copy_stage_bins(data_dir)
     (data_dir / "stages" / "bin" / "grnla.bin").write_bytes(bytes(buf))
-    (data_dir / "stages" / "bin" / "grnba.bin").write_bytes(
-        (root_data / "stages" / "bin" / "grnba.bin").read_bytes()
-    )
 
     code = f"""
 import msl_binding
@@ -388,6 +491,12 @@ if abs(float(seg["y0"]) - 27.200000762939453) > 1e-5:
     raise SystemExit(1)
 if int(seg["is_platform"]) != 1:
     raise SystemExit(3)
+fighter_seg = msl_binding.stage_fighter_floor_segment(31, 2)
+if fighter_seg is not None:
+    raise SystemExit(4)
+main = msl_binding.stage_fighter_floor_segment(31, 0)
+if main is None:
+    raise SystemExit(5)
 raise SystemExit(0)
 """
     proc = subprocess.run([sys.executable, "-c", code], text=True, capture_output=True)
@@ -395,15 +504,8 @@ raise SystemExit(0)
 
 
 def test_runtime_stage_collision_reads_match_flow_roles_from_mslstg01(tmp_path: Path) -> None:
-    root_data = Path("data").resolve()
     data_dir = _symlink_data_tree_with_private_dirs(tmp_path, ("stages",))
-    (data_dir / "stages" / "bin").mkdir(parents=True)
-    (data_dir / "stages" / "bin" / "grnla.bin").write_bytes(
-        (root_data / "stages" / "bin" / "grnla.bin").read_bytes()
-    )
-    (data_dir / "stages" / "bin" / "grnba.bin").write_bytes(
-        (root_data / "stages" / "bin" / "grnba.bin").read_bytes()
-    )
+    _copy_stage_bins(data_dir)
 
     code = """
 import msl_binding
@@ -434,6 +536,35 @@ if abs(float(roles["respawn_points"][2][0]) - 40.0) > 1e-5:
     raise SystemExit(1)
 if abs(float(roles["cam_bounds"][3]) - -47.20000076293945) > 1e-5:
     raise SystemExit(3)
+raise SystemExit(0)
+"""
+    proc = subprocess.run([sys.executable, "-c", code], text=True, capture_output=True)
+    assert proc.returncode == 0, proc.stderr + proc.stdout
+
+
+def test_runtime_stage_collision_reads_remaining_stage_roles_and_platforms() -> None:
+    code = """
+import msl_binding
+msl_binding.init(batch_size=1, num_players=2)
+cases = [
+    (2, 0, 1.125, 1, 63.75),
+    (3, 11, 26.002, 1, 60.0),
+    (8, 1, 23.45, 1, 52.5),
+    (28, 2, 51.42530059814453, 1, 84.22149658203125),
+]
+for stage_id, line_id, y0, is_platform, respawn_y in cases:
+    seg = msl_binding.stage_floor_segment(stage_id, line_id)
+    if seg is None:
+        raise SystemExit(10 + stage_id)
+    if abs(float(seg["y0"]) - y0) > 1e-4:
+        raise SystemExit(30 + stage_id)
+    if int(seg["is_platform"]) != is_platform:
+        raise SystemExit(50 + stage_id)
+    roles = msl_binding.stage_match_flow_roles(stage_id)
+    if roles is None:
+        raise SystemExit(70 + stage_id)
+    if abs(float(roles["respawn_points"][0][1]) - respawn_y) > 1e-4:
+        raise SystemExit(90 + stage_id)
 raise SystemExit(0)
 """
     proc = subprocess.run([sys.executable, "-c", code], text=True, capture_output=True)

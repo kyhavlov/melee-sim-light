@@ -940,7 +940,7 @@ def derive_rebirth_camera_anchor_y(
 
     Decomp / data anchors:
     - refs/melee/src/melee/ft/ft_0D31.c::ftCo_Rebirth_Cam
-    - data/stages/bin/{grnla,grnba}.bin::MSLSTG01 respawn_points
+    - data/stages/bin/*.bin::MSLSTG01 respawn_points
     """
     action = np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)
     out = np.zeros(action.shape[0], dtype=np.float32)
@@ -948,7 +948,7 @@ def derive_rebirth_camera_anchor_y(
     # Unsupported stages leave the foundational lane zero until their ISO-derived respawn points are
     # wired into MSLSTG01.
     # refs/melee/src/melee/ft/chara/ftCommon/forward.h::ftCo_MS_Rebirth
-    # data/stages/bin/{grnla,grnba}.bin::MSLSTG01 respawn_points
+    # data/stages/bin/*.bin::MSLSTG01 respawn_points
     if respawn_point_y == 0.0:
         return out
 
@@ -1081,7 +1081,7 @@ def derive_camera_target_point_inside_stage_cam_bounds(
     Decomp / data anchors:
     - refs/melee/src/melee/ft/ftlib.c::ftLib_80086A8C
     - refs/melee/src/melee/cm/camera.c::{Camera_80030CD8,Camera_80030BBC}
-    - data/stages/bin/{grnla,grnba}.bin::MSLSTG01 cam_bounds_world
+    - data/stages/bin/*.bin::MSLSTG01 cam_bounds_world
     """
     x = np.asarray(camera_target_world_x_f32, dtype=np.float32).reshape(-1)
     y = np.asarray(camera_target_world_y_f32, dtype=np.float32).reshape(-1)

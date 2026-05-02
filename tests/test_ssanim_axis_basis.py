@@ -144,7 +144,7 @@ def test_pose_facing_is_root_roty90_for_hitbox_centers() -> None:
 
     def run_with_facing(facing_right: bool) -> np.ndarray:
         seed = np.zeros((1,), dtype=SEED_DTYPE)
-        seed["stage_id"][0] = np.uint32(0)  # skip stage collision
+        seed["stage_id"][0] = np.uint32(32)
         seed["num_players"][0] = np.uint8(2)
         seed["stocks"][0, :2] = np.uint8(4)
         seed["char_id"][0, 0] = np.uint8(1)  # Fox

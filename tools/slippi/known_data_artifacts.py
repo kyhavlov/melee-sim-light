@@ -20,10 +20,18 @@ ITEM_ARTICLE_VALUE_U16 = 1
 ITEM_ARTICLE_VALUE_U32 = 2
 ITEM_ARTICLE_VALUE_F32 = 3
 
+STAGE_FOUNTAIN_OF_DREAMS = 2
+STAGE_POKEMON_STADIUM = 3
+STAGE_YOSHIS_STORY = 8
+STAGE_DREAM_LAND_N64 = 28
 STAGE_BATTLEFIELD = 31
 STAGE_FINAL_DESTINATION = 32
 
 STAGE_METADATA_BIN_BY_STAGE_ID = {
+    STAGE_FOUNTAIN_OF_DREAMS: "griz.bin",  # Fountain of Dreams / GrIz.dat
+    STAGE_POKEMON_STADIUM: "grps.bin",  # Pokemon Stadium base / GrPs.dat
+    STAGE_YOSHIS_STORY: "grst.bin",  # Yoshi's Story / GrSt.dat
+    STAGE_DREAM_LAND_N64: "grop.bin",  # Dream Land N64 / GrOp.dat
     STAGE_BATTLEFIELD: "grnba.bin",  # Battlefield / GrNBa.dat
     STAGE_FINAL_DESTINATION: "grnla.bin",  # Final Destination / GrNLa.dat
 }

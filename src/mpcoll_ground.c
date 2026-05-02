@@ -882,7 +882,7 @@ uint8_t mpcoll_800477e0_floor_mask_probe(const MslBatch* batch, size_t idx,
     return 0u;
   }
   const uint32_t stage_id = batch->state.stage_id[idx / (size_t)MSL_MAX_PLAYERS];
-  const MslStageFloorGraph* g = stage_collision_get_floor_graph(stage_id);
+  const MslStageFloorGraph* g = stage_collision_get_fighter_floor_graph(stage_id);
   if (g == NULL) {
     return 0u;
   }
@@ -959,7 +959,7 @@ uint8_t mpcoll_800477e0_capture_root_floor_mask_probe(const MslBatch* batch, siz
     return 0u;
   }
   const uint32_t stage_id = batch->state.stage_id[idx / (size_t)MSL_MAX_PLAYERS];
-  const MslStageFloorGraph* g = stage_collision_get_floor_graph(stage_id);
+  const MslStageFloorGraph* g = stage_collision_get_fighter_floor_graph(stage_id);
   if (g == NULL || g->lines == NULL || g->line_count == 0) {
     return 0u;
   }
@@ -977,7 +977,7 @@ uint8_t mpcoll_800477e0_capture_root_floor_mask_probe(const MslBatch* batch, siz
   int line_idx = -1;
   const uint16_t ground_id = batch->state.ground_id[idx];
   if (ground_id != 0xFFFFu) {
-    line_idx = stage_collision_floor_line_index(stage_id, ground_id);
+    line_idx = stage_collision_fighter_floor_line_index(stage_id, ground_id);
   }
 
   float y_corr = 0.0f;
@@ -1025,7 +1025,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
   const int num_players = (int)batch->config.num_players;
   for (int bi = 0; bi < batch->batch_size; bi++) {
     const uint32_t stage_id = batch->state.stage_id[bi];
-    const MslStageFloorGraph* g = stage_collision_get_floor_graph(stage_id);
+    const MslStageFloorGraph* g = stage_collision_get_fighter_floor_graph(stage_id);
     if (g == NULL || g->lines == NULL || g->line_count == 0) {
       continue;
     }
@@ -1248,7 +1248,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
 
       int prefer_line_idx = -1;
       if (ground_id != 0xFFFFu) {
-        prefer_line_idx = stage_collision_floor_line_index(stage_id, ground_id);
+        prefer_line_idx = stage_collision_fighter_floor_line_index(stage_id, ground_id);
       }
 
       if (was_grounded && prefer_line_idx >= 0) {
@@ -2225,9 +2225,9 @@ void mpcoll_ground_apply(MslBatch* batch) {
         // refs/melee/src/melee/mp/mpcoll.c::mpColl_80046F78
         batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_FLOOR_MASK;
 
-        floor_write_edge_suppression_flags(batch, idx, stage_id, g,
-                                           stage_collision_floor_line_index(stage_id, ground_id),
-                                           char_id, anim, ecb_frame, was_grounded);
+        floor_write_edge_suppression_flags(
+            batch, idx, stage_id, g, stage_collision_fighter_floor_line_index(stage_id, ground_id),
+            char_id, anim, ecb_frame, was_grounded);
 
         batch->state.ground_id[idx] = ground_id;
         batch->state.ground_normal_x[idx] = floor_nx;

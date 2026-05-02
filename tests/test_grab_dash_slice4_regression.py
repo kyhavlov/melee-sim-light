@@ -298,6 +298,7 @@ def test_catchdash_connect_enters_catchdashpull_and_capture_variant(
         seed_bytes = np.zeros((1, seed_stride), dtype=np.uint8)
         seed = seed_bytes.view(SEED_DTYPE).reshape(-1)
 
+        seed["stage_id"][0] = np.uint32(32)
         seed["num_players"][0] = np.uint8(2)
         seed["char_id"][0, 0] = np.uint8(1)  # Fox
         seed["char_id"][0, 1] = np.uint8(22)  # Falco
@@ -375,6 +376,7 @@ def test_catchdash_overlap_does_not_grab_downed_victim(
         seed_bytes = np.zeros((1, seed_stride), dtype=np.uint8)
         seed = seed_bytes.view(SEED_DTYPE).reshape(-1)
 
+        seed["stage_id"][0] = np.uint32(32)
         seed["num_players"][0] = np.uint8(2)
         seed["char_id"][0, 0] = np.uint8(1)  # Fox
         seed["char_id"][0, 1] = np.uint8(22)  # Falco

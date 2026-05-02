@@ -370,10 +370,14 @@ static inline uint8_t specialhi_try_ground_launch_from_hold(MslBatch* batch, siz
   // - |stick_x| + |stick_y| >= x64 direction threshold
   // - angle(floor.normal, stick_vec) >= PI/2
   // - ftCo_8009A134 (platform pass-through) is false
-  // On Final Destination there are no soft platforms, so the pass-through gate is always false.
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialAirHi_AirToGround
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_8009A134
-  // data/stages/final_destination.json::segments (no `platform: true` segments)
+  // data/stages/bin/*.bin::MSLSTG01 platform flags
+  const uint32_t stage_id = batch->state.stage_id[idx / (size_t)MSL_MAX_PLAYERS];
+  const uint16_t ground_id = batch->state.ground_id[idx];
+  if (ground_id != 0xFFFFu && stage_collision_floor_line_is_platform(stage_id, ground_id)) {
+    return 0u;
+  }
   if ((abs_x + abs_y) < ch->firefox_direction_stick_range_min) {
     return 0u;
   }

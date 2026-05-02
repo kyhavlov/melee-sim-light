@@ -53,14 +53,15 @@ def main() -> None:
         default=None,
         help=(
             "partial/debug-only single stage key alias for --stages "
-            "(grnla = Final Destination, grnba = Battlefield)"
+            "(grnla = Final Destination, grnba = Battlefield, griz = Fountain of Dreams, "
+            "grps = Pokemon Stadium, grst = Yoshi's Story, grop = Dream Land N64)"
         ),
     )
     ap.add_argument(
         "--stages",
         type=str,
-        default="grnla,grnba",
-        help="comma-separated stage keys (currently: grnla,grnba)",
+        default="grnla,grnba,griz,grps,grst,grop",
+        help="comma-separated stage keys (default: grnla,grnba,griz,grps,grst,grop)",
     )
     ap.add_argument("--melee-decomp", type=Path, default=Path("refs/melee"), help="path to doldecomp/melee checkout")
     ap.add_argument("--timings", action="store_true", help="print per-generator wall-clock timings")
@@ -93,8 +94,16 @@ def main() -> None:
         # Decomp:
         # - Battlefield: refs/melee/src/melee/gr/grbattle.c:127 uses "/GrNBa.dat"
         # - Final Destination: refs/melee/src/melee/gr/grlast.c:151 uses "/GrNLa.dat"
+        # - Fountain of Dreams: refs/melee/src/melee/gr/grizumi.c:162 uses "/GrIz.dat"
+        # - Pokemon Stadium: refs/melee/src/melee/gr/grpstadium.c:148 uses "/GrPs"
+        # - Yoshi's Story: refs/melee/src/melee/gr/grstory.c:49 uses "/GrSt.dat"
+        # - Dream Land N64: refs/melee/src/melee/gr/groldpupupu.c uses "/GrOp.dat"
         "grnba": "GrNBa.dat",
         "grnla": "GrNLa.dat",
+        "griz": "GrIz.dat",
+        "grps": "GrPs.dat",
+        "grst": "GrSt.dat",
+        "grop": "GrOp.dat",
     }
     if args.stage is not None:
         stage_keys = [args.stage.lower()]
@@ -116,6 +125,10 @@ def main() -> None:
     out_stage_by_key = {
         "grnla": Path("data/stages/final_destination.json"),
         "grnba": Path("data/stages/battlefield.json"),
+        "griz": Path("data/stages/fountain_of_dreams.json"),
+        "grps": Path("data/stages/pokemon_stadium.json"),
+        "grst": Path("data/stages/yoshis_story.json"),
+        "grop": Path("data/stages/dream_land_n64.json"),
     }
     out_common = Path("data/common/ft_common_data.json")
     for d in (

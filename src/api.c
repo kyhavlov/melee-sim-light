@@ -792,9 +792,6 @@ static int msl_batch_init_match_impl(MslBatch* batch, const uint8_t* config_byte
     const MslMatchConfig* cfg = (const MslMatchConfig*)ptr;
     MslSeed* seed = &seeds[bi];
 
-    if (cfg->stage_id != (uint32_t)MSL_STAGE_FINAL_DESTINATION) {
-      return EINVAL;
-    }
     if ((int)cfg->num_players != active_players) {
       return EINVAL;
     }
@@ -803,6 +800,10 @@ static int msl_batch_init_match_impl(MslBatch* batch, const uint8_t* config_byte
     }
     if (!(cfg->match_damage_ratio > 0.0f) || !isfinite(cfg->match_damage_ratio)) {
       return EINVAL;
+    }
+
+    if (!stage_collision_require_stage(cfg->stage_id)) {
+      return ENOENT;
     }
 
     MslStageBounds cam_bounds = {0};
@@ -875,8 +876,9 @@ static int msl_batch_init_match_impl(MslBatch* batch, const uint8_t* config_byte
       seed->defense_ratio[p] = 1.0f;
       seed->pos_x[p] = spawn.x;
       seed->pos_y[p] = spawn.y;
-      // Final Destination singles starts on the 2D plane; spawn_points are 2D stage points.
-      // data/stages/final_destination.json: spawn_points
+      // Normal legal-stage starts use 2D stage points from MSLSTG01. Stage depth starts at zero
+      // for the currently supported singles/opening paths.
+      // data/stages/bin/*.bin::MSLSTG01 spawn_points
       seed->pos_z[p] = 0.0f;
       // Decomp: fp->x34_scale.y is initialized from Player_GetModelScale, while
       // fp->co_attrs.model_scaling is a separate character attr lane applied by specific
@@ -997,6 +999,14 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       active_players = 1;
     } else if (active_players > MSL_MAX_PLAYERS) {
       active_players = MSL_MAX_PLAYERS;
+    }
+    // Replay/eval reseeds must not silently run with no stage graph. Stage artifacts are loaded at
+    // init time; this hot admission path only checks no-allocation availability.
+    if (!stage_collision_stage_registered(seed->stage_id)) {
+      return EINVAL;
+    }
+    if (!stage_collision_stage_available(seed->stage_id)) {
+      return ENOENT;
     }
 
     // Initialize per-environment global counters from seeded values.

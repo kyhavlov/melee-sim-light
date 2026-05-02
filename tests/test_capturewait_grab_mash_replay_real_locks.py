@@ -44,6 +44,7 @@ def test_capturewait_owner_tick_uses_mash_buttons_sign_change_or_prev_button_car
     # refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::{
     #   ftCo_CatchPull_Anim,fn_800DA1D8,fn_800DB6C8}
     seed = np.zeros((4,), dtype=SEED_DTYPE)
+    seed["stage_id"] = np.uint32(32)
     seed["num_players"] = np.uint8(2)
     seed["char_id"][:, :2] = np.uint8([1, 2])
     seed["stocks"][:, :2] = np.uint8([4, 4])
@@ -118,6 +119,7 @@ def test_capturewait_breakout_owner_path_uses_explicit_pending_signal() -> None:
     #   ftCo_CaptureWaitHi_Anim,ftCo_800DA698,ftCo_CaptureCut_Enter}
     # refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::ftCo_CatchWait_IASA
     seed = np.zeros((3,), dtype=SEED_DTYPE)
+    seed["stage_id"] = np.uint32(32)
     seed["num_players"] = np.uint8(2)
     seed["char_id"][:, :2] = np.uint8([1, 2])
     seed["stocks"][:, :2] = np.uint8([4, 4])

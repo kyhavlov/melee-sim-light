@@ -724,10 +724,11 @@ Characters (Fox/Falco):
     back to decomp symbol names. Runtime loads only the binary tables.
   - Stale/non-v2 `MSLMSO01` tables must be rejected; regenerate with
     `uv run python -m tools.extraction.extract_motion_state_owners --melee_decomp refs/melee --out_dir data/motion_state/owners --chars fox,falco`.
-- `data/stages/bin/{grnla,grnba}.bin` (stage collision/metadata; decomp-first, compact binary)
+- `data/stages/bin/{grnla,grnba,griz,grps,grst,grop}.bin` (stage collision/metadata; decomp-first, compact binary)
   - Purpose:
     - Pack the stable, source-backed stage data currently emitted by
-      `data/stages/{final_destination,battlefield}.json` into versioned artifacts. Runtime stage
+      `data/stages/{final_destination,battlefield,fountain_of_dreams,pokemon_stadium,yoshis_story,dream_land_n64}.json`
+      into versioned artifacts. Runtime stage
       collision and match-flow stage roles consume these binary tables.
     - Preserve source collision line IDs, floor/wall/ceiling class, line flags, ledge/platform bits,
       world-scaled stage-point positions, and source-mapped spawn/respawn/camera/blast roles.
@@ -737,8 +738,8 @@ Characters (Fox/Falco):
       `Ground_801C39C0` for camera, and `Ground_801C3BB4` for blast/dead range.
     - This does **not** encode procedural mpColl branch outcomes or inferred behavior categories.
   - Sources:
-    - `_iso/GrNLa.dat` / `_iso/GrNBa.dat` public symbols `coll_data`, `grGroundParam`, and
-      `map_head`
+    - `_iso/GrNLa.dat`, `_iso/GrNBa.dat`, `_iso/GrIz.dat`, `_iso/GrPs.dat`, `_iso/GrSt.dat`,
+      and `_iso/GrOp.dat` public symbols `coll_data`, `grGroundParam`, and `map_head`
     - `refs/melee/src/melee/mp/types.h::MapCollData`
     - `refs/melee/build/GALE01/asm/melee/gr/ground.s::Ground_801C34AC`
     - `refs/melee/src/melee/gr/ground.c::Ground_801C126C`, `Ground_801C2D24`, `Ground_801C39C0`,
@@ -754,14 +755,20 @@ Characters (Fox/Falco):
       world-scaled endpoints `(x0,y0,x1,y1)` after applying `grGroundParam.x0`
     - world-scaled raw stage-point coordinate payloads
     - world-scaled spawn point payloads `(x,y)` for stage point ids `0..3`
-    - world-scaled respawn point payloads `(x,y)` for stage point ids `4..7`
+    - world-scaled respawn point payloads `(x,y)` for stage point ids `4..7`; missing ids `5..7`
+      follow `Ground_801C2D24` and fall back to id `4`
   - Stale/non-v2 `MSLSTG01` tables must be rejected. Version 2 is the first version where
     spawn/respawn/camera/blast roles are populated, not reserved/unset. Regenerate supported stage
     artifacts with
-    `uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba --chars fox,falco`.
-  - Battlefield (`stage_id=31`) is currently supported for replay-seeded/eval data paths. New-match
-    initialization remains Final Destination-only until Slippi neutral-start ownership is mapped for
-    non-FD stages.
+    `uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba,griz,grps,grst,grop --chars fox,falco`.
+  - Supported runtime stage ids: `2` Fountain of Dreams, `3` Pokemon Stadium base, `8` Yoshi's
+    Story, `28` Dream Land N64, `31` Battlefield, `32` Final Destination. Pokemon Stadium
+    transformations and moving/pass-through platform mechanics remain runtime owner work, not
+    encoded MSLSTG01 behavior categories.
+  - Runtime keeps two floor views: the full debug/data graph, and a fighter-solid graph that
+    excludes `platform` lines until platform pass-through/drop-through/moving-platform ownership is
+    modeled. Platform lines remain inspectable through debug accessors and must not be treated as
+    solved fighter grounding parity.
 - `data/model_parts/fox.bin`, `data/model_parts/falco.bin` (fighter part/anchor descriptors; compact binary)
   - Purpose:
     - Expose known static part metadata and named gameplay anchors without live pose solving.
@@ -1420,7 +1427,7 @@ Generate all required artifacts for the current target domain:
 ```bash
 uv run python -m tools.extraction.build_data \
   --iso-dir _iso \
-  --stages grnla,grnba \
+  --stages grnla,grnba,griz,grps,grst,grop \
   --chars fox,falco
 ```
 

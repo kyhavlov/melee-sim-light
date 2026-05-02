@@ -144,7 +144,7 @@ rollout-disruptive-rerank:
 	@$(PY) -m tools.eval.disruptive_rollout_desyncs --suite "$(SUITE)" --datasets-dir "$(DATASETS_DIR)" --horizons "$(DISRUPTIVE_HORIZONS)" --rows-in "$(DISRUPTIVE_ROWS_IN)" --out-dir "$(DISRUPTIVE_OUT_DIR)" --top "$(ROLLOUT_TOP)" $(ARGS)
 
 build_data:
-	@$(PY) -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba --chars fox,falco
+	@$(PY) -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba,griz,grps,grst,grop --chars fox,falco
 
 webplay-build:
 	@tools/webplay/build_wasm.sh

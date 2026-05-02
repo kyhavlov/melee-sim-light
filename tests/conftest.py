@@ -152,7 +152,7 @@ def _ensure_tracks_bins() -> None:
         if missing_iso:
             raise RuntimeError(
                 f"missing required tracks file for tests: {tracks} (and cannot rebuild due to missing _iso/ files: {missing_iso}). "
-                f"Run: `uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba --chars fox,falco`"
+                f"Run: `uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba,griz,grps,grst,grop --chars fox,falco`"
             )
 
         subprocess.run(
@@ -226,7 +226,7 @@ def _ensure_dyn_bins() -> None:
             "are missing: "
             f"{missing_iso}. Dynamic-pose-specific tests should skip unless these artifacts are "
             "available. Run: `uv run python -m tools.extraction.build_data --iso-dir _iso --stages "
-            "grnla,grnba --chars fox,falco`",
+            "grnla,grnba,griz,grps,grst,grop --chars fox,falco`",
             RuntimeWarning,
         )
         return
@@ -238,7 +238,7 @@ def _ensure_dyn_bins() -> None:
             "--iso-dir",
             str(ROOT / "_iso"),
             "--stages",
-            "grnla,grnba",
+            "grnla,grnba,griz,grps,grst,grop",
             "--chars",
             "fox,falco",
         ],
@@ -272,7 +272,7 @@ def _ensure_hurtcaps_bins() -> None:
         if missing_iso:
             raise RuntimeError(
                 f"missing required hurtcaps bin for tests: {out} (and cannot rebuild due to missing _iso/ files: {missing_iso}). "
-                f"Run: `uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba --chars fox,falco`"
+                f"Run: `uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba,griz,grps,grst,grop --chars fox,falco`"
             )
 
         subprocess.run(
@@ -317,7 +317,7 @@ def _ensure_hurtbox_states_bins() -> None:
         if missing_iso:
             raise RuntimeError(
                 f"missing required hurtbox states bin for tests: {out} (and cannot rebuild due to missing _iso/ files: {missing_iso}). "
-                f"Run: `uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba --chars fox,falco`"
+                f"Run: `uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba,griz,grps,grst,grop --chars fox,falco`"
             )
 
         # `extract_fighter_hurtbox_modes` depends on existing ISO-derived hurtcaps and special_msids.
@@ -390,7 +390,7 @@ def _ensure_hit_status_bins() -> None:
         if missing_iso:
             raise RuntimeError(
                 f"missing required hit status bin for tests: {out} (and cannot rebuild due to missing _iso/ files: {missing_iso}). "
-                f"Run: `uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba --chars fox,falco`"
+                f"Run: `uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba,griz,grps,grst,grop --chars fox,falco`"
             )
 
         # `extract_fighter_hit_status` depends on existing ISO-derived special_msids.
@@ -465,7 +465,7 @@ def _ensure_shield_tilt_bins() -> None:
         if missing_iso:
             raise RuntimeError(
                 f"missing required shield tilt bin for tests: {out} (and cannot rebuild due to missing _iso/ files: {missing_iso}). "
-                f"Run: `uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba --chars fox,falco`"
+                f"Run: `uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba,griz,grps,grst,grop --chars fox,falco`"
             )
 
         subprocess.run(
@@ -528,6 +528,10 @@ def _ensure_known_data_artifacts() -> None:
     expected = [
         (ROOT / "data" / "stages" / "bin" / "grnla.bin", b"MSLSTG01", 2),
         (ROOT / "data" / "stages" / "bin" / "grnba.bin", b"MSLSTG01", 2),
+        (ROOT / "data" / "stages" / "bin" / "griz.bin", b"MSLSTG01", 2),
+        (ROOT / "data" / "stages" / "bin" / "grps.bin", b"MSLSTG01", 2),
+        (ROOT / "data" / "stages" / "bin" / "grst.bin", b"MSLSTG01", 2),
+        (ROOT / "data" / "stages" / "bin" / "grop.bin", b"MSLSTG01", 2),
         (ROOT / "data" / "model_parts" / "fox.bin", b"MSLPART1", 1),
         (ROOT / "data" / "model_parts" / "falco.bin", b"MSLPART1", 1),
         (ROOT / "data" / "items" / "articles" / "fox_falco.bin", b"MSLITAR1", 2),
@@ -557,6 +561,10 @@ def _ensure_known_data_artifacts() -> None:
         for p in (
             ROOT / "_iso" / "GrNLa.dat",
             ROOT / "_iso" / "GrNBa.dat",
+            ROOT / "_iso" / "GrIz.dat",
+            ROOT / "_iso" / "GrPs.dat",
+            ROOT / "_iso" / "GrSt.dat",
+            ROOT / "_iso" / "GrOp.dat",
             ROOT / "_iso" / "PlCo.dat",
             ROOT / "_iso" / "PlFx.dat",
             ROOT / "_iso" / "PlFc.dat",
@@ -566,7 +574,7 @@ def _ensure_known_data_artifacts() -> None:
     if missing_iso:
         raise RuntimeError(
             "missing required known-data artifact(s), and cannot rebuild because _iso inputs are missing: "
-            f"{missing_iso}. Run: `uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba --chars fox,falco`"
+            f"{missing_iso}. Run: `uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba,griz,grps,grst,grop --chars fox,falco`"
         )
     subprocess.run(
         [
@@ -576,7 +584,7 @@ def _ensure_known_data_artifacts() -> None:
             "--iso-dir",
             str(ROOT / "_iso"),
             "--stages",
-            "grnla,grnba",
+            "grnla,grnba,griz,grps,grst,grop",
             "--chars",
             "fox,falco",
         ],

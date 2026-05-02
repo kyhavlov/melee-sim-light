@@ -33,57 +33,64 @@ static inline float stage_line_y_at_x(const MslStageFloorLine* line, float x) {
 }
 
 enum {
+  MSL_STAGE_FOUNTAIN_OF_DREAMS = 2,
+  MSL_STAGE_POKEMON_STADIUM = 3,
+  MSL_STAGE_YOSHIS_STORY = 8,
+  MSL_STAGE_DREAM_LAND_N64 = 28,
   MSL_STAGE_BATTLEFIELD = 31,
   MSL_STAGE_FINAL_DESTINATION = 32,
 };
 
-static MslStageFloorLine* g_fd_floor_lines = NULL;
-static size_t g_fd_floor_line_count = 0;
-static MslStageCeilingLine* g_fd_ceiling_lines = NULL;
-static size_t g_fd_ceiling_line_count = 0;
-static MslStageWallLine* g_fd_left_wall_lines = NULL;
-static size_t g_fd_left_wall_line_count = 0;
-static MslStageWallLine* g_fd_right_wall_lines = NULL;
-static size_t g_fd_right_wall_line_count = 0;
-static int g_fd_loaded = 0;
-static uint8_t g_fd_match_flow_loaded = 0;
+typedef struct {
+  uint32_t stage_id;
+  const char* bin_name;
+  MslStageFloorLine* floor_lines;
+  size_t floor_line_count;
+  MslStageFloorLine* fighter_floor_lines;
+  size_t fighter_floor_line_count;
+  MslStageCeilingLine* ceiling_lines;
+  size_t ceiling_line_count;
+  MslStageWallLine* left_wall_lines;
+  size_t left_wall_line_count;
+  MslStageWallLine* right_wall_lines;
+  size_t right_wall_line_count;
+  int loaded;
+  uint8_t match_flow_loaded;
+  MslStageFloorGraph floor_graph;
+  MslStageFloorGraph fighter_floor_graph;
+  MslStageCeilingGraph ceiling_graph;
+  MslStageWallGraph left_wall_graph;
+  MslStageWallGraph right_wall_graph;
+  MslStageBoundsWorld blast_bounds_world;
+  MslStageBoundsWorld cam_bounds_world;
+  MslStagePoint2 spawn_points[MSL_MAX_PLAYERS];
+  MslStagePoint2 respawn_points[MSL_MAX_PLAYERS];
+  MslStagePoint2 ledge_points[2];
+  uint8_t have_ledge_points[2];
+  int16_t ledge_floor_line_idx[2];
+} MslStageSlot;
 
-static MslStageFloorLine* g_bf_floor_lines = NULL;
-static size_t g_bf_floor_line_count = 0;
-static MslStageCeilingLine* g_bf_ceiling_lines = NULL;
-static size_t g_bf_ceiling_line_count = 0;
-static MslStageWallLine* g_bf_left_wall_lines = NULL;
-static size_t g_bf_left_wall_line_count = 0;
-static MslStageWallLine* g_bf_right_wall_lines = NULL;
-static size_t g_bf_right_wall_line_count = 0;
-static int g_bf_loaded = 0;
-static uint8_t g_bf_match_flow_loaded = 0;
+static MslStageSlot g_stage_slots[] = {
+    // Stage ids are the Slippi/stage enum domain. Binaries are ISO-derived MSLSTG01 artifacts.
+    // docs/DATA_CONTRACT.md::MSLSTG01
+    {.stage_id = MSL_STAGE_FOUNTAIN_OF_DREAMS, .bin_name = "griz.bin"},
+    {.stage_id = MSL_STAGE_POKEMON_STADIUM, .bin_name = "grps.bin"},
+    {.stage_id = MSL_STAGE_YOSHIS_STORY, .bin_name = "grst.bin"},
+    {.stage_id = MSL_STAGE_DREAM_LAND_N64, .bin_name = "grop.bin"},
+    {.stage_id = MSL_STAGE_BATTLEFIELD, .bin_name = "grnba.bin"},
+    {.stage_id = MSL_STAGE_FINAL_DESTINATION, .bin_name = "grnla.bin"},
+};
 
-static MslStageFloorGraph g_fd_floor_graph;
-static MslStageCeilingGraph g_fd_ceiling_graph;
-static MslStageWallGraph g_fd_left_wall_graph;
-static MslStageWallGraph g_fd_right_wall_graph;
+static MslStageSlot* stage_slot_mut(uint32_t stage_id) {
+  for (size_t i = 0; i < sizeof(g_stage_slots) / sizeof(g_stage_slots[0]); i++) {
+    if (g_stage_slots[i].stage_id == stage_id) {
+      return &g_stage_slots[i];
+    }
+  }
+  return NULL;
+}
 
-static MslStageFloorGraph g_bf_floor_graph;
-static MslStageCeilingGraph g_bf_ceiling_graph;
-static MslStageWallGraph g_bf_left_wall_graph;
-static MslStageWallGraph g_bf_right_wall_graph;
-
-static MslStageBoundsWorld g_fd_blast_bounds_world;
-static MslStageBoundsWorld g_fd_cam_bounds_world;
-static MslStagePoint2 g_fd_spawn_points[MSL_MAX_PLAYERS];
-static MslStagePoint2 g_fd_respawn_points[MSL_MAX_PLAYERS];
-static MslStageBoundsWorld g_bf_blast_bounds_world;
-static MslStageBoundsWorld g_bf_cam_bounds_world;
-static MslStagePoint2 g_bf_spawn_points[MSL_MAX_PLAYERS];
-static MslStagePoint2 g_bf_respawn_points[MSL_MAX_PLAYERS];
-static MslStagePoint2 g_fd_ledge_points[2];
-static uint8_t g_fd_have_ledge_points[2];
-static int16_t g_fd_ledge_floor_line_idx[2];
-
-static MslStagePoint2 g_bf_ledge_points[2];
-static uint8_t g_bf_have_ledge_points[2];
-static int16_t g_bf_ledge_floor_line_idx[2];
+static const MslStageSlot* stage_slot(uint32_t stage_id) { return stage_slot_mut(stage_id); }
 
 static void fd_stage_bounds_reset(float* min_x, float* max_x, float* min_y, float* max_y) {
   if (min_x) {
@@ -435,55 +442,8 @@ static int fd_install_stage_segments(uint32_t stage_id, const FdSegTmp* seg_tmp,
     return -1;
   }
 
-  MslStageFloorLine** dst_floor_lines = NULL;
-  size_t* dst_floor_count = NULL;
-  MslStageCeilingLine** dst_ceiling_lines = NULL;
-  size_t* dst_ceiling_count = NULL;
-  MslStageWallLine** dst_left_wall_lines = NULL;
-  size_t* dst_left_wall_count = NULL;
-  MslStageWallLine** dst_right_wall_lines = NULL;
-  size_t* dst_right_wall_count = NULL;
-  MslStageFloorGraph* dst_floor_graph = NULL;
-  MslStageCeilingGraph* dst_ceiling_graph = NULL;
-  MslStageWallGraph* dst_left_wall_graph = NULL;
-  MslStageWallGraph* dst_right_wall_graph = NULL;
-  MslStagePoint2* dst_ledge_points = NULL;
-  uint8_t* dst_have_ledge_points = NULL;
-  int16_t* dst_ledge_floor_line_idx = NULL;
-
-  if (stage_id == (uint32_t)MSL_STAGE_FINAL_DESTINATION) {
-    dst_floor_lines = &g_fd_floor_lines;
-    dst_floor_count = &g_fd_floor_line_count;
-    dst_ceiling_lines = &g_fd_ceiling_lines;
-    dst_ceiling_count = &g_fd_ceiling_line_count;
-    dst_left_wall_lines = &g_fd_left_wall_lines;
-    dst_left_wall_count = &g_fd_left_wall_line_count;
-    dst_right_wall_lines = &g_fd_right_wall_lines;
-    dst_right_wall_count = &g_fd_right_wall_line_count;
-    dst_floor_graph = &g_fd_floor_graph;
-    dst_ceiling_graph = &g_fd_ceiling_graph;
-    dst_left_wall_graph = &g_fd_left_wall_graph;
-    dst_right_wall_graph = &g_fd_right_wall_graph;
-    dst_ledge_points = g_fd_ledge_points;
-    dst_have_ledge_points = g_fd_have_ledge_points;
-    dst_ledge_floor_line_idx = g_fd_ledge_floor_line_idx;
-  } else if (stage_id == (uint32_t)MSL_STAGE_BATTLEFIELD) {
-    dst_floor_lines = &g_bf_floor_lines;
-    dst_floor_count = &g_bf_floor_line_count;
-    dst_ceiling_lines = &g_bf_ceiling_lines;
-    dst_ceiling_count = &g_bf_ceiling_line_count;
-    dst_left_wall_lines = &g_bf_left_wall_lines;
-    dst_left_wall_count = &g_bf_left_wall_line_count;
-    dst_right_wall_lines = &g_bf_right_wall_lines;
-    dst_right_wall_count = &g_bf_right_wall_line_count;
-    dst_floor_graph = &g_bf_floor_graph;
-    dst_ceiling_graph = &g_bf_ceiling_graph;
-    dst_left_wall_graph = &g_bf_left_wall_graph;
-    dst_right_wall_graph = &g_bf_right_wall_graph;
-    dst_ledge_points = g_bf_ledge_points;
-    dst_have_ledge_points = g_bf_have_ledge_points;
-    dst_ledge_floor_line_idx = g_bf_ledge_floor_line_idx;
-  } else {
+  MslStageSlot* slot = stage_slot_mut(stage_id);
+  if (slot == NULL) {
     return -1;
   }
 
@@ -598,6 +558,39 @@ static int fd_install_stage_segments(uint32_t stage_id, const FdSegTmp* seg_tmp,
 
   fd_sort_floor_lines_by_id(floor_lines, floor_n);
   fd_build_floor_prev_next(floor_lines, floor_n);
+  size_t fighter_floor_n = 0;
+  for (size_t i = 0; i < floor_n; i++) {
+    if (!floor_lines[i].is_platform) {
+      fighter_floor_n++;
+    }
+  }
+  if (fighter_floor_n == 0u) {
+    alloc_free(floor_lines);
+    alloc_free(ceil_lines);
+    alloc_free(lw_lines);
+    alloc_free(rw_lines);
+    return -1;
+  }
+  MslStageFloorLine* fighter_floor_lines =
+      (MslStageFloorLine*)alloc_calloc(fighter_floor_n, sizeof(MslStageFloorLine));
+  if (fighter_floor_lines == NULL) {
+    alloc_free(floor_lines);
+    alloc_free(ceil_lines);
+    alloc_free(lw_lines);
+    alloc_free(rw_lines);
+    return -1;
+  }
+  size_t oi_fighter_floor = 0;
+  for (size_t i = 0; i < floor_n; i++) {
+    if (!floor_lines[i].is_platform) {
+      fighter_floor_lines[oi_fighter_floor++] = floor_lines[i];
+    }
+  }
+  // Fighter grounding excludes soft platforms until the platform pass-through/drop-through owner is
+  // modeled. Rebuild graph connectivity inside the filtered static-floor set rather than preserving
+  // links that traverse removed platform lines.
+  // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+  fd_build_floor_prev_next(fighter_floor_lines, fighter_floor_n);
   if (ceil_n) {
     fd_sort_ceiling_lines_by_id(ceil_lines, ceil_n);
     fd_build_ceiling_prev_next(ceil_lines, ceil_n);
@@ -616,12 +609,12 @@ static int fd_install_stage_segments(uint32_t stage_id, const FdSegTmp* seg_tmp,
   // Decomp context: fighter cliff physics snaps each frame to the cliff point obtained from
   // `mpLib_80053ECC_Floor` / `mpLib_80053DA4_Floor`.
   // refs/melee/src/melee/ft/ftcliffcommon.c::ftCo_CliffCatch_Phys
-  dst_have_ledge_points[0] = 0;
-  dst_have_ledge_points[1] = 0;
-  dst_ledge_points[0] = (MslStagePoint2){0};
-  dst_ledge_points[1] = (MslStagePoint2){0};
-  dst_ledge_floor_line_idx[0] = -1;
-  dst_ledge_floor_line_idx[1] = -1;
+  slot->have_ledge_points[0] = 0;
+  slot->have_ledge_points[1] = 0;
+  slot->ledge_points[0] = (MslStagePoint2){0};
+  slot->ledge_points[1] = (MslStagePoint2){0};
+  slot->ledge_floor_line_idx[0] = -1;
+  slot->ledge_floor_line_idx[1] = -1;
   float best_left_x = FLT_MAX;
   float best_right_x = -FLT_MAX;
   for (size_t i = 0; i < floor_n; i++) {
@@ -631,15 +624,15 @@ static int fd_install_stage_segments(uint32_t stage_id, const FdSegTmp* seg_tmp,
     }
     if (l->x0 < best_left_x) {
       best_left_x = l->x0;
-      dst_ledge_points[0] = (MslStagePoint2){.x = l->x0, .y = l->y0};
-      dst_have_ledge_points[0] = 1;
-      dst_ledge_floor_line_idx[0] = (int16_t)i;
+      slot->ledge_points[0] = (MslStagePoint2){.x = l->x0, .y = l->y0};
+      slot->have_ledge_points[0] = 1;
+      slot->ledge_floor_line_idx[0] = (int16_t)i;
     }
     if (l->x1 > best_right_x) {
       best_right_x = l->x1;
-      dst_ledge_points[1] = (MslStagePoint2){.x = l->x1, .y = l->y1};
-      dst_have_ledge_points[1] = 1;
-      dst_ledge_floor_line_idx[1] = (int16_t)i;
+      slot->ledge_points[1] = (MslStagePoint2){.x = l->x1, .y = l->y1};
+      slot->have_ledge_points[1] = 1;
+      slot->ledge_floor_line_idx[1] = (int16_t)i;
     }
   }
 
@@ -747,29 +740,34 @@ static int fd_install_stage_segments(uint32_t stage_id, const FdSegTmp* seg_tmp,
     rw_lines[i].has_next_link = c1;
   }
 
-  alloc_free(*dst_floor_lines);
-  alloc_free(*dst_ceiling_lines);
-  alloc_free(*dst_left_wall_lines);
-  alloc_free(*dst_right_wall_lines);
-  *dst_floor_lines = floor_lines;
-  *dst_floor_count = floor_n;
-  *dst_ceiling_lines = ceil_lines;
-  *dst_ceiling_count = ceil_n;
-  *dst_left_wall_lines = lw_lines;
-  *dst_left_wall_count = lw_n;
-  *dst_right_wall_lines = rw_lines;
-  *dst_right_wall_count = rw_n;
-  dst_floor_graph->lines = *dst_floor_lines;
-  dst_floor_graph->line_count = *dst_floor_count;
-  dst_ceiling_graph->lines = *dst_ceiling_lines;
-  dst_ceiling_graph->line_count = *dst_ceiling_count;
-  fd_stage_ceiling_graph_set_bounds(dst_ceiling_graph);
-  dst_left_wall_graph->lines = *dst_left_wall_lines;
-  dst_left_wall_graph->line_count = *dst_left_wall_count;
-  fd_stage_wall_graph_set_bounds(dst_left_wall_graph);
-  dst_right_wall_graph->lines = *dst_right_wall_lines;
-  dst_right_wall_graph->line_count = *dst_right_wall_count;
-  fd_stage_wall_graph_set_bounds(dst_right_wall_graph);
+  alloc_free(slot->floor_lines);
+  alloc_free(slot->fighter_floor_lines);
+  alloc_free(slot->ceiling_lines);
+  alloc_free(slot->left_wall_lines);
+  alloc_free(slot->right_wall_lines);
+  slot->floor_lines = floor_lines;
+  slot->floor_line_count = floor_n;
+  slot->fighter_floor_lines = fighter_floor_lines;
+  slot->fighter_floor_line_count = fighter_floor_n;
+  slot->ceiling_lines = ceil_lines;
+  slot->ceiling_line_count = ceil_n;
+  slot->left_wall_lines = lw_lines;
+  slot->left_wall_line_count = lw_n;
+  slot->right_wall_lines = rw_lines;
+  slot->right_wall_line_count = rw_n;
+  slot->floor_graph.lines = slot->floor_lines;
+  slot->floor_graph.line_count = slot->floor_line_count;
+  slot->fighter_floor_graph.lines = slot->fighter_floor_lines;
+  slot->fighter_floor_graph.line_count = slot->fighter_floor_line_count;
+  slot->ceiling_graph.lines = slot->ceiling_lines;
+  slot->ceiling_graph.line_count = slot->ceiling_line_count;
+  fd_stage_ceiling_graph_set_bounds(&slot->ceiling_graph);
+  slot->left_wall_graph.lines = slot->left_wall_lines;
+  slot->left_wall_graph.line_count = slot->left_wall_line_count;
+  fd_stage_wall_graph_set_bounds(&slot->left_wall_graph);
+  slot->right_wall_graph.lines = slot->right_wall_lines;
+  slot->right_wall_graph.line_count = slot->right_wall_line_count;
+  fd_stage_wall_graph_set_bounds(&slot->right_wall_graph);
 
   return 0;
 }
@@ -824,8 +822,9 @@ static void stage_install_match_flow_from_mslstg01(uint32_t stage_id, const uint
                                                    uint16_t segment_count,
                                                    uint16_t stage_point_count, uint16_t spawn_count,
                                                    uint16_t respawn_count) {
+  MslStageSlot* slot = stage_slot_mut(stage_id);
   if (buf == NULL || spawn_count < (uint16_t)MSL_MAX_PLAYERS ||
-      respawn_count < (uint16_t)MSL_MAX_PLAYERS) {
+      respawn_count < (uint16_t)MSL_MAX_PLAYERS || slot == NULL) {
     return;
   }
 
@@ -859,23 +858,13 @@ static void stage_install_match_flow_from_mslstg01(uint32_t stage_id, const uint
     respawn[i] = (MslStagePoint2){.x = stage_read_f32_le(p + 0), .y = stage_read_f32_le(p + 4)};
   }
 
-  if (stage_id == (uint32_t)MSL_STAGE_FINAL_DESTINATION) {
-    g_fd_cam_bounds_world = cam;
-    g_fd_blast_bounds_world = blast;
-    for (size_t i = 0; i < (size_t)MSL_MAX_PLAYERS; i++) {
-      g_fd_spawn_points[i] = spawn[i];
-      g_fd_respawn_points[i] = respawn[i];
-    }
-    g_fd_match_flow_loaded = 1u;
-  } else if (stage_id == (uint32_t)MSL_STAGE_BATTLEFIELD) {
-    g_bf_cam_bounds_world = cam;
-    g_bf_blast_bounds_world = blast;
-    for (size_t i = 0; i < (size_t)MSL_MAX_PLAYERS; i++) {
-      g_bf_spawn_points[i] = spawn[i];
-      g_bf_respawn_points[i] = respawn[i];
-    }
-    g_bf_match_flow_loaded = 1u;
+  slot->cam_bounds_world = cam;
+  slot->blast_bounds_world = blast;
+  for (size_t i = 0; i < (size_t)MSL_MAX_PLAYERS; i++) {
+    slot->spawn_points[i] = spawn[i];
+    slot->respawn_points[i] = respawn[i];
   }
+  slot->match_flow_loaded = 1u;
 }
 
 static int fd_load_floor_lines_from_mslstg01(uint32_t stage_id, const uint8_t* buf, size_t sz) {
@@ -968,11 +957,29 @@ static int fd_load_floor_lines_from_mslstg01_file(uint32_t stage_id, const char*
   return err;
 }
 
-int stage_collision_init(void) {
-  if (g_fd_loaded && g_bf_loaded && g_fd_match_flow_loaded && g_bf_match_flow_loaded) {
+static int stage_load_slot_from_data_dir(MslStageSlot* slot, const char* data_dir) {
+  if (slot == NULL || data_dir == NULL || data_dir[0] == '\0') {
+    return -1;
+  }
+  if (slot->loaded && slot->match_flow_loaded) {
     return 0;
   }
+  char path[512];
+  const int n = snprintf(path, sizeof(path), "%s/stages/bin/%s", data_dir, slot->bin_name);
+  if (n <= 0 || (size_t)n >= sizeof(path)) {
+    return -1;
+  }
+  if (fd_load_floor_lines_from_mslstg01_file(slot->stage_id, path) != 0) {
+    return -1;
+  }
+  if (!slot->match_flow_loaded) {
+    return -1;
+  }
+  slot->loaded = 1;
+  return 0;
+}
 
+int stage_collision_init(void) {
   // All allocations and IO for stage collision must happen here (init-time).
   // stage_collision_apply() is on the per-frame hot path and must remain allocation-free.
 
@@ -981,44 +988,50 @@ int stage_collision_init(void) {
     data_dir = "data";
   }
 
-  char path[512];
-  if (!g_fd_loaded) {
-    int n = snprintf(path, sizeof(path), "%s/stages/bin/grnla.bin", data_dir);
-    if (n <= 0 || (size_t)n >= sizeof(path)) {
-      return -1;
+  for (size_t i = 0; i < sizeof(g_stage_slots) / sizeof(g_stage_slots[0]); i++) {
+    MslStageSlot* slot = &g_stage_slots[i];
+    if (slot->loaded && slot->match_flow_loaded) {
+      continue;
     }
-    if (fd_load_floor_lines_from_mslstg01_file((uint32_t)MSL_STAGE_FINAL_DESTINATION, path) != 0) {
-      return -1;
-    }
-    g_fd_loaded = 1;
+    (void)stage_load_slot_from_data_dir(slot, data_dir);
   }
 
-  if (!g_bf_loaded) {
-    int n = snprintf(path, sizeof(path), "%s/stages/bin/grnba.bin", data_dir);
-    if (n <= 0 || (size_t)n >= sizeof(path)) {
-      return -1;
-    }
-    if (fd_load_floor_lines_from_mslstg01_file((uint32_t)MSL_STAGE_BATTLEFIELD, path) != 0) {
-      return -1;
-    }
-    g_bf_loaded = 1;
-  }
+  // FD is still the default/runtime baseline, so normal init requires it. Other registered stages
+  // load opportunistically and are required only when requested via stage_collision_require_stage().
+  return stage_collision_require_stage((uint32_t)MSL_STAGE_FINAL_DESTINATION) ? 0 : -1;
+}
 
-  if (!g_fd_match_flow_loaded || !g_bf_match_flow_loaded) {
-    return -1;
+uint8_t stage_collision_require_stage(uint32_t stage_id) {
+  MslStageSlot* slot = stage_slot_mut(stage_id);
+  if (slot == NULL) {
+    return 0u;
   }
+  if (slot->loaded && slot->match_flow_loaded) {
+    return 1u;
+  }
+  const char* data_dir = getenv("MSL_DATA_DIR");
+  if (data_dir == NULL || data_dir[0] == '\0') {
+    data_dir = "data";
+  }
+  if (stage_load_slot_from_data_dir(slot, data_dir) != 0) {
+    return 0u;
+  }
+  return (uint8_t)(slot->loaded && slot->match_flow_loaded);
+}
 
-  return 0;
+uint8_t stage_collision_stage_registered(uint32_t stage_id) {
+  return stage_slot(stage_id) != NULL ? 1u : 0u;
+}
+
+uint8_t stage_collision_stage_available(uint32_t stage_id) {
+  const MslStageSlot* slot = stage_slot(stage_id);
+  return (uint8_t)(slot != NULL && slot->loaded && slot->match_flow_loaded);
 }
 
 const MslStageFloorGraph* stage_collision_get_floor_graph(uint32_t stage_id) {
-  if (stage_id == (uint32_t)MSL_STAGE_FINAL_DESTINATION && g_fd_loaded &&
-      g_fd_floor_lines != NULL && g_fd_floor_line_count != 0) {
-    return &g_fd_floor_graph;
-  }
-  if (stage_id == (uint32_t)MSL_STAGE_BATTLEFIELD && g_bf_loaded && g_bf_floor_lines != NULL &&
-      g_bf_floor_line_count != 0) {
-    return &g_bf_floor_graph;
+  const MslStageSlot* slot = stage_slot(stage_id);
+  if (slot != NULL && slot->loaded && slot->floor_lines != NULL && slot->floor_line_count != 0) {
+    return &slot->floor_graph;
   }
   return NULL;
 }
@@ -1036,38 +1049,64 @@ int stage_collision_floor_line_index(uint32_t stage_id, uint16_t segment_i) {
   return -1;
 }
 
-const MslStageCeilingGraph* stage_collision_get_ceiling_graph(uint32_t stage_id) {
-  if (stage_id == (uint32_t)MSL_STAGE_FINAL_DESTINATION && g_fd_loaded &&
-      g_fd_ceiling_lines != NULL && g_fd_ceiling_line_count != 0) {
-    return &g_fd_ceiling_graph;
+const MslStageFloorGraph* stage_collision_get_fighter_floor_graph(uint32_t stage_id) {
+  const MslStageSlot* slot = stage_slot(stage_id);
+  if (slot != NULL && slot->loaded && slot->fighter_floor_lines != NULL &&
+      slot->fighter_floor_line_count != 0) {
+    return &slot->fighter_floor_graph;
   }
-  if (stage_id == (uint32_t)MSL_STAGE_BATTLEFIELD && g_bf_loaded && g_bf_ceiling_lines != NULL &&
-      g_bf_ceiling_line_count != 0) {
-    return &g_bf_ceiling_graph;
+  return NULL;
+}
+
+int stage_collision_fighter_floor_line_index(uint32_t stage_id, uint16_t segment_i) {
+  const MslStageFloorGraph* g = stage_collision_get_fighter_floor_graph(stage_id);
+  if (g == NULL) {
+    return -1;
+  }
+  for (size_t i = 0; i < g->line_count; i++) {
+    if (g->lines[i].segment_i == segment_i) {
+      return (int)i;
+    }
+  }
+  return -1;
+}
+
+uint8_t stage_collision_floor_line_is_platform(uint32_t stage_id, uint16_t segment_i) {
+  const MslStageFloorGraph* g = stage_collision_get_floor_graph(stage_id);
+  if (g == NULL) {
+    return 0u;
+  }
+  for (size_t i = 0; i < g->line_count; i++) {
+    if (g->lines[i].segment_i == segment_i) {
+      return g->lines[i].is_platform ? 1u : 0u;
+    }
+  }
+  return 0u;
+}
+
+const MslStageCeilingGraph* stage_collision_get_ceiling_graph(uint32_t stage_id) {
+  const MslStageSlot* slot = stage_slot(stage_id);
+  if (slot != NULL && slot->loaded && slot->ceiling_lines != NULL &&
+      slot->ceiling_line_count != 0) {
+    return &slot->ceiling_graph;
   }
   return NULL;
 }
 
 const MslStageWallGraph* stage_collision_get_left_wall_graph(uint32_t stage_id) {
-  if (stage_id == (uint32_t)MSL_STAGE_FINAL_DESTINATION && g_fd_loaded &&
-      g_fd_left_wall_lines != NULL && g_fd_left_wall_line_count != 0) {
-    return &g_fd_left_wall_graph;
-  }
-  if (stage_id == (uint32_t)MSL_STAGE_BATTLEFIELD && g_bf_loaded && g_bf_left_wall_lines != NULL &&
-      g_bf_left_wall_line_count != 0) {
-    return &g_bf_left_wall_graph;
+  const MslStageSlot* slot = stage_slot(stage_id);
+  if (slot != NULL && slot->loaded && slot->left_wall_lines != NULL &&
+      slot->left_wall_line_count != 0) {
+    return &slot->left_wall_graph;
   }
   return NULL;
 }
 
 const MslStageWallGraph* stage_collision_get_right_wall_graph(uint32_t stage_id) {
-  if (stage_id == (uint32_t)MSL_STAGE_FINAL_DESTINATION && g_fd_loaded &&
-      g_fd_right_wall_lines != NULL && g_fd_right_wall_line_count != 0) {
-    return &g_fd_right_wall_graph;
-  }
-  if (stage_id == (uint32_t)MSL_STAGE_BATTLEFIELD && g_bf_loaded && g_bf_right_wall_lines != NULL &&
-      g_bf_right_wall_line_count != 0) {
-    return &g_bf_right_wall_graph;
+  const MslStageSlot* slot = stage_slot(stage_id);
+  if (slot != NULL && slot->loaded && slot->right_wall_lines != NULL &&
+      slot->right_wall_line_count != 0) {
+    return &slot->right_wall_graph;
   }
   return NULL;
 }
@@ -1115,18 +1154,12 @@ uint8_t stage_collision_get_blast_bounds_world(uint32_t stage_id, MslStageBounds
   if (out == NULL) {
     return 0;
   }
-  if (stage_id == (uint32_t)MSL_STAGE_FINAL_DESTINATION && g_fd_loaded && g_fd_match_flow_loaded) {
-    out->left = g_fd_blast_bounds_world.left;
-    out->right = g_fd_blast_bounds_world.right;
-    out->top = g_fd_blast_bounds_world.top;
-    out->bottom = g_fd_blast_bounds_world.bottom;
-    return 1;
-  }
-  if (stage_id == (uint32_t)MSL_STAGE_BATTLEFIELD && g_bf_loaded && g_bf_match_flow_loaded) {
-    out->left = g_bf_blast_bounds_world.left;
-    out->right = g_bf_blast_bounds_world.right;
-    out->top = g_bf_blast_bounds_world.top;
-    out->bottom = g_bf_blast_bounds_world.bottom;
+  const MslStageSlot* slot = stage_slot(stage_id);
+  if (slot != NULL && slot->loaded && slot->match_flow_loaded) {
+    out->left = slot->blast_bounds_world.left;
+    out->right = slot->blast_bounds_world.right;
+    out->top = slot->blast_bounds_world.top;
+    out->bottom = slot->blast_bounds_world.bottom;
     return 1;
   }
   return 0;
@@ -1136,18 +1169,12 @@ uint8_t stage_collision_get_cam_bounds_world(uint32_t stage_id, MslStageBounds* 
   if (out == NULL) {
     return 0;
   }
-  if (stage_id == (uint32_t)MSL_STAGE_FINAL_DESTINATION && g_fd_loaded && g_fd_match_flow_loaded) {
-    out->left = g_fd_cam_bounds_world.left;
-    out->right = g_fd_cam_bounds_world.right;
-    out->top = g_fd_cam_bounds_world.top;
-    out->bottom = g_fd_cam_bounds_world.bottom;
-    return 1;
-  }
-  if (stage_id == (uint32_t)MSL_STAGE_BATTLEFIELD && g_bf_loaded && g_bf_match_flow_loaded) {
-    out->left = g_bf_cam_bounds_world.left;
-    out->right = g_bf_cam_bounds_world.right;
-    out->top = g_bf_cam_bounds_world.top;
-    out->bottom = g_bf_cam_bounds_world.bottom;
+  const MslStageSlot* slot = stage_slot(stage_id);
+  if (slot != NULL && slot->loaded && slot->match_flow_loaded) {
+    out->left = slot->cam_bounds_world.left;
+    out->right = slot->cam_bounds_world.right;
+    out->top = slot->cam_bounds_world.top;
+    out->bottom = slot->cam_bounds_world.bottom;
     return 1;
   }
   return 0;
@@ -1160,12 +1187,9 @@ uint8_t stage_collision_get_spawn_point(uint32_t stage_id, int port, MslStagePoi
   if (port < 0 || port >= (int)MSL_MAX_PLAYERS) {
     return 0;
   }
-  if (stage_id == (uint32_t)MSL_STAGE_FINAL_DESTINATION && g_fd_loaded && g_fd_match_flow_loaded) {
-    *out = g_fd_spawn_points[port];
-    return 1;
-  }
-  if (stage_id == (uint32_t)MSL_STAGE_BATTLEFIELD && g_bf_loaded && g_bf_match_flow_loaded) {
-    *out = g_bf_spawn_points[port];
+  const MslStageSlot* slot = stage_slot(stage_id);
+  if (slot != NULL && slot->loaded && slot->match_flow_loaded) {
+    *out = slot->spawn_points[port];
     return 1;
   }
   return 0;
@@ -1178,12 +1202,9 @@ uint8_t stage_collision_get_respawn_point(uint32_t stage_id, int port, MslStageP
   if (port < 0 || port >= (int)MSL_MAX_PLAYERS) {
     return 0;
   }
-  if (stage_id == (uint32_t)MSL_STAGE_FINAL_DESTINATION && g_fd_loaded && g_fd_match_flow_loaded) {
-    *out = g_fd_respawn_points[port];
-    return 1;
-  }
-  if (stage_id == (uint32_t)MSL_STAGE_BATTLEFIELD && g_bf_loaded && g_bf_match_flow_loaded) {
-    *out = g_bf_respawn_points[port];
+  const MslStageSlot* slot = stage_slot(stage_id);
+  if (slot != NULL && slot->loaded && slot->match_flow_loaded) {
+    *out = slot->respawn_points[port];
     return 1;
   }
   return 0;
@@ -1196,13 +1217,9 @@ uint8_t stage_collision_get_ledge_point(uint32_t stage_id, int side, MslStagePoi
   if (!(side == 0 || side == 1)) {
     return 0;
   }
-  if (stage_id == (uint32_t)MSL_STAGE_FINAL_DESTINATION && g_fd_loaded &&
-      g_fd_have_ledge_points[side]) {
-    *out = g_fd_ledge_points[side];
-    return 1;
-  }
-  if (stage_id == (uint32_t)MSL_STAGE_BATTLEFIELD && g_bf_loaded && g_bf_have_ledge_points[side]) {
-    *out = g_bf_ledge_points[side];
+  const MslStageSlot* slot = stage_slot(stage_id);
+  if (slot != NULL && slot->loaded && slot->have_ledge_points[side]) {
+    *out = slot->ledge_points[side];
     return 1;
   }
   return 0;
@@ -1212,15 +1229,11 @@ const MslStageFloorLine* stage_collision_get_ledge_floor_line(uint32_t stage_id,
   if (!(side == 0 || side == 1)) {
     return NULL;
   }
-  if (stage_id == (uint32_t)MSL_STAGE_FINAL_DESTINATION && g_fd_loaded) {
-    const int16_t li = g_fd_ledge_floor_line_idx[side];
-    if (li >= 0 && (size_t)li < g_fd_floor_line_count) {
-      return &g_fd_floor_lines[(size_t)li];
-    }
-  } else if (stage_id == (uint32_t)MSL_STAGE_BATTLEFIELD && g_bf_loaded) {
-    const int16_t li = g_bf_ledge_floor_line_idx[side];
-    if (li >= 0 && (size_t)li < g_bf_floor_line_count) {
-      return &g_bf_floor_lines[(size_t)li];
+  const MslStageSlot* slot = stage_slot(stage_id);
+  if (slot != NULL && slot->loaded) {
+    const int16_t li = slot->ledge_floor_line_idx[side];
+    if (li >= 0 && (size_t)li < slot->floor_line_count) {
+      return &slot->floor_lines[(size_t)li];
     }
   }
   return NULL;
@@ -1250,36 +1263,18 @@ static inline uint8_t stage_segment_intersects(float ax0, float ay0, float ax1, 
 
 uint8_t stage_collision_item_line_hits_floor(uint32_t stage_id, float x0, float y0, float x1,
                                              float y1) {
-  const MslStageFloorLine* segs = NULL;
-  size_t n = 0;
-  const MslStageWallLine* left_walls = NULL;
-  size_t left_wall_n = 0;
-  const MslStageWallLine* right_walls = NULL;
-  size_t right_wall_n = 0;
-  const MslStageCeilingLine* ceilings = NULL;
-  size_t ceiling_n = 0;
-
-  if (stage_id == (uint32_t)MSL_STAGE_FINAL_DESTINATION && g_fd_loaded) {
-    segs = g_fd_floor_lines;
-    n = g_fd_floor_line_count;
-    left_walls = g_fd_left_wall_lines;
-    left_wall_n = g_fd_left_wall_line_count;
-    right_walls = g_fd_right_wall_lines;
-    right_wall_n = g_fd_right_wall_line_count;
-    ceilings = g_fd_ceiling_lines;
-    ceiling_n = g_fd_ceiling_line_count;
-  } else if (stage_id == (uint32_t)MSL_STAGE_BATTLEFIELD && g_bf_loaded) {
-    segs = g_bf_floor_lines;
-    n = g_bf_floor_line_count;
-    left_walls = g_bf_left_wall_lines;
-    left_wall_n = g_bf_left_wall_line_count;
-    right_walls = g_bf_right_wall_lines;
-    right_wall_n = g_bf_right_wall_line_count;
-    ceilings = g_bf_ceiling_lines;
-    ceiling_n = g_bf_ceiling_line_count;
-  } else {
+  const MslStageSlot* slot = stage_slot(stage_id);
+  if (slot == NULL || !slot->loaded) {
     return 0;
   }
+  const MslStageFloorLine* segs = slot->floor_lines;
+  const size_t n = slot->floor_line_count;
+  const MslStageWallLine* left_walls = slot->left_wall_lines;
+  const size_t left_wall_n = slot->left_wall_line_count;
+  const MslStageWallLine* right_walls = slot->right_wall_lines;
+  const size_t right_wall_n = slot->right_wall_line_count;
+  const MslStageCeilingLine* ceilings = slot->ceiling_lines;
+  const size_t ceiling_n = slot->ceiling_line_count;
   if (segs == NULL || n == 0) {
     return 0;
   }
@@ -1320,8 +1315,8 @@ void stage_collision_apply(MslBatch* batch) {
   if (batch == NULL) {
     return;
   }
-  // Ground contact substrate (mpColl-shaped): owns on_ground/ground_id for FD.
+  // Ground contact substrate (mpColl-shaped): owns on_ground/ground_id for loaded MSLSTG01 stages.
   mpcoll_ground_apply(batch);
-  // Wall + ceiling contact substrate (mpColl-shaped): owns wall/ceiling contact metadata for FD.
+  // Wall + ceiling contact substrate (mpColl-shaped): owns wall/ceiling contact metadata.
   mpcoll_wall_ceil_apply(batch);
 }

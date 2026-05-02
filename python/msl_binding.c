@@ -1762,11 +1762,46 @@ static PyObject* msl_stage_floor_segment_py(PyObject* self, PyObject* args) {
     PyErr_SetString(PyExc_RuntimeError, "stage_collision_init failed");
     return NULL;
   }
+  if (!stage_collision_require_stage((uint32_t)stage_id_u)) {
+    PyErr_SetString(PyExc_RuntimeError, "requested stage collision artifact is unavailable");
+    return NULL;
+  }
   const MslStageFloorGraph* graph = stage_collision_get_floor_graph((uint32_t)stage_id_u);
   if (graph == NULL) {
     Py_RETURN_NONE;
   }
   const int idx = stage_collision_floor_line_index((uint32_t)stage_id_u, (uint16_t)segment_i_u);
+  if (idx < 0 || (size_t)idx >= graph->line_count) {
+    Py_RETURN_NONE;
+  }
+  const MslStageFloorLine* line = &graph->lines[(size_t)idx];
+  return Py_BuildValue("{s:i,s:f,s:f,s:f,s:f,s:i,s:i,s:i}", "segment_i", (int)line->segment_i, "x0",
+                       (double)line->x0, "y0", (double)line->y0, "x1", (double)line->x1, "y1",
+                       (double)line->y1, "is_ledge", (int)line->is_ledge, "is_platform",
+                       (int)line->is_platform, "line_index", idx);
+}
+
+static PyObject* msl_stage_fighter_floor_segment_py(PyObject* self, PyObject* args) {
+  (void)self;
+  unsigned int stage_id_u = 0;
+  unsigned int segment_i_u = 0;
+  if (!PyArg_ParseTuple(args, "II", &stage_id_u, &segment_i_u)) {
+    return NULL;
+  }
+  if (stage_collision_init() != 0) {
+    PyErr_SetString(PyExc_RuntimeError, "stage_collision_init failed");
+    return NULL;
+  }
+  if (!stage_collision_require_stage((uint32_t)stage_id_u)) {
+    PyErr_SetString(PyExc_RuntimeError, "requested stage collision artifact is unavailable");
+    return NULL;
+  }
+  const MslStageFloorGraph* graph = stage_collision_get_fighter_floor_graph((uint32_t)stage_id_u);
+  if (graph == NULL) {
+    Py_RETURN_NONE;
+  }
+  const int idx =
+      stage_collision_fighter_floor_line_index((uint32_t)stage_id_u, (uint16_t)segment_i_u);
   if (idx < 0 || (size_t)idx >= graph->line_count) {
     Py_RETURN_NONE;
   }
@@ -1785,6 +1820,10 @@ static PyObject* msl_stage_match_flow_roles_py(PyObject* self, PyObject* args) {
   }
   if (stage_collision_init() != 0) {
     PyErr_SetString(PyExc_RuntimeError, "stage_collision_init failed");
+    return NULL;
+  }
+  if (!stage_collision_require_stage((uint32_t)stage_id_u)) {
+    PyErr_SetString(PyExc_RuntimeError, "requested stage match-flow artifact is unavailable");
     return NULL;
   }
   MslStageBounds cam = {0};
@@ -3647,6 +3686,8 @@ static PyMethodDef methods[] = {
      "item_article_params(char_id) -> dict loaded from MSLITAR1."},
     {"stage_floor_segment", msl_stage_floor_segment_py, METH_VARARGS,
      "stage_floor_segment(stage_id, segment_i) -> dict from runtime stage collision tables."},
+    {"stage_fighter_floor_segment", msl_stage_fighter_floor_segment_py, METH_VARARGS,
+     "stage_fighter_floor_segment(stage_id, segment_i) -> dict from fighter-solid floor tables."},
     {"stage_match_flow_roles", msl_stage_match_flow_roles_py, METH_VARARGS,
      "stage_match_flow_roles(stage_id) -> dict of runtime MSLSTG01 match-flow role data."},
     {"hitlist_ring_demo", msl_hitlist_ring_demo_py, METH_VARARGS,
