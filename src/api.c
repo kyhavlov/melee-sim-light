@@ -45,12 +45,41 @@
 #include "staling_tables.h"
 #include "attack_id_tables.h"
 #include "motion_state_owners.h"
+#include "mpcoll_ecb_points.h"
 #include "specialhi_pose.h"
 #include "state.h"
 #include "state_flags.h"
 #include "step.h"
 #include "grab_attachment.h"
 #include "knockdown.h"
+
+static inline float reseed_ecb_bottom_rel_y(uint8_t char_id, uint32_t anim, float anim_frame_f32,
+                                            uint8_t force_zero) {
+  if (force_zero) {
+    return 0.0f;
+  }
+  const uint16_t frame = msl_ecb_frame_u16_from_anim_frame(anim_frame_f32);
+  return msl_ecb_bottom_rel_y(char_id, anim, (int)frame);
+}
+
+static inline float reseed_prev_ecb_bottom_rel_y(uint8_t char_id, uint32_t fallback_anim,
+                                                 float fallback_anim_frame_f32,
+                                                 uint16_t seed_prev_action,
+                                                 int16_t seed_prev_action_frame,
+                                                 uint8_t force_zero) {
+  if (force_zero) {
+    return 0.0f;
+  }
+  if (seed_prev_action_frame >= 0) {
+    const uint16_t prev_sm = msl_motion_state_submotion_id(char_id, seed_prev_action);
+    if (prev_sm != 0xFFFFu) {
+      const uint16_t prev_frame = msl_ecb_frame_u16_from_anim_frame((float)seed_prev_action_frame);
+      return msl_ecb_bottom_rel_y(char_id, (uint32_t)prev_sm, (int)prev_frame);
+    }
+  }
+  const uint16_t frame = msl_ecb_frame_u16_from_anim_frame(fallback_anim_frame_f32);
+  return msl_ecb_bottom_rel_y(char_id, fallback_anim, (int)msl_ecb_prev_frame_u16(frame));
+}
 
 static inline uint8_t reseed_action_is_damage_or_firefox_launch_victim(uint16_t action) {
   switch (action) {
@@ -1730,6 +1759,30 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       }
       batch->state.ground_id[idx] = seed->ground_id[p];
       batch->state.animation_index[idx] = seed->animation_index[p];
+      {
+        // CollData ECB lifetime seed:
+        // Source mpColl carries current/prev/desired ECB points as hidden collision state across
+        // map callbacks. Initialize that substrate from the current replay-visible pose plus the
+        // prefix-causal previous-action snapshot; no t+1 action/on_ground/ground_id values are
+        // consumed here.
+        // refs/melee/src/melee/mp/mpcoll.c::{
+        //   mpColl_LoadECB_inline,mpCollInterpolateECB,mpColl_80043754}
+        // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+        const uint8_t force_locked_bottom =
+            (seed->on_ground[p] || seed->ecb_lock_timer[p] != 0u) ? 1u : 0u;
+        const float desired_rel =
+            reseed_ecb_bottom_rel_y(batch->state.char_id[idx], batch->state.animation_index[idx],
+                                    seed->anim_frame_f32[p], force_locked_bottom);
+        const float prev_rel = reseed_prev_ecb_bottom_rel_y(
+            batch->state.char_id[idx], batch->state.animation_index[idx], seed->anim_frame_f32[p],
+            seed->seed_prev_action_id[p], seed->seed_prev_action_frame[p], 0u);
+        batch->state.coll_desired_ecb_bottom_rel_y[idx] = desired_rel;
+        batch->state.coll_ecb_bottom_rel_y[idx] = prev_rel;
+        batch->state.coll_prev_ecb_bottom_rel_y[idx] = prev_rel;
+        batch->state.coll_desired_ecb_bottom_valid[idx] = 1u;
+        batch->state.coll_ecb_bottom_valid[idx] = 1u;
+        batch->state.coll_prev_ecb_bottom_valid[idx] = 1u;
+      }
       batch->state.dynamic_pose_state_valid[idx] = 0u;
       batch->state.dynamic_pose_apply_collision_matrix[idx] = 0u;
       batch->state.dynamic_pose_node_count[idx] = 0u;

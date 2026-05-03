@@ -75,6 +75,12 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->floor_sweep_seed_prev_pos_x = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->floor_sweep_seed_prev_pos_y = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->floor_sweep_seed_prev_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->coll_ecb_bottom_rel_y = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->coll_prev_ecb_bottom_rel_y = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->coll_desired_ecb_bottom_rel_y = (float*)alloc_aligned_64(sizeof(float) * bp);
+  state->coll_ecb_bottom_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->coll_prev_ecb_bottom_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->coll_desired_ecb_bottom_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->coll_stage_prev_pos_x = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->coll_stage_prev_pos_y = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->coll_stage_cur_pos_x = (float*)alloc_aligned_64(sizeof(float) * bp);
@@ -464,7 +470,10 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->illusion_ghost_pos2_x || !state->illusion_ghost_pos2_y || !state->prev_pos_x ||
       !state->prev_pos_y || !state->floor_sweep_prev_pos_x || !state->floor_sweep_prev_pos_y ||
       !state->floor_sweep_seed_prev_pos_x || !state->floor_sweep_seed_prev_pos_y ||
-      !state->floor_sweep_seed_prev_valid || !state->coll_stage_prev_pos_x ||
+      !state->floor_sweep_seed_prev_valid || !state->coll_ecb_bottom_rel_y ||
+      !state->coll_prev_ecb_bottom_rel_y || !state->coll_desired_ecb_bottom_rel_y ||
+      !state->coll_ecb_bottom_valid || !state->coll_prev_ecb_bottom_valid ||
+      !state->coll_desired_ecb_bottom_valid || !state->coll_stage_prev_pos_x ||
       !state->coll_stage_prev_pos_y || !state->coll_stage_cur_pos_x ||
       !state->coll_stage_cur_pos_y || !state->speed_air_x_self || !state->speed_ground_x_self ||
       !state->speed_y_self || !state->speed_x_attack || !state->speed_y_attack ||
@@ -650,6 +659,12 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   memset(state->walljump_seed_phase_valid, 0, sizeof(uint8_t) * bp);
   memset(state->specialhi_rotate_model, 0, sizeof(float) * bp);
   memset(state->specialhi_rotate_model_valid, 0, sizeof(uint8_t) * bp);
+  memset(state->coll_ecb_bottom_rel_y, 0, sizeof(float) * bp);
+  memset(state->coll_prev_ecb_bottom_rel_y, 0, sizeof(float) * bp);
+  memset(state->coll_desired_ecb_bottom_rel_y, 0, sizeof(float) * bp);
+  memset(state->coll_ecb_bottom_valid, 0, sizeof(uint8_t) * bp);
+  memset(state->coll_prev_ecb_bottom_valid, 0, sizeof(uint8_t) * bp);
+  memset(state->coll_desired_ecb_bottom_valid, 0, sizeof(uint8_t) * bp);
   memset(state->walk_anim_source_vel, 0, sizeof(float) * bp);
   memset(state->walk_retarget_tick_source_vel, 0, sizeof(float) * bp);
   memset(state->run_anim_source_vel, 0, sizeof(float) * bp);
@@ -728,6 +743,12 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->floor_sweep_seed_prev_pos_x);
   alloc_free(state->floor_sweep_seed_prev_pos_y);
   alloc_free(state->floor_sweep_seed_prev_valid);
+  alloc_free(state->coll_ecb_bottom_rel_y);
+  alloc_free(state->coll_prev_ecb_bottom_rel_y);
+  alloc_free(state->coll_desired_ecb_bottom_rel_y);
+  alloc_free(state->coll_ecb_bottom_valid);
+  alloc_free(state->coll_prev_ecb_bottom_valid);
+  alloc_free(state->coll_desired_ecb_bottom_valid);
   alloc_free(state->coll_stage_prev_pos_x);
   alloc_free(state->coll_stage_prev_pos_y);
   alloc_free(state->coll_stage_cur_pos_x);

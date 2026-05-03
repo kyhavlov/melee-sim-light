@@ -118,6 +118,54 @@ def _step_one_record(row: np.ndarray, num_players: int):
             245,
             "LandingFallSpecial shares Landing_Coll and admits Ottotto on platform edge floor loss",
         ),
+        _ActionCase(
+            "fountain_of_dreams_recent/ParallelTemptingElk.msl",
+            1093,
+            0,
+            236,
+            236,
+            "EscapeAir keeps stale floor_skip cleared without landing before source floor contact",
+        ),
+        _ActionCase(
+            "fountain_of_dreams_recent/ParallelTemptingElk.msl",
+            1094,
+            0,
+            236,
+            43,
+            "EscapeAir ignores stale floor_skip and admits source LandingFallSpecial on FoD platform",
+        ),
+        _ActionCase(
+            "battlefield_recent/DelayedSuperbGuanaco.msl",
+            4961,
+            1,
+            27,
+            43,
+            "JumpAerialF -> EscapeAir entry uses prior-motion prev_ecb for same-frame landing",
+        ),
+        _ActionCase(
+            "battlefield_recent/LoyalDishonestWren.msl",
+            3401,
+            1,
+            28,
+            43,
+            "JumpAerialB -> EscapeAir entry uses prior-motion prev_ecb for same-frame landing",
+        ),
+        _ActionCase(
+            "battlefield_recent/LoyalDishonestWren.msl",
+            3606,
+            1,
+            27,
+            236,
+            "fresh JumpAerialF -> EscapeAir keeps locked CollData floor lifetime airborne",
+        ),
+        _ActionCase(
+            "yoshis_story_recent/CheeryNumbMonkey.msl",
+            3941,
+            1,
+            27,
+            236,
+            "fresh JumpAerialF -> EscapeAir suppresses generic floor projection on Yoshi slope",
+        ),
     ],
 )
 def test_nonfd_action_entry_platform_pass_replay_real_locks(case: _ActionCase) -> None:
@@ -130,11 +178,22 @@ def test_nonfd_action_entry_platform_pass_replay_real_locks(case: _ActionCase) -
     #   ftCo_800D0EC8 Wait/Landing velocity split.
     # - LandingFallSpecial uses ftCo_Landing_Coll, so edge floor-loss can enter Ottotto through
     #   the same ft_80084280 path as Landing.
+    # - Fighter_ChangeMotionState clears CollData.floor_skip before EscapeAir_Coll; replay-prefix
+    #   seeds can carry that hidden lane stale, but EscapeAir floor contact should not skip it.
+    # - mpCollInterpolateECB carries a one-step prev_ecb snapshot; on same-frame JumpAerial ->
+    #   EscapeAir entries, EscapeAir_Coll's previous endpoint can still use the prior motion ECB.
+    # - Fresh JumpAerial -> EscapeAir entry rows keep the pre-entry locked CollData floor/ECB
+    #   lifetime through the first EscapeAir_Coll pass instead of immediately consuming generic floor
+    #   projection into LandingFallSpecial.
     # refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
     # refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_inline
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
     # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::*_Coll
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    # refs/melee/src/melee/mp/mpcoll.c::mpClearFloorSkip
+    # refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_800471F8}
+    # refs/melee/src/melee/mp/mpcoll.c::mpCollInterpolateECB
     # refs/melee/src/melee/ft/ft_081B.c::{ft_80082B1C,ft_80082F28,ft_80084280}
     # refs/melee/src/melee/ft/ftchangeparam.c::ftCo_800D0EC8
     # refs/melee/src/melee/ft/ftmotionstates.c::ftCo_MS_LandingFallSpecial

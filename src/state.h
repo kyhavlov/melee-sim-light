@@ -95,6 +95,17 @@ typedef struct MslStateSoA {
   float* floor_sweep_seed_prev_pos_x;
   float* floor_sweep_seed_prev_pos_y;
   uint8_t* floor_sweep_seed_prev_valid;
+  // Hidden CollData ECB-bottom lifetime state. Source mpColl keeps current, prev, and desired ECB
+  // points across `mpColl_LoadECB_inline` / `mpCollInterpolateECB`; floor sweeps consume these
+  // bottom offsets rather than resampling every endpoint from the visible action row.
+  // refs/melee/src/melee/mp/mpcoll.c::{
+  //   mpColl_LoadECB_inline,mpCollInterpolateECB,mpColl_80043754}
+  float* coll_ecb_bottom_rel_y;
+  float* coll_prev_ecb_bottom_rel_y;
+  float* coll_desired_ecb_bottom_rel_y;
+  uint8_t* coll_ecb_bottom_valid;
+  uint8_t* coll_prev_ecb_bottom_valid;
+  uint8_t* coll_desired_ecb_bottom_valid;
   // Collision-stage prev/cur position snapshots used for mpColl-shaped ledge-grab AABB checks.
   //
   // Decomp: the ledge-grab block consumes CollData.prev_pos / CollData.cur_pos as managed inside
