@@ -336,6 +336,17 @@ typedef struct MslCommonParams {
   // Runtime stores this through mv.co.fallspecial.landing_lag on EscapeAir -> FallSpecial and
   // forwards it into LandingFallSpecial's entry frame speed.
   float landing_fall_special_lag_frames;  // p_ftCommonData->x344
+  // Basic landing callback Wait/Landing split.
+  //
+  // Decomp:
+  // - ft_80082B1C enters Wait through ft_8008A2BC when
+  //   fp->self_vel.y > ftCo_800D0EC8(fp), otherwise Landing_Enter_Basic.
+  // - ftCo_800D0EC8 scales Fighter_804D6524->x30 by fp->x34_scale.y and
+  //   p_ftCommonData->x310 through ftCo_CalcYScaledKnockback.
+  // refs/melee/src/melee/ft/ft_081B.c::ft_80082B1C
+  // refs/melee/src/melee/ft/ftchangeparam.c::{ftCo_800D0EC8,ftCo_CalcYScaledKnockback}
+  float basic_landing_wait_gravity_mult_x30;  // Fighter_804D6524->x30
+  float basic_landing_wait_scale_param_x310;  // p_ftCommonData->x310
 
   // Air dodge (EscapeAir) constants.
   // Decomp: ftCo_80099A9C / ftCo_EscapeAir_Phys.
@@ -541,3 +552,39 @@ typedef struct MslCommonParams {
 
 int common_params_init(void);
 const MslCommonParams* msl_common_params(void);
+
+static inline float msl_ftco_calc_y_scaled_knockback(float arg0, float scale, float arg2) {
+  // refs/melee/src/melee/ft/ftchangeparam.c::ftCo_CalcYScaledKnockback
+  if (scale == 0.0f) {
+    scale = 1.0f;
+  }
+  if (arg2 == 0.0f) {
+    return arg0;
+  }
+  if (arg2 < 0.0f) {
+    return arg0 / msl_ftco_calc_y_scaled_knockback(1.0f, scale, -arg2);
+  }
+  if (scale >= 1.0f || arg2 <= 1.0f) {
+    return (scale - 1.0f) * arg0 * arg2 + arg0;
+  }
+  return arg0 * scale / arg2;
+}
+
+static inline float msl_ftco_800d0ec8_basic_landing_threshold(const MslCommonParams* c,
+                                                              float fighter_scale_y) {
+  // refs/melee/src/melee/ft/ftchangeparam.c::ftCo_800D0EC8
+  const float scale_y = fighter_scale_y > 0.0f ? fighter_scale_y : 1.0f;
+  return -msl_ftco_calc_y_scaled_knockback(c->basic_landing_wait_gravity_mult_x30, scale_y,
+                                           c->basic_landing_wait_scale_param_x310);
+}
+
+static inline uint8_t msl_ftco_80082b1c_enters_wait(const MslCommonParams* c, float fighter_scale_y,
+                                                    float self_vel_y) {
+  // ft_80082B1C / ftCo_AirCatchHit_Coll enter Wait when self_vel.y is above
+  // ftCo_800D0EC8(fp), otherwise they enter Landing_Enter_Basic.
+  // refs/melee/src/melee/ft/ft_081B.c::{ft_80082B1C,ftCo_AirCatchHit_Coll}
+  if (c == 0) {
+    return 0u;
+  }
+  return self_vel_y > msl_ftco_800d0ec8_basic_landing_threshold(c, fighter_scale_y) ? 1u : 0u;
+}

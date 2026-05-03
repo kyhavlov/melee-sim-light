@@ -86,6 +86,38 @@ def _step_one_record(row: np.ndarray, num_players: int):
             244,
             "Squat pass countdown enters Pass after the source x470 delay",
         ),
+        _ActionCase(
+            "battlefield_recent/DelayedSuperbGuanaco.msl",
+            5521,
+            1,
+            25,
+            14,
+            "JumpF ft_80082B1C gentle floor contact enters Wait instead of Landing",
+        ),
+        _ActionCase(
+            "battlefield_recent/LoyalDishonestWren.msl",
+            928,
+            1,
+            345,
+            14,
+            "SpecialAirNLoop AirCatchHit shares ft_80082B1C's Wait/Landing velocity split",
+        ),
+        _ActionCase(
+            "dream_land_recent/FlippantEnchantedHorse.msl",
+            3266,
+            1,
+            251,
+            42,
+            "MissFoot_Coll routes through ft_80082F28 and enters basic Landing on hard floor contact",
+        ),
+        _ActionCase(
+            "battlefield_recent/DelayedSuperbGuanaco.msl",
+            7337,
+            1,
+            43,
+            245,
+            "LandingFallSpecial shares Landing_Coll and admits Ottotto on platform edge floor loss",
+        ),
     ],
 )
 def test_nonfd_action_entry_platform_pass_replay_real_locks(case: _ActionCase) -> None:
@@ -94,11 +126,18 @@ def test_nonfd_action_entry_platform_pass_replay_real_locks(case: _ActionCase) -
     #   CollData_X130_Locked is active after a ground-to-air handoff.
     # - Squat_IASA arms mv.co.squat.x4 through ftCo_80099F9C, returns, then only decrements the
     #   hidden countdown on later frames before calling ftCo_8009A228.
+    # - Fall/Jump/MissFoot and AirCatchHit collision callbacks share ft_80082B1C's
+    #   ftCo_800D0EC8 Wait/Landing velocity split.
+    # - LandingFallSpecial uses ftCo_Landing_Coll, so edge floor-loss can enter Ottotto through
+    #   the same ft_80084280 path as Landing.
     # refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
     # refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_inline
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
     # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::*_Coll
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_IASA
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_80082B1C,ft_80082F28,ft_80084280}
+    # refs/melee/src/melee/ft/ftchangeparam.c::ftCo_800D0EC8
+    # refs/melee/src/melee/ft/ftmotionstates.c::ftCo_MS_LandingFallSpecial
     root = Path(__file__).resolve().parents[1]
     path = root / _BASE / case.dataset_rel
     if not path.exists():

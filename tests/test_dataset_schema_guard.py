@@ -394,6 +394,15 @@ def test_ft_common_data_exports_soft_platform_callback_threshold() -> None:
     assert float(data["platform_air_land_stick_y_threshold"]) == pytest.approx(-0.5600000023841858)
 
 
+def test_ft_common_data_exports_basic_landing_wait_velocity_threshold_constants() -> None:
+    # ft_80082B1C and ftCo_AirCatchHit_Coll compare self_vel.y against ftCo_800D0EC8(fp).
+    # That threshold is computed from Fighter_804D6524->x30 and p_ftCommonData->x310, so keep both
+    # inputs extracted rather than duplicated as local gameplay constants.
+    data = json.loads(Path("data/common/ft_common_data.json").read_text())
+    assert float(data["basic_landing_wait_gravity_mult_x30"]) == pytest.approx(0.7649999856948853)
+    assert float(data["basic_landing_wait_scale_param_x310"]) == pytest.approx(1.0)
+
+
 def test_item_spawn_id_counter_survives_itemless_gaps() -> None:
     exists = np.array(
         [

@@ -63,6 +63,8 @@ def test_data_contract_is_self_consistent_if_present() -> None:
         "air_motion_kb_mul",
         "asdi_step_mul",
         "attack_angle_threshold_radians",
+        "basic_landing_wait_gravity_mult_x30",
+        "basic_landing_wait_scale_param_x310",
         "cliff_drop_stick_threshold",
         "crouch_stick_threshold",
         "guard_special_enable_frames",

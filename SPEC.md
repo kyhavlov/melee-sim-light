@@ -1615,6 +1615,15 @@ Grounded motion-entry timing notes:
   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Anim`,
   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA`,
   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_80099794`.
+- Fall/Jump/JumpAerial/MissFoot and Fox/Falco aerial blaster floor contact use the shared
+  `ft_80082B1C` Wait-vs-Landing velocity split. The threshold is `ftCo_800D0EC8(fp)`, computed via
+  `ftCo_CalcYScaledKnockback(Fighter_804D6524->x30, fp->x34_scale.y, p_ftCommonData->x310)`.
+  Runtime consumes the extracted `data/common/ft_common_data.json` keys
+  `basic_landing_wait_gravity_mult_x30` and `basic_landing_wait_scale_param_x310` through
+  `src/common_params.h::msl_ftco_80082b1c_enters_wait`; this owner remains a narrow checkpoint and
+  does not close EscapeAir/LandingFallSpecial or AttackAir landing residuals.
+  Refs: `refs/melee/src/melee/ft/ft_081B.c::{ft_80082B1C,ftCo_AirCatchHit_Coll}`,
+  `refs/melee/src/melee/ft/ftchangeparam.c::{ftCo_800D0EC8,ftCo_CalcYScaledKnockback}`.
 - Dash IASA terminal friction is a callback-phase owner, not an action-id shortcut. When
   `ftCo_Dash_IASA` reaches the terminal branch (`mv.co.dash.x4 != 0` and the consumed callback
   anim frame crosses `mv.co.dash.x44`), it applies `p_ftCommonData->x298` to `self_vel.x` before

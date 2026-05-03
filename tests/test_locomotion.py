@@ -2492,7 +2492,9 @@ def test_opening_input_lock_clears_on_landing() -> None:
     seed["pos_y"][0, 0] = np.float32(-bot0 + 0.10)
     grav = np.float32(_fox_attr("grav"))
     bot1 = _fox_ecb_bottom_rel_y(SM_FALL, 2)
-    seed["speed_y_self"][0, 0] = np.float32(min(-0.05, -(0.20 + (bot1 - bot0)) + grav))
+    # Use a clear downward velocity so ft_80082B1C takes the Landing branch rather than the
+    # gentle-contact Wait branch.
+    seed["speed_y_self"][0, 0] = np.float32(min(-1.0, -(0.20 + (bot1 - bot0)) + grav))
 
     prev_inp = _mk_input_bytes(1, input_stride)
     inp = _mk_input_bytes(1, input_stride)
@@ -2518,9 +2520,10 @@ def test_landing_resets_jumps_and_enters_landing() -> None:
     bot0 = _fox_ecb_bottom_rel_y(SM_FALL, 0)
     seed["pos_y"][0, 0] = np.float32(-bot0 + 0.10)
     grav = np.float32(_fox_attr("grav"))
-    # Choose a small downward speed so gravity moves us below the floor this frame.
+    # Choose a clear downward speed so gravity moves us below the floor and ft_80082B1C takes the
+    # Landing branch rather than the gentle-contact Wait branch.
     bot1 = _fox_ecb_bottom_rel_y(SM_FALL, 1)
-    seed["speed_y_self"][0, 0] = np.float32(min(-0.05, -(0.20 + (bot1 - bot0)) + grav))
+    seed["speed_y_self"][0, 0] = np.float32(min(-1.0, -(0.20 + (bot1 - bot0)) + grav))
     seed["jumps_left"][0, 0] = np.uint8(1)
 
     prev_inp = _mk_input_bytes(1, input_stride)

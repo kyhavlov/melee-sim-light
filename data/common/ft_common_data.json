@@ -18,6 +18,8 @@
   "attackair_stick_deadzone_x": 0.25,
   "attackair_stick_deadzone_y": 0.25,
   "attackdash_friction_mul": 0.625,
+  "basic_landing_wait_gravity_mult_x30": 0.7649999856948853,
+  "basic_landing_wait_scale_param_x310": 1.0,
   "capture_cut_escape_speed": 1.0,
   "capture_grab_timer_base": 30.0,
   "capture_grab_timer_handicap_base": 9.0,

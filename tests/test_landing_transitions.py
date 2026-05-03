@@ -260,8 +260,9 @@ def test_cliffjumpquick2_floor_contact_enters_basic_landing() -> None:
     seed["animation_index"][0, 0] = np.uint32(SM_CLIFF_JUMP_QUICK2)
     seed["ground_id"][0, 0] = np.uint16(1)  # prefer main FD floor segment
 
-    # Decomp: CliffJump2_Coll delegates floor contact to ft_80082B1C through ft_800835B0, so a
-    # steady CliffJump2 sweep that reaches floor should enter basic Landing immediately.
+    # Decomp: CliffJump2_Coll delegates floor contact to ft_80082B1C through ft_800835B0. Use a
+    # clear downward velocity so this fixture covers the Landing branch, not the gentle-contact
+    # Wait branch.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffJump.c::ftCo_CliffJump2_Coll
     # refs/melee/src/melee/ft/ft_081B.c::{ft_800835B0,ft_80082B1C}
     af0 = int(seed["action_frame"][0, 0])
@@ -270,7 +271,7 @@ def test_cliffjumpquick2_floor_contact_enters_basic_landing() -> None:
     bot1 = _fox_ecb_bottom_rel_y(SM_CLIFF_JUMP_QUICK2, af1)
     seed["pos_y"][0, 0] = np.float32(-bot0 + 0.10)
     grav = np.float32(_fox_attr("grav"))
-    seed["speed_y_self"][0, 0] = np.float32(min(-0.05, -(0.20 + (bot1 - bot0)) + grav))
+    seed["speed_y_self"][0, 0] = np.float32(min(-1.0, -(0.20 + (bot1 - bot0)) + grav))
     seed["jumps_left"][0, 0] = np.uint8(1)
 
     prev_inp = _mk_input_bytes(1, input_stride)

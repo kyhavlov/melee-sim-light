@@ -423,6 +423,10 @@ int common_params_init(void) {
       json_get_f32(buf, "lcancel_lag_div", &g_params.lcancel_lag_div) != 0 ||
       json_get_f32(buf, "landing_fall_special_lag_frames",
                    &g_params.landing_fall_special_lag_frames) != 0 ||
+      json_get_f32(buf, "basic_landing_wait_gravity_mult_x30",
+                   &g_params.basic_landing_wait_gravity_mult_x30) != 0 ||
+      json_get_f32(buf, "basic_landing_wait_scale_param_x310",
+                   &g_params.basic_landing_wait_scale_param_x310) != 0 ||
       json_get_f32(buf, "escapeair_deadzone_x", &g_params.escapeair_deadzone_x) != 0 ||
       json_get_f32(buf, "escapeair_deadzone_y", &g_params.escapeair_deadzone_y) != 0 ||
       json_get_u8(buf, "escapeair_timer_frames", &g_params.escapeair_timer_frames) != 0 ||

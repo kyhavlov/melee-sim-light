@@ -731,6 +731,7 @@ static inline uint8_t landing_contact_y_bridge_matches_source(uint16_t source_ac
 
 static inline uint8_t landing_action_owns_root_floor_snap(uint16_t land_act) {
   switch (land_act) {
+    case (uint16_t)MSL_ACT_WAIT:
     case (uint16_t)MSL_ACT_LANDING:
     case (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL:
     case (uint16_t)MSL_ACT_LANDING_AIR_N:
@@ -2335,10 +2336,13 @@ static inline uint8_t action_uses_ottotto_edge_callback(uint16_t a) {
     case MSL_ACT_WALK_FAST:
     case MSL_ACT_RUN_BRAKE:
     case MSL_ACT_LANDING:
+    case MSL_ACT_LANDING_FALL_SPECIAL:
       // These grounded common states use the ft_80084280 family: if the floor helper reports an
       // edge bit, ftCo_8009A3C8 enters Ottotto before falling.
+      // LandingFallSpecial shares Landing_Coll in the MotionState table.
       // Run can enter RunBrake in IASA before collision, so the same frame's collision callback is
       // RunBrake_Coll -> ft_80084280 rather than Run_Coll's ft_800844EC path.
+      // refs/melee/src/melee/ft/ftmotionstates.c::ftCo_MS_LandingFallSpecial
       // refs/melee/src/melee/ft/ft_081B.c::ft_80084280
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::{ftCo_8009A3C8,ftCo_8009A410}
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::ftCo_RunBrake_Coll
@@ -2401,7 +2405,7 @@ static inline uint8_t action_is_air_locomotion(uint16_t a) {
   if (a == MSL_ACT_JUMP_F || a == MSL_ACT_JUMP_B || a == MSL_ACT_JUMP_AERIAL_F ||
       a == MSL_ACT_JUMP_AERIAL_B || action_is_fall_like(a) || a == MSL_ACT_FALL_SPECIAL ||
       a == MSL_ACT_FALL_SPECIAL_F || a == MSL_ACT_FALL_SPECIAL_B || a == MSL_ACT_DAMAGE_FALL ||
-      a == MSL_ACT_PASS ||
+      a == MSL_ACT_PASS || a == MSL_ACT_MISS_FOOT ||
       // Decomp: both CliffJump2 variants use ft_800835B0(..., ft_80082B1C) for collision;
       // floor contact therefore enters the basic Landing/Wait path instead of staying in
       // CliffJump2 while grounded.
@@ -2411,6 +2415,42 @@ static inline uint8_t action_is_air_locomotion(uint16_t a) {
     return 1;
   }
   return 0;
+}
+
+static inline uint8_t action_uses_ft80082b1c_basic_landing_callback(uint16_t a) {
+  // Callback family:
+  // - Fall_Coll -> ft_800831CC(..., ft_80082B1C)
+  // - Jump/JumpAerial_Coll -> ft_800835B0(..., ft_80082B1C)
+  // - CliffJump2_Coll -> ft_800835B0(..., ft_80082B1C)
+  // - Fox/Falco SpecialAirN* AirCatchHit_Coll -> ft_80082B1C
+  // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_Fall.c,ftCo_Jump.c,ftCo_JumpAerial.c,ftCo_CliffJump.c}
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::*_Coll
+  // refs/melee/src/melee/ft/ft_081B.c::{ft_80082B1C,ftCo_AirCatchHit_Coll}
+  return (uint8_t)(action_is_fall_like(a) || a == (uint16_t)MSL_ACT_JUMP_F ||
+                   a == (uint16_t)MSL_ACT_JUMP_B || a == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
+                   a == (uint16_t)MSL_ACT_JUMP_AERIAL_B || a == (uint16_t)MSL_ACT_MISS_FOOT ||
+                   a == (uint16_t)MSL_ACT_CLIFF_JUMP_SLOW2 ||
+                   a == (uint16_t)MSL_ACT_CLIFF_JUMP_QUICK2 ||
+                   a == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_START ||
+                   a == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_LOOP ||
+                   a == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_END);
+}
+
+static inline uint16_t ft80082b1c_basic_landing_action(const MslBatch* batch,
+                                                       const MslCommonParams* c, size_t idx,
+                                                       uint16_t source_act) {
+  if (!action_uses_ft80082b1c_basic_landing_callback(source_act)) {
+    return (uint16_t)MSL_ACT_LANDING;
+  }
+  // ft_80082B1C keeps gentle floor contact in the neutral grounded state when vertical self
+  // velocity is above the scaled threshold, otherwise it enters Landing_Enter_Basic.
+  // refs/melee/src/melee/ft/ft_081B.c::ft_80082B1C
+  const float scale_y = (batch != NULL && batch->state.fighter_scale_y[idx] > 0.0f)
+                            ? batch->state.fighter_scale_y[idx]
+                            : 1.0f;
+  return msl_ftco_80082b1c_enters_wait(c, scale_y, batch->state.speed_y_self[idx])
+             ? (uint16_t)MSL_ACT_WAIT
+             : (uint16_t)MSL_ACT_LANDING;
 }
 
 static inline uint8_t action_is_catch_start_floor_loss(uint16_t a) {
@@ -2848,6 +2888,8 @@ static inline uint32_t submotion_for_action(uint16_t a) {
       return (uint32_t)MSL_SM_DAMAGE_FALL;
     case MSL_ACT_PASS:
       return (uint32_t)MSL_SM_PASS;
+    case MSL_ACT_MISS_FOOT:
+      return (uint32_t)MSL_SM_MISS_FOOT;
     case MSL_ACT_LANDING:
       return (uint32_t)MSL_SM_LANDING;
     case MSL_ACT_LANDING_FALL_SPECIAL:
@@ -5731,6 +5773,14 @@ void locomotion_update_post_collision(MslBatch* batch) {
           // EscapeAir: EscapeAir_Coll -> ft_80082C74(..., ftCo_80099D70) -> ftCo_LandingFallSpecial_Enter(..., x344)
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c
           land = (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL;
+        } else if (a == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_START ||
+                   a == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_LOOP ||
+                   a == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_END) {
+          // Fox/Falco AirCatchHit_Coll uses ft_80082B1C, the same velocity-gated Wait/Landing
+          // split as Fall/Jump.
+          // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::*_Coll
+          // refs/melee/src/melee/ft/ft_081B.c::{ftCo_AirCatchHit_Coll,ft_80082B1C}
+          land = ft80082b1c_basic_landing_action(batch, c, idx, a);
         } else if (a == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_END) {
           // Decomp: ftFx_SpecialAirSEnd_Coll enters LandingFallSpecial on ground contact.
           // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialAirSEnd_Coll
@@ -5766,7 +5816,7 @@ void locomotion_update_post_collision(MslBatch* batch) {
 
         // Locomotion-only fallback: fall states land into Landing/LandingFallSpecial.
         if (land == 0 && action_is_air_locomotion(a)) {
-          land = (uint16_t)MSL_ACT_LANDING;
+          land = ft80082b1c_basic_landing_action(batch, c, idx, a);
           if (a == MSL_ACT_FALL_SPECIAL || a == MSL_ACT_FALL_SPECIAL_F ||
               a == MSL_ACT_FALL_SPECIAL_B || a == MSL_ACT_LANDING_FALL_SPECIAL) {
             land = (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL;

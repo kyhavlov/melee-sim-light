@@ -48,6 +48,7 @@ def main() -> None:
 
     ptrs = [_u32_be(raw, i * 4) for i in range(n_ptr)]
     ft_common_abs = arc.data_base + ptrs[0]
+    fighter_scale_abs = arc.data_base + ptrs[12]
 
     out = {
         # Input processing thresholds
@@ -125,6 +126,16 @@ def main() -> None:
         #   otherwise mpColl_80044628_Floor continues searching / rejects that platform.
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_80096CC8
         "platform_air_land_stick_y_threshold": float(_f32_be(buf, ft_common_abs + 0x25C)),
+        # Basic air-to-ground callback velocity threshold:
+        # - ft_80082B1C enters Wait through ft_8008A2BC when
+        #   fp->self_vel.y > ftCo_800D0EC8(fp), otherwise Landing_Enter_Basic.
+        # - ftCo_800D0EC8 = -ftCo_CalcYScaledKnockback(Fighter_804D6524->x30,
+        #   fp->x34_scale.y, p_ftCommonData->x310).
+        # refs/melee/src/melee/ft/ft_081B.c::ft_80082B1C
+        # refs/melee/src/melee/ft/ftchangeparam.c::{ftCo_800D0EC8,ftCo_CalcYScaledKnockback}
+        # refs/melee/src/melee/ft/fighter.c::Fighter_LoadCommonData (pData[12] -> Fighter_804D6524)
+        "basic_landing_wait_gravity_mult_x30": float(_f32_be(buf, fighter_scale_abs + 0x30)),
+        "basic_landing_wait_scale_param_x310": float(_f32_be(buf, ft_common_abs + 0x310)),
         # Downed low-damage contact gate:
         # - ftCo_8009F0F0 routes DownBound/DownWait/DownDamage into DownDamage when
         #   `fp->x2224_b2 || fp->dmg.x1838_percentTemp < p_ftCommonData->x428`.

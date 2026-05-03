@@ -39,6 +39,18 @@ static inline uint8_t action_is_blaster(uint16_t action_id) {
   }
 }
 
+static inline uint8_t blaster_aircatchhit_enters_wait(const MslBatch* batch,
+                                                      const MslCommonParams* c, size_t idx) {
+  if (batch == NULL || c == NULL) {
+    return 0u;
+  }
+  const float scale_y =
+      batch->state.fighter_scale_y[idx] > 0.0f ? batch->state.fighter_scale_y[idx] : 1.0f;
+  // ftCo_AirCatchHit_Coll shares ft_80082B1C's Wait/Landing velocity split.
+  // refs/melee/src/melee/ft/ft_081B.c::{ftCo_AirCatchHit_Coll,ft_80082B1C}
+  return msl_ftco_80082b1c_enters_wait(c, scale_y, batch->state.speed_y_self[idx]);
+}
+
 static inline uint8_t specialn_is_blaster_loop_requested(const MslBatch* batch, size_t idx) {
   // Decomp (GALE01): the SpecialN Start/Loop IASA callbacks set fp->mv.fx.SpecialN.isBlasterLoop
   // when:
@@ -1172,25 +1184,32 @@ void blaster_update_post_collision(MslBatch* batch) {
       // Landing transition for aerial SpecialN.
       //
       // Decomp:
-      // - ftFx_SpecialAirN*_Coll uses ftCo_AirCatchHit_Coll, which enters Landing_Enter_Basic.
+      // - ftFx_SpecialAirN*_Coll uses ftCo_AirCatchHit_Coll, which runs the ft_80082B1C
+      //   self-vel.y threshold and enters Wait for gentle contacts, Landing_Enter_Basic otherwise.
       //   refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{ftFx_SpecialAirNStart_Coll,ftFx_SpecialAirNLoop_Coll,ftFx_SpecialAirNEnd_Coll}
-      //   refs/melee/src/melee/ft/ft_081B.c::ftCo_AirCatchHit_Coll
+      //   refs/melee/src/melee/ft/ft_081B.c::{ftCo_AirCatchHit_Coll,ft_80082B1C}
       //
       // Policy:
-      // - Use plain Landing (not LandingAir*): this matches Landing_Enter_Basic.
+      // - Use Wait/Landing (not LandingAir*): this matches ftCo_AirCatchHit_Coll.
       // - Preserve horizontal momentum by syncing air X -> ground X; ftCommon_8007D6A4 does not
       //   clear self_vel.x on landing entry, and Slippi exposes both lanes on the destination
-      //   Landing frame.
+      //   Wait/Landing frame.
       // - Refresh jumps on grounded transition (fp->x1968_jumpsUsed = 0).
       //   refs/melee/src/melee/ft/ftcommon.c:556-573
+      const MslCommonParams* c = msl_common_params();
+      const uint16_t land_action = blaster_aircatchhit_enters_wait(batch, c, idx)
+                                       ? (uint16_t)MSL_ACT_WAIT
+                                       : (uint16_t)MSL_ACT_LANDING;
       const float landing_self_vel_x = batch->state.speed_air_x_self[idx];
       batch->state.speed_ground_x_self[idx] = landing_self_vel_x;
       batch->state.speed_air_x_self[idx] = landing_self_vel_x;
       batch->state.fall_fast[idx] = 0;
       batch->state.jumps_left[idx] = ch->max_jumps;
 
-      batch->state.action_id[idx] = (uint16_t)MSL_ACT_LANDING;
-      batch->state.animation_index[idx] = (uint32_t)MSL_SM_LANDING;
+      batch->state.action_id[idx] = land_action;
+      batch->state.animation_index[idx] = land_action == (uint16_t)MSL_ACT_WAIT
+                                              ? (uint32_t)MSL_SM_WAIT1_0
+                                              : (uint32_t)MSL_SM_LANDING;
       msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
     }
   }
