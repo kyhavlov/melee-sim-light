@@ -975,8 +975,8 @@ def test_squat_down_input_enters_pass_and_skips_source_platform() -> None:
     seed = _seed_base(31, ACT_SQUAT_WAIT, 0, -40.0, 27.200000762939453)
     seed["on_ground"][0, 0] = np.uint8(1)
     seed["ground_id"][0, 0] = np.uint16(2)
-    seed["action_frame"][0, 0] = np.int16(2)
-    seed["anim_frame_f32"][0, 0] = np.float32(2.0)
+    seed["action_frame"][0, 0] = np.int16(3)
+    seed["anim_frame_f32"][0, 0] = np.float32(3.0)
     seed["tilt_timer_y"][0, 0] = np.uint8(1)
 
     prev_input = _input_bytes()

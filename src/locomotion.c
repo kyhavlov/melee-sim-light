@@ -3348,14 +3348,17 @@ void locomotion_update_pre(MslBatch* batch) {
               batch->state.kneebend_is_short_hop[idx] = 0;
               action_id = (uint16_t)MSL_ACT_KNEE_BEND;
             } else if ((action_id == MSL_ACT_SQUAT || action_id == MSL_ACT_SQUAT_WAIT) &&
-                       batch->state.action_frame[idx] >= (int16_t)c->floor_skip_frames &&
+                       batch->state.action_frame[idx] > ((int16_t)c->floor_skip_frames + 1) &&
                        common_pass_input_gate(batch, c, idx, stick_y, tilt_timer_y)) {
               // Squat/SquatWait platform pass:
               // ftCo_80099F9C arms mv.co.pass.x4 with p_ftCommonData->x470, then Squat_Anim
               // enters Pass once the countdown reaches zero while still on a platform.
-              // Model that hidden countdown with the current Squat/SquatWait action age.
+              // Model that hidden countdown with the current Squat/SquatWait action age. The arm
+              // helper returns before Squat_IASA_inline decrements x4, and the simulator's
+              // action_frame has already advanced for this step. Therefore x470==2 first admits
+              // Pass after one extra held frame beyond the raw countdown.
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_80099F9C
-              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_Anim
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_IASA_inline
               common_pass_enter(batch, c, ch, idx);
               action_id = (uint16_t)MSL_ACT_PASS;
             } else if (action_id == MSL_ACT_SQUAT_WAIT &&

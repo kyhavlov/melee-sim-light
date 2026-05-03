@@ -1484,6 +1484,13 @@ void mpcoll_ground_apply(MslBatch* batch) {
       uint8_t lock_bottom_to_prev_frame = 0u;
       const uint8_t spacie_air_special_floor_owner =
           is_spacie_air_special_floor_collision_action(action_id) && prev_action_id == action_id;
+      const uint8_t common_air_collision_uses_locked_ecb_bottom =
+          (ecb_lock_active && (is_attackair_action(action_id) ||
+                               action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_START ||
+                               action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_LOOP ||
+                               action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_END))
+              ? 1u
+              : 0u;
       const uint8_t damagefly_release_entry_uses_pose_bottom =
           // Throw release can enter DamageFly with an ECB-lock countdown still active, but the
           // next DamageFly_Coll floor pass uses the current DamageFly ECB source. Keeping the
@@ -1501,19 +1508,23 @@ void mpcoll_ground_apply(MslBatch* batch) {
       if (!lock_bottom_to_zero && !damagefly_release_entry_uses_pose_bottom &&
           (ecb_lock_active || damage_collision_uses_seeded_lock_bottom) &&
           (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR ||
-           is_damage_collision_landing_action(action_id) || spacie_air_special_floor_owner)) {
+           is_damage_collision_landing_action(action_id) || spacie_air_special_floor_owner ||
+           common_air_collision_uses_locked_ecb_bottom)) {
         // ECB lock-bottom semantics while CollData_X130_Locked is active:
         // - ftCommon_8007D5D4 sets fp->ecb_lock and CollData_X130_Locked on ground->air transitions.
         // - mpColl_LoadECB_inline preserves desired_ecb.bottom while locked.
-        // - EscapeAir, Damage/DamageFly, and the Fox/Falco aerial special callbacks above can
-        //   resolve grounded contact during this lock window.
+        // - EscapeAir, AttackAir, Damage/DamageFly, and the Fox/Falco aerial special callbacks above
+        //   can resolve grounded contact during this lock window.
         // - Shine narrows this to frame-start SpecialAirLwLoop/End owners; otherwise
         //   SpecialAirLwStart_Anim can change to Loop before collision and incorrectly inherit
         //   the loop/end floor-contact policy on the startup handoff frame.
         // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
         // refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_inline
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_Coll,ftCo_DamageFly_Coll}
+        // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
+        //   ftFx_SpecialAirNStart_Coll,ftFx_SpecialAirNLoop_Coll,ftFx_SpecialAirNEnd_Coll}
         // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{
         //   ftFx_SpecialAirLwStart_Anim,ftFx_SpecialAirLwLoop_Coll,ftFx_SpecialAirLwEnd_Coll}
         lock_bottom_to_zero = 1u;
