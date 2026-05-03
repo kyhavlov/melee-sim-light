@@ -28,6 +28,11 @@ typedef struct MslStateSoA {
   uint16_t* stage_yoshi_shyguy_timer;   // [batch]
   uint8_t* stage_yoshi_shyguy_pattern;  // [batch]
   uint8_t* stage_yoshi_shyguy_valid;    // [batch]
+  // Dream Land Whispy current hidden wind state (`grOldPupupu` xDC), prefix-causal in eval and
+  // source-scheduled in live/new-match runtime.
+  // refs/melee/src/melee/gr/groldpupupu.c::{grOldPupupu_802113E0,fn_802112F4}
+  uint8_t* stage_dream_whispy_wind_dir;    // [batch]
+  uint8_t* stage_dream_whispy_wind_valid;  // [batch]
   // Match-start fighter input lock (`fp->x221D_b4`) countdown, one per environment.
   //
   // Decomp / asset anchors:

@@ -1,0 +1,21 @@
+{
+  "idle_timer_max": 1200,
+  "idle_timer_min": 600,
+  "left_rect_left": -74.0,
+  "left_rect_right": -18.0,
+  "rect_bottom": -10.0,
+  "rect_top": 40.0,
+  "right_rect_left": -17.0,
+  "right_rect_right": 76.0,
+  "source": {
+    "refs": [
+      "refs/melee/src/melee/gr/groldpupupu.c::{grOldPupupu_802113E0,fn_802112F4}",
+      "refs/melee/src/melee/ft/ftcoll.c::ftColl_GetWindOffsetVec",
+      "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate"
+    ],
+    "stage_dat": "_iso/GrOp.dat",
+    "yakumono_param_rel": 78600
+  },
+  "stage_id": 28,
+  "wind_speed": 0.20000000298023224
+}

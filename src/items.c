@@ -860,6 +860,37 @@ static inline uint8_t item_type_is_fox_illusion(uint16_t item_type) {
   return item_type == item_article_illusion_kind((uint8_t)MSL_CHAR_FOX) ? 1u : 0u;
 }
 
+static void throw_laser_ensure_spawn_counter_for_pulse(MslBatch* batch, int bi, int owner,
+                                                       uint16_t gun_itkind, uint16_t action_id_u16,
+                                                       uint8_t char_id, uint8_t pulse_frame) {
+  if (batch == NULL || pulse_frame == 0u) {
+    return;
+  }
+  uint8_t pulse_ordinal = 0u;
+  if (!move_tables_throw_projectile_pulse_ordinal(char_id, action_id_u16, (int16_t)pulse_frame,
+                                                  &pulse_ordinal) ||
+      pulse_ordinal == 0u) {
+    return;
+  }
+  const int gun_slot = items_find_gun_slot(batch, bi, owner, gun_itkind);
+  if (gun_slot < 0) {
+    return;
+  }
+  const size_t gun_ii = msl_idx_item(bi, gun_slot);
+  const uint32_t min_next = batch->state.item_spawn_id[gun_ii] + (uint32_t)pulse_ordinal;
+  if (batch->state.item_spawn_id_counter[bi] < min_next) {
+    // Throw-side blaster shots allocate one item id per set_throw_spawn_projectile command, even
+    // when an earlier command's shot is consumed before Slippi can serialize it. The replay seed
+    // may therefore carry only the attached gun plus a lagging visible spawn counter. Use the
+    // extracted script pulse ordinal relative to the gun spawn id to restore the source item-id
+    // counter before emitting the current pulse.
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+    // refs/melee/src/melee/it/item.c::Item_80267AA8
+    // data/moves/{fox,falco}.json moves["ftCo_SM_ThrowB"/"ftCo_SM_ThrowHi"/"ftCo_SM_ThrowLw"].events
+    batch->state.item_spawn_id_counter[bi] = min_next;
+  }
+}
+
 enum {
   // Throw pulse frames from extracted move scripts:
   // - ThrowHi set_throw_spawn_projectile at 18/20/24 (Fox/Falco).
@@ -5152,6 +5183,25 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         continue;
       }
 
+      if (laser_state != 0u && item_type_is_falco_laser(batch->state.item_type[ii]) &&
+          batch->state.action_id[o_idx] == (uint16_t)MSL_ACT_THROW_B &&
+          batch->state.throw_pulse_crossed_curr_frame[o_idx] != 0u &&
+          batch->state.hitstun[d_idx] > 0u &&
+          batch->state.last_hit_by[d_idx] == item_source_port0_for_owner(batch, o_idx, owner) &&
+          batch->state.last_attack_landed[d_idx] != (uint8_t)lp->shot_itkind &&
+          ((x - batch->state.pos_x[d_idx]) * vx) > 0.0f) {
+        // Falco ThrowB same-frame pulse carry:
+        // - `it_80272460` tests item HitCapsules after item motion. In throw-hitstun rows where
+        //   the carried state1 projectile endpoint has already passed the victim on this frame, a
+        //   swept segment replay can falsely consume the article. Source keeps that carry through
+        //   the item victims_1 ring; rows where the endpoint has not yet crossed the victim stay on
+        //   the normal BODY consume path.
+        // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+        // refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C4D4
+        // refs/melee/src/melee/it/itcoll.c::{it_8026FAC4,it_80272460}
+        continue;
+      }
+
       if (item_type_is_fox_laser(batch->state.item_type[ii]) &&
           batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_PASSIVE) {
         // Passive hidden-colanim BODY guard (Fox laser):
@@ -5401,7 +5451,18 @@ static void yoshi_shyguy_items_update(MslBatch* batch, int bi) {
       // State 3 additionally delays before entering the return-flight state.
       // refs/melee/src/melee/it/items/itheiho.c::{
       //   itHeiho_UnkMotion2_Phys,itHeiho_UnkMotion3_Phys,it_802D9168}
-      batch->state.item_vel_y[ii] -= params->fall_accel;
+      if (state == 2u) {
+        // `itHeiho_UnkMotion2_Phys` uses generic item falling with the Article ItemAttr max-fall
+        // speed. Once x40_vel.y is at/past the max threshold, vanilla preserves it rather than
+        // applying another gravity tick.
+        // refs/melee/src/melee/it/items/itheiho.c::itHeiho_UnkMotion2_Phys
+        // refs/melee/src/melee/it/it_26B1.c::it_80272860
+        if (batch->state.item_vel_y[ii] > -params->fall_speed_max) {
+          batch->state.item_vel_y[ii] -= params->fall_accel;
+        }
+      } else {
+        batch->state.item_vel_y[ii] -= params->fall_accel;
+      }
       batch->state.item_pos_x[ii] += batch->state.item_vel_x[ii];
       batch->state.item_pos_y[ii] += batch->state.item_vel_y[ii];
       if (state == 3u && batch->state.item_shyguy_delay_valid[ii] != 0u &&
@@ -6319,6 +6380,7 @@ void items_spawn_pre_physics(MslBatch* batch) {
                   if (batch->state.hitstun[v_idx] > 0u &&
                       batch->state.last_hit_by[v_idx] ==
                           item_source_port0_for_owner(batch, idx, p) &&
+                      batch->state.last_attack_landed[v_idx] == (uint8_t)lp->shot_itkind &&
                       batch->state.hitstun[v_idx] < stale_hitstun_thresh) {
                     stale_throwb_context = 1u;
                     if (stale_throwb_victim >= 0) {
@@ -6371,6 +6433,7 @@ void items_spawn_pre_physics(MslBatch* batch) {
                       (batch->state.hitlag[v_idx] > 0u && batch->state.hitlag[v_idx] <= 2u)
                           ? 1u
                           : ((batch->state.hitlag[v_idx] == 0u &&
+                              batch->state.last_attack_landed[v_idx] == (uint8_t)lp->shot_itkind &&
                               batch->state.action_frame[v_idx] >= 11)
                                  ? 1u
                                  : 0u);
@@ -6607,6 +6670,11 @@ void items_spawn_pre_physics(MslBatch* batch) {
             shoot_seed_hitlist_mask = 0x0Cu;
           }
         }
+      }
+      if (is_blaster_throw && shoot_spawn_state == 1u) {
+        throw_laser_ensure_spawn_counter_for_pulse(
+            batch, bi, p, lp->gun_itkind, action_id, cid,
+            batch->state.throw_pulse_crossed_curr_frame[idx]);
       }
       const int spawned_slot =
           laser_spawn_from_fighter(batch, bi, p, lp, shoot_spawn_state, shoot_apply_motion_step,

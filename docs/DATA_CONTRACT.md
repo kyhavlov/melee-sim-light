@@ -883,14 +883,35 @@ Characters (Fox/Falco):
     - `refs/melee/src/melee/gr/grstory.c::{reset_shyguy_timer,grStory_801E3418}`
     - `refs/melee/src/melee/it/items/itheiho.c::{it_802D8618,itHeiho_UnkMotion*_Phys,it_802D98C4}`
     - `refs/melee/src/sysdolphin/baselib/{aobj.c,fobj.c,jobj.c}`
-  - Binary layout: `MSLSTIO1` v1
+  - Binary layout: `MSLSTIO1` v2
     - `u8 magic[8] = "MSLSTIO1"`
-    - `u32 version = 1`
+    - `u32 version = 2`
     - header: `stage_id`, `item_kind`, table counts, timer/count/delay fields, fall accel,
-      spawn X positions, state-4 speed multiplier, jitter amplitude
+      max fall speed, spawn X positions, state-4 speed multiplier, jitter amplitude
     - payload: `vpos[6]`, active speed attrs `[3]`, dynamic-bone Y velocity deltas `[128]`
-  - Stale/non-v1 tables must be rejected by tooling readers; regenerate with
+  - Stale/non-v2 tables must be rejected by tooling readers; regenerate with
     `uv run python -m tools.extraction.extract_stage_item_objects --grst _iso/GrSt.dat --out data/stage_items/yoshi_shyguy.bin --audit data/stage_items/yoshi_shyguy.json`
+    or through `tools.extraction.build_data`.
+- `data/stage_items/dream_whispy.bin` (Dream Land Whispy wind data; `MSLWHSP1` compact binary)
+  - Purpose:
+    - Store source-backed Whispy wind force magnitude and source rectangles from Dream Land
+      stage data so runtime wind force does not embed DAT constants in gameplay C.
+    - The replay/eval seed surface may carry the current hidden `grOldPupupu.xDC` wind direction
+      (`1` left wind, `2` right wind) when derived prefix-causally by native preprocessing; it
+      must not carry next-frame fighter position or velocity.
+  - Sources:
+    - `_iso/GrOp.dat::yakumono_param`
+    - `refs/melee/src/melee/gr/groldpupupu.c::{grOldPupupu_802113E0,fn_802112F4}`
+    - `refs/melee/src/melee/ft/ftcoll.c::ftColl_GetWindOffsetVec`
+    - `refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate`
+  - Binary layout: `MSLWHSP1` v1
+    - `u8 magic[8] = "MSLWHSP1"`
+    - `u32 version = 1`
+    - header: `stage_id`, reserved
+    - payload: `wind_speed`, right wind rectangle left/right, left wind rectangle left/right,
+      rectangle bottom/top
+  - Stale/non-v1 tables must be rejected by tooling readers; regenerate with
+    `uv run python -m tools.extraction.extract_stage_item_objects --grop _iso/GrOp.dat --dream-out data/stage_items/dream_whispy.bin --dream-audit data/stage_items/dream_whispy.json`
     or through `tools.extraction.build_data`.
 - `data/scripts/fox.bin`, `data/scripts/falco.bin` (unified decoded fighter script timeline; compact binary)
   - Purpose:

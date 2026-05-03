@@ -207,10 +207,16 @@ def main() -> None:
         [
             "--grst",
             str(iso_dir / "GrSt.dat"),
+            "--grop",
+            str(iso_dir / "GrOp.dat"),
             "--out",
             "data/stage_items/yoshi_shyguy.bin",
             "--audit",
             "data/stage_items/yoshi_shyguy.json",
+            "--dream-out",
+            "data/stage_items/dream_whispy.bin",
+            "--dream-audit",
+            "data/stage_items/dream_whispy.json",
         ],
     )
 

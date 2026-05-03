@@ -8,6 +8,7 @@ from pathlib import Path
 from melee_sim.hsd_archive import HsdArchive, parse_hsd_archive
 from tools.extraction.extract_fighter_anims import _FObj
 from tools.slippi.known_data_artifacts import (
+    STAGE_DREAM_LAND_N64,
     STAGE_ITEM_OBJECT_MAGIC,
     STAGE_ITEM_OBJECT_VERSION,
     STAGE_YOSHIS_STORY,
@@ -15,6 +16,8 @@ from tools.slippi.known_data_artifacts import (
 
 
 ITEM_KIND_HEIHO = 0xD2
+DREAM_WHISPY_MAGIC = b"MSLWHSP1"
+DREAM_WHISPY_VERSION = 1
 
 
 def _f32(v: float) -> float:
@@ -38,8 +41,8 @@ def _ptr32(arc: HsdArchive, abs_off: int) -> int:
     return arc.data_base + ptr if ptr != 0 else 0
 
 
-def _extract_heiho_article(arc: HsdArchive) -> tuple[int, int, list[float], float, int]:
-    """Return `(article_abs, state0_anim_abs, special_attrs, fall_accel, kind)`.
+def _extract_heiho_article(arc: HsdArchive) -> tuple[int, int, list[float], float, float, int]:
+    """Return `(article_abs, state0_anim_abs, special_attrs, fall_accel, fall_speed_max, kind)`.
 
     Source shape:
     - `stage_info.itemdata` is an array of stage item entries.
@@ -70,9 +73,10 @@ def _extract_heiho_article(arc: HsdArchive) -> tuple[int, int, list[float], floa
             raise ValueError("GrSt.dat Heiho article has null required table")
 
         fall_accel = _f32_be(arc.buf, attr + 0x10)
+        fall_speed_max = _f32_be(arc.buf, attr + 0x14)
         special_attrs = [_f32_be(arc.buf, special + i * 4) for i in range(7)]
         state0_anim = _ptr32(arc, states + 0x00)
-        return article, state0_anim, special_attrs, fall_accel, kind
+        return article, state0_anim, special_attrs, fall_accel, fall_speed_max, kind
 
     raise ValueError("GrSt.dat itemdata missing It_Kind_Heiho article")
 
@@ -138,7 +142,9 @@ def _extract_yoshi_shyguy(grst: Path) -> dict:
     if yak is None:
         raise ValueError("GrSt.dat missing yakumono_param public symbol")
 
-    article_abs, state0_anim, special_attrs, fall_accel, item_kind = _extract_heiho_article(arc)
+    article_abs, state0_anim, special_attrs, fall_accel, fall_speed_max, item_kind = (
+        _extract_heiho_article(arc)
+    )
     dyn_y_vel = _extract_child_jobj_tray_fobj_deltas(arc, state0_anim)
     return {
         "stage_id": STAGE_YOSHIS_STORY,
@@ -149,6 +155,7 @@ def _extract_yoshi_shyguy(grst: Path) -> dict:
         "spawnmany_rarity": int(_f32_be(arc.buf, yak + 0x08)),
         "spawn_delay_step": 25,
         "fall_accel": _f32(fall_accel),
+        "fall_speed_max": _f32(fall_speed_max),
         "spawn_left_x": _f32(-292.0),
         "spawn_right_x": _f32(304.0),
         "jitter_y_amp": _f32(3.0),
@@ -170,6 +177,43 @@ def _extract_yoshi_shyguy(grst: Path) -> dict:
     }
 
 
+def _extract_dream_whispy(grop: Path) -> dict:
+    arc = parse_hsd_archive(grop.read_bytes())
+    yak = arc.get_public_offset("yakumono_param")
+    if yak is None:
+        raise ValueError("GrOp.dat missing yakumono_param public symbol")
+
+    # refs/melee/src/melee/gr/groldpupupu.c::{grOldPupupu_802113E0,fn_802112F4}
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_GetWindOffsetVec
+    right_a = _f32(_f32_be(arc.buf, yak + 0x18))
+    right_b = _f32(_f32_be(arc.buf, yak + 0x14))
+    left_a = _f32(_f32_be(arc.buf, yak + 0x1C))
+    left_b = _f32(_f32_be(arc.buf, yak + 0x20))
+    top = _f32(_f32_be(arc.buf, yak + 0x24))
+    bottom = _f32(_f32_be(arc.buf, yak + 0x28))
+    return {
+        "stage_id": STAGE_DREAM_LAND_N64,
+        "wind_speed": _f32(_f32_be(arc.buf, yak + 0x10)),
+        "right_rect_left": min(right_a, right_b),
+        "right_rect_right": max(right_a, right_b),
+        "left_rect_left": min(left_a, left_b),
+        "left_rect_right": max(left_a, left_b),
+        "rect_bottom": min(bottom, top),
+        "rect_top": max(bottom, top),
+        "idle_timer_min": int(_u16_be(arc.buf, yak + 0x08 + 2)),
+        "idle_timer_max": int(_u16_be(arc.buf, yak + 0x0C + 2)),
+        "source": {
+            "stage_dat": str(grop),
+            "yakumono_param_rel": yak - arc.data_base,
+            "refs": [
+                "refs/melee/src/melee/gr/groldpupupu.c::{grOldPupupu_802113E0,fn_802112F4}",
+                "refs/melee/src/melee/ft/ftcoll.c::ftColl_GetWindOffsetVec",
+                "refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate",
+            ],
+        },
+    }
+
+
 def _write_bin(path: Path, data: dict) -> None:
     vpos = [float(x) for x in data["vpos"]]
     speed = [float(x) for x in data["speed"]]
@@ -180,7 +224,7 @@ def _write_bin(path: Path, data: dict) -> None:
     buf = bytearray()
     buf += STAGE_ITEM_OBJECT_MAGIC
     buf += struct.pack(
-        "<IHHHHHHHHHHfffff",
+        "<IHHHHHHHHHHffffff",
         STAGE_ITEM_OBJECT_VERSION,
         int(data["stage_id"]) & 0xFFFF,
         int(data["item_kind"]) & 0xFFFF,
@@ -193,6 +237,7 @@ def _write_bin(path: Path, data: dict) -> None:
         int(data["spawnmany_rarity"]) & 0xFFFF,
         int(data["spawn_delay_step"]) & 0xFFFF,
         _f32(data["fall_accel"]),
+        _f32(data["fall_speed_max"]),
         _f32(data["spawn_left_x"]),
         _f32(data["spawn_right_x"]),
         _f32(data["state4_speed_mul"]),
@@ -205,11 +250,34 @@ def _write_bin(path: Path, data: dict) -> None:
     path.write_bytes(bytes(buf))
 
 
+def _write_dream_whispy_bin(path: Path, data: dict) -> None:
+    buf = bytearray()
+    buf += DREAM_WHISPY_MAGIC
+    buf += struct.pack(
+        "<IHHfffffff",
+        DREAM_WHISPY_VERSION,
+        int(data["stage_id"]) & 0xFFFF,
+        0,
+        _f32(data["wind_speed"]),
+        _f32(data["right_rect_left"]),
+        _f32(data["right_rect_right"]),
+        _f32(data["left_rect_left"]),
+        _f32(data["left_rect_right"]),
+        _f32(data["rect_bottom"]),
+        _f32(data["rect_top"]),
+    )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(bytes(buf))
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Extract stage-owned item object data.")
     ap.add_argument("--grst", type=Path, default=Path("_iso/GrSt.dat"), help="path to GrSt.dat")
+    ap.add_argument("--grop", type=Path, default=Path("_iso/GrOp.dat"), help="path to GrOp.dat")
     ap.add_argument("--out", type=Path, default=Path("data/stage_items/yoshi_shyguy.bin"))
     ap.add_argument("--audit", type=Path, default=Path("data/stage_items/yoshi_shyguy.json"))
+    ap.add_argument("--dream-out", type=Path, default=Path("data/stage_items/dream_whispy.bin"))
+    ap.add_argument("--dream-audit", type=Path, default=Path("data/stage_items/dream_whispy.json"))
     args = ap.parse_args()
 
     data = _extract_yoshi_shyguy(args.grst)
@@ -217,6 +285,12 @@ def main() -> None:
     args.audit.parent.mkdir(parents=True, exist_ok=True)
     args.audit.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(f"wrote {args.out}")
+
+    dream = _extract_dream_whispy(args.grop)
+    _write_dream_whispy_bin(args.dream_out, dream)
+    args.dream_audit.parent.mkdir(parents=True, exist_ok=True)
+    args.dream_audit.write_text(json.dumps(dream, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    print(f"wrote {args.dream_out}")
 
 
 if __name__ == "__main__":

@@ -594,6 +594,23 @@ def test_yoshi_shyguy_state3_zero_delay_rows_do_not_over_enter_state4() -> None:
         assert int(seed["items"][1]["state"]) == 3
         assert int(seed["item_shyguy_delay_valid_u8"][1]) == 1
         assert int(seed["item_shyguy_delay_u16"][1]) == 0
-
         out, ref = _step_one_row(dataset_path, record)
         assert int(out["items"][1]["state"]) == int(ref["items"][1]["state"]) == 3
+
+
+def test_yoshi_shyguy_state2_uses_item_max_fall_speed() -> None:
+    dataset_path = Path(
+        "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+    )
+    record = 5264
+    slot = 3
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples[record]["seed_t"]
+    item = seed["items"][slot]
+    assert int(item["type"]) == ITEM_KIND_HEIHO
+    assert int(item["state"]) == 2
+    assert float(item["vel_y"]) <= -float(_shyguy_params().fall_speed_max)
+
+    out, ref = _step_one_row(dataset_path, record)
+    assert float(out["items"][slot]["pos_y"]) == pytest.approx(float(ref["items"][slot]["pos_y"]))
+    assert float(out["items"][slot]["vel_y"]) == pytest.approx(float(ref["items"][slot]["vel_y"]))

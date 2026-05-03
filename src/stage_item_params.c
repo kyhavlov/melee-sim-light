@@ -9,11 +9,14 @@
 #include "alloc.h"
 
 enum {
-  MSLSTIO1_VERSION = 1,
-  MSLSTIO1_HEADER_BYTES = 52,
+  MSLSTIO1_VERSION = 2,
+  MSLSTIO1_HEADER_BYTES = 56,
+  MSLWHSP1_VERSION = 1,
+  MSLWHSP1_BYTES = 44,
 };
 
 static MslYoshiShyguyParams g_yoshi_shyguy;
+static MslDreamWhispyParams g_dream_whispy;
 static uint8_t g_loaded;
 
 static uint16_t read_u16_le(const uint8_t* p) {
@@ -65,10 +68,11 @@ static int load_yoshi_shyguy(const uint8_t* buf, size_t sz) {
   g_yoshi_shyguy.spawnmany_rarity = read_u16_le(buf + 28);
   g_yoshi_shyguy.spawn_delay_step = read_u16_le(buf + 30);
   g_yoshi_shyguy.fall_accel = read_f32_le(buf + 32);
-  g_yoshi_shyguy.spawn_left_x = read_f32_le(buf + 36);
-  g_yoshi_shyguy.spawn_right_x = read_f32_le(buf + 40);
-  g_yoshi_shyguy.state4_speed_mul = read_f32_le(buf + 44);
-  g_yoshi_shyguy.jitter_y_amp = read_f32_le(buf + 48);
+  g_yoshi_shyguy.fall_speed_max = read_f32_le(buf + 36);
+  g_yoshi_shyguy.spawn_left_x = read_f32_le(buf + 40);
+  g_yoshi_shyguy.spawn_right_x = read_f32_le(buf + 44);
+  g_yoshi_shyguy.state4_speed_mul = read_f32_le(buf + 48);
+  g_yoshi_shyguy.jitter_y_amp = read_f32_le(buf + 52);
   size_t off = MSLSTIO1_HEADER_BYTES;
   for (int i = 0; i < MSL_YOSHI_SHYGUY_VPOS_COUNT; i++, off += sizeof(float)) {
     g_yoshi_shyguy.vpos[i] = read_f32_le(buf + off);
@@ -80,28 +84,39 @@ static int load_yoshi_shyguy(const uint8_t* buf, size_t sz) {
     g_yoshi_shyguy.dyn_y_vel[i] = read_f32_le(buf + off);
   }
   if (g_yoshi_shyguy.stage_id == 0u || g_yoshi_shyguy.item_kind == 0u ||
-      g_yoshi_shyguy.timer_reset == 0u || g_yoshi_shyguy.spawn_delay_step == 0u) {
+      g_yoshi_shyguy.timer_reset == 0u || g_yoshi_shyguy.spawn_delay_step == 0u ||
+      !(g_yoshi_shyguy.fall_speed_max > 0.0f)) {
     return -1;
   }
   return 0;
 }
 
-int stage_item_params_init(void) {
-  if (g_loaded) {
-    return 0;
+static int load_dream_whispy(const uint8_t* buf, size_t sz) {
+  if (sz != (size_t)MSLWHSP1_BYTES || memcmp(buf, "MSLWHSP1", 8) != 0) {
+    return -1;
   }
-
-  const char* data_dir = getenv("MSL_DATA_DIR");
-  if (data_dir == NULL || data_dir[0] == '\0') {
-    data_dir = "data";
-  }
-
-  char path[512];
-  const int n = snprintf(path, sizeof(path), "%s/stage_items/yoshi_shyguy.bin", data_dir);
-  if (n <= 0 || (size_t)n >= sizeof(path)) {
+  const uint32_t version = read_u32_le(buf + 8);
+  if (version != (uint32_t)MSLWHSP1_VERSION) {
     return -1;
   }
 
+  memset(&g_dream_whispy, 0, sizeof(g_dream_whispy));
+  g_dream_whispy.loaded = 1u;
+  g_dream_whispy.stage_id = read_u16_le(buf + 12);
+  g_dream_whispy.wind_speed = read_f32_le(buf + 16);
+  g_dream_whispy.right_rect_left = read_f32_le(buf + 20);
+  g_dream_whispy.right_rect_right = read_f32_le(buf + 24);
+  g_dream_whispy.left_rect_left = read_f32_le(buf + 28);
+  g_dream_whispy.left_rect_right = read_f32_le(buf + 32);
+  g_dream_whispy.rect_bottom = read_f32_le(buf + 36);
+  g_dream_whispy.rect_top = read_f32_le(buf + 40);
+  if (g_dream_whispy.stage_id == 0u || !(g_dream_whispy.wind_speed > 0.0f)) {
+    return -1;
+  }
+  return 0;
+}
+
+static int read_file_into_buffer(const char* path, uint8_t** buf_out, size_t* sz_out) {
   FILE* f = fopen(path, "rb");
   if (f == NULL) {
     return -1;
@@ -127,7 +142,46 @@ int stage_item_params_init(void) {
   }
   const size_t got = fread(buf, 1, (size_t)sz, f);
   fclose(f);
-  const int ok = (got == (size_t)sz && load_yoshi_shyguy(buf, (size_t)sz) == 0);
+  if (got != (size_t)sz) {
+    alloc_free(buf);
+    return -1;
+  }
+  *buf_out = buf;
+  *sz_out = (size_t)sz;
+  return 0;
+}
+
+int stage_item_params_init(void) {
+  if (g_loaded) {
+    return 0;
+  }
+
+  const char* data_dir = getenv("MSL_DATA_DIR");
+  if (data_dir == NULL || data_dir[0] == '\0') {
+    data_dir = "data";
+  }
+
+  char path[512];
+  int n = snprintf(path, sizeof(path), "%s/stage_items/yoshi_shyguy.bin", data_dir);
+  if (n <= 0 || (size_t)n >= sizeof(path)) {
+    return -1;
+  }
+
+  uint8_t* buf = NULL;
+  size_t sz = 0;
+  int ok = (read_file_into_buffer(path, &buf, &sz) == 0 && load_yoshi_shyguy(buf, sz) == 0);
+  alloc_free(buf);
+  if (!ok) {
+    return -1;
+  }
+
+  n = snprintf(path, sizeof(path), "%s/stage_items/dream_whispy.bin", data_dir);
+  if (n <= 0 || (size_t)n >= sizeof(path)) {
+    return -1;
+  }
+  buf = NULL;
+  sz = 0;
+  ok = (read_file_into_buffer(path, &buf, &sz) == 0 && load_dream_whispy(buf, sz) == 0);
   alloc_free(buf);
   if (!ok) {
     return -1;
@@ -138,4 +192,8 @@ int stage_item_params_init(void) {
 
 const MslYoshiShyguyParams* stage_item_params_yoshi_shyguy(void) {
   return g_yoshi_shyguy.loaded ? &g_yoshi_shyguy : NULL;
+}
+
+const MslDreamWhispyParams* stage_item_params_dream_whispy(void) {
+  return g_dream_whispy.loaded ? &g_dream_whispy : NULL;
 }

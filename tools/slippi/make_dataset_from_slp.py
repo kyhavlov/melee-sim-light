@@ -18,6 +18,7 @@ from tools.slippi.hitstun import hitstun_u16_from_misc_as_and_state_flags3
 from tools.slippi.item_article_data import item_article_kind_set, item_article_values_by_sim_char
 from tools.slippi.known_data_artifacts import (
     STAGE_PLATFORM_TRANSFORM_KIND_HEIGHT,
+    dream_whispy_metadata,
     fountain_of_dreams_default_platform_heights,
     fountain_of_dreams_platform_motion_params,
     read_mslstg01_v7,
@@ -1980,6 +1981,53 @@ def _derive_yoshi_shyguy_seed_lanes(
 ]:
     lanes = _derive_yoshi_shyguy_native_lanes(items_fixed, stage_id=int(stage_id))
     return lanes[4], lanes[5], lanes[6], lanes[7], lanes[8], lanes[9], lanes[10], lanes[11], lanes[12]
+
+
+def _structured_rows_as_bytes(rows: np.ndarray) -> np.ndarray:
+    contiguous = np.ascontiguousarray(rows)
+    return contiguous.view(np.uint8).reshape(contiguous.shape[0], contiguous.dtype.itemsize)
+
+
+@functools.lru_cache(maxsize=1)
+def _dream_whispy_params():
+    return dream_whispy_metadata(Path("data"))
+
+
+def _derive_dream_whispy_wind_seed_lanes(
+    samples: np.ndarray, *, stage_id: int, num_players: int
+) -> tuple[np.ndarray, np.ndarray]:
+    """Derive Dream Land Whispy current-wind seed state through native simulation.
+
+    Whispy's hidden `grOldPupupu` wind direction is not exported by Slippi. The native pass runs
+    the current simulator without wind, compares the same-frame one-step fighter `pos_x` residual
+    against the generated Dream Land wind speed, and promotes only the next row's current hidden
+    direction. This is prefix-causal (`t-1 -> t`), not a replay-future position bridge.
+    refs/melee/src/melee/gr/groldpupupu.c::{grOldPupupu_802113E0,fn_802112F4}
+    refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+    """
+    params = _dream_whispy_params()
+    n = int(samples.shape[0])
+    out_dir = np.zeros(n, dtype=np.uint8)
+    valid = np.zeros(n, dtype=np.uint8)
+    if int(stage_id) != int(params.stage_id) or n == 0:
+        return out_dir, valid
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.derive_dream_whispy_wind_seed_lanes is required for preprocessing; "
+            "run `make build`"
+        ) from exc
+    return msl_binding.derive_dream_whispy_wind_seed_lanes(
+        _structured_rows_as_bytes(samples["seed_t"]),
+        _structured_rows_as_bytes(samples["prev_input_t"]),
+        _structured_rows_as_bytes(samples["input_t"]),
+        _structured_rows_as_bytes(samples["ref_t1"]),
+        int(num_players),
+        int(params.stage_id),
+        float(params.wind_speed),
+        0.025,
+    )
 
 
 def _materialize_illusion_seed_positions(
@@ -5079,6 +5127,12 @@ def _main_impl(args) -> Dataset:
         data_root="data",
     )
     samples["seed_t"]["combo_push_timer_x2092"][:, :num_players] = combo_push_timer[:-1, :num_players]
+
+    dream_wind_dir, dream_wind_valid = _derive_dream_whispy_wind_seed_lanes(
+        samples, stage_id=int(stage_id), num_players=int(num_players)
+    )
+    samples["seed_t"]["stage_dream_whispy_wind_dir_u8"] = dream_wind_dir
+    samples["seed_t"]["stage_dream_whispy_wind_valid_u8"] = dream_wind_valid
 
     header = np.zeros((), dtype=HEADER_DTYPE)
     header["magic"] = MAGIC

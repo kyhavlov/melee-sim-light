@@ -21,6 +21,7 @@ typedef struct MslYoshiShyguyParams {
   uint16_t spawnmany_rarity;
   uint16_t spawn_delay_step;
   float fall_accel;
+  float fall_speed_max;
   float spawn_left_x;
   float spawn_right_x;
   float state4_speed_mul;
@@ -30,11 +31,26 @@ typedef struct MslYoshiShyguyParams {
   float dyn_y_vel[MSL_YOSHI_SHYGUY_DYN_Y_COUNT];
 } MslYoshiShyguyParams;
 
-// Init-time loader for generated stage-owned item data (MSLSTIO1). May perform IO/allocation;
-// per-frame gameplay reads the fixed table below only.
+typedef struct MslDreamWhispyParams {
+  uint8_t loaded;
+  uint8_t _pad0[3];
+  uint16_t stage_id;
+  uint16_t _pad1;
+  float wind_speed;
+  float right_rect_left;
+  float right_rect_right;
+  float left_rect_left;
+  float left_rect_right;
+  float rect_bottom;
+  float rect_top;
+} MslDreamWhispyParams;
+
+// Init-time loader for generated stage-owned item/object data (MSLSTIO1/MSLWHSP1).
+// May perform IO/allocation; per-frame gameplay reads the fixed tables below only.
 int stage_item_params_init(void);
 
 const MslYoshiShyguyParams* stage_item_params_yoshi_shyguy(void);
+const MslDreamWhispyParams* stage_item_params_dream_whispy(void);
 
 #ifdef __cplusplus
 }  // extern "C"

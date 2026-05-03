@@ -65,6 +65,7 @@ PyObject* msl_derive_item_attack_fields_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_item_reflect_damage_mul_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_item_hidden_callback_seed_lanes_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_yoshi_shyguy_seed_lanes_py(PyObject* self, PyObject* args);
+PyObject* msl_derive_dream_whispy_wind_seed_lanes_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_illusion_seed_position_updates_py(PyObject* self, PyObject* args);
 PyObject* msl_trim_stale_hitlist_seed_bridge_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_attacker_shield_ground_kb_vel_py(PyObject* self, PyObject* args);

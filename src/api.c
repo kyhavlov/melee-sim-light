@@ -1059,6 +1059,13 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
     batch->state.stage_yoshi_shyguy_timer[bi] = seed->stage_yoshi_shyguy_timer_u16;
     batch->state.stage_yoshi_shyguy_pattern[bi] = seed->stage_yoshi_shyguy_pattern_u8 % 6u;
     batch->state.stage_yoshi_shyguy_valid[bi] = seed->stage_yoshi_shyguy_valid_u8 ? 1u : 0u;
+    batch->state.stage_dream_whispy_wind_dir[bi] =
+        (seed->stage_dream_whispy_wind_dir_u8 <= 2u) ? seed->stage_dream_whispy_wind_dir_u8 : 0u;
+    batch->state.stage_dream_whispy_wind_valid[bi] =
+        (seed->stage_dream_whispy_wind_valid_u8 &&
+         batch->state.stage_dream_whispy_wind_dir[bi] != 0u)
+            ? 1u
+            : 0u;
     batch->state.opening_input_lock_timer[bi] = 0u;
     float match_damage_ratio = seed->match_damage_ratio;
     if (!(match_damage_ratio > 0.0f)) {

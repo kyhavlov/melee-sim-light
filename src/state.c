@@ -45,6 +45,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->stage_yoshi_shyguy_timer = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * b);
   state->stage_yoshi_shyguy_pattern = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * b);
   state->stage_yoshi_shyguy_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * b);
+  state->stage_dream_whispy_wind_dir = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * b);
+  state->stage_dream_whispy_wind_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * b);
   state->opening_input_lock_timer = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * b);
   state->stale_attack_instance_counter = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * b);
   state->instance_id_counter = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * b);
@@ -451,7 +453,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->stage_fod_platform_scheduler_phase || !state->stage_fod_platform_scheduler_timer ||
       !state->stage_fod_platform_scheduler_target || !state->stage_fod_platform_scheduler_valid ||
       !state->stage_yoshi_shyguy_timer || !state->stage_yoshi_shyguy_pattern ||
-      !state->stage_yoshi_shyguy_valid || !state->opening_input_lock_timer ||
+      !state->stage_yoshi_shyguy_valid || !state->stage_dream_whispy_wind_dir ||
+      !state->stage_dream_whispy_wind_valid || !state->opening_input_lock_timer ||
       !state->stale_attack_instance_counter || !state->instance_id_counter ||
       !state->item_spawn_id_counter || !state->match_damage_ratio || !state->is_teams ||
       !state->team_id || !state->char_id || !state->handicap || !state->attack_ratio ||
@@ -608,6 +611,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   memset(state->stage_fod_platform_scheduler_timer, 0, sizeof(uint16_t) * b2);
   memset(state->stage_fod_platform_scheduler_target, 0, sizeof(float) * b2);
   memset(state->stage_fod_platform_scheduler_valid, 0, sizeof(uint8_t) * b2);
+  memset(state->stage_dream_whispy_wind_dir, 0, sizeof(uint8_t) * b);
+  memset(state->stage_dream_whispy_wind_valid, 0, sizeof(uint8_t) * b);
   memset(state->item_spawn_id_counter, 0, sizeof(uint32_t) * b);
   memset(state->dynamic_pose_state_valid, 0, sizeof(uint8_t) * bp);
   memset(state->dynamic_pose_apply_collision_matrix, 0, sizeof(uint8_t) * bp);
@@ -693,6 +698,8 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->stage_yoshi_shyguy_timer);
   alloc_free(state->stage_yoshi_shyguy_pattern);
   alloc_free(state->stage_yoshi_shyguy_valid);
+  alloc_free(state->stage_dream_whispy_wind_dir);
+  alloc_free(state->stage_dream_whispy_wind_valid);
   alloc_free(state->opening_input_lock_timer);
   alloc_free(state->stale_attack_instance_counter);
   alloc_free(state->instance_id_counter);

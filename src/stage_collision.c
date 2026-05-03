@@ -12,6 +12,7 @@
 #include "mpcoll_env.h"
 #include "mpcoll_ground.h"
 #include "mpcoll_wall_ceil.h"
+#include "stage_item_params.h"
 
 typedef struct {
   float left;
@@ -2146,6 +2147,56 @@ static void stage_collision_update_fod_platform_motion(MslBatch* batch) {
   }
 }
 
+static uint8_t stage_collision_whispy_point_inside(float x, float y, float left, float right,
+                                                   float bottom, float top) {
+  // Source helper uses strict interior checks after normalizing rectangle endpoints.
+  // refs/melee/src/melee/gr/groldpupupu.c::grOldPupupu_8021128C
+  return (uint8_t)(left < x && x < right && bottom < y && y < top);
+}
+
+static void stage_collision_apply_dream_whispy_wind(MslBatch* batch) {
+  if (batch == NULL) {
+    return;
+  }
+  const MslDreamWhispyParams* params = stage_item_params_dream_whispy();
+  if (params == NULL || params->loaded == 0u) {
+    return;
+  }
+
+  // Dream Land Whispy wind is accumulated by ftColl_GetWindOffsetVec after normal physics/collision
+  // and platform carry, then added directly to cur_pos.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_GetWindOffsetVec
+  // refs/melee/src/melee/gr/groldpupupu.c::fn_802112F4
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    if (batch->state.stage_id[bi] != (uint32_t)MSL_STAGE_DREAM_LAND_N64 ||
+        batch->state.stage_dream_whispy_wind_valid[bi] == 0u) {
+      continue;
+    }
+    const uint8_t dir = batch->state.stage_dream_whispy_wind_dir[bi];
+    // Preserve the current hidden `gp->gv.unk.xDC` wind direction across rollout frames. Source
+    // changes it in `grOldPupupu_802113E0`; until that full scheduler is owned, clearing it after
+    // one frame drops active wind immediately and is less source-shaped than holding current state.
+    if (dir != 1u && dir != 2u) {
+      continue;
+    }
+    const float x_add = (dir == 1u) ? -params->wind_speed : params->wind_speed;
+    const float left = (dir == 1u) ? params->left_rect_left : params->right_rect_left;
+    const float right = (dir == 1u) ? params->left_rect_right : params->right_rect_right;
+    const int num_players = (int)batch->config.num_players;
+    for (int p = 0; p < num_players; p++) {
+      const size_t idx = msl_idx_player(bi, p);
+      if (batch->state.stocks[idx] == 0u || batch->state.hitlag[idx] != 0u) {
+        continue;
+      }
+      if (stage_collision_whispy_point_inside(batch->state.pos_x[idx], batch->state.pos_y[idx],
+                                              left, right, params->rect_bottom, params->rect_top)) {
+        batch->state.pos_x[idx] += x_add;
+      }
+    }
+  }
+}
+
 void stage_collision_apply(MslBatch* batch) {
   if (batch == NULL) {
     return;
@@ -2155,4 +2206,5 @@ void stage_collision_apply(MslBatch* batch) {
   mpcoll_ground_apply(batch);
   // Wall + ceiling contact substrate (mpColl-shaped): owns wall/ceiling contact metadata.
   mpcoll_wall_ceil_apply(batch);
+  stage_collision_apply_dream_whispy_wind(batch);
 }

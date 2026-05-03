@@ -714,17 +714,36 @@ Recent deltas to reflect here (do not let these get “lost in chat logs”):
   articles. Their source callback recomputes `item->x40_vel` from item-animation dynamic-bone state
   before generic item integration; state 0 waits on hidden `itemVar.heiho.x24` initialized from the
   spawn-group ordinal by `it_802D8618`. Runtime now admits replay-seeded/eval Shy Guy stage timer,
-  active-motion/state-delay/lifecycle slices: state-0 delay, active state 1/4 X-speed, state 2/3
-  gravity, blast-bound clear, and the active dynamic-bone Y recompute from the generated
-  `MSLSTIO1` GrSt.dat Heiho child-JObj `HSD_A_J_TRAY` FObj delta table using prefix-causal
-  previous velocity plus active AObj phase. The phase lane is current hidden runtime state, not a
-  replay-future bridge. This does not close full autonomous Yoshi Shy Guy ownership: global
-  pre-spawn HSD RNG phase/count, multi-spawn scheduling, collision turnarounds, and the full
-  free-running stage-object scheduler remain open. Dream Land Whispy/apple scheduling is also
-  separate and must not be substituted with replay-next lanes
+  active-motion/state-delay/lifecycle slices: state-0 delay, active state 1/4 X-speed, state 2
+  generated item max-fall clamp plus state 3 gravity, blast-bound clear, and the active dynamic-bone Y
+  recompute from the generated `MSLSTIO1` GrSt.dat Heiho child-JObj `HSD_A_J_TRAY` FObj delta table
+  using prefix-causal previous velocity plus active AObj phase. The phase lane is current hidden
+  runtime state, not a replay-future bridge. This does not close full autonomous Yoshi Shy Guy
+  ownership: global pre-spawn HSD RNG phase/count, multi-spawn scheduling, collision turnarounds,
+  and the full free-running stage-object scheduler remain open. Dream Land Whispy/apple scheduling
+  is also separate and must not be substituted with replay-next lanes
   (`src/items.c`, `data/stage_items/yoshi_shyguy.bin`; refs/melee/src/melee/gr/grstory.c::grStory_801E3418,
   refs/melee/src/melee/it/items/itheiho.c::{
-  it_802D8618,itHeiho_UnkMotion0_Phys,itHeiho_UnkMotion1_Phys,itHeiho_UnkMotion4_Phys,it_802D98C4}).
+  it_802D8618,itHeiho_UnkMotion0_Phys,itHeiho_UnkMotion1_Phys,itHeiho_UnkMotion2_Phys,
+  itHeiho_UnkMotion4_Phys,it_802D98C4}).
+- Dream Land Whispy wind is a stage-owned fighter horizontal force, not item motion. The runtime
+  consumes generated `MSLWHSP1` GrOp.dat wind speed/rectangles and applies the current
+  `grOldPupupu.xDC` wind direction after fighter collision/platform carry, matching
+  `ftColl_GetWindOffsetVec` ordering. Teacher-forced eval derives only the current hidden wind
+  direction prefix-causally in native preprocessing; it does not seed replay-next fighter position
+  or velocity. This closes the dense Dream Land fighter `pos_x` p95 wind band. The remaining
+  Dream Land float-norm p95 outlier was not Whispy apple p95; float-norm autopsy identified sparse
+  throw-side Fox/Falco laser item lifecycle rows. Runtime now advances the throw-side blaster item
+  spawn counter from extracted throw-pulse ordinals and keeps carried ThrowB state-1 laser articles
+  on their source item-BODY path instead of replaying stale pulse/despawn ownership. Whispy apple
+  lifecycle remains separate and is not modeled by this wind/throw-laser slice.
+  (`src/stage_collision.c`, `data/stage_items/dream_whispy.bin`;
+  refs/melee/src/melee/gr/groldpupupu.c::{grOldPupupu_802113E0,fn_802112F4},
+  refs/melee/src/melee/ft/ftcoll.c::ftColl_GetWindOffsetVec,
+  refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate;
+  refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim,
+  refs/melee/src/melee/it/item.c::Item_80267AA8,
+  refs/melee/src/melee/it/itcoll.c::{it_8026FA2C,it_8026FAC4,it_80272460}).
 - Ledge-grab mask ordering is now collision-stage prev/cur snapshot based (captured around `stage_collision_apply()` and consumed
   post-collision); regression locked for TreasuredBackKangaroo records 1806/1807 (`tests/test_ledge_grab_treasuredbackkangaroo_regression.py`).
 - Build now forces C extension rebuild to avoid stale `.so` issues (Makefile change).

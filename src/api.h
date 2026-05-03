@@ -232,6 +232,24 @@ typedef struct MslSeed {
   uint16_t stage_yoshi_shyguy_timer_u16;
   uint8_t stage_yoshi_shyguy_pattern_u8;
   uint8_t stage_yoshi_shyguy_valid_u8;
+  // Dream Land Whispy current wind state.
+  //
+  // Source owner:
+  // - grOldPupupu_802113E0 writes hidden `gp->gv.unk.xDC` while the Whispy wind animation is in
+  //   its active window.
+  // - ftColl_GetWindOffsetVec calls fn_802112F4, which applies `yakumono_param.x10` inside the
+  //   generated left/right rectangles.
+  //
+  // Seed representation:
+  // - valid=1: current hidden `xDC` for this seed frame (`1=left wind`, `2=right wind`), derived
+  //   prefix-causally from the prior frame's current replay state and source wind signature.
+  // - valid=0: no replay-seeded current wind force. Live/new-match runtime can still own Whispy
+  //   through its stage scheduler; this lane is not a t+1 position/velocity bridge.
+  // refs/melee/src/melee/gr/groldpupupu.c::{grOldPupupu_802113E0,fn_802112F4}
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_GetWindOffsetVec
+  uint8_t stage_dream_whispy_wind_dir_u8;
+  uint8_t stage_dream_whispy_wind_valid_u8;
+  uint8_t _pad_stage_dream_whispy[2];
   uint8_t num_players;  // 2 or 4 (<= MSL_MAX_PLAYERS)
   uint8_t is_teams;     // 0/1
   uint8_t _pad0[2];

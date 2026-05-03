@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import SAMPLE_DTYPE, SEED_DTYPE
+from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SAMPLE_DTYPE, SEED_DTYPE
 from tools.slippi.known_data_artifacts import (
     fountain_of_dreams_default_platform_heights,
     fountain_of_dreams_platform_motion_params,
@@ -148,12 +148,35 @@ def test_seed_schema_includes_staling_fields() -> None:
     assert "stage_yoshi_shyguy_timer_u16" in SEED_DTYPE.fields
     assert "stage_yoshi_shyguy_pattern_u8" in SEED_DTYPE.fields
     assert "stage_yoshi_shyguy_valid_u8" in SEED_DTYPE.fields
+    assert "stage_dream_whispy_wind_dir_u8" in SEED_DTYPE.fields
+    assert "stage_dream_whispy_wind_valid_u8" in SEED_DTYPE.fields
     assert "item_shyguy_speed_index_u8" in SEED_DTYPE.fields
     assert "item_shyguy_speed_index_valid_u8" in SEED_DTYPE.fields
     assert "item_shyguy_delay_u16" in SEED_DTYPE.fields
     assert "item_shyguy_delay_valid_u8" in SEED_DTYPE.fields
     assert "item_shyguy_hitlag_u8" in SEED_DTYPE.fields
     assert "item_shyguy_hitlag_valid_u8" in SEED_DTYPE.fields
+
+
+def test_native_dream_whispy_wind_derivation_rejects_short_rows() -> None:
+    import msl_binding
+
+    rows = 2
+    seed = np.zeros((rows, SEED_DTYPE.itemsize), dtype=np.uint8)
+    prev_input = np.zeros((rows, INPUT_DTYPE.itemsize), dtype=np.uint8)
+    input_t = np.zeros((rows, INPUT_DTYPE.itemsize), dtype=np.uint8)
+    short_ref = np.zeros((rows, COMPARE_DTYPE.itemsize - 1), dtype=np.uint8)
+    with pytest.raises(ValueError, match="short row stride"):
+        msl_binding.derive_dream_whispy_wind_seed_lanes(
+            seed,
+            prev_input,
+            input_t,
+            short_ref,
+            2,
+            28,
+            0.2,
+            0.025,
+        )
 
 
 def test_dataset_dtype_sizes_match_c_structs() -> None:

@@ -13,7 +13,9 @@ PART_VERSION = 1
 ITEM_ARTICLE_MAGIC = b"MSLITAR1"
 ITEM_ARTICLE_VERSION = 2
 STAGE_ITEM_OBJECT_MAGIC = b"MSLSTIO1"
-STAGE_ITEM_OBJECT_VERSION = 1
+STAGE_ITEM_OBJECT_VERSION = 2
+DREAM_WHISPY_MAGIC = b"MSLWHSP1"
+DREAM_WHISPY_VERSION = 1
 SCRIPT_MAGIC = b"MSLFTSC1"
 SCRIPT_VERSION = 1
 
@@ -193,6 +195,7 @@ class YoshiShyguyMetadata:
     spawnmany_rarity: int
     spawn_delay_step: int
     fall_accel: float
+    fall_speed_max: float
     spawn_left_x: float
     spawn_right_x: float
     state4_speed_mul: float
@@ -200,6 +203,18 @@ class YoshiShyguyMetadata:
     vpos: tuple[float, ...]
     speed: tuple[float, ...]
     dyn_y_vel: tuple[float, ...]
+
+
+@dataclass(frozen=True)
+class DreamWhispyMetadata:
+    stage_id: int
+    wind_speed: float
+    right_rect_left: float
+    right_rect_right: float
+    left_rect_left: float
+    left_rect_right: float
+    rect_bottom: float
+    rect_top: float
 
 
 @dataclass(frozen=True)
@@ -534,7 +549,7 @@ def read_mslitar1(path: Path) -> ItemArticleMetadata:
 
 
 def read_mslstio1_yoshi_shyguy(path: Path) -> YoshiShyguyMetadata:
-    buf = _require_header(path, STAGE_ITEM_OBJECT_MAGIC, STAGE_ITEM_OBJECT_VERSION, 52)
+    buf = _require_header(path, STAGE_ITEM_OBJECT_MAGIC, STAGE_ITEM_OBJECT_VERSION, 56)
     (
         stage_id,
         item_kind,
@@ -547,15 +562,16 @@ def read_mslstio1_yoshi_shyguy(path: Path) -> YoshiShyguyMetadata:
         spawnmany_rarity,
         spawn_delay_step,
         fall_accel,
+        fall_speed_max,
         spawn_left_x,
         spawn_right_x,
         state4_speed_mul,
         jitter_y_amp,
-    ) = struct.unpack_from("<HHHHHHHHHHfffff", buf, 12)
-    expected = 52 + int(vpos_count) * 4 + int(speed_count) * 4 + int(dyn_y_count) * 4
+    ) = struct.unpack_from("<HHHHHHHHHHffffff", buf, 12)
+    expected = 56 + int(vpos_count) * 4 + int(speed_count) * 4 + int(dyn_y_count) * 4
     if len(buf) != expected:
         raise ValueError(f"MSLSTIO1 size mismatch in {path}: header-derived {expected} != {len(buf)}")
-    off = 52
+    off = 56
     vpos = struct.unpack_from("<" + "f" * int(vpos_count), buf, off)
     off += int(vpos_count) * 4
     speed = struct.unpack_from("<" + "f" * int(speed_count), buf, off)
@@ -573,6 +589,7 @@ def read_mslstio1_yoshi_shyguy(path: Path) -> YoshiShyguyMetadata:
         spawnmany_rarity=int(spawnmany_rarity),
         spawn_delay_step=int(spawn_delay_step),
         fall_accel=float(fall_accel),
+        fall_speed_max=float(fall_speed_max),
         spawn_left_x=float(spawn_left_x),
         spawn_right_x=float(spawn_right_x),
         state4_speed_mul=float(state4_speed_mul),
@@ -593,6 +610,44 @@ def yoshi_shyguy_metadata(data_root: Path | str = Path("data")) -> YoshiShyguyMe
     refs/melee/src/melee/it/items/itheiho.c::{it_802D8618,itHeiho_UnkMotion*_Phys,it_802D98C4}
     """
     return read_mslstio1_yoshi_shyguy(Path(data_root) / "stage_items" / "yoshi_shyguy.bin")
+
+
+def read_mslwhsp1(path: Path) -> DreamWhispyMetadata:
+    buf = _require_header(path, DREAM_WHISPY_MAGIC, DREAM_WHISPY_VERSION, 44)
+    if len(buf) != 44:
+        raise ValueError(f"MSLWHSP1 size mismatch in {path}: expected 44 != {len(buf)}")
+    (
+        stage_id,
+        _reserved,
+        wind_speed,
+        right_rect_left,
+        right_rect_right,
+        left_rect_left,
+        left_rect_right,
+        rect_bottom,
+        rect_top,
+    ) = struct.unpack_from("<HHfffffff", buf, 12)
+    return DreamWhispyMetadata(
+        stage_id=int(stage_id),
+        wind_speed=float(wind_speed),
+        right_rect_left=float(right_rect_left),
+        right_rect_right=float(right_rect_right),
+        left_rect_left=float(left_rect_left),
+        left_rect_right=float(left_rect_right),
+        rect_bottom=float(rect_bottom),
+        rect_top=float(rect_top),
+    )
+
+
+def dream_whispy_metadata(data_root: Path | str = Path("data")) -> DreamWhispyMetadata:
+    """Return generated Dream Land Whispy wind data.
+
+    Source data:
+    - `_iso/GrOp.dat::yakumono_param`
+    refs/melee/src/melee/gr/groldpupupu.c::{grOldPupupu_802113E0,fn_802112F4}
+    refs/melee/src/melee/ft/ftcoll.c::ftColl_GetWindOffsetVec
+    """
+    return read_mslwhsp1(Path(data_root) / "stage_items" / "dream_whispy.bin")
 
 
 def read_mslftsc1_v1(path: Path) -> ScriptTimelineMetadata:

@@ -18,6 +18,8 @@ from tools.slippi.item_article_data import (
     item_article_values_by_sim_char,
 )
 from tools.slippi.known_data_artifacts import (
+    DREAM_WHISPY_MAGIC,
+    DREAM_WHISPY_VERSION,
     ITEM_ARTICLE_CHAR_DOMAIN_GALE01_FIGHTER_KIND,
     ITEM_ARTICLE_MAGIC,
     ITEM_ARTICLE_VALUE_F32,
@@ -34,12 +36,14 @@ from tools.slippi.known_data_artifacts import (
     STAGE_PLATFORM_MOTION_KIND_FOD,
     STAGE_VERSION,
     read_mslftsc1_v1,
+    read_mslwhsp1,
     read_mslitar1,
     read_mslpart1_v1,
     read_mslstg01_v7,
     read_mslstio1_yoshi_shyguy,
     stage_metadata_bin_name_for_stage_id,
     stage_metadata_path_for_stage_id,
+    dream_whispy_metadata,
     yoshi_shyguy_metadata,
 )
 from tools.slippi.make_dataset_from_slp import _load_stage_segments_for_seed
@@ -348,6 +352,7 @@ def test_stage_item_yoshi_shyguy_known_rows() -> None:
     assert params.spawnmany_rarity == 8
     assert params.spawn_delay_step == 25
     assert params.fall_accel == pytest.approx(0.12)
+    assert params.fall_speed_max == pytest.approx(2.2)
     assert params.spawn_left_x == pytest.approx(-292.0)
     assert params.spawn_right_x == pytest.approx(304.0)
     assert params.state4_speed_mul == pytest.approx(1.5)
@@ -363,6 +368,18 @@ def test_stage_item_yoshi_shyguy_known_rows() -> None:
         (-0.7028961182, -0.7028961182, -0.7015228271),
         abs=1e-7,
     )
+
+
+def test_stage_item_dream_whispy_known_rows() -> None:
+    params = dream_whispy_metadata(Path("data"))
+    assert params.stage_id == 28
+    assert params.wind_speed == pytest.approx(0.2)
+    assert params.right_rect_left == pytest.approx(-17.0)
+    assert params.right_rect_right == pytest.approx(76.0)
+    assert params.left_rect_left == pytest.approx(-74.0)
+    assert params.left_rect_right == pytest.approx(-18.0)
+    assert params.rect_bottom == pytest.approx(-10.0)
+    assert params.rect_top == pytest.approx(40.0)
 
 
 @pytest.mark.integration
@@ -1201,6 +1218,7 @@ def test_runtime_move_tables_mslftsc1_matches_legacy_json_queries() -> None:
             read_mslstio1_yoshi_shyguy,
             "unsupported MSLSTIO1 version",
         ),
+        (DREAM_WHISPY_MAGIC, DREAM_WHISPY_VERSION, read_mslwhsp1, "unsupported MSLWHSP1 version"),
         (SCRIPT_MAGIC, SCRIPT_VERSION, read_mslftsc1_v1, "unsupported MSLFTSC1 version"),
     ],
 )
@@ -1289,13 +1307,22 @@ def test_known_data_artifact_extractors_regenerate_stable_outputs(tmp_path: Path
             "tools.extraction.extract_stage_item_objects",
             "--grst",
             "_iso/GrSt.dat",
+            "--grop",
+            "_iso/GrOp.dat",
             "--out",
             str(tmp_path / "yoshi_shyguy.bin"),
             "--audit",
             str(tmp_path / "yoshi_shyguy.json"),
+            "--dream-out",
+            str(tmp_path / "dream_whispy.bin"),
+            "--dream-audit",
+            str(tmp_path / "dream_whispy.json"),
         ],
         check=True,
     )
     assert (tmp_path / "yoshi_shyguy.bin").read_bytes() == Path(
         "data/stage_items/yoshi_shyguy.bin"
+    ).read_bytes()
+    assert (tmp_path / "dream_whispy.bin").read_bytes() == Path(
+        "data/stage_items/dream_whispy.bin"
     ).read_bytes()

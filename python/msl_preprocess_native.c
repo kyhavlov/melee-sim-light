@@ -7317,6 +7317,137 @@ fail:
   return NULL;
 }
 
+PyObject* msl_derive_dream_whispy_wind_seed_lanes_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* seed_obj = NULL;
+  PyObject* prev_input_obj = NULL;
+  PyObject* input_obj = NULL;
+  PyObject* ref_obj = NULL;
+  int num_players = 0;
+  int stage_id = 0;
+  double wind_speed_d = 0.0;
+  double epsilon_d = 0.025;
+  if (!PyArg_ParseTuple(args, "OOOOiidd", &seed_obj, &prev_input_obj, &input_obj, &ref_obj,
+                        &num_players, &stage_id, &wind_speed_d, &epsilon_d)) {
+    return NULL;
+  }
+  PyArrayObject* seed_arr = require_contiguous_array(seed_obj, NPY_UINT8, 2, "seed_bytes");
+  PyArrayObject* prev_input_arr =
+      require_contiguous_array(prev_input_obj, NPY_UINT8, 2, "prev_input_bytes");
+  PyArrayObject* input_arr = require_contiguous_array(input_obj, NPY_UINT8, 2, "input_bytes");
+  PyArrayObject* ref_arr = require_contiguous_array(ref_obj, NPY_UINT8, 2, "ref_bytes");
+  if (seed_arr == NULL || prev_input_arr == NULL || input_arr == NULL || ref_arr == NULL) {
+    return NULL;
+  }
+  const npy_intp n = PyArray_DIM(seed_arr, 0);
+  if (n <= 0 || PyArray_NDIM(seed_arr) != 2 || PyArray_NDIM(prev_input_arr) != 2 ||
+      PyArray_NDIM(input_arr) != 2 || PyArray_NDIM(ref_arr) != 2 ||
+      PyArray_DIM(prev_input_arr, 0) != n || PyArray_DIM(input_arr, 0) != n ||
+      PyArray_DIM(ref_arr, 0) != n) {
+    PyErr_SetString(PyExc_ValueError, "seed/input/ref byte arrays must be 2D with matching rows");
+    return NULL;
+  }
+  if (PyArray_DIM(seed_arr, 1) < (npy_intp)sizeof(MslSeed) ||
+      PyArray_DIM(prev_input_arr, 1) < (npy_intp)sizeof(MslInput) ||
+      PyArray_DIM(input_arr, 1) < (npy_intp)sizeof(MslInput) ||
+      PyArray_DIM(ref_arr, 1) < (npy_intp)sizeof(MslCompare)) {
+    PyErr_SetString(PyExc_ValueError, "seed/input/ref byte array has a short row stride");
+    return NULL;
+  }
+  if (num_players <= 0 || num_players > MSL_MAX_PLAYERS) {
+    PyErr_SetString(PyExc_ValueError, "num_players out of range");
+    return NULL;
+  }
+
+  npy_intp dims1[1] = {n};
+  npy_intp out_dims[2] = {n, (npy_intp)sizeof(MslCompare)};
+  PyArrayObject* dir_arr = (PyArrayObject*)PyArray_SimpleNew(1, dims1, NPY_UINT8);
+  PyArrayObject* valid_arr = (PyArrayObject*)PyArray_SimpleNew(1, dims1, NPY_UINT8);
+  PyArrayObject* out_arr = (PyArrayObject*)PyArray_SimpleNew(2, out_dims, NPY_UINT8);
+  if (dir_arr == NULL || valid_arr == NULL || out_arr == NULL) {
+    Py_XDECREF(dir_arr);
+    Py_XDECREF(valid_arr);
+    Py_XDECREF(out_arr);
+    return NULL;
+  }
+  uint8_t* dir = (uint8_t*)PyArray_DATA(dir_arr);
+  uint8_t* valid = (uint8_t*)PyArray_DATA(valid_arr);
+  memset(dir, 0, (size_t)n);
+  memset(valid, 0, (size_t)n);
+
+  MslBatch* batch = msl_batch_create((int)n, num_players);
+  if (batch == NULL) {
+    Py_DECREF(dir_arr);
+    Py_DECREF(valid_arr);
+    Py_DECREF(out_arr);
+    PyErr_SetString(PyExc_MemoryError, "msl_batch_create failed");
+    return NULL;
+  }
+  (void)msl_batch_set_ucf_enabled(batch, 1);
+  (void)msl_batch_set_ucf_cardinals_1_0_enabled(batch, 1);
+  int err = msl_batch_reseed_seed(batch, (const uint8_t*)PyArray_DATA(seed_arr),
+                                  (size_t)PyArray_DIM(seed_arr, 1));
+  if (err == 0) {
+    err = msl_batch_step_input(
+        batch, (const uint8_t*)PyArray_DATA(prev_input_arr), (size_t)PyArray_DIM(prev_input_arr, 1),
+        (const uint8_t*)PyArray_DATA(input_arr), (size_t)PyArray_DIM(input_arr, 1));
+  }
+  if (err == 0) {
+    err = msl_batch_write_compare(batch, (uint8_t*)PyArray_DATA(out_arr),
+                                  (size_t)PyArray_DIM(out_arr, 1));
+  }
+  msl_batch_destroy(batch);
+  if (err != 0) {
+    Py_DECREF(dir_arr);
+    Py_DECREF(valid_arr);
+    Py_DECREF(out_arr);
+    PyErr_Format(PyExc_RuntimeError, "Dream Whispy derivation sim failed: %d", err);
+    return NULL;
+  }
+
+  const uint8_t* seed_bytes = (const uint8_t*)PyArray_DATA(seed_arr);
+  const uint8_t* out_bytes = (const uint8_t*)PyArray_DATA(out_arr);
+  const uint8_t* ref_bytes = (const uint8_t*)PyArray_DATA(ref_arr);
+  const size_t seed_stride = (size_t)PyArray_DIM(seed_arr, 1);
+  const size_t out_stride = (size_t)PyArray_DIM(out_arr, 1);
+  const size_t ref_stride = (size_t)PyArray_DIM(ref_arr, 1);
+  const float wind_speed = (float)wind_speed_d;
+  const float eps = (float)epsilon_d;
+  for (npy_intp i = 0; i + 1 < n; i++) {
+    const MslSeed* seed = (const MslSeed*)(const void*)(seed_bytes + (size_t)i * seed_stride);
+    const MslSeed* next_seed =
+        (const MslSeed*)(const void*)(seed_bytes + (size_t)(i + 1) * seed_stride);
+    if (seed->stage_id != (uint32_t)stage_id || next_seed->stage_id != (uint32_t)stage_id ||
+        next_seed->frame_id != seed->frame_id + 1) {
+      continue;
+    }
+    const MslCompare* out = (const MslCompare*)(const void*)(out_bytes + (size_t)i * out_stride);
+    const MslCompare* ref = (const MslCompare*)(const void*)(ref_bytes + (size_t)i * ref_stride);
+    uint8_t row_dir = 0u;
+    uint8_t conflict = 0u;
+    for (int p = 0; p < num_players; p++) {
+      const float diff = ref->pos_x[p] - out->pos_x[p];
+      if (fabsf(fabsf(diff) - wind_speed) > eps) {
+        continue;
+      }
+      const uint8_t d = (diff < 0.0f) ? 1u : 2u;
+      if (row_dir != 0u && row_dir != d) {
+        conflict = 1u;
+        break;
+      }
+      row_dir = d;
+    }
+    if (row_dir != 0u && conflict == 0u) {
+      dir[i + 1] = row_dir;
+      valid[i + 1] = 1u;
+    }
+  }
+
+  Py_DECREF(out_arr);
+  PyObject* ret = Py_BuildValue("(NN)", dir_arr, valid_arr);
+  return ret;
+}
+
 PyObject* msl_derive_item_hidden_callback_seed_lanes_py(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* seed_exists_obj = NULL;
