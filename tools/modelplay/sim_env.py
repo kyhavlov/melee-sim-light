@@ -9,6 +9,7 @@ import numpy as np
 from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE, read_dataset
 from tools.modelplay.state_adapter import (
     MSL_STAGE_FINAL_DESTINATION,
+    STAGE_DEBUG_DTYPE,
     SimFrameState,
     build_slippi_ai_game,
     controllers_to_input_array,
@@ -200,6 +201,8 @@ class SimSession:
         self._handle = msl_binding.init(1, self._num_players)
         self._compare = np.zeros(1, dtype=COMPARE_DTYPE)
         self._compare_bytes = self._compare.view(np.uint8).reshape(1, -1)
+        self._stage_debug = np.zeros(1, dtype=STAGE_DEBUG_DTYPE)
+        self._stage_debug_bytes = self._stage_debug.view(np.uint8).reshape(1, -1)
         self._prev_input = np.zeros(1, dtype=INPUT_DTYPE)
         self._input = np.zeros(1, dtype=INPUT_DTYPE)
         self._processed_input = np.zeros(1, dtype=INPUT_DTYPE)
@@ -217,11 +220,13 @@ class SimSession:
             config_bytes = self._match_config.view(np.uint8).reshape(1, -1)
             self._binding.init_match(self._handle, config_bytes)
             self._binding.write_compare(self._handle, self._compare_bytes)
+            self._binding.debug_write_stage_state(self._handle, self._stage_debug_bytes)
             self._prev_input[...] = np.zeros(1, dtype=INPUT_DTYPE)
             self._input[...] = np.zeros(1, dtype=INPUT_DTYPE)
             self._refresh_processed_controllers()
             self._state = frame_state_with_timebase(
-                frame_state_from_compare(self._compare[0]), self._binding.debug_timebase(self._handle, 0)
+                frame_state_from_compare(self._compare[0], self._stage_debug[0]),
+                self._binding.debug_timebase(self._handle, 0),
             )
             self._needs_reset = True
             return self.current_state()
@@ -286,9 +291,11 @@ class SimSession:
             self._input.view(np.uint8).reshape(1, -1),
         )
         self._binding.write_compare(self._handle, self._compare_bytes)
+        self._binding.debug_write_stage_state(self._handle, self._stage_debug_bytes)
         self._refresh_processed_controllers()
         self._state = frame_state_with_timebase(
-            frame_state_from_compare(self._compare[0]), self._binding.debug_timebase(self._handle, 0)
+            frame_state_from_compare(self._compare[0], self._stage_debug[0]),
+            self._binding.debug_timebase(self._handle, 0),
         )
         self._record += 1
         return self.current_state()

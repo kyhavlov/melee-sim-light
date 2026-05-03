@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 STAGE_MAGIC = b"MSLSTG01"
-STAGE_VERSION = 5
+STAGE_VERSION = 7
 PART_MAGIC = b"MSLPART1"
 PART_VERSION = 1
 ITEM_ARTICLE_MAGIC = b"MSLITAR1"
@@ -29,6 +29,7 @@ STAGE_DREAM_LAND_N64 = 28
 STAGE_BATTLEFIELD = 31
 STAGE_FINAL_DESTINATION = 32
 STAGE_PLATFORM_TRANSFORM_KIND_HEIGHT = 1
+STAGE_PLATFORM_MOTION_KIND_FOD = 1
 
 STAGE_METADATA_BIN_BY_STAGE_ID = {
     STAGE_FOUNTAIN_OF_DREAMS: "griz.bin",  # Fountain of Dreams / GrIz.dat
@@ -53,6 +54,8 @@ class StageMetadata:
     spawn_points: tuple["StagePoint2", ...]
     respawn_points: tuple["StagePoint2", ...]
     platform_transforms: tuple["StagePlatformTransform", ...]
+    platform_motions: tuple["StagePlatformMotion", ...]
+    platform_paths: tuple["StagePlatformPathFrame", ...]
 
 
 @dataclass(frozen=True)
@@ -82,6 +85,38 @@ class StagePlatformTransform:
     x1: float
     y_const: float
     height_coeff: float
+
+
+@dataclass(frozen=True)
+class StagePlatformMotion:
+    kind_id: int
+    platform_count: int
+    home_height: float
+    hidden_target_height: float
+    max_height: float
+    min_visible_height: float
+    up_speed: float
+    down_speed: float
+    wait_min_frames: float
+    wait_max_frames: float
+    hidden_wait_min_frames: float
+    hidden_wait_max_frames: float
+    target_delta_min: float
+    target_delta_max: float
+    bias_below_home: float
+    bias_above_home: float
+    hidden_weight: float
+    stay_weight: float
+    move_weight: float
+
+
+@dataclass(frozen=True)
+class StagePlatformPathFrame:
+    line_id: int
+    frame: int
+    x0: float
+    y: float
+    x1: float
 
 
 @dataclass(frozen=True)
@@ -201,8 +236,8 @@ def _require_header(path: Path, magic: bytes, version: int, min_size: int) -> by
     return buf
 
 
-def read_mslstg01_v5(path: Path) -> StageMetadata:
-    buf = _require_header(path, STAGE_MAGIC, STAGE_VERSION, 56)
+def read_mslstg01_v7(path: Path) -> StageMetadata:
+    buf = _require_header(path, STAGE_MAGIC, STAGE_VERSION, 64)
     (
         segment_count,
         stage_point_count,
@@ -210,6 +245,10 @@ def read_mslstg01_v5(path: Path) -> StageMetadata:
         respawn_count,
         platform_transform_count,
         platform_transform_record_bytes,
+        platform_motion_count,
+        platform_motion_record_bytes,
+        platform_path_count,
+        platform_path_record_bytes,
         cam_l,
         cam_r,
         cam_t,
@@ -218,18 +257,20 @@ def read_mslstg01_v5(path: Path) -> StageMetadata:
         blast_r,
         blast_t,
         blast_b,
-    ) = struct.unpack_from("<HHHHHHffffffff", buf, 12)
+    ) = struct.unpack_from("<HHHHHHHHHHffffffff", buf, 12)
     expected = (
-        56
+        64
         + segment_count * 32
         + stage_point_count * 12
         + spawn_count * 8
         + respawn_count * 8
         + platform_transform_count * platform_transform_record_bytes
+        + platform_motion_count * platform_motion_record_bytes
+        + platform_path_count * platform_path_record_bytes
     )
     if len(buf) != expected:
         raise ValueError(f"MSLSTG01 size mismatch in {path}: header-derived {expected} != {len(buf)}")
-    off = 56
+    off = 64
     segments: list[StageSegment] = []
     for _ in range(segment_count):
         line_id, kind_id, flags, hi_flags, lo_flags, prev_id0, next_id0, prev_id1, next_id1, x0, y0, x1, y1 = (
@@ -290,6 +331,75 @@ def read_mslstg01_v5(path: Path) -> StageMetadata:
                 height_coeff=float(height_coeff),
             )
         )
+    platform_motions: list[StagePlatformMotion] = []
+    for _ in range(platform_motion_count):
+        if platform_motion_record_bytes != 72:
+            raise ValueError(
+                f"MSLSTG01 unsupported platform motion record size in {path}: {platform_motion_record_bytes}"
+            )
+        (
+            kind_id,
+            platform_count,
+            _reserved,
+            home_height,
+            hidden_target_height,
+            max_height,
+            min_visible_height,
+            up_speed,
+            down_speed,
+            wait_min_frames,
+            wait_max_frames,
+            hidden_wait_min_frames,
+            hidden_wait_max_frames,
+            target_delta_min,
+            target_delta_max,
+            bias_below_home,
+            bias_above_home,
+            hidden_weight,
+            stay_weight,
+            move_weight,
+        ) = struct.unpack_from("<BBHfffffffffffffffff", buf, off)
+        off += platform_motion_record_bytes
+        platform_motions.append(
+            StagePlatformMotion(
+                kind_id=int(kind_id),
+                platform_count=int(platform_count),
+                home_height=float(home_height),
+                hidden_target_height=float(hidden_target_height),
+                max_height=float(max_height),
+                min_visible_height=float(min_visible_height),
+                up_speed=float(up_speed),
+                down_speed=float(down_speed),
+                wait_min_frames=float(wait_min_frames),
+                wait_max_frames=float(wait_max_frames),
+                hidden_wait_min_frames=float(hidden_wait_min_frames),
+                hidden_wait_max_frames=float(hidden_wait_max_frames),
+                target_delta_min=float(target_delta_min),
+                target_delta_max=float(target_delta_max),
+                bias_below_home=float(bias_below_home),
+                bias_above_home=float(bias_above_home),
+                hidden_weight=float(hidden_weight),
+                stay_weight=float(stay_weight),
+                move_weight=float(move_weight),
+            )
+        )
+    platform_paths: list[StagePlatformPathFrame] = []
+    for _ in range(platform_path_count):
+        if platform_path_record_bytes != 16:
+            raise ValueError(
+                f"MSLSTG01 unsupported platform path record size in {path}: {platform_path_record_bytes}"
+            )
+        line_id, frame, x0, y, x1 = struct.unpack_from("<HHfff", buf, off)
+        off += platform_path_record_bytes
+        platform_paths.append(
+            StagePlatformPathFrame(
+                line_id=int(line_id),
+                frame=int(frame),
+                x0=float(x0),
+                y=float(y),
+                x1=float(x1),
+            )
+        )
     if off != len(buf):
         raise ValueError(f"MSLSTG01 trailing bytes in {path}: parsed {off} != {len(buf)}")
     return StageMetadata(
@@ -304,6 +414,8 @@ def read_mslstg01_v5(path: Path) -> StageMetadata:
         spawn_points=tuple(spawn_points),
         respawn_points=tuple(respawn_points),
         platform_transforms=tuple(platform_transforms),
+        platform_motions=tuple(platform_motions),
+        platform_paths=tuple(platform_paths),
     )
 
 
@@ -313,14 +425,14 @@ def fountain_of_dreams_default_platform_heights(
     """Return source-backed FoD platform initial heights by Slippi platform id.
 
     Platform ids follow Slippi `fod_platform` events: 0=right, 1=left. The defaults come from the
-    generated MSLSTG01 v5 transform records rather than seed-generation local constants.
+    generated MSLSTG01 v7 transform records rather than seed-generation local constants.
     refs/melee/src/melee/gr/grizumi.c::{grIzumi_801CC358,grIzumi_801CCBDC}
     data/stages/bin/griz.bin::MSLSTG01 platform_transforms
     """
     stage_path = stage_metadata_path_for_stage_id(STAGE_FOUNTAIN_OF_DREAMS, data_root)
     if stage_path is None:
         raise ValueError("missing Fountain of Dreams stage metadata path")
-    stage = read_mslstg01_v5(stage_path)
+    stage = read_mslstg01_v7(stage_path)
     heights: list[float | None] = [None, None]
     for rec in stage.platform_transforms:
         if rec.kind_id != STAGE_PLATFORM_TRANSFORM_KIND_HEIGHT:
@@ -338,17 +450,34 @@ def fountain_of_dreams_platform_motion_params(
     """Return generated GrIz platform scheduler constants from `yakumono_param`.
 
     refs/melee/src/melee/gr/grizumi.c::{FountainParams,grIzumi_801CC358}
-    data/stages/bin/griz.json::platform_motion
+    data/stages/bin/griz.bin::MSLSTG01 platform_motions
     """
     stage_path = stage_metadata_path_for_stage_id(STAGE_FOUNTAIN_OF_DREAMS, data_root)
     if stage_path is None:
         raise ValueError("missing Fountain of Dreams stage metadata path")
-    audit_path = stage_path.with_suffix(".json")
-    data = json.loads(audit_path.read_text())
-    params = data.get("platform_motion", {}).get("fountain_platform")
-    if not isinstance(params, dict):
-        raise ValueError(f"{audit_path}: missing FoD platform motion params")
-    return {str(k): float(v) for k, v in params.items()}
+    stage = read_mslstg01_v7(stage_path)
+    for motion in stage.platform_motions:
+        if motion.kind_id == STAGE_PLATFORM_MOTION_KIND_FOD:
+            return {
+                "home_height": motion.home_height,
+                "hidden_target_height": motion.hidden_target_height,
+                "max_height": motion.max_height,
+                "min_visible_height": motion.min_visible_height,
+                "up_speed": motion.up_speed,
+                "down_speed": motion.down_speed,
+                "wait_min_frames": motion.wait_min_frames,
+                "wait_max_frames": motion.wait_max_frames,
+                "hidden_wait_min_frames": motion.hidden_wait_min_frames,
+                "hidden_wait_max_frames": motion.hidden_wait_max_frames,
+                "target_delta_min": motion.target_delta_min,
+                "target_delta_max": motion.target_delta_max,
+                "bias_below_home": motion.bias_below_home,
+                "bias_above_home": motion.bias_above_home,
+                "hidden_weight": motion.hidden_weight,
+                "stay_weight": motion.stay_weight,
+                "move_weight": motion.move_weight,
+            }
+    raise ValueError(f"{stage_path}: missing FoD platform motion params")
 
 
 def read_mslpart1_v1(path: Path) -> PartMetadata:

@@ -152,6 +152,14 @@ typedef struct MslProcessedInput {
   MslProcessedInputPlayer p[MSL_MAX_PLAYERS];
 } MslProcessedInput;
 
+typedef struct MslDebugStageState {
+  // Platform id order follows the runtime FoD owner: 0=right, 1=left.
+  // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+  float fod_platform_height[2];
+  uint8_t fod_platform_height_valid[2];
+  uint8_t _pad0[2];
+} MslDebugStageState;
+
 typedef struct MslItem {
   uint8_t exists;  // 0/1
   uint8_t state;   // item state
@@ -318,6 +326,18 @@ typedef struct MslSeed {
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_CalcKnockback
   uint8_t kb_smashcharge_active[MSL_MAX_PLAYERS];
   uint8_t on_ground[MSL_MAX_PLAYERS];  // 0/1
+  // Hidden CollData.floor_skip seed lane.
+  //
+  // Pass/shield-drop and source floor-callback rejection episodes can carry a skipped platform
+  // segment across later airborne callbacks. This is prefix-causal hidden mpColl state: runtime
+  // writes/clears the live lane directly, while replay/eval seed generation reconstructs only the
+  // current skipped segment from frame-t state and prior input, never from t+1 replay output.
+  // valid=0 means inactive; valid=1 uses the segment id below. 0xFFFF is also sanitized inactive.
+  // refs/melee/src/melee/mp/mpcoll.c::{mpUpdateFloorSkip,mpClearFloorSkip,mpColl_80044628_Floor}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::{
+  //   ftCo_8009A184,ftCo_8009A228}
+  uint16_t floor_skip_segment_id_u16[MSL_MAX_PLAYERS];
+  uint8_t floor_skip_segment_valid_u8[MSL_MAX_PLAYERS];
   uint8_t _pad1[1];
 
   // State machine
@@ -1944,6 +1964,11 @@ int msl_batch_write_terminal(const MslBatch* batch, uint8_t* out_bytes, size_t o
 // out_stride_bytes must be >= sizeof(MslProcessedInput).
 int msl_batch_debug_write_processed_input(const MslBatch* batch, uint8_t* out_bytes,
                                           size_t out_stride_bytes);
+
+// Debug/viewer helper: write current stage-object platform state (length batch_size).
+// out_stride_bytes must be >= sizeof(MslDebugStageState).
+int msl_batch_debug_write_stage_state(const MslBatch* batch, uint8_t* out_bytes,
+                                      size_t out_stride_bytes);
 
 // Debug/validation helper: write selected internal fields.
 // out_stride_bytes must be >= sizeof(MslDebugInternals).

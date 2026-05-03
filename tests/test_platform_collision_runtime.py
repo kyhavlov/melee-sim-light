@@ -7,7 +7,9 @@ import numpy as np
 import pytest
 
 from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE, read_dataset
-from tools.slippi.known_data_artifacts import read_mslstg01_v5
+from tools.modelplay.sim_env import build_match_config_array
+from tools.slippi.known_data_artifacts import read_mslstg01_v7
+from tools.slippi.seed_history import load_shield_tilt_table_meta
 
 
 ACT_WAIT = 0x000E
@@ -28,22 +30,37 @@ ACT_GUARD_SET_OFF = 0x00B5
 ACT_GUARD_REFLECT = 0x00B6
 ACT_DAMAGE_FLY_N = 0x0058
 ACT_DAMAGE_FLY_TOP = 0x005A
+ACT_ESCAPE_AIR = 0x00EC
 ACT_DOWN_BOUND_U = 0x00B7
 ACT_DOWN_WAIT_U = 0x00B8
 ACT_PASSIVE = 0x00C7
 ACT_PASS = 0x00F4
+ACT_OTTOTTO = 0x00F5
+ACT_OTTOTTO_WAIT = 0x00F6
 ACT_CLIFF_JUMP_SLOW2 = 0x0105
+ACT_ATTACK_AIR_N = 0x0041
+ACT_ATTACK_DASH = 0x0032
+ACT_ATTACK_S4_S = 0x003C
+ACT_ATTACK_HI4 = 0x003F
 
 SM_WAIT1_0 = 2
+SM_OTTOTTO = 210
 SM_JUMP_F = 16
 SM_FALL = 20
 SM_DAMAGE_FALL = 33
 SM_PASS = 209
 SM_CLIFF_JUMP_SLOW2 = 226
+SM_ATTACK_DASH = 52
+SM_ATTACK_S4 = 62
+SM_ATTACK_HI4 = 66
+SM_ESCAPE_AIR = 44
+SM_OTTOTTO_WAIT = 211
 
 CHAR_FOX = 1
 BUTTON_L = 0x0040
+BUTTON_A = 0x0100
 BUTTON_B = 0x0200
+BUTTON_Y = 0x0800
 
 ACT_FX_SPECIAL_AIR_LW_START = 0x016D
 
@@ -79,6 +96,14 @@ def test_static_platform_lines_are_debug_visible_but_not_in_filtered_graph(
         msl_binding.destroy(handle)
 
 
+def _floor_y_at(seg, x: float) -> float:
+    dx = float(seg.x1) - float(seg.x0)
+    if dx == 0.0:
+        return max(float(seg.y0), float(seg.y1))
+    t = (x - float(seg.x0)) / dx
+    return float(seg.y0) + (float(seg.y1) - float(seg.y0)) * t
+
+
 def _input_bytes() -> np.ndarray:
     import msl_binding
 
@@ -100,6 +125,8 @@ def _seed_base(stage_id: int, action_id: int, submotion_id: int, x: float, y: fl
     seed["pos_y"][0, 0] = np.float32(y)
     seed["jumps_left"][0, :2] = np.uint8(1)
     seed["frame_speed_mul_f32"][0, :2] = np.float32(1.0)
+    seed["floor_skip_segment_id_u16"][0, :] = np.uint16(0xFFFF)
+    seed["floor_skip_segment_valid_u8"][0, :] = np.uint8(0)
     seed["anim_frame_f32"][0, :2] = seed["action_frame"][0, :2].astype(np.float32)
     return seed
 
@@ -148,6 +175,429 @@ def _collision_contacts_dtype() -> np.dtype:
         ],
         align=False,
     )
+
+
+def test_yoshi_downhill_slope_grounded_projection_tracks_floor_height() -> None:
+    # Manual webplay bug: walking/running downhill on Yoshi could keep the fighter stranded at the
+    # previous higher Y. Source `mpLib_8004DD90_Floor` returns signed correction for current
+    # floor.index, so grounded slope persistence must apply the downward correction too.
+    # refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+    stage = read_mslstg01_v7(Path("data/stages/bin/grst.bin"))
+    seg = next(seg for seg in stage.segments if int(seg.line_id) == 6)
+    x0 = 45.0
+    seed = _seed_base(8, ACT_WALK_MIDDLE, SM_WAIT1_0, x0, _floor_y_at(seg, x0) + 0.0001)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(6)
+    seed["speed_ground_x_self"][0, 0] = np.float32(2.0)
+
+    out = _step_once(seed)
+    x1 = float(out["pos_x"][0])
+
+    assert int(out["on_ground"][0]) == 1
+    assert int(out["ground_id"][0]) == 6
+    assert float(out["pos_y"][0]) == pytest.approx(_floor_y_at(seg, x1) + 0.0001, abs=1e-5)
+
+
+def test_fod_stage_lip_slope_grounded_projection_tracks_floor_height() -> None:
+    # FoD side lips are admitted sloped GrIz floor segments. Grounded persistence should follow
+    # the current line's `mpLib_8004DD90_Floor` projection instead of carrying the previous root
+    # height across the raised lip.
+    # refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+    stage = read_mslstg01_v7(Path("data/stages/bin/griz.bin"))
+    seg = next(seg for seg in stage.segments if int(seg.line_id) == 6)
+    x0 = 51.5
+    seed = _seed_base(2, ACT_WALK_MIDDLE, SM_WAIT1_0, x0, _floor_y_at(seg, x0) + 0.0001)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(6)
+    seed["speed_ground_x_self"][0, 0] = np.float32(0.5)
+
+    out = _step_once(seed)
+    x1 = float(out["pos_x"][0])
+
+    assert int(out["on_ground"][0]) == 1
+    assert int(out["ground_id"][0]) == 6
+    assert float(out["pos_y"][0]) == pytest.approx(_floor_y_at(seg, x1) + 0.0001, abs=1e-5)
+
+
+def test_fod_stage_lip_slope_to_flat_handoff_drops_to_current_floor_height() -> None:
+    # The right FoD lip slopes down into the main floor. Source DD90 traversal remaps across the
+    # connected endpoint and applies the signed Y correction for the resulting floor, so walking
+    # down from the raised lip must not preserve the lip height over line 5.
+    # refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+    # refs/melee/src/melee/ft/ftcommon.c::ftCommon_ApplyGroundMovement
+    stage = read_mslstg01_v7(Path("data/stages/bin/griz.bin"))
+    slope = next(seg for seg in stage.segments if int(seg.line_id) == 6)
+    flat = next(seg for seg in stage.segments if int(seg.line_id) == 5)
+    x0 = 51.45
+    seed = _seed_base(2, ACT_RUN, SM_WAIT1_0, x0, _floor_y_at(slope, x0) + 0.0001)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(6)
+    seed["speed_ground_x_self"][0, 0] = np.float32(-0.8)
+
+    out = _step_once(seed)
+    x1 = float(out["pos_x"][0])
+
+    assert int(out["on_ground"][0]) == 1
+    assert int(out["ground_id"][0]) == 5
+    assert float(out["pos_y"][0]) == pytest.approx(_floor_y_at(flat, x1) + 0.0001, abs=1e-5)
+    assert float(out["speed_air_x_self"][0]) == pytest.approx(
+        float(out["speed_ground_x_self"][0]), abs=1e-4
+    )
+    assert float(out["speed_y_self"][0]) == pytest.approx(0.0, abs=1e-4)
+
+
+def test_yoshi_center_raw_platform_is_debug_visible_but_not_fighter_solid() -> None:
+    # The tiny raised center line is raw GrSt collision metadata, but not admitted as current legal
+    # Yoshi fighter-solid terrain. Keep debug visibility while rejecting fighter collision.
+    import msl_binding
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        raw = msl_binding.stage_floor_segment(8, 0)
+        assert raw is not None
+        assert int(raw["is_platform"]) == 1
+        assert float(raw["y0"]) == pytest.approx(5.25)
+        assert msl_binding.stage_fighter_floor_segment(8, 0) is None
+        randall = msl_binding.stage_floor_segment(8, 1000)
+        assert randall is not None
+        assert int(randall["is_platform"]) == 1
+    finally:
+        msl_binding.destroy(handle)
+
+
+def test_fod_live_platform_scheduler_moves_without_replay_seed() -> None:
+    # Live/webplay/new-match FoD has no Slippi current-height seed lanes. Runtime should initialize
+    # grIzumi scheduler state from generated stage data and advance the C-owned platform height.
+    import msl_binding
+
+    default_h = np.float32(27.44186019897461)
+    sizes = msl_binding.sizes()
+    inp = _input_bytes()
+    stage_dtype = np.dtype(
+        [
+            ("fod_platform_height", ("<f4", (2,))),
+            ("fod_platform_height_valid", ("u1", (2,))),
+            ("_pad0", "V2"),
+        ],
+        align=False,
+    )
+    stage_out = np.zeros((1, int(sizes["stage_state"])), dtype=np.uint8)
+    config = build_match_config_array(stage_id=2, random_seed=0, char_ids=(CHAR_FOX, CHAR_FOX))
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        msl_binding.init_match(handle, config.view(np.uint8).reshape((1, -1)))
+        for _ in range(1400):
+            msl_binding.step_input(handle, inp, inp)
+        msl_binding.debug_write_stage_state(handle, stage_out)
+        stage = stage_out.view(stage_dtype).reshape((1,))[0]
+    finally:
+        msl_binding.destroy(handle)
+
+    assert int(stage["fod_platform_height_valid"][0]) == 1
+    assert float(stage["fod_platform_height"][0]) < float(default_h) - 1.0
+
+
+def test_fod_live_platform_stage_debug_reports_runtime_height_for_webplay() -> None:
+    # Webplay/modelplay render FoD platforms from this debug stage-state path, so the visual
+    # platform height must be the same grIzumi runtime owner value used by collision.
+    import msl_binding
+
+    default_h = np.float32(27.44186019897461)
+    stage_dtype = np.dtype(
+        [
+            ("fod_platform_height", ("<f4", (2,))),
+            ("fod_platform_height_valid", ("u1", (2,))),
+            ("_pad0", "V2"),
+        ],
+        align=False,
+    )
+    sizes = msl_binding.sizes()
+    inp = _input_bytes()
+    stage_out = np.zeros((1, int(sizes["stage_state"])), dtype=np.uint8)
+    config = build_match_config_array(stage_id=2, random_seed=0, char_ids=(CHAR_FOX, CHAR_FOX))
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        msl_binding.init_match(handle, config.view(np.uint8).reshape((1, -1)))
+        for _ in range(1400):
+            msl_binding.step_input(handle, inp, inp)
+        msl_binding.debug_write_stage_state(handle, stage_out)
+        stage = stage_out.view(stage_dtype).reshape((1,))[0]
+    finally:
+        msl_binding.destroy(handle)
+
+    assert int(stage["fod_platform_height_valid"][0]) == 1
+    assert float(stage["fod_platform_height"][0]) < float(default_h)
+
+
+def test_yoshi_randall_dynamic_platform_world_line_admits_collision() -> None:
+    # Randall is a generated stage-object floor record. This seed is at the right-side horizontal
+    # pass; static artifact endpoints are on the left, so remaining grounded proves runtime used
+    # the stage-object transform.
+    seed = _seed_base(8, ACT_WAIT, SM_WAIT1_0, 90.0, -13.64989 + 0.0001)
+    seed["frame_id"][0] = np.int32(700)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(1000)
+    seed["facing"][0, 0] = np.uint8(1)
+
+    out = _step_once(seed)
+
+    assert int(out["action_id"][0]) == ACT_OTTOTTO
+    assert int(out["on_ground"][0]) == 1
+    assert int(out["ground_id"][0]) == 1000
+    assert float(out["pos_y"][0]) == pytest.approx(-13.64989 + 0.0001, abs=1e-5)
+
+
+def test_platform_edge_wait_enters_teeter_and_teeter_shield_enters_guard() -> None:
+    # Common ft_80084280 admits Ottotto on platform edges. ftCo_Ottotto_IASA then calls
+    # ftCo_80091A4C, so pressing shield during teeter enters GuardOn.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::ftCo_Ottotto_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
+    seed = _seed_base(31, ACT_WAIT, SM_WAIT1_0, 58.1, 27.2000007629 + 0.0001)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(4)
+    seed["facing"][0, 0] = np.uint8(1)
+
+    out = _step_once(seed)
+    assert int(out["action_id"][0]) == ACT_OTTOTTO
+    assert int(out["on_ground"][0]) == 1
+    assert int(out["ground_id"][0]) == 4
+
+    teeter = _seed_base(31, ACT_OTTOTTO, SM_OTTOTTO, 57.600002, 27.2000007629 + 0.0001)
+    teeter["on_ground"][0, 0] = np.uint8(1)
+    teeter["ground_id"][0, 0] = np.uint16(4)
+    teeter["facing"][0, 0] = np.uint8(1)
+    teeter["shield_hp"][0, 0] = np.float32(60.0)
+    prev_shield = _input_bytes()
+    prev_shield.view(INPUT_DTYPE).reshape((1,))["p"]["l"][0, 0] = np.uint8(38)
+    shield = _input_bytes()
+    shield_v = shield.view(INPUT_DTYPE).reshape((1,))
+    shield_v["p"]["l"][0, 0] = np.uint8(255)
+    shield_v["p"]["main_y"][0, 0] = np.int8(-103)
+    out2 = _step_once(teeter, prev_input=prev_shield, input_t=shield)
+    assert int(out2["action_id"][0]) == ACT_GUARD_ON
+
+
+def test_teeter_wait_can_enter_smash_attack() -> None:
+    # ftCo_OttottoWait_IASA shares the grounded A-attack owner with Ottotto. Manual play exposed
+    # that teeter-wait could shield after the prior fix but still failed to enter smash attacks.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::ftCo_OttottoWait_IASA
+    seed = _seed_base(31, ACT_OTTOTTO_WAIT, SM_OTTOTTO_WAIT, 57.600002, 27.2000007629 + 0.0001)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(4)
+    seed["facing"][0, 0] = np.uint8(1)
+    attack = _input_bytes()
+    attack_v = attack.view(INPUT_DTYPE).reshape((1,))
+    attack_v["p"]["buttons"][0, 0] = np.uint16(BUTTON_A)
+    attack_v["p"]["main_x"][0, 0] = np.int8(127)
+
+    out = _step_once(seed, input_t=attack)
+
+    assert int(out["action_id"][0]) == ACT_ATTACK_S4_S
+
+
+def test_shield_drop_immediate_aerial_keeps_platform_floor_skip() -> None:
+    # Shield-drop writes CollData.floor_skip via mpUpdateFloorSkip. An immediate aerial should not
+    # broadly re-ground on the same platform; delayed/non-platform contacts remain separately owned.
+    import msl_binding
+
+    seed = _seed_base(31, ACT_GUARD, 0xFFFFFFFF, 30.0, 27.2000007629 + 0.0001)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(4)
+    seed["shield_hp"][0, 0] = np.float32(60.0)
+
+    sizes = msl_binding.sizes()
+    neutral = _input_bytes()
+    drop = _input_bytes()
+    aerial = _input_bytes()
+    drop_v = drop.view(INPUT_DTYPE).reshape((1,))
+    drop_v["p"]["buttons"][0, 0] = np.uint16(BUTTON_L)
+    drop_v["p"]["main_y"][0, 0] = np.int8(-80)
+    aerial.view(INPUT_DTYPE).reshape((1,))["p"]["buttons"][0, 0] = np.uint16(BUTTON_A)
+    out = np.zeros((1, int(sizes["compare"])), dtype=np.uint8)
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, int(sizes["seed"]))))
+        msl_binding.step_input(handle, neutral, drop)
+        msl_binding.step_input(handle, drop, aerial)
+        msl_binding.write_compare(handle, out)
+        row = out.view(COMPARE_DTYPE).reshape((1,))[0]
+    finally:
+        msl_binding.destroy(handle)
+
+    assert int(row["action_id"][0]) == ACT_ATTACK_AIR_N
+    assert int(row["on_ground"][0]) == 0
+    assert int(row["ground_id"][0]) == 4
+
+
+def test_shield_tilt_on_platform_updates_bubble_and_still_allows_shield_drop() -> None:
+    # Shield tilt is data-table owned and should update Guard bubble pose without blocking the
+    # Guard platform-drop path.
+    import msl_binding
+
+    seed = _seed_base(31, ACT_WAIT, SM_WAIT1_0, -80.0, 0.0001)
+    seed["action_id"][0, 1] = np.uint16(ACT_GUARD)
+    seed["animation_index"][0, 1] = np.uint32(0xFFFFFFFF)
+    seed["pos_x"][0, 1] = np.float32(30.0)
+    seed["pos_y"][0, 1] = np.float32(27.2000007629 + 0.0001)
+    seed["on_ground"][0, 1] = np.uint8(1)
+    seed["ground_id"][0, 1] = np.uint16(4)
+    seed["shield_hp"][0, 1] = np.float32(60.0)
+    neutral_tilt, _frame_max = load_shield_tilt_table_meta()[CHAR_FOX]
+    seed["guard_tilt_x8"][0, 1] = np.uint16(neutral_tilt)
+    seed["guard_tilt_x4"][0, 1] = np.float32(0.0)
+
+    sizes = msl_binding.sizes()
+    neutral = _input_bytes()
+    tilt = _input_bytes()
+    drop = _input_bytes()
+    neutral.view(INPUT_DTYPE).reshape((1,))["p"]["buttons"][0, 1] = np.uint16(BUTTON_L)
+    tilt_v = tilt.view(INPUT_DTYPE).reshape((1,))
+    tilt_v["p"]["buttons"][0, 1] = np.uint16(BUTTON_L)
+    tilt_v["p"]["main_x"][0, 1] = np.int8(50)
+    drop_v = drop.view(INPUT_DTYPE).reshape((1,))
+    drop_v["p"]["buttons"][0, 1] = np.uint16(BUTTON_L)
+    drop_v["p"]["main_y"][0, 1] = np.int8(-80)
+    out = np.zeros((1, int(sizes["compare"])), dtype=np.uint8)
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, int(sizes["seed"]))))
+        msl_binding.step_input(handle, neutral, neutral)
+        b0 = msl_binding.debug_shield_bubbles_world(handle, 0)
+        msl_binding.step_input(handle, neutral, tilt)
+        b1 = msl_binding.debug_shield_bubbles_world(handle, 0)
+        bubble_delta = (
+            abs(float(b1[1, 0]) - float(b0[1, 0]))
+            + abs(float(b1[1, 1]) - float(b0[1, 1]))
+            + abs(float(b1[1, 2]) - float(b0[1, 2]))
+        )
+        assert bubble_delta > 1.0e-5
+
+        msl_binding.step_input(handle, tilt, drop)
+        msl_binding.write_compare(handle, out)
+        row = out.view(COMPARE_DTYPE).reshape((1,))[0]
+    finally:
+        msl_binding.destroy(handle)
+
+    assert int(row["action_id"][1]) == ACT_PASS
+    assert int(row["on_ground"][1]) == 0
+    assert int(row["ground_id"][1]) == 4
+
+
+def test_shield_drop_floor_skip_clears_after_another_floor_owns_collision() -> None:
+    # CollData.floor_skip blocks only the source platform. Once the fighter lands on another floor,
+    # mpClearFloorSkip-style ownership clears the skipped platform id.
+    import msl_binding
+
+    seed = _seed_base(31, ACT_GUARD, 0xFFFFFFFF, 30.0, 27.2000007629 + 0.0001)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(4)
+    seed["shield_hp"][0, 0] = np.float32(60.0)
+
+    sizes = msl_binding.sizes()
+    neutral = _input_bytes()
+    drop = _input_bytes()
+    drop_v = drop.view(INPUT_DTYPE).reshape((1,))
+    drop_v["p"]["buttons"][0, 0] = np.uint16(BUTTON_L)
+    drop_v["p"]["main_y"][0, 0] = np.int8(-80)
+    out = np.zeros((1, int(sizes["compare"])), dtype=np.uint8)
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, int(sizes["seed"]))))
+        prev = neutral
+        cur = drop
+        row = None
+        for _ in range(60):
+            msl_binding.step_input(handle, prev, cur)
+            msl_binding.write_compare(handle, out)
+            row = out.view(COMPARE_DTYPE).reshape((1,))[0].copy()
+            if int(row["on_ground"][0]) == 1 and int(row["ground_id"][0]) != 4:
+                break
+            prev = cur
+            cur = neutral
+    finally:
+        msl_binding.destroy(handle)
+
+    assert row is not None
+    assert int(row["on_ground"][0]) == 1
+    assert int(row["ground_id"][0]) != 4
+
+
+def test_shield_drop_jump_released_down_can_reland_same_platform() -> None:
+    # mpClearFloorSkip is called by Fighter_ChangeMotionState. The shield-drop frame consumes the
+    # platform skip, but after Pass hands off to JumpAerial/Fall and down is released, the same
+    # platform must be admissible again.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+    # refs/melee/src/melee/mp/mpcoll.c::{mpUpdateFloorSkip,mpClearFloorSkip}
+    import msl_binding
+
+    seed = _seed_base(31, ACT_GUARD, 0xFFFFFFFF, 30.0, 27.2000007629 + 0.0001)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(4)
+    seed["shield_hp"][0, 0] = np.float32(60.0)
+
+    sizes = msl_binding.sizes()
+    neutral = _input_bytes()
+    drop = _input_bytes()
+    jump = _input_bytes()
+    drop_v = drop.view(INPUT_DTYPE).reshape((1,))
+    drop_v["p"]["buttons"][0, 0] = np.uint16(BUTTON_L)
+    drop_v["p"]["main_y"][0, 0] = np.int8(-80)
+    jump.view(INPUT_DTYPE).reshape((1,))["p"]["buttons"][0, 0] = np.uint16(BUTTON_Y)
+    out = np.zeros((1, int(sizes["compare"])), dtype=np.uint8)
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, int(sizes["seed"]))))
+        msl_binding.step_input(handle, neutral, drop)
+        msl_binding.step_input(handle, drop, jump)
+        prev = jump
+        cur = neutral
+        row = None
+        for _ in range(90):
+            msl_binding.step_input(handle, prev, cur)
+            msl_binding.write_compare(handle, out)
+            row = out.view(COMPARE_DTYPE).reshape((1,))[0].copy()
+            if int(row["on_ground"][0]) == 1:
+                break
+            prev = cur
+            cur = neutral
+    finally:
+        msl_binding.destroy(handle)
+
+    assert row is not None
+    assert int(row["on_ground"][0]) == 1
+    assert int(row["ground_id"][0]) == 4
+
+
+@pytest.mark.parametrize(
+    ("action_id", "submotion_id"),
+    [
+        (ACT_ATTACK_DASH, SM_ATTACK_DASH),
+        (ACT_ATTACK_S4_S, SM_ATTACK_S4),
+        (ACT_ATTACK_HI4, SM_ATTACK_HI4),
+    ],
+)
+def test_grounded_root_actions_snap_to_platform_edge_without_impossible_floor(
+    action_id: int, submotion_id: int
+) -> None:
+    # Rooted grounded attacks use the same platform-edge/floor-persistence owner as locomotion.
+    # At the BF side-platform edge they should clamp to the live platform edge, not preserve a
+    # stale off-platform X/Y or snap to another impossible floor.
+    seed = _seed_base(31, action_id, submotion_id, 57.9, 27.2000007629 + 0.0001)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(4)
+    seed["facing"][0, 0] = np.uint8(1)
+    seed["speed_ground_x_self"][0, 0] = np.float32(1.0)
+
+    out = _step_once(seed)
+
+    assert int(out["on_ground"][0]) == 1
+    assert int(out["ground_id"][0]) == 4
+    assert float(out["pos_x"][0]) == pytest.approx(57.600002, abs=1e-5)
+    assert float(out["pos_y"][0]) == pytest.approx(27.2000007629, abs=1e-5)
 
 
 @pytest.mark.parametrize(
@@ -242,6 +692,136 @@ def test_fountain_left_moving_platform_advances_seeded_stage_velocity() -> None:
     assert int(out["on_ground"][0]) == 1
     assert int(out["ground_id"][0]) == 0
     assert float(out["pos_y"][0]) == pytest.approx(float(next_world_y) + 0.0001, abs=1e-5)
+
+
+def test_yoshi_randall_carries_grounded_rider_with_platform_motion() -> None:
+    # Randall is a stage-object-owned transformed floor. Grounded riders keep CollData.floor.index
+    # and inherit the platform transform delta before projection, rather than standing at stale X
+    # until the platform slides out from under them.
+    # refs/melee/src/melee/gr/grstory.c::{grStory_801E3370,Ground_801C2FE0}
+    frame_id = 600
+    x0 = 101.235443 - 11.9
+    y = -13.64989
+    seed = _seed_base(8, ACT_WAIT, SM_WAIT1_0, x0 + 6.0, y + 0.0001)
+    seed["frame_id"][0] = np.int32(frame_id)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(1000)
+
+    out = _step_once(seed)
+
+    assert int(out["on_ground"][0]) == 1
+    assert int(out["ground_id"][0]) == 1000
+    assert float(out["pos_x"][0]) < float(seed["pos_x"][0, 0]) - 0.3
+    assert float(out["pos_y"][0]) > float(seed["pos_y"][0, 0]) + 0.01
+    assert float(out["pos_y"][0]) == pytest.approx(-13.62498188, abs=1e-5)
+
+
+def test_fod_transformed_platform_edge_snap_uses_world_height_for_rooted_actions() -> None:
+    # Grounded rooted callbacks near FoD platform edges must snap to the transformed world line,
+    # not the source-local MSLSTG01 y=1.125 row. This covers the manual fsmash/dash-attack/roll
+    # "teleport to ground until the move ends" failure mode.
+    height = np.float32(19.899999618530273)
+    world_y = np.float32(float(height) * 0.80625)
+    seed = _seed_base(2, ACT_ATTACK_S4_S, SM_ATTACK_S4, -20.5, float(world_y) + 0.0001)
+    seed["stage_fod_platform_height_f32"][0, 1] = height
+    seed["stage_fod_platform_height_valid_u8"][0, 1] = np.uint8(1)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(0)
+
+    out = _step_once(seed)
+
+    assert int(out["on_ground"][0]) == 1
+    assert int(out["ground_id"][0]) == 0
+    assert float(out["pos_y"][0]) == pytest.approx(float(world_y), abs=1e-4)
+
+
+@pytest.mark.parametrize(
+    ("action_id", "submotion_id"),
+    [
+        (ACT_ATTACK_AIR_N, 68),
+        (ACT_DAMAGE_FLY_TOP, 180),
+    ],
+)
+def test_fod_airborne_aerial_and_tumble_can_land_on_transformed_platform_with_down_input(
+    action_id: int, submotion_id: int
+) -> None:
+    # AttackAir_Coll and DamageFly_Coll do not pass ftCo_80096CC8, so held down cannot make active
+    # aerials or damage/tumble fall through FoD transformed platforms.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
+    height = np.float32(19.899999618530273)
+    world_y = np.float32(float(height) * 0.80625)
+    seed = _seed_base(2, action_id, submotion_id, -35.0, float(world_y) - 2.0)
+    seed["ground_id"][0, 0] = np.uint16(0xFFFF)
+    seed["stage_fod_platform_height_f32"][0, 1] = height
+    seed["stage_fod_platform_height_valid_u8"][0, 1] = np.uint8(1)
+    if action_id == ACT_ATTACK_AIR_N:
+        seed["action_frame"][0, 0] = np.int16(4)
+        seed["anim_frame_f32"][0, 0] = np.float32(4.0)
+    seed["speed_y_self"][0, 0] = np.float32(-10.0)
+    seed["speed_y_attack"][0, 0] = np.float32(-5.0 if action_id == ACT_DAMAGE_FLY_TOP else -1.0)
+    seed["hitstun"][0, 0] = np.uint8(10 if action_id == ACT_DAMAGE_FLY_TOP else 0)
+    seed["floor_sweep_prev_pos_valid_u8"][0, 0] = np.uint8(1)
+    seed["floor_sweep_prev_pos_x_f32"][0, 0] = np.float32(-35.0)
+    seed["floor_sweep_prev_pos_y_f32"][0, 0] = np.float32(float(world_y) + 14.0)
+    prev_input = _input_bytes()
+    prev_input.view(INPUT_DTYPE).reshape((1,))["p"]["main_y"][0, 0] = np.int8(-95)
+    input_t = _input_bytes()
+    input_t.view(INPUT_DTYPE).reshape((1,))["p"]["main_y"][0, 0] = np.int8(-95)
+    out = _step_once(seed, prev_input, input_t)
+
+    assert int(out["on_ground"][0]) == 1
+    assert int(out["ground_id"][0]) == 0
+    assert float(out["pos_y"][0]) == pytest.approx(float(world_y) + 0.0001, abs=1e-4)
+
+
+def test_fod_escapeair_downward_airdodge_can_waveland_on_transformed_platform() -> None:
+    # EscapeAir_Coll uses ft_80082C74 and does not pass ftCo_80096CC8, so a downward airdodge can
+    # waveland on FoD transformed platforms instead of inheriting the common-air held-down
+    # pass-through gate. Floor skip remains the separate shield-drop/pass owner.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    height = np.float32(19.899999618530273)
+    world_y = np.float32(float(height) * 0.80625)
+    seed = _seed_base(2, ACT_ESCAPE_AIR, SM_ESCAPE_AIR, -35.0, float(world_y) + 2.0)
+    seed["ground_id"][0, 0] = np.uint16(0xFFFF)
+    seed["stage_fod_platform_height_f32"][0, 1] = height
+    seed["stage_fod_platform_height_valid_u8"][0, 1] = np.uint8(1)
+    seed["action_frame"][0, 0] = np.int16(4)
+    seed["anim_frame_f32"][0, 0] = np.float32(4.0)
+    seed["speed_y_self"][0, 0] = np.float32(-10.0)
+    seed["floor_sweep_prev_pos_valid_u8"][0, 0] = np.uint8(1)
+    seed["floor_sweep_prev_pos_x_f32"][0, 0] = np.float32(-35.0)
+    seed["floor_sweep_prev_pos_y_f32"][0, 0] = np.float32(float(world_y) + 14.0)
+    input_t = _input_bytes()
+    input_t.view(INPUT_DTYPE).reshape((1,))["p"]["main_y"][0, 0] = np.int8(-95)
+    out = _step_once(seed, _input_bytes(), input_t)
+
+    assert int(out["on_ground"][0]) == 1
+    assert int(out["ground_id"][0]) == 0
+
+
+def test_fod_common_air_down_input_rejects_transformed_soft_platform_callback() -> None:
+    # Ordinary Fall still passes ftCo_80096CC8, including on transformed FoD platform lines. Held
+    # down should pass through here, while AttackAir/EscapeAir/Damage owners above remain admitted.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Coll
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_80096CC8
+    height = np.float32(19.899999618530273)
+    world_y = np.float32(float(height) * 0.80625)
+    seed = _seed_base(2, ACT_FALL, SM_FALL, -35.0, float(world_y) - 2.0)
+    seed["ground_id"][0, 0] = np.uint16(0xFFFF)
+    seed["stage_fod_platform_height_f32"][0, 1] = height
+    seed["stage_fod_platform_height_valid_u8"][0, 1] = np.uint8(1)
+    seed["speed_y_self"][0, 0] = np.float32(-10.0)
+    seed["floor_sweep_prev_pos_valid_u8"][0, 0] = np.uint8(1)
+    seed["floor_sweep_prev_pos_x_f32"][0, 0] = np.float32(-35.0)
+    seed["floor_sweep_prev_pos_y_f32"][0, 0] = np.float32(float(world_y) + 14.0)
+    input_t = _input_bytes()
+    input_t.view(INPUT_DTYPE).reshape((1,))["p"]["main_y"][0, 0] = np.int8(-95)
+
+    out = _step_once(seed, _input_bytes(), input_t)
+
+    assert int(out["on_ground"][0]) == 0
+    assert int(out["ground_id"][0]) == 0xFFFF
 
 
 def test_guard_on_yoshi_platform_stays_grounded() -> None:
@@ -348,7 +928,7 @@ def test_frozen_pokemon_stadium_rejects_inactive_raw_wall_for_fighter_collision(
     # refs/melee/src/melee/gr/grpstadium.c::{grStadium_OnInit,grStadium_801D10F0}
     import msl_binding
 
-    stage = read_mslstg01_v5(Path("data/stages/bin/grps.bin"))
+    stage = read_mslstg01_v7(Path("data/stages/bin/grps.bin"))
     wall = next(seg for seg in stage.segments if int(seg.line_id) == 81)
     assert int(wall.kind_id) == 2  # right_wall
     assert wall.fighter_solid is False
@@ -537,6 +1117,33 @@ def test_yoshi_cliffjump_down_input_passes_through_platform_rollout_replay_real(
 
 
 @pytest.mark.integration
+def test_fod_downbound_platform_rows_do_not_borrow_platform_carry_snap_replay_real() -> None:
+    # EWT record 5135 is DownBoundU already grounded on the transformed FoD left platform. The
+    # stable grounded platform-carry correction must not leak into knockdown floor-contact
+    # callbacks; those callbacks own their projection/transition separately.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Coll
+    # refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B2DC
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.msl"
+    )
+    if not path.exists():
+        pytest.skip(f"missing local dataset: {path}")
+
+    ds = read_dataset(str(path))
+    out = _step_one_replay_row(ds, 5135)
+    ref = ds.samples[5135]["ref_t1"]
+    p = 1
+
+    assert int(ds.samples[5135]["seed_t"]["stage_id"]) == 2
+    assert int(ds.samples[5135]["seed_t"]["action_id"][p]) == ACT_DOWN_BOUND_U
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_DOWN_BOUND_U
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 1
+    assert int(out["ground_id"][p]) == int(ref["ground_id"][p]) == 0
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
 def test_fod_jumpf_down_input_passes_through_platform_rollout_replay_real() -> None:
     # Disruptive packet F08d_damage_timer_scalar_residual, ElatedWearyTermite record 10573:
     # the visible first diff was a false platform Landing while JumpF held stick down through the
@@ -653,6 +1260,9 @@ def test_fod_soft_platform_airborne_regression_rows_stay_airborne(
 
     assert int(row["seed_t"]["stage_id"]) == 2
     assert int(row["seed_t"]["action_id"][player]) == action_id
+    if action_id == ACT_ATTACK_AIR_LW:
+        assert int(row["seed_t"]["floor_skip_segment_valid_u8"][player]) == 1
+        assert int(row["seed_t"]["floor_skip_segment_id_u16"][player]) == 0
     out = _step_one_replay_row(ds, record)
 
     assert int(out["action_id"][player]) == int(row["ref_t1"]["action_id"][player]) == action_id
@@ -717,7 +1327,7 @@ def test_fod_prefix_platform_velocity_stops_at_source_target_replay_real(tmp_pat
     # FoD's right platform. Prefix-derived velocity must stop at the GrIz source target instead of
     # extrapolating indefinitely and making the platform non-solid at the later landing frame.
     # refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
-    # data/stages/bin/griz.json::platform_motion.fountain_platform
+    # data/stages/bin/griz.bin::MSLSTG01 platform_motion.fountain_platform
     slp = (
         Path(__file__).resolve().parents[1]
         / "replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.slp"

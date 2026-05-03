@@ -20,7 +20,7 @@ from tools.slippi.known_data_artifacts import (
     STAGE_PLATFORM_TRANSFORM_KIND_HEIGHT,
     fountain_of_dreams_default_platform_heights,
     fountain_of_dreams_platform_motion_params,
-    read_mslstg01_v5,
+    read_mslstg01_v7,
     stage_metadata_path_for_stage_id,
     yoshi_shyguy_metadata,
 )
@@ -57,7 +57,7 @@ def _load_stage_segments_for_seed(*, stage_id: int, data_root: Path) -> list[dic
     stage_path = stage_metadata_path_for_stage_id(int(stage_id), data_root)
     if stage_path is None:
         return []
-    stage = read_mslstg01_v5(stage_path)
+    stage = read_mslstg01_v7(stage_path)
     out: list[dict] = []
     for seg in stage.segments:
         out.append(
@@ -126,13 +126,102 @@ def _fod_platform_height_transform_records(
     stage_path = stage_metadata_path_for_stage_id(2, Path(data_root))
     if stage_path is None:
         return {}
-    stage = read_mslstg01_v5(stage_path)
+    stage = read_mslstg01_v7(stage_path)
     out: dict[int, tuple[int, float]] = {}
     for rec in stage.platform_transforms:
         if int(rec.kind_id) != STAGE_PLATFORM_TRANSFORM_KIND_HEIGHT:
             continue
         if 0 <= int(rec.platform_id) < 2 and float(rec.height_coeff) != 0.0:
             out[int(rec.line_id)] = (int(rec.platform_id), float(rec.height_coeff))
+    return out
+
+
+def _derive_fod_floor_skip_segments(
+    *,
+    action_id_u16: np.ndarray,
+    on_ground_u8: np.ndarray,
+    pos_x_f32: np.ndarray,
+    pos_y_f32: np.ndarray,
+    speed_y_self_f32: np.ndarray,
+    speed_y_attack_f32: np.ndarray,
+    prev_main_y_i8: np.ndarray,
+    main_y_i8: np.ndarray,
+    platform_height_f32: np.ndarray,
+    platform_height_valid_u8: np.ndarray,
+    platform_air_land_stick_y_threshold: float,
+    data_root: Path | str = Path("data"),
+) -> np.ndarray:
+    """Derive prefix-causal hidden ``CollData.floor_skip`` for FoD platform pass-through.
+
+    Slippi does not expose ``coll_data.floor_skip``. For replay/eval seeds, reconstruct only the
+    current skipped FoD platform segment from frame-t state and current/prior input: a continuous
+    down-held airborne aerial/airdodge episode whose self/KB displacement crosses a live transformed
+    platform. This avoids a runtime gameplay shortcut while preserving the source mpColl skip state
+    needed by teacher-forced rows.
+
+    refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpUpdateFloorSkip}
+    refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_80096CC8
+    data/stages/bin/griz.bin::MSLSTG01 platform_transforms
+    """
+
+    n_samples, players = action_id_u16.shape
+    out = np.full((n_samples, players), np.uint16(0xFFFF), dtype=np.uint16)
+    if n_samples == 0:
+        return out
+
+    stage_path = stage_metadata_path_for_stage_id(2, Path(data_root))
+    if stage_path is None:
+        return out
+    stage = read_mslstg01_v7(stage_path)
+    transforms = [
+        rec
+        for rec in stage.platform_transforms
+        if int(rec.kind_id) == STAGE_PLATFORM_TRANSFORM_KIND_HEIGHT
+        and 0 <= int(rec.platform_id) < 2
+        and float(rec.height_coeff) != 0.0
+    ]
+    if not transforms:
+        return out
+
+    active_skip_actions = {0x0041, 0x0042, 0x0043, 0x0044, 0x0045, 0x00EC}
+    down_threshold_i8 = int(np.floor(float(platform_air_land_stick_y_threshold) * 127.0))
+    active_skip = np.full(players, np.uint16(0xFFFF), dtype=np.uint16)
+
+    for fi in range(n_samples):
+        for slot in range(players):
+            if int(on_ground_u8[fi, slot]) != 0:
+                active_skip[slot] = np.uint16(0xFFFF)
+                continue
+            if int(action_id_u16[fi, slot]) not in active_skip_actions:
+                active_skip[slot] = np.uint16(0xFFFF)
+                continue
+            if (
+                int(main_y_i8[fi, slot]) > down_threshold_i8
+                or int(prev_main_y_i8[fi, slot]) > down_threshold_i8
+            ):
+                active_skip[slot] = np.uint16(0xFFFF)
+                continue
+            if active_skip[slot] != np.uint16(0xFFFF):
+                out[fi, slot] = active_skip[slot]
+                continue
+            x = float(pos_x_f32[fi, slot])
+            y0 = float(pos_y_f32[fi, slot])
+            y1 = y0 + float(speed_y_self_f32[fi, slot]) + float(speed_y_attack_f32[fi, slot])
+            if y1 > y0:
+                continue
+            for rec in transforms:
+                pid = int(rec.platform_id)
+                if not int(platform_height_valid_u8[fi, pid]):
+                    continue
+                if x < min(float(rec.x0), float(rec.x1)) - 2.0:
+                    continue
+                if x > max(float(rec.x0), float(rec.x1)) + 2.0:
+                    continue
+                world_y = float(platform_height_f32[fi, pid]) * float(rec.height_coeff)
+                if y0 >= world_y - 2.0 and y1 <= world_y + 2.0:
+                    out[fi, slot] = np.uint16(int(rec.line_id))
+                    active_skip[slot] = out[fi, slot]
+                    break
     return out
 
 
@@ -790,7 +879,7 @@ def _stage_respawn_points_y(*, stage_id: int, data_dir: str = "data") -> np.ndar
     stage_path = stage_metadata_path_for_stage_id(int(stage_id), Path(data_dir))
     if stage_path is None:
         return None
-    stage = read_mslstg01_v5(stage_path)
+    stage = read_mslstg01_v7(stage_path)
     if len(stage.respawn_points) < 4:
         raise ValueError(f"{stage_path}: expected 4 respawn_points entries")
 
@@ -2567,6 +2656,8 @@ def _main_impl(args) -> Dataset:
     samples["seed_t"]["phantom_damage_source_port"][:] = np.uint8(0xFF)
     samples["seed_t"]["item_reflect_transfer_port"][:] = np.uint8(0xFF)
     samples["seed_t"]["item_hidden_body_hit_victim_port"][:] = np.uint8(0xFF)
+    samples["seed_t"]["floor_skip_segment_id_u16"][:] = np.uint16(0xFFFF)
+    samples["seed_t"]["floor_skip_segment_valid_u8"][:] = np.uint8(0)
 
     stage_id = int(game.start.get("stage", 0))
     is_teams = int(bool(game.start.get("is_teams", False)))
@@ -2580,6 +2671,7 @@ def _main_impl(args) -> Dataset:
     dash_flick_tilt_max_frames = int(common["dash_flick_tilt_max_frames"])
     tap_jump_threshold = float(common["tap_jump_threshold"])
     dash_run_jump_stick_y_threshold = float(common["dash_run_jump_stick_y_threshold"])
+    platform_air_land_stick_y_threshold = float(common["platform_air_land_stick_y_threshold"])
     tap_jump_release_threshold = float(common["tap_jump_release_threshold"])
     tap_jump_tilt_max_frames = int(common["tap_jump_tilt_max_frames"])
     grab_mash_stick_threshold = float(common["grab_mash_stick_threshold"])
@@ -4471,6 +4563,24 @@ def _main_impl(args) -> Dataset:
         samples["seed_t"]["stage_fod_platform_height_valid_u8"] = fod_valid
         samples["seed_t"]["stage_fod_platform_velocity_f32"] = fod_velocity
         samples["seed_t"]["stage_fod_platform_velocity_valid_u8"] = fod_velocity_valid
+        fod_floor_skip = _derive_fod_floor_skip_segments(
+            action_id_u16=samples["seed_t"]["action_id"][:, :num_players],
+            on_ground_u8=samples["seed_t"]["on_ground"][:, :num_players],
+            pos_x_f32=samples["seed_t"]["pos_x"][:, :num_players],
+            pos_y_f32=samples["seed_t"]["pos_y"][:, :num_players],
+            speed_y_self_f32=samples["seed_t"]["speed_y_self"][:, :num_players],
+            speed_y_attack_f32=samples["seed_t"]["speed_y_attack"][:, :num_players],
+            prev_main_y_i8=samples["prev_input_t"]["p"]["main_y"][:, :num_players],
+            main_y_i8=samples["input_t"]["p"]["main_y"][:, :num_players],
+            platform_height_f32=fod_height,
+            platform_height_valid_u8=fod_valid,
+            platform_air_land_stick_y_threshold=platform_air_land_stick_y_threshold,
+            data_root=data_root,
+        )
+        samples["seed_t"]["floor_skip_segment_id_u16"][:, :num_players] = fod_floor_skip
+        samples["seed_t"]["floor_skip_segment_valid_u8"][:, :num_players] = (
+            fod_floor_skip != np.uint16(0xFFFF)
+        ).astype(np.uint8)
 
     # Seed bridge: plAttack_80037B08 global next-id counter (unk_804D6480).
     #

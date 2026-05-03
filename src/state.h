@@ -15,10 +15,14 @@ typedef struct MslStateSoA {
   // Fountain of Dreams dynamic platform heights, one pair per environment.
   // Platform id domain matches Slippi/grIzumi: 0=right, 1=left.
   // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
-  float* stage_fod_platform_height;            // [batch * 2]
-  uint8_t* stage_fod_platform_valid;           // [batch * 2]
-  float* stage_fod_platform_velocity;          // [batch * 2]
-  uint8_t* stage_fod_platform_velocity_valid;  // [batch * 2]
+  float* stage_fod_platform_height;              // [batch * 2]
+  uint8_t* stage_fod_platform_valid;             // [batch * 2]
+  float* stage_fod_platform_velocity;            // [batch * 2]
+  uint8_t* stage_fod_platform_velocity_valid;    // [batch * 2]
+  uint8_t* stage_fod_platform_scheduler_phase;   // [batch * 2]
+  uint16_t* stage_fod_platform_scheduler_timer;  // [batch * 2]
+  float* stage_fod_platform_scheduler_target;    // [batch * 2]
+  uint8_t* stage_fod_platform_scheduler_valid;   // [batch * 2]
   // Yoshi's Story Shy Guy stage-object scheduler.
   // refs/melee/src/melee/gr/grstory.c::grStory_801E3418
   uint16_t* stage_yoshi_shyguy_timer;   // [batch]
@@ -823,6 +827,12 @@ typedef struct MslStateSoA {
   float* reflector_y;       // [batch * players]
   float* reflector_radius;  // [batch * players]
   uint16_t* ground_id;
+  // Hidden CollData.floor_skip carry. Pass/shield-drop writes the current platform floor.index via
+  // mpUpdateFloorSkip; mpColl floor checks reject that same platform until source clears/overwrites
+  // the skip. This is causal runtime state only, not a replay future lane.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::mpUpdateFloorSkip callers
+  // refs/melee/src/melee/mp/mpcoll.c::{mpUpdateFloorSkip,mpClearFloorSkip,mpColl_80044628_Floor}
+  uint16_t* floor_skip_segment_id;
   uint32_t* animation_index;
   // Live fighter dynamic-node pose owner (`ftData.x2C` -> `lb_8001044C`).
   //

@@ -38,6 +38,10 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->stage_fod_platform_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * b2);
   state->stage_fod_platform_velocity = (float*)alloc_aligned_64(sizeof(float) * b2);
   state->stage_fod_platform_velocity_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * b2);
+  state->stage_fod_platform_scheduler_phase = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * b2);
+  state->stage_fod_platform_scheduler_timer = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * b2);
+  state->stage_fod_platform_scheduler_target = (float*)alloc_aligned_64(sizeof(float) * b2);
+  state->stage_fod_platform_scheduler_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * b2);
   state->stage_yoshi_shyguy_timer = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * b);
   state->stage_yoshi_shyguy_pattern = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * b);
   state->stage_yoshi_shyguy_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * b);
@@ -332,6 +336,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->reflector_y = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->reflector_radius = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->ground_id = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
+  state->floor_skip_segment_id = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->animation_index = (uint32_t*)alloc_aligned_64(sizeof(uint32_t) * bp);
   state->dynamic_pose_state_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->dynamic_pose_apply_collision_matrix = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
@@ -439,6 +444,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   if (!state->frame_id || !state->frame_pre_random_seed || !state->stage_id ||
       !state->stage_fod_platform_height || !state->stage_fod_platform_valid ||
       !state->stage_fod_platform_velocity || !state->stage_fod_platform_velocity_valid ||
+      !state->stage_fod_platform_scheduler_phase || !state->stage_fod_platform_scheduler_timer ||
+      !state->stage_fod_platform_scheduler_target || !state->stage_fod_platform_scheduler_valid ||
       !state->stage_yoshi_shyguy_timer || !state->stage_yoshi_shyguy_pattern ||
       !state->stage_yoshi_shyguy_valid || !state->opening_input_lock_timer ||
       !state->stale_attack_instance_counter || !state->instance_id_counter ||
@@ -545,17 +552,18 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->hitbox_sfx_severity || !state->hitbox_sfx_kind || !state->hitbox_flags ||
       !state->shield_x || !state->shield_y || !state->shield_z || !state->shield_radius ||
       !state->reflector_x || !state->reflector_y || !state->reflector_radius || !state->ground_id ||
-      !state->animation_index || !state->dynamic_pose_state_valid ||
-      !state->dynamic_pose_apply_collision_matrix || !state->dynamic_pose_node_count ||
-      !state->dynamic_pose_char_id || !state->dynamic_pose_msid || !state->dynamic_pose_frame ||
-      !state->dynamic_pose_rot_x || !state->dynamic_pose_rot_y || !state->dynamic_pose_rot_z ||
-      !state->dynamic_pose_pos_x || !state->dynamic_pose_pos_y || !state->dynamic_pose_pos_z ||
-      !state->dynamic_pose_axis_x || !state->dynamic_pose_axis_y || !state->dynamic_pose_axis_z ||
-      !state->dynamic_pose_angle || !state->instance_hit_by || !state->instance_id ||
-      !state->instance_id_x2073 || !state->motion_entry_instance_id_override ||
-      !state->instance_identity_last_action_id || !state->attack_id || !state->attack_instance ||
-      !state->attack_identity_last_action_id || !state->last_attack_landed || !state->combo_count ||
-      !state->combo_victim_port || !state->combo_victim_instance_id || !state->combo_timer_x2098 ||
+      !state->floor_skip_segment_id || !state->animation_index ||
+      !state->dynamic_pose_state_valid || !state->dynamic_pose_apply_collision_matrix ||
+      !state->dynamic_pose_node_count || !state->dynamic_pose_char_id ||
+      !state->dynamic_pose_msid || !state->dynamic_pose_frame || !state->dynamic_pose_rot_x ||
+      !state->dynamic_pose_rot_y || !state->dynamic_pose_rot_z || !state->dynamic_pose_pos_x ||
+      !state->dynamic_pose_pos_y || !state->dynamic_pose_pos_z || !state->dynamic_pose_axis_x ||
+      !state->dynamic_pose_axis_y || !state->dynamic_pose_axis_z || !state->dynamic_pose_angle ||
+      !state->instance_hit_by || !state->instance_id || !state->instance_id_x2073 ||
+      !state->motion_entry_instance_id_override || !state->instance_identity_last_action_id ||
+      !state->attack_id || !state->attack_instance || !state->attack_identity_last_action_id ||
+      !state->last_attack_landed || !state->combo_count || !state->combo_victim_port ||
+      !state->combo_victim_instance_id || !state->combo_timer_x2098 ||
       !state->combo_push_timer_x2092 || !state->source_port0 || !state->last_hit_by ||
       !state->state_flags || !state->combat_hitlist_cd || !state->combat_hitlist_victim_iid ||
       !state->combat_hitlist_hb_valid || !state->combat_hitlist_hb_cd ||
@@ -590,6 +598,10 @@ int state_alloc(MslStateSoA* state, int batch_size) {
     state->hitlist_reseed_gen[i] = 1u;
   }
   memset(state->frame_id, 0, sizeof(int32_t) * b);
+  memset(state->stage_fod_platform_scheduler_phase, 0, sizeof(uint8_t) * b2);
+  memset(state->stage_fod_platform_scheduler_timer, 0, sizeof(uint16_t) * b2);
+  memset(state->stage_fod_platform_scheduler_target, 0, sizeof(float) * b2);
+  memset(state->stage_fod_platform_scheduler_valid, 0, sizeof(uint8_t) * b2);
   memset(state->item_spawn_id_counter, 0, sizeof(uint32_t) * b);
   memset(state->dynamic_pose_state_valid, 0, sizeof(uint8_t) * bp);
   memset(state->dynamic_pose_apply_collision_matrix, 0, sizeof(uint8_t) * bp);
@@ -640,6 +652,9 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   memset(state->phantom_damage_pending_x1898, 0, sizeof(float) * bp);
   memset(state->phantom_damage_timer_x189c, 0, sizeof(uint16_t) * bp);
   memset(state->phantom_damage_source_port, 0xFF, sizeof(uint8_t) * bp);
+  for (size_t i = 0; i < bp; i++) {
+    state->floor_skip_segment_id[i] = 0xFFFFu;
+  }
   for (size_t i = 0; i < bph; i++) {
     state->fighter_hitlist_init_gen[i] = 0u;
     hitlist_capsule_clear(&state->fighter_hitlist[i]);
@@ -665,6 +680,10 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->stage_fod_platform_valid);
   alloc_free(state->stage_fod_platform_velocity);
   alloc_free(state->stage_fod_platform_velocity_valid);
+  alloc_free(state->stage_fod_platform_scheduler_phase);
+  alloc_free(state->stage_fod_platform_scheduler_timer);
+  alloc_free(state->stage_fod_platform_scheduler_target);
+  alloc_free(state->stage_fod_platform_scheduler_valid);
   alloc_free(state->stage_yoshi_shyguy_timer);
   alloc_free(state->stage_yoshi_shyguy_pattern);
   alloc_free(state->stage_yoshi_shyguy_valid);
@@ -953,6 +972,7 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->reflector_y);
   alloc_free(state->reflector_radius);
   alloc_free(state->ground_id);
+  alloc_free(state->floor_skip_segment_id);
   alloc_free(state->animation_index);
   alloc_free(state->dynamic_pose_state_valid);
   alloc_free(state->dynamic_pose_apply_collision_matrix);

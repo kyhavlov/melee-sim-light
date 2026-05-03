@@ -203,19 +203,25 @@ static inline void snap_root_y_to_ground_line_on_damage_land(MslBatch* batch, si
     return;
   }
 
-  const MslStageFloorLine* line = &g->lines[(size_t)line_idx];
+  MslStageFloorLine world_line = {0};
+  if (!stage_collision_floor_line_world(batch, (int)bi, &g->lines[(size_t)line_idx], &world_line)) {
+    return;
+  }
+  const MslStageFloorLine* line = &world_line;
   const float x = batch->state.pos_x[idx];
   float y = line->y0;
   // Decomp/data ownership for grounded root Y on landing:
   // - Damage/DamageFly collision callbacks resolve floor contact before ftCo_80090184 /
   //   ftCo_Landing_Enter_Basic choose the grounded destination state for the same frame.
   // - mpLib_8004DD90_Floor projects onto the owning floor line and applies a +0.0001 bias.
-  // - The floor line itself comes from the ISO-derived stage collision graph loaded into
-  //   stage_collision.{c,h}.
+  // - The floor line itself comes from the ISO-derived stage collision graph, after current
+  //   stage-object/platform transforms are applied. This matters for FoD DamageFly/DownBound
+  //   contact on moving platforms: the collision result owns the transformed world floor, not the
+  //   static source-local MSLSTG01 line height.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_Coll,ftCo_DamageFly_Coll,ftCo_80090184}
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Enter_Basic
   // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
-  // data/stages/final_destination.json: collision.segments
+  // data/stages/bin/*.bin::MSLSTG01 stage segments/platform transforms
   if (fabsf(line->x1 - line->x0) > 0.0001f) {
     y = ((line->y1 - line->y0) * (x - line->x0) / (line->x1 - line->x0)) + line->y0;
   }

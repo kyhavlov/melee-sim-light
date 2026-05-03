@@ -125,6 +125,10 @@ SEED_DTYPE = np.dtype(
         ("ground_friction_mul", _arr("<f4", MAX_PLAYERS)),
         ("kb_smashcharge_active", _arr("u1", MAX_PLAYERS)),
         ("on_ground", _arr("u1", MAX_PLAYERS)),
+        # Hidden CollData.floor_skip segment id. 0xFFFF means inactive.
+        # refs/melee/src/melee/mp/mpcoll.c::{mpUpdateFloorSkip,mpClearFloorSkip}
+        ("floor_skip_segment_id_u16", _arr("<u2", MAX_PLAYERS)),
+        ("floor_skip_segment_valid_u8", _arr("u1", MAX_PLAYERS)),
         ("_pad1", "V1"),
         ("action_id", _arr("<u2", MAX_PLAYERS)),
         ("action_frame", _arr("<i2", MAX_PLAYERS)),

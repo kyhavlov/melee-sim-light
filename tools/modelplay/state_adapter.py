@@ -12,6 +12,15 @@ from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 MSL_STAGE_FINAL_DESTINATION = 32
 LIBMELEE_STAGE_FINAL_DESTINATION = 25
 
+STAGE_DEBUG_DTYPE = np.dtype(
+    [
+        ("fod_platform_height", ("<f4", (2,))),
+        ("fod_platform_height_valid", ("u1", (2,))),
+        ("_pad0", "V2"),
+    ],
+    align=False,
+)
+
 SLIPPI_VIEWER_SETTINGS_TEMPLATE = {
     "replayFormatVersion": "3.9.0.0",
     "startTimestamp": "2026-04-08T00:00:00Z",
@@ -213,6 +222,8 @@ class SimFrameState:
     hurtbox_state: np.ndarray
     items: np.ndarray
     frame_pre_random_seed: int
+    stage_fod_platform_height: np.ndarray | None = None
+    stage_fod_platform_height_valid: np.ndarray | None = None
     anim_frame_f32: np.ndarray | None = None
     frame_speed_mul_f32: np.ndarray | None = None
 
@@ -248,10 +259,17 @@ def frame_state_from_seed(seed: np.void) -> SimFrameState:
         hurtbox_state=np.array(seed["hurtbox_state"], copy=True),
         items=np.array(seed["items"], copy=True),
         frame_pre_random_seed=int(seed["frame_pre_random_seed"]),
+        stage_fod_platform_height=np.array(seed["stage_fod_platform_height_f32"], copy=True),
+        stage_fod_platform_height_valid=np.array(seed["stage_fod_platform_height_valid_u8"], copy=True),
     )
 
 
-def frame_state_from_compare(compare: np.void) -> SimFrameState:
+def frame_state_from_compare(compare: np.void, stage_debug: np.void | None = None) -> SimFrameState:
+    stage_fod_platform_height = None
+    stage_fod_platform_height_valid = None
+    if stage_debug is not None:
+        stage_fod_platform_height = np.array(stage_debug["fod_platform_height"], copy=True)
+        stage_fod_platform_height_valid = np.array(stage_debug["fod_platform_height_valid"], copy=True)
     return SimFrameState(
         frame_id=int(compare["frame_id"]),
         stage_id=int(compare["stage_id"]),
@@ -281,6 +299,8 @@ def frame_state_from_compare(compare: np.void) -> SimFrameState:
         hurtbox_state=np.array(compare["hurtbox_state"], copy=True),
         items=np.array(compare["items"], copy=True),
         frame_pre_random_seed=int(compare["frame_pre_random_seed"]),
+        stage_fod_platform_height=stage_fod_platform_height,
+        stage_fod_platform_height_valid=stage_fod_platform_height_valid,
     )
 
 
@@ -597,7 +617,19 @@ def viewer_frame_from_state(state: SimFrameState, controllers: Mapping[int, obje
         "items": items,
         "stage": {
             "frameNumber": int(state.frame_id),
-            "fodLeftPlatformHeight": 0.0,
-            "fodRightPlatformHeight": 0.0,
+            "fodLeftPlatformHeight": (
+                float(np.float32(state.stage_fod_platform_height[1]))
+                if state.stage_fod_platform_height is not None
+                and state.stage_fod_platform_height_valid is not None
+                and int(state.stage_fod_platform_height_valid[1])
+                else None
+            ),
+            "fodRightPlatformHeight": (
+                float(np.float32(state.stage_fod_platform_height[0]))
+                if state.stage_fod_platform_height is not None
+                and state.stage_fod_platform_height_valid is not None
+                and int(state.stage_fod_platform_height_valid[0])
+                else None
+            ),
         },
     }

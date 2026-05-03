@@ -20,6 +20,11 @@ KIND_ID = {
 PLATFORM_TRANSFORM_KIND_ID = {
     "height": 1,
     "static_y": 2,
+    "randall": 3,
+}
+
+PLATFORM_MOTION_KIND_ID = {
+    "fountain_platform": 1,
 }
 
 
@@ -39,11 +44,18 @@ def _write_stage_bin(out: Path, data: dict) -> None:
     cam: dict = dict(data.get("cam_bounds_world", {}))
     blast: dict = dict(data.get("blast_bounds_world", {}))
     platform_transforms = list(data.get("platform_transforms", []))
+    platform_motion = dict(data.get("platform_motion", {}))
+    platform_paths = list(data.get("platform_paths", []))
+    platform_motion_records: list[tuple[str, dict]] = [
+        (name, dict(params))
+        for name, params in sorted(platform_motion.items())
+        if name in PLATFORM_MOTION_KIND_ID and isinstance(params, dict)
+    ]
 
     buf = bytearray()
     buf += STAGE_MAGIC
     buf += struct.pack(
-        "<IHHHHHHffffffff",
+        "<IHHHHHHHHHHffffffff",
         STAGE_VERSION,
         len(segments),
         len(stage_points),
@@ -51,6 +63,10 @@ def _write_stage_bin(out: Path, data: dict) -> None:
         len(respawn_points),
         len(platform_transforms),
         20 if platform_transforms else 0,
+        len(platform_motion_records),
+        72 if platform_motion_records else 0,
+            len(platform_paths),
+            16 if platform_paths else 0,
         _f32(float(cam.get("left", 0.0)) * unit_scale),
         _f32(float(cam.get("right", 0.0)) * unit_scale),
         _f32(float(cam.get("top", 0.0)) * unit_scale),
@@ -106,6 +122,46 @@ def _write_stage_bin(out: Path, data: dict) -> None:
             _f32(float(rec["x1"])),
             _f32(float(rec.get("y_const", 0.0))),
             _f32(float(rec.get("height_coeff", 0.0))),
+        )
+    for name, params in platform_motion_records:
+        # Runtime-owned platform scheduler parameters are DAT/decomp data, not audit JSON. Pack the
+        # FoD grIzumi params directly into MSLSTG01 so gameplay code can consume the binary artifact
+        # during init without sidecar parsing.
+        # refs/melee/src/melee/gr/grizumi.c::{FountainParams,grIzumi_801CC358}
+        buf += struct.pack(
+            "<BBHfffffffffffffffff",
+            PLATFORM_MOTION_KIND_ID[name] & 0xFF,
+            int(params.get("platform_count", 2)) & 0xFF,
+            0,
+            _f32(float(params["home_height"])),
+            _f32(float(params["hidden_target_height"])),
+            _f32(float(params["max_height"])),
+            _f32(float(params["min_visible_height"])),
+            _f32(float(params["up_speed"])),
+            _f32(float(params["down_speed"])),
+            _f32(float(params["wait_min_frames"])),
+            _f32(float(params["wait_max_frames"])),
+            _f32(float(params["hidden_wait_min_frames"])),
+            _f32(float(params["hidden_wait_max_frames"])),
+            _f32(float(params["target_delta_min"])),
+            _f32(float(params["target_delta_max"])),
+            _f32(float(params["bias_below_home"])),
+            _f32(float(params["bias_above_home"])),
+            _f32(float(params["hidden_weight"])),
+            _f32(float(params["stay_weight"])),
+            _f32(float(params["move_weight"])),
+        )
+    for rec in platform_paths:
+        # Runtime moving-collision paths are generated from source stage-object JObj animation data.
+        # refs/melee/src/melee/gr/grstory.c::{grStory_801E3370,grStory_801E33E0}
+        # refs/melee/src/melee/gr/ground.c::Ground_801C2FE0
+        buf += struct.pack(
+            "<HHfff",
+            int(rec["line_id"]) & 0xFFFF,
+            int(rec["frame"]) & 0xFFFF,
+            _f32(float(rec["x0"])),
+            _f32(float(rec["y"])),
+            _f32(float(rec["x1"])),
         )
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_bytes(bytes(buf))

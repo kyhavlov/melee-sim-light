@@ -79,7 +79,7 @@ emcc "${SRC_FILES[@]}" \
   -sEXPORT_NAME=createMslModule \
   -sENVIRONMENT=web,worker \
   -sALLOW_MEMORY_GROWTH=1 \
-  -sEXPORTED_FUNCTIONS='["_malloc","_free","_msl_batch_create","_msl_batch_destroy","_msl_batch_init_match","_msl_batch_step_input","_msl_batch_write_compare","_msl_batch_debug_write_processed_input"]' \
+  -sEXPORTED_FUNCTIONS='["_malloc","_free","_msl_batch_create","_msl_batch_destroy","_msl_batch_init_match","_msl_batch_step_input","_msl_batch_write_compare","_msl_batch_debug_write_processed_input","_msl_batch_debug_write_stage_state"]' \
   -sEXPORTED_RUNTIME_METHODS='["HEAPU8"]' \
   --preload-file "$ROOT/data@/data" \
   -o "$OUT_DIR/msl_sim.js"

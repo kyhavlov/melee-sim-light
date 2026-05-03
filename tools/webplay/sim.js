@@ -5,6 +5,7 @@ import {
   COMPARE_SIZE,
   INPUT_SIZE,
   MATCH_CONFIG_SIZE,
+  STAGE_STATE_SIZE,
   STAGE_FINAL_DESTINATION,
   inputPlayerOffsets,
   matchConfigOffsets,
@@ -43,7 +44,14 @@ export class MslWasmSim {
     this.prevInputPtr = module._malloc(INPUT_SIZE);
     this.inputPtr = module._malloc(INPUT_SIZE);
     this.comparePtr = module._malloc(COMPARE_SIZE);
-    if (!this.matchPtr || !this.prevInputPtr || !this.inputPtr || !this.comparePtr) {
+    this.stageStatePtr = module._malloc(STAGE_STATE_SIZE);
+    if (
+      !this.matchPtr ||
+      !this.prevInputPtr ||
+      !this.inputPtr ||
+      !this.comparePtr ||
+      !this.stageStatePtr
+    ) {
       throw new Error("failed to allocate WASM IO buffers");
     }
     this.displayFrame = 0;
@@ -60,7 +68,13 @@ export class MslWasmSim {
       this.module._msl_batch_destroy(this.handle);
       this.handle = 0;
     }
-    for (const ptr of [this.matchPtr, this.prevInputPtr, this.inputPtr, this.comparePtr]) {
+    for (const ptr of [
+      this.matchPtr,
+      this.prevInputPtr,
+      this.inputPtr,
+      this.comparePtr,
+      this.stageStatePtr,
+    ]) {
       if (ptr) this.module._free(ptr);
     }
   }
@@ -93,6 +107,7 @@ export class MslWasmSim {
       throw new Error(`msl_batch_init_match failed: ${err}`);
     }
     this.#writeCompare();
+    this.#writeStageState();
     return this.compareView();
   }
 
@@ -124,6 +139,7 @@ export class MslWasmSim {
     }
     const writeCompareStartMs = performance.now();
     this.#writeCompare();
+    this.#writeStageState();
     const writeCompareMs = performance.now() - writeCompareStartMs;
     this.displayFrame += 1;
     this.lastTimings.inputMs = inputMs;
@@ -137,10 +153,25 @@ export class MslWasmSim {
     return new DataView(this.module.HEAPU8.buffer, this.comparePtr, COMPARE_SIZE);
   }
 
+  stageStateView() {
+    return new DataView(this.module.HEAPU8.buffer, this.stageStatePtr, STAGE_STATE_SIZE);
+  }
+
   #writeCompare() {
     const err = this.module._msl_batch_write_compare(this.handle, this.comparePtr, COMPARE_SIZE);
     if (err !== 0) {
       throw new Error(`msl_batch_write_compare failed: ${err}`);
+    }
+  }
+
+  #writeStageState() {
+    const err = this.module._msl_batch_debug_write_stage_state(
+      this.handle,
+      this.stageStatePtr,
+      STAGE_STATE_SIZE
+    );
+    if (err !== 0) {
+      throw new Error(`msl_batch_debug_write_stage_state failed: ${err}`);
     }
   }
 

@@ -956,6 +956,16 @@ static int msl_batch_init_match_impl(MslBatch* batch, const uint8_t* config_byte
       continue;
     }
     batch->state.opening_input_lock_timer[bi] = match_flow_sim_init_opening_input_lock_timer();
+    if (batch->state.stage_id[bi] == 2u) {
+      // New-match/webplay runtime has no replay current-height seed, so it owns grIzumi scheduling
+      // from match start. Teacher-forced reseed rows intentionally leave this disabled unless
+      // causal FoD height/velocity seed lanes are present.
+      // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+      for (int platform_id = 0; platform_id < 2; platform_id++) {
+        const size_t pidx = (size_t)bi * 2u + (size_t)platform_id;
+        batch->state.stage_fod_platform_scheduler_valid[pidx] = 1u;
+      }
+    }
   }
 
   if (mask_bytes == NULL) {
@@ -1041,6 +1051,10 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.stage_fod_platform_velocity[pidx] = isfinite(v) ? v : 0.0f;
       batch->state.stage_fod_platform_velocity_valid[pidx] =
           (seed->stage_fod_platform_velocity_valid_u8[pi] && isfinite(v)) ? 1u : 0u;
+      batch->state.stage_fod_platform_scheduler_phase[pidx] = 0u;
+      batch->state.stage_fod_platform_scheduler_timer[pidx] = 0u;
+      batch->state.stage_fod_platform_scheduler_target[pidx] = 0.0f;
+      batch->state.stage_fod_platform_scheduler_valid[pidx] = 0u;
     }
     batch->state.stage_yoshi_shyguy_timer[bi] = seed->stage_yoshi_shyguy_timer_u16;
     batch->state.stage_yoshi_shyguy_pattern[bi] = seed->stage_yoshi_shyguy_pattern_u8 % 6u;
@@ -1057,6 +1071,12 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
 
     for (int p = 0; p < MSL_MAX_PLAYERS; p++) {
       const size_t idx = msl_idx_player(bi, p);
+      const uint16_t seed_floor_skip = seed->floor_skip_segment_id_u16[p];
+      batch->state.floor_skip_segment_id[idx] =
+          (seed->floor_skip_segment_valid_u8[p] && seed_floor_skip != 0xFFFFu &&
+           stage_collision_floor_line_is_platform(seed->stage_id, seed_floor_skip))
+              ? seed_floor_skip
+              : 0xFFFFu;
       batch->state.team_id[idx] = seed->team_id[p];
       batch->state.char_id[idx] = seed->char_id[p];
       batch->state.handicap[idx] = (seed->handicap[p] != 0u) ? seed->handicap[p] : 9u;
@@ -2728,6 +2748,30 @@ int msl_batch_debug_write_processed_input(const MslBatch* batch, uint8_t* out_by
       out->p[p].c_y = batch->state.input_c_y[idx];
       out->p[p].l = batch->state.input_l[idx];
       out->p[p].r = batch->state.input_r[idx];
+    }
+  }
+
+  return 0;
+}
+
+int msl_batch_debug_write_stage_state(const MslBatch* batch, uint8_t* out_bytes,
+                                      size_t out_stride_bytes) {
+  if (batch == NULL || out_bytes == NULL) {
+    return EINVAL;
+  }
+  if (out_stride_bytes < sizeof(MslDebugStageState)) {
+    return EINVAL;
+  }
+
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    MslDebugStageState* out = (MslDebugStageState*)(out_bytes + (size_t)bi * out_stride_bytes);
+    memset(out, 0, sizeof(*out));
+
+    for (int platform_id = 0; platform_id < 2; platform_id++) {
+      const size_t idx = (size_t)bi * 2u + (size_t)platform_id;
+      out->fod_platform_height[platform_id] = batch->state.stage_fod_platform_height[idx];
+      out->fod_platform_height_valid[platform_id] =
+          batch->state.stage_fod_platform_valid[idx] ? 1u : 0u;
     }
   }
 

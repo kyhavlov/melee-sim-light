@@ -763,32 +763,44 @@ Characters (Fox/Falco):
       follow `Ground_801C2D24` and fall back to id `4`
     - platform transform records: source line id, transform kind, platform id, source-local X span,
       source-local static Y, and source-backed height coefficient for live moving platform lines
-  - Stale/non-v5 `MSLSTG01` tables must be rejected. Version 3 added the raw `MapLine` graph links
+  - Stale/non-v7 `MSLSTG01` tables must be rejected. Version 3 added the raw `MapLine` graph links
     used by source-shaped `mpLineGetPrev/Next` traversal. Version 4 added generated fighter-solid
     line policy. Version 5 adds source/data-backed platform transform records for live platform
-    world endpoints. Regenerate supported stage artifacts with
+    world endpoints. Version 6 adds binary platform-motion records consumed by the free-running
+    FoD scheduler. Regenerate supported stage artifacts with
     `uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba,griz,grps,grst,grop --chars fox,falco`.
   - Supported runtime stage ids: `2` Fountain of Dreams, `3` Pokemon Stadium base, `8` Yoshi's
     Story, `28` Dream Land N64, `31` Battlefield, `32` Final Destination. Static pass-through
     platform flags are consumed by runtime fighter collision through source-shaped Pass/floor-skip
     gating. FoD moving platform world Y is driven by Slippi's current FoD platform height event
-    stream and MSLSTG01 platform transform records derived from `grIzumi`/stage geometry data.
-    The generated stage audit JSON also carries `platform_motion.fountain_platform` constants from
-    `GrIz.dat::yakumono_param` (`home_height`, hidden target, min/max, and source speed fields)
-    for causal prefix-state target clamping.
+    stream when seeded and by the `grIzumi_801CC358` free-running scheduler for new-match runtime.
+    Both paths use MSLSTG01 platform transform records derived from `grIzumi`/stage geometry data.
+    The MSLSTG01 v7 binary platform-motion payload carries
+    `platform_motion.fountain_platform` constants from `GrIz.dat::yakumono_param`
+    (`home_height`, hidden target, min/max, source speed fields, RNG weights, and
+    target-delta fields) for causal target selection and target clamping; the generated
+    `griz.json` sidecar is audit/provenance only.
+    Yoshi's Story adds current-domain stage-object terrain metadata: raw line `0` is
+    debug-visible/non-fighter-solid, and generated line `1000` is Randall's pass-through floor
+    transform record.
     Frozen Pokemon Stadium fighter collision uses the generated `fighter_solid` mask for the
     base/frozen legal-stage policy across floor/wall/ceiling collision while keeping
     transformation geometry inspectable through debug and data APIs.
   - FoD seed lanes:
     - `stage_fod_platform_height_f32[2]`, `stage_fod_platform_height_valid_u8[2]`
     - `stage_fod_platform_velocity_f32[2]`, `stage_fod_platform_velocity_valid_u8[2]`
+    - `floor_skip_segment_id_u16[4]`, `floor_skip_segment_valid_u8[4]` for hidden
+      `CollData.floor_skip` carry when a replay-prefix platform pass-through episode is already
+      active.
     - Platform ids match Slippi/grIzumi (`0=right`, `1=left`). Missing events use source-backed
       default current heights from `MSLSTG01` platform transform records; present events carry
       forward by replay prefix only. Consecutive prefix events or grounded platform contact derive
       the current per-frame height delta so rollout advances transformed world floors causally.
-      These lanes close replay-seeded/eval FoD moving-platform world-floor geometry.
-      Free-running/new-match `grIzumi_801CC358` phase/timer/RNG target scheduling is not yet
-      simulated.
+      Missing lanes in new-match/free-running runtime use the generated `grIzumi_801CC358`
+      phase/timer/RNG scheduler instead of fixed platform heights.
+      The floor-skip lanes are current hidden mpColl state, not t+1 replay output; seed generation
+      derives them from frame-t airborne state, current/prior down input, and transformed platform
+      geometry.
   - Runtime keeps two floor views: the full debug/data graph, and a non-platform-only graph for
     hard-floor checks. Fighter grounding consumes static platform lines through the full floor graph
     when the source callback admits them, with `ftCo_Pass`/`mpUpdateFloorSkip`-shaped pass-through

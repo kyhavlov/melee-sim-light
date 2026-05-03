@@ -8,6 +8,7 @@
 
 #include "alloc.h"
 #include "action_ids.h"
+#include "combat.h"
 #include "mpcoll_env.h"
 #include "mpcoll_ground.h"
 #include "mpcoll_wall_ceil.h"
@@ -28,6 +29,35 @@ typedef struct {
   float y_const;
   float height_coeff;
 } MslStagePlatformTransform;
+
+typedef struct {
+  uint16_t line_id;
+  uint16_t frame;
+  float x0;
+  float y;
+  float x1;
+} MslStagePlatformPathFrame;
+
+typedef struct {
+  uint8_t loaded;
+  float home_height;
+  float hidden_target_height;
+  float max_height;
+  float min_visible_height;
+  float up_speed;
+  float down_speed;
+  float wait_min_frames;
+  float wait_max_frames;
+  float hidden_wait_min_frames;
+  float hidden_wait_max_frames;
+  float target_delta_min;
+  float target_delta_max;
+  float bias_below_home;
+  float bias_above_home;
+  float hidden_weight;
+  float stay_weight;
+  float move_weight;
+} MslFodPlatformMotion;
 
 static inline uint8_t stage_line_x_contains_closed(const MslStageFloorLine* line, float x) {
   return (uint8_t)(x >= line->x0 && x <= line->x1);
@@ -66,6 +96,9 @@ typedef struct {
   size_t right_wall_line_count;
   MslStagePlatformTransform* platform_transforms;
   size_t platform_transform_count;
+  MslStagePlatformPathFrame* platform_path_frames;
+  size_t platform_path_frame_count;
+  MslFodPlatformMotion fod_motion;
   int loaded;
   uint8_t match_flow_loaded;
   MslStageFloorGraph floor_graph;
@@ -922,8 +955,8 @@ static int fd_install_stage_segments(uint32_t stage_id, const FdSegTmp* seg_tmp,
 }
 
 enum {
-  MSLSTG01_VERSION = 5,
-  MSLSTG01_HEADER_BYTES = 56,
+  MSLSTG01_VERSION = 7,
+  MSLSTG01_HEADER_BYTES = 64,
   MSLSTG01_SEGMENT_BYTES = 32,
   MSLSTG01_FLAG_PLATFORM = 1,
   MSLSTG01_FLAG_LEDGE = 2,
@@ -935,6 +968,8 @@ enum {
   MSLSTG01_KIND_DYNAMIC = 4,
   MSLSTG01_PLATFORM_TRANSFORM_HEIGHT = 1,
   MSLSTG01_PLATFORM_TRANSFORM_STATIC_Y = 2,
+  MSLSTG01_PLATFORM_TRANSFORM_RANDALL = 3,
+  MSLSTG01_PLATFORM_MOTION_FOD = 1,
 };
 
 static uint16_t stage_read_u16_le(const uint8_t* p) {
@@ -989,16 +1024,16 @@ static void stage_install_match_flow_from_mslstg01(uint32_t stage_id, const uint
   }
 
   MslStageBoundsWorld cam = {
-      .left = stage_read_f32_le(buf + 24),
-      .right = stage_read_f32_le(buf + 28),
-      .top = stage_read_f32_le(buf + 32),
-      .bottom = stage_read_f32_le(buf + 36),
+      .left = stage_read_f32_le(buf + 32),
+      .right = stage_read_f32_le(buf + 36),
+      .top = stage_read_f32_le(buf + 40),
+      .bottom = stage_read_f32_le(buf + 44),
   };
   MslStageBoundsWorld blast = {
-      .left = stage_read_f32_le(buf + 40),
-      .right = stage_read_f32_le(buf + 44),
-      .top = stage_read_f32_le(buf + 48),
-      .bottom = stage_read_f32_le(buf + 52),
+      .left = stage_read_f32_le(buf + 48),
+      .right = stage_read_f32_le(buf + 52),
+      .top = stage_read_f32_le(buf + 56),
+      .bottom = stage_read_f32_le(buf + 60),
   };
   if (!(cam.left < cam.right && cam.bottom < cam.top && blast.left < blast.right &&
         blast.bottom < blast.top)) {
@@ -1069,6 +1104,106 @@ static int stage_install_platform_transforms_from_mslstg01(
   return 0;
 }
 
+static int stage_install_platform_paths_from_mslstg01(
+    uint32_t stage_id, const uint8_t* buf, uint16_t segment_count, uint16_t stage_point_count,
+    uint16_t spawn_count, uint16_t respawn_count, uint16_t transform_count,
+    uint16_t transform_record_bytes, uint16_t motion_count, uint16_t motion_record_bytes,
+    uint16_t path_count, uint16_t path_record_bytes) {
+  MslStageSlot* slot = stage_slot_mut(stage_id);
+  if (slot == NULL) {
+    return -1;
+  }
+  if (path_count == 0u) {
+    alloc_free(slot->platform_path_frames);
+    slot->platform_path_frames = NULL;
+    slot->platform_path_frame_count = 0u;
+    return 0;
+  }
+  if (path_record_bytes != 16u) {
+    return -1;
+  }
+  MslStagePlatformPathFrame* recs = (MslStagePlatformPathFrame*)alloc_calloc(
+      (size_t)path_count, sizeof(MslStagePlatformPathFrame));
+  if (recs == NULL) {
+    return -1;
+  }
+  const uint8_t* p =
+      buf + MSLSTG01_HEADER_BYTES + (size_t)segment_count * (size_t)MSLSTG01_SEGMENT_BYTES +
+      (size_t)stage_point_count * 12u + (size_t)spawn_count * 8u + (size_t)respawn_count * 8u +
+      (size_t)transform_count * (size_t)transform_record_bytes +
+      (size_t)motion_count * (size_t)motion_record_bytes;
+  for (uint16_t i = 0; i < path_count; i++, p += 16u) {
+    recs[i] = (MslStagePlatformPathFrame){
+        .line_id = stage_read_u16_le(p + 0),
+        .frame = stage_read_u16_le(p + 2),
+        .x0 = stage_read_f32_le(p + 4),
+        .y = stage_read_f32_le(p + 8),
+        .x1 = stage_read_f32_le(p + 12),
+    };
+  }
+  alloc_free(slot->platform_path_frames);
+  slot->platform_path_frames = recs;
+  slot->platform_path_frame_count = path_count;
+  return 0;
+}
+
+static int stage_install_platform_motion_from_mslstg01(
+    uint32_t stage_id, const uint8_t* buf, uint16_t segment_count, uint16_t stage_point_count,
+    uint16_t spawn_count, uint16_t respawn_count, uint16_t transform_count,
+    uint16_t transform_record_bytes, uint16_t motion_count, uint16_t motion_record_bytes) {
+  MslStageSlot* slot = stage_slot_mut(stage_id);
+  if (slot == NULL) {
+    return -1;
+  }
+  slot->fod_motion = (MslFodPlatformMotion){0};
+  if (motion_count == 0u) {
+    return 0;
+  }
+  if (motion_record_bytes != 72u) {
+    return -1;
+  }
+  const uint8_t* p =
+      buf + MSLSTG01_HEADER_BYTES + (size_t)segment_count * (size_t)MSLSTG01_SEGMENT_BYTES +
+      (size_t)stage_point_count * 12u + (size_t)spawn_count * 8u + (size_t)respawn_count * 8u +
+      (size_t)transform_count * (size_t)transform_record_bytes;
+  for (uint16_t i = 0; i < motion_count; i++, p += 72u) {
+    const uint8_t kind = p[0];
+    const uint8_t platform_count = p[1];
+    if (kind != (uint8_t)MSLSTG01_PLATFORM_MOTION_FOD ||
+        stage_id != (uint32_t)MSL_STAGE_FOUNTAIN_OF_DREAMS || platform_count < 2u) {
+      continue;
+    }
+    MslFodPlatformMotion m = {0};
+    // Source/audit data is packed into MSLSTG01 by tools/extraction/extract_stage_metadata.py.
+    // griz.json remains only an audit sidecar; runtime consumes this binary record at init.
+    // refs/melee/src/melee/gr/grizumi.c::{FountainParams,grIzumi_801CC358}
+    m.home_height = stage_read_f32_le(p + 4);
+    m.hidden_target_height = stage_read_f32_le(p + 8);
+    m.max_height = stage_read_f32_le(p + 12);
+    m.min_visible_height = stage_read_f32_le(p + 16);
+    m.up_speed = stage_read_f32_le(p + 20);
+    m.down_speed = stage_read_f32_le(p + 24);
+    m.wait_min_frames = stage_read_f32_le(p + 28);
+    m.wait_max_frames = stage_read_f32_le(p + 32);
+    m.hidden_wait_min_frames = stage_read_f32_le(p + 36);
+    m.hidden_wait_max_frames = stage_read_f32_le(p + 40);
+    m.target_delta_min = stage_read_f32_le(p + 44);
+    m.target_delta_max = stage_read_f32_le(p + 48);
+    m.bias_below_home = stage_read_f32_le(p + 52);
+    m.bias_above_home = stage_read_f32_le(p + 56);
+    m.hidden_weight = stage_read_f32_le(p + 60);
+    m.stay_weight = stage_read_f32_le(p + 64);
+    m.move_weight = stage_read_f32_le(p + 68);
+    if (!(m.up_speed > 0.0f) || !(m.down_speed > 0.0f) ||
+        !(m.wait_max_frames >= m.wait_min_frames)) {
+      return -1;
+    }
+    m.loaded = 1u;
+    slot->fod_motion = m;
+  }
+  return 0;
+}
+
 static int fd_load_floor_lines_from_mslstg01(uint32_t stage_id, const uint8_t* buf, size_t sz) {
   if (buf == NULL || sz < (size_t)MSLSTG01_HEADER_BYTES || memcmp(buf, "MSLSTG01", 8) != 0) {
     return -1;
@@ -1083,10 +1218,16 @@ static int fd_load_floor_lines_from_mslstg01(uint32_t stage_id, const uint8_t* b
   const uint16_t respawn_count = stage_read_u16_le(buf + 18);
   const uint16_t platform_transform_count = stage_read_u16_le(buf + 20);
   const uint16_t platform_transform_record_bytes = stage_read_u16_le(buf + 22);
+  const uint16_t platform_motion_count = stage_read_u16_le(buf + 24);
+  const uint16_t platform_motion_record_bytes = stage_read_u16_le(buf + 26);
+  const uint16_t platform_path_count = stage_read_u16_le(buf + 28);
+  const uint16_t platform_path_record_bytes = stage_read_u16_le(buf + 30);
   const size_t expected =
       (size_t)MSLSTG01_HEADER_BYTES + (size_t)segment_count * (size_t)MSLSTG01_SEGMENT_BYTES +
       (size_t)stage_point_count * 12u + (size_t)spawn_count * 8u + (size_t)respawn_count * 8u +
-      (size_t)platform_transform_count * (size_t)platform_transform_record_bytes;
+      (size_t)platform_transform_count * (size_t)platform_transform_record_bytes +
+      (size_t)platform_motion_count * (size_t)platform_motion_record_bytes +
+      (size_t)platform_path_count * (size_t)platform_path_record_bytes;
   if (sz != expected || segment_count == 0u || segment_count > 4096u) {
     return -1;
   }
@@ -1121,6 +1262,18 @@ static int fd_load_floor_lines_from_mslstg01(uint32_t stage_id, const uint8_t* b
   int err = stage_install_platform_transforms_from_mslstg01(
       stage_id, buf, segment_count, stage_point_count, spawn_count, respawn_count,
       platform_transform_count, platform_transform_record_bytes);
+  if (err == 0) {
+    err = stage_install_platform_motion_from_mslstg01(
+        stage_id, buf, segment_count, stage_point_count, spawn_count, respawn_count,
+        platform_transform_count, platform_transform_record_bytes, platform_motion_count,
+        platform_motion_record_bytes);
+  }
+  if (err == 0) {
+    err = stage_install_platform_paths_from_mslstg01(
+        stage_id, buf, segment_count, stage_point_count, spawn_count, respawn_count,
+        platform_transform_count, platform_transform_record_bytes, platform_motion_count,
+        platform_motion_record_bytes, platform_path_count, platform_path_record_bytes);
+  }
   if (err == 0) {
     err = fd_install_stage_segments(stage_id, seg_tmp, seg_n);
   }
@@ -1458,6 +1611,70 @@ uint8_t stage_collision_floor_line_has_platform_transform(uint32_t stage_id, uin
   return 0u;
 }
 
+uint8_t stage_collision_floor_line_platform_transform_id(uint32_t stage_id, uint16_t segment_i,
+                                                         uint8_t* platform_id_out) {
+  const MslStageSlot* slot = stage_slot(stage_id);
+  if (slot == NULL || slot->platform_transforms == NULL || slot->platform_transform_count == 0u ||
+      platform_id_out == NULL) {
+    return 0u;
+  }
+  // data/stages/bin/*.bin::MSLSTG01 platform transform records
+  // refs/melee/src/melee/gr/grizumi.c::{grIzumi_801CC358,grIzumi_801CCBDC}
+  for (size_t i = 0; i < slot->platform_transform_count; i++) {
+    const MslStagePlatformTransform* rec = &slot->platform_transforms[i];
+    if (rec->line_id == segment_i) {
+      *platform_id_out = rec->platform_id;
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
+static uint8_t stage_collision_fod_platform_default_height(const MslStageSlot* slot,
+                                                           uint8_t platform_id, float* out) {
+  if (slot == NULL || out == NULL || slot->platform_transforms == NULL) {
+    return 0u;
+  }
+  for (size_t i = 0; i < slot->platform_transform_count; i++) {
+    const MslStagePlatformTransform* rec = &slot->platform_transforms[i];
+    if (rec->kind_id == (uint8_t)MSLSTG01_PLATFORM_TRANSFORM_HEIGHT &&
+        rec->platform_id == platform_id) {
+      *out = rec->y_const;
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
+static uint8_t stage_collision_platform_path_world_line(const MslStageSlot* slot, uint16_t line_id,
+                                                        int32_t frame_id, MslStageFloorLine* out) {
+  if (slot == NULL || out == NULL || slot->platform_path_frames == NULL ||
+      slot->platform_path_frame_count == 0u) {
+    return 0u;
+  }
+  int frame = (int)((frame_id - 123) % 1200);
+  if (frame < 0) {
+    frame += 1200;
+  }
+  for (size_t i = 0; i < slot->platform_path_frame_count; i++) {
+    const MslStagePlatformPathFrame* rec = &slot->platform_path_frames[i];
+    if (rec->line_id == line_id && rec->frame == (uint16_t)frame) {
+      // Randall source owner is the GrSt stage-object JObj animation refreshed into collision by
+      // Ground_801C2FE0. Runtime consumes the generated MSLSTG01 path samples instead of keeping
+      // stage-object motion constants in gameplay code.
+      // refs/melee/src/melee/gr/grstory.c::{grStory_801E3370,grStory_801E33E0}
+      // refs/melee/src/melee/gr/ground.c::Ground_801C2FE0
+      // data/stages/bin/grst.bin::MSLSTG01 platform_path records
+      out->x0 = rec->x0;
+      out->x1 = rec->x1;
+      out->y0 = rec->y;
+      out->y1 = rec->y;
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
 uint8_t stage_collision_floor_line_world(const MslBatch* batch, int bi,
                                          const MslStageFloorLine* line, MslStageFloorLine* out) {
   if (line == NULL || out == NULL) {
@@ -1487,6 +1704,11 @@ uint8_t stage_collision_floor_line_world(const MslBatch* batch, int bi,
     if (rec->kind_id == (uint8_t)MSLSTG01_PLATFORM_TRANSFORM_STATIC_Y) {
       out->y0 = rec->y_const;
       out->y1 = rec->y_const;
+    } else if (rec->kind_id == (uint8_t)MSLSTG01_PLATFORM_TRANSFORM_RANDALL) {
+      if (!stage_collision_platform_path_world_line(slot, rec->line_id, batch->state.frame_id[bi],
+                                                    out)) {
+        return 0u;
+      }
     } else if (rec->kind_id == (uint8_t)MSLSTG01_PLATFORM_TRANSFORM_HEIGHT &&
                rec->platform_id < 2u) {
       const size_t idx = (size_t)bi * 2u + (size_t)rec->platform_id;
@@ -1499,6 +1721,49 @@ uint8_t stage_collision_floor_line_world(const MslBatch* batch, int bi,
     return 1u;
   }
   return 1u;
+}
+
+uint8_t stage_collision_floor_line_motion_delta(const MslBatch* batch, int bi,
+                                                const MslStageFloorLine* line, float* dx_out,
+                                                float* dy_out) {
+  if (dx_out != NULL) {
+    *dx_out = 0.0f;
+  }
+  if (dy_out != NULL) {
+    *dy_out = 0.0f;
+  }
+  if (batch == NULL || line == NULL || bi < 0 || bi >= batch->batch_size) {
+    return 0u;
+  }
+  const MslStageSlot* slot = stage_slot(batch->state.stage_id[bi]);
+  if (slot == NULL || slot->platform_transforms == NULL || slot->platform_transform_count == 0u) {
+    return 0u;
+  }
+  for (size_t i = 0; i < slot->platform_transform_count; i++) {
+    const MslStagePlatformTransform* rec = &slot->platform_transforms[i];
+    if (rec->line_id != line->segment_i) {
+      continue;
+    }
+    if (rec->kind_id == (uint8_t)MSLSTG01_PLATFORM_TRANSFORM_RANDALL) {
+      MslStageFloorLine prev = *line;
+      MslStageFloorLine cur = *line;
+      if (!stage_collision_platform_path_world_line(slot, rec->line_id,
+                                                    batch->state.frame_id[bi] - 1, &prev) ||
+          !stage_collision_platform_path_world_line(slot, rec->line_id, batch->state.frame_id[bi],
+                                                    &cur)) {
+        return 0u;
+      }
+      if (dx_out != NULL) {
+        *dx_out = cur.x0 - prev.x0;
+      }
+      if (dy_out != NULL) {
+        *dy_out = cur.y0 - prev.y0;
+      }
+      return 1u;
+    }
+    return 0u;
+  }
+  return 0u;
 }
 
 const MslStageCeilingGraph* stage_collision_get_ceiling_graph(uint32_t stage_id) {
@@ -1735,20 +2000,148 @@ static void stage_collision_update_fod_platform_motion(MslBatch* batch) {
 
   // grIzumi advances platform ground-object height and refreshes mpLib line coordinates before
   // fighter collision. Replay-seeded eval supplies the current height and, when recoverable from
-  // prefix events/contact, the current per-frame height delta.
+  // prefix events/contact, the current per-frame height delta. Live/new-match runtime without a
+  // replay height seed owns the same phase/timer/target state internally from extracted GrIz.dat
+  // `yakumono_param`.
   // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
   // refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
   for (int bi = 0; bi < batch->batch_size; bi++) {
     if (batch->state.stage_id[bi] != (uint32_t)MSL_STAGE_FOUNTAIN_OF_DREAMS) {
       continue;
     }
+    const MslStageSlot* slot = stage_slot((uint32_t)MSL_STAGE_FOUNTAIN_OF_DREAMS);
+    const MslFodPlatformMotion* motion =
+        (slot != NULL && slot->fod_motion.loaded) ? &slot->fod_motion : NULL;
     for (size_t platform_id = 0; platform_id < 2u; platform_id++) {
       const size_t idx = (size_t)bi * 2u + platform_id;
-      if (!batch->state.stage_fod_platform_valid[idx] ||
-          !batch->state.stage_fod_platform_velocity_valid[idx]) {
+      if (batch->state.stage_fod_platform_valid[idx] &&
+          batch->state.stage_fod_platform_velocity_valid[idx] &&
+          !batch->state.stage_fod_platform_scheduler_valid[idx]) {
+        batch->state.stage_fod_platform_height[idx] +=
+            batch->state.stage_fod_platform_velocity[idx];
         continue;
       }
-      batch->state.stage_fod_platform_height[idx] += batch->state.stage_fod_platform_velocity[idx];
+      if (motion == NULL || !batch->state.stage_fod_platform_scheduler_valid[idx]) {
+        continue;
+      }
+      if (!batch->state.stage_fod_platform_valid[idx]) {
+        float h = 0.0f;
+        if (!stage_collision_fod_platform_default_height(slot, (uint8_t)platform_id, &h)) {
+          continue;
+        }
+        batch->state.stage_fod_platform_height[idx] = h;
+        batch->state.stage_fod_platform_valid[idx] = 1u;
+        batch->state.stage_fod_platform_scheduler_target[idx] = h;
+        batch->state.stage_fod_platform_scheduler_phase[idx] = 0u;
+      }
+
+      float h = batch->state.stage_fod_platform_height[idx];
+      float v = 0.0f;
+      uint8_t phase = batch->state.stage_fod_platform_scheduler_phase[idx];
+      uint16_t timer = batch->state.stage_fod_platform_scheduler_timer[idx];
+      float target = batch->state.stage_fod_platform_scheduler_target[idx];
+      if (phase == 0u) {
+        const int min_wait = (int)(motion->wait_min_frames + 0.5f);
+        const int max_wait = (int)(motion->wait_max_frames + 0.5f);
+        const int span = (max_wait >= min_wait) ? (max_wait - min_wait + 1) : 1;
+        timer = (uint16_t)(min_wait + combat_rng_consume_randi_site(
+                                          batch, bi, MSL_RNG_SITE_FOD_PLATFORM_WAIT, span));
+        target = h;
+        phase = 1u;
+      } else if (phase == 1u) {
+        if (timer != 0u) {
+          timer--;
+        } else {
+          const float total = motion->hidden_weight + motion->stay_weight + motion->move_weight;
+          const float choice =
+              combat_rng_consume_randf_site(batch, bi, MSL_RNG_SITE_FOD_PLATFORM_CHOICE) * total;
+          if (choice < motion->hidden_weight) {
+            target = motion->hidden_target_height;
+            phase = 2u;
+          } else if (choice < motion->hidden_weight + motion->move_weight) {
+            const float amount =
+                motion->target_delta_min +
+                combat_rng_consume_randf_site(batch, bi, MSL_RNG_SITE_FOD_PLATFORM_TARGET) *
+                    (motion->target_delta_max - motion->target_delta_min);
+            float sign = 1.0f;
+            if (h < motion->home_height) {
+              sign =
+                  combat_rng_consume_randf_site(
+                      batch, bi, MSL_RNG_SITE_FOD_PLATFORM_TARGET_ADJUST) < motion->bias_below_home
+                      ? -1.0f
+                      : 1.0f;
+            } else if (h > motion->home_height) {
+              sign =
+                  combat_rng_consume_randf_site(
+                      batch, bi, MSL_RNG_SITE_FOD_PLATFORM_TARGET_ADJUST) < motion->bias_above_home
+                      ? 1.0f
+                      : -1.0f;
+            } else {
+              sign = combat_rng_consume_randf_site(batch, bi,
+                                                   MSL_RNG_SITE_FOD_PLATFORM_TARGET_SIDE) < 0.5f
+                         ? 1.0f
+                         : -1.0f;
+            }
+            target = h + sign * amount;
+            if (target > motion->max_height) {
+              target = motion->max_height;
+            } else if (target < motion->min_visible_height) {
+              target = motion->min_visible_height;
+            }
+            phase = 2u;
+          } else {
+            const int min_wait = (int)(motion->wait_min_frames + 0.5f);
+            const int max_wait = (int)(motion->wait_max_frames + 0.5f);
+            const int span = (max_wait >= min_wait) ? (max_wait - min_wait + 1) : 1;
+            timer = (uint16_t)(min_wait + combat_rng_consume_randi_site(
+                                              batch, bi, MSL_RNG_SITE_FOD_PLATFORM_WAIT, span));
+          }
+        }
+      } else if (phase == 2u) {
+        const float delta = target - h;
+        if (delta > 0.0f) {
+          if (delta < motion->up_speed) {
+            h = target;
+            phase = 0u;
+          } else {
+            v = motion->up_speed;
+            h += v;
+          }
+        } else if (delta < 0.0f) {
+          if (-delta < motion->down_speed) {
+            h = target;
+            phase = (h < motion->min_visible_height) ? 3u : 0u;
+          } else {
+            v = -motion->down_speed;
+            h += v;
+          }
+        } else {
+          phase = 0u;
+        }
+      } else if (phase == 3u) {
+        const int min_wait = (int)(motion->hidden_wait_min_frames + 0.5f);
+        const int max_wait = (int)(motion->hidden_wait_max_frames + 0.5f);
+        const int span = (max_wait >= min_wait) ? (max_wait - min_wait + 1) : 1;
+        timer = (uint16_t)(min_wait + combat_rng_consume_randi_site(
+                                          batch, bi, MSL_RNG_SITE_FOD_PLATFORM_HIDDEN_WAIT, span));
+        phase = 4u;
+      } else if (phase == 4u) {
+        if (timer != 0u) {
+          timer--;
+        } else {
+          target = motion->home_height;
+          phase = 2u;
+        }
+      } else {
+        phase = 0u;
+      }
+
+      batch->state.stage_fod_platform_height[idx] = h;
+      batch->state.stage_fod_platform_velocity[idx] = v;
+      batch->state.stage_fod_platform_velocity_valid[idx] = 1u;
+      batch->state.stage_fod_platform_scheduler_phase[idx] = phase;
+      batch->state.stage_fod_platform_scheduler_timer[idx] = timer;
+      batch->state.stage_fod_platform_scheduler_target[idx] = target;
     }
   }
 }

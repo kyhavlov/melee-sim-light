@@ -159,10 +159,17 @@ int stage_collision_fighter_floor_line_index(uint32_t stage_id, uint16_t segment
 uint8_t stage_collision_floor_line_is_platform(uint32_t stage_id, uint16_t segment_i);
 uint8_t stage_collision_floor_line_is_runtime_fighter_solid(uint32_t stage_id, uint16_t segment_i);
 uint8_t stage_collision_floor_line_has_platform_transform(uint32_t stage_id, uint16_t segment_i);
+uint8_t stage_collision_floor_line_platform_transform_id(uint32_t stage_id, uint16_t segment_i,
+                                                         uint8_t* platform_id_out);
 // Resolve a floor line to current world coordinates for the given batch environment. Static lines
 // copy through unchanged. Dynamic FoD platform lines consume causal stage platform state.
 uint8_t stage_collision_floor_line_world(const MslBatch* batch, int bi,
                                          const MslStageFloorLine* line, MslStageFloorLine* out);
+// Return the current-frame platform motion delta for a transformed floor line. This is runtime
+// stage-object carry state, not replay-seeded future state.
+uint8_t stage_collision_floor_line_motion_delta(const MslBatch* batch, int bi,
+                                                const MslStageFloorLine* line, float* dx_out,
+                                                float* dy_out);
 
 // Source MapLine raw graph helpers. `segment_i` is the stable ISO line id carried in MSLSTG01.
 // These mirror mplib's mpLineGetPrev/Next plus the Non* traversal families without exposing

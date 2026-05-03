@@ -31,11 +31,12 @@ from tools.slippi.known_data_artifacts import (
     STAGE_MAGIC,
     STAGE_ITEM_OBJECT_MAGIC,
     STAGE_ITEM_OBJECT_VERSION,
+    STAGE_PLATFORM_MOTION_KIND_FOD,
     STAGE_VERSION,
     read_mslftsc1_v1,
     read_mslitar1,
     read_mslpart1_v1,
-    read_mslstg01_v5,
+    read_mslstg01_v7,
     read_mslstio1_yoshi_shyguy,
     stage_metadata_bin_name_for_stage_id,
     stage_metadata_path_for_stage_id,
@@ -90,7 +91,7 @@ def test_stage_metadata_registry_covers_supported_domain() -> None:
 
 @pytest.mark.integration
 def test_stage_metadata_fd_known_rows() -> None:
-    stage = read_mslstg01_v5(Path("data/stages/bin/grnla.bin"))
+    stage = read_mslstg01_v7(Path("data/stages/bin/grnla.bin"))
     assert stage.segment_count == 16
     assert stage.stage_point_count == 22
     assert stage.spawn_count == 4
@@ -119,7 +120,7 @@ def test_stage_metadata_fd_known_rows() -> None:
 
 @pytest.mark.integration
 def test_stage_metadata_segments_match_legacy_fd_json() -> None:
-    stage = read_mslstg01_v5(Path("data/stages/bin/grnla.bin"))
+    stage = read_mslstg01_v7(Path("data/stages/bin/grnla.bin"))
     fd = json.loads(Path("data/stages/final_destination.json").read_text(encoding="utf-8"))
     unit_scale = float(fd.get("unit_scale", 1.0))
     json_by_id = {int(seg["i"]): seg for seg in fd["segments"]}
@@ -148,7 +149,7 @@ def test_stage_metadata_segments_match_legacy_fd_json() -> None:
 
 @pytest.mark.integration
 def test_stage_metadata_battlefield_known_platform_rows() -> None:
-    stage = read_mslstg01_v5(Path("data/stages/bin/grnba.bin"))
+    stage = read_mslstg01_v7(Path("data/stages/bin/grnba.bin"))
     assert stage.segment_count == 23
     assert stage.stage_point_count == 22
     assert stage.spawn_count == 4
@@ -179,7 +180,7 @@ def test_stage_metadata_battlefield_known_platform_rows() -> None:
 
 @pytest.mark.integration
 def test_stage_metadata_remaining_legal_stages_known_rows() -> None:
-    fountain = read_mslstg01_v5(Path("data/stages/bin/griz.bin"))
+    fountain = read_mslstg01_v7(Path("data/stages/bin/griz.bin"))
     assert fountain.segment_count == 34
     assert fountain.spawn_count == 4
     assert fountain.respawn_count == 4
@@ -191,7 +192,7 @@ def test_stage_metadata_remaining_legal_stages_known_rows() -> None:
         (-14.25, 1.125, 14.25)
     )
 
-    pokemon = read_mslstg01_v5(Path("data/stages/bin/grps.bin"))
+    pokemon = read_mslstg01_v7(Path("data/stages/bin/grps.bin"))
     assert pokemon.segment_count == 136
     assert pokemon.spawn_count == 4
     assert pokemon.respawn_count == 4
@@ -205,8 +206,8 @@ def test_stage_metadata_remaining_legal_stages_known_rows() -> None:
         abs=1e-3,
     )
 
-    yoshis = read_mslstg01_v5(Path("data/stages/bin/grst.bin"))
-    assert yoshis.segment_count == 29
+    yoshis = read_mslstg01_v7(Path("data/stages/bin/grst.bin"))
+    assert yoshis.segment_count == 30
     assert yoshis.spawn_count == 4
     assert yoshis.respawn_count == 4
     assert yoshis.cam_bounds_world == pytest.approx((-126.0, 125.3, 118.3, -49.7), abs=1e-4)
@@ -214,7 +215,7 @@ def test_stage_metadata_remaining_legal_stages_known_rows() -> None:
     yoshis_platforms = [seg for seg in yoshis.segments if int(seg.flags) & 0x1]
     assert [int(seg.line_id) for seg in yoshis_platforms[:4]] == [0, 1, 4, 5]
 
-    dream = read_mslstg01_v5(Path("data/stages/bin/grop.bin"))
+    dream = read_mslstg01_v7(Path("data/stages/bin/grop.bin"))
     assert dream.segment_count == 11
     assert dream.spawn_count == 4
     assert dream.respawn_count == 4
@@ -242,13 +243,13 @@ def test_stage_metadata_preserves_raw_mapline_links_for_supported_stages() -> No
         ("grop.bin", 3, (9, 4, -1, -1)),
     ]
     for bin_name, line_id, expected_links in cases:
-        stage = read_mslstg01_v5(Path("data/stages/bin") / bin_name)
+        stage = read_mslstg01_v7(Path("data/stages/bin") / bin_name)
         seg = next(seg for seg in stage.segments if int(seg.line_id) == line_id)
         assert (int(seg.prev_id0), int(seg.next_id0), int(seg.prev_id1), int(seg.next_id1)) == expected_links
 
 
 def test_stage_metadata_contains_fod_platform_transform_records() -> None:
-    stage = read_mslstg01_v5(Path("data/stages/bin/griz.bin"))
+    stage = read_mslstg01_v7(Path("data/stages/bin/griz.bin"))
     by_line = {int(rec.line_id): rec for rec in stage.platform_transforms}
     assert sorted(by_line) == [0, 1, 2]
     assert int(by_line[0].platform_id) == 1  # left
@@ -263,6 +264,78 @@ def test_stage_metadata_contains_fod_platform_transform_records() -> None:
     assert (float(by_line[2].x0), float(by_line[2].x1), float(by_line[2].y_const)) == pytest.approx(
         (-14.25, 14.25, 42.75)
     )
+
+
+def test_stage_metadata_contains_source_backed_fod_motion_params() -> None:
+    stage = read_mslstg01_v7(Path("data/stages/bin/griz.bin"))
+    motion = next(m for m in stage.platform_motions if m.kind_id == STAGE_PLATFORM_MOTION_KIND_FOD)
+    assert motion.platform_count == 2
+    assert motion.home_height == pytest.approx(25.0)
+    assert motion.target_delta_min > 0.0
+    assert motion.target_delta_max > motion.target_delta_min
+    assert motion.hidden_weight >= 0.0
+    assert motion.move_weight >= 0.0
+    assert motion.stay_weight >= 0.0
+    assert motion.wait_max_frames >= motion.wait_min_frames
+
+    audit = json.loads(Path("data/stages/bin/griz.json").read_text())
+    assert audit["platform_motion"]["fountain_platform"]["home_height"] == pytest.approx(
+        motion.home_height
+    )
+
+
+def test_runtime_fod_scheduler_uses_binary_motion_without_audit_json(tmp_path: Path) -> None:
+    data_dir = _symlink_data_tree_with_private_dirs(tmp_path, ("stages",))
+    _copy_stage_bins(data_dir)
+
+    code = """
+import numpy as np
+import msl_binding
+from tools.modelplay.sim_env import build_match_config_array
+
+handle = msl_binding.init(batch_size=1, num_players=2)
+try:
+    config = build_match_config_array(stage_id=2, random_seed=0, char_ids=(1, 1))
+    msl_binding.init_match(handle, config.view(np.uint8).reshape((1, -1)))
+    sizes = msl_binding.sizes()
+    inp = np.zeros((1, int(sizes["input"])), dtype=np.uint8)
+    stage = np.zeros((1, int(sizes["stage_state"])), dtype=np.uint8)
+    dtype = np.dtype([
+        ("fod_platform_height", ("<f4", (2,))),
+        ("fod_platform_height_valid", ("u1", (2,))),
+        ("_pad0", "V2"),
+    ], align=False)
+    msl_binding.step_input(handle, inp, inp)
+    msl_binding.debug_write_stage_state(handle, stage)
+    row = stage.view(dtype).reshape((1,))[0]
+    assert int(row["fod_platform_height_valid"][0]) == 1
+    assert int(row["fod_platform_height_valid"][1]) == 1
+finally:
+    msl_binding.destroy(handle)
+"""
+    env = os.environ.copy()
+    env["MSL_DATA_DIR"] = str(data_dir)
+    proc = subprocess.run([sys.executable, "-c", code], text=True, capture_output=True, env=env)
+    assert proc.returncode == 0, proc.stderr + proc.stdout
+
+
+def test_stage_metadata_contains_yoshi_randall_and_rejects_center_raw_platform() -> None:
+    stage = read_mslstg01_v7(Path("data/stages/bin/grst.bin"))
+    by_line = {int(seg.line_id): seg for seg in stage.segments}
+    assert int(by_line[0].flags) & 1
+    assert by_line[0].fighter_solid is False
+    assert 1000 in by_line
+    assert int(by_line[1000].flags) & 1
+    assert by_line[1000].fighter_solid is True
+    transforms = {int(rec.line_id): rec for rec in stage.platform_transforms}
+    assert int(transforms[1000].kind_id) == 3
+    path = {(int(rec.line_id), int(rec.frame)): rec for rec in stage.platform_paths}
+    assert len([rec for rec in stage.platform_paths if int(rec.line_id) == 1000]) == 1200
+    assert path[(1000, 416)].x0 == pytest.approx(89.7526397705, abs=1e-6)
+    assert path[(1000, 416)].y == pytest.approx(-33.1844787598, abs=1e-6)
+    assert path[(1000, 477)].x0 == pytest.approx(89.3354431152, abs=2e-6)
+    assert path[(1000, 1016)].x0 == pytest.approx(-101.9196777344, abs=1e-6)
+    assert path[(1000, 1069)].y == pytest.approx(-31.5900421143, abs=1e-6)
 
 
 def test_stage_item_yoshi_shyguy_known_rows() -> None:
@@ -529,13 +602,13 @@ def test_runtime_stage_collision_reads_mslstg01_segments(tmp_path: Path) -> None
     root_data = Path("data").resolve()
     data_dir = _symlink_data_tree_with_private_dirs(tmp_path, ("stages",))
     (data_dir / "stages" / "bin").mkdir(parents=True)
-    stage = read_mslstg01_v5(root_data / "stages" / "bin" / "grnla.bin")
+    stage = read_mslstg01_v7(root_data / "stages" / "bin" / "grnla.bin")
     record_i, floor_seg = next(
         (i, seg) for i, seg in enumerate(stage.segments) if int(seg.kind_id) == 0 and int(seg.line_id) == 1
     )
     buf = bytearray((root_data / "stages" / "bin" / "grnla.bin").read_bytes())
-    # Segment record layout: <HBBHHhhhhffff>, records start after the 56-byte MSLSTG01 header.
-    rec_off = 56 + record_i * 32
+    # Segment record layout: <HBBHHhhhhffff>, records start after the 64-byte MSLSTG01 header.
+    rec_off = 64 + record_i * 32
     struct.pack_into("<f", buf, rec_off + 20, 5.0)
     struct.pack_into("<f", buf, rec_off + 28, 5.0)
     _copy_stage_bins(data_dir)
@@ -667,7 +740,7 @@ def test_runtime_frozen_ps_preserves_raw_links_but_uses_fighter_solid_mask() -> 
     finally:
         msl_binding.destroy(handle)
 
-    stage = read_mslstg01_v5(Path("data/stages/bin/grps.bin"))
+    stage = read_mslstg01_v7(Path("data/stages/bin/grps.bin"))
     seg_by_id = {int(seg.line_id): seg for seg in stage.segments}
     assert seg_by_id[35].fighter_solid is True
     assert seg_by_id[81].kind_id == 2  # right_wall
@@ -1119,7 +1192,7 @@ def test_runtime_move_tables_mslftsc1_matches_legacy_json_queries() -> None:
 @pytest.mark.parametrize(
     ("magic", "version", "reader", "match"),
     [
-        (STAGE_MAGIC, STAGE_VERSION, read_mslstg01_v5, "unsupported MSLSTG01 version"),
+        (STAGE_MAGIC, STAGE_VERSION, read_mslstg01_v7, "unsupported MSLSTG01 version"),
         (PART_MAGIC, PART_VERSION, read_mslpart1_v1, "unsupported MSLPART1 version"),
         (ITEM_ARTICLE_MAGIC, ITEM_ARTICLE_VERSION, read_mslitar1, "unsupported MSLITAR1 version"),
         (

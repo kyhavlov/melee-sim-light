@@ -158,7 +158,7 @@ export function viewerSettingsFromCompare(compare, { startStocks = 4 } = {}) {
   };
 }
 
-export function viewerFrameFromCompare(compare, frameNumber, controllersByPlayer) {
+export function viewerFrameFromCompare(compare, frameNumber, controllersByPlayer, stageState = null) {
   const numPlayers = u8(compare, compareOffsets.numPlayers);
   const players = [];
   for (let idx = 0; idx < numPlayers; idx += 1) {
@@ -248,8 +248,9 @@ export function viewerFrameFromCompare(compare, frameNumber, controllersByPlayer
     items,
     stage: {
       frameNumber,
-      fodLeftPlatformHeight: 0.0,
-      fodRightPlatformHeight: 0.0,
+      // Debug stage-state platform order follows C runtime owner: 0=right, 1=left.
+      fodLeftPlatformHeight: stageState && stageState.getUint8(9) ? f32(stageState, 4) : undefined,
+      fodRightPlatformHeight: stageState && stageState.getUint8(8) ? f32(stageState, 0) : undefined,
     },
   };
 }

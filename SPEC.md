@@ -691,17 +691,19 @@ Recent deltas to reflect here (do not let these get “lost in chat logs”):
   can land from above through `mpColl_80046904` with `CollisionFlagAir_PlatformPassCallback`,
   grounded fighters remain on their current platform through `mpLib_8004DD90_Floor`, and
   down-input Pass uses the extracted `p_ftCommonData->{x464,x468,x470,x46C}` thresholds/velocity
-  plus `mpUpdateFloorSkip`-shaped skip gating. FoD replay/eval floor collision consumes seeded
-  platform heights and prefix-derived height velocity through MSLSTG01 v5 platform transform
-  records, with generated `yakumono_param` target constants preventing stale prefix velocity from
-  running past source movement targets; the free-running grIzumi RNG/wait scheduler remains
-  separate stage-object work. Frozen Pokemon Stadium fighter-solid policy is
+  plus `mpUpdateFloorSkip`-shaped skip gating. FoD floor collision consumes seeded
+  replay/eval platform heights when present and otherwise free-runs the `grIzumi_801CC358`
+  RNG/wait/target scheduler from generated `GrIz.dat::yakumono_param` metadata; both paths update
+  MSLSTG01 v7 platform transform records before fighter collision and webplay/modelplay debug
+  stage output. Yoshi's Story keeps the raw center raised segment debug-visible but
+  non-fighter-solid and admits Randall as a generated transformed pass-through floor. Frozen
+  Pokemon Stadium fighter-solid policy is
   data-backed by MSLSTG01 current-domain metadata, keeping transformation lines visible for
   debug/data APIs while suppressing them from fighter collision.
   (`src/mpcoll_ground.c`, `src/locomotion.c`; refs/melee/src/melee/mp/mpcoll.c::{
   `mpColl_80046904`,`mpUpdateFloorSkip`,`mpColl_80044628_Floor`},
   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c).
-- MSLSTG01 v5 raw `MapLine` links are exposed as runtime substrate for source-shaped
+- MSLSTG01 v7 raw `MapLine` links are exposed as runtime substrate for source-shaped
   `mpLineGetPrev/Next` and non-kind traversal. Frozen Pokemon Stadium applies the active
   fighter-solid mask to walls/ceilings as well as floors, so inactive transformation/platform-side
   shell lines remain visible in data/debug output but do not participate in fighter wall collision.

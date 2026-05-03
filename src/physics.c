@@ -2065,7 +2065,8 @@ void physics_integrate(MslBatch* batch) {
         // Decomp: grounded movement helpers always run ftCommon_ApplyGroundMovement, which writes
         // fp->self_vel.x from fp->gr_vel each frame after applying ground accel/friction.
         // Our seed/output `speed_air_x_self` lane maps fp->self_vel.x, so keep it synced on
-        // grounded frames from the resolved ground velocity used for integration.
+        // grounded frames from the resolved ground velocity used for integration. Sloped-floor
+        // world-space tangent lanes are refreshed after mpColl publishes the current floor normal.
         // refs/melee/src/melee/ft/ftcommon.c::ftCommon_ApplyGroundMovement
         // refs/melee/src/melee/ft/ft_081B.c::{ft_80084F3C,ft_80085030,ft_800850E0}
         batch->state.speed_air_x_self[idx] = vx_self;
