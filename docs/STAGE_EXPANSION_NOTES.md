@@ -26,10 +26,11 @@ Current staged state:
   but fighter collision and floor traversal query the generated active/fighter-solid mask instead
   of a runtime line-id allowlist.
 - Yoshi's Story Shy Guys (`It_Kind_Heiho`) are stage-owned item objects, not fighter articles.
-  Runtime admits active state 1/4 generic item-position integration from visible `x40_vel`, but
-  still does not model item-animation/dynamic-bone velocity, hidden spawn delay, RNG, or collision
-  turnaround owners; closing them requires causal Shy Guy spawn/timer plus item animation
-  extraction, not replay-next velocity seed lanes.
+  Runtime admits replay-seeded/eval stage timer, state-0 delay, active state 1/4 motion, state 2/3
+  gravity, and blast-bound clear using generated `MSLSTIO1` params plus prefix-causal hidden item
+  internals. Global pre-spawn HSD RNG phase/count, multi-spawn scheduling, full autonomous
+  scheduler, and collision turnaround details remain separate owners; they must not be replaced
+  with replay-next velocity or existence seed lanes.
 
 Useful next stage work before deeper dynamic stage mechanics:
 - Decide when to admit four-player local Pokemon Stadium repros into validation; current aggregate

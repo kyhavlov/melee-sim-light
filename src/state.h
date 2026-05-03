@@ -1031,14 +1031,20 @@ typedef struct MslStateSoA {
   uint8_t* item_hidden_callback_flags;         // [batch * MSL_MAX_ITEMS]
   // Prefix-causal Shy Guy dynamic-bone velocity scratch.
   // refs/melee/src/melee/it/items/itheiho.c::it_802D98C4
-  float* item_shyguy_prev_vel_y;          // [batch * MSL_MAX_ITEMS]
-  uint8_t* item_shyguy_prev_vel_y_valid;  // [batch * MSL_MAX_ITEMS]
+  float* item_shyguy_prev_vel_y;           // [batch * MSL_MAX_ITEMS]
+  uint8_t* item_shyguy_prev_vel_y_valid;   // [batch * MSL_MAX_ITEMS]
+  uint8_t* item_shyguy_dyn_y_phase;        // [batch * MSL_MAX_ITEMS]
+  uint8_t* item_shyguy_dyn_y_phase_valid;  // [batch * MSL_MAX_ITEMS]
   // Shy Guy itemVar internals.
-  // refs/melee/src/melee/it/items/itheiho.c::{it_802D8618,itHeiho_UnkMotion0_Phys}
+  // refs/melee/src/melee/it/items/itheiho.c::{
+  //   it_802D8618,itHeiho_UnkMotion0_Phys,itHeiho_UnkMotion3_Phys,itHeiho_UnkMotion*_Coll}
+  // refs/melee/src/melee/it/item.c::{Item_802693E4,Item_802697D4}
   uint8_t* item_shyguy_speed_index;        // [batch * MSL_MAX_ITEMS]
   uint8_t* item_shyguy_speed_index_valid;  // [batch * MSL_MAX_ITEMS]
   uint16_t* item_shyguy_delay;             // [batch * MSL_MAX_ITEMS]
   uint8_t* item_shyguy_delay_valid;        // [batch * MSL_MAX_ITEMS]
+  uint8_t* item_shyguy_hitlag;             // [batch * MSL_MAX_ITEMS]
+  uint8_t* item_shyguy_hitlag_valid;       // [batch * MSL_MAX_ITEMS]
 
   // Item hitbox victim rings (HitCapsule victim lists per item slot and hitbox).
   // Decomp anchor (tick): refs/melee/src/melee/it/itcoll.c::it_8027146C

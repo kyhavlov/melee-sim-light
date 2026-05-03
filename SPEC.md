@@ -716,11 +716,12 @@ Recent deltas to reflect here (do not let these get “lost in chat logs”):
   spawn-group ordinal by `it_802D8618`. Runtime now admits replay-seeded/eval Shy Guy stage timer,
   active-motion/state-delay/lifecycle slices: state-0 delay, active state 1/4 X-speed, state 2/3
   gravity, blast-bound clear, and the active dynamic-bone Y recompute from the generated
-  `MSLSTIO1` GrSt.dat Heiho child-JObj `HSD_A_J_TRAY` FObj delta table using prefix-visible
-  previous velocity as the hidden phase key. This does not close full autonomous Yoshi Shy Guy
-  ownership: global pre-spawn HSD RNG phase/count, multi-spawn scheduling, collision turnarounds,
-  and the full free-running stage-object scheduler remain open. Dream Land Whispy/apple scheduling
-  is also separate and must not be substituted with replay-next lanes
+  `MSLSTIO1` GrSt.dat Heiho child-JObj `HSD_A_J_TRAY` FObj delta table using prefix-causal
+  previous velocity plus active AObj phase. The phase lane is current hidden runtime state, not a
+  replay-future bridge. This does not close full autonomous Yoshi Shy Guy ownership: global
+  pre-spawn HSD RNG phase/count, multi-spawn scheduling, collision turnarounds, and the full
+  free-running stage-object scheduler remain open. Dream Land Whispy/apple scheduling is also
+  separate and must not be substituted with replay-next lanes
   (`src/items.c`, `data/stage_items/yoshi_shyguy.bin`; refs/melee/src/melee/gr/grstory.c::grStory_801E3418,
   refs/melee/src/melee/it/items/itheiho.c::{
   it_802D8618,itHeiho_UnkMotion0_Phys,itHeiho_UnkMotion1_Phys,itHeiho_UnkMotion4_Phys,it_802D98C4}).

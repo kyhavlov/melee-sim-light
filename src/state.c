@@ -434,10 +434,14 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->item_hidden_callback_flags = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bi);
   state->item_shyguy_prev_vel_y = (float*)alloc_aligned_64(sizeof(float) * bi);
   state->item_shyguy_prev_vel_y_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bi);
+  state->item_shyguy_dyn_y_phase = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bi);
+  state->item_shyguy_dyn_y_phase_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bi);
   state->item_shyguy_speed_index = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bi);
   state->item_shyguy_speed_index_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bi);
   state->item_shyguy_delay = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bi);
   state->item_shyguy_delay_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bi);
+  state->item_shyguy_hitlag = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bi);
+  state->item_shyguy_hitlag_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bi);
   state->item_hitlist = (MslHitlistCapsule*)alloc_aligned_64(sizeof(MslHitlistCapsule) * bi *
                                                              (size_t)MSL_MAX_HITBOXES);
 
@@ -588,8 +592,10 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->item_shield_bounce_seed_vel_y || !state->item_hidden_body_hit_victim_port ||
       !state->item_hidden_body_hit_hurt_height || !state->item_hidden_callback_flags ||
       !state->item_shyguy_prev_vel_y || !state->item_shyguy_prev_vel_y_valid ||
+      !state->item_shyguy_dyn_y_phase || !state->item_shyguy_dyn_y_phase_valid ||
       !state->item_shyguy_speed_index || !state->item_shyguy_speed_index_valid ||
-      !state->item_shyguy_delay || !state->item_shyguy_delay_valid || !state->item_hitlist) {
+      !state->item_shyguy_delay || !state->item_shyguy_delay_valid || !state->item_shyguy_hitlag ||
+      !state->item_shyguy_hitlag_valid || !state->item_hitlist) {
     return -1;
   }
 
@@ -1072,10 +1078,14 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->item_hidden_callback_flags);
   alloc_free(state->item_shyguy_prev_vel_y);
   alloc_free(state->item_shyguy_prev_vel_y_valid);
+  alloc_free(state->item_shyguy_dyn_y_phase);
+  alloc_free(state->item_shyguy_dyn_y_phase_valid);
   alloc_free(state->item_shyguy_speed_index);
   alloc_free(state->item_shyguy_speed_index_valid);
   alloc_free(state->item_shyguy_delay);
   alloc_free(state->item_shyguy_delay_valid);
+  alloc_free(state->item_shyguy_hitlag);
+  alloc_free(state->item_shyguy_hitlag_valid);
   alloc_free(state->item_hitlist);
 
   state_zero_ptrs(state);

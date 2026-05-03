@@ -9,6 +9,8 @@
 #include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "../src/action_ids.h"
 #include "../src/api.h"
@@ -6644,6 +6646,675 @@ PyObject* msl_derive_item_reflect_damage_mul_py(PyObject* self, PyObject* args) 
 
 static bool msl_py_guard_family_action(uint16_t action_id) {
   return action_id >= 178u && action_id <= 182u;
+}
+
+typedef struct MslPyShyguyKeyState {
+  bool used;
+  uint32_t spawn_id;
+  uint32_t key_id;
+  int prev_state;
+  int state_age;
+  int hitlag;
+  int state3_moving_age;
+  int state4_zero_x_prefix;
+} MslPyShyguyKeyState;
+
+typedef struct MslPyShyguyPhaseState {
+  bool used;
+  uint32_t spawn_id;
+  uint32_t key_id;
+  int state;
+  uint8_t phase;
+  float prev_vel_y;
+  bool has_prev_vel_y;
+} MslPyShyguyPhaseState;
+
+typedef struct MslPyShyguySpawnState {
+  bool used;
+  uint32_t spawn_id;
+  int first_seen;
+  uint32_t group_base;
+} MslPyShyguySpawnState;
+
+typedef struct MslPyShyguyGroupState {
+  bool used;
+  uint32_t group_base;
+  uint8_t speed_index;
+  bool speed_valid;
+} MslPyShyguyGroupState;
+
+typedef struct MslPyShyguyPrevItem {
+  uint8_t state;
+  uint32_t spawn_id;
+  uint16_t instance_id;
+  float vel_y;
+} MslPyShyguyPrevItem;
+
+static float msl_py_shyguy_phase_value(const float* dyn, int phase) {
+  phase &= 0xFF;
+  if (phase == 0) {
+    return 0.0f;
+  }
+  if (phase <= 128) {
+    return dyn[phase - 1];
+  }
+  return dyn[256 - phase];
+}
+
+static float msl_py_shyguy_rate2_value(const float* dyn, int phase) {
+  phase &= 0xFF;
+  if (phase == 0) {
+    return 0.0f;
+  }
+  if (phase == 1) {
+    return msl_py_shyguy_phase_value(dyn, 1);
+  }
+  const int base = (2 * phase) - 2;
+  return msl_py_shyguy_phase_value(dyn, base) + msl_py_shyguy_phase_value(dyn, base + 1);
+}
+
+static float msl_py_shyguy_pair_forward(const float* dyn, int pair) {
+  pair &= 0x3F;
+  const int base = pair * 2;
+  return dyn[base] + dyn[(base + 1) & 0x7F];
+}
+
+static float msl_py_shyguy_current_vel_for_phase(const float* dyn, int phase, int state) {
+  phase &= 0xFF;
+  if (state == 4) {
+    if (phase <= 29) {
+      return 0.0f;
+    }
+    const int q = (phase - 18) & 0xFF;
+    if (q == 12) {
+      return msl_py_shyguy_phase_value(dyn, 1);
+    }
+    if (q == 140) {
+      return -msl_py_shyguy_phase_value(dyn, 1);
+    }
+    if (q >= 141) {
+      return msl_py_shyguy_pair_forward(dyn, q - 141);
+    }
+    return msl_py_shyguy_rate2_value(dyn, q - 11);
+  }
+  return msl_py_shyguy_phase_value(dyn, phase);
+}
+
+static int msl_py_shyguy_phase_distance(int a, int b) {
+  a &= 0xFF;
+  b &= 0xFF;
+  const int ab = (a - b) & 0xFF;
+  const int ba = (b - a) & 0xFF;
+  return ab < ba ? ab : ba;
+}
+
+static int msl_py_shyguy_visible_phase(const float* dyn, float prev_vel_y, float cur_vel_y,
+                                       int state, int predicted) {
+  const float eps = 0.001f;
+  if (state == 4 && fabsf(cur_vel_y) <= eps) {
+    return -1;
+  }
+  int best = -1;
+  int best_dist = 999;
+  for (int phase = 0; phase < 256; phase++) {
+    const int prev = (phase - 1) & 0xFF;
+    if (fabsf(msl_py_shyguy_current_vel_for_phase(dyn, phase, state) - cur_vel_y) <= eps &&
+        fabsf(msl_py_shyguy_current_vel_for_phase(dyn, prev, state) - prev_vel_y) <= eps) {
+      const int dist = msl_py_shyguy_phase_distance(phase, predicted);
+      if (best < 0 || dist < best_dist) {
+        best = phase;
+        best_dist = dist;
+      }
+    }
+  }
+  return best;
+}
+
+static MslPyShyguyKeyState* msl_py_shyguy_key_state(MslPyShyguyKeyState* states, size_t* count,
+                                                    size_t cap, uint32_t spawn_id,
+                                                    uint32_t key_id) {
+  for (size_t i = 0; i < *count; i++) {
+    if (states[i].used && states[i].spawn_id == spawn_id && states[i].key_id == key_id) {
+      return &states[i];
+    }
+  }
+  if (*count >= cap) {
+    return NULL;
+  }
+  MslPyShyguyKeyState* st = &states[*count];
+  memset(st, 0, sizeof(*st));
+  st->used = true;
+  st->spawn_id = spawn_id;
+  st->key_id = key_id;
+  st->prev_state = -1;
+  (*count)++;
+  return st;
+}
+
+static MslPyShyguyPhaseState* msl_py_shyguy_phase_state(MslPyShyguyPhaseState* states,
+                                                        size_t* count, size_t cap,
+                                                        uint32_t spawn_id, uint32_t key_id) {
+  for (size_t i = 0; i < *count; i++) {
+    if (states[i].used && states[i].spawn_id == spawn_id && states[i].key_id == key_id) {
+      return &states[i];
+    }
+  }
+  if (*count >= cap) {
+    return NULL;
+  }
+  MslPyShyguyPhaseState* st = &states[*count];
+  memset(st, 0, sizeof(*st));
+  st->used = true;
+  st->spawn_id = spawn_id;
+  st->key_id = key_id;
+  st->state = -1;
+  (*count)++;
+  return st;
+}
+
+static MslPyShyguySpawnState* msl_py_shyguy_spawn_state(MslPyShyguySpawnState* states,
+                                                        size_t* count, size_t cap,
+                                                        uint32_t spawn_id, int fi) {
+  for (size_t i = 0; i < *count; i++) {
+    if (states[i].used && states[i].spawn_id == spawn_id) {
+      return &states[i];
+    }
+  }
+  if (*count >= cap) {
+    return NULL;
+  }
+  MslPyShyguySpawnState* st = &states[*count];
+  memset(st, 0, sizeof(*st));
+  st->used = true;
+  st->spawn_id = spawn_id;
+  st->first_seen = fi;
+  st->group_base = spawn_id;
+  (*count)++;
+  return st;
+}
+
+static MslPyShyguyGroupState* msl_py_shyguy_group_state(MslPyShyguyGroupState* states,
+                                                        size_t* count, size_t cap,
+                                                        uint32_t group_base) {
+  for (size_t i = 0; i < *count; i++) {
+    if (states[i].used && states[i].group_base == group_base) {
+      return &states[i];
+    }
+  }
+  if (*count >= cap) {
+    return NULL;
+  }
+  MslPyShyguyGroupState* st = &states[*count];
+  memset(st, 0, sizeof(*st));
+  st->used = true;
+  st->group_base = group_base;
+  (*count)++;
+  return st;
+}
+
+static int msl_py_shyguy_pattern_from_item(float pos_x, float pos_y, const float* vpos) {
+  int best = pos_x < 0.0f ? 0 : 3;
+  const int end = best + 3;
+  float best_err = fabsf(pos_y - vpos[best]);
+  for (int i = best + 1; i < end; i++) {
+    const float err = fabsf(pos_y - vpos[i]);
+    if (err < best_err) {
+      best = i;
+      best_err = err;
+    }
+  }
+  return best;
+}
+
+static int msl_py_shyguy_speed_index_from_item(float vel_x, int state, const float* speeds,
+                                               float state4_mul) {
+  float speed = fabsf(vel_x);
+  if (state == 4 && state4_mul != 0.0f) {
+    speed /= state4_mul;
+  }
+  int best = 0;
+  float best_err = fabsf(speed - speeds[0]);
+  for (int i = 1; i < 3; i++) {
+    const float err = fabsf(speed - speeds[i]);
+    if (err < best_err) {
+      best = i;
+      best_err = err;
+    }
+  }
+  return best;
+}
+
+static int msl_py_shyguy_hitlag_from_damage(uint16_t damage, float damage_mul, float base) {
+  const int frames = (int)(((float)damage * damage_mul) + base);
+  return frames > 0 ? frames - 1 : 0;
+}
+
+PyObject* msl_derive_yoshi_shyguy_seed_lanes_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* exists_obj = NULL;
+  PyObject* type_obj = NULL;
+  PyObject* owner_obj = NULL;
+  PyObject* state_obj = NULL;
+  PyObject* spawn_obj = NULL;
+  PyObject* iid_obj = NULL;
+  PyObject* vel_x_obj = NULL;
+  PyObject* vel_y_obj = NULL;
+  PyObject* pos_x_obj = NULL;
+  PyObject* pos_y_obj = NULL;
+  PyObject* damage_obj = NULL;
+  PyObject* vpos_obj = NULL;
+  PyObject* speeds_obj = NULL;
+  PyObject* dyn_obj = NULL;
+  int replay_stage_id = 0;
+  int param_stage_id = 0;
+  int item_kind = 0;
+  int timer_reset = 0;
+  int spawn_delay_step = 0;
+  double state4_speed_mul = 0.0;
+  double hitlag_damage_mul = 0.0;
+  double hitlag_base = 0.0;
+  if (!PyArg_ParseTuple(args, "OOOOOOOOOOOiiiiidOOOdd", &exists_obj, &type_obj, &owner_obj,
+                        &state_obj, &spawn_obj, &iid_obj, &vel_x_obj, &vel_y_obj, &pos_x_obj,
+                        &pos_y_obj, &damage_obj, &replay_stage_id, &param_stage_id, &item_kind,
+                        &timer_reset, &spawn_delay_step, &state4_speed_mul, &vpos_obj, &speeds_obj,
+                        &dyn_obj, &hitlag_damage_mul, &hitlag_base)) {
+    return NULL;
+  }
+  PyArrayObject* exists = require_contiguous_array(exists_obj, NPY_UINT8, 2, "item_exists_u8");
+  PyArrayObject* type = require_contiguous_array(type_obj, NPY_UINT16, 2, "item_type_u16");
+  PyArrayObject* owner = require_contiguous_array(owner_obj, NPY_INT8, 2, "item_owner_i8");
+  PyArrayObject* state = require_contiguous_array(state_obj, NPY_UINT8, 2, "item_state_u8");
+  PyArrayObject* spawn = require_contiguous_array(spawn_obj, NPY_UINT32, 2, "item_spawn_id_u32");
+  PyArrayObject* iid = require_contiguous_array(iid_obj, NPY_UINT16, 2, "item_instance_id_u16");
+  PyArrayObject* vel_x = require_contiguous_array(vel_x_obj, NPY_FLOAT32, 2, "item_vel_x_f32");
+  PyArrayObject* vel_y = require_contiguous_array(vel_y_obj, NPY_FLOAT32, 2, "item_vel_y_f32");
+  PyArrayObject* pos_x = require_contiguous_array(pos_x_obj, NPY_FLOAT32, 2, "item_pos_x_f32");
+  PyArrayObject* pos_y = require_contiguous_array(pos_y_obj, NPY_FLOAT32, 2, "item_pos_y_f32");
+  PyArrayObject* damage = require_contiguous_array(damage_obj, NPY_UINT16, 2, "item_damage_u16");
+  PyArrayObject* vpos_arr = require_contiguous_array(vpos_obj, NPY_FLOAT32, 1, "shyguy_vpos_f32");
+  PyArrayObject* speeds_arr =
+      require_contiguous_array(speeds_obj, NPY_FLOAT32, 1, "shyguy_speeds_f32");
+  PyArrayObject* dyn_arr = require_contiguous_array(dyn_obj, NPY_FLOAT32, 1, "shyguy_dyn_y_f32");
+  if (exists == NULL || type == NULL || owner == NULL || state == NULL || spawn == NULL ||
+      iid == NULL || vel_x == NULL || vel_y == NULL || pos_x == NULL || pos_y == NULL ||
+      damage == NULL || vpos_arr == NULL || speeds_arr == NULL || dyn_arr == NULL) {
+    return NULL;
+  }
+  const npy_intp n = PyArray_DIM(exists, 0);
+  const npy_intp slots = PyArray_DIM(exists, 1);
+  if (require_exact_2d_shape(type, n, slots, "item_type_u16") != 0 ||
+      require_exact_2d_shape(owner, n, slots, "item_owner_i8") != 0 ||
+      require_exact_2d_shape(state, n, slots, "item_state_u8") != 0 ||
+      require_exact_2d_shape(spawn, n, slots, "item_spawn_id_u32") != 0 ||
+      require_exact_2d_shape(iid, n, slots, "item_instance_id_u16") != 0 ||
+      require_exact_2d_shape(vel_x, n, slots, "item_vel_x_f32") != 0 ||
+      require_exact_2d_shape(vel_y, n, slots, "item_vel_y_f32") != 0 ||
+      require_exact_2d_shape(pos_x, n, slots, "item_pos_x_f32") != 0 ||
+      require_exact_2d_shape(pos_y, n, slots, "item_pos_y_f32") != 0 ||
+      require_exact_2d_shape(damage, n, slots, "item_damage_u16") != 0) {
+    return NULL;
+  }
+  if (PyArray_SIZE(vpos_arr) < 6 || PyArray_SIZE(speeds_arr) < 3 || PyArray_SIZE(dyn_arr) < 128) {
+    PyErr_SetString(PyExc_ValueError, "Yoshi Shy Guy param arrays have invalid lengths");
+    return NULL;
+  }
+
+  npy_intp dims1[1] = {n};
+  npy_intp dims2[2] = {n, slots};
+  PyArrayObject* prev_vel_y = (PyArrayObject*)PyArray_ZEROS(2, dims2, NPY_FLOAT32, 0);
+  PyArrayObject* prev_valid = (PyArrayObject*)PyArray_ZEROS(2, dims2, NPY_UINT8, 0);
+  PyArrayObject* phase = (PyArrayObject*)PyArray_ZEROS(2, dims2, NPY_UINT8, 0);
+  PyArrayObject* phase_valid = (PyArrayObject*)PyArray_ZEROS(2, dims2, NPY_UINT8, 0);
+  PyArrayObject* timer = (PyArrayObject*)PyArray_ZEROS(1, dims1, NPY_UINT16, 0);
+  PyArrayObject* pattern = (PyArrayObject*)PyArray_ZEROS(1, dims1, NPY_UINT8, 0);
+  PyArrayObject* stage_valid = (PyArrayObject*)PyArray_ZEROS(1, dims1, NPY_UINT8, 0);
+  PyArrayObject* speed_index = (PyArrayObject*)PyArray_ZEROS(2, dims2, NPY_UINT8, 0);
+  PyArrayObject* speed_valid = (PyArrayObject*)PyArray_ZEROS(2, dims2, NPY_UINT8, 0);
+  PyArrayObject* delay = (PyArrayObject*)PyArray_ZEROS(2, dims2, NPY_UINT16, 0);
+  PyArrayObject* delay_valid = (PyArrayObject*)PyArray_ZEROS(2, dims2, NPY_UINT8, 0);
+  PyArrayObject* hitlag = (PyArrayObject*)PyArray_ZEROS(2, dims2, NPY_UINT8, 0);
+  PyArrayObject* hitlag_valid = (PyArrayObject*)PyArray_ZEROS(2, dims2, NPY_UINT8, 0);
+  if (prev_vel_y == NULL || prev_valid == NULL || phase == NULL || phase_valid == NULL ||
+      timer == NULL || pattern == NULL || stage_valid == NULL || speed_index == NULL ||
+      speed_valid == NULL || delay == NULL || delay_valid == NULL || hitlag == NULL ||
+      hitlag_valid == NULL) {
+    Py_XDECREF(prev_vel_y);
+    Py_XDECREF(prev_valid);
+    Py_XDECREF(phase);
+    Py_XDECREF(phase_valid);
+    Py_XDECREF(timer);
+    Py_XDECREF(pattern);
+    Py_XDECREF(stage_valid);
+    Py_XDECREF(speed_index);
+    Py_XDECREF(speed_valid);
+    Py_XDECREF(delay);
+    Py_XDECREF(delay_valid);
+    Py_XDECREF(hitlag);
+    Py_XDECREF(hitlag_valid);
+    return NULL;
+  }
+
+  const uint8_t* ex = (const uint8_t*)PyArray_DATA(exists);
+  const uint16_t* ty = (const uint16_t*)PyArray_DATA(type);
+  const int8_t* ow = (const int8_t*)PyArray_DATA(owner);
+  const uint8_t* stp = (const uint8_t*)PyArray_DATA(state);
+  const uint32_t* sp = (const uint32_t*)PyArray_DATA(spawn);
+  const uint16_t* iidp = (const uint16_t*)PyArray_DATA(iid);
+  const float* vx = (const float*)PyArray_DATA(vel_x);
+  const float* vy = (const float*)PyArray_DATA(vel_y);
+  const float* px = (const float*)PyArray_DATA(pos_x);
+  const float* py = (const float*)PyArray_DATA(pos_y);
+  const uint16_t* dmg = (const uint16_t*)PyArray_DATA(damage);
+  const float* vpos = (const float*)PyArray_DATA(vpos_arr);
+  const float* speeds = (const float*)PyArray_DATA(speeds_arr);
+  const float* dyn = (const float*)PyArray_DATA(dyn_arr);
+
+  float* out_prev_vy = (float*)PyArray_DATA(prev_vel_y);
+  uint8_t* out_prev_valid = (uint8_t*)PyArray_DATA(prev_valid);
+  uint8_t* out_phase = (uint8_t*)PyArray_DATA(phase);
+  uint8_t* out_phase_valid = (uint8_t*)PyArray_DATA(phase_valid);
+  uint16_t* out_timer = (uint16_t*)PyArray_DATA(timer);
+  uint8_t* out_pattern = (uint8_t*)PyArray_DATA(pattern);
+  uint8_t* out_stage_valid = (uint8_t*)PyArray_DATA(stage_valid);
+  uint8_t* out_speed_idx = (uint8_t*)PyArray_DATA(speed_index);
+  uint8_t* out_speed_valid = (uint8_t*)PyArray_DATA(speed_valid);
+  uint16_t* out_delay = (uint16_t*)PyArray_DATA(delay);
+  uint8_t* out_delay_valid = (uint8_t*)PyArray_DATA(delay_valid);
+  uint8_t* out_hitlag = (uint8_t*)PyArray_DATA(hitlag);
+  uint8_t* out_hitlag_valid = (uint8_t*)PyArray_DATA(hitlag_valid);
+
+  const size_t cap = (size_t)(n * slots + 16);
+  MslPyShyguyKeyState* key_states = (MslPyShyguyKeyState*)calloc(cap, sizeof(*key_states));
+  MslPyShyguyPhaseState* phase_states = (MslPyShyguyPhaseState*)calloc(cap, sizeof(*phase_states));
+  MslPyShyguySpawnState* spawn_states = (MslPyShyguySpawnState*)calloc(cap, sizeof(*spawn_states));
+  MslPyShyguyGroupState* group_states = (MslPyShyguyGroupState*)calloc(cap, sizeof(*group_states));
+  MslPyShyguyPrevItem* prev_items =
+      (MslPyShyguyPrevItem*)calloc((size_t)(slots > 1 ? slots : 1), sizeof(*prev_items));
+  int* shyguy_slots = (int*)calloc((size_t)(slots > 1 ? slots : 1), sizeof(*shyguy_slots));
+  uint32_t* new_spawns = (uint32_t*)calloc((size_t)(slots > 1 ? slots : 1), sizeof(*new_spawns));
+  if (key_states == NULL || phase_states == NULL || spawn_states == NULL || group_states == NULL ||
+      prev_items == NULL || shyguy_slots == NULL || new_spawns == NULL) {
+    free(key_states);
+    free(phase_states);
+    free(spawn_states);
+    free(group_states);
+    free(prev_items);
+    free(shyguy_slots);
+    free(new_spawns);
+    PyErr_NoMemory();
+    return NULL;
+  }
+
+  size_t key_count = 0;
+  size_t phase_count = 0;
+  size_t spawn_count = 0;
+  size_t group_count = 0;
+  int prev_item_count = 0;
+  int cur_timer = timer_reset > 0 ? timer_reset - 1 : 0;
+  int cur_pattern = 0;
+  const bool stage_ok = replay_stage_id == param_stage_id;
+  for (npy_intp fi = 0; fi < n; fi++) {
+    int shyguy_count = 0;
+    int new_count = 0;
+    uint32_t group_base = UINT32_MAX;
+    for (npy_intp slot = 0; slot < slots; slot++) {
+      const npy_intp idx = fi * slots + slot;
+      if (ex[idx] != 0u && ty[idx] == (uint16_t)item_kind && ow[idx] == -1) {
+        shyguy_slots[shyguy_count++] = (int)slot;
+        bool seen_spawn = false;
+        for (size_t si = 0; si < spawn_count; si++) {
+          if (spawn_states[si].used && spawn_states[si].spawn_id == sp[idx]) {
+            seen_spawn = true;
+            break;
+          }
+        }
+        if (!seen_spawn) {
+          new_spawns[new_count++] = sp[idx];
+          if (sp[idx] < group_base) {
+            group_base = sp[idx];
+          }
+        }
+      }
+    }
+
+    if (stage_ok) {
+      out_timer[fi] = (uint16_t)(cur_timer < 0 ? 0 : cur_timer);
+      out_pattern[fi] = (uint8_t)cur_pattern;
+      out_stage_valid[fi] = 1u;
+    }
+
+    for (int si = 0; si < shyguy_count; si++) {
+      const int slot = shyguy_slots[si];
+      const npy_intp idx = fi * slots + slot;
+      for (int pi = 0; pi < prev_item_count; pi++) {
+        bool match = false;
+        if (sp[idx] != 0u) {
+          match = prev_items[pi].spawn_id == sp[idx];
+        } else {
+          match = prev_items[pi].instance_id == iidp[idx];
+        }
+        if (match && (stp[idx] == 1u || stp[idx] == 4u)) {
+          out_prev_vy[idx] = prev_items[pi].vel_y;
+          out_prev_valid[idx] = 1u;
+          break;
+        }
+      }
+    }
+
+    if (stage_ok && shyguy_count > 0) {
+      cur_timer = timer_reset;
+      const int first_slot = shyguy_slots[0];
+      const npy_intp first_idx = fi * slots + first_slot;
+      cur_pattern = msl_py_shyguy_pattern_from_item(px[first_idx], py[first_idx], vpos);
+      out_pattern[fi] = (uint8_t)cur_pattern;
+      if (new_count > 0) {
+        for (int ni = 0; ni < new_count; ni++) {
+          MslPyShyguySpawnState* ss =
+              msl_py_shyguy_spawn_state(spawn_states, &spawn_count, cap, new_spawns[ni], (int)fi);
+          if (ss == NULL) {
+            PyErr_SetString(PyExc_RuntimeError, "Yoshi Shy Guy spawn-state capacity exhausted");
+            goto fail;
+          }
+          ss->group_base = group_base;
+        }
+      }
+
+      for (int si = 0; si < shyguy_count; si++) {
+        const int slot = shyguy_slots[si];
+        const npy_intp idx = fi * slots + slot;
+        MslPyShyguySpawnState* ss =
+            msl_py_shyguy_spawn_state(spawn_states, &spawn_count, cap, sp[idx], (int)fi);
+        if (ss == NULL) {
+          PyErr_SetString(PyExc_RuntimeError, "Yoshi Shy Guy spawn-state capacity exhausted");
+          goto fail;
+        }
+        if ((stp[idx] == 1u || stp[idx] == 4u) && fabsf(vx[idx]) > 0.05f) {
+          MslPyShyguyGroupState* gs =
+              msl_py_shyguy_group_state(group_states, &group_count, cap, ss->group_base);
+          if (gs == NULL) {
+            PyErr_SetString(PyExc_RuntimeError, "Yoshi Shy Guy group-state capacity exhausted");
+            goto fail;
+          }
+          gs->speed_index = (uint8_t)msl_py_shyguy_speed_index_from_item(vx[idx], stp[idx], speeds,
+                                                                         (float)state4_speed_mul);
+          gs->speed_valid = true;
+        }
+      }
+
+      for (int si = 0; si < shyguy_count; si++) {
+        const int slot = shyguy_slots[si];
+        const npy_intp idx = fi * slots + slot;
+        MslPyShyguySpawnState* ss =
+            msl_py_shyguy_spawn_state(spawn_states, &spawn_count, cap, sp[idx], (int)fi);
+        if (ss == NULL) {
+          PyErr_SetString(PyExc_RuntimeError, "Yoshi Shy Guy spawn-state capacity exhausted");
+          goto fail;
+        }
+        MslPyShyguyGroupState* gs =
+            msl_py_shyguy_group_state(group_states, &group_count, cap, ss->group_base);
+        if (gs == NULL) {
+          PyErr_SetString(PyExc_RuntimeError, "Yoshi Shy Guy group-state capacity exhausted");
+          goto fail;
+        }
+        if (gs->speed_valid) {
+          out_speed_idx[idx] = gs->speed_index;
+          out_speed_valid[idx] = 1u;
+        }
+
+        const uint32_t key_id = sp[idx] == 0u ? (uint32_t)iidp[idx] : sp[idx];
+        MslPyShyguyKeyState* ks =
+            msl_py_shyguy_key_state(key_states, &key_count, cap, sp[idx], key_id);
+        if (ks == NULL) {
+          PyErr_SetString(PyExc_RuntimeError, "Yoshi Shy Guy key-state capacity exhausted");
+          goto fail;
+        }
+        int age = 0;
+        if (ks->prev_state < 0 || ks->prev_state != (int)stp[idx]) {
+          age = 0;
+          if ((stp[idx] == 2u || stp[idx] == 3u) && dmg[idx] > 0u) {
+            ks->hitlag = msl_py_shyguy_hitlag_from_damage(dmg[idx], (float)hitlag_damage_mul,
+                                                          (float)hitlag_base);
+          } else {
+            ks->hitlag = 0;
+          }
+          ks->state3_moving_age = 0;
+          ks->state4_zero_x_prefix = (stp[idx] == 4u && fabsf(vx[idx]) <= 0.001f) ? 20 : 0;
+        } else {
+          age = ks->state_age + 1;
+        }
+
+        const int arg0 = sp[idx] >= ss->group_base ? (int)(sp[idx] - ss->group_base) : 0;
+        if (stp[idx] == 0u) {
+          age = (int)fi - ss->first_seen;
+          int remaining = (spawn_delay_step * arg0) - age - 1;
+          if (remaining < 0) remaining = 0;
+          out_delay[idx] = (uint16_t)remaining;
+          out_delay_valid[idx] = 1u;
+        } else if (stp[idx] == 3u) {
+          int rem_hitlag = ks->hitlag;
+          if (rem_hitlag < 0) rem_hitlag = 0;
+          if (rem_hitlag > 255) rem_hitlag = 255;
+          out_hitlag[idx] = (uint8_t)rem_hitlag;
+          out_hitlag_valid[idx] = 1u;
+          int remaining = 12 - ks->state3_moving_age;
+          if (remaining < 0) remaining = 0;
+          out_delay[idx] = (uint16_t)remaining;
+          out_delay_valid[idx] = 1u;
+          if (ks->hitlag > 0) {
+            ks->hitlag--;
+          } else {
+            ks->state3_moving_age++;
+          }
+        } else if (stp[idx] == 2u) {
+          int rem_hitlag = ks->hitlag;
+          if (rem_hitlag < 0) rem_hitlag = 0;
+          if (rem_hitlag > 255) rem_hitlag = 255;
+          out_hitlag[idx] = (uint8_t)rem_hitlag;
+          out_hitlag_valid[idx] = 1u;
+          if (ks->hitlag > 0) {
+            ks->hitlag--;
+          }
+        } else if (stp[idx] == 4u) {
+          int rem_turn = ks->state4_zero_x_prefix;
+          if (rem_turn < 0) rem_turn = 0;
+          out_delay[idx] = (uint16_t)rem_turn;
+          out_delay_valid[idx] = 1u;
+          if (ks->state4_zero_x_prefix > 0) {
+            ks->state4_zero_x_prefix--;
+          }
+          out_hitlag[idx] = 0u;
+          out_hitlag_valid[idx] = 1u;
+        } else if (stp[idx] == 1u) {
+          out_delay[idx] = 0u;
+          out_delay_valid[idx] = 1u;
+          out_hitlag[idx] = 0u;
+          out_hitlag_valid[idx] = 1u;
+        }
+        ks->prev_state = (int)stp[idx];
+        ks->state_age = age;
+      }
+    } else if (stage_ok && cur_timer > 0) {
+      cur_timer--;
+    }
+
+    for (int si = 0; si < shyguy_count; si++) {
+      const int slot = shyguy_slots[si];
+      const npy_intp idx = fi * slots + slot;
+      if (stp[idx] != 1u && stp[idx] != 4u) {
+        continue;
+      }
+      const uint32_t key_id = sp[idx] == 0u ? (uint32_t)iidp[idx] : sp[idx];
+      MslPyShyguyPhaseState* ps =
+          msl_py_shyguy_phase_state(phase_states, &phase_count, cap, sp[idx], key_id);
+      if (ps == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "Yoshi Shy Guy phase-state capacity exhausted");
+        goto fail;
+      }
+      uint8_t cur_phase = 0u;
+      if (ps->state == (int)stp[idx]) {
+        const int predicted = ((int)ps->phase + 1) & 0xFF;
+        int visible = -1;
+        if (stp[idx] == 1u || fabsf(vx[idx]) >= 0.5f) {
+          visible = msl_py_shyguy_visible_phase(dyn, ps->has_prev_vel_y ? ps->prev_vel_y : 0.0f,
+                                                vy[idx], stp[idx], predicted);
+        }
+        cur_phase = (uint8_t)(visible < 0 ? predicted : visible);
+      }
+      out_phase[idx] = cur_phase;
+      out_phase_valid[idx] = 1u;
+      ps->state = (int)stp[idx];
+      ps->phase = cur_phase;
+      ps->prev_vel_y = vy[idx];
+      ps->has_prev_vel_y = true;
+    }
+
+    prev_item_count = 0;
+    for (int si = 0; si < shyguy_count && prev_item_count < slots; si++) {
+      const int slot = shyguy_slots[si];
+      const npy_intp idx = fi * slots + slot;
+      if (stp[idx] == 1u || stp[idx] == 4u) {
+        prev_items[prev_item_count].state = stp[idx];
+        prev_items[prev_item_count].spawn_id = sp[idx];
+        prev_items[prev_item_count].instance_id = iidp[idx];
+        prev_items[prev_item_count].vel_y = vy[idx];
+        prev_item_count++;
+      }
+    }
+  }
+
+  free(key_states);
+  free(phase_states);
+  free(spawn_states);
+  free(group_states);
+  free(prev_items);
+  free(shyguy_slots);
+  free(new_spawns);
+  return Py_BuildValue("NNNNNNNNNNNNN", prev_vel_y, prev_valid, phase, phase_valid, timer, pattern,
+                       stage_valid, speed_index, speed_valid, delay, delay_valid, hitlag,
+                       hitlag_valid);
+
+fail:
+  free(key_states);
+  free(phase_states);
+  free(spawn_states);
+  free(group_states);
+  free(prev_items);
+  free(shyguy_slots);
+  free(new_spawns);
+  Py_XDECREF(prev_vel_y);
+  Py_XDECREF(prev_valid);
+  Py_XDECREF(phase);
+  Py_XDECREF(phase_valid);
+  Py_XDECREF(timer);
+  Py_XDECREF(pattern);
+  Py_XDECREF(stage_valid);
+  Py_XDECREF(speed_index);
+  Py_XDECREF(speed_valid);
+  Py_XDECREF(delay);
+  Py_XDECREF(delay_valid);
+  Py_XDECREF(hitlag);
+  Py_XDECREF(hitlag_valid);
+  return NULL;
 }
 
 PyObject* msl_derive_item_hidden_callback_seed_lanes_py(PyObject* self, PyObject* args) {

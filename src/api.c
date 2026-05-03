@@ -2030,11 +2030,16 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.item_shyguy_prev_vel_y[ii] = seed->item_shyguy_prev_vel_y[it];
       batch->state.item_shyguy_prev_vel_y_valid[ii] =
           seed->item_shyguy_prev_vel_y_valid[it] ? 1u : 0u;
+      batch->state.item_shyguy_dyn_y_phase[ii] = seed->item_shyguy_dyn_y_phase_u8[it];
+      batch->state.item_shyguy_dyn_y_phase_valid[ii] =
+          seed->item_shyguy_dyn_y_phase_valid_u8[it] ? 1u : 0u;
       batch->state.item_shyguy_speed_index[ii] = seed->item_shyguy_speed_index_u8[it] % 3u;
       batch->state.item_shyguy_speed_index_valid[ii] =
           seed->item_shyguy_speed_index_valid_u8[it] ? 1u : 0u;
       batch->state.item_shyguy_delay[ii] = seed->item_shyguy_delay_u16[it];
       batch->state.item_shyguy_delay_valid[ii] = seed->item_shyguy_delay_valid_u8[it] ? 1u : 0u;
+      batch->state.item_shyguy_hitlag[ii] = seed->item_shyguy_hitlag_u8[it];
+      batch->state.item_shyguy_hitlag_valid[ii] = seed->item_shyguy_hitlag_valid_u8[it] ? 1u : 0u;
 
       // Item hitlists are explicit runtime state. Clear on reseed so reused item slots do not
       // inherit stale victim rings; seed bridges below re-materialize selected victims_1 entries.

@@ -15,6 +15,11 @@ typedef struct MslItemCommonParams {
   // refs/melee/src/melee/it/types.h::ItemCommonData::unk_degrees
   float shield_bounce_extra_degrees;
   float shield_bounce_threshold_radians;
+  // Item hitlag scalar:
+  // refs/melee/src/melee/it/it_26B1.c::it_8026B424
+  // refs/melee/src/melee/it/types.h::ItemCommonData::{xB8,xBC}
+  float item_hitlag_damage_mul;
+  float item_hitlag_base;
 } MslItemCommonParams;
 
 int item_common_params_init(void);

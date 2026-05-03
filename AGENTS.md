@@ -56,6 +56,10 @@ Current target domain:
 ### C Core + Thin Python
 - All gameplay / physics / combat logic lives in **C** under `src/`.
 - Python under `python/` is a thin wrapper and tooling layer only.
+- Preprocessing/eval derivation is also a hot path. Do not add per-frame/per-item Python loops,
+  candidate searches, state maps, or repeated JSON/data reads to seed generation. New seed-lane
+  derivation must use native C (`python/msl_preprocess_native.c` / `msl_binding`) or include timing
+  proof that the Python path is negligible.
 
 ## Validation Model
 

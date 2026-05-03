@@ -852,8 +852,11 @@ Characters (Fox/Falco):
   - Purpose:
     - Store source-backed stage-owned item constants for `It_Kind_Heiho` so runtime item code
       consumes generated data instead of embedding DAT/FObj tables in gameplay C.
-    - Covers the replay-seeded/eval active-motion/state-delay slice only; it does not by itself
-      close global HSD RNG consumer order before `grStory_801E3418`.
+    - Covers the replay-seeded/eval active-motion/state-delay slice only. The seed surface may
+      carry prefix-causal Shy Guy internals such as previous dynamic-bone velocity, active AObj
+      phase, speed index, and state delay; it must not carry replay-next position/velocity.
+    - This artifact does not by itself close global HSD RNG consumer order before
+      `grStory_801E3418`.
   - Sources:
     - `_iso/GrSt.dat::yakumono_param` (`timer_min`, `timer_rand`, `spawnmany_rarity`, `vpos`)
     - `_iso/GrSt.dat::itemdata` Heiho `Article` common attrs / special attrs

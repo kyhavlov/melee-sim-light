@@ -490,12 +490,19 @@ SEED_DTYPE = np.dtype(
         # refs/melee/src/melee/it/items/itheiho.c::it_802D98C4
         ("item_shyguy_prev_vel_y", _arr("<f4", MAX_ITEMS)),
         ("item_shyguy_prev_vel_y_valid", _arr("u1", MAX_ITEMS)),
+        # Prefix-causal Shy Guy active animation phase. This is the hidden AObj/JObj phase behind
+        # the duplicate visible Y-velocity deltas, derived from replay prefix history only.
+        # refs/melee/src/melee/it/items/itheiho.c::{it_802D98AC,it_802D98C4}
+        ("item_shyguy_dyn_y_phase_u8", _arr("u1", MAX_ITEMS)),
+        ("item_shyguy_dyn_y_phase_valid_u8", _arr("u1", MAX_ITEMS)),
         # Prefix-causal Shy Guy itemVar internals.
         # refs/melee/src/melee/it/items/itheiho.c::{it_802D8618,itHeiho_UnkMotion0_Phys}
         ("item_shyguy_speed_index_u8", _arr("u1", MAX_ITEMS)),
         ("item_shyguy_speed_index_valid_u8", _arr("u1", MAX_ITEMS)),
         ("item_shyguy_delay_u16", _arr("<u2", MAX_ITEMS)),
         ("item_shyguy_delay_valid_u8", _arr("u1", MAX_ITEMS)),
+        ("item_shyguy_hitlag_u8", _arr("u1", MAX_ITEMS)),
+        ("item_shyguy_hitlag_valid_u8", _arr("u1", MAX_ITEMS)),
         # NOTE (PP#4): these staling fields are populated by replay-history preprocessing:
         # tools/slippi/staling_history.py (derive) and tools/slippi/make_dataset_from_slp.py (wire).
         # They seed the per-player `StaleMoveTable` ring buffer and `attack_instance`.

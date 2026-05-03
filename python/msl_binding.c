@@ -5151,6 +5151,8 @@ static PyMethodDef methods[] = {
      METH_VARARGS,
      "derive_item_hidden_callback_seed_lanes(seed/ref item fields, action fields, laser LUT) -> "
      "item hidden callback arrays"},
+    {"derive_yoshi_shyguy_seed_lanes", msl_derive_yoshi_shyguy_seed_lanes_py, METH_VARARGS,
+     "derive_yoshi_shyguy_seed_lanes(item fields, params...) -> Shy Guy seed lanes"},
     {"derive_illusion_seed_position_updates", msl_derive_illusion_seed_position_updates_py,
      METH_VARARGS,
      "derive_illusion_seed_position_updates(item fields, fighter fields, illusion LUT) -> "

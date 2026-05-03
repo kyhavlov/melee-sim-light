@@ -7,8 +7,11 @@ import pytest
 
 from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE, read_dataset
 from tools.slippi.make_dataset_from_slp import (
+    _derive_yoshi_shyguy_dyn_y_phase,
+    _derive_yoshi_shyguy_native_lanes,
     _derive_yoshi_shyguy_prev_vel_y,
     _derive_yoshi_shyguy_seed_lanes,
+    _item_common_params,
 )
 from tools.slippi.known_data_artifacts import yoshi_shyguy_metadata
 
@@ -109,6 +112,38 @@ def _empty_seed() -> np.ndarray:
 def _expected_shyguy_step_vel_y(seed: np.void, slot: int) -> float:
     cur = float(seed["items"][slot]["vel_y"])
     dyn_y_vel = _shyguy_params().dyn_y_vel
+    if int(seed["item_shyguy_dyn_y_phase_valid_u8"][slot]) != 0:
+        phase = int(seed["item_shyguy_dyn_y_phase_u8"][slot]) & 0xFF
+        state = int(seed["items"][slot]["state"])
+        if state == 4:
+            if phase <= 29:
+                expected_cur = 0.0
+                next_vel = dyn_y_vel[0]
+            else:
+                q = (phase - 18) & 0xFF
+                if q == 140:
+                    expected_cur = -dyn_y_vel[0]
+                elif q >= 141:
+                    base = ((q - 141) & 0x3F) * 2
+                    expected_cur = dyn_y_vel[base] + dyn_y_vel[(base + 1) & 0x7F]
+                elif q == 12:
+                    expected_cur = dyn_y_vel[0]
+                else:
+                    expected_cur = _state4_rate2_value(dyn_y_vel, q - 11)
+
+                if q == 139:
+                    next_vel = -dyn_y_vel[0]
+                elif q >= 140:
+                    base = ((q - 140) & 0x3F) * 2
+                    next_vel = dyn_y_vel[base] + dyn_y_vel[(base + 1) & 0x7F]
+                else:
+                    next_vel = _state4_rate2_value(dyn_y_vel, q - 10)
+            if abs(expected_cur - cur) <= 0.001:
+                return next_vel
+        else:
+            expected_cur = _phase_value(dyn_y_vel, phase)
+            if abs(expected_cur - cur) <= 0.001:
+                return _phase_value(dyn_y_vel, phase + 1)
     if int(seed["item_shyguy_prev_vel_y_valid"][slot]) == 0:
         if int(seed["items"][slot]["state"]) == 1 and abs(cur) <= 0.001:
             return dyn_y_vel[0]
@@ -118,6 +153,25 @@ def _expected_shyguy_step_vel_y(seed: np.void, slot: int) -> float:
         if abs(value - cur) <= 0.001 and abs(dyn_y_vel[(i - 1) % len(dyn_y_vel)] - prev) <= 0.001:
             return dyn_y_vel[(i + 1) % len(dyn_y_vel)]
     return cur
+
+
+def _phase_value(dyn_y_vel: tuple[float, ...], phase: int) -> float:
+    phase &= 0xFF
+    if phase == 0:
+        return 0.0
+    if phase <= len(dyn_y_vel):
+        return dyn_y_vel[phase - 1]
+    return dyn_y_vel[256 - phase]
+
+
+def _state4_rate2_value(dyn_y_vel: tuple[float, ...], phase: int) -> float:
+    phase &= 0xFF
+    if phase == 0:
+        return 0.0
+    if phase == 1:
+        return _phase_value(dyn_y_vel, 1)
+    base = (2 * phase) - 2
+    return _phase_value(dyn_y_vel, base) + _phase_value(dyn_y_vel, base + 1)
 
 
 def _expected_shyguy_step_vel_x(seed: np.void, slot: int) -> float:
@@ -151,6 +205,115 @@ def test_yoshi_shyguy_prev_vel_y_derivation_is_prefix_causal() -> None:
     prev_vel_y_after, valid_after = _derive_yoshi_shyguy_prev_vel_y(items)
     assert int(valid_after[1, 0]) == 1
     assert float(prev_vel_y_after[1, 0]) == pytest.approx(0.25)
+
+
+def test_yoshi_shyguy_dyn_y_phase_derivation_is_prefix_causal() -> None:
+    items = np.zeros((4, 15), dtype=SEED_DTYPE["items"].base)
+    items["owner"] = np.int8(-1)
+    for frame, vel_y in enumerate((0.0, 0.7028961182, 0.7015228271, -99.0)):
+        item = items[frame, 0]
+        item["exists"] = np.uint8(1)
+        item["state"] = np.uint8(1)
+        item["type"] = np.uint16(ITEM_KIND_HEIHO)
+        item["owner"] = np.int8(-1)
+        item["spawn_id"] = np.uint32(77)
+        item["vel_y"] = np.float32(vel_y)
+
+    phase, valid = _derive_yoshi_shyguy_dyn_y_phase(items)
+    assert int(valid[1, 0]) == 1
+    assert int(phase[1, 0]) == 1
+    assert int(valid[2, 0]) == 1
+    assert int(phase[2, 0]) == 2
+
+    items[3, 0]["vel_y"] = np.float32(123.0)
+    phase_after, valid_after = _derive_yoshi_shyguy_dyn_y_phase(items)
+    assert int(valid_after[2, 0]) == 1
+    assert int(phase_after[2, 0]) == 2
+
+
+def test_yoshi_shyguy_native_derivation_shapes_and_known_rows() -> None:
+    pytest.importorskip("msl_binding")
+    params = _shyguy_params()
+    items = np.zeros((4, 15), dtype=SEED_DTYPE["items"].base)
+    items["owner"] = np.int8(-1)
+    for frame, vel_y in enumerate((0.0, params.dyn_y_vel[0], params.dyn_y_vel[1], -99.0)):
+        item = items[frame, 0]
+        item["exists"] = np.uint8(1)
+        item["state"] = np.uint8(1)
+        item["type"] = np.uint16(ITEM_KIND_HEIHO)
+        item["owner"] = np.int8(-1)
+        item["spawn_id"] = np.uint32(77)
+        item["vel_x"] = np.float32(0.3)
+        item["vel_y"] = np.float32(vel_y)
+        item["pos_x"] = np.float32(-292.0)
+        item["pos_y"] = np.float32(params.vpos[0])
+
+    falling = items[1, 1]
+    falling["exists"] = np.uint8(1)
+    falling["state"] = np.uint8(3)
+    falling["type"] = np.uint16(ITEM_KIND_HEIHO)
+    falling["owner"] = np.int8(-1)
+    falling["spawn_id"] = np.uint32(78)
+    falling["damage"] = np.uint16(12)
+
+    lanes = _derive_yoshi_shyguy_native_lanes(items, stage_id=STAGE_YOSHIS_STORY)
+    assert len(lanes) == 13
+    prev_vel_y, prev_valid, phase, phase_valid, timer, pattern, stage_valid, *_rest = lanes
+    hitlag = lanes[11]
+    hitlag_valid = lanes[12]
+
+    assert prev_vel_y.shape == (4, 15)
+    assert prev_vel_y.dtype == np.float32
+    assert prev_valid.dtype == np.uint8
+    assert phase.dtype == np.uint8
+    assert phase_valid.dtype == np.uint8
+    assert timer.dtype == np.uint16
+    assert pattern.dtype == np.uint8
+    assert stage_valid.dtype == np.uint8
+
+    assert int(prev_valid[1, 0]) == 1
+    assert float(prev_vel_y[1, 0]) == pytest.approx(0.0)
+    assert int(phase_valid[1, 0]) == 1
+    assert int(phase[1, 0]) == 1
+    assert int(phase[2, 0]) == 2
+    assert int(stage_valid[0]) == 1
+    assert int(pattern[0]) == 0
+    assert int(hitlag_valid[1, 1]) == 1
+    assert int(hitlag[1, 1]) > 0
+
+
+def test_yoshi_shyguy_native_derivation_rejects_mismatched_item_width() -> None:
+    binding = pytest.importorskip("msl_binding")
+    params = _shyguy_params()
+    common = _item_common_params()
+    items = np.zeros((2, 15), dtype=SEED_DTYPE["items"].base)
+    items["owner"] = np.int8(-1)
+
+    with pytest.raises(ValueError):
+        binding.derive_yoshi_shyguy_seed_lanes(
+            np.ascontiguousarray(items["exists"], dtype=np.uint8),
+            np.ascontiguousarray(items["type"][:, :14], dtype=np.uint16),
+            np.ascontiguousarray(items["owner"], dtype=np.int8),
+            np.ascontiguousarray(items["state"], dtype=np.uint8),
+            np.ascontiguousarray(items["spawn_id"], dtype=np.uint32),
+            np.ascontiguousarray(items["instance_id"], dtype=np.uint16),
+            np.ascontiguousarray(items["vel_x"], dtype=np.float32),
+            np.ascontiguousarray(items["vel_y"], dtype=np.float32),
+            np.ascontiguousarray(items["pos_x"], dtype=np.float32),
+            np.ascontiguousarray(items["pos_y"], dtype=np.float32),
+            np.ascontiguousarray(items["damage"], dtype=np.uint16),
+            STAGE_YOSHIS_STORY,
+            int(params.stage_id),
+            int(params.item_kind),
+            int(params.timer_reset),
+            int(params.spawn_delay_step),
+            float(params.state4_speed_mul),
+            np.asarray(params.vpos, dtype=np.float32),
+            np.asarray(params.speed, dtype=np.float32),
+            np.asarray(params.dyn_y_vel, dtype=np.float32),
+            float(common["item_hitlag_damage_mul"]),
+            float(common["item_hitlag_base"]),
+        )
 
 
 def test_yoshi_shyguy_stage_timer_derivation_is_prefix_causal() -> None:
@@ -374,3 +537,63 @@ def test_state4_yoshi_shyguy_integrates_visible_velocity() -> None:
         assert float(out["items"][it]["pos_y"]) == pytest.approx(
             float(item["pos_y"]) + vel_y, abs=1e-6
         )
+
+
+@pytest.mark.integration
+def test_yoshi_shyguy_reconstructed_phase_handles_aobj_loop_rows() -> None:
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    try:
+        ds = read_dataset(str(dataset_path))
+    except ValueError as exc:
+        if "record_size mismatch" in str(exc):
+            pytest.skip(f"stale local dataset cache: {exc}")
+        raise
+
+    # State 4 row 667 is after the x24 return-flight prefix. The raw active-frame modulo phase
+    # selects the wrong side of the looping child AObj; preprocessing reconstructs the hidden phase
+    # from replay-prefix prev/current x40_vel.y and the extracted GrSt.dat FObj deltas.
+    # refs/melee/src/melee/it/items/itheiho.c::{itHeiho_UnkMotion4_Anim,it_802D98C4}
+    out, ref = _step_one_row(dataset_path, 667)
+    assert float(out["items"][3]["pos_y"]) == pytest.approx(
+        float(ref["items"][3]["pos_y"]), abs=1e-6
+    )
+
+
+@pytest.mark.integration
+def test_yoshi_shyguy_state3_zero_delay_rows_do_not_over_enter_state4() -> None:
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    try:
+        ds = read_dataset(str(dataset_path))
+    except ValueError as exc:
+        if "record_size mismatch" in str(exc):
+            pytest.skip(f"stale local dataset cache: {exc}")
+        raise
+
+    # These replay-real rows lock the rejected over-broad state-3 x24 reconstruction. Slippi
+    # serializes state 3 with x24==0 for several rows before the source item proc actually enters
+    # state 4, so zero alone is not a sufficient causal transition predicate.
+    # refs/melee/src/melee/it/items/itheiho.c::{itHeiho_UnkMotion3_Phys,it_802D9168}
+    for record in (6124, 6133):
+        row = ds.samples[record]
+        seed = row["seed_t"]
+        assert int(seed["items"][1]["type"]) == ITEM_KIND_HEIHO
+        assert int(seed["items"][1]["state"]) == 3
+        assert int(seed["item_shyguy_delay_valid_u8"][1]) == 1
+        assert int(seed["item_shyguy_delay_u16"][1]) == 0
+
+        out, ref = _step_one_row(dataset_path, record)
+        assert int(out["items"][1]["state"]) == int(ref["items"][1]["state"]) == 3

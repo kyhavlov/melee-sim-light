@@ -173,10 +173,14 @@ static inline void item_slot_clear(MslBatch* batch, size_t ii) {
   batch->state.item_hidden_callback_flags[ii] = 0u;
   batch->state.item_shyguy_prev_vel_y[ii] = 0.0f;
   batch->state.item_shyguy_prev_vel_y_valid[ii] = 0u;
+  batch->state.item_shyguy_dyn_y_phase[ii] = 0u;
+  batch->state.item_shyguy_dyn_y_phase_valid[ii] = 0u;
   batch->state.item_shyguy_speed_index[ii] = 0u;
   batch->state.item_shyguy_speed_index_valid[ii] = 0u;
   batch->state.item_shyguy_delay[ii] = 0u;
   batch->state.item_shyguy_delay_valid[ii] = 0u;
+  batch->state.item_shyguy_hitlag[ii] = 0u;
+  batch->state.item_shyguy_hitlag_valid[ii] = 0u;
 
   // Clear per-item/per-HitCapsule victim rings (hitlist).
   // Items own one HitCapsule victim ring per article hitbox:
@@ -243,10 +247,14 @@ static inline void item_slot_swap(MslBatch* batch, size_t a, size_t b) {
   SWAP(uint8_t, batch->state.item_hidden_callback_flags);
   SWAP(float, batch->state.item_shyguy_prev_vel_y);
   SWAP(uint8_t, batch->state.item_shyguy_prev_vel_y_valid);
+  SWAP(uint8_t, batch->state.item_shyguy_dyn_y_phase);
+  SWAP(uint8_t, batch->state.item_shyguy_dyn_y_phase_valid);
   SWAP(uint8_t, batch->state.item_shyguy_speed_index);
   SWAP(uint8_t, batch->state.item_shyguy_speed_index_valid);
   SWAP(uint16_t, batch->state.item_shyguy_delay);
   SWAP(uint8_t, batch->state.item_shyguy_delay_valid);
+  SWAP(uint8_t, batch->state.item_shyguy_hitlag);
+  SWAP(uint8_t, batch->state.item_shyguy_hitlag_valid);
 #undef SWAP
 
   // Swap per-item/per-HitCapsule hitlist lanes to preserve deterministic item ordering invariants.
@@ -342,21 +350,111 @@ static uint8_t yoshi_shyguy_has_live(const MslBatch* batch, int bi) {
   return 0u;
 }
 
+static float yoshi_shyguy_dyn_y_phase_value(const MslYoshiShyguyParams* params, int phase) {
+  phase &= 0xFF;
+  if (phase == 0) {
+    return 0.0f;
+  }
+  if (phase <= MSL_YOSHI_SHYGUY_DYN_Y_COUNT) {
+    return params->dyn_y_vel[phase - 1];
+  }
+  return params->dyn_y_vel[256 - phase];
+}
+
+static float yoshi_shyguy_dyn_y_rate2_value(const MslYoshiShyguyParams* params, int phase) {
+  phase &= 0xFF;
+  if (phase == 0) {
+    return 0.0f;
+  }
+  if (phase == 1) {
+    return yoshi_shyguy_dyn_y_phase_value(params, 1);
+  }
+  const int base = (2 * phase) - 2;
+  return yoshi_shyguy_dyn_y_phase_value(params, base) +
+         yoshi_shyguy_dyn_y_phase_value(params, base + 1);
+}
+
+static float yoshi_shyguy_dyn_y_pair_forward(const MslYoshiShyguyParams* params, int pair) {
+  pair &= 0x3F;
+  const int base = pair * 2;
+  return params->dyn_y_vel[base] + params->dyn_y_vel[(base + 1) & 0x7F];
+}
+
 static uint8_t yoshi_shyguy_next_dynamic_vel_y(const MslYoshiShyguyParams* params, float prev_vel_y,
-                                               float cur_vel_y, float* out) {
+                                               float cur_vel_y, uint8_t rate2, float* out) {
   if (params == NULL || out == NULL || !isfinite(prev_vel_y) || !isfinite(cur_vel_y)) {
     return 0u;
   }
   const float eps = 0.001f;
-  for (int i = 0; i < MSL_YOSHI_SHYGUY_DYN_Y_COUNT; i++) {
-    const int prev_i = (i + MSL_YOSHI_SHYGUY_DYN_Y_COUNT - 1) % MSL_YOSHI_SHYGUY_DYN_Y_COUNT;
-    if (fabsf(params->dyn_y_vel[i] - cur_vel_y) <= eps &&
-        fabsf(params->dyn_y_vel[prev_i] - prev_vel_y) <= eps) {
-      *out = params->dyn_y_vel[(i + 1) % MSL_YOSHI_SHYGUY_DYN_Y_COUNT];
+  if (rate2 != 0u) {
+    for (int i = 0; i < 256; i++) {
+      const int prev_i = (i + 255) & 0xFF;
+      if (fabsf(yoshi_shyguy_dyn_y_rate2_value(params, i) - cur_vel_y) <= eps &&
+          fabsf(yoshi_shyguy_dyn_y_rate2_value(params, prev_i) - prev_vel_y) <= eps) {
+        *out = yoshi_shyguy_dyn_y_rate2_value(params, (i + 1) & 0xFF);
+        return 1u;
+      }
+    }
+    return 0u;
+  }
+  for (int i = 0; i < 256; i++) {
+    const int prev_i = (i + 255) & 0xFF;
+    if (fabsf(yoshi_shyguy_dyn_y_phase_value(params, i) - cur_vel_y) <= eps &&
+        fabsf(yoshi_shyguy_dyn_y_phase_value(params, prev_i) - prev_vel_y) <= eps) {
+      *out = yoshi_shyguy_dyn_y_phase_value(params, (i + 1) & 0xFF);
       return 1u;
     }
   }
   return 0u;
+}
+
+static float yoshi_shyguy_vel_y_from_phase(const MslYoshiShyguyParams* params, uint8_t phase,
+                                           uint8_t state) {
+  if (state == 4u) {
+    const uint8_t p = phase;
+    if (p <= 29u) {
+      // Return-flight can enter with the source x24 camera-turn delay set. During this prefix,
+      // Slippi keeps x40_vel.y at zero even though `it_802D98C4` still contributes the first child
+      // dynamic-bone delta to item position.
+      // refs/melee/src/melee/it/items/itheiho.c::{it_802D9168,itHeiho_UnkMotion4_Phys}
+      return yoshi_shyguy_dyn_y_phase_value(params, 1);
+    }
+    const uint8_t q = (uint8_t)(p - 18u);
+    if (q == 139u) {
+      // `HSD_AObjInterpretAnim` rewinds the looping child AObj before the next update. The visible
+      // dynamic-bone delta is the reset-to-zero jump, not another rate-2 pair.
+      // refs/melee/src/sysdolphin/baselib/aobj.c::HSD_AObjInterpretAnim
+      // refs/melee/src/sysdolphin/baselib/fobj.c::HSD_FObjInterpretAnim
+      return -yoshi_shyguy_dyn_y_phase_value(params, 1);
+    }
+    if (q >= 140u) {
+      return yoshi_shyguy_dyn_y_pair_forward(params, (int)(q - 140u));
+    }
+    return yoshi_shyguy_dyn_y_rate2_value(params, (int)(q - 10u));
+  }
+  return yoshi_shyguy_dyn_y_phase_value(params, ((int)phase + 1) & 0xFF);
+}
+
+static float yoshi_shyguy_current_vel_y_for_phase(const MslYoshiShyguyParams* params, uint8_t phase,
+                                                  uint8_t state) {
+  if (state == 4u) {
+    const uint8_t p = phase;
+    if (p <= 29u) {
+      return 0.0f;
+    }
+    const uint8_t q = (uint8_t)(p - 18u);
+    if (q == 12u) {
+      return yoshi_shyguy_dyn_y_phase_value(params, 1);
+    }
+    if (q == 140u) {
+      return -yoshi_shyguy_dyn_y_phase_value(params, 1);
+    }
+    if (q >= 141u) {
+      return yoshi_shyguy_dyn_y_pair_forward(params, (int)(q - 141u));
+    }
+    return yoshi_shyguy_dyn_y_rate2_value(params, (int)(q - 11u));
+  }
+  return yoshi_shyguy_dyn_y_phase_value(params, phase);
 }
 
 static int yoshi_shyguy_spawn_count(MslBatch* batch, int bi) {
@@ -414,8 +512,12 @@ static void yoshi_shyguy_spawn_one(MslBatch* batch, int bi, int arg0, float pos_
   batch->state.item_spawn_id[ii] = items_next_spawn_id(batch, bi);
   batch->state.item_shyguy_speed_index[ii] = speed_index % 3u;
   batch->state.item_shyguy_speed_index_valid[ii] = 1u;
+  batch->state.item_shyguy_dyn_y_phase[ii] = 0u;
+  batch->state.item_shyguy_dyn_y_phase_valid[ii] = 1u;
   batch->state.item_shyguy_delay[ii] = (uint16_t)(params->spawn_delay_step * arg0);
   batch->state.item_shyguy_delay_valid[ii] = 1u;
+  batch->state.item_shyguy_hitlag[ii] = 0u;
+  batch->state.item_shyguy_hitlag_valid[ii] = 1u;
 }
 
 static void yoshi_shyguy_stage_update(MslBatch* batch, int bi) {
@@ -5286,6 +5388,15 @@ static void yoshi_shyguy_items_update(MslBatch* batch, int bi) {
     }
     const uint8_t state = batch->state.item_state[ii];
     if (state == 2u || state == 3u) {
+      if (batch->state.item_shyguy_hitlag_valid[ii] != 0u &&
+          batch->state.item_shyguy_hitlag[ii] > 0u) {
+        // Generic item hitlag decrements before the item Phys/movement proc and leaves
+        // xDC8_word.flags.x9 set while positive, so Item_802697D4 skips both Phys and position.
+        // refs/melee/src/melee/it/item.c::{Item_802693E4,Item_802697D4}
+        batch->state.item_shyguy_hitlag[ii]--;
+        batch->state.item_hitlag[ii] = batch->state.item_shyguy_hitlag[ii];
+        continue;
+      }
       // Knocked/falling Shy Guy states use item gravity, then generic item position integration.
       // State 3 additionally delays before entering the return-flight state.
       // refs/melee/src/melee/it/items/itheiho.c::{
@@ -5293,15 +5404,14 @@ static void yoshi_shyguy_items_update(MslBatch* batch, int bi) {
       batch->state.item_vel_y[ii] -= params->fall_accel;
       batch->state.item_pos_x[ii] += batch->state.item_vel_x[ii];
       batch->state.item_pos_y[ii] += batch->state.item_vel_y[ii];
-      if (state == 3u && batch->state.item_shyguy_delay_valid[ii] != 0u) {
-        if (batch->state.item_shyguy_delay[ii] == 0u) {
-          batch->state.item_state[ii] = 4u;
-          batch->state.item_shyguy_prev_vel_y[ii] = 0.0f;
-          batch->state.item_shyguy_prev_vel_y_valid[ii] = 0u;
-        } else {
-          batch->state.item_shyguy_delay[ii]--;
-        }
+      if (state == 3u && batch->state.item_shyguy_delay_valid[ii] != 0u &&
+          batch->state.item_shyguy_delay[ii] > 0u) {
+        batch->state.item_shyguy_delay[ii]--;
       }
+      // Do not treat a replay-seeded item_shyguy_delay == 0 as source x24 == 0 here.
+      // Broadly reconstructing that return-flight predicate over-entered it_802D9168 and
+      // regressed PhysicalElectricCapybara records 6124..6133. The hidden state-3 -> state-4
+      // predicate remains a named Shy Guy lifecycle residual.
       continue;
     }
     if (state == 0u && batch->state.item_shyguy_delay_valid[ii] != 0u) {
@@ -5314,6 +5424,8 @@ static void yoshi_shyguy_items_update(MslBatch* batch, int bi) {
         batch->state.item_vel_y[ii] = 0.0f;
         batch->state.item_shyguy_prev_vel_y[ii] = 0.0f;
         batch->state.item_shyguy_prev_vel_y_valid[ii] = 0u;
+        batch->state.item_shyguy_dyn_y_phase[ii] = 0u;
+        batch->state.item_shyguy_dyn_y_phase_valid[ii] = 1u;
       } else {
         batch->state.item_shyguy_delay[ii]--;
       }
@@ -5350,6 +5462,8 @@ static void yoshi_shyguy_items_update(MslBatch* batch, int bi) {
         continue;
       }
     }
+    float move_vel_x = batch->state.item_vel_x[ii];
+    float export_vel_x = batch->state.item_vel_x[ii];
     if (batch->state.item_shyguy_speed_index_valid[ii] != 0u) {
       const uint8_t speed_index =
           batch->state.item_shyguy_speed_index[ii] % MSL_YOSHI_SHYGUY_SPEED_COUNT;
@@ -5357,26 +5471,57 @@ static void yoshi_shyguy_items_update(MslBatch* batch, int bi) {
       if (state == 4u) {
         speed_x *= params->state4_speed_mul;
       }
-      batch->state.item_vel_x[ii] = speed_x;
+      move_vel_x = speed_x;
+      export_vel_x = speed_x;
     }
-    float vel_y = batch->state.item_vel_y[ii];
-    if (batch->state.item_shyguy_prev_vel_y_valid[ii] != 0u) {
-      const float prev_vel_y = batch->state.item_shyguy_prev_vel_y[ii];
-      float next_vel_y = vel_y;
-      if (yoshi_shyguy_next_dynamic_vel_y(params, prev_vel_y, vel_y, &next_vel_y) != 0u) {
-        vel_y = next_vel_y;
+    float move_vel_y = batch->state.item_vel_y[ii];
+    float export_vel_y = batch->state.item_vel_y[ii];
+    uint8_t phase_used = 0u;
+    if (phase_used == 0u && batch->state.item_shyguy_dyn_y_phase_valid[ii] != 0u) {
+      const uint8_t phase = batch->state.item_shyguy_dyn_y_phase[ii];
+      const float expected_cur = yoshi_shyguy_current_vel_y_for_phase(params, phase, state);
+      if (fabsf(expected_cur - move_vel_y) <= 0.001f) {
+        move_vel_y = yoshi_shyguy_vel_y_from_phase(params, phase, state);
+        export_vel_y = move_vel_y;
+        batch->state.item_shyguy_dyn_y_phase[ii] = (uint8_t)((phase + 1u) & 0xFFu);
+        phase_used = 1u;
+      } else {
+        batch->state.item_shyguy_dyn_y_phase_valid[ii] = 0u;
       }
-    } else if (fabsf(vel_y) <= 0.001f && state == 1u) {
-      // `itHeiho_UnkMotion0_Phys` enters state 1 through `it_802D8918`, which resets x3C and
-      // immediately samples the active child-JObj translation once before the first active Phys.
-      // refs/melee/src/melee/it/items/itheiho.c::{it_802D8918,it_802D98AC,it_802D98C4}
-      vel_y = params->dyn_y_vel[0];
+    }
+    if (phase_used == 0u) {
+      if (batch->state.item_shyguy_prev_vel_y_valid[ii] != 0u) {
+        const float prev_vel_y = batch->state.item_shyguy_prev_vel_y[ii];
+        float next_vel_y = move_vel_y;
+        if (yoshi_shyguy_next_dynamic_vel_y(params, prev_vel_y, move_vel_y, (state == 4u) ? 1u : 0u,
+                                            &next_vel_y) != 0u) {
+          move_vel_y = next_vel_y;
+          export_vel_y = next_vel_y;
+        }
+      } else if (fabsf(move_vel_y) <= 0.001f && state == 1u) {
+        // `itHeiho_UnkMotion0_Phys` enters state 1 through `it_802D8918`, which resets x3C and
+        // immediately samples the active child-JObj translation once before the first active Phys.
+        // refs/melee/src/melee/it/items/itheiho.c::{it_802D8918,it_802D98AC,it_802D98C4}
+        move_vel_y = params->dyn_y_vel[0];
+        export_vel_y = params->dyn_y_vel[0];
+      }
+    }
+    if (state == 4u && batch->state.item_shyguy_delay_valid[ii] != 0u &&
+        batch->state.item_shyguy_delay[ii] > 0u) {
+      // Return-flight x24 turn/camera delay: Phys uses the source X speed for position, but the
+      // post-frame item velocity is still the dynamic-bone/export velocity from Anim for the delay
+      // prefix.
+      // refs/melee/src/melee/it/items/itheiho.c::{it_802D9168,itHeiho_UnkMotion4_Phys}
+      export_vel_x = batch->state.item_vel_x[ii];
+      export_vel_y = batch->state.item_vel_y[ii];
+      batch->state.item_shyguy_delay[ii]--;
     }
     batch->state.item_shyguy_prev_vel_y[ii] = batch->state.item_vel_y[ii];
     batch->state.item_shyguy_prev_vel_y_valid[ii] = 1u;
-    batch->state.item_vel_y[ii] = vel_y;
-    batch->state.item_pos_x[ii] += batch->state.item_vel_x[ii];
-    batch->state.item_pos_y[ii] += vel_y;
+    batch->state.item_pos_x[ii] += move_vel_x;
+    batch->state.item_pos_y[ii] += move_vel_y;
+    batch->state.item_vel_x[ii] = export_vel_x;
+    batch->state.item_vel_y[ii] = export_vel_y;
   }
   if (needs_sort != 0u) {
     items_sort(batch, bi);

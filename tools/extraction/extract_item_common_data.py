@@ -35,6 +35,12 @@ def main() -> None:
     item_common_abs = arc.data_base + item_common_ptr
 
     out = {
+        # Item_8026B424 computes item hitlag as:
+        #   (s32)(damage * it_804D6D28->xB8 + it_804D6D28->xBC)
+        # refs/melee/src/melee/it/it_26B1.c::it_8026B424
+        # refs/melee/src/melee/it/types.h::ItemCommonData::{xB8,xBC}
+        "item_hitlag_damage_mul": float(_f32_be(buf, item_common_abs + 0xB8)),
+        "item_hitlag_base": float(_f32_be(buf, item_common_abs + 0xBC)),
         # Item_80269DC8 compares `item->xC54` against:
         #   deg_to_rad(90 + it_804D6D28->unk_degrees)
         # refs/melee/src/melee/it/item.c::Item_80269DC8

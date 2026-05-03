@@ -1,3 +1,5 @@
 {
+  "item_hitlag_base": 5.0,
+  "item_hitlag_damage_mul": 0.3333333432674408,
   "shield_bounce_extra_degrees": 45.0
 }

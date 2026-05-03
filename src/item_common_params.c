@@ -117,6 +117,11 @@ int item_common_params_init(void) {
     alloc_free(buf);
     return -1;
   }
+  if (json_get_f32(buf, "item_hitlag_damage_mul", &g_params.item_hitlag_damage_mul) != 0 ||
+      json_get_f32(buf, "item_hitlag_base", &g_params.item_hitlag_base) != 0) {
+    alloc_free(buf);
+    return -1;
+  }
   g_params.shield_bounce_threshold_radians =
       ((90.0f + g_params.shield_bounce_extra_degrees) * MSL_PI_F) / 180.0f;
 

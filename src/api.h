@@ -1434,14 +1434,24 @@ typedef struct MslSeed {
   // refs/melee/src/melee/it/items/itheiho.c::it_802D98C4
   float item_shyguy_prev_vel_y[MSL_MAX_ITEMS];
   uint8_t item_shyguy_prev_vel_y_valid[MSL_MAX_ITEMS];
+  // Prefix-causal active-animation phase for Shy Guy child-JObj Y deltas. This is source runtime
+  // state (`AObj`/itemVar.heiho.x3C phase), not a replay-future position bridge.
+  // refs/melee/src/melee/it/items/itheiho.c::{it_802D98AC,it_802D98C4}
+  uint8_t item_shyguy_dyn_y_phase_u8[MSL_MAX_ITEMS];
+  uint8_t item_shyguy_dyn_y_phase_valid_u8[MSL_MAX_ITEMS];
   // Shy Guy itemVar internals:
   // - speed_index is itemVar.heiho.x21 from `it_802D8618`.
-  // - delay is itemVar.heiho.x24, consumed by `itHeiho_UnkMotion0_Phys`.
-  // refs/melee/src/melee/it/items/itheiho.c::{it_802D8618,itHeiho_UnkMotion0_Phys}
+  // - delay is itemVar.heiho.x24, consumed by state0/state3 and active turn/camera phases.
+  // - hitlag mirrors item->xCBC_hitlagFrames / xDC8_word.flags.x9 for damaged state2/3 rows.
+  // refs/melee/src/melee/it/items/itheiho.c::{
+  //   it_802D8618,itHeiho_UnkMotion0_Phys,itHeiho_UnkMotion3_Phys,itHeiho_UnkMotion*_Coll}
+  // refs/melee/src/melee/it/item.c::{Item_802693E4,Item_802697D4}
   uint8_t item_shyguy_speed_index_u8[MSL_MAX_ITEMS];
   uint8_t item_shyguy_speed_index_valid_u8[MSL_MAX_ITEMS];
   uint16_t item_shyguy_delay_u16[MSL_MAX_ITEMS];
   uint8_t item_shyguy_delay_valid_u8[MSL_MAX_ITEMS];
+  uint8_t item_shyguy_hitlag_u8[MSL_MAX_ITEMS];
+  uint8_t item_shyguy_hitlag_valid_u8[MSL_MAX_ITEMS];
 
   MslItem items[MSL_MAX_ITEMS];
 } MslSeed;
