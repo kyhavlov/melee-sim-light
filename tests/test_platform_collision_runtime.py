@@ -64,6 +64,11 @@ BUTTON_Y = 0x0800
 
 ACT_FX_SPECIAL_AIR_LW_START = 0x016D
 
+COLLIDE_LEFT_WALL_MASK = 0x0000003F
+COLLIDE_RIGHT_WALL_MASK = 0x00000FC0
+COLLIDE_CEILING_MASK = 0x00006000
+COLLIDE_FLOOR_MASK = 0x00018000
+
 
 @pytest.mark.parametrize(
     ("stage_id", "line_id", "x", "y"),
@@ -149,6 +154,36 @@ def _step_once(seed: np.ndarray, prev_input: np.ndarray | None = None, input_t: 
         msl_binding.step_input(handle, prev_input, input_t)
         msl_binding.write_compare(handle, out)
         return out.view(COMPARE_DTYPE).reshape((1,))[0]
+    finally:
+        msl_binding.destroy(handle)
+
+
+def _step_once_with_contacts(
+    seed: np.ndarray, prev_input: np.ndarray | None = None, input_t: np.ndarray | None = None
+):
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    compare_stride = int(sizes["compare"])
+    contacts_stride = int(sizes["collision_contacts"])
+    if prev_input is None:
+        prev_input = _input_bytes()
+    if input_t is None:
+        input_t = _input_bytes()
+    out = np.zeros((1, compare_stride), dtype=np.uint8)
+    contacts = np.zeros((1, contacts_stride), dtype=np.uint8)
+
+    handle = msl_binding.init(batch_size=1, num_players=2, ucf_enabled=1, ucf_cardinals_1_0_enabled=1)
+    try:
+        msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, seed_stride)))
+        msl_binding.step_input(handle, prev_input, input_t)
+        msl_binding.write_compare(handle, out)
+        msl_binding.debug_write_collision_contacts(handle, contacts)
+        return (
+            out.view(COMPARE_DTYPE).reshape((1,))[0],
+            contacts.view(_collision_contacts_dtype()).reshape((1,))[0],
+        )
     finally:
         msl_binding.destroy(handle)
 
@@ -244,6 +279,238 @@ def test_fod_stage_lip_slope_to_flat_handoff_drops_to_current_floor_height() -> 
         float(out["speed_ground_x_self"][0]), abs=1e-4
     )
     assert float(out["speed_y_self"][0]) == pytest.approx(0.0, abs=1e-4)
+
+
+def test_fod_slope_corner_order_keeps_floor_owner_without_wall_or_ceiling() -> None:
+    # Grounded mpColl_8004ACE4 checks walls and ceiling before floor. At the FoD lip corner, those
+    # prepasses must not steal ownership from the source DD90 slope-to-flat floor traversal.
+    # refs/melee/src/melee/mp/mpcoll.c::mpColl_8004ACE4
+    # refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+    stage = read_mslstg01_v7(Path("data/stages/bin/griz.bin"))
+    slope = next(seg for seg in stage.segments if int(seg.line_id) == 6)
+    flat = next(seg for seg in stage.segments if int(seg.line_id) == 5)
+    x0 = 51.45
+    seed = _seed_base(2, ACT_RUN, SM_WAIT1_0, x0, _floor_y_at(slope, x0) + 0.0001)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(6)
+    seed["speed_ground_x_self"][0, 0] = np.float32(-0.8)
+
+    out, contacts = _step_once_with_contacts(seed)
+    x1 = float(out["pos_x"][0])
+
+    assert int(contacts["wall_kind"][0]) == 0
+    assert int(contacts["ceiling_id"][0]) == 0xFFFF
+    assert int(out["on_ground"][0]) == 1
+    assert int(out["ground_id"][0]) == 5
+    assert float(out["pos_y"][0]) == pytest.approx(_floor_y_at(flat, x1) + 0.0001, abs=1e-5)
+
+
+def test_battlefield_mpcoll_4a908_side_midpoint_retry_finds_disconnected_floor() -> None:
+    # Source mpColl_8004A908_Floor performs a second retry from previous ECB side-midpoint Y to
+    # current ECB bottom Y after ordinary persisted-floor projection fails. This catches a
+    # disconnected floor that the previous-bottom sweep misses, and only accepts floors that are not
+    # connected to the persisted CollData.floor.index.
+    # refs/melee/src/melee/mp/mpcoll.c::mpColl_8004A908_Floor
+    seed = _seed_base(31, ACT_WAIT, SM_WAIT1_0, 30.0, -6.0)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(3)  # persisted BF top platform, disconnected from main
+    seed["floor_sweep_prev_pos_x_f32"][0, 0] = np.float32(30.0)
+    seed["floor_sweep_prev_pos_y_f32"][0, 0] = np.float32(-5.0)
+    seed["floor_sweep_prev_pos_valid_u8"][0, 0] = np.uint8(1)
+
+    out = _step_once(seed)
+
+    assert int(out["on_ground"][0]) == 1
+    assert int(out["ground_id"][0]) == 1
+    assert float(out["pos_x"][0]) == pytest.approx(30.0, abs=1e-6)
+    assert float(out["pos_y"][0]) == pytest.approx(0.0001, abs=1e-5)
+
+
+def test_battlefield_mpcoll_4a908_connected_floor_retry_is_rejected() -> None:
+    # mpColl_8004A908_Floor rejects hits on floors connected to the persisted CollData.floor.index.
+    # Moving off BF's main floor toward the connected right edge should stay on the source floor
+    # chain/endpoint path instead of switching to the connected edge segment through the retry.
+    # refs/melee/src/melee/mp/mpcoll.c::mpColl_8004A908_Floor
+    seed = _seed_base(31, ACT_WAIT, SM_WAIT1_0, 80.0, -6.0)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(1)
+    seed["floor_sweep_prev_pos_x_f32"][0, 0] = np.float32(30.0)
+    seed["floor_sweep_prev_pos_y_f32"][0, 0] = np.float32(-5.0)
+    seed["floor_sweep_prev_pos_valid_u8"][0, 0] = np.uint8(1)
+
+    out = _step_once(seed)
+
+    assert int(out["on_ground"][0]) == 1
+    assert int(out["ground_id"][0]) == 1
+    assert float(out["pos_x"][0]) == pytest.approx(60.0, abs=1e-5)
+    assert float(out["pos_y"][0]) == pytest.approx(0.0001, abs=1e-5)
+
+
+def test_battlefield_mpcoll_4a908_floor_skip_rejects_platform_retry() -> None:
+    # The 4A908 retry uses the same CollData.floor_skip gate as mpCheckFloorRemap. Without a skip,
+    # the disconnected left platform can be recovered; with floor_skip set to that platform, the
+    # retry must leave the fighter airborne.
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004A908_Floor,mpUpdateFloorSkip}
+    seed = _seed_base(31, ACT_WAIT, SM_WAIT1_0, -40.0, 25.0)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(3)
+    seed["floor_sweep_prev_pos_x_f32"][0, 0] = np.float32(-40.0)
+    seed["floor_sweep_prev_pos_y_f32"][0, 0] = np.float32(26.0)
+    seed["floor_sweep_prev_pos_valid_u8"][0, 0] = np.uint8(1)
+
+    out = _step_once(seed)
+    assert int(out["on_ground"][0]) == 1
+    assert int(out["ground_id"][0]) == 2
+
+    seed["floor_skip_segment_id_u16"][0, 0] = np.uint16(2)
+    seed["floor_skip_segment_valid_u8"][0, 0] = np.uint8(1)
+    out_skip = _step_once(seed)
+    assert int(out_skip["on_ground"][0]) == 0
+    assert int(out_skip["ground_id"][0]) == 3
+
+
+def test_yoshi_mpcoll_4a908_fighter_solid_rejects_raw_center_line() -> None:
+    # Yoshi's center raw line is visible in debug data but not fighter-solid in the current legal
+    # stage policy. The 4A908 retry must use the generated fighter_solid metadata and not admit it.
+    # refs/melee/src/melee/mp/mpcoll.c::mpColl_8004A908_Floor
+    import msl_binding
+
+    raw = msl_binding.stage_floor_segment(8, 0)
+    assert raw is not None
+    assert int(raw["fighter_solid"]) == 0
+
+    seed = _seed_base(8, ACT_WAIT, SM_WAIT1_0, 0.0, 4.0)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(5)
+    seed["floor_sweep_prev_pos_x_f32"][0, 0] = np.float32(0.0)
+    seed["floor_sweep_prev_pos_y_f32"][0, 0] = np.float32(5.0)
+    seed["floor_sweep_prev_pos_valid_u8"][0, 0] = np.uint8(1)
+
+    out = _step_once(seed)
+
+    assert int(out["on_ground"][0]) == 0
+    assert int(out["ground_id"][0]) == 5
+
+
+def test_battlefield_mpcoll_4a908_platform_endpoint_snap_after_disconnected_retry() -> None:
+    # Source runs mpColl_80044838_Floor immediately after an accepted 4A908 retry. Keep hard-floor
+    # endpoint snap scoped to that accepted disconnected-floor path; this platform endpoint case
+    # proves the follow-up still runs when the wall prepass does not preempt the floor result.
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004A908_Floor,mpColl_80044838_Floor}
+    seed = _seed_base(31, ACT_WAIT, SM_WAIT1_0, -60.0, 25.0)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(3)
+    seed["floor_sweep_prev_pos_x_f32"][0, 0] = np.float32(-40.0)
+    seed["floor_sweep_prev_pos_y_f32"][0, 0] = np.float32(26.0)
+    seed["floor_sweep_prev_pos_valid_u8"][0, 0] = np.uint8(1)
+
+    out = _step_once(seed)
+
+    assert int(out["on_ground"][0]) == 1
+    assert int(out["ground_id"][0]) == 2
+    assert float(out["pos_x"][0]) == pytest.approx(-57.60000228881836, abs=1e-5)
+    assert float(out["pos_y"][0]) == pytest.approx(27.200000762939453, abs=1e-5)
+
+
+def test_battlefield_grounded_wall_prepass_runs_before_4a908_hard_floor_endpoint() -> None:
+    # Source grounded inline2 order checks walls before floor/4A908. This corner would previously
+    # snap the accepted hard floor to BF's main-floor endpoint; source order first resolves the
+    # right wall, so the later floor projection consumes the clamped X.
+    # refs/melee/src/melee/mp/mpcoll.c::{
+    #   mpColl_8004ACE4,mpColl_80048AB0_RightWall,mpColl_800491C8_RightWall,
+    #   mpColl_8004A908_Floor,mpColl_80044838_Floor}
+    seed = _seed_base(31, ACT_WAIT, SM_WAIT1_0, 90.0, -6.0)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(3)
+    seed["floor_sweep_prev_pos_x_f32"][0, 0] = np.float32(0.0)
+    seed["floor_sweep_prev_pos_y_f32"][0, 0] = np.float32(-5.0)
+    seed["floor_sweep_prev_pos_valid_u8"][0, 0] = np.uint8(1)
+
+    out, contacts = _step_once_with_contacts(seed)
+
+    assert int(contacts["wall_kind"][0]) == 2
+    assert int(contacts["wall_id"][0]) != 0xFFFF
+    assert int(out["on_ground"][0]) == 1
+    assert int(out["ground_id"][0]) == 1
+    assert float(out["pos_x"][0]) == pytest.approx(60.0, abs=1e-5)
+    assert float(out["pos_y"][0]) == pytest.approx(0.0, abs=1e-5)
+
+
+def test_fd_cardinal_grounded_center_does_not_broaden_wall_or_ceiling_prepass() -> None:
+    # FD/cardinal regression lock: enabling UCF cardinal handling must not let the new grounded
+    # wall/ceiling prepass synthesize wall or ceiling contacts on an ordinary hard-floor frame.
+    # refs/melee/src/melee/mp/mpcoll.c::mpColl_8004ACE4
+    seed = _seed_base(32, ACT_WAIT, SM_WAIT1_0, 0.0, 0.0001)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(1)
+    prev_input = _input_bytes()
+    input_t = _input_bytes()
+    prev_view = prev_input.view(INPUT_DTYPE).reshape((1,))
+    input_view = input_t.view(INPUT_DTYPE).reshape((1,))
+    prev_view["p"]["main_x"][0, 0] = np.int8(0)
+    prev_view["p"]["main_y"][0, 0] = np.int8(127)
+    input_view["p"]["main_x"][0, 0] = np.int8(0)
+    input_view["p"]["main_y"][0, 0] = np.int8(127)
+
+    out, contacts = _step_once_with_contacts(seed, prev_input, input_t)
+
+    assert int(contacts["wall_kind"][0]) == 0
+    assert int(contacts["ceiling_id"][0]) == 0xFFFF
+    assert int(contacts["coll_env_flags"][0]) & (COLLIDE_LEFT_WALL_MASK | COLLIDE_RIGHT_WALL_MASK) == 0
+    assert int(contacts["coll_env_flags"][0]) & COLLIDE_CEILING_MASK == 0
+    assert int(out["on_ground"][0]) == 1
+    assert int(out["ground_id"][0]) == 1
+    assert float(out["pos_x"][0]) == pytest.approx(0.0, abs=1e-6)
+    assert float(out["pos_y"][0]) == pytest.approx(0.0001, abs=1e-6)
+
+
+def test_fod_grounded_horizontal_squeeze_records_both_wall_sides_between_walls() -> None:
+    # FoD's lower wall shaft can produce same-frame left and right wall contact during the grounded
+    # inline2 prepass. Source mpColl_8004ACE4 records both sides, then runs
+    # mpCollSqueezeHorizontal before ceiling/floor resolution.
+    # refs/melee/src/melee/mp/mpcoll.c::{
+    #   mpColl_8004ACE4,mpColl_80048AB0_RightWall,mpColl_800491C8_RightWall,
+    #   mpColl_80049778_LeftWall,mpColl_80049EAC_LeftWall,mpCollSqueezeHorizontal}
+    seed = _seed_base(2, ACT_WAIT, SM_WAIT1_0, 10.0, -200.0)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(0xFFFF)
+    seed["speed_ground_x_self"][0, 0] = np.float32(-120.0)
+
+    out, contacts = _step_once_with_contacts(seed)
+    flags = int(contacts["coll_env_flags"][0])
+
+    assert flags & COLLIDE_LEFT_WALL_MASK
+    assert flags & COLLIDE_RIGHT_WALL_MASK
+    assert flags & COLLIDE_CEILING_MASK == 0
+    assert int(contacts["wall_kind"][0]) == 2
+    assert int(contacts["wall_id"][0]) == 12
+    assert int(out["on_ground"][0]) == 0
+    assert float(out["pos_x"][0]) == pytest.approx(-49.663360595703125, abs=1e-5)
+    assert float(out["pos_y"][0]) == pytest.approx(-200.0, abs=1e-5)
+
+
+def test_fod_grounded_floor_ceiling_retry_runs_vertical_squeeze_owner() -> None:
+    # Source mpColl_8004ACE4 preserves ceiling/floor squeeze state across the floor pass. This
+    # forced FoD lower-stage setup hits a ceiling in the grounded prepass, resolves the carried
+    # floor, and keeps the final grounded root on the floor after the ceiling retry/vertical
+    # squeeze owner runs.
+    # refs/melee/src/melee/mp/mpcoll.c::{
+    #   mpColl_8004ACE4,mpColl_80044AD8_Ceiling,mpColl_8004AB80,mpCollSqueezeVertical}
+    seed = _seed_base(2, ACT_WAIT, SM_WAIT1_0, -40.0, -175.0)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(5)
+    seed["speed_y_self"][0, 0] = np.float32(-80.0)
+
+    out, contacts = _step_once_with_contacts(seed)
+    flags = int(contacts["coll_env_flags"][0])
+
+    assert flags & COLLIDE_CEILING_MASK
+    assert flags & COLLIDE_FLOOR_MASK
+    assert int(contacts["wall_kind"][0]) == 0
+    assert int(contacts["ceiling_id"][0]) == 8
+    assert int(out["on_ground"][0]) == 1
+    assert int(out["ground_id"][0]) == 5
+    assert float(out["pos_y"][0]) == pytest.approx(0.0028839111328125, abs=1e-5)
 
 
 def test_yoshi_center_raw_platform_is_debug_visible_but_not_fighter_solid() -> None:
@@ -969,6 +1236,39 @@ def test_frozen_pokemon_stadium_rejects_inactive_raw_wall_for_fighter_collision(
         assert int(c0["wall_id"][0]) != 81
     finally:
         msl_binding.destroy(handle)
+
+
+def test_frozen_pokemon_stadium_inactive_transform_policy_covers_floor_wall_ceiling() -> None:
+    # Generated MSLSTG01 fighter_solid policy is shared by floor, wall, and ceiling queries.
+    # Frozen Stadium currently exposes inactive transform floors and walls, and no inactive
+    # transform ceilings; if ceiling records are added later, this lock should be extended to step
+    # through one instead of adding a stage-id allowlist in runtime code.
+    # refs/slippi-ssbm-asm/Online/Core/Hacks/Stadium/IngameCheckIfFrozen.asm
+    # data/stages/bin/grps.bin::MSLSTG01 flags
+    stage = read_mslstg01_v7(Path("data/stages/bin/grps.bin"))
+    inactive_floors = [seg for seg in stage.segments if int(seg.kind_id) == 0 and not seg.fighter_solid]
+    inactive_ceilings = [seg for seg in stage.segments if int(seg.kind_id) == 1 and not seg.fighter_solid]
+    inactive_right_walls = [seg for seg in stage.segments if int(seg.kind_id) == 2 and not seg.fighter_solid]
+    inactive_left_walls = [seg for seg in stage.segments if int(seg.kind_id) == 3 and not seg.fighter_solid]
+
+    assert inactive_floors
+    assert inactive_right_walls
+    assert inactive_left_walls
+    assert inactive_ceilings == []
+
+    seed = _seed_base(3, ACT_DAMAGE_FALL, SM_DAMAGE_FALL, 40.0, 34.0)
+    seed["speed_y_self"][0, 0] = np.float32(-10.0)
+    seed["floor_sweep_prev_pos_valid_u8"][0, 0] = np.uint8(1)
+    seed["floor_sweep_prev_pos_x_f32"][0, 0] = np.float32(40.0)
+    seed["floor_sweep_prev_pos_y_f32"][0, 0] = np.float32(40.0)
+
+    out, contacts = _step_once_with_contacts(seed)
+
+    assert int(out["ground_id"][0]) not in {int(seg.line_id) for seg in inactive_floors}
+    assert int(contacts["wall_id"][0]) not in {
+        int(seg.line_id) for seg in inactive_right_walls + inactive_left_walls
+    }
+    assert int(contacts["ceiling_id"][0]) == 0xFFFF
 
 
 def test_squat_down_input_enters_pass_and_skips_source_platform() -> None:

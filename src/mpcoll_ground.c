@@ -13,6 +13,7 @@
 #include "match_flow.h"
 #include "mpcoll_ecb_points.h"
 #include "motion_state_owners.h"
+#include "mpcoll_wall_ceil.h"
 #include "state_flags.h"
 #include "stage_collision.h"
 #include "input_axis.h"
@@ -1143,17 +1144,15 @@ static uint8_t floor_sweep_check(const MslBatch* batch, size_t idx, int bi,
   return 1;
 }
 
-static uint8_t floor_snap_to_line_edge_from_bottom(MslBatch* batch, int bi,
-                                                   const MslStageFloorGraph* g, int line_idx,
-                                                   float cur_bottom_x, float cur_bottom_y,
-                                                   uint16_t* ground_id_out, float* contact_x_out,
-                                                   float* contact_y_out, float* floor_nx_out,
-                                                   float* floor_ny_out) {
+static uint8_t floor_snap_to_line_edge_from_bottom(
+    MslBatch* batch, int bi, const MslStageFloorGraph* g, int line_idx, float cur_bottom_x,
+    float cur_bottom_y, uint8_t allow_hard_floor, uint16_t* ground_id_out, float* contact_x_out,
+    float* contact_y_out, float* floor_nx_out, float* floor_ny_out) {
   if (batch == NULL || g == NULL || line_idx < 0 || (size_t)line_idx >= g->line_count ||
       ground_id_out == NULL) {
     return 0u;
   }
-  if (!g->lines[(size_t)line_idx].is_platform) {
+  if (!allow_hard_floor && !g->lines[(size_t)line_idx].is_platform) {
     // Retained owner slice: platform endpoint admission. Hard-floor off-end cases need the full
     // same-frame mpColl scratch/order port before this fallback can be safely broadened.
     return 0u;
@@ -1183,6 +1182,158 @@ static uint8_t floor_snap_to_line_edge_from_bottom(MslBatch* batch, int bi,
     *contact_y_out = edge_y;
   }
   (void)cur_bottom_y;
+  return 1u;
+}
+
+static uint8_t floor_44628_wall_adjacent_fallback(
+    MslBatch* batch, size_t idx, int bi, const MslStageFloorGraph* g, uint32_t stage_id,
+    const MslMpcollOrderedWallCeilResult* wall_ceil, float cur_bottom_x, float cur_bottom_y,
+    uint16_t skip_platform_segment_i, uint16_t* ground_id_out, float* contact_x_out,
+    float* contact_y_out, float* floor_nx_out, float* floor_ny_out) {
+  if (batch == NULL || g == NULL || wall_ceil == NULL || ground_id_out == NULL) {
+    return 0u;
+  }
+  // Source side-floor fallback:
+  // mpColl_80044628_Floor first tries mpCheckFloorRemap. If no floor was hit, the same inline2
+  // wall pass can provide left/right wall bits; source then walks the raw MapLine graph with
+  // mpLinePrevNonLeftWall / mpLineNextNonRightWall and projects the current bottom onto that floor.
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpColl_8004ACE4}
+  // refs/melee/src/melee/mp/mplib.c::{
+  //   mpLinePrevNonLeftWall,mpLineNextNonRightWall,mpLib_8004DD90_Floor}
+  const uint8_t side_flags[2] = {
+      (uint8_t)(wall_ceil->left_right_flags & 1u),
+      (uint8_t)((wall_ceil->left_right_flags & 2u) ? 1u : 0u),
+  };
+  const uint16_t wall_segment[2] = {wall_ceil->left_wall_id, wall_ceil->right_wall_id};
+  const MslStageRawLineKind skip_kind[2] = {MSL_STAGE_RAW_LINE_LEFT_WALL,
+                                            MSL_STAGE_RAW_LINE_RIGHT_WALL};
+  for (size_t side = 0; side < 2u; side++) {
+    if (!side_flags[side] || wall_segment[side] == 0xFFFFu) {
+      continue;
+    }
+    MslStageRawLineKind out_kind = MSL_STAGE_RAW_LINE_UNKNOWN;
+    uint16_t floor_segment_i = 0xFFFFu;
+    const uint8_t found =
+        (side == 0u)
+            ? stage_collision_raw_line_prev_non_kind(stage_id, wall_segment[side], skip_kind[side],
+                                                     &out_kind, &floor_segment_i)
+            : stage_collision_raw_line_next_non_kind(stage_id, wall_segment[side], skip_kind[side],
+                                                     &out_kind, &floor_segment_i);
+    if (!found || out_kind != MSL_STAGE_RAW_LINE_FLOOR ||
+        !stage_collision_floor_line_is_runtime_fighter_solid(stage_id, floor_segment_i)) {
+      continue;
+    }
+    const int line_idx = stage_collision_floor_line_index(stage_id, floor_segment_i);
+    if (line_idx < 0 || (size_t)line_idx >= g->line_count ||
+        floor_line_is_skipped_platform(g, line_idx, skip_platform_segment_i)) {
+      continue;
+    }
+    float y_corr = 0.0f;
+    float nx = 0.0f;
+    float ny = 1.0f;
+    const int projected_line_idx =
+        floor_dd90_project(batch, bi, g, line_idx, cur_bottom_x, cur_bottom_y, &y_corr, &nx, &ny);
+    if (projected_line_idx < 0 || !(y_corr > 0.0f)) {
+      continue;
+    }
+    *ground_id_out = g->lines[(size_t)projected_line_idx].segment_i;
+    if (contact_x_out != NULL) {
+      *contact_x_out = cur_bottom_x;
+    }
+    if (contact_y_out != NULL) {
+      *contact_y_out = cur_bottom_y + y_corr;
+    }
+    if (floor_nx_out != NULL) {
+      *floor_nx_out = nx;
+    }
+    if (floor_ny_out != NULL) {
+      *floor_ny_out = ny;
+    }
+    batch->state.pos_y[idx] += y_corr;
+    return 1u;
+  }
+  return 0u;
+}
+
+static uint8_t floor_4a908_retry(MslBatch* batch, size_t idx, int bi, const MslStageFloorGraph* g,
+                                 uint32_t stage_id, int persisted_line_idx, float prev_bottom_x,
+                                 float prev_bottom_y, float prev_side_mid_y, float cur_bottom_x,
+                                 float cur_bottom_y, uint16_t skip_platform_segment_i,
+                                 uint16_t* ground_id_out, float* contact_x_out,
+                                 float* contact_y_out, float* floor_nx_out, float* floor_ny_out) {
+  if (batch == NULL || g == NULL || ground_id_out == NULL || persisted_line_idx < 0 ||
+      (size_t)persisted_line_idx >= g->line_count) {
+    return 0u;
+  }
+  // Source retry:
+  // - mpColl_8004A908_Floor first retries the normal previous-bottom -> current-bottom sweep with
+  //   a NULL callback.
+  // - If that does not find a disconnected floor, it retries from the previous ECB vertical
+  //   midpoint (`0.5 * (prev_ecb.top.y + prev_ecb.bottom.y) + prev_pos.y`) to the current bottom.
+  // - Both retries require a different floor that is not connected to the persisted
+  //   CollData.floor.index. Platform admission remains floor_skip/fighter-solid gated.
+  // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004A908_Floor
+  const float start_y[2] = {prev_bottom_y, prev_side_mid_y};
+  int accepted_line_idx = -1;
+  float nx = 0.0f;
+  float ny = 1.0f;
+  for (size_t pass = 0; pass < 2u; pass++) {
+    int hit_line_idx = -1;
+    float ix = 0.0f;
+    float iy = 0.0f;
+    float hit_nx = 0.0f;
+    float hit_ny = 1.0f;
+    if (!floor_sweep_check(batch, idx, bi, g, stage_id, prev_bottom_x, start_y[pass], cur_bottom_x,
+                           cur_bottom_y, skip_platform_segment_i, persisted_line_idx, NULL,
+                           &hit_line_idx, &ix, &iy, &hit_nx, &hit_ny)) {
+      continue;
+    }
+    if (hit_line_idx < 0 || (size_t)hit_line_idx >= g->line_count ||
+        hit_line_idx == persisted_line_idx ||
+        floor_lines_connected(g, hit_line_idx, persisted_line_idx)) {
+      continue;
+    }
+    accepted_line_idx = hit_line_idx;
+    nx = hit_nx;
+    ny = hit_ny;
+    break;
+  }
+  if (accepted_line_idx < 0) {
+    return 0u;
+  }
+
+  float y_corr = 0.0f;
+  const int projected_line_idx = floor_dd90_project(
+      batch, bi, g, accepted_line_idx, cur_bottom_x, cur_bottom_y, &y_corr,
+      floor_nx_out != NULL ? floor_nx_out : &nx, floor_ny_out != NULL ? floor_ny_out : &ny);
+  if (projected_line_idx < 0) {
+    // Source immediately follows an accepted mpColl_8004A908_Floor with
+    // mpColl_80044838_Floor, which endpoint-snaps the accepted floor even for hard floors.
+    // Keep hard-floor endpoint snap scoped to this accepted disconnected-floor retry so ordinary
+    // hard-floor off-end handling is not broadened.
+    // refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004A908_Floor,mpColl_80044838_Floor}
+    if (!floor_snap_to_line_edge_from_bottom(batch, bi, g, accepted_line_idx, cur_bottom_x,
+                                             cur_bottom_y, 1u, ground_id_out, contact_x_out,
+                                             contact_y_out, floor_nx_out, floor_ny_out)) {
+      return 0u;
+    }
+    if (contact_x_out != NULL) {
+      batch->state.pos_x[idx] += (*contact_x_out - cur_bottom_x);
+    }
+    if (contact_y_out != NULL) {
+      batch->state.pos_y[idx] += (*contact_y_out - cur_bottom_y);
+    }
+    return 1u;
+  }
+
+  *ground_id_out = g->lines[(size_t)projected_line_idx].segment_i;
+  if (contact_x_out != NULL) {
+    *contact_x_out = cur_bottom_x;
+  }
+  if (contact_y_out != NULL) {
+    *contact_y_out = cur_bottom_y + y_corr;
+  }
+  batch->state.pos_y[idx] += y_corr;
   return 1u;
 }
 
@@ -1614,10 +1765,18 @@ void mpcoll_ground_apply(MslBatch* batch) {
                                           lock_bottom_to_zero);
       }
 
-      const float cur_bottom_x = cur_bot.x;
-      const float cur_bottom_y = cur_bot.y;
+      float cur_bottom_x = cur_bot.x;
+      float cur_bottom_y = cur_bot.y;
       const float prev_bottom_x = prev_bot.x;
       const float prev_bottom_y = prev_bot.y;
+      const float facing_dir_for_ecb = batch->state.facing[idx] ? 1.0f : -1.0f;
+      MslEcbWorldPoints cur_ecb_points = {0};
+      msl_ecb_world_points_sample(&cur_ecb_points, char_id, anim, ecb_frame_cur, facing_dir_for_ecb,
+                                  x, y, lock_bottom_to_zero);
+      MslEcbWorldPoints prev_ecb_points = {0};
+      msl_ecb_world_points_sample(&prev_ecb_points, char_id, anim, ecb_frame_prev,
+                                  facing_dir_for_ecb, prev_x, prev_y, was_grounded);
+      const float prev_side_mid_y = prev_y + (0.5f * (prev_ecb_points.top_rel_y + prev_ecb_rel));
 
       // Collision env flags (subset) for Parity Project #2 (ledge grab mask parity).
       // Decomp: CollData carries env_flags and prev_env_flags across frames.
@@ -1661,6 +1820,42 @@ void mpcoll_ground_apply(MslBatch* batch) {
           (uint8_t)((prefer_line_is_platform || prefer_line_is_slope || prefer_line_is_ledge) ? 1u
                                                                                               : 0u);
       const uint16_t skip_platform_segment_i = platform_floor_skip_segment_id(batch, idx, stage_id);
+
+      MslMpcollOrderedWallCeilResult ordered_wall_ceil = {
+          .left_right_flags = 0u,
+          .squeeze_flags = 0u,
+          .squeeze_flags_all = 0u,
+          .hit_ceiling = 0u,
+          .hit_floor = 0u,
+          .touching_floor = 0u,
+          .left_wall_id = 0xFFFFu,
+          .right_wall_id = 0xFFFFu,
+          .x_after_left_wall = 0.0f,
+          .x_after_right_wall = 0.0f,
+          .y_after_ceiling = 0.0f,
+          .y_after_floor = 0.0f,
+          .cur_ecb_after = {0},
+      };
+      if (was_grounded) {
+        // Source grounded inline2 ordering runs wall and ceiling collision before the floor pass.
+        // Keep the scratch/result in the shared wall/ceiling helper so the floor pass can consume
+        // same-frame wall side bits for mpColl_80044628_Floor.
+        // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004ACE4
+        batch->state.wall_kind[idx] = 0u;
+        batch->state.wall_contact_x[idx] = 0.0f;
+        batch->state.wall_contact_y[idx] = 0.0f;
+        batch->state.wall_normal_x[idx] = 0.0f;
+        batch->state.wall_normal_y[idx] = 0.0f;
+        batch->state.ceiling_contact_x[idx] = 0.0f;
+        batch->state.ceiling_contact_y[idx] = 0.0f;
+        batch->state.ceiling_normal_x[idx] = 0.0f;
+        batch->state.ceiling_normal_y[idx] = 0.0f;
+        mpcoll_grounded_wall_ceil_ordered_begin(batch, idx, &prev_ecb_points, &cur_ecb_points,
+                                                &ordered_wall_ceil);
+        cur_ecb_points = ordered_wall_ceil.cur_ecb_after;
+        cur_bottom_x = cur_ecb_points.bottom_x;
+        cur_bottom_y = cur_ecb_points.bottom_y;
+      }
 
       if (was_grounded && prefer_line_idx >= 0) {
         float y_corr = 0.0f;
@@ -1865,6 +2060,12 @@ void mpcoll_ground_apply(MslBatch* batch) {
                   contact_y = iy;
                 }
               }
+            } else if (!landing_release_skip_floor_sweep &&
+                       floor_44628_wall_adjacent_fallback(
+                           batch, idx, bi, g, stage_id, &ordered_wall_ceil, cur_bottom_x,
+                           cur_bottom_y, skip_platform_segment_i, &ground_id, &contact_x,
+                           &contact_y, &floor_nx, &floor_ny)) {
+              on_ground = 1u;
             } else {
               // Decomp parity: mpColl_8004A45C_Floor can still set Collide_{Left,Right}Edge while
               // the floor collision pass does not report "touched_floor" (airborne), and the
@@ -2766,7 +2967,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
               // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
               if (!suppress_active_damage_hitlag_land &&
                   floor_snap_to_line_edge_from_bottom(batch, bi, g, hit_line_idx, cur_bottom_x,
-                                                      cur_bottom_y, &ground_id, &contact_x,
+                                                      cur_bottom_y, 0u, &ground_id, &contact_x,
                                                       &contact_y, &floor_nx, &floor_ny)) {
                 batch->state.pos_x[idx] += (contact_x - cur_bottom_x);
                 batch->state.pos_y[idx] += (contact_y - cur_bottom_y);
@@ -2847,6 +3048,45 @@ void mpcoll_ground_apply(MslBatch* batch) {
               }
             }
           }
+        }
+      }
+
+      if (on_ground && was_grounded) {
+        // Source ordering retries ceiling after a grounded floor collision in mpColl_8004ACE4.
+        // Carry source-equivalent floor squeeze state into the retry so a pre-floor ceiling hit or
+        // retry ceiling hit can trigger mpCollSqueezeVertical.
+        // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004ACE4
+        ordered_wall_ceil.hit_floor = 1u;
+        ordered_wall_ceil.touching_floor = 1u;
+        ordered_wall_ceil.squeeze_flags |= (uint8_t)MSL_MPCOLL_ORDERED_SQUEEZE_FLOOR;
+        ordered_wall_ceil.y_after_floor = batch->state.pos_y[idx];
+        MslEcbWorldPoints post_floor_ecb = {0};
+        msl_ecb_world_points_sample(&post_floor_ecb, char_id, anim, ecb_frame_cur,
+                                    facing_dir_for_ecb, batch->state.pos_x[idx],
+                                    batch->state.pos_y[idx], lock_bottom_to_zero);
+        (void)mpcoll_grounded_ceiling_ordered_retry(batch, idx, &prev_ecb_points, &post_floor_ecb,
+                                                    &ordered_wall_ceil);
+        cur_ecb_points = ordered_wall_ceil.cur_ecb_after;
+        cur_bottom_x = cur_ecb_points.bottom_x;
+        cur_bottom_y = cur_ecb_points.bottom_y;
+      }
+
+      if (!on_ground && was_grounded && prefer_line_idx >= 0) {
+        // Final source retry for grounded inline2-style collision callbacks:
+        // mpColl_8004ACE4 calls mpColl_8004A908_Floor after the ordinary floor/edge/ceiling loop.
+        // The retained slice below owns both `mpColl_8004A908_Floor` sweeps: first previous
+        // bottom, then previous ECB side-midpoint Y, accepting only a floor that is different from
+        // and not connected to the persisted CollData.floor.index.
+        //
+        // This is deliberately not row/action-gated: the retry is part of the shared CollData floor
+        // substrate for grounded callbacks. Airborne callbacks continue through their existing
+        // `mpColl_80046904` / `mpColl_80047E14` owners above.
+        // refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004ACE4,mpColl_8004A908_Floor}
+        if (floor_4a908_retry(batch, idx, bi, g, stage_id, prefer_line_idx, prev_bottom_x,
+                              prev_bottom_y, prev_side_mid_y, cur_bottom_x, cur_bottom_y,
+                              skip_platform_segment_i, &ground_id, &contact_x, &contact_y,
+                              &floor_nx, &floor_ny)) {
+          on_ground = 1u;
         }
       }
 

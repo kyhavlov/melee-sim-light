@@ -710,6 +710,21 @@ Recent deltas to reflect here (do not let these get “lost in chat logs”):
   (`src/stage_collision.c`, `src/mpcoll_wall_ceil.c`; refs/melee/src/melee/mp/mplib.c::{
   `mpLineGetPrev`,`mpLineGetNext`,`mpCheckLeftWall`,`mpCheckRightWall`},
   refs/slippi-ssbm-asm/Online/Core/Hacks/Stadium/IngameCheckIfFrozen.asm).
+- Grounded inline2 map collision now shares one ordered wall/ceiling/floor scratch for the source
+  `mpColl_8004ACE4` sequence: left/right wall candidate collection and envelope collision run
+  before horizontal squeeze, ceiling uses both direct sweep and raw wall-adjacent fallback, floor
+  resolution can consume those same-frame wall side bits through the raw `mpColl_80044628_Floor`
+  adjacent-floor fallback, successful floor contact retries ceiling with the carried source
+  squeeze flags for vertical squeeze, and the final
+  `mpColl_8004A908_Floor -> mpColl_80044838_Floor` disconnected-floor retry remains after the
+  ordinary wall/floor/ceiling loop. Floor-adjacent ledge walls are excluded through raw line
+  ownership rather than stage ids, preserving FD/cardinal ledge rows while allowing Battlefield
+  non-connected wall/floor corners to resolve in source order. (`src/mpcoll_ground.c`,
+  `src/mpcoll_wall_ceil.c`; refs/melee/src/melee/mp/mpcoll.c::{
+  `mpColl_8004ACE4`,`mpColl_80044628_Floor`,`mpColl_80044838_Floor`,
+  `mpColl_80044AD8_Ceiling`,`mpColl_8004A908_Floor`,`mpCollSqueezeHorizontal`,
+  `mpCollSqueezeVertical`,`mpColl_80048AB0_RightWall`,`mpColl_800491C8_RightWall`,
+  `mpColl_80049778_LeftWall`,`mpColl_80049EAC_LeftWall`}).
 - Yoshi's Story Shy Guys (`It_Kind_Heiho`) are admitted as stage-owned item objects, not Fox/Falco
   articles. Their source callback recomputes `item->x40_vel` from item-animation dynamic-bone state
   before generic item integration; state 0 waits on hidden `itemVar.heiho.x24` initialized from the

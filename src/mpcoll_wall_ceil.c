@@ -1291,6 +1291,31 @@ static inline void left_wall_candidate_add(MslWallCandidateList* out, const MslS
   }
 }
 
+static inline void wall_candidate_list_remove_connected(MslWallCandidateList* out,
+                                                        const MslStageWallGraph* g,
+                                                        int excluded_line_idx) {
+  if (out == NULL || g == NULL || excluded_line_idx < 0) {
+    return;
+  }
+  uint8_t write = 0u;
+  uint8_t removed_hug = 0u;
+  for (uint8_t read = 0u; read < out->count; read++) {
+    const int line_idx = out->line_idx[read];
+    if (line_idx == excluded_line_idx ||
+        wall_lines_connected_prev_next(g, line_idx, excluded_line_idx)) {
+      removed_hug = 1u;
+      continue;
+    }
+    out->line_idx[write++] = line_idx;
+  }
+  out->count = write;
+  if (removed_hug && write == 0u) {
+    out->has_hug = 0u;
+    out->first_ix = 0.0f;
+    out->first_iy = 0.0f;
+  }
+}
+
 static inline void right_wall_candidate_sweep(MslWallCandidateList* out, const MslStageWallGraph* g,
                                               float prev_x, float prev_y, float cur_x, float cur_y,
                                               int prefer_line_idx, uint8_t is_hug,
@@ -1782,6 +1807,485 @@ static inline void ceiling_write_edge_suppression_flags(MslBatch* batch, size_t 
   }
 }
 
+static inline void ecb_points_shift_x(MslEcbWorldPoints* ecb, float dx) {
+  if (ecb == NULL || dx == 0.0f) {
+    return;
+  }
+  ecb->bottom_x += dx;
+  ecb->top_x += dx;
+  ecb->left_x += dx;
+  ecb->right_x += dx;
+}
+
+static inline void ecb_points_shift_y(MslEcbWorldPoints* ecb, float dy) {
+  if (ecb == NULL || dy == 0.0f) {
+    return;
+  }
+  ecb->bottom_y += dy;
+  ecb->top_y += dy;
+  ecb->left_y += dy;
+  ecb->right_y += dy;
+}
+
+static inline void ecb_points_rebuild_x(MslEcbWorldPoints* ecb, float root_x) {
+  if (ecb == NULL) {
+    return;
+  }
+  ecb->bottom_x = root_x;
+  ecb->top_x = root_x;
+  ecb->left_x = root_x + ecb->left_rel_x;
+  ecb->right_x = root_x + ecb->right_rel_x;
+}
+
+static inline void ecb_points_rebuild_y(MslEcbWorldPoints* ecb, float root_y) {
+  if (ecb == NULL) {
+    return;
+  }
+  ecb->bottom_y = root_y + ecb->bottom_rel_y;
+  ecb->top_y = root_y + ecb->top_rel_y;
+  ecb->left_y = root_y + ecb->side_rel_y;
+  ecb->right_y = root_y + ecb->side_rel_y;
+}
+
+static void mpcoll_squeeze_horizontal(MslBatch* batch, size_t idx, MslEcbWorldPoints* cur_ecb,
+                                      float left, float right) {
+  if (batch == NULL || cur_ecb == NULL) {
+    return;
+  }
+  // Source `mpCollSqueezeHorizontal`: when both side walls collided in the same pass, shrink the
+  // current ECB width around the remaining gap and recenter the root. The persistent x34/x64 ECB
+  // storage is not modeled as a public seed lane yet, so this applies the source displacement and
+  // carries the squeezed local ECB through the rest of this callback.
+  // refs/melee/src/melee/mp/mpcoll.c::mpCollSqueezeHorizontal
+  const float half_width = 0.5f * (right - left + cur_ecb->right_rel_x - cur_ecb->left_rel_x);
+  const float root_x = (right + cur_ecb->right_rel_x) - half_width;
+  batch->state.pos_x[idx] = root_x;
+  cur_ecb->right_rel_x = half_width;
+  cur_ecb->left_rel_x = -half_width;
+  ecb_points_rebuild_x(cur_ecb, root_x);
+}
+
+static void mpcoll_squeeze_vertical(MslBatch* batch, size_t idx, MslEcbWorldPoints* cur_ecb,
+                                    uint8_t airborne, float top, float bottom) {
+  if (batch == NULL || cur_ecb == NULL) {
+    return;
+  }
+  // Source `mpCollSqueezeVertical`: floor+ceiling in the same pass shrink/recenter the current ECB
+  // according to grounded-vs-airborne ownership. The local ECB mutation feeds only the remainder of
+  // this callback; no heap or replay-future seed lane is introduced.
+  // refs/melee/src/melee/mp/mpcoll.c::mpCollSqueezeVertical
+  const float height = top - bottom + cur_ecb->top_rel_y - cur_ecb->bottom_rel_y;
+  if (height < 3.0f) {
+    const float old_height = cur_ecb->top_rel_y - cur_ecb->bottom_rel_y;
+    const float new_height = cur_ecb->top_rel_y + top - bottom;
+    cur_ecb->top_rel_y = fminf(old_height, new_height);
+    cur_ecb->bottom_rel_y = 0.0f;
+    batch->state.pos_y[idx] = bottom;
+  } else if (!airborne) {
+    batch->state.pos_y[idx] = bottom;
+    cur_ecb->top_rel_y = height + cur_ecb->bottom_rel_y;
+  } else {
+    batch->state.pos_y[idx] = 0.5f * (top + bottom);
+    cur_ecb->top_rel_y = 0.5f * (cur_ecb->top_rel_y + cur_ecb->bottom_rel_y + height);
+    cur_ecb->bottom_rel_y = cur_ecb->top_rel_y - height;
+  }
+  ecb_points_rebuild_y(cur_ecb, batch->state.pos_y[idx]);
+}
+
+static inline void ecb_points_apply_inline_horizontal_normalization(const MslBatch* batch,
+                                                                    size_t idx,
+                                                                    MslEcbWorldPoints* ecb) {
+  if (batch == NULL || ecb == NULL) {
+    return;
+  }
+  // Grounded ordered helpers consume the same CollData ECB loaded by mpColl_LoadECB_inline as the
+  // standalone wall/ceiling pass: narrow horizontal spans are recentered, then clamped to the
+  // source +/-2 minimum. `ecb->bottom_x` is the fighter root X because desired_ecb.bottom.x is 0.
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpColl_LoadECB_JObj}
+  float left_rel_x = ecb->left_rel_x;
+  float right_rel_x = ecb->right_rel_x;
+  const float min_ecb_width = fmaxf(4.0f, 10.0f * batch->state.fighter_scale_y[idx]);
+  const float ecb_width = fabsf(right_rel_x - left_rel_x);
+  if (ecb_width < min_ecb_width) {
+    const float half_width = 0.5f * ecb_width;
+    left_rel_x = -half_width;
+    right_rel_x = half_width;
+  }
+  if (right_rel_x < 2.0f) {
+    right_rel_x = 2.0f;
+  }
+  if (left_rel_x > -2.0f) {
+    left_rel_x = -2.0f;
+  }
+  const float root_x = ecb->bottom_x;
+  ecb->left_rel_x = left_rel_x;
+  ecb->right_rel_x = right_rel_x;
+  ecb->left_x = root_x + left_rel_x;
+  ecb->right_x = root_x + right_rel_x;
+}
+
+static uint8_t grounded_ordered_left_wall(MslBatch* batch, size_t idx, const MslStageWallGraph* lwg,
+                                          const MslEcbWorldPoints* prev_ecb,
+                                          MslEcbWorldPoints* cur_ecb, uint16_t* wall_id_out,
+                                          float* x_after_out) {
+  if (batch == NULL || lwg == NULL || lwg->lines == NULL || prev_ecb == NULL || cur_ecb == NULL ||
+      wall_id_out == NULL) {
+    return 0u;
+  }
+  const int bi = (int)(idx / (size_t)MSL_MAX_PLAYERS);
+  const uint32_t stage_id = batch->state.stage_id[(size_t)bi];
+  const int excluded_floor_wall =
+      grounded_left_wall_floor_adjacent_line_idx(stage_id, batch->state.ground_id[idx]);
+
+  MslWallCandidateList candidates;
+  wall_candidate_list_init(&candidates);
+  // Grounded source candidate collection:
+  // mpColl_80049778_LeftWall gathers side, bottom, top, current side-edge, and swept side-edge
+  // candidates before mpColl_80049EAC_LeftWall resolves the full ECB envelope.
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80049778_LeftWall,mpColl_80049EAC_LeftWall}
+  left_wall_candidate_sweep(&candidates, lwg, prev_ecb->right_x, prev_ecb->right_y,
+                            cur_ecb->right_x, cur_ecb->right_y, -1, 1u, -1);
+  left_wall_candidate_sweep(&candidates, lwg, prev_ecb->bottom_x, prev_ecb->bottom_y,
+                            cur_ecb->bottom_x, cur_ecb->bottom_y, -1, 0u, excluded_floor_wall);
+  left_wall_candidate_sweep(&candidates, lwg, prev_ecb->top_x, prev_ecb->top_y, cur_ecb->top_x,
+                            cur_ecb->top_y, -1, 0u, -1);
+  left_wall_candidate_sweep(&candidates, lwg, cur_ecb->bottom_x, cur_ecb->bottom_y,
+                            cur_ecb->right_x, cur_ecb->right_y, -1, 0u, excluded_floor_wall);
+  left_wall_candidate_quad(&candidates, lwg, prev_ecb->bottom_x, prev_ecb->bottom_y,
+                           prev_ecb->right_x, prev_ecb->right_y, cur_ecb->bottom_x,
+                           cur_ecb->bottom_y, cur_ecb->right_x, cur_ecb->right_y);
+  left_wall_candidate_sweep(&candidates, lwg, cur_ecb->top_x, cur_ecb->top_y, cur_ecb->right_x,
+                            cur_ecb->right_y, -1, 0u, -1);
+  left_wall_candidate_quad(&candidates, lwg, prev_ecb->right_x, prev_ecb->right_y, prev_ecb->top_x,
+                           prev_ecb->top_y, cur_ecb->right_x, cur_ecb->right_y, cur_ecb->top_x,
+                           cur_ecb->top_y);
+  wall_candidate_list_remove_connected(&candidates, lwg, excluded_floor_wall);
+
+  float envelope_x = 0.0f;
+  int envelope_line_idx = -1;
+  float envelope_nx = -1.0f;
+  float envelope_ny = 0.0f;
+  if (left_wall_air_envelope_min_x(lwg, &candidates, cur_ecb, batch->state.pos_x[idx],
+                                   batch->state.pos_y[idx], &envelope_x, &envelope_line_idx,
+                                   &envelope_nx, &envelope_ny)) {
+    const float dx = envelope_x - batch->state.pos_x[idx];
+    batch->state.pos_x[idx] = envelope_x;
+    ecb_points_shift_x(cur_ecb, dx);
+    batch->state.wall_kind[idx] = MSL_WALL_LEFT;
+    batch->state.wall_id[idx] = lwg->lines[(size_t)envelope_line_idx].segment_i;
+    batch->state.wall_contact_x[idx] = candidates.first_ix;
+    batch->state.wall_contact_y[idx] = candidates.first_iy;
+    batch->state.wall_normal_x[idx] = envelope_nx;
+    batch->state.wall_normal_y[idx] = envelope_ny;
+    mark_left_wall_contact(batch, idx, candidates.has_hug);
+    *wall_id_out = batch->state.wall_id[idx];
+    if (x_after_out != NULL) {
+      *x_after_out = batch->state.pos_x[idx];
+    }
+    return 1u;
+  }
+  for (uint8_t ci = 0u; ci < candidates.count; ci++) {
+    const int candidate_line_idx = candidates.line_idx[ci];
+    const float sample_x[3] = {cur_ecb->right_x, cur_ecb->bottom_x, cur_ecb->top_x};
+    const float sample_y[3] = {cur_ecb->right_y, cur_ecb->bottom_y, cur_ecb->top_y};
+    for (size_t pass = 0; pass < 3u; pass++) {
+      float x_corr = 0.0f;
+      float nx = -1.0f;
+      float ny = 0.0f;
+      const int out_line_idx = left_wall_e398_project(lwg, candidate_line_idx, sample_x[pass],
+                                                      sample_y[pass], &x_corr, &nx, &ny);
+      if (out_line_idx < 0) {
+        continue;
+      }
+      if (x_corr > 0.0f) {
+        x_corr = 0.0f;
+      }
+      batch->state.pos_x[idx] += x_corr;
+      ecb_points_shift_x(cur_ecb, x_corr);
+      batch->state.wall_kind[idx] = MSL_WALL_LEFT;
+      batch->state.wall_id[idx] = lwg->lines[(size_t)out_line_idx].segment_i;
+      batch->state.wall_contact_x[idx] = candidates.first_ix;
+      batch->state.wall_contact_y[idx] = candidates.first_iy;
+      batch->state.wall_normal_x[idx] = nx;
+      batch->state.wall_normal_y[idx] = ny;
+      mark_left_wall_contact(batch, idx, candidates.has_hug);
+      *wall_id_out = batch->state.wall_id[idx];
+      if (x_after_out != NULL) {
+        *x_after_out = batch->state.pos_x[idx];
+      }
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
+static uint8_t grounded_ordered_right_wall(MslBatch* batch, size_t idx,
+                                           const MslStageWallGraph* rwg,
+                                           const MslEcbWorldPoints* prev_ecb,
+                                           MslEcbWorldPoints* cur_ecb, uint16_t* wall_id_out,
+                                           float* x_after_out) {
+  if (batch == NULL || rwg == NULL || rwg->lines == NULL || prev_ecb == NULL || cur_ecb == NULL ||
+      wall_id_out == NULL) {
+    return 0u;
+  }
+  const int bi = (int)(idx / (size_t)MSL_MAX_PLAYERS);
+  const uint32_t stage_id = batch->state.stage_id[(size_t)bi];
+  const int excluded_floor_wall =
+      grounded_right_wall_floor_adjacent_line_idx(stage_id, batch->state.ground_id[idx]);
+
+  MslWallCandidateList candidates;
+  wall_candidate_list_init(&candidates);
+  // Symmetric grounded source candidate collection:
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80048AB0_RightWall,mpColl_800491C8_RightWall}
+  right_wall_candidate_sweep(&candidates, rwg, prev_ecb->left_x, prev_ecb->left_y, cur_ecb->left_x,
+                             cur_ecb->left_y, -1, 1u, -1);
+  right_wall_candidate_sweep(&candidates, rwg, prev_ecb->bottom_x, prev_ecb->bottom_y,
+                             cur_ecb->bottom_x, cur_ecb->bottom_y, -1, 0u, excluded_floor_wall);
+  right_wall_candidate_sweep(&candidates, rwg, prev_ecb->top_x, prev_ecb->top_y, cur_ecb->top_x,
+                             cur_ecb->top_y, -1, 0u, -1);
+  right_wall_candidate_sweep(&candidates, rwg, cur_ecb->bottom_x, cur_ecb->bottom_y,
+                             cur_ecb->left_x, cur_ecb->left_y, -1, 0u, excluded_floor_wall);
+  right_wall_candidate_quad(&candidates, rwg, prev_ecb->bottom_x, prev_ecb->bottom_y,
+                            prev_ecb->left_x, prev_ecb->left_y, cur_ecb->bottom_x,
+                            cur_ecb->bottom_y, cur_ecb->left_x, cur_ecb->left_y);
+  right_wall_candidate_sweep(&candidates, rwg, cur_ecb->top_x, cur_ecb->top_y, cur_ecb->left_x,
+                             cur_ecb->left_y, -1, 0u, -1);
+  right_wall_candidate_quad(&candidates, rwg, prev_ecb->left_x, prev_ecb->left_y, prev_ecb->top_x,
+                            prev_ecb->top_y, cur_ecb->left_x, cur_ecb->left_y, cur_ecb->top_x,
+                            cur_ecb->top_y);
+  wall_candidate_list_remove_connected(&candidates, rwg, excluded_floor_wall);
+
+  float envelope_x = 0.0f;
+  int envelope_line_idx = -1;
+  float envelope_nx = 1.0f;
+  float envelope_ny = 0.0f;
+  if (right_wall_air_envelope_max_x(rwg, &candidates, cur_ecb, batch->state.pos_x[idx],
+                                    batch->state.pos_y[idx], &envelope_x, &envelope_line_idx,
+                                    &envelope_nx, &envelope_ny)) {
+    const float dx = envelope_x - batch->state.pos_x[idx];
+    batch->state.pos_x[idx] = envelope_x;
+    ecb_points_shift_x(cur_ecb, dx);
+    batch->state.wall_kind[idx] = MSL_WALL_RIGHT;
+    batch->state.wall_id[idx] = rwg->lines[(size_t)envelope_line_idx].segment_i;
+    batch->state.wall_contact_x[idx] = candidates.first_ix;
+    batch->state.wall_contact_y[idx] = candidates.first_iy;
+    batch->state.wall_normal_x[idx] = envelope_nx;
+    batch->state.wall_normal_y[idx] = envelope_ny;
+    mark_right_wall_contact(batch, idx, candidates.has_hug);
+    *wall_id_out = batch->state.wall_id[idx];
+    if (x_after_out != NULL) {
+      *x_after_out = batch->state.pos_x[idx];
+    }
+    return 1u;
+  }
+  for (uint8_t ci = 0u; ci < candidates.count; ci++) {
+    const int candidate_line_idx = candidates.line_idx[ci];
+    const float sample_x[3] = {cur_ecb->left_x, cur_ecb->bottom_x, cur_ecb->top_x};
+    const float sample_y[3] = {cur_ecb->left_y, cur_ecb->bottom_y, cur_ecb->top_y};
+    for (size_t pass = 0; pass < 3u; pass++) {
+      float x_corr = 0.0f;
+      float nx = 1.0f;
+      float ny = 0.0f;
+      const int out_line_idx = right_wall_e684_project(rwg, candidate_line_idx, sample_x[pass],
+                                                       sample_y[pass], &x_corr, &nx, &ny);
+      if (out_line_idx < 0) {
+        continue;
+      }
+      if (x_corr < 0.0f) {
+        x_corr = 0.0f;
+      }
+      batch->state.pos_x[idx] += x_corr;
+      ecb_points_shift_x(cur_ecb, x_corr);
+      batch->state.wall_kind[idx] = MSL_WALL_RIGHT;
+      batch->state.wall_id[idx] = rwg->lines[(size_t)out_line_idx].segment_i;
+      batch->state.wall_contact_x[idx] = candidates.first_ix;
+      batch->state.wall_contact_y[idx] = candidates.first_iy;
+      batch->state.wall_normal_x[idx] = nx;
+      batch->state.wall_normal_y[idx] = ny;
+      mark_right_wall_contact(batch, idx, candidates.has_hug);
+      *wall_id_out = batch->state.wall_id[idx];
+      if (x_after_out != NULL) {
+        *x_after_out = batch->state.pos_x[idx];
+      }
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
+uint8_t mpcoll_grounded_ceiling_ordered_retry(MslBatch* batch, size_t idx,
+                                              const MslEcbWorldPoints* prev_ecb,
+                                              MslEcbWorldPoints* cur_ecb,
+                                              MslMpcollOrderedWallCeilResult* io) {
+  if (batch == NULL || prev_ecb == NULL || cur_ecb == NULL) {
+    return 0u;
+  }
+  const int bi = (int)(idx / (size_t)MSL_MAX_PLAYERS);
+  const uint32_t stage_id = batch->state.stage_id[(size_t)bi];
+  const MslStageCeilingGraph* cg = stage_collision_get_ceiling_graph(stage_id);
+  if (cg == NULL || cg->lines == NULL || cg->line_count == 0u) {
+    return 0u;
+  }
+
+  int prefer_line_idx = -1;
+  if (batch->state.ceiling_id[idx] != 0xFFFFu) {
+    prefer_line_idx = stage_collision_ceiling_line_index(stage_id, batch->state.ceiling_id[idx]);
+  }
+
+  int hit_line_idx = -1;
+  float ix = 0.0f;
+  float iy = 0.0f;
+  float nx = 0.0f;
+  float ny = -1.0f;
+  uint8_t hit_ceiling =
+      ceiling_sweep_check(cg, prev_ecb->top_x, prev_ecb->top_y, cur_ecb->top_x, cur_ecb->top_y,
+                          prefer_line_idx, &hit_line_idx, &ix, &iy, &nx, &ny);
+  if (!hit_ceiling && io != NULL) {
+    // Source `mpColl_80044AD8_Ceiling`: when the direct top sweep misses, same-frame wall side
+    // bits can walk the raw MapLine graph from the contacted wall to an adjacent ceiling.
+    // refs/melee/src/melee/mp/mpcoll.c::mpColl_80044AD8_Ceiling
+    MslStageRawLineKind out_kind = MSL_STAGE_RAW_LINE_UNKNOWN;
+    uint16_t ceiling_segment_i = 0xFFFFu;
+    if ((io->left_right_flags & 1u) != 0u && io->left_wall_id != 0xFFFFu &&
+        stage_collision_raw_line_next_non_kind(stage_id, io->left_wall_id,
+                                               MSL_STAGE_RAW_LINE_LEFT_WALL, &out_kind,
+                                               &ceiling_segment_i) &&
+        out_kind == MSL_STAGE_RAW_LINE_CEILING) {
+      hit_line_idx = stage_collision_ceiling_line_index(stage_id, ceiling_segment_i);
+      hit_ceiling = (hit_line_idx >= 0) ? 1u : 0u;
+      ix = cur_ecb->top_x;
+      iy = cur_ecb->top_y;
+    } else if ((io->left_right_flags & 2u) != 0u && io->right_wall_id != 0xFFFFu &&
+               stage_collision_raw_line_prev_non_kind(stage_id, io->right_wall_id,
+                                                      MSL_STAGE_RAW_LINE_RIGHT_WALL, &out_kind,
+                                                      &ceiling_segment_i) &&
+               out_kind == MSL_STAGE_RAW_LINE_CEILING) {
+      hit_line_idx = stage_collision_ceiling_line_index(stage_id, ceiling_segment_i);
+      hit_ceiling = (hit_line_idx >= 0) ? 1u : 0u;
+      ix = cur_ecb->top_x;
+      iy = cur_ecb->top_y;
+    }
+  }
+  if (!hit_ceiling) {
+    if (io != NULL && io->hit_floor && io->hit_ceiling) {
+      mpcoll_squeeze_vertical(batch, idx, cur_ecb, (uint8_t)(io->touching_floor ? 0u : 1u),
+                              io->y_after_ceiling, io->y_after_floor);
+      io->cur_ecb_after = *cur_ecb;
+      io->squeeze_flags_all |= io->squeeze_flags;
+    }
+    return 0u;
+  }
+  float y_corr = 0.0f;
+  const int out_line_idx =
+      ceiling_e090_project(cg, hit_line_idx, cur_ecb->top_x, cur_ecb->top_y, &y_corr, &nx, &ny);
+  if (out_line_idx < 0) {
+    return 0u;
+  }
+  if (y_corr > 0.0f) {
+    y_corr = 0.0f;
+  }
+  batch->state.pos_y[idx] += y_corr;
+  ecb_points_shift_y(cur_ecb, y_corr);
+  batch->state.ceiling_id[idx] = cg->lines[(size_t)out_line_idx].segment_i;
+  batch->state.ceiling_contact_x[idx] = ix;
+  batch->state.ceiling_contact_y[idx] = iy;
+  batch->state.ceiling_normal_x[idx] = nx;
+  batch->state.ceiling_normal_y[idx] = ny;
+  batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_CEILING_MASK;
+  ceiling_write_edge_suppression_flags(batch, idx, stage_id, cg, out_line_idx, cur_ecb);
+  if (io != NULL) {
+    io->hit_ceiling = 1u;
+    io->squeeze_flags |= (uint8_t)MSL_MPCOLL_ORDERED_SQUEEZE_CEILING;
+    io->y_after_ceiling = batch->state.pos_y[idx];
+    if (io->hit_floor) {
+      mpcoll_squeeze_vertical(batch, idx, cur_ecb, (uint8_t)(io->touching_floor ? 0u : 1u),
+                              io->y_after_ceiling, io->y_after_floor);
+    }
+    io->cur_ecb_after = *cur_ecb;
+    io->squeeze_flags_all |= io->squeeze_flags;
+  }
+  return 1u;
+}
+
+void mpcoll_grounded_wall_ceil_ordered_begin(MslBatch* batch, size_t idx,
+                                             const MslEcbWorldPoints* prev_ecb,
+                                             const MslEcbWorldPoints* cur_ecb,
+                                             MslMpcollOrderedWallCeilResult* out) {
+  MslMpcollOrderedWallCeilResult result = {
+      .left_right_flags = 0u,
+      .squeeze_flags = 0u,
+      .squeeze_flags_all = 0u,
+      .hit_ceiling = 0u,
+      .hit_floor = 0u,
+      .touching_floor = 0u,
+      .left_wall_id = 0xFFFFu,
+      .right_wall_id = 0xFFFFu,
+      .x_after_left_wall = 0.0f,
+      .x_after_right_wall = 0.0f,
+      .y_after_ceiling = 0.0f,
+      .y_after_floor = 0.0f,
+      .cur_ecb_after = {0},
+  };
+  if (out != NULL) {
+    *out = result;
+  }
+  if (batch == NULL || prev_ecb == NULL || cur_ecb == NULL) {
+    return;
+  }
+  const int bi = (int)(idx / (size_t)MSL_MAX_PLAYERS);
+  const uint32_t stage_id = batch->state.stage_id[(size_t)bi];
+  const MslStageWallGraph* lwg = stage_collision_get_left_wall_graph(stage_id);
+  const MslStageWallGraph* rwg = stage_collision_get_right_wall_graph(stage_id);
+
+  // Source order for grounded inline2:
+  // left wall, right wall, left wall retry, right wall retry, horizontal squeeze, then ceiling.
+  // This retained helper models the same left/right observation order and feeds the floor pass the
+  // wall side bits used by mpColl_80044628_Floor's raw adjacent-line fallback.
+  // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004ACE4
+  MslEcbWorldPoints cur = *cur_ecb;
+  MslEcbWorldPoints prev = *prev_ecb;
+  ecb_points_apply_inline_horizontal_normalization(batch, idx, &cur);
+  ecb_points_apply_inline_horizontal_normalization(batch, idx, &prev);
+  uint8_t hit_left = 0u;
+  uint8_t hit_right = 0u;
+  if (grounded_ordered_left_wall(batch, idx, lwg, &prev, &cur, &result.left_wall_id,
+                                 &result.x_after_left_wall)) {
+    hit_left = 1u;
+    result.left_right_flags |= 1u;
+    result.squeeze_flags |= (uint8_t)MSL_MPCOLL_ORDERED_SQUEEZE_LEFT_WALL;
+  }
+  if (grounded_ordered_right_wall(batch, idx, rwg, &prev, &cur, &result.right_wall_id,
+                                  &result.x_after_right_wall)) {
+    hit_right = 1u;
+    result.left_right_flags |= 2u;
+    result.squeeze_flags |= (uint8_t)MSL_MPCOLL_ORDERED_SQUEEZE_RIGHT_WALL;
+  }
+  if (grounded_ordered_left_wall(batch, idx, lwg, &prev, &cur, &result.left_wall_id,
+                                 &result.x_after_left_wall)) {
+    hit_left = 1u;
+    result.left_right_flags |= 1u;
+    result.squeeze_flags |= (uint8_t)MSL_MPCOLL_ORDERED_SQUEEZE_LEFT_WALL;
+  }
+  if (grounded_ordered_right_wall(batch, idx, rwg, &prev, &cur, &result.right_wall_id,
+                                  &result.x_after_right_wall)) {
+    hit_right = 1u;
+    result.left_right_flags |= 2u;
+    result.squeeze_flags |= (uint8_t)MSL_MPCOLL_ORDERED_SQUEEZE_RIGHT_WALL;
+  }
+
+  if (hit_left && hit_right) {
+    mpcoll_squeeze_horizontal(batch, idx, &cur, result.x_after_right_wall,
+                              result.x_after_left_wall);
+  }
+
+  (void)mpcoll_grounded_ceiling_ordered_retry(batch, idx, &prev, &cur, &result);
+  result.cur_ecb_after = cur;
+  result.squeeze_flags_all |= result.squeeze_flags;
+  if (out != NULL) {
+    *out = result;
+  }
+}
+
 void mpcoll_wall_ceil_apply(MslBatch* batch) {
   if (batch == NULL) {
     return;
@@ -1851,6 +2355,14 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
       }
 
       const uint8_t was_grounded = batch->state.prev_on_ground[idx] ? 1u : 0u;
+      if (was_grounded) {
+        // Grounded inline2 callbacks are handled in source order inside mpcoll_ground_apply:
+        // walls -> ceiling -> floor -> ceiling retry -> 4A908/44838. Re-running the generic
+        // wall/ceiling pass here would observe post-floor positions and overwrite the shared
+        // same-frame scratch/result.
+        // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004ACE4
+        continue;
+      }
       const uint8_t grounded_now = batch->state.on_ground[idx] ? 1u : 0u;
       const uint8_t char_id = batch->state.char_id[idx];
       const uint32_t anim = batch->state.animation_index[idx];
