@@ -43,19 +43,19 @@ validation.profile.ignored: state_flags[4]&0x80 reason=Slippi fp+0x221F camera-s
 
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl ==
 Records: 7295  Players/scored per record: 2  Total player-frames: 14590
-mismatch.action_id: 1 / 14590 (0.000069)
+mismatch.action_id: 0 / 14590 (0.000000)
 mismatch.action_frame: 4 / 14590 (0.000274)
-mismatch.on_ground: 1 / 14590 (0.000069)
+mismatch.on_ground: 0 / 14590 (0.000000)
 mismatch.facing: 1 / 14590 (0.000069)
 mismatch.stocks: 0 / 14590 (0.000000)
-mismatch.jumps_left: 1 / 14590 (0.000069)
+mismatch.jumps_left: 0 / 14590 (0.000000)
 mismatch.is_dead: 0 / 14590 (0.000000)
 mismatch.hitlag: 1 / 14590 (0.000069)
 mismatch.hitstun: 0 / 14590 (0.000000)
 mismatch.l_cancel: 0 / 14590 (0.000000)
 mismatch.hurtbox_state: 0 / 14590 (0.000000)
 mismatch.ground_id: 0 / 14590 (0.000000)
-mismatch.animation_index: 1 / 14590 (0.000069)
+mismatch.animation_index: 0 / 14590 (0.000000)
 mismatch.instance_hit_by: 0 / 14590 (0.000000)
 mismatch.instance_id: 0 / 14590 (0.000000)
 mismatch.last_attack_landed: 0 / 14590 (0.000000)
@@ -69,7 +69,7 @@ mismatch.item_owner: 0 / 109425 (0.000000)
 mismatch.item_instance_id: 0 / 109425 (0.000000)
 ignored_mismatch.state_flags[4]&0x80: 19 / 14590 (0.001302)
 err.pos_x: mae=0.000223 p95=0.000000 max=0.223244
-err.pos_y: mae=0.000927 p95=0.000000 max=5.364812
+err.pos_y: mae=0.000560 p95=0.000000 max=2.510000
 err.speed_air_x_self: mae=0.000021 p95=0.000000 max=0.103250
 err.speed_ground_x_self: mae=0.000051 p95=0.000000 max=0.142000
 err.speed_y_self: mae=0.000323 p95=0.000000 max=2.510000
@@ -81,10 +81,10 @@ err.item_pos_x: mae=0.039961 p95=0.000000 max=38.000000
 err.item_pos_y: mae=0.000022 p95=0.000000 max=0.030602
 err.item_vel_x: mae=0.007002 p95=0.000000 max=10.000000
 err.item_vel_y: mae=0.000022 p95=0.000000 max=0.030602
-overall.discrete_mismatch: 15 / 882695
-overall.strict_discrete_mismatch: 34 / 882695
+overall.discrete_mismatch: 11 / 882695
+overall.strict_discrete_mismatch: 30 / 882695
 overall.ignored_discrete_mismatch: 19
-overall.float_norm_mae_p95: 0.00003987
+overall.float_norm_mae_p95: 0.00003930
 
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl ==
 Records: 11529  Players/scored per record: 2  Total player-frames: 23058
@@ -222,7 +222,7 @@ overall.ignored_discrete_mismatch: 19
 overall.float_norm_mae_p95: 0.00002259
 
 == suite summary ==
-overall.discrete_mismatch: 118 / 4462843
-overall.strict_discrete_mismatch: 204 / 4462843
+overall.discrete_mismatch: 114 / 4462843
+overall.strict_discrete_mismatch: 200 / 4462843
 overall.ignored_discrete_mismatch: 86
-overall.float_norm_mae_p95: 0.00003975
+overall.float_norm_mae_p95: 0.00003964

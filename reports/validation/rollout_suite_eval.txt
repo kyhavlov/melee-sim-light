@@ -28,13 +28,13 @@ validation.profile.ignored: state_flags[4]&0x80 reason=Slippi fp+0x221F camera-s
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl ==
 rollout.best_len: 1435
 rollout.streak_count: 15
-rollout.streak_len.median: 341
+rollout.streak_len.median: 314
 rollout.streak_len.p90: 1282
 rollout.streak_len.p95: 1435
 rollout.streak_len.max: 1435
 rollout.first_mismatch_total: 14
-rollout.first_mismatch_seeded_total: 2
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:1792
+rollout.first_mismatch_seeded_total: 1
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:2056
 
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl ==
 rollout.best_len: 1169
@@ -71,11 +71,11 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:1615
 
 == suite summary ==
 overall.rollout.streak_count: 84
-overall.rollout.streak_len.median: 351
+overall.rollout.streak_len.median: 346
 overall.rollout.streak_len.p90: 985
 overall.rollout.streak_len.p95: 1131
 overall.rollout.streak_len.max: 2269
 overall.rollout.best_len.max: 2269
 overall.rollout.first_mismatch_total: 80
-overall.rollout.first_mismatch_seeded_total: 15
-overall.rollout.ignored_first_mismatch_top: state_flags[4]&0x80:7814
+overall.rollout.first_mismatch_seeded_total: 14
+overall.rollout.ignored_first_mismatch_top: state_flags[4]&0x80:8078
