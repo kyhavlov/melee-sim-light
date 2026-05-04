@@ -68,7 +68,7 @@ mismatch.item_state: 0 / 109425 (0.000000)
 mismatch.item_owner: 0 / 109425 (0.000000)
 mismatch.item_instance_id: 0 / 109425 (0.000000)
 ignored_mismatch.state_flags[4]&0x80: 19 / 14590 (0.001302)
-err.pos_x: mae=0.000241 p95=0.000000 max=0.263153
+err.pos_x: mae=0.000223 p95=0.000000 max=0.223244
 err.pos_y: mae=0.000927 p95=0.000000 max=5.364812
 err.speed_air_x_self: mae=0.000021 p95=0.000000 max=0.103250
 err.speed_ground_x_self: mae=0.000051 p95=0.000000 max=0.142000
@@ -84,7 +84,7 @@ err.item_vel_y: mae=0.000022 p95=0.000000 max=0.030602
 overall.discrete_mismatch: 16 / 882695
 overall.strict_discrete_mismatch: 35 / 882695
 overall.ignored_discrete_mismatch: 19
-overall.float_norm_mae_p95: 0.00003988
+overall.float_norm_mae_p95: 0.00003987
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl ==
 Records: 10174  Players/scored per record: 2  Total player-frames: 20348
@@ -563,7 +563,7 @@ mismatch.item_state: 1 / 113145 (0.000009)
 mismatch.item_owner: 1 / 113145 (0.000009)
 mismatch.item_instance_id: 1 / 113145 (0.000009)
 ignored_mismatch.state_flags[4]&0x80: 23 / 15086 (0.001525)
-err.pos_x: mae=0.001984 p95=0.000000 max=2.629730
+err.pos_x: mae=0.001919 p95=0.000000 max=2.629730
 err.pos_y: mae=0.001540 p95=0.000000 max=6.861949
 err.speed_air_x_self: mae=0.000159 p95=0.000000 max=1.046021
 err.speed_ground_x_self: mae=0.000501 p95=0.000000 max=1.768659
@@ -579,7 +579,7 @@ err.item_vel_y: mae=0.000001 p95=0.000000 max=0.000060
 overall.discrete_mismatch: 67 / 912703
 overall.strict_discrete_mismatch: 90 / 912703
 overall.ignored_discrete_mismatch: 23
-overall.float_norm_mae_p95: 0.00005892
+overall.float_norm_mae_p95: 0.00005885
 
 == datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
 Records: 10222  Players/scored per record: 2  Total player-frames: 20444
