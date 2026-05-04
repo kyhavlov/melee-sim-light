@@ -170,12 +170,12 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:1336
 
 == datasets/aggregate_recent/replays/validation/battlefield_recent/MediumVirtualPig.msl ==
 rollout.best_len: 886
-rollout.streak_count: 47
+rollout.streak_count: 46
 rollout.streak_len.median: 106
 rollout.streak_len.p90: 395
 rollout.streak_len.p95: 425
 rollout.streak_len.max: 886
-rollout.first_mismatch_total: 52
+rollout.first_mismatch_total: 51
 rollout.first_mismatch_seeded_total: 39
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:1427
 
@@ -350,13 +350,13 @@ rollout.first_mismatch_seeded_total: 98
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:1535
 
 == suite summary ==
-overall.rollout.streak_count: 1249
+overall.rollout.streak_count: 1248
 overall.rollout.streak_len.median: 129
 overall.rollout.streak_len.p90: 531
 overall.rollout.streak_len.p95: 760
 overall.rollout.streak_len.max: 2427
 overall.rollout.best_len.max: 2427
-overall.rollout.first_mismatch_total: 1416
+overall.rollout.first_mismatch_total: 1415
 overall.rollout.first_mismatch_seeded_total: 849
 overall.rollout.ignored_first_mismatch_top: state_flags[4]&0x80:53449
 overall.rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:6

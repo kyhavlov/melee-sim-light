@@ -56,7 +56,7 @@ mismatch.l_cancel: 0 / 14590 (0.000000)
 mismatch.hurtbox_state: 0 / 14590 (0.000000)
 mismatch.ground_id: 0 / 14590 (0.000000)
 mismatch.animation_index: 1 / 14590 (0.000069)
-mismatch.instance_hit_by: 1 / 14590 (0.000069)
+mismatch.instance_hit_by: 0 / 14590 (0.000000)
 mismatch.instance_id: 0 / 14590 (0.000000)
 mismatch.last_attack_landed: 0 / 14590 (0.000000)
 mismatch.combo_count: 0 / 14590 (0.000000)
@@ -81,8 +81,8 @@ err.item_pos_x: mae=0.039961 p95=0.000000 max=38.000000
 err.item_pos_y: mae=0.000022 p95=0.000000 max=0.030602
 err.item_vel_x: mae=0.007002 p95=0.000000 max=10.000000
 err.item_vel_y: mae=0.000022 p95=0.000000 max=0.030602
-overall.discrete_mismatch: 16 / 882695
-overall.strict_discrete_mismatch: 35 / 882695
+overall.discrete_mismatch: 15 / 882695
+overall.strict_discrete_mismatch: 34 / 882695
 overall.ignored_discrete_mismatch: 19
 overall.float_norm_mae_p95: 0.00003987
 
@@ -146,7 +146,7 @@ mismatch.l_cancel: 0 / 19712 (0.000000)
 mismatch.hurtbox_state: 1 / 19712 (0.000051)
 mismatch.ground_id: 0 / 19712 (0.000000)
 mismatch.animation_index: 3 / 19712 (0.000152)
-mismatch.instance_hit_by: 2 / 19712 (0.000101)
+mismatch.instance_hit_by: 0 / 19712 (0.000000)
 mismatch.instance_id: 3 / 19712 (0.000152)
 mismatch.last_attack_landed: 1 / 19712 (0.000051)
 mismatch.combo_count: 8 / 19712 (0.000406)
@@ -171,8 +171,8 @@ err.item_pos_x: mae=0.044243 p95=0.000000 max=43.625328
 err.item_pos_y: mae=0.021074 p95=0.000000 max=39.553974
 err.item_vel_x: mae=0.000127 p95=0.000000 max=0.239997
 err.item_vel_y: mae=0.003665 p95=0.000000 max=6.995884
-overall.discrete_mismatch: 74 / 1192576
-overall.strict_discrete_mismatch: 91 / 1192576
+overall.discrete_mismatch: 72 / 1192576
+overall.strict_discrete_mismatch: 89 / 1192576
 overall.ignored_discrete_mismatch: 17
 overall.float_norm_mae_p95: 0.00005386
 
@@ -191,7 +191,7 @@ mismatch.l_cancel: 0 / 24370 (0.000000)
 mismatch.hurtbox_state: 0 / 24370 (0.000000)
 mismatch.ground_id: 0 / 24370 (0.000000)
 mismatch.animation_index: 4 / 24370 (0.000164)
-mismatch.instance_hit_by: 1 / 24370 (0.000041)
+mismatch.instance_hit_by: 0 / 24370 (0.000000)
 mismatch.instance_id: 1 / 24370 (0.000041)
 mismatch.last_attack_landed: 0 / 24370 (0.000000)
 mismatch.combo_count: 2 / 24370 (0.000082)
@@ -216,8 +216,8 @@ err.item_pos_x: mae=0.090159 p95=0.000301 max=4.100000
 err.item_pos_y: mae=0.000002 p95=0.000000 max=0.000114
 err.item_vel_x: mae=0.000006 p95=0.000000 max=0.000234
 err.item_vel_y: mae=0.000001 p95=0.000000 max=0.000060
-overall.discrete_mismatch: 48 / 1474385
-overall.strict_discrete_mismatch: 95 / 1474385
+overall.discrete_mismatch: 47 / 1474385
+overall.strict_discrete_mismatch: 94 / 1474385
 overall.ignored_discrete_mismatch: 47
 overall.float_norm_mae_p95: 0.00002530
 
@@ -236,7 +236,7 @@ mismatch.l_cancel: 0 / 23058 (0.000000)
 mismatch.hurtbox_state: 2 / 23058 (0.000087)
 mismatch.ground_id: 0 / 23058 (0.000000)
 mismatch.animation_index: 3 / 23058 (0.000130)
-mismatch.instance_hit_by: 2 / 23058 (0.000087)
+mismatch.instance_hit_by: 0 / 23058 (0.000000)
 mismatch.instance_id: 4 / 23058 (0.000173)
 mismatch.last_attack_landed: 0 / 23058 (0.000000)
 mismatch.combo_count: 0 / 23058 (0.000000)
@@ -261,8 +261,8 @@ err.item_pos_x: mae=0.003881 p95=0.000000 max=3.790001
 err.item_pos_y: mae=0.000290 p95=0.000000 max=1.350348
 err.item_vel_x: mae=0.000055 p95=0.000000 max=0.251084
 err.item_vel_y: mae=0.000082 p95=0.000000 max=0.382914
-overall.discrete_mismatch: 37 / 1395009
-overall.strict_discrete_mismatch: 58 / 1395009
+overall.discrete_mismatch: 35 / 1395009
+overall.strict_discrete_mismatch: 56 / 1395009
 overall.ignored_discrete_mismatch: 21
 overall.float_norm_mae_p95: 0.00002604
 
@@ -281,7 +281,7 @@ mismatch.l_cancel: 0 / 18656 (0.000000)
 mismatch.hurtbox_state: 0 / 18656 (0.000000)
 mismatch.ground_id: 1 / 18656 (0.000054)
 mismatch.animation_index: 7 / 18656 (0.000375)
-mismatch.instance_hit_by: 4 / 18656 (0.000214)
+mismatch.instance_hit_by: 3 / 18656 (0.000161)
 mismatch.instance_id: 6 / 18656 (0.000322)
 mismatch.last_attack_landed: 3 / 18656 (0.000161)
 mismatch.combo_count: 2 / 18656 (0.000107)
@@ -306,8 +306,8 @@ err.item_pos_x: mae=0.097173 p95=0.000000 max=55.080002
 err.item_pos_y: mae=0.013308 p95=0.000000 max=10.402809
 err.item_vel_x: mae=0.005125 p95=0.000000 max=5.000000
 err.item_vel_y: mae=0.002615 p95=0.000000 max=3.820249
-overall.discrete_mismatch: 98 / 1128688
-overall.strict_discrete_mismatch: 123 / 1128688
+overall.discrete_mismatch: 97 / 1128688
+overall.strict_discrete_mismatch: 122 / 1128688
 overall.ignored_discrete_mismatch: 25
 overall.float_norm_mae_p95: 0.00011793
 
@@ -326,7 +326,7 @@ mismatch.l_cancel: 1 / 17458 (0.000057)
 mismatch.hurtbox_state: 2 / 17458 (0.000115)
 mismatch.ground_id: 1 / 17458 (0.000057)
 mismatch.animation_index: 5 / 17458 (0.000286)
-mismatch.instance_hit_by: 2 / 17458 (0.000115)
+mismatch.instance_hit_by: 1 / 17458 (0.000057)
 mismatch.instance_id: 2 / 17458 (0.000115)
 mismatch.last_attack_landed: 1 / 17458 (0.000057)
 mismatch.combo_count: 3 / 17458 (0.000172)
@@ -351,8 +351,8 @@ err.item_pos_x: mae=0.002243 p95=0.000000 max=1.940910
 err.item_pos_y: mae=0.000001 p95=0.000000 max=0.000114
 err.item_vel_x: mae=0.000002 p95=0.000000 max=0.000234
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000060
-overall.discrete_mismatch: 70 / 1056209
-overall.strict_discrete_mismatch: 84 / 1056209
+overall.discrete_mismatch: 69 / 1056209
+overall.strict_discrete_mismatch: 83 / 1056209
 overall.ignored_discrete_mismatch: 14
 overall.float_norm_mae_p95: 0.00003181
 
@@ -371,7 +371,7 @@ mismatch.l_cancel: 0 / 23516 (0.000000)
 mismatch.hurtbox_state: 2 / 23516 (0.000085)
 mismatch.ground_id: 2 / 23516 (0.000085)
 mismatch.animation_index: 13 / 23516 (0.000553)
-mismatch.instance_hit_by: 1 / 23516 (0.000043)
+mismatch.instance_hit_by: 0 / 23516 (0.000000)
 mismatch.instance_id: 6 / 23516 (0.000255)
 mismatch.last_attack_landed: 0 / 23516 (0.000000)
 mismatch.combo_count: 0 / 23516 (0.000000)
@@ -396,8 +396,8 @@ err.item_pos_x: mae=0.009063 p95=0.000000 max=3.790001
 err.item_pos_y: mae=0.000000 p95=0.000000 max=0.000004
 err.item_vel_x: mae=0.000000 p95=0.000000 max=0.000000
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000000
-overall.discrete_mismatch: 80 / 1422718
-overall.strict_discrete_mismatch: 103 / 1422718
+overall.discrete_mismatch: 79 / 1422718
+overall.strict_discrete_mismatch: 102 / 1422718
 overall.ignored_discrete_mismatch: 23
 overall.float_norm_mae_p95: 0.00005801
 
@@ -416,7 +416,7 @@ mismatch.l_cancel: 0 / 19378 (0.000000)
 mismatch.hurtbox_state: 1 / 19378 (0.000052)
 mismatch.ground_id: 0 / 19378 (0.000000)
 mismatch.animation_index: 20 / 19378 (0.001032)
-mismatch.instance_hit_by: 2 / 19378 (0.000103)
+mismatch.instance_hit_by: 1 / 19378 (0.000052)
 mismatch.instance_id: 10 / 19378 (0.000516)
 mismatch.last_attack_landed: 1 / 19378 (0.000052)
 mismatch.combo_count: 0 / 19378 (0.000000)
@@ -441,8 +441,8 @@ err.item_pos_x: mae=0.069745 p95=0.000000 max=89.601044
 err.item_pos_y: mae=0.011645 p95=0.000000 max=10.252837
 err.item_vel_x: mae=0.017886 p95=0.000000 max=10.000000
 err.item_vel_y: mae=0.003023 p95=0.000000 max=4.954213
-overall.discrete_mismatch: 161 / 1172369
-overall.strict_discrete_mismatch: 183 / 1172369
+overall.discrete_mismatch: 160 / 1172369
+overall.strict_discrete_mismatch: 182 / 1172369
 overall.ignored_discrete_mismatch: 22
 overall.float_norm_mae_p95: 0.00014531
 
@@ -506,7 +506,7 @@ mismatch.l_cancel: 0 / 15874 (0.000000)
 mismatch.hurtbox_state: 2 / 15874 (0.000126)
 mismatch.ground_id: 2 / 15874 (0.000126)
 mismatch.animation_index: 4 / 15874 (0.000252)
-mismatch.instance_hit_by: 1 / 15874 (0.000063)
+mismatch.instance_hit_by: 0 / 15874 (0.000000)
 mismatch.instance_id: 4 / 15874 (0.000252)
 mismatch.last_attack_landed: 0 / 15874 (0.000000)
 mismatch.combo_count: 2 / 15874 (0.000126)
@@ -531,8 +531,8 @@ err.item_pos_x: mae=0.014438 p95=0.000000 max=10.000000
 err.item_pos_y: mae=0.000038 p95=0.000000 max=0.043619
 err.item_vel_x: mae=0.021988 p95=0.000000 max=10.000000
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000000
-overall.discrete_mismatch: 55 / 960377
-overall.strict_discrete_mismatch: 82 / 960377
+overall.discrete_mismatch: 54 / 960377
+overall.strict_discrete_mismatch: 81 / 960377
 overall.ignored_discrete_mismatch: 27
 overall.float_norm_mae_p95: 0.00010277
 
@@ -596,7 +596,7 @@ mismatch.l_cancel: 0 / 20444 (0.000000)
 mismatch.hurtbox_state: 2 / 20444 (0.000098)
 mismatch.ground_id: 0 / 20444 (0.000000)
 mismatch.animation_index: 2 / 20444 (0.000098)
-mismatch.instance_hit_by: 4 / 20444 (0.000196)
+mismatch.instance_hit_by: 2 / 20444 (0.000098)
 mismatch.instance_id: 7 / 20444 (0.000342)
 mismatch.last_attack_landed: 1 / 20444 (0.000049)
 mismatch.combo_count: 1 / 20444 (0.000049)
@@ -621,8 +621,8 @@ err.item_pos_x: mae=0.016358 p95=0.000000 max=3.790001
 err.item_pos_y: mae=0.056702 p95=0.000000 max=18.343994
 err.item_vel_x: mae=0.000001 p95=0.000000 max=0.000152
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000045
-overall.discrete_mismatch: 49 / 1236862
-overall.strict_discrete_mismatch: 76 / 1236862
+overall.discrete_mismatch: 47 / 1236862
+overall.strict_discrete_mismatch: 74 / 1236862
 overall.ignored_discrete_mismatch: 27
 overall.float_norm_mae_p95: 0.00006950
 
@@ -641,7 +641,7 @@ mismatch.l_cancel: 0 / 15674 (0.000000)
 mismatch.hurtbox_state: 0 / 15674 (0.000000)
 mismatch.ground_id: 0 / 15674 (0.000000)
 mismatch.animation_index: 2 / 15674 (0.000128)
-mismatch.instance_hit_by: 1 / 15674 (0.000064)
+mismatch.instance_hit_by: 0 / 15674 (0.000000)
 mismatch.instance_id: 0 / 15674 (0.000000)
 mismatch.last_attack_landed: 0 / 15674 (0.000000)
 mismatch.combo_count: 0 / 15674 (0.000000)
@@ -666,8 +666,8 @@ err.item_pos_x: mae=0.007896 p95=0.000000 max=3.790001
 err.item_pos_y: mae=0.000000 p95=0.000000 max=0.000126
 err.item_vel_x: mae=0.000001 p95=0.000000 max=0.000213
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000126
-overall.discrete_mismatch: 22 / 948277
-overall.strict_discrete_mismatch: 41 / 948277
+overall.discrete_mismatch: 21 / 948277
+overall.strict_discrete_mismatch: 40 / 948277
 overall.ignored_discrete_mismatch: 19
 overall.float_norm_mae_p95: 0.00002259
 
@@ -686,7 +686,7 @@ mismatch.l_cancel: 0 / 24832 (0.000000)
 mismatch.hurtbox_state: 3 / 24832 (0.000121)
 mismatch.ground_id: 0 / 24832 (0.000000)
 mismatch.animation_index: 9 / 24832 (0.000362)
-mismatch.instance_hit_by: 5 / 24832 (0.000201)
+mismatch.instance_hit_by: 2 / 24832 (0.000081)
 mismatch.instance_id: 7 / 24832 (0.000282)
 mismatch.last_attack_landed: 3 / 24832 (0.000121)
 mismatch.combo_count: 4 / 24832 (0.000161)
@@ -711,8 +711,8 @@ err.item_pos_x: mae=0.000674 p95=0.000000 max=1.530910
 err.item_pos_y: mae=0.007303 p95=0.000000 max=21.128674
 err.item_vel_x: mae=0.000182 p95=0.000000 max=0.526065
 err.item_vel_y: mae=0.000002 p95=0.000000 max=0.006372
-overall.discrete_mismatch: 97 / 1502336
-overall.strict_discrete_mismatch: 130 / 1502336
+overall.discrete_mismatch: 94 / 1502336
+overall.strict_discrete_mismatch: 127 / 1502336
 overall.ignored_discrete_mismatch: 33
 overall.float_norm_mae_p95: 0.00006017
 
@@ -731,7 +731,7 @@ mismatch.l_cancel: 0 / 25828 (0.000000)
 mismatch.hurtbox_state: 5 / 25828 (0.000194)
 mismatch.ground_id: 12 / 25828 (0.000465)
 mismatch.animation_index: 41 / 25828 (0.001587)
-mismatch.instance_hit_by: 18 / 25828 (0.000697)
+mismatch.instance_hit_by: 17 / 25828 (0.000658)
 mismatch.instance_id: 37 / 25828 (0.001433)
 mismatch.last_attack_landed: 13 / 25828 (0.000503)
 mismatch.combo_count: 6 / 25828 (0.000232)
@@ -756,8 +756,8 @@ err.item_pos_x: mae=0.167567 p95=0.000000 max=55.080002
 err.item_pos_y: mae=0.037843 p95=0.000000 max=13.752838
 err.item_vel_x: mae=0.018097 p95=0.000000 max=7.000000
 err.item_vel_y: mae=0.000084 p95=0.000000 max=0.240240
-overall.discrete_mismatch: 496 / 1562594
-overall.strict_discrete_mismatch: 515 / 1562594
+overall.discrete_mismatch: 495 / 1562594
+overall.strict_discrete_mismatch: 514 / 1562594
 overall.ignored_discrete_mismatch: 19
 overall.float_norm_mae_p95: 1.61090117
 
@@ -776,7 +776,7 @@ mismatch.l_cancel: 1 / 9310 (0.000107)
 mismatch.hurtbox_state: 0 / 9310 (0.000000)
 mismatch.ground_id: 2 / 9310 (0.000215)
 mismatch.animation_index: 12 / 9310 (0.001289)
-mismatch.instance_hit_by: 2 / 9310 (0.000215)
+mismatch.instance_hit_by: 1 / 9310 (0.000107)
 mismatch.instance_id: 9 / 9310 (0.000967)
 mismatch.last_attack_landed: 1 / 9310 (0.000107)
 mismatch.combo_count: 6 / 9310 (0.000644)
@@ -801,8 +801,8 @@ err.item_pos_x: mae=0.065097 p95=0.000000 max=7.558097
 err.item_pos_y: mae=0.016667 p95=0.000000 max=4.864048
 err.item_vel_x: mae=0.008219 p95=0.000000 max=2.756694
 err.item_vel_y: mae=0.000717 p95=0.000000 max=0.240240
-overall.discrete_mismatch: 144 / 563255
-overall.strict_discrete_mismatch: 160 / 563255
+overall.discrete_mismatch: 143 / 563255
+overall.strict_discrete_mismatch: 159 / 563255
 overall.ignored_discrete_mismatch: 16
 overall.float_norm_mae_p95: 0.00018162
 
@@ -821,7 +821,7 @@ mismatch.l_cancel: 0 / 16160 (0.000000)
 mismatch.hurtbox_state: 8 / 16160 (0.000495)
 mismatch.ground_id: 9 / 16160 (0.000557)
 mismatch.animation_index: 36 / 16160 (0.002228)
-mismatch.instance_hit_by: 3 / 16160 (0.000186)
+mismatch.instance_hit_by: 1 / 16160 (0.000062)
 mismatch.instance_id: 28 / 16160 (0.001733)
 mismatch.last_attack_landed: 4 / 16160 (0.000248)
 mismatch.combo_count: 5 / 16160 (0.000309)
@@ -846,8 +846,8 @@ err.item_pos_x: mae=0.014229 p95=0.000000 max=3.790001
 err.item_pos_y: mae=0.000009 p95=0.000000 max=0.007275
 err.item_vel_x: mae=0.000000 p95=0.000000 max=0.000208
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000061
-overall.discrete_mismatch: 309 / 977680
-overall.strict_discrete_mismatch: 340 / 977680
+overall.discrete_mismatch: 307 / 977680
+overall.strict_discrete_mismatch: 338 / 977680
 overall.ignored_discrete_mismatch: 31
 overall.float_norm_mae_p95: 0.00120991
 
@@ -866,7 +866,7 @@ mismatch.l_cancel: 4 / 23836 (0.000168)
 mismatch.hurtbox_state: 3 / 23836 (0.000126)
 mismatch.ground_id: 56 / 23836 (0.002349)
 mismatch.animation_index: 75 / 23836 (0.003147)
-mismatch.instance_hit_by: 11 / 23836 (0.000461)
+mismatch.instance_hit_by: 7 / 23836 (0.000294)
 mismatch.instance_id: 51 / 23836 (0.002140)
 mismatch.last_attack_landed: 5 / 23836 (0.000210)
 mismatch.combo_count: 3 / 23836 (0.000126)
@@ -891,32 +891,32 @@ err.item_pos_x: mae=0.013905 p95=0.000000 max=9.359997
 err.item_pos_y: mae=0.000000 p95=0.000000 max=0.000093
 err.item_vel_x: mae=0.000001 p95=0.000000 max=0.000208
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000062
-overall.discrete_mismatch: 608 / 1442078
-overall.strict_discrete_mismatch: 731 / 1442078
+overall.discrete_mismatch: 604 / 1442078
+overall.strict_discrete_mismatch: 727 / 1442078
 overall.ignored_discrete_mismatch: 123
 overall.float_norm_mae_p95: 0.00033660
 
 == datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.msl ==
 Records: 11202  Players/scored per record: 2  Total player-frames: 22404
-mismatch.action_id: 64 / 22404 (0.002857)
-mismatch.action_frame: 54 / 22404 (0.002410)
+mismatch.action_id: 63 / 22404 (0.002812)
+mismatch.action_frame: 53 / 22404 (0.002366)
 mismatch.on_ground: 48 / 22404 (0.002142)
 mismatch.facing: 8 / 22404 (0.000357)
 mismatch.stocks: 0 / 22404 (0.000000)
 mismatch.jumps_left: 52 / 22404 (0.002321)
 mismatch.is_dead: 0 / 22404 (0.000000)
-mismatch.hitlag: 17 / 22404 (0.000759)
-mismatch.hitstun: 15 / 22404 (0.000670)
+mismatch.hitlag: 15 / 22404 (0.000670)
+mismatch.hitstun: 14 / 22404 (0.000625)
 mismatch.l_cancel: 7 / 22404 (0.000312)
 mismatch.hurtbox_state: 5 / 22404 (0.000223)
 mismatch.ground_id: 44 / 22404 (0.001964)
-mismatch.animation_index: 63 / 22404 (0.002812)
-mismatch.instance_hit_by: 9 / 22404 (0.000402)
-mismatch.instance_id: 41 / 22404 (0.001830)
-mismatch.last_attack_landed: 8 / 22404 (0.000357)
+mismatch.animation_index: 62 / 22404 (0.002767)
+mismatch.instance_hit_by: 6 / 22404 (0.000268)
+mismatch.instance_id: 40 / 22404 (0.001785)
+mismatch.last_attack_landed: 7 / 22404 (0.000312)
 mismatch.combo_count: 0 / 22404 (0.000000)
 mismatch.last_hit_by: 18 / 22404 (0.000803)
-mismatch.state_flags: 85 / 112020 (0.000759)
+mismatch.state_flags: 82 / 112020 (0.000732)
 mismatch.item_exists: 3 / 168030 (0.000018)
 mismatch.item_type: 3 / 168030 (0.000018)
 mismatch.item_state: 2 / 168030 (0.000012)
@@ -925,21 +925,21 @@ mismatch.item_instance_id: 3 / 168030 (0.000018)
 ignored_mismatch.state_flags[4]&0x80: 95 / 22404 (0.004240)
 err.pos_x: mae=0.001282 p95=0.000000 max=6.000000
 err.pos_y: mae=0.016053 p95=0.000000 max=12.392323
-err.speed_air_x_self: mae=0.000434 p95=0.000000 max=1.650063
+err.speed_air_x_self: mae=0.000429 p95=0.000000 max=1.650063
 err.speed_ground_x_self: mae=0.001553 p95=0.000000 max=2.041984
 err.speed_y_self: mae=0.002800 p95=0.000000 max=3.400000
-err.speed_x_attack: mae=0.000600 p95=0.000000 max=2.658680
-err.speed_y_attack: mae=0.001380 p95=0.000000 max=7.392025
-err.percent: mae=0.003725 p95=0.000000 max=17.820000
+err.speed_x_attack: mae=0.000542 p95=0.000000 max=2.658680
+err.speed_y_attack: mae=0.001050 p95=0.000000 max=5.006423
+err.percent: mae=0.002930 p95=0.000000 max=13.000000
 err.shield_hp: mae=0.000760 p95=0.000000 max=9.099998
 err.item_pos_x: mae=0.032265 p95=0.000000 max=18.492210
 err.item_pos_y: mae=0.010303 p95=0.000000 max=10.255612
 err.item_vel_x: mae=0.004525 p95=0.000000 max=5.000000
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000062
-overall.discrete_mismatch: 552 / 1355442
-overall.strict_discrete_mismatch: 647 / 1355442
+overall.discrete_mismatch: 538 / 1355442
+overall.strict_discrete_mismatch: 633 / 1355442
 overall.ignored_discrete_mismatch: 95
-overall.float_norm_mae_p95: 0.00036973
+overall.float_norm_mae_p95: 0.00034620
 
 == datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/CornyDelayedOkapi.msl ==
 Records: 13063  Players/scored per record: 2  Total player-frames: 26126
@@ -956,7 +956,7 @@ mismatch.l_cancel: 2 / 26126 (0.000077)
 mismatch.hurtbox_state: 1 / 26126 (0.000038)
 mismatch.ground_id: 8 / 26126 (0.000306)
 mismatch.animation_index: 34 / 26126 (0.001301)
-mismatch.instance_hit_by: 10 / 26126 (0.000383)
+mismatch.instance_hit_by: 8 / 26126 (0.000306)
 mismatch.instance_id: 27 / 26126 (0.001033)
 mismatch.last_attack_landed: 6 / 26126 (0.000230)
 mismatch.combo_count: 8 / 26126 (0.000306)
@@ -981,8 +981,8 @@ err.item_pos_x: mae=0.050922 p95=0.000000 max=27.670000
 err.item_pos_y: mae=0.003377 p95=0.000000 max=6.412833
 err.item_vel_x: mae=0.002172 p95=0.000000 max=5.000000
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000011
-overall.discrete_mismatch: 352 / 1580623
-overall.strict_discrete_mismatch: 479 / 1580623
+overall.discrete_mismatch: 350 / 1580623
+overall.strict_discrete_mismatch: 477 / 1580623
 overall.ignored_discrete_mismatch: 127
 overall.float_norm_mae_p95: 0.00037504
 
@@ -1046,7 +1046,7 @@ mismatch.l_cancel: 1 / 24950 (0.000040)
 mismatch.hurtbox_state: 4 / 24950 (0.000160)
 mismatch.ground_id: 5 / 24950 (0.000200)
 mismatch.animation_index: 21 / 24950 (0.000842)
-mismatch.instance_hit_by: 10 / 24950 (0.000401)
+mismatch.instance_hit_by: 7 / 24950 (0.000281)
 mismatch.instance_id: 16 / 24950 (0.000641)
 mismatch.last_attack_landed: 6 / 24950 (0.000240)
 mismatch.combo_count: 3 / 24950 (0.000120)
@@ -1071,8 +1071,8 @@ err.item_pos_x: mae=0.068561 p95=0.000000 max=128.755356
 err.item_pos_y: mae=0.015525 p95=0.000000 max=37.362816
 err.item_vel_x: mae=0.004330 p95=0.000000 max=5.000000
 err.item_vel_y: mae=0.001531 p95=0.000000 max=4.694131
-overall.discrete_mismatch: 263 / 1509475
-overall.strict_discrete_mismatch: 382 / 1509475
+overall.discrete_mismatch: 260 / 1509475
+overall.strict_discrete_mismatch: 379 / 1509475
 overall.ignored_discrete_mismatch: 119
 overall.float_norm_mae_p95: 0.00019048
 
@@ -1091,7 +1091,7 @@ mismatch.l_cancel: 1 / 24942 (0.000040)
 mismatch.hurtbox_state: 5 / 24942 (0.000200)
 mismatch.ground_id: 10 / 24942 (0.000401)
 mismatch.animation_index: 37 / 24942 (0.001483)
-mismatch.instance_hit_by: 11 / 24942 (0.000441)
+mismatch.instance_hit_by: 6 / 24942 (0.000241)
 mismatch.instance_id: 28 / 24942 (0.001123)
 mismatch.last_attack_landed: 7 / 24942 (0.000281)
 mismatch.combo_count: 5 / 24942 (0.000200)
@@ -1116,8 +1116,8 @@ err.item_pos_x: mae=0.045273 p95=0.000000 max=17.184387
 err.item_pos_y: mae=0.010578 p95=0.000000 max=10.261638
 err.item_vel_x: mae=0.015272 p95=0.000000 max=10.000000
 err.item_vel_y: mae=0.000327 p95=0.000000 max=0.382912
-overall.discrete_mismatch: 344 / 1508991
-overall.strict_discrete_mismatch: 462 / 1508991
+overall.discrete_mismatch: 339 / 1508991
+overall.strict_discrete_mismatch: 457 / 1508991
 overall.ignored_discrete_mismatch: 118
 overall.float_norm_mae_p95: 5.38029055
 
@@ -1136,7 +1136,7 @@ mismatch.l_cancel: 0 / 15298 (0.000000)
 mismatch.hurtbox_state: 1 / 15298 (0.000065)
 mismatch.ground_id: 8 / 15298 (0.000523)
 mismatch.animation_index: 20 / 15298 (0.001307)
-mismatch.instance_hit_by: 6 / 15298 (0.000392)
+mismatch.instance_hit_by: 5 / 15298 (0.000327)
 mismatch.instance_id: 11 / 15298 (0.000719)
 mismatch.last_attack_landed: 5 / 15298 (0.000327)
 mismatch.combo_count: 2 / 15298 (0.000131)
@@ -1161,8 +1161,8 @@ err.item_pos_x: mae=0.102016 p95=0.000000 max=82.241043
 err.item_pos_y: mae=0.022603 p95=0.000000 max=22.605335
 err.item_vel_x: mae=0.014911 p95=0.000000 max=10.000000
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000061
-overall.discrete_mismatch: 208 / 925529
-overall.strict_discrete_mismatch: 285 / 925529
+overall.discrete_mismatch: 207 / 925529
+overall.strict_discrete_mismatch: 284 / 925529
 overall.ignored_discrete_mismatch: 77
 overall.float_norm_mae_p95: 0.00123993
 
@@ -1271,7 +1271,7 @@ mismatch.l_cancel: 0 / 11968 (0.000000)
 mismatch.hurtbox_state: 1 / 11968 (0.000084)
 mismatch.ground_id: 7 / 11968 (0.000585)
 mismatch.animation_index: 30 / 11968 (0.002507)
-mismatch.instance_hit_by: 4 / 11968 (0.000334)
+mismatch.instance_hit_by: 3 / 11968 (0.000251)
 mismatch.instance_id: 22 / 11968 (0.001838)
 mismatch.last_attack_landed: 3 / 11968 (0.000251)
 mismatch.combo_count: 7 / 11968 (0.000585)
@@ -1296,8 +1296,8 @@ err.item_pos_x: mae=0.290693 p95=0.000000 max=596.000000
 err.item_pos_y: mae=0.041294 p95=0.000000 max=90.000000
 err.item_vel_x: mae=0.000546 p95=0.000000 max=1.000000
 err.item_vel_y: mae=0.004458 p95=0.000000 max=14.953766
-overall.discrete_mismatch: 265 / 724064
-overall.strict_discrete_mismatch: 308 / 724064
+overall.discrete_mismatch: 264 / 724064
+overall.strict_discrete_mismatch: 307 / 724064
 overall.ignored_discrete_mismatch: 43
 overall.float_norm_mae_p95: 0.00118132
 
@@ -1316,7 +1316,7 @@ mismatch.l_cancel: 0 / 18878 (0.000000)
 mismatch.hurtbox_state: 15 / 18878 (0.000795)
 mismatch.ground_id: 26 / 18878 (0.001377)
 mismatch.animation_index: 75 / 18878 (0.003973)
-mismatch.instance_hit_by: 9 / 18878 (0.000477)
+mismatch.instance_hit_by: 7 / 18878 (0.000371)
 mismatch.instance_id: 61 / 18878 (0.003231)
 mismatch.last_attack_landed: 10 / 18878 (0.000530)
 mismatch.combo_count: 8 / 18878 (0.000424)
@@ -1341,13 +1341,13 @@ err.item_pos_x: mae=0.212482 p95=0.000000 max=596.000000
 err.item_pos_y: mae=0.034173 p95=0.000000 max=75.000000
 err.item_vel_x: mae=0.001697 p95=0.000000 max=5.000000
 err.item_vel_y: mae=0.009096 p95=0.000000 max=13.417282
-overall.discrete_mismatch: 676 / 1142119
-overall.strict_discrete_mismatch: 745 / 1142119
+overall.discrete_mismatch: 674 / 1142119
+overall.strict_discrete_mismatch: 743 / 1142119
 overall.ignored_discrete_mismatch: 69
 overall.float_norm_mae_p95: 0.00199265
 
 == suite summary ==
-overall.discrete_mismatch: 6628 / 33581735
-overall.strict_discrete_mismatch: 8000 / 33581735
+overall.discrete_mismatch: 6575 / 33581735
+overall.strict_discrete_mismatch: 7947 / 33581735
 overall.ignored_discrete_mismatch: 1372
-overall.float_norm_mae_p95: 0.30017249
+overall.float_norm_mae_p95: 0.30017160
