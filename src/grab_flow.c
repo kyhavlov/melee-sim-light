@@ -123,6 +123,19 @@ static inline uint8_t action_is_catch_pull_state(uint16_t action_id) {
              : 0u;
 }
 
+static inline uint8_t capture_pre_connect_action_is_damagefly(uint16_t action_id) {
+  switch (action_id) {
+    case (uint16_t)MSL_ACT_DAMAGE_FLY_HI:
+    case (uint16_t)MSL_ACT_DAMAGE_FLY_N:
+    case (uint16_t)MSL_ACT_DAMAGE_FLY_LW:
+    case (uint16_t)MSL_ACT_DAMAGE_FLY_TOP:
+    case (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
 static inline void maybe_enter_capture_wait_lw_grounded_handoff(MslBatch* batch, int bi,
                                                                 int owner_p, size_t oidx) {
   if (batch == NULL) {
@@ -309,11 +322,23 @@ static inline void maybe_run_capture_pulled_hi_immediate_floor_callback(
       batch->state.on_ground[vidx] != 0u || batch->state.hitlag_started_frame[vidx] != 0u) {
     return;
   }
+  if (capture_pre_connect_action_is_damagefly(victim_pre_connect_action) ||
+      capture_pre_connect_action_is_damagefly(batch->state.prev_action_id[vidx]) ||
+      capture_pre_connect_action_is_damagefly(batch->state.seed_prev_action_id[vidx])) {
+    // DamageFly collision/ECB ownership remains with the damage family until CapturePulled entry;
+    // stale floor ids on these airborne victims are not proof for the immediate capture-root floor
+    // callback.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_CapturePulledHi_Coll
+    return;
+  }
 
   MslMpcollFloorMaskResult floor_result = {0xFFFFu, batch->state.pos_y[vidx]};
   uint8_t floor_mask = mpcoll_800477e0_floor_mask_probe(batch, vidx, &floor_result);
-  if (floor_mask == 0u && victim_pre_connect_action == (uint16_t)MSL_ACT_ATTACK_AIR_HI &&
-      batch->state.prev_action_id[vidx] == (uint16_t)MSL_ACT_KNEE_BEND) {
+  if (floor_mask == 0u &&
+      ((batch->state.ground_id[vidx] != 0xFFFFu && batch->state.ecb_lock_timer[vidx] != 0u) ||
+       (victim_pre_connect_action == (uint16_t)MSL_ACT_ATTACK_AIR_HI &&
+        batch->state.prev_action_id[vidx] == (uint16_t)MSL_ACT_KNEE_BEND))) {
     floor_mask = mpcoll_800477e0_capture_root_floor_mask_probe(batch, vidx, &floor_result);
   }
   if (floor_mask == 0u) {
@@ -325,10 +350,11 @@ static inline void maybe_run_capture_pulled_hi_immediate_floor_callback(
   //   CapturePulledHi anchor delta, then calls the victim's collision callback through fp+0x21A8.
   // - ftCo_CapturePulledHi_Coll -> ft_80083C00 -> fn_800DAECC/fn_800DAEEC lands the victim into
   //   CapturePulledLw when mpColl_800477E0 produces a floor-mask result.
-  // - Same-frame KneeBend -> JumpF -> AttackAirHi victims can carry the still-current grounded
-  //   CollData floor index into this callback; use the capture-root floor-mask reconstruction only
-  //   for that source episode. Other airborne CapturePulledHi entries must satisfy the ordinary ECB
-  //   floor-mask probe and stay CapturePulledHi when it fails.
+  // - Same-frame airborne captures can carry a locked current CollData floor index into this
+  //   callback before the capture anchor delta settles the victim; require the data-backed
+  //   `ecb_lock` owner with the floor id so stale airborne floor ids from other motion owners do not
+  //   force a landing. The older KneeBend -> AttackAirHi bridge remains as the one known
+  //   missing-floor-index source episode until its CollData seed owner is promoted.
   // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::fn_800DAADC
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
   //   ftCo_CapturePulledHi_Coll,fn_800DAECC,fn_800DAEEC}
@@ -1196,9 +1222,15 @@ void grab_flow_on_catch_connect(MslBatch* batch, int bi, int owner_p, int victim
   // - else    -> 0xDF (CapturePulledHi)
   // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::fn_800DAADC
   // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::fn_800DA8E4
-  // Sim mapping: xE0 is represented by victim on_ground.
+  // Sim mapping: xE0 is represented by victim on_ground. DamageFly-family victims can carry a
+  // transient grounded collision result during damage collision ownership; source catch entry still
+  // treats the pre-connect airborne DamageFly owner as CapturePulledHi.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
   // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::fn_800DAADC
-  if (batch->state.on_ground[vidx] != 0) {
+  if (batch->state.on_ground[vidx] != 0 &&
+      !capture_pre_connect_action_is_damagefly(victim_pre_connect_action) &&
+      !capture_pre_connect_action_is_damagefly(batch->state.prev_action_id[vidx]) &&
+      !capture_pre_connect_action_is_damagefly(batch->state.seed_prev_action_id[vidx])) {
     batch->state.action_id[vidx] = (uint16_t)MSL_ACT_CAPTURE_PULLED_LW;
     batch->state.animation_index[vidx] = (uint32_t)MSL_SM_CAPTURE_PULLED_LW;
   } else {
@@ -1493,7 +1525,10 @@ void grab_flow_update_pre_physics(MslBatch* batch) {
         }
         if ((va == (uint16_t)MSL_ACT_CAPTURE_WAIT_HI || va == (uint16_t)MSL_ACT_CAPTURE_WAIT_LW) &&
             batch->state.capture_wait_counter[vidx] < c->capture_wait_jump_latch_window_frames &&
-            (batch->state.input_buttons[vidx] & (uint16_t)MSL_BUTTON_XY) != 0u) {
+            (batch->state.input_buttons_pressed[vidx] & (uint16_t)MSL_BUTTON_XY) != 0u) {
+          // Decomp: CaptureWait*_IASA calls fn_800DC014, which gates the jump latch on
+          // fp->input.x668 & HSD_PAD_XY, not held_inputs.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::fn_800DC014
           batch->state.capture_wait_jump_latch[vidx] = 1u;
         }
         if ((va == (uint16_t)MSL_ACT_CAPTURE_WAIT_HI || va == (uint16_t)MSL_ACT_CAPTURE_WAIT_LW) &&

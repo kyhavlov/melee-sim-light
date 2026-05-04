@@ -17,6 +17,7 @@
 #include "char_params.h"
 #include "combat_geom.h"
 #include "common_params.h"
+#include "ecb_tables.h"
 #include "grab_flow.h"
 #include "hit_elements.h"
 #include "hitboxes_tables.h"
@@ -61,6 +62,32 @@ static inline void combat_throw_release_integrate_position_now(MslBatch* batch, 
 static inline void combat_throw_release_apply_immediate_di(MslBatch* batch, size_t victim_idx,
                                                            const MslCommonParams* c);
 static inline uint8_t combat_defender_hit_status_u8(const MslBatch* batch, size_t d_idx);
+static inline uint8_t combat_body_overlap_lbColl_80006E58_matrix_radius(
+    const MslBatch* batch, int bi, int attacker, int hb_id, int defender, int cap_id, float hx,
+    float hy, float hz, float hr, float ax, float ay, float az, float bx, float by, float bz,
+    float* out_overlap_amount, uint8_t* out_evaluated);
+
+static inline float combat_cross2(float ax, float ay, float bx, float by) {
+  return ax * by - ay * bx;
+}
+
+static inline uint8_t combat_segment_intersects_2d(float ax0, float ay0, float ax1, float ay1,
+                                                   float bx0, float by0, float bx1, float by1) {
+  const float rx = ax1 - ax0;
+  const float ry = ay1 - ay0;
+  const float sx = bx1 - bx0;
+  const float sy = by1 - by0;
+  const float denom = combat_cross2(rx, ry, sx, sy);
+  if (denom == 0.0f) {
+    return 0u;
+  }
+
+  const float qpx = bx0 - ax0;
+  const float qpy = by0 - ay0;
+  const float t = combat_cross2(qpx, qpy, sx, sy) / denom;
+  const float u = combat_cross2(qpx, qpy, rx, ry) / denom;
+  return (uint8_t)(t >= 0.0f && t <= 1.0f && u >= 0.0f && u <= 1.0f);
+}
 
 enum { MSL_COMBAT_BODY_DAMAGE_LOG_CAP = MSL_MAX_PLAYERS * MSL_MAX_HITBOXES };
 
@@ -583,10 +610,11 @@ static inline uint8_t combat_catch_overlap_lbColl_80007ECC(const MslBatch* batch
   return (uint8_t)(d2 <= rr * rr);
 }
 
-static inline void combat_catch_hitbox_center_model_scale_compensated(const MslBatch* batch, int bi,
-                                                                      int attacker, float* io_hx,
-                                                                      float* io_hy, float* io_hz) {
-  if (batch == NULL || io_hx == NULL || io_hy == NULL || io_hz == NULL) {
+static inline void combat_catch_hitbox_model_scale_compensated(const MslBatch* batch, int bi,
+                                                               int attacker, float* io_hx,
+                                                               float* io_hy, float* io_hz,
+                                                               float* io_hr) {
+  if (batch == NULL || io_hx == NULL || io_hy == NULL || io_hz == NULL || io_hr == NULL) {
     return;
   }
   const size_t a_idx = msl_idx_player(bi, attacker);
@@ -598,12 +626,12 @@ static inline void combat_catch_hitbox_center_model_scale_compensated(const MslB
     return;
   }
 
-  // Catch selection forwards HitCapsule.x58/x4C to lbColl_80007ECC with this_fp->x34_scale.y as
-  // the hit-side scalar. HitCapsule.x4C is produced from lb_8000B1CC's JObj point before the catch
-  // narrowphase; remove the simulator's generic pose-space model_scaling expansion for enlarged
-  // models so the catch bubble uses that collision-skeleton point. Do not use this helper to extend
-  // reach for model_scaling < 1; the reviewed generic hitbox path remains the source for those
-  // rows until the broader hitbox geometry owner is replaced.
+  // Catch selection forwards HitCapsule.x58/x4C and HitCapsule.scale to lbColl_80007ECC with
+  // this_fp->x34_scale.y as the hit-side scalar. HitCapsule points and radius are produced from the
+  // collision skeleton before the catch narrowphase; remove the simulator's generic pose-space
+  // model_scaling expansion for enlarged models so the catch bubble uses that source skeleton. Do
+  // not use this helper to extend reach for model_scaling < 1; the reviewed generic hitbox path
+  // remains the source for those rows until the broader hitbox geometry owner is replaced.
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078A2C,ftColl_8007AD18}
   // refs/melee/src/melee/lb/lbcollision.c::lbColl_80007ECC
   // refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
@@ -613,14 +641,13 @@ static inline void combat_catch_hitbox_center_model_scale_compensated(const MslB
   *io_hx = pos_x + ((*io_hx - pos_x) / model_scaling);
   *io_hy = pos_y + ((*io_hy - pos_y) / model_scaling);
   *io_hz = pos_z + ((*io_hz - pos_z) / model_scaling);
+  *io_hr /= model_scaling;
 }
 
-static inline uint8_t combat_guardreflect_no_submotion_catch_fallback_applies(const MslBatch* batch,
-                                                                              size_t d_idx) {
+static inline uint8_t combat_guard_family_no_submotion_catch_fallback_msid(const MslBatch* batch,
+                                                                           size_t d_idx,
+                                                                           uint16_t* out_msid) {
   if (batch == NULL) {
-    return 0u;
-  }
-  if (batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_GUARD_REFLECT) {
     return 0u;
   }
   if (batch->state.animation_index[d_idx] <= 0xFFFFu) {
@@ -629,10 +656,51 @@ static inline uint8_t combat_guardreflect_no_submotion_catch_fallback_applies(co
   if (batch->state.action_frame[d_idx] > (int16_t)-2) {
     return 0u;
   }
-  if (batch->state.prev_action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_ON ||
-      batch->state.seed_prev_action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_ON) {
+
+  uint16_t msid = 0u;
+  switch (batch->state.action_id[d_idx]) {
+    case (uint16_t)MSL_ACT_GUARD_ON:
+      msid = (uint16_t)MSL_SM_GUARD_ON;
+      break;
+    case (uint16_t)MSL_ACT_GUARD:
+      msid = (uint16_t)MSL_SM_GUARD;
+      break;
+    case (uint16_t)MSL_ACT_GUARD_SET_OFF:
+      msid = (uint16_t)MSL_SM_GUARD_DAMAGE;
+      break;
+    case (uint16_t)MSL_ACT_GUARD_REFLECT:
+      // ftCo_MS_GuardReflect uses ftCo_SM_GuardOn in the motion-state table.
+      // refs/melee/src/melee/ft/ftmotionstates.c::ftCo_MS_GuardReflect
+      if (batch->state.prev_action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_ON ||
+          batch->state.seed_prev_action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_ON) {
+        return 0u;
+      }
+      msid = (uint16_t)MSL_SM_GUARD_ON;
+      break;
+    default:
+      return 0u;
+  }
+  if (out_msid != NULL) {
+    *out_msid = msid;
+  }
+  return 1u;
+}
+
+static inline uint8_t combat_guard_family_no_submotion_catch_fallback_applies(const MslBatch* batch,
+                                                                              size_t d_idx) {
+  return combat_guard_family_no_submotion_catch_fallback_msid(batch, d_idx, NULL);
+}
+
+static inline uint8_t combat_guardreflect_no_submotion_catch_fallback_applies(const MslBatch* batch,
+                                                                              size_t d_idx) {
+  uint16_t msid = 0u;
+  if (!combat_guard_family_no_submotion_catch_fallback_msid(batch, d_idx, &msid)) {
     return 0u;
   }
+  if (batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_GUARD_REFLECT) {
+    return 0u;
+  }
+  (void)msid;
   return 1u;
 }
 
@@ -673,21 +741,30 @@ static inline uint8_t combat_guardreflect_catch_hurtcap_world(const MslBatch* ba
     return 0u;
   }
 
-  // GuardReflect catch-only no-submotion fallback:
-  // - ftCo_MS_GuardReflect uses the GuardOn submotion table.
+  uint16_t msid = 0u;
+  if (!combat_guard_family_no_submotion_catch_fallback_msid(batch, d_idx, &msid)) {
+    return 0u;
+  }
+
+  // Guard-family catch-only no-submotion fallback:
+  // - ftCo_MS_GuardOn/Guard/GuardSetOff/GuardReflect have source-owned submotion ids in the motion
+  //   state table even when Slippi serializes animation_index=-1/-2 for the post-frame snapshot.
+  // - ftColl_80078A2C checks `hurt_capsules[j].is_grabbable` through lbColl_80007ECC; it does not
+  //   acquire a grab from ShieldDesc rim/body shield-hit precedence.
   // - Slippi can serialize late GuardReflect snapshots with animation_index=-1/-2, while
   //   ftColl_80078A2C still checks `hurt_capsules[j].is_grabbable` for Catch/CatchDash selection.
   // - Keep this geometry local to catch selection; BODY hurtcaps remain absent for this
   //   no-submotion slice in hurtboxes_refresh().
-  // refs/melee/src/melee/ft/ftmotionstates.c::ftCo_MS_GuardReflect
+  // refs/melee/src/melee/ft/ftmotionstates.c::{
+  //   ftCo_MS_GuardOn,ftCo_MS_Guard,ftCo_MS_GuardSetOff,ftCo_MS_GuardReflect}
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078A2C
   // refs/melee/src/melee/lb/lbcollision.c::lbColl_80007ECC
   const uint8_t char_id = batch->state.char_id[d_idx];
   const float anim_frame_f32 = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[d_idx]);
   const uint16_t frame = msl_anim_frame_floor_u16(anim_frame_f32);
   float m[12];
-  if (anim_pose_get_collision_matrix_f32(batch, d_idx, (uint16_t)MSL_SM_GUARD_ON, (float)frame,
-                                         cap->bone_part_id, m) != 0) {
+  if (anim_pose_get_collision_matrix_f32(batch, d_idx, msid, (float)frame, cap->bone_part_id, m) !=
+      0) {
     (void)char_id;
     return 0u;
   }
@@ -5646,6 +5723,62 @@ static inline void combat_mutations_pass1_future_apply_shield_hit(MslBatch* batc
   }
 }
 
+static inline float combat_ecb_midpoint_world_y(const MslBatch* batch, size_t idx) {
+  const float anim_frame_f32 = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
+  const uint16_t frame = msl_anim_frame_floor_u16(anim_frame_f32);
+  const MslEcbExtentsRel ecb =
+      msl_ecb_extents_rel(batch->state.char_id[idx], batch->state.animation_index[idx], (int)frame);
+  float bottom_rel_y = ecb.min_y;
+  if (batch->state.coll_ecb_bottom_valid[idx] &&
+      isfinite(batch->state.coll_ecb_bottom_rel_y[idx])) {
+    bottom_rel_y = batch->state.coll_ecb_bottom_rel_y[idx];
+  }
+  return batch->state.pos_y[idx] + 0.5f * (ecb.max_y + bottom_rel_y);
+}
+
+static inline uint8_t combat_catch_wall_obstructed_ft_80084CE4(const MslBatch* batch, int bi,
+                                                               size_t a_idx, size_t d_idx) {
+  const float ax = batch->state.pos_x[a_idx];
+  const float ay = combat_ecb_midpoint_world_y(batch, a_idx);
+  const float dx = batch->state.pos_x[d_idx];
+  const float dy = combat_ecb_midpoint_world_y(batch, d_idx);
+  if (!isfinite(ax) || !isfinite(ay) || !isfinite(dx) || !isfinite(dy) || ax == dx) {
+    return 0u;
+  }
+
+  const uint32_t stage_id = batch->state.stage_id[bi];
+  const MslStageWallGraph* g = (ax > dx) ? stage_collision_get_right_wall_graph(stage_id)
+                                         : stage_collision_get_left_wall_graph(stage_id);
+  if (g == NULL || g->lines == NULL || g->line_count == 0u) {
+    return 0u;
+  }
+  const float min_x = ax < dx ? ax : dx;
+  const float max_x = ax > dx ? ax : dx;
+  const float min_y = ay < dy ? ay : dy;
+  const float max_y = ay > dy ? ay : dy;
+  if (max_x < g->min_x || min_x > g->max_x || max_y < g->min_y || min_y > g->max_y) {
+    return 0u;
+  }
+
+  for (size_t i = 0; i < g->line_count; i++) {
+    const MslStageWallLine* line = &g->lines[i];
+    if (!line->fighter_solid) {
+      continue;
+    }
+    const float line_min_x = line->x0 < line->x1 ? line->x0 : line->x1;
+    const float line_max_x = line->x0 > line->x1 ? line->x0 : line->x1;
+    const float line_min_y = line->y0 < line->y1 ? line->y0 : line->y1;
+    const float line_max_y = line->y0 > line->y1 ? line->y0 : line->y1;
+    if (max_x < line_min_x || min_x > line_max_x || max_y < line_min_y || min_y > line_max_y) {
+      continue;
+    }
+    if (combat_segment_intersects_2d(ax, ay, dx, dy, line->x0, line->y0, line->x1, line->y1)) {
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
 static void combat_select_catch_hits_one_mutating(MslBatch* batch, int bi) {
   if (batch == NULL) {
     return;
@@ -5732,12 +5865,24 @@ static void combat_select_catch_hits_one_mutating(MslBatch* batch, int bi) {
         continue;
       }
 
+      // Catch wall occlusion:
+      // ftColl_80078A2C rejects a candidate after grabbable capsule contact when ft_80084CE4
+      // reports a left/right wall between the fighters' ECB midpoints. The predicate is independent
+      // of replay rows and consumes the ISO-derived MSLSTG01 wall graph.
+      // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078A2C
+      // refs/melee/src/melee/ft/ft_081B.c::ft_80084CE4
+      // refs/melee/src/melee/mp/mplib.c::{mpCheckLeftWall,mpCheckRightWall}
+      // data/stages/bin/*.bin::MSLSTG01
+      if (combat_catch_wall_obstructed_ft_80084CE4(batch, bi, a_idx, d_idx)) {
+        continue;
+      }
+
       uint8_t hurtcap_count = batch->state.hurtcap_count[d_idx];
       const MslHurtCap* catch_fallback_caps = NULL;
       uint16_t catch_fallback_count_u16 = 0u;
       uint8_t use_catch_fallback_caps = 0u;
       if (hurtcap_count == 0 &&
-          combat_guardreflect_no_submotion_catch_fallback_applies(batch, d_idx)) {
+          combat_guard_family_no_submotion_catch_fallback_applies(batch, d_idx)) {
         if (hurtcaps_get(batch->state.char_id[d_idx], &catch_fallback_caps,
                          &catch_fallback_count_u16) == 0 &&
             catch_fallback_caps != NULL && catch_fallback_count_u16 != 0u) {
@@ -5796,8 +5941,9 @@ static void combat_select_catch_hits_one_mutating(MslBatch* batch, int bi) {
         float hx = batch->state.hitbox_x[hb_i];
         float hy = batch->state.hitbox_y[hb_i];
         float hz = batch->state.hitbox_z[hb_i];
-        const float hr = batch->state.hitbox_radius[hb_i];
-        combat_catch_hitbox_center_model_scale_compensated(batch, bi, attacker, &hx, &hy, &hz);
+        const float raw_hr = batch->state.hitbox_radius[hb_i];
+        float hr = raw_hr;
+        combat_catch_hitbox_model_scale_compensated(batch, bi, attacker, &hx, &hy, &hz, &hr);
 
         uint8_t found_grab_contact = 0u;
         for (uint8_t cap_id = 0; cap_id < hurtcap_count; cap_id++) {
@@ -5830,8 +5976,25 @@ static void combat_select_catch_hits_one_mutating(MslBatch* batch, int bi) {
             by = batch->state.hurtcap_b_y[cap_i];
             bz = batch->state.hurtcap_b_z[cap_i];
             cr = batch->state.hurtcap_radius[cap_i];
-            overlaps =
-                combat_sphere_capsule_intersects(hx, hy, hz, hr, ax, ay, az, bx, by, bz, cr, NULL);
+            overlaps = combat_catch_overlap_lbColl_80007ECC(batch, bi, attacker, hb_id, hx, hy, hz,
+                                                            hr, ax, ay, az, bx, by, bz, cr);
+            if (overlaps) {
+              uint8_t catch_lbcoll_evaluated = 0u;
+              const uint8_t matrix_overlaps = combat_body_overlap_lbColl_80006E58_matrix_radius(
+                  batch, bi, attacker, hb_id, defender, (int)cap_id, hx, hy, hz, hr, ax, ay, az, bx,
+                  by, bz, NULL, &catch_lbcoll_evaluated);
+              if (catch_lbcoll_evaluated && !matrix_overlaps) {
+                // Catch narrowphase source refinement:
+                // - ftColl_80078A2C routes grabbable hurtcaps through lbColl_80007ECC, which in
+                //   turn consumes lbColl_80006E58's matrix-derived radius.
+                // - The local matrix reconstruction is exact enough to reject evaluated misses, but
+                //   not yet exact enough to add new catch admissions over the simpler world capsule
+                //   path, so keep it fail-closed for source-owned veto only.
+                // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078A2C
+                // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007ECC,lbColl_80006E58}
+                overlaps = 0u;
+              }
+            }
           }
 
           if (!overlaps) {
@@ -5849,39 +6012,36 @@ static void combat_select_catch_hits_one_mutating(MslBatch* batch, int bi) {
           found_grab_contact = 1u;
           break;
         }
-        if (!found_grab_contact) {
-          const float shr = batch->state.shield_radius[d_idx];
-          // Guard/shield catch fallback:
-          // - Vanilla grabs shielded fighters; decomp catch selection ultimately records a fighter
-          //   victim (`ftGrabDist` / `victim_gobj`), not a shield-hit event.
-          // - Slippi guard-family rows can expose `animation_index=-1` sentinel pose snapshots while
-          //   the live shield descriptor is still exact. When pose-derived hurtcaps miss, use the
-          //   ShieldDesc world center as a seed-bridge proxy for the shielded fighter's grabbable
-          //   center. Do not use shield-edge overlap here: ftColl_80078A2C grabs the fighter, not
-          //   the shield rim.
-          // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078A2C
-          // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
-          const float shx = batch->state.shield_x[d_idx];
-          const float shy = batch->state.shield_y[d_idx];
-          const float shz = batch->state.shield_z[d_idx];
-          const float dx = shx - hx;
-          const float dy = shy - hy;
-          const float dz = shz - hz;
-          if (shr > 0.0f && (dx * dx + dy * dy + dz * dz) <= (hr * hr)) {
-            const float abs_dx = fabsf(batch->state.pos_x[d_idx] - batch->state.pos_x[a_idx]);
-            if (best_victim < 0 || abs_dx < best_abs_dx ||
-                (abs_dx == best_abs_dx && defender < best_victim)) {
-              best_victim = defender;
-              best_abs_dx = abs_dx;
-              best_hit_group = hit_group;
-              best_rehit_frames = rehit_frames;
-            }
-            found_grab_contact = 1u;
-          }
-        }
         if (found_grab_contact) {
           // Decomp shape: after finding a valid grabbable overlap for this defender, advance to the
           // next defender candidate (ftColl_80078A2C uses a goto next_gobj path).
+          break;
+        }
+        const float shr = batch->state.shield_radius[d_idx];
+        // Retained missing-pose bridge, not a source owner:
+        // - ftColl_80078A2C grabs a fighter via grabbable hurtcaps, not the shield rim.
+        // - Some GuardOn no-submotion replay seeds still lack enough source pose to reconstruct
+        //   those grabbable caps; until that hidden pose owner is promoted, keep the older
+        //   ShieldDesc-center proxy only as a center-point fallback. Negative locks prevent
+        //   broadening this into shield-radius grab acquisition.
+        // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078A2C
+        // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+        const float shx = batch->state.shield_x[d_idx];
+        const float shy = batch->state.shield_y[d_idx];
+        const float shz = batch->state.shield_z[d_idx];
+        const float dx = shx - hx;
+        const float dy = shy - hy;
+        const float dz = shz - hz;
+        if (shr > 0.0f && (dx * dx + dy * dy + dz * dz) <= (raw_hr * raw_hr)) {
+          const float abs_dx = fabsf(batch->state.pos_x[d_idx] - batch->state.pos_x[a_idx]);
+          if (best_victim < 0 || abs_dx < best_abs_dx ||
+              (abs_dx == best_abs_dx && defender < best_victim)) {
+            best_victim = defender;
+            best_abs_dx = abs_dx;
+            best_hit_group = hit_group;
+            best_rehit_frames = rehit_frames;
+          }
+          found_grab_contact = 1u;
           break;
         }
       }

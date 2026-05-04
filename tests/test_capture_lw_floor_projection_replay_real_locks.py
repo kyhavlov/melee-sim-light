@@ -17,6 +17,9 @@ SM_CAPTURE_WAIT_LW = 255
 ACT_THROW_B = 0x00DC
 ACT_THROWN_B = 0x00F0
 ACT_DAMAGE_FLY_N = 0x0058
+ACT_DAMAGE_FLY_TOP = 0x005A
+ACT_CAPTURE_PULLED_HI = 0x00DF
+ACT_FX_SPECIAL_AIR_LW_LOOP = 0x016E
 
 
 def _skip_if_required_artifacts_missing(root: Path) -> None:
@@ -156,6 +159,72 @@ def test_capturewaitlw_allow_ground_to_air_collision_reprojects_floor_direct_and
     rollout_ref, rollout_out = _run_rollout_record(dataset_path, 2477, 2480)
     assert int(rollout_out["action_id"][p]) == int(rollout_ref["action_id"][p]) == ACT_CAPTURE_WAIT_LW
     assert float(rollout_out["pos_y"][p]) == pytest.approx(float(rollout_ref["pos_y"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
+def test_capturepulledhi_entry_uses_locked_floor_owner_for_same_frame_lw_handoff() -> None:
+    # Replay-real lock for catch-connect capture-state ownership:
+    # - fn_800DAADC enters CapturePulledHi for an airborne victim.
+    # - The immediate CapturePulledHi collision callback can consume the victim's locked CollData
+    #   floor owner after the capture-anchor delta and enter CapturePulledLw in the same frame.
+    # - DamageFly-family floor ids remain owned by damage collision and must not force the Lw handoff.
+    # refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::{
+    #   fn_800DAADC,fn_800DAC78}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_CapturePulledHi_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80083C00
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_path = _cardinal_dataset_path(root, "AttachedGoodNaturedGuanaco.msl")
+    p = 0
+    seed, ref, out = _run_one_step_seed(dataset_path, 3204)
+    assert int(seed["action_id"][p]) == ACT_FX_SPECIAL_AIR_LW_LOOP
+    assert int(seed["on_ground"][p]) == 0
+    assert int(seed["ground_id"][p]) != 0xFFFF
+    assert int(seed["ecb_lock_timer"][p]) != 0
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_CAPTURE_PULLED_LW
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 1
+    assert int(out["jumps_left"][p]) == int(ref["jumps_left"][p]) == 2
+
+    dataset_path = _cardinal_dataset_path(root, "TreasuredBackKangaroo.msl")
+    p = 1
+    seed, ref, out = _run_one_step_seed(dataset_path, 5861)
+    assert int(seed["action_id"][p]) == ACT_DAMAGE_FLY_TOP
+    assert int(seed["on_ground"][p]) == 0
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_CAPTURE_PULLED_HI
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 0
+
+
+@pytest.mark.integration
+def test_agg_capture_entry_rollout_window_remains_exact_after_locked_floor_handoff() -> None:
+    # Replay-real lock for the AGG rollout median autopsy:
+    # - Before the locked-floor owner, rollout from record 2694 broke at 3204 and reseeded at 3205.
+    # - With the source owner, record 3204 is exact and a rollout seeded at 3204 remains exact
+    #   through the later 3468 hitlag window.
+    # - The remaining 2694 -> 3468 rollout break is therefore a downstream continuity residual, not
+    #   an over-broad local capture entry regression.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+    #   fn_800DAADC,ftCo_CapturePulledHi_Coll,fn_800DAECC,fn_800DAEEC}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = _cardinal_dataset_path(root, "AttachedGoodNaturedGuanaco.msl")
+
+    victim_p = 0
+    owner_p = 1
+    rollout = _run_rollout_records(dataset_path, 3204, (3204, 3468))
+
+    ref_3204, out_3204 = rollout[3204]
+    assert int(out_3204["action_id"][victim_p]) == int(ref_3204["action_id"][victim_p])
+    assert int(out_3204["animation_index"][victim_p]) == int(ref_3204["animation_index"][victim_p])
+    assert int(out_3204["on_ground"][victim_p]) == int(ref_3204["on_ground"][victim_p]) == 1
+    assert int(out_3204["action_id"][owner_p]) == int(ref_3204["action_id"][owner_p])
+
+    ref_3468, out_3468 = rollout[3468]
+    for p in (victim_p, owner_p):
+        assert int(out_3468["action_id"][p]) == int(ref_3468["action_id"][p])
+        assert int(out_3468["animation_index"][p]) == int(ref_3468["animation_index"][p])
+        assert int(out_3468["hitlag"][p]) == int(ref_3468["hitlag"][p])
+        assert int(out_3468["hitstun"][p]) == int(ref_3468["hitstun"][p])
 
 
 @pytest.mark.integration
