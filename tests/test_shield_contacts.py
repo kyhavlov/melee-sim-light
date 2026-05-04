@@ -8,6 +8,9 @@ from tools.eval.dataset import INPUT_DTYPE, SEED_DTYPE
 # Action ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 ACT_WAIT = 0x000E
 
+# src/hitboxes_tables.h (MSLHITB1 u16_6 bits)
+HIT_GROUNDED = 1 << 9
+
 # Submotion ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 SM_WAIT1_0 = 2
 
@@ -212,5 +215,63 @@ def test_debug_shield_candidate_decisions_reports_pair_and_hitbox_rejects() -> N
         ]
         assert len(hb01) == 4
         assert all(int(r["reject_reason"]) == 6 for r in hb01)
+    finally:
+        msl_binding.destroy(handle)
+
+
+def test_debug_shield_candidate_decisions_rejects_later_shield_after_earlier_body() -> None:
+    # Source ordering: ftColl_80078C70 checks shield then BODY for one HitCapsule before advancing
+    # to the next HitCapsule. Therefore a lower-index BODY contact rejects a later shield candidate.
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        seed = _seed_base()
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+        msl_binding.reseed_seed(handle, seed_bytes)
+
+        neutral = _mk_input_bytes(1, input_stride)
+        shield = _mk_input_bytes(1, input_stride)
+        shield_view = shield.view(INPUT_DTYPE).reshape((1,))
+        shield_view["p"]["l"][0, 1] = TRIGGER_FULL
+        msl_binding.step_input(handle, neutral, shield)
+
+        bubbles = msl_binding.debug_shield_bubbles_world(handle, 0)
+        shx, shy, shz, shr = (
+            float(bubbles[1, 0]),
+            float(bubbles[1, 1]),
+            float(bubbles[1, 2]),
+            float(bubbles[1, 3]),
+        )
+        assert shr > 0.0
+
+        body_x = shx + shr + 4.0
+        msl_binding.debug_clear_hurtcaps_world(handle, 0, 1)
+        msl_binding.debug_set_hurtcap_world(handle, 0, 1, 0, body_x - 0.25, shy, shz, body_x + 0.25, shy, shz, 0.5)
+
+        msl_binding.debug_clear_hitboxes_world(handle, 0, 0)
+        msl_binding.debug_set_hitbox_world(handle, 0, 0, 0, body_x, shy, shz, 1.0, 5.0, 1)
+        msl_binding.debug_set_hitbox_flags(handle, 0, 0, 0, int(HIT_GROUNDED))
+        msl_binding.debug_set_hitbox_world(handle, 0, 0, 1, shx, shy, shz, 1.0, 5.0, 2)
+        msl_binding.debug_set_hitbox_flags(handle, 0, 0, 1, int(HIT_GROUNDED))
+
+        raw, count = msl_binding.debug_shield_candidate_decisions(handle, 0, 64)
+        rows = raw.reshape(-1).view(_DEBUG_SHIELD_CANDIDATE_DTYPE)[:count]
+        hb1 = [
+            r
+            for r in rows
+            if int(r["source_kind"]) == 0
+            and int(r["attacker"]) == 0
+            and int(r["defender"]) == 1
+            and int(r["hitbox_id"]) == 1
+        ]
+        assert len(hb1) == 1
+        assert int(hb1[0]["reject_reason"]) == 12
+        assert int(hb1[0]["overlap_shield"]) == 0
     finally:
         msl_binding.destroy(handle)

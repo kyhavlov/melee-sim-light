@@ -4154,6 +4154,32 @@ int msl_batch_debug_set_hitbox_flags(MslBatch* batch, int batch_index, int playe
   return 0;
 }
 
+int msl_batch_debug_set_hitbox_group(MslBatch* batch, int batch_index, int player_index,
+                                     int hitbox_id, uint8_t hit_group) {
+  if (batch == NULL) {
+    return EINVAL;
+  }
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return EINVAL;
+  }
+  if (player_index < 0 || player_index >= MSL_MAX_PLAYERS) {
+    return EINVAL;
+  }
+  if (hitbox_id < 0 || hitbox_id >= MSL_MAX_HITBOXES || hit_group > 7u) {
+    return EINVAL;
+  }
+
+  const size_t hb_i = debug_idx_hitbox(batch_index, player_index, hitbox_id);
+  // MSLHITB1 u16_7 pack:
+  // - low 8 bits: rehit_rate_frames (HitCapsule.x40_b4)
+  // - bits 8..10: spawn_hitbox_0.hit_group
+  // refs/melee/src/melee/lb/types.h::spawn_hitbox_0
+  const uint16_t packed_group = (uint16_t)((uint16_t)(hit_group & 0x7u) << 8);
+  const uint16_t preserved = (uint16_t)(batch->state.hitbox_u16_7[hb_i] & 0xF8FFu);
+  batch->state.hitbox_u16_7[hb_i] = (uint16_t)(preserved | packed_group);
+  return 0;
+}
+
 int msl_batch_debug_set_hitbox_element(MslBatch* batch, int batch_index, int player_index,
                                        int hitbox_id, uint8_t element) {
   if (batch == NULL) {

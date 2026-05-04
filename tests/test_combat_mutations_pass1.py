@@ -676,6 +676,405 @@ def test_debug_select_body_hits_shield_precedence_blocks_body_selection() -> Non
         del handle
 
 
+def test_combat_resolve_earlier_body_hitbox_precedes_later_shield_candidate() -> None:
+    # Source ordering: ftColl_80078C70 resolves shield/BODY per HitCapsule. A lower-index BODY hit
+    # commits before a higher-index shield candidate can enter GuardSetOff.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8,ftColl_80076CBC}
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    assert seed_stride == SEED_DTYPE.itemsize
+    assert input_stride == INPUT_DTYPE.itemsize
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        seed = _seed_base()
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+        msl_binding.reseed_seed(handle, seed_bytes)
+
+        neutral = np.zeros((1, input_stride), dtype=np.uint8)
+        shield = np.zeros((1, input_stride), dtype=np.uint8)
+        shield_view = shield.view(INPUT_DTYPE).reshape((1,))
+        shield_view["p"]["l"][0, 1] = TRIGGER_FULL
+        msl_binding.step_input(handle, neutral, shield)
+
+        bubbles = msl_binding.debug_shield_bubbles_world(handle, 0)
+        shx, shy, shz, shr = (
+            float(bubbles[1, 0]),
+            float(bubbles[1, 1]),
+            float(bubbles[1, 2]),
+            float(bubbles[1, 3]),
+        )
+        assert shr > 0.0
+
+        msl_binding.debug_set_hitlag(handle, 0, 0, 0)
+        msl_binding.debug_set_hitlag(handle, 0, 1, 0)
+
+        body_x = shx + shr + 4.0
+        msl_binding.debug_clear_hurtcaps_world(handle, 0, 1)
+        msl_binding.debug_set_hurtcap_world(
+            handle, 0, 1, 0, body_x - 0.25, shy, shz, body_x + 0.25, shy, shz, 0.5
+        )
+
+        msl_binding.debug_clear_hitboxes_world(handle, 0, 0)
+        msl_binding.debug_set_hitbox_world(handle, 0, 0, 0, body_x, shy, shz, 1.0, 5.0, 1)
+        msl_binding.debug_set_hitbox_flags(handle, 0, 0, 0, int(HIT_GROUNDED))
+        msl_binding.debug_set_hitbox_world(handle, 0, 0, 1, shx, shy, shz, 1.0, 5.0, 2)
+        msl_binding.debug_set_hitbox_flags(handle, 0, 0, 1, int(HIT_GROUNDED))
+
+        out0 = _read_compare(handle)
+        hp0 = float(out0["shield_hp"][1])
+
+        msl_binding.debug_combat_resolve(handle)
+        out = _read_compare(handle)
+
+        assert float(out["shield_hp"][1]) == pytest.approx(hp0, abs=1e-6)
+        assert int(out["action_id"][1]) != ACT_GUARD_SET_OFF
+        assert int(out["hitlag"][0]) > 0
+        assert int(out["hitlag"][1]) > 0
+    finally:
+        msl_binding.destroy(handle)
+        del handle
+
+
+def test_combat_resolve_shield_hit_does_not_pairwide_suppress_later_distinct_body() -> None:
+    # Source ordering: ftColl_80078C70 resolves shield/BODY per HitCapsule. A shield hit registers
+    # that HitCapsule's hit_group, but does not terminate later distinct hit_groups in the same
+    # attacker->defender pair.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC,ftColl_80076ED8}
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80076808
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    assert seed_stride == SEED_DTYPE.itemsize
+    assert input_stride == INPUT_DTYPE.itemsize
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        seed = _seed_base()
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+        msl_binding.reseed_seed(handle, seed_bytes)
+
+        neutral = np.zeros((1, input_stride), dtype=np.uint8)
+        shield = np.zeros((1, input_stride), dtype=np.uint8)
+        shield_view = shield.view(INPUT_DTYPE).reshape((1,))
+        shield_view["p"]["l"][0, 1] = TRIGGER_FULL
+        msl_binding.step_input(handle, neutral, shield)
+
+        bubbles = msl_binding.debug_shield_bubbles_world(handle, 0)
+        shx, shy, shz, shr = (
+            float(bubbles[1, 0]),
+            float(bubbles[1, 1]),
+            float(bubbles[1, 2]),
+            float(bubbles[1, 3]),
+        )
+        assert shr > 0.0
+
+        msl_binding.debug_set_hitlag(handle, 0, 0, 0)
+        msl_binding.debug_set_hitlag(handle, 0, 1, 0)
+
+        body_x = shx + shr + 4.0
+        msl_binding.debug_clear_hurtcaps_world(handle, 0, 1)
+        msl_binding.debug_set_hurtcap_world(
+            handle, 0, 1, 0, body_x - 0.25, shy, shz, body_x + 0.25, shy, shz, 0.5
+        )
+
+        msl_binding.debug_clear_hitboxes_world(handle, 0, 0)
+        msl_binding.debug_set_hitbox_world(handle, 0, 0, 0, shx, shy, shz, 1.0, 5.0, 1)
+        msl_binding.debug_set_hitbox_flags(handle, 0, 0, 0, int(HIT_GROUNDED))
+        msl_binding.debug_set_hitbox_group(handle, 0, 0, 0, 0)
+        msl_binding.debug_set_hitbox_world(handle, 0, 0, 1, body_x, shy, shz, 1.0, 5.0, 1)
+        msl_binding.debug_set_hitbox_flags(handle, 0, 0, 1, int(HIT_GROUNDED))
+        msl_binding.debug_set_hitbox_group(handle, 0, 0, 1, 1)
+
+        out0 = _read_compare(handle)
+        hp0 = float(out0["shield_hp"][1])
+
+        msl_binding.debug_combat_resolve(handle)
+        out = _read_compare(handle)
+
+        assert float(out["shield_hp"][1]) < hp0
+        assert float(out["percent"][1]) == pytest.approx(5.0)
+        assert int(out["instance_hit_by"][1]) == 111
+        assert int(out["hitlag"][0]) > 0
+        assert int(out["hitlag"][1]) > 0
+    finally:
+        msl_binding.destroy(handle)
+        del handle
+
+
+def test_combat_resolve_shield_hit_group_register_suppresses_later_same_group_body() -> None:
+    # Shield contact calls ftColl_80076808(..., type=1, ...), registering every active HitCapsule
+    # with the same hit_group. A later same-group BODY candidate must be rejected by lbColl_8000ACFC.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076CBC,ftColl_80076808}
+    # refs/melee/src/melee/lb/lbcollision.c::lbColl_8000ACFC
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    assert seed_stride == SEED_DTYPE.itemsize
+    assert input_stride == INPUT_DTYPE.itemsize
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        seed = _seed_base()
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+        msl_binding.reseed_seed(handle, seed_bytes)
+
+        neutral = np.zeros((1, input_stride), dtype=np.uint8)
+        shield = np.zeros((1, input_stride), dtype=np.uint8)
+        shield_view = shield.view(INPUT_DTYPE).reshape((1,))
+        shield_view["p"]["l"][0, 1] = TRIGGER_FULL
+        msl_binding.step_input(handle, neutral, shield)
+
+        bubbles = msl_binding.debug_shield_bubbles_world(handle, 0)
+        shx, shy, shz, shr = (
+            float(bubbles[1, 0]),
+            float(bubbles[1, 1]),
+            float(bubbles[1, 2]),
+            float(bubbles[1, 3]),
+        )
+        assert shr > 0.0
+
+        msl_binding.debug_set_hitlag(handle, 0, 0, 0)
+        msl_binding.debug_set_hitlag(handle, 0, 1, 0)
+
+        body_x = shx + shr + 4.0
+        msl_binding.debug_clear_hurtcaps_world(handle, 0, 1)
+        msl_binding.debug_set_hurtcap_world(
+            handle, 0, 1, 0, body_x - 0.25, shy, shz, body_x + 0.25, shy, shz, 0.5
+        )
+
+        msl_binding.debug_clear_hitboxes_world(handle, 0, 0)
+        msl_binding.debug_set_hitbox_world(handle, 0, 0, 0, shx, shy, shz, 1.0, 5.0, 1)
+        msl_binding.debug_set_hitbox_flags(handle, 0, 0, 0, int(HIT_GROUNDED))
+        msl_binding.debug_set_hitbox_group(handle, 0, 0, 0, 0)
+        msl_binding.debug_set_hitbox_world(handle, 0, 0, 1, body_x, shy, shz, 1.0, 5.0, 1)
+        msl_binding.debug_set_hitbox_flags(handle, 0, 0, 1, int(HIT_GROUNDED))
+        msl_binding.debug_set_hitbox_group(handle, 0, 0, 1, 0)
+
+        out0 = _read_compare(handle)
+        hp0 = float(out0["shield_hp"][1])
+
+        msl_binding.debug_combat_resolve(handle)
+        out = _read_compare(handle)
+
+        assert float(out["shield_hp"][1]) < hp0
+        assert float(out["percent"][1]) == pytest.approx(0.0)
+        assert int(out["instance_hit_by"][1]) == 0
+    finally:
+        msl_binding.destroy(handle)
+        del handle
+
+
+def test_combat_resolve_distinct_group_body_contacts_accumulate_percent_and_max_hitlag() -> None:
+    # Source ftColl_80078C70 continues to later HitCapsules after a BODY hit. ftColl_80076ED8
+    # accumulates percentTemp across accepted distinct groups while x183C_applied keeps the max
+    # getEnvDmg value consumed once by Fighter_ProcessHit.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8,inlineB2}
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    assert seed_stride == SEED_DTYPE.itemsize
+    assert input_stride == INPUT_DTYPE.itemsize
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        seed = _seed_base()
+        seed["pos_x"][0, 0] = np.float32(0.0)
+        seed["pos_x"][0, 1] = np.float32(1.0)
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+        msl_binding.reseed_seed(handle, seed_bytes)
+
+        msl_binding.debug_clear_hurtcaps_world(handle, 0, 1)
+        msl_binding.debug_set_hurtcap_world(handle, 0, 1, 0, 0.5, 0.0, 0.0, 1.5, 0.0, 0.0, 0.5)
+        msl_binding.debug_set_hurtcap_height(handle, 0, 1, 0, 1)
+
+        msl_binding.debug_clear_hitboxes_world(handle, 0, 0)
+        msl_binding.debug_set_hitbox_world(handle, 0, 0, 0, 1.0, 0.0, 0.0, 1.0, 3.0, 1)
+        msl_binding.debug_set_hitbox_flags(handle, 0, 0, 0, int(HIT_GROUNDED))
+        msl_binding.debug_set_hitbox_group(handle, 0, 0, 0, 0)
+        msl_binding.debug_set_hitbox_kb_params(handle, 0, 0, 0, 0, 0, 0, 0)
+        msl_binding.debug_set_hitbox_world(handle, 0, 0, 1, 1.0, 0.0, 0.0, 1.0, 5.0, 1)
+        msl_binding.debug_set_hitbox_flags(handle, 0, 0, 1, int(HIT_GROUNDED))
+        msl_binding.debug_set_hitbox_group(handle, 0, 0, 1, 1)
+        msl_binding.debug_set_hitbox_kb_params(handle, 0, 0, 1, 0, 0, 0, 0)
+
+        msl_binding.debug_combat_resolve(handle)
+        out = _read_compare(handle)
+
+        hitlag_dmg_mul = _common_attr("hitlag_dmg_mul")
+        hitlag_base = _common_attr("hitlag_base")
+        exp_hl = int(int(5) * hitlag_dmg_mul + hitlag_base)
+
+        assert float(out["percent"][1]) == pytest.approx(8.0)
+        assert int(out["hitlag"][0]) == exp_hl
+        assert int(out["hitlag"][1]) == exp_hl
+        assert int(out["action_id"][1]) == ACT_WAIT
+    finally:
+        msl_binding.destroy(handle)
+        del handle
+
+
+def test_combat_resolve_same_group_body_contact_registers_before_later_body() -> None:
+    # ftColl_80076ED8 calls inlineB0/lbColl_80008688 immediately, so later same-group BODY
+    # candidates in the same ftColl_80078C70 pass are rejected by lbColl_8000ACFC.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,inlineB0}
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008688,lbColl_8000ACFC}
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    assert seed_stride == SEED_DTYPE.itemsize
+    assert input_stride == INPUT_DTYPE.itemsize
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        seed = _seed_base()
+        seed["pos_x"][0, 0] = np.float32(0.0)
+        seed["pos_x"][0, 1] = np.float32(1.0)
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+        msl_binding.reseed_seed(handle, seed_bytes)
+
+        msl_binding.debug_clear_hurtcaps_world(handle, 0, 1)
+        msl_binding.debug_set_hurtcap_world(handle, 0, 1, 0, 0.5, 0.0, 0.0, 1.5, 0.0, 0.0, 0.5)
+        msl_binding.debug_set_hurtcap_height(handle, 0, 1, 0, 1)
+
+        msl_binding.debug_clear_hitboxes_world(handle, 0, 0)
+        msl_binding.debug_set_hitbox_world(handle, 0, 0, 0, 1.0, 0.0, 0.0, 1.0, 3.0, 1)
+        msl_binding.debug_set_hitbox_flags(handle, 0, 0, 0, int(HIT_GROUNDED))
+        msl_binding.debug_set_hitbox_group(handle, 0, 0, 0, 0)
+        msl_binding.debug_set_hitbox_kb_params(handle, 0, 0, 0, 0, 0, 0, 0)
+        msl_binding.debug_set_hitbox_world(handle, 0, 0, 1, 1.0, 0.0, 0.0, 1.0, 5.0, 1)
+        msl_binding.debug_set_hitbox_flags(handle, 0, 0, 1, int(HIT_GROUNDED))
+        msl_binding.debug_set_hitbox_group(handle, 0, 0, 1, 0)
+        msl_binding.debug_set_hitbox_kb_params(handle, 0, 0, 1, 0, 0, 0, 0)
+
+        msl_binding.debug_combat_resolve(handle)
+        out = _read_compare(handle)
+
+        hitlag_dmg_mul = _common_attr("hitlag_dmg_mul")
+        hitlag_base = _common_attr("hitlag_base")
+        exp_hl = int(int(3) * hitlag_dmg_mul + hitlag_base)
+
+        assert float(out["percent"][1]) == pytest.approx(3.0)
+        assert int(out["hitlag"][0]) == exp_hl
+        assert int(out["hitlag"][1]) == exp_hl
+        assert int(out["action_id"][1]) == ACT_WAIT
+    finally:
+        msl_binding.destroy(handle)
+        del handle
+
+
+def test_combat_resolve_multi_body_best_kb_ignores_later_lower_kb_log() -> None:
+    # ftColl_80076ED8 logs every accepted BODY contact, but ftColl_8007A06C applies knockback and
+    # damage-entry fields from the highest-KB log after all percentTemp accumulation. A later lower-KB
+    # distinct group must not override the earlier winner.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    assert seed_stride == SEED_DTYPE.itemsize
+
+    def run(*, include_late_low: bool) -> np.void:
+        handle = msl_binding.init(batch_size=1, num_players=2)
+        try:
+            seed = _seed_base()
+            seed["pos_x"][0, 0] = np.float32(0.0)
+            seed["pos_x"][0, 1] = np.float32(1.0)
+            seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+            msl_binding.reseed_seed(handle, seed_bytes)
+
+            msl_binding.debug_clear_hurtcaps_world(handle, 0, 1)
+            msl_binding.debug_set_hurtcap_world(
+                handle, 0, 1, 0, 0.5, 0.0, 0.0, 1.5, 0.0, 0.0, 0.5
+            )
+            msl_binding.debug_set_hurtcap_height(handle, 0, 1, 0, 1)
+
+            msl_binding.debug_clear_hitboxes_world(handle, 0, 0)
+            msl_binding.debug_set_hitbox_world(handle, 0, 0, 0, 1.0, 0.0, 0.0, 1.0, 3.0, 1)
+            msl_binding.debug_set_hitbox_flags(handle, 0, 0, 0, int(HIT_GROUNDED))
+            msl_binding.debug_set_hitbox_group(handle, 0, 0, 0, 0)
+            msl_binding.debug_set_hitbox_kb_params(handle, 0, 0, 0, 0, 0, 0, 80)
+            if include_late_low:
+                msl_binding.debug_set_hitbox_world(handle, 0, 0, 1, 1.0, 0.0, 0.0, 1.0, 1.0, 1)
+                msl_binding.debug_set_hitbox_flags(handle, 0, 0, 1, int(HIT_GROUNDED))
+                msl_binding.debug_set_hitbox_group(handle, 0, 0, 1, 1)
+                msl_binding.debug_set_hitbox_kb_params(handle, 0, 0, 1, 0, 0, 0, 1)
+
+            msl_binding.debug_combat_resolve(handle)
+            return _read_compare(handle).copy()
+        finally:
+            msl_binding.destroy(handle)
+
+    high_only = run(include_late_low=False)
+    high_plus_low = run(include_late_low=True)
+
+    assert float(high_only["percent"][1]) == pytest.approx(3.0)
+    assert float(high_plus_low["percent"][1]) == pytest.approx(4.0)
+    assert int(high_plus_low["action_id"][1]) != ACT_WAIT
+    # The late low-BKB log contributes percentTemp but does not own KB/hitstun/writeback.
+    assert int(high_plus_low["hitstun"][1]) >= int(high_only["hitstun"][1])
+    assert float(high_plus_low["speed_x_attack"][1]) >= float(high_only["speed_x_attack"][1])
+
+
+def test_combat_resolve_distinct_body_logs_update_combo_from_collision_owner() -> None:
+    # ftColl_80076ED8 calls ftColl_8007891C for each accepted regular BODY log, so stale/combo
+    # bookkeeping is owned by the collision log path even though KB writeback is selected later by
+    # ftColl_8007A06C.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007891C,ftColl_8007A06C}
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    assert seed_stride == SEED_DTYPE.itemsize
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        seed = _seed_base()
+        seed["pos_x"][0, 0] = np.float32(0.0)
+        seed["pos_x"][0, 1] = np.float32(1.0)
+        seed["attack_id"][0, 0] = np.uint16(7)
+        seed["attack_instance"][0, 0] = np.uint16(44)
+        seed["combo_victim_port"][0, 0] = np.uint8(0xFF)
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+        msl_binding.reseed_seed(handle, seed_bytes)
+
+        msl_binding.debug_clear_hurtcaps_world(handle, 0, 1)
+        msl_binding.debug_set_hurtcap_world(handle, 0, 1, 0, 0.5, 0.0, 0.0, 1.5, 0.0, 0.0, 0.5)
+        msl_binding.debug_set_hurtcap_height(handle, 0, 1, 0, 1)
+
+        msl_binding.debug_clear_hitboxes_world(handle, 0, 0)
+        msl_binding.debug_set_hitbox_world(handle, 0, 0, 0, 1.0, 0.0, 0.0, 1.0, 2.0, 1)
+        msl_binding.debug_set_hitbox_flags(handle, 0, 0, 0, int(HIT_GROUNDED))
+        msl_binding.debug_set_hitbox_group(handle, 0, 0, 0, 0)
+        msl_binding.debug_set_hitbox_kb_params(handle, 0, 0, 0, 0, 0, 0, 0)
+        msl_binding.debug_set_hitbox_world(handle, 0, 0, 1, 1.0, 0.0, 0.0, 1.0, 2.0, 1)
+        msl_binding.debug_set_hitbox_flags(handle, 0, 0, 1, int(HIT_GROUNDED))
+        msl_binding.debug_set_hitbox_group(handle, 0, 0, 1, 1)
+        msl_binding.debug_set_hitbox_kb_params(handle, 0, 0, 1, 0, 0, 0, 0)
+
+        msl_binding.debug_combat_resolve(handle)
+        out = _read_compare(handle)
+
+        assert float(out["percent"][1]) > 0.0
+        assert int(out["action_id"][1]) == ACT_WAIT
+        assert int(out["last_attack_landed"][0]) == 7
+        assert int(out["combo_count"][0]) == 2
+    finally:
+        msl_binding.destroy(handle)
+        del handle
+
+
 def test_combat_resolve_shield_overlap_reduces_shield_hp_by_decomp_formula() -> None:
     import msl_binding
 
@@ -793,7 +1192,7 @@ def test_combat_resolve_shield_hitlag_uses_get_env_dmg_semantics() -> None:
         del handle
 
 
-def test_combat_resolve_shield_hit_uses_max_damage_for_hitlag_but_first_for_hp_in_pass1() -> None:
+def test_combat_resolve_same_group_shield_contact_registers_before_later_shield() -> None:
     import msl_binding
 
     sizes = msl_binding.sizes()
@@ -827,21 +1226,99 @@ def test_combat_resolve_shield_hit_uses_max_damage_for_hitlag_but_first_for_hp_i
         out0 = _read_compare(handle)
         hp0 = float(out0["shield_hp"][1])
 
-        # Force a shield overlap for two hitboxes this frame.
+        # Force shield overlap for two same-group hitboxes this frame.
         #
-        # Pass 1 is simplified: it applies shield HP / GuardSetOff from the first eligible overlap,
-        # but hitlag uses the max int damage over all eligible shield overlaps (decomp-shaped).
+        # Source ftColl_80076CBC calls ftColl_80076808 immediately for an accepted shield contact,
+        # registering the victim across every active HitCapsule with the same hit_group. The later
+        # same-group shield candidate is therefore rejected by lbColl_8000ACFC before it can raise
+        # x19A4 or x19A0.
+        # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076CBC,ftColl_80076808}
+        # refs/melee/src/melee/lb/lbcollision.c::lbColl_8000ACFC
         msl_binding.debug_clear_hitboxes_world(handle, 0, 0)
         msl_binding.debug_set_hitbox_world(handle, 0, 0, 0, shx, shy, shz, 1.0, 3.0, 1)
         msl_binding.debug_set_hitbox_flags(handle, 0, 0, 0, int(HIT_GROUNDED))
+        msl_binding.debug_set_hitbox_group(handle, 0, 0, 0, 0)
         msl_binding.debug_set_hitbox_world(handle, 0, 0, 1, shx, shy, shz, 1.0, 7.0, 1)
         msl_binding.debug_set_hitbox_flags(handle, 0, 0, 1, int(HIT_GROUNDED))
+        msl_binding.debug_set_hitbox_group(handle, 0, 0, 1, 0)
 
         msl_binding.debug_combat_resolve(handle)
         out = _read_compare(handle)
         hp1 = float(out["shield_hp"][1])
 
-        # Hitlag uses decomp getEnvDmg semantics (int damage) and uses the max over shield overlaps.
+        # Same-group rehit suppression leaves the first accepted shield contact as the only source
+        # for hitlag and shieldDamageTaken.
+        hitlag_dmg_mul = _common_attr("hitlag_dmg_mul")
+        hitlag_base = _common_attr("hitlag_base")
+        exp_hl = int(int(3) * hitlag_dmg_mul + hitlag_base)
+        assert int(out["hitlag"][0]) == exp_hl
+        assert int(out["hitlag"][1]) == exp_hl
+
+        trig_deadzone = _common_attr("trigger_deadzone")
+        shield_hit_damage_mul = _common_attr("shield_hit_damage_mul")
+        shield_hit_damage_base = _common_attr("shield_hit_damage_base")
+        shield_hit_ls_min = _common_attr("shield_hit_lightshield_min")
+        shield_hit_ls_max = _common_attr("shield_hit_lightshield_max")
+
+        assert trig_deadzone < 1.0
+        light = 1.0
+        ls = light * (shield_hit_ls_max - shield_hit_ls_min) + shield_hit_ls_min
+        exp_depletion = shield_hit_damage_mul * (float(int(3)) * (1.0 - ls)) + shield_hit_damage_base
+
+        assert np.isclose(hp1, hp0 - exp_depletion, atol=1e-5)
+    finally:
+        msl_binding.destroy(handle)
+        del handle
+
+
+def test_combat_resolve_distinct_group_shield_contacts_accumulate_damage_taken() -> None:
+    # Source ftColl_80076CBC accumulates x19A0 shieldDamageTaken across accepted shield contacts
+    # while x19A4 keeps the max int damage for shieldstun/hitlag.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    assert seed_stride == SEED_DTYPE.itemsize
+    assert input_stride == INPUT_DTYPE.itemsize
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        seed = _seed_base()
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+        msl_binding.reseed_seed(handle, seed_bytes)
+
+        neutral = np.zeros((1, input_stride), dtype=np.uint8)
+        shield = np.zeros((1, input_stride), dtype=np.uint8)
+        shield_view = shield.view(INPUT_DTYPE).reshape((1,))
+        shield_view["p"]["l"][0, 1] = TRIGGER_FULL
+
+        msl_binding.step_input(handle, neutral, shield)
+        bubbles = msl_binding.debug_shield_bubbles_world(handle, 0)
+        shx, shy, shz, shr = (
+            float(bubbles[1, 0]),
+            float(bubbles[1, 1]),
+            float(bubbles[1, 2]),
+            float(bubbles[1, 3]),
+        )
+        assert shr > 0.0
+
+        out0 = _read_compare(handle)
+        hp0 = float(out0["shield_hp"][1])
+
+        msl_binding.debug_clear_hitboxes_world(handle, 0, 0)
+        msl_binding.debug_set_hitbox_world(handle, 0, 0, 0, shx, shy, shz, 1.0, 3.0, 1)
+        msl_binding.debug_set_hitbox_flags(handle, 0, 0, 0, int(HIT_GROUNDED))
+        msl_binding.debug_set_hitbox_group(handle, 0, 0, 0, 0)
+        msl_binding.debug_set_hitbox_world(handle, 0, 0, 1, shx, shy, shz, 1.0, 7.0, 1)
+        msl_binding.debug_set_hitbox_flags(handle, 0, 0, 1, int(HIT_GROUNDED))
+        msl_binding.debug_set_hitbox_group(handle, 0, 0, 1, 1)
+
+        msl_binding.debug_combat_resolve(handle)
+        out = _read_compare(handle)
+        hp1 = float(out["shield_hp"][1])
+
         hitlag_dmg_mul = _common_attr("hitlag_dmg_mul")
         hitlag_base = _common_attr("hitlag_base")
         exp_hl = int(int(7) * hitlag_dmg_mul + hitlag_base)
@@ -857,7 +1334,8 @@ def test_combat_resolve_shield_hit_uses_max_damage_for_hitlag_but_first_for_hp_i
         assert trig_deadzone < 1.0
         light = 1.0
         ls = light * (shield_hit_ls_max - shield_hit_ls_min) + shield_hit_ls_min
-        exp_depletion = shield_hit_damage_mul * (float(int(3)) * (1.0 - ls)) + shield_hit_damage_base
+        shield_damage_taken = float(int(3) + int(7))
+        exp_depletion = shield_hit_damage_mul * (shield_damage_taken * (1.0 - ls)) + shield_hit_damage_base
 
         assert np.isclose(hp1, hp0 - exp_depletion, atol=1e-5)
     finally:
