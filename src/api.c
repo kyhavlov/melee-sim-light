@@ -2944,6 +2944,46 @@ int msl_batch_debug_step_input_pre_combat(MslBatch* batch, const uint8_t* prev_i
                                    input_stride_bytes);
 }
 
+int msl_batch_debug_set_coll_env_flags(MslBatch* batch, int batch_index, int player_index,
+                                       uint32_t flags) {
+  if (batch == NULL) {
+    return EINVAL;
+  }
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return EINVAL;
+  }
+  if (player_index < 0 || player_index >= MSL_MAX_PLAYERS) {
+    return EINVAL;
+  }
+  const size_t idx = msl_idx_player(batch_index, player_index);
+  batch->state.coll_env_flags[idx] = flags;
+  return 0;
+}
+
+int msl_batch_debug_set_ceiling_contact(MslBatch* batch, int batch_index, int player_index,
+                                        float contact_y) {
+  if (batch == NULL) {
+    return EINVAL;
+  }
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return EINVAL;
+  }
+  if (player_index < 0 || player_index >= MSL_MAX_PLAYERS) {
+    return EINVAL;
+  }
+  const size_t idx = msl_idx_player(batch_index, player_index);
+  batch->state.ceiling_contact_y[idx] = contact_y;
+  return 0;
+}
+
+int msl_batch_debug_run_knockdown_post_collision(MslBatch* batch) {
+  if (batch == NULL) {
+    return EINVAL;
+  }
+  knockdown_update_post_collision(batch);
+  return 0;
+}
+
 int msl_batch_debug_knockdown_update_pre_physics(MslBatch* batch) {
   if (batch == NULL) {
     return EINVAL;

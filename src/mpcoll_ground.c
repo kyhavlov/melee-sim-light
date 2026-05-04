@@ -362,15 +362,22 @@ static inline void mpcoll_bottom_world_point_from_rel(MslEcbBottomWorldPoint* ou
 
 static inline uint8_t action_allows_floor_edge_snap(uint16_t a) {
   // Decomp: mpColl_8004A45C_Floor (edge snap) is used by mpColl_8004B2DC (flags=2), which is
-  // called by ft_800827A0. Multiple grounded motion states use ft_80084104 (which calls
-  // ft_800827A0) as their collision callback, including:
-  // - Down* (except DownBound, which uses ft_80082708 -> mpColl_8004B108)
+  // called by ft_800827A0. Motion states that use ft_80084104 (ft_800827A0) as their collision
+  // callback include:
+  // - DownAttack, DownForward, DownBack (DownRoll)
   // - EscapeF/EscapeB/EscapeN (rolls / spotdodge)
   // - Grounded attacks (Attack11..AttackLw4), including AttackDash and AttackS4S.
   // - Common AppealSR/SL through ftCo_AppealS_Coll -> ft_80084104.
   // - Fox/Falco grounded SpecialSEnd, whose collision callback uses ft_800827A0 after the main
   //   Side-B travel phase has already converted through ft_80082708 when floor is lost.
   // - PassiveStandF/B tech-roll grounded continuation.
+  //
+  // DownWait/DownStand use ft_80083F88 -> ft_80082708 -> mpColl_8004B108 (allow-ground-to-air),
+  // NOT ft_80084104 -> ft_800827A0 -> mpColl_8004B2DC (edge snap).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::{ftCo_DownWait_Coll,ftCo_DownStand_Coll}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownAttack.c::ftCo_DownAttack_Coll
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Down.c::ftCo_Down_Coll
+  // refs/melee/src/melee/ft/ft_081B.c::{ft_80083F88,ft_80084104}
   //
   // Implementation note: we gate by action_id here as a proxy for "this motion state uses the
   // ft_80084104 collision callback chain". We intentionally do not include locomotion states
@@ -402,13 +409,14 @@ static inline uint8_t action_allows_floor_edge_snap(uint16_t a) {
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Coll
     // refs/melee/src/melee/ft/ft_081B.c::{ft_80082708,ft_800827A0}
     // refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004B108,mpColl_8004B2DC}
-    case MSL_ACT_DOWN_WAIT_U:
-    case MSL_ACT_DOWN_STAND_U:
+    // Decomp: DownWait/DownStand use ft_80083F88 -> ft_80082708 -> mpColl_8004B108
+    // (allow-ground-to-air), not ft_80084104 -> ft_800827A0 -> mpColl_8004B2DC (edge snap).
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownWait_Coll
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownStand.c::ftCo_DownStand_Coll
+    // refs/melee/src/melee/ft/ft_081B.c::{ft_80083F88,ft_80084104}
     case MSL_ACT_DOWN_ATTACK_U:
     case MSL_ACT_DOWN_FOWARD_U:
     case MSL_ACT_DOWN_BACK_U:
-    case MSL_ACT_DOWN_WAIT_D:
-    case MSL_ACT_DOWN_STAND_D:
     case MSL_ACT_DOWN_ATTACK_D:
     case MSL_ACT_DOWN_FOWARD_D:
     case MSL_ACT_DOWN_BACK_D:
@@ -1048,8 +1056,9 @@ static inline void floor_write_edge_suppression_flags(MslBatch* batch, size_t id
 static uint8_t floor_sweep_check(const MslBatch* batch, size_t idx, int bi,
                                  const MslStageFloorGraph* g, uint32_t stage_id, float ax, float ay,
                                  float bx, float by, uint16_t skip_platform_segment_i,
-                                 int prefer_line_idx, const MslCommonParams* c, int* out_line_idx,
-                                 float* out_ix, float* out_iy, float* out_nx, float* out_ny) {
+                                 int prefer_line_idx, int skip_line_idx, const MslCommonParams* c,
+                                 int* out_line_idx, float* out_ix, float* out_iy, float* out_nx,
+                                 float* out_ny) {
   // Decomp: mpCheckFloor iterates floor lines, intersects segment A->B with each, and chooses the
   // closest intersection to A (min dist^2), with stage-defined deterministic ordering on ties.
   // refs/melee/src/melee/mp/mplib.c::mpCheckFloor
@@ -1065,6 +1074,9 @@ static uint8_t floor_sweep_check(const MslBatch* batch, size_t idx, int bi,
   float best_nx = 0.0f, best_ny = 1.0f;
 
   for (size_t li = 0; li < g->line_count; li++) {
+    if (skip_line_idx >= 0 && (int)li == skip_line_idx) {
+      continue;
+    }
     if (!floor_line_admitted_by_source_callback(batch, idx, g, stage_id, (int)li,
                                                 skip_platform_segment_i, c)) {
       continue;
@@ -1284,7 +1296,7 @@ static uint8_t floor_4a908_retry(MslBatch* batch, size_t idx, int bi, const MslS
     float hit_nx = 0.0f;
     float hit_ny = 1.0f;
     if (!floor_sweep_check(batch, idx, bi, g, stage_id, prev_bottom_x, start_y[pass], cur_bottom_x,
-                           cur_bottom_y, skip_platform_segment_i, persisted_line_idx, NULL,
+                           cur_bottom_y, skip_platform_segment_i, persisted_line_idx, -1, NULL,
                            &hit_line_idx, &ix, &iy, &hit_nx, &hit_ny)) {
       continue;
     }
@@ -1375,7 +1387,7 @@ uint8_t mpcoll_800477e0_floor_mask_probe(const MslBatch* batch, size_t idx,
   const MslCommonParams* c = msl_common_params();
   if (cur_bot.y <= prev_bot.y &&
       floor_sweep_check(batch, idx, bi, g, stage_id, prev_bot.x, prev_bot.y, cur_bot.x, cur_bot.y,
-                        skip_platform_segment_i, -1, c, &line_idx, &ix, &iy, NULL, NULL)) {
+                        skip_platform_segment_i, -1, -1, c, &line_idx, &ix, &iy, NULL, NULL)) {
     float y_corr = 0.0f;
     const int out_line_idx =
         floor_dd90_project(batch, bi, g, line_idx, ix, cur_bot.y, &y_corr, NULL, NULL);
@@ -2003,8 +2015,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
             if (!landing_release_skip_floor_sweep && can_sweep &&
                 floor_sweep_check(batch, idx, bi, g, stage_id, prev_bottom_x, prev_bottom_y,
                                   cur_bottom_x, cur_bottom_y, skip_platform_segment_i,
-                                  prefer_line_idx, c, &hit_line_idx, &ix, &iy, &floor_nx,
-                                  &floor_ny)) {
+                                  prefer_line_idx, prefer_line_idx, c, &hit_line_idx, &ix, &iy,
+                                  &floor_nx, &floor_ny)) {
               const uint8_t hit_line_is_platform =
                   (hit_line_idx >= 0 && g->lines[(size_t)hit_line_idx].is_platform) ? 1u : 0u;
               const uint8_t hit_line_has_platform_transform =
@@ -2620,7 +2632,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
         if (!on_ground && !active_damage_hitlag_airborne_floor_contact && can_sweep &&
             floor_sweep_check(batch, idx, bi, g, stage_id, prev_bottom_x, prev_bottom_y,
                               cur_bottom_x, cur_bottom_y, skip_platform_segment_i, prefer_line_idx,
-                              c, &hit_line_idx, &ix, &iy, &floor_nx, &floor_ny)) {
+                              -1, c, &hit_line_idx, &ix, &iy, &floor_nx, &floor_ny)) {
           const uint8_t hit_line_is_platform =
               (hit_line_idx >= 0 && g->lines[(size_t)hit_line_idx].is_platform) ? 1u : 0u;
           const uint8_t hit_line_is_slope =

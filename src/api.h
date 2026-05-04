@@ -2025,6 +2025,21 @@ int msl_batch_debug_step_input_pre_combat(MslBatch* batch, const uint8_t* prev_i
                                           size_t prev_input_stride_bytes,
                                           const uint8_t* input_bytes, size_t input_stride_bytes);
 
+// Debug-only helper: override coll_env_flags for a single fighter (test-only).
+// This is intended for synthetic tests that need to arm ceiling/wall contact bits without
+// relying on the full stage-collision sweep.
+int msl_batch_debug_set_coll_env_flags(MslBatch* batch, int batch_index, int player_index,
+                                       uint32_t flags);
+
+// Debug-only helper: override ceiling contact Y for a single fighter (test-only).
+int msl_batch_debug_set_ceiling_contact(MslBatch* batch, int batch_index, int player_index,
+                                        float contact_y);
+
+// Debug-only helper: re-run knockdown_update_post_collision on current batch state (test-only).
+// Intended for tests that need to arm collision metadata after a normal step and then re-evaluate
+// the knockdown post-collision path.
+int msl_batch_debug_run_knockdown_post_collision(MslBatch* batch);
+
 // Debug-only branch-isolation helper: run only the knockdown/damage pre-physics callback slice on
 // the current reseeded state, without timers/input/physics.
 //

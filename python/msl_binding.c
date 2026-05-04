@@ -1148,6 +1148,68 @@ static PyObject* msl_debug_knockdown_update_pre_physics(PyObject* self, PyObject
   Py_RETURN_NONE;
 }
 
+static PyObject* msl_debug_set_coll_env_flags_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  int batch_index = 0;
+  int player_index = 0;
+  unsigned int flags = 0;
+  if (!PyArg_ParseTuple(args, "OiiI", &handle_obj, &batch_index, &player_index, &flags)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+  const int err = msl_batch_debug_set_coll_env_flags(h->batch, batch_index, player_index, flags);
+  if (err != 0) {
+    PyErr_Format(PyExc_ValueError, "msl_batch_debug_set_coll_env_flags failed: %d", err);
+    return NULL;
+  }
+  Py_RETURN_NONE;
+}
+
+static PyObject* msl_debug_set_ceiling_contact_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  int batch_index = 0;
+  int player_index = 0;
+  float contact_y = 0.0f;
+  if (!PyArg_ParseTuple(args, "Oiif", &handle_obj, &batch_index, &player_index, &contact_y)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+  const int err =
+      msl_batch_debug_set_ceiling_contact(h->batch, batch_index, player_index, contact_y);
+  if (err != 0) {
+    PyErr_Format(PyExc_ValueError, "msl_batch_debug_set_ceiling_contact failed: %d", err);
+    return NULL;
+  }
+  Py_RETURN_NONE;
+}
+
+static PyObject* msl_debug_run_knockdown_post_collision_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  if (!PyArg_ParseTuple(args, "O", &handle_obj)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+  const int err = msl_batch_debug_run_knockdown_post_collision(h->batch);
+  if (err != 0) {
+    PyErr_Format(PyExc_RuntimeError, "msl_batch_debug_run_knockdown_post_collision failed: %d",
+                 err);
+    return NULL;
+  }
+  Py_RETURN_NONE;
+}
+
 static PyObject* msl_debug_refresh_combat_geometry(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* handle_obj = NULL;
@@ -4941,6 +5003,15 @@ static PyMethodDef methods[] = {
      "debug_knockdown_update_pre_physics(handle) -> DEBUG-ONLY branch isolation. Runs only the "
      "knockdown/damage pre-physics callback slice on the current reseeded state; not for "
      "training/rollouts."},
+    {"debug_set_coll_env_flags", msl_debug_set_coll_env_flags_py, METH_VARARGS,
+     "debug_set_coll_env_flags(handle, batch_index, player_index, flags) -> DEBUG-ONLY. Override "
+     "coll_env_flags for a single fighter."},
+    {"debug_set_ceiling_contact", msl_debug_set_ceiling_contact_py, METH_VARARGS,
+     "debug_set_ceiling_contact(handle, batch_index, player_index, contact_y) -> DEBUG-ONLY. "
+     "Override ceiling_contact_y for a single fighter."},
+    {"debug_run_knockdown_post_collision", msl_debug_run_knockdown_post_collision_py, METH_VARARGS,
+     "debug_run_knockdown_post_collision(handle) -> DEBUG-ONLY. Re-run "
+     "knockdown_update_post_collision on current batch state."},
     {"debug_refresh_combat_geometry", msl_debug_refresh_combat_geometry, METH_VARARGS,
      "debug_refresh_combat_geometry(handle) -> DEBUG-ONLY. Recompute hurtcaps/hitboxes from "
      "current state without advancing frame stages."},

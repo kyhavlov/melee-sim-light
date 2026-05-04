@@ -16,6 +16,7 @@
 #include "input_axis.h"
 #include "jump_input.h"
 #include "locomotion.h"
+#include "ecb_tables.h"
 #include "mpcoll_ecb_points.h"
 #include "mpcoll_ground.h"
 #include "mtx34.h"
@@ -59,6 +60,9 @@ static inline uint8_t is_passive(uint16_t a) { return (a == (uint16_t)MSL_ACT_PA
 static inline uint8_t is_passive_stand(uint16_t a) {
   return (a == (uint16_t)MSL_ACT_PASSIVE_STAND_F || a == (uint16_t)MSL_ACT_PASSIVE_STAND_B) ? 1u
                                                                                             : 0u;
+}
+static inline uint8_t is_passive_ceil(uint16_t a) {
+  return (a == (uint16_t)MSL_ACT_PASSIVE_CEIL) ? 1u : 0u;
 }
 static inline uint8_t is_knockdown_any(uint16_t a) {
   return (is_down_any(a) || is_passive(a) || is_passive_stand(a)) ? 1u : 0u;
@@ -125,6 +129,8 @@ static inline uint32_t submotion_for_down_action(uint16_t a) {
       return (uint32_t)MSL_SM_PASSIVE_STAND_F;
     case (uint16_t)MSL_ACT_PASSIVE_STAND_B:
       return (uint32_t)MSL_SM_PASSIVE_STAND_B;
+    case (uint16_t)MSL_ACT_PASSIVE_CEIL:
+      return (uint32_t)MSL_SM_PASSIVE_CEIL;
     default:
       return 0xFFFFFFFFu;
   }
@@ -953,6 +959,7 @@ static inline void enter_damage_fall_from_damage_anim(MslBatch* batch, const Msl
                                                       size_t idx);
 static inline void enter_fall_from_downdamage_anim(MslBatch* batch, size_t idx);
 static inline void enter_fall_from_damagefall_iasa(MslBatch* batch, size_t idx);
+static inline void enter_fall(MslBatch* batch, size_t idx);
 static inline void enter_down_stand_from_downdamage_anim(MslBatch* batch, size_t idx,
                                                          uint16_t down_damage_act);
 static inline void clear_downed_damage_state(MslBatch* batch, size_t idx);
@@ -981,6 +988,7 @@ void knockdown_update_pre_physics(MslBatch* batch) {
       const size_t idx = msl_idx_player(bi, p);
       const uint16_t a0 = batch->state.action_id[idx];
       const uint8_t passivewall = is_passivewall_action(a0);
+      const uint8_t passive_ceil = is_passive_ceil(a0);
       const uint8_t down_damage = is_down_damage(a0);
       const uint8_t damage_fly = is_damage_fly_action(a0);
       const uint8_t damage_air = is_damage_air_action(a0);
@@ -990,7 +998,7 @@ void knockdown_update_pre_physics(MslBatch* batch) {
       const uint8_t common_damage_grounded =
           (uint8_t)((damage_air != 0u || damage_ground != 0u) && batch->state.on_ground[idx] != 0u);
       if (!is_knockdown_any(a0) && !down_damage && !passivewall && !damage_fly && !damage_air &&
-          !damage_ground) {
+          !damage_ground && !passive_ceil) {
         continue;
       }
       const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
@@ -1009,6 +1017,15 @@ void knockdown_update_pre_physics(MslBatch* batch) {
 
       const uint8_t cid = batch->state.char_id[idx];
       const float anim_frame = batch->state.anim_frame_f32[idx];
+
+      if (passive_ceil) {
+        // Decomp: ftCo_PassiveCeil_Anim ends through ftCo_Fall_Enter.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveCeil.c::ftCo_PassiveCeil_Anim
+        if (anim_is_finished(cid, (uint16_t)MSL_SM_PASSIVE_CEIL, anim_frame)) {
+          enter_fall(batch, idx);
+        }
+        continue;
+      }
 
       if (down_damage) {
         const uint32_t smid = submotion_for_down_action(a0);
@@ -1339,9 +1356,9 @@ void knockdown_update_pre_physics(MslBatch* batch) {
       }
 
       if (is_passive_stand(a0)) {
-        // PassiveStand phys uses ft_80084FA8 (root-motion + friction via ft_80085030). We don't yet
-        // model root motion here; leave self velocity teacher-forced and only handle anim-end exits.
+        // PassiveStand phys uses ft_80084FA8 -> ft_80085030.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveStand.c::ftCo_PassiveStand_Phys
+        // refs/melee/src/melee/ft/ft_081B.c::{ft_80084FA8,ft_80085030}
         const uint16_t msid = (a0 == (uint16_t)MSL_ACT_PASSIVE_STAND_F)
                                   ? (uint16_t)MSL_SM_PASSIVE_STAND_F
                                   : (uint16_t)MSL_SM_PASSIVE_STAND_B;
@@ -1357,6 +1374,17 @@ void knockdown_update_pre_physics(MslBatch* batch) {
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
           enter_wait(batch, idx);
           passive_stand_anim_end_try_enter_squat(batch, c, idx);
+          down_apply_phys_friction(batch, c, ch, idx);
+        } else if (msl_anim_uses_root_motion(cid, msid) != 0u) {
+          // Decomp: ft_80085030 uses fp->x6A4_transNOffset.z * facing_dir as the target ground
+          // velocity when fp->x594_b0 indicates TransN motion is active. PassiveStandF/B animations
+          // have x594_b0=1, so they are driven by TransN root motion with no friction fallback.
+          // refs/melee/src/melee/ft/ft_081B.c::ft_80085030
+          down_roll_apply_phys_transn(batch, c, ch, idx);
+        } else {
+          // Fallback for any motion where x594_b0 is not set: apply standard ground friction.
+          // This path should not be reached for vanilla PassiveStandF/B, but gating keeps the
+          // sim robust against data-table gaps or modded animations.
           down_apply_phys_friction(batch, c, ch, idx);
         }
         continue;
@@ -2332,6 +2360,56 @@ static inline void enter_passive_wall_from_damage_air(MslBatch* batch, size_t id
   batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN;
 }
 
+static inline void enter_fall(MslBatch* batch, size_t idx) {
+  // Decomp: ftCo_Fall_Enter is the standard airborne Fall entry.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter
+  if (batch == NULL) {
+    return;
+  }
+  batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
+  batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL;
+  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+}
+
+static inline void enter_passive_ceil_from_damage_air(MslBatch* batch, size_t idx,
+                                                      const MslCharParams* ch,
+                                                      uint16_t prev_action_id) {
+  // Decomp: ftCo_800C23FC enters PassiveCeil from ceiling tech.
+  // - Clears state via ftCommon_8007E2FC.
+  // - Sets throw_flags = 0.
+  // - Changes motion to ftCo_MS_PassiveCeil with Ft_MF_None.
+  // - Snaps fighter to ceiling contact point + x68C_transNPos.y.
+  // - Calls ftCo_80090574 (ft_80081DD4 floor collision check).
+  // - Plays SFX and sets colanim index 120 (visual only).
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveCeil.c::ftCo_800C23FC
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007E2FC
+  (void)prev_action_id;
+  batch->state.action_id[idx] = (uint16_t)MSL_ACT_PASSIVE_CEIL;
+  batch->state.animation_index[idx] = (uint32_t)MSL_SM_PASSIVE_CEIL;
+  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  batch->state.hitstun[idx] = 0u;
+  batch->state.speed_air_x_self[idx] = 0.0f;
+  batch->state.speed_y_self[idx] = 0.0f;
+  batch->state.speed_x_attack[idx] = 0.0f;
+  batch->state.speed_y_attack[idx] = 0.0f;
+  // Position snap: decomp uses cur_pos.y + coll_data.ecb.top.y + x68C_transNPos.y.
+  // x68C_transNPos.y is the TransN offset of the CURRENT motion (before the motion change),
+  // sampled at the current animation frame. The collision-reported ceiling_contact_y already
+  // reflects cur_pos.y + ecb.top.y, so we add only the current-motion TransN.y here.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveCeil.c::ftCo_800C23FC
+  const uint8_t char_id = batch->state.char_id[idx];
+  const uint32_t curr_msid = batch->state.animation_index[idx];
+  const uint16_t curr_frame =
+      msl_anim_frame_floor_u16(msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]));
+  float transn[3] = {0.0f, 0.0f, 0.0f};
+  (void)anim_pose_get_transn(char_id, (uint16_t)curr_msid, curr_frame, transn);
+  batch->state.pos_y[idx] = batch->state.ceiling_contact_y[idx] + (transn[1] * ch->model_scaling);
+  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
+  enum { MSL_STATE_FLAG_221C_IS_HITSTUN = 0x02 };
+  const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
+  batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN;
+}
+
 static inline uint8_t damagefly_reflect_lockout_active(const MslBatch* batch,
                                                        const MslCommonParams* c, size_t idx) {
   if (batch == NULL || c == NULL) {
@@ -2813,6 +2891,18 @@ void knockdown_update_post_collision(MslBatch* batch) {
                                          ? (uint16_t)MSL_ACT_PASSIVE_WALL_JUMP
                                          : (uint16_t)MSL_ACT_PASSIVE_WALL;
         enter_passive_wall_from_damage_air(batch, idx, a0, wall_action);
+        continue;
+      }
+
+      // Ceiling tech entry: checked after wall tech, before fly reflect.
+      // Decomp: ftCo_DamageFly_Coll calls ftCo_800C23A0 after ftCo_800C1D38 (wall tech) and before
+      // ftCo_800C17CC (fly reflect). Floor contact is checked earlier and takes priority.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveCeil.c::ftCo_800C23A0
+      if (!was_ground && !now_ground && is_damage_fly_action(a0) &&
+          tech_is_available(batch, c, idx) &&
+          (batch->state.coll_env_flags[idx] & (uint32_t)MSL_COLLIDE_CEILING_HUG) != 0u) {
+        enter_passive_ceil_from_damage_air(batch, idx, ch, a0);
         continue;
       }
 
