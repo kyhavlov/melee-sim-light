@@ -95,17 +95,45 @@ typedef struct MslStateSoA {
   float* floor_sweep_seed_prev_pos_x;
   float* floor_sweep_seed_prev_pos_y;
   uint8_t* floor_sweep_seed_prev_valid;
-  // Hidden CollData ECB-bottom lifetime state. Source mpColl keeps current, prev, and desired ECB
-  // points across `mpColl_LoadECB_inline` / `mpCollInterpolateECB`; floor sweeps consume these
-  // bottom offsets rather than resampling every endpoint from the visible action row.
+  // Hidden CollData ECB lifetime state. Source mpColl keeps current, prev, and desired ECB points
+  // across `mpColl_LoadECB_inline` / `mpCollInterpolateECB`; floor sweeps consume this hidden
+  // lifetime rather than resampling every endpoint from the visible action row.
   // refs/melee/src/melee/mp/mpcoll.c::{
   //   mpColl_LoadECB_inline,mpCollInterpolateECB,mpColl_80043754}
   float* coll_ecb_bottom_rel_y;
+  float* coll_ecb_top_rel_y;
+  float* coll_ecb_left_rel_x;
+  float* coll_ecb_right_rel_x;
+  float* coll_ecb_side_rel_y;
   float* coll_prev_ecb_bottom_rel_y;
+  float* coll_prev_ecb_top_rel_y;
+  float* coll_prev_ecb_left_rel_x;
+  float* coll_prev_ecb_right_rel_x;
+  float* coll_prev_ecb_side_rel_y;
   float* coll_desired_ecb_bottom_rel_y;
+  float* coll_desired_ecb_top_rel_y;
+  float* coll_desired_ecb_left_rel_x;
+  float* coll_desired_ecb_right_rel_x;
+  float* coll_desired_ecb_side_rel_y;
   uint8_t* coll_ecb_bottom_valid;
   uint8_t* coll_prev_ecb_bottom_valid;
   uint8_t* coll_desired_ecb_bottom_valid;
+  // Callback-local floor result scratch from the latest mpColl-shaped map callback. Source
+  // `mpColl_80043754` owns this as per-callback state: it interpolates ECB/root substeps, calls a
+  // floor helper, then the wrapper callback consumes the result immediately.
+  // refs/melee/src/melee/mp/mpcoll.c::{
+  //   mpColl_80043754,mpColl_8004A908_Floor,mpColl_80044628_Floor}
+  uint8_t* coll_floor_result_valid;
+  uint8_t* coll_floor_result_source;
+  uint16_t* coll_floor_result_segment_id;
+  float* coll_floor_result_contact_x;
+  float* coll_floor_result_contact_y;
+  float* coll_floor_result_normal_x;
+  float* coll_floor_result_normal_y;
+  float* coll_substep_prev_pos_x;
+  float* coll_substep_prev_pos_y;
+  float* coll_substep_cur_pos_x;
+  float* coll_substep_cur_pos_y;
   // Collision-stage prev/cur position snapshots used for mpColl-shaped ledge-grab AABB checks.
   //
   // Decomp: the ledge-grab block consumes CollData.prev_pos / CollData.cur_pos as managed inside

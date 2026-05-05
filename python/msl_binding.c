@@ -2899,6 +2899,39 @@ static PyObject* msl_debug_write_collision_contacts(PyObject* self, PyObject* ar
   Py_RETURN_NONE;
 }
 
+static PyObject* msl_debug_write_colldata_ecb(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  PyObject* out_obj = NULL;
+  if (!PyArg_ParseTuple(args, "OO", &handle_obj, &out_obj)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+
+  PyArrayObject* out = require_contiguous_array(out_obj, NPY_UINT8, 2, "out");
+  if (out == NULL) {
+    return NULL;
+  }
+  if (PyArray_DIM(out, 1) < (npy_intp)sizeof(MslDebugCollDataEcb)) {
+    PyErr_SetString(PyExc_ValueError, "out second dim too small for MslDebugCollDataEcb");
+    return NULL;
+  }
+
+  uint8_t* out_bytes = (uint8_t*)PyArray_DATA(out);
+  const size_t stride = (size_t)PyArray_STRIDE(out, 0);
+
+  const int err = msl_batch_debug_write_colldata_ecb(h->batch, out_bytes, stride);
+  if (err != 0) {
+    PyErr_Format(PyExc_RuntimeError, "msl_batch_debug_write_colldata_ecb failed: %d", err);
+    return NULL;
+  }
+
+  Py_RETURN_NONE;
+}
+
 static PyObject* msl_debug_force_anim_timebase_enter(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* handle_obj = NULL;
@@ -2927,12 +2960,13 @@ static PyObject* msl_sizes(PyObject* self, PyObject* args) {
   (void)self;
   (void)args;
   return Py_BuildValue(
-      "{s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:i}", "seed", (int)sizeof(MslSeed), "match_config",
-      (int)sizeof(MslMatchConfig), "input", (int)sizeof(MslInput), "compare",
+      "{s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:i}", "seed", (int)sizeof(MslSeed),
+      "match_config", (int)sizeof(MslMatchConfig), "input", (int)sizeof(MslInput), "compare",
       (int)sizeof(MslCompare), "sample", (int)sizeof(MslSample), "rl_observation",
       (int)sizeof(MslRlObservation), "terminal", (int)sizeof(MslTerminal), "processed_input",
       (int)sizeof(MslProcessedInput), "stage_state", (int)sizeof(MslDebugStageState), "internals",
-      (int)sizeof(MslDebugInternals), "collision_contacts", (int)sizeof(MslDebugCollisionContacts));
+      (int)sizeof(MslDebugInternals), "collision_contacts", (int)sizeof(MslDebugCollisionContacts),
+      "colldata_ecb", (int)sizeof(MslDebugCollDataEcb));
 }
 
 static PyObject* msl_alloc_reset(PyObject* self, PyObject* args) {
@@ -5036,6 +5070,8 @@ static PyMethodDef methods[] = {
      "debug_write_internals(handle, out_bytes)"},
     {"debug_write_collision_contacts", msl_debug_write_collision_contacts, METH_VARARGS,
      "debug_write_collision_contacts(handle, out_bytes)"},
+    {"debug_write_colldata_ecb", msl_debug_write_colldata_ecb, METH_VARARGS,
+     "debug_write_colldata_ecb(handle, out_bytes)"},
     {"debug_force_anim_timebase_enter", msl_debug_force_anim_timebase_enter, METH_VARARGS,
      "debug_force_anim_timebase_enter(handle, batch_index, player_index, anim_start, anim_speed)"},
     {"debug_timebase", msl_debug_timebase_py, METH_VARARGS,

@@ -72,6 +72,12 @@ static const float k_floor_edge_wall_probe_y_offset = 1.0f;
 // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80042384,mpColl_LoadECB_JObj}
 static const float k_ecb_vertical_unit = 1.0f;
 
+enum {
+  MSL_MPCOLL_FLOOR_RESULT_NONE = 0u,
+  MSL_MPCOLL_FLOOR_RESULT_DIRECT = 1u,
+  MSL_MPCOLL_FLOOR_RESULT_GROUNDED_4A908_RETRY = 2u,
+};
+
 static inline float cross2(float ax, float ay, float bx, float by) { return ax * by - ay * bx; }
 
 static inline uint8_t is_cliff_hold_action(uint16_t a) {
@@ -344,10 +350,6 @@ static inline float mpcoll_pose_ecb_bottom_rel_y(uint8_t char_id, uint32_t anim,
   return msl_ecb_bottom_rel_y(char_id, anim, (int)frame_u16);
 }
 
-static inline float mpcoll_state_ecb_rel_or(float rel, uint8_t valid, float fallback) {
-  return (valid && isfinite(rel)) ? rel : fallback;
-}
-
 static inline void mpcoll_bottom_world_point_from_rel(MslEcbBottomWorldPoint* out, float pos_x,
                                                       float pos_y, float rel_y,
                                                       uint16_t frame_u16) {
@@ -358,6 +360,109 @@ static inline void mpcoll_bottom_world_point_from_rel(MslEcbBottomWorldPoint* ou
   out->y = pos_y + rel_y;
   out->rel_y = rel_y;
   out->frame_u16 = frame_u16;
+}
+
+static inline void mpcoll_ecb_world_points_from_rel(MslEcbWorldPoints* out, float pos_x,
+                                                    float pos_y, float bottom_rel_y,
+                                                    float top_rel_y, float left_rel_x,
+                                                    float right_rel_x, float side_rel_y,
+                                                    uint16_t frame_u16) {
+  if (out == NULL) {
+    return;
+  }
+  out->bottom_rel_y = bottom_rel_y;
+  out->top_rel_y = top_rel_y;
+  out->left_rel_x = left_rel_x;
+  out->right_rel_x = right_rel_x;
+  out->side_rel_y = side_rel_y;
+  out->frame_u16 = frame_u16;
+  out->bottom_x = pos_x;
+  out->bottom_y = pos_y + bottom_rel_y;
+  out->top_x = pos_x;
+  out->top_y = pos_y + top_rel_y;
+  out->left_x = pos_x + left_rel_x;
+  out->left_y = pos_y + side_rel_y;
+  out->right_x = pos_x + right_rel_x;
+  out->right_y = pos_y + side_rel_y;
+}
+
+static inline uint8_t mpcoll_rel_ecb_is_finite(float bottom_rel_y, float top_rel_y,
+                                               float left_rel_x, float right_rel_x,
+                                               float side_rel_y) {
+  return (uint8_t)(isfinite(bottom_rel_y) && isfinite(top_rel_y) && isfinite(left_rel_x) &&
+                   isfinite(right_rel_x) && isfinite(side_rel_y));
+}
+
+static inline uint8_t mpcoll_state_current_ecb_points(const MslBatch* batch, size_t idx,
+                                                      MslEcbWorldPoints* out, float pos_x,
+                                                      float pos_y, uint16_t frame_u16) {
+  const float bottom_rel_y = batch->state.coll_ecb_bottom_rel_y[idx];
+  const float top_rel_y = batch->state.coll_ecb_top_rel_y[idx];
+  const float left_rel_x = batch->state.coll_ecb_left_rel_x[idx];
+  const float right_rel_x = batch->state.coll_ecb_right_rel_x[idx];
+  const float side_rel_y = batch->state.coll_ecb_side_rel_y[idx];
+  if (!batch->state.coll_ecb_bottom_valid[idx] ||
+      !mpcoll_rel_ecb_is_finite(bottom_rel_y, top_rel_y, left_rel_x, right_rel_x, side_rel_y)) {
+    return 0u;
+  }
+  mpcoll_ecb_world_points_from_rel(out, pos_x, pos_y, bottom_rel_y, top_rel_y, left_rel_x,
+                                   right_rel_x, side_rel_y, frame_u16);
+  return 1u;
+}
+
+static inline void mpcoll_store_current_ecb_points(MslBatch* batch, size_t idx,
+                                                   const MslEcbWorldPoints* ecb) {
+  batch->state.coll_ecb_bottom_rel_y[idx] = ecb->bottom_rel_y;
+  batch->state.coll_ecb_top_rel_y[idx] = ecb->top_rel_y;
+  batch->state.coll_ecb_left_rel_x[idx] = ecb->left_rel_x;
+  batch->state.coll_ecb_right_rel_x[idx] = ecb->right_rel_x;
+  batch->state.coll_ecb_side_rel_y[idx] = ecb->side_rel_y;
+}
+
+static inline void mpcoll_store_prev_ecb_points(MslBatch* batch, size_t idx,
+                                                const MslEcbWorldPoints* ecb) {
+  batch->state.coll_prev_ecb_bottom_rel_y[idx] = ecb->bottom_rel_y;
+  batch->state.coll_prev_ecb_top_rel_y[idx] = ecb->top_rel_y;
+  batch->state.coll_prev_ecb_left_rel_x[idx] = ecb->left_rel_x;
+  batch->state.coll_prev_ecb_right_rel_x[idx] = ecb->right_rel_x;
+  batch->state.coll_prev_ecb_side_rel_y[idx] = ecb->side_rel_y;
+}
+
+static inline void mpcoll_store_desired_ecb_points(MslBatch* batch, size_t idx,
+                                                   const MslEcbWorldPoints* ecb) {
+  batch->state.coll_desired_ecb_bottom_rel_y[idx] = ecb->bottom_rel_y;
+  batch->state.coll_desired_ecb_top_rel_y[idx] = ecb->top_rel_y;
+  batch->state.coll_desired_ecb_left_rel_x[idx] = ecb->left_rel_x;
+  batch->state.coll_desired_ecb_right_rel_x[idx] = ecb->right_rel_x;
+  batch->state.coll_desired_ecb_side_rel_y[idx] = ecb->side_rel_y;
+}
+
+static inline void mpcoll_clear_callback_floor_result(MslBatch* batch, size_t idx, float prev_x,
+                                                      float prev_y, float cur_x, float cur_y) {
+  batch->state.coll_floor_result_valid[idx] = 0u;
+  batch->state.coll_floor_result_source[idx] = (uint8_t)MSL_MPCOLL_FLOOR_RESULT_NONE;
+  batch->state.coll_floor_result_segment_id[idx] = 0xFFFFu;
+  batch->state.coll_floor_result_contact_x[idx] = 0.0f;
+  batch->state.coll_floor_result_contact_y[idx] = 0.0f;
+  batch->state.coll_floor_result_normal_x[idx] = 0.0f;
+  batch->state.coll_floor_result_normal_y[idx] = 1.0f;
+  batch->state.coll_substep_prev_pos_x[idx] = prev_x;
+  batch->state.coll_substep_prev_pos_y[idx] = prev_y;
+  batch->state.coll_substep_cur_pos_x[idx] = cur_x;
+  batch->state.coll_substep_cur_pos_y[idx] = cur_y;
+}
+
+static inline void mpcoll_record_callback_floor_result(MslBatch* batch, size_t idx, uint8_t source,
+                                                       uint16_t segment_id, float contact_x,
+                                                       float contact_y, float normal_x,
+                                                       float normal_y) {
+  batch->state.coll_floor_result_valid[idx] = 1u;
+  batch->state.coll_floor_result_source[idx] = source;
+  batch->state.coll_floor_result_segment_id[idx] = segment_id;
+  batch->state.coll_floor_result_contact_x[idx] = contact_x;
+  batch->state.coll_floor_result_contact_y[idx] = contact_y;
+  batch->state.coll_floor_result_normal_x[idx] = normal_x;
+  batch->state.coll_floor_result_normal_y[idx] = normal_y;
 }
 
 static inline uint8_t action_allows_floor_edge_snap(uint16_t a) {
@@ -1663,6 +1768,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag
       const float prev_x = batch->state.floor_sweep_prev_pos_x[idx];
       const float prev_y = batch->state.floor_sweep_prev_pos_y[idx];
+      mpcoll_clear_callback_floor_result(batch, idx, prev_x, prev_y, x, y);
 
       // ECB bottom point for floor collision.
       // Decomp: mpLib_8004DD90_Floor and mpCheckFloor consume the ECB bottom point.
@@ -1739,6 +1845,10 @@ void mpcoll_ground_apply(MslBatch* batch) {
           lock_bottom_to_prev_frame ? ecb_frame_prev : ecb_frame_bias_next;
       const float desired_ecb_rel =
           mpcoll_pose_ecb_bottom_rel_y(char_id, anim, ecb_frame_cur, lock_bottom_to_zero);
+      const float facing_dir_for_ecb = batch->state.facing[idx] ? 1.0f : -1.0f;
+      MslEcbWorldPoints desired_ecb_points = {0};
+      msl_ecb_world_points_sample(&desired_ecb_points, char_id, anim, ecb_frame_cur,
+                                  facing_dir_for_ecb, x, y, lock_bottom_to_zero);
       const uint8_t escapeair_jumpaerial_entry =
           (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR && prev_action_id != action_id &&
            (batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
@@ -1753,9 +1863,11 @@ void mpcoll_ground_apply(MslBatch* batch) {
       const uint8_t use_hidden_ecb_lifetime = escapeair_jumpaerial_prev_ecb_lifetime;
       const float pose_prev_ecb_rel =
           mpcoll_pose_ecb_bottom_rel_y(char_id, anim, ecb_frame_prev, lock_bottom_to_zero);
+      MslEcbWorldPoints state_cur_ecb_points = {0};
+      const uint8_t have_state_cur_ecb = mpcoll_state_current_ecb_points(
+          batch, idx, &state_cur_ecb_points, prev_x, prev_y, ecb_frame_prev);
       const float state_cur_ecb_rel =
-          mpcoll_state_ecb_rel_or(batch->state.coll_ecb_bottom_rel_y[idx],
-                                  batch->state.coll_ecb_bottom_valid[idx], pose_prev_ecb_rel);
+          have_state_cur_ecb ? state_cur_ecb_points.bottom_rel_y : pose_prev_ecb_rel;
       const float prev_ecb_rel =
           (use_hidden_ecb_lifetime && !lock_bottom_to_zero) ? state_cur_ecb_rel : pose_prev_ecb_rel;
       // CollData ECB lifetime substrate:
@@ -1763,7 +1875,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
       //   desired.bottom while CollData_X130_Locked is set.
       // - mpCollInterpolateECB first copies current ecb into prev_ecb, then moves ecb toward
       //   desired_ecb for the callback substep.
-      // Runtime carries those three bottom offsets explicitly so EscapeAir/Fall/Jump callbacks ask
+      // Runtime carries those three ECB point sets explicitly so EscapeAir/Fall/Jump callbacks ask
       // the same collision substrate instead of resampling previous motion rows locally.
       // refs/melee/src/melee/mp/mpcoll.c::{
       //   mpColl_LoadECB_inline,mpCollInterpolateECB,mpColl_80043754}
@@ -1781,13 +1893,14 @@ void mpcoll_ground_apply(MslBatch* batch) {
       float cur_bottom_y = cur_bot.y;
       const float prev_bottom_x = prev_bot.x;
       const float prev_bottom_y = prev_bot.y;
-      const float facing_dir_for_ecb = batch->state.facing[idx] ? 1.0f : -1.0f;
-      MslEcbWorldPoints cur_ecb_points = {0};
-      msl_ecb_world_points_sample(&cur_ecb_points, char_id, anim, ecb_frame_cur, facing_dir_for_ecb,
-                                  x, y, lock_bottom_to_zero);
+      MslEcbWorldPoints cur_ecb_points = desired_ecb_points;
       MslEcbWorldPoints prev_ecb_points = {0};
-      msl_ecb_world_points_sample(&prev_ecb_points, char_id, anim, ecb_frame_prev,
-                                  facing_dir_for_ecb, prev_x, prev_y, was_grounded);
+      if (use_hidden_ecb_lifetime && have_state_cur_ecb) {
+        prev_ecb_points = state_cur_ecb_points;
+      } else {
+        msl_ecb_world_points_sample(&prev_ecb_points, char_id, anim, ecb_frame_prev,
+                                    facing_dir_for_ecb, prev_x, prev_y, was_grounded);
+      }
       const float prev_side_mid_y = prev_y + (0.5f * (prev_ecb_points.top_rel_y + prev_ecb_rel));
 
       // Collision env flags (subset) for Parity Project #2 (ledge grab mask parity).
@@ -3098,6 +3211,14 @@ void mpcoll_ground_apply(MslBatch* batch) {
                               prev_bottom_y, prev_side_mid_y, cur_bottom_x, cur_bottom_y,
                               skip_platform_segment_i, &ground_id, &contact_x, &contact_y,
                               &floor_nx, &floor_ny)) {
+          // Retained source consumer: the grounded inline2 callback consumes the local
+          // mpColl_8004A908_Floor retry result after ordinary floor/edge/ceiling passes fail.
+          // Store the result in CollData-shaped callback scratch, then let the shared final
+          // grounded writeback consume that scratch below.
+          // refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004ACE4,mpColl_8004A908_Floor}
+          mpcoll_record_callback_floor_result(batch, idx,
+                                              (uint8_t)MSL_MPCOLL_FLOOR_RESULT_GROUNDED_4A908_RETRY,
+                                              ground_id, contact_x, contact_y, floor_nx, floor_ny);
           on_ground = 1u;
         }
       }
@@ -3151,8 +3272,28 @@ void mpcoll_ground_apply(MslBatch* batch) {
         }
       }
 
+      if (on_ground && batch->state.coll_floor_result_valid[idx] == 0u) {
+        // Source mpColl keeps the accepted floor result local to the callback before the wrapper
+        // consumes it. Mirror that result for ordinary direct floor hits too; the 4A908 retry above
+        // is the retained source-clear consumer that requires this scratch lane.
+        // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80043754,mpColl_80044628_Floor}
+        mpcoll_record_callback_floor_result(batch, idx, (uint8_t)MSL_MPCOLL_FLOOR_RESULT_DIRECT,
+                                            ground_id, contact_x, contact_y, floor_nx, floor_ny);
+      } else if (!on_ground && batch->state.coll_floor_result_valid[idx] != 0u) {
+        batch->state.coll_floor_result_valid[idx] = 0u;
+        batch->state.coll_floor_result_source[idx] = (uint8_t)MSL_MPCOLL_FLOOR_RESULT_NONE;
+        batch->state.coll_floor_result_segment_id[idx] = 0xFFFFu;
+      }
+
       batch->state.on_ground[idx] = on_ground;
       if (on_ground) {
+        if (batch->state.coll_floor_result_valid[idx] != 0u) {
+          ground_id = batch->state.coll_floor_result_segment_id[idx];
+          contact_x = batch->state.coll_floor_result_contact_x[idx];
+          contact_y = batch->state.coll_floor_result_contact_y[idx];
+          floor_nx = batch->state.coll_floor_result_normal_x[idx];
+          floor_ny = batch->state.coll_floor_result_normal_y[idx];
+        }
         if (action_id == (uint16_t)MSL_ACT_DASH && prev_action_id != (uint16_t)MSL_ACT_DASH &&
             seed_ground_id != 0xFFFFu) {
           // Dash entry floor-index ownership:
@@ -3205,13 +3346,17 @@ void mpcoll_ground_apply(MslBatch* batch) {
         batch->state.ground_contact_x[idx] = 0.0f;
         batch->state.ground_contact_y[idx] = 0.0f;
       }
-      // Promote CollData ECB-bottom lifetime for rollout. Source interpolation copies ecb to
-      // prev_ecb before stepping toward desired_ecb; after this single-step callback pass, carry the
-      // resolved desired bottom as the next current ECB bottom.
+      // Promote CollData ECB lifetime for rollout. Source interpolation copies ecb to prev_ecb
+      // before stepping toward desired_ecb; after this single-step callback pass, carry the resolved
+      // desired ECB as the next current ECB.
       // refs/melee/src/melee/mp/mpcoll.c::mpCollInterpolateECB
-      batch->state.coll_prev_ecb_bottom_rel_y[idx] = state_cur_ecb_rel;
-      batch->state.coll_ecb_bottom_rel_y[idx] = desired_ecb_rel;
-      batch->state.coll_desired_ecb_bottom_rel_y[idx] = desired_ecb_rel;
+      if (have_state_cur_ecb) {
+        mpcoll_store_prev_ecb_points(batch, idx, &state_cur_ecb_points);
+      } else {
+        mpcoll_store_prev_ecb_points(batch, idx, &prev_ecb_points);
+      }
+      mpcoll_store_current_ecb_points(batch, idx, &cur_ecb_points);
+      mpcoll_store_desired_ecb_points(batch, idx, &desired_ecb_points);
       batch->state.coll_prev_ecb_bottom_valid[idx] = 1u;
       batch->state.coll_ecb_bottom_valid[idx] = 1u;
       batch->state.coll_desired_ecb_bottom_valid[idx] = 1u;

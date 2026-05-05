@@ -53,32 +53,61 @@
 #include "grab_attachment.h"
 #include "knockdown.h"
 
-static inline float reseed_ecb_bottom_rel_y(uint8_t char_id, uint32_t anim, float anim_frame_f32,
-                                            uint8_t force_zero) {
-  if (force_zero) {
-    return 0.0f;
-  }
+static inline void reseed_ecb_rel_points_sample(MslEcbWorldPoints* out, uint8_t char_id,
+                                                uint32_t anim, float anim_frame_f32,
+                                                float facing_dir, uint8_t force_zero) {
   const uint16_t frame = msl_ecb_frame_u16_from_anim_frame(anim_frame_f32);
-  return msl_ecb_bottom_rel_y(char_id, anim, (int)frame);
+  msl_ecb_world_points_sample(out, char_id, anim, frame, facing_dir, 0.0f, 0.0f, force_zero);
 }
 
-static inline float reseed_prev_ecb_bottom_rel_y(uint8_t char_id, uint32_t fallback_anim,
-                                                 float fallback_anim_frame_f32,
-                                                 uint16_t seed_prev_action,
-                                                 int16_t seed_prev_action_frame,
-                                                 uint8_t force_zero) {
-  if (force_zero) {
-    return 0.0f;
+static inline void reseed_prev_ecb_rel_points_sample(MslEcbWorldPoints* out, uint8_t char_id,
+                                                     uint32_t fallback_anim,
+                                                     float fallback_anim_frame_f32,
+                                                     float facing_dir, uint16_t seed_prev_action,
+                                                     int16_t seed_prev_action_frame,
+                                                     uint8_t force_zero) {
+  if (out == NULL) {
+    return;
   }
   if (seed_prev_action_frame >= 0) {
     const uint16_t prev_sm = msl_motion_state_submotion_id(char_id, seed_prev_action);
     if (prev_sm != 0xFFFFu) {
       const uint16_t prev_frame = msl_ecb_frame_u16_from_anim_frame((float)seed_prev_action_frame);
-      return msl_ecb_bottom_rel_y(char_id, (uint32_t)prev_sm, (int)prev_frame);
+      msl_ecb_world_points_sample(out, char_id, (uint32_t)prev_sm, prev_frame, facing_dir, 0.0f,
+                                  0.0f, force_zero);
+      return;
     }
   }
   const uint16_t frame = msl_ecb_frame_u16_from_anim_frame(fallback_anim_frame_f32);
-  return msl_ecb_bottom_rel_y(char_id, fallback_anim, (int)msl_ecb_prev_frame_u16(frame));
+  msl_ecb_world_points_sample(out, char_id, fallback_anim, msl_ecb_prev_frame_u16(frame),
+                              facing_dir, 0.0f, 0.0f, force_zero);
+}
+
+static inline void reseed_store_colldata_ecb_current(MslBatch* batch, size_t idx,
+                                                     const MslEcbWorldPoints* ecb) {
+  batch->state.coll_ecb_bottom_rel_y[idx] = ecb->bottom_rel_y;
+  batch->state.coll_ecb_top_rel_y[idx] = ecb->top_rel_y;
+  batch->state.coll_ecb_left_rel_x[idx] = ecb->left_rel_x;
+  batch->state.coll_ecb_right_rel_x[idx] = ecb->right_rel_x;
+  batch->state.coll_ecb_side_rel_y[idx] = ecb->side_rel_y;
+}
+
+static inline void reseed_store_colldata_ecb_prev(MslBatch* batch, size_t idx,
+                                                  const MslEcbWorldPoints* ecb) {
+  batch->state.coll_prev_ecb_bottom_rel_y[idx] = ecb->bottom_rel_y;
+  batch->state.coll_prev_ecb_top_rel_y[idx] = ecb->top_rel_y;
+  batch->state.coll_prev_ecb_left_rel_x[idx] = ecb->left_rel_x;
+  batch->state.coll_prev_ecb_right_rel_x[idx] = ecb->right_rel_x;
+  batch->state.coll_prev_ecb_side_rel_y[idx] = ecb->side_rel_y;
+}
+
+static inline void reseed_store_colldata_ecb_desired(MslBatch* batch, size_t idx,
+                                                     const MslEcbWorldPoints* ecb) {
+  batch->state.coll_desired_ecb_bottom_rel_y[idx] = ecb->bottom_rel_y;
+  batch->state.coll_desired_ecb_top_rel_y[idx] = ecb->top_rel_y;
+  batch->state.coll_desired_ecb_left_rel_x[idx] = ecb->left_rel_x;
+  batch->state.coll_desired_ecb_right_rel_x[idx] = ecb->right_rel_x;
+  batch->state.coll_desired_ecb_side_rel_y[idx] = ecb->side_rel_y;
 }
 
 static inline uint8_t reseed_action_is_damage_or_firefox_launch_victim(uint16_t action) {
@@ -1770,15 +1799,19 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
         const uint8_t force_locked_bottom =
             (seed->on_ground[p] || seed->ecb_lock_timer[p] != 0u) ? 1u : 0u;
-        const float desired_rel =
-            reseed_ecb_bottom_rel_y(batch->state.char_id[idx], batch->state.animation_index[idx],
-                                    seed->anim_frame_f32[p], force_locked_bottom);
-        const float prev_rel = reseed_prev_ecb_bottom_rel_y(
-            batch->state.char_id[idx], batch->state.animation_index[idx], seed->anim_frame_f32[p],
-            seed->seed_prev_action_id[p], seed->seed_prev_action_frame[p], 0u);
-        batch->state.coll_desired_ecb_bottom_rel_y[idx] = desired_rel;
-        batch->state.coll_ecb_bottom_rel_y[idx] = prev_rel;
-        batch->state.coll_prev_ecb_bottom_rel_y[idx] = prev_rel;
+        const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+        MslEcbWorldPoints desired_ecb = {0};
+        MslEcbWorldPoints prev_ecb = {0};
+        reseed_ecb_rel_points_sample(&desired_ecb, batch->state.char_id[idx],
+                                     batch->state.animation_index[idx], seed->anim_frame_f32[p],
+                                     facing_dir, force_locked_bottom);
+        reseed_prev_ecb_rel_points_sample(
+            &prev_ecb, batch->state.char_id[idx], batch->state.animation_index[idx],
+            seed->anim_frame_f32[p], facing_dir, seed->seed_prev_action_id[p],
+            seed->seed_prev_action_frame[p], 0u);
+        reseed_store_colldata_ecb_desired(batch, idx, &desired_ecb);
+        reseed_store_colldata_ecb_current(batch, idx, &prev_ecb);
+        reseed_store_colldata_ecb_prev(batch, idx, &prev_ecb);
         batch->state.coll_desired_ecb_bottom_valid[idx] = 1u;
         batch->state.coll_ecb_bottom_valid[idx] = 1u;
         batch->state.coll_prev_ecb_bottom_valid[idx] = 1u;
@@ -2916,6 +2949,60 @@ int msl_batch_debug_write_collision_contacts(const MslBatch* batch, uint8_t* out
       out->coll_env_flags[p] = batch->state.coll_env_flags[idx];
       out->coll_prev_env_flags[p] = batch->state.coll_prev_env_flags[idx];
       out->damage_hitlag_wall_asdi_latch[p] = batch->state.damage_hitlag_wall_asdi_latch[idx];
+    }
+  }
+  return 0;
+}
+
+int msl_batch_debug_write_colldata_ecb(const MslBatch* batch, uint8_t* out_bytes,
+                                       size_t out_stride_bytes) {
+  if (batch == NULL || out_bytes == NULL) {
+    return EINVAL;
+  }
+  if (out_stride_bytes < sizeof(MslDebugCollDataEcb)) {
+    return EINVAL;
+  }
+
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    uint8_t* ptr = out_bytes + (size_t)bi * out_stride_bytes;
+    MslDebugCollDataEcb* out = (MslDebugCollDataEcb*)ptr;
+    memset(out, 0, sizeof(*out));
+
+    for (int p = 0; p < MSL_MAX_PLAYERS; p++) {
+      const size_t idx = msl_idx_player(bi, p);
+      out->current_valid[p] = batch->state.coll_ecb_bottom_valid[idx];
+      out->prev_valid[p] = batch->state.coll_prev_ecb_bottom_valid[idx];
+      out->desired_valid[p] = batch->state.coll_desired_ecb_bottom_valid[idx];
+      out->floor_result_valid[p] = batch->state.coll_floor_result_valid[idx];
+      out->floor_result_source[p] = batch->state.coll_floor_result_source[idx];
+      out->floor_result_segment_id[p] = batch->state.coll_floor_result_segment_id[idx];
+
+      out->current_bottom_rel_y[p] = batch->state.coll_ecb_bottom_rel_y[idx];
+      out->current_top_rel_y[p] = batch->state.coll_ecb_top_rel_y[idx];
+      out->current_left_rel_x[p] = batch->state.coll_ecb_left_rel_x[idx];
+      out->current_right_rel_x[p] = batch->state.coll_ecb_right_rel_x[idx];
+      out->current_side_rel_y[p] = batch->state.coll_ecb_side_rel_y[idx];
+
+      out->prev_bottom_rel_y[p] = batch->state.coll_prev_ecb_bottom_rel_y[idx];
+      out->prev_top_rel_y[p] = batch->state.coll_prev_ecb_top_rel_y[idx];
+      out->prev_left_rel_x[p] = batch->state.coll_prev_ecb_left_rel_x[idx];
+      out->prev_right_rel_x[p] = batch->state.coll_prev_ecb_right_rel_x[idx];
+      out->prev_side_rel_y[p] = batch->state.coll_prev_ecb_side_rel_y[idx];
+
+      out->desired_bottom_rel_y[p] = batch->state.coll_desired_ecb_bottom_rel_y[idx];
+      out->desired_top_rel_y[p] = batch->state.coll_desired_ecb_top_rel_y[idx];
+      out->desired_left_rel_x[p] = batch->state.coll_desired_ecb_left_rel_x[idx];
+      out->desired_right_rel_x[p] = batch->state.coll_desired_ecb_right_rel_x[idx];
+      out->desired_side_rel_y[p] = batch->state.coll_desired_ecb_side_rel_y[idx];
+
+      out->floor_result_contact_x[p] = batch->state.coll_floor_result_contact_x[idx];
+      out->floor_result_contact_y[p] = batch->state.coll_floor_result_contact_y[idx];
+      out->floor_result_normal_x[p] = batch->state.coll_floor_result_normal_x[idx];
+      out->floor_result_normal_y[p] = batch->state.coll_floor_result_normal_y[idx];
+      out->substep_prev_pos_x[p] = batch->state.coll_substep_prev_pos_x[idx];
+      out->substep_prev_pos_y[p] = batch->state.coll_substep_prev_pos_y[idx];
+      out->substep_cur_pos_x[p] = batch->state.coll_substep_cur_pos_x[idx];
+      out->substep_cur_pos_y[p] = batch->state.coll_substep_cur_pos_y[idx];
     }
   }
   return 0;

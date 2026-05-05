@@ -1594,6 +1594,45 @@ typedef struct MslDebugCollisionContacts {
   uint8_t damage_hitlag_wall_asdi_latch[MSL_MAX_PLAYERS];
 } MslDebugCollisionContacts;
 
+// Debug/test-only helper: write hidden CollData ECB and callback-local floor result state.
+typedef struct MslDebugCollDataEcb {
+  uint8_t current_valid[MSL_MAX_PLAYERS];
+  uint8_t prev_valid[MSL_MAX_PLAYERS];
+  uint8_t desired_valid[MSL_MAX_PLAYERS];
+  uint8_t floor_result_valid[MSL_MAX_PLAYERS];
+  uint8_t floor_result_source[MSL_MAX_PLAYERS];
+  uint8_t _pad0[3 * MSL_MAX_PLAYERS];
+
+  uint16_t floor_result_segment_id[MSL_MAX_PLAYERS];
+
+  float current_bottom_rel_y[MSL_MAX_PLAYERS];
+  float current_top_rel_y[MSL_MAX_PLAYERS];
+  float current_left_rel_x[MSL_MAX_PLAYERS];
+  float current_right_rel_x[MSL_MAX_PLAYERS];
+  float current_side_rel_y[MSL_MAX_PLAYERS];
+
+  float prev_bottom_rel_y[MSL_MAX_PLAYERS];
+  float prev_top_rel_y[MSL_MAX_PLAYERS];
+  float prev_left_rel_x[MSL_MAX_PLAYERS];
+  float prev_right_rel_x[MSL_MAX_PLAYERS];
+  float prev_side_rel_y[MSL_MAX_PLAYERS];
+
+  float desired_bottom_rel_y[MSL_MAX_PLAYERS];
+  float desired_top_rel_y[MSL_MAX_PLAYERS];
+  float desired_left_rel_x[MSL_MAX_PLAYERS];
+  float desired_right_rel_x[MSL_MAX_PLAYERS];
+  float desired_side_rel_y[MSL_MAX_PLAYERS];
+
+  float floor_result_contact_x[MSL_MAX_PLAYERS];
+  float floor_result_contact_y[MSL_MAX_PLAYERS];
+  float floor_result_normal_x[MSL_MAX_PLAYERS];
+  float floor_result_normal_y[MSL_MAX_PLAYERS];
+  float substep_prev_pos_x[MSL_MAX_PLAYERS];
+  float substep_prev_pos_y[MSL_MAX_PLAYERS];
+  float substep_cur_pos_x[MSL_MAX_PLAYERS];
+  float substep_cur_pos_y[MSL_MAX_PLAYERS];
+} MslDebugCollDataEcb;
+
 // Debug/validation helper: record a single hitbox-vs-hurtcap contact candidate.
 // This is a compact snapshot of the world-space primitives used in combat pass 1.
 typedef struct MslDebugCombatContact {
@@ -2007,6 +2046,10 @@ int msl_batch_debug_write_internals(const MslBatch* batch, uint8_t* out_bytes,
 // out_stride_bytes must be >= sizeof(MslDebugCollisionContacts).
 int msl_batch_debug_write_collision_contacts(const MslBatch* batch, uint8_t* out_bytes,
                                              size_t out_stride_bytes);
+// Debug/test-only helper: write CollData ECB/callback-local floor result state.
+// out_stride_bytes must be >= sizeof(MslDebugCollDataEcb).
+int msl_batch_debug_write_colldata_ecb(const MslBatch* batch, uint8_t* out_bytes,
+                                       size_t out_stride_bytes);
 
 // Debug/validation helper: force an animation timebase reset for a single fighter without
 // changing action_id (test-only). This is useful to validate that mechanics keyed to action
