@@ -248,25 +248,25 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:1567
 
 == datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.msl ==
 rollout.best_len: 719
-rollout.streak_count: 101
-rollout.streak_len.median: 76
-rollout.streak_len.p90: 284
-rollout.streak_len.p95: 348
+rollout.streak_count: 99
+rollout.streak_len.median: 78
+rollout.streak_len.p90: 295
+rollout.streak_len.p95: 366
 rollout.streak_len.max: 719
-rollout.first_mismatch_total: 110
-rollout.first_mismatch_seeded_total: 77
+rollout.first_mismatch_total: 108
+rollout.first_mismatch_seeded_total: 75
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:3278
 rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:1
 
 == datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.msl ==
 rollout.best_len: 518
-rollout.streak_count: 109
-rollout.streak_len.median: 91
-rollout.streak_len.p90: 227
+rollout.streak_count: 108
+rollout.streak_len.median: 84
+rollout.streak_len.p90: 228
 rollout.streak_len.p95: 335
 rollout.streak_len.max: 518
-rollout.first_mismatch_total: 118
-rollout.first_mismatch_seeded_total: 68
+rollout.first_mismatch_total: 117
+rollout.first_mismatch_seeded_total: 67
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:1722
 rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:1
 
@@ -310,8 +310,8 @@ rollout.streak_len.median: 77
 rollout.streak_len.p90: 241
 rollout.streak_len.p95: 362
 rollout.streak_len.max: 499
-rollout.first_mismatch_total: 93
-rollout.first_mismatch_seeded_total: 68
+rollout.first_mismatch_total: 92
+rollout.first_mismatch_seeded_total: 67
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:1401
 rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:1
 
@@ -328,36 +328,36 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:5
 
 == datasets/aggregate_recent/replays/validation/yoshis_story_recent/LawfulInsistentMeerkat.msl ==
 rollout.best_len: 687
-rollout.streak_count: 36
-rollout.streak_len.median: 74
+rollout.streak_count: 35
+rollout.streak_len.median: 80
 rollout.streak_len.p90: 514
 rollout.streak_len.p95: 544
 rollout.streak_len.max: 687
-rollout.first_mismatch_total: 43
-rollout.first_mismatch_seeded_total: 24
+rollout.first_mismatch_total: 42
+rollout.first_mismatch_seeded_total: 23
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:2353
 rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:1
 
 == datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl ==
 rollout.best_len: 1047
-rollout.streak_count: 72
-rollout.streak_len.median: 66
+rollout.streak_count: 71
+rollout.streak_len.median: 71
 rollout.streak_len.p90: 302
 rollout.streak_len.p95: 390
 rollout.streak_len.max: 1047
-rollout.first_mismatch_total: 96
-rollout.first_mismatch_seeded_total: 76
+rollout.first_mismatch_total: 95
+rollout.first_mismatch_seeded_total: 75
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:1613
 rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:1
 
 == suite summary ==
-overall.rollout.streak_count: 1213
-overall.rollout.streak_len.median: 134
+overall.rollout.streak_count: 1208
+overall.rollout.streak_len.median: 136
 overall.rollout.streak_len.p90: 566
 overall.rollout.streak_len.p95: 774
 overall.rollout.streak_len.max: 2427
 overall.rollout.best_len.max: 2427
-overall.rollout.first_mismatch_total: 1300
-overall.rollout.first_mismatch_seeded_total: 725
+overall.rollout.first_mismatch_total: 1294
+overall.rollout.first_mismatch_seeded_total: 719
 overall.rollout.ignored_first_mismatch_top: state_flags[4]&0x80:55048
 overall.rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:7

@@ -2414,8 +2414,17 @@ void mpcoll_ground_apply(MslBatch* batch) {
              batch->state.pos_y[idx] < k_floor_y_bias)
                 ? 1u
                 : 0u;
-        if (!on_ground && escapeair_locked && ecb_lock_timer >= 4u &&
-            batch->state.speed_y_self[idx] < 0.0f &&
+        const uint8_t escapeair_jump_platform_root_owner =
+            (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR && ecb_lock_active &&
+             (prev_action_id == (uint16_t)MSL_ACT_JUMP_F ||
+              prev_action_id == (uint16_t)MSL_ACT_JUMP_B ||
+              prev_action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
+              prev_action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_B))
+                ? 1u
+                : 0u;
+        if (!on_ground && escapeair_locked &&
+            (ecb_lock_timer >= 4u || escapeair_jump_platform_root_owner) &&
+            (batch->state.speed_y_self[idx] < 0.0f || escapeair_jump_platform_root_owner) &&
             escapeair_locked_platform_root_projection(
                 batch, idx, bi, g, stage_id, skip_platform_segment_i,
                 msl_ecb_bottom_rel_y(char_id, anim, (int)ecb_frame_cur), &ground_id, &contact_x,
@@ -2586,7 +2595,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
         const uint8_t escapeair_fresh_jumpaerial_entry_lock =
             (escapeair_jumpaerial_entry && ecb_lock_active &&
              batch->state.seed_prev_action_frame[idx] >= 2 &&
-             batch->state.seed_prev_action_frame[idx] <= 3)
+             batch->state.seed_prev_action_frame[idx] <= 4)
                 ? 1u
                 : 0u;
         // Fresh JumpAerial -> EscapeAir IASA handoff:
@@ -3102,6 +3111,25 @@ void mpcoll_ground_apply(MslBatch* batch) {
                batch->state.action_frame[idx] <= 1)
                   ? 1u
                   : 0u;
+          const uint8_t suppress_locomotion_attackair_entry_platform_land =
+              // Fall IASA can enter AttackAir before Fighter_procMap, but the entry frame still
+              // carries the pre-entry CollData/ECB callback lifetime. Platform contact on that same
+              // callback must not be consumed by a generic floor sweep before the AttackAir_Coll
+              // owner publishes its stable landing result on a later frame.
+              // Keep this to platform/slope contacts and fresh entry frames; hard-floor and
+              // sustained AttackAir landings remain owned by the normal ft_80082C74 path. Jump
+              // family AttackAir entries have a distinct locked-ECB/platform owner and are not part
+              // of this slice.
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_IASA_Inner
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::{
+              //   ftCo_AttackAir_EnterFromMsid,ftCo_AttackAir_Coll}
+              // refs/melee/src/melee/ft/ft_081B.c::ft_80082C74
+              (is_attackair_action(action_id) && batch->state.action_frame[idx] <= 1 &&
+               hit_line_is_platform_or_slope &&
+               (prev_action_id == (uint16_t)MSL_ACT_FALL ||
+                prev_action_id == (uint16_t)MSL_ACT_FALL_AERIAL))
+                  ? 1u
+                  : 0u;
           const uint8_t hit_line_has_platform_transform =
               (hit_line_idx >= 0 && stage_collision_floor_line_has_platform_transform(
                                         stage_id, g->lines[(size_t)hit_line_idx].segment_i))
@@ -3190,6 +3218,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
               escapeair_sustained_floorhug_airborne ||
               escapeair_fresh_horizontal_floorhug_airborne || specialhi_bound_entry_airborne ||
               suppress_damageflyroll_shallow_land || suppress_damageair_attackair_entry_land ||
+              suppress_locomotion_attackair_entry_platform_land ||
               suppress_escapeair_entry_locked_platform_land ||
               suppress_downheld_transformed_platform_land ||
               suppress_platform_damage_upward_kb_land) {
@@ -3212,12 +3241,21 @@ void mpcoll_ground_apply(MslBatch* batch) {
                   // mpLib projection/remap result. FoD can sweep one transformed platform record and
                   // resolve to another; using only the swept line over-admits first-entry air-dodge
                   // rows onto a neighboring platform.
+                  //
+                  // Fresh Jump/JumpAerial -> EscapeAir uses the same callback-local owner as the
+                  // final remap guard below: IASA has entered EscapeAir before Fighter_procMap, and
+                  // the EscapeAir_Coll pass can consume the transformed-platform projection result.
                   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+                  // refs/melee/src/melee/ft/ft_081B.c::ft_80082C74
                   // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
                   (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
                    batch->state.action_frame[idx] <= 4 && resolved_line_has_platform_transform &&
                    (ecb_lock_active || (prev_action_id == action_id &&
-                                        resolved_segment_i != batch->state.ground_id[idx])))
+                                        resolved_segment_i != batch->state.ground_id[idx])) &&
+                   batch->state.seed_prev_action_id[idx] != (uint16_t)MSL_ACT_JUMP_F &&
+                   batch->state.seed_prev_action_id[idx] != (uint16_t)MSL_ACT_JUMP_B &&
+                   batch->state.seed_prev_action_id[idx] != (uint16_t)MSL_ACT_JUMP_AERIAL_F &&
+                   batch->state.seed_prev_action_id[idx] != (uint16_t)MSL_ACT_JUMP_AERIAL_B)
                       ? 1u
                       : 0u;
               const uint8_t suppress_projected_specialhi_transformed_platform_land =
@@ -3423,10 +3461,22 @@ void mpcoll_ground_apply(MslBatch* batch) {
             // remapped line id. EscapeAir's locked entry frames should not convert to
             // LandingFallSpecial when the accepted transformed platform differs from the carried
             // CollData.floor.index.
+            //
+            // Fresh Jump/JumpAerial -> EscapeAir rows are the exception: IASA has changed the
+            // motion state before Fighter_procMap, and the same EscapeAir_Coll callback has already
+            // accepted the transformed-platform floor result. Do not discard that callback-local
+            // result only because mpLib_8004DD90_Floor remapped the line across FoD's platform
+            // graph.
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+            // refs/melee/src/melee/ft/ft_081B.c::ft_80082C74
             // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+            // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80043754,mpColl_80044838_Floor}
             (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR && batch->state.action_frame[idx] <= 4 &&
-             resolved_line_has_platform_transform && ground_id != batch->state.ground_id[idx])
+             resolved_line_has_platform_transform && ground_id != batch->state.ground_id[idx] &&
+             batch->state.seed_prev_action_id[idx] != (uint16_t)MSL_ACT_JUMP_F &&
+             batch->state.seed_prev_action_id[idx] != (uint16_t)MSL_ACT_JUMP_B &&
+             batch->state.seed_prev_action_id[idx] != (uint16_t)MSL_ACT_JUMP_AERIAL_F &&
+             batch->state.seed_prev_action_id[idx] != (uint16_t)MSL_ACT_JUMP_AERIAL_B)
                 ? 1u
                 : 0u;
         const uint8_t suppress_specialhi_transformed_platform_land =
