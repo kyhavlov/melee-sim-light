@@ -129,3 +129,33 @@ def test_fd_cardinal_attackair_fastfall_latch_non_regression_lock() -> None:
     _, ref_row, out_row = _run_one_step_row(dataset_path, record, p)
     assert int(out_row["state_flags"][p][1]) & 0x08 == 0x08
     assert float(out_row["speed_y_self"][p]) == pytest.approx(float(ref_row["speed_y_self"][p]))
+
+
+@pytest.mark.integration
+def test_pass_to_attackair_keeps_floor_skip_for_same_callback_replay_real_lock() -> None:
+    # Pass -> AttackAir same-frame floor-skip lifetime:
+    # Pass_IASA can enter AttackAir before the map callback, while the source collision callback
+    # still observes the platform-pass floor_skip written by ftCo_8009A228/mpUpdateFloorSkip.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::{ftCo_8009A228,ftCo_Pass_IASA}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
+    # refs/melee/src/melee/mp/mpcoll.c::{mpUpdateFloorSkip,mpColl_80044628_Floor}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = f"{_AGG_VALID}/fountain_of_dreams_recent/ElatedWearyTermite.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    record = 2537
+    p = 0
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record]
+    assert int(row["seed_t"]["action_id"][p]) == 244  # Pass
+    assert int(row["seed_t"]["action_frame"][p]) == 0
+    assert int(row["ref_t1"]["action_id"][p]) == 67  # AttackAirB
+    assert int(row["ref_t1"]["on_ground"][p]) == 0
+
+    _, ref_row, out_row = _run_one_step_row(dataset_path, record, p)
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+        assert int(out_row[field][p]) == int(ref_row[field][p]), field
+    assert float(out_row["pos_y"][p]) == pytest.approx(float(ref_row["pos_y"][p]), abs=1e-6)

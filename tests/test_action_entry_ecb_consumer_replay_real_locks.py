@@ -15,6 +15,7 @@ ACT_ATTACK_AIR_B = 67
 ACT_WAIT = 14
 ACT_JUMP_F = 25
 ACT_JUMP_AERIAL_F = 27
+ACT_JUMP_AERIAL_B = 28
 
 
 def _run_one_step(ds, record: int, *, seed_mutator=None) -> np.void:
@@ -170,3 +171,53 @@ def test_mutated_jumpf_provenance_does_not_consume_jumpaerial_ecb_landing() -> N
     assert int(out["action_id"][p]) == ACT_ATTACK_AIR_LW
     assert int(out["on_ground"][p]) == 0
     assert int(out["ground_id"][p]) == 4
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "p", "act"),
+    [
+        (
+            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+            "ElatedWearyTermite.msl",
+            6745,
+            1,
+            ACT_JUMP_AERIAL_F,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+            "ParallelTemptingElk.msl",
+            1332,
+            0,
+            ACT_JUMP_AERIAL_B,
+        ),
+    ],
+)
+def test_jumpaerial_fastfall_transformed_platform_keeps_callback_local_airborne_result(
+    dataset_rel: str, record: int, p: int, act: int
+) -> None:
+    # Sustained JumpAerial transformed-platform fastfall owner:
+    # JumpAerial_Coll routes through ft_800835B0 -> mpColl_80047E14. On FoD transformed platforms,
+    # the callback-local floor result can observe a platform sweep before the source publishes a
+    # landing handoff, so these same-action fastfall rows remain airborne.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_800835B0
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80043754,mpColl_80047E14}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record]
+    assert int(row["seed_t"]["action_id"][p]) == act
+    assert int(row["seed_t"]["seed_prev_action_id"][p]) == act
+    assert int(row["seed_t"]["fall_fast"][p]) == 1
+    assert int(row["ref_t1"]["action_id"][p]) == act
+    assert int(row["ref_t1"]["on_ground"][p]) == 0
+
+    out = _run_one_step(ds, record)
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+        assert int(out[field][p]) == int(row["ref_t1"][field][p]), field
+    assert float(out["speed_y_self"][p]) == pytest.approx(float(row["ref_t1"]["speed_y_self"][p]))

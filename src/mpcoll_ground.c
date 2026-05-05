@@ -888,6 +888,19 @@ static inline uint16_t platform_floor_skip_segment_id(const MslBatch* batch, siz
     // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpUpdateFloorSkip}
     return ground_id;
   }
+  if (is_attackair_action(action_id) &&
+      batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_PASS &&
+      stage_collision_floor_line_is_platform(stage_id, ground_id)) {
+    // Pass -> AttackAir same-frame floor-skip lifetime:
+    // Pass_IASA can enter AttackAir before the map callback, but the source CollData.floor_skip
+    // written by the platform-pass entry remains the floor callback's local skip owner for that
+    // collision pass. Replay-prefix rows can begin on the first Pass frame before the hidden lane is
+    // serialized, so recover the current platform floor.index for this shared Pass IASA handoff.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::{ftCo_8009A228,ftCo_Pass_IASA}
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
+    // refs/melee/src/melee/mp/mpcoll.c::{mpUpdateFloorSkip,mpColl_80044628_Floor}
+    return ground_id;
+  }
   return 0xFFFFu;
 }
 
@@ -3285,9 +3298,26 @@ void mpcoll_ground_apply(MslBatch* batch) {
              batch->state.action_frame[idx] <= 24)
                 ? 1u
                 : 0u;
+        const uint8_t suppress_jumpaerial_transformed_platform_fastfall_land =
+            // Sustained JumpAerial_Coll uses the same ft_800835B0 -> mpColl_80047E14 callback
+            // family, but transformed-platform fastfall rows can observe a platform sweep before
+            // the callback-local floor result is published as a landing. Keep this to same-action
+            // fastfall rows on transformed platform lines; fresh JumpAerial entry and hard-floor
+            // contacts remain on the normal landing path.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Coll
+            // refs/melee/src/melee/ft/ft_081B.c::ft_800835B0
+            // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80043754,mpColl_80047E14}
+            (resolved_line_has_platform_transform &&
+             (action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
+              action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_B) &&
+             prev_action_id == action_id && batch->state.fall_fast[idx] != 0u &&
+             batch->state.action_frame[idx] >= 25)
+                ? 1u
+                : 0u;
         if (suppress_escapeair_transformed_remap_land ||
             suppress_specialhi_transformed_platform_land ||
-            suppress_jump_transformed_platform_pre_handoff_land) {
+            suppress_jump_transformed_platform_pre_handoff_land ||
+            suppress_jumpaerial_transformed_platform_fastfall_land) {
           on_ground = 0u;
           ground_id = batch->state.ground_id[idx];
           contact_x = cur_bottom_x;

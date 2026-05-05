@@ -16,6 +16,7 @@
 #include "motion_state_owners.h"
 #include "move_tables.h"
 #include "special_msids.h"
+#include "stage_collision.h"
 
 // Character id mapping follows Slippi post-frame `character` (GALE01):
 // - Fox   = 1
@@ -70,6 +71,54 @@ static inline uint8_t action_is_shine_air(uint16_t action_id) {
           action_id <= (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_TURN)
              ? 1
              : 0;
+}
+
+static inline uint8_t shine_ground_start_platform_pass_gate(const MslBatch* batch,
+                                                            const MslCommonParams* c, size_t idx,
+                                                            float stick_y, uint8_t tilt_timer_y) {
+  if (batch == NULL || c == NULL) {
+    return 0u;
+  }
+  const uint32_t stage_id = batch->state.stage_id[idx / (size_t)MSL_MAX_PLAYERS];
+  const uint16_t ground_id = batch->state.ground_id[idx];
+  return (uint8_t)(ground_id != 0xFFFFu &&
+                   stage_collision_floor_line_is_platform(stage_id, ground_id) &&
+                   stick_y <= -c->pass_stick_threshold && tilt_timer_y < c->pass_tilt_max_frames);
+}
+
+static inline void shine_ground_start_platform_pass_enter(MslBatch* batch, const MslCommonParams* c,
+                                                          const MslCharParams* ch, size_t idx,
+                                                          const MslSpecialMsids* ms,
+                                                          float anim_frame_f32) {
+  if (batch == NULL || c == NULL || ch == NULL || ms == NULL) {
+    return;
+  }
+  // Grounded Reflector Start platform-pass IASA:
+  // ftFx_SpecialLwStart_IASA calls ftFx_SpecialLwStart_CheckPass, which delegates to
+  // ftCo_8009A184(..., ftFx_MS_SpecialAirLwStart, ..., cur_anim_frame). That helper runs the
+  // ordinary ground-to-air/platform-pass owner: ftCommon_8007D5D4, ftCommon_ClampAirDrift,
+  // self_vel.y = p_ftCommonData->x46C, Fighter_ChangeMotionState, mpUpdateFloorSkip, and
+  // x671_timer_lstick_tilt_y = 0xFE.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{
+  //   ftFx_SpecialLwStart_IASA,ftFx_SpecialLwStart_CheckPass,ftFx_SpecialLwStart_Pass}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::{ftCo_80099F1C,ftCo_8009A184}
+  // refs/melee/src/melee/mp/mpcoll.c::mpUpdateFloorSkip
+  const uint32_t stage_id = batch->state.stage_id[idx / (size_t)MSL_MAX_PLAYERS];
+  const uint16_t ground_id = batch->state.ground_id[idx];
+  if (batch->state.floor_skip_segment_id != NULL && ground_id != 0xFFFFu &&
+      stage_collision_floor_line_is_platform(stage_id, ground_id)) {
+    batch->state.floor_skip_segment_id[idx] = ground_id;
+  }
+  batch->state.on_ground[idx] = 0u;
+  batch->state.pos_z[idx] = 0.0f;
+  batch->state.ecb_lock_timer[idx] = 10u;
+  batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START;
+  batch->state.animation_index[idx] = (uint32_t)ms->speciallw_air_start;
+  batch->state.speed_ground_x_self[idx] = 0.0f;
+  batch->state.speed_y_self[idx] = c->pass_vel_y;
+  batch->state.jumps_left[idx] = ch->max_jumps > 0u ? (uint8_t)(ch->max_jumps - 1u) : 0u;
+  batch->state.tilt_timer_y[idx] = 0xFEu;
+  msl_anim_timebase_enter(batch, idx, anim_frame_f32, 1.0f);
 }
 
 static inline uint8_t shine_is_dash_flick(const MslCommonParams* c, float stick_x,
@@ -742,6 +791,11 @@ void shine_update_pre_physics(MslBatch* batch) {
               }
               a_work = batch->state.action_id[idx];
               continue;
+            }
+            if (shine_entered_this_frame == 0u && on_ground &&
+                shine_ground_start_platform_pass_gate(batch, c, idx, stick_y, tilt_timer_y)) {
+              shine_ground_start_platform_pass_enter(batch, c, ch, idx, ms, anim_frame_f32);
+              break;
             }
             break;
           case MSL_ACT_FX_SPECIAL_AIR_LW_START:

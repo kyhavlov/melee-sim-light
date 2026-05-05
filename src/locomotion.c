@@ -38,6 +38,8 @@ static inline uint16_t walk_action_from_speed(const MslCommonParams* c, const Ms
 static inline uint32_t anim_for_walk_action(uint16_t a);
 static inline uint8_t is_dash_flick(const MslCommonParams* c, float stick_x, uint8_t tilt_timer_x);
 static inline uint8_t did_tap_jump(const MslCommonParams* c, float stick_y, uint8_t tilt_timer_y);
+static inline uint8_t spacie_speciallw_pressed(const MslCommonParams* c, uint8_t char_id,
+                                               uint16_t buttons_pressed, float stick_y);
 static inline uint8_t jump_enter_pre_input_tilt_y_after_input(const MslCommonParams* c,
                                                               float stick_y, float prev_stick_y);
 static inline MslJumpInput jump_input_from_edges(const MslCommonParams* c, uint16_t buttons_pressed,
@@ -2763,6 +2765,23 @@ static inline uint8_t did_tap_jump(const MslCommonParams* c, float stick_y, uint
   return (stick_y >= c->tap_jump_threshold && tilt_timer_y < c->tap_jump_tilt_max_frames) ? 1 : 0;
 }
 
+static inline uint8_t spacie_speciallw_pressed(const MslCommonParams* c, uint8_t char_id,
+                                               uint16_t buttons_pressed, float stick_y) {
+  // Fox/Falco aerial common IASA checks ftCo_SpecialAir_CheckInput before ftCo_80099A58
+  // (EscapeAir). The simulator's Reflector owner runs after locomotion, so local locomotion IASA
+  // approximations must leave B+down reflector input unconsumed for that later source owner.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_IASA_Inner
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialAirLw_Enter
+  return (c != NULL && shine_char_supports_reflector(char_id) &&
+          (buttons_pressed & (uint16_t)MSL_BUTTON_B) != 0u &&
+          stick_y <= -c->special_stick_y_threshold)
+             ? 1u
+             : 0u;
+}
+
 static inline uint8_t jump_enter_pre_input_tilt_y_after_input(const MslCommonParams* c,
                                                               float stick_y, float prev_stick_y) {
   if (c == NULL) {
@@ -3370,10 +3389,23 @@ void locomotion_update_pre(MslBatch* batch) {
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SquatRv.c::ftCo_SquatRv_IASA
         if (action_id == MSL_ACT_SQUAT || action_id == MSL_ACT_SQUAT_WAIT ||
             action_id == MSL_ACT_SQUAT_RV) {
+          const uint8_t speciallw_preempts_squat_iasa =
+              // Squat/SquatWait IASA checks grounded special dispatch before AttackLw*/AttackS*
+              // branches and before the delayed platform-pass helper. Because this sim runs Shine
+              // entry after locomotion, keep B+down reflector input from being consumed by those local
+              // approximations first.
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_IASA
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D68C0
+              // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLw_Enter
+              (spacie_speciallw_pressed(c, cid, buttons_pressed, stick_y) &&
+               fabsf(stick_x) < c->special_stick_x_threshold_side)
+                  ? 1u
+                  : 0u;
           if (action_id == MSL_ACT_SQUAT &&
               blaster_try_enter_ground_from_wait_iasa(batch, c, idx)) {
             action_id = batch->state.action_id[idx];
-          } else if (grounded_a_attack_try_enter_from_iasa(batch, c, idx, buttons_pressed, stick_x,
+          } else if (!speciallw_preempts_squat_iasa &&
+                     grounded_a_attack_try_enter_from_iasa(batch, c, idx, buttons_pressed, stick_x,
                                                            stick_y, tilt_timer_x, tilt_timer_y,
                                                            facing_dir, 0, 1)) {
             action_id = batch->state.action_id[idx];
@@ -3396,6 +3428,7 @@ void locomotion_update_pre(MslBatch* batch) {
               action_id = (uint16_t)MSL_ACT_KNEE_BEND;
             } else if ((action_id == MSL_ACT_SQUAT || action_id == MSL_ACT_SQUAT_WAIT) &&
                        batch->state.action_frame[idx] > ((int16_t)c->floor_skip_frames + 1) &&
+                       !speciallw_preempts_squat_iasa &&
                        common_pass_input_gate(batch, c, idx, stick_y, tilt_timer_y)) {
               // Squat/SquatWait platform pass:
               // ftCo_80099F9C arms mv.co.pass.x4 with p_ftCommonData->x470, then Squat_Anim
@@ -5410,7 +5443,10 @@ void locomotion_update_pre(MslBatch* batch) {
              action_is_fall_like(action_id) || action_id == (uint16_t)MSL_ACT_PASS)
                 ? 1
                 : 0;
-        if (allow_escape_air && escape_air_try_enter_from_air_locomotion(batch, c, idx)) {
+        const uint8_t speciallw_preempts_escapeair =
+            spacie_speciallw_pressed(c, cid, buttons_pressed, stick_y);
+        if (allow_escape_air && !speciallw_preempts_escapeair &&
+            escape_air_try_enter_from_air_locomotion(batch, c, idx)) {
           continue;
         }
 
