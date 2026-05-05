@@ -231,7 +231,7 @@ rollout.streak_len.p90: 436
 rollout.streak_len.p95: 647
 rollout.streak_len.max: 897
 rollout.first_mismatch_total: 72
-rollout.first_mismatch_seeded_total: 31
+rollout.first_mismatch_seeded_total: 30
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:2598
 rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:2
 
@@ -327,36 +327,36 @@ rollout.first_mismatch_seeded_total: 5
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:5
 
 == datasets/aggregate_recent/replays/validation/yoshis_story_recent/LawfulInsistentMeerkat.msl ==
-rollout.best_len: 604
-rollout.streak_count: 39
-rollout.streak_len.median: 80
-rollout.streak_len.p90: 484
-rollout.streak_len.p95: 525
-rollout.streak_len.max: 604
-rollout.first_mismatch_total: 46
-rollout.first_mismatch_seeded_total: 27
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:1978
+rollout.best_len: 687
+rollout.streak_count: 36
+rollout.streak_len.median: 74
+rollout.streak_len.p90: 514
+rollout.streak_len.p95: 544
+rollout.streak_len.max: 687
+rollout.first_mismatch_total: 43
+rollout.first_mismatch_seeded_total: 24
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:2353
 rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:1
 
 == datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl ==
 rollout.best_len: 1047
-rollout.streak_count: 75
+rollout.streak_count: 74
 rollout.streak_len.median: 66
-rollout.streak_len.p90: 257
-rollout.streak_len.p95: 359
+rollout.streak_len.p90: 296
+rollout.streak_len.p95: 425
 rollout.streak_len.max: 1047
-rollout.first_mismatch_total: 99
-rollout.first_mismatch_seeded_total: 81
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:1392
+rollout.first_mismatch_total: 98
+rollout.first_mismatch_seeded_total: 80
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:1448
 
 == suite summary ==
-overall.rollout.streak_count: 1224
+overall.rollout.streak_count: 1220
 overall.rollout.streak_len.median: 133
 overall.rollout.streak_len.p90: 563
 overall.rollout.streak_len.p95: 772
 overall.rollout.streak_len.max: 2427
 overall.rollout.best_len.max: 2427
-overall.rollout.first_mismatch_total: 1362
-overall.rollout.first_mismatch_seeded_total: 793
-overall.rollout.ignored_first_mismatch_top: state_flags[4]&0x80:54429
+overall.rollout.first_mismatch_total: 1358
+overall.rollout.first_mismatch_seeded_total: 788
+overall.rollout.ignored_first_mismatch_top: state_flags[4]&0x80:54860
 overall.rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:6

@@ -1860,12 +1860,35 @@ void mpcoll_ground_apply(MslBatch* batch) {
            batch->state.pos_y[idx] > k_floor_y_bias)
               ? 1u
               : 0u;
-      const uint8_t use_hidden_ecb_lifetime = escapeair_jumpaerial_prev_ecb_lifetime;
       const float pose_prev_ecb_rel =
           mpcoll_pose_ecb_bottom_rel_y(char_id, anim, ecb_frame_prev, lock_bottom_to_zero);
       MslEcbWorldPoints state_cur_ecb_points = {0};
       const uint8_t have_state_cur_ecb = mpcoll_state_current_ecb_points(
           batch, idx, &state_cur_ecb_points, prev_x, prev_y, ecb_frame_prev);
+      const uint8_t jumpaerial_entry_ecb_consumer =
+          // JumpAerial -> AttackAir/SpecialAirN entry callback-local ECB lifetime:
+          // IASA can enter the aerial attack/special before the map callback, but the source
+          // mpColl pass still promotes the carried JumpAerial CollData.ecb into prev_ecb before
+          // loading/interpolating the entered action's desired ECB. Do not apply this to fresh
+          // JumpF/JumpB -> AttackAir entries; those remain owned by the Jump collision substrate.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::{
+          //   ftCo_JumpAerial_IASA,ftCo_JumpAerial_Coll}
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
+          // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
+          //   ftFx_SpecialAirNStart_Coll,ftFx_SpecialAirNLoop_Coll,ftFx_SpecialAirNEnd_Coll}
+          // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpCollInterpolateECB,mpColl_80043754}
+          ((prev_action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
+            prev_action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_B) &&
+           (is_attackair_action(action_id) ||
+            action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_START ||
+            action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_LOOP ||
+            action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_END))
+              ? 1u
+              : 0u;
+      const uint8_t use_hidden_ecb_lifetime =
+          (have_state_cur_ecb && !lock_bottom_to_zero && jumpaerial_entry_ecb_consumer)
+              ? 1u
+              : escapeair_jumpaerial_prev_ecb_lifetime;
       const float state_cur_ecb_rel =
           have_state_cur_ecb ? state_cur_ecb_points.bottom_rel_y : pose_prev_ecb_rel;
       const float prev_ecb_rel =
