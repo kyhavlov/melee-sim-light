@@ -764,14 +764,15 @@ Characters (Fox/Falco):
     - `refs/melee/src/melee/gr/ground.c::Ground_801C126C`, `Ground_801C2D24`, `Ground_801C39C0`,
       `Ground_801C3BB4`
     - `refs/melee/src/melee/gr/stage.c::Stage_80224E64`, `Stage_80224E38`
-  - Binary layout: `MSLSTG01` v5
+  - Binary layout: `MSLSTG01` v8
     - `u8 magic[8] = "MSLSTG01"`
-    - `u32 version = 5`
+    - `u32 version = 8`
     - `u16 segment_count`, `stage_point_count`, `spawn_count`, `respawn_count`,
       `platform_transform_count`, `platform_transform_record_bytes`, reserved lanes
     - `f32 cam_bounds_world[left,right,top,bottom]`
     - `f32 blast_bounds_world[left,right,top,bottom]`
-    - segment records: `line_id`, `kind_id`, `flags(platform/ledge/fighter_solid)`,
+    - segment records: `line_id`, `kind_id`,
+      `flags(platform/ledge/fighter_solid/stage_object_support_kind)`,
       raw `hi_flags/lo_flags`, raw `MapLine` links `prev_id0/next_id0/prev_id1/next_id1`,
       world-scaled endpoints
       `(x0,y0,x1,y1)` after applying `grGroundParam.x0`
@@ -781,11 +782,13 @@ Characters (Fox/Falco):
       follow `Ground_801C2D24` and fall back to id `4`
     - platform transform records: source line id, transform kind, platform id, source-local X span,
       source-local static Y, and source-backed height coefficient for live moving platform lines
-  - Stale/non-v7 `MSLSTG01` tables must be rejected. Version 3 added the raw `MapLine` graph links
+  - Stale/non-v8 `MSLSTG01` tables must be rejected. Version 3 added the raw `MapLine` graph links
     used by source-shaped `mpLineGetPrev/Next` traversal. Version 4 added generated fighter-solid
     line policy. Version 5 adds source/data-backed platform transform records for live platform
     world endpoints. Version 6 adds binary platform-motion records consumed by the free-running
-    FoD scheduler. Regenerate supported stage artifacts with
+    FoD scheduler. Version 8 adds a generated stage-object support kind in segment flag bits,
+    currently used for Yoshi's Story raw Shy Guy support floor ownership. Regenerate supported
+    stage artifacts with
     `uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba,griz,grps,grst,grop --chars fox,falco`.
   - Supported runtime stage ids: `2` Fountain of Dreams, `3` Pokemon Stadium base, `8` Yoshi's
     Story, `28` Dream Land N64, `31` Battlefield, `32` Final Destination. Static pass-through
@@ -793,14 +796,15 @@ Characters (Fox/Falco):
     gating. FoD moving platform world Y is driven by Slippi's current FoD platform height event
     stream when seeded and by the `grIzumi_801CC358` free-running scheduler for new-match runtime.
     Both paths use MSLSTG01 platform transform records derived from `grIzumi`/stage geometry data.
-    The MSLSTG01 v7 binary platform-motion payload carries
+    The MSLSTG01 v8 binary platform-motion payload carries
     `platform_motion.fountain_platform` constants from `GrIz.dat::yakumono_param`
     (`home_height`, hidden target, min/max, source speed fields, RNG weights, and
     target-delta fields) for causal target selection and target clamping; the generated
     `griz.json` sidecar is audit/provenance only.
     Yoshi's Story adds current-domain stage-object terrain metadata: raw line `0` is
-    debug-visible/non-fighter-solid, and generated line `1000` is Randall's pass-through floor
-    transform record.
+    debug-visible/non-fighter-solid and tagged with `stage_object_support_kind=yoshi_shyguy` for
+    carried CollData support while the Shy Guy controller is live, and generated line `1000` is
+    Randall's pass-through floor transform record.
     Frozen Pokemon Stadium fighter collision uses the generated `fighter_solid` mask for the
     base/frozen legal-stage policy across floor/wall/ceiling collision while keeping
     transformation geometry inspectable through debug and data APIs.

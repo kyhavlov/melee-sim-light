@@ -33,6 +33,7 @@ from tools.slippi.known_data_artifacts import (
     STAGE_MAGIC,
     STAGE_ITEM_OBJECT_MAGIC,
     STAGE_ITEM_OBJECT_VERSION,
+    STAGE_OBJECT_SUPPORT_KIND_YOSHI_SHYGUY,
     STAGE_PLATFORM_MOTION_KIND_FOD,
     STAGE_VERSION,
     read_mslftsc1_v1,
@@ -328,9 +329,12 @@ def test_stage_metadata_contains_yoshi_randall_and_rejects_center_raw_platform()
     by_line = {int(seg.line_id): seg for seg in stage.segments}
     assert int(by_line[0].flags) & 1
     assert by_line[0].fighter_solid is False
+    assert by_line[0].stage_object_support_kind == STAGE_OBJECT_SUPPORT_KIND_YOSHI_SHYGUY
+    assert by_line[1].stage_object_support_kind == 0
     assert 1000 in by_line
     assert int(by_line[1000].flags) & 1
     assert by_line[1000].fighter_solid is True
+    assert by_line[1000].stage_object_support_kind == 0
     transforms = {int(rec.line_id): rec for rec in stage.platform_transforms}
     assert int(transforms[1000].kind_id) == 3
     path = {(int(rec.line_id), int(rec.frame)): rec for rec in stage.platform_paths}

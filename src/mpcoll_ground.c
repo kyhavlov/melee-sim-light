@@ -922,6 +922,35 @@ static inline uint8_t floor_line_is_runtime_fighter_solid(const MslStageFloorGra
                                                              g->lines[(size_t)line_idx].segment_i);
 }
 
+static inline uint8_t carried_floor_line_is_live_yoshi_shyguy_support(const MslBatch* batch, int bi,
+                                                                      const MslStageFloorGraph* g,
+                                                                      uint32_t stage_id,
+                                                                      int line_idx) {
+  if (batch == NULL || g == NULL || line_idx < 0 || (size_t)line_idx >= g->line_count) {
+    return 0u;
+  }
+  const uint16_t segment_i = g->lines[(size_t)line_idx].segment_i;
+  if (stage_collision_floor_line_stage_object_support_kind(stage_id, segment_i) !=
+      (uint8_t)MSL_STAGE_OBJECT_SUPPORT_YOSHI_SHYGUY) {
+    return 0u;
+  }
+  if (floor_line_is_runtime_fighter_solid(g, stage_id, line_idx)) {
+    return 0u;
+  }
+  // Yoshi's Story Shy Guy support line is a generated MSLSTG01 stage-object support owner, not a
+  // general raw-platform predicate. Preserve only the carried current CollData support while the
+  // Heiho/Shy Guy stage-object controller seed lane says that owner is live; new contacts still use
+  // normal fighter-solid floor admission.
+  // data/stages/bin/grst.bin::MSLSTG01 stage_object_support_kind=yoshi_shyguy
+  // refs/melee/src/melee/gr/grstory.c::{reset_shyguy_timer,grStory_801E3418}
+  // refs/melee/src/melee/it/items/itheiho.c::{it_802D8618,it_802D9714,it_802D98C4}
+  // data/stage_items/yoshi_shyguy.json
+  return (batch->state.stage_yoshi_shyguy_valid != NULL &&
+          batch->state.stage_yoshi_shyguy_valid[bi] != 0u)
+             ? 1u
+             : 0u;
+}
+
 static inline uint8_t floor_line_admitted_by_source_callback(const MslBatch* batch, size_t idx,
                                                              const MslStageFloorGraph* g,
                                                              uint32_t stage_id, int line_idx,
@@ -1965,8 +1994,10 @@ void mpcoll_ground_apply(MslBatch* batch) {
       float contact_y = 0.0f;
 
       int prefer_line_idx = -1;
+      int raw_current_floor_line_idx = -1;
       if (ground_id != 0xFFFFu) {
-        prefer_line_idx = stage_collision_floor_line_index(stage_id, ground_id);
+        raw_current_floor_line_idx = stage_collision_floor_line_index(stage_id, ground_id);
+        prefer_line_idx = raw_current_floor_line_idx;
         if (!floor_line_is_runtime_fighter_solid(g, stage_id, prefer_line_idx)) {
           prefer_line_idx = -1;
         }
@@ -3210,6 +3241,23 @@ void mpcoll_ground_apply(MslBatch* batch) {
             }
           }
         }
+      }
+
+      if (!on_ground && was_grounded && prefer_line_idx < 0 &&
+          carried_floor_line_is_live_yoshi_shyguy_support(batch, bi, g, stage_id,
+                                                          raw_current_floor_line_idx)) {
+        // Current stage-object support lifetime:
+        // mpColl's static floor graph should not select the Shy Guy support line as a new floor,
+        // but source CollData can still carry its current floor/support owner while the stage object
+        // controller is live. Preserve the grounded support for this callback pass; ordinary
+        // fighter-solid floors and new raw-line contacts continue through normal mpColl paths.
+        // refs/melee/src/melee/lb/types.h::CollData
+        // refs/melee/src/melee/gr/grstory.c::grStory_801E3418
+        // refs/melee/src/melee/it/items/itheiho.c
+        on_ground = 1u;
+        ground_id = seed_ground_id;
+        contact_x = cur_bottom_x;
+        contact_y = cur_bottom_y;
       }
 
       if (on_ground && was_grounded) {

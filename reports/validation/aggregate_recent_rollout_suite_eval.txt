@@ -305,13 +305,13 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:2361
 
 == datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl ==
 rollout.best_len: 499
-rollout.streak_count: 74
+rollout.streak_count: 75
 rollout.streak_len.median: 77
 rollout.streak_len.p90: 241
 rollout.streak_len.p95: 362
 rollout.streak_len.max: 499
-rollout.first_mismatch_total: 140
-rollout.first_mismatch_seeded_total: 116
+rollout.first_mismatch_total: 93
+rollout.first_mismatch_seeded_total: 68
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:1401
 rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:1
 
@@ -350,13 +350,13 @@ rollout.first_mismatch_seeded_total: 78
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:1448
 
 == suite summary ==
-overall.rollout.streak_count: 1215
+overall.rollout.streak_count: 1216
 overall.rollout.streak_len.median: 134
 overall.rollout.streak_len.p90: 565
 overall.rollout.streak_len.p95: 774
 overall.rollout.streak_len.max: 2427
 overall.rollout.best_len.max: 2427
-overall.rollout.first_mismatch_total: 1350
-overall.rollout.first_mismatch_seeded_total: 779
+overall.rollout.first_mismatch_total: 1303
+overall.rollout.first_mismatch_seeded_total: 731
 overall.rollout.ignored_first_mismatch_top: state_flags[4]&0x80:54860
 overall.rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:6

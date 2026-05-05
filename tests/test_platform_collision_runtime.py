@@ -8,7 +8,7 @@ import pytest
 
 from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE, read_dataset
 from tools.modelplay.sim_env import build_match_config_array
-from tools.slippi.known_data_artifacts import read_mslstg01_v7
+from tools.slippi.known_data_artifacts import STAGE_OBJECT_SUPPORT_KIND_YOSHI_SHYGUY, read_mslstg01_v7
 from tools.slippi.seed_history import load_shield_tilt_table_meta
 
 
@@ -390,6 +390,97 @@ def test_yoshi_mpcoll_4a908_fighter_solid_rejects_raw_center_line() -> None:
 
     assert int(out["on_ground"][0]) == 0
     assert int(out["ground_id"][0]) == 5
+
+
+def test_yoshi_stage_object_support_preserves_current_raw_non_solid_floor() -> None:
+    # Yoshi Shy Guys are stage-owned item objects. Source CollData can carry the current support
+    # floor id even though the raw platform line is not selectable as static fighter-solid terrain.
+    # refs/melee/src/melee/gr/grstory.c::grStory_801E3418
+    # refs/melee/src/melee/it/items/itheiho.c
+    stage = read_mslstg01_v7(Path("data/stages/bin/grst.bin"))
+    support = next(seg for seg in stage.segments if int(seg.line_id) == 0)
+    assert support.stage_object_support_kind == STAGE_OBJECT_SUPPORT_KIND_YOSHI_SHYGUY
+
+    seed = _seed_base(8, ACT_WAIT, SM_WAIT1_0, -80.0, -13.649894)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(0)
+    seed["jumps_left"][0, 0] = np.uint8(2)
+    seed["floor_sweep_prev_pos_x_f32"][0, 0] = np.float32(-79.0)
+    seed["floor_sweep_prev_pos_y_f32"][0, 0] = np.float32(-13.649894)
+    seed["floor_sweep_prev_pos_valid_u8"][0, 0] = np.uint8(1)
+    seed["stage_yoshi_shyguy_valid_u8"][0] = np.uint8(1)
+
+    out = _step_once(seed)
+
+    assert int(out["action_id"][0]) == ACT_WAIT
+    assert int(out["on_ground"][0]) == 1
+    assert int(out["ground_id"][0]) == 0
+    assert int(out["jumps_left"][0]) == 2
+
+
+def test_yoshi_stage_object_support_does_not_admit_new_raw_contact() -> None:
+    # The Shy Guy owner preserves current CollData support only. A new airborne sweep crossing the
+    # raw support line must still reject it as static terrain.
+    # refs/melee/src/melee/mp/mpcoll.c::mpColl_8004A908_Floor
+    seed = _seed_base(8, ACT_FALL, SM_FALL, -80.0, -12.5)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["ground_id"][0, 0] = np.uint16(0xFFFF)
+    seed["speed_y_self"][0, 0] = np.float32(-2.0)
+    seed["floor_sweep_prev_pos_x_f32"][0, 0] = np.float32(-80.0)
+    seed["floor_sweep_prev_pos_y_f32"][0, 0] = np.float32(-10.0)
+    seed["floor_sweep_prev_pos_valid_u8"][0, 0] = np.uint8(1)
+    seed["stage_yoshi_shyguy_valid_u8"][0] = np.uint8(1)
+
+    out = _step_once(seed)
+
+    assert int(out["action_id"][0]) == ACT_FALL
+    assert int(out["on_ground"][0]) == 0
+    assert int(out["ground_id"][0]) == 0xFFFF
+
+
+def test_yoshi_raw_non_solid_floor_without_stage_object_support_still_falls() -> None:
+    # Negative lock for the same raw non-solid line: without the Shy Guy stage-object owner, the
+    # static mpColl graph must not keep the fighter grounded on debug-only platform metadata.
+    # refs/melee/src/melee/mp/mpcoll.c::mpColl_8004A908_Floor
+    seed = _seed_base(8, ACT_WAIT, SM_WAIT1_0, -80.0, -13.649894)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(0)
+    seed["floor_sweep_prev_pos_x_f32"][0, 0] = np.float32(-79.0)
+    seed["floor_sweep_prev_pos_y_f32"][0, 0] = np.float32(-13.649894)
+    seed["floor_sweep_prev_pos_valid_u8"][0, 0] = np.uint8(1)
+    seed["stage_yoshi_shyguy_valid_u8"][0] = np.uint8(0)
+
+    out = _step_once(seed)
+
+    assert int(out["action_id"][0]) == ACT_FALL
+    assert int(out["on_ground"][0]) == 0
+    assert int(out["ground_id"][0]) == 0
+
+
+def test_unrelated_raw_non_solid_platform_is_not_stage_object_support() -> None:
+    # Frozen Stadium keeps transformation platforms debug-visible but not fighter-solid. Even with
+    # the Yoshi stage-object seed lane set, generated MSLSTG01 support-kind metadata must prevent
+    # unrelated raw platform lines from being preserved as current support.
+    # refs/slippi-ssbm-asm/Online/Core/Hacks/Stadium/IngameCheckIfFrozen.asm
+    stage = read_mslstg01_v7(Path("data/stages/bin/grps.bin"))
+    raw = next(seg for seg in stage.segments if int(seg.line_id) == 11)
+    assert int(raw.flags) & 1
+    assert raw.fighter_solid is False
+    assert raw.stage_object_support_kind == 0
+
+    seed = _seed_base(3, ACT_WAIT, SM_WAIT1_0, 12.0, 39.003)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(11)
+    seed["floor_sweep_prev_pos_x_f32"][0, 0] = np.float32(12.0)
+    seed["floor_sweep_prev_pos_y_f32"][0, 0] = np.float32(40.0)
+    seed["floor_sweep_prev_pos_valid_u8"][0, 0] = np.uint8(1)
+    seed["stage_yoshi_shyguy_valid_u8"][0] = np.uint8(1)
+
+    out = _step_once(seed)
+
+    assert int(out["action_id"][0]) == ACT_FALL
+    assert int(out["on_ground"][0]) == 0
+    assert int(out["ground_id"][0]) == 11
 
 
 def test_battlefield_mpcoll_4a908_platform_endpoint_snap_after_disconnected_retry() -> None:
@@ -1359,6 +1450,35 @@ def test_guard_drop_through_replay_real_enters_pass_on_frozen_ps_platform() -> N
     assert int(out["action_id"][p]) == int(row["ref_t1"]["action_id"][p]) == ACT_PASS
     assert int(out["on_ground"][p]) == int(row["ref_t1"]["on_ground"][p]) == 0
     assert int(out["ground_id"][p]) == int(row["ref_t1"]["ground_id"][p]) == 36
+    assert float(out["pos_y"][p]) == pytest.approx(float(row["ref_t1"]["pos_y"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
+def test_yoshi_stage_object_support_replay_real_keeps_wait_on_raw_non_solid_floor() -> None:
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+    )
+    if not path.exists():
+        pytest.skip(f"missing local dataset: {path}")
+
+    ds = read_dataset(str(path))
+    row = ds.samples[7082]
+    p = 1
+
+    assert int(row["seed_t"]["stage_id"]) == 8
+    assert int(row["seed_t"]["stage_yoshi_shyguy_valid_u8"]) == 1
+    assert int(row["seed_t"]["action_id"][p]) == ACT_WAIT
+    assert int(row["seed_t"]["ground_id"][p]) == 0
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_WAIT
+    assert int(row["ref_t1"]["on_ground"][p]) == 1
+    assert int(row["ref_t1"]["ground_id"][p]) == 0
+
+    out = _step_one_replay_row(ds, 7082)
+
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+        assert int(out[field][p]) == int(row["ref_t1"][field][p]), field
+    assert int(out["jumps_left"][p]) == int(row["ref_t1"]["jumps_left"][p])
     assert float(out["pos_y"][p]) == pytest.approx(float(row["ref_t1"]["pos_y"][p]), abs=1e-6)
 
 

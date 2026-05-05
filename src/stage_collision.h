@@ -21,6 +21,11 @@ typedef struct MslStageFloorLine {
   // refs/slippi-ssbm-asm/Online/Core/Hacks/Stadium/IngameCheckIfFrozen.asm
   // data/stages/bin/grps.bin::MSLSTG01 flags
   uint8_t fighter_solid;
+  // Generated stage-object support owner. This is not static terrain admission; gameplay consumers
+  // must combine it with the matching live stage-object seed/runtime state before preserving carried
+  // CollData support.
+  // data/stages/bin/*.bin::MSLSTG01 flags[7:3]
+  uint8_t stage_object_support_kind;
   // Connectivity hints for mpLib_8004ED5C-style endpoint extension:
   // - has_prev_link: there exists some collision segment connected to (x0,y0)
   // - has_next_link: there exists some collision segment connected to (x1,y1)
@@ -30,7 +35,6 @@ typedef struct MslStageFloorLine {
   // refs/melee/src/melee/mp/mplib.c::mpLib_8004ED5C
   uint8_t has_prev_link;
   uint8_t has_next_link;
-  uint8_t _pad0[1];
   // Stable `ground_id` mapping (ISO-derived segment index).
   uint16_t segment_i;
   // Source MapLine links from refs/melee/src/melee/mp/types.h::MapLine, resolved to this
@@ -118,6 +122,11 @@ typedef enum MslStageRawLineKind {
   MSL_STAGE_RAW_LINE_RIGHT_WALL = 4,
 } MslStageRawLineKind;
 
+typedef enum MslStageObjectSupportKind {
+  MSL_STAGE_OBJECT_SUPPORT_NONE = 0,
+  MSL_STAGE_OBJECT_SUPPORT_YOSHI_SHYGUY = 1,
+} MslStageObjectSupportKind;
+
 typedef struct MslStagePoint2 {
   float x;
   float y;
@@ -158,6 +167,7 @@ const MslStageFloorGraph* stage_collision_get_fighter_floor_graph(uint32_t stage
 int stage_collision_fighter_floor_line_index(uint32_t stage_id, uint16_t segment_i);
 uint8_t stage_collision_floor_line_is_platform(uint32_t stage_id, uint16_t segment_i);
 uint8_t stage_collision_floor_line_is_runtime_fighter_solid(uint32_t stage_id, uint16_t segment_i);
+uint8_t stage_collision_floor_line_stage_object_support_kind(uint32_t stage_id, uint16_t segment_i);
 uint8_t stage_collision_floor_line_has_platform_transform(uint32_t stage_id, uint16_t segment_i);
 uint8_t stage_collision_floor_line_platform_transform_id(uint32_t stage_id, uint16_t segment_i,
                                                          uint8_t* platform_id_out);

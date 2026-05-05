@@ -196,13 +196,16 @@ def _apply_yoshi_stage_object_policy(stage_dat: Path, segments: list[dict], unit
     if stage_dat.name.lower() != "grst.dat":
         return
     # Yoshi line 0 is a raw soft-platform collision segment at stage center that is not part of the
-    # visible legal-stage fighter-solid floor. Keep it in debug/raw metadata, but make fighter
-    # collision consume generated current-domain metadata and reject it. Randall is represented by
-    # the generated stage-object floor below.
-    # refs/melee/src/melee/gr/grstory.c::{grStory_801E3370,grStory_801E33E0}
+    # visible legal-stage fighter-solid floor. It is still a source stage-object support surface
+    # while the Heiho/Shy Guy controller is live, so tag the generated raw line with a named owner
+    # that runtime can consume without a gameplay line-id allowlist. Randall is represented by the
+    # generated stage-object floor below.
+    # refs/melee/src/melee/gr/grstory.c::{reset_shyguy_timer,grStory_801E3418}
+    # refs/melee/src/melee/it/items/itheiho.c::{it_802D8618,itHeiho_UnkMotion*_Coll}
     center_raw = _line_by_id(segments, 0)
     if center_raw is not None and center_raw.get("kind") == "floor":
         center_raw["fighter_solid"] = False
+        center_raw["stage_object_support"] = "yoshi_shyguy"
 
     inv_scale = 1.0 / float(unit_scale if unit_scale else 1.0)
     if _line_by_id(segments, YOSHI_RANDALL_LINE_ID) is None:

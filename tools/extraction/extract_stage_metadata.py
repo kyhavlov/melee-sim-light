@@ -27,6 +27,10 @@ PLATFORM_MOTION_KIND_ID = {
     "fountain_platform": 1,
 }
 
+STAGE_OBJECT_SUPPORT_KIND_ID = {
+    "yoshi_shyguy": 1,
+}
+
 
 def _f32(v: float) -> float:
     return struct.unpack("<f", struct.pack("<f", float(v)))[0]
@@ -77,10 +81,14 @@ def _write_stage_bin(out: Path, data: dict) -> None:
         _f32(float(blast.get("bottom", 0.0)) * unit_scale),
     )
     for seg in segments:
+        stage_object_support_kind = STAGE_OBJECT_SUPPORT_KIND_ID.get(
+            str(seg.get("stage_object_support", "")), 0
+        )
         flags = (
             (1 if seg.get("platform") else 0)
             | (2 if seg.get("ledge") else 0)
             | (4 if seg.get("fighter_solid", True) else 0)
+            | ((stage_object_support_kind & 0x1F) << 3)
         )
         buf += struct.pack(
             "<HBBHHhhhhffff",

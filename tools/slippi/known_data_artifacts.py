@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 STAGE_MAGIC = b"MSLSTG01"
-STAGE_VERSION = 7
+STAGE_VERSION = 8
 PART_MAGIC = b"MSLPART1"
 PART_VERSION = 1
 ITEM_ARTICLE_MAGIC = b"MSLITAR1"
@@ -32,6 +32,7 @@ STAGE_BATTLEFIELD = 31
 STAGE_FINAL_DESTINATION = 32
 STAGE_PLATFORM_TRANSFORM_KIND_HEIGHT = 1
 STAGE_PLATFORM_MOTION_KIND_FOD = 1
+STAGE_OBJECT_SUPPORT_KIND_YOSHI_SHYGUY = 1
 
 STAGE_METADATA_BIN_BY_STAGE_ID = {
     STAGE_FOUNTAIN_OF_DREAMS: "griz.bin",  # Fountain of Dreams / GrIz.dat
@@ -66,6 +67,7 @@ class StageSegment:
     kind_id: int
     flags: int
     fighter_solid: bool
+    stage_object_support_kind: int
     hi_flags: int
     lo_flags: int
     prev_id0: int
@@ -298,6 +300,7 @@ def read_mslstg01_v7(path: Path) -> StageMetadata:
                 kind_id=int(kind_id),
                 flags=int(flags),
                 fighter_solid=bool(int(flags) & 4),
+                stage_object_support_kind=(int(flags) >> 3) & 0x1F,
                 hi_flags=int(hi_flags),
                 lo_flags=int(lo_flags),
                 prev_id0=int(prev_id0),
@@ -440,7 +443,7 @@ def fountain_of_dreams_default_platform_heights(
     """Return source-backed FoD platform initial heights by Slippi platform id.
 
     Platform ids follow Slippi `fod_platform` events: 0=right, 1=left. The defaults come from the
-    generated MSLSTG01 v7 transform records rather than seed-generation local constants.
+    generated MSLSTG01 transform records rather than seed-generation local constants.
     refs/melee/src/melee/gr/grizumi.c::{grIzumi_801CC358,grIzumi_801CCBDC}
     data/stages/bin/griz.bin::MSLSTG01 platform_transforms
     """

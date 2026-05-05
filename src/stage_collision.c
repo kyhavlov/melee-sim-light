@@ -295,6 +295,7 @@ typedef struct {
   uint8_t ledge;
   uint8_t platform;
   uint8_t fighter_solid;
+  uint8_t stage_object_support_kind;
   uint8_t reversed;
   uint16_t segment_i;
   int16_t prev_id0;
@@ -312,9 +313,10 @@ typedef struct {
 } FdSegTmp;
 
 static FdSegTmp fd_seg_tmp_normalized(FdSegKind kind, uint8_t ledge, uint8_t platform,
-                                      uint8_t fighter_solid, uint16_t segment_i, int16_t prev_id0,
-                                      int16_t next_id0, int16_t prev_id1, int16_t next_id1,
-                                      float fx0, float fy0, float fx1, float fy1) {
+                                      uint8_t fighter_solid, uint8_t stage_object_support_kind,
+                                      uint16_t segment_i, int16_t prev_id0, int16_t next_id0,
+                                      int16_t prev_id1, int16_t next_id1, float fx0, float fy0,
+                                      float fx1, float fy1) {
   // Normalize orientation to match mplib assumptions for each line kind:
   // - floor: x0 <= x1
   //   refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
@@ -375,6 +377,7 @@ static FdSegTmp fd_seg_tmp_normalized(FdSegKind kind, uint8_t ledge, uint8_t pla
       .ledge = ledge,
       .platform = platform,
       .fighter_solid = fighter_solid,
+      .stage_object_support_kind = stage_object_support_kind,
       .reversed = reversed,
       .segment_i = segment_i,
       .prev_id0 = prev_id0,
@@ -779,9 +782,9 @@ static int fd_install_stage_segments(uint32_t stage_id, const FdSegTmp* seg_tmp,
           .is_ledge = s->ledge,
           .is_platform = s->platform,
           .fighter_solid = s->fighter_solid,
+          .stage_object_support_kind = s->stage_object_support_kind,
           .has_prev_link = 0,
           .has_next_link = 0,
-          ._pad0 = {0},
           .segment_i = s->segment_i,
           .raw_prev_id = -1,
           .raw_next_id = -1,
@@ -956,12 +959,14 @@ static int fd_install_stage_segments(uint32_t stage_id, const FdSegTmp* seg_tmp,
 }
 
 enum {
-  MSLSTG01_VERSION = 7,
+  MSLSTG01_VERSION = 8,
   MSLSTG01_HEADER_BYTES = 64,
   MSLSTG01_SEGMENT_BYTES = 32,
   MSLSTG01_FLAG_PLATFORM = 1,
   MSLSTG01_FLAG_LEDGE = 2,
   MSLSTG01_FLAG_FIGHTER_SOLID = 4,
+  MSLSTG01_STAGE_OBJECT_SUPPORT_SHIFT = 3,
+  MSLSTG01_STAGE_OBJECT_SUPPORT_MASK = 0x1F,
   MSLSTG01_KIND_FLOOR = 0,
   MSLSTG01_KIND_CEILING = 1,
   MSLSTG01_KIND_RIGHT_WALL = 2,
@@ -1253,8 +1258,10 @@ static int fd_load_floor_lines_from_mslstg01(uint32_t stage_id, const uint8_t* b
     seg_tmp[seg_n++] = fd_seg_tmp_normalized(
         kind, (uint8_t)((flags & (uint8_t)MSLSTG01_FLAG_LEDGE) != 0u),
         (uint8_t)((flags & (uint8_t)MSLSTG01_FLAG_PLATFORM) != 0u),
-        (uint8_t)((flags & (uint8_t)MSLSTG01_FLAG_FIGHTER_SOLID) != 0u), line_id,
-        stage_read_s16_le(p + 8), stage_read_s16_le(p + 10), stage_read_s16_le(p + 12),
+        (uint8_t)((flags & (uint8_t)MSLSTG01_FLAG_FIGHTER_SOLID) != 0u),
+        (uint8_t)((flags >> MSLSTG01_STAGE_OBJECT_SUPPORT_SHIFT) &
+                  MSLSTG01_STAGE_OBJECT_SUPPORT_MASK),
+        line_id, stage_read_s16_le(p + 8), stage_read_s16_le(p + 10), stage_read_s16_le(p + 12),
         stage_read_s16_le(p + 14), stage_read_f32_le(p + 16), stage_read_f32_le(p + 20),
         stage_read_f32_le(p + 24), stage_read_f32_le(p + 28));
   }
@@ -1595,6 +1602,20 @@ uint8_t stage_collision_floor_line_is_runtime_fighter_solid(uint32_t stage_id, u
     }
   }
   return 0u;
+}
+
+uint8_t stage_collision_floor_line_stage_object_support_kind(uint32_t stage_id,
+                                                             uint16_t segment_i) {
+  const MslStageFloorGraph* g = stage_collision_get_floor_graph(stage_id);
+  if (g == NULL) {
+    return (uint8_t)MSL_STAGE_OBJECT_SUPPORT_NONE;
+  }
+  for (size_t i = 0; i < g->line_count; i++) {
+    if (g->lines[i].segment_i == segment_i) {
+      return g->lines[i].stage_object_support_kind;
+    }
+  }
+  return (uint8_t)MSL_STAGE_OBJECT_SUPPORT_NONE;
 }
 
 uint8_t stage_collision_floor_line_has_platform_transform(uint32_t stage_id, uint16_t segment_i) {
