@@ -1505,6 +1505,43 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
         msl_anim_end_frame(batch->state.char_id[idx], (uint16_t)MSL_SM_GUARD_OFF);
     if (end_frame > 0.0f && (batch->state.anim_frame_f32[idx] >= end_frame)) {
       guard_enter_wait(batch, idx);
+      {
+        // GuardOff_Anim can enter Wait before this frame's input callback dispatch. If the
+        // destination Wait_IASA reaches ftCo_80091A4C, held shield enters GuardOn/GuardReflect on
+        // the same source frame. Keep this at the anim-end handoff and require the earlier
+        // Wait_IASA command families to be absent so we do not turn attacks, specials, catch, or
+        // spotdodge into guard.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardOff_Anim
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
+        const uint16_t pre_guard_buttons = (uint16_t)(MSL_BUTTON_A | MSL_BUTTON_B | MSL_BUTTON_Z);
+        const uint8_t cstick_command =
+            (apply_deadzone(stick_i8_to_unit(batch->state.input_c_x[idx]), c->lstick_deadzone_x) !=
+                 0.0f ||
+             apply_deadzone(stick_i8_to_unit(batch->state.input_c_y[idx]), c->lstick_deadzone_y) !=
+                 0.0f)
+                ? 1u
+                : 0u;
+        const float stick_y =
+            apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
+        const uint8_t spotdodge_before_guard =
+            (stick_y < -c->crouch_stick_threshold && shield_held_inputs) ? 1u : 0u;
+        const uint8_t wait_iasa_can_reach_guard =
+            (shield_held_inputs && batch->state.shield_hp[idx] > 0.0f &&
+             (batch->state.input_buttons[idx] & pre_guard_buttons) == 0u &&
+             (batch->state.input_buttons_pressed[idx] & pre_guard_buttons) == 0u &&
+             !cstick_command && !spotdodge_before_guard)
+                ? 1u
+                : 0u;
+        if (wait_iasa_can_reach_guard) {
+          if ((batch->state.input_buttons_pressed[idx] & (uint16_t)LR) != 0u &&
+              batch->state.x672_input_timer[idx] < c->powershield_reflect_window_frames) {
+            enter_guard_reflect_from_locomotion(batch, c, idx);
+          } else {
+            enter_guard_on(batch, c, idx, 1u);
+          }
+        }
+      }
       return;
     }
     return;

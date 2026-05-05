@@ -131,3 +131,79 @@ def test_instance_id_transition_clusters_match_ref(
         )
     finally:
         binding.destroy(handle)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "p"),
+    [
+        (
+            "datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl",
+            10161,
+            0,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/battlefield_recent/DelayedSuperbGuanaco.msl",
+            7135,
+            0,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.msl",
+            8879,
+            0,
+        ),
+    ],
+)
+def test_wait_anim_end_restart_keeps_instance_id(dataset_rel: str, record: int, p: int) -> None:
+    # Wait_Anim -> ftCo_8008A7A8 restarts the selected idle sub-animation through
+    # ftCo_8008A6D8 / ftAnim_8006EBE8. It does not call Fighter_ChangeMotionState, so the
+    # motion-entry identity bundle (`ft_800895E0` / `plAttack_80037B08`) must not bump fp->x2088.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_Anim
+    # refs/melee/src/melee/ft/ftwaitanim.c::{ftCo_8008A7A8,ftCo_8008A6D8}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    assert int(samples.shape[0]) > record, f"dataset too short: num_records={int(samples.shape[0])}"
+    row = samples[record : record + 1]
+
+    assert int(row["seed_t"]["action_id"][0, p]) == 14  # Wait
+    assert int(row["ref_t1"]["action_id"][0, p]) == 14
+    assert int(row["seed_t"]["action_frame"][0, p]) == 119
+    assert int(row["ref_t1"]["action_frame"][0, p]) == 0
+    assert int(row["seed_t"]["instance_id"][0, p]) == int(row["ref_t1"]["instance_id"][0, p])
+
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    try:
+        seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).reshape(1, seed_stride).copy()
+        prev_input_bytes = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, input_stride
+        ).copy()
+        input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).reshape(1, input_stride).copy()
+        out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+
+        out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
+        assert int(out["action_id"][0, p]) == 14
+        assert int(out["action_frame"][0, p]) == 0
+        assert int(out["instance_id"][0, p]) == int(row["ref_t1"]["instance_id"][0, p])
+    finally:
+        binding.destroy(handle)

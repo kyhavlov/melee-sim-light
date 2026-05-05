@@ -92,6 +92,35 @@ static inline uint8_t anim_timebase_turnrun_cmd1_freeze_due(const MslBatch* batc
   return move_tables_turnrun_cmd1_active(batch->state.char_id[idx], (float)action_frame_pre);
 }
 
+static inline uint8_t anim_timebase_turnrun_cmd1_pivot_due(const MslBatch* batch, size_t idx,
+                                                           uint16_t action_id,
+                                                           int16_t action_frame_pre) {
+  if (batch == NULL || action_id != (uint16_t)MSL_ACT_TURN_RUN ||
+      batch->state.on_ground[idx] == 0u || batch->state.hitlag[idx] != 0u ||
+      batch->state.seed_prev_action_id[idx] != (uint16_t)MSL_ACT_TURN_RUN ||
+      batch->state.frame_speed_mul_fp_q16_16[idx] == 0) {
+    return 0u;
+  }
+  const uint8_t entry_facing = anim_timebase_turnrun_entry_facing_bit(batch, idx);
+  if (batch->state.facing[idx] != entry_facing) {
+    return 0u;
+  }
+  // TurnRun hidden x14 latch replay ownership:
+  // - The common TurnRun script sets cmd_vars[1] (MSLFTSC1 set_cmd_var idx=1).
+  // - ftCo_TurnRun_Anim first arms mv.co.turnrun.x14 by setting rate 0, then a later Anim callback
+  //   restores rate and flips facing once `mv.co.turnrun.accel_mul * gr_vel <= 0.01`.
+  // - One-step seeds can expose the post-rate value without exposing x14. Use the decomp pivot
+  //   predicate itself, scoped to steady TurnRun rows and the script-owned cmd1 window, rather than
+  //   fitting replay rows by action frame.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_TurnRun.c::ftCo_TurnRun_Anim
+  // refs/melee/src/melee/ft/ftaction.c::ftAction_80071820
+  if (!move_tables_turnrun_cmd1_active(batch->state.char_id[idx], (float)action_frame_pre)) {
+    return 0u;
+  }
+  const float entry_facing_dir = (batch->state.facing_dir1[idx] < 0.0f) ? -1.0f : 1.0f;
+  return (entry_facing_dir * batch->state.speed_ground_x_self[idx]) <= 0.01f ? 1u : 0u;
+}
+
 static inline int anim_timebase_throw_index_from_action(uint16_t action_id) {
   switch (action_id) {
     case (uint16_t)MSL_ACT_THROW_F:
@@ -685,6 +714,9 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
           // zero rate. Restore the callback-owned rate before this tick advances.
           batch->state.frame_speed_mul_fp_q16_16[idx] = MSL_Q16_16_ONE;
         }
+      } else if (anim_timebase_turnrun_cmd1_pivot_due(batch, idx, a, action_frame_pre)) {
+        batch->state.frame_speed_mul_fp_q16_16[idx] = 0;
+        turnrun_flip_after_zero_tick = 1u;
       } else if (anim_timebase_turnrun_cmd1_freeze_due(batch, idx, a, action_frame_pre)) {
         batch->state.frame_speed_mul_fp_q16_16[idx] = 0;
       }

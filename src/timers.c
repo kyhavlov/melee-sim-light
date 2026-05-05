@@ -172,6 +172,10 @@ static inline uint8_t damage_every_hitlag_sdi_timer_window_action(uint16_t a) {
   }
 }
 
+static inline uint8_t damage_timer_down_damage_action(uint16_t a) {
+  return (a == (uint16_t)MSL_ACT_DOWN_DAMAGE_U || a == (uint16_t)MSL_ACT_DOWN_DAMAGE_D) ? 1u : 0u;
+}
+
 static inline void damage_hitlag_exit_wall_project_asdi(const MslBatch* batch, size_t idx,
                                                         float* dx, float* dy) {
   if (batch == NULL || dx == NULL || dy == NULL ||
@@ -752,6 +756,15 @@ void timers_update_post_anim(MslBatch* batch) {
       // Decomp: hitstun flag is cleared when the hitstun timer reaches 0.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008F744
       if (hs == 0) {
+        if (damage_timer_down_damage_action(batch->state.action_id[idx])) {
+          // DownDamage owns a separate anim/timer lane:
+          // - ftCo_DownDamage_Anim decrements mv.co.downdamage.x0,
+          // - it does not call ftCo_8008F744 while the action remains DownDamageU/D, and
+          // - x221C_b6 can remain visible after the replay-facing hitstun scalar reaches zero.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::ftCo_DownDamage_Anim
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008F744
+          continue;
+        }
         const size_t flags_221c_i =
             idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221C_INDEX;
         batch->state.state_flags[flags_221c_i] &=

@@ -1,4 +1,6 @@
 {
+  "damage_mul": 2.0,
+  "damage_threshold": 15,
   "dyn_y_vel": [
     0.7028961181640625,
     0.7015228271484375,
@@ -131,6 +133,22 @@
   ],
   "fall_accel": 0.11999999731779099,
   "fall_speed_max": 2.200000047683716,
+  "hurtboxes": [
+    {
+      "a_offset": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "b_offset": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "bone_id": 0,
+      "scale": 5.0
+    }
+  ],
   "item_kind": 210,
   "jitter_y_amp": 3.0,
   "source": {

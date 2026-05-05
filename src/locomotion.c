@@ -2124,6 +2124,22 @@ static inline uint8_t action_is_grounded_guard_state(uint16_t a) {
                    a == (uint16_t)MSL_ACT_GUARD_REFLECT);
 }
 
+static inline uint8_t grounded_guard_state_allows_platform_pass_iasa(const MslBatch* batch,
+                                                                     size_t idx, uint16_t a) {
+  if (a == (uint16_t)MSL_ACT_GUARD_ON || a == (uint16_t)MSL_ACT_GUARD ||
+      a == (uint16_t)MSL_ACT_GUARD_REFLECT) {
+    return 1u;
+  }
+  if (a == (uint16_t)MSL_ACT_GUARD_OFF) {
+    // GuardOff_IASA only reaches ftCo_8009A080 while mv.co.guard.x1C is live; GuardSetOff_IASA is
+    // empty and must not share this platform-pass owner.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    //   ftCo_GuardOff_IASA,ftCo_GuardSetOff_IASA}
+    return (batch != NULL && batch->state.guard_special_enable_timer_x1c[idx] != 0u) ? 1u : 0u;
+  }
+  return 0u;
+}
+
 static inline uint8_t guard_floor_loss_should_missfoot(const MslBatch* batch, size_t idx,
                                                        uint32_t stage_id) {
   if (batch == NULL) {
@@ -3489,12 +3505,14 @@ void locomotion_update_pre(MslBatch* batch) {
           // It calls ftCo_8008A7A8, which restarts the current/selected wait subanimation through
           // ftCo_8008A6D8 / ftAnim_8006EBE8. The RNG consume for variant choice lives in
           // anim_timebase_update_pre_input; this callback owns the replay-visible timebase reset.
+          // This is not Fighter_ChangeMotionState, so it must not run the motion-entry identity
+          // bundle (`ft_800895E0` / `plAttack_80037B08`) or bump fp->x2088.
           // Keep the currently modeled wait variant stable until extracted wait-variant data is
           // promoted beyond the already-modeled RNG consume.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_Anim
           // refs/melee/src/melee/ft/ftwaitanim.c::{ftCo_8008A7A8,ftCo_8008A6D8}
           batch->state.animation_index[idx] = (uint32_t)MSL_SM_WAIT1_0;
-          msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+          msl_anim_timebase_restart(batch, idx, 0.0f, 1.0f);
           action_id = (uint16_t)MSL_ACT_WAIT;
         }
 
@@ -3592,23 +3610,22 @@ void locomotion_update_pre(MslBatch* batch) {
             anim_finished(cid, (uint16_t)MSL_SM_TURN_RUN, batch->state.anim_frame_f32[idx])) {
           // Hidden TurnRun exit microphase:
           // - Decomp routes animation end through fn_800CA644, then ft_8008A2BC -> Wait when the
-          //   Run gate fails; the same-frame Wait_IASA owner can then enter Squat on down-stick.
-          // - Replay rows show the down-stick/squat selector winning on the final TurnRun tick even
-          //   when the raw x stick also satisfies our simplified Run gate. Treat that as the hidden
-          //   processed-input/cmd microphase for this owner instead of broadening Wait_IASA.
+          //   Run gate fails; the same-frame destination Wait_IASA can then consume current input
+          //   into Dash/Squat/Turn/Walk.
+          // - TurnRun_Anim is a prio-1 Anim callback and reads the pre-input `fp->input.lstick`;
+          //   Fighter_Spaghetti_8006AD10 installs current-frame input later in proc priority.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_TurnRun.c::ftCo_TurnRun_Anim
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::fn_800CA644
+          // refs/melee/src/melee/ft/fighter.c::{Fighter_procUpdate,Fighter_Spaghetti_8006AD10}
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
-          const uint8_t turnrun_exit_prefers_wait =
-              (stick_y < -c->crouch_stick_threshold) ? 1u : 0u;
+          const float turnrun_anim_stick_x = apply_deadzone(
+              stick_i8_to_unit(batch->state.prev_input_main_x[idx]), c->lstick_deadzone_x);
           const float turnrun_entry_facing_dir = (batch->state.facing_dir1[idx] < 0) ? -1.0f : 1.0f;
           const float turnrun_exit_facing_dir =
               (turnrun_entry_facing_dir == facing_dir) ? -facing_dir : facing_dir;
           const uint8_t turnrun_exit_prefers_run =
-              (!turnrun_exit_prefers_wait &&
-               (stick_x * turnrun_exit_facing_dir) >= c->run_stick_x_threshold)
-                  ? 1u
-                  : 0u;
+              ((turnrun_anim_stick_x * turnrun_exit_facing_dir) >= c->run_stick_x_threshold) ? 1u
+                                                                                             : 0u;
           if (turnrun_exit_prefers_run) {
             // Decomp: ftCo_TurnRun_Enter copies entry `fp->facing_dir` into `fp->facing_dir1`.
             // ftCo_TurnRun_Anim can later flip current facing before the animation-end Run gate.
@@ -4158,7 +4175,7 @@ void locomotion_update_pre(MslBatch* batch) {
             action_id == MSL_ACT_SQUAT_RV) {
           allow_guard_entry = 1;
         }
-        if (action_is_grounded_guard_state(action_id) &&
+        if (grounded_guard_state_allows_platform_pass_iasa(batch, idx, action_id) &&
             (buttons & (uint16_t)(MSL_BUTTON_L | MSL_BUTTON_R)) != 0u &&
             common_pass_input_gate(batch, c, idx, stick_y, tilt_timer_y)) {
           // Guard/GuardOn/GuardReflect platform pass:

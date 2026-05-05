@@ -140,6 +140,36 @@ def test_turnrun_exit_downstick_feeds_wait_squat_selector_replay_real_lock() -> 
     _assert_transition_lock_fields_match_ref(out_row=out_row, ref_row=ref_row, record=record, p=p)
 
 
+def test_turnrun_anim_end_run_gate_uses_pre_input_then_wait_dash_replay_real_lock() -> None:
+    # Replay-real lock for TurnRun anim-end input-phase ownership:
+    # - ftCo_TurnRun_Anim calls fn_800CA644 in the Anim callback phase.
+    # - fn_800CA644 reads the pre-input fp->input.lstick snapshot, so a current-frame opposite
+    #   dash flick can fail the Run gate, route through ft_8008A2BC -> Wait, and then let
+    #   destination Wait_IASA consume the current input as Dash.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_TurnRun.c::ftCo_TurnRun_Anim
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::fn_800CA644
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_procUpdate,Fighter_Spaghetti_8006AD10}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/SweatyThisMallard.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    record = 2641
+    p = 0
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record]
+    assert int(row["seed_t"]["action_id"][p]) == 19  # TurnRun
+    assert int(row["seed_t"]["action_frame"][p]) == 19
+    assert int(row["prev_input_t"]["p"][p]["main_x"]) > 0
+    assert int(row["input_t"]["p"][p]["main_x"]) < 0
+    assert int(row["ref_t1"]["action_id"][p]) == 20  # Dash
+
+    _, ref_row, out_row = _run_one_step_row(dataset_path, record, p)
+    _assert_transition_lock_fields_match_ref(out_row=out_row, ref_row=ref_row, record=record, p=p)
+
+
 def _run_turnrun_rollout_records(
     dataset_path: Path,
     *,
@@ -273,6 +303,79 @@ def test_turnrun_midstate_pause_flips_and_resumes_after_ground_speed_stops_repla
         assert float(out_row["speed_ground_x_self"][p]) == pytest.approx(
             float(ref_row["speed_ground_x_self"][p])
         ), f"record={record}"
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "case",
+    [
+        _Case(
+            dataset_rel="datasets/aggregate_recent/replays/validation/battlefield_recent/"
+            "DelayedSuperbGuanaco.msl",
+            record=3898,
+            port=1,
+            note="Battlefield TurnRun cmd1 pivot with post-rate x14 hidden latch",
+        ),
+        _Case(
+            dataset_rel=f"{_AGG_VALID}/FavorableSuperficialPig.msl",
+            record=2385,
+            port=0,
+            note="FD TurnRun cmd1 pivot at zero ground speed",
+        ),
+        _Case(
+            dataset_rel=f"{_AGG_VALID}/ImpassionedAlarmedTarsier.msl",
+            record=7755,
+            port=1,
+            note="FD TurnRun cmd1 pivot mirror at zero ground speed",
+        ),
+        _Case(
+            dataset_rel=f"{_AGG_CARDINAL}/QuerulousGrandDinosaur.msl",
+            record=2344,
+            port=0,
+            note="cardinal TurnRun cmd1 pivot after command frame",
+        ),
+        _Case(
+            dataset_rel="datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/SweatyThisMallard.msl",
+            record=8111,
+            port=0,
+            note="Pokemon Stadium TurnRun cmd1 pivot on transformed floor",
+        ),
+        _Case(
+            dataset_rel="datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/SweatyThisMallard.msl",
+            record=9978,
+            port=0,
+            note="Pokemon Stadium later TurnRun cmd1 pivot on transformed floor",
+        ),
+    ],
+)
+def test_turnrun_cmd1_hidden_latch_flips_when_pivot_condition_already_satisfied(
+    case: _Case,
+) -> None:
+    # Replay-real locks for TurnRun hidden x14 latch ownership:
+    # - ftCo_TurnRun_Anim arms x14 when cmd_vars[1] is first consumed.
+    # - A later Anim callback restores rate and flips facing once accel_mul * gr_vel <= 0.01.
+    # - Slippi one-step seeds expose frame_speed_mul but not x14, so the runtime must use the
+    #   source pivot predicate rather than treating every script-active steady row as first-arm.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_TurnRun.c::ftCo_TurnRun_Anim
+    # refs/melee/src/melee/ft/ftaction.c::ftAction_80071820
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / case.dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[case.record]
+    p = case.port
+    assert int(row["seed_t"]["action_id"][p]) == 19, case.note  # TurnRun
+    assert int(row["seed_t"]["seed_prev_action_id"][p]) == 19, case.note
+    assert int(row["seed_t"]["facing"][p]) != int(row["ref_t1"]["facing"][p]), case.note
+
+    _, ref_row, out_row = _run_one_step_row(dataset_path, case.record, p)
+    _assert_transition_lock_fields_match_ref(out_row=out_row, ref_row=ref_row, record=case.record, p=p)
+    assert int(out_row["action_id"][p]) == int(ref_row["action_id"][p]) == 19, case.note
+    assert int(out_row["action_frame"][p]) == int(ref_row["action_frame"][p]), case.note
+    assert int(out_row["facing"][p]) == int(ref_row["facing"][p]), case.note
 
 
 @pytest.mark.integration

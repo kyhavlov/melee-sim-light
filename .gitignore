@@ -32,9 +32,7 @@ data/items/**
 !data/items/item_common.json
 !data/stage_items/
 data/stage_items/**
-!data/stage_items/yoshi_shyguy.bin
 !data/stage_items/yoshi_shyguy.json
-!data/stage_items/dream_whispy.bin
 !data/stage_items/dream_whispy.json
 
 # Build outputs / caches (future-proof)

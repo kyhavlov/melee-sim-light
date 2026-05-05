@@ -6657,6 +6657,7 @@ typedef struct MslPyShyguyKeyState {
   int hitlag;
   int state3_moving_age;
   int state4_zero_x_prefix;
+  int prev_damage;
 } MslPyShyguyKeyState;
 
 typedef struct MslPyShyguyPhaseState {
@@ -7169,11 +7170,19 @@ PyObject* msl_derive_yoshi_shyguy_seed_lanes_py(PyObject* self, PyObject* args) 
           goto fail;
         }
         int age = 0;
-        if (ks->prev_state < 0 || ks->prev_state != (int)stp[idx]) {
+        const bool damage_callback_reset =
+            (ks->prev_state == (int)stp[idx] && (stp[idx] == 2u || stp[idx] == 3u) &&
+             (int)dmg[idx] > ks->prev_damage);
+        if (ks->prev_state < 0 || ks->prev_state != (int)stp[idx] || damage_callback_reset) {
           age = 0;
           if ((stp[idx] == 2u || stp[idx] == 3u) && dmg[idx] > 0u) {
-            ks->hitlag = msl_py_shyguy_hitlag_from_damage(dmg[idx], (float)hitlag_damage_mul,
-                                                          (float)hitlag_base);
+            int damage_for_hitlag = (int)dmg[idx];
+            if (damage_callback_reset) {
+              damage_for_hitlag -= ks->prev_damage;
+              if (damage_for_hitlag <= 0) damage_for_hitlag = (int)dmg[idx];
+            }
+            ks->hitlag = msl_py_shyguy_hitlag_from_damage(
+                (uint16_t)damage_for_hitlag, (float)hitlag_damage_mul, (float)hitlag_base);
           } else {
             ks->hitlag = 0;
           }
@@ -7232,6 +7241,7 @@ PyObject* msl_derive_yoshi_shyguy_seed_lanes_py(PyObject* self, PyObject* args) 
         }
         ks->prev_state = (int)stp[idx];
         ks->state_age = age;
+        ks->prev_damage = (int)dmg[idx];
       }
     } else if (stage_ok && cur_timer > 0) {
       cur_timer--;

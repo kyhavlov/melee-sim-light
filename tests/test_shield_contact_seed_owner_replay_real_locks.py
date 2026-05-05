@@ -168,6 +168,74 @@ def test_guard_shielddesc_seed_rejects_replay_proven_body_damage_contact() -> No
 
 
 @pytest.mark.integration
+def test_guard_shielddesc_miss_preserves_current_hitcapsule_victim_latch_cheery() -> None:
+    # ShieldDesc-miss plus HitCapsule victims_1 ownership:
+    # - ftColl_80078C70 gates through lbColl_8000ACFC before ShieldDesc and BODY checks.
+    # - These rows have replay-proven ShieldDesc misses, but the dense victims_1 seed still names
+    #   the current Guard object. The miss must not be treated as permission to clear the latch and
+    #   fall through to BODY damage.
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80007BCC}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    attacker = 0
+    defender = 1
+    for record in range(1074, 1081):
+        seed, ref, out = _run_one_step_row(dataset_path, record, defender)
+        assert int(seed["action_id"][defender]) == 179
+        assert int(ref["action_id"][defender]) == 179
+        assert int(out["action_id"][defender]) == 179
+        assert int(out["hitlag"][defender]) == 0
+        assert int(out["hitstun"][defender]) == 0
+        assert int(seed["combat_hitlist_cd"][attacker, 0, defender]) == 0xFFFF
+        assert int(seed["combat_hitlist_victim_iid"][attacker, 0, defender]) == int(
+            seed["instance_id"][defender]
+        )
+        assert all(
+            int(seed["combat_shield_contact_hb_kind"][attacker][hb][defender]) == 1
+            for hb in range(2)
+        )
+
+
+@pytest.mark.integration
+def test_guard_shielddesc_miss_without_victim_latch_can_fall_through_to_body() -> None:
+    # Negative boundary for the Cheery latch: clearing the victims_1 seed removes the
+    # lbColl_8000ACFC suppression owner. The ShieldDesc miss remains, so the same BODY overlap is
+    # allowed to enter Damage instead of being suppressed by a broad Guard/action predicate.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    attacker = 0
+    defender = 1
+
+    def clear_dense_victim_latch(seed_t: np.ndarray) -> None:
+        seed_t["combat_hitlist_cd"][0, attacker, :, defender] = np.uint16(0)
+        seed_t["combat_hitlist_victim_iid"][0, attacker, :, defender] = np.uint16(0)
+
+    seed, _ref, out = _run_one_step_row(
+        dataset_path, 1074, defender, seed_mutator=clear_dense_victim_latch
+    )
+
+    assert all(
+        int(seed["combat_shield_contact_hb_kind"][attacker][hb][defender]) == 1 for hb in range(2)
+    )
+    assert int(out["action_id"][defender]) == 80  # DamageN3
+    assert int(out["hitlag"][defender]) > 0
+    assert int(out["hitstun"][defender]) > 0
+
+
+@pytest.mark.integration
 def test_guard_shielddesc_runtime_pose_accepts_prh_rollout_contact() -> None:
     # Runtime-positive boundary: no one-step ShieldDesc seed is available in this natural rollout
     # window. The decomp-shaped live Guard pose must still place Falco's ShieldDesc where

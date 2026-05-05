@@ -122,7 +122,9 @@ def test_rebirth_respawn_uses_replay_source_port_spawn_slot(case: _RespawnCase) 
     # player slot, not from this simulator's compact local player index. Aggregate-suite rows can
     # have local p0/p1 mapped to raw source ports 1/2, so respawn position and facing must follow
     # seed_t.source_port0.
+    # Centered respawn points use gm_1601.c::fn_8016719C's `x >= 0.0f` branch and face left.
     # refs/melee/src/melee/ft/ft_0D31.c::ftCo_800D4FF4
+    # refs/melee/src/melee/gm/gm_1601.c::fn_8016719C
     # refs/melee/src/melee/pl/player.c::{Player_GetSpawnPlatformPos,Player_GetFacingDirection}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
@@ -142,6 +144,31 @@ def test_rebirth_respawn_uses_replay_source_port_spawn_slot(case: _RespawnCase) 
     assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=1e-4)
     assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-4)
     assert float(out["speed_y_self"][p]) == pytest.approx(float(ref["speed_y_self"][p]), abs=1e-4)
+    assert int(out["facing"][p]) == int(ref["facing"][p])
+
+
+@pytest.mark.integration
+def test_rebirth_centered_respawn_faces_left_replay_real() -> None:
+    # Centered platform-stage respawn points use gm_1601.c::fn_8016719C's `x >= 0.0f` branch,
+    # so Rebirth faces left even though the current compact stage camera-Y substrate is still an
+    # adjacent residual on this Pokemon Stadium row.
+    # refs/melee/src/melee/gm/gm_1601.c::fn_8016719C
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset = "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/CornyDelayedOkapi.msl"
+    dataset_path = root / dataset
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset}")
+
+    seed, ref, out = _step_one_row(dataset_path=dataset_path, record=9226)
+    p = 1
+    assert int(seed["action_id"][p]) == 0
+    assert int(seed["source_port0"][p]) == 1
+    assert int(ref["action_id"][p]) == 12
+    assert float(ref["pos_x"][p]) == pytest.approx(0.0, abs=1e-4)
+    assert int(ref["facing"][p]) == 0
+
+    assert int(out["action_id"][p]) == int(ref["action_id"][p])
     assert int(out["facing"][p]) == int(ref["facing"][p])
 
 

@@ -1965,6 +1965,30 @@ static inline uint8_t stage_segment_intersects(float ax0, float ay0, float ax1, 
   return (uint8_t)(t >= 0.0f && t <= 1.0f && u >= 0.0f && u <= 1.0f);
 }
 
+static inline uint8_t stage_floor_segment_intersects_item(float ax0, float ay0, float ax1,
+                                                          float ay1, float bx0, float by0,
+                                                          float bx1, float by1) {
+  // mpCheckAllRemap -> mpCheckFloorRemap only admits horizontal floor lines when the motion segment
+  // is travelling downward; sloped floors use the general line intersection path.
+  // refs/melee/src/melee/mp/mplib.c::{mpCheckAllRemap,mpCheckFloorRemap}
+  if (fabsf(by0 - by1) <= 0.0001f && ay0 < ay1) {
+    return 0u;
+  }
+  return stage_segment_intersects(ax0, ay0, ax1, ay1, bx0, by0, bx1, by1);
+}
+
+static inline uint8_t stage_ceiling_segment_intersects_item(float ax0, float ay0, float ax1,
+                                                            float ay1, float bx0, float by0,
+                                                            float bx1, float by1) {
+  // mpCheckCeilingRemap is the mirror of the floor path: horizontal ceilings only admit upward
+  // motion. Keep sloped ceilings on the general intersection branch.
+  // refs/melee/src/melee/mp/mplib.c::{mpCheckAllRemap,mpCheckCeilingRemap}
+  if (fabsf(by0 - by1) <= 0.0001f && ay0 > ay1) {
+    return 0u;
+  }
+  return stage_segment_intersects(ax0, ay0, ax1, ay1, bx0, by0, bx1, by1);
+}
+
 uint8_t stage_collision_item_line_hits_floor(uint32_t stage_id, float x0, float y0, float x1,
                                              float y1) {
   const MslStageSlot* slot = stage_slot(stage_id);
@@ -1990,7 +2014,7 @@ uint8_t stage_collision_item_line_hits_floor(uint32_t stage_id, float x0, float 
   // refs/melee/src/melee/it/it_266F.c::it_8026E9A4
   for (size_t si = 0; si < n; si++) {
     const MslStageFloorLine* seg = &segs[si];
-    if (stage_segment_intersects(x0, y0, x1, y1, seg->x0, seg->y0, seg->x1, seg->y1)) {
+    if (stage_floor_segment_intersects_item(x0, y0, x1, y1, seg->x0, seg->y0, seg->x1, seg->y1)) {
       return 1;
     }
   }
@@ -2008,7 +2032,7 @@ uint8_t stage_collision_item_line_hits_floor(uint32_t stage_id, float x0, float 
   }
   for (size_t si = 0; si < ceiling_n; si++) {
     const MslStageCeilingLine* seg = &ceilings[si];
-    if (stage_segment_intersects(x0, y0, x1, y1, seg->x0, seg->y0, seg->x1, seg->y1)) {
+    if (stage_ceiling_segment_intersects_item(x0, y0, x1, y1, seg->x0, seg->y0, seg->x1, seg->y1)) {
       return 1;
     }
   }

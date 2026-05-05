@@ -14,7 +14,9 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
 
 # Button masks: src/buttons.h (Melee/HSD PAD bits)
 BUTTON_L = 0x0040
+BUTTON_R = 0x0020
 BUTTON_Z = 0x0010
+BUTTON_A = 0x0100
 BUTTON_B = 0x0200
 
 # Action ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
@@ -22,7 +24,9 @@ ACT_WAIT = 0x000E
 ACT_GUARD_ON = 0x00B2
 ACT_GUARD = 0x00B3
 ACT_GUARD_OFF = 0x00B4
+ACT_GUARD_SET_OFF = 0x00B5
 ACT_GUARD_REFLECT = 0x00B6
+ACT_PASS = 0x00F4
 ACT_FX_SPECIAL_LW_START = 0x0168
 ACT_ESCAPE_N = 0x00EB
 ACT_KNEE_BEND = 0x0018
@@ -33,10 +37,13 @@ SM_WAIT1_0 = 2
 SM_GUARD_ON = 37
 SM_GUARD = 38
 SM_GUARD_OFF = 39
+SM_GUARD_SET_OFF = 40
+SM_PASS = 209
 SM_KNEE_BEND = 11
 
 CHAR_FOX = 1
 STAGE_FD = 32
+STAGE_YOSHI = 8
 MAX_PLAYERS = 4
 
 
@@ -66,6 +73,26 @@ def _seed_base() -> np.ndarray:
     seed["animation_index"][0, 0] = np.uint32(SM_WAIT1_0)
     seed["shield_hp"][0, 0] = np.float32(_common_attr("start_shield_health"))
     return seed
+
+
+def _run_seed_one_step(seed: np.ndarray, cur_input: np.ndarray) -> np.void:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    prev = _mk_input_bytes(1, input_stride)
+    out = np.zeros((1, compare_stride), dtype=np.uint8)
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, seed_stride)))
+        msl_binding.step_input(handle, prev, cur_input)
+        msl_binding.write_compare(handle, out)
+        return out.view(COMPARE_DTYPE).reshape((1,))[0].copy()
+    finally:
+        msl_binding.destroy(handle)
 
 
 def test_grounded_guard_entry_hold_exit_changes_action_and_drains_shield() -> None:
@@ -359,6 +386,163 @@ def test_guard_snapshot_without_held_shield_still_enters_guardoff() -> None:
         assert int(got["action_id"][0]) == ACT_GUARD_OFF
     finally:
         msl_binding.destroy(handle)
+
+
+def test_guardsetoff_iasa_does_not_platform_pass_while_guardon_can() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    cur = _mk_input_bytes(1, input_stride)
+    cur_view = cur.view(INPUT_DTYPE).reshape((1,))
+    cur_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_L)
+    cur_view["p"]["main_y"][0, 0] = np.int8(-80)
+
+    seed = _seed_base()
+    seed["stage_id"][0] = np.uint32(STAGE_YOSHI)
+    seed["ground_id"][0, 0] = np.uint16(4)  # Yoshi top soft platform; data/stages/yoshis_story.json
+    seed["pos_x"][0, 0] = np.float32(0.0)
+    seed["pos_y"][0, 0] = np.float32(60.0)
+    seed["tilt_timer_y"][0, 0] = np.uint8(0)
+
+    guard_on_seed = seed.copy()
+    guard_on_seed["action_id"][0, 0] = np.uint16(ACT_GUARD_ON)
+    guard_on_seed["animation_index"][0, 0] = np.uint32(SM_GUARD_ON)
+    guard_on_seed["action_frame"][0, 0] = np.int16(2)
+    guard_on_seed["anim_frame_f32"][0, 0] = np.float32(2.0)
+
+    # Source positive: GuardOn_IASA calls ftCo_8009A080, which enters Pass while L/R is held and
+    # the current CollData floor is a platform.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardOn_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_8009A080
+    out_guard_on = _run_seed_one_step(guard_on_seed, cur)
+    assert int(out_guard_on["action_id"][0]) == ACT_PASS
+    assert int(out_guard_on["animation_index"][0]) == SM_PASS
+    assert int(out_guard_on["on_ground"][0]) == 0
+
+    guard_setoff_seed = seed.copy()
+    guard_setoff_seed["action_id"][0, 0] = np.uint16(ACT_GUARD_SET_OFF)
+    guard_setoff_seed["animation_index"][0, 0] = np.uint32(SM_GUARD_SET_OFF)
+    guard_setoff_seed["action_frame"][0, 0] = np.int16(2)
+    guard_setoff_seed["anim_frame_f32"][0, 0] = np.float32(2.0)
+
+    # Source negative: GuardSetOff_IASA is empty, so the same held shield+down platform input must
+    # not enter Pass from GuardSetOff.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardSetOff_IASA
+    out_guard_setoff = _run_seed_one_step(guard_setoff_seed, cur)
+    assert int(out_guard_setoff["action_id"][0]) == ACT_GUARD_SET_OFF
+    assert int(out_guard_setoff["on_ground"][0]) == 1
+
+
+@pytest.mark.integration
+def test_guardsetoff_platform_pass_is_not_admitted_from_empty_iasa_replay_real() -> None:
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_rel = "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    # Replay-real lock for the GuardSetOff platform-pass boundary:
+    # - GuardOn/Guard/GuardReflect can call ftCo_8009A080 from IASA.
+    # - GuardSetOff_IASA is empty, so held L/R+down must not enter Pass on these shield-hit rows.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    #   ftCo_GuardOn_IASA,ftCo_Guard_IASA,ftCo_GuardReflect_IASA,ftCo_GuardSetOff_IASA}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_8009A080
+    for record in (653, 654, 655):
+        seed, ref_row, out_row = _run_one_step_row(dataset_path, record, 1)
+        assert int(seed["action_id"][1]) == ACT_GUARD_SET_OFF
+        assert int(ref_row["action_id"][1]) == ACT_GUARD_SET_OFF
+        assert int(out_row["action_id"][1]) == ACT_GUARD_SET_OFF, (
+            f"record={record} expected GuardSetOff got={int(out_row['action_id'][1])}"
+        )
+        assert int(out_row["on_ground"][1]) == int(ref_row["on_ground"][1]) == 1
+
+
+def test_guardoff_anim_end_wait_destination_guard_entry_and_precedence() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    shield = _mk_input_bytes(1, input_stride)
+    shield_view = shield.view(INPUT_DTYPE).reshape((1,))
+    shield_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_R)
+    shield_view["p"]["r"][0, 0] = np.uint8(255)
+
+    seed = _seed_base()
+    seed["action_id"][0, 0] = np.uint16(ACT_GUARD_OFF)
+    seed["animation_index"][0, 0] = np.uint32(SM_GUARD_OFF)
+    seed["action_frame"][0, 0] = np.int16(14)
+    seed["anim_frame_f32"][0, 0] = np.float32(14.0)
+    seed["frame_speed_mul_f32"][0, 0] = np.float32(1.0)
+    seed["x672_input_timer"][0, 0] = np.uint8(16)
+
+    # GuardOff_Anim enters Wait when the shield-drop animation ends; the same frame's destination
+    # Wait_IASA then reaches ftCo_80091A4C and enters shield on held/pressed shield.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardOff_Anim
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+    out_guard = _run_seed_one_step(seed, shield)
+    assert int(out_guard["action_id"][0]) in (ACT_GUARD_ON, ACT_GUARD_REFLECT)
+    assert int(out_guard["animation_index"][0]) == 0xFFFFFFFF
+
+    # Negative coverage: Wait_IASA checks attack input before ftCo_80091A4C, so this retained
+    # destination callback must not broaden A+shield into GuardOn.
+    attack_shield = shield.copy()
+    attack_shield.view(INPUT_DTYPE).reshape((1,))["p"]["buttons"][0, 0] = np.uint16(
+        BUTTON_R | BUTTON_A
+    )
+    out_attack_priority = _run_seed_one_step(seed, attack_shield)
+    assert int(out_attack_priority["action_id"][0]) not in (ACT_GUARD_ON, ACT_GUARD_REFLECT)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "p"),
+    [
+        (
+            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
+            "CheeryNumbMonkey.msl",
+            679,
+            1,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/battlefield_recent/"
+            "DelayedSuperbGuanaco.msl",
+            2870,
+            1,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/dream_land_recent/"
+            "FlippantEnchantedHorse.msl",
+            2111,
+            1,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+            "TubbyCurlyHerring.msl",
+            1721,
+            1,
+        ),
+    ],
+)
+def test_guardoff_anim_end_wait_destination_guardon_replay_real(
+    dataset_rel: str, record: int, p: int
+) -> None:
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    seed, ref_row, out_row = _run_one_step_row(dataset_path, record, p)
+    assert int(seed["action_id"][p]) == ACT_GUARD_OFF
+    assert int(seed["action_frame"][p]) == 14
+    assert int(ref_row["action_id"][p]) == ACT_GUARD_ON
+    assert int(out_row["action_id"][p]) == ACT_GUARD_ON
+    assert int(out_row["animation_index"][p]) == int(ref_row["animation_index"][p]) == 0xFFFFFFFF
 
 
 @pytest.mark.integration

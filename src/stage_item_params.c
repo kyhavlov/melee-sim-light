@@ -9,8 +9,9 @@
 #include "alloc.h"
 
 enum {
-  MSLSTIO1_VERSION = 2,
-  MSLSTIO1_HEADER_BYTES = 56,
+  MSLSTIO1_VERSION = 3,
+  MSLSTIO1_HEADER_BYTES = 64,
+  MSLSTIO1_HURTBOX_BYTES = 32,
   MSLWHSP1_VERSION = 1,
   MSLWHSP1_BYTES = 44,
 };
@@ -50,11 +51,15 @@ static int load_yoshi_shyguy(const uint8_t* buf, size_t sz) {
   const uint16_t vpos_count = read_u16_le(buf + 16);
   const uint16_t speed_count = read_u16_le(buf + 18);
   const uint16_t dyn_y_count = read_u16_le(buf + 20);
-  const size_t expected = (size_t)MSLSTIO1_HEADER_BYTES + (size_t)vpos_count * sizeof(float) +
-                          (size_t)speed_count * sizeof(float) + (size_t)dyn_y_count * sizeof(float);
+  const uint16_t hurtbox_count = read_u16_le(buf + 62);
+  const size_t expected = (size_t)MSLSTIO1_HEADER_BYTES +
+                          (size_t)hurtbox_count * (size_t)MSLSTIO1_HURTBOX_BYTES +
+                          (size_t)vpos_count * sizeof(float) + (size_t)speed_count * sizeof(float) +
+                          (size_t)dyn_y_count * sizeof(float);
   if (sz != expected || vpos_count != (uint16_t)MSL_YOSHI_SHYGUY_VPOS_COUNT ||
       speed_count != (uint16_t)MSL_YOSHI_SHYGUY_SPEED_COUNT ||
-      dyn_y_count != (uint16_t)MSL_YOSHI_SHYGUY_DYN_Y_COUNT) {
+      dyn_y_count != (uint16_t)MSL_YOSHI_SHYGUY_DYN_Y_COUNT || hurtbox_count == 0u ||
+      hurtbox_count > 2u) {
     return -1;
   }
 
@@ -69,11 +74,25 @@ static int load_yoshi_shyguy(const uint8_t* buf, size_t sz) {
   g_yoshi_shyguy.spawn_delay_step = read_u16_le(buf + 30);
   g_yoshi_shyguy.fall_accel = read_f32_le(buf + 32);
   g_yoshi_shyguy.fall_speed_max = read_f32_le(buf + 36);
-  g_yoshi_shyguy.spawn_left_x = read_f32_le(buf + 40);
-  g_yoshi_shyguy.spawn_right_x = read_f32_le(buf + 44);
-  g_yoshi_shyguy.state4_speed_mul = read_f32_le(buf + 48);
-  g_yoshi_shyguy.jitter_y_amp = read_f32_le(buf + 52);
+  g_yoshi_shyguy.damage_mul = read_f32_le(buf + 40);
+  g_yoshi_shyguy.spawn_left_x = read_f32_le(buf + 44);
+  g_yoshi_shyguy.spawn_right_x = read_f32_le(buf + 48);
+  g_yoshi_shyguy.state4_speed_mul = read_f32_le(buf + 52);
+  g_yoshi_shyguy.jitter_y_amp = read_f32_le(buf + 56);
+  g_yoshi_shyguy.damage_threshold = read_u16_le(buf + 60);
+  g_yoshi_shyguy.hurtbox_count = hurtbox_count;
   size_t off = MSLSTIO1_HEADER_BYTES;
+  for (uint16_t hi = 0; hi < hurtbox_count; hi++, off += (size_t)MSLSTIO1_HURTBOX_BYTES) {
+    // MSLSTIO1 v3 hurtbox payload mirrors the concrete Heiho ItemDynamics descriptor copied by
+    // it_8027163C: bone_id, a_offset Vec3, b_offset Vec3, scale.
+    // refs/melee/src/melee/it/itcoll.c::it_8027163C
+    (void)read_u16_le(buf + off + 0);
+    for (int k = 0; k < 3; k++) {
+      g_yoshi_shyguy.hurtbox_a_offset[hi][k] = read_f32_le(buf + off + 4 + (size_t)k * 4u);
+      g_yoshi_shyguy.hurtbox_b_offset[hi][k] = read_f32_le(buf + off + 16 + (size_t)k * 4u);
+    }
+    g_yoshi_shyguy.hurtbox_scale[hi] = read_f32_le(buf + off + 28);
+  }
   for (int i = 0; i < MSL_YOSHI_SHYGUY_VPOS_COUNT; i++, off += sizeof(float)) {
     g_yoshi_shyguy.vpos[i] = read_f32_le(buf + off);
   }
@@ -85,7 +104,8 @@ static int load_yoshi_shyguy(const uint8_t* buf, size_t sz) {
   }
   if (g_yoshi_shyguy.stage_id == 0u || g_yoshi_shyguy.item_kind == 0u ||
       g_yoshi_shyguy.timer_reset == 0u || g_yoshi_shyguy.spawn_delay_step == 0u ||
-      !(g_yoshi_shyguy.fall_speed_max > 0.0f)) {
+      !(g_yoshi_shyguy.fall_speed_max > 0.0f) || !(g_yoshi_shyguy.damage_mul > 0.0f) ||
+      g_yoshi_shyguy.damage_threshold == 0u || !(g_yoshi_shyguy.hurtbox_scale[0] > 0.0f)) {
     return -1;
   }
   return 0;

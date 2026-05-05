@@ -357,10 +357,17 @@ def test_stage_item_yoshi_shyguy_known_rows() -> None:
     assert params.spawn_delay_step == 25
     assert params.fall_accel == pytest.approx(0.12)
     assert params.fall_speed_max == pytest.approx(2.2)
+    assert params.damage_mul == pytest.approx(2.0)
     assert params.spawn_left_x == pytest.approx(-292.0)
     assert params.spawn_right_x == pytest.approx(304.0)
     assert params.state4_speed_mul == pytest.approx(1.5)
     assert params.jitter_y_amp == pytest.approx(3.0)
+    assert params.damage_threshold == 15
+    assert len(params.hurtboxes) == 1
+    assert params.hurtboxes[0].bone_id == 0
+    assert params.hurtboxes[0].a_offset == pytest.approx((0.0, 0.0, 0.0))
+    assert params.hurtboxes[0].b_offset == pytest.approx((0.0, 0.0, 0.0))
+    assert params.hurtboxes[0].scale == pytest.approx(5.0)
     assert params.vpos == pytest.approx((30.0, 45.0, 60.0, 75.0, 90.0, 0.0))
     assert params.speed == pytest.approx((0.3, 0.5, 0.75))
     assert len(params.dyn_y_vel) == 128
@@ -1234,6 +1241,46 @@ def test_known_data_artifact_readers_reject_stale_versions(tmp_path: Path, magic
     path.write_bytes(bytes(buf))
     with pytest.raises(ValueError, match=match):
         reader(path)
+
+
+def test_mslstio1_rejects_zero_hurtbox_contract(tmp_path: Path) -> None:
+    path = tmp_path / "zero_hurtboxes.bin"
+    buf = bytearray(64)
+    buf[:8] = STAGE_ITEM_OBJECT_MAGIC
+    struct.pack_into("<I", buf, 8, STAGE_ITEM_OBJECT_VERSION)
+    struct.pack_into("<HHH", buf, 16, 6, 3, 128)
+    struct.pack_into("<H", buf, 62, 0)
+    path.write_bytes(bytes(buf))
+    with pytest.raises(ValueError, match="invalid hurtbox_count"):
+        read_mslstio1_yoshi_shyguy(path)
+
+    from tools.extraction.extract_stage_item_objects import _write_bin
+
+    with pytest.raises(ValueError, match="unexpected Shy Guy table dimensions"):
+        _write_bin(
+            tmp_path / "zero_hurtboxes_writer.bin",
+            {
+                "stage_id": 8,
+                "item_kind": 0xD2,
+                "timer_min": 1,
+                "timer_rand": 1,
+                "timer_reset": 120,
+                "spawnmany_rarity": 1,
+                "spawn_delay_step": 25,
+                "fall_accel": 0.1,
+                "fall_speed_max": 1.0,
+                "damage_mul": 2.0,
+                "spawn_left_x": -292.0,
+                "spawn_right_x": 304.0,
+                "state4_speed_mul": 1.5,
+                "jitter_y_amp": 3.0,
+                "damage_threshold": 15,
+                "hurtboxes": [],
+                "vpos": [0.0] * 6,
+                "speed": [1.0] * 3,
+                "dyn_y_vel": [0.0] * 128,
+            },
+        )
 
 
 @pytest.mark.integration

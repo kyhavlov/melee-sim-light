@@ -865,6 +865,25 @@ static void hitboxes_seed_bridge_trim_impossible_indefinite(
     if (batch->state.prev_action_id[v_idx] != (uint16_t)MSL_ACT_GUARD) {
       continue;
     }
+    const size_t shield_seed_base =
+        (size_t)bi * (size_t)MSL_MAX_PLAYERS * (size_t)MSL_MAX_HITBOXES * (size_t)MSL_MAX_PLAYERS;
+    const size_t shield_seed_slot =
+        ((size_t)attacker * (size_t)MSL_MAX_HITBOXES + (size_t)hb_id) * (size_t)MSL_MAX_PLAYERS +
+        (size_t)victim_port;
+    const size_t shield_seed_i = shield_seed_base + shield_seed_slot;
+    if (batch->state.combat_shield_contact_hb_kind[shield_seed_i] == 1u &&
+        e->id16 == batch->state.instance_id[v_idx]) {
+      // Frozen Guard no-submotion stale-trim boundary:
+      // - ftColl_80078C70 first gates the HitCapsule through lbColl_8000ACFC, then checks
+      //   ShieldDesc overlap with lbColl_80007BCC, then optionally falls through to BODY.
+      // - A replay-proven ShieldDesc miss (`combat_shield_contact_hb_kind == 1`) is not proof that
+      //   the HitCapsule victims_1 latch is stale. When the dense seed still names the current
+      //   Guard object, preserve that lbColl_8000ACFC suppression so the BODY fallthrough remains
+      //   blocked by source-owned HitCapsule provenance.
+      // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+      // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80007BCC}
+      continue;
+    }
     // Authoritative per-HitCapsule seed for the frozen-Guard shield-provenance family must survive
     // this reseed-only dense stale trim. Keep the legacy dense-fallback trim unchanged.
     // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076CBC}

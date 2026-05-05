@@ -41,8 +41,26 @@ def _ptr32(arc: HsdArchive, abs_off: int) -> int:
     return arc.data_base + ptr if ptr != 0 else 0
 
 
-def _extract_heiho_article(arc: HsdArchive) -> tuple[int, int, list[float], float, float, int]:
-    """Return `(article_abs, state0_anim_abs, special_attrs, fall_accel, fall_speed_max, kind)`.
+def _audit_stage_dat_path(path: Path) -> str:
+    try:
+        return path.resolve().relative_to(Path.cwd().resolve()).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
+def _extract_heiho_article(
+    arc: HsdArchive,
+) -> tuple[
+    int,
+    int,
+    list[float],
+    float,
+    float,
+    int,
+    int,
+    list[dict],
+]:
+    """Return Heiho article metadata used by the stage-object runtime.
 
     Source shape:
     - `stage_info.itemdata` is an array of stage item entries.
@@ -69,14 +87,51 @@ def _extract_heiho_article(arc: HsdArchive) -> tuple[int, int, list[float], floa
         attr = _ptr32(arc, article + 0x00)
         special = _ptr32(arc, article + 0x04)
         states = _ptr32(arc, article + 0x0C)
+        hurtbox_dyn = _ptr32(arc, article + 0x08)
         if attr == 0 or special == 0 or states == 0:
             raise ValueError("GrSt.dat Heiho article has null required table")
 
         fall_accel = _f32_be(arc.buf, attr + 0x10)
         fall_speed_max = _f32_be(arc.buf, attr + 0x14)
         special_attrs = [_f32_be(arc.buf, special + i * 4) for i in range(7)]
+        # Heiho's first special attr is a pointer to a short damage/collision parameter block.
+        # it_802D8EC8 compares cumulative item damage against `**special_attrs * 0.8F`.
+        damage_param = _ptr32(arc, special + 0x00)
+        if damage_param == 0:
+            raise ValueError("GrSt.dat Heiho special attr damage block is null")
+        damage_threshold = int(_u32_be(arc.buf, damage_param + 0x00))
+
+        hurtboxes: list[dict] = []
+        if hurtbox_dyn != 0:
+            count = int(_u32_be(arc.buf, hurtbox_dyn + 0x00))
+            dyn_descs = _ptr32(arc, hurtbox_dyn + 0x04)
+            if count == 0 or count > 2 or dyn_descs == 0:
+                raise ValueError("GrSt.dat Heiho hurtbox dynamics table has invalid shape")
+            for i in range(count):
+                # it_8027163C copies ItemDynamics dyn_descs into item->xACC_itemHurtbox. The
+                # concrete GrSt.dat Heiho table stores a 0x20-byte bone+hurt descriptor:
+                # bone_id, a_offset Vec3, b_offset Vec3, scale.
+                # refs/melee/src/melee/it/itcoll.c::it_8027163C
+                desc = dyn_descs + i * 0x20
+                hurtboxes.append(
+                    {
+                        "bone_id": int(_u32_be(arc.buf, desc + 0x00)),
+                        "a_offset": [_f32(_f32_be(arc.buf, desc + 0x04 + j * 4)) for j in range(3)],
+                        "b_offset": [_f32(_f32_be(arc.buf, desc + 0x10 + j * 4)) for j in range(3)],
+                        "scale": _f32(_f32_be(arc.buf, desc + 0x1C)),
+                    }
+                )
         state0_anim = _ptr32(arc, states + 0x00)
-        return article, state0_anim, special_attrs, fall_accel, fall_speed_max, kind
+        return (
+            article,
+            state0_anim,
+            special_attrs,
+            fall_accel,
+            fall_speed_max,
+            kind,
+            damage_threshold,
+            hurtboxes,
+        )
 
     raise ValueError("GrSt.dat itemdata missing It_Kind_Heiho article")
 
@@ -142,9 +197,16 @@ def _extract_yoshi_shyguy(grst: Path) -> dict:
     if yak is None:
         raise ValueError("GrSt.dat missing yakumono_param public symbol")
 
-    article_abs, state0_anim, special_attrs, fall_accel, fall_speed_max, item_kind = (
-        _extract_heiho_article(arc)
-    )
+    (
+        article_abs,
+        state0_anim,
+        special_attrs,
+        fall_accel,
+        fall_speed_max,
+        item_kind,
+        damage_threshold,
+        hurtboxes,
+    ) = _extract_heiho_article(arc)
     dyn_y_vel = _extract_child_jobj_tray_fobj_deltas(arc, state0_anim)
     return {
         "stage_id": STAGE_YOSHIS_STORY,
@@ -156,15 +218,18 @@ def _extract_yoshi_shyguy(grst: Path) -> dict:
         "spawn_delay_step": 25,
         "fall_accel": _f32(fall_accel),
         "fall_speed_max": _f32(fall_speed_max),
+        "damage_mul": _f32(_f32_be(arc.buf, _ptr32(arc, article_abs + 0x00) + 0x1C)),
         "spawn_left_x": _f32(-292.0),
         "spawn_right_x": _f32(304.0),
         "jitter_y_amp": _f32(3.0),
         "state4_speed_mul": _f32(1.5),
+        "damage_threshold": int(damage_threshold),
+        "hurtboxes": hurtboxes,
         "vpos": [_f32(_f32_be(arc.buf, yak + 0x0C + i * 4)) for i in range(6)],
         "speed": [_f32(v) for v in special_attrs[1:4]],
         "dyn_y_vel": dyn_y_vel,
         "source": {
-            "stage_dat": str(grst),
+            "stage_dat": _audit_stage_dat_path(grst),
             "yakumono_param_rel": yak - arc.data_base,
             "heiho_article_rel": article_abs - arc.data_base,
             "state0_anim_joint_rel": state0_anim - arc.data_base,
@@ -203,7 +268,7 @@ def _extract_dream_whispy(grop: Path) -> dict:
         "idle_timer_min": int(_u16_be(arc.buf, yak + 0x08 + 2)),
         "idle_timer_max": int(_u16_be(arc.buf, yak + 0x0C + 2)),
         "source": {
-            "stage_dat": str(grop),
+            "stage_dat": _audit_stage_dat_path(grop),
             "yakumono_param_rel": yak - arc.data_base,
             "refs": [
                 "refs/melee/src/melee/gr/groldpupupu.c::{grOldPupupu_802113E0,fn_802112F4}",
@@ -218,13 +283,20 @@ def _write_bin(path: Path, data: dict) -> None:
     vpos = [float(x) for x in data["vpos"]]
     speed = [float(x) for x in data["speed"]]
     dyn_y_vel = [float(x) for x in data["dyn_y_vel"]]
-    if len(vpos) != 6 or len(speed) != 3 or len(dyn_y_vel) != 128:
+    hurtboxes = list(data.get("hurtboxes") or [])
+    if (
+        len(vpos) != 6
+        or len(speed) != 3
+        or len(dyn_y_vel) != 128
+        or len(hurtboxes) == 0
+        or len(hurtboxes) > 2
+    ):
         raise ValueError("unexpected Shy Guy table dimensions")
 
     buf = bytearray()
     buf += STAGE_ITEM_OBJECT_MAGIC
     buf += struct.pack(
-        "<IHHHHHHHHHHffffff",
+        "<IHHHHHHHHHHfffffffHH",
         STAGE_ITEM_OBJECT_VERSION,
         int(data["stage_id"]) & 0xFFFF,
         int(data["item_kind"]) & 0xFFFF,
@@ -238,11 +310,26 @@ def _write_bin(path: Path, data: dict) -> None:
         int(data["spawn_delay_step"]) & 0xFFFF,
         _f32(data["fall_accel"]),
         _f32(data["fall_speed_max"]),
+        _f32(data["damage_mul"]),
         _f32(data["spawn_left_x"]),
         _f32(data["spawn_right_x"]),
         _f32(data["state4_speed_mul"]),
         _f32(data["jitter_y_amp"]),
+        int(data["damage_threshold"]) & 0xFFFF,
+        len(hurtboxes) & 0xFFFF,
     )
+    for hurt in hurtboxes:
+        a = list(hurt["a_offset"])
+        b = list(hurt["b_offset"])
+        if len(a) != 3 or len(b) != 3:
+            raise ValueError("unexpected Shy Guy hurtbox vector dimensions")
+        buf += struct.pack(
+            "<H2xfffffff",
+            int(hurt["bone_id"]) & 0xFFFF,
+            *[_f32(x) for x in a],
+            *[_f32(x) for x in b],
+            _f32(hurt["scale"]),
+        )
     buf += struct.pack("<" + "f" * len(vpos), *[_f32(x) for x in vpos])
     buf += struct.pack("<" + "f" * len(speed), *[_f32(x) for x in speed])
     buf += struct.pack("<" + "f" * len(dyn_y_vel), *[_f32(x) for x in dyn_y_vel])

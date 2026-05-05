@@ -316,6 +316,36 @@ def test_yoshi_shyguy_native_derivation_rejects_mismatched_item_width() -> None:
         )
 
 
+def test_yoshi_shyguy_state3_damage_reset_restarts_return_delay_lane() -> None:
+    pytest.importorskip("msl_binding")
+    items = np.zeros((5, 15), dtype=SEED_DTYPE["items"].base)
+    items["owner"] = np.int8(-1)
+    for frame, (state, damage) in enumerate(((1, 0), (3, 2), (3, 2), (3, 4), (3, 4))):
+        item = items[frame, 0]
+        item["exists"] = np.uint8(1)
+        item["state"] = np.uint8(state)
+        item["type"] = np.uint16(ITEM_KIND_HEIHO)
+        item["owner"] = np.int8(-1)
+        item["spawn_id"] = np.uint32(123)
+        item["vel_x"] = np.float32(0.5)
+        item["vel_y"] = np.float32(-1.77)
+        item["pos_x"] = np.float32(8.0)
+        item["pos_y"] = np.float32(20.0)
+        item["damage"] = np.uint16(damage)
+
+    lanes = _derive_yoshi_shyguy_native_lanes(items, stage_id=STAGE_YOSHIS_STORY)
+    delay, delay_valid = lanes[9], lanes[10]
+    hitlag, hitlag_valid = lanes[11], lanes[12]
+
+    assert int(delay_valid[1, 0]) == 1
+    assert int(delay[1, 0]) == 12
+    assert int(delay[2, 0]) == 12
+    assert int(delay_valid[3, 0]) == 1
+    assert int(delay[3, 0]) == 12
+    assert int(hitlag_valid[3, 0]) == 1
+    assert int(hitlag[3, 0]) > 0
+
+
 def test_yoshi_shyguy_stage_timer_derivation_is_prefix_causal() -> None:
     items = np.zeros((3, 15), dtype=SEED_DTYPE["items"].base)
     items["owner"] = np.int8(-1)
@@ -406,6 +436,63 @@ def test_yoshi_shyguy_state1_entry_samples_first_dynamic_delta() -> None:
     )
 
 
+def test_yoshi_shyguy_state3_zero_delay_enters_return_flight() -> None:
+    seed = _empty_seed()
+    item = seed["items"][0, 0]
+    item["exists"] = np.uint8(1)
+    item["type"] = np.uint16(ITEM_KIND_HEIHO)
+    item["state"] = np.uint8(3)
+    item["owner"] = np.int8(-1)
+    item["pos_x"] = np.float32(12.0)
+    item["pos_y"] = np.float32(40.0)
+    item["vel_x"] = np.float32(0.5)
+    item["vel_y"] = np.float32(-2.0)
+    item["direction"] = np.float32(-1.0)
+    item["damage"] = np.uint16(8)
+    seed["item_shyguy_delay_u16"][0, 0] = np.uint16(0)
+    seed["item_shyguy_delay_valid_u8"][0, 0] = np.uint8(1)
+    seed["item_shyguy_hitlag_u8"][0, 0] = np.uint8(0)
+    seed["item_shyguy_hitlag_valid_u8"][0, 0] = np.uint8(1)
+
+    out = _step_seed(seed)
+    out_item = out["items"][0]
+    assert int(out_item["exists"]) == 1
+    assert int(out_item["type"]) == ITEM_KIND_HEIHO
+    assert int(out_item["state"]) == 4
+    assert float(out_item["pos_x"]) == pytest.approx(12.0, abs=1e-6)
+    assert float(out_item["pos_y"]) == pytest.approx(40.0, abs=1e-6)
+    assert float(out_item["vel_x"]) == pytest.approx(0.0, abs=1e-6)
+    assert float(out_item["vel_y"]) == pytest.approx(0.0, abs=1e-6)
+    assert float(out_item["direction"]) == pytest.approx(1.0, abs=1e-6)
+
+
+def test_yoshi_shyguy_state3_positive_delay_keeps_falling() -> None:
+    seed = _empty_seed()
+    item = seed["items"][0, 0]
+    item["exists"] = np.uint8(1)
+    item["type"] = np.uint16(ITEM_KIND_HEIHO)
+    item["state"] = np.uint8(3)
+    item["owner"] = np.int8(-1)
+    item["pos_x"] = np.float32(12.0)
+    item["pos_y"] = np.float32(40.0)
+    item["vel_x"] = np.float32(0.5)
+    item["vel_y"] = np.float32(-2.0)
+    item["direction"] = np.float32(-1.0)
+    item["damage"] = np.uint16(5)
+    seed["item_shyguy_delay_u16"][0, 0] = np.uint16(1)
+    seed["item_shyguy_delay_valid_u8"][0, 0] = np.uint8(1)
+    seed["item_shyguy_hitlag_u8"][0, 0] = np.uint8(0)
+    seed["item_shyguy_hitlag_valid_u8"][0, 0] = np.uint8(1)
+
+    out = _step_seed(seed)
+    out_item = out["items"][0]
+    assert int(out_item["exists"]) == 1
+    assert int(out_item["type"]) == ITEM_KIND_HEIHO
+    assert int(out_item["state"]) == 3
+    assert float(out_item["pos_x"]) == pytest.approx(12.5, abs=1e-6)
+    assert float(out_item["vel_y"]) == pytest.approx(-2.12, abs=1e-5)
+
+
 def test_yoshi_shyguy_stage_timer_spawns_without_future_items() -> None:
     seed = _empty_seed()
     seed["frame_pre_random_seed"] = np.uint32(0x77C154)
@@ -439,6 +526,121 @@ def test_yoshi_shyguy_dynamic_prev_vel_y_does_not_touch_other_stages() -> None:
     out = _step_seed(seed)
     assert float(out["items"][0]["pos_y"]) == pytest.approx(20.0, abs=1e-6)
     assert float(out["items"][0]["vel_y"]) == pytest.approx(0.25, abs=1e-6)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("record", "slot"),
+    [
+        (1201, 0),
+        (6354, 1),
+    ],
+)
+def test_yoshi_shyguy_laser_item_hit_enters_damage_state(record: int, slot: int) -> None:
+    # Replay-real locks for stage-object item-vs-item damage:
+    # - Falco laser item HitCapsule intersects the Heiho item hurtbox.
+    # - it_802706D0 records the item hit and Item_8026A294 dispatches Heiho dmg_received.
+    # - Low cumulative damage enters state 3 through it_802D8EC8 / it_8027B798 and consumes the
+    #   laser article.
+    # refs/melee/src/melee/it/itcoll.c::{it_802706D0,it_80270E30}
+    # refs/melee/src/melee/it/items/itheiho.c::it_802D8EC8
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    out, ref = _step_one_row(dataset_path, record)
+    assert int(out["items"][slot]["exists"]) == 1
+    assert int(out["items"][slot]["type"]) == ITEM_KIND_HEIHO
+    assert int(out["items"][slot]["state"]) == 3
+    assert int(out["items"][slot]["state"]) == int(ref["items"][slot]["state"])
+    assert float(out["items"][slot]["vel_x"]) == pytest.approx(
+        float(ref["items"][slot]["vel_x"]), abs=1e-5
+    )
+    assert float(out["items"][slot]["vel_y"]) == pytest.approx(
+        float(ref["items"][slot]["vel_y"]), abs=1e-5
+    )
+    assert not any(int(item["exists"]) and int(item["type"]) == 55 for item in out["items"])
+
+
+def test_yoshi_shyguy_laser_item_hit_does_not_admit_far_or_non_yoshi_rows() -> None:
+    seed = _empty_seed()
+    seed["items"][0, 0]["exists"] = np.uint8(1)
+    seed["items"][0, 0]["type"] = np.uint16(ITEM_KIND_HEIHO)
+    seed["items"][0, 0]["state"] = np.uint8(1)
+    seed["items"][0, 0]["owner"] = np.int8(-1)
+    seed["items"][0, 0]["pos_x"] = np.float32(0.0)
+    seed["items"][0, 0]["pos_y"] = np.float32(0.0)
+    seed["items"][0, 0]["direction"] = np.float32(1.0)
+    seed["items"][0, 1]["exists"] = np.uint8(1)
+    seed["items"][0, 1]["type"] = np.uint16(55)
+    seed["items"][0, 1]["state"] = np.uint8(0)
+    seed["items"][0, 1]["owner"] = np.int8(0)
+    seed["items"][0, 1]["instance_id"] = np.uint16(77)
+    seed["items"][0, 1]["spawn_id"] = np.uint32(77)
+    seed["items"][0, 1]["pos_x"] = np.float32(100.0)
+    seed["items"][0, 1]["pos_y"] = np.float32(0.0)
+    seed["items"][0, 1]["vel_x"] = np.float32(5.0)
+    seed["items"][0, 1]["timer"] = np.float32(80.0)
+    seed["items"][0, 1]["direction"] = np.float32(1.0)
+    seed["char_id"][0, 0] = np.uint8(22)
+
+    out = _step_seed(seed)
+    assert any(
+        int(item["exists"]) and int(item["type"]) == ITEM_KIND_HEIHO and int(item["state"]) == 1
+        for item in out["items"]
+    )
+    assert any(int(item["exists"]) and int(item["type"]) == 55 for item in out["items"])
+
+    seed["stage_id"] = np.uint32(32)
+    seed["items"][0, 1]["pos_x"] = np.float32(0.0)
+    out_non_yoshi = _step_seed(seed)
+    assert any(int(item["exists"]) and int(item["type"]) == 55 for item in out_non_yoshi["items"])
+
+
+def test_yoshi_shyguy_reflected_laser_item_hit_uses_reflected_damage_lane() -> None:
+    seed = _empty_seed()
+    shy = seed["items"][0, 0]
+    shy["exists"] = np.uint8(1)
+    shy["type"] = np.uint16(ITEM_KIND_HEIHO)
+    shy["state"] = np.uint8(1)
+    shy["owner"] = np.int8(-1)
+    shy["spawn_id"] = np.uint32(88)
+    shy["pos_x"] = np.float32(0.0)
+    shy["pos_y"] = np.float32(0.0)
+    shy["direction"] = np.float32(1.0)
+
+    laser = seed["items"][0, 1]
+    laser["exists"] = np.uint8(1)
+    laser["type"] = np.uint16(55)
+    laser["state"] = np.uint8(0)
+    laser["owner"] = np.int8(0)
+    laser["instance_id"] = np.uint16(77)
+    laser["spawn_id"] = np.uint32(77)
+    laser["pos_x"] = np.float32(-1.0)
+    laser["pos_y"] = np.float32(0.0)
+    laser["vel_x"] = np.float32(1.0)
+    laser["timer"] = np.float32(80.0)
+    laser["direction"] = np.float32(1.0)
+    seed["char_id"][0, 0] = np.uint8(22)
+
+    raw_out = _step_seed(seed)
+    assert int(raw_out["items"][0]["damage"]) == 3
+    assert int(raw_out["items"][0]["damage"]) < int(_shyguy_params().damage_threshold * 0.8)
+    assert int(raw_out["items"][0]["state"]) == 3
+
+    reflected_seed = seed.copy()
+    reflected_seed["item_reflect_damage_mul"][0, 1] = np.float32(5.0)
+    reflected_out = _step_seed(reflected_seed)
+    # Item_80269F14 / it_80272460 normalize reflected item damage before any item damage callback
+    # consumes it. The Heiho item-vs-item path must feed that reflected lane into cumulative damage,
+    # knockback/hitlag, and the it_802D8EC8 high-damage threshold branch.
+    assert int(reflected_out["items"][0]["damage"]) == 15
+    assert int(reflected_out["items"][0]["state"]) == 2
+    assert not any(int(item["exists"]) and int(item["type"]) == 55 for item in reflected_out["items"])
 
 
 @pytest.mark.integration
@@ -583,19 +785,58 @@ def test_yoshi_shyguy_state3_zero_delay_rows_do_not_over_enter_state4() -> None:
             pytest.skip(f"stale local dataset cache: {exc}")
         raise
 
-    # These replay-real rows lock the rejected over-broad state-3 x24 reconstruction. Slippi
-    # serializes state 3 with x24==0 for several rows before the source item proc actually enters
-    # state 4, so zero alone is not a sufficient causal transition predicate.
-    # refs/melee/src/melee/it/items/itheiho.c::{itHeiho_UnkMotion3_Phys,it_802D9168}
+    items_for_derivation = np.empty(
+        (int(ds.samples.shape[0]) + 1, 15), dtype=SEED_DTYPE["items"].base
+    )
+    items_for_derivation[:-1] = ds.samples["seed_t"]["items"]
+    items_for_derivation[-1] = ds.samples["ref_t1"][-1]["items"]
+    fresh_lanes = _derive_yoshi_shyguy_native_lanes(
+        items_for_derivation, stage_id=STAGE_YOSHIS_STORY
+    )
+    fresh_delay, fresh_delay_valid = fresh_lanes[9], fresh_lanes[10]
+
+    # These replay-real rows lock the rejected over-broad state-3 x24 reconstruction. Repeated
+    # low-damage callbacks reset source x24 while staying in state 3, so zero alone is not a
+    # sufficient causal transition predicate.
+    # refs/melee/src/melee/it/items/itheiho.c::{it_802D8EC8,itHeiho_UnkMotion3_Phys,it_802D9168}
     for record in (6124, 6133):
         row = ds.samples[record]
         seed = row["seed_t"]
         assert int(seed["items"][1]["type"]) == ITEM_KIND_HEIHO
         assert int(seed["items"][1]["state"]) == 3
-        assert int(seed["item_shyguy_delay_valid_u8"][1]) == 1
-        assert int(seed["item_shyguy_delay_u16"][1]) == 0
+        if (
+            int(seed["item_shyguy_delay_u16"][1]) != int(fresh_delay[record, 1])
+            or int(seed["item_shyguy_delay_valid_u8"][1]) != int(fresh_delay_valid[record, 1])
+        ):
+            pytest.skip("local dataset cache predates Shy Guy repeated-damage x24 derivation")
         out, ref = _step_one_row(dataset_path, record)
         assert int(out["items"][1]["state"]) == int(ref["items"][1]["state"]) == 3
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(("record", "slot"), [(613, 3), (2733, 4)])
+def test_yoshi_shyguy_state3_zero_delay_enters_return_flight_replay_real(
+    record: int, slot: int
+) -> None:
+    dataset_path = Path(
+        "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+    seed = read_dataset(str(dataset_path)).samples[record]["seed_t"]
+    assert int(seed["items"][slot]["type"]) == ITEM_KIND_HEIHO
+    assert int(seed["items"][slot]["state"]) == 3
+    assert int(seed["item_shyguy_delay_valid_u8"][slot]) == 1
+    assert int(seed["item_shyguy_delay_u16"][slot]) == 0
+
+    out, ref = _step_one_row(dataset_path, record)
+    assert int(out["items"][slot]["state"]) == int(ref["items"][slot]["state"]) == 4
+    assert float(out["items"][slot]["pos_x"]) == pytest.approx(
+        float(ref["items"][slot]["pos_x"]), abs=1e-6
+    )
+    assert float(out["items"][slot]["pos_y"]) == pytest.approx(
+        float(ref["items"][slot]["pos_y"]), abs=1e-6
+    )
 
 
 def test_yoshi_shyguy_state2_uses_item_max_fall_speed() -> None:

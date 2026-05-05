@@ -63,6 +63,13 @@ static inline uint8_t state_flags_is_damage_fly_action(uint16_t action_id) {
   return msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_DAMAGE_FLY);
 }
 
+static inline uint8_t state_flags_is_down_damage_action(uint16_t action_id) {
+  return (action_id == (uint16_t)MSL_ACT_DOWN_DAMAGE_U ||
+          action_id == (uint16_t)MSL_ACT_DOWN_DAMAGE_D)
+             ? 1u
+             : 0u;
+}
+
 static inline uint8_t state_flags_221a_b5_capture_action(uint16_t action_id) {
   switch (action_id) {
     case MSL_ACT_CAPTURE_PULLED_HI:
@@ -748,7 +755,12 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
       // 0x221C: isHitstun derived from hitstun frames left.
       const size_t flags_221c_i = idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221C_INDEX;
       uint8_t f221c = batch->state.state_flags[flags_221c_i];
-      if (batch->state.hitstun[idx] > 0) {
+      const uint8_t down_damage_hitstun_flag_carry =
+          (state_flags_is_down_damage_action(batch->state.action_id[idx]) &&
+           (f221c & (uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN) != 0u)
+              ? 1u
+              : 0u;
+      if (batch->state.hitstun[idx] > 0 || down_damage_hitstun_flag_carry) {
         f221c |= (uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN;
       } else {
         f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN;
@@ -1189,17 +1201,6 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c
         // data/stages/final_destination.json: cam_bounds_world
         f221f |= (uint8_t)MSL_STATE_FLAG_221F_B0;
-      }
-      if (action_id == (uint16_t)MSL_ACT_LANDING && prev_action == (uint16_t)MSL_ACT_DAMAGE_AIR_2 &&
-          batch->state.prev_action_frame[idx] < 8 && batch->state.action_frame[idx] == 0) {
-        // Early DamageAir2->Landing snapshot carry:
-        // - Damage_Coll can still hand off through Landing_Enter_Basic while the replay-visible
-        //   post-frame retains the x221C_b6 lane on the destination snapshot.
-        // - Keep this restricted to the first Landing frame after the early DamageAir2 handoff so
-        //   the broad late-landing hitstun clear does not create new seed==ref state_flag drift.
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Coll
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Enter_Basic
-        f221c |= (uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN;
       }
       batch->state.state_flags[flags_221c_i] = f221c;
       batch->state.state_flags[flags_221f_i] = f221f;

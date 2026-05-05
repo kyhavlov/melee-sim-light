@@ -870,7 +870,7 @@ Characters (Fox/Falco):
     - `data/items/articles/manifest.json` maps generated field IDs, value types, units, and
       character domain to names for review/tooling.
   - Generated/ignored; regenerate through `tools.extraction.build_data`.
-- `data/stage_items/yoshi_shyguy.bin` (Yoshi's Story Shy Guy stage-object item data; `MSLSTIO1` compact binary)
+- `data/stage_items/yoshi_shyguy.bin` (Yoshi's Story Shy Guy stage-object item data; generated `MSLSTIO1` compact binary)
   - Purpose:
     - Store source-backed stage-owned item constants for `It_Kind_Heiho` so runtime item code
       consumes generated data instead of embedding DAT/FObj tables in gameplay C.
@@ -887,16 +887,21 @@ Characters (Fox/Falco):
     - `refs/melee/src/melee/gr/grstory.c::{reset_shyguy_timer,grStory_801E3418}`
     - `refs/melee/src/melee/it/items/itheiho.c::{it_802D8618,itHeiho_UnkMotion*_Phys,it_802D98C4}`
     - `refs/melee/src/sysdolphin/baselib/{aobj.c,fobj.c,jobj.c}`
-  - Binary layout: `MSLSTIO1` v2
+  - Binary layout: `MSLSTIO1` v3
     - `u8 magic[8] = "MSLSTIO1"`
-    - `u32 version = 2`
+    - `u32 version = 3`
     - header: `stage_id`, `item_kind`, table counts, timer/count/delay fields, fall accel,
-      max fall speed, spawn X positions, state-4 speed multiplier, jitter amplitude
+      max fall speed, Heiho item damage multiplier, spawn X positions, state-4 speed multiplier,
+      jitter amplitude, damage threshold, hurtbox count
+    - hurtbox payload: one or two concrete Heiho `ItemDynamics` descriptors copied by
+      `it_8027163C` (`bone_id`, `a_offset Vec3`, `b_offset Vec3`, `scale`)
     - payload: `vpos[6]`, active speed attrs `[3]`, dynamic-bone Y velocity deltas `[128]`
-  - Stale/non-v2 tables must be rejected by tooling readers; regenerate with
+  - Generated/ignored runtime artifact; do not source-control the `.bin`. The source-controlled
+    review mirror is `data/stage_items/yoshi_shyguy.json`.
+  - Stale/non-v3 tables must be rejected by tooling readers; regenerate with
     `uv run python -m tools.extraction.extract_stage_item_objects --grst _iso/GrSt.dat --out data/stage_items/yoshi_shyguy.bin --audit data/stage_items/yoshi_shyguy.json`
     or through `tools.extraction.build_data`.
-- `data/stage_items/dream_whispy.bin` (Dream Land Whispy wind data; `MSLWHSP1` compact binary)
+- `data/stage_items/dream_whispy.bin` (Dream Land Whispy wind data; generated `MSLWHSP1` compact binary)
   - Purpose:
     - Store source-backed Whispy wind force magnitude and source rectangles from Dream Land
       stage data so runtime wind force does not embed DAT constants in gameplay C.
@@ -914,6 +919,8 @@ Characters (Fox/Falco):
     - header: `stage_id`, reserved
     - payload: `wind_speed`, right wind rectangle left/right, left wind rectangle left/right,
       rectangle bottom/top
+  - Generated/ignored runtime artifact; do not source-control the `.bin`. The source-controlled
+    review mirror is `data/stage_items/dream_whispy.json`.
   - Stale/non-v1 tables must be rejected by tooling readers; regenerate with
     `uv run python -m tools.extraction.extract_stage_item_objects --grop _iso/GrOp.dat --dream-out data/stage_items/dream_whispy.bin --dream-audit data/stage_items/dream_whispy.json`
     or through `tools.extraction.build_data`.

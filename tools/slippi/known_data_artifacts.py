@@ -13,7 +13,7 @@ PART_VERSION = 1
 ITEM_ARTICLE_MAGIC = b"MSLITAR1"
 ITEM_ARTICLE_VERSION = 2
 STAGE_ITEM_OBJECT_MAGIC = b"MSLSTIO1"
-STAGE_ITEM_OBJECT_VERSION = 2
+STAGE_ITEM_OBJECT_VERSION = 3
 DREAM_WHISPY_MAGIC = b"MSLWHSP1"
 DREAM_WHISPY_VERSION = 1
 SCRIPT_MAGIC = b"MSLFTSC1"
@@ -198,13 +198,24 @@ class YoshiShyguyMetadata:
     spawn_delay_step: int
     fall_accel: float
     fall_speed_max: float
+    damage_mul: float
     spawn_left_x: float
     spawn_right_x: float
     state4_speed_mul: float
     jitter_y_amp: float
+    damage_threshold: int
+    hurtboxes: tuple["YoshiShyguyHurtbox", ...]
     vpos: tuple[float, ...]
     speed: tuple[float, ...]
     dyn_y_vel: tuple[float, ...]
+
+
+@dataclass(frozen=True)
+class YoshiShyguyHurtbox:
+    bone_id: int
+    a_offset: tuple[float, float, float]
+    b_offset: tuple[float, float, float]
+    scale: float
 
 
 @dataclass(frozen=True)
@@ -552,7 +563,7 @@ def read_mslitar1(path: Path) -> ItemArticleMetadata:
 
 
 def read_mslstio1_yoshi_shyguy(path: Path) -> YoshiShyguyMetadata:
-    buf = _require_header(path, STAGE_ITEM_OBJECT_MAGIC, STAGE_ITEM_OBJECT_VERSION, 56)
+    buf = _require_header(path, STAGE_ITEM_OBJECT_MAGIC, STAGE_ITEM_OBJECT_VERSION, 64)
     (
         stage_id,
         item_kind,
@@ -566,15 +577,41 @@ def read_mslstio1_yoshi_shyguy(path: Path) -> YoshiShyguyMetadata:
         spawn_delay_step,
         fall_accel,
         fall_speed_max,
+        damage_mul,
         spawn_left_x,
         spawn_right_x,
         state4_speed_mul,
         jitter_y_amp,
-    ) = struct.unpack_from("<HHHHHHHHHHffffff", buf, 12)
-    expected = 56 + int(vpos_count) * 4 + int(speed_count) * 4 + int(dyn_y_count) * 4
+        damage_threshold,
+        hurtbox_count,
+    ) = struct.unpack_from("<HHHHHHHHHHfffffffHH", buf, 12)
+    if int(hurtbox_count) == 0 or int(hurtbox_count) > 2:
+        raise ValueError(f"MSLSTIO1 invalid hurtbox_count in {path}: {hurtbox_count}")
+    expected = (
+        64
+        + int(hurtbox_count) * 32
+        + int(vpos_count) * 4
+        + int(speed_count) * 4
+        + int(dyn_y_count) * 4
+    )
     if len(buf) != expected:
         raise ValueError(f"MSLSTIO1 size mismatch in {path}: header-derived {expected} != {len(buf)}")
-    off = 56
+    off = 64
+    hurtboxes: list[YoshiShyguyHurtbox] = []
+    for _ in range(int(hurtbox_count)):
+        bone_id = struct.unpack_from("<H", buf, off)[0]
+        a = struct.unpack_from("<fff", buf, off + 4)
+        b = struct.unpack_from("<fff", buf, off + 16)
+        scale = struct.unpack_from("<f", buf, off + 28)[0]
+        off += 32
+        hurtboxes.append(
+            YoshiShyguyHurtbox(
+                bone_id=int(bone_id),
+                a_offset=(float(a[0]), float(a[1]), float(a[2])),
+                b_offset=(float(b[0]), float(b[1]), float(b[2])),
+                scale=float(scale),
+            )
+        )
     vpos = struct.unpack_from("<" + "f" * int(vpos_count), buf, off)
     off += int(vpos_count) * 4
     speed = struct.unpack_from("<" + "f" * int(speed_count), buf, off)
@@ -593,10 +630,13 @@ def read_mslstio1_yoshi_shyguy(path: Path) -> YoshiShyguyMetadata:
         spawn_delay_step=int(spawn_delay_step),
         fall_accel=float(fall_accel),
         fall_speed_max=float(fall_speed_max),
+        damage_mul=float(damage_mul),
         spawn_left_x=float(spawn_left_x),
         spawn_right_x=float(spawn_right_x),
         state4_speed_mul=float(state4_speed_mul),
         jitter_y_amp=float(jitter_y_amp),
+        damage_threshold=int(damage_threshold),
+        hurtboxes=tuple(hurtboxes),
         vpos=tuple(float(x) for x in vpos),
         speed=tuple(float(x) for x in speed),
         dyn_y_vel=tuple(float(x) for x in dyn_y_vel),

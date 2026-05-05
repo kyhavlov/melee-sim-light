@@ -1326,15 +1326,29 @@ static uint8_t blaster_gun_update_from_fighter(MslBatch* batch, int bi, int owne
   return spawned;
 }
 
-static inline uint8_t laser_should_shoot_on_frame(const MslLaserParams* lp, uint16_t msid,
-                                                  uint16_t frame) {
+static inline uint8_t laser_event_frame_crossed(float prev_frame, float cur_frame,
+                                                uint16_t event_frame) {
+  const float ef = (float)event_frame;
+  return (prev_frame < ef && cur_frame >= ef) ? 1u : 0u;
+}
+
+static inline uint8_t laser_should_shoot_between_frames(const MslLaserParams* lp, uint16_t msid,
+                                                        float prev_frame, float cur_frame) {
   if (lp == NULL) {
+    return 0;
+  }
+  if (cur_frame < prev_frame) {
+    // Loop restarts enter through Fighter_ChangeMotionState and reset the live AObj frame; the
+    // shoot command belongs to the pre-restart Anim callback and is intentionally not replayed from
+    // the new loop's frame 0 here.
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
+    //   ftFx_SpecialNLoop_Anim,ftFx_SpecialAirNLoop_Anim}
     return 0;
   }
   if (msid == lp->ground_loop_msid) {
     const uint8_t n = lp->shoot_frame_count_ground;
     for (uint8_t i = 0; i < n && i < (uint8_t)MSL_LASER_MAX_SHOOT_FRAMES; i++) {
-      if (lp->shoot_frames_ground[i] == frame) {
+      if (laser_event_frame_crossed(prev_frame, cur_frame, lp->shoot_frames_ground[i]) != 0u) {
         return 1;
       }
     }
@@ -1342,7 +1356,7 @@ static inline uint8_t laser_should_shoot_on_frame(const MslLaserParams* lp, uint
   if (msid == lp->air_loop_msid) {
     const uint8_t n = lp->shoot_frame_count_air;
     for (uint8_t i = 0; i < n && i < (uint8_t)MSL_LASER_MAX_SHOOT_FRAMES; i++) {
-      if (lp->shoot_frames_air[i] == frame) {
+      if (laser_event_frame_crossed(prev_frame, cur_frame, lp->shoot_frames_air[i]) != 0u) {
         return 1;
       }
     }
@@ -1827,7 +1841,8 @@ static inline uint8_t laser_airborne_damagefall_uses_lbcoll_hurt_radius(
 }
 
 static inline uint8_t item_try_guard_fresh_shield_center(const MslBatch* batch, size_t d_idx,
-                                                         float* out_x, float* out_y, float* out_z) {
+                                                         float laser_age_frames, float* out_x,
+                                                         float* out_y, float* out_z) {
   if (batch == NULL || out_x == NULL || out_y == NULL || out_z == NULL) {
     return 0u;
   }
@@ -1841,7 +1856,15 @@ static inline uint8_t item_try_guard_fresh_shield_center(const MslBatch* batch, 
           : 0u;
   const uint8_t fresh_locomotion_guard_reflect_entry =
       item_is_fresh_guardreflect_shield_center_source(batch, d_idx, prev_action_id);
-  if (!fresh_guard_on_entry && !fresh_locomotion_guard_reflect_entry) {
+  const uint8_t guard_on_command_bit_birth_item_pose =
+      (action_id == (uint16_t)MSL_ACT_GUARD_ON &&
+       batch->state.animation_index[d_idx] == 0xFFFFFFFFu && batch->state.action_frame[d_idx] < 0 &&
+       prev_action_id == (uint16_t)MSL_ACT_GUARD_ON && laser_age_frames <= 1.0f &&
+       (batch->state.state_flags[(d_idx * 5u) + 0u] & 0x40u) != 0u)
+          ? 1u
+          : 0u;
+  if (!fresh_guard_on_entry && !fresh_locomotion_guard_reflect_entry &&
+      !guard_on_command_bit_birth_item_pose) {
     return 0u;
   }
 
@@ -1858,8 +1881,12 @@ static inline uint8_t item_try_guard_fresh_shield_center(const MslBatch* batch, 
   // ftCo_80091A4C, but the repo only extracts Guard/GuardOn pose ownership in data/shields/*.bin;
   // applying that GuardOn current-pose table to Landing-origin GuardReflect rows creates unrelated
   // shield-contact drift.
-  // Restrict this to same-step entry in item shield precedence only; broadening the current-pose
-  // bridge to seeded frozen guard snapshots regresses replay-real shield-hit rows.
+  // Restrict this to callback-local item shield precedence only; broadening the current-pose bridge
+  // to seeded frozen guard snapshots regresses replay-real shield-hit rows.
+  // Steady GuardOn rows with raw fp+0x2218_b1 share the current-pose lane only on the newborn
+  // SpecialN article pass: by the next item callback, Item_80269DC8 shield contact uses the normal
+  // settled Guard bubble and can enter GuardSetOff.
+  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (fp+0x2218 byte)
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_{Wait,Walk,Turn,Dash,Run,RunDirect,Squat,SquatWait,SquatRv,Landing}.c
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
   //   ftCo_800921DC,ftCo_80091E78,ftCo_800924C0,ftCo_80093694,ftCo_8009388C,ftCo_80093A50}
@@ -2721,6 +2748,209 @@ static inline float laser_collision_offset_scale(const MslLaserParams* lp, uint8
     s = 1.0f;
   }
   return s;
+}
+
+static inline uint8_t yoshi_shyguy_state_accepts_item_damage(uint8_t state) {
+  // Heiho active and return-flight states keep enabled item hurtboxes. Knocked states 2/3 are
+  // already in the damage callback lifecycle and state 0 is spawn-delay/hidden motion.
+  // refs/melee/src/melee/it/items/itheiho.c::it_803F83F0
+  // refs/melee/src/melee/it/itcoll.c::it_8027163C
+  return (state == 1u || state == 4u) ? 1u : 0u;
+}
+
+static inline float yoshi_shyguy_item_kb_applied(const MslCommonParams* c,
+                                                 const MslYoshiShyguyParams* params, uint16_t kbg,
+                                                 uint16_t wsk, uint16_t bkb, int damage_i) {
+  if (c == NULL || params == NULL) {
+    return 0.0f;
+  }
+  // Item-vs-item damage intake uses the ItemCommonData knockback expression in it_80270E30. The
+  // constants share the same promoted ftColl KB lanes here; Heiho contributes its Article
+  // ItemAttr.x1C damage multiplier extracted into MSLSTIO1.
+  // refs/melee/src/melee/it/itcoll.c::{it_802706D0,it_80270E30}
+  // refs/melee/src/melee/it/types.h::ItemAttr::x1C_damage_mul
+  const float kbg_scale = 0.01f * (float)kbg;
+  const float bkb_f = (float)bkb;
+  float kb = 0.0f;
+  if (wsk != 0u) {
+    const float pre = params->damage_mul * ((c->kb_base_term * c->kb_wsk_mul) +
+                                            (c->kb_dmg_mul * (c->kb_wsk_mul * (float)wsk)));
+    const float inner = c->kb_growth_mul * pre + c->kb_base_add;
+    kb = bkb_f + kbg_scale * inner;
+  } else {
+    const float d = (float)damage_i;
+    const float pre = params->damage_mul * ((c->kb_base_term * d) + (c->kb_dmg_mul * d * d));
+    const float inner = c->kb_growth_mul * pre + c->kb_base_add;
+    kb = bkb_f + kbg_scale * inner;
+  }
+  if (kb > c->kb_applied_max) {
+    kb = c->kb_applied_max;
+  }
+  return kb;
+}
+
+static inline void yoshi_shyguy_apply_item_damage(MslBatch* batch, size_t shy_idx, size_t laser_idx,
+                                                  const MslYoshiShyguyParams* params,
+                                                  const MslLaserParams* lp, uint8_t laser_state,
+                                                  float damage_f) {
+  const MslCommonParams* c = msl_common_params();
+  // Caller supplies the item-owned reflected damage lane before Heiho dmg_received consumes it.
+  // refs/melee/src/melee/it/item.c::Item_80269F14
+  // refs/melee/src/melee/it/itcoll.c::{it_802706D0,it_80270E30}
+  // refs/melee/src/melee/it/items/itheiho.c::it_802D8EC8
+  int damage_i = (int)damage_f;
+  if (damage_i < 0) {
+    damage_i = 0;
+  }
+  const uint16_t angle = (laser_state == 0u) ? lp->angle : lp->state1_angle;
+  const uint16_t kbg = (laser_state == 0u) ? lp->kbg : lp->state1_kbg;
+  const uint16_t wsk = (laser_state == 0u) ? lp->wsk : lp->state1_wsk;
+  const uint16_t bkb = (laser_state == 0u) ? lp->bkb : lp->state1_bkb;
+  uint16_t damage_total = batch->state.item_damage[shy_idx];
+  if (damage_total <= (uint16_t)(999u - (uint16_t)damage_i)) {
+    damage_total = (uint16_t)(damage_total + (uint16_t)damage_i);
+  } else {
+    damage_total = 999u;
+  }
+  batch->state.item_damage[shy_idx] = damage_total;
+
+  const float kb = yoshi_shyguy_item_kb_applied(c, params, kbg, wsk, bkb, damage_i);
+  const float kb_vel_mag = (c != NULL) ? (kb * c->kb_vel_mul) : 0.0f;
+  const float angle_rad = (angle == 361u && c != NULL) ? c->sakurai_air_radians
+                                                       : (0.01745329251994329577f * (float)angle);
+  const float vx = kb_vel_mag * cosf(angle_rad);
+  const float vy = kb_vel_mag * sinf(angle_rad);
+  const float laser_vx = batch->state.item_vel_x[laser_idx];
+  const float dir =
+      (fabsf(laser_vx) < 0.0001f)
+          ? ((batch->state.item_pos_x[shy_idx] > batch->state.item_pos_x[laser_idx]) ? -1.0f : 1.0f)
+          : ((laser_vx < 0.0f) ? 1.0f : -1.0f);
+
+  if (params->damage_threshold != 0u &&
+      damage_total > (uint16_t)((float)params->damage_threshold * 0.8f)) {
+    // High-damage branch enters state 2 and adds random X scatter. The global RNG stream for this
+    // branch is not yet owned, so do not fabricate the scatter velocity here.
+    // refs/melee/src/melee/it/items/itheiho.c::{it_802D8EC8,it_802D8EC8_inline}
+    batch->state.item_state[shy_idx] = 2u;
+  } else {
+    // Low-damage branch: it_8027B798 writes KB velocity, x24 becomes 12, and state 3 is entered.
+    // refs/melee/src/melee/it/items/itheiho.c::it_802D8EC8
+    // refs/melee/src/melee/it/it_2725.c::it_8027B798
+    batch->state.item_state[shy_idx] = 3u;
+    batch->state.item_vel_x[shy_idx] = -vx * dir;
+    batch->state.item_vel_y[shy_idx] = vy;
+    batch->state.item_direction[shy_idx] = dir;
+    batch->state.item_shyguy_delay[shy_idx] = 12u;
+    batch->state.item_shyguy_delay_valid[shy_idx] = 1u;
+  }
+
+  const MslItemCommonParams* item_common = msl_item_common_params();
+  const float item_hitlag =
+      (item_common != NULL)
+          ? (item_common->item_hitlag_base + item_common->item_hitlag_damage_mul * (float)damage_i)
+          : 0.0f;
+  if (item_hitlag > 0.0f) {
+    const uint8_t frames = (uint8_t)item_hitlag;
+    if (frames > 0u) {
+      batch->state.item_hitlag[shy_idx] = frames;
+      batch->state.item_shyguy_hitlag[shy_idx] = frames;
+      batch->state.item_shyguy_hitlag_valid[shy_idx] = 1u;
+    }
+  }
+  batch->state.item_shyguy_prev_vel_y_valid[shy_idx] = 0u;
+  batch->state.item_shyguy_dyn_y_phase_valid[shy_idx] = 0u;
+}
+
+static uint8_t yoshi_shyguy_try_laser_item_hit(MslBatch* batch, int bi, int laser_slot,
+                                               const MslLaserParams* lp, uint8_t laser_state,
+                                               float x0, float y0, float x, float y, float ux,
+                                               float uy, float sr, float laser_prev_scale_z,
+                                               float laser_scale_z) {
+  const MslYoshiShyguyParams* params = stage_item_params_yoshi_shyguy();
+  if (batch == NULL || lp == NULL || params == NULL ||
+      batch->state.stage_id[bi] != (uint32_t)MSL_STAGE_YOSHIS_STORY ||
+      params->hurtbox_count == 0u) {
+    return 0u;
+  }
+  const size_t laser_idx = msl_idx_item(bi, laser_slot);
+  const uint8_t off_n =
+      (laser_state == 0u) ? lp->hitbox_offsets_x_count : lp->state1_hitbox_offsets_x_count;
+  const float cur_offset_scale = laser_collision_offset_scale(
+      lp, laser_state, laser_scale_z, MSL_LASER_COLLISION_SPACE_BODY, 0u, 1u);
+  const float prev_offset_scale = laser_collision_offset_scale(
+      lp, laser_state, laser_prev_scale_z, MSL_LASER_COLLISION_SPACE_BODY, 0u, 1u);
+  for (int it = 0; it < MSL_MAX_ITEMS; it++) {
+    if (it == laser_slot) {
+      continue;
+    }
+    const size_t shy_idx = msl_idx_item(bi, it);
+    if (!batch->state.item_exists[shy_idx] ||
+        batch->state.item_type[shy_idx] != (uint16_t)MSL_ITEM_KIND_HEIHO ||
+        !yoshi_shyguy_state_accepts_item_damage(batch->state.item_state[shy_idx])) {
+      continue;
+    }
+    for (uint8_t hi = 0; hi < params->hurtbox_count && hi < 2u; hi++) {
+      const float ax = batch->state.item_pos_x[shy_idx] + params->hurtbox_a_offset[hi][0];
+      const float ay = batch->state.item_pos_y[shy_idx] + params->hurtbox_a_offset[hi][1];
+      const float az = params->hurtbox_a_offset[hi][2];
+      const float bx = batch->state.item_pos_x[shy_idx] + params->hurtbox_b_offset[hi][0];
+      const float by = batch->state.item_pos_y[shy_idx] + params->hurtbox_b_offset[hi][1];
+      const float bz = params->hurtbox_b_offset[hi][2];
+      const float rr = sr + params->hurtbox_scale[hi];
+      if (off_n == 0u) {
+        const float d2 =
+            item_segment_segment_dist2(x0, y0, 0.0f, x, y, 0.0f, ax, ay, az, bx, by, bz);
+        if (d2 <= rr * rr) {
+          const float base_damage = (laser_state == 0u) ? lp->damage : lp->state1_damage;
+          const float damage = item_reflected_damage_lane(batch, laser_idx, base_damage);
+          yoshi_shyguy_apply_item_damage(batch, shy_idx, laser_idx, params, lp, laser_state,
+                                         damage);
+          item_slot_clear(batch, laser_idx);
+          return 1u;
+        }
+        continue;
+      }
+      for (uint8_t oi = 0; oi < off_n && oi < (uint8_t)MSL_LASER_MAX_HITBOX_OFFS_X; oi++) {
+        const float off_x =
+            (laser_state == 0u) ? lp->hitbox_offsets_x[oi] : lp->state1_hitbox_offsets_x[oi];
+        const float sx0 = x0 + ux * off_x * prev_offset_scale;
+        const float sy0 = y0 + uy * off_x * prev_offset_scale;
+        const float sx = x + ux * off_x * cur_offset_scale;
+        const float sy = y + uy * off_x * cur_offset_scale;
+        const float d2 =
+            item_segment_segment_dist2(sx0, sy0, 0.0f, sx, sy, 0.0f, ax, ay, az, bx, by, bz);
+        if (d2 <= rr * rr) {
+          // Source owner: item-vs-item hitbox against Heiho item hurtbox, then Heiho
+          // OnTakeDamageThink/dmg_received callback.
+          // refs/melee/src/melee/it/itcoll.c::{it_802706D0,it_80270E30}
+          // refs/melee/src/melee/it/items/itheiho.c::it_802D8EC8
+          const float base_damage = (laser_state == 0u) ? lp->damage : lp->state1_damage;
+          const float damage = item_reflected_damage_lane(batch, laser_idx, base_damage);
+          yoshi_shyguy_apply_item_damage(batch, shy_idx, laser_idx, params, lp, laser_state,
+                                         damage);
+          item_slot_clear(batch, laser_idx);
+          return 1u;
+        }
+      }
+      {
+        // Item hitcaps also carry the root prev/current endpoint through it_8027137C; the authored
+        // offset samples alone can miss stage-object hurtboxes that intersect the projectile origin
+        // segment while the visual scaleZ is already long.
+        // refs/melee/src/melee/it/itcoll.c::{it_8027137C,it_802706D0}
+        const float d2 =
+            item_segment_segment_dist2(x0, y0, 0.0f, x, y, 0.0f, ax, ay, az, bx, by, bz);
+        if (d2 <= rr * rr) {
+          const float base_damage = (laser_state == 0u) ? lp->damage : lp->state1_damage;
+          const float damage = item_reflected_damage_lane(batch, laser_idx, base_damage);
+          yoshi_shyguy_apply_item_damage(batch, shy_idx, laser_idx, params, lp, laser_state,
+                                         damage);
+          item_slot_clear(batch, laser_idx);
+          return 1u;
+        }
+      }
+    }
+  }
+  return 0u;
 }
 
 static inline uint8_t laser_try_shield_bounce_velocity(float vx, float vy, float shield_x,
@@ -3875,6 +4105,11 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
     batch->state.item_misc1[ii] = slippi_metadata_low_byte_from_f32(msl_melee_normalize_angle(
         msl_melee_atan2f(batch->state.item_vel_y[ii], batch->state.item_vel_x[ii])));
 
+    if (yoshi_shyguy_try_laser_item_hit(batch, bi, it, lp, laser_state, x0, y0, x, y, ux, uy, sr,
+                                        laser_prev_scale_z, laser_scale_z)) {
+      continue;
+    }
+
     for (int def = 0; def < num_players; def++) {
       if (def == owner) {
         continue;
@@ -4061,7 +4296,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         const float shield_bubble_shy = shy;
         const float shield_bubble_shz = shz;
         const uint8_t fresh_guard_center_used =
-            item_try_guard_fresh_shield_center(batch, d_idx, &shx, &shy, &shz);
+            item_try_guard_fresh_shield_center(batch, d_idx, laser_age_frames, &shx, &shy, &shz);
         if (!isfinite(shx) || !isfinite(shy) || !isfinite(shz)) {
           shx = batch->state.pos_x[d_idx];
           shy = batch->state.pos_y[d_idx];
@@ -5559,6 +5794,25 @@ static void yoshi_shyguy_items_update(MslBatch* batch, int bi) {
         batch->state.item_hitlag[ii] = batch->state.item_shyguy_hitlag[ii];
         continue;
       }
+      if (state == 3u && batch->state.item_shyguy_delay_valid[ii] != 0u &&
+          batch->state.item_shyguy_delay[ii] == 0u) {
+        // State 3 Phys enters the return-flight state through it_802D9168 once x24 has counted
+        // down. The native seed lane resets x24 on repeated low-damage callbacks while the item
+        // remains in state 3, matching it_802D8EC8's same-state writeback.
+        // refs/melee/src/melee/it/items/itheiho.c::{itHeiho_UnkMotion3_Phys,it_802D9168,
+        //   it_802D8EC8}
+        batch->state.item_state[ii] = 4u;
+        batch->state.item_vel_x[ii] = 0.0f;
+        batch->state.item_vel_y[ii] = 0.0f;
+        batch->state.item_direction[ii] = (batch->state.item_pos_x[ii] < 0.0f) ? -1.0f : 1.0f;
+        batch->state.item_shyguy_delay[ii] = 20u;
+        batch->state.item_shyguy_delay_valid[ii] = 1u;
+        batch->state.item_shyguy_dyn_y_phase[ii] = 0u;
+        batch->state.item_shyguy_dyn_y_phase_valid[ii] = 1u;
+        batch->state.item_shyguy_prev_vel_y[ii] = 0.0f;
+        batch->state.item_shyguy_prev_vel_y_valid[ii] = 0u;
+        continue;
+      }
       // Knocked/falling Shy Guy states use item gravity, then generic item position integration.
       // State 3 additionally delays before entering the return-flight state.
       // refs/melee/src/melee/it/items/itheiho.c::{
@@ -5581,10 +5835,6 @@ static void yoshi_shyguy_items_update(MslBatch* batch, int bi) {
           batch->state.item_shyguy_delay[ii] > 0u) {
         batch->state.item_shyguy_delay[ii]--;
       }
-      // Do not treat a replay-seeded item_shyguy_delay == 0 as source x24 == 0 here.
-      // Broadly reconstructing that return-flight predicate over-entered it_802D9168 and
-      // regressed PhysicalElectricCapybara records 6124..6133. The hidden state-3 -> state-4
-      // predicate remains a named Shy Guy lifecycle residual.
       continue;
     }
     if (state == 0u && batch->state.item_shyguy_delay_valid[ii] != 0u) {
@@ -5995,8 +6245,18 @@ void items_spawn_pre_physics(MslBatch* batch) {
       }
       const uint16_t msid = (uint16_t)anim_u32;
       const float af = items_cur_anim_frame_f32(batch, idx);
-      const uint16_t frame = msl_anim_frame_floor_u16(af);
-      uint8_t should_shoot = laser_should_shoot_on_frame(lp, msid, frame);
+      const int32_t prev_af_fp =
+          batch->state.anim_frame_fp_q16_16[idx] - batch->state.frame_speed_mul_fp_q16_16[idx];
+      const float af_prev = msl_anim_frame_sanitize_f32(msl_f32_from_q16_16(prev_af_fp));
+      // Blaster shot creation is owned by the motion-script set_cmd_var(2) command consumed in the
+      // Anim callback, so spawn on the extracted command-frame crossing rather than on any later
+      // frame whose floored time still equals the event.
+      // Source/data:
+      // - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
+      //   ftFx_SpecialNLoop_Anim,ftFx_SpecialAirNLoop_Anim}
+      // - data/items/lasers.bin (MSLLASR1 shoot_frames_{ground,air}, extracted from Pl*.dat
+      //   set_cmd_var idx=2 script events by tools/extraction/extract_lasers.py)
+      uint8_t should_shoot = laser_should_shoot_between_frames(lp, msid, af_prev, af);
       uint8_t shoot_spawn_state = 0u;
       uint8_t shoot_apply_motion_step = 0u;
       uint8_t shoot_throw_lw_late_pulse_transn_y = 0u;

@@ -888,16 +888,22 @@ static inline uint16_t platform_floor_skip_segment_id(const MslBatch* batch, siz
     // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpUpdateFloorSkip}
     return ground_id;
   }
-  if (is_attackair_action(action_id) &&
+  if (action_id != (uint16_t)MSL_ACT_PASS &&
       batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_PASS &&
+      batch->state.on_ground[idx] == 0u &&
       stage_collision_floor_line_is_platform(stage_id, ground_id)) {
-    // Pass -> AttackAir same-frame floor-skip lifetime:
-    // Pass_IASA can enter AttackAir before the map callback, but the source CollData.floor_skip
-    // written by the platform-pass entry remains the floor callback's local skip owner for that
-    // collision pass. Replay-prefix rows can begin on the first Pass frame before the hidden lane is
+    // Pass -> airborne destination same-frame floor-skip lifetime:
+    // Pass_IASA can enter AttackAir, SpecialAir, EscapeAir, item throw/catch, or other airborne
+    // destination callbacks before the map callback, but the source CollData.floor_skip written by
+    // the platform-pass entry remains the floor callback's local skip owner for that collision
+    // pass. Replay-prefix rows can begin on the first Pass frame before the hidden lane is
     // serialized, so recover the current platform floor.index for this shared Pass IASA handoff.
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::{ftCo_8009A228,ftCo_Pass_IASA}
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
+    //   ftFx_SpecialAirNStart_Coll,ftFx_SpecialAirNLoop_Coll,ftFx_SpecialAirNEnd_Coll}
     // refs/melee/src/melee/mp/mpcoll.c::{mpUpdateFloorSkip,mpColl_80044628_Floor}
     return ground_id;
   }
@@ -1810,6 +1816,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
       }
 
       const uint8_t was_grounded = batch->state.prev_on_ground[idx] ? 1u : 0u;
+      const uint8_t ecb_lock_timer_seed = batch->state.ecb_lock_timer[idx];
       if (was_grounded && batch->state.ground_id[idx] != 0xFFFFu &&
           grounded_action_allows_platform_carry_y_correction(action_id)) {
         const int carry_line_idx =
@@ -1840,7 +1847,6 @@ void mpcoll_ground_apply(MslBatch* batch) {
       //
       // This simulator stores only the countdown (`ecb_lock_timer`) and uses it as the lock gate.
       // Grounded snapshots should not carry a stale lock.
-      const uint8_t ecb_lock_timer_seed = batch->state.ecb_lock_timer[idx];
       uint8_t ecb_lock_timer = ecb_lock_timer_seed;
       if (batch->state.on_ground[idx]) {
         ecb_lock_timer = 0;
@@ -2175,29 +2181,15 @@ void mpcoll_ground_apply(MslBatch* batch) {
             y_corr = 0.0f;
           }
           int resolved_line_idx = out_line_idx;
-          if (prefer_line_idx >= 0 && out_line_idx != prefer_line_idx &&
-              floor_lines_connected(g, prefer_line_idx, out_line_idx)) {
-            // Decomp-shaped tie-break:
-            // mpLib_8004DD90_Floor traverses connected prev/next floor links immediately when the
-            // bottom point crosses an endpoint. Keep the pre-entry floor.index only for the
-            // Dash-entry callback slice that has replay-real coverage; ordinary Damage/Landing/etc.
-            // rows should accept the traversed line id.
-            // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
-            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_Coll
-            const uint8_t dash_entry_keep_prev_line =
-                (action_id == (uint16_t)MSL_ACT_DASH && prev_action_id != (uint16_t)MSL_ACT_DASH)
-                    ? 1u
-                    : 0u;
-            if (dash_entry_keep_prev_line) {
-              const MslStageFloorLine* pl = &g->lines[(size_t)prefer_line_idx];
-              const float min_x = (pl->x0 < pl->x1) ? pl->x0 : pl->x1;
-              const float max_x = (pl->x0 > pl->x1) ? pl->x0 : pl->x1;
-              if (cur_bottom_x >= (min_x - k_floor_x_end_clamp) &&
-                  cur_bottom_x <= (max_x + k_floor_x_end_clamp)) {
-                resolved_line_idx = prefer_line_idx;
-              }
-            }
-          }
+          // Source floor-index traversal:
+          // mpLib_8004DD90_Floor returns the projected line after following connected floor
+          // prev/next links at seams. Keep that returned line for grounded callbacks, including
+          // same-frame Dash entries through ft_800844EC -> ft_80082708 -> mpColl_8004B108; the
+          // previous bridge that forced Dash entry to keep seed floor.index was too broad at
+          // legal-stage seam edges.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_Coll
+          // refs/melee/src/melee/ft/ft_081B.c::{ft_800844EC,ft_80082708}
+          // refs/melee/src/melee/mp/{mpcoll.c::mpColl_8004B108,mplib.c::mpLib_8004DD90_Floor}
           batch->state.pos_y[idx] += y_corr;
           on_ground = 1;
           ground_id = g->lines[(size_t)resolved_line_idx].segment_i;
@@ -2754,8 +2746,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
                 (!is_ledge_floor ||
                  (ledge_escapeair_phase_owner && y_corr <= ledge_projection_depth_limit))) {
               batch->state.pos_y[idx] += y_corr;
-              on_ground = 1;
               ground_id = resolved_segment_i;
+              on_ground = 1;
               contact_x = cur_bottom_x;
               contact_y = cur_bottom_y + y_corr;
             }
@@ -3519,15 +3511,53 @@ void mpcoll_ground_apply(MslBatch* batch) {
              batch->state.action_frame[idx] >= 25)
                 ? 1u
                 : 0u;
+        const uint8_t suppress_fall_transformed_platform_fastfall_land =
+            // Fall_Coll routes through ft_800831CC -> mpColl_80047E14 with the same
+            // ftCo_80096CC8 platform callback as Jump/JumpAerial. FoD transformed-platform rows can
+            // see a remapped platform sweep before the source callback publishes a landing result;
+            // preserve the airborne Fall frame for sustained same-action fastfall contacts only.
+            // Fresh Fall entries and hard-floor contacts still use the normal landing path.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Coll
+            // refs/melee/src/melee/ft/ft_081B.c::ft_800831CC
+            // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80043754,mpColl_80047E14}
+            (resolved_line_has_platform_transform && action_id == (uint16_t)MSL_ACT_FALL &&
+             prev_action_id == action_id && batch->state.fall_fast[idx] != 0u)
+                ? 1u
+                : 0u;
         if (suppress_escapeair_transformed_remap_land ||
             suppress_specialhi_transformed_platform_land ||
             suppress_jump_transformed_platform_pre_handoff_land ||
-            suppress_jumpaerial_transformed_platform_fastfall_land) {
+            suppress_jumpaerial_transformed_platform_fastfall_land ||
+            suppress_fall_transformed_platform_fastfall_land) {
           on_ground = 0u;
           ground_id = batch->state.ground_id[idx];
           contact_x = cur_bottom_x;
           contact_y = cur_bottom_y;
         }
+      }
+
+      if (on_ground && action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
+          batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_ESCAPE_AIR &&
+          ecb_lock_timer_seed != 0u && batch->state.action_frame[idx] == 4 &&
+          prefer_line_idx >= 0 && !g->lines[(size_t)prefer_line_idx].is_platform &&
+          !g->lines[(size_t)prefer_line_idx].is_ledge &&
+          fabsf(cur_bottom_x - prev_bottom_x) <= (float)k_floor_horiz_dy_thresh &&
+          batch->state.prev_pos_y[idx] < 0.0f && y <= -fabsf(batch->state.speed_y_self[idx])) {
+        // Sustained EscapeAir frame-start below-floor lock window:
+        // EscapeAir_Coll delegates through ft_80082C74 while CollData_X130_Locked is still active.
+        // When the frame-start cur_pos was already below the carried hard floor, source
+        // mpColl_80043754/mpCollInterpolateECB preserves the airborne EscapeAir row for this
+        // callback instead of treating the already-penetrating root as a fresh floor crossing.
+        // Above->below crossings in the same visible window continue through ft_80082C74 and enter
+        // LandingFallSpecial normally.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+        // refs/melee/src/melee/ft/ft_081B.c::ft_80082C74
+        // refs/melee/src/melee/mp/mpcoll.c::{mpCollInterpolateECB,mpColl_80043754}
+        on_ground = 0u;
+        ground_id = seed_ground_id;
+        batch->state.pos_y[idx] = y;
+        contact_x = cur_bottom_x;
+        contact_y = cur_bottom_y;
       }
 
       if (on_ground && batch->state.coll_floor_result_valid[idx] == 0u) {
@@ -3551,14 +3581,6 @@ void mpcoll_ground_apply(MslBatch* batch) {
           contact_y = batch->state.coll_floor_result_contact_y[idx];
           floor_nx = batch->state.coll_floor_result_normal_x[idx];
           floor_ny = batch->state.coll_floor_result_normal_y[idx];
-        }
-        if (action_id == (uint16_t)MSL_ACT_DASH && prev_action_id != (uint16_t)MSL_ACT_DASH &&
-            seed_ground_id != 0xFFFFu) {
-          // Dash entry floor-index ownership:
-          // keep the pre-entry floor.index on the entry frame to avoid an early seam handoff.
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_Coll
-          // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
-          ground_id = seed_ground_id;
         }
         // Decomp: floor collision sets Collide_FloorPush (+ sometimes FloorHug).
         // refs/melee/src/melee/mp/mpcoll.c::mpColl_80044628_Floor

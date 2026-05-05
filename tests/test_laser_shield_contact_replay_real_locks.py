@@ -24,6 +24,19 @@ def _assert_live_laser_set_matches_ref(*, out_row, ref_row, record: int) -> None
     assert got == exp, f"record={record} live laser set expected={exp} got={got}"
 
 
+def _find_item_by_spawn(row, *, item_type: int, owner: int, instance_id: int, spawn_id: int):
+    for it in row["items"]:
+        if (
+            int(it["exists"]) == 1
+            and int(it["type"]) == item_type
+            and int(it["owner"]) == owner
+            and int(it["instance_id"]) == instance_id
+            and int(it["spawn_id"]) == spawn_id
+        ):
+            return it
+    return None
+
+
 @pytest.mark.integration
 @pytest.mark.parametrize(
     ("dataset_rel", "record", "p"),
@@ -209,6 +222,192 @@ def test_steady_guardreflect_does_not_reown_new_specialn_laser_spawn_frame() -> 
     assert int(out_row["items"][1]["owner"]) == int(ref_row["items"][1]["owner"]) == 0
     assert int(out_row["items"][1]["instance_id"]) == int(ref_row["items"][1]["instance_id"])
     assert float(out_row["items"][1]["direction"]) == float(ref_row["items"][1]["direction"])
+
+
+@pytest.mark.integration
+def test_steady_guardon_x2218_command_bit_keeps_birth_laser_out_of_hitshield() -> None:
+    # DSG:8216 covers the same birth-frame SpecialAirNLoop laser callback boundary, but through
+    # steady GuardOn / Item_80269DC8 rather than GuardReflect owner transfer. Raw fp+0x2218_b1 keeps
+    # the ShieldDesc bone on the GuardOn live command pose, so the high newborn laser misses instead
+    # of using the settled neutral Guard bubble and entering GuardSetOff.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialAirNLoop_Anim
+    # refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C504,itFoxlaser_UnkMotion1_Anim}
+    # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (fp+0x2218 byte)
+    # refs/melee/src/melee/it/item.c::Item_80269DC8
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/battlefield_recent/"
+        "DelayedSuperbGuanaco.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    seed_row, ref_row, out_row = _run_one_step_row(dataset_path, 8216, 0)
+
+    assert int(seed_row["action_id"][1]) == 345  # Falco SpecialAirNLoop.
+    assert int(seed_row["action_frame"][1]) == 7
+    assert int(seed_row["action_id"][0]) == 178  # GuardOn.
+    assert int(seed_row["seed_prev_action_id"][0]) == 178
+    assert int(seed_row["state_flags"][0][0]) & 0x40
+
+    assert int(ref_row["action_id"][0]) == 178
+    assert int(out_row["action_id"][0]) == 178
+    assert int(out_row["hitlag"][0]) == int(ref_row["hitlag"][0]) == 0
+    assert int(ref_row["items"][1]["exists"]) == 1
+    assert int(ref_row["items"][1]["type"]) == 55
+    assert int(ref_row["items"][1]["owner"]) == 1
+    for field in ("exists", "type", "state", "owner", "instance_id", "spawn_id", "timer"):
+        assert out_row["items"][1][field] == ref_row["items"][1][field]
+    assert float(out_row["items"][1]["pos_x"]) == pytest.approx(
+        float(ref_row["items"][1]["pos_x"]), abs=1.0e-4
+    )
+    assert float(out_row["items"][1]["pos_y"]) == pytest.approx(
+        float(ref_row["items"][1]["pos_y"]), abs=1.0e-4
+    )
+
+
+@pytest.mark.integration
+def test_steady_guardon_x2218_command_bit_still_hits_when_guardon_pose_overlaps() -> None:
+    # Shady:3700 is the paired positive for the GuardOn x2218 command-pose lane. The same raw byte
+    # and birth-frame laser are present, but the GuardOn live shield-bone pose overlaps the low laser
+    # and vanilla enters GuardSetOff through Item_80269DC8.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_800921DC,ftCo_80091E78}
+    # refs/melee/src/melee/it/item.c::Item_80269DC8
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/dream_land_recent/"
+        "ShadyDecimalStarling.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    seed_row, ref_row, out_row = _run_one_step_row(dataset_path, 3700, 0)
+
+    assert int(seed_row["action_id"][1]) == 345  # Falco SpecialAirNLoop.
+    assert int(seed_row["action_id"][0]) == 178  # GuardOn.
+    assert int(seed_row["seed_prev_action_id"][0]) == 178
+    assert int(seed_row["state_flags"][0][0]) & 0x40
+    assert int(ref_row["action_id"][0]) == 181  # GuardSetOff.
+    assert int(out_row["action_id"][0]) == 181
+    assert int(out_row["hitlag"][0]) == int(ref_row["hitlag"][0])
+    assert int(out_row["items"][1]["exists"]) == int(ref_row["items"][1]["exists"]) == 0
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "owner", "item_type", "instance_id", "spawn_id"),
+    [
+        (
+            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
+            "PhysicalElectricCapybara.msl",
+            3594,
+            1,
+            54,
+            710,
+            26,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
+            "PhysicalElectricCapybara.msl",
+            3599,
+            1,
+            54,
+            710,
+            28,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/battlefield_recent/"
+            "LoyalDishonestWren.msl",
+            1407,
+            1,
+            54,
+            287,
+            15,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/dream_land_recent/"
+            "FlippantEnchantedHorse.msl",
+            3441,
+            0,
+            54,
+            674,
+            23,
+        ),
+    ],
+)
+def test_upward_laser_stage_floor_crossing_does_not_preempt_article_delete(
+    dataset_rel: str, record: int, owner: int, item_type: int, instance_id: int, spawn_id: int
+) -> None:
+    # itfoxlaser stage collision is owned by mpCheckAllRemap. Horizontal floors use
+    # mpCheckFloorRemap's downward-only branch; upward state1 throw-laser segments crossing through a
+    # platform/floor line must not be converted to lifetime=1 before the later item/body/delete owner.
+    # refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Coll,it_8029C4D4}
+    # refs/melee/src/melee/it/it_266F.c::it_8026E9A4
+    # refs/melee/src/melee/mp/mplib.c::{mpCheckAllRemap,mpCheckFloorRemap}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    seed_row, ref_row, out_row = _run_one_step_row(dataset_path, record, 0)
+
+    assert _find_item_by_spawn(
+        seed_row, item_type=item_type, owner=owner, instance_id=instance_id, spawn_id=spawn_id
+    )
+    assert (
+        _find_item_by_spawn(
+            ref_row, item_type=item_type, owner=owner, instance_id=instance_id, spawn_id=spawn_id
+        )
+        is None
+    )
+    assert (
+        _find_item_by_spawn(
+            out_row, item_type=item_type, owner=owner, instance_id=instance_id, spawn_id=spawn_id
+        )
+        is None
+    )
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("record", "owner", "item_type", "instance_id", "spawn_id"),
+    [
+        (530, 1, 55, 117, 8),
+        (6272, 0, 55, 1182, 91),
+    ],
+)
+def test_downward_laser_stage_floor_crossing_preserves_lifetime_one_keepalive(
+    record: int, owner: int, item_type: int, instance_id: int, spawn_id: int
+) -> None:
+    # Negative for the directional floor fix: downward horizontal-floor crossings still hit
+    # mpCheckFloorRemap and serialize the source lifetime=1 keepalive.
+    # refs/melee/src/melee/mp/mplib.c::mpCheckFloorRemap
+    # refs/melee/src/melee/it/items/itfoxlaser.c::itFoxlaser_UnkMotion1_Coll
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    _seed_row, ref_row, out_row = _run_one_step_row(dataset_path, record, 0)
+    ref_item = _find_item_by_spawn(
+        ref_row, item_type=item_type, owner=owner, instance_id=instance_id, spawn_id=spawn_id
+    )
+    out_item = _find_item_by_spawn(
+        out_row, item_type=item_type, owner=owner, instance_id=instance_id, spawn_id=spawn_id
+    )
+
+    assert ref_item is not None
+    assert out_item is not None
+    assert float(out_item["timer"]) == pytest.approx(float(ref_item["timer"]), abs=1.0e-6)
+    assert float(out_item["timer"]) == pytest.approx(1.0, abs=1.0e-6)
 
 
 @pytest.mark.integration

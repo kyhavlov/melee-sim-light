@@ -22,10 +22,16 @@ typedef struct MslYoshiShyguyParams {
   uint16_t spawn_delay_step;
   float fall_accel;
   float fall_speed_max;
+  float damage_mul;
   float spawn_left_x;
   float spawn_right_x;
   float state4_speed_mul;
   float jitter_y_amp;
+  uint16_t damage_threshold;
+  uint16_t hurtbox_count;
+  float hurtbox_a_offset[2][3];
+  float hurtbox_b_offset[2][3];
+  float hurtbox_scale[2];
   float vpos[MSL_YOSHI_SHYGUY_VPOS_COUNT];
   float speed[MSL_YOSHI_SHYGUY_SPEED_COUNT];
   float dyn_y_vel[MSL_YOSHI_SHYGUY_DYN_Y_COUNT];
