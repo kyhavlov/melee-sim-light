@@ -168,6 +168,14 @@ static inline uint8_t state_flags_guard_setoff_is_post_hitlag_handoff_row(const 
   return (uint8_t)(phase == 2u || phase == 3u);
 }
 
+static inline uint8_t state_flags_guard_reflect_timer_after_anim_tick(uint8_t seed_timer,
+                                                                      uint8_t hitlag_started) {
+  if (hitlag_started != 0u || seed_timer == 0u) {
+    return seed_timer;
+  }
+  return (uint8_t)(seed_timer - 1u);
+}
+
 static inline uint8_t state_flags_guard_reflect_window_visible(const MslBatch* batch, size_t idx) {
   if (batch == NULL) {
     return 0u;
@@ -849,6 +857,36 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
           f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B1;
         }
 
+        if (prev_action == (uint16_t)MSL_ACT_GUARD_REFLECT &&
+            action_id != (uint16_t)MSL_ACT_GUARD_REFLECT &&
+            action_id != (uint16_t)MSL_ACT_GUARD_SET_OFF) {
+          // GuardReflect exit timer-bit ownership:
+          // - Fighter_procUpdate runs GuardReflect_Anim before GuardReflect_IASA.
+          // - GuardReflect_Anim calls ftCo_80093BC0, which clears x221C_b3 immediately and keeps
+          //   x221C_b1/x221C_b2 only while mv.co.guard.x14/x18 remain live.
+          // - IASA exits such as KneeBend (ftCo_800CB024) and Pass (ftCo_8009A080) then change
+          //   motion state, but the post-frame still exposes the timer-bit state produced by that
+          //   same callback tick rather than a destination-action hardcoded mask.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+          //   ftCo_GuardReflect_Anim,ftCo_80093BC0,ftCo_GuardReflect_IASA}
+          const uint8_t t14_after_anim = state_flags_guard_reflect_timer_after_anim_tick(
+              batch->state.guard_reflect_timer_x14_seed[idx],
+              batch->state.hitlag_started_frame[idx]);
+          const uint8_t t18_after_anim = state_flags_guard_reflect_timer_after_anim_tick(
+              batch->state.guard_reflect_timer_x18_seed[idx],
+              batch->state.hitlag_started_frame[idx]);
+          if (t14_after_anim != 0u) {
+            f221c |= (uint8_t)MSL_STATE_FLAG_221C_B1;
+          } else {
+            f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B1;
+          }
+          if (t18_after_anim != 0u) {
+            f221c |= (uint8_t)MSL_STATE_FLAG_221C_B2;
+          } else {
+            f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B2;
+          }
+        }
+
         if (action_id == (uint16_t)MSL_ACT_GUARD_SET_OFF &&
             batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
             batch->state.action_frame[idx] == 0 && batch->state.hitlag[idx] > 0u &&
@@ -995,17 +1033,6 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
           // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardSetOff_Anim,ftCo_80093BC0}
           f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B2;
-        }
-        if (action_id == (uint16_t)MSL_ACT_KNEE_BEND &&
-            prev_action == (uint16_t)MSL_ACT_GUARD_REFLECT && batch->state.action_frame[idx] == 0) {
-          // GuardReflect -> jump-squat transition ownership:
-          // - GuardReflect IASA delegates to the grounded jump check (ftCo_800CB024), which exits
-          //   GuardReflect before the KneeBend destination post-frame.
-          // - On that exit, the reflect-window bit x221C_b1 no longer has an owning callback/timer,
-          //   while the powershield-active lane can still persist.
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardReflect_IASA
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_800CB024
-          f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B1;
         }
         if (state_flags_is_damage_action(action_id) && action_id != prev_action &&
             batch->state.action_frame[idx] == 1 && batch->state.hitlag[idx] > 0u &&
