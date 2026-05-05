@@ -1496,6 +1496,105 @@ static uint8_t floor_4a908_retry(MslBatch* batch, size_t idx, int bi, const MslS
   return 1u;
 }
 
+static uint8_t escapeair_locked_platform_root_projection(
+    MslBatch* batch, size_t idx, int bi, const MslStageFloorGraph* g, uint32_t stage_id,
+    uint16_t skip_platform_segment_i, float pose_bottom_rel_y, uint16_t* ground_id_out,
+    float* contact_x_out, float* contact_y_out, float* floor_nx_out, float* floor_ny_out) {
+  if (batch == NULL || g == NULL || ground_id_out == NULL || !(pose_bottom_rel_y > 0.0f)) {
+    return 0u;
+  }
+
+  // Locked EscapeAir platform floor callback:
+  // ftCo_EscapeAir_Coll uses ft_80082C74 -> ft_80081D0C -> mpColl_800471F8. While
+  // CollData_X130_Locked is active, mpColl_LoadECB_inline preserves the desired bottom and
+  // mpColl_80046904 can land via mpColl_80044838_Floor(ignore_bottom=true), projecting from the
+  // fighter root instead of the locked zero-bottom point. Keep this consumer platform-only and
+  // require a real root-vs-ECB separation before accepting the root projection; shallow platform
+  // grazes remain owned by the ordinary sweep/suppression path below.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+  // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+  // refs/melee/src/melee/mp/mpcoll.c::{
+  //   mpColl_LoadECB_inline,mpColl_80043754,mpColl_80046904,mpColl_80044838_Floor}
+  const float root_x = batch->state.pos_x[idx];
+  const float root_y = batch->state.pos_y[idx];
+  const float min_lift = fmaxf(k_ecb_vertical_unit, pose_bottom_rel_y - k_ecb_vertical_unit);
+  const float max_lift = pose_bottom_rel_y + k_ecb_vertical_unit;
+
+  uint8_t found = 0u;
+  float best_lift = FLT_MAX;
+  int best_line_idx = -1;
+  float best_nx = 0.0f;
+  float best_ny = 1.0f;
+
+  for (size_t li = 0; li < g->line_count; li++) {
+    if (!g->lines[li].is_platform) {
+      continue;
+    }
+    if (!floor_line_is_runtime_fighter_solid(g, stage_id, (int)li)) {
+      continue;
+    }
+    if (floor_line_is_skipped_platform(g, (int)li, skip_platform_segment_i)) {
+      continue;
+    }
+
+    float y_corr = 0.0f;
+    float nx = 0.0f;
+    float ny = 1.0f;
+    const int out_line_idx =
+        floor_dd90_project(batch, bi, g, (int)li, root_x, root_y, &y_corr, &nx, &ny);
+    if (out_line_idx < 0 || (size_t)out_line_idx >= g->line_count ||
+        !g->lines[(size_t)out_line_idx].is_platform) {
+      continue;
+    }
+    if (!floor_line_is_runtime_fighter_solid(g, stage_id, out_line_idx)) {
+      continue;
+    }
+    if (floor_line_is_skipped_platform(g, out_line_idx, skip_platform_segment_i)) {
+      continue;
+    }
+    float start_y_corr = 0.0f;
+    const int start_line_idx =
+        floor_dd90_project(batch, bi, g, out_line_idx, root_x, batch->state.prev_pos_y[idx],
+                           &start_y_corr, NULL, NULL);
+    if (start_line_idx < 0 ||
+        g->lines[(size_t)start_line_idx].segment_i != g->lines[(size_t)out_line_idx].segment_i) {
+      continue;
+    }
+    if (!(start_y_corr >= min_lift && start_y_corr <= max_lift)) {
+      continue;
+    }
+    if (!found || y_corr < best_lift ||
+        (y_corr == best_lift &&
+         g->lines[(size_t)out_line_idx].segment_i < g->lines[(size_t)best_line_idx].segment_i)) {
+      found = 1u;
+      best_lift = y_corr;
+      best_line_idx = out_line_idx;
+      best_nx = nx;
+      best_ny = ny;
+    }
+  }
+
+  if (!found || best_line_idx < 0) {
+    return 0u;
+  }
+
+  batch->state.pos_y[idx] += best_lift;
+  *ground_id_out = g->lines[(size_t)best_line_idx].segment_i;
+  if (contact_x_out != NULL) {
+    *contact_x_out = root_x;
+  }
+  if (contact_y_out != NULL) {
+    *contact_y_out = root_y + best_lift - k_floor_y_bias;
+  }
+  if (floor_nx_out != NULL) {
+    *floor_nx_out = best_nx;
+  }
+  if (floor_ny_out != NULL) {
+    *floor_ny_out = best_ny;
+  }
+  return 1u;
+}
+
 uint8_t mpcoll_800477e0_floor_mask_probe(const MslBatch* batch, size_t idx,
                                          MslMpcollFloorMaskResult* out) {
   if (batch == NULL) {
@@ -2315,6 +2414,14 @@ void mpcoll_ground_apply(MslBatch* batch) {
              batch->state.pos_y[idx] < k_floor_y_bias)
                 ? 1u
                 : 0u;
+        if (!on_ground && escapeair_locked && ecb_lock_timer >= 4u &&
+            batch->state.speed_y_self[idx] < 0.0f &&
+            escapeair_locked_platform_root_projection(
+                batch, idx, bi, g, stage_id, skip_platform_segment_i,
+                msl_ecb_bottom_rel_y(char_id, anim, (int)ecb_frame_cur), &ground_id, &contact_x,
+                &contact_y, &floor_nx, &floor_ny)) {
+          on_ground = 1u;
+        }
         if (!on_ground && damage_hitlag_exit_projection_owner && prefer_line_idx >= 0) {
           // Damage hitlag-exit callback ownership:
           // - Damage entry writes `post_hitlag_cb = ftCo_Damage_OnExitHitlag`.
