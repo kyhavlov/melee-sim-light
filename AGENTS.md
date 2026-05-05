@@ -124,9 +124,12 @@ A family is only “closed” when:
 - Investigation, tooling, extraction, replay probes, seed-surface work, and final gameplay code are all part of the same task.
 - Keep working until ALL assigned work is ready for review.
 - Do not return with diagnosis-only prose if implementation, extraction, probes, locks, or validation remain credible local next steps.
-- Do not package behavior-neutral runtime substrate work as a checkpoint. If a retained runtime
-  change does not move validation/taxonomy metrics or fix a documented manual/modelplay bug, keep
-  working in the dirty tree until a source-backed consumer produces reviewable movement.
+- Do not package bare behavior-neutral substrate work as a checkpoint by itself. However, do not
+  back out a correct source-clear mechanic solely because current validation metrics are unchanged.
+  If a decomp/data-backed behavior is bounded, allocation-safe, on the RL 1.0/system path, and
+  covered by focused positive/negative tests, retain it as source-completion work. Keep working
+  until the dirty stack also includes a metric-moving consumer, a documented manual/modelplay fix,
+  or a coherent source-complete mechanic group ready for review.
 
 When broadening is justified:
 - grounded and airborne variants

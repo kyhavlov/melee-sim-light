@@ -18,9 +18,13 @@ Worklog:
 - After each completed owner, snapshot progress immediately so later review does not require archaeology.
 
 Repeat this loop indefinitely until I come back and stop you, or until the retained dirty stack
-becomes extremely large/unwieldy to continue safely. Do not stop after behavior-neutral substrate
-or a tiny row/window patch; keep the dirty stack moving until retained runtime work either moves
-validation/taxonomy metrics or fixes a documented manual/modelplay bug.
+becomes extremely large/unwieldy to continue safely. Do not stop after bare behavior-neutral
+substrate or a tiny row/window patch. Also do not back out correct source-clear mechanics solely
+because current validation metrics are unchanged: if a decomp/data-backed behavior is bounded,
+allocation-safe, on the RL 1.0/system path, and covered by focused positive/negative tests, retain
+it as source-completion work. Keep the dirty stack moving until it contains a metric-moving
+consumer, a documented manual/modelplay fix, or a coherent source-complete mechanic group ready for
+review.
 
 0. Write starting baselines in the worklog.
 1. Pick something to improve simulator correctness. Use your best judgment.
