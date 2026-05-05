@@ -236,6 +236,9 @@ static inline uint8_t state_flags_match_flow_respawn_action(uint16_t action_id) 
 static inline uint8_t state_flags_camera_target_live_pose_action(uint16_t action_id) {
   return (uint8_t)(state_flags_221f_dead_start_action(action_id) != 0u ||
                    action_id == (uint16_t)MSL_ACT_DEAD_UP_STAR ||
+                   action_id == (uint16_t)MSL_ACT_DEAD_UP_FALL ||
+                   action_id == (uint16_t)MSL_ACT_DEAD_UP_FALL_HIT_CAMERA ||
+                   action_id == (uint16_t)MSL_ACT_DEAD_UP_FALL_HIT_CAMERA_FLAT ||
                    state_flags_match_flow_respawn_action(action_id) != 0u);
 }
 
@@ -1090,7 +1093,11 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
         // - this is the F04/F25 lane where stale seeded camera subjects produce rollout-visible
         //   x221F_b0 drift,
         // - DamageFly* bottom-overlap timing is handled by its narrower existing owner below.
-        // refs/melee/src/melee/ft/ftcamera.c::ftCamera_UpdateCameraBox
+        // DeadUpFall/HitCamera uses ftCo_DeadUpFall_Cam -> ftCamera_80076320, which first refreshes
+        // the camera target through ftCamera_UpdateCameraBox before applying the DeadUpFall camera
+        // box center adjustment.
+        // refs/melee/src/melee/ft/ft_0D4D.c::ftCo_DeadUpFall_Cam
+        // refs/melee/src/melee/ft/ftcamera.c::{ftCamera_UpdateCameraBox,ftCamera_80076320}
         // refs/melee/src/melee/ft/ftlib.c::{ftLib_800866DC,ftLib_80086A8C}
         state_flags_refresh_camera_target_from_pose(batch, idx);
       }

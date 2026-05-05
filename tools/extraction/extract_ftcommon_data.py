@@ -416,6 +416,9 @@ def main() -> None:
         #   refs/melee/src/melee/ft/ft_0D31.c::{ftCo_DeadUpFall_Anim,ftCo_DeadUpFall_Phys}
         "dead_up_kb_vel_threshold": float(_f32_be(buf, ft_common_abs + 0x4F0)),
         "dead_timer_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x500))),
+        # Top-blast DeadUpFall selection percent:
+        # ftCo_800D3158 consumes HSD_Randi(100)+1 and enters DeadUpFall when x520 >= roll.
+        "dead_up_fall_select_percent": int(max(0, _i32_be(buf, ft_common_abs + 0x520))),
         "dead_up_star_initial_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x504))),
         "dead_up_star_phase1_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x508))),
         "dead_up_star_phase2_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x50C))),

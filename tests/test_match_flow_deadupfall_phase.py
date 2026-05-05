@@ -9,11 +9,16 @@ from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 STAGE_FD = 32
 CHAR_FOX = 1
 ACT_WAIT = 14
+ACT_DAMAGE_FLY_TOP = 90
+ACT_DEAD_UP_STAR = 4
 ACT_DEAD_UP_FALL = 6
 ACT_DEAD_UP_FALL_HIT_CAMERA = 7
 SM_WAIT = 2
 SM_DAMAGE_FALL = 29
 SM_DEAD_UP_FALL_HIT_CAMERA = 0
+ROLLOUT_CLOCK_HSD_RAND_STREAM = 1
+CAMERA_MODE_GAME = 0
+CAMERA_MODE_FREE = 1
 
 
 def _seed_base() -> np.ndarray:
@@ -34,7 +39,13 @@ def _seed_base() -> np.ndarray:
     return seed
 
 
-def _step_once(seed: np.ndarray) -> np.void:
+def _step_once(
+    seed: np.ndarray,
+    *,
+    replay_rollout: bool = False,
+    hsd_rng_owned: bool = False,
+    camera_mode: int = CAMERA_MODE_GAME,
+) -> np.void:
     msl_binding = pytest.importorskip("msl_binding")
     sizes = msl_binding.sizes()
     seed_stride = int(sizes["seed"])
@@ -52,7 +63,21 @@ def _step_once(seed: np.ndarray) -> np.void:
 
     handle = msl_binding.init(batch_size=1, num_players=2)
     try:
-        msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, seed_stride)))
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+        if replay_rollout:
+            msl_binding.reseed_seed_rollout(handle, seed_bytes)
+        else:
+            msl_binding.reseed_seed(handle, seed_bytes)
+        if hsd_rng_owned:
+            # Debug-only hook for synthetic source locks: this makes the top-blast branch consume
+            # the modeled HSD stream without deriving stream phase from a future replay label.
+            # refs/melee/src/sysdolphin/baselib/random.c::HSD_Randi
+            msl_binding.debug_set_rollout_clock_mode(handle, 0, ROLLOUT_CLOCK_HSD_RAND_STREAM)
+        if camera_mode != CAMERA_MODE_GAME:
+            # Camera_8003010C is mode == CAMERA_FREE; this is hidden CObj/debug camera state, not a
+            # replay outcome lane.
+            # refs/melee/src/melee/cm/camera.c::Camera_8003010C
+            msl_binding.debug_set_camera_mode(handle, 0, int(camera_mode))
         msl_binding.step_input(handle, prev_inp, inp)
         msl_binding.write_compare(handle, out)
         return out.view(COMPARE_DTYPE).reshape((1,))[0].copy()
@@ -72,6 +97,94 @@ def test_deadupfall_countdown_enters_hitcamera_without_future_position_bridge() 
     out = _step_once(seed)
     assert int(out["action_id"][0]) == ACT_DEAD_UP_FALL_HIT_CAMERA
     assert int(out["animation_index"][0]) == SM_DEAD_UP_FALL_HIT_CAMERA
+
+
+def test_replay_reseeded_top_blast_does_not_phase_deadupfall_from_future_label() -> None:
+    # ftCo_800D3158 uses p_ftCommonData->x520 >= HSD_Randi(100)+1 when the camera is not free.
+    # A replay one-step seed does not own all prefix HSD stream consumers before that callback, so
+    # the sim must not use a future DeadUpFall label or guessed stream offset to force this branch.
+    # refs/melee/src/melee/ft/ft_0D31.c::ftCo_800D3158
+    seed = _seed_base()
+    seed["frame_pre_random_seed"][0] = np.uint32(0)
+    seed["action_id"][0, 0] = np.uint16(ACT_DAMAGE_FLY_TOP)
+    seed["animation_index"][0, 0] = np.uint32(SM_DAMAGE_FALL)
+    seed["pos_y"][0, 0] = np.float32(190.0)
+    seed["speed_y_attack"][0, 0] = np.float32(3.0)
+
+    out = _step_once(seed)
+    assert int(out["action_id"][0]) == ACT_DEAD_UP_STAR
+
+
+def test_replay_reseeded_top_blast_keeps_deadupstar_without_rng_offset_lane() -> None:
+    # Seed 10000 produces HSD_Randi(100)+1 == 50, above x520==16, so the source branch remains
+    # DeadUpStar under a live HSD stream. Replay reseeds use the same visible outcome without any
+    # ref_t1 action-derived offset lane.
+    # refs/melee/src/melee/ft/ft_0D31.c::ftCo_800D3158
+    seed = _seed_base()
+    seed["frame_pre_random_seed"][0] = np.uint32(10000)
+    seed["action_id"][0, 0] = np.uint16(ACT_DAMAGE_FLY_TOP)
+    seed["animation_index"][0, 0] = np.uint32(SM_DAMAGE_FALL)
+    seed["pos_y"][0, 0] = np.float32(190.0)
+    seed["speed_y_attack"][0, 0] = np.float32(3.0)
+
+    out = _step_once(seed)
+    assert int(out["action_id"][0]) == ACT_DEAD_UP_STAR
+    assert int(out["stocks"][0]) == 4
+
+
+def test_replay_rollout_top_blast_consumes_causal_frame_seed_without_future_label() -> None:
+    # Replay rollout owns the frame-start RNG seed and modeled prefix consumers only. With no prefix
+    # consumers in this synthetic row, seed 0 causally produces HSD_Randi(100)+1 == 1 and enters
+    # DeadUpFall. This is not an offset search and does not inspect ref_t1.action_id.
+    # refs/melee/src/melee/ft/ft_0D31.c::ftCo_800D3158
+    # refs/slippi-ssbm-asm/Recording/SendFrameStart.s
+    seed = _seed_base()
+    seed["frame_pre_random_seed"][0] = np.uint32(0)
+    seed["action_id"][0, 0] = np.uint16(ACT_DAMAGE_FLY_TOP)
+    seed["animation_index"][0, 0] = np.uint32(SM_DAMAGE_FALL)
+    seed["pos_y"][0, 0] = np.float32(190.0)
+    seed["speed_y_attack"][0, 0] = np.float32(3.0)
+
+    out = _step_once(seed, replay_rollout=True)
+    assert int(out["action_id"][0]) == ACT_DEAD_UP_FALL
+    assert int(out["stocks"][0]) == 4
+
+
+def test_hsd_owned_top_blast_uses_percent_roll_to_enter_deadupfall() -> None:
+    # Source branch:
+    # - y > Stage_GetBlastZoneTopOffset and upward KB admit the top-KO path,
+    # - HSD_Randi(100)+1 is consumed from the current HSD stream,
+    # - p_ftCommonData->x520 (16) selects DeadUpFall when the roll is <= 16.
+    # Seed 0 produces roll 1 under HSD_Randi(100)+1.
+    # refs/melee/src/melee/ft/ft_0D31.c::ftCo_800D3158
+    # refs/melee/src/sysdolphin/baselib/random.c::HSD_Randi
+    seed = _seed_base()
+    seed["frame_pre_random_seed"][0] = np.uint32(0)
+    seed["action_id"][0, 0] = np.uint16(ACT_DAMAGE_FLY_TOP)
+    seed["animation_index"][0, 0] = np.uint32(SM_DAMAGE_FALL)
+    seed["pos_y"][0, 0] = np.float32(190.0)
+    seed["speed_y_attack"][0, 0] = np.float32(3.0)
+
+    out = _step_once(seed, hsd_rng_owned=True)
+    assert int(out["action_id"][0]) == ACT_DEAD_UP_FALL
+    assert int(out["animation_index"][0]) == SM_DAMAGE_FALL
+    assert int(out["stocks"][0]) == 4
+
+
+def test_hsd_owned_top_blast_camera_free_forces_deadupstar_after_roll_consume() -> None:
+    # ftCo_800D3158 samples HSD_Randi(100)+1, then requires !Camera_8003010C for DeadUpFall.
+    # CAMERA_FREE therefore forces DeadUpStar even when the roll would pass x520.
+    # refs/melee/src/melee/ft/ft_0D31.c::ftCo_800D3158
+    # refs/melee/src/melee/cm/camera.c::Camera_8003010C
+    seed = _seed_base()
+    seed["frame_pre_random_seed"][0] = np.uint32(0)
+    seed["action_id"][0, 0] = np.uint16(ACT_DAMAGE_FLY_TOP)
+    seed["animation_index"][0, 0] = np.uint32(SM_DAMAGE_FALL)
+    seed["pos_y"][0, 0] = np.float32(190.0)
+    seed["speed_y_attack"][0, 0] = np.float32(3.0)
+
+    out = _step_once(seed, hsd_rng_owned=True, camera_mode=CAMERA_MODE_FREE)
+    assert int(out["action_id"][0]) == ACT_DEAD_UP_STAR
 
 
 def test_deadupfall_hitcamera_hold_expiry_applies_phase3_fall_velocity() -> None:

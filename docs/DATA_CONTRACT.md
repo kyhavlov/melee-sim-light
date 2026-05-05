@@ -651,6 +651,20 @@ Stage (Final Destination):
 Common constants:
 - `_iso/PlCo.dat` (source)
 - `data/common/ft_common_data.json` (ftCommonData constants; decomp-first)
+  - Match-flow death constants:
+    - `dead_up_fall_select_percent`: `p_ftCommonData->x520`, the top-blast DeadUpFall selection
+      threshold compared against `HSD_Randi(100)+1` by `ftCo_800D3158`.
+    - DeadUpFall/HitCamera phase timers and velocities are the adjacent `x524+` fields documented
+      in `SPEC.md`; do not treat `x520` as a phase timer.
+  - Decomp refs: `refs/melee/src/melee/ft/ft_0D31.c::ftCo_800D3158` and
+    `refs/melee/src/melee/ft/ft_0D31.c::{ftCo_DeadUpFall_Anim,ftCo_DeadUpFall_Phys}`
+  - Live match config:
+    - `MslMatchConfig.camera_mode` reuses the former padding byte as the minimal
+      `Camera_8003010C` substrate (`0 = normal gameplay camera`, `1 = CAMERA_FREE`). Replay seed
+      rows do not carry this hidden CObj/debug-camera state and reset to normal mode on reseed.
+    - Replay rollout top-blast RNG ownership is limited to the immediate reseed frame. That frame
+      can consume Slippi's frame-start HSD seed plus modeled same-frame prefix consumers; later
+      replay-rollout frames must not treat the validation frame clock as the real HSD stream.
   - Grounded fighter-overlap nudge constants:
     - `player_nudge_x`: `p_ftCommonData->x450`, consumed by the horizontal overlap nudge owner.
     - `player_nudge_z`: `p_ftCommonData->x454`, consumed by the hidden engine-space Z/depth

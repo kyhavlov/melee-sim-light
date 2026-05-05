@@ -96,6 +96,7 @@
   "dead_up_fall_phase3_gravity": 0.20000000298023224,
   "dead_up_fall_phase3_terminal_vel": 1.7000000476837158,
   "dead_up_fall_phase4_frames": 35,
+  "dead_up_fall_select_percent": 16,
   "dead_up_kb_vel_threshold": 2.4000000953674316,
   "dead_up_star_initial_frames": 1,
   "dead_up_star_phase1_cam_top_mul": 0.6000000238418579,

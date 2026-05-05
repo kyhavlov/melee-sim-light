@@ -6,6 +6,7 @@
 #include "attack_identity.h"
 #include "blaster.h"
 #include "char_params.h"
+#include "combat.h"
 #include "common_params.h"
 #include "input_axis.h"
 #include "instance_id.h"
@@ -312,14 +313,9 @@ static inline void enter_rebirth(MslBatch* batch, size_t idx, const MslCommonPar
   // Decomp: gm_1601.c::fn_8016719C sets respawn facing from the resolved spawn-platform x:
   //   if (respawn_pos.x >= 0.0f) Player_SetFacingDirection(slot, -1.0f);
   //   else                         Player_SetFacingDirection(slot, +1.0f);
-  // Use the extracted camera midpoint as the stage-local zero. Centered respawn points therefore
-  // face left; this matters on platform stages whose stock respawn points sit exactly at x=0.
   // refs/melee/src/melee/gm/gm_1601.c::fn_8016719C
-  // data/stages/*.json: cam_bounds_world, respawn_points
-  {
-    const float cam_mid_x = 0.5f * (cam.left + cam.right);
-    batch->state.facing[idx] = (uint8_t)(respawn.x < cam_mid_x ? 1u : 0u);
-  }
+  // data/stages/bin/*.bin::MSLSTG01 respawn_points
+  batch->state.facing[idx] = (uint8_t)(respawn.x < 0.0f ? 1u : 0u);
   batch->state.pos_x[idx] = respawn.x;
   batch->state.pos_y[idx] = cam.top;
 
@@ -454,6 +450,43 @@ static inline uint32_t dead_up_fall_hitcamera_submotion(uint16_t action_id) {
   return MSL_ANIM_NONE_U32;
 }
 
+static inline void dead_up_fall_hidden_pose_init(MslBatch* batch, size_t idx,
+                                                 const MslCommonParams* c) {
+  if (batch == NULL || c == NULL) {
+    return;
+  }
+  batch->state.dead_up_fall_offset_x[idx] = c->dead_up_fall_lerp_start_x;
+  batch->state.dead_up_fall_offset_y[idx] = c->dead_up_fall_lerp_start_y;
+  batch->state.dead_up_fall_offset_z[idx] = c->dead_up_fall_lerp_start_z;
+  batch->state.dead_up_fall_vel_x[idx] = 0.0f;
+  batch->state.dead_up_fall_vel_y[idx] = 0.0f;
+  batch->state.dead_up_fall_vel_z[idx] = 0.0f;
+}
+
+static inline void enter_dead_up_fall(MslBatch* batch, size_t idx, const MslCommonParams* c) {
+  if (batch == NULL || c == NULL) {
+    return;
+  }
+  // ftCo_800D4580 initializes DeadUpFall and its hidden pose scratch:
+  //   x40=x524, x44=0, x50=*(Vec3*)&p_ftCommonData->x538.
+  // refs/melee/src/melee/ft/ft_0D31.c::{ftCo_800D3158,ftCo_800D4580}
+  batch->state.action_id[idx] = (uint16_t)MSL_ACT_DEAD_UP_FALL;
+  batch->state.animation_index[idx] = (uint32_t)MSL_SM_DAMAGE_FALL;
+  batch->state.match_flow_timer[idx] = (uint8_t)dead_up_fall_entry_total_timer(c);
+  batch->state.on_ground[idx] = 0u;
+  batch->state.speed_air_x_self[idx] = 0.0f;
+  batch->state.speed_ground_x_self[idx] = 0.0f;
+  batch->state.speed_y_self[idx] = 0.0f;
+  batch->state.speed_x_attack[idx] = 0.0f;
+  batch->state.speed_y_attack[idx] = 0.0f;
+  batch->state.hitlag[idx] = 0u;
+  batch->state.hitstun[idx] = 0u;
+  instance_id_reset_ft_800892D4(batch, idx);
+  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  msl_anim_timebase_seed(batch, idx, 0.0f, 1.0f);
+  dead_up_fall_hidden_pose_init(batch, idx, c);
+}
+
 static inline void enter_dead_up_fall_hitcamera(MslBatch* batch, size_t idx,
                                                 const MslCommonParams* c, uint16_t from_action) {
   if (batch == NULL || c == NULL) {
@@ -475,6 +508,34 @@ static inline void enter_dead_up_fall_hitcamera(MslBatch* batch, size_t idx,
   msl_anim_timebase_seed(batch, idx, -1.0f, 1.0f);
 }
 
+static inline void dead_up_fall_apply_lerp_pose(MslBatch* batch, size_t idx,
+                                                const MslCommonParams* c, uint8_t t) {
+  if (batch == NULL || c == NULL || c->dead_up_fall_lerp_frames == 0u) {
+    return;
+  }
+  // ftCo_DeadUpFall_Anim case 0 sets x4C to 1/x528, then case 1 increments it once per frame.
+  // ftCo_DeadUpFall_Phys case 1 lerps x538 -> x544 by that x4C owner. The shared countdown has
+  // already been decremented for this frame, so x528-t+1 is the source x4C numerator.
+  // refs/melee/src/melee/ft/ft_0D31.c::{ftCo_DeadUpFall_Anim,ftCo_DeadUpFall_Phys}
+  int elapsed = (int)c->dead_up_fall_lerp_frames - (int)t + 1;
+  if (elapsed < 1) {
+    elapsed = 1;
+  }
+  if (elapsed > (int)c->dead_up_fall_lerp_frames) {
+    elapsed = (int)c->dead_up_fall_lerp_frames;
+  }
+  const float frac = (float)elapsed / (float)c->dead_up_fall_lerp_frames;
+  batch->state.dead_up_fall_offset_x[idx] =
+      c->dead_up_fall_lerp_start_x +
+      (c->dead_up_fall_lerp_end_x - c->dead_up_fall_lerp_start_x) * frac;
+  batch->state.dead_up_fall_offset_y[idx] =
+      c->dead_up_fall_lerp_start_y +
+      (c->dead_up_fall_lerp_end_y - c->dead_up_fall_lerp_start_y) * frac;
+  batch->state.dead_up_fall_offset_z[idx] =
+      c->dead_up_fall_lerp_start_z +
+      (c->dead_up_fall_lerp_end_z - c->dead_up_fall_lerp_start_z) * frac;
+}
+
 static inline void dead_up_fall_apply_phase3_fall(MslBatch* batch, size_t idx,
                                                   const MslCommonParams* c) {
   if (batch == NULL || c == NULL) {
@@ -489,6 +550,52 @@ static inline void dead_up_fall_apply_phase3_fall(MslBatch* batch, size_t idx,
     vy = -terminal;
   }
   batch->state.speed_y_self[idx] = vy;
+  // ftCo_DeadUpFall_Phys case 3 accumulates self_vel into mv.co.unk_deadup.x5C, then adds x5C into
+  // x50 and clears x5C once the ftAnim_80070FD0 release predicate allows it. The current Fox/Falco
+  // no-ice runtime path has no separate XRotN comparison state, so carry the source velocity into
+  // x50 on each visible phase-3 physics tick and clear the scratch.
+  // refs/melee/src/melee/ft/ft_0D31.c::ftCo_DeadUpFall_Phys
+  // refs/melee/src/melee/ft/ftanim.c::ftAnim_80070FD0
+  batch->state.dead_up_fall_vel_y[idx] += vy;
+  batch->state.dead_up_fall_offset_y[idx] += batch->state.dead_up_fall_vel_y[idx];
+  batch->state.dead_up_fall_vel_x[idx] = 0.0f;
+  batch->state.dead_up_fall_vel_y[idx] = 0.0f;
+  batch->state.dead_up_fall_vel_z[idx] = 0.0f;
+}
+
+static inline uint8_t top_blast_selects_dead_up_fall(MslBatch* batch, int bi, size_t idx,
+                                                     const MslCommonParams* c) {
+  if (batch == NULL || c == NULL) {
+    return 0u;
+  }
+  (void)idx;
+  // ftCo_800D3158 consumes the global HSD RNG stream at the live top-blast callback. Match-init
+  // rollouts own the continuous HSD stream; replay rollouts own the Slippi frame-start seed and any
+  // prefix consumers this sim has modeled before match_flow_update_post_physics reaches this branch.
+  // Do not phase this draw from future DeadUpStar/DeadUpFall labels.
+  // refs/melee/src/melee/ft/ft_0D31.c::ftCo_800D3158
+  // refs/melee/src/sysdolphin/baselib/random.c::HSD_Randi
+  // refs/melee/src/melee/cm/camera.c::Camera_8003010C
+  if (batch->rollout_clock_rng_owned == NULL) {
+    return 0u;
+  }
+  const uint8_t rng_owner = batch->rollout_clock_rng_owned[bi];
+  if (rng_owner != (uint8_t)MSL_ROLLOUT_CLOCK_HSD_RAND_STREAM &&
+      rng_owner != (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED) {
+    return 0u;
+  }
+  if (rng_owner == (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED) {
+    if (batch->replay_rollout_seed_frame_id == NULL ||
+        batch->state.frame_id[bi] != batch->replay_rollout_seed_frame_id[bi]) {
+      return 0u;
+    }
+  }
+  const int32_t roll =
+      combat_rng_consume_randi_site(batch, bi, MSL_RNG_SITE_DEAD_UP_FALL_SELECT, 100) + 1;
+  if (batch->camera_mode != NULL && batch->camera_mode[bi] == (uint8_t)MSL_CAMERA_MODE_FREE) {
+    return 0u;
+  }
+  return (uint8_t)((int32_t)c->dead_up_fall_select_percent >= roll);
 }
 
 static inline void dead_up_star_try_enter_phase1(MslBatch* batch, size_t idx,
@@ -672,6 +779,9 @@ void match_flow_update_pre_anim(MslBatch* batch) {
           batch->state.speed_y_self[idx] = 0.0f;
           batch->state.speed_x_attack[idx] = 0.0f;
           batch->state.speed_y_attack[idx] = 0.0f;
+          if (t <= c->dead_up_fall_lerp_frames) {
+            dead_up_fall_apply_lerp_pose(batch, idx, c, t);
+          }
           if (t == 0) {
             enter_dead_up_fall_hitcamera(batch, idx, c, a);
           }
@@ -877,11 +987,20 @@ void match_flow_update_post_physics(MslBatch* batch) {
       } else if (x < blast.left) {
         death = (uint16_t)MSL_ACT_DEAD_LEFT;
       } else if (y > blast.top) {
-        // Decomp: top KO requires being grounded, or a sufficient upward KB velocity.
+        // Decomp: top KO requires being grounded, x2222_b3, or sufficient upward KB velocity. The
+        // lite sim does not currently expose x2222_b3, so the supported Fox/Falco path uses
+        // ground/KB lanes. Once admitted, normal camera mode consumes HSD_Randi(100)+1 and selects
+        // DeadUpFall when p_ftCommonData->x520 is at least the roll; camera-free mode forces
+        // DeadUpStar. Camera_8003010C is live CObj/camera-mode state, so replay reseeds do not
+        // approximate it from camera bounds.
         // refs/melee/src/melee/ft/ft_0D31.c::ftCo_800D3158
         const uint8_t on_ground = batch->state.on_ground[idx] ? 1 : 0;
         if (on_ground || (batch->state.speed_y_attack[idx] > c->dead_up_kb_vel_threshold)) {
-          death = (uint16_t)MSL_ACT_DEAD_UP_STAR;
+          if (top_blast_selects_dead_up_fall(batch, bi, idx, c)) {
+            death = (uint16_t)MSL_ACT_DEAD_UP_FALL;
+          } else {
+            death = (uint16_t)MSL_ACT_DEAD_UP_STAR;
+          }
         }
       } else if (y < blast.bottom) {
         death = (uint16_t)MSL_ACT_DEAD_DOWN;
@@ -897,10 +1016,15 @@ void match_flow_update_post_physics(MslBatch* batch) {
       // Decomp pointers:
       // - Blastzone check: refs/melee/src/melee/ft/ft_0D31.c::ftCo_800D3158
       // - Stock loss: refs/melee/src/melee/ft/ft_0D31.c::ftCo_800D34E0
-      if (death != (uint16_t)MSL_ACT_DEAD_UP_STAR) {
+      if (death != (uint16_t)MSL_ACT_DEAD_UP_STAR && death != (uint16_t)MSL_ACT_DEAD_UP_FALL) {
         if (batch->state.stocks[idx] > 0) {
           batch->state.stocks[idx] = (uint8_t)(batch->state.stocks[idx] - 1);
         }
+      }
+
+      if (death == (uint16_t)MSL_ACT_DEAD_UP_FALL) {
+        enter_dead_up_fall(batch, idx, c);
+        continue;
       }
 
       batch->state.action_id[idx] = death;

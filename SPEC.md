@@ -1602,26 +1602,47 @@ Match-flow closure notes:
   Sources: `refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s::ftCo_RebirthWait_{Anim,IASA}`,
   `refs/melee/src/melee/ft/fighter.c::Fighter_8006A360`,
   `refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm`.
-- DeadUpStar can keep `dmg.x18C4_source_ply` through the terminal x18C8 tick before the Rebirth
-  reset. This uses the existing `source_clear_terminal_phase` seed lane rather than a separate
-  match-flow timer repair.
+- Dead* match-flow actions keep `dmg.x18C4_source_ply` through terminal x18C8 source-clear ticks
+  before the Rebirth reset. Dead-flow callbacks still consume source attribution for KO/suicide and
+  death-effect bookkeeping, and the eventual clear is owned by
+  `Fighter_UnkInitReset_80067C98`. Sources:
+  `refs/melee/src/melee/ft/ft_0D31.c::{ftCo_800D331C,ftCo_800D34E0}` and
+  `refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_UnkInitReset_80067C98}`.
 - DeadUpStar's first active animation tick consumes the one-frame phase-0 timer, then writes the
   phase-1 vertical self velocity from `p_ftCommonData->x514 * Stage_GetCamBoundsTopOffset() -
   cur_pos.y` divided by `p_ftCommonData->x508`. The sim models that boundary from the total
   DeadUpStar countdown and extracted FD camera top; it does not recompute the velocity after phase 1
   has started. Source: `refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s::ftCo_DeadUpStar_Anim`.
-- DeadUpFall/HitCamera phase timing is source-owned by `p_ftCommonData->x520`. The sim derives the
-  existing `match_flow_timer` lane causally from action-prefix history for DeadUpFall actions
-  `6/7/8/9/10`, uses `x524/x528` for the DeadUpFall -> HitCamera countdown, and uses
+- DeadUpFall top-blast selection uses `p_ftCommonData->x520` as the percent threshold after
+  `HSD_Randi(100)+1`. Runtime consumes that source RNG site in `ftCo_800D3158` when the batch owns
+  the modeled HSD RNG stream (`init_match` / simulator-owned rollouts). Replay rollout may also
+  consume it on the immediate reseed frame, where Slippi's frame-start seed and the sim's modeled
+  same-frame prefix consumers are available; later replay-rollout frames do not use the validation
+  replay clock as an HSD-stream substitute. The live `Camera_8003010C()` predicate is modeled as
+  per-batch camera mode (`0 = normal`, `1 = CAMERA_FREE`); CAMERA_FREE forces DeadUpStar after the
+  source RNG draw. Replay one-step seeds expose the frame-start random seed but not all same-frame
+  prefix consumers or live camera mode, so replay-future DeadUpStar/DeadUpFall labels must not
+  choose or phase this RNG draw. No camera-bounds proxy is retained.
+- DeadUpFall/HitCamera phase timing is source-owned by the following ftCommonData fields. The sim
+  derives the existing `match_flow_timer` lane causally from action-prefix history for DeadUpFall
+  actions `6/7/8/9/10`, uses `x524/x528` for the DeadUpFall -> HitCamera countdown, and uses
   `x52C/x530/x534` plus `x550/x554/x558` for the HitCamera hold -> phase-3 self-velocity/fall
-  update. The visible `speed_y_self` lane is now source-owned by `ftCo_DeadUpFall_Anim` +
-  `ftCo_DeadUpFall_Phys`, but visible `cur_pos` during DeadUpFall* still also depends on hidden
-  `mv.co.unk_deadup.x50/x5C`, `xD4_unk_vel`, and `ftAnim_80070FD0` release state. Until that owner is
-  modeled causally, replay seeds must not teacher-force future `cur_pos` deltas; the runtime leaves
-  that hidden offset owner open rather than reintroducing a future-position bridge.
+  update. The visible `speed_y_self` lane is source-owned by `ftCo_DeadUpFall_Anim` +
+  `ftCo_DeadUpFall_Phys`; the runtime also carries the hidden `mv.co.unk_deadup.x50/x5C` scratch
+  owner for the supported no-ice path. The `xD4_unk_vel` / `ftAnim_80070FD0` branch is gated by
+  `fp->x2222_b6`; current supported Fox/Falco no-ice DeadUpFall entry has no source path setting
+  that bit, so no future-position replay bridge is introduced for it.
   Sources: `refs/melee/src/melee/ft/ft_0D31.c::{ftCo_DeadUpFall_Anim,ftCo_DeadUpFall_Phys}`,
   `refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate`,
   `refs/melee/src/melee/ft/ftanim.c::ftAnim_80070FD0`.
+- DeadUpFall/HitCamera camera ownership refreshes the live fighter camera target through
+  `ftCo_DeadUpFall_Cam -> ftCamera_80076320 -> ftCamera_UpdateCameraBox`. The hidden x50/x5C model
+  offset is carried for pose/effect ownership, but the CObj/scissor/projection portion of
+  `ftLib_80086A8C` remains outside the replay-visible gameplay surface; broad stage-bounds proxies
+  are not retained.
+  Sources: `refs/melee/src/melee/ft/ft_0D4D.c::ftCo_DeadUpFall_Cam`,
+  `refs/melee/src/melee/ft/ftcamera.c::{ftCamera_80076320,ftCamera_UpdateCameraBox}`,
+  `refs/melee/src/melee/ft/ftlib.c::ftLib_80086A8C`.
 
 #### Locomotion core (ground/air, jumps, fastfall, landing, airdodge/escapes)
 

@@ -25,13 +25,19 @@ enum {
   MSL_RNG_SITE_FOD_PLATFORM_TARGET_ADJUST = 19,
   MSL_RNG_SITE_FOD_PLATFORM_TARGET_SIDE = 20,
   MSL_RNG_SITE_FOD_PLATFORM_HIDDEN_WAIT = 21,
-  MSL_RNG_SITE_COUNT = 22,
+  MSL_RNG_SITE_DEAD_UP_FALL_SELECT = 22,
+  MSL_RNG_SITE_COUNT = 23,
 };
 
 enum {
   MSL_ROLLOUT_CLOCK_NONE = 0,
   MSL_ROLLOUT_CLOCK_HSD_RAND_STREAM = 1,
   MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED = 2,
+};
+
+enum {
+  MSL_CAMERA_MODE_GAME = 0,
+  MSL_CAMERA_MODE_FREE = 1,
 };
 
 struct MslBatch {
@@ -48,7 +54,12 @@ struct MslBatch {
   uint8_t* rollout_clock_rng_owned;  // [batch]
   // Replay validation rollout reseed mode. This stays true for `reseed_seed_rollout` even when the
   // RNG/frame-clock owner itself stays seed-owned.
-  uint8_t* replay_rollout_reseeded;  // [batch]
+  uint8_t* replay_rollout_reseeded;       // [batch]
+  int32_t* replay_rollout_seed_frame_id;  // [batch]
+  // Minimal live camera mode substrate for callbacks that query Camera_8003010C. Replay reseeds do
+  // not expose this hidden CObj/debug-mode state, so they reset to normal gameplay camera mode.
+  // refs/melee/src/melee/cm/camera.c::Camera_8003010C
+  uint8_t* camera_mode;  // [batch]
 
   // Debug-only per-fighter override for hit status eligibility (opcode 26).
   // Indexed like other per-player state arrays: [batch_size * MSL_MAX_PLAYERS].

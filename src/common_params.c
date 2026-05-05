@@ -301,6 +301,8 @@ int common_params_init(void) {
   // Match flow constants (KO/death/respawn/entry).
   if (json_get_f32(buf, "dead_up_kb_vel_threshold", &g_params.dead_up_kb_vel_threshold) != 0 ||
       json_get_u16(buf, "dead_timer_frames", &g_params.dead_timer_frames) != 0 ||
+      json_get_u16(buf, "dead_up_fall_select_percent", &g_params.dead_up_fall_select_percent) !=
+          0 ||
       json_get_u16(buf, "dead_up_star_initial_frames", &g_params.dead_up_star_initial_frames) !=
           0 ||
       json_get_u16(buf, "dead_up_star_phase1_frames", &g_params.dead_up_star_phase1_frames) != 0 ||

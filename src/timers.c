@@ -13,6 +13,23 @@
 #include "motion_state_owners.h"
 #include "stage_collision.h"
 
+static inline uint8_t timers_match_flow_dead_action_defers_source_clear(uint16_t action_id) {
+  switch (action_id) {
+    case MSL_ACT_DEAD_DOWN:
+    case MSL_ACT_DEAD_LEFT:
+    case MSL_ACT_DEAD_RIGHT:
+    case MSL_ACT_DEAD_UP_STAR:
+    case MSL_ACT_DEAD_UP_FALL:
+    case MSL_ACT_DEAD_UP_FALL_HIT_CAMERA:
+    case MSL_ACT_DEAD_UP_FALL_HIT_CAMERA_FLAT:
+    case MSL_ACT_DEAD_UP_FALL_ICE:
+    case MSL_ACT_DEAD_UP_FALL_HIT_CAMERA_ICE:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
 void timers_update(MslBatch* batch) {
   if (batch == NULL) {
     return;
@@ -654,6 +671,18 @@ void timers_update_post_anim(MslBatch* batch) {
       // refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC
       if (batch->state.last_hit_by[idx] == (uint8_t)MSL_LAST_HIT_BY_SOURCE_NONE) {
         batch->state.source_clear_timer_x18c8[idx] = 0u;
+        continue;
+      }
+      if (timers_match_flow_dead_action_defers_source_clear(batch->state.action_id[idx])) {
+        // Dead-flow source attribution lifetime:
+        // - Dead* entry stores death bookkeeping in ftCo_800D331C / ftCo_800D34E0 and later
+        //   dead-flow callbacks still consume `fp->dmg.x18c4_source_ply` for KO/suicide and
+        //   death-effect ownership.
+        // - Do not let the ordinary Fighter_8006A360 x18C8 countdown clear the replay-visible
+        //   source lane while the fighter is inside Dead* match-flow actions; Rebirth reset owns
+        //   the eventual attribution clear through Fighter_UnkInitReset_80067C98.
+        // refs/melee/src/melee/ft/ft_0D31.c::{ftCo_800D331C,ftCo_800D34E0}
+        // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_UnkInitReset_80067C98}
         continue;
       }
       // Grounded clear-path bridge:

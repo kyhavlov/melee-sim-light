@@ -181,12 +181,14 @@ typedef struct MslCommonParams {
   // - refs/melee/src/melee/ft/ft_0D31.c::ftCo_800D3158 (dead_up_kb_vel_threshold)
   // - refs/melee/src/melee/ft/ft_0D31.c::ftCo_800D3680 (dead_timer_frames)
   // - refs/melee/src/melee/ft/ft_0D31.c::ftCo_800D40B8 (dead_up_star_initial_frames)
+  // - refs/melee/src/melee/ft/ft_0D31.c::ftCo_800D3158 (dead_up_fall_select_percent)
   // - refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s::ftCo_DeadUpStar_Anim
   //   (dead_up_star_phase1/2_frames, phase1 y/z velocity setup)
   // - refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s (Rebirth/RebirthWait timers at 0x5D0/0x5D4)
   // - refs/melee/src/melee/ft/ft_0C31.c (entry_start_frames/entry_end_frames)
   float dead_up_kb_vel_threshold;               // p_ftCommonData->x4F0
   uint16_t dead_timer_frames;                   // p_ftCommonData->x500 (DeadDown/Left/Right timer)
+  uint16_t dead_up_fall_select_percent;         // p_ftCommonData->x520
   uint16_t dead_up_star_initial_frames;         // p_ftCommonData->x504
   uint16_t dead_up_star_phase1_frames;          // p_ftCommonData->x508
   uint16_t dead_up_star_phase2_frames;          // p_ftCommonData->x50C

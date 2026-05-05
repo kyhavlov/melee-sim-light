@@ -42,7 +42,7 @@ MATCH_CONFIG_DTYPE = np.dtype(
         ("num_players", "u1"),
         ("is_teams", "u1"),
         ("stock_count", "u1"),
-        ("_pad0", "V1"),
+        ("camera_mode", "u1"),
         ("players", MATCH_PLAYER_CONFIG_DTYPE, (4,)),
     ],
     align=False,

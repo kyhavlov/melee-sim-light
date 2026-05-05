@@ -331,6 +331,18 @@ typedef struct MslStateSoA {
   uint8_t* thrown_attached_prev_on_ground;   // [batch * players]
   uint16_t* thrown_attached_prev_ground_id;  // [batch * players]
   uint8_t* match_flow_timer;
+  // DeadUpFall hidden offset/velocity owner (`mv.co.unk_deadup.x50/x5C`).
+  //
+  // These lanes are not Slippi-visible by themselves, but they are the source-owned pose scratch
+  // behind DeadUpFall/HitCamera camera/effect positioning. Runtime initializes them from
+  // p_ftCommonData x538..x54C and advances them through ftCo_DeadUpFall_Phys.
+  // refs/melee/src/melee/ft/ft_0D31.c::{ftCo_800D4580,ftCo_DeadUpFall_Phys}
+  float* dead_up_fall_offset_x;
+  float* dead_up_fall_offset_y;
+  float* dead_up_fall_offset_z;
+  float* dead_up_fall_vel_x;
+  float* dead_up_fall_vel_y;
+  float* dead_up_fall_vel_z;
   // Legacy compatibility lane from the earlier EntryEnd->Fall investigation.
   // The authoritative opening-control owner is now opening_input_lock_timer (`fp->x221D_b4`).
   uint8_t* entry_end_fall_lock;

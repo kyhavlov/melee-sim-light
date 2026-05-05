@@ -11,6 +11,7 @@ void combat_rng_trace_begin_frame(MslBatch* batch);
 void combat_rng_trace_end_frame(MslBatch* batch);
 float combat_rng_consume_randf_site(MslBatch* batch, int bi, uint16_t site_id);
 int32_t combat_rng_consume_randi_site(MslBatch* batch, int bi, uint16_t site_id, int32_t max_val);
+void combat_rng_consume_step_site(MslBatch* batch, int bi, uint16_t site_id);
 
 typedef struct MslThrowHitboxParams MslThrowHitboxParams;
 

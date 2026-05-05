@@ -396,6 +396,7 @@ def test_ft_common_data_exports_deadupfall_hitcamera_source_constants() -> None:
     # ftCo_DeadUpFall_Anim/Phys use p_ftCommonData x520 timers/vectors and x550/x554/x558/x55C
     # for the DeadUpFall -> HitCamera phase owner.
     data = json.loads(Path("data/common/ft_common_data.json").read_text())
+    assert int(data["dead_up_fall_select_percent"]) == 16
     assert int(data["dead_up_fall_entry_hold_frames"]) == 1
     assert int(data["dead_up_fall_lerp_frames"]) == 50
     assert int(data["dead_up_fall_hitcamera_hold_frames"]) == 3

@@ -73,7 +73,11 @@ typedef struct MslMatchConfig {
   uint8_t num_players;  // Must match the batch config for v1.
   uint8_t is_teams;
   uint8_t stock_count;
-  uint8_t _pad0;
+  // Live camera debug mode for Camera_8003010C.
+  // 0 = normal gameplay camera, 1 = CAMERA_FREE.
+  //
+  // refs/melee/src/melee/cm/camera.c::Camera_8003010C
+  uint8_t camera_mode;
 
   MslMatchPlayerConfig players[MSL_MAX_PLAYERS];
 } MslMatchConfig;
@@ -2240,6 +2244,8 @@ int msl_batch_debug_set_hitlag(MslBatch* batch, int batch_index, int player_inde
                                uint16_t hitlag_frames);
 int msl_batch_debug_set_smash_charge_state(MslBatch* batch, int batch_index, int player_index,
                                            uint8_t state, uint8_t frames, uint8_t hold_frames_max);
+int msl_batch_debug_set_rollout_clock_mode(MslBatch* batch, int batch_index, uint8_t mode);
+int msl_batch_debug_set_camera_mode(MslBatch* batch, int batch_index, uint8_t mode);
 // Debug/testing helper: override movescript-derived hit status (opcode 26) eligibility.
 // - Pass status=-1 to clear the override (use extracted tables).
 // - Otherwise status must fit in u8 (0=normal, 1=invincible, 2=intangible in current decomp domain).

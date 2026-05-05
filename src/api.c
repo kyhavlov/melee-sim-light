@@ -407,6 +407,19 @@ MslBatch* msl_batch_create(int batch_size, int num_players) {
     return NULL;
   }
   memset(batch->replay_rollout_reseeded, 0, (size_t)batch_size * sizeof(uint8_t));
+  batch->replay_rollout_seed_frame_id =
+      (int32_t*)alloc_malloc((size_t)batch_size * sizeof(int32_t));
+  if (batch->replay_rollout_seed_frame_id == NULL) {
+    msl_batch_destroy(batch);
+    return NULL;
+  }
+  memset(batch->replay_rollout_seed_frame_id, 0, (size_t)batch_size * sizeof(int32_t));
+  batch->camera_mode = (uint8_t*)alloc_malloc((size_t)batch_size * sizeof(uint8_t));
+  if (batch->camera_mode == NULL) {
+    msl_batch_destroy(batch);
+    return NULL;
+  }
+  memset(batch->camera_mode, 0, (size_t)batch_size * sizeof(uint8_t));
 
   // Debug-only per-fighter hit status override table (0xFF = none).
   batch->debug_hit_status_override =
@@ -583,6 +596,8 @@ void msl_batch_destroy(MslBatch* batch) {
   alloc_free(batch->debug_rng_seed_in);
   alloc_free(batch->debug_rng_shadow_seed);
   alloc_free(batch->debug_hit_status_override);
+  alloc_free(batch->camera_mode);
+  alloc_free(batch->replay_rollout_seed_frame_id);
   alloc_free(batch->replay_rollout_reseeded);
   alloc_free(batch->rollout_clock_rng_owned);
   alloc_free(batch->match_init_seed_scratch);
@@ -767,7 +782,24 @@ static inline uint8_t msl_reseed_seed_uses_rollout_replay_frame_clock(const MslS
       return 1u;
     }
   }
+  MslStageBounds blast_bounds = {0};
+  const uint8_t have_blast_bounds =
+      stage_collision_get_blast_bounds_world(seed->stage_id, &blast_bounds);
+  const MslCommonParams* common_params = msl_common_params();
+  const float top_kb_threshold =
+      common_params != NULL ? common_params->dead_up_kb_vel_threshold : 0.0f;
   for (int victim = 0; victim < active_players; victim++) {
+    if (seed->action_id[victim] == (uint16_t)MSL_ACT_DAMAGE_FLY_TOP && have_blast_bounds != 0u &&
+        seed->pos_y[victim] > blast_bounds.top &&
+        (seed->on_ground[victim] != 0u || seed->speed_y_attack[victim] > top_kb_threshold)) {
+      // Replay rollout clock ownership for the top-blast DeadUpFall selection:
+      // ftCo_800D3158 consumes HSD_Randi(100)+1 from the frame-start HSD stream after any modeled
+      // same-frame prefix consumers. This admits the causal stream without deriving an offset from
+      // the future DeadUpStar/DeadUpFall label.
+      // refs/melee/src/melee/ft/ft_0D31.c::ftCo_800D3158
+      // refs/slippi-ssbm-asm/Recording/SendFrameStart.s
+      return 1u;
+    }
     const int attacker =
         msl_seed_local_slot_from_source_port0(seed, active_players, seed->last_hit_by[victim]);
     if (seed->fighter_8006cda4_pre_gate_consume_count[victim] >= 1u &&
@@ -860,6 +892,9 @@ static int msl_batch_init_match_impl(MslBatch* batch, const uint8_t* config_byte
       return EINVAL;
     }
     if (cfg->stock_count == 0u) {
+      return EINVAL;
+    }
+    if (cfg->camera_mode > (uint8_t)MSL_CAMERA_MODE_FREE) {
       return EINVAL;
     }
     if (!(cfg->match_damage_ratio > 0.0f) || !isfinite(cfg->match_damage_ratio)) {
@@ -999,6 +1034,9 @@ static int msl_batch_init_match_impl(MslBatch* batch, const uint8_t* config_byte
       seed->camera_target_point_inside_stage_cam_bounds_u8[p] =
           msl_match_init_point_inside_bounds(&cam_bounds, spawn.x, spawn.y);
       seed->magnify_damage_counter_x1910[p] = 0u;
+    }
+    if (batch->camera_mode != NULL) {
+      batch->camera_mode[bi] = cfg->camera_mode;
     }
   }
 
@@ -2528,6 +2566,13 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
     if (batch->replay_rollout_reseeded != NULL) {
       batch->replay_rollout_reseeded[bi] =
           (rollout_owned_after == (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED) ? 1u : 0u;
+    }
+    if (batch->replay_rollout_seed_frame_id != NULL) {
+      batch->replay_rollout_seed_frame_id[bi] = seed->frame_id;
+    }
+    if (batch->camera_mode != NULL &&
+        rollout_owned_after != (uint8_t)MSL_ROLLOUT_CLOCK_HSD_RAND_STREAM) {
+      batch->camera_mode[bi] = (uint8_t)MSL_CAMERA_MODE_GAME;
     }
   }
 
@@ -4514,6 +4559,34 @@ int msl_batch_debug_set_smash_charge_state(MslBatch* batch, int batch_index, int
   batch->state.smash_charge_state[idx] = state;
   batch->state.smash_charge_frames[idx] = frames;
   batch->state.smash_charge_hold_frames_max[idx] = hold_frames_max;
+  return 0;
+}
+
+int msl_batch_debug_set_rollout_clock_mode(MslBatch* batch, int batch_index, uint8_t mode) {
+  if (batch == NULL || batch->rollout_clock_rng_owned == NULL) {
+    return EINVAL;
+  }
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return EINVAL;
+  }
+  if (mode > (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED) {
+    return EINVAL;
+  }
+  batch->rollout_clock_rng_owned[batch_index] = mode;
+  return 0;
+}
+
+int msl_batch_debug_set_camera_mode(MslBatch* batch, int batch_index, uint8_t mode) {
+  if (batch == NULL || batch->camera_mode == NULL) {
+    return EINVAL;
+  }
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return EINVAL;
+  }
+  if (mode > (uint8_t)MSL_CAMERA_MODE_FREE) {
+    return EINVAL;
+  }
+  batch->camera_mode[batch_index] = mode;
   return 0;
 }
 
