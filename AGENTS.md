@@ -5,7 +5,10 @@
 Implement a **high-performance, batched, deterministic** SSBM-like simulator for RL.
 
 Current target domain:
-- **Singles (2 players)**, Fox vs Falco, Final Destination, UCF enabled by default.
+- **Singles (2 players)**, Fox vs Falco, UCF enabled by default.
+- The primary/control suite remains Final Destination, but RL 1.0 correctness now includes the
+  supported legal-stage aggregate: Final Destination, Battlefield, Fountain of Dreams, frozen
+  Pokemon Stadium, Yoshi's Story, and Dream Land N64.
 - The implementation must stay structured so enabling **4 players (2v2)** later is a config/codepath extension, not a rewrite.
 
 ## Hard Requirements
@@ -112,11 +115,18 @@ A family is only “closed” when:
 - For each selected mismatch, first identify the shared data-backed owner family when possible:
   MotionState callbacks, script events, item/article kind, stage segment, part/anchor, or explicit
   seed/provenance lane. Prefer closing that owner family over fitting the motivating row.
+- For platform-stage work, compare non-FD replays against FD/cardinal behavior using per-replay and
+  per-stage normalized rates, not raw aggregate totals alone. One-step taxonomy and validation
+  report deltas are usually better signals for missing shared systems; disruptive rollout packets
+  are supporting evidence and stability checks, not the only target selector.
 - For assigned multi-item work, the handoff bar applies to the whole list, not the first completed item.
 - Do not stop at the first motivating row or one small owner slice during checklist burn-down.
 - Investigation, tooling, extraction, replay probes, seed-surface work, and final gameplay code are all part of the same task.
 - Keep working until ALL assigned work is ready for review.
 - Do not return with diagnosis-only prose if implementation, extraction, probes, locks, or validation remain credible local next steps.
+- Do not package behavior-neutral runtime substrate work as a checkpoint. If a retained runtime
+  change does not move validation/taxonomy metrics or fix a documented manual/modelplay bug, keep
+  working in the dirty tree until a source-backed consumer produces reviewable movement.
 
 When broadening is justified:
 - grounded and airborne variants

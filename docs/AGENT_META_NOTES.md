@@ -31,18 +31,28 @@ not gameplay specification; use `SPEC.md` for source-backed mechanics.
 
 ## Target Selection
 
-- Use disruptive rollout clusters as the primary target selector, but treat repeated, early,
-  coherent, or modelplay-visible float residuals as first-class signals.
+- Start from a balanced census, not just the largest raw disruptive cluster:
+  - one-step taxonomy for direct owner evidence
+  - validation report diffs for suite/replay movement
+  - per-replay and per-stage normalized FD-vs-non-FD deltas for platform-stage work
+  - rollout/disruptive clusters for stability, cascade impact, and concrete packet autopsies
+- Use disruptive rollout clusters as a target selector when the owner is rollout-visible, but do
+  not over-centralize on them while broad one-step/platform systems are still missing.
+- Treat repeated, early, coherent, or modelplay-visible float residuals as first-class signals.
 - Max float error alone is usually a poor ranker because downstream rollout divergence can create
   huge late-position/velocity errors after an earlier owner break.
+- Retained runtime checkpoints should either move validation/taxonomy metrics or fix a documented
+  manual/modelplay bug. Behavior-neutral substrate may be useful as scaffolding, but it should
+  remain part of the dirty working stack until a source-backed consumer proves value.
 
 ## Data-Backed Owner Workflow
 
 - Treat the generated data substrates as part of the first-pass autopsy for every serious
   mismatch:
   - `MSLMSO01`: MotionState Anim/IASA/Phys/Coll/Cam callback owner classes.
-  - `MSLSTG01`: stage collision line ids, line kinds, flags, ledge/platform bits, endpoints, and
-    raw stage points. Reserved spawn/respawn/camera/blast fields are not source-backed yet.
+  - `MSLSTG01`: stage collision line ids, line kinds, flags, ledge/platform bits,
+    fighter-solid/current-domain policy, stage-object support tags, endpoints, raw stage points,
+    platform transforms/motions/paths, and spawn/respawn/camera/blast roles.
   - `MSLPART1`: static fighter part order, parent links, JObj flags, and named anchors.
   - `MSLITAR1`: Fox/Falco item/article constants and sim-char to GALE01 FighterKind mapping.
   - `MSLFTSC1`: decoded, stable fighter script events.

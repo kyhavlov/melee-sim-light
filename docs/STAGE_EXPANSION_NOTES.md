@@ -1,13 +1,17 @@
 # Stage Expansion Notes
 
 Current staged state:
+- RL 1.0 validation includes platform stages in the standard aggregate suite. FD/cardinal remains
+  the primary control, but Battlefield/FoD/frozen PS/Yoshi/Dream residuals are in-scope for normal
+  finish-the-sim burn-down.
 - `aggregate_recent` includes selected two-player Battlefield, Fountain of Dreams, frozen Pokemon
   Stadium, Yoshi's Story, and Dream Land N64 replays.
 - Focused suites exist for Battlefield, Fountain of Dreams, Pokemon Stadium, Yoshi's Story, and
   Dream Land N64.
-- `MSLSTG01` v6 extracts FD/Battlefield/Fountain/Pokemon/Yoshi/Dream Land collision segments, raw
+- `MSLSTG01` v8 extracts FD/Battlefield/Fountain/Pokemon/Yoshi/Dream Land collision segments, raw
   `MapLine` graph links, platform/ledge/fighter-solid flags, stage points, spawn/respawn points,
-  camera/blast bounds, and source-backed platform transform records.
+  camera/blast bounds, source-backed platform transform/motion/path records, and current-domain
+  stage-object support tags.
 - Runtime/eval can load all six supported legal-stage artifacts. New-match init uses MSLSTG01
   spawn/respawn/camera/blast roles for all supported stages; Slippi neutral-spawn teams mode
   remains FD-only because that patch table is FD-specific.

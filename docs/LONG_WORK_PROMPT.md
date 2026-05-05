@@ -17,7 +17,10 @@ Worklog:
 - Treat the worklog as a live review manifest, not just a narrative.
 - After each completed owner, snapshot progress immediately so later review does not require archaeology.
 
-Repeat this loop indefinitely until I come back and stop you, or until the retained dirty stack becomes extremely large/unwieldy to continue safely:
+Repeat this loop indefinitely until I come back and stop you, or until the retained dirty stack
+becomes extremely large/unwieldy to continue safely. Do not stop after behavior-neutral substrate
+or a tiny row/window patch; keep the dirty stack moving until retained runtime work either moves
+validation/taxonomy metrics or fixes a documented manual/modelplay bug.
 
 0. Write starting baselines in the worklog.
 1. Pick something to improve simulator correctness. Use your best judgment.
@@ -40,7 +43,8 @@ Process details to keep in mind:
   - changed files and owner-specific hunks in shared files
   - tests/locks added
   - SPEC/docs notes added
-  - before/after one-step, rollout, disruptive score, and float metrics
+  - before/after one-step, rollout, taxonomy, disruptive score, and float metrics
+  - per-replay and per-stage normalized deltas when the owner is platform-stage-visible
   - rejected experiments and what they proved
   - current unresolved local path, if interrupted
   - packaging notes for shared-file hunks
@@ -68,9 +72,14 @@ Process details to keep in mind:
 
 Prioritization:
 
-- Prioritize rollout-visible impact, but do not over-bias toward easy fixability.
-- Start from disruptive rollout reports and one-step taxonomy.
-- Use disruptive rollout clusters as the primary target selector.
+- Prioritize source-owner closure and simulator correctness; metrics choose between plausible
+  owners, but do not define the patch boundary.
+- Start from one-step taxonomy, validation report diffs, per-replay/per-stage normalized deltas,
+  rollout/disruptive reports, float outliers, and modelplay-visible bugs.
+- For platform-stage work, explicitly compare non-FD replays against FD/cardinal behavior using
+  normalized rates. Do not choose solely by raw aggregate totals.
+- Use disruptive rollout clusters when a target is rollout-visible, but do not over-bias toward
+  disruptive rankings while broad one-step/platform systems are still missing.
 - Before patching a selected disruptive row/cluster, run
   `uv run python -m tools.eval.next_desync_investigation --suite <suite> --datasets-dir datasets`
   and record the packet path in the worklog.
@@ -124,6 +133,9 @@ Validation cadence:
   + aggregate only when persistent `.msl` cache encoding/metadata or cache regeneration is part of
   the change being validated.
 - Before final handoff, run the appropriate full validation set for the retained dirty stack.
+- Do not refresh validation reports for test-only changes. If gameplay/runtime logic changes,
+  reports must be generator-produced and validation deltas must be compared against the cycle
+  baseline.
 
 Hard rule:
 

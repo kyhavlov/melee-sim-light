@@ -43,8 +43,11 @@ after the incremental build check. Suite eval builds datasets directly from
 normal validation. It uses worker subprocesses by default; set
 `VALIDATE_WORKERS=1` for serial output/debugging.
 The standard aggregate suite is `replays/suites/aggregate_recent.json`; it
-includes the current FD validation set plus Battlefield coverage. Use
-`replays/suites/battlefield_recent.json` for focused stage/platform work.
+includes the current FD validation set plus selected two-player Battlefield,
+Fountain of Dreams, frozen Pokemon Stadium, Yoshi's Story, and Dream Land N64
+coverage. Focused stage suites exist under `replays/suites/*_recent.json` for
+Battlefield, Fountain of Dreams, Pokemon Stadium, Yoshi's Story, and Dream Land
+N64.
 
 Diff validation reports against a baseline:
 
@@ -56,6 +59,20 @@ uv run python -m tools.eval.validation_report_diff \
 
 Use `--fail-on-regression` in long-work checkpoints when a nonzero exit should
 flag any suite or replay-level validation regression for investigation.
+
+One-step taxonomy / owner census:
+
+```bash
+uv run python -m tools.eval.mismatch_taxonomy \
+  --suite replays/suites/aggregate_recent.json \
+  --datasets-dir datasets \
+  --out-dir reports/triage/current_mismatch_taxonomy
+```
+
+For platform-stage burn-down, compare owner families by replay-normalized and
+stage-normalized deltas against the FD/cardinal controls. Raw aggregate totals
+are useful, but they can hide whether an owner is truly platform-specific or a
+generic FD-visible system.
 
 Guardrail convenience targets:
 

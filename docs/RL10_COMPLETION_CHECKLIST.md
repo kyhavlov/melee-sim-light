@@ -11,6 +11,13 @@ Last updated:
   motion-entry, item-owner identity, match-flow / respawn, and knockdown / passive contact owner
   families closed; checklist reflects post-closure RL 1.0 priority ordering.
 
+Maintenance note:
+- This checklist is history-heavy and some detailed priority text predates platform-stage
+  admission. RL 1.0 validation now includes the supported two-player legal-stage aggregate
+  (FD/Battlefield/FoD/frozen PS/Yoshi/Dream). Use fresh taxonomy/validation census artifacts for
+  immediate target ordering, and use this document for family boundaries, closure definitions, and
+  historical bridge/residual context.
+
 ## Status Legend
 
 - **Closed / effectively closed**: the shared owner path is in place; remaining behavior is narrow per-move or adjacent-family detail.
