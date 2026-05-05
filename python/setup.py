@@ -53,6 +53,7 @@ ext = Extension(
     sources=[
         str((ROOT / "python" / "msl_binding.c").resolve()),
         str((ROOT / "python" / "msl_preprocess_native.c").resolve()),
+        str((ROOT / "python" / "msl_taxonomy_native.c").resolve()),
         str((ROOT / "src" / "api.c").resolve()),
         str((ROOT / "src" / "alloc.c").resolve()),
         str((ROOT / "src" / "config.c").resolve()),

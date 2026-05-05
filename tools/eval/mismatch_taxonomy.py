@@ -47,6 +47,33 @@ ITEM_FIELD_TO_SUBFIELD: dict[str, str] = {
     "item_instance_id": "instance_id",
 }
 
+NATIVE_FIELD_CODE_TO_NAME: dict[int, str] = {
+    0: "action_id",
+    1: "action_frame",
+    2: "on_ground",
+    3: "facing",
+    4: "stocks",
+    5: "jumps_left",
+    6: "is_dead",
+    7: "hitlag",
+    8: "hitstun",
+    9: "l_cancel",
+    10: "hurtbox_state",
+    11: "ground_id",
+    12: "animation_index",
+    13: "instance_hit_by",
+    14: "instance_id",
+    15: "last_attack_landed",
+    16: "combo_count",
+    17: "last_hit_by",
+    18: "state_flags",
+    19: "item_exists",
+    20: "item_type",
+    21: "item_state",
+    22: "item_owner",
+    23: "item_instance_id",
+}
+
 ACTION_CORE_FIELDS: frozenset[str] = frozenset(
     {
         "action_id",
@@ -3820,6 +3847,7 @@ def _iter_suite_events(
             seed_b = np.frombuffer(samples["seed_t"].tobytes(order="C"), dtype=np.uint8).reshape(n, seed_stride).copy()
             prev_b = np.frombuffer(samples["prev_input_t"].tobytes(order="C"), dtype=np.uint8).reshape(n, input_stride).copy()
             in_b = np.frombuffer(samples["input_t"].tobytes(order="C"), dtype=np.uint8).reshape(n, input_stride).copy()
+            ref_b = np.frombuffer(samples["ref_t1"].tobytes(order="C"), dtype=np.uint8).reshape(n, compare_stride).copy()
             out_b = np.empty((n, compare_stride), dtype=np.uint8)
 
             binding.reseed_seed(handle, seed_b)
@@ -3833,137 +3861,180 @@ def _iter_suite_events(
             dataset_name = str(Path(ds_path).name)
             dataset_paths[dataset_name] = ds_path
 
-            for i in range(n):
-                for p in range(num_players):
-                    row_fields: list[str] = []
-                    player_key = (dataset_name, int(i), int(p))
+            native_events = binding.collect_mismatch_events(seed_b, ref_b, out_b, num_players)
+            player_event_indices: dict[tuple[int, int], list[int]] = defaultdict(list)
+            item_event_indices: dict[tuple[int, int], list[int]] = defaultdict(list)
+            for ev_i, kind in enumerate(native_events["kind"]):
+                record_i = int(native_events["record"][ev_i])
+                subject_i = int(native_events["subject"][ev_i])
+                if int(kind) == 0:
+                    player_event_indices[(record_i, subject_i)].append(ev_i)
+                else:
+                    item_event_indices[(record_i, subject_i)].append(ev_i)
 
-                    for field in PLAYER_FIELDS:
-                        if field == "state_flags":
-                            for sub in np.argwhere(out[field][i, p] != ref[field][i, p]).flatten().tolist():
-                                row_fields.append(f"state_flags[{int(sub)}]")
-                            continue
-                        if out[field][i, p] != ref[field][i, p]:
-                            row_fields.append(field)
+            for (i, p), indices in player_event_indices.items():
+                fields = []
+                for ev_i in indices:
+                    code = int(native_events["field_code"][ev_i])
+                    field = NATIVE_FIELD_CODE_TO_NAME[code]
+                    if field == "state_flags":
+                        field = f"state_flags[{int(native_events['subindex'][ev_i])}]"
+                    fields.append(field)
+                row = PlayerRow(
+                    dataset=dataset_name,
+                    record=int(i),
+                    p=int(p),
+                    seed_frame=int(native_events["seed_frame"][indices[0]]),
+                    ref_frame=int(native_events["ref_frame"][indices[0]]),
+                    seed_action_id=int(native_events["seed_action_id"][indices[0]]),
+                    ref_action_id=int(native_events["ref_action_id"][indices[0]]),
+                    out_action_id=int(native_events["out_action_id"][indices[0]]),
+                    prev_action_id=int(native_events["prev_action_id"][indices[0]]),
+                    seed_action_frame=int(np.int16(native_events["seed_action_frame"][indices[0]])),
+                    ref_action_frame=int(np.int16(native_events["ref_action_frame"][indices[0]])),
+                    out_action_frame=int(np.int16(native_events["out_action_frame"][indices[0]])),
+                    on_ground=int(native_events["on_ground"][indices[0]]),
+                    hitlag=int(native_events["hitlag"][indices[0]]),
+                    hitstun=int(native_events["hitstun"][indices[0]]),
+                    fields=tuple(sorted(fields)),
+                    family_id="F99_misc_other",
+                )
+                family_id = _classify_player_row(row, action_names)
+                row = PlayerRow(**{**asdict(row), "family_id": family_id})
+                player_rows[(dataset_name, int(i), int(p))] = row
 
-                    row = PlayerRow(
+                event_by_field: dict[str, int] = {}
+                for ev_i, field in zip(indices, fields, strict=True):
+                    event_by_field[field] = int(ev_i)
+                for field in row.fields:
+                    ev_i = event_by_field[field]
+                    all_events.append(
+                        MismatchEvent(
+                            family_id=family_id,
+                            dataset=dataset_name,
+                            record=int(i),
+                            subject=f"p{int(p)}",
+                            seed_frame=row.seed_frame,
+                            ref_frame=row.ref_frame,
+                            field=field,
+                            seed=int(native_events["seed_value"][ev_i]),
+                            ref=int(native_events["ref_value"][ev_i]),
+                            out=int(native_events["out_value"][ev_i]),
+                            seed_action_id=row.seed_action_id,
+                            ref_action_id=row.ref_action_id,
+                            out_action_id=row.out_action_id,
+                            prev_action_id=row.prev_action_id,
+                            seed_action_frame=row.seed_action_frame,
+                            ref_action_frame=row.ref_action_frame,
+                            out_action_frame=row.out_action_frame,
+                            on_ground=row.on_ground,
+                            hitlag=row.hitlag,
+                            hitstun=row.hitstun,
+                        )
+                    )
+
+            for i, p in player_event_indices:
+                for delta in (-2, -1, 1, 2):
+                    j = int(i + delta)
+                    if j < 0 or j >= n or (j, p) in player_event_indices:
+                        continue
+                    player_key = (dataset_name, j, int(p))
+                    if player_key in player_rows:
+                        continue
+                    player_rows[player_key] = PlayerRow(
                         dataset=dataset_name,
-                        record=int(i),
+                        record=j,
                         p=int(p),
-                        seed_frame=int(seed["frame_id"][i]),
-                        ref_frame=int(ref["frame_id"][i]),
-                        seed_action_id=int(seed["action_id"][i, p]),
-                        ref_action_id=int(ref["action_id"][i, p]),
-                        out_action_id=int(out["action_id"][i, p]),
-                        prev_action_id=int(seed["seed_prev_action_id"][i, p]),
-                        seed_action_frame=int(np.int16(seed["action_frame"][i, p])),
-                        ref_action_frame=int(np.int16(ref["action_frame"][i, p])),
-                        out_action_frame=int(np.int16(out["action_frame"][i, p])),
-                        on_ground=int(seed["on_ground"][i, p]),
-                        hitlag=int(seed["hitlag"][i, p]),
-                        hitstun=int(seed["hitstun"][i, p]),
-                        fields=tuple(sorted(row_fields)),
+                        seed_frame=int(seed["frame_id"][j]),
+                        ref_frame=int(ref["frame_id"][j]),
+                        seed_action_id=int(seed["action_id"][j, p]),
+                        ref_action_id=int(ref["action_id"][j, p]),
+                        out_action_id=int(out["action_id"][j, p]),
+                        prev_action_id=int(seed["seed_prev_action_id"][j, p]),
+                        seed_action_frame=int(np.int16(seed["action_frame"][j, p])),
+                        ref_action_frame=int(np.int16(ref["action_frame"][j, p])),
+                        out_action_frame=int(np.int16(out["action_frame"][j, p])),
+                        on_ground=int(seed["on_ground"][j, p]),
+                        hitlag=int(seed["hitlag"][j, p]),
+                        hitstun=int(seed["hitstun"][j, p]),
+                        fields=(),
                         family_id="F99_misc_other",
                     )
-                    family_id = _classify_player_row(row, action_names)
-                    row = PlayerRow(**{**asdict(row), "family_id": family_id})
-                    player_rows[player_key] = row
 
-                    for field in row.fields:
-                        if field.startswith("state_flags["):
-                            sub = int(field.removeprefix("state_flags[").removesuffix("]"))
-                            seed_v = int(seed["state_flags"][i, p, sub])
-                            ref_v = int(ref["state_flags"][i, p, sub])
-                            out_v = int(out["state_flags"][i, p, sub])
-                        else:
-                            if field == "is_dead":
-                                # `is_dead` is a compare-only lane derived from stocks in C
-                                # (`msl_is_dead_from_stocks`). Seed rows do not carry a separate
-                                # field; derive the same value here so taxonomy can observe
-                                # death-state mismatches instead of failing when a gameplay change
-                                # exposes one.
-                                # refs: src/api.c::msl_is_dead_from_stocks
-                                seed_v = 1 if int(seed["stocks"][i, p]) == 0 else 0
-                            else:
-                                seed_v = int(seed[field][i, p])
-                            ref_v = int(ref[field][i, p])
-                            out_v = int(out[field][i, p])
-                        all_events.append(
-                            MismatchEvent(
-                                family_id=family_id,
-                                dataset=dataset_name,
-                                record=int(i),
-                                subject=f"p{int(p)}",
-                                seed_frame=row.seed_frame,
-                                ref_frame=row.ref_frame,
-                                field=field,
-                                seed=seed_v,
-                                ref=ref_v,
-                                out=out_v,
-                                seed_action_id=row.seed_action_id,
-                                ref_action_id=row.ref_action_id,
-                                out_action_id=row.out_action_id,
-                                prev_action_id=row.prev_action_id,
-                                seed_action_frame=row.seed_action_frame,
-                                ref_action_frame=row.ref_action_frame,
-                                out_action_frame=row.out_action_frame,
-                                on_ground=row.on_ground,
-                                hitlag=row.hitlag,
-                                hitstun=row.hitstun,
-                            )
+            for (i, slot), indices in item_event_indices.items():
+                fields = [NATIVE_FIELD_CODE_TO_NAME[int(native_events["field_code"][ev_i])] for ev_i in indices]
+                slot_row = ItemSlotRow(
+                    dataset=dataset_name,
+                    record=int(i),
+                    slot=int(slot),
+                    seed_frame=int(native_events["seed_frame"][indices[0]]),
+                    ref_frame=int(native_events["ref_frame"][indices[0]]),
+                    player_actions=tuple(int(seed["action_id"][i, p]) for p in range(num_players)),
+                    ref_actions=tuple(int(ref["action_id"][i, p]) for p in range(num_players)),
+                    out_actions=tuple(int(out["action_id"][i, p]) for p in range(num_players)),
+                    prev_actions=tuple(int(seed["seed_prev_action_id"][i, p]) for p in range(num_players)),
+                    fields=tuple(sorted(fields)),
+                    family_id="F99_misc_other",
+                    seed_item_type=int(seed["items"]["type"][i, slot]),
+                    ref_item_type=int(ref["items"]["type"][i, slot]),
+                    out_item_type=int(out["items"]["type"][i, slot]),
+                )
+                family_id = _classify_item_slot_row(slot_row, action_names)
+                slot_row = ItemSlotRow(**{**asdict(slot_row), "family_id": family_id})
+                item_rows[(dataset_name, int(i), int(slot))] = slot_row
+
+                event_by_field = {field: int(ev_i) for ev_i, field in zip(indices, fields, strict=True)}
+                for field in slot_row.fields:
+                    ev_i = event_by_field[field]
+                    all_events.append(
+                        MismatchEvent(
+                            family_id=family_id,
+                            dataset=dataset_name,
+                            record=int(i),
+                            subject=f"item{int(slot)}",
+                            seed_frame=slot_row.seed_frame,
+                            ref_frame=slot_row.ref_frame,
+                            field=field,
+                            seed=int(native_events["seed_value"][ev_i]),
+                            ref=int(native_events["ref_value"][ev_i]),
+                            out=int(native_events["out_value"][ev_i]),
+                            seed_action_id=None,
+                            ref_action_id=None,
+                            out_action_id=None,
+                            prev_action_id=None,
+                            seed_action_frame=None,
+                            ref_action_frame=None,
+                            out_action_frame=None,
+                            on_ground=None,
+                            hitlag=None,
+                            hitstun=None,
                         )
+                    )
 
-                for slot in range(out["items"].shape[1]):
-                    slot_fields: list[str] = []
-                    for field, subfield in ITEM_FIELD_TO_SUBFIELD.items():
-                        if out["items"][subfield][i, slot] != ref["items"][subfield][i, slot]:
-                            slot_fields.append(field)
-                    slot_row = ItemSlotRow(
+            for i, slot in item_event_indices:
+                for delta in (-2, -1, 1, 2):
+                    j = int(i + delta)
+                    if j < 0 or j >= n or (j, slot) in item_event_indices:
+                        continue
+                    item_key = (dataset_name, j, int(slot))
+                    if item_key in item_rows:
+                        continue
+                    item_rows[item_key] = ItemSlotRow(
                         dataset=dataset_name,
-                        record=int(i),
+                        record=j,
                         slot=int(slot),
-                        seed_frame=int(seed["frame_id"][i]),
-                        ref_frame=int(ref["frame_id"][i]),
-                        player_actions=tuple(int(seed["action_id"][i, p]) for p in range(num_players)),
-                        ref_actions=tuple(int(ref["action_id"][i, p]) for p in range(num_players)),
-                        out_actions=tuple(int(out["action_id"][i, p]) for p in range(num_players)),
-                        prev_actions=tuple(int(seed["seed_prev_action_id"][i, p]) for p in range(num_players)),
-                        fields=tuple(sorted(slot_fields)),
+                        seed_frame=int(seed["frame_id"][j]),
+                        ref_frame=int(ref["frame_id"][j]),
+                        player_actions=tuple(int(seed["action_id"][j, p]) for p in range(num_players)),
+                        ref_actions=tuple(int(ref["action_id"][j, p]) for p in range(num_players)),
+                        out_actions=tuple(int(out["action_id"][j, p]) for p in range(num_players)),
+                        prev_actions=tuple(int(seed["seed_prev_action_id"][j, p]) for p in range(num_players)),
+                        fields=(),
                         family_id="F99_misc_other",
-                        seed_item_type=int(seed["items"]["type"][i, slot]),
-                        ref_item_type=int(ref["items"]["type"][i, slot]),
-                        out_item_type=int(out["items"]["type"][i, slot]),
+                        seed_item_type=int(seed["items"]["type"][j, slot]),
+                        ref_item_type=int(ref["items"]["type"][j, slot]),
+                        out_item_type=int(out["items"]["type"][j, slot]),
                     )
-                    family_id = _classify_item_slot_row(slot_row, action_names)
-                    slot_row = ItemSlotRow(**{**asdict(slot_row), "family_id": family_id})
-                    item_rows[(dataset_name, int(i), int(slot))] = slot_row
-
-                    for field in slot_row.fields:
-                        subfield = ITEM_FIELD_TO_SUBFIELD[field]
-                        all_events.append(
-                            MismatchEvent(
-                                family_id=family_id,
-                                dataset=dataset_name,
-                                record=int(i),
-                                subject=f"item{int(slot)}",
-                                seed_frame=slot_row.seed_frame,
-                                ref_frame=slot_row.ref_frame,
-                                field=field,
-                                seed=int(seed["items"][subfield][i, slot]),
-                                ref=int(ref["items"][subfield][i, slot]),
-                                out=int(out["items"][subfield][i, slot]),
-                                seed_action_id=None,
-                                ref_action_id=None,
-                                out_action_id=None,
-                                prev_action_id=None,
-                                seed_action_frame=None,
-                                ref_action_frame=None,
-                                out_action_frame=None,
-                                on_ground=None,
-                                hitlag=None,
-                                hitstun=None,
-                            )
-                        )
         finally:
             binding.destroy(handle)
 

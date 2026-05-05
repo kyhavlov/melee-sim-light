@@ -11,6 +11,7 @@
 #include <numpy/arrayobject.h>
 
 #include "msl_preprocess_native.h"
+#include "msl_taxonomy_native.h"
 
 #include "../src/alloc.h"
 #include "../src/api.h"
@@ -5016,6 +5017,9 @@ static PyMethodDef methods[] = {
      "debug_refresh_combat_geometry(handle) -> DEBUG-ONLY. Recompute hurtcaps/hitboxes from "
      "current state without advancing frame stages."},
     {"write_compare", msl_write_compare, METH_VARARGS, "write_compare(handle, out_bytes)"},
+    {"collect_mismatch_events", msl_collect_mismatch_events, METH_VARARGS,
+     "collect_mismatch_events(seed_bytes, ref_bytes, out_bytes, num_players) -> dict[np.ndarray]. "
+     "Native scanner for tools.eval.mismatch_taxonomy strict compare rows."},
     {"disruptive_scan", msl_disruptive_scan, METH_VARARGS,
      "disruptive_scan(samples_u8, horizons, discrete_fields, float_fields, players, num_players, "
      "max_records, stride, float_epsilon, ucf_enabled, ucf_cardinals_enabled, batch_size, "
