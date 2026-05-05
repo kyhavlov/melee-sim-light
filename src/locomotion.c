@@ -2695,6 +2695,11 @@ static inline void common_pass_enter(MslBatch* batch, const MslCommonParams* c,
   batch->state.speed_ground_x_self[idx] = 0.0f;
   batch->state.speed_y_self[idx] = c->pass_vel_y;
   batch->state.jumps_left[idx] = ch->max_jumps > 0 ? (uint8_t)(ch->max_jumps - 1) : 0u;
+  // Fighter_ChangeMotionState(..., Ft_MF_None) clears fp->fall_fast on Pass entry; ftCo_8009A228
+  // then writes x671=0xFE so the held-down pass input cannot immediately relatch fastfall.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_8009A228
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+  batch->state.fall_fast[idx] = 0u;
   batch->state.tilt_timer_y[idx] = 0xFEu;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
 }

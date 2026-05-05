@@ -1267,6 +1267,39 @@ static inline uint8_t ftCommon_CheckFallFast(const MslCommonParams* c, float sti
   return 1;
 }
 
+static inline void physics_apply_pass_floor_skip_x671_owner(const MslCommonParams* c,
+                                                            MslBatch* batch, size_t idx,
+                                                            uint16_t action_id,
+                                                            int16_t action_frame, float stick_y) {
+  if (c == NULL || batch == NULL || action_id != (uint16_t)MSL_ACT_PASS) {
+    return;
+  }
+  if (action_frame < 0 || action_frame > (int16_t)(c->floor_skip_frames + 1u)) {
+    return;
+  }
+  const float prev_stick_y =
+      apply_deadzone(stick_i8_to_unit(batch->state.prev_input_main_y[idx]), c->lstick_deadzone_y);
+  if (stick_y > -c->fastfall_stick_threshold || prev_stick_y > -c->fastfall_stick_threshold) {
+    return;
+  }
+
+  // Pass/floor-skip entry ownership:
+  // - ftCo_8009A228 / ftCo_8009A184 call ftCommon_8007D5D4, enter Pass or a pass-through aerial
+  //   motion with Ft_MF_None, call mpUpdateFloorSkip, then write fp->x671_timer_lstick_tilt_y =
+  //   0xFE.
+  // - The public replay seed can reconstruct the Pass action and platform floor-skip, but its
+  //   x671-style tilt timer is controller-history derived. Reapply the source entry side effect for
+  //   the short Pass ownership window so held-down platform-drop input does not relatch fastfall
+  //   before Pass_Anim exits through ftCo_Fall_Enter.
+  // - Require current and previous stick-down samples so a real release/re-press inside Pass can
+  //   still create a fresh x671=0 edge.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::{
+  //   ftCo_8009A184,ftCo_8009A228,ftCo_Pass_Anim,ftCo_Pass_Phys}
+  // refs/melee/src/melee/mp/mpcoll.c::{mpUpdateFloorSkip,mpClearFloorSkip}
+  batch->state.tilt_timer_y[idx] = 0xFEu;
+  batch->state.fall_fast[idx] = 0u;
+}
+
 static inline void physics_apply_combo_push_timer(MslBatch* batch, const MslCommonParams* c,
                                                   size_t idx) {
   if (batch == NULL || c == NULL || batch->state.combo_push_timer_x2092[idx] == 0u) {
@@ -1557,6 +1590,8 @@ void physics_integrate(MslBatch* batch) {
                 if (allow_fastfall) {
                   const float stick_y = apply_deadzone(
                       stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
+                  physics_apply_pass_floor_skip_x671_owner(c, batch, idx, action_id, action_frame,
+                                                           stick_y);
                   (void)ftCommon_CheckFallFast(c, stick_y, vy_self_pre,
                                                &batch->state.fall_fast[idx],
                                                &batch->state.tilt_timer_y[idx]);
