@@ -3937,6 +3937,12 @@ static inline void combat_mutations_pass1_future_apply_body_hit_invincible(
   }
 }
 
+static inline void combat_processhit_clear_phantom_damage(MslBatch* batch, size_t idx) {
+  batch->state.phantom_damage_pending_x1898[idx] = 0.0f;
+  batch->state.phantom_damage_timer_x189c[idx] = 0u;
+  batch->state.phantom_damage_source_port[idx] = 0xFFu;
+}
+
 // Combat Mutations Pass 1 (BODY-only).
 //
 // This is the minimal "writeback" set needed for one-step eval:
@@ -3948,9 +3954,7 @@ static inline void combat_mutations_pass1_future_apply_body_hit(
   if (batch == NULL) {
     return;
   }
-  batch->state.phantom_damage_pending_x1898[d_idx] = 0.0f;
-  batch->state.phantom_damage_timer_x189c[d_idx] = 0u;
-  batch->state.phantom_damage_source_port[d_idx] = 0xFFu;
+  combat_processhit_clear_phantom_damage(batch, d_idx);
 
   // === GALE01 Fighter_ProcessHit/TakDamage ordering (write-site checklist) ===
   //
@@ -4209,7 +4213,8 @@ static inline void combat_mutations_pass1_future_apply_body_hit(
     batch->state.hitstun[d_idx] = 0;
     combat_state_flags_set_is_hitstun(batch, d_idx, 0);
     batch->state.instance_hit_by[d_idx] = batch->state.instance_id[a_idx];
-    combat_processhit_commit_source_owner(batch, d_idx, (uint8_t)attacker);
+    combat_processhit_commit_source_owner(batch, d_idx,
+                                          combat_source_port0_for_attacker(batch, a_idx, attacker));
 
     // Stale-move queue update on successful damaging BODY hit (attacker-side).
     // Decomp: refs/melee/src/melee/pl/plstale.c::plStale_UpdateStaleMovesFromFighter
@@ -4355,10 +4360,7 @@ static inline uint8_t combat_body_damage_log_record(
       scratch->count >= (uint8_t)MSL_COMBAT_BODY_DAMAGE_LOG_CAP) {
     return 0u;
   }
-
-  batch->state.phantom_damage_pending_x1898[d_idx] = 0.0f;
-  batch->state.phantom_damage_timer_x189c[d_idx] = 0u;
-  batch->state.phantom_damage_source_port[d_idx] = 0xFFu;
+  combat_processhit_clear_phantom_damage(batch, d_idx);
 
   const MslCommonParams* c = msl_common_params();
   if (c == NULL) {
@@ -4791,7 +4793,8 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
     // TODO(decomp/non-flinch-authoritative-signal): replace this KB-triplet-derived lane with a
     // truly authoritative decomp/data-owned no-flinch signal once identified.
     batch->state.instance_hit_by[d_idx] = item_instance_id;
-    combat_processhit_commit_source_owner(batch, d_idx, (uint8_t)attacker);
+    combat_processhit_commit_source_owner(batch, d_idx,
+                                          combat_source_port0_for_attacker(batch, a_idx, attacker));
     // Non-flinch damage still routes through Fighter_ProcessHit's percent-temp consume without a
     // fresh Damage* entry. Keep fp->x221C_b0 aligned to the same hidden-damage ownership so the
     // post-frame no-reaction lane does not stale-carry after the item hit is accepted.
@@ -4963,7 +4966,8 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
     batch->state.hitstun[d_idx] = 0u;
     combat_state_flags_set_is_hitstun(batch, d_idx, 0u);
     batch->state.instance_hit_by[d_idx] = item_instance_id;
-    combat_processhit_commit_source_owner(batch, d_idx, (uint8_t)attacker);
+    combat_processhit_commit_source_owner(batch, d_idx,
+                                          combat_source_port0_for_attacker(batch, a_idx, attacker));
 
     staling_queue_update(batch, a_idx, item_attack_id, item_attack_instance);
     combat_combo_ftColl_800763C0(batch, a_idx, defender, d_idx, item_attack_id);
@@ -7041,13 +7045,32 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
                      (c->phantom_overlap_max_x7a8 + c->phantom_overlap_max_x7a8))))
                   ? 1u
                   : 0u;
+          const uint8_t fighter_phantom_tiplog_range =
+              (!attackairb_stale_owner_candidate && lbcoll_overlap_valid &&
+               lbcoll_overlap_amount > 0.0f &&
+               (lbcoll_overlap_amount <= c->phantom_overlap_max_x7a8 ||
+                guard_shield_poke_phantom_boundary))
+                  ? 1u
+                  : 0u;
+          const uint8_t attackairb_phantom_tiplog_range =
+              (attackairb_stale_owner_candidate && attackairb_overlap_amount > 0.0f &&
+               attackairb_overlap_amount <= c->phantom_overlap_max_x7a8)
+                  ? 1u
+                  : 0u;
+          if (fighter_phantom_tiplog_range &&
+              (body_damage_logs[defender].count != 0u ||
+               batch->state.phantom_damage_timer_x189c[d_idx] != 0u)) {
+            // ftColl_80076ED8's phantom/tip-log branch is not an alternate full-BODY path:
+            // once `dmg_log0_idx` has a BODY damage log, or x189C is already armed, an
+            // inlineB1-range contact returns false instead of falling through to percent/KB.
+            // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,inlineB1,checkTipLog}
+            continue;
+          }
           if (!attackairb_stale_owner_candidate && !defender_no_damage &&
               batch->state.hitstun[d_idx] == 0u &&
               ((!batch->state.on_ground[d_idx] && batch->state.hitbox_enable_edge[hb_i]) ||
                guard_shield_poke_phantom_boundary) &&
-              lbcoll_overlap_valid && lbcoll_overlap_amount > 0.0f &&
-              (lbcoll_overlap_amount <= c->phantom_overlap_max_x7a8 ||
-               guard_shield_poke_phantom_boundary)) {
+              fighter_phantom_tiplog_range) {
             // General fighter BODY phantom-hit lane:
             // - lbColl_8000805C writes HitCapsule.coll_distance from lbColl_80006E58.
             // - ftColl_80076ED8 routes 0 < coll_distance < p_ftCommonData->x7A8 through
@@ -7067,8 +7090,7 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
             break;
           }
           if (attackairb_stale_owner_candidate && !defender_no_damage &&
-              attackairb_overlap_amount > 0.0f &&
-              attackairb_overlap_amount <= c->phantom_overlap_max_x7a8) {
+              attackairb_phantom_tiplog_range) {
             // Phantom/tip-log branch for fighter BODY hits:
             // - ftColl_80076ED8 takes the phantom lane when 0 < coll_distance < x7A8 and the
             //   victim is not already present in HitCapsule.victims_2.
@@ -7391,15 +7413,12 @@ static inline void combat_processhit_apply_expired_phantom_damage(MslBatch* batc
                                                                   size_t idx) {
   float dmg = batch->state.phantom_damage_pending_x1898[idx];
   if (!(dmg > 0.0f) || !isfinite(dmg)) {
-    batch->state.phantom_damage_pending_x1898[idx] = 0.0f;
-    batch->state.phantom_damage_timer_x189c[idx] = 0u;
-    batch->state.phantom_damage_source_port[idx] = 0xFFu;
+    combat_processhit_clear_phantom_damage(batch, idx);
     return;
   }
   uint16_t timer = batch->state.phantom_damage_timer_x189c[idx];
   if (timer == 0u) {
-    batch->state.phantom_damage_pending_x1898[idx] = 0.0f;
-    batch->state.phantom_damage_source_port[idx] = 0xFFu;
+    combat_processhit_clear_phantom_damage(batch, idx);
     return;
   }
   timer--;
@@ -7430,9 +7449,7 @@ static inline void combat_processhit_apply_expired_phantom_damage(MslBatch* batc
     combat_combo_ftColl_800763C0(batch, a_idx, p, idx, move_id);
   }
 
-  batch->state.phantom_damage_pending_x1898[idx] = 0.0f;
-  batch->state.phantom_damage_timer_x189c[idx] = 0u;
-  batch->state.phantom_damage_source_port[idx] = 0xFFu;
+  combat_processhit_clear_phantom_damage(batch, idx);
 }
 
 void combat_processhit_consume(MslBatch* batch) {

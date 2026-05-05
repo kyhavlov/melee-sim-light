@@ -12,11 +12,13 @@ from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 ACT_WAIT = 0x000E
 ACT_FALL = 0x001D
 ACT_DAMAGE_HI_2 = 0x004C
+ACT_DAMAGE_FLY_N = 0x0058
 
 # Submotion ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 SM_WAIT1_0 = 2
 SM_FALL = 20
 SM_DAMAGE_HI_2 = 166
+SM_DAMAGE_FLY_N = 178
 MSL_BUTTON_L = 0x0040
 MSL_DAMAGE_POST_HITLAG_CB_DAMAGE_ON_EXIT = 1
 MSL_STATE_FLAG_221A_IS_HITLAG = 0x20
@@ -142,6 +144,32 @@ def test_hitlag_ends_then_action_and_physics_resume() -> None:
     assert np.isclose(out["pos_x"][0], np.float32(expected_kb_x), atol=0.0, rtol=0.0)
     assert np.isclose(out["pos_y"][0], np.float32(102.77), atol=0.0, rtol=0.0)
     assert np.isclose(out["speed_y_self"][0], np.float32(2.77), atol=1e-6, rtol=0.0)
+
+
+def test_damage_hitlag_exit_restores_hidden_anim_rate_before_prio1_tick() -> None:
+    # Source-owner lock:
+    # - Fighter_8006A1BC decrements hitlag and clears x2219_b5 at proc prio 0.
+    # - Fighter_8006A360 can then advance DamageFly animation in the same frame.
+    # - Vanilla freezes via x2219_b5, not by zeroing fp->frame_speed_mul; replay seeds expose a
+    #   zero visible rate while frozen, so runtime must restore the hidden damage rate on exit.
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360,Fighter_8006D10C}
+    seed = _seed_base()
+    seed["action_id"][0, 0] = np.uint16(ACT_DAMAGE_FLY_N)
+    seed["animation_index"][0, 0] = np.uint32(SM_DAMAGE_FLY_N)
+    seed["action_frame"][0, 0] = np.int16(1)
+    seed["anim_frame_f32"][0, 0] = np.float32(1.0)
+    seed["frame_speed_mul_f32"][0, 0] = np.float32(0.0)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["hitlag"][0, 0] = np.uint16(1)
+    seed["hitstun"][0, 0] = np.uint16(40)
+    seed["state_flags"][0, 0, 1] = np.uint8(MSL_STATE_FLAG_221A_IS_HITLAG | MSL_STATE_FLAG_221A_B3)
+    seed["state_flags"][0, 0, 3] = np.uint8(0x02)
+
+    out = _step_once(seed)
+
+    assert int(out["hitlag"][0]) == 0
+    assert int(out["hitstun"][0]) == 39
+    assert int(out["action_frame"][0]) == 2
 
 
 def test_hitstun_does_not_decrement_when_not_in_hitstun_flag() -> None:

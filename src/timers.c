@@ -6,6 +6,7 @@
 #include <stdint.h>
 
 #include "action_ids.h"
+#include "anim_timebase.h"
 #include "buttons.h"
 #include "common_params.h"
 #include "input_axis.h"
@@ -261,6 +262,17 @@ void timers_consume_post_hitlag_callbacks_pre_input(MslBatch* batch) {
       // `Fighter_8006D10C` is invoked from `Fighter_8006A1BC` before Fighter_procUpdate input_cb,
       // so Damage_OnExitHitlag must consume the prior-frame input snapshot.
       // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006D10C,Fighter_procUpdate}
+      //
+      // The engine's hitlag gate (`x2219_b5`) freezes Fighter_8006A360 without zeroing
+      // `frame_speed_mul`; when hitlag reaches zero, the same prio-1 update can immediately tick
+      // Damage/DamageFly animation. Replay seeds expose a zero visible rate while frozen, so
+      // restore the source-owned hidden rate on the exit frame before anim_timebase_update_pre_input
+      // consumes it.
+      // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360,Fighter_8006D10C}
+      if (batch->state.frame_speed_mul_fp_q16_16[idx] == 0) {
+        batch->state.frame_speed_mul_fp_q16_16[idx] = (int32_t)MSL_Q16_16_ONE;
+      }
+
       const float lstick_x = stick_i8_to_unit(batch->state.prev_input_main_x[idx]);
       const float lstick_y = stick_i8_to_unit(batch->state.prev_input_main_y[idx]);
       const float lstick_full_x = apply_deadzone(lstick_x, c->lstick_deadzone_x);

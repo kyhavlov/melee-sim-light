@@ -134,7 +134,7 @@ overall.float_norm_mae_p95: 0.00002604
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
 Records: 10222  Players/scored per record: 2  Total player-frames: 20444
 mismatch.action_id: 2 / 20444 (0.000098)
-mismatch.action_frame: 10 / 20444 (0.000489)
+mismatch.action_frame: 9 / 20444 (0.000440)
 mismatch.on_ground: 2 / 20444 (0.000098)
 mismatch.facing: 1 / 20444 (0.000049)
 mismatch.stocks: 0 / 20444 (0.000000)
@@ -171,15 +171,15 @@ err.item_pos_x: mae=0.016358 p95=0.000000 max=3.790001
 err.item_pos_y: mae=0.056702 p95=0.000000 max=18.343994
 err.item_vel_x: mae=0.000001 p95=0.000000 max=0.000152
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000045
-overall.discrete_mismatch: 47 / 1236862
-overall.strict_discrete_mismatch: 74 / 1236862
+overall.discrete_mismatch: 46 / 1236862
+overall.strict_discrete_mismatch: 73 / 1236862
 overall.ignored_discrete_mismatch: 27
 overall.float_norm_mae_p95: 0.00006950
 
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.msl ==
 Records: 7837  Players/scored per record: 2  Total player-frames: 15674
 mismatch.action_id: 2 / 15674 (0.000128)
-mismatch.action_frame: 4 / 15674 (0.000255)
+mismatch.action_frame: 2 / 15674 (0.000128)
 mismatch.on_ground: 0 / 15674 (0.000000)
 mismatch.facing: 0 / 15674 (0.000000)
 mismatch.stocks: 0 / 15674 (0.000000)
@@ -216,13 +216,13 @@ err.item_pos_x: mae=0.007896 p95=0.000000 max=3.790001
 err.item_pos_y: mae=0.000000 p95=0.000000 max=0.000126
 err.item_vel_x: mae=0.000001 p95=0.000000 max=0.000213
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000126
-overall.discrete_mismatch: 21 / 948277
-overall.strict_discrete_mismatch: 40 / 948277
+overall.discrete_mismatch: 19 / 948277
+overall.strict_discrete_mismatch: 38 / 948277
 overall.ignored_discrete_mismatch: 19
 overall.float_norm_mae_p95: 0.00002259
 
 == suite summary ==
-overall.discrete_mismatch: 114 / 4462843
-overall.strict_discrete_mismatch: 200 / 4462843
+overall.discrete_mismatch: 111 / 4462843
+overall.strict_discrete_mismatch: 197 / 4462843
 overall.ignored_discrete_mismatch: 86
 overall.float_norm_mae_p95: 0.00003964
