@@ -64,78 +64,23 @@ Current target domain:
   derivation must use native C (`python/msl_preprocess_native.c` / `msl_binding`) or include timing
   proof that the Python path is negligible.
 
-## Validation Model
-
-Primary validation is **teacher-forced, reseeded one-step** over replay suites:
-1. Build a seed state from replay row `t`
-2. Apply replay inputs for `t`
-3. Run exactly one step
-4. Compare against replay reference at `t+1`
-
-Use full rollout as a stability / regression lens.
-
 ## Current RL 1.0 Checklist
 
 Primary tracker:
 - `docs/RL10_COMPLETION_CHECKLIST.md`
 
-Use that file to understand:
-- the comprehensive RL 1.0 mechanic-family inventory
-- which owner families are effectively closed
-- which deep passes are next
-- what counts as a bridge vs a residual
-- what is out of scope for RL 1.0
-
-### Current Working Mode
-
-We are in **finish-the-sim** mode.
-
-Do not attempt to do less work just to have a clean win. Some cases will call for fixing multiple issues simultaneously to cleanly close out a system. THIS IS WHAT WE WANT.
-
-## What “Done” Means
-
-### Bridge
-A compensating path that exists because a shared owner is still missing or mis-owned.
-
-### Residual
-A real move-specific or adjacent-family difference that remains after the shared owner is closed.
-
-### Closed Family
-A family is only “closed” when:
-- the shared owner path is in place by default
-- remaining behavior is narrow and decomp-justified
-- the family no longer depends on bridges for its core behavior
-
 ## Required Last-Mile Behavior
 
 - Treat a mismatch as a **triage entry point**, not the patch boundary.
-- For disruptive rollout targets, run `tools.eval.next_desync_investigation` before patching and
-  include the packet path in the worklog/handoff. Use the packet as evidence, not as an
-  authoritative diagnosis.
 - For each selected mismatch, first identify the shared data-backed owner family when possible:
   MotionState callbacks, script events, item/article kind, stage segment, part/anchor, or explicit
   seed/provenance lane. Prefer closing that owner family over fitting the motivating row.
-- For platform-stage work, compare non-FD replays against FD/cardinal behavior using per-replay and
-  per-stage normalized rates, not raw aggregate totals alone. One-step taxonomy and validation
-  report deltas are usually better signals for missing shared systems; disruptive rollout packets
-  are supporting evidence and stability checks, not the only target selector.
-- For assigned multi-item work, the handoff bar applies to the whole list, not the first completed item.
 - Do not stop at the first motivating row or one small owner slice during checklist burn-down.
-- Investigation, tooling, extraction, replay probes, seed-surface work, and final gameplay code are all part of the same task.
-- Keep working until ALL assigned work is ready for review.
 - Do not return with diagnosis-only prose if implementation, extraction, probes, locks, or validation remain credible local next steps.
-- Do not package bare behavior-neutral substrate work as a checkpoint by itself. However, do not
-  back out a correct source-clear mechanic solely because current validation metrics are unchanged.
+- Do not package bare behavior-neutral substrate work as a checkpoint by itself.
+- Do not back out a correct source-clear mechanic solely because current validation metrics are unchanged.
   If a decomp/data-backed behavior is bounded, allocation-safe, on the RL 1.0/system path, and
-  covered by focused positive/negative tests, retain it as source-completion work. Keep working
-  until the dirty stack also includes a metric-moving consumer, a documented manual/modelplay fix,
-  or a coherent source-complete mechanic group ready for review.
-
-When broadening is justified:
-- grounded and airborne variants
-- entry / steady / exit ownership
-- callback ordering
-- item / shield / hitlag / persistence interactions
+  covered by focused positive/negative tests, retain it as source-completion work.
 
 ## Working Conventions
 
@@ -144,7 +89,6 @@ When broadening is justified:
 - Never hand-edit generator-owned validation reports.
 - Triage/debug outputs default under gitignored `reports/triage/`, not `/tmp`.
 - Never key gameplay behavior on dataset name or record id.
-- Keep review state inspectable and include `git status --porcelain` in handoffs; do not revert useful work merely to return a clean tree.
 
 ## Validation Requirements
 
@@ -153,41 +97,6 @@ When broadening is justified:
 - Formatting check: `make fmt-check`
 - Core sim logic changes: `make validate-all`
 
-### Seed / Schema Changes
-Suite validation builds seed rows directly from `.slp` files by default, so
-`make validate-all` does not require a prior `preprocess_suite` run. If you
-touch persistent dataset cache/schema surfaces, or you need to verify `.msl`
-cache regeneration, also run forced cache refreshes:
-
-- `tools/eval/dataset.py`
-- `tools/slippi/preprocess_suite.py`
-- cache writer/reader paths in `tools/slippi/make_dataset_from_slp.py`
-
-```bash
-uv run python -m tools.slippi.preprocess_suite \
-  --suite replays/suites/fox_falco_fd_ucf084_recent.json \
-  --datasets-dir datasets \
-  --force
-uv run python -m tools.slippi.preprocess_suite \
-  --suite replays/suites/aggregate_recent.json \
-  --datasets-dir datasets \
-  --force
-```
-
-For gameplay seed/runtime changes such as:
-- `src/api.h`, `src/api.c`
-- `src/state.h`, `src/state.c`
-- `tools/slippi/seed_history.py`
-- `tools/slippi/make_dataset_from_slp.py`
-
-run `make validate-all` after focused tests. Use forced cache refresh as an
-additional cache-contract check when those changes affect persistent `.msl`
-encoding or metadata.
-
-If you touch extraction code or generated data contracts, also run `make build_data` and ensure
-stale-version/data-contract tests cover the artifact. Behavior-equivalent extraction/table changes
-should not refresh validation reports unless generated report content actually changes.
-
 ### Validation Reports
 - Test-only changes should not refresh committed validation reports.
 - If core sim logic changes, refresh these reports:
@@ -195,40 +104,3 @@ should not refresh validation reports unless generated report content actually c
 - `reports/validation/rollout_suite_eval.txt`
 - `reports/validation/aggregate_recent_one_step_suite_eval.txt`
 - `reports/validation/aggregate_recent_rollout_suite_eval.txt`
-
-### Modelplay Regression Fixtures
-
-- Tests must not depend on full `reports/modelplay/**/trace.json` artifacts at runtime.
-- For modelplay-visible regressions, extract the minimal relevant replay window into
-  `tests/fixtures/modelplay/` and load that compact fixture in the test.
-- Keep the original trace path as fixture metadata/source context only; the test should pass when
-  the large local trace artifact is absent.
-
-## Operational References
-
-Use the docs for detailed workflows instead of expanding this file:
-- Docs index:
-  - `AGENTS.md`: operating contract and repo-phase rules
-  - `docs/RL10_COMPLETION_CHECKLIST.md`: live RL 1.0 execution tracker
-  - `docs/DEVELOPMENT_WORKFLOWS.md`: common commands and operator workflows
-  - `SPEC.md`: mechanics inventory and learned behavior notes
-- RL 1.0 checklist: `docs/RL10_COMPLETION_CHECKLIST.md`
-- Development workflows: `docs/DEVELOPMENT_WORKFLOWS.md`
-- Data contract: `docs/DATA_CONTRACT.md`
-- Architecture: `docs/ARCHITECTURE.md`
-- Mismatch roadmap: `docs/roadmaps/mismatch_roadmap.md`
-- Decomp process ordering: `docs/DECOMP_PROC_ORDER.md`
-- Modelplay viewer workflow: `tools/modelplay/README.md`
-- Dolphin playback / forensic workflow: `tools/dolphin/README.md`
-- Legacy probe notes: `docs/legacy_melee_sim/`
-
-## Handoff Standard
-
-For active checklist burn-down work, hand off only when the checklist item is closed. A final handoff should say:
-- what owner family or named residual bucket was targeted
-- whether the checklist item is now closed
-- which bridges were deleted
-- which residuals remain
-- why each remaining residual is decomp-justified or belongs to another named owner
-- what validation was run
-- `git status --porcelain`

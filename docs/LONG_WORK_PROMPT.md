@@ -17,14 +17,11 @@ Worklog:
 - Treat the worklog as a live review manifest, not just a narrative.
 - After each completed owner, snapshot progress immediately so later review does not require archaeology.
 
-Repeat this loop indefinitely until I come back and stop you, or until the retained dirty stack
-becomes extremely large/unwieldy to continue safely. Do not stop after bare behavior-neutral
+Repeat this loop indefinitely until I come back and stop you. Do not stop after bare behavior-neutral
 substrate or a tiny row/window patch. Also do not back out correct source-clear mechanics solely
 because current validation metrics are unchanged: if a decomp/data-backed behavior is bounded,
 allocation-safe, on the RL 1.0/system path, and covered by focused positive/negative tests, retain
-it as source-completion work. Keep the dirty stack moving until it contains a metric-moving
-consumer, a documented manual/modelplay fix, or a coherent source-complete mechanic group ready for
-review.
+it as source-completion work.
 
 0. Write starting baselines in the worklog.
 1. Pick something to improve simulator correctness. Use your best judgment.
@@ -32,26 +29,9 @@ review.
 3. Write the completed item into the worklog with updated baselines and packaging notes.
 4. When the item is done to our rules, return to step 1 and pick a new target area.
 
-Done means retained changes have no unexplained regressions on mismatch, float error, or rollout
-metrics. If a narrow metric tradeoff remains after investigation, keep it only when the owner fix is
-source-backed, broader distributions improve, and the worklog explains why the tradeoff is real
-rather than an unresolved local regression.
-
 Process details to keep in mind:
 
 - No hard cap on work duration or number of retained fixes; you should be able to work for a full day if needed.
-- The worklog should include, for each selected owner/system:
-  - selected owner/system
-  - source/decomp/data basis
-  - generated data substrates checked, and why they did or did not express the owner
-  - changed files and owner-specific hunks in shared files
-  - tests/locks added
-  - SPEC/docs notes added
-  - before/after one-step, rollout, taxonomy, disruptive score, and float metrics
-  - per-replay and per-stage normalized deltas when the owner is platform-stage-visible
-  - rejected experiments and what they proved
-  - current unresolved local path, if interrupted
-  - packaging notes for shared-file hunks
 - After each retained owner, run a validation diff against the cycle baseline, for example
   `uv run python -m tools.eval.validation_report_diff --before <baseline> --after reports/validation`.
   If any one-step, rollout, or float validation metric regresses, fix it or explicitly document the
@@ -65,14 +45,6 @@ Process details to keep in mind:
 - Runtime-required generated data must get a data-contract decision immediately:
   - tracked tiny contract files need .gitignore exceptions and guard tests
   - large/local generated artifacts stay ignored with documented regeneration commands
-- After each retained owner, run a review self-audit before selecting another owner:
-  - source-port vs local-slot domains are explicit and tested
-  - carries/provenance are scoped per source owner, hitbox, victim, or phase as appropriate
-  - stale collision/contact IDs are not used as current provenance without a latch
-  - gameplay constants are data/source-backed
-  - any new action-family, item-kind, part/anchor, stage-segment, or script-frame predicate uses
-    generated tables where possible, or documents why the table data is insufficient
-  - tests are behavioral locks, not source-text grep checks when runtime coverage is possible
 
 Prioritization:
 
@@ -92,11 +64,9 @@ Prioritization:
   - repeated same-owner float deltas
   - float divergence tied to a top rollout/disruptive owner
   - modelplay-visible float/position/velocity bugs
-- Prefer large blast-radius/high-score clusters.
 - Prefer coherent shared owners over isolated row wins.
 - Prefer decomp/data-backed mechanics and generated-table owner predicates.
 - Stay on a major selected owner until fixed.
-- Only take adjacent smaller wins when they naturally belong to the same owner family.
 
 Investigation rules:
 
@@ -116,8 +86,6 @@ Investigation rules:
   capture/throw provenance, GuardReflect descriptor state, SpecialHi pose lifetime, and similar
   callback-local mechanics still need source-owner modeling unless a table actually expresses the
   distinction.
-- Do not hop between unrelated clusters after a failed experiment.
-- Use failed experiments to refine the source predicate, seed surface, callback order, probe need, extraction need, or hidden-state need.
 - If an experiment fails, do not immediately revert it unless it is truly a dead end. Continue investigating the same owner with deeper evidence: decomp C, raw game asm, Slippi asm/labels, probes, extraction, instrumentation, or minimal seed/internal lanes.
 - No replay id, dataset id, row id, character-id proxy, stale-state shortcut, or broad tolerance hack in gameplay code.
 - If hidden state is required, add the smallest explicit seed/internal lane or local probe/tooling path that exposes the real owner.
@@ -132,11 +100,10 @@ For each selected owner, do not mark it blocked or move on merely because visibl
 Validation cadence:
 
 - After each retained owner, run focused tests and cheap checks.
-- Run full validation before handoff, before packaging, and after schema/data-contract changes.
+- Run full validation after schema/data-contract changes.
 - Suite validation builds seed rows directly from `.slp` files by default; force preprocess primary
   + aggregate only when persistent `.msl` cache encoding/metadata or cache regeneration is part of
   the change being validated.
-- Before final handoff, run the appropriate full validation set for the retained dirty stack.
 - Do not refresh validation reports for test-only changes. If gameplay/runtime logic changes,
   reports must be generator-produced and validation deltas must be compared against the cycle
   baseline.
