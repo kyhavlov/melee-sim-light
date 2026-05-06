@@ -5,6 +5,7 @@ import {
   COMPARE_SIZE,
   INPUT_SIZE,
   MATCH_CONFIG_SIZE,
+  SHIELD_BUBBLES_SIZE,
   STAGE_STATE_SIZE,
   STAGE_FINAL_DESTINATION,
   inputPlayerOffsets,
@@ -45,12 +46,14 @@ export class MslWasmSim {
     this.inputPtr = module._malloc(INPUT_SIZE);
     this.comparePtr = module._malloc(COMPARE_SIZE);
     this.stageStatePtr = module._malloc(STAGE_STATE_SIZE);
+    this.shieldBubblesPtr = module._malloc(SHIELD_BUBBLES_SIZE);
     if (
       !this.matchPtr ||
       !this.prevInputPtr ||
       !this.inputPtr ||
       !this.comparePtr ||
-      !this.stageStatePtr
+      !this.stageStatePtr ||
+      !this.shieldBubblesPtr
     ) {
       throw new Error("failed to allocate WASM IO buffers");
     }
@@ -74,6 +77,7 @@ export class MslWasmSim {
       this.inputPtr,
       this.comparePtr,
       this.stageStatePtr,
+      this.shieldBubblesPtr,
     ]) {
       if (ptr) this.module._free(ptr);
     }
@@ -108,6 +112,7 @@ export class MslWasmSim {
     }
     this.#writeCompare();
     this.#writeStageState();
+    this.#writeShieldBubbles();
     return this.compareView();
   }
 
@@ -140,6 +145,7 @@ export class MslWasmSim {
     const writeCompareStartMs = performance.now();
     this.#writeCompare();
     this.#writeStageState();
+    this.#writeShieldBubbles();
     const writeCompareMs = performance.now() - writeCompareStartMs;
     this.displayFrame += 1;
     this.lastTimings.inputMs = inputMs;
@@ -157,6 +163,10 @@ export class MslWasmSim {
     return new DataView(this.module.HEAPU8.buffer, this.stageStatePtr, STAGE_STATE_SIZE);
   }
 
+  shieldBubblesView() {
+    return new DataView(this.module.HEAPU8.buffer, this.shieldBubblesPtr, SHIELD_BUBBLES_SIZE);
+  }
+
   #writeCompare() {
     const err = this.module._msl_batch_write_compare(this.handle, this.comparePtr, COMPARE_SIZE);
     if (err !== 0) {
@@ -172,6 +182,25 @@ export class MslWasmSim {
     );
     if (err !== 0) {
       throw new Error(`msl_batch_debug_write_stage_state failed: ${err}`);
+    }
+  }
+
+  #writeShieldBubbles() {
+    if (typeof this.module._msl_batch_debug_shield_display_bubbles_world !== "function") {
+      this.module.HEAPU8.fill(
+        0,
+        this.shieldBubblesPtr,
+        this.shieldBubblesPtr + SHIELD_BUBBLES_SIZE
+      );
+      return;
+    }
+    const err = this.module._msl_batch_debug_shield_display_bubbles_world(
+      this.handle,
+      0,
+      this.shieldBubblesPtr
+    );
+    if (err !== 0) {
+      throw new Error(`msl_batch_debug_shield_display_bubbles_world failed: ${err}`);
     }
   }
 

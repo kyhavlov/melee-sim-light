@@ -158,7 +158,13 @@ export function viewerSettingsFromCompare(compare, { startStocks = 4 } = {}) {
   };
 }
 
-export function viewerFrameFromCompare(compare, frameNumber, controllersByPlayer, stageState = null) {
+export function viewerFrameFromCompare(
+  compare,
+  frameNumber,
+  controllersByPlayer,
+  stageState = null,
+  shieldBubbles = null
+) {
   const numPlayers = u8(compare, compareOffsets.numPlayers);
   const players = [];
   for (let idx = 0; idx < numPlayers; idx += 1) {
@@ -169,6 +175,8 @@ export function viewerFrameFromCompare(compare, frameNumber, controllersByPlayer
     const flags221c = u8(compare, flagsBase + 3);
     const hurtboxState = arrU8(compare, compareOffsets.hurtboxState, idx);
     const controller = controllersByPlayer[idx] ?? {};
+    const shieldRadius = shieldBubbles ? arrF32(shieldBubbles, 0, idx * 4 + 3) : 0;
+    const hasShieldBubble = Number.isFinite(shieldRadius) && shieldRadius > 0;
     players.push({
       frameNumber,
       playerIndex: idx,
@@ -184,6 +192,9 @@ export function viewerFrameFromCompare(compare, frameNumber, controllersByPlayer
         facingDirection: arrU8(compare, compareOffsets.facing, idx) === 0 ? -1.0 : 1.0,
         percent: arrF32(compare, compareOffsets.percent, idx),
         shieldSize: arrF32(compare, compareOffsets.shieldHp, idx),
+        shieldX: hasShieldBubble ? arrF32(shieldBubbles, 0, idx * 4) : undefined,
+        shieldY: hasShieldBubble ? arrF32(shieldBubbles, 0, idx * 4 + 1) : undefined,
+        shieldRadius: hasShieldBubble ? shieldRadius : undefined,
         lastHittingAttackId: 0,
         currentComboCount: 0,
         lastHitBy: 0,

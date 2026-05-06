@@ -261,6 +261,9 @@ export interface PlayerState {
   readonly facingDirection: number;
   readonly percent: number;
   readonly shieldSize: number;
+  readonly shieldX?: number;
+  readonly shieldY?: number;
+  readonly shieldRadius?: number;
   readonly lastHittingAttackId: number;
   readonly currentComboCount: number;
   readonly lastHitBy: number;

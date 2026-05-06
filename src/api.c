@@ -4239,6 +4239,103 @@ int msl_batch_debug_shield_bubbles_world(const MslBatch* batch, int batch_index,
   return 0;
 }
 
+static inline float debug_clamp01_f32(float x) {
+  if (x < 0.0f) {
+    return 0.0f;
+  }
+  if (x > 1.0f) {
+    return 1.0f;
+  }
+  return x;
+}
+
+static inline uint16_t debug_clamp_u16(uint16_t x, uint16_t lo, uint16_t hi) {
+  if (x < lo) {
+    return lo;
+  }
+  if (x > hi) {
+    return hi;
+  }
+  return x;
+}
+
+static inline uint8_t debug_is_guard_tilt_action(uint16_t action_id) {
+  switch (action_id) {
+    case MSL_ACT_GUARD_ON:
+    case MSL_ACT_GUARD:
+    case MSL_ACT_GUARD_REFLECT:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
+int msl_batch_debug_shield_display_bubbles_world(const MslBatch* batch, int batch_index,
+                                                 float* out_xyzw_4p) {
+  const int err = msl_batch_debug_shield_bubbles_world(batch, batch_index, out_xyzw_4p);
+  if (err != 0) {
+    return err;
+  }
+
+  // Display-only correction for guard visualization:
+  // `shields_refresh` still emits the gameplay ShieldDesc center used by validation. Webplay has no
+  // shield joint/model render, so draw no-tilt GuardOn/GuardReflect from the steady no-tilt pose
+  // instead of the transient collision entry pose. For nonzero `mv.co.guard.x4`, blend the angled
+  // Guard timeline sample against `fp->ft_data->x20->x8`, not against the timeline's neutral frame.
+  // This avoids visible forward snap on entry and avoids tilted shields rotating around a base
+  // center already pushed far in front of the fighter.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091BC4,ftCo_80091E78}
+  // data/shields/{fox,falco}.bin::guard_on_x20_xyz
+  const int num_players = (int)batch->config.num_players;
+  for (int p = 0; p < num_players; p++) {
+    const size_t idx = msl_idx_player(batch_index, p);
+    const uint16_t action_id = batch->state.action_id[idx];
+    if (!debug_is_guard_tilt_action(action_id) || batch->state.shield_radius[idx] <= 0.0f) {
+      continue;
+    }
+
+    MslShieldTiltTableView tv;
+    if (msl_shield_tilt_table_view(batch->state.char_id[idx], &tv) != 0 || tv.xyz == NULL ||
+        tv.frame_count == 0u) {
+      continue;
+    }
+    const float mag = debug_clamp01_f32(batch->state.guard_tilt_x4[idx]);
+    const uint8_t no_tilt = (mag <= 0.0f) ? 1u : 0u;
+    const uint16_t frame_max = (uint16_t)(tv.frame_count - 1u);
+    const uint16_t f = debug_clamp_u16(batch->state.guard_tilt_x8[idx], 0, frame_max);
+    const size_t f_i = (size_t)f * 3u;
+    const float dx =
+        no_tilt ? tv.xyz[0]
+                : tv.guard_on_x20_xyz[0] + mag * (tv.xyz[f_i + 0] - tv.guard_on_x20_xyz[0]);
+    const float dy =
+        no_tilt ? tv.xyz[1]
+                : tv.guard_on_x20_xyz[1] + mag * (tv.xyz[f_i + 1] - tv.guard_on_x20_xyz[1]);
+    const float dz =
+        no_tilt ? tv.xyz[2]
+                : tv.guard_on_x20_xyz[2] + mag * (tv.xyz[f_i + 2] - tv.guard_on_x20_xyz[2]);
+
+    const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+    const MslCharParams* ca = msl_char_params(batch->state.char_id[idx]);
+    const float model_scaling =
+        (ca != NULL && isfinite(ca->model_scaling) && ca->model_scaling > 0.0f) ? ca->model_scaling
+                                                                                : 1.0f;
+    const float pose_scale = no_tilt ? (batch->state.fighter_scale_y[idx] * model_scaling)
+                                     : batch->state.fighter_scale_y[idx];
+    const float lx = dx * pose_scale;
+    const float ly = dy * pose_scale;
+    const float lz = dz * pose_scale;
+    const float off_x = facing_dir * lz;
+    const float off_z = -facing_dir * lx;
+    const size_t o = (size_t)p * 4u;
+    out_xyzw_4p[o + 0] = batch->state.pos_x[idx] + off_x;
+    out_xyzw_4p[o + 1] = batch->state.pos_y[idx] + ly;
+    out_xyzw_4p[o + 2] = batch->state.pos_z[idx] + off_z;
+    out_xyzw_4p[o + 3] = batch->state.shield_radius[idx];
+  }
+
+  return 0;
+}
+
 int msl_batch_debug_clear_hitboxes_world(MslBatch* batch, int batch_index, int player_index) {
   if (batch == NULL) {
     return EINVAL;

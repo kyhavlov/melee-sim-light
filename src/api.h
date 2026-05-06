@@ -2222,6 +2222,11 @@ int msl_batch_debug_shield_candidate_decisions(MslBatch* batch, int batch_index,
 int msl_batch_debug_shield_bubbles_world(const MslBatch* batch, int batch_index,
                                          float* out_xyzw_4p);
 
+// Debug/display helper: same row format as `msl_batch_debug_shield_bubbles_world`, with Guard
+// tilt visuals blended from the decomp x20 base. This is intentionally display-only.
+int msl_batch_debug_shield_display_bubbles_world(const MslBatch* batch, int batch_index,
+                                                 float* out_xyzw_4p);
+
 // Debug/testing helper: allow unit tests to write world-space primitives directly and invoke combat
 // without touching upstream pose systems.
 int msl_batch_debug_clear_hitboxes_world(MslBatch* batch, int batch_index, int player_index);

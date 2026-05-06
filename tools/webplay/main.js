@@ -129,7 +129,13 @@ function installStageSelector() {
 
 function currentViewerFrame(frameNumber, controllers) {
   const compare = sim.compareView();
-  return viewerFrameFromCompare(compare, frameNumber, controllers, sim.stageStateView());
+  return viewerFrameFromCompare(
+    compare,
+    frameNumber,
+    controllers,
+    sim.stageStateView(),
+    sim.shieldBubblesView()
+  );
 }
 
 function frameHasDeadPlayer(frame) {

@@ -56,6 +56,27 @@ function Shield(props: { renderData: RenderData }) {
   const shieldSizeMultiplier = createMemo(
     () => ((shieldHealth() * triggerStrengthMultiplier()) / 60) * 0.85 + 0.15
   );
+  const shieldX = createMemo(() => {
+    const x = props.renderData.playerState.shieldX;
+    return typeof x === "number" && Number.isFinite(x)
+      ? x
+      : props.renderData.playerState.xPosition +
+          props.renderData.characterData.shieldOffset[0] *
+            props.renderData.playerState.facingDirection;
+  });
+  const shieldY = createMemo(() => {
+    const y = props.renderData.playerState.shieldY;
+    return typeof y === "number" && Number.isFinite(y)
+      ? y
+      : props.renderData.playerState.yPosition +
+          props.renderData.characterData.shieldOffset[1];
+  });
+  const shieldRadius = createMemo(() => {
+    const r = props.renderData.playerState.shieldRadius;
+    return typeof r === "number" && Number.isFinite(r) && r > 0
+      ? r
+      : props.renderData.characterData.shieldSize * shieldSizeMultiplier();
+  });
   return (
     <>
       <Show
@@ -64,17 +85,9 @@ function Shield(props: { renderData: RenderData }) {
         )}
       >
         <circle
-          // TODO: shield tilts
-          cx={
-            props.renderData.playerState.xPosition +
-            props.renderData.characterData.shieldOffset[0] *
-              props.renderData.playerState.facingDirection
-          }
-          cy={
-            props.renderData.playerState.yPosition +
-            props.renderData.characterData.shieldOffset[1]
-          }
-          r={props.renderData.characterData.shieldSize * shieldSizeMultiplier()}
+          cx={shieldX()}
+          cy={shieldY()}
+          r={shieldRadius()}
           fill={props.renderData.innerColor}
           opacity={0.6}
         />
