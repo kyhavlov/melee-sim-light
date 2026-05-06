@@ -36,11 +36,12 @@ def _input_bytes(rows: np.ndarray, field: str, *, stride: int) -> np.ndarray:
     return np.frombuffer(rows[field].tobytes(order="C"), dtype=np.uint8).copy().reshape(len(rows), stride)
 
 
-def test_capturewait_owner_tick_uses_mash_buttons_sign_change_or_prev_button_carry() -> None:
-    # Decomp: ftCommon_GrabMash treats held AB/XY/LR or x1A50/x1A51 sign-latch changes as active
-    # mash input, and CatchWait callback ownership can apply one extra CaptureWait victim tick on
-    # the first steady owner frame.
+def test_capturewait_owner_tick_uses_source_recent_buttons_or_sign_change() -> None:
+    # Decomp: ftCommon_GrabMash treats fp->input.x668 AB/XY/LR or x1A50/x1A51 sign-latch changes
+    # as active mash input, and CatchWait callback ownership can apply one extra
+    # CaptureWait victim tick on the first steady owner frame.
     # refs/melee/src/melee/ft/ftcommon.c::ftCommon_GrabMash
+    # refs/melee/src/melee/ft/fighter.c::Fighter_Spaghetti_8006AD10_Inner1
     # refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::{
     #   ftCo_CatchPull_Anim,fn_800DA1D8,fn_800DB6C8}
     seed = np.zeros((4,), dtype=SEED_DTYPE)
@@ -83,21 +84,20 @@ def test_capturewait_owner_tick_uses_mash_buttons_sign_change_or_prev_button_car
     cur_view = cur_input.view(INPUT_DTYPE).reshape((4,))
 
     # Case 0: no mash-active input -> normal one-tick advance.
-    cur_view["p"]["main_y"][0, victim_p] = np.int8(-99)
+    cur_view["p"]["main_y"][0, victim_p] = np.int8(0)
 
-    # Case 1: continuously held B counts as mash-active even with no sign change.
-    prev_view["p"]["buttons"][1, victim_p] = np.uint16(0x0200)
+    # Case 1: freshly pressed B counts as mash-active through input.x668.
     cur_view["p"]["buttons"][1, victim_p] = np.uint16(0x0200)
-    cur_view["p"]["main_y"][1, victim_p] = np.int8(-99)
+    cur_view["p"]["main_y"][1, victim_p] = np.int8(0)
 
     # Case 2: ftCommon_GrabMash also treats a stick sign-latch change as mash-active, even without
     # AB/XY/LR held.
     cur_view["p"]["main_x"][2, victim_p] = np.int8(127)
     cur_view["p"]["main_y"][2, victim_p] = np.int8(-99)
 
-    # Case 3: first steady CaptureWait frame can still consume prior-frame held mash buttons.
-    prev_view["p"]["buttons"][3, victim_p] = np.uint16(0x0200)
-    cur_view["p"]["main_y"][3, victim_p] = np.int8(-99)
+    # Case 3: stale held L/R without an x668 edge does not count.
+    prev_view["p"]["buttons"][3, victim_p] = np.uint16(0x0020)
+    cur_view["p"]["main_y"][3, victim_p] = np.int8(0)
 
     out = _step(seed, prev_input, cur_input, num_players=2)
     assert int(out["action_id"][0, victim_p]) == 227
@@ -107,7 +107,7 @@ def test_capturewait_owner_tick_uses_mash_buttons_sign_change_or_prev_button_car
     assert int(out["action_id"][2, victim_p]) == 227
     assert int(out["action_frame"][2, victim_p]) == 3
     assert int(out["action_id"][3, victim_p]) == 227
-    assert int(out["action_frame"][3, victim_p]) == 3
+    assert int(out["action_frame"][3, victim_p]) == 2
 
 
 def test_capturewait_breakout_owner_path_uses_explicit_pending_signal() -> None:

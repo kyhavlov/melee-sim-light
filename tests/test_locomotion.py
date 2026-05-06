@@ -31,6 +31,7 @@ ACT_SQUAT = 0x0027
 ACT_ATTACK_DASH = 0x0032
 ACT_ATTACK_S3_LW = 0x0037
 ACT_ATTACK_S3_HI = 0x0033
+ACT_ATTACK_S4_S = 0x003C
 ACT_ATTACK_HI3 = 0x0038
 ACT_ATTACK_LW3 = 0x0039
 ACT_ATTACK_HI4 = 0x003F
@@ -54,6 +55,7 @@ ACT_FX_SPECIAL_S_START = 0x015B
 ACT_FX_SPECIAL_S = 0x015C
 ACT_FX_SPECIAL_S_END = 0x015D
 ACT_FX_SPECIAL_LW_START = 0x0168
+ACT_FX_SPECIAL_LW_END = 0x016B
 ACT_FX_SPECIAL_AIR_S_START = 0x015E
 ACT_FX_SPECIAL_AIR_S = 0x015F
 ACT_FX_SPECIAL_AIR_LW_START = 0x016D
@@ -78,11 +80,13 @@ SM_SQUAT_WAIT = 31
 SM_ATTACK_DASH = 52
 SM_ATTACK_S3_LW = 57
 SM_ATTACK_S3_HI = 53
+SM_ATTACK_S4 = 62
 SM_ATTACK_HI3 = 58
 SM_ATTACK_LW3 = 59
 SM_ATTACK_HI4 = 66
 SM_ATTACK_LW4 = 67
 SM_GUARD_ON = 37
+SM_ESCAPE_N = 41
 SM_ESCAPE_F = 42
 SM_CATCH = 242
 SM_ATTACK_AIR_N = 68
@@ -98,7 +102,9 @@ SM_FX_SPECIAL_S = 302
 SM_FX_SPECIAL_S_END = 303
 SM_FX_SPECIAL_AIR_S_START = 304
 SM_FX_SPECIAL_AIR_S = 305
+SM_FX_SPECIAL_LW_START = 313
 SM_FX_SPECIAL_AIR_LW_START = 313
+SM_FX_SPECIAL_LW_END = 316
 
 # Collision env flag bits: refs/melee/src/common_structs.h, src/coll_env_flags.h
 MSL_COLLIDE_RIGHT_WALL_MASK = 0x00000FC0
@@ -1641,6 +1647,146 @@ def test_attacklw4_allow_interrupt_specialn_beats_attack_restart_on_exact_trace_
     out0 = _step_once(seed, prev_inp, inp)
     assert int(out0["action_id"][0]) == ACT_FX_SPECIAL_N_START
     assert int(out0["action_frame"][0]) == 1
+
+
+@pytest.mark.parametrize(
+    ("buttons", "main_x", "main_y", "c_x", "want_action", "want_submotion"),
+    [
+        (BUTTON_B, 0, 0, 0, ACT_FX_SPECIAL_N_START, None),
+        (BUTTON_B, 0, -80, 0, ACT_FX_SPECIAL_LW_START, SM_FX_SPECIAL_LW_START),
+        (BUTTON_A, 100, 0, 0, ACT_CATCH, SM_CATCH),
+        (0, 0, 0, 80, ACT_ATTACK_S4_S, SM_ATTACK_S4),
+    ],
+)
+def test_attacks4_preamble_commands_beat_guardon(
+    buttons: int,
+    main_x: int,
+    main_y: int,
+    c_x: int,
+    want_action: int,
+    want_submotion: int | None,
+) -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_ATTACK_S4_S)
+    seed["action_frame"][0, 0] = np.int16(45)
+    seed["anim_frame_f32"][0, 0] = np.float32(45.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_ATTACK_S4)
+    seed["facing"][0, 0] = np.uint8(1)  # right
+    seed["shield_hp"][0, 0] = np.float32(_common_attr("start_shield_health"))
+    seed["state_flags"][0, 0, 0] = np.uint8(0x80)
+    seed["tilt_timer_x"][0, 0] = np.uint8(0)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view["p"]["buttons"][0, 0] = np.uint16(buttons)
+    cur_view["p"]["main_x"][0, 0] = np.int8(main_x)
+    cur_view["p"]["main_y"][0, 0] = np.int8(main_y)
+    cur_view["p"]["c_x"][0, 0] = np.int8(c_x)
+    cur_view["p"]["l"][0, 0] = np.uint8(255)
+
+    # Decomp:
+    # - ftCo_AttackS4_IASA runs the special and grounded-attack preamble before Catch/Guard.
+    # - Held analog shield on the same row must not steal B, A, or C-stick command rows.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackS4.c::ftCo_AttackS4_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+    out0 = _step_once(seed, prev_inp, inp)
+    assert int(out0["action_id"][0]) == want_action
+    assert int(out0["action_id"][0]) not in (ACT_GUARD_ON, ACT_GUARD, ACT_GUARD_OFF)
+    if want_submotion is not None:
+        assert int(out0["animation_index"][0]) == want_submotion
+
+
+@pytest.mark.parametrize(
+    ("buttons", "main_x", "main_y", "c_x", "want_action", "want_submotion"),
+    [
+        (BUTTON_B, 0, 0, 0, ACT_FX_SPECIAL_N_START, None),
+        (BUTTON_B, 0, -80, 0, ACT_FX_SPECIAL_LW_START, SM_FX_SPECIAL_LW_START),
+        (BUTTON_A, 100, 0, 0, ACT_CATCH, SM_CATCH),
+        (0, 0, 0, 80, ACT_ATTACK_S4_S, SM_ATTACK_S4),
+    ],
+)
+def test_speciallw_end_destination_wait_commands_beat_guardon(
+    buttons: int,
+    main_x: int,
+    main_y: int,
+    c_x: int,
+    want_action: int,
+    want_submotion: int | None,
+) -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_FX_SPECIAL_LW_END)
+    seed["action_frame"][0, 0] = np.int16(60)
+    seed["anim_frame_f32"][0, 0] = np.float32(60.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_FX_SPECIAL_LW_END)
+    seed["facing"][0, 0] = np.uint8(1)  # right
+    seed["shield_hp"][0, 0] = np.float32(_common_attr("start_shield_health"))
+    seed["tilt_timer_x"][0, 0] = np.uint8(0)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view["p"]["buttons"][0, 0] = np.uint16(buttons)
+    cur_view["p"]["main_x"][0, 0] = np.int8(main_x)
+    cur_view["p"]["main_y"][0, 0] = np.int8(main_y)
+    cur_view["p"]["c_x"][0, 0] = np.int8(c_x)
+    cur_view["p"]["l"][0, 0] = np.uint8(255)
+
+    # Decomp:
+    # - ftFx_SpecialLwEnd_Anim promotes to Wait through ftCommon_8007D92C.
+    # - Destination Wait_IASA still runs command owners before ftCo_80091A4C GuardOn.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLwEnd_Anim
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+    out0 = _step_once(seed, prev_inp, inp)
+    assert int(out0["action_id"][0]) == want_action
+    assert int(out0["action_id"][0]) not in (ACT_GUARD_ON, ACT_GUARD, ACT_GUARD_OFF)
+    if want_submotion is not None:
+        assert int(out0["animation_index"][0]) == want_submotion
+
+
+def test_speciallw_end_wait_iasa_spotdodge_beats_guardon() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_FX_SPECIAL_LW_END)
+    seed["action_frame"][0, 0] = np.int16(60)
+    seed["anim_frame_f32"][0, 0] = np.float32(60.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_FX_SPECIAL_LW_END)
+    seed["facing"][0, 0] = np.uint8(1)  # right
+    seed["shield_hp"][0, 0] = np.float32(_common_attr("start_shield_health"))
+    seed["tilt_timer_y"][0, 0] = np.uint8(0)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_L)
+    cur_view["p"]["main_y"][0, 0] = np.int8(-80)
+    cur_view["p"]["l"][0, 0] = np.uint8(255)
+
+    # Decomp:
+    # - ftFx_SpecialLwEnd_Anim promotes to Wait through ftCommon_8007D92C.
+    # - Destination Wait_IASA checks ftCo_80099794 (down+shield EscapeN) before GuardOn.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLwEnd_Anim
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+    out0 = _step_once(seed, prev_inp, inp)
+    assert int(out0["action_id"][0]) == ACT_ESCAPE_N
+    assert int(out0["animation_index"][0]) == SM_ESCAPE_N
 
 
 def test_walkslow_attackhi4_beats_guardon_on_exact_trace_inputs() -> None:

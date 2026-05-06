@@ -799,6 +799,193 @@ def test_pure_x2218_laser_can_hit_steady_guard_no_submotion_snapshot() -> None:
 
 
 @pytest.mark.integration
+def test_steady_guard_x2218_b1_laser_uses_hitcapsule_offsets() -> None:
+    # Replay-real positive for the settled-Guard x2218_b1 boundary:
+    # - DSG:4129 starts with Fox already serialized as settled Guard (`af=-1`, `anim=-1`) while
+    #   Falco's SpecialAirNLoop callback spawns a laser from below/behind the shield.
+    # - Raw fp+0x2218 carries both behavior and b1 bits (`0x44`). Dolphin/slippi expose that byte as
+    #   state_flags[0], but the shield contact is still owned by the source item HitCapsule offset
+    #   path rather than the settled projectile point sample.
+    # - The x2218_b2/b0 command and interrupt lanes stay covered by the high-flag negative below,
+    #   while GuardOn entry command pose has its own birth-frame negative lock.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
+    #   ftFx_SpecialAirNLoop_Anim,ftFx_SpecialAirNLoop_Phys}
+    # refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C504,itFoxlaser_UnkMotion1_Phys}
+    # refs/melee/src/melee/it/item.c::Item_80269DC8
+    # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/battlefield_recent/"
+        "DelayedSuperbGuanaco.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    p = 0
+    seed_row, ref_row, out_row = _run_one_step_row(dataset_path, 4129, p)
+
+    assert int(seed_row["action_id"][p]) == 179  # Guard.
+    assert int(seed_row["action_frame"][p]) == -1
+    assert int(seed_row["animation_index"][p]) == 0xFFFFFFFF
+    assert int(seed_row["state_flags"][p][0]) == 0x44
+    assert int(seed_row["action_id"][1]) == 345  # Falco SpecialAirNLoop.
+    assert int(seed_row["action_frame"][1]) == 7
+    assert int(seed_row["items"][0]["exists"]) == 1
+    assert int(seed_row["items"][0]["type"]) == 75  # Falco blaster gun.
+    assert int(ref_row["action_id"][p]) == 181  # GuardSetOff.
+
+    assert int(out_row["action_id"][p]) == 181
+    assert int(out_row["hitlag"][p]) == int(ref_row["hitlag"][p]) == 3
+    assert int(out_row["hitstun"][p]) == int(ref_row["hitstun"][p])
+    assert abs(float(out_row["shield_hp"][p]) - float(ref_row["shield_hp"][p])) <= 5e-4
+
+    for i in range(2):
+        for field in ("exists", "type", "state", "owner", "instance_id"):
+            assert int(out_row["items"][i][field]) == int(ref_row["items"][i][field]), (
+                f"item={i} field={field} expected={int(ref_row['items'][i][field])} "
+                f"got={int(out_row['items'][i][field])}"
+            )
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "p", "item_slot", "seed_action"),
+    [
+        (
+            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
+            "CheeryNumbMonkey.msl",
+            1524,
+            0,
+            5,
+            14,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/battlefield_recent/"
+            "DelayedSuperbGuanaco.msl",
+            543,
+            0,
+            0,
+            178,
+        ),
+    ],
+)
+def test_seeded_pending_reflect_transfer_precedes_proxy_laser_collision(
+    dataset_rel: str, record: int, p: int, item_slot: int, seed_action: int
+) -> None:
+    # Replay-real locks for the hidden pending-reflect priority boundary:
+    # - the seed lane is prefix-causal item state, not future action fitting;
+    # - ftColl_80077464 has already selected a reflector and Item_8026A294 must consume
+    #   Item_80269F14 before the simulator's proxy laser-vs-fighter pass can destroy the item
+    #   through HitShield/BODY;
+    # - adjacent no-transfer rows stay covered by the GuardSetOff/ShieldBounced tests above.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077464}
+    # refs/melee/src/melee/it/item.c::{Item_8026A294,Item_80269F14}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    seed_row, ref_row, out_row = _run_one_step_row(dataset_path, record, p)
+    seed_item = seed_row["items"][item_slot]
+    ref_item = ref_row["items"][item_slot]
+    out_item = out_row["items"][item_slot]
+
+    assert int(seed_row["action_id"][p]) == seed_action
+    assert int(seed_row["item_reflect_transfer_port"][item_slot]) == p
+    assert int(seed_row["item_reflect_transfer_iid"][item_slot]) == int(ref_item["instance_id"])
+    assert int(seed_item["exists"]) == 1
+    assert int(seed_item["type"]) == 55
+    assert int(seed_item["owner"]) != p
+    assert int(ref_row["action_id"][p]) == 182  # GuardReflect.
+
+    assert int(out_row["action_id"][p]) == int(ref_row["action_id"][p])
+    assert int(out_row["action_frame"][p]) == int(ref_row["action_frame"][p])
+    assert int(out_row["animation_index"][p]) == int(ref_row["animation_index"][p])
+    assert int(out_row["hitlag"][p]) == int(ref_row["hitlag"][p])
+    assert int(out_row["hitstun"][p]) == int(ref_row["hitstun"][p])
+    assert abs(float(out_row["shield_hp"][p]) - float(ref_row["shield_hp"][p])) <= 1e-3
+
+    for field in ("exists", "type", "state", "owner", "instance_id", "spawn_id"):
+      assert int(out_item[field]) == int(ref_item[field]), (
+          f"record={record} item={item_slot} field={field} "
+          f"expected={int(ref_item[field])} got={int(out_item[field])}"
+      )
+    for field in ("direction", "timer", "pos_x", "pos_y", "vel_x", "vel_y"):
+      assert float(out_item[field]) == pytest.approx(float(ref_item[field]), abs=1e-5), (
+          f"record={record} item={item_slot} field={field}"
+      )
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "p", "seed_laser_slot", "seed_action"),
+    [
+        (
+            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+            "PositiveRevolvingHyena.msl",
+            131,
+            1,
+            1,
+            182,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+            "HilariousVillainousGiraffe.msl",
+            7493,
+            0,
+            1,
+            179,
+        ),
+    ],
+)
+def test_lightshield_no_submotion_guard_body_uses_frame_start_item_sample(
+    dataset_rel: str, record: int, p: int, seed_laser_slot: int, seed_action: int
+) -> None:
+    # Replay-real locks for the lightshield no-submotion item BODY miss boundary:
+    # - Item_802697D4 has integrated the laser by post-frame, but Fighter_8006CB94 /
+    #   ftColl_8007925C consumes the item HitCapsule BODY sample under the frame-start
+    #   `fp+0x2218` guard behavior byte.
+    # - Pure behavior/x2218_b1 rows (`0x04` or `0x44`) must not let the post-motion proxy BODY
+    #   sample damage through lightshield; command/interrupt rows remain on the current item
+    #   sample and are covered by adjacent GuardSetOff/body-hit locks.
+    # refs/melee/src/melee/it/item.c::Item_802697D4
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006CB94
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    seed_row, ref_row, out_row = _run_one_step_row(dataset_path, record, p)
+    seed_item = seed_row["items"][seed_laser_slot]
+
+    assert int(seed_row["action_id"][p]) == seed_action
+    assert int(seed_row["action_frame"][p]) < 0
+    assert int(seed_row["animation_index"][p]) == 0xFFFFFFFF
+    assert float(seed_row["lightshield_amount"][p]) > 0.0
+    assert int(seed_row["state_flags"][p][2]) & 0x80
+    assert (int(seed_row["state_flags"][p][0]) & 0xA4) == 0x04
+    assert int(seed_item["exists"]) == 1
+    assert int(seed_item["type"]) == 55
+    assert int(seed_row["item_reflect_transfer_port"][seed_laser_slot]) == 0xFF
+
+    assert int(out_row["action_id"][p]) == int(ref_row["action_id"][p])
+    assert int(out_row["action_frame"][p]) == int(ref_row["action_frame"][p])
+    assert int(out_row["animation_index"][p]) == int(ref_row["animation_index"][p])
+    assert int(out_row["hitlag"][p]) == int(ref_row["hitlag"][p])
+    assert int(out_row["hitstun"][p]) == int(ref_row["hitstun"][p])
+    assert int(out_row["state_flags"][p][0]) == int(ref_row["state_flags"][p][0])
+    assert int(out_row["state_flags"][p][1]) == int(ref_row["state_flags"][p][1])
+    assert int(out_row["state_flags"][p][2]) == int(ref_row["state_flags"][p][2])
+    assert abs(float(out_row["shield_hp"][p]) - float(ref_row["shield_hp"][p])) <= 1e-3
+    _assert_live_laser_set_matches_ref(out_row=out_row, ref_row=ref_row, record=record)
+
+
+@pytest.mark.integration
 def test_high_flag_laser_steady_guard_does_not_hit_immediately() -> None:
     # Negative for the same steady-Guard shape:
     # - DCC:6517 also has a defender serialized as settled Guard and an attacker in

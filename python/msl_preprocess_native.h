@@ -39,6 +39,7 @@ PyObject* msl_derive_shine_release_state_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_kneebend_internals_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_magnify_damage_counter_x1910_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_colanim_internals_py(PyObject* self, PyObject* args);
+PyObject* msl_derive_capture_mash_buttons_pressed_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_capture_grab_hidden_post_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_ledge_cooldown_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_match_flow_timer_py(PyObject* self, PyObject* args);

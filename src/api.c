@@ -111,6 +111,44 @@ static inline void reseed_store_colldata_ecb_desired(MslBatch* batch, size_t idx
   batch->state.coll_desired_ecb_side_rel_y[idx] = ecb->side_rel_y;
 }
 
+static void seed_ground_normal_from_floor_id(MslBatch* batch, int bi, size_t idx, uint32_t stage_id,
+                                             uint16_t ground_id) {
+  // Seed CollData.floor.normal from CollData.floor.index.
+  //
+  // Source shape:
+  // - floor.index and floor.normal are carried together in CollData.
+  // - Grounded Phys callbacks call ftCommon_ApplyGroundMovement before the next mpColl floor pass,
+  //   so the frame's self velocity must use the seed/current floor normal, not a flat fallback.
+  // refs/melee/src/melee/mp/types.h::CollData
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_ApplyGroundMovement
+  // data/stages/bin/*.bin::MSLSTG01 floor line endpoints
+  if (batch == NULL || ground_id == 0xFFFFu) {
+    return;
+  }
+  const MslStageFloorGraph* graph = stage_collision_get_floor_graph(stage_id);
+  if (graph == NULL) {
+    return;
+  }
+  const int line_idx = stage_collision_floor_line_index(stage_id, ground_id);
+  if (line_idx < 0 || (size_t)line_idx >= graph->line_count) {
+    return;
+  }
+  MslStageFloorLine line = {0};
+  if (!stage_collision_floor_line_world(batch, bi, &graph->lines[(size_t)line_idx], &line)) {
+    return;
+  }
+  float nx = -(line.y1 - line.y0);
+  float ny = line.x1 - line.x0;
+  const float len = sqrtf(nx * nx + ny * ny);
+  if (!(len > 0.0f)) {
+    return;
+  }
+  nx /= len;
+  ny /= len;
+  batch->state.ground_normal_x[idx] = nx;
+  batch->state.ground_normal_y[idx] = ny;
+}
+
 static inline uint8_t reseed_action_is_damage_or_firefox_launch_victim(uint16_t action) {
   switch (action) {
     case MSL_ACT_DAMAGE_HI_1:
@@ -1827,6 +1865,9 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         }
       }
       batch->state.ground_id[idx] = seed->ground_id[p];
+      if (batch->state.on_ground[idx]) {
+        seed_ground_normal_from_floor_id(batch, bi, idx, seed->stage_id, seed->ground_id[p]);
+      }
       batch->state.animation_index[idx] = seed->animation_index[p];
       {
         // CollData ECB lifetime seed:
@@ -1884,6 +1925,35 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         batch->state.capture_grab_timer[idx] = seed->capture_grab_timer_f32[p];
         batch->state.capture_wait_counter[idx] = seed->capture_wait_counter_f32[p];
         batch->state.capture_wait_anim_rate_timer[idx] = seed->capture_wait_anim_rate_timer_f32[p];
+        if (seed->action_id[p] == (uint16_t)MSL_ACT_CAPTURE_WAIT_HI ||
+            seed->action_id[p] == (uint16_t)MSL_ACT_CAPTURE_WAIT_LW) {
+          const MslCommonParams* c = msl_common_params();
+          const uint8_t capture_wait_post_loop_publication_row =
+              (c != NULL && seed->action_frame[p] == 1 &&
+               seed->seed_prev_action_id[p] == seed->action_id[p] &&
+               seed->seed_prev_action_frame[p] == 0 &&
+               seed->capture_wait_anim_rate_timer_f32[p] ==
+                   (c->capture_wait_anim_rate_hold_frames - c->capture_wait_anim_rate))
+                  ? 1u
+                  : 0u;
+          if (c != NULL &&
+              ((seed->action_frame[p] > 1 &&
+                seed->capture_wait_anim_rate_timer_f32[p] > c->capture_wait_anim_rate) ||
+               capture_wait_post_loop_publication_row) &&
+              seed->capture_wait_anim_rate_timer_f32[p] < c->capture_wait_anim_rate_hold_frames) {
+            // Teacher-forced CaptureWait reseed owner:
+            // Slippi can expose the post-frame x2344 hold timer while frame_speed_mul is still the
+            // pre-callback visible value. Interior x2344 ticks are after ftAnim_SetAnimRate(x3B4)
+            // and before the endpoint tick can reset the AObj rate to 1.0f. Entry and first-steady
+            // rows still need the visible seed rate because their Anim callback ordering is owned by
+            // the CapturePulled/CaptureWait handoff rather than this reseed bridge; the one
+            // exception is the post-loop publication row where x2344 has advanced to x3B0-x3B4
+            // while Slippi still serializes the stale rate-1 AObj value.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_CaptureWaitHi_Anim
+            batch->state.frame_speed_mul_fp_q16_16[idx] =
+                msl_q16_16_from_f32(c->capture_wait_anim_rate);
+          }
+        }
         batch->state.capture_wait_jump_latch[idx] = seed->capture_wait_jump_latch_u8[p] ? 1u : 0u;
         batch->state.capture_breakout_pending[idx] = seed->capture_breakout_pending_u8[p] ? 1u : 0u;
       }

@@ -145,6 +145,59 @@ def test_laser_stage_wall_collision_sets_expiry_before_slot_lifecycle_shift() ->
     assert _laser_ids(out_1161["items"]) == _laser_ids(ref_1161["items"])
 
 
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "p"),
+    [
+        (
+            "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
+            "ThisVioletRaccoon.msl",
+            1038,
+            0,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
+            "ThisVioletRaccoon.msl",
+            4128,
+            0,
+        ),
+    ],
+)
+def test_steady_guard_laser_shield_contact_precedes_stage_expiry(
+    dataset_rel: str, record: int, p: int
+) -> None:
+    # Replay-real locks for steady Guard item->shield contact from ftColl_8007925C.
+    #
+    # These Pokemon Stadium rows cross a platform line in the laser item-collision callback.
+    # Fighter shield contact must run before that stage expiry callback, and settled Guard remains
+    # on the authored item HitCapsule endpoint path rather than a broad projectile-origin fallback.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006CB94
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C
+    # refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Coll,it_8029C4D4}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_missing_laser_artifacts(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record : record + 1]
+    assert int(row["seed_t"]["action_id"][0, p]) == 179  # Guard
+    assert int(row["ref_t1"]["action_id"][0, p]) == 181  # GuardSetOff
+    assert int(row["seed_t"]["hitlag"][0, p]) == 0
+    assert int(row["ref_t1"]["hitlag"][0, p]) == 3
+    assert _laser_ids(row["seed_t"]["items"][0])
+    assert not _laser_ids(row["ref_t1"]["items"][0])
+
+    out = _one_step_out_compare(ds=ds, row=row)
+    for field in ("action_id", "action_frame", "animation_index", "hitlag", "state_flags"):
+        np.testing.assert_array_equal(out[field][0, p], row["ref_t1"][field][0, p])
+    assert float(out["shield_hp"][0, p]) == pytest.approx(
+        float(row["ref_t1"]["shield_hp"][0, p]), abs=1e-6
+    )
+    assert not _laser_ids(out["items"][0])
+
+
 @dataclass(frozen=True)
 class _Case:
     name: str

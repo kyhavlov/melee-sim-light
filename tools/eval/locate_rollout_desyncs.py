@@ -22,6 +22,7 @@ from tools.eval.rollout_locate_tsv import (
     write_rollout_locate_tsv,
 )
 from tools.eval.run_longest_rollout_streaks import _parse_csv, _parse_players, _validate_discrete_fields
+from tools.eval.validation_profile import get_validation_profile, validation_profile_names
 from tools.slippi.suite_io import dataset_path_for_suite_replay, load_suite, repo_root
 
 
@@ -152,6 +153,7 @@ def _locate_dataset_rollout_desyncs(
     row_limit: int | None,
     ucf_enabled: bool | None,
     ucf_cardinals_1_0_enabled: bool | None,
+    profile: str,
 ) -> list[RolloutLocateRow]:
     samples = ds.samples
     num_records_total = int(samples.shape[0])
@@ -188,7 +190,11 @@ def _locate_dataset_rollout_desyncs(
 
     seed = samples["seed_t"]
     ref = samples["ref_t1"]
-    compare_lanes = compile_discrete_compare_lanes(fields, players)
+    compare_lanes = compile_discrete_compare_lanes(
+        fields,
+        players,
+        profile=get_validation_profile(profile),
+    )
 
     def reseed_at(j: int) -> None:
         seed_bytes[0, :] = samples_u8[j, seed_off : seed_off + seed_stride]
@@ -320,6 +326,12 @@ def main() -> None:
     ap.add_argument("--top", type=int, default=12, help="Top-N clusters for the optional summary preview.")
     ap.add_argument("--out", type=Path, default=None, help="Optional TSV output path.")
     ap.add_argument(
+        "--profile",
+        choices=validation_profile_names(),
+        default="rl1_gameplay",
+        help="Validation profile used to mask compare lanes (default: %(default)s).",
+    )
+    ap.add_argument(
         "--print-summary",
         action="store_true",
         help="Print a cluster summary after writing TSV. If --out is omitted, TSV is still printed to stdout first.",
@@ -384,6 +396,7 @@ def main() -> None:
                 row_limit=remaining,
                 ucf_enabled=suite.ucf_enabled,
                 ucf_cardinals_1_0_enabled=suite.ucf_cardinals_1_0_enabled,
+                profile=str(args.profile),
             )
         )
 

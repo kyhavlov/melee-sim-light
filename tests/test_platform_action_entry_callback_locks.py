@@ -19,6 +19,8 @@ ACT_FX_SPECIAL_AIR_N_START = 344
 ACT_JUMP_F = 25
 ACT_ATTACK_AIR_F = 66
 ACT_LANDING = 42
+ACT_GUARD_ON = 178
+ACT_GUARD_REFLECT = 182
 SM_ESCAPE_AIR = 44
 SM_LANDING_FALL_SPECIAL = 36
 SM_ATTACK_AIR_F = 69
@@ -26,7 +28,7 @@ SM_LANDING = 35
 SM_FX_SPECIAL_AIR_N_START = 298
 
 
-def _run_one_step(ds, record: int, *, seed_mutator=None) -> np.void:
+def _run_one_step(ds, record: int, *, seed_mutator=None, input_mutator=None) -> np.void:
     binding = pytest.importorskip("msl_binding")
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
@@ -37,6 +39,8 @@ def _run_one_step(ds, record: int, *, seed_mutator=None) -> np.void:
     row = ds.samples[record : record + 1].copy()
     if seed_mutator is not None:
         seed_mutator(row["seed_t"])
+    if input_mutator is not None:
+        input_mutator(row["prev_input_t"], row["input_t"])
 
     out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
     handle = binding.init(
@@ -146,6 +150,32 @@ def test_locked_escapeair_platform_start_lifetime_enters_landing_fall_special(
             "PhysicalElectricCapybara.msl",
             4812,
             0,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
+            "PhysicalElectricCapybara.msl",
+            950,
+            1,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/battlefield_recent/MediumVirtualPig.msl",
+            2617,
+            1,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/battlefield_recent/MediumVirtualPig.msl",
+            2618,
+            1,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl",
+            511,
+            1,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl",
+            512,
+            1,
         ),
     ],
 )
@@ -368,6 +398,81 @@ def test_jumpaerial_escapeair_platform_entry_frame4_gate_is_not_broadened() -> N
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
+    ("dataset_rel", "record"),
+    [
+        (
+            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
+            "CheeryNumbMonkey.msl",
+            6725,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
+            "PhysicalElectricCapybara.msl",
+            7972,
+        ),
+    ],
+)
+def test_jumpaerial_escapeair_shallow_yoshi_ledge_remap_stays_airborne(
+    dataset_rel: str, record: int
+) -> None:
+    # Fresh JumpAerial -> EscapeAir can carry Yoshi center-floor CollData.floor.index while the
+    # projection helper remaps toward the adjacent ledge. Shallow remaps are not source floor
+    # callback results; vanilla publishes the EscapeAir row airborne at the post-physics root.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpColl_80044838_Floor}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    p = 1
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record]
+    assert int(row["seed_t"]["action_id"][p]) == ACT_JUMP_AERIAL_F
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_ESCAPE_AIR
+    assert int(row["ref_t1"]["on_ground"][p]) == 0
+
+    out = _run_one_step(ds, record)
+    ref = row["ref_t1"]
+    for field in ("action_id", "action_frame", "on_ground", "ground_id"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
+def test_jumpaerial_escapeair_deep_yoshi_ledge_remap_still_lands() -> None:
+    # Negative control for the shallow ledge-remap guard: once the accepted ledge snap is deeper
+    # than the entered EscapeAir ECB bottom owner, the same floor callback enters
+    # LandingFallSpecial.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
+        "PhysicalElectricCapybara.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    record = 5959
+    p = 1
+    row = ds.samples[record]
+    assert int(row["seed_t"]["action_id"][p]) == ACT_JUMP_AERIAL_F
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_LANDING_FALL_SPECIAL
+    assert int(row["ref_t1"]["on_ground"][p]) == 1
+
+    out = _run_one_step(ds, record)
+    ref = row["ref_t1"]
+    for field in ("action_id", "action_frame", "on_ground", "ground_id"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-4)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
     ("dataset_rel", "record", "p"),
     [
         (
@@ -413,6 +518,54 @@ def test_sustained_escapeair_early_locked_vertical_window_stays_airborne(
     ref = row["ref_t1"]
     for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
         assert int(out[field][p]) == int(ref[field][p]), field
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "p"),
+    [
+        (
+            "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
+            "CornyDelayedOkapi.msl",
+            3937,
+            1,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/battlefield_recent/MediumVirtualPig.msl",
+            787,
+            1,
+        ),
+    ],
+)
+def test_locked_escapeair_deep_platform_crossing_lands(
+    dataset_rel: str, record: int, p: int
+) -> None:
+    # Positive replay-real controls for the sustained EscapeAir window. Shallow first crossings
+    # remain airborne above, but once the current root is already below the accepted platform by at
+    # least the entered EscapeAir ECB bottom extent, ft_80082C74/mpColl_800471F8 owns the
+    # LandingFallSpecial handoff.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044838_Floor}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record]
+    assert int(row["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
+    assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_ESCAPE_AIR
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_LANDING_FALL_SPECIAL
+    assert int(row["ref_t1"]["on_ground"][p]) == 1
+
+    out = _run_one_step(ds, record)
+    ref = row["ref_t1"]
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
 
 
 @pytest.mark.integration
@@ -730,3 +883,65 @@ def test_fall_transformed_platform_fastfall_gate_is_source_scoped() -> None:
     out_not_fastfall = _run_one_step(ds, record, seed_mutator=not_fastfall)
     assert int(out_not_fastfall["action_id"][p]) == ACT_LANDING
     assert int(out_not_fastfall["on_ground"][p]) == 1
+
+
+@pytest.mark.integration
+def test_guardon_powershield_reflect_preempts_platform_pass() -> None:
+    # GuardOn IASA source order puts ftCo_80093694 powershield reflect before
+    # ftCo_8009A080 platform pass. A held-down platform shield row with a fresh LR edge must
+    # therefore enter GuardReflect, not consume the down input as Pass.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    #   ftCo_GuardOn_IASA,ftCo_80093694}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_8009A080
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
+        "CheeryNumbMonkey.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    record = 3516
+    p = 0
+    row = ds.samples[record]
+    assert int(row["seed_t"]["action_id"][p]) == ACT_GUARD_ON
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_GUARD_REFLECT
+    assert int(row["ref_t1"]["on_ground"][p]) == 1
+
+    out = _run_one_step(ds, record)
+    ref = row["ref_t1"]
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+
+
+@pytest.mark.integration
+def test_guardon_platform_pass_still_runs_without_lr_edge() -> None:
+    # Negative control on the same replay-real row: if the current LR input is held but not a fresh
+    # edge, the earlier powershield-reflect owner is absent and platform pass can consume down+shield.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
+        "CheeryNumbMonkey.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    record = 3516
+    p = 0
+    row = ds.samples[record]
+    assert int(row["seed_t"]["action_id"][p]) == ACT_GUARD_ON
+
+    def remove_lr_edge(prev_input: np.ndarray, input_t: np.ndarray) -> None:
+        prev_input["p"][0, p]["buttons"] = input_t["p"][0, p]["buttons"]
+        prev_input["p"][0, p]["r"] = input_t["p"][0, p]["r"]
+
+    out = _run_one_step(ds, record, input_mutator=remove_lr_edge)
+    assert int(out["action_id"][p]) == ACT_PASS
+    assert int(out["on_ground"][p]) == 0

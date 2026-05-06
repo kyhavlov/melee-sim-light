@@ -21,6 +21,7 @@ from tools.slippi.seed_history import (
     derive_camera_box_visible_x221f_b0,
     derive_camera_target_point_inside_stage_cam_bounds,
     derive_camera_target_world,
+    derive_capture_mash_buttons_pressed,
     derive_capture_grab_hidden_post,
     derive_magnify_damage_counter_x1910,
     derive_rebirth_camera_anchor_y,
@@ -1463,6 +1464,49 @@ def test_derive_guard_reflect_timer_counts_down_and_expires() -> None:
     assert out18_2.tolist() == [4, 3, 3]
 
 
+def test_derive_capture_mash_buttons_pressed_adds_z_as_a_and_lr_edges() -> None:
+    buttons = np.array(
+        [
+            [0x0000, 0x0000],
+            [0x0010, 0x0000],
+            [0x0010, 0x0000],
+            [0x0000, 0x0000],
+            [0x0000, 0x0020],
+        ],
+        dtype=np.uint16,
+    )
+    l_trigger = np.array(
+        [
+            [0, 0],
+            [0, 0],
+            [90, 0],
+            [90, 0],
+            [0, 0],
+        ],
+        dtype=np.uint8,
+    )
+    r_trigger = np.zeros_like(l_trigger)
+
+    out = derive_capture_mash_buttons_pressed(
+        buttons_u16_2d=buttons,
+        l_trigger_u8_2d=l_trigger,
+        r_trigger_u8_2d=r_trigger,
+        trigger_deadzone=0.3,
+        button_mask_a=0x0100,
+        button_mask_z=0x0010,
+        button_mask_lr=0x0060,
+    )
+
+    assert out.dtype == np.uint16
+    assert out.tolist() == [
+        [0x0000, 0x0000],
+        [0x0170, 0x0000],
+        [0x0000, 0x0000],
+        [0x0000, 0x0000],
+        [0x0000, 0x0060],
+    ]
+
+
 def test_derive_capture_grab_hidden_post_tracks_shared_owner_state() -> None:
     act_capturewait_lw = np.uint16(0x00E3)
     owner = np.array([0, 0, 0, 0], dtype=np.uint8)
@@ -1487,7 +1531,7 @@ def test_derive_capture_grab_hidden_post_tracks_shared_owner_state() -> None:
         action_frame_i16=action_frame,
         grab_owner_port_u8=owner,
         percent_f32=percent,
-        buttons_held_u16=buttons,
+        buttons_pressed_u16=buttons,
         stick_x_unit=stick_x,
         stick_y_unit=stick_y,
         frame_speed_mul_f32=frame_speed,
@@ -1534,7 +1578,7 @@ def test_derive_capture_grab_hidden_post_marks_wait_to_breakout_rows() -> None:
         action_frame_i16=np.array([3, 0, 7, 0], dtype=np.int16),
         grab_owner_port_u8=np.array([0, 0, 0, 0], dtype=np.uint8),
         percent_f32=np.array([10.0, 10.0, 10.0, 10.0], dtype=np.float32),
-        buttons_held_u16=np.zeros(4, dtype=np.uint16),
+        buttons_pressed_u16=np.zeros(4, dtype=np.uint16),
         stick_x_unit=np.zeros(4, dtype=np.float32),
         stick_y_unit=np.zeros(4, dtype=np.float32),
         frame_speed_mul_f32=np.ones(4, dtype=np.float32),
@@ -1565,7 +1609,7 @@ def test_derive_capture_grab_hidden_post_is_prefix_invariant() -> None:
         action_frame_i16=np.array([0, 1, 2], dtype=np.int16),
         grab_owner_port_u8=np.array([0, 0, 0], dtype=np.uint8),
         percent_f32=np.array([10.0, 10.0, 10.0], dtype=np.float32),
-        buttons_held_u16=np.array([0x0000, 0x0C00, 0x0000], dtype=np.uint16),
+        buttons_pressed_u16=np.array([0x0000, 0x0C00, 0x0000], dtype=np.uint16),
         stick_x_unit=np.zeros(3, dtype=np.float32),
         stick_y_unit=np.zeros(3, dtype=np.float32),
         frame_speed_mul_f32=np.array([1.0, 1.0, 2.0], dtype=np.float32),
@@ -1593,7 +1637,7 @@ def test_derive_capture_grab_hidden_post_is_prefix_invariant() -> None:
             "action_frame_i16": np.concatenate([base_kwargs["action_frame_i16"], np.array([3], dtype=np.int16)]),
             "grab_owner_port_u8": np.concatenate([base_kwargs["grab_owner_port_u8"], np.array([0], dtype=np.uint8)]),
             "percent_f32": np.concatenate([base_kwargs["percent_f32"], np.array([10.0], dtype=np.float32)]),
-            "buttons_held_u16": np.concatenate([base_kwargs["buttons_held_u16"], np.array([0x0000], dtype=np.uint16)]),
+            "buttons_pressed_u16": np.concatenate([base_kwargs["buttons_pressed_u16"], np.array([0x0000], dtype=np.uint16)]),
             "stick_x_unit": np.concatenate([base_kwargs["stick_x_unit"], np.array([0.0], dtype=np.float32)]),
             "stick_y_unit": np.concatenate([base_kwargs["stick_y_unit"], np.array([0.0], dtype=np.float32)]),
             "frame_speed_mul_f32": np.concatenate([base_kwargs["frame_speed_mul_f32"], np.array([2.0], dtype=np.float32)]),

@@ -213,6 +213,67 @@ static inline uint8_t hitboxes_seed_bridge_create_edge_guard_admission_dense_app
   return 0u;
 }
 
+static inline uint8_t hitboxes_seed_bridge_create_edge_guardon_shield_miss_dense_applies(
+    const MslBatch* batch, int bi, int attacker, int hb_id, uint8_t hit_group) {
+  if (batch == NULL || bi < 0 || attacker < 0 || attacker >= (int)MSL_MAX_PLAYERS || hb_id < 0 ||
+      hb_id >= (int)MSL_MAX_HITBOXES || hit_group >= (uint8_t)MSL_HITLIST_GROUPS) {
+    return 0u;
+  }
+  const size_t a_idx = msl_idx_player(bi, attacker);
+  if (!hitboxes_seed_bridge_is_attackair_owner(batch->state.action_id[a_idx]) ||
+      batch->state.hitlag[a_idx] != 0u || batch->state.hitstun[a_idx] != 0u) {
+    return 0u;
+  }
+
+  const size_t group_base =
+      (size_t)bi * (size_t)MSL_MAX_PLAYERS * (size_t)MSL_HITLIST_GROUPS * (size_t)MSL_MAX_PLAYERS;
+  const size_t shield_base =
+      (size_t)bi * (size_t)MSL_MAX_PLAYERS * (size_t)MSL_MAX_HITBOXES * (size_t)MSL_MAX_PLAYERS;
+  for (int victim = 0; victim < (int)batch->config.num_players; victim++) {
+    if (victim == attacker) {
+      continue;
+    }
+    const size_t cd_i =
+        group_base + (((size_t)attacker * (size_t)MSL_HITLIST_GROUPS + (size_t)hit_group) *
+                          (size_t)MSL_MAX_PLAYERS +
+                      (size_t)victim);
+    if (batch->state.combat_hitlist_cd[cd_i] == 0u) {
+      continue;
+    }
+    const size_t shield_i =
+        shield_base +
+        (((size_t)attacker * (size_t)MSL_MAX_HITBOXES + (size_t)hb_id) * (size_t)MSL_MAX_PLAYERS +
+         (size_t)victim);
+    if (batch->state.combat_shield_contact_hb_kind[shield_i] != 1u) {
+      continue;
+    }
+
+    const size_t v_idx = msl_idx_player(bi, victim);
+    if (batch->state.action_id[v_idx] != (uint16_t)MSL_ACT_GUARD_ON ||
+        batch->state.hitlag[v_idx] != 0u || batch->state.hitstun[v_idx] != 0u) {
+      continue;
+    }
+    const uint16_t stored_iid = batch->state.combat_hitlist_victim_iid[cd_i];
+    if (stored_iid != 0u && stored_iid != batch->state.instance_id[v_idx] &&
+        hitboxes_hitlist_victim_pointer_may_change(batch->state.stocks[v_idx],
+                                                   batch->state.action_id[v_idx])) {
+      continue;
+    }
+    // Create-edge ShieldDesc miss bridge:
+    // - ftAction_8007121C creates/copies HitCapsule victims_1 before ftColl_80078C70.
+    // - ftColl_80078C70 then gates BODY and shield through lbColl_8000ACFC before testing
+    //   ShieldDesc. A replay-proven ShieldDesc miss (`kind=1`) does not imply the HitCapsule
+    //   victim list was empty; if the dense group seed still names the current GuardOn object,
+    //   materialize that hidden victims_1 latch on the create edge so BODY fallthrough remains
+    //   suppressed by source-owned hitlist provenance.
+    // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+    // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+    // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80007BCC}
+    return 1u;
+  }
+  return 0u;
+}
+
 static inline uint8_t hitboxes_seed_bridge_attackairhi_damageflytop_create_dense_applies(
     const MslBatch* batch, int bi, int attacker, uint8_t hit_group, float hitbox_damage,
     uint16_t create_frame) {
@@ -761,6 +822,20 @@ static void hitboxes_seed_bridge_trim_impossible_indefinite(
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092450
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_IASA
+      const size_t shield_seed_i =
+          ((size_t)bi * (size_t)MSL_MAX_PLAYERS * (size_t)MSL_MAX_HITBOXES *
+           (size_t)MSL_MAX_PLAYERS) +
+          (((size_t)attacker * (size_t)MSL_MAX_HITBOXES + (size_t)hb_id) * (size_t)MSL_MAX_PLAYERS +
+           (size_t)victim_port);
+      if (batch->state.combat_shield_contact_hb_kind[shield_seed_i] == 1u) {
+        // A proven ShieldDesc miss still flows through lbColl_8000ACFC before BODY. When the dense
+        // victim latch names the current GuardOn/Guard object, preserve that hidden HitCapsule
+        // suppression instead of interpreting the miss as stale provenance. Accepted shield hits
+        // (`kind=2`) and rollout rows without a replay-proven miss keep the stale-clear behavior.
+        // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+        // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80007BCC}
+        continue;
+      }
       hitboxes_seed_bridge_entry_clear(e);
       continue;
     }
@@ -830,6 +905,41 @@ static void hitboxes_seed_bridge_trim_impossible_indefinite(
       continue;
     }
 
+    const uint8_t attackairf_late_frozen_guard_body_owner =
+        (attacker_action == (uint16_t)MSL_ACT_ATTACK_AIR_F && second_create_frame != 0xFFFFu &&
+         pose_frame >= second_create_frame && v_action == (uint16_t)MSL_ACT_GUARD &&
+         batch->state.action_frame[v_idx] < 0 &&
+         batch->state.animation_index[v_idx] == 0xFFFFFFFFu &&
+         batch->state.anim_frame_f32[v_idx] < 0.0f &&
+         batch->state.prev_action_id[v_idx] == (uint16_t)MSL_ACT_GUARD &&
+         batch->state.hitlag[v_idx] == 0u && batch->state.hitstun[v_idx] == 0u)
+            ? 1u
+            : 0u;
+    if (attackairf_late_frozen_guard_body_owner) {
+      const size_t shield_seed_base =
+          (size_t)bi * (size_t)MSL_MAX_PLAYERS * (size_t)MSL_MAX_HITBOXES * (size_t)MSL_MAX_PLAYERS;
+      const size_t shield_seed_slot =
+          ((size_t)attacker * (size_t)MSL_MAX_HITBOXES + (size_t)hb_id) * (size_t)MSL_MAX_PLAYERS +
+          (size_t)victim_port;
+      const size_t shield_seed_i = shield_seed_base + shield_seed_slot;
+      if (batch->state.combat_shield_contact_hb_kind[shield_seed_i] == 1u &&
+          e->id16 == batch->state.instance_id[v_idx]) {
+        // Late AttackAirF frozen-Guard stale dense trim:
+        // - Fair has extracted repeated create_hitbox refreshes in the same hit_group. Decomp only
+        //   calls ftColl_800768A0 when a slot first enables or changes hit_group, so the concrete
+        //   victims_1 owner is the live HitCapsule list, not the dense group seed.
+        // - Replay-real late-Fair rows can miss ShieldDesc and still take BODY damage. If the
+        //   coarse dense fallback still names the current Guard object here, clear it before the
+        //   generic cd gate so lbColl_8000ACFC does not suppress the source-owned BODY fallthrough.
+        // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+        // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+        // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80007BCC}
+        // data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirF.events.create_hitbox
+        hitboxes_seed_bridge_entry_clear(e);
+        continue;
+      }
+    }
+
     if (e->cd != 0u) {
       continue;
     }
@@ -872,16 +982,21 @@ static void hitboxes_seed_bridge_trim_impossible_indefinite(
         (size_t)victim_port;
     const size_t shield_seed_i = shield_seed_base + shield_seed_slot;
     if (batch->state.combat_shield_contact_hb_kind[shield_seed_i] == 1u &&
-        e->id16 == batch->state.instance_id[v_idx]) {
+        e->id16 == batch->state.instance_id[v_idx] && !attackairf_late_frozen_guard_body_owner) {
       // Frozen Guard no-submotion stale-trim boundary:
       // - ftColl_80078C70 first gates the HitCapsule through lbColl_8000ACFC, then checks
       //   ShieldDesc overlap with lbColl_80007BCC, then optionally falls through to BODY.
       // - A replay-proven ShieldDesc miss (`combat_shield_contact_hb_kind == 1`) is not proof that
       //   the HitCapsule victims_1 latch is stale. When the dense seed still names the current
       //   Guard object, preserve that lbColl_8000ACFC suppression so the BODY fallthrough remains
-      //   blocked by source-owned HitCapsule provenance.
+      //   blocked by source-owned HitCapsule provenance. The late AttackAirF frozen-Guard lane is
+      //   excluded: extracted AttackAirF refresh ownership can clear/copy the concrete HitCapsule
+      //   list even while the dense group fallback still names the Guard object, and replay-real
+      //   rows then take BODY damage after the ShieldDesc miss.
       // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+      // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
       // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80007BCC}
+      // data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirF.events.create_hitbox
       continue;
     }
     // Authoritative per-HitCapsule seed for the frozen-Guard shield-provenance family must survive
@@ -1301,6 +1416,10 @@ void hitboxes_refresh(MslBatch* batch) {
               const size_t dst_i = idx_hitbox(bi, p, hb);
               if (hitboxes_seed_bridge_create_edge_guard_admission_dense_applies(batch, bi, p,
                                                                                  new_g)) {
+                hitlist_seed_init_fighter_hitbox_from_group_allow_stale_iid(batch, bi, p, (int)hb,
+                                                                            new_g);
+              } else if (hitboxes_seed_bridge_create_edge_guardon_shield_miss_dense_applies(
+                             batch, bi, p, (int)hb, new_g)) {
                 hitlist_seed_init_fighter_hitbox_from_group_allow_stale_iid(batch, bi, p, (int)hb,
                                                                             new_g);
               } else if (ev->frame == first_create_frame[hb] &&

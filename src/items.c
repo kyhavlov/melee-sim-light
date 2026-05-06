@@ -2421,6 +2421,9 @@ static inline uint8_t item_reflect_transfer_flips_direction_now(const MslBatch* 
                                                                                            : 0u;
 }
 
+static inline void item_apply_shine_reflect_callback(MslBatch* batch, size_t ii,
+                                                     size_t reflector_idx);
+
 static inline void item_apply_seeded_reflect_transfer_after_collision(MslBatch* batch, size_t ii) {
   if (batch == NULL) {
     return;
@@ -2433,13 +2436,17 @@ static inline void item_apply_seeded_reflect_transfer_after_collision(MslBatch* 
 
   // Seeded hidden reflect-transfer lane:
   // - ftColl_80077464 writes the reflect snapshot during collision selection.
+  // - SpecialLw reflector descriptors also stage `reflect_hit_cb`, which Fighter_ProcessHit later
+  //   consumes as ftFx_SpecialLwHit_Enter before the item owner/xDA8 post-frame transfer is visible.
   // - Item_80269F14 consumes owner/xDA8_short before the post-frame item record.
   // Apply this after same-frame collision callbacks have seen the pre-transfer owner; otherwise
   // Shine/reflector callbacks incorrectly treat the projectile as already owned by the reflector.
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLwHit_Enter
   // refs/melee/src/melee/it/item.c::Item_80269F14
   const int bi = (int)(ii / (size_t)MSL_MAX_ITEMS);
   const size_t reflector_idx = msl_idx_player(bi, (int)seed_port);
+  item_apply_shine_reflect_callback(batch, ii, reflector_idx);
   if (batch->state.item_owner[ii] != (int8_t)seed_port &&
       item_reflect_transfer_flips_direction_now(batch, ii, reflector_idx)) {
     const float vx = batch->state.item_vel_x[ii];
@@ -3988,17 +3995,44 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       continue;
     }
 
-    // Decomp: item Phys advances `item->pos` before itFoxlaser_UnkMotion1_Coll runs. The Coll
-    // callback snapshots that post-motion `item->pos`, calls it_8029C4D4 (stage collision), then on
-    // hit sets lifetime to 1 and restores the callback-entry position.
-    // refs/melee/src/melee/it/items/itfoxlaser.c::itFoxlaser_UnkMotion1_Coll
-    // refs/melee/src/melee/it/items/itfoxlaser.c::itFoxlaser_UnkMotion1_Phys
-    if (stage_collision_item_line_hits_floor(stage_id, x0, y0, x, y)) {
-      if (t > 1.0f) {
-        batch->state.item_timer[ii] = 1.0f;
+    // Decomp order:
+    // - Fighter_8006CB94 -> ftColl_8007925C handles item-vs-fighter shield/BODY contact in the
+    //   fighter proc,
+    // - the laser's item collision callback (`itFoxlaser_UnkMotion1_Coll -> it_8029C4D4`) owns
+    //   stage-line lifetime expiry after that fighter-contact phase.
+    // Defer the stage-line result until after the defender loop below so same-frame shield hits
+    // beat platform/floor expiry, matching replay-visible GuardSetOff rows on Pokemon Stadium.
+    // refs/melee/src/melee/ft/fighter.c::Fighter_8006CB94
+    // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C
+    // refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Coll,it_8029C4D4}
+    const uint8_t stage_line_hit = stage_collision_item_line_hits_floor(stage_id, x0, y0, x, y);
+
+    if (batch->state.item_reflect_transfer_seed_port[ii] < (uint8_t)num_players &&
+        batch->state.item_reflect_transfer_seed_iid[ii] != 0u) {
+      // Pending reflect callback ownership:
+      // - ftColl_80077464 writes item->xC64_reflectGObj plus reflected owner/xDA8 snapshot lanes,
+      // - Item_8026A294 later consumes that pending callback through Item_80269F14 before the
+      //   article can be destroyed by a new reconstructed shield/BODY contact in this reseeded
+      //   one-step.
+      // Keep this explicit prefix-causal seed lane ahead of the proxy fighter-collision loop; the
+      // generic post-loop apply below is still used when no competing contact would consume the
+      // article first.
+      // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
+      // refs/melee/src/melee/it/item.c::{Item_8026A294,Item_80269F14}
+      item_apply_seeded_reflect_transfer_after_collision(batch, ii);
+      batch->state.item_reflect_transfer_seed_port[ii] = 0xFFu;
+      batch->state.item_reflect_transfer_seed_iid[ii] = 0u;
+      batch->state.item_shield_bounce_seed_valid[ii] = 0u;
+      batch->state.item_shield_bounce_seed_vel_x[ii] = 0.0f;
+      batch->state.item_shield_bounce_seed_vel_y[ii] = 0.0f;
+      batch->state.item_hidden_callback_flags[ii] = 0u;
+      if (stage_line_hit != 0u) {
+        if (batch->state.item_timer[ii] > 1.0f) {
+          batch->state.item_timer[ii] = 1.0f;
+        }
+        batch->state.item_pos_x[ii] = x;
+        batch->state.item_pos_y[ii] = y;
       }
-      batch->state.item_pos_x[ii] = x;
-      batch->state.item_pos_y[ii] = y;
       continue;
     }
 
@@ -4419,11 +4453,12 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         //   shield owner is already the settled Guard hold for this step.
         // - Replayed carried lasers in this settled snapshot stay on the point sample; broad
         //   authored-offset sweeps over-admit GAT/QGD carried-shot controls.
-        // - Lasers in the pure frame-start `fp+0x2218_b5` behavior lane use the authored
-        //   HitCapsule offsets for the immediate shield callback only while the owner is still in
-        //   the SpecialN loop callback phase that owns the shot. Carried landing/fallout lasers and
-        //   rows with high command/interrupt bits remain on the settled point sample; broad
-        //   authored-offset sweeps over-admit GAT/QGD/DCC controls.
+        // - Lasers in the frame-start `fp+0x2218_b5` behavior lane use the authored HitCapsule
+        //   offsets for the immediate shield callback only while the owner is still in the SpecialN
+        //   loop callback phase that owns the shot. Settled Guard rows can still carry x2218_b1
+        //   (`0x40`) and remain on this source item-HitCapsule path; x2218_b2/b0 command and
+        //   interrupt lanes (`0x20`/`0x80`) stay on the settled point sample. GuardOn entry rows
+        //   have their separate command-pose gate above.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
         //   ftCo_GuardOn_Anim,ftCo_800928CC,ftCo_Guard_IASA}
         // refs/melee/src/melee/it/items/itfoxlaser.c::{
@@ -4439,7 +4474,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
                 : 0u;
         const uint8_t guard_hold_pure_behavior_carried_laser =
             (defender_guard_hold_no_submotion_snapshot && laser_owner_specialn_loop &&
-             (batch->state.state_flags_2218_frame_start[d_idx] & 0xE4u) == 0x04u)
+             (batch->state.state_flags_2218_frame_start[d_idx] & 0xA4u) == 0x04u)
                 ? 1u
                 : 0u;
         const float shield_probe_x =
@@ -5270,6 +5305,26 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       // refs/melee/src/melee/it/itcoll.c::it_80272460
       // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B868
       const uint8_t use_swept_body = laser_grounded_body_uses_sweep(batch, d_idx, laser_age_frames);
+      const uint8_t use_frame_start_lightshield_body_sample =
+          (body_shield_adjacent != 0u && batch->state.lightshield_amount[d_idx] > 0.0f &&
+           (batch->state.state_flags_2218_frame_start[d_idx] & 0xA4u) == 0x04u &&
+           (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD ||
+            batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT) &&
+           batch->state.action_frame[d_idx] < 0 &&
+           batch->state.animation_index[d_idx] == UINT32_MAX)
+              ? 1u
+              : 0u;
+      // No-submotion lightshield item BODY sample:
+      // - item motion (Item_802697D4) and fighter/item collision (Fighter_8006CB94 ->
+      //   ftColl_8007925C) are separate HSD procs, and the replay-visible post-frame laser position
+      //   is one item integration later than the frame-start HitCapsule sample consumed by the pure
+      //   guard behavior lane.
+      // - Keep this on x2218 pure behavior plus x2218_b1 (`0x04`/`0x44`) and exclude
+      //   command/interrupt bits (`0x20`/`0x80`), which adjacent replay locks show should stay on
+      //   the current item sample for GuardSetOff/BODY.
+      // refs/melee/src/melee/it/item.c::Item_802697D4
+      // refs/melee/src/melee/ft/fighter.c::Fighter_8006CB94
+      // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C
       for (uint8_t oi = 0; oi < off_n && oi < (uint8_t)MSL_LASER_MAX_HITBOX_OFFS_X && !hit; oi++) {
         if (!hitlist_allows_item_hitbox_fighter(batch, bi, it, (int)oi, def, def_iid)) {
           continue;
@@ -5283,10 +5338,12 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         const float sx = x + (ux * s1);
         const float sy = y + (uy * s1);
         for (uint8_t ci = 0; ci < cap_n; ci++) {
-          const float hx0 = use_swept_body ? sx0 : sx;
-          const float hy0 = use_swept_body ? sy0 : sy;
+          const float hx0 = (use_swept_body || use_frame_start_lightshield_body_sample) ? sx0 : sx;
+          const float hy0 = (use_swept_body || use_frame_start_lightshield_body_sample) ? sy0 : sy;
+          const float hx1 = use_frame_start_lightshield_body_sample ? sx0 : sx;
+          const float hy1 = use_frame_start_lightshield_body_sample ? sy0 : sy;
           if (item_swept_sphere_capsule_overlap_amount(
-                  batch, bi, def, hx0, hy0, sx, sy, sr, (int)ci, &hit_hurt_height,
+                  batch, bi, def, hx0, hy0, hx1, hy1, sr, (int)ci, &hit_hurt_height,
                   &body_overlap_amount, flatten_body_hurt_z, 1.0f)) {
             hit = 1;
             hit_hb_id = oi;
@@ -5752,6 +5809,14 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       break;
     }
     if (batch->state.item_exists[ii]) {
+      if (stage_line_hit != 0u) {
+        if (batch->state.item_timer[ii] > 1.0f) {
+          batch->state.item_timer[ii] = 1.0f;
+        }
+        batch->state.item_pos_x[ii] = x;
+        batch->state.item_pos_y[ii] = y;
+        continue;
+      }
       if ((hidden_flags & (uint8_t)MSL_ITEM_HIDDEN_CALLBACK_CLEAR) != 0u) {
         item_slot_clear(batch, ii);
         continue;

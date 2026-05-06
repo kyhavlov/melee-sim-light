@@ -2090,13 +2090,41 @@ def derive_grab_mash_stick_sign_post(
     )
 
 
+def derive_capture_mash_buttons_pressed(
+    *,
+    buttons_u16_2d: np.ndarray,
+    l_trigger_u8_2d: np.ndarray,
+    r_trigger_u8_2d: np.ndarray,
+    trigger_deadzone: float,
+    button_mask_a: int,
+    button_mask_z: int,
+    button_mask_lr: int,
+) -> np.ndarray:
+    """Derive CaptureWait mash button edges, including Z-as-A and analog/digital LR edges."""
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.derive_capture_mash_buttons_pressed is required; run `make build`"
+        ) from exc
+    return msl_binding.derive_capture_mash_buttons_pressed(
+        np.ascontiguousarray(buttons_u16_2d, dtype=np.uint16),
+        np.ascontiguousarray(l_trigger_u8_2d, dtype=np.uint8),
+        np.ascontiguousarray(r_trigger_u8_2d, dtype=np.uint8),
+        float(trigger_deadzone),
+        int(button_mask_a),
+        int(button_mask_z),
+        int(button_mask_lr),
+    )
+
+
 def derive_capture_grab_hidden_post(
     *,
     action_id_u16: np.ndarray,
     action_frame_i16: np.ndarray,
     grab_owner_port_u8: np.ndarray,
     percent_f32: np.ndarray,
-    buttons_held_u16: np.ndarray,
+    buttons_pressed_u16: np.ndarray,
     stick_x_unit: np.ndarray,
     stick_y_unit: np.ndarray,
     frame_speed_mul_f32: np.ndarray,
@@ -2132,7 +2160,7 @@ def derive_capture_grab_hidden_post(
         np.ascontiguousarray(action_frame_i16, dtype=np.int16).reshape(-1),
         np.ascontiguousarray(grab_owner_port_u8, dtype=np.uint8).reshape(-1),
         np.ascontiguousarray(percent_f32, dtype=np.float32).reshape(-1),
-        np.ascontiguousarray(buttons_held_u16, dtype=np.uint16).reshape(-1),
+        np.ascontiguousarray(buttons_pressed_u16, dtype=np.uint16).reshape(-1),
         np.ascontiguousarray(stick_x_unit, dtype=np.float32).reshape(-1),
         np.ascontiguousarray(stick_y_unit, dtype=np.float32).reshape(-1),
         np.ascontiguousarray(frame_speed_mul_f32, dtype=np.float32).reshape(-1),

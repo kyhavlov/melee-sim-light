@@ -3160,6 +3160,83 @@ static inline bool msl_py_capture_attach_action(uint16_t a) {
          a == 0x00E4u;
 }
 
+PyObject* msl_derive_capture_mash_buttons_pressed_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* buttons_obj = NULL;
+  PyObject* l_obj = NULL;
+  PyObject* r_obj = NULL;
+  double trigger_deadzone = 0.0;
+  int button_mask_a = 0;
+  int button_mask_z = 0;
+  int button_mask_lr = 0;
+  if (!PyArg_ParseTuple(args, "OOOdiii", &buttons_obj, &l_obj, &r_obj, &trigger_deadzone,
+                        &button_mask_a, &button_mask_z, &button_mask_lr)) {
+    return NULL;
+  }
+  PyArrayObject* buttons = require_contiguous_array(buttons_obj, NPY_UINT16, 2, "buttons_u16_2d");
+  PyArrayObject* l_trigger = require_contiguous_array(l_obj, NPY_UINT8, 2, "l_trigger_u8_2d");
+  PyArrayObject* r_trigger = require_contiguous_array(r_obj, NPY_UINT8, 2, "r_trigger_u8_2d");
+  if (buttons == NULL || l_trigger == NULL || r_trigger == NULL) {
+    return NULL;
+  }
+  const npy_intp n = PyArray_DIM(buttons, 0);
+  const npy_intp width = PyArray_DIM(buttons, 1);
+  if (require_exact_2d_shape(l_trigger, n, width, "l_trigger_u8_2d") < 0 ||
+      require_exact_2d_shape(r_trigger, n, width, "r_trigger_u8_2d") < 0) {
+    return NULL;
+  }
+
+  npy_intp dims[2] = {n, width};
+  PyArrayObject* out = (PyArrayObject*)PyArray_EMPTY(2, dims, NPY_UINT16, 0);
+  if (out == NULL) {
+    return NULL;
+  }
+
+  const uint16_t* b = (const uint16_t*)PyArray_DATA(buttons);
+  const uint8_t* l = (const uint8_t*)PyArray_DATA(l_trigger);
+  const uint8_t* r = (const uint8_t*)PyArray_DATA(r_trigger);
+  uint16_t* out_p = (uint16_t*)PyArray_DATA(out);
+  const uint16_t m_a = (uint16_t)button_mask_a;
+  const uint16_t m_z = (uint16_t)button_mask_z;
+  const uint16_t m_lr = (uint16_t)button_mask_lr;
+  const uint16_t m_lr_z = (uint16_t)(m_lr | m_z);
+  const float dz = (float)trigger_deadzone;
+
+  for (npy_intp i = 0; i < n; i++) {
+    for (npy_intp p = 0; p < width; p++) {
+      const npy_intp idx = i * width + p;
+      const uint16_t cur = b[idx];
+      const uint16_t prev = (i > 0) ? b[((i - 1) * width) + p] : 0u;
+      uint16_t pressed = (uint16_t)(cur & (uint16_t)~prev);
+      if ((pressed & m_z) != 0u) {
+        pressed = (uint16_t)(pressed | m_a);
+      }
+
+      float cur_trigger = (float)(l[idx] > r[idx] ? l[idx] : r[idx]) / 255.0f;
+      if ((cur & m_lr) != 0u) {
+        cur_trigger = 1.0f;
+      }
+      bool cur_lr_held = ((cur & m_lr_z) != 0u) || cur_trigger > dz;
+      bool prev_lr_held = false;
+      if (i > 0) {
+        const npy_intp prev_idx = ((i - 1) * width) + p;
+        const uint16_t prev_buttons = b[prev_idx];
+        float prev_trigger =
+            (float)(l[prev_idx] > r[prev_idx] ? l[prev_idx] : r[prev_idx]) / 255.0f;
+        if ((prev_buttons & m_lr) != 0u) {
+          prev_trigger = 1.0f;
+        }
+        prev_lr_held = ((prev_buttons & m_lr_z) != 0u) || prev_trigger > dz;
+      }
+      if (cur_lr_held && !prev_lr_held) {
+        pressed = (uint16_t)(pressed | m_lr);
+      }
+      out_p[idx] = pressed;
+    }
+  }
+  return (PyObject*)out;
+}
+
 static inline bool msl_py_capture_wait_action(uint16_t a) { return a == 0x00E0u || a == 0x00E3u; }
 
 static inline bool msl_py_capture_damage_action(uint16_t a) { return a == 0x00E1u || a == 0x00E4u; }
@@ -3205,7 +3282,7 @@ PyObject* msl_derive_capture_grab_hidden_post_py(PyObject* self, PyObject* args)
   PyObject* frame_obj = NULL;
   PyObject* owner_obj = NULL;
   PyObject* percent_obj = NULL;
-  PyObject* buttons_obj = NULL;
+  PyObject* buttons_pressed_obj = NULL;
   PyObject* stick_x_obj = NULL;
   PyObject* stick_y_obj = NULL;
   PyObject* frame_speed_obj = NULL;
@@ -3217,17 +3294,18 @@ PyObject* msl_derive_capture_grab_hidden_post_py(PyObject* self, PyObject* args)
   double decrement = 0.0, mash_damage = 0.0, hold_frames = 0.0, jump_window = 0.0,
          stick_threshold = 0.0;
   if (!PyArg_ParseTuple(args, "OOOOOOOOOOiiddddddddddd", &action_obj, &frame_obj, &owner_obj,
-                        &percent_obj, &buttons_obj, &stick_x_obj, &stick_y_obj, &frame_speed_obj,
-                        &mash_x_obj, &mash_y_obj, &slot_index, &handicap, &base, &h_mul, &h_base,
-                        &slot_mul, &slot_base, &pct_mul, &decrement, &mash_damage, &hold_frames,
-                        &jump_window, &stick_threshold)) {
+                        &percent_obj, &buttons_pressed_obj, &stick_x_obj, &stick_y_obj,
+                        &frame_speed_obj, &mash_x_obj, &mash_y_obj, &slot_index, &handicap, &base,
+                        &h_mul, &h_base, &slot_mul, &slot_base, &pct_mul, &decrement, &mash_damage,
+                        &hold_frames, &jump_window, &stick_threshold)) {
     return NULL;
   }
   PyArrayObject* action = require_contiguous_array(action_obj, NPY_UINT16, 1, "action_id_u16");
   PyArrayObject* frame = require_contiguous_array(frame_obj, NPY_INT16, 1, "action_frame_i16");
   PyArrayObject* owner = require_contiguous_array(owner_obj, NPY_UINT8, 1, "grab_owner_port_u8");
   PyArrayObject* percent = require_contiguous_array(percent_obj, NPY_FLOAT32, 1, "percent_f32");
-  PyArrayObject* buttons = require_contiguous_array(buttons_obj, NPY_UINT16, 1, "buttons_held_u16");
+  PyArrayObject* buttons =
+      require_contiguous_array(buttons_pressed_obj, NPY_UINT16, 1, "buttons_pressed_u16");
   PyArrayObject* stick_x = require_contiguous_array(stick_x_obj, NPY_FLOAT32, 1, "stick_x_unit");
   PyArrayObject* stick_y = require_contiguous_array(stick_y_obj, NPY_FLOAT32, 1, "stick_y_unit");
   PyArrayObject* frame_speed =
@@ -3297,9 +3375,9 @@ PyObject* msl_derive_capture_grab_hidden_post_py(PyObject* self, PyObject* args)
       if (msl_py_capture_wait_or_damage_action(a[i])) {
         counter += 1.0f;
         timer -= (float)decrement;
-        const uint16_t held = b[i + 1];
+        const uint16_t pressed = b[i + 1];
         bool mash_active =
-            (held & (0x0100u | 0x0200u | 0x0400u | 0x0800u | 0x0040u | 0x0020u)) != 0u;
+            (pressed & (0x0100u | 0x0200u | 0x0400u | 0x0800u | 0x0040u | 0x0020u)) != 0u;
         int8_t next_x = mx[i];
         int8_t next_y = my[i];
         if (sx[i + 1] < -(float)stick_threshold) {

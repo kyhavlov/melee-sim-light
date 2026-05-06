@@ -381,7 +381,31 @@ static inline uint8_t capturewait_grab_mash_active(MslBatch* batch, const MslCom
     return 0u;
   }
 
-  const uint16_t buttons = batch->state.input_buttons[idx];
+  uint16_t buttons = batch->state.input_buttons_pressed[idx];
+  if ((buttons & (uint16_t)MSL_BUTTON_Z) != 0u) {
+    buttons = (uint16_t)(buttons | (uint16_t)MSL_BUTTON_A);
+  }
+  {
+    const uint16_t cur_buttons = batch->state.input_buttons[idx];
+    const uint16_t prev_buttons = batch->state.prev_input_buttons[idx];
+    const float cur_trig = msl_trigger_unit_from_input(cur_buttons, batch->state.input_l[idx],
+                                                       batch->state.input_r[idx]);
+    const float prev_trig = msl_trigger_unit_from_input(
+        prev_buttons, batch->state.prev_input_l[idx], batch->state.prev_input_r[idx]);
+    const uint8_t lr_now =
+        (((cur_buttons & (uint16_t)(MSL_BUTTON_L | MSL_BUTTON_R | MSL_BUTTON_Z)) != 0u) ||
+         cur_trig > c->trigger_deadzone)
+            ? 1u
+            : 0u;
+    const uint8_t lr_prev =
+        (((prev_buttons & (uint16_t)(MSL_BUTTON_L | MSL_BUTTON_R | MSL_BUTTON_Z)) != 0u) ||
+         prev_trig > c->trigger_deadzone)
+            ? 1u
+            : 0u;
+    if (lr_now != 0u && lr_prev == 0u) {
+      buttons = (uint16_t)(buttons | (uint16_t)MSL_BUTTON_L);
+    }
+  }
   uint8_t result = ((buttons & (uint16_t)(MSL_BUTTON_A | MSL_BUTTON_B | MSL_BUTTON_X |
                                           MSL_BUTTON_Y | MSL_BUTTON_L | MSL_BUTTON_R)) != 0u)
                        ? 1u
@@ -394,9 +418,10 @@ static inline uint8_t capturewait_grab_mash_active(MslBatch* batch, const MslCom
   const int8_t prev_y = batch->state.grab_mash_stick_y_sign[idx];
   int8_t next_x = prev_x;
   int8_t next_y = prev_y;
-  // ftCommon_GrabMash updates x1A50/x1A51 when lstick.{x,y} crosses +/-x308, and mash succeeds on
-  // any sign-latch change even without AB/XY/LR holds.
+  // ftCommon_GrabMash consumes fp->input.x668 for AB/XY/LR and updates x1A50/x1A51 when
+  // lstick.{x,y} crosses +/-x308. Mash succeeds on an x668 edge or any sign-latch change.
   // refs/melee/src/melee/ft/ftcommon.c::ftCommon_GrabMash
+  // refs/melee/src/melee/ft/fighter.c::Fighter_Spaghetti_8006AD10_Inner1
   // data/common/ft_common_data.json: grab_mash_stick_threshold
   if (stick_x < -c->grab_mash_stick_threshold) {
     next_x = -1;
@@ -422,7 +447,31 @@ static inline uint8_t capturewait_grab_mash_active_peek(const MslBatch* batch,
     return 0u;
   }
 
-  const uint16_t buttons = batch->state.input_buttons[idx];
+  uint16_t buttons = batch->state.input_buttons_pressed[idx];
+  if ((buttons & (uint16_t)MSL_BUTTON_Z) != 0u) {
+    buttons = (uint16_t)(buttons | (uint16_t)MSL_BUTTON_A);
+  }
+  {
+    const uint16_t cur_buttons = batch->state.input_buttons[idx];
+    const uint16_t prev_buttons = batch->state.prev_input_buttons[idx];
+    const float cur_trig = msl_trigger_unit_from_input(cur_buttons, batch->state.input_l[idx],
+                                                       batch->state.input_r[idx]);
+    const float prev_trig = msl_trigger_unit_from_input(
+        prev_buttons, batch->state.prev_input_l[idx], batch->state.prev_input_r[idx]);
+    const uint8_t lr_now =
+        (((cur_buttons & (uint16_t)(MSL_BUTTON_L | MSL_BUTTON_R | MSL_BUTTON_Z)) != 0u) ||
+         cur_trig > c->trigger_deadzone)
+            ? 1u
+            : 0u;
+    const uint8_t lr_prev =
+        (((prev_buttons & (uint16_t)(MSL_BUTTON_L | MSL_BUTTON_R | MSL_BUTTON_Z)) != 0u) ||
+         prev_trig > c->trigger_deadzone)
+            ? 1u
+            : 0u;
+    if (lr_now != 0u && lr_prev == 0u) {
+      buttons = (uint16_t)(buttons | (uint16_t)MSL_BUTTON_L);
+    }
+  }
   uint8_t result = ((buttons & (uint16_t)(MSL_BUTTON_A | MSL_BUTTON_B | MSL_BUTTON_X |
                                           MSL_BUTTON_Y | MSL_BUTTON_L | MSL_BUTTON_R)) != 0u)
                        ? 1u
@@ -452,37 +501,7 @@ static inline uint8_t capturewait_grab_mash_active_peek(const MslBatch* batch,
 
 static inline uint8_t capturewait_first_steady_extra_tick_active_post_input(
     const MslBatch* batch, const MslCommonParams* c, size_t idx) {
-  if (batch == NULL || c == NULL) {
-    return 0u;
-  }
-
-  const uint16_t buttons =
-      (uint16_t)(batch->state.input_buttons[idx] | batch->state.prev_input_buttons[idx]);
-  uint8_t result = ((buttons & (uint16_t)(MSL_BUTTON_A | MSL_BUTTON_B | MSL_BUTTON_X |
-                                          MSL_BUTTON_Y | MSL_BUTTON_L | MSL_BUTTON_R)) != 0u)
-                       ? 1u
-                       : 0u;
-  const float stick_x =
-      apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]), c->lstick_deadzone_x);
-  const float stick_y =
-      apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
-  int8_t next_x = batch->state.grab_mash_stick_x_sign[idx];
-  int8_t next_y = batch->state.grab_mash_stick_y_sign[idx];
-  if (stick_x < -c->grab_mash_stick_threshold) {
-    next_x = -1;
-  } else if (stick_x > c->grab_mash_stick_threshold) {
-    next_x = 1;
-  }
-  if (stick_y < -c->grab_mash_stick_threshold) {
-    next_y = -1;
-  } else if (stick_y > c->grab_mash_stick_threshold) {
-    next_y = 1;
-  }
-  if (batch->state.grab_mash_stick_x_sign[idx] != next_x ||
-      batch->state.grab_mash_stick_y_sign[idx] != next_y) {
-    result = 1u;
-  }
-  return result;
+  return capturewait_grab_mash_active_peek(batch, c, idx);
 }
 
 static inline uint8_t capturewait_is_first_steady_row(const MslBatch* batch, size_t idx) {
@@ -500,6 +519,68 @@ static inline uint8_t capturewait_is_first_steady_row(const MslBatch* batch, siz
              : 0u;
 }
 
+static inline uint8_t capturewait_is_first_steady_lifetime_row(const MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  const uint16_t va = batch->state.action_id[idx];
+  if (va != (uint16_t)MSL_ACT_CAPTURE_WAIT_HI && va != (uint16_t)MSL_ACT_CAPTURE_WAIT_LW) {
+    return 0u;
+  }
+  if (batch->state.prev_action_id[idx] != va || batch->state.prev_action_frame[idx] != 1) {
+    return 0u;
+  }
+  const uint16_t seed_prev = batch->state.seed_prev_action_id[idx];
+  if (seed_prev == va && batch->state.seed_prev_action_frame[idx] == 0) {
+    return 1u;
+  }
+  if (va == (uint16_t)MSL_ACT_CAPTURE_WAIT_LW && seed_prev == (uint16_t)MSL_ACT_CAPTURE_PULLED_LW) {
+    return 1u;
+  }
+  if (va == (uint16_t)MSL_ACT_CAPTURE_WAIT_HI && seed_prev == (uint16_t)MSL_ACT_CAPTURE_PULLED_HI) {
+    return 1u;
+  }
+  return 0u;
+}
+
+static inline uint8_t capturewait_first_steady_entry_mash_latch(const MslBatch* batch,
+                                                                const MslCommonParams* c,
+                                                                size_t idx) {
+  if (batch == NULL || c == NULL || capturewait_is_first_steady_lifetime_row(batch, idx) == 0u ||
+      batch->state.capture_wait_anim_rate_timer[idx] != 0.0f) {
+    return 0u;
+  }
+  if (batch->state.capture_wait_counter[idx] > 2.0f) {
+    return 0u;
+  }
+
+  const uint16_t held_or_recent =
+      (uint16_t)(batch->state.input_buttons[idx] | batch->state.prev_input_buttons[idx] |
+                 batch->state.input_buttons_pressed[idx]);
+  if ((held_or_recent & (uint16_t)(MSL_BUTTON_A | MSL_BUTTON_B | MSL_BUTTON_X | MSL_BUTTON_Y)) !=
+      0u) {
+    return 1u;
+  }
+
+  const float stick_x =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]), c->lstick_deadzone_x);
+  const float stick_y =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
+  // ftCommon_InitGrab resets x1A50/x1A51 before the CapturePulled -> CaptureWait handoff, and
+  // mv.co.capturewait.x0 is still in its first CaptureWait_Anim lifetime interval here. This check
+  // runs after the normal pre-input CaptureWait_Anim callback, so seed rows with x0==0/1 are
+  // observed as x0==1/2. Slippi seed rows can only expose the generic post-frame sign latch, so
+  // first-steady CaptureWait rows whose active entry latch would have changed from zero need this
+  // local source reconstruction.
+  // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_InitGrab,ftCommon_GrabMash}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_CaptureWaitHi_Anim
+  if (stick_x < -c->grab_mash_stick_threshold || stick_x > c->grab_mash_stick_threshold ||
+      stick_y < -c->grab_mash_stick_threshold || stick_y > c->grab_mash_stick_threshold) {
+    return 1u;
+  }
+  return 0u;
+}
+
 static inline uint8_t capturewait_should_apply_first_steady_extra_tick(const MslBatch* batch,
                                                                        const MslCommonParams* c,
                                                                        int owner_p, int victim_p,
@@ -507,32 +588,35 @@ static inline uint8_t capturewait_should_apply_first_steady_extra_tick(const Msl
   if (batch == NULL || c == NULL || victim_p < 0) {
     return 0u;
   }
-  const uint16_t held_or_carried =
-      (uint16_t)(batch->state.input_buttons[vidx] | batch->state.prev_input_buttons[vidx]);
   const uint16_t victim_action = batch->state.action_id[vidx];
   const uint16_t victim_seed_prev = batch->state.seed_prev_action_id[vidx];
-  const uint8_t held_buttons_active =
-      ((held_or_carried & (uint16_t)(MSL_BUTTON_A | MSL_BUTTON_B | MSL_BUTTON_X | MSL_BUTTON_Y |
-                                     MSL_BUTTON_L | MSL_BUTTON_R)) != 0u)
-          ? 1u
-          : 0u;
   const uint8_t mash_active =
-      (held_buttons_active != 0u ||
-       capturewait_first_steady_extra_tick_active_post_input(batch, c, vidx) != 0u)
+      (capturewait_first_steady_extra_tick_active_post_input(batch, c, vidx) != 0u ||
+       capturewait_first_steady_entry_mash_latch(batch, c, vidx) != 0u)
           ? 1u
           : 0u;
 
   if (victim_p > owner_p) {
-    const uint8_t owner_earlier_callback_shape =
-        ((batch->state.prev_action_id[oidx] == (uint16_t)MSL_ACT_CATCH_WAIT &&
-          batch->state.prev_action_frame[oidx] == 0) ||
-         (batch->state.prev_action_id[oidx] == (uint16_t)MSL_ACT_CATCH_ATTACK &&
-          batch->state.prev_action_frame[oidx] == 0 &&
-          batch->state.action_id[oidx] == (uint16_t)MSL_ACT_CATCH_ATTACK &&
-          batch->state.action_frame[oidx] == 1))
+    const uint8_t owner_earlier_catchattack_shape =
+        (batch->state.action_id[oidx] == (uint16_t)MSL_ACT_CATCH_ATTACK &&
+         batch->state.action_frame[oidx] == 1)
             ? 1u
             : 0u;
-    return (owner_earlier_callback_shape != 0u &&
+    const uint8_t owner_earlier_catchwait_shape =
+        (batch->state.prev_action_id[oidx] == (uint16_t)MSL_ACT_CATCH_WAIT &&
+         batch->state.prev_action_frame[oidx] == 0)
+            ? 1u
+            : 0u;
+    // Proc-order owner: when an earlier-slot grab owner has already advanced first-steady
+    // CatchAttack before the later-slot victim's first CaptureWait frame, the victim receives the
+    // same owner-family extra timeline tick even without a fresh ftCommon_GrabMash producer.
+    // Plain CatchWait first-steady owner rows do not have this extra owner tick unless the
+    // CaptureWait mash predicate below is active.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+    //   ftCo_CatchAttack_Anim,ftCo_CaptureWaitHi_Anim}
+    return ((owner_earlier_catchattack_shape != 0u ||
+             (owner_earlier_catchwait_shape != 0u &&
+              (mash_active != 0u || victim_action == (uint16_t)MSL_ACT_CAPTURE_WAIT_HI))) &&
             action_is_catch_pull_state(batch->state.seed_prev_action_id[oidx]) != 0u &&
             (victim_action == (uint16_t)MSL_ACT_CAPTURE_WAIT_LW ||
              victim_action == (uint16_t)MSL_ACT_CAPTURE_WAIT_HI) &&
@@ -544,8 +628,7 @@ static inline uint8_t capturewait_should_apply_first_steady_extra_tick(const Msl
                victim_seed_prev == (uint16_t)MSL_ACT_CAPTURE_WAIT_HI ||
                victim_seed_prev == (uint16_t)MSL_ACT_CAPTURE_PULLED_HI)) ||
              (victim_action == (uint16_t)MSL_ACT_CAPTURE_WAIT_HI &&
-              victim_seed_prev == (uint16_t)MSL_ACT_CAPTURE_PULLED_HI)) &&
-            mash_active != 0u)
+              victim_seed_prev == (uint16_t)MSL_ACT_CAPTURE_PULLED_HI)))
                ? 1u
                : 0u;
   }
@@ -1278,6 +1361,11 @@ void grab_flow_on_catch_connect(MslBatch* batch, int bi, int owner_p, int victim
     batch->state.capture_wait_anim_rate_timer[vidx] = 0.0f;
     batch->state.capture_wait_jump_latch[vidx] = 0u;
     batch->state.capture_breakout_pending[vidx] = 0u;
+    // Decomp: ftCommon_InitGrab clears the grab-mash sign latches at capture attach entry. The
+    // CaptureWait Anim callback later owns the first sign change from this zero latch.
+    // refs/melee/src/melee/ft/ftcommon.c::ftCommon_InitGrab
+    batch->state.grab_mash_stick_x_sign[vidx] = 0;
+    batch->state.grab_mash_stick_y_sign[vidx] = 0;
   }
   // Catch-connect identity ownership:
   // - fn_800DA8E4 installs owner linkage pointers on the grabbed victim (`fp->x1A58/x1A5C`).

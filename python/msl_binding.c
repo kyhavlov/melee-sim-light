@@ -5319,6 +5319,10 @@ static PyMethodDef methods[] = {
     {"derive_colanim_internals", msl_derive_colanim_internals_py, METH_VARARGS,
      "derive_colanim_internals(action, frame, hitlag, hitstun, hurtbox, timers, action sets) -> "
      "(x198c, x1990, x1994, x2221_b0, rebirth_fall_x1994)"},
+    {"derive_capture_mash_buttons_pressed", msl_derive_capture_mash_buttons_pressed_py,
+     METH_VARARGS,
+     "derive_capture_mash_buttons_pressed(buttons, l, r, deadzone, a_mask, z_mask, lr_mask) -> "
+     "uint16[:, :]"},
     {"derive_capture_grab_hidden_post", msl_derive_capture_grab_hidden_post_py, METH_VARARGS,
      "derive_capture_grab_hidden_post(action, frame, owner, percent, buttons, sticks, frame_speed, "
      "mash signs, constants...) -> hidden capture lanes"},

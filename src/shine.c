@@ -4,15 +4,19 @@
 #include <stdint.h>
 
 #include "action_ids.h"
+#include "action.h"
 #include "anim_frame.h"
 #include "anim_table.h"
 #include "anim_timebase.h"
+#include "blaster.h"
 #include "buttons.h"
 #include "char_params.h"
 #include "common_params.h"
+#include "grab_flow.h"
 #include "input_axis.h"
 #include "jump_input.h"
 #include "hit_status_tables.h"
+#include "locomotion.h"
 #include "motion_state_owners.h"
 #include "move_tables.h"
 #include "special_msids.h"
@@ -925,30 +929,54 @@ void shine_update_pre_physics(MslBatch* batch) {
               // Decomp callback order:
               // - ftFx_SpecialLwEnd_Anim calls ftCommon_8007DB24 then ftCommon_8007D92C.
               // - grounded ftCommon_8007D92C resolves to Wait via ft_8008A2BC.
-              // - destination Wait_IASA can then admit Dash or backward-flick TurnSmash on the
-              //   same frame through ftCo_Dash_CheckInput, or ordinary Turn through
-              //   ftCo_Turn_CheckInput.
+              // - destination Wait_IASA runs command owners before guard, then falls through to the
+              //   jump/dash/squat/turn/walk tail.
               // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLwEnd_Anim
               // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007DB24,ftCommon_8007D92C}
-              // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_Wait.c,ftCo_Dash.c,ftCo_Turn.c}
+              // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_Wait.c,ftCo_Guard.c,ftCo_Dash.c,ftCo_Turn.c}
               enter_wait(batch, idx);
-              if (shine_is_dash_flick(c, stick_x, tilt_timer_x)) {
-                if ((stick_x * facing_dir) < 0.0f) {
-                  enter_turn_smash_from_wait_iasa(batch, idx, facing_dir);
-                } else {
-                  batch->state.action_id[idx] = (uint16_t)MSL_ACT_DASH;
-                  batch->state.animation_index[idx] = (uint32_t)MSL_SM_DASH;
-                  batch->state.dash_x4[idx] = 1u;
-                  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-                  // Decomp: ftCo_Dash_Enter calls ftAnim_8006EBA4 immediately after ChangeMotionState.
-                  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c:59-62
-                  msl_anim_timebase_tick_once(batch, idx);
-                  batch->state.tilt_timer_x[idx] = 0xFEu;
-                }
-              } else if (stick_wants_turn(c, batch->state.input_main_x[idx],
-                                          batch->state.facing[idx])) {
-                enter_turn_basic_from_wait_iasa(batch, idx, ch);
+              const uint16_t buttons = batch->state.input_buttons[idx];
+              const uint8_t speciallw_preempts_guard =
+                  ((buttons & (uint16_t)MSL_BUTTON_B) != 0u &&
+                   stick_wants_speciallw(c, batch->state.input_main_y[idx]) &&
+                   fabsf(stick_x) < c->special_stick_x_threshold_side)
+                      ? 1u
+                      : 0u;
+              if (grab_flow_try_enter_catch_from_iasa(batch, c, idx)) {
+                // Destination Wait_IASA reaches Catch before Guard.
+                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Catch.c::ftCo_Catch_CheckInput
+              } else if (blaster_try_enter_ground_from_wait_iasa(batch, c, idx)) {
+                // SpecialS/Hi/N are owned by the grounded B-special dispatcher.
+                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D68C0
+              } else if (speciallw_preempts_guard) {
+                // Reflector is the remaining grounded B-special slot and runs before GuardOn. Its
+                // source gate is x687, refreshed from held B+down before the callback phase.
+                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{ftCo_800D688C,ftCo_800D68C0}
+                // refs/melee/src/melee/ft/fighter.c::Fighter_UnkIncrementCounters_8006ABEC
+                // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLw_Enter
+                shine_enter_ground_start_from_iasa(batch, idx);
+              } else if (locomotion_grounded_a_attack_try_enter_from_wait_iasa(
+                             batch, c, idx, buttons_pressed, stick_x, stick_y, tilt_timer_x,
+                             tilt_timer_y, facing_dir)) {
+                // Grounded attacks, including c-stick smash rows, also beat destination guard.
+                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+              } else if (wait_iasa_try_enter_spotdodge_before_guard(batch, c, idx)) {
+                // Destination Wait_IASA runs ftCo_80099794 before ftCo_80091A4C guard entry.
+                // A held shield plus fresh down-stick row after SpecialLwEnd must therefore become
+                // EscapeN instead of a local GuardOn shortcut.
+                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::{
+                //   ftCo_80099794,ftCo_80099894,ftCo_800998EC}
+              } else {
+                guard_update_grounded(batch, c, idx, 1u);
               }
+              if (batch->state.action_id[idx] != (uint16_t)MSL_ACT_WAIT) {
+                break;
+              }
+              (void)locomotion_wait_iasa_locomotion_subset_try_enter(
+                  batch, c, ch, idx, buttons, buttons_pressed, stick_x, stick_y, tilt_timer_x,
+                  tilt_timer_y, facing_dir, (uint16_t)MSL_ACT_FX_SPECIAL_LW_END);
             }
             break;
           case MSL_ACT_FX_SPECIAL_AIR_LW_END:

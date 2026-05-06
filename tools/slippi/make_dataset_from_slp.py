@@ -2567,6 +2567,7 @@ def _main_impl(args) -> Dataset:
         derive_camera_target_world,
         derive_magnify_damage_counter_x1910,
         derive_rebirth_camera_anchor_y,
+        derive_capture_mash_buttons_pressed,
         derive_capture_grab_hidden_post,
         derive_grab_mash_stick_sign_post,
         derive_grab_owner_port_2p,
@@ -4850,6 +4851,16 @@ def _main_impl(args) -> Dataset:
         samples["seed_t"]["grab_mash_stick_x_sign"][:, slot] = mash_x[:-1]
         samples["seed_t"]["grab_mash_stick_y_sign"][:, slot] = mash_y[:-1]
 
+    capture_mash_buttons_pressed = derive_capture_mash_buttons_pressed(
+        buttons_u16_2d=pre_buttons,
+        l_trigger_u8_2d=pre_l,
+        r_trigger_u8_2d=pre_r,
+        trigger_deadzone=float(common["trigger_deadzone"]),
+        button_mask_a=button_mask_a,
+        button_mask_z=button_mask_z,
+        button_mask_lr=button_mask_lr,
+    )
+
     (
         phantom_damage_pending,
         phantom_damage_timer,
@@ -4880,7 +4891,7 @@ def _main_impl(args) -> Dataset:
                 action_frame_i16=post_action_frame[:, slot],
                 grab_owner_port_u8=grab_owner[:, slot],
                 percent_f32=post_percent_all[:, slot],
-                buttons_held_u16=pre_buttons[:, slot],
+                buttons_pressed_u16=capture_mash_buttons_pressed[:, slot],
                 stick_x_unit=pre_stick_x_unit_2d[:, slot],
                 stick_y_unit=pre_stick_y_unit_2d[:, slot],
                 frame_speed_mul_f32=frame_speed_mul_all[:, slot],

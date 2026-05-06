@@ -1153,6 +1153,44 @@ static inline uint8_t combat_guard_no_tilt_current_pose_gap(const MslBatch* batc
   return batch->state.guard_tilt_x8[d_idx] == tv.neutral_frame ? 1u : 0u;
 }
 
+static inline uint8_t combat_guard_tilt_body_hurt_z_uses_live_shield_bone(
+    const MslBatch* batch, size_t d_idx, uint8_t shield_active, uint8_t shield_seed_kind) {
+  if (batch == NULL || !shield_active || shield_seed_kind != 1u) {
+    return 0u;
+  }
+  if (batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_GUARD ||
+      batch->state.animation_index[d_idx] != UINT32_MAX || batch->state.action_frame[d_idx] >= 0) {
+    return 0u;
+  }
+  if (batch->state.hitlag[d_idx] != 0u || batch->state.hitstun[d_idx] != 0u ||
+      batch->state.shield_radius[d_idx] <= 0.0f) {
+    return 0u;
+  }
+  const float mag = batch->state.guard_tilt_x4[d_idx];
+  if (!(mag > FLT_EPSILON)) {
+    return 0u;
+  }
+  MslShieldTiltTableView tv;
+  if (msl_shield_tilt_table_view(batch->state.char_id[d_idx], &tv) != 0 || tv.xyz == NULL ||
+      tv.frame_count == 0u) {
+    return 0u;
+  }
+
+  // Guard tilt BODY live-depth bridge:
+  // - ftCo_80091E78 samples the angled Guard timeline when mv.co.guard.x4 is nonzero, then
+  //   ftCo_80091D58 updates the ShieldDesc bone before ftColl_80078C70 runs ShieldDesc and BODY.
+  // - Current SSANIM01 hurtcap refresh has only a settled no-submotion Guard fallback for
+  //   Slippi rows with animation_index=-1. For ShieldDesc-miss rows (seed kind 1), carry the
+  //   same live guard-bone depth used by the ShieldDesc table into lbColl_8000805C's BODY
+  //   hurtcap endpoints. This keeps the bridge tied to source-owned guard tilt state and to
+  //   replay-proven ShieldDesc miss ownership, rather than flattening Guard hurtcaps broadly.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091E78,ftCo_80091D58}
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_8000805C}
+  // data/shields/{fox,falco}.bin::MSLSHLD1 steady Guard tilt table
+  return 1u;
+}
+
 static inline uint8_t combat_shield_active_action(uint16_t action_id) {
   switch (action_id) {
     case (uint16_t)MSL_ACT_GUARD_ON:
@@ -6951,7 +6989,6 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
             bz = batch->state.hurtcap_b_z[cap_i];
             cr = batch->state.hurtcap_radius[cap_i];
           }
-
           float lbcoll_overlap_amount = 0.0f;
           uint8_t lbcoll_overlap_valid = 0u;
           uint8_t lbcoll_overlap_evaluated = 0u;
@@ -6970,6 +7007,30 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           const uint8_t baseline_overlaps =
               combat_sphere_capsule_intersects(hx, hy, hz, hr, ax, ay, az, bx, by, bz, cr, NULL);
           uint8_t overlaps = lbcoll_overlap_evaluated ? lbcoll_overlap_valid : baseline_overlaps;
+          if (!overlaps && !use_guardreflect_body_fallback_caps &&
+              combat_guard_tilt_body_hurt_z_uses_live_shield_bone(batch, d_idx, shield_active,
+                                                                  shield_seed_kind)) {
+            const float guard_live_az = shz;
+            const float guard_live_bz = shz;
+            uint8_t guard_live_evaluated = 0u;
+            float guard_live_overlap_amount = 0.0f;
+            const uint8_t guard_live_overlap_valid =
+                combat_body_overlap_lbColl_80006E58_matrix_radius(
+                    batch, bi, attacker, hb_id, defender, (int)cap_id, hx, hy, hz, hr, ax, ay,
+                    guard_live_az, bx, by, guard_live_bz, &guard_live_overlap_amount,
+                    &guard_live_evaluated);
+            const uint8_t guard_live_baseline_overlaps = combat_sphere_capsule_intersects(
+                hx, hy, hz, hr, ax, ay, guard_live_az, bx, by, guard_live_bz, cr, NULL);
+            overlaps =
+                guard_live_evaluated ? guard_live_overlap_valid : guard_live_baseline_overlaps;
+            if (overlaps) {
+              az = guard_live_az;
+              bz = guard_live_bz;
+              lbcoll_overlap_valid = guard_live_evaluated ? guard_live_overlap_valid : overlaps;
+              lbcoll_overlap_evaluated = guard_live_evaluated;
+              lbcoll_overlap_amount = guard_live_overlap_amount;
+            }
+          }
           if (overlaps && combat_damageflylw_dynamic_high_part_rejects_body_contact(
                               batch, a_idx, d_idx, hb_id,
                               use_guardreflect_body_fallback_caps || defender_caps == NULL ||

@@ -110,6 +110,15 @@ def _floor_y_at(seg, x: float) -> float:
     return float(seg.y0) + (float(seg.y1) - float(seg.y0)) * t
 
 
+def _floor_normal(seg) -> tuple[float, float]:
+    dx = float(seg.x1) - float(seg.x0)
+    dy = float(seg.y1) - float(seg.y0)
+    nx = -dy
+    ny = dx
+    length = (nx * nx + ny * ny) ** 0.5
+    return nx / length, ny / length
+
+
 def _input_bytes() -> np.ndarray:
     import msl_binding
 
@@ -276,10 +285,18 @@ def test_fod_stage_lip_slope_to_flat_handoff_drops_to_current_floor_height() -> 
     assert int(out["on_ground"][0]) == 1
     assert int(out["ground_id"][0]) == 5
     assert float(out["pos_y"][0]) == pytest.approx(_floor_y_at(flat, x1) + 0.0001, abs=1e-5)
+    # Source ordering: Phys projects gr_vel through the starting floor normal, then Coll remaps the
+    # floor id/height after movement. The frame's self_vel therefore remains slope-tangent even
+    # though CollData.floor.index publishes the connected flat floor.
+    # refs/melee/src/melee/ft/ftcommon.c::ftCommon_ApplyGroundMovement
+    # refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+    nx, ny = _floor_normal(slope)
     assert float(out["speed_air_x_self"][0]) == pytest.approx(
-        float(out["speed_ground_x_self"][0]), abs=1e-4
+        ny * float(out["speed_ground_x_self"][0]), abs=1e-4
     )
-    assert float(out["speed_y_self"][0]) == pytest.approx(0.0, abs=1e-4)
+    assert float(out["speed_y_self"][0]) == pytest.approx(
+        -nx * float(out["speed_ground_x_self"][0]), abs=1e-4
+    )
 
 
 def test_fod_slope_corner_order_keeps_floor_owner_without_wall_or_ceiling() -> None:
