@@ -581,6 +581,12 @@ static int step_one_frame_core(MslBatch* batch, const uint8_t* prev_input_bytes,
   // refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009DD94
   // refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
   anim_pose_update_dynamic_state(batch);
+  // Guard/Shield animation owner:
+  // - ftCo_Guard_Anim calls ftCo_800925A4/ftCo_80091BC4 and ftCo_80091E78 before fighter
+  //   collision. Keep the pre-combat refresh scoped to the angled no-submotion Guard BODY owner;
+  //   the full ShieldDesc/state-flag refresh stays in its established post-hitlist slot below.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_Guard_Anim,ftCo_800925A4,ftCo_80091BC4,ftCo_80091E78}
+  shields_refresh_guard_tilt_body_owner(batch);
   if (run_combat) {
     // Fighter hitbox refresh needs the current-frame merged hurtbox state for no-damage contact
     // carry, but BODY/catch/item collision only consumes endpoint geometry when an item or opposing

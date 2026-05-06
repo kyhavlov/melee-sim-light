@@ -113,6 +113,116 @@ static inline float sanitize_lightshield_amount(float light) {
   return clamp01(light);
 }
 
+void shields_refresh_guard_tilt_body_owner(MslBatch* batch) {
+  if (batch == NULL) {
+    return;
+  }
+  const MslCommonParams* c = msl_common_params();
+  if (c == NULL) {
+    return;
+  }
+
+  const int num_players = (int)batch->config.num_players;
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    for (int p = 0; p < num_players; p++) {
+      const size_t idx = msl_idx_player(bi, p);
+      if (batch->state.action_id[idx] != (uint16_t)MSL_ACT_GUARD ||
+          batch->state.animation_index[idx] != UINT32_MAX || batch->state.action_frame[idx] >= 0 ||
+          batch->state.hitlag[idx] != 0u || batch->state.hitstun[idx] != 0u ||
+          (batch->state.pos_z[idx] <= 1.0e-6f && batch->state.pos_z[idx] >= -1.0e-6f) ||
+          batch->state.stocks[idx] == 0u || batch->state.shield_hp[idx] <= 0.0f ||
+          c->start_shield_health <= 0.0f) {
+        continue;
+      }
+
+      const MslCharParams* ca = msl_char_params(batch->state.char_id[idx]);
+      MslShieldTiltTableView tv;
+      if (ca == NULL || msl_shield_tilt_table_view(batch->state.char_id[idx], &tv) != 0 ||
+          tv.xyz == NULL || tv.frame_count == 0u) {
+        continue;
+      }
+
+      const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+      float stick_x_unit = (float)batch->state.input_main_x[idx] * (1.0f / 80.0f);
+      float stick_y_unit = (float)batch->state.input_main_y[idx] * (1.0f / 80.0f);
+      stick_x_unit = apply_deadzone_f32(stick_x_unit, c->lstick_deadzone_x);
+      stick_y_unit = apply_deadzone_f32(stick_y_unit, c->lstick_deadzone_y);
+      const uint8_t current_tilt_input = (stick_x_unit != 0.0f || stick_y_unit != 0.0f) ? 1u : 0u;
+      if (batch->state.guard_tilt_x4[idx] <= 0.0f ||
+          (batch->state.guard_tilt_x8[idx] == tv.neutral_frame && current_tilt_input == 0u)) {
+        continue;
+      }
+
+      const uint16_t neutral = tv.neutral_frame;
+      const uint16_t frame_max = (uint16_t)(tv.frame_count - 1u);
+      const float x = stick_x_unit * facing_dir;
+      const float y = stick_y_unit;
+      float rad = atan2f(y, x);
+      if (rad < 0.0f) {
+        rad += 2.0f * MSL_PI_F;
+      }
+      float deg = rad * (180.0f / MSL_PI_F);
+      if (deg < 0.0f) {
+        deg = 0.0f;
+      }
+      if (deg > 359.0f) {
+        deg = 359.0f;
+      }
+
+      const float offset = (float)batch->state.guard_tilt_x8[idx] - (float)neutral;
+      const float delta = normalize_angle_180(deg - offset);
+      const float lerp = c->guard_stick_lerp_x44c;
+      const float next_offset = normalize_angle_0(delta * lerp + offset);
+      const float next_x8_f = (float)neutral + next_offset;
+      batch->state.guard_tilt_x8[idx] = clamp_u16((uint16_t)next_x8_f, 0, frame_max);
+
+      float mag = sqrtf(stick_x_unit * stick_x_unit + stick_y_unit * stick_y_unit);
+      if (mag > 1.0f) {
+        mag = 1.0f;
+      }
+      if (mag < 0.0f) {
+        mag = 0.0f;
+      }
+      const float x4 = batch->state.guard_tilt_x4[idx];
+      batch->state.guard_tilt_x4[idx] = (lerp * (mag - x4)) + x4;
+
+      const uint16_t f = clamp_u16(batch->state.guard_tilt_x8[idx], 0, frame_max);
+      const float tilt_mag = clamp01(batch->state.guard_tilt_x4[idx]);
+      const size_t n_i = (size_t)neutral * 3u;
+      const size_t f_i = (size_t)f * 3u;
+      const float dx = tv.xyz[n_i + 0] + tilt_mag * (tv.xyz[f_i + 0] - tv.xyz[n_i + 0]);
+      const float dy = tv.xyz[n_i + 1] + tilt_mag * (tv.xyz[f_i + 1] - tv.xyz[n_i + 1]);
+      const float dz = tv.xyz[n_i + 2] + tilt_mag * (tv.xyz[f_i + 2] - tv.xyz[n_i + 2]);
+      const float scale_y = batch->state.fighter_scale_y[idx];
+      const float lx = dx * scale_y;
+      const float ly = dy * scale_y;
+      const float lz = dz * scale_y;
+      batch->state.shield_x[idx] = batch->state.pos_x[idx] + facing_dir * lz;
+      batch->state.shield_y[idx] = batch->state.pos_y[idx] + ly;
+      batch->state.shield_z[idx] = batch->state.pos_z[idx] - facing_dir * lx;
+
+      float light = sanitize_lightshield_amount(batch->state.lightshield_amount[idx]);
+      const float denom = 1.0f - c->trigger_deadzone;
+      const float trig = trigger_unit_from_input(
+          batch->state.input_buttons[idx], batch->state.input_l[idx], batch->state.input_r[idx]);
+      if (denom > 0.0f) {
+        const float candidate = (trig - c->trigger_deadzone) / denom;
+        if (candidate >= 0.0f) {
+          light = clamp01(candidate);
+        }
+      }
+      batch->state.lightshield_amount[idx] = light;
+      const float hp_ratio = clamp01(batch->state.shield_hp[idx] / c->start_shield_health);
+      const float light_scale =
+          (light * (c->shield_size_lightshield_max - c->shield_size_lightshield_min)) +
+          c->shield_size_lightshield_min;
+      const float scale =
+          ((1.0f - c->shield_size_min_scale) * hp_ratio * light_scale) + c->shield_size_min_scale;
+      batch->state.shield_radius[idx] = scale * ca->initial_shield_size * scale_y;
+    }
+  }
+}
+
 void shields_refresh(MslBatch* batch) {
   if (batch == NULL) {
     return;

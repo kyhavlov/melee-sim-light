@@ -1153,41 +1153,74 @@ static inline uint8_t combat_guard_no_tilt_current_pose_gap(const MslBatch* batc
   return batch->state.guard_tilt_x8[d_idx] == tv.neutral_frame ? 1u : 0u;
 }
 
-static inline uint8_t combat_guard_tilt_body_hurt_z_uses_live_shield_bone(
-    const MslBatch* batch, size_t d_idx, uint8_t shield_active, uint8_t shield_seed_kind) {
-  if (batch == NULL || !shield_active || shield_seed_kind != 1u) {
+static inline uint8_t combat_guard_tilt_live_body_pose_owner(const MslBatch* batch, size_t d_idx) {
+  if (batch == NULL) {
     return 0u;
   }
   if (batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_GUARD ||
       batch->state.animation_index[d_idx] != UINT32_MAX || batch->state.action_frame[d_idx] >= 0) {
     return 0u;
   }
-  if (batch->state.hitlag[d_idx] != 0u || batch->state.hitstun[d_idx] != 0u ||
-      batch->state.shield_radius[d_idx] <= 0.0f) {
+  if (batch->state.hitlag[d_idx] != 0u || batch->state.hitstun[d_idx] != 0u) {
     return 0u;
   }
-  const float mag = batch->state.guard_tilt_x4[d_idx];
-  if (!(mag > FLT_EPSILON)) {
+  if (batch->state.pos_z[d_idx] <= 1.0e-6f && batch->state.pos_z[d_idx] >= -1.0e-6f) {
     return 0u;
   }
+  const MslCommonParams* c = msl_common_params();
+  const float stick_x = apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[d_idx]),
+                                       c != NULL ? c->lstick_deadzone_x : 0.0f);
+  const float stick_y = apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[d_idx]),
+                                       c != NULL ? c->lstick_deadzone_y : 0.0f);
+  const uint8_t current_tilt_input = (stick_x != 0.0f || stick_y != 0.0f) ? 1u : 0u;
   MslShieldTiltTableView tv;
   if (msl_shield_tilt_table_view(batch->state.char_id[d_idx], &tv) != 0 || tv.xyz == NULL ||
-      tv.frame_count == 0u) {
+      tv.frame_count == 0u ||
+      (batch->state.guard_tilt_x8[d_idx] == tv.neutral_frame && current_tilt_input == 0u)) {
     return 0u;
   }
+  return (batch->state.guard_tilt_x4[d_idx] > 0.0f) ? 1u : 0u;
+}
 
-  // Guard tilt BODY live-depth bridge:
-  // - ftCo_80091E78 samples the angled Guard timeline when mv.co.guard.x4 is nonzero, then
-  //   ftCo_80091D58 updates the ShieldDesc bone before ftColl_80078C70 runs ShieldDesc and BODY.
-  // - Current SSANIM01 hurtcap refresh has only a settled no-submotion Guard fallback for
-  //   Slippi rows with animation_index=-1. For ShieldDesc-miss rows (seed kind 1), carry the
-  //   same live guard-bone depth used by the ShieldDesc table into lbColl_8000805C's BODY
-  //   hurtcap endpoints. This keeps the bridge tied to source-owned guard tilt state and to
-  //   replay-proven ShieldDesc miss ownership, rather than flattening Guard hurtcaps broadly.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091E78,ftCo_80091D58}
-  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
-  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_8000805C}
-  // data/shields/{fox,falco}.bin::MSLSHLD1 steady Guard tilt table
+static inline uint8_t combat_apply_guard_tilt_live_body_matrix(const MslBatch* batch, size_t d_idx,
+                                                               uint8_t char_id, uint16_t part_id,
+                                                               float io_m[12]) {
+  if (batch == NULL || io_m == NULL || !combat_guard_tilt_live_body_pose_owner(batch, d_idx)) {
+    return 0u;
+  }
+  float mag = batch->state.guard_tilt_x4[d_idx];
+  if (mag > 1.0f) {
+    mag = 1.0f;
+  }
+  uint16_t guard_tilt_frame = batch->state.guard_tilt_x8[d_idx];
+  const float guard_end = msl_anim_end_frame(char_id, (uint16_t)MSL_SM_GUARD);
+  if (guard_end > 0.0f && (float)guard_tilt_frame > guard_end) {
+    guard_tilt_frame = msl_anim_frame_floor_u16(guard_end);
+  }
+  float target_m[12];
+  if (anim_pose_get_collision_matrix_f32(batch, d_idx, (uint16_t)MSL_SM_GUARD,
+                                         (float)guard_tilt_frame, part_id, target_m) != 0) {
+    return 0u;
+  }
+  // Source owner: ftCo_Guard_Anim -> ftCo_80091E78 samples the Guard tilt AObj/JObj timeline at
+  // mv.co.guard.x8 and blends it into the live JObj chain by mv.co.guard.x4 before BODY
+  // narrowphase. Hurtcap endpoints are refreshed in hurtboxes.c from the same extracted matrices;
+  // the lbColl_80006E58 matrix-radius path consumes the matching bone matrix here.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_Guard_Anim,ftCo_80091E78}
+  // refs/melee/src/melee/ft/ftanim.c::{ftAnim_8006F4C8,ftAnim_80070710,ftAnim_80070108,ftAnim_8006FF74}
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+  for (int i = 0; i < 12; i++) {
+    io_m[i] += mag * (target_m[i] - io_m[i]);
+  }
+  return 1u;
+}
+
+static inline uint8_t combat_guard_tilt_live_body_z_owner_applies(const MslBatch* batch,
+                                                                  size_t d_idx,
+                                                                  uint8_t shield_active) {
+  if (batch == NULL || !shield_active || !combat_guard_tilt_live_body_pose_owner(batch, d_idx)) {
+    return 0u;
+  }
   return 1u;
 }
 
@@ -1313,6 +1346,7 @@ static inline uint8_t combat_body_overlap_lbColl_80006E58_matrix_radius(
                                          m) != 0) {
     return 0u;
   }
+  (void)combat_apply_guard_tilt_live_body_matrix(batch, d_idx, char_id, cap->bone_part_id, m);
   if (out_evaluated) {
     *out_evaluated = 1u;
   }
@@ -7006,10 +7040,26 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
           const uint8_t baseline_overlaps =
               combat_sphere_capsule_intersects(hx, hy, hz, hr, ax, ay, az, bx, by, bz, cr, NULL);
-          uint8_t overlaps = lbcoll_overlap_evaluated ? lbcoll_overlap_valid : baseline_overlaps;
+          // The Guard-tilt matrix owner is currently reconstructed from extracted world matrices,
+          // while HSD blends local JObj SRT state before matrix setup. Use that reconstructed matrix
+          // as a positive owner/supplement for no-submotion tilted Guard, but do not let it reject
+          // an already-valid BODY capsule admission.
+          const uint8_t guard_tilt_live_body_pose =
+              combat_guard_tilt_live_body_pose_owner(batch, d_idx);
+          uint8_t overlaps = (lbcoll_overlap_evaluated && guard_tilt_live_body_pose == 0u)
+                                 ? lbcoll_overlap_valid
+                                 : (uint8_t)(baseline_overlaps || lbcoll_overlap_valid);
           if (!overlaps && !use_guardreflect_body_fallback_caps &&
-              combat_guard_tilt_body_hurt_z_uses_live_shield_bone(batch, d_idx, shield_active,
-                                                                  shield_seed_kind)) {
+              combat_guard_tilt_live_body_z_owner_applies(batch, d_idx, shield_active)) {
+            // Source owner: lbColl_8000805C recomputes hurtcap endpoints through lb_8000B1CC from
+            // the same live angled-Guard JObj/AObj chain used by ShieldDesc. The simulator lacks a
+            // serialized `x34_scale.z` lane for ftCommon_8007F804's optional transform path, so
+            // no-transform no-submotion Guard rows consume the live guard collision depth already
+            // produced by the pre-combat ShieldDesc/JObj owner. This is not keyed by replay
+            // ShieldDesc miss provenance.
+            // refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C
+            // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+            // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007F804
             const float guard_live_az = shz;
             const float guard_live_bz = shz;
             uint8_t guard_live_evaluated = 0u;

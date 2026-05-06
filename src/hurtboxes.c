@@ -11,11 +11,13 @@
 #include "hit_status_tables.h"
 #include "hurtbox_modes_tables.h"
 #include "hurtcaps_tables.h"
+#include "input_axis.h"
 #include "items.h"
 #include "motion_state_owners.h"
 #include "msl_math.h"
 #include "mtx34.h"
 #include "move_tables.h"
+#include "shield_tilt_table.h"
 #include "specialhi_pose.h"
 
 enum { MSL_CHAR_FOX = 1, MSL_CHAR_FALCO = 22 };
@@ -109,6 +111,36 @@ static inline uint8_t hurtboxes_runtime_specialhi_pose_owner(uint8_t char_id, ui
 
 static inline uint8_t hurtboxes_float_aobj_pose_owner(uint16_t action_id) {
   return msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_LANDING_AIR);
+}
+
+static inline uint8_t hurtboxes_guard_tilt_live_body_pose_owner(const MslBatch* batch, size_t idx,
+                                                                uint16_t pose_msid) {
+  if (batch == NULL || pose_msid != (uint16_t)MSL_SM_GUARD) {
+    return 0u;
+  }
+  if (batch->state.action_id[idx] != (uint16_t)MSL_ACT_GUARD ||
+      batch->state.animation_index[idx] != UINT32_MAX || batch->state.action_frame[idx] >= 0) {
+    return 0u;
+  }
+  if (batch->state.hitlag[idx] != 0u || batch->state.hitstun[idx] != 0u) {
+    return 0u;
+  }
+  if (batch->state.pos_z[idx] <= 1.0e-6f && batch->state.pos_z[idx] >= -1.0e-6f) {
+    return 0u;
+  }
+  const MslCommonParams* c = msl_common_params();
+  const float stick_x = apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]),
+                                       c != NULL ? c->lstick_deadzone_x : 0.0f);
+  const float stick_y = apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]),
+                                       c != NULL ? c->lstick_deadzone_y : 0.0f);
+  const uint8_t current_tilt_input = (stick_x != 0.0f || stick_y != 0.0f) ? 1u : 0u;
+  MslShieldTiltTableView tv;
+  if (msl_shield_tilt_table_view(batch->state.char_id[idx], &tv) != 0 || tv.xyz == NULL ||
+      tv.frame_count == 0u ||
+      (batch->state.guard_tilt_x8[idx] == tv.neutral_frame && current_tilt_input == 0u)) {
+    return 0u;
+  }
+  return (batch->state.guard_tilt_x4[idx] > 0.0f) ? 1u : 0u;
 }
 
 static inline uint8_t hurtboxes_side_special_end_uses_pre_anim_collision_pose(uint8_t char_id,
@@ -897,6 +929,29 @@ static void hurtboxes_refresh_impl(MslBatch* batch, uint8_t geometry_mode) {
           hurtboxes_float_aobj_pose_owner(action_id) ? anim_frame_f32 : (float)pose_frame;
       (void)anim_pose_get_collision_matrices_f32(batch, idx, pose_msid, pose_sample_frame,
                                                  cap_part_ids, cap_count, cap_mats, cap_mat_ok);
+      float guard_tilt_mats[MSL_MAX_HURTCAPS * 12u];
+      uint8_t guard_tilt_mat_ok[MSL_MAX_HURTCAPS];
+      uint8_t use_guard_tilt_body_pose = 0u;
+      float guard_tilt_mag = 0.0f;
+      for (uint16_t ci = 0; ci < cap_count; ci++) {
+        guard_tilt_mat_ok[ci] = 0u;
+      }
+      if (hurtboxes_guard_tilt_live_body_pose_owner(batch, idx, pose_msid)) {
+        guard_tilt_mag = batch->state.guard_tilt_x4[idx];
+        if (guard_tilt_mag > 1.0f) {
+          guard_tilt_mag = 1.0f;
+        }
+        uint16_t guard_tilt_frame = batch->state.guard_tilt_x8[idx];
+        const float guard_end = msl_anim_end_frame(char_id, (uint16_t)MSL_SM_GUARD);
+        if (guard_end > 0.0f && (float)guard_tilt_frame > guard_end) {
+          guard_tilt_frame = msl_anim_frame_floor_u16(guard_end);
+        }
+        if (anim_pose_get_collision_matrices_f32(batch, idx, (uint16_t)MSL_SM_GUARD,
+                                                 (float)guard_tilt_frame, cap_part_ids, cap_count,
+                                                 guard_tilt_mats, guard_tilt_mat_ok) == 0) {
+          use_guard_tilt_body_pose = 1u;
+        }
+      }
       for (uint16_t ci = 0; ci < cap_count; ci++) {
         const size_t hi = idx_hurtcap(bi, p, (int)ci);
         batch->state.hurtcap_is_grabbable[hi] = caps[ci].is_grabbable ? 1 : 0;
@@ -914,6 +969,31 @@ static void hurtboxes_refresh_impl(MslBatch* batch, uint8_t geometry_mode) {
         float bx = 0.0f, by = 0.0f, bz = 0.0f;
         msl_mtx34_mul_point(m, caps[ci].a_offset, &ax, &ay, &az);
         msl_mtx34_mul_point(m, caps[ci].b_offset, &bx, &by, &bz);
+
+        if (use_guard_tilt_body_pose != 0u && guard_tilt_mat_ok[ci] != 0u) {
+          float tax = 0.0f, tay = 0.0f, taz = 0.0f;
+          float tbx = 0.0f, tby = 0.0f, tbz = 0.0f;
+          const float* tm = &guard_tilt_mats[(size_t)ci * 12u];
+          msl_mtx34_mul_point(tm, caps[ci].a_offset, &tax, &tay, &taz);
+          msl_mtx34_mul_point(tm, caps[ci].b_offset, &tbx, &tby, &tbz);
+
+          // Source owner: steady Guard_Anim calls ftCo_80091E78(..., 1). With nonzero
+          // mv.co.guard.x4, that path samples the Guard tilt AObj at mv.co.guard.x8 and blends it
+          // into the live JObj chain before ftColl_80078C70/lbColl_8000805C sample BODY
+          // hurtcaps through lb_8000B1CC. These matrices come from the same extracted SSANIMT1 /
+          // SSANIM01 Guard timeline used by the ShieldDesc guard-bone table; BODY no longer uses
+          // a ShieldDesc-miss depth fallback in combat selection.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_Guard_Anim,ftCo_80091E78}
+          // refs/melee/src/melee/ft/ftanim.c::{ftAnim_8006F4C8,ftAnim_80070710,ftAnim_80070108,ftAnim_8006FF74}
+          // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+          // refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C
+          ax += guard_tilt_mag * (tax - ax);
+          ay += guard_tilt_mag * (tay - ay);
+          az += guard_tilt_mag * (taz - az);
+          bx += guard_tilt_mag * (tbx - bx);
+          by += guard_tilt_mag * (tby - by);
+          bz += guard_tilt_mag * (tbz - bz);
+        }
 
         ax *= model_scale;
         ay *= model_scale;

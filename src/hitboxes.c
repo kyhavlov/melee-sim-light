@@ -213,7 +213,8 @@ static inline uint8_t hitboxes_seed_bridge_create_edge_guard_admission_dense_app
   return 0u;
 }
 
-static inline uint8_t hitboxes_seed_bridge_create_edge_guardon_shield_miss_dense_applies(
+static inline uint8_t
+hitboxes_teacher_seed_reconstruct_create_edge_guardon_shielddesc_miss_dense_applies(
     const MslBatch* batch, int bi, int attacker, int hb_id, uint8_t hit_group) {
   if (batch == NULL || bi < 0 || attacker < 0 || attacker >= (int)MSL_MAX_PLAYERS || hb_id < 0 ||
       hb_id >= (int)MSL_MAX_HITBOXES || hit_group >= (uint8_t)MSL_HITLIST_GROUPS) {
@@ -259,13 +260,14 @@ static inline uint8_t hitboxes_seed_bridge_create_edge_guardon_shield_miss_dense
                                                    batch->state.action_id[v_idx])) {
       continue;
     }
-    // Create-edge ShieldDesc miss bridge:
+    // Teacher-forced create-edge HitCapsule seed reconstruction:
     // - ftAction_8007121C creates/copies HitCapsule victims_1 before ftColl_80078C70.
     // - ftColl_80078C70 then gates BODY and shield through lbColl_8000ACFC before testing
     //   ShieldDesc. A replay-proven ShieldDesc miss (`kind=1`) does not imply the HitCapsule
     //   victim list was empty; if the dense group seed still names the current GuardOn object,
-    //   materialize that hidden victims_1 latch on the create edge so BODY fallthrough remains
-    //   suppressed by source-owned hitlist provenance.
+    //   reconstruct that hidden victims_1 latch on the create edge so BODY fallthrough remains
+    //   suppressed by source-owned hitlist provenance. This is reseed-only reconstruction of
+    //   ftColl_800768A0 / HitCapsule state, not a runtime collision bridge.
     // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
     // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
     // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80007BCC}
@@ -1418,8 +1420,9 @@ void hitboxes_refresh(MslBatch* batch) {
                                                                                  new_g)) {
                 hitlist_seed_init_fighter_hitbox_from_group_allow_stale_iid(batch, bi, p, (int)hb,
                                                                             new_g);
-              } else if (hitboxes_seed_bridge_create_edge_guardon_shield_miss_dense_applies(
-                             batch, bi, p, (int)hb, new_g)) {
+              } else if (
+                  hitboxes_teacher_seed_reconstruct_create_edge_guardon_shielddesc_miss_dense_applies(
+                      batch, bi, p, (int)hb, new_g)) {
                 hitlist_seed_init_fighter_hitbox_from_group_allow_stale_iid(batch, bi, p, (int)hb,
                                                                             new_g);
               } else if (ev->frame == first_create_frame[hb] &&

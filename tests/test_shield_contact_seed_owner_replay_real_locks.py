@@ -112,6 +112,46 @@ def _run_rollout_window_with_seed_mutator(
     return samples["ref_t1"][stop], out
 
 
+def _run_one_step_row_with_mutators(dataset_path: Path, record: int, seed_mutator, input_mutator):
+    import msl_binding
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    row = samples[record : record + 1]
+    seed_t = row["seed_t"].copy()
+    prev_input_t = row["prev_input_t"].copy()
+    input_t = row["input_t"].copy()
+    if seed_mutator is not None:
+        seed_mutator(seed_t)
+    if input_mutator is not None:
+        input_mutator(prev_input_t, input_t)
+
+    seed_bytes = np.frombuffer(seed_t.tobytes(order="C"), dtype=np.uint8).copy().reshape(
+        1, seed_stride
+    )
+    prev_input_bytes = np.frombuffer(prev_input_t.tobytes(order="C"), dtype=np.uint8).copy().reshape(
+        1, input_stride
+    )
+    input_bytes = np.frombuffer(input_t.tobytes(order="C"), dtype=np.uint8).copy().reshape(
+        1, input_stride
+    )
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+    handle = msl_binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        msl_binding.reseed_seed(handle, seed_bytes)
+        msl_binding.step_input(handle, prev_input_bytes, input_bytes)
+        msl_binding.write_compare(handle, out_compare_bytes)
+    finally:
+        msl_binding.destroy(handle)
+
+    return seed_t[0], samples["ref_t1"][record], out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0]
+
+
 @pytest.mark.integration
 def test_guard_shielddesc_seed_accepts_replay_proven_guardsetoff_contact() -> None:
     # Replay-visible GuardSetOff + attacker/defender hitlag proves the hidden
@@ -236,14 +276,14 @@ def test_guard_shielddesc_miss_without_victim_latch_can_fall_through_to_body() -
 
 
 @pytest.mark.integration
-def test_guard_tilt_shielddesc_miss_uses_live_body_depth_cheery() -> None:
-    # Guard tilt BODY depth owner:
+def test_guard_tilt_shielddesc_miss_uses_live_hurtcap_pose_cheery() -> None:
+    # Guard tilt BODY pose owner:
     # - ftCo_80091E78 applies nonzero mv.co.guard.x4 angled Guard pose before ftColl_80078C70.
     # - The replay-hidden ShieldDesc seed proves the shield descriptor missed, so the same live
     #   guard pose must feed BODY lbColl_8000805C instead of leaving frozen no-submotion hurtcap
-    #   depth from the fallback Guard frame.
-    # - Clearing the ShieldDesc-miss lane must remove this bridge; this is not a broad Guard BODY
-    #   flatten or replay-label action fit.
+    #   endpoints/matrix depth from the fallback Guard frame.
+    # - Clearing mv.co.guard.x4 removes the source live-pose owner; this is not a ShieldDesc-miss
+    #   bridge activation or replay-label action fit.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091E78,ftCo_80091D58}
     # refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
     # refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_8000805C}
@@ -271,11 +311,17 @@ def test_guard_tilt_shielddesc_miss_uses_live_body_depth_cheery() -> None:
         assert int(out[field][defender]) == int(ref[field][defender]), f"field={field}"
     assert float(out["percent"][defender]) == pytest.approx(float(ref["percent"][defender]))
 
-    def clear_shielddesc_miss(seed_t: np.ndarray) -> None:
-        seed_t["combat_shield_contact_hb_kind"][0, attacker, :, defender] = np.uint8(0)
+    def clear_guard_tilt_live_pose(seed_t: np.ndarray) -> None:
+        seed_t["guard_tilt_x4"][0, defender] = np.float32(0.0)
 
-    _seed2, _ref2, out2 = _run_one_step_row(
-        dataset_path, 5599, defender, seed_mutator=clear_shielddesc_miss
+    def neutralize_guard_tilt_input(prev_input_t: np.ndarray, input_t: np.ndarray) -> None:
+        prev_input_t["p"]["main_x"][0, defender] = np.int8(0)
+        prev_input_t["p"]["main_y"][0, defender] = np.int8(0)
+        input_t["p"]["main_x"][0, defender] = np.int8(0)
+        input_t["p"]["main_y"][0, defender] = np.int8(0)
+
+    _seed2, _ref2, out2 = _run_one_step_row_with_mutators(
+        dataset_path, 5599, clear_guard_tilt_live_pose, neutralize_guard_tilt_input
     )
     assert int(out2["action_id"][defender]) == 179  # Guard
     assert int(out2["hitlag"][defender]) == 0

@@ -3112,6 +3112,23 @@ Fox/Falco special-owner split (2026-04-17):
       ftCo_80091BC4,ftCo_80091E78,ftCo_800924C0,ftCo_800921DC}`,
     `refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC`,
     `data/shields/{fox,falco}.bin`, `data/characters/{fox,falco}.json`.
+  - Guard tilt no-submotion BODY pose:
+    - Steady `Guard` animation processing runs `ftCo_800925A4 -> ftCo_80091BC4` and then
+      `ftCo_80091E78(..., 1)` before fighter collision. Runtime therefore updates
+      `mv.co.guard.x8/x4` and ShieldDesc geometry before hurtcaps are refreshed, then samples the
+      same extracted Guard AObj/JObj collision matrices for no-submotion `Guard` BODY hurtcap
+      endpoints and matrix-radius checks. The BODY narrowphase also follows the
+      `lbColl_8000805C`/`ftCommon_8007F804` split: with no non-unit `x34_scale.z` transform, the
+      sampled live JObj depth is preserved; when that hidden transform lane is later promoted, the
+      endpoint z overwrite should consume the `arg6 = cur_pos.z` path before `lbColl_80006E58`.
+    - This is source-owned live pose state, not a ShieldDesc-miss seed bridge: replay
+      `combat_shield_contact_hb_kind` can still decide shield-vs-BODY ordering, but it no longer
+      gates whether BODY gets the angled Guard pose.
+    Sources: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091E78,ftCo_80091D58}`,
+    `refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70`,
+    `refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_8000805C}`,
+    `data/anims/{fox,falco}.tracks.bin`, `data/anims/{fox,falco}.bin`,
+    `data/shields/{fox,falco}.bin::MSLSHLD1`.
   - Guard hold-drain ShieldBreakFly entry:
     - `ftCo_800925A4` drains shield HP during Guard/GuardOn/GuardReflect animation processing.
       When the drain crosses below zero, it clears the active shield state and calls

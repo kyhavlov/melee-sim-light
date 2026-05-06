@@ -1941,13 +1941,13 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
                 seed->capture_wait_anim_rate_timer_f32[p] > c->capture_wait_anim_rate) ||
                capture_wait_post_loop_publication_row) &&
               seed->capture_wait_anim_rate_timer_f32[p] < c->capture_wait_anim_rate_hold_frames) {
-            // Teacher-forced CaptureWait reseed owner:
+            // Teacher-forced CaptureWait AObj-rate reconstruction:
             // Slippi can expose the post-frame x2344 hold timer while frame_speed_mul is still the
             // pre-callback visible value. Interior x2344 ticks are after ftAnim_SetAnimRate(x3B4)
             // and before the endpoint tick can reset the AObj rate to 1.0f. Entry and first-steady
             // rows still need the visible seed rate because their Anim callback ordering is owned by
-            // the CapturePulled/CaptureWait handoff rather than this reseed bridge; the one
-            // exception is the post-loop publication row where x2344 has advanced to x3B0-x3B4
+            // the CapturePulled/CaptureWait handoff rather than this reseed-only reconstruction. The
+            // one exception is the post-loop publication row where x2344 has advanced to x3B0-x3B4
             // while Slippi still serializes the stale rate-1 AObj value.
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_CaptureWaitHi_Anim
             batch->state.frame_speed_mul_fp_q16_16[idx] =
