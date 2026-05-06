@@ -27,6 +27,16 @@
 
 enum { MSL_FTPART_HIPN = 4 };  // refs/melee/src/melee/ft/forward.h::Fighter_Part (FtPart_HipN)
 
+static inline float knockdown_clamp_absf(float value, float max_abs) {
+  if (value > max_abs) {
+    return max_abs;
+  }
+  if (value < -max_abs) {
+    return -max_abs;
+  }
+  return value;
+}
+
 static inline uint8_t is_down_bound(uint16_t a) {
   return (a == (uint16_t)MSL_ACT_DOWN_BOUND_U || a == (uint16_t)MSL_ACT_DOWN_BOUND_D) ? 1u : 0u;
 }
@@ -784,6 +794,26 @@ static inline void passive_stand_anim_end_try_enter_squat(MslBatch* batch, const
 }
 
 static inline void enter_down_wait(MslBatch* batch, size_t idx, uint16_t wait_act) {
+  if (batch->state.on_ground[idx] == 0u) {
+    const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+    // Decomp: DownBound->DownWait enters through ftCo_80097E8C. If the DownBound callback is still
+    // GA_Air, it first calls ftCommon_8007D7FC, restoring grounded common state before changing to
+    // DownWait. FoD transformed-platform rows can otherwise publish impossible grounded actions
+    // (DownWait/DownStand/Wait) while Slippi-visible ground_or_air remains air.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_80097E8C
+    // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D7FC,ftCommon_8007D6A4}
+    batch->state.on_ground[idx] = 1u;
+    batch->state.fall_fast[idx] = 0u;
+    if (ch != NULL) {
+      batch->state.jumps_left[idx] = ch->max_jumps;
+      batch->state.speed_ground_x_self[idx] = knockdown_clamp_absf(
+          batch->state.speed_air_x_self[idx], ch->ground_max_horizontal_velocity);
+    } else {
+      batch->state.speed_ground_x_self[idx] = batch->state.speed_air_x_self[idx];
+    }
+    batch->state.speed_air_x_self[idx] = 0.0f;
+    batch->state.speed_y_self[idx] = 0.0f;
+  }
   batch->state.action_id[idx] = wait_act;
   batch->state.animation_index[idx] = submotion_for_down_action(wait_act);
   // Decomp: DownBound->DownWait initializes mv.co.downwait.x0 to p_ftCommonData->x424.

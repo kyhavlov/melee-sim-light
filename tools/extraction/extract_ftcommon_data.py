@@ -300,6 +300,12 @@ def main() -> None:
         # Decomp: ftCo_AttackDash_Phys -> ft_80085030(..., p_ftCommonData->x50 * traction, ...).
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_Phys
         "attackdash_friction_mul": float(_f32_be(buf, ft_common_abs + 0x50)),
+        # AttackDash late catch-dash pre-gate window.
+        # Decomp: ftCo_AttackDash_SetMv0 converts p_ftCommonData->x68 to int and stores
+        # fp->mv.co.attackdash.x0 (fp+0x2340). ftCo_800D8AE0 then consumes held L/R while x0 > 0.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_SetMv0
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D8AE0
+        "attackdash_x0_init_frames": int(_f32_be(buf, ft_common_abs + 0x68)),
         # Roll / spotdodge (ftCo_Escape.c)
         # - Roll: ABS(lstick.x) >= x31C and x670_timer_lstick_tilt_x < x320
         # - Spotdodge: lstick.y <= x314 and x671_timer_lstick_tilt_y < x318

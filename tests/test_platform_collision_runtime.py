@@ -32,6 +32,7 @@ ACT_DAMAGE_FLY_N = 0x0058
 ACT_DAMAGE_FLY_TOP = 0x005A
 ACT_ESCAPE_AIR = 0x00EC
 ACT_DOWN_BOUND_U = 0x00B7
+ACT_DOWN_BOUND_D = 0x00BF
 ACT_DOWN_WAIT_U = 0x00B8
 ACT_PASSIVE = 0x00C7
 ACT_PASS = 0x00F4
@@ -1133,6 +1134,36 @@ def test_fod_airborne_aerial_and_tumble_can_land_on_transformed_platform_with_do
     assert float(out["pos_y"][0]) == pytest.approx(float(world_y) + 0.0001, abs=1e-4)
 
 
+def test_fod_damagefly_lands_on_downward_sweep_even_with_positive_kb_lane() -> None:
+    # DamageFly_Coll routes through ft_80081DD4 and mpColl's floor sweep. The collision predicate is
+    # the live CollData bottom movement; a still-positive split KB lane is not a source reason to
+    # reject an actually descending platform crossing.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800477E0,mpColl_80044628_Floor}
+    height = np.float32(20.576549530029297)
+    world_y = np.float32(float(height) * 0.80625)
+    seed = _seed_base(2, ACT_DAMAGE_FLY_TOP, 180, 30.5, float(world_y) - 6.0)
+    seed["ground_id"][0, 0] = np.uint16(5)
+    seed["stage_fod_platform_height_f32"][0, 0] = height  # platform id 0 = right
+    seed["stage_fod_platform_height_valid_u8"][0, 0] = np.uint8(1)
+    seed["speed_y_self"][0, 0] = np.float32(-3.1)
+    seed["speed_y_attack"][0, 0] = np.float32(1.5)
+    seed["hitstun"][0, 0] = np.uint8(15)
+    seed["action_frame"][0, 0] = np.int16(46)
+    seed["anim_frame_f32"][0, 0] = np.float32(46.0)
+    seed["floor_sweep_prev_pos_valid_u8"][0, 0] = np.uint8(1)
+    seed["floor_sweep_prev_pos_x_f32"][0, 0] = np.float32(30.5)
+    seed["floor_sweep_prev_pos_y_f32"][0, 0] = np.float32(float(world_y) + 7.0)
+
+    out = _step_once(seed)
+
+    assert int(out["on_ground"][0]) == 1
+    assert int(out["ground_id"][0]) == 1
+    assert int(out["action_id"][0]) == ACT_DOWN_BOUND_D
+    assert float(out["pos_y"][0]) == pytest.approx(float(world_y) + 0.0001, abs=1e-4)
+
+
 def test_fod_escapeair_downward_airdodge_can_waveland_on_transformed_platform() -> None:
     # EscapeAir_Coll uses ft_80082C74 and does not pass ftCo_80096CC8, so a downward airdodge can
     # waveland on FoD transformed platforms instead of inheriting the common-air held-down
@@ -1651,9 +1682,10 @@ def test_fod_soft_platform_airborne_regression_rows_stay_airborne(
     action_id: int,
 ) -> None:
     # EWT 1025 is a down-held aerial crossing FoD's transformed left platform. EWT 1895 is
-    # DamageFlyTop crossing the top platform while damage KB still has upward Y. Both are
-    # source-owned soft-platform rejection boundaries and must not be converted into early Landing /
-    # DownBound by the replay-seeded FoD transform path.
+    # DamageFlyTop whose apparent top-platform crossing is dominated by early DamageFly ECB-bottom
+    # interpolation while residual KB is still upward. Both are source-owned soft-platform rejection
+    # boundaries and must not be converted into early Landing / DownBound by the replay-seeded FoD
+    # transform path.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_80096CC8
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
     slp = (

@@ -1817,6 +1817,13 @@ static inline void ecb_points_shift_x(MslEcbWorldPoints* ecb, float dx) {
   ecb->right_x += dx;
 }
 
+static inline void ecb_points_shift_x3(MslEcbWorldPoints* a, MslEcbWorldPoints* b,
+                                       MslEcbWorldPoints* c, float dx) {
+  ecb_points_shift_x(a, dx);
+  ecb_points_shift_x(b, dx);
+  ecb_points_shift_x(c, dx);
+}
+
 static inline void ecb_points_shift_y(MslEcbWorldPoints* ecb, float dy) {
   if (ecb == NULL || dy == 0.0f) {
     return;
@@ -1845,6 +1852,64 @@ static inline void ecb_points_rebuild_y(MslEcbWorldPoints* ecb, float root_y) {
   ecb->top_y = root_y + ecb->top_rel_y;
   ecb->left_y = root_y + ecb->side_rel_y;
   ecb->right_y = root_y + ecb->side_rel_y;
+}
+
+static uint8_t ceiling_try_adjacent_from_air_wall(MslBatch* batch, size_t idx, uint32_t stage_id,
+                                                  const MslStageCeilingGraph* cg,
+                                                  const MslEcbWorldPoints* ceiling_ecb) {
+  if (batch == NULL || cg == NULL || ceiling_ecb == NULL || batch->state.wall_id[idx] == 0xFFFFu) {
+    return 0u;
+  }
+
+  // Source `mpColl_80044AD8_Ceiling`: after airborne left/right wall resolution, the ceiling
+  // check walks the raw MapLine graph from the contacted wall to the first non-wall neighbor.
+  // This catches underside shell corners even when the direct top-point sweep misses the ceiling
+  // segment itself.
+  // refs/melee/src/melee/mp/mpcoll.c::mpColl_80044AD8_Ceiling
+  MslStageRawLineKind out_kind = MSL_STAGE_RAW_LINE_UNKNOWN;
+  uint16_t ceiling_segment_i = 0xFFFFu;
+  if (batch->state.wall_kind[idx] == MSL_WALL_LEFT) {
+    if (!stage_collision_raw_line_next_non_kind(stage_id, batch->state.wall_id[idx],
+                                                MSL_STAGE_RAW_LINE_LEFT_WALL, &out_kind,
+                                                &ceiling_segment_i) ||
+        out_kind != MSL_STAGE_RAW_LINE_CEILING) {
+      return 0u;
+    }
+  } else if (batch->state.wall_kind[idx] == MSL_WALL_RIGHT) {
+    if (!stage_collision_raw_line_prev_non_kind(stage_id, batch->state.wall_id[idx],
+                                                MSL_STAGE_RAW_LINE_RIGHT_WALL, &out_kind,
+                                                &ceiling_segment_i) ||
+        out_kind != MSL_STAGE_RAW_LINE_CEILING) {
+      return 0u;
+    }
+  } else {
+    return 0u;
+  }
+
+  const int ceiling_line_idx = stage_collision_ceiling_line_index(stage_id, ceiling_segment_i);
+  if (ceiling_line_idx < 0) {
+    return 0u;
+  }
+  const float cur_tx = ceiling_ecb->top_x;
+  const float cur_ty = ceiling_ecb->top_y;
+  float y_corr = 0.0f;
+  float nx = 0.0f;
+  float ny = -1.0f;
+  const int out_line_idx =
+      ceiling_e090_project(cg, ceiling_line_idx, cur_tx, cur_ty, &y_corr, &nx, &ny);
+  if (out_line_idx < 0 || !(y_corr < 0.0f)) {
+    return 0u;
+  }
+
+  batch->state.pos_y[idx] += y_corr;
+  batch->state.ceiling_id[idx] = cg->lines[(size_t)out_line_idx].segment_i;
+  batch->state.ceiling_contact_x[idx] = cur_tx;
+  batch->state.ceiling_contact_y[idx] = cur_ty + y_corr;
+  batch->state.ceiling_normal_x[idx] = nx;
+  batch->state.ceiling_normal_y[idx] = ny;
+  batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_CEILING_PUSH;
+  ceiling_write_edge_suppression_flags(batch, idx, stage_id, cg, out_line_idx, ceiling_ecb);
+  return 1u;
 }
 
 static void mpcoll_squeeze_horizontal(MslBatch* batch, size_t idx, MslEcbWorldPoints* cur_ecb,
@@ -2294,6 +2359,7 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
   const int num_players = (int)batch->config.num_players;
   for (int bi = 0; bi < batch->batch_size; bi++) {
     const uint32_t stage_id = batch->state.stage_id[bi];
+    const MslStageFloorGraph* fg = stage_collision_get_floor_graph(stage_id);
     const MslStageCeilingGraph* cg = stage_collision_get_ceiling_graph(stage_id);
     const MslStageWallGraph* lwg = stage_collision_get_left_wall_graph(stage_id);
     const MslStageWallGraph* rwg = stage_collision_get_right_wall_graph(stage_id);
@@ -2441,7 +2507,7 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
         // refs/melee/src/melee/mp/mplib.c::mpLib_8004E398_LeftWall
         // refs/melee/src/melee/mp/mpcoll.c::mpColl_80046224_LeftWall
         const uint8_t use_specialhi_left_envelope =
-            (uint8_t)(action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI);
+            specialhi_launch_uses_runtime_xrotn_ecb(char_id, action_id);
         // DamageFly consumes left-wall Hug for FlyReflectWall only while knockback is moving into
         // the left-facing wall. Keep stale/negative-kb DamageFly rows on the point-local
         // provenance path so they can refresh wall ids without arming Hug.
@@ -2492,6 +2558,7 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
                 (batch->state.coll_prev_env_flags[idx] & (uint32_t)MSL_COLLIDE_LEFT_WALL_HUG) ? 1u
                                                                                               : 0u;
             mark_left_wall_contact(batch, idx, prev_hug);
+            ecb_points_shift_x3(&cur_ecb, &cur_right_ecb, &cur_specialhi_wall_ecb, x_corr);
           }
         }
 
@@ -2542,6 +2609,7 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
           if (left_wall_air_envelope_min_x(lwg, &candidates, left_cur_ecb, batch->state.pos_x[idx],
                                            batch->state.pos_y[idx], &envelope_x, &envelope_line_idx,
                                            &envelope_nx, &envelope_ny)) {
+            const float dx = envelope_x - batch->state.pos_x[idx];
             batch->state.pos_x[idx] = envelope_x;
             batch->state.wall_kind[idx] = MSL_WALL_LEFT;
             batch->state.wall_id[idx] = lwg->lines[(size_t)envelope_line_idx].segment_i;
@@ -2563,6 +2631,7 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
                            (use_damagefly_left_envelope && !damagefly_hitlag_wall_refresh))
                               ? candidates.has_hug
                               : 0u));
+            ecb_points_shift_x3(&cur_ecb, &cur_right_ecb, &cur_specialhi_wall_ecb, dx);
           }
         }
         if (batch->state.wall_kind[idx] == 0 &&
@@ -2598,6 +2667,7 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
                   batch, idx,
                   (uint8_t)((damagefly_hitlag_wall_refresh || use_damagefly_left_envelope) ? 0u
                                                                                            : 1u));
+              ecb_points_shift_x3(&cur_ecb, &cur_right_ecb, &cur_specialhi_wall_ecb, x_corr);
             }
           }
         }
@@ -2647,6 +2717,7 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
             //   mpColl_80045B74_LeftWall,mpColl_80046224_LeftWall}
             mark_left_wall_contact(batch, idx,
                                    mpcoll_action_uses_common_air_walljump_callback(action_id));
+            ecb_points_shift_x3(&cur_ecb, &cur_right_ecb, &cur_specialhi_wall_ecb, best_corr);
           }
         }
 
@@ -2677,6 +2748,7 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
               batch->state.wall_normal_x[idx] = nx2;
               batch->state.wall_normal_y[idx] = ny2;
               mark_left_wall_contact(batch, idx, 0u);
+              ecb_points_shift_x3(&cur_ecb, &cur_right_ecb, &cur_specialhi_wall_ecb, x_corr);
             }
           }
         }
@@ -2707,6 +2779,7 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
               batch->state.wall_normal_x[idx] = nx2;
               batch->state.wall_normal_y[idx] = ny2;
               mark_left_wall_contact(batch, idx, 0u);
+              ecb_points_shift_x3(&cur_ecb, &cur_right_ecb, &cur_specialhi_wall_ecb, x_corr);
             }
           }
         }
@@ -2748,6 +2821,7 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
                 (batch->state.coll_prev_env_flags[idx] & (uint32_t)MSL_COLLIDE_RIGHT_WALL_HUG) ? 1u
                                                                                                : 0u;
             mark_right_wall_contact(batch, idx, prev_hug);
+            ecb_points_shift_x3(&cur_ecb, &cur_right_ecb, &cur_specialhi_wall_ecb, x_corr);
           }
         }
 
@@ -2797,6 +2871,7 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
                                             batch->state.pos_x[idx], batch->state.pos_y[idx],
                                             &envelope_x, &envelope_line_idx, &envelope_nx,
                                             &envelope_ny)) {
+            const float dx = envelope_x - batch->state.pos_x[idx];
             batch->state.pos_x[idx] = envelope_x;
             batch->state.wall_kind[idx] = MSL_WALL_RIGHT;
             batch->state.wall_id[idx] = rwg->lines[(size_t)envelope_line_idx].segment_i;
@@ -2810,6 +2885,7 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
                                     (damagefly_hitlag_wall_refresh || specialhi_wall_refresh)
                                         ? 0u
                                         : candidates.has_hug);
+            ecb_points_shift_x3(&cur_ecb, &cur_right_ecb, &cur_specialhi_wall_ecb, dx);
           }
         }
         if (batch->state.wall_kind[idx] == 0 && !grounded_now) {
@@ -2850,6 +2926,7 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
             //   mpColl_80044E10_RightWall,mpColl_800454A4_RightWall}
             mark_right_wall_contact(batch, idx,
                                     mpcoll_action_uses_common_air_walljump_callback(action_id));
+            ecb_points_shift_x3(&cur_ecb, &cur_right_ecb, &cur_specialhi_wall_ecb, best_corr);
           }
         }
       }
@@ -2857,12 +2934,24 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
       // Ceiling collision (hit by the fighter's top ECB point).
       if (cg && cg->lines && cg->line_count) {
         // Decomp: mpLib_8004E090_Ceiling consumes the ECB top point.
+        // SpecialAirHi's collision callback is in the same JObj-ECB owner family as its wall
+        // contacts: the launch model rotates XRotN before mpColl samples the top point. Reuse the
+        // live SpecialHi ECB sample here so upward recoveries collide with stage undersides instead
+        // of letting the generic unrotated top point miss until the later floor landing.
         // refs/melee/src/melee/mp/mplib.c::mpLib_8004E090_Ceiling
         // refs/melee/src/melee/mp/mpcoll.c::mpColl_80044C74_Ceiling
-        const float cur_tx = cur_ecb.top_x;
-        const float cur_ty = cur_ecb.top_y;
-        const float prev_tx = prev_ecb.top_x;
-        const float prev_ty = prev_ecb.top_y;
+        // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialAirHi_Coll
+        // refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_JObj
+        const uint8_t use_specialhi_ceiling_ecb =
+            specialhi_launch_uses_runtime_xrotn_ecb(char_id, action_id);
+        const MslEcbWorldPoints* ceiling_cur_ecb =
+            use_specialhi_ceiling_ecb ? &cur_specialhi_wall_ecb : &cur_ecb;
+        const MslEcbWorldPoints* ceiling_prev_ecb =
+            use_specialhi_ceiling_ecb ? &prev_specialhi_wall_ecb : &prev_ecb;
+        const float cur_tx = ceiling_cur_ecb->top_x;
+        const float cur_ty = ceiling_cur_ecb->top_y;
+        const float prev_tx = ceiling_prev_ecb->top_x;
+        const float prev_ty = ceiling_prev_ecb->top_y;
 
         int prefer_line_idx = -1;
         if (prev_ceiling_id != 0xFFFFu) {
@@ -2889,7 +2978,8 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
             batch->state.ceiling_contact_x[idx] = cur_tx;
             batch->state.ceiling_contact_y[idx] = cur_ty + y_corr;
             batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_CEILING_MASK;
-            ceiling_write_edge_suppression_flags(batch, idx, stage_id, cg, out_line_idx, &cur_ecb);
+            ceiling_write_edge_suppression_flags(batch, idx, stage_id, cg, out_line_idx,
+                                                 ceiling_cur_ecb);
           }
         } else {
           float ix = 0.0f, iy = 0.0f;
@@ -2912,8 +3002,68 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
               batch->state.ceiling_contact_y[idx] = iy;
               batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_CEILING_MASK;
               ceiling_write_edge_suppression_flags(batch, idx, stage_id, cg, out_line_idx,
-                                                   &cur_ecb);
+                                                   ceiling_cur_ecb);
             }
+          }
+        }
+        if ((batch->state.coll_env_flags[idx] & (uint32_t)MSL_COLLIDE_CEILING_MASK) == 0u &&
+            batch->state.wall_kind[idx] != MSL_WALL_NONE) {
+          (void)ceiling_try_adjacent_from_air_wall(batch, idx, stage_id, cg, ceiling_cur_ecb);
+        }
+        if ((batch->state.coll_env_flags[idx] & (uint32_t)MSL_COLLIDE_CEILING_MASK) == 0u &&
+            use_specialhi_ceiling_ecb && fg != NULL && fg->lines != NULL && fg->line_count != 0u &&
+            cur_ty > prev_ty) {
+          // Source has already sampled SpecialAirHi's live JObj ECB before ceiling/floor collision
+          // callbacks run. The extracted stage shell represents hard top surfaces in the floor
+          // graph and does not duplicate every underside as a ceiling line, so use the rotated
+          // SpecialHi top-point sweep against hard floor segments as the missing underside
+          // substrate. Soft platforms stay one-way and are intentionally excluded.
+          //
+          // Keep this owner on the top point only. A root-position crossing of a top floor line is
+          // not a ceiling hit in mpColl_80044C74_Ceiling; treating it as one clips side-riding Up-B
+          // movement as soon as the root reaches floor height even when the sampled top point has no
+          // obstruction above it.
+          // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialAirHi_Coll
+          // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_JObj,mpColl_80044C74_Ceiling}
+          int best_line_idx = -1;
+          float best_ix = 0.0f;
+          float best_iy = 0.0f;
+          float best_dist2 = 0.0f;
+          for (size_t li = 0; li < fg->line_count; li++) {
+            const MslStageFloorLine* line = &fg->lines[li];
+            if (line->fighter_solid == 0u || line->is_platform != 0u) {
+              continue;
+            }
+            float cand_ix = 0.0f;
+            float cand_iy = 0.0f;
+            if (!intersect_segment(line->x0, line->y0, line->x1, line->y1, prev_tx, prev_ty, cur_tx,
+                                   cur_ty, &cand_ix, &cand_iy)) {
+              continue;
+            }
+            const float dx = cand_ix - prev_tx;
+            const float dy = cand_iy - prev_ty;
+            const float dist2 = dx * dx + dy * dy;
+            if (best_line_idx < 0 || dist2 < best_dist2 ||
+                (dist2 == best_dist2 &&
+                 line->segment_i < fg->lines[(size_t)best_line_idx].segment_i)) {
+              best_line_idx = (int)li;
+              best_ix = cand_ix;
+              best_iy = cand_iy;
+              best_dist2 = dist2;
+            }
+          }
+          if (best_line_idx >= 0) {
+            const MslStageFloorLine* line = &fg->lines[(size_t)best_line_idx];
+            const float y_corr = (best_iy - k_ceiling_y_bias) - cur_ty;
+            if (y_corr < 0.0f) {
+              batch->state.pos_y[idx] += y_corr;
+            }
+            batch->state.ceiling_id[idx] = line->segment_i;
+            batch->state.ceiling_normal_x[idx] = 0.0f;
+            batch->state.ceiling_normal_y[idx] = -1.0f;
+            batch->state.ceiling_contact_x[idx] = best_ix;
+            batch->state.ceiling_contact_y[idx] = best_iy;
+            batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_CEILING_MASK;
           }
         }
       }

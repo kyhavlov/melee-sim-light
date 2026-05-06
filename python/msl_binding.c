@@ -1211,6 +1211,25 @@ static PyObject* msl_debug_run_knockdown_post_collision_py(PyObject* self, PyObj
   Py_RETURN_NONE;
 }
 
+static PyObject* msl_debug_run_locomotion_post_collision_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  if (!PyArg_ParseTuple(args, "O", &handle_obj)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+  const int err = msl_batch_debug_run_locomotion_post_collision(h->batch);
+  if (err != 0) {
+    PyErr_Format(PyExc_RuntimeError, "msl_batch_debug_run_locomotion_post_collision failed: %d",
+                 err);
+    return NULL;
+  }
+  Py_RETURN_NONE;
+}
+
 static PyObject* msl_debug_refresh_combat_geometry(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* handle_obj = NULL;
@@ -5095,6 +5114,10 @@ static PyMethodDef methods[] = {
     {"debug_run_knockdown_post_collision", msl_debug_run_knockdown_post_collision_py, METH_VARARGS,
      "debug_run_knockdown_post_collision(handle) -> DEBUG-ONLY. Re-run "
      "knockdown_update_post_collision on current batch state."},
+    {"debug_run_locomotion_post_collision", msl_debug_run_locomotion_post_collision_py,
+     METH_VARARGS,
+     "debug_run_locomotion_post_collision(handle) -> DEBUG-ONLY. Re-run "
+     "locomotion_update_post_collision on current batch state."},
     {"debug_refresh_combat_geometry", msl_debug_refresh_combat_geometry, METH_VARARGS,
      "debug_refresh_combat_geometry(handle) -> DEBUG-ONLY. Recompute hurtcaps/hitboxes from "
      "current state without advancing frame stages."},

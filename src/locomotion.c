@@ -171,6 +171,7 @@ static inline void side_special_air_to_ground_transition(MslBatch* batch, const 
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
   //   ftFx_SpecialAirSStart_AirToGround,ftFx_SpecialAirS_AirToGround}
   // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D7FC,ftCommon_8007D6A4}
+  batch->state.on_ground[idx] = 1u;
   batch->state.jumps_left[idx] = ch->max_jumps;
   batch->state.fall_fast[idx] = 0u;
   batch->state.speed_ground_x_self[idx] =
@@ -298,6 +299,18 @@ static inline void enter_specialhi_bound_from_airhi_collision(MslBatch* batch,
   batch->state.fall_fast[idx] = 0u;
   msl_anim_timebase_enter_with_policy(batch, idx, 0.0f, 1.0f, MSL_ANIM_ENTER_TICK_IMMEDIATE);
   batch->state.speed_air_x_self[idx] *= ch->firefox_bound_vel_x;
+}
+
+static inline uint8_t ft_check_ground_and_ledge_collision_contact(const MslBatch* batch,
+                                                                  size_t idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  const uint32_t flags = batch->state.coll_env_flags[idx];
+  if ((flags & (uint32_t)MSL_COLLIDE_FLOOR_MASK) != 0u) {
+    return 1u;
+  }
+  return 0u;
 }
 
 static inline void specialhi_apply_air_launch_ownership(MslBatch* batch, size_t idx,
@@ -3789,11 +3802,13 @@ void locomotion_update_pre(MslBatch* batch) {
             uint8_t attackdash_pregate_consumed = 0u;
             if (action_id == (uint16_t)MSL_ACT_ATTACK_DASH) {
               // AttackDash IASA pre-gate (ftCo_800D8AE0):
-              // - if (A-held && mv.co.attackdash.x0>0) => enter CatchDash via ftCo_800D8C54.
+              // - if (held_inputs & HSD_PAD_LR and mv.co.attackdash.x0>0) => enter CatchDash via
+              //   ftCo_800D8C54.
               // - else decrement x0 when x0>0.
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_IASA
               // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::{ftCo_800D8AE0,ftCo_800D8C54}
-              if ((buttons & (uint16_t)MSL_BUTTON_A) != 0u && batch->state.attackdash_x0[idx] > 0) {
+              if ((buttons & ((uint16_t)MSL_BUTTON_L | (uint16_t)MSL_BUTTON_R)) != 0u &&
+                  batch->state.attackdash_x0[idx] > 0) {
                 grab_flow_enter_catchdash_from_attackdash_pregate(batch, idx);
                 action_id = batch->state.action_id[idx];
                 attackdash_pregate_consumed = 1u;
@@ -4832,11 +4847,14 @@ void locomotion_update_pre(MslBatch* batch) {
                                                     1, 0)) {
             if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_ATTACK_DASH) {
               // Run/RunDirect IASA enters AttackDash before Phys in the same fighter proc.
+              // ftCo_AttackDash_SetMv0 also seeds fp+0x2340 from p_ftCommonData->x68 so
+              // ftCo_800D8AE0 can turn held L/R into a CatchDash during the next AttackDash IASA.
               // This simulator's locomotion IASA pass is post-physics, so restore the missed
               // `ftCo_AttackDash_Phys -> ft_80085030` velocity handoff on the entry frame.
               // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_Run.c,ftCo_RunDirect.c}
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::{
               //   ftCo_AttackDash_SetMv0,ftCo_AttackDash_Phys}
+              batch->state.attackdash_x0[idx] = (int16_t)c->attackdash_x0_init_frames;
               batch->state.anim_defer_tick_once[idx] = 0u;
               msl_anim_timebase_tick_once(batch, idx);
               (void)physics_apply_attackdash_entry_phys_now(batch, idx, facing_dir);
@@ -4973,8 +4991,12 @@ void locomotion_update_pre(MslBatch* batch) {
               // Fighter_procUpdate. This pass runs after physics, so apply the entry tick and
               // root-motion Phys handoff here instead of leaving AttackDash stationary for one
               // rollout frame.
+              // ftCo_AttackDash_SetMv0 seeds fp+0x2340 from p_ftCommonData->x68 before the Phys
+              // handoff; ftCo_800D8AE0 then uses that countdown for boost-grab CatchDash.
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::{
               //   doEnter,ftCo_AttackDash_Phys}
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D8AE0
+              batch->state.attackdash_x0[idx] = (int16_t)c->attackdash_x0_init_frames;
               batch->state.anim_defer_tick_once[idx] = 0u;
               msl_anim_timebase_tick_once(batch, idx);
               (void)physics_apply_attackdash_entry_phys_now(batch, idx, facing_dir);
@@ -5681,8 +5703,34 @@ void locomotion_update_post_collision(MslBatch* batch) {
         // refs/melee/src/melee/mp/mpcoll.c::{mpUpdateFloorSkip,mpClearFloorSkip}
         batch->state.floor_skip_segment_id[idx] = 0xFFFFu;
       }
+      if (now_ground && batch->state.ledge_drop_floor_skip_segment_id != NULL &&
+          batch->state.ledge_drop_floor_skip_segment_id[idx] != 0xFFFFu) {
+        // Ledge-drop stale platform rejection is local to the airborne recovery from ledge. Once a
+        // floor owns the fighter again, the hidden skip has been consumed.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_8009AAFC
+        // refs/melee/src/melee/mp/mpcoll.c::mpClearFloorSkip
+        batch->state.ledge_drop_floor_skip_segment_id[idx] = 0xFFFFu;
+      }
       if (!now_ground && a == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI) {
         specialhi_apply_collision_facing_dir(batch, ch, idx);
+      }
+      if (!now_ground && ft_check_ground_and_ledge_collision_contact(batch, idx)) {
+        if (ms != NULL && a == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_START) {
+          // Decomp: SpecialAirSStart_Coll calls ft_CheckGroundAndLedge, and any accepted mpColl
+          // collision enters the grounded start motion through ftFx_SpecialAirSStart_AirToGround.
+          // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialAirSStart_Coll
+          side_special_air_to_ground_transition(batch, ms, ch, idx,
+                                                (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_START);
+          continue;
+        }
+        if (ms != NULL && a == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S) {
+          // Decomp: SpecialAirS_Coll uses the same ft_CheckGroundAndLedge -> AirToGround owner as
+          // the start state.
+          // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialAirS_Coll
+          side_special_air_to_ground_transition(batch, ms, ch, idx,
+                                                (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S);
+          continue;
+        }
       }
       if (!now_ground && try_common_air_walljump_post_collision(batch, c, ch, idx, a)) {
         continue;

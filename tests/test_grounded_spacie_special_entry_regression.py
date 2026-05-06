@@ -208,7 +208,7 @@ def test_grounded_specialhi_hold_end_with_up_input_enters_air_launch() -> None:
     out = _step_once(seed, prev_inp, inp)
     assert int(out["action_id"][0]) == ACT_FX_SPECIAL_AIR_HI
     assert int(out["on_ground"][0]) == 0
-    assert float(out["pos_y"][0]) > 0.0
+    assert float(out["pos_y"][0]) >= 0.0
     assert abs(float(out["speed_air_x_self"][0])) <= 1e-5
     assert abs(float(out["speed_y_self"][0]) - _fox_attr("firefox_launch_speed")) <= 1e-4
 

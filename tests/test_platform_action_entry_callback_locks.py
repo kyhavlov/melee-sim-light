@@ -718,7 +718,9 @@ def test_fall_transformed_platform_fastfall_gate_is_source_scoped() -> None:
         pytest.skip(f"missing local dataset: {dataset_path}")
 
     ds = read_dataset(str(dataset_path))
-    record = 1532
+    # Use the next retained Fall frame: clearing fastfall still leaves enough descent to contact the
+    # transformed platform, so the negative isolates the callback gate instead of a no-contact row.
+    record = 1533
     p = 0
 
     def not_fastfall(seed: np.ndarray) -> None:

@@ -52,6 +52,7 @@
 #include "step.h"
 #include "grab_attachment.h"
 #include "knockdown.h"
+#include "locomotion.h"
 
 static inline void reseed_ecb_rel_points_sample(MslEcbWorldPoints* out, uint8_t char_id,
                                                 uint32_t anim, float anim_frame_f32,
@@ -1517,6 +1518,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         batch->state.ledge_cooldown[idx] = ledge_cd;
       }
       batch->state.ledge_side[idx] = -1;
+      batch->state.ledge_drop_floor_skip_segment_id[idx] = 0xFFFFu;
       batch->state.landing_fallspecial_allow_interrupt[idx] =
           seed->landing_fallspecial_allow_interrupt[p] ? 1u : 0u;
       {
@@ -3113,6 +3115,14 @@ int msl_batch_debug_run_knockdown_post_collision(MslBatch* batch) {
     return EINVAL;
   }
   knockdown_update_post_collision(batch);
+  return 0;
+}
+
+int msl_batch_debug_run_locomotion_post_collision(MslBatch* batch) {
+  if (batch == NULL) {
+    return EINVAL;
+  }
+  locomotion_update_post_collision(batch);
   return 0;
 }
 

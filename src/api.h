@@ -2087,6 +2087,11 @@ int msl_batch_debug_set_ceiling_contact(MslBatch* batch, int batch_index, int pl
 // the knockdown post-collision path.
 int msl_batch_debug_run_knockdown_post_collision(MslBatch* batch);
 
+// Debug-only helper: re-run locomotion_update_post_collision on current batch state (test-only).
+// Intended for tests that need to arm collision metadata after reseed and then isolate locomotion
+// collision handoffs.
+int msl_batch_debug_run_locomotion_post_collision(MslBatch* batch);
+
 // Debug-only branch-isolation helper: run only the knockdown/damage pre-physics callback slice on
 // the current reseeded state, without timers/input/physics.
 //

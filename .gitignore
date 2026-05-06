@@ -42,6 +42,10 @@ target/
 reports/triage/
 reports/modelplay/
 manual_repros/
+!tests/fixtures/modelplay/manual_repros/
+!tests/fixtures/modelplay/manual_repros/*.json
+!tests/fixtures/modelplay/manual_repros/**/
+!tests/fixtures/modelplay/manual_repros/**/*.json
 tools/modelplay/__pycache__/
 __pycache__/
 *.pyc

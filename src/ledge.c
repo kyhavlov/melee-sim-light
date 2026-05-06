@@ -211,6 +211,25 @@ static inline void enter_wait_on_stage(MslBatch* batch, size_t idx) {
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
 }
 
+static inline void mark_stale_floor_skip_for_ledge_flow(MslBatch* batch, int bi, size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  const uint32_t stage_id = batch->state.stage_id[bi];
+  const uint16_t ground_id = batch->state.ground_id[idx];
+  if (ground_id != 0xFFFFu && stage_collision_floor_line_is_platform(stage_id, ground_id)) {
+    // Source has ledge identity in the cliff state and does not let a pre-catch floor index seed
+    // subsequent Fall_Coll after dropping/releasing from ledge. Keep the replay-visible floor index
+    // intact and carry the rejection in a hidden mpColl skip.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_8009AAFC
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::ftCo_8009A9AC
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Coll
+    if (batch->state.ledge_drop_floor_skip_segment_id != NULL) {
+      batch->state.ledge_drop_floor_skip_segment_id[idx] = ground_id;
+    }
+  }
+}
+
 static inline uint8_t did_tap_jump(const MslCommonParams* c, float stick_y, uint8_t tilt_timer_y) {
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_GetInput
   return (stick_y >= c->tap_jump_threshold && tilt_timer_y < c->tap_jump_tilt_max_frames) ? 1 : 0;
@@ -428,6 +447,7 @@ static inline void cliff_option_phys_airground(MslBatch* batch, int bi, size_t i
   if (!stage_collision_get_ledge_point(stage_id, side, &ledge)) {
     // Decomp: ftCo_CliffClimb_Phys falls back to Fall when the ledge id is invalid.
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_CliffClimb_Phys
+    mark_stale_floor_skip_for_ledge_flow(batch, bi, idx);
     enter_fall(batch, idx);
     batch->state.ledge_side[idx] = -1;
     return;
@@ -631,6 +651,7 @@ static inline uint8_t ledge_wait_try_climb_or_drop(MslBatch* batch, const MslCom
     batch->state.ledge_cooldown[idx] = (cd > 0xFFu) ? 0xFFu : (uint8_t)cd;
   }
   batch->state.ledge_side[idx] = -1;
+  mark_stale_floor_skip_for_ledge_flow(batch, bi, idx);
   enter_fall(batch, idx);
   return 1;
 }
@@ -821,6 +842,7 @@ void ledge_update_pre_physics(MslBatch* batch) {
             const uint16_t cd = c->ledge_cooldown_frames;
             batch->state.ledge_cooldown[idx] = (cd > 0xFFu) ? 0xFFu : (uint8_t)cd;
             batch->state.ledge_side[idx] = -1;
+            mark_stale_floor_skip_for_ledge_flow(batch, bi, idx);
             enter_fall(batch, idx);
             a = batch->state.action_id[idx];
           }
@@ -860,6 +882,7 @@ void ledge_update_pre_physics(MslBatch* batch) {
         if (end_frame > 0.0f && (batch->state.anim_frame_f32[idx] >= end_frame)) {
           // Decomp: ftCo_CliffJump2_Anim -> Fall_Enter.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffJump.c::ftCo_CliffJump2_Anim
+          batch->state.prev_action_id[idx] = a;
           enter_fall(batch, idx);
           a = batch->state.action_id[idx];
         }

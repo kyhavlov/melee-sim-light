@@ -128,14 +128,14 @@ def test_rebirthwait_drop_does_not_reuse_pre_death_ceiling_contact() -> None:
     assert int(history[313]["action_id"][fox]) == 0  # DeadDown from bottom blastzone.
     assert float(history[313]["pos_y"][fox]) < -140.0
 
-    assert int(history[432]["action_id"][fox]) == 12  # Rebirth reaches platform height.
-    assert float(history[432]["pos_y"][fox]) == pytest.approx(45.0, abs=1e-3)
+    assert int(history[431]["action_id"][fox]) == 12  # Rebirth reaches platform height.
+    assert float(history[431]["pos_y"][fox]) == pytest.approx(45.0, abs=1e-3)
 
-    assert int(history[433]["action_id"][fox]) == 29  # RebirthWait IASA exits to Fall.
-    assert float(history[433]["pos_y"][fox]) == pytest.approx(44.77, abs=1e-3)
-    assert float(history[433]["pos_y"][fox]) > 0.0
+    assert int(history[432]["action_id"][fox]) == 29  # RebirthWait IASA exits to Fall.
+    assert float(history[432]["pos_y"][fox]) == pytest.approx(44.77, abs=1e-3)
+    assert float(history[432]["pos_y"][fox]) > 0.0
 
-    for frame in range(433, 448):
+    for frame in range(432, 448):
         assert int(history[frame]["action_id"][fox]) == 29
         assert float(history[frame]["pos_y"][fox]) > -5.0
         assert int(history[frame]["on_ground"][fox]) == 0

@@ -15,6 +15,12 @@
       "ports": [1, 2],
       "stage_id": 2,
       "characters": { "1": "Fox", "2": "Falco" }
+    },
+    {
+      "replay": "replays/validation/fountain_of_dreams_recent/MilkyGracefulStingray.slp",
+      "ports": [1, 2],
+      "stage_id": 2,
+      "characters": { "1": "Fox", "2": "Falco" }
     }
   ]
 }

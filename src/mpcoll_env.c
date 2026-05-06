@@ -379,15 +379,21 @@ static inline uint8_t mplib_select_ledge_floor_contact(uint32_t stage_id, int di
     *out_contact_y = 0.0f;
   }
 
-  const MslStageFloorLine* cand0 = stage_collision_get_ledge_floor_line(stage_id, 0);
-  const MslStageFloorLine* cand1 = stage_collision_get_ledge_floor_line(stage_id, 1);
+  // The source mpLib helper scans raw MapLine v0/v1 orientation. MSLSTG01 floor lines are
+  // normalized to x0<=x1 for floor collision, so the right-stage ledge segment's inner endpoint can
+  // otherwise look like a valid "left edge" when an AABB overlaps the right ledge floor. Limit each
+  // directional cliff helper to the global ledge endpoint with matching outside-stage direction:
+  // dir>0 -> stage-left ledge, dir<0 -> stage-right ledge.
+  // refs/melee/src/melee/mp/mplib.c::mpLib_80051BA8_Floor
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044164,mpColl_800443C4}
+  const MslStageFloorLine* cand0 = stage_collision_get_ledge_floor_line(stage_id, dir > 0 ? 0 : 1);
 
   const MslStageFloorLine* best = NULL;
   float best_x = (dir > 0) ? INFINITY : -INFINITY;
   float best_y = 0.0f;
 
-  const MslStageFloorLine* cands[2] = {cand0, cand1};
-  for (int i = 0; i < 2; i++) {
+  const MslStageFloorLine* cands[1] = {cand0};
+  for (int i = 0; i < 1; i++) {
     const MslStageFloorLine* l = cands[i];
     if (l == NULL) {
       continue;

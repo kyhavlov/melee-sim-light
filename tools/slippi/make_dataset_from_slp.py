@@ -150,17 +150,21 @@ def _derive_fod_floor_skip_segments(
     platform_height_f32: np.ndarray,
     platform_height_valid_u8: np.ndarray,
     platform_air_land_stick_y_threshold: float,
+    floor_skip_frames: int,
     data_root: Path | str = Path("data"),
 ) -> np.ndarray:
     """Derive prefix-causal hidden ``CollData.floor_skip`` for FoD platform pass-through.
 
     Slippi does not expose ``coll_data.floor_skip``. For replay/eval seeds, reconstruct only the
     current skipped FoD platform segment from frame-t state and current/prior input: a continuous
-    down-held airborne aerial/airdodge episode whose self/KB displacement crosses a live transformed
-    platform. This avoids a runtime gameplay shortcut while preserving the source mpColl skip state
-    needed by teacher-forced rows.
+    down-held airborne callback episode whose self/KB displacement crosses a live transformed
+    platform. JumpF/JumpB use ft_800835B0 with the same ftCo_80096CC8 platform predicate as
+    Fall/JumpAerial; after the initial crossing, carry that hidden floor-skip for the extracted x470
+    pass-through window. This avoids a runtime gameplay shortcut while preserving the source mpColl
+    skip state needed by teacher-forced rows.
 
     refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpUpdateFloorSkip}
+    refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_Coll
     refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_80096CC8
     data/stages/bin/griz.bin::MSLSTG01 platform_transforms
     """
@@ -185,25 +189,76 @@ def _derive_fod_floor_skip_segments(
         return out
 
     active_skip_actions = {0x0041, 0x0042, 0x0043, 0x0044, 0x0045, 0x00EC}
-    down_threshold_i8 = int(np.floor(float(platform_air_land_stick_y_threshold) * 127.0))
-    active_skip = np.full(players, np.uint16(0xFFFF), dtype=np.uint16)
+    jump_skip_actions = {0x0019, 0x001A}
+    active_down_threshold_i8 = int(np.floor(float(platform_air_land_stick_y_threshold) * 127.0))
+    jump_down_threshold_i8 = int(np.floor(float(platform_air_land_stick_y_threshold) * 80.0))
+    active_skip = [0xFFFF] * players
+    active_skip_remaining = [0] * players
+    max_line_id = max((int(rec.line_id) for rec in transforms), default=-1)
+    transform_platform_by_line = np.full(max_line_id + 1, -1, dtype=np.int16)
+    transform_height_coeff_by_line = np.zeros(max_line_id + 1, dtype=np.float32)
+    for rec in transforms:
+        line_id = int(rec.line_id)
+        transform_platform_by_line[line_id] = np.int16(int(rec.platform_id))
+        transform_height_coeff_by_line[line_id] = np.float32(float(rec.height_coeff))
+    jump_skip_root_clearance = float(max(0, int(floor_skip_frames)))
 
     for fi in range(n_samples):
         for slot in range(players):
             if int(on_ground_u8[fi, slot]) != 0:
-                active_skip[slot] = np.uint16(0xFFFF)
+                active_skip[slot] = 0xFFFF
                 continue
-            if int(action_id_u16[fi, slot]) not in active_skip_actions:
-                active_skip[slot] = np.uint16(0xFFFF)
+            action_id = int(action_id_u16[fi, slot])
+            if action_id not in active_skip_actions and action_id not in jump_skip_actions:
+                active_skip[slot] = 0xFFFF
+                active_skip_remaining[slot] = 0
                 continue
-            if (
-                int(main_y_i8[fi, slot]) > down_threshold_i8
-                or int(prev_main_y_i8[fi, slot]) > down_threshold_i8
-            ):
-                active_skip[slot] = np.uint16(0xFFFF)
-                continue
-            if active_skip[slot] != np.uint16(0xFFFF):
-                out[fi, slot] = active_skip[slot]
+            if action_id in active_skip_actions:
+                down_held = (
+                    int(main_y_i8[fi, slot]) <= active_down_threshold_i8
+                    and int(prev_main_y_i8[fi, slot]) <= active_down_threshold_i8
+                )
+            else:
+                down_held = (
+                    int(main_y_i8[fi, slot]) <= jump_down_threshold_i8
+                    or int(prev_main_y_i8[fi, slot]) <= jump_down_threshold_i8
+                )
+            if active_skip[slot] != 0xFFFF:
+                if action_id in active_skip_actions:
+                    if not down_held:
+                        active_skip[slot] = 0xFFFF
+                        continue
+                    out[fi, slot] = active_skip[slot]
+                    continue
+                line_id = int(active_skip[slot])
+                pid = (
+                    int(transform_platform_by_line[line_id])
+                    if line_id <= max_line_id
+                    else -1
+                )
+                jump_below_root = False
+                if pid >= 0 and int(platform_height_valid_u8[fi, pid]):
+                    world_y = float(platform_height_f32[fi, pid]) * float(
+                        transform_height_coeff_by_line[line_id]
+                    )
+                    jump_below_root = (
+                        float(pos_y_f32[fi, slot]) <= world_y - jump_skip_root_clearance
+                    )
+                if down_held:
+                    active_skip_remaining[slot] = int(floor_skip_frames)
+                    if not jump_below_root:
+                        continue
+                    out[fi, slot] = active_skip[slot]
+                    continue
+                if active_skip_remaining[slot] > 0:
+                    if not jump_below_root:
+                        active_skip_remaining[slot] -= 1
+                        continue
+                    out[fi, slot] = active_skip[slot]
+                    active_skip_remaining[slot] -= 1
+                    continue
+                active_skip[slot] = 0xFFFF
+            if not down_held:
                 continue
             x = float(pos_x_f32[fi, slot])
             y0 = float(pos_y_f32[fi, slot])
@@ -220,8 +275,14 @@ def _derive_fod_floor_skip_segments(
                     continue
                 world_y = float(platform_height_f32[fi, pid]) * float(rec.height_coeff)
                 if y0 >= world_y - 2.0 and y1 <= world_y + 2.0:
-                    out[fi, slot] = np.uint16(int(rec.line_id))
-                    active_skip[slot] = out[fi, slot]
+                    line_id = int(rec.line_id)
+                    active_skip[slot] = line_id
+                    active_skip_remaining[slot] = int(floor_skip_frames)
+                    if action_id in active_skip_actions:
+                        out[fi, slot] = active_skip[slot]
+                    else:
+                        if float(pos_y_f32[fi, slot]) <= world_y - jump_skip_root_clearance:
+                            out[fi, slot] = active_skip[slot]
                     break
     return out
 
@@ -2642,6 +2703,7 @@ def _main_impl(args) -> Dataset:
     tap_jump_threshold = float(common["tap_jump_threshold"])
     dash_run_jump_stick_y_threshold = float(common["dash_run_jump_stick_y_threshold"])
     platform_air_land_stick_y_threshold = float(common["platform_air_land_stick_y_threshold"])
+    floor_skip_frames = int(common["floor_skip_frames"])
     tap_jump_release_threshold = float(common["tap_jump_release_threshold"])
     tap_jump_tilt_max_frames = int(common["tap_jump_tilt_max_frames"])
     grab_mash_stick_threshold = float(common["grab_mash_stick_threshold"])
@@ -4554,6 +4616,7 @@ def _main_impl(args) -> Dataset:
             platform_height_f32=fod_height,
             platform_height_valid_u8=fod_valid,
             platform_air_land_stick_y_threshold=platform_air_land_stick_y_threshold,
+            floor_skip_frames=floor_skip_frames,
             data_root=data_root,
         )
         samples["seed_t"]["floor_skip_segment_id_u16"][:, :num_players] = fod_floor_skip

@@ -278,3 +278,69 @@ def test_escapeair_late_below_ledge_floor_continuations_keep_source_landing_boun
         ref = row["ref_t1"]
         for field in ("action_id", "animation_index", "on_ground", "ground_id"):
             assert int(out[field][p]) == int(ref[field][p]), (dataset_path.name, record, field)
+
+
+@pytest.mark.integration
+def test_yoshis_escapeair_low_ledge_floor_uses_ecb_depth_boundary() -> None:
+    # Yoshi's side-platform floor.index can survive into the locked EscapeAir callback while the raw
+    # bottom sweep is over the low side ledge floor. Source mpColl only lets the low raw floor replace
+    # that stale platform remap after the root has penetrated at least the entry ECB bottom span.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpColl_80044838_Floor}
+    root = Path(__file__).resolve().parents[1]
+    cases = (
+        (
+            root
+            / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl",
+            1196,
+            1,
+            ACT_ESCAPE_AIR,
+        ),
+        (
+            root
+            / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl",
+            1197,
+            1,
+            ACT_LANDING_FALL_SPECIAL,
+        ),
+        (
+            root
+            / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl",
+            5744,
+            1,
+            ACT_ESCAPE_AIR,
+        ),
+        (
+            root
+            / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl",
+            5745,
+            1,
+            ACT_LANDING_FALL_SPECIAL,
+        ),
+        (
+            root
+            / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl",
+            3543,
+            1,
+            ACT_ESCAPE_AIR,
+        ),
+        (
+            root
+            / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl",
+            4602,
+            1,
+            ACT_LANDING_FALL_SPECIAL,
+        ),
+    )
+    for dataset_path, record, p, expected_action in cases:
+        if not dataset_path.exists():
+            pytest.skip(f"missing local dataset: {dataset_path}")
+        ds = read_dataset(str(dataset_path))
+        row = ds.samples[record]
+        ref = row["ref_t1"]
+        assert int(row["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
+        assert int(ref["action_id"][p]) == expected_action
+
+        out = _step_bytes(ds, row["seed_t"], row["prev_input_t"], row["input_t"])
+        for field in ("action_id", "animation_index", "on_ground", "ground_id"):
+            assert int(out[field][p]) == int(ref[field][p]), (dataset_path.name, record, field)

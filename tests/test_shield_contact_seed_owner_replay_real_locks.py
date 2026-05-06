@@ -676,12 +676,14 @@ def test_carried_guardreflect_powershield_window_blocks_early_attackairb_hitshie
 
     defender = 1
 
-    ref_blocked, out_blocked = _run_rollout_window(dataset_path, 8636, 9104)
+    # Start after the unrelated attacker DamageFlyTop divergence in this long QGD slice; this lock is
+    # only about the GuardReflect x18 boundary immediately before the shield contact.
+    ref_blocked, out_blocked = _run_rollout_window(dataset_path, 8939, 9104)
     assert int(ref_blocked["action_id"][defender]) == 182
     assert int(out_blocked["action_id"][defender]) == 182
     assert int(out_blocked["hitlag"][defender]) == int(ref_blocked["hitlag"][defender]) == 0
 
-    ref_accept, out_accept = _run_rollout_window(dataset_path, 8636, 9107)
+    ref_accept, out_accept = _run_rollout_window(dataset_path, 8939, 9107)
     assert int(ref_accept["action_id"][defender]) == 181
     assert int(out_accept["action_id"][defender]) == 181
     assert int(out_accept["hitlag"][defender]) > 0

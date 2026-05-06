@@ -789,47 +789,47 @@ def test_noncausal_locomotion_lane_population_stays_narrow() -> None:
     }
     assert primary_turn_transitions == {(18, 24)}
     assert aggregate_turn == 80
-    assert aggregate_locomotion_motion == 1120
-    assert aggregate_specialn == 115
-    assert aggregate_match_flow == 377
-    assert aggregate_guard_collision == 1195
-    assert aggregate_hidden_order == 7101
+    assert aggregate_locomotion_motion == 1133
+    assert aggregate_specialn == 120
+    assert aggregate_match_flow == 391
+    assert aggregate_guard_collision == 1212
+    assert aggregate_hidden_order == 7257
     assert aggregate_attacklw3_runtime == 0
     assert aggregate_hidden_order_families == {
-        "attack": 414,
-        "cliff": 355,
-        "damage": 689,
-        "fox_falco_special": 725,
-        "grab_capture": 938,
-        "jump_landing": 2353,
-        "locomotion": 1516,
-        "other": 111,
+        "attack": 421,
+        "cliff": 361,
+        "damage": 707,
+        "fox_falco_special": 742,
+        "grab_capture": 949,
+        "jump_landing": 2410,
+        "locomotion": 1555,
+        "other": 112,
     }
     assert dict(aggregate_hidden_order_ref_actions.most_common(25)) == {
-        43: 877,
-        39: 600,
-        360: 432,
-        18: 431,
-        20: 380,
-        25: 319,
-        42: 287,
-        90: 245,
-        24: 193,
-        14: 187,
-        15: 186,
-        216: 184,
-        213: 181,
-        227: 178,
-        88: 155,
-        241: 147,
-        221: 147,
-        365: 143,
-        27: 125,
-        226: 123,
-        16: 99,
+        43: 906,
+        39: 610,
+        360: 446,
+        18: 445,
+        20: 385,
+        25: 325,
+        42: 294,
+        90: 255,
+        24: 199,
+        14: 193,
+        15: 190,
+        216: 186,
+        213: 183,
+        227: 180,
+        88: 157,
+        241: 148,
+        221: 148,
+        365: 145,
+        27: 126,
+        226: 125,
+        16: 102,
         344: 97,
-        69: 93,
-        67: 90,
-        65: 85,
+        69: 94,
+        67: 91,
+        65: 86,
     }
     assert aggregate_turn_transitions == {(18, 24)}

@@ -14,6 +14,7 @@ BUTTON_Y = 0x0800
 BUTTON_A = 0x0100
 BUTTON_B = 0x0200
 BUTTON_L = 0x0040
+BUTTON_R = 0x0020
 BUTTON_Z = 0x0010
 
 # Action ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
@@ -96,9 +97,13 @@ SM_FX_SPECIAL_S_START = 301
 SM_FX_SPECIAL_S = 302
 SM_FX_SPECIAL_S_END = 303
 SM_FX_SPECIAL_AIR_S_START = 304
+SM_FX_SPECIAL_AIR_S = 305
 SM_FX_SPECIAL_AIR_LW_START = 313
 
 # Collision env flag bits: refs/melee/src/common_structs.h, src/coll_env_flags.h
+MSL_COLLIDE_RIGHT_WALL_MASK = 0x00000FC0
+MSL_COLLIDE_CEILING_MASK = 0x00006000
+MSL_COLLIDE_FLOOR_MASK = 0x00018000
 MSL_COLLIDE_EDGE = 0x00800000
 MSL_COLLIDE_RIGHT_WALL_HUG = 0x00000800
 
@@ -415,6 +420,30 @@ def _step_once_with_collision_contacts(
         msl_binding.destroy(handle)
 
 
+def _run_locomotion_post_collision_with_flags(seed: np.ndarray, flags: int) -> np.ndarray:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    compare_stride = int(sizes["compare"])
+
+    assert seed.dtype == SEED_DTYPE
+    assert seed_stride == SEED_DTYPE.itemsize
+    assert compare_stride == COMPARE_DTYPE.itemsize
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+        out = np.zeros((1, compare_stride), dtype=np.uint8)
+        msl_binding.reseed_seed(handle, seed_bytes)
+        msl_binding.debug_set_coll_env_flags(handle, 0, 0, int(flags))
+        msl_binding.debug_run_locomotion_post_collision(handle)
+        msl_binding.write_compare(handle, out)
+        return out.view(COMPARE_DTYPE).reshape((1,))[0]
+    finally:
+        msl_binding.destroy(handle)
+
+
 def test_dash_iasa_opposite_flick_enters_turn_without_same_frame_flip() -> None:
     import msl_binding
 
@@ -617,6 +646,38 @@ def test_attackdash_iasa_jump_button_enters_kneebend() -> None:
     assert int(out0["action_id"][0]) == ACT_KNEEBEND
     assert int(out0["action_frame"][0]) == 0
     assert int(out0["animation_index"][0]) == SM_KNEEBEND
+
+
+def test_attackdash_x2340_trigger_window_enters_catchdash_without_new_a_edge() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_ATTACK_DASH)
+    seed["action_frame"][0, 0] = np.int16(2)
+    seed["anim_frame_f32"][0, 0] = np.float32(2.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_ATTACK_DASH)
+    seed["facing"][0, 0] = np.uint8(1)
+    seed["attackdash_x0"][0, 0] = np.int16(2)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    prev_view = prev_inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    # Source owner: ftCo_800D8AE0 checks held L/R plus mv.co.attackdash.x0, not an A edge.
+    # This is the boost-grab path after AttackDash_SetMv0 seeds fp+0x2340 from p_ftCommonData->x68.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D8AE0
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_SetMv0
+    prev_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_A)
+    cur_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_A | BUTTON_R)
+
+    out0 = _step_once(seed, prev_inp, inp)
+    assert int(out0["action_id"][0]) == ACT_CATCH_DASH
+    assert int(out0["action_frame"][0]) == 0
+    assert int(out0["animation_index"][0]) == SM_CATCH_DASH
 
 
 def test_attackdash_iasa_a_button_enters_attackhi3() -> None:
@@ -2691,6 +2752,39 @@ def test_grounded_sideb_main_floor_loss_enters_aerial_sideb_not_fall() -> None:
     assert int(out["action_id"][0]) == ACT_FX_SPECIAL_AIR_S
     assert int(out["on_ground"][0]) == 0
     assert int(out["jumps_left"][0]) == 0
+
+
+@pytest.mark.parametrize(
+    ("flags", "ground_id", "expected_action", "expected_on_ground"),
+    [
+        (MSL_COLLIDE_FLOOR_MASK, 5, ACT_FX_SPECIAL_S, 1),
+        (MSL_COLLIDE_CEILING_MASK, 5, ACT_FX_SPECIAL_AIR_S, 0),
+        (MSL_COLLIDE_RIGHT_WALL_MASK, 5, ACT_FX_SPECIAL_AIR_S, 0),
+        (MSL_COLLIDE_CEILING_MASK, 0xFFFF, ACT_FX_SPECIAL_AIR_S, 0),
+    ],
+)
+def test_aerial_sideb_ground_ledge_collision_requires_floor_owner(
+    flags: int, ground_id: int, expected_action: int, expected_on_ground: int
+) -> None:
+    seed = _seed_base()
+    seed["facing"][0, 0] = np.uint8(0)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["ground_id"][0, 0] = np.uint16(ground_id)
+    seed["action_id"][0, 0] = np.uint16(ACT_FX_SPECIAL_AIR_S)
+    seed["action_frame"][0, 0] = np.int16(0)
+    seed["animation_index"][0, 0] = np.uint32(SM_FX_SPECIAL_AIR_S)
+    seed["anim_frame_f32"][0, 0] = np.float32(0.0)
+    seed["jumps_left"][0, 0] = np.uint8(0)
+
+    out = _run_locomotion_post_collision_with_flags(seed, flags)
+
+    # Decomp: SpecialAirS_Coll calls ft_CheckGroundAndLedge. Only the floor/ledge owner returned by
+    # mpColl_800473CC may enter grounded Side-B; ceiling-only underside contact and wall-only contact
+    # do not become grounded even if CollData still carries an old floor id.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialAirS_Coll
+    # refs/melee/src/melee/mp/mpcoll.c::mpColl_800473CC
+    assert int(out["action_id"][0]) == expected_action
+    assert int(out["on_ground"][0]) == expected_on_ground
 
 
 def test_run_off_does_not_snap_to_floor_edge() -> None:
