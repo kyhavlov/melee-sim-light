@@ -191,11 +191,7 @@ class SimSession:
             self._num_players = 2 if char_ids is None else len(char_ids)
             if self._num_players not in (2, 4):
                 raise ValueError(f"num_players must be 2 or 4, got {self._num_players}")
-            init_char_ids = (
-                tuple(int(x) for x in char_ids_by_env[0])
-                if char_ids_by_env is not None
-                else tuple(int(x) for x in (char_ids or (CHAR_FALCO, CHAR_FOX)))
-            )
+            init_char_ids = tuple(int(x) for x in (char_ids or (CHAR_FALCO, CHAR_FOX)))
             init_team_ids = tuple(int(x) for x in (team_ids or tuple(range(self._num_players))))
             init_facing = tuple(int(x) for x in (facing or (1, 0, 1, 0)[: self._num_players]))
             self._char_ids = init_char_ids
