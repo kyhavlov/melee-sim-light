@@ -50,6 +50,10 @@ Prioritization:
 
 - Prioritize source-owner closure and simulator correctness; metrics choose between plausible
   owners, but do not define the patch boundary.
+- Proactively remove runtime bridges/proxies/fallbacks when they are in or adjacent to the owner
+  you are touching. Search the touched runtime/seed surfaces for bridge/proxy/fallback wording,
+  classify each hit in the worklog, and replace real runtime bridges with the source/data owner.
+  Do not relabel bridge debt as "source" unless the implementation changed to the real owner.
 - Start from one-step taxonomy, validation report diffs, per-replay/per-stage normalized deltas,
   rollout/disruptive reports, float outliers, and modelplay-visible bugs.
 - For platform-stage work, explicitly compare non-FD replays against FD/cardinal behavior using
@@ -67,6 +71,9 @@ Prioritization:
 - Prefer coherent shared owners over isolated row wins.
 - Prefer decomp/data-backed mechanics and generated-table owner predicates.
 - Stay on a major selected owner until fixed.
+- When a bridge/proxy/fallback is found, continue through the surrounding owner cluster before
+  moving on. A single removed bridge is not enough if the same file/family still has adjacent
+  runtime bridge debt.
 
 Investigation rules:
 
@@ -88,6 +95,8 @@ Investigation rules:
   distinction.
 - If an experiment fails, do not immediately revert it unless it is truly a dead end. Continue investigating the same owner with deeper evidence: decomp C, raw game asm, Slippi asm/labels, probes, extraction, instrumentation, or minimal seed/internal lanes.
 - No replay id, dataset id, row id, character-id proxy, stale-state shortcut, or broad tolerance hack in gameplay code.
+- Bridge/proxy/fallback audit terms are evidence, not naming cleanup. If the code is still a
+  compensating path, keep the debt wording honest and replace the owner; do not just rename it.
 - If hidden state is required, add the smallest explicit seed/internal lane or local probe/tooling path that exposes the real owner.
 - If a hidden seed/internal lane is added or changed, immediately update C structs, Python dtype/schema, DATA_CONTRACT.md, schema guards, and preprocess notes.
 - Add positive and negative replay-real locks for each retained owner boundary.

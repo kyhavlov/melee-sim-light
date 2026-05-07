@@ -55,6 +55,10 @@ Current target domain:
 - Core/shared systems must not branch on character id as a proxy for missing collision, timer, or callback state.
   Character-specific branches are allowed only for actual character-specific mechanics or data-table lookups, with nearby
   decomp or extracted-data backing.
+- Runtime/rollout bridges are not acceptable closure. If gameplay needs hidden state, live pose, or
+  callback phase, model that owner explicitly instead of adding a compensating runtime path. A
+  teacher-forced seed reconstruction is acceptable only when it initializes real hidden source state
+  for one-step reseed and does not change free-running gameplay semantics.
 
 ### C Core + Thin Python
 - All gameplay / physics / combat logic lives in **C** under `src/`.
