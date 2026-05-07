@@ -644,16 +644,16 @@ static inline void combat_catch_hitbox_model_scale_compensated(const MslBatch* b
   *io_hr /= model_scaling;
 }
 
-static inline uint8_t combat_guard_family_no_submotion_catch_fallback_msid(const MslBatch* batch,
-                                                                           size_t d_idx,
-                                                                           uint16_t* out_msid) {
+static inline uint8_t combat_guard_family_no_submotion_catch_source_msid(const MslBatch* batch,
+                                                                         size_t d_idx,
+                                                                         uint16_t* out_msid) {
   if (batch == NULL) {
     return 0u;
   }
   if (batch->state.animation_index[d_idx] <= 0xFFFFu) {
     return 0u;
   }
-  if (batch->state.action_frame[d_idx] > (int16_t)-2) {
+  if (batch->state.action_frame[d_idx] >= 0) {
     return 0u;
   }
 
@@ -686,22 +686,9 @@ static inline uint8_t combat_guard_family_no_submotion_catch_fallback_msid(const
   return 1u;
 }
 
-static inline uint8_t combat_guard_family_no_submotion_catch_fallback_applies(const MslBatch* batch,
-                                                                              size_t d_idx) {
-  return combat_guard_family_no_submotion_catch_fallback_msid(batch, d_idx, NULL);
-}
-
-static inline uint8_t combat_guardreflect_no_submotion_catch_fallback_applies(const MslBatch* batch,
-                                                                              size_t d_idx) {
-  uint16_t msid = 0u;
-  if (!combat_guard_family_no_submotion_catch_fallback_msid(batch, d_idx, &msid)) {
-    return 0u;
-  }
-  if (batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_GUARD_REFLECT) {
-    return 0u;
-  }
-  (void)msid;
-  return 1u;
+static inline uint8_t combat_guard_family_no_submotion_catch_source_applies(const MslBatch* batch,
+                                                                            size_t d_idx) {
+  return combat_guard_family_no_submotion_catch_source_msid(batch, d_idx, NULL);
 }
 
 static inline uint8_t combat_guardreflect_expired_x14_body_fallback_applies(const MslBatch* batch,
@@ -728,7 +715,7 @@ static inline uint8_t combat_guardreflect_expired_x14_body_fallback_applies(cons
   return 1u;
 }
 
-static inline uint8_t combat_guardreflect_catch_hurtcap_world(const MslBatch* batch, size_t d_idx,
+static inline uint8_t combat_guard_family_catch_hurtcap_world(const MslBatch* batch, size_t d_idx,
                                                               const MslHurtCap* cap, float* out_ax,
                                                               float* out_ay, float* out_az,
                                                               float* out_bx, float* out_by,
@@ -742,11 +729,11 @@ static inline uint8_t combat_guardreflect_catch_hurtcap_world(const MslBatch* ba
   }
 
   uint16_t msid = 0u;
-  if (!combat_guard_family_no_submotion_catch_fallback_msid(batch, d_idx, &msid)) {
+  if (!combat_guard_family_no_submotion_catch_source_msid(batch, d_idx, &msid)) {
     return 0u;
   }
 
-  // Guard-family catch-only no-submotion fallback:
+  // Guard-family catch-only no-submotion source pose:
   // - ftCo_MS_GuardOn/Guard/GuardSetOff/GuardReflect have source-owned submotion ids in the motion
   //   state table even when Slippi serializes animation_index=-1/-2 for the post-frame snapshot.
   // - ftColl_80078A2C checks `hurt_capsules[j].is_grabbable` through lbColl_80007ECC; it does not
@@ -767,6 +754,48 @@ static inline uint8_t combat_guardreflect_catch_hurtcap_world(const MslBatch* ba
       0) {
     (void)char_id;
     return 0u;
+  }
+  if (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_ON &&
+      batch->state.guard_tilt_x4[d_idx] > 0.0f) {
+    uint16_t guard_tilt_frame = batch->state.guard_tilt_x8[d_idx];
+    const float guard_end = msl_anim_end_frame(char_id, (uint16_t)MSL_SM_GUARD);
+    if (guard_end > 0.0f && (float)guard_tilt_frame > guard_end) {
+      guard_tilt_frame = msl_anim_frame_floor_u16(guard_end);
+    }
+    float target_m[12];
+    if (anim_pose_get_collision_matrix_f32(batch, d_idx, (uint16_t)MSL_SM_GUARD,
+                                           (float)guard_tilt_frame, cap->bone_part_id,
+                                           target_m) == 0) {
+      float tilt_mag = batch->state.guard_tilt_x4[d_idx];
+      if (tilt_mag > 1.0f) {
+        tilt_mag = 1.0f;
+      }
+      float guardon_blend = 1.0f;
+      const MslCommonParams* c = msl_common_params();
+      if (c != NULL && c->guard_x10_init_frames > 0.0f) {
+        const float elapsed = c->guard_x10_init_frames - (float)batch->state.guard_x10[d_idx];
+        guardon_blend = elapsed / c->guard_x10_init_frames;
+        if (guardon_blend < 0.0f) {
+          guardon_blend = 0.0f;
+        }
+        if (guardon_blend > 1.0f) {
+          guardon_blend = 1.0f;
+        }
+      }
+      // Source owner: GuardOn_Anim increments mv.co.guard.x0, then ftCo_80091E78 samples the
+      // angled Guard timeline when mv.co.guard.x4 is nonzero and blends it toward the GuardOn
+      // entry pose by x0 / fp->x2E8 before ftColl_80078A2C consumes grabbable hurtcaps.
+      // The seed surface carries the post-update guard tilt target (`x8`), tilt magnitude (`x4`),
+      // and GuardOn hold timer (`x10`), so catch selection can reconstruct the same no-submotion
+      // grabbable pose without consuming ShieldDesc center/rim geometry.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_Anim,ftCo_80091E78}
+      // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078A2C
+      // refs/melee/src/melee/lb/lbcollision.c::lbColl_80007ECC
+      for (int i = 0; i < 12; i++) {
+        const float tilted = m[i] + tilt_mag * (target_m[i] - m[i]);
+        m[i] += guardon_blend * (tilted - m[i]);
+      }
+    }
   }
 
   float ax = 0.0f, ay = 0.0f, az = 0.0f;
@@ -1167,16 +1196,9 @@ static inline uint8_t combat_guard_tilt_live_body_pose_owner(const MslBatch* bat
   if (batch->state.pos_z[d_idx] <= 1.0e-6f && batch->state.pos_z[d_idx] >= -1.0e-6f) {
     return 0u;
   }
-  const MslCommonParams* c = msl_common_params();
-  const float stick_x = apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[d_idx]),
-                                       c != NULL ? c->lstick_deadzone_x : 0.0f);
-  const float stick_y = apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[d_idx]),
-                                       c != NULL ? c->lstick_deadzone_y : 0.0f);
-  const uint8_t current_tilt_input = (stick_x != 0.0f || stick_y != 0.0f) ? 1u : 0u;
   MslShieldTiltTableView tv;
   if (msl_shield_tilt_table_view(batch->state.char_id[d_idx], &tv) != 0 || tv.xyz == NULL ||
-      tv.frame_count == 0u ||
-      (batch->state.guard_tilt_x8[d_idx] == tv.neutral_frame && current_tilt_input == 0u)) {
+      tv.frame_count == 0u) {
     return 0u;
   }
   return (batch->state.guard_tilt_x4[d_idx] > 0.0f) ? 1u : 0u;
@@ -5954,18 +5976,17 @@ static void combat_select_catch_hits_one_mutating(MslBatch* batch, int bi) {
       }
 
       uint8_t hurtcap_count = batch->state.hurtcap_count[d_idx];
-      const MslHurtCap* catch_fallback_caps = NULL;
-      uint16_t catch_fallback_count_u16 = 0u;
-      uint8_t use_catch_fallback_caps = 0u;
-      if (hurtcap_count == 0 &&
-          combat_guard_family_no_submotion_catch_fallback_applies(batch, d_idx)) {
-        if (hurtcaps_get(batch->state.char_id[d_idx], &catch_fallback_caps,
-                         &catch_fallback_count_u16) == 0 &&
-            catch_fallback_caps != NULL && catch_fallback_count_u16 != 0u) {
-          use_catch_fallback_caps = 1u;
-          hurtcap_count = catch_fallback_count_u16 > (uint16_t)MSL_MAX_HURTCAPS
+      const MslHurtCap* catch_source_caps = NULL;
+      uint16_t catch_source_count_u16 = 0u;
+      uint8_t use_catch_source_caps = 0u;
+      if (combat_guard_family_no_submotion_catch_source_applies(batch, d_idx)) {
+        if (hurtcaps_get(batch->state.char_id[d_idx], &catch_source_caps,
+                         &catch_source_count_u16) == 0 &&
+            catch_source_caps != NULL && catch_source_count_u16 != 0u) {
+          use_catch_source_caps = 1u;
+          hurtcap_count = catch_source_count_u16 > (uint16_t)MSL_MAX_HURTCAPS
                               ? (uint8_t)MSL_MAX_HURTCAPS
-                              : (uint8_t)catch_fallback_count_u16;
+                              : (uint8_t)catch_source_count_u16;
         }
       }
       if (hurtcap_count == 0) {
@@ -6027,8 +6048,8 @@ static void combat_select_catch_hits_one_mutating(MslBatch* batch, int bi) {
           float bx = 0.0f, by = 0.0f, bz = 0.0f;
           float cr = 0.0f;
           uint8_t overlaps = 0u;
-          if (use_catch_fallback_caps) {
-            if (!combat_guardreflect_catch_hurtcap_world(batch, d_idx, &catch_fallback_caps[cap_id],
+          if (use_catch_source_caps) {
+            if (!combat_guard_family_catch_hurtcap_world(batch, d_idx, &catch_source_caps[cap_id],
                                                          &ax, &ay, &az, &bx, &by, &bz, &cr)) {
               continue;
             }
@@ -6091,33 +6112,6 @@ static void combat_select_catch_hits_one_mutating(MslBatch* batch, int bi) {
         if (found_grab_contact) {
           // Decomp shape: after finding a valid grabbable overlap for this defender, advance to the
           // next defender candidate (ftColl_80078A2C uses a goto next_gobj path).
-          break;
-        }
-        const float shr = batch->state.shield_radius[d_idx];
-        // Retained missing-pose bridge, not a source owner:
-        // - ftColl_80078A2C grabs a fighter via grabbable hurtcaps, not the shield rim.
-        // - Some GuardOn no-submotion replay seeds still lack enough source pose to reconstruct
-        //   those grabbable caps; until that hidden pose owner is promoted, keep the older
-        //   ShieldDesc-center proxy only as a center-point fallback. Negative locks prevent
-        //   broadening this into shield-radius grab acquisition.
-        // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078A2C
-        // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
-        const float shx = batch->state.shield_x[d_idx];
-        const float shy = batch->state.shield_y[d_idx];
-        const float shz = batch->state.shield_z[d_idx];
-        const float dx = shx - hx;
-        const float dy = shy - hy;
-        const float dz = shz - hz;
-        if (shr > 0.0f && (dx * dx + dy * dy + dz * dz) <= (raw_hr * raw_hr)) {
-          const float abs_dx = fabsf(batch->state.pos_x[d_idx] - batch->state.pos_x[a_idx]);
-          if (best_victim < 0 || abs_dx < best_abs_dx ||
-              (abs_dx == best_abs_dx && defender < best_victim)) {
-            best_victim = defender;
-            best_abs_dx = abs_dx;
-            best_hit_group = hit_group;
-            best_rehit_frames = rehit_frames;
-          }
-          found_grab_contact = 1u;
           break;
         }
       }

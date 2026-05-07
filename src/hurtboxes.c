@@ -128,16 +128,9 @@ static inline uint8_t hurtboxes_guard_tilt_live_body_pose_owner(const MslBatch* 
   if (batch->state.pos_z[idx] <= 1.0e-6f && batch->state.pos_z[idx] >= -1.0e-6f) {
     return 0u;
   }
-  const MslCommonParams* c = msl_common_params();
-  const float stick_x = apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]),
-                                       c != NULL ? c->lstick_deadzone_x : 0.0f);
-  const float stick_y = apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]),
-                                       c != NULL ? c->lstick_deadzone_y : 0.0f);
-  const uint8_t current_tilt_input = (stick_x != 0.0f || stick_y != 0.0f) ? 1u : 0u;
   MslShieldTiltTableView tv;
   if (msl_shield_tilt_table_view(batch->state.char_id[idx], &tv) != 0 || tv.xyz == NULL ||
-      tv.frame_count == 0u ||
-      (batch->state.guard_tilt_x8[idx] == tv.neutral_frame && current_tilt_input == 0u)) {
+      tv.frame_count == 0u) {
     return 0u;
   }
   return (batch->state.guard_tilt_x4[idx] > 0.0f) ? 1u : 0u;

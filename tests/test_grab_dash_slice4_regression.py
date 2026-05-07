@@ -9,7 +9,7 @@ import pytest
 from tools.eval.dataset import COMPARE_DTYPE, SEED_DTYPE, read_dataset
 
 
-_BASE_REL = "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent"
+_BASE_REL = "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent"
 _BUTTON_A = 0x0100
 _BUTTON_Z = 0x0010
 _BUTTON_L = 0x0040
@@ -171,7 +171,7 @@ def test_catch_grabs_shielded_guardon_no_submotion_snapshot() -> None:
     victim = 1
 
     # Replay-real lock for shielded-fighter catch acquisition:
-    # - owner Catch hitboxes overlap the live ShieldDesc on a GuardOn no-submotion snapshot,
+    # - owner Catch hitboxes overlap the live no-submotion GuardOn grabbable hurtcaps,
     # - ref routes Catch -> CatchPull and GuardOn -> CapturePulledLw with no hitlag/hitstun.
     # Decomp owner: ftColl_80078A2C selects a grabbable fighter victim, then ftGrabDist installs
     # victim_gobj / x221B_b5 before grab_flow_on_catch_connect mirrors the transition.
@@ -180,6 +180,8 @@ def test_catch_grabs_shielded_guardon_no_submotion_snapshot() -> None:
     assert int(row["ref_t1"]["action_id"][0, owner]) == _ACT_CATCH_PULL
     assert int(row["seed_t"]["action_id"][0, victim]) == _ACT_GUARD_ON
     assert int(row["seed_t"]["animation_index"][0, victim]) == 0xFFFFFFFF
+    assert int(row["seed_t"]["guard_tilt_x8"][0, victim]) == 10
+    assert float(row["seed_t"]["guard_tilt_x4"][0, victim]) == pytest.approx(1.0)
     assert int(row["seed_t"]["state_flags"][0, victim, 2]) & 0x80
     assert int(row["ref_t1"]["action_id"][0, victim]) == _ACT_CAPTURE_PULLED_LW
     assert int(row["ref_t1"]["hitlag"][0, owner]) == 0
@@ -195,7 +197,7 @@ def test_catch_grabs_shielded_guardon_no_submotion_snapshot() -> None:
 
 @pytest.mark.integration
 @pytest.mark.parametrize("record", [5489, 5490])
-def test_catch_shielddesc_center_fallback_does_not_grab_shield_rim(record: int) -> None:
+def test_catch_no_submotion_source_pose_does_not_grab_shield_rim(record: int) -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_rel = f"{_BASE_REL}/GracefulAttachedTurtle.msl"
     dataset_path = root / dataset_rel
@@ -208,14 +210,15 @@ def test_catch_shielddesc_center_fallback_does_not_grab_shield_rim(record: int) 
     owner = 0
     victim = 1
 
-    # Negative lock for the ShieldDesc-center catch fallback:
+    # Negative lock for the GuardOn no-submotion source-pose catch owner:
     # these rows have shield-rim overlap against a GuardOn no-submotion snapshot, but ref keeps the
-    # owner in Catch. This prevents broadening the fallback into a shield-radius grab approximation.
+    # owner in Catch. This prevents reintroducing ShieldDesc/rim grab acquisition.
     # refs/melee/src/melee/ft/ftcoll.c::ftColl_80078A2C
     assert int(row["seed_t"]["action_id"][0, owner]) == _ACT_CATCH
     assert int(row["ref_t1"]["action_id"][0, owner]) == _ACT_CATCH
     assert int(row["seed_t"]["action_id"][0, victim]) == _ACT_GUARD_ON
     assert int(row["seed_t"]["animation_index"][0, victim]) == 0xFFFFFFFF
+    assert float(row["seed_t"]["guard_tilt_x4"][0, victim]) > 0.0
     assert int(row["seed_t"]["state_flags"][0, victim, 2]) & 0x80
     assert int(row["ref_t1"]["hitlag"][0, owner]) == 0
     assert int(row["ref_t1"]["hitstun"][0, owner]) == 0
