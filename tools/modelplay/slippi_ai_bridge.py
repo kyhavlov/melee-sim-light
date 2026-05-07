@@ -21,6 +21,28 @@ class ModelAgent:
         return self.embed_controller.decode(action)
 
 
+@dataclass
+class FusedBatchModelAgent:
+    delayed_agent: object
+    embed_controller: object
+    batch_size: int
+
+    def step(self, games: list[object], *, needs_reset: np.ndarray) -> list[object]:
+        if len(games) != self.batch_size:
+            raise ValueError(f"expected {self.batch_size} games, got {len(games)}")
+        needs_reset = np.asarray(needs_reset, dtype=np.bool_)
+        if needs_reset.shape != (self.batch_size,):
+            raise ValueError(f"expected needs_reset shape {(self.batch_size,)}, got {needs_reset.shape}")
+
+        batched_game = _batch_namedtuples(games)
+        outputs = self.delayed_agent.step(batched_game, needs_reset)
+        action = outputs.controller_state
+        return [
+            self.embed_controller.decode(_map_nt(lambda x, i=i: x[i], action))
+            for i in range(self.batch_size)
+        ]
+
+
 def import_slippi_ai(slippi_ai_root: Path):
     root = str(slippi_ai_root)
     if root not in sys.path:
@@ -50,6 +72,32 @@ def build_model_agent(
     return ModelAgent(delayed_agent=delayed, embed_controller=delayed.embed_controller)
 
 
+def build_fused_batch_model_agent(
+    *,
+    slippi_ai_root: Path,
+    model_path: Path,
+    batch_size: int,
+    name: Optional[str] = None,
+):
+    if batch_size <= 0:
+        raise ValueError(f"batch_size must be positive, got {batch_size}")
+    eval_lib = import_slippi_ai(slippi_ai_root)
+    state = eval_lib.load_state(path=str(model_path))
+    delayed = eval_lib.build_delayed_agent(
+        state=state,
+        console_delay=0,
+        batch_size=int(batch_size),
+        async_inference=False,
+        name=name,
+    )
+    delayed.start()
+    return FusedBatchModelAgent(
+        delayed_agent=delayed,
+        embed_controller=delayed.embed_controller,
+        batch_size=int(batch_size),
+    )
+
+
 def stop_model_agent(agent: ModelAgent) -> None:
     agent.delayed_agent.stop()
 
@@ -62,3 +110,11 @@ def _map_nt(f, val):
 
 def _batched_namedtuple(game):
     return _map_nt(lambda x: np.expand_dims(x, 0), game)
+
+
+def _batch_namedtuples(values: list[object]):
+    if not values:
+        raise ValueError("cannot batch empty values")
+    from slippi_ai import utils  # type: ignore
+
+    return utils.batch_nest_nt(values)

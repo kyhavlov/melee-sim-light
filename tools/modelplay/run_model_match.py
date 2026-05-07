@@ -115,7 +115,7 @@ def parse_args() -> argparse.Namespace:
         "--dataset",
         type=Path,
         default=Path(
-            "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
+            "datasets/fox_falco_fd_ucf084_recent/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
         ),
     )
     ap.add_argument("--start-record", type=int, default=0)

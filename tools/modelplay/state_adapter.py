@@ -10,7 +10,26 @@ from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 
 
 MSL_STAGE_FINAL_DESTINATION = 32
+MSL_STAGE_FOUNTAIN_OF_DREAMS = 2
+MSL_STAGE_POKEMON_STADIUM = 3
+MSL_STAGE_YOSHIS_STORY = 8
+MSL_STAGE_DREAM_LAND_N64 = 28
+MSL_STAGE_BATTLEFIELD = 31
+LIBMELEE_STAGE_FOUNTAIN_OF_DREAMS = 8
+LIBMELEE_STAGE_POKEMON_STADIUM = 18
+LIBMELEE_STAGE_YOSHIS_STORY = 6
+LIBMELEE_STAGE_DREAM_LAND_N64 = 26
+LIBMELEE_STAGE_BATTLEFIELD = 24
 LIBMELEE_STAGE_FINAL_DESTINATION = 25
+
+LIBMELEE_STAGE_BY_MSL_STAGE = {
+    MSL_STAGE_FOUNTAIN_OF_DREAMS: LIBMELEE_STAGE_FOUNTAIN_OF_DREAMS,
+    MSL_STAGE_POKEMON_STADIUM: LIBMELEE_STAGE_POKEMON_STADIUM,
+    MSL_STAGE_YOSHIS_STORY: LIBMELEE_STAGE_YOSHIS_STORY,
+    MSL_STAGE_DREAM_LAND_N64: LIBMELEE_STAGE_DREAM_LAND_N64,
+    MSL_STAGE_BATTLEFIELD: LIBMELEE_STAGE_BATTLEFIELD,
+    MSL_STAGE_FINAL_DESTINATION: LIBMELEE_STAGE_FINAL_DESTINATION,
+}
 
 STAGE_DEBUG_DTYPE = np.dtype(
     [
@@ -402,7 +421,7 @@ def build_slippi_ai_game(state: SimFrameState, controllers: Mapping[int, object]
         )
         for i, item in enumerate(state.items)
     }
-    stage = LIBMELEE_STAGE_FINAL_DESTINATION if state.stage_id == MSL_STAGE_FINAL_DESTINATION else 0
+    stage = LIBMELEE_STAGE_BY_MSL_STAGE.get(state.stage_id, 0)
     return sa_types.Game(
         p0=p0,
         p1=p1,
@@ -438,6 +457,7 @@ def _viewer_team_id(team_id: int) -> int:
 def viewer_settings_from_state(state: SimFrameState, *, start_stocks: int = 4, timer_start: int = 480) -> dict:
     settings = dict(SLIPPI_VIEWER_SETTINGS_TEMPLATE)
     settings["timerStart"] = int(timer_start)
+    settings["stageId"] = int(state.stage_id)
     settings["isTeams"] = bool(state.is_teams)
     settings["characterUiPlacesCount"] = int(state.num_players)
     settings["playerSettings"] = []

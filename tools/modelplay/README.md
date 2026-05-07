@@ -26,6 +26,29 @@ uv run python -m tools.modelplay.run_model_match \
 
 This writes `trace.json` under `reports/triage/...`.
 
+Diverse traces with the same checkpoint on both ports can use fused batched inference. This stacks
+all port/env views into one Slippi-AI `DelayedAgent` call per frame and writes one trace directory
+per env:
+
+```bash
+uv run python -m tools.modelplay.run_model_batch \
+  --slippi-ai-root /media/kyle/Windows/Users/kyleh/git/slippi-ai \
+  --model /path/to/model.pkl \
+  --num-traces 5 \
+  --start-mode sim-init \
+  --out reports/modelplay/<run_name>
+```
+
+Batch output layout:
+
+```text
+reports/modelplay/<run_name>/
+  summary.txt
+  env_000/trace.json
+  env_001/trace.json
+  ...
+```
+
 Doubles uses the C-owned sim-init path and defaults to red `fox/falco` vs blue `fox/falco` on FD:
 
 ```bash
