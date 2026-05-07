@@ -350,6 +350,7 @@ SEED_DTYPE = np.dtype(
         ("shine_is_release", _arr("u1", MAX_PLAYERS)),
         ("ecb_lock_timer", _arr("u1", MAX_PLAYERS)),
         ("ledge_cooldown", _arr("u1", MAX_PLAYERS)),
+        ("cliff_ledge_floor_segment_id_u16", _arr("<u2", MAX_PLAYERS)),
         ("landing_fallspecial_allow_interrupt", _arr("u1", MAX_PLAYERS)),
         ("turn_frames_to_turn", _arr("u1", MAX_PLAYERS)),
         ("turn_has_turned", _arr("u1", MAX_PLAYERS)),

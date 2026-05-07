@@ -1641,6 +1641,15 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       }
       batch->state.ledge_side[idx] = -1;
       batch->state.ledge_drop_floor_skip_segment_id[idx] = 0xFFFFu;
+      if (batch->state.cliff_ledge_floor_segment_id != NULL) {
+        const uint16_t seeded_cliff_floor = seed->cliff_ledge_floor_segment_id_u16[p];
+        batch->state.cliff_ledge_floor_segment_id[idx] =
+            (seeded_cliff_floor == 0xFFFFu) ? 0xFFFFu : seeded_cliff_floor;
+        if (batch->state.cliff_ledge_floor_segment_seeded != NULL) {
+          batch->state.cliff_ledge_floor_segment_seeded[idx] =
+              (seeded_cliff_floor == 0xFFFFu) ? 0u : 1u;
+        }
+      }
       batch->state.landing_fallspecial_allow_interrupt[idx] =
           seed->landing_fallspecial_allow_interrupt[p] ? 1u : 0u;
       {

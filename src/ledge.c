@@ -211,6 +211,35 @@ static inline void enter_wait_on_stage(MslBatch* batch, size_t idx) {
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
 }
 
+static inline void update_cliff_ledge_floor_owner(MslBatch* batch, int bi, size_t idx) {
+  if (batch == NULL || batch->state.cliff_ledge_floor_segment_id == NULL) {
+    return;
+  }
+  const uint32_t stage_id = batch->state.stage_id[bi];
+  int side = (int)batch->state.ledge_side[idx];
+  if (!(side == 0 || side == 1)) {
+    // Cliff source state always has a ledge side. Teacher-forced reseeds of Cliff actions can enter
+    // before local side state is initialized, so reconstruct from the same source-facing convention:
+    // left ledge faces right, right ledge faces left. Do not infer from position or future landing.
+    // refs/melee/src/melee/ft/ftcliffcommon.c::ftCliffCommon_80081370
+    side = batch->state.facing[idx] ? 0 : 1;
+    batch->state.ledge_side[idx] = (int8_t)side;
+  }
+  const MslStageFloorLine* ledge_floor = stage_collision_get_ledge_floor_line(stage_id, side);
+  if (ledge_floor != NULL) {
+    // Source cliff floor owner:
+    // `mv.co.cliff.ledge_id` is selected by CliffCatch and remains the CollData floor owner through
+    // immediate cliff exits such as CliffWait drop/release -> Fall -> JumpAerial -> EscapeAir.
+    // Store the generated stage floor line, not a position-fit or outcome-fit line.
+    // refs/melee/src/melee/ft/ftcliffcommon.c::ftCliffCommon_80081370
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_8009AAFC
+    batch->state.cliff_ledge_floor_segment_id[idx] = ledge_floor->segment_i;
+    if (batch->state.cliff_ledge_floor_segment_seeded != NULL) {
+      batch->state.cliff_ledge_floor_segment_seeded[idx] = 0u;
+    }
+  }
+}
+
 static inline void mark_stale_floor_skip_for_ledge_flow(MslBatch* batch, int bi, size_t idx) {
   if (batch == NULL) {
     return;
@@ -228,6 +257,7 @@ static inline void mark_stale_floor_skip_for_ledge_flow(MslBatch* batch, int bi,
       batch->state.ledge_drop_floor_skip_segment_id[idx] = ground_id;
     }
   }
+  update_cliff_ledge_floor_owner(batch, bi, idx);
 }
 
 static inline uint8_t did_tap_jump(const MslCommonParams* c, float stick_y, uint8_t tilt_timer_y) {
@@ -650,8 +680,8 @@ static inline uint8_t ledge_wait_try_climb_or_drop(MslBatch* batch, const MslCom
     const uint16_t cd = c->ledge_cooldown_frames;
     batch->state.ledge_cooldown[idx] = (cd > 0xFFu) ? 0xFFu : (uint8_t)cd;
   }
-  batch->state.ledge_side[idx] = -1;
   mark_stale_floor_skip_for_ledge_flow(batch, bi, idx);
+  batch->state.ledge_side[idx] = -1;
   enter_fall(batch, idx);
   return 1;
 }
@@ -754,6 +784,7 @@ void ledge_update_pre_physics(MslBatch* batch) {
           // Infer ledge side from facing: on the left ledge the fighter faces right (+).
           batch->state.ledge_side[idx] = batch->state.facing[idx] ? 0 : 1;
         }
+        update_cliff_ledge_floor_owner(batch, bi, idx);
         if (a == (uint16_t)MSL_ACT_CLIFF_CATCH) {
           const float end_frame =
               msl_anim_end_frame(batch->state.char_id[idx], (uint16_t)MSL_SM_CLIFF_CATCH);
@@ -841,8 +872,8 @@ void ledge_update_pre_physics(MslBatch* batch) {
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::ftCo_8009A9AC
             const uint16_t cd = c->ledge_cooldown_frames;
             batch->state.ledge_cooldown[idx] = (cd > 0xFFu) ? 0xFFu : (uint8_t)cd;
-            batch->state.ledge_side[idx] = -1;
             mark_stale_floor_skip_for_ledge_flow(batch, bi, idx);
+            batch->state.ledge_side[idx] = -1;
             enter_fall(batch, idx);
             a = batch->state.action_id[idx];
           }
@@ -1019,6 +1050,7 @@ void ledge_try_catch_post_collision(MslBatch* batch) {
 
         // Enter CliffCatch and snap.
         batch->state.ledge_side[idx] = 0;
+        update_cliff_ledge_floor_owner(batch, bi, idx);
         batch->state.action_id[idx] = (uint16_t)MSL_ACT_CLIFF_CATCH;
         batch->state.animation_index[idx] = (uint32_t)MSL_SM_CLIFF_CATCH;
         batch->state.on_ground[idx] = 0;
@@ -1056,6 +1088,7 @@ void ledge_try_catch_post_collision(MslBatch* batch) {
         }
 
         batch->state.ledge_side[idx] = 1;
+        update_cliff_ledge_floor_owner(batch, bi, idx);
         batch->state.action_id[idx] = (uint16_t)MSL_ACT_CLIFF_CATCH;
         batch->state.animation_index[idx] = (uint32_t)MSL_SM_CLIFF_CATCH;
         batch->state.on_ground[idx] = 0;

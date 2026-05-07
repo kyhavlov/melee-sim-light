@@ -1056,6 +1056,26 @@ static inline uint16_t platform_floor_skip_segment_id(const MslBatch* batch, siz
   return 0xFFFFu;
 }
 
+static inline uint8_t action_consumes_cliff_ledge_floor_owner(uint8_t char_id, uint16_t action_id) {
+  enum {
+    // MSLMSO01 callback_symbols.json: ftCo_EscapeAir_Coll.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    MSL_MSO_CB_FTCO_ESCAPEAIR_COLL = 339u,
+  };
+  // EscapeAir_Coll is the Fox/Falco cliff-exit consumer covered by the current RL1 surface:
+  // ftCo_EscapeAir_Coll -> ft_80082C74 -> ft_80081D0C -> mpColl_800471F8. The hidden floor line is
+  // selected through the shared CollData floor-owner path below only while source ledge-release
+  // cooldown is live; this predicate is extracted MotionState callback ownership, not a replay
+  // outcome or local action-id slice.
+  // data/motion_state/owners/{fox,falco}.bin (MSLMSO01 coll_cb_by_action)
+  // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+  // refs/melee/src/melee/mp/mpcoll.c::mpColl_800471F8
+  return (msl_motion_state_coll_cb_id(char_id, action_id) ==
+          (uint16_t)MSL_MSO_CB_FTCO_ESCAPEAIR_COLL)
+             ? 1u
+             : 0u;
+}
+
 static inline uint8_t floor_line_is_skipped_platform(const MslStageFloorGraph* g, int line_idx,
                                                      uint16_t skip_segment_i) {
   if (g == NULL || line_idx < 0 || (size_t)line_idx >= g->line_count || skip_segment_i == 0xFFFFu) {
@@ -2279,6 +2299,39 @@ void mpcoll_ground_apply(MslBatch* batch) {
           prefer_line_idx = -1;
         }
       }
+      uint8_t cliff_ledge_floor_owner_selected = 0u;
+      if (action_consumes_cliff_ledge_floor_owner(char_id, action_id) &&
+          batch->state.ledge_cooldown[idx] != 0 &&
+          batch->state.cliff_ledge_floor_segment_id != NULL &&
+          batch->state.cliff_ledge_floor_segment_id[idx] != 0xFFFFu) {
+        const uint16_t cliff_ledge_floor_id = batch->state.cliff_ledge_floor_segment_id[idx];
+        const int cliff_ledge_line_idx =
+            stage_collision_floor_line_index(stage_id, cliff_ledge_floor_id);
+        const uint8_t prefer_line_is_ledge_floor =
+            (prefer_line_idx >= 0 && g->lines[(size_t)prefer_line_idx].is_ledge) ? 1u : 0u;
+        const uint8_t prefer_line_is_platform_floor =
+            (prefer_line_idx >= 0 && g->lines[(size_t)prefer_line_idx].is_platform) ? 1u : 0u;
+        if ((prefer_line_idx < 0 || prefer_line_is_ledge_floor || prefer_line_is_platform_floor) &&
+            cliff_ledge_line_idx >= 0 &&
+            floor_line_is_runtime_fighter_solid(g, stage_id, cliff_ledge_line_idx) &&
+            g->lines[(size_t)cliff_ledge_line_idx].is_ledge) {
+          // Source cliff/CollData floor owner:
+          // CliffCatch/CliffWait store `mv.co.cliff.ledge_id`; release/drop sets
+          // fp->x2064_ledgeCooldown, and the following air collision wrappers branch on that
+          // timer. Immediate cliff exits carry the floor owner through Fall/JumpAerial/EscapeAir
+          // collision callbacks while the timer is live, while Slippi-visible lastGroundId may
+          // still name a stale platform, same-side ledge, or wrong-side ledge.
+          // Prefer the hidden cliff floor only when the visible floor owner is missing or still a
+          // ledge/platform owner; do not replace an already-updated hard main-floor index.
+          // refs/melee/src/melee/ft/ftcliffcommon.c::ftCliffCommon_80081370
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_8009AAFC
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+          // refs/melee/src/melee/ft/ft_081B.c::ft_80082C74
+          prefer_line_idx = cliff_ledge_line_idx;
+          cliff_ledge_floor_owner_selected =
+              (raw_current_floor_line_idx != cliff_ledge_line_idx) ? 1u : 0u;
+        }
+      }
       const uint8_t prefer_line_is_platform =
           (prefer_line_idx >= 0 && g->lines[(size_t)prefer_line_idx].is_platform) ? 1u : 0u;
       const uint8_t prefer_line_is_slope =
@@ -2288,6 +2341,16 @@ void mpcoll_ground_apply(MslBatch* batch) {
       const uint8_t prefer_line_is_platform_or_slope =
           (uint8_t)((prefer_line_is_platform || prefer_line_is_slope || prefer_line_is_ledge) ? 1u
                                                                                               : 0u);
+      const uint8_t cliff_ledge_floor_owner_active =
+          (cliff_ledge_floor_owner_selected && prefer_line_is_ledge &&
+           action_consumes_cliff_ledge_floor_owner(char_id, action_id) &&
+           batch->state.ledge_cooldown[idx] != 0 &&
+           batch->state.cliff_ledge_floor_segment_id != NULL &&
+           batch->state.cliff_ledge_floor_segment_id[idx] != 0xFFFFu &&
+           prefer_line_idx == stage_collision_floor_line_index(
+                                  stage_id, batch->state.cliff_ledge_floor_segment_id[idx]))
+              ? 1u
+              : 0u;
       const uint16_t skip_platform_segment_i = platform_floor_skip_segment_id(batch, idx, stage_id);
       const uint8_t escapeair_locked =
           (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR && ecb_lock_active) ? 1u : 0u;
@@ -2458,11 +2521,19 @@ void mpcoll_ground_apply(MslBatch* batch) {
             const uint8_t can_sweep = (uint8_t)(cur_bottom_y <= prev_bottom_y);
             int hit_line_idx = -1;
             float ix = 0.0f, iy = 0.0f;
+            const int floor_sweep_skip_line_idx =
+                // mpCheckFloor checks the current CollData.floor.index. The generic lite-sim pass
+                // skips the preferred line because ordinary floor.index projection has already
+                // tried it above, but the teacher-forced cliff floor owner is restored only for this
+                // air-callback floor sweep. Include it so the shared CollData owner consumes the
+                // same ledge floor rather than relying on a downstream EscapeAir exception.
+                // refs/melee/src/melee/mp/mpcoll.c::mpColl_80044628_Floor
+                cliff_ledge_floor_owner_active ? -1 : prefer_line_idx;
             if (!landing_release_skip_floor_sweep && can_sweep &&
                 floor_sweep_check(batch, idx, bi, g, stage_id, prev_bottom_x, prev_bottom_y,
                                   cur_bottom_x, cur_bottom_y, skip_platform_segment_i,
-                                  prefer_line_idx, prefer_line_idx, c, &hit_line_idx, &ix, &iy,
-                                  &floor_nx, &floor_ny)) {
+                                  prefer_line_idx, floor_sweep_skip_line_idx, c, &hit_line_idx, &ix,
+                                  &iy, &floor_nx, &floor_ny)) {
               const uint8_t hit_line_is_platform =
                   (hit_line_idx >= 0 && g->lines[(size_t)hit_line_idx].is_platform) ? 1u : 0u;
               const uint8_t hit_line_has_platform_transform =
@@ -2547,6 +2618,34 @@ void mpcoll_ground_apply(MslBatch* batch) {
                    !stage_collision_floor_line_is_platform(stage_id, batch->state.ground_id[idx]))
                       ? 1u
                       : 0u;
+              const uint8_t suppress_cliff_horizontal_ledge_locked_zero_bottom_hit =
+                  // Source mpColl ordering for the restored cliff floor owner:
+                  // mpColl_80046904 only consumes mpColl_80044838_Floor after
+                  // mpColl_80044628_Floor's live ECB-bottom check. A direct one-step seed can
+                  // reconstruct the cliff floor id while the locked EscapeAir bottom is still the
+                  // zero-bottom handoff value; on flat ledge floors this can synthesize an
+                  // early horizontal-floor sweep before the interpolated source ECB bottom reaches
+                  // the floor. Keep sloped ledges with the raw low-floor owner below, and let later
+                  // lock phases consume the horizontal ledge once the callback-local lock timer has
+                  // advanced.
+                  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+                  // refs/melee/src/melee/mp/mpcoll.c::{
+                  //   mpCollInterpolateECB,mpColl_80044628_Floor,mpColl_80044838_Floor}
+                  (cliff_ledge_floor_owner_active &&
+                   batch->state.cliff_ledge_floor_segment_seeded != NULL &&
+                   batch->state.cliff_ledge_floor_segment_seeded[idx] != 0u && hit_line_idx >= 0 &&
+                   (g->lines[(size_t)hit_line_idx].segment_i ==
+                        batch->state.cliff_ledge_floor_segment_id[idx] ||
+                    resolved_segment_i == batch->state.cliff_ledge_floor_segment_id[idx]) &&
+                   !floor_line_is_generated_stage_slope(
+                       batch, bi, g,
+                       (resolved_segment_i == batch->state.cliff_ledge_floor_segment_id[idx] &&
+                        out_line_idx2 >= 0)
+                           ? out_line_idx2
+                           : hit_line_idx) &&
+                   ecb_lock_timer_seed > 1u)
+                      ? 1u
+                      : 0u;
               const uint8_t escapeair_low_floor_raw_hit_over_stale_platform_remap =
                   // mpCheckFloor owns the raw floor intersection before mpLib projection/remap. If
                   // that raw hit is Yoshi's low ledge floor but the carried CollData.floor.index
@@ -2571,7 +2670,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
               } else if (escapeair_entry_locked_platform_airborne ||
                          specialhi_fall_understage_hard_floor_clip ||
                          suppress_damage_transformed_platform_ecb_only_land ||
-                         suppress_fallspecial_b_transformed_platform_skip) {
+                         suppress_fallspecial_b_transformed_platform_skip ||
+                         suppress_cliff_horizontal_ledge_locked_zero_bottom_hit) {
                 floor_write_edge_suppression_flags(batch, idx, stage_id, g, hit_line_idx, char_id,
                                                    anim, ecb_frame, was_grounded);
               } else {
@@ -2885,9 +2985,39 @@ void mpcoll_ground_apply(MslBatch* batch) {
           const int out_line_idx =
               floor_dd90_project(batch, bi, g, prefer_line_idx, batch->state.pos_x[idx],
                                  batch->state.pos_y[idx], &y_corr, &floor_nx, &floor_ny);
-          const float max_lift =
-              cur_bot.rel_y + fabsf(batch->state.speed_y_self[idx]) + (2.0f * k_ecb_vertical_unit);
-          if (out_line_idx >= 0 && y_corr >= 0.0f && y_corr <= max_lift) {
+          uint8_t cliff_ledge_floor_owner_floor_check_hit = 1u;
+          if (cliff_ledge_floor_owner_active) {
+            // mpColl_80046904 first requires mpColl_80044628_Floor to report an ECB-bottom floor
+            // hit; only then can mpColl_80044838_Floor use the root point when ecb.bottom.y > 0.
+            // The restored cliff floor id supplies CollData.floor.index, but it must not skip the
+            // preceding bottom-sweep contact. This keeps shallow ledge-release EscapeAir rows
+            // airborne until the loaded/interpolated ECB bottom actually crosses the source ledge
+            // floor.
+            // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpColl_80044838_Floor}
+            int cliff_hit_line_idx = -1;
+            cliff_ledge_floor_owner_floor_check_hit =
+                (floor_sweep_check(batch, idx, bi, g, stage_id, prev_bottom_x, prev_bottom_y,
+                                   cur_bottom_x, cur_bottom_y, skip_platform_segment_i,
+                                   prefer_line_idx, -1, c, &cliff_hit_line_idx, NULL, NULL, NULL,
+                                   NULL) &&
+                 cliff_hit_line_idx >= 0 &&
+                 g->lines[(size_t)cliff_hit_line_idx].segment_i ==
+                     batch->state.cliff_ledge_floor_segment_id[idx])
+                    ? 1u
+                    : 0u;
+          }
+          const float cliff_ledge_floor_owner_depth_gate =
+              cliff_ledge_floor_owner_active ? fabsf(msl_ecb_bottom_rel_y(char_id, anim, 0)) : 0.0f;
+          const float max_lift = cliff_ledge_floor_owner_active
+                                     ? (msl_ecb_bottom_rel_y(char_id, anim, 0) + fabsf(y - prev_y) +
+                                        fabsf(batch->state.speed_y_self[idx]) +
+                                        mpcoll_floor_projection_lift_allowance(&cur_ecb_points))
+                                     : (cur_bot.rel_y + fabsf(batch->state.speed_y_self[idx]) +
+                                        (2.0f * k_ecb_vertical_unit));
+          if (out_line_idx >= 0 && y_corr >= 0.0f && y_corr <= max_lift &&
+              (!cliff_ledge_floor_owner_active ||
+               (cliff_ledge_floor_owner_floor_check_hit &&
+                y_corr + k_floor_y_bias >= cliff_ledge_floor_owner_depth_gate))) {
             batch->state.pos_y[idx] += y_corr;
             on_ground = 1;
             ground_id = g->lines[(size_t)out_line_idx].segment_i;
@@ -2917,6 +3047,42 @@ void mpcoll_ground_apply(MslBatch* batch) {
           const float max_lift = fabsf(batch->state.speed_y_self[idx]);
           if (out_line_idx >= 0 && y_corr >= 0.0f && y_corr <= max_lift) {
             batch->state.pos_y[idx] += (y_corr - k_floor_y_bias);
+            on_ground = 1;
+            ground_id = g->lines[(size_t)out_line_idx].segment_i;
+            contact_x = batch->state.pos_x[idx];
+            contact_y = batch->state.pos_y[idx];
+          }
+        }
+        if (!on_ground && cliff_ledge_floor_owner_active &&
+            action_id == (uint16_t)MSL_ACT_ESCAPE_AIR && prefer_line_idx >= 0 &&
+            floor_line_is_generated_stage_slope(batch, bi, g, prefer_line_idx) &&
+            batch->state.speed_y_self[idx] < 0.0f &&
+            !(escapeair_fresh_jumpaerial_entry_lock && prefer_line_is_platform_or_slope)) {
+          // Sloped cliff-floor root owner:
+          // mpColl_80044838_Floor(ignore_bottom=true) applies the root projection after the air
+          // callback has accepted the floor. For Yoshi's sloped ledge floors, the raw bottom sweep
+          // and mpLib projection boundary is the generated sloped ledge itself; once the restored
+          // Cliff/CollData floor id is active, use that same floor line and require root penetration
+          // at least as deep as the entered EscapeAir ECB bottom span. Horizontal ledges stay on the
+          // ordinary bottom-sweep path above so locked zero-bottom interpolation cannot snap early.
+          // data/stages/bin/grst.bin::MSLSTG01 line 2/6
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+          // refs/melee/src/melee/mp/mpcoll.c::{
+          //   mpColl_80044628_Floor,mpColl_80044838_Floor}
+          float y_corr = 0.0f;
+          const int out_line_idx =
+              floor_dd90_project(batch, bi, g, prefer_line_idx, batch->state.pos_x[idx],
+                                 batch->state.pos_y[idx], &y_corr, &floor_nx, &floor_ny);
+          const float bottom_rel0 = msl_ecb_bottom_rel_y(char_id, anim, 0);
+          const float max_lift = bottom_rel0 + fabsf(y - prev_y) +
+                                 fabsf(batch->state.speed_y_self[idx]) +
+                                 mpcoll_floor_projection_lift_allowance(&cur_ecb_points);
+          if (out_line_idx >= 0 &&
+              g->lines[(size_t)out_line_idx].segment_i ==
+                  batch->state.cliff_ledge_floor_segment_id[idx] &&
+              floor_x_within_line_bounds(batch, bi, g, out_line_idx, batch->state.pos_x[idx]) &&
+              y_corr >= (bottom_rel0 - k_floor_y_bias) && y_corr <= max_lift) {
+            batch->state.pos_y[idx] += y_corr;
             on_ground = 1;
             ground_id = g->lines[(size_t)out_line_idx].segment_i;
             contact_x = batch->state.pos_x[idx];
@@ -2974,7 +3140,11 @@ void mpcoll_ground_apply(MslBatch* batch) {
             const int out_line_idx =
                 floor_dd90_project(batch, bi, g, prefer_line_idx, cur_bottom_x, cur_bottom_y,
                                    &y_corr, &floor_nx, &floor_ny);
-            const float ledge_projection_depth_limit = bottom_rel0 + fabsf(y - prev_y);
+            const float ledge_projection_depth_limit =
+                bottom_rel0 + fabsf(y - prev_y) +
+                (cliff_ledge_floor_owner_active
+                     ? mpcoll_floor_projection_lift_allowance(&cur_ecb_points)
+                     : 0.0f);
             const uint8_t is_ledge_floor = g->lines[(size_t)prefer_line_idx].is_ledge;
             const uint8_t ledge_x_in_bounds =
                 floor_x_within_line_bounds(batch, bi, g, prefer_line_idx, batch->state.pos_x[idx]);
@@ -3045,6 +3215,19 @@ void mpcoll_ground_apply(MslBatch* batch) {
                  y_corr < (bottom_rel0 - k_floor_y_bias))
                     ? 1u
                     : 0u;
+            const uint8_t suppress_cliff_ledge_floor_shallow_projection =
+                // The same depth owner applies when a teacher-forced seed restores the actual
+                // cliff/CollData ledge floor up front. A live cliff floor id selects the correct
+                // source floor, but mpColl_80044838_Floor still requires penetration at least as
+                // deep as the entered EscapeAir ECB bottom before the root projection may snap onto
+                // that ledge floor.
+                // data/moves/{fox,falco}.json::ftCo_SM_EscapeAir ECB frame 0 bottom
+                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+                // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpColl_80044838_Floor}
+                (cliff_ledge_floor_owner_active && is_ledge_floor && y_corr >= 0.0f &&
+                 y_corr < (bottom_rel0 - k_floor_y_bias))
+                    ? 1u
+                    : 0u;
             int low_raw_line_idx = -1;
             float low_raw_y = 0.0f;
             const float low_raw_max_lift = fabsf(cur_bottom_y - prev_bottom_y) +
@@ -3075,6 +3258,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
                        !suppress_same_platform_projection_from_below &&
                        !suppress_off_end_ledge_remap_projection &&
                        !suppress_jumpaerial_entry_shallow_ledge_projection &&
+                       !suppress_cliff_ledge_floor_shallow_projection &&
                        (!is_ledge_floor ||
                         (ledge_escapeair_phase_owner && y_corr <= ledge_projection_depth_limit))) {
               batch->state.pos_y[idx] += y_corr;
@@ -4129,6 +4313,26 @@ void mpcoll_ground_apply(MslBatch* batch) {
                  c->platform_air_land_stick_y_threshold)
                 ? 1u
                 : 0u;
+        const uint8_t suppress_cliff_horizontal_ledge_locked_final_land =
+            // Same source owner as the floor-sweep suppression above, kept as a final publication
+            // guard because several mpColl approximation paths can accept the restored ledge floor.
+            // Horizontal ledge floors should not publish LandingFallSpecial while the direct
+            // reseed's locked zero-bottom handoff is still earlier than the callback-local source
+            // floor contact. Sloped ledges retain the generated low-floor owner, and later lock
+            // phases on flat ledges continue through the normal EscapeAir_Coll landing path.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+            // refs/melee/src/melee/mp/mpcoll.c::{
+            //   mpCollInterpolateECB,mpColl_80044628_Floor,mpColl_80044838_Floor}
+            (cliff_ledge_floor_owner_active &&
+             batch->state.cliff_ledge_floor_segment_seeded != NULL &&
+             batch->state.cliff_ledge_floor_segment_seeded[idx] != 0u &&
+             action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
+             ground_id == batch->state.cliff_ledge_floor_segment_id[idx] &&
+             final_ground_line_idx >= 0 &&
+             !floor_line_is_generated_stage_slope(batch, bi, g, final_ground_line_idx) &&
+             ecb_lock_timer_seed > 1u)
+                ? 1u
+                : 0u;
         if (suppress_escapeair_transformed_remap_land || suppress_specialairhi_platform_land ||
             suppress_specialhi_transformed_platform_land ||
             suppress_specialhi_understage_hard_floor_land ||
@@ -4136,7 +4340,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
             suppress_jumpaerial_transformed_platform_fastfall_land ||
             suppress_fall_transformed_platform_fastfall_land ||
             suppress_sustained_escapeair_same_platform_lock_land ||
-            suppress_jumpaerial_escapeair_shallow_ledge_final_land) {
+            suppress_jumpaerial_escapeair_shallow_ledge_final_land ||
+            suppress_cliff_horizontal_ledge_locked_final_land) {
           if (suppress_specialairhi_platform_land && batch->state.floor_skip_segment_id != NULL) {
             batch->state.floor_skip_segment_id[idx] = ground_id;
           } else if (suppress_specialhi_understage_hard_floor_land) {
@@ -4149,6 +4354,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
             batch->state.pos_y[idx] = cur_bottom_y - cur_bot.rel_y;
           } else if (suppress_sustained_escapeair_same_platform_lock_land) {
             batch->state.pos_y[idx] = cur_bottom_y - cur_bot.rel_y;
+          } else if (suppress_cliff_horizontal_ledge_locked_final_land) {
+            batch->state.pos_y[idx] = y;
           }
           on_ground = 0u;
           if (!suppress_specialairhi_platform_land) {

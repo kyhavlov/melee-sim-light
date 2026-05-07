@@ -82,6 +82,24 @@ static inline uint8_t anim_finished(uint8_t char_id, uint16_t msid, float anim_f
   return msl_anim_frame_sanitize_f32(anim_frame_f32) >= end;
 }
 
+static inline uint8_t action_preserves_cliff_ledge_floor_owner(uint16_t action_id) {
+  switch (action_id) {
+    case MSL_ACT_CLIFF_CATCH:
+    case MSL_ACT_CLIFF_WAIT:
+    case MSL_ACT_FALL:
+    case MSL_ACT_FALL_F:
+    case MSL_ACT_FALL_B:
+    case MSL_ACT_JUMP_F:
+    case MSL_ACT_JUMP_B:
+    case MSL_ACT_JUMP_AERIAL_F:
+    case MSL_ACT_JUMP_AERIAL_B:
+    case MSL_ACT_ESCAPE_AIR:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
 static inline uint8_t dash_anim_end_try_enter_wait_ft_8008A2BC(MslBatch* batch, size_t idx,
                                                                uint16_t action_id_start) {
   if (batch == NULL || action_id_start != (uint16_t)MSL_ACT_DASH ||
@@ -5890,6 +5908,30 @@ void locomotion_update_post_collision(MslBatch* batch) {
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_8009AAFC
         // refs/melee/src/melee/mp/mpcoll.c::mpClearFloorSkip
         batch->state.ledge_drop_floor_skip_segment_id[idx] = 0xFFFFu;
+      }
+      if (now_ground && batch->state.cliff_ledge_floor_segment_id != NULL &&
+          batch->state.cliff_ledge_floor_segment_id[idx] != 0xFFFFu) {
+        // Grounded transfer consumes the Cliff/CollData ledge floor owner. Later grounded callbacks
+        // use the normal floor.index selected by mpColl.
+        // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D7FC
+        // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
+        batch->state.cliff_ledge_floor_segment_id[idx] = 0xFFFFu;
+        if (batch->state.cliff_ledge_floor_segment_seeded != NULL) {
+          batch->state.cliff_ledge_floor_segment_seeded[idx] = 0u;
+        }
+      }
+      if (!now_ground && batch->state.cliff_ledge_floor_segment_id != NULL &&
+          batch->state.cliff_ledge_floor_segment_id[idx] != 0xFFFFu &&
+          (batch->state.ledge_cooldown[idx] == 0u ||
+           !action_preserves_cliff_ledge_floor_owner(a))) {
+        // Once ledge-release cooldown expires, or once a non-cliff-exit aerial state owns
+        // collision, the stored cliff ledge floor is no longer the source CollData floor owner.
+        // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+        // refs/melee/src/melee/mp/mpcoll.c::mpClearFloorSkip
+        batch->state.cliff_ledge_floor_segment_id[idx] = 0xFFFFu;
+        if (batch->state.cliff_ledge_floor_segment_seeded != NULL) {
+          batch->state.cliff_ledge_floor_segment_seeded[idx] = 0u;
+        }
       }
       if (!now_ground && a == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI) {
         specialhi_apply_collision_facing_dir(batch, ch, idx);

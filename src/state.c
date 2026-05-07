@@ -262,6 +262,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->stage_ledge_occupant_right = (int8_t*)alloc_aligned_64(sizeof(int8_t) * b);
   state->ledge_cooldown = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->ledge_drop_floor_skip_segment_id = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
+  state->cliff_ledge_floor_segment_id = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
+  state->cliff_ledge_floor_segment_seeded = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->fallspecial_xc = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->fallspecial_landing_lag = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->landing_fallspecial_allow_interrupt = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
@@ -577,6 +579,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->shine_is_release || !state->ecb_lock_timer || !state->ledge_side ||
       !state->stage_ledge_occupant_left || !state->stage_ledge_occupant_right ||
       !state->ledge_cooldown || !state->ledge_drop_floor_skip_segment_id ||
+      !state->cliff_ledge_floor_segment_id || !state->cliff_ledge_floor_segment_seeded ||
       !state->fallspecial_xc || !state->fallspecial_landing_lag ||
       !state->landing_fallspecial_allow_interrupt || !state->turn_has_turned ||
       !state->turn_frames_to_turn || !state->walk_use_raw_input_once || !state->turn_x8 ||
@@ -756,6 +759,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   for (size_t i = 0; i < bp; i++) {
     state->floor_skip_segment_id[i] = 0xFFFFu;
     state->ledge_drop_floor_skip_segment_id[i] = 0xFFFFu;
+    state->cliff_ledge_floor_segment_id[i] = 0xFFFFu;
+    state->cliff_ledge_floor_segment_seeded[i] = 0u;
   }
   for (size_t i = 0; i < bph; i++) {
     state->fighter_hitlist_init_gen[i] = 0u;
@@ -1000,6 +1005,8 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->stage_ledge_occupant_right);
   alloc_free(state->ledge_cooldown);
   alloc_free(state->ledge_drop_floor_skip_segment_id);
+  alloc_free(state->cliff_ledge_floor_segment_id);
+  alloc_free(state->cliff_ledge_floor_segment_seeded);
   alloc_free(state->fallspecial_xc);
   alloc_free(state->fallspecial_landing_lag);
   alloc_free(state->landing_fallspecial_allow_interrupt);

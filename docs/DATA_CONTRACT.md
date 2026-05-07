@@ -830,6 +830,12 @@ Characters (Fox/Falco):
     - `floor_skip_segment_id_u16[4]`, `floor_skip_segment_valid_u8[4]` for hidden
       `CollData.floor_skip` carry when a replay-prefix platform pass-through episode is already
       active.
+    - `cliff_ledge_floor_segment_id_u16[4]` for the hidden Cliff/CollData ledge floor owner on
+      immediate cliff-exit prefixes. Native seed preprocessing reconstructs it only from
+      prefix-visible Cliff action + facing + generated MSLSTG01 ledge floor metadata, carries it
+      through Fall/JumpAerial/EscapeAir while the derived `ledge_cooldown` owner remains live, and
+      clears it on grounded transfer, cooldown expiry, or non-cliff-exit action. The sentinel
+      `0xFFFF` means no live owner.
     - Platform ids match Slippi/grIzumi (`0=right`, `1=left`). Missing events use source-backed
       default current heights from `MSLSTG01` platform transform records; present events carry
       forward by replay prefix only. Consecutive prefix events or grounded platform contact derive

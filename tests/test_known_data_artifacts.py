@@ -47,7 +47,7 @@ from tools.slippi.known_data_artifacts import (
     dream_whispy_metadata,
     yoshi_shyguy_metadata,
 )
-from tools.slippi.make_dataset_from_slp import _load_stage_segments_for_seed
+from tools.slippi.make_dataset_from_slp import _load_stage_segments_for_seed, _stage_ledge_floor_ids
 
 SUPPORTED_STAGE_BINS = ("griz.bin", "grps.bin", "grst.bin", "grop.bin", "grnba.bin", "grnla.bin")
 
@@ -92,6 +92,33 @@ def test_stage_metadata_registry_covers_supported_domain() -> None:
     assert stage_metadata_path_for_stage_id(31, Path("data")) == Path("data/stages/bin/grnba.bin")
     assert stage_metadata_path_for_stage_id(32, Path("data")) == Path("data/stages/bin/grnla.bin")
     assert stage_metadata_path_for_stage_id(4, Path("data")) is None
+
+
+@pytest.mark.integration
+def test_stage_ledge_floor_seed_ids_match_mslstg01_supported_legal_stages() -> None:
+    # The teacher-forced cliff_ledge_floor_segment_id_u16 seed lane depends on the same generated
+    # MSLSTG01 ledge floor ids that runtime CliffCatch/CliffWait ownership consumes. Lock all
+    # supported legal stages so left/right derivation cannot drift from extracted stage metadata.
+    expected = {
+        2: (3, 7),  # Fountain of Dreams
+        3: (51, 54),  # frozen Pokemon Stadium; excludes the elevated transformation ledge row
+        8: (2, 6),  # Yoshi's Story
+        28: (3, 5),  # Dream Land N64
+        31: (0, 5),  # Battlefield
+        32: (0, 2),  # Final Destination
+    }
+    for stage_id, expected_ids in expected.items():
+        left_id, right_id = _stage_ledge_floor_ids(stage_id=stage_id, data_root=Path("data"))
+        assert (left_id, right_id) == expected_ids
+
+        stage_path = stage_metadata_path_for_stage_id(stage_id, Path("data"))
+        assert stage_path is not None
+        stage = read_mslstg01_v7(stage_path)
+        ledge_floors = [
+            seg for seg in stage.segments if int(seg.kind_id) == 0 and (int(seg.flags) & 2)
+        ]
+        assert left_id == min(ledge_floors, key=lambda seg: float(seg.x0)).line_id
+        assert right_id == max(ledge_floors, key=lambda seg: float(seg.x1)).line_id
 
 
 @pytest.mark.integration

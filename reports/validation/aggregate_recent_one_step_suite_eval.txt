@@ -1213,21 +1213,21 @@ overall.float_norm_mae_p95: 0.00119640
 
 == datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl ==
 Records: 8459  Players/scored per record: 2  Total player-frames: 16918
-mismatch.action_id: 36 / 16918 (0.002128)
-mismatch.action_frame: 31 / 16918 (0.001832)
-mismatch.on_ground: 17 / 16918 (0.001005)
+mismatch.action_id: 34 / 16918 (0.002010)
+mismatch.action_frame: 29 / 16918 (0.001714)
+mismatch.on_ground: 15 / 16918 (0.000887)
 mismatch.facing: 3 / 16918 (0.000177)
 mismatch.stocks: 0 / 16918 (0.000000)
-mismatch.jumps_left: 17 / 16918 (0.001005)
+mismatch.jumps_left: 15 / 16918 (0.000887)
 mismatch.is_dead: 0 / 16918 (0.000000)
 mismatch.hitlag: 17 / 16918 (0.001005)
 mismatch.hitstun: 11 / 16918 (0.000650)
 mismatch.l_cancel: 0 / 16918 (0.000000)
 mismatch.hurtbox_state: 1 / 16918 (0.000059)
-mismatch.ground_id: 12 / 16918 (0.000709)
-mismatch.animation_index: 37 / 16918 (0.002187)
+mismatch.ground_id: 10 / 16918 (0.000591)
+mismatch.animation_index: 35 / 16918 (0.002069)
 mismatch.instance_hit_by: 9 / 16918 (0.000532)
-mismatch.instance_id: 32 / 16918 (0.001891)
+mismatch.instance_id: 30 / 16918 (0.001773)
 mismatch.last_attack_landed: 8 / 16918 (0.000473)
 mismatch.combo_count: 4 / 16918 (0.000236)
 mismatch.last_hit_by: 19 / 16918 (0.001123)
@@ -1239,9 +1239,9 @@ mismatch.item_owner: 14 / 126885 (0.000110)
 mismatch.item_instance_id: 15 / 126885 (0.000118)
 ignored_mismatch.state_flags[4]&0x80: 61 / 16918 (0.003606)
 err.pos_x: mae=0.003544 p95=0.000000 max=4.842353
-err.pos_y: mae=0.004582 p95=0.000000 max=11.650000
+err.pos_y: mae=0.004043 p95=0.000000 max=11.650000
 err.speed_air_x_self: mae=0.000656 p95=0.000000 max=1.460000
-err.speed_ground_x_self: mae=0.001328 p95=0.000000 max=2.488403
+err.speed_ground_x_self: mae=0.001074 p95=0.000000 max=2.488403
 err.speed_y_self: mae=0.000669 p95=0.000000 max=3.160000
 err.speed_x_attack: mae=0.000427 p95=0.000000 max=2.009857
 err.speed_y_attack: mae=0.000532 p95=0.000000 max=3.872669
@@ -1251,10 +1251,10 @@ err.item_pos_x: mae=0.428340 p95=0.000000 max=596.000000
 err.item_pos_y: mae=0.063810 p95=0.000000 max=76.907867
 err.item_vel_x: mae=0.002606 p95=0.000000 max=7.000000
 err.item_vel_y: mae=0.001771 p95=0.000000 max=14.700165
-overall.discrete_mismatch: 426 / 1023539
-overall.strict_discrete_mismatch: 487 / 1023539
+overall.discrete_mismatch: 412 / 1023539
+overall.strict_discrete_mismatch: 473 / 1023539
 overall.ignored_discrete_mismatch: 61
-overall.float_norm_mae_p95: 0.00100489
+overall.float_norm_mae_p95: 0.00099541
 
 == datasets/aggregate_recent/replays/validation/yoshis_story_recent/DependentSteelGrouse.msl ==
 Records: 344  Players/scored per record: 2  Total player-frames: 688
@@ -1392,7 +1392,7 @@ overall.ignored_discrete_mismatch: 69
 overall.float_norm_mae_p95: 0.00157653
 
 == suite summary ==
-overall.discrete_mismatch: 5176 / 34298176
-overall.strict_discrete_mismatch: 6613 / 34298176
+overall.discrete_mismatch: 5162 / 34298176
+overall.strict_discrete_mismatch: 6599 / 34298176
 overall.ignored_discrete_mismatch: 1437
-overall.float_norm_mae_p95: 0.22896187
+overall.float_norm_mae_p95: 0.22896141

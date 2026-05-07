@@ -68,6 +68,13 @@ def test_motion_state_owner_tables_cover_known_callbacks_and_flags() -> None:
     assert int(fox.class_bits[0x0023]) & CLASS_COMMON_AIR_COLL
     assert not int(fox.class_bits[0x0023]) & CLASS_COMMON_AIR_WALLJUMP_COLL
 
+    # Cliff ledgedash floor-owner consumer:
+    # EscapeAir_Coll is the generated MotionState callback consumed by
+    # src/mpcoll_ground.c's Cliff/CollData ledge floor owner.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    assert cb_name(0x00EC, "coll") == "ftCo_EscapeAir_Coll"
+    assert int(fox.coll_cb_id[0x00EC]) == 339
+
     assert cb_name(0x002A, "coll") == "ftCo_Landing_Coll"  # Landing
     assert int(fox.class_bits[0x002A]) & CLASS_LANDING_COLL
     assert cb_name(0x0046, "coll") == "ftCo_LandingAir_Coll"  # LandingAirN

@@ -3470,6 +3470,76 @@ PyObject* msl_derive_ledge_cooldown_py(PyObject* self, PyObject* args) {
   return (PyObject*)out;
 }
 
+static inline uint8_t msl_py_cliff_action_any(uint16_t a) {
+  return (a == (uint16_t)MSL_ACT_CLIFF_CATCH || a == (uint16_t)MSL_ACT_CLIFF_WAIT ||
+          a == (uint16_t)MSL_ACT_CLIFF_CLIMB_SLOW || a == (uint16_t)MSL_ACT_CLIFF_CLIMB_QUICK ||
+          a == (uint16_t)MSL_ACT_CLIFF_ATTACK_SLOW || a == (uint16_t)MSL_ACT_CLIFF_ATTACK_QUICK ||
+          a == (uint16_t)MSL_ACT_CLIFF_ESCAPE_SLOW || a == (uint16_t)MSL_ACT_CLIFF_ESCAPE_QUICK ||
+          a == (uint16_t)MSL_ACT_CLIFF_JUMP_SLOW1 || a == (uint16_t)MSL_ACT_CLIFF_JUMP_SLOW2 ||
+          a == (uint16_t)MSL_ACT_CLIFF_JUMP_QUICK1 || a == (uint16_t)MSL_ACT_CLIFF_JUMP_QUICK2)
+             ? 1u
+             : 0u;
+}
+
+static inline uint8_t msl_py_action_preserves_cliff_ledge_floor_owner(uint16_t a) {
+  return (a == (uint16_t)MSL_ACT_CLIFF_CATCH || a == (uint16_t)MSL_ACT_CLIFF_WAIT ||
+          a == (uint16_t)MSL_ACT_FALL || a == (uint16_t)MSL_ACT_FALL_F ||
+          a == (uint16_t)MSL_ACT_FALL_B || a == (uint16_t)MSL_ACT_JUMP_F ||
+          a == (uint16_t)MSL_ACT_JUMP_B || a == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
+          a == (uint16_t)MSL_ACT_JUMP_AERIAL_B || a == (uint16_t)MSL_ACT_ESCAPE_AIR)
+             ? 1u
+             : 0u;
+}
+
+PyObject* msl_derive_cliff_ledge_floor_segment_id_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* action_obj = NULL;
+  PyObject* facing_obj = NULL;
+  PyObject* on_ground_obj = NULL;
+  PyObject* cooldown_obj = NULL;
+  int left_floor_id = 0xFFFF;
+  int right_floor_id = 0xFFFF;
+  if (!PyArg_ParseTuple(args, "OOOOii", &action_obj, &facing_obj, &on_ground_obj, &cooldown_obj,
+                        &left_floor_id, &right_floor_id)) {
+    return NULL;
+  }
+  PyArrayObject* action = require_contiguous_array(action_obj, NPY_UINT16, 1, "action_id_u16");
+  PyArrayObject* facing = require_contiguous_array(facing_obj, NPY_UINT8, 1, "facing_u8");
+  PyArrayObject* on_ground = require_contiguous_array(on_ground_obj, NPY_UINT8, 1, "on_ground_u8");
+  PyArrayObject* cooldown =
+      require_contiguous_array(cooldown_obj, NPY_UINT8, 1, "ledge_cooldown_u8");
+  if (action == NULL || facing == NULL || on_ground == NULL || cooldown == NULL) return NULL;
+  const npy_intp n = PyArray_SIZE(action);
+  if (PyArray_SIZE(facing) != n || PyArray_SIZE(on_ground) != n || PyArray_SIZE(cooldown) != n) {
+    PyErr_SetString(PyExc_ValueError, "cliff ledge floor owner inputs must have equal lengths");
+    return NULL;
+  }
+  npy_intp dims[1] = {n};
+  PyArrayObject* out = (PyArrayObject*)PyArray_EMPTY(1, dims, NPY_UINT16, 0);
+  if (out == NULL) return NULL;
+  const uint16_t* a = (const uint16_t*)PyArray_DATA(action);
+  const uint8_t* face = (const uint8_t*)PyArray_DATA(facing);
+  const uint8_t* ground = (const uint8_t*)PyArray_DATA(on_ground);
+  const uint8_t* cd = (const uint8_t*)PyArray_DATA(cooldown);
+  uint16_t* o = (uint16_t*)PyArray_DATA(out);
+  const uint16_t left = (uint16_t)((uint32_t)left_floor_id & 0xFFFFu);
+  const uint16_t right = (uint16_t)((uint32_t)right_floor_id & 0xFFFFu);
+  uint16_t owner = 0xFFFFu;
+  for (npy_intp t = 0; t < n; t++) {
+    if (msl_py_cliff_action_any(a[t])) {
+      // Source cliff actions expose the ledge side through facing in Slippi post-frames:
+      // left-stage ledge faces right, right-stage ledge faces left. The floor id comes only from
+      // generated MSLSTG01 ledge metadata; no position/future outcome search is used.
+      owner = (face[t] != 0u) ? left : right;
+    } else if (ground[t] != 0u || cd[t] == 0u ||
+               !msl_py_action_preserves_cliff_ledge_floor_owner(a[t])) {
+      owner = 0xFFFFu;
+    }
+    o[t] = owner;
+  }
+  return (PyObject*)out;
+}
+
 PyObject* msl_derive_match_flow_timer_py(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* action_obj = NULL;

@@ -5356,6 +5356,10 @@ static PyMethodDef methods[] = {
      "mash signs, constants...) -> hidden capture lanes"},
     {"derive_ledge_cooldown", msl_derive_ledge_cooldown_py, METH_VARARGS,
      "derive_ledge_cooldown(action, hitlag, cooldown_frames) -> uint8[:]"},
+    {"derive_cliff_ledge_floor_segment_id", msl_derive_cliff_ledge_floor_segment_id_py,
+     METH_VARARGS,
+     "derive_cliff_ledge_floor_segment_id(action, facing, on_ground, cooldown, left_floor, "
+     "right_floor) -> uint16[:]"},
     {"derive_match_flow_timer", msl_derive_match_flow_timer_py, METH_VARARGS,
      "derive_match_flow_timer(action, port0, common timers...) -> uint8[:]"},
     {"derive_passivewall_timer", msl_derive_passivewall_timer_py, METH_VARARGS,

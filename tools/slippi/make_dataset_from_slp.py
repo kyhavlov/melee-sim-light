@@ -79,6 +79,27 @@ def _load_stage_segments_for_seed(*, stage_id: int, data_root: Path) -> list[dic
     return out
 
 
+def _stage_ledge_floor_ids(*, stage_id: int, data_root: Path) -> tuple[int, int]:
+    stage_path = stage_metadata_path_for_stage_id(int(stage_id), data_root)
+    if stage_path is None:
+        return 0xFFFF, 0xFFFF
+    stage = read_mslstg01_v7(stage_path)
+    left_id = 0xFFFF
+    right_id = 0xFFFF
+    best_left_x = float("inf")
+    best_right_x = -float("inf")
+    for seg in stage.segments:
+        if int(seg.kind_id) != 0 or not (int(seg.flags) & 2):
+            continue
+        if float(seg.x0) < best_left_x:
+            best_left_x = float(seg.x0)
+            left_id = int(seg.line_id)
+        if float(seg.x1) > best_right_x:
+            best_right_x = float(seg.x1)
+            right_id = int(seg.line_id)
+    return left_id, right_id
+
+
 def _fod_platform_heights_from_frames(
     frames,
     n_frames: int,
@@ -699,6 +720,44 @@ def _derive_ledge_cooldown(*, action_id_u16: np.ndarray, hitlag_u16: np.ndarray,
         np.ascontiguousarray(np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)),
         np.asarray(hitlag_u16, dtype=np.uint16).reshape(-1),
         int(common.get("ledge_cooldown_frames", 0)),
+    )
+
+
+def _derive_cliff_ledge_floor_segment_id(
+    *,
+    action_id_u16: np.ndarray,
+    facing_u8: np.ndarray,
+    on_ground_u8: np.ndarray,
+    ledge_cooldown_u8: np.ndarray,
+    stage_id: int,
+    data_root: Path,
+) -> np.ndarray:
+    """
+    Derive the teacher-forced hidden Cliff/CollData floor owner for direct cliff-exit reseeds.
+
+    Decomp shape:
+    - Cliff actions own ledge side through `mv.co.cliff.ledge_id`.
+    - Immediate cliff exits carry the generated ledge floor owner while `fp->x2064_ledgeCooldown`
+      remains live and before a grounded transfer clears the CollData owner.
+      refs/melee/src/melee/ft/ftcliffcommon.c::ftCliffCommon_80081370
+      refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::ftCo_8009A9AC
+      refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    """
+
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.derive_cliff_ledge_floor_segment_id is required; run `make build`"
+        ) from exc
+    left_floor, right_floor = _stage_ledge_floor_ids(stage_id=stage_id, data_root=data_root)
+    return msl_binding.derive_cliff_ledge_floor_segment_id(
+        np.ascontiguousarray(np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)),
+        np.ascontiguousarray(np.asarray(facing_u8, dtype=np.uint8).reshape(-1)),
+        np.ascontiguousarray(np.asarray(on_ground_u8, dtype=np.uint8).reshape(-1)),
+        np.ascontiguousarray(np.asarray(ledge_cooldown_u8, dtype=np.uint8).reshape(-1)),
+        int(left_floor),
+        int(right_floor),
     )
 
 
@@ -4011,6 +4070,15 @@ def _main_impl(args) -> Dataset:
         samples["seed_t"]["damage_post_hitlag_cb_kind"][:, slot] = damage_post_hitlag_cb_kind[:-1]
         ledge_cooldown = _derive_ledge_cooldown(action_id_u16=post_state, hitlag_u16=post_hitlag, common=common)
         samples["seed_t"]["ledge_cooldown"][:, slot] = ledge_cooldown[:-1]
+        cliff_ledge_floor_segment_id = _derive_cliff_ledge_floor_segment_id(
+            action_id_u16=post_state,
+            facing_u8=post_dir,
+            on_ground_u8=post_on_ground,
+            ledge_cooldown_u8=ledge_cooldown,
+            stage_id=int(stage_id),
+            data_root=data_root,
+        )
+        samples["seed_t"]["cliff_ledge_floor_segment_id_u16"][:, slot] = cliff_ledge_floor_segment_id[:-1]
         samples["seed_t"]["landing_fallspecial_allow_interrupt"][:, slot] = (
             _derive_landing_fallspecial_allow_interrupt_seed_lane(action_id_u16=post_state)[:-1]
         )

@@ -345,9 +345,10 @@ def test_jumpaerial_escapeair_platform_entry_frame4_keeps_source_airborne() -> N
 
 
 @pytest.mark.integration
-def test_jumpaerial_escapeair_platform_entry_frame4_gate_is_not_broadened() -> None:
-    # Synthetic negatives for the retained frame-4 owner:
-    # - later carried JumpAerial prefix age is not part of this source slice;
+def test_jumpaerial_escapeair_platform_entry_owner_is_not_broadened() -> None:
+    # Synthetic negatives for the retained source owners:
+    # - later carried JumpAerial prefix age is not part of the shallow-entry suppression slice when
+    #   visible floor ownership already names the same ledge;
     # - JumpF provenance does not borrow the JumpAerial callback lifetime;
     # - FD and hard-floor mutations do not use the soft-platform suppression path.
     root = Path(__file__).resolve().parents[1]

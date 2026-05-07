@@ -18,6 +18,7 @@ ACT_DASH = 0x0014
 ACT_RUN = 0x0015
 ACT_RUN_BRAKE = 0x0017
 ACT_JUMP_F = 0x0019
+ACT_JUMP_B = 0x001A
 ACT_JUMP_AERIAL_F = 0x001B
 ACT_JUMP_AERIAL_B = 0x001C
 ACT_FALL = 0x001D
@@ -41,6 +42,7 @@ ACT_PASS = 0x00F4
 ACT_OTTOTTO = 0x00F5
 ACT_OTTOTTO_WAIT = 0x00F6
 ACT_CLIFF_JUMP_SLOW2 = 0x0105
+ACT_CLIFF_WAIT = 0x00FD
 ACT_ATTACK_AIR_N = 0x0041
 ACT_ATTACK_DASH = 0x0032
 ACT_ATTACK_S4_S = 0x003C
@@ -55,6 +57,7 @@ SM_FALL = 20
 SM_DAMAGE_FALL = 33
 SM_PASS = 209
 SM_CLIFF_JUMP_SLOW2 = 226
+SM_CLIFF_WAIT = 217
 SM_ATTACK_DASH = 52
 SM_ATTACK_S4 = 62
 SM_ATTACK_HI4 = 66
@@ -65,11 +68,13 @@ SM_OTTOTTO_WAIT = 211
 CHAR_FOX = 1
 CHAR_FALCO = 22
 STAGE_POKEMON = 3
+STAGE_YOSHI = 8
 STAGE_BATTLEFIELD = 31
 BUTTON_L = 0x0040
 BUTTON_A = 0x0100
 BUTTON_B = 0x0200
 BUTTON_Y = 0x0800
+BUTTON_R = 0x0020
 
 ACT_FX_SPECIAL_AIR_LW_START = 0x016D
 
@@ -166,6 +171,7 @@ def _seed_base(stage_id: int, action_id: int, submotion_id: int, x: float, y: fl
     seed["frame_speed_mul_f32"][0, :2] = np.float32(1.0)
     seed["floor_skip_segment_id_u16"][0, :] = np.uint16(0xFFFF)
     seed["floor_skip_segment_valid_u8"][0, :] = np.uint8(0)
+    seed["cliff_ledge_floor_segment_id_u16"][0, :] = np.uint16(0xFFFF)
     seed["anim_frame_f32"][0, :2] = seed["action_frame"][0, :2].astype(np.float32)
     return seed
 
@@ -362,6 +368,446 @@ def test_escapeair_pokemon_ledge_floor_handoff_matches_vanilla_probe() -> None:
     assert int(out["ground_id"][0]) == 54
     assert float(out["pos_x"][0]) == pytest.approx(84.057, abs=1e-3)
     assert float(out["pos_y"][0]) == pytest.approx(0.0, abs=1e-4)
+
+
+def _run_cliff_wait_ledgedash(
+    *,
+    stage_id: int,
+    char_id: int,
+    x: float,
+    y: float,
+    facing: int,
+    ground_id: int,
+    percent: float,
+    action_frame: int,
+    inputs: list[tuple[int, int, int, int]],
+) -> list[np.void]:
+    seed = _seed_base(stage_id, ACT_CLIFF_WAIT, SM_CLIFF_WAIT, x, y)
+    seed["char_id"][0, :2] = np.uint8(char_id)
+    seed["facing"][0, 0] = np.uint8(facing)
+    seed["jumps_left"][0, 0] = np.uint8(1)
+    seed["action_frame"][0, 0] = np.int16(action_frame)
+    seed["anim_frame_f32"][0, 0] = np.float32(action_frame)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["ground_id"][0, 0] = np.uint16(ground_id)
+    seed["percent"][0, 0] = np.float32(percent)
+
+    def set_input(arr: np.ndarray, buttons: int, main_x: int, main_y: int, r: int = 0) -> None:
+        view = arr.view(INPUT_DTYPE).reshape((1,))
+        view["p"]["buttons"][0, 0] = np.uint16(buttons)
+        view["p"]["main_x"][0, 0] = np.int8(main_x)
+        view["p"]["main_y"][0, 0] = np.int8(main_y)
+        view["p"]["r"][0, 0] = np.uint8(r)
+
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    compare_stride = int(sizes["compare"])
+    out = np.zeros((1, compare_stride), dtype=np.uint8)
+    prev_input = _input_bytes()
+    input_t = _input_bytes()
+
+    rows = []
+    handle = msl_binding.init(batch_size=1, num_players=2, ucf_enabled=1, ucf_cardinals_1_0_enabled=1)
+    try:
+        msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, seed_stride)))
+        previous = (0, 0, 0, 0)
+        for current in inputs:
+            set_input(prev_input, *previous)
+            set_input(input_t, *current)
+            msl_binding.step_input(handle, prev_input, input_t)
+            msl_binding.write_compare(handle, out)
+            rows.append(out.view(COMPARE_DTYPE).reshape((1,))[0].copy())
+            previous = current
+    finally:
+        msl_binding.destroy(handle)
+    return rows
+
+
+def _run_direct_fall_cliff_exit_ledgedash(
+    *,
+    stage_id: int,
+    char_id: int,
+    x: float,
+    y: float,
+    facing: int,
+    ground_id: int,
+    cliff_floor_id: int,
+    ledge_cooldown: int,
+    inputs: list[tuple[int, int, int, int]],
+) -> list[np.void]:
+    seed = _seed_base(stage_id, ACT_FALL, SM_FALL, x, y)
+    seed["char_id"][0, :2] = np.uint8(char_id)
+    seed["facing"][0, 0] = np.uint8(facing)
+    seed["jumps_left"][0, 0] = np.uint8(1)
+    seed["action_frame"][0, 0] = np.int16(0)
+    seed["anim_frame_f32"][0, 0] = np.float32(0.0)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["ground_id"][0, 0] = np.uint16(ground_id)
+    seed["ledge_cooldown"][0, 0] = np.uint8(ledge_cooldown)
+    seed["cliff_ledge_floor_segment_id_u16"][0, 0] = np.uint16(cliff_floor_id)
+
+    def set_input(arr: np.ndarray, buttons: int, main_x: int, main_y: int, r: int = 0) -> None:
+        view = arr.view(INPUT_DTYPE).reshape((1,))
+        view["p"]["buttons"][0, 0] = np.uint16(buttons)
+        view["p"]["main_x"][0, 0] = np.int8(main_x)
+        view["p"]["main_y"][0, 0] = np.int8(main_y)
+        view["p"]["r"][0, 0] = np.uint8(r)
+
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    compare_stride = int(sizes["compare"])
+    out = np.zeros((1, compare_stride), dtype=np.uint8)
+    prev_input = _input_bytes()
+    input_t = _input_bytes()
+
+    rows = []
+    handle = msl_binding.init(batch_size=1, num_players=2, ucf_enabled=1, ucf_cardinals_1_0_enabled=1)
+    try:
+        msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, seed_stride)))
+        previous = (0, 0, 0, 0)
+        for current in inputs:
+            set_input(prev_input, *previous)
+            set_input(input_t, *current)
+            msl_binding.step_input(handle, prev_input, input_t)
+            msl_binding.write_compare(handle, out)
+            rows.append(out.view(COMPARE_DTYPE).reshape((1,))[0].copy())
+            previous = current
+    finally:
+        msl_binding.destroy(handle)
+    return rows
+
+
+@pytest.mark.integration
+def test_battlefield_ledge_drop_jump_airdodge_uses_source_cliff_floor_owner() -> None:
+    # Manual modelplay repro:
+    # reports/modelplay/20260506_231300_full_matrix_legal_stages_rl_doubles_v27_7000/
+    # env_005_battlefield_falco_vs_falco/trace.json, P2 frames 799-806.
+    #
+    # Source owner:
+    # - Cliff state stores `mv.co.cliff.ledge_id`, chosen from Collide_*LedgeGrab in
+    #   ftCliffCommon_80081370.
+    # - CliffWait drop enters Fall through ftCo_8009AAFC while that ledge floor identity is still the
+    #   source cliff/CollData owner, even though Slippi's visible lastGroundId can be stale.
+    # - Fall -> JumpAerial -> EscapeAir then reaches ftCo_EscapeAir_Coll -> ft_80082C74 ->
+    #   mpColl_800471F8 and projects against that same floor owner.
+    # refs/melee/src/melee/ft/ftcliffcommon.c::ftCliffCommon_80081370
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_8009AAFC
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80082C74
+    rows = _run_cliff_wait_ledgedash(
+        stage_id=STAGE_BATTLEFIELD,
+        char_id=CHAR_FALCO,
+        x=70.5999984741211,
+        y=-16.5,
+        facing=0,
+        ground_id=0,
+        percent=59.84,
+        action_frame=6,
+        inputs=[
+            (0, 0, -64, 0),
+            (BUTTON_Y, 0, -40, 0),
+            (BUTTON_Y, -96, -40, 0),
+            (BUTTON_Y, -96, -40, 0),
+            (BUTTON_Y, -96, -40, 0),
+            (BUTTON_Y | BUTTON_R, -80, -48, 255),
+            (BUTTON_Y | BUTTON_R, -80, -48, 255),
+        ],
+    )
+
+    assert int(rows[5]["action_id"][0]) == ACT_ESCAPE_AIR
+    assert int(rows[5]["on_ground"][0]) == 0
+    assert int(rows[6]["action_id"][0]) == ACT_LANDING_FALL_SPECIAL
+    assert int(rows[6]["on_ground"][0]) == 1
+    assert int(rows[6]["ground_id"][0]) == 5
+    assert float(rows[6]["pos_y"][0]) == pytest.approx(0.0, abs=3e-4)
+
+
+@pytest.mark.integration
+def test_direct_fall_reseed_carries_seeded_cliff_floor_through_jump_and_escapeair() -> None:
+    # Direct one-step seeds can start after CliffWait has already released into Fall. The hidden
+    # floor owner must come from MslSeed, then carry through Fall -> JumpAerial -> EscapeAir while
+    # x2064 ledge cooldown remains live.
+    rows = _run_direct_fall_cliff_exit_ledgedash(
+        stage_id=STAGE_YOSHI,
+        char_id=CHAR_FOX,
+        x=-57.91999816894531,
+        y=-17.9,
+        facing=1,
+        ground_id=0,
+        cliff_floor_id=2,
+        ledge_cooldown=20,
+        inputs=[
+            (BUTTON_Y, 96, -40, 0),
+            (BUTTON_Y, 96, -40, 0),
+            (BUTTON_Y, 96, -40, 0),
+            (BUTTON_Y, 96, -40, 0),
+            (BUTTON_Y | BUTTON_R, 80, -48, 255),
+            (BUTTON_Y | BUTTON_R, 80, -48, 255),
+            (BUTTON_Y | BUTTON_R, 80, -48, 255),
+        ],
+    )
+
+    before = rows[-2]
+    landed = rows[-1]
+    assert int(before["action_id"][0]) == ACT_ESCAPE_AIR
+    assert int(before["on_ground"][0]) == 0
+    assert int(landed["action_id"][0]) == ACT_LANDING_FALL_SPECIAL
+    assert int(landed["on_ground"][0]) == 1
+    assert int(landed["ground_id"][0]) == 2
+
+
+@pytest.mark.parametrize(
+    ("cliff_floor_id", "ledge_cooldown", "expected_grounded"),
+    [
+        (0xFFFF, 20, 0),  # direct later reseed without the hidden lane
+        (2, 0, 0),  # cooldown expired
+        (6, 20, 0),  # wrong-side reconstructed owner
+        (2, 20, 1),  # positive control
+    ],
+)
+@pytest.mark.integration
+def test_direct_fall_reseed_cliff_floor_owner_negative_boundaries(
+    cliff_floor_id: int, ledge_cooldown: int, expected_grounded: int
+) -> None:
+    rows = _run_direct_fall_cliff_exit_ledgedash(
+        stage_id=STAGE_YOSHI,
+        char_id=CHAR_FOX,
+        x=-57.91999816894531,
+        y=-17.9,
+        facing=1,
+        ground_id=0,
+        cliff_floor_id=cliff_floor_id,
+        ledge_cooldown=ledge_cooldown,
+        inputs=[
+            (BUTTON_Y, 96, -40, 0),
+            (BUTTON_Y, 96, -40, 0),
+            (BUTTON_Y, 96, -40, 0),
+            (BUTTON_Y, 96, -40, 0),
+            (BUTTON_Y | BUTTON_R, 80, -48, 255),
+            (BUTTON_Y | BUTTON_R, 80, -48, 255),
+            (BUTTON_Y | BUTTON_R, 80, -48, 255),
+        ],
+    )
+
+    final = rows[-1]
+    assert int(final["on_ground"][0]) == expected_grounded
+    if expected_grounded:
+        assert int(final["ground_id"][0]) == 2
+    else:
+        assert int(final["action_id"][0]) == ACT_ESCAPE_AIR
+
+
+@pytest.mark.parametrize(
+    ("stage_id", "char_id", "x", "y", "facing", "ground_id", "percent", "action_frame", "inputs", "land_step", "expected_ground"),
+    [
+        (
+            STAGE_BATTLEFIELD,
+            CHAR_FALCO,
+            -70.5999984741211,
+            -16.5,
+            1,
+            0,
+            120.11998748779297,
+            6,
+            [
+                (0, 0, -72, 0),
+                (BUTTON_Y, 96, -40, 0),
+                (BUTTON_Y, 96, -40, 0),
+                (BUTTON_Y, 96, -40, 0),
+                (BUTTON_Y, 96, -40, 0),
+                (BUTTON_Y | BUTTON_R, 80, -48, 255),
+                (BUTTON_Y | BUTTON_R, 80, -48, 255),
+            ],
+            7,
+            0,
+        ),
+        (
+            STAGE_YOSHI,
+            CHAR_FOX,
+            -57.91999816894531,
+            -17.899999618530273,
+            1,
+            0,
+            95.97999572753906,
+            4,
+            [
+                (0, 0, -72, 0),
+                (BUTTON_Y, 96, -40, 0),
+                (BUTTON_Y, 96, -40, 0),
+                (BUTTON_Y, 96, -40, 0),
+                (BUTTON_Y, 96, -40, 0),
+                (BUTTON_Y | BUTTON_R, 80, -48, 255),
+                (BUTTON_Y | BUTTON_R, 80, -48, 255),
+                (BUTTON_Y | BUTTON_R, 80, -48, 255),
+            ],
+            8,
+            2,
+        ),
+        (
+            STAGE_YOSHI,
+            CHAR_FALCO,
+            58.20000076293945,
+            -20.0,
+            0,
+            0,
+            26.400001525878906,
+            2,
+            [
+                (0, 0, -96, 0),
+                (BUTTON_Y, -88, -88, 0),
+                (BUTTON_Y, -88, -88, 0),
+                (BUTTON_Y, -88, -88, 0),
+                (BUTTON_Y, -88, -88, 0),
+                (BUTTON_Y, -88, -88, 0),
+                (BUTTON_Y | BUTTON_R, -88, -88, 255),
+                (BUTTON_Y | BUTTON_R, -96, -80, 255),
+                (BUTTON_Y | BUTTON_R, -104, -64, 255),
+            ],
+            9,
+            6,
+        ),
+    ],
+)
+@pytest.mark.integration
+def test_cliff_floor_owner_covers_same_side_and_yoshi_stale_floor(
+    stage_id: int,
+    char_id: int,
+    x: float,
+    y: float,
+    facing: int,
+    ground_id: int,
+    percent: float,
+    action_frame: int,
+    inputs: list[tuple[int, int, int, int]],
+    land_step: int,
+    expected_ground: int,
+) -> None:
+    # Manual modelplay repros from the 20260506 legal-stage matrix:
+    # - Battlefield left ledge: env_004_battlefield_fox_vs_falco P2 frames 2229-2236.
+    # - Yoshi left ledge: env_010_yoshi_fox_vs_falco P1 frames 7500-7508.
+    # - Yoshi right ledge: env_011_yoshi_falco_vs_falco P1 frames 5379-5388.
+    #
+    # These lock the shared Cliff/CollData floor owner, including visible floor.index already naming
+    # the same ledge and Yoshi's stale stage-object platform floor.index.
+    rows = _run_cliff_wait_ledgedash(
+        stage_id=stage_id,
+        char_id=char_id,
+        x=x,
+        y=y,
+        facing=facing,
+        ground_id=ground_id,
+        percent=percent,
+        action_frame=action_frame,
+        inputs=inputs,
+    )
+
+    before = rows[land_step - 2]
+    landed = rows[land_step - 1]
+    assert int(before["action_id"][0]) == ACT_ESCAPE_AIR
+    assert int(before["on_ground"][0]) == 0
+    assert int(landed["action_id"][0]) == ACT_LANDING_FALL_SPECIAL
+    assert int(landed["on_ground"][0]) == 1
+    assert int(landed["ground_id"][0]) == expected_ground
+
+
+def test_non_cliff_escapeair_near_yoshi_ledge_does_not_reconstruct_cliff_floor_owner() -> None:
+    # Negative control: a direct later EscapeAir reseed near the low Yoshi ledge does not have the
+    # hidden Cliff floor seed lane, so the sim must not infer a cliff ledge floor from position,
+    # ledge-cooldown alone, or future outcome.
+    seed = _seed_base(STAGE_YOSHI, ACT_ESCAPE_AIR, SM_ESCAPE_AIR, -53.5, -4.2)
+    seed["char_id"][0, :2] = np.uint8(CHAR_FOX)
+    seed["facing"][0, 0] = np.uint8(1)
+    seed["jumps_left"][0, 0] = np.uint8(0)
+    seed["action_frame"][0, 0] = np.int16(6)
+    seed["anim_frame_f32"][0, 0] = np.float32(6.0)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["ground_id"][0, 0] = np.uint16(0)
+    seed["ledge_cooldown"][0, 0] = np.uint8(20)
+    seed["speed_air_x_self"][0, 0] = np.float32(2.15)
+    seed["speed_y_self"][0, 0] = np.float32(-1.29)
+
+    out = _step_once(seed)
+
+    assert int(out["action_id"][0]) == ACT_ESCAPE_AIR
+    assert int(out["on_ground"][0]) == 0
+    assert int(out["ground_id"][0]) == 0
+
+
+def test_native_cliff_ledge_floor_seed_lane_carries_and_clears_by_source_lifetime() -> None:
+    import msl_binding
+
+    actions = np.array(
+        [
+            ACT_CLIFF_WAIT,
+            ACT_FALL,
+            ACT_JUMP_AERIAL_F,
+            ACT_ESCAPE_AIR,
+            ACT_ESCAPE_AIR,
+            ACT_ESCAPE_AIR,
+            ACT_WAIT,
+            ACT_ESCAPE_AIR,
+        ],
+        dtype=np.uint16,
+    )
+    facing = np.array([1, 1, 1, 1, 1, 1, 1, 1], dtype=np.uint8)
+    on_ground = np.array([0, 0, 0, 0, 1, 0, 0, 0], dtype=np.uint8)
+    ledge_cooldown = np.array([0, 20, 19, 18, 17, 0, 20, 20], dtype=np.uint8)
+
+    out = msl_binding.derive_cliff_ledge_floor_segment_id(
+        actions,
+        facing,
+        on_ground,
+        ledge_cooldown,
+        2,
+        6,
+    )
+
+    assert out.tolist() == [2, 2, 2, 2, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF]
+
+    wrong_side = msl_binding.derive_cliff_ledge_floor_segment_id(
+        np.array([ACT_CLIFF_WAIT, ACT_FALL], dtype=np.uint16),
+        np.array([0, 0], dtype=np.uint8),
+        np.array([0, 0], dtype=np.uint8),
+        np.array([0, 20], dtype=np.uint8),
+        2,
+        6,
+    )
+    assert wrong_side.tolist() == [6, 6]
+
+
+def test_cliff_ledge_floor_owner_reseed_uses_facing_not_position() -> None:
+    # Negative control for wrong-side teacher-forced CliffWait reseeds. The hidden cliff owner may
+    # be reconstructed from Cliff action + facing + generated stage ledge table only; a fighter
+    # seeded at the left ledge position but facing left is treated as owning the right ledge.
+    rows = _run_cliff_wait_ledgedash(
+        stage_id=STAGE_YOSHI,
+        char_id=CHAR_FOX,
+        x=-57.91999816894531,
+        y=-17.9,
+        facing=0,
+        ground_id=0,
+        percent=95.97999572753906,
+        action_frame=4,
+        inputs=[
+            (0, 0, -72, 0),
+            (BUTTON_Y, 96, -40, 0),
+            (BUTTON_Y, 96, -40, 0),
+            (BUTTON_Y, 96, -40, 0),
+            (BUTTON_Y, 96, -40, 0),
+            (BUTTON_Y | BUTTON_R, 80, -48, 255),
+            (BUTTON_Y | BUTTON_R, 80, -48, 255),
+            (BUTTON_Y | BUTTON_R, 80, -48, 255),
+        ],
+    )
+
+    final = rows[-1]
+    assert int(final["action_id"][0]) == ACT_ESCAPE_AIR
+    assert int(final["on_ground"][0]) == 0
+    assert int(final["ground_id"][0]) != 2
 
 
 def test_yoshi_downhill_slope_grounded_projection_tracks_floor_height() -> None:

@@ -616,6 +616,14 @@ typedef struct MslStateSoA {
   int8_t* stage_ledge_occupant_right;          // [batch]
   uint8_t* ledge_cooldown;                     // [batch * players]
   uint16_t* ledge_drop_floor_skip_segment_id;  // [batch * players], 0xFFFF = none
+  // Source cliff ledge floor owner (`mv.co.cliff.ledge_id` / CollData floor owner). Set while
+  // CliffCatch/CliffWait/Cliff* state is live and carried through immediate cliff exits until
+  // grounded collision consumes or clears the owner.
+  // refs/melee/src/melee/ft/ftcliffcommon.c::ftCliffCommon_80081370
+  uint16_t* cliff_ledge_floor_segment_id;  // [batch * players], 0xFFFF = none
+  // Runtime provenance for the above owner: 1 only when restored from a teacher-forced seed lane,
+  // 0 when populated by live CliffCatch/CliffWait runtime ownership.
+  uint8_t* cliff_ledge_floor_segment_seeded;  // [batch * players]
   // FallSpecial internals (seeded/derived).
   // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c
   uint8_t* fallspecial_xc;  // fp->mv.co.fallspecial.xC (arg1 to ftCo_80096900)

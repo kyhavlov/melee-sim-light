@@ -1006,6 +1006,21 @@ typedef struct MslSeed {
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_8009AAFC
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::ftCo_8009A9AC
   uint8_t ledge_cooldown[MSL_MAX_PLAYERS];  // fp->x2064_ledgeCooldown (clamped to 0..255)
+  // Hidden Cliff/CollData floor owner for immediate ledge-release/drop exits.
+  //
+  // Decomp owner:
+  // - CliffCatch/CliffWait own `mv.co.cliff.ledge_id`.
+  // - Cliff release/drop sets `fp->x2064_ledgeCooldown`.
+  // - EscapeAir_Coll reaches `mpColl_800471F8` while that source cliff floor owner is still live.
+  //
+  // Teacher-forced seed generation reconstructs this only from prefix-visible Cliff action +
+  // facing + generated MSLSTG01 stage ledge table, then carries it through the immediate cliff-exit
+  // action lifetime while `ledge_cooldown` is live. 0xFFFF means no hidden cliff floor owner.
+  // refs/melee/src/melee/ft/ftcliffcommon.c::ftCliffCommon_80081370
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::ftCo_8009A9AC
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+  // refs/melee/src/melee/mp/mpcoll.c::mpColl_800471F8
+  uint16_t cliff_ledge_floor_segment_id_u16[MSL_MAX_PLAYERS];
   // Hidden FallSpecial -> LandingFallSpecial interrupt permission carry
   // (`mv.co.fallspecial.allow_interrupt` / `mv.co.landing.allow_interrupt`).
   //

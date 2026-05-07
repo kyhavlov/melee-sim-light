@@ -150,6 +150,7 @@ def test_seed_schema_includes_staling_fields() -> None:
     assert "stage_yoshi_shyguy_valid_u8" in SEED_DTYPE.fields
     assert "stage_dream_whispy_wind_dir_u8" in SEED_DTYPE.fields
     assert "stage_dream_whispy_wind_valid_u8" in SEED_DTYPE.fields
+    assert "cliff_ledge_floor_segment_id_u16" in SEED_DTYPE.fields
     assert "item_shyguy_speed_index_u8" in SEED_DTYPE.fields
     assert "item_shyguy_speed_index_valid_u8" in SEED_DTYPE.fields
     assert "item_shyguy_delay_u16" in SEED_DTYPE.fields
