@@ -21,7 +21,13 @@ import numpy as np
 
 from tools.eval.dataset import COMPARE_DTYPE, read_dataset
 from tools.eval.facing_residual_blocker_report import load_action_id_names
-from tools.eval.mismatch_taxonomy import PlayerRow, _action_name, _classify_player_row
+from tools.eval.mismatch_taxonomy import (
+    PlayerRow,
+    _action_name,
+    _classify_player_row,
+    family_scope_reason,
+    family_scope_tier,
+)
 from tools.eval.run_longest_rollout_streaks import _parse_csv, _parse_players, _validate_discrete_fields
 from tools.eval.validation_profile import ValidationProfile, get_validation_profile, validation_profile_names
 from tools.slippi.suite_io import dataset_path_for_suite_replay, load_suite, repo_root
@@ -68,6 +74,8 @@ ROW_COLUMNS = (
     "ref_frame",
     "player",
     "family_id",
+    "scope_tier",
+    "scope_reason",
     "action_state",
     "field_cluster",
     "first_mismatch_offset",
@@ -97,6 +105,8 @@ CLUSTER_COLUMNS = (
     "suite",
     "horizon",
     "family_id",
+    "scope_tier",
+    "scope_reason",
     "action_state",
     "dataset",
     "player",
@@ -294,6 +304,8 @@ class DisruptiveRow:
     hitlag: int
     hitstun: int
     cluster_key: str
+    scope_tier: str = ""
+    scope_reason: str = ""
 
 
 @dataclass(frozen=True)
@@ -302,6 +314,8 @@ class ClusterSummary:
     suite: str
     horizon: int
     family_id: str
+    scope_tier: str
+    scope_reason: str
     action_state: str
     dataset: str
     player: int
@@ -422,20 +436,27 @@ def _read_rows_tsv(path: Path) -> list[DisruptiveRow]:
         reader = csv.DictReader(f, delimiter="\t")
         if reader.fieldnames is None:
             return []
-        missing = [column for column in ROW_COLUMNS if column not in reader.fieldnames]
+        optional_columns = {"scope_tier", "scope_reason"}
+        missing = [
+            column for column in ROW_COLUMNS if column not in reader.fieldnames and column not in optional_columns
+        ]
         if missing:
             raise SystemExit(f"error: {path} is missing columns: {', '.join(missing)}")
         rows: list[DisruptiveRow] = []
         for raw in reader:
             values: dict[str, Any] = {}
             for column in ROW_COLUMNS:
-                value = raw[column]
+                value = raw.get(column, "")
                 if column in _DISRUPTIVE_INT_COLUMNS:
                     values[column] = int(value)
                 elif column in _DISRUPTIVE_FLOAT_COLUMNS:
                     values[column] = float(value)
                 else:
                     values[column] = value
+            if not values["scope_tier"]:
+                values["scope_tier"] = family_scope_tier(str(values["family_id"]))
+            if not values["scope_reason"]:
+                values["scope_reason"] = family_scope_reason(str(values["family_id"]))
             rows.append(DisruptiveRow(**values))
     return rows
 
@@ -545,6 +566,8 @@ def _row_from_native(
         hitlag=int(raw_i[NATIVE_INT_HITLAG]),
         hitstun=int(raw_i[NATIVE_INT_HITSTUN]),
         cluster_key=cluster_key,
+        scope_tier=family_scope_tier(family_id),
+        scope_reason=family_scope_reason(family_id),
     )
 
 
@@ -644,6 +667,8 @@ def _summarize_clusters(rows: Iterable[DisruptiveRow]) -> list[ClusterSummary]:
                 suite=ex.suite,
                 horizon=int(ex.horizon),
                 family_id=ex.family_id,
+                scope_tier=family_scope_tier(ex.family_id),
+                scope_reason=family_scope_reason(ex.family_id),
                 action_state=ex.action_state,
                 dataset=Path(ex.dataset).name,
                 player=int(ex.player),
@@ -682,6 +707,9 @@ def _summary_json(
     float_epsilon: float,
     profile: ValidationProfile,
 ) -> dict[str, Any]:
+    scope_counts: dict[str, int] = defaultdict(int)
+    for row in rows:
+        scope_counts[row.scope_tier or family_scope_tier(row.family_id)] += 1
     return {
         "suite": suite_name,
         "suite_path": str(suite_path),
@@ -700,6 +728,7 @@ def _summary_json(
         "scoring_formula": SCORE_FORMULA,
         "row_count": len(rows),
         "cluster_count": len(clusters),
+        "scope_counts": dict(sorted(scope_counts.items())),
         "top_clusters": [asdict(row) for row in clusters[: max(1, int(top))]],
     }
 
@@ -909,7 +938,7 @@ def main() -> None:
     for i, row in enumerate(clusters[: max(1, int(args.top))], start=1):
         print(
             f"{i:>2}. score={row.score_sum:.1f} freq={row.frequency:<5d} h={row.horizon:<2d} "
-            f"{row.family_id} {row.field_cluster} p={row.player} "
+            f"{row.family_id} scope={row.scope_tier} {row.field_cluster} p={row.player} "
             f"example={row.dataset}:rec={row.example_record} first={row.example_first_field}"
         )
 

@@ -72,6 +72,8 @@ Current target domain:
 
 Primary tracker:
 - `docs/RL10_COMPLETION_CHECKLIST.md`
+- Use its RL 1.0 scope tiers when choosing work: rollout-critical gameplay owners outrank
+  replay-exact camera/viewer/cosmetic state unless that state feeds gameplay ownership.
 
 ## Required Last-Mile Behavior
 
@@ -79,6 +81,10 @@ Primary tracker:
 - For each selected mismatch, first identify the shared data-backed owner family when possible:
   MotionState callbacks, script events, item/article kind, stage segment, part/anchor, or explicit
   seed/provenance lane. Prefer closing that owner family over fitting the motivating row.
+- If decomp/data shows a feasible general source-owner fix that would cover the observed bug and
+  other plausible rollout/replay variants, implement that general owner. Do not retain a narrower
+  downstream action/row/stage exception just because it fixes the current replay suite. Lack of a
+  current replay exercising every variant is not a reason to avoid the general fix.
 - Do not stop at the first motivating row or one small owner slice during checklist burn-down.
 - Do not return with diagnosis-only prose if implementation, extraction, probes, locks, or validation remain credible local next steps.
 - Do not package bare behavior-neutral substrate work as a checkpoint by itself.

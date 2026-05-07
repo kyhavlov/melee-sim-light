@@ -112,6 +112,17 @@ SPECIAL_ENTRY_DISPATCH_FIELDS: frozenset[str] = frozenset(
 )
 SPECIAL_ENTRY_ACTION_FIELDS: frozenset[str] = frozenset({"action_id", "animation_index", "action_frame"})
 
+SCOPE_ROLLOUT_CRITICAL_GAMEPLAY = "rollout_critical_gameplay"
+SCOPE_DISTRIBUTION_CORRECT_NOT_REPLAY_PHASE_EXACT = (
+    "distribution_correct_not_replay_phase_exact"
+)
+SCOPE_REPLAY_EXACT_LOW_PRIORITY = "replay_exact_low_priority"
+
+DEFAULT_SCOPE_REASON = (
+    "This family affects, or can plausibly feed, rollout gameplay state and should stay in the "
+    "normal source-owner burn-down queue."
+)
+
 _DEBUG_CONTACT_CLASSIFIED_DTYPE = np.dtype(
     [
         ("attacker", "u1"),
@@ -176,6 +187,8 @@ class FamilyMeta:
     confidence: str
     hypothesis: str
     refs: tuple[str, ...]
+    scope_tier: str = SCOPE_ROLLOUT_CRITICAL_GAMEPLAY
+    scope_reason: str = DEFAULT_SCOPE_REASON
 
 
 FAMILY_META: dict[str, FamilyMeta] = {
@@ -277,6 +290,12 @@ FAMILY_META: dict[str, FamilyMeta] = {
             "refs/melee/src/melee/cm/camera.c::Camera_80030CFC",
             "src/state_flags.c",
         ),
+        scope_tier=SCOPE_REPLAY_EXACT_LOW_PRIORITY,
+        scope_reason=(
+            "Replay-visible camera-box / magnifier display state. The RL1 gameplay validation "
+            "profile already ignores only state_flags[4]&0x80; strict taxonomy keeps it visible so "
+            "it can be audited without dominating gameplay target selection."
+        ),
     ),
     "F06_damageflyroll_rng_gate": FamilyMeta(
         label="DamageFlyRoll RNG / Pre-Gate Admission",
@@ -294,6 +313,11 @@ FAMILY_META: dict[str, FamilyMeta] = {
             "refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4",
             "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0",
             "refs/melee/src/sysdolphin/baselib/random.c::HSD_Randf",
+        ),
+        scope_tier=SCOPE_DISTRIBUTION_CORRECT_NOT_REPLAY_PHASE_EXACT,
+        scope_reason=(
+            "DamageFlyRoll RNG consumers are gameplay, but RL1 prioritizes source-correct "
+            "distribution, range, and consumer ownership over exact hidden replay RNG phase."
         ),
     ),
     "F26_damageflyroll_rng_stream_seed_surface": FamilyMeta(
@@ -313,6 +337,12 @@ FAMILY_META: dict[str, FamilyMeta] = {
             "refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0",
             "refs/melee/src/sysdolphin/baselib/random.c::HSD_Randf",
             "tools/eval/damageflyroll_rng_blocker_report.py",
+        ),
+        scope_tier=SCOPE_DISTRIBUTION_CORRECT_NOT_REPLAY_PHASE_EXACT,
+        scope_reason=(
+            "Rows are exact RNG stream / seed-surface phase evidence. Keep source-shaped RNG "
+            "consumer semantics correct, but deprioritize replay-phase exactness when choosing "
+            "between gameplay owners."
         ),
     ),
     "F07_knockdown_grounding": FamilyMeta(
@@ -1564,6 +1594,16 @@ FAMILY_META: dict[str, FamilyMeta] = {
         ),
     ),
 }
+
+
+def family_scope_tier(family_id: str) -> str:
+    meta = FAMILY_META.get(str(family_id))
+    return meta.scope_tier if meta is not None else SCOPE_ROLLOUT_CRITICAL_GAMEPLAY
+
+
+def family_scope_reason(family_id: str) -> str:
+    meta = FAMILY_META.get(str(family_id))
+    return meta.scope_reason if meta is not None else DEFAULT_SCOPE_REASON
 
 
 @dataclass(frozen=True)
@@ -4201,6 +4241,8 @@ def build_summary(
                 "fix_type": meta.fix_type,
                 "risk": meta.risk,
                 "confidence": meta.confidence,
+                "scope_tier": meta.scope_tier,
+                "scope_reason": meta.scope_reason,
                 "count": int(len(family_list)),
                 "coverage": float(len(family_list) / total),
                 "row_count": int(len(unique_rows)),
@@ -4254,11 +4296,15 @@ def build_summary(
     top_families = families[: max(1, int(top_n))]
     top_family_ids = {family["family_id"] for family in top_families}
     top_coverage = sum(family["count"] for family in top_families) / total if total else 0.0
+    scope_counts: Counter[str] = Counter()
+    for family in families:
+        scope_counts[str(family["scope_tier"])] += int(family["count"])
 
     return {
         "generated_at_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "total_mismatches": total,
         "family_count": int(len(families)),
+        "scope_counts": dict(sorted(scope_counts.items())),
         "top_families": top_families,
         "families": families,
         "top_coverage": float(top_coverage),
@@ -4269,6 +4315,8 @@ def build_summary(
                 "fix_type": meta.fix_type,
                 "risk": meta.risk,
                 "confidence": meta.confidence,
+                "scope_tier": meta.scope_tier,
+                "scope_reason": meta.scope_reason,
                 "hypothesis": meta.hypothesis,
                 "refs": list(meta.refs),
             }
@@ -4285,6 +4333,7 @@ def _write_family_tsv(path: Path, events: list[MismatchEvent], action_names: dic
         writer.writerow(
             (
                 "family_id",
+                "scope_tier",
                 "dataset",
                 "record",
                 "subject",
@@ -4314,9 +4363,11 @@ def _write_family_tsv(path: Path, events: list[MismatchEvent], action_names: dic
             )
         )
         for event in sorted(events, key=_event_sort_key):
+            meta = FAMILY_META[event.family_id]
             writer.writerow(
                 (
                     event.family_id,
+                    meta.scope_tier,
                     event.dataset,
                     int(event.record),
                     event.subject,
@@ -4354,6 +4405,7 @@ def _write_audit_samples_tsv(path: Path, samples: list[AuditSample], action_name
         writer.writerow(
             (
                 "family_id",
+                "scope_tier",
                 "dataset",
                 "record",
                 "subject",
@@ -4372,9 +4424,11 @@ def _write_audit_samples_tsv(path: Path, samples: list[AuditSample], action_name
             )
         )
         for sample in samples:
+            meta = FAMILY_META[sample.family_id]
             writer.writerow(
                 (
                     sample.family_id,
+                    meta.scope_tier,
                     sample.dataset,
                     int(sample.record),
                     sample.subject,
@@ -4463,12 +4517,16 @@ def main() -> None:
     print(f"total_mismatches: {summary['total_mismatches']}")
     print(f"family_count: {summary['family_count']}")
     print(f"top_coverage: {summary['top_coverage']:.3%}")
+    print("scope_counts:")
+    for scope_tier, count in summary["scope_counts"].items():
+        print(f"  {scope_tier}: count={count}")
     print(f"audit_sample_n: {args.audit_sample_n}")
     print("top_families:")
     for family in summary["top_families"]:
         print(
             f"  {family['family_id']}: count={family['count']} owner={family['owner_module']} "
-            f"fix_type={family['fix_type']} risk={family['risk']} coverage={family['coverage']:.3%}"
+            f"fix_type={family['fix_type']} scope={family['scope_tier']} risk={family['risk']} "
+            f"coverage={family['coverage']:.3%}"
         )
     print(f"summary_json: {summary_path}")
     print(f"audit_summary_json: {audit_summary_path}")

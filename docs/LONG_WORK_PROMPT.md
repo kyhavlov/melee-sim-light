@@ -26,6 +26,14 @@ it as source-completion work.
 0. Write starting baselines in the worklog.
 1. Pick something to improve simulator correctness. Use your best judgment.
 2. Continue investigating and working the selected item until it is done. Do not stop or change topics. If you need supporting functionality to finish or continue the investigation, add it and keep going until the selected item is done.
+   Before retaining any runtime fix, perform this hard generality gate:
+   - Identify the broadest decomp/data-backed source owner that explains the observed bug family.
+   - If that general owner is locally feasible and would cover other plausible rollout/replay bugs,
+     implement it instead of the narrower downstream fix.
+   - This is required even when current validation/replay suites do not contain every variant the
+     general owner would cover.
+   - A narrow action/row/stage fix may remain only as temporary worklog evidence while building the
+     general owner; it is not the retained runtime shape.
 3. Write the completed item into the worklog with updated baselines and packaging notes.
 4. When the item is done to our rules, return to step 1 and pick a new target area.
 
@@ -50,6 +58,9 @@ Prioritization:
 
 - Prioritize source-owner closure and simulator correctness; metrics choose between plausible
   owners, but do not define the patch boundary.
+- Use the RL 1.0 scope tiers in docs/RL10_COMPLETION_CHECKLIST.md. Gameplay-critical rollout
+  owners outrank replay-exact/render-only state; low-priority camera/viewer/cosmetic lanes should
+  not drive target selection unless they feed gameplay ownership.
 - Proactively remove runtime bridges/proxies/fallbacks when they are in or adjacent to the owner
   you are touching. Search the touched runtime/seed surfaces for bridge/proxy/fallback wording,
   classify each hit in the worklog, and replace real runtime bridges with the source/data owner.
@@ -93,6 +104,8 @@ Investigation rules:
   capture/throw provenance, GuardReflect descriptor state, SpecialHi pose lifetime, and similar
   callback-local mechanics still need source-owner modeling unless a table actually expresses the
   distinction.
+- Do not stop at a downstream fix when the source points to an implementable upstream owner. The
+  upstream owner is the task, even if the downstream fix is already validation-clean.
 - If an experiment fails, do not immediately revert it unless it is truly a dead end. Continue investigating the same owner with deeper evidence: decomp C, raw game asm, Slippi asm/labels, probes, extraction, instrumentation, or minimal seed/internal lanes.
 - No replay id, dataset id, row id, character-id proxy, stale-state shortcut, or broad tolerance hack in gameplay code.
 - Bridge/proxy/fallback audit terms are evidence, not naming cleanup. If the code is still a

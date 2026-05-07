@@ -18,6 +18,7 @@ import numpy as np
 from tools.eval import disruptive_rollout_desyncs as disruptive
 from tools.eval.dataset import COMPARE_DTYPE, MAX_ITEMS, read_dataset
 from tools.eval.facing_residual_blocker_report import load_action_id_names
+from tools.eval.mismatch_taxonomy import family_scope_reason, family_scope_tier
 from tools.eval.validation_profile import ValidationProfile, get_validation_profile, validation_profile_names
 from tools.slippi.known_data_artifacts import (
     read_mslftsc1_v1,
@@ -47,6 +48,8 @@ class NextCluster:
     player: int
     horizon: int
     family_id: str
+    scope_tier: str
+    scope_reason: str
     action_family: str
     field_cluster: str
     frequency: int
@@ -338,7 +341,15 @@ def _cluster_rows(
             f"{action_family}|{row.field_cluster}|b{record_bucket}"
         )
         d = asdict(row)
-        d.update({"rank": rank, "next_cluster_id": cluster_id, "action_family": action_family})
+        d.update(
+            {
+                "rank": rank,
+                "next_cluster_id": cluster_id,
+                "action_family": action_family,
+                "scope_tier": row.scope_tier or family_scope_tier(row.family_id),
+                "scope_reason": row.scope_reason or family_scope_reason(row.family_id),
+            }
+        )
         ranked_dicts.append(d)
         groups[cluster_id].append((rank, row))
 
@@ -356,6 +367,8 @@ def _cluster_rows(
                 player=int(example.player),
                 horizon=int(example.horizon),
                 family_id=example.family_id,
+                scope_tier=example.scope_tier or family_scope_tier(example.family_id),
+                scope_reason=example.scope_reason or family_scope_reason(example.family_id),
                 action_family=_action_family(example, action_names),
                 field_cluster=example.field_cluster,
                 frequency=len(rows_only),
@@ -1130,6 +1143,7 @@ def _packet_markdown(packet: dict[str, Any]) -> str:
         f"- disruptive rank/source: `{packet['rows_source']}`",
         f"- score: `{float(candidate['score_total']):.3f}` horizon: `{candidate['horizon']}`",
         f"- family: `{candidate['family_id']}` field_cluster: `{candidate['field_cluster']}`",
+        f"- scope: `{candidate.get('scope_tier', family_scope_tier(candidate['family_id']))}`",
         f"- first rollout mismatch: `{candidate['first_mismatch_field']}` "
         f"offset `{candidate['first_mismatch_offset']}` out `{candidate['first_out']}` ref `{candidate['first_ref']}`",
         "",
@@ -1210,7 +1224,8 @@ def _summary_markdown(
     for cluster in clusters[:10]:
         lines.append(
             f"{cluster.rank}. score `{cluster.score_sum:.1f}` freq `{cluster.frequency}` "
-            f"`{cluster.family_id}` `{cluster.action_family}` `{Path(cluster.dataset).name}` "
+            f"`{cluster.family_id}` scope `{cluster.scope_tier}` "
+            f"`{cluster.action_family}` `{Path(cluster.dataset).name}` "
             f"records `{cluster.record_min}..{cluster.record_max}` first `{cluster.example_first_field}`"
         )
     lines.append("")
@@ -1287,6 +1302,8 @@ def main() -> None:
         "ref_frame",
         "player",
         "family_id",
+        "scope_tier",
+        "scope_reason",
         "action_family",
         "field_cluster",
         "first_mismatch_offset",

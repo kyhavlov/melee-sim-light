@@ -2111,6 +2111,36 @@ def test_build_summary_aggregates_family_counts_and_nearby_controls() -> None:
     assert summary["top_families"][0]["primary_fields"][0] == {"field": "action_id", "count": 1}
     assert summary["top_families"][0]["counterexample_rows"]
     assert summary["top_families"][0]["refs"] == list(FAMILY_META["F01_guard_release_collision"].refs)
+    assert summary["top_families"][0]["scope_tier"] == "rollout_critical_gameplay"
+    assert summary["scope_counts"] == {"rollout_critical_gameplay": 3}
+
+
+def test_build_summary_marks_camera_and_rng_as_deprioritized_scope_tiers() -> None:
+    player_rows = {("d.msl", 10, 0): _player_row()}
+    item_rows = {}
+    events = [
+        _event("F25_camera_box_visibility_x221f", "state_flags[4]", seed=0x80, ref=0, out=0x80),
+        _event("F26_damageflyroll_rng_stream_seed_surface", "action_id", seed=90, ref=91, out=90),
+    ]
+
+    summary = build_summary(
+        events,
+        player_rows,
+        item_rows,
+        action_names={90: "DAMAGE_FLY_TOP", 91: "DAMAGE_FLY_ROLL"},
+        top_n=5,
+    )
+    by_family = {family["family_id"]: family for family in summary["families"]}
+
+    assert by_family["F25_camera_box_visibility_x221f"]["scope_tier"] == "replay_exact_low_priority"
+    assert (
+        by_family["F26_damageflyroll_rng_stream_seed_surface"]["scope_tier"]
+        == "distribution_correct_not_replay_phase_exact"
+    )
+    assert summary["scope_counts"] == {
+        "distribution_correct_not_replay_phase_exact": 1,
+        "replay_exact_low_priority": 1,
+    }
 
 
 def test_build_audit_summary_reports_precision_on_synthetic_rows() -> None:
@@ -2158,8 +2188,10 @@ def test_family_tsv_includes_action_frame_buckets(tmp_path) -> None:
     text = out.read_text(encoding="utf-8")
     lines = text.splitlines()
     assert "seed_action_frame_bucket" in lines[0]
+    header = lines[0].split("\t")
     cols = lines[1].split("\t")
-    assert cols[18:24] == ["0", "0", "1", "1", "0", "0"]
+    idx = header.index("seed_action_frame")
+    assert cols[idx : idx + 6] == ["0", "0", "1", "1", "0", "0"]
 
 
 def test_audit_samples_tsv_includes_reason_and_buckets(tmp_path) -> None:

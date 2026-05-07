@@ -18,6 +18,56 @@ Maintenance note:
   immediate target ordering, and use this document for family boundaries, closure definitions, and
   historical bridge/residual context.
 
+## RL 1.0 Scope Tiers
+
+Use these tiers when choosing between plausible owners. They are prioritization rules, not
+permission to replay-fit or ignore a source-owned gameplay path.
+
+### Rollout-Critical Gameplay State
+
+These owners affect RL outcomes and should stay scored and high-priority:
+- action / subaction identity, action frame, motion-entry ordering, callbacks, IASA, and transition
+  ownership
+- position, velocity, facing, ECB / CollData / floor / ledge / platform / wall / ceiling ownership
+- hitboxes, hurtboxes, shields, reflectors, grab/capture/throw, damage, KB, DI/SDI/ASDI/tech,
+  hitlag, hitstun, stale/combo/source provenance, and item/projectile gameplay contact
+- stage-object and item lifecycle when it affects collision, damage, position, availability, or
+  ordering
+- match-flow state that affects death, stocks, respawn, spawn coordinates, invulnerability, or
+  control regain
+- hidden source state that feeds any of the above, even when it is only visible through later replay
+  divergence
+
+### Distribution-Correct, Not Replay-Phase Exact
+
+For RL 1.0, source-shaped distribution and consumer behavior matter more than matching an arbitrary
+Slippi replay's hidden RNG phase:
+- gameplay RNG consumers should use the same source distribution, range, ownership point, and
+  deterministic runtime stream semantics
+- replay reseed may reconstruct hidden RNG state only from causal source-visible evidence or
+  explicit seed lanes; it must not infer RNG phase from future labels or outcomes
+- exact per-replay RNG phase is lower priority unless it feeds a deterministic validation owner that
+  can be causally reconstructed
+
+### Replay-Exact / Low-Priority State
+
+These are lower priority unless they feed gameplay state:
+- render-only camera / CObj / scissor / magnifier visibility state
+- viewer/display-only coordinates and cosmetic pose values not consumed by collision, hitboxes,
+  hurtboxes, shields, anchors, item contact, or match-flow
+- exact replay object ids / debug provenance ids when they do not affect runtime ordering,
+  ownership, lifecycle, or contact resolution
+
+### Hard-Ignore Policy
+
+Hard validation ignores must be rare and lane-specific:
+- current hard ignore: `state_flags[4]&0x80`, the Slippi `fp+0x221F` camera-subject /
+  magnifying-glass visibility bit
+- do not hard-ignore broad gameplay fields such as action, position, velocity, percent, damage,
+  hitlag, source/provenance, item lifecycle, floor/ledge ids, or whole state-flag bytes
+- new ignores require a documented reason, a narrow `tools/eval/validation_profile.py` lane, tests
+  proving only that lane is ignored, and a report label that explains the exception
+
 ## Status Legend
 
 - **Closed / effectively closed**: the shared owner path is in place; remaining behavior is narrow per-move or adjacent-family detail.
