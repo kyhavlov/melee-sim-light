@@ -755,7 +755,9 @@ Characters (Fox/Falco):
       classes cover `ftCo_AttackAir_*`, `ftCo_AttackS3_*`, `ftCo_AttackS4_*`,
       `ftCo_Damage*`, `ftCo_DownDamage*`, `ftCo_DamageFly*`, `ftCo_FlyReflect*`,
       `ftCo_LandingAir*`, `ftCo_Jump*`, `ftCo_JumpAerial*`, `ftCo_Fall*`,
-      `ftCo_Landing*`, and `ftFx_SpecialHi*` callback-symbol families. They are callback-owner
+      `ftCo_Landing*`, `ftFx_SpecialHi*`, and the grounded stage-object carry collision owner
+      class used by Wait/Walk/Run/Squat/Landing/LandingAir/grounded attack/guard plus
+      `ftCo_Down_Coll`, `ftCo_DownAttack_Coll`, and `ftCo_PassiveStand_Coll`. They are callback-owner
       classifications only; procedural behavior such as edge-snap branch results, ledge
       eligibility, or hidden descriptor provenance is not inferred by this artifact.
   - Sources:

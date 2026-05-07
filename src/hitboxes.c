@@ -1118,10 +1118,11 @@ void hitboxes_refresh(MslBatch* batch) {
 
       batch->state.hitbox_count[idx] = 0;
 
-      if (msl_action_owns_respawn_collision_skip(batch->state.action_id[idx])) {
-        // Rebirth/RebirthWait set fp->x2219_b1, so Fighter_8006CB94 skips common fighter
+      if (msl_action_owns_x2219_collision_skip(batch->state.action_id[idx])) {
+        // Dead*/Rebirth source states set fp->x2219_b1, so Fighter_8006CB94 skips common fighter
         // collision while the platform bit is live. These states have no BODY hitbox owner in the
         // consumed collision path; leave slots cleared instead of sampling the terminal Wait1 pose.
+        // refs/melee/src/melee/ft/ft_0D31.c::{ftCo_800D3680,ftCo_800D3950,ftCo_800D3BC8,ftCo_800D3E40,ftCo_800D4580,ftCo_800D481C}
         // refs/melee/src/melee/ft/ft_0D4D.c::{ftCo_800D4FF4,ftCo_800D5600}
         // refs/melee/src/melee/ft/fighter.c::Fighter_8006CB94
         continue;

@@ -16,6 +16,9 @@ CHAR_FALCO = 22
 # Stage ids (GALE01): Final Destination.
 STAGE_FD = 32
 
+# Common action ids (GALE01).
+ACT_WAIT = 14
+
 # src/hitboxes_tables.h (MSLHITB1 u16_6 bits)
 HIT_GROUNDED = 1 << 9
 
@@ -97,6 +100,7 @@ def test_hit_status_table_gates_body_contact_selection(char_name: str, char_id: 
     seed["num_players"][0] = np.uint8(2)
     seed["stocks"][0, :2] = np.uint8(4)
     seed["char_id"][0, :2] = np.uint8(char_id)
+    seed["action_id"][0, :2] = np.uint16(ACT_WAIT)
     seed["facing"][0, :2] = np.uint8(1)
     seed["on_ground"][0, :2] = np.uint8(1)
     seed["ground_id"][0, :2] = np.uint16(0)

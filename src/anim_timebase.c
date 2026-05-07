@@ -632,8 +632,17 @@ void anim_timebase_update_pre_input(MslBatch* batch) {
       // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006EBA4
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::ftCo_Walk_Anim
       if (anim_timebase_is_walk(a)) {
-        // Entry-only guard: apply 1.0 only on true walk motion-state entry.
-        const uint8_t walk_entry = (batch->state.prev_action_id[idx] != a) ? 1u : 0u;
+        // Entry-only guard: apply 1.0 on true walk motion-state entry, including same-family
+        // WalkSlow/Middle/Fast retargets. ftWalkCommon_800DFEC8 runs from Walk_IASA after the
+        // frame's Walk_Anim callback has already run, so the new walk motion state's first
+        // post-retarget Anim tick consumes the ChangeMotionState entry rate before its own
+        // Walk_Anim callback can write the velocity-scaled rate for the following tick.
+        // refs/melee/src/melee/ft/ftwalkcommon.c::ftWalkCommon_800DFEC8
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::{ftCo_Walk_Anim,ftCo_Walk_IASA}
+        const uint8_t walk_entry =
+            (batch->state.prev_action_id[idx] != a || batch->state.seed_prev_action_id[idx] != a)
+                ? 1u
+                : 0u;
         if (walk_entry) {
           batch->state.frame_speed_mul_fp_q16_16[idx] = msl_q16_16_from_f32(1.0f);
           batch->state.walk_anim_source_vel[idx] = batch->state.speed_ground_x_self[idx];

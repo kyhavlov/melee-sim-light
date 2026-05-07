@@ -36,6 +36,7 @@ CLASS_LANDING_AIR_COLL = 1 << 12
 CLASS_DAMAGE_COMMON_COLL = 1 << 13
 CLASS_DAMAGE_FLY_COLL = 1 << 14
 CLASS_DAMAGE_FALL_COLL = 1 << 15
+CLASS_GROUNDED_STAGE_OBJECT_CARRY_COLL = 1 << 16
 
 
 @dataclass(frozen=True)
@@ -160,6 +161,48 @@ def _class_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
         bits |= CLASS_DAMAGE_FLY_COLL
     if coll_cb == "ftCo_DamageFall_Coll":
         bits |= CLASS_DAMAGE_FALL_COLL
+    if coll_cb in {
+        "ftCo_Wait_Coll",
+        "ftCo_Walk_Coll",
+        "ftCo_Turn_Coll",
+        "ftCo_TurnRun_Coll",
+        "ftCo_Dash_Coll",
+        "ftCo_Run_Coll",
+        "ftCo_RunDirect_Coll",
+        "ftCo_RunBrake_Coll",
+        "ftCo_Squat_Coll",
+        "ftCo_SquatWait_Coll",
+        "ftCo_SquatRv_Coll",
+        "ftCo_Landing_Coll",
+        "ftCo_LandingAir_Coll",
+        "ftCo_Attack11_Coll",
+        "ftCo_Attack100Start_Coll",
+        "ftCo_Attack100Loop_Coll",
+        "ftCo_Attack100End_Coll",
+        "ftCo_AttackDash_Coll",
+        "ftCo_AttackS3_Coll",
+        "ftCo_AttackHi3_Coll",
+        "ftCo_AttackLw3_Coll",
+        "ftCo_AttackS4_Coll",
+        "ftCo_AttackHi4_Coll",
+        "ftCo_AttackLw4_Coll",
+        "ftCo_GuardOn_Coll",
+        "ftCo_Guard_Coll",
+        "ftCo_GuardOff_Coll",
+        "ftCo_GuardSetOff_Coll",
+        "ftCo_GuardReflect_Coll",
+        "ftCo_Down_Coll",
+        "ftCo_DownAttack_Coll",
+        "ftCo_PassiveStand_Coll",
+    }:
+        # These grounded callbacks keep an attached floor through the common map-collision owner
+        # paths (`ft_80084280`, `ft_800844EC`, `ft_80084104`, or adjacent guarded variants). They
+        # should inherit stage-object platform transform while already attached to a moving floor.
+        #
+        # Deliberately excluded: DownBound/DownWait/DownStand/DownSpot/Passive callbacks that route
+        # through `ft_80083F88` (or a custom downed/damage projection owner), and airborne collision
+        # callbacks that may land this frame rather than persist an existing moving-floor attachment.
+        bits |= CLASS_GROUNDED_STAGE_OBJECT_CARRY_COLL
     return bits
 
 
@@ -334,6 +377,7 @@ def _write_manifest(out_path: Path, callback_ids: dict[str, int]) -> None:
         "DAMAGE_COMMON_COLL": CLASS_DAMAGE_COMMON_COLL,
         "DAMAGE_FLY_COLL": CLASS_DAMAGE_FLY_COLL,
         "DAMAGE_FALL_COLL": CLASS_DAMAGE_FALL_COLL,
+        "GROUNDED_STAGE_OBJECT_CARRY_COLL": CLASS_GROUNDED_STAGE_OBJECT_CARRY_COLL,
     }
     symbols = [{"id": int(i), "symbol": sym} for sym, i in sorted(callback_ids.items(), key=lambda kv: kv[1])]
     payload = {

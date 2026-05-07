@@ -20,6 +20,7 @@ from tools.extraction.extract_motion_state_owners import (
     CLASS_DAMAGE_FALL_COLL,
     CLASS_DAMAGE_FLY,
     CLASS_DAMAGE_FLY_COLL,
+    CLASS_GROUNDED_STAGE_OBJECT_CARRY_COLL,
     CLASS_LANDING_AIR,
     CLASS_LANDING_AIR_COLL,
     CLASS_LANDING_COLL,
@@ -77,9 +78,15 @@ def test_motion_state_owner_tables_cover_known_callbacks_and_flags() -> None:
 
     assert cb_name(0x002A, "coll") == "ftCo_Landing_Coll"  # Landing
     assert int(fox.class_bits[0x002A]) & CLASS_LANDING_COLL
+    assert int(fox.class_bits[0x002A]) & CLASS_GROUNDED_STAGE_OBJECT_CARRY_COLL
     assert cb_name(0x0046, "coll") == "ftCo_LandingAir_Coll"  # LandingAirN
     assert int(fox.class_bits[0x0046]) & CLASS_LANDING_AIR
     assert int(fox.class_bits[0x0046]) & CLASS_LANDING_AIR_COLL
+    assert int(fox.class_bits[0x0046]) & CLASS_GROUNDED_STAGE_OBJECT_CARRY_COLL
+    assert cb_name(0x00B8, "coll") == "ftCo_DownWait_Coll"
+    assert not int(fox.class_bits[0x00B8]) & CLASS_GROUNDED_STAGE_OBJECT_CARRY_COLL
+    assert cb_name(0x00C7, "coll") == "ftCo_Passive_Coll"
+    assert not int(fox.class_bits[0x00C7]) & CLASS_GROUNDED_STAGE_OBJECT_CARRY_COLL
     assert cb_name(0x0026, "coll") == "ftCo_DamageFall_Coll"  # DamageFall
     assert int(fox.class_bits[0x0026]) & CLASS_DAMAGE_FALL_COLL
     assert cb_name(0x005B, "coll") == "ftCo_DamageFlyRoll_Coll"  # DamageFlyRoll
@@ -149,6 +156,38 @@ def test_motion_state_class_equivalence_for_migrated_predicates() -> None:
     }
     landing_coll = {0x002A, 0x002B}
     damagefall_coll = {0x0026}
+    grounded_stage_object_carry = {
+        0x000E,
+        0x000F,
+        0x0010,
+        0x0011,
+        0x0012,
+        0x0013,
+        0x0014,
+        0x0015,
+        0x0016,
+        0x0017,
+        0x0027,
+        0x0028,
+        0x0029,
+        0x002A,
+        0x002B,
+        *range(0x002C, 0x0041),
+        *range(0x0046, 0x004B),
+        0x00B2,
+        0x00B3,
+        0x00B4,
+        0x00B5,
+        0x00B6,
+        0x00BB,
+        0x00BC,
+        0x00BD,
+        0x00C3,
+        0x00C4,
+        0x00C5,
+        0x00C8,
+        0x00C9,
+    }
 
     for action_id in range(max_action):
         assert both_have(action_id, CLASS_ATTACK_AIR) == (action_id in attack_air)
@@ -167,6 +206,59 @@ def test_motion_state_class_equivalence_for_migrated_predicates() -> None:
         assert both_have(action_id, CLASS_DAMAGE_COMMON_COLL) == (action_id in common_damage)
         assert both_have(action_id, CLASS_DAMAGE_FLY_COLL) == (action_id in damage_fly)
         assert both_have(action_id, CLASS_DAMAGE_FALL_COLL) == (action_id in damagefall_coll)
+        assert both_have(action_id, CLASS_GROUNDED_STAGE_OBJECT_CARRY_COLL) == (
+            action_id in grounded_stage_object_carry
+        )
+
+
+@pytest.mark.integration
+def test_stage_object_carry_class_tracks_grounded_floor_persistence_owner() -> None:
+    fox = read_mslmso01_v1(FOX)
+    symbols = read_callback_manifest(MANIFEST)
+
+    def has_carry(action_id: int) -> bool:
+        return bool(int(fox.class_bits[action_id]) & CLASS_GROUNDED_STAGE_OBJECT_CARRY_COLL)
+
+    def coll_name(action_id: int) -> str:
+        return symbols[int(fox.coll_cb_id[action_id])]
+
+    # Landing/LandingAir share the floor-persistence owner that should inherit Randall's stage
+    # object motion while already attached to its moving floor.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Coll
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c::ftCo_LandingAir_Coll
+    assert coll_name(0x002A) == "ftCo_Landing_Coll"
+    assert coll_name(0x0046) == "ftCo_LandingAir_Coll"
+    assert has_carry(0x002A)
+    assert has_carry(0x0046)
+
+    # These downed/passive-family callbacks route through ft_80084104 like grounded attacks, so they
+    # should inherit the same attached-floor stage-object carry.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Down.c::ftCo_Down_Coll
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownAttack.c::ftCo_DownAttack_Coll
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveStand.c::ftCo_PassiveStand_Coll
+    assert coll_name(0x00BC) == "ftCo_Down_Coll"
+    assert coll_name(0x00BB) == "ftCo_DownAttack_Coll"
+    assert coll_name(0x00C8) == "ftCo_PassiveStand_Coll"
+    assert has_carry(0x00BC)
+    assert has_carry(0x00BB)
+    assert has_carry(0x00C8)
+
+    # Other downed/passive states are separately owned in source and must not borrow the
+    # Landing/Wait stage-object carry class.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownWait.c::ftCo_DownWait_Coll
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Passive.c::ftCo_Passive_Coll
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::ftCo_DownDamage_Coll
+    assert coll_name(0x00B8) == "ftCo_DownWait_Coll"
+    assert coll_name(0x00C7) == "ftCo_Passive_Coll"
+    assert coll_name(0x00B9) == "ftCo_DownDamage_Coll"
+    assert not has_carry(0x00B8)
+    assert not has_carry(0x00C7)
+    assert not has_carry(0x00B9)
+
+    # Airborne floor-search callbacks can land on Randall, but they are not already-grounded
+    # floor-persistence riders and must not receive the pre-projection stage-object carry.
+    assert coll_name(0x001D) == "ftCo_Fall_Coll"
+    assert not has_carry(0x001D)
 
 
 def test_motion_state_owner_reader_rejects_stale_versions(tmp_path: Path) -> None:

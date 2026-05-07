@@ -719,8 +719,14 @@ Recent deltas to reflect here (do not let these get “lost in chat logs”):
   RNG/wait/target scheduler from generated `GrIz.dat::yakumono_param` metadata; both paths update
   MSLSTG01 v7 platform transform records before fighter collision and webplay/modelplay debug
   stage output. Yoshi's Story keeps the raw center raised segment debug-visible but
-  non-fighter-solid and admits Randall as a generated transformed pass-through floor. Frozen
-  Pokemon Stadium fighter-solid policy is
+  non-fighter-solid and admits Randall as a generated transformed pass-through floor. Grounded
+  riders already attached to a moving stage-object floor inherit that transform through the
+  generated `MSLMSO01` `GROUNDED_STAGE_OBJECT_CARRY_COLL` callback class, covering
+  Wait/Walk/Run/Squat/Landing/LandingAir/grounded attack/guard plus the downed/passive-family
+  callbacks that source routes through `ft_80084104` (`ftCo_Down_Coll`,
+  `ftCo_DownAttack_Coll`, `ftCo_PassiveStand_Coll`). DownBound/DownWait/DownStand/DownSpot,
+  Passive, and DownDamage keep their separate downed collision owners and do not borrow this carry
+  class. Frozen Pokemon Stadium fighter-solid policy is
   data-backed by MSLSTG01 current-domain metadata, keeping transformation lines visible for
   debug/data APIs while suppressing them from fighter collision.
   (`src/mpcoll_ground.c`, `src/locomotion.c`;
@@ -1609,10 +1615,11 @@ Match-flow closure notes:
   is cleared while in those match-flow states so a pre-death underside contact cannot project the
   first post-Rebirth Fall frame back to FD's underside. This is locked by
   `tests/test_modelplay_manual_respawn_collision_provenance_regression.py`.
-- Rebirth/RebirthWait also set `fp->x2219_b1`, which makes `Fighter_8006CB94` skip the common
-  fighter collision pass and makes item collision reject the respawning fighter as a target. This is
-  a combat eligibility gate, not a visible `hurtbox_state` rewrite: Slippi can still report the
-  Wait1 hurtbox state while the platform bit prevents BODY/catch/item hits. Sources:
+- Dead*/Rebirth states set `fp->x2219_b1`, which makes `Fighter_8006CB94` skip the common
+  fighter collision pass and makes item collision reject that fighter as a target. This is a combat
+  eligibility gate, not a visible `hurtbox_state` rewrite: Slippi can still report a pose-derived
+  hurtbox state while the platform bit prevents BODY/catch/item hits. Sources:
+  `refs/melee/src/melee/ft/ft_0D31.c::{ftCo_800D3680,ftCo_800D3950,ftCo_800D3BC8,ftCo_800D3E40,ftCo_800D4580,ftCo_800D481C}`,
   `refs/melee/src/melee/ft/ft_0D4D.c::{ftCo_800D4FF4,ftCo_800D5600}`,
   `refs/melee/src/melee/ft/fighter.c::Fighter_8006CB94`,
   `refs/melee/src/melee/it/itcoll.c::it_80272460`.

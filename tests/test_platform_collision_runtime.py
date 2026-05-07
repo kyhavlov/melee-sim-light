@@ -37,7 +37,9 @@ ACT_ESCAPE_AIR = 0x00EC
 ACT_DOWN_BOUND_U = 0x00B7
 ACT_DOWN_BOUND_D = 0x00BF
 ACT_DOWN_WAIT_U = 0x00B8
+ACT_DOWN_FOWARD_U = 0x00BC
 ACT_PASSIVE = 0x00C7
+ACT_PASSIVE_STAND_F = 0x00C8
 ACT_PASS = 0x00F4
 ACT_OTTOTTO = 0x00F5
 ACT_OTTOTTO_WAIT = 0x00F6
@@ -65,6 +67,8 @@ SM_ATTACK_HI4 = 66
 SM_ESCAPE_AIR = 44
 SM_FX_SPECIAL_HI = 309
 SM_OTTOTTO_WAIT = 211
+SM_DOWN_FOWARD_U = 188
+SM_PASSIVE_STAND_F = 200
 
 CHAR_FOX = 1
 CHAR_FALCO = 22
@@ -1683,6 +1687,61 @@ def test_yoshi_randall_carries_grounded_rider_with_platform_motion() -> None:
     assert float(out["pos_x"][0]) < float(seed["pos_x"][0, 0]) - 0.3
     assert float(out["pos_y"][0]) > float(seed["pos_y"][0, 0]) + 0.01
     assert float(out["pos_y"][0]) == pytest.approx(-13.62498188, abs=1e-5)
+
+
+def test_yoshi_randall_carries_landing_rider_with_platform_motion() -> None:
+    # Manual set9 repro: Fox landed on Randall and froze in X throughout Landing, then only moved
+    # again once Landing ended. Landing and LandingAir use ftCo_Landing_Coll -> ft_80084280, so an
+    # already-grounded rider keeps CollData.floor.index and inherits Randall's stage-object motion.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Coll
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c::ftCo_LandingAir_Coll
+    # refs/melee/src/melee/gr/grstory.c::{grStory_801E3370,Ground_801C2FE0}
+    frame_id = 600
+    seed = _seed_base(8, ACT_LANDING, SM_WAIT1_0, 95.8551, -13.64989 + 0.0001)
+    seed["frame_id"][0] = np.int32(frame_id)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(1000)
+    seed["action_frame"][0, 0] = np.int16(10)
+    seed["anim_frame_f32"][0, 0] = np.float32(10.0)
+
+    out = _step_once(seed)
+
+    assert int(out["action_id"][0]) == ACT_LANDING
+    assert int(out["on_ground"][0]) == 1
+    assert int(out["ground_id"][0]) == 1000
+    assert float(out["pos_x"][0]) < float(seed["pos_x"][0, 0]) - 0.3
+    assert float(out["pos_y"][0]) > float(seed["pos_y"][0, 0]) + 0.01
+    assert float(out["pos_y"][0]) == pytest.approx(-13.62498188, abs=1e-5)
+
+
+@pytest.mark.parametrize(
+    ("action_id", "submotion_id"),
+    [
+        (ACT_DOWN_FOWARD_U, SM_DOWN_FOWARD_U),
+        (ACT_PASSIVE_STAND_F, SM_PASSIVE_STAND_F),
+    ],
+)
+def test_yoshi_randall_carries_downed_ft80084104_rider(action_id: int, submotion_id: int) -> None:
+    # These downed/passive-family callbacks use ft_80084104, the same floor-persistence owner as
+    # grounded attacks. They should stay attached to Randall's generated floor and inherit its
+    # stage-object carry rather than waiting for a later non-downed action to start moving.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Down.c::ftCo_Down_Coll
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveStand.c::ftCo_PassiveStand_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80084104
+    frame_id = 600
+    seed = _seed_base(8, action_id, submotion_id, 95.8551, -13.64989 + 0.0001)
+    seed["frame_id"][0] = np.int32(frame_id)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(1000)
+    seed["action_frame"][0, 0] = np.int16(10)
+    seed["anim_frame_f32"][0, 0] = np.float32(10.0)
+
+    out = _step_once(seed)
+
+    assert int(out["action_id"][0]) == action_id
+    assert int(out["on_ground"][0]) == 1
+    assert int(out["ground_id"][0]) == 1000
+    assert float(out["pos_x"][0]) > float(seed["pos_x"][0, 0]) + 1.0
 
 
 def test_fod_transformed_platform_edge_snap_uses_world_height_for_rooted_actions() -> None:

@@ -780,6 +780,19 @@ static inline uint8_t grounded_action_allows_platform_carry_y_correction(uint16_
                    action_id <= (uint16_t)MSL_ACT_ATTACK_LW4);
 }
 
+static inline uint8_t grounded_action_allows_stage_object_platform_carry(uint16_t action_id) {
+  // Table-backed MotionState collision owner. The generated class groups grounded callbacks that
+  // preserve an existing floor attachment through common map-collision owners and should inherit a
+  // moving stage object's transform before projection. DownBound/DownWait/DownStand/DownSpot,
+  // Passive, and DownDamage callbacks are intentionally excluded by the extractor because they
+  // route through separate downed/damage owners.
+  //
+  // refs/melee/src/melee/ft/ft_081B.c::{ft_80084280,ft_800844EC,ft_80084104,ft_800845B4}
+  // data/motion_state/owners/{fox,falco}.bin (MSLMSO01 class GROUNDED_STAGE_OBJECT_CARRY_COLL)
+  return msl_motion_state_common_class_has(action_id,
+                                           MSL_MS_CLASS_GROUNDED_STAGE_OBJECT_CARRY_COLL);
+}
+
 static inline uint8_t floor_line_is_generated_stage_slope(const MslBatch* batch, int bi,
                                                           const MslStageFloorGraph* g,
                                                           int line_idx) {
@@ -2179,7 +2192,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
       const uint8_t was_grounded = batch->state.prev_on_ground[idx] ? 1u : 0u;
       const uint8_t ecb_lock_timer_seed = batch->state.ecb_lock_timer[idx];
       if (was_grounded && batch->state.ground_id[idx] != 0xFFFFu &&
-          grounded_action_allows_platform_carry_y_correction(action_id)) {
+          grounded_action_allows_stage_object_platform_carry(action_id)) {
         const int carry_line_idx =
             stage_collision_floor_line_index(stage_id, batch->state.ground_id[idx]);
         if (carry_line_idx >= 0 && (size_t)carry_line_idx < g->line_count &&

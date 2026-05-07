@@ -3757,9 +3757,10 @@ static void illusion_items_update_and_collide(MslBatch* batch, int bi) {
         continue;
       }
       const size_t d_idx = msl_idx_player(bi, def);
-      if (msl_action_owns_respawn_collision_skip(batch->state.action_id[d_idx])) {
-        // Rebirth/RebirthWait set fp->x2219_b1. Item-vs-fighter collision rejects x2219_b1 targets,
-        // so a respawning fighter must not be illusion-hit while the platform bit is live.
+      if (msl_action_owns_x2219_collision_skip(batch->state.action_id[d_idx])) {
+        // Dead*/Rebirth source states set fp->x2219_b1. Item-vs-fighter collision rejects x2219_b1
+        // targets, so these fighters must not be illusion-hit while the collision-skip bit is live.
+        // refs/melee/src/melee/ft/ft_0D31.c::{ftCo_800D3680,ftCo_800D3950,ftCo_800D3BC8,ftCo_800D3E40,ftCo_800D4580,ftCo_800D481C}
         // refs/melee/src/melee/ft/ft_0D4D.c::{ftCo_800D4FF4,ftCo_800D5600}
         // refs/melee/src/melee/it/itcoll.c::it_80272460
         continue;
@@ -4165,9 +4166,10 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       }
 
       const size_t d_idx = msl_idx_player(bi, def);
-      if (msl_action_owns_respawn_collision_skip(batch->state.action_id[d_idx])) {
-        // Rebirth/RebirthWait own x2219_b1; laser item collision rejects that target before
+      if (msl_action_owns_x2219_collision_skip(batch->state.action_id[d_idx])) {
+        // Dead*/Rebirth states own x2219_b1; laser item collision rejects that target before
         // shield/BODY admission.
+        // refs/melee/src/melee/ft/ft_0D31.c::{ftCo_800D3680,ftCo_800D3950,ftCo_800D3BC8,ftCo_800D3E40,ftCo_800D4580,ftCo_800D481C}
         // refs/melee/src/melee/ft/ft_0D4D.c::{ftCo_800D4FF4,ftCo_800D5600}
         // refs/melee/src/melee/it/itcoll.c::it_80272460
         continue;
