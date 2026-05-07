@@ -111,10 +111,6 @@ static inline uint8_t state_flags_2218_attack12_allow_interrupt_action(uint16_t 
   return (uint8_t)(action_id == (uint16_t)MSL_ACT_ATTACK_12);
 }
 
-static inline uint8_t state_flags_2218_attack_s3_action(uint16_t action_id) {
-  return msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_ATTACK_S3);
-}
-
 static inline uint8_t state_flags_2218_action_owns_reflecting(const MslBatch* batch, size_t idx,
                                                               uint16_t action_id) {
   switch (action_id) {
@@ -134,20 +130,6 @@ static inline uint8_t state_flags_2218_action_owns_reflecting(const MslBatch* ba
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
       //   ftCo_8009370C,ftCo_80093BC0}
       return (batch != NULL && batch->state.guard_reflect_timer_x14[idx] != 0u) ? 1u : 0u;
-    default:
-      return 0u;
-  }
-}
-
-static inline uint8_t state_flags_2218_wait_iasa_grounded_destination(uint16_t action_id) {
-  switch (action_id) {
-    case MSL_ACT_WAIT:
-    case MSL_ACT_WALK_SLOW:
-    case MSL_ACT_WALK_MIDDLE:
-    case MSL_ACT_WALK_FAST:
-    case MSL_ACT_DASH:
-    case MSL_ACT_TURN:
-      return 1u;
     default:
       return 0u;
   }
@@ -528,6 +510,7 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
           f2218 &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
         }
       }
+      const uint16_t prev_action_2218 = batch->state.prev_action_id[idx];
       // Jab command ownership (fp+0x2218 x2218_b1/x2218_b2):
       // - ftAction_80071AE8 sets x2218_b1 from set_jab_combo script commands.
       // - ftAction_80071B28 sets x2218_b2 from set_jab_rapid script commands.
@@ -552,35 +535,6 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
         } else {
           f2218 &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_B2;
         }
-      }
-      // AttackDash exit ownership bridge for fp+0x2218 bit0 (0x80):
-      // - ftCo_AttackDash_IASA runs ftCo_800D8AE0, then delegates to Wait_IASA family checks.
-      // - Those checks can consume into Squat/GuardOn on the same frame.
-      // - In decomp, fp+0x2218 is command-owned (ftAction_80071950); replay rows in these
-      //   transitions expose bit0x80 set on the destination frame, while this simulator does not
-      //   yet run full command ownership for non-Attack* destinations.
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_IASA
-      // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::ftCo_800D8AE0
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
-      // refs/melee/src/melee/ft/ftaction.c::ftAction_80071950
-      const uint16_t prev_action_2218 = batch->state.prev_action_id[idx];
-      if ((state_flags_2218_allow_interrupt_grounded_attack_action(prev_action_2218) &&
-           action_id == (uint16_t)MSL_ACT_SQUAT && action_frame_i <= 1) ||
-          (prev_action_2218 == (uint16_t)MSL_ACT_ATTACK_DASH &&
-           action_id == (uint16_t)MSL_ACT_GUARD_ON && action_frame_i <= 0)) {
-        f2218 |= (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
-      }
-      if (state_flags_2218_attack_s3_action(prev_action_2218) &&
-          state_flags_2218_wait_iasa_grounded_destination(action_id) && action_frame_i <= 1) {
-        // AttackS3 IASA delegates directly to Wait_IASA while fp->allow_interrupt is already set.
-        // The destination state's post-frame can therefore still expose x2218_b0 even though the
-        // live motion has become Wait/Walk/Dash/Turn. This is not a generic "previous attack"
-        // carry: restrict it to AttackS3's decomp path, which is a single
-        // `if (allow_interrupt) ftCo_Wait_IASA(gobj);` tail.
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackS3.c::ftCo_AttackS3_IASA
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
-        // refs/melee/src/melee/ft/ftaction.c::ftAction_80071950
-        f2218 |= (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
       }
       if (action_id != prev_action_2218 &&
           state_flags_2218_action_owns_reflecting(batch, idx, action_id) == 0u) {

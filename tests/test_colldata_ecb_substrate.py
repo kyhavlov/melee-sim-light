@@ -220,6 +220,30 @@ def test_reseed_locked_bottom_applies_to_desired_not_seeded_previous_ecb() -> No
     )
 
 
+def test_reseed_locked_desired_ecb_bottom_lane_preserves_source_bottom() -> None:
+    import msl_binding
+
+    seed = _seed_base(STAGE_FD, ACT_ESCAPE_AIR, SM_ESCAPE_AIR, 0.0, 45.0)
+    seed["action_frame"][0, 0] = np.int16(2)
+    seed["anim_frame_f32"][0, 0] = np.float32(2.0)
+    seed["seed_prev_action_id"][0, 0] = np.uint16(ACT_ESCAPE_AIR)
+    seed["seed_prev_action_frame"][0, 0] = np.int16(1)
+    seed["ecb_lock_timer"][0, 0] = np.uint8(8)
+    preserved = float(msl_binding.ecb_bottom_rel_y(CHAR_FOX, SM_ESCAPE_AIR, 6))
+    seed["ecb_lock_bottom_rel_y_f32"][0, 0] = np.float32(preserved)
+    seed["ecb_lock_bottom_rel_y_valid_u8"][0, 0] = np.uint8(1)
+
+    snap = _read_colldata_after_reseed(seed)
+
+    assert float(snap["desired_bottom_rel_y"][0]) == pytest.approx(preserved)
+    assert float(snap["desired_top_rel_y"][0]) == pytest.approx(
+        _ecb_rel_points(SM_ESCAPE_AIR, 2)["top"]
+    )
+    assert float(snap["current_bottom_rel_y"][0]) == pytest.approx(
+        float(msl_binding.ecb_bottom_rel_y(CHAR_FOX, SM_ESCAPE_AIR, 1))
+    )
+
+
 def test_mp_coll_interpolate_promotion_copies_current_to_prev_then_desired_to_current() -> None:
     seed = _seed_base(STAGE_FD, ACT_FALL, SM_FALL, 0.0, 80.0)
     seed["action_frame"][0, 0] = np.int16(6)

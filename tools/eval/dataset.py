@@ -113,6 +113,12 @@ SEED_DTYPE = np.dtype(
         ("floor_sweep_prev_pos_x_f32", _arr("<f4", MAX_PLAYERS)),
         ("floor_sweep_prev_pos_y_f32", _arr("<f4", MAX_PLAYERS)),
         ("floor_sweep_prev_pos_valid_u8", _arr("u1", MAX_PLAYERS)),
+        # Hidden CollData.desired_ecb.bottom.y carried while CollData_X130_Locked is live.
+        # refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
+        # refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpCollInterpolateECB}
+        # data/ecb/*
+        ("ecb_lock_bottom_rel_y_f32", _arr("<f4", MAX_PLAYERS)),
+        ("ecb_lock_bottom_rel_y_valid_u8", _arr("u1", MAX_PLAYERS)),
         ("speed_air_x_self", _arr("<f4", MAX_PLAYERS)),
         ("speed_ground_x_self", _arr("<f4", MAX_PLAYERS)),
         ("speed_y_self", _arr("<f4", MAX_PLAYERS)),

@@ -1437,6 +1437,47 @@ def derive_ecb_lock_timer(
     )
 
 
+def derive_ecb_lock_bottom_rel_y(
+    *,
+    char_id_u8: np.ndarray,
+    action_id_u16: np.ndarray,
+    animation_index_u32: np.ndarray,
+    anim_frame_f32: np.ndarray,
+    on_ground_u8: np.ndarray,
+    ecb_lock_timer_u8: np.ndarray,
+    act_jump_aerial_f: int = 0x001B,
+    act_jump_aerial_b: int = 0x001C,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Derive CollData.desired_ecb.bottom.y while CollData_X130_Locked is live.
+
+    The native producer uses extracted ECB tables and replay-prefix grounding/lock history. It
+    preserves the prior desired bottom through air-jump-origin lock rows, matching the observed
+    mpColl_LoadECB_inline locked-bottom owner without per-frame Python loops in the seed path.
+
+    Decomp anchors:
+    - refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
+    - refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpCollInterpolateECB}
+    - data/ecb/*
+    """
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.derive_ecb_lock_bottom_rel_y is required; run `make build`"
+        ) from exc
+    return msl_binding.derive_ecb_lock_bottom_rel_y(
+        np.ascontiguousarray(char_id_u8, dtype=np.uint8).reshape(-1),
+        np.ascontiguousarray(action_id_u16, dtype=np.uint16).reshape(-1),
+        np.ascontiguousarray(animation_index_u32, dtype=np.uint32).reshape(-1),
+        np.ascontiguousarray(anim_frame_f32, dtype=np.float32).reshape(-1),
+        np.ascontiguousarray(on_ground_u8, dtype=np.uint8).reshape(-1),
+        np.ascontiguousarray(ecb_lock_timer_u8, dtype=np.uint8).reshape(-1),
+        int(act_jump_aerial_f),
+        int(act_jump_aerial_b),
+    )
+
+
 def derive_damage_jump_buffer_x14(
     *,
     action_id: np.ndarray,

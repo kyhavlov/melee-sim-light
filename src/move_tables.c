@@ -64,6 +64,7 @@ enum {
 
 static MslFrameWindow g_cmd0_by_char_attackair[256][MSL_ATTACKAIR_KIND_COUNT];
 static MslFrameWindow g_allow_interrupt_by_char_attackair[256][MSL_ATTACKAIR_KIND_COUNT];
+static MslFrameWindow g_second_create_by_char_attackair[256][MSL_ATTACKAIR_KIND_COUNT];
 enum { MSL_GROUNDED_ATTACK_KIND_COUNT = 10 };
 enum {
   MSL_GROUNDED_ATTACK_KIND_11 = 0,
@@ -576,6 +577,43 @@ static int parse_entry_allow_interrupt_window(const MslScriptTableRaw* table,
   return -1;
 }
 
+static int parse_entry_second_create_hitbox_phase(const MslScriptTableRaw* table,
+                                                  const MslScriptEntryRaw* entry,
+                                                  MslFrameWindow* out) {
+  if (table == NULL || entry == NULL || out == NULL) {
+    return -1;
+  }
+  int first_frame = -1;
+  int second_frame = -1;
+  int clear_frame = -1;
+  for (uint32_t i = 0; i < entry->event_count; i++) {
+    const MslScriptEventRaw* ev = script_entry_event(table, entry, i);
+    if (ev == NULL) {
+      continue;
+    }
+    if (ev->kind_id == MSL_SCRIPT_EVENT_CREATE_HITBOX) {
+      if (first_frame < 0) {
+        first_frame = (int)ev->frame;
+        continue;
+      }
+      if (second_frame < 0 && (int)ev->frame != first_frame) {
+        second_frame = (int)ev->frame;
+      }
+    } else if (ev->kind_id == MSL_SCRIPT_EVENT_CLEAR_HITBOXES && second_frame >= 0 &&
+               (int)ev->frame >= second_frame) {
+      clear_frame = (int)ev->frame;
+      break;
+    }
+  }
+  if (second_frame < 0) {
+    return -1;
+  }
+  out->start_af = (int16_t)second_frame;
+  out->end_af = (int16_t)((clear_frame >= 0) ? clear_frame : INT16_MAX);
+  out->loaded = 1;
+  return 0;
+}
+
 static int parse_entry_start_smash_charge_info(const MslScriptTableRaw* table,
                                                const MslScriptEntryRaw* entry,
                                                MslSmashChargeInfo* out) {
@@ -928,6 +966,15 @@ static void load_if_allow_interrupt(const MslScriptTableRaw* table, uint16_t msi
   }
 }
 
+static void load_if_second_create_hitbox_phase(const MslScriptTableRaw* table, uint16_t msid,
+                                               MslFrameWindow* dst) {
+  const MslScriptEntryRaw* entry = script_table_raw_find_entry(table, msid);
+  MslFrameWindow win = {0};
+  if (entry != NULL && parse_entry_second_create_hitbox_phase(table, entry, &win) == 0) {
+    *dst = win;
+  }
+}
+
 static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id) {
   if (data_dir == NULL || rel_path == NULL) {
     return -1;
@@ -959,6 +1006,22 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
                           &g_allow_interrupt_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_HI]);
   load_if_allow_interrupt(&script, (uint16_t)MSL_SM_ATTACK_AIR_LW,
                           &g_allow_interrupt_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_LW]);
+
+  load_if_second_create_hitbox_phase(
+      &script, (uint16_t)MSL_SM_ATTACK_AIR_N,
+      &g_second_create_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_N]);
+  load_if_second_create_hitbox_phase(
+      &script, (uint16_t)MSL_SM_ATTACK_AIR_F,
+      &g_second_create_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_F]);
+  load_if_second_create_hitbox_phase(
+      &script, (uint16_t)MSL_SM_ATTACK_AIR_B,
+      &g_second_create_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_B]);
+  load_if_second_create_hitbox_phase(
+      &script, (uint16_t)MSL_SM_ATTACK_AIR_HI,
+      &g_second_create_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_HI]);
+  load_if_second_create_hitbox_phase(
+      &script, (uint16_t)MSL_SM_ATTACK_AIR_LW,
+      &g_second_create_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_LW]);
 
   static const uint16_t grounded_msids[MSL_GROUNDED_ATTACK_KIND_COUNT] = {
       (uint16_t)MSL_SM_ATTACK_11,   (uint16_t)MSL_SM_ATTACK_12, (uint16_t)MSL_SM_ATTACK_13,
@@ -1211,6 +1274,23 @@ uint8_t move_tables_attackair_allow_interrupt(uint8_t char_id, uint16_t attackai
   // Source: the command script emits an "allow interrupt" cmd (ftAction_80071950), which toggles
   // fp->allow_interrupt based on fp->cur_anim_frame (float) timing.
   // refs/melee/src/melee/ft/ftaction.c::ftAction_80071950
+  return (cur_anim_frame_f32 >= (float)win.start_af && cur_anim_frame_f32 < (float)win.end_af) ? 1
+                                                                                               : 0;
+}
+
+uint8_t move_tables_attackair_second_create_hitbox_phase(uint8_t char_id,
+                                                         uint16_t attackair_action_id,
+                                                         float cur_anim_frame_f32) {
+  const int kind = attackair_kind_from_action(attackair_action_id);
+  if (kind < 0) {
+    return 0;
+  }
+
+  const MslFrameWindow win = g_second_create_by_char_attackair[char_id][(size_t)kind];
+  if (!win.loaded) {
+    return 0;
+  }
+
   return (cur_anim_frame_f32 >= (float)win.start_af && cur_anim_frame_f32 < (float)win.end_af) ? 1
                                                                                                : 0;
 }

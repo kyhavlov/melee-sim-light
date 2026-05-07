@@ -2645,6 +2645,7 @@ def _main_impl(args) -> Dataset:
         derive_shine_release_state,
         derive_run_x0,
         derive_ecb_lock_timer,
+        derive_ecb_lock_bottom_rel_y,
         load_shield_tilt_table_meta,
         compute_tilt_timer_axis_pre_post,
         compute_tilt_timer_y_pre_post_with_fall_fast,
@@ -4017,6 +4018,23 @@ def _main_impl(args) -> Dataset:
             lock_frames_ground_to_air=10,
         )
         samples["seed_t"]["ecb_lock_timer"][:, slot] = ecb_lock_timer[:-1]
+        # CollData_X130_Locked preserves desired_ecb.bottom.y through mpColl_LoadECB_inline; seed
+        # the prefix-causal hidden bottom from extracted ECB tables so one-step reseeds do not
+        # collapse active-lock EscapeAir/FallSpecial floor checks to root-y.
+        # refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
+        # refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpCollInterpolateECB}
+        ecb_lock_bottom_rel_y, ecb_lock_bottom_rel_y_valid = derive_ecb_lock_bottom_rel_y(
+            char_id_u8=post_char,
+            action_id_u16=post_state,
+            animation_index_u32=animation_index,
+            anim_frame_f32=post_anim_frame_f32,
+            on_ground_u8=post_on_ground,
+            ecb_lock_timer_u8=ecb_lock_timer,
+            act_jump_aerial_f=act_jump_aerial_f,
+            act_jump_aerial_b=act_jump_aerial_b,
+        )
+        samples["seed_t"]["ecb_lock_bottom_rel_y_f32"][:, slot] = ecb_lock_bottom_rel_y[:-1]
+        samples["seed_t"]["ecb_lock_bottom_rel_y_valid_u8"][:, slot] = ecb_lock_bottom_rel_y_valid[:-1]
         damage_jump_buffer_x14 = derive_damage_jump_buffer_x14(
             action_id=post_state,
             hitstun_u16=post_hitstun,

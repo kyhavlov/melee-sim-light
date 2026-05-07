@@ -1633,6 +1633,24 @@ uint8_t stage_collision_floor_line_has_platform_transform(uint32_t stage_id, uin
   return 0u;
 }
 
+uint8_t stage_collision_floor_line_has_height_platform_transform(uint32_t stage_id,
+                                                                 uint16_t segment_i) {
+  const MslStageSlot* slot = stage_slot(stage_id);
+  if (slot == NULL || slot->platform_transforms == NULL || slot->platform_transform_count == 0u) {
+    return 0u;
+  }
+  // data/stages/bin/*.bin::MSLSTG01 platform transform records distinguish dynamic grIzumi height
+  // transforms from static-y support transforms. Only the former are moving platform owners.
+  // refs/melee/src/melee/gr/grizumi.c::{grIzumi_801CC358,grIzumi_801CCBDC}
+  for (size_t i = 0; i < slot->platform_transform_count; i++) {
+    const MslStagePlatformTransform* rec = &slot->platform_transforms[i];
+    if (rec->line_id == segment_i && rec->kind_id == (uint8_t)MSLSTG01_PLATFORM_TRANSFORM_HEIGHT) {
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
 uint8_t stage_collision_floor_line_platform_transform_id(uint32_t stage_id, uint16_t segment_i,
                                                          uint8_t* platform_id_out) {
   const MslStageSlot* slot = stage_slot(stage_id);

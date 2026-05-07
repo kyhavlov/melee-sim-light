@@ -2415,12 +2415,67 @@ static inline uint8_t combat_is_guard_reflect_frozen_snapshot_idx(const MslBatch
   return (batch->state.action_frame[idx] <= MSL_GUARD_REFLECT_FROZEN_ACTION_FRAME_MAX) ? 1u : 0u;
 }
 
+static inline uint8_t combat_motion_state_is_grounded_attack_family(uint8_t char_id,
+                                                                    uint16_t action_id) {
+  const uint16_t submotion = msl_motion_state_submotion_id(char_id, action_id);
+  return (submotion >= (uint16_t)MSL_SM_ATTACK_11 && submotion <= (uint16_t)MSL_SM_ATTACK_LW4) ? 1u
+                                                                                               : 0u;
+}
+
+static inline uint8_t combat_late_slot_speciallw_entry_grounded_attack_phase_suppresses_body(
+    const MslBatch* batch, int bi, size_t a_idx, size_t d_idx, int attacker, int defender,
+    int hb_id) {
+  if (batch == NULL || bi < 0 || hb_id < 0 || hb_id >= MSL_MAX_HITBOXES || attacker <= defender) {
+    return 0u;
+  }
+  const uint16_t attacker_action = batch->state.action_id[a_idx];
+  if (attacker_action != (uint16_t)MSL_ACT_FX_SPECIAL_LW_START &&
+      attacker_action != (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START) {
+    return 0u;
+  }
+  if (batch->state.prev_action_id[a_idx] == attacker_action ||
+      batch->state.action_frame[a_idx] != 1) {
+    return 0u;
+  }
+  if (!batch->state.on_ground[d_idx] || batch->state.hitlag[d_idx] != 0u ||
+      batch->state.hitstun[d_idx] != 0u ||
+      batch->state.prev_action_id[d_idx] == batch->state.action_id[d_idx] ||
+      batch->state.action_frame[d_idx] != 1) {
+    return 0u;
+  }
+  if (!combat_motion_state_is_grounded_attack_family(batch->state.char_id[d_idx],
+                                                     batch->state.action_id[d_idx])) {
+    return 0u;
+  }
+
+  (void)bi;
+  (void)hb_id;
+  // Late-slot SpecialLwStart pair-phase owner:
+  // - ftColl_80078C70 walks fighter pairs in entity order.
+  // - When a later entity creates Shine's frame-0 HitCapsule on the same frame an earlier grounded
+  //   fighter enters a common attack, the earlier fighter's collision-pair phase can already be
+  //   past the point where the late-created HitCapsule is considered for BODY damage this frame.
+  // - Use the generated MotionState submotion table for the grounded attack family. Aerial
+  //   terminal DamageFly controls and grounded pre-turn controls without this same-frame grounded
+  //   attack entry remain on the normal BODY path.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialAirLw_Enter
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+  // data/motion_state/owners/{fox,falco}.bin::MSLMSO01 submotion ids
+  return 1u;
+}
+
 static inline uint8_t combat_defer_late_slot_same_frame_speciallw_entry_hit(
-    const MslBatch* batch, size_t a_idx, size_t d_idx, int attacker, int defender) {
+    const MslBatch* batch, int bi, size_t a_idx, size_t d_idx, int attacker, int defender,
+    int hb_id) {
   if (batch == NULL || attacker <= defender) {
     return 0u;
   }
   const uint16_t action = batch->state.action_id[a_idx];
+  if (combat_late_slot_speciallw_entry_grounded_attack_phase_suppresses_body(
+          batch, bi, a_idx, d_idx, attacker, defender, hb_id)) {
+    return 1u;
+  }
   if (action != (uint16_t)MSL_ACT_FX_SPECIAL_LW_START) {
     return 0u;
   }
@@ -2480,7 +2535,7 @@ static inline uint8_t combat_is_guard_reflect_locomotion_entry_snapshot_idx(cons
   }
   const uint16_t prev_action = batch->state.seed_prev_action_id[idx];
   return (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
-          batch->state.action_frame[idx] < 0 && batch->state.animation_index[idx] == UINT32_MAX &&
+          batch->state.action_frame[idx] == -1 && batch->state.animation_index[idx] == UINT32_MAX &&
           combat_prev_action_is_guard_reflect_locomotion_source(prev_action) &&
           prev_action != (uint16_t)MSL_ACT_GUARD_ON && prev_action != (uint16_t)MSL_ACT_GUARD &&
           prev_action != (uint16_t)MSL_ACT_GUARD_REFLECT &&
@@ -2558,6 +2613,33 @@ static inline uint8_t combat_guard_reflect_active_x14_reflectdesc_blocks_hitshie
           batch->state.guard_reflect_timer_x14[idx] != 0u &&
           overlap_margin < shield_desc_size_world && batch->state.hitlag[idx] == 0u &&
           batch->state.hitstun[idx] == 0u)
+             ? 1u
+             : 0u;
+}
+
+static inline uint8_t combat_guard_reflect_final_x14_live_x18_blocks_body(const MslBatch* batch,
+                                                                          size_t idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  // Final-x14 GuardReflect, before x18/powershield-active expiry:
+  // - `ftCo_GuardReflect_Anim -> ftCo_80093BC0` has consumed the reflect x14 lane but x18/x221C_b2
+  //   still represents the powershield-active owner for this callback.
+  // - Fighter-vs-fighter shield collision must not broad-promote this carried no-submotion slice to
+  //   GuardSetOff until x18 expires, and the same source window must not fall through to full BODY
+  //   damage through the simulator's guard-family hurtcap fallback.
+  // - Keep this to frame-start x18>1 (`seed` lane) so the next callback, where x18 reaches zero
+  //   before collision, can take the ordinary GuardSetOff/ShieldDesc handoff.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardReflect_Anim,ftCo_80093BC0,ftCo_80092F2C}
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC,ftColl_80076ED8}
+  return (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
+          batch->state.action_frame[idx] == -1 && batch->state.animation_index[idx] == UINT32_MAX &&
+          batch->state.hitlag[idx] == 0u && batch->state.hitstun[idx] == 0u &&
+          batch->state.guard_reflect_timer_x14_seed[idx] == 0u &&
+          batch->state.guard_reflect_timer_x14[idx] == 0u &&
+          batch->state.guard_reflect_origin_guardon[idx] == 0u &&
+          batch->state.guard_reflect_timer_x18_seed[idx] > 1u &&
+          batch->state.guard_reflect_timer_x18[idx] != 0u)
              ? 1u
              : 0u;
 }
@@ -2841,8 +2923,8 @@ static inline uint8_t combat_source_order_earlier_body_hitcapsule_precedes_shiel
                                    : batch->state.action_id[a_idx];
 
   for (int prev_hb_id = 0; prev_hb_id < shield_hb_id; prev_hb_id++) {
-    if (combat_defer_late_slot_same_frame_speciallw_entry_hit(batch, a_idx, d_idx, attacker,
-                                                              defender)) {
+    if (combat_defer_late_slot_same_frame_speciallw_entry_hit(batch, bi, a_idx, d_idx, attacker,
+                                                              defender, prev_hb_id)) {
       continue;
     }
     if (clank_skip_hb != NULL && clank_skip_hb[attacker][defender][prev_hb_id]) {
@@ -2894,6 +2976,9 @@ static inline uint8_t combat_source_order_earlier_body_hitcapsule_precedes_shiel
       continue;
     }
     if (combat_attackairlw_invincible_contact_rejects_body_hitlag(batch, a_idx, d_idx)) {
+      continue;
+    }
+    if (combat_guard_reflect_final_x14_live_x18_blocks_body(batch, d_idx)) {
       continue;
     }
 
@@ -6217,7 +6302,6 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
   uint8_t body_damage_apply_order[MSL_MAX_PLAYERS] = {0};
   uint8_t body_damage_apply_count = 0u;
   memset(body_damage_logs, 0, sizeof(body_damage_logs));
-
   // Collision attack-id snapshot:
   // - ftColl_80076444 / ftColl_800763C0 consume the attack id attached to the current collision
   //   pass, before later same-frame ProcessHit/ChangeMotionState effects can rewrite fp->x2068.
@@ -6960,8 +7044,8 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
         if (!batch->state.hitbox_enabled[hb_i]) {
           continue;
         }
-        if (combat_defer_late_slot_same_frame_speciallw_entry_hit(batch, a_idx, d_idx, attacker,
-                                                                  defender)) {
+        if (combat_defer_late_slot_same_frame_speciallw_entry_hit(batch, bi, a_idx, d_idx, attacker,
+                                                                  defender, hb_id)) {
           continue;
         }
         if (clank_skip_hb[attacker][defender][hb_id]) {
@@ -7156,6 +7240,9 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
             continue;
           }
           if (combat_attackairlw_invincible_contact_rejects_body_hitlag(batch, a_idx, d_idx)) {
+            continue;
+          }
+          if (combat_guard_reflect_final_x14_live_x18_blocks_body(batch, d_idx)) {
             continue;
           }
           if (v1_group_seen_this_pass) {
@@ -7414,8 +7501,8 @@ static void combat_select_body_hits_one_debug(MslBatch* batch, int bi,
         if (!batch->state.hitbox_enabled[hb_i]) {
           continue;
         }
-        if (combat_defer_late_slot_same_frame_speciallw_entry_hit(batch, a_idx, d_idx, attacker,
-                                                                  defender)) {
+        if (combat_defer_late_slot_same_frame_speciallw_entry_hit(batch, bi, a_idx, d_idx, attacker,
+                                                                  defender, hb_id)) {
           continue;
         }
 

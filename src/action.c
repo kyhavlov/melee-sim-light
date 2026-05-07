@@ -21,6 +21,7 @@
 #include "ledge.h"
 #include "grab_flow.h"
 #include "throw_flow.h"
+#include "stage_collision.h"
 
 // -----------
 // EscapeAir.c
@@ -146,9 +147,41 @@ static inline void enter_escape_roll(MslBatch* batch, size_t idx, uint16_t actio
   msl_anim_timebase_enter_with_policy(batch, idx, 0.0f, 1.0f, MSL_ANIM_ENTER_TICK_IMMEDIATE);
 }
 
+static inline uint8_t ucf_shielddrop_suppresses_spotdodge(const MslBatch* batch,
+                                                          const MslCommonParams* c, size_t idx,
+                                                          float stick_x, float stick_y,
+                                                          float cstick_y, uint8_t tilt_timer_x) {
+  if (batch == NULL || c == NULL || !batch->config.ucf_enabled) {
+    return 0u;
+  }
+  if (cstick_y <= c->spotdodge_stick_y_threshold ||
+      tilt_timer_x < c->escape_flick_tilt_max_frames || stick_y <= -0.8f) {
+    return 0u;
+  }
+  const uint32_t stage_id = batch->state.stage_id[idx / (size_t)MSL_MAX_PLAYERS];
+  const uint16_t ground_id = batch->state.ground_id[idx];
+  if (ground_id == 0xFFFFu || !stage_collision_floor_line_is_platform(stage_id, ground_id)) {
+    return 0u;
+  }
+
+  // UCF 0.84 Axe-method shield-drop spotdodge suppressor:
+  // - The patch hooks the shared EscapeN entry and skips to the caller's false return when the
+  //   current input is a rim-coordinate shield-drop attempt on a platform.
+  // - C-stick down keeps spotdodge priority.
+  // - Roll must be disabled (`stick_x_hold_time >= roll_stick_frames`).
+  // - The Y gate is the patch-local `-.8000` threshold; stronger down still spotdodges.
+  // refs/ucf/src/shielddrop/shielddrop.S
+  // refs/ucf/src/pad_buffer/pad_buffer.cpp::is_rim_coord
+  const float bias = 0.0001f;
+  const int ix = (int)(msl_absf(stick_x) * 80.0f - bias) + 2;
+  const int iy = (int)(msl_absf(stick_y) * 80.0f - bias) + 2;
+  return (uint8_t)((ix * ix + iy * iy) > (80 * 80));
+}
+
 static inline uint8_t escape_try_enter_spotdodge_from_guard_y(MslBatch* batch,
                                                               const MslCommonParams* c, size_t idx,
-                                                              float stick_y, float cstick_y,
+                                                              float stick_x, float stick_y,
+                                                              float cstick_y, uint8_t tilt_timer_x,
                                                               uint8_t tilt_timer_y) {
   if (batch == NULL || c == NULL) {
     return 0;
@@ -166,6 +199,10 @@ static inline uint8_t escape_try_enter_spotdodge_from_guard_y(MslBatch* batch,
   if (!want_spotdodge) {
     return 0;
   }
+  if (ucf_shielddrop_suppresses_spotdodge(batch, c, idx, stick_x, stick_y, cstick_y,
+                                          tilt_timer_x)) {
+    return 0;
+  }
   enter_escape_n(batch, idx);
   return 1;
 }
@@ -177,14 +214,21 @@ static inline uint8_t escape_guard_wants_spotdodge(MslBatch* batch, const MslCom
   }
   const float stick_y =
       apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
+  const float stick_x =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]), c->lstick_deadzone_x);
   const float cstick_y =
       apply_deadzone(stick_i8_to_unit(batch->state.input_c_y[idx]), c->lstick_deadzone_y);
+  const uint8_t tilt_timer_x = batch->state.tilt_timer_x[idx];
   const uint8_t tilt_timer_y = batch->state.tilt_timer_y[idx];
-  return ((stick_y <= c->spotdodge_stick_y_threshold &&
-           tilt_timer_y < c->spotdodge_flick_tilt_max_frames) ||
-          (cstick_y <= c->spotdodge_stick_y_threshold))
-             ? 1u
-             : 0u;
+  if (!((stick_y <= c->spotdodge_stick_y_threshold &&
+         tilt_timer_y < c->spotdodge_flick_tilt_max_frames) ||
+        (cstick_y <= c->spotdodge_stick_y_threshold))) {
+    return 0u;
+  }
+  return ucf_shielddrop_suppresses_spotdodge(batch, c, idx, stick_x, stick_y, cstick_y,
+                                             tilt_timer_x)
+             ? 0u
+             : 1u;
 }
 
 static inline uint8_t guard_entry_via_wait_callback_from_current_row(const MslBatch* batch,
@@ -213,10 +257,14 @@ static inline uint8_t escape_try_enter_spotdodge_from_guard(MslBatch* batch,
   }
   const float stick_y =
       apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
+  const float stick_x =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]), c->lstick_deadzone_x);
   const float cstick_y =
       apply_deadzone(stick_i8_to_unit(batch->state.input_c_y[idx]), c->lstick_deadzone_y);
+  const uint8_t tilt_timer_x = batch->state.tilt_timer_x[idx];
   const uint8_t tilt_timer_y = batch->state.tilt_timer_y[idx];
-  return escape_try_enter_spotdodge_from_guard_y(batch, c, idx, stick_y, cstick_y, tilt_timer_y);
+  return escape_try_enter_spotdodge_from_guard_y(batch, c, idx, stick_x, stick_y, cstick_y,
+                                                 tilt_timer_x, tilt_timer_y);
 }
 
 uint8_t wait_iasa_try_enter_spotdodge_before_guard(MslBatch* batch, const MslCommonParams* c,
@@ -241,8 +289,13 @@ uint8_t wait_iasa_try_enter_spotdodge_before_guard(MslBatch* batch, const MslCom
         batch->state.tilt_timer_y[idx] < c->spotdodge_flick_tilt_max_frames)) {
     return 0u;
   }
-  enter_escape_n(batch, idx);
-  return 1u;
+  const float stick_x =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]), c->lstick_deadzone_x);
+  const float cstick_y =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_c_y[idx]), c->lstick_deadzone_y);
+  return escape_try_enter_spotdodge_from_guard_y(batch, c, idx, stick_x, stick_y, cstick_y,
+                                                 batch->state.tilt_timer_x[idx],
+                                                 batch->state.tilt_timer_y[idx]);
 }
 
 uint8_t escape_try_enter_from_guard(MslBatch* batch, const MslCommonParams* c, size_t idx) {
@@ -263,7 +316,8 @@ uint8_t escape_try_enter_from_guard(MslBatch* batch, const MslCommonParams* c, s
   const uint8_t tilt_timer_y = batch->state.tilt_timer_y[idx];
 
   // Spotdodge (EscapeN) has priority over rolls in Guard IASA.
-  if (escape_try_enter_spotdodge_from_guard_y(batch, c, idx, stick_y, cstick_y, tilt_timer_y)) {
+  if (escape_try_enter_spotdodge_from_guard_y(batch, c, idx, stick_x, stick_y, cstick_y,
+                                              tilt_timer_x, tilt_timer_y)) {
     return 1;
   }
 

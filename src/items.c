@@ -459,6 +459,21 @@ static float yoshi_shyguy_current_vel_y_for_phase(const MslYoshiShyguyParams* pa
   return yoshi_shyguy_dyn_y_phase_value(params, phase);
 }
 
+static inline uint8_t yoshi_shyguy_falling_state_crossed_generic_blast_clear(
+    const MslStageBounds* blast_bounds, float x, float y) {
+  if (blast_bounds == NULL) {
+    return 0u;
+  }
+  // Knocked/falling Heiho states run the generic item post-Phys destroy gate after position
+  // integration. State 2/3 set xDCC_flag.b3 through it_802D8EC8; Item_802696CC then destroys on
+  // the enabled side/bottom blast bounds (top uses the generic 10000.0 sentinel and is irrelevant
+  // for this stage item).
+  // refs/melee/src/melee/it/items/itheiho.c::{it_802D8EC8,itHeiho_UnkMotion2_Phys,
+  //   itHeiho_UnkMotion3_Phys}
+  // refs/melee/src/melee/it/item.c::{Item_802697D4,Item_802696CC}
+  return (x > blast_bounds->right || x < blast_bounds->left || y < blast_bounds->bottom) ? 1u : 0u;
+}
+
 static int yoshi_shyguy_spawn_count(MslBatch* batch, int bi) {
   // Source calls set_shyguy_spawn_count twice; the second call overwrites the first, but both RNG
   // streams are consumed.
@@ -5899,6 +5914,12 @@ static void yoshi_shyguy_items_update(MslBatch* batch, int bi) {
       if (state == 3u && batch->state.item_shyguy_delay_valid[ii] != 0u &&
           batch->state.item_shyguy_delay[ii] > 0u) {
         batch->state.item_shyguy_delay[ii]--;
+      }
+      if (has_blast_bounds != 0u &&
+          yoshi_shyguy_falling_state_crossed_generic_blast_clear(
+              &blast_bounds, batch->state.item_pos_x[ii], batch->state.item_pos_y[ii]) != 0u) {
+        item_slot_clear(batch, ii);
+        needs_sort = 1u;
       }
       continue;
     }

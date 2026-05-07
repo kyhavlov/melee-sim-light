@@ -23,6 +23,7 @@
 #include "../src/hitlist.h"
 #include "../src/hurtcaps_tables.h"
 #include "../src/input_axis.h"
+#include "../src/mpcoll_ecb_points.h"
 #include "../src/shield_tilt_table.h"
 #include "../src/specialhi_pose.h"
 #include "../src/staling.h"
@@ -2074,6 +2075,106 @@ PyObject* msl_derive_ecb_lock_timer_py(PyObject* self, PyObject* args) {
     prev_ground = cur_ground;
   }
   return (PyObject*)out;
+}
+
+PyObject* msl_derive_ecb_lock_bottom_rel_y_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* char_obj = NULL;
+  PyObject* action_obj = NULL;
+  PyObject* anim_obj = NULL;
+  PyObject* anim_frame_obj = NULL;
+  PyObject* ground_obj = NULL;
+  PyObject* lock_obj = NULL;
+  int act_jump_aerial_f = MSL_ACT_JUMP_AERIAL_F;
+  int act_jump_aerial_b = MSL_ACT_JUMP_AERIAL_B;
+  if (!PyArg_ParseTuple(args, "OOOOOO|ii", &char_obj, &action_obj, &anim_obj, &anim_frame_obj,
+                        &ground_obj, &lock_obj, &act_jump_aerial_f, &act_jump_aerial_b)) {
+    return NULL;
+  }
+  PyArrayObject* char_arr = require_contiguous_array(char_obj, NPY_UINT8, 1, "char_id_u8");
+  PyArrayObject* action_arr = require_contiguous_array(action_obj, NPY_UINT16, 1, "action_id_u16");
+  PyArrayObject* anim_arr =
+      require_contiguous_array(anim_obj, NPY_UINT32, 1, "animation_index_u32");
+  PyArrayObject* anim_frame_arr =
+      require_contiguous_array(anim_frame_obj, NPY_FLOAT32, 1, "anim_frame_f32");
+  PyArrayObject* ground_arr = require_contiguous_array(ground_obj, NPY_UINT8, 1, "on_ground_u8");
+  PyArrayObject* lock_arr = require_contiguous_array(lock_obj, NPY_UINT8, 1, "ecb_lock_timer_u8");
+  if (char_arr == NULL || action_arr == NULL || anim_arr == NULL || anim_frame_arr == NULL ||
+      ground_arr == NULL || lock_arr == NULL) {
+    return NULL;
+  }
+  if (ecb_table_init() != 0) {
+    PyErr_SetString(PyExc_RuntimeError, "ecb_table_init failed");
+    return NULL;
+  }
+  const npy_intp n = PyArray_SIZE(char_arr);
+  if (PyArray_SIZE(action_arr) != n || PyArray_SIZE(anim_arr) != n ||
+      PyArray_SIZE(anim_frame_arr) != n || PyArray_SIZE(ground_arr) != n ||
+      PyArray_SIZE(lock_arr) != n) {
+    PyErr_SetString(PyExc_ValueError, "ECB lock-bottom inputs must have matching length");
+    return NULL;
+  }
+  npy_intp dims[1] = {n};
+  PyArrayObject* bottom_arr = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_FLOAT32, 0);
+  PyArrayObject* valid_arr = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_UINT8, 0);
+  if (bottom_arr == NULL || valid_arr == NULL) {
+    Py_XDECREF(bottom_arr);
+    Py_XDECREF(valid_arr);
+    return NULL;
+  }
+
+  const uint8_t* char_p = (const uint8_t*)PyArray_DATA(char_arr);
+  const uint16_t* action_p = (const uint16_t*)PyArray_DATA(action_arr);
+  const uint32_t* anim_p = (const uint32_t*)PyArray_DATA(anim_arr);
+  const float* anim_frame_p = (const float*)PyArray_DATA(anim_frame_arr);
+  const uint8_t* ground_p = (const uint8_t*)PyArray_DATA(ground_arr);
+  const uint8_t* lock_p = (const uint8_t*)PyArray_DATA(lock_arr);
+  float* bottom_p = (float*)PyArray_DATA(bottom_arr);
+  uint8_t* valid_p = (uint8_t*)PyArray_DATA(valid_arr);
+
+  float desired_bottom = 0.0f;
+  uint8_t desired_valid = 0u;
+  uint8_t episode_airjump_lock = 0u;
+  uint8_t prev_lock = 0u;
+  const uint16_t jaf = (uint16_t)((uint32_t)act_jump_aerial_f & 0xFFFFu);
+  const uint16_t jab = (uint16_t)((uint32_t)act_jump_aerial_b & 0xFFFFu);
+  for (npy_intp i = 0; i < n; i++) {
+    const uint8_t char_id = char_p[i];
+    const uint32_t anim = anim_p[i];
+    const uint16_t frame = msl_ecb_frame_u16_from_anim_frame(anim_frame_p[i]);
+    const float pose_bottom = msl_ecb_bottom_rel_y(char_id, anim, (int)frame);
+    if (ground_p[i] != 0u) {
+      desired_bottom = 0.0f;
+      desired_valid = 1u;
+      episode_airjump_lock = 0u;
+      prev_lock = lock_p[i];
+      continue;
+    }
+    if (lock_p[i] != 0u) {
+      const uint8_t lock_start = (i == 0 || prev_lock == 0u || lock_p[i] > prev_lock) ? 1u : 0u;
+      if (lock_start) {
+        const uint16_t action = action_p[i];
+        episode_airjump_lock = (action == jaf || action == jab) ? 1u : 0u;
+      }
+      if (!desired_valid) {
+        desired_bottom = pose_bottom;
+        desired_valid = 1u;
+      }
+      if (episode_airjump_lock) {
+        bottom_p[i] = desired_bottom;
+        valid_p[i] = 1u;
+      }
+      prev_lock = lock_p[i];
+      continue;
+    }
+    desired_bottom = pose_bottom;
+    desired_valid = 1u;
+    episode_airjump_lock = 0u;
+    prev_lock = 0u;
+  }
+
+  PyObject* ret = Py_BuildValue("(NN)", bottom_arr, valid_arr);
+  return ret;
 }
 
 PyObject* msl_compute_press_timer_u8_py(PyObject* self, PyObject* args) {

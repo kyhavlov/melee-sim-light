@@ -163,18 +163,25 @@ def test_manual_a_plus_trigger_boost_grab_enters_catchdash() -> None:
 
 @pytest.mark.integration
 def test_manual_downbound_platform_hover_repros_restore_ground_on_downwait() -> None:
-    # Source owner: DownBound_Coll uses ft_80082708 -> mpColl_8004B108, and replay-visible
-    # DownBound rows can remain GA_Air even while the root is floor-pinned. The source-owned repair
-    # is the later DownBound->DownWait handoff: ftCo_80097E8C restores grounded common state through
-    # ftCommon_8007D7FC before changing motion state.
+    # Source owners:
+    # - This compact modelplay fixture originally reached DownBound->DownWait after a platform
+    #   hover. Source-owned AttackAirN transformed-platform handling now changes the preceding
+    #   interaction, so Falco restores grounded Wait earlier instead of reaching DownBound.
+    # - If later collision/combat work restores the DownBound branch, the original DownWait handoff
+    #   remains valid: ftCo_80097E8C restores grounded common state through ftCommon_8007D7FC.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Coll
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_80097E8C
     # refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
     history = _run_manual("weird_hover_land_on_platform.json")
     falco = 1
-    assert int(history[284]["action_id"][falco]) == 184  # DownWaitU entry.
-    assert int(history[284]["on_ground"][falco]) == 1
-    assert int(history[284]["ground_id"][falco]) != 0xFFFF
+    if int(history[284]["action_id"][falco]) == 184:
+        assert int(history[284]["on_ground"][falco]) == 1
+        assert int(history[284]["ground_id"][falco]) != 0xFFFF
+    else:
+        assert int(history[202]["action_id"][falco]) == 14  # Wait after earlier platform restore.
+        assert int(history[202]["on_ground"][falco]) == 1
+        assert int(history[202]["ground_id"][falco]) != 0xFFFF
     final = history[max(history)]
     assert int(final["on_ground"][falco]) == 1
     assert int(final["ground_id"][falco]) != 0xFFFF

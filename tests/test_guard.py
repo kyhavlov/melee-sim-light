@@ -397,7 +397,9 @@ def test_guardsetoff_iasa_does_not_platform_pass_while_guardon_can() -> None:
     cur = _mk_input_bytes(1, input_stride)
     cur_view = cur.view(INPUT_DTYPE).reshape((1,))
     cur_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_L)
-    cur_view["p"]["main_y"][0, 0] = np.int8(-80)
+    # Use a down value that satisfies pass-through (`x464`) but not spotdodge (`x314`), so this
+    # positive isolates ftCo_8009A080 instead of the earlier ftCo_8009980C branch.
+    cur_view["p"]["main_y"][0, 0] = np.int8(-55)
 
     seed = _seed_base()
     seed["stage_id"][0] = np.uint32(STAGE_YOSHI)
@@ -412,14 +414,33 @@ def test_guardsetoff_iasa_does_not_platform_pass_while_guardon_can() -> None:
     guard_on_seed["action_frame"][0, 0] = np.int16(2)
     guard_on_seed["anim_frame_f32"][0, 0] = np.float32(2.0)
 
-    # Source positive: GuardOn_IASA calls ftCo_8009A080, which enters Pass while L/R is held and
-    # the current CollData floor is a platform.
+    # Source positive: when earlier GuardOn IASA branches are absent, ftCo_8009A080 enters Pass
+    # while L/R is held and the current CollData floor is a platform.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardOn_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_8009980C
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_8009A080
     out_guard_on = _run_seed_one_step(guard_on_seed, cur)
     assert int(out_guard_on["action_id"][0]) == ACT_PASS
     assert int(out_guard_on["animation_index"][0]) == SM_PASS
     assert int(out_guard_on["on_ground"][0]) == 0
+
+    analog_cur = _mk_input_bytes(1, input_stride)
+    analog_view = analog_cur.view(INPUT_DTYPE).reshape((1,))
+    analog_view["p"]["r"][0, 0] = np.uint8(96)
+    analog_view["p"]["main_y"][0, 0] = np.int8(-55)
+
+    # HSD_PAD_LR is the synthesized held-input lane, not only the digital button bits. Analog
+    # trigger-held shield-drop inputs therefore reach ftCo_8009A080 too.
+    # refs/melee/src/melee/ft/fighter.c:1868-1890
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_8009A080
+    out_guard_on_analog = _run_seed_one_step(guard_on_seed, analog_cur)
+    assert int(out_guard_on_analog["action_id"][0]) == ACT_PASS
+    assert int(out_guard_on_analog["animation_index"][0]) == SM_PASS
+
+    no_shield_down = _mk_input_bytes(1, input_stride)
+    no_shield_down.view(INPUT_DTYPE).reshape((1,))["p"]["main_y"][0, 0] = np.int8(-55)
+    out_no_shield = _run_seed_one_step(guard_on_seed, no_shield_down)
+    assert int(out_no_shield["action_id"][0]) != ACT_PASS
 
     guard_setoff_seed = seed.copy()
     guard_setoff_seed["action_id"][0, 0] = np.uint16(ACT_GUARD_SET_OFF)
@@ -433,6 +454,49 @@ def test_guardsetoff_iasa_does_not_platform_pass_while_guardon_can() -> None:
     out_guard_setoff = _run_seed_one_step(guard_setoff_seed, cur)
     assert int(out_guard_setoff["action_id"][0]) == ACT_GUARD_SET_OFF
     assert int(out_guard_setoff["on_ground"][0]) == 1
+
+
+def test_guardreflect_spotdodge_preempts_platform_pass() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["stage_id"][0] = np.uint32(STAGE_YOSHI)
+    seed["ground_id"][0, 0] = np.uint16(4)  # Yoshi top soft platform; data/stages/yoshis_story.json
+    seed["pos_x"][0, 0] = np.float32(0.0)
+    seed["pos_y"][0, 0] = np.float32(60.0)
+    seed["action_id"][0, 0] = np.uint16(ACT_GUARD_REFLECT)
+    seed["animation_index"][0, 0] = np.uint32(0xFFFFFFFF)
+    seed["action_frame"][0, 0] = np.int16(-1)
+    seed["anim_frame_f32"][0, 0] = np.float32(-1.0)
+    seed["tilt_timer_y"][0, 0] = np.uint8(0)
+    seed["guard_reflect_timer_x14"][0, 0] = np.uint8(2)
+    seed["guard_reflect_timer_x18"][0, 0] = np.uint8(2)
+
+    down_spotdodge = _mk_input_bytes(1, input_stride)
+    down_spotdodge_view = down_spotdodge.view(INPUT_DTYPE).reshape((1,))
+    down_spotdodge_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_L)
+    down_spotdodge_view["p"]["main_y"][0, 0] = np.int8(-80)
+
+    # GuardReflect_IASA checks spotdodge/roll/catch/jump before ftCo_8009A080 platform pass.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardReflect_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_8009980C
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_8009A080
+    out_spotdodge = _run_seed_one_step(seed, down_spotdodge)
+    assert int(out_spotdodge["action_id"][0]) == ACT_ESCAPE_N
+    assert int(out_spotdodge["on_ground"][0]) == 1
+
+    down_pass_only = _mk_input_bytes(1, input_stride)
+    down_pass_view = down_pass_only.view(INPUT_DTYPE).reshape((1,))
+    down_pass_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_L)
+    down_pass_view["p"]["main_y"][0, 0] = np.int8(-55)
+
+    out_pass = _run_seed_one_step(seed, down_pass_only)
+    assert int(out_pass["action_id"][0]) == ACT_PASS
+    assert int(out_pass["animation_index"][0]) == SM_PASS
+    assert int(out_pass["on_ground"][0]) == 0
 
 
 @pytest.mark.integration
@@ -459,6 +523,58 @@ def test_guardsetoff_platform_pass_is_not_admitted_from_empty_iasa_replay_real()
             f"record={record} expected GuardSetOff got={int(out_row['action_id'][1])}"
         )
         assert int(out_row["on_ground"][1]) == int(ref_row["on_ground"][1]) == 1
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "p", "seed_action"),
+    [
+        (
+            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
+            "PhysicalElectricCapybara.msl",
+            1067,
+            1,
+            ACT_GUARD,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
+            "PhysicalElectricCapybara.msl",
+            4046,
+            1,
+            ACT_GUARD,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
+            "CheeryNumbMonkey.msl",
+            7423,
+            1,
+            ACT_GUARD_SET_OFF,
+        ),
+    ],
+)
+def test_guard_platform_pass_uses_hsd_lr_lane_and_destination_guard_replay_real(
+    dataset_rel: str, record: int, p: int, seed_action: int
+) -> None:
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    # Replay-real locks for ftCo_8009A080 ownership:
+    # - `held_inputs & HSD_PAD_LR` includes analog trigger-held shield inputs.
+    # - When GuardSetOff_Anim ends into Guard before input dispatch, destination Guard_IASA can
+    #   consume the same platform-pass tail.
+    # refs/melee/src/melee/ft/fighter.c:1868-1890
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    #   ftCo_GuardSetOff_Anim,ftCo_Guard_IASA}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_8009A080
+    seed, ref_row, out_row = _run_one_step_row(dataset_path, record, p)
+    assert int(seed["action_id"][p]) == seed_action
+    assert int(ref_row["action_id"][p]) == ACT_PASS
+    assert int(out_row["action_id"][p]) == ACT_PASS
+    assert int(out_row["animation_index"][p]) == int(ref_row["animation_index"][p]) == SM_PASS
+    assert int(out_row["on_ground"][p]) == int(ref_row["on_ground"][p]) == 0
 
 
 def test_guardoff_anim_end_wait_destination_guard_entry_and_precedence() -> None:

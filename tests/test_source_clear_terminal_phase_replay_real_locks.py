@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from tests.test_combat_ownership_seed_guardrail_locks import (
@@ -10,7 +11,7 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
-from tools.eval.dataset import read_dataset
+from tools.eval.dataset import COMPARE_DTYPE, read_dataset
 
 
 @dataclass(frozen=True)
@@ -172,3 +173,70 @@ def test_source_clear_terminal_phase_target_pm1_both_players_strict_lock(
             assert (
                 got_last_hit_by == exp_last_hit_by
             ), f"record={rec} p={p} field=last_hit_by expected={exp_last_hit_by} got={got_last_hit_by}"
+
+
+def _run_rollout_compare_row(dataset_path: Path, start_record: int, compare_record: int) -> tuple[np.void, np.void]:
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    assert start_record <= compare_record
+    assert int(samples.shape[0]) > compare_record, f"dataset too short for compare row: record={compare_record}"
+
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    seed_bytes = np.frombuffer(samples[start_record : start_record + 1]["seed_t"].tobytes(order="C"), dtype=np.uint8)
+    seed_bytes = seed_bytes.copy().reshape(1, seed_stride)
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    try:
+        binding.reseed_seed_rollout(handle, seed_bytes)
+        for record in range(start_record, compare_record + 1):
+            prev_input_bytes = np.frombuffer(
+                samples[record : record + 1]["prev_input_t"].tobytes(order="C"), dtype=np.uint8
+            )
+            input_bytes = np.frombuffer(samples[record : record + 1]["input_t"].tobytes(order="C"), dtype=np.uint8)
+            binding.step_input(
+                handle,
+                prev_input_bytes.copy().reshape(1, input_stride),
+                input_bytes.copy().reshape(1, input_stride),
+            )
+        binding.write_compare(handle, out_compare_bytes)
+    finally:
+        binding.destroy(handle)
+
+    out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0]
+    ref = samples[compare_record]["ref_t1"]
+    return out, ref
+
+
+@pytest.mark.integration
+def test_source_clear_terminal_phase_attackairn_without_terminal_lane_still_clears_tch() -> None:
+    # Negative control: not every owner-set terminal x18C8 row retains source attribution.
+    # TCH:441 is AttackAirN with timer==1 and owner-set phase, but the generated terminal seed lane
+    # is clear, so Fighter_8006A360's ordinary terminal clear still publishes source 6.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    record = 441
+    victim = 0
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples[record]["seed_t"]
+    assert int(seed["action_id"][victim]) == 0x0041
+    assert int(seed["source_clear_timer_x18c8"][victim]) == 1
+    assert int(seed["source_clear_owner_set_phase"][victim]) == 1
+    assert int(seed["source_clear_terminal_phase"][victim]) == 0
+
+    _, ref, out = _run_one_step_row(dataset_path, record, victim)
+    assert int(out["last_hit_by"][victim]) == int(ref["last_hit_by"][victim]) == 6

@@ -34,6 +34,7 @@ from tools.slippi.seed_history import (
     derive_guard_setoff_hitlag_damage_min,
     derive_guard_setoff_hitlag_exit_phase,
     derive_guard_setoff_post_hitlag_owner,
+    derive_ecb_lock_bottom_rel_y,
     derive_ucf_pad_buffer_state,
     derive_kneebend_internals,
     derive_turn_internals,
@@ -101,6 +102,60 @@ def test_derive_instance_id_counter_running_max_seed_bridge() -> None:
     )
     assert got.dtype == np.uint16
     assert got.tolist() == [1, 11, 12, 12, 13, 13, 1, 1]
+
+
+def test_derive_ecb_lock_bottom_rel_y_preserves_desired_bottom_during_lock() -> None:
+    # CollData_X130_Locked preserves desired_ecb.bottom instead of resampling EscapeAir's current
+    # pose or forcing root-y. The native producer carries the last non-locked desired bottom through
+    # the lock window using extracted data/ecb tables.
+    # refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpCollInterpolateECB}
+    char = np.array([1, 1, 1, 1], dtype=np.uint8)
+    action = np.array([0x001D, 0x001B, 0x00EC, 0x00EC], dtype=np.uint16)
+    anim = np.array([20, 27, 44, 44], dtype=np.uint32)  # Fall -> JumpAerialF -> EscapeAir
+    anim_frame = np.array([5.0, 6.0, 1.0, 2.0], dtype=np.float32)
+    on_ground = np.array([0, 0, 0, 0], dtype=np.uint8)
+    lock = np.array([0, 9, 8, 7], dtype=np.uint8)
+
+    bottom, valid = derive_ecb_lock_bottom_rel_y(
+        char_id_u8=char,
+        action_id_u16=action,
+        animation_index_u32=anim,
+        anim_frame_f32=anim_frame,
+        on_ground_u8=on_ground,
+        ecb_lock_timer_u8=lock,
+    )
+
+    assert bottom.dtype == np.float32
+    assert valid.dtype == np.uint8
+    assert valid.tolist() == [0, 1, 1, 1]
+    import msl_binding
+
+    preserved = float(msl_binding.ecb_bottom_rel_y(1, 20, 5))
+    assert float(bottom[1]) == pytest.approx(preserved, abs=1e-6)
+    assert float(bottom[2]) == pytest.approx(preserved, abs=1e-6)
+    assert float(bottom[3]) == pytest.approx(preserved, abs=1e-6)
+
+
+def test_derive_ecb_lock_bottom_rel_y_clears_on_grounded_rows() -> None:
+    char = np.array([1, 1, 1], dtype=np.uint8)
+    action = np.array([0x001B, 0x001B, 0x00EC], dtype=np.uint16)
+    anim = np.array([44, 44, 44], dtype=np.uint32)
+    anim_frame = np.array([5.0, 6.0, 7.0], dtype=np.float32)
+    on_ground = np.array([0, 1, 0], dtype=np.uint8)
+    lock = np.array([0, 9, 8], dtype=np.uint8)
+
+    bottom, valid = derive_ecb_lock_bottom_rel_y(
+        char_id_u8=char,
+        action_id_u16=action,
+        animation_index_u32=anim,
+        anim_frame_f32=anim_frame,
+        on_ground_u8=on_ground,
+        ecb_lock_timer_u8=lock,
+    )
+
+    assert valid.tolist() == [0, 0, 0]
+    assert float(bottom[2]) == pytest.approx(0.0)
 
 
 def test_derive_instance_id_counter_prefix_invariant() -> None:

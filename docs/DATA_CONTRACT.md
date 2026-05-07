@@ -447,6 +447,30 @@ Decomp contract:
 - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::{
   ftCo_KneeBend_Enter,ftCo_KneeBend_Check_ShortHop}`
 
+## Replay Seed Contract: Locked CollData ECB Bottom
+
+The replay seed contains `ecb_lock_bottom_rel_y_f32[player]` and
+`ecb_lock_bottom_rel_y_valid_u8[player]`, the hidden `CollData.desired_ecb.bottom.y` value carried
+while `CollData_X130_Locked` is live.
+
+Domain:
+- `valid=1`: `ecb_lock_timer[player]` is active on an airborne row in an air-jump-origin lock
+  episode, and the float is the prefix-causal desired ECB bottom reconstructed from extracted ECB
+  tables and replay grounding / lock history.
+- `valid=0`: reseed falls back to the current pose bottom, or to the legacy zero-bottom lock
+  approximation for rows whose hidden history is unavailable.
+- Rollouts carry `MslStateSoA.coll_desired_ecb_bottom_rel_y` directly and consume it in mpColl floor
+  callbacks while the lock remains active.
+
+Source/generation:
+- Generated natively by `msl_binding.derive_ecb_lock_bottom_rel_y`, called from
+  `tools/slippi/make_dataset_from_slp.py` immediately after `ecb_lock_timer`.
+- Uses extracted `data/ecb/*` pose tables and does not run per-frame Python loops.
+
+Decomp contract:
+- `refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4`
+- `refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpCollInterpolateECB}`
+
 ## Replay Seed Contract: SpecialHi rotateModel
 
 The replay seed contains `specialhi_rotate_model_f32[player]` and

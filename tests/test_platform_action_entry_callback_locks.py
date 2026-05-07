@@ -9,6 +9,8 @@ from tests.test_combat_ownership_seed_guardrail_locks import _skip_if_required_a
 from tools.eval.dataset import COMPARE_DTYPE, read_dataset
 
 
+BUTTON_L = 0x0040
+
 ACT_ESCAPE_AIR = 236
 ACT_LANDING_FALL_SPECIAL = 43
 ACT_JUMP_AERIAL_F = 27
@@ -21,6 +23,7 @@ ACT_ATTACK_AIR_F = 66
 ACT_LANDING = 42
 ACT_GUARD_ON = 178
 ACT_GUARD_REFLECT = 182
+ACT_ESCAPE_N = 235
 SM_ESCAPE_AIR = 44
 SM_LANDING_FALL_SPECIAL = 36
 SM_ATTACK_AIR_F = 69
@@ -570,6 +573,89 @@ def test_locked_escapeair_deep_platform_crossing_lands(
 
 
 @pytest.mark.integration
+def test_locked_escapeair_late_above_root_platform_projection_uses_callback_prev_root() -> None:
+    # EscapeAir_Coll delegates through ft_80082C74 -> ft_80081D0C -> mpColl_800471F8.
+    # During the locked ECB window, mpColl_80046904 can accept a soft-platform floor result and
+    # mpColl_80044838_Floor(ignore_bottom=true) then projects from cur_pos because
+    # ecb.bottom.y > 0. The source start point for this callback is CollData.prev_pos, represented
+    # by the replay seed's floor_sweep_prev_pos lane.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+    # refs/melee/src/melee/mp/mpcoll.c::{
+    #   mpColl_80043754,mpColl_80046904,mpColl_80044838_Floor}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    positives = (
+        (
+            "datasets/aggregate_recent/replays/validation/battlefield_recent/"
+            "DelayedSuperbGuanaco.msl",
+            953,
+            1,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+            "ElatedWearyTermite.msl",
+            8411,
+            1,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+            "MilkyGracefulStingray.msl",
+            5485,
+            0,
+        ),
+    )
+    for dataset_rel, record, p in positives:
+        dataset_path = root / dataset_rel
+        if not dataset_path.exists():
+            pytest.skip(f"missing local dataset: {dataset_rel}")
+
+        ds = read_dataset(str(dataset_path))
+        row = ds.samples[record]
+        assert int(row["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
+        assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_ESCAPE_AIR
+        assert int(row["seed_t"]["ecb_lock_timer"][p]) == 6
+        assert int(row["ref_t1"]["action_id"][p]) == ACT_LANDING_FALL_SPECIAL
+
+        out = _run_one_step(ds, record)
+        ref = row["ref_t1"]
+        for field in ("action_id", "animation_index", "on_ground", "ground_id"):
+            assert int(out[field][p]) == int(ref[field][p]), (dataset_rel, record, field)
+        assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-4)
+
+
+@pytest.mark.integration
+def test_locked_escapeair_late_platform_projection_keeps_shallow_current_root_airborne() -> None:
+    # Same ecb_lock_timer=6 owner as the positive test above, but the current root has not reached
+    # the above-root ECB-bottom depth required by mpColl_80044838_Floor's callback-local projection.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/CornyDelayedOkapi.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    record = 3936
+    p = 1
+    row = ds.samples[record]
+    assert int(row["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
+    assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_ESCAPE_AIR
+    assert int(row["seed_t"]["ecb_lock_timer"][p]) == 6
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_ESCAPE_AIR
+    assert int(row["ref_t1"]["on_ground"][p]) == 0
+
+    out = _run_one_step(ds, record)
+    ref = row["ref_t1"]
+    for field in ("action_id", "animation_index", "on_ground", "ground_id"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("dataset_rel", "record", "p"),
     [
@@ -920,9 +1006,14 @@ def test_guardon_powershield_reflect_preempts_platform_pass() -> None:
 
 
 @pytest.mark.integration
-def test_guardon_platform_pass_still_runs_without_lr_edge() -> None:
+def test_guardon_ucf_shielddrop_suppresses_spotdodge_without_lr_edge() -> None:
     # Negative control on the same replay-real row: if the current LR input is held but not a fresh
-    # edge, the earlier powershield-reflect owner is absent and platform pass can consume down+shield.
+    # edge, powershield-reflect is absent. The diagonal rim down input is an Axe-method UCF
+    # shield-drop row, so UCF suppresses the earlier spotdodge branch and platform pass wins.
+    #
+    # refs/ucf/src/shielddrop/shielddrop.S
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardOn_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_8009A080
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
@@ -946,3 +1037,50 @@ def test_guardon_platform_pass_still_runs_without_lr_edge() -> None:
     out = _run_one_step(ds, record, input_mutator=remove_lr_edge)
     assert int(out["action_id"][p]) == ACT_PASS
     assert int(out["on_ground"][p]) == 0
+
+
+@pytest.mark.integration
+def test_fresh_guardon_nonshield_entry_does_not_platform_pass_same_callback() -> None:
+    # Same replay-real platform row, but with powershield-reflect and spotdodge removed. This
+    # no-submotion GuardOn snapshot came from a non-shield callback owner, so the current fighter
+    # proc has already consumed its input callback and must not immediately run the platform-pass
+    # IASA tail.
+    #
+    # refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardOn_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_8009980C
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_8009A080
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
+        "CheeryNumbMonkey.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    record = 3516
+    p = 0
+    row = ds.samples[record]
+    assert int(row["seed_t"]["action_id"][p]) == ACT_GUARD_ON
+
+    def refresh_pass_tilt_timer(seed: np.ndarray) -> None:
+        seed["tilt_timer_y"][0, p] = np.uint8(0)
+
+    def remove_lr_edge_and_spotdodge(prev_input: np.ndarray, input_t: np.ndarray) -> None:
+        input_t["p"][0, p]["buttons"] = np.uint16(int(input_t["p"][0, p]["buttons"]) | BUTTON_L)
+        prev_input["p"][0, p]["buttons"] = input_t["p"][0, p]["buttons"]
+        prev_input["p"][0, p]["r"] = input_t["p"][0, p]["r"]
+        prev_input["p"][0, p]["main_y"] = np.int8(0)
+        input_t["p"][0, p]["main_y"] = np.int8(-55)
+
+    out = _run_one_step(
+        ds,
+        record,
+        seed_mutator=refresh_pass_tilt_timer,
+        input_mutator=remove_lr_edge_and_spotdodge,
+    )
+    assert int(out["action_id"][p]) == ACT_GUARD_ON
+    assert int(out["on_ground"][p]) == 1

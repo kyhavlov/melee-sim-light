@@ -13,6 +13,8 @@
 #include "motion_state_owners.h"
 #include "stage_collision.h"
 
+enum { TIMERS_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
+
 static inline uint8_t timers_match_flow_dead_action_defers_source_clear(uint16_t action_id) {
   switch (action_id) {
     case MSL_ACT_DEAD_DOWN:
@@ -698,8 +700,10 @@ void timers_update_post_anim(MslBatch* batch) {
       // callback-owned ownership phase ordering inside Fighter_8006A360. Defer terminal clear
       // exactly one frame when producer marked this row.
       // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
-      if (t == 1u && (batch->state.hitstun[idx] != 0u ||
-                      batch->state.source_clear_terminal_phase[idx] != 0u)) {
+      if (t == 1u && batch->state.hitstun[idx] != 0u) {
+        continue;
+      }
+      if (t == 1u && batch->state.source_clear_terminal_phase[idx] != 0u) {
         continue;
       }
       t--;

@@ -50,6 +50,48 @@ def _step_one_record(row: np.ndarray, num_players: int):
     return out_compare_bytes.view(COMPARE_DTYPE).reshape((1,))[0]
 
 
+def _rollout_record(dataset_path: Path, *, start_record: int, target_record: int):
+    msl_binding = pytest.importorskip("msl_binding")
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    assert start_record <= target_record
+    assert int(samples.shape[0]) > target_record
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    seed_bytes = np.frombuffer(
+        samples[start_record]["seed_t"].tobytes(order="C"), dtype=np.uint8
+    ).reshape(1, seed_stride).copy()
+    prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+    input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+    handle = msl_binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    try:
+        msl_binding.reseed_seed_rollout(handle, seed_bytes)
+        for record in range(start_record, target_record + 1):
+            prev_input_bytes[:] = np.frombuffer(
+                samples[record]["prev_input_t"].tobytes(order="C"), dtype=np.uint8
+            ).reshape(1, input_stride)
+            input_bytes[:] = np.frombuffer(
+                samples[record]["input_t"].tobytes(order="C"), dtype=np.uint8
+            ).reshape(1, input_stride)
+            msl_binding.step_input(handle, prev_input_bytes, input_bytes)
+        msl_binding.write_compare(handle, out_compare_bytes)
+    finally:
+        msl_binding.destroy(handle)
+
+    return out_compare_bytes.view(COMPARE_DTYPE).reshape((1,))[0], samples[target_record]["ref_t1"]
+
+
 @pytest.mark.integration
 @pytest.mark.parametrize(
     "case",
@@ -215,3 +257,112 @@ def test_nonfd_action_entry_platform_pass_replay_real_locks(case: _ActionCase) -
 
     out = _step_one_record(row, int(ds.header["num_players"]))
     assert int(out["action_id"][p]) == int(row["ref_t1"]["action_id"][0, p]), case.note
+
+
+@pytest.mark.integration
+def test_fod_attackairn_downheld_transformed_platform_hitbox_phase_rollout_stays_airborne() -> None:
+    # Replay-real rollout lock for sustained AttackAirN on FoD's transformed platforms: p0 holds
+    # down through the right moving platform after the replay-prefix seed lane reports the hidden
+    # platform skip. Runtime does not fabricate CollData.floor_skip for AttackAir_Coll; it must keep
+    # the same late transformed-platform floor contact airborne through the source AttackAir_Coll
+    # floor owner instead of publishing LandingAirN early.
+    # data/motion_state/owners/{fox,falco}.bin (MSLMSO01 coll_cb_by_action)
+    # data/stages/bin/griz.bin (MSLSTG01 height platform transforms)
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor}
+    root = Path(__file__).resolve().parents[1]
+    path = root / _BASE / "fountain_of_dreams_recent/ParallelTemptingElk.msl"
+    if not path.exists():
+        pytest.skip(f"missing local dataset: {_BASE / 'fountain_of_dreams_recent/ParallelTemptingElk.msl'}")
+
+    start = 1663
+    target = 1690
+    player = 0
+
+    ds = read_dataset(str(path))
+    if int(ds.samples.shape[0]) <= target:
+        pytest.skip(f"dataset too short for record {target}: {path}")
+    assert int(ds.samples[start]["seed_t"]["action_id"][1]) == 212  # Catch selector row.
+    assert int(ds.samples[target]["seed_t"]["action_frame"][player]) == 11
+    assert int(ds.samples[target]["ref_t1"]["action_id"][player]) == 65  # AttackAirN.
+    assert int(ds.samples[target]["ref_t1"]["on_ground"][player]) == 0
+    assert int(ds.samples[target]["seed_t"]["floor_skip_segment_valid_u8"][player]) == 1
+    assert int(ds.samples[target]["seed_t"]["floor_skip_segment_id_u16"][player]) == 1
+
+    out, ref = _rollout_record(path, start_record=start, target_record=target)
+
+    assert int(out["action_id"][player]) == int(ref["action_id"][player]) == 65
+    assert int(out["on_ground"][player]) == int(ref["on_ground"][player]) == 0
+    assert int(out["ground_id"][player]) == int(ref["ground_id"][player])
+    assert int(out["jumps_left"][player]) == int(ref["jumps_left"][player])
+    assert float(out["pos_y"][player]) == pytest.approx(float(ref["pos_y"][player]), abs=3e-4)
+
+
+@pytest.mark.integration
+def test_fod_attackair_floor_skip_still_lands_on_nonplatform_floor_rollout() -> None:
+    # Negative replay-real boundary for the same AttackAir_Coll transformed-platform family: EWT p0
+    # has a replay-prefix floor-skip lane during AttackAirB, but the callback-visible floor
+    # projection reaches a different non-platform floor. The retained N/Lw transformed-platform
+    # owner must not suppress that later hard-floor LandingAirB handoff.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor,mpColl_80044838_Floor}
+    root = Path(__file__).resolve().parents[1]
+    path = root / _BASE / "fountain_of_dreams_recent/ElatedWearyTermite.msl"
+    if not path.exists():
+        pytest.skip(f"missing local dataset: {_BASE / 'fountain_of_dreams_recent/ElatedWearyTermite.msl'}")
+
+    start = 7647
+    target = 7996
+    player = 0
+
+    ds = read_dataset(str(path))
+    if int(ds.samples.shape[0]) <= target:
+        pytest.skip(f"dataset too short for record {target}: {path}")
+    assert int(ds.samples[target]["seed_t"]["action_id"][player]) == 67  # AttackAirB.
+    assert int(ds.samples[target]["seed_t"]["floor_skip_segment_valid_u8"][player]) == 1
+    assert int(ds.samples[target]["ref_t1"]["action_id"][player]) == 72  # LandingAirB.
+    assert int(ds.samples[target]["ref_t1"]["on_ground"][player]) == 1
+
+    out, ref = _rollout_record(path, start_record=start, target_record=target)
+
+    assert int(out["action_id"][player]) == int(ref["action_id"][player]) == 72
+    assert int(out["on_ground"][player]) == int(ref["on_ground"][player]) == 1
+    assert int(out["ground_id"][player]) == int(ref["ground_id"][player])
+
+
+@pytest.mark.integration
+def test_battlefield_landingfallspecial_overlap_nudge_reaches_ottotto_rollout() -> None:
+    # Replay-real rollout lock for common grounded fighter-overlap nudge before edge collision:
+    # - ftCommon_8007E0E4 / ftCommon_8007DD7C computes xF8_playerNudgeVel.x before
+    #   Fighter_procUpdate.
+    # - Fighter_procUpdate applies that +x450 displacement while p0 is in LandingFallSpecial on
+    #   Battlefield's left platform and overlapping p1.
+    # - The later Landing/LandingFallSpecial collision callback (`ft_80084280`) consumes the nudged
+    #   edge position and enters Ottotto, then falls from the platform edge on the following frame.
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+    # refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007DD7C,ftCommon_8007E0E4}
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80084280
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::ftCo_8009A3C8
+    root = Path(__file__).resolve().parents[1]
+    path = root / _BASE / "battlefield_recent/LoyalDishonestWren.msl"
+    if not path.exists():
+        pytest.skip(f"missing local dataset: {_BASE / 'battlefield_recent/LoyalDishonestWren.msl'}")
+
+    start = 2581
+    player = 0
+
+    out_nudge, ref_nudge = _rollout_record(path, start_record=start, target_record=2612)
+    assert int(ref_nudge["action_id"][player]) == 43  # LandingFallSpecial
+    assert int(out_nudge["action_id"][player]) == int(ref_nudge["action_id"][player])
+    assert float(out_nudge["pos_x"][player]) == pytest.approx(float(ref_nudge["pos_x"][player]))
+
+    out_teeter, ref_teeter = _rollout_record(path, start_record=start, target_record=2613)
+    assert int(ref_teeter["action_id"][player]) == 245  # Ottotto
+    assert int(out_teeter["action_id"][player]) == int(ref_teeter["action_id"][player])
+    assert float(out_teeter["pos_x"][player]) == pytest.approx(float(ref_teeter["pos_x"][player]))
+
+    out_fall, ref_fall = _rollout_record(path, start_record=start, target_record=2615)
+    assert int(ref_fall["action_id"][player]) == 29  # Fall
+    assert int(out_fall["action_id"][player]) == int(ref_fall["action_id"][player])
+    assert int(out_fall["on_ground"][player]) == int(ref_fall["on_ground"][player])
+    assert float(out_fall["pos_x"][player]) == pytest.approx(float(ref_fall["pos_x"][player]))

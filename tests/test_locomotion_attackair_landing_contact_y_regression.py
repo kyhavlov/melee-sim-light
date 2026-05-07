@@ -660,9 +660,9 @@ def test_landing_fallspecial_origin_specific_frame_speed_replay_real_locks(
             43,  # FallSpecial lands on the adjacent ledge/seam floor at af3.
             1,
             2,
-            35,  # Residual F13a: do not retain a broad FallSpecial seam-floor handoff.
-            0,
+            43,
             1,
+            2,
         ),
     ],
 )
@@ -685,9 +685,8 @@ def test_fallspecial_af3_floor_callback_keeps_unmodeled_seam_handoff_residual(
 
     seed, out, ref = _step_one_row(dataset_path, record, p)
 
-    # FallSpecial_Coll uses ft_80083090 -> ftCo_80096D28. The main-floor negative is modeled, but
-    # the adjacent ledge/seam handoff remains an F13a residual until the exact mpColl floor callback
-    # owner is implemented; do not hide it behind a broad visible FallSpecial floor crossing gate.
+    # FallSpecial_Coll uses ft_80083090 -> ftCo_80096D28. The main-floor negative remains airborne,
+    # while the adjacent ledge/seam row now lands through the callback-visible mpColl floor owner.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::{
     #   ftCo_FallSpecial_Coll,ftCo_80096CC8,ftCo_80096D28}
     # refs/melee/src/melee/ft/ft_081B.c::ft_80083090

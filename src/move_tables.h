@@ -36,6 +36,18 @@ uint8_t move_tables_attackair_cmd0_active(uint8_t char_id, uint16_t attackair_ac
 uint8_t move_tables_attackair_allow_interrupt(uint8_t char_id, uint16_t attackair_action_id,
                                               float cur_anim_frame_f32);
 
+// Returns whether an AttackAir* script has reached its second distinct create_hitbox frame.
+//
+// Decomp: AttackAir_Coll runs with the command-script HitCapsule timeline already advanced by
+// ftAction_80073354 / ftColl_8007AD18. This exposes the late-hitbox phase without hardcoding a
+// local action_frame threshold.
+//
+// Source of truth: data/scripts/{fox,falco}.bin (MSLFTSC1) moves["ftCo_SM_AttackAir*"]["events"]
+// create_hitbox.
+uint8_t move_tables_attackair_second_create_hitbox_phase(uint8_t char_id,
+                                                         uint16_t attackair_action_id,
+                                                         float cur_anim_frame_f32);
+
 // Returns whether grounded Attack* can be interrupted (IASA) at the given cur_anim_frame.
 //
 // Decomp:

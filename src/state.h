@@ -118,6 +118,7 @@ typedef struct MslStateSoA {
   uint8_t* coll_ecb_bottom_valid;
   uint8_t* coll_prev_ecb_bottom_valid;
   uint8_t* coll_desired_ecb_bottom_valid;
+  uint8_t* coll_desired_ecb_bottom_locked_owner;
   // Callback-local floor result scratch from the latest mpColl-shaped map callback. Source
   // `mpColl_80043754` owns this as per-callback state: it interpolates ECB/root substeps, calls a
   // floor helper, then the wrapper callback consumes the result immediately.

@@ -291,6 +291,20 @@ typedef struct MslSeed {
   float floor_sweep_prev_pos_x_f32[MSL_MAX_PLAYERS];
   float floor_sweep_prev_pos_y_f32[MSL_MAX_PLAYERS];
   uint8_t floor_sweep_prev_pos_valid_u8[MSL_MAX_PLAYERS];
+  // Hidden CollData.desired_ecb.bottom.y while CollData_X130_Locked is live.
+  //
+  // Decomp:
+  // - ftCommon_8007D5D4 enables the ECB lock on ground->air / jump transitions.
+  // - mpColl_LoadECB_inline refreshes top/side points from the current pose but preserves
+  //   desired_ecb.bottom while CollData_X130_Locked is set.
+  //
+  // Seed generation carries the prefix-causal desired bottom from extracted ECB data through the
+  // replay lock countdown. Runtime rollouts carry the live CollData field directly.
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpCollInterpolateECB}
+  // data/ecb/*
+  float ecb_lock_bottom_rel_y_f32[MSL_MAX_PLAYERS];
+  uint8_t ecb_lock_bottom_rel_y_valid_u8[MSL_MAX_PLAYERS];
   // Velocities as recorded by Slippi post-frame (when available).
   float speed_air_x_self[MSL_MAX_PLAYERS];
   float speed_ground_x_self[MSL_MAX_PLAYERS];

@@ -12,6 +12,7 @@ ACT_ESCAPE_AIR = 236
 ACT_LANDING_FALL_SPECIAL = 43
 SM_ESCAPE_AIR = 44
 SM_LANDING_FALL_SPECIAL = 36
+ACT_JUMP_AERIAL_F = 27
 
 
 def _step_bytes(ds, seed, prev_input, input_t) -> np.void:
@@ -343,4 +344,86 @@ def test_yoshis_escapeair_low_ledge_floor_uses_ecb_depth_boundary() -> None:
 
         out = _step_bytes(ds, row["seed_t"], row["prev_input_t"], row["input_t"])
         for field in ("action_id", "animation_index", "on_ground", "ground_id"):
+            assert int(out[field][p]) == int(ref[field][p]), (dataset_path.name, record, field)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "p"),
+    [
+        (
+            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+            "BlondHardHippopotamus.msl",
+            5517,
+            1,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
+            "TreasuredBackKangaroo.msl",
+            7158,
+            1,
+        ),
+    ],
+)
+def test_jumpaerial_escapeair_same_cliff_floor_guard_keeps_later_depth_landing(
+    dataset_rel: str, record: int, p: int
+) -> None:
+    # Negative controls for the same hidden cliff-floor owner: later/deeper callback phases still
+    # publish LandingFallSpecial instead of borrowing the early same-line suppression.
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record]
+    ref = row["ref_t1"]
+    assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_JUMP_AERIAL_F
+    assert int(row["seed_t"]["cliff_ledge_floor_segment_id_u16"][p]) != 0xFFFF
+    assert int(ref["action_id"][p]) == ACT_LANDING_FALL_SPECIAL
+    assert int(ref["on_ground"][p]) == 1
+
+    out = _step_bytes(ds, row["seed_t"], row["prev_input_t"], row["input_t"])
+    for field in ("action_id", "animation_index", "on_ground", "ground_id", "jumps_left"):
+        assert int(out[field][p]) == int(ref[field][p]), (dataset_path.name, record, field)
+
+
+@pytest.mark.integration
+def test_escapeair_locked_same_ledge_floor_final_writeback_stays_airborne_until_deep() -> None:
+    # Same carried ledge floor, but a shallow final writeback while CollData_X130_Locked is still
+    # active. Source EscapeAir_Coll keeps these airborne until the entered EscapeAir ECB reaches the
+    # mpColl_800471F8 floor handoff depth; this is the ledge sibling of the same-platform lock.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+    # refs/melee/src/melee/mp/mpcoll.c::{
+    #   mpColl_800471F8,mpColl_LoadECB_inline,mpCollInterpolateECB,mpColl_80044838_Floor}
+    root = Path(__file__).resolve().parents[1]
+    cases = (
+        (
+            root
+            / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl",
+            373,
+            1,
+        ),
+        (
+            root
+            / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl",
+            960,
+            0,
+        ),
+    )
+    for dataset_path, record, p in cases:
+        if not dataset_path.exists():
+            pytest.skip(f"missing local dataset: {dataset_path}")
+        ds = read_dataset(str(dataset_path))
+        row = ds.samples[record]
+        ref = row["ref_t1"]
+        assert int(row["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
+        assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_ESCAPE_AIR
+        assert int(row["seed_t"]["ecb_lock_timer"][p]) != 0
+        assert int(ref["action_id"][p]) == ACT_ESCAPE_AIR
+        assert int(ref["on_ground"][p]) == 0
+
+        out = _step_bytes(ds, row["seed_t"], row["prev_input_t"], row["input_t"])
+        for field in ("action_id", "animation_index", "on_ground", "ground_id", "jumps_left"):
             assert int(out[field][p]) == int(ref[field][p]), (dataset_path.name, record, field)

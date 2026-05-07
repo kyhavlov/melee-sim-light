@@ -20,6 +20,20 @@ static inline void capturewait_anim_callback_apply(MslBatch* batch, const MslCom
 static inline uint8_t capture_family_frame_start_matches_current_action(const MslBatch* batch,
                                                                         size_t idx);
 
+static inline void clear_outgoing_hitboxes_after_catch_connect(MslBatch* batch, int bi, int p) {
+  if (batch == NULL || bi < 0 || bi >= batch->batch_size || p < 0 ||
+      p >= (int)batch->config.num_players) {
+    return;
+  }
+  const size_t idx = msl_idx_player(bi, p);
+  batch->state.hitbox_count[idx] = 0u;
+  for (int hb = 0; hb < MSL_MAX_HITBOXES; hb++) {
+    const size_t hb_i =
+        ((size_t)bi * (size_t)MSL_MAX_PLAYERS + (size_t)p) * (size_t)MSL_MAX_HITBOXES + (size_t)hb;
+    batch->state.hitbox_enabled[hb_i] = 0u;
+  }
+}
+
 static inline uint8_t anim_finished(uint8_t char_id, uint16_t msid, float anim_frame_f32) {
   const float end = msl_anim_end_frame(char_id, msid);
   if (!(end > 0.0f)) {
@@ -335,10 +349,8 @@ static inline void maybe_run_capture_pulled_hi_immediate_floor_callback(
 
   MslMpcollFloorMaskResult floor_result = {0xFFFFu, batch->state.pos_y[vidx]};
   uint8_t floor_mask = mpcoll_800477e0_floor_mask_probe(batch, vidx, &floor_result);
-  if (floor_mask == 0u &&
-      ((batch->state.ground_id[vidx] != 0xFFFFu && batch->state.ecb_lock_timer[vidx] != 0u) ||
-       (victim_pre_connect_action == (uint16_t)MSL_ACT_ATTACK_AIR_HI &&
-        batch->state.prev_action_id[vidx] == (uint16_t)MSL_ACT_KNEE_BEND))) {
+  if (floor_mask == 0u && batch->state.ground_id[vidx] != 0xFFFFu &&
+      batch->state.ecb_lock_timer[vidx] != 0u) {
     floor_mask = mpcoll_800477e0_capture_root_floor_mask_probe(batch, vidx, &floor_result);
   }
   if (floor_mask == 0u) {
@@ -353,8 +365,7 @@ static inline void maybe_run_capture_pulled_hi_immediate_floor_callback(
   // - Same-frame airborne captures can carry a locked current CollData floor index into this
   //   callback before the capture anchor delta settles the victim; require the data-backed
   //   `ecb_lock` owner with the floor id so stale airborne floor ids from other motion owners do not
-  //   force a landing. The older KneeBend -> AttackAirHi bridge remains as the one known
-  //   missing-floor-index source episode until its CollData seed owner is promoted.
+  //   force a landing.
   // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::fn_800DAADC
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
   //   ftCo_CapturePulledHi_Coll,fn_800DAECC,fn_800DAEEC}
@@ -1341,6 +1352,17 @@ void grab_flow_on_catch_connect(MslBatch* batch, int bi, int owner_p, int victim
   batch->state.speed_y_self[vidx] = 0.0f;
   batch->state.speed_x_attack[vidx] = 0.0f;
   batch->state.speed_y_attack[vidx] = 0.0f;
+  // Proc-order catch ownership:
+  // - Fighter_UnkProcessGrab_8006CA5C (prio 0xC) runs catch acquisition before the common fighter
+  //   collision pass Fighter_8006CB94 (prio 0xD).
+  // - After ftColl_80078754 / fn_800DAADC installs CapturePulled*, the grabbed victim's subsequent
+  //   collision pass sees the new captured motion state, not the previous Attack* hitboxes.
+  // Clear the simulator's pre-refreshed outgoing hitboxes for this victim so catch-connect frames do
+  // not also apply stale BODY damage in the later combat body pass.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_UnkProcessGrab_8006CA5C,Fighter_8006CB94}
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078A2C,ftColl_80078754}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::fn_800DAADC
+  clear_outgoing_hitboxes_after_catch_connect(batch, bi, victim_p);
   // Decomp ownership: catch-connect callback fn_800DAADC installs CapturePulled* and calls
   // fn_800DAA10; this transition switches to non-Damage motion-state vars, so Damage* hitstun
   // (x2340) is no longer the active lane after this transition.

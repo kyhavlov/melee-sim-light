@@ -12,6 +12,9 @@ _DCC = Path("datasets/aggregate_recent/replays/debug/fd_mixed_recent/DistinctCar
 _HVG = Path("datasets/aggregate_recent/replays/validation/aggregate_recent/HilariousVillainousGiraffe.msl")
 _TCH = Path("datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl")
 _QGD = Path("datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.msl")
+_PTE = Path(
+    "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.msl"
+)
 
 
 def _run_one_step(binding: object, row: np.ndarray, *, num_players: int) -> np.void:
@@ -32,6 +35,39 @@ def _run_one_step(binding: object, row: np.ndarray, *, num_players: int) -> np.v
     try:
         binding.reseed_seed(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+    finally:
+        binding.destroy(handle)
+    return out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()
+
+
+def _run_rollout_to_record(binding: object, samples: np.ndarray, start: int, target: int, *, num_players: int) -> np.void:
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    seed_bytes = (
+        np.frombuffer(samples[start:start + 1]["seed_t"].tobytes(order="C"), dtype=np.uint8)
+        .copy()
+        .reshape(1, seed_stride)
+    )
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+    handle = binding.init(batch_size=1, num_players=num_players)
+    try:
+        binding.reseed_seed(handle, seed_bytes)
+        for record in range(start, target + 1):
+            prev_input_bytes = (
+                np.frombuffer(samples[record:record + 1]["prev_input_t"].tobytes(order="C"), dtype=np.uint8)
+                .copy()
+                .reshape(1, input_stride)
+            )
+            input_bytes = (
+                np.frombuffer(samples[record:record + 1]["input_t"].tobytes(order="C"), dtype=np.uint8)
+                .copy()
+                .reshape(1, input_stride)
+            )
+            binding.step_input(handle, prev_input_bytes, input_bytes)
         binding.write_compare(handle, out_compare_bytes)
     finally:
         binding.destroy(handle)
@@ -195,3 +231,68 @@ def test_aerial_shine_start_terminal_damagefly_still_hits_qgd_235() -> None:
     for field in ("action_id", "action_frame", "hitlag", "hitstun", "instance_id", "instance_hit_by"):
         assert int(out[field][defender]) == int(row["ref_t1"][field][0, defender]), field
     assert int(out["hitlag"][attacker]) == int(row["ref_t1"]["hitlag"][0, attacker])
+
+
+@pytest.mark.integration
+def test_aerial_shine_start_late_slot_grounded_attack_entry_uses_dense_victim_seed() -> None:
+    # PTE rec=5419 has p1 entering aerial SpecialLwStart on the same frame p0 enters grounded
+    # AttackHi3. The later-slot Shine hitbox does not damage the earlier-slot grounded attack entry
+    # during this collision-pair phase; QGD:235 remains the aerial-DamageFly control where the same
+    # aerial Shine entry does hit.
+    #
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialAirLw_Enter
+    root = Path(__file__).resolve().parents[1]
+    ds_path = root / _PTE
+    if not ds_path.exists():
+        pytest.skip(f"missing local dataset: {ds_path}")
+
+    binding = pytest.importorskip("msl_binding")
+    ds = read_dataset(str(ds_path))
+    row = ds.samples[5419:5420]
+    attacker = 1
+    defender = 0
+
+    assert int(row["seed_t"]["action_id"][0, attacker]) == 24  # KneeBend
+    assert int(row["ref_t1"]["action_id"][0, attacker]) == 365  # aerial SpecialLwStart
+    assert int(row["seed_t"]["action_id"][0, defender]) == 42  # Landing
+    assert int(row["ref_t1"]["action_id"][0, defender]) == 56  # AttackHi3
+    assert int(row["seed_t"]["combat_hitlist_cd"][0, attacker, 0, defender]) == 0xFFFF
+    assert int(row["seed_t"]["combat_hitlist_victim_iid"][0, attacker, 0, defender]) != int(
+        row["seed_t"]["instance_id"][0, defender]
+    )
+
+    out = _run_one_step(binding, row, num_players=int(ds.header["num_players"]))
+    for field in ("action_id", "action_frame", "hitlag", "hitstun", "instance_id", "instance_hit_by"):
+        assert int(out[field][defender]) == int(row["ref_t1"][field][0, defender]), field
+    assert float(out["percent"][defender]) == pytest.approx(float(row["ref_t1"]["percent"][0, defender]))
+    assert int(out["hitlag"][attacker]) == int(row["ref_t1"]["hitlag"][0, attacker])
+
+
+@pytest.mark.integration
+def test_aerial_shine_start_late_slot_grounded_attack_entry_rollout_uses_pair_phase_owner() -> None:
+    root = Path(__file__).resolve().parents[1]
+    ds_path = root / _PTE
+    if not ds_path.exists():
+        pytest.skip(f"missing local dataset: {ds_path}")
+
+    binding = pytest.importorskip("msl_binding")
+    ds = read_dataset(str(ds_path))
+    start = 5412
+    target = 5419
+    attacker = 1
+    defender = 0
+
+    assert int(ds.samples[start]["seed_t"]["action_id"][defender]) == 67  # AttackAirB
+    assert int(ds.samples[target]["ref_t1"]["action_id"][attacker]) == 365
+    assert int(ds.samples[target]["ref_t1"]["action_id"][defender]) == 56
+
+    out = _run_rollout_to_record(
+        binding, ds.samples, start, target, num_players=int(ds.header["num_players"])
+    )
+    for field in ("action_id", "action_frame", "hitlag", "hitstun"):
+        assert int(out[field][defender]) == int(ds.samples[target]["ref_t1"][field][defender]), field
+    assert float(out["percent"][defender]) == pytest.approx(
+        float(ds.samples[target]["ref_t1"]["percent"][defender])
+    )
+    assert int(out["hitlag"][attacker]) == int(ds.samples[target]["ref_t1"]["hitlag"][attacker])

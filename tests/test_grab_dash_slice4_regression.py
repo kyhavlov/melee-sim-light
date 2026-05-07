@@ -123,6 +123,51 @@ def _run_record(dataset_path: Path, record: int) -> tuple[np.ndarray, np.ndarray
         binding.destroy(handle)
 
 
+def _run_rollout_to_record(dataset_path: Path, *, start_record: int, target_record: int):
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    assert start_record <= target_record
+    assert int(samples.shape[0]) > target_record
+
+    binding = importlib.import_module("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    try:
+        seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
+        prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+        input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+        out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+        seed_bytes[:] = np.frombuffer(
+            samples[start_record]["seed_t"].tobytes(order="C"), dtype=np.uint8
+        ).reshape(1, seed_stride)
+        binding.reseed_seed_rollout(handle, seed_bytes)
+        for record in range(start_record, target_record + 1):
+            prev_input_bytes[:] = np.frombuffer(
+                samples[record]["prev_input_t"].tobytes(order="C"), dtype=np.uint8
+            ).reshape(1, input_stride)
+            input_bytes[:] = np.frombuffer(
+                samples[record]["input_t"].tobytes(order="C"), dtype=np.uint8
+            ).reshape(1, input_stride)
+            binding.step_input(handle, prev_input_bytes, input_bytes)
+
+        binding.write_compare(handle, out_compare_bytes)
+        out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0]
+        ref = samples[target_record]["ref_t1"]
+        return samples[target_record], out, ref
+    finally:
+        binding.destroy(handle)
+
+
 @pytest.mark.integration
 @pytest.mark.parametrize(
     ("dataset_name", "record", "attacker"),
@@ -276,6 +321,51 @@ def test_replay_catchdash_connect_enters_pull_and_capture_pulled(
     assert int(out["action_frame"][0, victim]) == int(ref["action_frame"][victim])
     assert int(out["animation_index"][0, attacker]) == int(ref["animation_index"][attacker])
     assert int(out["animation_index"][0, victim]) == int(ref["animation_index"][victim])
+
+
+@pytest.mark.integration
+def test_catch_connect_clears_victim_attack_hitboxes_before_body_collision_rollout() -> None:
+    # Runtime rollout lock for source proc ordering:
+    # p1 Catch connects with p0 on the same frame p0's AttackS3S hitbox would otherwise overlap.
+    # Vanilla runs Fighter_UnkProcessGrab_8006CA5C before Fighter_8006CB94, so the grabbed victim's
+    # later common collision pass sees CapturePulledLw, not the stale AttackS3S hitboxes.
+    #
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_UnkProcessGrab_8006CA5C,Fighter_8006CB94}
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078A2C,ftColl_80078754}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::fn_800DAADC
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/SweatyThisMallard.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+    _skip_if_required_artifacts_missing(root)
+
+    row_6005, out_6005, ref_6005 = _run_rollout_to_record(
+        dataset_path, start_record=5976, target_record=6005
+    )
+    assert int(row_6005["seed_t"]["action_id"][0]) == 53  # AttackS3S, stale outgoing hitbox owner
+    assert int(row_6005["seed_t"]["action_id"][1]) == _ACT_CATCH
+    assert int(ref_6005["action_id"][0]) == _ACT_CAPTURE_PULLED_LW
+    assert int(ref_6005["action_id"][1]) == _ACT_CATCH_PULL
+
+    for p in (0, 1):
+        assert int(out_6005["action_id"][p]) == int(ref_6005["action_id"][p])
+        assert int(out_6005["action_frame"][p]) == int(ref_6005["action_frame"][p])
+        assert int(out_6005["hitlag"][p]) == 0
+        assert int(out_6005["hitstun"][p]) == 0
+        assert float(out_6005["percent"][p]) == pytest.approx(float(ref_6005["percent"][p]), abs=0.0)
+        assert int(out_6005["last_attack_landed"][p]) == int(ref_6005["last_attack_landed"][p])
+        assert int(out_6005["instance_hit_by"][p]) == int(ref_6005["instance_hit_by"][p])
+
+    _row_6007, out_6007, ref_6007 = _run_rollout_to_record(
+        dataset_path, start_record=5976, target_record=6007
+    )
+    for p in (0, 1):
+        assert int(out_6007["action_id"][p]) == int(ref_6007["action_id"][p])
+        assert int(out_6007["action_frame"][p]) == int(ref_6007["action_frame"][p])
+        assert int(out_6007["hitlag"][p]) == 0
 
 
 @pytest.mark.parametrize(

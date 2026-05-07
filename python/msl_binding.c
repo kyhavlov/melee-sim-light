@@ -4676,6 +4676,10 @@ static PyObject* msl_move_tables_debug_query_py(PyObject* self, PyObject* args) 
     return PyLong_FromLong((long)move_tables_attackair_allow_interrupt(
         (uint8_t)char_id, (uint16_t)action_or_msid, f32_from_double(a)));
   }
+  if (strcmp(kind, "attackair_second_create_hitbox_phase") == 0) {
+    return PyLong_FromLong((long)move_tables_attackair_second_create_hitbox_phase(
+        (uint8_t)char_id, (uint16_t)action_or_msid, f32_from_double(a)));
+  }
   if (strcmp(kind, "grounded_attack_allow_interrupt") == 0) {
     return PyLong_FromLong((long)move_tables_grounded_attack_allow_interrupt(
         (uint8_t)char_id, (uint16_t)action_or_msid, f32_from_double(a)));
@@ -5310,6 +5314,9 @@ static PyMethodDef methods[] = {
     {"derive_ecb_lock_timer", msl_derive_ecb_lock_timer_py, METH_VARARGS,
      "derive_ecb_lock_timer(on_ground, action, lock_frames, jump_f, jump_b, aerial_f, aerial_b) -> "
      "uint8[:]"},
+    {"derive_ecb_lock_bottom_rel_y", msl_derive_ecb_lock_bottom_rel_y_py, METH_VARARGS,
+     "derive_ecb_lock_bottom_rel_y(char, action, anim, anim_frame, on_ground, lock_timer) -> "
+     "(float32[:], uint8[:])"},
     {"derive_turn_internals", msl_derive_turn_internals_py, METH_VARARGS,
      "derive_turn_internals(action, frame, facing, stick_x, tilt_x, dash_abs, dash_max, "
      "turn_frames, turn, turn_run) -> (frames, has_turned, x8)"},

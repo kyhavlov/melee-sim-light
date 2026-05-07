@@ -93,6 +93,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->coll_ecb_bottom_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->coll_prev_ecb_bottom_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->coll_desired_ecb_bottom_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->coll_desired_ecb_bottom_locked_owner = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->coll_floor_result_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->coll_floor_result_source = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->coll_floor_result_segment_id = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
@@ -512,24 +513,24 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->coll_desired_ecb_left_rel_x || !state->coll_desired_ecb_right_rel_x ||
       !state->coll_desired_ecb_side_rel_y || !state->coll_ecb_bottom_valid ||
       !state->coll_prev_ecb_bottom_valid || !state->coll_desired_ecb_bottom_valid ||
-      !state->coll_floor_result_valid || !state->coll_floor_result_source ||
-      !state->coll_floor_result_segment_id || !state->coll_floor_result_contact_x ||
-      !state->coll_floor_result_contact_y || !state->coll_floor_result_normal_x ||
-      !state->coll_floor_result_normal_y || !state->coll_substep_prev_pos_x ||
-      !state->coll_substep_prev_pos_y || !state->coll_substep_cur_pos_x ||
-      !state->coll_substep_cur_pos_y || !state->coll_stage_prev_pos_x ||
-      !state->coll_stage_prev_pos_y || !state->coll_stage_cur_pos_x ||
-      !state->coll_stage_cur_pos_y || !state->speed_air_x_self || !state->speed_ground_x_self ||
-      !state->speed_y_self || !state->speed_x_attack || !state->speed_y_attack ||
-      !state->specialhi_rotate_model || !state->specialhi_rotate_model_valid ||
-      !state->fighter_scale_y || !state->facing || !state->facing_dir1 ||
-      !state->ground_friction_mul || !state->kb_smashcharge_active || !state->smash_charge_state ||
-      !state->smash_charge_frames || !state->smash_charge_hold_frames_max ||
-      !state->smash_charge_saved_rate_fp_q16_16 || !state->on_ground ||
-      !state->frame_start_on_ground || !state->prev_on_ground || !state->ground_contact_x ||
-      !state->ground_contact_y || !state->ground_normal_x || !state->ground_normal_y ||
-      !state->wall_contact_x || !state->wall_contact_y || !state->wall_normal_x ||
-      !state->wall_normal_y || !state->wall_id || !state->wall_kind ||
+      !state->coll_desired_ecb_bottom_locked_owner || !state->coll_floor_result_valid ||
+      !state->coll_floor_result_source || !state->coll_floor_result_segment_id ||
+      !state->coll_floor_result_contact_x || !state->coll_floor_result_contact_y ||
+      !state->coll_floor_result_normal_x || !state->coll_floor_result_normal_y ||
+      !state->coll_substep_prev_pos_x || !state->coll_substep_prev_pos_y ||
+      !state->coll_substep_cur_pos_x || !state->coll_substep_cur_pos_y ||
+      !state->coll_stage_prev_pos_x || !state->coll_stage_prev_pos_y ||
+      !state->coll_stage_cur_pos_x || !state->coll_stage_cur_pos_y || !state->speed_air_x_self ||
+      !state->speed_ground_x_self || !state->speed_y_self || !state->speed_x_attack ||
+      !state->speed_y_attack || !state->specialhi_rotate_model ||
+      !state->specialhi_rotate_model_valid || !state->fighter_scale_y || !state->facing ||
+      !state->facing_dir1 || !state->ground_friction_mul || !state->kb_smashcharge_active ||
+      !state->smash_charge_state || !state->smash_charge_frames ||
+      !state->smash_charge_hold_frames_max || !state->smash_charge_saved_rate_fp_q16_16 ||
+      !state->on_ground || !state->frame_start_on_ground || !state->prev_on_ground ||
+      !state->ground_contact_x || !state->ground_contact_y || !state->ground_normal_x ||
+      !state->ground_normal_y || !state->wall_contact_x || !state->wall_contact_y ||
+      !state->wall_normal_x || !state->wall_normal_y || !state->wall_id || !state->wall_kind ||
       !state->damage_hitlag_wall_asdi_latch || !state->ceiling_contact_x ||
       !state->ceiling_contact_y || !state->ceiling_normal_x || !state->ceiling_normal_y ||
       !state->ceiling_id || !state->coll_env_flags || !state->coll_prev_env_flags ||
@@ -731,6 +732,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   memset(state->coll_ecb_bottom_valid, 0, sizeof(uint8_t) * bp);
   memset(state->coll_prev_ecb_bottom_valid, 0, sizeof(uint8_t) * bp);
   memset(state->coll_desired_ecb_bottom_valid, 0, sizeof(uint8_t) * bp);
+  memset(state->coll_desired_ecb_bottom_locked_owner, 0, sizeof(uint8_t) * bp);
   memset(state->coll_floor_result_valid, 0, sizeof(uint8_t) * bp);
   memset(state->coll_floor_result_source, 0, sizeof(uint8_t) * bp);
   memset(state->coll_floor_result_segment_id, 0xFF, sizeof(uint16_t) * bp);
@@ -842,6 +844,7 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->coll_ecb_bottom_valid);
   alloc_free(state->coll_prev_ecb_bottom_valid);
   alloc_free(state->coll_desired_ecb_bottom_valid);
+  alloc_free(state->coll_desired_ecb_bottom_locked_owner);
   alloc_free(state->coll_floor_result_valid);
   alloc_free(state->coll_floor_result_source);
   alloc_free(state->coll_floor_result_segment_id);

@@ -493,6 +493,47 @@ def test_yoshi_shyguy_state3_positive_delay_keeps_falling() -> None:
     assert float(out_item["vel_y"]) == pytest.approx(-2.12, abs=1e-5)
 
 
+def test_yoshi_shyguy_falling_state_clears_on_generic_item_blast_bounds() -> None:
+    seed = _empty_seed()
+    item = seed["items"][0, 0]
+    item["exists"] = np.uint8(1)
+    item["type"] = np.uint16(ITEM_KIND_HEIHO)
+    item["state"] = np.uint8(2)
+    item["owner"] = np.int8(-1)
+    item["pos_x"] = np.float32(171.808044)
+    item["pos_y"] = np.float32(-1.16848)
+    item["vel_x"] = np.float32(2.4214478)
+    item["vel_y"] = np.float32(-2.2)
+    item["direction"] = np.float32(1.0)
+    seed["item_shyguy_hitlag_u8"][0, 0] = np.uint8(0)
+    seed["item_shyguy_hitlag_valid_u8"][0, 0] = np.uint8(1)
+
+    # State 2/3 Heiho uses the generic item destroy gate after Phys/integration:
+    # it_802D8EC8 sets xDCC_flag.b3, then Item_802697D4 calls Item_802696CC. This is different
+    # from active state 1/4's it_802D9714 20-unit return margin.
+    # refs/melee/src/melee/it/items/itheiho.c::{it_802D8EC8,itHeiho_UnkMotion2_Phys}
+    # refs/melee/src/melee/it/item.c::{Item_802697D4,Item_802696CC}
+    out = _step_seed(seed)
+    assert int(out["items"][0]["exists"]) == 0
+    assert int(out["items"][0]["type"]) == 0
+
+
+@pytest.mark.integration
+def test_yoshi_shyguy_falling_state_blast_clear_replay_real_cnm_5275() -> None:
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    out, ref = _step_one_row(dataset_path, 5275)
+    slot = 3
+    assert int(ref["items"][slot]["exists"]) == 0
+    assert int(out["items"][slot]["exists"]) == int(ref["items"][slot]["exists"])
+    assert int(out["items"][slot]["type"]) == int(ref["items"][slot]["type"])
+
+
 def test_yoshi_shyguy_stage_timer_spawns_without_future_items() -> None:
     seed = _empty_seed()
     seed["frame_pre_random_seed"] = np.uint32(0x77C154)

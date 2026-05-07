@@ -169,6 +169,8 @@ uint8_t stage_collision_floor_line_is_platform(uint32_t stage_id, uint16_t segme
 uint8_t stage_collision_floor_line_is_runtime_fighter_solid(uint32_t stage_id, uint16_t segment_i);
 uint8_t stage_collision_floor_line_stage_object_support_kind(uint32_t stage_id, uint16_t segment_i);
 uint8_t stage_collision_floor_line_has_platform_transform(uint32_t stage_id, uint16_t segment_i);
+uint8_t stage_collision_floor_line_has_height_platform_transform(uint32_t stage_id,
+                                                                 uint16_t segment_i);
 uint8_t stage_collision_floor_line_platform_transform_id(uint32_t stage_id, uint16_t segment_i,
                                                          uint8_t* platform_id_out);
 // Resolve a floor line to current world coordinates for the given batch environment. Static lines

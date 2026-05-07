@@ -1988,19 +1988,34 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         // refs/melee/src/melee/mp/mpcoll.c::{
         //   mpColl_LoadECB_inline,mpCollInterpolateECB,mpColl_80043754}
         // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+        const uint8_t seed_locked_bottom_valid =
+            (seed->ecb_lock_timer[p] != 0u && seed->on_ground[p] == 0u &&
+             seed->ecb_lock_bottom_rel_y_valid_u8[p] != 0u)
+                ? 1u
+                : 0u;
         const uint8_t force_locked_bottom =
-            (seed->on_ground[p] || seed->ecb_lock_timer[p] != 0u) ? 1u : 0u;
+            (seed->on_ground[p] || (seed->ecb_lock_timer[p] != 0u && !seed_locked_bottom_valid))
+                ? 1u
+                : 0u;
         const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
         MslEcbWorldPoints desired_ecb = {0};
         MslEcbWorldPoints prev_ecb = {0};
         reseed_ecb_rel_points_sample(&desired_ecb, batch->state.char_id[idx],
                                      batch->state.animation_index[idx], seed->anim_frame_f32[p],
                                      facing_dir, force_locked_bottom);
+        if (seed_locked_bottom_valid) {
+          // CollData_X130_Locked preserves desired_ecb.bottom across mpColl_LoadECB_inline; use the
+          // explicit replay-history lane instead of the old zero-bottom reseed approximation.
+          // refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_inline
+          msl_ecb_world_points_override_bottom_rel_y(&desired_ecb, batch->state.char_id[idx], 0.0f,
+                                                     0.0f, seed->ecb_lock_bottom_rel_y_f32[p]);
+        }
         reseed_prev_ecb_rel_points_sample(
             &prev_ecb, batch->state.char_id[idx], batch->state.animation_index[idx],
             seed->anim_frame_f32[p], facing_dir, seed->seed_prev_action_id[p],
             seed->seed_prev_action_frame[p], 0u);
         reseed_store_colldata_ecb_desired(batch, idx, &desired_ecb);
+        batch->state.coll_desired_ecb_bottom_locked_owner[idx] = seed_locked_bottom_valid;
         reseed_store_colldata_ecb_current(batch, idx, &prev_ecb);
         reseed_store_colldata_ecb_prev(batch, idx, &prev_ecb);
         batch->state.coll_desired_ecb_bottom_valid[idx] = 1u;
@@ -2287,7 +2302,6 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         hitlist_capsule_clear(&batch->state.fighter_hitlist[base + i]);
       }
     }
-
     for (int it = 0; it < MSL_MAX_ITEMS; it++) {
       const size_t ii = msl_idx_item(bi, it);
       const MslItem* item = &seed->items[it];

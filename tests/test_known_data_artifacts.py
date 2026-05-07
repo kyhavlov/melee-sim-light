@@ -934,6 +934,25 @@ def _allow_interrupt_window(events: list[dict]) -> tuple[int, int] | None:
     return None
 
 
+def _second_create_hitbox_window(events: list[dict]) -> tuple[int, int] | None:
+    first = None
+    second = None
+    clear = None
+    for ev in events:
+        frame = int(ev["frame"])
+        if ev.get("kind") == "create_hitbox":
+            if first is None:
+                first = frame
+            elif second is None and frame != first:
+                second = frame
+        elif ev.get("kind") == "clear_hitboxes" and second is not None and frame >= second:
+            clear = frame
+            break
+    if second is None:
+        return None
+    return (second, clear if clear is not None else 32767)
+
+
 def _throw_flags_start(events: list[dict], *, hit_idx: int | None = None) -> int | None:
     frames = []
     for ev in events:
@@ -1058,6 +1077,7 @@ def test_runtime_move_tables_mslftsc1_matches_legacy_json_queries() -> None:
             events = _move_events(moves, move_name)
             cmd0 = _cmd0_window(events, open_end=False)
             allow = _allow_interrupt_window(events)
+            second_create = _second_create_hitbox_window(events)
             for frame in range(0, 80):
                 assert msl_binding.move_tables_debug_query(
                     "attackair_cmd0", char_id, action_id, float(frame), 0.0
@@ -1065,6 +1085,9 @@ def test_runtime_move_tables_mslftsc1_matches_legacy_json_queries() -> None:
                 assert msl_binding.move_tables_debug_query(
                     "attackair_allow_interrupt", char_id, action_id, float(frame), 0.0
                 ) == _active(allow, float(frame))
+                assert msl_binding.move_tables_debug_query(
+                    "attackair_second_create_hitbox_phase", char_id, action_id, float(frame), 0.0
+                ) == _active(second_create, float(frame))
 
         for action_id, move_name in grounded:
             events = _move_events(moves, move_name)

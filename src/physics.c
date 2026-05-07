@@ -770,13 +770,6 @@ static inline uint8_t physics_floor_line_contains_or_connects_to_nudged_x(
     return 0u;
   }
   const MslStageFloorLine* line = &g->lines[(size_t)line_idx];
-  // Conservative safety gate for the reduced horizontal x450 nudge:
-  // decomp computes xF8_playerNudgeVel before Fighter_procUpdate, but the full mpColl follow-up can
-  // preserve floor ownership at connected endpoints. Admit only current/adjacent connected floor
-  // segments here; the later motion-state collision callback owns the actual floor.index update.
-  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007E0E4
-  // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
-  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004B108,mpColl_8004A45C_Floor}
   if (x >= line->x0 && x <= line->x1) {
     return 1u;
   }
@@ -792,6 +785,38 @@ static inline uint8_t physics_floor_line_contains_or_connects_to_nudged_x(
     }
   }
   return 0u;
+}
+
+static inline uint8_t physics_action_uses_ft80084280_ottotto_edge_callback(uint16_t action_id) {
+  if (msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_LANDING_AIR_COLL)) {
+    return 1u;
+  }
+  switch (action_id) {
+    case MSL_ACT_WAIT:
+    case MSL_ACT_WALK_SLOW:
+    case MSL_ACT_WALK_MIDDLE:
+    case MSL_ACT_WALK_FAST:
+    case MSL_ACT_RUN_BRAKE:
+    case MSL_ACT_LANDING:
+    case MSL_ACT_LANDING_FALL_SPECIAL:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
+static inline uint8_t physics_nudge_reaches_facing_edge(const MslStageFloorGraph* g, int line_idx,
+                                                        float pos_x, float nudge_x,
+                                                        uint8_t facing_right) {
+  if (g == NULL || line_idx < 0 || (size_t)line_idx >= g->line_count || nudge_x == 0.0f) {
+    return 0u;
+  }
+  const MslStageFloorLine* line = &g->lines[(size_t)line_idx];
+  const float nudged_x = pos_x + nudge_x;
+  if (facing_right) {
+    return (uint8_t)(nudge_x > 0.0f && nudged_x >= line->x1);
+  }
+  return (uint8_t)(nudge_x < 0.0f && nudged_x <= line->x0);
 }
 
 static inline uint8_t physics_action_is_attackdash_knockdown_overlap_owner(uint16_t action_id,
@@ -941,7 +966,10 @@ static inline void physics_compute_grounded_player_nudge(MslBatch* batch, int bi
           nudge_x = player_nudge_x_step;
         }
         if (!physics_floor_line_contains_or_connects_to_nudged_x(
-                floor_graph, self_line, batch->state.pos_x[idx] + nudge_x)) {
+                floor_graph, self_line, batch->state.pos_x[idx] + nudge_x) &&
+            !(physics_action_uses_ft80084280_ottotto_edge_callback(batch->state.action_id[idx]) &&
+              physics_nudge_reaches_facing_edge(floor_graph, self_line, batch->state.pos_x[idx],
+                                                nudge_x, batch->state.facing[idx]))) {
           continue;
         }
         out_nudge_x[p] += nudge_x;
