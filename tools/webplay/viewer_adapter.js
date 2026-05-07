@@ -137,7 +137,7 @@ export function viewerSettingsFromCompare(compare, { startStocks = 4 } = {}) {
     isTeams: Boolean(u8(compare, compareOffsets.isTeams)),
     stageId: u32(compare, compareOffsets.stageId),
     isPal: false,
-    isFrozenStadium: false,
+    isFrozenStadium: u32(compare, compareOffsets.stageId) === 3,
     platform: "dolphin",
     consoleNickname: "melee-sim-light-browser",
     timerType: "counting down",

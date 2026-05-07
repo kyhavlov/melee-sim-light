@@ -1170,6 +1170,31 @@ static PyObject* msl_debug_set_coll_env_flags_py(PyObject* self, PyObject* args)
   Py_RETURN_NONE;
 }
 
+static PyObject* msl_debug_set_player_root_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  int batch_index = 0;
+  int player_index = 0;
+  float pos_x = 0.0f;
+  float pos_y = 0.0f;
+  int facing = 0;
+  if (!PyArg_ParseTuple(args, "Oiiffi", &handle_obj, &batch_index, &player_index, &pos_x, &pos_y,
+                        &facing)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+  const int err = msl_batch_debug_set_player_root(h->batch, batch_index, player_index, pos_x, pos_y,
+                                                  (uint8_t)(facing ? 1 : 0));
+  if (err != 0) {
+    PyErr_Format(PyExc_ValueError, "msl_batch_debug_set_player_root failed: %d", err);
+    return NULL;
+  }
+  Py_RETURN_NONE;
+}
+
 static PyObject* msl_debug_set_ceiling_contact_py(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* handle_obj = NULL;
@@ -5108,6 +5133,9 @@ static PyMethodDef methods[] = {
     {"debug_set_coll_env_flags", msl_debug_set_coll_env_flags_py, METH_VARARGS,
      "debug_set_coll_env_flags(handle, batch_index, player_index, flags) -> DEBUG-ONLY. Override "
      "coll_env_flags for a single fighter."},
+    {"debug_set_player_root", msl_debug_set_player_root_py, METH_VARARGS,
+     "debug_set_player_root(handle, batch_index, player_index, pos_x, pos_y, facing) -> "
+     "DEBUG-ONLY. Override fighter root position/facing for fixture setup."},
     {"debug_set_ceiling_contact", msl_debug_set_ceiling_contact_py, METH_VARARGS,
      "debug_set_ceiling_contact(handle, batch_index, player_index, contact_y) -> DEBUG-ONLY. "
      "Override ceiling_contact_y for a single fighter."},

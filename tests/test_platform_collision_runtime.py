@@ -18,6 +18,8 @@ ACT_DASH = 0x0014
 ACT_RUN = 0x0015
 ACT_RUN_BRAKE = 0x0017
 ACT_JUMP_F = 0x0019
+ACT_JUMP_AERIAL_F = 0x001B
+ACT_JUMP_AERIAL_B = 0x001C
 ACT_FALL = 0x001D
 ACT_ATTACK_AIR_LW = 0x0045
 ACT_SQUAT_WAIT = 0x0028
@@ -43,6 +45,8 @@ ACT_ATTACK_AIR_N = 0x0041
 ACT_ATTACK_DASH = 0x0032
 ACT_ATTACK_S4_S = 0x003C
 ACT_ATTACK_HI4 = 0x003F
+ACT_FX_SPECIAL_AIR_HI = 0x0164
+ACT_FX_SPECIAL_HI_BOUND = 0x0167
 
 SM_WAIT1_0 = 2
 SM_OTTOTTO = 210
@@ -55,9 +59,13 @@ SM_ATTACK_DASH = 52
 SM_ATTACK_S4 = 62
 SM_ATTACK_HI4 = 66
 SM_ESCAPE_AIR = 44
+SM_FX_SPECIAL_HI = 309
 SM_OTTOTTO_WAIT = 211
 
 CHAR_FOX = 1
+CHAR_FALCO = 22
+STAGE_POKEMON = 3
+STAGE_BATTLEFIELD = 31
 BUTTON_L = 0x0040
 BUTTON_A = 0x0100
 BUTTON_B = 0x0200
@@ -68,6 +76,22 @@ ACT_FX_SPECIAL_AIR_LW_START = 0x016D
 COLLIDE_LEFT_WALL_MASK = 0x0000003F
 COLLIDE_RIGHT_WALL_MASK = 0x00000FC0
 COLLIDE_CEILING_MASK = 0x00006000
+
+
+def _seed_specialairhi_downward(*, x: float, y: float, prev_y: float, ground_id: int) -> np.ndarray:
+    seed = _seed_base(STAGE_BATTLEFIELD, ACT_FX_SPECIAL_AIR_HI, SM_FX_SPECIAL_HI, x, y)
+    seed["floor_sweep_prev_pos_x_f32"][0, 0] = np.float32(x)
+    seed["floor_sweep_prev_pos_y_f32"][0, 0] = np.float32(prev_y)
+    seed["floor_sweep_prev_pos_valid_u8"][0, 0] = np.uint8(1)
+    seed["speed_y_self"][0, 0] = np.float32(-3.8)
+    seed["speed_air_x_self"][0, 0] = np.float32(0.0)
+    seed["action_frame"][0, 0] = np.int16(8)
+    seed["anim_frame_f32"][0, 0] = np.float32(8.0)
+    seed["ground_id"][0, 0] = np.uint16(ground_id)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["specialhi_rotate_model_valid_u8"][0, 0] = np.uint8(1)
+    seed["specialhi_rotate_model_f32"][0, 0] = np.float32(-np.pi / 2.0)
+    return seed
 COLLIDE_FLOOR_MASK = 0x00018000
 
 
@@ -220,6 +244,124 @@ def _collision_contacts_dtype() -> np.dtype:
         ],
         align=False,
     )
+
+
+@pytest.mark.integration
+def test_specialairhi_platform_contact_writes_floor_skip_and_stays_airborne() -> None:
+    # Vanilla reference: /home/kyle/Slippi/2026-05/Game_20260506T201935.slp, P1 Battlefield
+    # frames 29-32. Downward Firefox touches the left platform, stays in SpecialAirHi/airborne, and
+    # then continues below it because ftFox_SpecialHi_IsBound calls ftCo_8009A134 on platforms.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+    #   ftFx_SpecialAirHi_Coll,ftFox_SpecialHi_IsBound}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_8009A134
+    # refs/melee/src/melee/mp/mpcoll.c::{mpUpdateFloorSkip,mpColl_80044628_Floor}
+    import msl_binding
+
+    seed = _seed_specialairhi_downward(x=-38.8, y=36.0, prev_y=40.0, ground_id=2)
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    compare_stride = int(sizes["compare"])
+    input_stride = int(sizes["input"])
+    out = np.zeros((1, compare_stride), dtype=np.uint8)
+    inp = np.zeros((1, input_stride), dtype=np.uint8)
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, seed_stride)))
+        rows = []
+        for _ in range(5):
+            msl_binding.step_input(handle, inp, inp)
+            msl_binding.write_compare(handle, out)
+            rows.append(out.view(COMPARE_DTYPE).reshape((1,))[0].copy())
+    finally:
+        msl_binding.destroy(handle)
+
+    assert int(rows[3]["action_id"][0]) == ACT_FX_SPECIAL_AIR_HI
+    assert int(rows[3]["on_ground"][0]) == 0
+    assert int(rows[3]["ground_id"][0]) == 2
+    assert float(rows[3]["pos_y"][0]) == pytest.approx(27.2001, abs=1e-3)
+
+    assert int(rows[4]["action_id"][0]) == ACT_FX_SPECIAL_AIR_HI
+    assert int(rows[4]["on_ground"][0]) == 0
+    assert int(rows[4]["ground_id"][0]) == 2
+    assert float(rows[4]["pos_y"][0]) < 25.0
+
+
+@pytest.mark.integration
+def test_specialairhi_hard_floor_contact_still_enters_bound() -> None:
+    # Negative boundary: ftCo_8009A134 only returns true on platforms. Hard-floor contact remains a
+    # SpecialHiBound owner, matching the same vanilla replay's main-floor rebound after the platform
+    # pass-through sequence.
+    import msl_binding
+
+    seed = _seed_specialairhi_downward(x=-38.8, y=0.7, prev_y=2.9, ground_id=1)
+    seed["speed_y_self"][0, 0] = np.float32(-2.2)
+    seed["action_frame"][0, 0] = np.int16(20)
+    seed["anim_frame_f32"][0, 0] = np.float32(20.0)
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    compare_stride = int(sizes["compare"])
+    input_stride = int(sizes["input"])
+    out = np.zeros((1, compare_stride), dtype=np.uint8)
+    inp = np.zeros((1, input_stride), dtype=np.uint8)
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, seed_stride)))
+        rows = []
+        for _ in range(2):
+            msl_binding.step_input(handle, inp, inp)
+            msl_binding.write_compare(handle, out)
+            rows.append(out.view(COMPARE_DTYPE).reshape((1,))[0].copy())
+    finally:
+        msl_binding.destroy(handle)
+
+    assert int(rows[0]["action_id"][0]) == ACT_FX_SPECIAL_AIR_HI
+    assert int(rows[0]["on_ground"][0]) == 0
+    assert int(rows[1]["action_id"][0]) == ACT_FX_SPECIAL_HI_BOUND
+
+
+@pytest.mark.integration
+def test_escapeair_pokemon_ledge_floor_handoff_matches_vanilla_probe() -> None:
+    # Vanilla reference: a Dolphin-orchestrated ledgedash probe from
+    # replays/validation/pokemon_stadium_recent/ThisVioletRaccoon.slp lands on frozen Pokemon's
+    # right ledge floor one frame after EscapeAir starts:
+    #
+    #   reports/triage/legal_stage_modelplay_misc/vanilla_pokemon_ledgedash
+    #   P2 raw frame 1720: EscapeAir x=86.210 y=-4.389 vx=-2.392 vy=-1.435
+    #   P2 raw frame 1721: LandingFallSpecial x=84.057 y=0.000
+    #
+    # Source owner: EscapeAir_Coll calls ft_80082C74 -> mpColl_800471F8, which loads the live
+    # EscapeAir ECB with flags=6. That path does not force desired_ecb.bottom.y to zero while
+    # CollData_X130_Locked is active, so a downward ledgedash can resolve the ledge floor instead of
+    # passing through the stage.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80082C74
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_LoadECB_inline}
+    seed = _seed_base(STAGE_POKEMON, ACT_ESCAPE_AIR, SM_ESCAPE_AIR, 86.210, -4.389)
+    seed["char_id"][0, :2] = np.uint8(CHAR_FALCO)
+    seed["floor_sweep_prev_pos_x_f32"][0, 0] = np.float32(88.603)
+    seed["floor_sweep_prev_pos_y_f32"][0, 0] = np.float32(-2.954)
+    seed["floor_sweep_prev_pos_valid_u8"][0, 0] = np.uint8(1)
+    seed["speed_air_x_self"][0, 0] = np.float32(-2.392)
+    seed["speed_y_self"][0, 0] = np.float32(-1.435)
+    seed["action_frame"][0, 0] = np.int16(1)
+    seed["anim_frame_f32"][0, 0] = np.float32(1.0)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["ground_id"][0, 0] = np.uint16(53)
+    seed["seed_prev_action_id"][0, 0] = np.uint16(ACT_JUMP_AERIAL_F)
+    seed["seed_prev_action_frame"][0, 0] = np.int16(4)
+    seed["facing"][0, 0] = np.uint8(0)
+    seed["jumps_left"][0, 0] = np.uint8(0)
+
+    out = _step_once(seed)
+
+    assert int(out["action_id"][0]) == ACT_LANDING_FALL_SPECIAL
+    assert int(out["on_ground"][0]) == 1
+    assert int(out["ground_id"][0]) == 54
+    assert float(out["pos_x"][0]) == pytest.approx(84.057, abs=1e-3)
+    assert float(out["pos_y"][0]) == pytest.approx(0.0, abs=1e-4)
 
 
 def test_yoshi_downhill_slope_grounded_projection_tracks_floor_height() -> None:

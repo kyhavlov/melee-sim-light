@@ -1127,6 +1127,11 @@ static inline uint8_t floor_line_admitted_by_source_callback(const MslBatch* bat
   if (!action_uses_ftco_80096cc8_floor_callback(batch->state.action_id[idx])) {
     return 1u;
   }
+  // Source callback consumes `fp->input.lstick.y` as updated for the current frame. Replay rows where
+  // the hidden callback-visible input differs need a narrower seed owner; do not use previous input
+  // broadly here because many platform-stage rows depend on current-frame release landing.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_80096CC8
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_procUpdate,Fighter_procMap}
   const float stick_y = stick_i8_to_unit(batch->state.input_main_y[idx]);
   return (uint8_t)(stick_y > c->platform_air_land_stick_y_threshold);
 }
@@ -3316,17 +3321,25 @@ void mpcoll_ground_apply(MslBatch* batch) {
                batch->state.action_frame[idx] <= 1 && !escapeair_fresh_horizontal_floorhug_airborne)
                   ? 1u
                   : 0u;
-          const uint8_t escapeair_locked_deep_platform_floor_handoff =
-              (escapeair_locked && hit_line_idx >= 0 &&
-               (hit_line_is_platform_or_slope || g->lines[(size_t)hit_line_idx].is_platform) &&
-               hit_line_x_in_strict_segment && batch->state.action_frame[idx] == 3 &&
+          const uint8_t escapeair_flags6_deep_floor_handoff =
+              // Source floor handoff for locked EscapeAir:
+              // ftCo_EscapeAir_Coll -> ft_80082C74 -> ft_80081D0C -> mpColl_800471F8 uses
+              // mpColl_LoadECB_inline(flags=6) followed by mpColl_80043754 interpolation. Once the
+              // loaded/interpolated bottom is deep enough for mpColl_80044838_Floor to own the
+              // callback, ledge, hard-floor, and platform contacts share the same source predicate.
+              // data/moves/{fox,falco}.json::ftCo_SM_EscapeAir ECB frame 0 bottom
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+              // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+              // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_LoadECB_inline,mpColl_80043754,mpColl_80044838_Floor}
+              (escapeair_locked && hit_line_idx >= 0 && hit_line_x_in_strict_segment &&
                (iy - cur_bottom_y) >= msl_ecb_bottom_rel_y(char_id, anim, 0))
                   ? 1u
                   : 0u;
           const uint8_t suppress_locked_ledge_land =
               (escapeair_locked && !deep_lock_penetration && hit_line_idx >= 0 &&
                g->lines[(size_t)hit_line_idx].is_ledge && !escapeair_sustained_floor_handoff &&
-               !escapeair_kneebend_entry_floor_handoff && !escapeair_jump_entry_floor_handoff)
+               !escapeair_kneebend_entry_floor_handoff && !escapeair_jump_entry_floor_handoff &&
+               !escapeair_flags6_deep_floor_handoff)
                   ? 1u
                   : 0u;
           const uint8_t suppress_locked_off_end_platform_land =
@@ -3356,9 +3369,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
                   ? 1u
                   : 0u;
           const uint8_t suppress_locked_vertical_af3_land =
-              (escapeair_locked && !deep_lock_penetration &&
-               !escapeair_locked_deep_platform_floor_handoff && hit_line_idx >= 0 &&
-               !g->lines[(size_t)hit_line_idx].is_ledge &&
+              (escapeair_locked && !deep_lock_penetration && !escapeair_flags6_deep_floor_handoff &&
+               hit_line_idx >= 0 && !g->lines[(size_t)hit_line_idx].is_ledge &&
                // Decomp-shaped interpolation gap: in the early EscapeAir lock window, vertical-only
                // platform/slope sweep crossings can report a floor hit one frame earlier than
                // replay references. Once the current root is already below the accepted floor by at
@@ -3971,16 +3983,29 @@ void mpcoll_ground_apply(MslBatch* batch) {
              batch->state.seed_prev_action_id[idx] != (uint16_t)MSL_ACT_JUMP_AERIAL_B)
                 ? 1u
                 : 0u;
-        const uint8_t suppress_specialhi_transformed_platform_land =
-            // Fox/Falco up-special collision callbacks own transformed-platform bound/landing
-            // timing. Keep locked SpecialAirHi and remapped SpecialHiFall transformed-platform
-            // contacts airborne here; hard floors and same-floor followups retain the normal result.
+        const uint8_t suppress_specialairhi_platform_land =
+            // SpecialAirHi platform floor contact is consumed by ftCo_8009A134 inside
+            // ftFox_SpecialHi_IsBound: platforms call mpUpdateFloorSkip and keep the launch
+            // airborne instead of publishing a grounded/Bound handoff. The floor contact can still
+            // snap cur_pos to the platform for that callback pass; the source-owned floor_skip then
+            // excludes the same platform on following floor checks.
             // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
-            //   ftFx_SpecialHi_Coll,ftFx_SpecialHiFall_Coll,ftFx_SpecialHiBound_Coll}
+            //   ftFx_SpecialAirHi_Coll,ftFox_SpecialHi_IsBound}
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_8009A134
+            // refs/melee/src/melee/mp/mpcoll.c::{mpUpdateFloorSkip,mpColl_80044628_Floor}
+            (action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI &&
+             stage_collision_floor_line_is_platform(stage_id, ground_id))
+                ? 1u
+                : 0u;
+        const uint8_t suppress_specialhi_transformed_platform_land =
+            // SpecialHiFall transformed-platform contacts remain owned by the Fox/Falco
+            // up-special fall callback. Hard floors and same-floor followups retain the normal
+            // result.
+            // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+            //   ftFx_SpecialHiFall_Coll,ftFx_SpecialHiBound_Coll}
             (resolved_line_has_platform_transform &&
-             ((action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI && ecb_lock_active) ||
-              (action_id == (uint16_t)MSL_ACT_FX_SPECIAL_HI_FALL &&
-               ground_id != batch->state.ground_id[idx])))
+             action_id == (uint16_t)MSL_ACT_FX_SPECIAL_HI_FALL &&
+             ground_id != batch->state.ground_id[idx])
                 ? 1u
                 : 0u;
         const uint8_t suppress_specialhi_understage_hard_floor_land =
@@ -4104,7 +4129,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
                  c->platform_air_land_stick_y_threshold)
                 ? 1u
                 : 0u;
-        if (suppress_escapeair_transformed_remap_land ||
+        if (suppress_escapeair_transformed_remap_land || suppress_specialairhi_platform_land ||
             suppress_specialhi_transformed_platform_land ||
             suppress_specialhi_understage_hard_floor_land ||
             suppress_jump_transformed_platform_pre_handoff_land ||
@@ -4112,7 +4137,9 @@ void mpcoll_ground_apply(MslBatch* batch) {
             suppress_fall_transformed_platform_fastfall_land ||
             suppress_sustained_escapeair_same_platform_lock_land ||
             suppress_jumpaerial_escapeair_shallow_ledge_final_land) {
-          if (suppress_specialhi_understage_hard_floor_land) {
+          if (suppress_specialairhi_platform_land && batch->state.floor_skip_segment_id != NULL) {
+            batch->state.floor_skip_segment_id[idx] = ground_id;
+          } else if (suppress_specialhi_understage_hard_floor_land) {
             // Keep the rejected root outside the same live ECB neighborhood; otherwise the next frame
             // can re-accept the same inside-stage floor.
             batch->state.pos_y[idx] =
@@ -4124,7 +4151,9 @@ void mpcoll_ground_apply(MslBatch* batch) {
             batch->state.pos_y[idx] = cur_bottom_y - cur_bot.rel_y;
           }
           on_ground = 0u;
-          ground_id = batch->state.ground_id[idx];
+          if (!suppress_specialairhi_platform_land) {
+            ground_id = batch->state.ground_id[idx];
+          }
           contact_x = cur_bottom_x;
           contact_y = cur_bottom_y;
         }

@@ -34,6 +34,9 @@ data/items/**
 data/stage_items/**
 !data/stage_items/yoshi_shyguy.json
 !data/stage_items/dream_whispy.json
+!data/stages/
+data/stages/**
+!data/stages/slippi_neutral_spawns.json
 
 # Build outputs / caches (future-proof)
 build/

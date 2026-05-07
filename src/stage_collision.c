@@ -1989,6 +1989,16 @@ static inline uint8_t stage_ceiling_segment_intersects_item(float ax0, float ay0
   return stage_segment_intersects(ax0, ay0, ax1, ay1, bx0, by0, bx1, by1);
 }
 
+static inline uint8_t stage_line_is_active_for_item_collision(uint8_t active_runtime_line) {
+  // Item projectile collision consumes the same active mpLib line set as fighters. The generated
+  // MSLSTG01 field is still named `fighter_solid`, but for frozen Pokemon it is the runtime active
+  // line mask after Slippi's Stadium transform suppression, not an item-specific material rule.
+  // refs/melee/src/melee/it/it_266F.c::it_8026E9A4
+  // refs/slippi-ssbm-asm/Online/Core/Hacks/Stadium/IngameCheckIfFrozen.asm
+  // data/stages/bin/grps.bin::MSLSTG01 segments[*].fighter_solid
+  return active_runtime_line ? 1u : 0u;
+}
+
 uint8_t stage_collision_item_line_hits_floor(uint32_t stage_id, float x0, float y0, float x1,
                                              float y1) {
   const MslStageSlot* slot = stage_slot(stage_id);
@@ -2008,30 +2018,47 @@ uint8_t stage_collision_item_line_hits_floor(uint32_t stage_id, float x0, float 
   }
 
   // Treat the projectile as a point and intersect against stage collision segments.
-  // Decomp laser collision calls it_8029C4D4 -> it_8026E9A4, not a floor-only helper; FD ledge
-  // lasers can hit vertical wall segments below the floor before crossing the floor y.
+  // Decomp laser collision calls it_8029C4D4 -> it_8026E9A4 against the active mpLib collision
+  // line set, not a floor-only helper; FD ledge lasers can hit vertical wall segments below the
+  // floor before crossing the floor y. MSLSTG01 keeps inactive frozen-Stadium transformation
+  // geometry in the debug graph; those lines are not active runtime collision and must not delete
+  // lasers as invisible terrain.
   // refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Coll,it_8029C4D4}
   // refs/melee/src/melee/it/it_266F.c::it_8026E9A4
+  // refs/slippi-ssbm-asm/Online/Core/Hacks/Stadium/IngameCheckIfFrozen.asm
+  // data/stages/bin/grps.bin::MSLSTG01 segments[*].fighter_solid
   for (size_t si = 0; si < n; si++) {
     const MslStageFloorLine* seg = &segs[si];
+    if (!stage_line_is_active_for_item_collision(seg->fighter_solid)) {
+      continue;
+    }
     if (stage_floor_segment_intersects_item(x0, y0, x1, y1, seg->x0, seg->y0, seg->x1, seg->y1)) {
       return 1;
     }
   }
   for (size_t si = 0; si < left_wall_n; si++) {
     const MslStageWallLine* seg = &left_walls[si];
+    if (!stage_line_is_active_for_item_collision(seg->fighter_solid)) {
+      continue;
+    }
     if (stage_segment_intersects(x0, y0, x1, y1, seg->x0, seg->y0, seg->x1, seg->y1)) {
       return 1;
     }
   }
   for (size_t si = 0; si < right_wall_n; si++) {
     const MslStageWallLine* seg = &right_walls[si];
+    if (!stage_line_is_active_for_item_collision(seg->fighter_solid)) {
+      continue;
+    }
     if (stage_segment_intersects(x0, y0, x1, y1, seg->x0, seg->y0, seg->x1, seg->y1)) {
       return 1;
     }
   }
   for (size_t si = 0; si < ceiling_n; si++) {
     const MslStageCeilingLine* seg = &ceilings[si];
+    if (!stage_line_is_active_for_item_collision(seg->fighter_solid)) {
+      continue;
+    }
     if (stage_ceiling_segment_intersects_item(x0, y0, x1, y1, seg->x0, seg->y0, seg->x1, seg->y1)) {
       return 1;
     }

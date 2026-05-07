@@ -458,6 +458,7 @@ def viewer_settings_from_state(state: SimFrameState, *, start_stocks: int = 4, t
     settings = dict(SLIPPI_VIEWER_SETTINGS_TEMPLATE)
     settings["timerStart"] = int(timer_start)
     settings["stageId"] = int(state.stage_id)
+    settings["isFrozenStadium"] = int(state.stage_id) == MSL_STAGE_POKEMON_STADIUM
     settings["isTeams"] = bool(state.is_teams)
     settings["characterUiPlacesCount"] = int(state.num_players)
     settings["playerSettings"] = []

@@ -1168,8 +1168,8 @@ overall.float_norm_mae_p95: 5.38028816
 
 == datasets/aggregate_recent/replays/validation/dream_land_recent/ShadyDecimalStarling.msl ==
 Records: 7649  Players/scored per record: 2  Total player-frames: 15298
-mismatch.action_id: 18 / 15298 (0.001177)
-mismatch.action_frame: 21 / 15298 (0.001373)
+mismatch.action_id: 17 / 15298 (0.001111)
+mismatch.action_frame: 20 / 15298 (0.001307)
 mismatch.on_ground: 11 / 15298 (0.000719)
 mismatch.facing: 3 / 15298 (0.000196)
 mismatch.stocks: 0 / 15298 (0.000000)
@@ -1180,7 +1180,7 @@ mismatch.hitstun: 6 / 15298 (0.000392)
 mismatch.l_cancel: 0 / 15298 (0.000000)
 mismatch.hurtbox_state: 1 / 15298 (0.000065)
 mismatch.ground_id: 8 / 15298 (0.000523)
-mismatch.animation_index: 18 / 15298 (0.001177)
+mismatch.animation_index: 17 / 15298 (0.001111)
 mismatch.instance_hit_by: 5 / 15298 (0.000327)
 mismatch.instance_id: 11 / 15298 (0.000719)
 mismatch.last_attack_landed: 5 / 15298 (0.000327)
@@ -1195,7 +1195,7 @@ mismatch.item_instance_id: 4 / 114735 (0.000035)
 ignored_mismatch.state_flags[4]&0x80: 77 / 15298 (0.005033)
 err.pos_x: mae=0.001064 p95=0.000000 max=4.425001
 err.pos_y: mae=0.002199 p95=0.000000 max=6.316139
-err.speed_air_x_self: mae=0.000374 p95=0.000000 max=1.300000
+err.speed_air_x_self: mae=0.000346 p95=0.000000 max=1.300000
 err.speed_ground_x_self: mae=0.000880 p95=0.000000 max=1.900000
 err.speed_y_self: mae=0.000406 p95=0.000000 max=1.790000
 err.speed_x_attack: mae=0.000297 p95=0.000000 max=2.242872
@@ -1206,10 +1206,10 @@ err.item_pos_x: mae=0.102016 p95=0.000000 max=82.241043
 err.item_pos_y: mae=0.022603 p95=0.000000 max=22.605335
 err.item_vel_x: mae=0.014911 p95=0.000000 max=10.000000
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000061
-overall.discrete_mismatch: 182 / 925529
-overall.strict_discrete_mismatch: 259 / 925529
+overall.discrete_mismatch: 179 / 925529
+overall.strict_discrete_mismatch: 256 / 925529
 overall.ignored_discrete_mismatch: 77
-overall.float_norm_mae_p95: 0.00119811
+overall.float_norm_mae_p95: 0.00119640
 
 == datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl ==
 Records: 8459  Players/scored per record: 2  Total player-frames: 16918
@@ -1392,7 +1392,7 @@ overall.ignored_discrete_mismatch: 69
 overall.float_norm_mae_p95: 0.00157653
 
 == suite summary ==
-overall.discrete_mismatch: 5179 / 34298176
-overall.strict_discrete_mismatch: 6616 / 34298176
+overall.discrete_mismatch: 5176 / 34298176
+overall.strict_discrete_mismatch: 6613 / 34298176
 overall.ignored_discrete_mismatch: 1437
-overall.float_norm_mae_p95: 0.22896191
+overall.float_norm_mae_p95: 0.22896187

@@ -696,7 +696,11 @@ int msl_batch_set_ucf_cardinals_1_0_enabled(MslBatch* batch, int enabled) {
 }
 
 enum {
-  // Source: data/stages/final_destination.json is extracted from _iso/GrNLa.dat and uses
+  MSL_STAGE_FOUNTAIN_OF_DREAMS = 2,
+  MSL_STAGE_POKEMON_STADIUM = 3,
+  MSL_STAGE_YOSHIS_STORY = 8,
+  MSL_STAGE_DREAM_LAND_N64 = 28,
+  MSL_STAGE_BATTLEFIELD = 31,
   // GALE01/Slippi stage id 32 for Final Destination in this simulator's target domain.
   MSL_STAGE_FINAL_DESTINATION = 32,
   // Character id mapping follows Slippi post-frame `character` (GALE01):
@@ -727,56 +731,107 @@ static uint8_t msl_match_init_slippi_neutral_spawn_point(const MslMatchConfig* c
   if (cfg == NULL || out == NULL || out_facing == NULL) {
     return 0u;
   }
-  if (!cfg->is_teams || active_players != 4 ||
-      cfg->stage_id != (uint32_t)MSL_STAGE_FINAL_DESTINATION) {
+  if (!(active_players == 2 || active_players == 4)) {
     return 0u;
   }
 
-  // Slippi neutral-spawn teams mode only applies to 2v2, grouping slots by team id 0..2 and
-  // assigning spawn ids from that grouped order. FD teams coordinates are copied from the patch's
-  // FD `Teams Data` table; facing is then derived from x <= 0 exactly like `SetSpawn_UpdateFacingDirection`.
-  // refs/slippi-ssbm-asm/External/NeutralSpawn/NeutralSpawn.asm::{isTeams,SetSpawn,NeutralSpawnTable}
-  uint8_t team_counts[3] = {0u, 0u, 0u};
-  for (int p = 0; p < active_players; p++) {
-    const uint8_t team_id = cfg->players[p].team_id;
-    if (team_id >= 3u) {
-      return 0u;
-    }
-    team_counts[team_id]++;
-  }
-  for (int team_id = 0; team_id < 3; team_id++) {
-    if (team_counts[team_id] == 1u || team_counts[team_id] > 2u) {
-      return 0u;
-    }
-  }
+  // Slippi neutral-spawn patch owns match-start positions on legal stages. It computes a spawn id:
+  // - singles: order among present player slots 0..4,
+  // - teams: grouped 2v2 team order by team id 0..2.
+  // Then `SetSpawn` indexes a per-stage singles/teams coordinate table and derives facing from
+  // spawn.x <= 0. This is distinct from vanilla respawn platform positions.
+  // The literal mirror below is audit-backed by the tracked table:
+  // data/stages/slippi_neutral_spawns.json
+  // refs/slippi-ssbm-asm/External/NeutralSpawn/NeutralSpawn.asm::{
+  //   isSingles,isTeams,SetSpawn,NeutralSpawnTable}
+  static const struct {
+    uint32_t stage_id;
+    MslStagePoint2 singles[MSL_MAX_PLAYERS];
+    MslStagePoint2 teams[MSL_MAX_PLAYERS];
+  } k_neutral_spawn[] = {
+      {MSL_STAGE_FINAL_DESTINATION,
+       {{-60.0f, 10.0f}, {60.0f, 10.0f}, {-20.0f, 10.0f}, {20.0f, 10.0f}},
+       {{-60.0f, 10.0f}, {-20.0f, 10.0f}, {60.0f, 10.0f}, {20.0f, 10.0f}}},
+      {MSL_STAGE_BATTLEFIELD,
+       {{-38.8f, 35.2f}, {38.8f, 35.2f}, {0.0f, 8.0f}, {0.0f, 62.4f}},
+       {{-38.8f, 35.2f}, {-38.8f, 5.0f}, {38.8f, 35.2f}, {38.8f, 5.0f}}},
+      {MSL_STAGE_YOSHIS_STORY,
+       {{-42.0f, 26.6f}, {42.0f, 28.0f}, {0.0f, 46.9f}, {0.0f, 4.9f}},
+       {{-42.0f, 26.6f}, {-42.0f, 5.0f}, {42.0f, 28.0f}, {42.0f, 5.0f}}},
+      {MSL_STAGE_DREAM_LAND_N64,
+       {{-46.6f, 37.2f}, {47.4f, 37.3f}, {0.0f, 7.0f}, {0.0f, 58.5f}},
+       {{-46.6f, 37.2f}, {-46.6f, 5.0f}, {47.4f, 37.3f}, {47.4f, 5.0f}}},
+      {MSL_STAGE_FOUNTAIN_OF_DREAMS,
+       {{-41.25f, 21.0f}, {41.25f, 27.0f}, {0.0f, 5.25f}, {0.0f, 48.0f}},
+       {{-41.25f, 21.0f}, {-41.25f, 5.0f}, {41.25f, 27.0f}, {41.25f, 5.0f}}},
+      {MSL_STAGE_POKEMON_STADIUM,
+       {{-40.0f, 32.0f}, {40.0f, 32.0f}, {70.0f, 7.0f}, {-70.0f, 7.0f}},
+       {{-40.0f, 32.0f}, {-40.0f, 5.0f}, {40.0f, 32.0f}, {40.0f, 5.0f}}},
+  };
 
-  uint8_t team_order[MSL_MAX_PLAYERS] = {0u, 0u, 0u, 0u};
-  int team_order_size = 0;
-  for (int team_id = 0; team_id < 3; team_id++) {
-    for (int p = 0; p < active_players; p++) {
-      if (cfg->players[p].team_id == (uint8_t)team_id) {
-        team_order[team_order_size++] = (uint8_t)p;
-      }
+  const MslStagePoint2* table = NULL;
+  for (size_t i = 0; i < sizeof(k_neutral_spawn) / sizeof(k_neutral_spawn[0]); i++) {
+    if (k_neutral_spawn[i].stage_id == cfg->stage_id) {
+      table = cfg->is_teams ? k_neutral_spawn[i].teams : k_neutral_spawn[i].singles;
+      break;
     }
   }
-  if (team_order_size != active_players) {
+  if (table == NULL) {
     return 0u;
   }
 
   int spawn_id = -1;
-  for (int i = 0; i < team_order_size; i++) {
-    if (team_order[i] == (uint8_t)player) {
-      spawn_id = i;
-      break;
+  if (!cfg->is_teams) {
+    int spawn_order = 0;
+    for (int p = 0; p < active_players; p++) {
+      if (p == player) {
+        spawn_id = spawn_order;
+        break;
+      }
+      spawn_order++;
+    }
+  } else {
+    if (active_players != 4) {
+      return 0u;
+    }
+    uint8_t team_counts[3] = {0u, 0u, 0u};
+    for (int p = 0; p < active_players; p++) {
+      const uint8_t team_id = cfg->players[p].team_id;
+      if (team_id >= 3u) {
+        return 0u;
+      }
+      team_counts[team_id]++;
+    }
+    for (int team_id = 0; team_id < 3; team_id++) {
+      if (team_counts[team_id] == 1u || team_counts[team_id] > 2u) {
+        return 0u;
+      }
+    }
+
+    uint8_t team_order[MSL_MAX_PLAYERS] = {0u, 0u, 0u, 0u};
+    int team_order_size = 0;
+    for (int team_id = 0; team_id < 3; team_id++) {
+      for (int p = 0; p < active_players; p++) {
+        if (cfg->players[p].team_id == (uint8_t)team_id) {
+          team_order[team_order_size++] = (uint8_t)p;
+        }
+      }
+    }
+    if (team_order_size != active_players) {
+      return 0u;
+    }
+    for (int i = 0; i < team_order_size; i++) {
+      if (team_order[i] == (uint8_t)player) {
+        spawn_id = i;
+        break;
+      }
     }
   }
-  if (spawn_id < 0) {
+  if (spawn_id < 0 || spawn_id >= MSL_MAX_PLAYERS) {
     return 0u;
   }
 
-  static const MslStagePoint2 fd_teams_spawn_points[MSL_MAX_PLAYERS] = {
-      {-60.0f, 10.0f}, {-20.0f, 10.0f}, {60.0f, 10.0f}, {20.0f, 10.0f}};
-  *out = fd_teams_spawn_points[spawn_id];
+  *out = table[spawn_id];
   *out_facing = out->x <= 0.0f ? 1u : 0u;
   return 1u;
 }
@@ -1043,9 +1098,9 @@ static int msl_batch_init_match_impl(MslBatch* batch, const uint8_t* config_byte
       seed->defense_ratio[p] = 1.0f;
       seed->pos_x[p] = spawn.x;
       seed->pos_y[p] = spawn.y;
-      // Normal legal-stage starts use 2D stage points from MSLSTG01. Stage depth starts at zero
+      // Normal legal-stage starts use Slippi neutral-spawn 2D stage points. Stage depth starts at zero
       // for the currently supported singles/opening paths.
-      // data/stages/bin/*.bin::MSLSTG01 spawn_points
+      // refs/slippi-ssbm-asm/External/NeutralSpawn/NeutralSpawn.asm::NeutralSpawnTable
       seed->pos_z[p] = 0.0f;
       // Decomp: fp->x34_scale.y is initialized from Player_GetModelScale, while
       // fp->co_attrs.model_scaling is a separate character attr lane applied by specific
@@ -3207,6 +3262,42 @@ int msl_batch_debug_set_coll_env_flags(MslBatch* batch, int batch_index, int pla
   }
   const size_t idx = msl_idx_player(batch_index, player_index);
   batch->state.coll_env_flags[idx] = flags;
+  return 0;
+}
+
+int msl_batch_debug_set_player_root(MslBatch* batch, int batch_index, int player_index, float pos_x,
+                                    float pos_y, uint8_t facing) {
+  if (batch == NULL || !isfinite(pos_x) || !isfinite(pos_y)) {
+    return EINVAL;
+  }
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return EINVAL;
+  }
+  if (player_index < 0 || player_index >= MSL_MAX_PLAYERS) {
+    return EINVAL;
+  }
+  const size_t idx = msl_idx_player(batch_index, player_index);
+  batch->state.pos_x[idx] = pos_x;
+  batch->state.pos_y[idx] = pos_y;
+  batch->state.prev_pos_x[idx] = pos_x;
+  batch->state.prev_pos_y[idx] = pos_y;
+  batch->state.floor_sweep_prev_pos_x[idx] = pos_x;
+  batch->state.floor_sweep_prev_pos_y[idx] = pos_y;
+  batch->state.floor_sweep_seed_prev_pos_x[idx] = pos_x;
+  batch->state.floor_sweep_seed_prev_pos_y[idx] = pos_y;
+  batch->state.floor_sweep_seed_prev_valid[idx] = 0u;
+  batch->state.coll_stage_prev_pos_x[idx] = pos_x;
+  batch->state.coll_stage_prev_pos_y[idx] = pos_y;
+  batch->state.coll_stage_cur_pos_x[idx] = pos_x;
+  batch->state.coll_stage_cur_pos_y[idx] = pos_y;
+  batch->state.coll_substep_prev_pos_x[idx] = pos_x;
+  batch->state.coll_substep_prev_pos_y[idx] = pos_y;
+  batch->state.coll_substep_cur_pos_x[idx] = pos_x;
+  batch->state.coll_substep_cur_pos_y[idx] = pos_y;
+  batch->state.dynamic_pose_pos_x[idx] = pos_x;
+  batch->state.dynamic_pose_pos_y[idx] = pos_y;
+  batch->state.facing[idx] = facing ? 1u : 0u;
+  batch->state.facing_dir1[idx] = facing ? 1 : -1;
   return 0;
 }
 

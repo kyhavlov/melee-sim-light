@@ -16,12 +16,23 @@ from tools.modelplay.sim_env import (
 )
 from tools.modelplay.state_adapter import MSL_STAGE_FINAL_DESTINATION
 from tools.modelplay.sim_env import SimSession
-from tools.slippi.known_data_artifacts import read_mslstg01_v7, stage_metadata_path_for_stage_id
 
 
 ACT_ENTRY = 0x0142
 ANIM_NONE = 0xFFFFFFFF
-STAGE_PATH = Path("data/stages/final_destination.json")
+
+
+def _slippi_neutral_spawn_table() -> dict[int, dict[str, np.ndarray]]:
+    path = Path("data/stages/slippi_neutral_spawns.json")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert data["source"] == "refs/slippi-ssbm-asm/External/NeutralSpawn/NeutralSpawn.asm::NeutralSpawnTable"
+    return {
+        int(stage_id): {
+            "singles": np.array(entry["singles"], dtype=np.float32),
+            "teams": np.array(entry["teams"], dtype=np.float32),
+        }
+        for stage_id, entry in data["stages"].items()
+    }
 
 
 def _binding_or_skip():
@@ -44,13 +55,7 @@ def _compare_bytes(rows: int = 1) -> np.ndarray:
 
 
 def _fd_spawn_points() -> np.ndarray:
-    if not STAGE_PATH.exists():
-        pytest.skip(f"missing local artifact: {STAGE_PATH}")
-    data = json.loads(STAGE_PATH.read_text(encoding="utf-8"))
-    points = data.get("spawn_points")
-    if not isinstance(points, list) or len(points) < 2:
-        pytest.skip(f"{STAGE_PATH}: missing spawn_points")
-    return np.array([(float(p["x"]), float(p["y"])) for p in points], dtype=np.float32)
+    return _slippi_neutral_spawn_table()[MSL_STAGE_FINAL_DESTINATION]["singles"]
 
 
 def _char_trophy_scale_or_skip(char_name: str) -> float:
@@ -106,19 +111,13 @@ def test_init_match_writes_valid_fox_falco_fd_entry_state() -> None:
 @pytest.mark.parametrize(
     "stage_id",
     [
-        2,   # Fountain of Dreams
-        3,   # Pokemon Stadium base
-        8,   # Yoshi's Story
-        28,  # Dream Land N64
-        31,  # Battlefield
+        *_slippi_neutral_spawn_table().keys(),
     ],
 )
-def test_init_match_uses_mslstg01_spawn_roles_for_supported_non_fd_stage(stage_id: int) -> None:
+def test_init_match_uses_slippi_neutral_spawn_roles_for_supported_legal_stages(
+    stage_id: int,
+) -> None:
     binding = _binding_or_skip()
-    stage_path = stage_metadata_path_for_stage_id(stage_id)
-    if stage_path is None or not stage_path.exists():
-        pytest.skip(f"missing local stage artifact: {stage_path}")
-    stage = read_mslstg01_v7(stage_path)
     handle = _init_handle_or_skip(binding)
     try:
         config = build_match_config_array(
@@ -137,14 +136,55 @@ def test_init_match_uses_mslstg01_spawn_roles_for_supported_non_fd_stage(stage_i
 
     assert int(row["stage_id"]) == stage_id
     assert row["char_id"][:2].tolist() == [CHAR_FOX, CHAR_FALCO]
-    np.testing.assert_array_equal(
-        row["pos_x"][:2],
-        np.array([stage.spawn_points[0].x, stage.spawn_points[1].x], dtype=np.float32),
-    )
-    np.testing.assert_array_equal(
-        row["pos_y"][:2],
-        np.array([stage.spawn_points[0].y, stage.spawn_points[1].y], dtype=np.float32),
-    )
+    spawn = _slippi_neutral_spawn_table()[stage_id]["singles"]
+    np.testing.assert_array_equal(row["pos_x"][:2], spawn[:2, 0])
+    np.testing.assert_array_equal(row["pos_y"][:2], spawn[:2, 1])
+    assert row["facing"][:2].tolist() == [1, 0]
+
+
+@pytest.mark.parametrize(
+    "stage_id",
+    [
+        *_slippi_neutral_spawn_table().keys(),
+    ],
+)
+def test_init_match_uses_slippi_neutral_spawn_team_order_for_supported_legal_stages(
+    stage_id: int,
+) -> None:
+    binding = _binding_or_skip()
+    handle = _init_handle_or_skip(binding, num_players=4)
+    try:
+        config = build_match_config_array(
+            num_players=4,
+            char_ids=(CHAR_FOX, CHAR_FALCO, CHAR_FOX, CHAR_FALCO),
+            team_ids=(1, 0, 1, 0),
+            facing=(0, 0, 0, 0),
+            stocks=4,
+            stage_id=stage_id,
+            is_teams=True,
+        )
+        out = _compare_bytes()
+        binding.init_match(handle, _config_bytes(config))
+        binding.write_compare(handle, out)
+        row = out.view(COMPARE_DTYPE).reshape((1,))[0].copy()
+    finally:
+        binding.destroy(handle)
+
+    assert int(row["stage_id"]) == stage_id
+    assert int(row["num_players"]) == 4
+    assert int(row["is_teams"]) == 1
+    assert row["team_id"][:4].tolist() == [1, 0, 1, 0]
+    spawn = _slippi_neutral_spawn_table()[stage_id]["teams"]
+    expected_by_player = np.zeros((4, 2), dtype=np.float32)
+    expected_by_player[1] = spawn[0]
+    expected_by_player[3] = spawn[1]
+    expected_by_player[0] = spawn[2]
+    expected_by_player[2] = spawn[3]
+    np.testing.assert_array_equal(row["pos_x"][:4], expected_by_player[:, 0])
+    np.testing.assert_array_equal(row["pos_y"][:4], expected_by_player[:, 1])
+    assert row["facing"][:4].tolist() == [
+        1 if expected_by_player[p, 0] <= np.float32(0.0) else 0 for p in range(4)
+    ]
 
 
 def test_init_match_binding_rejects_too_few_config_rows() -> None:

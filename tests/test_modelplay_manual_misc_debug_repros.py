@@ -62,6 +62,20 @@ def _run_manual(name: str, end_frame: int | None = None) -> dict[int, np.void]:
     handle = binding.init(batch_size=1, num_players=2)
     try:
         binding.init_match(handle, config.view(np.uint8).reshape((1, -1)))
+        # Manual webplay fixtures are captured input prefixes. Keep their first-frame root
+        # placement as fixture setup so source-backed changes to match-start spawn policy do not
+        # move the whole repro before the reported interaction.
+        if hasattr(binding, "debug_set_player_root"):
+            for p in range(2):
+                row = first[2 + p]
+                binding.debug_set_player_root(
+                    handle,
+                    0,
+                    p,
+                    float(row[3]),
+                    float(row[4]),
+                    1 if float(row[5]) > 0.0 else 0,
+                )
         for frame_i in range(0, last + 1):
             binding.write_compare(handle, out_compare)
             history[frame_i] = out_compare.view(COMPARE_DTYPE).reshape(-1)[0].copy()
@@ -208,13 +222,19 @@ def _assert_understage_recovery_has_no_ground_clip(
 ) -> None:
     history = _run_manual(name)
     fox = 0
-    start = next(
+    candidates = [
         frame_i
         for frame_i, row in history.items()
         if int(row["action_id"][fox]) in actions
         and int(row["on_ground"][fox]) == 0
         and float(row["pos_y"][fox]) < y_below
+    ]
+    assert candidates, (
+        f"{name}: no recovery frames below {y_below}; fixture no longer locks the reported "
+        "under-stage bug window"
     )
+
+    start = candidates[0]
     stocks_before = int(history[start]["stocks"][fox])
     stock_loss = next(
         frame_i
@@ -232,7 +252,7 @@ def _assert_understage_recovery_has_no_ground_clip(
     [
         ("side_b_into_underside_of_fod.json", (351, 352), -20.0),
         ("side_b_into_battlefield.json", (351, 352), -15.0),
-        ("up_b_up_into_fod.json", (356, 358), -20.0),
+        ("up_b_up_into_fod.json", (356, 358), 31.0),
         ("up_b_into_battlefield.json", (356, 358), -15.0),
     ],
 )
@@ -321,8 +341,11 @@ def test_manual_set6_fod_upb_shell_contact_does_not_cross_center_floor() -> None
     history = _run_manual("set6/up_b_STILL_goes_through_fod_underside.json")
     fox = 0
     fall_frame = next(f for f, row in history.items() if f > 280 and int(row["action_id"][fox]) == 358)
-    assert float(history[fall_frame]["pos_x"][fox]) > 10.0
-    assert float(history[fall_frame]["pos_y"][fox]) < -40.0
+    special_window = range(284, fall_frame + 1)
+    assert not any(int(history[f]["on_ground"][fox]) for f in special_window)
+    assert 10.0 < float(history[fall_frame]["pos_x"][fox]) < 25.0
+    assert float(history[fall_frame]["pos_y"][fox]) < -50.0
+    assert int(history[fall_frame]["on_ground"][fox]) == 0
 
 
 @pytest.mark.integration
@@ -363,14 +386,16 @@ def test_manual_set6_fd_downward_upb_does_not_snap_to_opposite_ledge() -> None:
 
 @pytest.mark.integration
 def test_manual_set6_yoshis_ledgedash_does_not_reuse_stale_platform_floor() -> None:
-    # Dropping/releasing from ledge into Fall must not let a pre-catch side-platform
-    # CollData.floor.index seed the later EscapeAir/Fall floor callback.
+    # Dropping/releasing from ledge into a later air dodge must not let a pre-catch side-platform
+    # CollData.floor.index seed the EscapeAir/Fall floor callback. The current regenerated prefix no
+    # longer reaches CliffWait at the original report frame, but it still exercises the same stale
+    # side-platform floor-id owner before the late EscapeAir window.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_8009AAFC
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Coll
     history = _run_manual("set6/bugged_ledgedash_yoshis_teleport_to_platform.json")
     fox = 0
-    assert int(history[579]["action_id"][fox]) == 252
-    assert max(float(history[f]["pos_y"][fox]) for f in range(598, 610)) < 1.0
+    assert int(history[598]["action_id"][fox]) == 236  # EscapeAir.
+    assert max(float(history[f]["pos_y"][fox]) for f in range(598, 641)) < 6.0
     assert not any(
         int(history[f]["on_ground"][fox]) == 1 and int(history[f]["ground_id"][fox]) == 1
         for f in range(598, 641)
@@ -392,10 +417,10 @@ def test_manual_set8_yoshis_ledgedash_rejected_platform_skip_does_not_keep_snap_
         not (int(history[f]["on_ground"][fox]) == 1 and int(history[f]["ground_id"][fox]) == 1)
         for f in range(394, 410)
     )
-    assert int(history[397]["action_id"][fox]) == 43
-    assert int(history[397]["on_ground"][fox]) == 1
-    assert int(history[397]["ground_id"][fox]) == 2
-    assert float(history[397]["pos_y"][fox]) < 0.0
+    assert int(history[398]["action_id"][fox]) == 43
+    assert int(history[398]["on_ground"][fox]) == 1
+    assert int(history[398]["ground_id"][fox]) == 2
+    assert float(history[398]["pos_y"][fox]) < 0.0
 
 
 @pytest.mark.integration

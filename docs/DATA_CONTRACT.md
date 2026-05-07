@@ -819,9 +819,11 @@ Characters (Fox/Falco):
     debug-visible/non-fighter-solid and tagged with `stage_object_support_kind=yoshi_shyguy` for
     carried CollData support while the Shy Guy controller is live, and generated line `1000` is
     Randall's pass-through floor transform record.
-    Frozen Pokemon Stadium fighter collision uses the generated `fighter_solid` mask for the
-    base/frozen legal-stage policy across floor/wall/ceiling collision while keeping
-    transformation geometry inspectable through debug and data APIs.
+    `fighter_solid` is a legacy field name for the active runtime mpLib line mask in the supported
+    legal-stage mode, not a fighter-only material predicate. Fighter collision and item/projectile
+    stage collision both filter inactive lines through this bit unless a source owner explicitly
+    queries raw/debug geometry. Frozen Pokemon Stadium marks transformation terrain inactive in
+    this runtime mask while keeping that geometry inspectable through debug and data APIs.
   - FoD seed lanes:
     - `stage_fod_platform_height_f32[2]`, `stage_fod_platform_height_valid_u8[2]`
     - `stage_fod_platform_velocity_f32[2]`, `stage_fod_platform_velocity_valid_u8[2]`
@@ -841,6 +843,19 @@ Characters (Fox/Falco):
     hard-floor checks. Fighter grounding consumes static platform lines through the full floor graph
     when the source callback admits them, with `ftCo_Pass`/`mpUpdateFloorSkip`-shaped pass-through
     gating. Platform lines remain inspectable through debug accessors.
+- `data/stages/slippi_neutral_spawns.json` (tracked tiny audit/contract file)
+  - Purpose:
+    - Mirror Slippi's neutral-spawn ASM table for supported legal stages so match-start positions in
+      `src/api.c::msl_match_init_slippi_neutral_spawn_point` are reviewable and tests do not duplicate
+      C literals as their own oracle.
+    - This file is intentionally tracked through a narrow `.gitignore` exception. It is not a large
+      generated stage artifact and does not replace the MSLSTG01 spawn/respawn stage-point contract.
+  - Source:
+    - `refs/slippi-ssbm-asm/External/NeutralSpawn/NeutralSpawn.asm::{SetSpawn,NeutralSpawnTable}`
+  - Runtime rule:
+    - Singles use the active player slot order; teams use Slippi's team-id grouped 2v2 order. Facing
+      is derived from `spawn.x <= 0`, matching `SetSpawn_UpdateFacingDirection`.
+    - Respawns continue to use MSLSTG01 respawn points and the vanilla respawn-facing owner.
 - `data/model_parts/fox.bin`, `data/model_parts/falco.bin` (fighter part/anchor descriptors; compact binary)
   - Purpose:
     - Expose known static part metadata and named gameplay anchors without live pose solving.
