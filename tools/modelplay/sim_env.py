@@ -191,7 +191,11 @@ class SimSession:
             self._num_players = 2 if char_ids is None else len(char_ids)
             if self._num_players not in (2, 4):
                 raise ValueError(f"num_players must be 2 or 4, got {self._num_players}")
-            init_char_ids = tuple(int(x) for x in (char_ids or (CHAR_FALCO, CHAR_FOX)))
+            init_char_ids = (
+                tuple(int(x) for x in char_ids_by_env[0])
+                if char_ids_by_env is not None
+                else tuple(int(x) for x in (char_ids or (CHAR_FALCO, CHAR_FOX)))
+            )
             init_team_ids = tuple(int(x) for x in (team_ids or tuple(range(self._num_players))))
             init_facing = tuple(int(x) for x in (facing or (1, 0, 1, 0)[: self._num_players]))
             self._char_ids = init_char_ids
@@ -336,6 +340,7 @@ class BatchedSimSession:
         stocks: int = 4,
         stage_id: int = MSL_STAGE_FINAL_DESTINATION,
         stage_ids: Sequence[int] | None = None,
+        char_ids_by_env: Sequence[Sequence[int]] | None = None,
         facing: Sequence[int] | None = None,
         frame_id: int = 0,
         random_seed: int = 0,
@@ -371,9 +376,21 @@ class BatchedSimSession:
             self._is_teams = bool(is_teams)
             self._match_config = None
         else:
-            self._num_players = 2 if char_ids is None else len(char_ids)
+            if char_ids_by_env is not None and len(char_ids_by_env) != self._batch_size:
+                raise ValueError(f"expected {self._batch_size} char-id rows, got {len(char_ids_by_env)}")
+            self._num_players = (
+                len(char_ids_by_env[0])
+                if char_ids_by_env is not None
+                else 2 if char_ids is None else len(char_ids)
+            )
             if self._num_players not in (2, 4):
                 raise ValueError(f"num_players must be 2 or 4, got {self._num_players}")
+            if char_ids_by_env is not None:
+                for env, row in enumerate(char_ids_by_env):
+                    if len(row) != self._num_players:
+                        raise ValueError(
+                            f"expected {self._num_players} char ids for env {env}, got {len(row)}"
+                        )
             if stage_ids is not None and len(stage_ids) != self._batch_size:
                 raise ValueError(f"expected {self._batch_size} stage ids, got {len(stage_ids)}")
             init_char_ids = tuple(int(x) for x in (char_ids or (CHAR_FALCO, CHAR_FOX)))
@@ -397,6 +414,10 @@ class BatchedSimSession:
             self._match_config[:] = one
             if stage_ids is not None:
                 self._match_config["stage_id"] = np.asarray(stage_ids, dtype=np.uint32)
+            if char_ids_by_env is not None:
+                for env, row in enumerate(char_ids_by_env):
+                    for port, char_id in enumerate(row):
+                        self._match_config["players"][env, port]["char_id"] = np.uint8(int(char_id))
             self._match_config["frame_pre_random_seed"] = (
                 np.uint32(random_seed) + np.arange(self._batch_size, dtype=np.uint32)
             )

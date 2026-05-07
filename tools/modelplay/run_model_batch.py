@@ -42,6 +42,8 @@ STAGE_IDS = {
 }
 
 STAGE_NAMES_BY_ID = {stage_id: name for name, stage_id in STAGE_IDS.items()}
+LEGAL_STAGE_ORDER = ("fd", "battlefield", "pokemon", "yoshi", "dreamland", "fod")
+SUPPORTED_MATCHUPS = (("fox", "fox"), ("fox", "falco"), ("falco", "falco"))
 
 
 def _timestamp() -> str:
@@ -85,8 +87,34 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Comma-separated stage names, one per trace. Example: battlefield,pokemon,yoshi,dreamland,fod",
     )
+    ap.add_argument(
+        "--matchups",
+        default=None,
+        help="Comma-separated p1-vs-p2 pairs, one per trace. Example: fox-fox,fox-falco,falco-falco",
+    )
+    ap.add_argument(
+        "--legal-stage-matchup-matrix",
+        action="store_true",
+        help="Run every supported legal stage with fox-fox, fox-falco, and falco-falco in one fused batch.",
+    )
     ap.add_argument("--team-ids", default=None, help="Internal debug hook; comma-separated 2-player team ids")
     return ap.parse_args()
+
+
+def _parse_matchup(value: str) -> tuple[str, str]:
+    parts = value.replace("_vs_", "-").replace("vs", "-").split("-")
+    if len(parts) != 2:
+        raise ValueError(f"matchup must look like fox-falco, got {value!r}")
+    p1, p2 = (part.strip() for part in parts)
+    if p1 not in CHAR_IDS or p2 not in CHAR_IDS:
+        raise ValueError(f"unknown matchup {value!r}")
+    return p1, p2
+
+
+def _env_dir(out_dir: Path, env: int, label: str | None, state: SimFrameState) -> Path:
+    if label is not None:
+        return out_dir / f"env_{env:03d}_{label}"
+    return out_dir / f"env_{env:03d}_{STAGE_NAMES_BY_ID.get(int(state.stage_id), state.stage_id)}"
 
 
 def _termination_summary(
@@ -117,11 +145,21 @@ def _termination_summary(
 
 def main() -> int:
     args = parse_args()
-    if args.num_traces <= 0:
-        raise ValueError(f"--num-traces must be positive, got {args.num_traces}")
 
     out_dir = args.out.resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    matrix_specs: tuple[tuple[str, tuple[str, str]], ...] | None = None
+    if args.legal_stage_matchup_matrix:
+        if args.stages is not None or args.matchups is not None:
+            raise ValueError("--legal-stage-matchup-matrix cannot be combined with --stages or --matchups")
+        if args.start_mode != "sim-init":
+            raise ValueError("--legal-stage-matchup-matrix requires --start-mode sim-init")
+        matrix_specs = tuple((stage, matchup) for stage in LEGAL_STAGE_ORDER for matchup in SUPPORTED_MATCHUPS)
+        args.num_traces = len(matrix_specs)
+
+    if args.num_traces <= 0:
+        raise ValueError(f"--num-traces must be positive, got {args.num_traces}")
 
     char_ids = None
     if args.p1_char is not None or args.p2_char is not None:
@@ -131,7 +169,19 @@ def main() -> int:
         )
     team_ids = None if args.team_ids is None else _parse_int_tuple(args.team_ids, expected_len=2, name="--team-ids")
     stage_ids = None
-    if args.stages is not None:
+    matchup_names = None
+    char_ids_by_env = None
+    env_labels: list[str | None] = [None for _ in range(args.num_traces)]
+    if matrix_specs is not None:
+        stage_names = tuple(stage for stage, _matchup in matrix_specs)
+        matchup_names = tuple(matchup for _stage, matchup in matrix_specs)
+        stage_ids = tuple(STAGE_IDS[name] for name in stage_names)
+        char_ids_by_env = tuple(tuple(CHAR_IDS[name] for name in matchup) for matchup in matchup_names)
+        env_labels = [
+            f"{stage}_{p1}_vs_{p2}"
+            for stage, (p1, p2) in matrix_specs
+        ]
+    elif args.stages is not None:
         stage_names = tuple(part.strip() for part in args.stages.split(",") if part.strip())
         unknown = [name for name in stage_names if name not in STAGE_IDS]
         if unknown:
@@ -141,6 +191,17 @@ def main() -> int:
         stage_ids = tuple(STAGE_IDS[name] for name in stage_names)
         if args.start_mode != "sim-init":
             raise ValueError("--stages requires --start-mode sim-init")
+    if args.matchups is not None:
+        matchup_names = tuple(_parse_matchup(part.strip()) for part in args.matchups.split(",") if part.strip())
+        if len(matchup_names) != args.num_traces:
+            raise ValueError(f"--matchups has {len(matchup_names)} entries but --num-traces is {args.num_traces}")
+        if args.start_mode != "sim-init":
+            raise ValueError("--matchups requires --start-mode sim-init")
+        char_ids_by_env = tuple(tuple(CHAR_IDS[name] for name in matchup) for matchup in matchup_names)
+        char_ids = None
+        for env, (p1, p2) in enumerate(matchup_names):
+            prefix = env_labels[env] + "_" if env_labels[env] is not None else ""
+            env_labels[env] = f"{prefix}{p1}_vs_{p2}"
     stage_id = STAGE_IDS[args.stage]
 
     session = BatchedSimSession(
@@ -153,6 +214,7 @@ def main() -> int:
         start_mode=args.start_mode,
         stage_id=stage_id,
         stage_ids=stage_ids,
+        char_ids_by_env=char_ids_by_env,
     )
     # Port-major order mirrors slippi_ai.evaluators fused inference: all envs for port 1,
     # then all envs for port 2. One DelayedAgent owns recurrent state for every lane.
@@ -285,9 +347,7 @@ def main() -> int:
                 if termination_reason is None:
                     continue
 
-                env_dir = out_dir / f"env_{env:03d}"
-                if stage_ids is not None:
-                    env_dir = out_dir / f"env_{env:03d}_{STAGE_NAMES_BY_ID.get(int(state.stage_id), state.stage_id)}"
+                env_dir = _env_dir(out_dir, env, env_labels[env], state)
                 trace_path = env_dir / "trace.json"
                 trace.write_json(trace_path)
                 trace_to_failure_path = None
@@ -315,11 +375,7 @@ def main() -> int:
         for env, state in enumerate(session.current_frame_states):
             if summaries[env] is not None:
                 continue
-            env_dir = out_dir / f"env_{env:03d}"
-            if stage_ids is not None:
-                env_dir = out_dir / (
-                    f"env_{env:03d}_{STAGE_NAMES_BY_ID.get(int(state.stage_id), state.stage_id)}"
-                )
+            env_dir = _env_dir(out_dir, env, env_labels[env], state)
             trace_path = env_dir / "trace.json"
             traces[env].write_json(trace_path)
             summaries[env] = _termination_summary(
@@ -341,6 +397,7 @@ def main() -> int:
             "start_mode": args.start_mode,
             "stage": args.stage,
             "stage_ids": None if stage_ids is None else list(stage_ids),
+            "matchups": None if matchup_names is None else [list(matchup) for matchup in matchup_names],
             "num_traces": int(args.num_traces),
             "max_frames": int(args.max_frames),
             "static_frame_threshold": int(args.static_frame_threshold),
