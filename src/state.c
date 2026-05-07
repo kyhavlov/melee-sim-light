@@ -307,6 +307,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->hitlag = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->hitlag_pre_timer = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->hitlag_started_frame = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->damage_allow_sdi = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->damage_hitlag_floorhug_latch = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->damage_hitlag_downward_sdi_consumed = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->hitstun = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
@@ -589,9 +590,9 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->phantom_damage_timer_x189c || !state->phantom_damage_source_port ||
       !state->damage_time_since_hit_x18ac || !state->dmg_x2225_b7 || !state->dmg_x2224_b2 ||
       !state->shield_hp || !state->hitlag || !state->hitlag_pre_timer ||
-      !state->hitlag_started_frame || !state->damage_hitlag_floorhug_latch ||
-      !state->damage_hitlag_downward_sdi_consumed || !state->hitstun ||
-      !state->damage_jump_buffer_x14 || !state->damage_post_hitlag_cb_kind ||
+      !state->hitlag_started_frame || !state->damage_allow_sdi ||
+      !state->damage_hitlag_floorhug_latch || !state->damage_hitlag_downward_sdi_consumed ||
+      !state->hitstun || !state->damage_jump_buffer_x14 || !state->damage_post_hitlag_cb_kind ||
       !state->attacker_shield_ground_kb_vel || !state->l_cancel || !state->hurtbox_state ||
       !state->colanim_hit_status_x198c || !state->colanim_timer_x1990 ||
       !state->colanim_timer_x1994 || !state->colanim_lock_x2221_b0 ||
@@ -746,6 +747,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   memset(state->x2228_b7, 0, sizeof(uint8_t) * bp);
   memset(state->fallspecial_landing_lag, 0, sizeof(float) * bp);
   memset(state->damage_hitlag_wall_asdi_latch, 0, sizeof(uint8_t) * bp);
+  memset(state->damage_allow_sdi, 0, sizeof(uint8_t) * bp);
   memset(state->damage_hitlag_floorhug_latch, 0, sizeof(uint8_t) * bp);
   memset(state->damage_hitlag_downward_sdi_consumed, 0, sizeof(uint8_t) * bp);
   memset(state->phantom_damage_pending_x1898, 0, sizeof(float) * bp);
@@ -1043,6 +1045,7 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->hitlag);
   alloc_free(state->hitlag_pre_timer);
   alloc_free(state->hitlag_started_frame);
+  alloc_free(state->damage_allow_sdi);
   alloc_free(state->damage_hitlag_floorhug_latch);
   alloc_free(state->damage_hitlag_downward_sdi_consumed);
   alloc_free(state->hitstun);

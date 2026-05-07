@@ -2143,6 +2143,48 @@ static inline void combat_state_flags_set_is_hitlag(MslBatch* batch, size_t idx,
   batch->state.state_flags[flags_i] = f;
 }
 
+static inline uint8_t combat_damage_allow_sdi_owner_action(uint16_t action) {
+  switch (action) {
+    case MSL_ACT_DAMAGE_HI_1:
+    case MSL_ACT_DAMAGE_HI_2:
+    case MSL_ACT_DAMAGE_HI_3:
+    case MSL_ACT_DAMAGE_N_1:
+    case MSL_ACT_DAMAGE_N_2:
+    case MSL_ACT_DAMAGE_N_3:
+    case MSL_ACT_DAMAGE_LW_1:
+    case MSL_ACT_DAMAGE_LW_2:
+    case MSL_ACT_DAMAGE_LW_3:
+    case MSL_ACT_DAMAGE_AIR_1:
+    case MSL_ACT_DAMAGE_AIR_2:
+    case MSL_ACT_DAMAGE_AIR_3:
+    case MSL_ACT_DAMAGE_FLY_HI:
+    case MSL_ACT_DAMAGE_FLY_N:
+    case MSL_ACT_DAMAGE_FLY_LW:
+    case MSL_ACT_DAMAGE_FLY_TOP:
+    case MSL_ACT_DAMAGE_FLY_ROLL:
+    case MSL_ACT_FLY_REFLECT_WALL:
+    case MSL_ACT_FLY_REFLECT_CEIL:
+    case MSL_ACT_DAMAGE_FALL:
+    case MSL_ACT_DOWN_DAMAGE_D:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
+static inline void combat_damage_allow_sdi_set(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  // Source owner: Fighter_ProcessHit starts damage hitlag and owns `allow_sdi`
+  // (fp+0x221A:2) for ftCo_Damage_OnEveryHitlag. Keep this separate from the generic
+  // hitlag-active bit so shield, clank, deal-hitlag, and item-shield helpers do not gain SDI.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006A1BC}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag
+  // refs/melee/src/melee/ft/types.h
+  batch->state.damage_allow_sdi[idx] = 1u;
+}
+
 static inline void combat_state_flags_set_x221a_b3(MslBatch* batch, size_t idx) {
   // Decomp: Fighter_ProcessHit sets fp->x221A_b3 = 1 alongside hitlag start under certain
   // knockback/damage paths (see `bool2`), and Fighter_8006A1BC clears it on hitlag end.
@@ -4430,6 +4472,7 @@ static inline void combat_mutations_pass1_future_apply_body_hit(
     // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
     batch->state.hitlag[d_idx] = d_hl;
     combat_state_flags_set_is_hitlag(batch, d_idx, d_hl);
+    combat_damage_allow_sdi_set(batch, d_idx);
     combat_state_flags_set_x221a_b3(batch, d_idx);
   }
 
@@ -4668,6 +4711,7 @@ static inline void combat_body_damage_log_apply(MslBatch* batch, int bi,
   if (d_hl > 0u) {
     batch->state.hitlag[d_idx] = d_hl;
     combat_state_flags_set_is_hitlag(batch, d_idx, d_hl);
+    combat_damage_allow_sdi_set(batch, d_idx);
     combat_state_flags_set_x221a_b3(batch, d_idx);
   }
 
@@ -4716,6 +4760,9 @@ static inline void combat_mutations_pass1_future_apply_body_phantom_hit(MslBatch
   if (d_hl > batch->state.hitlag[d_idx]) {
     batch->state.hitlag[d_idx] = d_hl;
     combat_state_flags_set_is_hitlag(batch, d_idx, d_hl);
+    if (combat_damage_allow_sdi_owner_action(batch->state.action_id[d_idx])) {
+      combat_damage_allow_sdi_set(batch, d_idx);
+    }
   }
 
   batch->state.phantom_damage_pending_x1898[d_idx] = phantom_dmg;
@@ -4771,6 +4818,9 @@ void combat_apply_item_phantom_hit(MslBatch* batch, int batch_index, int attacke
   if (d_hl > batch->state.hitlag[d_idx]) {
     batch->state.hitlag[d_idx] = d_hl;
     combat_state_flags_set_is_hitlag(batch, d_idx, d_hl);
+    if (combat_damage_allow_sdi_owner_action(batch->state.action_id[d_idx])) {
+      combat_damage_allow_sdi_set(batch, d_idx);
+    }
   }
   batch->state.instance_hit_by[d_idx] = item_instance_id;
   batch->state.last_hit_by[d_idx] = combat_source_port0_for_attacker(batch, a_idx, attacker);
@@ -5158,11 +5208,6 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
   batch->state.hitstun[d_idx] = hs;
   combat_state_flags_set_is_hitstun(batch, d_idx, hs);
   combat_damage_mark_entry_time_since_hit(batch, d_idx);
-  // Mirror Fighter_ProcessHit's x221A_b3 update shape (gate on hitlag start).
-  // refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006A1BC}
-  if (d_hl > d_hl_prev) {
-    combat_state_flags_set_x221a_b3(batch, d_idx);
-  }
 
   // Decomp: item/fighter BODY hits still route through Fighter_ProcessHit -> ftCo_8008DCE0 for
   // damage-state entry, and ftCo_8008DCE0 clears self_vel/gr_vel at block_28 before selecting the
@@ -5178,6 +5223,13 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
   combat_damage_enter_state(c, batch, batch_index, d_idx, defender_on_ground,
                             defender_on_ground_after, defender_hurt_height, kb_applied,
                             kb_angle_rad);
+  // Mirror Fighter_ProcessHit's damage-hitlag ownership after ftCo_8008DCE0 state entry:
+  // allow_sdi and x221A_b3 are ProcessHit damage paths, not generic hitlag side effects.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006A1BC}
+  if (d_hl > d_hl_prev) {
+    combat_damage_allow_sdi_set(batch, d_idx);
+    combat_state_flags_set_x221a_b3(batch, d_idx);
+  }
   combat_apply_guard_reflect_body_hit_followup(c, batch, d_idx, d_motion_id);
 
   batch->state.instance_hit_by[d_idx] = item_instance_id;

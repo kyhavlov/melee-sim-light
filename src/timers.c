@@ -43,11 +43,8 @@ void timers_update(MslBatch* batch) {
   // Dataset packing/layout reference:
   // tools/slippi/make_dataset_from_slp.py (stack order 0..4 into `state_flags[..., 5]`)
   // Slippi records fp+0x221A directly. The replay-visible 0x20 bit is the engine's hitlag-active
-  // lane (`x221A_b2` in the decomp comments / Slippi docs), not an independently seeded allow_sdi
-  // bit. This simulator currently derives that 0x20 lane from active hitlag and uses it later as a
-  // proxy for allow_sdi in damage hitlag callbacks because allow_sdi is not yet modeled as its own
-  // internal. Keep the name/comment explicit so we do not overstate this as true allow_sdi
-  // ownership.
+  // lane (`x221A_b2` in the decomp comments / Slippi docs), not `allow_sdi`. Runtime SDI callbacks
+  // consume the explicit internal `damage_allow_sdi` lane instead.
   // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
   // refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006A1BC}
   enum { MSL_STATE_FLAG_221A_IS_HITLAG = 0x20 };
@@ -121,6 +118,7 @@ void timers_update(MslBatch* batch) {
         flags_221a |= (uint8_t)MSL_STATE_FLAG_221A_IS_HITLAG;
       } else {
         flags_221a &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221A_IS_HITLAG;
+        batch->state.damage_allow_sdi[idx] = 0u;
         // Decomp: when hitlag ends, Fighter_8006A1BC clears x221A_b2 (isHitlag) and, if set,
         // clears x221A_b3 after calling ftCo_80090718(fp).
         // refs/melee/src/melee/ft/fighter.c::Fighter_8006A1BC
@@ -386,11 +384,10 @@ void timers_consume_post_hitlag_callbacks_after_input(MslBatch* batch) {
   //   refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
   //
   // Current sim contract:
-  // - We do not yet seed/model `allow_sdi` independently.
-  // - The runtime therefore uses the replay-visible fp+0x221A 0x20 lane, which this sim derives
-  //   from active hitlag in `timers_update`, as a proxy for allow_sdi.
-  // - This pass replaces the old action-family SDI split with the generic OnEveryHitlag owner
-  //   path. It does not claim to have fully separated allow_sdi from hitlag-active ownership.
+  // - Runtime owns `allow_sdi` through `state.damage_allow_sdi`, set by ProcessHit hitlag start
+  //   paths and cleared by Fighter_8006A1BC-shaped hitlag exit above.
+  // - Teacher-forced reseed initializes that lane from replay-visible ProcessHit provenance, then
+  //   free-running steps use the internal lane rather than the hitlag-active state byte.
   // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
   // refs/melee/src/melee/ft/types.h (fp+221A:2 allow_sdi, fp+221A:3 x221A_b3)
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c:824 (allow_sdi can be set without
@@ -442,24 +439,13 @@ void timers_consume_post_hitlag_callbacks_after_input(MslBatch* batch) {
               : 0u;
       const uint8_t flags_221a = batch->state.state_flags[flags_i];
       // Source predicate:
-      // - ftCo_Damage_OnEveryHitlag's timer-window path is generic, but it is gated by hidden
-      //   `allow_sdi`; replay only exposes the surrounding 0x221A byte.
-      // - ProcessHit sets x221A_b3 on the ordinary hitlag-start path while also setting
-      //   `allow_sdi`, and Fighter_8006A1BC clears x221A_b3 at hitlag exit.
-      // - Therefore x221A_b3 is a narrow visible provenance signal for timer-window SDI on normal
-      //   damage hitlag rows. Keep existing explicit DownDamageD / phantom lanes for source paths
-      //   where allow_sdi can be true without x221A_b3.
-      // - DamageFly/FlyReflect actions keep the existing DamageFly callback-owner path: these
-      //   actions are entered through ftCo_8008DCE0 and run the same OnEveryHitlag callback, and
-      //   replay rows have existing locks proving SDI without requiring x221A_b3.
+      // - ftCo_Damage_OnEveryHitlag's timer-window path is generic and gated by hidden `allow_sdi`.
+      // - Runtime uses `damage_allow_sdi`; action-family/phantom distinctions only participate in
+      //   teacher-forced reseed initialization for that lane.
       // refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006A1BC}
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag
-      const uint8_t use_timer_window = ((flags_221a & (uint8_t)MSL_STATE_FLAG_221A_B3) != 0u ||
-                                        damage_post_hitlag_cb_damagefly_action(a) ||
-                                        damage_every_hitlag_sdi_timer_window_action(a) ||
-                                        batch->state.phantom_damage_pending_x1898[idx] > 0.0f)
-                                           ? sdi_tilt_window
-                                           : 0u;
+      const uint8_t allow_sdi = batch->state.damage_allow_sdi[idx] ? 1u : 0u;
+      const uint8_t use_timer_window = allow_sdi ? sdi_tilt_window : 0u;
       // This callback runs before the end-of-frame state-flag refresh that mirrors active hitlag
       // into Slippi's fp+0x221A 0x20 byte. Use the runtime hitlag timers as the current-frame
       // derived hitlag-active owner; keep the allow-SDI provenance above separate.
@@ -470,7 +456,7 @@ void timers_consume_post_hitlag_callbacks_after_input(MslBatch* batch) {
            batch->state.hitlag[idx] != 0u)
               ? 1u
               : 0u;
-      if (batch->state.hitlag_pre_timer[idx] != 0u && batch->state.hitlag[idx] != 0u &&
+      if (batch->state.hitlag_pre_timer[idx] != 0u && batch->state.hitlag[idx] != 0u && allow_sdi &&
           (use_full_2d || use_timer_window) && is_current_hitlag_active &&
           lstick_mag_sq >= sdi_radius_sq) {
         batch->state.pos_x[idx] += lstick_full_x * sdi_step_mul;

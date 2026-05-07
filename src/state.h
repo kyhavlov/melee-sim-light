@@ -744,6 +744,15 @@ typedef struct MslStateSoA {
   // - refs/melee/src/melee/ft/fighter.c::Fighter_8006A360 (update gate on `!fp->x2219_b5`)
   // - refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC (hitlag start)
   uint8_t* hitlag_started_frame;
+  // Explicit Damage hitlag SDI owner bit (`allow_sdi`, fp+0x221A:2 in decomp comments).
+  // Runtime sets this when ProcessHit starts damage hitlag and clears it when hitlag exits.
+  // Teacher-forced reseed initializes it from strictly visible ProcessHit provenance; after the
+  // seeded frame, free-running gameplay uses this internal lane instead of re-reading Slippi's
+  // hitlag-active byte.
+  // refs/melee/src/melee/ft/types.h
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006A1BC}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag
+  uint8_t* damage_allow_sdi;
   // Runtime-only collision continuation latch for damage hitlag floor-hug handoff.
   //
   // Decomp shape:

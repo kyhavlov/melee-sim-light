@@ -202,6 +202,35 @@ static inline uint8_t reseed_action_is_attackair(uint16_t action) {
   return msl_motion_state_common_class_has(action, MSL_MS_CLASS_ATTACK_AIR);
 }
 
+static inline uint8_t reseed_damage_allow_sdi_source_action(uint16_t action) {
+  switch (action) {
+    case MSL_ACT_DAMAGE_HI_1:
+    case MSL_ACT_DAMAGE_HI_2:
+    case MSL_ACT_DAMAGE_HI_3:
+    case MSL_ACT_DAMAGE_N_1:
+    case MSL_ACT_DAMAGE_N_2:
+    case MSL_ACT_DAMAGE_N_3:
+    case MSL_ACT_DAMAGE_LW_1:
+    case MSL_ACT_DAMAGE_LW_2:
+    case MSL_ACT_DAMAGE_LW_3:
+    case MSL_ACT_DAMAGE_AIR_1:
+    case MSL_ACT_DAMAGE_AIR_2:
+    case MSL_ACT_DAMAGE_AIR_3:
+    case MSL_ACT_DAMAGE_FLY_HI:
+    case MSL_ACT_DAMAGE_FLY_N:
+    case MSL_ACT_DAMAGE_FLY_LW:
+    case MSL_ACT_DAMAGE_FLY_TOP:
+    case MSL_ACT_DAMAGE_FLY_ROLL:
+    case MSL_ACT_FLY_REFLECT_WALL:
+    case MSL_ACT_FLY_REFLECT_CEIL:
+    case MSL_ACT_DAMAGE_FALL:
+    case MSL_ACT_DOWN_DAMAGE_D:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
 static inline uint8_t reseed_action_is_cliff_any(uint16_t action) {
   switch (action) {
     case MSL_ACT_CLIFF_CATCH:
@@ -1669,6 +1698,23 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.hitlag[idx] = seed->hitlag[p];
       batch->state.hitlag_pre_timer[idx] = (seed->hitlag[p] != 0u) ? 1u : 0u;
       batch->state.hitlag_started_frame[idx] = 0;
+      enum { MSL_STATE_FLAG_221A_B3_LOCAL = 0x10 };
+      const uint8_t seed_x221a = seed->state_flags[p][(size_t)MSL_STATE_FLAGS_221A_INDEX];
+      // Teacher-forced hidden-state reconstruction for `allow_sdi` (fp+0x221A:2). Slippi does not
+      // expose that bit separately, so reseed uses only visible same-frame ProcessHit signals:
+      // active hitlag, Damage/DownDamage/DamageFly action ownership, replay-visible x221A_b3,
+      // DamageFly/DownDamage common source paths, and phantom-damage provenance. Runtime damage
+      // hits set `damage_allow_sdi` directly; this assignment is seed initialization only.
+      // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag
+      // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+      batch->state.damage_allow_sdi[idx] =
+          (seed->hitlag[p] != 0u && reseed_damage_allow_sdi_source_action(seed->action_id[p]) &&
+           (((seed_x221a & (uint8_t)MSL_STATE_FLAG_221A_B3_LOCAL) != 0u) ||
+            msl_motion_state_common_class_has(seed->action_id[p], MSL_MS_CLASS_DAMAGE_FLY) ||
+            seed->action_id[p] == (uint16_t)MSL_ACT_DOWN_DAMAGE_D || phantom_damage > 0.0f))
+              ? 1u
+              : 0u;
       batch->state.hitstun[idx] = seed->hitstun[p];
       int16_t x18ac = seed->damage_time_since_hit_x18ac[p];
       if (x18ac < -1) {

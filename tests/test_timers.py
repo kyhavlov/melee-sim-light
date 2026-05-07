@@ -13,12 +13,14 @@ ACT_WAIT = 0x000E
 ACT_FALL = 0x001D
 ACT_DAMAGE_HI_2 = 0x004C
 ACT_DAMAGE_FLY_N = 0x0058
+ACT_GUARD_SET_OFF = 0x00B5
 
 # Submotion ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 SM_WAIT1_0 = 2
 SM_FALL = 20
 SM_DAMAGE_HI_2 = 166
 SM_DAMAGE_FLY_N = 178
+SM_GUARD = 38
 MSL_BUTTON_L = 0x0040
 MSL_DAMAGE_POST_HITLAG_CB_DAMAGE_ON_EXIT = 1
 MSL_STATE_FLAG_221A_IS_HITLAG = 0x20
@@ -227,14 +229,12 @@ def test_grounded_damage_hitlag_exit_preserves_xf0_ground_kb_against_di() -> Non
 
 
 def test_damageflyhi_hitlag_sdi_no_longer_requires_x221a_b3() -> None:
-    # Current sim gate lock:
+    # allow_sdi owner lock:
     # - ftCo_Damage_OnEveryHitlag in vanilla gates on `allow_sdi` (fp+0x221A:2), not x221A_b3.
-    # - DamageFlyHi already lives in the current 2D SDI subset, so this isolates the gate owner
-    #   without broadening any action families.
-    # - This simulator does not yet seed/model allow_sdi independently; it currently derives the
-    #   replay-visible 0x20 lane from active hitlag and uses that as the proxy gate.
-    # - So this test is intentionally narrower: it proves the runtime no longer keys SDI on
-    #   x221A_b3. It does not claim that true allow_sdi ownership is fully modeled yet.
+    # - Runtime now carries `damage_allow_sdi` internally; reseed initializes it from visible
+    #   ProcessHit provenance, then OnEveryHitlag consumes that lane instead of the x221A_b3 bit.
+    # - DamageFlyHi is in the common DamageFly callback owner, so this proves x221A_b3 is not the
+    #   runtime SDI gate for the first teacher-forced step.
     # refs/melee/src/melee/ft/types.h (fp+221A:2 allow_sdi, fp+221A:3 x221A_b3)
     # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_OnEveryHitlag,ftCo_8008EC90}
@@ -274,3 +274,43 @@ def test_damageflyhi_hitlag_sdi_no_longer_requires_x221a_b3() -> None:
     out_no_b3 = _step_once(seed_no_b3, prev_inp=prev_inp, inp=inp)
     assert float(out_no_b3["pos_x"][0]) > float(seed["pos_x"][0, 0])
     assert float(out_no_b3["pos_y"][0]) > float(seed["pos_y"][0, 0])
+
+
+def test_guardsetoff_hitlag_does_not_gain_damage_allow_sdi_from_hitlag_flags() -> None:
+    # Negative owner lock:
+    # - Shield/clank/deal-hitlag paths may set hitlag-active flags, but they do not enter
+    #   Fighter_ProcessHit's Damage OnEveryHitlag owner and must not gain `allow_sdi`.
+    # - Seed includes active hitlag and x221A_b3 to prove reseed does not treat generic 0x221A
+    #   visible bits as damage SDI ownership for non-Damage actions.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80092F2C,ftCo_GuardSetOff_Anim}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag
+    seed = _seed_base()
+    seed["action_id"][0, 0] = np.uint16(ACT_GUARD_SET_OFF)
+    seed["animation_index"][0, 0] = np.uint32(SM_GUARD)
+    seed["action_frame"][0, 0] = np.int16(6)
+    seed["anim_frame_f32"][0, 0] = np.float32(6.0)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["hitlag"][0, 0] = np.uint16(6)
+    seed["hitstun"][0, 0] = np.uint16(0)
+    seed["pos_x"][0, 0] = np.float32(1.25)
+    seed["pos_y"][0, 0] = np.float32(0.0)
+    seed["state_flags"][0, 0, 1] = np.uint8(
+        MSL_STATE_FLAG_221A_IS_HITLAG | MSL_STATE_FLAG_221A_B3
+    )
+
+    sizes = INPUT_DTYPE.itemsize
+    prev_inp = np.zeros((1, sizes), dtype=np.uint8)
+    inp = np.zeros((1, sizes), dtype=np.uint8)
+    prev = prev_inp.view(INPUT_DTYPE).reshape((1,))
+    cur = inp.view(INPUT_DTYPE).reshape((1,))
+    prev["p"]["main_x"][0, 0] = np.int8(0)
+    prev["p"]["main_y"][0, 0] = np.int8(0)
+    cur["p"]["main_x"][0, 0] = np.int8(80)
+    cur["p"]["main_y"][0, 0] = np.int8(80)
+
+    out = _step_once(seed, prev_inp=prev_inp, inp=inp)
+
+    assert int(out["hitlag"][0]) == 5
+    assert int(out["action_id"][0]) == ACT_GUARD_SET_OFF
+    assert float(out["pos_x"][0]) == np.float32(1.25)
+    assert abs(float(out["pos_y"][0])) < 0.001
