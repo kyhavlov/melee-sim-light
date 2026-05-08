@@ -4456,6 +4456,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
       if (on_ground) {
         const uint8_t resolved_line_has_platform_transform =
             stage_collision_floor_line_has_platform_transform(stage_id, ground_id);
+        const uint8_t resolved_line_has_height_platform_transform =
+            stage_collision_floor_line_has_height_platform_transform(stage_id, ground_id);
         const int final_ground_line_idx = stage_collision_floor_line_index(stage_id, ground_id);
         const uint8_t suppress_escapeair_transformed_remap_land =
             // Final guard for FoD's transformed-platform remap path: several source-shaped
@@ -4569,8 +4571,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
             // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
             // refs/melee/src/melee/mp/mpcoll.c::{
             //   mpColl_800471F8,mpColl_80044628_Floor,mpColl_80044838_Floor}
-            (stage_collision_floor_line_has_height_platform_transform(stage_id, ground_id) &&
-             shallow_attackair_platform_ecb_owner && prev_action_id == action_id &&
+            (resolved_line_has_height_platform_transform && shallow_attackair_platform_ecb_owner &&
+             prev_action_id == action_id &&
              move_tables_attackair_second_create_hitbox_phase(char_id, action_id,
                                                               batch->state.anim_frame_f32[idx]) &&
              jump_transformed_platform_line_valid && prev_y < jump_transformed_platform_line_y &&
@@ -4581,15 +4583,15 @@ void mpcoll_ground_apply(MslBatch* batch) {
                 : 0u;
         const uint8_t suppress_jumpaerial_transformed_platform_fastfall_land =
             // Sustained JumpAerial_Coll uses the same ft_800835B0 -> mpColl_80047E14 callback
-            // family, but transformed-platform fastfall rows can observe a platform sweep before
-            // the callback-local floor result is published as a landing. Keep this to same-action
-            // fastfall rows on transformed platform lines; fresh JumpAerial entry and hard-floor
-            // contacts remain on the normal landing path.
+            // family, but FoD height-transformed platform fastfall rows can observe a platform
+            // sweep before the callback-local floor result is published as a landing. Keep this to
+            // same-action fastfall rows on height-transform lines; static-y stage-object support
+            // transforms such as Randall remain on the normal landing path.
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Coll
             // refs/melee/src/melee/ft/ft_081B.c::ft_80084DB0
             // refs/melee/src/melee/ft/ft_081B.c::ft_800835B0
             // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80043754,mpColl_80047E14}
-            (resolved_line_has_platform_transform &&
+            (resolved_line_has_height_platform_transform &&
              (action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
               action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_B) &&
              prev_action_id == action_id && batch->state.fall_fast[idx] != 0u &&
@@ -4598,14 +4600,15 @@ void mpcoll_ground_apply(MslBatch* batch) {
                 : 0u;
         const uint8_t suppress_fall_transformed_platform_fastfall_land =
             // Fall_Coll routes through ft_800831CC -> mpColl_80047E14 with the same
-            // ftCo_80096CC8 platform callback as Jump/JumpAerial. FoD transformed-platform rows can
-            // see a remapped platform sweep before the source callback publishes a landing result;
-            // preserve the airborne Fall frame for sustained same-action fastfall contacts only.
-            // Fresh Fall entries and hard-floor contacts still use the normal landing path.
+            // ftCo_80096CC8 platform callback as Jump/JumpAerial. FoD height-transformed platform
+            // rows can see a remapped platform sweep before the source callback publishes a landing
+            // result; preserve the airborne Fall frame for sustained same-action fastfall contacts
+            // only. Fresh Fall entries, hard-floor contacts, and static-y stage-object supports
+            // such as Randall still use the normal landing path.
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Coll
             // refs/melee/src/melee/ft/ft_081B.c::ft_800831CC
             // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80043754,mpColl_80047E14}
-            (resolved_line_has_platform_transform && action_id == (uint16_t)MSL_ACT_FALL &&
+            (resolved_line_has_height_platform_transform && action_id == (uint16_t)MSL_ACT_FALL &&
              prev_action_id == action_id && batch->state.fall_fast[idx] != 0u)
                 ? 1u
                 : 0u;

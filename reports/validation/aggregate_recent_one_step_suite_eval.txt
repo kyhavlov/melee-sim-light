@@ -943,25 +943,25 @@ overall.float_norm_mae_p95: 0.00019048
 
 == datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/MilkyGracefulStingray.msl ==
 Records: 5921  Players/scored per record: 2  Total player-frames: 11842
-mismatch.action_id: 38 / 11842 (0.003209)
+mismatch.action_id: 37 / 11842 (0.003124)
 mismatch.action_frame: 41 / 11842 (0.003462)
-mismatch.on_ground: 33 / 11842 (0.002787)
+mismatch.on_ground: 32 / 11842 (0.002702)
 mismatch.facing: 11 / 11842 (0.000929)
 mismatch.stocks: 0 / 11842 (0.000000)
-mismatch.jumps_left: 35 / 11842 (0.002956)
+mismatch.jumps_left: 34 / 11842 (0.002871)
 mismatch.is_dead: 0 / 11842 (0.000000)
 mismatch.hitlag: 33 / 11842 (0.002787)
 mismatch.hitstun: 23 / 11842 (0.001942)
 mismatch.l_cancel: 6 / 11842 (0.000507)
 mismatch.hurtbox_state: 6 / 11842 (0.000507)
-mismatch.ground_id: 21 / 11842 (0.001773)
-mismatch.animation_index: 38 / 11842 (0.003209)
+mismatch.ground_id: 20 / 11842 (0.001689)
+mismatch.animation_index: 37 / 11842 (0.003124)
 mismatch.instance_hit_by: 9 / 11842 (0.000760)
-mismatch.instance_id: 37 / 11842 (0.003124)
+mismatch.instance_id: 36 / 11842 (0.003040)
 mismatch.last_attack_landed: 7 / 11842 (0.000591)
 mismatch.combo_count: 13 / 11842 (0.001098)
 mismatch.last_hit_by: 12 / 11842 (0.001013)
-mismatch.state_flags: 57 / 59210 (0.000963)
+mismatch.state_flags: 56 / 59210 (0.000946)
 mismatch.item_exists: 3 / 88815 (0.000034)
 mismatch.item_type: 7 / 88815 (0.000079)
 mismatch.item_state: 5 / 88815 (0.000056)
@@ -981,8 +981,8 @@ err.item_pos_x: mae=0.218996 p95=0.000000 max=68.241035
 err.item_pos_y: mae=0.108839 p95=0.000000 max=33.377846
 err.item_vel_x: mae=0.028392 p95=0.000000 max=7.000000
 err.item_vel_y: mae=0.000015 p95=0.000000 max=0.018209
-overall.discrete_mismatch: 445 / 716441
-overall.strict_discrete_mismatch: 510 / 716441
+overall.discrete_mismatch: 438 / 716441
+overall.strict_discrete_mismatch: 503 / 716441
 overall.ignored_discrete_mismatch: 65
 overall.float_norm_mae_p95: 0.26776187
 
@@ -1392,7 +1392,7 @@ overall.ignored_discrete_mismatch: 69
 overall.float_norm_mae_p95: 0.00153580
 
 == suite summary ==
-overall.discrete_mismatch: 4797 / 34298176
-overall.strict_discrete_mismatch: 6234 / 34298176
+overall.discrete_mismatch: 4790 / 34298176
+overall.strict_discrete_mismatch: 6227 / 34298176
 overall.ignored_discrete_mismatch: 1437
 overall.float_norm_mae_p95: 0.22895579

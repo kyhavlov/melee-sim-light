@@ -2220,6 +2220,16 @@ Fox/Falco special-owner split (2026-04-17):
     `refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}`,
     `refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor,mpColl_80044838_Floor}`,
     and `data/stages/bin/griz.json::platform_transforms`.
+  - Sustained `Fall` and `JumpAerial` fastfall rows use the same source split: FoD
+    height-transform platform contacts can remain airborne until the callback-local floor handoff
+    publishes, but static-y stage-object support transforms are ordinary pass-through platform
+    landings. In particular, a neutral-stick `Fall_Coll -> ft_800831CC -> mpColl_80047E14`
+    crossing onto Randall publishes `Landing` on the generated support floor instead of reusing the
+    FoD height-transform suppression. Sources:
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Coll`,
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Coll`,
+    `refs/melee/src/melee/ft/ft_081B.c::{ft_800831CC,ft_800835B0}`, and
+    `refs/melee/src/melee/mp/mpcoll.c::mpColl_80047E14`.
   - While `CollData_X130_Locked` is live, `mpColl_LoadECB_inline` refreshes the current pose
     extents but preserves `desired_ecb.bottom.y`. Teacher-forced reseed now carries that hidden
     desired bottom through `ecb_lock_bottom_rel_y_f32/valid` for air-jump-origin lock episodes,
