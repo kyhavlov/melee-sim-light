@@ -1300,7 +1300,9 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       const uint16_t seed_floor_skip = seed->floor_skip_segment_id_u16[p];
       batch->state.floor_skip_segment_id[idx] =
           (seed->floor_skip_segment_valid_u8[p] && seed_floor_skip != 0xFFFFu &&
-           stage_collision_floor_line_is_platform(seed->stage_id, seed_floor_skip))
+           (stage_collision_floor_line_is_platform(seed->stage_id, seed_floor_skip) ||
+            stage_collision_floor_line_has_height_platform_transform(seed->stage_id,
+                                                                     seed_floor_skip)))
               ? seed_floor_skip
               : 0xFFFFu;
       batch->state.team_id[idx] = seed->team_id[p];
@@ -1701,6 +1703,12 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.turn_x8[idx] = seed->turn_x8[p];
       batch->state.lr_press_timer[idx] = seed->lr_press_timer[p];
       batch->state.x672_input_timer[idx] = seed->x672_input_timer[p];
+      // Teacher-forced reseed starts immediately before the current-frame input callback; the
+      // callback-visible frame-start copy must match the persisted source x672 counter until
+      // input_apply advances it for the next frame.
+      // refs/melee/src/melee/ft/fighter.c::Fighter_Spaghetti_8006AD10
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093694
+      batch->state.x672_input_timer_frame_start[idx] = seed->x672_input_timer[p];
       batch->state.x673[idx] = seed->x673[p];
       batch->state.x674[idx] = seed->x674[p];
       batch->state.x675[idx] = seed->x675[p];

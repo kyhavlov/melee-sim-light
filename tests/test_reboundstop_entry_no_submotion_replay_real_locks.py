@@ -282,6 +282,132 @@ def test_reboundstop_same_group_clank_suppresses_enable_edge_body_fsp_467() -> N
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "expected_hitlag"),
+    [
+        (
+            "datasets/aggregate_recent/replays/validation/battlefield_recent/"
+            "LoyalDishonestWren.msl",
+            1103,
+            (0, 4),
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/dream_land_recent/"
+            "FlippantEnchantedHorse.msl",
+            6937,
+            (4, 0),
+        ),
+    ],
+)
+def test_ftcoll_8007699c_asymmetric_x3cc_clank_side_branches(
+    dataset_rel: str, record: int, expected_hitlag: tuple[int, int]
+) -> None:
+    # Replay-real locks for ftColl_8007699C's two independent x3CC threshold branches:
+    # - LDW has the later-slot SpecialLwStart hitbox as the only clank-damage side; the earlier
+    #   AttackLw4 owner stays in-place while Shine gets clank hitlag.
+    # - FEH is the mirror high-vs-low damage case after stale HitCapsule damage is applied; the
+    #   SpecialLwStart side receives clank hitlag and its same-group victim ring suppresses BODY,
+    #   but the AttackLw3 side must not enter ReboundStop.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007699C,inlineA0,inlineA1,ftColl_80078C70}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    assert int(ds.samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
+
+    seed_t = ds.samples[record]["seed_t"]
+    ref_t1 = ds.samples[record]["ref_t1"]
+    assert any(int(ref_t1["action_id"][p]) == 360 for p in (0, 1))  # SpecialLwStart
+    for p, expected in enumerate(expected_hitlag):
+        assert int(seed_t["hitlag"][p]) == 0
+        assert int(ref_t1["hitlag"][p]) == expected
+
+    for p in (0, 1):
+        _, ref_row, out_row = _run_one_step_row(dataset_path, record, p)
+        for field in (
+            "action_id",
+            "action_frame",
+            "animation_index",
+            "hitlag",
+            "hitstun",
+            "percent",
+            "instance_id",
+            "instance_hit_by",
+            "last_hit_by",
+            "last_attack_landed",
+            "on_ground",
+        ):
+            got = float(out_row[field][p]) if field == "percent" else int(out_row[field][p])
+            exp = float(ref_row[field][p]) if field == "percent" else int(ref_row[field][p])
+            assert got == exp, f"record={record} p={p} field={field} expected={exp} got={got}"
+        assert out_row["state_flags"][p].tolist() == ref_row["state_flags"][p].tolist()
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "start_record", "target_records", "focus_port"),
+    [
+        (
+            "datasets/aggregate_recent/replays/validation/battlefield_recent/"
+            "LoyalDishonestWren.msl",
+            1103,
+            (1104, 1105, 1106),
+            1,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/dream_land_recent/"
+            "FlippantEnchantedHorse.msl",
+            6937,
+            (6938, 6939, 6940),
+            0,
+        ),
+    ],
+)
+def test_ftcoll_8007699c_hitbox_contact_victim_ring_persists_through_hitlag_tail(
+    dataset_rel: str, start_record: int, target_records: tuple[int, ...], focus_port: int
+) -> None:
+    # Replay-real rollout lock for ftColl_8007699C's type=3 victims_1 insert:
+    # - the clank entry frame registers the opponent into every active same-group HitCapsule,
+    # - hitlag freezes that HitCapsule state,
+    # - later frozen tail frames must decay hitlag instead of re-clanking overlapping capsules.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007699C,inlineA0,inlineA1}
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008688,lbColl_8000ACFC}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    assert int(ds.samples.shape[0]) > max(target_records), (
+        f"dataset too short for lock rows: records={target_records}"
+    )
+    assert int(ds.samples[start_record]["seed_t"]["hitlag"][focus_port]) == 0
+
+    for target_record in target_records:
+        ref_row, out_row = _run_rollout_to_record(dataset_path, start_record, target_record)
+        for field in ("action_id", "hitlag", "hitstun", "percent", "instance_hit_by"):
+            got = (
+                float(out_row[field][focus_port])
+                if field == "percent"
+                else int(out_row[field][focus_port])
+            )
+            exp = (
+                float(ref_row[field][focus_port])
+                if field == "percent"
+                else int(ref_row[field][focus_port])
+            )
+            assert got == exp, (
+                f"record={target_record} p={focus_port} field={field} expected={exp} got={got}"
+            )
+
+
+@pytest.mark.integration
 def test_reboundstop_rollout_clears_stale_seed_hitlists_before_shine_jab_clank_qgd_2732() -> None:
     # Replay-real rollout lock for teacher-forced HitCapsule seed-lane lifetime:
     # - The start row carries per-HitCapsule/dense hitlist seeds from an unrelated prior hitbox

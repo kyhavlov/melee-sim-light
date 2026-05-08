@@ -5935,16 +5935,26 @@ void locomotion_update_post_collision(MslBatch* batch) {
       }
 
       const uint16_t a = batch->state.action_id[idx];
-      if (batch->state.floor_skip_segment_id != NULL &&
-          batch->state.floor_skip_segment_id[idx] != 0xFFFFu && a != (uint16_t)MSL_ACT_PASS &&
-          a != (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI) {
+      const uint32_t stage_id = batch->state.stage_id[idx / (size_t)MSL_MAX_PLAYERS];
+      const uint16_t floor_skip_segment = (batch->state.floor_skip_segment_id != NULL)
+                                              ? batch->state.floor_skip_segment_id[idx]
+                                              : 0xFFFFu;
+      const uint8_t keep_attackair_transformed_platform_floor_skip =
+          (floor_skip_segment != 0xFFFFu && action_is_attackair(a) && now_ground == 0u &&
+           stage_collision_floor_line_has_height_platform_transform(stage_id, floor_skip_segment))
+              ? 1u
+              : 0u;
+      if (batch->state.floor_skip_segment_id != NULL && floor_skip_segment != 0xFFFFu &&
+          a != (uint16_t)MSL_ACT_PASS && a != (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI &&
+          !keep_attackair_transformed_platform_floor_skip) {
         // Fighter_ChangeMotionState clears CollData.floor_skip via mpClearFloorSkip. The current
         // frame has already consumed the old skip in stage collision, so clear it here for later
         // contacts once Pass has handed off to jump/aerial/fall/landing owners. SpecialAirHi is the
         // other retained owner: ftFox_SpecialHi_IsBound calls ftCo_8009A134 on platform contact,
         // which writes floor_skip without changing motion state so the launch can continue through
-        // that same platform. AttackAir_Coll does not call mpUpdateFloorSkip; transformed-platform
-        // AttackAir shallow ECB-only contacts are handled inside the collision owner instead.
+        // that same platform. AttackAir_Coll does not call mpUpdateFloorSkip, but FoD
+        // height-transformed AttackAirN/Lw pass-through contacts can keep the same source
+        // floor-skip owner live while airborne; preserve only that generated stage-line owner.
         // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
         // refs/melee/src/melee/mp/mpcoll.c::{mpUpdateFloorSkip,mpClearFloorSkip}
         // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFox_SpecialHi_IsBound

@@ -18,7 +18,9 @@
 #include "../src/anim_table.h"
 #include "../src/attack_id_tables.h"
 #include "../src/char_params.h"
+#include "../src/combat_geom.h"
 #include "../src/common_params.h"
+#include "../src/hit_elements.h"
 #include "../src/hitboxes_tables.h"
 #include "../src/hitlist.h"
 #include "../src/hurtcaps_tables.h"
@@ -5165,10 +5167,16 @@ PyObject* msl_derive_illusion_ghost_pos012_py(PyObject* self, PyObject* args) {
 
 typedef struct MslPyHbPrim {
   uint8_t valid;
+  uint8_t prev_valid;
   uint16_t flags;
   int16_t def_frame;
   uint8_t group;
   uint8_t rehit;
+  uint8_t element;
+  uint8_t _pad0;
+  float prev_x;
+  float prev_y;
+  float prev_z;
   float x;
   float y;
   float z;
@@ -5253,6 +5261,24 @@ static inline uint8_t msl_py_sphere_capsule_intersects(float sx, float sy, float
   return d2 <= (r * r) ? 1u : 0u;
 }
 
+static inline uint8_t msl_py_hitbox_hitbox_intersects_swept(const MslPyHbPrim* a,
+                                                            const MslPyHbPrim* b) {
+  if (a == NULL || b == NULL || !a->valid || !b->valid) {
+    return 0u;
+  }
+  const float ax0 = a->prev_valid ? a->prev_x : a->x;
+  const float ay0 = a->prev_valid ? a->prev_y : a->y;
+  const float az0 = a->prev_valid ? a->prev_z : a->z;
+  const float bx0 = b->prev_valid ? b->prev_x : b->x;
+  const float by0 = b->prev_valid ? b->prev_y : b->y;
+  const float bz0 = b->prev_valid ? b->prev_z : b->z;
+  float d2 = 0.0f;
+  combat_segment_segment_dist2(ax0, ay0, az0, a->x, a->y, a->z, bx0, by0, bz0, b->x, b->y, b->z,
+                               &d2, NULL, NULL);
+  const float rr = a->r + b->r;
+  return d2 <= (rr * rr) ? 1u : 0u;
+}
+
 static inline float msl_py_clamp01(float x) {
   if (x < 0.0f) {
     return 0.0f;
@@ -5289,6 +5315,27 @@ static inline uint16_t msl_py_calc_hitlag_frames(const MslCommonParams* common, 
     tmp = 0xFFFF;
   }
   return (uint16_t)tmp;
+}
+
+static inline void msl_py_register_hitbox_contact_seed(
+    MslPyHbPrim hitboxes[MSL_MAX_PLAYERS][MSL_MAX_HITBOXES],
+    uint16_t hitlist_cd[MSL_MAX_PLAYERS][MSL_HITLIST_GROUPS][MSL_MAX_PLAYERS],
+    uint16_t hitlist_iid[MSL_MAX_PLAYERS][MSL_HITLIST_GROUPS][MSL_MAX_PLAYERS],
+    uint16_t hitlist_hb_cd[MSL_MAX_PLAYERS][MSL_MAX_HITBOXES][MSL_MAX_PLAYERS],
+    uint16_t hitlist_hb_iid[MSL_MAX_PLAYERS][MSL_MAX_HITBOXES][MSL_MAX_PLAYERS],
+    uint8_t hitlist_hb_authoritative[MSL_MAX_PLAYERS][MSL_MAX_HITBOXES], int attacker,
+    int hit_group, int defender, uint16_t defender_iid, uint8_t rehit) {
+  const uint16_t seeded = rehit == 0u ? 0xFFFFu : (uint16_t)rehit;
+  const uint8_t group = (uint8_t)(hit_group & 0x7);
+  for (int reg = 0; reg < MSL_MAX_HITBOXES; reg++) {
+    if (hitboxes[attacker][reg].valid && (hitboxes[attacker][reg].group & 0x7u) == group) {
+      hitlist_hb_cd[attacker][reg][defender] = seeded;
+      hitlist_hb_iid[attacker][reg][defender] = defender_iid;
+      hitlist_hb_authoritative[attacker][reg] = 1u;
+    }
+  }
+  hitlist_cd[attacker][group][defender] = seeded;
+  hitlist_iid[attacker][group][defender] = defender_iid;
 }
 
 PyObject* msl_derive_combat_hitlist_seed_fields_py(PyObject* self, PyObject* args) {
@@ -5511,6 +5558,9 @@ PyObject* msl_derive_combat_hitlist_seed_fields_py(PyObject* self, PyObject* arg
   uint8_t prev_group_active[MSL_MAX_PLAYERS][MSL_HITLIST_GROUPS] = {{0}};
   uint8_t prev_hb_active[MSL_MAX_PLAYERS][MSL_MAX_HITBOXES] = {{0}};
   uint8_t prev_hb_group[MSL_MAX_PLAYERS][MSL_MAX_HITBOXES] = {{0}};
+  float prev_hb_x[MSL_MAX_PLAYERS][MSL_MAX_HITBOXES] = {{0.0f}};
+  float prev_hb_y[MSL_MAX_PLAYERS][MSL_MAX_HITBOXES] = {{0.0f}};
+  float prev_hb_z[MSL_MAX_PLAYERS][MSL_MAX_HITBOXES] = {{0.0f}};
 
   const float denom = 1.0f - common->trigger_deadzone;
 
@@ -5650,6 +5700,12 @@ PyObject* msl_derive_combat_hitlist_seed_fields_py(PyObject* self, PyObject* arg
                                              &ly, &lz);
           MslPyHbPrim* hb = &hitboxes[p][hb_id];
           hb->valid = 1u;
+          hb->group = (uint8_t)((ev->u16_7 >> 8) & 0x7u);
+          hb->prev_valid =
+              (prev_hb_active[p][hb_id] && prev_hb_group[p][hb_id] == hb->group) ? 1u : 0u;
+          hb->prev_x = hb->prev_valid ? prev_hb_x[p][hb_id] : (facing_dir * lz + px);
+          hb->prev_y = hb->prev_valid ? prev_hb_y[p][hb_id] : (ly + py);
+          hb->prev_z = hb->prev_valid ? prev_hb_z[p][hb_id] : (-facing_dir * lx);
           hb->x = facing_dir * lz + px;
           hb->y = ly + py;
           hb->z = -facing_dir * lx;
@@ -5660,8 +5716,8 @@ PyObject* msl_derive_combat_hitlist_seed_fields_py(PyObject* self, PyObject* arg
           hb->damage = ev->damage;
           hb->flags = ev->u16_6;
           hb->def_frame = (int16_t)ev->frame;
-          hb->group = (uint8_t)((ev->u16_7 >> 8) & 0x7u);
           hb->rehit = (uint8_t)(ev->u16_7 & 0xFFu);
+          hb->element = (uint8_t)(ev->u16_4 & 0xFFu);
         }
       }
 
@@ -5719,12 +5775,81 @@ PyObject* msl_derive_combat_hitlist_seed_fields_py(PyObject* self, PyObject* arg
       int attacker, group, defender, rehit, iid, hl;
     } pending[16];
 
+    if (hitlag_p != NULL) {
+      for (int p0 = 0; p0 < num_players; p0++) {
+        const npy_intp p0i = fi * width + p0;
+        if (stocks_p[p0i] == 0u || !on_ground_p[p0i]) {
+          continue;
+        }
+        for (int p1 = p0 + 1; p1 < num_players; p1++) {
+          const npy_intp p1i = fi * width + p1;
+          if (stocks_p[p1i] == 0u || !on_ground_p[p1i]) {
+            continue;
+          }
+          if (is_teams && team_p[p0i] == team_p[p1i]) {
+            continue;
+          }
+          if (hitlag_p[p0i] == 0u && hitlag_p[p1i] == 0u) {
+            continue;
+          }
+
+          for (int hb1 = 0; hb1 < MSL_MAX_HITBOXES; hb1++) {
+            MslPyHbPrim* h1 = &hitboxes[p1][hb1];
+            if (!h1->valid || (h1->flags & (uint16_t)MSL_HITBOX_FLAG_CLANK) == 0u ||
+                (h1->flags & (uint16_t)MSL_HITBOX_FLAG_HIT_GROUNDED) == 0u ||
+                h1->element == (uint8_t)MSL_HIT_ELEMENT_INERT || !(h1->damage > 0.0f)) {
+              continue;
+            }
+            for (int hb0 = 0; hb0 < MSL_MAX_HITBOXES; hb0++) {
+              MslPyHbPrim* h0 = &hitboxes[p0][hb0];
+              if (!h0->valid || (h0->flags & (uint16_t)MSL_HITBOX_FLAG_CLANK) == 0u ||
+                  (h0->flags & (uint16_t)MSL_HITBOX_FLAG_HIT_GROUNDED) == 0u ||
+                  h0->element == (uint8_t)MSL_HIT_ELEMENT_INERT || !(h0->damage > 0.0f)) {
+                continue;
+              }
+              if (!msl_py_hitbox_hitbox_intersects_swept(h0, h1)) {
+                continue;
+              }
+
+              const int raw0 = (int)h0->damage;
+              const int raw1 = (int)h1->damage;
+              const uint8_t p0_side =
+                  ((raw0 - common->clank_damage_diff_threshold) < raw1 && hitlag_p[p0i] != 0u) ? 1u
+                                                                                               : 0u;
+              const uint8_t p1_side =
+                  ((raw1 - common->clank_damage_diff_threshold) < raw0 && hitlag_p[p1i] != 0u) ? 1u
+                                                                                               : 0u;
+              if (p0_side) {
+                // Seed-time reconstruction of ftColl_8007699C's type=3 victim insert:
+                // active clank hitboxes overlap through lbColl_80007AFC and the replay-visible
+                // clank hitlag proves this side branch ran. Materialize the per-HitCapsule
+                // victims_1 lane so one-step reseeds into the frozen hitlag tail do not re-clank.
+                // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007699C,inlineA0,inlineA1}
+                // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008688,lbColl_8000ACFC}
+                msl_py_register_hitbox_contact_seed(
+                    hitboxes, hitlist_cd, hitlist_iid, hitlist_hb_cd, hitlist_hb_iid,
+                    hitlist_hb_authoritative, p0, h0->group, p1, instance_id_p[p1i], h0->rehit);
+              }
+              if (p1_side) {
+                msl_py_register_hitbox_contact_seed(
+                    hitboxes, hitlist_cd, hitlist_iid, hitlist_hb_cd, hitlist_hb_iid,
+                    hitlist_hb_authoritative, p1, h1->group, p0, instance_id_p[p0i], h1->rehit);
+              }
+            }
+          }
+        }
+      }
+    }
+
     for (int attacker = 0; attacker < num_players; attacker++) {
       const npy_intp ai = fi * width + attacker;
       if (stocks_p[ai] == 0u) {
         memset(hitlist_hb_cd[attacker], 0, sizeof(hitlist_hb_cd[attacker]));
         memset(hitlist_hb_iid[attacker], 0, sizeof(hitlist_hb_iid[attacker]));
         memset(prev_hb_active[attacker], 0, sizeof(prev_hb_active[attacker]));
+        memset(prev_hb_x[attacker], 0, sizeof(prev_hb_x[attacker]));
+        memset(prev_hb_y[attacker], 0, sizeof(prev_hb_y[attacker]));
+        memset(prev_hb_z[attacker], 0, sizeof(prev_hb_z[attacker]));
         memset(prev_group_active[attacker], 0, sizeof(prev_group_active[attacker]));
         continue;
       }
@@ -5833,6 +5958,17 @@ PyObject* msl_derive_combat_hitlist_seed_fields_py(PyObject* self, PyObject* arg
       }
       memcpy(prev_hb_active[attacker], cur_active, sizeof(cur_active));
       memcpy(prev_hb_group[attacker], cur_group, sizeof(cur_group));
+      for (int hb_id = 0; hb_id < MSL_MAX_HITBOXES; hb_id++) {
+        if (cur_active[hb_id]) {
+          prev_hb_x[attacker][hb_id] = hitboxes[attacker][hb_id].x;
+          prev_hb_y[attacker][hb_id] = hitboxes[attacker][hb_id].y;
+          prev_hb_z[attacker][hb_id] = hitboxes[attacker][hb_id].z;
+        } else {
+          prev_hb_x[attacker][hb_id] = 0.0f;
+          prev_hb_y[attacker][hb_id] = 0.0f;
+          prev_hb_z[attacker][hb_id] = 0.0f;
+        }
+      }
 
       if (!any_hitboxes) {
         continue;

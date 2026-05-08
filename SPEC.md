@@ -211,6 +211,19 @@ sim-owned**:
   ftCo_GuardOn_IASA,ftCo_Guard_IASA,ftCo_GuardSetOff_Anim,ftCo_GuardReflect_IASA},
   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_8009A080,
   refs/melee/src/melee/ft/fighter.c:1868-1890, refs/ucf/src/shielddrop/shielddrop.S).
+- GuardOn powershield re-entry uses the source `ftCo_80093694` owner: `mv.co.guard.x0`, the
+  current digital L/R edge, and `x672_input_timer_counter` all gate `GuardOn -> GuardReflect`.
+  For no-submotion GuardOn snapshots whose previous source state belongs to the generated
+  `MSLMSO01` grounded-locomotion guard-entry IASA class, the simulator uses a transient
+  frame-start x672 copy so fresh shield-entry rows with an analog trigger already held plus a fresh
+  digital L/R edge do not advance the trigger timer before the GuardOn IASA gate. Landing,
+  Ottotto, grounded attack, appeal, and steady shield-owned GuardOn snapshots keep the ordinary
+  current x672 gate.
+  (`src/action.c`, `src/input.c`, `src/locomotion.c`, `data/motion_state/owners/{fox,falco}.bin`;
+  refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_IASA,ftCo_80093694,ftCo_8009388C},
+  refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_IASA,
+  refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::ftCo_Attack12_IASA,
+  refs/melee/src/melee/ft/fighter.c::Fighter_Spaghetti_8006AD10).
 - Shield bubble center is **data-driven** from ISO-derived shield-tilt tables and sim guard-tilt state.
   - Dash `x4` held-shield entry through `ftCo_Dash_IASA -> ftCo_80091AD8 -> ftCo_800923B4`
     installs `ShieldDesc` before item collision; same-step laser shield contact uses the live
@@ -2182,7 +2195,9 @@ Fox/Falco special-owner split (2026-04-17):
     callback-visible floor sweep to accept first, then applies the `mpColl_80044838_Floor` snap
     from that accepted callback result. Replay-real locks cover both platform/hard-floor rows that
     remain `FallSpecial` until the callback-visible sweep crosses and the following positive
-    `LandingFallSpecial` frame.
+    `LandingFallSpecial` frame. Static soft-platform first root crossings are kept airborne for the
+    platform-callback handoff; the next already-below-platform callback owns the
+    `LandingFallSpecial` publication.
   - `ftCo_EscapeAir_Anim` enters `FallSpecial` through `ftCo_80096900`, whose `inline0` calls
     `Fighter_ChangeMotionState(..., Ft_MF_KeepFastFall)`. Runtime preserves the fastfall bit and
     lets that same entered `FallSpecial_Coll` frame consume the callback-visible floor owner when
@@ -2200,26 +2215,53 @@ Fox/Falco special-owner split (2026-04-17):
     crossed that floor, so runtime adds a bounded projection only when the frame-start previous ECB
     bottom is already below the persisted floor. Active-lock rows whose previous ECB bottom is still
     above floor remain airborne through the existing negative locks; the rejected broad EscapeAir
-    projection is not restored. Sources:
+    projection is not restored. Locked same-frame JumpAerial -> EscapeAir rows use the
+    frame-start `CollData.last_pos` owner from `ft_80082C74`, not the older replay t-1
+    `floor_sweep_prev_pos` lane; while `CollData_X130_Locked` is live, runtime preserves the seeded
+    desired ECB bottom. Zero-bottom locked rows use the same frame-start root sweep. Sources:
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll`,
     `refs/melee/src/melee/ft/ft_081B.c::ft_80082C74`, and
-    `refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor`.
+    `refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpColl_80043754,mpColl_80044628_Floor,mpColl_80044838_Floor}`.
   - Sustained `AttackAirN`/`AttackAirLw` on FoD height-transform platforms uses the common
     `AttackAir_Coll -> ft_80082C74 -> mpColl_800471F8` floor handoff, but the moving-platform
     transform can expose an ECB-bottom platform contact before the retained submotion owner should
-    publish `LandingAir*`. Runtime keeps that generated `MSLMSO01` submotion boundary airborne for
-    sustained late FoD height-transform contacts; early synthetic contacts, static
-    platforms/supports, hard floors, and other AttackAir submotions still publish
-    `Landing`/`LandingAir*` through the ordinary `mpColl_80044628_Floor` ->
-    `mpColl_80044838_Floor(ignore_bottom=true)` handoff. Replay-prefix rows may expose the same
-    hidden episode as `floor_skip_segment_id_u16/valid`, but runtime does not fabricate
-    `CollData.floor_skip` for `AttackAir_Coll` because the decomp source does not call
-    `mpUpdateFloorSkip` on that callback. Sources:
+    publish `LandingAir*`. Runtime keeps the generated `MSLMSO01` N/Lw submotion boundary airborne
+    for three source-shaped cases: down-held endpoint contacts that publish the explicit
+    `CollData.floor_skip` lane, already-live `floor_skip` carry into the first hard-floor crossing
+    after that platform pass, and height-transform platform writebacks where both callback root
+    samples are already below the platform and the ECB-bottom precondition for
+    `mpColl_80044838_Floor(ignore_bottom=true)` is absent. First root crossings from above, static
+    platforms/supports, ordinary hard floors, and other AttackAir submotions still publish
+    `Landing`/`LandingAir*` through the normal floor handoff. Replay-prefix rows reconstruct the
+    same hidden episode as `floor_skip_segment_id_u16/valid` from current/prior input and generated
+    FoD transform metadata. Sources:
     `data/motion_state/owners/{fox,falco}.bin::MSLMSO01`,
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll`,
     `refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}`,
     `refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor,mpColl_80044838_Floor}`,
     and `data/stages/bin/griz.json::platform_transforms`.
+  - Same-frame `JumpAerial -> EscapeAir` keeps the pre-entry JumpAerial `CollData.ecb` as
+    `prev_ecb` for the EscapeAir map callback. Runtime reconstructs that bottom point from the
+    generated `MSLMSO01` submotion id for the frame-start JumpAerial action instead of sampling the
+    entered EscapeAir pose for both endpoints. This lets the real
+    `mpCollInterpolateECB -> mpColl_80044628_Floor` bottom sweep publish late transformed-platform
+    `LandingFallSpecial` rows. The older down-held EscapeAir transformed-platform fallback is
+    removed: platform pass-through is owned by explicit `CollData.floor_skip` and callbacks that
+    pass `ftCo_80096CC8`; `EscapeAir_Coll -> ft_80082C74` does not use that callback.
+    Sources: `data/motion_state/owners/{fox,falco}.bin::MSLMSO01`,
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_IASA`,
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll`,
+    `refs/melee/src/melee/ft/ft_081B.c::ft_80082C74`, and
+    `refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpCollInterpolateECB,mpColl_80044628_Floor,mpUpdateFloorSkip}`.
+  - Sustained locked `EscapeAir` transformed-platform projection keeps the same source split:
+    remaps to a distinct transformed floor can stay airborne during the early lock window, but a
+    same-carried transformed floor accepted by the sustained `EscapeAir_Coll` handoff is an ordinary
+    `LandingFallSpecial` callback result. Similarly, flat cliff/ledge final guards only suppress
+    shallow snaps; once the accepted floor is deeper than the entered EscapeAir ECB-bottom extent
+    plus mpColl's vertical ECB unit, `ft_80082C74 -> mpColl_800471F8` owns the landing. Sources:
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll`,
+    `refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}`, and
+    `refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor,mpColl_80044838_Floor}`.
   - Sustained `Fall` and `JumpAerial` fastfall rows use the same source split: FoD
     height-transform platform contacts can remain airborne until the callback-local floor handoff
     publishes, but static-y stage-object support transforms are ordinary pass-through platform
@@ -2230,6 +2272,19 @@ Fox/Falco special-owner split (2026-04-17):
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Coll`,
     `refs/melee/src/melee/ft/ft_081B.c::{ft_800831CC,ft_800835B0}`, and
     `refs/melee/src/melee/mp/mpcoll.c::mpColl_80047E14`.
+  - `Fall_Coll` fastfall rows whose loaded ECB bottom is above the fighter root can still publish
+    hard-floor and ledge-floor landings through the shared flags-6 callback owner when a
+    prefix-causal `CollData_X130_Locked` owner or a true adjacent ledge-floor continuation owns the
+    crossing. Runtime asks the generated stage graph and `ftCo_80096CC8` platform predicate for the
+    callback-visible root crossing, then applies the source
+    `mpColl_80044838_Floor(ignore_bottom=true)` root projection. The retained negatives are stale
+    non-fastfall lock rows, stale same-ledgerow floor.index snapshots, and the probed expanded-model
+    non-fastfall center-floor -> ledge first-crossing window, where live `CollData.ecb.bottom`
+    remains above the ledge floor for one more callback; fastfall ledge crossings remain on the
+    ordinary `Fall_Coll` landing path. Sources:
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Coll`,
+    `refs/melee/src/melee/ft/ft_081B.c::ft_800831CC`, and
+    `refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047E14,mpColl_80044628_Floor,mpColl_80044838_Floor}`.
   - While `CollData_X130_Locked` is live, `mpColl_LoadECB_inline` refreshes the current pose
     extents but preserves `desired_ecb.bottom.y`. Teacher-forced reseed now carries that hidden
     desired bottom through `ecb_lock_bottom_rel_y_f32/valid` for air-jump-origin lock episodes,
@@ -2596,12 +2651,14 @@ Fox/Falco special-owner split (2026-04-17):
     Sources: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll`,
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_FallSpecial_Coll`,
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c`.
-  - Sustained EscapeAir rows that no longer carry CollData_X130_Locked keep current-ECB sampling in
-    the early same-action window instead of using the previous-ECB approximation. This prevents a
-    simulator-only early `LandingFallSpecial` on no-lock vertical crossings while preserving the
-    locked and later prev-bottom landing slices. Sources:
-    `refs/melee/src/melee/mp/mpcoll.c::mpCollInterpolateECB`,
-    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll`.
+  - Sustained EscapeAir rows that no longer carry `CollData_X130_Locked` use the normal
+    `EscapeAir_Coll -> ft_80082C74 -> mpColl_800471F8` floor owner. Runtime no longer has a
+    no-lock vertical-frame suppression bridge; once the lock has cleared, platform/floor crossings
+    can enter `LandingFallSpecial` through the ordinary callback. Locked-window and remap guards
+    remain scoped to the callback-local CollData lifetime they model. Sources:
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll`,
+    `refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}`, and
+    `refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor}`.
   - Sustained locked `EscapeAir` on the same carried ledge floor uses the same CollData floor owner
     as same-platform continuations: if the floor-sweep source row was already below that carried
     ledge and the final writeback snap is shallower than the entered EscapeAir ECB bottom, runtime
@@ -3220,6 +3277,14 @@ Fox/Falco special-owner split (2026-04-17):
       the GuardOn-table grabbable capsule pose locally inside catch selection only; they do not
       populate global BODY/debug hurtcap state. PJO `4221 -> 4240` locks the positive catch
       connection, while the same row's debug BODY candidates remain empty.
+    - The input-side `GuardReflect_IASA -> Catch_CheckInput` branch is gated by the frame-start x14
+      ReflectDesc timer on no-submotion snapshots. If x14 is still live when
+      `ftCo_80093BC0` ticks, the same frozen row does not expose a fresh A+LR catch consume; once
+      x14 has expired, x18 alone keeps powershield-active state bits but does not suppress
+      `Catch_CheckInput`. CDO `1328` locks the live-x14 negative and TCH `11792` locks the x18-only
+      catch positive (`src/grab_flow.c`; refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+      ftCo_GuardReflect_Anim,ftCo_80093BC0,ftCo_GuardReflect_IASA},
+      refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Catch_CheckInput).
     - No-submotion `GuardOn` entry snapshots (`animation_index=-1`, `action_frame<0`) use
       `data/shields/{fox,falco}.bin::guard_on_xyz[0]` with the same live model-scaled ShieldDesc
       bone only when the previous post-frame owner is not already a shield action. Source path:
@@ -3229,6 +3294,13 @@ Fox/Falco special-owner split (2026-04-17):
       already inside shield ownership and keep their normal tilt/neutral placement; PRH `11242`
       locks this negative. GuardReflect and nonzero-x4 angled Guard retain the earlier
       neutral-target collision-subtree scaling path until their separate pose owners are proved.
+    - The same raw `fp+0x2218_b1` command-pose shield-center lane applies to steady `Guard` as well
+      as `GuardOn` on the newborn SpecialN article pass. A first-frame laser checks the live command
+      pose before the settled Guard bubble can be used by later item callbacks; DSG `7430` locks the
+      Guard positive while existing GuardOn controls keep the one-frame scope
+      (`src/items.c`; refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm,
+      refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091E78,ftCo_80092450},
+      refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C504,itFoxlaser_UnkMotion1_Anim}).
     - `fp->lightshield_amount` is a Guard/GuardOn/GuardReflect latch, not just current trigger
       input. `ftCo_800925A4` snapshots the previous value into `mv.co.guard.x2C`, and when the
       current trigger is below the shield deadzone it preserves that value instead of recomputing a
@@ -5039,7 +5111,16 @@ BODY collision-space residual split and rejected seed bridge:
     `HitCapsule.x4` group via `inlineA0`/`inlineA1`, but `ftColl_80078C70` runs that inside the
     per-HitCapsule loop. The first accepted same-group clank owns the group's hitlag/rebound
     damage for that fighter pair; later same-group clank candidates and BODY admission for that
-    pair are suppressed by the refreshed HitVictim entries;
+    pair are suppressed by the refreshed HitVictim entries. Those type-3 victims_1 entries are
+    persistent HitCapsule state, so hitlag-tail rollouts and one-step reseeds materialize them from
+    the per-HitCapsule seed lane when swept clank geometry plus replay-visible clank hitlag prove
+    that side branch;
+  - the `ftCommonData.x3CC` damage-delta checks inside `ftColl_8007699C` are side-specific, not a
+    single reciprocal boolean. Each side only receives clank hitlag/rebound and same-group victim
+    suppression when its own `(int)HitCapsule.damage - x3CC < (int)other.damage` branch runs.
+    `HitCapsule.damage` is the already-produced collision damage after stale/smash scaling, so a
+    staled Shine can suppress BODY through its side's clank branch while the higher-damage attack
+    receives no ReboundStop;
   - clank geometry is allowed to run before replay-reconstructed BODY victim rings prefilter the
     pair. HHG:8674 proves a stale BODY ring can otherwise mask a live AttackDash/AttackHi3 clank,
     while FSP:467 protects the degenerate enable-edge point-capsule side; this is a

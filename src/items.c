@@ -9,15 +9,18 @@
 #include "anim_frame.h"
 #include "anim_pose.h"
 #include "anim_timebase.h"
-#include "combat.h"
-#include "common_params.h"
 #include "char_params.h"
+#include "combat.h"
+#include "combat_geom.h"
+#include "common_params.h"
 #include "hit_elements.h"
 #include "hitboxes_tables.h"
 #include "hitlist.h"
 #include "item_article_params.h"
 #include "item_common_params.h"
 #include "laser_params.h"
+#include "hurtcaps_tables.h"
+#include "motion_state_owners.h"
 #include "move_tables.h"
 #include "msl_math.h"
 #include "mtx34.h"
@@ -1621,6 +1624,273 @@ static inline uint8_t item_swept_sphere_capsule_overlap_amount(
   return 1;
 }
 
+static inline void item_lbcoll_80006e58_closest_points(float p0x, float p0y, float p0z, float p1x,
+                                                       float p1y, float p1z, float q0x, float q0y,
+                                                       float q0z, float q1x, float q1y, float q1z,
+                                                       float* out_px, float* out_py, float* out_pz,
+                                                       float* out_qx, float* out_qy, float* out_qz,
+                                                       float* out_world_dist) {
+  const float ux = p1x - p0x;
+  const float uy = p1y - p0y;
+  const float uz = p1z - p0z;
+  const float vx = q1x - q0x;
+  const float vy = q1y - q0y;
+  const float vz = q1z - q0z;
+  const float wx = p0x - q0x;
+  const float wy = p0y - q0y;
+  const float wz = p0z - q0z;
+  const float a = msl_dot3(ux, uy, uz, ux, uy, uz);
+  const float b = msl_dot3(ux, uy, uz, vx, vy, vz);
+  const float c = msl_dot3(vx, vy, vz, vx, vy, vz);
+  const float d = msl_dot3(ux, uy, uz, wx, wy, wz);
+  const float e = msl_dot3(vx, vy, vz, wx, wy, wz);
+  const float denom = a * c - b * b;
+  const float eps_hi = 1.0e-5f;
+  const float eps_lo = -1.0e-5f;
+  float s = 0.0f;
+  float t = 0.0f;
+
+  // This intentionally follows lbColl_80006E58's endpoint fallback order instead of the generic
+  // closest-segment helper: the source routine can select a different endpoint pair, and that pair
+  // feeds the local-matrix radius scalar that writes HitCapsule.coll_distance.
+  // refs/melee/src/melee/lb/lbcollision.c::lbColl_80006E58
+  if (c < eps_hi && c > eps_lo) {
+    if (!(a < eps_hi && a > eps_lo)) {
+      s = -d / a;
+      if (s > 1.0f) {
+        s = 1.0f;
+      } else if (s < 0.0f) {
+        s = 0.0f;
+      }
+    }
+  } else if (denom < eps_hi && denom > eps_lo) {
+    const float mid_x = q0x + 0.5f * vx;
+    const float mid_y = q0y + 0.5f * vy;
+    const float mid_z = q0z + 0.5f * vz;
+    const float d0 = msl_len2_3(p0x - mid_x, p0y - mid_y, p0z - mid_z);
+    const float d1 = msl_len2_3(p1x - mid_x, p1y - mid_y, p1z - mid_z);
+    s = (d0 < d1) ? 0.0f : 1.0f;
+    const float px = (s == 0.0f) ? p0x : p1x;
+    const float py = (s == 0.0f) ? p0y : p1y;
+    const float pz = (s == 0.0f) ? p0z : p1z;
+    const float q_to_p_x = q0x - px;
+    const float q_to_p_y = q0y - py;
+    const float q_to_p_z = q0z - pz;
+    t = -msl_dot3(vx, vy, vz, q_to_p_x, q_to_p_y, q_to_p_z) / c;
+    if (t > 1.0f) {
+      t = 1.0f;
+    } else if (t < 0.0f) {
+      t = 0.0f;
+    }
+  } else {
+    s = ((b * e) - (c * d)) / denom;
+    t = ((a * e) - (b * d)) / denom;
+    if (s > 1.0f || s < 0.0f || t > 1.0f || t < 0.0f) {
+      float s_candidate = 0.0f;
+      float t_candidate = 0.0f;
+      float first_d2 = 0.0f;
+      float second_d2 = 0.0f;
+      if (s < 0.0f) {
+        s_candidate = 0.0f;
+        combat_point_segment_dist2(p0x, p0y, p0z, q0x, q0y, q0z, q1x, q1y, q1z, &first_d2,
+                                   &t_candidate);
+      } else {
+        s_candidate = 1.0f;
+        combat_point_segment_dist2(p1x, p1y, p1z, q0x, q0y, q0z, q1x, q1y, q1z, &first_d2,
+                                   &t_candidate);
+      }
+      float s_candidate_2 = 0.0f;
+      float t_candidate_2 = 0.0f;
+      if (t < 0.0f) {
+        t_candidate_2 = 0.0f;
+        combat_point_segment_dist2(q0x, q0y, q0z, p0x, p0y, p0z, p1x, p1y, p1z, &second_d2,
+                                   &s_candidate_2);
+      } else {
+        t_candidate_2 = 1.0f;
+        combat_point_segment_dist2(q1x, q1y, q1z, p0x, p0y, p0z, p1x, p1y, p1z, &second_d2,
+                                   &s_candidate_2);
+      }
+      if (first_d2 < second_d2) {
+        s = s_candidate;
+        t = t_candidate;
+      } else {
+        s = s_candidate_2;
+        t = t_candidate_2;
+      }
+    }
+  }
+
+  const float px = p0x + s * ux;
+  const float py = p0y + s * uy;
+  const float pz = p0z + s * uz;
+  const float qx = q0x + t * vx;
+  const float qy = q0y + t * vy;
+  const float qz = q0z + t * vz;
+  if (out_px) {
+    *out_px = px;
+  }
+  if (out_py) {
+    *out_py = py;
+  }
+  if (out_pz) {
+    *out_pz = pz;
+  }
+  if (out_qx) {
+    *out_qx = qx;
+  }
+  if (out_qy) {
+    *out_qy = qy;
+  }
+  if (out_qz) {
+    *out_qz = qz;
+  }
+  if (out_world_dist) {
+    const float dx = px - qx;
+    const float dy = py - qy;
+    const float dz = pz - qz;
+    const float d2 = msl_len2_3(dx, dy, dz);
+    *out_world_dist = (d2 > 0.0f) ? sqrtf(d2) : 0.0f;
+  }
+}
+
+static inline uint8_t item_laser_body_lbcoll_matrix_radius_overlap(
+    const MslBatch* batch, int bi, int defender, float sx0, float sy0, float sx1, float sy1,
+    float sr, int cap_i, uint8_t* out_hurt_height, float* out_overlap_amount,
+    uint8_t* out_evaluated) {
+  if (out_overlap_amount) {
+    *out_overlap_amount = 0.0f;
+  }
+  if (out_evaluated) {
+    *out_evaluated = 0u;
+  }
+  if (batch == NULL || !(sr > 0.0f)) {
+    return 0u;
+  }
+  const size_t d_idx = msl_idx_player(bi, defender);
+  const uint8_t cap_count = batch->state.hurtcap_count[d_idx];
+  if (cap_i < 0 || cap_i >= (int)cap_count) {
+    return 0u;
+  }
+  const size_t hi = idx_hurtcap(bi, defender, cap_i);
+  if (!batch->state.hurtcap_enabled[hi]) {
+    return 0u;
+  }
+
+  const uint8_t char_id = batch->state.char_id[d_idx];
+  const MslHurtCap* caps = NULL;
+  uint16_t cap_count_u16 = 0u;
+  if (hurtcaps_get(char_id, &caps, &cap_count_u16) != 0 || caps == NULL ||
+      (uint16_t)cap_i >= cap_count_u16) {
+    return 0u;
+  }
+  const MslHurtCap* cap = &caps[cap_i];
+
+  uint16_t msid = 0u;
+  const uint32_t anim_u32 = batch->state.animation_index[d_idx];
+  const uint16_t action_id = batch->state.action_id[d_idx];
+  if (anim_u32 > 0xFFFFu) {
+    if (action_id != (uint16_t)MSL_ACT_GUARD) {
+      return 0u;
+    }
+    msid = (uint16_t)MSL_SM_GUARD;
+  } else {
+    msid = (uint16_t)anim_u32;
+  }
+
+  const float anim_frame_f32 = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[d_idx]);
+  const uint16_t frame = msl_anim_frame_floor_u16(anim_frame_f32);
+  const float pose_sample_frame =
+      msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_LANDING_AIR) ? anim_frame_f32
+                                                                             : (float)frame;
+
+  float m[12];
+  if (anim_pose_get_collision_matrix_f32(batch, d_idx, msid, pose_sample_frame, cap->bone_part_id,
+                                         m) != 0) {
+    return 0u;
+  }
+  if (out_evaluated) {
+    *out_evaluated = 1u;
+  }
+
+  const MslCharParams* chp = msl_char_params(char_id);
+  const float model_scaling =
+      (chp != NULL && isfinite(chp->model_scaling) && chp->model_scaling > 0.0f)
+          ? chp->model_scaling
+          : 1.0f;
+  const float model_scale = batch->state.fighter_scale_y[d_idx] * model_scaling;
+  if (!(model_scale > 0.0f)) {
+    return 0u;
+  }
+
+  const float ax = batch->state.hurtcap_a_x[hi];
+  const float ay = batch->state.hurtcap_a_y[hi];
+  const float az = batch->state.hurtcap_a_z[hi];
+  const float bx = batch->state.hurtcap_b_x[hi];
+  const float by = batch->state.hurtcap_b_y[hi];
+  const float bz = batch->state.hurtcap_b_z[hi];
+
+  float world_dist = 0.0f;
+  float hit_cp_x = 0.0f;
+  float hit_cp_y = 0.0f;
+  float hit_cp_z = 0.0f;
+  float hurt_cp_x = 0.0f;
+  float hurt_cp_y = 0.0f;
+  float hurt_cp_z = 0.0f;
+  item_lbcoll_80006e58_closest_points(sx0, sy0, 0.0f, sx1, sy1, 0.0f, ax, ay, az, bx, by, bz,
+                                      &hit_cp_x, &hit_cp_y, &hit_cp_z, &hurt_cp_x, &hurt_cp_y,
+                                      &hurt_cp_z, &world_dist);
+
+  const float facing_dir = batch->state.facing[d_idx] ? 1.0f : -1.0f;
+  const float pos_x = batch->state.pos_x[d_idx];
+  const float pos_y = batch->state.pos_y[d_idx];
+  const float pos_z = batch->state.pos_z[d_idx];
+
+  const float hit_rel_x = hit_cp_x - pos_x;
+  const float hit_rel_y = hit_cp_y - pos_y;
+  const float hit_rel_z = hit_cp_z - pos_z;
+  const float hurt_rel_x = hurt_cp_x - pos_x;
+  const float hurt_rel_y = hurt_cp_y - pos_y;
+  const float hurt_rel_z = hurt_cp_z - pos_z;
+
+  const float hit_pose_x = -facing_dir * hit_rel_z;
+  const float hit_pose_y = hit_rel_y;
+  const float hit_pose_z = facing_dir * hit_rel_x;
+  const float hurt_pose_x = -facing_dir * hurt_rel_z;
+  const float hurt_pose_y = hurt_rel_y;
+  const float hurt_pose_z = facing_dir * hurt_rel_x;
+
+  float hit_local_x = 0.0f, hit_local_y = 0.0f, hit_local_z = 0.0f;
+  float hurt_local_x = 0.0f, hurt_local_y = 0.0f, hurt_local_z = 0.0f;
+  if (!msl_mtx34_inverse_point(m, hit_pose_x / model_scale, hit_pose_y / model_scale,
+                               hit_pose_z / model_scale, &hit_local_x, &hit_local_y,
+                               &hit_local_z) ||
+      !msl_mtx34_inverse_point(m, hurt_pose_x / model_scale, hurt_pose_y / model_scale,
+                               hurt_pose_z / model_scale, &hurt_local_x, &hurt_local_y,
+                               &hurt_local_z)) {
+    return 0u;
+  }
+
+  const float local_dx = hit_local_x - hurt_local_x;
+  const float local_dy = hit_local_y - hurt_local_y;
+  const float local_dz = hit_local_z - hurt_local_z;
+  const float local_dist = sqrtf(local_dx * local_dx + local_dy * local_dy + local_dz * local_dz);
+  float hurt_radius_world_equiv = cap->scale;
+  if (local_dist > 1.0e-8f && world_dist > 0.0f) {
+    hurt_radius_world_equiv = cap->scale * (world_dist / local_dist);
+  }
+  const float overlap_amount = sr + hurt_radius_world_equiv - world_dist;
+  if (out_overlap_amount) {
+    *out_overlap_amount = overlap_amount;
+  }
+  if (overlap_amount <= 0.0f) {
+    return 0u;
+  }
+  if (out_hurt_height) {
+    *out_hurt_height = batch->state.hurtcap_height[hi];
+  }
+  return 1u;
+}
+
 static inline uint8_t item_sphere_sphere_intersects_2d(float ax, float ay, float ar, float bx,
                                                        float by, float br) {
   const float dx = ax - bx;
@@ -1800,6 +2070,67 @@ static inline uint8_t laser_grounded_body_uses_lbcoll_hurt_radius(const MslBatch
   return 1u;
 }
 
+static inline uint8_t laser_body_uses_exact_lbcoll_hitcapsule_sweep(
+    const MslBatch* batch, size_t d_idx, uint8_t laser_state, float laser_age_frames,
+    uint16_t item_type, uint8_t body_shield_adjacent, uint8_t flatten_body_hurt_z) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  if (laser_state != 0u ||
+      (item_type_is_falco_laser(item_type) == 0u && item_type_is_fox_laser(item_type) == 0u) ||
+      !(laser_age_frames > 1.0f)) {
+    return 0u;
+  }
+  if (body_shield_adjacent != 0u || flatten_body_hurt_z != 0u ||
+      batch->state.hurtbox_state[d_idx] != 0u) {
+    return 0u;
+  }
+  // Source owner for ordinary blaster BODY:
+  // - it_8027137C advances item HitCapsule state by copying x4C into x58, then sampling the
+  //   current JObj endpoint into x4C.
+  // - ftColl_8007925C calls lbColl_8000805C on that x58->x4C segment for every fighter hurtcap.
+  // - ftColl_80077C60 consumes HitCapsule.coll_distance after lbColl_80006E58 and routes
+  //   `coll_distance < p_ftCommonData->x7A8` to item phantom/tip-log instead of full BODY damage.
+  // This is callback/data-owned, not an action-row sweep list.
+  // refs/melee/src/melee/it/itcoll.c::it_8027137C
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077C60}
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+  return 1u;
+}
+
+static inline uint8_t laser_exact_lbcoll_body_contact_admits_candidate(
+    const MslBatch* batch, size_t d_idx, const MslCommonParams* common, uint8_t hurt_height,
+    float overlap_amount, float laser_prev_scale_z, float laser_scale_z) {
+  if (!(overlap_amount > 0.0f)) {
+    return 0u;
+  }
+  if (common != NULL && overlap_amount <= common->phantom_overlap_max_x7a8) {
+    return 1u;
+  }
+  if (batch != NULL && hurt_height < (uint8_t)2u &&
+      fabsf(laser_scale_z - laser_prev_scale_z) > 1.0e-5f &&
+      batch->state.seed_prev_action_id[d_idx] == (uint16_t)MSL_ACT_LANDING &&
+      ((batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_TURN &&
+        batch->state.action_frame[d_idx] == 1) ||
+       (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_DASH &&
+        batch->state.action_frame[d_idx] == 1))) {
+    // Landing -> Turn/Dash first-frame low/mid item-HitCapsule phase guard:
+    // Dolphin primitive probe `reports/triage/item11_dolphin_lbcoll_dsg671/` shows vanilla does
+    // not accept the low-cap Falco-laser BODY contact across the fresh Turn/Dash handoff after
+    // Landing while the item HitCapsule scale is still changing; stable-scale DCC 7573 hits on the
+    // same action handoff, so the guard is the item HitCapsule x58/x4C scale-propagation phase, not
+    // the action id alone. Keep high/head exact contacts and tiny phantom overlaps live.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Anim
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_Anim
+    return 0u;
+  }
+  // Source `lbColl_8000805C` forwards the HurtHeight class (`x43_b2`) for the candidate capsule,
+  // but the exact matrix/local-radius owner applies to the ordinary BODY loop across heights.
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077C60
+  return 1u;
+}
+
 static inline uint8_t laser_airborne_body_uses_flattened_hurt_z(const MslBatch* batch, size_t d_idx,
                                                                 uint8_t laser_state,
                                                                 uint16_t item_type,
@@ -1871,15 +2202,15 @@ static inline uint8_t item_try_guard_fresh_shield_center(const MslBatch* batch, 
           : 0u;
   const uint8_t fresh_locomotion_guard_reflect_entry =
       item_is_fresh_guardreflect_shield_center_source(batch, d_idx, prev_action_id);
-  const uint8_t guard_on_command_bit_birth_item_pose =
-      (action_id == (uint16_t)MSL_ACT_GUARD_ON &&
+  const uint8_t guard_command_bit_birth_item_pose =
+      ((action_id == (uint16_t)MSL_ACT_GUARD_ON || action_id == (uint16_t)MSL_ACT_GUARD) &&
        batch->state.animation_index[d_idx] == 0xFFFFFFFFu && batch->state.action_frame[d_idx] < 0 &&
-       prev_action_id == (uint16_t)MSL_ACT_GUARD_ON && laser_age_frames <= 1.0f &&
+       prev_action_id == action_id && laser_age_frames <= 1.0f &&
        (batch->state.state_flags[(d_idx * 5u) + 0u] & 0x40u) != 0u)
           ? 1u
           : 0u;
   if (!fresh_guard_on_entry && !fresh_locomotion_guard_reflect_entry &&
-      !guard_on_command_bit_birth_item_pose) {
+      !guard_command_bit_birth_item_pose) {
     return 0u;
   }
 
@@ -1898,9 +2229,9 @@ static inline uint8_t item_try_guard_fresh_shield_center(const MslBatch* batch, 
   // shield-contact drift.
   // Restrict this to callback-local item shield precedence only; broadening the current-pose bridge
   // to seeded frozen guard snapshots regresses replay-real shield-hit rows.
-  // Steady GuardOn rows with raw fp+0x2218_b1 share the current-pose lane only on the newborn
-  // SpecialN article pass: by the next item callback, Item_80269DC8 shield contact uses the normal
-  // settled Guard bubble and can enter GuardSetOff.
+  // Steady GuardOn/Guard rows with raw fp+0x2218_b1 share the current-pose command lane only on the
+  // newborn SpecialN article pass: by the next item callback, Item_80269DC8 shield contact uses the
+  // normal settled Guard bubble and can enter GuardSetOff.
   // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (fp+0x2218 byte)
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_{Wait,Walk,Turn,Dash,Run,RunDirect,Squat,SquatWait,SquatRv,Landing}.c
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
@@ -4472,10 +4803,9 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         //   authored-offset sweeps over-admit GAT/QGD carried-shot controls.
         // - Lasers in the frame-start `fp+0x2218_b5` behavior lane use the authored HitCapsule
         //   offsets for the immediate shield callback only while the owner is still in the SpecialN
-        //   loop callback phase that owns the shot. Settled Guard rows can still carry x2218_b1
-        //   (`0x40`) and remain on this source item-HitCapsule path; x2218_b2/b0 command and
-        //   interrupt lanes (`0x20`/`0x80`) stay on the settled point sample. GuardOn entry rows
-        //   have their separate command-pose gate above.
+        //   loop callback phase that owns the shot. The x2218_b2 and x2218_b0 command/interrupt
+        //   lanes stay on the settled point sample; GuardOn entry rows have their separate
+        //   command-pose gate above.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
         //   ftCo_GuardOn_Anim,ftCo_800928CC,ftCo_Guard_IASA}
         // refs/melee/src/melee/it/items/itfoxlaser.c::{
@@ -5284,6 +5614,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       uint8_t hit_hurt_height = 0;
       uint8_t hit = 0;
       uint8_t hit_hb_id = 0xFFu;
+      uint8_t hit_from_exact_lbcoll = 0u;
       float body_overlap_amount = 0.0f;
       // Deterministic order: offsets (script order) then capsule slots.
       const uint8_t off_n =
@@ -5311,6 +5642,10 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       // refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
       const uint8_t flatten_body_hurt_z = laser_airborne_body_uses_flattened_hurt_z(
           batch, d_idx, laser_state, batch->state.item_type[ii], batch->state.item_attack_id[ii]);
+      const uint8_t use_exact_lbcoll_hitcapsule_sweep =
+          laser_body_uses_exact_lbcoll_hitcapsule_sweep(batch, d_idx, laser_state, laser_age_frames,
+                                                        batch->state.item_type[ii],
+                                                        body_shield_adjacent, flatten_body_hurt_z);
       // Laser BODY overlap parity:
       // - Decomp computes collision over projectile travel in-frame (prev_pos -> cur_pos), so a
       //   current-point-only probe can miss replay-causal same-frame hits.
@@ -5355,6 +5690,25 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         const float sx = x + (ux * s1);
         const float sy = y + (uy * s1);
         for (uint8_t ci = 0; ci < cap_n; ci++) {
+          if (use_exact_lbcoll_hitcapsule_sweep != 0u) {
+            uint8_t exact_evaluated = 0u;
+            if (item_laser_body_lbcoll_matrix_radius_overlap(
+                    batch, bi, def, sx0, sy0, sx, sy, sr, (int)ci, &hit_hurt_height,
+                    &body_overlap_amount, &exact_evaluated) &&
+                laser_exact_lbcoll_body_contact_admits_candidate(
+                    batch, d_idx, common, hit_hurt_height, body_overlap_amount, laser_prev_scale_z,
+                    laser_scale_z)) {
+              hit = 1;
+              hit_from_exact_lbcoll = 1u;
+              hit_hb_id = oi;
+              break;
+            }
+            if (exact_evaluated != 0u) {
+              if (use_swept_body == 0u && use_frame_start_lightshield_body_sample == 0u) {
+                continue;
+              }
+            }
+          }
           const float hx0 = (use_swept_body || use_frame_start_lightshield_body_sample) ? sx0 : sx;
           const float hy0 = (use_swept_body || use_frame_start_lightshield_body_sample) ? sy0 : sy;
           const float hx1 = use_frame_start_lightshield_body_sample ? sx0 : sx;
@@ -5372,6 +5726,25 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       if (!hit && cap_n > 0 && off_n == 0) {
         if (hitlist_allows_item_hitbox_fighter(batch, bi, it, 0, def, def_iid)) {
           for (uint8_t ci = 0; ci < cap_n; ci++) {
+            if (use_exact_lbcoll_hitcapsule_sweep != 0u) {
+              uint8_t exact_evaluated = 0u;
+              if (item_laser_body_lbcoll_matrix_radius_overlap(
+                      batch, bi, def, x0, y0, x, y, sr, (int)ci, &hit_hurt_height,
+                      &body_overlap_amount, &exact_evaluated) &&
+                  laser_exact_lbcoll_body_contact_admits_candidate(
+                      batch, d_idx, common, hit_hurt_height, body_overlap_amount,
+                      laser_prev_scale_z, laser_scale_z)) {
+                hit = 1;
+                hit_from_exact_lbcoll = 1u;
+                hit_hb_id = 0u;
+                break;
+              }
+              if (exact_evaluated != 0u) {
+                if (use_swept_body == 0u) {
+                  continue;
+                }
+              }
+            }
             const float hx0 = use_swept_body ? x0 : x;
             const float hy0 = use_swept_body ? y0 : y;
             if (item_swept_sphere_capsule_overlap_amount(
@@ -5648,15 +6021,18 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         break;
       }
 
-      if (laser_state == 0u && common != NULL && batch->state.on_ground[d_idx] == 0u &&
+      if (laser_state == 0u && common != NULL &&
+          (batch->state.on_ground[d_idx] == 0u || hit_from_exact_lbcoll != 0u) &&
           batch->state.hitstun[d_idx] == 0u && body_overlap_amount > 0.0f &&
           body_overlap_amount <= common->phantom_overlap_max_x7a8) {
         // Item phantom/tip-log BODY contact:
-        // - ftColl_80076ED8 routes small positive `coll_distance < p_ftCommonData->x7A8` overlaps
-        //   through checkTipLog into victim hitlag only, without percent/KB/damage-state entry.
+        // - ftColl_80077C60 routes small positive `coll_distance < p_ftCommonData->x7A8` item
+        //   overlaps through checkTipLog into victim hitlag only, without percent/KB/damage-state
+        //   entry. Grounded BODY takes this path only when the exact lbColl HitCapsule sweep above
+        //   produced the coll_distance owner; proxy overlaps stay on the old airborne-only lane.
         // - Item hitbox damage is normalized by it_80272460 before hitlag calculation; the projectile
         //   itself persists because no damage/dealt callback consumes it on this lane.
-        // refs/melee/src/melee/ft/ftcoll.c::{checkTipLog,inlineB1,ftColl_80076ED8}
+        // refs/melee/src/melee/ft/ftcoll.c::{checkTipLog,inlineB1,ftColl_80077C60}
         // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
         // refs/melee/src/melee/it/itcoll.c::it_80272460
         float dmg = lp->damage;

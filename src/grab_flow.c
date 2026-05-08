@@ -902,6 +902,27 @@ static inline uint8_t catch_input_lr_held(const MslBatch* batch, const MslCommon
   return (trig >= c->trigger_deadzone) ? 1u : 0u;
 }
 
+static inline uint8_t guardreflect_no_submotion_x18_blocks_guard_catch(const MslBatch* batch,
+                                                                       size_t idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  // No-submotion GuardReflect catch-input boundary:
+  // Slippi can serialize GuardReflect as an action-frame-negative, no-submotion snapshot while
+  // `ftCo_80093BC0` still has a live x14 ReflectDesc timer to tick before IASA. The GuardReflect
+  // IASA table is real, but this frozen snapshot shape does not expose a fresh Catch_CheckInput
+  // A+LR consume until x14 has expired. Keep the suppression scoped to Catch_CheckInput only;
+  // collision-time grabbable capsules and x18-only GuardReflect owners remain separately modeled.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardReflect_Anim,ftCo_80093BC0,ftCo_GuardReflect_IASA}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Catch_CheckInput
+  return (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
+          batch->state.action_frame[idx] <= -2 && batch->state.animation_index[idx] == UINT32_MAX &&
+          batch->state.guard_reflect_timer_x14_seed[idx] > 0u &&
+          batch->state.guard_reflect_timer_x18[idx] > 0u)
+             ? 1u
+             : 0u;
+}
+
 static inline void enter_catch_motion_state(MslBatch* batch, size_t idx, uint16_t action_id,
                                             uint32_t submotion) {
   if (batch == NULL) {
@@ -933,6 +954,9 @@ uint8_t grab_flow_try_enter_catch_from_iasa(MslBatch* batch, const MslCommonPara
   // - On success calls ftCo_800D8C54(..., ftCo_MS_Catch=0xD4).
   // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::ftCo_Catch_CheckInput
   // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::ftCo_800D8C54
+  if (guardreflect_no_submotion_x18_blocks_guard_catch(batch, idx)) {
+    return 0u;
+  }
   if (!catch_input_a_pressed_edge(batch, idx)) {
     return 0u;
   }

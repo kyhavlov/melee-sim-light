@@ -56,12 +56,18 @@ Source/generation:
   when the previous visible action is not Guard-family. In that case seed-history stamps the
   replay-proven per-HitCapsule lanes on the following frozen hitlag rows because
   `ftColl_80076CBC` has already admitted the shield branch and written `HitCapsule.victims_1`.
+- Hitbox-vs-hitbox clank contact may be proven from `ftColl_8007699C`-shaped swept HitCapsule
+  overlap plus replay-visible clank hitlag on the affected side. In that case seed-history stamps
+  the same type-3 `victims_1` entries that `inlineA0`/`inlineA1` write through
+  `lbColl_80008688`, so one-step reseeds into the frozen hitlag tail do not re-clank.
 
 Decomp contract:
 - `refs/melee/src/melee/ft/ftcoll.c::ftColl_800768A0` copies/clears HitCapsule state on enable or
   hit-group edges.
 - `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076CBC,ftColl_80076ED8}` register accepted shield
   and BODY contacts into active same-group HitCapsules.
+- `refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007699C,inlineA0,inlineA1}` register accepted
+  hitbox-vs-hitbox clank contact into active same-group HitCapsules with insertion type 3.
 - `refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}` gate and insert
   `victims_1` entries.
 
@@ -755,8 +761,11 @@ Characters (Fox/Falco):
       classes cover `ftCo_AttackAir_*`, `ftCo_AttackS3_*`, `ftCo_AttackS4_*`,
       `ftCo_Damage*`, `ftCo_DownDamage*`, `ftCo_DamageFly*`, `ftCo_FlyReflect*`,
       `ftCo_LandingAir*`, `ftCo_Jump*`, `ftCo_JumpAerial*`, `ftCo_Fall*`,
-      `ftCo_Landing*`, `ftFx_SpecialHi*`, and the grounded stage-object carry collision owner
-      class used by Wait/Walk/Run/Squat/Landing/LandingAir/grounded attack/guard plus
+      `ftCo_Landing*`, `ftFx_SpecialHi*`, the grounded `ftCo_Attack*` callback family (excluding
+      `ftCo_AttackAir*`), the grounded-locomotion IASA class whose callbacks route to
+      `ftCo_80091A4C` before GuardOn frame-start x672 consumption, and the grounded stage-object
+      carry collision owner class used by
+      Wait/Walk/Run/Squat/Landing/LandingAir/grounded attack/guard plus
       `ftCo_Down_Coll`, `ftCo_DownAttack_Coll`, and `ftCo_PassiveStand_Coll`. They are callback-owner
       classifications only; procedural behavior such as edge-snap branch results, ledge
       eligibility, or hidden descriptor provenance is not inferred by this artifact.
@@ -766,9 +775,9 @@ Characters (Fox/Falco):
     - `refs/melee/src/melee/ft/ftmotionstates.c::ftData_MotionStateList`
     - `refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c::ftFx_Init_MotionStateTable`
     - `refs/melee/src/melee/ft/chara/ftFalco/ftFc_Init.c::ftFc_Init_MotionStateTable`
-  - Binary layout: `MSLMSO01` v2 (little-endian, dense tables indexed by GALE01 `action_id`)
+  - Binary layout: `MSLMSO01` v4 (little-endian, dense tables indexed by GALE01 `action_id`)
     - `u8  magic[8] = "MSLMSO01"`
-    - `u32 version = 2`
+    - `u32 version = 4`
     - `u16 action_count`
     - `u16 reserved = 0`
     - `u32` offsets for `submotion_id`, `x4_flags`, `motion_state_word`, `anim_cb_id`,
@@ -780,7 +789,7 @@ Characters (Fox/Falco):
     - `u32 class_bits[action_count]`
   - `data/motion_state/owners/callback_symbols.json` is review/debug metadata mapping callback IDs
     back to decomp symbol names. Runtime loads only the binary tables.
-  - Stale/non-v2 `MSLMSO01` tables must be rejected; regenerate with
+  - Stale/non-v4 `MSLMSO01` tables must be rejected; regenerate with
     `uv run python -m tools.extraction.extract_motion_state_owners --melee_decomp refs/melee --out_dir data/motion_state/owners --chars fox,falco`.
 - `data/stages/bin/{grnla,grnba,griz,grps,grst,grop}.bin` (stage collision/metadata; decomp-first, compact binary)
   - Purpose:
@@ -855,7 +864,11 @@ Characters (Fox/Falco):
     - `stage_fod_platform_velocity_f32[2]`, `stage_fod_platform_velocity_valid_u8[2]`
     - `floor_skip_segment_id_u16[4]`, `floor_skip_segment_valid_u8[4]` for hidden
       `CollData.floor_skip` carry when a replay-prefix platform pass-through episode is already
-      active.
+      active. For FoD height-transform `AttackAirN`/`AttackAirLw`, native preprocessing serializes
+      only prefix-causal skip frames: the down-held platform contact, down-held/root-clear carry
+      while the hidden platform skip remains live, and the first hard-floor crossing that consumes
+      that owner. Intermediate airborne frames stay unseeded unless one of those source handoff
+      boundaries is visible.
     - `cliff_ledge_floor_segment_id_u16[4]` for the hidden Cliff/CollData ledge floor owner on
       immediate cliff-exit prefixes. Native seed preprocessing reconstructs it only from
       prefix-visible Cliff action + facing + generated MSLSTG01 ledge floor metadata, carries it

@@ -65,6 +65,7 @@ enum {
 static MslFrameWindow g_cmd0_by_char_attackair[256][MSL_ATTACKAIR_KIND_COUNT];
 static MslFrameWindow g_allow_interrupt_by_char_attackair[256][MSL_ATTACKAIR_KIND_COUNT];
 static MslFrameWindow g_second_create_by_char_attackair[256][MSL_ATTACKAIR_KIND_COUNT];
+static MslFrameWindow g_last_create_by_char_attackair[256][MSL_ATTACKAIR_KIND_COUNT];
 enum { MSL_GROUNDED_ATTACK_KIND_COUNT = 10 };
 enum {
   MSL_GROUNDED_ATTACK_KIND_11 = 0,
@@ -614,6 +615,40 @@ static int parse_entry_second_create_hitbox_phase(const MslScriptTableRaw* table
   return 0;
 }
 
+static int parse_entry_last_create_hitbox_phase(const MslScriptTableRaw* table,
+                                                const MslScriptEntryRaw* entry,
+                                                MslFrameWindow* out) {
+  if (table == NULL || entry == NULL || out == NULL) {
+    return -1;
+  }
+  int last_create_frame = -1;
+  int last_seen_create_frame = -1;
+  for (uint32_t i = 0; i < entry->event_count; i++) {
+    const MslScriptEventRaw* ev = script_entry_event(table, entry, i);
+    if (ev != NULL && ev->kind_id == MSL_SCRIPT_EVENT_CREATE_HITBOX &&
+        (int)ev->frame != last_seen_create_frame) {
+      last_seen_create_frame = (int)ev->frame;
+      last_create_frame = (int)ev->frame;
+    }
+  }
+  if (last_create_frame < 0) {
+    return -1;
+  }
+  int clear_frame = INT16_MAX;
+  for (uint32_t i = 0; i < entry->event_count; i++) {
+    const MslScriptEventRaw* ev = script_entry_event(table, entry, i);
+    if (ev != NULL && ev->kind_id == MSL_SCRIPT_EVENT_CLEAR_HITBOXES &&
+        (int)ev->frame >= last_create_frame) {
+      clear_frame = (int)ev->frame;
+      break;
+    }
+  }
+  out->start_af = (int16_t)last_create_frame;
+  out->end_af = (int16_t)clear_frame;
+  out->loaded = 1;
+  return 0;
+}
+
 static int parse_entry_start_smash_charge_info(const MslScriptTableRaw* table,
                                                const MslScriptEntryRaw* entry,
                                                MslSmashChargeInfo* out) {
@@ -975,6 +1010,15 @@ static void load_if_second_create_hitbox_phase(const MslScriptTableRaw* table, u
   }
 }
 
+static void load_if_last_create_hitbox_phase(const MslScriptTableRaw* table, uint16_t msid,
+                                             MslFrameWindow* dst) {
+  const MslScriptEntryRaw* entry = script_table_raw_find_entry(table, msid);
+  MslFrameWindow win = {0};
+  if (entry != NULL && parse_entry_last_create_hitbox_phase(table, entry, &win) == 0) {
+    *dst = win;
+  }
+}
+
 static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id) {
   if (data_dir == NULL || rel_path == NULL) {
     return -1;
@@ -1022,6 +1066,19 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
   load_if_second_create_hitbox_phase(
       &script, (uint16_t)MSL_SM_ATTACK_AIR_LW,
       &g_second_create_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_LW]);
+
+  load_if_last_create_hitbox_phase(&script, (uint16_t)MSL_SM_ATTACK_AIR_N,
+                                   &g_last_create_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_N]);
+  load_if_last_create_hitbox_phase(&script, (uint16_t)MSL_SM_ATTACK_AIR_F,
+                                   &g_last_create_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_F]);
+  load_if_last_create_hitbox_phase(&script, (uint16_t)MSL_SM_ATTACK_AIR_B,
+                                   &g_last_create_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_B]);
+  load_if_last_create_hitbox_phase(
+      &script, (uint16_t)MSL_SM_ATTACK_AIR_HI,
+      &g_last_create_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_HI]);
+  load_if_last_create_hitbox_phase(
+      &script, (uint16_t)MSL_SM_ATTACK_AIR_LW,
+      &g_last_create_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_LW]);
 
   static const uint16_t grounded_msids[MSL_GROUNDED_ATTACK_KIND_COUNT] = {
       (uint16_t)MSL_SM_ATTACK_11,   (uint16_t)MSL_SM_ATTACK_12, (uint16_t)MSL_SM_ATTACK_13,
@@ -1287,6 +1344,23 @@ uint8_t move_tables_attackair_second_create_hitbox_phase(uint8_t char_id,
   }
 
   const MslFrameWindow win = g_second_create_by_char_attackair[char_id][(size_t)kind];
+  if (!win.loaded) {
+    return 0;
+  }
+
+  return (cur_anim_frame_f32 >= (float)win.start_af && cur_anim_frame_f32 < (float)win.end_af) ? 1
+                                                                                               : 0;
+}
+
+uint8_t move_tables_attackair_last_create_hitbox_phase(uint8_t char_id,
+                                                       uint16_t attackair_action_id,
+                                                       float cur_anim_frame_f32) {
+  const int kind = attackair_kind_from_action(attackair_action_id);
+  if (kind < 0) {
+    return 0;
+  }
+
+  const MslFrameWindow win = g_last_create_by_char_attackair[char_id][(size_t)kind];
   if (!win.loaded) {
     return 0;
   }

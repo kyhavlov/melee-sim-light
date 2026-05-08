@@ -274,6 +274,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->turn_x8 = (int8_t*)alloc_aligned_64(sizeof(int8_t) * bp);
   state->lr_press_timer = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->x672_input_timer = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->x672_input_timer_frame_start = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->x673 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->x674 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->x675 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
@@ -584,17 +585,17 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->fallspecial_xc || !state->fallspecial_landing_lag ||
       !state->landing_fallspecial_allow_interrupt || !state->turn_has_turned ||
       !state->turn_frames_to_turn || !state->walk_use_raw_input_once || !state->turn_x8 ||
-      !state->lr_press_timer || !state->x672_input_timer || !state->x673 || !state->x674 ||
-      !state->x675 || !state->x676_x || !state->x2228_b7 || !state->x677_y || !state->x678 ||
-      !state->x679_x || !state->x67A_y || !state->x67B || !state->x67C || !state->x67D ||
-      !state->x67E || !state->x680 || !state->x681 || !state->x682 || !state->x683 ||
-      !state->x684 || !state->ucf_padbuf_index || !state->ucf_padbuf_sdrop_up_frames ||
-      !state->ucf_padbuf_stick_x || !state->ucf_padbuf_stick_y || !state->percent ||
-      !state->percent_temp || !state->phantom_damage_pending_x1898 ||
-      !state->phantom_damage_timer_x189c || !state->phantom_damage_source_port ||
-      !state->damage_time_since_hit_x18ac || !state->dmg_x2225_b7 || !state->dmg_x2224_b2 ||
-      !state->shield_hp || !state->hitlag || !state->hitlag_pre_timer ||
-      !state->hitlag_started_frame || !state->damage_allow_sdi ||
+      !state->lr_press_timer || !state->x672_input_timer || !state->x672_input_timer_frame_start ||
+      !state->x673 || !state->x674 || !state->x675 || !state->x676_x || !state->x2228_b7 ||
+      !state->x677_y || !state->x678 || !state->x679_x || !state->x67A_y || !state->x67B ||
+      !state->x67C || !state->x67D || !state->x67E || !state->x680 || !state->x681 ||
+      !state->x682 || !state->x683 || !state->x684 || !state->ucf_padbuf_index ||
+      !state->ucf_padbuf_sdrop_up_frames || !state->ucf_padbuf_stick_x ||
+      !state->ucf_padbuf_stick_y || !state->percent || !state->percent_temp ||
+      !state->phantom_damage_pending_x1898 || !state->phantom_damage_timer_x189c ||
+      !state->phantom_damage_source_port || !state->damage_time_since_hit_x18ac ||
+      !state->dmg_x2225_b7 || !state->dmg_x2224_b2 || !state->shield_hp || !state->hitlag ||
+      !state->hitlag_pre_timer || !state->hitlag_started_frame || !state->damage_allow_sdi ||
       !state->damage_hitlag_floorhug_latch || !state->damage_hitlag_downward_sdi_consumed ||
       !state->hitstun || !state->damage_jump_buffer_x14 || !state->damage_post_hitlag_cb_kind ||
       !state->attacker_shield_ground_kb_vel || !state->l_cancel || !state->hurtbox_state ||
@@ -1019,6 +1020,7 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->turn_x8);
   alloc_free(state->lr_press_timer);
   alloc_free(state->x672_input_timer);
+  alloc_free(state->x672_input_timer_frame_start);
   alloc_free(state->x673);
   alloc_free(state->x674);
   alloc_free(state->x675);

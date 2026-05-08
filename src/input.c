@@ -341,6 +341,7 @@ static inline void opening_input_lock_apply_Fighter_UnkInitLoad_80068914_Inner1_
   batch->state.tilt_timer_x[idx] = 0xFEu;
   batch->state.tilt_timer_y[idx] = 0xFEu;
   batch->state.x672_input_timer[idx] = 0xFEu;
+  batch->state.x672_input_timer_frame_start[idx] = 0xFEu;
   batch->state.x673[idx] = 0xFEu;
   batch->state.x674[idx] = 0xFEu;
   batch->state.x675[idx] = 0xFEu;
@@ -641,6 +642,11 @@ int input_apply(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev_in
       batch->state.lr_press_timer[idx] =
           press_timer_u8_update_edge(batch->state.lr_press_timer[idx], pressed_lr_lane);
 
+      // GuardReflect admission helpers read x672 from the callback-visible frame-start phase while
+      // input_apply owns the persistent counter update for the next frame.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093694
+      // refs/melee/src/melee/ft/fighter.c::Fighter_Spaghetti_8006AD10
+      batch->state.x672_input_timer_frame_start[idx] = batch->state.x672_input_timer[idx];
       batch->state.x672_input_timer[idx] =
           x672_trigger_timer_update(batch->state.x672_input_timer[idx], trig, prev_trig,
                                     com->powershield_reflect_trigger_min);

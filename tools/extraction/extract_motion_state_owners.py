@@ -17,7 +17,7 @@ from tools.extraction.extract_attack_id_move_id import (
 
 
 FORMAT_MAGIC = b"MSLMSO01"
-FORMAT_VERSION = 2
+FORMAT_VERSION = 4
 U16_ABSENT = 0xFFFF
 
 CLASS_ATTACK_AIR = 1 << 0
@@ -37,6 +37,8 @@ CLASS_DAMAGE_COMMON_COLL = 1 << 13
 CLASS_DAMAGE_FLY_COLL = 1 << 14
 CLASS_DAMAGE_FALL_COLL = 1 << 15
 CLASS_GROUNDED_STAGE_OBJECT_CARRY_COLL = 1 << 16
+CLASS_GROUNDED_ATTACK = 1 << 17
+CLASS_GUARDON_FRAME_START_X672_IASA = 1 << 18
 
 
 @dataclass(frozen=True)
@@ -115,10 +117,29 @@ def _parse_submotion_ids(melee_decomp_root: Path) -> dict[str, int]:
 
 def _class_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
     bits = 0
+    iasa_cb = callbacks[1]
     phys_cb = callbacks[2]
     coll_cb = callbacks[3]
     if any(cb.startswith("ftCo_AttackAir") for cb in callbacks):
         bits |= CLASS_ATTACK_AIR
+    if any(cb.startswith("ftCo_Attack") and not cb.startswith("ftCo_AttackAir") for cb in callbacks):
+        bits |= CLASS_GROUNDED_ATTACK
+    if iasa_cb in {
+        "ftCo_Wait_IASA",
+        "ftCo_Walk_IASA",
+        "ftCo_Turn_IASA",
+        "ftCo_Dash_IASA",
+        "ftCo_Run_IASA",
+        "ftCo_RunDirect_IASA",
+        "ftCo_Squat_IASA",
+        "ftCo_SquatWait_IASA",
+        "ftCo_SquatRv_IASA",
+    }:
+        # These grounded locomotion IASA callbacks reach ftCo_80091A4C on the source path that can
+        # expose a fresh GuardOn row before a delayed digital L/R edge is consumed by GuardOn_IASA.
+        # Other ftCo_80091A4C callers (Landing/Ottotto/grounded attack/appeal) have separate
+        # selector ordering and keep the ordinary current x672 timer.
+        bits |= CLASS_GUARDON_FRAME_START_X672_IASA
     if any(cb.startswith("ftCo_AttackS3") for cb in callbacks):
         bits |= CLASS_ATTACK_S3
     if any(cb.startswith("ftCo_AttackS4") for cb in callbacks):
@@ -378,6 +399,8 @@ def _write_manifest(out_path: Path, callback_ids: dict[str, int]) -> None:
         "DAMAGE_FLY_COLL": CLASS_DAMAGE_FLY_COLL,
         "DAMAGE_FALL_COLL": CLASS_DAMAGE_FALL_COLL,
         "GROUNDED_STAGE_OBJECT_CARRY_COLL": CLASS_GROUNDED_STAGE_OBJECT_CARRY_COLL,
+        "GROUNDED_ATTACK": CLASS_GROUNDED_ATTACK,
+        "GUARDON_FRAME_START_X672_IASA": CLASS_GUARDON_FRAME_START_X672_IASA,
     }
     symbols = [{"id": int(i), "symbol": sym} for sym, i in sorted(callback_ids.items(), key=lambda kv: kv[1])]
     payload = {

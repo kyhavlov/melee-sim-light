@@ -48,6 +48,13 @@ uint8_t move_tables_attackair_second_create_hitbox_phase(uint8_t char_id,
                                                          uint16_t attackair_action_id,
                                                          float cur_anim_frame_f32);
 
+// Returns whether an AttackAir* script is inside its final create_hitbox band before the next
+// clear_hitboxes command. This is sourced from MSLFTSC1 create/clear events and covers late
+// multi-hit bands such as Fox AttackAirN without hardcoded action-frame thresholds.
+uint8_t move_tables_attackair_last_create_hitbox_phase(uint8_t char_id,
+                                                       uint16_t attackair_action_id,
+                                                       float cur_anim_frame_f32);
+
 // Returns whether grounded Attack* can be interrupted (IASA) at the given cur_anim_frame.
 //
 // Decomp:

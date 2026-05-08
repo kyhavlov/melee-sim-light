@@ -99,6 +99,17 @@ def _dataset_path(root: Path, dataset: str) -> Path:
     for path in candidates:
         if path.exists():
             return path
+    for parent in (
+        root / "datasets/aggregate_recent/replays/validation",
+        root / "datasets/aggregate_recent/replays/debug",
+        root / "datasets/fox_falco_fd_ucf084_recent/replays/validation",
+        root / "datasets/fox_falco_fd_ucf084_recent/replays/debug",
+    ):
+        if not parent.exists():
+            continue
+        matches = sorted(parent.glob(f"*/{dataset}"))
+        if matches:
+            return matches[0]
     raise FileNotFoundError(dataset)
 
 
@@ -179,6 +190,8 @@ def audit(family_tsv: Path, out_dir: Path, *, root: Path) -> None:
         dataset_name = str(row["dataset"])
         record = int(row["record"])
         subject = str(row["subject"])
+        if not subject.startswith("p"):
+            continue
         victim = int(subject[1:])
         attacker_guess = 1 - victim
         ds_path = _dataset_path(root, dataset_name)

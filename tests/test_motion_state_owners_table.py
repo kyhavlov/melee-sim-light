@@ -20,6 +20,8 @@ from tools.extraction.extract_motion_state_owners import (
     CLASS_DAMAGE_FALL_COLL,
     CLASS_DAMAGE_FLY,
     CLASS_DAMAGE_FLY_COLL,
+    CLASS_GUARDON_FRAME_START_X672_IASA,
+    CLASS_GROUNDED_ATTACK,
     CLASS_GROUNDED_STAGE_OBJECT_CARRY_COLL,
     CLASS_LANDING_AIR,
     CLASS_LANDING_AIR_COLL,
@@ -188,6 +190,20 @@ def test_motion_state_class_equivalence_for_migrated_predicates() -> None:
         0x00C8,
         0x00C9,
     }
+    grounded_attack = {*range(0x002C, 0x0041)}
+    guardon_frame_start_x672_iasa = {
+        0x000E,
+        0x000F,
+        0x0010,
+        0x0011,
+        0x0012,
+        0x0014,
+        0x0015,
+        0x0016,
+        0x0027,
+        0x0028,
+        0x0029,
+    }
 
     for action_id in range(max_action):
         assert both_have(action_id, CLASS_ATTACK_AIR) == (action_id in attack_air)
@@ -208,6 +224,10 @@ def test_motion_state_class_equivalence_for_migrated_predicates() -> None:
         assert both_have(action_id, CLASS_DAMAGE_FALL_COLL) == (action_id in damagefall_coll)
         assert both_have(action_id, CLASS_GROUNDED_STAGE_OBJECT_CARRY_COLL) == (
             action_id in grounded_stage_object_carry
+        )
+        assert both_have(action_id, CLASS_GROUNDED_ATTACK) == (action_id in grounded_attack)
+        assert both_have(action_id, CLASS_GUARDON_FRAME_START_X672_IASA) == (
+            action_id in guardon_frame_start_x672_iasa
         )
 
 

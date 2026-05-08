@@ -113,6 +113,46 @@ _AGG = "datasets/aggregate_recent/replays/validation/aggregate_recent"
             note="EscapeF frame-20 Falco laser uses lbColl hurt-radius BODY lane",
         ),
         _Case(
+            dataset_rel="datasets/aggregate_recent/replays/validation/"
+            "yoshis_story_recent/CheeryNumbMonkey.msl",
+            record=184,
+            player=0,
+            seed_action=41,  # LandingAirN
+            ref_action=75,  # DamageHi1
+            expect_item_clear=True,
+            note="LandingAirN high-cap laser uses exact lbColl matrix-radius lane",
+        ),
+        _Case(
+            dataset_rel="datasets/aggregate_recent/replays/validation/"
+            "yoshis_story_recent/CheeryNumbMonkey.msl",
+            record=250,
+            player=0,
+            seed_action=60,  # AttackS4
+            ref_action=75,  # DamageHi1
+            expect_item_clear=True,
+            note="AttackS4 high-cap laser uses exact lbColl matrix-radius lane",
+        ),
+        _Case(
+            dataset_rel="datasets/aggregate_recent/replays/validation/"
+            "yoshis_story_recent/CheeryNumbMonkey.msl",
+            record=4719,
+            player=0,
+            seed_action=72,  # LandingAirB
+            ref_action=75,  # DamageHi1
+            expect_item_clear=True,
+            note="LandingAirB high-cap laser uses exact lbColl matrix-radius lane",
+        ),
+        _Case(
+            dataset_rel="datasets/aggregate_recent/replays/validation/"
+            "fountain_of_dreams_recent/ElatedWearyTermite.msl",
+            record=4216,
+            player=0,
+            seed_action=72,  # LandingAirB
+            ref_action=75,  # DamageHi1
+            expect_item_clear=True,
+            note="FoD LandingAirB high-cap laser uses exact lbColl matrix-radius lane",
+        ),
+        _Case(
             dataset_rel=f"{_AGG}/DistinctCaringCobra.msl",
             record=7618,
             player=0,
@@ -168,6 +208,16 @@ _AGG = "datasets/aggregate_recent/replays/validation/aggregate_recent"
             expect_item_clear=False,
             note="adjacent EscapeF frame before lbColl radius lane keeps laser alive",
         ),
+        _Case(
+            dataset_rel="datasets/aggregate_recent/replays/validation/"
+            "pokemon_stadium_recent/CornyDelayedOkapi.msl",
+            record=112,
+            player=0,
+            seed_action=20,  # Dash
+            ref_action=20,
+            expect_item_clear=False,
+            note="tiny exact lbColl overlap routes to grounded phantom without BODY damage",
+        ),
     ],
     ids=lambda case: case.note,
 )
@@ -176,8 +226,12 @@ def test_grounded_laser_body_segment_rows(case: _Case) -> None:
     # - itFoxlaser_UnkMotion1_Phys snapshots previous projectile position.
     # - it_8029C4D4 dispatches fighter collision over the previous-to-current projectile segment.
     # - it_80272460 applies item-vs-fighter BODY damage/despawn once contact is accepted.
+    # - ftColl_80077C60 consumes lbColl_80006E58's matrix/local coll_distance to split full BODY
+    #   damage from phantom/tip-log overlap.
     # refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Phys,it_8029C4D4}
     # refs/melee/src/melee/it/itcoll.c::it_80272460
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80077C60
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
     root = Path(__file__).resolve().parents[1]
     dataset_path = root / case.dataset_rel
     if not dataset_path.exists():

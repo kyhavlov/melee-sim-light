@@ -6,6 +6,7 @@ import json
 import struct
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -25,7 +26,20 @@ from tools.slippi.known_data_artifacts import (
     stage_metadata_path_for_stage_id,
     yoshi_shyguy_metadata,
 )
+from tools.slippi.motion_state_owners import read_callback_manifest, read_mslmso01_v1
 from tools.slippi.rollback import finalized_frame_indices
+
+
+MSL_MS_CLASS_ATTACK_AIR = 1 << 0
+
+# Keep preprocessing geometry constants named with the same source owners as the runtime mpcoll
+# path. These are used only to reconstruct hidden CollData.floor_skip from prefix-causal replay
+# rows; they are not gameplay tolerances.
+FOD_SKIP_ECB_VERTICAL_UNIT = 1.0
+FOD_TRANSFORMED_PLATFORM_SKIP_LOOKUP_SLOP = 2.0 * FOD_SKIP_ECB_VERTICAL_UNIT
+FOD_FLOOR_X_END_CLAMP = 0.1
+FOD_FLOOR_Y_BIAS = 0.0001
+FOD_STAGE_LINE_DX_EPSILON = 1.0e-6
 
 
 @dataclass(frozen=True)
@@ -77,6 +91,33 @@ def _load_stage_segments_for_seed(*, stage_id: int, data_root: Path) -> list[dic
             }
         )
     return out
+
+
+@functools.cache
+def _common_motion_state_owner_actions(
+    data_root_text: str, *, class_bit: int = 0, coll_callbacks: tuple[str, ...] = ()
+) -> frozenset[int]:
+    """Return action ids whose generated Fox/Falco MSLMSO01 owner rows agree.
+
+    Seed preprocessing receives action ids before runtime has loaded C owner helpers. Use the same
+    generated MotionState owner artifact here instead of local replay-shaped action-id lists.
+    """
+
+    owner_dir = Path(data_root_text) / "motion_state" / "owners"
+    manifest = read_callback_manifest(owner_dir / "callback_symbols.json")
+    wanted_callbacks = set(coll_callbacks)
+    common: set[int] | None = None
+    for ch in ("fox", "falco"):
+        owners = read_mslmso01_v1(owner_dir / f"{ch}.bin")
+        selected: set[int] = set()
+        for action_id in range(len(owners.submotion_id)):
+            if class_bit and (int(owners.class_bits[action_id]) & int(class_bit)) == 0:
+                continue
+            if wanted_callbacks and manifest.get(int(owners.coll_cb_id[action_id])) not in wanted_callbacks:
+                continue
+            selected.add(action_id)
+        common = selected if common is None else common & selected
+    return frozenset(common or ())
 
 
 def _stage_ledge_floor_ids(*, stage_id: int, data_root: Path) -> tuple[int, int]:
@@ -209,8 +250,18 @@ def _derive_fod_floor_skip_segments(
     if not transforms:
         return out
 
-    active_skip_actions = {0x0041, 0x0042, 0x0043, 0x0044, 0x0045, 0x00EC}
-    jump_skip_actions = {0x0019, 0x001A}
+    data_root_path = Path(data_root)
+    data_root_text = str(data_root_path)
+    active_attackair_actions = _common_motion_state_owner_actions(
+        data_root_text, class_bit=MSL_MS_CLASS_ATTACK_AIR
+    )
+    escapeair_actions = _common_motion_state_owner_actions(
+        data_root_text, coll_callbacks=("ftCo_EscapeAir_Coll",)
+    )
+    active_skip_actions = active_attackair_actions | escapeair_actions
+    jump_skip_actions = _common_motion_state_owner_actions(
+        data_root_text, coll_callbacks=("ftCo_Jump_Coll",)
+    )
     active_down_threshold_i8 = int(np.floor(float(platform_air_land_stick_y_threshold) * 127.0))
     jump_down_threshold_i8 = int(np.floor(float(platform_air_land_stick_y_threshold) * 80.0))
     active_skip = [0xFFFF] * players
@@ -218,11 +269,83 @@ def _derive_fod_floor_skip_segments(
     max_line_id = max((int(rec.line_id) for rec in transforms), default=-1)
     transform_platform_by_line = np.full(max_line_id + 1, -1, dtype=np.int16)
     transform_height_coeff_by_line = np.zeros(max_line_id + 1, dtype=np.float32)
+    transform_record_by_line = {}
     for rec in transforms:
         line_id = int(rec.line_id)
         transform_platform_by_line[line_id] = np.int16(int(rec.platform_id))
         transform_height_coeff_by_line[line_id] = np.float32(float(rec.height_coeff))
+        transform_record_by_line[line_id] = rec
     jump_skip_root_clearance = float(max(0, int(floor_skip_frames)))
+    # Source `mpColl_LoadECB_inline` tightens the desired ECB envelope with midpoint +/- 1.0f.
+    # Reconstructing hidden CollData.floor_skip from post-frame rows has only root/current samples,
+    # so the transformed-platform lookup uses bounded ECB-unit envelopes instead of row ids.
+    transformed_platform_skip_lookup_slop = FOD_TRANSFORMED_PLATFORM_SKIP_LOOKUP_SLOP
+    # Active AttackAir/EscapeAir transformed-platform skip carry is reconstructed from the same
+    # source floor-skip lifetime: p_ftCommonData->x470 frames plus the one-ECB-unit tightened
+    # mpColl_LoadECB_inline envelope used by the runtime owner.
+    # refs/melee/src/melee/ft/types.h::ftCommonData::x470
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpColl_80044628_Floor}
+    active_skip_platform_root_clearance = jump_skip_root_clearance + FOD_SKIP_ECB_VERTICAL_UNIT
+    hard_floor_segments = [
+        seg
+        for seg in stage.segments
+        if int(seg.kind_id) == 0 and bool(seg.fighter_solid) and not bool(int(seg.flags) & 1)
+    ]
+    hard_floor_root_crossing = np.zeros((n_samples, players), dtype=np.bool_)
+    if hard_floor_segments:
+        # Prefix-causal mirror of the runtime mpColl first-crossing boundary after a live FoD
+        # platform-skip owner. This is vectorized over all frames/slots so preprocessing does not run
+        # a per-row Python floor-candidate search in the seed loop. Static hard floors are generated
+        # MSLSTG01 segments; dynamic transformed platforms stay on the separate owner above.
+        # refs/melee/src/melee/mp/mplib.c::{mpCheckFloor,mpLib_8004DD90_Floor}
+        # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor}
+        root_x = np.asarray(pos_x_f32, dtype=np.float32)
+        root_y0 = np.asarray(pos_y_f32, dtype=np.float32)
+        root_y1 = (
+            root_y0
+            + np.asarray(speed_y_self_f32, dtype=np.float32)
+            + np.asarray(speed_y_attack_f32, dtype=np.float32)
+        )
+        descending = root_y1 < root_y0
+        for seg in hard_floor_segments:
+            x0 = float(seg.x0)
+            x1 = float(seg.x1)
+            dx = x1 - x0
+            if abs(dx) <= FOD_STAGE_LINE_DX_EPSILON:
+                continue
+            lo_x = min(x0, x1) - FOD_FLOOR_X_END_CLAMP
+            hi_x = max(x0, x1) + FOD_FLOOR_X_END_CLAMP
+            in_x = (root_x >= lo_x) & (root_x <= hi_x)
+            t = (root_x - x0) / dx
+            world_y = float(seg.y0) + ((float(seg.y1) - float(seg.y0)) * t)
+            hard_floor_root_crossing |= (
+                descending & in_x & (root_y0 > (world_y + FOD_FLOOR_Y_BIAS)) & (root_y1 < world_y)
+            )
+
+    def active_skip_platform_root_clear(fi: int, slot: int, line_id: int) -> bool:
+        if line_id < 0 or line_id > max_line_id:
+            return False
+        pid = int(transform_platform_by_line[line_id])
+        if pid < 0 or not int(platform_height_valid_u8[fi, pid]):
+            return False
+        rec = transform_record_by_line.get(line_id)
+        if rec is None:
+            return False
+        if float(pos_y_f32[fi, slot]) <= 0.0:
+            return False
+        x = float(pos_x_f32[fi, slot])
+        if x < min(float(rec.x0), float(rec.x1)) - active_skip_platform_root_clearance:
+            return False
+        if x > max(float(rec.x0), float(rec.x1)) + active_skip_platform_root_clearance:
+            return False
+        world_y = float(platform_height_f32[fi, pid]) * float(
+            transform_height_coeff_by_line[line_id]
+        )
+        return float(pos_y_f32[fi, slot]) < world_y - active_skip_platform_root_clearance
+
+    def transform_endpoint_contact(fi: int, slot: int, rec: Any) -> bool:
+        x = float(pos_x_f32[fi, slot])
+        return min(abs(x - float(rec.x0)), abs(x - float(rec.x1))) <= active_skip_platform_root_clearance
 
     for fi in range(n_samples):
         for slot in range(players):
@@ -246,10 +369,23 @@ def _derive_fod_floor_skip_segments(
                 )
             if active_skip[slot] != 0xFFFF:
                 if action_id in active_skip_actions:
-                    if not down_held:
+                    # Source CollData.floor_skip is not exposed by Slippi. Once a down-held
+                    # transformed-platform pass-through has selected the hidden floor-skip line,
+                    # keep that hidden owner internally until the airborne callback leaves the active
+                    # aerial family, lands, or consumes the first hard-floor crossing after the moving
+                    # platform pass. Do not serialize it on every intermediate aerial frame: direct
+                    # reseeds only need the skip on the initial transformed-platform pass and on the
+                    # later hard-floor crossing frame that consumes the source owner.
+                    # refs/melee/src/melee/mp/mpcoll.c::{
+                    #   mpColl_800471F8,mpColl_80044628_Floor,mpUpdateFloorSkip}
+                    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
+                    line_id = int(active_skip[slot])
+                    if down_held and active_skip_platform_root_clear(fi, slot, line_id):
+                        out[fi, slot] = active_skip[slot]
+                    elif bool(hard_floor_root_crossing[fi, slot]):
+                        out[fi, slot] = active_skip[slot]
                         active_skip[slot] = 0xFFFF
-                        continue
-                    out[fi, slot] = active_skip[slot]
+                        active_skip_remaining[slot] = 0
                     continue
                 line_id = int(active_skip[slot])
                 pid = (
@@ -290,17 +426,23 @@ def _derive_fod_floor_skip_segments(
                 pid = int(rec.platform_id)
                 if not int(platform_height_valid_u8[fi, pid]):
                     continue
-                if x < min(float(rec.x0), float(rec.x1)) - 2.0:
+                if x < min(float(rec.x0), float(rec.x1)) - transformed_platform_skip_lookup_slop:
                     continue
-                if x > max(float(rec.x0), float(rec.x1)) + 2.0:
+                if x > max(float(rec.x0), float(rec.x1)) + transformed_platform_skip_lookup_slop:
                     continue
                 world_y = float(platform_height_f32[fi, pid]) * float(rec.height_coeff)
-                if y0 >= world_y - 2.0 and y1 <= world_y + 2.0:
+                if (
+                    y0 >= world_y - transformed_platform_skip_lookup_slop
+                    and y1 <= world_y + transformed_platform_skip_lookup_slop
+                ):
                     line_id = int(rec.line_id)
                     active_skip[slot] = line_id
                     active_skip_remaining[slot] = int(floor_skip_frames)
                     if action_id in active_skip_actions:
-                        out[fi, slot] = active_skip[slot]
+                        if action_id not in active_attackair_actions or transform_endpoint_contact(
+                            fi, slot, rec
+                        ):
+                            out[fi, slot] = active_skip[slot]
                     else:
                         if float(pos_y_f32[fi, slot]) <= world_y - jump_skip_root_clearance:
                             out[fi, slot] = active_skip[slot]
@@ -1498,17 +1640,18 @@ def _derive_source_clear_terminal_phase_seed_lane(
     terminal_followup_cmd0_on_by_char_action: dict[tuple[int, int], int],
     terminal_followup_cmd0_off_by_char_action: dict[tuple[int, int], int],
 ) -> np.ndarray:
-    """Derive one-step terminal phase bridge for source-owner clear.
+    """Derive one-step terminal phase lane for source-owner clear/parking.
 
     Decomp ownership:
     - Fighter_8006A360 owns x18C8 countdown + terminal source-owner clear in proc-prio-1.
+      Some terminal callback contexts park the source owner while retiring the countdown.
     - Slippi `last_hit_by` mirrors `dmg.x18C4_source_ply` snapshots.
     refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
     refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
 
     Seed representation:
     - 0: default terminal-clear behavior at `source_clear_timer_x18c8 == 1`.
-    - 1: defer that terminal clear for one frame on this row.
+    - 1: park source owner and retire the countdown on this row.
 
     Producer policy (narrow, replay-causal):
     - only on terminal timer rows (`t == 1`) under !x221F_b3,

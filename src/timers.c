@@ -32,6 +32,61 @@ static inline uint8_t timers_match_flow_dead_action_defers_source_clear(uint16_t
   }
 }
 
+static inline uint8_t timers_source_clear_downed_recovery_terminal_parks_owner(
+    const MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  const uint16_t action = batch->state.action_id[idx];
+  switch (action) {
+    case MSL_ACT_DOWN_BOUND_U:
+    case MSL_ACT_DOWN_WAIT_U:
+    case MSL_ACT_DOWN_STAND_U:
+    case MSL_ACT_DOWN_ATTACK_U:
+    case MSL_ACT_DOWN_FOWARD_U:
+    case MSL_ACT_DOWN_BACK_U:
+    case MSL_ACT_DOWN_BOUND_D:
+    case MSL_ACT_DOWN_WAIT_D:
+    case MSL_ACT_DOWN_STAND_D:
+    case MSL_ACT_DOWN_ATTACK_D:
+    case MSL_ACT_DOWN_FOWARD_D:
+    case MSL_ACT_DOWN_BACK_D:
+    case MSL_ACT_PASSIVE:
+    case MSL_ACT_PASSIVE_STAND_F:
+    case MSL_ACT_PASSIVE_STAND_B:
+      break;
+    default:
+      return 0u;
+  }
+
+  if (batch->state.source_clear_owner_set_phase[idx] == 0u || batch->state.combo_count[idx] == 0u ||
+      batch->state.last_attack_landed[idx] == 0u || batch->state.hitlag[idx] != 0u ||
+      batch->state.hitstun[idx] != 0u) {
+    return 0u;
+  }
+
+  const uint16_t prev_action = batch->state.prev_action_id[idx];
+  const int16_t prev_frame = batch->state.prev_action_frame[idx];
+  const int16_t action_frame = batch->state.action_frame[idx];
+  if (prev_action != action || prev_frame < 0 || action_frame != (int16_t)(prev_frame + 1)) {
+    return 0u;
+  }
+
+  // Decomp owner:
+  // - Fighter_ChangeMotionState starts x18C8 on grounded x9_b1 motions.
+  // - Fighter_8006A360 decrements that live timer in the main fighter proc.
+  // - The downed/passive recovery family (`ftCo_Down*` / `ftCo_Passive*`) can inherit an already
+  //   live x18C8 run from an earlier grounded motion; when the replay-visible terminal row is
+  //   reached, source ownership parks with the timer inactive rather than clearing during rollout.
+  // This mirrors the one-step terminal phase producer for the same decomp callback family without
+  // keying on a dataset, replay, or row id.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_ChangeMotionState,Fighter_8006A360}
+  // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_Passive.c,ftCo_PassiveStand.c}
+  // refs/melee/src/melee/ft/ftmotionstates.c (Down*/Passive* callback rows)
+  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
+  return 1u;
+}
+
 void timers_update(MslBatch* batch) {
   if (batch == NULL) {
     return;
@@ -696,14 +751,16 @@ void timers_update_post_anim(MslBatch* batch) {
       // refs/melee/src/melee/ft/ftcoll.c::ftColl_800764DC
       // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
       //
-      // Seed bridge: some terminal x18C8 rows keep source owner one additional post-frame due to
-      // callback-owned ownership phase ordering inside Fighter_8006A360. Defer terminal clear
-      // exactly one frame when producer marked this row.
+      // Some terminal x18C8 rows park source owner with the timer inactive due to callback-owned
+      // ownership phase ordering inside Fighter_8006A360. The seed lane preserves one-step rows;
+      // the downed/passive predicate reconstructs the same owner in free rollout.
       // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
       if (t == 1u && batch->state.hitstun[idx] != 0u) {
         continue;
       }
-      if (t == 1u && batch->state.source_clear_terminal_phase[idx] != 0u) {
+      if (t == 1u && (batch->state.source_clear_terminal_phase[idx] != 0u ||
+                      timers_source_clear_downed_recovery_terminal_parks_owner(batch, idx))) {
+        batch->state.source_clear_timer_x18c8[idx] = 0u;
         continue;
       }
       t--;

@@ -261,11 +261,10 @@ def test_nonfd_action_entry_platform_pass_replay_real_locks(case: _ActionCase) -
 
 @pytest.mark.integration
 def test_fod_attackairn_downheld_transformed_platform_hitbox_phase_rollout_stays_airborne() -> None:
-    # Replay-real rollout lock for sustained AttackAirN on FoD's transformed platforms: p0 holds
-    # down through the right moving platform after the replay-prefix seed lane reports the hidden
-    # platform skip. Runtime does not fabricate CollData.floor_skip for AttackAir_Coll; it must keep
-    # the same late transformed-platform floor contact airborne through the source AttackAir_Coll
-    # floor owner instead of publishing LandingAirN early.
+    # Replay-real rollout lock for sustained AttackAirN after a FoD transformed-platform
+    # pass-through: p0 holds down through the right moving platform, carries the hidden floor-skip
+    # owner, then crosses the connected hard-floor edge. Runtime must keep that first hard-floor
+    # crossing airborne and consume the skip so the following callback can enter LandingAirN.
     # data/motion_state/owners/{fox,falco}.bin (MSLMSO01 coll_cb_by_action)
     # data/stages/bin/griz.bin (MSLSTG01 height platform transforms)
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
@@ -276,18 +275,20 @@ def test_fod_attackairn_downheld_transformed_platform_hitbox_phase_rollout_stays
         pytest.skip(f"missing local dataset: {_BASE / 'fountain_of_dreams_recent/ParallelTemptingElk.msl'}")
 
     start = 1663
-    target = 1690
+    target = 1701
     player = 0
 
     ds = read_dataset(str(path))
     if int(ds.samples.shape[0]) <= target:
         pytest.skip(f"dataset too short for record {target}: {path}")
     assert int(ds.samples[start]["seed_t"]["action_id"][1]) == 212  # Catch selector row.
-    assert int(ds.samples[target]["seed_t"]["action_frame"][player]) == 11
+    assert int(ds.samples[target]["seed_t"]["action_frame"][player]) == 18
     assert int(ds.samples[target]["ref_t1"]["action_id"][player]) == 65  # AttackAirN.
     assert int(ds.samples[target]["ref_t1"]["on_ground"][player]) == 0
     assert int(ds.samples[target]["seed_t"]["floor_skip_segment_valid_u8"][player]) == 1
     assert int(ds.samples[target]["seed_t"]["floor_skip_segment_id_u16"][player]) == 1
+    assert int(ds.samples[target + 1]["seed_t"]["floor_skip_segment_valid_u8"][player]) == 0
+    assert int(ds.samples[target + 1]["ref_t1"]["action_id"][player]) == 70  # LandingAirN.
 
     out, ref = _rollout_record(path, start_record=start, target_record=target)
 
@@ -301,9 +302,9 @@ def test_fod_attackairn_downheld_transformed_platform_hitbox_phase_rollout_stays
 @pytest.mark.integration
 def test_fod_attackair_floor_skip_still_lands_on_nonplatform_floor_rollout() -> None:
     # Negative replay-real boundary for the same AttackAir_Coll transformed-platform family: EWT p0
-    # has a replay-prefix floor-skip lane during AttackAirB, but the callback-visible floor
-    # projection reaches a different non-platform floor. The retained N/Lw transformed-platform
-    # owner must not suppress that later hard-floor LandingAirB handoff.
+    # has an AttackAirB hard-floor handoff after the transformed-platform pass window. The retained
+    # N/Lw endpoint owner must not serialize or carry a platform floor-skip into this later
+    # non-platform LandingAirB handoff.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor,mpColl_80044838_Floor}
     root = Path(__file__).resolve().parents[1]
@@ -319,7 +320,7 @@ def test_fod_attackair_floor_skip_still_lands_on_nonplatform_floor_rollout() -> 
     if int(ds.samples.shape[0]) <= target:
         pytest.skip(f"dataset too short for record {target}: {path}")
     assert int(ds.samples[target]["seed_t"]["action_id"][player]) == 67  # AttackAirB.
-    assert int(ds.samples[target]["seed_t"]["floor_skip_segment_valid_u8"][player]) == 1
+    assert int(ds.samples[target]["seed_t"]["floor_skip_segment_valid_u8"][player]) == 0
     assert int(ds.samples[target]["ref_t1"]["action_id"][player]) == 72  # LandingAirB.
     assert int(ds.samples[target]["ref_t1"]["on_ground"][player]) == 1
 

@@ -1012,37 +1012,29 @@ static inline void combat_clank_candidate_skip_same_hit_group_all(
   }
 }
 
+static inline void combat_clank_register_same_hit_group(MslBatch* batch, int bi, int attacker,
+                                                        int defender, int hb_id,
+                                                        uint16_t defender_iid) {
+  if (batch == NULL || hb_id < 0 || hb_id >= MSL_MAX_HITBOXES) {
+    return;
+  }
+  const size_t src_i = idx_hitbox(bi, attacker, hb_id);
+  const uint8_t group = hitlist_hit_group_from_u16_7(batch->state.hitbox_u16_7[src_i]);
+  const uint8_t rehit_frames = hitlist_rehit_frames_from_u16_7(batch->state.hitbox_u16_7[src_i]);
+
+  // ftColl_8007699C's inlineA0/inlineA1 route hitbox-vs-hitbox contact through
+  // lbColl_80008688(..., type=3, ...), sharing the victim entry across every active HitCapsule in
+  // the same hit_group. This is persistent HitCapsule state, not just a same-pass BODY skip; it
+  // keeps later hitlag-tail collision passes from re-clanking the same overlapping capsules.
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007699C,inlineA0,inlineA1}
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008688,lbColl_8000ACFC}
+  hitlist_register_fighter_group(batch, bi, attacker, group, defender, defender_iid,
+                                 (int)MSL_LBCOLL_INSERT_FT_HITBOX_CONTACT, rehit_frames);
+}
+
 static inline uint8_t combat_mtx34_inverse_point(const float m[12], float x, float y, float z,
                                                  float* out_x, float* out_y, float* out_z) {
-  if (m == NULL || out_x == NULL || out_y == NULL || out_z == NULL) {
-    return 0u;
-  }
-  const float a00 = m[0], a01 = m[1], a02 = m[2];
-  const float a10 = m[4], a11 = m[5], a12 = m[6];
-  const float a20 = m[8], a21 = m[9], a22 = m[10];
-  const float tx = m[3], ty = m[7], tz = m[11];
-
-  const float c00 = a11 * a22 - a12 * a21;
-  const float c01 = a02 * a21 - a01 * a22;
-  const float c02 = a01 * a12 - a02 * a11;
-  const float c10 = a12 * a20 - a10 * a22;
-  const float c11 = a00 * a22 - a02 * a20;
-  const float c12 = a02 * a10 - a00 * a12;
-  const float c20 = a10 * a21 - a11 * a20;
-  const float c21 = a01 * a20 - a00 * a21;
-  const float c22 = a00 * a11 - a01 * a10;
-  const float det = a00 * c00 + a01 * c10 + a02 * c20;
-  if (!(fabsf(det) > 1.0e-8f)) {
-    return 0u;
-  }
-  const float inv_det = 1.0f / det;
-  const float rx = x - tx;
-  const float ry = y - ty;
-  const float rz = z - tz;
-  *out_x = inv_det * (c00 * rx + c01 * ry + c02 * rz);
-  *out_y = inv_det * (c10 * rx + c11 * ry + c12 * rz);
-  *out_z = inv_det * (c20 * rx + c21 * ry + c22 * rz);
-  return 1u;
+  return (uint8_t)msl_mtx34_inverse_point(m, x, y, z, out_x, out_y, out_z);
 }
 
 static inline uint8_t combat_is_damage_or_firefox_launch_victim_action(uint16_t action_id) {
@@ -6478,65 +6470,90 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
               if (!clank_overlaps) {
                 continue;
               }
-              // Decomp clank confirmation requires reciprocal x3CC comparisons.
+              // Decomp clank confirmation is asymmetric:
+              // - ftColl_8007699C first lets `hit1` contribute clank damage to fp1 when
+              //   `(int)hit1.damage - x3CC < (int)hit0.damage`,
+              // - then returns true when `hit0` contributes clank damage to fp0 under the mirror
+              //   comparison.
+              // The return value is what skips shield/BODY follow-up for this victim HitCapsule.
+              // A high-damage owner hitbox can therefore make the lower-damage victim hitbox
+              // confirm the clank while the owner side receives no clank hitlag/rebound.
               // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007699C
               const int raw0 = (int)d0;
               const int raw1 = (int)d1;
-              if (!(((raw0 - clank_damage_diff_threshold) < raw1) &&
-                    ((raw1 - clank_damage_diff_threshold) < raw0))) {
+              const uint8_t p0_side_clank_damage =
+                  ((raw0 - clank_damage_diff_threshold) < raw1) ? 1u : 0u;
+              const uint8_t p1_side_confirms_clank =
+                  ((raw1 - clank_damage_diff_threshold) < raw0) ? 1u : 0u;
+              if (!p0_side_clank_damage && !p1_side_confirms_clank) {
                 continue;
               }
 
-              did_clank = 1u;
               // ftColl_8007699C registers the clank victim into every active HitCapsule sharing
               // the clanking hit_group (`x4`), via inlineA0/inlineA1 and lbColl_80008688. BODY
               // admission later consults lbColl_8000ACFC, so the whole same-group cluster is
-              // suppressed for the opponent on this collision pass, not only the exact pair that
-              // overlapped in lbColl_80007AFC.
+              // suppressed for the opponent on this collision pass when that side's threshold
+              // branch runs, not only the exact pair that overlapped in lbColl_80007AFC.
               // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007699C,inlineA0,inlineA1}
               // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008688,lbColl_8000ACFC}
-              combat_clank_candidate_skip_same_hit_group_all(batch, bi, p0, p1, hb0,
-                                                             clank_candidate_skip_hb);
-              combat_clank_candidate_skip_same_hit_group_all(batch, bi, p1, p0, hb1,
-                                                             clank_candidate_skip_hb);
-              combat_clank_skip_same_hit_group(batch, bi, p0, p1, hb0, clank_skip_hb);
-              combat_clank_skip_same_hit_group(batch, bi, p1, p0, hb1, clank_skip_hb);
+              if (p0_side_clank_damage) {
+                did_clank = 1u;
+                combat_clank_candidate_skip_same_hit_group_all(batch, bi, p0, p1, hb0,
+                                                               clank_candidate_skip_hb);
+                combat_clank_skip_same_hit_group(batch, bi, p0, p1, hb0, clank_skip_hb);
+                combat_clank_register_same_hit_group(batch, bi, p0, p1, hb0,
+                                                     batch->state.instance_id[p1_idx]);
+              }
+              if (p1_side_confirms_clank) {
+                did_clank = 1u;
+                combat_clank_candidate_skip_same_hit_group_all(batch, bi, p1, p0, hb1,
+                                                               clank_candidate_skip_hb);
+                combat_clank_skip_same_hit_group(batch, bi, p1, p0, hb1, clank_skip_hb);
+                combat_clank_register_same_hit_group(batch, bi, p1, p0, hb1,
+                                                     batch->state.instance_id[p0_idx]);
+              }
               // Electric-vs-electric clank SFX lane consumes HSD_Randi(3) to pick one of three
               // entries in ftColl_803C0C4C.
               // refs/melee/src/melee/ft/ftcoll.c::ftColl_800784B4
               // refs/melee/src/sysdolphin/baselib/random.c::HSD_Randi
-              if (e0 == (uint8_t)MSL_HIT_ELEMENT_ELECTRIC &&
+              if (p1_side_confirms_clank && e0 == (uint8_t)MSL_HIT_ELEMENT_ELECTRIC &&
                   e1 == (uint8_t)MSL_HIT_ELEMENT_ELECTRIC) {
                 (void)combat_rng_consume_randi_site(batch, bi,
                                                     MSL_RNG_SITE_FTCOLL_ELECTRIC_CLANK_SFX, 3);
               }
 
-              const int int0 = combat_get_env_dmg(d0);
-              if (int0 > max_int_dmg[0]) {
-                max_int_dmg[0] = int0;
-              }
-              if ((f0 & (uint16_t)MSL_HITBOX_FLAG_REBOUND) != 0) {
-                want_rebound_stop[0] = 1u;
-                if (int0 > max_rebound_int_dmg[0]) {
-                  max_rebound_int_dmg[0] = int0;
-                  rebound_damage_facing_dir[0] =
-                      combat_clank_damage_facing_dir(batch, p0_idx, p1_idx);
+              if (p0_side_clank_damage) {
+                const int int0 = combat_get_env_dmg(d0);
+                if (int0 > max_int_dmg[0]) {
+                  max_int_dmg[0] = int0;
+                }
+                if ((f0 & (uint16_t)MSL_HITBOX_FLAG_REBOUND) != 0) {
+                  want_rebound_stop[0] = 1u;
+                  if (int0 > max_rebound_int_dmg[0]) {
+                    max_rebound_int_dmg[0] = int0;
+                    rebound_damage_facing_dir[0] =
+                        combat_clank_damage_facing_dir(batch, p0_idx, p1_idx);
+                  }
                 }
               }
 
-              const int int1 = combat_get_env_dmg(d1);
-              if (int1 > max_int_dmg[1]) {
-                max_int_dmg[1] = int1;
-              }
-              if ((f1 & (uint16_t)MSL_HITBOX_FLAG_REBOUND) != 0) {
-                want_rebound_stop[1] = 1u;
-                if (int1 > max_rebound_int_dmg[1]) {
-                  max_rebound_int_dmg[1] = int1;
-                  rebound_damage_facing_dir[1] =
-                      combat_clank_damage_facing_dir(batch, p1_idx, p0_idx);
+              if (p1_side_confirms_clank) {
+                const int int1 = combat_get_env_dmg(d1);
+                if (int1 > max_int_dmg[1]) {
+                  max_int_dmg[1] = int1;
+                }
+                if ((f1 & (uint16_t)MSL_HITBOX_FLAG_REBOUND) != 0) {
+                  want_rebound_stop[1] = 1u;
+                  if (int1 > max_rebound_int_dmg[1]) {
+                    max_rebound_int_dmg[1] = int1;
+                    rebound_damage_facing_dir[1] =
+                        combat_clank_damage_facing_dir(batch, p1_idx, p0_idx);
+                  }
                 }
               }
-              break;
+              if (p1_side_confirms_clank) {
+                break;
+              }
             }
           }
 

@@ -288,8 +288,9 @@ typedef struct MslStateSoA {
   // refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC
   // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
   uint8_t* source_clear_grounded_damage_clear_phase;
-  // Terminal clear-phase bridge for source-owner identity (`dmg.x18C4_source_ply`) on
-  // `source_clear_timer_x18c8 == 1` rows. One-step transient lane produced in dataset tooling.
+  // Terminal source-owner phase for `source_clear_timer_x18c8 == 1` rows. One-step transient lane
+  // produced in dataset tooling; matching runtime owners may also park the source lane while
+  // retiring the countdown.
   // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
   // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
   uint8_t* source_clear_terminal_phase;
@@ -645,6 +646,8 @@ typedef struct MslStateSoA {
   uint8_t* lr_press_timer;  // fp->x67F (refs/melee/src/melee/ft/fighter.c:2078-2086)
   uint8_t*
       x672_input_timer;  // fp->x672_input_timer_counter (refs/melee/src/melee/ft/fighter.c:2020-2050)
+  uint8_t*
+      x672_input_timer_frame_start;  // transient callback-visible x672 before input.c updates it
   // Fighter input counters block: refs/melee/src/melee/ft/fighter.c:1897-2094.
   uint8_t* x673;    // fp->x673
   uint8_t* x674;    // fp->x674

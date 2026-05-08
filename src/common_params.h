@@ -392,7 +392,7 @@ typedef struct MslCommonParams {
   // Clank damage-delta threshold used by ftColl_8007699C:
   // - if ((int)dmg_other - x3CC < (int)dmg_self) side-self applies clank-contact ownership,
   // - full clank-confirm (skip shield/body follow-up on this victim hitbox) occurs when the
-  //   reciprocal check also passes.
+  //   second/source-return side passes; the first side may still fail and receive no clank damage.
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007699C
   // refs/melee/src/melee/ft/types.h (ftCommonData +0x3CC)
   int32_t clank_damage_diff_threshold;  // p_ftCommonData->x3CC

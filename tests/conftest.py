@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 import warnings
@@ -487,6 +488,15 @@ def _ensure_shield_tilt_bins() -> None:
             raise RuntimeError(f"failed to generate required shield tilt bin for tests: {out}")
 
 
+def _motion_state_owner_manifest_v4(path: Path) -> bool:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        version = int(payload.get("version", -1))
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+        return False
+    return payload.get("magic") == "MSLMSO01" and version == 4
+
+
 def _ensure_motion_state_owner_bins() -> None:
     stale = False
     for ch in ("fox", "falco"):
@@ -496,14 +506,14 @@ def _ensure_motion_state_owner_bins() -> None:
                 with out.open("rb") as f:
                     magic = f.read(8)
                     ver = int.from_bytes(f.read(4), "little", signed=False)
-                if magic == b"MSLMSO01" and ver == 2:
+                if magic == b"MSLMSO01" and ver == 4:
                     continue
             except OSError:
                 pass
         stale = True
         break
     manifest = ROOT / "data" / "motion_state" / "owners" / "callback_symbols.json"
-    if stale or not manifest.exists():
+    if stale or not _motion_state_owner_manifest_v4(manifest):
         subprocess.run(
             [
                 sys.executable,
@@ -522,6 +532,8 @@ def _ensure_motion_state_owner_bins() -> None:
         out = ROOT / "data" / "motion_state" / "owners" / f"{ch}.bin"
         if not out.exists():
             raise RuntimeError(f"failed to generate required MotionState owner table: {out}")
+    if not _motion_state_owner_manifest_v4(manifest):
+        raise RuntimeError(f"failed to generate required MotionState owner manifest: {manifest}")
 
 
 def _ensure_known_data_artifacts() -> None:
