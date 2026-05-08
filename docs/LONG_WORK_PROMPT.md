@@ -48,8 +48,6 @@ Process details to keep in mind:
 - Once the owner is validation-clean, save a binary patch snapshot, for example
   `git diff --binary > reports/triage/itemNN_owner_name.patch`, so later review can recover or
   bisect owner-specific changes. Do not treat snapshots as a substitute for the worklog manifest.
-- Validation reports should be generator-produced only, and the worklog should note which retained owner refreshed them.
-- When touching shared files, record hunk ownership in the worklog immediately.
 - Runtime-required generated data must get a data-contract decision immediately:
   - tracked tiny contract files need .gitignore exceptions and guard tests
   - large/local generated artifacts stay ignored with documented regeneration commands
@@ -74,14 +72,9 @@ Prioritization:
 - Before patching a selected disruptive row/cluster, run
   `uv run python -m tools.eval.next_desync_investigation --suite <suite> --datasets-dir datasets`
   and record the packet path in the worklog.
-- Treat high repeated float residuals as first-class signals, especially:
-  - early float divergence before discrete mismatch
-  - repeated same-owner float deltas
-  - float divergence tied to a top rollout/disruptive owner
-  - modelplay-visible float/position/velocity bugs
-- Prefer coherent shared owners over isolated row wins.
-- Prefer decomp/data-backed mechanics and generated-table owner predicates.
-- Stay on a major selected owner until fixed.
+- Treat high repeated float residuals as first-class signals when they precede discrete mismatch,
+  repeat under the same owner, drive rollout disruption, or show up as modelplay-visible
+  position/velocity bugs.
 - When a bridge/proxy/fallback is found, continue through the surrounding owner cluster before
   moving on. A single removed bridge is not enough if the same file/family still has adjacent
   runtime bridge debt.
@@ -89,6 +82,9 @@ Prioritization:
 Investigation rules:
 
 - Treat a mismatch as an entry point, not the patch boundary.
+- Before retaining a fix, translate the motivating mismatch into gameplay terms in the worklog:
+  situation, vanilla-vs-sim behavior, timing, player-visible meaning, likely source owner, and
+  confidence level. Row ids, fields, metrics, and packets are evidence, not the patch boundary.
 - Before patching a row, do a data-backed owner autopsy:
   - `MSLMSO01` MotionState callback/classes for action-family and callback-owner identity
   - `MSLFTSC1` script timeline events for frame/script-owned transitions and pulses
@@ -117,7 +113,12 @@ Investigation rules:
 
 Important hidden-state rule:
 
-For each selected owner, do not mark it blocked or move on merely because visible replay state is insufficient. Missing hidden state/live pose/callback phase/extracted data means the next step is to expose it locally via probe, extraction, instrumentation, or a minimal seed/internal lane. “Blocked” is NOT ALLOWED. You have EVERYTHING you need to solve ANY ISSUE in building the sim between the reference materials like game decomp, game asm, Slippi asm/labels, local probes, and extraction. If you write “needs probe/extraction/seed lane,” immediately attempt that lane before considering any other owner. If a path appears impossible, treat that as evidence that the current representation is wrong: switch from gameplay patching to extraction/probe/instrumentation/decomp work for the same owner, and keep the worklog centered on that owner. Failed experiments refine the same owner hypothesis; they do not permit target switching.
+For each selected owner, insufficient visible replay state is not a stop condition. Expose the
+missing hidden state, live pose, callback phase, or extracted data through a local probe,
+extraction, instrumentation, or minimal seed/internal lane, then continue the same owner. If a path
+appears impossible, the current representation is probably wrong; switch to extraction/probe/
+instrumentation/decomp work for that owner. Failed experiments refine the owner hypothesis; they
+do not permit target switching.
 
 Validation cadence:
 
