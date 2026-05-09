@@ -14,6 +14,7 @@
 enum { MSL_CHAR_FOX = 1, MSL_CHAR_FALCO = 22 };
 
 static MslCharParams g_params_by_char[256];
+static const MslCharParams* g_params_ptr_by_char[256];
 static uint8_t g_have_params_by_char[256];
 static int g_loaded = 0;
 
@@ -563,6 +564,7 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
   alloc_free(buf);
   g_params_by_char[char_id] = out;
   g_have_params_by_char[char_id] = 1;
+  g_params_ptr_by_char[char_id] = &g_params_by_char[char_id];
   return 0;
 }
 
@@ -588,8 +590,9 @@ int char_params_init(void) {
 }
 
 const MslCharParams* msl_char_params(uint8_t char_id) {
-  if (!g_loaded || !g_have_params_by_char[char_id]) {
+  const MslCharParams* params = g_params_ptr_by_char[char_id];
+  if (!g_loaded || params == NULL) {
     return NULL;
   }
-  return &g_params_by_char[char_id];
+  return params;
 }

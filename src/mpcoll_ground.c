@@ -631,7 +631,11 @@ static inline MslStageFloorLine floor_line_world_for_env(const MslBatch* batch, 
   if (g == NULL || line_idx < 0 || (size_t)line_idx >= g->line_count) {
     return out;
   }
-  (void)stage_collision_floor_line_world(batch, bi, &g->lines[(size_t)line_idx], &out);
+  const MslStageFloorLine* line = &g->lines[(size_t)line_idx];
+  if (line->platform_transform_kind == 0u) {
+    return *line;
+  }
+  (void)stage_collision_floor_line_world(batch, bi, line, &out);
   return out;
 }
 
@@ -1271,11 +1275,11 @@ static inline void publish_attackair_transformed_platform_floor_skip_from_sweep(
 
 static inline uint8_t floor_line_is_runtime_fighter_solid(const MslStageFloorGraph* g,
                                                           uint32_t stage_id, int line_idx) {
+  (void)stage_id;
   if (g == NULL || line_idx < 0 || (size_t)line_idx >= g->line_count) {
     return 0u;
   }
-  return stage_collision_floor_line_is_runtime_fighter_solid(stage_id,
-                                                             g->lines[(size_t)line_idx].segment_i);
+  return g->lines[(size_t)line_idx].fighter_solid ? 1u : 0u;
 }
 
 static inline uint8_t carried_floor_line_is_live_yoshi_shyguy_support(const MslBatch* batch, int bi,

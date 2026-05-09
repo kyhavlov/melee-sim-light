@@ -50,6 +50,14 @@ from tools.slippi.known_data_artifacts import (
 from tools.slippi.make_dataset_from_slp import _load_stage_segments_for_seed, _stage_ledge_floor_ids
 
 SUPPORTED_STAGE_BINS = ("griz.bin", "grps.bin", "grst.bin", "grop.bin", "grnba.bin", "grnla.bin")
+SUPPORTED_STAGE_IDS_BY_BIN = {
+    "griz.bin": 2,
+    "grps.bin": 3,
+    "grst.bin": 8,
+    "grop.bin": 28,
+    "grnba.bin": 31,
+    "grnla.bin": 32,
+}
 
 
 def _symlink_data_tree_with_private_dirs(tmp_path: Path, private_dirs: tuple[str, ...]) -> Path:
@@ -800,6 +808,67 @@ def test_runtime_frozen_ps_preserves_raw_links_but_uses_fighter_solid_mask() -> 
     assert seg_by_id[35].fighter_solid is True
     assert seg_by_id[81].kind_id == 2  # right_wall
     assert seg_by_id[81].fighter_solid is False
+
+
+def test_runtime_stage_lookup_caches_match_mslstg01_for_supported_stages() -> None:
+    import msl_binding
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        for bin_name, stage_id in SUPPORTED_STAGE_IDS_BY_BIN.items():
+            stage = read_mslstg01_v7(Path("data/stages/bin") / bin_name)
+            transforms = {int(rec.line_id): rec for rec in stage.platform_transforms}
+
+            floors = sorted((seg for seg in stage.segments if int(seg.kind_id) == 0), key=lambda s: int(s.line_id))
+            fighter_floors = [
+                seg for seg in floors if not (int(seg.flags) & 0x1) and bool(seg.fighter_solid)
+            ]
+            ceilings = sorted((seg for seg in stage.segments if int(seg.kind_id) == 1), key=lambda s: int(s.line_id))
+            right_walls = sorted((seg for seg in stage.segments if int(seg.kind_id) == 2), key=lambda s: int(s.line_id))
+            left_walls = sorted((seg for seg in stage.segments if int(seg.kind_id) == 3), key=lambda s: int(s.line_id))
+
+            for expected_idx, seg in enumerate(floors):
+                line_id = int(seg.line_id)
+                runtime = msl_binding.stage_floor_segment(stage_id, line_id)
+                assert runtime is not None, (stage_id, "floor", line_id)
+                assert int(runtime["line_index"]) == expected_idx
+                rec = transforms.get(line_id)
+                expected_kind = 0 if rec is None else int(rec.kind_id)
+                expected_platform_id = 0 if rec is None else int(rec.platform_id)
+                assert int(runtime["platform_transform_kind"]) == expected_kind
+                assert int(runtime["platform_transform_id"]) == expected_platform_id
+
+            fighter_index_by_line = {
+                int(seg.line_id): i for i, seg in enumerate(fighter_floors)
+            }
+            for seg in floors:
+                line_id = int(seg.line_id)
+                runtime = msl_binding.stage_fighter_floor_segment(stage_id, line_id)
+                if line_id not in fighter_index_by_line:
+                    assert runtime is None, (stage_id, "fighter_floor", line_id)
+                else:
+                    assert runtime is not None, (stage_id, "fighter_floor", line_id)
+                    assert int(runtime["line_index"]) == fighter_index_by_line[line_id]
+
+            for expected_idx, seg in enumerate(ceilings):
+                line_id = int(seg.line_id)
+                runtime = msl_binding.stage_ceiling_segment(stage_id, line_id)
+                assert runtime is not None, (stage_id, "ceiling", line_id)
+                assert int(runtime["line_index"]) == expected_idx
+
+            for expected_idx, seg in enumerate(left_walls):
+                line_id = int(seg.line_id)
+                runtime = msl_binding.stage_left_wall_segment(stage_id, line_id)
+                assert runtime is not None, (stage_id, "left_wall", line_id)
+                assert int(runtime["line_index"]) == expected_idx
+
+            for expected_idx, seg in enumerate(right_walls):
+                line_id = int(seg.line_id)
+                runtime = msl_binding.stage_right_wall_segment(stage_id, line_id)
+                assert runtime is not None, (stage_id, "right_wall", line_id)
+                assert int(runtime["line_index"]) == expected_idx
+    finally:
+        msl_binding.destroy(handle)
 
 
 def test_runtime_move_tables_reject_stale_mslftsc1(tmp_path: Path) -> None:

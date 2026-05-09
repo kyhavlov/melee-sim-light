@@ -26,6 +26,11 @@ typedef struct MslStageFloorLine {
   // CollData support.
   // data/stages/bin/*.bin::MSLSTG01 flags[7:3]
   uint8_t stage_object_support_kind;
+  // Generated platform transform owner for this floor line, if any. Zero means static world
+  // endpoints; nonzero values correspond to MSLSTG01 platform transform record kind ids.
+  // data/stages/bin/*.bin::MSLSTG01 platform_transform records
+  uint8_t platform_transform_kind;
+  uint8_t platform_transform_id;
   // Connectivity hints for mpLib_8004ED5C-style endpoint extension:
   // - has_prev_link: there exists some collision segment connected to (x0,y0)
   // - has_next_link: there exists some collision segment connected to (x1,y1)
@@ -45,6 +50,10 @@ typedef struct MslStageFloorLine {
   // or -1 for none.
   int16_t prev;
   int16_t next;
+  // Adjacent wall graph indices at the start/end of this floor chain, or -1 for none.
+  // Derived from generated MapLine endpoint geometry during stage load.
+  int16_t adjacent_left_wall;
+  int16_t adjacent_right_wall;
 } MslStageFloorLine;
 
 typedef struct MslStageFloorGraph {
@@ -87,6 +96,10 @@ typedef struct MslStageWallLine {
   float y0;
   float x1;
   float y1;
+  float min_x;
+  float max_x;
+  float min_y;
+  float max_y;
   uint8_t has_prev_link;  // connected at (x0,y0)
   uint8_t has_next_link;  // connected at (x1,y1)
   uint8_t fighter_solid;

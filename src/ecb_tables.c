@@ -34,6 +34,8 @@ typedef struct {
   uint8_t* buf;
   size_t sz;
   MslEcbEntry* entries;
+  int32_t* entry_index_by_msid;
+  float model_scaling;
   uint16_t anim_count;
   uint8_t have;
 } MslEcbTable;
@@ -133,6 +135,15 @@ static int load_table_for_char(const char* data_dir, const char* rel_path, uint8
     alloc_free(buf);
     return -1;
   }
+  int32_t* entry_index_by_msid = (int32_t*)alloc_malloc(sizeof(int32_t) * 65536u);
+  if (entry_index_by_msid == NULL) {
+    alloc_free(entries);
+    alloc_free(buf);
+    return -1;
+  }
+  for (size_t i = 0; i < 65536u; i++) {
+    entry_index_by_msid[i] = -1;
+  }
 
   const uint8_t* p = buf + toc_off;
   uint16_t prev_msid = 0;
@@ -146,22 +157,26 @@ static int load_table_for_char(const char* data_dir, const char* rel_path, uint8
 
     // Self-check: values are float32[frame_count].
     if (values_bytes != (uint32_t)frame_count * 4u) {
+      alloc_free(entry_index_by_msid);
       alloc_free(entries);
       alloc_free(buf);
       return -1;
     }
     if (values_off > sz || values_bytes > (uint32_t)(sz - (size_t)values_off)) {
+      alloc_free(entry_index_by_msid);
       alloc_free(entries);
       alloc_free(buf);
       return -1;
     }
     if ((values_off & 3u) != 0u) {
+      alloc_free(entry_index_by_msid);
       alloc_free(entries);
       alloc_free(buf);
       return -1;
     }
     if (have_prev && msid < prev_msid) {
       // Contract: extractor writes sorted msids for deterministic lookup/binary search.
+      alloc_free(entry_index_by_msid);
       alloc_free(entries);
       alloc_free(buf);
       return -1;
@@ -174,17 +189,23 @@ static int load_table_for_char(const char* data_dir, const char* rel_path, uint8
         .frame_count = frame_count,
         .values_off = values_off,
     };
+    entry_index_by_msid[msid] = (int32_t)i;
   }
 
   // Replace any existing table for this character.
   if (g_table_by_char[char_id].buf) {
+    alloc_free(g_table_by_char[char_id].entry_index_by_msid);
     alloc_free(g_table_by_char[char_id].entries);
     alloc_free(g_table_by_char[char_id].buf);
   }
+  const MslCharParams* ch = msl_char_params(char_id);
+  const float model_scaling = (ch != NULL) ? ch->model_scaling : 1.0f;
   g_table_by_char[char_id] = (MslEcbTable){
       .buf = buf,
       .sz = sz,
       .entries = entries,
+      .entry_index_by_msid = entry_index_by_msid,
+      .model_scaling = model_scaling,
       .anim_count = anim_count,
       .have = 1,
   };
@@ -231,6 +252,9 @@ static const MslEcbTable* table_for_char(uint8_t char_id) {
 static int find_entry_index(const MslEcbTable* t, uint16_t msid) {
   if (t == NULL || t->entries == NULL) {
     return -1;
+  }
+  if (t->entry_index_by_msid != NULL) {
+    return (int)t->entry_index_by_msid[msid];
   }
   int lo = 0;
   int hi = (int)t->anim_count - 1;
@@ -287,9 +311,7 @@ float msl_ecb_bottom_rel_y(uint8_t char_id, uint32_t animation_index, int action
   if (!(v == v)) {
     return 0.0f;
   }
-  const MslCharParams* ch = msl_char_params(char_id);
-  const float model_scaling = (ch != NULL) ? ch->model_scaling : 1.0f;
-  return v * model_scaling;
+  return v * t->model_scaling;
 }
 
 // -----------------
@@ -308,6 +330,8 @@ typedef struct {
   uint8_t* buf;
   size_t sz;
   MslEcbExtentsEntry* entries;
+  int32_t* entry_index_by_msid;
+  float model_scaling;
   uint16_t anim_count;
   uint8_t have;
 } MslEcbExtentsTable;
@@ -396,6 +420,15 @@ static int load_extents_table_for_char(const char* data_dir, const char* rel_pat
     alloc_free(buf);
     return -1;
   }
+  int32_t* entry_index_by_msid = (int32_t*)alloc_malloc(sizeof(int32_t) * 65536u);
+  if (entry_index_by_msid == NULL) {
+    alloc_free(entries);
+    alloc_free(buf);
+    return -1;
+  }
+  for (size_t i = 0; i < 65536u; i++) {
+    entry_index_by_msid[i] = -1;
+  }
 
   const uint8_t* p = buf + toc_off;
   uint16_t prev_msid = 0;
@@ -408,21 +441,25 @@ static int load_extents_table_for_char(const char* data_dir, const char* rel_pat
     p += ECB_TOC_ENTRY_BYTES;
 
     if (values_bytes != (uint32_t)frame_count * (uint32_t)ECB_EXTENTS_STRIDE_BYTES) {
+      alloc_free(entry_index_by_msid);
       alloc_free(entries);
       alloc_free(buf);
       return -1;
     }
     if (values_off > sz || values_bytes > (uint32_t)(sz - (size_t)values_off)) {
+      alloc_free(entry_index_by_msid);
       alloc_free(entries);
       alloc_free(buf);
       return -1;
     }
     if ((values_off & 3u) != 0u) {
+      alloc_free(entry_index_by_msid);
       alloc_free(entries);
       alloc_free(buf);
       return -1;
     }
     if (have_prev && msid < prev_msid) {
+      alloc_free(entry_index_by_msid);
       alloc_free(entries);
       alloc_free(buf);
       return -1;
@@ -435,16 +472,22 @@ static int load_extents_table_for_char(const char* data_dir, const char* rel_pat
         .frame_count = frame_count,
         .values_off = values_off,
     };
+    entry_index_by_msid[msid] = (int32_t)i;
   }
 
   if (g_extents_table_by_char[char_id].buf) {
+    alloc_free(g_extents_table_by_char[char_id].entry_index_by_msid);
     alloc_free(g_extents_table_by_char[char_id].entries);
     alloc_free(g_extents_table_by_char[char_id].buf);
   }
+  const MslCharParams* ch = msl_char_params(char_id);
+  const float model_scaling = (ch != NULL) ? ch->model_scaling : 1.0f;
   g_extents_table_by_char[char_id] = (MslEcbExtentsTable){
       .buf = buf,
       .sz = sz,
       .entries = entries,
+      .entry_index_by_msid = entry_index_by_msid,
+      .model_scaling = model_scaling,
       .anim_count = anim_count,
       .have = 1,
   };
@@ -490,6 +533,9 @@ static const MslEcbExtentsTable* extents_table_for_char(uint8_t char_id) {
 static int find_extents_entry_index(const MslEcbExtentsTable* t, uint16_t msid) {
   if (t == NULL || t->entries == NULL) {
     return -1;
+  }
+  if (t->entry_index_by_msid != NULL) {
+    return (int)t->entry_index_by_msid[msid];
   }
   int lo = 0;
   int hi = (int)t->anim_count - 1;
@@ -550,13 +596,11 @@ MslEcbExtentsRel msl_ecb_extents_rel(uint8_t char_id, uint32_t animation_index, 
     return (MslEcbExtentsRel){0};
   }
 
-  const MslCharParams* ch = msl_char_params(char_id);
-  const float model_scaling = (ch != NULL) ? ch->model_scaling : 1.0f;
   return (MslEcbExtentsRel){
-      .min_x = min_x * model_scaling,
-      .max_x = max_x * model_scaling,
-      .min_y = min_y * model_scaling,
-      .max_y = max_y * model_scaling,
+      .min_x = min_x * t->model_scaling,
+      .max_x = max_x * t->model_scaling,
+      .min_y = min_y * t->model_scaling,
+      .max_y = max_y * t->model_scaling,
   };
 }
 

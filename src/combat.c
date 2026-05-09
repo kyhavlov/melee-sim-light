@@ -1346,25 +1346,6 @@ static inline uint8_t combat_body_overlap_lbColl_80006E58_matrix_radius(
     return 0u;
   }
   const MslHurtCap* cap = &caps[cap_id];
-
-  float m[12];
-  const float pose_sample_frame =
-      combat_float_aobj_hurtcap_pose_owner(action_id)
-          ? anim_frame_f32
-          : (float)(combat_attackdash_post_hitbox_collision_pose_owner(
-                        batch, bi, d_idx, action_id, char_id, anim_frame_f32, attacker_action_id,
-                        attacker_hitbox_active)
-                        ? (uint16_t)(frame + 1u)
-                        : frame);
-  if (anim_pose_get_collision_matrix_f32(batch, d_idx, msid, pose_sample_frame, cap->bone_part_id,
-                                         m) != 0) {
-    return 0u;
-  }
-  (void)combat_apply_guard_tilt_live_body_matrix(batch, d_idx, char_id, cap->bone_part_id, m);
-  if (out_evaluated) {
-    *out_evaluated = 1u;
-  }
-
   const MslCharParams* chp = msl_char_params(char_id);
   const float model_scaling = (chp && isfinite(chp->model_scaling) && chp->model_scaling > 0.0f)
                                   ? chp->model_scaling
@@ -1374,11 +1355,6 @@ static inline uint8_t combat_body_overlap_lbColl_80006E58_matrix_radius(
   if (!(model_scale > 0.0f)) {
     return 0u;
   }
-  const float facing_dir = batch->state.facing[d_idx] ? 1.0f : -1.0f;
-  const float pos_x = batch->state.pos_x[d_idx];
-  const float pos_y = batch->state.pos_y[d_idx];
-  const float pos_z = batch->state.pos_z[d_idx];
-
   const size_t hb_i = idx_hitbox(bi, attacker, hb_id);
   float px = hx;
   float py = hy;
@@ -1403,6 +1379,29 @@ static inline uint8_t combat_body_overlap_lbColl_80006E58_matrix_radius(
   const float hurt_cp_x = ax + t * (bx - ax);
   const float hurt_cp_y = ay + t * (by - ay);
   const float hurt_cp_z = az + t * (bz - az);
+
+  float m[12];
+  const float pose_sample_frame =
+      combat_float_aobj_hurtcap_pose_owner(action_id)
+          ? anim_frame_f32
+          : (float)(combat_attackdash_post_hitbox_collision_pose_owner(
+                        batch, bi, d_idx, action_id, char_id, anim_frame_f32, attacker_action_id,
+                        attacker_hitbox_active)
+                        ? (uint16_t)(frame + 1u)
+                        : frame);
+  if (anim_pose_get_collision_matrix_f32(batch, d_idx, msid, pose_sample_frame, cap->bone_part_id,
+                                         m) != 0) {
+    return 0u;
+  }
+  (void)combat_apply_guard_tilt_live_body_matrix(batch, d_idx, char_id, cap->bone_part_id, m);
+  if (out_evaluated) {
+    *out_evaluated = 1u;
+  }
+
+  const float facing_dir = batch->state.facing[d_idx] ? 1.0f : -1.0f;
+  const float pos_x = batch->state.pos_x[d_idx];
+  const float pos_y = batch->state.pos_y[d_idx];
+  const float pos_z = batch->state.pos_z[d_idx];
 
   const float hit_rel_x = hit_cp_x - pos_x;
   const float hit_rel_y = hit_cp_y - pos_y;

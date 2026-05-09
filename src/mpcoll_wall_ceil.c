@@ -99,31 +99,34 @@ static inline void mark_right_wall_contact(MslBatch* batch, size_t idx, uint8_t 
   }
 }
 
-static inline uint8_t point_eq_axis_eps(float ax, float ay, float bx, float by) {
-  return (uint8_t)(fabsf(ax - bx) <= k_line_axis_thresh && fabsf(ay - by) <= k_line_axis_thresh);
+static inline float min4f(float a, float b, float c, float d) {
+  float m = (a < b) ? a : b;
+  m = (c < m) ? c : m;
+  return (d < m) ? d : m;
 }
 
-static int wall_line_index_connected_to_point(const MslStageWallGraph* g, float x, float y) {
-  if (g == NULL || g->lines == NULL) {
-    return -1;
-  }
-  for (size_t i = 0; i < g->line_count; i++) {
-    const MslStageWallLine* l = &g->lines[i];
-    if (point_eq_axis_eps(l->x0, l->y0, x, y) || point_eq_axis_eps(l->x1, l->y1, x, y)) {
-      return (int)i;
-    }
-  }
-  return -1;
+static inline float max4f(float a, float b, float c, float d) {
+  float m = (a > b) ? a : b;
+  m = (c > m) ? c : m;
+  return (d > m) ? d : m;
 }
 
-static int grounded_right_wall_floor_adjacent_line_idx(uint32_t stage_id, uint16_t ground_id) {
+static inline uint8_t wall_line_outside_box(const MslStageWallLine* l, float min_x, float max_x,
+                                            float min_y, float max_y) {
+  if (l->max_x < min_x || l->min_x > max_x) {
+    return 1u;
+  }
+  return (uint8_t)(l->max_y < min_y || l->min_y > max_y);
+}
+
+static int grounded_right_wall_floor_adjacent_line_idx(const MslStageFloorGraph* fg,
+                                                       const MslStageWallGraph* rwg,
+                                                       uint32_t stage_id, uint16_t ground_id) {
   // Grounded right-wall checks exclude the floor-chain wall owners that are connected to the
   // current floor. Decomp resolves these through mpLib_80053394_Floor / mpLib_800536CC_Floor
   // before mpColl_80048AB0_RightWall / mpColl_800491C8_RightWall admit bottom-point wall hits.
   // refs/melee/src/melee/mp/mplib.c::{mpLib_80053394_Floor,mpLib_800536CC_Floor}
   // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80048AB0_RightWall,mpColl_800491C8_RightWall}
-  const MslStageFloorGraph* fg = stage_collision_get_floor_graph(stage_id);
-  const MslStageWallGraph* rwg = stage_collision_get_right_wall_graph(stage_id);
   if (fg == NULL || rwg == NULL || fg->lines == NULL || rwg->lines == NULL) {
     return -1;
   }
@@ -131,23 +134,16 @@ static int grounded_right_wall_floor_adjacent_line_idx(uint32_t stage_id, uint16
   if (floor_line_idx < 0 || (size_t)floor_line_idx >= fg->line_count) {
     return -1;
   }
-  for (size_t i = 0; i < fg->line_count; i++) {
-    const int16_t next = fg->lines[(size_t)floor_line_idx].next;
-    if (next < 0 || (size_t)next >= fg->line_count) {
-      break;
-    }
-    floor_line_idx = (int)next;
-  }
-  const MslStageFloorLine* floor = &fg->lines[(size_t)floor_line_idx];
-  return wall_line_index_connected_to_point(rwg, floor->x1, floor->y1);
+  (void)rwg;
+  return fg->lines[(size_t)floor_line_idx].adjacent_right_wall;
 }
 
-static int grounded_left_wall_floor_adjacent_line_idx(uint32_t stage_id, uint16_t ground_id) {
+static int grounded_left_wall_floor_adjacent_line_idx(const MslStageFloorGraph* fg,
+                                                      const MslStageWallGraph* lwg,
+                                                      uint32_t stage_id, uint16_t ground_id) {
   // Symmetric grounded floor-chain exclusion for left-wall checks.
   // refs/melee/src/melee/mp/mplib.c::{mpLib_80053448_Floor,mpLib_800534FC_Floor}
   // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80049778_LeftWall,mpColl_80049EAC_LeftWall}
-  const MslStageFloorGraph* fg = stage_collision_get_floor_graph(stage_id);
-  const MslStageWallGraph* lwg = stage_collision_get_left_wall_graph(stage_id);
   if (fg == NULL || lwg == NULL || fg->lines == NULL || lwg->lines == NULL) {
     return -1;
   }
@@ -155,15 +151,8 @@ static int grounded_left_wall_floor_adjacent_line_idx(uint32_t stage_id, uint16_
   if (floor_line_idx < 0 || (size_t)floor_line_idx >= fg->line_count) {
     return -1;
   }
-  for (size_t i = 0; i < fg->line_count; i++) {
-    const int16_t prev = fg->lines[(size_t)floor_line_idx].prev;
-    if (prev < 0 || (size_t)prev >= fg->line_count) {
-      break;
-    }
-    floor_line_idx = (int)prev;
-  }
-  const MslStageFloorLine* floor = &fg->lines[(size_t)floor_line_idx];
-  return wall_line_index_connected_to_point(lwg, floor->x0, floor->y0);
+  (void)lwg;
+  return fg->lines[(size_t)floor_line_idx].adjacent_left_wall;
 }
 
 static inline float cross2(float ax, float ay, float bx, float by) { return ax * by - ay * bx; }
@@ -1125,6 +1114,10 @@ static uint8_t wall_sweep_check(const MslStageWallGraph* g, uint8_t is_left_wall
     if (!l->fighter_solid) {
       continue;
     }
+    if (l->max_x + k_line_end_clamp < sweep_min_x || l->min_x - k_line_end_clamp > sweep_max_x ||
+        l->max_y + k_line_end_clamp < sweep_min_y || l->min_y - k_line_end_clamp > sweep_max_y) {
+      continue;
+    }
     // Decomp: mpCheck{Left,Right}Wall tests the raw wall segment endpoints, then
     // mpLineIntersectionV applies only its local +/-0.1 endpoint clamp for vertical walls. Do not
     // use the broader mpLib_8004ED5C endpoint extension here; that helper belongs to other
@@ -1373,10 +1366,21 @@ static inline void right_wall_candidate_quad(MslWallCandidateList* out, const Ms
   int best_line_idx = -1;
   float best_ix = 0.0f;
   float best_iy = 0.0f;
+  const float sweep_min_x = min4f(prev_a_x, prev_b_x, cur_a_x, cur_b_x) - k_line_end_clamp;
+  const float sweep_max_x = max4f(prev_a_x, prev_b_x, cur_a_x, cur_b_x) + k_line_end_clamp;
+  const float sweep_min_y = min4f(prev_a_y, prev_b_y, cur_a_y, cur_b_y) - k_line_end_clamp;
+  const float sweep_max_y = max4f(prev_a_y, prev_b_y, cur_a_y, cur_b_y) + k_line_end_clamp;
+  if (g->max_x < sweep_min_x || g->min_x > sweep_max_x || g->max_y < sweep_min_y ||
+      g->min_y > sweep_max_y) {
+    return;
+  }
 
   for (size_t li = 0; li < g->line_count; li++) {
     const MslStageWallLine* l = &g->lines[li];
     if (!l->fighter_solid) {
+      continue;
+    }
+    if (wall_line_outside_box(l, sweep_min_x, sweep_max_x, sweep_min_y, sweep_max_y)) {
       continue;
     }
     const float vx[2] = {l->x0, l->x1};
@@ -1432,10 +1436,21 @@ static inline void left_wall_candidate_quad(MslWallCandidateList* out, const Msl
   int best_line_idx = -1;
   float best_ix = 0.0f;
   float best_iy = 0.0f;
+  const float sweep_min_x = min4f(prev_a_x, prev_b_x, cur_a_x, cur_b_x) - k_line_end_clamp;
+  const float sweep_max_x = max4f(prev_a_x, prev_b_x, cur_a_x, cur_b_x) + k_line_end_clamp;
+  const float sweep_min_y = min4f(prev_a_y, prev_b_y, cur_a_y, cur_b_y) - k_line_end_clamp;
+  const float sweep_max_y = max4f(prev_a_y, prev_b_y, cur_a_y, cur_b_y) + k_line_end_clamp;
+  if (g->max_x < sweep_min_x || g->min_x > sweep_max_x || g->max_y < sweep_min_y ||
+      g->min_y > sweep_max_y) {
+    return;
+  }
 
   for (size_t li = 0; li < g->line_count; li++) {
     const MslStageWallLine* l = &g->lines[li];
     if (!l->fighter_solid) {
+      continue;
+    }
+    if (wall_line_outside_box(l, sweep_min_x, sweep_max_x, sweep_min_y, sweep_max_y)) {
       continue;
     }
     const float vx[2] = {l->x0, l->x1};
@@ -2003,7 +2018,8 @@ static inline void ecb_points_apply_inline_horizontal_normalization(const MslBat
   ecb->right_x = root_x + right_rel_x;
 }
 
-static uint8_t grounded_ordered_left_wall(MslBatch* batch, size_t idx, const MslStageWallGraph* lwg,
+static uint8_t grounded_ordered_left_wall(MslBatch* batch, size_t idx, const MslStageFloorGraph* fg,
+                                          const MslStageWallGraph* lwg,
                                           const MslEcbWorldPoints* prev_ecb,
                                           MslEcbWorldPoints* cur_ecb, uint16_t* wall_id_out,
                                           float* x_after_out) {
@@ -2014,7 +2030,7 @@ static uint8_t grounded_ordered_left_wall(MslBatch* batch, size_t idx, const Msl
   const int bi = (int)(idx / (size_t)MSL_MAX_PLAYERS);
   const uint32_t stage_id = batch->state.stage_id[(size_t)bi];
   const int excluded_floor_wall =
-      grounded_left_wall_floor_adjacent_line_idx(stage_id, batch->state.ground_id[idx]);
+      grounded_left_wall_floor_adjacent_line_idx(fg, lwg, stage_id, batch->state.ground_id[idx]);
 
   MslWallCandidateList candidates;
   wall_candidate_list_init(&candidates);
@@ -2099,6 +2115,7 @@ static uint8_t grounded_ordered_left_wall(MslBatch* batch, size_t idx, const Msl
 }
 
 static uint8_t grounded_ordered_right_wall(MslBatch* batch, size_t idx,
+                                           const MslStageFloorGraph* fg,
                                            const MslStageWallGraph* rwg,
                                            const MslEcbWorldPoints* prev_ecb,
                                            MslEcbWorldPoints* cur_ecb, uint16_t* wall_id_out,
@@ -2110,7 +2127,7 @@ static uint8_t grounded_ordered_right_wall(MslBatch* batch, size_t idx,
   const int bi = (int)(idx / (size_t)MSL_MAX_PLAYERS);
   const uint32_t stage_id = batch->state.stage_id[(size_t)bi];
   const int excluded_floor_wall =
-      grounded_right_wall_floor_adjacent_line_idx(stage_id, batch->state.ground_id[idx]);
+      grounded_right_wall_floor_adjacent_line_idx(fg, rwg, stage_id, batch->state.ground_id[idx]);
 
   MslWallCandidateList candidates;
   wall_candidate_list_init(&candidates);
@@ -2313,6 +2330,7 @@ void mpcoll_grounded_wall_ceil_ordered_begin(MslBatch* batch, size_t idx,
   }
   const int bi = (int)(idx / (size_t)MSL_MAX_PLAYERS);
   const uint32_t stage_id = batch->state.stage_id[(size_t)bi];
+  const MslStageFloorGraph* fg = stage_collision_get_floor_graph(stage_id);
   const MslStageWallGraph* lwg = stage_collision_get_left_wall_graph(stage_id);
   const MslStageWallGraph* rwg = stage_collision_get_right_wall_graph(stage_id);
 
@@ -2327,25 +2345,25 @@ void mpcoll_grounded_wall_ceil_ordered_begin(MslBatch* batch, size_t idx,
   ecb_points_apply_inline_horizontal_normalization(batch, idx, &prev);
   uint8_t hit_left = 0u;
   uint8_t hit_right = 0u;
-  if (grounded_ordered_left_wall(batch, idx, lwg, &prev, &cur, &result.left_wall_id,
+  if (grounded_ordered_left_wall(batch, idx, fg, lwg, &prev, &cur, &result.left_wall_id,
                                  &result.x_after_left_wall)) {
     hit_left = 1u;
     result.left_right_flags |= 1u;
     result.squeeze_flags |= (uint8_t)MSL_MPCOLL_ORDERED_SQUEEZE_LEFT_WALL;
   }
-  if (grounded_ordered_right_wall(batch, idx, rwg, &prev, &cur, &result.right_wall_id,
+  if (grounded_ordered_right_wall(batch, idx, fg, rwg, &prev, &cur, &result.right_wall_id,
                                   &result.x_after_right_wall)) {
     hit_right = 1u;
     result.left_right_flags |= 2u;
     result.squeeze_flags |= (uint8_t)MSL_MPCOLL_ORDERED_SQUEEZE_RIGHT_WALL;
   }
-  if (grounded_ordered_left_wall(batch, idx, lwg, &prev, &cur, &result.left_wall_id,
+  if (grounded_ordered_left_wall(batch, idx, fg, lwg, &prev, &cur, &result.left_wall_id,
                                  &result.x_after_left_wall)) {
     hit_left = 1u;
     result.left_right_flags |= 1u;
     result.squeeze_flags |= (uint8_t)MSL_MPCOLL_ORDERED_SQUEEZE_LEFT_WALL;
   }
-  if (grounded_ordered_right_wall(batch, idx, rwg, &prev, &cur, &result.right_wall_id,
+  if (grounded_ordered_right_wall(batch, idx, fg, rwg, &prev, &cur, &result.right_wall_id,
                                   &result.x_after_right_wall)) {
     hit_right = 1u;
     result.left_right_flags |= 2u;
@@ -2453,13 +2471,13 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
           msl_ecb_frame_u16_from_anim_frame(batch->state.anim_frame_f32[idx]);
       const uint16_t ecb_frame_prev = msl_ecb_prev_frame_u16(ecb_frame);
       const int grounded_left_floor_adj_line_idx =
-          grounded_now
-              ? grounded_left_wall_floor_adjacent_line_idx(stage_id, batch->state.ground_id[idx])
-              : -1;
+          grounded_now ? grounded_left_wall_floor_adjacent_line_idx(fg, lwg, stage_id,
+                                                                    batch->state.ground_id[idx])
+                       : -1;
       const int grounded_right_floor_adj_line_idx =
-          grounded_now
-              ? grounded_right_wall_floor_adjacent_line_idx(stage_id, batch->state.ground_id[idx])
-              : -1;
+          grounded_now ? grounded_right_wall_floor_adjacent_line_idx(fg, rwg, stage_id,
+                                                                     batch->state.ground_id[idx])
+                       : -1;
 
       const float prev_x = batch->state.prev_pos_x[idx];
       const float prev_y = batch->state.prev_pos_y[idx];

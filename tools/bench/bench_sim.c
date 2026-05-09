@@ -22,7 +22,25 @@ typedef struct BenchConfig {
   int warmup_frames;
   int input_ring;
   BenchMode mode;
+  uint32_t stage_ids[8];
+  int stage_count;
 } BenchConfig;
+
+typedef struct BenchStage {
+  const char* name;
+  uint32_t stage_id;
+} BenchStage;
+
+static const BenchStage k_supported_stages[] = {
+    {"fd", 32u},           // Final Destination
+    {"battlefield", 31u},  // Battlefield
+    {"pokemon", 3u},       // Pokemon Stadium
+    {"yoshi", 8u},         // Yoshi's Story
+    {"dreamland", 28u},    // Dream Land N64
+    {"fod", 2u},           // Fountain of Dreams
+};
+
+static int parse_int_arg(const char* value, int* out);
 
 static uint64_t now_ns(void) {
   struct timespec ts;
@@ -44,18 +62,68 @@ static int8_t stick_axis_from_rng(uint32_t r) {
   return (int8_t)v;
 }
 
-static void fill_match_configs(MslMatchConfig* configs, int batch_size) {
+static void fill_default_stages(BenchConfig* cfg) {
+  cfg->stage_count = (int)(sizeof(k_supported_stages) / sizeof(k_supported_stages[0]));
+  for (int i = 0; i < cfg->stage_count; i++) {
+    cfg->stage_ids[i] = k_supported_stages[i].stage_id;
+  }
+}
+
+static int stage_id_from_name(const char* value, uint32_t* out) {
+  for (size_t i = 0; i < sizeof(k_supported_stages) / sizeof(k_supported_stages[0]); i++) {
+    if (strcmp(value, k_supported_stages[i].name) == 0) {
+      *out = k_supported_stages[i].stage_id;
+      return 0;
+    }
+  }
+  int parsed = 0;
+  if (parse_int_arg(value, &parsed) == 0) {
+    *out = (uint32_t)parsed;
+    return 0;
+  }
+  return -1;
+}
+
+static int parse_stage_list(const char* value, BenchConfig* cfg) {
+  if (strcmp(value, "all") == 0) {
+    fill_default_stages(cfg);
+    return 0;
+  }
+  char buf[128];
+  const size_t len = strlen(value);
+  if (len == 0 || len >= sizeof(buf)) {
+    return -1;
+  }
+  memcpy(buf, value, len + 1u);
+
+  cfg->stage_count = 0;
+  char* save = NULL;
+  for (char* tok = strtok_r(buf, ",", &save); tok != NULL; tok = strtok_r(NULL, ",", &save)) {
+    if (cfg->stage_count >= (int)(sizeof(cfg->stage_ids) / sizeof(cfg->stage_ids[0]))) {
+      return -1;
+    }
+    uint32_t stage_id = 0u;
+    if (stage_id_from_name(tok, &stage_id) != 0) {
+      return -1;
+    }
+    cfg->stage_ids[cfg->stage_count++] = stage_id;
+  }
+  return cfg->stage_count > 0 ? 0 : -1;
+}
+
+static void fill_match_configs(MslMatchConfig* configs, const BenchConfig* bench_cfg) {
+  const int batch_size = bench_cfg->batch_size;
   memset(configs, 0, sizeof(*configs) * (size_t)batch_size);
   for (int bi = 0; bi < batch_size; bi++) {
     MslMatchConfig* cfg = &configs[bi];
-    cfg->stage_id = 32u;  // Final Destination, Slippi external stage id.
+    cfg->stage_id = bench_cfg->stage_ids[bi % bench_cfg->stage_count];
     cfg->frame_id = -123;
     cfg->frame_pre_random_seed = 0x319E1C7Du ^ (uint32_t)bi * 0x9E3779B9u;
     cfg->match_damage_ratio = 1.0f;
     cfg->num_players = 2;
     cfg->is_teams = 0;
     cfg->stock_count = 4;
-    cfg->players[0].char_id = 1;   // Fox, Slippi external id.
+    cfg->players[0].char_id = 1;  // Fox, Slippi external id.
     cfg->players[0].team_id = 0;
     cfg->players[0].facing = 1;
     cfg->players[1].char_id = 22;  // Falco, Slippi external id.
@@ -129,6 +197,7 @@ static int parse_args(int argc, char** argv, BenchConfig* cfg) {
   cfg->warmup_frames = 2000;
   cfg->input_ring = 256;
   cfg->mode = BENCH_MODE_ROLLOUT;
+  fill_default_stages(cfg);
 
   for (int i = 1; i < argc; i++) {
     if (strcmp(argv[i], "--batch") == 0 && i + 1 < argc) {
@@ -156,6 +225,10 @@ static int parse_args(int argc, char** argv, BenchConfig* cfg) {
       } else {
         return -1;
       }
+    } else if (strcmp(argv[i], "--stages") == 0 && i + 1 < argc) {
+      if (parse_stage_list(argv[++i], cfg) != 0) {
+        return -1;
+      }
     } else if (strcmp(argv[i], "--help") == 0) {
       return 1;
     } else {
@@ -178,7 +251,8 @@ static const char* mode_name(BenchMode mode) {
 static void print_usage(const char* argv0) {
   fprintf(stderr,
           "usage: %s [--batch N] [--frames N] [--warmup N] [--input-ring N]\n"
-          "          [--mode rollout|rollout_compare]\n",
+          "          [--mode rollout|rollout_compare]\n"
+          "          [--stages all|fd,battlefield,pokemon,yoshi,dreamland,fod|ID[,ID...]]\n",
           argv0);
 }
 
@@ -251,7 +325,7 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  fill_match_configs(match_configs, cfg.batch_size);
+  fill_match_configs(match_configs, &cfg);
   fill_inputs(inputs, cfg.input_ring, cfg.batch_size);
 
   MslBatch* batch = msl_batch_create(cfg.batch_size, 2);
@@ -319,10 +393,14 @@ int main(int argc, char** argv) {
   const double ns_per_env_step = (double)elapsed_ns / env_steps;
   const uint64_t checksum = checksum_compares(compares, cfg.batch_size);
 
-  printf("mode=%s batch=%d frames=%d warmup=%d input_ring=%d\n", mode_name(cfg.mode),
+  printf("mode=%s batch=%d frames=%d warmup=%d input_ring=%d stages=", mode_name(cfg.mode),
          cfg.batch_size, cfg.frames, cfg.warmup_frames, cfg.input_ring);
-  printf("elapsed_sec=%.9f env_steps=%.0f env_steps_per_sec=%.3f ns_per_env_step=%.3f\n",
-         seconds, env_steps, env_steps_per_sec, ns_per_env_step);
+  for (int i = 0; i < cfg.stage_count; i++) {
+    printf("%s%" PRIu32, (i == 0) ? "" : ",", cfg.stage_ids[i]);
+  }
+  printf("\n");
+  printf("elapsed_sec=%.9f env_steps=%.0f env_steps_per_sec=%.3f ns_per_env_step=%.3f\n", seconds,
+         env_steps, env_steps_per_sec, ns_per_env_step);
   printf("checksum=%" PRIu64 "\n", checksum);
 
   msl_batch_destroy(batch);

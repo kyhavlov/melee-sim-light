@@ -14,6 +14,10 @@ MslStickI8 ucf_clamp_stick_i8(int8_t raw_x, int8_t raw_y);
 // Apply UCF 1.0 cardinals snap (optional).
 MslStickI8 ucf_apply_cardinals_1_0_i8(MslStickI8 clamped);
 
+// Build deterministic stick-processing lookup tables. Must be called during batch initialization
+// before runtime stepping.
+int ucf_init(void);
+
 // Full processing used by the sim input pass:
 // - If ucf_enabled && ucf_cardinals_1_0_enabled, apply 1.0 cardinals snap using raw axes.
 // - Apply Melee clamp to legal coordinates.

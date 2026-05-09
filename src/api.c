@@ -45,6 +45,7 @@
 #include "staling_tables.h"
 #include "attack_id_tables.h"
 #include "motion_state_owners.h"
+#include "ucf.h"
 #include "mpcoll_ecb_points.h"
 #include "specialhi_pose.h"
 #include "state.h"
@@ -545,6 +546,11 @@ MslBatch* msl_batch_create(int batch_size, int num_players) {
   }
 
   if (common_params_init() != 0) {
+    msl_batch_destroy(batch);
+    return NULL;
+  }
+
+  if (ucf_init() != 0) {
     msl_batch_destroy(batch);
     return NULL;
   }

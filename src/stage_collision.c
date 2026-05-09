@@ -80,6 +80,8 @@ enum {
   MSL_STAGE_DREAM_LAND_N64 = 28,
   MSL_STAGE_BATTLEFIELD = 31,
   MSL_STAGE_FINAL_DESTINATION = 32,
+  MSL_STAGE_ID_LOOKUP_COUNT = 256,
+  MSL_STAGE_SEGMENT_LOOKUP_COUNT = 65536,
 };
 
 typedef struct {
@@ -107,6 +109,13 @@ typedef struct {
   MslStageCeilingGraph ceiling_graph;
   MslStageWallGraph left_wall_graph;
   MslStageWallGraph right_wall_graph;
+  int16_t floor_line_index_by_segment[MSL_STAGE_SEGMENT_LOOKUP_COUNT];
+  int16_t fighter_floor_line_index_by_segment[MSL_STAGE_SEGMENT_LOOKUP_COUNT];
+  int16_t ceiling_line_index_by_segment[MSL_STAGE_SEGMENT_LOOKUP_COUNT];
+  int16_t left_wall_line_index_by_segment[MSL_STAGE_SEGMENT_LOOKUP_COUNT];
+  int16_t right_wall_line_index_by_segment[MSL_STAGE_SEGMENT_LOOKUP_COUNT];
+  uint8_t platform_transform_kind_by_segment[MSL_STAGE_SEGMENT_LOOKUP_COUNT];
+  uint8_t platform_transform_id_by_segment[MSL_STAGE_SEGMENT_LOOKUP_COUNT];
   MslStageBoundsWorld blast_bounds_world;
   MslStageBoundsWorld cam_bounds_world;
   MslStagePoint2 spawn_points[MSL_MAX_PLAYERS];
@@ -127,16 +136,72 @@ static MslStageSlot g_stage_slots[] = {
     {.stage_id = MSL_STAGE_FINAL_DESTINATION, .bin_name = "grnla.bin"},
 };
 
+static MslStageSlot* g_stage_slot_by_id[MSL_STAGE_ID_LOOKUP_COUNT] = {
+    [MSL_STAGE_FOUNTAIN_OF_DREAMS] = &g_stage_slots[0],
+    [MSL_STAGE_POKEMON_STADIUM] = &g_stage_slots[1],
+    [MSL_STAGE_YOSHIS_STORY] = &g_stage_slots[2],
+    [MSL_STAGE_DREAM_LAND_N64] = &g_stage_slots[3],
+    [MSL_STAGE_BATTLEFIELD] = &g_stage_slots[4],
+    [MSL_STAGE_FINAL_DESTINATION] = &g_stage_slots[5],
+};
+
 static MslStageSlot* stage_slot_mut(uint32_t stage_id) {
-  for (size_t i = 0; i < sizeof(g_stage_slots) / sizeof(g_stage_slots[0]); i++) {
-    if (g_stage_slots[i].stage_id == stage_id) {
-      return &g_stage_slots[i];
-    }
+  if (stage_id < (uint32_t)MSL_STAGE_ID_LOOKUP_COUNT) {
+    return g_stage_slot_by_id[stage_id];
   }
   return NULL;
 }
 
 static const MslStageSlot* stage_slot(uint32_t stage_id) { return stage_slot_mut(stage_id); }
+
+static void stage_segment_index_lookup_reset(int16_t* lookup) {
+  if (lookup == NULL) {
+    return;
+  }
+  for (size_t i = 0; i < (size_t)MSL_STAGE_SEGMENT_LOOKUP_COUNT; i++) {
+    lookup[i] = -1;
+  }
+}
+
+static void stage_floor_index_lookup_install(int16_t* lookup, const MslStageFloorLine* lines,
+                                             size_t line_count) {
+  stage_segment_index_lookup_reset(lookup);
+  if (lookup == NULL || lines == NULL) {
+    return;
+  }
+  for (size_t i = 0; i < line_count && i <= (size_t)INT16_MAX; i++) {
+    lookup[lines[i].segment_i] = (int16_t)i;
+  }
+}
+
+static void stage_ceiling_index_lookup_install(int16_t* lookup, const MslStageCeilingLine* lines,
+                                               size_t line_count) {
+  stage_segment_index_lookup_reset(lookup);
+  if (lookup == NULL || lines == NULL) {
+    return;
+  }
+  for (size_t i = 0; i < line_count && i <= (size_t)INT16_MAX; i++) {
+    lookup[lines[i].segment_i] = (int16_t)i;
+  }
+}
+
+static void stage_wall_index_lookup_install(int16_t* lookup, const MslStageWallLine* lines,
+                                            size_t line_count) {
+  stage_segment_index_lookup_reset(lookup);
+  if (lookup == NULL || lines == NULL) {
+    return;
+  }
+  for (size_t i = 0; i < line_count && i <= (size_t)INT16_MAX; i++) {
+    lookup[lines[i].segment_i] = (int16_t)i;
+  }
+}
+
+static int stage_slot_floor_line_index(const MslStageSlot* slot, uint16_t segment_i) {
+  if (slot == NULL || !slot->loaded || slot->floor_lines == NULL || slot->floor_line_count == 0u) {
+    return -1;
+  }
+  return (int)slot->floor_line_index_by_segment[segment_i];
+}
 
 static void fd_stage_bounds_reset(float* min_x, float* max_x, float* min_y, float* max_y) {
   if (min_x) {
@@ -708,6 +773,61 @@ static void fd_apply_wall_raw_links(MslStageWallLine* lines, size_t n, FdSegKind
   }
 }
 
+static uint8_t fd_points_match(float ax, float ay, float bx, float by) {
+  // Load-time endpoint ownership: generated MSLSTG01 endpoints come from the same source MapLine
+  // data but pass through float extraction/normalization. Use the same small coordinate epsilon
+  // already used by floor horizontal/decomp projection checks in this file.
+  // refs/melee/src/melee/mp/mplib.c::mpCheckFloor
+  return (uint8_t)(fabsf(ax - bx) <= 0.0001f && fabsf(ay - by) <= 0.0001f);
+}
+
+static int16_t fd_wall_index_connected_to_point(const MslStageWallLine* lines, size_t n, float x,
+                                                float y) {
+  if (lines == NULL) {
+    return -1;
+  }
+  for (size_t i = 0; i < n && i <= (size_t)INT16_MAX; i++) {
+    const MslStageWallLine* l = &lines[i];
+    if (fd_points_match(l->x0, l->y0, x, y) || fd_points_match(l->x1, l->y1, x, y)) {
+      return (int16_t)i;
+    }
+  }
+  return -1;
+}
+
+static void fd_apply_floor_adjacent_wall_indices(MslStageFloorLine* floor_lines, size_t floor_n,
+                                                 const MslStageWallLine* lw_lines, size_t lw_n,
+                                                 const MslStageWallLine* rw_lines, size_t rw_n) {
+  if (floor_lines == NULL) {
+    return;
+  }
+  for (size_t i = 0; i < floor_n; i++) {
+    int left_floor_i = (int)i;
+    for (size_t guard = 0; guard < floor_n; guard++) {
+      const int16_t prev = floor_lines[(size_t)left_floor_i].prev;
+      if (prev < 0 || (size_t)prev >= floor_n) {
+        break;
+      }
+      left_floor_i = (int)prev;
+    }
+    const MslStageFloorLine* left_floor = &floor_lines[(size_t)left_floor_i];
+    floor_lines[i].adjacent_left_wall =
+        fd_wall_index_connected_to_point(lw_lines, lw_n, left_floor->x0, left_floor->y0);
+
+    int right_floor_i = (int)i;
+    for (size_t guard = 0; guard < floor_n; guard++) {
+      const int16_t next = floor_lines[(size_t)right_floor_i].next;
+      if (next < 0 || (size_t)next >= floor_n) {
+        break;
+      }
+      right_floor_i = (int)next;
+    }
+    const MslStageFloorLine* right_floor = &floor_lines[(size_t)right_floor_i];
+    floor_lines[i].adjacent_right_wall =
+        fd_wall_index_connected_to_point(rw_lines, rw_n, right_floor->x1, right_floor->y1);
+  }
+}
+
 static int fd_install_stage_segments(uint32_t stage_id, const FdSegTmp* seg_tmp, size_t seg_n) {
   if (seg_tmp == NULL || seg_n == 0) {
     return -1;
@@ -790,6 +910,8 @@ static int fd_install_stage_segments(uint32_t stage_id, const FdSegTmp* seg_tmp,
           .raw_next_id = -1,
           .prev = -1,
           .next = -1,
+          .adjacent_left_wall = -1,
+          .adjacent_right_wall = -1,
       };
     } else if (s->kind == FD_SEG_CEILING) {
       ceil_lines[oi_ceil++] = (MslStageCeilingLine){
@@ -813,6 +935,10 @@ static int fd_install_stage_segments(uint32_t stage_id, const FdSegTmp* seg_tmp,
           .y0 = s->y0,
           .x1 = s->x1,
           .y1 = s->y1,
+          .min_x = (s->x0 < s->x1) ? s->x0 : s->x1,
+          .max_x = (s->x0 > s->x1) ? s->x0 : s->x1,
+          .min_y = (s->y0 < s->y1) ? s->y0 : s->y1,
+          .max_y = (s->y0 > s->y1) ? s->y0 : s->y1,
           .has_prev_link = 0,
           .has_next_link = 0,
           .fighter_solid = s->fighter_solid,
@@ -829,10 +955,13 @@ static int fd_install_stage_segments(uint32_t stage_id, const FdSegTmp* seg_tmp,
           .y0 = s->y0,
           .x1 = s->x1,
           .y1 = s->y1,
+          .min_x = (s->x0 < s->x1) ? s->x0 : s->x1,
+          .max_x = (s->x0 > s->x1) ? s->x0 : s->x1,
+          .min_y = (s->y0 < s->y1) ? s->y0 : s->y1,
+          .max_y = (s->y0 > s->y1) ? s->y0 : s->y1,
           .has_prev_link = 0,
           .has_next_link = 0,
           .fighter_solid = s->fighter_solid,
-          ._pad0 = {0},
           .segment_i = s->segment_i,
           .raw_prev_id = -1,
           .raw_next_id = -1,
@@ -844,6 +973,12 @@ static int fd_install_stage_segments(uint32_t stage_id, const FdSegTmp* seg_tmp,
 
   fd_sort_floor_lines_by_id(floor_lines, floor_n);
   fd_apply_floor_raw_links(stage_id, floor_lines, floor_n, seg_tmp, seg_n);
+  for (size_t i = 0; i < floor_n; i++) {
+    floor_lines[i].platform_transform_kind =
+        slot->platform_transform_kind_by_segment[floor_lines[i].segment_i];
+    floor_lines[i].platform_transform_id =
+        slot->platform_transform_id_by_segment[floor_lines[i].segment_i];
+  }
   size_t fighter_floor_n = 0;
   for (size_t i = 0; i < floor_n; i++) {
     if (!floor_lines[i].is_platform && floor_lines[i].fighter_solid) {
@@ -889,6 +1024,9 @@ static int fd_install_stage_segments(uint32_t stage_id, const FdSegTmp* seg_tmp,
     fd_sort_wall_lines_by_id(rw_lines, rw_n);
     fd_apply_wall_raw_links(rw_lines, rw_n, FD_SEG_RIGHT_WALL, seg_tmp, seg_n);
   }
+  fd_apply_floor_adjacent_wall_indices(floor_lines, floor_n, lw_lines, lw_n, rw_lines, rw_n);
+  fd_apply_floor_adjacent_wall_indices(fighter_floor_lines, fighter_floor_n, lw_lines, lw_n,
+                                       rw_lines, rw_n);
 
   // Ledge candidates are floor segments with the ISO-derived LINE_FLAG_LEDGE bit.
   //
@@ -954,6 +1092,20 @@ static int fd_install_stage_segments(uint32_t stage_id, const FdSegTmp* seg_tmp,
   slot->right_wall_graph.lines = slot->right_wall_lines;
   slot->right_wall_graph.line_count = slot->right_wall_line_count;
   fd_stage_wall_graph_set_bounds(&slot->right_wall_graph);
+  // Runtime callers carry ISO-derived segment ids in state (ground_id and raw MapLine refs).
+  // Build direct id->graph-index lookups at load time so gameplay paths keep the data-backed
+  // mapping without rescanning generated MSLSTG01 line arrays every frame.
+  // data/stages/bin/*.bin::MSLSTG01 segment line_id
+  stage_floor_index_lookup_install(slot->floor_line_index_by_segment, slot->floor_lines,
+                                   slot->floor_line_count);
+  stage_floor_index_lookup_install(slot->fighter_floor_line_index_by_segment,
+                                   slot->fighter_floor_lines, slot->fighter_floor_line_count);
+  stage_ceiling_index_lookup_install(slot->ceiling_line_index_by_segment, slot->ceiling_lines,
+                                     slot->ceiling_line_count);
+  stage_wall_index_lookup_install(slot->left_wall_line_index_by_segment, slot->left_wall_lines,
+                                  slot->left_wall_line_count);
+  stage_wall_index_lookup_install(slot->right_wall_line_index_by_segment, slot->right_wall_lines,
+                                  slot->right_wall_line_count);
 
   return 0;
 }
@@ -1076,6 +1228,9 @@ static int stage_install_platform_transforms_from_mslstg01(
   if (slot == NULL) {
     return -1;
   }
+  memset(slot->platform_transform_kind_by_segment, 0,
+         sizeof(slot->platform_transform_kind_by_segment));
+  memset(slot->platform_transform_id_by_segment, 0, sizeof(slot->platform_transform_id_by_segment));
   if (transform_count == 0u) {
     alloc_free(slot->platform_transforms);
     slot->platform_transforms = NULL;
@@ -1103,6 +1258,8 @@ static int stage_install_platform_transforms_from_mslstg01(
         .y_const = stage_read_f32_le(p + 12),
         .height_coeff = stage_read_f32_le(p + 16),
     };
+    slot->platform_transform_kind_by_segment[recs[i].line_id] = recs[i].kind_id;
+    slot->platform_transform_id_by_segment[recs[i].line_id] = recs[i].platform_id;
   }
   alloc_free(slot->platform_transforms);
   slot->platform_transforms = recs;
@@ -1407,16 +1564,24 @@ const MslStageFloorGraph* stage_collision_get_floor_graph(uint32_t stage_id) {
 }
 
 int stage_collision_floor_line_index(uint32_t stage_id, uint16_t segment_i) {
-  const MslStageFloorGraph* g = stage_collision_get_floor_graph(stage_id);
-  if (g == NULL) {
+  return stage_slot_floor_line_index(stage_slot(stage_id), segment_i);
+}
+
+static const MslStageFloorLine* stage_floor_line_for_segment(const MslStageSlot* slot,
+                                                             uint16_t segment_i) {
+  const int line_idx = stage_slot_floor_line_index(slot, segment_i);
+  if (line_idx < 0) {
+    return NULL;
+  }
+  return &slot->floor_lines[(size_t)line_idx];
+}
+
+static int stage_slot_fighter_floor_line_index(const MslStageSlot* slot, uint16_t segment_i) {
+  if (slot == NULL || !slot->loaded || slot->fighter_floor_lines == NULL ||
+      slot->fighter_floor_line_count == 0u) {
     return -1;
   }
-  for (size_t i = 0; i < g->line_count; i++) {
-    if (g->lines[i].segment_i == segment_i) {
-      return (int)i;
-    }
-  }
-  return -1;
+  return (int)slot->fighter_floor_line_index_by_segment[segment_i];
 }
 
 typedef struct MslStageRawLineRef {
@@ -1566,108 +1731,70 @@ const MslStageFloorGraph* stage_collision_get_fighter_floor_graph(uint32_t stage
 }
 
 int stage_collision_fighter_floor_line_index(uint32_t stage_id, uint16_t segment_i) {
-  const MslStageFloorGraph* g = stage_collision_get_fighter_floor_graph(stage_id);
-  if (g == NULL) {
-    return -1;
-  }
-  for (size_t i = 0; i < g->line_count; i++) {
-    if (g->lines[i].segment_i == segment_i) {
-      return (int)i;
-    }
-  }
-  return -1;
+  return stage_slot_fighter_floor_line_index(stage_slot(stage_id), segment_i);
 }
 
 uint8_t stage_collision_floor_line_is_platform(uint32_t stage_id, uint16_t segment_i) {
-  const MslStageFloorGraph* g = stage_collision_get_floor_graph(stage_id);
-  if (g == NULL) {
+  const MslStageFloorLine* line = stage_floor_line_for_segment(stage_slot(stage_id), segment_i);
+  if (line == NULL) {
     return 0u;
   }
-  for (size_t i = 0; i < g->line_count; i++) {
-    if (g->lines[i].segment_i == segment_i) {
-      return g->lines[i].is_platform ? 1u : 0u;
-    }
-  }
-  return 0u;
+  return line->is_platform ? 1u : 0u;
 }
 
 uint8_t stage_collision_floor_line_is_runtime_fighter_solid(uint32_t stage_id, uint16_t segment_i) {
-  const MslStageFloorGraph* g = stage_collision_get_floor_graph(stage_id);
-  if (g == NULL) {
+  const MslStageFloorLine* line = stage_floor_line_for_segment(stage_slot(stage_id), segment_i);
+  if (line == NULL) {
     return 0u;
   }
-  for (size_t i = 0; i < g->line_count; i++) {
-    if (g->lines[i].segment_i == segment_i) {
-      return g->lines[i].fighter_solid ? 1u : 0u;
-    }
-  }
-  return 0u;
+  return line->fighter_solid ? 1u : 0u;
 }
 
 uint8_t stage_collision_floor_line_stage_object_support_kind(uint32_t stage_id,
                                                              uint16_t segment_i) {
-  const MslStageFloorGraph* g = stage_collision_get_floor_graph(stage_id);
-  if (g == NULL) {
+  const MslStageFloorLine* line = stage_floor_line_for_segment(stage_slot(stage_id), segment_i);
+  if (line == NULL) {
     return (uint8_t)MSL_STAGE_OBJECT_SUPPORT_NONE;
   }
-  for (size_t i = 0; i < g->line_count; i++) {
-    if (g->lines[i].segment_i == segment_i) {
-      return g->lines[i].stage_object_support_kind;
-    }
-  }
-  return (uint8_t)MSL_STAGE_OBJECT_SUPPORT_NONE;
+  return line->stage_object_support_kind;
 }
 
 uint8_t stage_collision_floor_line_has_platform_transform(uint32_t stage_id, uint16_t segment_i) {
   const MslStageSlot* slot = stage_slot(stage_id);
-  if (slot == NULL || slot->platform_transforms == NULL || slot->platform_transform_count == 0u) {
+  if (slot == NULL || !slot->loaded) {
     return 0u;
   }
   // data/stages/bin/*.bin::MSLSTG01 platform transform records
   // refs/melee/src/melee/gr/grizumi.c::{grIzumi_801CC358,grIzumi_801CCBDC}
-  for (size_t i = 0; i < slot->platform_transform_count; i++) {
-    if (slot->platform_transforms[i].line_id == segment_i) {
-      return 1u;
-    }
-  }
-  return 0u;
+  return slot->platform_transform_kind_by_segment[segment_i] != 0u ? 1u : 0u;
 }
 
 uint8_t stage_collision_floor_line_has_height_platform_transform(uint32_t stage_id,
                                                                  uint16_t segment_i) {
   const MslStageSlot* slot = stage_slot(stage_id);
-  if (slot == NULL || slot->platform_transforms == NULL || slot->platform_transform_count == 0u) {
+  if (slot == NULL || !slot->loaded) {
     return 0u;
   }
   // data/stages/bin/*.bin::MSLSTG01 platform transform records distinguish dynamic grIzumi height
   // transforms from static-y support transforms. Only the former are moving platform owners.
   // refs/melee/src/melee/gr/grizumi.c::{grIzumi_801CC358,grIzumi_801CCBDC}
-  for (size_t i = 0; i < slot->platform_transform_count; i++) {
-    const MslStagePlatformTransform* rec = &slot->platform_transforms[i];
-    if (rec->line_id == segment_i && rec->kind_id == (uint8_t)MSLSTG01_PLATFORM_TRANSFORM_HEIGHT) {
-      return 1u;
-    }
-  }
-  return 0u;
+  return slot->platform_transform_kind_by_segment[segment_i] ==
+                 (uint8_t)MSLSTG01_PLATFORM_TRANSFORM_HEIGHT
+             ? 1u
+             : 0u;
 }
 
 uint8_t stage_collision_floor_line_platform_transform_id(uint32_t stage_id, uint16_t segment_i,
                                                          uint8_t* platform_id_out) {
   const MslStageSlot* slot = stage_slot(stage_id);
-  if (slot == NULL || slot->platform_transforms == NULL || slot->platform_transform_count == 0u ||
-      platform_id_out == NULL) {
+  if (slot == NULL || !slot->loaded || platform_id_out == NULL ||
+      slot->platform_transform_kind_by_segment[segment_i] == 0u) {
     return 0u;
   }
   // data/stages/bin/*.bin::MSLSTG01 platform transform records
   // refs/melee/src/melee/gr/grizumi.c::{grIzumi_801CC358,grIzumi_801CCBDC}
-  for (size_t i = 0; i < slot->platform_transform_count; i++) {
-    const MslStagePlatformTransform* rec = &slot->platform_transforms[i];
-    if (rec->line_id == segment_i) {
-      *platform_id_out = rec->platform_id;
-      return 1u;
-    }
-  }
-  return 0u;
+  *platform_id_out = slot->platform_transform_id_by_segment[segment_i];
+  return 1u;
 }
 
 static uint8_t stage_collision_fod_platform_default_height(const MslStageSlot* slot,
@@ -1726,6 +1853,10 @@ uint8_t stage_collision_floor_line_world(const MslBatch* batch, int bi,
   }
   const MslStageSlot* slot = stage_slot(batch->state.stage_id[bi]);
   if (slot == NULL || slot->platform_transforms == NULL || slot->platform_transform_count == 0u) {
+    return 1u;
+  }
+  if (line->platform_transform_kind == 0u &&
+      slot->platform_transform_kind_by_segment[line->segment_i] == 0u) {
     return 1u;
   }
 
@@ -1834,42 +1965,30 @@ const MslStageWallGraph* stage_collision_get_right_wall_graph(uint32_t stage_id)
 }
 
 int stage_collision_ceiling_line_index(uint32_t stage_id, uint16_t segment_i) {
-  const MslStageCeilingGraph* g = stage_collision_get_ceiling_graph(stage_id);
-  if (g == NULL) {
+  const MslStageSlot* slot = stage_slot(stage_id);
+  if (slot == NULL || !slot->loaded || slot->ceiling_lines == NULL ||
+      slot->ceiling_line_count == 0u) {
     return -1;
   }
-  for (size_t i = 0; i < g->line_count; i++) {
-    if (g->lines[i].segment_i == segment_i) {
-      return (int)i;
-    }
-  }
-  return -1;
+  return (int)slot->ceiling_line_index_by_segment[segment_i];
 }
 
 int stage_collision_left_wall_line_index(uint32_t stage_id, uint16_t segment_i) {
-  const MslStageWallGraph* g = stage_collision_get_left_wall_graph(stage_id);
-  if (g == NULL) {
+  const MslStageSlot* slot = stage_slot(stage_id);
+  if (slot == NULL || !slot->loaded || slot->left_wall_lines == NULL ||
+      slot->left_wall_line_count == 0u) {
     return -1;
   }
-  for (size_t i = 0; i < g->line_count; i++) {
-    if (g->lines[i].segment_i == segment_i) {
-      return (int)i;
-    }
-  }
-  return -1;
+  return (int)slot->left_wall_line_index_by_segment[segment_i];
 }
 
 int stage_collision_right_wall_line_index(uint32_t stage_id, uint16_t segment_i) {
-  const MslStageWallGraph* g = stage_collision_get_right_wall_graph(stage_id);
-  if (g == NULL) {
+  const MslStageSlot* slot = stage_slot(stage_id);
+  if (slot == NULL || !slot->loaded || slot->right_wall_lines == NULL ||
+      slot->right_wall_line_count == 0u) {
     return -1;
   }
-  for (size_t i = 0; i < g->line_count; i++) {
-    if (g->lines[i].segment_i == segment_i) {
-      return (int)i;
-    }
-  }
-  return -1;
+  return (int)slot->right_wall_line_index_by_segment[segment_i];
 }
 
 uint8_t stage_collision_get_blast_bounds_world(uint32_t stage_id, MslStageBounds* out) {

@@ -1722,7 +1722,6 @@ static inline uint8_t item_laser_body_lbcoll_matrix_radius_overlap(
   if (!batch->state.hurtcap_enabled[hi]) {
     return 0u;
   }
-
   const uint8_t char_id = batch->state.char_id[d_idx];
   const MslHurtCap* caps = NULL;
   uint16_t cap_count_u16 = 0u;
@@ -5630,6 +5629,41 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       const uint8_t off_n =
           (laser_state == 0u) ? lp->hitbox_offsets_x_count : lp->state1_hitbox_offsets_x_count;
       const uint8_t cap_n = batch->state.hurtcap_count[d_idx];
+      uint8_t body_bounds_valid = 0u;
+      float body_min_x = 0.0f;
+      float body_max_x = 0.0f;
+      float body_min_y = 0.0f;
+      float body_max_y = 0.0f;
+      for (uint8_t ci = 0; ci < cap_n; ci++) {
+        const size_t hi = idx_hurtcap(bi, def, (int)ci);
+        if (!batch->state.hurtcap_enabled[hi]) {
+          continue;
+        }
+        float broad_r = batch->state.hurtcap_radius[hi] * 4.0f;
+        if (!(broad_r > 0.0f)) {
+          broad_r = 16.0f;
+        }
+        const float cap_min_x =
+            fminf(batch->state.hurtcap_a_x[hi], batch->state.hurtcap_b_x[hi]) - broad_r;
+        const float cap_max_x =
+            fmaxf(batch->state.hurtcap_a_x[hi], batch->state.hurtcap_b_x[hi]) + broad_r;
+        const float cap_min_y =
+            fminf(batch->state.hurtcap_a_y[hi], batch->state.hurtcap_b_y[hi]) - broad_r;
+        const float cap_max_y =
+            fmaxf(batch->state.hurtcap_a_y[hi], batch->state.hurtcap_b_y[hi]) + broad_r;
+        if (!body_bounds_valid) {
+          body_min_x = cap_min_x;
+          body_max_x = cap_max_x;
+          body_min_y = cap_min_y;
+          body_max_y = cap_max_y;
+          body_bounds_valid = 1u;
+        } else {
+          body_min_x = fminf(body_min_x, cap_min_x);
+          body_max_x = fmaxf(body_max_x, cap_max_x);
+          body_min_y = fminf(body_min_y, cap_min_y);
+          body_max_y = fmaxf(body_max_y, cap_max_y);
+        }
+      }
       const uint8_t body_shield_adjacent =
           (batch->state.shield_radius[d_idx] > 0.0f || disabled_contact_only != 0u) ? 1u : 0u;
       const float laser_offset_scale = laser_collision_offset_scale(
@@ -5701,6 +5735,16 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         const float sy0 = y0 + (uy * s0);
         const float sx = x + (ux * s1);
         const float sy = y + (uy * s1);
+        if (body_bounds_valid != 0u) {
+          const float seg_min_x = fminf(sx0, sx) - sr;
+          const float seg_max_x = fmaxf(sx0, sx) + sr;
+          const float seg_min_y = fminf(sy0, sy) - sr;
+          const float seg_max_y = fmaxf(sy0, sy) + sr;
+          if (seg_max_x < body_min_x || seg_min_x > body_max_x || seg_max_y < body_min_y ||
+              seg_min_y > body_max_y) {
+            continue;
+          }
+        }
         for (uint8_t ci = 0; ci < cap_n; ci++) {
           if (use_exact_lbcoll_hitcapsule_sweep != 0u) {
             uint8_t exact_evaluated = 0u;
@@ -5737,6 +5781,16 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       // If no scripted offsets exist, fall back to the projectile origin.
       if (!hit && cap_n > 0 && off_n == 0) {
         if (hitlist_allows_item_hitbox_fighter(batch, bi, it, 0, def, def_iid)) {
+          if (body_bounds_valid != 0u) {
+            const float seg_min_x = fminf(x0, x) - sr;
+            const float seg_max_x = fmaxf(x0, x) + sr;
+            const float seg_min_y = fminf(y0, y) - sr;
+            const float seg_max_y = fmaxf(y0, y) + sr;
+            if (seg_max_x < body_min_x || seg_min_x > body_max_x || seg_max_y < body_min_y ||
+                seg_min_y > body_max_y) {
+              continue;
+            }
+          }
           for (uint8_t ci = 0; ci < cap_n; ci++) {
             if (use_exact_lbcoll_hitcapsule_sweep != 0u) {
               uint8_t exact_evaluated = 0u;
