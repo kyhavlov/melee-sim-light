@@ -17,7 +17,7 @@ from tools.extraction.extract_attack_id_move_id import (
 
 
 FORMAT_MAGIC = b"MSLMSO01"
-FORMAT_VERSION = 4
+FORMAT_VERSION = 6
 U16_ABSENT = 0xFFFF
 
 CLASS_ATTACK_AIR = 1 << 0
@@ -39,6 +39,8 @@ CLASS_DAMAGE_FALL_COLL = 1 << 15
 CLASS_GROUNDED_STAGE_OBJECT_CARRY_COLL = 1 << 16
 CLASS_GROUNDED_ATTACK = 1 << 17
 CLASS_GUARDON_FRAME_START_X672_IASA = 1 << 18
+CLASS_FT80081D0C_AIR_COLL = 1 << 19
+CLASS_SIDEB_AIR_GROUND_LEDGE_COLL = 1 << 20
 
 
 @dataclass(frozen=True)
@@ -172,6 +174,36 @@ def _class_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
         bits |= CLASS_COMMON_AIR_COLL
     if coll_cb in {"ftCo_Jump_Coll", "ftCo_JumpAerial_Coll", "ftCo_Fall_Coll"}:
         bits |= CLASS_COMMON_AIR_WALLJUMP_COLL
+    if coll_cb in {
+        "ftCo_AttackAir_Coll",
+        "ftCo_AirCatch_Coll",
+        "ftCo_EscapeAir_Coll",
+        "ftCo_ItemThrowAir_Coll",
+        "ftCo_ShieldBreakFall_Coll",
+        "ftCo_ShieldBreakFly_Coll",
+        "ftCo_HammerFall_Coll",
+        "ftCo_CargoFall_Coll",
+        "ftCo_CargoThrow_Coll",
+        "ftCo_YoshiEgg_Coll",
+        "ftCo_KinokoSmallStart_Coll",
+        "ftCo_KinokoSmallEnd_Coll",
+        "ftCo_KinokoGiantStart_Coll",
+        "ftCo_KinokoGiantEnd_Coll",
+    }:
+        # These common Fox/Falco collision callbacks delegate through `ft_80082C74`, whose
+        # `ft_80081D0C` helper loads the normal airborne ECB and runs `mpColl_800471F8`. That
+        # source owner uses the full airborne wall/floor/ceiling collision callback without the
+        # common-air walljump post-consumers.
+        bits |= CLASS_FT80081D0C_AIR_COLL
+    if coll_cb in {
+        "ftFx_SpecialAirSStart_Coll",
+        "ftFx_SpecialAirS_Coll",
+        "ftFx_SpecialAirSEnd_Coll",
+    }:
+        # Fox/Falco aerial Side-B collision callbacks call ft_CheckGroundAndLedge directly, which
+        # snapshots CollData and tests floors/ledges without the held-down common-air platform
+        # rejection path.
+        bits |= CLASS_SIDEB_AIR_GROUND_LEDGE_COLL
     if coll_cb == "ftCo_Landing_Coll":
         bits |= CLASS_LANDING_COLL
     if coll_cb == "ftCo_LandingAir_Coll":
@@ -401,6 +433,8 @@ def _write_manifest(out_path: Path, callback_ids: dict[str, int]) -> None:
         "GROUNDED_STAGE_OBJECT_CARRY_COLL": CLASS_GROUNDED_STAGE_OBJECT_CARRY_COLL,
         "GROUNDED_ATTACK": CLASS_GROUNDED_ATTACK,
         "GUARDON_FRAME_START_X672_IASA": CLASS_GUARDON_FRAME_START_X672_IASA,
+        "FT80081D0C_AIR_COLL": CLASS_FT80081D0C_AIR_COLL,
+        "SIDEB_AIR_GROUND_LEDGE_COLL": CLASS_SIDEB_AIR_GROUND_LEDGE_COLL,
     }
     symbols = [{"id": int(i), "symbol": sym} for sym, i in sorted(callback_ids.items(), key=lambda kv: kv[1])]
     payload = {

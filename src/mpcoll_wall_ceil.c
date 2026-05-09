@@ -255,6 +255,16 @@ static inline uint8_t mpcoll_action_uses_common_air_walljump_callback(uint16_t a
   return msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_COMMON_AIR_WALLJUMP_COLL);
 }
 
+static inline uint8_t mpcoll_action_uses_ft80081d0c_air_collision(uint16_t action_id) {
+  // `ft_80082C74` delegates through `ft_80081D0C`, which loads the normal airborne ECB and calls
+  // `mpColl_800471F8`; that source path runs the full `mpColl_80046904` airborne wall envelope on
+  // both sides, but unlike common Jump/Fall callbacks it does not immediately call the walljump or
+  // cliff post-consumers.
+  // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80046904}
+  return msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_FT80081D0C_AIR_COLL);
+}
+
 static inline void ecb_update_rot_bounds(float x, float y, float* io_min_x, float* io_max_x,
                                          float* io_min_y, float* io_max_y) {
   if (x < *io_min_x) {
@@ -328,11 +338,10 @@ static inline uint8_t specialhi_rotate_collision_point_xrotn(
   return 1u;
 }
 
-static inline uint8_t specialhi_try_sample_jobj_ecb_points(MslEcbWorldPoints* out,
-                                                           const MslBatch* batch, size_t idx,
-                                                           uint8_t char_id, uint32_t anim,
-                                                           uint16_t frame_u16, float facing_dir,
-                                                           float pos_x, float pos_y) {
+static inline uint8_t try_sample_jobj_ecb_points(MslEcbWorldPoints* out, const MslBatch* batch,
+                                                 size_t idx, uint8_t char_id, uint32_t anim,
+                                                 uint16_t action_id, uint16_t frame_u16,
+                                                 float facing_dir, float pos_x, float pos_y) {
   if (out == NULL || batch == NULL || !(anim <= 0xFFFFu)) {
     return 0u;
   }
@@ -366,8 +375,10 @@ static inline uint8_t specialhi_try_sample_jobj_ecb_points(MslEcbWorldPoints* ou
     x *= model_scale;
     y *= model_scale;
     z *= model_scale;
-    (void)specialhi_rotate_collision_point_xrotn(batch, idx, char_id, msid, frame_u16, part_id,
-                                                 facing_dir, model_scale, &x, &y, &z);
+    if (specialhi_launch_uses_runtime_xrotn_ecb(char_id, action_id)) {
+      (void)specialhi_rotate_collision_point_xrotn(batch, idx, char_id, msid, frame_u16, part_id,
+                                                   facing_dir, model_scale, &x, &y, &z);
+    }
 
     // Decomp: mpColl_LoadECB_JObj consumes `lb_8000B1CC` world-space x/y after fighter model
     // scale. SSANIM01 matrices are facing-independent; the fighter root Y rotation maps the
@@ -395,9 +406,10 @@ static inline uint8_t specialhi_try_sample_jobj_ecb_points(MslEcbWorldPoints* ou
 
   // Decomp: mpColl_LoadECB_JObj compares the JObj horizontal span with
   // `max(4.0f, ecb_source.x12C)`, where ft_80081B38 seeds x12C as `10.0f * fp->x34_scale.y`.
-  // If the span is smaller, it recenters left/right around zero before the final +/-2 clamp.
-  // This matters for horizontal Firefox at the right wall: the raw six-joint span is narrower than
-  // x12C, so vanilla projects from the centered half-width rather than the raw leftmost joint.
+  // If the span is smaller, it recenters the existing sampled span around zero before the final
+  // +/-2 clamp (`right_x = 0.5F * ABS(right_x - left_x)`). It does not expand the span to x12C.
+  // This matters for horizontal Firefox at the right wall: vanilla projects from the centered
+  // sampled half-width rather than the raw leftmost joint or an expanded x12C half-width.
   // refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_JObj
   // refs/melee/src/melee/ft/ft_081B.c::ft_80081B38
   const float min_ecb_width = fmaxf(4.0f, 10.0f * batch->state.fighter_scale_y[idx]);
@@ -439,13 +451,15 @@ static inline uint8_t specialhi_try_sample_jobj_ecb_points(MslEcbWorldPoints* ou
 
 static inline void sample_collision_ecb_points(MslEcbWorldPoints* out, const MslBatch* batch,
                                                size_t idx, uint8_t char_id, uint32_t anim,
-                                               uint16_t frame_u16, float facing_dir, float pos_x,
-                                               float pos_y, uint8_t lock_bottom_to_zero) {
+                                               uint16_t action_id, uint16_t frame_u16,
+                                               float facing_dir, float pos_x, float pos_y,
+                                               uint8_t lock_bottom_to_zero) {
   msl_ecb_world_points_sample(out, char_id, anim, frame_u16, facing_dir, pos_x, pos_y,
                               lock_bottom_to_zero);
   if (out == NULL || batch == NULL) {
     return;
   }
+  (void)action_id;
 
   // Decomp: mpColl_LoadECB_JObj normalizes the sampled JObj ECB before wall/ceiling/floor tests.
   // In particular, if horizontal span is below max(4, x12C), it recenters the existing span around
@@ -2458,10 +2472,22 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
       // - ceiling: top point
       // refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_JObj
       // refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_Fixed
-      sample_collision_ecb_points(&cur_ecb, batch, idx, char_id, anim, ecb_frame, fd,
+      sample_collision_ecb_points(&cur_ecb, batch, idx, char_id, anim, action_id, ecb_frame, fd,
                                   batch->state.pos_x[idx], batch->state.pos_y[idx], was_grounded);
-      sample_collision_ecb_points(&prev_ecb, batch, idx, char_id, anim, ecb_frame_prev, fd, prev_x,
-                                  prev_y, was_grounded);
+      sample_collision_ecb_points(&prev_ecb, batch, idx, char_id, anim, action_id, ecb_frame_prev,
+                                  fd, prev_x, prev_y, was_grounded);
+      if (!was_grounded && batch->state.ecb_lock_timer[idx] != 0u &&
+          batch->state.coll_desired_ecb_bottom_valid[idx] != 0u &&
+          batch->state.coll_desired_ecb_bottom_locked_owner[idx] != 0u) {
+        // Source `mpColl_LoadECB_inline` preserves CollData.desired_ecb.bottom while
+        // CollData_X130_Locked is live. Wall/ceiling callbacks consume the same loaded ECB as floor
+        // callbacks; resampling the pose bottom here makes airborne ledge/lip wall envelopes too
+        // shallow during ground->air lock windows.
+        // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpColl_80045B74_LeftWall}
+        msl_ecb_world_points_preserve_desired_bottom_rel_y(
+            &cur_ecb, batch->state.pos_x[idx], batch->state.pos_y[idx],
+            batch->state.coll_desired_ecb_bottom_rel_y[idx]);
+      }
       MslEcbWorldPoints cur_right_ecb = cur_ecb;
       MslEcbWorldPoints prev_right_ecb = prev_ecb;
       MslEcbWorldPoints cur_specialhi_wall_ecb = cur_ecb;
@@ -2476,12 +2502,12 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
         // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialAirHi_Coll
         // refs/melee/src/melee/mp/mpcoll.c::{
         //   mpColl_LoadECB_JObj,mpColl_80044E10_RightWall,mpColl_80045B74_LeftWall}
-        const uint8_t have_cur_specialhi_ecb = specialhi_try_sample_jobj_ecb_points(
-            &cur_specialhi_wall_ecb, batch, idx, char_id, anim, ecb_frame, fd,
+        const uint8_t have_cur_specialhi_ecb = try_sample_jobj_ecb_points(
+            &cur_specialhi_wall_ecb, batch, idx, char_id, anim, action_id, ecb_frame, fd,
             batch->state.pos_x[idx], batch->state.pos_y[idx]);
         const uint8_t have_prev_specialhi_ecb =
-            specialhi_try_sample_jobj_ecb_points(&prev_specialhi_wall_ecb, batch, idx, char_id,
-                                                 anim, ecb_frame_prev, fd, prev_x, prev_y);
+            try_sample_jobj_ecb_points(&prev_specialhi_wall_ecb, batch, idx, char_id, anim,
+                                       action_id, ecb_frame_prev, fd, prev_x, prev_y);
         if (have_cur_specialhi_ecb) {
           cur_right_ecb = cur_specialhi_wall_ecb;
         }
@@ -2516,9 +2542,11 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
             (uint8_t)(mpcoll_damagefly_wall_asdi_latch_action(action_id) &&
                       !damagefly_hitlag_wall_refresh && batch->state.speed_x_attack[idx] > 0.0f);
         const uint8_t use_common_air_left_envelope = use_common_air_walljump_callback;
+        const uint8_t use_ft80081d0c_left_envelope =
+            mpcoll_action_uses_ft80081d0c_air_collision(action_id);
         const uint8_t use_left_air_envelope =
             (uint8_t)(use_specialhi_left_envelope || use_damagefly_left_envelope ||
-                      use_common_air_left_envelope);
+                      use_common_air_left_envelope || use_ft80081d0c_left_envelope);
         const MslEcbWorldPoints* left_cur_ecb =
             use_specialhi_left_envelope ? &cur_specialhi_wall_ecb : &cur_ecb;
         const MslEcbWorldPoints* left_prev_ecb =
@@ -2565,11 +2593,12 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
         // Decomp: `mpColl_80045B74_LeftWall` collects a fixed-capacity candidate list from
         // side, bottom, and top sweeps; `mpColl_80046224_LeftWall` then resolves the full
         // airborne ECB envelope against that list. Retain that envelope for source callbacks that
-        // immediately consume the airborne left-wall result: SpecialAirHi's launch collision and
-        // common-air Jump/Fall walljump callbacks. Other non-SpecialHi left-wall actions stay on
-        // the older point-local path until their callback-specific owners are closed.
+        // call the same airborne mpColl owner: SpecialAirHi's live-JObj launch collision, common
+        // Jump/Fall walljump callbacks, DamageFly wall-tech/reflect paths, and ft_80082C74's
+        // ft_80081D0C path for AttackAir/EscapeAir/common airborne landing callbacks.
         // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialAirHi_Coll
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Coll
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
         // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80045B74_LeftWall,mpColl_80046224_LeftWall}
         if (batch->state.wall_kind[idx] == 0 && use_left_air_envelope) {
           MslWallCandidateList candidates;
@@ -2620,14 +2649,15 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
             // SpecialAirHi consumes the wall resolution for rebound/hitlag provenance, not the
             // common-air PassiveWall/WallJump Hug consumer. DamageFly and common Jump/Fall
             // callbacks do immediately consume Collide_LeftWallHug after this mpColl path:
-            // DamageFly for FlyReflect/PassiveWall, Jump/Fall for walljump.
+            // DamageFly for FlyReflect/PassiveWall, Jump/Fall for walljump. The ft_80081D0C path
+            // still receives the source mpColl Hug bit, but has no same-callback walljump consumer.
             // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialAirHi_Coll
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FlyReflect.c::ftCo_800C15F4
             // refs/melee/src/melee/ft/ft_081B.c::ft_800835B0
             mark_left_wall_contact(
                 batch, idx,
-                (uint8_t)((use_common_air_left_envelope ||
+                (uint8_t)((use_common_air_left_envelope || use_ft80081d0c_left_envelope ||
                            (use_damagefly_left_envelope && !damagefly_hitlag_wall_refresh))
                               ? candidates.has_hug
                               : 0u));

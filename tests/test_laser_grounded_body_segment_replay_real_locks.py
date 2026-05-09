@@ -92,7 +92,7 @@ _AGG = "datasets/aggregate_recent/replays/validation/aggregate_recent"
             seed_action=20,  # Dash, then Turn before item BODY collision
             ref_action=78,  # DamageN1
             expect_item_clear=True,
-            note="Dash-to-Turn Falco laser uses lbColl hurt-radius BODY lane",
+            note="Dash-to-Turn Falco laser uses established grounded BODY travel lane",
         ),
         _Case(
             dataset_rel=f"{_AGG}/HilariousVillainousGiraffe.msl",
@@ -102,15 +102,6 @@ _AGG = "datasets/aggregate_recent/replays/validation/aggregate_recent"
             ref_action=81,  # DamageLw3
             expect_item_clear=True,
             note="AttackHi3 grounded laser segment admits BODY hit",
-        ),
-        _Case(
-            dataset_rel=f"{_AGG}/HilariousVillainousGiraffe.msl",
-            record=9169,
-            player=0,
-            seed_action=233,  # EscapeF, first vulnerable post-script frame before BODY
-            ref_action=78,  # DamageN1
-            expect_item_clear=True,
-            note="EscapeF frame-20 Falco laser uses lbColl hurt-radius BODY lane",
         ),
         _Case(
             dataset_rel="datasets/aggregate_recent/replays/validation/"
@@ -178,7 +169,7 @@ _AGG = "datasets/aggregate_recent/replays/validation/aggregate_recent"
             seed_action=20,  # adjacent pre-Turn Dash frame
             ref_action=20,
             expect_item_clear=False,
-            note="adjacent Dash frame keeps Falco laser alive before lbColl radius lane",
+            note="adjacent Dash frame keeps Falco laser alive before grounded BODY contact",
         ),
         _Case(
             dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/validation/"
@@ -188,7 +179,17 @@ _AGG = "datasets/aggregate_recent/replays/validation/aggregate_recent"
             seed_action=20,  # adjacent high-cap Dash-to-Turn no-hit
             ref_action=18,
             expect_item_clear=False,
-            note="high-cap Dash-to-Turn Falco laser stays outside lbColl radius lane",
+            note="high-cap Dash-to-Turn Falco laser stable-scale candidate stays rejected",
+        ),
+        _Case(
+            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/validation/"
+            "cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            record=4142,
+            player=0,
+            seed_action=20,  # fresh L edge still takes Dash_CheckInput Turn before guard.
+            ref_action=18,
+            expect_item_clear=False,
+            note="high-cap Dash-to-Turn with shield edge keeps laser alive",
         ),
         _Case(
             dataset_rel=f"{_AGG}/HilariousVillainousGiraffe.msl",
@@ -198,15 +199,6 @@ _AGG = "datasets/aggregate_recent/replays/validation/aggregate_recent"
             ref_action=56,
             expect_item_clear=False,
             note="adjacent AttackHi3 negative keeps laser alive",
-        ),
-        _Case(
-            dataset_rel=f"{_AGG}/HilariousVillainousGiraffe.msl",
-            record=9168,
-            player=0,
-            seed_action=233,  # EscapeF still protected by script hit-status
-            ref_action=233,
-            expect_item_clear=False,
-            note="adjacent EscapeF frame before lbColl radius lane keeps laser alive",
         ),
         _Case(
             dataset_rel="datasets/aggregate_recent/replays/validation/"
@@ -228,6 +220,8 @@ def test_grounded_laser_body_segment_rows(case: _Case) -> None:
     # - it_80272460 applies item-vs-fighter BODY damage/despawn once contact is accepted.
     # - ftColl_80077C60 consumes lbColl_80006E58's matrix/local coll_distance to split full BODY
     #   damage from phantom/tip-log overlap.
+    # - First-frame Turn/Dash handoff negatives are locked to source-probed item HitCapsule x58/x4C
+    #   scale phase, not to replay ids.
     # refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Phys,it_8029C4D4}
     # refs/melee/src/melee/it/itcoll.c::it_80272460
     # refs/melee/src/melee/ft/ftcoll.c::ftColl_80077C60

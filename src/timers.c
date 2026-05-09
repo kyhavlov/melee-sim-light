@@ -230,6 +230,31 @@ static inline uint8_t damage_post_hitlag_cb_damagefly_action(uint16_t a) {
   return msl_motion_state_common_class_has(a, MSL_MS_CLASS_DAMAGE_FLY);
 }
 
+static inline uint8_t timers_damagefly_first_active_sdi_allows_radius_crossing(
+    const MslBatch* batch, int bi, size_t idx) {
+  (void)bi;
+  if (batch == NULL) {
+    return 0u;
+  }
+  if (!damage_post_hitlag_cb_damagefly_action(batch->state.action_id[idx])) {
+    return 1u;
+  }
+
+  // The retained owner here is strictly the source first-active DamageFly stick-radius crossing
+  // consumed by ftCo_Damage_OnEveryHitlag. Floor-owned horizontal DamageFlyN rows are excluded only
+  // when the seed carries an explicit CollData_X130_Locked / ECB-lock floor-contact owner
+  // (`ecb_lock_timer` plus a persisted floor index). A previous root-vs-floor-height bias heuristic
+  // was rejected because replay-visible position is not source provenance.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+  //   ftCo_Damage_OnEveryHitlag,ftCo_DamageFly_Coll}
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpColl_80046904}
+  if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_DAMAGE_FLY_N &&
+      batch->state.ground_id[idx] != 0xFFFFu && batch->state.ecb_lock_timer[idx] != 0u) {
+    return 0u;
+  }
+  return 1u;
+}
+
 static inline uint8_t damage_every_hitlag_sdi_timer_window_action(uint16_t a) {
   switch (a) {
     // DownDamageD re-enters ftCo_8008DCE0 via ftCo_8009F184 and owns the same per-hitlag SDI
@@ -464,11 +489,11 @@ void timers_consume_post_hitlag_callbacks_after_input(MslBatch* batch) {
 
       const float lstick_x = stick_i8_to_unit(batch->state.input_main_x[idx]);
       const float lstick_y = stick_i8_to_unit(batch->state.input_main_y[idx]);
-      const float prev_lstick_x = stick_i8_to_unit(batch->state.prev_input_main_x[idx]);
-      const float prev_lstick_y = stick_i8_to_unit(batch->state.prev_input_main_y[idx]);
       const float lstick_full_x = apply_deadzone(lstick_x, c->lstick_deadzone_x);
       const float lstick_full_y = apply_deadzone(lstick_y, c->lstick_deadzone_y);
       const float lstick_mag_sq = lstick_x * lstick_x + lstick_y * lstick_y;
+      const float prev_lstick_x = stick_i8_to_unit(batch->state.prev_input_main_x[idx]);
+      const float prev_lstick_y = stick_i8_to_unit(batch->state.prev_input_main_y[idx]);
       const float prev_lstick_mag_sq =
           prev_lstick_x * prev_lstick_x + prev_lstick_y * prev_lstick_y;
       const size_t flags_i =
@@ -477,21 +502,21 @@ void timers_consume_post_hitlag_callbacks_after_input(MslBatch* batch) {
                                        batch->state.tilt_timer_y[idx] < c->sdi_tilt_max_frames)
                                           ? 1u
                                           : 0u;
-      // OnEveryHitlag's first gate is the full stick magnitude against `sdi_radius`. Replay rows
-      // can expose action-entry hitlag pulses where the replay-visible x670/x671 seeds are already
-      // reset by damage entry, but vanilla still consumes the newly radius-eligible stick at the
-      // first callback. Require previous-action provenance so the bridge cannot fire on later
-      // frozen action_frame==1 callbacks; those must use the ordinary x670/x671 timer-window path.
+      // Probed callback-local owner for fresh common-Damage hitlag:
+      // - `ftCo_8008DCE0` resets x670/x671 to 0xFE on entry, but Dolphin probes show
+      //   `ftCo_Damage_OnEveryHitlag` can still consume the callback-local radius crossing on the
+      //   first active common-Damage hitlag row (PPA:2185).
+      // - Active DamageFly rows with the same replay-visible shape are not equivalent: BHH:1600
+      //   stays frozen with x670/x671 reset despite a radius crossing. Keep DamageFly on the source
+      //   timer-window path until its separate callback/input snapshot owner is modeled.
       //
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+      //   ftCo_8008DCE0,ftCo_Damage_OnEveryHitlag}
       const uint8_t use_first_active_radius_crossing =
-          (batch->state.action_frame[idx] == 1 && batch->state.tilt_timer_x[idx] == 254u &&
-           batch->state.tilt_timer_y[idx] == 254u && batch->state.seed_prev_action_id[idx] != a)
-              ? 1u
-              : 0u;
-      const uint8_t use_full_2d =
-          (use_first_active_radius_crossing && lstick_mag_sq >= sdi_radius_sq &&
-           prev_lstick_mag_sq < sdi_radius_sq)
+          (timers_damagefly_first_active_sdi_allows_radius_crossing(batch, bi, idx) &&
+           batch->state.action_frame[idx] == 1 && batch->state.tilt_timer_x[idx] == 254u &&
+           batch->state.tilt_timer_y[idx] == 254u && batch->state.seed_prev_action_id[idx] != a &&
+           lstick_mag_sq >= sdi_radius_sq && prev_lstick_mag_sq < sdi_radius_sq)
               ? 1u
               : 0u;
       const uint8_t flags_221a = batch->state.state_flags[flags_i];
@@ -514,7 +539,7 @@ void timers_consume_post_hitlag_callbacks_after_input(MslBatch* batch) {
               ? 1u
               : 0u;
       if (batch->state.hitlag_pre_timer[idx] != 0u && batch->state.hitlag[idx] != 0u && allow_sdi &&
-          (use_full_2d || use_timer_window) && is_current_hitlag_active &&
+          (use_timer_window || use_first_active_radius_crossing) && is_current_hitlag_active &&
           lstick_mag_sq >= sdi_radius_sq) {
         batch->state.pos_x[idx] += lstick_full_x * sdi_step_mul;
         batch->state.pos_y[idx] += lstick_full_y * sdi_step_mul;

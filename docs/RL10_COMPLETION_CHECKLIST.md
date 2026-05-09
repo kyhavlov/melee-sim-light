@@ -403,8 +403,9 @@ Recommended sequence for the next deep passes:
     `0x18` stride, includes the dynamic child chain rooted at part 17, and emits dynamic-chain data
     consumed by `src/anim_pose.c`. Runtime carries fixed-capacity dynamic-node pose state, updates it
     before hurtcap refresh, and samples dynamic collision matrices for BODY hurtcap endpoints before
-    `lbColl_8000805C`. `SSDYNN01` v4 owns the dynamic-collision submotion predicate, and runtime
-    separates dynamic state carry from current-frame collision-matrix application. A broad static
+    `lbColl_8000805C`. `SSDYNN01` v5 owns the dynamic-collision submotion predicate plus the
+    source `ftData.x2C->x8` collider rows, and runtime carries dynamic state only through generated
+    dynamic-collision owner submotions. A broad static
     grounded-common-attack application
     was tested and rejected: it fixed `BHH:1599` but regressed suite totals and introduced Fox
     BODY false negatives because static SSANIM lacks the persisted `lb_8001044C` dynamic-node
@@ -713,7 +714,7 @@ Recommended sequence for the next deep passes:
     `lbColl_8000805C` path. The runtime update follows the supported `lb_8001044C`
     segment-vector owner: previous child position, current animation segment vector, descriptor
     follow/down/cone/decay constants, and carried correction axis/angle produce the next
-    dynamic-chain collision matrix. Dynamic collision applicability is an extracted `SSDYNN01` v4
+    dynamic-chain collision matrix. Dynamic collision applicability is an extracted `SSDYNN01` v5
     owner predicate, not a C-side raw `msid=58` gate, and sequential state carry uses a separate
     state-valid flag from the collision-apply flag. The rejected hardcoded runtime primitive
     overlay, generated one-slice overlay, broad grounded-attack bake, and matrix-primary /
@@ -742,11 +743,13 @@ Recommended sequence for the next deep passes:
   - the broad grounded-attack dynamic-descriptor bake is rejected; regression artifacts live under
     `reports/triage/20260416_hsd_dynamic_regression_broad/` and show new Fox msid-59 BODY false
     negatives (`AGN:1471`, `QGD:7589`, `TBK:870`);
-  - the Fox JumpB/AttackHi3 / SSDYNN01 dynamic-chain collision-pose sub-owner covers the target-domain
-    one-set data surface without widening BODY
+  - the Fox JumpB/AttackHi3 / SSDYNN01 dynamic-chain collision-pose sub-owner partially covers the
+    target-domain one-set data surface without widening BODY
     admission. Refreshed validation for the current local implementation is non-regressing relative
     to the starting review reports: primary/cardinal one-step `715 -> 699`, primary rollout
     `425 -> 423`, aggregate one-step `7962 -> 6785`, aggregate rollout `2313 -> 2262`;
+  - residual: full `lb_8001044C` natural-direction/JObj-rotation cone ownership is still missing
+    and must not be described as closed by this item.
   - hidden HitCapsule shield/body lineage is closed for the observed same-group shield/body
     continuation surface. `PRH:1830..1834`, `IAT:11146..11147`, and `BHH:1803..1804` are
     suppressed by authoritative per-HitCapsule `victims_1` seed lanes, including the GuardSetOff
@@ -1231,11 +1234,9 @@ Recommended sequence for the next deep passes:
     `F16c=0`, `F16d=0`. Aggregate total `5106`; `F14c=400`, `F14d=66`, `F15a=10`, `F15b=104`,
     `F16a=0`, `F16b=0`, `F16c=0`, `F16d=75`. Section 6 and ledge/collision-env remain closed:
     `F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`.
-  - Grounded EscapeF frame-20 Falco-laser BODY `lbColl` hurt-radius lane keeps the same
-    `ftColl_8007925C -> lbColl_8000805C -> lbColl_80006E58` source owner but applies it to the
-    aggregate-only first-vulnerable EscapeF row after the extracted script hit-status window. The
-    retained branch is state0 Falco laser, shieldless vulnerable EscapeF frame 20, lower/mid
-    hurtcaps only. Replay-real locks: positive `HVG:9169`, adjacent no-hit `HVG:9168`.
+  - The EscapeF frame-20 Falco-laser BODY slice is rejected/not retained. `MSLHSTA1` explains the
+    first vulnerable EscapeF frame, but the row still requires the broader live item BODY
+    hurt-capsule/JObj pose-selection owner rather than an EscapeF action-frame predicate.
   - Terminal x1990 hidden-colanim item BODY guard carries one internal frame of item BODY
     eligibility when `x198C=2`, `x1990=1`, `x1994=0`, and `x2221_b0=0`: visible
     `hurtbox_state` can clear for Slippi t+1 while `ftColl_8007925C` still observes the terminal

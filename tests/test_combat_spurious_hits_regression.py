@@ -20,7 +20,7 @@ def test_spurious_body_hitstun_not_applied_treasuredbackkangaroo_record_1075_p1(
     # the replay ref has hitlag/hitstun == 0 (seed==ref for those fields).
     root = Path(__file__).resolve().parents[1]
     expected_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+        "datasets/fox_falco_fd_ucf084_recent/replays/validation/"
         "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
     )
     dataset_path = root / expected_rel
@@ -706,7 +706,7 @@ def test_spurious_shield_hit_not_applied_treasuredbackkangaroo_record_2217_p0() 
     # caused by shield-bubble geometry being mis-scaled / mis-rotated relative to pose primitives.
     root = Path(__file__).resolve().parents[1]
     expected_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+        "datasets/fox_falco_fd_ucf084_recent/replays/validation/"
         "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
     )
     dataset_path = root / expected_rel
@@ -996,7 +996,7 @@ def test_spurious_shine_start_body_hit_not_applied_treasuredbackkangaroo_record_
     # refs/melee/src/melee/ft/ft_081B.c::ft_80084F3C
     root = Path(__file__).resolve().parents[1]
     expected_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+        "datasets/fox_falco_fd_ucf084_recent/replays/validation/"
         "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
     )
     dataset_path = root / expected_rel
@@ -1062,6 +1062,40 @@ def test_spurious_shine_start_body_hit_not_applied_treasuredbackkangaroo_record_
 
 
 @pytest.mark.integration
+def test_late_slot_same_frame_shine_start_cannot_hit_earlier_catchdash_sds_299() -> None:
+    # Fox dynamic-chain CatchDash BODY pose:
+    # - Dolphin primitive probes show Falco Shine's HitCapsule matches sim, but Fox cap12/part18
+    #   is lower in vanilla because `ftCo_8009DD94` has advanced the live ftData.x2C dynamic JObj
+    #   chain before `lbColl_8000805C`.
+    # - SSDYNN01 marks CatchDash as a generated dynamic-collision owner and carries the ftData.x2C
+    #   collider records used by `lb_8001044C`; this lock must not depend on a Shine pair-order
+    #   suppression branch.
+    # refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009DD94
+    # refs/melee/src/melee/lb/lb_00F9.c::lb_8001044C
+    # refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C
+    root = Path(__file__).resolve().parents[1]
+    expected_rel = "datasets/aggregate_recent/replays/validation/dream_land_recent/ShadyDecimalStarling.msl"
+    dataset_path = root / expected_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {expected_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[299:300]
+    defender = 0
+    attacker = 1
+    assert int(row["seed_t"]["action_id"][0, defender]) == 214  # CatchDash
+    assert int(row["seed_t"]["seed_prev_action_id"][0, attacker]) == 39  # Squat
+    assert int(row["ref_t1"]["action_id"][0, attacker]) == 360  # SpecialLwStart
+    assert int(row["ref_t1"]["action_id"][0, defender]) == 214
+    assert int(row["ref_t1"]["hitlag"][0, defender]) == 0
+    assert int(row["ref_t1"]["hitstun"][0, defender]) == 0
+
+    out = _one_step_out_compare(ds=ds, row=row)
+    for field in ("action_id", "animation_index", "hitlag", "hitstun", "instance_id", "last_hit_by"):
+        assert int(out[field][0, defender]) == int(row["ref_t1"][field][0, defender]), f"field={field}"
+
+
+@pytest.mark.integration
 def test_grounded_damageair2_shine_start_body_hit_stays_allowed_attachedgoodguanaco_record_4782() -> None:
     # Positive lock for the temporary airborne DamageAir2 pose-clock blocker:
     # AGN rec=4782 has Fox in grounded DamageAir2 hitstun and Falco entering grounded Shine Start.
@@ -1071,7 +1105,7 @@ def test_grounded_damageair2_shine_start_body_hit_stays_allowed_attachedgoodguan
     # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLw_Enter
     root = Path(__file__).resolve().parents[1]
     expected_rel = (
-        "datasets/fox_falco_fd_ucf084_recent/replays/debug/"
+        "datasets/fox_falco_fd_ucf084_recent/replays/validation/"
         "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl"
     )
     dataset_path = root / expected_rel

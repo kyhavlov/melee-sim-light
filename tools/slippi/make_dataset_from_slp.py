@@ -477,6 +477,9 @@ def _fod_platform_motion_with_ground_contact(
     post_on_ground_u8: np.ndarray,
     post_ground_id_u16: np.ndarray,
     post_pos_y_f32: np.ndarray,
+    next_post_on_ground_u8: np.ndarray | None = None,
+    next_post_ground_id_u16: np.ndarray | None = None,
+    next_post_pos_y_f32: np.ndarray | None = None,
     line_transforms: dict[int, tuple[int, float]],
     motion_params: dict[str, float] | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
@@ -486,8 +489,13 @@ def _fod_platform_motion_with_ground_contact(
     A grounded fighter on a FoD moving-platform line exposes the same current grIzumi/JObj height
     through the replay-visible root Y and MSLSTG01's line transform. Consecutive prefix contact also
     exposes the current per-frame height delta, which is the causal grIzumi state needed to keep
-    transformed platform floors moving during replay rollout. No future frame is read: frame `i` can
-    only affect seed frame `i` and later rows.
+    transformed platform floors moving during replay rollout.
+
+    When supplied, ``next_post_*`` is a teacher-forced same-step hidden-state reconstruction: a
+    frame-i collision that lands on a transformed FoD platform exposes the already-updated grIzumi
+    platform height only in post-frame i+1. That value initializes the frame-i collision seed only
+    when no nonzero platform velocity owner is active, so runtime/free-running gameplay remains
+    owned by the stage scheduler and moving-platform rows do not double-advance.
 
     refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
     refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
@@ -504,6 +512,22 @@ def _fod_platform_motion_with_ground_contact(
         raise ValueError("FoD grounded-contact arrays must have matching shapes")
     if on_ground.shape[0] != out_h.shape[0]:
         raise ValueError("FoD grounded-contact frame count must match height frame count")
+    next_on_ground = (
+        None if next_post_on_ground_u8 is None else np.asarray(next_post_on_ground_u8, dtype=np.uint8)
+    )
+    next_ground_id = (
+        None if next_post_ground_id_u16 is None else np.asarray(next_post_ground_id_u16, dtype=np.uint16)
+    )
+    next_pos_y = None if next_post_pos_y_f32 is None else np.asarray(next_post_pos_y_f32, dtype=np.float32)
+    if (next_on_ground is None) != (next_ground_id is None) or (next_on_ground is None) != (
+        next_pos_y is None
+    ):
+        raise ValueError("FoD next-post grounded-contact arrays must be supplied together")
+    if next_on_ground is not None:
+        if next_on_ground.shape != next_ground_id.shape or next_on_ground.shape != next_pos_y.shape:
+            raise ValueError("FoD next-post grounded-contact arrays must have matching shapes")
+        if next_on_ground.shape != on_ground.shape:
+            raise ValueError("FoD next-post grounded-contact arrays must match seed frame shape")
 
     out_vel = np.zeros_like(out_h, dtype=np.float32)
     out_vel_valid = np.zeros_like(out_v, dtype=np.uint8)
@@ -535,6 +559,7 @@ def _fod_platform_motion_with_ground_contact(
         return nxt, True
 
     for fi in range(out_h.shape[0]):
+        current_contact_this_frame = np.zeros(2, dtype=np.uint8)
         # Replay FoD events, when present, are current grIzumi state for this frame. The helper
         # above carries valid event values forward, so only a changed value is treated as a fresh
         # observation once a prefix-derived state is already active.
@@ -590,6 +615,39 @@ def _fod_platform_motion_with_ground_contact(
             last_obs_frame[platform_id] = np.int32(fi)
             has_obs[platform_id] = np.uint8(1)
             contact_owned[platform_id] = np.uint8(1)
+            current_contact_this_frame[platform_id] = np.uint8(1)
+
+        if next_on_ground is not None:
+            for slot in range(next_on_ground.shape[1]):
+                if not int(next_on_ground[fi, slot]):
+                    continue
+                rec = line_transforms.get(int(next_ground_id[fi, slot]))
+                if rec is None:
+                    continue
+                platform_id, height_coeff = rec
+                y = float(next_pos_y[fi, slot])
+                if not np.isfinite(y) or height_coeff == 0.0:
+                    continue
+                if int(current_contact_this_frame[platform_id]):
+                    continue
+                if int(cur_vel_valid[platform_id]) and abs(float(cur_vel[platform_id])) > 1e-6:
+                    continue
+                # The post-frame grounded root already includes mpLib_8004DD90_Floor's +0.0001
+                # floor bias, and the replay-seeded one-step will run that projection again from
+                # the hidden transformed line. Invert both biases for same-step hidden-height seeds
+                # so replay-real one-step contact lands on the post-frame root.
+                # refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+                h = np.float32((y - (2.0 * FOD_FLOOR_Y_BIAS)) / height_coeff)
+                if int(cur_valid[platform_id]) and abs(float(h - cur[platform_id])) <= 1e-6:
+                    continue
+                cur[platform_id] = h
+                cur_valid[platform_id] = np.uint8(1)
+                cur_vel[platform_id] = np.float32(0.0)
+                cur_vel_valid[platform_id] = np.uint8(0)
+                last_obs_h[platform_id] = h
+                last_obs_frame[platform_id] = np.int32(fi)
+                has_obs[platform_id] = np.uint8(1)
+                contact_owned[platform_id] = np.uint8(1)
 
         for platform_id in range(2):
             if int(cur_valid[platform_id]):
@@ -2175,6 +2233,30 @@ def _item_common_params() -> dict[str, float]:
     return json.loads(Path("data/items/item_common.json").read_text(encoding="utf-8"))
 
 
+@functools.lru_cache(maxsize=4)
+def _laser_shot_item_kinds(path: Path) -> tuple[int, ...]:
+    """Read supported Fox/Falco laser shot item kinds from generated MSLLASR1 data."""
+    buf = path.read_bytes()
+    if len(buf) < 16 or buf[:8] != b"MSLLASR1":
+        raise ValueError(f"{path}: invalid MSLLASR1 header")
+    version = struct.unpack_from("<I", buf, 8)[0]
+    count = struct.unpack_from("<H", buf, 12)[0]
+    if version != 4:
+        raise ValueError(f"{path}: unsupported MSLLASR1 version {version}")
+    # tools/extraction/extract_lasers.py::_pack_record starts each record with:
+    #   char_id, shot_itkind, gun_itkind, spawn_bone_part_id
+    # followed by the fixed-size laser parameter payload consumed by src/laser_params.c.
+    record_size = 254
+    off = 16
+    out: list[int] = []
+    for _ in range(int(count)):
+        if off + record_size > len(buf):
+            raise ValueError(f"{path}: truncated MSLLASR1 record")
+        out.append(int(struct.unpack_from("<H", buf, off + 2)[0]))
+        off += record_size
+    return tuple(out)
+
+
 def _derive_yoshi_shyguy_native_lanes(items_fixed: np.ndarray, *, stage_id: int):
     """Derive Shy Guy seed lanes through the required native preprocessing path.
 
@@ -2408,6 +2490,12 @@ def _derive_item_attack_fields(
     Decomp shape:
     - Items spawned from fighters copy fp->x2068_attackID / fp->x206C_attack_instance at spawn.
       refs/melee/src/melee/it/it_2725.c::it_8027B070
+    - Fox/Falco laser shots can first appear in the serialized post-frame after the spawn callback
+      has run and the owner has already left Blaster Loop. For shot item kinds from
+      `data/items/lasers.bin`, the native derivation repairs only that first-visibility timing gap
+      by using the previous post-frame owner identity when the same-frame owner identity is already
+      FtMoveId_Default.
+      refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C504
     - Reflected items can change owner/instance identity without despawning, but the item's staling
       identity remains spawn-latched for lasers in v1 (do not overwrite these fields on reflect).
       Slippi records item.instance_id from item->xDA8_short (SendItemInfo.s reads 0xDA8), and the
@@ -2425,6 +2513,7 @@ def _derive_item_attack_fields(
         import msl_binding  # type: ignore
     except ImportError as exc:
         raise RuntimeError("native msl_binding.derive_item_attack_fields is required; run `make build`") from exc
+    laser_shot_kinds = _laser_shot_item_kinds(Path("data") / "items" / "lasers.bin")
     attack_id, attack_instance = msl_binding.derive_item_attack_fields(
         np.ascontiguousarray(items_fixed["exists"], dtype=np.uint8),
         np.ascontiguousarray(items_fixed["type"], dtype=np.uint16),
@@ -2433,6 +2522,7 @@ def _derive_item_attack_fields(
         np.ascontiguousarray(fighter_attack_id, dtype=np.uint16),
         np.ascontiguousarray(fighter_attack_instance, dtype=np.uint16),
         int(num_players),
+        np.asarray(laser_shot_kinds, dtype=np.uint16),
     )
     items_fixed["attack_id"] = attack_id
     items_fixed["attack_instance"] = attack_instance
@@ -3207,12 +3297,23 @@ def _main_impl(args) -> Dataset:
         samples["seed_t"]["stage_fod_platform_height_f32"] = fod_height[:-1]
         samples["seed_t"]["stage_fod_platform_height_valid_u8"] = fod_valid[:-1]
 
+    # Items are global per frame. Build raw item rows before final staling so reflected item hits
+    # can advance the owner's stale queue through plStale_UpdateStaleMovesFromItem.
+    items_fixed = _fill_items_fixed(frames, n_frames, src_ports=src_ports)
+
     # Staling seed schema (PP#4):
     # - Derive stale queue state strictly causally from replay history so one-step reseed can
     #   apply staling multiplier deterministically.
     from tools.slippi.staling_history import derive_staling_history
 
-    hist = derive_staling_history(frames, src_ports=src_ports)
+    hist_initial = derive_staling_history(frames, src_ports=src_ports)
+    _derive_item_attack_fields(
+        items_fixed,
+        fighter_attack_id=hist_initial.attack_id,
+        fighter_attack_instance=hist_initial.attack_instance,
+        num_players=num_players,
+    )
+    hist = derive_staling_history(frames, src_ports=src_ports, items_fixed=items_fixed)
     samples["seed_t"]["attack_id"][:, :num_players] = hist.attack_id[:-1, :]
     samples["seed_t"]["attack_instance"][:, :num_players] = hist.attack_instance[:-1, :]
     samples["seed_t"]["stale_queue_index"][:, :num_players] = hist.stale_queue_index[:-1, :]
@@ -4618,14 +4719,6 @@ def _main_impl(args) -> Dataset:
 
     samples["seed_t"]["attacker_shield_ground_kb_vel"] = attacker_shield_ground_kb_vel
 
-    # Items are global per frame.
-    items_fixed = _fill_items_fixed(frames, n_frames, src_ports=src_ports)
-    _derive_item_attack_fields(
-        items_fixed,
-        fighter_attack_id=hist.attack_id,
-        fighter_attack_instance=hist.attack_instance,
-        num_players=num_players,
-    )
     items_seed = _materialize_illusion_seed_positions(
         items_fixed,
         illusion_ghost_pos1_x=illusion_ghost_pos1_x,
@@ -4827,6 +4920,9 @@ def _main_impl(args) -> Dataset:
             post_on_ground_u8=post_on_ground[:-1, :num_players],
             post_ground_id_u16=post_ground_id[:-1, :num_players],
             post_pos_y_f32=post_pos_y[:-1, :num_players],
+            next_post_on_ground_u8=post_on_ground[1:, :num_players],
+            next_post_ground_id_u16=post_ground_id[1:, :num_players],
+            next_post_pos_y_f32=post_pos_y[1:, :num_players],
             line_transforms=_fod_platform_height_transform_records(data_root),
             motion_params=fountain_of_dreams_platform_motion_params(data_root),
         )

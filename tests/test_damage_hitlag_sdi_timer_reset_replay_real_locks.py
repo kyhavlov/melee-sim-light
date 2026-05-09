@@ -93,6 +93,38 @@ def test_damageair3_prior_sdi_reset_blocks_stale_timer_window_tbk_4224() -> None
 
 
 @pytest.mark.integration
+def test_damagefly_fresh_entry_reset_blocks_radius_crossing_sdi_bhh_1600() -> None:
+    # Source negative for first-active radius crossing:
+    # - ftCo_8008DCE0 has reset x670/x671 to 0xFE on DamageFly entry.
+    # - The seed carries a CollData_X130_Locked / ECB-lock floor-contact owner, so the horizontal
+    #   DamageFlyN row stays on the floor-collision owner instead of the first-active SDI crossing.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+    #   ftCo_8008DCE0,ftCo_Damage_OnEveryHitlag,ftCo_DamageFly_Coll}
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpColl_80046904}
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+        "BlondHardHippopotamus.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    seed, ref, out = _run_one_step(dataset_path, 1600)
+    p = 1
+    assert int(seed["action_id"][p]) == 88  # DamageFlyN
+    assert int(seed["hitlag"][p]) == 6
+    assert int(seed["tilt_timer_x"][p]) == 0xFE
+    assert int(seed["tilt_timer_y"][p]) == 0xFE
+    assert float(ref["pos_x"][p]) == pytest.approx(float(seed["pos_x"][p]), abs=1e-6)
+    assert float(ref["pos_y"][p]) == pytest.approx(float(seed["pos_y"][p]), abs=1e-6)
+
+    assert int(out["hitlag"][p]) == int(ref["hitlag"][p])
+    assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=1e-6)
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
 def test_damageflytop_to_damagefall_preserves_x670_for_exit_gat_8021() -> None:
     # Negative for the damage-entry backfill: natural DamageFlyTop -> DamageFall is not
     # ftCo_8008DCE0 and must not clear x670/x671. The preserved x670 lets DamageFall immediately

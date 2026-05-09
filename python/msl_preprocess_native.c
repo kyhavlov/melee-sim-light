@@ -526,9 +526,15 @@ PyObject* msl_derive_staling_history_py(PyObject* self, PyObject* args) {
   PyObject* state_iid_obj = NULL;
   PyObject* last_hit_by_obj = NULL;
   PyObject* last_hit_by_iid_obj = NULL;
-  if (!PyArg_ParseTuple(args, "OOOOOOOOOO", &src_ports_obj, &char_obj, &action_obj,
+  PyObject* item_exists_obj = NULL;
+  PyObject* item_owner_obj = NULL;
+  PyObject* item_instance_id_obj = NULL;
+  PyObject* item_attack_id_obj = NULL;
+  PyObject* item_attack_instance_obj = NULL;
+  if (!PyArg_ParseTuple(args, "OOOOOOOOOO|OOOOO", &src_ports_obj, &char_obj, &action_obj,
                         &action_frame_obj, &anim_obj, &percent_obj, &stocks_obj, &state_iid_obj,
-                        &last_hit_by_obj, &last_hit_by_iid_obj)) {
+                        &last_hit_by_obj, &last_hit_by_iid_obj, &item_exists_obj, &item_owner_obj,
+                        &item_instance_id_obj, &item_attack_id_obj, &item_attack_instance_obj)) {
     return NULL;
   }
   PyObject* src_seq = PySequence_Fast(src_ports_obj, "src_ports must be a sequence");
@@ -570,9 +576,35 @@ PyObject* msl_derive_staling_history_py(PyObject* self, PyObject* args) {
       require_contiguous_array(last_hit_by_obj, NPY_UINT8, 2, "last_hit_by");
   PyArrayObject* last_hit_by_iid =
       require_contiguous_array(last_hit_by_iid_obj, NPY_UINT16, 2, "last_hit_by_instance");
+  PyArrayObject* item_exists = NULL;
+  PyArrayObject* item_owner = NULL;
+  PyArrayObject* item_instance_id = NULL;
+  PyArrayObject* item_attack_id = NULL;
+  PyArrayObject* item_attack_instance = NULL;
+  const uint8_t have_item_args =
+      (item_exists_obj != NULL || item_owner_obj != NULL || item_instance_id_obj != NULL ||
+       item_attack_id_obj != NULL || item_attack_instance_obj != NULL)
+          ? 1u
+          : 0u;
+  if (have_item_args) {
+    if (item_exists_obj == NULL || item_owner_obj == NULL || item_instance_id_obj == NULL ||
+        item_attack_id_obj == NULL || item_attack_instance_obj == NULL) {
+      PyErr_SetString(PyExc_ValueError, "item staling inputs must be provided as a complete set");
+      return NULL;
+    }
+    item_exists = require_contiguous_array(item_exists_obj, NPY_UINT8, 2, "item_exists");
+    item_owner = require_contiguous_array(item_owner_obj, NPY_INT8, 2, "item_owner");
+    item_instance_id =
+        require_contiguous_array(item_instance_id_obj, NPY_UINT16, 2, "item_instance_id");
+    item_attack_id = require_contiguous_array(item_attack_id_obj, NPY_UINT16, 2, "item_attack_id");
+    item_attack_instance =
+        require_contiguous_array(item_attack_instance_obj, NPY_UINT16, 2, "item_attack_instance");
+  }
   if (char_id == NULL || action_id == NULL || action_frame == NULL || anim == NULL ||
       percent == NULL || stocks == NULL || state_iid == NULL || last_hit_by == NULL ||
-      last_hit_by_iid == NULL) {
+      last_hit_by_iid == NULL ||
+      (have_item_args && (item_exists == NULL || item_owner == NULL || item_instance_id == NULL ||
+                          item_attack_id == NULL || item_attack_instance == NULL))) {
     return NULL;
   }
   const npy_intp n = PyArray_DIM(action_id, 0);
@@ -590,6 +622,21 @@ PyObject* msl_derive_staling_history_py(PyObject* self, PyObject* args) {
       require_exact_2d_shape(last_hit_by, n, w, "last_hit_by") != 0 ||
       require_exact_2d_shape(last_hit_by_iid, n, w, "last_hit_by_instance") != 0) {
     return NULL;
+  }
+  npy_intp item_width = 0;
+  if (have_item_args) {
+    item_width = PyArray_DIM(item_exists, 1);
+    if (PyArray_NDIM(item_exists) != 2 || PyArray_DIM(item_exists, 0) != n ||
+        PyArray_NDIM(item_owner) != 2 || PyArray_DIM(item_owner, 0) != n ||
+        PyArray_DIM(item_owner, 1) != item_width || PyArray_NDIM(item_instance_id) != 2 ||
+        PyArray_DIM(item_instance_id, 0) != n || PyArray_DIM(item_instance_id, 1) != item_width ||
+        PyArray_NDIM(item_attack_id) != 2 || PyArray_DIM(item_attack_id, 0) != n ||
+        PyArray_DIM(item_attack_id, 1) != item_width || PyArray_NDIM(item_attack_instance) != 2 ||
+        PyArray_DIM(item_attack_instance, 0) != n ||
+        PyArray_DIM(item_attack_instance, 1) != item_width) {
+      PyErr_SetString(PyExc_ValueError, "item staling inputs must have matching [n,item] shapes");
+      return NULL;
+    }
   }
   if (attack_id_tables_init() != 0) {
     PyErr_SetString(PyExc_RuntimeError, "attack_id_tables_init failed");
@@ -639,6 +686,14 @@ PyObject* msl_derive_staling_history_py(PyObject* self, PyObject* args) {
   const uint16_t* iid_p = (const uint16_t*)PyArray_DATA(state_iid);
   const uint8_t* last_hit_p = (const uint8_t*)PyArray_DATA(last_hit_by);
   const uint16_t* last_hit_iid_p = (const uint16_t*)PyArray_DATA(last_hit_by_iid);
+  const uint8_t* item_exists_p = have_item_args ? (const uint8_t*)PyArray_DATA(item_exists) : NULL;
+  const int8_t* item_owner_p = have_item_args ? (const int8_t*)PyArray_DATA(item_owner) : NULL;
+  const uint16_t* item_iid_p =
+      have_item_args ? (const uint16_t*)PyArray_DATA(item_instance_id) : NULL;
+  const uint16_t* item_attack_id_p =
+      have_item_args ? (const uint16_t*)PyArray_DATA(item_attack_id) : NULL;
+  const uint16_t* item_attack_inst_p =
+      have_item_args ? (const uint16_t*)PyArray_DATA(item_attack_instance) : NULL;
   uint16_t* out_attack_id_p = (uint16_t*)PyArray_DATA(out_attack_id);
   uint16_t* out_attack_inst_p = (uint16_t*)PyArray_DATA(out_attack_inst);
   uint8_t* out_qi_p = (uint8_t*)PyArray_DATA(out_qi);
@@ -738,12 +793,14 @@ PyObject* msl_derive_staling_history_py(PyObject* self, PyObject* args) {
           continue;
         }
         int attacker = -1;
+        uint16_t att_move_id = 0xFFFFu;
+        uint16_t att_attack_inst = 0u;
+        const uint16_t hit_iid = last_hit_iid_p[vi];
         const uint8_t port0 = last_hit_p[vi];
         if (port0 < 4u) {
           attacker = slot_by_port0[port0];
         }
         if (attacker < 0) {
-          const uint16_t hit_iid = last_hit_iid_p[vi];
           if (hit_iid != 0u) {
             int match = -1;
             int match_count = 0;
@@ -758,14 +815,88 @@ PyObject* msl_derive_staling_history_py(PyObject* self, PyObject* args) {
             }
           }
         }
+
+        uint8_t hit_iid_matches_fighter_row = 0u;
+        if (hit_iid != 0u) {
+          for (int p = 0; p < num_players; p++) {
+            if (iid_p[t * w + p] == hit_iid) {
+              if (port0 >= 4u || slot_by_port0[port0] < 0 || slot_by_port0[port0] == p) {
+                hit_iid_matches_fighter_row = 1u;
+              }
+              break;
+            }
+          }
+        }
+
+        if (attacker >= 0 && hit_iid != 0u) {
+          const size_t mi = (size_t)attacker * 65536u + (size_t)hit_iid;
+          if (map_mid[mi] != 0xFFFFu || map_inst[mi] != 0u) {
+            att_move_id = map_mid[mi];
+            att_attack_inst = map_inst[mi];
+          }
+        }
+
+        const uint8_t fighter_hit_identity_available =
+            (attacker >= 0 && hit_iid_matches_fighter_row != 0u &&
+             ((att_move_id != 0xFFFFu && att_move_id != (uint16_t)MSL_FT_MOVE_ID_DEFAULT &&
+               att_attack_inst != 0u) ||
+              (cur_attack_id[attacker] != 0xFFFFu &&
+               cur_attack_id[attacker] != (uint16_t)MSL_FT_MOVE_ID_DEFAULT &&
+               cur_attack_inst[attacker] != 0u)))
+                ? 1u
+                : 0u;
+
+        if (have_item_args && hit_iid != 0u && fighter_hit_identity_available == 0u &&
+            (att_move_id == 0xFFFFu || att_move_id == (uint16_t)MSL_FT_MOVE_ID_DEFAULT ||
+             att_attack_inst == 0u)) {
+          int item_attacker = -1;
+          uint16_t item_move_id = 0xFFFFu;
+          uint16_t item_attack_inst = 0u;
+          int item_match_count = 0;
+          // Decomp: item-owned hits update the stale table through
+          // plStale_UpdateStaleMovesFromItem(owner, victim), using the item's xD88/xD8C attack
+          // identity and its current owner. Reflected lasers can damage on the frame after the
+          // item disappears from post-frame, so first consult the previous post-frame item row
+          // (the seed_t owner) and then current as a fallback.
+          // refs/melee/src/melee/pl/plstale.c::plStale_UpdateStaleMovesFromItem
+          // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078998,ftColl_80077464}
+          for (int pass = 0; pass < 2; pass++) {
+            const npy_intp item_t = (pass == 0) ? (t - 1) : t;
+            if (item_t < 0 || item_t >= n) {
+              continue;
+            }
+            for (npy_intp it = 0; it < item_width; it++) {
+              const npy_intp ii = item_t * item_width + it;
+              if (item_exists_p[ii] == 0u || item_iid_p[ii] != hit_iid) {
+                continue;
+              }
+              const int owner = (int)item_owner_p[ii];
+              if (owner < 0 || owner >= num_players || owner == victim) {
+                continue;
+              }
+              if (port0 < 4u && slot_by_port0[port0] >= 0 && slot_by_port0[port0] != owner) {
+                continue;
+              }
+              item_attacker = owner;
+              item_move_id = item_attack_id_p[ii];
+              item_attack_inst = item_attack_inst_p[ii];
+              item_match_count++;
+            }
+            if (item_match_count > 0) {
+              break;
+            }
+          }
+          if (item_match_count == 1) {
+            attacker = item_attacker;
+            att_move_id = item_move_id;
+            att_attack_inst = item_attack_inst;
+          }
+        }
         if (attacker < 0 || attacker == victim) {
           continue;
         }
 
-        uint16_t att_move_id = 0xFFFFu;
-        uint16_t att_attack_inst = 0u;
-        const uint16_t hit_iid = last_hit_iid_p[vi];
-        if (hit_iid != 0u) {
+        if ((att_move_id == 0xFFFFu || att_attack_inst == 0u) && hit_iid != 0u) {
           const size_t mi = (size_t)attacker * 65536u + (size_t)hit_iid;
           if (map_mid[mi] != 0xFFFFu || map_inst[mi] != 0u) {
             att_move_id = map_mid[mi];
@@ -6753,10 +6884,11 @@ PyObject* msl_derive_item_attack_fields_py(PyObject* self, PyObject* args) {
   PyObject* item_spawn_id_obj = NULL;
   PyObject* fighter_attack_id_obj = NULL;
   PyObject* fighter_attack_instance_obj = NULL;
+  PyObject* prev_frame_spawn_kind_obj = NULL;
   int num_players = 0;
-  if (!PyArg_ParseTuple(args, "OOOOOOi", &item_exists_obj, &item_type_obj, &item_owner_obj,
+  if (!PyArg_ParseTuple(args, "OOOOOOi|O", &item_exists_obj, &item_type_obj, &item_owner_obj,
                         &item_spawn_id_obj, &fighter_attack_id_obj, &fighter_attack_instance_obj,
-                        &num_players)) {
+                        &num_players, &prev_frame_spawn_kind_obj)) {
     return NULL;
   }
   PyArrayObject* item_exists =
@@ -6771,8 +6903,15 @@ PyObject* msl_derive_item_attack_fields_py(PyObject* self, PyObject* args) {
       require_contiguous_array(fighter_attack_id_obj, NPY_UINT16, 2, "fighter_attack_id_u16");
   PyArrayObject* fighter_attack_instance = require_contiguous_array(
       fighter_attack_instance_obj, NPY_UINT16, 2, "fighter_attack_instance_u16");
+  PyArrayObject* prev_frame_spawn_kind = NULL;
+  if (prev_frame_spawn_kind_obj != NULL && prev_frame_spawn_kind_obj != Py_None) {
+    prev_frame_spawn_kind = require_contiguous_array(prev_frame_spawn_kind_obj, NPY_UINT16, 1,
+                                                     "prev_frame_spawn_kind_u16");
+  }
   if (item_exists == NULL || item_type == NULL || item_owner == NULL || item_spawn_id == NULL ||
-      fighter_attack_id == NULL || fighter_attack_instance == NULL) {
+      fighter_attack_id == NULL || fighter_attack_instance == NULL ||
+      (prev_frame_spawn_kind_obj != NULL && prev_frame_spawn_kind_obj != Py_None &&
+       prev_frame_spawn_kind == NULL)) {
     return NULL;
   }
   const npy_intp n = PyArray_DIM(item_exists, 0);
@@ -6807,6 +6946,10 @@ PyObject* msl_derive_item_attack_fields_py(PyObject* self, PyObject* args) {
   const uint32_t* spawn = (const uint32_t*)PyArray_DATA(item_spawn_id);
   const uint16_t* fighter_aid = (const uint16_t*)PyArray_DATA(fighter_attack_id);
   const uint16_t* fighter_ainst = (const uint16_t*)PyArray_DATA(fighter_attack_instance);
+  const uint16_t* prev_kind =
+      prev_frame_spawn_kind != NULL ? (const uint16_t*)PyArray_DATA(prev_frame_spawn_kind) : NULL;
+  const npy_intp prev_kind_count =
+      prev_frame_spawn_kind != NULL ? PyArray_SIZE(prev_frame_spawn_kind) : 0;
   uint16_t* out_aid = (uint16_t*)PyArray_DATA(out_attack_id);
   uint16_t* out_ainst = (uint16_t*)PyArray_DATA(out_attack_instance);
   uint32_t active_spawn[15] = {0};
@@ -6842,8 +6985,34 @@ PyObject* msl_derive_item_attack_fields_py(PyObject* self, PyObject* args) {
         active_type[active_idx] = key_type;
         const int owner = (int)owner_data[item_idx];
         if (owner >= 0 && owner < players) {
-          active_aid[active_idx] = fighter_aid[(i * width) + owner];
-          active_ainst[active_idx] = fighter_ainst[(i * width) + owner];
+          npy_intp owner_frame = i;
+          if (prev_kind != NULL && i > 0) {
+            bool use_prev_owner_frame = false;
+            for (npy_intp k = 0; k < prev_kind_count; k++) {
+              if (prev_kind[k] == key_type) {
+                use_prev_owner_frame = true;
+                break;
+              }
+            }
+            if (use_prev_owner_frame) {
+              const npy_intp cur_owner_idx = (i * width) + owner;
+              const npy_intp prev_owner_idx = ((i - 1) * width) + owner;
+              // Source owner: Item_80268B18/it_8027B0C4 copies xD88/xD8C at the live item-spawn
+              // callback. Slippi first serializes newly-created Fox/Falco laser shots in the
+              // post-frame after that callback, by which point the fighter can already have left
+              // Blaster Loop and reset x2068/x206C to FtMoveId_Default. For data-backed laser shot
+              // kinds, repair only that first-visibility timing gap by using the previous
+              // post-frame owner identity when the current owner identity is already default.
+              // refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C504
+              // refs/melee/src/melee/it/it_2725.c::{it_8027B0C4,it_8027B070}
+              if ((fighter_aid[cur_owner_idx] == 1u || fighter_ainst[cur_owner_idx] == 0u) &&
+                  fighter_aid[prev_owner_idx] != 1u && fighter_ainst[prev_owner_idx] != 0u) {
+                owner_frame = i - 1;
+              }
+            }
+          }
+          active_aid[active_idx] = fighter_aid[(owner_frame * width) + owner];
+          active_ainst[active_idx] = fighter_ainst[(owner_frame * width) + owner];
         } else {
           active_aid[active_idx] = 1u;
           active_ainst[active_idx] = 0u;
@@ -7489,11 +7658,19 @@ PyObject* msl_derive_yoshi_shyguy_seed_lanes_py(PyObject* self, PyObject* args) 
 
     if (stage_ok && shyguy_count > 0) {
       cur_timer = timer_reset;
-      const int first_slot = shyguy_slots[0];
-      const npy_intp first_idx = fi * slots + first_slot;
-      cur_pattern = msl_py_shyguy_pattern_from_item(px[first_idx], py[first_idx], vpos);
-      out_pattern[fi] = (uint8_t)cur_pattern;
       if (new_count > 0) {
+        int pattern_slot = shyguy_slots[0];
+        for (int si = 0; si < shyguy_count; si++) {
+          const int slot = shyguy_slots[si];
+          const npy_intp idx = fi * slots + slot;
+          if (sp[idx] == group_base) {
+            pattern_slot = slot;
+            break;
+          }
+        }
+        const npy_intp pattern_idx = fi * slots + pattern_slot;
+        cur_pattern = msl_py_shyguy_pattern_from_item(px[pattern_idx], py[pattern_idx], vpos);
+        out_pattern[fi] = (uint8_t)cur_pattern;
         for (int ni = 0; ni < new_count; ni++) {
           MslPyShyguySpawnState* ss =
               msl_py_shyguy_spawn_state(spawn_states, &spawn_count, cap, new_spawns[ni], (int)fi);

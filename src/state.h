@@ -951,6 +951,11 @@ typedef struct MslStateSoA {
   uint16_t* instance_identity_last_action_id;  // [batch * players]
   uint16_t* attack_id;  // GALE01 fp->x2068_attackID (seeded; replay-history derived)
   uint16_t* attack_instance;
+  // Internal-only frame-start copy of x2068/x206C. Item spawn callbacks use this to recover the
+  // live Blaster Loop attack identity when the simulator has already applied a same-frame
+  // motion-state exit before spawning the shot article.
+  uint16_t* frame_start_attack_id;        // [batch * players]
+  uint16_t* frame_start_attack_instance;  // [batch * players]
   // Internal-only: last action_id for which attack_id/attack_instance were updated.
   // Used to avoid incorrectly bumping x206C on animation restarts (msl_anim_timebase_enter without
   // a motion-state change).

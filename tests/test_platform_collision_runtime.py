@@ -51,6 +51,7 @@ ACT_ATTACK_DASH = 0x0032
 ACT_ATTACK_S4_S = 0x003C
 ACT_ATTACK_HI4 = 0x003F
 ACT_FX_SPECIAL_AIR_HI = 0x0164
+ACT_FX_SPECIAL_AIR_S_END = 0x0160
 ACT_FX_SPECIAL_HI_BOUND = 0x0167
 
 SM_WAIT1_0 = 2
@@ -2385,7 +2386,9 @@ def test_fod_attackair_deep_transformed_platform_crossing_still_lands_replay_rea
     ref = row["ref_t1"]
     for field in ("action_id", "animation_index", "on_ground", "ground_id"):
         assert int(out[field][p]) == int(ref[field][p]), field
-    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+    # The negative boundary is the callback-owned Landing handoff; the float compare can differ by
+    # the floor-y bias used when projecting against the transformed FoD platform line.
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-4)
 
 
 @pytest.mark.integration
@@ -2496,6 +2499,65 @@ def test_fod_grounded_contact_derives_current_platform_height_replay_real(tmp_pa
     assert int(out["ground_id"][p]) == int(row["ref_t1"]["ground_id"][p]) == 0
     assert float(out["pos_x"][p]) == pytest.approx(float(row["ref_t1"]["pos_x"][p]), abs=1e-6)
     assert float(out["pos_y"][p]) == pytest.approx(float(row["ref_t1"]["pos_y"][p]), abs=2e-4)
+
+
+@pytest.mark.integration
+def test_fod_same_step_landing_contact_derives_hidden_platform_height_replay_real(
+    tmp_path: Path,
+) -> None:
+    # EWT record 10353 lands out of Fox/Falco aerial Side-B on FoD's left moving platform. The
+    # sparse Slippi platform event stream has not exposed the current left-platform height yet, but
+    # the same source collision step has already updated grIzumi/mpLib before
+    # ftFx_SpecialAirSEnd_Coll calls ft_CheckGroundAndLedge. The post-frame grounded root exposes
+    # that hidden transformed-line height for teacher-forced one-step seeds.
+    # refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialAirSEnd_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_CheckGroundAndLedge
+    # data/stages/bin/griz.bin::MSLSTG01 platform_transforms
+    slp = (
+        Path(__file__).resolve().parents[1]
+        / "replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.slp"
+    )
+    if not slp.exists():
+        pytest.skip(f"missing local replay: {slp}")
+
+    from tools.slippi.make_dataset_from_slp import _main_impl
+
+    out_path = tmp_path / "ElatedWearyTermite.msl"
+    _main_impl(
+        Namespace(
+            slp=str(slp),
+            out=str(out_path),
+            ports=None,
+            ucf_enabled=True,
+            ucf_cardinals_1_0_enabled=True,
+        )
+    )
+    ds = read_dataset(str(out_path))
+    row = ds.samples[10353]
+    p = 0
+
+    assert int(row["seed_t"]["stage_id"]) == 2
+    assert int(row["seed_t"]["action_id"][p]) == ACT_FX_SPECIAL_AIR_S_END
+    assert int(row["seed_t"]["on_ground"][p]) == 0
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_LANDING_FALL_SPECIAL
+    assert int(row["ref_t1"]["ground_id"][p]) == 0
+    assert int(row["seed_t"]["stage_fod_platform_height_valid_u8"][1]) == 1
+    assert int(row["seed_t"]["stage_fod_platform_velocity_valid_u8"][1]) == 0
+
+    out = _step_one_replay_row(ds, 10353)
+
+    assert int(out["action_id"][p]) == int(row["ref_t1"]["action_id"][p]) == ACT_LANDING_FALL_SPECIAL
+    assert int(out["action_frame"][p]) == int(row["ref_t1"]["action_frame"][p]) == 0
+    assert int(out["on_ground"][p]) == int(row["ref_t1"]["on_ground"][p]) == 1
+    assert int(out["ground_id"][p]) == int(row["ref_t1"]["ground_id"][p]) == 0
+    assert float(out["pos_x"][p]) == pytest.approx(float(row["ref_t1"]["pos_x"][p]), abs=1e-6)
+    assert float(out["pos_y"][p]) == pytest.approx(float(row["ref_t1"]["pos_y"][p]), abs=1e-5)
+
+    prev_row = ds.samples[10352]
+    prev_out = _step_one_replay_row(ds, 10352)
+    assert int(prev_out["action_id"][p]) == int(prev_row["ref_t1"]["action_id"][p]) == ACT_FX_SPECIAL_AIR_S_END
+    assert int(prev_out["on_ground"][p]) == int(prev_row["ref_t1"]["on_ground"][p]) == 0
 
 
 @pytest.mark.integration

@@ -26,13 +26,13 @@ validation.profile: rl1_gameplay
 validation.profile.ignored: state_flags[4]&0x80 reason=Slippi fp+0x221F camera-subject / magnifying-glass visibility bit. The current RL1 target consumes gameplay state, collision, damage, hitlag, shield, item, source, identity lanes, and the other fp+0x221F gameplay-adjacent bits, but not camera-box rendering visibility. exception=Only bit 0x80 of the raw compare byte is ignored for validation totals/rollout first-break ranking. Other state_flags[4] bits, including x221F_b1/x221F_b3, remain scored.
 
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl ==
-rollout.best_len: 1435
-rollout.streak_count: 15
-rollout.streak_len.median: 314
+rollout.best_len: 1883
+rollout.streak_count: 14
+rollout.streak_len.median: 291
 rollout.streak_len.p90: 1282
-rollout.streak_len.p95: 1435
-rollout.streak_len.max: 1435
-rollout.first_mismatch_total: 14
+rollout.streak_len.p95: 1883
+rollout.streak_len.max: 1883
+rollout.first_mismatch_total: 13
 rollout.first_mismatch_seeded_total: 1
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:2056
 
@@ -61,21 +61,21 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:1543
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.msl ==
 rollout.best_len: 1131
 rollout.streak_count: 18
-rollout.streak_len.median: 250
-rollout.streak_len.p90: 1104
+rollout.streak_len.median: 265
+rollout.streak_len.p90: 1129
 rollout.streak_len.p95: 1131
 rollout.streak_len.max: 1131
 rollout.first_mismatch_total: 17
-rollout.first_mismatch_seeded_total: 4
+rollout.first_mismatch_seeded_total: 3
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:1615
 
 == suite summary ==
-overall.rollout.streak_count: 82
+overall.rollout.streak_count: 81
 overall.rollout.streak_len.median: 354
 overall.rollout.streak_len.p90: 985
 overall.rollout.streak_len.p95: 1131
 overall.rollout.streak_len.max: 2269
 overall.rollout.best_len.max: 2269
-overall.rollout.first_mismatch_total: 78
-overall.rollout.first_mismatch_seeded_total: 13
+overall.rollout.first_mismatch_total: 77
+overall.rollout.first_mismatch_seeded_total: 12
 overall.rollout.ignored_first_mismatch_top: state_flags[4]&0x80:8078

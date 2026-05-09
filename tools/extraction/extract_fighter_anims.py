@@ -1059,9 +1059,22 @@ def _read_fighter_dynamics(character: str) -> list[dict[str, object]]:
 
     dyn_count = int(_u32_be(arc.buf, dyn_abs + 0x00))
     bones_ptr = _u32_be(arc.buf, dyn_abs + 0x04)
+    collider_count = int(_u32_be(arc.buf, dyn_abs + 0x08))
+    colliders_ptr = _u32_be(arc.buf, dyn_abs + 0x0C)
     if dyn_count <= 0 or bones_ptr == 0:
         return []
     bones_abs = arc.data_base + bones_ptr
+    colliders: list[tuple[int, tuple[float, float, float], float]] = []
+    if collider_count > 0 and colliders_ptr != 0:
+        colliders_abs = arc.data_base + colliders_ptr
+        for i in range(collider_count):
+            ent_abs = colliders_abs + i * 0x14
+            if ent_abs + 0x14 > len(arc.buf):
+                raise RuntimeError(f"{base.name} dynamic collider truncated: index={i}")
+            part = int(_u32_be(arc.buf, ent_abs + 0x00))
+            offset = tuple(float(_f32_be(arc.buf, ent_abs + 0x04 + j * 4)) for j in range(3))
+            radius = float(_f32_be(arc.buf, ent_abs + 0x10))
+            colliders.append((part, (offset[0], offset[1], offset[2]), radius))
 
     out: list[dict[str, object]] = []
     for i in range(dyn_count):
@@ -1091,6 +1104,7 @@ def _read_fighter_dynamics(character: str) -> list[dict[str, object]]:
                 "chain_count": chain_count,
                 "pos": pos,
                 "entries": entries,
+                "colliders": colliders,
             }
         )
     return out
@@ -1446,16 +1460,19 @@ def _write_fighter_dynamics_data(
 ) -> Path:
     """Write extracted ftData.x2C dynamic-chain descriptors for runtime pose ownership.
 
-    Layout `SSDYNN01` v4:
+    Layout `SSDYNN01` v5:
     - set_count:u16, total_node_count:u16
     - per set: root_part:u16, node_count:u16, pos:vec3
     - per node: part:u16, pad:u16, constants[15]:f32
     - collision_msid_count:u16, reserved:u16, collision_msids:u16[]
+    - collider_count:u16, reserved:u16
+    - per collider: part:u16, pad:u16, offset:vec3, radius:f32
 
     The constants are the raw 0x3C-byte `lb_00F9_UnkDesc1Inner` entries copied by
     `lb_80011710`; runtime maps them onto the `lb_8001044C` dynamic-node fields. The
     collision msid index is the audited owner predicate for submotions whose BODY collision
-    matrices consume this dynamic-chain state on every supported frame.
+    matrices consume this dynamic-chain state on every supported frame. The collider records are
+    ftData.x2C->x8 (`fp->x1670`) entries consumed by `lb_8001044C`'s segment/sphere avoidance.
     """
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"{character}.dyn.bin"
@@ -1479,7 +1496,7 @@ def _write_fighter_dynamics_data(
 
     with out_path.open("wb") as f:
         f.write(b"SSDYNN01")
-        f.write(struct.pack("<I", 4))
+        f.write(struct.pack("<I", 5))
         f.write(struct.pack("<H", len(encoded_sets)))
         f.write(struct.pack("<H", total_nodes))
         for root, pos, nodes in encoded_sets:
@@ -1492,6 +1509,15 @@ def _write_fighter_dynamics_data(
         f.write(struct.pack("<HH", len(owner_msids), 0))
         for msid in owner_msids:
             f.write(struct.pack("<H", msid))
+        colliders_raw = []
+        for dyn in dynamic_sets:
+            for part, offset, radius in dyn.get("colliders", []):  # type: ignore[assignment]
+                colliders_raw.append((int(part), tuple(float(x) for x in offset), float(radius)))
+            if colliders_raw:
+                break
+        f.write(struct.pack("<HH", len(colliders_raw), 0))
+        for part, offset, radius in colliders_raw:
+            f.write(struct.pack("<HH4f", int(part) & 0xFFFF, 0, offset[0], offset[1], offset[2], radius))
     return out_path
 
 
@@ -1502,8 +1528,9 @@ def _dynamic_collision_owner_msids(
 ) -> list[int]:
     """Return submotions whose BODY collision matrices consume fighter dynamics state.
 
-    This is deliberately data-owned rather than a C gameplay branch. Fox `AttackHi3`, `JumpB`, and
-    `LandingFallSpecial` are the audited RL1.0 dynamic-chain collision owners: Dolphin
+    This is deliberately data-owned rather than a C gameplay branch. Fox `AttackHi3`, `JumpB`,
+    `LandingFallSpecial`, and `CatchDash` are the audited RL1.0 dynamic-chain collision owners:
+    Dolphin
     pre-`ftColl_80078C70` primitive probes show live hurtcap endpoints on the x2C chain consume
     `ftData.x2C` / `lb_8001044C`, while the HIS:5029 AttackDash/AttackLw4 primitive probe selects a
     static-chain low hurtcap and rejects the tail-chain contact when AttackDash dynamic matrices are
@@ -1520,7 +1547,12 @@ def _dynamic_collision_owner_msids(
         "ftCo_SM_LandingFallSpecial": 36,
     }
     out: list[int] = []
-    for move_name in ("ftCo_SM_JumpB", "ftCo_SM_LandingFallSpecial", "ftCo_SM_AttackHi3"):
+    for move_name in (
+        "ftCo_SM_JumpB",
+        "ftCo_SM_LandingFallSpecial",
+        "ftCo_SM_AttackHi3",
+        "ftCo_SM_CatchDash",
+    ):
         move_entry = move_map.get(move_name)
         msid = move_entry.get("submotion_id") if isinstance(move_entry, dict) else None
         if msid is None:

@@ -5250,7 +5250,8 @@ static PyMethodDef methods[] = {
      "derive_item_spawn_id_counter(item_exists, item_spawn_id) -> uint32[:]"},
     {"derive_staling_history", msl_derive_staling_history_py, METH_VARARGS,
      "derive_staling_history(src_ports, char_id, action_id, action_frame, animation_index, "
-     "percent, stocks, instance_id, last_hit_by, last_hit_by_instance) -> "
+     "percent, stocks, instance_id, last_hit_by, last_hit_by_instance[, item_exists, item_owner, "
+     "item_instance_id, item_attack_id, item_attack_instance]) -> "
      "(attack_id, attack_instance, stale_queue_index, stale_move_id, stale_attack_instance)"},
     {"process_stick_i8_units", msl_process_stick_i8_units_py, METH_VARARGS,
      "process_stick_i8_units(raw_x, raw_y, ucf_enabled, cardinals_enabled, deadzone_x, "
@@ -5399,7 +5400,8 @@ static PyMethodDef methods[] = {
      "derive_throw_laser_item_hitlist_seed_lanes(...) -> "
      "(victim_port,victim_cd,victim_hitbox_mask,victim_iid)"},
     {"derive_item_attack_fields", msl_derive_item_attack_fields_py, METH_VARARGS,
-     "derive_item_attack_fields(item fields, fighter attack fields, players) -> "
+     "derive_item_attack_fields(item fields, fighter attack fields, players[, "
+     "prev_frame_spawn_kinds]) -> "
      "(attack_id,attack_instance)"},
     {"derive_item_reflect_damage_mul", msl_derive_item_reflect_damage_mul_py, METH_VARARGS,
      "derive_item_reflect_damage_mul(item fields, fighter fields, powershield_mul, players) -> "

@@ -1352,6 +1352,20 @@ uint8_t move_tables_attackair_second_create_hitbox_phase(uint8_t char_id,
                                                                                                : 0;
 }
 
+int16_t move_tables_attackair_second_create_hitbox_frame(uint8_t char_id,
+                                                         uint16_t attackair_action_id) {
+  const int kind = attackair_kind_from_action(attackair_action_id);
+  if (kind < 0) {
+    return -1;
+  }
+
+  const MslFrameWindow win = g_second_create_by_char_attackair[char_id][(size_t)kind];
+  if (!win.loaded) {
+    return -1;
+  }
+  return win.start_af;
+}
+
 uint8_t move_tables_attackair_last_create_hitbox_phase(uint8_t char_id,
                                                        uint16_t attackair_action_id,
                                                        float cur_anim_frame_f32) {

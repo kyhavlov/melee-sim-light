@@ -2015,8 +2015,8 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
           // CollData_X130_Locked preserves desired_ecb.bottom across mpColl_LoadECB_inline; use the
           // explicit replay-history lane instead of the old zero-bottom reseed approximation.
           // refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_inline
-          msl_ecb_world_points_override_bottom_rel_y(&desired_ecb, batch->state.char_id[idx], 0.0f,
-                                                     0.0f, seed->ecb_lock_bottom_rel_y_f32[p]);
+          msl_ecb_world_points_preserve_desired_bottom_rel_y(&desired_ecb, 0.0f, 0.0f,
+                                                             seed->ecb_lock_bottom_rel_y_f32[p]);
         }
         reseed_prev_ecb_rel_points_sample(
             &prev_ecb, batch->state.char_id[idx], batch->state.animation_index[idx],
@@ -2804,20 +2804,29 @@ static void msl_batch_commit_rollout_clock_rng(MslBatch* batch) {
           (uint8_t)(batch->state.opening_input_lock_timer[bi] - 1u);
     }
     const uint8_t clock_owner = batch->rollout_clock_rng_owned[bi];
-    if (clock_owner == (uint8_t)MSL_ROLLOUT_CLOCK_NONE) {
+    const uint8_t replay_rollout_frame_clock = (uint8_t)((batch->replay_rollout_reseeded != NULL &&
+                                                          batch->replay_rollout_reseeded[bi] != 0u)
+                                                             ? 1u
+                                                             : 0u);
+    if (clock_owner == (uint8_t)MSL_ROLLOUT_CLOCK_NONE && replay_rollout_frame_clock == 0u) {
       continue;
     }
     // Simulator-owned rollout metadata:
     // - Match-init episodes carry the modeled HSD_Rand/HSD_Randi stream.
-    // - Replay-reseeded rollouts carry the Slippi frame-start seed clock. Slippi records
-    //   0x804D5F90 at frame start/pre-frame; replay suites expose that lane as a monotonic
-    //   frame-clock seed, so validation rollouts advance it by one frame rather than leaving
-    //   every future frame stuck on the reseed row.
+    // - Replay-reseeded validation rollouts always advance frame_id so frame-indexed source owners
+    //   such as Yoshi's Story Randall consume the current simulated frame rather than the reseed
+    //   row. The Slippi RNG seed itself only advances for explicit replay-frame RNG-clock owners;
+    //   ordinary replay rollouts keep frame_pre_random_seed seed-owned.
     // refs/slippi-ssbm-asm/Recording/SendFrameStart.s
     // refs/slippi-ssbm-asm/Recording/SendGamePreFrame.asm
+    // refs/melee/src/melee/gr/grstory.c::{grStory_801E3370,grStory_801E33E0}
+    // data/stages/bin/grst.bin::MSLSTG01 platform_path records
     // RNG source for match-init mode:
     // refs/melee/src/sysdolphin/baselib/random.c::{HSD_Rand,HSD_Randi,HSD_Randf}
     batch->state.frame_id[bi] += 1;
+    if (clock_owner == (uint8_t)MSL_ROLLOUT_CLOCK_NONE) {
+      continue;
+    }
     if (clock_owner == (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED) {
       batch->state.frame_pre_random_seed[bi] += 0x10000u;
     } else if (batch->debug_rng_seed_out != NULL) {

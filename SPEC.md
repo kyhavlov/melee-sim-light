@@ -1157,6 +1157,8 @@ Prefer completing these projects in order rather than “patching symptoms” in
        per-recency staling decrement table used by `ft_80089118`)
      - `refs/melee/src/melee/pl/plstale.c::plStale_UpdateStaleMovesFromFighter` (enqueue `(move_id, attack_instance)` on hit)
      - `refs/melee/src/melee/pl/plstale.c::plStale_UpdateStaleMovesFromItem` (same, but source is an item)
+     - `refs/melee/src/melee/ft/ftcoll.c::ftColl_80078998` (item hit stale/combo side effects)
+     - `refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464` (reflect hit writes item reflect/owner snapshot before item collision)
      - `refs/melee/src/melee/pl/plstale.c::plStale_IncrementAttackInstance` (global `u16` instance counter; wraps, skips 0)
      - `refs/melee/src/melee/ft/ftcoll.c::ftColl_8007BE3C` (post-hit consumer; calls stale update for fighter vs item sources)
      - `refs/melee/src/melee/pl/types.h::StaleMoveTable` (10-entry ring buffer; `current_index` + `(move_id, instance)` pairs)
@@ -1175,7 +1177,11 @@ Prefer completing these projects in order rather than “patching symptoms” in
        - `StaleMoves[10]` entries: `(move_id, attack_instance)`
    - Source identity needed to update staling correctly:
      - Fighters: `attack_id` (`fp->x2068_attackID`) and `attack_instance` (`fp->x206C_attack_instance`)
-     - Items/projectiles: `attack_id` (`it->xD88_attackID`) and `attack_instance` (`it->xD8C_attack_instance`)
+     - Items/projectiles: owner (`item->owner`), `attack_id` (`it->xD88_attackID`), and
+       `attack_instance` (`it->xD8C_attack_instance`). Reflected projectiles update the new
+       owner's stale table with the item attack identity; replay preprocessing matches
+       `last_hit_by_instance` against current/previous item rows because the item can be destroyed
+       before the damage post-frame is serialized.
    - Per-player/per-entity damage multipliers that influence suite-visible fields:
      - Staling multiplier (from stale table).
      - Reflect/absorb multipliers on projectiles (damage and speed multipliers).
@@ -2272,6 +2278,12 @@ Fox/Falco special-owner split (2026-04-17):
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Coll`,
     `refs/melee/src/melee/ft/ft_081B.c::{ft_800831CC,ft_800835B0}`, and
     `refs/melee/src/melee/mp/mpcoll.c::mpColl_80047E14`.
+  - Replay rollout keeps a live `frame_id` clock for generated stage-object motion even when the
+    Slippi frame-start RNG seed remains seed-owned. Randall collision consumes
+    `data/stages/bin/grst.bin::MSLSTG01 platform_path` records through `Ground_801C2FE0` /
+    `grStory_801E3370`; freezing the frame clock at the replay reseed row can collide aerial
+    Side-B or common-air callbacks with an old cloud phase. Normal `reseed_seed()` remains
+    one-step/teacher-forced and does not advance `frame_id` or `frame_pre_random_seed`.
   - `Fall_Coll` fastfall rows whose loaded ECB bottom is above the fighter root can still publish
     hard-floor and ledge-floor landings through the shared flags-6 callback owner when a
     prefix-causal `CollData_X130_Locked` owner or a true adjacent ledge-floor continuation owns the
@@ -3421,18 +3433,11 @@ Fox/Falco special-owner split (2026-04-17):
     `refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}`,
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA`,
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_Enter_Smash`.
-  - Grounded EscapeF frame-20 Falco-laser BODY `lbColl` hurt-radius lane:
-    - The same `ftColl_8007925C -> lbColl_8000805C -> lbColl_80006E58` hurt-radius owner also
-      covers the aggregate-only `HVG:9169` EscapeF row: script hit-status is still active on the
-      adjacent frame, then frame 20 is the first vulnerable item BODY frame and uses
-      `lbColl_804D7A38 * fp->x34_scale.y` rather than the simplified hurt radius.
-    - Runtime keeps this as a sibling of the Dash-to-Turn lane: state0 Falco laser, shieldless
-      vulnerable EscapeF frame 20, lower/mid hurtcaps only. Replay-real locks are in
-      `tests/test_laser_grounded_body_segment_replay_real_locks.py`: positive `HVG:9169` and
-      adjacent no-hit `HVG:9168`.
-    Sources: `refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077C60}`,
-    `refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}`,
-    `data/hit_status/{fox,falco}.bin`.
+  - Rejected EscapeF frame-20 Falco-laser BODY slice:
+    - `MSLHSTA1` explains the first vulnerable EscapeF frame, but the retained runtime does not
+      promote EscapeF to the grounded lbColl hurt-radius lane. Debug evidence points to the broader
+      live item BODY hurt-capsule/JObj pose-selection owner; a local EscapeF action-frame slice is
+      not retained.
   - Terminal x1990 hidden-colanim item BODY guard:
     - `Fighter_8006A360` decrements `x1990` and can clear visible `x198C` for Slippi t+1 before
       the item slot compare, but the same frame's item BODY pass still follows
@@ -4872,7 +4877,7 @@ BODY collision-space residual split and rejected seed bridge:
     was tested and rejected: it fixed no extra QGD phantom rows beyond the hitbox scale / x1898
     owner, and regressed earlier QGD active-hitstun BODY rows by applying the live x2C chain where
     vanilla selects the SSANIM collision matrix. The retained dynamic-collision data remains the
-    audited Fox JumpB/AttackDash/AttackHi3 owner set.
+    audited Fox JumpB/LandingFallSpecial/CatchDash/AttackHi3 owner set.
 - The grounded fighter-overlap Z-depth runtime owner now mirrors the normal `ftCommon_8007E0E4`
   lane: `ftCommon_8007DD7C` contributes +/-`p_ftCommonData->x454` to `xF8_playerNudgeVel.y`,
   no-overlap grounded frames decay hidden depth toward zero, and the resulting non-transformed
@@ -4973,11 +4978,12 @@ BODY collision-space residual split and rejected seed bridge:
   `data/anims/{fox,falco}.dyn.bin`, keeps runtime dynamic-node pose state in fixed-capacity
   per-player arrays, updates that state before hurtcap refresh, and lets hurtcap world endpoints
   sample a dynamic collision matrix before `lbColl_8000805C` runs. BODY admission still uses the
-  normal `ftColl_80078C70` -> `lbColl_8000805C` predicate. `SSDYNN01` v3 also carries the audited
-  dynamic-collision owner submotion index, so C gameplay no longer gates this owner on raw
-  Fox/JumpB/AttackDash/AttackHi3 msid branches. Runtime keeps dynamic-node state validity separate
-  from current-frame collision-matrix substitution: valid state carries sequentially even on frames
-  where the dynamic matrix is not applied. The implemented runtime surface is intentionally one-set for Fox/Falco
+  normal `ftColl_80078C70` -> `lbColl_8000805C` predicate. `SSDYNN01` v5 carries the audited
+  dynamic-collision owner submotion index plus `ftData.x2C->x8` collider rows, so C gameplay no
+  longer gates this owner on raw Fox/JumpB/CatchDash/AttackHi3 msid branches. Runtime carries
+  dynamic-node state sequentially only inside generated dynamic-collision owner submotions; local
+  non-owner submotions clear the state instead of preserving an unseeded hidden carry. The
+  implemented runtime surface is intentionally one-set for Fox/Falco
   (`Fox: [17,18,19,20]`, `Falco: []`) and the loader rejects present multi-set or oversized-chain
   `SSDYNN01` data until a set-indexed state surface is needed.
 - A runtime hardcoded primitive overlay for Fox `AttackHi3` / frame 4 / hurtcap 12 and a generated
@@ -4989,24 +4995,33 @@ BODY collision-space residual split and rejected seed bridge:
   `0x18`, descriptor constants stride `0x3C`) and emits dynamic chains; `src/anim_pose.c` loads the
   chains and carries runtime dynamic-node rotations/positions. The update model follows the
   `lb_8001044C` segment-vector path for the supported target domain: previous child position,
-  current animation segment vector, descriptor follow/down/cone/decay constants, and carried
-  correction axis/angle produce the next child position and collision-matrix rotation before
-  `lb_8000B1CC`. Non-sequential replay seeds reconstruct the same deterministic state by replaying
+  current animation segment vector, descriptor follow/down/decay constants, carried correction
+  axis/angle, and source `ftData.x2C->x8` segment/sphere avoidance produce the next child position
+  and collision-matrix rotation before `lb_8000B1CC`. The previous lite cone clamp
+  against the current animation vector was rejected because source `lb_8001044C` applies descriptor
+  `unk_68` against a separate natural direction built from descriptor `unk_58` / live JObj
+  rotation; that cone remains disabled until the natural-direction owner is modeled. Non-sequential
+  replay seeds reconstruct the same deterministic state by replaying
   that action-local dynamic update from frame 0 to the seeded integer animation frame. This replay
   is `O(action_frame)` on non-sequential reseed/pre-combat reconstruction only; normal sequential
   rollout carries the fixed dynamic state forward. No replay authority, record-id branch, cap/frame
   primitive injection, runtime overlay table, or broad permissive geometry sweep is used.
-- This closes the Fox JumpB/AttackDash/AttackHi3 / `SSDYNN01` dynamic-chain collision-pose sub-owner.
+- This partially models the Fox JumpB/LandingFallSpecial/CatchDash/AttackHi3 / `SSDYNN01`
+  dynamic-chain collision-pose sub-owner. The retained runtime is source-bounded for the supported
+  segment/sphere surface, but full `lb_8001044C` ownership remains incomplete until the
+  natural-direction/JObj-rotation cone path is represented.
   JumpB was added after Dolphin pre-ftColl probes on `PPA:3182` showed Falco AttackAirB's hitbox
   already matched runtime, while Fox hurtcap-12 endpoints consumed the live `ftData.x2C` dynamic
-  chain before `lb_8000B1CC`. The retained v3 contract treats the collision-owner index as
+  chain before `lb_8000B1CC`. The retained v5 contract treats the collision-owner index as
   current-frame dynamic matrix ownership even when the `lb_8001044C` update has no nonzero
   correction carry; a broad JumpB facing flip was rejected because it fixed `PPA:3182` but regressed
   protected aggregate BODY rows and rollout totals.
-  AttackDash was added to the extracted dynamic-collision predicate after Dolphin pre-ftColl probes
-  on `FSP:7078` showed Fox part-18 hurtcap endpoints consuming the same `ftData.x2C` chain before
-  `lb_8000B1CC`; the runtime still consumes only the `SSDYNN01` owner index and has no C row/msid
-  gate. Together with
+  AttackDash remains intentionally excluded after the HIS/FSP static-chain probes showed vanilla
+  rejecting the dynamic-tail contact in those rows; the runtime still consumes only the `SSDYNN01`
+  owner index and has no C row/msid gate. CatchDash was added after the SDS:299 collision probe
+  showed vanilla's live part-18 tail endpoints below Falco grounded Shine while the old partial
+  dynamic-chain cone admitted a false BODY hit; the retained fix models the shared dynamic-chain
+  state/collider owner rather than a Shine/CatchDash combat exception. Together with
   Turn internal-facing hurtcaps, authoritative HitCapsule `victims_1` preservation, GuardSetOff
   shield-hit onset lineage, swept/same-group hitbox-vs-hitbox clank, decomp-ordered clank
   same-group suppression, hidden x1990 visible-clear seed ownership, Escape floor-edge BODY pose,

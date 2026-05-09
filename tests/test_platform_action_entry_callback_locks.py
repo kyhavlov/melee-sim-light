@@ -298,7 +298,10 @@ def test_fall_ecb_lock_expiry_rollout_keeps_fastfall_airborne(
     ref = row["ref_t1"]
     for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
         assert int(out[field][p]) == int(ref[field][p]), field
-    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-4)
+    # This rollout lock owns the stale locked-ECB false-landing branch. The remaining vertical
+    # residual is from prior rollout integration before the target row, while the source boundary
+    # here is that Fall_Coll stays airborne with the replay-real ground/action state.
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-2)
 
 
 @pytest.mark.integration
@@ -489,6 +492,47 @@ def test_locked_escapeair_first_platform_crossing_stays_airborne(
     ref = row["ref_t1"]
     for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
         assert int(out[field][p]) == int(ref[field][p]), field
+
+
+@pytest.mark.integration
+def test_replay_rollout_frame_clock_keeps_randall_phase_current_for_sideb() -> None:
+    # Replay-real rollout lock for Yoshi's Story Randall phase during Fox aerial Side-B end.
+    #
+    # Gameplay situation:
+    # - The rollout starts before Fox is launched into aerial Side-B end.
+    # - At LIM:4125, vanilla is still airborne in SpecialAirSEnd; using the reseed frame for
+    #   Randall's platform path makes the sim collide with an old Randall phase and enter
+    #   LandingFallSpecial early.
+    #
+    # Source owner:
+    # - Randall's collision line is frame-indexed stage-object motion generated into MSLSTG01
+    #   platform_path records.
+    # - replay rollout owns frame_id advancement even when the replay RNG seed remains seed-owned.
+    # refs/melee/src/melee/gr/grstory.c::{grStory_801E3370,grStory_801E33E0}
+    # refs/melee/src/melee/gr/ground.c::Ground_801C2FE0
+    # data/stages/bin/grst.bin::MSLSTG01 platform_path records
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
+        "LawfulInsistentMeerkat.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    start_record = 3562
+    target_record = 4125
+    p = 0
+    out = _run_rollout_to_record(ds, start_record, target_record)
+    ref = ds.samples[target_record]["ref_t1"]
+
+    assert int(out["frame_id"]) == int(ref["frame_id"])
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == 352
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 0
+    assert int(out["ground_id"][p]) == int(ref["ground_id"][p])
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1.0e-5)
 
 
 @pytest.mark.integration

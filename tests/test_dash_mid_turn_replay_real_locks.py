@@ -79,3 +79,54 @@ def test_dash_mid_iasa_turn_agn_replay_real_lock(case: _Case) -> None:
             f"{case.note}: stable field={field} expected={int(ref_row[field][p])} "
             f"got={int(out_row[field][p])}"
         )
+
+
+@pytest.mark.integration
+def test_dash_mid_iasa_opposite_turn_preempts_guardreflect_replay_real_lock() -> None:
+    # Replay-real lock for Dash_IASA callback ordering:
+    # - Fox is in Dash with a fresh L edge and a strong opposite-facing stick flick.
+    # - ftCo_Dash_IASA checks ftCo_Dash_CheckInput before the guard helper in this branch, so
+    #   vanilla enters Turn rather than GuardReflect.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::{
+    #   ftCo_Dash_IASA,ftCo_Dash_CheckInput
+    # }
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_Enter_Smash
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091AD8,ftCo_80091A4C}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/validation/"
+        "cardinal_1.0_recent/TreasuredBackKangaroo.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    record = 4142
+    p = 0
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record : record + 1]
+    seed = row["seed_t"][0]
+    ref = row["ref_t1"][0]
+
+    assert int(seed["action_id"][p]) == 20  # Dash
+    assert int(seed["action_frame"][p]) == 5
+    assert int(seed["animation_index"][p]) == 12
+    assert int(row["input_t"][0]["p"][p]["buttons"]) & 0x40
+    assert int(row["input_t"][0]["p"][p]["main_x"]) < 0
+    assert int(ref["action_id"][p]) == 18  # Turn
+    assert int(ref["animation_index"][p]) == 10
+
+    _, ref_row, out_row = _run_one_step_row(dataset_path, record, p)
+    for field in ("action_id", "action_frame", "animation_index", "instance_id"):
+        assert int(out_row[field][p]) == int(ref_row[field][p]), (
+            f"Dash_CheckInput turn preempts guard: field={field} "
+            f"expected={int(ref_row[field][p])} got={int(out_row[field][p])}"
+        )
+
+    for field in ("on_ground", "jumps_left", "facing"):
+        assert int(out_row[field][p]) == int(ref_row[field][p]), (
+            f"Dash_CheckInput turn preempts guard: stable field={field} "
+            f"expected={int(ref_row[field][p])} got={int(out_row[field][p])}"
+        )

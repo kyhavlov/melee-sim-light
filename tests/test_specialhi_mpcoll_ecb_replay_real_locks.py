@@ -36,6 +36,10 @@ HIS = (
     "datasets/aggregate_recent/replays/validation/aggregate_recent/"
     "HungryImportantSnake.msl"
 )
+MGS = (
+    "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+    "MilkyGracefulStingray.msl"
+)
 
 
 def _run_row(
@@ -437,6 +441,96 @@ def test_same_frame_specialairhi_wall_contact_does_not_stale_project_damagefly_a
     assert int(contacts_8519["damage_hitlag_wall_asdi_latch"][p]) == 0
     assert float(got_8519["pos_x"][p]) == pytest.approx(float(ref_8519["pos_x"][p]), abs=1e-6)
     assert float(got_8519["pos_y"][p]) == pytest.approx(float(ref_8519["pos_y"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
+def test_specialairhi_rotated_jobj_ecb_delays_fod_left_ledge_catch_until_source_frame() -> None:
+    # SpecialAirHi_Coll feeds ft_CheckGroundAndLedge, whose mpColl ledge AABB consumes the live
+    # JObj ECB after ftFox_SpecialHi_RotateModel has rotated FtPart_XRotN. Static SSANIM ECB
+    # extents are wide enough to catch FoD's left ledge one frame early in MGS:3980; the rotated
+    # JObj owner stays airborne there and catches on the next source frame.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+    #   ftFx_SpecialAirHi_Coll,ftFox_SpecialHi_RotateModel}
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_JObj,mpColl_80044164}
+    _, ref_3980, got_3980, contacts_3980 = _run_row(3980, MGS)
+    _, ref_3981, got_3981, contacts_3981 = _run_row(3981, MGS)
+    p = 1
+
+    assert int(got_3980["action_id"][p]) == int(ref_3980["action_id"][p]) == 356
+    assert int(contacts_3980["coll_env_flags"][p]) & 0x01000000 == 0
+    assert float(got_3980["pos_x"][p]) == pytest.approx(float(ref_3980["pos_x"][p]), abs=1e-6)
+    assert float(got_3980["pos_y"][p]) == pytest.approx(float(ref_3980["pos_y"][p]), abs=1e-6)
+
+    assert int(got_3981["action_id"][p]) == int(ref_3981["action_id"][p]) == 252
+    assert int(contacts_3981["coll_env_flags"][p]) & 0x01000000
+    # CliffCatch entry ordering: ftCliffCommon_80081370 flips facing, ticks the new CliffCatch
+    # motion, then ftCo_CliffCatch_Phys snaps to ledge_point + the post-entry TransN frame.
+    # refs/melee/src/melee/ft/ftcliffcommon.c::{ftCliffCommon_80081370,ftCo_CliffCatch_Phys}
+    assert float(got_3981["pos_x"][p]) == pytest.approx(float(ref_3981["pos_x"][p]), abs=1e-6)
+    assert float(got_3981["pos_y"][p]) == pytest.approx(float(ref_3981["pos_y"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
+def test_jumpaerial_locked_desired_bottom_feeds_fod_left_wall_envelope() -> None:
+    # Ledge jump leaves CollData_X130_Locked live while JumpAerial_Coll routes through
+    # ft_800835B0 -> mpColl_80047E14. Source mpColl_LoadECB_inline preserves desired_ecb.bottom
+    # for the wall envelope as well as floor checks; using the pose bottom makes the FoD lip
+    # projection too shallow on the first wall-push frame.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_800835B0
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpColl_80045B74_LeftWall}
+    seed_3998, ref_3998, got_3998, contacts_3998 = _run_row(3998, MGS)
+    seed_3999, ref_3999, got_3999, contacts_3999 = _run_row(3999, MGS)
+    p = 1
+
+    assert int(seed_3998["action_id"][p]) == int(seed_3999["action_id"][p]) == 27
+    assert int(seed_3999["ecb_lock_timer"][p]) != 0
+    assert int(seed_3999["ecb_lock_bottom_rel_y_valid_u8"][p]) == 1
+
+    assert int(contacts_3998["wall_kind"][p]) == 1
+    assert int(contacts_3998["wall_id"][p]) == 23
+    assert float(got_3998["pos_x"][p]) == pytest.approx(float(ref_3998["pos_x"][p]), abs=1e-6)
+    assert float(got_3998["pos_y"][p]) == pytest.approx(float(ref_3998["pos_y"][p]), abs=1e-6)
+
+    assert int(contacts_3999["wall_kind"][p]) == 1
+    assert int(contacts_3999["wall_id"][p]) == 23
+    assert float(got_3999["pos_x"][p]) == pytest.approx(float(ref_3999["pos_x"][p]), abs=1e-6)
+    assert float(got_3999["pos_y"][p]) == pytest.approx(float(ref_3999["pos_y"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
+def test_jumpaerial_runtime_preserves_pre_entry_desired_bottom_for_fod_left_wall() -> None:
+    # Runtime rollout variant of the same owner:
+    # ftCo_JumpAerial_Enter_Basic calls ftCommon_8007D5D4 before Fighter_ChangeMotionState, so
+    # CollData_X130_Locked preserves the pre-entry Fall desired_ecb.bottom while JumpAerial_Coll
+    # refreshes the current/top/side ECB. If runtime snapshots the lock after entering JumpAerial,
+    # the next left-wall projection under-pushes the fighter at MGS:3999.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Enter_Basic
+    # refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpColl_80045B74_LeftWall}
+    rows = _run_rollout_rows(3977, 4002, MGS, rollout_seed=True)
+    p = 1
+    got_3998, ref_3998, contacts_3998 = rows[3998]
+    got_3999, ref_3999, contacts_3999 = rows[3999]
+    got_4002, ref_4002, _ = rows[4002]
+
+    assert int(got_3998["action_id"][p]) == int(ref_3998["action_id"][p]) == 27
+    assert int(contacts_3998["wall_kind"][p]) == 1
+    assert int(contacts_3998["wall_id"][p]) == 23
+    assert float(got_3998["pos_x"][p]) == pytest.approx(float(ref_3998["pos_x"][p]), abs=1e-6)
+
+    assert int(got_3999["action_id"][p]) == int(ref_3999["action_id"][p]) == 27
+    assert int(contacts_3999["wall_kind"][p]) == 1
+    assert int(contacts_3999["wall_id"][p]) == 23
+    assert float(got_3999["pos_x"][p]) == pytest.approx(float(ref_3999["pos_x"][p]), abs=1e-6)
+    assert float(got_3999["pos_y"][p]) == pytest.approx(float(ref_3999["pos_y"][p]), abs=1e-6)
+
+    # Negative boundary: after the wall-contact frame, the owner only carries the resulting
+    # correction through ordinary velocity integration; no new action/ground/floor handoff is
+    # fabricated by the lock.
+    assert int(got_4002["action_id"][p]) == int(ref_4002["action_id"][p]) == 27
+    assert int(got_4002["on_ground"][p]) == int(ref_4002["on_ground"][p]) == 0
+    assert float(got_4002["pos_x"][p]) == pytest.approx(float(ref_4002["pos_x"][p]), abs=1e-6)
 
 
 @pytest.mark.integration

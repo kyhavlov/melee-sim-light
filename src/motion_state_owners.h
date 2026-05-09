@@ -35,6 +35,8 @@ enum {
   MSL_MS_CLASS_GROUNDED_STAGE_OBJECT_CARRY_COLL = 1u << 16,
   MSL_MS_CLASS_GROUNDED_ATTACK = 1u << 17,
   MSL_MS_CLASS_GUARDON_FRAME_START_X672_IASA = 1u << 18,
+  MSL_MS_CLASS_FT80081D0C_AIR_COLL = 1u << 19,
+  MSL_MS_CLASS_SIDEB_AIR_GROUND_LEDGE_COLL = 1u << 20,
 };
 
 uint16_t msl_motion_state_submotion_id(uint8_t char_id, uint16_t action_id);

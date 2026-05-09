@@ -48,6 +48,12 @@ uint8_t move_tables_attackair_second_create_hitbox_phase(uint8_t char_id,
                                                          uint16_t attackair_action_id,
                                                          float cur_anim_frame_f32);
 
+// Returns the second distinct AttackAir* create_hitbox frame, or -1 when the script has no second
+// create band. Use this when a runtime owner needs the sourced boundary itself rather than a broad
+// in-window boolean.
+int16_t move_tables_attackair_second_create_hitbox_frame(uint8_t char_id,
+                                                         uint16_t attackair_action_id);
+
 // Returns whether an AttackAir* script is inside its final create_hitbox band before the next
 // clear_hitboxes command. This is sourced from MSLFTSC1 create/clear events and covers late
 // multi-hit bands such as Fox AttackAirN without hardcoded action-frame thresholds.

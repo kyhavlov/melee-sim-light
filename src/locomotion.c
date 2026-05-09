@@ -1099,8 +1099,10 @@ uint8_t locomotion_attackair_try_enter_from_air_iasa(MslBatch* batch, const MslC
   batch->state.action_id[idx] = act;
   batch->state.animation_index[idx] = smid;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  // Decomp entry immediately calls `ftAnim_8006EBA4`, so the same frame's Phys/Coll callbacks
+  // see the first AttackAir pose/ECB rather than the raw frame-0 motion-entry pose.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_EnterFromMsid
-  msl_anim_timebase_defer_tick_once(batch, idx);
+  msl_anim_timebase_tick_once(batch, idx);
   return 1;
 }
 
@@ -1431,10 +1433,10 @@ static inline uint8_t locomotion_try_kneebend_startup_complete_jump_prepass(
   const float jump_stick_x =
       apply_deadzone(stick_i8_to_unit(batch->state.prev_input_main_x[idx]), c->lstick_deadzone_x);
   const uint16_t jump_act = jump_action_from_stick(c, jump_stick_x, facing_dir);
+  locomotion_apply_jump_enter_ground_to_air(batch, idx);
   batch->state.action_id[idx] = jump_act;
   batch->state.animation_index[idx] = (uint32_t)submotion_for_action(jump_act);
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-  locomotion_apply_jump_enter_ground_to_air(batch, idx);
 
   const float base_x =
       batch->state.speed_ground_x_self[idx] * ch->ground_to_air_jump_momentum_multiplier;
@@ -2807,13 +2809,33 @@ static inline void locomotion_apply_jump_enter_ground_to_air(MslBatch* batch, si
   if (batch == NULL) {
     return;
   }
-  // Ground-to-air common entry paths route through ftCommon_8007D5D4, which clears ground state,
-  // shield-kb z, cur_pos.z, and locks ECB. Keep jump/pass impulse, self-velocity, and jumps-used
-  // ownership in callers because each entry owns different followup lanes.
+  // Ground-to-air and air-jump common entry paths route through ftCommon_8007D5D4 before the
+  // destination motion-state change. That call locks CollData_X130 and preserves the current
+  // desired_ecb.bottom for later mpColl_LoadECB_inline calls; JumpAerial from Fall therefore keeps
+  // the Fall callback's desired bottom while its current/top/side ECB refreshes from JumpAerial.
+  // Keep jump/pass impulse, self-velocity, and jumps-used ownership in callers because each entry
+  // owns different followup lanes.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_Enter
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Enter_Basic
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::{ftCo_8009A184,ftCo_8009A228}
   // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
+  const uint8_t char_id = batch->state.char_id[idx];
+  const uint32_t anim = batch->state.animation_index[idx];
+  const uint16_t frame = msl_ecb_frame_u16_from_anim_frame(batch->state.anim_frame_f32[idx]);
+  const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+  MslEcbWorldPoints desired_ecb = {0};
+  msl_ecb_world_points_sample(&desired_ecb, char_id, anim, frame, facing_dir,
+                              batch->state.pos_x[idx], batch->state.pos_y[idx], 0u);
+  const float locked_bottom = batch->state.coll_desired_ecb_bottom_valid[idx]
+                                  ? batch->state.coll_desired_ecb_bottom_rel_y[idx]
+                                  : desired_ecb.bottom_rel_y;
+  batch->state.coll_desired_ecb_bottom_rel_y[idx] = locked_bottom;
+  batch->state.coll_desired_ecb_top_rel_y[idx] = desired_ecb.top_rel_y;
+  batch->state.coll_desired_ecb_left_rel_x[idx] = desired_ecb.left_rel_x;
+  batch->state.coll_desired_ecb_right_rel_x[idx] = desired_ecb.right_rel_x;
+  batch->state.coll_desired_ecb_side_rel_y[idx] = desired_ecb.side_rel_y;
+  batch->state.coll_desired_ecb_bottom_valid[idx] = 1u;
+  batch->state.coll_desired_ecb_bottom_locked_owner[idx] = 1u;
   batch->state.on_ground[idx] = 0u;
   batch->state.pos_z[idx] = 0.0f;
   batch->state.ecb_lock_timer[idx] = 10u;
@@ -2889,10 +2911,10 @@ static inline uint8_t locomotion_try_enter_jump_aerial_iasa(
   }
 
   const uint16_t act = jump_aerial_action_from_stick(c, stick_x, facing_dir);
+  locomotion_apply_jump_enter_ground_to_air(batch, idx);
   batch->state.action_id[idx] = act;
   batch->state.animation_index[idx] = submotion_for_action(act);
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-  locomotion_apply_jump_enter_ground_to_air(batch, idx);
   batch->state.speed_air_x_self[idx] = stick_x * ch->air_jump_h_multiplier;
   batch->state.speed_y_self[idx] = ch->jump_v_initial_velocity * ch->air_jump_v_multiplier;
   // Decomp: fp->x671_timer_lstick_tilt_y = 0xFE.
@@ -5402,10 +5424,14 @@ void locomotion_update_pre(MslBatch* batch) {
           //   in KneeBend after Anim. A release observed on the same frame as Anim-owned Jump entry
           //   is therefore too late to create a short hop; the latched bit must come from an earlier
           //   KneeBend IASA frame or from the replay seed.
+          // - A fresh anim-end/IASA destination whose serialized action frame is still 0 has not
+          //   had a source KneeBend_IASA proc yet; do not let buffered-release rows latch a short
+          //   hop before the first owned KneeBend callback.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::{
           //   ftCo_KneeBend_Anim,ftCo_KneeBend_IASA,ftCo_KneeBend_Check_ShortHop
           // }
-          if (!startup_complete && !batch->state.kneebend_is_short_hop[idx]) {
+          if (!startup_complete && !fresh_kneebend_from_prior_callback &&
+              batch->state.action_frame[idx] > 0 && !batch->state.kneebend_is_short_hop[idx]) {
             const uint8_t j_in = batch->state.kneebend_jump_input[idx];
             if (j_in == (uint8_t)MSL_JUMP_INPUT_XY) {
               if (!(buttons & (uint16_t)MSL_BUTTON_XY)) {
@@ -5451,10 +5477,10 @@ void locomotion_update_pre(MslBatch* batch) {
             const float jump_stick_x = apply_deadzone(
                 stick_i8_to_unit(batch->state.prev_input_main_x[idx]), c->lstick_deadzone_x);
             const uint16_t jump_act = jump_action_from_stick(c, jump_stick_x, facing_dir);
+            locomotion_apply_jump_enter_ground_to_air(batch, idx);
             batch->state.action_id[idx] = jump_act;
             batch->state.animation_index[idx] = (uint32_t)submotion_for_action(jump_act);
             msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-            locomotion_apply_jump_enter_ground_to_air(batch, idx);
 
             // Ground-to-air momentum + jump impulse (refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_800CB110)
             const float base_x =

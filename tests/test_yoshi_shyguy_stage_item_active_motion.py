@@ -371,6 +371,37 @@ def test_yoshi_shyguy_stage_timer_derivation_is_prefix_causal() -> None:
     assert int(valid_after[1]) == 1
 
 
+def test_yoshi_shyguy_stage_pattern_latches_new_spawn_group_only() -> None:
+    items = np.zeros((4, 15), dtype=SEED_DTYPE["items"].base)
+    items["owner"] = np.int8(-1)
+
+    first = items[1, 0]
+    first["exists"] = np.uint8(1)
+    first["state"] = np.uint8(1)
+    first["type"] = np.uint16(ITEM_KIND_HEIHO)
+    first["owner"] = np.int8(-1)
+    first["spawn_id"] = np.uint32(50)
+    first["pos_x"] = np.float32(-292.0)
+    first["pos_y"] = np.float32(60.0)
+
+    moved = items[2, 0]
+    moved["exists"] = np.uint8(1)
+    moved["state"] = np.uint8(1)
+    moved["type"] = np.uint16(ITEM_KIND_HEIHO)
+    moved["owner"] = np.int8(-1)
+    moved["spawn_id"] = np.uint32(50)
+    moved["pos_x"] = np.float32(304.0)
+    moved["pos_y"] = np.float32(75.0)
+
+    timer, pattern, valid, *_ = _derive_yoshi_shyguy_seed_lanes(items, stage_id=STAGE_YOSHIS_STORY)
+
+    assert int(valid[3]) == 1
+    assert int(pattern[1]) == 2
+    assert int(pattern[2]) == 2
+    assert int(pattern[3]) == 2
+    assert int(timer[3]) == 120
+
+
 def test_yoshi_shyguy_dynamic_prev_vel_y_updates_active_motion() -> None:
     seed = _empty_seed()
     item = seed["items"][0, 0]

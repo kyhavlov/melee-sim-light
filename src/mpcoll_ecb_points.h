@@ -164,3 +164,19 @@ static inline void msl_ecb_world_points_override_bottom_rel_y(MslEcbWorldPoints*
   out->left_y = pos_y + side_rel_y;
   out->right_y = pos_y + side_rel_y;
 }
+
+static inline void msl_ecb_world_points_preserve_desired_bottom_rel_y(MslEcbWorldPoints* out,
+                                                                      float pos_x, float pos_y,
+                                                                      float bottom_rel_y) {
+  if (out == NULL) {
+    return;
+  }
+  // Source `mpColl_LoadECB_inline` saves/restores desired_ecb.bottom while CollData_X130_Locked is
+  // set. The freshly loaded top/left/right side points remain from the current ECB source unless
+  // `mpColl_80042384` later clamps an invalid shape; do not recompute side_y from the restored
+  // bottom for ordinary valid envelopes.
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpColl_80042384}
+  out->bottom_rel_y = bottom_rel_y;
+  out->bottom_x = pos_x;
+  out->bottom_y = pos_y + bottom_rel_y;
+}

@@ -6,10 +6,15 @@
 #include <stdint.h>
 
 #include "action_ids.h"
+#include "anim_pose.h"
+#include "anim_table.h"
 #include "char_params.h"
 #include "coll_env_flags.h"
 #include "common_params.h"
+#include "msl_math.h"
+#include "mtx34.h"
 #include "mpcoll_ecb_points.h"
+#include "specialhi_pose.h"
 #include "stage_collision.h"
 
 static inline uint8_t mpcoll_is_pending_throw_release_victim(const MslBatch* batch, int bi, int p) {
@@ -35,6 +40,169 @@ static inline uint8_t mpcoll_is_pending_throw_release_victim(const MslBatch* bat
     }
   }
   return 0u;
+}
+
+static inline void mpcoll_env_update_rot_bounds(float x, float y, float* io_min_x, float* io_max_x,
+                                                float* io_min_y, float* io_max_y) {
+  if (x < *io_min_x) {
+    *io_min_x = x;
+  }
+  if (x > *io_max_x) {
+    *io_max_x = x;
+  }
+  if (y < *io_min_y) {
+    *io_min_y = y;
+  }
+  if (y > *io_max_y) {
+    *io_max_y = y;
+  }
+}
+
+static inline uint8_t mpcoll_env_specialhi_rotate_collision_point_xrotn(
+    const MslBatch* batch, size_t idx, uint8_t char_id, uint16_t msid, uint16_t frame_u16,
+    uint16_t part_id, float model_scale, float* io_x, float* io_y, float* io_z) {
+  if (batch == NULL || io_x == NULL || io_y == NULL || io_z == NULL ||
+      !msl_anim_part_under_xrotn(char_id, part_id)) {
+    return 0u;
+  }
+  float rotate_model = 0.0f;
+  if (!msl_specialhi_rotate_model_get_or_velocity(batch, idx, &rotate_model)) {
+    return 0u;
+  }
+
+  float m[12];
+  if (anim_pose_get_collision_matrix(batch, idx, msid, frame_u16, 2u, m) != 0) {
+    return 0u;
+  }
+  float ax0 = 0.0f, ay0 = 0.0f, az0 = 0.0f;
+  float ax1 = 0.0f, ay1 = 0.0f, az1 = 0.0f;
+  const float origin[3] = {0.0f, 0.0f, 0.0f};
+  const float local_x[3] = {1.0f, 0.0f, 0.0f};
+  msl_mtx34_mul_point(m, origin, &ax0, &ay0, &az0);
+  msl_mtx34_mul_point(m, local_x, &ax1, &ay1, &az1);
+  ax0 *= model_scale;
+  ay0 *= model_scale;
+  az0 *= model_scale;
+  ax1 *= model_scale;
+  ay1 *= model_scale;
+  az1 *= model_scale;
+
+  float axis_x = ax1 - ax0;
+  float axis_y = ay1 - ay0;
+  float axis_z = az1 - az0;
+  const float axis_len = sqrtf(axis_x * axis_x + axis_y * axis_y + axis_z * axis_z);
+  if (!(axis_len > 0.0f)) {
+    return 0u;
+  }
+  axis_x /= axis_len;
+  axis_y /= axis_len;
+  axis_z /= axis_len;
+
+  const float angle = msl_specialhi_xrotn_angle_from_rotate_model(rotate_model);
+  const float px = *io_x - ax0;
+  const float py = *io_y - ay0;
+  const float pz = *io_z - az0;
+  const float c = cosf(angle);
+  const float s = sinf(angle);
+  const float dot = axis_x * px + axis_y * py + axis_z * pz;
+  const float cross_x = axis_y * pz - axis_z * py;
+  const float cross_y = axis_z * px - axis_x * pz;
+  const float cross_z = axis_x * py - axis_y * px;
+  *io_x = ax0 + (px * c) + (cross_x * s) + (axis_x * dot * (1.0f - c));
+  *io_y = ay0 + (py * c) + (cross_y * s) + (axis_y * dot * (1.0f - c));
+  *io_z = az0 + (pz * c) + (cross_z * s) + (axis_z * dot * (1.0f - c));
+  return 1u;
+}
+
+static inline uint8_t mpcoll_env_specialhi_try_sample_jobj_ecb_points(
+    MslEcbWorldPoints* out, const MslBatch* batch, size_t idx, uint8_t char_id, uint32_t anim,
+    uint16_t frame_u16, float facing_dir, float pos_x, float pos_y) {
+  if (out == NULL || batch == NULL || !(anim <= 0xFFFFu)) {
+    return 0u;
+  }
+
+  const MslCharParams* ch = msl_char_params(char_id);
+  if (ch == NULL || ch->ecb_joint_count == 0u) {
+    return 0u;
+  }
+  const uint16_t msid = (uint16_t)anim;
+  const float model_scaling =
+      (isfinite(ch->model_scaling) && ch->model_scaling > 0.0f) ? ch->model_scaling : 1.0f;
+  const float model_scale = batch->state.fighter_scale_y[idx] * model_scaling;
+
+  float min_x = 0.0f;
+  float max_x = 0.0f;
+  float min_y = 0.0f;
+  float max_y = 0.0f;
+  uint8_t have = 0u;
+  for (uint16_t pi = 0; pi < ch->ecb_joint_count; pi++) {
+    const uint16_t part_id = ch->ecb_joints[pi];
+    float m[12];
+    if (anim_pose_get_collision_matrix(batch, idx, msid, frame_u16, part_id, m) != 0) {
+      return 0u;
+    }
+    const float origin[3] = {0.0f, 0.0f, 0.0f};
+    float x = 0.0f, y = 0.0f, z = 0.0f;
+    msl_mtx34_mul_point(m, origin, &x, &y, &z);
+    x *= model_scale;
+    y *= model_scale;
+    z *= model_scale;
+    (void)mpcoll_env_specialhi_rotate_collision_point_xrotn(batch, idx, char_id, msid, frame_u16,
+                                                            part_id, model_scale, &x, &y, &z);
+
+    // Decomp: mpColl_LoadECB_JObj samples live JObj world points via lb_8000B1CC. For
+    // Firefox/Firebird, ftFox_SpecialHi_RotateModel writes FtPart_XRotN, so ledge-grab AABBs must
+    // use the same rotated collision-pose ECB already consumed by the wall/ceiling owner.
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFox_SpecialHi_RotateModel
+    // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_JObj,mpColl_80044164}
+    // refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
+    const float rel_x = facing_dir * z;
+    const float rel_y = y;
+    if (!have) {
+      min_x = max_x = rel_x;
+      min_y = max_y = rel_y;
+      have = 1u;
+    } else {
+      mpcoll_env_update_rot_bounds(rel_x, rel_y, &min_x, &max_x, &min_y, &max_y);
+    }
+  }
+  if (!have) {
+    return 0u;
+  }
+
+  const float min_ecb_width = fmaxf(4.0f, 10.0f * batch->state.fighter_scale_y[idx]);
+  const float ecb_width = fabsf(max_x - min_x);
+  if (ecb_width < min_ecb_width) {
+    const float half_width = 0.5f * ecb_width;
+    max_x = half_width;
+    min_x = -half_width;
+  }
+  if (max_x < 2.0f) {
+    max_x = 2.0f;
+  }
+  if (min_x > -2.0f) {
+    min_x = -2.0f;
+  }
+  if (min_y < 0.0f) {
+    min_y = 0.0f;
+  }
+  const float side_rel_y = ch->ecb_side_y_offset + 0.5f * (min_y + max_y);
+
+  out->left_rel_x = min_x;
+  out->right_rel_x = max_x;
+  out->bottom_rel_y = min_y;
+  out->top_rel_y = max_y;
+  out->side_rel_y = side_rel_y;
+  out->frame_u16 = frame_u16;
+  out->bottom_x = pos_x;
+  out->bottom_y = pos_y + min_y;
+  out->top_x = pos_x;
+  out->top_y = pos_y + max_y;
+  out->left_x = pos_x + min_x;
+  out->left_y = pos_y + side_rel_y;
+  out->right_x = pos_x + max_x;
+  out->right_y = pos_y + side_rel_y;
+  return 1u;
 }
 
 // Decomp constants / shapes:
@@ -439,12 +607,11 @@ static inline uint8_t mplib_select_ledge_floor_contact(uint32_t stage_id, int di
   return 1u;
 }
 
-static inline uint32_t ledge_grab_flags_for_fighter(uint32_t stage_id, float coll_prev_x,
-                                                    float coll_prev_y, float coll_cur_x,
-                                                    float coll_cur_y, float descent_prev_y,
-                                                    float descent_cur_y, float facing_dir,
-                                                    uint8_t char_id, uint32_t animation_index,
-                                                    float anim_frame_f32, float fighter_scale_y) {
+static inline uint32_t ledge_grab_flags_for_fighter(
+    const MslBatch* batch, size_t idx, uint16_t action_id, uint32_t stage_id, float coll_prev_x,
+    float coll_prev_y, float coll_cur_x, float coll_cur_y, float descent_prev_y,
+    float descent_cur_y, float facing_dir, uint8_t char_id, uint32_t animation_index,
+    float anim_frame_f32, float fighter_scale_y) {
   // Decomp gate: mpColl only attempts ledge-grab checks while moving downward.
   // Decomp: uses CollData.prev_pos.y / cur_pos.y as managed inside the collision substep loop
   // (mpColl_80043754), not previous-frame y.
@@ -482,6 +649,12 @@ static inline uint32_t ledge_grab_flags_for_fighter(uint32_t stage_id, float col
   msl_ecb_world_points_sample(&ecb, char_id, animation_index, ecb_frame, ecb_facing_dir, coll_cur_x,
                               coll_cur_y,
                               /*lock_bottom_to_zero=*/0u);
+  if (action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI ||
+      action_id == (uint16_t)MSL_ACT_FX_SPECIAL_HI_FALL) {
+    (void)mpcoll_env_specialhi_try_sample_jobj_ecb_points(&ecb, batch, idx, char_id,
+                                                          animation_index, ecb_frame,
+                                                          ecb_facing_dir, coll_cur_x, coll_cur_y);
+  }
 
   // Data-contract guardrail: if ECB extents/bottom tables do not contain an entry for this
   // (char_id, msid), msl_ecb_world_points_sample returns all-zeros. Do not attempt ledge-grab AABB
@@ -747,9 +920,9 @@ void mpcoll_env_update_ledge_grab(MslBatch* batch) {
       // src/api.h::MslSeed (fighter_scale_y note)
       const float scale_y = batch->state.fighter_scale_y[idx];
       const uint32_t flags = ledge_grab_flags_for_fighter(
-          stage_id, coll_prev_x, coll_prev_y, coll_cur_x, coll_cur_y, descent_prev_y, descent_cur_y,
-          fd, batch->state.char_id[idx], batch->state.animation_index[idx],
-          batch->state.anim_frame_f32[idx], scale_y);
+          batch, idx, batch->state.action_id[idx], stage_id, coll_prev_x, coll_prev_y, coll_cur_x,
+          coll_cur_y, descent_prev_y, descent_cur_y, fd, batch->state.char_id[idx],
+          batch->state.animation_index[idx], batch->state.anim_frame_f32[idx], scale_y);
       batch->state.coll_env_flags[idx] |= flags;
     }
   }

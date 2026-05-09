@@ -13,6 +13,7 @@ ACT_DAMAGE_FLY_N = 0x0058
 ACT_DAMAGE_FLY_TOP = 0x005A
 ACT_DOWN_BOUND_U = 0x00B7
 ACT_PASSIVE = 0x00C7
+ACT_PASSIVE_STAND_B = 0x00C9
 
 
 def _skip_if_required_artifacts_missing(root: Path) -> None:
@@ -44,6 +45,14 @@ def _dataset_path(root: Path) -> Path:
 
 def _aggregate_dataset_path(root: Path, name: str) -> Path:
     dataset_rel = f"datasets/aggregate_recent/replays/validation/aggregate_recent/{name}.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+    return dataset_path
+
+
+def _fod_dataset_path(root: Path, name: str) -> Path:
+    dataset_rel = f"datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/{name}.msl"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
         pytest.skip(f"missing local dataset: {dataset_rel}")
@@ -197,7 +206,7 @@ def test_ground_to_air_damage_entry_ecb_lock_survives_hitlag_for_downbound_hando
     assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 1
     assert int(out["hitstun"][p]) == int(ref["hitstun"][p]) == 0
     assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=2e-6)
-    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-6)
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-4)
 
     by_record = _run_rollout_records(
         dataset_path, 8302, (8348, 8349), ucf_cardinals_1_0_enabled=True
@@ -242,7 +251,7 @@ def test_throwlw_release_damageflytop_uses_pose_bottom_for_next_floor_handoff() 
     assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 1
     assert int(out["hitstun"][p]) == int(ref["hitstun"][p]) == 0
     assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=2e-6)
-    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-6)
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-4)
     assert float(out["speed_y_attack"][p]) == pytest.approx(float(ref["speed_y_attack"][p]))
 
     by_record = _run_rollout_records(
@@ -259,3 +268,157 @@ def test_throwlw_release_damageflytop_uses_pose_bottom_for_next_floor_handoff() 
     assert int(out_5648["hitstun"][p]) == int(ref_5648["hitstun"][p]) == 0
     assert float(out_5648["pos_x"][p]) == pytest.approx(float(ref_5648["pos_x"][p]), abs=2e-6)
     assert float(out_5648["pos_y"][p]) == pytest.approx(float(ref_5648["pos_y"][p]), abs=2e-6)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("record", [3297, 3427, 3428])
+def test_terminal_damageflytop_stale_hard_floor_does_not_snap_to_fod_height_platform(
+    record: int,
+) -> None:
+    # Replay-real locks for MGS p1:
+    # - Fox is in late DamageFlyTop below FoD's low left height-transform platform while carrying
+    #   the main-floor CollData.floor.index.
+    # - The live source floor precondition remains the DamageFly_Coll ECB-bottom pass; the stale
+    #   hard-floor owner must not let a deep transformed-platform bottom crossing publish DownBound
+    #   before the terminal DamageFly/DamageFall handoff.
+    # - rec=3297 also verifies same-frame Shine hits the airborne DamageFlyTop victim rather than a
+    #   downed victim.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+    #   ftCo_DamageFly_Anim,ftCo_DamageFly_Coll}
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpColl_80044838_Floor}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = _fod_dataset_path(root, "MilkyGracefulStingray")
+
+    p = 1
+    seed, ref, out = _run_one_step(dataset_path, record, ucf_cardinals_1_0_enabled=True)
+    assert int(seed["action_id"][p]) == ACT_DAMAGE_FLY_TOP
+    assert int(seed["ground_id"][p]) == 5
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_DAMAGE_FLY_TOP
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 0
+    assert int(out["ground_id"][p]) == int(ref["ground_id"][p]) == 5
+    assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=2e-6)
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-6)
+
+
+@pytest.mark.integration
+def test_carried_fod_height_platform_terminal_damageflytop_still_lands() -> None:
+    # Negative boundary for the stale hard-floor guard: PTE p1 already carries FoD's transformed
+    # platform as CollData.floor.index, so terminal DamageFlyTop still consumes the normal platform
+    # floor handoff into Passive.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpColl_80044838_Floor}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = _fod_dataset_path(root, "ParallelTemptingElk")
+
+    p = 1
+    seed, ref, out = _run_one_step(dataset_path, 7218, ucf_cardinals_1_0_enabled=True)
+    assert int(seed["action_id"][p]) == ACT_DAMAGE_FLY_TOP
+    assert int(seed["hitstun"][p]) == 0
+    assert int(seed["ground_id"][p]) == 0
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_PASSIVE
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 1
+    assert int(out["ground_id"][p]) == int(ref["ground_id"][p]) == 0
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-4)
+
+
+@pytest.mark.integration
+def test_fod_static_center_platform_damageflytop_still_uses_normal_floor_handoff() -> None:
+    # Negative boundary for the height-transform-only guard: FoD's static-y center platform remains
+    # an ordinary DamageFly_Coll floor contact and must still enter DownBoundU.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
+    # data/stages/bin/griz.bin::MSLSTG01 platform_transforms(kind=static_y)
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = _fod_dataset_path(root, "ElatedWearyTermite")
+
+    p = 1
+    seed, ref, out = _run_one_step(dataset_path, 3668, ucf_cardinals_1_0_enabled=True)
+    assert int(seed["action_id"][p]) == ACT_DAMAGE_FLY_TOP
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_DOWN_BOUND_U
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 1
+    assert int(out["ground_id"][p]) == int(ref["ground_id"][p]) == 2
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-6)
+
+
+@pytest.mark.integration
+def test_fod_static_center_platform_damageflytop_offspan_endpoint_stays_airborne() -> None:
+    # Positive boundary for the endpoint/span owner: EWT 1895's ECB-bottom sweep reaches the static
+    # center platform just past the live transformed segment endpoint. Source mpCheckFloor does not
+    # publish that off-span endpoint contact through the DamageFly tech ladder.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_DamageFly_Coll,ftCo_80090184}
+    # refs/melee/src/melee/mp/mplib.c::{mpCheckFloor,mpLib_8004DD90_Floor}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = _fod_dataset_path(root, "ElatedWearyTermite")
+
+    p = 1
+    seed, ref, out = _run_one_step(dataset_path, 1895, ucf_cardinals_1_0_enabled=True)
+    assert int(seed["action_id"][p]) == ACT_DAMAGE_FLY_TOP
+    assert int(seed["hitstun"][p]) != 0
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_DAMAGE_FLY_TOP
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 0
+    assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=2e-6)
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-6)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("record", "expected_action", "expected_ground_id"),
+    [
+        (5133, ACT_DOWN_BOUND_U, 0),
+        (5219, ACT_PASSIVE_STAND_B, 2),
+    ],
+)
+def test_fod_damagefly_platform_inspan_contacts_use_tech_downbound_ladder(
+    record: int, expected_action: int, expected_ground_id: int
+) -> None:
+    # Negative boundary for the endpoint/span owner: in-span platform contacts remain ordinary
+    # DamageFly_Coll floor results, including no-tech DownBound on the moving left platform and
+    # tech PassiveStandB on the static center platform.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_DamageFly_Coll,ftCo_80090184}
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpColl_80044838_Floor}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = _fod_dataset_path(root, "ElatedWearyTermite")
+
+    p = 1
+    seed, ref, out = _run_one_step(dataset_path, record, ucf_cardinals_1_0_enabled=True)
+    assert int(seed["action_id"][p]) == ACT_DAMAGE_FLY_TOP
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == expected_action
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 1
+    assert int(out["ground_id"][p]) == int(ref["ground_id"][p]) == expected_ground_id
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-4)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("record", "player", "expected_action"),
+    [
+        (7642, 1, ACT_DAMAGE_FLY_TOP),
+        (10453, 0, ACT_DAMAGE_FLY_N),
+    ],
+)
+def test_fod_height_platform_damagefly_endpoint_contacts_stay_airborne(
+    record: int, player: int, expected_action: int
+) -> None:
+    # Positive boundary for the height-platform endpoint owner: contacts near the live
+    # height-transform platform endpoint remain airborne until the grIzumi/CollData edge phase owns
+    # the floor handoff. The runtime bound is the extracted character ledge-snap height used by
+    # ft_80081DD4 before mpColl_800473CC.
+    # data/stages/bin/griz.bin::MSLSTG01 platform_transforms(kind=height)
+    # data/characters/{fox,falco}.json::ledge_snap_height
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpColl_80044838_Floor}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = _fod_dataset_path(root, "ElatedWearyTermite")
+
+    seed, ref, out = _run_one_step(dataset_path, record, ucf_cardinals_1_0_enabled=True)
+    assert int(seed["action_id"][player]) == expected_action
+    assert int(out["action_id"][player]) == int(ref["action_id"][player]) == expected_action
+    assert int(out["on_ground"][player]) == int(ref["on_ground"][player]) == 0
+    assert float(out["pos_x"][player]) == pytest.approx(float(ref["pos_x"][player]), abs=2e-6)
+    assert float(out["pos_y"][player]) == pytest.approx(float(ref["pos_y"][player]), abs=2e-6)

@@ -258,6 +258,26 @@ def test_replay_reseed_step_preserves_seed_owned_frame_metadata() -> None:
     assert int(row["frame_pre_random_seed"]) == 0x12345678
 
 
+def test_replay_rollout_advances_frame_id_without_advancing_seed_rng() -> None:
+    binding = _binding_or_skip()
+    handle = _init_handle_or_skip(binding)
+    try:
+        seed = _basic_seed(frame_id=123)
+        out = _compare_bytes(1)
+        binding.reseed_seed_rollout(handle, seed.view(np.uint8).reshape(1, -1))
+        for _ in range(3):
+            binding.step_input(handle, _idle_input(1), _idle_input(1))
+        binding.write_compare(handle, out)
+        row = out.view(COMPARE_DTYPE).reshape(1)[0].copy()
+    finally:
+        binding.destroy(handle)
+
+    # Replay rollouts need a live frame clock for frame-indexed stage-object owners such as
+    # Randall, but ordinary rows must not imply a replay-frame RNG stream owner.
+    assert int(row["frame_id"]) == 126
+    assert int(row["frame_pre_random_seed"]) == 0x12345678
+
+
 def test_rl_observation_viewpoint_swap_matches_compare_fields() -> None:
     binding = _binding_or_skip()
     handle = _init_handle_or_skip(binding, batch_size=2)

@@ -48,12 +48,13 @@ struct MslBatch {
   // Episode/match init scratch, allocated with the batch so `msl_batch_init_match` can remain
   // allocation-free when used as an RL reset path.
   MslSeed* match_init_seed_scratch;  // [batch]
-  // Per-env frame/RNG clock ownership mode. Match-init rollouts own the modeled HSD_Rand stream;
-  // replay-reseeded rollouts normally keep seed-owned metadata, with a narrow Slippi frame-start
-  // clock mode for replay-carry rows that need the post-frame seed to advance.
+  // Per-env RNG clock ownership mode. Match-init rollouts own the modeled HSD_Rand stream;
+  // replay-reseeded rollouts normally keep the RNG seed-owned, with a narrow Slippi frame-start
+  // RNG-clock mode for replay-carry rows that need the post-frame seed to advance.
   uint8_t* rollout_clock_rng_owned;  // [batch]
   // Replay validation rollout reseed mode. This stays true for `reseed_seed_rollout` even when the
-  // RNG/frame-clock owner itself stays seed-owned.
+  // RNG owner itself stays seed-owned; runtime uses it to advance frame-indexed stage/object owners
+  // such as Randall without advancing frame_pre_random_seed.
   uint8_t* replay_rollout_reseeded;       // [batch]
   int32_t* replay_rollout_seed_frame_id;  // [batch]
   // Minimal live camera mode substrate for callbacks that query Camera_8003010C. Replay reseeds do

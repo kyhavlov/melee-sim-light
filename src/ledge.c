@@ -1031,11 +1031,6 @@ void ledge_try_catch_post_collision(MslBatch* batch) {
         continue;
       }
 
-      const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
-      if (ch == NULL) {
-        continue;
-      }
-
       // Decomp: ftCliffCommon_80081370 chooses ledge side based on Collide_LeftLedgeGrab (left bit
       // wins when both bits are present), and does not attempt a second side on failure.
       // refs/melee/src/melee/ft/ftcliffcommon.c::ftCliffCommon_80081370
@@ -1048,31 +1043,20 @@ void ledge_try_catch_post_collision(MslBatch* batch) {
           continue;
         }
 
-        // Enter CliffCatch and snap.
         batch->state.ledge_side[idx] = 0;
         update_cliff_ledge_floor_owner(batch, bi, idx);
         batch->state.action_id[idx] = (uint16_t)MSL_ACT_CLIFF_CATCH;
         batch->state.animation_index[idx] = (uint32_t)MSL_SM_CLIFF_CATCH;
         batch->state.on_ground[idx] = 0;
         batch->state.fall_fast[idx] = 0;
-        enter_cliff_catch_immediate(batch, idx);
-        // Decomp: ftCliffCommon_80081370 sets facing toward stage and snaps to the ledge point.
-        // refs/melee/src/melee/ft/ftcliffcommon.c::ftCliffCommon_80081370
         batch->state.facing[idx] = 1;  // left ledge -> face right
-        {
-          // Decomp: ftCo_CliffCatch_Phys snaps to `cliff_point + TransNPos` each frame.
-          // refs/melee/src/melee/ft/ftcliffcommon.c::ftCo_CliffCatch_Phys
-          float t[3] = {0};
-          if (anim_pose_get_transn(batch->state.char_id[idx], (uint16_t)MSL_SM_CLIFF_CATCH, 0, t) ==
-              0) {
-            batch->state.pos_x[idx] = ledge_left.x + (t[2] * ch->model_scaling);
-            batch->state.pos_y[idx] = ledge_left.y + (t[1] * ch->model_scaling);
-          } else {
-            // Fallback (should not happen with extracted pose data present).
-            batch->state.pos_x[idx] = ledge_left.x;
-            batch->state.pos_y[idx] = ledge_left.y + ch->ledge_snap_y;
-          }
-        }
+        // Decomp: ftCliffCommon_80081370 sets facing toward stage, enters CliffCatch, immediately
+        // ticks the new motion via ftAnim_8006EBA4, then ftCo_CliffCatch_Phys snaps using the live
+        // post-entry TransN frame rather than the raw frame-0 pose.
+        // refs/melee/src/melee/ft/ftcliffcommon.c::ftCliffCommon_80081370
+        // refs/melee/src/melee/ft/ftcliffcommon.c::ftCo_CliffCatch_Phys
+        enter_cliff_catch_immediate(batch, idx);
+        cliff_hold_phys_snap(batch, bi, idx, (uint16_t)MSL_SM_CLIFF_CATCH);
         batch->state.speed_ground_x_self[idx] = 0.0f;
         batch->state.speed_air_x_self[idx] = 0.0f;
         batch->state.speed_y_self[idx] = 0.0f;
@@ -1093,21 +1077,11 @@ void ledge_try_catch_post_collision(MslBatch* batch) {
         batch->state.animation_index[idx] = (uint32_t)MSL_SM_CLIFF_CATCH;
         batch->state.on_ground[idx] = 0;
         batch->state.fall_fast[idx] = 0;
-        enter_cliff_catch_immediate(batch, idx);
         batch->state.facing[idx] = 0;  // right ledge -> face left
-        {
-          // Decomp: ftCo_CliffCatch_Phys snaps to `cliff_point + TransNPos` each frame.
-          // refs/melee/src/melee/ft/ftcliffcommon.c::ftCo_CliffCatch_Phys
-          float t[3] = {0};
-          if (anim_pose_get_transn(batch->state.char_id[idx], (uint16_t)MSL_SM_CLIFF_CATCH, 0, t) ==
-              0) {
-            batch->state.pos_x[idx] = ledge_right.x + (-t[2] * ch->model_scaling);
-            batch->state.pos_y[idx] = ledge_right.y + (t[1] * ch->model_scaling);
-          } else {
-            batch->state.pos_x[idx] = ledge_right.x;
-            batch->state.pos_y[idx] = ledge_right.y + ch->ledge_snap_y;
-          }
-        }
+        // Decomp: same CliffCatch entry/tick/phys ordering as the left ledge branch above.
+        // refs/melee/src/melee/ft/ftcliffcommon.c::{ftCliffCommon_80081370,ftCo_CliffCatch_Phys}
+        enter_cliff_catch_immediate(batch, idx);
+        cliff_hold_phys_snap(batch, bi, idx, (uint16_t)MSL_SM_CLIFF_CATCH);
         batch->state.speed_ground_x_self[idx] = 0.0f;
         batch->state.speed_air_x_self[idx] = 0.0f;
         batch->state.speed_y_self[idx] = 0.0f;

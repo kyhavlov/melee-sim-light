@@ -59,7 +59,7 @@ def _infer_attacker_slot_from_last_hit_by_instance(
     return int(matches[0]) if matches.size == 1 else -1
 
 
-def derive_staling_history(frames: pa.StructArray, *, src_ports: list[int]) -> StalingHistory:
+def derive_staling_history(frames: pa.StructArray, *, src_ports: list[int], items_fixed=None) -> StalingHistory:
     """Derive stale-queue seed state strictly causally (prefix-invariant).
 
     Returns per-post-frame staling state:
@@ -82,6 +82,12 @@ def derive_staling_history(frames: pa.StructArray, *, src_ports: list[int]) -> S
       last_hit_by / last_hit_by_instance fields to select the attacker and tie the hit to the
       attacker's historical action-state instance_id when needed (e.g. projectiles inheriting
       owner instance_id).
+    - When `items_fixed` is provided, damaging hits first resolve any matching fighter action-state
+      instance id. Only hits not attributable to a fighter row may use a unique matching item row,
+      whose current owner plus spawn-latched attack_id/attack_instance mirrors
+      plStale_UpdateStaleMovesFromItem for reflected lasers and other item-owned damage; the
+      previous post-frame item row is consulted first because projectile hits can destroy the item
+      before the damage post-frame is serialized.
     """
     if frames is None:
         raise ValueError("frames is None")
@@ -124,13 +130,7 @@ def derive_staling_history(frames: pa.StructArray, *, src_ports: list[int]) -> S
         raise RuntimeError(
             "native msl_binding.derive_staling_history is required for preprocessing; run `make build`"
         ) from exc
-    (
-        attack_id_out,
-        attack_inst_out,
-        qi_out,
-        stale_mid_out,
-        stale_inst_out,
-    ) = msl_binding.derive_staling_history(
+    args = [
         [int(p) for p in src_ports],
         np.ascontiguousarray(char_id, dtype=np.uint8),
         np.ascontiguousarray(action_id, dtype=np.uint16),
@@ -141,7 +141,24 @@ def derive_staling_history(frames: pa.StructArray, *, src_ports: list[int]) -> S
         np.ascontiguousarray(state_iid, dtype=np.uint16),
         np.ascontiguousarray(last_hit_by, dtype=np.uint8),
         np.ascontiguousarray(last_hit_by_instance, dtype=np.uint16),
-    )
+    ]
+    if items_fixed is not None:
+        args.extend(
+            [
+                np.ascontiguousarray(items_fixed["exists"], dtype=np.uint8),
+                np.ascontiguousarray(items_fixed["owner"], dtype=np.int8),
+                np.ascontiguousarray(items_fixed["instance_id"], dtype=np.uint16),
+                np.ascontiguousarray(items_fixed["attack_id"], dtype=np.uint16),
+                np.ascontiguousarray(items_fixed["attack_instance"], dtype=np.uint16),
+            ]
+        )
+    (
+        attack_id_out,
+        attack_inst_out,
+        qi_out,
+        stale_mid_out,
+        stale_inst_out,
+    ) = msl_binding.derive_staling_history(*args)
 
     return StalingHistory(
         attack_id=attack_id_out,

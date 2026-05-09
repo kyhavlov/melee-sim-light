@@ -16,10 +16,11 @@ enum {
   ANIM_HDR_BASE_BYTES = 16,  // magic[8] + ver[u32] + joint_count[u16] + anim_count[u16]
   ANIM_VERSION_V4 = 4,
   ANIM_DYN_VERSION_V4 = 4,
+  ANIM_DYN_VERSION_V5 = 5,
   MAT_BYTES = 12 * 4,              // float32[12] (3x4)
   TRANSN_BYTES_PER_FRAME = 3 * 4,  // float32[3] v4 tail (TransN/root translation)
 
-  // SSDYNN01 v4 is written by tools/extraction/extract_fighter_anims.py.
+  // SSDYNN01 v5 is written by tools/extraction/extract_fighter_anims.py.
   //
   // RL1.0 target data contract:
   // - Fox ftData.x2C has exactly one dynamic bone set rooted at part 17.
@@ -28,8 +29,11 @@ enum {
   // Runtime state is indexed by player and node. Until a multi-set seed/state surface is added,
   // reject present SSDYNN01 files with more than one set instead of accepting a layout the hot path
   // cannot represent without set-index collisions.
-  ANIM_DYN_MAX_SETS = 1
+  ANIM_DYN_MAX_SETS = 1,
+  ANIM_DYN_MAX_COLLIDERS = 4
 };
+
+static const float kDynColliderSkinRadius = 0.1f;  // lb_00F9.s::lb_804D7BE0
 
 static const uint8_t k_anim_magic[ANIM_MAGIC_LEN] = {'S', 'S', 'A', 'N', 'I', 'M', '0', '1'};
 
@@ -49,6 +53,12 @@ typedef struct {
   float pos[3];
   MslAnimDynNodeData nodes[MSL_MAX_DYNAMIC_NODES];
 } MslAnimDynSetData;
+
+typedef struct {
+  uint16_t part_id;
+  float offset[3];
+  float radius;
+} MslAnimDynColliderData;
 
 typedef struct {
   uint8_t* buf;
@@ -79,7 +89,9 @@ typedef struct {
 
   uint16_t dyn_set_count;
   uint16_t dyn_total_nodes;
+  uint16_t dyn_collider_count;
   MslAnimDynSetData dyn_sets[ANIM_DYN_MAX_SETS];
+  MslAnimDynColliderData dyn_colliders[ANIM_DYN_MAX_COLLIDERS];
   uint8_t* dyn_collision_have_msid;  // [65536], extracted SSDYNN01 collision-owner index
 
   uint8_t* track_buf;
@@ -784,7 +796,7 @@ static int load_dynamics_into_table(const char* data_dir, const char* rel_path,
   static const uint8_t dyn_magic[ANIM_MAGIC_LEN] = {'S', 'S', 'D', 'Y', 'N', 'N', '0', '1'};
   const uint32_t ver = (sz >= ANIM_HDR_BASE_BYTES) ? read_u32_le(buf + 8) : 0u;
   if (sz < ANIM_HDR_BASE_BYTES || memcmp(buf, dyn_magic, ANIM_MAGIC_LEN) != 0 ||
-      ver != ANIM_DYN_VERSION_V4) {
+      ver != ANIM_DYN_VERSION_V5) {
     alloc_free(buf);
     return -1;
   }
@@ -798,6 +810,7 @@ static int load_dynamics_into_table(const char* data_dir, const char* rel_path,
   size_t off = ANIM_HDR_BASE_BYTES;
   uint16_t seen_nodes = 0;
   memset(t->dyn_sets, 0, sizeof(t->dyn_sets));
+  memset(t->dyn_colliders, 0, sizeof(t->dyn_colliders));
   for (uint16_t si = 0; si < set_count; si++) {
     if (off + 16u > sz) {
       alloc_free(buf);
@@ -853,6 +866,29 @@ static int load_dynamics_into_table(const char* data_dir, const char* rel_path,
     dyn_collision_have_msid[msid] = 1u;
   }
   off += (size_t)collision_msid_count * 2u;
+  if (off + 4u > sz) {
+    alloc_free(buf);
+    alloc_free(dyn_collision_have_msid);
+    return -1;
+  }
+  const uint16_t collider_count = read_u16_le(buf + off);
+  off += 4u;  // collider_count + reserved
+  if (collider_count > (uint16_t)ANIM_DYN_MAX_COLLIDERS ||
+      off + (size_t)collider_count * 20u > sz) {
+    alloc_free(buf);
+    alloc_free(dyn_collision_have_msid);
+    return -1;
+  }
+  for (uint16_t ci = 0; ci < collider_count; ci++) {
+    MslAnimDynColliderData* col = &t->dyn_colliders[ci];
+    col->part_id = read_u16_le(buf + off);
+    off += 4u;  // part + pad
+    col->offset[0] = read_f32_le(buf + off);
+    col->offset[1] = read_f32_le(buf + off + 4u);
+    col->offset[2] = read_f32_le(buf + off + 8u);
+    col->radius = read_f32_le(buf + off + 12u);
+    off += 16u;
+  }
   alloc_free(buf);
   if (off != sz || seen_nodes != total_nodes) {
     alloc_free(dyn_collision_have_msid);
@@ -860,6 +896,7 @@ static int load_dynamics_into_table(const char* data_dir, const char* rel_path,
   }
   t->dyn_set_count = set_count;
   t->dyn_total_nodes = total_nodes;
+  t->dyn_collider_count = collider_count;
   t->dyn_collision_have_msid = dyn_collision_have_msid;
   return 0;
 }
@@ -1685,6 +1722,52 @@ static void vec3_rotate_towards(float v[3], const float target[3], float step_an
   }
 }
 
+static uint8_t segment_sphere_intersects(const float a[3], const float b[3], const float c[3],
+                                         float tolerance, float radius) {
+  float ab[3] = {b[0] - a[0], b[1] - a[1], b[2] - a[2]};
+  float ac[3] = {c[0] - a[0], c[1] - a[1], c[2] - a[2]};
+  const float ab_len_sq = vec3_dot(ab, ab);
+  float t = 0.0f;
+  if (ab_len_sq > 1.0e-6f) {
+    t = vec3_dot(ac, ab) / ab_len_sq;
+    if (t < 0.0f) {
+      t = 0.0f;
+    } else if (t > 1.0f) {
+      t = 1.0f;
+    }
+  }
+  const float closest[3] = {a[0] + ab[0] * t, a[1] + ab[1] * t, a[2] + ab[2] * t};
+  const float dx = c[0] - closest[0];
+  const float dy = c[1] - closest[1];
+  const float dz = c[2] - closest[2];
+  const float r = radius + tolerance;
+  return (dx * dx + dy * dy + dz * dz <= r * r) ? 1u : 0u;
+}
+
+static uint16_t dynamic_world_colliders(const MslAnimPoseTable* t, uint8_t char_id, uint16_t msid,
+                                        uint16_t frame, float out[ANIM_DYN_MAX_COLLIDERS][4]) {
+  if (t == NULL || out == NULL || t->dyn_collider_count == 0u) {
+    return 0u;
+  }
+  uint16_t count = 0u;
+  for (uint16_t ci = 0; ci < t->dyn_collider_count && ci < (uint16_t)ANIM_DYN_MAX_COLLIDERS; ci++) {
+    const MslAnimDynColliderData* col = &t->dyn_colliders[ci];
+    float m[12];
+    if (anim_pose_get_matrix(char_id, msid, frame, col->part_id, m) != 0) {
+      continue;
+    }
+    const float x = col->offset[0];
+    const float y = col->offset[1];
+    const float z = col->offset[2];
+    out[count][0] = m[0] * x + m[1] * y + m[2] * z + m[3];
+    out[count][1] = m[4] * x + m[5] * y + m[6] * z + m[7];
+    out[count][2] = m[8] * x + m[9] * y + m[10] * z + m[11];
+    out[count][3] = col->radius;
+    count++;
+  }
+  return count;
+}
+
 static int dynamic_node_base_positions(const MslAnimDynSetData* set, uint8_t char_id, uint16_t msid,
                                        uint16_t frame, float out_pos[MSL_MAX_DYNAMIC_NODES][3]) {
   if (set == NULL || out_pos == NULL) {
@@ -1763,7 +1846,7 @@ static void dynamic_state_initialize_from_locals(MslBatch* batch, size_t idx,
 
 static void dynamic_state_step(MslBatch* batch, size_t idx, const MslAnimPoseTable* t,
                                const MslAnimDynSetData* set, uint8_t char_id, uint16_t msid,
-                               uint16_t frame) {
+                               uint16_t frame, uint8_t collision_owner) {
   if (batch == NULL || t == NULL || set == NULL || set->node_count == 0u) {
     return;
   }
@@ -1774,6 +1857,8 @@ static void dynamic_state_step(MslBatch* batch, size_t idx, const MslAnimPoseTab
     batch->state.dynamic_pose_apply_collision_matrix[idx] = 0u;
     return;
   }
+  float colliders[ANIM_DYN_MAX_COLLIDERS][4];
+  const uint16_t collider_count = dynamic_world_colliders(t, char_id, msid, frame, colliders);
 
   float prev_pos[MSL_MAX_DYNAMIC_NODES][3];
   for (uint16_t ni = 0; ni < node_count; ni++) {
@@ -1804,12 +1889,12 @@ static void dynamic_state_step(MslBatch* batch, size_t idx, const MslAnimPoseTab
     batch->state.dynamic_pose_pos_z[root_di] = base_pos[0][2];
   }
 
-  // SSDYNN01 v4's collision-owner index means this submotion consumes the live dynamic JObj
+  // SSDYNN01 v5's collision-owner index means this submotion consumes the live dynamic JObj
   // matrix for BODY hurtcaps on every supported frame, even when the current lb_8001044C update
   // resolves to the static segment vector with no nonzero correction carry.
   // refs/melee/src/melee/ft/ftdynamics.c::{ftCo_8009DD94,ftCo_8009E318}
   // refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
-  uint8_t apply_collision_pose = 1u;
+  uint8_t apply_collision_pose = collision_owner ? 1u : 0u;
   for (uint16_t ni = 0; ni + 1u < node_count; ni++) {
     const size_t di = dynamic_state_index(idx, ni);
     const size_t child_di = dynamic_state_index(idx, (uint16_t)(ni + 1u));
@@ -1896,11 +1981,63 @@ static void dynamic_state_step(MslBatch* batch, size_t idx, const MslAnimPoseTab
       }
     }
 
+    // lb_8001044C applies descriptor +0x68 against a natural direction derived from descriptor
+    // +0x58 and the live JObj rotation. SSDYNN01 v5 does not yet serialize that live natural-dir
+    // state, and the older base-vector approximation can move valid source dynamic tails back into
+    // false BODY contact. Keep the cone un-applied until the natural-dir/JObj owner is promoted.
+    // refs/melee/src/melee/lb/lb_00F9.c::lb_8001044C
     const float cone = fabsf(set->nodes[ni].c[6]);
-    const float cone_angle = vec3_angle(base_vec, prev_vec);
-    if (cone > 0.0f && cone_angle > cone) {
-      vec3_rotate_towards(prev_vec, base_vec, cone_angle - cone);
-      apply_collision_pose = 1u;
+    (void)cone;
+
+    // ftCo_8009DD94 refreshes fp->x1670 via ftColl_8007AF60 and passes those source dynamic
+    // colliders to lb_8001044C before JObj matrices are rebuilt. Source applies this after the
+    // max-deviation cone, so collider avoidance can still move a constrained segment away from
+    // the fighter body.
+    // refs/melee/src/melee/ft/ftdynamics.c::ftCo_8009DD94
+    // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007AF60
+    // refs/melee/src/melee/lb/lb_00F9.c::lb_8001044C
+    const uint16_t active_collider_count = collider_count;
+    for (uint16_t ci = 0; ci < active_collider_count; ci++) {
+      const float collider_pos[3] = {colliders[ci][0], colliders[ci][1], colliders[ci][2]};
+      const float collider_radius = colliders[ci][3];
+      float next_pos[3] = {parent_pos[0] + prev_vec[0] * seg_len,
+                           parent_pos[1] + prev_vec[1] * seg_len,
+                           parent_pos[2] + prev_vec[2] * seg_len};
+      float coll_dir[3] = {collider_pos[0] - parent_pos[0], collider_pos[1] - parent_pos[1],
+                           collider_pos[2] - parent_pos[2]};
+      float coll_dist = vec3_len(coll_dir);
+      if (coll_dist > collider_radius &&
+          segment_sphere_intersects(parent_pos, next_pos, collider_pos, kDynColliderSkinRadius,
+                                    collider_radius)) {
+        float force_dir[3] = {coll_dir[0], coll_dir[1], coll_dir[2]};
+        if (!vec3_normalize(force_dir)) {
+          continue;
+        }
+        const float coll_angle = vec3_angle(force_dir, prev_vec);
+        if (coll_angle <= 1.0e-6f) {
+          continue;
+        }
+        const float adj_radius = kDynColliderSkinRadius + collider_radius;
+        float side_sq = coll_dist * coll_dist - adj_radius * adj_radius;
+        if (side_sq < 0.0f) {
+          side_sq = 0.0f;
+        }
+        const float side = sqrtf(side_sq);
+        const float avoidance_angle = fabsf(atan2f(adj_radius, side)) - coll_angle;
+        if (avoidance_angle > 0.0f) {
+          float axis[3];
+          vec3_cross(force_dir, prev_vec, axis);
+          if (vec3_normalize(axis)) {
+            float out[3];
+            vec3_rotate_about_unit_axis(prev_vec, axis, avoidance_angle, out);
+            if (vec3_normalize(out)) {
+              prev_vec[0] = out[0];
+              prev_vec[1] = out[1];
+              prev_vec[2] = out[2];
+            }
+          }
+        }
+      }
     }
 
     float carry_axis[3];
@@ -1920,7 +2057,9 @@ static void dynamic_state_step(MslBatch* batch, size_t idx, const MslAnimPoseTab
       next_carry = 0.0f;
     }
     if (next_carry > 1.0e-6f) {
-      apply_collision_pose = 1u;
+      if (collision_owner) {
+        apply_collision_pose = 1u;
+      }
     }
     batch->state.dynamic_pose_axis_x[di] = carry_axis[0];
     batch->state.dynamic_pose_axis_y[di] = carry_axis[1];
@@ -1974,24 +2113,26 @@ void anim_pose_update_dynamic_state(MslBatch* batch) {
         batch->state.dynamic_pose_apply_collision_matrix[idx] = 0u;
         continue;
       }
-
-      const uint8_t sequential = batch->state.dynamic_pose_state_valid[idx] &&
-                                 batch->state.dynamic_pose_char_id[idx] == char_id &&
-                                 batch->state.dynamic_pose_msid[idx] == msid &&
-                                 (uint16_t)(batch->state.dynamic_pose_frame[idx] + 1u) == frame;
-      if (!sequential) {
+      const uint8_t same_msid_sequential =
+          (batch->state.dynamic_pose_state_valid[idx] &&
+           batch->state.dynamic_pose_char_id[idx] == char_id &&
+           batch->state.dynamic_pose_msid[idx] == msid &&
+           (uint16_t)(batch->state.dynamic_pose_frame[idx] + 1u) == frame)
+              ? 1u
+              : 0u;
+      if (!same_msid_sequential) {
         dynamic_state_initialize_from_locals(batch, idx, t, set, char_id, msid, 0u);
         const uint16_t max_frame = (frame < t->local_frame_count_by_msid[msid])
                                        ? frame
                                        : (uint16_t)(t->local_frame_count_by_msid[msid] - 1u);
         for (uint16_t f = 0; f <= max_frame; f++) {
-          dynamic_state_step(batch, idx, t, set, char_id, msid, f);
+          dynamic_state_step(batch, idx, t, set, char_id, msid, f, 1u);
           if (f == 0xFFFFu) {
             break;
           }
         }
       } else {
-        dynamic_state_step(batch, idx, t, set, char_id, msid, frame);
+        dynamic_state_step(batch, idx, t, set, char_id, msid, frame, 1u);
       }
     }
   }

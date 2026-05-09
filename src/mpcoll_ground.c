@@ -266,8 +266,6 @@ static inline uint8_t damage_hitlag_floorhug_attempts_downward_sdi(const MslBatc
   if (batch->state.damage_hitlag_downward_sdi_consumed[idx] != 0u) {
     return 1u;
   }
-  const float prev_sx = stick_i8_to_unit(batch->state.prev_input_main_x[idx]);
-  const float prev_sy = stick_i8_to_unit(batch->state.prev_input_main_y[idx]);
   const float mag_sq = raw_sx * raw_sx + raw_sy * raw_sy;
   if (mag_sq < c->sdi_radius * c->sdi_radius) {
     return 0u;
@@ -292,15 +290,17 @@ static inline uint8_t damage_hitlag_floorhug_attempts_downward_sdi(const MslBatc
        sdi_tilt_window)
           ? 1u
           : 0u;
+  const float prev_sx = stick_i8_to_unit(batch->state.prev_input_main_x[idx]);
+  const float prev_sy = stick_i8_to_unit(batch->state.prev_input_main_y[idx]);
   const float prev_mag_sq = prev_sx * prev_sx + prev_sy * prev_sy;
-  const uint8_t first_active_radius_crossing =
-      (batch->state.action_frame[idx] == 1 && batch->state.tilt_timer_x[idx] == 254u &&
-       batch->state.tilt_timer_y[idx] == 254u &&
+  const uint8_t first_active_common_damage_radius_crossing =
+      (!is_damage_fly_collision_action(action_id) && batch->state.action_frame[idx] == 1 &&
+       batch->state.tilt_timer_x[idx] == 254u && batch->state.tilt_timer_y[idx] == 254u &&
        batch->state.seed_prev_action_id[idx] != action_id &&
        mag_sq >= c->sdi_radius * c->sdi_radius && prev_mag_sq < c->sdi_radius * c->sdi_radius)
           ? 1u
           : 0u;
-  return (uint8_t)((timer_window_owner || first_active_radius_crossing) ? 1u : 0u);
+  return (uint8_t)((timer_window_owner || first_active_common_damage_radius_crossing) ? 1u : 0u);
 }
 
 static inline uint8_t grounded_damage_hitlag_allows_downward_floor_projection(const MslBatch* batch,
@@ -1189,6 +1189,22 @@ static inline uint8_t action_uses_shallow_attackair_platform_ecb_owner(uint8_t c
   const uint16_t smid = msl_motion_state_submotion_id(char_id, action_id);
   return (smid == (uint16_t)MSL_SM_ATTACK_AIR_N || smid == (uint16_t)MSL_SM_ATTACK_AIR_LW) ? 1u
                                                                                            : 0u;
+}
+
+static inline uint8_t action_uses_sideb_air_ft_check_ground_and_ledge_coll(uint8_t char_id,
+                                                                           uint16_t action_id) {
+  // Fox/Falco aerial Side-B collision callbacks call `ft_CheckGroundAndLedge`, which snapshots
+  // `fp->cur_pos` into CollData and runs `mpColl_800473CC` / `mpColl_800471F8` before entering the
+  // grounded Side-B or LandingFallSpecial consumers. Unlike common-air `ft_80082C74` callbacks,
+  // this path does not pass `ftCo_80096CC8`, so held-down platform input does not reject the floor.
+  // Use the generated MotionState collision-callback owner class rather than callback-id ordering
+  // artifacts or a local action-family list.
+  // data/motion_state/owners/{fox,falco}.bin (MSLMSO01 class_bits)
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
+  //   ftFx_SpecialAirSStart_Coll,ftFx_SpecialAirS_Coll,ftFx_SpecialAirSEnd_Coll}
+  // refs/melee/src/melee/ft/ft_081B.c::ft_CheckGroundAndLedge
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800473CC,mpColl_800471F8}
+  return msl_motion_state_class_has(char_id, action_id, MSL_MS_CLASS_SIDEB_AIR_GROUND_LEDGE_COLL);
 }
 
 static inline uint8_t floor_line_is_skipped_platform(uint32_t stage_id, const MslStageFloorGraph* g,
@@ -2749,8 +2765,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
         // - Fall fastfall rows in `Fall_Coll` (`ft_800831CC` -> `mpColl_80047E14`), EscapeAir,
         //   AttackAir, Damage/DamageFly, and the Fox/Falco aerial special callbacks above can also
         //   resolve grounded contact during this lock window. Jump/JumpAerial, non-fastfall Fall,
-        //   and FallSpecial have distinct callback-phase owners and are not part of this retained
-        //   Fall slice.
+        //   and FallSpecial have distinct floor callback-phase owners and are not part of this
+        //   retained floor slice.
         // - Shine narrows this to frame-start SpecialAirLwLoop/End owners; otherwise
         //   SpecialAirLwStart_Anim can change to Loop before collision and incorrectly inherit
         //   the loop/end floor-contact policy on the startup handoff frame.
@@ -2797,8 +2813,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
         // Source mpColl_LoadECB_inline preserves desired_ecb.bottom while the CollData lock bit is
         // live; top/side points still refresh from the current pose.
         // refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_inline
-        msl_ecb_world_points_override_bottom_rel_y(&desired_ecb_points, char_id, x, y,
-                                                   desired_ecb_rel);
+        msl_ecb_world_points_preserve_desired_bottom_rel_y(&desired_ecb_points, x, y,
+                                                           desired_ecb_rel);
       }
       const uint8_t escapeair_jumpaerial_entry =
           (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR && prev_action_id != action_id &&
@@ -3028,6 +3044,24 @@ void mpcoll_ground_apply(MslBatch* batch) {
         const int out_line_idx = floor_dd90_project(batch, bi, g, prefer_line_idx, cur_bottom_x,
                                                     cur_bottom_y, &y_corr, &floor_nx, &floor_ny);
         if (out_line_idx >= 0) {
+          const uint8_t down_bound_slope_root_snap =
+              (uint8_t)(action_is_down_bound(action_id) &&
+                        (floor_line_is_generated_stage_slope(batch, bi, g, prefer_line_idx) ||
+                         floor_line_is_generated_stage_slope(batch, bi, g, out_line_idx)));
+          if (down_bound_slope_root_snap) {
+            float root_line_y = 0.0f;
+            if (floor_line_y_at_x_for_env(batch, bi, g, out_line_idx, batch->state.pos_x[idx],
+                                          &root_line_y)) {
+              // DownBound_Coll uses the allow-ground-to-air floor persistence path. When a grounded
+              // DownBound root traverses generated legal-stage slopes, source keeps the root pinned
+              // to the persisted floor line until `mpColl_8004B108` reports floor loss; projecting
+              // the positive DownBound ECB bottom instead leaves the root stranded below the slope.
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Coll
+              // refs/melee/src/melee/ft/ft_081B.c::ft_80082708
+              // refs/melee/src/melee/mp/{mpcoll.c::mpColl_8004B108,mplib.c::mpLib_8004DD90_Floor}
+              y_corr = (root_line_y + k_floor_y_bias) - batch->state.pos_y[idx];
+            }
+          }
           const uint8_t keep_grounded_damage_hitlag_floor_snap =
               grounded_damage_hitlag_allows_downward_floor_projection(batch, idx, action_id);
           const uint8_t keep_capture_lw_floor_snap =
@@ -3046,7 +3080,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
           // Exception: low capture states call the allow-ground-to-air collision wrapper after
           // `fn_800DAD18`; it owns re-projecting the attached grounded victim back onto the floor.
           if (y_corr < 0.0f && !keep_grounded_damage_hitlag_floor_snap &&
-              !keep_capture_lw_floor_snap && !keep_slope_or_platform_floor_snap) {
+              !keep_capture_lw_floor_snap && !keep_slope_or_platform_floor_snap &&
+              !down_bound_slope_root_snap) {
             y_corr = 0.0f;
           }
           int resolved_line_idx = out_line_idx;
@@ -3175,6 +3210,11 @@ void mpcoll_ground_apply(MslBatch* batch) {
                                             stage_id, g->lines[(size_t)hit_line_idx].segment_i))
                       ? 1u
                       : 0u;
+              const uint8_t hit_line_has_height_platform_transform =
+                  (hit_line_idx >= 0 && stage_collision_floor_line_has_height_platform_transform(
+                                            stage_id, g->lines[(size_t)hit_line_idx].segment_i))
+                      ? 1u
+                      : 0u;
               // Decomp: desired_ecb.bottom.x is always 0.0, so clamping the ECB bottom contact X
               // corresponds to clamping the fighter position X.
               // refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_JObj
@@ -3186,6 +3226,9 @@ void mpcoll_ground_apply(MslBatch* batch) {
                                                       : g->lines[(size_t)hit_line_idx].segment_i;
               const uint8_t resolved_line_has_platform_transform =
                   stage_collision_floor_line_has_platform_transform(stage_id, resolved_segment_i);
+              const uint8_t resolved_line_has_height_platform_transform =
+                  stage_collision_floor_line_has_height_platform_transform(stage_id,
+                                                                           resolved_segment_i);
               const uint8_t resolved_line_is_platform =
                   (out_line_idx2 >= 0 && g->lines[(size_t)out_line_idx2].is_platform) ? 1u : 0u;
               const uint8_t resolved_line_is_ledge =
@@ -3238,29 +3281,82 @@ void mpcoll_ground_apply(MslBatch* batch) {
                              k_floor_y_bias))
                       ? 1u
                       : 0u;
-              const float damage_root_down_delta = prev_y - y;
-              const uint8_t damage_root_tracks_self_descent =
-                  (damage_root_down_delta >=
-                   (fabsf(batch->state.speed_y_self[idx]) - k_floor_horiz_dy_thresh))
+              const float transformed_platform_bottom_penetration = iy - cur_bottom_y;
+              const uint8_t damage_transformed_platform_offspan_contact =
+                  // mpCheckFloor can report a transformed-platform endpoint contact from the ECB
+                  // bottom sweep, but source floor handoff still requires the callback-local root
+                  // to be in the live floor span before ftCo_80090184 may publish Passive/DownBound.
+                  // refs/melee/src/melee/mp/mplib.c::{mpCheckFloor,mpLib_8004DD90_Floor}
+                  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpColl_80044838_Floor}
+                  (((hit_line_has_platform_transform &&
+                     !floor_x_within_line_segment_strict(batch, bi, g, hit_line_idx, x)) ||
+                    (resolved_line_has_platform_transform && out_line_idx2 >= 0 &&
+                     !floor_x_within_line_segment_strict(batch, bi, g, out_line_idx2, x))) &&
+                   is_damage_collision_landing_action(action_id) &&
+                   batch->state.speed_y_attack[idx] > 0.0f && batch->state.hitstun[idx] != 0u)
+                      ? 1u
+                      : 0u;
+              const MslCharParams* damage_floor_chp = msl_char_params(char_id);
+              const float damage_height_platform_edge_slack =
+                  (damage_floor_chp != NULL && isfinite(damage_floor_chp->ledge_snap_height))
+                      ? (damage_floor_chp->ledge_snap_height * batch->state.fighter_scale_y[idx])
+                      : k_ecb_vertical_unit;
+              const uint8_t damage_height_platform_pending_owner =
+                  // FoD height-transform platform DamageFly endpoint contacts still need the live
+                  // grIzumi platform/CollData substep owner. `ft_80081DD4` sets
+                  // coll->ledge_snap_height before calling `mpColl_800473CC`; use the extracted
+                  // character ledge-snap height as the endpoint bound instead of a replay-local x
+                  // window. Inboard height-platform contacts and static-y support lines remain
+                  // ordinary DamageFly floor handoffs.
+                  // data/stages/bin/griz.bin::MSLSTG01 platform_transforms(kind=height)
+                  // data/characters/{fox,falco}.json::ledge_snap_height
+                  // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+                  // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+                  // refs/melee/src/melee/mp/mpcoll.c::{mpCollInterpolateECB,mpColl_80044628_Floor}
+                  (((hit_line_has_height_platform_transform &&
+                     floor_line_x_near_endpoint_for_env(batch, bi, g, hit_line_idx, x,
+                                                        damage_height_platform_edge_slack)) ||
+                    (resolved_line_has_height_platform_transform && out_line_idx2 >= 0 &&
+                     floor_line_x_near_endpoint_for_env(batch, bi, g, out_line_idx2, x,
+                                                        damage_height_platform_edge_slack))) &&
+                   is_damage_collision_landing_action(action_id) &&
+                   batch->state.speed_y_attack[idx] > 0.0f && batch->state.hitstun[idx] != 0u)
+                      ? 1u
+                      : 0u;
+              const uint8_t damage_terminal_height_platform_stale_floor =
+                  // Late DamageFly rows can carry a stale hard-floor CollData.floor.index while a
+                  // FoD height-transform platform is between the live root and the carried floor.
+                  // Source `mpColl_80044628_Floor` still requires the live ECB-bottom floor
+                  // precondition for the transformed line; do not let a deep bottom-only crossing
+                  // publish a platform DownBound before the terminal DamageFly/DamageFall owner.
+                  // The bound is the mpColl one-unit ECB neighborhood, narrowed to the terminal
+                  // hitstun window so ordinary mid-hitstun platform landings remain live.
+                  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+                  //   ftCo_DamageFly_Anim,ftCo_DamageFly_Coll}
+                  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpColl_80044838_Floor}
+                  ((hit_line_has_platform_transform || resolved_line_has_platform_transform) &&
+                   is_damage_fly_collision_action(action_id) && batch->state.hitstun[idx] <= 4u &&
+                   !stage_collision_floor_line_is_platform(stage_id, batch->state.ground_id[idx]) &&
+                   transformed_platform_bottom_penetration > (0.5f * k_ecb_vertical_unit))
                       ? 1u
                       : 0u;
               const uint8_t suppress_damage_transformed_platform_ecb_only_land =
                   // Damage/DamageFly platform contact is owned by ftCo_Damage*_Coll -> ft_80081DD4
                   // and mpCheckFloor's live CollData ECB sweep. Do not key this on residual KB sign:
                   // legal-stage platform landings can retain positive attack-Y while the ECB bottom
-                  // descends through the floor. The retained rejection is the FoD transformed-platform
-                  // boundary where the platform hit is dominated by ECB-bottom interpolation rather
-                  // than root descent.
+                  // descends through the floor. Reject only source-shaped platform contacts where
+                  // the source floor pass has only an endpoint/off-span transformed-platform hit,
+                  // plus the terminal stale hard-floor/height-platform owner. In-span static-y FoD
+                  // support lines are ordinary platform floor contacts for the DamageFly
+                  // tech/DownBound ladder.
                   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
                   // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
                   // refs/melee/src/melee/mp/mpcoll.c::{mpCollInterpolateECB,mpCheckFloor}
-                  ((hit_line_has_platform_transform || resolved_line_has_platform_transform) &&
-                   is_damage_collision_landing_action(action_id) &&
-                   batch->state.hitstun[idx] != 0u && batch->state.speed_y_attack[idx] > 0.0f &&
-                   !damage_root_tracks_self_descent)
+                  (damage_transformed_platform_offspan_contact ||
+                   damage_height_platform_pending_owner ||
+                   damage_terminal_height_platform_stale_floor)
                       ? 1u
                       : 0u;
-              const float transformed_platform_bottom_penetration = iy - cur_bottom_y;
               const uint8_t suppress_attackair_transformed_platform_ecb_only_land =
                   // AttackAirN/Lw's generated submotion rows use AttackAir_Coll
                   // (ft_80082C74 -> mpColl_800471F8), whose floor path first accepts a live
@@ -3482,6 +3578,47 @@ void mpcoll_ground_apply(MslBatch* batch) {
                 batch->state.coll_desired_ecb_bottom_rel_y[idx], c, &ground_id, &contact_x,
                 &contact_y, &floor_nx, &floor_ny)) {
           on_ground = 1u;
+        }
+        if (!on_ground &&
+            action_uses_sideb_air_ft_check_ground_and_ledge_coll(char_id, action_id) &&
+            cur_bottom_y <= prev_bottom_y) {
+          // Aerial Side-B direct ground/ledge callback:
+          // `ft_CheckGroundAndLedge` uses the direct mpColl floor path (`mpColl_800473CC`, or
+          // `mpColl_800471F8` while ledge cooldown/x2224_b2 is active). After
+          // `mpColl_80044628_Floor` accepts an ECB-bottom floor hit, `mpColl_80044838_Floor`
+          // projects from root when the loaded ECB bottom is positive. Do not pass the common-air
+          // platform callback here: Side-B's direct helper has no held-down platform-pass predicate.
+          // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
+          //   ftFx_SpecialAirSStart_Coll,ftFx_SpecialAirS_Coll,ftFx_SpecialAirSEnd_Coll}
+          // refs/melee/src/melee/ft/ft_081B.c::ft_CheckGroundAndLedge
+          // refs/melee/src/melee/mp/mpcoll.c::{
+          //   mpColl_800473CC,mpColl_800471F8,mpColl_80044628_Floor,mpColl_80044838_Floor}
+          int hit_line_idx = -1;
+          float ix = 0.0f;
+          float iy = 0.0f;
+          if (floor_sweep_check(batch, idx, bi, g, stage_id, prev_bottom_x, prev_bottom_y,
+                                cur_bottom_x, cur_bottom_y, skip_platform_segment_i,
+                                prefer_line_idx, -1, NULL, &hit_line_idx, &ix, &iy, &floor_nx,
+                                &floor_ny)) {
+            float y_corr = 0.0f;
+            const int out_line_idx =
+                floor_dd90_project(batch, bi, g, hit_line_idx, batch->state.pos_x[idx],
+                                   batch->state.pos_y[idx], &y_corr, &floor_nx, &floor_ny);
+            if (out_line_idx >= 0 && y_corr >= 0.0f) {
+              batch->state.pos_y[idx] += y_corr;
+              on_ground = 1u;
+              ground_id = g->lines[(size_t)out_line_idx].segment_i;
+              contact_x = batch->state.pos_x[idx];
+              contact_y = batch->state.pos_y[idx];
+            } else if (hit_line_idx >= 0) {
+              batch->state.pos_x[idx] += (ix - cur_bottom_x);
+              batch->state.pos_y[idx] += (iy - cur_bottom_y) + k_floor_y_bias;
+              on_ground = 1u;
+              ground_id = g->lines[(size_t)hit_line_idx].segment_i;
+              contact_x = ix;
+              contact_y = iy;
+            }
+          }
         }
         if (!on_ground && damage_hitlag_exit_projection_owner && prefer_line_idx >= 0) {
           // Damage hitlag-exit callback ownership:
@@ -4737,40 +4874,81 @@ void mpcoll_ground_apply(MslBatch* batch) {
                suppress_attackair_offspan_hard_floor_edge_land || carried_transformed_platform_skip)
                   ? 1u
                   : 0u;
-          const float damage_root_down_delta = prev_y - y;
-          const uint8_t damage_root_tracks_self_descent =
-              (damage_root_down_delta >=
-               (fabsf(batch->state.speed_y_self[idx]) - k_floor_horiz_dy_thresh))
+          const float transformed_platform_bottom_penetration = iy - cur_bottom_y;
+          const uint8_t damage_transformed_platform_offspan_contact =
+              // mpCheckFloor can report a transformed-platform endpoint contact from the ECB bottom
+              // sweep, but source floor handoff still requires the callback-local root to be in the
+              // live floor span before ftCo_80090184 may publish Passive/DownBound.
+              // refs/melee/src/melee/mp/mplib.c::{mpCheckFloor,mpLib_8004DD90_Floor}
+              // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpColl_80044838_Floor}
+              (((hit_line_has_platform_transform &&
+                 !floor_x_within_line_segment_strict(batch, bi, g, hit_line_idx, x)) ||
+                (projected_line_has_platform_transform && out_line_idx >= 0 &&
+                 !floor_x_within_line_segment_strict(batch, bi, g, out_line_idx, x))) &&
+               is_damage_collision_landing_action(action_id) &&
+               batch->state.speed_y_attack[idx] > 0.0f && batch->state.hitstun[idx] != 0u)
                   ? 1u
                   : 0u;
-          const uint8_t damage_floor_tech_window_active =
-              (c != NULL && (float)batch->state.x680[idx] < c->tech_window_frames &&
-               batch->state.x684[idx] >= c->tech_lr_debounce_frames)
+          const MslCharParams* damage_floor_chp = msl_char_params(char_id);
+          const float damage_height_platform_edge_slack =
+              (damage_floor_chp != NULL && isfinite(damage_floor_chp->ledge_snap_height))
+                  ? (damage_floor_chp->ledge_snap_height * batch->state.fighter_scale_y[idx])
+                  : k_ecb_vertical_unit;
+          const uint8_t damage_height_platform_pending_owner =
+              // FoD height-transform platform DamageFly endpoint contacts still need the live
+              // grIzumi platform/CollData substep owner. `ft_80081DD4` sets
+              // coll->ledge_snap_height before calling `mpColl_800473CC`; use the extracted
+              // character ledge-snap height as the endpoint bound instead of a replay-local x
+              // window. Inboard height-platform contacts and static-y support lines remain ordinary
+              // DamageFly floor handoffs.
+              // data/stages/bin/griz.bin::MSLSTG01 platform_transforms(kind=height)
+              // data/characters/{fox,falco}.json::ledge_snap_height
+              // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+              // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+              // refs/melee/src/melee/mp/mpcoll.c::{mpCollInterpolateECB,mpColl_80044628_Floor}
+              (((hit_line_has_height_platform_transform &&
+                 floor_line_x_near_endpoint_for_env(batch, bi, g, hit_line_idx, x,
+                                                    damage_height_platform_edge_slack)) ||
+                (projected_line_has_height_platform_transform && out_line_idx >= 0 &&
+                 floor_line_x_near_endpoint_for_env(batch, bi, g, out_line_idx, x,
+                                                    damage_height_platform_edge_slack))) &&
+               is_damage_collision_landing_action(action_id) &&
+               batch->state.speed_y_attack[idx] > 0.0f && batch->state.hitstun[idx] != 0u)
+                  ? 1u
+                  : 0u;
+          const uint8_t damage_terminal_height_platform_stale_floor =
+              // Late DamageFly rows can carry a stale hard-floor CollData.floor.index while a FoD
+              // height-transform platform sits between the live root and the carried floor. Source
+              // `mpColl_80044628_Floor` still requires the live ECB-bottom floor precondition for
+              // the transformed line before `mpColl_80044838_Floor` may publish the floor handoff.
+              // Keep the guard inside the terminal hitstun window and outside already-carried
+              // platform floors so ordinary mid-hitstun platform landings remain live.
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+              //   ftCo_DamageFly_Anim,ftCo_DamageFly_Coll}
+              // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpColl_80044838_Floor}
+              ((hit_line_has_height_platform_transform ||
+                projected_line_has_height_platform_transform) &&
+               is_damage_fly_collision_action(action_id) && batch->state.hitstun[idx] <= 4u &&
+               !stage_collision_floor_line_is_platform(stage_id, batch->state.ground_id[idx]) &&
+               transformed_platform_bottom_penetration > (0.5f * k_ecb_vertical_unit))
                   ? 1u
                   : 0u;
           const uint8_t suppress_damage_transformed_platform_ecb_only_land =
               // Damage/DamageFly platform contact consumes the same live CollData ECB sweep as hard
               // floors. Positive attack-Y is not a pass-through predicate by itself; suppress only
-              // the table-backed height-transform boundary where the apparent crossing is
-              // ECB-bottom interpolation rather than root descent. Static-y transform records, such
-              // as FoD's center top platform, remain ordinary mpColl platform lines except while
-              // the source tech ladder is live: a false early transformed-support contact would
-              // immediately publish Passive through ftCo_80090184, so keep that ECB-only tech
-              // window airborne until the later no-tech floor-contact owner.
+              // source-shaped platform contacts where the CollData ECB precondition is not met:
+              // endpoint/off-span transformed-platform contacts, or the terminal stale
+              // hard-floor/height-platform owner. In-span static-y FoD support lines are ordinary
+              // platform floor contacts for the DamageFly tech/DownBound ladder.
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_80090184
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownAttack.c::ftCo_800986B0
               // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
               // refs/melee/src/melee/mp/mpcoll.c::{mpCollInterpolateECB,mpCheckFloor}
-              (((hit_line_has_height_platform_transform ||
-                 projected_line_has_height_platform_transform) ||
-                (damage_floor_tech_window_active &&
-                 (hit_line_has_platform_transform || projected_line_has_platform_transform))) &&
-               is_damage_collision_landing_action(action_id) && batch->state.hitstun[idx] != 0u &&
-               batch->state.speed_y_attack[idx] > 0.0f && !damage_root_tracks_self_descent)
+              (damage_transformed_platform_offspan_contact ||
+               damage_height_platform_pending_owner || damage_terminal_height_platform_stale_floor)
                   ? 1u
                   : 0u;
-          const float transformed_platform_bottom_penetration = iy - cur_bottom_y;
           const uint8_t suppress_attackair_transformed_platform_ecb_only_land =
               // AttackAirN/Lw's generated submotion rows use AttackAir_Coll
               // (ft_80082C74 -> mpColl_800471F8). That source path must first accept an ECB-bottom
@@ -5833,8 +6011,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
         if (action_is_down_bound(action_id) && prefer_line_idx >= 0) {
           // DownBound_Coll uses the allow-ground-to-air mpColl path: the fighter can remain
           // airborne while CollData's floor.index updates across connected floor seams. Preserve
-          // airborne `ground_or_air`, but refresh the persisted floor id when DD90 projection can
-          // resolve the current bottom point.
+          // airborne `ground_or_air`, but refresh the persisted floor id and generated-slope root
+          // height when DD90 projection can resolve the current floor point.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Coll
           // refs/melee/src/melee/ft/ft_081B.c::ft_80082708
           // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
@@ -5843,6 +6021,14 @@ void mpcoll_ground_apply(MslBatch* batch) {
                                                       cur_bottom_y, NULL, NULL, NULL);
           if (out_line_idx >= 0) {
             ground_id = g->lines[(size_t)out_line_idx].segment_i;
+            if (floor_line_is_generated_stage_slope(batch, bi, g, prefer_line_idx) ||
+                floor_line_is_generated_stage_slope(batch, bi, g, out_line_idx)) {
+              float root_line_y = 0.0f;
+              if (floor_line_y_at_x_for_env(batch, bi, g, out_line_idx, batch->state.pos_x[idx],
+                                            &root_line_y)) {
+                batch->state.pos_y[idx] = root_line_y + k_floor_y_bias;
+              }
+            }
           }
         }
         // Keep ground_id stable while airborne (CollData floor.index persists while in air).
@@ -5862,8 +6048,26 @@ void mpcoll_ground_apply(MslBatch* batch) {
       } else {
         mpcoll_store_prev_ecb_points(batch, idx, &prev_ecb_points);
       }
+      MslEcbWorldPoints stored_desired_ecb_points = desired_ecb_points;
+      uint8_t stored_locked_desired_bottom_owner =
+          (use_locked_desired_ecb_bottom && ecb_lock_active) ? 1u : 0u;
+      if (!stored_locked_desired_bottom_owner && !lock_bottom_to_zero && ecb_lock_active &&
+          msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_COMMON_AIR_COLL) &&
+          batch->state.coll_desired_ecb_bottom_valid[idx] != 0u &&
+          batch->state.coll_desired_ecb_bottom_locked_owner[idx] != 0u) {
+        // The lite floor pass keeps Jump/JumpAerial floor ownership on its existing callback-phase
+        // slice above, but the subsequent airborne wall/ceiling pass still consumes the same
+        // source CollData desired ECB loaded by `mpColl_LoadECB_inline`. Carry the preserved
+        // desired bottom for that wall/ceiling owner without changing the already-completed floor
+        // decision.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Coll
+        // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpColl_80045B74_LeftWall}
+        msl_ecb_world_points_preserve_desired_bottom_rel_y(
+            &stored_desired_ecb_points, x, y, batch->state.coll_desired_ecb_bottom_rel_y[idx]);
+        stored_locked_desired_bottom_owner = 1u;
+      }
       mpcoll_store_current_ecb_points(batch, idx, &cur_ecb_points);
-      mpcoll_store_desired_ecb_points(batch, idx, &desired_ecb_points);
+      mpcoll_store_desired_ecb_points(batch, idx, &stored_desired_ecb_points);
       const float unlocked_fall_pose_bottom_rel =
           (action_id == (uint16_t)MSL_ACT_FALL && ecb_lock_timer <= 1u)
               ? mpcoll_pose_ecb_bottom_rel_y(char_id, anim, ecb_frame_cur, 0u)
@@ -5895,8 +6099,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
       batch->state.coll_prev_ecb_bottom_valid[idx] = 1u;
       batch->state.coll_ecb_bottom_valid[idx] = 1u;
       batch->state.coll_desired_ecb_bottom_valid[idx] = 1u;
-      batch->state.coll_desired_ecb_bottom_locked_owner[idx] =
-          (use_locked_desired_ecb_bottom && ecb_lock_active) ? 1u : 0u;
+      batch->state.coll_desired_ecb_bottom_locked_owner[idx] = stored_locked_desired_bottom_owner;
     }
   }
 }

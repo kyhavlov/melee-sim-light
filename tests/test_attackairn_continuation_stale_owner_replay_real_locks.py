@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from tests.test_combat_ownership_seed_guardrail_locks import (
@@ -9,7 +10,43 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
-from tools.eval.dataset import read_dataset
+from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+
+
+def _run_rollout_row(ds_path: Path, *, start_record: int, target_record: int) -> np.void:
+    ds = read_dataset(str(ds_path))
+    samples = ds.samples
+    assert int(samples.shape[0]) > target_record, f"dataset too short for rollout target: record={target_record}"
+    assert start_record <= target_record
+
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    seed_bytes = np.frombuffer(
+        samples[start_record : start_record + 1]["seed_t"].tobytes(order="C"), dtype=np.uint8
+    ).copy().reshape(1, seed_stride)
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        binding.reseed_seed_rollout(handle, seed_bytes)
+        for rec in range(start_record, target_record + 1):
+            row = samples[rec : rec + 1]
+            prev_input_bytes = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+                1, input_stride
+            )
+            input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+                1, input_stride
+            )
+            binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+    finally:
+        binding.destroy(handle)
+
+    return out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()
 
 
 @pytest.mark.integration
@@ -71,6 +108,19 @@ def test_attackairn_continuation_stale_owner_rows_and_adjacent_controls_are_repl
                 p=p,
             )
 
+    # Rollout-real boundary for the same owner: from an earlier seed, AGN reaches the lateral NAir
+    # limb contact one frame before vanilla should allow the hit. The hidden limb HitCapsule carry
+    # suppresses that first contact.
+    out_roll_early = _run_rollout_row(agn_path, start_record=5295, target_record=5481)
+    ref_roll_early = agn[5481]["ref_t1"]
+    for p in (0, 1):
+        _assert_transition_identity_lock_fields_match_ref(
+            out_row=out_roll_early,
+            ref_row=ref_roll_early,
+            record=5481,
+            p=p,
+        )
+
     _, ref_2520, out_2520 = _run_one_step_row(gat_path, 2520, 0)
     for p in (0, 1):
         _assert_transition_identity_lock_fields_match_ref(
@@ -79,3 +129,62 @@ def test_attackairn_continuation_stale_owner_rows_and_adjacent_controls_are_repl
             record=2520,
             p=p,
         )
+
+
+@pytest.mark.integration
+def test_attackairn_same_group_damageflytop_latch_suppresses_reseeded_rehit_on_mgs() -> None:
+    # Replay-real lock for the opposite AttackAirN continuation boundary from AGN:5482:
+    # - MGS:3421 reseeds into Falco AttackAirN's same-group active window while Fox is still a
+    #   DamageFlyTop victim from the previous same-port Shine.
+    # - Slippi has only the dense group victim lane here; no authoritative per-HitCapsule empty seed
+    #   is present, so the teacher-forced seed must reconstruct vanilla's hidden HitCapsule.victims_1
+    #   latch instead of clearing it on the same-group refresh.
+    # - A rollout from MGS:3373 reaches the same contact at MGS:3420/3421; without the hidden latch
+    #   reconstruction, the simulated late NAir hits empty air and rewrites Fox to DamageAir3.
+    # refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    mgs_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+        / "MilkyGracefulStingray.msl"
+    )
+    if not mgs_path.exists():
+        pytest.skip(f"missing local dataset: {mgs_path}")
+
+    mgs = read_dataset(str(mgs_path)).samples
+    assert int(mgs.shape[0]) > 3421, "dataset too short for MGS lock"
+
+    seed = mgs[3421]["seed_t"]
+    ref = mgs[3421]["ref_t1"]
+    assert int(seed["action_id"][0]) == 65  # AttackAirN
+    assert int(seed["action_frame"][0]) >= 10
+    assert int(seed["action_id"][1]) == 90  # DamageFlyTop continuation victim
+    assert int(seed["hitstun"][1]) > 0
+    assert int(seed["hitlag"][1]) == 0
+    assert int(ref["action_id"][1]) == 90
+    assert int(ref["hitlag"][1]) == 0
+    assert int(ref["instance_hit_by"][1]) == 698
+
+    _, ref_one, out_one = _run_one_step_row(mgs_path, 3421, 0)
+    for p in (0, 1):
+        _assert_transition_identity_lock_fields_match_ref(
+            out_row=out_one,
+            ref_row=ref_one,
+            record=3421,
+            p=p,
+        )
+
+    for rec in (3420, 3421):
+        out_roll = _run_rollout_row(mgs_path, start_record=3373, target_record=rec)
+        ref_roll = mgs[rec]["ref_t1"]
+        for p in (0, 1):
+            _assert_transition_identity_lock_fields_match_ref(
+                out_row=out_roll,
+                ref_row=ref_roll,
+                record=rec,
+                p=p,
+            )

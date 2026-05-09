@@ -170,6 +170,39 @@ def test_fresh_run_tapjump_kneebend_does_not_reconsume_kneebend_iasa_tvr_5857() 
 
 
 @pytest.mark.integration
+def test_attacklw3_anim_end_buffered_kneebend_does_not_latch_short_hop_cnm_4433() -> None:
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    # Source callback-order lock:
+    # - AttackLw3_Anim exits through ftCo_800D638C, then the destination SquatWait_IASA can enter
+    #   KneeBend from the buffered jump edge in the same fighter proc.
+    # - The newly-entered KneeBend has not run its own IASA yet, so ftCo_KneeBend_Check_ShortHop
+    #   must not latch a release while the serialized KneeBend action frame is still 0.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackLw3.c::ftCo_AttackLw3_Anim
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_SquatWait.c::{
+    #   ftCo_800D638C,ftCo_SquatWait_IASA}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::{
+    #   ftCo_KneeBend_Enter,ftCo_KneeBend_IASA,ftCo_KneeBend_Check_ShortHop}
+    rollout_ref, rollout_out = _rollout_to_record(dataset_path, 4398, 4433)
+    p = 0
+
+    assert int(rollout_ref["action_id"][p]) == 25  # JumpF
+    assert int(rollout_ref["action_frame"][p]) == 0
+    assert np.isclose(float(rollout_ref["speed_y_self"][p]), 3.680000066757202, atol=1e-6)
+
+    assert int(rollout_out["action_id"][p]) == int(rollout_ref["action_id"][p])
+    assert int(rollout_out["action_frame"][p]) == int(rollout_ref["action_frame"][p])
+    assert np.isclose(float(rollout_out["speed_y_self"][p]), float(rollout_ref["speed_y_self"][p]), atol=1e-6)
+    assert np.isclose(float(rollout_out["pos_y"][p]), float(rollout_ref["pos_y"][p]), atol=1e-6)
+
+
+@pytest.mark.integration
 def test_kneebend_takeoff_frame_release_keeps_full_jump_dcc_9255() -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_path = (

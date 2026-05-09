@@ -19,7 +19,7 @@ def _parse_ssdynn01(path: Path) -> dict[str, object]:
     if buf[:8] != b"SSDYNN01":
         raise ValueError(f"SSDYNN01: bad magic {buf[:8]!r}")
     version, set_count, total_nodes = struct.unpack_from("<IHH", buf, 8)
-    if version != 4:
+    if version != 5:
         raise ValueError(f"SSDYNN01: bad version {version}")
     off = 16
     sets: list[dict[str, object]] = []
@@ -56,6 +56,17 @@ def _parse_ssdynn01(path: Path) -> dict[str, object]:
         (msid,) = struct.unpack_from("<H", buf, off)
         off += 2
         collision_msids.append(int(msid))
+    if off + 4 > len(buf):
+        raise ValueError("SSDYNN01: truncated collider index")
+    collider_count, _reserved = struct.unpack_from("<HH", buf, off)
+    off += 4
+    colliders: list[dict[str, object]] = []
+    for _ in range(int(collider_count)):
+        if off + 20 > len(buf):
+            raise ValueError("SSDYNN01: truncated collider")
+        part, _pad, ox, oy, oz, radius = struct.unpack_from("<HH4f", buf, off)
+        off += 20
+        colliders.append({"part": int(part), "offset": (float(ox), float(oy), float(oz)), "radius": float(radius)})
     if off != len(buf):
         raise ValueError("SSDYNN01: trailing bytes")
     return {
@@ -64,6 +75,7 @@ def _parse_ssdynn01(path: Path) -> dict[str, object]:
         "total_nodes": int(total_nodes),
         "sets": sets,
         "collision_msids": collision_msids,
+        "colliders": colliders,
     }
 
 
@@ -103,8 +115,9 @@ def _write_dyn(
     path: Path,
     sets: list[tuple[int, list[int]]],
     *,
-    version: int = 4,
+    version: int = 5,
     collision_msids: list[int] | None = None,
+    colliders: list[tuple[int, tuple[float, float, float], float]] | None = None,
 ) -> None:
     total_nodes = sum(len(parts) for _root, parts in sets)
     buf = bytearray()
@@ -123,6 +136,11 @@ def _write_dyn(
         buf += struct.pack("<HH", len(owner_msids), 0)
         for msid in owner_msids:
             buf += struct.pack("<H", msid)
+    if version >= 5:
+        collider_rows = list(colliders or [])
+        buf += struct.pack("<HH", len(collider_rows), 0)
+        for part, offset, radius in collider_rows:
+            buf += struct.pack("<HH4f", int(part) & 0xFFFF, 0, offset[0], offset[1], offset[2], radius)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(bytes(buf))
 
@@ -262,8 +280,9 @@ def test_committed_fox_falco_dynamic_contract_matches_supported_loader_surface()
 
     assert fox["set_count"] == 1
     assert fox["total_nodes"] == 4
-    assert fox["version"] == 4
-    assert fox["collision_msids"] == [17, 36, 58]
+    assert fox["version"] == 5
+    assert fox["collision_msids"] == [17, 36, 58, 243]
+    assert fox["colliders"] == [{"part": 41, "offset": pytest.approx((0.0, 2.0, 0.0)), "radius": pytest.approx(3.0)}]
     fox_set = fox["sets"][0]  # type: ignore[index]
     assert fox_set["root_part"] == 17
     assert fox_set["node_count"] == 4
@@ -273,7 +292,14 @@ def test_committed_fox_falco_dynamic_contract_matches_supported_loader_surface()
     assert c0[13] == pytest.approx(0.008726646192371845)
     assert c0[14] == pytest.approx(0.05235987901687622)
 
-    assert falco == {"version": 4, "set_count": 0, "total_nodes": 0, "sets": [], "collision_msids": []}
+    assert falco == {
+        "version": 5,
+        "set_count": 0,
+        "total_nodes": 0,
+        "sets": [],
+        "collision_msids": [],
+        "colliders": [],
+    }
 
 
 @pytest.mark.integration
@@ -308,12 +334,20 @@ def test_extract_fighter_anims_emits_fox_falco_dynamic_contract(tmp_path: Path) 
 
     fox = _parse_ssdynn01(tmp_path / "fox.dyn.bin")
     falco = _parse_ssdynn01(tmp_path / "falco.dyn.bin")
-    assert fox["version"] == 4
+    assert fox["version"] == 5
     assert fox["set_count"] == 1
     assert fox["total_nodes"] == 4
-    assert fox["collision_msids"] == [17, 36, 58]
+    assert fox["collision_msids"] == [17, 36, 58, 243]
+    assert fox["colliders"] == [{"part": 41, "offset": pytest.approx((0.0, 2.0, 0.0)), "radius": pytest.approx(3.0)}]
     assert [n["part"] for n in fox["sets"][0]["nodes"]] == [17, 18, 19, 20]  # type: ignore[index]
-    assert falco == {"version": 4, "set_count": 0, "total_nodes": 0, "sets": [], "collision_msids": []}
+    assert falco == {
+        "version": 5,
+        "set_count": 0,
+        "total_nodes": 0,
+        "sets": [],
+        "collision_msids": [],
+        "colliders": [],
+    }
 
 
 def test_dynamic_collision_owner_predicate_is_data_driven_not_raw_msid_gate() -> None:
@@ -322,6 +356,7 @@ def test_dynamic_collision_owner_predicate_is_data_driven_not_raw_msid_gate() ->
     assert "msid == 52" not in src
     assert "msid != 58" not in src
     assert "msid == 58" not in src
+    assert "MSL_SM_CATCH_DASH" not in src
     assert "dyn_collision_have_msid[msid]" in src
 
 
@@ -331,7 +366,8 @@ def test_dynamic_state_validity_is_split_from_collision_matrix_application() -> 
 
     assert "dynamic_pose_state_valid" in state_h
     assert "dynamic_pose_apply_collision_matrix" in state_h
-    assert "const uint8_t sequential = batch->state.dynamic_pose_state_valid[idx]" in src
+    assert "const uint8_t same_msid_sequential =" in src
+    assert "cross_msid_carry" not in src
     assert "batch->state.dynamic_pose_state_valid[idx] = 1u;" in src
     assert "batch->state.dynamic_pose_apply_collision_matrix[idx] = apply_collision_pose;" in src
     assert "batch->state.dynamic_pose_apply_collision_matrix[player_idx]" in src

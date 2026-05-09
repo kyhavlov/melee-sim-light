@@ -183,7 +183,7 @@ def _dyn_contract_ok(path: Path, want_collision_msids: set[int]) -> bool:
             version = int.from_bytes(f.read(4), "little", signed=False)
             set_count = int.from_bytes(f.read(2), "little", signed=False)
             total_nodes = int.from_bytes(f.read(2), "little", signed=False)
-            if magic != b"SSDYNN01" or version != 4:
+            if magic != b"SSDYNN01" or version != 5:
                 return False
             for _set_i in range(set_count):
                 f.read(2)  # root_part
@@ -200,7 +200,7 @@ def _dyn_contract_ok(path: Path, want_collision_msids: set[int]) -> bool:
 
 def _ensure_dyn_bins() -> None:
     expected = {
-        "fox": {17, 36, 58},
+        "fox": {17, 36, 58, 243},
         "falco": set(),
     }
     stale = False
@@ -488,13 +488,13 @@ def _ensure_shield_tilt_bins() -> None:
             raise RuntimeError(f"failed to generate required shield tilt bin for tests: {out}")
 
 
-def _motion_state_owner_manifest_v4(path: Path) -> bool:
+def _motion_state_owner_manifest_current(path: Path) -> bool:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
         version = int(payload.get("version", -1))
     except (OSError, json.JSONDecodeError, TypeError, ValueError):
         return False
-    return payload.get("magic") == "MSLMSO01" and version == 4
+    return payload.get("magic") == "MSLMSO01" and version == 6
 
 
 def _ensure_motion_state_owner_bins() -> None:
@@ -506,14 +506,14 @@ def _ensure_motion_state_owner_bins() -> None:
                 with out.open("rb") as f:
                     magic = f.read(8)
                     ver = int.from_bytes(f.read(4), "little", signed=False)
-                if magic == b"MSLMSO01" and ver == 4:
+                if magic == b"MSLMSO01" and ver == 6:
                     continue
             except OSError:
                 pass
         stale = True
         break
     manifest = ROOT / "data" / "motion_state" / "owners" / "callback_symbols.json"
-    if stale or not _motion_state_owner_manifest_v4(manifest):
+    if stale or not _motion_state_owner_manifest_current(manifest):
         subprocess.run(
             [
                 sys.executable,
@@ -532,7 +532,7 @@ def _ensure_motion_state_owner_bins() -> None:
         out = ROOT / "data" / "motion_state" / "owners" / f"{ch}.bin"
         if not out.exists():
             raise RuntimeError(f"failed to generate required MotionState owner table: {out}")
-    if not _motion_state_owner_manifest_v4(manifest):
+    if not _motion_state_owner_manifest_current(manifest):
         raise RuntimeError(f"failed to generate required MotionState owner manifest: {manifest}")
 
 

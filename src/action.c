@@ -569,6 +569,50 @@ static inline uint8_t dash_iasa_guard_admission_reaches_terminal_scalar(
   return 1u;
 }
 
+static inline uint8_t dash_iasa_try_enter_opposite_checkinput_turn_before_guard(
+    MslBatch* batch, const MslCommonParams* c, size_t idx, uint16_t action_id_start) {
+  if (batch == NULL || c == NULL || action_id_start != (uint16_t)MSL_ACT_DASH) {
+    return 0u;
+  }
+
+  const float cur_anim_frame = batch->state.anim_frame_f32[idx];
+  if (batch->state.dash_x4[idx] != 0u && cur_anim_frame <= c->dash_iasa_x44) {
+    return 0u;
+  }
+
+  const float stick_x =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]), c->lstick_deadzone_x);
+  const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+  if ((stick_x * facing_dir) >= 0.0f) {
+    return 0u;
+  }
+
+  // Decomp: the mid Dash_IASA branch calls ftCo_Dash_CheckInput before ftCo_80091AD8, and
+  // the late branch calls ftCo_Dash_CheckInput before ftCo_80091A4C. The opposite-facing
+  // x3C/x40 path enters Turn and consumes the callback before GuardOn/GuardReflect can start.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::{
+  //   ftCo_Dash_IASA,ftCo_Dash_CheckInput
+  // }
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_Enter_Smash
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091AD8,ftCo_80091A4C}
+  if (msl_absf(stick_x) < c->dash_flick_abs ||
+      batch->state.tilt_timer_x[idx] >= c->dash_flick_tilt_max_frames) {
+    return 0u;
+  }
+
+  batch->state.turn_has_turned[idx] = 0;
+  batch->state.turn_frames_to_turn[idx] = 0;
+  batch->state.turn_x8[idx] = (int8_t)(facing_dir > 0.0f ? 1 : -1);
+  batch->state.action_id[idx] = (uint16_t)MSL_ACT_TURN;
+  batch->state.animation_index[idx] = (uint32_t)MSL_SM_TURN;
+  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  msl_anim_timebase_tick_once(batch, idx);
+  dash_iasa_apply_root_motion_exit_gr_vel_clamp(batch, msl_char_params(batch->state.char_id[idx]),
+                                                idx);
+  dash_iasa_apply_terminal_velocity_scalar(batch, c, idx);
+  return 1u;
+}
+
 static inline void enter_guard_on(MslBatch* batch, const MslCommonParams* c, size_t idx,
                                   uint8_t entered_via_wait_callback) {
   // Decomp entry: ftCo_80091A4C -> ftCo_800923B4 -> ftCo_800924C0.
@@ -1663,6 +1707,10 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
     // SpecialS/item/CatchDash/AttackS4/EscapeF and then falls through without calling the guard
     // helper. Guard/GuardReflect admission starts in the later Dash_IASA branches.
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
+    return;
+  }
+
+  if (dash_iasa_try_enter_opposite_checkinput_turn_before_guard(batch, c, idx, a0)) {
     return;
   }
 

@@ -21,11 +21,13 @@ from tools.extraction.extract_motion_state_owners import (
     CLASS_DAMAGE_FLY,
     CLASS_DAMAGE_FLY_COLL,
     CLASS_GUARDON_FRAME_START_X672_IASA,
+    CLASS_FT80081D0C_AIR_COLL,
     CLASS_GROUNDED_ATTACK,
     CLASS_GROUNDED_STAGE_OBJECT_CARRY_COLL,
     CLASS_LANDING_AIR,
     CLASS_LANDING_AIR_COLL,
     CLASS_LANDING_COLL,
+    CLASS_SIDEB_AIR_GROUND_LEDGE_COLL,
     CLASS_SPECIALHI,
 )
 from tools.slippi.motion_state_owners import VERSION, read_callback_manifest, read_mslmso01_v1
@@ -52,12 +54,21 @@ def test_motion_state_owner_tables_cover_known_callbacks_and_flags() -> None:
 
     assert cb_name(0x0041, "anim") == "ftCo_AttackAir_Anim"  # AttackAirN
     assert cb_name(0x0041, "iasa") == "ftCo_AttackAirN_IASA"
+    assert cb_name(0x0041, "coll") == "ftCo_AttackAir_Coll"
     assert int(fox.class_bits[0x0041]) & CLASS_ATTACK_AIR
+    assert int(fox.class_bits[0x0041]) & CLASS_FT80081D0C_AIR_COLL
 
     # refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c::ftFx_Init_MotionStateTable
     assert cb_name(0x0163, "anim") == "ftFx_SpecialHi_Anim"
     assert cb_name(0x0163, "coll") == "ftFx_SpecialHi_Coll"
     assert int(fox.class_bits[0x0163]) & CLASS_SPECIALHI
+
+    assert cb_name(0x015E, "coll") == "ftFx_SpecialAirSStart_Coll"
+    assert cb_name(0x015F, "coll") == "ftFx_SpecialAirS_Coll"
+    assert cb_name(0x0160, "coll") == "ftFx_SpecialAirSEnd_Coll"
+    assert int(fox.class_bits[0x015E]) & CLASS_SIDEB_AIR_GROUND_LEDGE_COLL
+    assert int(fox.class_bits[0x015F]) & CLASS_SIDEB_AIR_GROUND_LEDGE_COLL
+    assert int(fox.class_bits[0x0160]) & CLASS_SIDEB_AIR_GROUND_LEDGE_COLL
 
     assert cb_name(0x0019, "phys") == "ftCo_Jump_Phys"  # JumpF
     assert cb_name(0x0019, "coll") == "ftCo_Jump_Coll"
@@ -204,6 +215,19 @@ def test_motion_state_class_equivalence_for_migrated_predicates() -> None:
         0x0028,
         0x0029,
     }
+    ft80081d0c_air_coll = {
+        *range(0x0041, 0x0046),
+        0x00CD,
+        0x00CE,
+        0x00EC,
+        0x0115,
+        0x0137,
+        0x013A,
+        0x013C,
+        0x013E,
+        0x0140,
+    }
+    sideb_air_ground_ledge_coll = {0x015E, 0x015F, 0x0160}
 
     for action_id in range(max_action):
         assert both_have(action_id, CLASS_ATTACK_AIR) == (action_id in attack_air)
@@ -228,6 +252,12 @@ def test_motion_state_class_equivalence_for_migrated_predicates() -> None:
         assert both_have(action_id, CLASS_GROUNDED_ATTACK) == (action_id in grounded_attack)
         assert both_have(action_id, CLASS_GUARDON_FRAME_START_X672_IASA) == (
             action_id in guardon_frame_start_x672_iasa
+        )
+        assert both_have(action_id, CLASS_FT80081D0C_AIR_COLL) == (
+            action_id in ft80081d0c_air_coll
+        )
+        assert both_have(action_id, CLASS_SIDEB_AIR_GROUND_LEDGE_COLL) == (
+            action_id in sideb_air_ground_ledge_coll
         )
 
 
