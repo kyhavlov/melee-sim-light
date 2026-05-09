@@ -28,6 +28,12 @@ typedef struct MslStateSoA {
   uint16_t* stage_yoshi_shyguy_timer;   // [batch]
   uint8_t* stage_yoshi_shyguy_pattern;  // [batch]
   uint8_t* stage_yoshi_shyguy_valid;    // [batch]
+  // Replay-rollout seed lane for the global HSD RNG stream consumed by the zero-timer Shy Guy
+  // spawn callback. This is not a free-running gameplay clock; it only reconstructs the hidden
+  // source stream for replay-seeded no-live countdown windows.
+  // refs/melee/src/melee/gr/grstory.c::grStory_801E3418
+  uint32_t* stage_yoshi_shyguy_spawn_rng_seed;  // [batch]
+  uint8_t* stage_yoshi_shyguy_spawn_rng_valid;  // [batch]
   // Dream Land Whispy current hidden wind state (`grOldPupupu` xDC), prefix-causal in eval and
   // source-scheduled in live/new-match runtime.
   // refs/melee/src/melee/gr/groldpupupu.c::{grOldPupupu_802113E0,fn_802112F4}

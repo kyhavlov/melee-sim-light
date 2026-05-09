@@ -236,6 +236,18 @@ typedef struct MslSeed {
   uint16_t stage_yoshi_shyguy_timer_u16;
   uint8_t stage_yoshi_shyguy_pattern_u8;
   uint8_t stage_yoshi_shyguy_valid_u8;
+  // Replay-rollout hidden HSD stream at the zero-timer Shy Guy spawn frame.
+  //
+  // The source scheduler consumes the global HSD stream only when no Heiho is live and the stage
+  // timer reaches zero. Slippi exposes frame-start RNG seeds, but not all unrelated global RNG
+  // consumers during the pre-spawn countdown. This lane carries the source spawn-frame stream for
+  // replay reseed only; live/new-match gameplay still consumes the modeled HSD stream.
+  // refs/slippi-ssbm-asm/Recording/SendFrameStart.s
+  // refs/melee/src/melee/gr/grstory.c::{grStory_801E3418,set_shyguy_spawn_count}
+  // refs/melee/src/sysdolphin/baselib/random.c::{HSD_Randi,HSD_Randf}
+  uint32_t stage_yoshi_shyguy_spawn_rng_seed_u32;
+  uint8_t stage_yoshi_shyguy_spawn_rng_seed_valid_u8;
+  uint8_t _pad_stage_yoshi_shyguy[3];
   // Dream Land Whispy current wind state.
   //
   // Source owner:

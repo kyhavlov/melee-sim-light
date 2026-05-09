@@ -95,6 +95,8 @@ def test_seed_schema_includes_staling_fields() -> None:
     assert "walljump_wall_side_i8" in SEED_DTYPE.fields
     # Damage KB stacking window (fp->dmg.x18AC_time_since_hit).
     assert "damage_time_since_hit_x18ac" in SEED_DTYPE.fields
+    # Rejected DamageAir2 source-step residue must not remain as a seed lane.
+    assert "damage_aobj_pose_lag_u8" not in SEED_DTYPE.fields
     # Fighter phantom/tip-log delayed damage lane (`dmg.x1898` + x189C countdown + source).
     assert "phantom_damage_pending_x1898" in SEED_DTYPE.fields
     assert "phantom_damage_timer_x189c" in SEED_DTYPE.fields
@@ -150,6 +152,8 @@ def test_seed_schema_includes_staling_fields() -> None:
     assert "stage_yoshi_shyguy_timer_u16" in SEED_DTYPE.fields
     assert "stage_yoshi_shyguy_pattern_u8" in SEED_DTYPE.fields
     assert "stage_yoshi_shyguy_valid_u8" in SEED_DTYPE.fields
+    assert "stage_yoshi_shyguy_spawn_rng_seed_u32" in SEED_DTYPE.fields
+    assert "stage_yoshi_shyguy_spawn_rng_seed_valid_u8" in SEED_DTYPE.fields
     assert "stage_dream_whispy_wind_dir_u8" in SEED_DTYPE.fields
     assert "stage_dream_whispy_wind_valid_u8" in SEED_DTYPE.fields
     assert "cliff_ledge_floor_segment_id_u16" in SEED_DTYPE.fields
@@ -235,7 +239,7 @@ class _FakeFrames:
 
 def test_fod_platform_seed_defaults_are_stage_artifact_backed() -> None:
     defaults = fountain_of_dreams_default_platform_heights(Path("data"))
-    heights, valid = _fod_platform_heights_from_frames(
+    heights, valid, fresh = _fod_platform_heights_from_frames(
         _FakeFrames(None),
         4,
         default_heights=defaults,
@@ -243,6 +247,7 @@ def test_fod_platform_seed_defaults_are_stage_artifact_backed() -> None:
     assert heights.shape == (4, 2)
     assert np.all(heights == np.asarray(defaults, dtype=np.float32).reshape(1, 2))
     assert np.all(valid == 0)
+    assert np.all(fresh == 0)
 
 
 def test_fod_platform_motion_params_are_stage_artifact_backed() -> None:
@@ -263,31 +268,35 @@ def test_fod_platform_seed_derivation_uses_no_future_events() -> None:
         [],
         [{"platform": 0, "height": 25.25}],
     ]
-    full_heights, full_valid = _fod_platform_heights_from_frames(
+    full_heights, full_valid, full_fresh = _fod_platform_heights_from_frames(
         _FakeFrames(events),
         len(events),
         default_heights=defaults,
     )
-    prefix_heights, prefix_valid = _fod_platform_heights_from_frames(
+    prefix_heights, prefix_valid, prefix_fresh = _fod_platform_heights_from_frames(
         _FakeFrames(events[:3]),
         3,
         default_heights=defaults,
     )
     assert full_heights[:3].tolist() == prefix_heights.tolist()
     assert full_valid[:3].tolist() == prefix_valid.tolist()
+    assert full_fresh[:3].tolist() == prefix_fresh.tolist()
     assert float(full_heights[1, 1]) == pytest.approx(18.5)
     assert int(full_valid[1, 1]) == 1
+    assert int(full_fresh[1, 1]) == 1
     assert float(full_heights[2, 1]) == pytest.approx(18.5)
+    assert int(full_fresh[2, 1]) == 0
     assert int(full_valid[2, 0]) == 0
     assert float(full_heights[3, 0]) == pytest.approx(25.25)
     assert int(full_valid[3, 0]) == 1
+    assert int(full_fresh[3, 0]) == 1
 
 
 def test_fod_platform_seed_derivation_uses_current_grounded_contact_prefix() -> None:
     defaults = fountain_of_dreams_default_platform_heights(Path("data"))
     heights = np.asarray([defaults, defaults, defaults], dtype=np.float32)
     valid = np.zeros((3, 2), dtype=np.uint8)
-    line_transforms = {0: (1, 0.80625)}
+    line_transforms = {0: (1, 0.75, 1.125)}
     out_h, out_v = _fod_platform_heights_with_ground_contact(
         heights,
         valid,
@@ -297,7 +306,7 @@ def test_fod_platform_seed_derivation_uses_current_grounded_contact_prefix() -> 
         line_transforms=line_transforms,
     )
 
-    inferred = np.float32(25.9748 / 0.80625)
+    inferred = np.float32((25.9748 - 1.125) / 0.75)
     assert int(out_v[0, 1]) == 0
     assert int(out_v[1, 1]) == 1
     assert float(out_h[1, 1]) == pytest.approx(float(inferred))
@@ -311,7 +320,7 @@ def test_fod_platform_seed_derivation_carries_prefix_velocity_without_future_con
     defaults = fountain_of_dreams_default_platform_heights(Path("data"))
     heights = np.asarray([defaults, defaults, defaults, defaults], dtype=np.float32)
     valid = np.zeros((4, 2), dtype=np.uint8)
-    line_transforms = {0: (1, 0.80625)}
+    line_transforms = {0: (1, 0.75, 1.125)}
     y0 = np.float32(13.800076)
     y1 = np.float32(13.725076)
     out_h, out_v, out_vel, out_vel_v = _fod_platform_motion_with_ground_contact(
@@ -323,8 +332,8 @@ def test_fod_platform_seed_derivation_carries_prefix_velocity_without_future_con
         line_transforms=line_transforms,
     )
 
-    h0 = np.float32(float(y0) / 0.80625)
-    h1 = np.float32(float(y1) / 0.80625)
+    h0 = np.float32((float(y0) - 1.125) / 0.75)
+    h1 = np.float32((float(y1) - 1.125) / 0.75)
     vel = np.float32(h1 - h0)
     assert int(out_v[0, 1]) == 1
     assert int(out_vel_v[0, 1]) == 0
@@ -334,11 +343,56 @@ def test_fod_platform_seed_derivation_carries_prefix_velocity_without_future_con
     assert float(out_h[3, 1]) == pytest.approx(float(np.float32(h1 + vel + vel)), abs=1e-6)
 
 
+def test_fod_platform_direct_events_override_contact_fallback_owner() -> None:
+    # Direct Slippi FoD platform events are current grIzumi state. Grounded-contact fallback is
+    # only a sparse/missing-event reconstruction and must not keep ownership once direct events
+    # resume for the same platform.
+    defaults = fountain_of_dreams_default_platform_heights(Path("data"))
+    heights = np.asarray(
+        [
+            defaults,
+            defaults,
+            [defaults[0], 31.0],
+            [defaults[0], 31.15],
+            [defaults[0], 31.15],
+            [defaults[0], 31.15],
+        ],
+        dtype=np.float32,
+    )
+    valid = np.zeros((6, 2), dtype=np.uint8)
+    valid[2:, 1] = np.uint8(1)
+    fresh = np.zeros((6, 2), dtype=np.uint8)
+    fresh[2, 1] = np.uint8(1)
+    fresh[3, 1] = np.uint8(1)
+    fresh[4, 1] = np.uint8(1)
+    line_transforms = {0: (1, 0.75, 1.125)}
+    contact_y = np.float32(24.651287  * 0.75 + 1.125)
+    out_h, out_v, out_vel, out_vel_v = _fod_platform_motion_with_ground_contact(
+        heights,
+        valid,
+        event_fresh_u8=fresh,
+        post_on_ground_u8=np.asarray([[1], [0], [0], [0], [0], [0]], dtype=np.uint8),
+        post_ground_id_u16=np.asarray([[0], [0xFFFF], [0xFFFF], [0xFFFF], [0xFFFF], [0xFFFF]], dtype=np.uint16),
+        post_pos_y_f32=np.asarray([[contact_y], [0.0], [0.0], [0.0], [0.0], [0.0]], dtype=np.float32),
+        line_transforms=line_transforms,
+    )
+
+    assert int(out_v[0, 1]) == 1
+    assert float(out_h[0, 1]) == pytest.approx(24.651287, abs=1e-5)
+    assert float(out_h[2, 1]) == pytest.approx(31.0)
+    assert float(out_h[3, 1]) == pytest.approx(31.15)
+    # The repeated direct event at frame 4 is the source stop boundary; the carried value should not
+    # keep the old event delta alive and drift after events stop.
+    assert int(out_vel_v[4, 1]) == 0
+    assert int(out_vel_v[5, 1]) == 0
+    assert float(out_h[5, 1]) == pytest.approx(31.15)
+
+
 def test_fod_platform_ground_contact_derivation_uses_no_future_observations() -> None:
     defaults = fountain_of_dreams_default_platform_heights(Path("data"))
     heights = np.asarray([defaults, defaults, defaults, defaults], dtype=np.float32)
     valid = np.zeros((4, 2), dtype=np.uint8)
-    line_transforms = {0: (1, 0.80625)}
+    line_transforms = {0: (1, 0.75, 1.125)}
     full_h, full_v, full_vel, full_vel_v = _fod_platform_motion_with_ground_contact(
         heights,
         valid,

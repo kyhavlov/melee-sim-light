@@ -245,10 +245,6 @@ static inline void promote_seed_prev_action_snapshot_post_frame(MslBatch* batch)
   for (int bi = 0; bi < batch->batch_size; bi++) {
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
-      // Runtime carry for entry-shaped owner families:
-      // - `seed_prev_action_*` holds the replay-true (t-1 -> t) post-frame snapshot after reseed.
-      // - Preserve the same meaning across rollout by promoting the frame-start action cached in
-      //   `prev_action_*` so the next simulated frame sees the correct prior post-frame motion.
       batch->state.seed_prev_action_id[idx] = batch->state.prev_action_id[idx];
       batch->state.seed_prev_action_frame[idx] = batch->state.prev_action_frame[idx];
     }
@@ -600,8 +596,11 @@ static int step_one_frame_core(MslBatch* batch, const uint8_t* prev_input_bytes,
     hitboxes_refresh(batch);
     hurtboxes_refresh_contact_geometry(batch);
   } else {
-    hurtboxes_refresh(batch);
+    // Debug pre-combat must expose the same primitive refresh state that full combat consumes.
+    // Keep only combat_resolve()/post-combat mutations skipped.
+    hurtboxes_refresh_metadata(batch);
     hitboxes_refresh(batch);
+    hurtboxes_refresh_contact_geometry(batch);
   }
   hitlist_tick(batch);
   shields_refresh(batch);

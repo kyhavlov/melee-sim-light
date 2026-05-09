@@ -254,7 +254,9 @@ def _stage_platform_transforms(stage_dat: Path) -> list[dict]:
         return []
     # FoD platform collision lines are source-local MapLine records whose world transform is owned
     # by GrIz ground-object JObjs. The two side platforms use Slippi/grIzumi platform ids
-    # 0=right, 1=left; the top platform is static.
+    # 0=right, 1=left; the top platform is static. `grIzumi_801CC358` writes the raw current
+    # platform height to the collision JObj, then `mpLib_80055E9C` transforms the source MapLine
+    # vertex: world_y = source_local_y + current_height * 0.75f.
     # refs/melee/src/melee/gr/grizumi.c::{grIzumi_801CC358,grIzumi_801CCBDC}
     # refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
     # tools/modelplay/viewer/src/components/viewer/Stage.tsx::FountainOfDreams
@@ -266,7 +268,7 @@ def _stage_platform_transforms(stage_dat: Path) -> list[dict]:
             "x0": -49.5,
             "x1": -21.0,
             "y_const": 20.0,
-            "height_coeff": 0.80625,
+            "height_coeff": 0.75,
         },
         {
             "line_id": 1,
@@ -274,8 +276,8 @@ def _stage_platform_transforms(stage_dat: Path) -> list[dict]:
             "platform_id": 0,
             "x0": 21.0,
             "x1": 49.5,
-            "y_const": 27.44186047,
-            "height_coeff": 0.80625,
+            "y_const": 28.0,
+            "height_coeff": 0.75,
         },
         {
             "line_id": 2,

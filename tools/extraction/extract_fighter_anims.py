@@ -1457,14 +1457,16 @@ def _write_fighter_dynamics_data(
     dynamic_sets: list[dict[str, object]],
     parent_part: list[int],
     collision_msids: list[int] | None = None,
+    source_step_msids: list[int] | None = None,
 ) -> Path:
     """Write extracted ftData.x2C dynamic-chain descriptors for runtime pose ownership.
 
-    Layout `SSDYNN01` v5:
+    Layout `SSDYNN01` v6:
     - set_count:u16, total_node_count:u16
     - per set: root_part:u16, node_count:u16, pos:vec3
     - per node: part:u16, pad:u16, constants[15]:f32
     - collision_msid_count:u16, reserved:u16, collision_msids:u16[]
+    - source_step_msid_count:u16, reserved:u16, source_step_msids:u16[]
     - collider_count:u16, reserved:u16
     - per collider: part:u16, pad:u16, offset:vec3, radius:f32
 
@@ -1496,7 +1498,7 @@ def _write_fighter_dynamics_data(
 
     with out_path.open("wb") as f:
         f.write(b"SSDYNN01")
-        f.write(struct.pack("<I", 5))
+        f.write(struct.pack("<I", 6))
         f.write(struct.pack("<H", len(encoded_sets)))
         f.write(struct.pack("<H", total_nodes))
         for root, pos, nodes in encoded_sets:
@@ -1508,6 +1510,13 @@ def _write_fighter_dynamics_data(
         owner_msids = sorted({int(msid) & 0xFFFF for msid in (collision_msids or [])})
         f.write(struct.pack("<HH", len(owner_msids), 0))
         for msid in owner_msids:
+            f.write(struct.pack("<H", msid))
+        source_step_owner_msids = sorted({int(msid) & 0xFFFF for msid in (source_step_msids or [])})
+        if not set(source_step_owner_msids).issubset(set(owner_msids)):
+            extra = sorted(set(source_step_owner_msids) - set(owner_msids))
+            raise RuntimeError(f"{character}: source-step msids not in collision owner index: {extra}")
+        f.write(struct.pack("<HH", len(source_step_owner_msids), 0))
+        for msid in source_step_owner_msids:
             f.write(struct.pack("<H", msid))
         colliders_raw = []
         for dyn in dynamic_sets:
@@ -1529,7 +1538,8 @@ def _dynamic_collision_owner_msids(
     """Return submotions whose BODY collision matrices consume fighter dynamics state.
 
     This is deliberately data-owned rather than a C gameplay branch. Fox `AttackHi3`, `JumpB`,
-    `LandingFallSpecial`, and `CatchDash` are the audited RL1.0 dynamic-chain collision owners:
+    `LandingFallSpecial` and `CatchDash` are the audited RL1.0
+    dynamic-chain collision owners:
     Dolphin
     pre-`ftColl_80078C70` primitive probes show live hurtcap endpoints on the x2C chain consume
     `ftData.x2C` / `lb_8001044C`, while the HIS:5029 AttackDash/AttackLw4 primitive probe selects a
@@ -1560,6 +1570,24 @@ def _dynamic_collision_owner_msids(
         if isinstance(msid, int) and 0 <= msid <= 0xFFFF:
             out.append(int(msid))
     return out
+
+
+def _dynamic_source_step_owner_msids(
+    character: str,
+    moves: dict[str, object],
+    dynamic_sets: list[dict[str, object]],
+) -> list[int]:
+    """Return collision owners that use the source-step dynamic-chain solver mode.
+
+    This is deliberately a generated owner index instead of a C gameplay branch. The mode is only
+    enabled where primitive probes cover the `lb_8001044C` natural-dir/max-step/cone phase and
+    local dynamic JObj rotation writeback; other SSDYNN01 collision owners keep their previously
+    validated reconstruction until separately audited.
+    """
+    if character != "fox" or not dynamic_sets:
+        return []
+    del moves
+    return []
 
 
 def _node_mapping_for_parts(parts_num: int, skip_parts: list[int], fig: _FigaTree) -> tuple[list[int], list[int], list[int]]:
@@ -1682,6 +1710,7 @@ def extract_one_character(
         dynamic_sets,
         parent_part,
         collision_msids=_dynamic_collision_owner_msids(character, moves, dynamic_sets),
+        source_step_msids=_dynamic_source_step_owner_msids(character, moves, dynamic_sets),
     )
 
     # Capture victim alignment anchor (`mv.co.capturedamage.x18`) is set from `ftData.x8->x11`.

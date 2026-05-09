@@ -92,6 +92,9 @@ SEED_DTYPE = np.dtype(
         ("stage_yoshi_shyguy_timer_u16", "<u2"),
         ("stage_yoshi_shyguy_pattern_u8", "u1"),
         ("stage_yoshi_shyguy_valid_u8", "u1"),
+        ("stage_yoshi_shyguy_spawn_rng_seed_u32", "<u4"),
+        ("stage_yoshi_shyguy_spawn_rng_seed_valid_u8", "u1"),
+        ("_pad_stage_yoshi_shyguy", "V3"),
         # Prefix-causal Dream Land Whispy current wind state.
         # refs/melee/src/melee/gr/groldpupupu.c::{grOldPupupu_802113E0,fn_802112F4}
         ("stage_dream_whispy_wind_dir_u8", "u1"),

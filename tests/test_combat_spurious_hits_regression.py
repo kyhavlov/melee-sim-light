@@ -85,7 +85,7 @@ def test_spurious_body_hitstun_not_applied_treasuredbackkangaroo_record_1075_p1(
         binding.destroy(handle)
 
 
-def _one_step_out_compare(*, ds, row) -> np.ndarray:
+def _one_step_out_compare(*, ds, row, seed_mutator=None) -> np.ndarray:
     binding = pytest.importorskip("msl_binding")
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
@@ -99,7 +99,10 @@ def _one_step_out_compare(*, ds, row) -> np.ndarray:
         input_bytes = np.empty((1, input_stride), dtype=np.uint8)
         out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-        seed_bytes[:] = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).reshape(1, seed_stride)
+        seed_t = row["seed_t"].copy()
+        if seed_mutator is not None:
+            seed_mutator(seed_t)
+        seed_bytes[:] = np.frombuffer(seed_t.tobytes(order="C"), dtype=np.uint8).reshape(1, seed_stride)
         prev_input_bytes[:] = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
             1, input_stride
         )
@@ -986,14 +989,18 @@ def test_spurious_hitstun_not_applied_shine_start_gracefulattachedturtle_record_
 
 
 @pytest.mark.integration
-def test_spurious_shine_start_body_hit_not_applied_treasuredbackkangaroo_record_1575() -> None:
-    # Negative lock for grounded Shine Start entry geometry:
-    # TBK rec=1575 has Falco entering SpecialLwStart while Fox is in DamageAir2. Vanilla applies
-    # Shine Start's post-frame ground friction but does not connect the active shine body hitbox.
-    # This guards against turning the Shine Start friction fix into a replay-false hit.
+@pytest.mark.parametrize("record", [1575, 5265])
+def test_spurious_shine_start_body_hit_not_applied_treasuredbackkangaroo_damageair(record: int) -> None:
+    # Negative sentinel for the remaining Fox DamageAir2 BODY pose debt:
+    # TBK rec=1575/5265 have Falco entering SpecialLwStart while Fox is in airborne DamageAir2.
+    # Vanilla applies Shine Start's post-frame ground friction but does not connect the active
+    # shine body hitbox. A generated DamageAir2 source-step owner was tried and rejected; until the
+    # full source-order dynamic/AObj owner is implemented, keep this row as a guard against
+    # reopening the false Shine BODY hit.
     #
-    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLwStart_Phys
-    # refs/melee/src/melee/ft/ft_081B.c::ft_80084F3C
+    # refs/melee/src/melee/ft/ftdynamics.c::{ftCo_8009DD94,ftCo_8009E318}
+    # refs/melee/src/melee/lb/lb_00F9.c::lb_8001044C
+    # refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
     root = Path(__file__).resolve().parents[1]
     expected_rel = (
         "datasets/fox_falco_fd_ucf084_recent/replays/validation/"
@@ -1005,7 +1012,6 @@ def test_spurious_shine_start_body_hit_not_applied_treasuredbackkangaroo_record_
 
     ds = read_dataset(str(dataset_path))
     samples = ds.samples
-    record = 1575
     row = samples[record : record + 1]
 
     assert int(row["seed_t"]["action_id"][0, 0]) == 85
@@ -1014,9 +1020,8 @@ def test_spurious_shine_start_body_hit_not_applied_treasuredbackkangaroo_record_
     assert int(row["ref_t1"]["action_id"][0, 1]) == 360
     assert int(row["ref_t1"]["hitlag"][0, 0]) == 0
     assert int(row["ref_t1"]["hitlag"][0, 1]) == 0
-    assert int(row["ref_t1"]["hitstun"][0, 0]) == 4
+    assert int(row["ref_t1"]["hitstun"][0, 0]) == int(row["seed_t"]["hitstun"][0, 0]) - 1
     assert int(row["ref_t1"]["hitstun"][0, 1]) == 0
-
     binding = importlib.import_module("msl_binding")
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
@@ -1057,6 +1062,7 @@ def test_spurious_shine_start_body_hit_not_applied_treasuredbackkangaroo_record_
         assert float(out["speed_ground_x_self"][0, 1]) == pytest.approx(
             float(row["ref_t1"]["speed_ground_x_self"][0, 1]), abs=0.001
         )
+
     finally:
         binding.destroy(handle)
 

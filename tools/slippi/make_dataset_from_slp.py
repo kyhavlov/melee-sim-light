@@ -146,7 +146,7 @@ def _fod_platform_heights_from_frames(
     n_frames: int,
     *,
     default_heights: tuple[float, float],
-) -> tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Return replay-visible FoD platform heights, carried forward per frame.
 
     Slippi 3.18+ emits `fod_platform` events with platform id 0=right, 1=left and the current
@@ -160,9 +160,10 @@ def _fod_platform_heights_from_frames(
         raise ValueError(f"expected two FoD platform defaults, got shape {default.shape}")
     heights = np.zeros((n_frames, 2), dtype=np.float32)
     valid = np.zeros((n_frames, 2), dtype=np.uint8)
+    fresh = np.zeros((n_frames, 2), dtype=np.uint8)
     heights[:, :] = default.reshape(1, 2)
     if frames.type.get_field_index("fod_platform") == -1:
-        return heights, valid
+        return heights, valid, fresh
     events = frames.field("fod_platform").to_pylist()
     cur = default.copy()
     cur_valid = np.zeros(2, dtype=np.uint8)
@@ -173,29 +174,37 @@ def _fod_platform_heights_from_frames(
                 if 0 <= platform < 2:
                     cur[platform] = np.float32(float(ev.get("height", cur[platform])))
                     cur_valid[platform] = np.uint8(1)
+                    fresh[fi, platform] = np.uint8(1)
         heights[fi, :] = cur
         valid[fi, :] = cur_valid
-    return heights, valid
+    return heights, valid, fresh
 
 
 def _fod_platform_height_transform_records(
     data_root: Path | str = Path("data"),
-) -> dict[int, tuple[int, float]]:
-    """Return FoD platform line -> (platform id, height coeff) from MSLSTG01.
+) -> dict[int, tuple[int, float, float]]:
+    """Return FoD platform line -> (platform id, height coeff, local y) from MSLSTG01.
 
     refs/melee/src/melee/gr/grizumi.c::{grIzumi_801CC358,grIzumi_801CCBDC}
+    refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
     data/stages/bin/griz.bin::MSLSTG01 platform_transforms
     """
     stage_path = stage_metadata_path_for_stage_id(2, Path(data_root))
     if stage_path is None:
         return {}
     stage = read_mslstg01_v7(stage_path)
-    out: dict[int, tuple[int, float]] = {}
+    segment_y_by_line = {int(seg.line_id): float(seg.y0) for seg in stage.segments}
+    out: dict[int, tuple[int, float, float]] = {}
     for rec in stage.platform_transforms:
         if int(rec.kind_id) != STAGE_PLATFORM_TRANSFORM_KIND_HEIGHT:
             continue
         if 0 <= int(rec.platform_id) < 2 and float(rec.height_coeff) != 0.0:
-            out[int(rec.line_id)] = (int(rec.platform_id), float(rec.height_coeff))
+            line_id = int(rec.line_id)
+            out[line_id] = (
+                int(rec.platform_id),
+                float(rec.height_coeff),
+                float(segment_y_by_line.get(line_id, 0.0)),
+            )
     return out
 
 
@@ -269,11 +278,14 @@ def _derive_fod_floor_skip_segments(
     max_line_id = max((int(rec.line_id) for rec in transforms), default=-1)
     transform_platform_by_line = np.full(max_line_id + 1, -1, dtype=np.int16)
     transform_height_coeff_by_line = np.zeros(max_line_id + 1, dtype=np.float32)
+    transform_local_y_by_line = np.zeros(max_line_id + 1, dtype=np.float32)
+    segment_y_by_line = {int(seg.line_id): float(seg.y0) for seg in stage.segments}
     transform_record_by_line = {}
     for rec in transforms:
         line_id = int(rec.line_id)
         transform_platform_by_line[line_id] = np.int16(int(rec.platform_id))
         transform_height_coeff_by_line[line_id] = np.float32(float(rec.height_coeff))
+        transform_local_y_by_line[line_id] = np.float32(float(segment_y_by_line.get(line_id, 0.0)))
         transform_record_by_line[line_id] = rec
     jump_skip_root_clearance = float(max(0, int(floor_skip_frames)))
     # Source `mpColl_LoadECB_inline` tightens the desired ECB envelope with midpoint +/- 1.0f.
@@ -338,9 +350,9 @@ def _derive_fod_floor_skip_segments(
             return False
         if x > max(float(rec.x0), float(rec.x1)) + active_skip_platform_root_clearance:
             return False
-        world_y = float(platform_height_f32[fi, pid]) * float(
-            transform_height_coeff_by_line[line_id]
-        )
+        world_y = float(transform_local_y_by_line[line_id]) + float(
+            platform_height_f32[fi, pid]
+        ) * float(transform_height_coeff_by_line[line_id])
         return float(pos_y_f32[fi, slot]) < world_y - active_skip_platform_root_clearance
 
     def transform_endpoint_contact(fi: int, slot: int, rec: Any) -> bool:
@@ -395,9 +407,9 @@ def _derive_fod_floor_skip_segments(
                 )
                 jump_below_root = False
                 if pid >= 0 and int(platform_height_valid_u8[fi, pid]):
-                    world_y = float(platform_height_f32[fi, pid]) * float(
-                        transform_height_coeff_by_line[line_id]
-                    )
+                    world_y = float(transform_local_y_by_line[line_id]) + float(
+                        platform_height_f32[fi, pid]
+                    ) * float(transform_height_coeff_by_line[line_id])
                     jump_below_root = (
                         float(pos_y_f32[fi, slot]) <= world_y - jump_skip_root_clearance
                     )
@@ -430,7 +442,9 @@ def _derive_fod_floor_skip_segments(
                     continue
                 if x > max(float(rec.x0), float(rec.x1)) + transformed_platform_skip_lookup_slop:
                     continue
-                world_y = float(platform_height_f32[fi, pid]) * float(rec.height_coeff)
+                world_y = float(segment_y_by_line.get(int(rec.line_id), 0.0)) + float(
+                    platform_height_f32[fi, pid]
+                ) * float(rec.height_coeff)
                 if (
                     y0 >= world_y - transformed_platform_skip_lookup_slop
                     and y1 <= world_y + transformed_platform_skip_lookup_slop
@@ -457,7 +471,7 @@ def _fod_platform_heights_with_ground_contact(
     post_on_ground_u8: np.ndarray,
     post_ground_id_u16: np.ndarray,
     post_pos_y_f32: np.ndarray,
-    line_transforms: dict[int, tuple[int, float]],
+    line_transforms: dict[int, tuple[int, float, float]],
 ) -> tuple[np.ndarray, np.ndarray]:
     out_h, out_v, _, _ = _fod_platform_motion_with_ground_contact(
         heights,
@@ -474,13 +488,14 @@ def _fod_platform_motion_with_ground_contact(
     heights: np.ndarray,
     valid: np.ndarray,
     *,
+    event_fresh_u8: np.ndarray | None = None,
     post_on_ground_u8: np.ndarray,
     post_ground_id_u16: np.ndarray,
     post_pos_y_f32: np.ndarray,
     next_post_on_ground_u8: np.ndarray | None = None,
     next_post_ground_id_u16: np.ndarray | None = None,
     next_post_pos_y_f32: np.ndarray | None = None,
-    line_transforms: dict[int, tuple[int, float]],
+    line_transforms: dict[int, tuple[int, float, float]],
     motion_params: dict[str, float] | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Promote current FoD platform height from grounded replay-prefix contact.
@@ -503,6 +518,7 @@ def _fod_platform_motion_with_ground_contact(
     """
     out_h = np.asarray(heights, dtype=np.float32).copy()
     out_v = np.asarray(valid, dtype=np.uint8).copy()
+    event_fresh = None if event_fresh_u8 is None else np.asarray(event_fresh_u8, dtype=np.uint8)
     on_ground = np.asarray(post_on_ground_u8, dtype=np.uint8)
     ground_id = np.asarray(post_ground_id_u16, dtype=np.uint16)
     pos_y = np.asarray(post_pos_y_f32, dtype=np.float32)
@@ -512,6 +528,8 @@ def _fod_platform_motion_with_ground_contact(
         raise ValueError("FoD grounded-contact arrays must have matching shapes")
     if on_ground.shape[0] != out_h.shape[0]:
         raise ValueError("FoD grounded-contact frame count must match height frame count")
+    if event_fresh is not None and event_fresh.shape != out_h.shape:
+        raise ValueError("FoD event-fresh array must match height shape")
     next_on_ground = (
         None if next_post_on_ground_u8 is None else np.asarray(next_post_on_ground_u8, dtype=np.uint8)
     )
@@ -560,30 +578,47 @@ def _fod_platform_motion_with_ground_contact(
 
     for fi in range(out_h.shape[0]):
         current_contact_this_frame = np.zeros(2, dtype=np.uint8)
-        # Replay FoD events, when present, are current grIzumi state for this frame. The helper
-        # above carries valid event values forward, so only a changed value is treated as a fresh
-        # observation once a prefix-derived state is already active.
+        # Replay FoD events, when present, are direct current grIzumi state for this frame. They
+        # override grounded-contact fallback; the contact path exists only for sparse/missing event
+        # streams. The helper above carries valid event values forward, so consume only fresh event
+        # rows here (or value changes for older callers that do not provide a fresh mask).
         for platform_id in range(2):
-            if int(contact_owned[platform_id]):
-                continue
             if not int(out_v[fi, platform_id]):
                 continue
             event_h = np.float32(out_h[fi, platform_id])
-            if int(cur_valid[platform_id]) and abs(float(event_h - cur[platform_id])) <= 1e-6:
+            fresh_event = (
+                bool(int(event_fresh[fi, platform_id]))
+                if event_fresh is not None
+                else not (
+                    int(cur_valid[platform_id]) and abs(float(event_h - cur[platform_id])) <= 1e-6
+                )
+            )
+            if not fresh_event:
                 continue
-            if int(has_obs[platform_id]) and fi > int(last_obs_frame[platform_id]):
+            same_height = int(cur_valid[platform_id]) and abs(float(event_h - cur[platform_id])) <= 1e-6
+            if same_height:
+                cur_vel[platform_id] = np.float32(0.0)
+                cur_vel_valid[platform_id] = np.uint8(0)
+            elif int(has_obs[platform_id]) and fi > int(last_obs_frame[platform_id]):
                 delta = np.float32(
                     (float(event_h) - float(last_obs_h[platform_id]))
                     / float(fi - int(last_obs_frame[platform_id]))
                 )
-                if np.isfinite(delta):
+                if np.isfinite(delta) and abs(float(delta)) > 1e-6:
                     cur_vel[platform_id] = delta
                     cur_vel_valid[platform_id] = np.uint8(1)
+                else:
+                    cur_vel[platform_id] = np.float32(0.0)
+                    cur_vel_valid[platform_id] = np.uint8(0)
+            else:
+                cur_vel[platform_id] = np.float32(0.0)
+                cur_vel_valid[platform_id] = np.uint8(0)
             cur[platform_id] = event_h
             cur_valid[platform_id] = np.uint8(1)
             last_obs_h[platform_id] = event_h
             last_obs_frame[platform_id] = np.int32(fi)
             has_obs[platform_id] = np.uint8(1)
+            contact_owned[platform_id] = np.uint8(0)
 
         for slot in range(on_ground.shape[1]):
             if not int(on_ground[fi, slot]):
@@ -591,11 +626,11 @@ def _fod_platform_motion_with_ground_contact(
             rec = line_transforms.get(int(ground_id[fi, slot]))
             if rec is None:
                 continue
-            platform_id, height_coeff = rec
+            platform_id, height_coeff, local_y = rec
             y = float(pos_y[fi, slot])
             if not np.isfinite(y) or height_coeff == 0.0:
                 continue
-            h = np.float32(y / height_coeff)
+            h = np.float32((y - local_y) / height_coeff)
             derived_velocity = False
             if int(has_obs[platform_id]) and fi > int(last_obs_frame[platform_id]):
                 delta = np.float32(
@@ -624,7 +659,7 @@ def _fod_platform_motion_with_ground_contact(
                 rec = line_transforms.get(int(next_ground_id[fi, slot]))
                 if rec is None:
                     continue
-                platform_id, height_coeff = rec
+                platform_id, height_coeff, local_y = rec
                 y = float(next_pos_y[fi, slot])
                 if not np.isfinite(y) or height_coeff == 0.0:
                     continue
@@ -637,7 +672,7 @@ def _fod_platform_motion_with_ground_contact(
                 # the hidden transformed line. Invert both biases for same-step hidden-height seeds
                 # so replay-real one-step contact lands on the post-frame root.
                 # refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
-                h = np.float32((y - (2.0 * FOD_FLOOR_Y_BIAS)) / height_coeff)
+                h = np.float32((y - local_y - (2.0 * FOD_FLOOR_Y_BIAS)) / height_coeff)
                 if int(cur_valid[platform_id]) and abs(float(h - cur[platform_id])) <= 1e-6:
                     continue
                 cur[platform_id] = h
@@ -3291,11 +3326,17 @@ def _main_impl(args) -> Dataset:
     samples["seed_t"]["match_damage_ratio"] = np.float32(float(game.start.get("damage_ratio", 1.0)))
     if int(stage_id) == 2:
         fod_defaults = fountain_of_dreams_default_platform_heights(data_root)
-        fod_height, fod_valid = _fod_platform_heights_from_frames(
-            frames, n_frames, default_heights=fod_defaults
+        fod_motion_params = fountain_of_dreams_platform_motion_params(data_root)
+        fod_height, fod_valid, fod_fresh = _fod_platform_heights_from_frames(
+            frames,
+            n_frames,
+            default_heights=fod_defaults,
         )
         samples["seed_t"]["stage_fod_platform_height_f32"] = fod_height[:-1]
         samples["seed_t"]["stage_fod_platform_height_valid_u8"] = fod_valid[:-1]
+    else:
+        fod_fresh = None
+        fod_motion_params = None
 
     # Items are global per frame. Build raw item rows before final staling so reflected item hits
     # can advance the owner's stale queue through plStale_UpdateStaleMovesFromItem.
@@ -4790,6 +4831,26 @@ def _main_impl(args) -> Dataset:
             samples["seed_t"]["frame_pre_random_seed"][shyguy_rng_owner] = frame_pre_random_seed[1:][
                 shyguy_rng_owner
             ]
+        spawn_rng_seed = np.zeros(samples.shape[0], dtype=np.uint32)
+        spawn_rng_seed_valid = np.zeros(samples.shape[0], dtype=np.uint8)
+        sample_idx = np.arange(samples.shape[0], dtype=np.int64)
+        spawn_idx = sample_idx + samples["seed_t"]["stage_yoshi_shyguy_timer_u16"].astype(np.int64)
+        spawn_rng_owner = shyguy_rng_owner & (spawn_idx >= 0) & (spawn_idx < samples.shape[0])
+        if np.any(spawn_rng_owner):
+            # Replay-rollout hidden stream lane for no-live Shy Guy countdowns:
+            # - grStory_801E3418 only consumes HSD RNG on the zero-timer spawn frame.
+            # - Slippi frame-start random_seed exposes that stream, while unrelated global RNG
+            #   consumers during the countdown are not source-visible in fighter/item state.
+            # - Store the source spawn-frame stream explicitly so rollout validation does not use
+            #   the old synthetic `+0x10000` clock bridge.
+            # refs/slippi-ssbm-asm/Recording/SendFrameStart.s
+            # refs/melee/src/melee/gr/grstory.c::{grStory_801E3418,set_shyguy_spawn_count}
+            spawn_rng_seed[spawn_rng_owner] = samples["seed_t"]["frame_pre_random_seed"][
+                spawn_idx[spawn_rng_owner]
+            ]
+            spawn_rng_seed_valid[spawn_rng_owner] = np.uint8(1)
+        samples["seed_t"]["stage_yoshi_shyguy_spawn_rng_seed_u32"] = spawn_rng_seed
+        samples["seed_t"]["stage_yoshi_shyguy_spawn_rng_seed_valid_u8"] = spawn_rng_seed_valid
     # Throw pulse-consume seed lane (causal producer):
     # - runtime consumes this lane in src/items.c throw-side pulse reconstruction suppressor.
     # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
@@ -4939,6 +5000,7 @@ def _main_impl(args) -> Dataset:
         fod_height, fod_valid, fod_velocity, fod_velocity_valid = _fod_platform_motion_with_ground_contact(
             samples["seed_t"]["stage_fod_platform_height_f32"],
             samples["seed_t"]["stage_fod_platform_height_valid_u8"],
+            event_fresh_u8=None if fod_fresh is None else fod_fresh[:-1],
             post_on_ground_u8=post_on_ground[:-1, :num_players],
             post_ground_id_u16=post_ground_id[:-1, :num_players],
             post_pos_y_f32=post_pos_y[:-1, :num_players],
@@ -4946,7 +5008,7 @@ def _main_impl(args) -> Dataset:
             next_post_ground_id_u16=post_ground_id[1:, :num_players],
             next_post_pos_y_f32=post_pos_y[1:, :num_players],
             line_transforms=_fod_platform_height_transform_records(data_root),
-            motion_params=fountain_of_dreams_platform_motion_params(data_root),
+            motion_params=fod_motion_params,
         )
         samples["seed_t"]["stage_fod_platform_height_f32"] = fod_height
         samples["seed_t"]["stage_fod_platform_height_valid_u8"] = fod_valid

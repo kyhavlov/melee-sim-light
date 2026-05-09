@@ -17,10 +17,11 @@ enum {
   ANIM_VERSION_V4 = 4,
   ANIM_DYN_VERSION_V4 = 4,
   ANIM_DYN_VERSION_V5 = 5,
+  ANIM_DYN_VERSION_V6 = 6,
   MAT_BYTES = 12 * 4,              // float32[12] (3x4)
   TRANSN_BYTES_PER_FRAME = 3 * 4,  // float32[3] v4 tail (TransN/root translation)
 
-  // SSDYNN01 v5 is written by tools/extraction/extract_fighter_anims.py.
+  // SSDYNN01 v6 is written by tools/extraction/extract_fighter_anims.py.
   //
   // RL1.0 target data contract:
   // - Fox ftData.x2C has exactly one dynamic bone set rooted at part 17.
@@ -796,7 +797,7 @@ static int load_dynamics_into_table(const char* data_dir, const char* rel_path,
   static const uint8_t dyn_magic[ANIM_MAGIC_LEN] = {'S', 'S', 'D', 'Y', 'N', 'N', '0', '1'};
   const uint32_t ver = (sz >= ANIM_HDR_BASE_BYTES) ? read_u32_le(buf + 8) : 0u;
   if (sz < ANIM_HDR_BASE_BYTES || memcmp(buf, dyn_magic, ANIM_MAGIC_LEN) != 0 ||
-      ver != ANIM_DYN_VERSION_V5) {
+      ver != ANIM_DYN_VERSION_V6) {
     alloc_free(buf);
     return -1;
   }
@@ -866,6 +867,27 @@ static int load_dynamics_into_table(const char* data_dir, const char* rel_path,
     dyn_collision_have_msid[msid] = 1u;
   }
   off += (size_t)collision_msid_count * 2u;
+  if (off + 4u > sz) {
+    alloc_free(buf);
+    alloc_free(dyn_collision_have_msid);
+    return -1;
+  }
+  const uint16_t source_step_msid_count = read_u16_le(buf + off);
+  off += 4u;  // source_step_msid_count + reserved
+  if (source_step_msid_count != 0u) {
+    // SSDYNN01 v6 reserves a source-step owner index, but this stack intentionally hard-disables
+    // the runtime mode after the DamageAir2 source-step attempt was rejected. Non-empty artifacts
+    // must fail loudly until the full source-order dynamic/AObj owner is implemented.
+    alloc_free(buf);
+    alloc_free(dyn_collision_have_msid);
+    return -1;
+  }
+  if (off + (size_t)source_step_msid_count * 2u > sz) {
+    alloc_free(buf);
+    alloc_free(dyn_collision_have_msid);
+    return -1;
+  }
+  off += (size_t)source_step_msid_count * 2u;
   if (off + 4u > sz) {
     alloc_free(buf);
     alloc_free(dyn_collision_have_msid);
@@ -1889,7 +1911,7 @@ static void dynamic_state_step(MslBatch* batch, size_t idx, const MslAnimPoseTab
     batch->state.dynamic_pose_pos_z[root_di] = base_pos[0][2];
   }
 
-  // SSDYNN01 v5's collision-owner index means this submotion consumes the live dynamic JObj
+  // SSDYNN01 v6's collision-owner index means this submotion consumes the live dynamic JObj
   // matrix for BODY hurtcaps on every supported frame, even when the current lb_8001044C update
   // resolves to the static segment vector with no nonzero correction carry.
   // refs/melee/src/melee/ft/ftdynamics.c::{ftCo_8009DD94,ftCo_8009E318}
@@ -1904,42 +1926,42 @@ static void dynamic_state_step(MslBatch* batch, size_t idx, const MslAnimPoseTab
         batch->state.dynamic_pose_pos_y[di],
         batch->state.dynamic_pose_pos_z[di],
     };
-    float base_vec[3] = {
+    float current_dir[3] = {
         base_pos[ni + 1u][0] - base_pos[ni][0],
         base_pos[ni + 1u][1] - base_pos[ni][1],
         base_pos[ni + 1u][2] - base_pos[ni][2],
     };
-    const float seg_len = vec3_len(base_vec);
-    if (!vec3_normalize(base_vec)) {
+    const float seg_len = vec3_len(current_dir);
+    if (!vec3_normalize(current_dir)) {
       batch->state.dynamic_pose_pos_x[child_di] = base_pos[ni + 1u][0];
       batch->state.dynamic_pose_pos_y[child_di] = base_pos[ni + 1u][1];
       batch->state.dynamic_pose_pos_z[child_di] = base_pos[ni + 1u][2];
       continue;
     }
-
     float prev_vec[3] = {
         prev_pos[ni + 1u][0] - parent_pos[0],
         prev_pos[ni + 1u][1] - parent_pos[1],
         prev_pos[ni + 1u][2] - parent_pos[2],
     };
     if (!vec3_normalize(prev_vec)) {
-      prev_vec[0] = base_vec[0];
-      prev_vec[1] = base_vec[1];
-      prev_vec[2] = base_vec[2];
+      prev_vec[0] = current_dir[0];
+      prev_vec[1] = current_dir[1];
+      prev_vec[2] = current_dir[2];
     }
     float original_prev[3] = {prev_vec[0], prev_vec[1], prev_vec[2]};
 
     // Ported shape from lb_8001044C:
-    // - node +0x4C and descriptor +0x08 blend previous segment direction toward the current
-    //   animation vector.
+    // - node +0x4C and descriptor +0x08 blend previous segment direction toward current_dir.
     // - node +0x8C applies the gravity/down-vector correction derived by lb_80011710 from
     //   descriptor +0x10 / segment length.
     // - node +0x38/+0x44 carries the prior angular correction axis/angle, then +0x84 decays it.
-    // - node +0x68 clamps the segment direction cone around the current animation vector.
+    // - node +0x88 limits same-frame angular movement from the saved link direction.
+    // - node +0x50 converges toward natural_dir, and node +0x68 clamps max deviation from it.
+    // refs/melee/src/melee/lb/lb_00F9.c::lb_8001044C
     const float anim_follow = set->nodes[ni].c[0] * set->pos[0];
     if (anim_follow < 1.0f) {
-      vec3_rotate_towards(prev_vec, base_vec,
-                          vec3_angle(prev_vec, base_vec) * (1.0f - anim_follow));
+      vec3_rotate_towards(prev_vec, current_dir,
+                          vec3_angle(prev_vec, current_dir) * (1.0f - anim_follow));
     }
 
     const float inv_len_corr = (seg_len > 1.0e-6f) ? (set->pos[2] / seg_len) : 0.0f;
@@ -1969,24 +1991,24 @@ static void dynamic_state_step(MslBatch* batch, size_t idx, const MslAnimPoseTab
       }
     }
 
-    const float snap_angle = fabsf(set->nodes[ni].c[1]);
-    if (snap_angle > 0.0f) {
-      const float angle_to_anim = vec3_angle(base_vec, prev_vec);
-      if (angle_to_anim < snap_angle) {
-        prev_vec[0] = base_vec[0];
-        prev_vec[1] = base_vec[1];
-        prev_vec[2] = base_vec[2];
+    const float converge_angle = fabsf(set->nodes[ni].c[1]);
+    if (converge_angle > 0.0f) {
+      const float angle_to_natural = vec3_angle(current_dir, prev_vec);
+      if (angle_to_natural < converge_angle) {
+        prev_vec[0] = current_dir[0];
+        prev_vec[1] = current_dir[1];
+        prev_vec[2] = current_dir[2];
       } else {
-        vec3_rotate_towards(prev_vec, base_vec, snap_angle);
+        vec3_rotate_towards(prev_vec, current_dir, converge_angle);
       }
     }
 
-    // lb_8001044C applies descriptor +0x68 against a natural direction derived from descriptor
-    // +0x58 and the live JObj rotation. SSDYNN01 v5 does not yet serialize that live natural-dir
-    // state, and the older base-vector approximation can move valid source dynamic tails back into
-    // false BODY contact. Keep the cone un-applied until the natural-dir/JObj owner is promoted.
-    // refs/melee/src/melee/lb/lb_00F9.c::lb_8001044C
     const float cone = fabsf(set->nodes[ni].c[6]);
+    // lb_8001044C applies descriptor +0x68 against a natural direction derived from descriptor
+    // +0x58 and the live JObj rotation. That source-step mode is intentionally hard-disabled in
+    // this stack after the DamageAir2 source-step attempt was rejected; current dynamic owners keep
+    // the validated base-vector approximation until separately audited.
+    // refs/melee/src/melee/lb/lb_00F9.c::lb_8001044C
     (void)cone;
 
     // ftCo_8009DD94 refreshes fp->x1670 via ftColl_8007AF60 and passes those source dynamic
@@ -2094,8 +2116,6 @@ void anim_pose_update_dynamic_state(MslBatch* batch) {
         continue;
       }
       const uint16_t msid = (uint16_t)anim_u32;
-      const uint16_t frame =
-          msl_anim_frame_floor_u16(msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]));
       const MslAnimPoseTable* t = table_for_char(char_id);
       if (t == NULL || t->dyn_set_count == 0u) {
         batch->state.dynamic_pose_state_valid[idx] = 0u;
@@ -2113,6 +2133,8 @@ void anim_pose_update_dynamic_state(MslBatch* batch) {
         batch->state.dynamic_pose_apply_collision_matrix[idx] = 0u;
         continue;
       }
+      float dynamic_frame_f32 = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
+      const uint16_t frame = msl_anim_frame_floor_u16(dynamic_frame_f32);
       const uint8_t same_msid_sequential =
           (batch->state.dynamic_pose_state_valid[idx] &&
            batch->state.dynamic_pose_char_id[idx] == char_id &&
@@ -2125,7 +2147,7 @@ void anim_pose_update_dynamic_state(MslBatch* batch) {
         const uint16_t max_frame = (frame < t->local_frame_count_by_msid[msid])
                                        ? frame
                                        : (uint16_t)(t->local_frame_count_by_msid[msid] - 1u);
-        for (uint16_t f = 0; f <= max_frame; f++) {
+        for (uint16_t f = 0u; f <= max_frame; f++) {
           dynamic_state_step(batch, idx, t, set, char_id, msid, f, 1u);
           if (f == 0xFFFFu) {
             break;
@@ -2175,7 +2197,6 @@ static int dynamic_matrix_from_locals(const MslBatch* batch, size_t player_idx,
       return -1;
     }
     const int dyn_i = dynamic_set_node_index_for_part(set, part);
-
     const float* parent_scl = NULL;
     if (parent >= 0 && have_parent_scl) {
       parent_scl = parent_world_scl;

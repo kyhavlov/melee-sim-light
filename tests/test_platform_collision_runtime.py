@@ -1240,7 +1240,7 @@ def test_fod_live_platform_scheduler_moves_without_replay_seed() -> None:
     # grIzumi scheduler state from generated stage data and advance the C-owned platform height.
     import msl_binding
 
-    default_h = np.float32(27.44186019897461)
+    default_h = np.float32(28.0)
     sizes = msl_binding.sizes()
     inp = _input_bytes()
     stage_dtype = np.dtype(
@@ -1272,7 +1272,7 @@ def test_fod_live_platform_stage_debug_reports_runtime_height_for_webplay() -> N
     # platform height must be the same grIzumi runtime owner value used by collision.
     import msl_binding
 
-    default_h = np.float32(27.44186019897461)
+    default_h = np.float32(28.0)
     stage_dtype = np.dtype(
         [
             ("fod_platform_height", ("<f4", (2,))),
@@ -1632,7 +1632,7 @@ def test_fountain_left_moving_platform_uses_seeded_stage_height() -> None:
     # Runtime must transform the stable source line id instead of grounding on the source-local
     # MSLSTG01 y=1.125 platform row.
     height = np.float32(19.899999618530273)
-    world_y = np.float32(float(height) * 0.80625)
+    world_y = np.float32(1.125 + float(height) * 0.75)
     seed = _seed_base(2, ACT_WAIT, SM_WAIT1_0, -35.0, float(world_y))
     seed["stage_fod_platform_height_f32"][0, 1] = height  # platform id 1 = left
     seed["stage_fod_platform_height_valid_u8"][0, 1] = np.uint8(1)
@@ -1643,7 +1643,7 @@ def test_fountain_left_moving_platform_uses_seeded_stage_height() -> None:
 
     assert int(out["on_ground"][0]) == 1
     assert int(out["ground_id"][0]) == 0
-    assert float(out["pos_y"][0]) == pytest.approx(float(world_y) + 0.0001, abs=1e-5)
+    assert float(out["pos_y"][0]) == pytest.approx(float(world_y), abs=1.0e-4)
 
 
 def test_fountain_left_moving_platform_advances_seeded_stage_velocity() -> None:
@@ -1652,7 +1652,7 @@ def test_fountain_left_moving_platform_advances_seeded_stage_velocity() -> None:
     # the next transformed world line, not the stale seed-frame line.
     height = np.float32(17.100000381469727)
     velocity = np.float32(-0.093023255)
-    next_world_y = np.float32(float(np.float32(height + velocity)) * 0.80625)
+    next_world_y = np.float32(1.125 + float(np.float32(height + velocity)) * 0.75)
     seed = _seed_base(2, ACT_WAIT, SM_WAIT1_0, -35.0, float(next_world_y))
     seed["stage_fod_platform_height_f32"][0, 1] = height  # platform id 1 = left
     seed["stage_fod_platform_height_valid_u8"][0, 1] = np.uint8(1)
@@ -1750,7 +1750,7 @@ def test_fod_transformed_platform_edge_snap_uses_world_height_for_rooted_actions
     # not the source-local MSLSTG01 y=1.125 row. This covers the manual fsmash/dash-attack/roll
     # "teleport to ground until the move ends" failure mode.
     height = np.float32(19.899999618530273)
-    world_y = np.float32(float(height) * 0.80625)
+    world_y = np.float32(1.125 + float(height) * 0.75)
     seed = _seed_base(2, ACT_ATTACK_S4_S, SM_ATTACK_S4, -20.5, float(world_y) + 0.0001)
     seed["stage_fod_platform_height_f32"][0, 1] = height
     seed["stage_fod_platform_height_valid_u8"][0, 1] = np.uint8(1)
@@ -1779,7 +1779,7 @@ def test_fod_airborne_aerial_and_tumble_can_land_on_transformed_platform_with_do
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
     height = np.float32(19.899999618530273)
-    world_y = np.float32(float(height) * 0.80625)
+    world_y = np.float32(1.125 + float(height) * 0.75)
     seed = _seed_base(2, action_id, submotion_id, -35.0, float(world_y) - 2.0)
     seed["ground_id"][0, 0] = np.uint16(0xFFFF)
     seed["stage_fod_platform_height_f32"][0, 1] = height
@@ -1812,7 +1812,7 @@ def test_fod_damagefly_lands_on_downward_sweep_even_with_positive_kb_lane() -> N
     # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800477E0,mpColl_80044628_Floor}
     height = np.float32(20.576549530029297)
-    world_y = np.float32(float(height) * 0.80625)
+    world_y = np.float32(1.125 + float(height) * 0.75)
     seed = _seed_base(2, ACT_DAMAGE_FLY_TOP, 180, 30.5, float(world_y) - 6.0)
     seed["ground_id"][0, 0] = np.uint16(5)
     seed["stage_fod_platform_height_f32"][0, 0] = height  # platform id 0 = right
@@ -1840,7 +1840,7 @@ def test_fod_escapeair_downward_airdodge_can_waveland_on_transformed_platform() 
     # pass-through gate. Floor skip remains the separate shield-drop/pass owner.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
     height = np.float32(19.899999618530273)
-    world_y = np.float32(float(height) * 0.80625)
+    world_y = np.float32(1.125 + float(height) * 0.75)
     seed = _seed_base(2, ACT_ESCAPE_AIR, SM_ESCAPE_AIR, -35.0, float(world_y) + 2.0)
     seed["ground_id"][0, 0] = np.uint16(0xFFFF)
     seed["stage_fod_platform_height_f32"][0, 1] = height
@@ -1865,7 +1865,7 @@ def test_fod_common_air_down_input_rejects_transformed_soft_platform_callback() 
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Coll
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_80096CC8
     height = np.float32(19.899999618530273)
-    world_y = np.float32(float(height) * 0.80625)
+    world_y = np.float32(1.125 + float(height) * 0.75)
     seed = _seed_base(2, ACT_FALL, SM_FALL, -35.0, float(world_y) - 2.0)
     seed["ground_id"][0, 0] = np.uint16(0xFFFF)
     seed["stage_fod_platform_height_f32"][0, 1] = height
@@ -1881,6 +1881,28 @@ def test_fod_common_air_down_input_rejects_transformed_soft_platform_callback() 
 
     assert int(out["on_ground"][0]) == 0
     assert int(out["ground_id"][0]) == 0xFFFF
+
+
+def test_fod_negative_reconstructed_platform_height_stays_below_stage_until_visibility_lane() -> None:
+    # Negative FoD heights in no-event replay caches are the existing reconstructed below-stage
+    # sentinel. They should not become a low active platform near the main floor unless/until the
+    # separate grIzumi JObj hidden/visible phase is modeled explicitly.
+    # refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+    # refs/melee/src/melee/mp/mplib.c::{mpLib_80055E9C,mpJointHide}
+    seed = _seed_base(2, ACT_FALL, SM_FALL, -35.0, 2.0)
+    seed["ground_id"][0, 0] = np.uint16(0xFFFF)
+    seed["stage_fod_platform_height_f32"][0, 1] = np.float32(-1.0)
+    seed["stage_fod_platform_height_valid_u8"][0, 1] = np.uint8(1)
+    seed["speed_y_self"][0, 0] = np.float32(-4.0)
+    seed["floor_sweep_prev_pos_valid_u8"][0, 0] = np.uint8(1)
+    seed["floor_sweep_prev_pos_x_f32"][0, 0] = np.float32(-35.0)
+    seed["floor_sweep_prev_pos_y_f32"][0, 0] = np.float32(2.0)
+
+    out = _step_once(seed)
+
+    assert int(out["on_ground"][0]) == 0
+    assert int(out["ground_id"][0]) == 0xFFFF
+    assert float(out["pos_y"][0]) < 0.0
 
 
 def test_guard_on_yoshi_platform_stays_grounded() -> None:
@@ -2489,7 +2511,7 @@ def test_fod_grounded_contact_derives_current_platform_height_replay_real(tmp_pa
     assert int(row["seed_t"]["ground_id"][p]) == 0
     assert int(row["seed_t"]["stage_fod_platform_height_valid_u8"][1]) == 1
     assert float(row["seed_t"]["stage_fod_platform_height_f32"][1]) == pytest.approx(
-        float(row["seed_t"]["pos_y"][p]) / 0.80625,
+        (float(row["seed_t"]["pos_y"][p]) - 1.125) / 0.75,
         abs=1e-5,
     )
 
@@ -2606,8 +2628,7 @@ def test_fod_soft_platform_airborne_regression_rows_stay_airborne(
     assert int(row["seed_t"]["stage_id"]) == 2
     assert int(row["seed_t"]["action_id"][player]) == action_id
     if action_id == ACT_ATTACK_AIR_LW:
-        assert int(row["seed_t"]["floor_skip_segment_valid_u8"][player]) == 1
-        assert int(row["seed_t"]["floor_skip_segment_id_u16"][player]) == 0
+        assert int(row["seed_t"]["floor_skip_segment_valid_u8"][player]) == 0
     out = _step_one_replay_row(ds, record)
 
     assert int(out["action_id"][player]) == int(row["ref_t1"]["action_id"][player]) == action_id
@@ -2652,7 +2673,7 @@ def test_fod_prefix_platform_velocity_keeps_rollout_floor_transform_replay_real(
     assert int(row["seed_t"]["stage_id"]) == 2
     assert int(row["seed_t"]["stage_fod_platform_velocity_valid_u8"][0]) == 1
     assert float(row["seed_t"]["stage_fod_platform_velocity_f32"][0]) == pytest.approx(
-        -0.0930233,
+        -0.1,
         abs=1e-6,
     )
 

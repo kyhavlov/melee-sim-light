@@ -9,8 +9,8 @@
 #include "alloc.h"
 
 enum {
-  MSLSTIO1_VERSION = 3,
-  MSLSTIO1_HEADER_BYTES = 64,
+  MSLSTIO1_VERSION = 4,
+  MSLSTIO1_HEADER_BYTES = 84,
   MSLSTIO1_HURTBOX_BYTES = 32,
   MSLWHSP1_VERSION = 1,
   MSLWHSP1_BYTES = 44,
@@ -51,7 +51,7 @@ static int load_yoshi_shyguy(const uint8_t* buf, size_t sz) {
   const uint16_t vpos_count = read_u16_le(buf + 16);
   const uint16_t speed_count = read_u16_le(buf + 18);
   const uint16_t dyn_y_count = read_u16_le(buf + 20);
-  const uint16_t hurtbox_count = read_u16_le(buf + 62);
+  const uint16_t hurtbox_count = read_u16_le(buf + 82);
   const size_t expected = (size_t)MSLSTIO1_HEADER_BYTES +
                           (size_t)hurtbox_count * (size_t)MSLSTIO1_HURTBOX_BYTES +
                           (size_t)vpos_count * sizeof(float) + (size_t)speed_count * sizeof(float) +
@@ -79,7 +79,12 @@ static int load_yoshi_shyguy(const uint8_t* buf, size_t sz) {
   g_yoshi_shyguy.spawn_right_x = read_f32_le(buf + 48);
   g_yoshi_shyguy.state4_speed_mul = read_f32_le(buf + 52);
   g_yoshi_shyguy.jitter_y_amp = read_f32_le(buf + 56);
-  g_yoshi_shyguy.damage_threshold = read_u16_le(buf + 60);
+  g_yoshi_shyguy.collision_ecb_up = read_f32_le(buf + 60);
+  g_yoshi_shyguy.collision_ecb_down = read_f32_le(buf + 64);
+  g_yoshi_shyguy.collision_ecb_right = read_f32_le(buf + 68);
+  g_yoshi_shyguy.collision_ecb_left = read_f32_le(buf + 72);
+  g_yoshi_shyguy.collision_ecb_scale = read_f32_le(buf + 76);
+  g_yoshi_shyguy.damage_threshold = read_u16_le(buf + 80);
   g_yoshi_shyguy.hurtbox_count = hurtbox_count;
   size_t off = MSLSTIO1_HEADER_BYTES;
   for (uint16_t hi = 0; hi < hurtbox_count; hi++, off += (size_t)MSLSTIO1_HURTBOX_BYTES) {
@@ -105,7 +110,10 @@ static int load_yoshi_shyguy(const uint8_t* buf, size_t sz) {
   if (g_yoshi_shyguy.stage_id == 0u || g_yoshi_shyguy.item_kind == 0u ||
       g_yoshi_shyguy.timer_reset == 0u || g_yoshi_shyguy.spawn_delay_step == 0u ||
       !(g_yoshi_shyguy.fall_speed_max > 0.0f) || !(g_yoshi_shyguy.damage_mul > 0.0f) ||
-      g_yoshi_shyguy.damage_threshold == 0u || !(g_yoshi_shyguy.hurtbox_scale[0] > 0.0f)) {
+      !(g_yoshi_shyguy.collision_ecb_up > 0.0f) || !(g_yoshi_shyguy.collision_ecb_down > 0.0f) ||
+      !(g_yoshi_shyguy.collision_ecb_right > 0.0f) || !(g_yoshi_shyguy.collision_ecb_left > 0.0f) ||
+      !(g_yoshi_shyguy.collision_ecb_scale > 0.0f) || g_yoshi_shyguy.damage_threshold == 0u ||
+      !(g_yoshi_shyguy.hurtbox_scale[0] > 0.0f)) {
     return -1;
   }
   return 0;

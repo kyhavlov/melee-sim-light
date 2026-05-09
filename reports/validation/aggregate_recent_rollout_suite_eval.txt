@@ -192,13 +192,13 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:2056
 
 == datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl ==
 rollout.best_len: 1169
-rollout.streak_count: 24
-rollout.streak_len.median: 459
+rollout.streak_count: 22
+rollout.streak_len.median: 500
 rollout.streak_len.p90: 974
 rollout.streak_len.p95: 1019
 rollout.streak_len.max: 1169
-rollout.first_mismatch_total: 23
-rollout.first_mismatch_seeded_total: 5
+rollout.first_mismatch_total: 21
+rollout.first_mismatch_seeded_total: 3
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:2864
 
 == datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
@@ -248,34 +248,34 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:2219
 
 == datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.msl ==
 rollout.best_len: 728
-rollout.streak_count: 76
-rollout.streak_len.median: 106
-rollout.streak_len.p90: 391
+rollout.streak_count: 67
+rollout.streak_len.median: 140
+rollout.streak_len.p90: 443
 rollout.streak_len.p95: 517
 rollout.streak_len.max: 728
-rollout.first_mismatch_total: 80
-rollout.first_mismatch_seeded_total: 47
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:3589
+rollout.first_mismatch_total: 69
+rollout.first_mismatch_seeded_total: 42
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:3651
 
 == datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/MilkyGracefulStingray.msl ==
-rollout.best_len: 914
-rollout.streak_count: 30
-rollout.streak_len.median: 140
-rollout.streak_len.p90: 362
-rollout.streak_len.p95: 564
-rollout.streak_len.max: 914
-rollout.first_mismatch_total: 33
-rollout.first_mismatch_seeded_total: 20
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:1633
+rollout.best_len: 915
+rollout.streak_count: 24
+rollout.streak_len.median: 173
+rollout.streak_len.p90: 564
+rollout.streak_len.p95: 647
+rollout.streak_len.max: 915
+rollout.first_mismatch_total: 23
+rollout.first_mismatch_seeded_total: 12
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:1620
 
 == datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.msl ==
 rollout.best_len: 536
-rollout.streak_count: 81
-rollout.streak_len.median: 99
+rollout.streak_count: 80
+rollout.streak_len.median: 101
 rollout.streak_len.p90: 310
 rollout.streak_len.p95: 406
 rollout.streak_len.max: 536
-rollout.first_mismatch_total: 84
+rollout.first_mismatch_total: 83
 rollout.first_mismatch_seeded_total: 41
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:2291
 rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:1
@@ -360,13 +360,13 @@ rollout.first_mismatch_seeded_total: 38
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:1879
 
 == suite summary ==
-overall.rollout.streak_count: 971
-overall.rollout.streak_len.median: 188
-overall.rollout.streak_len.p90: 741
+overall.rollout.streak_count: 953
+overall.rollout.streak_len.median: 196
+overall.rollout.streak_len.p90: 743
 overall.rollout.streak_len.p95: 974
 overall.rollout.streak_len.max: 2513
 overall.rollout.best_len.max: 2513
-overall.rollout.first_mismatch_total: 994
-overall.rollout.first_mismatch_seeded_total: 446
-overall.rollout.ignored_first_mismatch_top: state_flags[4]&0x80:65397
+overall.rollout.first_mismatch_total: 970
+overall.rollout.first_mismatch_seeded_total: 431
+overall.rollout.ignored_first_mismatch_top: state_flags[4]&0x80:65446
 overall.rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:5

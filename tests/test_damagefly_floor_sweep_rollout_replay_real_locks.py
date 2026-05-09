@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from argparse import Namespace
 from pathlib import Path
 
 import numpy as np
@@ -13,6 +14,7 @@ ACT_DAMAGE_FLY_N = 0x0058
 ACT_DAMAGE_FLY_TOP = 0x005A
 ACT_DOWN_BOUND_U = 0x00B7
 ACT_PASSIVE = 0x00C7
+ACT_PASSIVE_STAND_F = 0x00C8
 ACT_PASSIVE_STAND_B = 0x00C9
 
 
@@ -422,3 +424,51 @@ def test_fod_height_platform_damagefly_endpoint_contacts_stay_airborne(
     assert int(out["on_ground"][player]) == int(ref["on_ground"][player]) == 0
     assert float(out["pos_x"][player]) == pytest.approx(float(ref["pos_x"][player]), abs=2e-6)
     assert float(out["pos_y"][player]) == pytest.approx(float(ref["pos_y"][player]), abs=2e-6)
+
+
+@pytest.mark.integration
+def test_fod_damagefly_rollout_uses_grizumi_collision_height_from_direct_events(
+    tmp_path: Path,
+) -> None:
+    # Replay-real rollout lock for EWT rec=4495 -> 4501 p0:
+    # - Fox/Falco is tumbling downward onto FoD's moving left platform.
+    # - Vanilla has already refreshed the platform collision line through grIzumi/mpLib and reaches
+    #   the DamageFly floor-tech ladder into PassiveStandF.
+    # - The Slippi `fod_platform` direct event carries raw grIzumi height, while collision consumes
+    #   the source MapLine transform world_y = local_y + height * 0.75f. Treating the event as the
+    #   old viewer-scale height leaves rollout airborne in DamageFlyTop.
+    # refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+    # refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_DamageFly_Coll,ftCo_80090184}
+    root = Path(__file__).resolve().parents[1]
+    slp = root / "replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.slp"
+    if not slp.exists():
+        pytest.skip(f"missing local replay: {slp}")
+
+    from tools.slippi.make_dataset_from_slp import _main_impl
+
+    out_path = tmp_path / "ElatedWearyTermite.msl"
+    _main_impl(
+        Namespace(
+            slp=str(slp),
+            out=str(out_path),
+            ports=None,
+            ucf_enabled=True,
+            ucf_cardinals_1_0_enabled=True,
+        )
+    )
+
+    p = 0
+    by_record = _run_rollout_records(out_path, 4495, (4500, 4501), ucf_cardinals_1_0_enabled=True)
+    ref_4500, out_4500 = by_record[4500]
+    assert int(out_4500["action_id"][p]) == int(ref_4500["action_id"][p]) == ACT_DAMAGE_FLY_TOP
+    assert int(out_4500["on_ground"][p]) == int(ref_4500["on_ground"][p]) == 0
+    assert float(out_4500["pos_y"][p]) == pytest.approx(float(ref_4500["pos_y"][p]), abs=1e-5)
+
+    ref_4501, out_4501 = by_record[4501]
+    assert int(out_4501["action_id"][p]) == int(ref_4501["action_id"][p]) == ACT_PASSIVE_STAND_F
+    assert int(out_4501["on_ground"][p]) == int(ref_4501["on_ground"][p]) == 1
+    assert int(out_4501["ground_id"][p]) == int(ref_4501["ground_id"][p]) == 0
+    assert int(out_4501["hitstun"][p]) == int(ref_4501["hitstun"][p]) == 0
+    assert float(out_4501["pos_x"][p]) == pytest.approx(float(ref_4501["pos_x"][p]), abs=1e-5)
+    assert float(out_4501["pos_y"][p]) == pytest.approx(float(ref_4501["pos_y"][p]), abs=1e-5)

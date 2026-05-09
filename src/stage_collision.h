@@ -243,3 +243,16 @@ const MslStageFloorLine* stage_collision_get_ledge_floor_line(uint32_t stage_id,
 // (it_8029C4D4) and, on hit, sets lifetime=1 and restores the pre-coll position.
 uint8_t stage_collision_item_line_hits_floor(uint32_t stage_id, float x0, float y0, float x1,
                                              float y1);
+
+// Item fixed-ECB wall helper for stage-owned item Coll callbacks. Returns 1 when the fixed ECB's
+// previous-to-current point/edge sweep hits the requested active wall graph. side: 0 = left wall,
+// 1 = right wall. The caller owns source-specific response such as direction flips.
+uint8_t stage_collision_item_fixed_ecb_sweep_hits_wall(uint32_t stage_id, int side,
+                                                       float prev_center_x, float prev_center_y,
+                                                       float center_x, float center_y,
+                                                       float ecb_left, float ecb_right,
+                                                       float ecb_bottom, float ecb_top);
+uint8_t stage_collision_item_fixed_ecb_sweep_hits_floor(uint32_t stage_id, float prev_center_x,
+                                                        float prev_center_y, float center_x,
+                                                        float center_y, float ecb_left,
+                                                        float ecb_right, float ecb_bottom);

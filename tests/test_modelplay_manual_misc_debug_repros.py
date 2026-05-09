@@ -218,7 +218,7 @@ def test_manual_damagefly_upthrow_recontacts_fod_platform_on_descent() -> None:
     assert int(history[990]["action_id"][falco]) == 183  # DownBoundU from damage floor collision.
     assert int(history[990]["on_ground"][falco]) == 1
     assert int(history[990]["ground_id"][falco]) == 1  # FoD right moving platform.
-    assert float(history[990]["pos_y"][falco]) == pytest.approx(16.58994, abs=1e-4)
+    assert float(history[990]["pos_y"][falco]) == pytest.approx(16.976116, abs=1e-4)
     final = history[max(history)]
     assert int(final["on_ground"][falco]) == 1
     assert int(final["ground_id"][falco]) == 1

@@ -9,6 +9,12 @@ extern "C" {
 #define MSL_YOSHI_SHYGUY_VPOS_COUNT 6
 #define MSL_YOSHI_SHYGUY_SPEED_COUNT 3
 #define MSL_YOSHI_SHYGUY_DYN_Y_COUNT 128
+// `itemVar.heiho.x24` cooldown written by active/return wall-turn callbacks.
+// refs/melee/src/melee/it/items/itheiho.c::{itHeiho_UnkMotion1_Coll,itHeiho_UnkMotion4_Coll}
+#define MSL_YOSHI_SHYGUY_TURN_DELAY_FRAMES 20u
+// Prefix-causal cache reconstruction only: live runtime owns wall turns through fixed ECB stage
+// collision. The seed lane observes Slippi x40_vel sign flips and ignores near-zero export jitter.
+#define MSL_YOSHI_SHYGUY_VISIBLE_TURN_MIN_ABS_VX 0.05f
 
 typedef struct MslYoshiShyguyParams {
   uint8_t loaded;
@@ -27,6 +33,11 @@ typedef struct MslYoshiShyguyParams {
   float spawn_right_x;
   float state4_speed_mul;
   float jitter_y_amp;
+  float collision_ecb_up;
+  float collision_ecb_down;
+  float collision_ecb_right;
+  float collision_ecb_left;
+  float collision_ecb_scale;
   uint16_t damage_threshold;
   uint16_t hurtbox_count;
   float hurtbox_a_offset[2][3];

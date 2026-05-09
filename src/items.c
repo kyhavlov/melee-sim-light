@@ -367,6 +367,35 @@ static inline void yoshi_shyguy_clear_rollout_rng_owner_if_live(MslBatch* batch,
     // seed-owned again and must not keep advancing Slippi's frame RNG lane.
     // refs/melee/src/melee/gr/grstory.c::grStory_801E3418
     batch->rollout_clock_rng_owned[bi] = (uint8_t)MSL_ROLLOUT_CLOCK_NONE;
+    batch->state.stage_yoshi_shyguy_spawn_rng_valid[bi] = 0u;
+  }
+}
+
+static inline void yoshi_shyguy_install_rollout_spawn_rng_seed(MslBatch* batch, int bi) {
+  if (batch == NULL || batch->rollout_clock_rng_owned == NULL) {
+    return;
+  }
+  if (batch->rollout_clock_rng_owned[bi] !=
+          (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED_YOSHI_SHYGUY ||
+      batch->state.stage_yoshi_shyguy_spawn_rng_valid[bi] == 0u) {
+    return;
+  }
+  // Replay-seeded countdowns do not expose unrelated global HSD consumers between frame starts.
+  // The seed lane carries the source spawn-frame stream; install it immediately before
+  // grStory_801E3418's zero-timer RNG consumers so combat_rng_consume_* samples the same stream.
+  // refs/slippi-ssbm-asm/Recording/SendFrameStart.s
+  // refs/melee/src/melee/gr/grstory.c::{grStory_801E3418,set_shyguy_spawn_count}
+  // refs/melee/src/sysdolphin/baselib/random.c::{HSD_Randi,HSD_Randf}
+  const uint32_t seed = batch->state.stage_yoshi_shyguy_spawn_rng_seed[bi];
+  batch->state.frame_pre_random_seed[bi] = seed;
+  if (batch->debug_rng_shadow_seed != NULL) {
+    batch->debug_rng_shadow_seed[bi] = seed;
+  }
+  if (batch->debug_rng_seed_in != NULL) {
+    batch->debug_rng_seed_in[bi] = seed;
+  }
+  if (batch->debug_rng_seed_out != NULL) {
+    batch->debug_rng_seed_out[bi] = seed;
   }
 }
 
@@ -382,6 +411,7 @@ static inline void yoshi_shyguy_mark_rollout_rng_owner_consumed(MslBatch* batch,
     // refs/slippi-ssbm-asm/Recording/SendFrameStart.s
     // refs/melee/src/melee/gr/grstory.c::{grStory_801E3418,set_shyguy_spawn_count}
     batch->rollout_clock_rng_owned[bi] = (uint8_t)MSL_ROLLOUT_CLOCK_NONE;
+    batch->state.stage_yoshi_shyguy_spawn_rng_valid[bi] = 0u;
   }
 }
 
@@ -507,6 +537,52 @@ static inline uint8_t yoshi_shyguy_falling_state_crossed_generic_blast_clear(
   return (x > blast_bounds->right || x < blast_bounds->left || y < blast_bounds->bottom) ? 1u : 0u;
 }
 
+static uint8_t yoshi_shyguy_active_fixed_ecb_wall_contact(const MslYoshiShyguyParams* params,
+                                                          uint32_t stage_id, float facing_dir,
+                                                          float prev_pos_x, float prev_pos_y,
+                                                          float pos_x, float pos_y) {
+  if (params == NULL) {
+    return 0u;
+  }
+  const float scale = params->collision_ecb_scale;
+  const float ecb_top = params->collision_ecb_up * scale;
+  const float ecb_bottom = -params->collision_ecb_down * scale;
+  const float ecb_right = params->collision_ecb_right * scale;
+  const float ecb_left = -params->collision_ecb_left * scale;
+  const int wall_side = (facing_dir < 0.0f) ? 1 : 0;
+  // Active and return-flight Heiho call `it_8026DA70`, then `it_80276308` tests wall contact
+  // against the item CollData fixed ECB installed from Article ItemAttr.x40 by `it_80275DFC`.
+  // The queried wall graph is the wall ahead of the current facing direction.
+  // refs/melee/src/melee/it/items/itheiho.c::{itHeiho_UnkMotion1_Coll,itHeiho_UnkMotion4_Coll}
+  // refs/melee/src/melee/it/it_266F.c::it_8026DA70
+  // refs/melee/src/melee/it/it_2725.c::{it_80275DFC,it_80276308}
+  // refs/melee/src/melee/mp/mpcoll.c::mpColl_SetECBSource_Fixed
+  return stage_collision_item_fixed_ecb_sweep_hits_wall(stage_id, wall_side, prev_pos_x, prev_pos_y,
+                                                        pos_x, pos_y, ecb_left, ecb_right,
+                                                        ecb_bottom, ecb_top);
+}
+
+static uint8_t yoshi_shyguy_active_fixed_ecb_floor_contact(const MslYoshiShyguyParams* params,
+                                                           uint32_t stage_id, float prev_pos_x,
+                                                           float prev_pos_y, float pos_x,
+                                                           float pos_y) {
+  if (params == NULL) {
+    return 0u;
+  }
+  const float scale = params->collision_ecb_scale;
+  const float ecb_bottom = -params->collision_ecb_down * scale;
+  const float ecb_right = params->collision_ecb_right * scale;
+  const float ecb_left = -params->collision_ecb_left * scale;
+  // Active and return-flight Heiho call `it_8026DA70`; when the fixed-ECB mpColl pass reports
+  // contact but the wall-turn branch does not run, state 1 restarts its active animation and state
+  // 4 re-enters return flight. `it_8026DA70` does not copy CollData.cur_pos to Item.pos, so this
+  // helper only owns the boolean animation-reset branch.
+  // refs/melee/src/melee/it/items/itheiho.c::{itHeiho_UnkMotion1_Coll,itHeiho_UnkMotion4_Coll}
+  // refs/melee/src/melee/it/it_266F.c::it_8026DA70
+  return stage_collision_item_fixed_ecb_sweep_hits_floor(stage_id, prev_pos_x, prev_pos_y, pos_x,
+                                                         pos_y, ecb_left, ecb_right, ecb_bottom);
+}
+
 static int yoshi_shyguy_spawn_count(MslBatch* batch, int bi) {
   // Source calls set_shyguy_spawn_count twice; the second call overwrites the first, but both RNG
   // streams are consumed.
@@ -582,6 +658,8 @@ static void yoshi_shyguy_stage_update(MslBatch* batch, int bi) {
     batch->state.stage_yoshi_shyguy_timer[bi]--;
     return;
   }
+
+  yoshi_shyguy_install_rollout_spawn_rng_seed(batch, bi);
 
   // `reset_shyguy_timer` first samples timer_min + HSD_Randi(timer_rand), then immediately
   // overwrites the timer with 120. The sampled value is discarded but the RNG consumer is real and
@@ -6324,7 +6402,7 @@ static void yoshi_shyguy_items_update(MslBatch* batch, int bi) {
         batch->state.item_vel_x[ii] = 0.0f;
         batch->state.item_vel_y[ii] = 0.0f;
         batch->state.item_direction[ii] = (batch->state.item_pos_x[ii] < 0.0f) ? -1.0f : 1.0f;
-        batch->state.item_shyguy_delay[ii] = 20u;
+        batch->state.item_shyguy_delay[ii] = (uint16_t)MSL_YOSHI_SHYGUY_TURN_DELAY_FRAMES;
         batch->state.item_shyguy_delay_valid[ii] = 1u;
         batch->state.item_shyguy_dyn_y_phase[ii] = 0u;
         batch->state.item_shyguy_dyn_y_phase_valid[ii] = 1u;
@@ -6394,11 +6472,12 @@ static void yoshi_shyguy_items_update(MslBatch* batch, int bi) {
     //   itHeiho_UnkMotion4_Anim}
     // refs/melee/src/melee/it/items/itheiho.c::{itHeiho_UnkMotion1_Phys,itHeiho_UnkMotion4_Phys}
     // refs/melee/src/melee/it/item.c::Item_802697D4
-    if (has_blast_bounds != 0u) {
-      // `it_802D9714` sets the clear flag after an active Shy Guy has entered the interior and
-      // then crosses blast bounds with a 20-unit margin. x22 is hidden; direction plus the crossed
-      // side is enough for the legal-stage Shy Guy paths currently represented in replay rows.
-      // refs/melee/src/melee/it/items/itheiho.c::it_802D9714
+    if (has_blast_bounds != 0u && state == 1u) {
+      // Active state 1 calls `it_802D9714` from Phys. That helper sets the generic clear flag only
+      // after the Shy Guy has entered the interior and then crosses blast bounds with a 20-unit
+      // margin. x22 is hidden; direction plus the crossed side is enough for the legal-stage Shy
+      // Guy paths currently represented in replay rows.
+      // refs/melee/src/melee/it/items/itheiho.c::{itHeiho_UnkMotion1_Phys,it_802D9714}
       const float x = batch->state.item_pos_x[ii];
       const float y = batch->state.item_pos_y[ii];
       const float dir = batch->state.item_direction[ii];
@@ -6454,20 +6533,81 @@ static void yoshi_shyguy_items_update(MslBatch* batch, int bi) {
         export_vel_y = params->dyn_y_vel[0];
       }
     }
-    if (state == 4u && batch->state.item_shyguy_delay_valid[ii] != 0u &&
-        batch->state.item_shyguy_delay[ii] > 0u) {
+    const uint8_t turn_delay_started_positive =
+        (uint8_t)(batch->state.item_shyguy_delay_valid[ii] != 0u &&
+                  batch->state.item_shyguy_delay[ii] > 0u);
+    uint8_t turn_contact_allowed = 1u;
+    if (turn_delay_started_positive != 0u) {
+      batch->state.item_shyguy_delay[ii]--;
+      if (batch->state.item_shyguy_delay[ii] > 0u) {
+        turn_contact_allowed = 0u;
+      }
+    }
+    if (state == 4u && turn_delay_started_positive != 0u) {
       // Return-flight x24 turn/camera delay: Phys uses the source X speed for position, but the
       // post-frame item velocity is still the dynamic-bone/export velocity from Anim for the delay
       // prefix.
       // refs/melee/src/melee/it/items/itheiho.c::{it_802D9168,itHeiho_UnkMotion4_Phys}
       export_vel_x = batch->state.item_vel_x[ii];
       export_vel_y = batch->state.item_vel_y[ii];
-      batch->state.item_shyguy_delay[ii]--;
     }
     batch->state.item_shyguy_prev_vel_y[ii] = batch->state.item_vel_y[ii];
     batch->state.item_shyguy_prev_vel_y_valid[ii] = 1u;
+    const float prev_pos_x = batch->state.item_pos_x[ii];
+    const float prev_pos_y = batch->state.item_pos_y[ii];
     batch->state.item_pos_x[ii] += move_vel_x;
     batch->state.item_pos_y[ii] += move_vel_y;
+    if (has_blast_bounds != 0u && state == 4u &&
+        yoshi_shyguy_falling_state_crossed_generic_blast_clear(
+            &blast_bounds, batch->state.item_pos_x[ii], batch->state.item_pos_y[ii]) != 0u) {
+      // Return-flight state 4 does not call `it_802D9714`. It is entered from the low-damage
+      // callback path after `it_802D8EC8` sets xDCC_flag.b3, so the generic item proc clears it on
+      // exact side/bottom blast bounds after Phys/integration and before Coll.
+      // refs/melee/src/melee/it/items/itheiho.c::{it_802D8EC8,it_802D9168,
+      //   itHeiho_UnkMotion4_Phys}
+      // refs/melee/src/melee/it/item.c::{Item_802697D4,Item_802696CC}
+      item_slot_clear(batch, ii);
+      needs_sort = 1u;
+      continue;
+    }
+    const uint8_t wall_contact =
+        (uint8_t)(turn_contact_allowed != 0u &&
+                  yoshi_shyguy_active_fixed_ecb_wall_contact(
+                      params, batch->state.stage_id[bi], batch->state.item_direction[ii],
+                      prev_pos_x, prev_pos_y, batch->state.item_pos_x[ii],
+                      batch->state.item_pos_y[ii]) != 0u);
+    if (wall_contact != 0u) {
+      const float new_dir = -batch->state.item_direction[ii];
+      batch->state.item_direction[ii] = new_dir;
+      if (batch->state.item_shyguy_speed_index_valid[ii] != 0u) {
+        const uint8_t speed_index =
+            batch->state.item_shyguy_speed_index[ii] % MSL_YOSHI_SHYGUY_SPEED_COUNT;
+        export_vel_x = params->speed[speed_index] * new_dir;
+      } else {
+        export_vel_x = -export_vel_x;
+      }
+      batch->state.item_shyguy_delay[ii] = (uint16_t)MSL_YOSHI_SHYGUY_TURN_DELAY_FRAMES;
+      batch->state.item_shyguy_delay_valid[ii] = 1u;
+    } else if (yoshi_shyguy_active_fixed_ecb_floor_contact(
+                   params, batch->state.stage_id[bi], prev_pos_x, prev_pos_y,
+                   batch->state.item_pos_x[ii], batch->state.item_pos_y[ii]) != 0u) {
+      // `temp_r31 == 1` restarts the current active/return animation through
+      // `itHeiho_UnkMotion1_Anim_inline` or `it_802D9168`, which zeroes the exported dynamic-bone
+      // velocity for this post-frame and restarts the phase consumed by the next Anim callback.
+      // refs/melee/src/melee/it/items/itheiho.c::{itHeiho_UnkMotion1_Coll,itHeiho_UnkMotion4_Coll,
+      //   itHeiho_UnkMotion1_Anim_inline,it_802D9168}
+      if (state == 4u) {
+        batch->state.item_direction[ii] = (batch->state.item_pos_x[ii] < 0.0f) ? -1.0f : 1.0f;
+        batch->state.item_shyguy_delay[ii] = 0u;
+        batch->state.item_shyguy_delay_valid[ii] = 1u;
+      }
+      export_vel_x = 0.0f;
+      export_vel_y = 0.0f;
+      batch->state.item_shyguy_dyn_y_phase[ii] = 0u;
+      batch->state.item_shyguy_dyn_y_phase_valid[ii] = 1u;
+      batch->state.item_shyguy_prev_vel_y[ii] = 0.0f;
+      batch->state.item_shyguy_prev_vel_y_valid[ii] = 1u;
+    }
     batch->state.item_vel_x[ii] = export_vel_x;
     batch->state.item_vel_y[ii] = export_vel_y;
   }
@@ -6846,6 +6986,17 @@ void items_spawn_pre_physics(MslBatch* batch) {
                  (int16_t)pending_pulse_af == first_throwb_pulse_af)
                     ? 1u
                     : 0u;
+            if (is_first_throwb_pending && batch->state.throw_pulse_consumed[idx] != 0u) {
+              // ThrowB consumed first-command latch:
+              // The pending lane identifies the source command cursor, while the consumed lane
+              // says ftFx_Throw_Anim already consumed the one-shot throw_flags_b0 pulse before this
+              // seed. If no live shot remains, do not respawn the article or advance combo from the
+              // command flag alone.
+              // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
+              // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+              suppress_pending_article = 1u;
+              throw_command_authoritative = 1u;
+            }
             for (int vp = 0; vp < num_players; vp++) {
               if (vp == p) {
                 continue;
@@ -6865,12 +7016,16 @@ void items_spawn_pre_physics(MslBatch* batch) {
               }
               stale_victim_p = vp;
             }
-            if (stale_victim_p >= 0) {
+            if (stale_victim_p >= 0 && throw_seed_shot_count[p] != 0u) {
               // ThrowB pending command / stale victim-ring split:
               // - The command lane proves a throw_flags_b0 pulse is pending, but the unique victim is
-              //   already in same-owner throw-laser hitstun. In this path Melee carries item-domain
-              //   combo bookkeeping without emitting a new live article.
+              //   already in same-owner throw-laser hitstun and a live throw-side shot already
+              //   represents this callback phase. In this path Melee carries item-domain combo
+              //   bookkeeping without emitting another live article. When no shot is live, keep the
+              //   command path authoritative and spawn; ftFx_Throw_Anim still creates the article and
+              //   it_8029C4D4 owns the immediate BODY consume/hit decision.
               // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+              // refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C6CC,it_8029C4D4}
               // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007646C,ftColl_800763C0}
               if (is_first_throwb_pending && batch->state.throw_pulse_consumed[idx] == 0u) {
                 const size_t v_idx = msl_idx_player(bi, stale_victim_p);
@@ -6891,7 +7046,7 @@ void items_spawn_pre_physics(MslBatch* batch) {
               throw_command_authoritative = 1u;
             }
             if (!suppress_pending_article && is_first_throwb_pending &&
-                item_type_is_fox_laser(lp->shot_itkind)) {
+                throw_seed_shot_count[p] != 0u && item_type_is_fox_laser(lp->shot_itkind)) {
               const int callback_victim = throw_laser_unique_same_source_victim(batch, bi, p);
               if (callback_victim >= 0) {
                 // ThrowB first-command callback consume:
@@ -7186,7 +7341,8 @@ void items_spawn_pre_physics(MslBatch* batch) {
               const size_t v_idx = msl_idx_player(bi, vp);
               // ThrowB stale-latch context:
               // - defender already in ongoing hitstun from this same projectile kind.
-              if (action_id == (uint16_t)MSL_ACT_THROW_B && batch->state.hitstun[v_idx] > 0u &&
+              if (action_id == (uint16_t)MSL_ACT_THROW_B && throw_seed_shot_count[p] != 0u &&
+                  batch->state.hitstun[v_idx] > 0u &&
                   batch->state.last_attack_landed[v_idx] == lp->shot_itkind) {
                 stale_throw_pulse_context = 1u;
                 if (stale_throw_pulse_victim >= 0) {
@@ -7277,6 +7433,7 @@ void items_spawn_pre_physics(MslBatch* batch) {
                   if (batch->state.hitstun[v_idx] > 0u &&
                       batch->state.last_hit_by[v_idx] ==
                           item_source_port0_for_owner(batch, idx, p) &&
+                      throw_seed_shot_count[p] != 0u &&
                       batch->state.last_attack_landed[v_idx] == (uint8_t)lp->shot_itkind &&
                       batch->state.hitstun[v_idx] < stale_hitstun_thresh) {
                     stale_throwb_context = 1u;

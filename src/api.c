@@ -883,20 +883,13 @@ static inline uint8_t msl_reseed_seed_rollout_replay_frame_clock_owner(const Msl
   if (seed == NULL) {
     return (uint8_t)MSL_ROLLOUT_CLOCK_NONE;
   }
-  if (seed->stage_id == (uint32_t)MSL_STAGE_YOSHIS_STORY &&
-      seed->stage_yoshi_shyguy_valid_u8 != 0u && !msl_seed_has_live_yoshi_shyguy(seed)) {
-    // Replay rollout clock ownership for Yoshi's Story Shy Guy scheduler:
-    // `grStory_801E3418` decrements its stage timer only while no Heiho items are live, then
-    // consumes the current frame-start HSD RNG stream for pattern, speed, count, and jitter when
-    // the timer reaches zero. One-step seed rows are preprocessed with the simulated frame's
-    // random_seed; rollouts seeded before the spawn must continue that replay frame clock until the
-    // stage callback consumes it. This is hidden-state reconstruction for replay rollout, not a live
-    // gameplay mode gate.
-    // refs/slippi-ssbm-asm/Recording/SendFrameStart.s
-    // refs/melee/src/melee/gr/grstory.c::{grStory_801E3418,set_shyguy_spawn_count}
-    // refs/melee/src/sysdolphin/baselib/random.c::{HSD_Randi,HSD_Randf}
-    return (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED_YOSHI_SHYGUY;
-  }
+  const uint8_t yoshi_shyguy_spawn_seed_owner =
+      (uint8_t)((seed->stage_id == (uint32_t)MSL_STAGE_YOSHIS_STORY &&
+                 seed->stage_yoshi_shyguy_valid_u8 != 0u &&
+                 seed->stage_yoshi_shyguy_spawn_rng_seed_valid_u8 != 0u &&
+                 !msl_seed_has_live_yoshi_shyguy(seed))
+                    ? 1u
+                    : 0u);
   for (int p = 0; p < active_players; p++) {
     if (seed->opening_input_lock_timer[p] != 0u) {
       // Opening-countdown rollout rows need the replay frame clock so the final timer=1 step
@@ -1001,6 +994,20 @@ static inline uint8_t msl_reseed_seed_rollout_replay_frame_clock_owner(const Msl
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
       return (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED;
     }
+  }
+  if (yoshi_shyguy_spawn_seed_owner != 0u) {
+    // Replay rollout clock ownership for Yoshi's Story Shy Guy scheduler:
+    // `grStory_801E3418` decrements its stage timer only while no Heiho items are live, then
+    // consumes the current frame-start HSD RNG stream for pattern, speed, count, and jitter when
+    // the timer reaches zero. This owner is lower priority than other explicit replay-frame RNG
+    // consumers above: top-blast, Fighter_8006CDA4, throw/capture, and opening countdown owners
+    // must keep the normal frame-start stream advancing instead of freezing on the Shy Guy spawn
+    // seed. Rollouts seeded before an otherwise isolated Shy Guy spawn carry the source
+    // spawn-frame stream explicitly rather than advancing a synthetic frame clock.
+    // refs/slippi-ssbm-asm/Recording/SendFrameStart.s
+    // refs/melee/src/melee/gr/grstory.c::{grStory_801E3418,set_shyguy_spawn_count}
+    // refs/melee/src/sysdolphin/baselib/random.c::{HSD_Randi,HSD_Randf}
+    return (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED_YOSHI_SHYGUY;
   }
   return (uint8_t)MSL_ROLLOUT_CLOCK_NONE;
 }
@@ -1313,6 +1320,13 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
     batch->state.stage_yoshi_shyguy_timer[bi] = seed->stage_yoshi_shyguy_timer_u16;
     batch->state.stage_yoshi_shyguy_pattern[bi] = seed->stage_yoshi_shyguy_pattern_u8 % 6u;
     batch->state.stage_yoshi_shyguy_valid[bi] = seed->stage_yoshi_shyguy_valid_u8 ? 1u : 0u;
+    batch->state.stage_yoshi_shyguy_spawn_rng_seed[bi] =
+        seed->stage_yoshi_shyguy_spawn_rng_seed_u32;
+    batch->state.stage_yoshi_shyguy_spawn_rng_valid[bi] =
+        (seed->stage_yoshi_shyguy_spawn_rng_seed_valid_u8 &&
+         batch->state.stage_yoshi_shyguy_valid[bi] != 0u)
+            ? 1u
+            : 0u;
     batch->state.stage_dream_whispy_wind_dir[bi] =
         (seed->stage_dream_whispy_wind_dir_u8 <= 2u) ? seed->stage_dream_whispy_wind_dir_u8 : 0u;
     batch->state.stage_dream_whispy_wind_valid[bi] =
@@ -2861,9 +2875,14 @@ static void msl_batch_commit_rollout_clock_rng(MslBatch* batch) {
     if (clock_owner == (uint8_t)MSL_ROLLOUT_CLOCK_NONE) {
       continue;
     }
-    if (clock_owner == (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED ||
-        clock_owner == (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED_YOSHI_SHYGUY) {
+    if (clock_owner == (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED) {
       batch->state.frame_pre_random_seed[bi] += 0x10000u;
+    } else if (clock_owner == (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED_YOSHI_SHYGUY) {
+      // The Shy Guy owner carries an explicit spawn-frame HSD seed and installs it in
+      // yoshi_shyguy_stage_update when the timer reaches zero. Countdown frames leave the visible
+      // frame seed seed-owned; the fake `+0x10000` bridge is intentionally not used for this owner.
+      // refs/melee/src/melee/gr/grstory.c::grStory_801E3418
+      continue;
     } else if (batch->debug_rng_seed_out != NULL) {
       batch->state.frame_pre_random_seed[bi] = batch->debug_rng_seed_out[(size_t)bi];
     }

@@ -293,13 +293,19 @@ def test_stage_metadata_contains_fod_platform_transform_records() -> None:
     by_line = {int(rec.line_id): rec for rec in stage.platform_transforms}
     assert sorted(by_line) == [0, 1, 2]
     assert int(by_line[0].platform_id) == 1  # left
-    assert (float(by_line[0].x0), float(by_line[0].x1), float(by_line[0].height_coeff)) == pytest.approx(
-        (-49.5, -21.0, 0.80625)
-    )
+    assert (
+        float(by_line[0].x0),
+        float(by_line[0].x1),
+        float(by_line[0].y_const),
+        float(by_line[0].height_coeff),
+    ) == pytest.approx((-49.5, -21.0, 20.0, 0.75))
     assert int(by_line[1].platform_id) == 0  # right
-    assert (float(by_line[1].x0), float(by_line[1].x1), float(by_line[1].height_coeff)) == pytest.approx(
-        (21.0, 49.5, 0.80625)
-    )
+    assert (
+        float(by_line[1].x0),
+        float(by_line[1].x1),
+        float(by_line[1].y_const),
+        float(by_line[1].height_coeff),
+    ) == pytest.approx((21.0, 49.5, 28.0, 0.75))
     assert int(by_line[2].kind_id) == 2
     assert (float(by_line[2].x0), float(by_line[2].x1), float(by_line[2].y_const)) == pytest.approx(
         (-14.25, 14.25, 42.75)
@@ -397,6 +403,11 @@ def test_stage_item_yoshi_shyguy_known_rows() -> None:
     assert params.spawn_right_x == pytest.approx(304.0)
     assert params.state4_speed_mul == pytest.approx(1.5)
     assert params.jitter_y_amp == pytest.approx(3.0)
+    assert params.collision_ecb_up == pytest.approx(6.0)
+    assert params.collision_ecb_down == pytest.approx(6.0)
+    assert params.collision_ecb_right == pytest.approx(8.0)
+    assert params.collision_ecb_left == pytest.approx(8.0)
+    assert params.collision_ecb_scale == pytest.approx(0.8500000238)
     assert params.damage_threshold == 15
     assert len(params.hurtboxes) == 1
     assert params.hurtboxes[0].bone_id == 0
@@ -1354,7 +1365,7 @@ def test_runtime_move_tables_mslftsc1_matches_legacy_json_queries() -> None:
 )
 def test_known_data_artifact_readers_reject_stale_versions(tmp_path: Path, magic, version, reader, match) -> None:
     path = tmp_path / "stale.bin"
-    buf = bytearray(64)
+    buf = bytearray(84 if magic == STAGE_ITEM_OBJECT_MAGIC else 64)
     buf[:8] = magic
     struct.pack_into("<I", buf, 8, version - 1)
     path.write_bytes(bytes(buf))
@@ -1364,11 +1375,11 @@ def test_known_data_artifact_readers_reject_stale_versions(tmp_path: Path, magic
 
 def test_mslstio1_rejects_zero_hurtbox_contract(tmp_path: Path) -> None:
     path = tmp_path / "zero_hurtboxes.bin"
-    buf = bytearray(64)
+    buf = bytearray(84)
     buf[:8] = STAGE_ITEM_OBJECT_MAGIC
     struct.pack_into("<I", buf, 8, STAGE_ITEM_OBJECT_VERSION)
     struct.pack_into("<HHH", buf, 16, 6, 3, 128)
-    struct.pack_into("<H", buf, 62, 0)
+    struct.pack_into("<H", buf, 82, 0)
     path.write_bytes(bytes(buf))
     with pytest.raises(ValueError, match="invalid hurtbox_count"):
         read_mslstio1_yoshi_shyguy(path)
@@ -1394,6 +1405,13 @@ def test_mslstio1_rejects_zero_hurtbox_contract(tmp_path: Path) -> None:
                 "state4_speed_mul": 1.5,
                 "jitter_y_amp": 3.0,
                 "damage_threshold": 15,
+                "collision_ecb": {
+                    "up": 6.0,
+                    "down": 6.0,
+                    "right": 8.0,
+                    "left": 8.0,
+                    "scale": 0.85,
+                },
                 "hurtboxes": [],
                 "vpos": [0.0] * 6,
                 "speed": [1.0] * 3,

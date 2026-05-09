@@ -403,9 +403,10 @@ Recommended sequence for the next deep passes:
     `0x18` stride, includes the dynamic child chain rooted at part 17, and emits dynamic-chain data
     consumed by `src/anim_pose.c`. Runtime carries fixed-capacity dynamic-node pose state, updates it
     before hurtcap refresh, and samples dynamic collision matrices for BODY hurtcap endpoints before
-    `lbColl_8000805C`. `SSDYNN01` v5 owns the dynamic-collision submotion predicate plus the
-    source `ftData.x2C->x8` collider rows, and runtime carries dynamic state only through generated
-    dynamic-collision owner submotions. A broad static
+    `lbColl_8000805C`. `SSDYNN01` v6 owns the dynamic-collision submotion predicate, reserved-empty
+    source-step owner index, and source `ftData.x2C->x8` collider rows; runtime carries dynamic
+    state only through generated dynamic-collision owner submotions and rejects non-empty
+    source-step indexes. A broad static
     grounded-common-attack application
     was tested and rejected: it fixed `BHH:1599` but regressed suite totals and introduced Fox
     BODY false negatives because static SSANIM lacks the persisted `lb_8001044C` dynamic-node
@@ -689,7 +690,8 @@ Recommended sequence for the next deep passes:
 - Roadmap family: former `F08b_body_contact_geometry_residual` no longer emits as one broad bucket
   in the refreshed taxonomy, and no parent-owned collision/pose residual bucket remains.
   The implemented runtime/seed sub-owners cover the shared BODY primitive surface: SSDYNN01
-  dynamic-chain collision pose (Fox JumpB/LandingFallSpecial/AttackHi3 owner predicate), Turn internal-facing hurtcaps, per-HitCapsule `victims_1`
+  dynamic-chain collision pose (Fox JumpB/LandingFallSpecial/AttackHi3/CatchDash owner predicate),
+  Turn internal-facing hurtcaps, per-HitCapsule `victims_1`
   preservation, GuardSetOff onset lineage, swept/same-group clank, Escape floor-edge pose
   selection, same-frame/enable-edge HitCapsule x58/x4C continuity, CliffAttack hitbox extraction,
   enable-edge phantom/tip-log handling, narrowed AttackAirN dense-latch preservation,
@@ -714,11 +716,13 @@ Recommended sequence for the next deep passes:
     `lbColl_8000805C` path. The runtime update follows the supported `lb_8001044C`
     segment-vector owner: previous child position, current animation segment vector, descriptor
     follow/down/cone/decay constants, and carried correction axis/angle produce the next
-    dynamic-chain collision matrix. Dynamic collision applicability is an extracted `SSDYNN01` v5
+    dynamic-chain collision matrix. Dynamic collision applicability is an extracted `SSDYNN01` v6
     owner predicate, not a C-side raw `msid=58` gate, and sequential state carry uses a separate
-    state-valid flag from the collision-apply flag. The rejected hardcoded runtime primitive
-    overlay, generated one-slice overlay, broad grounded-attack bake, and matrix-primary /
-    pose-order probe remain documented as rejected bridges.
+    state-valid flag from the collision-apply flag. The v6 source-step owner index is currently
+    required empty and runtime rejects non-empty indexes after the DamageAir2 source-step attempt
+    was rejected. The rejected hardcoded runtime primitive overlay, generated one-slice overlay,
+    broad grounded-attack bake, and matrix-primary / pose-order probe remain documented as rejected
+    bridges.
   - `BHH:1163`: standing Turn internal-facing hurtcaps are implemented and protected.
   - `BHH:1169`, `TBK:5523`, `TBK:5247`, AGN/body-overlap rows remain negative/adjacent sentinels.
 - Reproducibility:

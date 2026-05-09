@@ -1883,10 +1883,22 @@ uint8_t stage_collision_floor_line_world(const MslBatch* batch, int bi,
     } else if (rec->kind_id == (uint8_t)MSLSTG01_PLATFORM_TRANSFORM_HEIGHT &&
                rec->platform_id < 2u) {
       const size_t idx = (size_t)bi * 2u + (size_t)rec->platform_id;
-      const float h = batch->state.stage_fod_platform_valid[idx]
-                          ? batch->state.stage_fod_platform_height[idx]
-                          : rec->y_const;
-      out->y0 = h * rec->height_coeff;
+      const uint8_t height_valid = batch->state.stage_fod_platform_valid[idx];
+      const float h = height_valid ? batch->state.stage_fod_platform_height[idx] : rec->y_const;
+      if (height_valid != 0u && slot->fod_motion.loaded != 0u &&
+          fabsf(h - slot->fod_motion.hidden_target_height) <= 1.0e-4f) {
+        // `grIzumi_801CC358` sends the platform to the generated hidden target. Keep the hidden
+        // reconstruction bounded to that exact target and place the collision line below the main
+        // floor so the ordinary floor solver selects Dream Land/FoD ground when a falling fighter
+        // crosses both surfaces. Visible heights use the source MapLine local-y offset below.
+        // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+        // refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
+        // data/stages/bin/griz.bin::MSLSTG01 platform_motions.hidden_target_height
+        out->y0 = h * rec->height_coeff;
+        out->y1 = out->y0;
+        return 1u;
+      }
+      out->y0 = line->y0 + h * rec->height_coeff;
       out->y1 = out->y0;
     }
     return 1u;
@@ -2201,6 +2213,187 @@ uint8_t stage_collision_item_line_hits_floor(uint32_t stage_id, float x0, float 
     }
   }
   return 0;
+}
+
+static inline uint8_t stage_vertical_wall_intersects_sweep_source(float wall_x, float wall_y0,
+                                                                  float wall_y1, float ax0,
+                                                                  float ay0, float ax1, float ay1) {
+  // Mirrors `mpLineIntersectionV`: vertical wall checks admit small endpoint overshoots
+  // (0.1 world units) and clamp to the segment endpoint.
+  // refs/melee/src/melee/mp/mplib.c::mpLineIntersectionV
+  const float min_y = (wall_y0 < wall_y1) ? wall_y0 : wall_y1;
+  const float max_y = (wall_y0 > wall_y1) ? wall_y0 : wall_y1;
+  if ((ay0 < min_y && ay1 < min_y) || (max_y < ay0 && max_y < ay1)) {
+    return 0u;
+  }
+  if (wall_y0 < wall_y1) {
+    if (ax1 - wall_x < -0.0001f || ax0 - wall_x > 0.0001f) {
+      return 0u;
+    }
+  } else {
+    if (ax0 - wall_x < -0.0001f || ax1 - wall_x > 0.0001f) {
+      return 0u;
+    }
+  }
+  const float dx = ax1 - ax0;
+  if (fabsf(dx) < 0.0001f) {
+    return 0u;
+  }
+  const float y = (((ay1 - ay0) / dx) * (wall_x - ax0)) + ay0;
+  if (y < min_y) {
+    return (uint8_t)((y - min_y) >= -0.1f);
+  }
+  if (y > max_y) {
+    return (uint8_t)((y - max_y) <= 0.1f);
+  }
+  return 1u;
+}
+
+static inline uint8_t stage_wall_line_intersects_sweep_segment(const MslStageWallLine* seg,
+                                                               int side, float ax0, float ay0,
+                                                               float ax1, float ay1) {
+  if (seg == NULL || !stage_line_is_active_for_item_collision(seg->fighter_solid)) {
+    return 0u;
+  }
+  const float min_x = (ax0 < ax1) ? ax0 : ax1;
+  const float max_x = (ax0 > ax1) ? ax0 : ax1;
+  const float min_y = (ay0 < ay1) ? ay0 : ay1;
+  const float max_y = (ay0 > ay1) ? ay0 : ay1;
+  if (seg->max_x < min_x || seg->min_x > max_x || seg->max_y < min_y || seg->min_y > max_y) {
+    return 0u;
+  }
+  if (fabsf(seg->x0 - seg->x1) <= 0.0001f) {
+    if ((side == 0 && ax0 <= ax1) || (side == 1 && ax0 >= ax1)) {
+      return stage_vertical_wall_intersects_sweep_source(seg->x0, seg->y0, seg->y1, ax0, ay0, ax1,
+                                                         ay1);
+    }
+    return 0u;
+  }
+  return stage_segment_intersects(ax0, ay0, ax1, ay1, seg->x0, seg->y0, seg->x1, seg->y1);
+}
+
+static uint8_t stage_wall_graph_hits_fixed_ecb_sweep(const MslStageWallGraph* graph, int side,
+                                                     float prev_cx, float prev_cy, float cx,
+                                                     float cy, float ecb_left, float ecb_right,
+                                                     float ecb_bottom, float ecb_top) {
+  if (graph == NULL || graph->lines == NULL || graph->line_count == 0u) {
+    return 0u;
+  }
+  const float side_prev_x = prev_cx + ((side == 0) ? ecb_right : ecb_left);
+  const float side_prev_y = prev_cy;
+  const float side_cur_x = cx + ((side == 0) ? ecb_right : ecb_left);
+  const float side_cur_y = cy;
+  const float bottom_prev_x = prev_cx;
+  const float bottom_prev_y = prev_cy + ecb_bottom;
+  const float bottom_cur_x = cx;
+  const float bottom_cur_y = cy + ecb_bottom;
+  const float top_prev_x = prev_cx;
+  const float top_prev_y = prev_cy + ecb_top;
+  const float top_cur_x = cx;
+  const float top_cur_y = cy + ecb_top;
+  for (size_t i = 0; i < graph->line_count; i++) {
+    const MslStageWallLine* seg = &graph->lines[i];
+    if (stage_wall_line_intersects_sweep_segment(seg, side, side_prev_x, side_prev_y, side_cur_x,
+                                                 side_cur_y) ||
+        stage_wall_line_intersects_sweep_segment(seg, side, bottom_prev_x, bottom_prev_y,
+                                                 bottom_cur_x, bottom_cur_y) ||
+        stage_wall_line_intersects_sweep_segment(seg, side, top_prev_x, top_prev_y, top_cur_x,
+                                                 top_cur_y) ||
+        stage_wall_line_intersects_sweep_segment(seg, side, bottom_cur_x, bottom_cur_y, side_cur_x,
+                                                 side_cur_y) ||
+        stage_wall_line_intersects_sweep_segment(seg, side, top_cur_x, top_cur_y, side_cur_x,
+                                                 side_cur_y)) {
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
+uint8_t stage_collision_item_fixed_ecb_sweep_hits_wall(uint32_t stage_id, int side,
+                                                       float prev_center_x, float prev_center_y,
+                                                       float center_x, float center_y,
+                                                       float ecb_left, float ecb_right,
+                                                       float ecb_bottom, float ecb_top) {
+  const MslStageWallGraph* graph =
+      (side == 0) ? stage_collision_get_left_wall_graph(stage_id)
+                  : ((side == 1) ? stage_collision_get_right_wall_graph(stage_id) : NULL);
+  if (graph == NULL || graph->lines == NULL || graph->line_count == 0u) {
+    return 0u;
+  }
+  const float sweep_min_x = fminf(fminf(prev_center_x + ecb_left, prev_center_x + ecb_right),
+                                  fminf(center_x + ecb_left, center_x + ecb_right));
+  const float sweep_max_x = fmaxf(fmaxf(prev_center_x + ecb_left, prev_center_x + ecb_right),
+                                  fmaxf(center_x + ecb_left, center_x + ecb_right));
+  const float sweep_min_y = fminf(fminf(prev_center_y + ecb_bottom, prev_center_y + ecb_top),
+                                  fminf(center_y + ecb_bottom, center_y + ecb_top));
+  const float sweep_max_y = fmaxf(fmaxf(prev_center_y + ecb_bottom, prev_center_y + ecb_top),
+                                  fmaxf(center_y + ecb_bottom, center_y + ecb_top));
+  if (sweep_max_x < graph->min_x || sweep_min_x > graph->max_x || sweep_max_y < graph->min_y ||
+      sweep_min_y > graph->max_y) {
+    return 0u;
+  }
+  return stage_wall_graph_hits_fixed_ecb_sweep(graph, side, prev_center_x, prev_center_y, center_x,
+                                               center_y, ecb_left, ecb_right, ecb_bottom, ecb_top);
+}
+
+uint8_t stage_collision_item_fixed_ecb_sweep_hits_floor(uint32_t stage_id, float prev_center_x,
+                                                        float prev_center_y, float center_x,
+                                                        float center_y, float ecb_left,
+                                                        float ecb_right, float ecb_bottom) {
+  const MslStageSlot* slot = stage_slot(stage_id);
+  if (slot == NULL || !slot->loaded || slot->floor_lines == NULL || slot->floor_line_count == 0u) {
+    return 0u;
+  }
+  if (center_y > prev_center_y) {
+    return 0u;
+  }
+  // Fixed-ECB item collision calls `mpColl_800471F8`, which loads the ItemAttr.x40 fixed ECB
+  // (`mpColl_LoadECB_inline(..., 6)`) and runs the normal floor solver. For the Shy Guy callers
+  // that only test the boolean return, the source-owned visible effect is the active animation
+  // reset; `it_8026DA70` does not copy CollData.cur_pos back to Item.pos.
+  // Floor admission follows mpCheckFloorRemap's floor directionality: after the reset, the next
+  // upward child-JObj delta is not another floor hit even if the previous bottom point was just
+  // below the floor plane.
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_8004ACE4}
+  // refs/melee/src/melee/mp/mplib.c::mpCheckFloorRemap
+  // refs/melee/src/melee/it/it_266F.c::it_8026DA70
+  const float bottom_prev_lx = prev_center_x + ecb_left;
+  const float bottom_prev_rx = prev_center_x + ecb_right;
+  const float bottom_prev_cx = prev_center_x;
+  const float bottom_prev_y = prev_center_y + ecb_bottom;
+  const float bottom_cur_lx = center_x + ecb_left;
+  const float bottom_cur_rx = center_x + ecb_right;
+  const float bottom_cur_cx = center_x;
+  const float bottom_cur_y = center_y + ecb_bottom;
+  const float sweep_min_x =
+      fminf(fminf(bottom_prev_lx, bottom_prev_rx), fminf(bottom_cur_lx, bottom_cur_rx));
+  const float sweep_max_x =
+      fmaxf(fmaxf(bottom_prev_lx, bottom_prev_rx), fmaxf(bottom_cur_lx, bottom_cur_rx));
+  const float sweep_min_y = fminf(bottom_prev_y, bottom_cur_y);
+  const float sweep_max_y = fmaxf(bottom_prev_y, bottom_cur_y);
+  for (size_t i = 0; i < slot->floor_line_count; i++) {
+    const MslStageFloorLine* seg = &slot->floor_lines[i];
+    if (!stage_line_is_active_for_item_collision(seg->fighter_solid)) {
+      continue;
+    }
+    const float seg_min_x = fminf(seg->x0, seg->x1);
+    const float seg_max_x = fmaxf(seg->x0, seg->x1);
+    const float seg_min_y = fminf(seg->y0, seg->y1);
+    const float seg_max_y = fmaxf(seg->y0, seg->y1);
+    if (sweep_max_x < seg_min_x || sweep_min_x > seg_max_x || sweep_max_y < seg_min_y ||
+        sweep_min_y > seg_max_y) {
+      continue;
+    }
+    if (stage_floor_segment_intersects_item(bottom_prev_lx, bottom_prev_y, bottom_cur_lx,
+                                            bottom_cur_y, seg->x0, seg->y0, seg->x1, seg->y1) ||
+        stage_floor_segment_intersects_item(bottom_prev_cx, bottom_prev_y, bottom_cur_cx,
+                                            bottom_cur_y, seg->x0, seg->y0, seg->x1, seg->y1) ||
+        stage_floor_segment_intersects_item(bottom_prev_rx, bottom_prev_y, bottom_cur_rx,
+                                            bottom_cur_y, seg->x0, seg->y0, seg->x1, seg->y1)) {
+      return 1u;
+    }
+  }
+  return 0u;
 }
 
 static void stage_collision_update_fod_platform_motion(MslBatch* batch) {

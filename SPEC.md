@@ -753,10 +753,12 @@ Recent deltas to reflect here (do not let these get “lost in chat logs”):
   grounded fighters remain on their current platform through `mpLib_8004DD90_Floor`, and
   down-input Pass uses the extracted `p_ftCommonData->{x464,x468,x470,x46C}` thresholds/velocity
   plus `mpUpdateFloorSkip`-shaped skip gating. FoD floor collision consumes seeded
-  replay/eval platform heights when present and otherwise free-runs the `grIzumi_801CC358`
-  RNG/wait/target scheduler from generated `GrIz.dat::yakumono_param` metadata; both paths update
-  MSLSTG01 v7 platform transform records before fighter collision and webplay/modelplay debug
-  stage output. Yoshi's Story keeps the raw center raised segment debug-visible but
+  replay/eval raw grIzumi platform heights when present and otherwise free-runs the
+  `grIzumi_801CC358` RNG/wait/target scheduler from generated `GrIz.dat::yakumono_param`
+  metadata; both paths update MSLSTG01 platform transform records before fighter collision. FoD
+  side-platform collision uses the source `mpLib_80055E9C` MapLine transform
+  `world_y = source_local_y + current_height * 0.75`, distinct from the viewer/visual platform
+  scale. Yoshi's Story keeps the raw center raised segment debug-visible but
   non-fighter-solid and admits Randall as a generated transformed pass-through floor. Grounded
   riders already attached to a moving stage-object floor inherit that transform through the
   generated `MSLMSO01` `GROUNDED_STAGE_OBJECT_CARRY_COLL` callback class, covering
@@ -812,21 +814,29 @@ Recent deltas to reflect here (do not let these get “lost in chat logs”):
   active-motion/state-delay/lifecycle slices: state-0 delay, active state 1/4 X-speed, state 2
   generated item max-fall clamp plus state 3 gravity, blast-bound clear, and the active dynamic-bone Y
   recompute from the generated `MSLSTIO1` GrSt.dat Heiho child-JObj `HSD_A_J_TRAY` FObj delta table
-  using prefix-causal previous velocity plus active AObj phase. The phase lane is current hidden
-  runtime state, not a replay-future bridge. Runtime also models the source no-live-Heiho stage
+  using prefix-causal previous velocity plus active AObj phase. Active state 1/4 wall turnarounds use
+  the generated Heiho Article `ItemAttr.x40` fixed ECB source plus `ItemAttr.x60` scale and the
+  `it_80276308` wall-contact owner after item position integration; the replay seed lane
+  reconstructs the resulting 20-frame `itemVar.heiho.x24` turn cooldown from prefix-visible
+  velocity sign flips. The phase lane is current hidden runtime state, not a replay-future bridge.
+  Runtime also models the source no-live-Heiho stage
   scheduler's timer, discarded reset-timer RNG consume, two `set_shyguy_spawn_count` calls, and
-  per-spawn jitter; replay rollouts carry the frame-start RNG clock only until the zero-timer spawn
-  callback consumes it, then live Heiho frames return to seed-owned RNG state. This still does not
-  close full autonomous Yoshi Shy Guy ownership: collision turnarounds and some free-running
-  stage-object item interactions remain open. Knocked/falling state 2/3 blast clear is the generic
-  item post-Phys owner (`Item_802697D4 -> Item_802696CC`), so it clears on
-  side/bottom blast bounds without the active-state `it_802D9714` 20-unit return margin. Dream Land
-  Whispy/apple scheduling is also separate and must not be substituted with replay-next lanes
+  per-spawn jitter; replay rollouts seeded during a no-live countdown carry an explicit
+  `stage_yoshi_shyguy_spawn_rng_seed_u32` lane and install it only at the zero-timer spawn callback,
+  then live Heiho frames return to seed-owned RNG state. This replaces the old synthetic
+  `+0x10000` Shy Guy frame clock but still does not close full autonomous Yoshi Shy Guy ownership:
+  unrelated global HSD consumer order before the spawn and some free-running stage-object item
+  interactions remain open. Knocked/falling state 2/3 and low-damage return-flight state 4 blast
+  clear are the generic item post-Phys owner (`Item_802697D4 -> Item_802696CC`), so they clear on
+  exact side/bottom blast bounds without the active-state-1 `it_802D9714` 20-unit return margin.
+  Dream Land Whispy/apple scheduling is also separate and must not be substituted with replay-next lanes
   (`src/items.c`, `data/stage_items/yoshi_shyguy.bin`; refs/melee/src/melee/gr/grstory.c::grStory_801E3418,
   refs/melee/src/melee/it/items/itheiho.c::{
   it_802D8618,itHeiho_UnkMotion0_Phys,itHeiho_UnkMotion1_Phys,itHeiho_UnkMotion2_Phys,
-  itHeiho_UnkMotion3_Phys,itHeiho_UnkMotion4_Phys,it_802D8EC8,it_802D98C4},
-  refs/melee/src/melee/it/item.c::{Item_802697D4,Item_802696CC}).
+  itHeiho_UnkMotion3_Phys,itHeiho_UnkMotion4_Phys,itHeiho_UnkMotion1_Coll,
+  itHeiho_UnkMotion4_Coll,it_802D8EC8,it_802D98C4},
+  refs/melee/src/melee/it/item.c::{Item_802697D4,Item_802696CC},
+  refs/melee/src/melee/it/it_2725.c::{it_80275DFC,it_80276308}).
 - Dream Land Whispy wind is a stage-owned fighter horizontal force, not item motion. The runtime
   consumes generated `MSLWHSP1` GrOp.dat wind speed/rectangles and applies the current
   `grOldPupupu.xDC` wind direction after fighter collision/platform carry, matching
@@ -2327,7 +2337,10 @@ Fox/Falco special-owner split (2026-04-17):
     no-live-Heiho Yoshi's Story scheduler rows, preprocessing stores
     `seed_t.frame_pre_random_seed` from the simulated pre-frame (`input_t := pre(i)`) so
     `grStory_801E3418` starts from the callback frame's Slippi/HSD seed rather than the previous
-    post-frame row.
+    post-frame row. For replay rollouts that start before the timer reaches zero, preprocessing
+    also stores `stage_yoshi_shyguy_spawn_rng_seed_u32`, the source frame-start stream for that
+    future zero-timer spawn callback; runtime installs it only when the scheduler consumes Shy Guy
+    RNG.
   - `Fall_Coll` fastfall rows whose loaded ECB bottom is above the fighter root can still publish
     hard-floor and ledge-floor landings through the shared flags-6 callback owner when a
     prefix-causal `CollData_X130_Locked` owner or a true adjacent ledge-floor continuation owns the
@@ -4489,9 +4502,10 @@ This is a living, comprehensive list of Melee-relevant systems. Any time we beco
     - Derive `action_frame` as `floor(cur_anim_frame)` from that accumulator for table lookups and comparisons.
     - On motion-state entry, reset `cur_anim_frame` as `anim_start - frame_speed_mul` (per `Fighter_ChangeMotionState`), so the next
       anim-advance produces `anim_start`.
-  - **Known blocker**: DamageAir hitstun hurtcap pose can diverge from both replay-visible `action_frame` and seeded `anim_frame_f32`.
-    TBK rec=1575 Dolphin forensics show airborne DamageAir2 hurtcaps using a Damage AObj pose clock not represented in the current seed/model.
-    Add an explicit DamageAir AObj pose-clock seed/model so BODY contact uses the correct hurtcap pose without temporary contact suppression.
+  - DamageAir2 source-order BODY pose remains open. A generated source-step dynamic owner
+    temporarily matched some Shine/DamageAir rows but regressed other source-valid BODY contacts, so
+    this stack keeps the pre-existing Shine/DamageAir entry-pose bridge as honest runtime debt and
+    does not claim DamageAir2 dynamic-chain closure.
 
 4) Locomotion + physics core (**PARTIAL**)
 - Ground/air movement, friction/traction, gravity/terminal velocity, fastfall, jumps (incl. double jump).
@@ -5022,8 +5036,9 @@ BODY collision-space residual split and rejected seed bridge:
   `data/anims/{fox,falco}.dyn.bin`, keeps runtime dynamic-node pose state in fixed-capacity
   per-player arrays, updates that state before hurtcap refresh, and lets hurtcap world endpoints
   sample a dynamic collision matrix before `lbColl_8000805C` runs. BODY admission still uses the
-  normal `ftColl_80078C70` -> `lbColl_8000805C` predicate. `SSDYNN01` v5 carries the audited
-  dynamic-collision owner submotion index plus `ftData.x2C->x8` collider rows, so C gameplay no
+  normal `ftColl_80078C70` -> `lbColl_8000805C` predicate. `SSDYNN01` v6 carries the audited
+  dynamic-collision owner submotion index, reserved-empty source-step owner submotion index, and
+  `ftData.x2C->x8` collider rows, so C gameplay no
   longer gates this owner on raw Fox/JumpB/CatchDash/AttackHi3 msid branches. Runtime carries
   dynamic-node state sequentially only inside generated dynamic-collision owner submotions; local
   non-owner submotions clear the state instead of preserving an unseeded hidden carry. The
@@ -5041,22 +5056,25 @@ BODY collision-space residual split and rejected seed bridge:
   `lb_8001044C` segment-vector path for the supported target domain: previous child position,
   current animation segment vector, descriptor follow/down/decay constants, carried correction
   axis/angle, and source `ftData.x2C->x8` segment/sphere avoidance produce the next child position
-  and collision-matrix rotation before `lb_8000B1CC`. The previous lite cone clamp
-  against the current animation vector was rejected because source `lb_8001044C` applies descriptor
-  `unk_68` against a separate natural direction built from descriptor `unk_58` / live JObj
-  rotation; that cone remains disabled until the natural-direction owner is modeled. Non-sequential
-  replay seeds reconstruct the same deterministic state by replaying
-  that action-local dynamic update from frame 0 to the seeded integer animation frame. This replay
+  and collision-matrix rotation before `lb_8000B1CC`. The source-step subset is hard-disabled in
+  runtime for this stack: generated data must keep the index empty and the loader rejects non-empty
+  source-step indexes until descriptor natural direction, max-step, cone clamp, local dynamic JObj
+  rotation writeback, and source-order timing land as one validation-clean owner. Current
+  collision owners keep the validated base-vector approximation. Non-sequential replay seeds
+  reconstruct the same deterministic
+  state by replaying that action-local dynamic update from frame 0 to the seeded integer animation
+  frame. This replay
   is `O(action_frame)` on non-sequential reseed/pre-combat reconstruction only; normal sequential
   rollout carries the fixed dynamic state forward. No replay authority, record-id branch, cap/frame
   primitive injection, runtime overlay table, or broad permissive geometry sweep is used.
-- This partially models the Fox JumpB/LandingFallSpecial/CatchDash/AttackHi3 / `SSDYNN01`
+- This partially models the Fox JumpB/LandingFallSpecial/CatchDash/AttackHi3 /
+  `SSDYNN01`
   dynamic-chain collision-pose sub-owner. The retained runtime is source-bounded for the supported
-  segment/sphere surface, but full `lb_8001044C` ownership remains incomplete until the
-  natural-direction/JObj-rotation cone path is represented.
+  segment/sphere surface, but full `lb_8001044C` ownership remains incomplete for non-source-step
+  submotions until their natural-direction/JObj-rotation cone paths are separately audited.
   JumpB was added after Dolphin pre-ftColl probes on `PPA:3182` showed Falco AttackAirB's hitbox
   already matched runtime, while Fox hurtcap-12 endpoints consumed the live `ftData.x2C` dynamic
-  chain before `lb_8000B1CC`. The retained v5 contract treats the collision-owner index as
+  chain before `lb_8000B1CC`. The retained v6 contract treats the collision-owner index as
   current-frame dynamic matrix ownership even when the `lb_8001044C` update has no nonzero
   correction carry; a broad JumpB facing flip was rejected because it fixed `PPA:3182` but regressed
   protected aggregate BODY rows and rollout totals.
@@ -5064,8 +5082,9 @@ BODY collision-space residual split and rejected seed bridge:
   rejecting the dynamic-tail contact in those rows; the runtime still consumes only the `SSDYNN01`
   owner index and has no C row/msid gate. CatchDash was added after the SDS:299 collision probe
   showed vanilla's live part-18 tail endpoints below Falco grounded Shine while the old partial
-  dynamic-chain cone admitted a false BODY hit; the retained fix models the shared dynamic-chain
-  state/collider owner rather than a Shine/CatchDash combat exception. Together with
+  dynamic-chain cone admitted a false BODY hit. DamageAir2 remains excluded after the source-step
+  experiment traded TBK/DSG/FSP/PJO rows instead of closing the shared source-order dynamic pose
+  owner. Together with
   Turn internal-facing hurtcaps, authoritative HitCapsule `victims_1` preservation, GuardSetOff
   shield-hit onset lineage, swept/same-group hitbox-vs-hitbox clank, decomp-ordered clank
   same-group suppression, hidden x1990 visible-clear seed ownership, Escape floor-edge BODY pose,
@@ -5209,6 +5228,20 @@ BODY collision-space residual split and rejected seed bridge:
   Sources: `refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC`,
   `refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC`,
   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C`.
+- Continuing GuardOn raise-shield no-submotion rows have a separate fighter-vs-fighter ShieldDesc
+  pose owner. After `ftCo_800924C0` enters GuardOn, `ftCo_GuardOn_Anim` continues calling
+  `ftCo_80091E78` while `mv.co.guard.x10` remains live, but Slippi still exposes the row as
+  `animation_index=-1/action_frame=-1`. For rows whose previous seed action was already shield-owned,
+  fighter shield collision samples the GuardOn x20 target extracted in `data/shields/{fox,falco}.bin`
+  instead of the settled Guard neutral bubble. First visible GuardOn entry remains owned by the
+  existing entry ShieldDesc lane; broad x20 on entry over-admits nearby persistent AttackAirB/Shine
+  controls. The extra ShieldDesc.size term is retained only for aerial AttackAir capsules in this
+  continuing raise-shield lane; non-AttackAir specials remain on the established lightshield bubble
+  owner until their exact x58/x4C shield narrowphase is closed. Positive: DSG:6313. Negatives:
+  DSG:6311/6312, IAT GuardOn entry, HVG AttackAirB, FSP Shine lightshield.
+  Sources: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_800924C0,
+  ftCo_GuardOn_Anim,ftCo_80091E78}`, `refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70`,
+  `refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC`.
 - Hidden color-animation x1990 seed ownership now treats replay-visible vulnerable snapshots as an
   observable clear of stale cliff/ledge x1990, while preserving the hidden x1994 invincible-contact
   lane only for source-proven Damage/DownBound consumers. A visible vulnerable non-damage /

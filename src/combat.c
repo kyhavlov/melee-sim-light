@@ -1124,6 +1124,17 @@ static inline uint8_t combat_float_aobj_hurtcap_pose_owner(uint16_t action_id) {
   return msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_LANDING_AIR);
 }
 
+static inline float combat_hurtcap_pose_sample_frame(const MslBatch* batch, size_t idx,
+                                                     uint8_t char_id, uint16_t msid,
+                                                     uint16_t action_id, float anim_frame_f32,
+                                                     uint16_t pose_frame) {
+  (void)batch;
+  (void)idx;
+  (void)char_id;
+  (void)msid;
+  return combat_float_aobj_hurtcap_pose_owner(action_id) ? anim_frame_f32 : (float)pose_frame;
+}
+
 static inline uint8_t combat_attackdash_post_hitbox_collision_pose_owner(
     const MslBatch* batch, int bi, size_t idx, uint16_t action_id, uint8_t char_id,
     float anim_frame_f32, uint16_t attacker_action_id, uint8_t attacker_hitbox_active) {
@@ -1381,14 +1392,13 @@ static inline uint8_t combat_body_overlap_lbColl_80006E58_matrix_radius(
   const float hurt_cp_z = az + t * (bz - az);
 
   float m[12];
-  const float pose_sample_frame =
-      combat_float_aobj_hurtcap_pose_owner(action_id)
-          ? anim_frame_f32
-          : (float)(combat_attackdash_post_hitbox_collision_pose_owner(
-                        batch, bi, d_idx, action_id, char_id, anim_frame_f32, attacker_action_id,
-                        attacker_hitbox_active)
-                        ? (uint16_t)(frame + 1u)
-                        : frame);
+  const uint16_t pose_frame = combat_attackdash_post_hitbox_collision_pose_owner(
+                                  batch, bi, d_idx, action_id, char_id, anim_frame_f32,
+                                  attacker_action_id, attacker_hitbox_active)
+                                  ? (uint16_t)(frame + 1u)
+                                  : frame;
+  const float pose_sample_frame = combat_hurtcap_pose_sample_frame(
+      batch, d_idx, char_id, msid, action_id, anim_frame_f32, pose_frame);
   if (anim_pose_get_collision_matrix_f32(batch, d_idx, msid, pose_sample_frame, cap->bone_part_id,
                                          m) != 0) {
     return 0u;

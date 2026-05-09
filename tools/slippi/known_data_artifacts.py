@@ -13,7 +13,7 @@ PART_VERSION = 1
 ITEM_ARTICLE_MAGIC = b"MSLITAR1"
 ITEM_ARTICLE_VERSION = 2
 STAGE_ITEM_OBJECT_MAGIC = b"MSLSTIO1"
-STAGE_ITEM_OBJECT_VERSION = 3
+STAGE_ITEM_OBJECT_VERSION = 4
 DREAM_WHISPY_MAGIC = b"MSLWHSP1"
 DREAM_WHISPY_VERSION = 1
 SCRIPT_MAGIC = b"MSLFTSC1"
@@ -203,6 +203,11 @@ class YoshiShyguyMetadata:
     spawn_right_x: float
     state4_speed_mul: float
     jitter_y_amp: float
+    collision_ecb_up: float
+    collision_ecb_down: float
+    collision_ecb_right: float
+    collision_ecb_left: float
+    collision_ecb_scale: float
     damage_threshold: int
     hurtboxes: tuple["YoshiShyguyHurtbox", ...]
     vpos: tuple[float, ...]
@@ -563,7 +568,8 @@ def read_mslitar1(path: Path) -> ItemArticleMetadata:
 
 
 def read_mslstio1_yoshi_shyguy(path: Path) -> YoshiShyguyMetadata:
-    buf = _require_header(path, STAGE_ITEM_OBJECT_MAGIC, STAGE_ITEM_OBJECT_VERSION, 64)
+    header_bytes = 84
+    buf = _require_header(path, STAGE_ITEM_OBJECT_MAGIC, STAGE_ITEM_OBJECT_VERSION, header_bytes)
     (
         stage_id,
         item_kind,
@@ -582,13 +588,18 @@ def read_mslstio1_yoshi_shyguy(path: Path) -> YoshiShyguyMetadata:
         spawn_right_x,
         state4_speed_mul,
         jitter_y_amp,
+        collision_ecb_up,
+        collision_ecb_down,
+        collision_ecb_right,
+        collision_ecb_left,
+        collision_ecb_scale,
         damage_threshold,
         hurtbox_count,
-    ) = struct.unpack_from("<HHHHHHHHHHfffffffHH", buf, 12)
+    ) = struct.unpack_from("<HHHHHHHHHHffffffffffffHH", buf, 12)
     if int(hurtbox_count) == 0 or int(hurtbox_count) > 2:
         raise ValueError(f"MSLSTIO1 invalid hurtbox_count in {path}: {hurtbox_count}")
     expected = (
-        64
+        header_bytes
         + int(hurtbox_count) * 32
         + int(vpos_count) * 4
         + int(speed_count) * 4
@@ -596,7 +607,7 @@ def read_mslstio1_yoshi_shyguy(path: Path) -> YoshiShyguyMetadata:
     )
     if len(buf) != expected:
         raise ValueError(f"MSLSTIO1 size mismatch in {path}: header-derived {expected} != {len(buf)}")
-    off = 64
+    off = header_bytes
     hurtboxes: list[YoshiShyguyHurtbox] = []
     for _ in range(int(hurtbox_count)):
         bone_id = struct.unpack_from("<H", buf, off)[0]
@@ -635,6 +646,11 @@ def read_mslstio1_yoshi_shyguy(path: Path) -> YoshiShyguyMetadata:
         spawn_right_x=float(spawn_right_x),
         state4_speed_mul=float(state4_speed_mul),
         jitter_y_amp=float(jitter_y_amp),
+        collision_ecb_up=float(collision_ecb_up),
+        collision_ecb_down=float(collision_ecb_down),
+        collision_ecb_right=float(collision_ecb_right),
+        collision_ecb_left=float(collision_ecb_left),
+        collision_ecb_scale=float(collision_ecb_scale),
         damage_threshold=int(damage_threshold),
         hurtboxes=tuple(hurtboxes),
         vpos=tuple(float(x) for x in vpos),
@@ -648,9 +664,10 @@ def yoshi_shyguy_metadata(data_root: Path | str = Path("data")) -> YoshiShyguyMe
 
     Source data:
     - `_iso/GrSt.dat::yakumono_param`
-    - `_iso/GrSt.dat::itemdata` Heiho Article attrs and child-JObj FObjDesc
+    - `_iso/GrSt.dat::itemdata` Heiho Article attrs, fixed ECB, and child-JObj FObjDesc
     refs/melee/src/melee/gr/grstory.c::{reset_shyguy_timer,grStory_801E3418}
     refs/melee/src/melee/it/items/itheiho.c::{it_802D8618,itHeiho_UnkMotion*_Phys,it_802D98C4}
+    refs/melee/src/melee/it/it_2725.c::{it_80275DFC,it_80276308}
     """
     return read_mslstio1_yoshi_shyguy(Path(data_root) / "stage_items" / "yoshi_shyguy.bin")
 

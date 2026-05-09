@@ -18,6 +18,8 @@ from tools.slippi.known_data_artifacts import yoshi_shyguy_metadata
 
 STAGE_YOSHIS_STORY = 8
 ITEM_KIND_HEIHO = 0xD2
+ACT_DAMAGE_FLY_TOP = 90
+ROLLOUT_CLOCK_REPLAY_FRAME_SEED = 2
 
 
 def _shyguy_params():
@@ -124,6 +126,23 @@ def _step_seed(seed: np.ndarray) -> np.void:
         binding.step_input(handle, prev_input_bytes, cur_input_bytes)
         binding.write_compare(handle, out_bytes)
         return out_bytes.view(COMPARE_DTYPE).reshape(-1)[0]
+    finally:
+        binding.destroy(handle)
+
+
+def _rollout_clock_mode_for_seed(seed: np.ndarray) -> int:
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+
+    assert int(SEED_DTYPE.itemsize) == seed_stride
+    handle = binding.init(batch_size=1, num_players=2)
+    try:
+        seed_bytes = np.frombuffer(seed.tobytes(order="C"), dtype=np.uint8).reshape(
+            1, seed_stride
+        )
+        binding.reseed_seed_rollout(handle, seed_bytes.copy())
+        return int(binding.debug_get_rollout_clock_mode(handle, 0))
     finally:
         binding.destroy(handle)
 
@@ -697,8 +716,8 @@ def test_yoshi_shyguy_rollout_advances_replay_rng_clock_until_spawn_cnm_2153() -
     # - CNM:2153 seeds eight frames before the Yoshi's Story Shy Guy timer reaches zero.
     # - Vanilla consumes the frame-2038 Slippi/HSD RNG seed and spawns five left-side Heiho items.
     # - A frozen reseed RNG clock consumes the stale frame-2030 seed instead, spawning one right-side
-    #   Heiho at x=304. The rollout clock owner must therefore advance while no Heiho items are live
-    #   and the stage timer is active.
+    #   Heiho at x=304. The rollout seed lane carries the source spawn-frame stream so the zero-timer
+    #   callback samples the same pattern/count/jitter without a synthetic frame-clock bridge.
     # refs/slippi-ssbm-asm/Recording/SendFrameStart.s
     # refs/melee/src/melee/gr/grstory.c::{grStory_801E3418,set_shyguy_spawn_count}
     root = Path(__file__).resolve().parents[1]
@@ -707,6 +726,13 @@ def test_yoshi_shyguy_rollout_advances_replay_rng_clock_until_spawn_cnm_2153() -
     )
     if not dataset_path.exists():
         pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples[2153]["seed_t"]
+    assert int(seed["stage_yoshi_shyguy_spawn_rng_seed_valid_u8"]) == 1
+    assert int(seed["stage_yoshi_shyguy_spawn_rng_seed_u32"]) == int(
+        ds.samples[2161]["seed_t"]["frame_pre_random_seed"]
+    )
 
     out, ref = _run_rollout_to_record(dataset_path, start_record=2153, target_record=2161)
 
@@ -774,6 +800,59 @@ def test_yoshi_shyguy_rollout_clock_stays_seed_owned_when_heiho_live_cnm_2162() 
     assert int(out["frame_pre_random_seed"]) != int(ref["frame_pre_random_seed"])
     assert int(out["items"][0]["exists"]) == 1
     assert int(out["items"][0]["type"]) == ITEM_KIND_HEIHO
+
+
+def test_yoshi_shyguy_rollout_clock_does_not_preempt_top_blast_rng_owner() -> None:
+    # Arbitration boundary: an isolated no-live Shy Guy countdown can install its explicit
+    # spawn-frame RNG seed at the future zero-timer callback, but it must not freeze the Slippi
+    # frame-start stream when another source owner needs that stream earlier. Top-blast
+    # DeadUpFall selection consumes `HSD_Randi(100)+1` from the normal replay frame clock.
+    # refs/melee/src/melee/ft/ft_0D31.c::ftCo_800D3158
+    # refs/melee/src/melee/gr/grstory.c::{grStory_801E3418,set_shyguy_spawn_count}
+    seed = _empty_seed()
+    seed["stage_yoshi_shyguy_valid_u8"] = np.uint8(1)
+    seed["stage_yoshi_shyguy_timer_u16"] = np.uint16(7)
+    seed["stage_yoshi_shyguy_spawn_rng_seed_valid_u8"] = np.uint8(1)
+    seed["stage_yoshi_shyguy_spawn_rng_seed_u32"] = np.uint32(0x12340000)
+    seed["action_id"][0, 0] = np.uint16(ACT_DAMAGE_FLY_TOP)
+    seed["animation_index"][0, 0] = np.uint32(180)
+    seed["pos_y"][0, 0] = np.float32(300.0)
+    seed["speed_y_attack"][0, 0] = np.float32(5.0)
+
+    assert _rollout_clock_mode_for_seed(seed) == ROLLOUT_CLOCK_REPLAY_FRAME_SEED
+
+
+@pytest.mark.integration
+def test_yoshi_shyguy_rollout_uses_spawn_frame_rng_seed_lawful_meerkat_112() -> None:
+    # LIM:112 starts seven frames before the Yoshi scheduler reaches timer zero. The source global
+    # HSD stream advances by unrelated consumers during that countdown; using the old synthetic
+    # `+0x10000` replay clock spawns the left-side group, while grStory_801E3418 samples the
+    # spawn-frame stream and creates the right-side group.
+    # refs/slippi-ssbm-asm/Recording/SendFrameStart.s
+    # refs/melee/src/melee/gr/grstory.c::{grStory_801E3418,set_shyguy_spawn_count}
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/LawfulInsistentMeerkat.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples[112]["seed_t"]
+    assert int(seed["stage_yoshi_shyguy_timer_u16"]) == 7
+    assert int(seed["stage_yoshi_shyguy_spawn_rng_seed_valid_u8"]) == 1
+    assert int(seed["stage_yoshi_shyguy_spawn_rng_seed_u32"]) == int(
+        ds.samples[119]["seed_t"]["frame_pre_random_seed"]
+    )
+
+    out, ref = _run_rollout_to_record(dataset_path, start_record=112, target_record=119)
+    live_slots = [i for i, item in enumerate(ref["items"]) if int(item["exists"]) != 0]
+    assert live_slots == [0]
+    assert int(out["items"][0]["exists"]) == 1
+    assert int(out["items"][0]["type"]) == ITEM_KIND_HEIHO
+    assert float(out["items"][0]["pos_x"]) == pytest.approx(float(ref["items"][0]["pos_x"]), abs=1e-6)
+    assert float(out["items"][0]["pos_y"]) == pytest.approx(float(ref["items"][0]["pos_y"]), abs=1e-6)
 
 
 def test_yoshi_shyguy_dynamic_prev_vel_y_does_not_touch_other_stages() -> None:
@@ -924,7 +1003,7 @@ def test_active_yoshi_shyguy_integrates_visible_velocity() -> None:
         ds = read_dataset(str(dataset_path))
     except ValueError as exc:
         if "record_size mismatch" in str(exc):
-            pytest.skip(f"stale local dataset cache: {exc}")
+            raise AssertionError(f"stale local dataset cache: rerun forced aggregate preprocess: {exc}")
         raise
     record = 1235
     row = ds.samples[record]
@@ -964,6 +1043,214 @@ def test_active_yoshi_shyguy_integrates_visible_velocity() -> None:
 
 
 @pytest.mark.integration
+def test_yoshi_shyguy_fixed_ecb_wall_turn_replay_real_pec_946() -> None:
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    # A left-moving live Heiho passes near Yoshi's right wall. Vanilla integrates with the old
+    # leftward speed, then the active Coll callback sees the Article ItemAttr.x40 fixed ECB touch
+    # the wall and flips x40_vel/facing for the post-frame state.
+    # refs/melee/src/melee/it/items/itheiho.c::{itHeiho_UnkMotion1_Coll,itHeiho_UnkMotion1_Phys}
+    # refs/melee/src/melee/it/it_2725.c::{it_80275DFC,it_80276308}
+    # data/stage_items/yoshi_shyguy.bin::MSLSTIO1 collision_ecb
+    out, ref = _step_one_row(dataset_path, 946)
+    assert int(out["items"][0]["exists"]) == 1
+    assert int(out["items"][0]["type"]) == ITEM_KIND_HEIHO
+    assert int(out["items"][0]["state"]) == 1
+    assert float(out["items"][0]["pos_x"]) == pytest.approx(float(ref["items"][0]["pos_x"]))
+    assert float(out["items"][0]["pos_y"]) == pytest.approx(float(ref["items"][0]["pos_y"]))
+    assert float(out["items"][0]["direction"]) == pytest.approx(1.0)
+    assert float(out["items"][0]["vel_x"]) == pytest.approx(0.3)
+    assert float(out["items"][0]["direction"]) == pytest.approx(float(ref["items"][0]["direction"]))
+    assert float(out["items"][0]["vel_x"]) == pytest.approx(float(ref["items"][0]["vel_x"]))
+
+
+@pytest.mark.integration
+def test_yoshi_shyguy_active_turn_delay_is_prefix_causal_after_visible_flip_pec_947() -> None:
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples[947]["seed_t"]
+    assert int(seed["item_shyguy_delay_valid_u8"][0]) == 1, (
+        "stale local dataset cache: rerun forced aggregate preprocess for "
+        "active Shy Guy turn-delay derivation"
+    )
+    # The previous visible frame flipped this Heiho's exported X velocity. Preprocessing can
+    # reconstruct the source `itemVar.heiho.x24 = 20` cooldown from that prefix-visible sign flip,
+    # without looking at replay-future collision.
+    assert int(seed["items"][0]["state"]) == 1
+    assert float(seed["items"][0]["vel_x"]) == pytest.approx(0.3)
+    assert int(seed["item_shyguy_delay_u16"][0]) == 20
+    assert int(seed["item_shyguy_delay_valid_u8"][0]) == 1
+
+
+@pytest.mark.integration
+def test_yoshi_shyguy_fixed_ecb_wall_turn_negative_before_contact_pec_945() -> None:
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    # Same item and wall approach one frame earlier: the fixed ECB bottom is still above the wall
+    # top, so `it_80276308` does not own a turn yet.
+    out, ref = _step_one_row(dataset_path, 945)
+    assert int(out["items"][0]["exists"]) == 1
+    assert int(out["items"][0]["type"]) == ITEM_KIND_HEIHO
+    assert int(out["items"][0]["state"]) == 1
+    assert float(out["items"][0]["pos_x"]) == pytest.approx(float(ref["items"][0]["pos_x"]))
+    assert float(out["items"][0]["pos_y"]) == pytest.approx(float(ref["items"][0]["pos_y"]))
+    assert float(out["items"][0]["direction"]) == pytest.approx(-1.0)
+    assert float(out["items"][0]["vel_x"]) == pytest.approx(-0.3)
+    assert float(out["items"][0]["direction"]) == pytest.approx(float(ref["items"][0]["direction"]))
+    assert float(out["items"][0]["vel_x"]) == pytest.approx(float(ref["items"][0]["vel_x"]))
+
+
+@pytest.mark.integration
+def test_yoshi_shyguy_active_floor_contact_resets_anim_export_pec_1289() -> None:
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    # A live state-1 Heiho descends until its fixed ECB crosses Yoshi's ground. Vanilla keeps the
+    # already-integrated item position, but `it_8026DA70` returns true and the active Coll callback
+    # restarts the state-1 animation, zeroing exported x40_vel for this post-frame.
+    # refs/melee/src/melee/it/items/itheiho.c::{itHeiho_UnkMotion1_Coll,
+    #   itHeiho_UnkMotion1_Anim_inline}
+    # refs/melee/src/melee/it/it_266F.c::it_8026DA70
+    out, ref = _step_one_row(dataset_path, 1289)
+    assert int(out["items"][1]["exists"]) == 1
+    assert int(out["items"][1]["type"]) == ITEM_KIND_HEIHO
+    assert int(out["items"][1]["state"]) == 1
+    assert float(out["items"][1]["pos_x"]) == pytest.approx(float(ref["items"][1]["pos_x"]))
+    assert float(out["items"][1]["pos_y"]) == pytest.approx(float(ref["items"][1]["pos_y"]))
+    assert float(out["items"][1]["vel_x"]) == pytest.approx(0.0)
+    assert float(out["items"][1]["vel_y"]) == pytest.approx(0.0)
+    assert float(out["items"][1]["vel_x"]) == pytest.approx(float(ref["items"][1]["vel_x"]))
+    assert float(out["items"][1]["vel_y"]) == pytest.approx(float(ref["items"][1]["vel_y"]))
+
+
+@pytest.mark.integration
+def test_yoshi_shyguy_return_flight_generic_blast_clear_replay_real_pec_1294() -> None:
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    # Low-damage state 4 is return flight, not ordinary active state 1. It inherits xDCC_flag.b3
+    # from `it_802D8EC8`, so generic Item_802697D4 clears it on exact side/bottom blast bounds
+    # after Phys/integration. The active state-1 `it_802D9714` 20-unit margin does not apply here.
+    # refs/melee/src/melee/it/items/itheiho.c::{it_802D8EC8,it_802D9168,
+    #   itHeiho_UnkMotion4_Phys}
+    # refs/melee/src/melee/it/item.c::{Item_802697D4,Item_802696CC}
+    out, ref = _step_one_row(dataset_path, 1294)
+    assert int(ref["items"][0]["spawn_id"]) == 1
+    assert int(out["items"][0]["spawn_id"]) == int(ref["items"][0]["spawn_id"])
+    assert not any(
+        int(item["exists"]) and int(item["type"]) == ITEM_KIND_HEIHO and int(item["spawn_id"]) == 0
+        for item in out["items"]
+    )
+
+
+@pytest.mark.integration
+def test_yoshi_shyguy_return_flight_generic_blast_clear_negative_before_bounds_pec_1293() -> None:
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    # One frame earlier the same return-flight Shy Guy remains inside the exact side blast bound
+    # after item integration, so the generic item destroy owner must not clear it yet.
+    out, ref = _step_one_row(dataset_path, 1293)
+    assert int(out["items"][0]["exists"]) == 1
+    assert int(out["items"][0]["type"]) == ITEM_KIND_HEIHO
+    assert int(out["items"][0]["spawn_id"]) == 0
+    assert int(out["items"][0]["state"]) == 4
+    assert int(out["items"][0]["spawn_id"]) == int(ref["items"][0]["spawn_id"])
+    assert float(out["items"][0]["pos_x"]) == pytest.approx(float(ref["items"][0]["pos_x"]))
+    assert float(out["items"][0]["pos_y"]) == pytest.approx(float(ref["items"][0]["pos_y"]))
+
+
+@pytest.mark.integration
+def test_yoshi_shyguy_floor_reset_restarts_phase_lane_pec_1290() -> None:
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples[1290]["seed_t"]
+    assert int(seed["item_shyguy_dyn_y_phase_u8"][1]) == 0, (
+        "stale local dataset cache: rerun forced aggregate preprocess for "
+        "active Shy Guy floor-reset phase derivation"
+    )
+
+    assert int(seed["items"][1]["state"]) == 1
+    assert float(seed["items"][1]["vel_x"]) == pytest.approx(0.0)
+    assert float(seed["items"][1]["vel_y"]) == pytest.approx(0.0)
+    assert int(seed["item_shyguy_dyn_y_phase_u8"][1]) == 0
+    assert int(seed["item_shyguy_dyn_y_phase_valid_u8"][1]) == 1
+    out, ref = _step_one_row(dataset_path, 1290)
+    assert float(out["items"][1]["pos_y"]) == pytest.approx(float(ref["items"][1]["pos_y"]))
+    assert float(out["items"][1]["vel_y"]) == pytest.approx(float(ref["items"][1]["vel_y"]))
+
+
+@pytest.mark.integration
+def test_yoshi_shyguy_turn_cooldown_suppresses_repeat_wall_turn_pec_1835() -> None:
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples[1835]["seed_t"]
+    assert int(seed["item_shyguy_delay_u16"][1]) == 20, (
+        "stale local dataset cache: rerun forced aggregate preprocess for "
+        "active Shy Guy turn-delay derivation"
+    )
+
+    # Same wall/ECB neighborhood as the positive contact path, but this row starts immediately
+    # after a visible source turn. `itHeiho_UnkMotion1_Phys` decrements x24, and the Coll callback
+    # must not flip again while the cooldown remains positive.
+    out, ref = _step_one_row(dataset_path, 1835)
+    assert int(seed["items"][1]["state"]) == 1
+    assert int(seed["item_shyguy_delay_u16"][1]) == 20
+    assert float(out["items"][1]["vel_x"]) == pytest.approx(-0.3)
+    assert float(out["items"][1]["direction"]) == pytest.approx(-1.0)
+    assert float(out["items"][1]["vel_x"]) == pytest.approx(float(ref["items"][1]["vel_x"]))
+    assert float(out["items"][1]["direction"]) == pytest.approx(float(ref["items"][1]["direction"]))
+
+
+@pytest.mark.integration
 def test_state4_yoshi_shyguy_integrates_visible_velocity() -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
@@ -977,7 +1264,7 @@ def test_state4_yoshi_shyguy_integrates_visible_velocity() -> None:
         ds = read_dataset(str(dataset_path))
     except ValueError as exc:
         if "record_size mismatch" in str(exc):
-            pytest.skip(f"stale local dataset cache: {exc}")
+            raise AssertionError(f"stale local dataset cache: rerun forced aggregate preprocess: {exc}")
         raise
     record = 614
     row = ds.samples[record]
@@ -1022,7 +1309,7 @@ def test_yoshi_shyguy_reconstructed_phase_handles_aobj_loop_rows() -> None:
         ds = read_dataset(str(dataset_path))
     except ValueError as exc:
         if "record_size mismatch" in str(exc):
-            pytest.skip(f"stale local dataset cache: {exc}")
+            raise AssertionError(f"stale local dataset cache: rerun forced aggregate preprocess: {exc}")
         raise
 
     # State 4 row 667 is after the x24 return-flight prefix. The raw active-frame modulo phase
@@ -1049,7 +1336,7 @@ def test_yoshi_shyguy_state3_zero_delay_rows_do_not_over_enter_state4() -> None:
         ds = read_dataset(str(dataset_path))
     except ValueError as exc:
         if "record_size mismatch" in str(exc):
-            pytest.skip(f"stale local dataset cache: {exc}")
+            raise AssertionError(f"stale local dataset cache: rerun forced aggregate preprocess: {exc}")
         raise
 
     items_for_derivation = np.empty(
@@ -1075,7 +1362,10 @@ def test_yoshi_shyguy_state3_zero_delay_rows_do_not_over_enter_state4() -> None:
             int(seed["item_shyguy_delay_u16"][1]) != int(fresh_delay[record, 1])
             or int(seed["item_shyguy_delay_valid_u8"][1]) != int(fresh_delay_valid[record, 1])
         ):
-            pytest.skip("local dataset cache predates Shy Guy repeated-damage x24 derivation")
+            raise AssertionError(
+                "stale local dataset cache: rerun forced aggregate preprocess for "
+                "Shy Guy repeated-damage x24 derivation"
+            )
         out, ref = _step_one_row(dataset_path, record)
         assert int(out["items"][1]["state"]) == int(ref["items"][1]["state"]) == 3
 

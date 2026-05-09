@@ -28,6 +28,7 @@
 #include "../src/mpcoll_ecb_points.h"
 #include "../src/shield_tilt_table.h"
 #include "../src/specialhi_pose.h"
+#include "../src/stage_item_params.h"
 #include "../src/staling.h"
 #include "../src/ucf.h"
 
@@ -7211,7 +7212,10 @@ typedef struct MslPyShyguyKeyState {
   int hitlag;
   int state3_moving_age;
   int state4_zero_x_prefix;
+  int active_turn_delay;
   int prev_damage;
+  float prev_vel_x;
+  bool has_prev_vel_x;
 } MslPyShyguyKeyState;
 
 typedef struct MslPyShyguyPhaseState {
@@ -7691,7 +7695,8 @@ PyObject* msl_derive_yoshi_shyguy_seed_lanes_py(PyObject* self, PyObject* args) 
           PyErr_SetString(PyExc_RuntimeError, "Yoshi Shy Guy spawn-state capacity exhausted");
           goto fail;
         }
-        if ((stp[idx] == 1u || stp[idx] == 4u) && fabsf(vx[idx]) > 0.05f) {
+        if ((stp[idx] == 1u || stp[idx] == 4u) &&
+            fabsf(vx[idx]) > MSL_YOSHI_SHYGUY_VISIBLE_TURN_MIN_ABS_VX) {
           MslPyShyguyGroupState* gs =
               msl_py_shyguy_group_state(group_states, &group_count, cap, ss->group_base);
           if (gs == NULL) {
@@ -7750,6 +7755,7 @@ PyObject* msl_derive_yoshi_shyguy_seed_lanes_py(PyObject* self, PyObject* args) 
           }
           ks->state3_moving_age = 0;
           ks->state4_zero_x_prefix = (stp[idx] == 4u && fabsf(vx[idx]) <= 0.001f) ? 20 : 0;
+          ks->active_turn_delay = 0;
         } else {
           age = ks->state_age + 1;
         }
@@ -7786,24 +7792,55 @@ PyObject* msl_derive_yoshi_shyguy_seed_lanes_py(PyObject* self, PyObject* args) 
             ks->hitlag--;
           }
         } else if (stp[idx] == 4u) {
+          if (ks->has_prev_vel_x &&
+              fabsf(ks->prev_vel_x) > MSL_YOSHI_SHYGUY_VISIBLE_TURN_MIN_ABS_VX &&
+              fabsf(vx[idx]) > MSL_YOSHI_SHYGUY_VISIBLE_TURN_MIN_ABS_VX &&
+              ((ks->prev_vel_x < 0.0f && vx[idx] > 0.0f) ||
+               (ks->prev_vel_x > 0.0f && vx[idx] < 0.0f))) {
+            ks->active_turn_delay = (int)MSL_YOSHI_SHYGUY_TURN_DELAY_FRAMES;
+          }
           int rem_turn = ks->state4_zero_x_prefix;
+          if (ks->active_turn_delay > rem_turn) {
+            rem_turn = ks->active_turn_delay;
+          }
           if (rem_turn < 0) rem_turn = 0;
           out_delay[idx] = (uint16_t)rem_turn;
           out_delay_valid[idx] = 1u;
           if (ks->state4_zero_x_prefix > 0) {
             ks->state4_zero_x_prefix--;
           }
+          if (ks->active_turn_delay > 0) {
+            ks->active_turn_delay--;
+          }
           out_hitlag[idx] = 0u;
           out_hitlag_valid[idx] = 1u;
         } else if (stp[idx] == 1u) {
-          out_delay[idx] = 0u;
+          if (ks->has_prev_vel_x &&
+              fabsf(ks->prev_vel_x) > MSL_YOSHI_SHYGUY_VISIBLE_TURN_MIN_ABS_VX &&
+              fabsf(vx[idx]) > MSL_YOSHI_SHYGUY_VISIBLE_TURN_MIN_ABS_VX &&
+              ((ks->prev_vel_x < 0.0f && vx[idx] > 0.0f) ||
+               (ks->prev_vel_x > 0.0f && vx[idx] < 0.0f))) {
+            ks->active_turn_delay = (int)MSL_YOSHI_SHYGUY_TURN_DELAY_FRAMES;
+          }
+          int rem_turn = ks->active_turn_delay;
+          if (rem_turn < 0) rem_turn = 0;
+          out_delay[idx] = (uint16_t)rem_turn;
           out_delay_valid[idx] = 1u;
+          if (ks->active_turn_delay > 0) {
+            ks->active_turn_delay--;
+          }
           out_hitlag[idx] = 0u;
           out_hitlag_valid[idx] = 1u;
         }
         ks->prev_state = (int)stp[idx];
         ks->state_age = age;
         ks->prev_damage = (int)dmg[idx];
+        if (stp[idx] == 1u || stp[idx] == 4u) {
+          ks->prev_vel_x = vx[idx];
+          ks->has_prev_vel_x = true;
+        } else {
+          ks->has_prev_vel_x = false;
+        }
       }
     } else if (stage_ok && cur_timer > 0) {
       cur_timer--;
@@ -7826,7 +7863,15 @@ PyObject* msl_derive_yoshi_shyguy_seed_lanes_py(PyObject* self, PyObject* args) 
       if (ps->state == (int)stp[idx]) {
         const int predicted = ((int)ps->phase + 1) & 0xFF;
         int visible = -1;
-        if (stp[idx] == 1u || fabsf(vx[idx]) >= 0.5f) {
+        if (stp[idx] == 1u && fabsf(vx[idx]) <= 0.001f && fabsf(vy[idx]) <= 0.001f) {
+          // Active Heiho floor-contact reset (`itHeiho_UnkMotion1_Coll` -> temp_r31 == 1)
+          // restarts the state-1 animation through `itHeiho_UnkMotion1_Anim_inline`, leaving
+          // replay-visible x40_vel at zero for the post-frame. The next active Anim starts from
+          // phase 0 again; this is prefix-visible and does not look at future collision rows.
+          // refs/melee/src/melee/it/items/itheiho.c::{itHeiho_UnkMotion1_Coll,
+          //   itHeiho_UnkMotion1_Anim_inline}
+          visible = 0;
+        } else if (stp[idx] == 1u || fabsf(vx[idx]) >= 0.5f) {
           visible = msl_py_shyguy_visible_phase(dyn, ps->has_prev_vel_y ? ps->prev_vel_y : 0.0f,
                                                 vy[idx], stp[idx], predicted);
         }

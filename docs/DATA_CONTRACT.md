@@ -546,6 +546,12 @@ Source/generation:
   consume the callback frame's Slippi random_seed for Shy Guy pattern/count/jitter selection. Other
   one-step rows keep the historical seed-owned frame RNG lane unless a separate source owner
   promotes that phase.
+- `seed_t.stage_yoshi_shyguy_spawn_rng_seed_u32/valid` carries the explicit spawn-frame HSD stream
+  for replay rollouts that start during a no-live-Heiho countdown. The producer uses the source
+  stage timer to select the future zero-timer frame-start Slippi RNG seed; runtime installs it only
+  when `grStory_801E3418` reaches the spawn callback. This replaces the old synthetic `+0x10000`
+  Shy Guy rollout clock. It is a replay hidden-stream reconstruction lane, not a free-running
+  stage scheduler or global RNG consumer-order closure.
 - Suite `.msl` cache metadata version `3` invalidates older Yoshi no-live-Heiho cache rows with the
   same record size but stale `frame_pre_random_seed` semantics. Forced preprocessing regenerates the
   corrected cache metadata and sample payload.
@@ -554,14 +560,15 @@ Source/generation:
   source-backed owner is Yoshi's Story Randall: `data/stages/bin/grst.bin::MSLSTG01`
   `platform_path` records are sampled by `src/stage_collision.c` from the live frame clock.
 - `reseed_seed_rollout()` advances `frame_pre_random_seed` only for explicit replay-frame RNG-clock
-  owners, including the no-live-Heiho Yoshi Shy Guy scheduler before its zero-timer spawn consumer
-  and data-backed blaster capture/throw episodes. This is rollout-only metadata ownership: normal
+  owners. The no-live-Heiho Yoshi Shy Guy scheduler no longer uses the generic `+0x10000` frame
+  clock; it installs `stage_yoshi_shyguy_spawn_rng_seed_u32` at the zero-timer callback. Other
+  data-backed blaster capture/throw episodes still use replay-frame RNG clock ownership. This is
+  rollout-only metadata ownership: normal
   `reseed_seed()` keeps `frame_id` / `frame_pre_random_seed` seed-owned after the preprocessing
   phase choice above initializes the simulated frame's source RNG seed, while validation rollout
-  carries `frame_id` for all replay rollouts and carries the Slippi frame-start RNG seed only
-  through source-owned consumers. The Shy Guy rollout owner clears immediately after
-  `grStory_801E3418` consumes the spawn-frame RNG stream or when live Heiho items make the scheduler
-  return.
+  carries `frame_id` for all replay rollouts and carries the Slippi frame-start RNG seed only through
+  source-owned consumers. The Shy Guy rollout owner clears immediately after `grStory_801E3418`
+  consumes the spawn-frame RNG stream or when live Heiho items make the scheduler return.
 
 Decomp contract:
 - `refs/slippi-ssbm-asm/Recording/SendFrameStart.s`.
@@ -860,7 +867,8 @@ Characters (Fox/Falco):
     - world-scaled respawn point payloads `(x,y)` for stage point ids `4..7`; missing ids `5..7`
       follow `Ground_801C2D24` and fall back to id `4`
     - platform transform records: source line id, transform kind, platform id, source-local X span,
-      source-local static Y, and source-backed height coefficient for live moving platform lines
+      default current height for height-owned moving lines or static world Y for static-Y records,
+      and source-backed height coefficient for live moving platform collision transforms
   - Stale/non-v8 `MSLSTG01` tables must be rejected. Version 3 added the raw `MapLine` graph links
     used by source-shaped `mpLineGetPrev/Next` traversal. Version 4 added generated fighter-solid
     line policy. Version 5 adds source/data-backed platform transform records for live platform
@@ -872,9 +880,11 @@ Characters (Fox/Falco):
   - Supported runtime stage ids: `2` Fountain of Dreams, `3` Pokemon Stadium base, `8` Yoshi's
     Story, `28` Dream Land N64, `31` Battlefield, `32` Final Destination. Static pass-through
     platform flags are consumed by runtime fighter collision through source-shaped Pass/floor-skip
-    gating. FoD moving platform world Y is driven by Slippi's current FoD platform height event
-    stream when seeded and by the `grIzumi_801CC358` free-running scheduler for new-match runtime.
-    Both paths use MSLSTG01 platform transform records derived from `grIzumi`/stage geometry data.
+    gating. FoD moving platform collision is driven by Slippi's current raw FoD platform height
+    event stream when seeded and by the `grIzumi_801CC358` free-running scheduler for new-match
+    runtime. Both paths use MSLSTG01 platform transform records derived from `grIzumi`/stage
+    geometry data; for the side platforms `mpLib_80055E9C` consumes the source MapLine vertex as
+    `world_y = source_local_y + current_grIzumi_height * 0.75`.
     The MSLSTG01 v8 binary platform-motion payload carries
     `platform_motion.fountain_platform` constants from `GrIz.dat::yakumono_param`
     (`home_height`, hidden target, min/max, source speed fields, RNG weights, and
@@ -906,9 +916,12 @@ Characters (Fox/Falco):
       clears it on grounded transfer, cooldown expiry, or non-cliff-exit action. The sentinel
       `0xFFFF` means no live owner.
     - Platform ids match Slippi/grIzumi (`0=right`, `1=left`). Missing events use source-backed
-      default current heights from `MSLSTG01` platform transform records; present events carry
+      default current raw heights from `MSLSTG01` platform transform records; present events carry
       forward by replay prefix only. Consecutive prefix events or grounded platform contact derive
       the current per-frame height delta so rollout advances transformed world floors causally.
+      Grounded-contact fallback inverts the generated collision transform
+      `(root_y - source_local_y) / height_coeff`; direct `fod_platform` events remain raw grIzumi
+      heights and are not treated as viewer-space/platform-world Y.
       Missing lanes in new-match/free-running runtime use the generated `grIzumi_801CC358`
       phase/timer/RNG scheduler instead of fixed platform heights.
       The floor-skip lanes are current hidden mpColl state, not t+1 replay output; seed generation
@@ -980,29 +993,35 @@ Characters (Fox/Falco):
       consumes generated data instead of embedding DAT/FObj tables in gameplay C.
     - Covers the replay-seeded/eval active-motion/state-delay slice only. The seed surface may
       carry prefix-causal Shy Guy internals such as previous dynamic-bone velocity, active AObj
-      phase, speed index, and state delay; it must not carry replay-next position/velocity.
-    - This artifact does not by itself close global HSD RNG consumer order before
+      phase, speed index, state delay, and active turn cooldown reconstructed from visible
+      previous-frame velocity flips; it must not carry replay-next position/velocity.
+    - The separate seed lane `stage_yoshi_shyguy_spawn_rng_seed_u32/valid` carries the source
+      spawn-frame HSD stream for replay rollouts through no-live countdown windows. This still does
+      not close global HSD RNG consumer order for free-running gameplay before
       `grStory_801E3418`.
   - Sources:
     - `_iso/GrSt.dat::yakumono_param` (`timer_min`, `timer_rand`, `spawnmany_rarity`, `vpos`)
     - `_iso/GrSt.dat::itemdata` Heiho `Article` common attrs / special attrs
+      (`ItemAttr.x40` fixed ECB source, `ItemAttr.x60` scale)
     - `_iso/GrSt.dat` Heiho state-0 child `HSD_A_J_TRAY` FObjDesc interpreted through the
       extractor FObj port
     - `refs/melee/src/melee/gr/grstory.c::{reset_shyguy_timer,grStory_801E3418}`
-    - `refs/melee/src/melee/it/items/itheiho.c::{it_802D8618,itHeiho_UnkMotion*_Phys,it_802D98C4}`
+    - `refs/melee/src/melee/it/items/itheiho.c::{it_802D8618,itHeiho_UnkMotion*_Phys,itHeiho_UnkMotion*_Coll,it_802D98C4}`
+    - `refs/melee/src/melee/it/it_2725.c::{it_80275DFC,it_80276308}`
     - `refs/melee/src/sysdolphin/baselib/{aobj.c,fobj.c,jobj.c}`
-  - Binary layout: `MSLSTIO1` v3
+  - Binary layout: `MSLSTIO1` v4
     - `u8 magic[8] = "MSLSTIO1"`
-    - `u32 version = 3`
+    - `u32 version = 4`
     - header: `stage_id`, `item_kind`, table counts, timer/count/delay fields, fall accel,
       max fall speed, Heiho item damage multiplier, spawn X positions, state-4 speed multiplier,
-      jitter amplitude, damage threshold, hurtbox count
+      jitter amplitude, fixed CollData ECB source (`up`, `down`, `right`, `left`, `scale`),
+      damage threshold, hurtbox count
     - hurtbox payload: one or two concrete Heiho `ItemDynamics` descriptors copied by
       `it_8027163C` (`bone_id`, `a_offset Vec3`, `b_offset Vec3`, `scale`)
     - payload: `vpos[6]`, active speed attrs `[3]`, dynamic-bone Y velocity deltas `[128]`
   - Generated/ignored runtime artifact; do not source-control the `.bin`. The source-controlled
     review mirror is `data/stage_items/yoshi_shyguy.json`.
-  - Stale/non-v3 tables must be rejected by tooling readers; regenerate with
+  - Stale/non-v4 tables must be rejected by tooling readers; regenerate with
     `uv run python -m tools.extraction.extract_stage_item_objects --grst _iso/GrSt.dat --out data/stage_items/yoshi_shyguy.bin --audit data/stage_items/yoshi_shyguy.json`
     or through `tools.extraction.build_data`.
 - `data/stage_items/dream_whispy.bin` (Dream Land Whispy wind data; generated `MSLWHSP1` compact binary)
@@ -1195,7 +1214,7 @@ Loader contract:
 - The loader allocates lookup tables only during initialization; normal gameplay sampling is fixed
   capacity and allocation-free.
 
-## `data/anims/<char>.dyn.bin` (SSDYNN01 v5)
+## `data/anims/<char>.dyn.bin` (SSDYNN01 v6)
 
 Purpose: compact, init-time-loadable fighter dynamic-chain descriptors from `ftData.x2C`. These are
 the descriptor inputs to the live collision-pose owner that feeds `lb_8000B1CC` hurtcap endpoints.
@@ -1221,7 +1240,7 @@ Source and generation:
 Binary layout (little-endian):
 - Header:
   - `magic[8] = "SSDYNN01"`
-  - `version: u32 = 5`
+  - `version: u32 = 6`
   - `set_count: u16`
   - `total_node_count: u16`
 - Per dynamic set:
@@ -1236,6 +1255,10 @@ Binary layout (little-endian):
   - `collision_msid_count: u16`
   - `reserved: u16 = 0`
   - `collision_msids: u16[collision_msid_count]`
+- Source-step owner index:
+  - `source_step_msid_count: u16`
+  - `reserved: u16 = 0`
+  - `source_step_msids: u16[source_step_msid_count]`
 - Dynamic collider index:
   - `collider_count: u16`
   - `reserved: u16 = 0`
@@ -1250,42 +1273,48 @@ Supported runtime contract:
   with nodes `[17, 18, 19, 20]`; Falco has zero sets.
 - The collision-owner index is the only runtime predicate for dynamic matrix substitution. Current
   generated data marks Fox `ftCo_SM_JumpB` (`submotion_id=17`),
-  `ftCo_SM_LandingFallSpecial` (`submotion_id=36`), and `ftCo_SM_AttackHi3`
-  (`submotion_id=58`) because pre-`ftColl_80078C70` Dolphin primitive/engine probes show those
-  BODY hurtcap endpoints consume the live dynamic chain. v5 also marks Fox `ftCo_SM_CatchDash`
-  (`submotion_id=243`): the SDS:299 probe shows vanilla's live part-18 tail endpoints stay below
-  Falco's grounded Shine while the static/existing-lite chain admits a false BODY hit. Fox
-  `ftCo_SM_AttackDash` is intentionally not marked: the HIS:5029 AttackDash/AttackLw4 primitive
-  probe selects the static-chain low hurtcap contact and rejects the false tail-chain contact
-  produced by applying the dynamic matrix. C gameplay must not hardcode these msids; adding another
-  dynamic collision submotion is an extraction/data contract change backed by the same primitive
-  evidence.
+  `ftCo_SM_LandingFallSpecial` (`submotion_id=36`), `ftCo_SM_AttackHi3`
+  (`submotion_id=58`), and `ftCo_SM_CatchDash` (`submotion_id=243`) because
+  pre-`ftColl_80078C70` Dolphin primitive/engine probes and replay-real BODY locks show those
+  hurtcap endpoints consume the live dynamic chain. `ftCo_SM_CatchDash` is backed by the SDS:299
+  probe: vanilla's live part-18 tail endpoints stay below Falco's grounded Shine while the
+  static/existing-lite chain admits a false BODY hit. Fox `ftCo_SM_AttackDash` and
+  `ftCo_SM_DamageAir2` are intentionally not marked: current probes/validation show their live
+  collision phase needs a fuller source-order dynamic/AObj owner before they can be retained as
+  generated collision owners. C gameplay must not hardcode these msids; adding another dynamic
+  collision submotion is an extraction/data contract change backed by primitive evidence and
+  validation-clean positive/negative locks.
+- The source-step owner index is a subset of the collision-owner index. Current generated Fox/Falco
+  data has no source-step owners. The v6 field is reserved for a future `lb_8001044C` source-step
+  owner once descriptor natural direction, max-step, cone clamp, local dynamic JObj rotation
+  writeback, dynamic collider avoidance, and source-order timing are validation-clean. Runtime
+  initialization currently rejects non-empty source-step indexes so a rejected/probe-only owner
+  cannot be activated by generated data.
 - The dynamic collider index is copied from `ftData.x2C->x8` / `fp->x1670`. Current Fox data has
   one collider on part 41 at offset `(0, 2, 0)` with radius `3.0`; Falco has none. Runtime uses
   these rows to model the `lb_8001044C` segment/sphere avoidance path, including the source
   `0.1f` skin radius from `lb_00F9.s::lb_804D7BE0`.
-- In v5, a collision-owner msid means the runtime applies the reconstructed dynamic matrix on every
+- In v6, a collision-owner msid means the runtime applies the reconstructed dynamic matrix on every
   supported frame for that submotion. It is not contingent on a nonzero current-frame
   `lb_8001044C` correction carry; `JumpB` rows proved vanilla can consume the dynamic chain even
   when the segment resolves close to the static pose.
 - Runtime carries dynamic state across sequential frames only for submotions present in the
   collision-owner index. Non-owner local submotions clear the dynamic collision state instead of
   preserving an unseeded hidden carry. Non-sequential reseeds reconstruct owner state from frame 0
-  through the seeded frame.
-- The descriptor `unk_68` / node `+0x68` cone clamp is not applied in the current C owner. Decomp
-  applies it against a `natural_dir` built from descriptor `unk_58` / live JObj rotation; the older
-  lite path incorrectly clamped against the current animation segment vector and over-constrained
-  Fox's CatchDash tail upward. Re-enabling this cone requires promoting that natural-direction/JObj
-  rotation owner, not a row-local clamp.
+  through the seeded frame for the validated reconstruction mode.
+- The descriptor `unk_68` / node `+0x68` cone clamp is not retained for current owners. Decomp
+  applies it against a `natural_dir` built from descriptor `unk_58` / live JObj rotation; the
+  rejected source-step experiment showed the lite representation is still incomplete there. Current
+  owners keep the validated base-vector approximation until that source-step owner lands as a
+  separate, validation-clean change.
 - The C runtime state is indexed by player and node for the supported one-set surface. Present
   `.dyn.bin` files with more than one set or more than `MSL_MAX_DYNAMIC_NODES` total nodes are
   rejected at initialization instead of being partially loaded.
 - Missing `.dyn.bin` files are allowed for synthetic pose-only tests and disable dynamic collision
   pose reconstruction. Present `.dyn.bin` files require the matching `.locals.bin` file; dynamic
   descriptors without local SRT are invalid because the runtime cannot reconstruct the JObj subtree
-  that feeds `lb_8000B1CC`. Present-but-invalid `.dyn.bin` files fail initialization. Stale v1/v2
-  dynamic artifacts are rejected because they do not carry the v5 collision-owner and collider
-  predicates.
+  that feeds `lb_8000B1CC`. Present-but-invalid `.dyn.bin` files fail initialization. Stale v1-v5
+  dynamic artifacts are rejected because they do not carry the v6 source-step owner index.
 - Reseed contract: non-sequential teacher-forced seeds rebuild supported dynamic-chain state by
   initializing from frame 0 local SRT and replaying the deterministic dynamic update through the
   seeded integer animation frame. This is `O(action_frame)` on reseed/pre-combat reconstruction

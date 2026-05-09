@@ -219,6 +219,9 @@ def main() -> None:
         "ftCo_SM_ThrownB",
         "ftCo_SM_ThrownHi",
         "ftCo_SM_ThrownLw",
+        "ftCo_SM_DamageAir1",
+        "ftCo_SM_DamageAir2",
+        "ftCo_SM_DamageAir3",
     ]
     want_ids = {name: enum_map[name] for name in want if name in enum_map}
     if len(want_ids) != len(want):

@@ -59,6 +59,7 @@ def _extract_heiho_article(
     int,
     int,
     list[dict],
+    dict,
 ]:
     """Return Heiho article metadata used by the stage-object runtime.
 
@@ -93,6 +94,17 @@ def _extract_heiho_article(
 
         fall_accel = _f32_be(arc.buf, attr + 0x10)
         fall_speed_max = _f32_be(arc.buf, attr + 0x14)
+        # Item_80267AA8 copies ItemAttr.x40 to item->xC1C/xC0C, and it_80275DFC installs it as
+        # the fixed mpColl ECB source scaled by ItemAttr.x60_scale.
+        # refs/melee/src/melee/it/item.c::Item_80267AA8
+        # refs/melee/src/melee/it/it_2725.c::{it_80275DFC,mpColl_SetECBSource_Fixed}
+        collision_ecb = {
+            "up": _f32(_f32_be(arc.buf, attr + 0x40)),
+            "down": _f32(_f32_be(arc.buf, attr + 0x44)),
+            "right": _f32(_f32_be(arc.buf, attr + 0x48)),
+            "left": _f32(_f32_be(arc.buf, attr + 0x4C)),
+            "scale": _f32(_f32_be(arc.buf, attr + 0x60)),
+        }
         special_attrs = [_f32_be(arc.buf, special + i * 4) for i in range(7)]
         # Heiho's first special attr is a pointer to a short damage/collision parameter block.
         # it_802D8EC8 compares cumulative item damage against `**special_attrs * 0.8F`.
@@ -131,6 +143,7 @@ def _extract_heiho_article(
             kind,
             damage_threshold,
             hurtboxes,
+            collision_ecb,
         )
 
     raise ValueError("GrSt.dat itemdata missing It_Kind_Heiho article")
@@ -206,6 +219,7 @@ def _extract_yoshi_shyguy(grst: Path) -> dict:
         item_kind,
         damage_threshold,
         hurtboxes,
+        collision_ecb,
     ) = _extract_heiho_article(arc)
     dyn_y_vel = _extract_child_jobj_tray_fobj_deltas(arc, state0_anim)
     return {
@@ -224,6 +238,7 @@ def _extract_yoshi_shyguy(grst: Path) -> dict:
         "jitter_y_amp": _f32(3.0),
         "state4_speed_mul": _f32(1.5),
         "damage_threshold": int(damage_threshold),
+        "collision_ecb": collision_ecb,
         "hurtboxes": hurtboxes,
         "vpos": [_f32(_f32_be(arc.buf, yak + 0x0C + i * 4)) for i in range(6)],
         "speed": [_f32(v) for v in special_attrs[1:4]],
@@ -236,6 +251,8 @@ def _extract_yoshi_shyguy(grst: Path) -> dict:
             "refs": [
                 "refs/melee/src/melee/gr/grstory.c::{reset_shyguy_timer,grStory_801E3418}",
                 "refs/melee/src/melee/it/items/itheiho.c::{it_802D8618,itHeiho_UnkMotion*_Phys,it_802D98C4}",
+                "refs/melee/src/melee/it/item.c::Item_80267AA8",
+                "refs/melee/src/melee/it/it_2725.c::it_80275DFC",
                 "refs/melee/src/sysdolphin/baselib/{aobj.c,fobj.c,jobj.c}",
             ],
         },
@@ -284,19 +301,21 @@ def _write_bin(path: Path, data: dict) -> None:
     speed = [float(x) for x in data["speed"]]
     dyn_y_vel = [float(x) for x in data["dyn_y_vel"]]
     hurtboxes = list(data.get("hurtboxes") or [])
+    collision_ecb = dict(data.get("collision_ecb") or {})
     if (
         len(vpos) != 6
         or len(speed) != 3
         or len(dyn_y_vel) != 128
         or len(hurtboxes) == 0
         or len(hurtboxes) > 2
+        or not all(k in collision_ecb for k in ("up", "down", "right", "left", "scale"))
     ):
         raise ValueError("unexpected Shy Guy table dimensions")
 
     buf = bytearray()
     buf += STAGE_ITEM_OBJECT_MAGIC
     buf += struct.pack(
-        "<IHHHHHHHHHHfffffffHH",
+        "<IHHHHHHHHHHffffffffffffHH",
         STAGE_ITEM_OBJECT_VERSION,
         int(data["stage_id"]) & 0xFFFF,
         int(data["item_kind"]) & 0xFFFF,
@@ -315,6 +334,11 @@ def _write_bin(path: Path, data: dict) -> None:
         _f32(data["spawn_right_x"]),
         _f32(data["state4_speed_mul"]),
         _f32(data["jitter_y_amp"]),
+        _f32(collision_ecb["up"]),
+        _f32(collision_ecb["down"]),
+        _f32(collision_ecb["right"]),
+        _f32(collision_ecb["left"]),
+        _f32(collision_ecb["scale"]),
         int(data["damage_threshold"]) & 0xFFFF,
         len(hurtboxes) & 0xFFFF,
     )

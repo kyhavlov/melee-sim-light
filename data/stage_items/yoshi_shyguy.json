@@ -1,4 +1,11 @@
 {
+  "collision_ecb": {
+    "down": 6.0,
+    "left": 8.0,
+    "right": 8.0,
+    "scale": 0.8500000238418579,
+    "up": 6.0
+  },
   "damage_mul": 2.0,
   "damage_threshold": 15,
   "dyn_y_vel": [
@@ -156,6 +163,8 @@
     "refs": [
       "refs/melee/src/melee/gr/grstory.c::{reset_shyguy_timer,grStory_801E3418}",
       "refs/melee/src/melee/it/items/itheiho.c::{it_802D8618,itHeiho_UnkMotion*_Phys,it_802D98C4}",
+      "refs/melee/src/melee/it/item.c::Item_80267AA8",
+      "refs/melee/src/melee/it/it_2725.c::it_80275DFC",
       "refs/melee/src/sysdolphin/baselib/{aobj.c,fobj.c,jobj.c}"
     ],
     "stage_dat": "_iso/GrSt.dat",

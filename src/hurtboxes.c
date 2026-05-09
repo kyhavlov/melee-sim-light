@@ -113,6 +113,16 @@ static inline uint8_t hurtboxes_float_aobj_pose_owner(uint16_t action_id) {
   return msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_LANDING_AIR);
 }
 
+static inline float hurtboxes_pose_sample_frame(const MslBatch* batch, size_t idx, uint8_t char_id,
+                                                uint16_t msid, uint16_t action_id,
+                                                float anim_frame_f32, uint16_t pose_frame) {
+  (void)batch;
+  (void)idx;
+  (void)char_id;
+  (void)msid;
+  return hurtboxes_float_aobj_pose_owner(action_id) ? anim_frame_f32 : (float)pose_frame;
+}
+
 static inline uint8_t hurtboxes_guard_tilt_live_body_pose_owner(const MslBatch* batch, size_t idx,
                                                                 uint16_t pose_msid) {
   if (batch == NULL || pose_msid != (uint16_t)MSL_SM_GUARD) {
@@ -914,8 +924,8 @@ static void hurtboxes_refresh_impl(MslBatch* batch, uint8_t geometry_mode) {
       // refs/melee/src/sysdolphin/baselib/aobj.c::HSD_AObjInterpretAnim
       // refs/melee/src/sysdolphin/baselib/fobj.c::HSD_FObjInterpretAnim
       // refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
-      const float pose_sample_frame =
-          hurtboxes_float_aobj_pose_owner(action_id) ? anim_frame_f32 : (float)pose_frame;
+      const float pose_sample_frame = hurtboxes_pose_sample_frame(
+          batch, idx, char_id, pose_msid, action_id, anim_frame_f32, pose_frame);
       (void)anim_pose_get_collision_matrices_f32(batch, idx, pose_msid, pose_sample_frame,
                                                  cap_part_ids, cap_count, cap_mats, cap_mat_ok);
       float guard_tilt_mats[MSL_MAX_HURTCAPS * 12u];
