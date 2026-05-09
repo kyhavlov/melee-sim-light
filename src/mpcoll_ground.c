@@ -495,6 +495,7 @@ static inline uint8_t action_allows_floor_edge_snap(uint16_t a) {
   // - EscapeF/EscapeB/EscapeN (rolls / spotdodge)
   // - Grounded attacks (Attack11..AttackLw4), including AttackDash and AttackS4S.
   // - Common AppealSR/SL through ftCo_AppealS_Coll -> ft_80084104.
+  // - Grounded ThrowF/B/Hi/Lw through ftCo_Throw*_Coll -> ft_800841B8 -> ft_800827A0.
   // - Fox/Falco grounded SpecialSEnd, whose collision callback uses ft_800827A0 after the main
   //   Side-B travel phase has already converted through ft_80082708 when floor is lost.
   // - PassiveStandF/B tech-roll grounded continuation.
@@ -524,6 +525,7 @@ static inline uint8_t action_allows_floor_edge_snap(uint16_t a) {
   // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_Coll
   // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackS4.c::ftCo_AttackS4_Coll
   // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_AppealS.c::ftCo_AppealS_Coll
+  // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_Throw{F,B,Hi,Lw}_Coll
   // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveStand.c::ftCo_PassiveStand_Coll
   if (a >= (uint16_t)MSL_ACT_ATTACK_11 && a <= (uint16_t)MSL_ACT_ATTACK_LW4) {
     return 1;
@@ -554,6 +556,10 @@ static inline uint8_t action_allows_floor_edge_snap(uint16_t a) {
     case MSL_ACT_PASSIVE_STAND_B:
     case MSL_ACT_APPEAL_SR:
     case MSL_ACT_APPEAL_SL:
+    case MSL_ACT_THROW_F:
+    case MSL_ACT_THROW_B:
+    case MSL_ACT_THROW_HI:
+    case MSL_ACT_THROW_LW:
     case MSL_ACT_FX_SPECIAL_S_END:
       return 1;
     default:

@@ -2640,9 +2640,13 @@ static inline void enter_fall_from_grounded_floor_loss(MslBatch* batch, const Ms
   batch->state.fall_fast[idx] = 0u;
 
   // ftCo_Fall_Enter clamps self_vel.x through ftCommon_ClampAirDrift after the motion change.
+  // It does not copy the current gr_vel into self_vel.x; ftCommon_8007D5D4 then clears gr_vel.
+  // Grounded Phys callbacks can update fp->gr_vel for the post-frame state while the movement
+  // self_vel for the current frame remains the old projected value, so floor-loss Fall must source
+  // the air velocity from the self-velocity lane, not the post-Phys ground scalar.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter
-  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_ClampAirDrift
-  float air_x = batch->state.speed_ground_x_self[idx];
+  // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_ClampAirDrift,ftCommon_8007D5D4}
+  float air_x = batch->state.speed_air_x_self[idx];
   if (air_x > ch->air_drift_max) {
     air_x = ch->air_drift_max;
   } else if (air_x < -ch->air_drift_max) {
@@ -2661,6 +2665,22 @@ static inline uint8_t action_is_attackair(uint16_t a) {
   // aerial attacks.
   // refs/melee/src/melee/ft/ftmotionstates.c::ftData_MotionStateList
   return msl_motion_state_common_class_has(a, MSL_MS_CLASS_ATTACK_AIR);
+}
+
+static inline uint16_t attackair_landing_action_for_contact(const MslBatch* batch, size_t idx,
+                                                            uint16_t a) {
+  if (!action_is_attackair(a)) {
+    return 0u;
+  }
+  // AttackAir_Coll dispatches through ft_80082C74 even on same-frame hitlag contacts; the callback
+  // then lets ftCo_LandingAir_EnterWithLag choose LandingAir* vs autocancel Landing from
+  // fp->cmd_vars[0]. cmd_vars[0] is modeled from extracted MSLFTSC1 set_cmd_var timelines.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
+  // refs/melee/src/melee/ft/ft_081B.c::ft_80082C74
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c::ftCo_LandingAir_EnterWithLag
+  const uint8_t lag_enabled = move_tables_attackair_cmd0_active(batch->state.char_id[idx], a,
+                                                                batch->state.anim_frame_f32[idx]);
+  return lag_enabled ? landing_air_action_from_attackair(a) : (uint16_t)MSL_ACT_LANDING;
 }
 
 static inline uint16_t walk_action_from_speed(const MslCommonParams* c, const MslCharParams* ch,
@@ -5947,9 +5967,6 @@ void locomotion_update_post_collision(MslBatch* batch) {
   for (int bi = 0; bi < batch->batch_size; bi++) {
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
-      if (batch->state.hitlag_started_frame[idx] != 0) {
-        continue;
-      }
 
       const uint8_t was_ground = batch->state.prev_on_ground[idx] ? 1 : 0;
       const uint8_t now_ground = batch->state.on_ground[idx] ? 1 : 0;
@@ -5961,6 +5978,16 @@ void locomotion_update_post_collision(MslBatch* batch) {
       }
 
       const uint16_t a = batch->state.action_id[idx];
+      if (batch->state.hitlag_started_frame[idx] != 0) {
+        if (!was_ground && now_ground && action_is_attackair(a)) {
+          const uint16_t land = attackair_landing_action_for_contact(batch, idx, a);
+          if (land != 0u) {
+            enter_landing_action_from_air(batch, ch, idx, (size_t)bi, a, land);
+          }
+        }
+        continue;
+      }
+
       const uint32_t stage_id = batch->state.stage_id[idx / (size_t)MSL_MAX_PLAYERS];
       const uint16_t floor_skip_segment = (batch->state.floor_skip_segment_id != NULL)
                                               ? batch->state.floor_skip_segment_id[idx]
@@ -6180,9 +6207,7 @@ void locomotion_update_post_collision(MslBatch* batch) {
         // data/moves/{fox,falco}.json moves["ftCo_SM_AttackAir*"]["events"] set_cmd_var(idx=0).
         uint16_t land = 0;
         if (action_is_attackair(a)) {
-          const uint8_t lag_enabled = move_tables_attackair_cmd0_active(
-              batch->state.char_id[idx], a, batch->state.anim_frame_f32[idx]);
-          land = lag_enabled ? landing_air_action_from_attackair(a) : (uint16_t)MSL_ACT_LANDING;
+          land = attackair_landing_action_for_contact(batch, idx, a);
         } else if (ms != NULL && a == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_START) {
           side_special_air_to_ground_transition(batch, ms, ch, idx,
                                                 (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_START);
