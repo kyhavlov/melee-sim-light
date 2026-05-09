@@ -105,6 +105,16 @@ _AGG = "datasets/aggregate_recent/replays/validation/aggregate_recent"
         ),
         _Case(
             dataset_rel="datasets/aggregate_recent/replays/validation/"
+            "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            record=3105,
+            player=1,
+            seed_action=43,  # LandingFallSpecial
+            ref_action=78,  # DamageN1
+            expect_item_clear=True,
+            note="LandingFallSpecial exact flattened-Z laser BODY admits hit",
+        ),
+        _Case(
+            dataset_rel="datasets/aggregate_recent/replays/validation/"
             "yoshis_story_recent/CheeryNumbMonkey.msl",
             record=184,
             player=0,
@@ -199,6 +209,16 @@ _AGG = "datasets/aggregate_recent/replays/validation/aggregate_recent"
             ref_action=56,
             expect_item_clear=False,
             note="adjacent AttackHi3 negative keeps laser alive",
+        ),
+        _Case(
+            dataset_rel="datasets/aggregate_recent/replays/validation/"
+            "cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
+            record=3104,
+            player=1,
+            seed_action=43,  # adjacent LandingFallSpecial no-hit frame
+            ref_action=43,
+            expect_item_clear=False,
+            note="adjacent LandingFallSpecial exact flattened-Z negative keeps laser alive",
         ),
         _Case(
             dataset_rel="datasets/aggregate_recent/replays/validation/"

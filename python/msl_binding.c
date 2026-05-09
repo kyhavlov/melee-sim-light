@@ -3898,6 +3898,26 @@ static PyObject* msl_debug_set_rollout_clock_mode_py(PyObject* self, PyObject* a
   Py_RETURN_NONE;
 }
 
+static PyObject* msl_debug_get_rollout_clock_mode_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  int batch_index = 0;
+  if (!PyArg_ParseTuple(args, "Oi", &handle_obj, &batch_index)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+  uint8_t mode = 0u;
+  const int err = msl_batch_debug_get_rollout_clock_mode(h->batch, batch_index, &mode);
+  if (err != 0) {
+    PyErr_Format(PyExc_ValueError, "msl_batch_debug_get_rollout_clock_mode failed: %d", err);
+    return NULL;
+  }
+  return PyLong_FromLong((long)mode);
+}
+
 static PyObject* msl_debug_set_camera_mode_py(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* handle_obj = NULL;
@@ -5179,6 +5199,8 @@ static PyMethodDef methods[] = {
      "debug_force_anim_timebase_enter(handle, batch_index, player_index, anim_start, anim_speed)"},
     {"debug_set_rollout_clock_mode", msl_debug_set_rollout_clock_mode_py, METH_VARARGS,
      "debug_set_rollout_clock_mode(handle, batch_index, mode)"},
+    {"debug_get_rollout_clock_mode", msl_debug_get_rollout_clock_mode_py, METH_VARARGS,
+     "debug_get_rollout_clock_mode(handle, batch_index) -> int"},
     {"debug_set_camera_mode", msl_debug_set_camera_mode_py, METH_VARARGS,
      "debug_set_camera_mode(handle, batch_index, mode)"},
     {"debug_timebase", msl_debug_timebase_py, METH_VARARGS,

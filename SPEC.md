@@ -776,10 +776,13 @@ Recent deltas to reflect here (do not let these get “lost in chat logs”):
   generated item max-fall clamp plus state 3 gravity, blast-bound clear, and the active dynamic-bone Y
   recompute from the generated `MSLSTIO1` GrSt.dat Heiho child-JObj `HSD_A_J_TRAY` FObj delta table
   using prefix-causal previous velocity plus active AObj phase. The phase lane is current hidden
-  runtime state, not a replay-future bridge. This does not close full autonomous Yoshi Shy Guy
-  ownership: global pre-spawn HSD RNG phase/count, multi-spawn scheduling, collision turnarounds,
-  and the full free-running stage-object scheduler remain open. Knocked/falling state 2/3 blast
-  clear is the generic item post-Phys owner (`Item_802697D4 -> Item_802696CC`), so it clears on
+  runtime state, not a replay-future bridge. Runtime also models the source no-live-Heiho stage
+  scheduler's timer, discarded reset-timer RNG consume, two `set_shyguy_spawn_count` calls, and
+  per-spawn jitter; replay rollouts carry the frame-start RNG clock only until the zero-timer spawn
+  callback consumes it, then live Heiho frames return to seed-owned RNG state. This still does not
+  close full autonomous Yoshi Shy Guy ownership: collision turnarounds and some free-running
+  stage-object item interactions remain open. Knocked/falling state 2/3 blast clear is the generic
+  item post-Phys owner (`Item_802697D4 -> Item_802696CC`), so it clears on
   side/bottom blast bounds without the active-state `it_802D9714` 20-unit return margin. Dream Land
   Whispy/apple scheduling is also separate and must not be substituted with replay-next lanes
   (`src/items.c`, `data/stage_items/yoshi_shyguy.bin`; refs/melee/src/melee/gr/grstory.c::grStory_801E3418,
@@ -2283,7 +2286,11 @@ Fox/Falco special-owner split (2026-04-17):
     `data/stages/bin/grst.bin::MSLSTG01 platform_path` records through `Ground_801C2FE0` /
     `grStory_801E3370`; freezing the frame clock at the replay reseed row can collide aerial
     Side-B or common-air callbacks with an old cloud phase. Normal `reseed_seed()` remains
-    one-step/teacher-forced and does not advance `frame_id` or `frame_pre_random_seed`.
+    one-step/teacher-forced and does not advance `frame_id` or `frame_pre_random_seed`; for
+    no-live-Heiho Yoshi's Story scheduler rows, preprocessing stores
+    `seed_t.frame_pre_random_seed` from the simulated pre-frame (`input_t := pre(i)`) so
+    `grStory_801E3418` starts from the callback frame's Slippi/HSD seed rather than the previous
+    post-frame row.
   - `Fall_Coll` fastfall rows whose loaded ECB bottom is above the fighter root can still publish
     hard-floor and ledge-floor landings through the shared flags-6 callback owner when a
     prefix-causal `CollData_X130_Locked` owner or a true adjacent ledge-floor continuation owns the

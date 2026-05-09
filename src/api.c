@@ -703,6 +703,9 @@ enum {
   MSL_STAGE_BATTLEFIELD = 31,
   // GALE01/Slippi stage id 32 for Final Destination in this simulator's target domain.
   MSL_STAGE_FINAL_DESTINATION = 32,
+  // GALE01 ItemKind constants for Yoshi's Story Shy Guys.
+  // refs/melee/src/melee/it/forward.h::It_Kind_Heiho
+  MSL_ITEM_KIND_HEIHO = 0xD2,
   // Character id mapping follows Slippi post-frame `character` (GALE01):
   // - Fox   = 1
   // - Falco = 22
@@ -857,10 +860,36 @@ static int msl_seed_local_slot_from_source_port0(const MslSeed* seed, int active
   return -1;
 }
 
-static inline uint8_t msl_reseed_seed_uses_rollout_replay_frame_clock(const MslSeed* seed,
-                                                                      int active_players) {
+static inline uint8_t msl_seed_has_live_yoshi_shyguy(const MslSeed* seed) {
   if (seed == NULL) {
     return 0u;
+  }
+  for (int it = 0; it < MSL_MAX_ITEMS; it++) {
+    if (seed->items[it].exists != 0u && seed->items[it].type == (uint16_t)MSL_ITEM_KIND_HEIHO) {
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
+static inline uint8_t msl_reseed_seed_rollout_replay_frame_clock_owner(const MslSeed* seed,
+                                                                       int active_players) {
+  if (seed == NULL) {
+    return (uint8_t)MSL_ROLLOUT_CLOCK_NONE;
+  }
+  if (seed->stage_id == (uint32_t)MSL_STAGE_YOSHIS_STORY &&
+      seed->stage_yoshi_shyguy_valid_u8 != 0u && !msl_seed_has_live_yoshi_shyguy(seed)) {
+    // Replay rollout clock ownership for Yoshi's Story Shy Guy scheduler:
+    // `grStory_801E3418` decrements its stage timer only while no Heiho items are live, then
+    // consumes the current frame-start HSD RNG stream for pattern, speed, count, and jitter when
+    // the timer reaches zero. One-step seed rows are preprocessed with the simulated frame's
+    // random_seed; rollouts seeded before the spawn must continue that replay frame clock until the
+    // stage callback consumes it. This is hidden-state reconstruction for replay rollout, not a live
+    // gameplay mode gate.
+    // refs/slippi-ssbm-asm/Recording/SendFrameStart.s
+    // refs/melee/src/melee/gr/grstory.c::{grStory_801E3418,set_shyguy_spawn_count}
+    // refs/melee/src/sysdolphin/baselib/random.c::{HSD_Randi,HSD_Randf}
+    return (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED_YOSHI_SHYGUY;
   }
   for (int p = 0; p < active_players; p++) {
     if (seed->opening_input_lock_timer[p] != 0u) {
@@ -870,7 +899,7 @@ static inline uint8_t msl_reseed_seed_uses_rollout_replay_frame_clock(const MslS
       // refs/slippi-ssbm-asm/Recording/SendFrameStart.s
       // refs/melee/src/melee/gm/gm_16AE.c::fn_8016B7F8
       // refs/melee/src/melee/if/ifstatus.c::ifStatus_802F6EA4
-      return 1u;
+      return (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED;
     }
   }
   for (int victim = 0; victim < active_players; victim++) {
@@ -902,7 +931,7 @@ static inline uint8_t msl_reseed_seed_uses_rollout_replay_frame_clock(const MslS
       // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
       // data/items/lasers.bin / data/characters/{fox,falco}.json blaster shot params.
-      return 1u;
+      return (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED;
     }
   }
   MslStageBounds blast_bounds = {0};
@@ -921,7 +950,7 @@ static inline uint8_t msl_reseed_seed_uses_rollout_replay_frame_clock(const MslS
       // the future DeadUpStar/DeadUpFall label.
       // refs/melee/src/melee/ft/ft_0D31.c::ftCo_800D3158
       // refs/slippi-ssbm-asm/Recording/SendFrameStart.s
-      return 1u;
+      return (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED;
     }
     const int attacker =
         msl_seed_local_slot_from_source_port0(seed, active_players, seed->last_hit_by[victim]);
@@ -933,7 +962,7 @@ static inline uint8_t msl_reseed_seed_uses_rollout_replay_frame_clock(const MslS
       // refs/slippi-ssbm-asm/Recording/SendFrameStart.s
       // refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-      return 1u;
+      return (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED;
     }
     if (attacker < 0 || attacker == victim) {
       continue;
@@ -951,7 +980,7 @@ static inline uint8_t msl_reseed_seed_uses_rollout_replay_frame_clock(const MslS
       // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by raw source-port domain)
       // refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-      return 1u;
+      return (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED;
     }
     if ((seed->action_id[victim] == (uint16_t)MSL_ACT_FX_SPECIAL_HI_FALL ||
          seed->action_id[victim] == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_END) &&
@@ -964,10 +993,10 @@ static inline uint8_t msl_reseed_seed_uses_rollout_replay_frame_clock(const MslS
       // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiFall_Anim
       // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialAirSEnd_Anim
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-      return 1u;
+      return (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED;
     }
   }
-  return 0u;
+  return (uint8_t)MSL_ROLLOUT_CLOCK_NONE;
 }
 
 static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes,
@@ -2761,9 +2790,8 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
 
     if (batch->rollout_clock_rng_owned != NULL) {
       uint8_t clock_owner = rollout_owned_after;
-      if (clock_owner == (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED &&
-          !msl_reseed_seed_uses_rollout_replay_frame_clock(seed, active_players)) {
-        clock_owner = (uint8_t)MSL_ROLLOUT_CLOCK_NONE;
+      if (clock_owner == (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED) {
+        clock_owner = msl_reseed_seed_rollout_replay_frame_clock_owner(seed, active_players);
       }
       batch->rollout_clock_rng_owned[bi] = clock_owner;
     }
@@ -2827,7 +2855,8 @@ static void msl_batch_commit_rollout_clock_rng(MslBatch* batch) {
     if (clock_owner == (uint8_t)MSL_ROLLOUT_CLOCK_NONE) {
       continue;
     }
-    if (clock_owner == (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED) {
+    if (clock_owner == (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED ||
+        clock_owner == (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED_YOSHI_SHYGUY) {
       batch->state.frame_pre_random_seed[bi] += 0x10000u;
     } else if (batch->debug_rng_seed_out != NULL) {
       batch->state.frame_pre_random_seed[bi] = batch->debug_rng_seed_out[(size_t)bi];
@@ -4923,10 +4952,22 @@ int msl_batch_debug_set_rollout_clock_mode(MslBatch* batch, int batch_index, uin
   if (batch_index < 0 || batch_index >= batch->batch_size) {
     return EINVAL;
   }
-  if (mode > (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED) {
+  if (mode > (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED_YOSHI_SHYGUY) {
     return EINVAL;
   }
   batch->rollout_clock_rng_owned[batch_index] = mode;
+  return 0;
+}
+
+int msl_batch_debug_get_rollout_clock_mode(const MslBatch* batch, int batch_index,
+                                           uint8_t* out_mode) {
+  if (batch == NULL || batch->rollout_clock_rng_owned == NULL || out_mode == NULL) {
+    return EINVAL;
+  }
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return EINVAL;
+  }
+  *out_mode = batch->rollout_clock_rng_owned[batch_index];
   return 0;
 }
 

@@ -539,16 +539,29 @@ Source/generation:
   branch state for that owner.
 - Runtime consumes the lane in `src/combat.c` immediately before the DamageFlyRoll gate, then clears
   it.
+- For Yoshi's Story Shy Guy scheduler rows with no live Heiho item, preprocessing stores
+  `seed_t.frame_pre_random_seed` from the frame being simulated (`input_t := pre(i)` /
+  `ref_t1 := post(i)`) while keeping visible fighter/item/stage state from `post(i-1)`. This
+  reconstructs the hidden HSD stream phase for `grStory_801E3418`, which can decrement to or
+  consume the callback frame's Slippi random_seed for Shy Guy pattern/count/jitter selection. Other
+  one-step rows keep the historical seed-owned frame RNG lane unless a separate source owner
+  promotes that phase.
+- Suite `.msl` cache metadata version `3` invalidates older Yoshi no-live-Heiho cache rows with the
+  same record size but stale `frame_pre_random_seed` semantics. Forced preprocessing regenerates the
+  corrected cache metadata and sample payload.
 - `reseed_seed_rollout()` always advances `frame_id` during validation rollout so frame-indexed
   stage/object owners consume the current simulated frame rather than the reseed row. The immediate
   source-backed owner is Yoshi's Story Randall: `data/stages/bin/grst.bin::MSLSTG01`
   `platform_path` records are sampled by `src/stage_collision.c` from the live frame clock.
 - `reseed_seed_rollout()` advances `frame_pre_random_seed` only for explicit replay-frame RNG-clock
-  owners, including data-backed blaster capture/throw episodes. This is rollout-only metadata
-  ownership: normal `reseed_seed()` keeps `frame_id` / `frame_pre_random_seed` seed-owned, while
-  validation rollout carries `frame_id` for all replay rollouts and carries the Slippi frame-start
-  RNG seed only through source-owned ThrowHi/ThrowB/ThrowLw article paths that can later reach the
-  same `ftCo_8008DCE0` gate.
+  owners, including the no-live-Heiho Yoshi Shy Guy scheduler before its zero-timer spawn consumer
+  and data-backed blaster capture/throw episodes. This is rollout-only metadata ownership: normal
+  `reseed_seed()` keeps `frame_id` / `frame_pre_random_seed` seed-owned after the preprocessing
+  phase choice above initializes the simulated frame's source RNG seed, while validation rollout
+  carries `frame_id` for all replay rollouts and carries the Slippi frame-start RNG seed only
+  through source-owned consumers. The Shy Guy rollout owner clears immediately after
+  `grStory_801E3418` consumes the spawn-frame RNG stream or when live Heiho items make the scheduler
+  return.
 
 Decomp contract:
 - `refs/slippi-ssbm-asm/Recording/SendFrameStart.s`.

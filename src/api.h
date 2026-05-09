@@ -2290,6 +2290,8 @@ int msl_batch_debug_set_hitlag(MslBatch* batch, int batch_index, int player_inde
 int msl_batch_debug_set_smash_charge_state(MslBatch* batch, int batch_index, int player_index,
                                            uint8_t state, uint8_t frames, uint8_t hold_frames_max);
 int msl_batch_debug_set_rollout_clock_mode(MslBatch* batch, int batch_index, uint8_t mode);
+int msl_batch_debug_get_rollout_clock_mode(const MslBatch* batch, int batch_index,
+                                           uint8_t* out_mode);
 int msl_batch_debug_set_camera_mode(MslBatch* batch, int batch_index, uint8_t mode);
 // Debug/testing helper: override movescript-derived hit status (opcode 26) eligibility.
 // - Pass status=-1 to clear the override (use extracted tables).

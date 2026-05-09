@@ -302,10 +302,19 @@ def test_powershield_reflect_transfer_then_speed_apply_timing_locks(case: _Timin
         assert np.isclose(got, exp, atol=1e-6), f"{case.note}: transfer field={fld} expected={exp} got={got}"
 
     # Strict replay-real parity: follow-up frame after deferred speed apply.
-    _seed_ap, out_ap, ref_ap = _step_one_row(dataset_path=dataset_path, record=case.apply_record)
-    ap_slot_out = _find_item_slot_by_key(out_ap["items"], spawn_id=case.spawn_id, item_type=case.item_type)
-    ap_slot_ref = _find_item_slot_by_key(ref_ap["items"], spawn_id=case.spawn_id, item_type=case.item_type)
-    assert ap_slot_out >= 0 and ap_slot_ref >= 0, f"{case.note}: follow-up row item key missing"
+    seed_ap, out_ap, ref_ap = _step_one_row(dataset_path=dataset_path, record=case.apply_record)
+    ap_slot_seed = _find_item_slot_by_key(
+        seed_ap["items"], spawn_id=case.spawn_id, item_type=case.item_type
+    )
+    ap_slot_out = _find_item_slot_by_key(
+        out_ap["items"], spawn_id=case.spawn_id, item_type=case.item_type
+    )
+    ap_slot_ref = _find_item_slot_by_key(
+        ref_ap["items"], spawn_id=case.spawn_id, item_type=case.item_type
+    )
+    assert ap_slot_seed >= 0 and ap_slot_out >= 0 and ap_slot_ref >= 0, (
+        f"{case.note}: follow-up row item key missing"
+    )
     for fld in ("owner", "instance_id", "direction"):
         got = int(out_ap["items"][ap_slot_out][fld])
         exp = int(ref_ap["items"][ap_slot_ref][fld])
@@ -314,6 +323,24 @@ def test_powershield_reflect_transfer_then_speed_apply_timing_locks(case: _Timin
         got = float(out_ap["items"][ap_slot_out][fld])
         exp = float(ref_ap["items"][ap_slot_ref][fld])
         assert np.isclose(got, exp, atol=1e-6), f"{case.note}: apply field={fld} expected={exp} got={got}"
+    # Fox/Falco laser reflected callback ignores ReflectDesc.x1C speed_mul (`p_ftCommonData->x2B0`)
+    # and only flips the article angle/facing before the next Anim callback rebuilds velocity.
+    # refs/melee/src/melee/it/items/itfoxlaser.c::itFoxLaser_Logic94_Reflected
+    seed_speed = float(
+        np.hypot(
+            float(seed_ap["items"][ap_slot_seed]["vel_x"]),
+            float(seed_ap["items"][ap_slot_seed]["vel_y"]),
+        )
+    )
+    out_speed = float(
+        np.hypot(
+            float(out_ap["items"][ap_slot_out]["vel_x"]),
+            float(out_ap["items"][ap_slot_out]["vel_y"]),
+        )
+    )
+    assert np.isclose(out_speed, seed_speed, atol=1e-6), (
+        f"{case.note}: reflected laser speed magnitude expected identity got seed={seed_speed} out={out_speed}"
+    )
 
 
 @dataclass(frozen=True)

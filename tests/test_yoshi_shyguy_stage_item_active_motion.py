@@ -56,6 +56,48 @@ def _step_one_row(dataset_path: Path, record: int) -> tuple[np.void, np.void]:
         binding.destroy(handle)
 
 
+def _field_bytes(samples: np.ndarray, record: int, field: str, stride: int) -> np.ndarray:
+    return np.frombuffer(samples[record : record + 1][field].tobytes(order="C"), dtype=np.uint8).reshape(
+        1, stride
+    ).copy()
+
+
+def _run_rollout_to_record(
+    dataset_path: Path, *, start_record: int, target_record: int, return_clock_mode: bool = False
+) -> tuple[np.void, np.void] | tuple[np.void, np.void, int]:
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    try:
+        binding.reseed_seed_rollout(handle, _field_bytes(samples, start_record, "seed_t", seed_stride))
+        for record in range(start_record, target_record + 1):
+            binding.step_input(
+                handle,
+                _field_bytes(samples, record, "prev_input_t", input_stride),
+                _field_bytes(samples, record, "input_t", input_stride),
+            )
+            binding.write_compare(handle, out_bytes)
+        out = out_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()
+        ref = samples[target_record]["ref_t1"]
+        if return_clock_mode:
+            return out, ref, int(binding.debug_get_rollout_clock_mode(handle, 0))
+        return out, ref
+    finally:
+        binding.destroy(handle)
+
+
 def _step_seed(seed: np.ndarray) -> np.void:
     binding = pytest.importorskip("msl_binding")
     sizes = binding.sizes()
@@ -579,6 +621,159 @@ def test_yoshi_shyguy_stage_timer_spawns_without_future_items() -> None:
     assert int(out["items"][0]["state"]) == 1
     pos_x = float(out["items"][0]["pos_x"])
     assert min(abs(pos_x + 292.0), abs(pos_x - 304.0)) <= 1e-6
+
+
+@pytest.mark.integration
+def test_yoshi_shyguy_one_step_timer_zero_uses_next_frame_rng_pec_119() -> None:
+    # Replay-real one-step clock lock for grStory_801E3418:
+    # PEC:119 seeds with the visible Shy Guy timer already at zero and no live Heiho items. Vanilla
+    # consumes the next Slippi frame-start HSD stream for pattern/count/jitter and spawns five
+    # right-side Heiho. Starting from the seed row's previous frame-start stream spawns the wrong
+    # count and vertical pattern.
+    # refs/slippi-ssbm-asm/Recording/SendFrameStart.s
+    # refs/melee/src/melee/gr/grstory.c::{grStory_801E3418,set_shyguy_spawn_count}
+    dataset_path = Path(
+        "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples[119]["seed_t"]
+    ref = ds.samples[119]["ref_t1"]
+    assert int(seed["frame_pre_random_seed"]) == int(ref["frame_pre_random_seed"]), (
+        "local dataset cache predates one-step frame RNG seed phase correction; rerun forced "
+        "preprocess so no-live Shy Guy timer-zero rows carry the spawn-frame RNG seed"
+    )
+    assert int(seed["stage_yoshi_shyguy_timer_u16"]) == 0
+    assert not any(
+        int(item["exists"]) and int(item["type"]) == ITEM_KIND_HEIHO for item in seed["items"]
+    )
+
+    out, ref = _step_one_row(dataset_path, 119)
+    live_slots = [i for i, item in enumerate(ref["items"]) if int(item["exists"]) != 0]
+    assert live_slots == [0, 1, 2, 3, 4]
+    assert int(out["frame_pre_random_seed"]) == int(ref["frame_pre_random_seed"])
+    for slot in live_slots:
+        assert int(out["items"][slot]["exists"]) == int(ref["items"][slot]["exists"])
+        assert int(out["items"][slot]["type"]) == int(ref["items"][slot]["type"])
+        assert float(out["items"][slot]["pos_x"]) == pytest.approx(
+            float(ref["items"][slot]["pos_x"]), abs=1e-6
+        )
+        assert float(out["items"][slot]["pos_y"]) == pytest.approx(
+            float(ref["items"][slot]["pos_y"]), abs=1e-6
+        )
+
+
+@pytest.mark.integration
+def test_yoshi_shyguy_one_step_timer_countdown_keeps_rng_seed_owned_pec_118() -> None:
+    # Negative owner boundary: when the stage timer is still counting down, grStory_801E3418 returns
+    # before any Shy Guy RNG consumers. The replay one-step pre-step owner is only for the timer-zero
+    # spawn callback, not for all timer-visible Yoshi rows.
+    # refs/melee/src/melee/gr/grstory.c::grStory_801E3418
+    dataset_path = Path(
+        "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples[118]["seed_t"]
+    ref = ds.samples[118]["ref_t1"]
+    assert int(seed["frame_pre_random_seed"]) == int(ref["frame_pre_random_seed"]), (
+        "local dataset cache predates one-step frame RNG seed phase correction; rerun forced "
+        "preprocess so Yoshi no-live Shy Guy rows carry the corrected seed phase"
+    )
+    assert int(seed["stage_yoshi_shyguy_timer_u16"]) == 1
+
+    out, _ = _step_one_row(dataset_path, 118)
+    assert int(out["frame_pre_random_seed"]) == int(seed["frame_pre_random_seed"])
+    assert not any(int(item["exists"]) and int(item["type"]) == ITEM_KIND_HEIHO for item in out["items"])
+
+
+@pytest.mark.integration
+def test_yoshi_shyguy_rollout_advances_replay_rng_clock_until_spawn_cnm_2153() -> None:
+    # Runtime rollout lock for the stage scheduler RNG owner:
+    # - CNM:2153 seeds eight frames before the Yoshi's Story Shy Guy timer reaches zero.
+    # - Vanilla consumes the frame-2038 Slippi/HSD RNG seed and spawns five left-side Heiho items.
+    # - A frozen reseed RNG clock consumes the stale frame-2030 seed instead, spawning one right-side
+    #   Heiho at x=304. The rollout clock owner must therefore advance while no Heiho items are live
+    #   and the stage timer is active.
+    # refs/slippi-ssbm-asm/Recording/SendFrameStart.s
+    # refs/melee/src/melee/gr/grstory.c::{grStory_801E3418,set_shyguy_spawn_count}
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    out, ref = _run_rollout_to_record(dataset_path, start_record=2153, target_record=2161)
+
+    live_slots = [i for i, item in enumerate(ref["items"]) if int(item["exists"]) != 0]
+    assert len(live_slots) == 5
+    for slot in live_slots:
+        assert int(out["items"][slot]["exists"]) == 1
+        assert int(out["items"][slot]["type"]) == ITEM_KIND_HEIHO
+        assert int(out["items"][slot]["state"]) == int(ref["items"][slot]["state"])
+        assert float(out["items"][slot]["pos_x"]) == pytest.approx(
+            float(ref["items"][slot]["pos_x"]), abs=1e-6
+        )
+        assert float(out["items"][slot]["pos_y"]) == pytest.approx(
+            float(ref["items"][slot]["pos_y"]), abs=1e-6
+        )
+        assert int(out["items"][slot]["spawn_id"]) == int(ref["items"][slot]["spawn_id"])
+
+
+@pytest.mark.integration
+def test_yoshi_shyguy_rollout_rng_clock_clears_after_spawn_cnm_2153() -> None:
+    # Lifetime boundary for the replay-frame Shy Guy RNG clock:
+    # starting before the zero-timer callback must advance to the spawn-frame RNG seed, but once
+    # `grStory_801E3418` has spawned live Heiho items it returns before any later RNG consumers.
+    # Later rollout frames must therefore keep frame_pre_random_seed seed-owned again.
+    # refs/slippi-ssbm-asm/Recording/SendFrameStart.s
+    # refs/melee/src/melee/gr/grstory.c::{grStory_801E3418,set_shyguy_spawn_count}
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    out, _ref, clock_mode = _run_rollout_to_record(
+        dataset_path, start_record=2153, target_record=2162, return_clock_mode=True
+    )
+
+    spawn_post_rng = int(ds.samples[2161]["ref_t1"]["frame_pre_random_seed"])
+    next_frame_rng = int(ds.samples[2162]["ref_t1"]["frame_pre_random_seed"])
+    assert clock_mode == 0
+    assert int(out["frame_pre_random_seed"]) == spawn_post_rng
+    assert int(out["frame_pre_random_seed"]) != next_frame_rng
+    assert any(int(item["exists"]) and int(item["type"]) == ITEM_KIND_HEIHO for item in out["items"])
+
+
+@pytest.mark.integration
+def test_yoshi_shyguy_rollout_clock_stays_seed_owned_when_heiho_live_cnm_2162() -> None:
+    # Negative owner boundary: once the spawn exists, `grStory_801E3418` returns before decrementing
+    # the stage timer or consuming pattern/count RNG. Reseeding on the first active Heiho frame must
+    # preserve the seed-owned frame RNG lane instead of entering the stage-spawn rollout clock owner.
+    # refs/melee/src/melee/gr/grstory.c::grStory_801E3418
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    seed_rng = int(ds.samples[2162]["seed_t"]["frame_pre_random_seed"])
+    out, ref = _run_rollout_to_record(dataset_path, start_record=2162, target_record=2162)
+
+    assert int(out["frame_pre_random_seed"]) == seed_rng
+    assert int(out["frame_pre_random_seed"]) != int(ref["frame_pre_random_seed"])
+    assert int(out["items"][0]["exists"]) == 1
+    assert int(out["items"][0]["type"]) == ITEM_KIND_HEIHO
 
 
 def test_yoshi_shyguy_dynamic_prev_vel_y_does_not_touch_other_stages() -> None:

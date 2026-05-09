@@ -180,7 +180,7 @@ void combat_rng_trace_begin_frame(MslBatch* batch) {
   }
   for (int bi = 0; bi < batch->batch_size; bi++) {
     const size_t bi_u = (size_t)bi;
-    const uint32_t seed_in = batch->state.frame_pre_random_seed[bi_u];
+    uint32_t seed_in = batch->state.frame_pre_random_seed[bi_u];
     batch->debug_rng_shadow_seed[bi_u] = seed_in;
     batch->debug_rng_seed_in[bi_u] = seed_in;
     batch->debug_rng_seed_out[bi_u] = seed_in;
@@ -1127,6 +1127,9 @@ static inline uint8_t combat_float_aobj_hurtcap_pose_owner(uint16_t action_id) {
 static inline uint8_t combat_attackdash_post_hitbox_collision_pose_owner(
     const MslBatch* batch, int bi, size_t idx, uint16_t action_id, uint8_t char_id,
     float anim_frame_f32, uint16_t attacker_action_id, uint8_t attacker_hitbox_active) {
+  (void)bi;
+  (void)attacker_action_id;
+  (void)attacker_hitbox_active;
   if (batch == NULL || action_id != (uint16_t)MSL_ACT_ATTACK_DASH) {
     return 0u;
   }
@@ -1137,15 +1140,12 @@ static inline uint8_t combat_attackdash_post_hitbox_collision_pose_owner(
   if (frame != 34u) {
     return 0u;
   }
-  // Keep this aligned with hurtboxes.c for ordinary reseeds. Replay-rollout handles may consume
-  // this only for the source-shaped DownSmash-vs-AttackDash BODY owner; applying the bridge as a
-  // generic rollout hurtcap pose offset produces false BODY contacts after the live rollout state
-  // has already advanced its own timebase.
-  if (batch->replay_rollout_reseeded != NULL && bi >= 0 &&
-      batch->replay_rollout_reseeded[bi] != 0u &&
-      (attacker_action_id != (uint16_t)MSL_ACT_ATTACK_LW4 || attacker_hitbox_active == 0u)) {
-    return 0u;
-  }
+  // Same source predicate as hurtboxes.c: AttackDash's immediate post-hitbox-clear collision pose
+  // is sampled on frame 34 before the allow_interrupt gate. This is not rollout-mode-specific and
+  // does not depend on the opposing attack family.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::{
+  //   ftCo_AttackDash_Anim,ftCo_AttackDash_IASA,ftCo_AttackDash_Coll}
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}
   if (move_tables_grounded_attack_allow_interrupt(char_id, action_id, anim_frame_f32) != 0u) {
     return 0u;
   }

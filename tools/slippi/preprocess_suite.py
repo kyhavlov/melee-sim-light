@@ -16,7 +16,7 @@ from tools.slippi.suite_io import dataset_path_for_suite_replay, load_suite, rep
 from tools.eval.dataset import HEADER_DTYPE, MAGIC, SAMPLE_DTYPE, SEED_DTYPE
 
 
-_CACHE_VERSION = 2
+_CACHE_VERSION = 3
 _SOURCE_INPUT_PY_TREES = ("tools/slippi",)
 _SOURCE_INPUT_FILES = ("tools/eval/dataset.py",)
 

@@ -3279,7 +3279,7 @@ def _main_impl(args) -> Dataset:
     reflector_damage_mul_lut[np.uint8(22)] = np.float32(
         json.loads(Path("data/characters/falco.json").read_text())["reflector_damage_mul"]
     )
-    # Frame ids and seeds (seed from frame i-1, ref from frame i).
+    # Frame ids and seeds (visible seed state from frame i-1, ref from frame i).
     samples["seed_t"]["frame_id"] = frame_ids[:-1]
     samples["ref_t1"]["frame_id"] = frame_ids[1:]
     samples["seed_t"]["frame_pre_random_seed"] = frame_pre_random_seed[:-1]
@@ -4768,6 +4768,28 @@ def _main_impl(args) -> Dataset:
     samples["seed_t"]["item_shyguy_hitlag_u8"] = shyguy_hitlag[:-1]
     samples["seed_t"]["item_shyguy_hitlag_valid_u8"] = shyguy_hitlag_valid[:-1]
     samples["seed_t"]["items"] = items_seed[:-1]
+    if int(stage_id) == int(_yoshi_shyguy_params().stage_id):
+        seed_items = samples["seed_t"]["items"]
+        live_seed_shyguy = np.any(
+            (seed_items["exists"] != 0)
+            & (seed_items["type"].astype(np.uint16) == np.uint16(_yoshi_shyguy_params().item_kind)),
+            axis=1,
+        )
+        shyguy_rng_owner = (
+            (samples["seed_t"]["stage_yoshi_shyguy_valid_u8"] != 0)
+            & (~live_seed_shyguy)
+        )
+        # Yoshi's Story Shy Guy stage callback is the source owner for these rows: while no Heiho
+        # item is live, `grStory_801E3418` may decrement to or consume the simulated frame's RNG
+        # stream. Seed rows still carry visible post(i-1) stage/item state, but this hidden HSD
+        # stream lane must be frame i's Slippi random_seed for one-step rows and for rollout clock
+        # carry from pre-spawn timer windows.
+        # refs/slippi-ssbm-asm/Recording/SendFrameStart.s
+        # refs/melee/src/melee/gr/grstory.c::{grStory_801E3418,set_shyguy_spawn_count}
+        if np.any(shyguy_rng_owner):
+            samples["seed_t"]["frame_pre_random_seed"][shyguy_rng_owner] = frame_pre_random_seed[1:][
+                shyguy_rng_owner
+            ]
     # Throw pulse-consume seed lane (causal producer):
     # - runtime consumes this lane in src/items.c throw-side pulse reconstruction suppressor.
     # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim

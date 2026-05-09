@@ -9,6 +9,7 @@
 #include "anim_frame.h"
 #include "anim_pose.h"
 #include "anim_timebase.h"
+#include "batch_internal.h"
 #include "char_params.h"
 #include "combat.h"
 #include "combat_geom.h"
@@ -355,6 +356,35 @@ static uint8_t yoshi_shyguy_has_live(const MslBatch* batch, int bi) {
   return 0u;
 }
 
+static inline void yoshi_shyguy_clear_rollout_rng_owner_if_live(MslBatch* batch, int bi) {
+  if (batch == NULL || batch->rollout_clock_rng_owned == NULL) {
+    return;
+  }
+  if (batch->rollout_clock_rng_owned[bi] ==
+      (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED_YOSHI_SHYGUY) {
+    // `grStory_801E3418` returns immediately while any Heiho item is live. If a replay rollout
+    // no-live scheduler owner reaches this state, ownership is over; later live-Heiho frames are
+    // seed-owned again and must not keep advancing Slippi's frame RNG lane.
+    // refs/melee/src/melee/gr/grstory.c::grStory_801E3418
+    batch->rollout_clock_rng_owned[bi] = (uint8_t)MSL_ROLLOUT_CLOCK_NONE;
+  }
+}
+
+static inline void yoshi_shyguy_mark_rollout_rng_owner_consumed(MslBatch* batch, int bi) {
+  if (batch == NULL || batch->rollout_clock_rng_owned == NULL) {
+    return;
+  }
+  if (batch->rollout_clock_rng_owned[bi] ==
+      (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED_YOSHI_SHYGUY) {
+    // The zero-timer stage callback has consumed the spawn-frame HSD RNG stream. Slippi's
+    // post-frame seed lane stays at that consumed frame-start value for this row, so clear the
+    // owner before api.c's rollout-clock commit.
+    // refs/slippi-ssbm-asm/Recording/SendFrameStart.s
+    // refs/melee/src/melee/gr/grstory.c::{grStory_801E3418,set_shyguy_spawn_count}
+    batch->rollout_clock_rng_owned[bi] = (uint8_t)MSL_ROLLOUT_CLOCK_NONE;
+  }
+}
+
 static float yoshi_shyguy_dyn_y_phase_value(const MslYoshiShyguyParams* params, int phase) {
   phase &= 0xFF;
   if (phase == 0) {
@@ -492,12 +522,10 @@ static int yoshi_shyguy_spawn_count(MslBatch* batch, int bi) {
     const int count =
         combat_rng_consume_randi_site(batch, bi, MSL_RNG_SITE_YOSHI_SHYGUY_COUNT_RARITY2_BONUS, 3) +
         3;
-    // Replay-reseeded rows expose the frame-start seed, not a fully replayed global HSD RNG
-    // stream. Until the upstream global RNG consumer order is owned, admitting multi-spawn count
-    // from the phase-shifted frame seed creates one-step regressions. Keep the source fallback
-    // spawn count rather than adding future spawn-count lanes.
-    (void)count;
-    return 1;
+    // Source count owner: the second `set_shyguy_spawn_count(gp, 2)` overwrites the earlier
+    // rarity-8 result and can spawn 3..5 Shy Guys from this bonus sample.
+    // refs/melee/src/melee/gr/grstory.c::{grStory_801E3418,set_shyguy_spawn_count}
+    return count;
   }
   return 1;
 }
@@ -547,6 +575,7 @@ static void yoshi_shyguy_stage_update(MslBatch* batch, int bi) {
     return;
   }
   if (yoshi_shyguy_has_live(batch, bi) != 0u) {
+    yoshi_shyguy_clear_rollout_rng_owner_if_live(batch, bi);
     return;
   }
   if (batch->state.stage_yoshi_shyguy_timer[bi] != 0u) {
@@ -554,6 +583,12 @@ static void yoshi_shyguy_stage_update(MslBatch* batch, int bi) {
     return;
   }
 
+  // `reset_shyguy_timer` first samples timer_min + HSD_Randi(timer_rand), then immediately
+  // overwrites the timer with 120. The sampled value is discarded but the RNG consumer is real and
+  // phase-orders the following pattern/speed/count/jitter samples.
+  // refs/melee/src/melee/gr/grstory.c::{reset_shyguy_timer,grStory_801E3418}
+  (void)combat_rng_consume_randi_site(batch, bi, MSL_RNG_SITE_YOSHI_SHYGUY_TIMER_WAIT,
+                                      (int32_t)params->timer_rand);
   batch->state.stage_yoshi_shyguy_timer[bi] = params->timer_reset;
   uint8_t pattern = batch->state.stage_yoshi_shyguy_pattern[bi] % MSL_YOSHI_SHYGUY_VPOS_COUNT;
   uint8_t next_pattern = pattern;
@@ -575,6 +610,7 @@ static void yoshi_shyguy_stage_update(MslBatch* batch, int bi) {
     pos_y = (params->jitter_y_amp * ((2.0f * randf) - 1.0f)) + base_y;
   }
   items_sort(batch, bi);
+  yoshi_shyguy_mark_rollout_rng_owner_consumed(batch, bi);
 }
 
 static inline int items_find_gun_slot(const MslBatch* batch, int bi, int owner,
@@ -764,83 +800,6 @@ static inline uint8_t laser_grounded_body_uses_sweep(const MslBatch* batch, size
   // refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Phys,it_8029C4D4}
   // refs/melee/src/melee/it/itcoll.c::it_80272460
   return 1u;
-}
-
-static inline uint8_t laser_grounded_body_aabb_overlap(const MslBatch* batch, int bi, int def,
-                                                       float x0, float y0, float x, float y,
-                                                       float sr, uint8_t* hit_hurt_height) {
-  const size_t d_idx = msl_idx_player(bi, def);
-  const float seg_min_x = fminf(x0, x) - sr;
-  const float seg_max_x = fmaxf(x0, x) + sr;
-  const float seg_min_y = fminf(y0, y) - sr;
-  const float seg_max_y = fmaxf(y0, y) + sr;
-  const float defender_x = batch->state.pos_x[d_idx];
-  if (defender_x < seg_min_x || defender_x > seg_max_x) {
-    return 0u;
-  }
-  const uint8_t cap_n = batch->state.hurtcap_count[d_idx];
-  for (uint8_t ci = 0; ci < cap_n; ci++) {
-    const size_t hc_idx = idx_hurtcap(bi, def, ci);
-    if (!batch->state.hurtcap_enabled[hc_idx]) {
-      continue;
-    }
-    // Height-class trim:
-    // - The miss-only bridge is only compensating lower/mid BODY overlap that our grounded precise
-    //   probe fails to select. High/head-only capsules still stay on the exact lbColl-shaped path;
-    //   broadening the bridge to height=2 reopens replay-false head contacts in the adjacent GAT
-    //   LandingFallSpecial family.
-    // - Decomp exposes hurt capsule height class on HitCapsule/HurtCapsule (`x43_b2`) and forwards
-    //   it through lbColl_8000805C acceptance.
-    // refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C
-    // refs/melee/src/melee/it/itcoll.c::it_80272460
-    if (batch->state.hurtcap_height[hc_idx] == (uint8_t)2u) {
-      continue;
-    }
-    const float r = batch->state.hurtcap_radius[hc_idx];
-    const float cap_min_x =
-        fminf(batch->state.hurtcap_a_x[hc_idx], batch->state.hurtcap_b_x[hc_idx]) - r;
-    const float cap_max_x =
-        fmaxf(batch->state.hurtcap_a_x[hc_idx], batch->state.hurtcap_b_x[hc_idx]) + r;
-    const float cap_min_y =
-        fminf(batch->state.hurtcap_a_y[hc_idx], batch->state.hurtcap_b_y[hc_idx]) - r;
-    const float cap_max_y =
-        fmaxf(batch->state.hurtcap_a_y[hc_idx], batch->state.hurtcap_b_y[hc_idx]) + r;
-    if (seg_max_x < cap_min_x || seg_min_x > cap_max_x || seg_max_y < cap_min_y ||
-        seg_min_y > cap_max_y) {
-      continue;
-    }
-    *hit_hurt_height = batch->state.hurtcap_height[hc_idx];
-    return 1u;
-  }
-  return 0u;
-}
-
-static inline uint8_t laser_grounded_body_landing_fall_special_aabb_bridge(
-    const MslBatch* batch, int bi, int def, float x0, float y0, float x, float y, float sr,
-    float laser_age_frames, uint8_t* hit_hurt_height) {
-  if (batch == NULL || hit_hurt_height == NULL) {
-    return 0u;
-  }
-  const size_t d_idx = msl_idx_player(bi, def);
-  if (batch->state.prev_action_id[d_idx] != (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL ||
-      batch->state.shield_radius[d_idx] > 0.0f || !(laser_age_frames > 1.0f)) {
-    return 0u;
-  }
-  // Grounded LandingFallSpecial miss-only BODY bridge:
-  // - item BODY contact in it_80272460 consumes the projectile travel segment owned by
-  //   itFoxlaser_UnkMotion1_Phys / it_8029C4D4.
-  // - Our precise grounded probe can still miss replay-real rows in LandingFallSpecial when the
-  //   live hurtcap stack spans the traveled segment but no individual capsule sweep is selected.
-  // - Keep it off the first post-spawn motion tick; freshly emitted lasers already have explicit
-  //   spawn/collision ordering and broadening that window reopens the adjacent no-hit row.
-  // - Reconstruct only that geometric coarse overlap using the defender's currently enabled
-  //   hurtcaps; keep it miss-only and state-scoped so ordinary grounded/catch/shield families stay
-  //   on the precise path.
-  // refs/melee/src/melee/it/itcoll.c::it_80272460
-  // refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Phys,it_8029C4D4}
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::{
-  //   ftCo_LandingFallSpecial_Enter,ftCo_LandingFallSpecial_Anim}
-  return laser_grounded_body_aabb_overlap(batch, bi, def, x0, y0, x, y, sr, hit_hurt_height);
 }
 
 enum {
@@ -1744,7 +1703,7 @@ static inline void item_lbcoll_80006e58_closest_points(float p0x, float p0y, flo
 static inline uint8_t item_laser_body_lbcoll_matrix_radius_overlap(
     const MslBatch* batch, int bi, int defender, float sx0, float sy0, float sx1, float sy1,
     float sr, int cap_i, uint8_t* out_hurt_height, float* out_overlap_amount,
-    uint8_t* out_evaluated) {
+    uint8_t* out_evaluated, uint8_t flatten_hurt_z) {
   if (out_overlap_amount) {
     *out_overlap_amount = 0.0f;
   }
@@ -1786,10 +1745,11 @@ static inline uint8_t item_laser_body_lbcoll_matrix_radius_overlap(
   }
 
   const float anim_frame_f32 = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[d_idx]);
-  const uint16_t frame = msl_anim_frame_floor_u16(anim_frame_f32);
-  const float pose_sample_frame =
-      msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_LANDING_AIR) ? anim_frame_f32
-                                                                             : (float)frame;
+  const uint16_t pose_frame = msl_anim_frame_floor_u16(anim_frame_f32);
+  // Keep fractional matrix sampling limited to the retained LandingFallSpecial flattened-Z owner.
+  // Other exact item BODY users stay on the existing source-visible frame sample until their wider
+  // pose/hurtcap eligibility owners are proven.
+  const float pose_sample_frame = (flatten_hurt_z != 0u) ? anim_frame_f32 : (float)pose_frame;
 
   float m[12];
   if (anim_pose_get_collision_matrix_f32(batch, d_idx, msid, pose_sample_frame, cap->bone_part_id,
@@ -1812,10 +1772,17 @@ static inline uint8_t item_laser_body_lbcoll_matrix_radius_overlap(
 
   const float ax = batch->state.hurtcap_a_x[hi];
   const float ay = batch->state.hurtcap_a_y[hi];
-  const float az = batch->state.hurtcap_a_z[hi];
+  // ftColl_8007925C passes ftCommon_8007F804(fp) and fp->cur_pos.z to lbColl_8000805C. With that
+  // matrix argument present, lbColl rewrites both hurt capsule endpoint Z values. The current
+  // source-closed replacement uses this for the LandingFallSpecial exact BODY owner below; the
+  // broad all-state flattened-Z path still needs full phantom/hurtcap-order parity before it can
+  // replace the remaining proxy lanes.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C
+  // refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C
+  const float az = flatten_hurt_z ? batch->state.pos_z[d_idx] : batch->state.hurtcap_a_z[hi];
   const float bx = batch->state.hurtcap_b_x[hi];
   const float by = batch->state.hurtcap_b_y[hi];
-  const float bz = batch->state.hurtcap_b_z[hi];
+  const float bz = flatten_hurt_z ? batch->state.pos_z[d_idx] : batch->state.hurtcap_b_z[hi];
 
   float world_dist = 0.0f;
   float hit_cp_x = 0.0f;
@@ -2075,6 +2042,31 @@ static inline uint8_t laser_body_uses_exact_lbcoll_hitcapsule_sweep(
   // refs/melee/src/melee/it/itcoll.c::it_8027137C
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077C60}
   // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+  return 1u;
+}
+
+static inline uint8_t laser_grounded_body_landing_fall_special_exact_z_owner(
+    const MslBatch* batch, size_t d_idx, float laser_age_frames) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  if (batch->state.on_ground[d_idx] == 0u || batch->state.shield_radius[d_idx] > 0.0f ||
+      batch->state.hurtbox_state[d_idx] != 0u || !(laser_age_frames > 1.0f)) {
+    return 0u;
+  }
+  if (batch->state.prev_action_id[d_idx] != (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL ||
+      batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL) {
+    return 0u;
+  }
+  // LandingFallSpecial exact item BODY owner:
+  // - ftColl_8007925C routes item BODY through lbColl_8000805C with a matrix argument and
+  //   fp->cur_pos.z, so the exact x58->x4C HitCapsule path must evaluate against flattened hurtcap
+  //   Z instead of falling through to the old 2D/AABB miss bridge.
+  // - Keep the promoted lane on the LandingFallSpecial replay-real family while the broader
+  //   all-state flattened-Z owner is still blocked by missing phantom/hurtcap-order filters exposed
+  //   by AttackHi3/CDO controls.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C
+  // refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C
   return 1u;
 }
 
@@ -2663,11 +2655,15 @@ static inline void item_apply_pending_powershield_reflect_speed(MslBatch* batch,
   if (!pending_reflect) {
     return;
   }
-  // Narrowed temporary behavior (kept):
-  // - apply deferred reflect with identity speed multiplier (1.0f) on the next item pass,
-  //   keyed by reflected orientation mismatch.
-  // TODO(decomp/powershield-reflect-speed-mul): validate authoritative x2B0 ownership/timing
-  // for these rows and replace this identity speed-mul bridge.
+  // Fox/Falco laser reflected callback owner:
+  // - ftColl_80077464 snapshots ReflectDesc.x1C into item->xC70.
+  // - Item_80269F14 consumes the reflected callback before recomputing item HitCapsule damage.
+  // - itFoxLaser_Logic94_Reflected flips facing, resets scale, and adds pi to the laser angle; it
+  //   does not multiply item->xDD4_itemVar.foxlaser.speed by xC70. The next laser Anim callback
+  //   therefore rebuilds velocity with unchanged speed magnitude.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
+  // refs/melee/src/melee/it/item.c::Item_80269F14
+  // refs/melee/src/melee/it/items/itfoxlaser.c::itFoxLaser_Logic94_Reflected
   const float mul = 1.0f;
   const float new_vx = -vx * mul;
   const float new_vy = -batch->state.item_vel_y[ii] * mul;
@@ -5660,6 +5656,8 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           laser_body_uses_exact_lbcoll_hitcapsule_sweep(batch, d_idx, laser_state, laser_age_frames,
                                                         batch->state.item_type[ii],
                                                         body_shield_adjacent, flatten_body_hurt_z);
+      const uint8_t use_landing_fall_special_exact_z =
+          laser_grounded_body_landing_fall_special_exact_z_owner(batch, d_idx, laser_age_frames);
       // Laser BODY overlap parity:
       // - Decomp computes collision over projectile travel in-frame (prev_pos -> cur_pos), so a
       //   current-point-only probe can miss replay-causal same-frame hits.
@@ -5708,7 +5706,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
             uint8_t exact_evaluated = 0u;
             if (item_laser_body_lbcoll_matrix_radius_overlap(
                     batch, bi, def, sx0, sy0, sx, sy, sr, (int)ci, &hit_hurt_height,
-                    &body_overlap_amount, &exact_evaluated) &&
+                    &body_overlap_amount, &exact_evaluated, use_landing_fall_special_exact_z) &&
                 laser_exact_lbcoll_body_contact_admits_candidate(
                     batch, d_idx, common, hit_hurt_height, body_overlap_amount, laser_prev_scale_z,
                     laser_scale_z, batch->state.item_type[ii])) {
@@ -5744,7 +5742,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
               uint8_t exact_evaluated = 0u;
               if (item_laser_body_lbcoll_matrix_radius_overlap(
                       batch, bi, def, x0, y0, x, y, sr, (int)ci, &hit_hurt_height,
-                      &body_overlap_amount, &exact_evaluated) &&
+                      &body_overlap_amount, &exact_evaluated, use_landing_fall_special_exact_z) &&
                   laser_exact_lbcoll_body_contact_admits_candidate(
                       batch, d_idx, common, hit_hurt_height, body_overlap_amount,
                       laser_prev_scale_z, laser_scale_z, batch->state.item_type[ii])) {
@@ -5830,11 +5828,6 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
             }
           }
         }
-      }
-      if (!hit && laser_grounded_body_landing_fall_special_aabb_bridge(
-                      batch, bi, def, x0, y0, x, y, sr, laser_age_frames, &hit_hurt_height)) {
-        hit = 1;
-        hit_hb_id = 0xFFu;
       }
       if (!hit && laser_state != 0u &&
           batch->state.action_id[o_idx] == (uint16_t)MSL_ACT_THROW_HI &&

@@ -154,15 +154,11 @@ static inline uint8_t hurtboxes_attackdash_post_hitbox_collision_pose_owner(cons
   if (batch == NULL || action_id != (uint16_t)MSL_ACT_ATTACK_DASH) {
     return 0u;
   }
-  if (batch->replay_rollout_reseeded != NULL && bi >= 0 &&
-      batch->replay_rollout_reseeded[bi] != 0u) {
-    return 0u;
-  }
   // Replay post-frame rows do not expose the live JObj/AObj phase for AttackDash's immediate
-  // post-hitbox-clear collision frame. Teacher-forced one-step uses this post-clear pose bridge for
-  // BODY contacts on sampled frame 34; replay-seeded rollout carries the live phase and must not
-  // apply the global hurtcap shift. Applying the offset later over-admits frame-38 AttackDash BODY
-  // rows. The boundary is data-backed by MSLFTSC1's AttackDash hitbox-clear timing.
+  // post-hitbox-clear collision frame. Use the same source predicate in one-step and rollout:
+  // sampled frame 34 after the script hitbox clear and before the AttackDash IASA gate. Applying
+  // the offset later over-admits frame-38 AttackDash BODY rows, so the boundary remains data-backed
+  // by MSLFTSC1's AttackDash hitbox-clear timing and move-table allow_interrupt timing.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::{
   //   ftCo_AttackDash_Anim,ftCo_AttackDash_IASA,ftCo_AttackDash_Coll}
   if (batch->state.hitbox_count[idx] != 0u) {
@@ -728,10 +724,9 @@ static void hurtboxes_refresh_impl(MslBatch* batch, uint8_t geometry_mode) {
         // - ftCo_AttackDash_Anim owns the command-script hitbox clear before collision.
         // - While the action is still before its command-script allow_interrupt frame, BODY
         //   collision consumes the post-clear JObj pose that is one AObj step ahead of the
-        //   replay-visible action-frame lane. This helper is disabled for replay-seeded rollout
-        //   handles so live timebase state, not a reseed bridge, owns later frames. Do not apply
-        //   this after allow_interrupt, where IASA can hand ownership to Wait/Walk on the same
-        //   frame.
+        //   replay-visible action-frame lane. Apply the same source predicate in one-step and
+        //   rollout; do not apply this after allow_interrupt, where IASA can hand ownership to
+        //   Wait/Walk on the same frame.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::{
         //   ftCo_AttackDash_Anim,ftCo_AttackDash_IASA,ftCo_AttackDash_Coll}
         // Source of timing windows: data/scripts/{fox,falco}.bin (MSLFTSC1).

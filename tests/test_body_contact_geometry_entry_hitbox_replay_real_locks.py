@@ -1319,6 +1319,31 @@ def test_fox_attackdash_static_collision_pose_rejects_false_attackairhi_fsp_7078
 
 
 @pytest.mark.integration
+def test_fox_attackdash_static_collision_pose_rejects_false_attackairhi_fsp_7078_rollout() -> None:
+    # Rollout-mode negative lock for the former AttackDash frame-34 over-admit:
+    # FSP:7078 has the same visible AttackDash family as the positive frame-34 slice, but it is
+    # after allow_interrupt and must keep the static collision pose. This proves rollout/free-run
+    # code no longer depends on a replay_rollout_reseeded gate to reject the false AttackAirHi hit.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::{
+    #   ftCo_AttackDash_Anim,ftCo_AttackDash_IASA,ftCo_AttackDash_Coll}
+    # Source of timing windows: data/scripts/{fox,falco}.bin (MSLFTSC1).
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples[7078:7079]["seed_t"].copy()
+    out, ref = _step_one_row_with_seed(dataset_path, 7078, seed)
+    defender = 1
+    for field in ("action_id", "animation_index", "hitlag", "hitstun", "instance_hit_by", "last_hit_by"):
+        assert int(out[field][defender]) == int(ref[field][defender]), f"field={field}"
+
+
+@pytest.mark.integration
 def test_attackdash_post_hitbox_pre_iasa_pose_selects_downsmash_body_fsp_5765() -> None:
     # AttackDash late collision-pose phase:
     # - Fox AttackDash has already run its script hitbox clear, but has not crossed its
