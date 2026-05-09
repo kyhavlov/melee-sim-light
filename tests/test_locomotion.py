@@ -3177,6 +3177,38 @@ def test_fastfall_latched_sets_vy_to_minus_fast_fall_velocity_each_frame() -> No
     assert np.isclose(out["speed_y_self"][0], np.float32(-fast_fall_v))
 
 
+def test_fastfall_latched_up_input_does_not_cancel_source_fastfall() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    fast_fall_v = np.float32(_fox_attr("fast_fall_velocity"))
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["action_id"][0, 0] = np.uint16(ACT_FALL)
+    seed["action_frame"][0, 0] = np.int16(0)
+    seed["animation_index"][0, 0] = np.uint32(SM_FALL)
+    seed["pos_y"][0, 0] = np.float32(10.0)
+    seed["speed_y_self"][0, 0] = np.float32(-fast_fall_v)
+    seed["fall_fast"][0, 0] = np.uint8(1)
+    seed["state_flags"][0, 0, 1] = np.uint8(0x08)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    inp.view(INPUT_DTYPE).reshape((1,))["p"]["main_y"][0, 0] = np.int8(80)
+
+    # Decomp has only a latch-on gate in ftCommon_CheckFallFast. Once fp->fall_fast is set,
+    # ft_80084DB0 keeps calling ftCommon_FallFast until a motion-state change without
+    # Ft_MF_KeepFastFall clears it; up-stick alone is not a cancel owner.
+    # refs/melee/src/melee/ft/ftcommon.c::{ftCommon_CheckFallFast,ftCommon_FallFast}
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80084DB0
+    out = _step_once(seed, prev_inp, inp)
+    assert np.isclose(out["speed_y_self"][0], np.float32(-fast_fall_v))
+    assert int(out["state_flags"][0, 1]) & 0x08
+
+
 def test_fall_fast_clears_on_landing_and_does_not_persist_off_stage() -> None:
     import msl_binding
 

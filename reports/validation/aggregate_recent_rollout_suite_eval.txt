@@ -352,12 +352,12 @@ rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:1
 rollout.best_len: 980
 rollout.streak_count: 51
 rollout.streak_len.median: 146
-rollout.streak_len.p90: 425
+rollout.streak_len.p90: 455
 rollout.streak_len.p95: 542
 rollout.streak_len.max: 980
 rollout.first_mismatch_total: 66
-rollout.first_mismatch_seeded_total: 39
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:1940
+rollout.first_mismatch_seeded_total: 38
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:1879
 
 == suite summary ==
 overall.rollout.streak_count: 971
@@ -367,6 +367,6 @@ overall.rollout.streak_len.p95: 974
 overall.rollout.streak_len.max: 2513
 overall.rollout.best_len.max: 2513
 overall.rollout.first_mismatch_total: 994
-overall.rollout.first_mismatch_seeded_total: 447
-overall.rollout.ignored_first_mismatch_top: state_flags[4]&0x80:65458
+overall.rollout.first_mismatch_seeded_total: 446
+overall.rollout.ignored_first_mismatch_top: state_flags[4]&0x80:65397
 overall.rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:5

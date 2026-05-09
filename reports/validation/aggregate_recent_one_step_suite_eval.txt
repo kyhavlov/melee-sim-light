@@ -1348,8 +1348,8 @@ overall.float_norm_mae_p95: 0.00077437
 
 == datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl ==
 Records: 9439  Players/scored per record: 2  Total player-frames: 18878
-mismatch.action_id: 36 / 18878 (0.001907)
-mismatch.action_frame: 32 / 18878 (0.001695)
+mismatch.action_id: 35 / 18878 (0.001854)
+mismatch.action_frame: 31 / 18878 (0.001642)
 mismatch.on_ground: 10 / 18878 (0.000530)
 mismatch.facing: 7 / 18878 (0.000371)
 mismatch.stocks: 0 / 18878 (0.000000)
@@ -1358,11 +1358,11 @@ mismatch.is_dead: 0 / 18878 (0.000000)
 mismatch.hitlag: 24 / 18878 (0.001271)
 mismatch.hitstun: 10 / 18878 (0.000530)
 mismatch.l_cancel: 0 / 18878 (0.000000)
-mismatch.hurtbox_state: 4 / 18878 (0.000212)
+mismatch.hurtbox_state: 3 / 18878 (0.000159)
 mismatch.ground_id: 1 / 18878 (0.000053)
-mismatch.animation_index: 36 / 18878 (0.001907)
+mismatch.animation_index: 35 / 18878 (0.001854)
 mismatch.instance_hit_by: 6 / 18878 (0.000318)
-mismatch.instance_id: 28 / 18878 (0.001483)
+mismatch.instance_id: 27 / 18878 (0.001430)
 mismatch.last_attack_landed: 9 / 18878 (0.000477)
 mismatch.combo_count: 4 / 18878 (0.000212)
 mismatch.last_hit_by: 18 / 18878 (0.000953)
@@ -1373,11 +1373,11 @@ mismatch.item_state: 7 / 141585 (0.000049)
 mismatch.item_owner: 1 / 141585 (0.000007)
 mismatch.item_instance_id: 2 / 141585 (0.000014)
 ignored_mismatch.state_flags[4]&0x80: 69 / 18878 (0.003655)
-err.pos_x: mae=0.003041 p95=0.000000 max=5.225872
-err.pos_y: mae=0.003658 p95=0.000000 max=7.564011
+err.pos_x: mae=0.002975 p95=0.000000 max=5.225872
+err.pos_y: mae=0.003341 p95=0.000000 max=7.564011
 err.speed_air_x_self: mae=0.000409 p95=0.000000 max=2.200000
 err.speed_ground_x_self: mae=0.000693 p95=0.000000 max=2.200000
-err.speed_y_self: mae=0.000867 p95=0.000000 max=3.183986
+err.speed_y_self: mae=0.000718 p95=0.000000 max=3.183986
 err.speed_x_attack: mae=0.000551 p95=0.000000 max=2.410532
 err.speed_y_attack: mae=0.001052 p95=0.000000 max=4.369796
 err.percent: mae=0.004450 p95=0.000000 max=12.000000
@@ -1386,13 +1386,13 @@ err.item_pos_x: mae=0.019294 p95=0.000000 max=214.676956
 err.item_pos_y: mae=0.010780 p95=0.000000 max=28.605560
 err.item_vel_x: mae=0.001603 p95=0.000000 max=5.000000
 err.item_vel_y: mae=0.008605 p95=0.000000 max=13.417282
-overall.discrete_mismatch: 303 / 1142119
-overall.strict_discrete_mismatch: 372 / 1142119
+overall.discrete_mismatch: 298 / 1142119
+overall.strict_discrete_mismatch: 367 / 1142119
 overall.ignored_discrete_mismatch: 69
-overall.float_norm_mae_p95: 0.00142035
+overall.float_norm_mae_p95: 0.00141676
 
 == suite summary ==
-overall.discrete_mismatch: 3894 / 34298176
-overall.strict_discrete_mismatch: 5331 / 34298176
+overall.discrete_mismatch: 3889 / 34298176
+overall.strict_discrete_mismatch: 5326 / 34298176
 overall.ignored_discrete_mismatch: 1437
-overall.float_norm_mae_p95: 0.22891158
+overall.float_norm_mae_p95: 0.22891141

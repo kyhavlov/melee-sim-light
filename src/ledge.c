@@ -89,6 +89,15 @@ static inline uint8_t is_airborne_action_with_cliffcatch_check(uint16_t a) {
     return 1;
   }
   switch (a) {
+    // Pass / platform drop collision uses the MissFoot-style common-air wrapper, which runs
+    // ftCliffCommon_80081298 after airborne stage collision. Holding down still blocks the catch
+    // inside ftCliffCommon_80081298, but releasing down before the ledge window must allow it.
+    // Decomp:
+    // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_Pass_Coll
+    // - refs/melee/src/melee/ft/ft_081B.c::ft_80082F28
+    case MSL_ACT_PASS:
+      return 1;
+
     // Jump / aerial jump collision wrappers end with ftCliffCommon_80081298.
     // Decomp:
     // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_Coll
