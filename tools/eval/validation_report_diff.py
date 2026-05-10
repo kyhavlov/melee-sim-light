@@ -8,11 +8,20 @@ from pathlib import Path
 from typing import Iterable
 
 
-REPORT_FILES: tuple[tuple[str, str], ...] = (
-    ("primary one-step", "one_step_suite_eval.txt"),
-    ("primary rollout", "rollout_suite_eval.txt"),
-    ("aggregate one-step", "aggregate_recent_one_step_suite_eval.txt"),
-    ("aggregate rollout", "aggregate_recent_rollout_suite_eval.txt"),
+@dataclass(frozen=True)
+class ReportSpec:
+    label: str
+    rel_path: str
+    optional_before: bool = False
+
+
+REPORT_FILES: tuple[ReportSpec, ...] = (
+    ReportSpec("primary one-step", "one_step_suite_eval.txt"),
+    ReportSpec("primary rollout", "rollout_suite_eval.txt"),
+    ReportSpec("aggregate one-step", "aggregate_recent_one_step_suite_eval.txt"),
+    ReportSpec("aggregate rollout", "aggregate_recent_rollout_suite_eval.txt"),
+    ReportSpec("doubles one-step", "doubles_recent_one_step_suite_eval.txt", optional_before=True),
+    ReportSpec("doubles rollout", "doubles_recent_rollout_suite_eval.txt", optional_before=True),
 )
 
 ONE_STEP_METRICS: dict[str, str] = {
@@ -30,6 +39,7 @@ ROLLOUT_METRICS: dict[str, str] = {
     "rollout.best_len": "higher",
     "rollout.first_mismatch_total": "lower",
     "rollout.first_mismatch_seeded_total": "lower",
+    "rollout.first_mismatch_non_seeded_total": "lower",
     "overall.rollout.streak_count": "lower",
     "overall.rollout.streak_len.median": "higher",
     "overall.rollout.streak_len.p90": "higher",
@@ -38,6 +48,7 @@ ROLLOUT_METRICS: dict[str, str] = {
     "overall.rollout.best_len.max": "higher",
     "overall.rollout.first_mismatch_total": "lower",
     "overall.rollout.first_mismatch_seeded_total": "lower",
+    "overall.rollout.first_mismatch_non_seeded_total": "lower",
 }
 
 
@@ -85,10 +96,15 @@ def _parse_metric_value(raw: str) -> MetricValue:
     return MetricValue(raw=raw.strip(), value=float(match.group(0)))
 
 
-def _read_report(source: str, rel_path: str) -> str:
+def _read_report(source: str, rel_path: str, *, required: bool) -> str | None:
     path = Path(source)
     if path.is_dir():
-        return (path / rel_path).read_text(encoding="utf-8")
+        report_path = path / rel_path
+        if not report_path.exists():
+            if required:
+                raise FileNotFoundError(f"required validation report missing: {report_path}")
+            return None
+        return report_path.read_text(encoding="utf-8")
     if path.is_file():
         return path.read_text(encoding="utf-8")
     try:
@@ -99,8 +115,13 @@ def _read_report(source: str, rel_path: str) -> str:
             stderr=subprocess.PIPE,
         )
     except subprocess.CalledProcessError as exc:
-        stderr = exc.stderr.strip()
-        raise SystemExit(f"error: could not read {rel_path!r} from {source!r}: {stderr}") from exc
+        if required:
+            detail = (exc.stderr or "").strip()
+            raise FileNotFoundError(
+                f"required validation report missing from {source}: reports/validation/{rel_path}"
+                + (f" ({detail})" if detail else "")
+            ) from exc
+        return None
 
 
 def _metrics_for_report(label: str) -> dict[str, str]:
@@ -128,10 +149,13 @@ def parse_report(text: str, *, label: str) -> dict[str, dict[str, MetricValue]]:
     return sections
 
 
-def read_report_set(source: str) -> dict[str, dict[str, dict[str, MetricValue]]]:
+def read_report_set(source: str, *, before: bool = False) -> dict[str, dict[str, dict[str, MetricValue]]]:
     reports: dict[str, dict[str, dict[str, MetricValue]]] = {}
-    for label, rel_path in REPORT_FILES:
-        reports[label] = parse_report(_read_report(source, rel_path), label=label)
+    for spec in REPORT_FILES:
+        text = _read_report(source, spec.rel_path, required=not (before and spec.optional_before))
+        if text is None:
+            continue
+        reports[spec.label] = parse_report(text, label=spec.label)
     return reports
 
 
@@ -249,8 +273,8 @@ def main(argv: list[str] | None = None) -> None:
     )
     args = ap.parse_args(argv)
 
-    before = read_report_set(str(args.before))
-    after = read_report_set(str(args.after))
+    before = read_report_set(str(args.before), before=True)
+    after = read_report_set(str(args.after), before=False)
     print(f"before: {args.before}")
     print(f"after:  {args.after}")
     regression_count = print_summary(diff_report_sets(before, after), top=max(1, int(args.top)))

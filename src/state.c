@@ -181,6 +181,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->thrown_attached_prev_on_ground = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->thrown_attached_prev_ground_id = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->match_flow_timer = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->match_flow_pending_rebirth_char_id = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->dead_up_fall_offset_x = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->dead_up_fall_offset_y = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->dead_up_fall_offset_z = (float*)alloc_aligned_64(sizeof(float) * bp);
@@ -551,7 +552,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->fighter_8006cda4_pre_gate_consume_count ||
       !state->source_clear_grounded_damage_clear_phase || !state->source_clear_terminal_phase ||
       !state->grab_mash_stick_x_sign || !state->grab_mash_stick_y_sign ||
-      !state->match_flow_timer || !state->dead_up_fall_offset_x || !state->dead_up_fall_offset_y ||
+      !state->match_flow_timer || !state->match_flow_pending_rebirth_char_id ||
+      !state->dead_up_fall_offset_x || !state->dead_up_fall_offset_y ||
       !state->dead_up_fall_offset_z || !state->dead_up_fall_vel_x || !state->dead_up_fall_vel_y ||
       !state->dead_up_fall_vel_z || !state->entry_end_fall_lock ||
       !state->camera_box_visible_x221f_b0 || !state->rebirth_camera_anchor_y_f32 ||
@@ -715,6 +717,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   memset(state->dead_up_fall_vel_x, 0, sizeof(float) * bp);
   memset(state->dead_up_fall_vel_y, 0, sizeof(float) * bp);
   memset(state->dead_up_fall_vel_z, 0, sizeof(float) * bp);
+  memset(state->match_flow_pending_rebirth_char_id, 0, sizeof(uint8_t) * bp);
   memset(state->magnify_damage_counter_x1910, 0, sizeof(uint16_t) * bp);
   memset(state->smash_charge_state, 0, sizeof(uint8_t) * bp);
   memset(state->smash_charge_frames, 0, sizeof(uint8_t) * bp);
@@ -937,6 +940,7 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->thrown_attached_prev_on_ground);
   alloc_free(state->thrown_attached_prev_ground_id);
   alloc_free(state->match_flow_timer);
+  alloc_free(state->match_flow_pending_rebirth_char_id);
   alloc_free(state->dead_up_fall_offset_x);
   alloc_free(state->dead_up_fall_offset_y);
   alloc_free(state->dead_up_fall_offset_z);

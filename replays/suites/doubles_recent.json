@@ -1,0 +1,20 @@
+{
+  "name": "doubles_recent",
+  "notes": "Single 4-player Fox/Falco teams replay used as a narrow doubles smoke suite. Team Attack is assumed on in the simulator domain; keep this suite separate from aggregate_recent until 4p validation is promoted to the normal gate.",
+  "ucf_enabled": true,
+  "ucf_cardinals_1_0_enabled": true,
+  "team_attack_on": true,
+  "replays": [
+    {
+      "replay": "replays/validation/doubles_recent/Game_20260509T152622.slp",
+      "ports": [1, 2, 3, 4],
+      "stage_id": 32,
+      "characters": {
+        "1": "Fox",
+        "2": "Fox",
+        "3": "Falco",
+        "4": "Falco"
+      }
+    }
+  ]
+}

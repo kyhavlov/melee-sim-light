@@ -2077,6 +2077,73 @@ def derive_grab_owner_port_2p(*, action_id_u16_2p: np.ndarray) -> np.ndarray:
     return out
 
 
+def derive_grab_owner_port(
+    *, action_id_u16: np.ndarray, num_players: int | None = None
+) -> np.ndarray:
+    """Derive per-frame grab owner identity for 2-4 player replays.
+
+    This is a conservative teacher-forced reconstruction of the hidden `fp->victim_gobj`
+    attachment owner used by catch/capture/throw callbacks. For 2p it preserves the historical
+    other-player derivation. For 4p doubles it only assigns an owner when exactly one attached
+    victim action and exactly one owner action are visible in the same post-frame row; ambiguous
+    simultaneous grab pairs remain unseeded instead of inventing a pairing from replay shape.
+
+    Decomp owner:
+    - refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078A2C,ftGrabDist}
+    - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD398
+    - refs/melee/src/melee/ft/chara/ftCommon/ftCo_CaptureCut.c::ftCo_800DC920
+    """
+    a = np.asarray(action_id_u16, dtype=np.uint16)
+    if a.ndim != 2:
+        raise ValueError(f"action_id_u16 must have shape [n,players], got {a.shape}")
+    width = int(a.shape[1])
+    players = width if num_players is None else int(num_players)
+    if players < 0 or players > width:
+        raise ValueError(f"num_players must be in [0,{width}], got {players}")
+    if players == 2:
+        return derive_grab_owner_port_2p(action_id_u16_2p=a[:, :2])
+
+    out = np.full((a.shape[0], width), 0xFF, dtype=np.uint8)
+    if players <= 0:
+        return out
+
+    active = a[:, :players]
+    is_victim = (
+        (active == _ACT_CAPTURE_PULLED_HI)
+        | (active == _ACT_CAPTURE_WAIT_HI)
+        | (active == _ACT_CAPTURE_DAMAGE_HI)
+        | (active == _ACT_CAPTURE_PULLED_LW)
+        | (active == _ACT_CAPTURE_WAIT_LW)
+        | (active == _ACT_CAPTURE_DAMAGE_LW)
+        | (active == _ACT_CAPTURE_NECK)
+        | (active == _ACT_CAPTURE_FOOT)
+        | (active == _ACT_THROWN_F)
+        | (active == _ACT_THROWN_B)
+        | (active == _ACT_THROWN_HI)
+        | (active == _ACT_THROWN_LW)
+        | (active == _ACT_THROWN_LW_WOMEN)
+    )
+    is_owner = (
+        (active == np.uint16(0x00D5))  # ftCo_MS_CatchPull
+        | (active == np.uint16(0x00D7))  # ftCo_MS_CatchDashPull
+        | (active == np.uint16(0x00D8))  # ftCo_MS_CatchWait
+        | (active == np.uint16(0x00D9))  # ftCo_MS_CatchAttack
+        | (active == np.uint16(0x00DB))  # ftCo_MS_ThrowF
+        | (active == np.uint16(0x00DC))  # ftCo_MS_ThrowB
+        | (active == np.uint16(0x00DD))  # ftCo_MS_ThrowHi
+        | (active == np.uint16(0x00DE))  # ftCo_MS_ThrowLw
+    )
+    unique_pair = (np.count_nonzero(is_victim, axis=1) == 1) & (
+        np.count_nonzero(is_owner, axis=1) == 1
+    )
+    if np.any(unique_pair):
+        rows = np.nonzero(unique_pair)[0]
+        victims = np.argmax(is_victim[rows, :], axis=1).astype(np.intp, copy=False)
+        owners = np.argmax(is_owner[rows, :], axis=1).astype(np.uint8, copy=False)
+        out[rows, victims] = owners
+    return out
+
+
 def derive_seed_prev_action_post(
     *, post_action_id_u16: np.ndarray, post_action_frame_i16: np.ndarray
 ) -> tuple[np.ndarray, np.ndarray]:

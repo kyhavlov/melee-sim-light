@@ -6082,9 +6082,6 @@ static void combat_select_catch_hits_one_mutating(MslBatch* batch, int bi) {
       if (batch->state.grab_owner_port[d_idx] != 0xFFu) {
         continue;
       }
-      if (batch->state.is_teams[bi] && batch->state.team_id[a_idx] == batch->state.team_id[d_idx]) {
-        continue;
-      }
       if (msl_action_owns_x2219_collision_skip(batch->state.action_id[d_idx])) {
         // Dead*/Rebirth source states set fp->x2219_b1. In vanilla, Fighter_8006CB94 does not call the
         // common collision pass for that fighter while the bit is set, and catch selection also
@@ -6663,12 +6660,6 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
         }
       }
       const uint16_t defender_iid = batch->state.instance_id[d_idx];
-
-      if (batch->state.is_teams[bi]) {
-        if (batch->state.team_id[a_idx] == batch->state.team_id[d_idx]) {
-          continue;
-        }
-      }
 
       // Hitlag gating (attacker-owned):
       // - Decomp collision pass ftColl_80078C70 does not gate BODY/SHIELD candidate evaluation on
@@ -7546,12 +7537,6 @@ static void combat_select_body_hits_one_debug(MslBatch* batch, int bi,
       }
       const uint16_t defender_iid = batch->state.instance_id[d_idx];
 
-      if (batch->state.is_teams[bi]) {
-        if (batch->state.team_id[a_idx] == batch->state.team_id[d_idx]) {
-          continue;
-        }
-      }
-
       uint8_t hurtcap_count = batch->state.hurtcap_count[d_idx];
       const MslHurtCap* body_fallback_caps = NULL;
       uint16_t body_fallback_count_u16 = 0u;
@@ -7958,10 +7943,6 @@ int combat_debug_shield_candidate_decisions(MslBatch* batch, int batch_index,
       }
       const size_t d_idx = msl_idx_player(bi, defender);
       const uint8_t defender_stock_zero = (batch->state.stocks[d_idx] == 0u) ? 1u : 0u;
-      const uint8_t teams_friendly =
-          (batch->state.is_teams[bi] && batch->state.team_id[a_idx] == batch->state.team_id[d_idx])
-              ? 1u
-              : 0u;
       const uint8_t attacker_hitlag_started = batch->state.hitlag_started_frame[a_idx] ? 1u : 0u;
       const uint8_t defender_hitlag_started = batch->state.hitlag_started_frame[d_idx] ? 1u : 0u;
       const uint8_t hitlag_gate = attacker_hitlag_started ? 1u : 0u;
@@ -8000,8 +7981,6 @@ int combat_debug_shield_candidate_decisions(MslBatch* batch, int batch_index,
         pair_reason = (uint8_t)MSL_DEBUG_SHIELD_REJECT_ATTACKER_STOCKS_ZERO;
       } else if (defender_stock_zero) {
         pair_reason = (uint8_t)MSL_DEBUG_SHIELD_REJECT_DEFENDER_STOCKS_ZERO;
-      } else if (teams_friendly) {
-        pair_reason = (uint8_t)MSL_DEBUG_SHIELD_REJECT_TEAMS_FRIENDLY;
       } else if (hitlag_gate) {
         // Decomp gate shape: ftColl_80078C70 collision ownership is attacker-centric; keep this
         // debug pair gate aligned to attacker-side hitlag only.

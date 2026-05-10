@@ -28,6 +28,7 @@ def _print_suite_delta(rep: dict) -> None:
         "suite_first_mismatch_delta:",
         f"raw={_fmt_delta(int(d['first_mismatch_total']))}",
         f"seeded={_fmt_delta(int(d['first_mismatch_seeded_total']))}",
+        f"non_seeded={_fmt_delta(int(d['first_mismatch_non_seeded_total']))}",
     )
 
 
@@ -95,6 +96,7 @@ def main() -> None:
                 f"p95={_fmt_delta(int(row['p95_streak_len']))}",
                 f"first_mm={_fmt_delta(int(row['first_mismatch_total']))}",
                 f"seeded_mm={_fmt_delta(int(row['first_mismatch_seeded_total']))}",
+                f"non_seeded_mm={_fmt_delta(int(row['first_mismatch_non_seeded_total']))}",
             )
 
     if args.out is not None:

@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from tools.eval.dataset import COMPARE_DTYPE
 from tools.eval.discrete_compare_lanes import compile_discrete_compare_lanes, first_mismatch_values
@@ -195,12 +196,16 @@ def test_rollout_metrics_summary_and_diff_on_synthetic_payload() -> None:
     assert s_before["suite_summary"]["dataset_count"] == 2
     assert s_before["suite_summary"]["max_best_len"] == 6
     assert s_before["suite_summary"]["first_mismatch_total"] == 11
+    assert s_before["suite_summary"]["first_mismatch_non_seeded_total"] == 5
+    assert s_before["dataset_summaries"][0]["first_mismatch_non_seeded_total"] == 3
     assert s_after["suite_summary"]["max_best_len"] == 8
     assert s_after["suite_summary"]["first_mismatch_total"] == 7
+    assert s_after["suite_summary"]["first_mismatch_non_seeded_total"] == 3
 
     diff = diff_rollout_summaries(before, after)
     assert diff["suite_delta"]["max_best_len"] == 2
     assert diff["suite_delta"]["first_mismatch_total"] == -4
+    assert diff["suite_delta"]["first_mismatch_non_seeded_total"] == -2
     assert diff["suite_first_mismatch_field_delta"]["action_id"] == -3
     assert diff["suite_first_mismatch_field_delta"]["hitlag"] == -1
     assert len(diff["per_dataset_delta"]) == 2
@@ -228,6 +233,8 @@ def test_rollout_metrics_handles_empty_histograms_stably() -> None:
     assert row["total_streaks"] == 0
     assert row["median_streak_len"] == 0
     assert row["p90_streak_len"] == 0
+    assert row["first_mismatch_non_seeded_total"] == 0
+    assert suite["first_mismatch_non_seeded_total"] == 0
     assert row["p95_streak_len"] == 0
     assert row["max_streak_len"] == 0
     assert suite["total_streaks"] == 0
@@ -235,6 +242,25 @@ def test_rollout_metrics_handles_empty_histograms_stably() -> None:
     assert suite["p90_streak_len"] == 0
     assert suite["p95_streak_len"] == 0
     assert suite["max_streak_len"] == 0
+
+
+def test_rollout_metrics_rejects_seeded_first_mismatch_overcount() -> None:
+    payload = {
+        "suite": "s",
+        "fields": ["action_id"],
+        "per_dataset": [
+            {
+                "dataset": "datasets/x/bad.msl",
+                "best_len": 0,
+                "streak_histogram": {},
+                "first_mismatch_field_counts": {"action_id": 1},
+                "first_mismatch_field_counts_seeded": {"action_id": 2},
+            }
+        ],
+    }
+
+    with pytest.raises(ValueError, match="seeded first mismatches exceed total"):
+        summarize_rollout_payload(payload)
 
 
 def test_rollout_metrics_validate_payload_requires_expected_keys() -> None:

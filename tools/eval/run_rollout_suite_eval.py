@@ -249,6 +249,9 @@ def main() -> None:
             reporter.print(f"rollout.streak_len.max: {row['max_streak_len']}")
             reporter.print(f"rollout.first_mismatch_total: {row['first_mismatch_total']}")
             reporter.print(f"rollout.first_mismatch_seeded_total: {row['first_mismatch_seeded_total']}")
+            reporter.print(
+                f"rollout.first_mismatch_non_seeded_total: {row['first_mismatch_non_seeded_total']}"
+            )
             ignored = dict(row.get("ignored_first_mismatch_field_counts", {}))
             ignored_seeded = dict(row.get("ignored_first_mismatch_field_counts_seeded", {}))
             if ignored:
@@ -275,6 +278,10 @@ def main() -> None:
         reporter.print(f"overall.rollout.first_mismatch_total: {suite_summary['first_mismatch_total']}")
         reporter.print(
             f"overall.rollout.first_mismatch_seeded_total: {suite_summary['first_mismatch_seeded_total']}"
+        )
+        reporter.print(
+            "overall.rollout.first_mismatch_non_seeded_total: "
+            f"{suite_summary['first_mismatch_non_seeded_total']}"
         )
         ignored_suite: dict[str, int] = {}
         ignored_seeded_suite: dict[str, int] = {}

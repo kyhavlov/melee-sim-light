@@ -7,12 +7,15 @@ import pytest
 from tools.eval.validation_report_diff import diff_report_sets, main, read_report_set
 
 
-def _write_reports(root: Path, *, one_step: str, rollout: str) -> None:
+def _write_reports(root: Path, *, one_step: str, rollout: str, include_doubles: bool = True) -> None:
     root.mkdir(parents=True, exist_ok=True)
     (root / "one_step_suite_eval.txt").write_text(one_step, encoding="utf-8")
     (root / "aggregate_recent_one_step_suite_eval.txt").write_text(one_step, encoding="utf-8")
     (root / "rollout_suite_eval.txt").write_text(rollout, encoding="utf-8")
     (root / "aggregate_recent_rollout_suite_eval.txt").write_text(rollout, encoding="utf-8")
+    if include_doubles:
+        (root / "doubles_recent_one_step_suite_eval.txt").write_text(one_step, encoding="utf-8")
+        (root / "doubles_recent_rollout_suite_eval.txt").write_text(rollout, encoding="utf-8")
 
 
 def _one_step(*, total: int, strict: int, p95: str, replay_total: int | None = None) -> str:
@@ -54,6 +57,7 @@ rollout.streak_len.p95: {p90}
 rollout.streak_len.max: 1000
 rollout.first_mismatch_total: {first}
 rollout.first_mismatch_seeded_total: {seeded}
+rollout.first_mismatch_non_seeded_total: {first - seeded}
 
 == suite summary ==
 overall.rollout.streak_count: {streak_count}
@@ -64,6 +68,7 @@ overall.rollout.streak_len.max: 1000
 overall.rollout.best_len.max: 1000
 overall.rollout.first_mismatch_total: {first}
 overall.rollout.first_mismatch_seeded_total: {seeded}
+overall.rollout.first_mismatch_non_seeded_total: {first - seeded}
 """
 
 
@@ -90,7 +95,7 @@ def test_validation_report_diff_detects_replay_regression_despite_suite_improvem
         ),
     )
 
-    deltas = diff_report_sets(read_report_set(str(before)), read_report_set(str(after)))
+    deltas = diff_report_sets(read_report_set(str(before), before=True), read_report_set(str(after)))
 
     assert any(
         d.report == "primary rollout"
@@ -179,6 +184,57 @@ overall.rollout.first_mismatch_seeded_total: 9
     assert exc.value.code == 1
     out = capsys.readouterr().out
     assert "replay-level regressions:\n- none" in out
+
+
+def test_validation_report_diff_tolerates_missing_new_optional_reports(tmp_path: Path) -> None:
+    before = tmp_path / "before"
+    after = tmp_path / "after"
+    _write_reports(
+        before,
+        one_step=_one_step(total=10, strict=12, p95="0.20"),
+        rollout=_rollout(streak_count=30, first=30, seeded=8, median=100, p90=200),
+        include_doubles=False,
+    )
+    _write_reports(
+        after,
+        one_step=_one_step(total=10, strict=12, p95="0.20"),
+        rollout=_rollout(streak_count=30, first=30, seeded=8, median=100, p90=200),
+    )
+
+    deltas = diff_report_sets(read_report_set(str(before), before=True), read_report_set(str(after)))
+    assert deltas == []
+
+
+def test_validation_report_diff_rejects_missing_required_before_report(tmp_path: Path) -> None:
+    before = tmp_path / "before"
+    after = tmp_path / "after"
+    _write_reports(
+        before,
+        one_step=_one_step(total=10, strict=12, p95="0.20"),
+        rollout=_rollout(streak_count=30, first=30, seeded=8, median=100, p90=200),
+    )
+    _write_reports(
+        after,
+        one_step=_one_step(total=10, strict=12, p95="0.20"),
+        rollout=_rollout(streak_count=30, first=30, seeded=8, median=100, p90=200),
+    )
+    (before / "rollout_suite_eval.txt").unlink()
+
+    with pytest.raises(FileNotFoundError, match="required validation report missing"):
+        read_report_set(str(before), before=True)
+
+
+def test_validation_report_diff_rejects_missing_after_doubles_report(tmp_path: Path) -> None:
+    after = tmp_path / "after"
+    _write_reports(
+        after,
+        one_step=_one_step(total=10, strict=12, p95="0.20"),
+        rollout=_rollout(streak_count=30, first=30, seeded=8, median=100, p90=200),
+    )
+    (after / "doubles_recent_rollout_suite_eval.txt").unlink()
+
+    with pytest.raises(FileNotFoundError, match="required validation report missing"):
+        read_report_set(str(after), before=False)
 
 
 def test_validation_report_diff_clean_improvement_does_not_exit(tmp_path: Path) -> None:

@@ -21,6 +21,14 @@ class ReplaySuite:
     replays: tuple[SuiteReplay, ...]
     ucf_enabled: bool | None = None
     ucf_cardinals_1_0_enabled: bool | None = None
+    team_attack_on: bool | None = None
+
+
+def team_attack_on_from_start(start: dict[str, Any]) -> bool | None:
+    bitfield = start.get("bitfield")
+    if isinstance(bitfield, list) and len(bitfield) >= 2:
+        return (int(bitfield[1]) & 0x01) != 0
+    return None
 
 
 def load_suite(path: str | Path) -> ReplaySuite:
@@ -30,6 +38,7 @@ def load_suite(path: str | Path) -> ReplaySuite:
     notes = data.get("notes")
     ucf_enabled = data.get("ucf_enabled")
     ucf_cardinals_1_0_enabled = data.get("ucf_cardinals_1_0_enabled")
+    team_attack_on = data.get("team_attack_on")
     replays = []
     for r in data["replays"]:
         replay = str(r["replay"])
@@ -44,6 +53,11 @@ def load_suite(path: str | Path) -> ReplaySuite:
                 characters=r.get("characters"),
             )
         )
+    if any(len(r.ports) > 2 for r in replays) and team_attack_on is not True:
+        raise ValueError(
+            f"{p}: suites selecting more than two ports must declare \"team_attack_on\": true; "
+            "team-attack-off doubles are outside the supported simulator domain"
+        )
     return ReplaySuite(
         name=name,
         notes=notes,
@@ -51,6 +65,7 @@ def load_suite(path: str | Path) -> ReplaySuite:
         ucf_cardinals_1_0_enabled=bool(ucf_cardinals_1_0_enabled)
         if ucf_cardinals_1_0_enabled is not None
         else None,
+        team_attack_on=bool(team_attack_on) if team_attack_on is not None else None,
         replays=tuple(replays),
     )
 

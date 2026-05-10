@@ -223,6 +223,9 @@ SEED_DTYPE = np.dtype(
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Attack_800D6A50
         ("jab_rapid_count", _arr("u1", MAX_PLAYERS)),
         ("match_flow_timer", _arr("u1", MAX_PLAYERS)),
+        # Hidden fighter kind for stock-share / pending Rebirth rows where Slippi serializes the
+        # inter-stock DeadDown slot with char_id=0 and stocks=0 until Rebirth becomes visible.
+        ("match_flow_pending_rebirth_char_id", _arr("u1", MAX_PLAYERS)),
         # Match-start fighter input lock countdown (`fp->x221D_b4`).
         # refs/melee/src/melee/ft/ftlib.c::{ftLib_800867E8,ftLib_800868A4}
         # refs/melee/src/melee/ft/fighter.c::{Fighter_procUpdate,Fighter_UnkInitLoad_80068914_Inner1}

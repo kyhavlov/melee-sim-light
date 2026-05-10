@@ -5519,6 +5519,9 @@ PyObject* msl_derive_combat_hitlist_seed_fields_py(PyObject* self, PyObject* arg
     PyErr_SetString(PyExc_ValueError, "num_players must be 2 or 4");
     return NULL;
   }
+  // Team Attack is assumed on for simulator teams mode, so team identity remains a match-flow /
+  // observation lane and is not a combat eligibility filter.
+  (void)is_teams;
 
 #define REQ_ARR(name, obj, typenum, label)                                      \
   PyArrayObject* name = require_contiguous_array((obj), (typenum), 2, (label)); \
@@ -5640,6 +5643,7 @@ PyObject* msl_derive_combat_hitlist_seed_fields_py(PyObject* self, PyObject* arg
 
 #define PTR(name, type, arr) const type* name = (const type*)PyArray_DATA(arr)
   PTR(team_p, uint8_t, team);
+  (void)team_p;
   PTR(char_p, uint8_t, char_id);
   PTR(action_p, uint16_t, action_id);
   PTR(action_frame_p, int16_t, action_frame);
@@ -5918,9 +5922,6 @@ PyObject* msl_derive_combat_hitlist_seed_fields_py(PyObject* self, PyObject* arg
           if (stocks_p[p1i] == 0u || !on_ground_p[p1i]) {
             continue;
           }
-          if (is_teams && team_p[p0i] == team_p[p1i]) {
-            continue;
-          }
           if (hitlag_p[p0i] == 0u && hitlag_p[p1i] == 0u) {
             continue;
           }
@@ -6115,9 +6116,6 @@ PyObject* msl_derive_combat_hitlist_seed_fields_py(PyObject* self, PyObject* arg
           continue;
         }
         const uint8_t defender_no_damage = hurtbox_state_p[di] != 0u ? 1u : 0u;
-        if (is_teams && team_p[ai] == team_p[di]) {
-          continue;
-        }
         if (sim_hitlag[attacker] != 0u || sim_hitlag[defender] != 0u) {
           continue;
         }

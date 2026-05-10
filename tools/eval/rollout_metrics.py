@@ -77,6 +77,14 @@ def _summarize_dataset_row(row: Mapping[str, Any]) -> dict[str, Any]:
     ignored_first_seeded = Counter(
         {str(k): int(v) for k, v in dict(row.get("ignored_first_mismatch_field_counts_seeded", {})).items()}
     )
+    first_total = int(sum(first_mm.values()))
+    first_seeded_total = int(sum(first_mm_seeded.values()))
+    first_non_seeded_total = first_total - first_seeded_total
+    if first_non_seeded_total < 0:
+        raise ValueError(
+            f"{row.get('dataset', '')}: seeded first mismatches exceed total "
+            f"({first_seeded_total} > {first_total})"
+        )
     return {
         "dataset": str(row.get("dataset", "")),
         "num_records": int(row.get("num_records", 0)),
@@ -94,8 +102,9 @@ def _summarize_dataset_row(row: Mapping[str, Any]) -> dict[str, Any]:
         "first_mismatch_field_counts_seeded": dict(sorted(first_mm_seeded.items())),
         "ignored_first_mismatch_field_counts": dict(sorted(ignored_first.items())),
         "ignored_first_mismatch_field_counts_seeded": dict(sorted(ignored_first_seeded.items())),
-        "first_mismatch_total": int(sum(first_mm.values())),
-        "first_mismatch_seeded_total": int(sum(first_mm_seeded.values())),
+        "first_mismatch_total": first_total,
+        "first_mismatch_seeded_total": first_seeded_total,
+        "first_mismatch_non_seeded_total": first_non_seeded_total,
     }
 
 
@@ -119,6 +128,15 @@ def summarize_rollout_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
         suite_ignored_first.update(Counter(row["ignored_first_mismatch_field_counts"]))
         suite_ignored_first_seeded.update(Counter(row["ignored_first_mismatch_field_counts_seeded"]))
 
+    suite_first_total = int(sum(suite_first_mm.values()))
+    suite_first_seeded_total = int(sum(suite_first_mm_seeded.values()))
+    suite_first_non_seeded_total = suite_first_total - suite_first_seeded_total
+    if suite_first_non_seeded_total < 0:
+        raise ValueError(
+            "rollout suite: seeded first mismatches exceed total "
+            f"({suite_first_seeded_total} > {suite_first_total})"
+        )
+
     suite = {
         "dataset_count": len(dataset_rows),
         "total_streaks": int(sum(suite_hist.values())),
@@ -131,8 +149,9 @@ def summarize_rollout_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
         "first_mismatch_field_counts_seeded": dict(sorted(suite_first_mm_seeded.items())),
         "ignored_first_mismatch_field_counts": dict(sorted(suite_ignored_first.items())),
         "ignored_first_mismatch_field_counts_seeded": dict(sorted(suite_ignored_first_seeded.items())),
-        "first_mismatch_total": int(sum(suite_first_mm.values())),
-        "first_mismatch_seeded_total": int(sum(suite_first_mm_seeded.values())),
+        "first_mismatch_total": suite_first_total,
+        "first_mismatch_seeded_total": suite_first_seeded_total,
+        "first_mismatch_non_seeded_total": suite_first_non_seeded_total,
     }
 
     return {
@@ -164,6 +183,8 @@ def diff_rollout_summaries(before: Mapping[str, Any], after: Mapping[str, Any]) 
         "first_mismatch_total": int(a_suite["first_mismatch_total"]) - int(b_suite["first_mismatch_total"]),
         "first_mismatch_seeded_total": int(a_suite["first_mismatch_seeded_total"])
         - int(b_suite["first_mismatch_seeded_total"]),
+        "first_mismatch_non_seeded_total": int(a_suite["first_mismatch_non_seeded_total"])
+        - int(b_suite["first_mismatch_non_seeded_total"]),
     }
 
     b_field = Counter({str(k): int(v) for k, v in b_suite["first_mismatch_field_counts"].items()})
@@ -192,6 +213,8 @@ def diff_rollout_summaries(before: Mapping[str, Any], after: Mapping[str, Any]) 
                 "first_mismatch_total": int(ra["first_mismatch_total"]) - int(rb["first_mismatch_total"]),
                 "first_mismatch_seeded_total": int(ra["first_mismatch_seeded_total"])
                 - int(rb["first_mismatch_seeded_total"]),
+                "first_mismatch_non_seeded_total": int(ra["first_mismatch_non_seeded_total"])
+                - int(rb["first_mismatch_non_seeded_total"]),
             }
         )
 

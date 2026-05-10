@@ -578,6 +578,15 @@ typedef struct MslSeed {
   // exit early via inputs (IASA), and the replay action_id run length may be shorter than the
   // internal timer.
   uint8_t match_flow_timer[MSL_MAX_PLAYERS];
+  // Hidden fighter kind for pending stock-share/Rebirth rows where Slippi serializes the
+  // inter-stock DeadDown slot as char_id=0/stocks=0 until Rebirth becomes visible.
+  //
+  // This is seed/reseed reconstruction only. Normal live runtime keeps char_id/stocks in state
+  // through death flow; teacher-forced starts in the inter-stock zeroed slot need this lane to
+  // restore Fighter_UnkProcessDeath_80068354 -> Rebirth without treating the player as eliminated.
+  // refs/melee/src/melee/ft/ft_0D31.c::ftCo_800D4FF4
+  // refs/melee/src/melee/gm/gm_16AE.c (team stock-share / respawn flow)
+  uint8_t match_flow_pending_rebirth_char_id[MSL_MAX_PLAYERS];
   // Match-start fighter input lock countdown (`fp->x221D_b4`).
   //
   // Decomp / asset anchors:

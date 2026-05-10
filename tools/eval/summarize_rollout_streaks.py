@@ -51,6 +51,7 @@ def main() -> None:
         "suite_first_mismatch_total:",
         f"raw={suite['first_mismatch_total']}",
         f"seeded={suite['first_mismatch_seeded_total']}",
+        f"non_seeded={suite['first_mismatch_non_seeded_total']}",
     )
     print(
         "suite_first_mismatch_top:",
@@ -72,6 +73,7 @@ def main() -> None:
             f"max={row['max_streak_len']}",
             f"first_mm={row['first_mismatch_total']}",
             f"seeded_mm={row['first_mismatch_seeded_total']}",
+            f"non_seeded_mm={row['first_mismatch_non_seeded_total']}",
         )
 
     if args.out is not None:

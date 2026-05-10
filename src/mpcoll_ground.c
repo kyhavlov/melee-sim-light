@@ -2560,6 +2560,20 @@ void mpcoll_ground_apply(MslBatch* batch) {
       // skips the generic stage collision pass until those paths are implemented.
       // refs: src/match_flow.c::match_flow_should_stage_collide
       if (!match_flow_should_stage_collide(action_id)) {
+        if (batch->state.stocks[idx] == 0u && batch->state.char_id[idx] == 0u &&
+            action_id == (uint16_t)MSL_ACT_DEAD_DOWN) {
+          // Inactive zero-stock slots have no live Fighter map callback. Preserve the Slippi
+          // terminal slot shape installed by match_flow.c instead of converting it to a live
+          // airborne DeadDown fighter.
+          // refs/melee/src/melee/gm/gm_16AE.c::fn_8016B918_inline
+          batch->state.on_ground[idx] = 1u;
+          batch->state.ground_id[idx] = 0u;
+          batch->state.ground_normal_x[idx] = 0.0f;
+          batch->state.ground_normal_y[idx] = 1.0f;
+          batch->state.ground_contact_x[idx] = 0.0f;
+          batch->state.ground_contact_y[idx] = 0.0f;
+          continue;
+        }
         batch->state.on_ground[idx] = 0;
         continue;
       }

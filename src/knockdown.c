@@ -23,6 +23,7 @@
 #include "msl_math.h"
 #include "stage_collision.h"
 #include "state_flags.h"
+#include "trigger_input.h"
 #include "turn.h"
 
 enum { MSL_FTPART_HIPN = 4 };  // refs/melee/src/melee/ft/forward.h::Fighter_Part (FtPart_HipN)
@@ -964,8 +965,27 @@ static inline uint8_t should_enter_down_attack_from_wait(const MslBatch* batch,
 static inline uint8_t should_enter_down_stand_from_wait(const MslBatch* batch,
                                                         const MslCommonParams* c, size_t idx) {
   // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownStand.c::ftCo_800980BC
+  // `ftCo_800980BC` reads the synthesized `input.x668 & HSD_PAD_LR` lane. The replay-visible
+  // physical Z bit is not a source owner for this DownWait -> DownStand path; Z remains handled by
+  // the separate A-timer/down-attack input synthesis lane.
   enum { LR = (uint16_t)MSL_BUTTON_L | (uint16_t)MSL_BUTTON_R };
-  if ((batch->state.input_buttons_pressed[idx] & (uint16_t)LR) != 0) {
+  const float cur_trigger = msl_trigger_u8_to_unit(
+      batch->state.input_l[idx] > batch->state.input_r[idx] ? batch->state.input_l[idx]
+                                                            : batch->state.input_r[idx]);
+  const float prev_trigger =
+      msl_trigger_u8_to_unit(batch->state.prev_input_l[idx] > batch->state.prev_input_r[idx]
+                                 ? batch->state.prev_input_l[idx]
+                                 : batch->state.prev_input_r[idx]);
+  const uint8_t lr_lane_held_now = (((batch->state.input_buttons[idx] & (uint16_t)LR) != 0u) ||
+                                    cur_trigger > c->trigger_deadzone)
+                                       ? 1u
+                                       : 0u;
+  const uint8_t lr_lane_held_prev =
+      (((batch->state.prev_input_buttons[idx] & (uint16_t)LR) != 0u) ||
+       prev_trigger > c->trigger_deadzone)
+          ? 1u
+          : 0u;
+  if (lr_lane_held_now != 0u && lr_lane_held_prev == 0u) {
     return 1u;
   }
   const float stick_x =

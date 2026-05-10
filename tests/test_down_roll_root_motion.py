@@ -11,10 +11,12 @@ from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 # Action ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 ACT_WAIT = 0x000E
 ACT_DOWN_WAIT_U = 0x00B8
+ACT_DOWN_STAND_U = 0x00BA
 ACT_DOWN_FOWARD_U = 0x00BC
 ACT_DOWN_BACK_U = 0x00BD
 ACT_GUARD_ON = 0x00B2
 ACT_SQUAT = 0x0027
+BUTTON_Z = 0x0010
 
 # Submotion ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 SM_WAIT1_0 = 2
@@ -169,6 +171,78 @@ def _step_sequence(seed: np.ndarray, inputs: list[np.ndarray]) -> list[np.ndarra
         return outs
     finally:
         msl_binding.destroy(handle)
+
+
+@pytest.mark.integration
+def test_downwait_fresh_analog_trigger_enters_downstand() -> None:
+    _require_local_artifacts_or_skip()
+    seed = _seed_ground_base()
+    seed["action_id"][0, 0] = np.uint16(ACT_DOWN_WAIT_U)
+    seed["animation_index"][0, 0] = np.uint32(ACT_DOWN_WAIT_U)
+    seed["action_frame"][0, 0] = np.int16(5)
+    seed["downwait_timer"][0, 0] = np.int16(216)
+
+    import msl_binding
+
+    input_stride = int(msl_binding.sizes()["input"])
+    inp = _mk_input_bytes(1, input_stride)
+    inp.view(INPUT_DTYPE).reshape(-1)["p"]["l"][0, 0] = np.uint8(255)
+
+    out0 = _step_sequence(seed, [inp])[0]
+    assert int(out0["action_id"][0]) == ACT_DOWN_STAND_U
+    assert int(out0["action_frame"][0]) == 0
+
+
+@pytest.mark.integration
+def test_downwait_held_analog_trigger_does_not_retrigger_downstand() -> None:
+    _require_local_artifacts_or_skip()
+    seed = _seed_ground_base()
+    seed["action_id"][0, 0] = np.uint16(ACT_DOWN_WAIT_U)
+    seed["animation_index"][0, 0] = np.uint32(ACT_DOWN_WAIT_U)
+    seed["action_frame"][0, 0] = np.int16(5)
+    seed["downwait_timer"][0, 0] = np.int16(216)
+
+    import msl_binding
+
+    input_stride = int(msl_binding.sizes()["input"])
+    prev = _mk_input_bytes(1, input_stride)
+    cur = _mk_input_bytes(1, input_stride)
+    prev.view(INPUT_DTYPE).reshape(-1)["p"]["l"][0, 0] = np.uint8(255)
+    cur.view(INPUT_DTYPE).reshape(-1)["p"]["l"][0, 0] = np.uint8(255)
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    compare_stride = int(sizes["compare"])
+    handle = msl_binding.init(batch_size=1, num_players=2, ucf_enabled=1, ucf_cardinals_1_0_enabled=1)
+    try:
+        msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, seed_stride)))
+        msl_binding.step_input(handle, prev, cur)
+        out = np.zeros((1, compare_stride), dtype=np.uint8)
+        msl_binding.write_compare(handle, out)
+        out0 = out.view(COMPARE_DTYPE).reshape((1,))[0]
+    finally:
+        msl_binding.destroy(handle)
+
+    assert int(out0["action_id"][0]) == ACT_DOWN_WAIT_U
+
+
+@pytest.mark.integration
+def test_downwait_z_alone_does_not_enter_downstand() -> None:
+    _require_local_artifacts_or_skip()
+    seed = _seed_ground_base()
+    seed["action_id"][0, 0] = np.uint16(ACT_DOWN_WAIT_U)
+    seed["animation_index"][0, 0] = np.uint32(ACT_DOWN_WAIT_U)
+    seed["action_frame"][0, 0] = np.int16(5)
+    seed["downwait_timer"][0, 0] = np.int16(216)
+
+    import msl_binding
+
+    input_stride = int(msl_binding.sizes()["input"])
+    inp = _mk_input_bytes(1, input_stride)
+    inp.view(INPUT_DTYPE).reshape(-1)["p"]["buttons"][0, 0] = np.uint16(BUTTON_Z)
+
+    out0 = _step_sequence(seed, [inp])[0]
+    assert int(out0["action_id"][0]) == ACT_DOWN_WAIT_U
 
 
 @pytest.mark.integration

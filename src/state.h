@@ -339,6 +339,7 @@ typedef struct MslStateSoA {
   uint8_t* thrown_attached_prev_on_ground;   // [batch * players]
   uint16_t* thrown_attached_prev_ground_id;  // [batch * players]
   uint8_t* match_flow_timer;
+  uint8_t* match_flow_pending_rebirth_char_id;
   // DeadUpFall hidden offset/velocity owner (`mv.co.unk_deadup.x50/x5C`).
   //
   // These lanes are not Slippi-visible by themselves, but they are the source-owned pose scratch

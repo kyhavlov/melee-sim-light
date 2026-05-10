@@ -350,7 +350,11 @@ Combat geometry SoA (recommended):
 
 Design choices to keep “2→4 players” trivial:
 - All loops iterate `p in 0..num_players`.
-- Collision/combat works for all pairwise interactions `p != q` and supports team filtering.
+- Collision/combat works for all pairwise interactions `p != q`. The simulator teams domain assumes
+  Team Attack is on, so `is_teams`/`team_id` are match-flow and observation lanes, not fighter
+  hit/grab/shield eligibility filters. Four-player validation suites must declare
+  `"team_attack_on": true`, and preprocessing rejects 4-player teams replays whose Slippi start
+  bitfield does not prove Team Attack ON.
 - Observation emitter supports multiple viewpoints:
   - singles: 2 viewpoints (P1, P2)
   - doubles: 4 viewpoints (one per port) with a stable port mapping policy
@@ -1673,6 +1677,17 @@ Match-flow closure notes:
 - Match-start neutral spawn is separate from stock respawn. The only Slippi neutral-spawn ASM path
   in runtime setup is the 4-player teams `init_match` branch; Rebirth stays on the vanilla
   `Player_GetSpawnPlatformPos` owner and must not inherit neutral-start coordinates.
+- Zero-stock players do not auto-Rebirth. In teams, `gm_16AE.c::fn_8016B918_inline` restores a
+  zero-stock player only through explicit stock share from a teammate with more than one stock; until
+  then Slippi exposes an inactive zeroed DeadDown slot rather than a live Rebirth platform fighter.
+- Some team-stock inter-stock rows are serialized by Slippi as `char_id=0, stocks=0, DeadDown`
+  while the source match-flow timer is still counting down to Rebirth. The seed lane
+  `match_flow_pending_rebirth_char_id` carries the static fighter kind for those rows and is
+  consumed only when the Dead* timer reaches zero; before that transition the replay-visible slot
+  remains zeroed. The lane is not keyed by action run length alone: generation requires teams
+  context, same-team stock-share availability (`stocks > 1` on the teammate), and prefix-visible
+  transition/continuity into the zeroed pending slot so terminal eliminated DeadDown slots remain
+  unseeded.
 - Dead* -> Rebirth runs `Fighter_UnkProcessDeath_80068354 ->
   Fighter_UnkInitReset_80067C98` before `Fighter_ChangeMotionState(Rebirth)`. That reset clears
   percent/temp percent and reloads shield HP from `ftCommonData.x260_startShieldHealth`; rollout
@@ -4555,7 +4570,8 @@ This is a living, comprehensive list of Melee-relevant systems. Any time we beco
 #### P2 — Stretch / post-1.0
 
 - Short-horizon rollout parity (open-loop) on a subset of the suite.
-- 4p doubles-specific interactions (team damage rules, teammate collision nuances, simultaneous collision priority).
+- 4p doubles-specific interactions beyond Team Attack ON combat and zero-stock terminal slots:
+  teammate collision nuances, simultaneous collision priority, and stock-share input flow.
 - Broader stage roster and character roster.
 
 ### Milestones (Suggested Order)
@@ -5382,6 +5398,8 @@ BODY collision-space residual split and rejected seed bridge:
   the A-timer consumer and keep physical L/R timers on their explicit L/R/Z trigger lane. HIS
   `5121..5146` locks the positive `DownBoundU -> DownAttackU` path; clearing only Z from the same
   episode is the negative.
+- `DownWait* -> DownStand*` stays on `ftCo_800980BC`'s explicit `input.x668 & HSD_PAD_LR` /
+  analog-trigger edge owner; physical Z alone does not enter DownStand.
 - DownDamage contact preserves the downed victim's visible facing from `ftCo_8009F184`, but
   `ftCo_8008DCE0` uses the collision-owned `dmg.facing_dir_1` lane for knockback velocity. Reverse
   shine on a downed victim therefore can launch opposite the victim's visible downed facing.

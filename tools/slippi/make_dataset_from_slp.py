@@ -28,6 +28,7 @@ from tools.slippi.known_data_artifacts import (
 )
 from tools.slippi.motion_state_owners import read_callback_manifest, read_mslmso01_v1
 from tools.slippi.rollback import finalized_frame_indices
+from tools.slippi.suite_io import team_attack_on_from_start
 
 
 MSL_MS_CLASS_ATTACK_AIR = 1 << 0
@@ -2197,6 +2198,78 @@ def _team_id_from_start_player(p: dict) -> int:
     return int(c) if c is not None else 0
 
 
+def _derive_match_flow_pending_rebirth_char_id(
+    *,
+    post_action_id_u16: np.ndarray,
+    post_char_id_u8: np.ndarray,
+    post_stocks_u8: np.ndarray,
+    match_flow_timer_u8: np.ndarray,
+    static_char_id_u8: np.ndarray,
+    team_id_u8: np.ndarray,
+    is_teams: bool,
+    num_players: int,
+) -> np.ndarray:
+    """Derive zeroed DeadDown -> Rebirth fighter kind for team-stock respawn rows.
+
+    Source owner:
+    - Teams stock-share pending Rebirth runs through gm_16AE.c::fn_8016B918_inline and then
+      ftCo_Rebirth entry. Slippi can publish the pending slot as DeadDown/char_id=0/stocks=0
+      before Rebirth restores the fighter kind.
+
+    Prefix-causal boundary:
+    - A zeroed DeadDown slot is considered pending only after a replay-visible transition into that
+      zeroed state while a same-team teammate has more than one stock to share. Terminal eliminated
+      slots with no stock-share source, or long-standing zeroed slots without a pending transition,
+      remain unseeded.
+    """
+    n_frames = int(post_action_id_u16.shape[0])
+    n_players = int(num_players)
+    out = np.zeros((n_frames, 4), dtype=np.uint8)
+    if not bool(is_teams) or n_players <= 2:
+        return out
+
+    active = np.zeros(4, dtype=np.uint8)
+    for frame in range(n_frames):
+        for slot in range(n_players):
+            static_char = int(static_char_id_u8[slot])
+            is_zeroed_dead = (
+                int(post_action_id_u16[frame, slot]) == 0
+                and int(post_char_id_u8[frame, slot]) == 0
+                and int(post_stocks_u8[frame, slot]) == 0
+                and int(match_flow_timer_u8[frame, slot]) > 0
+                and static_char != 0
+            )
+            if not is_zeroed_dead:
+                active[slot] = 0
+                continue
+
+            teammate_has_stock_share = False
+            for other in range(n_players):
+                if other == slot:
+                    continue
+                if int(team_id_u8[other]) != int(team_id_u8[slot]):
+                    continue
+                if int(post_stocks_u8[frame, other]) > 1:
+                    teammate_has_stock_share = True
+                    break
+
+            if not teammate_has_stock_share:
+                active[slot] = 0
+                continue
+
+            fresh_zero_transition = (
+                frame == 0
+                or int(post_action_id_u16[frame - 1, slot]) != 0
+                or int(post_char_id_u8[frame - 1, slot]) != 0
+                or int(post_stocks_u8[frame - 1, slot]) != 0
+            )
+            if fresh_zero_transition:
+                active[slot] = 1
+            if active[slot] != 0:
+                out[frame, slot] = np.uint8(static_char)
+    return out
+
+
 def _fill_items_fixed(frames: pa.StructArray, n_frames: int, *, src_ports: list[int]) -> np.ndarray:
     """
     Convert Slippi frame items (list<struct<...>>) into a fixed-length [n_frames, 15]
@@ -2897,6 +2970,7 @@ def _main_impl(args) -> Dataset:
         derive_capture_mash_buttons_pressed,
         derive_capture_grab_hidden_post,
         derive_grab_mash_stick_sign_post,
+        derive_grab_owner_port,
         derive_grab_owner_port_2p,
         derive_seed_prev_action_post,
         derive_guard_reflect_timer_x14,
@@ -3021,6 +3095,12 @@ def _main_impl(args) -> Dataset:
 
     stage_id = int(game.start.get("stage", 0))
     is_teams = int(bool(game.start.get("is_teams", False)))
+    team_attack_on = team_attack_on_from_start(game.start)
+    if int(num_players) > 2 and is_teams and team_attack_on is not True:
+        raise ValueError(
+            f"{args.slp}: selected 4-player teams replay has Team Attack OFF or unknown; "
+            "melee-sim-light doubles validation currently supports Team Attack ON only"
+        )
 
     common = json.loads(Path("data/common/ft_common_data.json").read_text())
     lstick_deadzone_x = float(common["lstick_deadzone_x"])
@@ -3381,6 +3461,14 @@ def _main_impl(args) -> Dataset:
     post_action_id_u16 = np.zeros((n_frames, 4), dtype=np.uint16)
     post_state_age_all = np.zeros((n_frames, 4), dtype=np.int16)
     post_char_id_u8 = np.zeros((n_frames, 4), dtype=np.uint8)
+    post_stocks_u8_all = np.zeros((n_frames, 4), dtype=np.uint8)
+    match_flow_timer_u8_all = np.zeros((n_frames, 4), dtype=np.uint8)
+    static_char_id_u8 = np.zeros(4, dtype=np.uint8)
+    team_id_u8 = np.zeros(4, dtype=np.uint8)
+    for slot, port_1based in enumerate(src_ports):
+        st = static_by_port.get(port_1based, PortStatic(team_id=0, char_id=0, handicap=9))
+        static_char_id_u8[slot] = np.uint8(st.char_id)
+        team_id_u8[slot] = np.uint8(st.team_id)
     post_pos_x_all = np.zeros((n_frames, 4), dtype=np.float32)
     post_pos_y_all = np.zeros((n_frames, 4), dtype=np.float32)
     post_percent_all = np.zeros((n_frames, 4), dtype=np.float32)
@@ -3456,6 +3544,7 @@ def _main_impl(args) -> Dataset:
         post_shield = _to_numpy(post.field("shield")).astype(np.float32)
         post_shield_f32_all[:, slot] = post_shield
         post_stocks = _to_numpy(post.field("stocks")).astype(np.uint8)
+        post_stocks_u8_all[:, slot] = post_stocks
         post_jumps = _to_numpy(post.field("jumps")).astype(np.uint8)
         post_airborne = _to_numpy(post.field("airborne")).astype(np.uint8)
         post_on_ground = _airborne_to_on_ground(post_airborne, n_frames)
@@ -3565,9 +3654,11 @@ def _main_impl(args) -> Dataset:
             button_mask_a=button_mask_a,
         )[:-1]
         port0 = int(src_ports[slot]) - 1
-        samples["seed_t"]["match_flow_timer"][:, slot] = _derive_match_flow_timer(
+        match_flow_timer = _derive_match_flow_timer(
             action_id_u16=post_state, port0=port0, common=common
-        )[:-1]
+        )
+        match_flow_timer_u8_all[:, slot] = match_flow_timer
+        samples["seed_t"]["match_flow_timer"][:, slot] = match_flow_timer[:-1]
         samples["seed_t"]["opening_input_lock_timer"][:, slot] = _derive_opening_input_lock_timer(
             frame_id_i32=frame_ids
         )[:-1]
@@ -5181,10 +5272,26 @@ def _main_impl(args) -> Dataset:
     ]
     samples["seed_t"]["motion_entry_instance_id_override_u16"][:, :] = motion_entry_iid_override
 
-    # Grab/throw victim attachment owner identity (slot indices; 2p-only for v1 suite).
+    samples["seed_t"]["match_flow_pending_rebirth_char_id"][:, :] = _derive_match_flow_pending_rebirth_char_id(
+        post_action_id_u16=post_action_id_u16,
+        post_char_id_u8=post_char_id_u8,
+        post_stocks_u8=post_stocks_u8_all,
+        match_flow_timer_u8=match_flow_timer_u8_all,
+        static_char_id_u8=static_char_id_u8,
+        team_id_u8=team_id_u8,
+        is_teams=bool(is_teams),
+        num_players=int(num_players),
+    )[:-1, :]
+
+    # Grab/throw victim attachment owner identity (slot indices).
     if int(num_players) == 2:
         grab_owner = derive_grab_owner_port_2p(action_id_u16_2p=post_action_id[:, :2])
         samples["seed_t"]["grab_owner_port"][:, :2] = grab_owner[:-1, :]
+    elif int(num_players) > 2:
+        grab_owner = derive_grab_owner_port(
+            action_id_u16=post_action_id[:, : int(num_players)], num_players=int(num_players)
+        )
+        samples["seed_t"]["grab_owner_port"][:, : int(num_players)] = grab_owner[:-1, :]
 
     (
         item_hitlist_victim_port,

@@ -1482,6 +1482,8 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.source_clear_terminal_phase[idx] =
           seed->source_clear_terminal_phase[p] ? 1u : 0u;
       batch->state.match_flow_timer[idx] = seed->match_flow_timer[p];
+      batch->state.match_flow_pending_rebirth_char_id[idx] =
+          seed->match_flow_pending_rebirth_char_id[p];
       if (seed->opening_input_lock_timer[p] > batch->state.opening_input_lock_timer[bi]) {
         batch->state.opening_input_lock_timer[bi] = seed->opening_input_lock_timer[p];
       }
@@ -4225,12 +4227,6 @@ static int debug_combat_contacts_impl(const MslBatch* batch, int batch_index,
       }
       const size_t d_idx = msl_idx_player(batch_index, defender);
 
-      if (batch->state.is_teams[batch_index]) {
-        if (batch->state.team_id[a_idx] == batch->state.team_id[d_idx]) {
-          continue;
-        }
-      }
-
       const uint8_t hurtcap_count = batch->state.hurtcap_count[d_idx];
       if (hurtcap_count == 0) {
         continue;
@@ -4351,12 +4347,6 @@ static int debug_combat_contacts_classified_impl(const MslBatch* batch, int batc
         continue;
       }
       const size_t d_idx = msl_idx_player(batch_index, defender);
-
-      if (batch->state.is_teams[batch_index]) {
-        if (batch->state.team_id[a_idx] == batch->state.team_id[d_idx]) {
-          continue;
-        }
-      }
 
       const float shx = batch->state.shield_x[d_idx];
       const float shy = batch->state.shield_y[d_idx];

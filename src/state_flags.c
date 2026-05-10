@@ -426,6 +426,17 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
     }
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
+      if (batch->state.stocks[idx] == 0u && batch->state.char_id[idx] == 0u &&
+          batch->state.action_id[idx] == (uint16_t)MSL_ACT_DEAD_DOWN) {
+        // Eliminated player slots have no live Fighter owner; Slippi exposes the inactive slot with
+        // zeroed state flag bytes. Team stock-share can later create a fresh Rebirth owner, but
+        // until then stale seeded flag bits must not survive on the terminal dead slot.
+        // refs/melee/src/melee/gm/gm_16AE.c::fn_8016B918_inline
+        for (size_t k = 0; k < (size_t)MSL_STATE_FLAGS_BYTES; k++) {
+          batch->state.state_flags[idx * (size_t)MSL_STATE_FLAGS_BYTES + k] = 0u;
+        }
+        continue;
+      }
       const uint16_t action_id = batch->state.action_id[idx];
       const uint16_t prev_action = batch->state.prev_action_id[idx];
 
