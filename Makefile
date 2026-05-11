@@ -1,4 +1,4 @@
-.PHONY: build test test-parallel test-serial preprocess preprocess-aggregate validate validate-aggregate validate-rollout validate-rollout-aggregate validate-all rollout-capture rollout-summary rollout-diff rollout-locate rollout-locate-summary rollout-locate-diff rollout-disruptive rollout-disruptive-rerank build_data webplay-build webplay fmt fmt-check check guardrail-preflight guardrail-preflight-full guardrail-baseline forensic-rows dolphin-engine-dump dolphin-extract dolphin-forensic-row build-bench-sim bench-sim FORCE
+.PHONY: build clean-native-shadow test test-parallel test-serial package-smoke preprocess preprocess-aggregate validate validate-aggregate validate-rollout validate-rollout-aggregate validate-all rollout-capture rollout-summary rollout-diff rollout-locate rollout-locate-summary rollout-locate-diff rollout-disruptive rollout-disruptive-rerank build_data webplay-build webplay fmt fmt-check check guardrail-preflight guardrail-preflight-full guardrail-baseline forensic-rows dolphin-engine-dump dolphin-extract dolphin-forensic-row build-bench-sim bench-sim FORCE
 
 PY := uv run python
 DATASETS_DIR ?= datasets
@@ -42,7 +42,9 @@ BENCH_SIM ?= build/bench/bench_sim
 BENCH_SIM_SRCS := $(wildcard src/*.c) src/decomp/lb/lb_00ce.c tools/bench/bench_sim.c
 BUILD_FORCE ?= 0
 BUILD_STAMP ?= build/msl_binding.stamp
-BUILD_SRCS := $(shell find src python -type f '(' -name '*.c' -o -name '*.h' -o -name 'setup.py' ')' -print)
+NATIVE_EXT_GLOB := melee_sim/_native*.so
+LEGACY_ROOT_EXT_GLOB := msl_binding*.so
+BUILD_SRCS := $(shell find src python -type f '(' -name '*.c' -o -name '*.h' ')' -print; printf '%s\n' setup.py pyproject.toml)
 WEBPLAY_PORT ?= 8001
 HOST ?= 127.0.0.1
 OPEN ?= 1
@@ -77,14 +79,17 @@ BUILD_FORCE_ARG :=
 BUILD_STAMP_DEPS :=
 endif
 
-build: $(BUILD_STAMP)
-	@if ! ls msl_binding*.so >/dev/null 2>&1; then \
+build: clean-native-shadow $(BUILD_STAMP)
+	@if ! ls $(NATIVE_EXT_GLOB) >/dev/null 2>&1; then \
 		$(MAKE) --no-print-directory BUILD_FORCE=1 "$(BUILD_STAMP)"; \
 	fi
 
+clean-native-shadow:
+	@rm -f $(LEGACY_ROOT_EXT_GLOB)
+
 $(BUILD_STAMP): $(BUILD_SRCS) $(BUILD_STAMP_DEPS)
 	@mkdir -p "$(@D)"
-	@$(PY) python/setup.py build_ext --inplace $(BUILD_FORCE_ARG) $(BUILD_STDOUT)
+	@$(PY) setup.py build_ext --inplace $(BUILD_FORCE_ARG) $(BUILD_STDOUT)
 	@touch "$@"
 
 FORCE:
@@ -98,6 +103,9 @@ test-parallel: test
 test-serial: build
 	@mkdir -p reports/triage
 	@$(PY) -m pytest $(TEST_ARGS)
+
+package-smoke:
+	@$(PY) scripts/package_smoke.py
 
 preprocess:
 	@$(PY) -m tools.slippi.preprocess_suite --suite "$(SUITE)" --datasets-dir "$(DATASETS_DIR)" --workers "$(PREPROCESS_WORKERS)"

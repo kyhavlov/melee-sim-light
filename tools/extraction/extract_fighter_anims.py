@@ -11,6 +11,7 @@ import numpy as np
 from melee_sim.hsd_archive import HsdArchive, parse_hsd_archive
 
 ISO_DIR = Path("_iso")
+DATA_DIR = Path("data")
 
 F32 = np.float32
 
@@ -1401,7 +1402,7 @@ def _collect_needed_parts_from_moves(character: str, moves_path: Path) -> tuple[
                 needed.add(part)
 
     # Include hurt capsule bones if extracted (needed to animate accurate defender hurt capsules).
-    hurt_path = Path("data/hurtcaps") / f"{character}.json"
+    hurt_path = DATA_DIR / "hurtcaps" / f"{character}.json"
     if hurt_path.exists():
         try:
             hurt = json.loads(hurt_path.read_text())
@@ -1671,7 +1672,7 @@ def extract_one_character(
     # Sources:
     # - Hurtcaps: `data/hurtcaps/<character>.json` (extracted from ftData hurtbox init tables)
     # - ECB joints: `data/characters/<character>.json` `ecb_joints` (used by our ECB probe/debug)
-    hc_path = Path("data") / "hurtcaps" / f"{character}.json"
+    hc_path = DATA_DIR / "hurtcaps" / f"{character}.json"
     if hc_path.exists():
         try:
             hc = json.loads(hc_path.read_text())
@@ -1682,7 +1683,7 @@ def extract_one_character(
         except Exception:
             pass
 
-    ch_path = Path("data") / "characters" / f"{character}.json"
+    ch_path = DATA_DIR / "characters" / f"{character}.json"
     if ch_path.exists():
         try:
             ch = json.loads(ch_path.read_text())
@@ -1785,12 +1786,12 @@ def extract_one_character(
     if not native:
         raise RuntimeError(
             "pure-Python fighter animation extraction is disabled: never use this path. "
-            "Build/import msl_binding and use the native anim_bake_ssanim01 helper instead."
+            "Install/build melee_sim and use the native anim_bake_ssanim01 helper instead."
         )
     if debug_msid is not None or debug_frame is not None or debug_part is not None:
         raise RuntimeError(
             "debug fighter animation extraction would use the disabled pure-Python bake path. "
-            "Never use this for setup; build/import msl_binding and use native extraction instead."
+            "Never use this for setup; install/build melee_sim and use native extraction instead."
         )
 
     # Native path uses fixed arrays.
@@ -1798,11 +1799,11 @@ def extract_one_character(
     msl = None
     if use_native:
         try:
-            import msl_binding as msl  # type: ignore[import-not-found]
+            from melee_sim._native_access import native as msl
         except Exception as exc:
             raise RuntimeError(
-                "msl_binding is required for fighter animation extraction. "
-                "Never use the pure-Python fallback; run `make build` and rerun extraction."
+                "melee_sim native bindings are required for fighter animation extraction. "
+                "Never use the pure-Python fallback; install/build melee_sim and rerun extraction."
             ) from exc
 
     rest_rot_np = np.asarray(part_rot, dtype=np.float32)
@@ -2317,9 +2318,12 @@ def extract_one_character(
 
 
 def main() -> None:
+    global DATA_DIR, ISO_DIR
     ap = argparse.ArgumentParser(description="Extract per-move fighter bone matrices from FigaTree animations (decomp-first).")
     ap.add_argument("--character", type=str, required=True, help="one of: fox,falco,sheik,peach,marth,puff,falcon")
     ap.add_argument("--moves", type=Path, default=None, help="path to data/moves/<character>.json (default inferred)")
+    ap.add_argument("--data-dir", type=Path, default=Path("data"), help="directory containing generated character metadata")
+    ap.add_argument("--iso-dir", type=Path, default=Path("_iso"), help="directory containing extracted Pl*.dat files")
     ap.add_argument("--out-dir", type=Path, default=Path("data/anims"), help="output directory")
     ap.add_argument(
         "--blend-only",
@@ -2340,10 +2344,12 @@ def main() -> None:
         help="add these submotion ids to the default extracted set (repeatable; ignored if --msid is set)",
     )
     args = ap.parse_args()
+    DATA_DIR = args.data_dir
+    ISO_DIR = args.iso_dir
 
     moves = args.moves
     if moves is None:
-        moves = Path("data/moves") / f"{args.character}.json"
+        moves = DATA_DIR / "moves" / f"{args.character}.json"
     if not moves.exists():
         raise SystemExit(f"moves file not found: {moves}")
 

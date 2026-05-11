@@ -127,6 +127,75 @@ def _extract_fox_falco_laser(pl_buf: bytes, arc, *, ftdata_abs: int) -> dict:
     return out
 
 
+def _q8(v: float) -> float:
+    return float(round(float(v) * 256.0) / 256.0)
+
+
+def _extract_fox_falco_illusion_item(pl_buf: bytes, arc, *, ftdata_abs: int) -> dict:
+    """Extract Fox/Falco Illusion/Phantasm item params from fighter article data.
+
+    Decomp anchors:
+    - refs/melee/src/melee/it/items/itfoxillusion.c
+    - refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c::ftFx_Init_OnLoad
+    - refs/melee/src/melee/ft/chara/ftFalco/ftFc_Init.c::ftFc_Init_OnLoad
+    """
+    items_abs = arc.ptr32(ftdata_abs + 0x48)
+    if items_abs == arc.data_base:
+        return {}
+
+    def _state_hitbox(states_abs: int, state_index: int) -> dict | None:
+        script_abs = arc.ptr32(states_abs + 0x0C + int(state_index) * 0x10)
+        if script_abs == arc.data_base:
+            return None
+        events = _parse_subaction_events(arc, script_abs, max_frames=8, max_steps_per_frame=500)
+        for ev in events:
+            if ev.kind == "create_hitbox":
+                hb = ev.data.get("hitbox")
+                if isinstance(hb, dict):
+                    return hb
+        return None
+
+    # ftData.x48_items[0] is the blaster shot. The Illusion/Phantasm item is the later
+    # Fox/Falco article with state 0 and state 1 hitbox scripts.
+    for item_index in range(1, 4):
+        article_abs = arc.ptr32(items_abs + item_index * 4)
+        if article_abs == arc.data_base or article_abs < 0 or article_abs + 0x10 > len(pl_buf):
+            continue
+        special_abs = arc.ptr32(article_abs + 0x04)
+        states_abs = arc.ptr32(article_abs + 0x0C)
+        if special_abs == arc.data_base or states_abs == arc.data_base:
+            continue
+        lifetime01 = int(max(0, min(255, int(round(float(_f32_be(pl_buf, special_abs + 0x00)))))))
+        lifetime2 = int(max(0, min(255, int(round(float(_f32_be(pl_buf, special_abs + 0x04)))))))
+        hb0 = _state_hitbox(states_abs, 0)
+        hb1 = _state_hitbox(states_abs, 1)
+        if hb0 is None or hb1 is None:
+            continue
+
+        return {
+            "illusion_item_lifetime_state01_frames": lifetime01,
+            "illusion_item_lifetime_state2_frames": lifetime2,
+            "illusion_item_hitbox_size": _q8(float(hb0.get("size", 0.0))),
+            "illusion_item_state0_hitbox_y_offset": _q8(float(hb0.get("y_offset", 0.0))),
+            "illusion_item_state0_damage": float(hb0.get("damage", 0.0)),
+            "illusion_item_state0_angle": int(hb0.get("angle", 0)),
+            "illusion_item_state0_kbg": int(hb0.get("kbg", 0)),
+            "illusion_item_state0_wsk": int(hb0.get("wsk", 0)),
+            "illusion_item_state0_bkb": int(hb0.get("bkb", 0)),
+            "illusion_item_state0_element": int(hb0.get("element", 0)),
+            "illusion_item_state0_shield_damage": int(hb0.get("shield_damage", 0)),
+            "illusion_item_state1_hitbox_y_offset": _q8(float(hb1.get("y_offset", 0.0))),
+            "illusion_item_state1_damage": float(hb1.get("damage", 0.0)),
+            "illusion_item_state1_angle": int(hb1.get("angle", 0)),
+            "illusion_item_state1_kbg": int(hb1.get("kbg", 0)),
+            "illusion_item_state1_wsk": int(hb1.get("wsk", 0)),
+            "illusion_item_state1_bkb": int(hb1.get("bkb", 0)),
+            "illusion_item_state1_element": int(hb1.get("element", 0)),
+            "illusion_item_state1_shield_damage": int(hb1.get("shield_damage", 0)),
+        }
+    return {}
+
+
 def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaster: bool = False) -> dict:
     buf = pl_dat.read_bytes()
     arc = parse_hsd_archive(buf)
@@ -149,8 +218,12 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
 
     # struct ftData { ftCo_DatAttrs* x0; ... }
     attrs_abs = arc.ptr32(ftdata_abs + 0x00)
+    # struct ftData { ... UnkFloat6_Camera* x3C; } consumed by ftCamera_80076018.
+    camera_abs = arc.ptr32(ftdata_abs + 0x3C)
     # struct ftData { ... Vec2* x50; } (ft/types.h +0x50) => fp->x2C4 (pushbox center offset + radius).
     pushbox_abs = arc.ptr32(ftdata_abs + 0x50)
+    # struct ftData { ... FtSFX* x4C_sfx; }.
+    sfx_abs = arc.ptr32(ftdata_abs + 0x4C)
 
     def f(off: int) -> float:
         return float(_f32_be(buf, attrs_abs + off))
@@ -258,6 +331,18 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
         # refs/melee/src/melee/ft/ftwalljump.c::ftWallJump_8008169C
         # refs/melee/src/melee/ft/types.h::ftCo_DatAttrs (+0x148)
         "walljump_setup_x_delta_threshold": f(0x148),
+        # Fighter camera subject data:
+        # - ftCo_DatAttrs.camera_zoom_target_bone/x170 feeds ftLib_800866DC.
+        # - ftData.x3C is copied by ftCamera_80076018 into CmSubject extents.
+        # refs/melee/src/melee/ft/ftlib.c::ftLib_800866DC
+        # refs/melee/src/melee/ft/ftcamera.c::ftCamera_80076064
+        "camera_zoom_target_bone_part_id": int(_i32_be(buf, attrs_abs + 0x16C)),
+        "camera_zoom_target_offset": [
+            float(_f32_be(buf, attrs_abs + 0x170)),
+            float(_f32_be(buf, attrs_abs + 0x174)),
+            float(_f32_be(buf, attrs_abs + 0x178)),
+        ],
+        "camera_box_radius": float(_f32_be(buf, camera_abs + 0x14)),
 
         # Ledge snap parameters: ftData_x44_t (ft/types.h)
         # struct ftData { ... ftData_x44_t* x44; }
@@ -277,7 +362,18 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
             int(_s16_be(buf, x44_abs + 0x0A)),
         ],
         "ecb_side_y_offset": float(_f32_be(buf, x44_abs + 0x0C)),
+        # Compatibility SFX metadata. Runtime does not currently consume these, but keeping them
+        # generated preserves the character JSON contract for downstream tooling.
+        #
+        # Decomp: refs/melee/src/melee/ft/types.h::FtSFX / ftData.x4C_sfx.
+        "smash_sfx_num": int(_i32_be(buf, arc.ptr32(sfx_abs + 0x00) + 0x00)),
     }
+    if ftdata_symbol == "ftDataFox":
+        out["damage_post_hitlag_sfx_mid_num"] = 2
+        out["damage_post_hitlag_sfx_high_num"] = 2
+    elif ftdata_symbol == "ftDataFalco":
+        out["damage_post_hitlag_sfx_mid_num"] = 1
+        out["damage_post_hitlag_sfx_high_num"] = 2
     if extract_fox_blaster:
         # struct ftData { ... void* ext_attr; } (ft/types.h +0x4)
         # Fox/Falco ext attrs: struct ftFox_DatAttrs (ft/chara/ftFox/types.h)
@@ -314,9 +410,14 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
         out["illusion_ground_friction"] = float(_f32_be(buf, ext_abs + 0x38))
         out["illusion_air_end_vel_x"] = float(_f32_be(buf, ext_abs + 0x3C))
         out["illusion_air_friction"] = float(_f32_be(buf, ext_abs + 0x40))
+        out["illusion_gravity_delay_end_frames"] = int(
+            max(0, min(255, int(round(float(_f32_be(buf, ext_abs + 0x44))))))
+        )
+        out["illusion_fall_accel_end"] = float(_f32_be(buf, ext_abs + 0x48))
         out["illusion_landing_lag_frames"] = int(
             max(0, min(255, int(round(float(_f32_be(buf, ext_abs + 0x50))))))
         )
+        out.update(_extract_fox_falco_illusion_item(buf, arc, ftdata_abs=ftdata_abs))
         # Fox/Falco up special HoldAir/Launch/Bound (Firefox/Firebird) attrs.
         #
         # Decomp:
@@ -502,7 +603,28 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
         "illusion_ground_friction",
         "illusion_air_end_vel_x",
         "illusion_air_friction",
+        "illusion_gravity_delay_end_frames",
+        "illusion_fall_accel_end",
         "illusion_landing_lag_frames",
+        "illusion_item_lifetime_state01_frames",
+        "illusion_item_lifetime_state2_frames",
+        "illusion_item_hitbox_size",
+        "illusion_item_state0_hitbox_y_offset",
+        "illusion_item_state0_damage",
+        "illusion_item_state0_angle",
+        "illusion_item_state0_kbg",
+        "illusion_item_state0_wsk",
+        "illusion_item_state0_bkb",
+        "illusion_item_state0_element",
+        "illusion_item_state0_shield_damage",
+        "illusion_item_state1_hitbox_y_offset",
+        "illusion_item_state1_damage",
+        "illusion_item_state1_angle",
+        "illusion_item_state1_kbg",
+        "illusion_item_state1_wsk",
+        "illusion_item_state1_bkb",
+        "illusion_item_state1_element",
+        "illusion_item_state1_shield_damage",
         "firefox_hold_gravity_delay_frames",
         "firefox_hold_vel_x",
         "firefox_hold_air_friction",
@@ -565,6 +687,9 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
         "ledge_snap_x",
         "ledge_snap_y",
         "ledge_snap_height",
+        "smash_sfx_num",
+        "damage_post_hitlag_sfx_mid_num",
+        "damage_post_hitlag_sfx_high_num",
     ]
     for k in ordered_keys:
         if k in extracted:

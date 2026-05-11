@@ -3126,8 +3126,8 @@ int msl_batch_write_compare(const MslBatch* batch, uint8_t* out_bytes, size_t ou
   return 0;
 }
 
-static void msl_write_rl_player_observation(const MslBatch* batch, int bi, int p,
-                                            uint8_t team_relation, MslRlPlayerObservation* out) {
+static void write_melee_player(const MslBatch* batch, int bi, int p, uint8_t team_relation,
+                               MeleePlayer* out) {
   const size_t idx = msl_idx_player(bi, p);
   memset(out, 0, sizeof(*out));
   out->present = 1u;
@@ -3153,16 +3153,41 @@ static void msl_write_rl_player_observation(const MslBatch* batch, int bi, int p
   out->on_ground = batch->state.on_ground[idx] ? 1u : 0u;
   out->jumps_left = batch->state.jumps_left[idx];
   out->hurtbox_state = batch->state.hurtbox_state[idx];
+  out->invulnerable = batch->state.hurtbox_state[idx] != 0u ? 1u : 0u;
 }
 
-int msl_batch_write_rl_observation(const MslBatch* batch, const uint8_t* viewpoint_player_bytes,
-                                   size_t viewpoint_player_stride_bytes, uint8_t* out_bytes,
-                                   size_t out_stride_bytes) {
+static void write_melee_item(const MslBatch* batch, int bi, int it, MslItem* out) {
+  const size_t ii = msl_idx_item(bi, it);
+  memset(out, 0, sizeof(*out));
+  out->exists = batch->state.item_exists[ii];
+  out->state = batch->state.item_state[ii];
+  out->type = batch->state.item_type[ii];
+  out->owner = batch->state.item_owner[ii];
+  out->instance_id = batch->state.item_instance_id[ii];
+  out->attack_id = batch->state.item_attack_id[ii];
+  out->attack_instance = batch->state.item_attack_instance[ii];
+  out->direction = batch->state.item_direction[ii];
+  out->vel_x = batch->state.item_vel_x[ii];
+  out->vel_y = batch->state.item_vel_y[ii];
+  out->pos_x = batch->state.item_pos_x[ii];
+  out->pos_y = batch->state.item_pos_y[ii];
+  out->damage = batch->state.item_damage[ii];
+  out->timer = batch->state.item_timer[ii];
+  out->spawn_id = batch->state.item_spawn_id[ii];
+  out->misc0 = batch->state.item_misc0[ii];
+  out->misc1 = batch->state.item_misc1[ii];
+  out->misc2 = batch->state.item_misc2[ii];
+  out->misc3 = batch->state.item_misc3[ii];
+}
+
+int melee_batch_write_gamestate(const MslBatch* batch, const uint8_t* viewpoint_player_bytes,
+                                size_t viewpoint_player_stride_bytes, uint8_t* out_bytes,
+                                size_t out_stride_bytes) {
   if (batch == NULL || viewpoint_player_bytes == NULL || out_bytes == NULL) {
     return EINVAL;
   }
   if (viewpoint_player_stride_bytes < sizeof(uint8_t) ||
-      out_stride_bytes < sizeof(MslRlObservation)) {
+      out_stride_bytes < sizeof(MeleeGamestate)) {
     return EINVAL;
   }
   const int active_players = (int)batch->config.num_players;
@@ -3175,7 +3200,7 @@ int msl_batch_write_rl_observation(const MslBatch* batch, const uint8_t* viewpoi
     if ((int)vp >= active_players) {
       return EINVAL;
     }
-    MslRlObservation* out = (MslRlObservation*)(out_bytes + (size_t)bi * out_stride_bytes);
+    MeleeGamestate* out = (MeleeGamestate*)(out_bytes + (size_t)bi * out_stride_bytes);
     memset(out, 0, sizeof(*out));
     out->frame_id = batch->state.frame_id[bi];
     out->frame_pre_random_seed = batch->state.frame_pre_random_seed[bi];
@@ -3183,10 +3208,17 @@ int msl_batch_write_rl_observation(const MslBatch* batch, const uint8_t* viewpoi
     out->num_players = batch->config.num_players;
     out->is_teams = batch->state.is_teams[bi] ? 1u : 0u;
     out->viewpoint_player = vp;
+    float randall_x = 0.0f;
+    float randall_y = 0.0f;
+    if (stage_collision_get_randall_position(batch, bi, &randall_x, &randall_y)) {
+      out->stage.randall.exists = 1u;
+      out->stage.randall.x = randall_x;
+      out->stage.randall.y = randall_y;
+    }
     const size_t vp_idx = msl_idx_player(bi, (int)vp);
     const uint8_t vp_team = batch->state.team_id[vp_idx];
     int slot = 0;
-    msl_write_rl_player_observation(batch, bi, (int)vp, 0u, &out->slots[slot++]);
+    write_melee_player(batch, bi, (int)vp, 0u, &out->slots[slot++]);
     if (batch->state.is_teams[bi]) {
       for (int p = 0; p < active_players && slot < MSL_MAX_PLAYERS; p++) {
         if (p == (int)vp) {
@@ -3194,7 +3226,7 @@ int msl_batch_write_rl_observation(const MslBatch* batch, const uint8_t* viewpoi
         }
         const size_t idx = msl_idx_player(bi, p);
         if (batch->state.team_id[idx] == vp_team) {
-          msl_write_rl_player_observation(batch, bi, p, 1u, &out->slots[slot++]);
+          write_melee_player(batch, bi, p, 1u, &out->slots[slot++]);
         }
       }
     }
@@ -3206,7 +3238,10 @@ int msl_batch_write_rl_observation(const MslBatch* batch, const uint8_t* viewpoi
       if (batch->state.is_teams[bi] && batch->state.team_id[idx] == vp_team) {
         continue;
       }
-      msl_write_rl_player_observation(batch, bi, p, 2u, &out->slots[slot++]);
+      write_melee_player(batch, bi, p, 2u, &out->slots[slot++]);
+    }
+    for (int it = 0; it < MSL_MAX_ITEMS; it++) {
+      write_melee_item(batch, bi, it, &out->items[it]);
     }
   }
 

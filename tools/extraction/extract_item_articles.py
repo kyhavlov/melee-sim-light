@@ -7,7 +7,7 @@ from pathlib import Path
 
 from dataclasses import dataclass
 
-from tools.slippi.known_data_artifacts import (
+from tools.extraction.known_data_artifacts import (
     ITEM_ARTICLE_CHAR_DOMAIN_GALE01_FIGHTER_KIND,
     ITEM_ARTICLE_MAGIC,
     ITEM_ARTICLE_VALUE_F32,

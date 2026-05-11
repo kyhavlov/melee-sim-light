@@ -193,6 +193,10 @@ uint8_t stage_collision_floor_line_height_platform_state_is_source_trusted(const
 // copy through unchanged. Dynamic FoD platform lines consume causal stage platform state.
 uint8_t stage_collision_floor_line_world(const MslBatch* batch, int bi,
                                          const MslStageFloorLine* line, MslStageFloorLine* out);
+// Resolve Yoshi's Story Randall to its current platform center. Returns 0 outside stages without
+// extracted Randall path data.
+uint8_t stage_collision_get_randall_position(const MslBatch* batch, int bi, float* x_out,
+                                             float* y_out);
 // Return the current-frame platform motion delta for a transformed floor line. This is runtime
 // stage-object carry state, not replay-seeded future state.
 uint8_t stage_collision_floor_line_motion_delta(const MslBatch* batch, int bi,

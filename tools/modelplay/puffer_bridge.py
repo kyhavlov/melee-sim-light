@@ -7,7 +7,7 @@ from pathlib import Path
 
 import numpy as np
 
-from tools.modelplay.sim_env import RL_OBS_DTYPE
+from tools.modelplay.sim_env import GAMESTATE_DTYPE
 from tools.modelplay.state_adapter import INPUT_DTYPE, _controller_from_input_player, empty_controller
 
 
@@ -130,20 +130,20 @@ def _pack_slot(out: np.ndarray, slot: np.void) -> None:
 
 
 def pack_observation(
-    rl_obs: np.void,
+    gamestate: np.void,
     button_hist: np.ndarray,
     main_hist: np.ndarray,
     history_count: int,
     history_cursor: int,
 ) -> np.ndarray:
     out = np.zeros(MELEE_OBS_SIZE, dtype=np.float32)
-    out[0] = _melee_safe_div(float(int(rl_obs["frame_id"]) % 3600), 3600.0)
-    out[1] = _melee_safe_div(float(rl_obs["viewpoint_player"]), 3.0)
-    out[2] = float(rl_obs["is_teams"])
+    out[0] = _melee_safe_div(float(int(gamestate["frame_id"]) % 3600), 3600.0)
+    out[1] = _melee_safe_div(float(gamestate["viewpoint_player"]), 3.0)
+    out[2] = float(gamestate["is_teams"])
     out[3] = 1.0
 
     ptr = 4
-    for slot in rl_obs["slots"]:
+    for slot in gamestate["slots"]:
         if int(slot["present"]):
             _pack_slot(out[ptr : ptr + 26], slot)
         ptr += 26
@@ -265,11 +265,11 @@ class PufferAgent:
         if self._count < MELEE_INPUT_HISTORY:
             self._count += 1
 
-    def step(self, rl_obs: np.void, *, needs_reset: bool):
+    def step(self, gamestate: np.void, *, needs_reset: bool):
         if needs_reset:
             self.reset()
         obs = pack_observation(
-            rl_obs,
+            gamestate,
             self._button_hist,
             self._main_hist,
             self._count,
