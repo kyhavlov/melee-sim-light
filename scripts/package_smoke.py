@@ -58,7 +58,9 @@ def main() -> None:
         smoke = f"""
         import importlib.util
         import melee_sim as msl
+        from melee_sim._native_access import native
         import tools.extraction.known_data_artifacts as artifacts
+        import tools.extraction.extract_fighter_anims as extract_fighter_anims
 
         if importlib.util.find_spec("tools.slippi") is not None:
             raise SystemExit("tools.slippi should not be installed in the public package")
@@ -66,6 +68,10 @@ def main() -> None:
             raise SystemExit("msl_binding should not be installed in the public package")
         if artifacts.STAGE_MAGIC != b"MSLSTG01":
             raise SystemExit("artifact constants did not import")
+        if native.sizes()["gamestate"] != msl.gamestate_dtype().itemsize:
+            raise SystemExit("native access helper did not resolve packaged extension")
+        if not hasattr(extract_fighter_anims, "extract_one_character"):
+            raise SystemExit("fighter animation extractor did not import")
 
         with msl.EnvBatch(batch_size=1, length=2, data_dir={str(repo / "data")!r}) as env:
             buffers = env.buffers()

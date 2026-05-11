@@ -1786,12 +1786,12 @@ def extract_one_character(
     if not native:
         raise RuntimeError(
             "pure-Python fighter animation extraction is disabled: never use this path. "
-            "Build/import msl_binding and use the native anim_bake_ssanim01 helper instead."
+            "Install/build melee_sim and use the native anim_bake_ssanim01 helper instead."
         )
     if debug_msid is not None or debug_frame is not None or debug_part is not None:
         raise RuntimeError(
             "debug fighter animation extraction would use the disabled pure-Python bake path. "
-            "Never use this for setup; build/import msl_binding and use native extraction instead."
+            "Never use this for setup; install/build melee_sim and use native extraction instead."
         )
 
     # Native path uses fixed arrays.
@@ -1799,11 +1799,11 @@ def extract_one_character(
     msl = None
     if use_native:
         try:
-            import msl_binding as msl  # type: ignore[import-not-found]
+            from melee_sim._native_access import native as msl
         except Exception as exc:
             raise RuntimeError(
-                "msl_binding is required for fighter animation extraction. "
-                "Never use the pure-Python fallback; run `make build` and rerun extraction."
+                "melee_sim native bindings are required for fighter animation extraction. "
+                "Never use the pure-Python fallback; install/build melee_sim and rerun extraction."
             ) from exc
 
     rest_rot_np = np.asarray(part_rot, dtype=np.float32)
