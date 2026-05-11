@@ -116,7 +116,7 @@ typedef struct {
   size_t rollout_reset_mask_batch_stride;
 } PyMslHandle;
 
-static void pymsl_release_rollout_buffers(PyMslHandle* h) {
+static void pymsl_release_sequence_buffers(PyMslHandle* h) {
   if (h == NULL) {
     return;
   }
@@ -180,7 +180,7 @@ static void pymsl_capsule_destructor(PyObject* capsule) {
     return;
   }
   pymsl_release_bound_buffers(h);
-  pymsl_release_rollout_buffers(h);
+  pymsl_release_sequence_buffers(h);
   if (h->batch) {
     msl_batch_destroy(h->batch);
     h->batch = NULL;
@@ -1578,7 +1578,7 @@ static PyObject* msl_bind_buffers(PyObject* self, PyObject* args) {
   if (h == NULL) {
     return NULL;
   }
-  pymsl_release_rollout_buffers(h);
+  pymsl_release_sequence_buffers(h);
   const int batch_size = msl_batch_batch_size(h->batch);
 
   PyArrayObject* match_config =
@@ -1701,22 +1701,22 @@ static PyObject* msl_unbind_buffers(PyObject* self, PyObject* args) {
     return NULL;
   }
   pymsl_release_bound_buffers(h);
-  pymsl_release_rollout_buffers(h);
+  pymsl_release_sequence_buffers(h);
   Py_RETURN_NONE;
 }
 
-static int require_rollout_rows(PyArrayObject* arr, int horizon, int batch_size, const char* name) {
-  if (PyArray_NDIM(arr) != 3 || PyArray_DIM(arr, 0) < (npy_intp)horizon ||
+static int require_sequence_rows(PyArrayObject* arr, int length, int batch_size, const char* name) {
+  if (PyArray_NDIM(arr) != 3 || PyArray_DIM(arr, 0) < (npy_intp)length ||
       PyArray_DIM(arr, 1) < (npy_intp)batch_size) {
     PyErr_Format(PyExc_ValueError,
-                 "%s must have shape [horizon, batch, bytes] with at least [%d, %d, ...]", name,
-                 horizon, batch_size);
+                 "%s must have shape [length, batch, bytes] with at least [%d, %d, ...]", name,
+                 length, batch_size);
     return -1;
   }
   return 0;
 }
 
-static PyObject* msl_bind_rollout_buffers(PyObject* self, PyObject* args) {
+static PyObject* msl_bind_sequence_buffers(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* handle_obj = NULL;
   PyObject* match_config_obj = NULL;
@@ -1754,7 +1754,7 @@ static PyObject* msl_bind_rollout_buffers(PyObject* self, PyObject* args) {
     return NULL;
   }
   const int horizon = (int)PyArray_DIM(action, 0);
-  if (horizon <= 0 || require_rollout_rows(action, horizon, batch_size, "action") != 0) {
+  if (horizon <= 0 || require_sequence_rows(action, horizon, batch_size, "action") != 0) {
     return NULL;
   }
   int action_format_id = PYMSL_ACTION_FORMAT_NONE;
@@ -1790,7 +1790,7 @@ static PyObject* msl_bind_rollout_buffers(PyObject* self, PyObject* args) {
 
   PyArrayObject* gamestate = require_contiguous_array(gamestate_obj, NPY_UINT8, 3, "gamestate");
   if (gamestate == NULL ||
-      require_rollout_rows(gamestate, horizon + 1, batch_size, "gamestate") != 0) {
+      require_sequence_rows(gamestate, horizon + 1, batch_size, "gamestate") != 0) {
     return NULL;
   }
   if (PyArray_DIM(gamestate, 2) < (npy_intp)sizeof(MeleeGamestate)) {
@@ -1799,7 +1799,7 @@ static PyObject* msl_bind_rollout_buffers(PyObject* self, PyObject* args) {
   }
 
   PyArrayObject* terminal = require_contiguous_array(terminal_obj, NPY_UINT8, 3, "terminal");
-  if (terminal == NULL || require_rollout_rows(terminal, horizon, batch_size, "terminal") != 0) {
+  if (terminal == NULL || require_sequence_rows(terminal, horizon, batch_size, "terminal") != 0) {
     return NULL;
   }
   if (PyArray_DIM(terminal, 2) < (npy_intp)sizeof(MslTerminal)) {
@@ -1819,7 +1819,7 @@ static PyObject* msl_bind_rollout_buffers(PyObject* self, PyObject* args) {
   }
 
   pymsl_release_bound_buffers(h);
-  pymsl_release_rollout_buffers(h);
+  pymsl_release_sequence_buffers(h);
 
   Py_INCREF(match_config_obj);
   h->match_config_obj = match_config_obj;
@@ -1874,7 +1874,7 @@ static PyObject* msl_bind_rollout_buffers(PyObject* self, PyObject* args) {
   Py_RETURN_NONE;
 }
 
-static PyObject* msl_unbind_rollout_buffers(PyObject* self, PyObject* args) {
+static PyObject* msl_unbind_sequence_buffers(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* handle_obj = NULL;
   if (!PyArg_ParseTuple(args, "O", &handle_obj)) {
@@ -1885,30 +1885,30 @@ static PyObject* msl_unbind_rollout_buffers(PyObject* self, PyObject* args) {
     return NULL;
   }
   pymsl_release_bound_buffers(h);
-  pymsl_release_rollout_buffers(h);
+  pymsl_release_sequence_buffers(h);
   Py_RETURN_NONE;
 }
 
-static int msl_require_rollout_buffers(PyMslHandle* h) {
+static int msl_require_sequence_buffers(PyMslHandle* h) {
   if (h->match_config_bytes == NULL || h->rollout_action_bytes == NULL ||
       h->prev_input_storage == NULL || h->input_storage == NULL || h->rollout_done_bytes == NULL ||
       h->rollout_reset_mask_bytes == NULL) {
-    PyErr_SetString(PyExc_ValueError, "rollout buffers are not bound");
+    PyErr_SetString(PyExc_ValueError, "sequence buffers are not bound");
     return -1;
   }
   return 0;
 }
 
-static int msl_require_rollout_frame(PyMslHandle* h, int frame) {
+static int msl_require_sequence_frame(PyMslHandle* h, int frame) {
   if (frame < 0 || frame >= h->rollout_horizon) {
-    PyErr_Format(PyExc_IndexError, "rollout frame %d is outside horizon %d", frame,
+    PyErr_Format(PyExc_IndexError, "sequence frame %d is outside length %d", frame,
                  h->rollout_horizon);
     return -1;
   }
   return 0;
 }
 
-static const uint8_t* pymsl_prepare_rollout_input_frame(PyMslHandle* h, int frame) {
+static const uint8_t* pymsl_prepare_sequence_input_frame(PyMslHandle* h, int frame) {
   const int batch_size = msl_batch_batch_size(h->batch);
   const uint8_t* action_frame =
       h->rollout_action_bytes + (size_t)frame * h->rollout_action_frame_stride;
@@ -1924,11 +1924,11 @@ static const uint8_t* pymsl_prepare_rollout_input_frame(PyMslHandle* h, int fram
     }
     return h->input_storage;
   }
-  PyErr_SetString(PyExc_ValueError, "unsupported rollout action format");
+  PyErr_SetString(PyExc_ValueError, "unsupported sequence action format");
   return NULL;
 }
 
-static size_t pymsl_prepared_rollout_input_stride(PyMslHandle* h) {
+static size_t pymsl_prepared_sequence_input_stride(PyMslHandle* h) {
   return h->rollout_action_format == PYMSL_ACTION_FORMAT_RAW ? h->rollout_action_batch_stride
                                                              : h->input_storage_stride;
 }
@@ -1968,7 +1968,7 @@ static PyObject* msl_reset_prev_input(PyObject* self, PyObject* args) {
   Py_RETURN_NONE;
 }
 
-static PyObject* msl_set_prev_input_from_rollout(PyObject* self, PyObject* args) {
+static PyObject* msl_set_prev_input_from_sequence(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* handle_obj = NULL;
   int frame = 0;
@@ -1976,14 +1976,14 @@ static PyObject* msl_set_prev_input_from_rollout(PyObject* self, PyObject* args)
     return NULL;
   }
   PyMslHandle* h = unpack_handle(handle_obj);
-  if (h == NULL || msl_require_rollout_buffers(h) != 0 ||
-      msl_require_rollout_frame(h, frame) != 0) {
+  if (h == NULL || msl_require_sequence_buffers(h) != 0 ||
+      msl_require_sequence_frame(h, frame) != 0) {
     return NULL;
   }
   const uint8_t* input_frame =
       h->rollout_action_bytes + (size_t)frame * h->rollout_action_frame_stride;
   if (h->rollout_action_format == PYMSL_ACTION_FORMAT_CONTROLLER) {
-    input_frame = pymsl_prepare_rollout_input_frame(h, frame);
+    input_frame = pymsl_prepare_sequence_input_frame(h, frame);
     if (input_frame == NULL) {
       return NULL;
     }
@@ -2030,14 +2030,14 @@ static PyObject* msl_init_match_bound(PyObject* self, PyObject* args) {
   Py_RETURN_NONE;
 }
 
-static PyObject* msl_init_match_rollout_bound(PyObject* self, PyObject* args) {
+static PyObject* msl_init_match_sequence_bound(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* handle_obj = NULL;
   if (!PyArg_ParseTuple(args, "O", &handle_obj)) {
     return NULL;
   }
   PyMslHandle* h = unpack_handle(handle_obj);
-  if (h == NULL || msl_require_rollout_buffers(h) != 0) {
+  if (h == NULL || msl_require_sequence_buffers(h) != 0) {
     return NULL;
   }
   int err = msl_batch_init_match(h->batch, h->match_config_bytes, h->match_config_stride);
@@ -2060,7 +2060,7 @@ static PyObject* msl_init_match_rollout_bound(PyObject* self, PyObject* args) {
   Py_RETURN_NONE;
 }
 
-static PyObject* msl_reset_rollout_masked(PyObject* self, PyObject* args) {
+static PyObject* msl_reset_sequence_masked(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* handle_obj = NULL;
   int frame = 0;
@@ -2069,8 +2069,8 @@ static PyObject* msl_reset_rollout_masked(PyObject* self, PyObject* args) {
     return NULL;
   }
   PyMslHandle* h = unpack_handle(handle_obj);
-  if (h == NULL || msl_require_rollout_buffers(h) != 0 ||
-      msl_require_rollout_frame(h, frame) != 0) {
+  if (h == NULL || msl_require_sequence_buffers(h) != 0 ||
+      msl_require_sequence_frame(h, frame) != 0) {
     return NULL;
   }
   const uint8_t* mask_frame =
@@ -2168,7 +2168,7 @@ static PyObject* msl_step_write_compare_bound(PyObject* self, PyObject* args) {
   Py_RETURN_NONE;
 }
 
-static PyObject* msl_step_rollout(PyObject* self, PyObject* args) {
+static PyObject* msl_step_sequence(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* handle_obj = NULL;
   int frame = 0;
@@ -2180,16 +2180,16 @@ static PyObject* msl_step_rollout(PyObject* self, PyObject* args) {
     return NULL;
   }
   PyMslHandle* h = unpack_handle(handle_obj);
-  if (h == NULL || msl_require_rollout_buffers(h) != 0 ||
-      msl_require_rollout_frame(h, frame) != 0) {
+  if (h == NULL || msl_require_sequence_buffers(h) != 0 ||
+      msl_require_sequence_frame(h, frame) != 0) {
     return NULL;
   }
 
-  const uint8_t* input_frame = pymsl_prepare_rollout_input_frame(h, frame);
+  const uint8_t* input_frame = pymsl_prepare_sequence_input_frame(h, frame);
   if (input_frame == NULL) {
     return NULL;
   }
-  const size_t input_stride = pymsl_prepared_rollout_input_stride(h);
+  const size_t input_stride = pymsl_prepared_sequence_input_stride(h);
   int err = msl_batch_step_input(h->batch, h->prev_input_storage, h->prev_input_storage_stride,
                                  input_frame, input_stride);
   if (err == 0) {
@@ -2220,7 +2220,7 @@ static PyObject* msl_step_rollout(PyObject* self, PyObject* args) {
     err = msl_batch_write_compare(h->batch, h->compare_bytes, h->compare_stride);
   }
   if (err != 0) {
-    PyErr_Format(PyExc_RuntimeError, "msl_batch rollout step failed: %d", err);
+    PyErr_Format(PyExc_RuntimeError, "msl_batch sequence step failed: %d", err);
     return NULL;
   }
   Py_RETURN_NONE;
@@ -5721,7 +5721,7 @@ static PyObject* msl_destroy(PyObject* self, PyObject* args) {
     return NULL;
   }
   pymsl_release_bound_buffers(h);
-  pymsl_release_rollout_buffers(h);
+  pymsl_release_sequence_buffers(h);
   if (h->batch) {
     msl_batch_destroy(h->batch);
     h->batch = NULL;
@@ -6237,25 +6237,25 @@ static PyMethodDef methods[] = {
      "bind_buffers(handle, match_config, prev_input, input, compare[, viewpoint, "
      "gamestate, terminal])"},
     {"unbind_buffers", msl_unbind_buffers, METH_VARARGS, "unbind_buffers(handle)"},
-    {"bind_rollout_buffers", msl_bind_rollout_buffers, METH_VARARGS,
-     "bind_rollout_buffers(handle, match_config, action, compare, viewpoint, gamestate, "
+    {"bind_sequence_buffers", msl_bind_sequence_buffers, METH_VARARGS,
+     "bind_sequence_buffers(handle, match_config, action, compare, viewpoint, gamestate, "
      "terminal, done, reset_mask, action_format)"},
-    {"unbind_rollout_buffers", msl_unbind_rollout_buffers, METH_VARARGS,
-     "unbind_rollout_buffers(handle)"},
+    {"unbind_sequence_buffers", msl_unbind_sequence_buffers, METH_VARARGS,
+     "unbind_sequence_buffers(handle)"},
     {"init_match_bound", msl_init_match_bound, METH_VARARGS,
      "init_match_bound(handle) -> initialize from bound match_config"},
-    {"init_match_rollout_bound", msl_init_match_rollout_bound, METH_VARARGS,
-     "init_match_rollout_bound(handle) -> initialize from bound rollout match_config"},
-    {"reset_rollout_masked", msl_reset_rollout_masked, METH_VARARGS,
-     "reset_rollout_masked(handle, frame, write_initial_observation=True)"},
+    {"init_match_sequence_bound", msl_init_match_sequence_bound, METH_VARARGS,
+     "init_match_sequence_bound(handle) -> initialize from bound sequence match_config"},
+    {"reset_sequence_masked", msl_reset_sequence_masked, METH_VARARGS,
+     "reset_sequence_masked(handle, frame, write_initial_observation=True)"},
     {"reset_prev_input", msl_reset_prev_input, METH_VARARGS,
      "reset_prev_input(handle) -> clear env-owned previous input storage"},
-    {"set_prev_input_from_rollout", msl_set_prev_input_from_rollout, METH_VARARGS,
-     "set_prev_input_from_rollout(handle, frame) -> copy rollout action[frame] to previous input"},
+    {"set_prev_input_from_sequence", msl_set_prev_input_from_sequence, METH_VARARGS,
+     "set_prev_input_from_sequence(handle, frame) -> copy sequence action[frame] to previous input"},
     {"step_bound", msl_step_bound, METH_VARARGS,
      "step_bound(handle) -> step using bound prev_input/input buffers"},
-    {"step_rollout", msl_step_rollout, METH_VARARGS,
-     "step_rollout(handle, frame, write_outputs=True, write_compare=False, max_frame_id=-1)"},
+    {"step_sequence", msl_step_sequence, METH_VARARGS,
+     "step_sequence(handle, frame, write_outputs=True, write_compare=False, max_frame_id=-1)"},
     {"write_compare_bound", msl_write_compare_bound, METH_VARARGS,
      "write_compare_bound(handle) -> write bound compare buffer"},
     {"step_write_compare_bound", msl_step_write_compare_bound, METH_VARARGS,

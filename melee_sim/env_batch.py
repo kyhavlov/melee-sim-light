@@ -234,7 +234,7 @@ class EnvBatch:
         self._check_buffers_compatible(buffers)
         if buffers.length != self.length:
             raise ValueError("buffers.length must match EnvBatch.length")
-        _native.bind_rollout_buffers(
+        _native.bind_sequence_buffers(
             self._handle,
             buffers.match_config,
             buffers.action,
@@ -256,7 +256,7 @@ class EnvBatch:
 
     def reset_all(self) -> None:
         self._check_bound()
-        _native.init_match_rollout_bound(self._handle)
+        _native.init_match_sequence_bound(self._handle)
         self.t = 0
 
     def reset_previous_input(self) -> None:
@@ -270,11 +270,11 @@ class EnvBatch:
     def reset_masked(self, *, write_initial_observation: bool = True) -> None:
         self._check_bound()
         self._check_t_in_length()
-        _native.reset_rollout_masked(self._handle, self.t, int(write_initial_observation))
+        _native.reset_sequence_masked(self._handle, self.t, int(write_initial_observation))
 
     def set_previous_input(self, t: int = 0) -> None:
         self._check_bound()
-        _native.set_prev_input_from_rollout(self._handle, int(t))
+        _native.set_prev_input_from_sequence(self._handle, int(t))
 
     def step(
         self,
@@ -303,7 +303,7 @@ class EnvBatch:
         self._check_bound()
         if t < 0 or t >= self.length:
             raise RuntimeError("buffer length exhausted")
-        _native.step_rollout(
+        _native.step_sequence(
             self._handle,
             int(t),
             int(write_outputs),
