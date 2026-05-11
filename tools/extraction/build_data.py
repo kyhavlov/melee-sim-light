@@ -46,6 +46,7 @@ def main() -> None:
     global _RUN_TIMINGS
     ap = argparse.ArgumentParser(description="Build ISO-derived `data/` artifacts.")
     ap.add_argument("--iso-dir", type=Path, default=Path("_iso"), help="directory containing extracted *.dat files")
+    ap.add_argument("--out-dir", type=Path, default=Path("data"), help="directory for generated simulator data")
     ap.add_argument("--chars", type=str, default="fox,falco", help="comma-separated characters (fox,falco,...)")
     ap.add_argument(
         "--stage",
@@ -68,6 +69,11 @@ def main() -> None:
     args = ap.parse_args()
 
     iso_dir = args.iso_dir
+    out_root = args.out_dir
+
+    def out(rel: str) -> Path:
+        return out_root / rel
+
     chars = [c.strip() for c in args.chars.split(",") if c.strip()]
     timings: list[tuple[str, float]] | None = [] if args.timings else None
     _RUN_TIMINGS = timings
@@ -123,38 +129,38 @@ def main() -> None:
 
     # Outputs.
     out_stage_by_key = {
-        "grnla": Path("data/stages/final_destination.json"),
-        "grnba": Path("data/stages/battlefield.json"),
-        "griz": Path("data/stages/fountain_of_dreams.json"),
-        "grps": Path("data/stages/pokemon_stadium.json"),
-        "grst": Path("data/stages/yoshis_story.json"),
-        "grop": Path("data/stages/dream_land_n64.json"),
+        "grnla": out("stages/final_destination.json"),
+        "grnba": out("stages/battlefield.json"),
+        "griz": out("stages/fountain_of_dreams.json"),
+        "grps": out("stages/pokemon_stadium.json"),
+        "grst": out("stages/yoshis_story.json"),
+        "grop": out("stages/dream_land_n64.json"),
     }
-    out_common = Path("data/common/ft_common_data.json")
+    out_common = out("common/ft_common_data.json")
     for d in (
-        Path("data/stages"),
+        out("stages"),
         out_common.parent,
-        Path("data/airborne_state_events"),
-        Path("data/anims"),
-        Path("data/anims_ecb"),
-        Path("data/attack_id/move_id"),
-        Path("data/characters"),
-        Path("data/ecb"),
-        Path("data/hit_status"),
-        Path("data/hitboxes"),
-        Path("data/hurtbox_states"),
-        Path("data/hurtcaps"),
-        Path("data/items"),
-        Path("data/items/articles"),
-        Path("data/model_parts"),
-        Path("data/motion_state/owners"),
-        Path("data/moves"),
-        Path("data/shields"),
-        Path("data/scripts"),
-        Path("data/special_msids"),
-        Path("data/stage_items"),
-        Path("data/staling/move_id"),
-        Path("data/stages/bin"),
+        out("airborne_state_events"),
+        out("anims"),
+        out("anims_ecb"),
+        out("attack_id/move_id"),
+        out("characters"),
+        out("ecb"),
+        out("hit_status"),
+        out("hitboxes"),
+        out("hurtbox_states"),
+        out("hurtcaps"),
+        out("items"),
+        out("items/articles"),
+        out("model_parts"),
+        out("motion_state/owners"),
+        out("moves"),
+        out("shields"),
+        out("scripts"),
+        out("special_msids"),
+        out("stage_items"),
+        out("staling/move_id"),
+        out("stages/bin"),
     ):
         d.mkdir(parents=True, exist_ok=True)
 
@@ -171,9 +177,9 @@ def main() -> None:
                 "--dat",
                 str(iso_dir / stage_dat),
                 "--out",
-                str(Path("data/stages/bin") / f"{stage_key}.bin"),
+                str(out("stages/bin") / f"{stage_key}.bin"),
                 "--audit",
-                str(Path("data/stages/bin") / f"{stage_key}.json"),
+                str(out("stages/bin") / f"{stage_key}.json"),
             ],
         )
 
@@ -184,23 +190,23 @@ def main() -> None:
     )
     _run(
         "tools.extraction.extract_staling_weights",
-        ["--plco", str(iso_dir / "PlCo.dat"), "--out", "data/staling/weights.bin"],
+        ["--plco", str(iso_dir / "PlCo.dat"), "--out", str(out("staling/weights.bin"))],
     )
 
     # Character attrs (also contains key ECB/ledge snap params and laser special attrs).
     _run(
         "tools.extraction.extract_character_attrs",
-        ["--pl-dir", str(iso_dir), "--out-dir", "data/characters", "--chars", ",".join(chars)],
+        ["--pl-dir", str(iso_dir), "--out-dir", str(out("characters")), "--chars", ",".join(chars)],
     )
 
     # Laser item params (Fox/Falco blaster shot) as a compact binary table.
     _run(
         "tools.extraction.extract_lasers",
-        ["--iso_dir", str(iso_dir), "--out", "data/items/lasers.bin"],
+        ["--iso_dir", str(iso_dir), "--out", str(out("items/lasers.bin"))],
     )
     _run(
         "tools.extraction.extract_item_common_data",
-        ["--itco", str(iso_dir / "ItCo.dat"), "--out", "data/items/item_common.json"],
+        ["--itco", str(iso_dir / "ItCo.dat"), "--out", str(out("items/item_common.json"))],
     )
     _run(
         "tools.extraction.extract_stage_item_objects",
@@ -210,13 +216,13 @@ def main() -> None:
             "--grop",
             str(iso_dir / "GrOp.dat"),
             "--out",
-            "data/stage_items/yoshi_shyguy.bin",
+            str(out("stage_items/yoshi_shyguy.bin")),
             "--audit",
-            "data/stage_items/yoshi_shyguy.json",
+            str(out("stage_items/yoshi_shyguy.json")),
             "--dream-out",
-            "data/stage_items/dream_whispy.bin",
+            str(out("stage_items/dream_whispy.bin")),
             "--dream-audit",
-            "data/stage_items/dream_whispy.json",
+            str(out("stage_items/dream_whispy.json")),
         ],
     )
 
@@ -224,7 +230,7 @@ def main() -> None:
     for ch in chars:
         _run(
             "tools.extraction.extract_shield_tilt_table",
-            ["--iso-dir", str(iso_dir), "--character", ch, "--out", f"data/shields/{ch}.bin"],
+            ["--iso-dir", str(iso_dir), "--character", ch, "--out", str(out(f"shields/{ch}.bin"))],
         )
 
     # Hurt capsule init tables.
@@ -235,9 +241,9 @@ def main() -> None:
                 "--iso_dir",
                 str(iso_dir),
                 "--out_dir",
-                "data/hurtcaps",
+                str(out("hurtcaps")),
                 "--out_bin_dir",
-                "data/hurtcaps",
+                str(out("hurtcaps")),
                 "--character",
                 ch,
             ],
@@ -246,7 +252,7 @@ def main() -> None:
     # Subaction/move timelines.
     _run(
         "tools.extraction.extract_special_msids",
-        ["--iso_dir", str(iso_dir), "--out_dir", "data/special_msids", "--chars", ",".join(chars)],
+        ["--iso_dir", str(iso_dir), "--out_dir", str(out("special_msids")), "--chars", ",".join(chars)],
     )
     _run(
         "tools.extraction.extract_fighter_moves",
@@ -256,9 +262,9 @@ def main() -> None:
             "--melee_decomp",
             str(args.melee_decomp),
             "--out_dir",
-            "data/moves",
+            str(out("moves")),
             "--special_msids_dir",
-            "data/special_msids",
+            str(out("special_msids")),
             "--chars",
             ",".join(chars),
         ],
@@ -269,7 +275,7 @@ def main() -> None:
             "--melee_decomp",
             str(args.melee_decomp),
             "--out_dir",
-            "data/staling/move_id",
+            str(out("staling/move_id")),
             "--chars",
             ",".join(chars),
         ],
@@ -280,7 +286,7 @@ def main() -> None:
             "--melee_decomp",
             str(args.melee_decomp),
             "--out_dir",
-            "data/attack_id/move_id",
+            str(out("attack_id/move_id")),
             "--chars",
             ",".join(chars),
         ],
@@ -294,7 +300,7 @@ def main() -> None:
             "--melee_decomp",
             str(args.melee_decomp),
             "--out_dir",
-            "data/motion_state/owners",
+            str(out("motion_state/owners")),
             "--chars",
             ",".join(chars),
         ],
@@ -307,11 +313,11 @@ def main() -> None:
             "tools.extraction.extract_fighter_script_timeline",
             [
                 "--moves",
-                f"data/moves/{ch}.json",
+                str(out(f"moves/{ch}.json")),
                 "--out",
-                f"data/scripts/{ch}.bin",
+                str(out(f"scripts/{ch}.bin")),
                 "--manifest",
-                f"data/scripts/{ch}_manifest.json",
+                str(out(f"scripts/{ch}_manifest.json")),
             ],
         )
 
@@ -323,7 +329,7 @@ def main() -> None:
     for ch in chars:
         _run(
             "tools.extraction.extract_fighter_hitboxes",
-            ["--moves", f"data/moves/{ch}.json", "--out", f"data/hitboxes/{ch}.bin"],
+            ["--moves", str(out(f"moves/{ch}.json")), "--out", str(out(f"hitboxes/{ch}.bin"))],
         )
 
     # Movescript-derived hurt capsule state timelines.
@@ -335,11 +341,11 @@ def main() -> None:
             "--melee_decomp",
             str(args.melee_decomp),
             "--hurtcaps_dir",
-            "data/hurtcaps",
+            str(out("hurtcaps")),
             "--special_msids_dir",
-            "data/special_msids",
+            str(out("special_msids")),
             "--out_dir",
-            "data/hurtbox_states",
+            str(out("hurtbox_states")),
             "--chars",
             ",".join(chars),
         ],
@@ -354,9 +360,9 @@ def main() -> None:
             "--melee_decomp",
             str(args.melee_decomp),
             "--special_msids_dir",
-            "data/special_msids",
+            str(out("special_msids")),
             "--out_dir",
-            "data/hit_status",
+            str(out("hit_status")),
             "--chars",
             ",".join(chars),
         ],
@@ -371,9 +377,9 @@ def main() -> None:
             "--melee_decomp",
             str(args.melee_decomp),
             "--special_msids_dir",
-            "data/special_msids",
+            str(out("special_msids")),
             "--out_dir",
-            "data/state_flags_221c_y",
+            str(out("state_flags_221c_y")),
             "--chars",
             ",".join(chars),
         ],
@@ -388,9 +394,9 @@ def main() -> None:
             "--melee_decomp",
             str(args.melee_decomp),
             "--special_msids_dir",
-            "data/special_msids",
+            str(out("special_msids")),
             "--out_dir",
-            "data/airborne_state_events",
+            str(out("airborne_state_events")),
             "--chars",
             ",".join(chars),
         ],
@@ -402,7 +408,7 @@ def main() -> None:
     # from that output. The regression test locks this assumption so adding a genuinely broader ECB
     # set later must update this path instead of silently changing data/anims/<char>*.
     for ch in chars:
-        ecb_anim_dir = "data/anims_ecb"
+        ecb_anim_dir = out("anims_ecb")
         # ECB tables need broader msid coverage than the runtime pose/move subset.
         #
         # In particular, the canonical Fox/Falco suite includes DamageAir2/3 (ftCo_Submotion 175/176),
@@ -414,8 +420,12 @@ def main() -> None:
             [
                 "--character",
                 ch,
+                "--iso-dir",
+                str(iso_dir),
+                "--data-dir",
+                str(out_root),
                 "--out-dir",
-                ecb_anim_dir,
+                str(ecb_anim_dir),
                 "--add-msid",
                 str(FTCO_SM_DAMAGEAIR2),
                 "--add-msid",
@@ -423,7 +433,7 @@ def main() -> None:
             ],
         )
         t_copy0 = time.perf_counter()
-        _copy_anim_outputs(ch, src_dir=Path(ecb_anim_dir), out_dir=Path("data/anims"))
+        _copy_anim_outputs(ch, src_dir=ecb_anim_dir, out_dir=out("anims"))
         if timings is not None:
             dt = time.perf_counter() - t_copy0
             timings.append(("tools.extraction.copy_fighter_anims", dt))
@@ -434,13 +444,13 @@ def main() -> None:
                 "--character",
                 ch,
                 "--attrs",
-                f"data/characters/{ch}.json",
+                str(out(f"characters/{ch}.json")),
                 "--tracks",
-                f"data/anims/{ch}.tracks.bin",
+                str(out(f"anims/{ch}.tracks.bin")),
                 "--out",
-                f"data/model_parts/{ch}.bin",
+                str(out(f"model_parts/{ch}.bin")),
                 "--audit",
-                f"data/model_parts/{ch}.json",
+                str(out(f"model_parts/{ch}.json")),
             ],
         )
         _run(
@@ -449,11 +459,11 @@ def main() -> None:
                 "--character",
                 ch,
                 "--anims",
-                f"{ecb_anim_dir}/{ch}.bin",
+                str(ecb_anim_dir / f"{ch}.bin"),
                 "--attrs",
-                f"data/characters/{ch}.json",
+                str(out(f"characters/{ch}.json")),
                 "--out",
-                f"data/ecb/{ch}_bottom.bin",
+                str(out(f"ecb/{ch}_bottom.bin")),
             ],
         )
 
@@ -463,11 +473,11 @@ def main() -> None:
                 "--character",
                 ch,
                 "--anims",
-                f"{ecb_anim_dir}/{ch}.bin",
+                str(ecb_anim_dir / f"{ch}.bin"),
                 "--attrs",
-                f"data/characters/{ch}.json",
+                str(out(f"characters/{ch}.json")),
                 "--out",
-                f"data/ecb/{ch}_extents.bin",
+                str(out(f"ecb/{ch}_extents.bin")),
             ],
         )
 
@@ -475,13 +485,13 @@ def main() -> None:
         "tools.extraction.extract_item_articles",
         [
             "--attrs-dir",
-            "data/characters",
+            str(out("characters")),
             "--item-common",
-            "data/items/item_common.json",
+            str(out("items/item_common.json")),
             "--out",
-            "data/items/articles/fox_falco.bin",
+            str(out("items/articles/fox_falco.bin")),
             "--manifest",
-            "data/items/articles/manifest.json",
+            str(out("items/articles/manifest.json")),
             "--chars",
             ",".join(chars),
         ],

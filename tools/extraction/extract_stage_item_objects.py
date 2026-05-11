@@ -7,7 +7,7 @@ from pathlib import Path
 
 from melee_sim.hsd_archive import HsdArchive, parse_hsd_archive
 from tools.extraction.extract_fighter_anims import _FObj
-from tools.slippi.known_data_artifacts import (
+from tools.extraction.known_data_artifacts import (
     STAGE_DREAM_LAND_N64,
     STAGE_ITEM_OBJECT_MAGIC,
     STAGE_ITEM_OBJECT_VERSION,

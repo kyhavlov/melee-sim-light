@@ -8,7 +8,7 @@ from tools.modelplay.sim_env import CHAR_FALCO, CHAR_FOX, MATCH_CONFIG_DTYPE, bu
 from tools.modelplay.state_adapter import MSL_STAGE_FINAL_DESTINATION
 
 
-RL_PLAYER_OBS_DTYPE = np.dtype(
+GAMESTATE_PLAYER_DTYPE = np.dtype(
     [
         ("present", "u1"),
         ("source_player", "u1"),
@@ -33,12 +33,26 @@ RL_PLAYER_OBS_DTYPE = np.dtype(
         ("on_ground", "u1"),
         ("jumps_left", "u1"),
         ("hurtbox_state", "u1"),
-        ("_pad0", "V2"),
+        ("invulnerable", "u1"),
+        ("_pad0", "V1"),
     ],
     align=False,
 )
 
-RL_OBS_DTYPE = np.dtype(
+GAMESTATE_RANDALL_DTYPE = np.dtype(
+    [
+        ("exists", "u1"),
+        ("_pad0", "V3"),
+        ("x", "<f4"),
+        ("y", "<f4"),
+    ],
+    align=False,
+)
+
+GAMESTATE_STAGE_DTYPE = np.dtype([("randall", GAMESTATE_RANDALL_DTYPE)], align=False)
+GAMESTATE_ITEM_DTYPE = COMPARE_DTYPE["items"].subdtype[0]
+
+GAMESTATE_DTYPE = np.dtype(
     [
         ("frame_id", "<i4"),
         ("frame_pre_random_seed", "<u4"),
@@ -47,7 +61,9 @@ RL_OBS_DTYPE = np.dtype(
         ("viewpoint_player", "u1"),
         ("is_teams", "u1"),
         ("_pad0", "V1"),
-        ("slots", RL_PLAYER_OBS_DTYPE, (4,)),
+        ("stage", GAMESTATE_STAGE_DTYPE),
+        ("slots", GAMESTATE_PLAYER_DTYPE, (4,)),
+        ("items", GAMESTATE_ITEM_DTYPE, (15,)),
     ],
     align=False,
 )
@@ -132,10 +148,10 @@ def _basic_seed(
     return seed
 
 
-def test_rl_api_dtype_sizes_match_c() -> None:
+def test_gamestate_dtype_sizes_match_c() -> None:
     binding = _binding_or_skip()
     sizes = binding.sizes()
-    assert int(sizes["rl_observation"]) == RL_OBS_DTYPE.itemsize
+    assert int(sizes["gamestate"]) == GAMESTATE_DTYPE.itemsize
     assert int(sizes["terminal"]) == TERMINAL_DTYPE.itemsize
 
 
@@ -278,7 +294,7 @@ def test_replay_rollout_advances_frame_id_without_advancing_seed_rng() -> None:
     assert int(row["frame_pre_random_seed"]) == 0x12345678
 
 
-def test_rl_observation_viewpoint_swap_matches_compare_fields() -> None:
+def test_gamestate_viewpoint_swap_matches_compare_fields() -> None:
     binding = _binding_or_skip()
     handle = _init_handle_or_skip(binding, batch_size=2)
     try:
@@ -286,14 +302,14 @@ def test_rl_observation_viewpoint_swap_matches_compare_fields() -> None:
         row1 = build_match_config_array(char_ids=(CHAR_FOX, CHAR_FALCO), facing=(1, 0))[0]
         config = _config_rows(row0, row1)
         cmp_bytes = _compare_bytes(2)
-        obs_bytes = np.zeros((2, RL_OBS_DTYPE.itemsize), dtype=np.uint8)
+        obs_bytes = np.zeros((2, GAMESTATE_DTYPE.itemsize), dtype=np.uint8)
         viewpoints = np.array([0, 1], dtype=np.uint8)
 
         binding.init_match(handle, _config_bytes(config))
         binding.write_compare(handle, cmp_bytes)
-        binding.write_rl_observation(handle, viewpoints, obs_bytes)
+        binding.write_gamestate(handle, viewpoints, obs_bytes)
         cmp_rows = cmp_bytes.view(COMPARE_DTYPE).reshape(2).copy()
-        obs_rows = obs_bytes.view(RL_OBS_DTYPE).reshape(2).copy()
+        obs_rows = obs_bytes.view(GAMESTATE_DTYPE).reshape(2).copy()
     finally:
         binding.destroy(handle)
 
@@ -316,22 +332,24 @@ def test_rl_observation_viewpoint_swap_matches_compare_fields() -> None:
         assert int(obs["slots"][1]["action_id"]) == int(cmp_row["action_id"][opp_p])
         assert int(obs["slots"][0]["stocks"]) == int(cmp_row["stocks"][self_p])
         assert int(obs["slots"][1]["stocks"]) == int(cmp_row["stocks"][opp_p])
-        zero_slot = np.zeros((), dtype=RL_PLAYER_OBS_DTYPE).tobytes()
+        assert int(obs["slots"][0]["invulnerable"]) == int(cmp_row["hurtbox_state"][self_p] != 0)
+        assert obs["items"].tobytes() == cmp_row["items"].tobytes()
+        zero_slot = np.zeros((), dtype=GAMESTATE_PLAYER_DTYPE).tobytes()
         assert obs["slots"][2].tobytes() == zero_slot
         assert obs["slots"][3].tobytes() == zero_slot
 
 
-def test_rl_observation_four_player_teams_slot_order_is_deterministic() -> None:
+def test_gamestate_four_player_teams_slot_order_is_deterministic() -> None:
     binding = _binding_or_skip()
     handle = _init_handle_or_skip(binding, num_players=4)
     try:
         seed = _basic_seed(num_players=4, is_teams=True, team_ids=(0, 0, 1, 1))
         seed[0]["pos_x"][:4] = np.array([10.0, 20.0, 30.0, 40.0], dtype=np.float32)
-        obs_bytes = np.zeros((1, RL_OBS_DTYPE.itemsize), dtype=np.uint8)
+        obs_bytes = np.zeros((1, GAMESTATE_DTYPE.itemsize), dtype=np.uint8)
         viewpoints = np.array([1], dtype=np.uint8)
         binding.reseed_seed(handle, seed.view(np.uint8).reshape(1, -1))
-        binding.write_rl_observation(handle, viewpoints, obs_bytes)
-        obs = obs_bytes.view(RL_OBS_DTYPE).reshape(1)[0].copy()
+        binding.write_gamestate(handle, viewpoints, obs_bytes)
+        obs = obs_bytes.view(GAMESTATE_DTYPE).reshape(1)[0].copy()
     finally:
         binding.destroy(handle)
 
@@ -414,7 +432,7 @@ def test_terminal_four_player_teams_waits_for_team_elimination() -> None:
     assert int(max_frame["max_frame_reached"]) == 1
 
 
-def test_new_rl_api_no_allocations_after_init() -> None:
+def test_new_gamestate_api_no_allocations_after_init() -> None:
     binding = _binding_or_skip()
     handle = _init_handle_or_skip(binding, batch_size=2)
     try:
@@ -425,7 +443,7 @@ def test_new_rl_api_no_allocations_after_init() -> None:
         mask = np.array([0, 1], dtype=np.uint8)
         prev_inp = _idle_input(2)
         inp = _idle_input(2)
-        obs = np.zeros((2, RL_OBS_DTYPE.itemsize), dtype=np.uint8)
+        obs = np.zeros((2, GAMESTATE_DTYPE.itemsize), dtype=np.uint8)
         term = np.zeros((2, TERMINAL_DTYPE.itemsize), dtype=np.uint8)
         viewpoints = np.array([0, 1], dtype=np.uint8)
 
@@ -433,7 +451,7 @@ def test_new_rl_api_no_allocations_after_init() -> None:
         binding.alloc_reset()
         binding.init_match_masked(handle, _config_bytes(config), mask)
         binding.step_input(handle, prev_inp, inp)
-        binding.write_rl_observation(handle, viewpoints, obs)
+        binding.write_gamestate(handle, viewpoints, obs)
         binding.write_terminal(handle, term, 120)
         stats = binding.alloc_stats()
     finally:

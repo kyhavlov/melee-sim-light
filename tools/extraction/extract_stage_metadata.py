@@ -6,7 +6,7 @@ import struct
 from pathlib import Path
 
 from tools.extraction.extract_stage_collision import _extract_segments
-from tools.slippi.known_data_artifacts import STAGE_MAGIC, STAGE_VERSION
+from tools.extraction.known_data_artifacts import STAGE_MAGIC, STAGE_VERSION
 
 
 KIND_ID = {

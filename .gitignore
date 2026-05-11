@@ -1,6 +1,7 @@
 # Local-only large assets
 SSBM.iso
 _iso/
+.msl/
 
 # Heavy reference repos / binaries (keep locally; document setup)
 refs/**

@@ -57,28 +57,28 @@ wheels = [
 [[package]]
 name = "melee-sim-light"
 version = "0.0.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numpy", version = "2.4.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
-    { name = "peppi-py" },
 ]
 
 [package.dev-dependencies]
 dev = [
+    { name = "peppi-py" },
+    { name = "pyarrow" },
     { name = "pytest" },
     { name = "pytest-xdist" },
     { name = "setuptools" },
 ]
 
 [package.metadata]
-requires-dist = [
-    { name = "numpy" },
-    { name = "peppi-py" },
-]
+requires-dist = [{ name = "numpy" }]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "peppi-py" },
+    { name = "pyarrow" },
     { name = "pytest" },
     { name = "pytest-xdist" },
     { name = "setuptools" },

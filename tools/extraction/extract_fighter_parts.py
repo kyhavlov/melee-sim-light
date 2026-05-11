@@ -5,7 +5,7 @@ import json
 import struct
 from pathlib import Path
 
-from tools.slippi.known_data_artifacts import PART_MAGIC, PART_VERSION
+from tools.extraction.known_data_artifacts import PART_MAGIC, PART_VERSION
 
 
 CHAR_IDS = {"fox": 2, "falco": 20}

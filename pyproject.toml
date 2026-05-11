@@ -1,14 +1,19 @@
+[build-system]
+requires = ["setuptools", "wheel", "numpy"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "melee-sim-light"
 version = "0.0.0"
 requires-python = ">=3.10"
 dependencies = [
   "numpy",
-  "peppi-py",
 ]
 
 [dependency-groups]
 dev = [
+  "peppi-py",
+  "pyarrow",
   "pytest",
   "pytest-xdist",
   "setuptools",

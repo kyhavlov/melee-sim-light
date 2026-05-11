@@ -82,7 +82,7 @@ typedef struct MslMatchConfig {
   MslMatchPlayerConfig players[MSL_MAX_PLAYERS];
 } MslMatchConfig;
 
-typedef struct MslRlPlayerObservation {
+typedef struct MeleePlayer {
   // present=1 for an active source player in this slot. team_relation: 0=self, 1=ally,
   // 2=opponent. Inactive/unused slots are zero-filled with present=0.
   uint8_t present;
@@ -111,10 +111,54 @@ typedef struct MslRlPlayerObservation {
   uint8_t on_ground;
   uint8_t jumps_left;
   uint8_t hurtbox_state;
-  uint8_t _pad0[2];
-} MslRlPlayerObservation;
+  uint8_t invulnerable;
+  uint8_t _pad0[1];
+} MeleePlayer;
 
-typedef struct MslRlObservation {
+typedef struct MeleeRandall {
+  uint8_t exists;
+  uint8_t _pad0[3];
+  float x;
+  float y;
+} MeleeRandall;
+
+typedef struct MeleeStage {
+  MeleeRandall randall;
+} MeleeStage;
+
+typedef struct MeleeItem {
+  uint8_t exists;  // 0/1
+  uint8_t state;   // item state
+  uint16_t type;   // item kind/type id
+
+  int8_t owner;  // -1 if none/unknown
+  uint8_t _pad0;
+  uint16_t instance_id;
+
+  // Item staling identity (GALE01):
+  // - it->xD88_attackID
+  // - it->xD8C_attack_instance
+  // refs/melee/src/melee/it/types.h
+  uint16_t attack_id;
+  uint16_t attack_instance;
+
+  float direction;
+  float vel_x;
+  float vel_y;
+  float pos_x;
+  float pos_y;
+  uint16_t damage;
+  uint16_t _pad1;
+  float timer;
+  uint32_t spawn_id;
+  uint8_t misc0;
+  uint8_t misc1;
+  uint8_t misc2;
+  uint8_t misc3;
+} MeleeItem;
+typedef MeleeItem MslItem;
+
+typedef struct MeleeGamestate {
   int32_t frame_id;
   uint32_t frame_pre_random_seed;
   uint32_t stage_id;
@@ -125,8 +169,10 @@ typedef struct MslRlObservation {
   uint8_t is_teams;
   uint8_t _pad0;
 
-  MslRlPlayerObservation slots[MSL_MAX_PLAYERS];
-} MslRlObservation;
+  MeleeStage stage;
+  MeleePlayer slots[MSL_MAX_PLAYERS];
+  MeleeItem items[MSL_MAX_ITEMS];
+} MeleeGamestate;
 
 typedef struct MslTerminal {
   int32_t frame_id;
@@ -163,37 +209,6 @@ typedef struct MslDebugStageState {
   uint8_t fod_platform_height_valid[2];
   uint8_t _pad0[2];
 } MslDebugStageState;
-
-typedef struct MslItem {
-  uint8_t exists;  // 0/1
-  uint8_t state;   // item state
-  uint16_t type;   // item kind/type id
-
-  int8_t owner;  // -1 if none/unknown
-  uint8_t _pad0;
-  uint16_t instance_id;
-
-  // Item staling identity (GALE01):
-  // - it->xD88_attackID
-  // - it->xD8C_attack_instance
-  // refs/melee/src/melee/it/types.h
-  uint16_t attack_id;
-  uint16_t attack_instance;
-
-  float direction;
-  float vel_x;
-  float vel_y;
-  float pos_x;
-  float pos_y;
-  uint16_t damage;
-  uint16_t _pad1;
-  float timer;
-  uint32_t spawn_id;
-  uint8_t misc0;
-  uint8_t misc1;
-  uint8_t misc2;
-  uint8_t misc3;
-} MslItem;
 
 typedef struct MslSeed {
   int32_t frame_id;
@@ -1525,7 +1540,7 @@ typedef struct MslSeed {
   uint8_t item_shyguy_hitlag_u8[MSL_MAX_ITEMS];
   uint8_t item_shyguy_hitlag_valid_u8[MSL_MAX_ITEMS];
 
-  MslItem items[MSL_MAX_ITEMS];
+  MeleeItem items[MSL_MAX_ITEMS];
 } MslSeed;
 
 typedef struct MslCompare {
@@ -1574,7 +1589,7 @@ typedef struct MslCompare {
   uint8_t _pad2[1];
   uint8_t state_flags[MSL_MAX_PLAYERS][5];
 
-  MslItem items[MSL_MAX_ITEMS];
+  MeleeItem items[MSL_MAX_ITEMS];
 } MslCompare;
 
 typedef struct MslDatasetHeader {
@@ -2073,10 +2088,10 @@ int msl_batch_step_input(MslBatch* batch, const uint8_t* prev_input_bytes,
 // Write packed compare outputs (length batch_size).
 // out_stride_bytes must be >= sizeof(MslCompare).
 int msl_batch_write_compare(const MslBatch* batch, uint8_t* out_bytes, size_t out_stride_bytes);
-// Write one compact RL observation per batch row. viewpoint_players are 0-based player indices.
-int msl_batch_write_rl_observation(const MslBatch* batch, const uint8_t* viewpoint_player_bytes,
-                                   size_t viewpoint_player_stride_bytes, uint8_t* out_bytes,
-                                   size_t out_stride_bytes);
+// Write one compact gamestate per batch row. viewpoint_players are 0-based player indices.
+int melee_batch_write_gamestate(const MslBatch* batch, const uint8_t* viewpoint_player_bytes,
+                                size_t viewpoint_player_stride_bytes, uint8_t* out_bytes,
+                                size_t out_stride_bytes);
 // Write terminal flags. max_frame_id < 0 disables the max-frame done condition.
 int msl_batch_write_terminal(const MslBatch* batch, uint8_t* out_bytes, size_t out_stride_bytes,
                              int32_t max_frame_id);

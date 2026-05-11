@@ -5,7 +5,7 @@ import json
 import struct
 from pathlib import Path
 
-from tools.slippi.known_data_artifacts import SCRIPT_MAGIC, SCRIPT_VERSION
+from tools.extraction.known_data_artifacts import SCRIPT_MAGIC, SCRIPT_VERSION
 
 
 EVENT_IDS = {

@@ -1906,6 +1906,42 @@ uint8_t stage_collision_floor_line_world(const MslBatch* batch, int bi,
   return 1u;
 }
 
+uint8_t stage_collision_get_randall_position(const MslBatch* batch, int bi, float* x_out,
+                                             float* y_out) {
+  if (x_out != NULL) {
+    *x_out = 0.0f;
+  }
+  if (y_out != NULL) {
+    *y_out = 0.0f;
+  }
+  if (batch == NULL || bi < 0 || bi >= batch->batch_size) {
+    return 0u;
+  }
+
+  const MslStageFloorGraph* graph = stage_collision_get_floor_graph(batch->state.stage_id[bi]);
+  if (graph == NULL || graph->lines == NULL) {
+    return 0u;
+  }
+  for (size_t i = 0; i < graph->line_count; i++) {
+    const MslStageFloorLine* line = &graph->lines[i];
+    if (line->platform_transform_kind != (uint8_t)MSLSTG01_PLATFORM_TRANSFORM_RANDALL) {
+      continue;
+    }
+    MslStageFloorLine world = *line;
+    if (!stage_collision_floor_line_world(batch, bi, line, &world)) {
+      return 0u;
+    }
+    if (x_out != NULL) {
+      *x_out = 0.5f * (world.x0 + world.x1);
+    }
+    if (y_out != NULL) {
+      *y_out = 0.5f * (world.y0 + world.y1);
+    }
+    return 1u;
+  }
+  return 0u;
+}
+
 uint8_t stage_collision_floor_line_motion_delta(const MslBatch* batch, int bi,
                                                 const MslStageFloorLine* line, float* dx_out,
                                                 float* dy_out) {
