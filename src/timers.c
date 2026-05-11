@@ -230,8 +230,8 @@ static inline uint8_t damage_post_hitlag_cb_damagefly_action(uint16_t a) {
   return msl_motion_state_common_class_has(a, MSL_MS_CLASS_DAMAGE_FLY);
 }
 
-static inline uint8_t timers_damagefly_first_active_sdi_allows_radius_crossing(
-    const MslBatch* batch, int bi, size_t idx) {
+static inline uint8_t timers_first_active_sdi_allows_radius_crossing(const MslBatch* batch, int bi,
+                                                                     size_t idx) {
   (void)bi;
   if (batch == NULL) {
     return 0u;
@@ -240,13 +240,21 @@ static inline uint8_t timers_damagefly_first_active_sdi_allows_radius_crossing(
     return 1u;
   }
 
-  // The retained owner here is strictly the source first-active DamageFly stick-radius crossing
-  // consumed by ftCo_Damage_OnEveryHitlag. Floor-owned horizontal DamageFlyN rows are excluded only
-  // when the seed carries an explicit CollData_X130_Locked / ECB-lock floor-contact owner
-  // (`ecb_lock_timer` plus a persisted floor index). A previous root-vs-floor-height bias heuristic
-  // was rejected because replay-visible position is not source provenance.
+  // Fresh common-Damage hitlag can consume a callback-local stick-radius crossing even when
+  // ftCo_8008DCE0 has reset replay-visible x670/x671 to 0xFE. DamageFlyRoll's active-hitlag entry
+  // is a narrower DamageFly owner: it must use the seeded/live x670/x671 timer-window path, not the
+  // generic first-active radius bridge. Otherwise replay rollouts can apply SDI one frame early and
+  // move a DamageFlyRoll victim during the frozen hitlag entry.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
-  //   ftCo_Damage_OnEveryHitlag,ftCo_DamageFly_Coll}
+  //   ftCo_8008DCE0,ftCo_Damage_OnEveryHitlag,ftCo_DamageFlyRoll_Coll}
+  if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL) {
+    return 0u;
+  }
+
+  // Floor-owned horizontal DamageFlyN rows are excluded when the seed carries an explicit
+  // CollData_X130_Locked / ECB-lock floor-contact owner (`ecb_lock_timer` plus a persisted floor
+  // index). A root-vs-floor-height bias is not source provenance.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
   // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpColl_80046904}
   if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_DAMAGE_FLY_N &&
       batch->state.ground_id[idx] != 0xFFFFu && batch->state.ecb_lock_timer[idx] != 0u) {
@@ -513,7 +521,7 @@ void timers_consume_post_hitlag_callbacks_after_input(MslBatch* batch) {
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
       //   ftCo_8008DCE0,ftCo_Damage_OnEveryHitlag}
       const uint8_t use_first_active_radius_crossing =
-          (timers_damagefly_first_active_sdi_allows_radius_crossing(batch, bi, idx) &&
+          (timers_first_active_sdi_allows_radius_crossing(batch, bi, idx) &&
            batch->state.action_frame[idx] == 1 && batch->state.tilt_timer_x[idx] == 254u &&
            batch->state.tilt_timer_y[idx] == 254u && batch->state.seed_prev_action_id[idx] != a &&
            lstick_mag_sq >= sdi_radius_sq && prev_lstick_mag_sq < sdi_radius_sq)

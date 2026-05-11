@@ -2448,7 +2448,7 @@ def _dream_whispy_params():
 
 def _derive_dream_whispy_wind_seed_lanes(
     samples: np.ndarray, *, stage_id: int, num_players: int
-) -> tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Derive Dream Land Whispy current-wind seed state through native simulation.
 
     Whispy's hidden `grOldPupupu` wind direction is not exported by Slippi. The native pass runs
@@ -2462,8 +2462,9 @@ def _derive_dream_whispy_wind_seed_lanes(
     n = int(samples.shape[0])
     out_dir = np.zeros(n, dtype=np.uint8)
     valid = np.zeros(n, dtype=np.uint8)
+    timer = np.zeros(n, dtype=np.uint16)
     if int(stage_id) != int(params.stage_id) or n == 0:
-        return out_dir, valid
+        return out_dir, valid, timer
     try:
         import msl_binding  # type: ignore
     except ImportError as exc:
@@ -5718,11 +5719,12 @@ def _main_impl(args) -> Dataset:
     )
     samples["seed_t"]["combo_push_timer_x2092"][:, :num_players] = combo_push_timer[:-1, :num_players]
 
-    dream_wind_dir, dream_wind_valid = _derive_dream_whispy_wind_seed_lanes(
+    dream_wind_dir, dream_wind_valid, dream_wind_timer = _derive_dream_whispy_wind_seed_lanes(
         samples, stage_id=int(stage_id), num_players=int(num_players)
     )
     samples["seed_t"]["stage_dream_whispy_wind_dir_u8"] = dream_wind_dir
     samples["seed_t"]["stage_dream_whispy_wind_valid_u8"] = dream_wind_valid
+    samples["seed_t"]["stage_dream_whispy_wind_timer_u16"] = dream_wind_timer
 
     header = np.zeros((), dtype=HEADER_DTYPE)
     header["magic"] = MAGIC

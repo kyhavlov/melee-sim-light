@@ -155,6 +155,22 @@ static inline uint8_t hurtboxes_side_special_end_uses_pre_anim_collision_pose(ui
                    action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_END);
 }
 
+static inline uint8_t hurtboxes_side_special_start_passivewalljump_entry_pose_owner(
+    const MslBatch* batch, size_t idx, uint8_t char_id, uint16_t action_id) {
+  if (batch == NULL || (char_id != (uint8_t)MSL_CHAR_FOX && char_id != (uint8_t)MSL_CHAR_FALCO)) {
+    return 0u;
+  }
+  if (action_id != (uint16_t)MSL_ACT_FX_SPECIAL_S_START &&
+      action_id != (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_START) {
+    return 0u;
+  }
+  if (batch->state.action_frame[idx] > 2) {
+    return 0u;
+  }
+  return (uint8_t)(batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_PASSIVE_WALL_JUMP ||
+                   batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_PASSIVE_WALL_JUMP);
+}
+
 static inline uint8_t hurtboxes_attackdash_post_hitbox_collision_pose_owner(const MslBatch* batch,
                                                                             int bi, size_t idx,
                                                                             uint16_t action_id,
@@ -723,6 +739,21 @@ static void hurtboxes_refresh_impl(MslBatch* batch, uint8_t geometry_mode) {
         // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
         //   ftFx_SpecialSEnd_Anim,ftFx_SpecialAirSEnd_Anim,ftFx_SpecialSEnd_Coll,
         //   ftFx_SpecialAirSEnd_Coll}
+        // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076ED8
+        // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+        pose_frame = (uint16_t)(pose_frame - 1u);
+      }
+      if (hurtboxes_side_special_start_passivewalljump_entry_pose_owner(batch, idx, char_id,
+                                                                        action_id) &&
+          pose_frame > 0u && pose_frame != 0xFFFFu) {
+        // PassiveWallJump -> Fox/Falco Side-B Start collision-pose ownership:
+        // - The first visible Side-B startup row after PassiveWallJump IASA still consumes the
+        //   entry-source JObj pose for BODY collision. Generic Side-B startup rows keep the normal
+        //   startup pose owner.
+        // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
+        //   ftFx_SpecialSStart_Anim,ftFx_SpecialAirSStart_Anim,ftFx_SpecialSStart_Coll,
+        //   ftFx_SpecialAirSStart_Coll}
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::ftCo_PassiveWall_IASA
         // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076ED8
         // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
         pose_frame = (uint16_t)(pose_frame - 1u);

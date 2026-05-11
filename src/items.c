@@ -372,22 +372,26 @@ static inline void yoshi_shyguy_clear_rollout_rng_owner_if_live(MslBatch* batch,
 }
 
 static inline void yoshi_shyguy_install_rollout_spawn_rng_seed(MslBatch* batch, int bi) {
-  if (batch == NULL || batch->rollout_clock_rng_owned == NULL) {
+  if (batch == NULL) {
     return;
   }
-  if (batch->rollout_clock_rng_owned[bi] !=
-          (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED_YOSHI_SHYGUY ||
-      batch->state.stage_yoshi_shyguy_spawn_rng_valid[bi] == 0u) {
+  if (batch->state.stage_yoshi_shyguy_spawn_rng_valid[bi] == 0u) {
     return;
   }
   // Replay-seeded countdowns do not expose unrelated global HSD consumers between frame starts.
   // The seed lane carries the source spawn-frame stream; install it immediately before
   // grStory_801E3418's zero-timer RNG consumers so combat_rng_consume_* samples the same stream.
+  // This callback-local install can coexist with broader replay-frame RNG clock owners (opening
+  // countdown, DamageFlyRoll phase, etc.); api.c suppresses only that frame's generic +0x10000
+  // commit after this source callback has installed the spawn-frame seed.
   // refs/slippi-ssbm-asm/Recording/SendFrameStart.s
   // refs/melee/src/melee/gr/grstory.c::{grStory_801E3418,set_shyguy_spawn_count}
   // refs/melee/src/sysdolphin/baselib/random.c::{HSD_Randi,HSD_Randf}
   const uint32_t seed = batch->state.stage_yoshi_shyguy_spawn_rng_seed[bi];
   batch->state.frame_pre_random_seed[bi] = seed;
+  if (batch->rollout_yoshi_shyguy_spawn_rng_installed != NULL) {
+    batch->rollout_yoshi_shyguy_spawn_rng_installed[bi] = 1u;
+  }
   if (batch->debug_rng_shadow_seed != NULL) {
     batch->debug_rng_shadow_seed[bi] = seed;
   }
@@ -400,19 +404,20 @@ static inline void yoshi_shyguy_install_rollout_spawn_rng_seed(MslBatch* batch, 
 }
 
 static inline void yoshi_shyguy_mark_rollout_rng_owner_consumed(MslBatch* batch, int bi) {
-  if (batch == NULL || batch->rollout_clock_rng_owned == NULL) {
+  if (batch == NULL) {
     return;
   }
-  if (batch->rollout_clock_rng_owned[bi] ==
-      (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED_YOSHI_SHYGUY) {
+  if (batch->rollout_clock_rng_owned != NULL &&
+      batch->rollout_clock_rng_owned[bi] ==
+          (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED_YOSHI_SHYGUY) {
     // The zero-timer stage callback has consumed the spawn-frame HSD RNG stream. Slippi's
     // post-frame seed lane stays at that consumed frame-start value for this row, so clear the
     // owner before api.c's rollout-clock commit.
     // refs/slippi-ssbm-asm/Recording/SendFrameStart.s
     // refs/melee/src/melee/gr/grstory.c::{grStory_801E3418,set_shyguy_spawn_count}
     batch->rollout_clock_rng_owned[bi] = (uint8_t)MSL_ROLLOUT_CLOCK_NONE;
-    batch->state.stage_yoshi_shyguy_spawn_rng_valid[bi] = 0u;
   }
+  batch->state.stage_yoshi_shyguy_spawn_rng_valid[bi] = 0u;
 }
 
 static float yoshi_shyguy_dyn_y_phase_value(const MslYoshiShyguyParams* params, int phase) {
@@ -424,6 +429,10 @@ static float yoshi_shyguy_dyn_y_phase_value(const MslYoshiShyguyParams* params, 
     return params->dyn_y_vel[phase - 1];
   }
   return params->dyn_y_vel[256 - phase];
+}
+
+static float yoshi_shyguy_dyn_y_pos_after_phase(const MslYoshiShyguyParams* params, int phase) {
+  return params->dyn_y_pos_after_phase[phase & 0xFF];
 }
 
 static float yoshi_shyguy_dyn_y_rate2_value(const MslYoshiShyguyParams* params, int phase) {
@@ -520,6 +529,19 @@ static float yoshi_shyguy_current_vel_y_for_phase(const MslYoshiShyguyParams* pa
     return yoshi_shyguy_dyn_y_rate2_value(params, (int)(q - 11u));
   }
   return yoshi_shyguy_dyn_y_phase_value(params, phase);
+}
+
+static uint8_t yoshi_shyguy_state1_current_is_reset_export(const MslYoshiShyguyParams* params,
+                                                           uint8_t phase, float prev_vel_y,
+                                                           float cur_vel_y) {
+  if (params == NULL) {
+    return 0u;
+  }
+  const uint8_t prev_phase = (uint8_t)((phase + 255u) & 0xFFu);
+  const float expected_prev = yoshi_shyguy_dyn_y_phase_value(params, prev_phase);
+  const float reset_export = -yoshi_shyguy_dyn_y_pos_after_phase(params, phase);
+  return (uint8_t)(fabsf(expected_prev - prev_vel_y) <= 0.001f &&
+                   fabsf(reset_export - cur_vel_y) <= 0.001f);
 }
 
 static inline uint8_t yoshi_shyguy_falling_state_crossed_generic_blast_clear(
@@ -6512,6 +6534,25 @@ static void yoshi_shyguy_items_update(MslBatch* batch, int bi) {
         export_vel_y = move_vel_y;
         batch->state.item_shyguy_dyn_y_phase[ii] = (uint8_t)((phase + 1u) & 0xFFu);
         phase_used = 1u;
+      } else if (state == 1u && batch->state.item_shyguy_prev_vel_y_valid[ii] != 0u &&
+                 yoshi_shyguy_state1_current_is_reset_export(
+                     params, phase, batch->state.item_shyguy_prev_vel_y[ii], move_vel_y) != 0u) {
+        move_vel_y = params->dyn_y_vel[0];
+        export_vel_y = params->dyn_y_vel[0];
+        batch->state.item_shyguy_dyn_y_phase[ii] = (uint8_t)((phase + 1u) & 0xFFu);
+        phase_used = 1u;
+      } else if (state == 1u && batch->state.item_shyguy_prev_vel_y_valid[ii] != 0u) {
+        const uint8_t prev_phase = (uint8_t)((phase + 255u) & 0xFFu);
+        const float prev_reset_export = -yoshi_shyguy_dyn_y_pos_after_phase(params, prev_phase);
+        if (fabsf(prev_reset_export - batch->state.item_shyguy_prev_vel_y[ii]) <= 0.001f &&
+            fabsf(params->dyn_y_vel[0] - move_vel_y) <= 0.001f) {
+          move_vel_y = params->dyn_y_vel[1];
+          export_vel_y = params->dyn_y_vel[1];
+          batch->state.item_shyguy_dyn_y_phase[ii] = 2u;
+          phase_used = 1u;
+        } else {
+          batch->state.item_shyguy_dyn_y_phase_valid[ii] = 0u;
+        }
       } else {
         batch->state.item_shyguy_dyn_y_phase_valid[ii] = 0u;
       }
@@ -7256,7 +7297,9 @@ void items_spawn_pre_physics(MslBatch* batch) {
               batch->state.throw_pulse_crossed_prev_frame[idx] ==
                   (uint8_t)MSL_THROWHI_PREV_PHASE_AF &&
               throw_seed_shot_count[p] == 1u &&
-              batch->state.frame_speed_mul_fp_q16_16[idx] <= (int32_t)81920) {
+              batch->state.throw_command_deferred_pulse_frame[idx] == 0u &&
+              batch->state.frame_speed_mul_fp_q16_16[idx] <=
+                  ((int32_t)MSL_Q16_16_ONE + ((int32_t)MSL_Q16_16_ONE / 4))) {
             uint8_t falco_prev18_second_article = 0u;
             for (int vp = 0; vp < num_players; vp++) {
               if (vp == p) {
@@ -7276,13 +7319,12 @@ void items_spawn_pre_physics(MslBatch* batch) {
               // - Event probes for PRH:6737 show a replay seed with one live state1 Falco throw
               //   laser and `throw_pulse_crossed_prev_frame==18`; vanilla emits another
               //   it_8029C6CC spawn request in the next frame and carries it through post-frame.
-              // - Keep this narrower than the rejected broad Falco second-shot bridge by requiring
-              //   the first-pulse crossed-prev lane, exactly one live state1 throw shot, and the
-              //   seed-visible command cadence that the event probes separate: PRH/HVG/TCH are on
-              //   the 1.25x ThrowHi command phase and carry the next article; QGD/GAT/TBK primary
-              //   controls are on the 1.333x phase and do not serialize the next article until a
-              //   later callback. The per-hitbox BODY path below remains responsible for immediate
-              //   hb0 destroy rows.
+              // - Keep this on the source-owned command phase by requiring the first-pulse
+              //   crossed-prev lane, exactly one live state1 throw shot, and same-source victim
+              //   provenance. The command-timer boundary is rate-sensitive in source: 1.25x rows
+              //   serialize this command in the current callback, while the reconstructed deferred
+              //   cursor owner below handles the 4/3 frame-20 carry. The per-hitbox BODY path below
+              //   remains responsible for immediate hb0 destroy rows.
               // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
               // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
               // refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C6CC,it_8029C4D4}
@@ -7295,19 +7337,28 @@ void items_spawn_pre_physics(MslBatch* batch) {
         if (!should_shoot) {
           if (action_id == (uint16_t)MSL_ACT_THROW_HI &&
               batch->state.throw_pulse_crossed_prev_frame[idx] == 20u &&
-              throw_seed_shot_count[p] == 0u) {
+              (throw_seed_shot_count[p] == 0u ||
+               (batch->state.throw_command_deferred_pulse_frame[idx] == 20u &&
+                batch->state.throw_command_pending_seed_valid[idx] == 0u &&
+                throw_seed_shot_count[p] < 2u))) {
             // ThrowHi crossed-prev command pulse reconstruction:
             // - ftAction_80073354 can execute the frame-20 set_throw_spawn_projectile command and
             //   ftFx_Throw_Anim consumes throw_flags_b0 in the source frame before the next
             //   teacher-forced seed. Slippi does not expose that command cursor/consumed latch.
             // - The prefix-causal `throw_pulse_crossed_prev_frame` lane records that frame-20
-            //   command crossing. Re-emit only when no owner state1 throw shot is already present,
-            //   leaving mid-pulse carry/despawn rows on the existing lifetime owner.
+            //   command crossing. Runtime deferred-cursor rows additionally keep
+            //   `throw_command_deferred_pulse_frame==20`, so ordinary frame-crossing provenance does
+            //   not broaden into another one-live-shot article spawn. One-step rows with explicit
+            //   command cursor state stay on `throw_command_pending_pulse_frame`.
             // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
             // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
             // data/moves/{fox,falco}.json moves["ftCo_SM_ThrowHi"].events
             should_shoot = 1u;
             shoot_spawn_state = 1u;
+            if (throw_seed_shot_count[p] != 0u) {
+              batch->state.throw_pulse_crossed_curr_frame[idx] = 20u;
+              batch->state.throw_command_deferred_pulse_frame[idx] = 0u;
+            }
           }
         }
         if (!should_shoot) {
@@ -7531,6 +7582,48 @@ void items_spawn_pre_physics(MslBatch* batch) {
                  batch->state.action_frame[msl_idx_player(bi, throwb_startup_carry_victim)] > 4)
                     ? 1u
                     : 0u;
+            if (action_id == (uint16_t)MSL_ACT_THROW_HI &&
+                crossed_pulse_af == (int16_t)MSL_THROWHI_PULSE_MID_AF &&
+                batch->state.throw_command_deferred_pulse_frame[idx] ==
+                    (uint8_t)MSL_THROWHI_PULSE_MID_AF &&
+                cid == (uint8_t)MSL_CHAR_FALCO && item_type_is_falco_laser(lp->shot_itkind) &&
+                batch->state.throw_pulse_crossed_prev_frame[idx] ==
+                    (uint8_t)MSL_THROWHI_PREV_PHASE_AF &&
+                throw_seed_shot_count[p] == 1u) {
+              uint8_t falco_prev18_cursor_carry = 0u;
+              for (int vp = 0; vp < num_players; vp++) {
+                if (vp == p) {
+                  continue;
+                }
+                const size_t v_idx = msl_idx_player(bi, vp);
+                if (batch->state.hitstun[v_idx] > 0u &&
+                    batch->state.last_hit_by[v_idx] == item_source_port0_for_owner(batch, idx, p) &&
+                    batch->state.instance_hit_by[v_idx] == batch->state.instance_id[idx] &&
+                    batch->state.last_attack_landed[idx] == (uint8_t)lp->shot_itkind) {
+                  falco_prev18_cursor_carry = 1u;
+                  break;
+                }
+              }
+              if (falco_prev18_cursor_carry != 0u) {
+                // Falco/Fox ThrowHi frame-20 cursor carry:
+                // - The first frame-18 command already produced one live state1 shot, and reseed
+                //   reconstructed source ftAction command-timer state that carries the frame-20
+                //   throw_flags_b0 command into the next Anim callback.
+                // - Record the crossed command as current provenance without serializing the
+                //   article in this callback; step.c promotes it to crossed-prev so the next
+                //   runtime frame takes the same source-owned path as teacher-forced `pending=20`
+                //   rows.
+                // - Keep the owner on the same-source victim provenance used by the one-step
+                //   crossed-prev frame-18 path; ordinary one-live-shot rows without that provenance
+                //   remain suppressed by the stale-latch guard below.
+                // refs/melee/src/melee/ft/ftaction.c::ftAction_80073354
+                // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD4B0
+                // data/moves/falco.json moves["ftCo_SM_ThrowHi"].events
+                batch->state.throw_pulse_crossed_curr_frame[idx] = (uint8_t)crossed_pulse_af;
+                continue;
+              }
+            }
             if (batch->state.throw_command_pending_seed_valid[idx] != 0u &&
                 throw_blaster_pulse_is_seed_stale_latch(action_id, lp->shot_itkind,
                                                         crossed_pulse_af, prev_frame_i) &&

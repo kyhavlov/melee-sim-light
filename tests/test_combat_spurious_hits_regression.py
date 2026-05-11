@@ -117,6 +117,41 @@ def _one_step_out_compare(*, ds, row, seed_mutator=None) -> np.ndarray:
         binding.destroy(handle)
 
 
+def _rollout_out_compare(*, ds, start: int, target: int) -> np.ndarray:
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    samples = ds.samples
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    try:
+        seed_bytes = np.frombuffer(
+            samples[start : start + 1]["seed_t"].tobytes(order="C"), dtype=np.uint8
+        ).copy().reshape(1, seed_stride)
+        out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+        binding.reseed_seed_rollout(handle, seed_bytes)
+        for record in range(start, target + 1):
+            prev_input_bytes = np.frombuffer(
+                samples[record : record + 1]["prev_input_t"].tobytes(order="C"), dtype=np.uint8
+            ).copy().reshape(1, input_stride)
+            input_bytes = np.frombuffer(
+                samples[record : record + 1]["input_t"].tobytes(order="C"), dtype=np.uint8
+            ).copy().reshape(1, input_stride)
+            binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+        return out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
+    finally:
+        binding.destroy(handle)
+
+
 @pytest.mark.integration
 @pytest.mark.parametrize(
     ("dataset_rel", "record", "p"),
@@ -1065,6 +1100,49 @@ def test_spurious_shine_start_body_hit_not_applied_treasuredbackkangaroo_damagea
 
     finally:
         binding.destroy(handle)
+
+
+@pytest.mark.integration
+def test_grounded_shine_start_damageair2_non_tail_body_hit_rollout_dsg_5041() -> None:
+    # Positive control for the same Shine/DamageAir2 owner as the TBK negatives above:
+    # DelayedSuperbGuanaco rolls from rec=5004 to rec=5041 with Falco entering grounded
+    # SpecialLwStart against airborne Fox DamageAir2. The accepted BODY contact is cap2 (head/torso
+    # table capsule), not Fox's dynamic tail cap12/FtPart 18, so the temporary tail-pose blocker
+    # must leave the normal lbColl matrix-radius BODY owner eligible.
+    #
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLw_Enter
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+    # data/hurtcaps/fox.bin cap2 vs cap12/FtPart 18
+    root = Path(__file__).resolve().parents[1]
+    expected_rel = (
+        "datasets/aggregate_recent/replays/validation/"
+        "battlefield_recent/DelayedSuperbGuanaco.msl"
+    )
+    dataset_path = root / expected_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {expected_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    start = 5004
+    target = 5041
+    attacker = 1
+    defender = 0
+    row = ds.samples[target : target + 1]
+
+    assert int(ds.samples[start]["seed_t"]["hitstun"][defender]) > 0
+    assert int(row["seed_t"]["action_id"][0, defender]) == 85  # DamageAir2
+    assert int(row["seed_t"]["hitstun"][0, defender]) > 0
+    assert int(row["ref_t1"]["action_id"][0, attacker]) == 360  # grounded SpecialLwStart
+    assert int(row["ref_t1"]["action_id"][0, defender]) == 90  # DamageFlyTop
+    assert int(row["ref_t1"]["hitlag"][0, defender]) > 0
+    assert int(row["ref_t1"]["hitstun"][0, defender]) > int(row["seed_t"]["hitstun"][0, defender])
+
+    out = _rollout_out_compare(ds=ds, start=start, target=target)
+    for field in ("action_id", "animation_index", "hitlag", "hitstun", "instance_id", "last_hit_by"):
+        assert int(out[field][0, defender]) == int(row["ref_t1"][field][0, defender]), f"field={field}"
+    assert int(out["hitlag"][0, attacker]) == int(row["ref_t1"]["hitlag"][0, attacker])
+    assert float(out["percent"][0, defender]) == pytest.approx(float(row["ref_t1"]["percent"][0, defender]))
 
 
 @pytest.mark.integration

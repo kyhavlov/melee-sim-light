@@ -1797,6 +1797,48 @@ uint8_t stage_collision_floor_line_platform_transform_id(uint32_t stage_id, uint
   return 1u;
 }
 
+uint8_t stage_collision_floor_line_height_platform_state_is_source_trusted(const MslBatch* batch,
+                                                                           int bi,
+                                                                           uint16_t segment_i) {
+  if (batch == NULL || bi < 0 || bi >= batch->batch_size) {
+    return 0u;
+  }
+  const uint32_t stage_id = batch->state.stage_id[(size_t)bi];
+  const MslStageSlot* slot = stage_slot(stage_id);
+  if (stage_id != (uint32_t)MSL_STAGE_FOUNTAIN_OF_DREAMS || slot == NULL || !slot->loaded ||
+      !slot->fod_motion.loaded ||
+      slot->platform_transform_kind_by_segment[segment_i] !=
+          (uint8_t)MSLSTG01_PLATFORM_TRANSFORM_HEIGHT) {
+    return 0u;
+  }
+
+  const uint8_t platform_id = slot->platform_transform_id_by_segment[segment_i];
+  if (platform_id >= 2u) {
+    return 0u;
+  }
+  const size_t idx = (size_t)bi * 2u + (size_t)platform_id;
+  if (!batch->state.stage_fod_platform_valid[idx]) {
+    return 0u;
+  }
+  if (batch->state.stage_fod_platform_scheduler_valid[idx] ||
+      (batch->state.stage_fod_platform_velocity_valid[idx] &&
+       fabsf(batch->state.stage_fod_platform_velocity[idx]) > 1.0e-6f)) {
+    return 1u;
+  }
+
+  const float h = batch->state.stage_fod_platform_height[idx];
+  const MslFodPlatformMotion* motion = &slot->fod_motion;
+  // grIzumi target states are source-owned by the platform JObj and refreshed into mpLib. Sparse
+  // replay reconstruction can also carry stale mid-flight heights without the hidden phase/target
+  // owner; those rows must stay on mpColl's endpoint pending owner.
+  // refs/melee/src/melee/gr/grizumi.c::{grIzumi_801CC358,grIzumi_801CCBDC}
+  // refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
+  return (uint8_t)(fabsf(h - motion->home_height) <= 1.0e-3f ||
+                   fabsf(h - motion->max_height) <= 1.0e-3f ||
+                   fabsf(h - motion->min_visible_height) <= 1.0e-3f ||
+                   fabsf(h - motion->hidden_target_height) <= 1.0e-3f);
+}
+
 static uint8_t stage_collision_fod_platform_default_height(const MslStageSlot* slot,
                                                            uint8_t platform_id, float* out) {
   if (slot == NULL || out == NULL || slot->platform_transforms == NULL) {
@@ -2126,6 +2168,24 @@ static inline uint8_t stage_floor_segment_intersects_item(float ax0, float ay0, 
   return stage_segment_intersects(ax0, ay0, ax1, ay1, bx0, by0, bx1, by1);
 }
 
+static inline uint8_t stage_floor_prev_point_can_enter_item_floor(const MslStageFloorLine* seg,
+                                                                  float x, float y) {
+  if (seg == NULL) {
+    return 0u;
+  }
+  const float min_x = fminf(seg->x0, seg->x1);
+  const float max_x = fmaxf(seg->x0, seg->x1);
+  if (x < min_x - 0.001f || x > max_x + 0.001f) {
+    return 1u;
+  }
+  const float dx = seg->x1 - seg->x0;
+  float floor_y = seg->y0;
+  if (fabsf(dx) > 0.0001f) {
+    floor_y = seg->y0 + ((x - seg->x0) * (seg->y1 - seg->y0) / dx);
+  }
+  return (y >= floor_y - 0.001f) ? 1u : 0u;
+}
+
 static inline uint8_t stage_ceiling_segment_intersects_item(float ax0, float ay0, float ax1,
                                                             float ay1, float bx0, float by0,
                                                             float bx1, float by1) {
@@ -2357,18 +2417,14 @@ uint8_t stage_collision_item_fixed_ecb_sweep_hits_floor(uint32_t stage_id, float
   // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_8004ACE4}
   // refs/melee/src/melee/mp/mplib.c::mpCheckFloorRemap
   // refs/melee/src/melee/it/it_266F.c::it_8026DA70
-  const float bottom_prev_lx = prev_center_x + ecb_left;
-  const float bottom_prev_rx = prev_center_x + ecb_right;
   const float bottom_prev_cx = prev_center_x;
   const float bottom_prev_y = prev_center_y + ecb_bottom;
-  const float bottom_cur_lx = center_x + ecb_left;
-  const float bottom_cur_rx = center_x + ecb_right;
   const float bottom_cur_cx = center_x;
   const float bottom_cur_y = center_y + ecb_bottom;
-  const float sweep_min_x =
-      fminf(fminf(bottom_prev_lx, bottom_prev_rx), fminf(bottom_cur_lx, bottom_cur_rx));
-  const float sweep_max_x =
-      fmaxf(fmaxf(bottom_prev_lx, bottom_prev_rx), fmaxf(bottom_cur_lx, bottom_cur_rx));
+  (void)ecb_left;
+  (void)ecb_right;
+  const float sweep_min_x = fminf(bottom_prev_cx, bottom_cur_cx);
+  const float sweep_max_x = fmaxf(bottom_prev_cx, bottom_cur_cx);
   const float sweep_min_y = fminf(bottom_prev_y, bottom_cur_y);
   const float sweep_max_y = fmaxf(bottom_prev_y, bottom_cur_y);
   for (size_t i = 0; i < slot->floor_line_count; i++) {
@@ -2384,11 +2440,13 @@ uint8_t stage_collision_item_fixed_ecb_sweep_hits_floor(uint32_t stage_id, float
         sweep_min_y > seg_max_y) {
       continue;
     }
-    if (stage_floor_segment_intersects_item(bottom_prev_lx, bottom_prev_y, bottom_cur_lx,
-                                            bottom_cur_y, seg->x0, seg->y0, seg->x1, seg->y1) ||
+    // Fixed-ECB floor admission follows mpCheckFloorRemap's bottom-vertex "entering from above"
+    // shape. Horizontal ECB extents are wall/side-collision inputs; using them for floor entry
+    // admits lateral below-floor grazes at Yoshi's sloped edge that vanilla ignores.
+    // refs/melee/src/melee/mp/mplib.c::mpCheckFloorRemap
+    // refs/melee/src/melee/it/it_266F.c::it_8026DA70
+    if (stage_floor_prev_point_can_enter_item_floor(seg, bottom_prev_cx, bottom_prev_y) != 0u &&
         stage_floor_segment_intersects_item(bottom_prev_cx, bottom_prev_y, bottom_cur_cx,
-                                            bottom_cur_y, seg->x0, seg->y0, seg->x1, seg->y1) ||
-        stage_floor_segment_intersects_item(bottom_prev_rx, bottom_prev_y, bottom_cur_rx,
                                             bottom_cur_y, seg->x0, seg->y0, seg->x1, seg->y1)) {
       return 1u;
     }
@@ -2576,10 +2634,16 @@ static void stage_collision_apply_dream_whispy_wind(MslBatch* batch) {
       continue;
     }
     const uint8_t dir = batch->state.stage_dream_whispy_wind_dir[bi];
-    // Preserve the current hidden `gp->gv.unk.xDC` wind direction across rollout frames. Source
-    // changes it in `grOldPupupu_802113E0`; until that full scheduler is owned, clearing it after
-    // one frame drops active wind immediately and is less source-shaped than holding current state.
-    if (dir != 1u && dir != 2u) {
+    // The generated seed lane is a prefix-causal current-frame reconstruction of hidden
+    // `gp->gv.unk.xDC`, not Whispy's full scheduler. When reseeded inside a live wind episode, carry
+    // it only through the source active-window bound: grOldPupupu_802113E0 publishes xDC for
+    // xD0 in (45, 320), so a seeded active frame has at most 274 remaining wind applications.
+    // This keeps same-episode rollout continuity without stale-carrying a wind direction across an
+    // arbitrary long replay.
+    // refs/melee/src/melee/gr/groldpupupu.c::{grOldPupupu_802113E0,fn_802112F4}
+    if ((dir != 1u && dir != 2u) || batch->state.stage_dream_whispy_wind_timer[bi] == 0u) {
+      batch->state.stage_dream_whispy_wind_dir[bi] = 0u;
+      batch->state.stage_dream_whispy_wind_valid[bi] = 0u;
       continue;
     }
     const float x_add = (dir == 1u) ? -params->wind_speed : params->wind_speed;
@@ -2595,6 +2659,11 @@ static void stage_collision_apply_dream_whispy_wind(MslBatch* batch) {
                                               left, right, params->rect_bottom, params->rect_top)) {
         batch->state.pos_x[idx] += x_add;
       }
+    }
+    batch->state.stage_dream_whispy_wind_timer[bi]--;
+    if (batch->state.stage_dream_whispy_wind_timer[bi] == 0u) {
+      batch->state.stage_dream_whispy_wind_dir[bi] = 0u;
+      batch->state.stage_dream_whispy_wind_valid[bi] = 0u;
     }
   }
 }

@@ -99,7 +99,7 @@ SEED_DTYPE = np.dtype(
         # refs/melee/src/melee/gr/groldpupupu.c::{grOldPupupu_802113E0,fn_802112F4}
         ("stage_dream_whispy_wind_dir_u8", "u1"),
         ("stage_dream_whispy_wind_valid_u8", "u1"),
-        ("_pad_stage_dream_whispy", "V2"),
+        ("stage_dream_whispy_wind_timer_u16", "<u2"),
         ("num_players", "u1"),
         ("is_teams", "u1"),
         ("_pad0", "V2"),

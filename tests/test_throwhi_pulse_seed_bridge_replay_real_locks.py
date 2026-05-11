@@ -807,6 +807,51 @@ def test_falco_throwhi_crossed_prev_frame18_emits_second_article(
 
 
 @pytest.mark.integration
+def test_falco_throwhi_crossed_prev_frame18_rollout_emits_second_article_pec() -> None:
+    # Rollout-real lock for the same command owner as the one-step crossed-prev locks above:
+    # - PEC:8136 starts with one live state1 Falco ThrowHi laser and the prior frame-18 pulse.
+    # - The next rollout frame must still emit the frame-20 command article; this is owned by the
+    #   extracted ThrowHi set_throw_spawn_projectile sequence, not by a victim-weight rate proxy.
+    # refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+    # refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C6CC
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples[8136]["seed_t"]
+    thrower = 0
+    victim = 1
+    assert int(seed["char_id"][thrower]) == 22
+    assert int(seed["action_id"][thrower]) == 221
+    assert int(seed["throw_pulse_crossed_prev_frame"][thrower]) == 18
+    assert int(seed["throw_command_pending_pulse_frame"][thrower]) == 0
+    assert int(seed["hitstun"][victim]) > 0
+    assert int(seed["last_hit_by"][victim]) == 0
+    assert int(seed["instance_hit_by"][victim]) == int(seed["instance_id"][thrower])
+    seed_state1_count = sum(
+        1
+        for item in seed["items"]
+        if int(item["exists"]) != 0
+        and int(item["owner"]) == thrower
+        and int(item["type"]) == 55
+        and int(item["state"]) == 1
+    )
+    assert seed_state1_count == 1
+
+    rows = _run_rollout_rows(dataset_path, 8136, (8137, 8139))
+    for record, slot in ((8137, 6), (8139, 7)):
+        out_row, ref_row = rows[record]
+        assert int(ref_row["items"][slot]["exists"]) == 1
+        for field in ("exists", "type", "state", "owner", "instance_id"):
+            assert int(out_row["items"][slot][field]) == int(ref_row["items"][slot][field])
+
+
+@pytest.mark.integration
 @pytest.mark.parametrize(
     "case",
     [

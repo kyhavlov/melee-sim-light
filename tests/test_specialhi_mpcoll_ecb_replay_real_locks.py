@@ -40,6 +40,10 @@ MGS = (
     "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
     "MilkyGracefulStingray.msl"
 )
+PTE = (
+    "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+    "ParallelTemptingElk.msl"
+)
 
 
 def _run_row(
@@ -336,6 +340,68 @@ def test_specialhi_rotate_model_seed_persists_into_fall_landing_and_bound_rows()
         assert int(seed["action_id"][player]) == action_id
         assert int(seed["specialhi_rotate_model_valid_u8"][player]) == 1
         assert np.isfinite(float(seed["specialhi_rotate_model_f32"][player]))
+
+
+@pytest.mark.integration
+def test_specialairhi_stale_endpoint_floor_owner_continues_launch_his_1409() -> None:
+    # HIS starts this row with Fox's SpecialAirHi root carrying FD main-floor ground_id after the
+    # previous root has already moved past that floor segment's right endpoint. Source
+    # ft_CheckGroundAndLedge does not synthesize SpecialHiBound by endpoint-clamping back through
+    # the stale carried floor; HIS:559 remains the existing Bound control in
+    # test_specialhi_rotate_model_seed_persists_into_fall_landing_and_bound_rows.
+    #
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+    #   ftFx_SpecialAirHi_Coll,ftFox_SpecialHi_IsBound}
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800473CC,mpColl_80044628_Floor}
+    root = Path(__file__).resolve().parents[1]
+    ds = read_dataset(str(root / HIS))
+    seed = ds.samples[1409]["seed_t"]
+    ref = ds.samples[1409]["ref_t1"]
+    p = 1
+
+    assert int(seed["char_id"][p]) == 1
+    assert int(seed["action_id"][p]) == 356
+    assert int(seed["action_frame"][p]) == 14
+    assert float(seed["pos_y"][p]) < 0.0
+    assert int(ref["action_id"][p]) == 356
+
+    rows = _run_rollout_rows(1408, 1409, HIS, rollout_seed=True)
+    got, ref, contacts = rows[1409]
+
+    assert int(got["action_id"][p]) == int(ref["action_id"][p]) == 356
+    assert int(got["action_frame"][p]) == int(ref["action_frame"][p]) == 15
+    assert int(got["on_ground"][p]) == int(ref["on_ground"][p]) == 0
+    assert (int(contacts["coll_env_flags"][p]) & 0x00018000) == 0
+    assert float(got["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "player"),
+    [
+        (PTE, 4554, 0),
+        (TCH, 839, 0),
+    ],
+)
+def test_specialairhi_steep_hard_floor_angle_enters_bound(
+    dataset_rel: str, record: int, player: int
+) -> None:
+    # Replay-real positives for the other side of the same source predicate: hard-floor contacts
+    # whose floor.normal/self_vel angle is outside the bound threshold must remain publishable so
+    # ftFx_SpecialAirHi_Coll can enter SpecialHiBound immediately, even while the launch root is
+    # already inside the stage shell.
+    #
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+    #   ftFx_SpecialAirHi_Coll,ftFox_SpecialHi_IsBound,ftFx_SpecialHiBound_Enter}
+    # data/characters/{fox,falco}.json::firefox_bound_angle_degrees
+    _, ref, got, contacts = _run_row(record, dataset_rel)
+
+    assert int(got["action_id"][player]) == int(ref["action_id"][player]) == 359
+    assert int(got["animation_index"][player]) == int(ref["animation_index"][player]) == 312
+    assert int(got["action_frame"][player]) == int(ref["action_frame"][player]) == 1
+    assert int(got["on_ground"][player]) == int(ref["on_ground"][player]) == 0
+    assert int(contacts["coll_env_flags"][player]) & 0x00018000
+    assert float(got["pos_y"][player]) == pytest.approx(float(ref["pos_y"][player]), abs=1e-5)
 
 
 @pytest.mark.integration

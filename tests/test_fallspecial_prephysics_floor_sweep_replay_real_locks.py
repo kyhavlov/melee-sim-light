@@ -78,3 +78,48 @@ def test_fallspecial_lands_when_callback_visible_bottom_sweep_hits() -> None:
     assert int(out["action_id"][player]) == int(ref["action_id"][player]) == 0x002B
     assert int(out["on_ground"][player]) == int(ref["on_ground"][player]) == 1
     assert float(out["pos_y"][player]) == pytest.approx(float(ref["pos_y"][player]), abs=1.0e-6)
+
+
+def test_fallspecial_current_ecb_owner_does_not_land_first_sustained_frame_pec() -> None:
+    # PEC:6952 is the first sustained FallSpecial callback after entry. Its current ECB bottom is
+    # near the Yoshi floor, but vanilla keeps FallSpecial airborne for this frame and lands on the
+    # following callback. The retained current-ECB owner starts after this first sustained frame.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::{
+    #   ftCo_FallSpecial_Coll,ftCo_80096CC8,ftCo_80096D28}
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047E14,mpColl_80044628_Floor}
+    path = "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
+    rec = 6952
+    player = 1
+    ds = read_dataset(path)
+    seed = ds.samples["seed_t"][rec]
+    ref = ds.samples["ref_t1"][rec]
+    assert int(seed["action_id"][player]) == 0x0023
+    assert int(seed["action_frame"][player]) == 1
+    assert int(ref["action_id"][player]) == 0x0023
+
+    out = _step_record(path, rec)
+
+    assert int(out["action_id"][player]) == int(ref["action_id"][player]) == 0x0023
+    assert int(out["on_ground"][player]) == int(ref["on_ground"][player]) == 0
+    assert float(out["pos_y"][player]) == pytest.approx(float(ref["pos_y"][player]), abs=1.0e-6)
+
+
+def test_fallspecial_same_floor_early_root_crossing_stays_airborne_dcc() -> None:
+    # Same carried-floor early FallSpecial root crossings stay airborne; adjacent floor/seam
+    # handoffs remain covered by the positive controls above.
+    path = "datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl"
+    rec = 8771
+    player = 1
+    ds = read_dataset(path)
+    seed = ds.samples["seed_t"][rec]
+    ref = ds.samples["ref_t1"][rec]
+    assert int(seed["action_id"][player]) == 0x0023
+    assert int(seed["ground_id"][player]) == 1
+    assert int(ref["action_id"][player]) == 0x0023
+
+    out = _step_record(path, rec)
+
+    assert int(out["action_id"][player]) == int(ref["action_id"][player]) == 0x0023
+    assert int(out["on_ground"][player]) == int(ref["on_ground"][player]) == 0
+    assert float(out["pos_y"][player]) == pytest.approx(float(ref["pos_y"][player]), abs=1.0e-6)

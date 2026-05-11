@@ -838,12 +838,28 @@ static inline void align_passivewalljump_entry_x(MslBatch* batch, size_t idx) {
   if (anim_pose_get_transn(cid, (uint16_t)MSL_SM_PASSIVE_WALL_JUMP, 0u, transn) != 0) {
     transn[2] = 0.0f;
   }
+  const MslCharParams* ch = msl_char_params(cid);
+  const float model_scaling =
+      (ch != NULL && isfinite(ch->model_scaling) && ch->model_scaling > 0.0f) ? ch->model_scaling
+                                                                              : 1.0f;
+  const float scale_y =
+      (batch->state.fighter_scale_y[idx] > 0.0f) ? batch->state.fighter_scale_y[idx] : 1.0f;
+  // ftCo_800C1E64 consumes fp->x68C_transNPos.z after Fighter_ChangeMotionState has run the
+  // TransN JObj through ftAnim_8006E054. That path scales raw TransN by ftCommon_GetModelScale
+  // before the wall-entry root snap.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::ftCo_800C1E64
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+  // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006E054
+  // refs/melee/src/melee/ft/ftlib.c::ftLib_800869D4
+  const float transn_z = transn[2] * scale_y * model_scaling;
 
   const uint32_t env = batch->state.coll_env_flags[idx];
   if ((env & (uint32_t)MSL_COLLIDE_RIGHT_WALL_HUG) != 0u) {
-    batch->state.pos_x[idx] = ecb.left_x + transn[2] * facing_dir;
+    const float anchor_x =
+        (batch->state.wall_id[idx] != 0xFFFFu) ? batch->state.wall_contact_x[idx] : ecb.left_x;
+    batch->state.pos_x[idx] = anchor_x + transn_z * facing_dir;
   } else if ((env & (uint32_t)MSL_COLLIDE_LEFT_WALL_HUG) != 0u) {
-    batch->state.pos_x[idx] = ecb.right_x + transn[2] * facing_dir;
+    batch->state.pos_x[idx] = ecb.right_x + transn_z * facing_dir;
   }
 }
 
@@ -933,6 +949,7 @@ static inline uint8_t try_common_air_walljump_post_collision(MslBatch* batch,
   batch->state.speed_air_x_self[idx] = 0.0f;
   batch->state.speed_y_self[idx] = 0.0f;
   batch->state.passivewall_timer[idx] = (uint8_t)c->walljump_startup_timer_frames;
+  batch->state.passivewall_jump_latch[idx] = 0u;
   batch->state.tilt_timer_x[idx] = 0xFEu;
   batch->state.tilt_timer_y[idx] = 0xFEu;
   batch->state.colanim_timer_x1990[idx] = c->colanim_passivewall_x1990_frames;
@@ -5903,18 +5920,16 @@ void locomotion_update_pre(MslBatch* batch) {
 
           // Aerial jump (double jump) entry.
           //
-          // AttackAir DO_IASA checks special-air dispatch before JumpAerial. Shine/Blaster run
-          // later in this sim's action_update(), so a B-edge must stay in AttackAir through this
-          // local JumpAerial branch for those owners to consume it in decomp order.
+          // AttackAir DO_IASA does not call ftCo_SpecialAir_CheckInput. B-specials are not an
+          // AttackAir IASA branch, so a concurrent B edge must not block the later JumpAerial
+          // branch when the jump input is otherwise valid.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::DO_IASA
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Enter_Basic
           const uint8_t jump_aerial_input = ((buttons_pressed & (uint16_t)MSL_BUTTON_XY) ||
                                              did_tap_jump(c, stick_y, tilt_timer_y))
                                                 ? 1u
                                                 : 0u;
-          if ((buttons_pressed & (uint16_t)MSL_BUTTON_B) == 0u &&
-              locomotion_try_enter_jump_aerial_iasa(batch, c, ch, idx, jump_aerial_input, stick_x,
+          if (locomotion_try_enter_jump_aerial_iasa(batch, c, ch, idx, jump_aerial_input, stick_x,
                                                     facing_dir, 0u)) {
             tilt_timer_y = 0xFEu;
             action_id = batch->state.action_id[idx];

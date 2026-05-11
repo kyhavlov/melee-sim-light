@@ -142,6 +142,11 @@ static inline void clear_seed_owned_transients_post_frame(MslBatch* batch) {
           batch->state.throw_pulse_crossed_curr_frame[idx];
       batch->state.throw_command_pending_pulse_frame[idx] = 0u;
       batch->state.throw_command_pending_seed_valid[idx] = 0u;
+      const uint16_t action_id = batch->state.action_id[idx];
+      if (action_id != (uint16_t)MSL_ACT_THROW_B && action_id != (uint16_t)MSL_ACT_THROW_HI &&
+          action_id != (uint16_t)MSL_ACT_THROW_LW) {
+        batch->state.throw_command_deferred_pulse_frame[idx] = 0u;
+      }
       batch->state.throw_pulse_crossed_curr_frame[idx] = 0u;
       // DamageFly wall-ASDI provenance is allowed to arm on the SpecialAirHi wall-contact frame
       // before combat starts hitlag, but it must become live only if the frame actually enters or

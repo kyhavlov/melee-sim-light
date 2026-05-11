@@ -396,6 +396,49 @@ def test_fod_damagefly_platform_inspan_contacts_use_tech_downbound_ladder(
 
 
 @pytest.mark.integration
+def test_fod_height_platform_damagefly_live_bottom_crossing_enters_tech_replay_real() -> None:
+    # MGS 5478 is near FoD's right-platform endpoint, but the live DamageFlyTop ECB bottom crosses
+    # the transformed floor from above to below during ft_80081DD4 -> mpColl_80044628_Floor. Source
+    # mpCheckFloor publishes the floor handoff and ftCo_80090184 selects PassiveStandF from the
+    # active tech timers. The platform height is a trusted grIzumi target state, not a stale sparse
+    # replay reconstruction.
+    # data/stages/bin/griz.bin::MSLSTG01 platform_transforms(kind=height)
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_DamageFly_Coll,ftCo_80090184}
+    # refs/melee/src/melee/gr/grizumi.c::{grIzumi_801CC358,grIzumi_801CCBDC}
+    # refs/melee/src/melee/mp/mpcoll.c::mpColl_80044628_Floor
+    # refs/melee/src/melee/mp/mplib.c::{mpCheckFloor,mpLineIntersectionH,mpLib_80055E9C}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = _fod_dataset_path(root, "MilkyGracefulStingray")
+
+    p = 1
+    seed, ref, out = _run_one_step(dataset_path, 5478, ucf_cardinals_1_0_enabled=True)
+    assert int(seed["action_id"][p]) == ACT_DAMAGE_FLY_TOP
+    assert int(seed["hitstun"][p]) != 0
+    assert int(ref["action_id"][p]) == ACT_PASSIVE_STAND_F
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_PASSIVE_STAND_F
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 1
+    assert int(out["ground_id"][p]) == int(ref["ground_id"][p]) == 1
+    assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=2e-6)
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-4)
+
+    by_record = _run_rollout_records(
+        dataset_path, 5450, (5477, 5478), ucf_cardinals_1_0_enabled=True
+    )
+    ref_5477, out_5477 = by_record[5477]
+    assert int(out_5477["action_id"][p]) == int(ref_5477["action_id"][p]) == ACT_DAMAGE_FLY_TOP
+    assert int(out_5477["on_ground"][p]) == int(ref_5477["on_ground"][p]) == 0
+    assert float(out_5477["pos_y"][p]) == pytest.approx(float(ref_5477["pos_y"][p]), abs=2e-5)
+
+    ref_5478, out_5478 = by_record[5478]
+    assert int(out_5478["action_id"][p]) == int(ref_5478["action_id"][p]) == ACT_PASSIVE_STAND_F
+    assert int(out_5478["on_ground"][p]) == int(ref_5478["on_ground"][p]) == 1
+    assert int(out_5478["ground_id"][p]) == int(ref_5478["ground_id"][p]) == 1
+    assert float(out_5478["pos_y"][p]) == pytest.approx(float(ref_5478["pos_y"][p]), abs=2e-4)
+
+
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("record", "player", "expected_action"),
     [

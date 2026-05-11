@@ -177,6 +177,14 @@ class _DamageFlyRoll8006CDA4Case:
             note="AttackAirN pre-action carries double Fighter_8006CDA4 stream phase (TBK)",
         ),
         _DamageFlyRoll8006CDA4Case(
+            dataset_rel="datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            target_record=2752,
+            victim_port=0,
+            expect_seed_count=0,
+            expect_action_id=91,
+            note="active-hitlag DamageFlyN <- ThrowHi state1 laser reaches DamageFlyRoll gate (TBK)",
+        ),
+        _DamageFlyRoll8006CDA4Case(
             dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl",
             target_record=10207,
             victim_port=0,
@@ -723,3 +731,156 @@ def test_damageflytop_f26_runtime_maps_raw_source_port_before_attacker_lookup() 
     _, ref_row, out_row = _run_one_step_row(dataset_path, 3907, 1, seed_mutator=_noncompact_ports)
     assert int(ref_row["action_id"][1]) == 91
     assert int(out_row["action_id"][1]) == 91
+
+
+@pytest.mark.integration
+def test_specialairhi_damageflyroll_gate_uses_live_rollout_rng_stream_his_1598() -> None:
+    # HIS rollout lock for ftCo_8008DCE0's generic severe-airborne DamageFlyRoll gate:
+    # p1 is still in SpecialAirHi when p0's AttackAirB hits. SpecialAirHi is not excluded by
+    # Fighter_8006CDA4 or ftCo_8008DCE0, so the runtime rollout must admit the gate and consume the
+    # live RNG stream. The teacher-forced one-step seed remains a separate hidden stream-phase
+    # problem; this lock protects the free-running source owner that caused the HIS best/max red.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+        "HungryImportantSnake.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples[1598]["seed_t"]
+    ref = ds.samples[1598]["ref_t1"]
+    assert int(seed["action_id"][1]) == 356  # SpecialAirHi
+    assert int(seed["action_frame"][1]) == 15
+    assert int(seed["action_id"][0]) == 67  # AttackAirB
+    assert int(ref["action_id"][1]) == 91  # DamageFlyRoll
+
+    rows = _run_rollout_window_rows_with_trace(
+        dataset_path,
+        start_record=0,
+        window_records=(1597, 1598, 1599),
+        rng_damage_fly_roll_gate=True,
+        trace_path=root / "reports/triage/his1598_specialairhi_damageflyroll_rollout.tsv",
+    )
+    for rec in (1597, 1598, 1599):
+        ref_row, out_row, site1_count = rows[rec]
+        for p in (0, 1):
+            _assert_transition_identity_lock_fields_match_ref(
+                out_row=out_row,
+                ref_row=ref_row,
+                record=rec,
+                p=p,
+            )
+        assert site1_count == (1 if rec == 1598 else 0), (
+            f"unexpected DamageFlyRoll gate pulse at {rec}"
+        )
+
+
+@pytest.mark.integration
+def test_specialairhi_damageflyroll_gate_rejects_teacher_forced_seed_phase_agg_2864() -> None:
+    # Replay-real one-step negative for the SpecialAirHi slice of ftCo_8008DCE0:
+    # SpecialAirHi is admitted when a free-running rollout owns the RNG clock, but a teacher-forced
+    # one-step seed does not expose enough hidden HSD_Randf stream phase. The generic
+    # Fighter_8006CDA4 pre-gate consume-count lane is not sufficient to turn this seeded row into a
+    # DamageFlyRoll.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
+        "AttachedGoodNaturedGuanaco.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples[2864]["seed_t"]
+    ref = ds.samples[2864]["ref_t1"]
+    p = 0
+    assert int(seed["action_id"][p]) == 356  # SpecialAirHi
+    assert int(ref["action_id"][p]) == 87  # DamageFlyHi, not DamageFlyRoll
+
+    _, ref_row, out_row = _run_one_step_row(dataset_path, 2864, p)
+    for q in (0, 1):
+        _assert_transition_lock_fields_match_ref(out_row=out_row, ref_row=ref_row, record=2864, p=q)
+
+
+@pytest.mark.integration
+def test_specialairhi_damageflyroll_gate_rejects_exact_rollout_reseed_phase_agg_2864() -> None:
+    # Replay-real rollout negative for the same SpecialAirHi owner: `reseed_seed_rollout()` exposes
+    # frame-indexed rollout ownership, but a rollout that starts exactly on the hit row has not
+    # advanced the hidden HSD_Randf stream beyond the seed frame. It must match the one-step
+    # teacher-forced behavior and reject the DamageFlyRoll gate.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
+        "AttachedGoodNaturedGuanaco.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    rows = _run_rollout_window_rows_with_trace(
+        dataset_path,
+        start_record=2864,
+        window_records=(2864,),
+        rng_damage_fly_roll_gate=True,
+        trace_path=root / "reports/triage/agg2864_specialairhi_exact_reseed_rollout.tsv",
+    )
+    ref_row, out_row, site1_count = rows[2864]
+    for q in (0, 1):
+        _assert_transition_lock_fields_match_ref(out_row=out_row, ref_row=ref_row, record=2864, p=q)
+    assert site1_count == 0, f"unexpected DamageFlyRoll gate pulse at exact reseed row"
+
+
+@pytest.mark.integration
+def test_damageflyn_without_stream_phase_rejects_exact_reseed_damageflyroll_prh_8390() -> None:
+    # DamageFlyN/Lw remain source-eligible for ftCo_8008DCE0's DamageFlyRoll gate, but visible
+    # damage-state shape alone does not reconstruct the hidden HSD_Randf phase. PRH 8390 has no
+    # Fighter_8006CDA4 pre-gate stream lane, so both one-step and exact rollout reseed must keep
+    # the vanilla DamageFlyLw result instead of manufacturing DamageFlyRoll.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+        "PositiveRevolvingHyena.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples[8390]["seed_t"]
+    ref = ds.samples[8390]["ref_t1"]
+    p = 1
+    assert int(seed["action_id"][p]) == 88  # DamageFlyN
+    assert int(seed["fighter_8006cda4_pre_gate_consume_count"][p]) == 0
+    assert int(ref["action_id"][p]) == 89  # DamageFlyLw, not DamageFlyRoll
+
+    _, ref_row, out_row = _run_one_step_row(dataset_path, 8390, p)
+    for q in (0, 1):
+        _assert_transition_lock_fields_match_ref(out_row=out_row, ref_row=ref_row, record=8390, p=q)
+
+    rows = _run_rollout_window_rows_with_trace(
+        dataset_path,
+        start_record=8390,
+        window_records=(8390,),
+        rng_damage_fly_roll_gate=True,
+        trace_path=root / "reports/triage/prh8390_damageflyn_exact_reseed_rollout.tsv",
+    )
+    ref_row, out_row, site1_count = rows[8390]
+    for q in (0, 1):
+        _assert_transition_lock_fields_match_ref(out_row=out_row, ref_row=ref_row, record=8390, p=q)
+    assert site1_count == 0, f"unexpected DamageFlyRoll gate pulse at exact reseed row"

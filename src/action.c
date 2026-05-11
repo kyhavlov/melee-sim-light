@@ -1,6 +1,7 @@
 #include "action.h"
 
 #include <math.h>
+#include <stddef.h>
 
 #include "action_ids.h"
 #include "airborne_state_events_tables.h"
@@ -46,6 +47,45 @@ static inline void enter_fall_special(MslBatch* batch, const MslCommonParams* c,
   batch->state.landing_fallspecial_allow_interrupt[idx] = 0u;
 }
 
+static inline uint8_t action_floor_line_y_at_x(const MslBatch* batch, size_t idx, uint32_t stage_id,
+                                               uint16_t floor_id, float x, float* y_out) {
+  if (batch == NULL || y_out == NULL) {
+    return 0u;
+  }
+  const int line_idx = stage_collision_floor_line_index(stage_id, floor_id);
+  const MslStageFloorGraph* g = stage_collision_get_floor_graph(stage_id);
+  if (g == NULL || line_idx < 0 || (size_t)line_idx >= g->line_count) {
+    return 0u;
+  }
+  MslStageFloorLine line = {0};
+  const int bi = (int)(idx / (size_t)MSL_MAX_PLAYERS);
+  if (!stage_collision_floor_line_world(batch, bi, &g->lines[(size_t)line_idx], &line)) {
+    return 0u;
+  }
+  const float dx = line.x1 - line.x0;
+  if (fabsf(dx) <= 1e-6f) {
+    *y_out = line.y0;
+    return 1u;
+  }
+  const float t = (x - line.x0) / dx;
+  *y_out = line.y0 + t * (line.y1 - line.y0);
+  return 1u;
+}
+
+static inline uint8_t action_stage_has_soft_platform_floor(uint32_t stage_id) {
+  const MslStageFloorGraph* g = stage_collision_get_floor_graph(stage_id);
+  if (g == NULL) {
+    return 0u;
+  }
+  for (size_t i = 0; i < g->line_count; i++) {
+    if (g->lines[i].is_platform ||
+        stage_collision_floor_line_has_platform_transform(stage_id, g->lines[i].segment_i)) {
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
 uint8_t escape_air_try_enter_from_air_locomotion(MslBatch* batch, const MslCommonParams* c,
                                                  size_t idx) {
   if (batch == NULL || c == NULL) {
@@ -81,6 +121,61 @@ uint8_t escape_air_try_enter_from_air_locomotion(MslBatch* batch, const MslCommo
     const float ang = atan2f(stick_y, stick_x);
     vx = c->escapeair_force * cosf(ang);
     vy = c->escapeair_force * sinf(ang);
+  }
+
+  const uint32_t stage_id = batch->state.stage_id[idx / (size_t)MSL_MAX_PLAYERS];
+  const uint16_t source_action_id = batch->state.action_id[idx];
+  const uint16_t floor_id = batch->state.ground_id[idx];
+  const uint8_t source_floor_is_solid_line =
+      (floor_id != 0xFFFFu && !stage_collision_floor_line_is_platform(stage_id, floor_id)) ? 1u
+                                                                                           : 0u;
+  const uint8_t source_is_jumpaerial = (source_action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
+                                        source_action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_B)
+                                           ? 1u
+                                           : 0u;
+  float source_floor_y = 0.0f;
+  const uint8_t source_floor_y_valid = action_floor_line_y_at_x(
+      batch, idx, stage_id, floor_id, batch->state.pos_x[idx], &source_floor_y);
+  const float escapeair_entry_next_root_y = batch->state.pos_y[idx] + vy;
+  const uint8_t escapeair_entry_bottom_sweep_still_above_floor =
+      (source_floor_y_valid &&
+       (escapeair_entry_next_root_y + batch->state.coll_desired_ecb_bottom_rel_y[idx]) >
+           (source_floor_y + 0.0001f))
+          ? 1u
+          : 0u;
+  if (batch->state.ecb_lock_timer[idx] != 0u &&
+      batch->state.coll_desired_ecb_bottom_valid[idx] != 0u &&
+      batch->state.coll_desired_ecb_bottom_rel_y[idx] > 0.0001f && source_floor_is_solid_line &&
+      source_is_jumpaerial && batch->state.action_frame[idx] >= 1 &&
+      escapeair_entry_bottom_sweep_still_above_floor) {
+    // Runtime EscapeAir entry can happen during JumpAerial IASA before Fighter_procMap. On
+    // JumpAerial pass-through from a solid floor-domain line still carries CollData_X130_Locked when
+    // source `ftCo_EscapeAir_Coll` calls `mpColl_LoadECB_inline`, preserving the pre-entry
+    // desired_ecb.bottom for the first EscapeAir callback only while the frame-start provenance is
+    // still sustained JumpAerial and that bottom sweep is still above the carried floor. Fresh
+    // cliff-jump chains and zero-bottom air-dodge entries keep their ordinary EscapeAir floor
+    // handoff; if the entered EscapeAir root is already deep enough that bottom.y crosses the floor
+    // this frame, the normal floor publication path owns the immediate LandingFallSpecial
+    // transition instead.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::{
+    //   ftCo_80099A58,ftCo_EscapeAir_Coll}
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_IASA
+    // refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_inline
+    // Internal owner values:
+    // - 2: live JumpAerial -> EscapeAir soft-platform-stage provenance.
+    // - 3: live JumpAerial -> EscapeAir ordinary hard-floor provenance.
+    // Keep both distinct from replay-real seed owner 1 because rollout must preserve this hidden
+    // desired-bottom lifetime across sustained EscapeAir callbacks after the IASA entry frame,
+    // while FD hard-floor rows must not inherit soft-platform remap guards.
+    batch->state.coll_desired_ecb_bottom_locked_owner[idx] =
+        action_stage_has_soft_platform_floor(stage_id) ? 2u : 3u;
+  } else if (source_is_jumpaerial) {
+    // Other JumpAerial -> EscapeAir entries use the freshly loaded EscapeAir floor handoff. Clear
+    // the runtime JumpAerial desired-bottom owner so platform-origin and zero-bottom air-dodges do
+    // not inherit the narrower soft-platform pass-through path above. Already-seeded EscapeAir rows
+    // bypass this entry callback and keep their explicit one-step seed lane.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    batch->state.coll_desired_ecb_bottom_locked_owner[idx] = 0u;
   }
 
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_ESCAPE_AIR;
@@ -1050,6 +1145,17 @@ static inline void guard_update_grounded_anim_callback_pre_input(MslBatch* batch
       if (t14 > 0) {
         t14--;
         batch->state.guard_reflect_timer_x14[idx] = t14;
+      }
+      if (t14 == 0u && batch->state.hitlag_pre_timer[idx] == 0u) {
+        // Decomp: ftCo_80093BC0 clears x221C_b1 when the shorter x14 reflect descriptor timer
+        // expires, matching the x18/x221C_b2 clear below.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0
+        enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
+        enum { MSL_STATE_FLAG_221C_GUARD_REFLECT_X14 = 0x40 };
+        const size_t flags_i =
+            idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
+        batch->state.state_flags[flags_i] &=
+            (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_GUARD_REFLECT_X14;
       }
       uint8_t t18 = batch->state.guard_reflect_timer_x18[idx];
       if (t18 > 0) {

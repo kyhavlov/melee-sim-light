@@ -37,8 +37,9 @@ typedef struct MslStateSoA {
   // Dream Land Whispy current hidden wind state (`grOldPupupu` xDC), prefix-causal in eval and
   // source-scheduled in live/new-match runtime.
   // refs/melee/src/melee/gr/groldpupupu.c::{grOldPupupu_802113E0,fn_802112F4}
-  uint8_t* stage_dream_whispy_wind_dir;    // [batch]
-  uint8_t* stage_dream_whispy_wind_valid;  // [batch]
+  uint8_t* stage_dream_whispy_wind_dir;     // [batch]
+  uint8_t* stage_dream_whispy_wind_valid;   // [batch]
+  uint16_t* stage_dream_whispy_wind_timer;  // [batch]
   // Match-start fighter input lock (`fp->x221D_b4`) countdown, one per environment.
   //
   // Decomp / asset anchors:
@@ -253,6 +254,12 @@ typedef struct MslStateSoA {
   // frame-crossing after `throw_command_pending_seed_valid` is cleared at end-of-frame.
   uint8_t* throw_command_pending_pulse_frame;
   uint8_t* throw_command_pending_seed_valid;
+  // Internal command-cursor carry for source frames where ftAction reaches a projectile command but
+  // the matching article is serialized by the next Anim callback. Unlike the seed-owned pending
+  // lane, this persists across the end-of-frame transient clear until the carried pulse is spawned.
+  // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+  uint8_t* throw_command_deferred_pulse_frame;
   // Internal runtime producer for the current frame's throw pulse crossing.
   // step.c promotes this to `throw_pulse_crossed_prev_frame` at end-of-frame so rollout can carry
   // the same throw-side pulse ownership that one-step seeds expose directly.
@@ -388,6 +395,11 @@ typedef struct MslStateSoA {
   // must be seeded from replay history for one-step parity.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::{ftCo_800C1E64,ftCo_PassiveWall_Anim}
   uint8_t* passivewall_timer;
+  // PassiveWall startup jump latch (`fp->mv.co.passivewall.x8`). While timer>0,
+  // PassiveWall_IASA sets this latch when ftCo_800C1E0C succeeds; PassiveWall_Anim consumes it
+  // on timer expiry by re-entering PassiveWallJump through Fighter_ChangeMotionState.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::{ftCo_PassiveWall_IASA,inlineA0}
+  uint8_t* passivewall_jump_latch;
   // Generic wall-jump hidden input phase (`fp->wall_jump_input_timer`, `fp->x2110_walljumpWallSide`).
   // refs/melee/src/melee/ft/ftwalljump.c::ftWallJump_8008169C
   uint8_t* walljump_input_timer;
@@ -874,6 +886,17 @@ typedef struct MslStateSoA {
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
   // refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C
   uint8_t* hitbox_x43_b2;  // [batch * players * MSL_MAX_HITBOXES]
+  // Internal HitCapsule state/x4 lane for the x914 lifecycle. This is separate from
+  // `hitbox_enabled`, which only means the current frame has collision geometry to test.
+  //
+  // Decomp ownership:
+  // - Fighter_ChangeMotionState skips ftColl_8007AFF8 when Ft_MF_SkipHit is set, so x914 capsule
+  //   state and victims_1 can persist into a new motion before the next create command.
+  // - ftAction_8007121C only calls ftColl_800768A0 when the slot is disabled or x4 changes.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+  // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+  uint8_t* hitbox_capsule_enabled;  // [batch * players * MSL_MAX_HITBOXES]
+  uint8_t* hitbox_capsule_group;    // [batch * players * MSL_MAX_HITBOXES]
   // First-frame bootstrap flag for x58 previous centers after teacher-forced reseed.
   // 1 => bootstrap hitbox_prev_* once in hitboxes_refresh(), then clear to 0.
   uint8_t* hitbox_prev_bootstrap;  // [batch * players]

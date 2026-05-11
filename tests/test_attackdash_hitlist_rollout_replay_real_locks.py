@@ -15,9 +15,14 @@ _HHG = Path("datasets/aggregate_recent/replays/validation/aggregate_recent/Hilar
 ACT_LANDING = 42
 ACT_ATTACK_DASH = 50
 ACT_ATTACK_LW4 = 64
+ACT_ATTACK_AIR_F = 66
+ACT_ATTACK_AIR_B = 67
 ACT_ATTACK_S3_HI = 56
 ACT_DAMAGE_N_2 = 79
+ACT_DAMAGE_FLY_N = 88
 ACT_DAMAGE_FLY_LW = 89
+ACT_DAMAGE_FLY_TOP = 90
+ACT_GUARD_ON = 178
 ACT_REBOUND_STOP = 237
 
 
@@ -147,6 +152,58 @@ def test_attackdash_dense_hitlist_rebind_requires_same_source_provenance() -> No
     assert int(out["action_id"][0]) == ACT_DAMAGE_N_2
     assert int(out["hitlag"][0]) > 0
     assert int(out["hitlag"][1]) > 0
+
+
+@pytest.mark.integration
+def test_exact_rollout_reseed_preserves_dense_hitlist_before_guardon_hhg_7970() -> None:
+    # Exact-row replay rollout reseeds are still teacher-forced seed materialization: the dense
+    # victims_1 latch from the seed row must suppress the stale AttackAirF BODY contact before p0's
+    # current-frame shield input enters GuardOn. The stricter same-source replay-rollout filter
+    # applies only after the rollout has advanced beyond the reseed frame.
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = root / _HHG
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    seed, out, ref = _rollout_one(dataset_path, 7970)
+    assert int(seed["action_id"][0]) == ACT_LANDING
+    assert int(seed["action_id"][1]) == ACT_ATTACK_AIR_F
+    assert int(seed["combat_hitlist_cd"][1, 0, 0]) == 0xFFFF
+    assert int(seed["combat_hitlist_victim_iid"][1, 0, 0]) == int(seed["instance_id"][0])
+
+    assert int(out["action_id"][0]) == int(ref["action_id"][0]) == ACT_GUARD_ON
+    assert int(out["hitlag"][0]) == int(ref["hitlag"][0]) == 0
+    assert int(out["hitlag"][1]) == int(ref["hitlag"][1]) == 0
+
+
+@pytest.mark.integration
+def test_damage_episode_dense_hitlist_requires_current_source_instance_lim_5673() -> None:
+    # LIM 5673 is inside p0's active DamageFlyTop episode. The dense group hitlist seed still names
+    # p0's current Slippi instance_id, but `instance_hit_by` names a different attacker action
+    # instance than the live p1 AttackAirB. That stale dense proxy must not suppress the fresh BODY
+    # hit that vanilla resolves into DamageFlyN hitlag.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = root / Path(
+        "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
+        "LawfulInsistentMeerkat.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    seed, out, ref = _rollout_one(dataset_path, 5673)
+    assert int(seed["action_id"][0]) == ACT_DAMAGE_FLY_TOP
+    assert int(seed["action_id"][1]) == ACT_ATTACK_AIR_B
+    assert int(seed["combat_hitlist_cd"][1, 0, 0]) == 0xFFFF
+    assert int(seed["combat_hitlist_victim_iid"][1, 0, 0]) == int(seed["instance_id"][0])
+    assert int(seed["instance_hit_by"][0]) != int(seed["instance_id"][1])
+
+    assert int(out["action_id"][0]) == int(ref["action_id"][0]) == ACT_DAMAGE_FLY_N
+    assert int(out["hitlag"][0]) == int(ref["hitlag"][0]) == 6
+    assert int(out["hitlag"][1]) == int(ref["hitlag"][1]) == 6
 
 
 @pytest.mark.integration

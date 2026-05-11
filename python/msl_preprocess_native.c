@@ -7704,6 +7704,13 @@ PyObject* msl_derive_yoshi_shyguy_seed_lanes_py(PyObject* self, PyObject* args) 
           gs->speed_index = (uint8_t)msl_py_shyguy_speed_index_from_item(vx[idx], stp[idx], speeds,
                                                                          (float)state4_speed_mul);
           gs->speed_valid = true;
+          // `it_802D8618` stores the group-wide random speed index in itemVar.heiho.x21 at spawn.
+          // Existing replay items expose that hidden value only once state 1/4 publishes nonzero
+          // horizontal velocity. Keep the seed lane prefix-causal by marking the group valid from
+          // this row forward; earlier zero-velocity active rows must be seeded by the scheduler RNG
+          // owner or left unowned.
+          // refs/melee/src/melee/it/items/itheiho.c::{it_802D8618,itHeiho_UnkMotion0_Phys,
+          //   it_802D8918,itHeiho_UnkMotion1_Phys,itHeiho_UnkMotion4_Phys}
         }
       }
 
@@ -7978,22 +7985,27 @@ PyObject* msl_derive_dream_whispy_wind_seed_lanes_py(PyObject* self, PyObject* a
   npy_intp out_dims[2] = {n, (npy_intp)sizeof(MslCompare)};
   PyArrayObject* dir_arr = (PyArrayObject*)PyArray_SimpleNew(1, dims1, NPY_UINT8);
   PyArrayObject* valid_arr = (PyArrayObject*)PyArray_SimpleNew(1, dims1, NPY_UINT8);
+  PyArrayObject* timer_arr = (PyArrayObject*)PyArray_SimpleNew(1, dims1, NPY_UINT16);
   PyArrayObject* out_arr = (PyArrayObject*)PyArray_SimpleNew(2, out_dims, NPY_UINT8);
-  if (dir_arr == NULL || valid_arr == NULL || out_arr == NULL) {
+  if (dir_arr == NULL || valid_arr == NULL || timer_arr == NULL || out_arr == NULL) {
     Py_XDECREF(dir_arr);
     Py_XDECREF(valid_arr);
+    Py_XDECREF(timer_arr);
     Py_XDECREF(out_arr);
     return NULL;
   }
   uint8_t* dir = (uint8_t*)PyArray_DATA(dir_arr);
   uint8_t* valid = (uint8_t*)PyArray_DATA(valid_arr);
+  uint16_t* timer = (uint16_t*)PyArray_DATA(timer_arr);
   memset(dir, 0, (size_t)n);
   memset(valid, 0, (size_t)n);
+  memset(timer, 0, (size_t)n * sizeof(uint16_t));
 
   MslBatch* batch = msl_batch_create((int)n, num_players);
   if (batch == NULL) {
     Py_DECREF(dir_arr);
     Py_DECREF(valid_arr);
+    Py_DECREF(timer_arr);
     Py_DECREF(out_arr);
     PyErr_SetString(PyExc_MemoryError, "msl_batch_create failed");
     return NULL;
@@ -8015,6 +8027,7 @@ PyObject* msl_derive_dream_whispy_wind_seed_lanes_py(PyObject* self, PyObject* a
   if (err != 0) {
     Py_DECREF(dir_arr);
     Py_DECREF(valid_arr);
+    Py_DECREF(timer_arr);
     Py_DECREF(out_arr);
     PyErr_Format(PyExc_RuntimeError, "Dream Whispy derivation sim failed: %d", err);
     return NULL;
@@ -8058,8 +8071,26 @@ PyObject* msl_derive_dream_whispy_wind_seed_lanes_py(PyObject* self, PyObject* a
     }
   }
 
+  uint8_t episode_dir = 0u;
+  uint16_t episode_age = 0u;
+  for (npy_intp i = 0; i < n; i++) {
+    if (valid[i] == 0u || dir[i] == 0u) {
+      episode_dir = 0u;
+      episode_age = 0u;
+      continue;
+    }
+    if (dir[i] != episode_dir) {
+      episode_dir = dir[i];
+      episode_age = 0u;
+    }
+    timer[i] = (episode_age < 274u) ? (uint16_t)(274u - episode_age) : 1u;
+    if (episode_age < 274u) {
+      episode_age++;
+    }
+  }
+
   Py_DECREF(out_arr);
-  PyObject* ret = Py_BuildValue("(NN)", dir_arr, valid_arr);
+  PyObject* ret = Py_BuildValue("(NNN)", dir_arr, valid_arr, timer_arr);
   return ret;
 }
 

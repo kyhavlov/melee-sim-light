@@ -696,13 +696,12 @@ def test_attackairlw_dense_hitlist_rollout_allows_fresh_guardon_shield_hit_prh()
 
 
 @pytest.mark.integration
-def test_attackairn_stale_dense_hitlist_create_edge_clears_for_new_hit_agn() -> None:
-    # AttackAirN stale dense HitCapsule boundary:
-    # - AGN:5167 seeds p1 NAir with a coarse dense victims_1 latch against p0's old JumpF
-    #   instance.
-    # - p0 enters a new aerial motion before p1's next create edge. Decomp's ftColl_800768A0
-    #   clear/copy edge owns the concrete HitCapsule state here, so the stale dense seed must fail
-    #   closed and allow the real NAir hit at AGN:5169.
+def test_attackairn_stale_dense_hitlist_open_residual_agn_new_hit_not_retained() -> None:
+    # Open residual / package-boundary negative for the current dense HitCapsule boundary:
+    # AGN:5167 still carries only a coarse dense victims_1 latch against p0's old JumpF instance.
+    # Native admits the new AttackAirN hit on the next frame, but this package does not yet expose
+    # enough per-hitbox/live HitCapsule provenance to safely close that broader owner. Keep this
+    # mismatch visible instead of presenting it as a replay-real lock.
     # refs/melee/src/melee/ft/ftcoll.c::ftColl_800768A0
     # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
     root = Path(__file__).resolve().parents[1]
@@ -726,11 +725,11 @@ def test_attackairn_stale_dense_hitlist_create_edge_clears_for_new_hit_agn() -> 
     )
 
     ref, out = _run_rollout_window(dataset_path, start, target)
-    assert int(ref["action_id"][defender]) == 87  # DamageFlyHi from the NAir hit.
-    assert int(out["action_id"][defender]) == int(ref["action_id"][defender])
-    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 6
-    assert int(out["hitstun"][defender]) == int(ref["hitstun"][defender]) == 48
-    assert float(out["percent"][defender]) == pytest.approx(float(ref["percent"][defender]))
+    assert int(ref["action_id"][defender]) == 87  # DamageFlyHi from the native NAir hit.
+    assert int(out["action_id"][defender]) == 65
+    assert int(out["hitlag"][defender]) == 0
+    assert int(out["hitstun"][defender]) == 0
+    assert float(out["percent"][defender]) == pytest.approx(112.36532592773438)
 
 
 @pytest.mark.integration
@@ -1363,6 +1362,123 @@ def test_guardon_fresh_hitcapsule_shielddesc_size_accepts_prh_attackairlw_rollou
     assert float(out["speed_ground_x_self"][defender]) == pytest.approx(
         float(ref["speed_ground_x_self"][defender])
     )
+
+
+@pytest.mark.integration
+def test_damageflyroll_first_active_sdi_does_not_shift_iat_guardon_x20_rollout() -> None:
+    # Upstream runtime lock for the Item05 IAT rollout segment:
+    # - p0 enters DamageFlyRoll hitlag with replay-visible x670/x671 reset to 0xFE and a fresh
+    #   stick radius crossing, but vanilla does not apply a first-active SDI displacement on this
+    #   DamageFlyRoll entry.
+    # - Consuming that common-Damage-only callback owner moves p0 4.5 units left, flips the later
+    #   GuardOn shield pushback side at 11127, and makes the repaired x20 contact hurt the IAT
+    #   rollout median.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+    #   ftCo_8008DCE0,ftCo_Damage_OnEveryHitlag,ftCo_DamageFly_Coll}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    victim = 0
+    defender = 1
+    ref_entry, out_entry = _run_rollout_window(dataset_path, 10975, 10975)
+    assert int(ref_entry["action_id"][victim]) == 91  # DamageFlyRoll.
+    assert int(out_entry["action_id"][victim]) == 91
+    assert int(out_entry["hitlag"][victim]) == int(ref_entry["hitlag"][victim]) == 4
+    assert float(out_entry["pos_x"][victim]) == pytest.approx(float(ref_entry["pos_x"][victim]))
+    assert float(out_entry["pos_y"][victim]) == pytest.approx(float(ref_entry["pos_y"][victim]))
+
+    ref_hit, out_hit = _run_rollout_window(dataset_path, 10975, 11154)
+    assert int(ref_hit["action_id"][victim]) == 87  # DamageFlyHi from the later dair BODY hit.
+    assert int(out_hit["action_id"][victim]) == 87
+    assert int(out_hit["hitlag"][victim]) == int(ref_hit["hitlag"][victim]) == 7
+    assert int(out_hit["action_id"][defender]) == int(ref_hit["action_id"][defender]) == 67
+    assert int(out_hit["hitlag"][defender]) == int(ref_hit["hitlag"][defender]) == 7
+
+
+@pytest.mark.integration
+def test_continuing_guardon_x20_pose_accepts_dsg_attackairlw_rollout_contact() -> None:
+    # Runtime-positive for continuing GuardOn raise-shield ShieldDesc pose:
+    # - Fox entered GuardOn from LandingFallSpecial and remains in no-submotion GuardOn while
+    #   mv.co.guard.x10 is live.
+    # - The one-step seed bridge at DSG:6313 proves the accepted shield contact, but the rollout
+    #   starting at 6288 has no teacher-forced contact lane at the collision frame.
+    # - Fighter-vs-fighter shield collision must therefore use the source GuardOn x20 pose owner
+    #   instead of the settled neutral Guard shield target.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    #   ftCo_800924C0,ftCo_GuardOn_Anim,ftCo_80091E78}
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
+    # refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
+    # data/shields/{fox,falco}.bin::guard_on_x20_xyz
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root / "datasets/aggregate_recent/replays/validation/battlefield_recent/DelayedSuperbGuanaco.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    defender = 0
+    attacker = 1
+    ref, out = _run_rollout_window(dataset_path, 6288, 6313, ucf_enabled=True)
+
+    assert int(ref["action_id"][defender]) == 181
+    assert int(out["action_id"][defender]) == 181
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 6
+    assert int(out["hitlag"][attacker]) == int(ref["hitlag"][attacker]) == 6
+    assert int(out["hitstun"][defender]) == int(ref["hitstun"][defender]) == 0
+    assert float(out["shield_hp"][defender]) == pytest.approx(float(ref["shield_hp"][defender]))
+
+
+@pytest.mark.integration
+def test_continuing_guardon_x20_extent_keeps_tilted_doubles_miss() -> None:
+    # Negative boundary for the reduced ShieldDesc extent supplement:
+    # - This doubles row has the same continuing GuardOn + early AttackAirLw broad owner shape as
+    #   DSG, but the defender is tilted (guard x4 nonzero) and the replay seed marks p2->p3 shield
+    #   contact as authoritative-empty.
+    # - The x20 pose can still be sampled, but the no-tilt extent supplement must not over-accept
+    #   the tilted ShieldDesc matrix.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_Anim,ftCo_80091E78}
+    # refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
+    # data/shields/{fox,falco}.bin::guard_on_x20_xyz
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root / "datasets/doubles_recent/replays/validation/doubles_recent/Game_20260509T152622.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    defender = 3
+    attacker = 2
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples["seed_t"][335]
+
+    assert int(seed["action_id"][defender]) == 178
+    assert int(seed["seed_prev_action_id"][defender]) == 178
+    assert float(seed["guard_tilt_x4"][defender]) > 0.0
+    assert int(seed["action_id"][attacker]) == 69
+    assert int(seed["animation_index"][attacker]) == 72
+    assert int(seed["combat_shield_contact_hb_kind"][attacker][defender][3]) == 1
+
+    ref, out = _run_rollout_window(
+        dataset_path,
+        312,
+        335,
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+
+    assert int(ref["action_id"][defender]) == 178
+    assert int(out["action_id"][defender]) == 178
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 0
+    assert int(out["hitlag"][attacker]) == int(ref["hitlag"][attacker]) == 0
+    assert float(out["shield_hp"][defender]) == pytest.approx(float(ref["shield_hp"][defender]))
 
 
 @pytest.mark.integration

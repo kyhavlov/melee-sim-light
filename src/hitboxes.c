@@ -22,6 +22,34 @@ static inline size_t idx_hitbox(int bi, int p, int hb_i) {
          (size_t)hb_i;
 }
 
+static inline void hitboxes_clear_world_slot(MslBatch* batch, int bi, int p, int hi) {
+  const size_t oi = idx_hitbox(bi, p, hi);
+  batch->state.hitbox_enabled[oi] = 0;
+  batch->state.hitbox_x[oi] = 0.0f;
+  batch->state.hitbox_y[oi] = 0.0f;
+  batch->state.hitbox_z[oi] = 0.0f;
+  batch->state.hitbox_radius[oi] = 0.0f;
+  batch->state.hitbox_damage[oi] = 0.0f;
+  batch->state.hitbox_bone_part_id[oi] = 0;
+  batch->state.hitbox_u16_0[oi] = 0;
+  batch->state.hitbox_u16_1[oi] = 0;
+  batch->state.hitbox_u16_2[oi] = 0;
+  batch->state.hitbox_u16_3[oi] = 0;
+  batch->state.hitbox_u16_4[oi] = 0;
+  batch->state.hitbox_u16_5[oi] = 0;
+  batch->state.hitbox_u16_6[oi] = 0;
+  batch->state.hitbox_u16_7[oi] = 0;
+  batch->state.hitbox_angle[oi] = 0;
+  batch->state.hitbox_kbg[oi] = 0;
+  batch->state.hitbox_wsk[oi] = 0;
+  batch->state.hitbox_bkb[oi] = 0;
+  batch->state.hitbox_element[oi] = 0;
+  batch->state.hitbox_shield_damage[oi] = 0;
+  batch->state.hitbox_sfx_severity[oi] = 0;
+  batch->state.hitbox_sfx_kind[oi] = 0;
+  batch->state.hitbox_flags[oi] = 0;
+}
+
 static inline uint8_t hitboxes_has_authoritative_hitlist_seed(const MslBatch* batch, int bi,
                                                               int attacker, int hb) {
   if (batch == NULL || bi < 0 || attacker < 0 || attacker >= (int)MSL_MAX_PLAYERS || hb < 0 ||
@@ -99,6 +127,18 @@ static inline uint8_t hitboxes_hitlist_has_dense_seed_entry(const MslHitlistCaps
   return 0u;
 }
 
+static inline uint8_t hitboxes_hitlist_has_victims1_entry(const MslHitlistCapsule* hit) {
+  if (hit == NULL) {
+    return 0u;
+  }
+  for (size_t i = 0; i < (size_t)MSL_HITLIST_VICTIM_CAP; i++) {
+    if (!msl_hitlist_victim_is_empty(hit->victims_1[i].kind_slot)) {
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
 static inline uint8_t hitboxes_seed_bridge_is_guard_transition_owner(uint16_t action_id) {
   switch (action_id) {
     case MSL_ACT_GUARD_ON:
@@ -131,6 +171,27 @@ static inline uint8_t hitboxes_seed_bridge_is_attackair_guard_shield_reentry_own
 }
 
 static inline uint8_t hitboxes_seed_bridge_is_guard_admission_source(uint16_t action_id);
+
+static inline uint8_t hitboxes_motion_state_entry_preserves_hitcapsules(
+    uint8_t char_id, uint16_t action_id, uint8_t motion_entered_this_frame) {
+  if (!motion_entered_this_frame) {
+    return 0u;
+  }
+  if (!msl_motion_state_has_motion_flag(char_id, action_id, MSL_MOTION_FLAG_SKIP_HIT)) {
+    return 0u;
+  }
+  if (msl_motion_state_class_has(char_id, action_id, MSL_MS_CLASS_LANDING_AIR)) {
+    // The LandingAir motion rows carry Ft_MF_SkipHit in the table, but the common aerial-landing
+    // entry helper overrides the actual Fighter_ChangeMotionState flags with Ft_MF_None. Source
+    // therefore takes Fighter_ChangeMotionState's ftColl_8007AFF8 clear path on LandingAir entry;
+    // do not preserve an aerial's x914 HitCapsule payload through LandingAir just from the row flag.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c::ftCo_LandingAir_EnterWithMsidLag
+    // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+    // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007AFF8
+    return 0u;
+  }
+  return 1u;
+}
 
 static inline uint8_t hitboxes_hitlist_victim_pointer_may_change(uint8_t stocks,
                                                                  uint16_t action_id) {
@@ -825,6 +886,24 @@ static void hitboxes_seed_bridge_trim_impossible_indefinite(
       // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}
       continue;
     }
+    if (attacker_action == (uint16_t)MSL_ACT_ATTACK_AIR_B &&
+        v_action == (uint16_t)MSL_ACT_DAMAGE_FLY_TOP && batch->state.hitlag[v_idx] == 0u &&
+        batch->state.hitstun[v_idx] != 0u && batch->state.instance_hit_by[v_idx] != attacker_iid) {
+      // AttackAirB active-damage stale dense latch:
+      // - AttackAirB owns multi-create HitCapsule refresh through ftAction_8007121C /
+      //   ftColl_800768A0, but the dense group seed has no per-HitCapsule insertion provenance.
+      // - For active DamageFlyTop victims, Slippi BODY attribution (`instance_hit_by`) identifies
+      //   the action instance that owns the current damage episode. If it differs from the live
+      //   AttackAirB instance, the dense group latch is stale for this HitCapsule and must clear so
+      //   the fresh BODY contact can enter ftColl_80076ED8/Fighter_ProcessHit.
+      // data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirB.events.create_hitbox
+      // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+      // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}
+      // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+      // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+      hitboxes_seed_bridge_entry_clear(e);
+      continue;
+    }
     if (attacker_action == (uint16_t)MSL_ACT_ATTACK_AIR_N && v_action == (uint16_t)MSL_ACT_WAIT &&
         batch->state.action_frame[v_idx] <= 1 && batch->state.hitlag[v_idx] == 0u &&
         batch->state.hitstun[v_idx] == 0u && e->id16 == batch->state.instance_id[v_idx]) {
@@ -1081,8 +1160,19 @@ void hitboxes_refresh(MslBatch* batch) {
       float seeded_prev_x[MSL_MAX_HITBOXES] = {0.0f};
       float seeded_prev_y[MSL_MAX_HITBOXES] = {0.0f};
       float seeded_prev_z[MSL_MAX_HITBOXES] = {0.0f};
+      uint8_t capsule_enabled[MSL_MAX_HITBOXES] = {0};
+      uint8_t capsule_group[MSL_MAX_HITBOXES] = {0};
+      uint8_t preserve_skiphit_geometry[MSL_MAX_HITBOXES] = {0};
+      uint8_t preserved_skiphit_count = 0u;
       uint8_t preserve_frozen_hitlag_hitboxes = 0u;
       uint8_t preserved_hitbox_count = 0u;
+      const uint8_t char_id = batch->state.char_id[idx];
+      const uint16_t action_id = batch->state.action_id[idx];
+      const uint8_t motion_entered_this_frame =
+          (action_id != batch->state.prev_action_id[idx]) ? 1u : 0u;
+      const uint8_t motion_preserves_hitcapsules =
+          hitboxes_motion_state_entry_preserves_hitcapsules(char_id, action_id,
+                                                            motion_entered_this_frame);
 
       // Hitlag freeze ownership:
       // - Fighter_8006A360 skips ftAnim_8006EBA4 / anim_cb / ftColl_800764DC while x2219_b5
@@ -1103,6 +1193,17 @@ void hitboxes_refresh(MslBatch* batch) {
       for (int hi = 0; hi < MSL_MAX_HITBOXES; hi++) {
         const size_t oi = idx_hitbox(bi, p, hi);
         x43_b2_prev[hi] = batch->state.hitbox_x43_b2[oi];
+        capsule_enabled[hi] = batch->state.hitbox_capsule_enabled[oi];
+        capsule_group[hi] = batch->state.hitbox_capsule_group[oi];
+        if (motion_entered_this_frame && !motion_preserves_hitcapsules) {
+          // Fighter_ChangeMotionState calls ftColl_8007AFF8 unless Ft_MF_SkipHit is set. That
+          // disables x914 slots but does not erase their victim rings; a later create edge owns
+          // clear/copy through ftColl_800768A0.
+          // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+          // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007AFF8
+          capsule_enabled[hi] = 0u;
+          batch->state.hitbox_capsule_enabled[oi] = 0u;
+        }
         if (batch->state.hitbox_prev_bootstrap[idx] == 2u && batch->state.hitbox_prev_enabled[oi]) {
           seeded_prev_enabled[hi] = 1u;
           seeded_prev_x[hi] = batch->state.hitbox_prev_x[oi];
@@ -1118,11 +1219,27 @@ void hitboxes_refresh(MslBatch* batch) {
         batch->state.hitbox_prev_z[oi] = batch->state.hitbox_z[oi];
         batch->state.hitbox_pose_create[oi] = 0u;
         batch->state.hitbox_enable_edge[oi] = 0u;
+        const uint8_t keep_skiphit_geometry =
+            (motion_preserves_hitcapsules && capsule_enabled[hi] && batch->state.hitbox_enabled[oi])
+                ? 1u
+                : 0u;
         if (preserve_frozen_hitlag_hitboxes) {
           batch->state.hitbox_x43_b2[oi] = x43_b2_prev[hi];
           if (batch->state.hitbox_enabled[oi]) {
             preserved_hitbox_count = (uint8_t)(preserved_hitbox_count + 1u);
           }
+          continue;
+        }
+        if (keep_skiphit_geometry) {
+          // Ft_MF_SkipHit preserves the whole x914 HitCapsule payload, not just victims_1. Keep
+          // the previous active geometry only across the Fighter_ChangeMotionState entry that used
+          // the flag. Ordinary sustained aerial frames still run their script/callback owner below;
+          // treating the motion flag as a per-frame carry over-preserves stale AttackAir geometry.
+          // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+          // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+          preserve_skiphit_geometry[hi] = 1u;
+          preserved_skiphit_count = (uint8_t)(preserved_skiphit_count + 1u);
+          batch->state.hitbox_x43_b2[oi] = x43_b2_prev[hi];
           continue;
         }
         batch->state.hitbox_x43_b2[oi] = 0u;
@@ -1170,6 +1287,16 @@ void hitboxes_refresh(MslBatch* batch) {
         continue;
       }
 
+      if (msl_motion_state_class_has(char_id, action_id, MSL_MS_CLASS_LANDING_AIR)) {
+        // LandingAir's callback owner is landing animation/IASA only. The aerial source has already
+        // run ftCo_LandingAir_EnterWithMsidLag -> Fighter_ChangeMotionState(Ft_MF_None), so x914
+        // HitCapsules are cleared and no LandingAir script hitboxes are emitted for combat.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c::{
+        //   ftCo_LandingAir_EnterWithMsidLag,ftCo_LandingAir_Anim}
+        // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+        continue;
+      }
+
       // Same-frame motion-state entry ownership:
       // - Entry paths such as ftFx_SpecialLw_Enter call ftAnim_8006EBA4 after
       //   Fighter_ChangeMotionState, so frame-0 create_hitbox commands can have fired even when
@@ -1180,16 +1307,12 @@ void hitboxes_refresh(MslBatch* batch) {
       // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLw_Enter
       // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
       // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007AD18,ftColl_800768A0}
-      const uint8_t motion_entered_this_frame =
-          (batch->state.action_id[idx] != batch->state.prev_action_id[idx]) ? 1u : 0u;
-
       const uint32_t anim_u32 = batch->state.animation_index[idx];
       if (anim_u32 > 0xFFFFu) {
         continue;
       }
       const float anim_frame_f32 = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
 
-      const uint8_t char_id = batch->state.char_id[idx];
       const uint16_t msid = (uint16_t)anim_u32;
       const uint16_t pose_frame = msl_anim_frame_floor_u16(anim_frame_f32);
 
@@ -1197,6 +1320,9 @@ void hitboxes_refresh(MslBatch* batch) {
       uint16_t event_count = 0;
       if (hitboxes_get_events(char_id, msid, &events, &event_count) != 0 || events == NULL ||
           event_count == 0) {
+        if (preserved_skiphit_count != 0u) {
+          batch->state.hitbox_count[idx] = preserved_skiphit_count;
+        }
         continue;
       }
 
@@ -1213,6 +1339,7 @@ void hitboxes_refresh(MslBatch* batch) {
       uint8_t have_prev[MSL_MAX_HITBOXES] = {0};
       MslHitboxEvent def_prev[MSL_MAX_HITBOXES] = {0};
       uint8_t pose_create_count[MSL_MAX_HITBOXES] = {0};
+      uint8_t pose_create_enable_edge[MSL_MAX_HITBOXES] = {0};
       uint8_t x43_b2_cur[MSL_MAX_HITBOXES] = {0};
       uint16_t first_create_frame[MSL_MAX_HITBOXES];
       uint16_t second_create_frame[MSL_MAX_HITBOXES];
@@ -1350,9 +1477,15 @@ void hitboxes_refresh(MslBatch* batch) {
             if (ev->hitbox_id == 0xFFu) {
               for (int hi = 0; hi < MSL_MAX_HITBOXES; hi++) {
                 have_prev[hi] = 0;
+                capsule_enabled[hi] = 0u;
+                preserve_skiphit_geometry[hi] = 0u;
+                hitboxes_clear_world_slot(batch, bi, p, hi);
               }
             } else if (ev->hitbox_id < (uint8_t)MSL_MAX_HITBOXES) {
               have_prev[ev->hitbox_id] = 0;
+              capsule_enabled[ev->hitbox_id] = 0u;
+              preserve_skiphit_geometry[ev->hitbox_id] = 0u;
+              hitboxes_clear_world_slot(batch, bi, p, (int)ev->hitbox_id);
             }
           } else if (ev->hitbox_id < (uint8_t)MSL_MAX_HITBOXES) {
             def_prev[ev->hitbox_id] = *ev;
@@ -1368,20 +1501,39 @@ void hitboxes_refresh(MslBatch* batch) {
               def[hi] = def_prev[hi];
               have_def[hi] = 1;
               x43_b2_cur[hi] = x43_b2_prev[hi];
+              if (!motion_entered_this_frame || motion_preserves_hitcapsules) {
+                // Reseed can enter in the middle of an already-active HitCapsule window before
+                // the internal x914 enabled/group lanes exist. The active script snapshot proves
+                // the slot is enabled, so initialize x914 from the current definition before any
+                // same-frame create command decides whether ftColl_800768A0 should copy/clear.
+                // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+                // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007AD18,ftColl_800768A0}
+                capsule_enabled[hi] = 1u;
+                capsule_group[hi] = hitlist_hit_group_from_u16_7(def[hi].u16_7);
+              }
 
               // Seed materialize the victim list for hitboxes already active at pose_frame-1.
               const size_t hl_i = idx_hitbox(bi, p, hi);
-              if (motion_entered_this_frame) {
+              if (motion_entered_this_frame && !motion_preserves_hitcapsules) {
                 hitlist_capsule_clear(&batch->state.fighter_hitlist[hl_i]);
                 batch->state.fighter_hitlist_init_gen[hl_i] = hitlist_gen;
                 x43_b2_cur[hi] = 0u;
               } else if (batch->state.fighter_hitlist_init_gen[hl_i] != hitlist_gen) {
-                const uint8_t seed_materialized_now = 1u;
-                const uint8_t g = hitlist_hit_group_from_u16_7(def[hi].u16_7);
-                hitlist_seed_init_fighter_hitbox_from_group(batch, bi, p, hi, g);
-                hitboxes_seed_bridge_trim_impossible_indefinite(
-                    batch, bi, p, hi, &def[hi], first_create_frame[hi], second_create_frame[hi],
-                    first_create_damage[hi], pose_frame, seed_materialized_now, 1u);
+                if (hitboxes_hitlist_has_victims1_entry(&batch->state.fighter_hitlist[hl_i])) {
+                  // A live collision path has already populated this HitCapsule. Preserve that
+                  // source-owned victims_1 list instead of overwriting it with teacher-forced seed
+                  // materialization on a later refresh.
+                  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076808,ftColl_8007AD18}
+                  // refs/melee/src/melee/lb/types.h::HitCapsule
+                  batch->state.fighter_hitlist_init_gen[hl_i] = hitlist_gen;
+                } else {
+                  const uint8_t seed_materialized_now = 1u;
+                  const uint8_t g = hitlist_hit_group_from_u16_7(def[hi].u16_7);
+                  hitlist_seed_init_fighter_hitbox_from_group(batch, bi, p, hi, g);
+                  hitboxes_seed_bridge_trim_impossible_indefinite(
+                      batch, bi, p, hi, &def[hi], first_create_frame[hi], second_create_frame[hi],
+                      first_create_damage[hi], pose_frame, seed_materialized_now, 1u);
+                }
               } else {
                 hitboxes_seed_bridge_trim_impossible_indefinite(
                     batch, bi, p, hi, &def[hi], first_create_frame[hi], second_create_frame[hi],
@@ -1408,23 +1560,30 @@ void hitboxes_refresh(MslBatch* batch) {
             for (int hi = 0; hi < MSL_MAX_HITBOXES; hi++) {
               have_def[hi] = 0;
               x43_b2_cur[hi] = 0u;
+              capsule_enabled[hi] = 0u;
+              preserve_skiphit_geometry[hi] = 0u;
+              hitboxes_clear_world_slot(batch, bi, p, hi);
             }
           } else if (ev->hitbox_id < (uint8_t)MSL_MAX_HITBOXES) {
             have_def[ev->hitbox_id] = 0;
             x43_b2_cur[ev->hitbox_id] = 0u;
+            capsule_enabled[ev->hitbox_id] = 0u;
+            preserve_skiphit_geometry[ev->hitbox_id] = 0u;
+            hitboxes_clear_world_slot(batch, bi, p, (int)ev->hitbox_id);
           }
         } else if (ev->hitbox_id < (uint8_t)MSL_MAX_HITBOXES) {
           const uint8_t hb = ev->hitbox_id;
           pose_create_count[hb] = (uint8_t)(pose_create_count[hb] + 1u);
           const uint8_t new_g = hitlist_hit_group_from_u16_7(ev->u16_7);
-          const uint8_t had_old = have_def[hb] ? 1u : 0u;
-          const uint8_t old_g = had_old ? hitlist_hit_group_from_u16_7(def[hb].u16_7) : 0u;
+          const uint8_t had_old = capsule_enabled[hb] ? 1u : 0u;
+          const uint8_t old_g = had_old ? capsule_group[hb] : 0u;
           uint8_t x43_b2_next = had_old ? x43_b2_cur[hb] : 0u;
 
           def[hb] = *ev;
           have_def[hb] = 1;
 
           const uint8_t enable_edge = (!had_old || old_g != new_g) ? 1u : 0u;
+          pose_create_enable_edge[hb] = enable_edge;
           if (enable_edge) {
             // ftColl_800768A0: copy from an existing active hitbox with same hit_group, else clear.
             uint8_t copied = 0;
@@ -1432,10 +1591,10 @@ void hitboxes_refresh(MslBatch* batch) {
               if (src == (int)hb) {
                 continue;
               }
-              if (!have_def[src]) {
+              if (!capsule_enabled[src]) {
                 continue;
               }
-              const uint8_t src_g = hitlist_hit_group_from_u16_7(def[src].u16_7);
+              const uint8_t src_g = capsule_group[src];
               if (src_g != new_g) {
                 continue;
               }
@@ -1507,6 +1666,8 @@ void hitboxes_refresh(MslBatch* batch) {
           // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
           (void)x43_b2_next;
           x43_b2_cur[hb] = 0u;
+          capsule_enabled[hb] = 1u;
+          capsule_group[hb] = new_g;
         }
       }
 
@@ -1517,20 +1678,35 @@ void hitboxes_refresh(MslBatch* batch) {
             def[hi] = def_prev[hi];
             have_def[hi] = 1;
             x43_b2_cur[hi] = x43_b2_prev[hi];
+            if (!motion_entered_this_frame || motion_preserves_hitcapsules) {
+              // Same source owner as the pose-frame event path above: active-at-previous-frame
+              // definitions imply an enabled x914 slot for ftAction_8007121C copy/clear decisions.
+              capsule_enabled[hi] = 1u;
+              capsule_group[hi] = hitlist_hit_group_from_u16_7(def[hi].u16_7);
+            }
 
             // Seed materialize for hitboxes active at pose_frame-1 even when no pose_frame events fire.
             const size_t hl_i = idx_hitbox(bi, p, hi);
-            if (motion_entered_this_frame) {
+            if (motion_entered_this_frame && !motion_preserves_hitcapsules) {
               hitlist_capsule_clear(&batch->state.fighter_hitlist[hl_i]);
               batch->state.fighter_hitlist_init_gen[hl_i] = hitlist_gen;
               x43_b2_cur[hi] = 0u;
             } else if (batch->state.fighter_hitlist_init_gen[hl_i] != hitlist_gen) {
-              const uint8_t seed_materialized_now = 1u;
-              const uint8_t g = hitlist_hit_group_from_u16_7(def[hi].u16_7);
-              hitlist_seed_init_fighter_hitbox_from_group(batch, bi, p, hi, g);
-              hitboxes_seed_bridge_trim_impossible_indefinite(
-                  batch, bi, p, hi, &def[hi], first_create_frame[hi], second_create_frame[hi],
-                  first_create_damage[hi], pose_frame, seed_materialized_now, 1u);
+              if (hitboxes_hitlist_has_victims1_entry(&batch->state.fighter_hitlist[hl_i])) {
+                // A live collision path has already populated this HitCapsule. Preserve that
+                // source-owned victims_1 list instead of overwriting it with teacher-forced seed
+                // materialization on a later refresh.
+                // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076808,ftColl_8007AD18}
+                // refs/melee/src/melee/lb/types.h::HitCapsule
+                batch->state.fighter_hitlist_init_gen[hl_i] = hitlist_gen;
+              } else {
+                const uint8_t seed_materialized_now = 1u;
+                const uint8_t g = hitlist_hit_group_from_u16_7(def[hi].u16_7);
+                hitlist_seed_init_fighter_hitbox_from_group(batch, bi, p, hi, g);
+                hitboxes_seed_bridge_trim_impossible_indefinite(
+                    batch, bi, p, hi, &def[hi], first_create_frame[hi], second_create_frame[hi],
+                    first_create_damage[hi], pose_frame, seed_materialized_now, 1u);
+              }
             } else {
               hitboxes_seed_bridge_trim_impossible_indefinite(
                   batch, bi, p, hi, &def[hi], first_create_frame[hi], second_create_frame[hi],
@@ -1580,6 +1756,9 @@ void hitboxes_refresh(MslBatch* batch) {
       uint8_t out_count = 0;
       for (int hi = 0; hi < MSL_MAX_HITBOXES; hi++) {
         if (!have_def[hi]) {
+          if (preserve_skiphit_geometry[hi]) {
+            out_count = (uint8_t)(out_count + 1u);
+          }
           continue;
         }
 
@@ -1658,7 +1837,9 @@ void hitboxes_refresh(MslBatch* batch) {
 
         const size_t oi = idx_hitbox(bi, p, hi);
         uint8_t enable_edge = 1u;
-        if (have_prev[hi] && !motion_entered_this_frame) {
+        if (pose_create_count[hi] != 0u) {
+          enable_edge = pose_create_enable_edge[hi];
+        } else if (have_prev[hi] && !motion_entered_this_frame) {
           const uint8_t old_g = hitlist_hit_group_from_u16_7(def_prev[hi].u16_7);
           const uint8_t new_g = hitlist_hit_group_from_u16_7(def[hi].u16_7);
           enable_edge = (old_g != new_g) ? 1u : 0u;
@@ -1689,6 +1870,8 @@ void hitboxes_refresh(MslBatch* batch) {
         batch->state.hitbox_sfx_severity[oi] = (uint8_t)(def[hi].u16_5 & 0xFFu);
         batch->state.hitbox_sfx_kind[oi] = (uint8_t)((def[hi].u16_5 >> 8) & 0xFFu);
         batch->state.hitbox_flags[oi] = def[hi].u16_6;
+        batch->state.hitbox_capsule_enabled[oi] = capsule_enabled[hi];
+        batch->state.hitbox_capsule_group[oi] = capsule_group[hi];
         // Same-frame entry capsule continuity:
         // - ftAction_8007121C runs from the fighter anim script at proc priority 1.
         // - ftColl_8007AE80 refreshes hitcapsules later at priority 9.
@@ -1707,6 +1890,15 @@ void hitboxes_refresh(MslBatch* batch) {
         // refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C
         batch->state.hitbox_x43_b2[oi] = x43_b2_cur[hi];
         out_count++;
+      }
+
+      for (int hi = 0; hi < MSL_MAX_HITBOXES; hi++) {
+        if (have_def[hi]) {
+          continue;
+        }
+        const size_t oi = idx_hitbox(bi, p, hi);
+        batch->state.hitbox_capsule_enabled[oi] = capsule_enabled[hi];
+        batch->state.hitbox_capsule_group[oi] = capsule_group[hi];
       }
 
       batch->state.hitbox_count[idx] = out_count;

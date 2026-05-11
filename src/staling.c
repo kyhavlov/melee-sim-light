@@ -91,3 +91,15 @@ void staling_queue_update(MslBatch* batch, size_t fighter_idx, uint16_t move_id,
   qi = (qi == (uint8_t)MSL_STALE_QUEUE_SIZE - 1) ? 0 : (uint8_t)(qi + 1);
   batch->state.stale_queue_index[fighter_idx] = qi;
 }
+
+void staling_queue_reset_for_player(MslBatch* batch, size_t fighter_idx) {
+  if (batch == NULL) {
+    return;
+  }
+  batch->state.stale_queue_index[fighter_idx] = 0u;
+  const size_t base = fighter_idx * (size_t)MSL_STALE_QUEUE_SIZE;
+  for (int i = 0; i < MSL_STALE_QUEUE_SIZE; i++) {
+    batch->state.stale_move_id[base + (size_t)i] = 0u;
+    batch->state.stale_attack_instance[base + (size_t)i] = 0u;
+  }
+}

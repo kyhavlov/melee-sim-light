@@ -107,6 +107,19 @@ static int load_yoshi_shyguy(const uint8_t* buf, size_t sz) {
   for (int i = 0; i < MSL_YOSHI_SHYGUY_DYN_Y_COUNT; i++, off += sizeof(float)) {
     g_yoshi_shyguy.dyn_y_vel[i] = read_f32_le(buf + off);
   }
+  float dyn_y_pos = 0.0f;
+  for (int phase = 0; phase < 256; phase++) {
+    float dyn_y_delta = 0.0f;
+    if (phase != 0) {
+      if (phase <= MSL_YOSHI_SHYGUY_DYN_Y_COUNT) {
+        dyn_y_delta = g_yoshi_shyguy.dyn_y_vel[phase - 1];
+      } else {
+        dyn_y_delta = g_yoshi_shyguy.dyn_y_vel[256 - phase];
+      }
+    }
+    dyn_y_pos += dyn_y_delta;
+    g_yoshi_shyguy.dyn_y_pos_after_phase[phase] = dyn_y_pos;
+  }
   if (g_yoshi_shyguy.stage_id == 0u || g_yoshi_shyguy.item_kind == 0u ||
       g_yoshi_shyguy.timer_reset == 0u || g_yoshi_shyguy.spawn_delay_step == 0u ||
       !(g_yoshi_shyguy.fall_speed_max > 0.0f) || !(g_yoshi_shyguy.damage_mul > 0.0f) ||

@@ -183,6 +183,63 @@ def test_reboundstop_entry_uses_swept_hitbox_hitbox_clank_fsp_5466() -> None:
 
 
 @pytest.mark.integration
+def test_landingair_entry_clears_carried_attackair_hitcapsules_lim_4610() -> None:
+    # Replay-real rollout lock for LandingAir entry hitcapsule ownership:
+    # - ftCo_LandingAir_EnterWithMsidLag calls Fighter_ChangeMotionState with Ft_MF_None, even
+    #   though the destination motion-state row has Ft_MF_SkipHit.
+    # - Fighter_ChangeMotionState therefore takes ftColl_8007AFF8 and clears the prior aerial's
+    #   x914 HitCapsules on LandingAir entry.
+    # - LIM:4610 previously carried p0 Falco's AttackAirN capsule into LandingAirN, causing a
+    #   spurious hitbox-vs-hitbox clank/ReboundStop against p1 Fox AttackAirN. Vanilla clears p0's
+    #   LandingAirN capsules, so p1's aerial damages p0 instead.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c::ftCo_LandingAir_EnterWithMsidLag
+    # refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007AFF8,ftColl_80078C70}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
+        "LawfulInsistentMeerkat.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    start_record = 3562
+    target_record = 4610
+    ds = read_dataset(str(dataset_path))
+    assert int(ds.samples.shape[0]) > target_record, (
+        f"dataset too short for lock row: record={target_record}"
+    )
+
+    seed_t = ds.samples[target_record]["seed_t"]
+    ref_t1 = ds.samples[target_record]["ref_t1"]
+    assert int(seed_t["action_id"][0]) == 70  # LandingAirN
+    assert int(seed_t["action_id"][1]) == 63  # AttackAirN
+    assert int(ref_t1["action_id"][0]) == 90  # DamageFlyTop
+    assert int(ref_t1["action_id"][1]) == 63  # AttackAirN, not ReboundStop
+    assert int(ref_t1["hitlag"][0]) > 0
+    assert int(ref_t1["hitstun"][0]) > 0
+    assert int(ref_t1["hitstun"][1]) == 0
+
+    ref_row, out_row = _run_rollout_to_record(dataset_path, start_record, target_record)
+    for p in (0, 1):
+        for field in ("action_id", "animation_index", "hitlag", "hitstun", "on_ground"):
+            got = int(out_row[field][p])
+            exp = int(ref_row[field][p])
+            assert got == exp, f"record={target_record} p={p} field={field} expected={exp} got={got}"
+    assert float(out_row["percent"][0]) == pytest.approx(float(ref_row["percent"][0]), abs=1e-5)
+    # state_flags[4]&0x80 is the existing camera-subject/magnify-display lane ignored by the RL1
+    # gameplay profile; this lock is for the LandingAir HitCapsule combat owner.
+    got_flags = out_row["state_flags"][0].copy()
+    exp_flags = ref_row["state_flags"][0].copy()
+    got_flags[4] &= np.uint8(0x7F)
+    exp_flags[4] &= np.uint8(0x7F)
+    assert got_flags.tolist() == exp_flags.tolist()
+
+
+@pytest.mark.integration
 def test_reboundstop_entry_clank_precedes_stale_body_hitlist_hhg_8674() -> None:
     # Replay-real lock for the remaining former-F08h1 collision-order slice:
     # - p0 AttackDash hb1 carries a seeded BODY victim ring from the prior active window.

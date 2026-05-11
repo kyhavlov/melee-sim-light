@@ -124,6 +124,38 @@ def test_enable_edge_tiplog_phantom_rows_do_not_enter_damage(dataset_name: str, 
 
 
 @pytest.mark.integration
+def test_specialairsstart_pre_anim_pose_rejects_dtilt_body_cnm_5292() -> None:
+    # Fox/Falco Side-B Start collision-pose ownership:
+    # - BODY collision consumes the same frame's pre-Anim JObj pose on SpecialAirSStart startup.
+    # - The generic post-Anim pose plus x58/x4C sweep admits a false Falco dtilt BODY hit against
+    #   Fox Side-B startup low hurtcaps on CNM:5292; vanilla keeps Fox in SpecialAirSStart with no
+    #   hitlag/hitstun.
+    # - Adjacent real Falco BODY hits on the same flagless parts stay admitted by the row-level
+    #   validation diff; this is not a generic attacker model-scale or part-id filter.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
+    #   ftFx_SpecialSStart_Anim,ftFx_SpecialAirSStart_Anim,ftFx_SpecialSStart_Coll,
+    #   ftFx_SpecialAirSStart_Coll}
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80076ED8
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    seed, out, ref = _step_one_row(dataset_path, 5292)
+    defender = 0
+    attacker = 1
+    assert int(seed["action_id"][defender]) == 350  # SpecialAirSStart
+    assert int(seed["action_id"][attacker]) == 57  # AttackLw3
+    assert int(seed["action_frame"][attacker]) == 7
+    for field in ("action_id", "animation_index", "hitlag", "hitstun", "instance_id", "percent"):
+        assert int(out[field][defender]) == int(ref[field][defender]), f"defender field={field}"
+    for field in ("action_id", "animation_index", "hitlag", "hitstun", "instance_id"):
+        assert int(out[field][attacker]) == int(ref[field][attacker]), f"attacker field={field}"
+
+
+@pytest.mark.integration
 def test_damageflyhi_terminal_aobj_pose_selects_high_hurtcap_dcc_8565() -> None:
     # DamageFly terminal AObj collision pose:
     # - ftCo_DamageFly_Anim keeps the victim in active hitstun after the non-looping AObj reaches

@@ -74,3 +74,75 @@ def test_shine_loop_release_lag_holds_loop_until_countdown_expires() -> None:
         assert int(out["animation_index"][p]) == int(row["ref_t1"]["animation_index"][0, p])
     finally:
         binding.destroy(handle)
+
+
+@pytest.mark.integration
+def test_shine_turn_to_loop_followup_does_not_double_tick_release_lag_hvg() -> None:
+    # HVG 2923 -> 2937 runs Shine Loop -> Turn -> Loop while B is released. Turn_Anim owns one
+    # releaseLag tick before ftFx_SpecialLwHit_Check returns to Loop; the same-frame destination
+    # Loop IASA may run, but Loop_Anim must not double-tick the hidden releaseLag or End starts a
+    # frame early.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{
+    #   ftFx_SpecialLwTurn_Anim,ftFx_SpecialLwHit_Check,ftFx_SpecialLwLoop_IASA}
+    root = Path(__file__).resolve().parents[1]
+    rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/HilariousVillainousGiraffe.msl"
+    dataset_path = root / rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {rel}")
+
+    ds = read_dataset(str(dataset_path))
+    start_record = 2658
+    loop_record = 2936
+    end_record = 2937
+    p = 1
+
+    binding = importlib.import_module("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+    try:
+        binding.reseed_seed_rollout(
+            handle,
+            np.frombuffer(ds.samples[start_record]["seed_t"].tobytes(order="C"), dtype=np.uint8)
+            .copy()
+            .reshape(1, seed_stride),
+        )
+        loop_out = None
+        end_out = None
+        for record in range(start_record, end_record + 1):
+            row = ds.samples[record]
+            binding.step_input(
+                handle,
+                np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8)
+                .copy()
+                .reshape(1, input_stride),
+                np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8)
+                .copy()
+                .reshape(1, input_stride),
+            )
+            binding.write_compare(handle, out_compare_bytes)
+            out = out_compare_bytes.view(COMPARE_DTYPE).reshape((1,))[0].copy()
+            if record == loop_record:
+                loop_out = out
+            if record == end_record:
+                end_out = out
+
+        assert loop_out is not None
+        assert end_out is not None
+        loop_ref = ds.samples[loop_record]["ref_t1"]
+        end_ref = ds.samples[end_record]["ref_t1"]
+        assert int(loop_out["action_id"][p]) == int(loop_ref["action_id"][p]) == 361
+        assert int(loop_out["action_frame"][p]) == int(loop_ref["action_frame"][p]) == 10
+        assert int(end_out["action_id"][p]) == int(end_ref["action_id"][p]) == 363
+        assert int(end_out["action_frame"][p]) == int(end_ref["action_frame"][p]) == 0
+    finally:
+        binding.destroy(handle)

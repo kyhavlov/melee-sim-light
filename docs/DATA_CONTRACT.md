@@ -1028,9 +1028,12 @@ Characters (Fox/Falco):
     - Store source-backed stage-owned item constants for `It_Kind_Heiho` so runtime item code
       consumes generated data instead of embedding DAT/FObj tables in gameplay C.
     - Covers the replay-seeded/eval active-motion/state-delay slice only. The seed surface may
-      carry prefix-causal Shy Guy internals such as previous dynamic-bone velocity, active AObj
-      phase, speed index, state delay, and active turn cooldown reconstructed from visible
-      previous-frame velocity flips; it must not carry replay-next position/velocity.
+      carry Shy Guy internals such as previous dynamic-bone velocity, active AObj phase, speed
+      index, state delay, and active turn cooldown reconstructed from prefix-visible state. The
+      speed-index lane is forward-only: runtime-spawned Shy Guys get the source value from the
+      scheduler RNG owner, and replay reseeds of already-live Shy Guys mark it only once current or
+      prior rows expose nonzero active/return velocity. It must not future-backfill zero-velocity
+      active rows or carry replay-next position/velocity.
     - The separate seed lane `stage_yoshi_shyguy_spawn_rng_seed_u32/valid` carries the source
       spawn-frame HSD stream for replay rollouts through no-live countdown windows. This still does
       not close global HSD RNG consumer order for free-running gameplay before
@@ -1066,7 +1069,9 @@ Characters (Fox/Falco):
       stage data so runtime wind force does not embed DAT constants in gameplay C.
     - The replay/eval seed surface may carry the current hidden `grOldPupupu.xDC` wind direction
       (`1` left wind, `2` right wind) when derived prefix-causally by native preprocessing; it
-      must not carry next-frame fighter position or velocity.
+      also carries the remaining active-window timer derived from same-direction prefix history and
+      capped to the source `xD0` in `(45, 320)` wind episode. It must not carry next-frame fighter
+      position or velocity.
   - Sources:
     - `_iso/GrOp.dat::yakumono_param`
     - `refs/melee/src/melee/gr/groldpupupu.c::{grOldPupupu_802113E0,fn_802112F4}`

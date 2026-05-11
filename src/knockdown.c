@@ -81,6 +81,10 @@ static inline uint8_t is_knockdown_any(uint16_t a) {
 static inline uint8_t is_passivewall_action(uint16_t a);
 static inline void passivewall_launch_from_timer_expiry(MslBatch* batch, const MslCharParams* ch,
                                                         size_t idx);
+static inline uint8_t passivewall_jump_latch_input_active(MslBatch* batch, const MslCommonParams* c,
+                                                          size_t idx);
+static inline void passivewall_timer_expired_anim_owner(MslBatch* batch, const MslCharParams* ch,
+                                                        size_t idx);
 static inline uint8_t passivewall_iasa_try_air_options(MslBatch* batch, const MslCommonParams* c,
                                                        const MslCharParams* ch, size_t idx);
 
@@ -1137,10 +1141,13 @@ void knockdown_update_pre_physics(MslBatch* batch) {
                                                               : MSL_SM_PASSIVE_WALL_JUMP);
         uint8_t timer = batch->state.passivewall_timer[idx];
         if (timer != 0u) {
+          if (passivewall_jump_latch_input_active(batch, c, idx)) {
+            batch->state.passivewall_jump_latch[idx] = 1u;
+          }
           timer = (uint8_t)(timer - 1u);
           batch->state.passivewall_timer[idx] = timer;
           if (timer == 0u) {
-            passivewall_launch_from_timer_expiry(batch, ch, idx);
+            passivewall_timer_expired_anim_owner(batch, ch, idx);
             if (passivewall_iasa_try_air_options(batch, c, ch, idx)) {
               continue;
             }
@@ -2297,9 +2304,22 @@ static inline void passivewall_align_entry_x(MslBatch* batch, size_t idx, uint16
   if (anim_pose_get_transn(cid, target_msid, 0u, transn) != 0) {
     transn[2] = 0.0f;
   }
+  const MslCharParams* ch = msl_char_params(cid);
+  const float model_scaling =
+      (ch != NULL && isfinite(ch->model_scaling) && ch->model_scaling > 0.0f) ? ch->model_scaling
+                                                                              : 1.0f;
+  const float scale_y =
+      (batch->state.fighter_scale_y[idx] > 0.0f) ? batch->state.fighter_scale_y[idx] : 1.0f;
+  // ftCo_800C1E64 uses fp->x68C_transNPos after Fighter_ChangeMotionState has animated and scaled
+  // the new TransN JObj via ftAnim_8006E054 / ftCommon_GetModelScale.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::ftCo_800C1E64
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+  // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006E054
+  // refs/melee/src/melee/ft/ftlib.c::ftLib_800869D4
+  const float transn_z = transn[2] * scale_y * model_scaling;
 
   const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
-  batch->state.pos_x[idx] = wall_contact_x + transn[2] * facing_dir;
+  batch->state.pos_x[idx] = wall_contact_x + transn_z * facing_dir;
 }
 
 static inline void passivewall_launch_from_timer_expiry(MslBatch* batch, const MslCharParams* ch,
@@ -2322,6 +2342,45 @@ static inline void passivewall_launch_from_timer_expiry(MslBatch* batch, const M
   } else if (a == (uint16_t)MSL_ACT_PASSIVE_WALL) {
     batch->state.speed_air_x_self[idx] = facing_dir * ch->passivewall_vel_x;
   }
+}
+
+static inline uint8_t passivewall_jump_latch_input_active(MslBatch* batch, const MslCommonParams* c,
+                                                          size_t idx) {
+  if (batch == NULL || c == NULL) {
+    return 0u;
+  }
+  const float stick_y =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
+  // Decomp: ftCo_800C1E0C sets/chooses the jump branch when either the hidden x67E timer is still
+  // inside p_ftCommonData->x250 or the current main-stick Y is above tap-jump threshold.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::ftCo_800C1E0C
+  return ((float)batch->state.x67E[idx] < c->tech_window_frames || stick_y >= c->tap_jump_threshold)
+             ? 1u
+             : 0u;
+}
+
+static inline void passivewall_timer_expired_anim_owner(MslBatch* batch, const MslCharParams* ch,
+                                                        size_t idx) {
+  if (batch == NULL || ch == NULL) {
+    return;
+  }
+  if (batch->state.passivewall_jump_latch[idx] != 0u) {
+    const float cur_anim = batch->state.anim_frame_f32[idx];
+    batch->state.action_id[idx] = (uint16_t)MSL_ACT_PASSIVE_WALL_JUMP;
+    batch->state.animation_index[idx] = (uint32_t)MSL_SM_PASSIVE_WALL_JUMP;
+    // Decomp: inlineA0 re-enters PassiveWallJump with anim_start=fp->cur_anim_frame and
+    // anim_speed=1, consuming Fighter_ChangeMotionState side effects even when the visible action
+    // id is already PassiveWallJump.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::inlineA0
+    msl_anim_timebase_enter(batch, idx, cur_anim, 1.0f);
+    batch->state.tilt_timer_y[idx] = 0xFEu;
+  } else {
+    // Decomp: no latch means timer expiry only unfreezes the current PassiveWall{Jump} animation.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::ftCo_PassiveWall_Anim
+    msl_anim_timebase_set_rate(batch, idx, 1.0f);
+  }
+  batch->state.passivewall_jump_latch[idx] = 0u;
+  passivewall_launch_from_timer_expiry(batch, ch, idx);
 }
 
 static inline uint8_t passivewall_iasa_try_air_options(MslBatch* batch, const MslCommonParams* c,
@@ -2388,6 +2447,7 @@ static inline void enter_passive_wall_from_damage_air(MslBatch* batch, size_t id
   batch->state.speed_x_attack[idx] = 0.0f;
   batch->state.speed_y_attack[idx] = 0.0f;
   batch->state.passivewall_timer[idx] = (uint8_t)c->passivewall_timer_frames;
+  batch->state.passivewall_jump_latch[idx] = 0u;
   batch->state.tilt_timer_x[idx] = 0xFEu;
   batch->state.tilt_timer_y[idx] = 0xFEu;
   batch->state.colanim_timer_x1990[idx] = c->colanim_passivewall_x1990_frames;

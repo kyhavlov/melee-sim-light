@@ -209,6 +209,31 @@ static inline void msl_anim_timebase_apply_enter_tick_policy(MslBatch* batch, si
   }
 }
 
+static inline void msl_motion_state_start_source_clear_timer_x18c8(MslBatch* batch, size_t idx) {
+  if (batch == NULL || batch->state.on_ground[idx] == 0u ||
+      batch->state.source_clear_timer_x18c8[idx] != 0u || batch->state.last_hit_by[idx] == 6u) {
+    return;
+  }
+
+  const uint16_t a = batch->state.action_id[idx];
+  const uint32_t motion_word =
+      attack_id_motion_state_word_from_action(batch->state.char_id[idx], a);
+  // Big-endian MotionState bitfield packing: x9_b0 is bit 23 and x9_b1 is bit 22 in the
+  // extracted +0x8 word. Fighter_ChangeMotionState seeds dmg.x18C8 from p_ftCommonData->x814
+  // when entering a grounded x9_b1 state while the countdown is inactive.
+  // Runtime stores the +1-biased seed representation. The modeled landing/collision entries that
+  // reach this helper run after timers_update_post_anim(), so the first decrement is on the next
+  // simulated frame.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_ChangeMotionState,Fighter_8006A360}
+  // refs/melee/src/melee/ft/types.h::MotionState (x9_b1), fp->dmg.x18C8
+  // data/attack_id/move_id/{fox,falco}.bin::motion_state_word
+  enum { MSL_SOURCE_CLEAR_X18C8_INIT_FRAMES_X814 = 60u };
+  if ((motion_word & (uint32_t)(1u << 22)) != 0u) {
+    batch->state.source_clear_timer_x18c8[idx] = (uint8_t)MSL_SOURCE_CLEAR_X18C8_INIT_FRAMES_X814;
+    batch->state.source_clear_owner_set_phase[idx] = 1u;
+  }
+}
+
 // Forward decl: fighter attack identity update on motion-state change.
 // Defined in src/attack_identity.c.
 void attack_identity_on_motion_state_change_ft_800890D0(MslBatch* batch, size_t idx);
@@ -266,6 +291,8 @@ static inline void msl_motion_state_enter_side_effects(MslBatch* batch, size_t i
   attack_identity_on_motion_state_change_ft_800890D0(batch, idx);
 
   instance_id_on_motion_state_change_ft_800895E0(batch, idx);
+
+  msl_motion_state_start_source_clear_timer_x18c8(batch, idx);
 }
 
 static inline void msl_anim_timebase_enter(MslBatch* batch, size_t idx, float anim_start_f32,

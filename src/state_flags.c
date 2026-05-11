@@ -495,15 +495,18 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
                                                         allow_interrupt_anim_probe)) {
           f2218 |= (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
         }
-      } else if (action_id == (uint16_t)MSL_ACT_ESCAPE_N) {
-        // EscapeN (spotdodge) `allow_interrupt` lane:
-        // - ftAction command script emits `allow_interrupt` (ftAction_80071950) during EscapeN.
+      } else if (action_id == (uint16_t)MSL_ACT_ESCAPE_N ||
+                 action_id == (uint16_t)MSL_ACT_ESCAPE_AIR) {
+        // EscapeN/EscapeAir `allow_interrupt` lane:
+        // - ftAction command script emits `allow_interrupt` (ftAction_80071950) during EscapeN and
+        //   EscapeAir.
         // - Slippi state_flags[0] bit 0x80 mirrors fp->allow_interrupt (fp+0x2218 bit0).
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_EscapeN_Anim
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Anim
         // refs/melee/src/melee/ft/ftaction.c::ftAction_80071950
         // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
-        // data/moves/{fox,falco}.json moves["ftCo_SM_EscapeN"]["events"]
-        // EscapeN script timing is integer-framed in-suite; use action_frame to avoid float-timebase
+        // data/moves/{fox,falco}.json moves["ftCo_SM_Escape{N,Air}"]["events"]
+        // Escape script timing is integer-framed in-suite; use action_frame to avoid float-timebase
         // probe jitter on this lane.
         //
         // Keep this as a one-way command write (set-only). EscapeN can inherit a pre-existing

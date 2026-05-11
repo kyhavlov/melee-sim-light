@@ -470,6 +470,13 @@ MslBatch* msl_batch_create(int batch_size, int num_players) {
     return NULL;
   }
   memset(batch->rollout_clock_rng_owned, 0, (size_t)batch_size * sizeof(uint8_t));
+  batch->rollout_yoshi_shyguy_spawn_rng_installed =
+      (uint8_t*)alloc_malloc((size_t)batch_size * sizeof(uint8_t));
+  if (batch->rollout_yoshi_shyguy_spawn_rng_installed == NULL) {
+    msl_batch_destroy(batch);
+    return NULL;
+  }
+  memset(batch->rollout_yoshi_shyguy_spawn_rng_installed, 0, (size_t)batch_size * sizeof(uint8_t));
   batch->replay_rollout_reseeded = (uint8_t*)alloc_malloc((size_t)batch_size * sizeof(uint8_t));
   if (batch->replay_rollout_reseeded == NULL) {
     msl_batch_destroy(batch);
@@ -673,6 +680,7 @@ void msl_batch_destroy(MslBatch* batch) {
   alloc_free(batch->camera_mode);
   alloc_free(batch->replay_rollout_seed_frame_id);
   alloc_free(batch->replay_rollout_reseeded);
+  alloc_free(batch->rollout_yoshi_shyguy_spawn_rng_installed);
   alloc_free(batch->rollout_clock_rng_owned);
   alloc_free(batch->match_init_seed_scratch);
   state_free(&batch->state);
@@ -1334,6 +1342,14 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
          batch->state.stage_dream_whispy_wind_dir[bi] != 0u)
             ? 1u
             : 0u;
+    uint16_t whispy_wind_timer = seed->stage_dream_whispy_wind_timer_u16;
+    if (whispy_wind_timer > 274u) {
+      whispy_wind_timer = 274u;
+    }
+    batch->state.stage_dream_whispy_wind_timer[bi] =
+        batch->state.stage_dream_whispy_wind_valid[bi]
+            ? (uint16_t)((whispy_wind_timer != 0u) ? whispy_wind_timer : 1u)
+            : 0u;
     batch->state.opening_input_lock_timer[bi] = 0u;
     float match_damage_ratio = seed->match_damage_ratio;
     if (!(match_damage_ratio > 0.0f)) {
@@ -1469,6 +1485,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.throw_command_pending_pulse_frame[idx] =
           seed->throw_command_pending_pulse_frame[p];
       batch->state.throw_command_pending_seed_valid[idx] = 1u;
+      batch->state.throw_command_deferred_pulse_frame[idx] = 0u;
       batch->state.throw_pulse_crossed_curr_frame[idx] = 0u;
       batch->state.source_clear_timer_x18c8[idx] = seed->source_clear_timer_x18c8[p];
       batch->state.source_clear_owner_set_phase[idx] =
@@ -1520,6 +1537,34 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.magnify_damage_counter_x1910[idx] = seed->magnify_damage_counter_x1910[p];
       batch->state.downwait_timer[idx] = seed->downwait_timer[p];
       batch->state.passivewall_timer[idx] = seed->passivewall_timer[p];
+      batch->state.passivewall_jump_latch[idx] = 0u;
+      if ((seed->action_id[p] == (uint16_t)MSL_ACT_PASSIVE_WALL ||
+           seed->action_id[p] == (uint16_t)MSL_ACT_PASSIVE_WALL_JUMP) &&
+          seed->passivewall_timer[p] != 0u) {
+        // Seed reconstruction for `fp->mv.co.passivewall.x8`:
+        // - ftCo_800C1E64 initializes x8=false on PassiveWall{Jump} entry.
+        // - each subsequent startup IASA callback sets x8 when ftCo_800C1E0C succeeds.
+        // - public replay state does not expose x8, but it does expose fp->x67E and the
+        //   strictly-causal passivewall_timer. Rewind x67E across the elapsed startup rows to
+        //   determine whether the x67E < p_ftCommonData->x250 branch has already latched.
+        // - the current-frame tap-jump branch is input-owned and is applied by PassiveWall_IASA
+        //   during step_input, including timer-expiry rows.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::{
+        //   ftCo_800C1E64,ftCo_800C1E0C,ftCo_PassiveWall_IASA,inlineA0}
+        const MslCommonParams* c = msl_common_params();
+        const uint8_t total = (uint8_t)((seed->action_id[p] == (uint16_t)MSL_ACT_PASSIVE_WALL_JUMP)
+                                            ? c->walljump_startup_timer_frames
+                                            : c->passivewall_timer_frames);
+        const uint8_t timer = seed->passivewall_timer[p];
+        if (timer < total) {
+          const uint8_t elapsed = (uint8_t)(total - timer);
+          const uint8_t earliest_x67e =
+              (seed->x67E[p] > elapsed) ? (uint8_t)(seed->x67E[p] - elapsed) : 0u;
+          if ((float)earliest_x67e < c->tech_window_frames) {
+            batch->state.passivewall_jump_latch[idx] = 1u;
+          }
+        }
+      }
       batch->state.walljump_input_timer[idx] = seed->walljump_input_timer[p];
       batch->state.walljump_wall_side_i8[idx] = seed->walljump_wall_side_i8[p];
       batch->state.walljump_seed_phase_valid[idx] =
@@ -2221,6 +2266,8 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
         // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
         batch->state.hitbox_x43_b2[hb_i] = 0u;
+        batch->state.hitbox_capsule_enabled[hb_i] = 0u;
+        batch->state.hitbox_capsule_group[hb_i] = 0u;
       }
 
       if (seed->attack_instance[p] > max_attack_inst) {
@@ -2507,6 +2554,73 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       }
       batch->state.throw_anim_rate_fp_q16_16[o_idx] = rate_fp;
       batch->state.throw_anim_rate_fp_q16_16[v_idx] = rate_fp;
+    }
+    for (int p = 0; p < num_players; p++) {
+      const size_t idx = msl_idx_player(bi, p);
+      const uint8_t char_id = batch->state.char_id[idx];
+      const uint16_t action = batch->state.action_id[idx];
+      const MslLaserParams* lp = laser_params_get(char_id);
+      int16_t first_pulse_af = 0;
+      int16_t crossed_pulse_af = 0;
+      uint8_t crossed_pulse_ordinal = 0u;
+      const float af = msl_anim_frame_sanitize_f32(seed->anim_frame_f32[p]);
+      const float rate = seed->frame_speed_mul_f32[p];
+      if (rollout_owned_after != (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED ||
+          batch->state.throw_anim_rate_fp_q16_16[idx] != 0 ||
+          batch->state.frame_speed_mul_fp_q16_16[idx] <=
+              ((int32_t)MSL_Q16_16_ONE + ((int32_t)MSL_Q16_16_ONE / 4)) ||
+          lp == NULL || char_id != (uint8_t)MSL_CHAR_FALCO ||
+          action != (uint16_t)MSL_ACT_THROW_HI ||
+          seed->throw_command_pending_pulse_frame[p] != 0u ||
+          !move_tables_throw_projectile_first_pulse_frame(char_id, action, &first_pulse_af) ||
+          seed->throw_pulse_crossed_prev_frame[p] != (uint8_t)first_pulse_af ||
+          !move_tables_throw_crossed_projectile_pulse_frame(char_id, action, af, af + rate,
+                                                            &crossed_pulse_af) ||
+          !move_tables_throw_projectile_pulse_ordinal(char_id, action, crossed_pulse_af,
+                                                      &crossed_pulse_ordinal) ||
+          crossed_pulse_ordinal != 2u) {
+        continue;
+      }
+      uint8_t live_state1_shots = 0u;
+      for (int it = 0; it < MSL_MAX_ITEMS; it++) {
+        const MslItem* si = &seed->items[it];
+        if (si->exists != 0u && si->owner == (int8_t)p && si->type == lp->shot_itkind &&
+            si->state == 1u) {
+          live_state1_shots = (uint8_t)(live_state1_shots + 1u);
+        }
+      }
+      uint8_t same_source_victim = 0u;
+      for (int vp = 0; vp < num_players; vp++) {
+        if (vp == p) {
+          continue;
+        }
+        const size_t v_idx = msl_idx_player(bi, vp);
+        if (batch->state.hitstun[v_idx] > 0u &&
+            batch->state.last_hit_by[v_idx] == batch->state.source_port0[idx] &&
+            batch->state.instance_hit_by[v_idx] == batch->state.instance_id[idx]) {
+          same_source_victim = 1u;
+          break;
+        }
+      }
+      if (live_state1_shots == 1u && same_source_victim != 0u) {
+        // Falco ThrowHi deferred command cursor:
+        // - A rollout seed can begin after the frame-18 projectile command has produced one live
+        //   state1 article, while the frame-20 command reaches ftAction on the next 4/3-rate
+        //   callback but is serialized by the following Anim callback rather than the current
+        //   post-frame.
+        // - Reconstruct that hidden source cursor from causal seed state: extracted throw pulse
+        //   order, current frame_speed_mul, one live state1 shot, and same-source victim provenance.
+        //   This is not stage-owned and does not depend on replay row identity.
+        // - Teacher-forced one-step rows with an explicit pending command stay on
+        //   `throw_command_pending_pulse_frame`.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{
+        //   ftCo_800DD4B0,ftCo_800DD724}
+        // refs/melee/src/melee/ft/ftaction.c::ftAction_80073354
+        // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+        // data/moves/falco.json moves["ftCo_SM_ThrowHi"].events
+        batch->state.throw_command_deferred_pulse_frame[idx] = (uint8_t)crossed_pulse_af;
+        batch->state.throw_anim_rate_fp_q16_16[idx] = batch->state.frame_speed_mul_fp_q16_16[idx];
+      }
     }
 
     // Seed bridge: item hitlists (teacher-forced one-step).
@@ -2817,6 +2931,9 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       }
       batch->rollout_clock_rng_owned[bi] = clock_owner;
     }
+    if (batch->rollout_yoshi_shyguy_spawn_rng_installed != NULL) {
+      batch->rollout_yoshi_shyguy_spawn_rng_installed[bi] = 0u;
+    }
     if (batch->replay_rollout_reseeded != NULL) {
       batch->replay_rollout_reseeded[bi] =
           (rollout_owned_after == (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED) ? 1u : 0u;
@@ -2874,10 +2991,27 @@ static void msl_batch_commit_rollout_clock_rng(MslBatch* batch) {
     // RNG source for match-init mode:
     // refs/melee/src/sysdolphin/baselib/random.c::{HSD_Rand,HSD_Randi,HSD_Randf}
     batch->state.frame_id[bi] += 1;
+    const uint8_t yoshi_spawn_installed =
+        (batch->rollout_yoshi_shyguy_spawn_rng_installed != NULL &&
+         batch->rollout_yoshi_shyguy_spawn_rng_installed[bi] != 0u)
+            ? 1u
+            : 0u;
+    if (batch->rollout_yoshi_shyguy_spawn_rng_installed != NULL) {
+      batch->rollout_yoshi_shyguy_spawn_rng_installed[bi] = 0u;
+    }
     if (clock_owner == (uint8_t)MSL_ROLLOUT_CLOCK_NONE) {
       continue;
     }
     if (clock_owner == (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED) {
+      if (yoshi_spawn_installed != 0u) {
+        // A broader replay-frame RNG owner can coexist with Yoshi's no-live stage scheduler. On
+        // the exact `grStory_801E3418` spawn frame, the explicit spawn seed is already the
+        // frame-start stream that Slippi serializes for this post-frame; resume the broader
+        // `+0x10000` replay clock on later frames.
+        // refs/slippi-ssbm-asm/Recording/SendFrameStart.s
+        // refs/melee/src/melee/gr/grstory.c::{grStory_801E3418,set_shyguy_spawn_count}
+        continue;
+      }
       batch->state.frame_pre_random_seed[bi] += 0x10000u;
     } else if (clock_owner == (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED_YOSHI_SHYGUY) {
       // The Shy Guy owner carries an explicit spawn-frame HSD seed and installs it in
@@ -4652,6 +4786,8 @@ int msl_batch_debug_clear_hitboxes_world(MslBatch* batch, int batch_index, int p
     batch->state.hitbox_u16_6[hb_i] = 0;
     batch->state.hitbox_flags[hb_i] = 0;
     batch->state.hitbox_x43_b2[hb_i] = 0u;
+    batch->state.hitbox_capsule_enabled[hb_i] = 0u;
+    batch->state.hitbox_capsule_group[hb_i] = 0u;
   }
 
   // Debug helper: approximate the engine's "clear hitboxes" behavior by also resetting rehit

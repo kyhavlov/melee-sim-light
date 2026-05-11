@@ -147,7 +147,7 @@ mismatch.hurtbox_state: 1 / 20444 (0.000049)
 mismatch.ground_id: 0 / 20444 (0.000000)
 mismatch.animation_index: 1 / 20444 (0.000049)
 mismatch.instance_hit_by: 2 / 20444 (0.000098)
-mismatch.instance_id: 5 / 20444 (0.000245)
+mismatch.instance_id: 3 / 20444 (0.000147)
 mismatch.last_attack_landed: 1 / 20444 (0.000049)
 mismatch.combo_count: 1 / 20444 (0.000049)
 mismatch.last_hit_by: 6 / 20444 (0.000293)
@@ -158,7 +158,7 @@ mismatch.item_state: 0 / 153330 (0.000000)
 mismatch.item_owner: 0 / 153330 (0.000000)
 mismatch.item_instance_id: 0 / 153330 (0.000000)
 ignored_mismatch.state_flags[4]&0x80: 27 / 20444 (0.001321)
-err.pos_x: mae=0.001542 p95=0.000000 max=5.225872
+err.pos_x: mae=0.001470 p95=0.000000 max=5.225872
 err.pos_y: mae=0.001424 p95=0.000000 max=4.808083
 err.speed_air_x_self: mae=0.000234 p95=0.000000 max=1.080002
 err.speed_ground_x_self: mae=0.000452 p95=0.000000 max=1.080002
@@ -171,10 +171,10 @@ err.item_pos_x: mae=0.016358 p95=0.000000 max=3.790001
 err.item_pos_y: mae=0.056702 p95=0.000000 max=18.343994
 err.item_vel_x: mae=0.000001 p95=0.000000 max=0.000152
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000045
-overall.discrete_mismatch: 34 / 1236862
-overall.strict_discrete_mismatch: 61 / 1236862
+overall.discrete_mismatch: 32 / 1236862
+overall.strict_discrete_mismatch: 59 / 1236862
 overall.ignored_discrete_mismatch: 27
-overall.float_norm_mae_p95: 0.00006929
+overall.float_norm_mae_p95: 0.00006923
 
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.msl ==
 Records: 7837  Players/scored per record: 2  Total player-frames: 15674
@@ -222,7 +222,7 @@ overall.ignored_discrete_mismatch: 19
 overall.float_norm_mae_p95: 0.00002236
 
 == suite summary ==
-overall.discrete_mismatch: 78 / 4462843
-overall.strict_discrete_mismatch: 164 / 4462843
+overall.discrete_mismatch: 76 / 4462843
+overall.strict_discrete_mismatch: 162 / 4462843
 overall.ignored_discrete_mismatch: 86
-overall.float_norm_mae_p95: 0.00003776
+overall.float_norm_mae_p95: 0.00003774

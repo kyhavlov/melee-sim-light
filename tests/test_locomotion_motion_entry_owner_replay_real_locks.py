@@ -789,30 +789,30 @@ def test_noncausal_locomotion_lane_population_stays_narrow() -> None:
     }
     assert primary_turn_transitions == {(18, 24)}
     assert aggregate_turn == 80
-    assert aggregate_locomotion_motion == 1133
+    assert aggregate_locomotion_motion == 1128
     assert aggregate_specialn == 120
-    assert aggregate_match_flow == 391
+    assert aggregate_match_flow == 390
     assert aggregate_guard_collision == 1212
-    assert aggregate_hidden_order == 7257
+    assert aggregate_hidden_order == 7252
     assert aggregate_attacklw3_runtime == 0
     assert aggregate_hidden_order_families == {
         "attack": 421,
         "cliff": 361,
-        "damage": 707,
-        "fox_falco_special": 742,
+        "damage": 706,
+        "fox_falco_special": 741,
         "grab_capture": 949,
-        "jump_landing": 2410,
+        "jump_landing": 2407,
         "locomotion": 1555,
         "other": 112,
     }
     assert dict(aggregate_hidden_order_ref_actions.most_common(25)) == {
         43: 906,
-        39: 610,
+        39: 609,
         360: 446,
         18: 445,
         20: 385,
-        25: 325,
-        42: 294,
+        25: 324,
+        42: 293,
         90: 255,
         24: 199,
         14: 193,

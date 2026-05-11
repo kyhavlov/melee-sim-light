@@ -13,6 +13,10 @@ int motion_state_owners_init(void);
 
 enum {
   MSL_MOTION_FLAG_KEEP_FASTFALL = 1u << 0,
+  // refs/melee/src/melee/ft/forward.h::Ft_MF_SkipHit
+  // Fighter_ChangeMotionState skips ftColl_8007AFF8 when this bit is set, preserving x914
+  // HitCapsule state/victim lists across the motion transition.
+  MSL_MOTION_FLAG_SKIP_HIT = 1u << 3,
 };
 
 enum {

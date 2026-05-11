@@ -46,6 +46,7 @@ typedef struct MslYoshiShyguyParams {
   float vpos[MSL_YOSHI_SHYGUY_VPOS_COUNT];
   float speed[MSL_YOSHI_SHYGUY_SPEED_COUNT];
   float dyn_y_vel[MSL_YOSHI_SHYGUY_DYN_Y_COUNT];
+  float dyn_y_pos_after_phase[256];
 } MslYoshiShyguyParams;
 
 typedef struct MslDreamWhispyParams {

@@ -84,6 +84,7 @@ static MslFrameWindow g_allow_interrupt_by_char_grounded_attack[256]
 static MslSmashChargeInfo g_smash_charge_by_char_grounded_attack[256]
                                                                 [MSL_GROUNDED_ATTACK_KIND_COUNT];
 static MslFrameWindow g_allow_interrupt_by_char_escape_n[256];
+static MslFrameWindow g_allow_interrupt_by_char_escape_air[256];
 static MslFrameWindow g_throw_flags_by_char_escape_f[256];
 static MslFrameWindow g_jab_combo_by_char_grounded_attack[256][MSL_GROUNDED_ATTACK_KIND_COUNT];
 static MslFrameWindow g_jab_rapid_by_char_grounded_attack[256][MSL_GROUNDED_ATTACK_KIND_COUNT];
@@ -1103,6 +1104,8 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
 
   load_if_allow_interrupt(&script, (uint16_t)MSL_SM_ESCAPE_N,
                           &g_allow_interrupt_by_char_escape_n[char_id]);
+  load_if_allow_interrupt(&script, (uint16_t)MSL_SM_ESCAPE_AIR,
+                          &g_allow_interrupt_by_char_escape_air[char_id]);
 
   const MslScriptEntryRaw* entry = script_table_raw_find_entry(&script, (uint16_t)MSL_SM_ATTACK_11);
   MslFrameWindow win = {0};
@@ -1439,11 +1442,14 @@ float move_tables_grounded_smash_charge_damage_mul(uint8_t char_id, uint16_t gro
 
 uint8_t move_tables_escape_allow_interrupt(uint8_t char_id, uint16_t action_id,
                                            float cur_anim_frame_f32) {
-  if (action_id != (uint16_t)MSL_ACT_ESCAPE_N) {
+  MslFrameWindow win = {0};
+  if (action_id == (uint16_t)MSL_ACT_ESCAPE_N) {
+    win = g_allow_interrupt_by_char_escape_n[char_id];
+  } else if (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR) {
+    win = g_allow_interrupt_by_char_escape_air[char_id];
+  } else {
     return 0;
   }
-
-  const MslFrameWindow win = g_allow_interrupt_by_char_escape_n[char_id];
   if (!win.loaded) {
     return 0;
   }

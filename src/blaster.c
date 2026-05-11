@@ -171,12 +171,6 @@ static inline uint8_t action_is_damage_air_or_fly_special_iasa(uint16_t action_i
   }
 }
 
-static inline uint8_t action_is_attackair_special_iasa(uint16_t action_id) {
-  // Generated from MotionState callback symbols ftCo_AttackAir_* for the five common aerial
-  // attacks. Exhaustive Fox/Falco equivalence is covered by tests/test_motion_state_owners_table.py.
-  return msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_ATTACK_AIR);
-}
-
 static inline uint8_t damage_air_or_fly_allows_special_air_iasa(const MslBatch* batch, size_t idx) {
   if (batch == NULL) {
     return 0u;
@@ -200,8 +194,8 @@ static inline uint8_t action_allows_special_entry_air(const MslBatch* batch, siz
                                                       uint16_t action_id) {
   // Decomp-special input ownership:
   // - Jump/Fall-family IASA owners route through ftCo_SpecialAir_CheckInput.
-  // - AttackAir DO_IASA runs EscapeAir, then ftCo_800D7100 / ftCo_SpecialAir_CheckInput, then
-  //   item / attack / jump branches, gated by script-owned allow_interrupt.
+  // - AttackAir DO_IASA is intentionally excluded: it checks EscapeAir, item/aircatch, item throw,
+  //   and JumpAerial branches, but does not call ftCo_SpecialAir_CheckInput.
   // - DamageFall_IASA also routes through ftCo_SpecialAir_CheckInput.
   // - Pass_IASA routes through the same aerial special gate after platform drop-through.
   // - FallSpecial_IASA does not; it only checks attack/item/jump-owned branches.
@@ -231,10 +225,6 @@ static inline uint8_t action_allows_special_entry_air(const MslBatch* batch, siz
   }
   if (action_is_damage_air_or_fly_special_iasa(action_id)) {
     return damage_air_or_fly_allows_special_air_iasa(batch, idx);
-  }
-  if (action_is_attackair_special_iasa(action_id)) {
-    return move_tables_attackair_allow_interrupt(batch->state.char_id[idx], action_id,
-                                                 batch->state.anim_frame_f32[idx]);
   }
   return 0u;
 }

@@ -783,7 +783,8 @@ def test_jumpaerial_escapeair_platform_entry_owner_is_not_broadened() -> None:
     # - later carried JumpAerial prefix age is not part of the shallow-entry suppression slice when
     #   visible floor ownership already names the same ledge;
     # - JumpF provenance does not borrow the JumpAerial callback lifetime;
-    # - FD and hard-floor mutations do not use the soft-platform suppression path.
+    # - FD hard-floor mutation uses the ordinary EscapeAir floor handoff, while the Yoshi hard-floor
+    #   mutation remains on the shallow locked-owner path.
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
@@ -817,8 +818,8 @@ def test_jumpaerial_escapeair_platform_entry_owner_is_not_broadened() -> None:
         seed["ground_id"][0, p] = np.uint16(1)
 
     out_fd = _run_one_step(ds, record, seed_mutator=fd_mutation)
-    assert int(out_fd["action_id"][p]) == ACT_ESCAPE_AIR
-    assert int(out_fd["on_ground"][p]) == 0
+    assert int(out_fd["action_id"][p]) == ACT_LANDING_FALL_SPECIAL
+    assert int(out_fd["on_ground"][p]) == 1
 
     def hard_floor_mutation(seed: np.ndarray) -> None:
         seed["ground_id"][0, p] = np.uint16(3)

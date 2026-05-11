@@ -39,6 +39,12 @@ float staling_multiplier_for_move_excluding_instance(const MslBatch* batch, size
 void staling_queue_update(MslBatch* batch, size_t fighter_idx, uint16_t move_id,
                           uint16_t attack_instance);
 
+// Reset a player's stale-move table.
+// Decomp reference: plStale_ResetStaleMoveTableForPlayer zeros current_index and all 10
+// (move_id, attack_instance) entries.
+// refs/melee/src/melee/pl/plstale.c::plStale_ResetStaleMoveTableForPlayer
+void staling_queue_reset_for_player(MslBatch* batch, size_t fighter_idx);
+
 // Convenience helper: return the fighter-side FtMoveId for the current motion state.
 // In GALE01 this is fp->x2068_attackID, updated on motion-state changes via ft_800890D0.
 // refs/melee/src/melee/ft/ft_0881.c::ft_800890D0

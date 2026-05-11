@@ -227,6 +227,7 @@ typedef struct MslCharParams {
   // - firefox_hold_air_fall_accel
   // - firefox_direction_stick_range_min
   // - firefox_launch_duration_frames
+  // - firefox_bound_delay_frames
   // - firefox_launch_reverse_accel_start_frames
   // - firefox_launch_speed
   // - firefox_launch_reverse_accel
@@ -251,16 +252,16 @@ typedef struct MslCharParams {
   float firefox_hold_air_fall_accel;                  // ftFox_DatAttrs.x60
   float firefox_direction_stick_range_min;            // ftFox_DatAttrs.x64
   uint8_t firefox_launch_duration_frames;             // ftFox_DatAttrs.x68
+  uint8_t firefox_bound_delay_frames;                 // ftFox_DatAttrs.x6C
   uint8_t firefox_launch_reverse_accel_start_frames;  // ftFox_DatAttrs.x70
   uint8_t firefox_landing_lag_frames;                 // ftFox_DatAttrs.x90
-  uint8_t _pad_u8_firefox_hold_1[1];
-  float firefox_launch_speed;            // ftFox_DatAttrs.x74
-  float firefox_launch_reverse_accel;    // ftFox_DatAttrs.x78
-  float firefox_ground_momentum_end;     // ftFox_DatAttrs.x7C
-  float firefox_bound_vel_x;             // ftFox_DatAttrs.x84
-  float firefox_facing_stick_range_min;  // ftFox_DatAttrs.x88
-  float firefox_freefall_mobility;       // ftFox_DatAttrs.x8C
-  float firefox_bound_angle_degrees;     // ftFox_DatAttrs.x94
+  float firefox_launch_speed;                         // ftFox_DatAttrs.x74
+  float firefox_launch_reverse_accel;                 // ftFox_DatAttrs.x78
+  float firefox_ground_momentum_end;                  // ftFox_DatAttrs.x7C
+  float firefox_bound_vel_x;                          // ftFox_DatAttrs.x84
+  float firefox_facing_stick_range_min;               // ftFox_DatAttrs.x88
+  float firefox_freefall_mobility;                    // ftFox_DatAttrs.x8C
+  float firefox_bound_angle_degrees;                  // ftFox_DatAttrs.x94
 
   // Cliff / ledge (ftCo_Cliff*).
   //

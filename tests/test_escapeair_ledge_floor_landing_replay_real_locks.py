@@ -145,10 +145,48 @@ def test_escapeair_sustained_left_ledge_floor_lands_on_shallow_root_crossing() -
 
 
 @pytest.mark.integration
+def test_escapeair_early_locked_fd_ledge_root_handoff_lands() -> None:
+    # Early sustained EscapeAir can consume the carried FD ledge floor through the
+    # ft_80082C74/mpColl_800471F8 root path even when CollData_X130_Locked preserves a desired ECB
+    # bottom. Later already-below/action-frame-3 ledge controls remain covered by the negative
+    # test below.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_LoadECB_inline}
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root / "datasets/doubles_recent/replays/validation/doubles_recent/Game_20260509T152622.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[2711]
+    p = 0
+    assert int(row["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
+    assert int(row["seed_t"]["action_frame"][p]) == 2
+    assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_ESCAPE_AIR
+    assert int(row["seed_t"]["ecb_lock_timer"][p]) == 3
+    assert int(row["seed_t"]["ecb_lock_bottom_rel_y_valid_u8"][p]) == 1
+    assert int(row["seed_t"]["state_flags"][p, 0]) & 0x80
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_LANDING_FALL_SPECIAL
+    assert int(row["ref_t1"]["ground_id"][p]) == 0
+
+    out = _step_bytes(ds, row["seed_t"], row["prev_input_t"], row["input_t"])
+    ref = row["ref_t1"]
+    for field in ("action_id", "action_frame", "animation_index", "on_ground", "ground_id", "jumps_left"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
 def test_escapeair_floorhug_and_already_below_ledge_rows_do_not_land_early() -> None:
     # Negative controls for the same EscapeAir_Coll bridge:
     # - PJO 4645 is already floor-hugging near the floor bias with only sub-bias vertical drift.
     # - HIS 4313 is already below the left ledge floor at frame start.
+    # - G20260509 4480 is the early locked right-ledge interpolation phase before mpColl_800471F8
+    #   owns the horizontal ledge root crossing.
     # Neither is a frame-local root crossing from above the floor into the persisted line.
     root = Path(__file__).resolve().parents[1]
     cases = (
@@ -162,6 +200,11 @@ def test_escapeair_floorhug_and_already_below_ledge_rows_do_not_land_early() -> 
             root
             / "datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl",
             4313,
+            0,
+        ),
+        (
+            root / "datasets/doubles_recent/replays/validation/doubles_recent/Game_20260509T152622.msl",
+            4480,
             0,
         ),
     )
@@ -345,6 +388,43 @@ def test_yoshis_escapeair_low_ledge_floor_uses_ecb_depth_boundary() -> None:
         out = _step_bytes(ds, row["seed_t"], row["prev_input_t"], row["input_t"])
         for field in ("action_id", "animation_index", "on_ground", "ground_id"):
             assert int(out[field][p]) == int(ref[field][p]), (dataset_path.name, record, field)
+
+
+@pytest.mark.integration
+def test_yoshis_escapeair_stale_side_platform_lands_on_current_top_platform() -> None:
+    # Locked EscapeAir can carry a stale side-platform CollData.floor.index after JumpAerial entry,
+    # while the current root is already over Yoshi's top platform. Source EscapeAir_Coll's
+    # ft_80082C74/mpColl_800471F8 handoff publishes the current static platform, not the stale
+    # out-of-span platform line.
+    #
+    # data/stages/bin/grst.bin::MSLSTG01 platform segments 4/5
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80082C74
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/yoshis_story_recent/replays/validation/yoshis_story_recent/"
+        "DependentSteelGrouse.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+    try:
+        ds = read_dataset(str(dataset_path))
+    except ValueError as exc:
+        pytest.skip(f"local dataset cache is stale: {exc}")
+
+    row = ds.samples[190]
+    p = 1
+    ref = row["ref_t1"]
+    assert int(row["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
+    assert int(row["seed_t"]["ground_id"][p]) == 5
+    assert int(ref["action_id"][p]) == ACT_LANDING_FALL_SPECIAL
+    assert int(ref["ground_id"][p]) == 4
+
+    out = _step_bytes(ds, row["seed_t"], row["prev_input_t"], row["input_t"])
+    for field in ("action_id", "animation_index", "on_ground", "ground_id", "jumps_left"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
 
 
 @pytest.mark.integration

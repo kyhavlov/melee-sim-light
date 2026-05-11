@@ -54,6 +54,10 @@ struct MslBatch {
   // replay-reseeded rollouts normally keep the RNG seed-owned, with a narrow Slippi frame-start
   // RNG-clock mode for replay-carry rows that need the post-frame seed to advance.
   uint8_t* rollout_clock_rng_owned;  // [batch]
+  // Runtime-only one-frame marker: Yoshi's Story Shy Guy installed an explicit spawn-frame HSD
+  // seed during this step. Used to arbitrate with broader replay-frame RNG clock owners without
+  // adding a replay schema lane.
+  uint8_t* rollout_yoshi_shyguy_spawn_rng_installed;  // [batch]
   // Replay validation rollout reseed mode. This stays true for `reseed_seed_rollout` even when the
   // RNG owner itself stays seed-owned; runtime uses it to advance frame-indexed stage/object owners
   // such as Randall without advancing frame_pre_random_seed.

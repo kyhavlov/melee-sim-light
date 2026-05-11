@@ -252,8 +252,8 @@ static inline uint8_t hitlist_item_key(uint8_t slot) {
 
 static uint8_t hitlist_capsule_find_fighter_entry(MslBatch* batch, int bi,
                                                   MslHitlistVictimEntry* victims, size_t cap,
-                                                  uint8_t victim_port, uint16_t victim_iid,
-                                                  size_t* out_index) {
+                                                  int attacker, uint8_t victim_port,
+                                                  uint16_t victim_iid, size_t* out_index) {
   if (batch == NULL || victims == NULL || out_index == NULL) {
     return 0u;
   }
@@ -264,6 +264,26 @@ static uint8_t hitlist_capsule_find_fighter_entry(MslBatch* batch, int bi,
     }
     if (victims[i].kind_slot != key) {
       continue;
+    }
+    if (attacker >= 0 && attacker < (int)batch->config.num_players &&
+        victims[i].id32 == MSL_HITLIST_FIGHTER_ID32_SEED_DENSE) {
+      const size_t a_idx = msl_idx_player(bi, attacker);
+      const size_t v_idx = msl_idx_player(bi, (int)victim_port);
+      if (batch->state.action_id[a_idx] == (uint16_t)MSL_ACT_ATTACK_AIR_B &&
+          (batch->state.hitlag[v_idx] != 0u || batch->state.hitstun[v_idx] != 0u) &&
+          batch->state.instance_hit_by[v_idx] != batch->state.instance_id[a_idx]) {
+        // AttackAirB active-damage stale dense latch:
+        // Dense group seed entries lack per-HitCapsule insertion provenance. During an active
+        // damage episode, `instance_hit_by` identifies the source action instance that owns the
+        // current BODY attribution; a different live AttackAirB instance must not be suppressed by
+        // a stale dense proxy.
+        // data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirB.events.create_hitbox
+        // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076ED8
+        // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+        // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+        entry_clear(&victims[i]);
+        return 0u;
+      }
     }
     // Victim identity boundary handling (decomp-faithful, reseed-friendly):
     // - Decomp key is a pointer; we key by port and store instance_id as a proxy.
@@ -319,6 +339,12 @@ uint8_t hitlist_allows_fighter(MslBatch* batch, int bi, int attacker, int hb_id,
          (size_t)victim);
     const size_t a_idx = msl_idx_player(bi, attacker);
     const size_t v_idx = msl_idx_player(bi, victim);
+    const uint8_t same_source_body_attribution =
+        (batch->state.instance_hit_by[v_idx] == batch->state.instance_id[a_idx] &&
+         batch->state.last_hit_by[v_idx] ==
+             hitlist_source_port0_for_attacker(batch, a_idx, attacker))
+            ? 1u
+            : 0u;
     const uint16_t seed_cd = batch->state.combat_hitlist_hb_cd[hb_cd_i];
     if (batch->state.combat_hitlist_hb_valid[valid_i] && seed_cd != 0u &&
         (batch->state.hitlag_pre_timer[a_idx] != 0u ||
@@ -341,10 +367,39 @@ uint8_t hitlist_allows_fighter(MslBatch* batch, int bi, int attacker, int hb_id,
       const uint8_t cd_set = (seed_cd == 0xFFFFu) ? 0u : (uint8_t)(seed_cd & 0xFFu);
       (void)hitlist_insert_victims1(hit, (int)MSL_LBCOLL_INSERT_FT_SHIELD, &key, cd_set);
     }
+    if (seed_cd == 0u && !batch->state.combat_hitlist_hb_valid[valid_i] &&
+        ((batch->state.hitlag_pre_timer[a_idx] != 0u &&
+          batch->state.hitlag_pre_timer[v_idx] != 0u) ||
+         (batch->state.hitbox_enable_edge[hb_i] == 0u && batch->state.hitstun[v_idx] != 0u)) &&
+        batch->state.hitbox_prev_enabled[hb_i] != 0u &&
+        batch->state.action_id[a_idx] == batch->state.seed_prev_action_id[a_idx] &&
+        same_source_body_attribution) {
+      // Same-source sustained HitCapsule carry:
+      // - While either fighter is frozen in hitlag, Fighter_8006A360 skips the animation/collision
+      //   callback path that would clear/copy HitCapsule victims_1.
+      // - Some replay seeds expose only the previous x58/x4C capsule geometry plus BODY
+      //   attribution (`instance_hit_by`/`last_hit_by`), not an authoritative per-HitCapsule
+      //   victim list. When both attacker and victim had hitlag at frame start, that attribution
+      //   proves the current HitCapsule already contains the victim and must suppress the first
+      //   post-decrement collision pass.
+      // - After hitlag exits, the same victims_1 list continues suppressing sustained same-source
+      //   hitstun contacts until a real enable-edge clear/copy event changes HitCapsule ownership.
+      // - Authoritative per-HitCapsule empty seed lanes are the source owner for exact one-step
+      //   rows; they prove this slot's victims_1 list is empty and must not be backfilled from
+      //   BODY attribution alone.
+      // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+      // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+      // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+      MslHitlistVictimEntry key;
+      memset(&key, 0, sizeof(key));
+      key.id16 = victim_iid;
+      key.kind_slot = hitlist_fighter_key((uint8_t)victim);
+      (void)hitlist_insert_victims1(hit, (int)MSL_LBCOLL_INSERT_FT_SHIELD, &key, 0u);
+    }
   }
   size_t found = 0;
   if (hitlist_capsule_find_fighter_entry(batch, bi, hit->victims_1, (size_t)MSL_HITLIST_VICTIM_CAP,
-                                         (uint8_t)victim, victim_iid, &found)) {
+                                         attacker, (uint8_t)victim, victim_iid, &found)) {
     return 0u;
   }
   return 1u;
@@ -423,7 +478,7 @@ uint8_t hitlist_allows_fighter_v2(MslBatch* batch, int bi, int attacker, int hb_
   MslHitlistCapsule* hit = &batch->state.fighter_hitlist[hb_i];
   size_t found = 0;
   if (hitlist_capsule_find_fighter_entry(batch, bi, hit->victims_2, (size_t)MSL_HITLIST_VICTIM_CAP,
-                                         (uint8_t)victim, victim_iid, &found)) {
+                                         attacker, (uint8_t)victim, victim_iid, &found)) {
     return 0u;
   }
   return 1u;
@@ -464,6 +519,12 @@ void hitlist_register_fighter_group(MslBatch* batch, int bi, int attacker, uint8
     }
     const size_t hl_i = idx_fighter_hitlist(bi, attacker, hb_id);
     MslHitlistCapsule* hit = &batch->state.fighter_hitlist[hl_i];
+    // Runtime collision has now materialized this HitCapsule's live victim list. Mark it initialized
+    // for the current reseed generation so the next hitbox refresh does not overwrite source-owned
+    // victims_1 state with the teacher-forced seed materializer.
+    // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076808,inlineB0,ftColl_80076CBC}
+    // refs/melee/src/melee/lb/types.h::HitCapsule
+    batch->state.fighter_hitlist_init_gen[hl_i] = batch->state.hitlist_reseed_gen[bi];
     (void)hitlist_insert_victims1(hit, type, &key, rehit_frames);
   }
 }
@@ -497,6 +558,11 @@ void hitlist_register_fighter_group_v2(MslBatch* batch, int bi, int attacker, ui
     }
     const size_t hl_i = idx_fighter_hitlist(bi, attacker, hb_id);
     MslHitlistCapsule* hit = &batch->state.fighter_hitlist[hl_i];
+    // Runtime phantom/tip-log ownership is live HitCapsule state too; keep seed materialization
+    // from clearing victims_2 on the following refresh.
+    // refs/melee/src/melee/ft/ftcoll.c::{checkTipLog,ftColl_80076ED8}
+    // refs/melee/src/melee/lb/types.h::HitCapsule
+    batch->state.fighter_hitlist_init_gen[hl_i] = batch->state.hitlist_reseed_gen[bi];
     MslHitlistVictimEntry victim_key;
     memset(&victim_key, 0, sizeof(victim_key));
     victim_key.kind_slot = key;
@@ -527,7 +593,7 @@ uint8_t hitlist_allows_item_hitbox_fighter(MslBatch* batch, int bi, int item_slo
   MslHitlistCapsule* hit = &batch->state.item_hitlist[ii];
   size_t found = 0;
   if (hitlist_capsule_find_fighter_entry(batch, bi, hit->victims_1, (size_t)MSL_HITLIST_VICTIM_CAP,
-                                         (uint8_t)victim, victim_iid, &found)) {
+                                         -1, (uint8_t)victim, victim_iid, &found)) {
     return 0u;
   }
   return 1u;
@@ -612,6 +678,11 @@ static void hitlist_seed_init_fighter_hitbox_from_group_impl(MslBatch* batch, in
   const uint8_t is_replay_rollout =
       (batch->replay_rollout_reseeded != NULL && batch->replay_rollout_reseeded[bi] != 0u) ? 1u
                                                                                            : 0u;
+  const uint8_t exact_replay_reseed =
+      (is_replay_rollout && batch->replay_rollout_seed_frame_id != NULL &&
+       batch->state.frame_id[bi] == batch->replay_rollout_seed_frame_id[bi])
+          ? 1u
+          : 0u;
 
   size_t out_i = 0;
   for (int v = 0; v < (int)batch->config.num_players && out_i < (size_t)MSL_HITLIST_VICTIM_CAP;
@@ -632,7 +703,11 @@ static void hitlist_seed_init_fighter_hitbox_from_group_impl(MslBatch* batch, in
     if (cd_seed == 0) {
       continue;
     }
-    if (is_replay_rollout && !use_hitbox_seed) {
+    const uint16_t stored_iid = use_hitbox_seed ? batch->state.combat_hitlist_hb_victim_iid[i]
+                                                : batch->state.combat_hitlist_victim_iid[i];
+    const size_t v_idx = msl_idx_player(bi, v);
+    const size_t a_idx = msl_idx_player(bi, attacker);
+    if (is_replay_rollout && !exact_replay_reseed && !use_hitbox_seed) {
       // Dense group seeds are a compatibility surface for replay-derived HitCapsule victims_1.
       // For SpecialHi rollout rows, materialize that coarse lane only when replay-visible state
       // proves the current victim is still in the accepted-hit episode from this attacker:
@@ -641,13 +716,12 @@ static void hitlist_seed_init_fighter_hitbox_from_group_impl(MslBatch* batch, in
       // approximation from an inactive gap; binding it into the current HitCapsule would over-admit
       // lbColl_8000ACFC suppression before the real launch BODY callback.
       //
-      // Authoritative per-hitbox seeds stay exact and normal teacher-forced reseeds preserve strict
-      // compatibility.
+      // Authoritative per-hitbox seeds stay exact, and exact-row rollout reseeds preserve the same
+      // teacher-forced compatibility as one-step reseeds. Once a replay rollout advances past its
+      // seed frame, the filter below prevents stale dense seeds from becoming a free-running
+      // runtime bridge without same-source proof.
       // refs/melee/src/melee/ft/ftcoll.c::ftColl_800768A0
       // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
-      const uint16_t stored_iid = batch->state.combat_hitlist_victim_iid[i];
-      const size_t v_idx = msl_idx_player(bi, v);
-      const size_t a_idx = msl_idx_player(bi, attacker);
       if (hitlist_specialhi_action(batch->state.action_id[a_idx])) {
         if (stored_iid == 0u || stored_iid != batch->state.instance_id[v_idx]) {
           continue;

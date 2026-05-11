@@ -11,6 +11,7 @@
 #include "input_axis.h"
 #include "instance_id.h"
 #include "stage_collision.h"
+#include "staling.h"
 #include "trigger_input.h"
 
 enum { MSL_ANIM_NONE_U32 = 0xFFFFFFFFu };
@@ -253,6 +254,11 @@ static inline void enter_rebirth(MslBatch* batch, size_t idx, const MslCommonPar
   attack_identity_reset_ft_800890BC(batch, idx);
   match_flow_identity_reset_Fighter_UnkInitReset_80067C98_subset(batch, idx);
   instance_id_reset_ft_800892D4(batch, idx);
+  // Decomp: stock reset clears the player's stale-move table before Rebirth resumes gameplay.
+  // Leaving the prior stock's table live makes the next-stock first hits stale during rollout.
+  // refs/melee/src/melee/pl/plstale.c::plStale_ResetStaleMoveTableForPlayer
+  // refs/melee/src/melee/ft/fighter.c::Fighter_UnkProcessDeath_80068354
+  staling_queue_reset_for_player(batch, idx);
   batch->state.percent[idx] = 0.0f;
   batch->state.percent_temp[idx] = 0.0f;
   batch->state.shield_hp[idx] = c->start_shield_health;

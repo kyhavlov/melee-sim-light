@@ -100,6 +100,40 @@ def _run_rollout_to_record(
         binding.destroy(handle)
 
 
+def _run_rollout_samples_to_record(
+    samples: np.ndarray, *, num_players: int, start_record: int, target_record: int
+) -> tuple[np.void, np.void]:
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+    handle = binding.init(
+        batch_size=1,
+        num_players=num_players,
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    try:
+        binding.reseed_seed_rollout(
+            handle, _field_bytes(samples, start_record, "seed_t", seed_stride)
+        )
+        for record in range(start_record, target_record + 1):
+            binding.step_input(
+                handle,
+                _field_bytes(samples, record, "prev_input_t", input_stride),
+                _field_bytes(samples, record, "input_t", input_stride),
+            )
+            binding.write_compare(handle, out_bytes)
+        out = out_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()
+        ref = samples[target_record]["ref_t1"].copy()
+        return out, ref
+    finally:
+        binding.destroy(handle)
+
+
 def _step_seed(seed: np.ndarray) -> np.void:
     binding = pytest.importorskip("msl_binding")
     sizes = binding.sizes()
@@ -319,7 +353,16 @@ def test_yoshi_shyguy_native_derivation_shapes_and_known_rows() -> None:
 
     lanes = _derive_yoshi_shyguy_native_lanes(items, stage_id=STAGE_YOSHIS_STORY)
     assert len(lanes) == 13
-    prev_vel_y, prev_valid, phase, phase_valid, timer, pattern, stage_valid, *_rest = lanes
+    (
+        prev_vel_y,
+        prev_valid,
+        phase,
+        phase_valid,
+        timer,
+        pattern,
+        stage_valid,
+        *_rest,
+    ) = lanes
     hitlag = lanes[11]
     hitlag_valid = lanes[12]
 
@@ -484,6 +527,33 @@ def test_yoshi_shyguy_dynamic_prev_vel_y_updates_active_motion() -> None:
     assert float(out["items"][0]["vel_y"]) == pytest.approx(expected_vel_y, abs=1e-6)
     assert float(out["items"][0]["pos_y"]) == pytest.approx(20.0 + expected_vel_y, abs=1e-6)
     assert float(out["items"][0]["pos_x"]) == pytest.approx(10.75, abs=1e-6)
+
+
+def test_yoshi_shyguy_post_reset_export_restarts_child_delta() -> None:
+    seed = _empty_seed()
+    item = seed["items"][0, 0]
+    item["exists"] = np.uint8(1)
+    item["state"] = np.uint8(1)
+    item["type"] = np.uint16(ITEM_KIND_HEIHO)
+    item["owner"] = np.int8(-1)
+    item["spawn_id"] = np.uint32(52)
+    item["direction"] = np.float32(1.0)
+    item["vel_x"] = np.float32(0.0)
+    item["vel_y"] = np.float32(10.828628540039062)
+    item["pos_x"] = np.float32(1.1003704071044922)
+    item["pos_y"] = np.float32(47.06268310546875)
+    seed["item_shyguy_speed_index_u8"][0, 0] = np.uint8(0)
+    seed["item_shyguy_speed_index_valid_u8"][0, 0] = np.uint8(1)
+    seed["item_shyguy_prev_vel_y"][0, 0] = np.float32(-0.5381011962890625)
+    seed["item_shyguy_prev_vel_y_valid"][0, 0] = np.uint8(1)
+    seed["item_shyguy_dyn_y_phase_u8"][0, 0] = np.uint8(209)
+    seed["item_shyguy_dyn_y_phase_valid_u8"][0, 0] = np.uint8(1)
+
+    out = _step_seed(seed)
+    first_dyn_y = _shyguy_params().dyn_y_vel[0]
+    assert float(out["items"][0]["pos_y"]) == pytest.approx(47.06268310546875 + first_dyn_y)
+    assert float(out["items"][0]["vel_y"]) == pytest.approx(first_dyn_y, abs=1e-6)
+    assert float(out["items"][0]["vel_x"]) == pytest.approx(0.30000001192092896, abs=1e-6)
 
 
 def test_yoshi_shyguy_state0_delay_transitions_without_active_motion() -> None:
@@ -855,6 +925,94 @@ def test_yoshi_shyguy_rollout_uses_spawn_frame_rng_seed_lawful_meerkat_112() -> 
     assert float(out["items"][0]["pos_y"]) == pytest.approx(float(ref["items"][0]["pos_y"]), abs=1e-6)
 
 
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("record", "target_record", "expected_slots"),
+    [
+        (2719, 2724, [0, 1, 2, 3]),
+        (3679, 3681, [0, 1, 2]),
+    ],
+)
+def test_yoshi_shyguy_spawn_seed_coexists_with_replay_frame_rng_owner_lawful_meerkat(
+    record: int, target_record: int, expected_slots: list[int]
+) -> None:
+    # These LIM countdown rollouts carry another replay-frame RNG-clock owner from fighter hidden
+    # state, but `grStory_801E3418` still owns the zero-timer Shy Guy spawn stream. The explicit
+    # spawn seed must install at the callback instead of letting the broader +0x10000 replay clock
+    # choose side/count.
+    # refs/slippi-ssbm-asm/Recording/SendFrameStart.s
+    # refs/melee/src/melee/gr/grstory.c::{grStory_801E3418,set_shyguy_spawn_count}
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/LawfulInsistentMeerkat.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples[record]["seed_t"]
+    assert int(seed["stage_yoshi_shyguy_spawn_rng_seed_valid_u8"]) == 1
+    assert int(seed["stage_yoshi_shyguy_spawn_rng_seed_u32"]) == int(
+        ds.samples[target_record]["seed_t"]["frame_pre_random_seed"]
+    )
+
+    out, ref, clock_mode = _run_rollout_to_record(
+        dataset_path, start_record=record, target_record=target_record, return_clock_mode=True
+    )
+    assert clock_mode == ROLLOUT_CLOCK_REPLAY_FRAME_SEED
+    assert int(out["frame_pre_random_seed"]) == int(ref["frame_pre_random_seed"])
+    live_slots = [i for i, item in enumerate(ref["items"]) if int(item["exists"]) != 0]
+    assert live_slots == expected_slots
+    for slot in expected_slots:
+        assert int(out["items"][slot]["exists"]) == 1
+        assert int(out["items"][slot]["type"]) == ITEM_KIND_HEIHO
+        assert int(out["items"][slot]["state"]) == int(ref["items"][slot]["state"])
+        assert int(out["items"][slot]["spawn_id"]) == int(ref["items"][slot]["spawn_id"])
+        assert float(out["items"][slot]["pos_x"]) == pytest.approx(
+            float(ref["items"][slot]["pos_x"]), abs=1e-6
+        )
+        assert float(out["items"][slot]["pos_y"]) == pytest.approx(
+            float(ref["items"][slot]["pos_y"]), abs=1e-6
+        )
+
+
+@pytest.mark.integration
+def test_yoshi_shyguy_spawn_seed_coexists_with_opening_countdown_clock_dsg_74() -> None:
+    # Opening-countdown rows keep the broad replay-frame clock so input lock clears on the source
+    # frame, but a later no-live Shy Guy zero-timer callback must still install its explicit
+    # spawn-frame RNG seed. This guards against treating the rollout clock mode as exclusive owner
+    # state for `grStory_801E3418`.
+    # refs/slippi-ssbm-asm/Recording/SendFrameStart.s
+    # refs/melee/src/melee/gr/grstory.c::{grStory_801E3418,set_shyguy_spawn_count}
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/DependentSteelGrouse.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples[74]["seed_t"]
+    assert int(seed["opening_input_lock_timer"][0]) > 0
+    assert int(seed["stage_yoshi_shyguy_spawn_rng_seed_valid_u8"]) == 1
+    assert int(seed["stage_yoshi_shyguy_spawn_rng_seed_u32"]) == int(
+        ds.samples[119]["seed_t"]["frame_pre_random_seed"]
+    )
+
+    out, ref, clock_mode = _run_rollout_to_record(
+        dataset_path, start_record=74, target_record=119, return_clock_mode=True
+    )
+    assert clock_mode == ROLLOUT_CLOCK_REPLAY_FRAME_SEED
+    assert int(out["frame_pre_random_seed"]) == int(ref["frame_pre_random_seed"])
+    assert int(out["items"][0]["exists"]) == 1
+    assert int(out["items"][0]["type"]) == ITEM_KIND_HEIHO
+    assert int(out["items"][0]["spawn_id"]) == int(ref["items"][0]["spawn_id"])
+    assert float(out["items"][0]["pos_x"]) == pytest.approx(float(ref["items"][0]["pos_x"]), abs=1e-6)
+    assert float(out["items"][0]["pos_y"]) == pytest.approx(float(ref["items"][0]["pos_y"]), abs=1e-6)
+
+
 def test_yoshi_shyguy_dynamic_prev_vel_y_does_not_touch_other_stages() -> None:
     seed = _empty_seed()
     seed["stage_id"] = np.uint32(32)
@@ -1222,6 +1380,45 @@ def test_yoshi_shyguy_floor_reset_restarts_phase_lane_pec_1290() -> None:
 
 
 @pytest.mark.integration
+def test_yoshi_shyguy_fixed_ecb_floor_does_not_reset_when_already_below_floor_pec_996() -> None:
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples[996]["seed_t"]
+    slot = 2
+    assert int(seed["items"][slot]["type"]) == ITEM_KIND_HEIHO
+    assert int(seed["items"][slot]["state"]) == 1
+
+    # The active state-1 fixed ECB bottom is already below Yoshi's sloped right floor here. Source
+    # floor admission (`it_8026DA70 -> mpColl_800471F8/mpCheckFloorRemap`) must not report another
+    # floor entry just because the item continues moving laterally while below the floor plane.
+    # refs/melee/src/melee/it/items/itheiho.c::{itHeiho_UnkMotion1_Coll,
+    #   itHeiho_UnkMotion1_Anim}
+    # refs/melee/src/melee/it/it_266F.c::it_8026DA70
+    # refs/melee/src/melee/mp/mplib.c::mpCheckFloorRemap
+    for target_record, expected_vel_y in ((997, -0.6891632080078125), (998, -0.6946563720703125)):
+        out, ref = _run_rollout_to_record(
+            dataset_path, start_record=996, target_record=target_record
+        )
+        assert float(out["items"][slot]["pos_y"]) == pytest.approx(
+            float(ref["items"][slot]["pos_y"]), abs=1e-6
+        )
+        assert float(out["items"][slot]["vel_x"]) == pytest.approx(
+            float(ref["items"][slot]["vel_x"]), abs=1e-6
+        )
+        assert float(out["items"][slot]["vel_y"]) == pytest.approx(expected_vel_y, abs=1e-6)
+        assert float(out["items"][slot]["vel_y"]) == pytest.approx(
+            float(ref["items"][slot]["vel_y"]), abs=1e-6
+        )
+
+
+@pytest.mark.integration
 def test_yoshi_shyguy_turn_cooldown_suppresses_repeat_wall_turn_pec_1835() -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_path = (
@@ -1394,6 +1591,76 @@ def test_yoshi_shyguy_state3_zero_delay_enters_return_flight_replay_real(
     assert float(out["items"][slot]["pos_y"]) == pytest.approx(
         float(ref["items"][slot]["pos_y"]), abs=1e-6
     )
+
+
+@pytest.mark.integration
+def test_yoshi_shyguy_first_visible_speed_marks_prefix_causal_speed_index_pec_5099() -> None:
+    # Replay-real lock for prefix-causal hidden group speed ownership:
+    # - it_802D8618 stores the spawn-group speed index in itemVar.heiho.x21.
+    # - The first active post-frame can still expose x40_vel.x == 0 because state 0 has just entered
+    #   state 1 through it_802D8918; the next visible active frame reveals the same hidden group
+    #   speed that was already source-owned at spawn.
+    # - Native preprocessing must not future-backfill that hidden speed onto earlier zero-velocity
+    #   active rows. Runtime-spawned Shy Guys get the value from the scheduler RNG owner; replay
+    #   reseeds of already-live items mark the speed lane only from the first visible nonzero row.
+    # refs/melee/src/melee/it/items/itheiho.c::{it_802D8618,itHeiho_UnkMotion0_Phys,
+    #   it_802D8918,itHeiho_UnkMotion1_Phys}
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples.copy()
+    lanes = _derive_yoshi_shyguy_native_lanes(samples["seed_t"]["items"], stage_id=STAGE_YOSHIS_STORY)
+    speed_index = lanes[7]
+    speed_valid = lanes[8]
+
+    slot = 0
+    assert int(samples[5098]["seed_t"]["items"][slot]["exists"]) == 0
+    assert int(speed_valid[5098, slot]) == 0
+    assert int(samples[5099]["seed_t"]["items"][slot]["type"]) == ITEM_KIND_HEIHO
+    assert int(samples[5099]["seed_t"]["items"][slot]["state"]) == 1
+    assert float(samples[5099]["seed_t"]["items"][slot]["vel_x"]) == pytest.approx(0.0)
+    assert int(speed_valid[5099, slot]) == 0
+    assert int(speed_valid[5099, 1]) == 0
+    assert int(speed_valid[5099, 2]) == 0
+
+    causal_record = next(
+        record
+        for record in range(5100, 5160)
+        if int(samples[record]["seed_t"]["items"][slot]["type"]) == ITEM_KIND_HEIHO
+        and abs(float(samples[record]["seed_t"]["items"][slot]["vel_x"])) > 0.001
+    )
+    assert causal_record == 5100
+    assert int(speed_valid[causal_record, slot]) == 1
+    assert int(speed_index[causal_record, slot]) == 0
+    assert int(speed_valid[causal_record, 1]) == 1
+    assert int(speed_valid[causal_record, 2]) == 1
+
+    samples["seed_t"]["item_shyguy_speed_index_u8"] = speed_index
+    samples["seed_t"]["item_shyguy_speed_index_valid_u8"] = speed_valid
+
+    for target_record in (causal_record, 5119, 5159):
+        out, ref = _run_rollout_samples_to_record(
+            samples,
+            num_players=int(ds.header["num_players"]),
+            start_record=causal_record,
+            target_record=target_record,
+        )
+        assert int(out["items"][slot]["state"]) == int(ref["items"][slot]["state"]) == 1
+        assert float(out["items"][slot]["pos_x"]) == pytest.approx(
+            float(ref["items"][slot]["pos_x"]), abs=1e-6
+        )
+        assert float(out["items"][slot]["vel_x"]) == pytest.approx(
+            float(ref["items"][slot]["vel_x"]), abs=1e-6
+        )
+        assert float(out["items"][slot]["pos_y"]) == pytest.approx(
+            float(ref["items"][slot]["pos_y"]), abs=1e-6
+        )
 
 
 def test_yoshi_shyguy_state2_uses_item_max_fall_speed() -> None:

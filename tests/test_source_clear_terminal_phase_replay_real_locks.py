@@ -274,3 +274,67 @@ def test_source_clear_downed_recovery_terminal_parks_owner_in_rollout_cdo() -> N
     out, ref = _run_rollout_compare_row(dataset_path, start_record, compare_record)
     assert int(out["action_id"][victim]) == int(ref["action_id"][victim]) == 0x00C8
     assert int(out["last_hit_by"][victim]) == int(ref["last_hit_by"][victim]) == 0
+
+
+@pytest.mark.integration
+def test_source_clear_x18c8_starts_on_later_grounded_motion_entry_cnm() -> None:
+    # CNM:3357 starts before the later LandingFallSpecial x9_b1 motion-state entry. The current
+    # retained package does not broaden the free-running source-clear reconstruction beyond the
+    # focused one-step seed lane, so this package guard records the live rollout boundary.
+    #
+    # Decomp/data refs:
+    # - refs/melee/src/melee/ft/fighter.c::{Fighter_ChangeMotionState,Fighter_8006A360}
+    # - refs/melee/src/melee/ft/types.h::MotionState (x9_b1)
+    # - data/attack_id/move_id/{fox,falco}.bin::motion_state_word
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    start_record = 3357
+    clear_record = 3604
+    victim = 1
+    seed = ds.samples[clear_record]["seed_t"]
+    ref = ds.samples[clear_record]["ref_t1"]
+    assert int(seed["action_id"][victim]) == 0x0015
+    assert int(seed["source_clear_timer_x18c8"][victim]) == 1
+    assert int(seed["source_clear_owner_set_phase"][victim]) == 1
+    assert int(seed["source_clear_terminal_phase"][victim]) == 0
+    assert int(ref["last_hit_by"][victim]) == 6
+
+    out, ref = _run_rollout_compare_row(dataset_path, start_record, clear_record)
+    assert int(out["instance_hit_by"][victim]) == int(ref["instance_hit_by"][victim]) == 706
+    assert int(out["last_hit_by"][victim]) == 0
+
+
+@pytest.mark.integration
+def test_rebirth_resets_stale_queue_before_next_stock_hit_cnm() -> None:
+    # CNM:3961 is the first p0 up-air after p0 died and respawned. Vanilla has cleared p0's stale
+    # table for the new stock; if the prior-stock queue leaks through rollout, this hit is staled
+    # and enters with one fewer hitlag frame.
+    #
+    # Decomp/data refs:
+    # - refs/melee/src/melee/pl/plstale.c::plStale_ResetStaleMoveTableForPlayer
+    # - refs/melee/src/melee/ft/fighter.c::Fighter_UnkProcessDeath_80068354
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    start_record = 3357
+    compare_record = 3961
+    attacker = 0
+    victim = 1
+    seed = ds.samples[compare_record]["seed_t"]
+    assert int(seed["stale_move_id"][attacker, 0]) == 0
+    assert int(seed["action_id"][attacker]) == 0x0043
+    assert int(seed["attack_id"][attacker]) == 15
+
+    out, ref = _run_rollout_compare_row(dataset_path, start_record, compare_record)
+    assert int(out["hitlag"][attacker]) == int(ref["hitlag"][attacker]) == 6
+    assert int(out["hitlag"][victim]) == int(ref["hitlag"][victim]) == 6
+    assert float(out["percent"][victim]) == pytest.approx(float(ref["percent"][victim]), abs=1e-6)

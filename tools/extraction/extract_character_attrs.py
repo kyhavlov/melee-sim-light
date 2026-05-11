@@ -334,6 +334,7 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
         out["firefox_launch_duration_frames"] = int(
             max(0, min(255, int(round(float(_f32_be(buf, ext_abs + 0x68))))))
         )
+        out["firefox_bound_delay_frames"] = int(max(0, min(255, _i32_be(buf, ext_abs + 0x6C))))
         out["firefox_launch_reverse_accel_start_frames"] = int(
             max(0, min(255, int(round(float(_f32_be(buf, ext_abs + 0x70))))))
         )

@@ -11,6 +11,7 @@ from tools.eval.run_longest_rollout_streaks import _load_binding
 
 
 _HVG = Path("datasets/aggregate_recent/replays/validation/aggregate_recent/HilariousVillainousGiraffe.msl")
+_CNM = Path("datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl")
 
 
 def _contact_dtype() -> np.dtype:
@@ -119,13 +120,61 @@ def test_common_air_left_walljump_uses_frame_start_pos_delta_for_setup() -> None
     assert int(contacts_4667["wall_id"][p]) == 13
     assert int(contacts_4667["coll_env_flags"][p]) & 0x20
     assert int(got_4667["action_id"][p]) == int(ref_4667["action_id"][p]) == 203
+    # The shared ftCo_800C1E64 placement path consumes the new motion's scaled x68C_transNPos.
+    # The remaining FD left-wall X residual is the older CollData anchor gap protected by this
+    # negative-control cluster, not an unscaled TransN tail.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::ftCo_800C1E64
+    # refs/melee/src/melee/ft/ftanim.c::ftAnim_8006E054
     assert float(got_4667["pos_x"][p] - ref_4667["pos_x"][p]) == pytest.approx(
-        0.29499054, abs=1e-6
+        -0.26924133, abs=1e-6
     )
 
     assert int(got_4672["action_id"][p]) == int(ref_4672["action_id"][p]) == 203
     assert int(contacts_4672["wall_id"][p]) == 13
     assert float(got_4672["pos_x"][p] - ref_4672["pos_x"][p]) == pytest.approx(
-        0.29499054, abs=1e-6
+        -0.26924133, abs=1e-6
     )
 
+
+@pytest.mark.integration
+def test_yoshi_common_air_right_walljump_entry_uses_scaled_transn_anchor() -> None:
+    # Replay-real lock for common-air walljump entry placement on Yoshi's right wall:
+    # - ftWallJump_8008169C enters PassiveWallJump through ftCo_800C1E64.
+    # - ftCo_800C1E64 places the root at the live wall-side anchor plus the new motion's
+    #   x68C_transNPos.z, which Fighter_ChangeMotionState/ftAnim_8006E054 has model-scaled.
+    # - The adjacent row proves the existing frame-start pos_delta setup still gates entry timing.
+    # refs/melee/src/melee/ft/ftwalljump.c::ftWallJump_8008169C
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::ftCo_800C1E64
+    # refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+    # refs/melee/src/melee/ft/ftanim.c::ftAnim_8006E054
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / _CNM
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    rows = _rollout_rows(dataset_path, 5255, 5283)
+    p = 0
+    got_5276, ref_5276, contacts_5276 = rows[5276]
+    got_5277, ref_5277, contacts_5277 = rows[5277]
+    got_5282, ref_5282, _contacts_5282 = rows[5282]
+
+    assert int(contacts_5276["wall_kind"][p]) == 2
+    assert int(contacts_5276["wall_id"][p]) == 9
+    assert int(contacts_5276["coll_env_flags"][p]) & 0x800
+    assert int(got_5276["action_id"][p]) == int(ref_5276["action_id"][p]) == 28
+    assert float(got_5276["pos_x"][p]) == pytest.approx(float(ref_5276["pos_x"][p]), abs=1e-6)
+
+    assert int(contacts_5277["wall_kind"][p]) == 2
+    assert int(contacts_5277["wall_id"][p]) == 9
+    assert int(contacts_5277["coll_env_flags"][p]) & 0x800
+    assert int(got_5277["action_id"][p]) == int(ref_5277["action_id"][p]) == 203
+    assert int(got_5277["action_frame"][p]) == int(ref_5277["action_frame"][p]) == 0
+    assert float(got_5277["pos_x"][p]) == pytest.approx(float(ref_5277["pos_x"][p]), abs=1e-6)
+    assert float(got_5277["pos_y"][p]) == pytest.approx(float(ref_5277["pos_y"][p]), abs=1e-6)
+
+    assert int(got_5282["action_id"][p]) == int(ref_5282["action_id"][p]) == 203
+    assert float(got_5282["pos_x"][p]) == pytest.approx(float(ref_5282["pos_x"][p]), abs=1e-6)
+    assert float(got_5282["speed_air_x_self"][p]) == pytest.approx(
+        float(ref_5282["speed_air_x_self"][p]), abs=1e-6
+    )

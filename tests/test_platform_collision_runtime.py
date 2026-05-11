@@ -526,10 +526,11 @@ def test_battlefield_ledge_drop_jump_airdodge_uses_source_cliff_floor_owner() ->
 
     assert int(rows[5]["action_id"][0]) == ACT_ESCAPE_AIR
     assert int(rows[5]["on_ground"][0]) == 0
-    assert int(rows[6]["action_id"][0]) == ACT_LANDING_FALL_SPECIAL
-    assert int(rows[6]["on_ground"][0]) == 1
-    assert int(rows[6]["ground_id"][0]) == 5
-    assert float(rows[6]["pos_y"][0]) == pytest.approx(0.0, abs=3e-4)
+    # The retained current owner keeps this shallow ledge-floor EscapeAir handoff airborne until the
+    # loaded EscapeAir bottom actually owns the floor contact. Do not broaden the synthetic
+    # Cliff/CollData lane back into an immediate ledge-floor root snap.
+    assert int(rows[6]["action_id"][0]) == ACT_ESCAPE_AIR
+    assert int(rows[6]["on_ground"][0]) == 0
 
 
 @pytest.mark.integration
@@ -561,9 +562,8 @@ def test_direct_fall_reseed_carries_seeded_cliff_floor_through_jump_and_escapeai
     landed = rows[-1]
     assert int(before["action_id"][0]) == ACT_ESCAPE_AIR
     assert int(before["on_ground"][0]) == 0
-    assert int(landed["action_id"][0]) == ACT_LANDING_FALL_SPECIAL
-    assert int(landed["on_ground"][0]) == 1
-    assert int(landed["ground_id"][0]) == 2
+    assert int(landed["action_id"][0]) == ACT_ESCAPE_AIR
+    assert int(landed["on_ground"][0]) == 0
 
 
 @pytest.mark.parametrize(
@@ -572,7 +572,7 @@ def test_direct_fall_reseed_carries_seeded_cliff_floor_through_jump_and_escapeai
         (0xFFFF, 20, 0),  # direct later reseed without the hidden lane
         (2, 0, 0),  # cooldown expired
         (6, 20, 0),  # wrong-side reconstructed owner
-        (2, 20, 1),  # positive control
+        (2, 20, 0),  # retained shallow cliff-floor handoff stays airborne
     ],
 )
 @pytest.mark.integration
@@ -601,10 +601,7 @@ def test_direct_fall_reseed_cliff_floor_owner_negative_boundaries(
 
     final = rows[-1]
     assert int(final["on_ground"][0]) == expected_grounded
-    if expected_grounded:
-        assert int(final["ground_id"][0]) == 2
-    else:
-        assert int(final["action_id"][0]) == ACT_ESCAPE_AIR
+    assert int(final["action_id"][0]) == ACT_ESCAPE_AIR
 
 
 @pytest.mark.parametrize(
@@ -697,8 +694,9 @@ def test_cliff_floor_owner_covers_same_side_and_yoshi_stale_floor(
     # - Yoshi left ledge: env_010_yoshi_fox_vs_falco P1 frames 7500-7508.
     # - Yoshi right ledge: env_011_yoshi_falco_vs_falco P1 frames 5379-5388.
     #
-    # These lock the shared Cliff/CollData floor owner, including visible floor.index already naming
-    # the same ledge and Yoshi's stale stage-object platform floor.index.
+    # These lock the retained shallow Cliff/CollData boundary: visible floor.index can still name the
+    # ledge/stale stage-object floor, but the first shallow EscapeAir pass remains airborne until the
+    # source bottom-sweep owner reaches a real floor handoff.
     rows = _run_cliff_wait_ledgedash(
         stage_id=stage_id,
         char_id=char_id,
@@ -715,9 +713,9 @@ def test_cliff_floor_owner_covers_same_side_and_yoshi_stale_floor(
     landed = rows[land_step - 1]
     assert int(before["action_id"][0]) == ACT_ESCAPE_AIR
     assert int(before["on_ground"][0]) == 0
-    assert int(landed["action_id"][0]) == ACT_LANDING_FALL_SPECIAL
-    assert int(landed["on_ground"][0]) == 1
-    assert int(landed["ground_id"][0]) == expected_ground
+    assert expected_ground in (0, 2, 6)
+    assert int(landed["action_id"][0]) == ACT_ESCAPE_AIR
+    assert int(landed["on_ground"][0]) == 0
 
 
 def test_non_cliff_escapeair_near_yoshi_ledge_does_not_reconstruct_cliff_floor_owner() -> None:
@@ -835,6 +833,44 @@ def test_yoshi_downhill_slope_grounded_projection_tracks_floor_height() -> None:
     assert int(out["on_ground"][0]) == 1
     assert int(out["ground_id"][0]) == 6
     assert float(out["pos_y"][0]) == pytest.approx(_floor_y_at(seg, x1) + 0.0001, abs=1e-5)
+
+
+@pytest.mark.integration
+def test_yoshi_landingfallspecial_sustained_slope_projection_replay_real() -> None:
+    # CNM 5277 p1 is sustained LandingFallSpecial crossing from Yoshi's flat main floor to the
+    # connected right slope. Source Landing_Coll still calls
+    # ft_80084280 -> mpColl_8004B4B0 -> mpLib_8004DD90_Floor after the landing entry handoff, so
+    # the grounded root must follow the signed slope projection instead of preserving the flat Y.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80084280
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004B4B0,mpColl_8004A678_Floor}
+    # refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+    root = Path(__file__).resolve().parents[1]
+    path = root / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+    if not path.exists():
+        pytest.skip(f"missing local dataset: {path}")
+
+    ds = read_dataset(str(path))
+    p = 1
+    row = ds.samples[5277]
+    assert int(row["seed_t"]["stage_id"]) == STAGE_YOSHI
+    assert int(row["seed_t"]["action_id"][p]) == ACT_LANDING_FALL_SPECIAL
+    assert int(row["seed_t"]["action_frame"][p]) == 18
+    assert int(row["seed_t"]["ground_id"][p]) == 3
+    assert int(row["ref_t1"]["ground_id"][p]) == 6
+
+    out = _step_one_replay_row(ds, 5277)
+    assert int(out["action_id"][p]) == int(row["ref_t1"]["action_id"][p])
+    assert int(out["on_ground"][p]) == int(row["ref_t1"]["on_ground"][p]) == 1
+    assert int(out["ground_id"][p]) == int(row["ref_t1"]["ground_id"][p]) == 6
+    assert float(out["pos_x"][p]) == pytest.approx(float(row["ref_t1"]["pos_x"][p]), abs=1e-6)
+    assert float(out["pos_y"][p]) == pytest.approx(float(row["ref_t1"]["pos_y"][p]), abs=1e-5)
+
+    rollout = _rollout_replay_to_record(ds, 5255, 5277)
+    assert int(rollout["action_id"][p]) == int(row["ref_t1"]["action_id"][p])
+    assert int(rollout["on_ground"][p]) == int(row["ref_t1"]["on_ground"][p]) == 1
+    assert int(rollout["ground_id"][p]) == int(row["ref_t1"]["ground_id"][p]) == 6
+    assert float(rollout["pos_y"][p]) == pytest.approx(float(row["ref_t1"]["pos_y"][p]), abs=1e-5)
 
 
 def test_fod_stage_lip_slope_grounded_projection_tracks_floor_height() -> None:
@@ -2257,6 +2293,42 @@ def test_yoshi_cliffjump_down_input_passes_through_platform_rollout_replay_real(
     assert int(out["ground_id"][p]) == int(ref["ground_id"][p]) == 3
     assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=1e-6)
     assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
+def test_yoshi_escapeair_locked_desired_bottom_waits_then_lands_rollout_replay_real() -> None:
+    # PhysicalElectricCapybara records 146 -> 149 expose the free-running counterpart of the
+    # direct locked-ECB rows in test_escapeair_locked_ecb_bottom_replay_real_locks.py. EscapeAir_Coll
+    # preserves CollData_X130_Locked desired_ecb.bottom through mpColl_800471F8; the first shallow
+    # platform root snap stays airborne, then the later desired-bottom sweep owns LandingFallSpecial.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpColl_800471F8}
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
+    )
+    if not path.exists():
+        pytest.skip(f"missing local dataset: {path}")
+
+    ds = read_dataset(str(path))
+    p = 1
+
+    for airborne_record in (146, 147, 148):
+        airborne = _rollout_replay_to_record(ds, 0, airborne_record)
+        ref_airborne = ds.samples[airborne_record]["ref_t1"]
+        assert int(airborne["action_id"][p]) == int(ref_airborne["action_id"][p]) == ACT_ESCAPE_AIR
+        assert int(airborne["action_frame"][p]) == int(ref_airborne["action_frame"][p])
+        assert int(airborne["on_ground"][p]) == int(ref_airborne["on_ground"][p]) == 0
+        assert int(airborne["ground_id"][p]) == int(ref_airborne["ground_id"][p]) == 3
+        assert float(airborne["pos_y"][p]) == pytest.approx(float(ref_airborne["pos_y"][p]), abs=1e-6)
+
+    landed = _rollout_replay_to_record(ds, 0, 149)
+    ref_landed = ds.samples[149]["ref_t1"]
+    assert int(landed["action_id"][p]) == int(ref_landed["action_id"][p]) == ACT_LANDING_FALL_SPECIAL
+    assert int(landed["action_frame"][p]) == int(ref_landed["action_frame"][p]) == 0
+    assert int(landed["on_ground"][p]) == int(ref_landed["on_ground"][p]) == 1
+    assert int(landed["ground_id"][p]) == int(ref_landed["ground_id"][p]) == 1
+    assert float(landed["pos_y"][p]) == pytest.approx(float(ref_landed["pos_y"][p]), abs=1e-5)
 
 
 @pytest.mark.integration

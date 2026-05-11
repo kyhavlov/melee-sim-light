@@ -251,12 +251,6 @@ static inline uint8_t action_is_damage_air_or_fly_special_iasa(uint16_t action_i
   }
 }
 
-static inline uint8_t action_is_attackair_special_iasa(uint16_t action_id) {
-  // Generated from MotionState callback symbols ftCo_AttackAir_* for the five common aerial
-  // attacks. Exhaustive Fox/Falco equivalence is covered by tests/test_motion_state_owners_table.py.
-  return msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_ATTACK_AIR);
-}
-
 static inline uint8_t damage_air_or_fly_allows_special_air_iasa(const MslBatch* batch, size_t idx) {
   if (batch == NULL) {
     return 0u;
@@ -280,8 +274,8 @@ static inline uint8_t action_allows_shine_entry_air(const MslBatch* batch, size_
                                                     uint16_t action_id) {
   // Decomp-special input ownership:
   // - Jump/Fall-family IASA owners route through ftCo_SpecialAir_CheckInput.
-  // - AttackAir DO_IASA runs EscapeAir, then ftCo_800D7100 / ftCo_SpecialAir_CheckInput, then
-  //   item / attack / jump branches, gated by script-owned allow_interrupt.
+  // - AttackAir DO_IASA is intentionally excluded: it checks EscapeAir, item/aircatch, item throw,
+  //   and JumpAerial branches, but does not call ftCo_SpecialAir_CheckInput.
   // - DamageFall_IASA also routes through ftCo_SpecialAir_CheckInput.
   // - Pass_IASA routes through the same aerial special gate after platform drop-through.
   // - FallSpecial_IASA does not; it only checks attack/item/jump-owned branches.
@@ -317,10 +311,6 @@ static inline uint8_t action_allows_shine_entry_air(const MslBatch* batch, size_
   }
   if (action_is_damage_air_or_fly_special_iasa(action_id)) {
     return damage_air_or_fly_allows_special_air_iasa(batch, idx);
-  }
-  if (action_is_attackair_special_iasa(action_id)) {
-    return move_tables_attackair_allow_interrupt(batch->state.char_id[idx], action_id,
-                                                 batch->state.anim_frame_f32[idx]);
   }
   return 0u;
 }
@@ -779,6 +769,7 @@ void shine_update_pre_physics(MslBatch* batch) {
       // Decomp ordering: if an Anim callback transitions into Loop (e.g. Start->Loop or Turn->Loop),
       // the destination state's IASA can run later in the same frame. Allow one follow-up pass.
       uint16_t a_work = a2;
+      uint8_t loop_entered_from_anim_callback = 0u;
       for (int it = 0; it < 2; it++) {
         switch (a_work) {
           case MSL_ACT_FX_SPECIAL_LW_START:
@@ -819,17 +810,26 @@ void shine_update_pre_physics(MslBatch* batch) {
             }
             break;
           case MSL_ACT_FX_SPECIAL_LW_LOOP: {
-            // Slippi post-frame alignment: gate Loop->End from the reseeded lag value before
-            // decrementing for this simulated frame, so teacher-forced one-step mirrors when the
-            // post snapshot crosses the release boundary.
-            shine_release_latch_anim(batch, idx, held);
-            if (shine_release_should_end(batch, idx)) {
-              enter_shine_ground_end(batch, idx, ms);
-              break;
-            }
-            if (batch->state.shine_release_lag[idx] > 0u) {
-              batch->state.shine_release_lag[idx] =
-                  (uint8_t)(batch->state.shine_release_lag[idx] - 1u);
+            if (loop_entered_from_anim_callback == 0u) {
+              // Slippi post-frame alignment: gate Loop->End from the reseeded lag value before
+              // decrementing for this simulated frame, so teacher-forced one-step mirrors when the
+              // post snapshot crosses the release boundary.
+              shine_release_latch_anim(batch, idx, held);
+              if (shine_release_should_end(batch, idx)) {
+                enter_shine_ground_end(batch, idx, ms);
+                break;
+              }
+              if (batch->state.shine_release_lag[idx] > 0u) {
+                batch->state.shine_release_lag[idx] =
+                    (uint8_t)(batch->state.shine_release_lag[idx] - 1u);
+              }
+            } else {
+              // Hit/Turn Anim callbacks can enter Loop, then the destination Loop IASA may run
+              // later in the same fighter proc. Do not also run Loop_Anim on that follow-up pass;
+              // source only runs the original state's Anim callback for this frame.
+              // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{
+              //   ftFx_SpecialLwHit_Anim,ftFx_SpecialLwTurn_Anim,ftFx_SpecialLwLoop_IASA}
+              loop_entered_from_anim_callback = 0u;
             }
             if (stick_wants_turn(c, batch->state.input_main_x[idx], batch->state.facing[idx])) {
               enter_shine_ground_turn(batch, idx, ms);
@@ -849,14 +849,20 @@ void shine_update_pre_physics(MslBatch* batch) {
             }
           } break;
           case MSL_ACT_FX_SPECIAL_AIR_LW_LOOP: {
-            shine_release_latch_anim(batch, idx, held);
-            if (shine_release_should_end(batch, idx)) {
-              enter_shine_air_end(batch, idx, ms);
-              break;
-            }
-            if (batch->state.shine_release_lag[idx] > 0u) {
-              batch->state.shine_release_lag[idx] =
-                  (uint8_t)(batch->state.shine_release_lag[idx] - 1u);
+            if (loop_entered_from_anim_callback == 0u) {
+              shine_release_latch_anim(batch, idx, held);
+              if (shine_release_should_end(batch, idx)) {
+                enter_shine_air_end(batch, idx, ms);
+                break;
+              }
+              if (batch->state.shine_release_lag[idx] > 0u) {
+                batch->state.shine_release_lag[idx] =
+                    (uint8_t)(batch->state.shine_release_lag[idx] - 1u);
+              }
+            } else {
+              // See the grounded Loop case above: destination Loop IASA can run on an Anim
+              // transition follow-up, but destination Loop_Anim cannot double-tick releaseLag.
+              loop_entered_from_anim_callback = 0u;
             }
             if (stick_wants_turn(c, batch->state.input_main_x[idx], batch->state.facing[idx])) {
               enter_shine_air_turn(batch, idx, ms);
@@ -879,6 +885,7 @@ void shine_update_pre_physics(MslBatch* batch) {
                 enter_shine_ground_end(batch, idx, ms);
               } else {
                 enter_shine_ground_loop(batch, idx, ms);
+                loop_entered_from_anim_callback = 1u;
                 a_work = batch->state.action_id[idx];
                 continue;
               }
@@ -891,6 +898,7 @@ void shine_update_pre_physics(MslBatch* batch) {
                 enter_shine_air_end(batch, idx, ms);
               } else {
                 enter_shine_air_loop(batch, idx, ms);
+                loop_entered_from_anim_callback = 1u;
                 a_work = batch->state.action_id[idx];
                 continue;
               }
@@ -905,6 +913,7 @@ void shine_update_pre_physics(MslBatch* batch) {
                 enter_shine_ground_end(batch, idx, ms);
               } else {
                 enter_shine_ground_loop(batch, idx, ms);
+                loop_entered_from_anim_callback = 1u;
                 a_work = batch->state.action_id[idx];
                 continue;
               }
@@ -919,6 +928,7 @@ void shine_update_pre_physics(MslBatch* batch) {
                 enter_shine_air_end(batch, idx, ms);
               } else {
                 enter_shine_air_loop(batch, idx, ms);
+                loop_entered_from_anim_callback = 1u;
                 a_work = batch->state.action_id[idx];
                 continue;
               }
