@@ -160,52 +160,156 @@ buffers.reset_mask[env.t, 3] = 1
 env.reset_masked()
 ```
 
-## Structured Dtypes
+## Observation Schema
 
-`melee_sim` exposes NumPy dtype helpers for the packed native buffers:
+`buffers.gamestate_view` is a structured NumPy view with shape
+`(length + 1, batch_size)` and dtype `msl.gamestate_dtype()`.
 
-- `input_dtype()`
-- `controller_input_dtype()`
-- `item_dtype()`
-- `match_config_dtype()`
-- `compare_dtype()`
-- `seed_dtype()`
-- `gamestate_dtype()`
-- `gamestate_player_dtype()`
-- `gamestate_randall_dtype()`
-- `gamestate_stage_dtype()`
-- `terminal_dtype()`
+```python
+row = buffers.gamestate_view[env.t, 0]
+self_slot = row["slots"][0]
+first_item = row["items"][0]
+randall = row["stage"]["randall"]
 
-Raw allocation helper:
-
-- `raw_buffer(batch_size, kind)`
-
-## Performance Contract
-
-The hot path is a two-phase binding model:
-
-1. Allocate NumPy buffers.
-2. Bind them to `EnvBatch`.
-3. Step with `env.step()`.
-
-The native binding validates dtype, shape, and stride at bind time. Per-frame
-stepping performs pointer offsets into already-bound arrays and does not
-allocate Python or C gameplay memory.
-
-The simulator does not own multiprocessing, worker pools, learner queues, reward
-logic, or trajectory postprocessing. Downstream training code owns those layers
-around `EnvBatch` and `Buffers`.
-
-## Package Shape
-
-```text
-melee_sim/
-  __init__.py
-  env_batch.py
-  buffers.py
-  controller.py
-  dtypes.py
-  _native.so
+print(row["frame_id"])
+print(self_slot["pos_x"], self_slot["pos_y"])
+print(first_item["exists"], first_item["type"])
+print(randall["exists"], randall["x"], randall["y"])
 ```
 
-`melee_sim._native` is private. Public code imports `melee_sim`.
+Top-level gamestate fields:
+
+| field | dtype | shape |
+| --- | --- | --- |
+| `frame_id` | `int32` | scalar |
+| `frame_pre_random_seed` | `uint32` | scalar |
+| `stage_id` | `uint32` | scalar |
+| `num_players` | `uint8` | scalar |
+| `viewpoint_player` | `uint8` | scalar |
+| `is_teams` | `uint8` | scalar |
+| `stage` | `gamestate_stage_dtype()` | scalar |
+| `slots` | `gamestate_player_dtype()` | `(4,)` |
+| `items` | `item_dtype()` | `(15,)` |
+
+`slots[4]` is viewpoint-relative: self first, then allies by source player
+index, then opponents by source player index. Unused slots have `present == 0`.
+
+| `slots` field | dtype |
+| --- | --- |
+| `present` | `uint8` |
+| `source_player` | `uint8` |
+| `team_relation` | `uint8` |
+| `team_id` | `uint8` |
+| `pos_x`, `pos_y` | `float32` |
+| `speed_air_x_self`, `speed_ground_x_self`, `speed_y_self` | `float32` |
+| `speed_x_attack`, `speed_y_attack` | `float32` |
+| `percent`, `shield_hp` | `float32` |
+| `action_id` | `uint16` |
+| `action_frame` | `int16` |
+| `hitlag`, `hitstun` | `uint16` |
+| `char_id`, `stocks`, `facing`, `on_ground` | `uint8` |
+| `jumps_left`, `hurtbox_state`, `invulnerable` | `uint8` |
+
+`items[15]` is a fixed item slot array. Inactive item slots have `exists == 0`.
+
+| `items` field | dtype |
+| --- | --- |
+| `exists`, `state` | `uint8` |
+| `type` | `uint16` |
+| `owner` | `int8` |
+| `instance_id`, `attack_id`, `attack_instance` | `uint16` |
+| `direction` | `float32` |
+| `vel_x`, `vel_y` | `float32` |
+| `pos_x`, `pos_y` | `float32` |
+| `damage` | `uint16` |
+| `timer` | `float32` |
+| `spawn_id` | `uint32` |
+| `misc0`, `misc1`, `misc2`, `misc3` | `uint8` |
+
+`stage.randall` is populated on Yoshi's Story:
+
+| `stage.randall` field | dtype |
+| --- | --- |
+| `exists` | `uint8` |
+| `x`, `y` | `float32` |
+
+## Controller Action Schema
+
+The default action format is `controller`. `buffers.controller_action_view` has
+shape `(length, batch_size)` and dtype `msl.controller_input_dtype()`.
+
+```python
+import numpy as np
+import melee_sim as msl
+
+controller = msl.neutral_controller((env.length, env.batch_size))
+
+# Hold right on the main stick for every frame and env.
+controller = controller._replace(
+    main_stick=msl.Stick(
+        x=np.full((env.length, env.batch_size), 0.8, dtype=np.float32),
+        y=np.full((env.length, env.batch_size), 0.5, dtype=np.float32),
+    ),
+)
+
+# Press A on frames 10..14.
+controller.buttons.A[10:15, :] = True
+
+msl.write_controller(buffers.controller_action_view, controller, player=0)
+```
+
+Per-player controller fields:
+
+| field | dtype | accepted range |
+| --- | --- | --- |
+| `buttons.A` | `uint8` bool | `0` or `1` |
+| `buttons.B` | `uint8` bool | `0` or `1` |
+| `buttons.X` | `uint8` bool | `0` or `1` |
+| `buttons.Y` | `uint8` bool | `0` or `1` |
+| `buttons.Z` | `uint8` bool | `0` or `1` |
+| `buttons.L` | `uint8` bool | `0` or `1` |
+| `buttons.R` | `uint8` bool | `0` or `1` |
+| `buttons.D_UP` | `uint8` bool | `0` or `1` |
+| `main_stick_x`, `main_stick_y` | `float32` | `[0, 1]` |
+| `c_stick_x`, `c_stick_y` | `float32` | `[0, 1]` |
+| `shoulder` | `float32` | `[0, 1]` |
+
+Stick values are normalized controller coordinates. `0.5` is neutral, `0.0`
+is minimum, and `1.0` is maximum. `write_controller()` broadcasts any NumPy
+shape compatible with the target action view.
+
+## Raw Action Schema
+
+Replay tooling and benchmarks can request packed native inputs instead:
+
+```python
+buffers = msl.Buffers.empty(length=128, batch_size=32, action_format="raw")
+raw = buffers.raw_action_view
+
+raw["p"][:, :, 0]["buttons"] = msl.BUTTON_A
+raw["p"][:, :, 0]["main_x"] = 80
+raw["p"][:, :, 0]["main_y"] = 0
+```
+
+Per-player raw input fields:
+
+| field | dtype | native meaning |
+| --- | --- | --- |
+| `buttons` | `uint16` | packed button mask |
+| `main_x`, `main_y` | `int8` | raw main-stick axes, usually `[-80, 80]` |
+| `c_x`, `c_y` | `int8` | raw C-stick axes, usually `[-80, 80]` |
+| `l`, `r` | `uint8` | raw trigger values |
+
+Button masks exported by `melee_sim`:
+
+| constant | value |
+| --- | --- |
+| `BUTTON_A` | `0x0100` |
+| `BUTTON_B` | `0x0200` |
+| `BUTTON_X` | `0x0400` |
+| `BUTTON_Y` | `0x0800` |
+| `BUTTON_Z` | `0x0010` |
+| `BUTTON_L` | `0x0040` |
+| `BUTTON_R` | `0x0020` |
+| `BUTTON_D_UP` | `0x0008` |
+
