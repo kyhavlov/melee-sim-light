@@ -21,6 +21,20 @@ def test_dataset_roundtrip(tmp_path: Path) -> None:
     assert got.samples.shape == (3,)
 
 
+def test_dataset_window_uses_memmap_slice(tmp_path: Path) -> None:
+    samples = np.zeros(5, dtype=ds.SAMPLE_DTYPE)
+    samples["seed_t"]["frame_id"] = np.arange(5, dtype=np.int32)
+    out = tmp_path / "t.msl"
+    ds.write_dataset(str(out), num_players=2, samples=samples)
+
+    got = ds.read_dataset_window(str(out), 2, 4)
+
+    assert int(got.header["num_records"]) == 5
+    assert isinstance(got.samples, np.memmap)
+    assert got.samples.shape == (2,)
+    assert got.samples["seed_t"]["frame_id"].tolist() == [2, 3]
+
+
 def test_dataset_rejects_bad_magic(tmp_path: Path) -> None:
     out = tmp_path / "bad.msl"
     out.write_bytes(b"NOTMAGIC" + b"\x00" * 64)
@@ -53,4 +67,3 @@ def test_dataset_rejects_truncated_samples(tmp_path: Path) -> None:
     out.write_bytes(header.tobytes(order="C") + b"\x00" * (ds.SAMPLE_DTYPE.itemsize + 7))
     with pytest.raises(ValueError, match="file truncated"):
         ds.read_dataset(str(out))
-

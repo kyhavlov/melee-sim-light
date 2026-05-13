@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 import struct
+from pathlib import Path
 from typing import Final
 
 import numpy as np
@@ -591,6 +592,21 @@ class Dataset:
     samples: np.ndarray
 
 
+def _read_dataset_header(path: str) -> np.ndarray:
+    with open(path, "rb") as f:
+        header_bytes = f.read(HEADER_DTYPE.itemsize)
+    if len(header_bytes) != HEADER_DTYPE.itemsize:
+        raise ValueError("file too small for header")
+    header = np.frombuffer(header_bytes, dtype=HEADER_DTYPE, count=1)[0]
+    if bytes(header["magic"]) != MAGIC:
+        raise ValueError(f"bad magic: {header['magic']!r}")
+
+    record_size = int(header["record_size"])
+    if record_size != SAMPLE_DTYPE.itemsize:
+        raise ValueError(f"record_size mismatch: file={record_size} dtype={SAMPLE_DTYPE.itemsize}")
+    return header
+
+
 def write_dataset(path: str, num_players: int, samples: np.ndarray) -> None:
     if num_players not in (2, 4):
         raise ValueError(f"num_players must be 2 or 4, got {num_players}")
@@ -609,23 +625,41 @@ def write_dataset(path: str, num_players: int, samples: np.ndarray) -> None:
 
 
 def read_dataset(path: str) -> Dataset:
+    header = _read_dataset_header(path)
+    record_size = int(header["record_size"])
+    num_records = int(header["num_records"])
     with open(path, "rb") as f:
-        header_bytes = f.read(HEADER_DTYPE.itemsize)
-        if len(header_bytes) != HEADER_DTYPE.itemsize:
-            raise ValueError("file too small for header")
-        header = np.frombuffer(header_bytes, dtype=HEADER_DTYPE, count=1)[0]
-        if bytes(header["magic"]) != MAGIC:
-            raise ValueError(f"bad magic: {header['magic']!r}")
-
-        record_size = int(header["record_size"])
-        if record_size != SAMPLE_DTYPE.itemsize:
-            raise ValueError(
-                f"record_size mismatch: file={record_size} dtype={SAMPLE_DTYPE.itemsize}"
-            )
-        num_records = int(header["num_records"])
+        f.seek(HEADER_DTYPE.itemsize)
         samples_bytes = f.read(record_size * num_records)
-        if len(samples_bytes) != record_size * num_records:
-            raise ValueError("file truncated")
-        samples = np.frombuffer(samples_bytes, dtype=SAMPLE_DTYPE, count=num_records)
+    if len(samples_bytes) != record_size * num_records:
+        raise ValueError("file truncated")
+    samples = np.frombuffer(samples_bytes, dtype=SAMPLE_DTYPE, count=num_records)
+
+    return Dataset(header=header, samples=samples)
+
+
+def read_dataset_window(path: str, start: int, stop: int) -> Dataset:
+    """Expose a direct `[start:stop]` sample window without reading the full `.msl` payload."""
+    header = _read_dataset_header(path)
+    num_records = int(header["num_records"])
+    if start < 0:
+        raise IndexError(f"start must be nonnegative, got {start}")
+    if stop < start:
+        raise IndexError(f"stop must be >= start, got start={start} stop={stop}")
+    if start >= num_records:
+        raise IndexError(f"start {start} out of range for {num_records} records")
+
+    clipped_stop = min(stop, num_records)
+    expected_size = HEADER_DTYPE.itemsize + int(header["record_size"]) * num_records
+    if Path(path).stat().st_size < expected_size:
+        raise ValueError("file truncated")
+
+    samples = np.memmap(
+        path,
+        mode="r",
+        dtype=SAMPLE_DTYPE,
+        offset=HEADER_DTYPE.itemsize + SAMPLE_DTYPE.itemsize * start,
+        shape=(clipped_stop - start,),
+    )
 
     return Dataset(header=header, samples=samples)

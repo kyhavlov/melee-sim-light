@@ -80,6 +80,14 @@ class MetricDelta:
         raise ValueError(f"unknown metric direction: {self.direction}")
 
 
+@dataclass(frozen=True)
+class RedClassification:
+    hard: tuple[MetricDelta, ...]
+    distribution_only: tuple[MetricDelta, ...]
+    derived_only: tuple[MetricDelta, ...]
+    unclassified: tuple[MetricDelta, ...]
+
+
 _HEADER_RE = re.compile(r"^== (?P<section>.+) ==$")
 _METRIC_RE = re.compile(r"^(?P<key>[A-Za-z0-9_.]+): (?P<value>.+)$")
 _NUMBER_RE = re.compile(r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?")
@@ -219,6 +227,154 @@ def _print_delta(delta: MetricDelta) -> None:
     )
 
 
+def _metric_value(
+    reports: dict[str, dict[str, dict[str, MetricValue]]],
+    delta: MetricDelta,
+    metric: str,
+) -> MetricValue | None:
+    return reports.get(delta.report, {}).get(delta.section, {}).get(metric)
+
+
+def _metric_non_regressing(
+    before: dict[str, dict[str, dict[str, MetricValue]]],
+    after: dict[str, dict[str, dict[str, MetricValue]]],
+    delta: MetricDelta,
+    metric: str,
+) -> bool | None:
+    before_value = _metric_value(before, delta, metric)
+    after_value = _metric_value(after, delta, metric)
+    if before_value is None or after_value is None:
+        return None
+    direction = _metrics_for_report(delta.report).get(metric)
+    if direction == "lower":
+        return after_value.value <= before_value.value
+    if direction == "higher":
+        return after_value.value >= before_value.value
+    return None
+
+
+def _is_hard_red(delta: MetricDelta) -> bool:
+    if "one-step" in delta.report:
+        return delta.metric in {
+            "overall.discrete_mismatch",
+            "overall.strict_discrete_mismatch",
+            "overall.float_norm_mae_p95",
+        }
+    if "rollout" not in delta.report:
+        return False
+    return delta.metric in {
+        "rollout.best_len",
+        "rollout.streak_len.max",
+        "rollout.first_mismatch_total",
+        "rollout.first_mismatch_seeded_total",
+        "rollout.streak_count",
+        "overall.rollout.best_len.max",
+        "overall.rollout.streak_len.max",
+        "overall.rollout.first_mismatch_total",
+        "overall.rollout.first_mismatch_seeded_total",
+        "overall.rollout.streak_count",
+    }
+
+
+def _distribution_hard_metrics(delta: MetricDelta) -> tuple[str, ...]:
+    if delta.section == "suite":
+        return ()
+    return (
+        "rollout.best_len",
+        "rollout.streak_len.max",
+        "rollout.first_mismatch_total",
+        "rollout.first_mismatch_seeded_total",
+        "rollout.streak_count",
+    )
+
+
+def classify_reds(
+    before: dict[str, dict[str, dict[str, MetricValue]]],
+    after: dict[str, dict[str, dict[str, MetricValue]]],
+    deltas: Iterable[MetricDelta],
+) -> RedClassification:
+    hard: list[MetricDelta] = []
+    distribution_only: list[MetricDelta] = []
+    derived_only: list[MetricDelta] = []
+    unclassified: list[MetricDelta] = []
+
+    for delta in deltas:
+        if not delta.is_regression:
+            continue
+        if _is_hard_red(delta):
+            hard.append(delta)
+            continue
+        if (
+            "rollout" in delta.report
+            and delta.metric
+            in {"rollout.streak_len.median", "rollout.streak_len.p90", "rollout.streak_len.p95"}
+            and delta.section != "suite"
+        ):
+            statuses = [
+                _metric_non_regressing(before, after, delta, metric)
+                for metric in _distribution_hard_metrics(delta)
+            ]
+            if statuses and all(status is True for status in statuses):
+                distribution_only.append(delta)
+            else:
+                unclassified.append(delta)
+            continue
+        if (
+            "rollout" in delta.report
+            and delta.metric
+            in {
+                "rollout.first_mismatch_non_seeded_total",
+                "overall.rollout.first_mismatch_non_seeded_total",
+            }
+        ):
+            if delta.section == "suite":
+                total_metric = "overall.rollout.first_mismatch_total"
+                streak_metric = "overall.rollout.streak_count"
+            else:
+                total_metric = "rollout.first_mismatch_total"
+                streak_metric = "rollout.streak_count"
+            total_ok = _metric_non_regressing(before, after, delta, total_metric)
+            streak_ok = _metric_non_regressing(before, after, delta, streak_metric)
+            if total_ok is True and streak_ok is True:
+                derived_only.append(delta)
+            else:
+                unclassified.append(delta)
+            continue
+        unclassified.append(delta)
+
+    return RedClassification(
+        hard=tuple(hard),
+        distribution_only=tuple(distribution_only),
+        derived_only=tuple(derived_only),
+        unclassified=tuple(unclassified),
+    )
+
+
+def _print_classification_group(name: str, rows: tuple[MetricDelta, ...], *, top: int) -> None:
+    print(f"{name}:")
+    if not rows:
+        print("- none")
+        return
+    shown = rows[: max(1, top)]
+    for delta in shown:
+        _print_delta(delta)
+    extra = len(rows) - len(shown)
+    if extra > 0:
+        print(f"- ... {extra} more")
+
+
+def print_red_classification(classification: RedClassification, *, top: int) -> None:
+    print("red classification:")
+    _print_classification_group("hard reds", classification.hard, top=top)
+    _print_classification_group(
+        "distribution-only reds", classification.distribution_only, top=top
+    )
+    _print_classification_group("derived-only reds", classification.derived_only, top=top)
+    _print_classification_group(
+        "unclassified regressions", classification.unclassified, top=top
+    )
+
+
 def print_summary(deltas: Iterable[MetricDelta], *, top: int) -> int:
     rows = sorted(deltas, key=_sort_key)
     regressions = [d for d in rows if d.is_regression]
@@ -253,6 +409,19 @@ def print_summary(deltas: Iterable[MetricDelta], *, top: int) -> int:
     return len(regressions)
 
 
+def print_report(
+    before: dict[str, dict[str, dict[str, MetricValue]]],
+    after: dict[str, dict[str, dict[str, MetricValue]]],
+    *,
+    top: int,
+) -> int:
+    deltas = diff_report_sets(before, after)
+    regression_count = print_summary(deltas, top=top)
+    rows = sorted(deltas, key=_sort_key)
+    print_red_classification(classify_reds(before, after, rows), top=top)
+    return regression_count
+
+
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description="Diff generated validation text reports.")
     ap.add_argument(
@@ -277,7 +446,7 @@ def main(argv: list[str] | None = None) -> None:
     after = read_report_set(str(args.after), before=False)
     print(f"before: {args.before}")
     print(f"after:  {args.after}")
-    regression_count = print_summary(diff_report_sets(before, after), top=max(1, int(args.top)))
+    regression_count = print_report(before, after, top=max(1, int(args.top)))
     if args.fail_on_regression and regression_count:
         raise SystemExit(1)
 

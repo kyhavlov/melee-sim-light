@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from tools.eval.validation_report_diff import diff_report_sets, main, read_report_set
+from tools.eval.validation_report_diff import classify_reds, diff_report_sets, main, read_report_set
 
 
 def _write_reports(root: Path, *, one_step: str, rollout: str, include_doubles: bool = True) -> None:
@@ -108,6 +108,112 @@ def test_validation_report_diff_detects_replay_regression_despite_suite_improvem
         d.section == "suite" and d.metric == "overall.rollout.streak_count" and d.is_regression
         for d in deltas
     )
+
+
+def test_validation_report_diff_classifies_hard_reds(tmp_path: Path) -> None:
+    before = tmp_path / "before"
+    after = tmp_path / "after"
+    _write_reports(
+        before,
+        one_step=_one_step(total=10, strict=12, p95="0.20"),
+        rollout=_rollout(streak_count=30, first=30, seeded=8, median=100, p90=200),
+    )
+    _write_reports(
+        after,
+        one_step=_one_step(total=11, strict=12, p95="0.20"),
+        rollout=_rollout(streak_count=30, first=30, seeded=8, median=100, p90=200),
+    )
+
+    before_reports = read_report_set(str(before), before=True)
+    after_reports = read_report_set(str(after))
+    classification = classify_reds(
+        before_reports, after_reports, diff_report_sets(before_reports, after_reports)
+    )
+
+    assert any(d.metric == "overall.discrete_mismatch" for d in classification.hard)
+    assert not classification.distribution_only
+    assert not classification.derived_only
+
+
+def test_validation_report_diff_classifies_distribution_only_rollout_red(tmp_path: Path) -> None:
+    before = tmp_path / "before"
+    after = tmp_path / "after"
+    _write_reports(
+        before,
+        one_step=_one_step(total=10, strict=12, p95="0.20"),
+        rollout=_rollout(streak_count=30, first=30, seeded=8, median=100, p90=200),
+    )
+    _write_reports(
+        after,
+        one_step=_one_step(total=10, strict=12, p95="0.20"),
+        rollout=_rollout(streak_count=29, first=29, seeded=7, median=90, p90=220),
+    )
+
+    before_reports = read_report_set(str(before), before=True)
+    after_reports = read_report_set(str(after))
+    classification = classify_reds(
+        before_reports, after_reports, diff_report_sets(before_reports, after_reports)
+    )
+
+    assert any(d.metric == "rollout.streak_len.median" for d in classification.distribution_only)
+    assert not classification.hard
+    assert not classification.derived_only
+
+
+def test_validation_report_diff_classifies_derived_only_non_seeded_red(tmp_path: Path) -> None:
+    before = tmp_path / "before"
+    after = tmp_path / "after"
+    _write_reports(
+        before,
+        one_step=_one_step(total=10, strict=12, p95="0.20"),
+        rollout=_rollout(streak_count=30, first=10, seeded=5, median=100, p90=200),
+    )
+    _write_reports(
+        after,
+        one_step=_one_step(total=10, strict=12, p95="0.20"),
+        rollout=_rollout(streak_count=29, first=9, seeded=3, median=100, p90=200),
+    )
+
+    before_reports = read_report_set(str(before), before=True)
+    after_reports = read_report_set(str(after))
+    classification = classify_reds(
+        before_reports, after_reports, diff_report_sets(before_reports, after_reports)
+    )
+
+    assert any(
+        d.metric == "rollout.first_mismatch_non_seeded_total" for d in classification.derived_only
+    )
+    assert not classification.hard
+    assert not classification.distribution_only
+
+
+def test_validation_report_diff_classifies_suite_level_derived_only_non_seeded_red(
+    tmp_path: Path,
+) -> None:
+    before = tmp_path / "before"
+    after = tmp_path / "after"
+    _write_reports(
+        before,
+        one_step=_one_step(total=10, strict=12, p95="0.20"),
+        rollout=_rollout(streak_count=30, first=10, seeded=5, median=100, p90=200),
+    )
+    _write_reports(
+        after,
+        one_step=_one_step(total=10, strict=12, p95="0.20"),
+        rollout=_rollout(streak_count=29, first=9, seeded=3, median=100, p90=200),
+    )
+
+    before_reports = read_report_set(str(before), before=True)
+    after_reports = read_report_set(str(after))
+    classification = classify_reds(
+        before_reports, after_reports, diff_report_sets(before_reports, after_reports)
+    )
+
+    assert any(
+        d.section == "suite" and d.metric == "overall.rollout.first_mismatch_non_seeded_total"
+        for d in classification.derived_only
+    )
+    assert not classification.hard
 
 
 def test_validation_report_diff_fail_on_regression_exits_nonzero(tmp_path: Path) -> None:
