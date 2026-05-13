@@ -96,7 +96,11 @@ def _load_stage_segments_for_seed(*, stage_id: int, data_root: Path) -> list[dic
 
 @functools.cache
 def _common_motion_state_owner_actions(
-    data_root_text: str, *, class_bit: int = 0, coll_callbacks: tuple[str, ...] = ()
+    data_root_text: str,
+    *,
+    class_bit: int = 0,
+    coll_callbacks: tuple[str, ...] = (),
+    submotion_ids: tuple[int, ...] = (),
 ) -> frozenset[int]:
     """Return action ids whose generated Fox/Falco MSLMSO01 owner rows agree.
 
@@ -107,6 +111,7 @@ def _common_motion_state_owner_actions(
     owner_dir = Path(data_root_text) / "motion_state" / "owners"
     manifest = read_callback_manifest(owner_dir / "callback_symbols.json")
     wanted_callbacks = set(coll_callbacks)
+    wanted_submotions = {int(v) for v in submotion_ids}
     common: set[int] | None = None
     for ch in ("fox", "falco"):
         owners = read_mslmso01_v1(owner_dir / f"{ch}.bin")
@@ -116,9 +121,78 @@ def _common_motion_state_owner_actions(
                 continue
             if wanted_callbacks and manifest.get(int(owners.coll_cb_id[action_id])) not in wanted_callbacks:
                 continue
+            if wanted_submotions and int(owners.submotion_id[action_id]) not in wanted_submotions:
+                continue
             selected.add(action_id)
         common = selected if common is None else common & selected
     return frozenset(common or ())
+
+
+@functools.cache
+def _common_move_submotion_ids(data_root_text: str, move_names: tuple[str, ...]) -> tuple[int, ...]:
+    common: set[int] | None = None
+    for ch in ("fox", "falco"):
+        moves_path = Path(data_root_text) / "moves" / f"{ch}.json"
+        payload = json.loads(moves_path.read_text(encoding="utf-8"))
+        moves = payload.get("moves", {})
+        selected: set[int] = set()
+        for name in move_names:
+            row = moves.get(name)
+            if isinstance(row, dict) and int(row.get("submotion_id", -1)) >= 0:
+                selected.add(int(row["submotion_id"]))
+        common = selected if common is None else common & selected
+    return tuple(sorted(common or ()))
+
+
+@functools.cache
+def _common_attackair_first_hitbox_phase_by_action(data_root_text: str) -> dict[int, tuple[int, int]]:
+    owner_dir = Path(data_root_text) / "motion_state" / "owners"
+    by_char: list[dict[int, tuple[int, int]]] = []
+    for ch in ("fox", "falco"):
+        owners = read_mslmso01_v1(owner_dir / f"{ch}.bin")
+        moves_path = Path(data_root_text) / "moves" / f"{ch}.json"
+        moves = json.loads(moves_path.read_text(encoding="utf-8")).get("moves", {})
+        phase_by_submotion: dict[int, tuple[int, int]] = {}
+        for row in moves.values():
+            if not isinstance(row, dict):
+                continue
+            submotion_id = int(row.get("submotion_id", -1))
+            if submotion_id < 0:
+                continue
+            first_create = None
+            first_clear = None
+            for ev in row.get("events", []):
+                if not isinstance(ev, dict):
+                    continue
+                kind = ev.get("kind")
+                frame = int(ev.get("frame", -1))
+                if kind == "create_hitbox" and first_create is None:
+                    first_create = frame
+                elif kind == "clear_hitboxes" and first_create is not None:
+                    first_clear = frame
+                    break
+            if first_create is not None:
+                phase_by_submotion[submotion_id] = (
+                    int(first_create),
+                    int(first_clear + 1 if first_clear is not None else 0x7FFF),
+                )
+
+        selected: dict[int, tuple[int, int]] = {}
+        for action_id in range(len(owners.submotion_id)):
+            if (int(owners.class_bits[action_id]) & int(MSL_MS_CLASS_ATTACK_AIR)) == 0:
+                continue
+            phase = phase_by_submotion.get(int(owners.submotion_id[action_id]))
+            if phase is not None:
+                selected[action_id] = phase
+        by_char.append(selected)
+
+    if len(by_char) != 2:
+        return {}
+    common: dict[int, tuple[int, int]] = {}
+    for action_id, phase in by_char[0].items():
+        if by_char[1].get(action_id) == phase:
+            common[action_id] = phase
+    return common
 
 
 def _stage_ledge_floor_ids(*, stage_id: int, data_root: Path) -> tuple[int, int]:
@@ -212,6 +286,7 @@ def _fod_platform_height_transform_records(
 def _derive_fod_floor_skip_segments(
     *,
     action_id_u16: np.ndarray,
+    action_frame_u16: np.ndarray,
     on_ground_u8: np.ndarray,
     pos_x_f32: np.ndarray,
     pos_y_f32: np.ndarray,
@@ -230,13 +305,14 @@ def _derive_fod_floor_skip_segments(
     Slippi does not expose ``coll_data.floor_skip``. For replay/eval seeds, reconstruct only the
     current skipped FoD platform segment from frame-t state and current/prior input: a continuous
     down-held airborne callback episode whose self/KB displacement crosses a live transformed
-    platform. JumpF/JumpB use ft_800835B0 with the same ftCo_80096CC8 platform predicate as
-    Fall/JumpAerial; after the initial crossing, carry that hidden floor-skip for the extracted x470
-    pass-through window. This avoids a runtime gameplay shortcut while preserving the source mpColl
-    skip state needed by teacher-forced rows.
+    platform. JumpF/JumpB use ft_800835B0 and Fall uses ft_800831CC with the same
+    ftCo_80096CC8 platform predicate as JumpAerial; after the initial crossing, carry that hidden
+    floor-skip for the extracted x470 pass-through window. This avoids a runtime gameplay shortcut
+    while preserving the source mpColl skip state needed by teacher-forced rows.
 
     refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpUpdateFloorSkip}
     refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_Coll
+    refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Coll
     refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_80096CC8
     data/stages/bin/griz.bin::MSLSTG01 platform_transforms
     """
@@ -262,20 +338,34 @@ def _derive_fod_floor_skip_segments(
 
     data_root_path = Path(data_root)
     data_root_text = str(data_root_path)
-    active_attackair_actions = _common_motion_state_owner_actions(
+    attackair_actions = _common_motion_state_owner_actions(
         data_root_text, class_bit=MSL_MS_CLASS_ATTACK_AIR
     )
+    shallow_attackair_submotions = _common_move_submotion_ids(
+        data_root_text, ("ftCo_SM_AttackAirN", "ftCo_SM_AttackAirHi", "ftCo_SM_AttackAirLw")
+    )
+    shallow_attackair_actions = _common_motion_state_owner_actions(
+        data_root_text,
+        class_bit=MSL_MS_CLASS_ATTACK_AIR,
+        submotion_ids=shallow_attackair_submotions,
+    )
+    attackair_first_phase_by_action = _common_attackair_first_hitbox_phase_by_action(data_root_text)
     escapeair_actions = _common_motion_state_owner_actions(
         data_root_text, coll_callbacks=("ftCo_EscapeAir_Coll",)
     )
-    active_skip_actions = active_attackair_actions | escapeair_actions
+    active_skip_actions = attackair_actions | escapeair_actions
     jump_skip_actions = _common_motion_state_owner_actions(
         data_root_text, coll_callbacks=("ftCo_Jump_Coll",)
     )
+    fall_skip_actions = _common_motion_state_owner_actions(
+        data_root_text, coll_callbacks=("ftCo_Fall_Coll",)
+    )
+    common_air_skip_actions = jump_skip_actions | fall_skip_actions
     active_down_threshold_i8 = int(np.floor(float(platform_air_land_stick_y_threshold) * 127.0))
     jump_down_threshold_i8 = int(np.floor(float(platform_air_land_stick_y_threshold) * 80.0))
     active_skip = [0xFFFF] * players
     active_skip_remaining = [0] * players
+    active_skip_from_shallow_attackair = [False] * players
     max_line_id = max((int(rec.line_id) for rec in transforms), default=-1)
     transform_platform_by_line = np.full(max_line_id + 1, -1, dtype=np.int16)
     transform_height_coeff_by_line = np.zeros(max_line_id + 1, dtype=np.float32)
@@ -360,15 +450,44 @@ def _derive_fod_floor_skip_segments(
         x = float(pos_x_f32[fi, slot])
         return min(abs(x - float(rec.x0)), abs(x - float(rec.x1))) <= active_skip_platform_root_clearance
 
+    def attackair_shallow_first_contact(fi: int, slot: int, rec: Any) -> bool:
+        x = float(pos_x_f32[fi, slot])
+        if x < min(float(rec.x0), float(rec.x1)) - transformed_platform_skip_lookup_slop:
+            return False
+        if x > max(float(rec.x0), float(rec.x1)) + transformed_platform_skip_lookup_slop:
+            return False
+        pid = int(rec.platform_id)
+        if not int(platform_height_valid_u8[fi, pid]):
+            return False
+        world_y = float(segment_y_by_line.get(int(rec.line_id), 0.0)) + float(
+            platform_height_f32[fi, pid]
+        ) * float(rec.height_coeff)
+        y0 = float(pos_y_f32[fi, slot])
+        y1 = y0 + float(speed_y_self_f32[fi, slot]) + float(speed_y_attack_f32[fi, slot])
+        prev_depth = world_y - y0
+        return (
+            prev_depth > FOD_FLOOR_Y_BIAS
+            and prev_depth <= (2.0 * FOD_SKIP_ECB_VERTICAL_UNIT)
+            and y1 < world_y
+        )
+
+    def attackair_first_hitbox_phase(action_id: int, action_frame: int) -> bool:
+        phase = attackair_first_phase_by_action.get(int(action_id))
+        if phase is None:
+            return False
+        return int(action_frame) >= phase[0] and int(action_frame) < phase[1]
+
     for fi in range(n_samples):
         for slot in range(players):
             if int(on_ground_u8[fi, slot]) != 0:
                 active_skip[slot] = 0xFFFF
+                active_skip_from_shallow_attackair[slot] = False
                 continue
             action_id = int(action_id_u16[fi, slot])
-            if action_id not in active_skip_actions and action_id not in jump_skip_actions:
+            if action_id not in active_skip_actions and action_id not in common_air_skip_actions:
                 active_skip[slot] = 0xFFFF
                 active_skip_remaining[slot] = 0
+                active_skip_from_shallow_attackair[slot] = False
                 continue
             if action_id in active_skip_actions:
                 down_held = (
@@ -383,7 +502,8 @@ def _derive_fod_floor_skip_segments(
             if active_skip[slot] != 0xFFFF:
                 if action_id in active_skip_actions:
                     # Source CollData.floor_skip is not exposed by Slippi. Once a down-held
-                    # transformed-platform pass-through has selected the hidden floor-skip line,
+                    # transformed-platform pass-through or shallow AttackAir_Coll ECB contact has
+                    # selected the hidden floor-skip line,
                     # keep that hidden owner internally until the airborne callback leaves the active
                     # aerial family, lands, or consumes the first hard-floor crossing after the moving
                     # platform pass. Do not serialize it on every intermediate aerial frame: direct
@@ -393,12 +513,25 @@ def _derive_fod_floor_skip_segments(
                     #   mpColl_800471F8,mpColl_80044628_Floor,mpUpdateFloorSkip}
                     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
                     line_id = int(active_skip[slot])
-                    if down_held and active_skip_platform_root_clear(fi, slot, line_id):
+                    rec = transform_record_by_line.get(line_id)
+                    if (
+                        rec is not None
+                        and action_id in shallow_attackair_actions
+                        and attackair_first_hitbox_phase(
+                            action_id, int(action_frame_u16[fi, slot])
+                        )
+                        and attackair_shallow_first_contact(fi, slot, rec)
+                    ):
+                        active_skip_from_shallow_attackair[slot] = True
+                    if (down_held or active_skip_from_shallow_attackair[slot]) and active_skip_platform_root_clear(
+                        fi, slot, line_id
+                    ):
                         out[fi, slot] = active_skip[slot]
                     elif bool(hard_floor_root_crossing[fi, slot]):
                         out[fi, slot] = active_skip[slot]
                         active_skip[slot] = 0xFFFF
                         active_skip_remaining[slot] = 0
+                        active_skip_from_shallow_attackair[slot] = False
                     continue
                 line_id = int(active_skip[slot])
                 pid = (
@@ -428,8 +561,7 @@ def _derive_fod_floor_skip_segments(
                     active_skip_remaining[slot] -= 1
                     continue
                 active_skip[slot] = 0xFFFF
-            if not down_held:
-                continue
+                active_skip_from_shallow_attackair[slot] = False
             x = float(pos_x_f32[fi, slot])
             y0 = float(pos_y_f32[fi, slot])
             y1 = y0 + float(speed_y_self_f32[fi, slot]) + float(speed_y_attack_f32[fi, slot])
@@ -446,21 +578,31 @@ def _derive_fod_floor_skip_segments(
                 world_y = float(segment_y_by_line.get(int(rec.line_id), 0.0)) + float(
                     platform_height_f32[fi, pid]
                 ) * float(rec.height_coeff)
-                if (
+                if down_held and (
                     y0 >= world_y - transformed_platform_skip_lookup_slop
                     and y1 <= world_y + transformed_platform_skip_lookup_slop
                 ):
                     line_id = int(rec.line_id)
                     active_skip[slot] = line_id
                     active_skip_remaining[slot] = int(floor_skip_frames)
+                    active_skip_from_shallow_attackair[slot] = False
                     if action_id in active_skip_actions:
-                        if action_id not in active_attackair_actions or transform_endpoint_contact(
+                        if action_id not in attackair_actions or transform_endpoint_contact(
                             fi, slot, rec
                         ):
                             out[fi, slot] = active_skip[slot]
                     else:
                         if float(pos_y_f32[fi, slot]) <= world_y - jump_skip_root_clearance:
                             out[fi, slot] = active_skip[slot]
+                    break
+                if (
+                    action_id in shallow_attackair_actions
+                    and attackair_first_hitbox_phase(action_id, int(action_frame_u16[fi, slot]))
+                    and attackair_shallow_first_contact(fi, slot, rec)
+                ):
+                    active_skip[slot] = int(rec.line_id)
+                    active_skip_remaining[slot] = int(floor_skip_frames)
+                    active_skip_from_shallow_attackair[slot] = True
                     break
     return out
 
@@ -1066,6 +1208,7 @@ def _derive_walljump_phase_seed_lanes(
     *,
     action_id_u16: np.ndarray,
     action_frame_i16: np.ndarray,
+    walljump_setup_x_delta_threshold_f32: np.ndarray,
     pos_x_f32: np.ndarray,
     pos_y_f32: np.ndarray,
     raw_main_x_i8: np.ndarray,
@@ -1074,26 +1217,25 @@ def _derive_walljump_phase_seed_lanes(
 
     Slippi does not expose `fp->wall_jump_input_timer`, `fp->x2110_walljumpWallSide`, or CollData's
     persisted wall-hug side. Keep this seed lane restricted to common airborne walljump callbacks
-    in Final Destination wall/underside neighborhoods. This is a teacher-forced one-step seed for
-    the hidden timer/side only: runtime still requires the current stick-away input and x670
-    freshness before entering PassiveWallJump.
+    in supported side-wall/underside neighborhoods. This is a teacher-forced one-step seed for the
+    hidden timer/side only: runtime still requires the current stick-away input and x670 freshness
+    before entering PassiveWallJump.
 
-    The reconstruction is prefix-causal in sample space: for seed row `i`, `raw_main_x[i]` is the
-    previous input lane and `raw_main_x[i + 1]` is the current one-step input copied to
-    `samples["input_t"]`. It does not read the next post-frame reference state. The terminal output
-    row is unused because datasets store `walljump_*[:-1]`. The FD gates are stage-data backed:
-    - main floor is y=0, while the underside wall cluster starts below y=-10.5 and reaches inner
-      wall x around +/-61.42 to +/-65.84; y<-5 and |x|>=60 select that wall/underside region
-      without relying on a future collision callback.
-    - raw stick +/-64 is the controller-side away-input threshold corresponding to
-      p_ftCommonData->x76C once normalized by runtime deadzone handling.
-    - action-frame 17/19/20 boundaries and timer=action_frame-8 reconstruct the hidden
-      ftWallJump_8008169C timer phase from the replay history of common-air FD wall-hug rows; they
-      are seed-only provenance, and normal rollout rows leave these lanes at their sentinel.
+    The reconstruction is prefix-causal in sample space: for seed row `i`, it uses only root
+    movement, action state, and raw input visible at or before that row's one-step input. It does
+    not read the next post-frame reference state. The terminal output row is unused because
+    datasets store `walljump_*[:-1]`.
+    - setup is reconstructed from replay-prefix root movement into the side-wall neighborhood using
+      `data/characters/{fox,falco}.json::walljump_setup_x_delta_threshold`, matching the source
+      `ABS(fp->pos_delta.x - wall_speed.x) > fp->co_attrs.x148` setup branch. Supported legal-stage
+      side walls in the current suite are static for this owner, so wall speed is zero.
+    - once setup starts, the hidden timer carries causally across same-side common-air wall rows,
+      but preprocessing serializes it only for rows where the ftWallJump stick-away admission branch
+      can consume the timer. Runtime still requires current WallHug/seeded-Hug and x670 freshness.
 
     refs/melee/src/melee/ft/ftwalljump.c::ftWallJump_8008169C
     refs/melee/src/melee/ft/ft_081B.c::{ft_800831CC,ft_800835B0}
-    data/stages/final_destination.json
+    data/characters/{fox,falco}.json::walljump_setup_x_delta_threshold
     """
     try:
         import msl_binding  # type: ignore
@@ -1102,6 +1244,7 @@ def _derive_walljump_phase_seed_lanes(
     return msl_binding.derive_walljump_phase_seed_lanes(
         np.asarray(action_id_u16, dtype=np.uint16).reshape(-1),
         np.asarray(action_frame_i16, dtype=np.int16).reshape(-1),
+        np.asarray(walljump_setup_x_delta_threshold_f32, dtype=np.float32).reshape(-1),
         np.asarray(pos_x_f32, dtype=np.float32).reshape(-1),
         np.asarray(pos_y_f32, dtype=np.float32).reshape(-1),
         np.asarray(raw_main_x_i8, dtype=np.int8).reshape(-1),
@@ -3143,6 +3286,7 @@ def _main_impl(args) -> Dataset:
     char_run_scaling: dict[int, float] = {}
     char_gr_friction: dict[int, float] = {}
     char_rebound_anim_numerator_frames: dict[int, float] = {}
+    char_walljump_setup_x_delta_threshold: dict[int, float] = {}
     char_active_shield_hit_int_damage: dict[int, dict[int, dict[int, int]]] = {}
 
     def _get_env_dmg_local(dmg: float) -> int:
@@ -3196,6 +3340,7 @@ def _main_impl(args) -> Dataset:
         char_run_scaling[int(cid)] = float(attrs["run_animation_scaling"])
         char_gr_friction[int(cid)] = float(attrs["gr_friction"])
         char_rebound_anim_numerator_frames[int(cid)] = float(attrs["rebound_anim_numerator_frames"])
+        char_walljump_setup_x_delta_threshold[int(cid)] = float(attrs["walljump_setup_x_delta_threshold"])
         active_int_damage_by_anim: dict[int, dict[int, int]] = {}
         for move in [*move_data.values(), *special_move_data.values()]:
             submotion_id = int(move.get("submotion_id", -1))
@@ -3743,6 +3888,15 @@ def _main_impl(args) -> Dataset:
         walljump_timer, walljump_side = _derive_walljump_phase_seed_lanes(
             action_id_u16=post_state,
             action_frame_i16=post_state_age,
+            walljump_setup_x_delta_threshold_f32=np.where(
+                post_char == np.uint8(1),
+                np.float32(char_walljump_setup_x_delta_threshold.get(1, 0.0)),
+                np.where(
+                    post_char == np.uint8(22),
+                    np.float32(char_walljump_setup_x_delta_threshold.get(22, 0.0)),
+                    np.float32(0.0),
+                ),
+            ),
             pos_x_f32=post_pos_x,
             pos_y_f32=post_pos_y,
             raw_main_x_i8=pre_main_x,
@@ -5192,6 +5346,7 @@ def _main_impl(args) -> Dataset:
         samples["seed_t"]["stage_fod_platform_velocity_valid_u8"] = fod_velocity_valid
         fod_floor_skip = _derive_fod_floor_skip_segments(
             action_id_u16=samples["seed_t"]["action_id"][:, :num_players],
+            action_frame_u16=samples["seed_t"]["action_frame"][:, :num_players],
             on_ground_u8=samples["seed_t"]["on_ground"][:, :num_players],
             pos_x_f32=samples["seed_t"]["pos_x"][:, :num_players],
             pos_y_f32=samples["seed_t"]["pos_y"][:, :num_players],

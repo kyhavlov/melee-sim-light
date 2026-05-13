@@ -680,15 +680,19 @@ typedef struct MslStateSoA {
   uint8_t* x678;      // fp->x678
   uint8_t* x679_x;    // fp->x679_x
   uint8_t* x67A_y;    // fp->x67A_y
-  uint8_t* x67B;      // fp->x67B
-  uint8_t* x67C;      // fp->x67C
-  uint8_t* x67D;      // fp->x67D
-  uint8_t* x67E;      // fp->x67E
-  uint8_t* x680;      // fp->x680
-  uint8_t* x681;      // fp->x681
-  uint8_t* x682;      // fp->x682
-  uint8_t* x683;      // fp->x683
-  uint8_t* x684;      // fp->x684
+  // Transient callback-visible copies captured before input.c advances x679/x67A for the current
+  // frame. Used by same-frame callbacks that need the previous Fighter_Spaghetti source phase.
+  uint8_t* x679_x_frame_start;
+  uint8_t* x67A_y_frame_start;
+  uint8_t* x67B;  // fp->x67B
+  uint8_t* x67C;  // fp->x67C
+  uint8_t* x67D;  // fp->x67D
+  uint8_t* x67E;  // fp->x67E
+  uint8_t* x680;  // fp->x680
+  uint8_t* x681;  // fp->x681
+  uint8_t* x682;  // fp->x682
+  uint8_t* x683;  // fp->x683
+  uint8_t* x684;  // fp->x684
 
   // UCF pad buffer (seeded, multi-frame).
   // refs/ucf/include/ucf/pad_buffer.h

@@ -15,6 +15,7 @@
 #include "trigger_input.h"
 
 enum { MSL_ANIM_NONE_U32 = 0xFFFFFFFFu };
+enum { MSL_STAGE_POKEMON_STADIUM = 3u };
 
 static inline uint8_t match_flow_is_dead_action(uint16_t a) {
   switch (a) {
@@ -274,8 +275,17 @@ static inline void enter_rebirth(MslBatch* batch, size_t idx, const MslCommonPar
   // refs/melee/build/GALE01/asm/melee/ft/fighter.s::Fighter_UnkProcessDeath_80068354
   instance_id_counter_consume_plAttack_80037B08(batch, idx);
 
-  // Decomp: respawn starts at camera top (world) and falls to the spawn platform.
-  // refs/melee/src/melee/gr/stage.c::Stage_GetCamBoundsTopOffset
+  // Decomp: gm_1601.c::fn_8016719C stores two player-slot positions before the fighter enters
+  // Rebirth:
+  // - Player_SetSpawnPlatformPos receives the resolved spawn-platform target.
+  // - Player_80032768 receives the start coordinate loaded later by Fighter_UnkInitReset_80067C98.
+  // Most supported stages expose that start Y as the world camera top. Pokemon Stadium's normal
+  // stage path uses the source default Stage_GetCamBoundsTopOffset top (120) for the player start
+  // coordinate while its active camera bounds remain wider/taller for camera/death ownership.
+  // refs/melee/src/melee/gm/gm_1601.c::{fn_8016719C,fn_80167638}
+  // refs/melee/src/melee/pl/player.c::{Player_80032768,Player_LoadPlayerCoords}
+  // refs/melee/src/melee/ft/fighter.c::Fighter_UnkInitReset_80067C98
+  // refs/melee/src/melee/gr/ground.c::{Ground_801C39C0,Stage_GetCamBoundsTopOffset}
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_REBIRTH;
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_WAIT1_0;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
@@ -323,15 +333,19 @@ static inline void enter_rebirth(MslBatch* batch, size_t idx, const MslCommonPar
   // data/stages/bin/*.bin::MSLSTG01 respawn_points
   batch->state.facing[idx] = (uint8_t)(respawn.x < 0.0f ? 1u : 0u);
   batch->state.pos_x[idx] = respawn.x;
-  batch->state.pos_y[idx] = cam.top;
+  const float rebirth_start_y =
+      (stage_id == (uint32_t)MSL_STAGE_POKEMON_STADIUM) ? 120.0f : cam.top;
+  batch->state.pos_y[idx] = rebirth_start_y;
 
-  // Rebirth fall speed is stage-derived: linear fall from camera top to platform Y over the
-  // Rebirth timer length (p_ftCommonData + 0x5D0).
+  // Rebirth fall speed is source-derived: ftCo_Rebirth_Phys computes velocity from the
+  // Fighter_UnkInitReset-loaded start coordinate toward Player_GetSpawnPlatformPos over the
+  // remaining Rebirth timer (p_ftCommonData + 0x5D0).
   // Decomp: refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s (Rebirth enter sets fp->x2340 from 0x5D0)
+  // refs/melee/src/melee/ft/ft_0D4D.c::ftCo_Rebirth_Phys
   const int frames = (int)c->rebirth_timer_frames;
   float vy = 0.0f;
   if (frames > 0) {
-    vy = (respawn.y - cam.top) / (float)frames;
+    vy = (respawn.y - rebirth_start_y) / (float)frames;
   }
   batch->state.speed_air_x_self[idx] = 0.0f;
   batch->state.speed_ground_x_self[idx] = 0.0f;

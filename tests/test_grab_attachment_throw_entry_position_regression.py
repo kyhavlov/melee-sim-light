@@ -177,6 +177,39 @@ def test_throwhi_attached_rollout_uses_float_aobj_anchor() -> None:
 
 
 @pytest.mark.integration
+def test_throwf_attached_validation_row_strips_duplicate_transn_root() -> None:
+    # Replay-real positive for grounded ThrowF/ThrownF attachment:
+    # - ThrowF Phys has already carried the thrower's script TransN root into cur_pos through
+    #   ft_80085004/ft_80085030.
+    # - ftCo_800DE508 then samples the constrained XRotN attachment joint and applies x1A70.
+    # - The attachment sample must use the root-relative pose lane for ThrownF so the thrower
+    #   TransN root is not counted once in cur_pos and again in the sampled joint.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_ThrowF_Phys
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_80085004,ft_80085030}
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
+        "GracefulAttachedTurtle.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    record = 1452
+    victim = 0
+    out, ref = _run_record(dataset_path, record)
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples[record]["seed_t"]
+
+    assert int(seed["action_id"][victim]) == 239  # ThrownF
+    assert int(out["action_id"][0, victim]) == int(ref["action_id"][victim]) == 239
+    assert abs(float(seed["pos_x"][victim]) - float(ref["pos_x"][victim])) > 3.0
+    assert abs(float(out["pos_x"][0, victim]) - float(ref["pos_x"][victim])) <= 0.01
+    assert abs(float(out["pos_y"][0, victim]) - float(ref["pos_y"][victim])) <= 0.03
+
+
+@pytest.mark.integration
 def test_throwlw_low_throw_keeps_existing_attachment_anchor_boundary() -> None:
     # Replay-real boundary for the low-throw attached owner:
     # - ThrownLw uses the constrained TransN2/capture-anchor joint plus static x1A70 offset.

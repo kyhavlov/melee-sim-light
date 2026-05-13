@@ -219,6 +219,7 @@ static inline uint8_t damage_post_hitlag_cb_owner_action(uint16_t a) {
     case MSL_ACT_FLY_REFLECT_WALL:
     case MSL_ACT_FLY_REFLECT_CEIL:
     case MSL_ACT_DAMAGE_FALL:
+    case MSL_ACT_DOWN_DAMAGE_U:
     case MSL_ACT_DOWN_DAMAGE_D:
       return 1u;
     default:
@@ -251,13 +252,15 @@ static inline uint8_t timers_first_active_sdi_allows_radius_crossing(const MslBa
     return 0u;
   }
 
-  // Floor-owned horizontal DamageFlyN rows are excluded when the seed carries an explicit
-  // CollData_X130_Locked / ECB-lock floor-contact owner (`ecb_lock_timer` plus a persisted floor
-  // index). A root-vs-floor-height bias is not source provenance.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
-  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpColl_80046904}
-  if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_DAMAGE_FLY_N &&
-      batch->state.ground_id[idx] != 0xFFFFu && batch->state.ecb_lock_timer[idx] != 0u) {
+  // The first-active bridge is only valid when the frame-start Fighter_Spaghetti source input
+  // segment detected a fresh center-line crossing. That helper resets the companion x679/x67A
+  // counters through lb_8000D148 even when ftCo_8008DCE0 left x670/x671 at 0xFE.
+  // DamageFly rows without this source input-crossing evidence stay on the ordinary x670/x671
+  // timer-window path; the post-input x679/x67A values have already advanced one frame by the time
+  // this callback runs, so use input.c's frame-start snapshot.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_Spaghetti_8006AD10,lb_8000D148}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag
+  if (batch->state.x679_x_frame_start[idx] != 0u && batch->state.x67A_y_frame_start[idx] != 0u) {
     return 0u;
   }
   return 1u;
@@ -265,11 +268,12 @@ static inline uint8_t timers_first_active_sdi_allows_radius_crossing(const MslBa
 
 static inline uint8_t damage_every_hitlag_sdi_timer_window_action(uint16_t a) {
   switch (a) {
-    // DownDamageD re-enters ftCo_8008DCE0 via ftCo_8009F184 and owns the same per-hitlag SDI
+    // DownDamageU/D re-enter ftCo_8008DCE0 via ftCo_8009F184 and own the same per-hitlag SDI
     // callback, but it is not part of the common Damage* / DamageFly* action-id block above.
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::{
     //   ftCo_8009F184,ftCo_DownDamage_Phys}
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag
+    case MSL_ACT_DOWN_DAMAGE_U:
     case MSL_ACT_DOWN_DAMAGE_D:
       return 1u;
     default:
@@ -313,6 +317,41 @@ static inline void damage_hitlag_exit_wall_project_asdi(const MslBatch* batch, s
 
 static inline uint8_t guard_setoff_post_hitlag_cb_owner_action(uint16_t a) {
   return a == (uint16_t)MSL_ACT_GUARD_SET_OFF ? 1u : 0u;
+}
+
+static inline uint8_t guard_setoff_active_hitlag_sdi_seed_window(const MslBatch* batch,
+                                                                 const MslCommonParams* c,
+                                                                 size_t idx, float lstick_x) {
+  if (batch == NULL || c == NULL) {
+    return 0u;
+  }
+  const float prev_lstick_x = stick_i8_to_unit(batch->state.prev_input_main_x[idx]);
+  const uint8_t fresh_directional_entry =
+      (uint8_t)(fabsf(lstick_x) >= c->sdi_radius && fabsf(prev_lstick_x) < c->sdi_radius &&
+                batch->state.x679_x_frame_start[idx] == 254u && batch->state.x679_x[idx] == 0u);
+  if (fresh_directional_entry != 0u) {
+    return 1u;
+  }
+
+  // ftCo_80093240 also has the ordinary x670 timer-window path after a fresh pulse.
+  //
+  // Replay seeds expose Fighter_Spaghetti's post-frame input-history timer, not the callback-local
+  // value after ftCo_80093240 writes x670=254.  The bounded source-visible carry phase that remains
+  // reconstructible without a future lane is the first post-entry X segment carry on active
+  // high-damage GuardSetOff rows: x19A4 proves the shield-hit damage owner, frame-start x679==0
+  // proves the source input segment is still on the first carry tick, and the caller has already
+  // proved hitlag remains active after the prio-0 decrement. ftCo_80093240 still runs on the last
+  // nonzero hitlag tick; only post-hitlag rows switch to ftCo_800932DC.
+  //
+  // refs/melee/src/melee/ft/fighter.c::Fighter_Spaghetti_8006AD10
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80092F2C,ftCo_80093240}
+  if (batch->state.guard_setoff_hitlag_damage_min[idx] > c->sdi_tilt_max_frames &&
+      batch->state.hitlag[idx] != 0u && batch->state.x679_x_frame_start[idx] == 0u &&
+      batch->state.tilt_timer_x[idx] < c->sdi_tilt_max_frames) {
+    return 1u;
+  }
+
+  return 0u;
 }
 
 void timers_consume_post_hitlag_callbacks_pre_input(MslBatch* batch) {
@@ -491,6 +530,33 @@ void timers_consume_post_hitlag_callbacks_after_input(MslBatch* batch) {
       const size_t idx = msl_idx_player(bi, p);
       batch->state.damage_hitlag_downward_sdi_consumed[idx] = 0u;
       const uint16_t a = batch->state.action_id[idx];
+      if (guard_setoff_post_hitlag_cb_owner_action(a)) {
+        // GuardSetOff active-hitlag callback:
+        // - ftCo_80092F2C installs `hitlag_cb = ftCo_80093240` when shield contact enters
+        //   GuardSetOff.
+        // - Fighter_procUpdate refreshes current-frame input before calling `hitlag_cb`, so the
+        //   callback observes the current x670 timer produced by Fighter_Spaghetti.
+        // - ftCo_80093240 is grounded-only and applies floor-tangent SDI with the shield scalar
+        //   x4C0 when `allow_sdi`, abs(lstick.x) >= sdi radius, and x670 is inside the SDI window.
+        // refs/melee/src/melee/ft/fighter.c::{Fighter_procUpdate,Fighter_Spaghetti_8006AD10}
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80092F2C,ftCo_80093240}
+        if (batch->state.hitlag_pre_timer[idx] != 0u && batch->state.hitlag[idx] != 0u &&
+            batch->state.on_ground[idx] != 0u) {
+          const float lstick_x = stick_i8_to_unit(batch->state.input_main_x[idx]);
+          const float lstick_full_x = apply_deadzone(lstick_x, c->lstick_deadzone_x);
+          if (guard_setoff_active_hitlag_sdi_seed_window(batch, c, idx, lstick_x) != 0u) {
+            const float nx = batch->state.ground_normal_x[idx];
+            const float ny = (batch->state.ground_normal_y[idx] != 0.0f)
+                                 ? batch->state.ground_normal_y[idx]
+                                 : 1.0f;
+            const float scl = c->shield_sdi_mul * (lstick_full_x * sdi_step_mul);
+            batch->state.pos_x[idx] += ny * scl;
+            batch->state.pos_y[idx] += -nx * scl;
+            batch->state.tilt_timer_x[idx] = 254u;
+          }
+        }
+        continue;
+      }
       if (!damage_post_hitlag_cb_owner_action(a)) {
         continue;
       }
@@ -499,11 +565,14 @@ void timers_consume_post_hitlag_callbacks_after_input(MslBatch* batch) {
       const float lstick_y = stick_i8_to_unit(batch->state.input_main_y[idx]);
       const float lstick_full_x = apply_deadzone(lstick_x, c->lstick_deadzone_x);
       const float lstick_full_y = apply_deadzone(lstick_y, c->lstick_deadzone_y);
-      const float lstick_mag_sq = lstick_x * lstick_x + lstick_y * lstick_y;
+      const float lstick_full_mag_sq =
+          lstick_full_x * lstick_full_x + lstick_full_y * lstick_full_y;
       const float prev_lstick_x = stick_i8_to_unit(batch->state.prev_input_main_x[idx]);
       const float prev_lstick_y = stick_i8_to_unit(batch->state.prev_input_main_y[idx]);
-      const float prev_lstick_mag_sq =
-          prev_lstick_x * prev_lstick_x + prev_lstick_y * prev_lstick_y;
+      const float prev_lstick_full_x = apply_deadzone(prev_lstick_x, c->lstick_deadzone_x);
+      const float prev_lstick_full_y = apply_deadzone(prev_lstick_y, c->lstick_deadzone_y);
+      const float prev_lstick_full_mag_sq =
+          prev_lstick_full_x * prev_lstick_full_x + prev_lstick_full_y * prev_lstick_full_y;
       const size_t flags_i =
           idx * (size_t)MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221A_INDEX;
       const uint8_t sdi_tilt_window = (batch->state.tilt_timer_x[idx] < c->sdi_tilt_max_frames ||
@@ -524,14 +593,17 @@ void timers_consume_post_hitlag_callbacks_after_input(MslBatch* batch) {
           (timers_first_active_sdi_allows_radius_crossing(batch, bi, idx) &&
            batch->state.action_frame[idx] == 1 && batch->state.tilt_timer_x[idx] == 254u &&
            batch->state.tilt_timer_y[idx] == 254u && batch->state.seed_prev_action_id[idx] != a &&
-           lstick_mag_sq >= sdi_radius_sq && prev_lstick_mag_sq < sdi_radius_sq)
+           lstick_full_mag_sq >= sdi_radius_sq && prev_lstick_full_mag_sq < sdi_radius_sq)
               ? 1u
               : 0u;
       const uint8_t flags_221a = batch->state.state_flags[flags_i];
       // Source predicate:
       // - ftCo_Damage_OnEveryHitlag's timer-window path is generic and gated by hidden `allow_sdi`.
+      // - The callback tests `fp->input.lstick`, after Fighter_Spaghetti has zeroed global-deadzone
+      //   axes; the radius predicate must use the same deadzoned vector as the displacement.
       // - Runtime uses `damage_allow_sdi`; action-family/phantom distinctions only participate in
       //   teacher-forced reseed initialization for that lane.
+      // refs/melee/src/melee/ft/fighter.c::Fighter_Spaghetti_8006AD10
       // refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006A1BC}
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag
       const uint8_t allow_sdi = batch->state.damage_allow_sdi[idx] ? 1u : 0u;
@@ -548,7 +620,7 @@ void timers_consume_post_hitlag_callbacks_after_input(MslBatch* batch) {
               : 0u;
       if (batch->state.hitlag_pre_timer[idx] != 0u && batch->state.hitlag[idx] != 0u && allow_sdi &&
           (use_timer_window || use_first_active_radius_crossing) && is_current_hitlag_active &&
-          lstick_mag_sq >= sdi_radius_sq) {
+          lstick_full_mag_sq >= sdi_radius_sq) {
         batch->state.pos_x[idx] += lstick_full_x * sdi_step_mul;
         batch->state.pos_y[idx] += lstick_full_y * sdi_step_mul;
         if (lstick_full_y < 0.0f) {

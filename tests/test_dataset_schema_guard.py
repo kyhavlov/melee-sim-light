@@ -580,28 +580,31 @@ def test_jab_rapid_count_seed_lane_resets_on_attack11_entry_and_counts_iasa_fram
 
 
 def test_walljump_phase_seed_lane_is_prefix_causal() -> None:
-    action = np.array([27, 27, 27, 27, 27, 27, 27], dtype=np.uint16)
-    action_frame = np.array([15, 16, 17, 18, 19, 20, 21], dtype=np.int16)
-    pos_x = np.array([87.0, 87.0, 87.0, 87.0, -87.0, -87.0, -87.0], dtype=np.float32)
+    action = np.array([27, 27, 27, 27, 0, 27, 27, 27], dtype=np.uint16)
+    action_frame = np.array([15, 16, 17, 18, 19, 11, 12, 13], dtype=np.int16)
+    pos_x = np.array([86.0, 86.7, 87.0, 87.0, 0.0, -86.0, -86.7, -87.0], dtype=np.float32)
     pos_y = np.full(action.shape, -9.0, dtype=np.float32)
-    # `raw_main_x[i + 1]` is the sample's current one-step input_t for seed row i; this is not
-    # future reference state. The final reconstruction row is unused by dataset emission.
-    raw_main_x = np.array([0, 0, 0, 84, 0, -84, -84], dtype=np.int8)
+    # `raw_main_x[i + 1]` is the current one-step input for seed row i. The lane carries setup
+    # internally but serializes only rows where ftWallJump's stick-away branch can consume it.
+    raw_main_x = np.array([0, 0, 0, 84, 84, 0, 0, -84], dtype=np.int8)
+    setup_threshold = np.full(action.shape, 0.5, dtype=np.float32)
 
     timer, side = _derive_walljump_phase_seed_lanes(
         action_id_u16=action,
         action_frame_i16=action_frame,
+        walljump_setup_x_delta_threshold_f32=setup_threshold,
         pos_x_f32=pos_x,
         pos_y_f32=pos_y,
         raw_main_x_i8=raw_main_x,
     )
-    assert timer.tolist() == [254, 254, 9, 254, 11, 12, 13]
-    assert side.tolist() == [0, 0, -1, 0, 1, 1, 1]
+    assert timer.tolist() == [254, 254, 9, 254, 254, 254, 254, 254]
+    assert side.tolist() == [0, 0, -1, 0, 0, 0, 0, 0]
 
     for end in range(2, action.shape[0] + 1):
         prefix_timer, prefix_side = _derive_walljump_phase_seed_lanes(
             action_id_u16=action[:end],
             action_frame_i16=action_frame[:end],
+            walljump_setup_x_delta_threshold_f32=setup_threshold[:end],
             pos_x_f32=pos_x[:end],
             pos_y_f32=pos_y[:end],
             raw_main_x_i8=raw_main_x[:end],
@@ -614,16 +617,18 @@ def test_walljump_phase_seed_lane_rejects_generic_wall_hug_rows() -> None:
     # These are seed-lane guardrails, not gameplay admission tests:
     # - early common-air wall hugs remain sentinel until the hidden timer phase is reconstructable;
     # - floor/ledge-near rows and non-common-air rows do not get generic walljump authority;
-    # - wrong-way or neutral stick rows leave runtime CollData as the owner.
-    action = np.array([27, 27, 88, 27, 27, 27, 0], dtype=np.uint16)
+    # - static wall-hug rows without prefix root movement leave runtime CollData as the owner.
+    action = np.array([27, 27, 88, 27, 0, 27, 0], dtype=np.uint16)
     action_frame = np.array([7, 18, 18, 18, 20, 20, 20], dtype=np.int16)
-    pos_x = np.array([87.0, 87.0, 87.0, 50.0, 87.0, -87.0, -87.0], dtype=np.float32)
+    pos_x = np.array([87.0, 87.0, 87.0, 50.0, -87.0, -87.0, -87.0], dtype=np.float32)
     pos_y = np.array([-9.0, -2.0, -9.0, -9.0, -9.0, -9.0, -9.0], dtype=np.float32)
     raw_main_x = np.array([84, 84, 84, 84, 0, -84, 84], dtype=np.int8)
+    setup_threshold = np.full(action.shape, 0.5, dtype=np.float32)
 
     timer, side = _derive_walljump_phase_seed_lanes(
         action_id_u16=action,
         action_frame_i16=action_frame,
+        walljump_setup_x_delta_threshold_f32=setup_threshold,
         pos_x_f32=pos_x,
         pos_y_f32=pos_y,
         raw_main_x_i8=raw_main_x,

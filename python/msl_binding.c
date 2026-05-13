@@ -6495,7 +6495,7 @@ static PyMethodDef methods[] = {
     {"derive_passivewall_timer", msl_derive_passivewall_timer_py, METH_VARARGS,
      "derive_passivewall_timer(action, frame, total_frames) -> uint8[:]"},
     {"derive_walljump_phase_seed_lanes", msl_derive_walljump_phase_seed_lanes_py, METH_VARARGS,
-     "derive_walljump_phase_seed_lanes(action, frame, pos_x, pos_y, raw_main_x) -> "
+     "derive_walljump_phase_seed_lanes(action, frame, setup_x_delta, pos_x, pos_y, raw_main_x) -> "
      "(timer, side)"},
     {"derive_entry_end_fall_lock", msl_derive_entry_end_fall_lock_py, METH_VARARGS,
      "derive_entry_end_fall_lock(action, on_ground, entry_end, fall) -> uint8[:]"},

@@ -254,6 +254,23 @@ static inline uint8_t mpcoll_action_uses_ft80081d0c_air_collision(uint16_t actio
   return msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_FT80081D0C_AIR_COLL);
 }
 
+static inline uint8_t mpcoll_action_uses_sideb_air_ground_ledge_collision(uint8_t char_id,
+                                                                          uint16_t action_id) {
+  // Fox/Falco aerial Side-B Start/Main/End collision callbacks call `ft_CheckGroundAndLedge`,
+  // which loads the airborne ECB and calls `mpColl_800473CC` or `mpColl_800471F8`. Both routes run
+  // the full `mpColl_80046904` airborne wall envelope before the floor/ledge consumers. This is the
+  // same wall source owner as the ft_80081D0C airborne collision path, not a common-air walljump
+  // callback; Side-B receives Push/Hug provenance from mpColl but has no same-callback
+  // ftWallJump_8008169C consumer.
+  // data/motion_state/owners/{fox,falco}.bin (MSLMSO01 class_bits)
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
+  //   ftFx_SpecialAirSStart_Coll,ftFx_SpecialAirS_Coll,ftFx_SpecialAirSEnd_Coll}
+  // refs/melee/src/melee/ft/ft_081B.c::ft_CheckGroundAndLedge
+  // refs/melee/src/melee/mp/mpcoll.c::{
+  //   mpColl_800473CC,mpColl_800471F8,mpColl_80046904}
+  return msl_motion_state_class_has(char_id, action_id, MSL_MS_CLASS_SIDEB_AIR_GROUND_LEDGE_COLL);
+}
+
 static inline void ecb_update_rot_bounds(float x, float y, float* io_min_x, float* io_max_x,
                                          float* io_min_y, float* io_max_y) {
   if (x < *io_min_x) {
@@ -2648,9 +2665,12 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
         const uint8_t use_common_air_left_envelope = use_common_air_walljump_callback;
         const uint8_t use_ft80081d0c_left_envelope =
             mpcoll_action_uses_ft80081d0c_air_collision(action_id);
+        const uint8_t use_sideb_air_left_envelope =
+            mpcoll_action_uses_sideb_air_ground_ledge_collision(char_id, action_id);
         const uint8_t use_left_air_envelope =
             (uint8_t)(use_specialhi_left_envelope || use_damagefly_left_envelope ||
-                      use_common_air_left_envelope || use_ft80081d0c_left_envelope);
+                      use_common_air_left_envelope || use_ft80081d0c_left_envelope ||
+                      use_sideb_air_left_envelope);
         const MslEcbWorldPoints* left_cur_ecb =
             use_specialhi_left_envelope ? &cur_specialhi_wall_ecb : &cur_ecb;
         const MslEcbWorldPoints* left_prev_ecb =
@@ -2762,7 +2782,7 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
             mark_left_wall_contact(
                 batch, idx,
                 (uint8_t)((use_common_air_left_envelope || use_ft80081d0c_left_envelope ||
-                           use_damagefly_left_envelope)
+                           use_sideb_air_left_envelope || use_damagefly_left_envelope)
                               ? candidates.has_hug
                               : 0u));
             ecb_points_shift_x3(&cur_ecb, &cur_right_ecb, &cur_specialhi_wall_ecb, dx);
@@ -2932,9 +2952,12 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
         const uint8_t use_common_air_right_envelope = use_common_air_walljump_callback;
         const uint8_t use_ft80081d0c_right_envelope =
             mpcoll_action_uses_ft80081d0c_air_collision(action_id);
+        const uint8_t use_sideb_air_right_envelope =
+            mpcoll_action_uses_sideb_air_ground_ledge_collision(char_id, action_id);
         const uint8_t use_right_air_envelope =
             (uint8_t)(use_specialhi_right_envelope || use_damagefly_right_envelope ||
-                      use_common_air_right_envelope || use_ft80081d0c_right_envelope);
+                      use_common_air_right_envelope || use_ft80081d0c_right_envelope ||
+                      use_sideb_air_right_envelope);
         const float cur_lx = cur_right_ecb.left_x;
         const float cur_ly = cur_right_ecb.left_y;
         const float prev_lx = prev_right_ecb.left_x;

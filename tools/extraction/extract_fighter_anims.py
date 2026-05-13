@@ -1459,15 +1459,17 @@ def _write_fighter_dynamics_data(
     parent_part: list[int],
     collision_msids: list[int] | None = None,
     source_step_msids: list[int] | None = None,
+    cone_msids: list[int] | None = None,
 ) -> Path:
     """Write extracted ftData.x2C dynamic-chain descriptors for runtime pose ownership.
 
-    Layout `SSDYNN01` v6:
+    Layout `SSDYNN01` v7:
     - set_count:u16, total_node_count:u16
     - per set: root_part:u16, node_count:u16, pos:vec3
     - per node: part:u16, pad:u16, constants[15]:f32
     - collision_msid_count:u16, reserved:u16, collision_msids:u16[]
     - source_step_msid_count:u16, reserved:u16, source_step_msids:u16[]
+    - cone_msid_count:u16, reserved:u16, cone_msids:u16[]
     - collider_count:u16, reserved:u16
     - per collider: part:u16, pad:u16, offset:vec3, radius:f32
 
@@ -1499,7 +1501,7 @@ def _write_fighter_dynamics_data(
 
     with out_path.open("wb") as f:
         f.write(b"SSDYNN01")
-        f.write(struct.pack("<I", 6))
+        f.write(struct.pack("<I", 7))
         f.write(struct.pack("<H", len(encoded_sets)))
         f.write(struct.pack("<H", total_nodes))
         for root, pos, nodes in encoded_sets:
@@ -1518,6 +1520,13 @@ def _write_fighter_dynamics_data(
             raise RuntimeError(f"{character}: source-step msids not in collision owner index: {extra}")
         f.write(struct.pack("<HH", len(source_step_owner_msids), 0))
         for msid in source_step_owner_msids:
+            f.write(struct.pack("<H", msid))
+        cone_owner_msids = sorted({int(msid) & 0xFFFF for msid in (cone_msids or [])})
+        if not set(cone_owner_msids).issubset(set(owner_msids)):
+            extra = sorted(set(cone_owner_msids) - set(owner_msids))
+            raise RuntimeError(f"{character}: cone msids not in collision owner index: {extra}")
+        f.write(struct.pack("<HH", len(cone_owner_msids), 0))
+        for msid in cone_owner_msids:
             f.write(struct.pack("<H", msid))
         colliders_raw = []
         for dyn in dynamic_sets:
@@ -1539,7 +1548,7 @@ def _dynamic_collision_owner_msids(
     """Return submotions whose BODY collision matrices consume fighter dynamics state.
 
     This is deliberately data-owned rather than a C gameplay branch. Fox `AttackHi3`, `JumpB`,
-    `LandingFallSpecial` and `CatchDash` are the audited RL1.0
+    `LandingFallSpecial`, `Catch`, and `CatchDash` are the audited RL1.0
     dynamic-chain collision owners:
     Dolphin
     pre-`ftColl_80078C70` primitive probes show live hurtcap endpoints on the x2C chain consume
@@ -1562,6 +1571,7 @@ def _dynamic_collision_owner_msids(
         "ftCo_SM_JumpB",
         "ftCo_SM_LandingFallSpecial",
         "ftCo_SM_AttackHi3",
+        "ftCo_SM_Catch",
         "ftCo_SM_CatchDash",
     ):
         move_entry = move_map.get(move_name)
@@ -1589,6 +1599,29 @@ def _dynamic_source_step_owner_msids(
         return []
     del moves
     return []
+
+
+def _dynamic_cone_owner_msids(
+    character: str,
+    moves: dict[str, object],
+    dynamic_sets: list[dict[str, object]],
+) -> list[int]:
+    """Return collision owners whose validated reconstruction uses descriptor +0x68 cone clamp.
+
+    This remains a generated owner index because the current-segment cone approximation is validated
+    for Fox Catch (MGS:4921..4923) but is not the full source-step/natural-direction owner for every
+    dynamic collision msid (SDS:299 is the CatchDash negative).
+    """
+    if character != "fox" or not dynamic_sets:
+        return []
+    move_map = (moves.get("moves") or {}) if isinstance(moves, dict) else {}
+    out: list[int] = []
+    for move_name in ("ftCo_SM_Catch",):
+        move_entry = move_map.get(move_name)
+        msid = move_entry.get("submotion_id") if isinstance(move_entry, dict) else None
+        if isinstance(msid, int) and 0 <= msid <= 0xFFFF:
+            out.append(int(msid))
+    return out
 
 
 def _node_mapping_for_parts(parts_num: int, skip_parts: list[int], fig: _FigaTree) -> tuple[list[int], list[int], list[int]]:
@@ -1712,6 +1745,7 @@ def extract_one_character(
         parent_part,
         collision_msids=_dynamic_collision_owner_msids(character, moves, dynamic_sets),
         source_step_msids=_dynamic_source_step_owner_msids(character, moves, dynamic_sets),
+        cone_msids=_dynamic_cone_owner_msids(character, moves, dynamic_sets),
     )
 
     # Capture victim alignment anchor (`mv.co.capturedamage.x18`) is set from `ftData.x8->x11`.

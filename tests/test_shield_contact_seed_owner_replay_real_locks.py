@@ -1559,6 +1559,159 @@ def test_guard_shielddesc_runtime_pose_keeps_dcc_body_rollout_negative() -> None
 
 
 @pytest.mark.integration
+def test_guardsetoff_active_hitlag_sdi_applies_floor_tangent_displacement() -> None:
+    # Replay-real positive lock for active GuardSetOff shield SDI:
+    # - ftCo_80092F2C installs hitlag_cb = ftCo_80093240 on shield contact.
+    # - Fighter_procUpdate refreshes current input before the hitlag callback; this row carries a
+    #   fresh horizontal stick entry, which is replay-visible through the frame-start x679 seed.
+    # - ftCo_80093240 uses x4B8 * x4C0, not the post-hitlag ASDI scalar x4BC.
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_procUpdate,Fighter_Spaghetti_8006AD10}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80092F2C,ftCo_80093240}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/dream_land_recent/"
+        / "FlippantEnchantedHorse.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    defender = 1
+    seed, ref, out = _run_one_step_row(dataset_path, 5348, defender)
+
+    assert int(seed["action_id"][defender]) == 181
+    assert int(seed["hitlag"][defender]) > int(ref["hitlag"][defender]) > 0
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender]) == 181
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender])
+    assert float(out["pos_x"][defender]) == pytest.approx(float(ref["pos_x"][defender]), abs=1e-6)
+    assert float(out["pos_y"][defender]) == pytest.approx(float(ref["pos_y"][defender]), abs=1e-6)
+
+
+@pytest.mark.integration
+def test_guardsetoff_active_hitlag_sdi_high_damage_x670_carry_displaces() -> None:
+    # Positive boundary for the GuardSetOff x670 timer-window pulse after fresh entry:
+    # - ftCo_80092F2C has already installed the hitlag callback and seeded x19A4 from the accepted
+    #   shield hit.
+    # - Fighter_Spaghetti exposes x670 inside p_ftCommonData->x4B4 on this active high-damage
+    #   GuardSetOff row, so ftCo_80093240 consumes the same floor-tangent x4B8*x4C0 displacement.
+    # - CNM 8214 below remains the negative for a stale low-damage visible carry row.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_Spaghetti_8006AD10
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80092F2C,ftCo_80093240}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/dream_land_recent/"
+        / "FlippantEnchantedHorse.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    defender = 1
+    seed, ref, out = _run_one_step_row(dataset_path, 5349, defender)
+
+    assert int(seed["action_id"][defender]) == 181
+    assert int(seed["hitlag"][defender]) == 3
+    assert int(seed["tilt_timer_x"][defender]) == 0
+    assert int(seed["guard_setoff_hitlag_damage_min"][defender]) > 4
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender]) == 181
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender])
+    assert float(out["pos_x"][defender]) == pytest.approx(float(ref["pos_x"][defender]), abs=1e-6)
+    assert float(out["pos_y"][defender]) == pytest.approx(float(ref["pos_y"][defender]), abs=1e-6)
+
+
+@pytest.mark.integration
+def test_guardsetoff_active_hitlag_sdi_last_active_tick_still_displaces_feh() -> None:
+    # Positive boundary for the last active-hitlag tick:
+    # - ftCo_80093240 runs while GuardSetOff hitlag is still nonzero; only the later hitlag-exit
+    #   callback switches to ftCo_800932DC.
+    # - FEH 11426 is the fresh X pulse; FEH 11427 is the next held x670 carry tick with hitlag
+    #   still active after decrement, and vanilla applies the same floor-tangent shield SDI.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80092F2C,ftCo_80093240,ftCo_800932DC}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/dream_land_recent/"
+        / "FlippantEnchantedHorse.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    defender = 0
+    seed, ref, out = _run_one_step_row(dataset_path, 11427, defender)
+
+    assert int(seed["action_id"][defender]) == 181
+    assert int(seed["hitlag"][defender]) == 2
+    assert int(seed["tilt_timer_x"][defender]) == 0
+    assert int(seed["guard_setoff_hitlag_damage_min"][defender]) > 4
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender]) == 181
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 1
+    assert float(out["pos_x"][defender]) == pytest.approx(float(ref["pos_x"][defender]), abs=1e-5)
+    assert float(out["pos_y"][defender]) == pytest.approx(float(ref["pos_y"][defender]), abs=1e-6)
+
+
+@pytest.mark.integration
+def test_guardsetoff_active_hitlag_sdi_requires_x670_window() -> None:
+    # Negative boundary: active GuardSetOff hitlag with x670 still reset/outside the SDI window does
+    # not receive ftCo_80093240 displacement, even though the shield-hit callback is installed.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/dream_land_recent/"
+        / "FlippantEnchantedHorse.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    defender = 1
+    seed, ref, out = _run_one_step_row(dataset_path, 5347, defender)
+
+    assert int(seed["action_id"][defender]) == 181
+    assert int(seed["hitlag"][defender]) == 5
+    assert int(seed["tilt_timer_x"][defender]) == 0xFE
+    assert float(ref["pos_x"][defender]) == pytest.approx(float(seed["pos_x"][defender]), abs=1e-6)
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender]) == 181
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender])
+    assert float(out["pos_x"][defender]) == pytest.approx(float(ref["pos_x"][defender]), abs=1e-6)
+
+
+@pytest.mark.integration
+def test_guardsetoff_active_hitlag_sdi_stale_seed_carry_does_not_reconsume() -> None:
+    # Negative boundary for teacher-forced replay seeds:
+    # - the previous CNM row consumed ftCo_80093240 and reset callback-local x670,
+    # - the next Slippi row still shows x670/x679/x67A as 0 from the surrounding input-history
+    #   update, but vanilla does not apply another active SDI pulse.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093240
+    # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
+        / "CheeryNumbMonkey.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    defender = 1
+    seed, ref, out = _run_one_step_row(dataset_path, 8214, defender)
+
+    assert int(seed["action_id"][defender]) == 181
+    assert int(seed["hitlag"][defender]) == 3
+    assert int(seed["tilt_timer_x"][defender]) == 0
+    assert int(seed["x679_x"][defender]) == 0
+    assert int(seed["x67A_y"][defender]) == 0
+    assert float(ref["pos_x"][defender]) == pytest.approx(float(seed["pos_x"][defender]), abs=1e-6)
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender]) == 181
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender])
+    assert float(out["pos_x"][defender]) == pytest.approx(float(ref["pos_x"][defender]), abs=1e-6)
+
+
+@pytest.mark.integration
 def test_guardsetoff_post_hitlag_asdi_applies_floor_tangent_displacement() -> None:
     # Replay-real positive lock for GuardSetOff post-hitlag ASDI:
     # - ftCo_80092F2C installs post_hitlag_cb = ftCo_800932DC on GuardSetOff entry.

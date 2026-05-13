@@ -289,6 +289,23 @@ def _assert_transition_fields_match_ref(*, out_row, ref_row, record: int, p: int
             ref_action=42,
             note="DamageAir1 Landing_Enter_Basic clears hitstun even when seed x221C_b6 lockout is live",
         ),
+        _DamageContactCase(
+            dataset_rel="datasets/doubles_recent/replays/validation/doubles_recent/Game_20260509T152622.msl",
+            record=2634,
+            port=2,
+            seed_action=259,
+            ref_action=178,
+            note="CliffEscapeQuick anim-end preserves residual ground speed into GuardOn Phys",
+        ),
+        _DamageContactCase(
+            dataset_rel="datasets/doubles_recent/replays/validation/doubles_recent/Game_20260509T152622.msl",
+            record=2745,
+            port=2,
+            seed_action=183,
+            ref_action=183,
+            note="DownBoundU weak contact after repaired cliff-speed carry stays no-hitstun",
+            require_ref_hitlag_zero=False,
+        ),
     ],
 )
 def test_core_damage_contact_followup_rows_are_replay_exact(case: _DamageContactCase) -> None:
@@ -320,6 +337,8 @@ def test_core_damage_contact_followup_rows_are_replay_exact(case: _DamageContact
     #   mpColl_800473CC floor callback, while DamageAir/DamageFly remain on their separate timing.
     # - DamageAir -> Landing enters ftCo_Landing_Enter_Basic, whose motion-state reset clears the
     #   replay-facing hitstun lane on the destination Landing row.
+    # - Cliff option anim-end enters a Wait-like state through ftCommon_8007D92C; if Wait IASA
+    #   immediately enters GuardOn, GuardOn Phys still owns residual ground-speed friction/movement.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_IASA
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::ftCo_DownDamage_Anim
@@ -345,6 +364,9 @@ def test_core_damage_contact_followup_rows_are_replay_exact(case: _DamageContact
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Enter_Basic
     # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
     # refs/melee/src/melee/mp/mpcoll.c::mpColl_800473CC
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::{
+    #   ftCo_CliffClimb_Anim,ftCo_CliffClimb_Phys}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_GuardOn_Phys}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / case.dataset_rel

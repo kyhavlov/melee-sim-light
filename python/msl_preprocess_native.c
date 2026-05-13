@@ -3964,74 +3964,138 @@ PyObject* msl_derive_walljump_phase_seed_lanes_py(PyObject* self, PyObject* args
   (void)self;
   PyObject* action_obj = NULL;
   PyObject* frame_obj = NULL;
+  PyObject* setup_threshold_obj = NULL;
   PyObject* pos_x_obj = NULL;
   PyObject* pos_y_obj = NULL;
   PyObject* raw_x_obj = NULL;
-  if (!PyArg_ParseTuple(args, "OOOOO", &action_obj, &frame_obj, &pos_x_obj, &pos_y_obj,
-                        &raw_x_obj)) {
+  PyArrayObject* timer = NULL;
+  PyArrayObject* side = NULL;
+  if (!PyArg_ParseTuple(args, "OOOOOO", &action_obj, &frame_obj, &setup_threshold_obj, &pos_x_obj,
+                        &pos_y_obj, &raw_x_obj)) {
     return NULL;
   }
   PyArrayObject* action = require_contiguous_array(action_obj, NPY_UINT16, 1, "action_id_u16");
   PyArrayObject* frame = require_contiguous_array(frame_obj, NPY_INT16, 1, "action_frame_i16");
+  PyArrayObject* setup_threshold = require_contiguous_array(setup_threshold_obj, NPY_FLOAT32, 1,
+                                                            "walljump_setup_x_delta_threshold_f32");
   PyArrayObject* pos_x = require_contiguous_array(pos_x_obj, NPY_FLOAT32, 1, "pos_x_f32");
   PyArrayObject* pos_y = require_contiguous_array(pos_y_obj, NPY_FLOAT32, 1, "pos_y_f32");
   PyArrayObject* raw_x = require_contiguous_array(raw_x_obj, NPY_INT8, 1, "raw_main_x_i8");
-  if (action == NULL || frame == NULL || pos_x == NULL || pos_y == NULL || raw_x == NULL) {
-    return NULL;
+  if (action == NULL || frame == NULL || setup_threshold == NULL || pos_x == NULL ||
+      pos_y == NULL || raw_x == NULL) {
+    goto fail;
   }
   const npy_intp n = PyArray_SIZE(action);
-  if (PyArray_SIZE(frame) != n || PyArray_SIZE(pos_x) != n || PyArray_SIZE(pos_y) != n ||
-      PyArray_SIZE(raw_x) != n) {
+  if (PyArray_SIZE(frame) != n || PyArray_SIZE(setup_threshold) != n || PyArray_SIZE(pos_x) != n ||
+      PyArray_SIZE(pos_y) != n || PyArray_SIZE(raw_x) != n) {
     PyErr_SetString(PyExc_ValueError, "walljump phase inputs must have equal lengths");
-    return NULL;
+    goto fail;
   }
   npy_intp dims[1] = {n};
-  PyArrayObject* timer = (PyArrayObject*)PyArray_EMPTY(1, dims, NPY_UINT8, 0);
-  PyArrayObject* side = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_INT8, 0);
+  timer = (PyArrayObject*)PyArray_EMPTY(1, dims, NPY_UINT8, 0);
+  side = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_INT8, 0);
   if (timer == NULL || side == NULL) {
-    Py_XDECREF(timer);
-    Py_XDECREF(side);
-    return NULL;
+    goto fail;
   }
   uint8_t* t = (uint8_t*)PyArray_DATA(timer);
   int8_t* s = (int8_t*)PyArray_DATA(side);
   for (npy_intp i = 0; i < n; i++) t[i] = 254u;
   const uint16_t* a = (const uint16_t*)PyArray_DATA(action);
   const int16_t* af = (const int16_t*)PyArray_DATA(frame);
+  const float* setup_x_delta = (const float*)PyArray_DATA(setup_threshold);
   const float* x = (const float*)PyArray_DATA(pos_x);
   const float* y = (const float*)PyArray_DATA(pos_y);
   const int8_t* rx = (const int8_t*)PyArray_DATA(raw_x);
+  uint8_t carry_timer = 254u;
+  int8_t carry_side = 0;
   for (npy_intp i = 0; i < n; i++) {
     const uint16_t ai = a[i];
-    if (!(ai == 27u || ai == 28u || (ai >= 29u && ai <= 34u))) continue;
+    if (!(ai == 27u || ai == 28u || (ai >= 29u && ai <= 34u))) {
+      carry_timer = 254u;
+      carry_side = 0;
+      continue;
+    }
     const int frame_i = af[i];
-    if (frame_i < 12) continue;
+    if (frame_i < 12) {
+      carry_timer = 254u;
+      carry_side = 0;
+      continue;
+    }
     const float px = x[i];
     const float py = y[i];
-    if (!isfinite(px) || !isfinite(py) || py >= -5.0f) continue;
+    const float threshold = setup_x_delta[i];
+    if (!isfinite(px) || !isfinite(py) || !isfinite(threshold) || !(threshold > 0.0f) ||
+        py >= -5.0f || fabsf(px) < 60.0f) {
+      carry_timer = 254u;
+      carry_side = 0;
+      continue;
+    }
+
+    const int8_t wall_side = (px >= 60.0f) ? (int8_t)-1 : (int8_t)1;
+    const uint8_t had_carry = (carry_timer < 254u && carry_side == wall_side) ? 1u : 0u;
+    const uint8_t active_timer = carry_timer;
+    uint8_t setup_now = 0u;
+    if (i > 0 && isfinite(x[i - 1])) {
+      const float dx = px - x[i - 1];
+      if ((wall_side < 0 && dx > threshold) || (wall_side > 0 && -dx > threshold)) {
+        setup_now = 1u;
+      }
+    }
+
     const int cur_x = (i + 1 < n) ? (int)rx[i + 1] : (int)rx[i];
     const int prev_x = (int)rx[i];
-    if (px <= -60.0f) {
-      if (!((frame_i >= 20 && cur_x <= -64) || (frame_i >= 19 && prev_x > -64 && cur_x <= -64))) {
-        continue;
+    uint8_t old_phase_gate = 0u;
+    uint8_t edge_consume_gate = 0u;
+    if (wall_side < 0) {
+      old_phase_gate = (uint8_t)((frame_i >= 20 && cur_x >= 64) ||
+                                 (frame_i >= 17 && prev_x < 64 && cur_x >= 64));
+      edge_consume_gate = (uint8_t)(prev_x < 64 && cur_x >= 64 && had_carry);
+    } else {
+      old_phase_gate = (uint8_t)((frame_i >= 20 && cur_x <= -64) ||
+                                 (frame_i >= 19 && prev_x > -64 && cur_x <= -64));
+      edge_consume_gate = (uint8_t)(prev_x > -64 && cur_x <= -64 && had_carry);
+    }
+    if (old_phase_gate || edge_consume_gate) {
+      uint8_t out_timer = active_timer;
+      if (old_phase_gate) {
+        int hidden = frame_i - 8;
+        if (hidden < 0) hidden = 0;
+        if (hidden > 120) hidden = 120;
+        out_timer = (uint8_t)hidden;
+      } else if (!had_carry) {
+        out_timer = 254u;
       }
-      int hidden = frame_i - 8;
-      if (hidden < 0) hidden = 0;
-      if (hidden > 120) hidden = 120;
-      t[i] = (uint8_t)hidden;
-      s[i] = 1;
-    } else if (px >= 60.0f) {
-      if (!((frame_i >= 20 && cur_x >= 64) || (frame_i >= 17 && prev_x < 64 && cur_x >= 64))) {
-        continue;
-      }
-      int hidden = frame_i - 8;
-      if (hidden < 0) hidden = 0;
-      if (hidden > 120) hidden = 120;
-      t[i] = (uint8_t)hidden;
-      s[i] = -1;
+      t[i] = out_timer;
+      s[i] = wall_side;
+    }
+
+    if (had_carry) {
+      carry_timer = (carry_timer < 253u) ? (uint8_t)(carry_timer + 1u) : 254u;
+      continue;
+    }
+
+    if (setup_now) {
+      carry_timer = 1u;
+      carry_side = wall_side;
+    } else {
+      carry_timer = 254u;
+      carry_side = 0;
     }
   }
-  return Py_BuildValue("NN", timer, side);
+  PyObject* result = PyTuple_New(2);
+  if (result == NULL) {
+    goto fail;
+  }
+  PyTuple_SET_ITEM(result, 0, (PyObject*)timer);
+  PyTuple_SET_ITEM(result, 1, (PyObject*)side);
+  timer = NULL;
+  side = NULL;
+  return result;
+
+fail:
+  Py_XDECREF(timer);
+  Py_XDECREF(side);
+  return NULL;
 }
 
 PyObject* msl_derive_entry_end_fall_lock_py(PyObject* self, PyObject* args) {

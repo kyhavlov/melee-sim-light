@@ -87,8 +87,13 @@ def test_dead_to_rebirth_uses_mslstg01_respawn_and_world_zero_facing(stage_id: i
     assert int(out["facing"][port]) == expected_facing
     assert float(out["pos_x"][port]) == pytest.approx(float(respawn_x), abs=1e-5)
     assert float(out["speed_y_self"][port]) < 0.0
+    # Pokemon Stadium's Rebirth start coordinate is the Player_80032768 source start Y (120),
+    # while its camera/death bounds remain at the broader MSLSTG01 camera top.
+    # refs/melee/src/melee/gm/gm_1601.c::{fn_8016719C,fn_80167638}
+    # refs/melee/src/melee/pl/player.c::{Player_80032768,Player_LoadPlayerCoords}
+    rebirth_start_y = 120.0 if int(stage_id) == 3 else float(cam_top)
     assert float(out["pos_y"][port]) == pytest.approx(
-        float(cam_top) + float(out["speed_y_self"][port]),
+        rebirth_start_y + float(out["speed_y_self"][port]),
         abs=1e-5,
     )
     assert float(respawn_y) < float(cam_top)

@@ -12,6 +12,7 @@ from tools.eval.dataset import COMPARE_DTYPE, read_dataset
 ACT_DAMAGE_FLY_HI = 0x0057
 ACT_DAMAGE_FLY_N = 0x0058
 ACT_DAMAGE_FLY_TOP = 0x005A
+ACT_DAMAGE_AIR_3 = 0x0056
 ACT_DOWN_BOUND_U = 0x00B7
 ACT_PASSIVE = 0x00C7
 ACT_PASSIVE_STAND_F = 0x00C8
@@ -515,3 +516,25 @@ def test_fod_damagefly_rollout_uses_grizumi_collision_height_from_direct_events(
     assert int(out_4501["hitstun"][p]) == int(ref_4501["hitstun"][p]) == 0
     assert float(out_4501["pos_x"][p]) == pytest.approx(float(ref_4501["pos_x"][p]), abs=1e-5)
     assert float(out_4501["pos_y"][p]) == pytest.approx(float(ref_4501["pos_y"][p]), abs=1e-5)
+
+
+@pytest.mark.integration
+def test_fod_initial_height_platform_damageair3_lands_on_right_platform_mgs_442() -> None:
+    # FoD initial platform collision height owner:
+    # - MGS:442 starts before any Slippi FoD direct platform event has arrived, while grIzumi has
+    #   already initialized the right platform JObj and collision line from stage data.
+    # - The MSLSTG01 initial height transform is therefore source-trusted for collision before the
+    #   scheduler publishes live target heights; using only event-backed heights misses Landing.
+    # refs/melee/src/melee/gr/grizumi.c::{grIzumi_801CC358,grIzumi_801CCBDC}
+    # data/stages/bin/griz.bin::MSLSTG01 platform_transform.y_const
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = _fod_dataset_path(root, "MilkyGracefulStingray")
+
+    p = 1
+    seed, ref, out = _run_one_step(dataset_path, 442, ucf_cardinals_1_0_enabled=True)
+    assert int(seed["action_id"][p]) == ACT_DAMAGE_AIR_3
+    assert int(ref["action_id"][p]) == int(out["action_id"][p]) == 42  # Landing
+    assert int(ref["on_ground"][p]) == int(out["on_ground"][p]) == 1
+    assert int(ref["ground_id"][p]) == int(out["ground_id"][p]) == 1
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-4)

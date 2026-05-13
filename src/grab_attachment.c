@@ -659,6 +659,22 @@ static inline void grabbed_victim_anchor_world_at_owner_frame(float* out_x, floa
         &ax, &ay, &az, batch, oidx, batch->state.animation_index[oidx], owner_anim_frame,
         owner_anchor_part, batch->state.pos_x[oidx], batch->state.pos_y[oidx],
         batch->state.pos_z[oidx], owner_scale_y, batch->state.facing[oidx]);
+  } else if (batch->state.action_id[vidx] == (uint16_t)MSL_ACT_THROWN_F) {
+    // ThrowF/ThrownF attachment owner:
+    // - ftCo_800DE508 samples the constrained victim FtPart_XRotN and then applies x1A70.
+    // - The thrower's grounded ThrowF Phys has already carried the script TransN root into cur_pos
+    //   through ft_80085004/ft_80085030 before the accessory placement owner runs. Use the stripped
+    //   SSANIM/root-relative joint lane here so the current-frame TransN root is not counted both in
+    //   the thrower root and again in the sampled attachment joint.
+    // - Keep ThrowB/ThrowHi on the float AObj/JObj path below; replay-real ThrowHi/ThrowB locks show
+    //   that their current owner still needs the live float track.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_ThrowF_Phys
+    // refs/melee/src/melee/ft/ft_081B.c::{ft_80085004,ft_80085030}
+    pose_status = pose_part_origin_world_facing_yrot90(
+        &ax, &ay, &az, batch->state.char_id[oidx], batch->state.animation_index[oidx],
+        owner_anim_frame, owner_anchor_part, batch->state.pos_x[oidx], batch->state.pos_y[oidx],
+        batch->state.pos_z[oidx], owner_scale_y, batch->state.facing[oidx]);
   } else if (use_float_track_anchor) {
     // ThrownF/B/Hi attachment samples the live HSD AObj/JObj owner. CaptureWait/Pulled and low
     // throw stay on their separate attachment paths.

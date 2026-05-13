@@ -56,6 +56,14 @@ def _cardinal_dataset_path(root: Path, name: str) -> Path:
     return dataset_path
 
 
+def _aggregate_validation_dataset_path(root: Path, subdir: str, name: str) -> Path:
+    dataset_rel = f"datasets/aggregate_recent/replays/validation/{subdir}/{name}"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+    return dataset_path
+
+
 def _binding_sizes():
     binding = pytest.importorskip("msl_binding")
     sizes = binding.sizes()
@@ -458,3 +466,62 @@ def test_capturepulledlw_immediate_floor_callback_rejects_ordinary_grounded_capt
     assert int(out["ground_id"][victim_p]) == int(ref["ground_id"][victim_p])
     assert float(out["pos_x"][victim_p]) == pytest.approx(float(ref["pos_x"][victim_p]), abs=1e-5)
     assert float(out["pos_y"][victim_p]) == pytest.approx(float(ref["pos_y"][victim_p]), abs=1e-6)
+
+
+@pytest.mark.integration
+def test_grounded_capturepulledlw_catch_connect_does_not_run_lw_coll_prh_6851() -> None:
+    # Replay-real lock for grounded catch-connect entry:
+    # - The victim's current action callback enters grounded AttackHi4 before the catch collision.
+    # - fn_800DAADC then installs CapturePulledLw directly from the grounded xE0 lane.
+    # - The newly-entered Lw Phys/Coll (`fn_800DAD18` / `ftCo_CapturePulledLw_Coll`) does not run
+    #   inside that catch-connect callback; applying the Lw -> Hi -> Lw projection here overmoves X.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+    #   fn_800DAADC,ftCo_CapturePulledLw_Phys,ftCo_CapturePulledLw_Coll}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+        "PositiveRevolvingHyena.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    victim_p = 1
+    seed, ref, out = _run_one_step_seed(dataset_path, 6851)
+    assert int(seed["action_id"][victim_p]) == 72  # LandingAirB
+    assert int(ref["action_id"][victim_p]) == ACT_CAPTURE_PULLED_LW
+    assert int(out["action_id"][victim_p]) == ACT_CAPTURE_PULLED_LW
+    assert int(out["action_frame"][victim_p]) == int(ref["action_frame"][victim_p]) == 1
+    assert float(out["pos_x"][victim_p]) == pytest.approx(float(ref["pos_x"][victim_p]), abs=1e-6)
+    assert float(out["pos_y"][victim_p]) == pytest.approx(float(ref["pos_y"][victim_p]), abs=1e-6)
+
+
+@pytest.mark.integration
+def test_pass_floor_skip_capturepulledhi_floor_mask_ignores_dropped_platform_mgs_1791() -> None:
+    # Replay-real positive for Pass floor-skip into catch-connect capture:
+    # - Pass entry writes CollData.floor_skip through mpUpdateFloorSkip for the platform being
+    #   dropped through.
+    # - fn_800DAADC installs airborne CapturePulledHi, applies fn_800DAC78/fn_800DAA40, then
+    #   CapturePulledHi_Coll runs ft_80083C00/mpColl_800477E0.
+    # - The floor-mask query must keep skipping the stale platform floor and select the lower
+    #   fighter-solid floor, entering CapturePulledLw at the replay floor height.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::{ftCo_8009A184,ftCo_8009A228}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{fn_800DAADC,ftCo_CapturePulledHi_Coll}
+    # refs/melee/src/melee/mp/mpcoll.c::{mpUpdateFloorSkip,mpColl_800477E0}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = _aggregate_validation_dataset_path(
+        root, "fountain_of_dreams_recent", "MilkyGracefulStingray.msl"
+    )
+
+    p = 1
+    seed, ref, out = _run_one_step_seed(dataset_path, 1791)
+    assert int(seed["action_id"][p]) == 244  # Pass
+    assert int(seed["ground_id"][p]) == 1  # skipped FoD platform
+    assert int(ref["action_id"][p]) == ACT_CAPTURE_PULLED_LW
+    assert int(out["action_id"][p]) == ACT_CAPTURE_PULLED_LW
+    assert int(ref["ground_id"][p]) == 5
+    assert int(out["ground_id"][p]) == 5
+    assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=1e-5)
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-5)

@@ -898,6 +898,12 @@ Characters (Fox/Falco):
     - `u32 class_bits[action_count]`
   - `data/motion_state/owners/callback_symbols.json` is review/debug metadata mapping callback IDs
     back to decomp symbol names. Runtime loads only the binary tables.
+  - Class-bit examples:
+    - `COMMON_AIR_WALLJUMP_COLL` is keyed to source collision helper identity, not generic Phys
+      ownership. It includes Jump/Fall callbacks and `ftCo_PassiveWall_Coll`, because
+      PassiveWall/PassiveWallJump call `ft_800831CC` or `ft_80083318` and therefore consume the
+      same airborne wall envelope plus walljump/ledge post-consumer family after their startup
+      timer expires.
   - Stale/non-v6 `MSLMSO01` tables must be rejected; regenerate with
     `uv run python -m tools.extraction.extract_motion_state_owners --melee_decomp refs/melee --out_dir data/motion_state/owners --chars fox,falco`.
 - `data/stages/bin/{grnla,grnba,griz,grps,grst,grop}.bin` (stage collision/metadata; decomp-first, compact binary)
@@ -976,11 +982,18 @@ Characters (Fox/Falco):
     - `stage_fod_platform_velocity_f32[2]`, `stage_fod_platform_velocity_valid_u8[2]`
     - `floor_skip_segment_id_u16[4]`, `floor_skip_segment_valid_u8[4]` for hidden
       `CollData.floor_skip` carry when a replay-prefix platform pass-through episode is already
-      active. For FoD height-transform `AttackAirN`/`AttackAirLw`, native preprocessing serializes
-      only prefix-causal skip frames: the down-held platform contact, down-held/root-clear carry
-      while the hidden platform skip remains live, and the first hard-floor crossing that consumes
-      that owner. Intermediate airborne frames stay unseeded unless one of those source handoff
-      boundaries is visible.
+      active. For FoD height-transform `AttackAirN`/`AttackAirHi`/`AttackAirLw`, preprocessing uses
+      generated MSLMSO01 submotion ownership plus the MSLFTSC1 first HitCapsule create->clear phase
+      to serialize prefix-causal shallow first contacts and the subsequent root-clear carry. For
+      `Fall_Coll` rows routed through `ft_800831CC(..., ftCo_80096CC8)`, preprocessing serializes
+      the down-held platform contact, down-held/root-clear carry while the hidden platform skip
+      remains live, and the first hard-floor crossing that consumes that owner. Intermediate
+      airborne frames stay unseeded unless one of those source handoff boundaries is visible.
+      `tools/slippi/preprocess_suite.py` cache version 7 is the first valid cache generation for the
+      AttackAirHi/shallow-AttackAir FoD floor-skip semantics plus common-air walljump hidden phase
+      setup/carry seeds derived from source `pos_delta.x`; older `.msl` caches can pass record-size
+      checks while missing these hidden owners. The cache signature also hashes
+      `python/msl_preprocess_native.c` for native seed-lane semantic changes.
     - `cliff_ledge_floor_segment_id_u16[4]` for the hidden Cliff/CollData ledge floor owner on
       immediate cliff-exit prefixes. Native seed preprocessing reconstructs it only from
       prefix-visible Cliff action + facing + generated MSLSTG01 ledge floor metadata, carries it
@@ -1291,7 +1304,7 @@ Loader contract:
 - The loader allocates lookup tables only during initialization; normal gameplay sampling is fixed
   capacity and allocation-free.
 
-## `data/anims/<char>.dyn.bin` (SSDYNN01 v6)
+## `data/anims/<char>.dyn.bin` (SSDYNN01 v7)
 
 Purpose: compact, init-time-loadable fighter dynamic-chain descriptors from `ftData.x2C`. These are
 the descriptor inputs to the live collision-pose owner that feeds `lb_8000B1CC` hurtcap endpoints.
@@ -1317,7 +1330,7 @@ Source and generation:
 Binary layout (little-endian):
 - Header:
   - `magic[8] = "SSDYNN01"`
-  - `version: u32 = 6`
+  - `version: u32 = 7`
   - `set_count: u16`
   - `total_node_count: u16`
 - Per dynamic set:
@@ -1336,6 +1349,10 @@ Binary layout (little-endian):
   - `source_step_msid_count: u16`
   - `reserved: u16 = 0`
   - `source_step_msids: u16[source_step_msid_count]`
+- Cone-clamp owner index:
+  - `cone_msid_count: u16`
+  - `reserved: u16 = 0`
+  - `cone_msids: u16[cone_msid_count]`
 - Dynamic collider index:
   - `collider_count: u16`
   - `reserved: u16 = 0`
@@ -1351,27 +1368,35 @@ Supported runtime contract:
 - The collision-owner index is the only runtime predicate for dynamic matrix substitution. Current
   generated data marks Fox `ftCo_SM_JumpB` (`submotion_id=17`),
   `ftCo_SM_LandingFallSpecial` (`submotion_id=36`), `ftCo_SM_AttackHi3`
-  (`submotion_id=58`), and `ftCo_SM_CatchDash` (`submotion_id=243`) because
+  (`submotion_id=58`), `ftCo_SM_Catch` (`submotion_id=242`), and
+  `ftCo_SM_CatchDash` (`submotion_id=243`) because
   pre-`ftColl_80078C70` Dolphin primitive/engine probes and replay-real BODY locks show those
   hurtcap endpoints consume the live dynamic chain. `ftCo_SM_CatchDash` is backed by the SDS:299
   probe: vanilla's live part-18 tail endpoints stay below Falco's grounded Shine while the
-  static/existing-lite chain admits a false BODY hit. Fox `ftCo_SM_AttackDash` and
+  static/existing-lite chain admits a false BODY hit. `ftCo_SM_Catch` is backed by MGS:4921..4923:
+  Falco DAir overlaps Fox's part-18 tail cap only after the dynamic-chain update and descriptor
+  cone clamp advance far enough on Catch frame 10. Fox `ftCo_SM_AttackDash` and
   `ftCo_SM_DamageAir2` are intentionally not marked: current probes/validation show their live
   collision phase needs a fuller source-order dynamic/AObj owner before they can be retained as
   generated collision owners. C gameplay must not hardcode these msids; adding another dynamic
   collision submotion is an extraction/data contract change backed by primitive evidence and
   validation-clean positive/negative locks.
 - The source-step owner index is a subset of the collision-owner index. Current generated Fox/Falco
-  data has no source-step owners. The v6 field is reserved for a future `lb_8001044C` source-step
-  owner once descriptor natural direction, max-step, cone clamp, local dynamic JObj rotation
+  data has no source-step owners. The v7 field is reserved for a future `lb_8001044C` source-step
+  owner once descriptor natural direction, max-step, local dynamic JObj rotation
   writeback, dynamic collider avoidance, and source-order timing are validation-clean. Runtime
   initialization currently rejects non-empty source-step indexes so a rejected/probe-only owner
   cannot be activated by generated data.
+- The cone-clamp owner index is also a subset of the collision-owner index. Current generated data
+  marks only Fox `ftCo_SM_Catch` (`submotion_id=242`) because MGS:4921..4923 proves the local
+  current-segment cone approximation closes Catch timing, while SDS:299 proves applying that
+  approximation to the existing CatchDash owner is overbroad. This keeps the retained cone surface
+  data-owned instead of branching on submotion ids in C.
 - The dynamic collider index is copied from `ftData.x2C->x8` / `fp->x1670`. Current Fox data has
   one collider on part 41 at offset `(0, 2, 0)` with radius `3.0`; Falco has none. Runtime uses
   these rows to model the `lb_8001044C` segment/sphere avoidance path, including the source
   `0.1f` skin radius from `lb_00F9.s::lb_804D7BE0`.
-- In v6, a collision-owner msid means the runtime applies the reconstructed dynamic matrix on every
+- In v7, a collision-owner msid means the runtime applies the reconstructed dynamic matrix on every
   supported frame for that submotion. It is not contingent on a nonzero current-frame
   `lb_8001044C` correction carry; `JumpB` rows proved vanilla can consume the dynamic chain even
   when the segment resolves close to the static pose.
@@ -1379,19 +1404,21 @@ Supported runtime contract:
   collision-owner index. Non-owner local submotions clear the dynamic collision state instead of
   preserving an unseeded hidden carry. Non-sequential reseeds reconstruct owner state from frame 0
   through the seeded frame for the validated reconstruction mode.
-- The descriptor `unk_68` / node `+0x68` cone clamp is not retained for current owners. Decomp
-  applies it against a `natural_dir` built from descriptor `unk_58` / live JObj rotation; the
-  rejected source-step experiment showed the lite representation is still incomplete there. Current
-  owners keep the validated base-vector approximation until that source-step owner lands as a
-  separate, validation-clean change.
+- The descriptor `unk_68` / node `+0x68` cone clamp is retained for the supported one-set Fox tail
+  surface by clamping the carried child segment against the current animation segment basis before
+  the collision matrix is rebuilt. This is the locally source-owned `lb_8001044C` cone boundary
+  needed by `ftCo_SM_Catch` rows; the fuller descriptor natural-direction/JObj-rotation source-step
+  subset remains reserved and must stay empty in generated v7 data until separately audited. Non-cone
+  collision owners keep the validated base-vector approximation until that source-step owner lands
+  as a separate, validation-clean change.
 - The C runtime state is indexed by player and node for the supported one-set surface. Present
   `.dyn.bin` files with more than one set or more than `MSL_MAX_DYNAMIC_NODES` total nodes are
   rejected at initialization instead of being partially loaded.
 - Missing `.dyn.bin` files are allowed for synthetic pose-only tests and disable dynamic collision
   pose reconstruction. Present `.dyn.bin` files require the matching `.locals.bin` file; dynamic
   descriptors without local SRT are invalid because the runtime cannot reconstruct the JObj subtree
-  that feeds `lb_8000B1CC`. Present-but-invalid `.dyn.bin` files fail initialization. Stale v1-v5
-  dynamic artifacts are rejected because they do not carry the v6 source-step owner index.
+  that feeds `lb_8000B1CC`. Present-but-invalid `.dyn.bin` files fail initialization. Stale v1-v6
+  dynamic artifacts are rejected because they do not carry the v7 cone-clamp owner index.
 - Reseed contract: non-sequential teacher-forced seeds rebuild supported dynamic-chain state by
   initializing from frame 0 local SRT and replaying the deterministic dynamic update through the
   seeded integer animation frame. This is `O(action_frame)` on reseed/pre-combat reconstruction

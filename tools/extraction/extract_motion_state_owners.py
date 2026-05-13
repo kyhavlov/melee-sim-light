@@ -172,7 +172,16 @@ def _class_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
         "ftCo_FallSpecial_Coll",
     }:
         bits |= CLASS_COMMON_AIR_COLL
-    if coll_cb in {"ftCo_Jump_Coll", "ftCo_JumpAerial_Coll", "ftCo_Fall_Coll"}:
+    if coll_cb in {
+        "ftCo_Jump_Coll",
+        "ftCo_JumpAerial_Coll",
+        "ftCo_Fall_Coll",
+        "ftCo_PassiveWall_Coll",
+    }:
+        # These callbacks route through `ft_800831CC` or `ft_80083318`, whose source path runs the
+        # airborne wall envelope and then the common walljump/ledge consumers when no floor
+        # callback fires. PassiveWall{Jump} shares that collision helper even though its Phys
+        # callback is not the generic common-air Phys family.
         bits |= CLASS_COMMON_AIR_WALLJUMP_COLL
     if coll_cb in {
         "ftCo_AttackAir_Coll",

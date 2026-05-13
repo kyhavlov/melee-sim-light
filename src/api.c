@@ -237,6 +237,7 @@ static inline uint8_t reseed_damage_allow_sdi_source_action(uint16_t action) {
     case MSL_ACT_FLY_REFLECT_WALL:
     case MSL_ACT_FLY_REFLECT_CEIL:
     case MSL_ACT_DAMAGE_FALL:
+    case MSL_ACT_DOWN_DAMAGE_U:
     case MSL_ACT_DOWN_DAMAGE_D:
       return 1u;
     default:
@@ -1826,6 +1827,8 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.x678[idx] = seed->x678[p];
       batch->state.x679_x[idx] = seed->x679_x[p];
       batch->state.x67A_y[idx] = seed->x67A_y[p];
+      batch->state.x679_x_frame_start[idx] = seed->x679_x[p];
+      batch->state.x67A_y_frame_start[idx] = seed->x67A_y[p];
       batch->state.x67B[idx] = seed->x67B[p];
       batch->state.x67C[idx] = seed->x67C[p];
       batch->state.x67D[idx] = seed->x67D[p];
@@ -1892,6 +1895,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
           (seed->hitlag[p] != 0u && reseed_damage_allow_sdi_source_action(seed->action_id[p]) &&
            (((seed_x221a & (uint8_t)MSL_STATE_FLAG_221A_B3_LOCAL) != 0u) ||
             msl_motion_state_common_class_has(seed->action_id[p], MSL_MS_CLASS_DAMAGE_FLY) ||
+            seed->action_id[p] == (uint16_t)MSL_ACT_DOWN_DAMAGE_U ||
             seed->action_id[p] == (uint16_t)MSL_ACT_DOWN_DAMAGE_D || phantom_damage > 0.0f))
               ? 1u
               : 0u;

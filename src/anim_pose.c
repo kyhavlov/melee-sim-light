@@ -18,10 +18,11 @@ enum {
   ANIM_DYN_VERSION_V4 = 4,
   ANIM_DYN_VERSION_V5 = 5,
   ANIM_DYN_VERSION_V6 = 6,
+  ANIM_DYN_VERSION_V7 = 7,
   MAT_BYTES = 12 * 4,              // float32[12] (3x4)
   TRANSN_BYTES_PER_FRAME = 3 * 4,  // float32[3] v4 tail (TransN/root translation)
 
-  // SSDYNN01 v6 is written by tools/extraction/extract_fighter_anims.py.
+  // SSDYNN01 v7 is written by tools/extraction/extract_fighter_anims.py.
   //
   // RL1.0 target data contract:
   // - Fox ftData.x2C has exactly one dynamic bone set rooted at part 17.
@@ -94,6 +95,7 @@ typedef struct {
   MslAnimDynSetData dyn_sets[ANIM_DYN_MAX_SETS];
   MslAnimDynColliderData dyn_colliders[ANIM_DYN_MAX_COLLIDERS];
   uint8_t* dyn_collision_have_msid;  // [65536], extracted SSDYNN01 collision-owner index
+  uint8_t* dyn_cone_have_msid;       // [65536], extracted descriptor +0x68 cone-owner index
 
   uint8_t* track_buf;
   size_t track_sz;
@@ -562,6 +564,7 @@ static void free_table(MslAnimPoseTable* t) {
   alloc_free(t->local_frame_count_by_msid);
   alloc_free(t->local_base_off_by_msid);
   alloc_free(t->dyn_collision_have_msid);
+  alloc_free(t->dyn_cone_have_msid);
   alloc_free(t->track_buf);
   alloc_free(t->track_part_to_index);
   alloc_free(t->track_msid_to_anim_index);
@@ -797,7 +800,7 @@ static int load_dynamics_into_table(const char* data_dir, const char* rel_path,
   static const uint8_t dyn_magic[ANIM_MAGIC_LEN] = {'S', 'S', 'D', 'Y', 'N', 'N', '0', '1'};
   const uint32_t ver = (sz >= ANIM_HDR_BASE_BYTES) ? read_u32_le(buf + 8) : 0u;
   if (sz < ANIM_HDR_BASE_BYTES || memcmp(buf, dyn_magic, ANIM_MAGIC_LEN) != 0 ||
-      ver != ANIM_DYN_VERSION_V6) {
+      ver != ANIM_DYN_VERSION_V7) {
     alloc_free(buf);
     return -1;
   }
@@ -847,6 +850,7 @@ static int load_dynamics_into_table(const char* data_dir, const char* rel_path,
     seen_nodes = (uint16_t)(seen_nodes + set->node_count);
   }
   uint8_t* dyn_collision_have_msid = NULL;
+  uint8_t* dyn_cone_have_msid = NULL;
   if (off + 4u > sz) {
     alloc_free(buf);
     return -1;
@@ -867,30 +871,65 @@ static int load_dynamics_into_table(const char* data_dir, const char* rel_path,
     dyn_collision_have_msid[msid] = 1u;
   }
   off += (size_t)collision_msid_count * 2u;
+  dyn_cone_have_msid = (uint8_t*)alloc_calloc(65536, 1);
+  if (dyn_cone_have_msid == NULL) {
+    alloc_free(buf);
+    alloc_free(dyn_collision_have_msid);
+    return -1;
+  }
   if (off + 4u > sz) {
     alloc_free(buf);
     alloc_free(dyn_collision_have_msid);
+    alloc_free(dyn_cone_have_msid);
     return -1;
   }
   const uint16_t source_step_msid_count = read_u16_le(buf + off);
   off += 4u;  // source_step_msid_count + reserved
   if (source_step_msid_count != 0u) {
-    // SSDYNN01 v6 reserves a source-step owner index, but this stack intentionally hard-disables
+    // SSDYNN01 v7 reserves a source-step owner index, but this stack intentionally hard-disables
     // the runtime mode after the DamageAir2 source-step attempt was rejected. Non-empty artifacts
     // must fail loudly until the full source-order dynamic/AObj owner is implemented.
     alloc_free(buf);
     alloc_free(dyn_collision_have_msid);
+    alloc_free(dyn_cone_have_msid);
     return -1;
   }
   if (off + (size_t)source_step_msid_count * 2u > sz) {
     alloc_free(buf);
     alloc_free(dyn_collision_have_msid);
+    alloc_free(dyn_cone_have_msid);
     return -1;
   }
   off += (size_t)source_step_msid_count * 2u;
   if (off + 4u > sz) {
     alloc_free(buf);
     alloc_free(dyn_collision_have_msid);
+    alloc_free(dyn_cone_have_msid);
+    return -1;
+  }
+  const uint16_t cone_msid_count = read_u16_le(buf + off);
+  off += 4u;  // cone_msid_count + reserved
+  if (off + (size_t)cone_msid_count * 2u > sz) {
+    alloc_free(buf);
+    alloc_free(dyn_collision_have_msid);
+    alloc_free(dyn_cone_have_msid);
+    return -1;
+  }
+  for (uint16_t i = 0; i < cone_msid_count; i++) {
+    const uint16_t msid = read_u16_le(buf + off + (size_t)i * 2u);
+    if (!dyn_collision_have_msid[msid]) {
+      alloc_free(buf);
+      alloc_free(dyn_collision_have_msid);
+      alloc_free(dyn_cone_have_msid);
+      return -1;
+    }
+    dyn_cone_have_msid[msid] = 1u;
+  }
+  off += (size_t)cone_msid_count * 2u;
+  if (off + 4u > sz) {
+    alloc_free(buf);
+    alloc_free(dyn_collision_have_msid);
+    alloc_free(dyn_cone_have_msid);
     return -1;
   }
   const uint16_t collider_count = read_u16_le(buf + off);
@@ -899,6 +938,7 @@ static int load_dynamics_into_table(const char* data_dir, const char* rel_path,
       off + (size_t)collider_count * 20u > sz) {
     alloc_free(buf);
     alloc_free(dyn_collision_have_msid);
+    alloc_free(dyn_cone_have_msid);
     return -1;
   }
   for (uint16_t ci = 0; ci < collider_count; ci++) {
@@ -914,12 +954,14 @@ static int load_dynamics_into_table(const char* data_dir, const char* rel_path,
   alloc_free(buf);
   if (off != sz || seen_nodes != total_nodes) {
     alloc_free(dyn_collision_have_msid);
+    alloc_free(dyn_cone_have_msid);
     return -1;
   }
   t->dyn_set_count = set_count;
   t->dyn_total_nodes = total_nodes;
   t->dyn_collider_count = collider_count;
   t->dyn_collision_have_msid = dyn_collision_have_msid;
+  t->dyn_cone_have_msid = dyn_cone_have_msid;
   return 0;
 }
 
@@ -1911,7 +1953,7 @@ static void dynamic_state_step(MslBatch* batch, size_t idx, const MslAnimPoseTab
     batch->state.dynamic_pose_pos_z[root_di] = base_pos[0][2];
   }
 
-  // SSDYNN01 v6's collision-owner index means this submotion consumes the live dynamic JObj
+  // SSDYNN01 v7's collision-owner index means this submotion consumes the live dynamic JObj
   // matrix for BODY hurtcaps on every supported frame, even when the current lb_8001044C update
   // resolves to the static segment vector with no nonzero correction carry.
   // refs/melee/src/melee/ft/ftdynamics.c::{ftCo_8009DD94,ftCo_8009E318}
@@ -2004,12 +2046,17 @@ static void dynamic_state_step(MslBatch* batch, size_t idx, const MslAnimPoseTab
     }
 
     const float cone = fabsf(set->nodes[ni].c[6]);
-    // lb_8001044C applies descriptor +0x68 against a natural direction derived from descriptor
-    // +0x58 and the live JObj rotation. That source-step mode is intentionally hard-disabled in
-    // this stack after the DamageAir2 source-step attempt was rejected; current dynamic owners keep
-    // the validated base-vector approximation until separately audited.
+    // lb_8001044C applies descriptor +0x68 as a max-deviation cone around the source natural
+    // direction after gravity/carry-angle correction. The descriptor natural direction is authored
+    // in the same local segment basis as the current JObj chain for Fox's tail set, so clamp against
+    // the current segment direction here instead of leaving the already-ported constant unused.
     // refs/melee/src/melee/lb/lb_00F9.c::lb_8001044C
-    (void)cone;
+    if (cone > 0.0f && t->dyn_cone_have_msid != NULL && t->dyn_cone_have_msid[msid]) {
+      const float cone_angle = vec3_angle(current_dir, prev_vec);
+      if (cone_angle > cone) {
+        vec3_rotate_towards(prev_vec, current_dir, cone_angle - cone);
+      }
+    }
 
     // ftCo_8009DD94 refreshes fp->x1670 via ftColl_8007AF60 and passes those source dynamic
     // colliders to lb_8001044C before JObj matrices are rebuilt. Source applies this after the

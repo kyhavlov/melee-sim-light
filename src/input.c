@@ -350,6 +350,8 @@ static inline void opening_input_lock_apply_Fighter_UnkInitLoad_80068914_Inner1_
   batch->state.x678[idx] = 0xFEu;
   batch->state.x679_x[idx] = 0xFEu;
   batch->state.x67A_y[idx] = 0xFEu;
+  batch->state.x679_x_frame_start[idx] = 0xFEu;
+  batch->state.x67A_y_frame_start[idx] = 0xFEu;
   batch->state.x67B[idx] = 0xFEu;
 
   batch->state.x67C[idx] = 0xFFu;
@@ -650,6 +652,8 @@ int input_apply(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev_in
       batch->state.x672_input_timer[idx] =
           x672_trigger_timer_update(batch->state.x672_input_timer[idx], trig, prev_trig,
                                     com->powershield_reflect_trigger_min);
+      batch->state.x679_x_frame_start[idx] = batch->state.x679_x[idx];
+      batch->state.x67A_y_frame_start[idx] = batch->state.x67A_y[idx];
 
       // x676_x: increment (clamp to 0xFE) then reset on fresh directional entry.
       batch->state.x676_x[idx] = clamp_inc_u8_fe(batch->state.x676_x[idx]);

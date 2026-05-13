@@ -788,31 +788,35 @@ def test_noncausal_locomotion_lane_population_stays_narrow() -> None:
         67: 8,
     }
     assert primary_turn_transitions == {(18, 24)}
+    # Aggregate population moves with the retained source-owned seed lanes in this package:
+    # common-air walljump hidden setup/carry promotes five more locomotion motion-entry rows, while
+    # the guarded capture/match-flow and hidden-order families pick up the corresponding
+    # replay-prefix owners. Keep this as a population guard, not as per-row gameplay authority.
     assert aggregate_turn == 80
-    assert aggregate_locomotion_motion == 1128
+    assert aggregate_locomotion_motion == 1133
     assert aggregate_specialn == 120
-    assert aggregate_match_flow == 390
+    assert aggregate_match_flow == 391
     assert aggregate_guard_collision == 1212
-    assert aggregate_hidden_order == 7252
+    assert aggregate_hidden_order == 7257
     assert aggregate_attacklw3_runtime == 0
     assert aggregate_hidden_order_families == {
         "attack": 421,
         "cliff": 361,
-        "damage": 706,
-        "fox_falco_special": 741,
+        "damage": 707,
+        "fox_falco_special": 742,
         "grab_capture": 949,
-        "jump_landing": 2407,
+        "jump_landing": 2410,
         "locomotion": 1555,
         "other": 112,
     }
     assert dict(aggregate_hidden_order_ref_actions.most_common(25)) == {
         43: 906,
-        39: 609,
+        39: 610,
         360: 446,
         18: 445,
         20: 385,
-        25: 324,
-        42: 293,
+        25: 325,
+        42: 294,
         90: 255,
         24: 199,
         14: 193,

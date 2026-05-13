@@ -1463,6 +1463,58 @@ def test_fox_jumpb_dynamic_chain_does_not_broaden_body_admission_controls(
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize(
+    ("record", "expected_action", "expected_hitlag"),
+    [
+        (4921, 212, 0),
+        (4922, 212, 0),
+        (4923, 79, 6),
+    ],
+)
+def test_fox_catch_dynamic_tail_chain_keeps_dair_body_timing_mgs(
+    record: int, expected_action: int, expected_hitlag: int
+) -> None:
+    # Fox Catch dynamic-chain collision pose:
+    # - Falco DAir's active hitbox overlaps Fox's part-18 tail cap near Catch frames 8..10.
+    # - Vanilla ftColl consumes Fox's ftData.x2C dynamic JObj chain through ftCo_8009E0A8 before
+    #   lbColl BODY tests; the descriptor cone clamp from lb_8001044C keeps frames 8 and 9 out,
+    #   while frame 10 reaches DamageN2.
+    # - The SSDYNN01 collision-owner predicate names ftCo_SM_Catch, so this is not a local
+    #   AttackAirLw, FoD, or record-window BODY suppression.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+    # refs/melee/src/melee/ft/ftdynamics.c::{ftCo_8009DD94,ftCo_8009E0A8}
+    # refs/melee/src/melee/lb/lb_00F9.c::lb_8001044C
+    # data/anims/fox.dyn.bin::SSDYNN01 collision_motion_state_ids(ftCo_SM_Catch)
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/MilkyGracefulStingray.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    seed, out, ref = _step_one_row(dataset_path, record)
+    attacker = 0
+    defender = 1
+    assert int(seed["action_id"][attacker]) == 69  # AttackAirLw
+    assert int(seed["action_id"][defender]) == 212  # Catch
+    assert int(seed["animation_index"][defender]) == 242
+    assert int(ref["action_id"][defender]) == expected_action
+    assert int(ref["hitlag"][defender]) == expected_hitlag
+    for field in (
+        "action_id",
+        "animation_index",
+        "hitlag",
+        "hitstun",
+        "percent",
+        "instance_hit_by",
+        "last_hit_by",
+    ):
+        np.testing.assert_array_equal(out[field], ref[field], err_msg=f"field={field}")
+
+
+@pytest.mark.integration
 def test_late_attackairhi_hitcapsule_latch_rejects_false_wait_hit_fsp_7079() -> None:
     # Late AttackAirHi victim-list owner:
     # - Fox/Falco UpAir clears the early hitboxes and recreates same-group late hitboxes.

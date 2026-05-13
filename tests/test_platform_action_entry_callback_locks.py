@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from argparse import Namespace
 from pathlib import Path
 
 import numpy as np
@@ -7,6 +8,7 @@ import pytest
 
 from tests.test_combat_ownership_seed_guardrail_locks import _skip_if_required_artifacts_missing
 from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.slippi.make_dataset_from_slp import _main_impl
 
 
 BUTTON_L = 0x0040
@@ -15,6 +17,7 @@ ACT_ESCAPE_AIR = 236
 ACT_LANDING_FALL_SPECIAL = 43
 ACT_FALL_SPECIAL = 35
 ACT_JUMP_AERIAL_F = 27
+ACT_JUMP_AERIAL_B = 28
 ACT_KNEE_BEND = 24
 ACT_FALL = 29
 ACT_PASS = 244
@@ -23,7 +26,9 @@ ACT_JUMP_F = 25
 ACT_ATTACK_AIR_N = 65
 ACT_ATTACK_AIR_LW = 65
 ACT_ATTACK_AIR_F = 66
+ACT_ATTACK_AIR_HI = 68
 ACT_LANDING_AIR_LW = 70
+ACT_LANDING_AIR_HI = 73
 ACT_LANDING = 42
 ACT_GUARD_ON = 178
 ACT_GUARD_REFLECT = 182
@@ -778,6 +783,73 @@ def test_jumpaerial_escapeair_ledge_entry_keeps_source_airborne(
 
 
 @pytest.mark.integration
+def test_jumpaerial_escapeair_static_platform_overstep_stays_airborne_feh() -> None:
+    # FEH reaches Dream Land top platform from fresh JumpAerial -> EscapeAir with a shallow
+    # callback-local bottom crossing whose final platform correction is larger than the current
+    # EscapeAir vertical step. That is still the pre-entry CollData/ECB handoff, not a source
+    # LandingFallSpecial publication.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpColl_80044838_Floor}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/dream_land_recent/"
+        "FlippantEnchantedHorse.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    record = 11156
+    p = 0
+    row = ds.samples[record]
+    assert int(row["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
+    assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_JUMP_AERIAL_F
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_ESCAPE_AIR
+    assert int(row["ref_t1"]["on_ground"][p]) == 0
+
+    out = _run_one_step(ds, record)
+    ref = row["ref_t1"]
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("record", [9669, 11255])
+def test_jumpaerial_escapeair_static_platform_deeper_step_still_lands_feh(record: int) -> None:
+    # Negative controls for the static-platform overstep guard: deeper Dream Land top-platform
+    # crossings are ordinary EscapeAir_Coll floor publications.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/dream_land_recent/"
+        "FlippantEnchantedHorse.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    p = 0
+    row = ds.samples[record]
+    assert int(row["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
+    assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_JUMP_AERIAL_F
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_LANDING_FALL_SPECIAL
+    assert int(row["ref_t1"]["on_ground"][p]) == 1
+
+    out = _run_one_step(ds, record)
+    ref = row["ref_t1"]
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
 def test_jumpaerial_escapeair_platform_entry_owner_is_not_broadened() -> None:
     # Synthetic negatives for the retained source owners:
     # - later carried JumpAerial prefix age is not part of the shallow-entry suppression slice when
@@ -1295,6 +1367,44 @@ def test_locked_escapeair_late_platform_projection_keeps_shallow_current_root_ai
 
 
 @pytest.mark.integration
+def test_locked_escapeair_seed6_different_platform_root_projection_stays_airborne() -> None:
+    # The ecb_lock_timer=6 interpolation-gap owner also applies when root projection can see a
+    # different static soft platform than the carried CollData.floor.index. Source has not reached the
+    # later ft_80082C74/mpColl_800471F8 platform publication phase yet, so this first projected
+    # platform candidate remains airborne.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    # refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D5D4,ftCommon_UnlockECB}
+    # refs/melee/src/melee/mp/mpcoll.c::{mpCollInterpolateECB,mpColl_80043754}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/CornyDelayedOkapi.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    record = 2838
+    p = 1
+    row = ds.samples[record]
+    assert int(row["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
+    assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_ESCAPE_AIR
+    assert int(row["seed_t"]["ecb_lock_timer"][p]) == 6
+    assert int(row["seed_t"]["ground_id"][p]) != 35
+    assert int(row["ref_t1"]["ground_id"][p]) != 35
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_ESCAPE_AIR
+    assert int(row["ref_t1"]["on_ground"][p]) == 0
+
+    out = _run_one_step(ds, record)
+    ref = row["ref_t1"]
+    for field in ("action_id", "animation_index", "on_ground", "ground_id"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("dataset_rel", "record", "p"),
     [
@@ -1548,6 +1658,148 @@ def test_jump_attackair_platform_entry_does_not_use_fall_owner(
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
+    ("record", "p", "expected_action", "expected_on_ground", "expected_ground_id", "raw_stick_y"),
+    [
+        (1403, 0, ACT_JUMP_AERIAL_F, 0, 3, -58),
+        (1616, 1, ACT_LANDING, 1, 4, 0),
+    ],
+)
+def test_jumpaerial_static_platform_pass_callback_boundary(
+    record: int,
+    p: int,
+    expected_action: int,
+    expected_on_ground: int,
+    expected_ground_id: int,
+    raw_stick_y: int,
+) -> None:
+    # Sustained JumpAerial_Coll routes through ft_800835B0 -> mpColl_80047E14. Source floor
+    # projection first requires mpColl_80044628_Floor to accept ftCo_80096CC8's platform callback:
+    # held-down platform pass stays airborne, while released/no-pass rows keep the ordinary platform
+    # Landing path.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Coll
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_80096CC8
+    # refs/melee/src/melee/ft/ft_081B.c::ft_800835B0
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpColl_80044838_Floor}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
+        "CheeryNumbMonkey.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record]
+    assert int(row["seed_t"]["action_id"][p]) == ACT_JUMP_AERIAL_F
+    ucf_slot = int(row["seed_t"]["ucf_padbuf_index"][p]) & 3
+    assert int(row["seed_t"]["ucf_padbuf_stick_y"][p][ucf_slot]) == raw_stick_y
+    assert int(row["ref_t1"]["action_id"][p]) == expected_action
+    assert int(row["ref_t1"]["on_ground"][p]) == expected_on_ground
+    assert int(row["ref_t1"]["ground_id"][p]) == expected_ground_id
+
+    out = _run_one_step(ds, record)
+    ref = row["ref_t1"]
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    for field in ("pos_x", "pos_y", "speed_air_x_self", "speed_y_self"):
+        assert float(out[field][p]) == pytest.approx(float(ref[field][p]), abs=1e-6), field
+
+
+@pytest.mark.integration
+def test_fod_jumpaerial_fastfall_transformed_platform_suppression_restores_root_y() -> None:
+    # Sustained JumpAerial_Coll over FoD height-transform platforms can reject the final platform
+    # publication while remaining airborne. The suppression must restore callback root Y as well as
+    # on_ground/ground_id; otherwise replay-real rows stay airborne but keep a platform-snapped root.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_800835B0
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047E14,mpColl_80044838_Floor}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    record = 1333
+    p = 0
+    row = ds.samples[record]
+    assert int(row["seed_t"]["action_id"][p]) == ACT_JUMP_AERIAL_B
+    assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_JUMP_AERIAL_B
+    assert int(row["seed_t"]["fall_fast"][p]) == 1
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_JUMP_AERIAL_B
+    assert int(row["ref_t1"]["on_ground"][p]) == 0
+
+    out = _run_one_step(ds, record)
+    ref = row["ref_t1"]
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "p", "expected_ground_id"),
+    [
+        (
+            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+            "MilkyGracefulStingray.msl",
+            1341,
+            0,
+            0,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+            "ElatedWearyTermite.msl",
+            6748,
+            1,
+            1,
+        ),
+    ],
+)
+def test_fod_jumpaerial_fastfall_fresh_platform_floor_contact_lands(
+    dataset_rel: str, record: int, p: int, expected_ground_id: int
+) -> None:
+    # Positive controls for the JumpAerial_Coll height-platform split. The stay-airborne owner above
+    # requires a carried generated platform floor.index; rows starting from a hard-floor index and
+    # crossing onto FoD's side platforms publish ordinary Landing through ft_800835B0.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_80084DB0,ft_800835B0}
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047E14,mpColl_80044628_Floor}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record]
+    assert int(row["seed_t"]["action_id"][p]) == ACT_JUMP_AERIAL_F
+    assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_JUMP_AERIAL_F
+    assert int(row["seed_t"]["ground_id"][p]) == 5
+    assert int(row["seed_t"]["fall_fast"][p]) == 1
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_LANDING
+    assert int(row["ref_t1"]["ground_id"][p]) == expected_ground_id
+
+    out = _run_one_step(ds, record)
+    ref = row["ref_t1"]
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    # The source owner under test is the landing publication boundary; existing FoD platform
+    # projection leaves the familiar mpLib 0.0001 floor-bias residual on this path.
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-4)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
     ("record", "p"),
     [
         (1532, 0),
@@ -1586,12 +1838,15 @@ def test_fall_transformed_platform_fastfall_callback_lifetime_stays_airborne(
     ref = row["ref_t1"]
     for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
         assert int(out[field][p]) == int(ref[field][p]), field
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
 
 
 @pytest.mark.integration
 def test_fall_transformed_platform_fastfall_gate_is_source_scoped() -> None:
-    # Synthetic negatives using a retained FoD row:
-    # - clearing fp->fall_fast exits the fastfall owner and admits the same platform contact.
+    # Synthetic negative using a retained FoD row:
+    # - breaking the sustained same-action Fall_Coll lifetime exits the fastfall transformed-platform
+    #   owner and admits the same platform contact. Clearing fp->fall_fast alone reduces the Fall
+    #   descent on current v7 generated seeds, so it no longer isolates this contact row.
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
@@ -1603,18 +1858,69 @@ def test_fall_transformed_platform_fastfall_gate_is_source_scoped() -> None:
         pytest.skip(f"missing local dataset: {dataset_path}")
 
     ds = read_dataset(str(dataset_path))
-    # Use a retained Fall frame where clearing fastfall still leaves enough descent to contact the
-    # transformed platform, so the negative isolates the callback gate instead of a no-contact row.
-    record = 5954
+    # Use the last retained airborne Fall frame before the platform publishes Landing. With the
+    # same-action lifetime broken, the row is no longer owned by sustained Fall_Coll and lands.
+    record = 5960
     p = 1
 
-    def not_fastfall(seed: np.ndarray) -> None:
-        seed["fall_fast"][0, p] = np.uint8(0)
-        seed["state_flags"][0, p, 1] = np.uint8(int(seed["state_flags"][0, p, 1]) & ~0x08)
+    def not_sustained_fall(seed: np.ndarray) -> None:
+        seed["seed_prev_action_id"][0, p] = np.uint16(ACT_JUMP_AERIAL_F)
 
-    out_not_fastfall = _run_one_step(ds, record, seed_mutator=not_fastfall)
-    assert int(out_not_fastfall["action_id"][p]) == ACT_LANDING
-    assert int(out_not_fastfall["on_ground"][p]) == 1
+    out_not_sustained_fall = _run_one_step(ds, record, seed_mutator=not_sustained_fall)
+    assert int(out_not_sustained_fall["action_id"][p]) == ACT_LANDING
+    assert int(out_not_sustained_fall["on_ground"][p]) == 1
+
+
+@pytest.mark.integration
+def test_fod_fall_loop_wrap_delays_transformed_platform_hard_floor_publish() -> None:
+    # Replay-real boundary for a sustained fastfall Fall_Coll row immediately after the Fall AObj
+    # loops. The carried CollData floor.index is still FoD's height-transformed platform, and source
+    # keeps the loop-wrap callback airborne before publishing the hard main-floor landing on the
+    # following callback. This is distinct from the broader transformed-platform platform-contact
+    # suppression above; the next row below proves the hard-floor handoff still lands normally.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::{ftCo_Fall_Anim,ftCo_Fall_Coll}
+    # refs/melee/src/melee/ft/ftanim.c::ftAnim_8006EBE8
+    # refs/melee/src/sysdolphin/baselib/aobj.c::HSD_AObjInterpretAnim
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047E14,mpColl_80044838_Floor}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+        "ElatedWearyTermite.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    p = 1
+    loop_row = ds.samples[5960]
+    assert int(loop_row["seed_t"]["action_id"][p]) == ACT_FALL
+    assert int(loop_row["seed_t"]["seed_prev_action_id"][p]) == ACT_FALL
+    assert int(loop_row["seed_t"]["seed_prev_action_frame"][p]) == 7
+    assert int(loop_row["seed_t"]["action_frame"][p]) == 0
+    assert int(loop_row["seed_t"]["ground_id"][p]) == 2
+    assert int(loop_row["seed_t"]["fall_fast"][p]) == 1
+    assert int(loop_row["seed_t"]["state_flags"][p, 0]) & 0x80 == 0
+    assert int(loop_row["ref_t1"]["action_id"][p]) == ACT_FALL
+    assert int(loop_row["ref_t1"]["on_ground"][p]) == 0
+
+    out = _run_one_step(ds, 5960)
+    ref = loop_row["ref_t1"]
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+
+    landing_row = ds.samples[5961]
+    assert int(landing_row["seed_t"]["action_id"][p]) == ACT_FALL
+    assert int(landing_row["seed_t"]["seed_prev_action_frame"][p]) == 0
+    assert int(landing_row["ref_t1"]["action_id"][p]) == ACT_LANDING
+    out_landing = _run_one_step(ds, 5961)
+    ref_landing = landing_row["ref_t1"]
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+        assert int(out_landing[field][p]) == int(ref_landing[field][p]), field
+    assert float(out_landing["pos_y"][p]) == pytest.approx(float(ref_landing["pos_y"][p]), abs=1e-6)
 
 
 @pytest.mark.integration
@@ -1989,3 +2295,111 @@ def test_fresh_guardon_nonshield_entry_does_not_platform_pass_same_callback() ->
     )
     assert int(out["action_id"][p]) == ACT_GUARD_ON
     assert int(out["on_ground"][p]) == 1
+
+
+@pytest.mark.integration
+def test_fod_fall_coll_floor_skip_seed_carries_transformed_platform_pass(tmp_path: Path) -> None:
+    # FoD Fall_Coll floor-skip seed owner:
+    # - Fall_Coll routes through ft_800831CC with ftCo_80096CC8, the same soft-platform predicate
+    #   used by Jump/JumpAerial. A down-held transformed-platform crossing writes hidden
+    #   CollData.floor_skip, and the x470 pass-through lifetime carries it after the stick is
+    #   released.
+    # - EWT:5954 is a direct replay seed in that carry window. Without the Fall_Coll derivation the
+    #   sim applies a stay-airborne platform Y correction to FoD's left platform; with the source
+    #   skip lane it stays at vanilla Fall root Y.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_800831CC
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_80096CC8
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpUpdateFloorSkip}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    slp = root / "replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.slp"
+    if not slp.exists():
+        pytest.skip(f"missing local replay: {slp}")
+
+    out_path = tmp_path / "ElatedWearyTermite.msl"
+    _main_impl(
+        Namespace(
+            slp=str(slp),
+            out=str(out_path),
+            ports=None,
+            ucf_enabled=True,
+            ucf_cardinals_1_0_enabled=True,
+        )
+    )
+    ds = read_dataset(str(out_path))
+    record = 5954
+    p = 1
+    row = ds.samples[record]
+    assert int(row["seed_t"]["action_id"][p]) == ACT_FALL
+    assert int(row["seed_t"]["floor_skip_segment_id_u16"][p]) == 1
+    assert int(row["seed_t"]["floor_skip_segment_valid_u8"][p]) == 1
+
+    out = _run_one_step(ds, record)
+    ref = row["ref_t1"]
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_FALL
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 0
+    assert int(out["ground_id"][p]) == int(ref["ground_id"][p]) == 2
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-6)
+
+
+@pytest.mark.integration
+def test_fod_attackair_shallow_transformed_platform_seed_carries_floor_owner(
+    tmp_path: Path,
+) -> None:
+    # FoD AttackAir_Coll shallow transformed-platform owner:
+    # - AttackAir_Coll routes through ft_80082C74 -> mpColl_800471F8. During the extracted
+    #   AttackAirN/Hi/Lw first HitCapsule create->clear phase, a shallow first contact with FoD's
+    #   height-transformed side platform can reject LandingAir* and carry the callback-local
+    #   CollData floor owner into the next direct reseed row.
+    # - PTE:1640/1641 cover Falco AttackAirHi around its first clear/second create boundary.
+    #   PTE:1692 covers Fox AttackAirN late-hit lifetime. PTE:7843 is a released/no-owner control
+    #   that must still publish LandingAirN normally.
+    # data/motion_state/owners/{fox,falco}.bin::MSLMSO01 submotion_id
+    # data/scripts/{fox,falco}.bin::MSLFTSC1 create_hitbox/clear_hitboxes events
+    # data/stages/bin/griz.bin::MSLSTG01 height platform transforms
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    slp = root / "replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.slp"
+    if not slp.exists():
+        pytest.skip(f"missing local replay: {slp}")
+
+    out_path = tmp_path / "ParallelTemptingElk.msl"
+    _main_impl(
+        Namespace(
+            slp=str(slp),
+            out=str(out_path),
+            ports="1,2",
+            ucf_enabled=True,
+            ucf_cardinals_1_0_enabled=True,
+        )
+    )
+    ds = read_dataset(str(out_path))
+
+    for record, action in ((1640, ACT_ATTACK_AIR_HI), (1641, ACT_ATTACK_AIR_HI), (1692, ACT_ATTACK_AIR_N)):
+        row = ds.samples[record]
+        assert int(row["seed_t"]["action_id"][0]) == action
+        assert int(row["seed_t"]["floor_skip_segment_id_u16"][0]) == 1
+        assert int(row["seed_t"]["floor_skip_segment_valid_u8"][0]) == 1
+        assert int(row["ref_t1"]["action_id"][0]) == action
+        assert int(row["ref_t1"]["on_ground"][0]) == 0
+
+        out = _run_one_step(ds, record)
+        ref = row["ref_t1"]
+        for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+            assert int(out[field][0]) == int(ref[field][0]), (record, field)
+        assert float(out["pos_y"][0]) == pytest.approx(float(ref["pos_y"][0]), abs=1e-6)
+
+    released = ds.samples[7843]
+    assert int(released["seed_t"]["action_id"][0]) == ACT_ATTACK_AIR_N
+    assert int(released["seed_t"]["floor_skip_segment_id_u16"][0]) == 0xFFFF
+    assert int(released["seed_t"]["floor_skip_segment_valid_u8"][0]) == 0
+    assert int(released["ref_t1"]["action_id"][0]) == ACT_LANDING_AIR_LW
+    released_out = _run_one_step(ds, 7843)
+    assert int(released_out["action_id"][0]) == ACT_LANDING_AIR_LW
+    assert int(released_out["on_ground"][0]) == 1
+    assert float(released_out["pos_y"][0]) == pytest.approx(
+        float(released["ref_t1"]["pos_y"][0]), abs=2e-4
+    )

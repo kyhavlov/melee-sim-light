@@ -76,6 +76,11 @@ def test_motion_state_owner_tables_cover_known_callbacks_and_flags() -> None:
     assert int(fox.class_bits[0x0019]) & CLASS_COMMON_AIR_COLL
     assert int(fox.class_bits[0x0019]) & CLASS_COMMON_AIR_WALLJUMP_COLL
 
+    assert cb_name(0x00CA, "coll") == "ftCo_PassiveWall_Coll"
+    assert cb_name(0x00CB, "coll") == "ftCo_PassiveWall_Coll"
+    assert int(fox.class_bits[0x00CA]) & CLASS_COMMON_AIR_WALLJUMP_COLL
+    assert int(fox.class_bits[0x00CB]) & CLASS_COMMON_AIR_WALLJUMP_COLL
+
     assert cb_name(0x0023, "phys") == "ftCo_FallSpecial_Phys"  # FallSpecial
     assert cb_name(0x0023, "coll") == "ftCo_FallSpecial_Coll"
     assert int(fox.class_bits[0x0023]) & CLASS_COMMON_AIR_PHYS
@@ -166,6 +171,8 @@ def test_motion_state_class_equivalence_for_migrated_predicates() -> None:
         0x001F,
         0x0021,
         0x0022,
+        0x00CA,
+        0x00CB,
     }
     landing_coll = {0x002A, 0x002B}
     damagefall_coll = {0x0026}

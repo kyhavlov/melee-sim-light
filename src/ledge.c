@@ -208,14 +208,21 @@ static inline void enter_wait_on_stage(MslBatch* batch, size_t idx) {
   if (batch == NULL) {
     return;
   }
+  // Cliff option anim-end owner:
+  // - ftCo_CliffClimb_Anim (shared by CliffClimb/Attack/Escape) enters the grounded Wait-like
+  //   destination through ftCommon_8007D92C.
+  // - The same Fighter proc can then run Wait_IASA and enter GuardOn before Phys; source GuardOn
+  //   Phys still sees the residual cliff-option gr_vel and applies ordinary ground friction before
+  //   position integration.
+  // Preserve the velocity lanes here so the destination Phys callback owns the friction/movement
+  // step instead of dropping a frame of residual cliff motion at the state handoff.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::{
+  //   ftCo_CliffClimb_Anim,ftCo_CliffClimb_Phys}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_GuardOn_Phys}
+  // refs/melee/src/melee/ft/ft_081B.c::{ft_80084FA8,ft_80084F3C}
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_WAIT;
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_WAIT1_0;
   batch->state.on_ground[idx] = 1;
-  batch->state.speed_ground_x_self[idx] = 0.0f;
-  batch->state.speed_air_x_self[idx] = 0.0f;
-  batch->state.speed_y_self[idx] = 0.0f;
-  batch->state.speed_x_attack[idx] = 0.0f;
-  batch->state.speed_y_attack[idx] = 0.0f;
   batch->state.fall_fast[idx] = 0;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
 }

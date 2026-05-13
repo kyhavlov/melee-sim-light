@@ -2429,6 +2429,7 @@ static inline uint8_t combat_damage_allow_sdi_owner_action(uint16_t action) {
     case MSL_ACT_FLY_REFLECT_WALL:
     case MSL_ACT_FLY_REFLECT_CEIL:
     case MSL_ACT_DAMAGE_FALL:
+    case MSL_ACT_DOWN_DAMAGE_U:
     case MSL_ACT_DOWN_DAMAGE_D:
       return 1u;
     default:

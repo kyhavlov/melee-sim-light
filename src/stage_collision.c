@@ -1828,6 +1828,20 @@ uint8_t stage_collision_floor_line_height_platform_state_is_source_trusted(const
 
   const float h = batch->state.stage_fod_platform_height[idx];
   const MslFodPlatformMotion* motion = &slot->fod_motion;
+  for (size_t i = 0; i < slot->platform_transform_count; i++) {
+    const MslStagePlatformTransform* rec = &slot->platform_transforms[i];
+    if (rec->line_id == segment_i && rec->kind_id == (uint8_t)MSLSTG01_PLATFORM_TRANSFORM_HEIGHT &&
+        rec->platform_id == platform_id && fabsf(h - rec->y_const) <= 1.0e-3f) {
+      // Source-owned initial platform pose:
+      // grIzumi initializes each platform JObj from the stage data before the runtime scheduler
+      // chooses later targets. MSLSTG01 stores that per-line initial height in the height-transform
+      // record, so a replay seed at the initial right/left FoD height is not sparse mid-flight
+      // reconstruction and may own mpCheckFloor contacts.
+      // refs/melee/src/melee/gr/grizumi.c::{grIzumi_801CC358,grIzumi_801CCBDC}
+      // data/stages/bin/griz.bin::MSLSTG01 platform_transform.y_const
+      return 1u;
+    }
+  }
   // grIzumi target states are source-owned by the platform JObj and refreshed into mpLib. Sparse
   // replay reconstruction can also carry stale mid-flight heights without the hidden phase/target
   // owner; those rows must stay on mpColl's endpoint pending owner.

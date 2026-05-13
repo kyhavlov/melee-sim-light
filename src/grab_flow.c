@@ -208,128 +208,6 @@ static inline void maybe_enter_capture_wait_lw_grounded_handoff(MslBatch* batch,
   }
 }
 
-static inline void maybe_run_capture_pulled_lw_immediate_floor_callback(
-    MslBatch* batch, int bi, int owner_p, int victim_p, size_t vidx,
-    uint16_t victim_pre_connect_action) {
-  if (batch == NULL || batch->state.action_id[vidx] != (uint16_t)MSL_ACT_CAPTURE_PULLED_LW ||
-      batch->state.on_ground[vidx] == 0u || batch->state.hitlag_started_frame[vidx] != 0u) {
-    return;
-  }
-  // Source-shaped boundary for the supported rollout case:
-  // - the victim entered AttackHi4 earlier in the same frame before the grab callback runs, so the
-  //   immediate CapturePulledLw Coll callback observes the current-frame attack/collision episode;
-  // - steady AttackHi4 and ordinary Guard/Catch grounded captures keep floor contact in ft_8008403C
-  //   and must not take the Lw -> Hi -> Lw root projection.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackHi4.c::doEnter
-  // refs/melee/src/melee/ft/fighter.c::{Fighter_procUpdate,Fighter_UnkProcessGrab_8006CA5C}
-  if (victim_pre_connect_action != (uint16_t)MSL_ACT_ATTACK_HI4 ||
-      batch->state.prev_action_id[vidx] == victim_pre_connect_action) {
-    return;
-  }
-
-  const float saved_pos_x = batch->state.pos_x[vidx];
-  const float saved_pos_y = batch->state.pos_y[vidx];
-  const float saved_pos_z = batch->state.pos_z[vidx];
-  const uint16_t saved_action = batch->state.action_id[vidx];
-  const uint32_t saved_anim = batch->state.animation_index[vidx];
-  const uint8_t saved_on_ground = batch->state.on_ground[vidx];
-  const uint16_t saved_ground_id = batch->state.ground_id[vidx];
-  const uint8_t saved_ecb_lock = batch->state.ecb_lock_timer[vidx];
-  const uint8_t saved_jumps_left = batch->state.jumps_left[vidx];
-  const int8_t saved_facing_dir1 = batch->state.facing_dir1[vidx];
-  const uint8_t saved_fall_fast = batch->state.fall_fast[vidx];
-  const uint8_t saved_kb_smashcharge_active = batch->state.kb_smashcharge_active[vidx];
-  const uint8_t saved_smash_charge_state = batch->state.smash_charge_state[vidx];
-  const uint8_t saved_smash_charge_frames = batch->state.smash_charge_frames[vidx];
-  const uint8_t saved_smash_charge_hold_frames_max =
-      batch->state.smash_charge_hold_frames_max[vidx];
-  const int32_t saved_smash_charge_saved_rate_fp_q16_16 =
-      batch->state.smash_charge_saved_rate_fp_q16_16[vidx];
-  const uint8_t saved_anim_defer_tick_once = batch->state.anim_defer_tick_once[vidx];
-  const float saved_anim_frame_f32 = batch->state.anim_frame_f32[vidx];
-  const int32_t saved_anim_frame_fp_q16_16 = batch->state.anim_frame_fp_q16_16[vidx];
-  const int32_t saved_frame_speed_mul_fp_q16_16 = batch->state.frame_speed_mul_fp_q16_16[vidx];
-  const int16_t saved_action_frame = batch->state.action_frame[vidx];
-  const uint16_t saved_attack_id = batch->state.attack_id[vidx];
-  const uint16_t saved_attack_instance = batch->state.attack_instance[vidx];
-  const uint16_t saved_attack_identity_last_action_id =
-      batch->state.attack_identity_last_action_id[vidx];
-  const uint16_t saved_instance_id = batch->state.instance_id[vidx];
-  const uint8_t saved_x2073 = batch->state.instance_id_x2073[vidx];
-  const uint16_t saved_motion_entry_instance_id_override =
-      batch->state.motion_entry_instance_id_override[vidx];
-  const uint16_t saved_identity_last = batch->state.instance_identity_last_action_id[vidx];
-  const int saved_bi = bi;
-  const uint16_t saved_counter = batch->state.instance_id_counter[saved_bi];
-
-  const float cur_anim = batch->state.anim_frame_f32[vidx];
-  const float cur_rate = msl_f32_from_q16_16(batch->state.frame_speed_mul_fp_q16_16[vidx]);
-
-  // Immediate CapturePulledLw Coll callback:
-  // - ftCo_CapturePulledLw_Coll calls ft_8008403C; when mpColl_8004B108 reports no floor,
-  //   fn_800DB230 switches Lw -> Hi, applies fn_800DAA40 attachment X/Y/Z, and then probes
-  //   ft_80083C00/mpColl_800477E0 to land back in CapturePulledLw if a floor mask is present.
-  // - Keep this experiment bounded to the Lw -> Hi -> Lw case that the reconstructed floor-mask
-  //   probe can prove locally; otherwise restore the original grounded Lw entry.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
-  //   ftCo_CapturePulledLw_Coll,fn_800DB230,fn_800DAECC,fn_800DAEEC}
-  // refs/melee/src/melee/ft/ft_081B.c::{ft_8008403C,ft_80083C00}
-  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004B108,mpColl_800477E0}
-  batch->state.on_ground[vidx] = 0u;
-  batch->state.ecb_lock_timer[vidx] = 0u;
-  batch->state.action_id[vidx] = (uint16_t)MSL_ACT_CAPTURE_PULLED_HI;
-  batch->state.animation_index[vidx] = (uint32_t)MSL_SM_CAPTURE_PULLED_HI;
-  msl_anim_timebase_enter(batch, vidx, cur_anim, cur_rate);
-  grab_attachment_apply_capture_delta_now(batch, bi, victim_p, owner_p);
-
-  MslMpcollFloorMaskResult floor_result = {0xFFFFu, batch->state.pos_y[vidx]};
-  if (mpcoll_800477e0_capture_root_floor_mask_probe(batch, vidx, &floor_result)) {
-    batch->state.action_id[vidx] = (uint16_t)MSL_ACT_CAPTURE_PULLED_LW;
-    batch->state.animation_index[vidx] = (uint32_t)MSL_SM_CAPTURE_PULLED_LW;
-    msl_anim_timebase_enter(batch, vidx, cur_anim, cur_rate);
-    batch->state.on_ground[vidx] = 1u;
-    if (floor_result.ground_id != 0xFFFFu) {
-      batch->state.ground_id[vidx] = floor_result.ground_id;
-    }
-    batch->state.pos_y[vidx] = floor_result.corrected_pos_y;
-    const MslCharParams* ch = msl_char_params(batch->state.char_id[vidx]);
-    if (ch != NULL) {
-      batch->state.jumps_left[vidx] = ch->max_jumps;
-    }
-    return;
-  }
-
-  batch->state.pos_x[vidx] = saved_pos_x;
-  batch->state.pos_y[vidx] = saved_pos_y;
-  batch->state.pos_z[vidx] = saved_pos_z;
-  batch->state.action_id[vidx] = saved_action;
-  batch->state.animation_index[vidx] = saved_anim;
-  batch->state.on_ground[vidx] = saved_on_ground;
-  batch->state.ground_id[vidx] = saved_ground_id;
-  batch->state.ecb_lock_timer[vidx] = saved_ecb_lock;
-  batch->state.jumps_left[vidx] = saved_jumps_left;
-  batch->state.facing_dir1[vidx] = saved_facing_dir1;
-  batch->state.fall_fast[vidx] = saved_fall_fast;
-  batch->state.kb_smashcharge_active[vidx] = saved_kb_smashcharge_active;
-  batch->state.smash_charge_state[vidx] = saved_smash_charge_state;
-  batch->state.smash_charge_frames[vidx] = saved_smash_charge_frames;
-  batch->state.smash_charge_hold_frames_max[vidx] = saved_smash_charge_hold_frames_max;
-  batch->state.smash_charge_saved_rate_fp_q16_16[vidx] = saved_smash_charge_saved_rate_fp_q16_16;
-  batch->state.anim_defer_tick_once[vidx] = saved_anim_defer_tick_once;
-  batch->state.anim_frame_f32[vidx] = saved_anim_frame_f32;
-  batch->state.anim_frame_fp_q16_16[vidx] = saved_anim_frame_fp_q16_16;
-  batch->state.frame_speed_mul_fp_q16_16[vidx] = saved_frame_speed_mul_fp_q16_16;
-  batch->state.action_frame[vidx] = saved_action_frame;
-  batch->state.attack_id[vidx] = saved_attack_id;
-  batch->state.attack_instance[vidx] = saved_attack_instance;
-  batch->state.attack_identity_last_action_id[vidx] = saved_attack_identity_last_action_id;
-  batch->state.instance_id[vidx] = saved_instance_id;
-  batch->state.instance_id_x2073[vidx] = saved_x2073;
-  batch->state.motion_entry_instance_id_override[vidx] = saved_motion_entry_instance_id_override;
-  batch->state.instance_identity_last_action_id[vidx] = saved_identity_last;
-  batch->state.instance_id_counter[saved_bi] = saved_counter;
-}
-
 static inline void maybe_run_capture_pulled_hi_immediate_floor_callback(
     MslBatch* batch, size_t vidx, uint16_t victim_pre_connect_action) {
   if (batch == NULL || batch->state.action_id[vidx] != (uint16_t)MSL_ACT_CAPTURE_PULLED_HI ||
@@ -1274,6 +1152,7 @@ static inline uint8_t enter_throw_from_wait(MslBatch* batch, int bi, int owner_p
       batch->state.grab_offset_y[vidx] = (victim_entry_pos_y - ay) / scale_y;
     }
     batch->state.grab_offset_z[vidx] = 0.0f;
+    grab_attachment_apply_thrown_anchor_now(batch, bi, victim_p, owner_p);
   } else {
     // Thrown entry from CatchWait/CaptureWait owns an immediate attachment position through the
     // ftCo_800DE3FC -> ftCo_800DE508 path. Use the victim's static x1A70 analog instead of
@@ -1452,8 +1331,10 @@ void grab_flow_on_catch_connect(MslBatch* batch, int bi, int owner_p, int victim
     grab_attachment_apply_capture_delta_now(batch, bi, victim_p, owner_p);
     maybe_run_capture_pulled_hi_immediate_floor_callback(batch, vidx, victim_pre_connect_action);
   } else if (batch->state.action_id[vidx] == (uint16_t)MSL_ACT_CAPTURE_PULLED_LW) {
-    maybe_run_capture_pulled_lw_immediate_floor_callback(batch, bi, owner_p, victim_p, vidx,
-                                                         victim_pre_connect_action);
+    // Grounded CapturePulledLw catch-connect entry does not run the newly-entered Lw Phys/Coll in
+    // the catch callback. The source same-frame collision handoff is the airborne Hi entry above;
+    // steady Lw Phys/Coll deltas begin from the next Fighter_procUpdate pass.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{fn_800DAADC,ftCo_CapturePulledLw_Phys}
   }
 }
 

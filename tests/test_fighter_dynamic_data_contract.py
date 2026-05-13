@@ -19,7 +19,7 @@ def _parse_ssdynn01(path: Path) -> dict[str, object]:
     if buf[:8] != b"SSDYNN01":
         raise ValueError(f"SSDYNN01: bad magic {buf[:8]!r}")
     version, set_count, total_nodes = struct.unpack_from("<IHH", buf, 8)
-    if version != 6:
+    if version != 7:
         raise ValueError(f"SSDYNN01: bad version {version}")
     off = 16
     sets: list[dict[str, object]] = []
@@ -67,6 +67,17 @@ def _parse_ssdynn01(path: Path) -> dict[str, object]:
         (msid,) = struct.unpack_from("<H", buf, off)
         off += 2
         source_step_msids.append(int(msid))
+    cone_msids: list[int] = []
+    if off + 4 > len(buf):
+        raise ValueError("SSDYNN01: truncated cone owner index")
+    cone_msid_count, _reserved = struct.unpack_from("<HH", buf, off)
+    off += 4
+    for _ in range(int(cone_msid_count)):
+        if off + 2 > len(buf):
+            raise ValueError("SSDYNN01: truncated cone owner msid")
+        (msid,) = struct.unpack_from("<H", buf, off)
+        off += 2
+        cone_msids.append(int(msid))
     if off + 4 > len(buf):
         raise ValueError("SSDYNN01: truncated collider index")
     collider_count, _reserved = struct.unpack_from("<HH", buf, off)
@@ -87,6 +98,7 @@ def _parse_ssdynn01(path: Path) -> dict[str, object]:
         "sets": sets,
         "collision_msids": collision_msids,
         "source_step_msids": source_step_msids,
+        "cone_msids": cone_msids,
         "colliders": colliders,
     }
 
@@ -130,6 +142,7 @@ def _write_dyn(
     version: int = 5,
     collision_msids: list[int] | None = None,
     source_step_msids: list[int] | None = None,
+    cone_msids: list[int] | None = None,
     colliders: list[tuple[int, tuple[float, float, float], float]] | None = None,
 ) -> None:
     total_nodes = sum(len(parts) for _root, parts in sets)
@@ -153,6 +166,11 @@ def _write_dyn(
         source_step_owner_msids = sorted({int(msid) & 0xFFFF for msid in (source_step_msids or [])})
         buf += struct.pack("<HH", len(source_step_owner_msids), 0)
         for msid in source_step_owner_msids:
+            buf += struct.pack("<H", msid)
+    if version >= 7:
+        cone_owner_msids = sorted({int(msid) & 0xFFFF for msid in (cone_msids or [])})
+        buf += struct.pack("<HH", len(cone_owner_msids), 0)
+        for msid in cone_owner_msids:
             buf += struct.pack("<H", msid)
     if version >= 5:
         collider_rows = list(colliders or [])
@@ -342,9 +360,10 @@ def test_committed_fox_falco_dynamic_contract_matches_supported_loader_surface()
 
     assert fox["set_count"] == 1
     assert fox["total_nodes"] == 4
-    assert fox["version"] == 6
-    assert fox["collision_msids"] == [17, 36, 58, 243]
+    assert fox["version"] == 7
+    assert fox["collision_msids"] == [17, 36, 58, 242, 243]
     assert fox["source_step_msids"] == []
+    assert fox["cone_msids"] == [242]
     assert fox["colliders"] == [{"part": 41, "offset": pytest.approx((0.0, 2.0, 0.0)), "radius": pytest.approx(3.0)}]
     fox_set = fox["sets"][0]  # type: ignore[index]
     assert fox_set["root_part"] == 17
@@ -356,12 +375,13 @@ def test_committed_fox_falco_dynamic_contract_matches_supported_loader_surface()
     assert c0[14] == pytest.approx(0.05235987901687622)
 
     assert falco == {
-        "version": 6,
+        "version": 7,
         "set_count": 0,
         "total_nodes": 0,
         "sets": [],
         "collision_msids": [],
         "source_step_msids": [],
+        "cone_msids": [],
         "colliders": [],
     }
 
@@ -381,6 +401,7 @@ def test_extract_fighter_anims_emits_fox_falco_dynamic_contract(tmp_path: Path) 
 
     from tools.extraction.extract_fighter_anims import _read_fighter_dynamics
     from tools.extraction.extract_fighter_anims import _read_rest_srt_and_parents
+    from tools.extraction.extract_fighter_anims import _dynamic_cone_owner_msids
     from tools.extraction.extract_fighter_anims import _dynamic_collision_owner_msids
     from tools.extraction.extract_fighter_anims import _dynamic_source_step_owner_msids
     from tools.extraction.extract_fighter_anims import _write_fighter_dynamics_data
@@ -396,24 +417,27 @@ def test_extract_fighter_anims_emits_fox_falco_dynamic_contract(tmp_path: Path) 
             parent_part,
             collision_msids=_dynamic_collision_owner_msids(character, moves, dynamic_sets),
             source_step_msids=_dynamic_source_step_owner_msids(character, moves, dynamic_sets),
+            cone_msids=_dynamic_cone_owner_msids(character, moves, dynamic_sets),
         )
 
     fox = _parse_ssdynn01(tmp_path / "fox.dyn.bin")
     falco = _parse_ssdynn01(tmp_path / "falco.dyn.bin")
-    assert fox["version"] == 6
+    assert fox["version"] == 7
     assert fox["set_count"] == 1
     assert fox["total_nodes"] == 4
-    assert fox["collision_msids"] == [17, 36, 58, 243]
+    assert fox["collision_msids"] == [17, 36, 58, 242, 243]
     assert fox["source_step_msids"] == []
+    assert fox["cone_msids"] == [242]
     assert fox["colliders"] == [{"part": 41, "offset": pytest.approx((0.0, 2.0, 0.0)), "radius": pytest.approx(3.0)}]
     assert [n["part"] for n in fox["sets"][0]["nodes"]] == [17, 18, 19, 20]  # type: ignore[index]
     assert falco == {
-        "version": 6,
+        "version": 7,
         "set_count": 0,
         "total_nodes": 0,
         "sets": [],
         "collision_msids": [],
         "source_step_msids": [],
+        "cone_msids": [],
         "colliders": [],
     }
 

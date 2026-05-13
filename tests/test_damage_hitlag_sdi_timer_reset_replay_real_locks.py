@@ -66,6 +66,42 @@ def test_damageair3_hitlag_x670_window_sdi_applies_tbk_4222() -> None:
 
 
 @pytest.mark.integration
+def test_damage_n3_hitlag_sdi_radius_uses_deadzoned_lstick_fsp_10790() -> None:
+    # Replay-real negative for the `ftCo_Damage_OnEveryHitlag` stick-radius owner:
+    # - Fighter_Spaghetti zeroes fp->input.lstick axes inside the global deadzone before hitlag_cb.
+    # - FSP:10790 has raw stick (54,16), but the Y axis is deadzone-zeroed, so the source radius
+    #   predicate sees only X=0.675 and vanilla does not consume SDI until the next stronger input.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_Spaghetti_8006AD10
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+        "FavorableSuperficialPig.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[10790:10791]
+    assert int(row.shape[0]) == 1
+    seed, ref, out = _run_one_step(dataset_path, 10790)
+    p = 0
+    assert int(seed["action_id"][p]) == 80  # DamageN3
+    assert int(seed["hitlag"][p]) == 4
+    assert int(seed["tilt_timer_x"][p]) < 4
+    assert int(row["input_t"]["p"][0, p]["main_x"]) == 54
+    assert int(row["input_t"]["p"][0, p]["main_y"]) == 16
+    assert float(ref["pos_x"][p]) == pytest.approx(float(seed["pos_x"][p]), abs=1e-6)
+    assert float(ref["pos_y"][p]) == pytest.approx(float(seed["pos_y"][p]), abs=1e-6)
+
+    assert int(out["action_id"][p]) == int(ref["action_id"][p])
+    assert int(out["hitlag"][p]) == int(ref["hitlag"][p])
+    assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=1e-6)
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
 def test_damageair3_prior_sdi_reset_blocks_stale_timer_window_tbk_4224() -> None:
     # Negative adjacent row: the prior hitlag callback reset x670/x671 to 0xFE. Raw replay inputs
     # would otherwise look like a held-stick timer-window row, but vanilla applies no SDI here.
@@ -96,11 +132,11 @@ def test_damageair3_prior_sdi_reset_blocks_stale_timer_window_tbk_4224() -> None
 def test_damagefly_fresh_entry_reset_blocks_radius_crossing_sdi_bhh_1600() -> None:
     # Source negative for first-active radius crossing:
     # - ftCo_8008DCE0 has reset x670/x671 to 0xFE on DamageFly entry.
-    # - The seed carries a CollData_X130_Locked / ECB-lock floor-contact owner, so the horizontal
-    #   DamageFlyN row stays on the floor-collision owner instead of the first-active SDI crossing.
+    # - Fighter_Spaghetti's lb_8000D148 input segment did not reset x679/x67A, so the horizontal
+    #   DamageFlyN row stays on the ordinary x670/x671 path instead of the first-active SDI bridge.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
     #   ftCo_8008DCE0,ftCo_Damage_OnEveryHitlag,ftCo_DamageFly_Coll}
-    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpColl_80046904}
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_Spaghetti_8006AD10,lb_8000D148}
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
         "datasets/aggregate_recent/replays/validation/aggregate_recent/"
@@ -116,8 +152,42 @@ def test_damagefly_fresh_entry_reset_blocks_radius_crossing_sdi_bhh_1600() -> No
     assert int(seed["hitlag"][p]) == 6
     assert int(seed["tilt_timer_x"][p]) == 0xFE
     assert int(seed["tilt_timer_y"][p]) == 0xFE
+    assert int(seed["x679_x"][p]) != 0
+    assert int(seed["x67A_y"][p]) != 0
     assert float(ref["pos_x"][p]) == pytest.approx(float(seed["pos_x"][p]), abs=1e-6)
     assert float(ref["pos_y"][p]) == pytest.approx(float(seed["pos_y"][p]), abs=1e-6)
+
+    assert int(out["hitlag"][p]) == int(ref["hitlag"][p])
+    assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=1e-6)
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
+def test_damageflyn_first_active_source_input_crossing_sdi_applies_pyo_364() -> None:
+    # Positive counterpart for the DamageFlyN first-active bridge. The row has the same fresh
+    # ftCo_8008DCE0 x670/x671 reset shape as BHH:1600, but Fighter_Spaghetti's source input segment
+    # reset x679/x67A through lb_8000D148. Vanilla consumes that callback-local SDI pulse before
+    # hitlag decrements.
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_Spaghetti_8006AD10,lb_8000D148}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+        "PutridJoyousOryx.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    seed, ref, out = _run_one_step(dataset_path, 364)
+    p = 1
+    assert int(seed["action_id"][p]) == 88  # DamageFlyN
+    assert int(seed["hitlag"][p]) == 6
+    assert int(seed["tilt_timer_x"][p]) == 0xFE
+    assert int(seed["tilt_timer_y"][p]) == 0xFE
+    assert int(seed["x679_x"][p]) == 0
+    assert int(seed["x67A_y"][p]) == 0
+    assert float(ref["pos_x"][p] - seed["pos_x"][p]) == pytest.approx(5.7749996, abs=1e-5)
 
     assert int(out["hitlag"][p]) == int(ref["hitlag"][p])
     assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=1e-6)

@@ -2,13 +2,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
-from tools.eval.dataset import read_dataset
+from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
 
 
 @pytest.mark.integration
@@ -110,6 +112,46 @@ def test_passivewalljump_timer_hold_and_launch_qgd_replay_real_lock() -> None:
             want = ref_row[field][0]
             if field.startswith("pos_") or field.startswith("speed_"):
                 assert float(got) == pytest.approx(float(want), abs=1e-4), (
+                    f"record={record} p=0 field={field} expected={float(want)} got={float(got)}"
+                )
+            else:
+                assert int(got) == int(want), (
+                    f"record={record} p=0 field={field} expected={int(want)} got={int(got)}"
+                )
+
+
+@pytest.mark.integration
+def test_passivewalljump_steady_wall_envelope_priceypartialalbatross_lock() -> None:
+    # Replay-real positive for PassiveWallJump after the startup timer has expired:
+    # - PassiveWall_Coll calls ft_800831CC once mv.co.passivewall.timer is 0.
+    # - ft_800831CC's source path runs the airborne mpColl wall envelope before the shared
+    #   walljump/ledge post-consumers, so steady PassiveWallJump can still be clamped by the wall
+    #   ECB envelope while ordinary Phys only applies fall/friction.
+    # - MSLMSO01 marks PassiveWall{Jump} as COMMON_AIR_WALLJUMP_COLL from that callback identity;
+    #   this lock covers the former Yoshi's Story row where sim moved by self velocity only.
+    #
+    # data/motion_state/owners/{fox,falco}.bin::MSLMSO01 class_bits
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::{
+    #   ftCo_PassiveWall_Anim,ftCo_PassiveWall_Phys,ftCo_PassiveWall_Coll}
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_800831CC,ft_80083090_inline}
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047E14,mpColl_80046904}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    locked_fields = ("action_id", "action_frame", "pos_x", "pos_y", "speed_air_x_self", "speed_y_self")
+    for record in range(907, 912):
+        seed, ref_row, out_row = _run_one_step_row(dataset_path, record, 0)
+        assert int(seed["action_id"][0]) == 203  # PassiveWallJump
+        for field in locked_fields:
+            got = out_row[field][0]
+            want = ref_row[field][0]
+            if field.startswith("pos_") or field.startswith("speed_"):
+                assert float(got) == pytest.approx(float(want), abs=1e-5), (
                     f"record={record} p=0 field={field} expected={float(want)} got={float(got)}"
                 )
             else:
@@ -282,3 +324,73 @@ def test_common_air_walljump_hidden_phase_seed_qgd_replay_real_lock() -> None:
         _, ref_row, out_row = _run_one_step_row(dataset_path, record, p)
         assert int(ref_row["action_id"][p]) != 203
         assert int(out_row["action_id"][p]) == int(ref_row["action_id"][p])
+
+
+@pytest.mark.integration
+def test_common_air_walljump_setup_carry_consumes_fresh_stick_away_feh_lock() -> None:
+    # Replay-real lock for source `ftWallJump_8008169C` setup/carry consumption on Dream Land:
+    # - Slippi does not expose `wall_jump_input_timer` / `x2110_walljumpWallSide`.
+    # - The native seed lane reconstructs the hidden setup from prefix root movement, but only
+    #   serializes it on the row where the stick-away admission branch can consume it.
+    # - FEH 8797/8798 are neutral-control rows; 8799 is the fresh right-wall stick-away consumer.
+    # refs/melee/src/melee/ft/ftwalljump.c::ftWallJump_8008169C
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+    # data/characters/falco.json::walljump_setup_x_delta_threshold
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    slp_path = root / "replays/validation/dream_land_recent/FlippantEnchantedHorse.slp"
+    if not slp_path.exists():
+        pytest.skip(f"missing local replay: {slp_path}")
+
+    ds = build_dataset_from_slp(
+        slp_path=str(slp_path),
+        ports=[1, 2],
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    samples = ds.samples
+    p = 1
+    for record in (8797, 8798, 8799):
+        assert int(samples.shape[0]) > record, f"dataset too short for lock row: record={record}"
+
+    for record in (8797, 8798):
+        seed = samples[record]["seed_t"]
+        ref = samples[record]["ref_t1"]
+        assert int(seed["action_id"][p]) == 27  # JumpAerialF
+        assert int(seed["walljump_input_timer"][p]) == 254
+        assert int(seed["walljump_wall_side_i8"][p]) == 0
+        assert int(ref["action_id"][p]) == 27
+
+    seed = samples[8799]["seed_t"]
+    ref = samples[8799]["ref_t1"]
+    assert int(seed["action_id"][p]) == 27
+    assert int(seed["action_frame"][p]) == 16
+    assert int(seed["walljump_input_timer"][p]) == 2
+    assert int(seed["walljump_wall_side_i8"][p]) == -1
+    assert int(samples[8799]["prev_input_t"]["p"][p]["main_x"]) == 0
+    assert int(samples[8799]["input_t"]["p"][p]["main_x"]) == 80
+    assert int(ref["action_id"][p]) == 203  # PassiveWallJump
+
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    row = samples[8799:8800]
+    seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+        1, int(sizes["seed"])
+    )
+    prev_input_bytes = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+        1, int(sizes["input"])
+    )
+    input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+        1, int(sizes["input"])
+    )
+    out_bytes = np.empty((1, int(sizes["compare"])), dtype=np.uint8)
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_bytes)
+    finally:
+        binding.destroy(handle)
+    out = out_bytes.view(COMPARE_DTYPE).reshape(-1)[0]
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == 203
+    assert int(out["animation_index"][p]) == int(ref["animation_index"][p]) == 203

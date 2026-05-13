@@ -36,6 +36,25 @@ uint8_t move_tables_attackair_cmd0_active(uint8_t char_id, uint16_t attackair_ac
 uint8_t move_tables_attackair_allow_interrupt(uint8_t char_id, uint16_t attackair_action_id,
                                               float cur_anim_frame_f32);
 
+// Returns whether an AttackAir* script is between its first create_hitbox event and final
+// clear_hitboxes event. This is intentionally a script-lifetime owner, not an exact active-HitCapsule
+// predicate: source map callbacks observe the command-script/HitCapsule timeline around clear/create
+// handoff frames without hardcoded action-frame thresholds.
+//
+// Source of truth: data/scripts/{fox,falco}.bin (MSLFTSC1) moves["ftCo_SM_AttackAir*"]["events"]
+// create_hitbox / clear_hitboxes.
+uint8_t move_tables_attackair_hitbox_script_lifetime(uint8_t char_id, uint16_t attackair_action_id,
+                                                     float cur_anim_frame_f32);
+
+// Returns whether an AttackAir* script is inside its first create_hitbox -> first clear_hitboxes
+// phase. The clear frame is included because Fighter_procMap observes the script/collision state
+// around the command clear/create handoff after ftAction_80073354 has advanced the script.
+//
+// Source of truth: data/scripts/{fox,falco}.bin (MSLFTSC1) moves["ftCo_SM_AttackAir*"]["events"]
+// create_hitbox / clear_hitboxes.
+uint8_t move_tables_attackair_first_hitbox_phase(uint8_t char_id, uint16_t attackair_action_id,
+                                                 float cur_anim_frame_f32);
+
 // Returns whether an AttackAir* script has reached its second distinct create_hitbox frame.
 //
 // Decomp: AttackAir_Coll runs with the command-script HitCapsule timeline already advanced by

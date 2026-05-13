@@ -16,12 +16,12 @@ from tools.slippi.suite_io import dataset_path_for_suite_replay, load_suite, rep
 from tools.eval.dataset import HEADER_DTYPE, MAGIC, SAMPLE_DTYPE, SEED_DTYPE
 
 
-# v5 invalidates same-record-size datasets generated before Damage x14 derivation included
-# FlyReflectWall/Ceil in the DamageFly IASA family. Record-size checks alone cannot detect that
-# semantic.
-_CACHE_VERSION = 5
+# v7 invalidates same-record-size datasets generated before common-air walljump hidden phase seeds
+# used source `pos_delta.x` setup-and-carry semantics in native preprocessing. Record-size checks
+# alone cannot detect this semantic.
+_CACHE_VERSION = 7
 _SOURCE_INPUT_PY_TREES = ("tools/slippi",)
-_SOURCE_INPUT_FILES = ("tools/eval/dataset.py",)
+_SOURCE_INPUT_FILES = ("tools/eval/dataset.py", "python/msl_preprocess_native.c")
 
 
 def _hash_file(path: Path) -> str:
