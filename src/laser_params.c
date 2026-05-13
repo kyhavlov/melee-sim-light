@@ -93,7 +93,7 @@ int laser_params_init(void) {
   p += 8;
   const uint32_t version = read_u32_le(p);
   p += 4;
-  if (version != 1 && version != 2 && version != 3 && version != 4) {
+  if (version != 1 && version != 2 && version != 3 && version != 4 && version != 5) {
     alloc_free(buf);
     return -1;
   }
@@ -182,9 +182,16 @@ int laser_params_init(void) {
     // MSLLASR1 v4 reserved-byte signal: extracted no-flinch proxy lane for this laser state.
     // tools/extraction/extract_lasers.py::_pack_record
     rec.non_flinch = (version >= 4) ? p[off + 18] : 0u;
-    // p[off + 19] reserved
-    rec.hitbox_offsets_x_count = p[off + 20];
-    // p[off + 21..23] pad
+    if (version >= 5) {
+      rec.hitbox_offsets_x_count = p[off + 19];
+      rec.hitbox_x138_mask = read_u16_le(p + off + 20);
+      // p[off + 22..23] pad
+    } else {
+      // p[off + 19] reserved
+      rec.hitbox_offsets_x_count = p[off + 20];
+      rec.hitbox_x138_mask = 0u;
+      // p[off + 21..23] pad
+    }
     off += 24;
     for (int i = 0; i < MSL_LASER_MAX_HITBOX_OFFS_X; i++) {
       rec.hitbox_offsets_x[i] = read_f32_le(p + off + (size_t)i * 4);
@@ -203,7 +210,13 @@ int laser_params_init(void) {
       rec.state1_shield_damage = (int8_t)p[off + 16];
       rec.state1_element = (version >= 4) ? p[off + 17] : 2u;
       rec.state1_non_flinch = (version >= 4) ? p[off + 18] : 0u;
-      rec.state1_hitbox_offsets_x_count = p[off + 20];
+      if (version >= 5) {
+        rec.state1_hitbox_offsets_x_count = p[off + 19];
+        rec.state1_hitbox_x138_mask = read_u16_le(p + off + 20);
+      } else {
+        rec.state1_hitbox_offsets_x_count = p[off + 20];
+        rec.state1_hitbox_x138_mask = 0u;
+      }
       off += 24;
       for (int i = 0; i < MSL_LASER_MAX_HITBOX_OFFS_X; i++) {
         rec.state1_hitbox_offsets_x[i] = read_f32_le(p + off + (size_t)i * 4);
@@ -218,6 +231,7 @@ int laser_params_init(void) {
       rec.state1_element = rec.element;
       rec.state1_shield_damage = rec.shield_damage;
       rec.state1_non_flinch = rec.non_flinch;
+      rec.state1_hitbox_x138_mask = rec.hitbox_x138_mask;
       rec.state1_hitbox_offsets_x_count = rec.hitbox_offsets_x_count;
       for (int i = 0; i < MSL_LASER_MAX_HITBOX_OFFS_X; i++) {
         rec.state1_hitbox_offsets_x[i] = rec.hitbox_offsets_x[i];

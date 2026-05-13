@@ -13,6 +13,10 @@ _GAT = (
     "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
     "GracefulAttachedTurtle.msl"
 )
+_FEH = (
+    "datasets/aggregate_recent/replays/validation/dream_land_recent/"
+    "FlippantEnchantedHorse.msl"
+)
 
 
 def _field_bytes(samples: np.ndarray, record: int, field: str, stride: int) -> np.ndarray:
@@ -131,3 +135,28 @@ def test_damageflyroll_hitlag_exit_wall_reflect_requires_knockback_threshold() -
     _seed, _ref, out = _run_one_step(dataset_path, 3113, seed_mutator=clear_horizontal_kb)
     assert int(out["action_id"][0]) == 91  # DamageFlyRoll, not FlyReflectWall.
 
+
+@pytest.mark.integration
+def test_damageflytop_sloped_right_wall_hug_enters_flyreflectwall() -> None:
+    # DamageFlyTop at Dream Land's sloped right wall starts the side-point sweep infinitesimally
+    # across the wall line. Source `mpLineIntersection` accepts that within its 0.1 half-space clamp,
+    # publishes Collide_RightWallHug from the side-point branch, and DamageFly_Coll immediately
+    # enters FlyReflectWall with mirrored KB velocity.
+    # refs/melee/src/melee/mp/mplib.c::mpLineIntersection
+    # refs/melee/src/melee/mp/mpcoll.c::mpColl_80044E10_RightWall
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_FlyReflect.c::{ftCo_800C15F4,ftCo_800C18A8}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / _FEH
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {_FEH}")
+
+    p = 0
+    seed, ref, out = _run_one_step(dataset_path, 9195)
+    assert int(seed["action_id"][p]) == 90  # DamageFlyTop
+    assert int(seed["hitlag"][p]) == 1
+    assert int(ref["action_id"][p]) == 247  # FlyReflectWall
+    assert int(out["action_id"][p]) == int(ref["action_id"][p])
+    assert float(out["speed_x_attack"][p]) == pytest.approx(float(ref["speed_x_attack"][p]))
+    assert float(out["speed_y_attack"][p]) == pytest.approx(float(ref["speed_y_attack"][p]))

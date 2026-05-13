@@ -254,6 +254,27 @@ sim-owned**:
   refs/melee/src/melee/it/itcoll.c::{it_802706D0,it_8026FAC4,it_80272460},
   refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC,
   refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688).
+- Fox DownBack terminal laser BODY uses the `ftColl_8007925C -> lbColl_8000805C` hurt-radius
+  release-edge lane when the extracted hit-status table shows the current DownBack pose frame has
+  just released a nonzero x1988 window. Ordinary grounded vulnerable rows, shield defensive
+  options, PassiveStand, and Falco DownBack controls stay on the exact x58/x4C matrix/local-radius
+  lane instead of borrowing the release-edge broadphase.
+  (`src/items.c`; refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C,
+  refs/melee/src/melee/ft/chara/ftCommon/ftCo_Down.c::ftCo_Down_Coll,
+  refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58,lbColl_804D7A38};
+  data/hurtcaps/{fox,falco}.bin, data/hurtbox_states/{fox,falco}.bin).
+- Late aerial Blaster Loop terminal rows use the raw script `cmd_vars[0]` window from MSLFTSC1 as
+  the BODY-contact boundary. While `ftFx_SpecialAirNLoop_IASA` still has cmd0 active, laser phantom
+  and full BODY contacts remain eligible; after the script clear, terminal no-repeat
+  `SpecialAirNLoop` rows reject same-family laser BODY overlap until the action transitions or
+  lands. `data/items/lasers.bin` v5 also exposes the article hitbox `x138` mask for the separate
+  `gm_8016B1C4` item-hitbox gate, but standard validation rows do not enable that game-rule path.
+  (`src/items.c`, `src/move_tables.c`, `data/items/lasers.bin`;
+  refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
+  ftFx_SpecialAirNLoop_IASA,ftFx_SpecialAirNLoop_Coll},
+  refs/melee/src/melee/ft/ftaction.c::ftAction_80071820,
+  refs/melee/src/melee/it/it_2725.c::it_802790C0,
+  refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C).
 
 ## What “Approximate” Means Here
 
@@ -676,7 +697,11 @@ Recent deltas to reflect here (do not let these get “lost in chat logs”):
   resolved by the pre-hit motion-state collision callback (`Fighter_procMap`) before
   `Fighter_ProcessHit -> ftCo_8008DCE0`; later active-hitlag floorhug projection requires actual
   `ftCo_Damage_OnEveryHitlag` SDI-consume provenance, so a held downward stick after x670/x671 reset
-  cannot repeatedly snap the frozen DamageAir root to floor bias. AttackAir
+  cannot repeatedly snap the frozen DamageAir root to floor bias. The stay-airborne floorhug
+  continuation may project a carried hard-floor `CollData.floor.index`, but soft platforms require
+  a current `mpColl_80044628_Floor` bottom-sweep hit before `mpColl_80044948_Floor` can correct the
+  root; replay-visible carried platform ids alone are not enough to snap active-hitlag SDI upward
+  onto a platform. AttackAir
   same-frame IASA checks aerial B-special admission before JumpAerial (`ftCo_AttackAir.c::DO_IASA`,
   `ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput`); JumpF/JumpB -> EscapeAir floor handoff
   projects through the decomp floor wrapper (`ftCo_EscapeAir_Coll`, `ft_80082C74`,
@@ -2698,14 +2723,17 @@ Fox/Falco special-owner split (2026-04-17):
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_IASA`,
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{ftCo_Attack100_CheckInput,ftCo_800D6928}`,
     `refs/melee/src/melee/ft/fighter.c::Fighter_UnkIncrementCounters_8006ABEC`.
-  - DamageFly / DamageFlyRoll active-hitstun jump buffering uses the same `doIasa` x14 snapshot
-    owner as common Damage: while `x221C_b6` is set, `ftCo_Jump_GetInput` stores
+  - DamageFly / DamageFlyRoll / FlyReflect active-hitstun jump buffering uses the same `doIasa`
+    x14 snapshot owner as common Damage: while `x221C_b6` is set, `ftCo_Jump_GetInput` stores
     `mv.co.damage.x0` in `mv.co.damage.x14`; after hitstun ends, `ftCo_DamageFly_Anim` consumes
     that snapshot through `inlineC0` before entering `DamageFall`, or `DamageFall_IASA` consumes it
-    through the JumpAerial path. This is required for rollout carry such as QGD `DamageFlyN` x14
-    buffering into `JumpAerialF`, which then reaches the existing `DamageFlyRoll` RNG gate.
+    through the JumpAerial path. FlyReflectWall/Ceil delegate their Anim/IASA callbacks to the
+    same DamageFly owners, so replay seed derivation must keep their active-hitstun rows in the x14
+    family. This is required for rollout carry such as QGD `DamageFlyN` x14 buffering into
+    `JumpAerialF`, and FEH `FlyReflectWall` terminal x14 buffering into `JumpAerialB`.
     Sources: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{doIasa,inlineC0,ftCo_DamageFly_Anim,ftCo_DamageFly_IASA,ftCo_DamageFlyRoll_IASA}`,
-    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA`.
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA`,
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_FlyReflect.c::{ftCo_FlyReflect_Anim,ftCo_FlyReflect_IASA}`.
   - DamageFly active-hitstun meteor-cancel jumps use the earlier `doIasa` immediate escape branch,
     not the delayed x14 buffer. `ftColl_8007AC68` marks 260..280 degree KB as
     `mv.co.damage.x1A`; `doIasa` decrements the p_ftCommonData->x7F0 `x1B` lockout, then a
@@ -5483,6 +5511,19 @@ BODY collision-space residual split and rejected seed bridge:
   DamageFlyTop wall-callback bridge. Persisted-index recovery is likewise Push-only, so PPA's
   Push-only right-wall correction cannot manufacture PassiveWall, while DCC/HIS one-step
   `DamageFlyTop -> PassiveWall{Jump}` rows still consume the seed-owned WallHug phase.
+- Sloped-wall side-point Hug uses `mpLineIntersection`'s decomp half-space clamp, not a strict
+  geometric segment intersection. On Dream Land's right wall, `DamageFlyTop` can begin the
+  side-point sweep infinitesimally across the sloped wall line; vanilla accepts that within the
+  source `0.1` clamp, sets `Collide_RightWallHug` in `mpColl_80044E10_RightWall`, and
+  `ftCo_DamageFly_Coll -> ftCo_800C17CC -> ftCo_800C18A8` enters `FlyReflectWall`. The retained
+  runtime slice applies this clamp only to the side-point Hug sweeps; Push-only bottom/top/edge
+  candidates stay on the existing strict intersection until the broader sloped-wall push/envelope
+  owner is closed with separate locks. FEH `9195` locks the `DamageFlyTop -> FlyReflectWall`
+  velocity owner, while PPA controls keep Push-only wall projection from manufacturing
+  PassiveWall/FlyReflect. Sources: `refs/melee/src/melee/mp/mplib.c::mpLineIntersection`,
+  `refs/melee/src/melee/mp/mpcoll.c::mpColl_80044E10_RightWall`,
+  `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll`, and
+  `refs/melee/src/melee/ft/chara/ftCommon/ftCo_FlyReflect.c::{ftCo_800C15F4,ftCo_800C18A8}`.
 - Common Jump/Fall walljump callbacks use the `ft_800831CC` / `ft_800835B0` path through
   `ft_80083090_inline` and `mpColl_80047E14` flags-6 wall collision, not the `0xA`
   PassiveWall timer helper. When that callback preserves WallHug on FD's left wall,

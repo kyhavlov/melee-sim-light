@@ -16,9 +16,10 @@ from tools.slippi.suite_io import dataset_path_for_suite_replay, load_suite, rep
 from tools.eval.dataset import HEADER_DTYPE, MAGIC, SAMPLE_DTYPE, SEED_DTYPE
 
 
-# v4 invalidates same-record-size datasets generated before damage_post_hitlag_cb_kind bit 7
-# started carrying Damage meteor-cancel x1A. Record-size checks alone cannot detect that semantic.
-_CACHE_VERSION = 4
+# v5 invalidates same-record-size datasets generated before Damage x14 derivation included
+# FlyReflectWall/Ceil in the DamageFly IASA family. Record-size checks alone cannot detect that
+# semantic.
+_CACHE_VERSION = 5
 _SOURCE_INPUT_PY_TREES = ("tools/slippi",)
 _SOURCE_INPUT_FILES = ("tools/eval/dataset.py",)
 

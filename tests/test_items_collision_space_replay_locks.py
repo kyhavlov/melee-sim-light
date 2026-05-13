@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import struct
 
 import numpy as np
 import pytest
@@ -13,6 +14,27 @@ from tools.eval.run_longest_rollout_streaks import _load_binding
 def _skip_if_missing_laser_artifacts(root: Path) -> None:
     if not (root / "data/items/lasers.bin").exists():
         pytest.skip("missing local artifact: data/items/lasers.bin")
+
+
+def _laser_x138_masks_by_item_type(root: Path, item_type: int) -> tuple[int, int]:
+    path = root / "data/items/lasers.bin"
+    if not path.exists():
+        pytest.skip("missing local artifact: data/items/lasers.bin")
+    buf = path.read_bytes()
+    assert buf[:8] == b"MSLLASR1"
+    version = struct.unpack_from("<I", buf, 8)[0]
+    assert version >= 5
+    count = struct.unpack_from("<H", buf, 12)[0]
+    off = 16
+    record_bytes = 254
+    for _ in range(int(count)):
+        shot_itkind = struct.unpack_from("<H", buf, off + 2)[0]
+        if int(shot_itkind) == int(item_type):
+            state0 = struct.unpack_from("<H", buf, off + 78 + 20)[0]
+            state1 = struct.unpack_from("<H", buf, off + 166 + 20)[0]
+            return int(state0), int(state1)
+        off += record_bytes
+    raise AssertionError(f"laser item_type={item_type} not found in {path}")
 
 
 def _laser_ids(items_row: np.ndarray) -> list[int]:
@@ -27,6 +49,13 @@ def _laser_ids(items_row: np.ndarray) -> list[int]:
 def _item_by_instance(items_row: np.ndarray, instance_id: int) -> np.void | None:
     for it in items_row:
         if int(it["exists"]) and int(it["instance_id"]) == int(instance_id):
+            return it
+    return None
+
+
+def _item_by_instance_and_type(items_row: np.ndarray, instance_id: int, item_type: int) -> np.void | None:
+    for it in items_row:
+        if int(it["exists"]) and int(it["instance_id"]) == int(instance_id) and int(it["type"]) == int(item_type):
             return it
     return None
 
@@ -101,6 +130,57 @@ def _rollout_rows(dataset_path: Path, start_record: int, end_record_inclusive: i
         return rows
     finally:
         binding.destroy(handle)
+
+
+@pytest.mark.integration
+def test_late_specialairnloop_clear_cmd0_rejects_laser_body_overlap() -> None:
+    # Replay-real lock for the late aerial Blaster Loop command-script boundary:
+    # - MGS:-11/-10 has p1 Fox state0 laser geometry overlapping p0 Falco SpecialAirNLoop after
+    #   the loop script has cleared cmd_vars[0], so native keeps the laser alive and does not admit
+    #   BODY damage on those terminal no-repeat loop rows.
+    # - IAT:1581 is a positive post-start SpecialAirNLoop BODY control proving the owner is not a
+    #   broad SpecialN or action-family contact suppressor before the command-script clear.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialAirNLoop_IASA
+    # refs/melee/src/melee/ft/ftaction.c::ftAction_80071820
+    # data/scripts/{fox,falco}.bin (MSLFTSC1 set_cmd_var idx=0 for msid 299)
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_missing_laser_artifacts(root)
+    assert _laser_x138_masks_by_item_type(root, item_type=54) == (0, 0)
+    assert _laser_x138_masks_by_item_type(root, item_type=55) == (0, 0)
+
+    mgs_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/MilkyGracefulStingray.msl"
+    )
+    if not mgs_path.exists():
+        pytest.skip(f"missing local dataset: {mgs_path}")
+    mgs = read_dataset(str(mgs_path))
+    for record in (112, 113):
+        row = mgs.samples[record : record + 1]
+        assert int(row["seed_t"]["frame_id"][0]) < 0
+        assert int(row["seed_t"]["items"][0, 0]["type"]) == 54
+        assert int(row["seed_t"]["items"][0, 0]["owner"]) == 1
+        out = _one_step_out_compare(ds=mgs, row=row)
+        ref = row["ref_t1"]
+        assert int(out["action_id"][0, 0]) == int(ref["action_id"][0, 0])
+        assert float(out["percent"][0, 0]) == pytest.approx(float(ref["percent"][0, 0]), abs=1e-6)
+        got_laser = _item_by_instance_and_type(out["items"][0], 16, 54)
+        ref_laser = _item_by_instance_and_type(ref["items"][0], 16, 54)
+        assert got_laser is not None and ref_laser is not None
+        assert float(got_laser["timer"]) == pytest.approx(float(ref_laser["timer"]), abs=1e-6)
+
+    iat_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.msl"
+    if not iat_path.exists():
+        pytest.skip(f"missing local dataset: {iat_path}")
+    iat = read_dataset(str(iat_path))
+    row = iat.samples[1581:1582]
+    assert int(row["seed_t"]["frame_id"][0]) >= 0
+    assert int(row["seed_t"]["action_id"][0, 0]) == 345  # SpecialAirNLoop
+    out = _one_step_out_compare(ds=iat, row=row)
+    ref = row["ref_t1"]
+    assert int(out["action_id"][0, 0]) == int(ref["action_id"][0, 0])
+    assert int(out["hitlag"][0, 0]) == int(ref["hitlag"][0, 0])
+    assert float(out["percent"][0, 0]) == pytest.approx(float(ref["percent"][0, 0]), abs=1e-6)
 
 
 @pytest.mark.integration
@@ -196,6 +276,46 @@ def test_steady_guard_laser_shield_contact_precedes_stage_expiry(
         float(row["ref_t1"]["shield_hp"][0, p]), abs=1e-6
     )
     assert not _laser_ids(out["items"][0])
+
+
+@pytest.mark.integration
+def test_grounded_vulnerable_downbackd_laser_body_uses_lbcoll_hurt_radius() -> None:
+    # Grounded vulnerable item BODY lbColl owner:
+    # - ftColl_8007925C routes item BODY against fighter HurtCapsules through lbColl_8000805C.
+    # - lbColl_8000805C forwards the shared lbColl_804D7A38 hurt-radius broadphase into the BODY
+    #   contact helper. The previous row is the negative boundary: the same DownBackD family still
+    #   has intangible hurt status and must not consume the laser.
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58,lbColl_804D7A38}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_missing_laser_artifacts(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/dream_land_recent/"
+        "FlippantEnchantedHorse.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+
+    neg_row = ds.samples[4493:4494]
+    neg_out = _one_step_out_compare(ds=ds, row=neg_row)
+    assert int(neg_row["seed_t"]["action_id"][0, 0]) == 197  # DownBackD
+    assert int(neg_row["ref_t1"]["action_id"][0, 0]) == 197
+    assert _item_by_instance_and_type(neg_out["items"][0], 892, 55) is not None
+    assert _item_by_instance_and_type(neg_row["ref_t1"]["items"][0], 892, 55) is not None
+
+    row = ds.samples[4494:4495]
+    out = _one_step_out_compare(ds=ds, row=row)
+    assert int(row["seed_t"]["action_id"][0, 0]) == 197  # DownBackD
+    assert int(row["ref_t1"]["action_id"][0, 0]) == 78  # DamageAir3
+    assert int(out["action_id"][0, 0]) == int(row["ref_t1"]["action_id"][0, 0])
+    assert int(out["hitlag"][0, 0]) == int(row["ref_t1"]["hitlag"][0, 0])
+    assert int(out["hitstun"][0, 0]) == int(row["ref_t1"]["hitstun"][0, 0])
+    assert float(out["percent"][0, 0]) == pytest.approx(float(row["ref_t1"]["percent"][0, 0]), abs=1e-5)
+    assert _item_by_instance_and_type(out["items"][0], 892, 55) is None
+    assert _item_by_instance_and_type(row["ref_t1"]["items"][0], 892, 55) is None
 
 
 @dataclass(frozen=True)

@@ -171,14 +171,14 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:3748
 
 == datasets/aggregate_recent/replays/validation/battlefield_recent/LoyalDishonestWren.msl ==
 rollout.best_len: 1745
-rollout.streak_count: 8
-rollout.streak_len.median: 379
+rollout.streak_count: 7
+rollout.streak_len.median: 564
 rollout.streak_len.p90: 1745
 rollout.streak_len.p95: 1745
 rollout.streak_len.max: 1745
-rollout.first_mismatch_total: 7
+rollout.first_mismatch_total: 6
 rollout.first_mismatch_seeded_total: 4
-rollout.first_mismatch_non_seeded_total: 3
+rollout.first_mismatch_non_seeded_total: 2
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:2188
 
 == datasets/aggregate_recent/replays/validation/battlefield_recent/MediumVirtualPig.msl ==
@@ -243,16 +243,15 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:2552
 
 == datasets/aggregate_recent/replays/validation/dream_land_recent/FlippantEnchantedHorse.msl ==
 rollout.best_len: 1260
-rollout.streak_count: 52
-rollout.streak_len.median: 115
-rollout.streak_len.p90: 662
-rollout.streak_len.p95: 930
+rollout.streak_count: 49
+rollout.streak_len.median: 111
+rollout.streak_len.p90: 849
+rollout.streak_len.p95: 953
 rollout.streak_len.max: 1260
-rollout.first_mismatch_total: 51
-rollout.first_mismatch_seeded_total: 20
-rollout.first_mismatch_non_seeded_total: 31
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:3561
-rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:2
+rollout.first_mismatch_total: 48
+rollout.first_mismatch_seeded_total: 19
+rollout.first_mismatch_non_seeded_total: 29
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:3588
 
 == datasets/aggregate_recent/replays/validation/dream_land_recent/ShadyDecimalStarling.msl ==
 rollout.best_len: 1517
@@ -317,14 +316,14 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:5128
 
 == datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/SweatyThisMallard.msl ==
 rollout.best_len: 2001
-rollout.streak_count: 27
-rollout.streak_len.median: 175
+rollout.streak_count: 26
+rollout.streak_len.median: 245
 rollout.streak_len.p90: 927
 rollout.streak_len.p95: 1286
 rollout.streak_len.max: 2001
-rollout.first_mismatch_total: 26
+rollout.first_mismatch_total: 25
 rollout.first_mismatch_seeded_total: 14
-rollout.first_mismatch_non_seeded_total: 12
+rollout.first_mismatch_non_seeded_total: 11
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:3181
 
 == datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/ThisVioletRaccoon.msl ==
@@ -389,14 +388,14 @@ rollout.first_mismatch_non_seeded_total: 21
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:2269
 
 == suite summary ==
-overall.rollout.streak_count: 799
-overall.rollout.streak_len.median: 216
-overall.rollout.streak_len.p90: 886
+overall.rollout.streak_count: 794
+overall.rollout.streak_len.median: 217
+overall.rollout.streak_len.p90: 915
 overall.rollout.streak_len.p95: 1242
 overall.rollout.streak_len.max: 2817
 overall.rollout.best_len.max: 2817
-overall.rollout.first_mismatch_total: 814
-overall.rollout.first_mismatch_seeded_total: 394
-overall.rollout.first_mismatch_non_seeded_total: 420
-overall.rollout.ignored_first_mismatch_top: state_flags[4]&0x80:94468
-overall.rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:4
+overall.rollout.first_mismatch_total: 809
+overall.rollout.first_mismatch_seeded_total: 393
+overall.rollout.first_mismatch_non_seeded_total: 416
+overall.rollout.ignored_first_mismatch_top: state_flags[4]&0x80:94495
+overall.rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:2

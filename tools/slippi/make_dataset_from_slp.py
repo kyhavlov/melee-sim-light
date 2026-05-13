@@ -2349,7 +2349,7 @@ def _laser_shot_item_kinds(path: Path) -> tuple[int, ...]:
         raise ValueError(f"{path}: invalid MSLLASR1 header")
     version = struct.unpack_from("<I", buf, 8)[0]
     count = struct.unpack_from("<H", buf, 12)[0]
-    if version != 4:
+    if version not in (4, 5):
         raise ValueError(f"{path}: unsupported MSLLASR1 version {version}")
     # tools/extraction/extract_lasers.py::_pack_record starts each record with:
     #   char_id, shot_itkind, gun_itkind, spawn_bone_part_id
@@ -4452,6 +4452,8 @@ def _main_impl(args) -> Dataset:
                 act_damage_fly_lw,
                 act_damage_fly_top,
                 act_damage_fly_roll,
+                act_fly_reflect_wall,
+                act_fly_reflect_ceil,
                 act_damage_fall,
             ),
         )

@@ -4007,13 +4007,33 @@ void mpcoll_ground_apply(MslBatch* batch) {
           float y_corr = 0.0f;
           const int out_line_idx = floor_dd90_project(batch, bi, g, prefer_line_idx, proj_x, proj_y,
                                                       &y_corr, &floor_nx, &floor_ny);
+          uint8_t active_damage_platform_floor_hit = 1u;
+          if (out_line_idx >= 0 && g->lines[(size_t)out_line_idx].is_platform) {
+            int swept_line_idx = -1;
+            active_damage_platform_floor_hit =
+                (cur_bottom_y <= prev_bottom_y &&
+                 floor_sweep_check(batch, idx, bi, g, stage_id, prev_bottom_x, prev_bottom_y,
+                                   cur_bottom_x, cur_bottom_y, skip_platform_segment_i,
+                                   out_line_idx, -1, c, &swept_line_idx, NULL, NULL, NULL, NULL) &&
+                 swept_line_idx >= 0 &&
+                 g->lines[(size_t)swept_line_idx].segment_i ==
+                     g->lines[(size_t)out_line_idx].segment_i)
+                    ? 1u
+                    : 0u;
+          }
           if (out_line_idx >= 0 && y_corr >= 0.0f &&
               // Keep this bridge off ledge floor segments. mpColl edge/ledge suppression is owned
               // by separate floor-edge helpers, and replay-real AGN 4839/4840 stay airborne below
               // the FD ledge floor despite diagonal down input during DamageFlyTop hitlag.
               // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004A45C_Floor
               // refs/melee/src/melee/mp/mpcoll.c::mpColl_80046904
-              !g->lines[(size_t)out_line_idx].is_ledge) {
+              !g->lines[(size_t)out_line_idx].is_ledge &&
+              // Soft-platform stay-airborne projection needs a real current bottom sweep. A
+              // replay-seeded carried floor.index alone can represent hard-floor CollData
+              // continuation, but using it for static platforms snaps active-hitlag SDI upward to a
+              // platform the source mpColl_80044628_Floor never accepted.
+              // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpColl_80044948_Floor}
+              (!g->lines[(size_t)out_line_idx].is_platform || active_damage_platform_floor_hit)) {
             batch->state.pos_y[idx] += y_corr;
             batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_FLOOR_MASK;
             ground_id = g->lines[(size_t)out_line_idx].segment_i;
@@ -4021,7 +4041,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
             contact_y = proj_y + y_corr;
             active_damage_hitlag_airborne_floor_contact = 1u;
             batch->state.damage_hitlag_floorhug_latch[idx] = 1u;
-          } else if (prefer_line_idx >= 0 && !g->lines[(size_t)prefer_line_idx].is_ledge) {
+          } else if (prefer_line_idx >= 0 && !g->lines[(size_t)prefer_line_idx].is_ledge &&
+                     !g->lines[(size_t)prefer_line_idx].is_platform) {
             // Same active-hitlag owner, root fallback:
             // mpColl_80044948_Floor can use the fighter root when the loaded ECB bottom is not the
             // usable floor-contact point. Keep the fallback inside the already-proven

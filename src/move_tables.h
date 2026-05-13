@@ -136,6 +136,11 @@ uint8_t move_tables_escapeair_cmd0_active(uint8_t char_id, float cur_anim_frame_
 // Source of truth: data/scripts/{fox,falco}.bin (MSLFTSC1) specials_by_msid["<msid>"].events set_cmd_var(idx=0).
 uint8_t move_tables_special_cmd0_active_at_frame(uint8_t char_id, uint16_t msid, int action_frame);
 
+// Returns the exact command-script cmd_var[0] window without the loop-repeat latch tail used by
+// move_tables_special_cmd0_active_at_frame().
+uint8_t move_tables_special_cmd0_raw_active_at_frame(uint8_t char_id, uint16_t msid,
+                                                     int action_frame);
+
 // Returns whether EscapeF should consume a script-driven facing flip this frame.
 //
 // Decomp:

@@ -96,12 +96,16 @@ def _extract_fox_falco_laser(pl_buf: bytes, arc, *, ftdata_abs: int) -> dict:
     #
     # (Decomp: Pl*.dat article state script; parsed via `_parse_subaction_events`.)
     x_offs0: list[float] = []
+    x138_mask0 = 0
     for hb in hbs0:
         try:
             x_offs0.append(float(hb.get("x_offset", 0.0)))
+            if bool(hb.get("item_match_start_x138", False)):
+                x138_mask0 |= 1 << (len(x_offs0) - 1)
         except Exception:
             pass
     out["laser_hitbox_offsets_x"] = x_offs0
+    out["laser_hitbox_x138_mask"] = int(x138_mask0)
 
     # State 1 is spawned by it_8029C6CC (msid=1).
     # refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C6CC
@@ -118,12 +122,16 @@ def _extract_fox_falco_laser(pl_buf: bytes, arc, *, ftdata_abs: int) -> dict:
         out["laser_state1_shield_damage"] = int(hb1.get("shield_damage", 0))
 
         x_offs1: list[float] = []
+        x138_mask1 = 0
         for hb in hbs1:
             try:
                 x_offs1.append(float(hb.get("x_offset", 0.0)))
+                if bool(hb.get("item_match_start_x138", False)):
+                    x138_mask1 |= 1 << (len(x_offs1) - 1)
             except Exception:
                 pass
         out["laser_state1_hitbox_offsets_x"] = x_offs1
+        out["laser_state1_hitbox_x138_mask"] = int(x138_mask1)
     return out
 
 

@@ -6,9 +6,11 @@ import numpy as np
 import pytest
 
 from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
 
 
 TCH = Path("datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl")
+FEH_SLP = Path("replays/validation/dream_land_recent/FlippantEnchantedHorse.slp")
 
 
 def _skip_if_dataset_missing(ds_path: Path) -> None:
@@ -37,6 +39,49 @@ def _run_one_step_row(ds_path: Path, record: int) -> tuple[np.void, np.void, np.
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
     handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+    finally:
+        binding.destroy(handle)
+
+    out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0]
+    return seed, ref, out
+
+
+def _run_one_step_from_slp(slp_path: Path, record: int, *, ports: list[int]) -> tuple[np.void, np.void, np.void]:
+    if not slp_path.exists():
+        pytest.skip(f"missing local replay: {slp_path}")
+    ds = build_dataset_from_slp(
+        slp_path=str(slp_path),
+        ports=ports,
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    row = ds.samples[record : record + 1]
+    seed = row["seed_t"][0]
+    ref = row["ref_t1"][0]
+
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, seed_stride)
+    prev_input_bytes = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+        1, input_stride
+    )
+    input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
     try:
         binding.reseed_seed(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)
@@ -79,3 +124,25 @@ def test_damage_air_tap_jump_x14_does_not_refresh_below_threshold_replay_real() 
 
     assert int(out["action_id"][p]) == int(ref["action_id"][p]) == 86
     assert int(out["jumps_left"][p]) == int(ref["jumps_left"][p]) == 1
+
+
+@pytest.mark.integration
+def test_flyreflectwall_terminal_x14_buffer_enters_jumpaerialb_replay_real() -> None:
+    # FEH 9274 is a FlyReflectWall terminal hitstun row:
+    # - ftCo_FlyReflect_IASA delegates to ftCo_DamageFly_IASA during active hitstun.
+    # - Y pressed earlier in the reflected-hitstun episode writes mv.co.damage.x14 through doIasa.
+    # - On the terminal Anim frame, inlineC0 consumes x14 before the fallback DamageFall handoff,
+    #   entering JumpAerialB with the source jump velocity.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_FlyReflect.c::{
+    #   ftCo_FlyReflect_Anim,ftCo_FlyReflect_IASA}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{doIasa,inlineC0,ftCo_DamageFly_Anim}
+    seed, ref, out = _run_one_step_from_slp(FEH_SLP, 9274, ports=[1, 2])
+    p = 0
+    assert int(seed["action_id"][p]) == 247  # FlyReflectWall
+    assert int(seed["hitstun"][p]) == 1
+    assert int(seed["damage_jump_buffer_x14"][p]) == 7
+
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == 28  # JumpAerialB
+    assert int(out["jumps_left"][p]) == int(ref["jumps_left"][p]) == 0
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]))
+    assert float(out["speed_y_self"][p]) == pytest.approx(float(ref["speed_y_self"][p]))

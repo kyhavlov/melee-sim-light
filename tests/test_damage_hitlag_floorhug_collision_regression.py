@@ -190,6 +190,49 @@ def test_damageflytop_active_hitlag_floorhug_does_not_snap_to_ledge_floor_agn_48
 
 
 @pytest.mark.integration
+def test_damageair_active_hitlag_sdi_does_not_snap_to_dream_land_platform_feh_11342() -> None:
+    # Negative lock from FEH rec=11342 p1:
+    # - active hitlag DamageAir2 receives a fresh down-left SDI input below Dream Land's top
+    #   platform,
+    # - vanilla applies the SDI displacement but does not raise FloorPush/FloorHug against the soft
+    #   platform because mpColl_80044628_Floor has no current bottom-sweep platform hit,
+    # - a carried CollData floor.index may continue hard-floor damage floorhug rows, but it must not
+    #   synthesize a soft-platform projection from replay-visible ground_id alone.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800477E0,mpColl_80044628_Floor,mpColl_80044948_Floor}
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/dream_land_recent/"
+        "FlippantEnchantedHorse.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[11342:11343]
+    p = 1
+
+    assert int(row["seed_t"]["action_id"][0, p]) == ACT_DAMAGE_AIR_2
+    assert int(row["seed_t"]["hitlag"][0, p]) == 4
+    assert int(row["seed_t"]["ground_id"][0, p]) == 2
+    assert int(row["input_t"]["p"]["main_x"][0, p]) < 0
+    assert int(row["input_t"]["p"]["main_y"][0, p]) < 0
+    assert float(row["seed_t"]["pos_y"][0, p]) < 51.0
+    assert float(row["ref_t1"]["pos_y"][0, p]) < float(row["seed_t"]["pos_y"][0, p])
+
+    out, ref, contacts = _run_one_step_with_contacts(dataset_path, 11342)
+
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_DAMAGE_AIR_2
+    assert int(out["hitlag"][p]) == int(ref["hitlag"][p]) == 3
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 0
+    assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=1e-6)
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+    assert (int(contacts["coll_env_flags"][p]) & MSL_COLLIDE_FLOOR_MASK) == 0
+
+
+@pytest.mark.integration
 def test_damageflytop_downward_sdi_floorhug_uses_consumed_sdi_latch_agn_794() -> None:
     # Positive lock for the same active-hitlag floorhug owner using committed validation data:
     # - ftCo_Damage_OnEveryHitlag consumes a downward SDI input and then resets x670/x671 to 0xFE,

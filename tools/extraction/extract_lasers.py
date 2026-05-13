@@ -63,6 +63,7 @@ class LaserRecord:
     laser_element: int
     laser_shield_damage: int
     laser_non_flinch: int
+    hitbox_x138_mask: int
     hitbox_offsets_x: tuple[float, ...]
     laser_state1_damage: float
     laser_state1_size: float
@@ -73,6 +74,7 @@ class LaserRecord:
     laser_state1_element: int
     laser_state1_shield_damage: int
     laser_state1_non_flinch: int
+    state1_hitbox_x138_mask: int
     state1_hitbox_offsets_x: tuple[float, ...]
     shoot_frames_ground: tuple[int, ...]
     shoot_frames_air: tuple[int, ...]
@@ -157,6 +159,7 @@ def _load_record(*, iso_dir: Path, dat_name: str, ftdata_symbol: str, char_id: i
             int(laser.get("laser_wsk", 0)),
             int(laser.get("laser_bkb", 0)),
         ),
+        hitbox_x138_mask=int(laser.get("laser_hitbox_x138_mask", 0)),
         hitbox_offsets_x=hitbox_offsets_x,
         laser_state1_damage=float(laser.get("laser_state1_damage", laser.get("laser_damage", 0.0))),
         laser_state1_size=float(laser.get("laser_state1_size", laser.get("laser_size", 0.0))),
@@ -172,6 +175,9 @@ def _load_record(*, iso_dir: Path, dat_name: str, ftdata_symbol: str, char_id: i
             int(laser.get("laser_state1_kbg", laser.get("laser_kbg", 0))),
             int(laser.get("laser_state1_wsk", laser.get("laser_wsk", 0))),
             int(laser.get("laser_state1_bkb", laser.get("laser_bkb", 0))),
+        ),
+        state1_hitbox_x138_mask=int(
+            laser.get("laser_state1_hitbox_x138_mask", laser.get("laser_hitbox_x138_mask", 0))
         ),
         state1_hitbox_offsets_x=hitbox_offsets_x_state1 if hitbox_offsets_x_state1 else hitbox_offsets_x,
         shoot_frames_ground=shoot_frames_ground,
@@ -194,7 +200,7 @@ def _pack_record(rec: LaserRecord) -> bytes:
     offs1 = list(rec.state1_hitbox_offsets_x)[:MAX_HITBOX_OFFS]
     offs1 += [0.0] * (MAX_HITBOX_OFFS - len(offs1))
 
-    # Layout is documented in docs/DATA_CONTRACT.md (MSLLASR1 v4).
+    # Layout is documented in docs/DATA_CONTRACT.md (MSLLASR1 v5).
     out = bytearray()
     out += struct.pack(
         "<BBHHHHHHHHHff3fHBBH",
@@ -227,7 +233,7 @@ def _pack_record(rec: LaserRecord) -> bytes:
     if sd > 127:
         sd = 127
     out += struct.pack(
-        "<ffHHHHbBBxB3x",
+        "<ffHHHHbBBBH2x",
         _f32(rec.laser_damage),
         _f32(rec.laser_size),
         int(rec.laser_angle) & 0xFFFF,
@@ -238,6 +244,7 @@ def _pack_record(rec: LaserRecord) -> bytes:
         int(rec.laser_element) & 0xFF,
         int(rec.laser_non_flinch) & 0xFF,
         min(len(rec.hitbox_offsets_x), MAX_HITBOX_OFFS) & 0xFF,
+        int(rec.hitbox_x138_mask) & 0xFFFF,
     )
     out += struct.pack("<" + "f" * MAX_HITBOX_OFFS, *[_f32(x) for x in offs0])
 
@@ -247,7 +254,7 @@ def _pack_record(rec: LaserRecord) -> bytes:
     if sd1 > 127:
         sd1 = 127
     out += struct.pack(
-        "<ffHHHHbBBxB3x",
+        "<ffHHHHbBBBH2x",
         _f32(rec.laser_state1_damage),
         _f32(rec.laser_state1_size),
         int(rec.laser_state1_angle) & 0xFFFF,
@@ -258,6 +265,7 @@ def _pack_record(rec: LaserRecord) -> bytes:
         int(rec.laser_state1_element) & 0xFF,
         int(rec.laser_state1_non_flinch) & 0xFF,
         min(len(rec.state1_hitbox_offsets_x), MAX_HITBOX_OFFS) & 0xFF,
+        int(rec.state1_hitbox_x138_mask) & 0xFFFF,
     )
     out += struct.pack("<" + "f" * MAX_HITBOX_OFFS, *[_f32(x) for x in offs1])
     return bytes(out)
@@ -277,7 +285,7 @@ def main() -> None:
     args.out.parent.mkdir(parents=True, exist_ok=True)
     with args.out.open("wb") as f:
         f.write(b"MSLLASR1")
-        f.write(struct.pack("<I", 4))
+        f.write(struct.pack("<I", 5))
         f.write(struct.pack("<H", len(recs)))
         f.write(struct.pack("<H", 0))
         for r in recs:

@@ -78,6 +78,7 @@ class Hitbox:
     ignore_fighter_scale: bool
     clank: bool
     rebound: bool
+    item_match_start_x138: bool
 
 
 @dataclass(frozen=True)
@@ -118,6 +119,14 @@ def _decode_create_hitbox(words: list[int]) -> Hitbox:
     ignore_fighter_scale = bool((w3 >> 2) & 0x1)
     clank = bool((w3 >> 1) & 0x1)
     rebound = bool(w3 & 0x1)
+    item_match_start_x138 = False
+    if w5 is not None:
+        # Item command ownership: it_802790C0 copies cmd->x8_bits->x2_b5 into
+        # item->x5D4_hitboxes[id].x138. ftColl_8007925C consults this bit under
+        # gm_8016B1C4() before item-vs-fighter reflect/shield/BODY checks.
+        # refs/melee/src/melee/it/it_2725.c::it_802790C0
+        # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C
+        item_match_start_x138 = bool((w5 >> 13) & 0x1)
 
     bkb = (w4 >> 23) & 0x1FF
     element = (w4 >> 18) & 0x1F
@@ -167,6 +176,7 @@ def _decode_create_hitbox(words: list[int]) -> Hitbox:
         ignore_fighter_scale=ignore_fighter_scale,
         clank=clank,
         rebound=rebound,
+        item_match_start_x138=item_match_start_x138,
     )
 
 

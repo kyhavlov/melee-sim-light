@@ -1590,6 +1590,21 @@ uint8_t move_tables_special_cmd0_active_at_frame(uint8_t char_id, uint16_t msid,
   return 0u;
 }
 
+uint8_t move_tables_special_cmd0_raw_active_at_frame(uint8_t char_id, uint16_t msid,
+                                                     int action_frame) {
+  const uint8_t count = g_special_cmd0_count_by_char[char_id];
+  for (uint8_t i = 0; i < count; i++) {
+    const MslSpecialCmd0ByMsid* ent = &g_special_cmd0_by_char[char_id][i];
+    if (ent->msid != msid || !ent->window.loaded) {
+      continue;
+    }
+    return (action_frame >= (int)ent->window.start_af && action_frame < (int)ent->window.end_af)
+               ? 1u
+               : 0u;
+  }
+  return 0u;
+}
+
 uint8_t move_tables_catchpull_should_enter_wait(uint8_t char_id, uint16_t catch_action_id,
                                                 float cur_anim_frame_f32) {
   // Decomp: CatchPull_Anim triggers the CatchWait transition on a throw_flags bit that is set by the

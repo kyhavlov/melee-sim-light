@@ -198,3 +198,60 @@ def test_damage_jump_buffer_x14_prefix_invariant_across_damagefly_family_action_
             damage_actions=(act_damage_fly_n, act_damage_fly_top, act_damage_fall),
         )
         assert np.array_equal(got, full[:k])
+
+
+def test_damage_jump_buffer_x14_persists_across_flyreflect_family() -> None:
+    # FlyReflectWall/Ceil use ftCo_FlyReflect_Anim/IASA, which delegate to the same
+    # DamageFly_Anim/IASA x14 owner. They must be included in the seed family so a jump buffered
+    # during reflected hitstun can be consumed on the terminal frame before DamageFall entry.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_FlyReflect.c::{
+    #   ftCo_FlyReflect_Anim,ftCo_FlyReflect_IASA}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{doIasa,inlineC0}
+    act_wait = 0x000E
+    act_fly_reflect_wall = 0x00F7
+    act_damage_fall = 0x0026
+    act_jump_aerial_b = 0x001C
+
+    action_id = np.array(
+        [
+            act_wait,
+            act_fly_reflect_wall,
+            act_fly_reflect_wall,
+            act_fly_reflect_wall,
+            act_damage_fall,
+            act_jump_aerial_b,
+        ],
+        dtype=np.uint16,
+    )
+    hitstun = np.array([0, 4, 3, 2, 1, 0], dtype=np.uint16)
+    buttons_pressed = np.array([0, 0, 0x0C00, 0, 0, 0], dtype=np.uint16)
+    stick_y = np.zeros(action_id.size, dtype=np.float32)
+    tilt_timer_y = np.array([0xFE, 0xFE, 0, 0, 0, 0xFE], dtype=np.uint8)
+
+    full = derive_damage_jump_buffer_x14(
+        action_id=action_id,
+        hitstun_u16=hitstun,
+        buttons_pressed=buttons_pressed,
+        stick_y_unit=stick_y,
+        tilt_timer_y=tilt_timer_y,
+        tap_jump_threshold=0.7,
+        tap_jump_tilt_max_frames=4,
+        button_mask_xy=0x0C00,
+        damage_actions=(act_fly_reflect_wall, act_damage_fall),
+    )
+
+    assert [int(x) for x in full] == [0, 0, 3, 3, 3, 0]
+
+    for k in (1, 2, 3, 4, 5, int(action_id.size)):
+        got = derive_damage_jump_buffer_x14(
+            action_id=action_id[:k],
+            hitstun_u16=hitstun[:k],
+            buttons_pressed=buttons_pressed[:k],
+            stick_y_unit=stick_y[:k],
+            tilt_timer_y=tilt_timer_y[:k],
+            tap_jump_threshold=0.7,
+            tap_jump_tilt_max_frames=4,
+            button_mask_xy=0x0C00,
+            damage_actions=(act_fly_reflect_wall, act_damage_fall),
+        )
+        assert np.array_equal(got, full[:k])

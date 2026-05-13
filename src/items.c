@@ -16,6 +16,7 @@
 #include "common_params.h"
 #include "hit_elements.h"
 #include "hitboxes_tables.h"
+#include "hit_status_tables.h"
 #include "hitlist.h"
 #include "item_article_params.h"
 #include "item_common_params.h"
@@ -2166,15 +2167,63 @@ static inline uint8_t laser_grounded_body_uses_lbcoll_hurt_radius(const MslBatch
                                                                   size_t d_idx, uint8_t laser_state,
                                                                   float laser_age_frames,
                                                                   uint16_t item_type) {
-  (void)batch;
-  (void)d_idx;
-  (void)laser_state;
-  (void)laser_age_frames;
-  (void)item_type;
-  // Disabled until the upstream grounded item BODY hurt-capsule/JObj pose-selection owner is
-  // modeled. The previous Dash->Turn/action_frame gate was a replay-shaped proxy for missing
-  // eligibility filters, not a retained source owner.
-  return 0u;
+  // Age gate source owner:
+  // - it_8029C504 creates the laser article, initializes xDD4_itemVar.foxlaser.pos to the spawn
+  //   position, and starts the item motion/lifetime state.
+  // - This grounded BODY lbColl hurt-radius slice applies only after that spawn/create-edge frame;
+  //   live laser travel is then owned by itFoxlaser_UnkMotion1_Phys' previous-position snapshot and
+  //   it_8029C4D4's previous-to-current item collision segment. Fresh laser rows stay on the
+  //   spawn-frame GuardOn/create-edge owners above.
+  // refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C504,itFoxlaser_UnkMotion1_Phys,it_8029C4D4}
+  if (batch == NULL || laser_state != 0u ||
+      (item_type_is_falco_laser(item_type) == 0u && item_type_is_fox_laser(item_type) == 0u) ||
+      !(laser_age_frames > 1.0f)) {
+    return 0u;
+  }
+  if (batch->state.on_ground[d_idx] == 0u || batch->state.shield_radius[d_idx] > 0.0f ||
+      batch->state.hurtbox_state[d_idx] != 0u) {
+    return 0u;
+  }
+  if (batch->state.char_id[d_idx] != (uint8_t)MSL_CHAR_FOX ||
+      (batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_DOWN_BACK_U &&
+       batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_DOWN_BACK_D)) {
+    return 0u;
+  }
+  const uint32_t anim_u32 = batch->state.animation_index[d_idx];
+  if (anim_u32 > 0xFFFFu) {
+    return 0u;
+  }
+  const uint16_t msid = (uint16_t)anim_u32;
+  const float anim_frame_f32 = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[d_idx]);
+  const uint16_t pose_frame = msl_anim_frame_floor_u16(anim_frame_f32);
+  if (pose_frame == 0u) {
+    return 0u;
+  }
+  uint8_t cur_hit_status = 0u;
+  uint8_t prev_hit_status = 0u;
+  if (hit_status_get(batch->state.char_id[d_idx], msid, pose_frame, &cur_hit_status) != 0 ||
+      hit_status_get(batch->state.char_id[d_idx], msid, (uint16_t)(pose_frame - 1u),
+                     &prev_hit_status) != 0 ||
+      cur_hit_status != 0u || prev_hit_status == 0u) {
+    return 0u;
+  }
+  // Fox DownBack terminal item BODY lbColl owner on movescript hit-status release edges:
+  // - ftColl_8007925C routes item BODY against every enabled fighter HurtCapsule through
+  //   lbColl_8000805C with `ftCommon_8007F804(fp)`, `item->scl`, `fp->x34_scale.y`, and
+  //   `fp->cur_pos.z`.
+  // - The broad hurt-radius lane is retained only when the data-backed hit-status table says the
+  //   current DownBack pose frame just released a nonzero x1988 window. Ordinary grounded
+  //   vulnerable rows, shield defensive options, PassiveStand, and Falco DownBack controls stay on
+  //   the exact x58/x4C matrix/local-radius owner and do not borrow this release-edge broadphase.
+  // - This is an action/character data boundary, not a replay row: Fox and Falco DownBack use
+  //   distinct extracted hurtcaps/animations, and the retained owner is the Fox terminal
+  //   DownBack* release edge.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Down.c::ftCo_Down_Coll
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58,lbColl_804D7A38}
+  // data/hurtcaps/{fox,falco}.bin
+  // data/hurtbox_states/{fox,falco}.bin (MSLHURM1)
+  return 1u;
 }
 
 static inline uint8_t laser_body_guard_family_no_submotion_exact_lbcoll_applies(
@@ -4724,6 +4773,24 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       const uint8_t item_hitlist_prefilter_allows =
           item_any_hitbox_allows_fighter(batch, bi, it, def, def_iid);
       if (!item_hitlist_prefilter_allows) {
+        continue;
+      }
+      if (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_LOOP &&
+          ((uint16_t)(batch->state.animation_index[d_idx] & 0xFFFFu)) == lp->air_loop_msid &&
+          !move_tables_special_cmd0_raw_active_at_frame(batch->state.char_id[d_idx],
+                                                        lp->air_loop_msid,
+                                                        (int)batch->state.action_frame[d_idx])) {
+        // Late aerial Blaster Loop command-script boundary:
+        // - ftFx_SpecialAirNLoop_IASA only keeps the loop-repeat owner alive while cmd_vars[0] is
+        //   set by the extracted script. After the clear frame, the fighter is in the terminal
+        //   no-repeat part of the loop and native item-vs-fighter contact on same-family laser
+        //   rows is not admitted until the action transitions/lands.
+        // - Scope to the exact SpecialAirNLoop submotion and the raw cmd_var[0] window from
+        //   MSLFTSC1; earlier loop frames and unrelated grounded laser rows keep normal contact.
+        // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
+        //   ftFx_SpecialAirNLoop_IASA,ftFx_SpecialAirNLoop_Coll}
+        // refs/melee/src/melee/ft/ftaction.c::ftAction_80071820
+        // data/scripts/{fox,falco}.bin (MSLFTSC1 set_cmd_var idx=0 for msid 299)
         continue;
       }
 

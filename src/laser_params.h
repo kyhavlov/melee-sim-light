@@ -59,6 +59,9 @@ typedef struct MslLaserParams {
   // TODO(decomp/non-flinch-authoritative-signal): replace with a truly authoritative no-flinch lane
   // once identified in decomp/game data.
   uint8_t non_flinch;
+  // Per-scripted-hitbox item->x5D4_hitboxes[id].x138 bit. ftColl_8007925C skips item hitboxes
+  // with this bit clear while gm_8016B1C4() is active.
+  uint16_t hitbox_x138_mask;
 
   uint8_t hitbox_offsets_x_count;
   float hitbox_offsets_x[MSL_LASER_MAX_HITBOX_OFFS_X];
@@ -82,6 +85,7 @@ typedef struct MslLaserParams {
   uint8_t state1_element;
   int8_t state1_shield_damage;
   uint8_t state1_non_flinch;
+  uint16_t state1_hitbox_x138_mask;
 
   uint8_t state1_hitbox_offsets_x_count;
   float state1_hitbox_offsets_x[MSL_LASER_MAX_HITBOX_OFFS_X];
