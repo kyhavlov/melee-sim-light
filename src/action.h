@@ -81,6 +81,12 @@ uint8_t escape_try_enter_from_guard(MslBatch* batch, const MslCommonParams* c, s
 // `ftCo_80091A4C` guard entry. Returns 1 if EscapeN was entered.
 uint8_t wait_iasa_try_enter_spotdodge_before_guard(MslBatch* batch, const MslCommonParams* c,
                                                    size_t idx);
+// Same source helper using Melee's synthesized HSD_PAD_LR lane (digital L/R/Z or analog trigger
+// past the common deadzone). This is for callback-local destination Wait slices whose owner is
+// `held_inputs & HSD_PAD_LR`; do not use it as a broad replacement for replay-visible digital-LR
+// locks without validating that owner boundary.
+uint8_t wait_iasa_try_enter_spotdodge_before_guard_hsd_lr(MslBatch* batch, const MslCommonParams* c,
+                                                          size_t idx);
 
 // Per-frame grounded escape update (friction + anim-end return-to-Wait).
 void escape_update_grounded(MslBatch* batch, const MslCommonParams* c, const MslCharParams* ch,

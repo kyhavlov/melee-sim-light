@@ -6455,6 +6455,9 @@ static PyMethodDef methods[] = {
     {"derive_damage_jump_buffer_x14", msl_derive_damage_jump_buffer_x14_py, METH_VARARGS,
      "derive_damage_jump_buffer_x14(action, hitstun, buttons_pressed, stick_y, tilt_y, "
      "hitlag_or_None, tap_threshold, tilt_max, xy_mask, damage_actions) -> uint16[:]"},
+    {"derive_damage_meteor_cancel_x1a", msl_derive_damage_meteor_cancel_x1a_py, METH_VARARGS,
+     "derive_damage_meteor_cancel_x1a(action, hitstun, source_angle, angle_min, angle_max, "
+     "damage_actions) -> uint8[:]"},
     {"derive_damage_post_hitlag_cb_kind", msl_derive_damage_post_hitlag_cb_kind_py, METH_VARARGS,
      "derive_damage_post_hitlag_cb_kind(action, hitstun, damage_actions) -> uint8[:]"},
     {"derive_guard_tilt_state", msl_derive_guard_tilt_state_py, METH_VARARGS,

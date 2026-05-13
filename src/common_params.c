@@ -486,6 +486,12 @@ int common_params_init(void) {
       json_get_f32(buf, "damage_severity_x158", &g_params.damage_severity_x158) != 0 ||
       json_get_f32(buf, "damage_severity_x15c", &g_params.damage_severity_x15c) != 0 ||
       json_get_f32(buf, "damage_severity_x160", &g_params.damage_severity_x160) != 0 ||
+      json_get_u16(buf, "damage_meteor_cancel_angle_min_deg",
+                   &g_params.damage_meteor_cancel_angle_min_deg) != 0 ||
+      json_get_u16(buf, "damage_meteor_cancel_angle_max_deg",
+                   &g_params.damage_meteor_cancel_angle_max_deg) != 0 ||
+      json_get_u16(buf, "damage_meteor_cancel_lockout_frames",
+                   &g_params.damage_meteor_cancel_lockout_frames) != 0 ||
       json_get_f32(buf, "grounded_tumble_bounce_angle_extra_radians",
                    &g_params.grounded_tumble_bounce_angle_extra_radians) != 0 ||
       json_get_f32(buf, "grounded_tumble_bounce_y_mul", &g_params.grounded_tumble_bounce_y_mul) !=

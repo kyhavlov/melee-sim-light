@@ -271,6 +271,7 @@ def _run_rollout_window_rows_with_trace(
     window_records: tuple[int, int, int],
     rng_damage_fly_roll_gate: bool | None,
     trace_path: Path,
+    seed_mutator=None,
 ) -> dict[int, tuple[np.void, np.void, int]]:
     ds = read_dataset(str(ds_path))
     samples = ds.samples
@@ -283,9 +284,10 @@ def _run_rollout_window_rows_with_trace(
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    seed_bytes = np.frombuffer(
-        samples[start_record : start_record + 1]["seed_t"].tobytes(order="C"), dtype=np.uint8
-    ).copy().reshape(1, seed_stride)
+    seed_t = samples[start_record : start_record + 1]["seed_t"].copy()
+    if seed_mutator is not None:
+        seed_mutator(seed_t)
+    seed_bytes = np.frombuffer(seed_t.tobytes(order="C"), dtype=np.uint8).copy().reshape(1, seed_stride)
     out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
     prev_rng_gate_env = os.environ.get("MSL_RNG_ENABLE_DAMAGE_FLY_ROLL_GATE")

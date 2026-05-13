@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from tests.test_combat_ownership_seed_guardrail_locks import (
@@ -9,7 +10,7 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_pre_combat_debug_row,
     _skip_if_required_artifacts_missing,
 )
-from tools.eval.dataset import read_dataset
+from tools.eval.dataset import COMPARE_DTYPE, read_dataset
 
 
 @pytest.mark.integration
@@ -352,6 +353,59 @@ def test_f08b_attackairlw_kneebend_authoritative_hitcapsule_seed_bypasses_stale_
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize(
+    ("record", "attacker", "defender"),
+    [
+        (2535, 3, 2),
+        (6150, 2, 3),
+    ],
+)
+def test_doubles_escapef_root_facing_body_pose_admits_aerial_hit(record: int, attacker: int, defender: int) -> None:
+    # EscapeF root-facing BODY owner:
+    # - EscapeF frame 20 emits both `set_hit_status(0)` and `set_throw_flags(hit_idx=0)`.
+    # - These doubles rows are post-frame-20 EscapeF snapshots where visible scalar facing has
+    #   diverged from the motion-entry root facing lane (`facing_dir1`).
+    # - Vanilla samples the BODY hurtcaps from the motion-entry root-facing collision matrix and
+    #   admits the aerial hit; using visible scalar facing misses it.
+    #
+    # Source anchors:
+    # - data/moves/{fox,falco}.json moves["ftCo_SM_EscapeF"].events
+    # - refs/melee/src/melee/ft/fighter.c (Fighter_ChangeMotionState copies facing_dir -> facing_dir1)
+    # - refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+    # - refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_path = root / "datasets/doubles_recent/replays/validation/doubles_recent/Game_20260509T152622.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    seed_t = ds.samples[record]["seed_t"]
+    ref_t1 = ds.samples[record]["ref_t1"]
+
+    assert int(seed_t["action_id"][defender]) == 233  # EscapeF
+    assert int(seed_t["action_frame"][defender]) >= 20
+    assert int(seed_t["facing_dir1"][defender]) != (1 if int(seed_t["facing"][defender]) else -1)
+    assert int(ref_t1["action_id"][defender]) in (75, 76)  # DamageHi1/2
+    assert int(ref_t1["hitlag"][defender]) > 0
+    assert int(ref_t1["last_hit_by"][defender]) == attacker
+
+    _, ref_row, out_row = _run_one_step_row(dataset_path, record, defender)
+    for field in ("action_id", "action_frame", "animation_index", "hitlag", "hitstun", "instance_hit_by"):
+        assert int(out_row[field][defender]) == int(ref_row[field][defender])
+    assert float(out_row["percent"][defender]) == pytest.approx(float(ref_row["percent"][defender]))
+
+    def use_visible_facing(seed_t_mut) -> None:
+        seed_t_mut["facing_dir1"][0, defender] = 1 if int(seed_t_mut["facing"][0, defender]) else -1
+
+    _, _, visible_facing_out = _run_one_step_row(dataset_path, record, defender, seed_mutator=use_visible_facing)
+    assert int(visible_facing_out["action_id"][defender]) == 233
+    assert int(visible_facing_out["hitlag"][defender]) == 0
+    assert float(visible_facing_out["percent"][defender]) == pytest.approx(float(seed_t["percent"][defender]))
+
+
+@pytest.mark.integration
 def test_f08b_body_contact_geometry_cardinal_attackairb_turn_control_stays_suppressed() -> None:
     # Negative same-shape control:
     # Cardinal TBK:5523 also has a steady AttackAirB attacker and grounded Turn defender, but replay
@@ -401,6 +455,95 @@ def test_f08b_body_contact_geometry_cardinal_attackairb_turn_control_stays_suppr
     assert int(out_row["hitlag"][defender]) == 0
     assert int(out_row["action_id"][defender]) == int(ref_row["action_id"][defender])
     assert float(out_row["percent"][defender]) == pytest.approx(float(ref_row["percent"][defender]))
+
+
+@pytest.mark.integration
+def test_doubles_attackhi3_powershield_hitlist_latch_suppresses_late_guard_body() -> None:
+    # Replay-rollout positive for a hidden powershield HitCapsule victim-list latch:
+    # - p0 enters grounded AttackHi3 while p2 is in the GuardOn -> GuardReflect powershield window.
+    # - Source `ftColl_80076CBC` registers the attacker HitCapsule victim before the x221C_b2
+    #   powershield branch suppresses ordinary shield damage / GuardSetOff effects.
+    # - When p2 later becomes visible Guard, the same AttackHi3 hit_group must remain suppressed
+    #   by lbColl_8000ACFC instead of falling through to BODY.
+    #
+    # Decomp anchors:
+    # - refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+    # - refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076CBC,ftColl_80078C70}
+    # - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80094138
+    # - refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008688,lbColl_8000ACFC}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_path = root / (
+        "datasets/doubles_recent/replays/validation/doubles_recent/Game_20260509T152622.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    start = 2048
+    stop = 2064
+    attacker = 0
+    defender = 2
+
+    def rollout(seed_mutator=None) -> np.void:
+        seed = samples["seed_t"][start : start + 1].copy()
+        if seed_mutator is not None:
+            seed_mutator(seed)
+        seed_bytes = np.frombuffer(seed.tobytes(order="C"), dtype=np.uint8).copy().reshape(
+            1, seed_stride
+        )
+        out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+        out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(1)
+        handle = binding.init(
+            batch_size=1,
+            num_players=int(ds.header["num_players"]),
+            ucf_enabled=1,
+            ucf_cardinals_1_0_enabled=1,
+        )
+        try:
+            binding.reseed_seed_rollout(handle, seed_bytes)
+            for record in range(start, stop + 1):
+                prev_input_bytes = np.frombuffer(
+                    samples["prev_input_t"][record : record + 1].tobytes(order="C"),
+                    dtype=np.uint8,
+                ).copy().reshape(1, input_stride)
+                input_bytes = np.frombuffer(
+                    samples["input_t"][record : record + 1].tobytes(order="C"), dtype=np.uint8
+                ).copy().reshape(1, input_stride)
+                binding.step_input(handle, prev_input_bytes, input_bytes)
+                binding.write_compare(handle, out_compare_bytes)
+            return out_view[0].copy()
+        finally:
+            binding.destroy(handle)
+
+    seed_start = samples["seed_t"][start]
+    ref_stop = samples["ref_t1"][stop]
+    assert int(seed_start["action_id"][attacker]) == 44  # AttackAirHi prior hidden hitlist owner
+    assert int(seed_start["combat_hitlist_cd"][attacker, 0, defender]) != 0
+    assert int(ref_stop["action_id"][attacker]) == 56  # AttackHi3
+    assert int(ref_stop["action_id"][defender]) == 179  # Guard
+
+    out = rollout()
+    for field in ("action_id", "action_frame", "animation_index", "hitlag", "hitstun"):
+      assert int(out[field][defender]) == int(ref_stop[field][defender]), f"field={field}"
+    assert float(out["percent"][defender]) == pytest.approx(float(ref_stop["percent"][defender]))
+
+    def clear_hidden_latch(seed_t_mut: np.ndarray) -> None:
+        seed_t_mut["combat_hitlist_cd"][0, attacker, 0, defender] = 0
+        seed_t_mut["combat_hitlist_victim_iid"][0, attacker, 0, defender] = 0
+
+    no_latch_out = rollout(clear_hidden_latch)
+    assert int(no_latch_out["action_id"][defender]) == 88  # DamageFlyN
+    assert int(no_latch_out["hitlag"][defender]) > 0
+    assert float(no_latch_out["percent"][defender]) > float(seed_start["percent"][defender])
 
 
 @pytest.mark.integration

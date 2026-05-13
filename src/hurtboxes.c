@@ -204,6 +204,25 @@ static inline uint8_t hurtboxes_damageflyroll_live_xrotn_pose_owner(uint16_t act
   return (uint8_t)(action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL);
 }
 
+static inline uint8_t hurtboxes_escapef_root_facing_owner(const MslBatch* batch, size_t idx) {
+  if (batch == NULL || batch->state.action_id[idx] != (uint16_t)MSL_ACT_ESCAPE_F) {
+    return 0u;
+  }
+  if (batch->state.action_frame[idx] < 20 || batch->state.facing_dir1[idx] == 0) {
+    return 0u;
+  }
+  // EscapeF has a script-owned mid-roll root-facing boundary when its vulnerable collision phase
+  // starts: frame 20 emits `set_hit_status(0)` and `set_throw_flags(hit_idx=0)`. The root JObj
+  // collision matrix still follows the motion-entry facing (`facing_dir1`) while the replay-visible
+  // scalar facing byte can already describe the gameplay-facing side of the roll. EscapeB/EscapeN
+  // are intentionally excluded because their extracted scripts do not emit the EscapeF throw-flag
+  // event at the vulnerable boundary.
+  // data/moves/{fox,falco}.json moves["ftCo_SM_EscapeF"].events
+  // refs/melee/src/melee/ft/fighter.c (Fighter_ChangeMotionState copies facing_dir -> facing_dir1)
+  // refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
+  return 1u;
+}
+
 static inline uint8_t hurtboxes_damageflyroll_xrotn_angle_from_velocity(const MslBatch* batch,
                                                                         size_t idx,
                                                                         float* out_angle) {
@@ -919,6 +938,9 @@ static void hurtboxes_refresh_impl(MslBatch* batch, uint8_t geometry_mode) {
         //   ftCo_Turn_Enter,ftCo_Turn_Anim_Inner}
         // refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
         facing_dir = -facing_dir;
+      }
+      if (hurtboxes_escapef_root_facing_owner(batch, idx)) {
+        facing_dir = (batch->state.facing_dir1[idx] < 0) ? -1.0f : 1.0f;
       }
       // Fallback policy: missing pose data for a specific capsule only drops that capsule, keeping
       // the rest usable under partial animation coverage.

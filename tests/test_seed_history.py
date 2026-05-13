@@ -25,6 +25,7 @@ from tools.slippi.seed_history import (
     derive_capture_grab_hidden_post,
     derive_magnify_damage_counter_x1910,
     derive_rebirth_camera_anchor_y,
+    derive_damage_meteor_cancel_x1a,
     derive_damage_post_hitlag_cb_kind,
     derive_guard_reflect_origin_guardon,
     derive_guard_reflect_timer_x14,
@@ -3203,6 +3204,40 @@ def test_derive_damage_post_hitlag_cb_kind_fresh_hit_reentry_stays_active() -> N
         damage_actions=(int(act_damage_fly_n),),
     )
     assert got.tolist() == [1, 1, 1, 1]
+
+
+def test_derive_damage_meteor_cancel_x1a_samples_entry_angle_only() -> None:
+    act_wait = np.uint16(14)
+    act_damage_fly_n = np.uint16(88)
+    action = np.array(
+        [act_wait, act_damage_fly_n, act_damage_fly_n, act_wait, act_damage_fly_n],
+        dtype=np.uint16,
+    )
+    hitstun = np.array([0, 25, 24, 0, 29], dtype=np.uint16)
+    # First episode is Sakurai angle 361, which may become visibly vertical but never calls
+    # ftColl_8007AC68. The second episode starts inside the source 260..280 window and carries true.
+    source_angle = np.array([0xFFFF, 361, 361, 0xFFFF, 270], dtype=np.uint16)
+
+    got = derive_damage_meteor_cancel_x1a(
+        action_id=action,
+        hitstun_u16=hitstun,
+        source_angle_u16=source_angle,
+        angle_min_deg=260,
+        angle_max_deg=280,
+        damage_actions=(int(act_damage_fly_n),),
+    )
+    assert got.tolist() == [0, 0, 0, 0, 1]
+
+    for k in range(1, int(action.size) + 1):
+        prefix = derive_damage_meteor_cancel_x1a(
+            action_id=action[:k],
+            hitstun_u16=hitstun[:k],
+            source_angle_u16=source_angle[:k],
+            angle_min_deg=260,
+            angle_max_deg=280,
+            damage_actions=(int(act_damage_fly_n),),
+        )
+        assert np.array_equal(prefix, got[:k])
 
 
 def test_derive_camera_box_visible_x221f_b0_prefix_invariant() -> None:

@@ -15,6 +15,7 @@ _QGD = Path("datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0
 _PTE = Path(
     "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.msl"
 )
+_GAT_DOUBLES = Path("datasets/doubles_recent/replays/validation/doubles_recent/Game_20260509T152622.msl")
 
 
 def _run_one_step(binding: object, row: np.ndarray, *, num_players: int) -> np.void:
@@ -267,6 +268,45 @@ def test_aerial_shine_start_late_slot_grounded_attack_entry_uses_dense_victim_se
         assert int(out[field][defender]) == int(row["ref_t1"][field][0, defender]), field
     assert float(out["percent"][defender]) == pytest.approx(float(row["ref_t1"]["percent"][0, defender]))
     assert int(out["hitlag"][attacker]) == int(row["ref_t1"]["hitlag"][0, attacker])
+
+
+@pytest.mark.integration
+def test_aerial_shine_start_late_slot_active_damagefly_uses_pair_phase_owner() -> None:
+    # GAT-doubles rec=3154 has p1 platform-pass into aerial SpecialLwStart while p0 is an
+    # earlier-slot active DamageFlyN victim. The ref keeps p0 in the prior damage episode and p1
+    # out of hitlag for this frame. This is the same ftColl entity-order owner as the grounded
+    # attack-entry lane above, but the victim family is DAMAGE_*_COLL from MSLMSO01 rather than a
+    # grounded attack entry.
+    #
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{
+    #   ftFx_SpecialLwStart_Pass,ftFx_SpecialAirLw_Enter}
+    # data/motion_state/owners/{fox,falco}.bin (MSLMSO01 DAMAGE_*_COLL classes)
+    root = Path(__file__).resolve().parents[1]
+    ds_path = root / _GAT_DOUBLES
+    if not ds_path.exists():
+        pytest.skip(f"missing local dataset: {ds_path}")
+
+    binding = pytest.importorskip("msl_binding")
+    ds = read_dataset(str(ds_path))
+    row = ds.samples[3154:3155]
+    attacker = 1
+    defender = 0
+
+    assert int(row["seed_t"]["action_id"][0, attacker]) == 39  # Squat
+    assert int(row["ref_t1"]["action_id"][0, attacker]) == 365  # aerial SpecialLwStart
+    assert int(row["ref_t1"]["animation_index"][0, attacker]) == 317  # platform-pass start submotion
+    assert int(row["seed_t"]["action_id"][0, defender]) == 88  # DamageFlyN
+    assert int(row["seed_t"]["hitstun"][0, defender]) != 0
+    assert int(row["ref_t1"]["instance_hit_by"][0, defender]) == int(
+        row["seed_t"]["instance_hit_by"][0, defender]
+    )
+
+    out = _run_one_step(binding, row, num_players=int(ds.header["num_players"]))
+    for field in ("action_id", "action_frame", "hitlag", "hitstun", "instance_id", "instance_hit_by"):
+        assert int(out[field][defender]) == int(row["ref_t1"][field][0, defender]), field
+    assert int(out["hitlag"][attacker]) == int(row["ref_t1"]["hitlag"][0, attacker])
+    assert float(out["percent"][defender]) == pytest.approx(float(row["ref_t1"]["percent"][0, defender]))
 
 
 @pytest.mark.integration

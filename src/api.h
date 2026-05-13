@@ -210,6 +210,11 @@ typedef struct MslDebugStageState {
   uint8_t _pad0[2];
 } MslDebugStageState;
 
+enum {
+  MSL_DAMAGE_POST_HITLAG_CB_KIND_MASK = 0x0F,
+  MSL_DAMAGE_METEOR_CANCEL_X1A_MASK = 0x80,
+};
+
 typedef struct MslSeed {
   int32_t frame_id;
   uint32_t
@@ -1188,6 +1193,13 @@ typedef struct MslSeed {
   // - Gated against p_ftCommonData->x1D0 in Damage_Anim's inlineC0 jump path.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_8008DCE0,doIasa,ftCo_Damage_Anim}
   uint16_t damage_jump_buffer_x14[MSL_MAX_PLAYERS];
+  // Bit-packed damage hidden state:
+  // - low nibble: post-hitlag callback kind (`fp->post_hitlag_cb`), currently 0/1.
+  // - bit 7: meteor-cancel eligibility (`fp->mv.co.damage.x1A`) from ftColl_8007AC68.
+  // Keeping this as one byte preserves existing local dataset record sizes while still avoiding a
+  // runtime live-vector proxy for x1A.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007AC68
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_8008DCE0,doIasa}
   uint8_t l_cancel[MSL_MAX_PLAYERS];
   uint8_t hurtbox_state[MSL_MAX_PLAYERS];  // 0 vuln, 1 invuln, 2 intangible
   // Collision hit-status internals (decomp fp->x198C / x1990 / x1994 / x2221_b0).

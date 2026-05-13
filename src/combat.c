@@ -1204,6 +1204,21 @@ static inline uint8_t combat_side_special_start_passivewalljump_entry_pose_owner
                    batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_PASSIVE_WALL_JUMP);
 }
 
+static inline float combat_root_facing_dir_for_body_hurtcap(const MslBatch* batch, size_t idx) {
+  float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+  if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_ESCAPE_F &&
+      batch->state.action_frame[idx] >= 20 && batch->state.facing_dir1[idx] != 0) {
+    // Same EscapeF root-facing owner as hurtboxes.c: the frame-20 vulnerable phase emits
+    // `set_throw_flags(hit_idx=0)` and keeps the collision-root owner on motion-entry facing
+    // (`facing_dir1`) even when visible scalar facing has already diverged.
+    // data/moves/{fox,falco}.json moves["ftCo_SM_EscapeF"].events
+    // refs/melee/src/melee/ft/fighter.c (Fighter_ChangeMotionState copies facing_dir -> facing_dir1)
+    // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+    facing_dir = (batch->state.facing_dir1[idx] < 0) ? -1.0f : 1.0f;
+  }
+  return facing_dir;
+}
+
 static inline float combat_hurtcap_pose_sample_frame(const MslBatch* batch, size_t idx,
                                                      uint8_t char_id, uint16_t msid,
                                                      uint16_t action_id, float anim_frame_f32,
@@ -1509,7 +1524,7 @@ static inline uint8_t combat_body_overlap_lbColl_80006E58_matrix_radius(
     *out_evaluated = 1u;
   }
 
-  const float facing_dir = batch->state.facing[d_idx] ? 1.0f : -1.0f;
+  const float facing_dir = combat_root_facing_dir_for_body_hurtcap(batch, d_idx);
   const float pos_x = batch->state.pos_x[d_idx];
   const float pos_y = batch->state.pos_y[d_idx];
   const float pos_z = batch->state.pos_z[d_idx];
@@ -1981,6 +1996,35 @@ static inline uint8_t combat_shield_overlap_ftcoll_80007bcc(
   float eff_shx = shx;
   float eff_shy = shy;
   float eff_shz = shz;
+  if (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_SET_OFF) {
+    float m[12];
+    const float sample_frame = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[d_idx]);
+    if (anim_pose_get_collision_matrix_f32(
+            batch, d_idx, (uint16_t)MSL_SM_GUARD_DAMAGE, sample_frame,
+            defender_params != NULL ? defender_params->grab_capture_anchor_part_id : 0u, m) == 0) {
+      float lx = 0.0f;
+      float ly = 0.0f;
+      float lz = 0.0f;
+      // GuardSetOff ShieldDesc pose owner:
+      // - ftColl_8007B1B8 stores ShieldDesc.bone from `fp->ft_data->x8->x11` with zero offset and
+      //   size=1 in ftCo_80092450.
+      // - GuardSetOff uses ftCo_SM_GuardDamage and `ftCo_GuardSetOff_Anim` only calls
+      //   ftCo_80091D58 while frames remain, so the live ShieldDesc center is the GuardDamage
+      //   shield-bone matrix plus the current shield scale, not the steady Guard tilt table.
+      // - `grab_capture_anchor_part_id` is extracted from the same `ft_data->x8->x11` source field.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+      //   ftCo_80092450,ftCo_80091D58,ftCo_GuardSetOff_Anim}
+      // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B1B8
+      // refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
+      const float zero[3] = {0.0f, 0.0f, 0.0f};
+      msl_mtx34_mul_point(m, zero, &lx, &ly, &lz);
+      const float model_scale = shield_owner_scale_y * shield_owner_model_scale;
+      const float facing_dir = batch->state.facing[d_idx] ? 1.0f : -1.0f;
+      eff_shx = batch->state.pos_x[d_idx] + facing_dir * lz * model_scale;
+      eff_shy = batch->state.pos_y[d_idx] + ly * model_scale;
+      eff_shz = batch->state.pos_z[d_idx] - facing_dir * lx * model_scale;
+    }
+  }
   const uint8_t guardreflect_x14_expired_this_callback =
       (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
        batch->state.animation_index[d_idx] == UINT32_MAX &&
@@ -2651,11 +2695,40 @@ static inline uint8_t combat_defer_late_slot_same_frame_speciallw_entry_hit(
   if (batch->state.prev_action_id[a_idx] == action) {
     return 0u;
   }
+  const uint16_t defender_action = batch->state.action_id[d_idx];
+  const uint16_t attacker_prev_action = batch->state.prev_action_id[a_idx];
+  const uint8_t attacker_squat_family_platform_pass_source =
+      (batch->state.frame_start_on_ground[a_idx] != 0u &&
+       (attacker_prev_action == (uint16_t)MSL_ACT_SQUAT ||
+        attacker_prev_action == (uint16_t)MSL_ACT_SQUAT_WAIT ||
+        attacker_prev_action == (uint16_t)MSL_ACT_SQUAT_RV))
+          ? 1u
+          : 0u;
+  if (action == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START &&
+      attacker_squat_family_platform_pass_source && batch->state.on_ground[d_idx] == 0u &&
+      batch->state.hitlag[d_idx] == 0u && batch->state.hitstun[d_idx] != 0u &&
+      (msl_motion_state_common_class_has(defender_action, MSL_MS_CLASS_DAMAGE_FLY_COLL) ||
+       msl_motion_state_common_class_has(defender_action, MSL_MS_CLASS_DAMAGE_COMMON_COLL))) {
+    // Fighter BODY pair-order + active airborne damage collision owner:
+    // - A frame-start grounded Squat-family state can enter grounded Reflector and immediately
+    //   platform-pass into SpecialAirLwStart, preserving the ground-start submotion/hitbox while
+    //   `ftFx_SpecialLwStart_Pass` explicitly creates the reflect hit.
+    // - If that platform-pass creator is a later entity, an earlier active Damage/DamageFly fighter
+    //   has already run its collision callback for this frame, so the fresh HitCapsule cannot damage
+    //   it until a later pair phase. Ordinary aerial Shine entries stay on the normal BODY path; QGD
+    //   and aggregate controls show those hits are real.
+    // - Use MSLMSO01 collision-owner classes for the victim family instead of an action-id list.
+    // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{
+    //   ftFx_SpecialLwStart_Pass,ftFx_SpecialAirLw_Enter}
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_IASA
+    // data/motion_state/owners/{fox,falco}.bin (MSLMSO01 DAMAGE_*_COLL classes)
+    return 1u;
+  }
   if (!batch->state.on_ground[d_idx] || batch->state.hitlag[d_idx] != 0u ||
       batch->state.hitstun[d_idx] != 0u) {
     return 0u;
   }
-  const uint16_t defender_action = batch->state.action_id[d_idx];
   if (action == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START &&
       batch->state.prev_action_id[d_idx] != defender_action &&
       batch->state.action_frame[d_idx] <= 1 &&
@@ -3813,6 +3886,55 @@ static inline uint16_t combat_damage_hitstun_from_kb(const MslCommonParams* c, f
   return (uint16_t)hs;
 }
 
+static inline uint8_t combat_damage_meteor_cancel_x1a_from_raw_angle(const MslCommonParams* c,
+                                                                     uint16_t raw_angle) {
+  if (c == NULL) {
+    return 0u;
+  }
+  // Decomp: ftColl_8007AC68 writes mv.co.damage.x1A from the hit's source knockback angle before
+  // doIasa later admits meteor-cancel escape dispatch. The retained runtime escape branch below is
+  // JumpAerial-only; SpecialHi admission remains a separate source-owner boundary. Sakurai angle
+  // 361 takes a separate ftCo_Damage_CalcAngle branch and never calls ftColl_8007AC68.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007AC68
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_CalcAngle,doIasa}
+  if (raw_angle == 361u) {
+    return 0u;
+  }
+  return (raw_angle >= c->damage_meteor_cancel_angle_min_deg &&
+          raw_angle <= c->damage_meteor_cancel_angle_max_deg)
+             ? 1u
+             : 0u;
+}
+
+static inline uint8_t combat_illusion_owner_is_end_phase(uint16_t action_id_u16) {
+  return (action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_S_END ||
+          action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_END)
+             ? 1u
+             : 0u;
+}
+
+static inline uint16_t combat_item_damage_meteor_cancel_raw_angle(const MslBatch* batch,
+                                                                  size_t attacker_idx,
+                                                                  uint8_t item_is_illusion,
+                                                                  uint16_t item_angle) {
+  if (batch == NULL || !item_is_illusion) {
+    return item_angle;
+  }
+
+  // Illusion/Phantasm article damage angle and meteor-cancel x1A provenance are not identical
+  // during the main dash phase: the live article can apply the downward state1 hitbox while
+  // ftCo_Damage_CalcAngle's x1A source only appears on the End-phase owner. Keep the damage/KB
+  // angle table-backed, but suppress x1A for SpecialS/SpecialAirS main-phase article hits.
+  // Positive/negative replay locks: GAT doubles rec1146 (SpecialAirSEnd x1A) and HVG rec552
+  // (SpecialAirS downward hit without x1A).
+  // refs/melee/src/melee/it/items/itfoxillusion.c::{it_8029CFF0,itFoxillusion_UnkMotion1_Phys}
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
+  //   ftFx_SpecialS_Anim,ftFx_SpecialAirS_Anim,ftFx_SpecialSEnd_Anim,ftFx_SpecialAirSEnd_Anim}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_CalcAngle
+  return combat_illusion_owner_is_end_phase(batch->state.action_id[attacker_idx]) ? item_angle
+                                                                                  : UINT16_MAX;
+}
+
 static inline uint8_t combat_damage_severity_u8_from_kb(const MslCommonParams* c,
                                                         float kb_applied) {
   // Decomp: ftCo_8008DCE0 derives severity by comparing `kb_applied * x154` against thresholds:
@@ -4179,7 +4301,8 @@ static inline void combat_damageflyroll_consume_jumpaerial_attackairb_carry(MslB
 static inline void combat_damage_enter_state(const MslCommonParams* c, MslBatch* batch, int bi,
                                              size_t d_idx, uint8_t defender_on_ground_before,
                                              uint8_t defender_on_ground_after, uint8_t hurt_height,
-                                             float kb_applied, float kb_angle_rad) {
+                                             float kb_applied, float kb_angle_rad,
+                                             uint16_t raw_kb_angle) {
   if (batch == NULL) {
     return;
   }
@@ -4342,6 +4465,8 @@ static inline void combat_damage_enter_state(const MslCommonParams* c, MslBatch*
   // Decomp: ftCo_8008DCE0 clears mv.co.damage.x14 on damage entry.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
   batch->state.damage_jump_buffer_x14[d_idx] = 0;
+  batch->state.damage_meteor_cancel_eligible_x1a[d_idx] =
+      combat_damage_meteor_cancel_x1a_from_raw_angle(c, raw_kb_angle);
   // Decomp: ftCo_8008DCE0 clears the x670/x671 tilt timer window on damage entry. This matters
   // before the per-hitlag `ftCo_Damage_OnEveryHitlag` callback: fresh damage hitlag should not
   // inherit stale pre-hit flick timers into timer-window SDI.
@@ -4686,6 +4811,7 @@ static inline void combat_mutations_pass1_future_apply_body_hit(
     batch->state.speed_x_attack[d_idx] = 0.0f;
     batch->state.speed_y_attack[d_idx] = 0.0f;
     batch->state.hitstun[d_idx] = 0;
+    batch->state.damage_meteor_cancel_eligible_x1a[d_idx] = 0u;
     combat_state_flags_set_is_hitstun(batch, d_idx, 0);
     batch->state.instance_hit_by[d_idx] = batch->state.instance_id[a_idx];
     combat_processhit_commit_source_owner(batch, d_idx,
@@ -4796,7 +4922,7 @@ static inline void combat_mutations_pass1_future_apply_body_hit(
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
   const uint8_t defender_on_ground_after = batch->state.on_ground[d_idx] ? 1u : 0u;
   combat_damage_enter_state(c, batch, (int)bi, d_idx, defender_on_ground, defender_on_ground_after,
-                            hurt_height, kb_applied, kb_angle_rad);
+                            hurt_height, kb_applied, kb_angle_rad, hb_angle);
   // Decomp ordering: Damage state entry runs before hitlag assignment in Fighter_ProcessHit.
   // - forceAppliedOnHit path enters ftCo_8008DCE0 (ChangeMotionState + immediate ftAnim_8006EBA4),
   // - then bool1 drives fp->dmg.x195c_hitlag_frames assignment.
@@ -4986,6 +5112,7 @@ static inline void combat_body_damage_log_apply(MslBatch* batch, int bi,
     batch->state.speed_x_attack[d_idx] = 0.0f;
     batch->state.speed_y_attack[d_idx] = 0.0f;
     batch->state.hitstun[d_idx] = 0;
+    batch->state.damage_meteor_cancel_eligible_x1a[d_idx] = 0u;
     combat_state_flags_set_is_hitstun(batch, d_idx, 0);
     batch->state.instance_hit_by[d_idx] = e->attacker_instance_id;
     combat_processhit_commit_source_owner(
@@ -5046,7 +5173,7 @@ static inline void combat_body_damage_log_apply(MslBatch* batch, int bi,
   combat_damage_mark_entry_time_since_hit(batch, d_idx);
   const uint8_t defender_on_ground_after = batch->state.on_ground[d_idx] ? 1u : 0u;
   combat_damage_enter_state(c, batch, bi, d_idx, e->defender_on_ground, defender_on_ground_after,
-                            e->hurt_height, best_kb, kb_angle_rad);
+                            e->hurt_height, best_kb, kb_angle_rad, e->hitbox_angle);
   if (d_hl > 0u) {
     batch->state.hitlag[d_idx] = d_hl;
     combat_state_flags_set_is_hitlag(batch, d_idx, d_hl);
@@ -5079,12 +5206,16 @@ static inline void combat_mutations_pass1_future_apply_body_phantom_hit(MslBatch
   }
 
   // Fighter phantom-hit lane:
-  // - ftColl_80076ED8 halves the float damage and stores it into fp->dmg.x1840.
+  // - ft_80089228 stores stale-scaled HitCapsule.damage before collision.
+  // - ftColl_80076ED8 halves that float damage and stores it into fp->dmg.x1840.
   // - Fighter_ProcessHit consumes x1840 through the x18a0 branch, starting victim hitlag without
   //   percent/KB/damage-state entry and without attacker hitlag.
+  // refs/melee/src/melee/ft/ft_0881.c::ft_80089228
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076ED8
   // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
-  float phantom_dmg = 0.5f * dmg_f;
+  const uint16_t move_id = staling_move_id_from_state(batch, a_idx);
+  const float stale_mult = staling_multiplier_for_move(batch, a_idx, move_id);
+  float phantom_dmg = 0.5f * dmg_f * stale_mult;
   if (!((int)phantom_dmg) && dmg_f > 0.0f) {
     phantom_dmg = 1.0f;
   }
@@ -5170,7 +5301,8 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
                                        uint16_t item_instance_id, uint16_t item_type,
                                        uint8_t item_state, float damage, uint16_t angle,
                                        uint16_t kbg, uint16_t wsk, uint16_t bkb,
-                                       uint8_t defender_hurt_height, uint8_t element) {
+                                       uint8_t defender_hurt_height, uint8_t element,
+                                       float stale_mult_override) {
   if (batch == NULL) {
     return MSL_ITEM_HIT_NONE;
   }
@@ -5216,7 +5348,9 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
   // refs/melee/src/melee/it/itcoll.c::it_80272460 (calls ft_80089228)
   // refs/melee/src/melee/ft/ft_0881.c::ft_80089228
   float dmg_f_base = damage;
-  const float stale_mult = staling_multiplier_for_move(batch, a_idx, item_attack_id);
+  const float stale_mult = (stale_mult_override >= 0.0f)
+                               ? stale_mult_override
+                               : staling_multiplier_for_move(batch, a_idx, item_attack_id);
   if (stale_mult != 1.0f) {
     dmg_f_base *= stale_mult;
   }
@@ -5307,7 +5441,7 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
        batch->state.last_hit_by[d_idx] == combat_source_port0_for_attacker(batch, a_idx, attacker))
           ? 1u
           : 0u;
-  if (d_hl > d_hl_prev) {
+  if (d_hl != d_hl_prev) {
     batch->state.hitlag[d_idx] = d_hl;
     combat_state_flags_set_is_hitlag(batch, d_idx, d_hl);
   }
@@ -5447,6 +5581,7 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
     batch->state.speed_x_attack[d_idx] = 0.0f;
     batch->state.speed_y_attack[d_idx] = 0.0f;
     batch->state.hitstun[d_idx] = 0u;
+    batch->state.damage_meteor_cancel_eligible_x1a[d_idx] = 0u;
     combat_state_flags_set_is_hitstun(batch, d_idx, 0u);
     batch->state.instance_hit_by[d_idx] = item_instance_id;
     combat_processhit_commit_source_owner(batch, d_idx,
@@ -5559,9 +5694,11 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
   // Decomp: ftCo_8008DCE0 can clear grounded state (ftCommon_8007D5D4) before selecting the
   // damage motion state. Use the post-KB on_ground value for state entry.
   const uint8_t defender_on_ground_after = batch->state.on_ground[d_idx] ? 1u : 0u;
+  const uint16_t meteor_cancel_raw_angle =
+      combat_item_damage_meteor_cancel_raw_angle(batch, a_idx, item_is_illusion, angle);
   combat_damage_enter_state(c, batch, batch_index, d_idx, defender_on_ground,
                             defender_on_ground_after, defender_hurt_height, kb_applied,
-                            kb_angle_rad);
+                            kb_angle_rad, meteor_cancel_raw_angle);
   // Mirror Fighter_ProcessHit's damage-hitlag ownership after ftCo_8008DCE0 state entry:
   // allow_sdi and x221A_b3 are ProcessHit damage paths, not generic hitlag side effects.
   // refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006A1BC}
@@ -5764,6 +5901,7 @@ static inline uint8_t combat_apply_throw_hit_core(MslBatch* batch, int batch_ind
     batch->state.speed_x_attack[d_idx] = 0.0f;
     batch->state.speed_y_attack[d_idx] = 0.0f;
     batch->state.hitstun[d_idx] = 0;
+    batch->state.damage_meteor_cancel_eligible_x1a[d_idx] = 0u;
     combat_state_flags_set_is_hitstun(batch, d_idx, 0);
     batch->state.instance_hit_by[d_idx] = batch->state.instance_id[a_idx];
     batch->state.last_hit_by[d_idx] = combat_source_port0_for_attacker(batch, a_idx, attacker);
@@ -5820,7 +5958,7 @@ static inline uint8_t combat_apply_throw_hit_core(MslBatch* batch, int batch_ind
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
   const uint8_t hurt_height = 1u;
   combat_damage_enter_state(c, batch, batch_index, d_idx, defender_on_ground, defender_on_ground,
-                            hurt_height, kb_applied, damage_state_angle_rad);
+                            hurt_height, kb_applied, damage_state_angle_rad, p->angle);
   // Throw-release ordering:
   // - ftCo_800DDDE4 routes into Fighter_ProcessHit damage entry, and ftCo_8008DCE0 already performs
   //   an immediate ftAnim_8006EBA4 on state change.
@@ -7620,6 +7758,12 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
                      (c->phantom_overlap_max_x7a8 + c->phantom_overlap_max_x7a8))))
                   ? 1u
                   : 0u;
+          const uint8_t downed_phantom_boundary =
+              (combat_is_downed_damage_contact_action(batch->state.action_id[d_idx]) &&
+               batch->state.hitstun[d_idx] == 0u && lbcoll_overlap_valid &&
+               lbcoll_overlap_amount > 0.0f && lbcoll_overlap_amount <= c->phantom_overlap_max_x7a8)
+                  ? 1u
+                  : 0u;
           const uint8_t fighter_phantom_tiplog_range =
               (!attackairb_stale_owner_candidate && lbcoll_overlap_valid &&
                lbcoll_overlap_amount > 0.0f &&
@@ -7644,7 +7788,7 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           if (!attackairb_stale_owner_candidate && !defender_no_damage &&
               batch->state.hitstun[d_idx] == 0u &&
               ((!batch->state.on_ground[d_idx] && batch->state.hitbox_enable_edge[hb_i]) ||
-               guard_shield_poke_phantom_boundary) &&
+               guard_shield_poke_phantom_boundary || downed_phantom_boundary) &&
               fighter_phantom_tiplog_range) {
             // General fighter BODY phantom-hit lane:
             // - lbColl_8000805C writes HitCapsule.coll_distance from lbColl_80006E58.
@@ -7652,9 +7796,12 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
             //   checkTipLog/inlineB1 instead of the percent/KB damage-state path.
             // - Apply the matrix-radius helper on enable-edge capsules, where ftColl_8007AD18 has
             //   just initialized x58=x4C for the live HitCapsule. Sustained capsules remain on the
-            //   damage path until the exact lbColl scalar is ported for all edge/non-edge cases.
+            //   damage path until the exact lbColl scalar is ported for all edge/non-edge cases,
+            //   except downed actions where ftCo_8009F0F0's contact branch uses the same
+            //   percent-temp/phantom path before any generic damage-state entry.
             // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
             // refs/melee/src/melee/ft/ftcoll.c::{checkTipLog,inlineB1,ftColl_80076ED8,ftColl_8007AD18}
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::ftCo_8009F0F0
             if (!hitlist_allows_fighter_v2(batch, bi, attacker, hb_id, defender, defender_iid)) {
               continue;
             }

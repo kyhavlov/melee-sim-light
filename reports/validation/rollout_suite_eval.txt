@@ -63,24 +63,24 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:3147
 
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.msl ==
 rollout.best_len: 1340
-rollout.streak_count: 17
+rollout.streak_count: 16
 rollout.streak_len.median: 346
 rollout.streak_len.p90: 1131
 rollout.streak_len.p95: 1340
 rollout.streak_len.max: 1340
-rollout.first_mismatch_total: 16
-rollout.first_mismatch_seeded_total: 3
+rollout.first_mismatch_total: 15
+rollout.first_mismatch_seeded_total: 2
 rollout.first_mismatch_non_seeded_total: 13
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:2227
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:2552
 
 == suite summary ==
-overall.rollout.streak_count: 64
-overall.rollout.streak_len.median: 470
+overall.rollout.streak_count: 63
+overall.rollout.streak_len.median: 493
 overall.rollout.streak_len.p90: 1200
 overall.rollout.streak_len.p95: 1340
 overall.rollout.streak_len.max: 2653
 overall.rollout.best_len.max: 2653
-overall.rollout.first_mismatch_total: 60
-overall.rollout.first_mismatch_seeded_total: 10
+overall.rollout.first_mismatch_total: 59
+overall.rollout.first_mismatch_seeded_total: 9
 overall.rollout.first_mismatch_non_seeded_total: 50
-overall.rollout.ignored_first_mismatch_top: state_flags[4]&0x80:13259
+overall.rollout.ignored_first_mismatch_top: state_flags[4]&0x80:13584

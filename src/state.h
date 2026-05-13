@@ -808,6 +808,12 @@ typedef struct MslStateSoA {
   // hitstun; used by Damage_Anim inlineC0 gate vs p_ftCommonData->x1D0).
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{doIasa,ftCo_Damage_Anim}
   uint16_t* damage_jump_buffer_x14;  // [batch * players]
+  // Meteor-cancel eligibility bit (decomp: fp->mv.co.damage.x1A).
+  // Runtime damage entry sets it from the source hit angle before DI can rotate the visible KB
+  // vector; teacher-forced reseed unpacks it from MslSeed::damage_post_hitlag_cb_kind bit 7.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007AC68
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::doIasa
+  uint8_t* damage_meteor_cancel_eligible_x1a;  // [batch * players]
   // Post-hitlag callback ownership lane (`fp->post_hitlag_cb`).
   // 0 = none, 1 = ftCo_Damage_OnExitHitlag (decomp: ftCo_8008DCE0 sets callback pointer).
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0

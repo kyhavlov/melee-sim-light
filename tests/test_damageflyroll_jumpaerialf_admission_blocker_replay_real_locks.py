@@ -48,6 +48,120 @@ def _trace_site_count(trace_path: Path, site_id: int) -> int:
 
 
 @pytest.mark.integration
+def test_damagefly_meteor_cancel_jumpaerial_immediate_escape_doubles() -> None:
+    # Replay-real lock for DamageFly `doIasa` meteor-cancel escape:
+    # - ftColl_8007AC68 marks 260..280 degree KB as mv.co.damage.x1A meteor-cancel eligible.
+    # - doIasa decrements x1B from p_ftCommonData->x7F0, then a jump input can enter JumpAerial
+    #   immediately while x221C_b6 is still active; this is distinct from the delayed x14 buffer.
+    # - The branch clears KB velocity and hitstun on the JumpAerial entry frame.
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007AC68
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::doIasa
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_rel = "datasets/doubles_recent/replays/validation/doubles_recent/Game_20260509T152622.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    start_record = 1140
+    jump_record = 1146
+    p = 3
+    for rec in (start_record, jump_record - 1, jump_record, jump_record + 1):
+        assert int(samples.shape[0]) > rec, f"dataset too short for meteor-cancel lock: record={rec}"
+
+    jump_seed = samples[jump_record]["seed_t"]
+    assert int(jump_seed["action_id"][p]) == 88  # ftCo_MS_DamageFlyN
+    assert int(jump_seed["action_frame"][p]) == 19
+    assert int(jump_seed["hitstun"][p]) == 29
+    assert int(jump_seed["damage_jump_buffer_x14"][p]) == 0
+    assert int(jump_seed["damage_post_hitlag_cb_kind"][p]) & 0x80
+    assert float(jump_seed["speed_y_attack"][p]) < 0.0
+    assert int(samples[jump_record]["input_t"]["p"][p][0]) & 0x400
+    assert int(samples[jump_record]["ref_t1"]["action_id"][p]) == 27  # ftCo_MS_JumpAerialF
+    assert int(samples[jump_record]["ref_t1"]["hitstun"][p]) == 0
+    assert float(samples[jump_record]["ref_t1"]["speed_y_attack"][p]) == pytest.approx(0.0, abs=1e-6)
+
+    rows = _run_rollout_window_rows_with_trace(
+        dataset_path,
+        start_record=start_record,
+        window_records=(jump_record - 1, jump_record, jump_record + 1),
+        rng_damage_fly_roll_gate=True,
+        trace_path=root / "reports/triage/gat_damagefly_meteor_cancel_jump.tsv",
+    )
+
+    for rec in (jump_record - 1, jump_record, jump_record + 1):
+        ref_row, out_row, _site1_count = rows[rec]
+        _assert_fields_match_ref(out_row=out_row, ref_row=ref_row, p=p)
+    assert int(rows[jump_record][1]["action_id"][p]) == 27
+    assert int(rows[jump_record][1]["hitstun"][p]) == 0
+    assert float(rows[jump_record][1]["speed_y_attack"][p]) == pytest.approx(0.0, abs=1e-6)
+
+
+@pytest.mark.integration
+def test_illusion_main_dash_downward_hit_does_not_seed_meteor_cancel_x1a() -> None:
+    # Replay-real negative lock for the Illusion/Phantasm item-hit x1A boundary:
+    # - the main dash article can apply a downward DamageFlyN hit, but vanilla does not let the
+    #   victim immediately meteor-cancel out with Y while x221C_b6 is still active.
+    # - End-phase side-B remains covered by the positive GAT lock above.
+    # refs/melee/src/melee/it/items/itfoxillusion.c::{it_8029CFF0,itFoxillusion_UnkMotion1_Phys}
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
+    #   ftFx_SpecialAirS_Anim,ftFx_SpecialAirSEnd_Anim}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::doIasa
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+        "HilariousVillainousGiraffe.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    start_record = 140
+    hit_record = 528
+    jump_record = 552
+    p = 1
+    source = 0
+    for rec in (start_record, hit_record, jump_record):
+        assert int(samples.shape[0]) > rec, f"dataset too short for HVG lock: record={rec}"
+
+    hit_seed = samples[hit_record]["seed_t"]
+    jump_seed = samples[jump_record]["seed_t"]
+    assert int(hit_seed["action_id"][source]) == 351  # ftFx_MS_SpecialAirS main dash.
+    assert int(samples[hit_record]["ref_t1"]["action_id"][p]) == 88  # DamageFlyN.
+    assert int(jump_seed["action_id"][p]) == 88
+    assert int(jump_seed["action_frame"][p]) == 20
+    assert int(jump_seed["hitstun"][p]) == 15
+    assert float(jump_seed["speed_y_attack"][p]) < 0.0
+    assert int(samples[jump_record]["input_t"]["p"][p][0]) & 0x800
+    assert int(samples[jump_record]["ref_t1"]["action_id"][p]) == 88
+
+    rows = _run_rollout_window_rows_with_trace(
+        dataset_path,
+        start_record=start_record,
+        window_records=(jump_record - 1, jump_record, jump_record + 1),
+        rng_damage_fly_roll_gate=True,
+        trace_path=root / "reports/triage/hvg_illusion_main_dash_no_meteor_cancel.tsv",
+    )
+
+    for rec in (jump_record - 1, jump_record, jump_record + 1):
+        ref_row, out_row, _site1_count = rows[rec]
+        for field in ("action_id", "action_frame", "hitlag", "hitstun", "on_ground"):
+            assert int(out_row[field][p]) == int(ref_row[field][p]), (rec, field)
+        assert [int(x) for x in out_row["state_flags"][p].tolist()] == [
+            int(x) for x in ref_row["state_flags"][p].tolist()
+        ]
+    assert int(rows[jump_record][1]["action_id"][p]) == 88
+    assert int(rows[jump_record][1]["hitstun"][p]) == 14
+
+
+@pytest.mark.integration
 def test_damageflyroll_jumpaerialf_attackairb_carry_target_and_controls_are_replay_exact() -> None:
     # Replay-real lock for the remaining weak-bair / JumpAerialF admission family:
     # - ftCo_8008DCE0 block_33 evaluates the airborne DamageFlyRoll gate on the defender pre-action.

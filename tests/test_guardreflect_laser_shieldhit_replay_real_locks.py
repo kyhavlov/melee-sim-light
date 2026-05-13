@@ -189,6 +189,87 @@ def test_landing_turn_guardon_followup_reflect_miss_preserves_laser_for_body_hit
     assert int(out_2343["items"][0]["exists"]) == int(ref_2343["items"][0]["exists"]) == 0
 
 
+@pytest.mark.integration
+def test_doubles_no_submotion_guard_laser_uses_source_item_contact_sample() -> None:
+    # Replay-real lock for same-team doubles blaster shots crossing no-submotion Guard-family rows:
+    # - Slippi serializes Guard/GuardReflect as animation_index=-1 while x221B_b0 still proves a
+    #   live ShieldDesc. BODY must not consume the one-item-integration-later laser endpoint before
+    #   the source item/fighter collision callback reaches the shield hit.
+    # - The following GuardReflect/Guard rows prove the adjacent shield-hit and ShieldBounced
+    #   owners remain live; this is not a blanket same-team or no-submotion item immunity.
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80077688
+    # refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Phys,it_8029C4D4}
+    # refs/melee/src/melee/it/items/itfoxlaser.c::itFoxLaser_Logic94_ShieldBounced
+    # refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (fp+0x2218/fp+0x221B bytes)
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/doubles_recent/replays/validation/doubles_recent/Game_20260509T152622.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    defender = 1
+    for record, expected_action in ((3578, 182), (3616, 179)):
+        seed_t, out_t, ref_t = _step_one_row(dataset_path, record)
+        assert int(seed_t["state_flags"][defender][2]) & 0x80
+        assert int(seed_t["action_frame"][defender]) < 0
+        assert int(seed_t["animation_index"][defender]) == 0xFFFFFFFF
+        assert int(ref_t["action_id"][defender]) == expected_action
+        assert int(ref_t["hitlag"][defender]) == 0
+        assert int(ref_t["hitstun"][defender]) == 0
+
+        for field in (
+            "action_id",
+            "action_frame",
+            "animation_index",
+            "hitlag",
+            "hitstun",
+            "instance_id",
+            "instance_hit_by",
+            "last_hit_by",
+        ):
+            assert int(out_t[field][defender]) == int(ref_t[field][defender]), (
+                f"record={record} field={field}"
+            )
+        assert float(out_t["percent"][defender]) == pytest.approx(float(ref_t["percent"][defender]), abs=1e-6)
+        assert float(out_t["shield_hp"][defender]) == pytest.approx(
+            float(ref_t["shield_hp"][defender]), abs=1e-6
+        )
+        assert [int(x) for x in out_t["state_flags"][defender]] == [
+            int(x) for x in ref_t["state_flags"][defender]
+        ]
+
+    seed_3579, out_3579, ref_3579 = _step_one_row(dataset_path, 3579)
+    assert int(seed_3579["action_id"][defender]) == 182  # GuardReflect
+    assert int(ref_3579["action_id"][defender]) == 181  # GuardSetOff
+    assert int(ref_3579["hitlag"][defender]) == 3
+    for field in ("action_id", "action_frame", "animation_index", "hitlag", "instance_id"):
+        assert int(out_3579[field][defender]) == int(ref_3579[field][defender]), field
+    assert float(out_3579["shield_hp"][defender]) == pytest.approx(
+        float(ref_3579["shield_hp"][defender]), abs=1e-6
+    )
+
+    seed_3617, out_3617, ref_3617 = _step_one_row(dataset_path, 3617)
+    assert int(seed_3617["action_id"][defender]) == 179  # Guard.
+    assert int(seed_3617["state_flags"][defender][2]) & 0x80
+    assert int(seed_3617["item_shield_bounce_valid"][0]) == 1
+    assert int(ref_3617["action_id"][defender]) == 181  # GuardSetOff.
+    assert int(ref_3617["hitlag"][defender]) == 3
+    for field in ("action_id", "action_frame", "animation_index", "hitlag", "hitstun", "instance_id"):
+        assert int(out_3617[field][defender]) == int(ref_3617[field][defender]), field
+    assert float(out_3617["shield_hp"][defender]) == pytest.approx(
+        float(ref_3617["shield_hp"][defender]), abs=1e-6
+    )
+    for field in ("exists", "type", "state", "owner", "instance_id"):
+        assert int(out_3617["items"][0][field]) == int(ref_3617["items"][0][field]), field
+    assert float(out_3617["items"][0]["vel_x"]) == pytest.approx(
+        float(ref_3617["items"][0]["vel_x"]), abs=1e-6
+    )
+    assert float(out_3617["items"][0]["vel_y"]) == pytest.approx(
+        float(ref_3617["items"][0]["vel_y"]), abs=1e-6
+    )
+
+
 def _step_one_row_with_seed_prev_action(
     dataset_path: Path, record: int, *, player: int, seed_prev_action_id: int
 ) -> tuple[np.void, np.void, np.void]:

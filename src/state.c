@@ -322,6 +322,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->damage_hitlag_downward_sdi_consumed = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->hitstun = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->damage_jump_buffer_x14 = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
+  state->damage_meteor_cancel_eligible_x1a = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->damage_post_hitlag_cb_kind = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->attacker_shield_ground_kb_vel = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->l_cancel = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
@@ -611,7 +612,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->shield_hp || !state->hitlag || !state->hitlag_pre_timer ||
       !state->hitlag_started_frame || !state->damage_allow_sdi ||
       !state->damage_hitlag_floorhug_latch || !state->damage_hitlag_downward_sdi_consumed ||
-      !state->hitstun || !state->damage_jump_buffer_x14 || !state->damage_post_hitlag_cb_kind ||
+      !state->hitstun || !state->damage_jump_buffer_x14 ||
+      !state->damage_meteor_cancel_eligible_x1a || !state->damage_post_hitlag_cb_kind ||
       !state->attacker_shield_ground_kb_vel || !state->l_cancel || !state->hurtbox_state ||
       !state->colanim_hit_status_x198c || !state->colanim_timer_x1990 ||
       !state->colanim_timer_x1994 || !state->colanim_lock_x2221_b0 ||
@@ -777,6 +779,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   memset(state->damage_allow_sdi, 0, sizeof(uint8_t) * bp);
   memset(state->damage_hitlag_floorhug_latch, 0, sizeof(uint8_t) * bp);
   memset(state->damage_hitlag_downward_sdi_consumed, 0, sizeof(uint8_t) * bp);
+  memset(state->damage_meteor_cancel_eligible_x1a, 0, sizeof(uint8_t) * bp);
   memset(state->phantom_damage_pending_x1898, 0, sizeof(float) * bp);
   memset(state->phantom_damage_timer_x189c, 0, sizeof(uint16_t) * bp);
   memset(state->phantom_damage_source_port, 0xFF, sizeof(uint8_t) * bp);
@@ -1091,6 +1094,7 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->damage_hitlag_downward_sdi_consumed);
   alloc_free(state->hitstun);
   alloc_free(state->damage_jump_buffer_x14);
+  alloc_free(state->damage_meteor_cancel_eligible_x1a);
   alloc_free(state->damage_post_hitlag_cb_kind);
   alloc_free(state->attacker_shield_ground_kb_vel);
   alloc_free(state->l_cancel);

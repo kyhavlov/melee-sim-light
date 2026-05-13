@@ -563,6 +563,62 @@ def test_throwhi_rollout_uses_frame_crossing_after_seed_pending_authority_clears
 
 
 @pytest.mark.integration
+def test_throwhi_frame20_timebase_snap_defers_consumed_first_pulse_article_doubles() -> None:
+    # Rollout-real lock for the ThrowHi timebase / command-cursor split:
+    # - The 4/3 throw-rate AObj reaches action frame 20 on GAT-doubles rec 7734.
+    # - The frame-20 throw_flags_b0 command is still serialized by the following ftFx_Throw_Anim
+    #   callback because the frame-18 article has already advanced same-source item bookkeeping and
+    #   left no live state1 article.
+    # refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_Throw_Anim
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD4B0
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = "datasets/doubles_recent/replays/validation/doubles_recent/Game_20260509T152622.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    seed_7734 = ds.samples[7734]["seed_t"]
+    thrower = 0
+    victim = 1
+    assert int(seed_7734["char_id"][thrower]) == 1  # Fox
+    assert int(seed_7734["action_id"][thrower]) == 221  # ThrowHi
+    assert int(seed_7734["throw_pulse_crossed_prev_frame"][thrower]) == 18
+    assert int(seed_7734["throw_command_pending_pulse_frame"][thrower]) == 0
+    assert int(seed_7734["combo_count"][thrower]) == 2
+    assert int(seed_7734["hitstun"][victim]) > 0
+    assert int(seed_7734["last_hit_by"][victim]) == thrower
+    assert int(seed_7734["instance_hit_by"][victim]) == int(seed_7734["instance_id"][thrower])
+    seed_state1_count = sum(
+        1
+        for item in seed_7734["items"]
+        if int(item["exists"]) != 0
+        and int(item["owner"]) == thrower
+        and int(item["type"]) == 54
+        and int(item["state"]) == 1
+    )
+    assert seed_state1_count == 0
+
+    rows = _run_rollout_rows(dataset_path, 7725, (7734, 7735))
+    out_7734, ref_7734 = rows[7734]
+    assert int(out_7734["action_frame"][thrower]) == int(ref_7734["action_frame"][thrower]) == 20
+    assert int(out_7734["items"][1]["exists"]) == int(ref_7734["items"][1]["exists"]) == 0
+
+    out_7735, ref_7735 = rows[7735]
+    assert int(ref_7735["items"][1]["exists"]) == 1
+    for field in ("exists", "type", "state", "owner", "instance_id"):
+        assert int(out_7735["items"][1][field]) == int(ref_7735["items"][1][field])
+    assert float(out_7735["items"][1]["pos_x"]) == pytest.approx(
+        float(ref_7735["items"][1]["pos_x"]), abs=1.0e-3
+    )
+    assert float(out_7735["items"][1]["pos_y"]) == pytest.approx(
+        float(ref_7735["items"][1]["pos_y"]), abs=1.0e-3
+    )
+
+
+@pytest.mark.integration
 @pytest.mark.parametrize(
     "case",
     [

@@ -2716,6 +2716,64 @@ PyObject* msl_derive_damage_jump_buffer_x14_py(PyObject* self, PyObject* args) {
   return (PyObject*)out;
 }
 
+PyObject* msl_derive_damage_meteor_cancel_x1a_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* action_obj = NULL;
+  PyObject* hitstun_obj = NULL;
+  PyObject* source_angle_obj = NULL;
+  int angle_min = 0;
+  int angle_max = 0;
+  PyObject* damage_actions_obj = NULL;
+  if (!PyArg_ParseTuple(args, "OOOiiO", &action_obj, &hitstun_obj, &source_angle_obj, &angle_min,
+                        &angle_max, &damage_actions_obj)) {
+    return NULL;
+  }
+  PyArrayObject* action = require_contiguous_array(action_obj, NPY_UINT16, 1, "action_id");
+  PyArrayObject* hitstun = require_contiguous_array(hitstun_obj, NPY_UINT16, 1, "hitstun_u16");
+  PyArrayObject* source_angle =
+      require_contiguous_array(source_angle_obj, NPY_UINT16, 1, "source_angle_u16");
+  if (action == NULL || hitstun == NULL || source_angle == NULL) {
+    return NULL;
+  }
+  const npy_intp n = PyArray_SIZE(action);
+  if (PyArray_SIZE(hitstun) != n || PyArray_SIZE(source_angle) != n) {
+    PyErr_SetString(PyExc_ValueError, "damage meteor x1A inputs must have the same length");
+    return NULL;
+  }
+  uint16_t damage_actions[256];
+  Py_ssize_t damage_count = 0;
+  if (parse_u16_sequence_fixed(damage_actions_obj, damage_actions, 256, &damage_count,
+                               "damage_actions must be a sequence") < 0) {
+    return NULL;
+  }
+  npy_intp dims[1] = {n};
+  PyArrayObject* out = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_UINT8, 0);
+  if (out == NULL) return NULL;
+  const uint16_t* a = (const uint16_t*)PyArray_DATA(action);
+  const uint16_t* hs = (const uint16_t*)PyArray_DATA(hitstun);
+  const uint16_t* src_angle = (const uint16_t*)PyArray_DATA(source_angle);
+  uint8_t* out_p = (uint8_t*)PyArray_DATA(out);
+  uint8_t x1a = 0u;
+  for (npy_intp i = 0; i < n; i++) {
+    const bool in_damage = u16_in_fixed_set(a[i], damage_actions, damage_count) && hs[i] > 0u;
+    if (!in_damage) {
+      x1a = 0u;
+      continue;
+    }
+    const bool prev_in_damage =
+        i > 0 && u16_in_fixed_set(a[i - 1], damage_actions, damage_count) && hs[i - 1] > 0u;
+    if (i == 0 || !prev_in_damage || hs[i] > hs[i - 1]) {
+      const uint16_t angle = src_angle[i];
+      x1a = (angle != 0xFFFFu && angle != 361u && angle >= (uint16_t)angle_min &&
+             angle <= (uint16_t)angle_max)
+                ? 1u
+                : 0u;
+    }
+    out_p[i] = x1a;
+  }
+  return (PyObject*)out;
+}
+
 PyObject* msl_derive_damage_post_hitlag_cb_kind_py(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* action_obj = NULL;

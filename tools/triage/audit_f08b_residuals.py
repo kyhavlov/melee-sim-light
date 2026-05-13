@@ -95,6 +95,7 @@ def _dataset_path(root: Path, dataset: str) -> Path:
         root / "datasets/aggregate_recent/replays/validation/aggregate_recent" / dataset,
         root / "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent" / dataset,
         root / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent" / dataset,
+        root / "datasets/doubles_recent/replays/validation/doubles_recent" / dataset,
     ]
     for path in candidates:
         if path.exists():
@@ -104,6 +105,8 @@ def _dataset_path(root: Path, dataset: str) -> Path:
         root / "datasets/aggregate_recent/replays/debug",
         root / "datasets/fox_falco_fd_ucf084_recent/replays/validation",
         root / "datasets/fox_falco_fd_ucf084_recent/replays/debug",
+        root / "datasets/doubles_recent/replays/validation",
+        root / "datasets/doubles_recent/replays/debug",
     ):
         if not parent.exists():
             continue

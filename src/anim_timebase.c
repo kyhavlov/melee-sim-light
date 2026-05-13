@@ -292,16 +292,16 @@ static inline int32_t anim_timebase_non_low_throw_rate_snap_delta(const MslBatch
         }
       }
       if (first_pulse_hit_provenance_active) {
-        // ThrowHi mirror mid-pulse callback boundary:
-        // - Existing source-shaped item logic keeps frame-20 rows from serializing the second
-        //   article one callback early when the first state1 shot is already carrying victim
-        //   hitstun/source provenance from this thrower's raw source port and current instance,
-        //   and the previous replay step already recorded an earlier ThrowHi pulse crossing.
-        // - Preserve that boundary here too; the fixed-point snap must not manufacture an earlier
-        //   command crossing than ftAction/ftFx_Throw_Anim exposes.
+        // ThrowHi mid-pulse timebase / command split:
+        // - The AObj timebase can still reach the integer frame-20 state on the 4/3-rate callback;
+        //   holding the fighter action frame below the integer creates replay-visible state_age
+        //   drift.
+        // - The article pulse is a separate ftAction/ftFx_Throw_Anim command-cursor owner. `items.c`
+        //   keeps the frame-20 command on the following callback when the frame-18 source-proven
+        //   hit is still active, instead of using the timebase snap itself as article authority.
         // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
         // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
-        return 0;
+        return delta_to_integer;
       }
     }
     return delta_to_integer;

@@ -2960,6 +2960,7 @@ def _main_impl(args) -> Dataset:
         derive_colanim_internals,
         derive_downwait_timer,
         derive_damage_jump_buffer_x14,
+        derive_damage_meteor_cancel_x1a,
         derive_damage_entry_tilt_timer_reset_post_mask,
         derive_damage_hitlag_sdi_reset_post_mask,
         derive_damage_post_hitlag_cb_kind,
@@ -3269,6 +3270,10 @@ def _main_impl(args) -> Dataset:
     act_landing_fall_special = 0x002B
     act_fx_special_n_loop = 0x0156
     act_fx_special_air_n_loop = 0x0159
+    act_fx_special_s = 0x015C
+    act_fx_special_s_end = 0x015D
+    act_fx_special_air_s = 0x015F
+    act_fx_special_air_s_end = 0x0160
     act_fx_special_hi = 0x0163
     act_fx_special_air_hi = 0x0164
     act_fx_special_hi_landing = 0x0165
@@ -3362,6 +3367,7 @@ def _main_impl(args) -> Dataset:
     # GALE01 p_ftCommonData->x814 initializes fp->dmg.x18C8 in Fighter_ChangeMotionState.
     # refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
     source_clear_x18c8_init_frames = 60
+    char_fox = 1
     char_falco = 22
     button_mask_xy = 0x0400 | 0x0800  # HSD_PAD_XY / src/buttons.h::MSL_BUTTON_XY
     button_mask_lr = 0x0040 | 0x0020  # HSD_PAD_L|HSD_PAD_R / src/buttons.h::MSL_BUTTON_{L,R}
@@ -4943,6 +4949,82 @@ def _main_impl(args) -> Dataset:
             spawn_rng_seed_valid[spawn_rng_owner] = np.uint8(1)
         samples["seed_t"]["stage_yoshi_shyguy_spawn_rng_seed_u32"] = spawn_rng_seed
         samples["seed_t"]["stage_yoshi_shyguy_spawn_rng_seed_valid_u8"] = spawn_rng_seed_valid
+
+    # Damage meteor-cancel x1A seed lane (bit-packed into damage_post_hitlag_cb_kind bit 7).
+    #
+    # Decomp owner:
+    # - ftCo_Damage_CalcAngle calls ftColl_8007AC68 only when the raw source angle is not 361.
+    # - Sakurai-angle Side-B hits can produce a vertical visible KB vector, but they must not set
+    #   x1A unless the source item/hitbox raw angle is actually in p_ftCommonData->x7E8..x7EC.
+    #
+    # Current prefix-causal source coverage:
+    # - Fox/Falco Illusion/Phantasm End-phase item state is data-backed in data/characters/*.json.
+    #   Runtime uses the same item-state angles in src/items.c -> combat_apply_item_hit, but main
+    #   dash article rows stay clear here because HVG proves their downward KB must not seed x1A.
+    # - Unknown source angles remain 0xFFFF and do not seed x1A; free-running runtime still sets
+    #   x1A from raw hitbox/item angles at damage entry.
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007AC68
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_CalcAngle
+    # refs/melee/src/melee/it/items/itfoxillusion.c
+    fox_attrs = json.loads((data_root / "characters" / "fox.json").read_text())
+    falco_attrs = json.loads((data_root / "characters" / "falco.json").read_text())
+    illusion_end_angle_by_char = {
+        int(char_fox): int(fox_attrs["illusion_item_state1_angle"]),
+        int(char_falco): int(falco_attrs["illusion_item_state1_angle"]),
+    }
+    source_port0_by_slot = np.array([int(p) - 1 for p in src_ports], dtype=np.uint8)
+    damage_action_family = (
+        act_damage_hi_1,
+        act_damage_hi_2,
+        act_damage_hi_3,
+        act_damage_n_1,
+        act_damage_n_2,
+        act_damage_n_3,
+        act_damage_lw_1,
+        act_damage_lw_2,
+        act_damage_lw_3,
+        act_damage_air_1,
+        act_damage_air_2,
+        act_damage_air_3,
+        act_damage_fly_hi,
+        act_damage_fly_n,
+        act_damage_fly_lw,
+        act_damage_fly_top,
+        act_damage_fly_roll,
+        act_damage_fall,
+    )
+    for slot in range(num_players):
+        source_angle = np.full(samples.shape[0], np.uint16(0xFFFF), dtype=np.uint16)
+        last_hit_by_seed = samples["seed_t"]["last_hit_by"][:, slot].astype(np.uint8)
+        for src_slot in range(num_players):
+            source_mask = last_hit_by_seed == source_port0_by_slot[src_slot]
+            if not np.any(source_mask):
+                continue
+            src_action = samples["seed_t"]["action_id"][:, src_slot].astype(np.uint16)
+            src_char = samples["seed_t"]["char_id"][:, src_slot].astype(np.uint8)
+            for char_id, angle in illusion_end_angle_by_char.items():
+                char_mask = source_mask & (src_char == np.uint8(char_id))
+                if not np.any(char_mask):
+                    continue
+                end_mask = char_mask & (
+                    (src_action == np.uint16(act_fx_special_s_end))
+                    | (src_action == np.uint16(act_fx_special_air_s_end))
+                )
+                source_angle[end_mask] = np.uint16(angle)
+
+        damage_meteor_cancel_x1a = derive_damage_meteor_cancel_x1a(
+            action_id=samples["seed_t"]["action_id"][:, slot],
+            hitstun_u16=samples["seed_t"]["hitstun"][:, slot],
+            source_angle_u16=source_angle,
+            angle_min_deg=int(common["damage_meteor_cancel_angle_min_deg"]),
+            angle_max_deg=int(common["damage_meteor_cancel_angle_max_deg"]),
+            damage_actions=damage_action_family,
+        )
+        samples["seed_t"]["damage_post_hitlag_cb_kind"][:, slot] = np.bitwise_or(
+            samples["seed_t"]["damage_post_hitlag_cb_kind"][:, slot].astype(np.uint8),
+            np.left_shift(damage_meteor_cancel_x1a.astype(np.uint8), np.uint8(7)),
+        ).astype(np.uint8)
+
     # Throw pulse-consume seed lane (causal producer):
     # - runtime consumes this lane in src/items.c throw-side pulse reconstruction suppressor.
     # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim

@@ -1540,6 +1540,44 @@ def derive_damage_jump_buffer_x14(
     )
 
 
+def derive_damage_meteor_cancel_x1a(
+    *,
+    action_id: np.ndarray,
+    hitstun_u16: np.ndarray,
+    source_angle_u16: np.ndarray,
+    angle_min_deg: int,
+    angle_max_deg: int,
+    damage_actions: tuple[int, ...],
+) -> np.ndarray:
+    """
+    Derive `fp->mv.co.damage.x1A` (meteor-cancel eligibility) per post-frame.
+
+    Causality / prefix-invariance:
+    - Uses only <=t replay rows.
+    - Samples the source hit angle only at causal damage-entry / fresh-hit boundaries, then carries
+      the hidden x1A bit through the continuous damage episode. Later DI-adjusted KB vectors are
+      deliberately ignored; Sakurai-angle rows can become visibly vertical without source x1A.
+
+    Decomp anchors:
+    - `ftColl_8007AC68` sets x1A from the source hit angle window.
+    - `doIasa` consumes x1A with the x1B lockout before immediate JumpAerial/SpecialAirHi escape.
+    """
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.derive_damage_meteor_cancel_x1a is required; run `make build`"
+        ) from exc
+    return msl_binding.derive_damage_meteor_cancel_x1a(
+        np.ascontiguousarray(action_id, dtype=np.uint16).reshape(-1),
+        np.ascontiguousarray(hitstun_u16, dtype=np.uint16).reshape(-1),
+        np.ascontiguousarray(source_angle_u16, dtype=np.uint16).reshape(-1),
+        int(angle_min_deg),
+        int(angle_max_deg),
+        tuple(int(v) for v in damage_actions),
+    )
+
+
 def derive_damage_post_hitlag_cb_kind(
     *,
     action_id: np.ndarray,

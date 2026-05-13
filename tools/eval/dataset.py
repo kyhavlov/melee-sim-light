@@ -479,9 +479,9 @@ SEED_DTYPE = np.dtype(
         ("stale_queue_index", _arr("u1", MAX_PLAYERS)),
         ("stale_move_id", ("<u2", (MAX_PLAYERS, STALE_QUEUE_SIZE))),
         ("stale_attack_instance", ("<u2", (MAX_PLAYERS, STALE_QUEUE_SIZE))),
-        # Damage hitlag-exit callback lane (decomp: fp->post_hitlag_cb = ftCo_Damage_OnExitHitlag).
-        # Slippi does not expose callback pointers; this seeded lane is derived causally from replay
-        # history for one-step reseed parity.
+        # Bit-packed damage hidden lane:
+        # - low nibble: hitlag-exit callback kind (fp->post_hitlag_cb = ftCo_Damage_OnExitHitlag)
+        # - bit 7: meteor-cancel x1A eligibility (fp->mv.co.damage.x1A)
         ("damage_post_hitlag_cb_kind", _arr("u1", MAX_PLAYERS)),
         # Grounded attacker-on-shield knockback scalar (`fp->xF4_ground_attacker_shield_kb_vel`).
         ("attacker_shield_ground_kb_vel", _arr("<f4", MAX_PLAYERS)),

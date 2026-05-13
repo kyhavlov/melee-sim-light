@@ -543,6 +543,18 @@ def main() -> None:
         # `mv.co.damage.x14` is set to the current timer `x0`, and subsequent IASA frames inject
         # `input.x668 |= HSD_PAD_XY` while `x14 <= x1D0`.
         "damage_jump_buffer_window_frames": int(round(float(_f32_be(buf, ft_common_abs + 0x1D0)))),
+        # Meteor-cancel immediate escape branch in Damage `doIasa`.
+        #
+        # Decomp:
+        # - `ftColl_8007AC68` marks kb angles inside [x7E8, x7EC] as meteor-cancel eligible
+        #   (`mv.co.damage.x1A`).
+        # - `doIasa` decrements `mv.co.damage.x1B`, initialized from x7F0, and only admits the
+        #   immediate SpecialAirHi / JumpAerial path once that lockout expires.
+        # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007AC68
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_CalcAngle,doIasa}
+        "damage_meteor_cancel_angle_min_deg": int(_u32_be(buf, ft_common_abs + 0x7E8)),
+        "damage_meteor_cancel_angle_max_deg": int(_u32_be(buf, ft_common_abs + 0x7EC)),
+        "damage_meteor_cancel_lockout_frames": int(max(0, _i32_be(buf, ft_common_abs + 0x7F0))),
         # DamageFlyTop angle window (radians).
         # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0 (block_33)
         "damagefly_top_angle_min_radians": float(_f32_be(buf, ft_common_abs + 0x234)),

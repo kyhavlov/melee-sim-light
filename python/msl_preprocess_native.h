@@ -34,6 +34,7 @@ PyObject* msl_derive_turn_internals_py(PyObject* self, PyObject* args);
 PyObject* msl_compute_x672_trigger_timer_pre_post_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_downwait_timer_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_damage_jump_buffer_x14_py(PyObject* self, PyObject* args);
+PyObject* msl_derive_damage_meteor_cancel_x1a_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_damage_post_hitlag_cb_kind_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_guard_tilt_state_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_shine_release_state_py(PyObject* self, PyObject* args);

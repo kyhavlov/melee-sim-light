@@ -62,6 +62,18 @@ static inline void reseed_ecb_rel_points_sample(MslEcbWorldPoints* out, uint8_t 
   msl_ecb_world_points_sample(out, char_id, anim, frame, facing_dir, 0.0f, 0.0f, force_zero);
 }
 
+static inline uint8_t reseed_throwhi_deferred_mid_pulse_rate_source_step(int32_t rate_q16_16) {
+  // Source step owner for the 4/3 ThrowHi frame-20 deferred cursor lane. Keep this as a
+  // quantized equality against the decomp-owned throw rate, not a broad "greater than 1.25"
+  // threshold, so ordinary 1.25x ThrowHi rows remain on current-callback serialization.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD4B0
+  // refs/melee/src/melee/ft/ftaction.c::ftAction_80073354
+  const int32_t target_q16_16 = msl_q16_16_from_f32(4.0f / 3.0f);
+  const int32_t delta = (rate_q16_16 >= target_q16_16) ? (rate_q16_16 - target_q16_16)
+                                                       : (target_q16_16 - rate_q16_16);
+  return (delta <= 1) ? 1u : 0u;
+}
+
 static inline void reseed_prev_ecb_rel_points_sample(MslEcbWorldPoints* out, uint8_t char_id,
                                                      uint32_t fallback_anim,
                                                      float fallback_anim_frame_f32,
@@ -1890,7 +1902,11 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       }
       batch->state.damage_time_since_hit_x18ac[idx] = x18ac;
       batch->state.damage_jump_buffer_x14[idx] = seed->damage_jump_buffer_x14[p];
-      batch->state.damage_post_hitlag_cb_kind[idx] = seed->damage_post_hitlag_cb_kind[p];
+      const uint8_t damage_cb_packed = seed->damage_post_hitlag_cb_kind[p];
+      batch->state.damage_post_hitlag_cb_kind[idx] =
+          (uint8_t)(damage_cb_packed & (uint8_t)MSL_DAMAGE_POST_HITLAG_CB_KIND_MASK);
+      batch->state.damage_meteor_cancel_eligible_x1a[idx] =
+          ((damage_cb_packed & (uint8_t)MSL_DAMAGE_METEOR_CANCEL_X1A_MASK) != 0u) ? 1u : 0u;
       batch->state.attacker_shield_ground_kb_vel[idx] = seed->attacker_shield_ground_kb_vel[p];
       batch->state.throw_pending_victim_port[idx] = 0xFFu;
       batch->state.attached_victim_port[idx] = 0xFFu;
@@ -2567,8 +2583,8 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       const float rate = seed->frame_speed_mul_f32[p];
       if (rollout_owned_after != (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED ||
           batch->state.throw_anim_rate_fp_q16_16[idx] != 0 ||
-          batch->state.frame_speed_mul_fp_q16_16[idx] <=
-              ((int32_t)MSL_Q16_16_ONE + ((int32_t)MSL_Q16_16_ONE / 4)) ||
+          !reseed_throwhi_deferred_mid_pulse_rate_source_step(
+              batch->state.frame_speed_mul_fp_q16_16[idx]) ||
           lp == NULL || char_id != (uint8_t)MSL_CHAR_FALCO ||
           action != (uint16_t)MSL_ACT_THROW_HI ||
           seed->throw_command_pending_pulse_frame[p] != 0u ||

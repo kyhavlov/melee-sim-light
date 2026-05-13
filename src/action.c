@@ -363,8 +363,10 @@ static inline uint8_t escape_try_enter_spotdodge_from_guard(MslBatch* batch,
                                                  tilt_timer_x, tilt_timer_y);
 }
 
-uint8_t wait_iasa_try_enter_spotdodge_before_guard(MslBatch* batch, const MslCommonParams* c,
-                                                   size_t idx) {
+static inline uint8_t wait_iasa_try_enter_spotdodge_before_guard_impl(MslBatch* batch,
+                                                                      const MslCommonParams* c,
+                                                                      size_t idx,
+                                                                      uint8_t use_hsd_lr_lane) {
   if (batch == NULL || c == NULL) {
     return 0u;
   }
@@ -375,9 +377,21 @@ uint8_t wait_iasa_try_enter_spotdodge_before_guard(MslBatch* batch, const MslCom
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::{
   //   ftCo_80099794,ftCo_80099894,ftCo_800998EC}
-  const uint16_t lr = (uint16_t)(MSL_BUTTON_L | MSL_BUTTON_R);
-  if ((batch->state.input_buttons[idx] & lr) == 0u) {
-    return 0u;
+  const uint16_t lr = use_hsd_lr_lane ? (uint16_t)(MSL_BUTTON_L | MSL_BUTTON_R | MSL_BUTTON_Z)
+                                      : (uint16_t)(MSL_BUTTON_L | MSL_BUTTON_R);
+  const uint16_t buttons = batch->state.input_buttons[idx];
+  if ((buttons & lr) == 0u) {
+    if (!use_hsd_lr_lane) {
+      return 0u;
+    }
+    // Fighter input synthesis maps analog trigger values past p_ftCommonData->x10 into
+    // held_inputs & HSD_PAD_LR before callbacks consume ftCo_80099794.
+    // refs/melee/src/melee/ft/fighter.c:1868-1890
+    const float trig =
+        msl_trigger_unit_from_input(buttons, batch->state.input_l[idx], batch->state.input_r[idx]);
+    if (trig <= c->trigger_deadzone) {
+      return 0u;
+    }
   }
   const float stick_y =
       apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
@@ -392,6 +406,16 @@ uint8_t wait_iasa_try_enter_spotdodge_before_guard(MslBatch* batch, const MslCom
   return escape_try_enter_spotdodge_from_guard_y(batch, c, idx, stick_x, stick_y, cstick_y,
                                                  batch->state.tilt_timer_x[idx],
                                                  batch->state.tilt_timer_y[idx]);
+}
+
+uint8_t wait_iasa_try_enter_spotdodge_before_guard(MslBatch* batch, const MslCommonParams* c,
+                                                   size_t idx) {
+  return wait_iasa_try_enter_spotdodge_before_guard_impl(batch, c, idx, 0u);
+}
+
+uint8_t wait_iasa_try_enter_spotdodge_before_guard_hsd_lr(MslBatch* batch, const MslCommonParams* c,
+                                                          size_t idx) {
+  return wait_iasa_try_enter_spotdodge_before_guard_impl(batch, c, idx, 1u);
 }
 
 uint8_t escape_try_enter_from_guard(MslBatch* batch, const MslCommonParams* c, size_t idx) {

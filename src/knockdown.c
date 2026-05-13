@@ -647,6 +647,40 @@ static inline uint8_t damage_air_try_jump_aerial(MslBatch* batch, const MslCommo
   return 1u;
 }
 
+static inline uint8_t damage_meteor_cancel_eligible(const MslBatch* batch, const MslCommonParams* c,
+                                                    size_t idx) {
+  if (batch == NULL || c == NULL || batch->state.on_ground[idx] != 0u ||
+      batch->state.speed_y_attack[idx] >= 0.0f) {
+    return 0u;
+  }
+
+  // Decomp owner:
+  // - `ftColl_8007AC68` sets mv.co.damage.x1A only for kb angles inside p_ftCommonData
+  //   [x7E8, x7EC].
+  // - `doIasa` decrements mv.co.damage.x1B, initialized from p_ftCommonData->x7F0, before
+  //   immediate meteor-cancel escape dispatch. This runtime slice currently retains the
+  //   JumpAerial branch; SpecialHi admission needs its own input/source-owner lock before closure.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007AC68
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_CalcAngle,doIasa}
+  if (batch->state.damage_meteor_cancel_eligible_x1a[idx] == 0u) {
+    return 0u;
+  }
+  return (batch->state.action_frame[idx] >= (int16_t)c->damage_meteor_cancel_lockout_frames) ? 1u
+                                                                                             : 0u;
+}
+
+static inline uint8_t damage_try_meteor_cancel_jump_aerial(MslBatch* batch,
+                                                           const MslCommonParams* c,
+                                                           const MslCharParams* ch, size_t idx) {
+  if (!damage_meteor_cancel_eligible(batch, c, idx)) {
+    return 0u;
+  }
+  if (!damage_jump_input_from_edges(batch, c, idx)) {
+    return 0u;
+  }
+  return damage_air_try_jump_aerial(batch, c, ch, idx, 1u);
+}
+
 static inline uint8_t cstick_up_edge(const MslBatch* batch, const MslCommonParams* c, size_t idx) {
   if (batch == NULL || c == NULL) {
     return 0;
@@ -923,15 +957,25 @@ static inline uint8_t should_enter_down_attack_from_bound(const MslBatch* batch,
   // - Restrict the timer lane to post-entry presses by requiring timer < action_frame.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_8009794C
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Down.c::ftCo_80098400
-  const uint8_t x67c_recent =
-      ((float)batch->state.x67C[idx] < c->down_attack_button_window_frames) ? 1u : 0u;
-  const uint8_t x67d_recent =
-      ((float)batch->state.x67D[idx] < c->down_attack_button_window_frames) ? 1u : 0u;
   const uint8_t ab_pressed_now =
       ((batch->state.input_buttons_pressed[idx] &
         (uint16_t)((uint16_t)MSL_BUTTON_A | (uint16_t)MSL_BUTTON_B)) != 0u)
           ? 1u
           : 0u;
+  uint8_t x67c = batch->state.x67C[idx];
+  // Source order runs DownBound_Anim before Fighter_procUpdate refreshes input history. When a
+  // same-frame A edge has already reset x67C in this simulator pass, x683 holds the source
+  // pre-input A timer that ftCo_80098400 should see. Stale/pre-entry captures remain rejected by
+  // the post-entry timer test below.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Anim
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Down.c::ftCo_80098400
+  if ((batch->state.input_buttons_pressed[idx] & (uint16_t)MSL_BUTTON_A) != 0u && x67c == 0u) {
+    x67c = batch->state.x683[idx];
+  }
+  const uint8_t x67c_recent = ((float)x67c < c->down_attack_button_window_frames) ? 1u : 0u;
+  const uint8_t x67d_recent =
+      ((float)batch->state.x67D[idx] < c->down_attack_button_window_frames) ? 1u : 0u;
   if (x67c_recent || x67d_recent) {
     const int16_t af_i16 = batch->state.action_frame[idx];
     const uint16_t af = (af_i16 > 0) ? (uint16_t)af_i16 : 0u;
@@ -942,10 +986,10 @@ static inline uint8_t should_enter_down_attack_from_bound(const MslBatch* batch,
     // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Anim
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Down.c::ftCo_80098400
-    const uint8_t x67c_same_frame_edge = (ab_pressed_now && batch->state.x67C[idx] == 0u) ? 1u : 0u;
+    const uint8_t x67c_same_frame_edge = (ab_pressed_now && x67c == 0u) ? 1u : 0u;
     const uint8_t x67d_same_frame_edge = (ab_pressed_now && batch->state.x67D[idx] == 0u) ? 1u : 0u;
     const uint8_t x67c_post_entry =
-        (!x67c_same_frame_edge && (af == 0u || (uint16_t)batch->state.x67C[idx] < af)) ? 1u : 0u;
+        (!x67c_same_frame_edge && (af == 0u || (uint16_t)x67c < af)) ? 1u : 0u;
     const uint8_t x67d_post_entry =
         (!x67d_same_frame_edge && (af == 0u || (uint16_t)batch->state.x67D[idx] < af)) ? 1u : 0u;
     if ((x67c_recent && x67c_post_entry) || (x67d_recent && x67d_post_entry)) {
@@ -1184,6 +1228,17 @@ void knockdown_update_pre_physics(MslBatch* batch) {
         const uint8_t should_enter_damage_fall =
             fly_roll ? (uint8_t)(!in_hitstun && !iasa_locked)
                      : (uint8_t)(!in_hitstun && !iasa_locked && anim_done);
+        if (in_hitstun && iasa_locked && damage_try_meteor_cancel_jump_aerial(batch, c, ch, idx)) {
+          batch->state.speed_x_attack[idx] = 0.0f;
+          batch->state.speed_y_attack[idx] = 0.0f;
+          batch->state.hitstun[idx] = 0u;
+          batch->state.damage_jump_buffer_x14[idx] = 0u;
+          batch->state.damage_meteor_cancel_eligible_x1a[idx] = 0u;
+          batch->state.state_flags[idx * (size_t)MSL_STATE_FLAGS_BYTES +
+                                   (size_t)MSL_STATE_FLAGS_221C_BYTE_INDEX] &=
+              (uint8_t) ~(uint8_t)MSL_STATE_FLAGS_221C_B6_MASK;
+          continue;
+        }
         if (in_hitstun && iasa_locked && damage_jump_input_from_edges(batch, c, idx)) {
           // DamageFly/DamageFlyRoll IASA uses the same x221C_b6 `doIasa` path as common Damage:
           // a qualifying jump input snapshots mv.co.damage.x0 into x14 before the later
@@ -1249,6 +1304,17 @@ void knockdown_update_pre_physics(MslBatch* batch) {
 
         const uint8_t in_hitstun = (batch->state.hitstun[idx] > 0) ? 1u : 0u;
         const uint8_t iasa_locked = damage_iasa_lockout_x221c_b6(batch, idx);
+        if (in_hitstun && iasa_locked && damage_try_meteor_cancel_jump_aerial(batch, c, ch, idx)) {
+          batch->state.speed_x_attack[idx] = 0.0f;
+          batch->state.speed_y_attack[idx] = 0.0f;
+          batch->state.hitstun[idx] = 0u;
+          batch->state.damage_jump_buffer_x14[idx] = 0u;
+          batch->state.damage_meteor_cancel_eligible_x1a[idx] = 0u;
+          batch->state.state_flags[idx * (size_t)MSL_STATE_FLAGS_BYTES +
+                                   (size_t)MSL_STATE_FLAGS_221C_BYTE_INDEX] &=
+              (uint8_t) ~(uint8_t)MSL_STATE_FLAGS_221C_B6_MASK;
+          continue;
+        }
         if (in_hitstun && damage_jump_input_from_edges(batch, c, idx)) {
           // Decomp: doIasa snapshots x0 into mv.co.damage.x14 when ftCo_Jump_GetInput succeeds.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::doIasa

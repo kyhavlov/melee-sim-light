@@ -215,6 +215,11 @@ static inline uint8_t hitboxes_seed_bridge_create_edge_guard_admission_dense_app
       hit_group >= (uint8_t)MSL_HITLIST_GROUPS) {
     return 0u;
   }
+  // Temporary teacher-forced rollout reconstruction only:
+  // - Free-running and ordinary one-step reseed paths do not set replay_rollout_reseeded, so they
+  //   cannot materialize this dense HitCapsule victims_1 provenance.
+  // - The broader closure is an explicit seeded HitCapsule provenance lane before refresh; until
+  //   then this stays labeled as rollout seed reconstruction rather than runtime collision logic.
   if (batch->replay_rollout_reseeded == NULL || batch->replay_rollout_reseeded[bi] == 0u) {
     return 0u;
   }
@@ -332,6 +337,81 @@ hitboxes_teacher_seed_reconstruct_create_edge_guardon_shielddesc_miss_dense_appl
     // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
     // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
     // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80007BCC}
+    return 1u;
+  }
+  return 0u;
+}
+
+static inline uint8_t hitboxes_seed_reconstruct_create_edge_powershield_dense_applies(
+    const MslBatch* batch, int bi, int attacker, uint8_t hit_group) {
+  if (batch == NULL || bi < 0 || attacker < 0 || attacker >= (int)MSL_MAX_PLAYERS ||
+      hit_group >= (uint8_t)MSL_HITLIST_GROUPS) {
+    return 0u;
+  }
+  if (batch->replay_rollout_reseeded == NULL || batch->replay_rollout_reseeded[bi] == 0u) {
+    return 0u;
+  }
+  const size_t a_idx = msl_idx_player(bi, attacker);
+  if (!msl_motion_state_common_class_has(batch->state.action_id[a_idx],
+                                         MSL_MS_CLASS_GROUNDED_ATTACK) ||
+      batch->state.hitlag[a_idx] != 0u || batch->state.hitstun[a_idx] != 0u) {
+    return 0u;
+  }
+
+  enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
+  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
+  enum { MSL_STATE_FLAG_221C_POWERSHIELD_ACTIVE = 0x20 };
+
+  const size_t group_base =
+      (size_t)bi * (size_t)MSL_MAX_PLAYERS * (size_t)MSL_HITLIST_GROUPS * (size_t)MSL_MAX_PLAYERS;
+  for (int victim = 0; victim < (int)batch->config.num_players; victim++) {
+    if (victim == attacker) {
+      continue;
+    }
+    const size_t cd_i =
+        group_base + (((size_t)attacker * (size_t)MSL_HITLIST_GROUPS + (size_t)hit_group) *
+                          (size_t)MSL_MAX_PLAYERS +
+                      (size_t)victim);
+    if (batch->state.combat_hitlist_cd[cd_i] == 0u) {
+      continue;
+    }
+    const size_t v_idx = msl_idx_player(bi, victim);
+    const uint16_t v_action = batch->state.action_id[v_idx];
+    if (v_action != (uint16_t)MSL_ACT_GUARD_REFLECT ||
+        batch->state.guard_reflect_origin_guardon[v_idx] == 0u ||
+        batch->state.hitlag[v_idx] != 0u || batch->state.hitstun[v_idx] != 0u) {
+      continue;
+    }
+    const uint8_t flags_221c =
+        batch->state.state_flags[v_idx * MSL_STATE_FLAGS_STRIDE + MSL_STATE_FLAGS_221C_INDEX];
+    const uint8_t powershield_active =
+        (flags_221c & (uint8_t)MSL_STATE_FLAG_221C_POWERSHIELD_ACTIVE) ? 1u : 0u;
+    if (!powershield_active && batch->state.guard_reflect_timer_x18[v_idx] == 0u) {
+      continue;
+    }
+    const uint16_t stored_iid = batch->state.combat_hitlist_victim_iid[cd_i];
+    if (stored_iid != 0u && stored_iid != batch->state.instance_id[v_idx] &&
+        hitboxes_hitlist_victim_pointer_may_change(batch->state.stocks[v_idx],
+                                                   batch->state.action_id[v_idx])) {
+      continue;
+    }
+    // Teacher-forced rollout create-edge HitCapsule seed reconstruction:
+    // - GuardOn-origin GuardReflect powershield contact registers the attacker HitCapsule victim
+    //   before branching on x221C_b2. The x221C_b2 branch suppresses ordinary shield damage /
+    //   GuardSetOff effects, so replay-visible state can look like "no hit" while the hidden
+    //   victims_1 latch still suppresses a later BODY fallthrough from the same hit_group.
+    // - This helper is gated by `replay_rollout_reseeded`; ordinary one-step reseed and
+    //   free-running runtime paths cannot enter it.
+    // - This is not source-closed runtime HitCapsule authority. The source-closed shape is an
+    //   explicit seeded HitCapsule provenance lane before refresh. Until then, keep this limited to
+    //   teacher-forced rollout reconstruction and GuardOn-origin GuardReflect provenance instead of
+    //   widening ShieldDesc geometry or applying stale dense victims to ordinary Guard/GuardSetOff
+    //   transitions.
+    //
+    // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+    // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076CBC,ftColl_80078C70}
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80094138
+    // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008688,lbColl_8000ACFC}
     return 1u;
   }
   return 0u;
@@ -1620,6 +1700,10 @@ void hitboxes_refresh(MslBatch* batch) {
               const size_t dst_i = idx_hitbox(bi, p, hb);
               if (hitboxes_seed_bridge_create_edge_guard_admission_dense_applies(batch, bi, p,
                                                                                  new_g)) {
+                hitlist_seed_init_fighter_hitbox_from_group_allow_stale_iid(batch, bi, p, (int)hb,
+                                                                            new_g);
+              } else if (hitboxes_seed_reconstruct_create_edge_powershield_dense_applies(
+                             batch, bi, p, new_g)) {
                 hitlist_seed_init_fighter_hitbox_from_group_allow_stale_iid(batch, bi, p, (int)hb,
                                                                             new_g);
               } else if (

@@ -477,6 +477,14 @@ typedef struct MslCommonParams {
   float damage_severity_x158;  // p_ftCommonData->0x158
   float damage_severity_x15c;  // p_ftCommonData->0x15C
   float damage_severity_x160;  // p_ftCommonData->0x160
+  // Damage meteor-cancel immediate escape branch:
+  // - x7E8/x7EC are the kb-angle window for `mv.co.damage.x1A`,
+  // - x7F0 seeds the `mv.co.damage.x1B` input lockout countdown.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007AC68
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::doIasa
+  uint16_t damage_meteor_cancel_angle_min_deg;
+  uint16_t damage_meteor_cancel_angle_max_deg;
+  uint16_t damage_meteor_cancel_lockout_frames;
   // Grounded tumble-only meteor rebound branch in ftCo_8008DCE0:
   // - if grounded and KB angle vs floor normal exceeds PI/2 + x1E8, vertical KB reflects upward
   //   with multiplier x1EC instead of keeping the raw downward Y component.
