@@ -231,6 +231,79 @@ def test_passivewall_entry_uses_source_wall_anchor_and_clears_kb_distinctcaringc
 
 
 @pytest.mark.integration
+def test_passivewalljump_entry_uses_mpcoll_wall_contact_his_lock() -> None:
+    # Replay-real lock for DamageFlyTop -> PassiveWallJump placement on the FD lower right wall:
+    # - DamageFly_Coll's wall pass writes the source wall-side contact before ftCo_800C1E64
+    #   snapshots coll->ecb.left for the PassiveWallJump root snap.
+    # - Resampling the outgoing animation ECB side after the wall pass is too late and places the
+    #   startup hold 0.416 units to the right, which cascades into the later HIS blastzone death.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::ftCo_800C1E64
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_800831CC,ft_800835B0}
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047E14,mpColl_80046904}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl"
+    if not dataset_path.exists():
+        pytest.skip("missing aggregate validation dataset: HungryImportantSnake.msl")
+
+    p = 1
+    entry_record = 1789
+    seed, ref_entry, out_entry = _run_one_step_row(dataset_path, entry_record, p)
+    assert int(seed["action_id"][p]) == 90  # DamageFlyTop
+    assert int(seed["mpcoll_wall_kind_seed_u8"][p]) == 2
+    assert int(seed["mpcoll_wall_id_seed_u16"][p]) == 9
+    assert int(ref_entry["action_id"][p]) == 203  # PassiveWallJump
+
+    for field in ("action_id", "animation_index", "action_frame", "facing", "hitstun", "hurtbox_state"):
+        assert int(out_entry[field][p]) == int(ref_entry[field][p]), (
+            f"field={field} expected={int(ref_entry[field][p])} got={int(out_entry[field][p])}"
+        )
+    for field in ("pos_x", "pos_y", "speed_x_attack", "speed_y_attack", "speed_air_x_self", "speed_y_self"):
+        assert float(out_entry[field][p]) == pytest.approx(float(ref_entry[field][p]), abs=1e-5), (
+            f"field={field} expected={float(ref_entry[field][p])} got={float(out_entry[field][p])}"
+        )
+
+
+@pytest.mark.integration
+def test_passivewalljump_current_stick_entry_uses_outgoing_ecb_side_ppa_lock() -> None:
+    # Replay-real negative for overusing the replay-seeded wall-contact anchor:
+    # - this DamageFlyTop -> PassiveWallJump row has no mpColl wall seed and x67E is expired,
+    #   so ftCo_800C1E0C reaches PassiveWallJump from current tap-jump stick instead of the
+    #   rewind-wall branch,
+    # - ftCo_800C1E64 still snapshots the outgoing ECB side, but the lite wall_contact_x from the
+    #   same frame is not the source rewind contact used by the HIS/DCC positives.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::{ftCo_800C1E0C,ftCo_800C1E64}
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_800831CC,ft_800835B0}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl"
+    if not dataset_path.exists():
+        pytest.skip("missing aggregate validation dataset: PriceyPartialAlbatross.msl")
+
+    p = 0
+    record = 902
+    seed, ref_entry, out_entry = _run_one_step_row(dataset_path, record, p)
+    assert int(seed["action_id"][p]) == 90  # DamageFlyTop
+    assert int(seed["mpcoll_wall_kind_seed_u8"][p]) == 0
+    assert int(seed["mpcoll_wall_id_seed_u16"][p]) == 0xFFFF
+    assert int(seed["x67E"][p]) == 0xFF
+    assert int(ref_entry["action_id"][p]) == 203  # PassiveWallJump
+
+    for field in ("action_id", "animation_index", "action_frame", "facing", "hitstun", "hurtbox_state"):
+        assert int(out_entry[field][p]) == int(ref_entry[field][p]), (
+            f"field={field} expected={int(ref_entry[field][p])} got={int(out_entry[field][p])}"
+        )
+    for field in ("pos_y", "speed_x_attack", "speed_y_attack", "speed_air_x_self", "speed_y_self"):
+        assert float(out_entry[field][p]) == pytest.approx(float(ref_entry[field][p]), abs=1e-5), (
+            f"field={field} expected={float(ref_entry[field][p])} got={float(out_entry[field][p])}"
+        )
+    assert abs(float(out_entry["pos_x"][p]) - float(ref_entry["pos_x"][p])) < 0.5
+
+
+@pytest.mark.integration
 def test_passivewalljump_terminal_x1990_clears_hurtbox_state_hvg_lock() -> None:
     # Replay-real lock for PassiveWallJump x198C/x1990 terminal ownership:
     # - ftCo_800C1E64 starts x1990 via ftColl_8007B760(..., p_ftCommonData->x764) on entry.

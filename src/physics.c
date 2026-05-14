@@ -1776,6 +1776,19 @@ void physics_integrate(MslBatch* batch) {
                                                  physics_prev_anim_frame_f32(batch, idx),
                                                  physics_cur_anim_frame_f32(batch, idx), dxyz)) {
               batch->state.speed_y_self[idx] = dxyz[1];
+              if (dxyz[1] > ch->terminal_vel && batch->state.jumps_left[idx] == 0u) {
+                // SpecialHiBound's rebound motion remains GA_Air, but source rebound common-air
+                // bookkeeping has refreshed x1968_jumpsUsed to one before the visible rebound
+                // launch TransN impulse. Slippi records the inverse `jumps_left`, so the first
+                // upward root-motion tick large enough to exceed the character's ordinary fall
+                // terminal velocity publishes max_jumps - 1 instead of leaving the launch-consumed
+                // zero-jump state in place; tiny floor-bias/root settle deltas remain unchanged.
+                // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
+                // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+                //   ftFx_SpecialHiBound_Enter,ftFx_SpecialHiBound_Phys}
+                batch->state.jumps_left[idx] =
+                    (ch->max_jumps > 0u) ? (uint8_t)(ch->max_jumps - 1u) : 0u;
+              }
             }
             batch->state.speed_air_x_self[idx] =
                 physics_apply_ftcommon_8007cf58_x_clamp(ch, c, batch->state.speed_air_x_self[idx]);

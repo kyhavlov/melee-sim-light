@@ -48,6 +48,41 @@ def _step_one_row_with_seed(dataset_path: Path, record: int, seed: np.ndarray) -
     return out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0], ref
 
 
+def _step_one_row_with_seed_one_step(dataset_path: Path, record: int, seed: np.ndarray) -> tuple[np.void, np.void]:
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    row = samples[record : record + 1]
+    ref = row["ref_t1"][0]
+
+    binding = _load_binding()
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    seed_bytes = np.frombuffer(seed.tobytes(order="C"), dtype=np.uint8).copy().reshape(1, seed_stride)
+    prev_input_bytes = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+        1, input_stride
+    )
+    input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    try:
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+    finally:
+        binding.destroy(handle)
+
+    return out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0], ref
+
+
 def _dataset_byte_views(ds):
     samples = ds.samples
     sample_stride = int(samples.dtype.itemsize)
@@ -792,8 +827,9 @@ def test_guardreflect_current_shielddesc_requires_x14_expiry_boundary_tch_5251(x
 @pytest.mark.integration
 def test_guardreflect_already_expired_x14_seed_does_not_suppress_shield_damage_tch_5251() -> None:
     # Boundary negative for shield-damage suppression: replay-proven ShieldDesc contact can still
-    # be teacher-forced when x14 was already expired, but without the `x14_seed==1 -> x14==0`
-    # callback boundary it must not borrow x18 as a powershield no-damage owner.
+    # be teacher-forced when x14 was already expired, but this test isolates the old x14-only
+    # boundary by clearing the independent x221C_b2 powershield owner. Without either source lane it
+    # must not borrow x18 as a powershield no-damage owner.
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl"
@@ -805,6 +841,7 @@ def test_guardreflect_already_expired_x14_seed_does_not_suppress_shield_damage_t
     ds = read_dataset(str(dataset_path))
     seed = ds.samples["seed_t"][record : record + 1].copy()
     seed["guard_reflect_timer_x14"][0, defender] = np.uint8(0)
+    seed["state_flags"][0, defender, 3] = np.uint8(int(seed["state_flags"][0, defender, 3]) & ~0x20)
     out, ref = _step_one_row_with_seed(dataset_path, record, seed)
 
     assert int(out["action_id"][defender]) == int(ref["action_id"][defender]) == 181
@@ -1676,6 +1713,40 @@ def test_attackairn_neutral_hitcapsule_latch_suppresses_false_wait_hit_his_2752(
     defender = 0
     for field in ("action_id", "animation_index", "hitlag", "hitstun", "instance_hit_by"):
         assert int(out[field][defender]) == int(ref[field][defender]), f"field={field}"
+
+
+@pytest.mark.integration
+def test_attackairn_wait_rollout_bridge_not_used_by_ordinary_one_step_his_2752() -> None:
+    # Package-boundary negative for the retained HIS rollout bridge:
+    # - ordinary one-step reseed is allowed to use the explicit dense HitCapsule seed when present,
+    #   but it must not consume the x18c8/last_hit_by fallback that exists only to reconstruct long
+    #   replay-rollout hidden victim provenance.
+    # - Clearing the dense row-local seed leaves only that fallback evidence; ordinary reseed must
+    #   admit the live BODY hit rather than suppressing it as if replay_rollout_reseeded were set.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    record = 2752
+    attacker = 1
+    defender = 0
+    seed = ds.samples["seed_t"][record : record + 1].copy()
+    assert int(seed["combat_hitlist_cd"][0, attacker, 0, defender]) != 0
+    seed["combat_hitlist_cd"][0, attacker, 0, defender] = np.uint16(0)
+    seed["combat_hitlist_victim_iid"][0, attacker, 0, defender] = np.uint16(0)
+
+    out, ref = _step_one_row_with_seed_one_step(dataset_path, record, seed)
+
+    assert int(ref["action_id"][defender]) == 14  # Wait: dense seed suppresses the real replay row.
+    assert int(out["action_id"][defender]) != int(ref["action_id"][defender])
+    assert int(out["hitlag"][defender]) > 0
 
 
 @pytest.mark.integration

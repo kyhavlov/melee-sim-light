@@ -4155,7 +4155,8 @@ static void laser_spawn_apply_throwlw_attached_body_callback(MslBatch* batch, in
       batch, bi, owner, victim, batch->state.item_attack_id[ii],
       batch->state.item_attack_instance[ii], batch->state.item_instance_id[ii],
       batch->state.item_type[ii], batch->state.item_state[ii], lp->state1_damage, lp->state1_angle,
-      lp->state1_kbg, lp->state1_wsk, lp->state1_bkb, 1u, lp->state1_element, -1.0f);
+      lp->state1_kbg, lp->state1_wsk, lp->state1_bkb, 1u, lp->state1_element, -1.0f,
+      batch->state.item_pos_x[ii], batch->state.item_vel_x[ii], 0u);
   if (res == MSL_ITEM_HIT_APPLIED_CONSUME_ITEM && preserve_late_state1_article == 0u) {
     item_slot_clear(batch, ii);
     return;
@@ -4220,7 +4221,8 @@ static void laser_spawn_apply_falco_throwb_startup_body_callback(MslBatch* batch
       batch, bi, owner, victim, batch->state.item_attack_id[ii],
       batch->state.item_attack_instance[ii], batch->state.item_instance_id[ii],
       batch->state.item_type[ii], batch->state.item_state[ii], lp->state1_damage, lp->state1_angle,
-      lp->state1_kbg, lp->state1_wsk, lp->state1_bkb, 1u, lp->state1_element, -1.0f);
+      lp->state1_kbg, lp->state1_wsk, lp->state1_bkb, 1u, lp->state1_element, -1.0f,
+      batch->state.item_pos_x[ii], batch->state.item_vel_x[ii], 0u);
   if (res == MSL_ITEM_HIT_APPLIED_CONSUME_ITEM) {
     item_slot_clear(batch, ii);
     return;
@@ -4432,11 +4434,18 @@ static void illusion_items_update_and_collide(MslBatch* batch, int bi) {
       const uint8_t defender_guardon_reflect_body_undo_recharge =
           item_guardon_reflect_body_hit_undoes_action_recharge(batch, d_idx);
       const float dmg = item_reflected_damage_lane(batch, ii, hp.damage);
+      const uint8_t steady_illusion_item_facing_owner =
+          (chp->illusion_item_lifetime_state01_frames >= 2u &&
+           batch->state.item_timer[ii] <=
+               (float)(uint8_t)(chp->illusion_item_lifetime_state01_frames - 2u))
+              ? 1u
+              : 0u;
       const MslItemHitResult res = combat_apply_item_hit(
           batch, bi, owner, def, batch->state.item_attack_id[ii],
           batch->state.item_attack_instance[ii], batch->state.item_instance_id[ii],
           batch->state.item_type[ii], batch->state.item_state[ii], dmg, hp.angle, hp.kbg, hp.wsk,
-          hp.bkb, hit_hurt_height, hp.element, -1.0f);
+          hp.bkb, hit_hurt_height, hp.element, -1.0f, batch->state.item_pos_x[ii],
+          batch->state.item_vel_x[ii], steady_illusion_item_facing_owner);
       if (res == MSL_ITEM_HIT_NONE) {
         continue;
       }
@@ -4538,7 +4547,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           batch, bi, owner, (int)hidden_victim, batch->state.item_attack_id[ii],
           batch->state.item_attack_instance[ii], batch->state.item_instance_id[ii],
           batch->state.item_type[ii], laser_state, dmg, angle, kbg, wsk, bkb, hurt_height, element,
-          -1.0f);
+          -1.0f, batch->state.item_pos_x[ii], batch->state.item_vel_x[ii], 0u);
       const uint16_t victim_iid_post =
           batch->state.instance_id[msl_idx_player(bi, (int)hidden_victim)];
       if (res != MSL_ITEM_HIT_NONE) {
@@ -6547,7 +6556,8 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           batch, bi, owner, def, batch->state.item_attack_id[ii],
           batch->state.item_attack_instance[ii], batch->state.item_instance_id[ii],
           batch->state.item_type[ii], laser_state, dmg, angle, kbg, wsk, bkb, hit_hurt_height,
-          element, laser_body_stale_mult);
+          element, laser_body_stale_mult, batch->state.item_pos_x[ii], batch->state.item_vel_x[ii],
+          0u);
       if (res == MSL_ITEM_HIT_NONE) {
         continue;
       }

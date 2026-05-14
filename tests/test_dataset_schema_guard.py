@@ -441,6 +441,9 @@ def test_item_common_data_exports_shield_bounce_threshold_source() -> None:
     # the extracted ItCo.dat item common file instead of a naked gameplay constant.
     data = json.loads(Path("data/items/item_common.json").read_text())
     assert data["shield_bounce_extra_degrees"] == 45.0
+    # ftColl_8007A06C uses ItemCommonData->x78 as the item x-velocity threshold below which
+    # item-hit damage facing is position-owned instead of velocity-owned.
+    assert data["item_damage_facing_velocity_threshold"] == pytest.approx(0.15000000596046448)
 
 
 def test_ft_common_data_exports_magnify_damage_source_constants() -> None:

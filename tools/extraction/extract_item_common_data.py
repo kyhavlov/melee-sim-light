@@ -35,6 +35,12 @@ def main() -> None:
     item_common_abs = arc.data_base + item_common_ptr
 
     out = {
+        # ftColl_8007A06C item-damage facing owner:
+        #   if abs(item->x40_vel.x) < it_804D6D28->x78_float, use item position vs victim;
+        #   otherwise use item velocity sign.
+        # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007A06C
+        # refs/melee/src/melee/it/types.h::ItemCommonData::x78_float
+        "item_damage_facing_velocity_threshold": float(_f32_be(buf, item_common_abs + 0x78)),
         # Item_8026B424 computes item hitlag as:
         #   (s32)(damage * it_804D6D28->xB8 + it_804D6D28->xBC)
         # refs/melee/src/melee/it/it_26B1.c::it_8026B424

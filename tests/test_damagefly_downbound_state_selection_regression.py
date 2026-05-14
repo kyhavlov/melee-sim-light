@@ -439,6 +439,43 @@ def test_damageflyroll_x221c_b6_floor_ownership_window_attachedgoodnaturedguanac
 
 
 @pytest.mark.integration
+def test_damageflyroll_active_hitlag_without_sdi_keeps_below_floor_pose_his() -> None:
+    # Active-hitlag DamageFlyRoll floor ownership:
+    # - ftCo_Damage_OnEveryHitlag can create a stay-airborne floor projection only when the
+    #   callback-local SDI/ASDI owner actually admits displacement.
+    # - Without that owner, frozen DamageFlyRoll hitlag must not run the generic floor projection
+    #   before ftCo_Damage_OnExitHitlag / DamageFlyRoll_Coll. HIS 4398 starts below FD floor in
+    #   hitlag and vanilla keeps that pose for the frozen row.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+    #   ftCo_Damage_OnEveryHitlag,ftCo_Damage_OnExitHitlag,ftCo_DamageFlyRoll_Coll}
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl"
+    record = 4398
+    p = 0
+
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record]
+    assert int(row["seed_t"]["action_id"][p]) == 91  # DamageFlyRoll
+    assert int(row["seed_t"]["hitlag"][p]) > 0
+    assert float(row["seed_t"]["pos_y"][p]) < 0.0
+    assert float(row["ref_t1"]["pos_y"][p]) < 0.0
+    assert int(row["ref_t1"]["on_ground"][p]) == 0
+
+    out, ref = _run_one_step(dataset_rel=dataset_rel, record=record, p=p)
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == 91
+    assert int(out["hitlag"][p]) == int(ref["hitlag"][p])
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 0
+    np.testing.assert_allclose(float(out["pos_y"][p]), float(ref["pos_y"][p]), atol=1e-6)
+    assert float(out["pos_y"][p]) < 0.0
+
+
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("record", "expect_ref_action", "expect_ref_state_flag3"),
     [

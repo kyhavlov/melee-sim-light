@@ -2270,11 +2270,33 @@ static inline uint8_t passivewall_entry_wall_contact_x(const MslBatch* batch, si
                               batch->state.pos_y[idx], 0u);
 
   const uint32_t env = batch->state.coll_env_flags[idx];
+  const uint8_t wall_rewind_contact_owner = (batch->state.x67E[idx] != 0xFFu) ? 1u : 0u;
   if ((env & (uint32_t)MSL_COLLIDE_RIGHT_WALL_HUG) != 0u) {
+    if (wall_rewind_contact_owner && batch->state.wall_id[idx] != 0xFFFFu &&
+        isfinite(batch->state.wall_contact_x[idx])) {
+      // ftCo_800C1E64 snapshots coll->ecb.left/right after DamageFly_Coll has run the wall
+      // collision pass. The lite mpColl wall pass exposes that source side/contact as wall_contact_x;
+      // this matches the adjacent common-air PassiveWallJump entry owner in locomotion.c. Current
+      // tap-jump entries with expired x67E do not carry the rewind wall-contact owner; keep those
+      // on the outgoing ECB side sampled below.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::{ftCo_800C1E0C,ftCo_800C1E64}
+      // refs/melee/src/melee/ft/ft_081B.c::{ft_800831CC,ft_800835B0}
+      // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047E14,mpColl_80046904}
+      *out_x = batch->state.wall_contact_x[idx];
+      return 1u;
+    }
     *out_x = ecb.left_x;
     return 1u;
   }
   if ((env & (uint32_t)MSL_COLLIDE_LEFT_WALL_HUG) != 0u) {
+    if (wall_rewind_contact_owner && batch->state.wall_id[idx] != 0xFFFFu &&
+        isfinite(batch->state.wall_contact_x[idx])) {
+      // Same collision-pass wall-side anchor as the right-wall path above, using the left-wall
+      // contact point as the source coll->ecb.right equivalent.
+      *out_x = batch->state.wall_contact_x[idx];
+      return 1u;
+    }
     *out_x = ecb.right_x;
     return 1u;
   }

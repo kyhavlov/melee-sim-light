@@ -26,6 +26,7 @@
 #include "hurtbox_modes_tables.h"
 #include "hurtcaps_tables.h"
 #include "input_axis.h"
+#include "item_common_params.h"
 #include "item_article_params.h"
 #include "laser_params.h"
 #include "motion_state_owners.h"
@@ -1812,6 +1813,94 @@ static inline uint8_t combat_attackairb_dense_seed_suppresses_full_body(const Ms
   return (hb_id == 1) ? 1u : 0u;
 }
 
+static inline uint8_t combat_attackairn_wait_dense_seed_suppresses_full_body(
+    const MslBatch* batch, int bi, int attacker, int hb_id, int defender, uint16_t defender_iid) {
+  if (batch == NULL || bi < 0 || attacker < 0 || attacker >= (int)MSL_MAX_PLAYERS || hb_id < 0 ||
+      hb_id >= MSL_MAX_HITBOXES || defender < 0 || defender >= (int)MSL_MAX_PLAYERS ||
+      attacker == defender) {
+    return 0u;
+  }
+  if (batch->replay_rollout_reseeded == NULL || batch->replay_rollout_reseeded[bi] == 0u) {
+    return 0u;
+  }
+  const size_t hb_i = idx_hitbox(bi, attacker, hb_id);
+  const size_t a_idx = msl_idx_player(bi, attacker);
+  const size_t d_idx = msl_idx_player(bi, defender);
+  const uint16_t attacker_action = batch->state.action_id[a_idx];
+  if (attacker_action != (uint16_t)MSL_ACT_ATTACK_AIR_N ||
+      !msl_motion_state_has_motion_flag(batch->state.char_id[a_idx], attacker_action,
+                                        MSL_MOTION_FLAG_SKIP_HIT) ||
+      batch->state.hitlag[a_idx] != 0u || batch->state.hitstun[a_idx] != 0u ||
+      batch->state.hitlag[d_idx] != 0u || batch->state.hitstun[d_idx] != 0u ||
+      batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_WAIT ||
+      batch->state.action_frame[d_idx] != 1 || hb_id != 1) {
+    return 0u;
+  }
+  const size_t valid_i =
+      ((size_t)bi * (size_t)MSL_MAX_PLAYERS + (size_t)attacker) * (size_t)MSL_MAX_HITBOXES +
+      (size_t)hb_id;
+  if (batch->state.combat_hitlist_hb_valid[valid_i] != 0u) {
+    return 0u;
+  }
+  const uint8_t hit_group = hitlist_hit_group_from_u16_7(batch->state.hitbox_u16_7[hb_i]);
+  if (hit_group >= (uint8_t)MSL_HITLIST_GROUPS) {
+    return 0u;
+  }
+  const size_t group_base =
+      (size_t)bi * (size_t)MSL_MAX_PLAYERS * (size_t)MSL_HITLIST_GROUPS * (size_t)MSL_MAX_PLAYERS;
+  const size_t cd_i =
+      group_base + (((size_t)attacker * (size_t)MSL_HITLIST_GROUPS + (size_t)hit_group) *
+                        (size_t)MSL_MAX_PLAYERS +
+                    (size_t)defender);
+  const uint8_t dense_seed_present = (batch->state.combat_hitlist_cd[cd_i] != 0u) ? 1u : 0u;
+  if (!dense_seed_present) {
+    const uint8_t attacker_source_port0 =
+        (batch->state.source_port0[a_idx] < (uint8_t)MSL_MAX_PLAYERS)
+            ? batch->state.source_port0[a_idx]
+            : (uint8_t)attacker;
+    if (batch->state.last_hit_by[d_idx] != attacker_source_port0 ||
+        batch->state.instance_hit_by[d_idx] == batch->state.instance_id[a_idx] ||
+        batch->state.source_clear_timer_x18c8[d_idx] == 0u) {
+      return 0u;
+    }
+    // Replay-rollout hidden victim provenance fallback:
+    // - The direct seed lane can carry dense HitCapsule victims_1 for this AttackAirN/Wait
+    //   boundary, but a long rollout seeded before the source projectile/fighter episode has no
+    //   row-local dense map to materialize.
+    // - `last_hit_by`, `instance_hit_by`, and x18c8 source-clear state are live source-clear/body
+    //   attribution lanes from Fighter_ProcessHit. They prove the defender is still in the same
+    //   source-owned no-new-hit episode while the current AttackAirN instance is not the accepted
+    //   source instance. Use them only for the first neutral Wait BODY fallthrough; later Wait
+    //   frames remain eligible for the ordinary live BODY hit.
+    // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+    // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_800768A0}
+    // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+    return 1u;
+  }
+  const uint16_t seed_iid = batch->state.combat_hitlist_victim_iid[cd_i];
+  if (seed_iid != 0u && seed_iid != defender_iid &&
+      combat_hitlist_victim_pointer_may_change(batch->state.stocks[d_idx],
+                                               batch->state.action_id[d_idx])) {
+    return 0u;
+  }
+  // Teacher-forced dense HitCapsule suppression for AttackAirN -> neutral Wait entry:
+  // - AttackAirN carries Ft_MF_SkipHit, so Fighter_ChangeMotionState can preserve x914
+  //   HitCapsule state across the motion entry. lbColl_8000ACFC then suppresses by the raw
+  //   HitVictim fighter pointer, not by Slippi's damage attribution or motion-state instance id.
+  // - In long replay rollouts that start before the aerial, the only available hidden provenance
+  //   is the dense group victim seed. Use it only for the neutral Wait entry row where the dense
+  //   proxy is replay-proven to suppress a one-frame-early BODY fallthrough; later Wait frames
+  //   remain eligible for the live BODY hit once stale dense filtering has released the latch.
+  // - This does not alter ordinary free-running gameplay: the helper requires
+  //   replay_rollout_reseeded and only suppresses full BODY damage, leaving live HitCapsule
+  //   registration to lbColl_80008688-shaped runtime hitlists.
+  // refs/melee/src/melee/ft/chara/ftCommon/forward.h::ftCo_MF_AttackAirN
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+  return 1u;
+}
+
 static inline uint8_t combat_seed_hitlist_suppresses_clank_candidate(const MslBatch* batch, int bi,
                                                                      int attacker, int hb_id,
                                                                      int defender) {
@@ -2937,6 +3026,14 @@ static inline uint8_t combat_shield_damage_powershield_suppressed_idx(const MslB
       // expired use this branch as the older frozen-snapshot shield-damage handoff.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardReflect_Anim,ftCo_80093BC0}
       batch->state.guard_reflect_timer_x14_seed[idx] == 0u) {
+    enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
+    enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
+    enum { MSL_STATE_FLAG_221C_POWERSHIELD_ACTIVE = 0x20 };
+    const uint8_t flags_221c =
+        batch->state.state_flags[idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221C_INDEX];
+    if ((flags_221c & (uint8_t)MSL_STATE_FLAG_221C_POWERSHIELD_ACTIVE) != 0u) {
+      return powershield_active;
+    }
     powershield_active = 0u;
   }
   return powershield_active;
@@ -4125,6 +4222,19 @@ static inline uint8_t combat_damageflyroll_rng_subset_allows_pre_action(const Ms
       const size_t a_idx = bi * (size_t)MSL_MAX_PLAYERS + (size_t)attacker;
       const uint16_t a_action = batch->state.action_id[a_idx];
       const int16_t a_af = batch->state.action_frame[a_idx];
+      // AttackLw4 can refresh a same-source DamageFlyTop victim through the same ftCo_8008DCE0
+      // severe airborne damage-entry owner as AttackAirB; the replay-visible source attribution
+      // still maps to the AttackLw4 attacker for this retained row. Keep the admission local to the
+      // extracted create-hitbox command frame rather than broadening all DamageFlyTop refreshes.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackLw4.c
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+      // data/scripts/{fox,falco}.bin (MSLFTSC1 ftCo_SM_AttackLw4 create_hitbox)
+      const int16_t attacklw4_create_frame = move_tables_grounded_attack_first_create_hitbox_frame(
+          batch->state.char_id[a_idx], a_action);
+      if (a_action == (uint16_t)MSL_ACT_ATTACK_LW4 && attacklw4_create_frame >= 0 &&
+          a_af == attacklw4_create_frame) {
+        return 1u;
+      }
       // Create-window threshold:
       // - AttackAirB's first create event is script frame 4. This gate is checked after the
       //   same-frame fighter tick.
@@ -5303,7 +5413,8 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
                                        uint8_t item_state, float damage, uint16_t angle,
                                        uint16_t kbg, uint16_t wsk, uint16_t bkb,
                                        uint8_t defender_hurt_height, uint8_t element,
-                                       float stale_mult_override) {
+                                       float stale_mult_override, float item_pos_x,
+                                       float item_vel_x, uint8_t item_damage_facing_owner_valid) {
   if (batch == NULL) {
     return MSL_ITEM_HIT_NONE;
   }
@@ -5602,11 +5713,12 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
   }
 
   // Horizontal sign for item-hit knockback:
-  // - Generic item BODY hits follow the same facing_dir_1 ownership as BODY hits:
-  //   collision stores fp->dmg.facing_dir_1 from the relative X ordering between victim and
-  //   source, then ftCo_8008DCE0 sets facing from that sign before applying `-x * facing_dir_1`.
-  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-  //   refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_8007A06C
+  // - ftColl_8007A06C item damage uses item position for slow/stationary items and item velocity
+  //   sign once abs(x40_vel.x) reaches ItemCommonData->x78. ftCo_8008DCE0 then sets facing from
+  //   that sign before applying `-x * facing_dir_1`.
+  //   refs/melee/src/melee/ft/ftcoll.c::ftColl_8007A06C
+  //   refs/melee/src/melee/it/types.h::ItemCommonData::x78_float
+  //   data/items/item_common.json::item_damage_facing_velocity_threshold
   // - ThrowHi throw-side blaster shots are spawned by ftFx_Throw_Anim via it_8029C6CC in the
   //   state1 projectile lane, and their active BODY overlap is driven forward along the scripted
   //   shot velocity rather than the thrower root transform.
@@ -5615,6 +5727,31 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
   const float one = combat_damage_ftColl_804D82EC_one();
   float defender_facing_dir_1 =
       (batch->state.pos_x[d_idx] > batch->state.pos_x[a_idx]) ? -one : one;
+  if (item_is_illusion && item_damage_facing_owner_valid != 0u) {
+    // Retained item-position facing owner scope:
+    // ftColl_8007A06C's item branch uses item position for stationary/slow item damage. This
+    // package applies that source owner only to steady Fox/Falco Illusion/Phantasm ghost articles,
+    // where the hit item is represented directly by a prior-frame live item slot and no separate
+    // laser collision owner rewrites the contact geometry. Same-frame spawned Illusion articles
+    // are a callback-phase/ghostEffect owner boundary and keep the older projectile-owner facing
+    // until that family is closed. Blaster laser BODY facing likewise remains on the older
+    // projectile-owner path until the full laser DmgLog/collision owner is closed.
+    // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007A06C
+    // refs/melee/src/melee/it/itcoll.c (case 2 item damage direction)
+    // refs/melee/src/melee/it/types.h::ItemCommonData::x78_float
+    const MslItemCommonParams* item_common = msl_item_common_params();
+    const float item_facing_vel_threshold =
+        (item_common != NULL) ? item_common->item_damage_facing_velocity_threshold : 0.0f;
+    float item_vel_abs_x = item_vel_x;
+    if (item_vel_abs_x < 0.0f) {
+      item_vel_abs_x = -item_vel_abs_x;
+    }
+    if (item_vel_abs_x < item_facing_vel_threshold) {
+      defender_facing_dir_1 = (batch->state.pos_x[d_idx] > item_pos_x) ? -one : one;
+    } else {
+      defender_facing_dir_1 = (item_vel_x < 0.0f) ? one : -one;
+    }
+  }
   if (lp != NULL && item_state == (uint8_t)1u &&
       batch->state.action_id[a_idx] == (uint16_t)MSL_ACT_THROW_LW &&
       batch->state.throw_pending_victim_port[a_idx] == (uint8_t)defender &&
@@ -7555,6 +7692,9 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
         const uint8_t attackairb_dense_seed_suppresses_full_body =
             combat_attackairb_dense_seed_suppresses_full_body(batch, bi, attacker, hb_id, defender,
                                                               defender_iid, expected_body_hitlag);
+        const uint8_t attackairn_wait_dense_seed_suppresses_full_body =
+            combat_attackairn_wait_dense_seed_suppresses_full_body(batch, bi, attacker, hb_id,
+                                                                   defender, defender_iid);
         const uint8_t rehit_frames =
             hitlist_rehit_frames_from_u16_7(batch->state.hitbox_u16_7[hb_i]);
         const uint8_t v1_group_seen_this_pass =
@@ -7830,7 +7970,8 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
                                               defender_iid, (int)MSL_LBCOLL_INSERT_FT_BODY, 0u);
             break;
           }
-          if (dense_seed_suppresses_body || attackairb_dense_seed_suppresses_full_body) {
+          if (dense_seed_suppresses_body || attackairb_dense_seed_suppresses_full_body ||
+              attackairn_wait_dense_seed_suppresses_full_body) {
             continue;
           }
           // Combat Mutations Pass 1 (BODY-only).

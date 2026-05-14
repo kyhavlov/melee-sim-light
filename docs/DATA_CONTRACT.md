@@ -1050,13 +1050,14 @@ Characters (Fox/Falco):
 - `data/items/articles/fox_falco.bin` (known common/Fox/Falco item article fields; `MSLITAR1` compact binary)
   - Purpose:
     - Collect stable, named item/article constants for Fox/Falco blaster, laser, illusion/phantasm,
-      and item-common shield bounce data.
+      item-common item-damage facing, and item-common shield bounce data.
     - This is a known-field table only; it does not classify item behavior from replay observations.
   - Sources:
     - `data/characters/{fox,falco}.json`
     - `data/items/item_common.json`
     - `refs/melee/src/melee/it/types.h`
     - `refs/melee/src/melee/it/forward.h::ItemKind`
+    - `refs/melee/src/melee/ft/ftcoll.c::ftColl_8007A06C`
     - `refs/melee/src/melee/it/item.c::Item_80269DC8`
     - `refs/melee/src/melee/it/items/itfoxblaster.c`
     - `refs/melee/src/melee/it/items/itfoxillusion.c`

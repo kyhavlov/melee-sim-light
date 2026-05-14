@@ -3092,6 +3092,17 @@ Fox/Falco special-owner split (2026-04-17):
     Sources: `refs/melee/src/melee/it/item.c::Item_80269DC8`,
     `refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C504,itFoxlaser_UnkMotion1_Anim,it_8029C4D4,itFoxLaser_Logic94_ShieldBounced,itFoxLaser_Logic94_HitShield}`,
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C`.
+  - Item damage facing source owner:
+    - `ftColl_8007A06C` item-damage intake does not always use the owner fighter root to choose
+      `fp->dmg.facing_dir_1`. When `abs(item->x40_vel.x) < ItemCommonData->x78_float`, the sign is
+      owned by item position vs victim position; otherwise it is owned by item velocity sign.
+      Runtime loads `x78_float` from `data/items/item_common.json::item_damage_facing_velocity_threshold`
+      and applies the same position/velocity split for `combat_apply_item_hit`.
+    - Replay-real locks: `GracefulAttachedTurtle.msl:{923,3386}` cover ordinary item-hit facing
+      directions, and `HungryImportantSnake.msl:1673` covers the stationary Phantasm item case where
+      item position and owner root are on opposite sides of the victim.
+    Sources: `refs/melee/src/melee/ft/ftcoll.c::ftColl_8007A06C`,
+    `refs/melee/src/melee/it/types.h::ItemCommonData::x78_float`.
   - Illusion / Phantasm article lifetime runtime/seed slice:
     - BODY-hit Illusion/Phantasm articles persist but do not enter generic item hitlag. Decomp
       `OnGiveDamageThink` copies damage into `xCA8`, then
@@ -5452,10 +5463,24 @@ BODY collision-space residual split and rejected seed bridge:
     the exact per-HitCapsule `victims_1` clear/copy provenance for this boundary. Delete it when
     the replay seed carries the needed per-HitCapsule provenance owner instead of relying on dense
     same-group materialization.
-  - Open residuals / package-boundary negatives: AGN `5167 -> 5168` AttackAirN new-hit admission
-    and QGD dense SpecialHi BODY admissions are not replay-exact owner closures in this package.
-    They remain visible negative locks until per-hitbox/live HitCapsule provenance can replace the
-    coarse dense group lane without a replay-row bridge.
+  - Open residual / package-boundary negative: AGN `5167 -> 5168` AttackAirN new-hit admission is
+    not a replay-exact owner closure in this package. It remains a visible negative lock until
+    per-hitbox/live HitCapsule provenance can replace the coarse dense group lane without a
+    replay-row bridge.
+  - SpecialHi dense group seed materialization is narrowed to source-proven accepted-hit episodes:
+    the coarse dense group lane can suppress a live SpecialHi BODY contact only when the stored
+    victim instance is current, `instance_hit_by` names the attacker instance, and `last_hit_by`
+    names the attacker source port. This preserves post-hitlag DownBound/knockdown repeats where
+    the HitVictim pointer still owns suppression after hitstun clears, but lets unrelated
+    SpecialHi charge/launch inactive-gap dense entries clear through the live BODY callback. This
+    fixes QGD dense SpecialHi positives and HIS `8513` without turning the dense group fallback into
+    replay-proof authority. Authoritative per-HitCapsule seed lanes remain exact.
+  - HIS `2752` AttackAirN -> first neutral Wait BODY suppression is retained as replay-rollout
+    reconstruction debt, not source-closed live HitCapsule authority. The helper requires
+    `replay_rollout_reseeded`; ordinary free-running and one-step reseed paths cannot consume the
+    x18c8/last-hit fallback when row-local dense HitCapsule provenance is absent. Delete this bridge
+    when a prefix-causal per-HitCapsule victim/provenance lane can materialize the actual
+    `HitCapsule.victims_1` state through long rollout segments.
   - GuardSetOff onset provenance is replay-visible when the defender enters GuardSetOff hitlag and
     shield HP drops, even if the previous visible action was not Guard-family (for example
     DownStandD). That proves the prior shield branch `ftColl_80076CBC` wrote the same-group

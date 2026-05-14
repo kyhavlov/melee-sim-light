@@ -83,6 +83,8 @@ enum {
 };
 static MslFrameWindow g_allow_interrupt_by_char_grounded_attack[256]
                                                                [MSL_GROUNDED_ATTACK_KIND_COUNT];
+static MslFrameWindow g_first_hitbox_phase_by_char_grounded_attack[256]
+                                                                  [MSL_GROUNDED_ATTACK_KIND_COUNT];
 static MslSmashChargeInfo g_smash_charge_by_char_grounded_attack[256]
                                                                 [MSL_GROUNDED_ATTACK_KIND_COUNT];
 static MslFrameWindow g_allow_interrupt_by_char_escape_n[256];
@@ -1201,6 +1203,8 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
   for (size_t i = 0; i < MSL_GROUNDED_ATTACK_KIND_COUNT; i++) {
     load_if_allow_interrupt(&script, grounded_msids[i],
                             &g_allow_interrupt_by_char_grounded_attack[char_id][i]);
+    load_if_first_hitbox_phase(&script, grounded_msids[i],
+                               &g_first_hitbox_phase_by_char_grounded_attack[char_id][i]);
   }
   const size_t smash_kinds[] = {MSL_GROUNDED_ATTACK_KIND_S4, MSL_GROUNDED_ATTACK_KIND_HI4,
                                 MSL_GROUNDED_ATTACK_KIND_LW4};
@@ -1546,6 +1550,19 @@ uint8_t move_tables_grounded_attack_allow_interrupt(uint8_t char_id, uint16_t gr
   // Source: command-script `allow_interrupt` events in data/scripts/{fox,falco}.bin (MSLFTSC1).
   return (cur_anim_frame_f32 >= (float)win.start_af && cur_anim_frame_f32 < (float)win.end_af) ? 1
                                                                                                : 0;
+}
+
+int16_t move_tables_grounded_attack_first_create_hitbox_frame(uint8_t char_id,
+                                                              uint16_t grounded_action_id) {
+  const int kind = grounded_attack_kind_from_action(grounded_action_id);
+  if (kind < 0) {
+    return -1;
+  }
+  const MslFrameWindow win = g_first_hitbox_phase_by_char_grounded_attack[char_id][(size_t)kind];
+  if (!win.loaded) {
+    return -1;
+  }
+  return win.start_af;
 }
 
 uint8_t move_tables_grounded_smash_charge_crossed(uint8_t char_id, uint16_t grounded_action_id,

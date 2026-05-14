@@ -66,10 +66,10 @@ uint8_t hitlist_rollout_dense_seed_same_object_rebind_applies(const MslBatch* ba
                                         batch->state.action_id[v_idx])) {
     return 0u;
   }
-  if (batch->state.prev_action_id[a_idx] != batch->state.action_id[a_idx]) {
+  if (batch->state.hitlag[a_idx] != 0u || batch->state.hitstun[a_idx] != 0u) {
     return 0u;
   }
-  if (batch->state.hitlag[a_idx] != 0u || batch->state.hitstun[a_idx] != 0u) {
+  if (batch->state.prev_action_id[a_idx] != batch->state.action_id[a_idx]) {
     return 0u;
   }
   if (batch->state.instance_hit_by[v_idx] != batch->state.instance_id[a_idx]) {
@@ -707,32 +707,35 @@ static void hitlist_seed_init_fighter_hitbox_from_group_impl(MslBatch* batch, in
                                                 : batch->state.combat_hitlist_victim_iid[i];
     const size_t v_idx = msl_idx_player(bi, v);
     const size_t a_idx = msl_idx_player(bi, attacker);
-    if (is_replay_rollout && !exact_replay_reseed && !use_hitbox_seed) {
-      // Dense group seeds are a compatibility surface for replay-derived HitCapsule victims_1.
-      // For SpecialHi rollout rows, materialize that coarse lane only when replay-visible state
-      // proves the current victim is still in the accepted-hit episode from this attacker:
-      // the stored victim instance is current, the victim is still in hitlag/hitstun, and
-      // instance_hit_by names the attacker instance. Otherwise the dense lane may be a geometry
-      // approximation from an inactive gap; binding it into the current HitCapsule would over-admit
-      // lbColl_8000ACFC suppression before the real launch BODY callback.
-      //
-      // Authoritative per-hitbox seeds stay exact, and exact-row rollout reseeds preserve the same
-      // teacher-forced compatibility as one-step reseeds. Once a replay rollout advances past its
-      // seed frame, the filter below prevents stale dense seeds from becoming a free-running
-      // runtime bridge without same-source proof.
+    if (!use_hitbox_seed && hitlist_specialhi_action(batch->state.action_id[a_idx])) {
+      // Dense group seeds are a compatibility surface for replay-derived HitCapsule victims_1,
+      // not per-HitCapsule authority. SpecialHi charge/launch spans can carry coarse dense
+      // entries across inactive gaps, so materialize them only when replay-visible state proves
+      // the victim is still owned by an accepted hit from this attacker: the stored victim instance
+      // is current, BODY attribution names the attacker instance, and last_hit_by names the
+      // attacker source port. This spans post-hitlag DownBound/knockdown aftermath where the
+      // HitVictim pointer still suppresses repeats after hitstun has cleared, but rejects stale
+      // same-victim dense entries from unrelated source ownership. Authoritative per-hitbox seeds
+      // stay exact.
       // refs/melee/src/melee/ft/ftcoll.c::ftColl_800768A0
       // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
-      if (hitlist_specialhi_action(batch->state.action_id[a_idx])) {
-        if (stored_iid == 0u || stored_iid != batch->state.instance_id[v_idx]) {
-          continue;
-        }
-        if (batch->state.instance_hit_by[v_idx] != batch->state.instance_id[a_idx]) {
-          continue;
-        }
-        if (batch->state.hitlag[v_idx] == 0u && batch->state.hitstun[v_idx] == 0u) {
-          continue;
-        }
-      } else if (stored_iid != 0u && stored_iid != batch->state.instance_id[v_idx]) {
+      if (stored_iid == 0u || stored_iid != batch->state.instance_id[v_idx]) {
+        continue;
+      }
+      if (batch->state.instance_hit_by[v_idx] != batch->state.instance_id[a_idx]) {
+        continue;
+      }
+      if (batch->state.last_hit_by[v_idx] !=
+          hitlist_source_port0_for_attacker(batch, a_idx, attacker)) {
+        continue;
+      }
+    } else if (is_replay_rollout && !exact_replay_reseed && !use_hitbox_seed) {
+      // Dense group seeds are a compatibility surface for replay-derived HitCapsule victims_1.
+      // Once a replay rollout advances past its seed frame, the filter below prevents stale dense
+      // seeds from becoming a free-running runtime bridge without same-source proof.
+      // refs/melee/src/melee/ft/ftcoll.c::ftColl_800768A0
+      // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+      if (stored_iid != 0u && stored_iid != batch->state.instance_id[v_idx]) {
         // Dense group seeds carry a Slippi-visible instance_id proxy for decomp's raw victim
         // pointer, not the raw pointer itself. On a normal HitCapsule create edge,
         // ftColl_800768A0 clears/copies concrete victims_1 state; a stale dense seed usually fails

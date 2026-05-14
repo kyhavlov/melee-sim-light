@@ -943,6 +943,43 @@ def test_carried_guardreflect_powershield_window_blocks_early_attackairb_hitshie
 
 
 @pytest.mark.integration
+def test_guardreflect_x221c_b2_suppresses_fighter_shield_damage_his_lock() -> None:
+    # Replay-real lock for the fighter-vs-fighter shield-damage accumulator on an x14-expired
+    # GuardReflect frozen snapshot:
+    # - ftColl_80076CBC gates shieldDamageTaken on fp->x221C_b2, not on the shorter ReflectDesc x14
+    #   timer.
+    # - HIS 2090 has x14=0, x18=2, and Slippi state_flags[3]&0x20 set; the AttackAirF shield hit
+    #   should enter GuardSetOff with powershield pushback and only the base shield HP depletion.
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80093BC0,ftCo_80092F2C}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl"
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    defender = 1
+    attacker = 0
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples[2090]["seed_t"]
+    assert int(seed["action_id"][attacker]) == 63  # AttackAirF
+    assert int(seed["action_id"][defender]) == 182  # GuardReflect
+    assert int(seed["guard_reflect_timer_x14"][defender]) == 0
+    assert int(seed["guard_reflect_timer_x18"][defender]) == 2
+    assert int(seed["state_flags"][defender][3]) & 0x20
+    assert int(seed["combat_shield_hit_int_damage"][defender]) == 18
+    assert int(seed["combat_shield_damage_taken"][defender]) == 0
+
+    _, ref, out = _run_one_step_row(dataset_path, 2090, defender)
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender]) == 181
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 9
+    assert float(out["shield_hp"][defender]) == pytest.approx(float(ref["shield_hp"][defender]))
+    assert float(out["speed_ground_x_self"][defender]) == pytest.approx(
+        float(ref["speed_ground_x_self"][defender])
+    )
+
+
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("dataset_name", "record", "defender", "expected_prev", "expected_owner"),
     [

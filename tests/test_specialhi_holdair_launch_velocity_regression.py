@@ -356,6 +356,8 @@ def test_specialairhi_bound_velocity_scalar_does_not_apply_before_bound_entry_hi
     assert int(ref["action_id"][p]) == 356
     assert int(out["action_id"][p]) == int(ref["action_id"][p])
     assert int(out_roll["action_id"][p]) == int(ref["action_id"][p])
+    assert int(out["jumps_left"][p]) == int(ref["jumps_left"][p]) == 0
+    assert int(out_roll["jumps_left"][p]) == int(ref["jumps_left"][p]) == 0
 
     unscaled = float(ref["speed_air_x_self"][p])
     assert abs(unscaled) > 0.1
@@ -393,6 +395,7 @@ def test_specialhi_bound_airborne_phys_uses_root_y_and_air_friction_his(record: 
 
     assert int(out["action_id"][p]) == int(ref["action_id"][p])
     assert int(out["on_ground"][p]) == int(ref["on_ground"][p])
+    assert int(out["jumps_left"][p]) == int(ref["jumps_left"][p])
     assert float(out["speed_y_self"][p]) == pytest.approx(float(ref["speed_y_self"][p]), abs=1e-4)
     assert float(out["speed_air_x_self"][p]) == pytest.approx(
         float(ref["speed_air_x_self"][p]), abs=1e-4
@@ -400,6 +403,7 @@ def test_specialhi_bound_airborne_phys_uses_root_y_and_air_friction_his(record: 
 
     assert int(out_roll["action_id"][p]) == int(ref["action_id"][p])
     assert int(out_roll["on_ground"][p]) == int(ref["on_ground"][p])
+    assert int(out_roll["jumps_left"][p]) == int(ref["jumps_left"][p])
     assert float(out_roll["speed_y_self"][p]) == pytest.approx(
         float(ref["speed_y_self"][p]), abs=1e-4
     )

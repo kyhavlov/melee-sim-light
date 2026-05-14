@@ -21,6 +21,16 @@ def _aggregate_fsp_path() -> Path:
     return root / "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
 
 
+def _aggregate_his_path() -> Path:
+    root = Path(__file__).resolve().parents[1]
+    return root / "datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl"
+
+
+def _aggregate_pec_path() -> Path:
+    root = Path(__file__).resolve().parents[1]
+    return root / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl"
+
+
 def _run_row(binding, row: np.ndarray) -> np.ndarray:
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
@@ -166,16 +176,14 @@ def test_specialairhi_launch_hitbox_xrotn_qgd_target_precombat_hitbox_matches_pr
 
 
 @pytest.mark.integration
-def test_specialairhi_dense_hitlist_open_residual_qgd_launch_body_not_retained() -> None:
-    # Open residual / package-boundary negative for the current retained SpecialAirHi dense-hitlist
-    # boundary in rollout:
+def test_specialairhi_dense_hitlist_stale_gap_admits_qgd_launch_body() -> None:
+    # SpecialAirHi dense-hitlist/live-HitCapsule boundary:
     # - Earlier stale dense group fallback may still be present in the compatibility seed lane.
     # - SpecialHi launch materialization must not turn that coarse lane into a current HitCapsule
     #   victim ring when its stored victim instance differs from the live victim instance and no
-    #   per-hitbox provenance exists.
-    # - Native admits the broader real launch BODY contact at 9389. This package does not yet close
-    #   that dense-hitlist/live-HitCapsule owner, so keep the mismatch explicit instead of treating
-    #   this as a replay-real positive.
+    #   same-source accepted-hit proof exists.
+    # - Native admits the real launch BODY contact at 9389; stale dense group state must not
+    #   suppress the live launch capsule.
     # Decomp owner: HitCapsule victim lists, copied/cleared by ftColl_800768A0 and consulted by
     # lbColl_8000ACFC; SpecialHi charge/launch gaps must not preserve stale dense lineage as if it
     # were a source-owned active capsule.
@@ -203,12 +211,10 @@ def test_specialairhi_dense_hitlist_open_residual_qgd_launch_body_not_retained()
     ref = samples["ref_t1"][target_record]
 
     assert int(ref["action_id"][defender]) == 90  # DamageFlyTop in native.
-    assert int(got["action_id"][defender]) == 69
-    assert int(got["hitlag"][defender]) == 0
-    assert int(got["hitstun"][defender]) == 0
-    assert int(got["hitlag"][attacker]) == 0
-    assert int(got["instance_hit_by"][defender]) == 1563
-    np.testing.assert_allclose(got["percent"][defender], np.float32(99.37), atol=1e-6)
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "hitlag", "hitstun"):
+        np.testing.assert_array_equal(got[field], ref[field], err_msg=f"field={field}")
+    for field in ("percent", "speed_x_attack", "speed_y_attack"):
+        np.testing.assert_allclose(got[field], ref[field], atol=1e-6, err_msg=f"field={field}")
 
 
 @pytest.mark.integration
@@ -249,18 +255,15 @@ def test_specialairhi_dense_hitlist_keeps_same_victim_fsp_suppression() -> None:
 
 
 @pytest.mark.integration
-def test_specialairhi_dense_hitlist_open_residual_qgd_same_victim_body_not_retained() -> None:
-    # Open residual / package-boundary negative for broad same-victim dense fallback. QGD carries a
-    # dense SpecialHi group seed naming the current victim instance, but the victim is not in an
-    # accepted-hit episode from this
-    # attacker: hitstun/hitlag are clear and instance_hit_by points elsewhere. That compatibility
-    # seed must not be broadened into current runtime authority during packaging.
-    # Native later admits the SpecialHi BODY contact; this package leaves that broader provenance
-    # owner open rather than hiding it as a replay-real positive.
-    #
+def test_specialairhi_dense_hitlist_same_victim_without_source_admits_qgd_body() -> None:
+    # Same-victim SpecialHi dense fallback:
+    # - QGD carries a dense SpecialHi group seed naming the current victim instance, but the victim
+    #   is not in an accepted-hit episode from this attacker: hitstun/hitlag are clear and
+    #   instance_hit_by points elsewhere.
+    # - A coarse replay-derived group lane without current damage-source provenance cannot stand in
+    #   for that HitVictim pointer, so the live BODY contact remains admissible.
     # Decomp owner: HitCapsule.victims_1 is written by accepted contact through ftColl_80076808 /
-    # lbColl_80008688 and tested by lbColl_8000ACFC. A coarse replay-derived group lane without
-    # current damage-source provenance cannot stand in for that HitVictim pointer.
+    # lbColl_80008688 and tested by lbColl_8000ACFC.
     dataset_path = _dataset_path()
     if not dataset_path.exists():
         pytest.skip(f"missing local dataset: {dataset_path}")
@@ -289,12 +292,95 @@ def test_specialairhi_dense_hitlist_open_residual_qgd_same_victim_body_not_retai
     ref = samples["ref_t1"][target_record]
 
     assert int(ref["action_id"][defender]) == 90
-    assert int(got["action_id"][defender]) == 64
-    assert int(got["hitlag"][defender]) == 0
-    assert int(got["hitstun"][defender]) == 0
-    assert int(got["hitlag"][attacker]) == 0
-    assert int(got["instance_hit_by"][defender]) == 939
-    np.testing.assert_allclose(got["percent"][defender], np.float32(20.0), atol=1e-6)
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "hitlag", "hitstun"):
+        np.testing.assert_array_equal(got[field], ref[field], err_msg=f"field={field}")
+    for field in ("percent", "speed_x_attack", "speed_y_attack"):
+        np.testing.assert_allclose(got[field], ref[field], atol=1e-6, err_msg=f"field={field}")
+
+
+@pytest.mark.integration
+def test_specialairhi_dense_hitlist_same_victim_without_source_admits_his_body() -> None:
+    # HIS mirrors the same source boundary on an exact one-step seed:
+    # - p1 SpecialAirHi has a stale same-victim dense group seed.
+    # - p0 is in AttackLw3 with no accepted-hit episode from p1, so the dense fallback cannot
+    #   suppress the live launch BODY contact.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+    dataset_path = _aggregate_his_path()
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    binding = pytest.importorskip("msl_binding")
+
+    record = 8513
+    attacker = 1
+    defender = 0
+
+    assert int(samples["seed_t"]["action_id"][record, attacker]) == 356
+    assert int(samples["seed_t"]["action_id"][record, defender]) == 57
+    assert int(samples["seed_t"]["combat_hitlist_cd"][record, attacker, 0, defender]) == 0xFFFF
+    assert int(samples["seed_t"]["combat_hitlist_victim_iid"][record, attacker, 0, defender]) == int(
+        samples["seed_t"]["instance_id"][record, defender]
+    )
+    assert int(samples["seed_t"]["instance_hit_by"][record, defender]) != int(
+        samples["seed_t"]["instance_id"][record, attacker]
+    )
+    assert int(samples["seed_t"]["hitlag"][record, defender]) == 0
+    assert int(samples["seed_t"]["hitstun"][record, defender]) == 0
+
+    got = _run_row(binding, samples[record : record + 1])
+    ref = samples["ref_t1"][record]
+
+    assert int(ref["action_id"][defender]) == 90
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "hitlag", "hitstun"):
+        np.testing.assert_array_equal(got[field], ref[field], err_msg=f"field={field}")
+    for field in ("percent", "speed_x_attack", "speed_y_attack"):
+        np.testing.assert_allclose(got[field], ref[field], atol=1e-6, err_msg=f"field={field}")
+
+
+@pytest.mark.integration
+def test_specialairhi_dense_hitlist_same_source_downbound_suppresses_pec_rehit() -> None:
+    # Negative control for the SpecialHi dense filter:
+    # - p0 has already been hit by p1 SpecialAirHi and has landed in DownBoundU with hitlag/hitstun
+    #   clear, but `instance_hit_by`/`last_hit_by` still prove same-source accepted-hit ownership.
+    # - The dense group seed is therefore a real HitVictim suppression latch, not an inactive-gap
+    #   stale entry, and must block the repeated SpecialHi BODY contact.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+    dataset_path = _aggregate_pec_path()
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    binding = pytest.importorskip("msl_binding")
+
+    record = 6905
+    attacker = 1
+    defender = 0
+
+    assert int(samples["seed_t"]["action_id"][record, attacker]) == 356
+    assert int(samples["seed_t"]["action_id"][record, defender]) == 183
+    assert int(samples["seed_t"]["combat_hitlist_cd"][record, attacker, 0, defender]) != 0
+    assert int(samples["seed_t"]["instance_hit_by"][record, defender]) == int(
+        samples["seed_t"]["instance_id"][record, attacker]
+    )
+    assert int(samples["seed_t"]["last_hit_by"][record, defender]) == int(
+        samples["seed_t"]["source_port0"][record, attacker]
+    )
+    assert int(samples["seed_t"]["hitlag"][record, defender]) == 0
+    assert int(samples["seed_t"]["hitstun"][record, defender]) == 0
+
+    got = _run_row(binding, samples[record : record + 1])
+    ref = samples["ref_t1"][record]
+
+    assert int(ref["action_id"][defender]) == 183
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "hitlag", "hitstun"):
+        np.testing.assert_array_equal(got[field], ref[field], err_msg=f"field={field}")
+    for field in ("percent", "speed_x_attack", "speed_y_attack"):
+        np.testing.assert_allclose(got[field], ref[field], atol=1e-6, err_msg=f"field={field}")
 
 
 @pytest.mark.integration

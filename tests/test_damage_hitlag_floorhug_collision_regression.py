@@ -77,6 +77,40 @@ def _run_one_step_with_contacts(dataset_path: Path, record: int) -> tuple[np.nda
 
 
 @pytest.mark.integration
+def test_damageair_reentry_active_hitlag_floorhug_projects_root_his_3147() -> None:
+    # Replay-real lock for common DamageAir re-entry below the FD floor:
+    # - a BODY refresh changes DamageAir3 -> DamageAir2 while hitlag remains active,
+    # - the next ftCo_Damage_Coll / ft_80081DD4 pass refreshes FloorPush|FloorHug from the
+    #   persisted floor and keeps the fighter airborne at floor height,
+    # - adjacent non-DamageAir and DamageFly rows remain outside this owner.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[3147:3148]
+    p = 0
+
+    assert int(row["seed_t"]["action_id"][0, p]) == ACT_DAMAGE_AIR_2
+    assert int(row["seed_t"]["seed_prev_action_id"][0, p]) == ACT_DAMAGE_AIR_3
+    assert int(row["seed_t"]["hitlag"][0, p]) == 4
+    assert float(row["seed_t"]["pos_y"][0, p]) < 0.0
+    assert float(row["ref_t1"]["pos_y"][0, p]) == pytest.approx(0.00010013580322265625, abs=1e-6)
+
+    out, ref, contacts = _run_one_step_with_contacts(dataset_path, 3147)
+
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_DAMAGE_AIR_2
+    assert int(out["hitlag"][p]) == int(ref["hitlag"][p])
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 0
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+    assert int(contacts["coll_env_flags"][p]) & MSL_COLLIDE_FLOOR_MASK
+
+
+@pytest.mark.integration
 def test_damageflytop_active_hitlag_floorhug_stays_airborne_qgd_9683() -> None:
     # Vanilla forensic lock from QGD rec=9683 p1:
     # - active hitlag DamageFlyTop

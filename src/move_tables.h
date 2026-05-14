@@ -90,6 +90,13 @@ uint8_t move_tables_attackair_last_create_hitbox_phase(uint8_t char_id,
 uint8_t move_tables_grounded_attack_allow_interrupt(uint8_t char_id, uint16_t grounded_action_id,
                                                     float cur_anim_frame_f32);
 
+// Returns the first create_hitbox command frame for a grounded Attack* script, or -1 if absent.
+//
+// Source of truth: data/scripts/{fox,falco}.bin (MSLFTSC1)
+// moves["ftCo_SM_Attack*"]["events"] create_hitbox.
+int16_t move_tables_grounded_attack_first_create_hitbox_frame(uint8_t char_id,
+                                                              uint16_t grounded_action_id);
+
 // Returns whether grounded smash charge (opcode 56 -> ftCo_800DEE84) was crossed this frame.
 //
 // Decomp:

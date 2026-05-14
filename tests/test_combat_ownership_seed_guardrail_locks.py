@@ -215,6 +215,8 @@ def _run_one_step_row(
     p: int,
     *,
     rng_damage_fly_roll_gate: bool | None = None,
+    ucf_enabled: bool | None = None,
+    ucf_cardinals_1_0_enabled: bool | None = None,
     seed_mutator=None,
 ) -> tuple[np.void, np.void, np.void]:
     ds = read_dataset(str(ds_path))
@@ -248,7 +250,12 @@ def _run_one_step_row(
         # causality A/B checks in this lock harness.
         os.environ["MSL_RNG_ENABLE_DAMAGE_FLY_ROLL_GATE"] = "1"
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    init_kwargs = {"batch_size": 1, "num_players": int(ds.header["num_players"])}
+    if ucf_enabled is not None:
+        init_kwargs["ucf_enabled"] = int(bool(ucf_enabled))
+    if ucf_cardinals_1_0_enabled is not None:
+        init_kwargs["ucf_cardinals_1_0_enabled"] = int(bool(ucf_cardinals_1_0_enabled))
+    handle = binding.init(**init_kwargs)
     try:
         binding.reseed_seed(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)
@@ -5011,6 +5018,88 @@ def test_damageflyroll_damageflytop_attackairb_steady_admission_rows_and_adjacen
             os.environ.pop("MSL_RNG_TRACE_PATH", None)
         else:
             os.environ["MSL_RNG_TRACE_PATH"] = prev_trace_env
+
+
+@pytest.mark.integration
+def test_damageflyroll_damageflytop_attacklw4_source_admission_his() -> None:
+    # DamageFlyRoll RNG gate AttackLw4 source owner:
+    # - HIS 4397 is a DamageFlyTop victim refreshed by an AttackLw4 BODY hit.
+    # - Decomp's severe airborne damage entry has no AttackLw4 exclusion from the DamageFlyRoll
+    #   RNG gate; the replay-visible source attribution still maps to the AttackLw4 attacker.
+    # - Keep this as an AttackLw4 source create-hitbox phase admission, not a blanket DamageFlyTop
+    #   refresh gate. The phase boundary is sourced from MSLFTSC1 ftCo_SM_AttackLw4 create_hitbox.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackLw4.c
+    # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    # data/scripts/{fox,falco}.bin (MSLFTSC1 ftCo_SM_AttackLw4 create_hitbox)
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    target_record = 4397
+    p_victim = 0
+    p_attacker = 1
+    seed, ref, out = _run_one_step_row(
+        dataset_path,
+        target_record,
+        p_attacker,
+        rng_damage_fly_roll_gate=True,
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    assert int(seed["action_id"][p_victim]) == 90  # ftCo_MS_DamageFlyTop
+    assert int(seed["action_id"][p_attacker]) == 64  # ftCo_MS_AttackLw4
+    assert int(ref["action_id"][p_victim]) == 91  # ftCo_MS_DamageFlyRoll
+    _assert_transition_lock_fields_match_ref(
+        out_row=out,
+        ref_row=ref,
+        record=target_record,
+        p=p_victim,
+    )
+    _assert_transition_identity_lock_fields_match_ref(
+        out_row=out,
+        ref_row=ref,
+        record=target_record,
+        p=p_victim,
+    )
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("seed_action_frame", [4, 6])
+def test_damageflyroll_attacklw4_gate_rejects_adjacent_script_frames_his(seed_action_frame: int) -> None:
+    # Adjacent-frame controls for the AttackLw4 DamageFlyRoll gate. HIS 4397 reaches the source
+    # create-hitbox phase when the runtime action frame becomes the MSLFTSC1 create frame; moving
+    # the attacker one frame earlier/later must not broaden the gate.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    target_record = 4397
+    p_victim = 0
+    p_attacker = 1
+
+    def mutate(seed_t: np.ndarray) -> None:
+        seed_t["action_frame"][0, p_attacker] = np.int16(seed_action_frame)
+        seed_t["anim_frame_f32"][0, p_attacker] = np.float32(seed_action_frame)
+
+    seed, _ref, out = _run_one_step_row(
+        dataset_path,
+        target_record,
+        p_attacker,
+        rng_damage_fly_roll_gate=True,
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+        seed_mutator=mutate,
+    )
+    assert int(seed["action_id"][p_attacker]) == 64  # ftCo_MS_AttackLw4
+    assert int(seed["action_frame"][p_attacker]) == seed_action_frame
+    assert int(out["action_id"][p_victim]) != 91  # adjacent frames do not enter DamageFlyRoll.
 
 
 @pytest.mark.integration

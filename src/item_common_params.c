@@ -112,8 +112,10 @@ int item_common_params_init(void) {
   }
   buf[sz] = '\0';
 
-  if (json_get_f32(buf, "shield_bounce_extra_degrees", &g_params.shield_bounce_extra_degrees) !=
-      0) {
+  if (json_get_f32(buf, "item_damage_facing_velocity_threshold",
+                   &g_params.item_damage_facing_velocity_threshold) != 0 ||
+      json_get_f32(buf, "shield_bounce_extra_degrees", &g_params.shield_bounce_extra_degrees) !=
+          0) {
     alloc_free(buf);
     return -1;
   }

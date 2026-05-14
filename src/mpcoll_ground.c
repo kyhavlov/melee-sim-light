@@ -3144,12 +3144,13 @@ void mpcoll_ground_apply(MslBatch* batch) {
               ? 1u
               : 0u;
       const uint8_t locked_desired_ecb_bottom_valid =
-          (ecb_lock_active && action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
+          (ecb_lock_active && batch->state.coll_desired_ecb_bottom_valid[idx] != 0u &&
+           batch->state.coll_desired_ecb_bottom_locked_owner[idx] != 0u &&
            (escapeair_locked_jumpaerial_entry_desired_bottom_owner ||
             batch->state.coll_desired_ecb_bottom_locked_owner[idx] == 2u ||
-            batch->state.coll_desired_ecb_bottom_locked_owner[idx] == 3u) &&
-           batch->state.coll_desired_ecb_bottom_valid[idx] != 0u &&
-           batch->state.coll_desired_ecb_bottom_locked_owner[idx] != 0u)
+            batch->state.coll_desired_ecb_bottom_locked_owner[idx] == 3u ||
+            is_attackair_action(action_id) ||
+            msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_COMMON_AIR_COLL)))
               ? 1u
               : 0u;
       uint8_t use_locked_desired_ecb_bottom = 0u;
@@ -3403,6 +3404,48 @@ void mpcoll_ground_apply(MslBatch* batch) {
       const uint8_t escapeair_locked =
           (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR && ecb_lock_active) ? 1u : 0u;
       uint8_t deep_lock_penetration = 0u;
+      const uint8_t downdamage_x_axis_fresh_sdi_edge =
+          ((action_id == (uint16_t)MSL_ACT_DOWN_DAMAGE_U ||
+            action_id == (uint16_t)MSL_ACT_DOWN_DAMAGE_D) &&
+           fabsf(apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]),
+                                c->lstick_deadzone_x)) >= c->lstick_tilt_x_thresh &&
+           fabsf(apply_deadzone(stick_i8_to_unit(batch->state.prev_input_main_x[idx]),
+                                c->lstick_deadzone_x)) < c->lstick_tilt_x_thresh)
+              ? 1u
+              : 0u;
+      const uint8_t damage_active_hitlag_downward_sdi_airborne_owner =
+          // Active-hitlag SDI/floor handoff:
+          // - ftCo_Damage_OnEveryHitlag mutates cur_pos before the motion-state collision callback.
+          // - ft_80081DD4's allow-SDI path can keep a below-floor SDI root airborne via
+          //   mpColl_800477E0 / mpColl_80044948_Floor while hitlag remains frozen.
+          // - DownDamageU/D re-enter that common callback through ftCo_8009F184, but floor-adjacent
+          //   rows with a fresh x670 horizontal edge publish the horizontal displacement without
+          //   treating the y component as a below-floor stay-airborne owner; the later
+          //   DownDamage_Coll path owns floor contact. Rows whose fresh edge is vertical remain on
+          //   the below-floor active-hitlag owner.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+          //   ftCo_8008DCE0,ftCo_Damage_OnEveryHitlag}
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::{
+          //   ftCo_8009F184,ftCo_DownDamage_Phys,ftCo_DownDamage_Coll}
+          // refs/melee/src/melee/ft/fighter.c::Fighter_Spaghetti_8006AD10
+          // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+          // - The retained non-DownDamage slice is DamageAir3 active hitlag only: source routes it
+          //   through the common Damage_Coll / mpColl_800477E0 allow-SDI floor path after a consumed
+          //   downward OnEveryHitlag displacement. DamageAir2 floor-adjacent controls stay on the
+          //   normal floor clamp path, and DamageFly* remains deferred until its separate collision
+          //   handoff owner is closed. This avoids turning generic below-floor damage poses into a
+          //   broad runtime floor-suppression bridge.
+          ((batch->state.hitlag_pre_timer[idx] != 0u && batch->state.hitlag[idx] != 0u &&
+            batch->state.damage_hitlag_downward_sdi_consumed[idx] != 0u) &&
+           (((action_id == (uint16_t)MSL_ACT_DOWN_DAMAGE_U ||
+              action_id == (uint16_t)MSL_ACT_DOWN_DAMAGE_D) &&
+             !downdamage_x_axis_fresh_sdi_edge) ||
+            (action_id == (uint16_t)MSL_ACT_DAMAGE_AIR_3 &&
+             isfinite(batch->state.floor_sweep_prev_pos_y[idx]) &&
+             batch->state.floor_sweep_prev_pos_y[idx] > k_floor_y_bias &&
+             batch->state.pos_y[idx] < -k_floor_y_bias && batch->state.speed_y_attack[idx] < 0.0f)))
+              ? 1u
+              : 0u;
 
       MslMpcollOrderedWallCeilResult ordered_wall_ceil = {
           .left_right_flags = 0u,
@@ -4059,6 +4102,27 @@ void mpcoll_ground_apply(MslBatch* batch) {
              batch->state.pos_y[idx] < k_floor_y_bias)
                 ? 1u
                 : 0u;
+        const uint8_t active_common_damage_entry_floor_owner =
+            // Common DamageAir re-entry active-hitlag floorhug:
+            // a BODY hit can refresh DamageAir1/2/3 into another DamageAir state while the victim
+            // root is already below the persisted hard floor. The next
+            // `ftCo_Damage_Coll -> ft_80081DD4` callback still runs the stay-airborne floor path
+            // (`mpColl_800477E0`), projecting FloorPush/FloorHug without setting the fighter
+            // grounded. Keep this separate from DamageHi/N/Lw, DamageFly, and DamageFlyRoll rows,
+            // whose below-floor active-hitlag rows have their own owners and negative locks.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Coll
+            // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+            // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800477E0,mpColl_80044628_Floor,mpColl_80044948_Floor}
+            (batch->state.hitlag_pre_timer[idx] != 0u && batch->state.hitlag[idx] != 0u &&
+             is_damage_collision_landing_action(action_id) &&
+             !is_damage_fly_collision_action(action_id) && batch->state.action_frame[idx] == 1 &&
+             batch->state.seed_prev_action_id[idx] != action_id &&
+             (batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_DAMAGE_AIR_1 ||
+              batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_DAMAGE_AIR_2 ||
+              batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_DAMAGE_AIR_3) &&
+             batch->state.pos_y[idx] < k_floor_y_bias && prefer_line_idx >= 0)
+                ? 1u
+                : 0u;
         const uint8_t escapeair_jump_platform_root_owner =
             (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR && ecb_lock_active &&
              (prev_action_id == (uint16_t)MSL_ACT_JUMP_F ||
@@ -4189,8 +4253,9 @@ void mpcoll_ground_apply(MslBatch* batch) {
           }
         }
         uint8_t active_damage_hitlag_airborne_floor_contact = 0u;
-        if (!on_ground && (active_damage_hitlag_stay_airborne_floor_owner ||
-                           active_damage_thrown_release_floor_owner)) {
+        if (!on_ground &&
+            (active_damage_hitlag_stay_airborne_floor_owner ||
+             active_damage_thrown_release_floor_owner || active_common_damage_entry_floor_owner)) {
           // Stay-airborne floor contact ownership:
           // - mpColl_80044628_Floor sets FloorPush|FloorHug when the ECB bottom segment touches the
           //   persisted floor line.
@@ -4914,7 +4979,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
              batch->state.hitlag_pre_timer[idx] != 0u && batch->state.speed_y_attack[idx] < 0.0f)
                 ? 1u
                 : 0u;
-        if (!on_ground && !active_damage_hitlag_airborne_floor_contact && can_sweep &&
+        if (!on_ground && !active_damage_hitlag_airborne_floor_contact &&
+            !damage_active_hitlag_downward_sdi_airborne_owner && can_sweep &&
             floor_sweep_check(batch, idx, bi, g, stage_id, prev_bottom_x, prev_bottom_y,
                               cur_bottom_x, cur_bottom_y, skip_platform_segment_i, prefer_line_idx,
                               -1, c, &hit_line_idx, &ix, &iy, &floor_nx, &floor_ny)) {
@@ -5280,16 +5346,26 @@ void mpcoll_ground_apply(MslBatch* batch) {
                damageflyroll_root_proj_y_corr < damageflyroll_side_y_thresh)
                   ? 1u
                   : 0u;
-          // Active-hitlag damage rows can receive Damage_OnEveryHitlag SDI/ASDI before collision,
-          // but the Damage motion state remains airborne until the hitlag-exit/collision handoff.
-          // Resolve root penetration for visual/collision stability without setting
-          // ground_or_air=Ground during the frozen frame.
+          // DamageFlyRoll active-hitlag below-floor freeze:
+          // - DamageFlyRoll keeps the victim airborne while hitlag is still frozen.
+          // - Without a proven Damage_OnEveryHitlag stay-airborne floorhug owner above, do not let
+          //   generic floor projection snap a below-floor DamageFlyRoll pose to the floor before
+          //   ftCo_Damage_OnExitHitlag / DamageFlyRoll_Coll run.
+          // Other active Damage/DamageFly rows keep the existing floorhug/projected-contact paths;
+          // this is not a broad suppression of the damage collision family.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
-          //   ftCo_Damage_OnEveryHitlag,ftCo_Damage_Coll,ftCo_DamageFly_Coll}
+          //   ftCo_Damage_OnEveryHitlag,ftCo_Damage_OnExitHitlag,ftCo_Damage_Coll,
+          //   ftCo_DamageFlyRoll_Coll}
           // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
-          // refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpCheckFloor,mpColl_800477E0}
+          // refs/melee/src/melee/mp/mpcoll.c::{
+          //   mpCollPrev,mpCheckFloor,mpColl_800477E0,mpColl_80046904}
           const uint8_t suppress_active_damage_hitlag_land =
               (batch->state.hitlag[idx] != 0u && is_damage_collision_landing_action(action_id))
+                  ? 1u
+                  : 0u;
+          const uint8_t suppress_damageflyroll_below_floor_active_hitlag_land =
+              (action_id == MSL_ACT_DAMAGE_FLY_ROLL && batch->state.hitlag[idx] != 0u &&
+               batch->state.pos_y[idx] < 0.0f)
                   ? 1u
                   : 0u;
           const uint8_t suppress_damageair_attackair_entry_land =
@@ -5945,7 +6021,9 @@ void mpcoll_ground_apply(MslBatch* batch) {
                          suppress_projected_attackair_transformed_platform_ecb_only_land ||
                          suppress_projected_attackair_transformed_platform_floor_skip_land ||
                          suppress_projected_attackair_offspan_hard_floor_edge_land ||
-                         suppress_projected_attackair_transformed_platform_below_land) {
+                         suppress_projected_attackair_transformed_platform_below_land ||
+                         damage_active_hitlag_downward_sdi_airborne_owner ||
+                         suppress_damageflyroll_below_floor_active_hitlag_land) {
                 if (suppress_projected_attackair_transformed_platform_ecb_only_land ||
                     suppress_projected_attackair_transformed_platform_floor_skip_land) {
                   if (suppress_projected_attackair_transformed_platform_ecb_only_land) {
@@ -5985,6 +6063,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
               //   ftCo_DownDamage_Phys,ftCo_DownDamage_Coll}
               // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
               if (!suppress_active_damage_hitlag_land &&
+                  !suppress_damageflyroll_below_floor_active_hitlag_land &&
                   floor_snap_to_line_edge_from_bottom(batch, bi, g, hit_line_idx, cur_bottom_x,
                                                       cur_bottom_y, 0u, &ground_id, &contact_x,
                                                       &contact_y, &floor_nx, &floor_ny)) {
@@ -6864,6 +6943,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
             suppress_kneebend_escapeair_slope_final_land ||
             suppress_jumpaerial_escapeair_high_lift_ledge_final_land ||
             suppress_jumpaerial_escapeair_static_platform_overstep_final_land ||
+            damage_active_hitlag_downward_sdi_airborne_owner ||
             suppress_cliff_horizontal_ledge_locked_final_land) {
           if (suppress_specialairhi_platform_land && batch->state.floor_skip_segment_id != NULL) {
             batch->state.floor_skip_segment_id[idx] = ground_id;
@@ -6916,6 +6996,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
           } else if (suppress_locked_desired_nonplatform_without_bottom_sweep) {
             batch->state.pos_y[idx] = y;
           } else if (suppress_kneebend_escapeair_slope_final_land) {
+            batch->state.pos_y[idx] = y;
+          } else if (damage_active_hitlag_downward_sdi_airborne_owner) {
             batch->state.pos_y[idx] = y;
           } else if (suppress_cliff_horizontal_ledge_locked_final_land) {
             batch->state.pos_y[idx] = y;
@@ -7049,6 +7131,18 @@ void mpcoll_ground_apply(MslBatch* batch) {
         //   ftCo_FallSpecial_Coll,ftCo_80096CC8,ftCo_80096D28}
         on_ground = 0u;
         batch->state.pos_y[idx] = y;
+      }
+      if (damage_active_hitlag_downward_sdi_airborne_owner) {
+        // Last publication guard for the same active-hitlag owner above. Some generic
+        // floor paths can keep `ground_or_air` airborne while still lifting the root to the floor
+        // bias; source keeps the current hitlag-callback root until the damage collision owner
+        // resolves the floor contact.
+        on_ground = 0u;
+        ground_id = seed_ground_id;
+        batch->state.pos_y[idx] = y;
+        batch->state.coll_floor_result_valid[idx] = 0u;
+        batch->state.coll_floor_result_source[idx] = (uint8_t)MSL_MPCOLL_FLOOR_RESULT_NONE;
+        batch->state.coll_floor_result_segment_id[idx] = 0xFFFFu;
       }
       batch->state.on_ground[idx] = on_ground;
       if (on_ground) {

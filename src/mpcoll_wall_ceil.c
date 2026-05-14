@@ -3235,25 +3235,22 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
       // Damage_OnExitHitlag wall-ASDI provenance:
       // `wall_id` persists after detach, so the hitlag-exit ASDI owner cannot key on that id alone.
       // Latch when the DamageFly collision callback observes a wall during active hitlag. The
-      // same-frame SpecialAirHi_Coll -> DamageFly bridge is kept only for continuing wall
-      // provenance: the previous frame's CollData already had a wall mask, and the current
-      // SpecialAirHi collision callback refreshes the same wall before combat starts hitlag. A
-      // first-touch SpecialHi wall contact on the damage-entry frame must not stale-arm
-      // hitlag-exit ASDI.
+      // A same-frame SpecialAirHi_Coll contact before combat starts hitlag is not generic
+      // DamageFly_Coll evidence for ftCo_Damage_OnExitHitlag wall-ASDI projection. Retain the
+      // existing source-backed left-wall SpecialHi envelope slice only when the previous CollData
+      // wall mask proves continuing left-wall provenance; right-wall damage-entry scrapes remain
+      // open and must not stale-project ASDI on hitlag exit.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_OnExitHitlag,ftCo_DamageFly_Coll}
       // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_procMap}
       const uint8_t active_hitlag_phase = mpcoll_active_hitlag_phase(batch, idx);
-      const uint32_t current_wall_mask =
-          (batch->state.wall_kind[idx] == MSL_WALL_LEFT)    ? (uint32_t)MSL_COLLIDE_LEFT_WALL_MASK
-          : (batch->state.wall_kind[idx] == MSL_WALL_RIGHT) ? (uint32_t)MSL_COLLIDE_RIGHT_WALL_MASK
-                                                            : 0u;
-      const uint8_t same_frame_specialhi_continuing_wall =
-          (action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI && current_wall_mask != 0u &&
-           (batch->state.coll_prev_env_flags[idx] & current_wall_mask) != 0u)
+      const uint8_t same_frame_specialhi_continuing_left_wall =
+          (action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI &&
+           batch->state.wall_kind[idx] == MSL_WALL_LEFT &&
+           (batch->state.coll_prev_env_flags[idx] & (uint32_t)MSL_COLLIDE_LEFT_WALL_MASK) != 0u)
               ? 1u
               : 0u;
       if (mpcoll_wall_asdi_producer_action(action_id) &&
-          (active_hitlag_phase || same_frame_specialhi_continuing_wall)) {
+          (active_hitlag_phase || same_frame_specialhi_continuing_left_wall)) {
         if (batch->state.wall_kind[idx] == MSL_WALL_LEFT ||
             batch->state.wall_kind[idx] == MSL_WALL_RIGHT) {
           batch->state.damage_hitlag_wall_asdi_latch[idx] = 1u;

@@ -9,6 +9,11 @@
 // The per-frame hot path must remain alloc-free.
 
 typedef struct MslItemCommonParams {
+  // ftColl_8007A06C item-damage facing owner:
+  // if abs(item->x40_vel.x) < x78, use item position; otherwise use item velocity sign.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007A06C
+  // refs/melee/src/melee/it/types.h::ItemCommonData::x78_float
+  float item_damage_facing_velocity_threshold;
   // Item_80269DC8 shield-bounce angle predicate:
   // item->xC54 < deg_to_rad(90 + it_804D6D28->unk_degrees)
   // refs/melee/src/melee/it/item.c::Item_80269DC8

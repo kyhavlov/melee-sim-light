@@ -596,6 +596,23 @@ void timers_consume_post_hitlag_callbacks_after_input(MslBatch* batch) {
            lstick_full_mag_sq >= sdi_radius_sq && prev_lstick_full_mag_sq < sdi_radius_sq)
               ? 1u
               : 0u;
+      const uint8_t downdamage_x_axis_floor_sdi_suppresses_downward_y =
+          // DownDamageU/D can re-enter the common Damage hitlag callback through ftCo_8009F184.
+          // In floor-facing active-hitlag rows, a current-frame x670 horizontal edge owns the
+          // replay-visible displacement as horizontal SDI; source does not also treat a downward y
+          // component as a below-floor stay-airborne owner for DownDamage_Coll. Upward SDI is still
+          // ordinary ftCo_Damage_OnEveryHitlag displacement, so diagonal-up rows must retain y.
+          // Rows without a fresh x-axis owner remain on the generic 2D displacement.
+          //
+          // refs/melee/src/melee/ft/fighter.c::Fighter_Spaghetti_8006AD10 (x670/x671 update)
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+          //   ftCo_8008DCE0,ftCo_Damage_OnEveryHitlag}
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::ftCo_8009F184
+          ((a == (uint16_t)MSL_ACT_DOWN_DAMAGE_U || a == (uint16_t)MSL_ACT_DOWN_DAMAGE_D) &&
+           batch->state.action_frame[idx] == 1 &&
+           batch->state.tilt_timer_x[idx] < c->sdi_tilt_max_frames)
+              ? 1u
+              : 0u;
       const uint8_t flags_221a = batch->state.state_flags[flags_i];
       // Source predicate:
       // - ftCo_Damage_OnEveryHitlag's timer-window path is generic and gated by hidden `allow_sdi`.
@@ -621,9 +638,13 @@ void timers_consume_post_hitlag_callbacks_after_input(MslBatch* batch) {
       if (batch->state.hitlag_pre_timer[idx] != 0u && batch->state.hitlag[idx] != 0u && allow_sdi &&
           (use_timer_window || use_first_active_radius_crossing) && is_current_hitlag_active &&
           lstick_full_mag_sq >= sdi_radius_sq) {
+        const float sdi_y =
+            (downdamage_x_axis_floor_sdi_suppresses_downward_y && lstick_full_y < 0.0f)
+                ? 0.0f
+                : lstick_full_y;
         batch->state.pos_x[idx] += lstick_full_x * sdi_step_mul;
-        batch->state.pos_y[idx] += lstick_full_y * sdi_step_mul;
-        if (lstick_full_y < 0.0f) {
+        batch->state.pos_y[idx] += sdi_y * sdi_step_mul;
+        if (sdi_y < 0.0f) {
           batch->state.damage_hitlag_downward_sdi_consumed[idx] = 1u;
         }
         batch->state.tilt_timer_x[idx] = 254u;

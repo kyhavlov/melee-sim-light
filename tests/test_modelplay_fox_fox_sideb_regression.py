@@ -53,6 +53,8 @@ def test_modelplay_fox_fox_sideb_body_hit_launches_victim_instead_of_freezing() 
     #      consuming it (`itFoxIllusion_Logic14_DmgDealt` returns false and clears xCA8),
     #   2) item BODY hits use the same ftCo_8008DCE0 grounded-vs-airborne knockback install as
     #      fighter BODY hits.
+    # Horizontal direction is owned by the item-damage facing source, so this symptom lock only
+    # asserts that the victim enters airborne hitstun and moves instead of freezing on the floor.
     # refs/melee/src/melee/it/items/itfoxillusion.c::itFoxIllusion_Logic14_DmgDealt
     # refs/melee/src/melee/it/item.c::{OnGiveDamageThink,checkHitLag}
     # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
@@ -97,4 +99,4 @@ def test_modelplay_fox_fox_sideb_body_hit_launches_victim_instead_of_freezing() 
     assert int(post_hitlag["hitstun"][1]) == 45
     assert int(post_hitlag["on_ground"][1]) == 0
     assert float(post_hitlag["pos_y"][1]) > 1.0
-    assert float(post_hitlag["pos_x"][1]) > 76.0
+    assert abs(float(post_hitlag["pos_x"][1]) - float(seed["pos_x"][0, 1])) > 0.5
