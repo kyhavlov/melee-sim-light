@@ -729,7 +729,12 @@ Recent deltas to reflect here (do not let these get “lost in chat logs”):
   across the accepted floor or stay airborne; root projection alone cannot synthesize a large
   platform lift while the desired bottom stayed below the line. This keeps shallower first crossings
   airborne while allowing countdown-6 platform landings on legal stages whose callback-local floor
-  precondition has reached the floor
+  precondition has reached the floor. FoD-specific locked EscapeAir rows can also expose a zero
+  visible EscapeAir bottom while source CollData still carries a positive desired/previous bottom;
+  runtime admits only the platform-bottom sweep into MSLSTG01 FoD platform lines before applying the
+  same root projection. Transformed side platforms retain the lock-countdown boundary (timer 3
+  airborne, timer 2 publishable), while static center-platform and fresh Jump/JumpAerial entry rows
+  use their own callback-local sweep.
   (`src/mpcoll_ground.c`; refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll,
   refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C},
   refs/melee/src/melee/mp/mpcoll.c::{mpColl_80043754,mpColl_80046904,mpColl_80044838_Floor});
@@ -847,9 +852,10 @@ Recent deltas to reflect here (do not let these get “lost in chat logs”):
   generated `MSLMSO01` `GROUNDED_STAGE_OBJECT_CARRY_COLL` callback class, covering
   Wait/Walk/Run/Squat/Landing/LandingAir/grounded attack/guard plus the downed/passive-family
   callbacks that source routes through `ft_80084104` (`ftCo_Down_Coll`,
-  `ftCo_DownAttack_Coll`, `ftCo_PassiveStand_Coll`). DownBound/DownWait/DownStand/DownSpot,
-  Passive, and DownDamage keep their separate downed collision owners and do not borrow this carry
-  class. Frozen Pokemon Stadium fighter-solid policy is
+  `ftCo_DownAttack_Coll`, `ftCo_PassiveStand_Coll`) and the grounded Catch/Throw callbacks that
+  source routes through `ft_800841B8 -> ft_800827A0 -> mpColl_8004B2DC`. DownBound/DownWait/
+  DownStand/DownSpot, Passive, and DownDamage keep their separate downed collision owners and do not
+  borrow this carry class. Frozen Pokemon Stadium fighter-solid policy is
   data-backed by MSLSTG01 current-domain metadata, keeping transformation lines visible for
   debug/data APIs while suppressing them from fighter collision.
   (`src/mpcoll_ground.c`, `src/locomotion.c`;
@@ -859,16 +865,37 @@ Recent deltas to reflect here (do not let these get “lost in chat logs”):
 - AttackAir floor contact is owned by `AttackAir_Coll -> ft_80082C74` even on same-frame
   hitlag-start contacts, so an aerial that hits while touching a platform still enters `Landing` /
   `LandingAir*` from the extracted command-script `cmd_vars[0]` window instead of remaining as a
-  grounded AttackAir. Grounded ThrowF/B/Hi/Lw floor-end behavior shares the
-  `ftCo_Throw*_Coll -> ft_800841B8 -> ft_800827A0 -> mpColl_8004B2DC` owner; the
-  `mpColl_8004A45C_Floor` endpoint snap keeps the throw rooted to the current floor edge rather
-  than publishing an airborne throw at platform height. Modelplay locks cover Battlefield
-  AttackAirN hitlag landing and Yoshi ThrowF platform-edge rooting (`src/locomotion.c`,
+  grounded AttackAir. The same `ft_80082C74 -> mpColl_800471F8` owner accepts connected
+  hard-floor edge handoffs by first requiring the `mpColl_80044628_Floor` bottom sweep, then using
+  `mpColl_80044838_Floor(ignore_bottom=true)` when the loaded AttackAir ECB bottom is above the
+  callback root. The same source handoff can publish source-trusted FoD height-transform platforms
+  once the callback root is past the shallow first-phase platform-contact band; `AttackAir_Coll`
+  does not pass `ftCo_80096CC8`, so held-down input alone is not a platform-pass reject for those
+  deeper root-below contacts. Shallow first-phase and carried `floor_skip` contacts remain scoped to
+  height-transform platform pass-through. Grounded
+  ThrowF/B/Hi/Lw floor-end behavior shares the
+  `ftCo_Throw*_Coll -> ft_800841B8 -> ft_800827A0 -> mpColl_8004B2DC` owner; connected FoD
+  slope-to-flat handoffs use the floor line returned by `mpLib_8004DD90_Floor` instead of
+  extrapolating the carried slope past its endpoint, while `mpColl_8004A45C_Floor` endpoint snap
+  keeps off-end throws rooted to the current floor edge rather than publishing an airborne throw at
+  platform height. Replay/modelplay locks cover MGS ThrowF right-main-floor seam projection,
+  Battlefield AttackAirN hitlag landing, and Yoshi ThrowF platform-edge rooting (`src/locomotion.c`,
   `src/mpcoll_ground.c`; refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c,
   refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c,
   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c,
   refs/melee/src/melee/ft/ft_081B.c, refs/melee/src/melee/mp/mpcoll.c).
-- MSLSTG01 v7 raw `MapLine` links are exposed as runtime substrate for source-shaped
+- Fresh `JumpAerialF/B -> EscapeAir` hard-floor contacts consume the preserved
+  `CollData_X130_Locked` desired ECB bottom in the same `EscapeAir_Coll` callback. The bottom sweep
+  uses the current locked desired bottom before `mpColl_80044838_Floor(ignore_bottom=true)` projects
+  the root to the accepted floor, so FoD hard-floor rows like EWT's right ledge floor enter
+  `LandingFallSpecial` from the fresh EscapeAir callback rather than staying airborne. Sustained
+  soft-platform EscapeAir countdown guards remain separate from this fresh hard-floor bottom-sweep
+  owner (`src/mpcoll_ground.c`; refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_IASA,
+  refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll,
+  refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C},
+  refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpColl_800471F8,
+  mpColl_80044628_Floor,mpColl_80044838_Floor}).
+- MSLSTG01 v9 raw `MapLine` links are exposed as runtime substrate for source-shaped
   `mpLineGetPrev/Next` and non-kind traversal. Frozen Pokemon Stadium applies the active
   fighter-solid mask to walls/ceilings as well as floors, so inactive transformation/platform-side
   shell lines remain visible in data/debug output but do not participate in fighter wall collision.
@@ -2465,7 +2492,10 @@ Fox/Falco special-owner split (2026-04-17):
     projection is not restored. Locked same-frame JumpAerial -> EscapeAir rows use the
     frame-start `CollData.last_pos` owner from `ft_80082C74`, not the older replay t-1
     `floor_sweep_prev_pos` lane; while `CollData_X130_Locked` is live, runtime preserves the seeded
-    desired ECB bottom. Zero-bottom locked rows use the same frame-start root sweep. Sources:
+    desired ECB bottom. On non-FD legal-stage hard floors, replay-prefix rows that expose an active
+    lock but no desired-bottom lane use the same frame-start root sweep; FD stays on the existing
+    desired-bottom/locked-owner branch because owner-zero free-running FD states are a separate
+    hidden-state gap. Soft platforms and ledges remain on their separate EscapeAir guards. Sources:
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll`,
     `refs/melee/src/melee/ft/ft_081B.c::ft_80082C74`, and
     `refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpColl_80043754,mpColl_80044628_Floor,mpColl_80044838_Floor}`.
@@ -2479,11 +2509,12 @@ Fox/Falco special-owner split (2026-04-17):
     hard-floor crossing after that platform pass, and height-transform platform writebacks where
     both callback root samples are already below the platform and the ECB-bottom precondition for
     `mpColl_80044838_Floor(ignore_bottom=true)` is absent. Released/no-owner first crossings,
-    static platforms/supports, ordinary hard floors, and other AttackAir submotions still publish
-    `Landing`/`LandingAir*` through the normal floor handoff. Replay-prefix rows reconstruct the
-    same hidden episode as `floor_skip_segment_id_u16/valid` from generated MSLMSO01 submotion
-    ownership, MSLFTSC1 first hitbox phase, current/prior input, and generated FoD transform
-    metadata. Sources:
+    source-trusted FoD platform contacts where the root is already deeper than the shallow
+    first-phase band, static platforms/supports, ordinary hard floors, and other AttackAir submotions
+    still publish `Landing`/`LandingAir*` through the normal floor handoff. Replay-prefix rows
+    reconstruct the same hidden episode as `floor_skip_segment_id_u16/valid` from generated MSLMSO01
+    submotion ownership, MSLFTSC1 first hitbox phase, current/prior input, and generated FoD
+    transform metadata. Sources:
     `data/motion_state/owners/{fox,falco}.bin::MSLMSO01`,
     `data/scripts/{fox,falco}.bin::MSLFTSC1`,
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll`,
@@ -2503,8 +2534,27 @@ Fox/Falco special-owner split (2026-04-17):
     step; those rows have not reached the source floor-publication phase even though the
     callback-local bottom sweep can see the platform. Same-frame `JumpAerial_IASA -> EscapeAir`
     entries, rows with preserved desired-bottom / CollData_X130 ownership, and deeper same-owner
-    Dream Land crossings remain ordinary `EscapeAir_Coll` landings.
+    Dream Land crossings remain ordinary `EscapeAir_Coll` landings. A carried FoD height-transform
+    platform floor id that is already horizontally off-span is still a valid CollData_X130 source
+    owner for the EscapeAir entry: runtime preserves the JumpAerial desired bottom for the following
+    callback instead of clearing it against the stale transformed platform height, and the adjacent
+    hard-floor handoff then lands through the ordinary `EscapeAir_Coll` floor search. Direct
+    replay-seeded owner-1 rows from the same `JumpAerial -> EscapeAir` lineage use the explicit
+    desired-bottom seed lane to admit non-platform floor projection only when that desired bottom
+    crosses the carried floor this frame; sustained `EscapeAir -> EscapeAir` lock rows stay on their
+    separate source window. First-frame JumpAerial entries whose preserved desired bottom is the
+    zero-bottom handoff can also publish a FoD transformed-platform floor when the previous/root
+    projection proves the same platform crossing; the final missing-bottom guard does not discard
+    that proven `EscapeAir_Coll` root projection, while later carried JumpAerial frames stay on the
+    existing interpolation/airborne controls. Fresh ground-jump `JumpF/JumpB -> EscapeAir` entries
+    have a separate FoD height-platform owner: when `ftCo_80099A58` enters EscapeAir before
+    Fighter_procMap, `EscapeAir_Coll/mpColl_800471F8` may accept the source-trusted grIzumi
+    height-transform platform under the root even though `CollData.floor.index` still names the main
+    floor. That owner is restricted to generated `MSLSTG01` height-transform platforms with
+    source-trusted live height; ordinary stages and ground-jump airdodges without a height-platform
+    line remain on the existing airborne guards.
     Sources: `data/motion_state/owners/{fox,falco}.bin::MSLMSO01`,
+    `data/stages/bin/griz.json::platform_transforms`,
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_IASA`,
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll`,
     `refs/melee/src/melee/ft/ft_081B.c::ft_80082C74`, and
@@ -2518,21 +2568,59 @@ Fox/Falco special-owner split (2026-04-17):
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll`,
     `refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}`, and
     `refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor,mpColl_80044838_Floor}`.
-  - Sustained `Fall` and `JumpAerial` fastfall rows use the same source split: FoD
+  - Sustained `JumpF`/`JumpB`, `Fall`, and `JumpAerial` fastfall rows use the same source split: FoD
     height-transform platform contacts can remain airborne until the callback-local floor handoff
     publishes, but static-y stage-object support transforms are ordinary pass-through platform
     landings. In particular, a neutral-stick `Fall_Coll -> ft_800831CC -> mpColl_80047E14`
     crossing onto Randall publishes `Landing` on the generated support floor instead of reusing the
-    FoD height-transform suppression. Replay-prefix FoD rows also reconstruct active
-    `CollData.floor_skip` for `Fall_Coll` because `ft_800831CC` passes the same
-    `ftCo_80096CC8` soft-platform predicate as Jump/JumpAerial. `ElatedWearyTermite.msl:5954`
-    locks that carry after a down-held transformed-platform pass; adjacent
-    `ParallelTemptingElk` Jump/Fall/AttackAir rows remain separate evidence for the deeper
-    FoD/ECB-bottom or scheduler-phase owner rather than this seed lane. Sources:
+    FoD height-transform suppression. Runtime now publishes the same generated transformed-platform
+    `CollData.floor_skip` when a common-air root crossing is rejected by `ftCo_80096CC8`, then
+    preserves that skip while the same airborne common-air callback family remains active. This
+    closes free-running `JumpB` pass-through rows that start before the replay-prefix seed lane is
+    serialized. Replay-prefix FoD rows also reconstruct active `CollData.floor_skip` for
+    `Fall_Coll`/`Jump_Coll` because `ft_800831CC` and `ft_800835B0` pass the same
+    `ftCo_80096CC8` soft-platform predicate as JumpAerial. `ElatedWearyTermite.msl:5954` and
+    `ParallelTemptingElk.msl:1510` lock that carry after a down-held transformed-platform pass;
+    adjacent FoD AttackAir rows remain separate evidence for the deeper ECB-bottom or
+    scheduler-phase owner rather than this common-air floor-skip lane. Sources:
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Coll`,
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_Coll`,
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Coll`,
     `refs/melee/src/melee/ft/ft_081B.c::{ft_800831CC,ft_800835B0}`, and
-    `refs/melee/src/melee/mp/mpcoll.c::mpColl_80047E14`.
+    `refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpColl_80047E14}`.
+  - FoD platform height seeds now retain a three-bit source bitmask in the former stage padding lane:
+    direct Slippi `fod_platform` current-height events, current grounded-contact reconstruction,
+    and same-step contact reconstruction. Runtime transformed-platform trust uses that source bitmask
+    to distinguish current grIzumi/mpLib platform heights from stale sparse carries without enabling
+    the free-running FoD scheduler on teacher-forced replay seeds. `ParallelTemptingElk.msl:9136`
+    locks the low-left-platform same-step contact row; the long rollout cascade that starts at
+    `8596` still exposes the separate hidden FoD scheduler/RNG phase owner, because the platform
+    reappears hundreds of frames after the rollout seed and the current package does not seed the
+    remaining grIzumi wait/target phase. Sources:
+    `refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358`,
+    `refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C`, and
+    `data/stages/bin/griz.bin::MSLSTG01 platform_transforms`.
+  - A replay rollout seeded at true match start (`frame_id <= -123`) may trust the extracted FoD
+    initial side-platform heights even when the sparse Slippi platform event/contact lane is not yet
+    marked valid. `grIzumi_801CCBDC` initializes the side-platform JObjs from stage data before the
+    first match frame and before later random target/phase updates; this is narrower than enabling
+    the hidden scheduler from an arbitrary replay seed. `MilkyGracefulStingray.msl:442` locks the
+    initial-height side-platform Damage landing, while later invalid sparse rows still require
+    explicit source height/velocity evidence. Sources:
+    `refs/melee/src/melee/gr/grizumi.c::{grIzumi_801CCBDC,grIzumi_801CC358}` and
+    `data/stages/bin/griz.bin::MSLSTG01 platform_transform.y_const`.
+  - Supported-stage floor material friction is generated into `MSLSTG01` per floor segment from
+    `mpLib_800569EC(MapLine.lo_flags & 0xFF)`. Grounded knockback decay and grounded
+    attacker-shield pushback now use the current `ground_id`'s generated material multiplier before
+    falling back to the legacy seed lane when no loaded stage table is available. This closes FoD
+    Passive slide rows on material-2 floor segment `3`, where vanilla decays grounded KB by
+    `1.5 * co_attrs.gr_friction * p_ftCommonData->x200` instead of the seeded default `1.0`.
+    Sources:
+    `refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate`,
+    `refs/melee/src/melee/ft/ft_081B.c::ft_GetGroundFrictionMultiplier`,
+    `refs/melee/src/melee/mp/mpcoll.c::mpColl_8004CA6C`,
+    `refs/melee/src/melee/mp/mplib.c::mpLib_800569EC`, and
+    `data/stages/bin/*.bin::MSLSTG01 segment.ground_friction_mul`.
   - Sustained `JumpAerialF/B` static-platform pass-through uses the generated pose ECB bottom as
     the final publication boundary. A just-released down-held platform pass can leave the
     callback-local JumpAerial root below a static soft platform; when the generated pose bottom is
@@ -2579,8 +2667,9 @@ Fox/Falco special-owner split (2026-04-17):
     boundary, a carried generated platform floor.index can remain live for the first post-wrap
     callback before a non-ledge hard-floor handoff publishes Landing. The retained Fall split is the
     generated platform floor owner plus `AOBJ_LOOP` timing: loop-wrap hard-floor rows stay airborne
-    for one callback, adjacent ledge-floor rows and the following below-floor hard-floor row still
-    land through ordinary `Fall_Coll`. Sources:
+    only while the callback-local previous root is still above the accepted hard floor; adjacent
+    ledge-floor rows and the following already-below hard-floor row still land through ordinary
+    `Fall_Coll`. Sources:
     `data/stages/bin/*.bin::MSLSTG01 platform transform records`,
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::{ftCo_Fall_Anim,ftCo_Fall_Coll}`,
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Coll`,
@@ -2594,9 +2683,16 @@ Fox/Falco special-owner split (2026-04-17):
     live `coll_desired_ecb_bottom_rel_y` field. The retained runtime consumer is currently scoped to
     active-lock `EscapeAir_Coll`, the Dolphin-probed owner family; extending AttackAir/Damage/
     SpecialAirN consumers needs separate row locks because the broad consumer regressed current
-    aggregate validation. Sources:
+    aggregate validation. FoD side-platform EscapeAir rows can expose the timer-3 frame before the
+    source callback publishes a floor result, but the same locked CollData desired bottom must carry
+    into the timer-2 frame where `EscapeAir_Coll` accepts the transformed platform. Runtime preserves
+    FoD replay-seeded owner-1 desired-bottom rows only after the current floor decision has completed;
+    it does not let owner-1 desired-bottom evidence publish a same-frame landing. The timer-2 landing
+    still goes through the existing FoD platform bottom-sweep/root-projection owner. Sources:
     `refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4`,
-    `refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpCollInterpolateECB}`,
+    `refs/melee/src/melee/ft/ftcommon.c::ftCommon_UnlockECB`,
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll`,
+    `refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpCollInterpolateECB,mpColl_80044628_Floor,mpColl_80044838_Floor}`,
     `data/ecb/*`.
   - FireFox/FireBird rebound ownership now includes `SpecialAirHi` floor collision into
     `SpecialHiBound` and airborne `SpecialHiBound` anim-end into common `FallSpecial`, consuming
@@ -5244,13 +5340,21 @@ BODY collision-space residual split and rejected seed bridge:
   applied before the entered motion's collision pass observes floor loss. LDW `2581 -> 2615` locks
   the Battlefield platform overlap case where LandingFallSpecial receives the outward `+0.3` nudge,
   enters `Ottotto`, then falls from the platform edge after the frame-start Ottotto Turn IASA.
-  The broader all-grounded off-edge nudge remains gated until the non-`ft_80084280` collision
-  owners are modeled; an all-action removal regressed the GAT DamageFlyRoll rollout lock. Sources:
+  The same source owner is now table-backed for grounded callbacks whose decomp Coll bodies call
+  `ft_80083F88(gobj)`: generated `MSLMSO01` class `FT80083F88_GROUND_TO_AIR_COLL` identifies the
+  `ft_80082708 -> mpColl_8004B108` ground-to-air family. The retained runtime consumes only the
+  audited KneeBend subset: `MGS:616` locks the FoD top-platform `SquatRv -> KneeBend -> Fall` case
+  where the source x450 nudge moves the KneeBend root past the static platform edge before
+  collision. The broader all-grounded off-edge nudge remains gated until unrelated
+  collision-owner families are modeled; an all-class experiment caused unrelated Battlefield float
+  drift. Sources:
   `refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}`,
   `refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007DD7C,ftCommon_8007E0E4}`,
-  `refs/melee/src/melee/ft/ft_081B.c::ft_80084280`,
+  `refs/melee/src/melee/ft/ft_081B.c::{ft_80084280,ft_80083F88,ft_80082708}`,
   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::{ftCo_8009A3C8,ftCo_Ottotto_IASA}`,
-  `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_Coll`.
+  `refs/melee/src/melee/ft/chara/ftCommon/{ftCo_Turn.c,ftCo_KneeBend.c,ftCo_SquatRv.c}`,
+  `refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108`,
+  `data/motion_state/owners/{fox,falco}.bin`.
 - Taxonomy now records the victim's post-timebase/pre-combat action when splitting debug-selected
   false-positive rows. If the victim already diverged from the replay destination before BODY
   collision, the row is assigned to `F10l`; if there is no pre-combat candidate, it is assigned to

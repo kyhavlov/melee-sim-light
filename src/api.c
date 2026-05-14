@@ -1333,6 +1333,20 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.stage_fod_platform_velocity[pidx] = isfinite(v) ? v : 0.0f;
       batch->state.stage_fod_platform_velocity_valid[pidx] =
           (seed->stage_fod_platform_velocity_valid_u8[pi] && isfinite(v)) ? 1u : 0u;
+      batch->state.stage_fod_platform_height_source[pidx] =
+          batch->state.stage_fod_platform_valid[pidx]
+              ? seed->stage_fod_platform_height_source_u8[pi]
+              : 0u;
+      if (seed->stage_id == (uint32_t)MSL_STAGE_FOUNTAIN_OF_DREAMS && seed->frame_id <= -123 &&
+          !batch->state.stage_fod_platform_valid[pidx] && isfinite(h)) {
+        // grIzumi initializes both side-platform JObjs from stage data before the match-start
+        // frame. Sparse replay streams may not emit a platform event/contact at frame -123, but the
+        // generated seed still carries those extracted initial heights. Trust them only for true
+        // match-start seeds; later invalid sparse rows do not expose the hidden scheduler phase.
+        // refs/melee/src/melee/gr/grizumi.c::{grIzumi_801CCBDC,grIzumi_801CC358}
+        // data/stages/bin/griz.bin::MSLSTG01 platform_transform.y_const
+        batch->state.stage_fod_platform_valid[pidx] = 1u;
+      }
       batch->state.stage_fod_platform_scheduler_phase[pidx] = 0u;
       batch->state.stage_fod_platform_scheduler_timer[pidx] = 0u;
       batch->state.stage_fod_platform_scheduler_target[pidx] = 0.0f;
@@ -3373,6 +3387,8 @@ int msl_batch_debug_write_stage_state(const MslBatch* batch, uint8_t* out_bytes,
       out->fod_platform_height[platform_id] = batch->state.stage_fod_platform_height[idx];
       out->fod_platform_height_valid[platform_id] =
           batch->state.stage_fod_platform_valid[idx] ? 1u : 0u;
+      out->fod_platform_height_source[platform_id] =
+          batch->state.stage_fod_platform_height_source[idx];
     }
   }
 

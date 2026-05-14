@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 STAGE_MAGIC = b"MSLSTG01"
-STAGE_VERSION = 8
+STAGE_VERSION = 9
 PART_MAGIC = b"MSLPART1"
 PART_VERSION = 1
 ITEM_ARTICLE_MAGIC = b"MSLITAR1"
@@ -78,6 +78,7 @@ class StageSegment:
     y0: float
     x1: float
     y1: float
+    ground_friction_mul: float
 
 
 @dataclass(frozen=True)
@@ -293,7 +294,7 @@ def read_mslstg01_v7(path: Path) -> StageMetadata:
     ) = struct.unpack_from("<HHHHHHHHHHffffffff", buf, 12)
     expected = (
         64
-        + segment_count * 32
+        + segment_count * 36
         + stage_point_count * 12
         + spawn_count * 8
         + respawn_count * 8
@@ -306,10 +307,23 @@ def read_mslstg01_v7(path: Path) -> StageMetadata:
     off = 64
     segments: list[StageSegment] = []
     for _ in range(segment_count):
-        line_id, kind_id, flags, hi_flags, lo_flags, prev_id0, next_id0, prev_id1, next_id1, x0, y0, x1, y1 = (
-            struct.unpack_from("<HBBHHhhhhffff", buf, off)
-        )
-        off += 32
+        (
+            line_id,
+            kind_id,
+            flags,
+            hi_flags,
+            lo_flags,
+            prev_id0,
+            next_id0,
+            prev_id1,
+            next_id1,
+            x0,
+            y0,
+            x1,
+            y1,
+            ground_friction_mul,
+        ) = struct.unpack_from("<HBBHHhhhhfffff", buf, off)
+        off += 36
         segments.append(
             StageSegment(
                 line_id=int(line_id),
@@ -327,6 +341,7 @@ def read_mslstg01_v7(path: Path) -> StageMetadata:
                 y0=float(y0),
                 x1=float(x1),
                 y1=float(y1),
+                ground_friction_mul=float(ground_friction_mul),
             )
         )
     stage_points: list[StagePoint] = []

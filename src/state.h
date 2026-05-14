@@ -19,6 +19,7 @@ typedef struct MslStateSoA {
   uint8_t* stage_fod_platform_valid;             // [batch * 2]
   float* stage_fod_platform_velocity;            // [batch * 2]
   uint8_t* stage_fod_platform_velocity_valid;    // [batch * 2]
+  uint8_t* stage_fod_platform_height_source;     // [batch * 2]
   uint8_t* stage_fod_platform_scheduler_phase;   // [batch * 2]
   uint16_t* stage_fod_platform_scheduler_timer;  // [batch * 2]
   float* stage_fod_platform_scheduler_target;    // [batch * 2]

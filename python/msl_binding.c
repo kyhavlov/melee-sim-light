@@ -4128,12 +4128,13 @@ static PyObject* msl_stage_floor_segment_py(PyObject* self, PyObject* args) {
   }
   const MslStageFloorLine* line = &graph->lines[(size_t)idx];
   return Py_BuildValue(
-      "{s:i,s:f,s:f,s:f,s:f,s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:i}", "segment_i",
+      "{s:i,s:f,s:f,s:f,s:f,s:f,s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:i}", "segment_i",
       (int)line->segment_i, "x0", (double)line->x0, "y0", (double)line->y0, "x1", (double)line->x1,
-      "y1", (double)line->y1, "is_ledge", (int)line->is_ledge, "is_platform",
-      (int)line->is_platform, "fighter_solid", (int)line->fighter_solid, "platform_transform_kind",
-      (int)line->platform_transform_kind, "platform_transform_id", (int)line->platform_transform_id,
-      "raw_prev_id", (int)line->raw_prev_id, "raw_next_id", (int)line->raw_next_id, "has_prev_link",
+      "y1", (double)line->y1, "ground_friction_mul", (double)line->ground_friction_mul, "is_ledge",
+      (int)line->is_ledge, "is_platform", (int)line->is_platform, "fighter_solid",
+      (int)line->fighter_solid, "platform_transform_kind", (int)line->platform_transform_kind,
+      "platform_transform_id", (int)line->platform_transform_id, "raw_prev_id",
+      (int)line->raw_prev_id, "raw_next_id", (int)line->raw_next_id, "has_prev_link",
       (int)line->has_prev_link, "has_next_link", (int)line->has_next_link, "prev", (int)line->prev,
       "next", (int)line->next, "line_index", idx);
 }

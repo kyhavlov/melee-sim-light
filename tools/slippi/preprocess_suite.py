@@ -19,7 +19,7 @@ from tools.eval.dataset import HEADER_DTYPE, MAGIC, SAMPLE_DTYPE, SEED_DTYPE
 # v7 invalidates same-record-size datasets generated before common-air walljump hidden phase seeds
 # used source `pos_delta.x` setup-and-carry semantics in native preprocessing. Record-size checks
 # alone cannot detect this semantic.
-_CACHE_VERSION = 7
+_CACHE_VERSION = 8
 _SOURCE_INPUT_PY_TREES = ("tools/slippi",)
 _SOURCE_INPUT_FILES = ("tools/eval/dataset.py", "python/msl_preprocess_native.c")
 

@@ -874,8 +874,11 @@ Characters (Fox/Falco):
       family (excluding `ftCo_AttackAir*`), the grounded-locomotion IASA class whose callbacks route to
       `ftCo_80091A4C` before GuardOn frame-start x672 consumption, and the grounded stage-object
       carry collision owner class used by
-      Wait/Walk/Run/Squat/Landing/LandingAir/grounded attack/guard plus
-      `ftCo_Down_Coll`, `ftCo_DownAttack_Coll`, and `ftCo_PassiveStand_Coll`. They are callback-owner
+      Wait/Walk/Run/Squat/Landing/LandingAir/grounded attack/guard, the `ftCo_Catch*` and
+      grounded `ftCo_Throw*` callbacks that source routes through `ft_800841B8`, plus
+      `ftCo_Down_Coll`, `ftCo_DownAttack_Coll`, and `ftCo_PassiveStand_Coll`, plus the
+      `ft_80083F88 -> ft_80082708 -> mpColl_8004B108` ground-to-air collision callback owner.
+      They are callback-owner
       classifications only; procedural behavior such as edge-snap branch results, ledge
       eligibility, or hidden descriptor provenance is not inferred by this artifact.
   - Sources:
@@ -884,9 +887,9 @@ Characters (Fox/Falco):
     - `refs/melee/src/melee/ft/ftmotionstates.c::ftData_MotionStateList`
     - `refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c::ftFx_Init_MotionStateTable`
     - `refs/melee/src/melee/ft/chara/ftFalco/ftFc_Init.c::ftFc_Init_MotionStateTable`
-  - Binary layout: `MSLMSO01` v6 (little-endian, dense tables indexed by GALE01 `action_id`)
+  - Binary layout: `MSLMSO01` v8 (little-endian, dense tables indexed by GALE01 `action_id`)
     - `u8  magic[8] = "MSLMSO01"`
-    - `u32 version = 6`
+    - `u32 version = 8`
     - `u16 action_count`
     - `u16 reserved = 0`
     - `u32` offsets for `submotion_id`, `x4_flags`, `motion_state_word`, `anim_cb_id`,
@@ -904,7 +907,15 @@ Characters (Fox/Falco):
       PassiveWall/PassiveWallJump call `ft_800831CC` or `ft_80083318` and therefore consume the
       same airborne wall envelope plus walljump/ledge post-consumer family after their startup
       timer expires.
-  - Stale/non-v6 `MSLMSO01` tables must be rejected; regenerate with
+    - `FT80083F88_GROUND_TO_AIR_COLL` is keyed to source collision helper identity for callbacks
+      whose decomp bodies call `ft_80083F88(gobj)`. Runtime may use it to admit current-frame
+      xF8 player-nudge floor-edge exits through `ft_80082708` / `mpColl_8004B108` without adding a
+      local action-id list.
+  - Stale/non-v8 `MSLMSO01` tables must be rejected. Version 8 adds the
+    `FT80083F88_GROUND_TO_AIR_COLL` callback class. Version 7 added `ftCo_Catch*` and grounded
+    `ftCo_Throw*` callbacks to `GROUNDED_STAGE_OBJECT_CARRY_COLL` so grounded B2DC floor-persistence
+    rows can consume connected legal-stage slope/flat floor handoffs without local action lists.
+    Regenerate with
     `uv run python -m tools.extraction.extract_motion_state_owners --melee_decomp refs/melee --out_dir data/motion_state/owners --chars fox,falco`.
 - `data/stages/bin/{grnla,grnba,griz,grps,grst,grop}.bin` (stage collision/metadata; decomp-first, compact binary)
   - Purpose:
@@ -928,9 +939,9 @@ Characters (Fox/Falco):
     - `refs/melee/src/melee/gr/ground.c::Ground_801C126C`, `Ground_801C2D24`, `Ground_801C39C0`,
       `Ground_801C3BB4`
     - `refs/melee/src/melee/gr/stage.c::Stage_80224E64`, `Stage_80224E38`
-  - Binary layout: `MSLSTG01` v8
+  - Binary layout: `MSLSTG01` v9
     - `u8 magic[8] = "MSLSTG01"`
-    - `u32 version = 8`
+    - `u32 version = 9`
     - `u16 segment_count`, `stage_point_count`, `spawn_count`, `respawn_count`,
       `platform_transform_count`, `platform_transform_record_bytes`, reserved lanes
     - `f32 cam_bounds_world[left,right,top,bottom]`
@@ -939,7 +950,8 @@ Characters (Fox/Falco):
       `flags(platform/ledge/fighter_solid/stage_object_support_kind)`,
       raw `hi_flags/lo_flags`, raw `MapLine` links `prev_id0/next_id0/prev_id1/next_id1`,
       world-scaled endpoints
-      `(x0,y0,x1,y1)` after applying `grGroundParam.x0`
+      `(x0,y0,x1,y1)` after applying `grGroundParam.x0`, and source floor material
+      `ground_friction_mul = mpLib_800569EC(lo_flags & 0xFF).x0`
     - world-scaled raw stage-point coordinate payloads
     - world-scaled spawn point payloads `(x,y)` for stage point ids `0..3`
     - world-scaled respawn point payloads `(x,y)` for stage point ids `4..7`; missing ids `5..7`
@@ -947,12 +959,14 @@ Characters (Fox/Falco):
     - platform transform records: source line id, transform kind, platform id, source-local X span,
       default current height for height-owned moving lines or static world Y for static-Y records,
       and source-backed height coefficient for live moving platform collision transforms
-  - Stale/non-v8 `MSLSTG01` tables must be rejected. Version 3 added the raw `MapLine` graph links
+  - Stale/non-v9 `MSLSTG01` tables must be rejected. Version 3 added the raw `MapLine` graph links
     used by source-shaped `mpLineGetPrev/Next` traversal. Version 4 added generated fighter-solid
     line policy. Version 5 adds source/data-backed platform transform records for live platform
     world endpoints. Version 6 adds binary platform-motion records consumed by the free-running
     FoD scheduler. Version 8 adds a generated stage-object support kind in segment flag bits,
-    currently used for Yoshi's Story raw Shy Guy support floor ownership. Regenerate supported
+    currently used for Yoshi's Story raw Shy Guy support floor ownership. Version 9 adds the
+    source floor material friction multiplier used by `ft_GetGroundFrictionMultiplier` for grounded
+    knockback decay. Regenerate supported
     stage artifacts with
     `uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba,griz,grps,grst,grop --chars fox,falco`.
   - Supported runtime stage ids: `2` Fountain of Dreams, `3` Pokemon Stadium base, `8` Yoshi's
@@ -963,7 +977,7 @@ Characters (Fox/Falco):
     runtime. Both paths use MSLSTG01 platform transform records derived from `grIzumi`/stage
     geometry data; for the side platforms `mpLib_80055E9C` consumes the source MapLine vertex as
     `world_y = source_local_y + current_grIzumi_height * 0.75`.
-    The MSLSTG01 v8 binary platform-motion payload carries
+    The MSLSTG01 v9 binary platform-motion payload carries
     `platform_motion.fountain_platform` constants from `GrIz.dat::yakumono_param`
     (`home_height`, hidden target, min/max, source speed fields, RNG weights, and
     target-delta fields) for causal target selection and target clamping; the generated
@@ -980,6 +994,11 @@ Characters (Fox/Falco):
   - FoD seed lanes:
     - `stage_fod_platform_height_f32[2]`, `stage_fod_platform_height_valid_u8[2]`
     - `stage_fod_platform_velocity_f32[2]`, `stage_fod_platform_velocity_valid_u8[2]`
+    - `stage_fod_platform_height_source_u8[2]`: per-platform source bitmask for the current
+      height (`0x01` direct Slippi `fod_platform` event, `0x02` current grounded-contact
+      reconstruction, `0x04` same-step hidden contact reconstruction). This consumes the former
+      FoD padding bytes and lets runtime collision trust fresh/source-owned current heights without
+      trusting stale sparse carried heights.
     - `floor_skip_segment_id_u16[4]`, `floor_skip_segment_valid_u8[4]` for hidden
       `CollData.floor_skip` carry when a replay-prefix platform pass-through episode is already
       active. For FoD height-transform `AttackAirN`/`AttackAirHi`/`AttackAirLw`, preprocessing uses
@@ -989,7 +1008,8 @@ Characters (Fox/Falco):
       the down-held platform contact, down-held/root-clear carry while the hidden platform skip
       remains live, and the first hard-floor crossing that consumes that owner. Intermediate
       airborne frames stay unseeded unless one of those source handoff boundaries is visible.
-      `tools/slippi/preprocess_suite.py` cache version 7 is the first valid cache generation for the
+      `tools/slippi/preprocess_suite.py` cache version 8 is the first valid cache generation for the
+      FoD platform height source lane; cache version 7 is the first valid cache generation for the
       AttackAirHi/shallow-AttackAir FoD floor-skip semantics plus common-air walljump hidden phase
       setup/carry seeds derived from source `pos_delta.x`; older `.msl` caches can pass record-size
       checks while missing these hidden owners. The cache signature also hashes

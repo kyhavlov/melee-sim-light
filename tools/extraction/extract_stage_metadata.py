@@ -31,9 +31,48 @@ STAGE_OBJECT_SUPPORT_KIND_ID = {
     "yoshi_shyguy": 1,
 }
 
+# Source floor material friction multipliers used by mpLib_800569EC(MapLine.lo_flags & 0xFF).
+# Keep this in the generator so runtime consumes a generated MSLSTG01 field instead of duplicating
+# the mplib material table on gameplay paths.
+# refs/melee/src/melee/mp/mplib.c::{
+#   mpLib_800569EC,mpLib_803BD3D8,mpLib_803BD430,mpLib_803BD488,mpLib_803BD4E0,
+#   mpLib_803BD538,mpLib_803BD590,mpLib_803BD5E8,mpLib_803BD640,mpLib_803BD698,
+#   mpLib_803BD6F0,mpLib_803BD748,mpLib_803BD8A8,mpLib_803BD900,mpLib_803BD958,
+#   mpLib_803BD9B0,mpLib_803BDA60,mpLib_803BDAB8,mpLib_803BDB10,mpLib_803BDB68,
+#   mpLib_803BDBC0}
+MPLIB_GROUND_FRICTION_MUL_BY_MATERIAL = (
+    1.0,
+    1.0,
+    1.5,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    0.1,
+    0.9,
+    1.0,
+    0.2,
+    1.0,
+    0.1,
+    1.0,
+    1.0,
+)
+
 
 def _f32(v: float) -> float:
     return struct.unpack("<f", struct.pack("<f", float(v)))[0]
+
+
+def _ground_friction_mul_from_lo_flags(lo_flags: int) -> float:
+    material = int(lo_flags) & 0xFF
+    if 0 <= material < len(MPLIB_GROUND_FRICTION_MUL_BY_MATERIAL):
+        return float(MPLIB_GROUND_FRICTION_MUL_BY_MATERIAL[material])
+    return 1.0
 
 
 def _write_stage_bin(out: Path, data: dict) -> None:
@@ -91,7 +130,7 @@ def _write_stage_bin(out: Path, data: dict) -> None:
             | ((stage_object_support_kind & 0x1F) << 3)
         )
         buf += struct.pack(
-            "<HBBHHhhhhffff",
+            "<HBBHHhhhhfffff",
             int(seg["i"]) & 0xFFFF,
             KIND_ID[str(seg["kind"])] & 0xFF,
             flags & 0xFF,
@@ -105,6 +144,7 @@ def _write_stage_bin(out: Path, data: dict) -> None:
             _f32(float(seg["y0"]) * unit_scale),
             _f32(float(seg["x1"]) * unit_scale),
             _f32(float(seg["y1"]) * unit_scale),
+            _f32(_ground_friction_mul_from_lo_flags(int(seg.get("lo_flags", 0)))),
         )
     for pt in stage_points:
         buf += struct.pack(

@@ -375,13 +375,14 @@ typedef struct {
   float y0;
   float x1;
   float y1;
+  float ground_friction_mul;
 } FdSegTmp;
 
 static FdSegTmp fd_seg_tmp_normalized(FdSegKind kind, uint8_t ledge, uint8_t platform,
                                       uint8_t fighter_solid, uint8_t stage_object_support_kind,
                                       uint16_t segment_i, int16_t prev_id0, int16_t next_id0,
                                       int16_t prev_id1, int16_t next_id1, float fx0, float fy0,
-                                      float fx1, float fy1) {
+                                      float fx1, float fy1, float ground_friction_mul) {
   // Normalize orientation to match mplib assumptions for each line kind:
   // - floor: x0 <= x1
   //   refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
@@ -457,6 +458,7 @@ static FdSegTmp fd_seg_tmp_normalized(FdSegKind kind, uint8_t ledge, uint8_t pla
       .y0 = fy0,
       .x1 = fx1,
       .y1 = fy1,
+      .ground_friction_mul = ground_friction_mul,
   };
 }
 
@@ -903,6 +905,7 @@ static int fd_install_stage_segments(uint32_t stage_id, const FdSegTmp* seg_tmp,
           .is_platform = s->platform,
           .fighter_solid = s->fighter_solid,
           .stage_object_support_kind = s->stage_object_support_kind,
+          .ground_friction_mul = s->ground_friction_mul,
           .has_prev_link = 0,
           .has_next_link = 0,
           .segment_i = s->segment_i,
@@ -1111,9 +1114,9 @@ static int fd_install_stage_segments(uint32_t stage_id, const FdSegTmp* seg_tmp,
 }
 
 enum {
-  MSLSTG01_VERSION = 8,
+  MSLSTG01_VERSION = 9,
   MSLSTG01_HEADER_BYTES = 64,
-  MSLSTG01_SEGMENT_BYTES = 32,
+  MSLSTG01_SEGMENT_BYTES = 36,
   MSLSTG01_FLAG_PLATFORM = 1,
   MSLSTG01_FLAG_LEDGE = 2,
   MSLSTG01_FLAG_FIGHTER_SOLID = 4,
@@ -1420,7 +1423,7 @@ static int fd_load_floor_lines_from_mslstg01(uint32_t stage_id, const uint8_t* b
                   MSLSTG01_STAGE_OBJECT_SUPPORT_MASK),
         line_id, stage_read_s16_le(p + 8), stage_read_s16_le(p + 10), stage_read_s16_le(p + 12),
         stage_read_s16_le(p + 14), stage_read_f32_le(p + 16), stage_read_f32_le(p + 20),
-        stage_read_f32_le(p + 24), stage_read_f32_le(p + 28));
+        stage_read_f32_le(p + 24), stage_read_f32_le(p + 28), stage_read_f32_le(p + 32));
   }
   stage_install_match_flow_from_mslstg01(stage_id, buf, segment_count, stage_point_count,
                                          spawn_count, respawn_count);
@@ -1784,6 +1787,14 @@ uint8_t stage_collision_floor_line_has_height_platform_transform(uint32_t stage_
              : 0u;
 }
 
+float stage_collision_floor_ground_friction_mul(uint32_t stage_id, uint16_t segment_i) {
+  const MslStageFloorLine* line = stage_floor_line_for_segment(stage_slot(stage_id), segment_i);
+  if (line == NULL || !(line->ground_friction_mul > 0.0f)) {
+    return 0.0f;
+  }
+  return line->ground_friction_mul;
+}
+
 uint8_t stage_collision_floor_line_platform_transform_id(uint32_t stage_id, uint16_t segment_i,
                                                          uint8_t* platform_id_out) {
   const MslStageSlot* slot = stage_slot(stage_id);
@@ -1819,6 +1830,18 @@ uint8_t stage_collision_floor_line_height_platform_state_is_source_trusted(const
   const size_t idx = (size_t)bi * 2u + (size_t)platform_id;
   if (!batch->state.stage_fod_platform_valid[idx]) {
     return 0u;
+  }
+  if ((batch->state.stage_fod_platform_height_source[idx] &
+       (uint8_t)(MSL_FOD_PLATFORM_HEIGHT_SOURCE_DIRECT_EVENT |
+                 MSL_FOD_PLATFORM_HEIGHT_SOURCE_GROUND_CONTACT |
+                 MSL_FOD_PLATFORM_HEIGHT_SOURCE_SAME_STEP_CONTACT)) != 0u) {
+    // Prefix/source-owned current platform heights are the live grIzumi/mpLib line owner even when
+    // the sparse replay stream cannot derive a per-frame velocity. This separates fresh/current
+    // source heights from stale carried sparse heights without enabling the free-running scheduler
+    // on teacher-forced seeds.
+    // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+    // refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
+    return 1u;
   }
   if (batch->state.stage_fod_platform_scheduler_valid[idx] ||
       (batch->state.stage_fod_platform_velocity_valid[idx] &&

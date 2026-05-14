@@ -48,9 +48,13 @@ static inline void enter_fall_special(MslBatch* batch, const MslCommonParams* c,
 }
 
 static inline uint8_t action_floor_line_y_at_x(const MslBatch* batch, size_t idx, uint32_t stage_id,
-                                               uint16_t floor_id, float x, float* y_out) {
+                                               uint16_t floor_id, float x, float* y_out,
+                                               uint8_t* x_within_out) {
   if (batch == NULL || y_out == NULL) {
     return 0u;
+  }
+  if (x_within_out != NULL) {
+    *x_within_out = 0u;
   }
   const int line_idx = stage_collision_floor_line_index(stage_id, floor_id);
   const MslStageFloorGraph* g = stage_collision_get_floor_graph(stage_id);
@@ -61,6 +65,11 @@ static inline uint8_t action_floor_line_y_at_x(const MslBatch* batch, size_t idx
   const int bi = (int)(idx / (size_t)MSL_MAX_PLAYERS);
   if (!stage_collision_floor_line_world(batch, bi, &g->lines[(size_t)line_idx], &line)) {
     return 0u;
+  }
+  if (x_within_out != NULL) {
+    const float min_x = line.x0 < line.x1 ? line.x0 : line.x1;
+    const float max_x = line.x0 > line.x1 ? line.x0 : line.x1;
+    *x_within_out = (x >= min_x - 0.0001f && x <= max_x + 0.0001f) ? 1u : 0u;
   }
   const float dx = line.x1 - line.x0;
   if (fabsf(dx) <= 1e-6f) {
@@ -126,34 +135,54 @@ uint8_t escape_air_try_enter_from_air_locomotion(MslBatch* batch, const MslCommo
   const uint32_t stage_id = batch->state.stage_id[idx / (size_t)MSL_MAX_PLAYERS];
   const uint16_t source_action_id = batch->state.action_id[idx];
   const uint16_t floor_id = batch->state.ground_id[idx];
-  const uint8_t source_floor_is_solid_line =
-      (floor_id != 0xFFFFu && !stage_collision_floor_line_is_platform(stage_id, floor_id)) ? 1u
-                                                                                           : 0u;
+  const uint8_t source_floor_is_platform =
+      (floor_id != 0xFFFFu && stage_collision_floor_line_is_platform(stage_id, floor_id)) ? 1u : 0u;
+  const uint8_t source_floor_has_platform_transform =
+      (floor_id != 0xFFFFu && stage_collision_floor_line_has_platform_transform(stage_id, floor_id))
+          ? 1u
+          : 0u;
+  const uint8_t source_floor_carries_locked_ecb =
+      (floor_id != 0xFFFFu && (!source_floor_is_platform || source_floor_has_platform_transform))
+          ? 1u
+          : 0u;
   const uint8_t source_is_jumpaerial = (source_action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
                                         source_action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_B)
                                            ? 1u
                                            : 0u;
   float source_floor_y = 0.0f;
-  const uint8_t source_floor_y_valid = action_floor_line_y_at_x(
-      batch, idx, stage_id, floor_id, batch->state.pos_x[idx], &source_floor_y);
+  uint8_t source_floor_x_within = 0u;
+  const uint8_t source_floor_y_valid =
+      action_floor_line_y_at_x(batch, idx, stage_id, floor_id, batch->state.pos_x[idx],
+                               &source_floor_y, &source_floor_x_within);
   const float escapeair_entry_next_root_y = batch->state.pos_y[idx] + vy;
+  const uint8_t source_floor_is_offspan_transform =
+      (source_floor_has_platform_transform && source_floor_y_valid != 0u &&
+       source_floor_x_within == 0u)
+          ? 1u
+          : 0u;
   const uint8_t escapeair_entry_bottom_sweep_still_above_floor =
-      (source_floor_y_valid &&
-       (escapeair_entry_next_root_y + batch->state.coll_desired_ecb_bottom_rel_y[idx]) >
-           (source_floor_y + 0.0001f))
+      (source_floor_is_offspan_transform ||
+       (source_floor_y_valid &&
+        (escapeair_entry_next_root_y + batch->state.coll_desired_ecb_bottom_rel_y[idx]) >
+            (source_floor_y + 0.0001f)))
           ? 1u
           : 0u;
   if (batch->state.ecb_lock_timer[idx] != 0u &&
       batch->state.coll_desired_ecb_bottom_valid[idx] != 0u &&
-      batch->state.coll_desired_ecb_bottom_rel_y[idx] > 0.0001f && source_floor_is_solid_line &&
-      source_is_jumpaerial && batch->state.action_frame[idx] >= 1 &&
-      escapeair_entry_bottom_sweep_still_above_floor) {
+      batch->state.coll_desired_ecb_bottom_rel_y[idx] > 0.0001f &&
+      source_floor_carries_locked_ecb && source_is_jumpaerial &&
+      batch->state.action_frame[idx] >= 1 && escapeair_entry_bottom_sweep_still_above_floor) {
     // Runtime EscapeAir entry can happen during JumpAerial IASA before Fighter_procMap. On
-    // JumpAerial pass-through from a solid floor-domain line still carries CollData_X130_Locked when
-    // source `ftCo_EscapeAir_Coll` calls `mpColl_LoadECB_inline`, preserving the pre-entry
+    // JumpAerial pass-through from a source floor-domain line still carries CollData_X130_Locked
+    // when source `ftCo_EscapeAir_Coll` calls `mpColl_LoadECB_inline`, preserving the pre-entry
     // desired_ecb.bottom for the first EscapeAir callback only while the frame-start provenance is
-    // still sustained JumpAerial and that bottom sweep is still above the carried floor. Fresh
-    // cliff-jump chains and zero-bottom air-dodge entries keep their ordinary EscapeAir floor
+    // still sustained JumpAerial and that bottom sweep is still above the carried floor. On FoD, a
+    // height-transform platform floor is also a source floor-domain line: the platform object owns
+    // the moving floor and the same CollData lock handoff, unlike ordinary soft-platform candidates.
+    // If the fighter has already moved off that transformed platform's horizontal span, do not use
+    // the stale platform height to clear CollData ownership; the following EscapeAir_Coll floor
+    // search owns the adjacent hard-floor handoff. Fresh cliff-jump chains, ordinary non-transform
+    // platform air dodges, and zero-bottom air-dodge entries keep their ordinary EscapeAir floor
     // handoff; if the entered EscapeAir root is already deep enough that bottom.y crosses the floor
     // this frame, the normal floor publication path owns the immediate LandingFallSpecial
     // transition instead.

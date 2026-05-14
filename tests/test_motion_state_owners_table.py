@@ -22,6 +22,7 @@ from tools.extraction.extract_motion_state_owners import (
     CLASS_DAMAGE_FLY_COLL,
     CLASS_GUARDON_FRAME_START_X672_IASA,
     CLASS_FT80081D0C_AIR_COLL,
+    CLASS_FT80083F88_GROUND_TO_AIR_COLL,
     CLASS_GROUNDED_ATTACK,
     CLASS_GROUNDED_STAGE_OBJECT_CARRY_COLL,
     CLASS_LANDING_AIR,
@@ -105,6 +106,9 @@ def test_motion_state_owner_tables_cover_known_callbacks_and_flags() -> None:
     assert not int(fox.class_bits[0x00B8]) & CLASS_GROUNDED_STAGE_OBJECT_CARRY_COLL
     assert cb_name(0x00C7, "coll") == "ftCo_Passive_Coll"
     assert not int(fox.class_bits[0x00C7]) & CLASS_GROUNDED_STAGE_OBJECT_CARRY_COLL
+    assert int(fox.class_bits[0x00C7]) & CLASS_FT80083F88_GROUND_TO_AIR_COLL
+    assert cb_name(0x0018, "coll") == "ftCo_KneeBend_Coll"
+    assert int(fox.class_bits[0x0018]) & CLASS_FT80083F88_GROUND_TO_AIR_COLL
     assert cb_name(0x0026, "coll") == "ftCo_DamageFall_Coll"  # DamageFall
     assert int(fox.class_bits[0x0026]) & CLASS_DAMAGE_FALL_COLL
     assert cb_name(0x005B, "coll") == "ftCo_DamageFlyRoll_Coll"  # DamageFlyRoll
@@ -207,6 +211,17 @@ def test_motion_state_class_equivalence_for_migrated_predicates() -> None:
         0x00C5,
         0x00C8,
         0x00C9,
+        0x00D4,
+        0x00D5,
+        0x00D6,
+        0x00D7,
+        0x00D8,
+        0x00D9,
+        0x00DA,
+        0x00DB,
+        0x00DC,
+        0x00DD,
+        0x00DE,
     }
     grounded_attack = {*range(0x002C, 0x0041)}
     guardon_frame_start_x672_iasa = {
@@ -235,6 +250,29 @@ def test_motion_state_class_equivalence_for_migrated_predicates() -> None:
         0x0140,
     }
     sideb_air_ground_ledge_coll = {0x015E, 0x015F, 0x0160}
+    ft80083f88_ground_to_air_coll = {
+        0x0012,
+        0x0018,
+        0x0027,
+        0x0028,
+        0x0029,
+        0x00B7,
+        0x00BA,
+        0x00BE,
+        0x00BF,
+        0x00C2,
+        0x00C6,
+        0x00C7,
+        0x00CF,
+        0x00D0,
+        0x00D1,
+        0x00D2,
+        0x00D3,
+        0x00EE,
+        0x0155,
+        0x0156,
+        0x0157,
+    }
 
     for action_id in range(max_action):
         assert both_have(action_id, CLASS_ATTACK_AIR) == (action_id in attack_air)
@@ -265,6 +303,9 @@ def test_motion_state_class_equivalence_for_migrated_predicates() -> None:
         )
         assert both_have(action_id, CLASS_SIDEB_AIR_GROUND_LEDGE_COLL) == (
             action_id in sideb_air_ground_ledge_coll
+        )
+        assert both_have(action_id, CLASS_FT80083F88_GROUND_TO_AIR_COLL) == (
+            action_id in ft80083f88_ground_to_air_coll
         )
 
 
@@ -299,6 +340,39 @@ def test_stage_object_carry_class_tracks_grounded_floor_persistence_owner() -> N
     assert has_carry(0x00BC)
     assert has_carry(0x00BB)
     assert has_carry(0x00C8)
+
+    # Catch-family grounded callbacks use ft_800841B8 -> ft_800827A0 -> mpColl_8004B2DC, so they
+    # share the same attached-floor persistence owner as other B2DC grounded states.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+    #   ftCo_Catch_Coll,ftCo_CatchDash_Coll,ftCo_CatchPull_Coll,ftCo_CatchWait_Coll,
+    #   ftCo_CatchAttack_Coll,ftCo_CatchCut_Coll}
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_800841B8,ft_800827A0}
+    assert coll_name(0x00D4) == "ftCo_Catch_Coll"
+    assert coll_name(0x00D6) == "ftCo_CatchDash_Coll"
+    assert coll_name(0x00D5) == "ftCo_CatchPull_Coll"
+    assert coll_name(0x00D7) == "ftCo_CatchPull_Coll"
+    assert coll_name(0x00D8) == "ftCo_CatchWait_Coll"
+    assert coll_name(0x00D9) == "ftCo_CatchAttack_Coll"
+    assert coll_name(0x00DA) == "ftCo_CatchCut_Coll"
+    assert has_carry(0x00D4)
+    assert has_carry(0x00D6)
+    assert has_carry(0x00D5)
+    assert has_carry(0x00D7)
+    assert has_carry(0x00D8)
+    assert has_carry(0x00D9)
+    assert has_carry(0x00DA)
+
+    # Grounded Throw* callbacks also branch to ft_800841B8 -> ft_800827A0 while ground-owned.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{
+    #   ftCo_ThrowF_Coll,ftCo_ThrowB_Coll,ftCo_ThrowHi_Coll,ftCo_ThrowLw_Coll}
+    assert coll_name(0x00DB) == "ftCo_ThrowF_Coll"
+    assert coll_name(0x00DC) == "ftCo_ThrowB_Coll"
+    assert coll_name(0x00DD) == "ftCo_ThrowHi_Coll"
+    assert coll_name(0x00DE) == "ftCo_ThrowLw_Coll"
+    assert has_carry(0x00DB)
+    assert has_carry(0x00DC)
+    assert has_carry(0x00DD)
+    assert has_carry(0x00DE)
 
     # Other downed/passive states are separately owned in source and must not borrow the
     # Landing/Wait stage-object carry class.

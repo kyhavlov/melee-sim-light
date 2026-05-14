@@ -266,40 +266,40 @@ rollout.first_mismatch_non_seeded_total: 15
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:2539
 
 == datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.msl ==
-rollout.best_len: 769
-rollout.streak_count: 56
-rollout.streak_len.median: 157
-rollout.streak_len.p90: 487
-rollout.streak_len.p95: 587
-rollout.streak_len.max: 769
-rollout.first_mismatch_total: 58
-rollout.first_mismatch_seeded_total: 36
+rollout.best_len: 867
+rollout.streak_count: 47
+rollout.streak_len.median: 173
+rollout.streak_len.p90: 652
+rollout.streak_len.p95: 739
+rollout.streak_len.max: 867
+rollout.first_mismatch_total: 49
+rollout.first_mismatch_seeded_total: 27
 rollout.first_mismatch_non_seeded_total: 22
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:4050
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:3568
 
 == datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/MilkyGracefulStingray.msl ==
-rollout.best_len: 915
-rollout.streak_count: 22
-rollout.streak_len.median: 174
-rollout.streak_len.p90: 592
-rollout.streak_len.p95: 647
-rollout.streak_len.max: 915
-rollout.first_mismatch_total: 21
-rollout.first_mismatch_seeded_total: 11
-rollout.first_mismatch_non_seeded_total: 10
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:1557
+rollout.best_len: 967
+rollout.streak_count: 19
+rollout.streak_len.median: 197
+rollout.streak_len.p90: 915
+rollout.streak_len.p95: 967
+rollout.streak_len.max: 967
+rollout.first_mismatch_total: 18
+rollout.first_mismatch_seeded_total: 6
+rollout.first_mismatch_non_seeded_total: 12
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:2073
 
 == datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.msl ==
-rollout.best_len: 536
-rollout.streak_count: 72
-rollout.streak_len.median: 132
-rollout.streak_len.p90: 312
-rollout.streak_len.p95: 431
-rollout.streak_len.max: 536
-rollout.first_mismatch_total: 74
-rollout.first_mismatch_seeded_total: 36
-rollout.first_mismatch_non_seeded_total: 38
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:2291
+rollout.best_len: 540
+rollout.streak_count: 59
+rollout.streak_len.median: 144
+rollout.streak_len.p90: 424
+rollout.streak_len.p95: 493
+rollout.streak_len.max: 540
+rollout.first_mismatch_total: 61
+rollout.first_mismatch_seeded_total: 31
+rollout.first_mismatch_non_seeded_total: 30
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:2422
 rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:1
 
 == datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/CornyDelayedOkapi.msl ==
@@ -388,14 +388,14 @@ rollout.first_mismatch_non_seeded_total: 21
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:2269
 
 == suite summary ==
-overall.rollout.streak_count: 756
-overall.rollout.streak_len.median: 222
-overall.rollout.streak_len.p90: 953
-overall.rollout.streak_len.p95: 1286
+overall.rollout.streak_count: 731
+overall.rollout.streak_len.median: 227
+overall.rollout.streak_len.p90: 963
+overall.rollout.streak_len.p95: 1289
 overall.rollout.streak_len.max: 4397
 overall.rollout.best_len.max: 4397
-overall.rollout.first_mismatch_total: 770
-overall.rollout.first_mismatch_seeded_total: 382
-overall.rollout.first_mismatch_non_seeded_total: 388
-overall.rollout.ignored_first_mismatch_top: state_flags[4]&0x80:98425
+overall.rollout.first_mismatch_total: 745
+overall.rollout.first_mismatch_seeded_total: 363
+overall.rollout.first_mismatch_non_seeded_total: 382
+overall.rollout.ignored_first_mismatch_top: state_flags[4]&0x80:98590
 overall.rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:2

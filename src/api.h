@@ -207,12 +207,20 @@ typedef struct MslDebugStageState {
   // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
   float fod_platform_height[2];
   uint8_t fod_platform_height_valid[2];
-  uint8_t _pad0[2];
+  // One-step replay/source provenance for current FoD platform heights. This is debug output only;
+  // runtime clears seed-provided source bits after the frame unless a live owner reasserts them.
+  uint8_t fod_platform_height_source[2];
 } MslDebugStageState;
 
 enum {
   MSL_DAMAGE_POST_HITLAG_CB_KIND_MASK = 0x0F,
   MSL_DAMAGE_METEOR_CANCEL_X1A_MASK = 0x80,
+};
+
+enum {
+  MSL_FOD_PLATFORM_HEIGHT_SOURCE_DIRECT_EVENT = 0x01,
+  MSL_FOD_PLATFORM_HEIGHT_SOURCE_GROUND_CONTACT = 0x02,
+  MSL_FOD_PLATFORM_HEIGHT_SOURCE_SAME_STEP_CONTACT = 0x04,
 };
 
 typedef struct MslSeed {
@@ -247,7 +255,16 @@ typedef struct MslSeed {
   uint8_t stage_fod_platform_height_valid_u8[2];
   float stage_fod_platform_velocity_f32[2];
   uint8_t stage_fod_platform_velocity_valid_u8[2];
-  uint8_t _pad_stage_fod[2];
+  // Prefix/source class for current FoD platform heights:
+  // - bit 0: direct Slippi `fod_platform` current grIzumi event this frame.
+  // - bit 1: current grounded contact reconstructed the platform height from mpLib line geometry.
+  // - bit 2: same-step hidden contact reconstruction for the upcoming collision callback.
+  //
+  // This field intentionally consumes the former two padding bytes, so dataset record size is
+  // unchanged while cache/signature semantics still invalidate stale `.msl` files.
+  // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+  // refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
+  uint8_t stage_fod_platform_height_source_u8[2];
   // Yoshi's Story Shy Guy stage-object scheduler state.
   //
   // The stage callback decrements `gp->u.shyguys.timer` only while no Heiho items are live, then

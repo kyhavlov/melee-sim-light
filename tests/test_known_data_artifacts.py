@@ -153,6 +153,7 @@ def test_stage_metadata_fd_known_rows() -> None:
     assert seg0.lo_flags == 0x200
     assert (seg0.prev_id0, seg0.next_id0, seg0.prev_id1, seg0.next_id1) == (11, 1, -1, -1)
     assert (seg0.x0, seg0.y0, seg0.x1, seg0.y1) == pytest.approx((-85.5656967, 0.0, -75.0, 0.0))
+    assert seg0.ground_friction_mul == pytest.approx(1.0)
     assert (stage.stage_points[1].x, stage.stage_points[1].y, stage.stage_points[1].z) == pytest.approx(
         (0.0, 12.0, 0.0)
     )
@@ -231,6 +232,9 @@ def test_stage_metadata_remaining_legal_stages_known_rows() -> None:
     assert (fountain_platforms[0].x0, fountain_platforms[0].y0, fountain_platforms[0].x1) == pytest.approx(
         (-14.25, 1.125, 14.25)
     )
+    fountain_by_id = {int(seg.line_id): seg for seg in fountain.segments}
+    assert fountain_by_id[3].lo_flags == 0x0202
+    assert fountain_by_id[3].ground_friction_mul == pytest.approx(1.5)
 
     pokemon = read_mslstg01_v7(Path("data/stages/bin/grps.bin"))
     assert pokemon.segment_count == 136
@@ -349,7 +353,7 @@ try:
     dtype = np.dtype([
         ("fod_platform_height", ("<f4", (2,))),
         ("fod_platform_height_valid", ("u1", (2,))),
-        ("_pad0", "V2"),
+        ("fod_platform_height_source", ("u1", (2,))),
     ], align=False)
     msl_binding.step_input(handle, inp, inp)
     msl_binding.debug_write_stage_state(handle, stage)
@@ -681,8 +685,8 @@ def test_runtime_stage_collision_reads_mslstg01_segments(tmp_path: Path) -> None
         (i, seg) for i, seg in enumerate(stage.segments) if int(seg.kind_id) == 0 and int(seg.line_id) == 1
     )
     buf = bytearray((root_data / "stages" / "bin" / "grnla.bin").read_bytes())
-    # Segment record layout: <HBBHHhhhhffff>, records start after the 64-byte MSLSTG01 header.
-    rec_off = 64 + record_i * 32
+    # Segment record layout: <HBBHHhhhhfffff>, records start after the 64-byte MSLSTG01 header.
+    rec_off = 64 + record_i * 36
     struct.pack_into("<f", buf, rec_off + 20, 5.0)
     struct.pack_into("<f", buf, rec_off + 28, 5.0)
     _copy_stage_bins(data_dir)
@@ -848,6 +852,9 @@ def test_runtime_stage_lookup_caches_match_mslstg01_for_supported_stages() -> No
                 expected_platform_id = 0 if rec is None else int(rec.platform_id)
                 assert int(runtime["platform_transform_kind"]) == expected_kind
                 assert int(runtime["platform_transform_id"]) == expected_platform_id
+                assert float(runtime["ground_friction_mul"]) == pytest.approx(
+                    float(seg.ground_friction_mul)
+                )
 
             fighter_index_by_line = {
                 int(seg.line_id): i for i, seg in enumerate(fighter_floors)

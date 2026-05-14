@@ -6008,9 +6008,17 @@ void locomotion_update_post_collision(MslBatch* batch) {
            stage_collision_floor_line_has_height_platform_transform(stage_id, floor_skip_segment))
               ? 1u
               : 0u;
+      const uint8_t keep_common_air_transformed_platform_floor_skip =
+          (floor_skip_segment != 0xFFFFu && now_ground == 0u &&
+           stage_collision_floor_line_has_height_platform_transform(stage_id, floor_skip_segment) &&
+           batch->state.prev_action_id[idx] == a &&
+           msl_motion_state_common_class_has(a, MSL_MS_CLASS_COMMON_AIR_COLL))
+              ? 1u
+              : 0u;
       if (batch->state.floor_skip_segment_id != NULL && floor_skip_segment != 0xFFFFu &&
           a != (uint16_t)MSL_ACT_PASS && a != (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI &&
-          !keep_attackair_transformed_platform_floor_skip) {
+          !keep_attackair_transformed_platform_floor_skip &&
+          !keep_common_air_transformed_platform_floor_skip) {
         // Fighter_ChangeMotionState clears CollData.floor_skip via mpClearFloorSkip. The current
         // frame has already consumed the old skip in stage collision, so clear it here for later
         // contacts once Pass has handed off to jump/aerial/fall/landing owners. SpecialAirHi is the
@@ -6018,12 +6026,15 @@ void locomotion_update_post_collision(MslBatch* batch) {
         // which writes floor_skip without changing motion state so the launch can continue through
         // that same platform. AttackAir_Coll does not call mpUpdateFloorSkip, but FoD
         // height-transformed AttackAirN/Lw pass-through contacts can keep the same source
-        // floor-skip owner live while airborne; preserve only that generated stage-line owner.
+        // floor-skip owner live while airborne. Common-air callbacks preserve a transformed-platform
+        // skip only through same-action callback continuity and the generated MSLMSO01 common-air
+        // collision class; a real Fighter_ChangeMotionState clears CollData.floor_skip.
         // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
         // refs/melee/src/melee/mp/mpcoll.c::{mpUpdateFloorSkip,mpClearFloorSkip}
         // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFox_SpecialHi_IsBound
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_8009A134
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_80096CC8
         batch->state.floor_skip_segment_id[idx] = 0xFFFFu;
       }
       if (now_ground && batch->state.floor_skip_segment_id != NULL &&

@@ -640,7 +640,10 @@ def _fod_platform_motion_with_ground_contact(
     next_post_pos_y_f32: np.ndarray | None = None,
     line_transforms: dict[int, tuple[int, float, float]],
     motion_params: dict[str, float] | None = None,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    return_source: bool = False,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray] | tuple[
+    np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray
+]:
     """Promote current FoD platform height from grounded replay-prefix contact.
 
     Some Slippi files lack the `fod_platform` event stream or have sparse current-height events.
@@ -692,6 +695,7 @@ def _fod_platform_motion_with_ground_contact(
 
     out_vel = np.zeros_like(out_h, dtype=np.float32)
     out_vel_valid = np.zeros_like(out_v, dtype=np.uint8)
+    out_source = np.zeros_like(out_v, dtype=np.uint8)
     cur = out_h[0].astype(np.float32, copy=True)
     cur_valid = np.zeros(2, dtype=np.uint8)
     cur_vel = np.zeros(2, dtype=np.float32)
@@ -721,6 +725,7 @@ def _fod_platform_motion_with_ground_contact(
 
     for fi in range(out_h.shape[0]):
         current_contact_this_frame = np.zeros(2, dtype=np.uint8)
+        source_this_frame = np.zeros(2, dtype=np.uint8)
         # Replay FoD events, when present, are direct current grIzumi state for this frame. They
         # override grounded-contact fallback; the contact path exists only for sparse/missing event
         # streams. The helper above carries valid event values forward, so consume only fresh event
@@ -738,6 +743,7 @@ def _fod_platform_motion_with_ground_contact(
             )
             if not fresh_event:
                 continue
+            source_this_frame[platform_id] |= np.uint8(0x01)
             same_height = int(cur_valid[platform_id]) and abs(float(event_h - cur[platform_id])) <= 1e-6
             if same_height:
                 cur_vel[platform_id] = np.float32(0.0)
@@ -794,6 +800,7 @@ def _fod_platform_motion_with_ground_contact(
             has_obs[platform_id] = np.uint8(1)
             contact_owned[platform_id] = np.uint8(1)
             current_contact_this_frame[platform_id] = np.uint8(1)
+            source_this_frame[platform_id] |= np.uint8(0x02)
 
         if next_on_ground is not None:
             for slot in range(next_on_ground.shape[1]):
@@ -826,6 +833,7 @@ def _fod_platform_motion_with_ground_contact(
                 last_obs_frame[platform_id] = np.int32(fi)
                 has_obs[platform_id] = np.uint8(1)
                 contact_owned[platform_id] = np.uint8(1)
+                source_this_frame[platform_id] |= np.uint8(0x04)
 
         for platform_id in range(2):
             if int(cur_valid[platform_id]):
@@ -834,6 +842,7 @@ def _fod_platform_motion_with_ground_contact(
             if int(cur_vel_valid[platform_id]):
                 out_vel[fi, platform_id] = cur_vel[platform_id]
                 out_vel_valid[fi, platform_id] = np.uint8(1)
+            out_source[fi, platform_id] = source_this_frame[platform_id]
 
         for platform_id in range(2):
             if int(cur_valid[platform_id]) and int(cur_vel_valid[platform_id]):
@@ -843,6 +852,8 @@ def _fod_platform_motion_with_ground_contact(
                 )
                 if not keep_velocity:
                     cur_vel_valid[platform_id] = np.uint8(0)
+    if return_source:
+        return out_h, out_v, out_vel, out_vel_valid, out_source
     return out_h, out_v, out_vel, out_vel_valid
 
 
@@ -5327,7 +5338,13 @@ def _main_impl(args) -> Dataset:
     samples["seed_t"]["pos_z"] = hidden_pos_z[:-1]
 
     if int(stage_id) == 2:
-        fod_height, fod_valid, fod_velocity, fod_velocity_valid = _fod_platform_motion_with_ground_contact(
+        (
+            fod_height,
+            fod_valid,
+            fod_velocity,
+            fod_velocity_valid,
+            fod_height_source,
+        ) = _fod_platform_motion_with_ground_contact(
             samples["seed_t"]["stage_fod_platform_height_f32"],
             samples["seed_t"]["stage_fod_platform_height_valid_u8"],
             event_fresh_u8=None if fod_fresh is None else fod_fresh[:-1],
@@ -5339,11 +5356,13 @@ def _main_impl(args) -> Dataset:
             next_post_pos_y_f32=post_pos_y[1:, :num_players],
             line_transforms=_fod_platform_height_transform_records(data_root),
             motion_params=fod_motion_params,
+            return_source=True,
         )
         samples["seed_t"]["stage_fod_platform_height_f32"] = fod_height
         samples["seed_t"]["stage_fod_platform_height_valid_u8"] = fod_valid
         samples["seed_t"]["stage_fod_platform_velocity_f32"] = fod_velocity
         samples["seed_t"]["stage_fod_platform_velocity_valid_u8"] = fod_velocity_valid
+        samples["seed_t"]["stage_fod_platform_height_source_u8"] = fod_height_source
         fod_floor_skip = _derive_fod_floor_skip_segments(
             action_id_u16=samples["seed_t"]["action_id"][:, :num_players],
             action_frame_u16=samples["seed_t"]["action_frame"][:, :num_players],

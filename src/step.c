@@ -130,6 +130,15 @@ static inline void clear_seed_owned_transients_post_frame(MslBatch* batch) {
   }
   const int num_players = (int)batch->config.num_players;
   for (int bi = 0; bi < batch->batch_size; bi++) {
+    for (int platform_id = 0; platform_id < 2; platform_id++) {
+      const size_t pidx = (size_t)bi * 2u + (size_t)platform_id;
+      // FoD platform-height source bits are seed/current-frame provenance for sparse replay
+      // reconstruction, not live scheduler state. Consume them during the reseeded frame, then
+      // require live velocity/scheduler/contact evidence or generated initial-height data again.
+      // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+      // refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
+      batch->state.stage_fod_platform_height_source[pidx] = 0u;
+    }
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
       // `seed_t.throw_pulse_consumed` is a one-step seed bridge for throw_flags_b0 pulse ownership:

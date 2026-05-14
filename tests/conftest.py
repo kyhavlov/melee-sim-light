@@ -515,7 +515,7 @@ def _motion_state_owner_manifest_current(path: Path) -> bool:
         version = int(payload.get("version", -1))
     except (OSError, json.JSONDecodeError, TypeError, ValueError):
         return False
-    return payload.get("magic") == "MSLMSO01" and version == 6
+    return payload.get("magic") == "MSLMSO01" and version == 8
 
 
 def _ensure_motion_state_owner_bins() -> None:
@@ -527,7 +527,7 @@ def _ensure_motion_state_owner_bins() -> None:
                 with out.open("rb") as f:
                     magic = f.read(8)
                     ver = int.from_bytes(f.read(4), "little", signed=False)
-                if magic == b"MSLMSO01" and ver == 6:
+                if magic == b"MSLMSO01" and ver == 8:
                     continue
             except OSError:
                 pass
@@ -559,12 +559,12 @@ def _ensure_motion_state_owner_bins() -> None:
 
 def _ensure_known_data_artifacts() -> None:
     expected = [
-        (ROOT / "data" / "stages" / "bin" / "grnla.bin", b"MSLSTG01", 8),
-        (ROOT / "data" / "stages" / "bin" / "grnba.bin", b"MSLSTG01", 8),
-        (ROOT / "data" / "stages" / "bin" / "griz.bin", b"MSLSTG01", 8),
-        (ROOT / "data" / "stages" / "bin" / "grps.bin", b"MSLSTG01", 8),
-        (ROOT / "data" / "stages" / "bin" / "grst.bin", b"MSLSTG01", 8),
-        (ROOT / "data" / "stages" / "bin" / "grop.bin", b"MSLSTG01", 8),
+        (ROOT / "data" / "stages" / "bin" / "grnla.bin", b"MSLSTG01", 9),
+        (ROOT / "data" / "stages" / "bin" / "grnba.bin", b"MSLSTG01", 9),
+        (ROOT / "data" / "stages" / "bin" / "griz.bin", b"MSLSTG01", 9),
+        (ROOT / "data" / "stages" / "bin" / "grps.bin", b"MSLSTG01", 9),
+        (ROOT / "data" / "stages" / "bin" / "grst.bin", b"MSLSTG01", 9),
+        (ROOT / "data" / "stages" / "bin" / "grop.bin", b"MSLSTG01", 9),
         (ROOT / "data" / "model_parts" / "fox.bin", b"MSLPART1", 1),
         (ROOT / "data" / "model_parts" / "falco.bin", b"MSLPART1", 1),
         (ROOT / "data" / "items" / "articles" / "fox_falco.bin", b"MSLITAR1", 2),

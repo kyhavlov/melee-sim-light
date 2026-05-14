@@ -1283,7 +1283,7 @@ def test_fod_live_platform_scheduler_moves_without_replay_seed() -> None:
         [
             ("fod_platform_height", ("<f4", (2,))),
             ("fod_platform_height_valid", ("u1", (2,))),
-            ("_pad0", "V2"),
+            ("fod_platform_height_source", ("u1", (2,))),
         ],
         align=False,
     )
@@ -1313,7 +1313,7 @@ def test_fod_live_platform_stage_debug_reports_runtime_height_for_webplay() -> N
         [
             ("fod_platform_height", ("<f4", (2,))),
             ("fod_platform_height_valid", ("u1", (2,))),
-            ("_pad0", "V2"),
+            ("fod_platform_height_source", ("u1", (2,))),
         ],
         align=False,
     )

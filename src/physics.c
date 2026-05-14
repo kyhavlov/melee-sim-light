@@ -153,7 +153,33 @@ static inline void physics_apply_specialhi_air_reverse_accel(const MslBatch* bat
   *io_vel_y = -((ch->firefox_launch_reverse_accel * sinf(rotate_model)) - *io_vel_y);
 }
 
-static inline void physics_apply_knockback_decay(MslBatch* batch, size_t idx,
+static inline float physics_ground_friction_mul_for_floor(const MslBatch* batch, size_t bi,
+                                                          size_t idx) {
+  if (batch == NULL) {
+    return 1.0f;
+  }
+  float friction_mul = batch->state.ground_friction_mul[idx];
+  if (!(friction_mul > 0.0f)) {
+    friction_mul = 1.0f;
+  }
+  const uint16_t ground_id = batch->state.ground_id[idx];
+  if (ground_id != 0xFFFFu) {
+    // Source owner: ft_GetGroundFrictionMultiplier reads the current floor MapLine flags through
+    // mpColl_8004CA6C -> mpLib_800569EC. The generated MSLSTG01 segment field is authoritative
+    // when the stage artifact is loaded; the seed lane stays a compatibility fallback.
+    // refs/melee/src/melee/ft/ft_081B.c::ft_GetGroundFrictionMultiplier
+    // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004CA6C
+    // refs/melee/src/melee/mp/mplib.c::mpLib_800569EC
+    const float stage_mul =
+        stage_collision_floor_ground_friction_mul(batch->state.stage_id[bi], ground_id);
+    if (stage_mul > 0.0f) {
+      friction_mul = stage_mul;
+    }
+  }
+  return friction_mul;
+}
+
+static inline void physics_apply_knockback_decay(MslBatch* batch, size_t bi, size_t idx,
                                                  const MslCharParams* ch, const MslCommonParams* c,
                                                  uint8_t on_ground) {
   if (batch == NULL || c == NULL) {
@@ -189,17 +215,17 @@ static inline void physics_apply_knockback_decay(MslBatch* batch, size_t idx,
     // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
     // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007CCA0
     //
-    // Ground friction multiplier lane ownership:
-    // - `ground_friction_mul` is a seeded/runtime lane mirroring ft_GetGroundFrictionMultiplier(fp).
-    // - For stale datasets/tests without this lane, reseed sanitizes non-positive values to 1.0f.
+    // Ground friction multiplier ownership:
+    // - supported-stage runtime uses generated MSLSTG01 floor material data;
+    // - `ground_friction_mul` remains the compatibility seed lane when a floor table is unavailable.
     // refs/melee/src/melee/ft/ft_081B.c::ft_GetGroundFrictionMultiplier
     const float nx = batch->state.ground_normal_x[idx];
     const float ny = batch->state.ground_normal_y[idx];
     const float tangent_x = ny;
     const float tangent_y = -nx;
     float ground_kb = kb_x * tangent_x + kb_y * tangent_y;
-    const float friction =
-        batch->state.ground_friction_mul[idx] * ch->gr_friction * c->ground_kb_friction_mul;
+    const float friction = physics_ground_friction_mul_for_floor(batch, bi, idx) * ch->gr_friction *
+                           c->ground_kb_friction_mul;
 
     if (ground_kb < 0.0f) {
       ground_kb += friction;
@@ -805,6 +831,24 @@ static inline uint8_t physics_action_uses_ft80084280_ottotto_edge_callback(uint1
   }
 }
 
+static inline uint8_t physics_action_uses_kneebend_ft80083f88_ground_to_air_coll(
+    uint16_t action_id) {
+  // Generated MSLMSO01 marks all grounded collision callbacks whose decomp bodies call
+  // `ft_80083F88(gobj)`. The retained runtime owner here consumes only the audited KneeBend subset:
+  // SquatRv/grounded jump entry can carry the frame-start xF8 player nudge to a facing floor edge,
+  // and KneeBend_Coll then lets `ft_80082708 -> mpColl_8004B108` decide ground-to-air.
+  //
+  // Other ft_80083F88 callback families remain table-visible but are not runtime-closed by this
+  // item; a broader all-class nudge edge admission caused unrelated Battlefield float drift.
+  //
+  // refs/melee/src/melee/ft/ft_081B.c::{ft_80083F88,ft_80082708}
+  // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_Coll
+  return (uint8_t)(action_id == (uint16_t)MSL_ACT_KNEE_BEND &&
+                   msl_motion_state_common_class_has(action_id,
+                                                     MSL_MS_CLASS_FT80083F88_GROUND_TO_AIR_COLL));
+}
+
 static inline uint8_t physics_nudge_reaches_facing_edge(const MslStageFloorGraph* g, int line_idx,
                                                         float pos_x, float nudge_x,
                                                         uint8_t facing_right) {
@@ -968,6 +1012,10 @@ static inline void physics_compute_grounded_player_nudge(MslBatch* batch, int bi
         if (!physics_floor_line_contains_or_connects_to_nudged_x(
                 floor_graph, self_line, batch->state.pos_x[idx] + nudge_x) &&
             !(physics_action_uses_ft80084280_ottotto_edge_callback(batch->state.action_id[idx]) &&
+              physics_nudge_reaches_facing_edge(floor_graph, self_line, batch->state.pos_x[idx],
+                                                nudge_x, batch->state.facing[idx])) &&
+            !(physics_action_uses_kneebend_ft80083f88_ground_to_air_coll(
+                  batch->state.action_id[idx]) &&
               physics_nudge_reaches_facing_edge(floor_graph, self_line, batch->state.pos_x[idx],
                                                 nudge_x, batch->state.facing[idx]))) {
           continue;
@@ -2172,8 +2220,8 @@ void physics_integrate(MslBatch* batch) {
         const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
         float shield_kb = batch->state.attacker_shield_ground_kb_vel[idx];
         if (ch != NULL && shield_kb != 0.0f) {
-          const float friction = batch->state.ground_friction_mul[idx] * ch->gr_friction *
-                                 c->shield_attacker_ground_friction_mul;
+          const float friction = physics_ground_friction_mul_for_floor(batch, bi, idx) *
+                                 ch->gr_friction * c->shield_attacker_ground_friction_mul;
           if (shield_kb < 0.0f) {
             shield_kb += friction;
             if (shield_kb > 0.0f) {
@@ -2197,7 +2245,7 @@ void physics_integrate(MslBatch* batch) {
         batch->state.attacker_shield_ground_kb_vel[idx] = 0.0f;
       }
 
-      physics_apply_knockback_decay(batch, idx, msl_char_params(batch->state.char_id[idx]), c,
+      physics_apply_knockback_decay(batch, bi, idx, msl_char_params(batch->state.char_id[idx]), c,
                                     on_ground);
 
       const float vy_self = batch->state.speed_y_self[idx];

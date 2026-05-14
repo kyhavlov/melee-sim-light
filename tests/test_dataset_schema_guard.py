@@ -144,6 +144,7 @@ def test_seed_schema_includes_staling_fields() -> None:
     assert "stage_fod_platform_height_valid_u8" in SEED_DTYPE.fields
     assert "stage_fod_platform_velocity_f32" in SEED_DTYPE.fields
     assert "stage_fod_platform_velocity_valid_u8" in SEED_DTYPE.fields
+    assert "stage_fod_platform_height_source_u8" in SEED_DTYPE.fields
     # Prefix-causal Yoshi Shy Guy dynamic-bone velocity scratch.
     assert "item_shyguy_prev_vel_y" in SEED_DTYPE.fields
     assert "item_shyguy_prev_vel_y_valid" in SEED_DTYPE.fields
@@ -324,13 +325,14 @@ def test_fod_platform_seed_derivation_carries_prefix_velocity_without_future_con
     line_transforms = {0: (1, 0.75, 1.125)}
     y0 = np.float32(13.800076)
     y1 = np.float32(13.725076)
-    out_h, out_v, out_vel, out_vel_v = _fod_platform_motion_with_ground_contact(
+    out_h, out_v, out_vel, out_vel_v, out_source = _fod_platform_motion_with_ground_contact(
         heights,
         valid,
         post_on_ground_u8=np.asarray([[1], [1], [0], [0]], dtype=np.uint8),
         post_ground_id_u16=np.asarray([[0], [0], [0xFFFF], [0xFFFF]], dtype=np.uint16),
         post_pos_y_f32=np.asarray([[y0], [y1], [0.0], [0.0]], dtype=np.float32),
         line_transforms=line_transforms,
+        return_source=True,
     )
 
     h0 = np.float32((float(y0) - 1.125) / 0.75)
@@ -339,6 +341,9 @@ def test_fod_platform_seed_derivation_carries_prefix_velocity_without_future_con
     assert int(out_v[0, 1]) == 1
     assert int(out_vel_v[0, 1]) == 0
     assert int(out_vel_v[1, 1]) == 1
+    assert int(out_source[0, 1]) == 0x02
+    assert int(out_source[1, 1]) == 0x02
+    assert int(out_source[2, 1]) == 0
     assert float(out_vel[1, 1]) == pytest.approx(float(vel), abs=1e-6)
     assert float(out_h[2, 1]) == pytest.approx(float(np.float32(h1 + vel)), abs=1e-6)
     assert float(out_h[3, 1]) == pytest.approx(float(np.float32(h1 + vel + vel)), abs=1e-6)
@@ -368,7 +373,7 @@ def test_fod_platform_direct_events_override_contact_fallback_owner() -> None:
     fresh[4, 1] = np.uint8(1)
     line_transforms = {0: (1, 0.75, 1.125)}
     contact_y = np.float32(24.651287  * 0.75 + 1.125)
-    out_h, out_v, out_vel, out_vel_v = _fod_platform_motion_with_ground_contact(
+    out_h, out_v, out_vel, out_vel_v, out_source = _fod_platform_motion_with_ground_contact(
         heights,
         valid,
         event_fresh_u8=fresh,
@@ -376,6 +381,7 @@ def test_fod_platform_direct_events_override_contact_fallback_owner() -> None:
         post_ground_id_u16=np.asarray([[0], [0xFFFF], [0xFFFF], [0xFFFF], [0xFFFF], [0xFFFF]], dtype=np.uint16),
         post_pos_y_f32=np.asarray([[contact_y], [0.0], [0.0], [0.0], [0.0], [0.0]], dtype=np.float32),
         line_transforms=line_transforms,
+        return_source=True,
     )
 
     assert int(out_v[0, 1]) == 1
@@ -386,7 +392,37 @@ def test_fod_platform_direct_events_override_contact_fallback_owner() -> None:
     # keep the old event delta alive and drift after events stop.
     assert int(out_vel_v[4, 1]) == 0
     assert int(out_vel_v[5, 1]) == 0
+    assert int(out_source[0, 1]) == 0x02
+    assert int(out_source[1, 1]) == 0
+    assert int(out_source[2, 1]) == 0x01
+    assert int(out_source[4, 1]) == 0x01
+    assert int(out_source[5, 1]) == 0
     assert float(out_h[5, 1]) == pytest.approx(31.15)
+
+
+def test_fod_platform_same_step_contact_marks_source_height_without_velocity() -> None:
+    defaults = fountain_of_dreams_default_platform_heights(Path("data"))
+    heights = np.asarray([defaults, defaults], dtype=np.float32)
+    valid = np.zeros((2, 2), dtype=np.uint8)
+    line_transforms = {0: (1, 0.75, 1.125)}
+    out_h, out_v, out_vel, out_vel_v, out_source = _fod_platform_motion_with_ground_contact(
+        heights,
+        valid,
+        post_on_ground_u8=np.asarray([[0], [0]], dtype=np.uint8),
+        post_ground_id_u16=np.asarray([[0xFFFF], [0xFFFF]], dtype=np.uint16),
+        post_pos_y_f32=np.asarray([[0.0], [0.0]], dtype=np.float32),
+        next_post_on_ground_u8=np.asarray([[1], [0]], dtype=np.uint8),
+        next_post_ground_id_u16=np.asarray([[0], [0xFFFF]], dtype=np.uint16),
+        next_post_pos_y_f32=np.asarray([[6.90005], [0.0]], dtype=np.float32),
+        line_transforms=line_transforms,
+        return_source=True,
+    )
+
+    assert int(out_v[0, 1]) == 1
+    assert int(out_vel_v[0, 1]) == 0
+    assert int(out_source[0, 1]) == 0x04
+    assert int(out_source[1, 1]) == 0
+    assert float(out_h[0, 1]) == pytest.approx((6.90005 - 1.125 - 0.0002) / 0.75)
 
 
 def test_fod_platform_ground_contact_derivation_uses_no_future_observations() -> None:

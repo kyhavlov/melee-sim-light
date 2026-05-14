@@ -8,7 +8,7 @@ Current staged state:
   Stadium, Yoshi's Story, and Dream Land N64 replays.
 - Focused suites exist for Battlefield, Fountain of Dreams, Pokemon Stadium, Yoshi's Story, and
   Dream Land N64.
-- `MSLSTG01` v8 extracts FD/Battlefield/Fountain/Pokemon/Yoshi/Dream Land collision segments, raw
+- `MSLSTG01` v9 extracts FD/Battlefield/Fountain/Pokemon/Yoshi/Dream Land collision segments, raw
   `MapLine` graph links, platform/ledge/fighter-solid flags, stage points, spawn/respawn points,
   camera/blast bounds, source-backed platform transform/motion/path records, and current-domain
   stage-object support tags.

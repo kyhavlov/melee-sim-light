@@ -87,7 +87,7 @@ SEED_DTYPE = np.dtype(
         ("stage_fod_platform_height_valid_u8", _arr("u1", 2)),
         ("stage_fod_platform_velocity_f32", _arr("<f4", 2)),
         ("stage_fod_platform_velocity_valid_u8", _arr("u1", 2)),
-        ("_pad_stage_fod", "V2"),
+        ("stage_fod_platform_height_source_u8", _arr("u1", 2)),
         # Prefix-causal Yoshi's Story Shy Guy stage-object scheduler state.
         # refs/melee/src/melee/gr/grstory.c::grStory_801E3418
         ("stage_yoshi_shyguy_timer_u16", "<u2"),

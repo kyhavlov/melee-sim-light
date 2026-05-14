@@ -31,6 +31,13 @@ typedef struct MslStageFloorLine {
   // data/stages/bin/*.bin::MSLSTG01 platform_transform records
   uint8_t platform_transform_kind;
   uint8_t platform_transform_id;
+  // Source floor material multiplier returned by mpLib_800569EC(MapLine.lo_flags & 0xFF).
+  // Fighter_procUpdate consumes it through ft_GetGroundFrictionMultiplier for grounded knockback
+  // and attacker shield pushback decay.
+  // refs/melee/src/melee/mp/mplib.c::{mpLib_800569EC,mpLib_803BF248}
+  // refs/melee/src/melee/ft/ft_081B.c::ft_GetGroundFrictionMultiplier
+  // data/stages/bin/*.bin::MSLSTG01 segment.ground_friction_mul
+  float ground_friction_mul;
   // Connectivity hints for mpLib_8004ED5C-style endpoint extension:
   // - has_prev_link: there exists some collision segment connected to (x0,y0)
   // - has_next_link: there exists some collision segment connected to (x1,y1)
@@ -184,6 +191,7 @@ uint8_t stage_collision_floor_line_stage_object_support_kind(uint32_t stage_id, 
 uint8_t stage_collision_floor_line_has_platform_transform(uint32_t stage_id, uint16_t segment_i);
 uint8_t stage_collision_floor_line_has_height_platform_transform(uint32_t stage_id,
                                                                  uint16_t segment_i);
+float stage_collision_floor_ground_friction_mul(uint32_t stage_id, uint16_t segment_i);
 uint8_t stage_collision_floor_line_platform_transform_id(uint32_t stage_id, uint16_t segment_i,
                                                          uint8_t* platform_id_out);
 uint8_t stage_collision_floor_line_height_platform_state_is_source_trusted(const MslBatch* batch,

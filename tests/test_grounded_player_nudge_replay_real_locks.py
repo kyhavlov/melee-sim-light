@@ -281,3 +281,38 @@ def test_ottotto_kneebend_floor_loss_carries_source_player_nudge() -> None:
     assert int(out["action_id"][p]) == int(ref["action_id"][p])
     assert int(out["on_ground"][p]) == int(ref["on_ground"][p])
     assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=2e-6)
+
+
+@pytest.mark.integration
+def test_fod_squatrv_kneebend_floor_loss_uses_ft80083f88_nudge_owner() -> None:
+    # Replay-real positive for the same x450 source owner through an ft_80083F88 collision callback:
+    # - SquatRv_IASA enters KneeBend from a jump input while overlapping a grounded peer.
+    # - Fighter_8006A360 computes xF8_playerNudgeVel before Fighter_procUpdate.
+    # - KneeBend_Coll calls ft_80083F88 -> ft_80082708 -> mpColl_8004B108, so the nudged FoD
+    #   top-platform edge position can leave ground and enter Fall on that same frame.
+    # data/motion_state/owners/{fox,falco}.bin::MSLMSO01 class FT80083F88_GROUND_TO_AIR_COLL
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_SquatRv.c::ftCo_SquatRv_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_Coll
+    # refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007DD7C,ftCommon_8007E0E4}
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_80083F88,ft_80082708}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+        "MilkyGracefulStingray.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    seed, ref, out = _run_one_step_row(dataset_path, 616, 1)
+    p = 1
+    assert int(seed["action_id"][p]) == 24  # KneeBend
+    assert int(seed["seed_prev_action_id"][p]) == 39  # SquatRv
+    assert int(ref["action_id"][p]) == 29  # Fall
+    assert int(ref["on_ground"][p]) == 0
+    assert int(out["action_id"][p]) == int(ref["action_id"][p])
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p])
+    assert int(out["jumps_left"][p]) == int(ref["jumps_left"][p])
+    assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=2e-6)

@@ -17,7 +17,7 @@ from tools.extraction.extract_attack_id_move_id import (
 
 
 FORMAT_MAGIC = b"MSLMSO01"
-FORMAT_VERSION = 6
+FORMAT_VERSION = 8
 U16_ABSENT = 0xFFFF
 
 CLASS_ATTACK_AIR = 1 << 0
@@ -41,6 +41,7 @@ CLASS_GROUNDED_ATTACK = 1 << 17
 CLASS_GUARDON_FRAME_START_X672_IASA = 1 << 18
 CLASS_FT80081D0C_AIR_COLL = 1 << 19
 CLASS_SIDEB_AIR_GROUND_LEDGE_COLL = 1 << 20
+CLASS_FT80083F88_GROUND_TO_AIR_COLL = 1 << 21
 
 
 @dataclass(frozen=True)
@@ -253,18 +254,55 @@ def _class_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
         "ftCo_GuardOff_Coll",
         "ftCo_GuardSetOff_Coll",
         "ftCo_GuardReflect_Coll",
+        "ftCo_Catch_Coll",
+        "ftCo_CatchDash_Coll",
+        "ftCo_CatchPull_Coll",
+        "ftCo_CatchDashPull_Coll",
+        "ftCo_CatchWait_Coll",
+        "ftCo_CatchAttack_Coll",
+        "ftCo_CatchCut_Coll",
+        "ftCo_ThrowF_Coll",
+        "ftCo_ThrowB_Coll",
+        "ftCo_ThrowHi_Coll",
+        "ftCo_ThrowLw_Coll",
         "ftCo_Down_Coll",
         "ftCo_DownAttack_Coll",
         "ftCo_PassiveStand_Coll",
     }:
         # These grounded callbacks keep an attached floor through the common map-collision owner
-        # paths (`ft_80084280`, `ft_800844EC`, `ft_80084104`, or adjacent guarded variants). They
-        # should inherit stage-object platform transform while already attached to a moving floor.
+        # paths (`ft_80084280`, `ft_800844EC`, `ft_80084104`, `ft_800841B8`, or adjacent guarded
+        # variants). They should inherit stage-object platform transform while already attached to a
+        # moving floor.
         #
         # Deliberately excluded: DownBound/DownWait/DownStand/DownSpot/Passive callbacks that route
         # through `ft_80083F88` (or a custom downed/damage projection owner), and airborne collision
         # callbacks that may land this frame rather than persist an existing moving-floor attachment.
         bits |= CLASS_GROUNDED_STAGE_OBJECT_CARRY_COLL
+    if coll_cb in {
+        "ftCo_KneeBend_Coll",
+        "ftCo_Squat_Coll",
+        "ftCo_SquatWait_Coll",
+        "ftCo_SquatRv_Coll",
+        "ftCo_Turn_Coll",
+        "ftCo_Rebound_Coll",
+        "ftCo_DownBound_Coll",
+        "ftCo_DownStand_Coll",
+        "ftCo_DownSpot_Coll",
+        "ftCo_Passive_Coll",
+        "ftCo_ShieldBreakDown_Coll",
+        "ftCo_ShieldBreakStand_Coll",
+        "ftCo_Furafura_Coll",
+        "ftFx_SpecialNStart_Coll",
+        "ftFx_SpecialNLoop_Coll",
+        "ftFx_SpecialNEnd_Coll",
+    }:
+        # Collision callbacks whose decomp bodies call `ft_80083F88(gobj)`. That wrapper delegates
+        # through `ft_80082708` / `mpColl_8004B108` and can leave ground when the frame's current
+        # root position has crossed a floor endpoint.
+        #
+        # refs/melee/src/melee/ft/ft_081B.c::{ft_80083F88,ft_80082708}
+        # refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
+        bits |= CLASS_FT80083F88_GROUND_TO_AIR_COLL
     return bits
 
 
@@ -444,6 +482,7 @@ def _write_manifest(out_path: Path, callback_ids: dict[str, int]) -> None:
         "GUARDON_FRAME_START_X672_IASA": CLASS_GUARDON_FRAME_START_X672_IASA,
         "FT80081D0C_AIR_COLL": CLASS_FT80081D0C_AIR_COLL,
         "SIDEB_AIR_GROUND_LEDGE_COLL": CLASS_SIDEB_AIR_GROUND_LEDGE_COLL,
+        "FT80083F88_GROUND_TO_AIR_COLL": CLASS_FT80083F88_GROUND_TO_AIR_COLL,
     }
     symbols = [{"id": int(i), "symbol": sym} for sym, i in sorted(callback_ids.items(), key=lambda kv: kv[1])]
     payload = {

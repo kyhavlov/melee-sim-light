@@ -38,6 +38,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->stage_fod_platform_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * b2);
   state->stage_fod_platform_velocity = (float*)alloc_aligned_64(sizeof(float) * b2);
   state->stage_fod_platform_velocity_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * b2);
+  state->stage_fod_platform_height_source = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * b2);
   state->stage_fod_platform_scheduler_phase = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * b2);
   state->stage_fod_platform_scheduler_timer = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * b2);
   state->stage_fod_platform_scheduler_target = (float*)alloc_aligned_64(sizeof(float) * b2);
@@ -504,17 +505,18 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   if (!state->frame_id || !state->frame_pre_random_seed || !state->stage_id ||
       !state->stage_fod_platform_height || !state->stage_fod_platform_valid ||
       !state->stage_fod_platform_velocity || !state->stage_fod_platform_velocity_valid ||
-      !state->stage_fod_platform_scheduler_phase || !state->stage_fod_platform_scheduler_timer ||
-      !state->stage_fod_platform_scheduler_target || !state->stage_fod_platform_scheduler_valid ||
-      !state->stage_yoshi_shyguy_timer || !state->stage_yoshi_shyguy_pattern ||
-      !state->stage_yoshi_shyguy_valid || !state->stage_yoshi_shyguy_spawn_rng_seed ||
-      !state->stage_yoshi_shyguy_spawn_rng_valid || !state->stage_dream_whispy_wind_dir ||
-      !state->stage_dream_whispy_wind_valid || !state->stage_dream_whispy_wind_timer ||
-      !state->opening_input_lock_timer || !state->stale_attack_instance_counter ||
-      !state->instance_id_counter || !state->item_spawn_id_counter || !state->match_damage_ratio ||
-      !state->is_teams || !state->team_id || !state->char_id || !state->handicap ||
-      !state->attack_ratio || !state->defense_ratio || !state->pos_x || !state->pos_y ||
-      !state->pos_z || !state->illusion_ghost_pos0_x || !state->illusion_ghost_pos0_y ||
+      !state->stage_fod_platform_height_source || !state->stage_fod_platform_scheduler_phase ||
+      !state->stage_fod_platform_scheduler_timer || !state->stage_fod_platform_scheduler_target ||
+      !state->stage_fod_platform_scheduler_valid || !state->stage_yoshi_shyguy_timer ||
+      !state->stage_yoshi_shyguy_pattern || !state->stage_yoshi_shyguy_valid ||
+      !state->stage_yoshi_shyguy_spawn_rng_seed || !state->stage_yoshi_shyguy_spawn_rng_valid ||
+      !state->stage_dream_whispy_wind_dir || !state->stage_dream_whispy_wind_valid ||
+      !state->stage_dream_whispy_wind_timer || !state->opening_input_lock_timer ||
+      !state->stale_attack_instance_counter || !state->instance_id_counter ||
+      !state->item_spawn_id_counter || !state->match_damage_ratio || !state->is_teams ||
+      !state->team_id || !state->char_id || !state->handicap || !state->attack_ratio ||
+      !state->defense_ratio || !state->pos_x || !state->pos_y || !state->pos_z ||
+      !state->illusion_ghost_pos0_x || !state->illusion_ghost_pos0_y ||
       !state->illusion_ghost_pos1_x || !state->illusion_ghost_pos1_y ||
       !state->illusion_ghost_pos2_x || !state->illusion_ghost_pos2_y || !state->prev_pos_x ||
       !state->prev_pos_y || !state->floor_sweep_prev_pos_x || !state->floor_sweep_prev_pos_y ||
@@ -686,6 +688,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   }
   memset(state->frame_id, 0, sizeof(int32_t) * b);
   memset(state->stage_fod_platform_scheduler_phase, 0, sizeof(uint8_t) * b2);
+  memset(state->stage_fod_platform_height_source, 0, sizeof(uint8_t) * b2);
   memset(state->stage_fod_platform_scheduler_timer, 0, sizeof(uint16_t) * b2);
   memset(state->stage_fod_platform_scheduler_target, 0, sizeof(float) * b2);
   memset(state->stage_fod_platform_scheduler_valid, 0, sizeof(uint8_t) * b2);
@@ -818,6 +821,7 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->stage_fod_platform_valid);
   alloc_free(state->stage_fod_platform_velocity);
   alloc_free(state->stage_fod_platform_velocity_valid);
+  alloc_free(state->stage_fod_platform_height_source);
   alloc_free(state->stage_fod_platform_scheduler_phase);
   alloc_free(state->stage_fod_platform_scheduler_timer);
   alloc_free(state->stage_fod_platform_scheduler_target);
