@@ -157,7 +157,6 @@ def _print_rollout(
         print(f"rollout.streak_len.max: {row['max_streak_len']}")
         print(f"rollout.first_mismatch_total: {row['first_mismatch_total']}")
         print(f"rollout.first_mismatch_seeded_total: {row['first_mismatch_seeded_total']}")
-        print(f"rollout.first_mismatch_non_seeded_total: {row['first_mismatch_non_seeded_total']}")
         ignored = dict(row.get("ignored_first_mismatch_field_counts", {}))
         if ignored:
             print(
@@ -175,7 +174,6 @@ def _print_rollout(
     print(f"overall.rollout.best_len.max: {suite_summary['max_best_len']}")
     print(f"overall.rollout.first_mismatch_total: {suite_summary['first_mismatch_total']}")
     print(f"overall.rollout.first_mismatch_seeded_total: {suite_summary['first_mismatch_seeded_total']}")
-    print(f"overall.rollout.first_mismatch_non_seeded_total: {suite_summary['first_mismatch_non_seeded_total']}")
 
 
 def main() -> None:

@@ -3,8 +3,11 @@ from __future__ import annotations
 import argparse
 import concurrent.futures
 import os
+from dataclasses import asdict
 from pathlib import Path
 
+from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.locate_rollout_desyncs import _locate_dataset_rollout_desyncs
 from tools.eval.rollout_metrics import summarize_rollout_payload
 from tools.eval.run_longest_rollout_streaks import (
     _parse_csv,
@@ -13,9 +16,28 @@ from tools.eval.run_longest_rollout_streaks import (
     _validate_discrete_fields,
 )
 from tools.eval.run_one_step_eval import Reporter
-from tools.eval.dataset import read_dataset
+from tools.eval.top_float_offenders import collect_dataset_top_rollout_float_offenders
+from tools.eval.validation_exceptions import (
+    ValidationExceptions,
+    classify_float_row,
+    load_validation_exceptions,
+    match_rollout_first_exceptions,
+)
 from tools.eval.validation_profile import get_validation_profile, validation_profile_names
 from tools.slippi.suite_io import dataset_path_for_suite_replay, load_suite, repo_root
+
+
+FLOAT_DISPLAY_THRESHOLDS: dict[str, float] = {
+    "pos_x": 1.0e-4,
+    "pos_y": 1.0e-4,
+    "speed_air_x_self": 1.0e-5,
+    "speed_ground_x_self": 1.0e-5,
+    "speed_y_self": 1.0e-5,
+    "speed_x_attack": 1.0e-5,
+    "speed_y_attack": 1.0e-5,
+    "percent": 1.0e-4,
+    "shield_hp": 1.0e-4,
+}
 
 
 def _report_header(*, root: Path, suite: str, suite_name: str, datasets_dir: str) -> list[str]:
@@ -41,6 +63,14 @@ def _report_header(*, root: Path, suite: str, suite_name: str, datasets_dir: str
         "#     make rollout-summary ROLLOUT_JSON=reports/triage/current_rollout_streaks.json",
         "# - Diff baseline vs current:",
         "#     make rollout-diff ROLLOUT_BEFORE=reports/triage/rollout_streaks.json ROLLOUT_AFTER=reports/triage/current_rollout_streaks.json",
+        "#",
+        "# Reviewed rollout exception overlay:",
+        "# - replays/validation_exceptions.json can mark exact, reviewed first-break rows as accepted",
+        "#   package-boundary residuals. Raw rollout metrics above remain canonical; exception",
+        "#   fields are display-only review aids and fail stale if the observed seed/out/ref shape moves.",
+        "# - rollout.float_top_errors rows have matching discrete state and are the main float",
+        "#   polish targets. rollout.float_top_downstream rows already sit on a discrete mismatch path.",
+        "#   Float summaries are triage-only and do not alter validation scoring.",
     ]
 
 
@@ -56,6 +86,148 @@ def _display_path(path: Path, *, root: Path) -> str:
         return str(resolved.relative_to(root))
     except ValueError:
         return str(resolved)
+
+
+def _float_compare_fields() -> tuple[str, ...]:
+    fields: list[str] = []
+    for name, (dt, _off) in COMPARE_DTYPE.fields.items():
+        base = dt.subdtype[0] if dt.subdtype is not None else dt
+        if base.fields is None and base.kind == "f":
+            fields.append(name)
+    return tuple(fields)
+
+
+def _dataset_exception_overlay(
+    *,
+    dataset: str,
+    first_mismatch_rows: list[dict],
+    exceptions: ValidationExceptions,
+) -> dict:
+    rows_tuple = tuple(first_mismatch_rows)
+    accepted, stale = match_rollout_first_exceptions(
+        dataset=dataset, rows=rows_tuple, exceptions=exceptions
+    )
+    accepted_total = sum(1 for _exc, row in accepted if not bool(row.get("seeded_break", False)))
+    accepted_seeded_total = sum(1 for _exc, row in accepted if bool(row.get("seeded_break", False)))
+    return {
+        "accepted": [
+            {
+                "record": int(row["record"]),
+                "player": int(row["player"]),
+                "field": str(row["field"]),
+                "subindex": int(row["subindex"]),
+                "seed": int(row["seed"]),
+                "out": int(row["out"]),
+                "ref": int(row["ref"]),
+                "seeded_break": bool(row["seeded_break"]),
+                "category": exc.category,
+                "reason": exc.reason,
+            }
+            for exc, row in accepted
+        ],
+        "stale": [asdict(exc) for exc in stale],
+        "accepted_total": int(accepted_total),
+        "accepted_seeded_total": int(accepted_seeded_total),
+    }
+
+
+def _exception_probe_limit(*, dataset: str, exceptions: ValidationExceptions) -> int:
+    max_record = -1
+    for exc in exceptions.rollout_first_mismatch:
+        if exc.dataset == dataset or Path(exc.dataset).name == Path(dataset).name:
+            max_record = max(max_record, int(exc.record))
+    return 0 if max_record < 0 else max_record + 1
+
+
+def _rollout_status(*, raw_total: int, accepted_total: int, stale_total: int) -> str:
+    if raw_total == 0:
+        return "raw-clean"
+    if accepted_total == raw_total and stale_total == 0:
+        return "accepted-clean"
+    return "not-clean"
+
+
+def _float_summary(
+    *,
+    dataset: str,
+    rows_by_field: dict[str, list],
+    exceptions: ValidationExceptions,
+    top: int,
+) -> dict:
+    by_kind: dict[str, dict[str, dict]] = {"float_only": {}, "downstream": {}}
+    for field, field_rows in rows_by_field.items():
+        for raw_row in field_rows:
+            row = dict(raw_row) if isinstance(raw_row, dict) else asdict(raw_row)
+            category, reason = classify_float_row(
+                dataset=dataset,
+                record=int(row["record"]),
+                player=int(row["p"]),
+                field=str(row["field"]),
+                exceptions=exceptions,
+            )
+            row["category"] = category
+            row["reason"] = reason
+            kind = "float_only" if bool(row.get("discrete_state_matches", False)) else "downstream"
+            if kind == "downstream" and category == "unclassified":
+                row["category"] = "downstream_discrete_mismatch"
+            prev = by_kind[kind].get(field)
+            if prev is None or float(row["abs_err"]) > float(prev["abs_err"]):
+                by_kind[kind][field] = row
+
+    all_float_only = sorted(
+        by_kind["float_only"].values(),
+        key=lambda r: (-float(r["abs_err"]), str(r["field"]), int(r["record"]), int(r["p"])),
+    )
+    all_downstream = sorted(
+        by_kind["downstream"].values(),
+        key=lambda r: (-float(r["abs_err"]), str(r["field"]), int(r["record"]), int(r["p"])),
+    )
+    float_only = all_float_only[: max(0, int(top))]
+    downstream = all_downstream[: max(0, int(top))]
+    accepted_float_total = sum(
+        1
+        for row in all_float_only
+        if row.get("category", "unclassified") != "unclassified"
+        and float(row["abs_err"]) > FLOAT_DISPLAY_THRESHOLDS.get(str(row["field"]), 0.0)
+    )
+    float_clean = not any(
+        float(row["abs_err"]) > FLOAT_DISPLAY_THRESHOLDS.get(str(row["field"]), 0.0)
+        for row in all_float_only
+        if row.get("category", "unclassified") == "unclassified"
+    )
+    return {
+        "float_only": float_only,
+        "downstream": downstream,
+        "accepted_float_exception_total": accepted_float_total,
+        "status": "float-clean" if float_clean else "not-clean",
+    }
+
+
+def _format_float_row(row: dict) -> str:
+    return (
+        f"{row['field']} max_err={float(row['abs_err']):.6g} rec={int(row['record'])} p={int(row['p'])} "
+        f"seed/ref/out="
+        f"{float(row['seed']):.6g}/{float(row['ref']):.6g}/{float(row['out']):.6g} "
+        f"actions={int(row['seed_action_id'])}/{int(row['ref_action_id'])}/{int(row['out_action_id'])} "
+        f"category={row.get('category', 'unclassified')}"
+    )
+
+
+def _format_status(value: object) -> str:
+    return str(value).upper()
+
+
+def _top_float_fields(rows: list[dict], *, top: int) -> list[dict]:
+    by_field: dict[str, dict] = {}
+    for row in rows:
+        field = str(row["field"])
+        prev = by_field.get(field)
+        if prev is None or float(row["abs_err"]) > float(prev["abs_err"]):
+            by_field[field] = row
+    return sorted(
+        by_field.values(),
+        key=lambda r: (-float(r["abs_err"]), str(r["field"]), str(r["dataset"]), int(r["record"]), int(r["p"])),
+    )[: max(0, int(top))]
 
 
 def _scan_dataset_payload_task(task: dict) -> dict:
@@ -84,8 +256,48 @@ def _scan_dataset_payload_task(task: dict) -> dict:
         ucf_cardinals_1_0_enabled=bool(task["ucf_cardinals_1_0_enabled"]),
         profile=str(task["profile"]),
     )
+    dataset_label = _display_path(Path(s.dataset), root=root)
+    first_rows: list[dict] = []
+    exception_probe_limit = int(task.get("exception_probe_limit", 0))
+    if exception_probe_limit > 0:
+        max_records = int(task["max_records"])
+        if max_records > 0:
+            exception_probe_limit = min(exception_probe_limit, max_records)
+        first_rows = [
+            asdict(row)
+            for row in _locate_dataset_rollout_desyncs(
+                dataset_path=ds_path,
+                dataset_label=dataset_label,
+                ds=ds,
+                fields=tuple(task["fields"]),
+                players=players,
+                max_records=exception_probe_limit,
+                row_limit=None,
+                ucf_enabled=bool(task["ucf_enabled"]),
+                ucf_cardinals_1_0_enabled=bool(task["ucf_cardinals_1_0_enabled"]),
+                profile=str(task["profile"]),
+            )
+        ]
+    float_rows: dict[str, list[dict]] = {}
+    float_top = int(task.get("float_top_scan", 0))
+    if float_top > 0:
+        raw_float_rows = collect_dataset_top_rollout_float_offenders(
+            dataset_path=ds_path,
+            ds=ds,
+            dataset_label=dataset_label,
+            fields=tuple(task["float_fields"]),
+            players=players,
+            top=float_top,
+            max_records=int(task["max_records"]),
+            threshold=0.0,
+            discrete_fields=tuple(task["fields"]),
+            profile=str(task["profile"]),
+            ucf_enabled=bool(task["ucf_enabled"]),
+            ucf_cardinals_1_0_enabled=bool(task["ucf_cardinals_1_0_enabled"]),
+        )
+        float_rows = {field: [asdict(row) for row in rows] for field, rows in raw_float_rows.items()}
     return {
-        "dataset": _display_path(Path(s.dataset), root=root),
+        "dataset": dataset_label,
         "num_records": s.num_records,
         "max_records_used": s.max_records_used,
         "players": list(s.players),
@@ -99,6 +311,8 @@ def _scan_dataset_payload_task(task: dict) -> dict:
         "first_mismatch_field_counts_seeded": s.first_mismatch_field_counts_seeded,
         "ignored_first_mismatch_field_counts": s.ignored_first_mismatch_field_counts,
         "ignored_first_mismatch_field_counts_seeded": s.ignored_first_mismatch_field_counts_seeded,
+        "first_mismatch_rows": first_rows,
+        "float_rows": float_rows,
     }
 
 
@@ -152,6 +366,18 @@ def main() -> None:
         action="store_false",
         help="Read existing .msl files from --datasets-dir instead of building from .slp in memory.",
     )
+    ap.add_argument(
+        "--exceptions",
+        type=Path,
+        default=Path("replays/validation_exceptions.json"),
+        help="Report-only reviewed exception/annotation JSON.",
+    )
+    ap.add_argument(
+        "--float-top",
+        type=int,
+        default=3,
+        help="Top-N rollout float-only and downstream rows to display per dataset (0 disables).",
+    )
     args = ap.parse_args()
 
     root = repo_root()
@@ -160,6 +386,10 @@ def main() -> None:
 
     fields = _validate_discrete_fields(_parse_csv(str(args.fields)))
     validation_profile = get_validation_profile(args.profile)
+    exceptions_path = (root / args.exceptions).resolve()
+    exceptions = load_validation_exceptions(exceptions_path)
+    float_fields = _float_compare_fields()
+    float_top_scan = max(0, int(args.float_top)) * 8
 
     dataset_paths: list[Path] = []
     for entry in suite.replays:
@@ -194,6 +424,11 @@ def main() -> None:
             "ucf_enabled": bool(suite.ucf_enabled),
             "ucf_cardinals_1_0_enabled": bool(suite.ucf_cardinals_1_0_enabled),
             "profile": validation_profile.name,
+            "float_fields": list(float_fields),
+            "float_top_scan": int(float_top_scan),
+            "exception_probe_limit": _exception_probe_limit(
+                dataset=_display_path(ds_path, root=root), exceptions=exceptions
+            ),
         }
         for ds_path, entry in zip(dataset_paths, suite.replays, strict=True)
     ]
@@ -219,6 +454,46 @@ def main() -> None:
     }
     summary = summarize_rollout_payload(payload)
     suite_summary = summary["suite_summary"]
+    dataset_overlays: dict[str, dict] = {}
+    suite_exception_totals = {
+        "accepted_total": 0,
+        "accepted_seeded_total": 0,
+        "stale_total": 0,
+        "accepted_float_total": 0,
+    }
+    suite_float_only: list[dict] = []
+    suite_float_downstream: list[dict] = []
+    by_payload_dataset = {str(row["dataset"]): row for row in per_dataset_payload}
+    for row in summary["dataset_summaries"]:
+        dataset = str(row["dataset"])
+        raw = by_payload_dataset.get(dataset, {})
+        overlay = _dataset_exception_overlay(
+            dataset=dataset,
+            first_mismatch_rows=list(raw.get("first_mismatch_rows", [])),
+            exceptions=exceptions,
+        )
+        raw_total = int(row["first_mismatch_total"])
+        accepted_total = int(overlay["accepted_total"])
+        accepted_seeded_total = int(overlay["accepted_seeded_total"])
+        overlay["status"] = _rollout_status(
+            raw_total=raw_total,
+            accepted_total=accepted_total,
+            stale_total=len(overlay["stale"]),
+        )
+        float_overlay = _float_summary(
+            dataset=dataset,
+            rows_by_field=dict(raw.get("float_rows", {})),
+            exceptions=exceptions,
+            top=int(args.float_top),
+        )
+        overlay["float"] = float_overlay
+        suite_exception_totals["accepted_total"] += accepted_total
+        suite_exception_totals["accepted_seeded_total"] += accepted_seeded_total
+        suite_exception_totals["stale_total"] += len(overlay["stale"])
+        suite_exception_totals["accepted_float_total"] += int(float_overlay["accepted_float_exception_total"])
+        suite_float_only.extend(float_overlay["float_only"])
+        suite_float_downstream.extend(float_overlay["downstream"])
+        dataset_overlays[dataset] = overlay
 
     reporter = Reporter(args.out, echo=not bool(args.quiet))
     try:
@@ -237,10 +512,16 @@ def main() -> None:
         reporter.print(f"validation.profile: {validation_profile.name}")
         for lane in validation_profile.ignored_lanes:
             reporter.print(f"validation.profile.ignored: {lane.label} reason={lane.reason} exception={lane.exception}")
+        reporter.print(
+            f"validation.exceptions: {Path(args.exceptions).as_posix()} "
+            "mode=report-overlay canonical_raw_metrics_unchanged"
+        )
 
         for row in summary["dataset_summaries"]:
             reporter.print()
             reporter.print(f"== {row['dataset']} ==")
+            overlay = dataset_overlays.get(str(row["dataset"]), {})
+            reporter.print(f"rollout.status: {_format_status(overlay.get('status', 'not-clean'))}")
             reporter.print(f"rollout.best_len: {row['best_len']}")
             reporter.print(f"rollout.streak_count: {row['total_streaks']}")
             reporter.print(f"rollout.streak_len.median: {row['median_streak_len']}")
@@ -249,9 +530,48 @@ def main() -> None:
             reporter.print(f"rollout.streak_len.max: {row['max_streak_len']}")
             reporter.print(f"rollout.first_mismatch_total: {row['first_mismatch_total']}")
             reporter.print(f"rollout.first_mismatch_seeded_total: {row['first_mismatch_seeded_total']}")
-            reporter.print(
-                f"rollout.first_mismatch_non_seeded_total: {row['first_mismatch_non_seeded_total']}"
-            )
+            accepted_total = int(overlay.get("accepted_total", 0))
+            accepted_seeded_total = int(overlay.get("accepted_seeded_total", 0))
+            if accepted_total:
+                reporter.print(f"rollout.approved_exception_total: {accepted_total}")
+            if accepted_seeded_total:
+                reporter.print(f"rollout.approved_exception_seeded_total: {accepted_seeded_total}")
+            accepted = list(overlay.get("accepted", []))
+            if accepted:
+                reporter.print(
+                    "rollout.approved_exceptions:",
+                    " ; ".join(
+                        f"rec={e['record']} p={e['player']} seeded={int(bool(e.get('seeded_break', False)))} "
+                        f"{e['field']}[{e['subindex']}] "
+                        f"seed/out/ref={e['seed']}/{e['out']}/{e['ref']} category={e['category']}"
+                        for e in accepted[:8]
+                    ),
+                )
+            stale = list(overlay.get("stale", []))
+            if stale:
+                reporter.print(
+                    "rollout.stale_exceptions:",
+                    " ; ".join(
+                        f"rec={e['record']} p={e['player']} {e['field']}[{e['subindex']}] "
+                        f"seed/out/ref={e['seed']}/{e['out']}/{e['ref']} category={e['category']}"
+                        for e in stale[:8]
+                    ),
+                )
+            float_overlay = dict(overlay.get("float", {}))
+            reporter.print(f"rollout.float_status: {_format_status(float_overlay.get('status', 'float-clean'))}")
+            accepted_float_total = int(float_overlay.get("accepted_float_exception_total", 0))
+            if accepted_float_total:
+                reporter.print(f"rollout.approved_float_exception_total: {accepted_float_total}")
+            float_only = list(float_overlay.get("float_only", []))
+            downstream = list(float_overlay.get("downstream", []))
+            if float_only:
+                reporter.print("rollout.float_top_errors:")
+                for i, float_row in enumerate(float_only[: max(0, int(args.float_top))], start=1):
+                    reporter.print(f"  {i}. {_format_float_row(float_row)}")
+            if downstream:
+                reporter.print("rollout.float_top_downstream:")
+                for i, float_row in enumerate(downstream[: max(0, int(args.float_top))], start=1):
+                    reporter.print(f"  {i}. {_format_float_row(float_row)}")
             ignored = dict(row.get("ignored_first_mismatch_field_counts", {}))
             ignored_seeded = dict(row.get("ignored_first_mismatch_field_counts_seeded", {}))
             if ignored:
@@ -279,10 +599,33 @@ def main() -> None:
         reporter.print(
             f"overall.rollout.first_mismatch_seeded_total: {suite_summary['first_mismatch_seeded_total']}"
         )
+        if suite_exception_totals["accepted_total"]:
+            reporter.print(f"overall.rollout.approved_exception_total: {suite_exception_totals['accepted_total']}")
+        if suite_exception_totals["accepted_seeded_total"]:
+            reporter.print(
+                "overall.rollout.approved_exception_seeded_total: "
+                f"{suite_exception_totals['accepted_seeded_total']}"
+            )
         reporter.print(
-            "overall.rollout.first_mismatch_non_seeded_total: "
-            f"{suite_summary['first_mismatch_non_seeded_total']}"
+            "overall.rollout.status: "
+            f"{_format_status(_rollout_status(raw_total=int(suite_summary['first_mismatch_total']), accepted_total=suite_exception_totals['accepted_total'], stale_total=suite_exception_totals['stale_total']))}"
         )
+        if suite_exception_totals["stale_total"]:
+            reporter.print(f"overall.rollout.stale_exception_total: {suite_exception_totals['stale_total']}")
+        if suite_exception_totals["accepted_float_total"]:
+            reporter.print(
+                f"overall.rollout.approved_float_exception_total: {suite_exception_totals['accepted_float_total']}"
+            )
+        suite_float_only = _top_float_fields(suite_float_only, top=int(args.float_top))
+        suite_float_downstream = _top_float_fields(suite_float_downstream, top=int(args.float_top))
+        if suite_float_only:
+            reporter.print("overall.rollout.float_top_errors:")
+            for i, float_row in enumerate(suite_float_only, start=1):
+                reporter.print(f"  {i}. {_format_float_row(float_row)}")
+        if suite_float_downstream:
+            reporter.print("overall.rollout.float_top_downstream:")
+            for i, float_row in enumerate(suite_float_downstream, start=1):
+                reporter.print(f"  {i}. {_format_float_row(float_row)}")
         ignored_suite: dict[str, int] = {}
         ignored_seeded_suite: dict[str, int] = {}
         for row in summary["dataset_summaries"]:

@@ -79,8 +79,7 @@ def _summarize_dataset_row(row: Mapping[str, Any]) -> dict[str, Any]:
     )
     first_total = int(sum(first_mm.values()))
     first_seeded_total = int(sum(first_mm_seeded.values()))
-    first_non_seeded_total = first_total - first_seeded_total
-    if first_non_seeded_total < 0:
+    if first_seeded_total > first_total:
         raise ValueError(
             f"{row.get('dataset', '')}: seeded first mismatches exceed total "
             f"({first_seeded_total} > {first_total})"
@@ -104,7 +103,6 @@ def _summarize_dataset_row(row: Mapping[str, Any]) -> dict[str, Any]:
         "ignored_first_mismatch_field_counts_seeded": dict(sorted(ignored_first_seeded.items())),
         "first_mismatch_total": first_total,
         "first_mismatch_seeded_total": first_seeded_total,
-        "first_mismatch_non_seeded_total": first_non_seeded_total,
     }
 
 
@@ -130,8 +128,7 @@ def summarize_rollout_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
 
     suite_first_total = int(sum(suite_first_mm.values()))
     suite_first_seeded_total = int(sum(suite_first_mm_seeded.values()))
-    suite_first_non_seeded_total = suite_first_total - suite_first_seeded_total
-    if suite_first_non_seeded_total < 0:
+    if suite_first_seeded_total > suite_first_total:
         raise ValueError(
             "rollout suite: seeded first mismatches exceed total "
             f"({suite_first_seeded_total} > {suite_first_total})"
@@ -151,7 +148,6 @@ def summarize_rollout_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
         "ignored_first_mismatch_field_counts_seeded": dict(sorted(suite_ignored_first_seeded.items())),
         "first_mismatch_total": suite_first_total,
         "first_mismatch_seeded_total": suite_first_seeded_total,
-        "first_mismatch_non_seeded_total": suite_first_non_seeded_total,
     }
 
     return {
@@ -183,8 +179,6 @@ def diff_rollout_summaries(before: Mapping[str, Any], after: Mapping[str, Any]) 
         "first_mismatch_total": int(a_suite["first_mismatch_total"]) - int(b_suite["first_mismatch_total"]),
         "first_mismatch_seeded_total": int(a_suite["first_mismatch_seeded_total"])
         - int(b_suite["first_mismatch_seeded_total"]),
-        "first_mismatch_non_seeded_total": int(a_suite["first_mismatch_non_seeded_total"])
-        - int(b_suite["first_mismatch_non_seeded_total"]),
     }
 
     b_field = Counter({str(k): int(v) for k, v in b_suite["first_mismatch_field_counts"].items()})
@@ -213,8 +207,6 @@ def diff_rollout_summaries(before: Mapping[str, Any], after: Mapping[str, Any]) 
                 "first_mismatch_total": int(ra["first_mismatch_total"]) - int(rb["first_mismatch_total"]),
                 "first_mismatch_seeded_total": int(ra["first_mismatch_seeded_total"])
                 - int(rb["first_mismatch_seeded_total"]),
-                "first_mismatch_non_seeded_total": int(ra["first_mismatch_non_seeded_total"])
-                - int(rb["first_mismatch_non_seeded_total"]),
             }
         )
 

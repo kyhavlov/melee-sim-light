@@ -39,7 +39,6 @@ ROLLOUT_METRICS: dict[str, str] = {
     "rollout.best_len": "higher",
     "rollout.first_mismatch_total": "lower",
     "rollout.first_mismatch_seeded_total": "lower",
-    "rollout.first_mismatch_non_seeded_total": "lower",
     "overall.rollout.streak_count": "lower",
     "overall.rollout.streak_len.median": "higher",
     "overall.rollout.streak_len.p90": "higher",
@@ -48,7 +47,6 @@ ROLLOUT_METRICS: dict[str, str] = {
     "overall.rollout.best_len.max": "higher",
     "overall.rollout.first_mismatch_total": "lower",
     "overall.rollout.first_mismatch_seeded_total": "lower",
-    "overall.rollout.first_mismatch_non_seeded_total": "lower",
 }
 
 
@@ -84,7 +82,6 @@ class MetricDelta:
 class RedClassification:
     hard: tuple[MetricDelta, ...]
     distribution_only: tuple[MetricDelta, ...]
-    derived_only: tuple[MetricDelta, ...]
     unclassified: tuple[MetricDelta, ...]
 
 
@@ -295,7 +292,6 @@ def classify_reds(
 ) -> RedClassification:
     hard: list[MetricDelta] = []
     distribution_only: list[MetricDelta] = []
-    derived_only: list[MetricDelta] = []
     unclassified: list[MetricDelta] = []
 
     for delta in deltas:
@@ -319,33 +315,11 @@ def classify_reds(
             else:
                 unclassified.append(delta)
             continue
-        if (
-            "rollout" in delta.report
-            and delta.metric
-            in {
-                "rollout.first_mismatch_non_seeded_total",
-                "overall.rollout.first_mismatch_non_seeded_total",
-            }
-        ):
-            if delta.section == "suite":
-                total_metric = "overall.rollout.first_mismatch_total"
-                streak_metric = "overall.rollout.streak_count"
-            else:
-                total_metric = "rollout.first_mismatch_total"
-                streak_metric = "rollout.streak_count"
-            total_ok = _metric_non_regressing(before, after, delta, total_metric)
-            streak_ok = _metric_non_regressing(before, after, delta, streak_metric)
-            if total_ok is True and streak_ok is True:
-                derived_only.append(delta)
-            else:
-                unclassified.append(delta)
-            continue
         unclassified.append(delta)
 
     return RedClassification(
         hard=tuple(hard),
         distribution_only=tuple(distribution_only),
-        derived_only=tuple(derived_only),
         unclassified=tuple(unclassified),
     )
 
@@ -369,7 +343,6 @@ def print_red_classification(classification: RedClassification, *, top: int) -> 
     _print_classification_group(
         "distribution-only reds", classification.distribution_only, top=top
     )
-    _print_classification_group("derived-only reds", classification.derived_only, top=top)
     _print_classification_group(
         "unclassified regressions", classification.unclassified, top=top
     )

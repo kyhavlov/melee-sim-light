@@ -57,7 +57,6 @@ rollout.streak_len.p95: {p90}
 rollout.streak_len.max: 1000
 rollout.first_mismatch_total: {first}
 rollout.first_mismatch_seeded_total: {seeded}
-rollout.first_mismatch_non_seeded_total: {first - seeded}
 
 == suite summary ==
 overall.rollout.streak_count: {streak_count}
@@ -68,7 +67,6 @@ overall.rollout.streak_len.max: 1000
 overall.rollout.best_len.max: 1000
 overall.rollout.first_mismatch_total: {first}
 overall.rollout.first_mismatch_seeded_total: {seeded}
-overall.rollout.first_mismatch_non_seeded_total: {first - seeded}
 """
 
 
@@ -132,7 +130,6 @@ def test_validation_report_diff_classifies_hard_reds(tmp_path: Path) -> None:
 
     assert any(d.metric == "overall.discrete_mismatch" for d in classification.hard)
     assert not classification.distribution_only
-    assert not classification.derived_only
 
 
 def test_validation_report_diff_classifies_distribution_only_rollout_red(tmp_path: Path) -> None:
@@ -156,63 +153,6 @@ def test_validation_report_diff_classifies_distribution_only_rollout_red(tmp_pat
     )
 
     assert any(d.metric == "rollout.streak_len.median" for d in classification.distribution_only)
-    assert not classification.hard
-    assert not classification.derived_only
-
-
-def test_validation_report_diff_classifies_derived_only_non_seeded_red(tmp_path: Path) -> None:
-    before = tmp_path / "before"
-    after = tmp_path / "after"
-    _write_reports(
-        before,
-        one_step=_one_step(total=10, strict=12, p95="0.20"),
-        rollout=_rollout(streak_count=30, first=10, seeded=5, median=100, p90=200),
-    )
-    _write_reports(
-        after,
-        one_step=_one_step(total=10, strict=12, p95="0.20"),
-        rollout=_rollout(streak_count=29, first=9, seeded=3, median=100, p90=200),
-    )
-
-    before_reports = read_report_set(str(before), before=True)
-    after_reports = read_report_set(str(after))
-    classification = classify_reds(
-        before_reports, after_reports, diff_report_sets(before_reports, after_reports)
-    )
-
-    assert any(
-        d.metric == "rollout.first_mismatch_non_seeded_total" for d in classification.derived_only
-    )
-    assert not classification.hard
-    assert not classification.distribution_only
-
-
-def test_validation_report_diff_classifies_suite_level_derived_only_non_seeded_red(
-    tmp_path: Path,
-) -> None:
-    before = tmp_path / "before"
-    after = tmp_path / "after"
-    _write_reports(
-        before,
-        one_step=_one_step(total=10, strict=12, p95="0.20"),
-        rollout=_rollout(streak_count=30, first=10, seeded=5, median=100, p90=200),
-    )
-    _write_reports(
-        after,
-        one_step=_one_step(total=10, strict=12, p95="0.20"),
-        rollout=_rollout(streak_count=29, first=9, seeded=3, median=100, p90=200),
-    )
-
-    before_reports = read_report_set(str(before), before=True)
-    after_reports = read_report_set(str(after))
-    classification = classify_reds(
-        before_reports, after_reports, diff_report_sets(before_reports, after_reports)
-    )
-
-    assert any(
-        d.section == "suite" and d.metric == "overall.rollout.first_mismatch_non_seeded_total"
-        for d in classification.derived_only
-    )
     assert not classification.hard
 
 
