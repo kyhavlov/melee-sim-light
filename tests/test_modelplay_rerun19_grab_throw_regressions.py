@@ -89,24 +89,29 @@ def _run_rerun19_window(
 
 
 @pytest.mark.integration
-def test_modelplay_rerun19_jc_grab_loses_floor_into_fall_instead_of_airborne_wait() -> None:
+def test_modelplay_rerun19_jc_grab_uses_catch_edge_snap_not_airborne_hover() -> None:
     # Rerun19 visible bug around frame 1847:
     # - Fox jump-cancels into Catch while carrying run speed near FD's right edge.
-    # - Catch_Coll must route floor loss through ft_800841B8(..., fn_800D8E30) into Fall.
-    # - Without that callback, Catch persists airborne and then anim-finishes into airborne Wait,
-    #   producing a long hover/slide.
+    # - Catch_Coll routes through ft_800841B8 -> ft_800827A0 -> mpColl_8004B2DC.
+    # - mpColl_8004B2DC uses the flags=2 floor-edge snap helper before the fn_800D8E30
+    #   floor-loss callback; successful edge snap keeps Catch grounded at the FD endpoint.
+    # - The negative this guards is the old illegal airborne Catch/Wait hover, not source
+    #   mpColl edge clamping.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
     #   ftCo_Catch_Coll,fn_800D8E30}
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_800841B8,ft_800827A0}
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004B2DC,mpColl_8004A45C_Floor}
     history = _run_rerun19_window(start_frame=1846, end_frame=1862)
 
     out = history[1861]
-    assert int(out["action_id"][1]) == ACT_FALL
-    assert int(out["on_ground"][1]) == 0
-    assert float(out["speed_ground_x_self"][1]) == pytest.approx(0.0, abs=1e-6)
+    assert int(out["action_id"][1]) == ACT_CATCH
+    assert int(out["on_ground"][1]) == 1
+    assert float(out["pos_x"][1]) == pytest.approx(85.5657, abs=0.001)
 
     out_next = history[1862]
-    assert int(out_next["action_id"][1]) == ACT_FALL
-    assert int(out_next["action_id"][1]) not in (ACT_CATCH, ACT_CATCH_DASH)
+    assert int(out_next["action_id"][1]) == ACT_CATCH
+    assert int(out_next["on_ground"][1]) == 1
+    assert float(out_next["pos_x"][1]) == pytest.approx(85.5657, abs=0.001)
 
 
 @pytest.mark.integration

@@ -947,7 +947,7 @@ void shine_update_pre_physics(MslBatch* batch) {
               enter_wait(batch, idx);
               const uint16_t buttons = batch->state.input_buttons[idx];
               const uint8_t speciallw_preempts_guard =
-                  ((buttons & (uint16_t)MSL_BUTTON_B) != 0u &&
+                  ((buttons_pressed & (uint16_t)MSL_BUTTON_B) != 0u &&
                    stick_wants_speciallw(c, batch->state.input_main_y[idx]) &&
                    fabsf(stick_x) < c->special_stick_x_threshold_side)
                       ? 1u
@@ -961,7 +961,8 @@ void shine_update_pre_physics(MslBatch* batch) {
                 // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D68C0
               } else if (speciallw_preempts_guard) {
                 // Reflector is the remaining grounded B-special slot and runs before GuardOn. Its
-                // source gate is x687, refreshed from held B+down before the callback phase.
+                // source gate is x687, refreshed from the B pressed-edge plus down-stick before
+                // the callback phase.
                 // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{ftCo_800D688C,ftCo_800D68C0}
                 // refs/melee/src/melee/ft/fighter.c::Fighter_UnkIncrementCounters_8006ABEC
                 // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLw_Enter

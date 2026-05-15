@@ -16,10 +16,10 @@ from tools.slippi.suite_io import dataset_path_for_suite_replay, load_suite, rep
 from tools.eval.dataset import HEADER_DTYPE, MAGIC, SAMPLE_DTYPE, SEED_DTYPE
 
 
-# v7 invalidates same-record-size datasets generated before common-air walljump hidden phase seeds
-# used source `pos_delta.x` setup-and-carry semantics in native preprocessing. Record-size checks
-# alone cannot detect this semantic.
-_CACHE_VERSION = 8
+# v9 invalidates same-record-size datasets generated before Catch-family severe-airborne
+# DamageFlyRoll gate rows were included in the Fighter_8006CDA4 pre-gate consume-count seed lane.
+# Record-size checks alone cannot detect this semantic.
+_CACHE_VERSION = 10
 _SOURCE_INPUT_PY_TREES = ("tools/slippi",)
 _SOURCE_INPUT_FILES = ("tools/eval/dataset.py", "python/msl_preprocess_native.c")
 

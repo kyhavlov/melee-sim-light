@@ -1810,6 +1810,9 @@ def _derive_fighter_8006cda4_pre_gate_consume_count_seed_lane(
       * DamageFlyTop AttackAirB early/steady rows where the replay-visible RNG outcome proves the
         hidden held-item/x197C stream phase -> explicit zero-consume marker or one to three
         consumes
+      * Catch-family severe-airborne damage entry rows where the replay-visible RNG outcome proves
+        the hidden held-item/x197C stream phase -> explicit zero-consume marker or one to three
+        consumes
 
     Causality:
     - Runtime remains causal: it consumes only this explicit stream-phase lane.

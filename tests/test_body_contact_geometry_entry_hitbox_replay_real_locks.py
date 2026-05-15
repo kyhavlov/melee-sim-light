@@ -9,7 +9,7 @@ from tests.test_items_spawn_joint_replay_real_locks import (
     _step_one_row,
 )
 from tests.test_combat_ownership_seed_guardrail_locks import _DEBUG_SHIELD_CANDIDATE_DTYPE
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.dataset import COMPARE_DTYPE, SEED_DTYPE, read_dataset
 from tools.eval.run_longest_rollout_streaks import _load_binding
 
 
@@ -1774,6 +1774,139 @@ def test_attackairn_stale_latch_wait_post_entry_and_jumpf_admit_real_hits_his(
     assert int(ref["hitlag"][defender]) > 0
     for field in ("action_id", "animation_index", "hitlag", "hitstun", "instance_hit_by"):
         assert int(out[field][defender]) == int(ref[field][defender]), f"field={field}"
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("record", [5136, 5137])
+def test_forensic_optional_attackairb_source_clear_landing_latch_suppresses_false_selfplay_body(
+    record: int,
+) -> None:
+    # Optional replay-forensic self-play check for the AttackAirB source-clear landing latch.
+    # Package coverage for this owner is the committed synthetic guard below; this local triage
+    # dataset check is intentionally not required for package review.
+    #
+    # AttackAirB source-clear landing latch:
+    # - Fox BAir has already hit the victim and the dense same-hit_group HitCapsule seed still
+    #   names the current victim object through the DamageN -> Landing handoff.
+    # - Vanilla keeps Landing; without reconstructing the HitCapsule victims_1 owner the simulator
+    #   admits a one-frame-early BAir BODY rehit into DamageHi3.
+    # - This is hidden HitCapsule provenance, not a BODY geometry tolerance; clearing the dense
+    #   seed in the adjacent negative below must admit the contact.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006A360}
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "reports/triage/mainline_selfplay_datasets/mainline_selfplay_20260514T083640/"
+        / "reports/triage/mainline_selfplay_replays/Game_20260514T083640.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing optional local self-play triage dataset: {dataset_path}")
+
+    seed, out, ref = _step_one_row(dataset_path, record)
+    attacker = 1
+    defender = 0
+    assert int(seed["action_id"][attacker]) == 67  # AttackAirB
+    assert int(seed["action_id"][defender]) == 42  # Landing
+    assert int(seed["combat_hitlist_cd"][attacker, 0, defender]) == 0xFFFF
+    assert int(seed["combat_hitlist_victim_iid"][attacker, 0, defender]) == int(
+        seed["instance_id"][defender]
+    )
+    for field in ("action_id", "animation_index", "hitlag", "hitstun", "percent"):
+        assert int(out[field][defender]) == int(ref[field][defender]), f"field={field}"
+
+
+@pytest.mark.integration
+def test_forensic_optional_attackairb_source_clear_landing_latch_requires_dense_hitcapsule_seed_selfplay() -> None:
+    # Optional replay-forensic negative for the BAir Landing source-clear owner. Package coverage
+    # for this dense-HitCapsule boundary is the committed synthetic guard below.
+    #
+    # Source attribution alone is not enough to suppress a BODY contact. The dense HitCapsule
+    # victim seed is the hidden owner proof.
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "reports/triage/mainline_selfplay_datasets/mainline_selfplay_20260514T083640/"
+        / "reports/triage/mainline_selfplay_replays/Game_20260514T083640.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing optional local self-play triage dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    record = 5136
+    attacker = 1
+    defender = 0
+    seed = ds.samples["seed_t"][record : record + 1].copy()
+    seed["combat_hitlist_cd"][0, attacker, 0, defender] = np.uint16(0)
+    seed["combat_hitlist_victim_iid"][0, attacker, 0, defender] = np.uint16(0)
+
+    out, ref = _step_one_row_with_seed_one_step(dataset_path, record, seed)
+
+    assert int(ref["action_id"][defender]) == 42  # Landing: dense seed suppresses the real row.
+    assert int(out["action_id"][defender]) != int(ref["action_id"][defender])
+    assert int(out["hitlag"][defender]) > 0
+
+
+def test_attackairb_source_clear_landing_dense_hitcapsule_suppression_synthetic() -> None:
+    # Committed package guard for the AttackAirB source-clear Landing owner:
+    # same-source Landing + x18C8 + same attacker instance is not enough by itself. The dense
+    # HitCapsule victim seed (`combat_hitlist_cd == 0xFFFF`) is the hidden source owner that
+    # suppresses the full BODY rehit. Clearing only that dense proof admits the contact.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006A360}
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    compare_stride = int(sizes["compare"])
+    hit_grounded = 1 << 9
+    hit_aerial = 1 << 10
+
+    seed_bytes = np.zeros((1, seed_stride), dtype=np.uint8)
+    seed = seed_bytes.view(SEED_DTYPE).reshape(-1)
+    attacker = 0
+    defender = 1
+    seed["stage_id"][0] = np.uint32(32)
+    seed["num_players"][0] = np.uint8(2)
+    seed["char_id"][0, :2] = np.uint8(1)
+    seed["stocks"][0, :2] = np.uint8(4)
+    seed["instance_id"][0, attacker] = np.uint16(111)
+    seed["instance_id"][0, defender] = np.uint16(222)
+    seed["action_id"][0, attacker] = np.uint16(67)  # AttackAirB
+    seed["action_frame"][0, attacker] = np.int16(20)
+    seed["source_port0"][0, attacker] = np.uint8(attacker)
+    seed["action_id"][0, defender] = np.uint16(42)  # Landing
+    seed["action_frame"][0, defender] = np.int16(3)
+    seed["on_ground"][0, defender] = np.uint8(1)
+    seed["source_clear_timer_x18c8"][0, defender] = np.uint8(3)
+    seed["last_hit_by"][0, defender] = np.uint8(attacker)
+    seed["instance_hit_by"][0, defender] = np.uint16(111)
+
+    out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+    handle = binding.init(batch_size=1, num_players=2, ucf_enabled=1, ucf_cardinals_1_0_enabled=1)
+    try:
+        for dense_seed, expected_hitlag, expected_percent in ((1, 0, 0.0), (0, 4, 5.0)):
+            seed["combat_hitlist_cd"][0, attacker, 0, defender] = np.uint16(
+                0xFFFF if dense_seed else 0
+            )
+            seed["combat_hitlist_victim_iid"][0, attacker, 0, defender] = np.uint16(
+                222 if dense_seed else 0
+            )
+            binding.reseed_seed(handle, seed_bytes)
+            binding.debug_set_hitbox_world(handle, 0, attacker, 0, 0.0, 0.0, 0.0, 2.0, 5.0, 1)
+            binding.debug_set_hitbox_flags(handle, 0, attacker, 0, hit_grounded | hit_aerial)
+            binding.debug_set_hitbox_group(handle, 0, attacker, 0, 0)
+            binding.debug_set_hurtcap_world(
+                handle, 0, defender, 0, -0.5, 0.0, 0.0, 0.5, 0.0, 0.0, 1.0
+            )
+            binding.debug_combat_resolve(handle)
+            binding.write_compare(handle, out_bytes)
+            out = out_bytes.view(COMPARE_DTYPE).reshape(-1)[0]
+            assert int(out["action_id"][defender]) == 42
+            assert int(out["hitlag"][defender]) == expected_hitlag
+            assert float(out["percent"][defender]) == pytest.approx(expected_percent)
+    finally:
+        binding.destroy(handle)
 
 
 @pytest.mark.integration

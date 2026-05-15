@@ -810,20 +810,23 @@ static inline void enter_wait(MslBatch* batch, size_t idx) {
 static inline uint8_t should_enter_squat_from_wait(const MslBatch* batch, const MslCommonParams* c,
                                                    size_t idx);
 
-static inline void passive_stand_anim_end_try_enter_squat(MslBatch* batch, const MslCommonParams* c,
-                                                          size_t idx) {
+static inline void anim_end_wait_try_enter_squat_subset(MslBatch* batch, const MslCommonParams* c,
+                                                        size_t idx) {
   if (batch == NULL || c == NULL) {
     return;
   }
-  // PassiveStand end -> Wait happens during Anim via ft_8008A2BC. In the rerun11 window the
-  // destination frame immediately admits Squat on held-down input, but letting the full Wait_IASA
-  // chain run here over-consumes shield input before locomotion_update_pre() reaches the normal
-  // GuardOn owner. Keep only the proven crouch admission bridge in this owner.
+  // Downed/stand-style anim-end -> Wait happens during Anim via ft_8008A2BC. The destination frame
+  // immediately admits Squat on held-down input, but letting the full Wait_IASA chain run here
+  // over-consumes shield input before locomotion_update_pre() reaches the normal GuardOn owner.
+  // Keep only the proven pre-guard spotdodge + crouch admission subset in this owner. The
+  // spotdodge branch uses synthesized HSD LR held input because Fighter_procUpdate maps analog
+  // trigger values past deadzone into the lane consumed by ftCo_80099794.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveStand.c::ftCo_PassiveStand_Anim
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownStand.c::ftCo_DownStand_Anim
   // refs/melee/src/melee/ft/ft_0892.c::{ft_8008A2BC,ft_8008A348}
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_Enter
   if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_WAIT &&
-      wait_iasa_try_enter_spotdodge_before_guard(batch, c, idx)) {
+      wait_iasa_try_enter_spotdodge_before_guard_hsd_lr(batch, c, idx)) {
     return;
   }
   if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_WAIT &&
@@ -1473,7 +1476,15 @@ void knockdown_update_pre_physics(MslBatch* batch) {
         batch->state.animation_index[idx] = (uint32_t)MSL_SM_PASSIVE;
         down_apply_phys_friction(batch, c, ch, idx);
         if (anim_is_finished(cid, (uint16_t)MSL_SM_PASSIVE, anim_frame)) {
+          // Decomp: ftCo_Passive_Anim ends through ft_8008A2BC, the same destination-Wait
+          // owner used by PassiveStand/DownStand. Keep the retained Wait_IASA subset here too:
+          // down+shield may enter EscapeN before GuardOn, and held down may crouch, but the full
+          // Wait input chain still belongs to the normal locomotion pass.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Passive.c::ftCo_Passive_Anim
+          // refs/melee/src/melee/ft/ft_0892.c::{ft_8008A2BC,ft_8008A348}
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
           enter_wait(batch, idx);
+          anim_end_wait_try_enter_squat_subset(batch, c, idx);
         }
         continue;
       }
@@ -1496,7 +1507,7 @@ void knockdown_update_pre_physics(MslBatch* batch) {
           // refs/melee/src/melee/ft/ft_0892.c::{ft_8008A2BC,ft_8008A348}
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
           enter_wait(batch, idx);
-          passive_stand_anim_end_try_enter_squat(batch, c, idx);
+          anim_end_wait_try_enter_squat_subset(batch, c, idx);
           down_apply_phys_friction(batch, c, ch, idx);
         } else if (msl_anim_uses_root_motion(cid, msid) != 0u) {
           // Decomp: ft_80085030 uses fp->x6A4_transNOffset.z * facing_dir as the target ground
@@ -1656,7 +1667,14 @@ void knockdown_update_pre_physics(MslBatch* batch) {
                                   ? (uint16_t)MSL_SM_DOWN_STAND_U
                                   : (uint16_t)MSL_SM_DOWN_STAND_D;
         if (anim_is_finished(cid, msid, anim_frame)) {
+          // Decomp: DownStand_Anim exits through ft_8008A2BC. Match the same destination-Wait
+          // crouch subset used by PassiveStand/roll anim-end so held down enters Squat on the
+          // end frame instead of lingering in Wait.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownStand.c::ftCo_DownStand_Anim
+          // refs/melee/src/melee/ft/ft_0892.c::{ft_8008A2BC,ft_8008A348}
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
           enter_wait(batch, idx);
+          anim_end_wait_try_enter_squat_subset(batch, c, idx);
         }
         continue;
       }

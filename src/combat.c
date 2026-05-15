@@ -68,9 +68,14 @@ static inline uint8_t combat_defender_hit_status_u8(const MslBatch* batch, size_
 static inline uint8_t combat_body_overlap_lbColl_80006E58_matrix_radius(
     const MslBatch* batch, int bi, int attacker, int hb_id, int defender, int cap_id, float hx,
     float hy, float hz, float hr, float ax, float ay, float az, float bx, float by, float bz,
-    float* out_overlap_amount, uint8_t* out_evaluated);
+    uint8_t use_catch_grabbable_pose, float* out_overlap_amount, uint8_t* out_evaluated);
 static inline uint8_t combat_side_special_start_passivewalljump_entry_pose_owner(
     const MslBatch* batch, size_t idx, uint8_t char_id, uint16_t action_id);
+
+static inline uint8_t combat_action_is_catch_family(uint16_t action_id) {
+  return (action_id >= (uint16_t)MSL_ACT_CATCH && action_id <= (uint16_t)MSL_ACT_CATCH_CUT) ? 1u
+                                                                                            : 0u;
+}
 
 static inline float combat_cross2(float ax, float ay, float bx, float by) {
   return ax * by - ay * bx;
@@ -898,6 +903,78 @@ static inline uint8_t combat_guard_family_catch_hurtcap_world(const MslBatch* ba
   return (uint8_t)(*out_r > 0.0f);
 }
 
+static inline uint8_t combat_catch_grabbable_dynamic_hurtcap_world(
+    const MslBatch* batch, size_t d_idx, uint8_t cap_id, float* out_ax, float* out_ay,
+    float* out_az, float* out_bx, float* out_by, float* out_bz, float* out_r) {
+  if (batch == NULL || out_ax == NULL || out_ay == NULL || out_az == NULL || out_bx == NULL ||
+      out_by == NULL || out_bz == NULL || out_r == NULL) {
+    return 0u;
+  }
+  const uint8_t char_id = batch->state.char_id[d_idx];
+  const MslHurtCap* caps = NULL;
+  uint16_t cap_count_u16 = 0u;
+  if (hurtcaps_get(char_id, &caps, &cap_count_u16) != 0 || caps == NULL ||
+      (uint16_t)cap_id >= cap_count_u16) {
+    return 0u;
+  }
+  const MslHurtCap* cap = &caps[cap_id];
+  if (!cap->is_grabbable || batch->state.animation_index[d_idx] > 0xFFFFu) {
+    return 0u;
+  }
+
+  // Catch-only dynamic grabbable hurtcap owner:
+  // - ftColl_80078A2C tests `hurt_capsules[j].is_grabbable` through lbColl_80007ECC.
+  // - SSDYNN01 v8's catch-grabbable index is allowed to carry live `ftData.x2C` dynamic-chain
+  //   state for that Catch selection path without marking the same submotion as a BODY collision
+  //   owner. The motivating probe is Fox AttackDash part-18: vanilla rejects the grabbable tail
+  //   capsule in Catch while existing BODY locks keep AttackDash on static collision matrices.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078A2C
+  // refs/melee/src/melee/lb/lbcollision.c::lbColl_80007ECC
+  // refs/melee/src/melee/ft/ftdynamics.c::{ftCo_8009DD94,ftCo_8009E318}
+  // data/anims/fox.dyn.bin (SSDYNN01 catch-grabbable owner index)
+  const uint16_t msid = (uint16_t)batch->state.animation_index[d_idx];
+  const float pose_sample_frame = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[d_idx]);
+  float m[12];
+  if (anim_pose_get_catch_grabbable_matrix_f32(batch, d_idx, msid, pose_sample_frame,
+                                               cap->bone_part_id, m) != 0) {
+    return 0u;
+  }
+
+  float ax = 0.0f, ay = 0.0f, az = 0.0f;
+  float bx = 0.0f, by = 0.0f, bz = 0.0f;
+  msl_mtx34_mul_point(m, cap->a_offset, &ax, &ay, &az);
+  msl_mtx34_mul_point(m, cap->b_offset, &bx, &by, &bz);
+
+  const MslCharParams* chp = msl_char_params(char_id);
+  const float model_scaling = (chp && isfinite(chp->model_scaling) && chp->model_scaling > 0.0f)
+                                  ? chp->model_scaling
+                                  : 1.0f;
+  const float model_scale = batch->state.fighter_scale_y[d_idx] * model_scaling;
+  if (!(model_scale > 0.0f)) {
+    return 0u;
+  }
+  ax *= model_scale;
+  ay *= model_scale;
+  az *= model_scale;
+  bx *= model_scale;
+  by *= model_scale;
+  bz *= model_scale;
+
+  const float facing_dir = batch->state.facing[d_idx] ? 1.0f : -1.0f;
+  const float ax_rot_x = facing_dir * az;
+  const float ax_rot_z = -facing_dir * ax;
+  const float bx_rot_x = facing_dir * bz;
+  const float bx_rot_z = -facing_dir * bx;
+  *out_ax = ax_rot_x + batch->state.pos_x[d_idx];
+  *out_ay = ay + batch->state.pos_y[d_idx];
+  *out_az = ax_rot_z + batch->state.pos_z[d_idx];
+  *out_bx = bx_rot_x + batch->state.pos_x[d_idx];
+  *out_by = by + batch->state.pos_y[d_idx];
+  *out_bz = bx_rot_z + batch->state.pos_z[d_idx];
+  *out_r = cap->scale * model_scale;
+  return (uint8_t)(*out_r > 0.0f);
+}
+
 static inline uint8_t combat_defender_downed_catch_mask_blocks(uint16_t action_id) {
   switch (action_id) {
     case MSL_ACT_DOWN_BOUND_U:
@@ -1405,7 +1482,7 @@ static inline void combat_preserve_guard_x10_for_immediate_setoff(MslBatch* batc
 static inline uint8_t combat_body_overlap_lbColl_80006E58_matrix_radius(
     const MslBatch* batch, int bi, int attacker, int hb_id, int defender, int cap_id, float hx,
     float hy, float hz, float hr, float ax, float ay, float az, float bx, float by, float bz,
-    float* out_overlap_amount, uint8_t* out_evaluated) {
+    uint8_t use_catch_grabbable_pose, float* out_overlap_amount, uint8_t* out_evaluated) {
   if (out_overlap_amount) {
     *out_overlap_amount = 0.0f;
   }
@@ -1516,8 +1593,12 @@ static inline uint8_t combat_body_overlap_lbColl_80006E58_matrix_radius(
   }
   const float pose_sample_frame = combat_hurtcap_pose_sample_frame(
       batch, d_idx, char_id, msid, action_id, anim_frame_f32, combat_pose_frame);
-  if (anim_pose_get_collision_matrix_f32(batch, d_idx, msid, pose_sample_frame, cap->bone_part_id,
-                                         m) != 0) {
+  const int matrix_status = use_catch_grabbable_pose
+                                ? anim_pose_get_catch_grabbable_matrix_f32(
+                                      batch, d_idx, msid, pose_sample_frame, cap->bone_part_id, m)
+                                : anim_pose_get_collision_matrix_f32(
+                                      batch, d_idx, msid, pose_sample_frame, cap->bone_part_id, m);
+  if (matrix_status != 0) {
     return 0u;
   }
   (void)combat_apply_guard_tilt_live_body_matrix(batch, d_idx, char_id, cap->bone_part_id, m);
@@ -1592,7 +1673,7 @@ static inline uint8_t combat_attackairb_continuation_body_overlap_exact(
   }
   return combat_body_overlap_lbColl_80006E58_matrix_radius(batch, bi, attacker, hb_id, defender,
                                                            cap_id, hx, hy, hz, hr, ax, ay, az, bx,
-                                                           by, bz, out_overlap_amount, NULL);
+                                                           by, bz, 0u, out_overlap_amount, NULL);
 }
 
 static inline uint8_t combat_attackairb_stale_owner_continuation_candidate(
@@ -1766,16 +1847,10 @@ static inline uint8_t combat_attackairb_dense_seed_suppresses_full_body(const Ms
                                        (size_t)hb_id] != 0u) {
     return 0u;
   }
-  if (batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_DAMAGE_FLY_TOP ||
-      batch->state.hitlag[a_idx] != 0u || batch->state.hitstun[a_idx] != 0u ||
-      batch->state.hitlag[d_idx] != 0u || batch->state.hitstun[d_idx] == 0u ||
-      batch->state.last_hit_by[d_idx] != batch->state.source_port0[a_idx] ||
-      batch->state.instance_hit_by[d_idx] == batch->state.instance_id[a_idx]) {
-    return 0u;
-  }
-  if (expected_hitlag == 0u || batch->state.hitstun[d_idx] > expected_hitlag) {
-    return 0u;
-  }
+  const uint8_t attacker_source_port0 =
+      (batch->state.source_port0[a_idx] < (uint8_t)MSL_MAX_PLAYERS)
+          ? batch->state.source_port0[a_idx]
+          : (uint8_t)attacker;
   const uint8_t hit_group = hitlist_hit_group_from_u16_7(batch->state.hitbox_u16_7[hb_i]);
   if (hit_group >= (uint8_t)MSL_HITLIST_GROUPS) {
     return 0u;
@@ -1786,6 +1861,45 @@ static inline uint8_t combat_attackairb_dense_seed_suppresses_full_body(const Ms
       group_base + (((size_t)attacker * (size_t)MSL_HITLIST_GROUPS + (size_t)hit_group) *
                         (size_t)MSL_MAX_PLAYERS +
                     (size_t)defender);
+  if (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_LANDING) {
+    if (batch->state.hitlag[a_idx] != 0u || batch->state.hitstun[a_idx] != 0u ||
+        batch->state.hitlag[d_idx] != 0u || batch->state.hitstun[d_idx] != 0u ||
+        batch->state.source_clear_timer_x18c8[d_idx] == 0u ||
+        batch->state.last_hit_by[d_idx] != attacker_source_port0 ||
+        batch->state.instance_hit_by[d_idx] != batch->state.instance_id[a_idx] ||
+        batch->state.combat_hitlist_cd[cd_i] != 0xFFFFu) {
+      return 0u;
+    }
+    const uint16_t seed_iid = batch->state.combat_hitlist_victim_iid[cd_i];
+    if (seed_iid != 0u && seed_iid != defender_iid) {
+      if (combat_hitlist_victim_pointer_may_change(batch->state.stocks[d_idx],
+                                                   batch->state.action_id[d_idx])) {
+        return 0u;
+      }
+    }
+    // AttackAirB source-clear landing latch:
+    // - ftColl_80076ED8 inserts the victim into same-hit_group HitCapsules, and those
+    //   HitVictim pointers survive ordinary victim motion changes until a hitbox clear/copy or
+    //   victim object lifetime boundary.
+    // - Landing from the same BODY source still carries fp->dmg.x18C8 source-clear ownership and
+    //   same-instance BODY attribution, while the replay seed can only expose dense group victims.
+    //   Suppress this full BODY rehit through the decomp HitCapsule victim-list owner rather than
+    //   a geometry tolerance.
+    // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}
+    // refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006A360}
+    // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+    return 1u;
+  }
+  if (batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_DAMAGE_FLY_TOP ||
+      batch->state.hitlag[a_idx] != 0u || batch->state.hitstun[a_idx] != 0u ||
+      batch->state.hitlag[d_idx] != 0u || batch->state.hitstun[d_idx] == 0u ||
+      batch->state.last_hit_by[d_idx] != attacker_source_port0 ||
+      batch->state.instance_hit_by[d_idx] == batch->state.instance_id[a_idx]) {
+    return 0u;
+  }
+  if (expected_hitlag == 0u || batch->state.hitstun[d_idx] > expected_hitlag) {
+    return 0u;
+  }
   if (batch->state.combat_hitlist_cd[cd_i] != 0xFFFFu) {
     return 0u;
   }
@@ -2046,7 +2160,7 @@ int combat_debug_body_matrix_overlap(const MslBatch* batch, int batch_index, int
   const float bz = batch->state.hurtcap_b_z[cap_i];
   (void)combat_body_overlap_lbColl_80006E58_matrix_radius(batch, batch_index, attacker, hb_id,
                                                           defender, cap_id, hx, hy, hz, hr, ax, ay,
-                                                          az, bx, by, bz, out_overlap, NULL);
+                                                          az, bx, by, bz, 0u, out_overlap, NULL);
   return 0;
 }
 
@@ -3371,7 +3485,7 @@ static inline uint8_t combat_source_order_earlier_body_hitcapsule_precedes_shiel
       uint8_t lbcoll_overlap_evaluated = 0u;
       const uint8_t lbcoll_overlap_valid = combat_body_overlap_lbColl_80006E58_matrix_radius(
           batch, bi, attacker, prev_hb_id, defender, (int)cap_id, hx, hy, hz, hr, ax, ay, az, bx,
-          by, bz, &lbcoll_overlap_amount, &lbcoll_overlap_evaluated);
+          by, bz, 0u, &lbcoll_overlap_amount, &lbcoll_overlap_evaluated);
       const uint8_t overlaps =
           lbcoll_overlap_evaluated
               ? lbcoll_overlap_valid
@@ -4268,6 +4382,27 @@ static inline uint8_t combat_damageflyroll_rng_subset_allows_pre_action(const Ms
       // refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
       return (batch->state.fighter_8006cda4_pre_gate_consume_count[d_idx] != 0u) ? 1u : 0u;
+    case (uint16_t)MSL_ACT_CATCH:
+    case (uint16_t)MSL_ACT_CATCH_PULL:
+    case (uint16_t)MSL_ACT_CATCH_DASH:
+    case (uint16_t)MSL_ACT_CATCH_DASH_PULL:
+    case (uint16_t)MSL_ACT_CATCH_WAIT:
+    case (uint16_t)MSL_ACT_CATCH_ATTACK:
+    case (uint16_t)MSL_ACT_CATCH_CUT:
+      // Catch-family pre-actions are ordinary Fighter motion states for the severe-airborne
+      // ftCo_8008DCE0 DamageFlyRoll gate: Fighter_8006CDA4 does not exclude them. Exact replay
+      // seeds still need the explicit hidden pre-gate stream lane because Slippi does not expose
+      // the held-item/x197C branch inputs that can advance HSD_Randi before the gate; free-running
+      // replay rollout may use the live owned RNG clock after the seed frame.
+      // refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+      if (batch->state.fighter_8006cda4_pre_gate_consume_count[d_idx] != 0u) {
+        return 1u;
+      }
+      return (replay_rollout && advanced_past_reseed &&
+              clock_owner != (uint8_t)MSL_ROLLOUT_CLOCK_NONE)
+                 ? 1u
+                 : 0u;
     default:
       return 0u;
   }
@@ -6738,17 +6873,32 @@ static void combat_select_catch_hits_one_mutating(MslBatch* batch, int bi) {
             by = batch->state.hurtcap_b_y[cap_i];
             bz = batch->state.hurtcap_b_z[cap_i];
             cr = batch->state.hurtcap_radius[cap_i];
+            (void)combat_catch_grabbable_dynamic_hurtcap_world(batch, d_idx, cap_id, &ax, &ay, &az,
+                                                               &bx, &by, &bz, &cr);
             overlaps = combat_catch_overlap_lbColl_80007ECC(batch, bi, attacker, hb_id, hx, hy, hz,
                                                             hr, ax, ay, az, bx, by, bz, cr);
             if (overlaps) {
               uint8_t catch_lbcoll_evaluated = 0u;
-              const uint8_t matrix_overlaps = combat_body_overlap_lbColl_80006E58_matrix_radius(
+              uint8_t matrix_overlaps = combat_body_overlap_lbColl_80006E58_matrix_radius(
                   batch, bi, attacker, hb_id, defender, (int)cap_id, hx, hy, hz, hr, ax, ay, az, bx,
-                  by, bz, NULL, &catch_lbcoll_evaluated);
+                  by, bz, 1u, NULL, &catch_lbcoll_evaluated);
+              if (!catch_lbcoll_evaluated) {
+                matrix_overlaps = combat_body_overlap_lbColl_80006E58_matrix_radius(
+                    batch, bi, attacker, hb_id, defender, (int)cap_id, hx, hy, hz, hr, ax, ay, az,
+                    bx, by, bz, 0u, NULL, &catch_lbcoll_evaluated);
+              }
               if (catch_lbcoll_evaluated && !matrix_overlaps) {
                 // Catch narrowphase source refinement:
                 // - ftColl_80078A2C routes grabbable hurtcaps through lbColl_80007ECC, which in
                 //   turn consumes lbColl_80006E58's matrix-derived radius.
+                // - SSDYNN01's catch-grabbable owner index can expose live dynamic-chain matrices
+                //   for Catch selection without widening ordinary BODY collision owners; Fox
+                //   AttackDash is the motivating split where Dolphin probes show live part-18
+                //   grabbable pose in Catch but existing BODY locks keep AttackDash static.
+                // - Ordinary grabbable hurtcaps still use the same source-pose matrix veto when no
+                //   dynamic catch-grabbable owner exists. Fox KneeBend near-miss probes show
+                //   lbColl_80007ECC rejecting the simple replay-state capsule overlap after
+                //   lbColl_80006E58's source matrix/radius refinement.
                 // - The local matrix reconstruction is exact enough to reject evaluated misses, but
                 //   not yet exact enough to add new catch admissions over the simpler world capsule
                 //   path, so keep it fail-closed for source-owned veto only.
@@ -7729,7 +7879,7 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           float attackairb_overlap_amount = 0.0f;
           lbcoll_overlap_valid = combat_body_overlap_lbColl_80006E58_matrix_radius(
               batch, bi, attacker, hb_id, defender, (int)cap_id, hx, hy, hz, hr, ax, ay, az, bx, by,
-              bz, &lbcoll_overlap_amount, &lbcoll_overlap_evaluated);
+              bz, 0u, &lbcoll_overlap_amount, &lbcoll_overlap_evaluated);
           // Decomp BODY narrowphase owner:
           // - ftColl_80078C70 calls lbColl_8000805C for fighter BODY admission.
           // - lbColl_8000805C forwards to lbColl_80006E58, whose matrix-derived scalar is the
@@ -7767,7 +7917,7 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
             const uint8_t guard_live_overlap_valid =
                 combat_body_overlap_lbColl_80006E58_matrix_radius(
                     batch, bi, attacker, hb_id, defender, (int)cap_id, hx, hy, hz, hr, ax, ay,
-                    guard_live_az, bx, by, guard_live_bz, &guard_live_overlap_amount,
+                    guard_live_az, bx, by, guard_live_bz, 0u, &guard_live_overlap_amount,
                     &guard_live_evaluated);
             const uint8_t guard_live_baseline_overlaps = combat_sphere_capsule_intersects(
                 hx, hy, hz, hr, ax, ay, guard_live_az, bx, by, guard_live_bz, cr, NULL);
@@ -7806,7 +7956,7 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
               if (overlaps) {
                 lbcoll_overlap_valid = combat_body_overlap_lbColl_80006E58_matrix_radius(
                     batch, bi, attacker, hb_id, defender, (int)cap_id, hx, hy, hz, hr, ax, ay, az,
-                    bx, by, bz, &lbcoll_overlap_amount, &lbcoll_overlap_evaluated);
+                    bx, by, bz, 0u, &lbcoll_overlap_amount, &lbcoll_overlap_evaluated);
               }
             }
           }
@@ -8184,7 +8334,7 @@ static void combat_select_body_hits_one_debug(MslBatch* batch, int bi,
           uint8_t lbcoll_overlap_evaluated = 0u;
           lbcoll_overlap_valid = combat_body_overlap_lbColl_80006E58_matrix_radius(
               batch, bi, attacker, hb_id, defender, (int)cap_id, hx, hy, hz, hr, ax, ay, az, bx, by,
-              bz, &lbcoll_overlap_amount, &lbcoll_overlap_evaluated);
+              bz, 0u, &lbcoll_overlap_amount, &lbcoll_overlap_evaluated);
           uint8_t overlaps = lbcoll_overlap_evaluated
                                  ? lbcoll_overlap_valid
                                  : combat_sphere_capsule_intersects(hx, hy, hz, hr, ax, ay, az, bx,
@@ -8197,7 +8347,7 @@ static void combat_select_body_hits_one_debug(MslBatch* batch, int bi,
             if (overlaps) {
               lbcoll_overlap_valid = combat_body_overlap_lbColl_80006E58_matrix_radius(
                   batch, bi, attacker, hb_id, defender, (int)cap_id, hx, hy, hz, hr, ax, ay, az, bx,
-                  by, bz, &lbcoll_overlap_amount, &lbcoll_overlap_evaluated);
+                  by, bz, 0u, &lbcoll_overlap_amount, &lbcoll_overlap_evaluated);
               (void)lbcoll_overlap_valid;
             }
           }
@@ -8409,6 +8559,15 @@ void combat_resolve(MslBatch* batch) {
         batch->state.percent[idx] = percent;
       }
       batch->state.percent_temp[idx] = 0.0f;
+      if (combat_action_is_catch_family(batch->state.action_id[idx])) {
+        // Catch-family Fighter_8006CDA4 pre-gate counts are replay seed reconstruction for a
+        // same-frame severe-airborne DamageFlyRoll gate. If no gate consumed the marker this frame,
+        // it must not persist into later Catch/throw gameplay; delayed carry owners such as
+        // DamageFlyTop/AttackAir remain outside this Catch-family clear.
+        // refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+        batch->state.fighter_8006cda4_pre_gate_consume_count[idx] = 0u;
+      }
     }
   }
 

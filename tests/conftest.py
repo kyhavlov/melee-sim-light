@@ -181,6 +181,7 @@ def _dyn_contract_ok(
     want_collision_msids: set[int],
     want_source_step_msids: set[int],
     want_cone_msids: set[int],
+    want_catch_grabbable_msids: set[int],
 ) -> bool:
     try:
         with path.open("rb") as f:
@@ -188,7 +189,7 @@ def _dyn_contract_ok(
             version = int.from_bytes(f.read(4), "little", signed=False)
             set_count = int.from_bytes(f.read(2), "little", signed=False)
             total_nodes = int.from_bytes(f.read(2), "little", signed=False)
-            if magic != b"SSDYNN01" or version != 7:
+            if magic != b"SSDYNN01" or version != 8:
                 return False
             for _set_i in range(set_count):
                 f.read(2)  # root_part
@@ -204,10 +205,14 @@ def _dyn_contract_ok(
             count = int.from_bytes(f.read(2), "little", signed=False)
             f.read(2)  # reserved
             got_cone = {int.from_bytes(f.read(2), "little", signed=False) for _ in range(count)}
+            count = int.from_bytes(f.read(2), "little", signed=False)
+            f.read(2)  # reserved
+            got_catch_grabbable = {int.from_bytes(f.read(2), "little", signed=False) for _ in range(count)}
             return (
                 got == want_collision_msids
                 and got_source_step == want_source_step_msids
                 and got_cone == want_cone_msids
+                and got_catch_grabbable == want_catch_grabbable_msids
                 and total_nodes <= 4
             )
     except OSError:
@@ -216,16 +221,17 @@ def _dyn_contract_ok(
 
 def _ensure_dyn_bins() -> None:
     expected = {
-        "fox": ({17, 36, 58, 242, 243}, set(), {242}),
-        "falco": (set(), set(), set()),
+        "fox": ({17, 36, 58, 242, 243}, set(), {242}, {52}),
+        "falco": (set(), set(), set(), set()),
     }
     stale = False
-    for ch, (want_collision, want_source_step, want_cone) in expected.items():
+    for ch, (want_collision, want_source_step, want_cone, want_catch_grabbable) in expected.items():
         if not _dyn_contract_ok(
             ROOT / "data" / "anims" / f"{ch}.dyn.bin",
             want_collision,
             want_source_step,
             want_cone,
+            want_catch_grabbable,
         ):
             stale = True
             break
@@ -266,9 +272,10 @@ def _ensure_dyn_bins() -> None:
         ],
         check=True,
     )
-    for ch, (want_collision, want_source_step, want_cone) in expected.items():
+    for ch, (want_collision, want_source_step, want_cone, want_catch_grabbable) in expected.items():
         path = ROOT / "data" / "anims" / f"{ch}.dyn.bin"
-        if not _dyn_contract_ok(path, want_collision, want_source_step, want_cone):
+        if not _dyn_contract_ok(path, want_collision, want_source_step, want_cone,
+                                want_catch_grabbable):
             raise RuntimeError(f"failed to generate required dynamic pose artifact: {path}")
 
 

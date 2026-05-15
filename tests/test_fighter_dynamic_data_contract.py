@@ -19,7 +19,7 @@ def _parse_ssdynn01(path: Path) -> dict[str, object]:
     if buf[:8] != b"SSDYNN01":
         raise ValueError(f"SSDYNN01: bad magic {buf[:8]!r}")
     version, set_count, total_nodes = struct.unpack_from("<IHH", buf, 8)
-    if version != 7:
+    if version != 8:
         raise ValueError(f"SSDYNN01: bad version {version}")
     off = 16
     sets: list[dict[str, object]] = []
@@ -78,6 +78,17 @@ def _parse_ssdynn01(path: Path) -> dict[str, object]:
         (msid,) = struct.unpack_from("<H", buf, off)
         off += 2
         cone_msids.append(int(msid))
+    catch_grabbable_msids: list[int] = []
+    if off + 4 > len(buf):
+        raise ValueError("SSDYNN01: truncated catch grabbable owner index")
+    catch_grabbable_msid_count, _reserved = struct.unpack_from("<HH", buf, off)
+    off += 4
+    for _ in range(int(catch_grabbable_msid_count)):
+        if off + 2 > len(buf):
+            raise ValueError("SSDYNN01: truncated catch grabbable owner msid")
+        (msid,) = struct.unpack_from("<H", buf, off)
+        off += 2
+        catch_grabbable_msids.append(int(msid))
     if off + 4 > len(buf):
         raise ValueError("SSDYNN01: truncated collider index")
     collider_count, _reserved = struct.unpack_from("<HH", buf, off)
@@ -99,6 +110,7 @@ def _parse_ssdynn01(path: Path) -> dict[str, object]:
         "collision_msids": collision_msids,
         "source_step_msids": source_step_msids,
         "cone_msids": cone_msids,
+        "catch_grabbable_msids": catch_grabbable_msids,
         "colliders": colliders,
     }
 
@@ -139,10 +151,11 @@ def _write_dyn(
     path: Path,
     sets: list[tuple[int, list[int]]],
     *,
-    version: int = 5,
+    version: int = 8,
     collision_msids: list[int] | None = None,
     source_step_msids: list[int] | None = None,
     cone_msids: list[int] | None = None,
+    catch_grabbable_msids: list[int] | None = None,
     colliders: list[tuple[int, tuple[float, float, float], float]] | None = None,
 ) -> None:
     total_nodes = sum(len(parts) for _root, parts in sets)
@@ -171,6 +184,11 @@ def _write_dyn(
         cone_owner_msids = sorted({int(msid) & 0xFFFF for msid in (cone_msids or [])})
         buf += struct.pack("<HH", len(cone_owner_msids), 0)
         for msid in cone_owner_msids:
+            buf += struct.pack("<H", msid)
+    if version >= 8:
+        catch_owner_msids = sorted({int(msid) & 0xFFFF for msid in (catch_grabbable_msids or [])})
+        buf += struct.pack("<HH", len(catch_owner_msids), 0)
+        for msid in catch_owner_msids:
             buf += struct.pack("<H", msid)
     if version >= 5:
         collider_rows = list(colliders or [])
@@ -360,10 +378,11 @@ def test_committed_fox_falco_dynamic_contract_matches_supported_loader_surface()
 
     assert fox["set_count"] == 1
     assert fox["total_nodes"] == 4
-    assert fox["version"] == 7
+    assert fox["version"] == 8
     assert fox["collision_msids"] == [17, 36, 58, 242, 243]
     assert fox["source_step_msids"] == []
     assert fox["cone_msids"] == [242]
+    assert fox["catch_grabbable_msids"] == [52]
     assert fox["colliders"] == [{"part": 41, "offset": pytest.approx((0.0, 2.0, 0.0)), "radius": pytest.approx(3.0)}]
     fox_set = fox["sets"][0]  # type: ignore[index]
     assert fox_set["root_part"] == 17
@@ -375,13 +394,14 @@ def test_committed_fox_falco_dynamic_contract_matches_supported_loader_surface()
     assert c0[14] == pytest.approx(0.05235987901687622)
 
     assert falco == {
-        "version": 7,
+        "version": 8,
         "set_count": 0,
         "total_nodes": 0,
         "sets": [],
         "collision_msids": [],
         "source_step_msids": [],
         "cone_msids": [],
+        "catch_grabbable_msids": [],
         "colliders": [],
     }
 
@@ -401,6 +421,7 @@ def test_extract_fighter_anims_emits_fox_falco_dynamic_contract(tmp_path: Path) 
 
     from tools.extraction.extract_fighter_anims import _read_fighter_dynamics
     from tools.extraction.extract_fighter_anims import _read_rest_srt_and_parents
+    from tools.extraction.extract_fighter_anims import _dynamic_catch_grabbable_owner_msids
     from tools.extraction.extract_fighter_anims import _dynamic_cone_owner_msids
     from tools.extraction.extract_fighter_anims import _dynamic_collision_owner_msids
     from tools.extraction.extract_fighter_anims import _dynamic_source_step_owner_msids
@@ -418,26 +439,29 @@ def test_extract_fighter_anims_emits_fox_falco_dynamic_contract(tmp_path: Path) 
             collision_msids=_dynamic_collision_owner_msids(character, moves, dynamic_sets),
             source_step_msids=_dynamic_source_step_owner_msids(character, moves, dynamic_sets),
             cone_msids=_dynamic_cone_owner_msids(character, moves, dynamic_sets),
+            catch_grabbable_msids=_dynamic_catch_grabbable_owner_msids(character, moves, dynamic_sets),
         )
 
     fox = _parse_ssdynn01(tmp_path / "fox.dyn.bin")
     falco = _parse_ssdynn01(tmp_path / "falco.dyn.bin")
-    assert fox["version"] == 7
+    assert fox["version"] == 8
     assert fox["set_count"] == 1
     assert fox["total_nodes"] == 4
     assert fox["collision_msids"] == [17, 36, 58, 242, 243]
     assert fox["source_step_msids"] == []
     assert fox["cone_msids"] == [242]
+    assert fox["catch_grabbable_msids"] == [52]
     assert fox["colliders"] == [{"part": 41, "offset": pytest.approx((0.0, 2.0, 0.0)), "radius": pytest.approx(3.0)}]
     assert [n["part"] for n in fox["sets"][0]["nodes"]] == [17, 18, 19, 20]  # type: ignore[index]
     assert falco == {
-        "version": 7,
+        "version": 8,
         "set_count": 0,
         "total_nodes": 0,
         "sets": [],
         "collision_msids": [],
         "source_step_msids": [],
         "cone_msids": [],
+        "catch_grabbable_msids": [],
         "colliders": [],
     }
 
@@ -449,6 +473,34 @@ def test_dynamic_collision_owner_predicate_is_data_driven_not_raw_msid_gate() ->
     assert "msid != 58" not in src
     assert "msid == 58" not in src
     assert "MSL_SM_CATCH_DASH" not in src
+
+
+def test_catch_grabbable_owner_is_fox_tail_catch_only_and_not_body_collision() -> None:
+    from tools.extraction.extract_fighter_anims import _dynamic_catch_grabbable_owner_msids
+    from tools.extraction.extract_fighter_anims import _dynamic_collision_owner_msids
+
+    moves = {
+        "moves": {
+            "ftCo_SM_AttackDash": {"submotion_id": 52},
+            "ftCo_SM_JumpB": {"submotion_id": 17},
+            "ftCo_SM_AttackHi3": {"submotion_id": 58},
+            "ftCo_SM_Catch": {"submotion_id": 242},
+            "ftCo_SM_CatchDash": {"submotion_id": 243},
+        }
+    }
+    fox_tail_dynamic_set = [{"root_part": 17, "chain_count": 4, "entries": [], "colliders": []}]
+
+    catch_msids = _dynamic_catch_grabbable_owner_msids("fox", moves, fox_tail_dynamic_set)
+    body_msids = _dynamic_collision_owner_msids("fox", moves, fox_tail_dynamic_set)
+
+    assert catch_msids == [52]
+    assert 52 not in body_msids
+    assert _dynamic_catch_grabbable_owner_msids("falco", moves, fox_tail_dynamic_set) == []
+    assert _dynamic_catch_grabbable_owner_msids(
+        "fox", moves, [{"root_part": 99, "chain_count": 4, "entries": [], "colliders": []}]
+    ) == []
+
+    src = Path("src/anim_pose.c").read_text()
     assert "dyn_collision_have_msid[msid]" in src
     assert "dyn_source_step_have_msid" not in src
     assert "source_step_msid_count != 0u" in src

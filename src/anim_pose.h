@@ -69,6 +69,16 @@ int anim_pose_get_collision_matrix(const MslBatch* batch, size_t player_idx, uin
 int anim_pose_get_collision_matrix_f32(const MslBatch* batch, size_t player_idx, uint16_t msid,
                                        float anim_frame, uint16_t part_id, float out_3x4[12]);
 
+// Catch-selection collision-pose sampler.
+//
+// `ftColl_80078A2C` routes grabbable hurt capsules through `lbColl_80007ECC`, which consumes the
+// same live JObj/dynamic-chain endpoint owner as `lb_8000B1CC` without implying the submotion is a
+// BODY collision owner. This helper allows generated SSDYNN catch-grabbable owners to use live
+// dynamic matrices while ordinary BODY paths remain restricted to the collision-owner index.
+int anim_pose_get_catch_grabbable_matrix_f32(const MslBatch* batch, size_t player_idx,
+                                             uint16_t msid, float anim_frame, uint16_t part_id,
+                                             float out_3x4[12]);
+
 // Bulk variant for hot primitive refresh paths that need several collision matrices for the same
 // fighter pose. `out_mats_12` is `count * 12` floats; `out_ok[i]` is set to 1 when row i was
 // populated and 0 otherwise.

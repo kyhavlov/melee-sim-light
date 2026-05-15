@@ -3729,6 +3729,31 @@ static PyObject* msl_debug_dynamic_pose_state_py(PyObject* self, PyObject* args)
   return (PyObject*)arr;
 }
 
+static PyObject* msl_debug_get_fighter_8006cda4_pre_gate_consume_count_py(PyObject* self,
+                                                                          PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  int batch_index = 0;
+  int player_index = 0;
+  if (!PyArg_ParseTuple(args, "Oii", &handle_obj, &batch_index, &player_index)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+
+  uint8_t count = 0u;
+  const int err = msl_batch_debug_get_fighter_8006cda4_pre_gate_consume_count(h->batch, batch_index,
+                                                                              player_index, &count);
+  if (err != 0) {
+    PyErr_Format(PyExc_ValueError,
+                 "msl_batch_debug_get_fighter_8006cda4_pre_gate_consume_count failed: %d", err);
+    return NULL;
+  }
+  return PyLong_FromUnsignedLong((unsigned long)count);
+}
+
 static PyObject* msl_debug_attackairb_continuation_overlap_py(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* handle_obj = NULL;
@@ -6311,6 +6336,9 @@ static PyMethodDef methods[] = {
     {"debug_dynamic_pose_state", msl_debug_dynamic_pose_state_py, METH_VARARGS,
      "debug_dynamic_pose_state(handle, batch_index, player_index) -> "
      "bytes[1,sizeof(MslDebugDynamicPoseState)]"},
+    {"debug_get_fighter_8006cda4_pre_gate_consume_count",
+     msl_debug_get_fighter_8006cda4_pre_gate_consume_count_py, METH_VARARGS,
+     "debug_get_fighter_8006cda4_pre_gate_consume_count(handle, batch_index, player_index) -> int"},
     {"debug_attackairb_continuation_overlap", msl_debug_attackairb_continuation_overlap_py,
      METH_VARARGS,
      "debug_attackairb_continuation_overlap(handle, batch_index, attacker, hb_id, defender, "

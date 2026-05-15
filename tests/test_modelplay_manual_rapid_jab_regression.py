@@ -340,6 +340,8 @@ def test_fox_attack100_loop_hits_and_then_locks_into_attack100end() -> None:
     # manual_repros/fox_rapid_jab_doesnt_hit_and_easily_cancelled.json. It exists because the
     # first rapid-jab implementation exported Attack100Loop move-script hitboxes but left the
     # derived MSLHITB1 runtime hitbox tables stale, so the loop entered but never hit.
+    # The compact approach omits the trace's final hard-right movement prefix: source-correct FD
+    # edge collision now sends that prefix offstage before this rapid-jab owner is exercised.
     history = _replay_fixture(_load_hit_fixture(), end_frame=430)
 
     fox = 0
@@ -350,13 +352,28 @@ def test_fox_attack100_loop_hits_and_then_locks_into_attack100end() -> None:
     assert float(history[314]["percent"][falco]) > 8.0
     # Attack100Loop restart runs ft_800892A0, giving repeated rapid-jab hits fresh attack
     # instances for stale-queue accounting. Without that source callback, this over-damages.
-    assert float(history[413]["percent"][falco]) == pytest.approx(16.869998931884766)
+    assert float(history[413]["percent"][falco]) == pytest.approx(16.03999900817871)
 
-    assert int(history[415]["action_id"][fox]) == ACT_ATTACK_100_END
+    assert int(history[413]["action_id"][fox]) == ACT_ATTACK_100_END
     assert all(
-        int(history[frame]["action_id"][fox]) == ACT_ATTACK_100_END for frame in range(415, 424)
+        int(history[frame]["action_id"][fox]) == ACT_ATTACK_100_END for frame in range(413, 422)
     )
-    assert int(history[424]["action_id"][fox]) == ACT_WAIT
+    assert int(history[422]["action_id"][fox]) == ACT_WAIT
+
+
+@pytest.mark.integration
+def test_removed_rapid_jab_hard_right_prefix_now_correctly_falls_off_fd_edge() -> None:
+    # Packageability guard for the compact rapid-jab fixture split: the omitted hard-right
+    # approach prefix is no longer part of the Attack100 hitbox owner because source-correct FD
+    # edge collision sends Fox offstage before the rapid-jab window.
+    fixture = copy.deepcopy(_load_hit_fixture())
+    fixture["input_ranges"].insert(4, [181, 188, [0, 1, 0, 0, 0, 0, 0]])
+    history = _replay_fixture(fixture, end_frame=306)
+
+    fox = 0
+    assert int(history[235]["action_id"][fox]) != ACT_ATTACK_100_START
+    assert float(history[270]["pos_y"][fox]) < -130.0
+    assert int(history[306]["action_id"][fox]) != ACT_ATTACK_100_START
 
 
 @pytest.mark.integration

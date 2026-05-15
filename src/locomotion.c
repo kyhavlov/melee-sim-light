@@ -40,9 +40,10 @@ static inline uint8_t is_dash_flick(const MslCommonParams* c, float stick_x, uin
 static inline uint8_t did_tap_jump(const MslCommonParams* c, float stick_y, uint8_t tilt_timer_y);
 static inline uint8_t spacie_speciallw_pressed(const MslCommonParams* c, uint8_t char_id,
                                                uint16_t buttons_pressed, float stick_y);
-static inline uint8_t spacie_speciallw_wait_iasa_held(const MslCommonParams* c, uint8_t char_id,
-                                                      uint16_t buttons, float stick_x,
-                                                      float stick_y);
+static inline uint8_t spacie_speciallw_wait_iasa_pressed_edge(const MslCommonParams* c,
+                                                              uint8_t char_id,
+                                                              uint16_t buttons_pressed,
+                                                              float stick_x, float stick_y);
 static inline uint8_t jump_enter_pre_input_tilt_y_after_input(const MslCommonParams* c,
                                                               float stick_y, float prev_stick_y);
 static inline MslJumpInput jump_input_from_edges(const MslCommonParams* c, uint16_t buttons_pressed,
@@ -2998,17 +2999,19 @@ static inline uint8_t spacie_speciallw_pressed(const MslCommonParams* c, uint8_t
              : 0u;
 }
 
-static inline uint8_t spacie_speciallw_wait_iasa_held(const MslCommonParams* c, uint8_t char_id,
-                                                      uint16_t buttons, float stick_x,
-                                                      float stick_y) {
+static inline uint8_t spacie_speciallw_wait_iasa_pressed_edge(const MslCommonParams* c,
+                                                              uint8_t char_id,
+                                                              uint16_t buttons_pressed,
+                                                              float stick_x, float stick_y) {
   // Wait-style grounded B-special dispatch reaches ftCo_800D68C0. Its source gate is fp->x687,
-  // refreshed before callbacks from held B+down through Fighter_UnkIncrementCounters_8006ABEC.
+  // refreshed before callbacks only when ftCo_800D688C sees the B pressed-edge plus down-stick.
   // Keep Side-B precedence by requiring the side-special x threshold to be absent.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{ftCo_800D688C,ftCo_800D68C0}
   // refs/melee/src/melee/ft/fighter.c::Fighter_UnkIncrementCounters_8006ABEC
   return (c != NULL && shine_char_supports_reflector(char_id) &&
-          (buttons & (uint16_t)MSL_BUTTON_B) != 0u && stick_y <= -c->special_stick_y_threshold &&
+          (buttons_pressed & (uint16_t)MSL_BUTTON_B) != 0u &&
+          stick_y <= -c->special_stick_y_threshold &&
           fabsf(stick_x) < c->special_stick_x_threshold_side)
              ? 1u
              : 0u;
@@ -3957,7 +3960,8 @@ void locomotion_update_pre(MslBatch* batch) {
               continue;
             }
             if (action_id_start != (uint16_t)MSL_ACT_ATTACK_DASH &&
-                spacie_speciallw_wait_iasa_held(c, cid, buttons, stick_x, stick_y)) {
+                spacie_speciallw_wait_iasa_pressed_edge(c, cid, buttons_pressed, stick_x,
+                                                        stick_y)) {
               shine_enter_ground_start_from_iasa(batch, idx);
               continue;
             }
@@ -4169,13 +4173,14 @@ void locomotion_update_pre(MslBatch* batch) {
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
               const uint8_t speciallw_preempts_attacks4_guard =
-                  spacie_speciallw_wait_iasa_held(c, cid, buttons, stick_x, stick_y);
+                  spacie_speciallw_wait_iasa_pressed_edge(c, cid, buttons_pressed, stick_x,
+                                                          stick_y);
               if (speciallw_preempts_attacks4_guard) {
                 // AttackS4's source IASA preamble reaches the grounded special dispatcher before
                 // Catch/Guard. The Side/Hi/Neutral subset above lives in blaster.c; Reflector is
                 // owned by shine.c and must consume B+down before same-frame shield input can enter
-                // GuardOn. The source predicate is the x687 timer, refreshed from held B+down in
-                // Fighter_UnkIncrementCounters_8006ABEC before the IASA callback.
+                // GuardOn. The source predicate is the x687 timer, refreshed from the B pressed-edge
+                // plus down-stick in Fighter_UnkIncrementCounters_8006ABEC before the IASA callback.
                 // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackS4.c::ftCo_AttackS4_IASA
                 // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{ftCo_800D688C,ftCo_800D68C0}
                 // refs/melee/src/melee/ft/fighter.c::Fighter_UnkIncrementCounters_8006ABEC
@@ -5274,6 +5279,7 @@ void locomotion_update_pre(MslBatch* batch) {
           const uint8_t dash_x4 = batch->state.dash_x4[idx];
           const uint8_t dash_iasa_early_x4 =
               (dash_x4 != 0u && cur_anim_frame <= c->dash_iasa_x44) ? 1u : 0u;
+          uint8_t dash_checkinput_entered_dash = 0u;
           if (dash_iasa_early_x4 && dash_early_attack_s4_try_enter_from_iasa(
                                         batch, c, idx, buttons_pressed, stick_x, facing_dir)) {
             action_id = batch->state.action_id[idx];
@@ -5358,26 +5364,63 @@ void locomotion_update_pre(MslBatch* batch) {
                   dash_iasa_apply_root_motion_exit_gr_vel_clamp(batch, ch, idx);
                   dash_iasa_apply_terminal_velocity_scalar(batch, c, idx);
                   action_id = (uint16_t)MSL_ACT_TURN;
+                } else if ((stick_x * facing_dir) > 0.0f && cur_anim_frame <= c->dash_iasa_x4c &&
+                           cur_anim_frame + msl_f32_from_q16_16(
+                                                batch->state.frame_speed_mul_fp_q16_16[idx]) >
+                               c->dash_iasa_x4c &&
+                           is_dash_flick(c, stick_x, tilt_timer_x)) {
+                  // Boundary phase: source Dash IASA sees fp->cur_anim_frame after the prio-1
+                  // animation callback tick. A replay seed serialized at exactly x4C with a normal
+                  // frame-speed tick has crossed into the late `ftCo_Dash_CheckInput` branch by
+                  // the time IASA runs, so a same-facing fresh flick re-enters Dash instead of
+                  // falling through to the Run gate.
+                  // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+                  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::{
+                  //   ftCo_Dash_IASA,ftCo_Dash_CheckInput,ftCo_Dash_Enter}
+                  batch->state.action_id[idx] = (uint16_t)MSL_ACT_DASH;
+                  batch->state.animation_index[idx] = (uint32_t)MSL_SM_DASH;
+                  batch->state.dash_x4[idx] = 1u;
+                  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+                  msl_anim_timebase_tick_once(batch, idx);
+                  batch->state.tilt_timer_x[idx] = 0xFEu;
+                  dash_iasa_apply_root_motion_exit_gr_vel_clamp(batch, ch, idx);
+                  dash_iasa_apply_terminal_velocity_scalar(batch, c, idx);
+                  dash_checkinput_entered_dash = 1u;
+                  action_id = (uint16_t)MSL_ACT_DASH;
                 }
-              } else if (cur_anim_frame > c->dash_iasa_x4c && (stick_x * facing_dir) < 0.0f &&
+              } else if (cur_anim_frame > c->dash_iasa_x4c &&
                          is_dash_flick(c, stick_x, tilt_timer_x)) {
                 // Late Dash IASA still routes through ftCo_Dash_CheckInput before guard / jump /
-                // run checks. Keep only the opposite-facing smash-turn subset here; same-facing
-                // Dash re-entry remains excluded until its late-window ownership is triaged.
+                // run checks. That helper enters TurnSmash on opposite-facing flicks and re-enters
+                // Dash on same-facing flicks via ftCo_Dash_Enter(gobj, 1).
                 // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::{
                 //   ftCo_Dash_IASA,ftCo_Dash_CheckInput
                 // }
-                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_Enter_Smash
-                batch->state.turn_has_turned[idx] = 0;
-                batch->state.turn_frames_to_turn[idx] = 0;
-                batch->state.turn_x8[idx] = (int8_t)(facing_dir > 0.0f ? 1 : -1);
-                batch->state.action_id[idx] = (uint16_t)MSL_ACT_TURN;
-                batch->state.animation_index[idx] = (uint32_t)MSL_SM_TURN;
-                msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-                msl_anim_timebase_tick_once(batch, idx);
-                dash_iasa_apply_root_motion_exit_gr_vel_clamp(batch, ch, idx);
-                dash_iasa_apply_terminal_velocity_scalar(batch, c, idx);
-                action_id = (uint16_t)MSL_ACT_TURN;
+                if ((stick_x * facing_dir) < 0.0f) {
+                  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_Enter_Smash
+                  batch->state.turn_has_turned[idx] = 0;
+                  batch->state.turn_frames_to_turn[idx] = 0;
+                  batch->state.turn_x8[idx] = (int8_t)(facing_dir > 0.0f ? 1 : -1);
+                  batch->state.action_id[idx] = (uint16_t)MSL_ACT_TURN;
+                  batch->state.animation_index[idx] = (uint32_t)MSL_SM_TURN;
+                  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+                  msl_anim_timebase_tick_once(batch, idx);
+                  dash_iasa_apply_root_motion_exit_gr_vel_clamp(batch, ch, idx);
+                  dash_iasa_apply_terminal_velocity_scalar(batch, c, idx);
+                  action_id = (uint16_t)MSL_ACT_TURN;
+                } else {
+                  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_Enter
+                  batch->state.action_id[idx] = (uint16_t)MSL_ACT_DASH;
+                  batch->state.animation_index[idx] = (uint32_t)MSL_SM_DASH;
+                  batch->state.dash_x4[idx] = 1u;
+                  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+                  msl_anim_timebase_tick_once(batch, idx);
+                  batch->state.tilt_timer_x[idx] = 0xFEu;
+                  dash_iasa_apply_root_motion_exit_gr_vel_clamp(batch, ch, idx);
+                  dash_iasa_apply_terminal_velocity_scalar(batch, c, idx);
+                  dash_checkinput_entered_dash = 1u;
+                  action_id = (uint16_t)MSL_ACT_DASH;
+                }
               }
 
               // Dash -> Run when cmd_var[0] enables the late IASA chain and stick is held forward.
@@ -5390,7 +5433,8 @@ void locomotion_update_pre(MslBatch* batch) {
               //
               // Source of truth for fp->cmd_vars[0] timing:
               // - data/moves/{fox,falco}.json moves["ftCo_SM_Dash"]["events"] set_cmd_var(idx=0).
-              if (action_id == MSL_ACT_DASH && move_tables_dash_cmd0_active(cid, cur_anim_frame)) {
+              if (action_id == MSL_ACT_DASH && dash_checkinput_entered_dash == 0u &&
+                  move_tables_dash_cmd0_active(cid, cur_anim_frame)) {
                 const float stick_f = stick_x * facing_dir;
                 if (stick_f >= c->run_stick_x_threshold) {
                   batch->state.action_id[idx] = (uint16_t)MSL_ACT_RUN;
@@ -6180,6 +6224,76 @@ void locomotion_update_post_collision(MslBatch* batch) {
           batch->state.speed_ground_x_self[idx] = 0.0f;
           batch->state.speed_y_self[idx] = 0.0f;
           msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+          continue;
+        }
+      }
+
+      if (was_ground && now_ground && a == (uint16_t)MSL_ACT_LANDING &&
+          ft80084280_ottotto_edge_admits(batch, c, bi, p, a)) {
+        const float landing_nudge_x = ottotto_floor_loss_player_nudge_x(batch, c, bi, p);
+        const float landing_facing_sign = batch->state.facing[idx] ? 1.0f : -1.0f;
+        const uint8_t landing_grounded_overlap_depth =
+            (batch->state.pos_z[idx] < -1.0e-6f || batch->state.pos_z[idx] > 1.0e-6f) ? 1u : 0u;
+        const uint8_t landing_source_stationary_edge =
+            (batch->state.speed_ground_x_self[idx] == 0.0f &&
+             batch->state.speed_air_x_self[idx] == 0.0f)
+                ? 1u
+                : 0u;
+        if (!(landing_nudge_x * landing_facing_sign > 0.0f) &&
+            landing_grounded_overlap_depth == 0u && landing_source_stationary_edge == 0u) {
+          continue;
+        }
+        float ottotto_x = 0.0f;
+        float ottotto_y = 0.0f;
+        if (ottotto_edge_point_for_facing(batch, bi, batch->state.ground_id[idx],
+                                          batch->state.facing[idx], &ottotto_x, &ottotto_y)) {
+          // Landing_Coll calls ft_80084280, which in turn calls ftCo_8009A3C8 after
+          // mpColl_8004B4B0 even if the floor helper kept the fighter grounded. The retained
+          // same-ground slice is the source-visible non-self-motion edge case:
+          // - recomputed outward xF8_playerNudgeVel.x from the current player-overlap helper,
+          // - nonzero prefix-causal hidden `pos_z` proving the same ftCommon_8007DD7C/8007E0E4
+          //   grounded-overlap owner was live before collision refresh, or
+          // - exact zero self ground/air x velocity from the Landing_Coll source state, proving the
+          //   edge bit is not from this fighter's own horizontal floor sweep.
+          // Rough replay Collide_Edge alone is not precise enough to emulate every self-moving
+          // ft_80084280 edge result, so moving Landing rows keep their ordinary source collision
+          // result.
+          // refs/melee/src/melee/ft/ft_081B.c::ft_80084280
+          // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007DD7C,ftCommon_8007E0E4}
+          // refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004B4B0,mpColl_8004A678_Floor}
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Coll
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::{ftCo_8009A3C8,ftCo_8009A410}
+          batch->state.action_id[idx] = (uint16_t)MSL_ACT_OTTOTTO;
+          batch->state.animation_index[idx] = (uint32_t)MSL_SM_OTTOTTO;
+          batch->state.pos_x[idx] = ottotto_x;
+          batch->state.pos_y[idx] = ottotto_y + 0.0001f;
+          batch->state.speed_air_x_self[idx] = 0.0f;
+          batch->state.speed_ground_x_self[idx] = 0.0f;
+          batch->state.speed_y_self[idx] = 0.0f;
+          msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+          continue;
+        }
+      }
+
+      if (was_ground && now_ground &&
+          (a == (uint16_t)MSL_ACT_OTTOTTO || a == (uint16_t)MSL_ACT_OTTOTTO_WAIT) &&
+          ottotto_edge_matches_facing(batch, bi, batch->state.ground_id[idx],
+                                      batch->state.facing[idx], batch->state.pos_x[idx])) {
+        float ottotto_x = 0.0f;
+        float ottotto_y = 0.0f;
+        if (ottotto_edge_point_for_facing(batch, bi, batch->state.ground_id[idx],
+                                          batch->state.facing[idx], &ottotto_x, &ottotto_y)) {
+          // Ottotto_Coll/OttottoWait_Coll stay on the floor only while the facing endpoint remains
+          // the source edge; the collision pass owns the endpoint anchor after any pre-collision
+          // xF8 fighter-overlap displacement. Keep this limited to steady teeter states that are
+          // already on their facing endpoint.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::{
+          //   ftCo_Ottotto_Coll,ftCo_OttottoWait_Coll}
+          batch->state.pos_x[idx] = ottotto_x;
+          batch->state.pos_y[idx] = ottotto_y + 0.0001f;
+          batch->state.speed_air_x_self[idx] = 0.0f;
+          batch->state.speed_ground_x_self[idx] = 0.0f;
+          batch->state.speed_y_self[idx] = 0.0f;
           continue;
         }
       }

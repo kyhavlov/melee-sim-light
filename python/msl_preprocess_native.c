@@ -9661,7 +9661,9 @@ PyObject* msl_derive_mpcoll_wall_seed_lanes_py(PyObject* self, PyObject* args) {
   const float* sy1 = (const float*)PyArray_DATA(y1);
   uint8_t* ok = (uint8_t*)PyArray_DATA(out_kind);
   for (npy_intp i = 0; i < n; i++) {
-    if (a[i] != 90u || hl[i] != 0u || hs[i] == 0u || af[i] < 10) continue;
+    if (a[i] != (uint16_t)MSL_ACT_DAMAGE_FLY_TOP || hl[i] != 0u || hs[i] == 0u || af[i] < 10) {
+      continue;
+    }
     const float x = px[i];
     const float y = py[i];
     if (!isfinite(x) || !isfinite(y)) continue;
@@ -10063,22 +10065,35 @@ static int msl_py_f26_source_port_for_player(const uint8_t* last_hit_by,
   return (int)ref_last_hit_by[(row * width) + p];
 }
 
+static inline bool msl_py_action_is_catch_family(uint16_t action_id) {
+  return action_id >= (uint16_t)MSL_ACT_CATCH && action_id <= (uint16_t)MSL_ACT_CATCH_CUT;
+}
+
+static inline bool msl_py_action_is_airborne_damage_family(uint16_t action_id) {
+  return action_id >= (uint16_t)MSL_ACT_DAMAGE_AIR_1 &&
+         action_id <= (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL;
+}
+
 static int msl_py_f26_current_pre_action_marker(const uint16_t* action, const uint16_t* ref_action,
                                                 const uint8_t* ground, const uint16_t* hitlag,
                                                 const uint16_t* hitstun, const uint32_t* rng_seed,
                                                 npy_intp width, npy_intp row, int p,
                                                 int stream_offset_steps, float roll_prob) {
   const uint16_t cur = action[(row * width) + p];
-  if (ground[(row * width) + p] != 0u || hitlag[(row * width) + p] != 0u ||
-      hitstun[(row * width) + p] != 0u) {
+  const uint8_t on_ground = ground[(row * width) + p];
+  if (hitlag[(row * width) + p] != 0u || hitstun[(row * width) + p] != 0u) {
     return 0;
   }
-  if (!(cur == 65u || cur == 67u)) return 0;
+  if (!(((cur == (uint16_t)MSL_ACT_ATTACK_AIR_N || cur == (uint16_t)MSL_ACT_ATTACK_AIR_B) &&
+         on_ground == 0u) ||
+        (msl_py_action_is_catch_family(cur) && on_ground != 0u))) {
+    return 0;
+  }
   float rolls[4];
   for (int consume = 0; consume < 4; consume++) {
     rolls[consume] = msl_py_randf_after_pre_gate(rng_seed[row], stream_offset_steps, consume);
   }
-  if (ref_action[(row * width) + p] == 91u) {
+  if (ref_action[(row * width) + p] == (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL) {
     for (int consume = 0; consume < 4; consume++) {
       if (rolls[consume] < roll_prob) return consume > 0 ? consume : 4;
     }
@@ -10261,8 +10276,8 @@ PyObject* msl_derive_fighter_8006cda4_pre_gate_count_py(PyObject* self, PyObject
       o[i] = 1u;
       continue;
     }
-    if (cur == 65u && g[i] == 0u && hl[i] == 0u && hs[i] == 0u) {
-      if (ref_a[i] == 91u) {
+    if (cur == (uint16_t)MSL_ACT_ATTACK_AIR_N && g[i] == 0u && hl[i] == 0u && hs[i] == 0u) {
+      if (ref_a[i] == (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL) {
         const int stream_steps = msl_py_f26_prior_same_frame_stream_steps(
             aa, ara, ag, ahl, ahs, alhb, arlhb, source_port, seed, width, i, num_players,
             victim_port, roll_prob);
@@ -10272,7 +10287,16 @@ PyObject* msl_derive_fighter_8006cda4_pre_gate_count_py(PyObject* self, PyObject
       }
       continue;
     }
-    if (cur == 67u && g[i] == 0u && hl[i] == 0u && hs[i] == 0u) {
+    if (msl_py_action_is_catch_family(cur) && g[i] != 0u && hl[i] == 0u && hs[i] == 0u) {
+      const int stream_steps = msl_py_f26_prior_same_frame_stream_steps(
+          aa, ara, ag, ahl, ahs, alhb, arlhb, source_port, seed, width, i, num_players, victim_port,
+          roll_prob);
+      const int marker = msl_py_f26_current_pre_action_marker(aa, ara, ag, ahl, ahs, seed, width, i,
+                                                              victim_port, stream_steps, roll_prob);
+      if (marker != 0) o[i] = (uint8_t)marker;
+      continue;
+    }
+    if (cur == (uint16_t)MSL_ACT_ATTACK_AIR_B && g[i] == 0u && hl[i] == 0u && hs[i] == 0u) {
       const int stream_steps = msl_py_f26_prior_same_frame_stream_steps(
           aa, ara, ag, ahl, ahs, alhb, arlhb, source_port, seed, width, i, num_players, victim_port,
           roll_prob);
@@ -10286,18 +10310,19 @@ PyObject* msl_derive_fighter_8006cda4_pre_gate_count_py(PyObject* self, PyObject
       o[i] = 2u;
       continue;
     }
-    if (cur == 90u && g[i] == 0u && hl[i] == 0u && hs[i] > 0u) {
+    if (cur == (uint16_t)MSL_ACT_DAMAGE_FLY_TOP && g[i] == 0u && hl[i] == 0u && hs[i] > 0u) {
       const int attacker =
           msl_py_local_slot_from_source_port(source_port, width, i, num_players, (int)lhb[i]);
       if (attacker < 0 || attacker == victim_port) continue;
       const uint16_t attacker_action = aa[(i * width) + attacker];
       const int attacker_frame = (int)aaf[(i * width) + attacker];
-      if (attacker_action == 67u && (attacker_frame == 3 || attacker_frame == 4)) {
+      if (attacker_action == (uint16_t)MSL_ACT_ATTACK_AIR_B &&
+          (attacker_frame == 3 || attacker_frame == 4)) {
         float rolls[4];
         for (int consume = 0; consume < 4; consume++) {
           rolls[consume] = msl_py_randf_after_pre_gate(seed[i], 0, consume);
         }
-        if (ref_a[i] == 91u) {
+        if (ref_a[i] == (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL) {
           for (int consume = 0; consume < 4; consume++) {
             if (rolls[consume] < roll_prob) {
               o[i] = (uint8_t)(consume > 0 ? consume : 4);
@@ -10316,7 +10341,7 @@ PyObject* msl_derive_fighter_8006cda4_pre_gate_count_py(PyObject* self, PyObject
           continue;
         }
       }
-      if (attacker_action == 67u && attacker_frame >= 6) {
+      if (attacker_action == (uint16_t)MSL_ACT_ATTACK_AIR_B && attacker_frame >= 6) {
         o[i] = 2u;
       }
     }
@@ -10325,14 +10350,16 @@ PyObject* msl_derive_fighter_8006cda4_pre_gate_count_py(PyObject* self, PyObject
   for (npy_intp i = 0; i < n; i++) {
     const int consume = (int)o[i];
     if (consume <= 0 || consume > 4) continue;
-    if (!(a[i] == 90u && g[i] == 0u && hl[i] == 0u && hs[i] > 0u)) continue;
+    if (!(a[i] == (uint16_t)MSL_ACT_DAMAGE_FLY_TOP && g[i] == 0u && hl[i] == 0u && hs[i] > 0u)) {
+      continue;
+    }
     const int attacker =
         msl_py_local_slot_from_source_port(source_port, width, i, num_players, (int)lhb[i]);
     if (attacker < 0 || attacker == victim_port) continue;
-    if (aa[(i * width) + attacker] != 67u) continue;
+    if (aa[(i * width) + attacker] != (uint16_t)MSL_ACT_ATTACK_AIR_B) continue;
     npy_intp j = i - 1;
     while (j >= 0) {
-      if (a[j] != 90u) break;
+      if (a[j] != (uint16_t)MSL_ACT_DAMAGE_FLY_TOP) break;
       if (g[j] != 0u || hs[j] == 0u) break;
       if (msl_py_local_slot_from_source_port(source_port, width, j, num_players, (int)lhb[j]) !=
           attacker) {
@@ -10346,7 +10373,8 @@ PyObject* msl_derive_fighter_8006cda4_pre_gate_count_py(PyObject* self, PyObject
   for (npy_intp i = 0; i < n; i++) {
     const int consume = (int)o[i];
     if (consume <= 0 || consume > 3) continue;
-    if (!(a[i] == 65u && g[i] == 0u && hl[i] == 0u && hs[i] == 0u && ref_a[i] == 91u)) {
+    if (!(a[i] == (uint16_t)MSL_ACT_ATTACK_AIR_N && g[i] == 0u && hl[i] == 0u && hs[i] == 0u &&
+          ref_a[i] == (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL)) {
       continue;
     }
     const int source_port_raw = msl_py_f26_source_port_for_player(alhb, arlhb, source_port, width,
@@ -10359,13 +10387,13 @@ PyObject* msl_derive_fighter_8006cda4_pre_gate_count_py(PyObject* self, PyObject
     bool seen_damagefall_handoff = false;
     while (j >= 0) {
       const uint16_t cur = a[j];
-      if (cur == 65u) {
+      if (cur == (uint16_t)MSL_ACT_ATTACK_AIR_N) {
         if (g[j] != 0u || hl[j] != 0u || hs[j] != 0u) break;
-      } else if (cur == 38u) {
+      } else if (cur == (uint16_t)MSL_ACT_DAMAGE_FALL) {
         if (seen_damagefall_handoff) break;
         if (g[j] != 0u || hl[j] != 0u || hs[j] != 0u) break;
         seen_damagefall_handoff = true;
-      } else if (cur == 90u) {
+      } else if (cur == (uint16_t)MSL_ACT_DAMAGE_FLY_TOP) {
         if (!seen_damagefall_handoff) break;
         if (g[j] != 0u || hl[j] != 0u || hs[j] <= 0u) break;
       } else {
@@ -10375,7 +10403,10 @@ PyObject* msl_derive_fighter_8006cda4_pre_gate_count_py(PyObject* self, PyObject
           attacker) {
         break;
       }
-      if (cur != 90u && aa[(j * width) + attacker] != attacker_action) break;
+      if (cur != (uint16_t)MSL_ACT_DAMAGE_FLY_TOP &&
+          aa[(j * width) + attacker] != attacker_action) {
+        break;
+      }
       if (o[j] == 0u) o[j] = (uint8_t)consume;
       j--;
     }
@@ -10503,7 +10534,7 @@ PyObject* msl_derive_phantom_damage_pending_seed_lanes_py(PyObject* self, PyObje
 }
 
 static inline bool msl_py_hidden_z_action_allows_depth(uint16_t a) {
-  if (a >= 0x004Bu && a <= 0x005Bu) return false;
+  if (msl_py_action_is_airborne_damage_family(a)) return false;
   if (a == 0x00F7u || a == 0x00F8u) return false;
   if (a == 0x00B5u || a == 0x00B7u || a == 0x00BFu || a == 0x00FCu || a == 0x00FDu) {
     return false;

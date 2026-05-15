@@ -19,10 +19,11 @@ enum {
   ANIM_DYN_VERSION_V5 = 5,
   ANIM_DYN_VERSION_V6 = 6,
   ANIM_DYN_VERSION_V7 = 7,
+  ANIM_DYN_VERSION_V8 = 8,
   MAT_BYTES = 12 * 4,              // float32[12] (3x4)
   TRANSN_BYTES_PER_FRAME = 3 * 4,  // float32[3] v4 tail (TransN/root translation)
 
-  // SSDYNN01 v7 is written by tools/extraction/extract_fighter_anims.py.
+  // SSDYNN01 v8 is written by tools/extraction/extract_fighter_anims.py.
   //
   // RL1.0 target data contract:
   // - Fox ftData.x2C has exactly one dynamic bone set rooted at part 17.
@@ -94,8 +95,9 @@ typedef struct {
   uint16_t dyn_collider_count;
   MslAnimDynSetData dyn_sets[ANIM_DYN_MAX_SETS];
   MslAnimDynColliderData dyn_colliders[ANIM_DYN_MAX_COLLIDERS];
-  uint8_t* dyn_collision_have_msid;  // [65536], extracted SSDYNN01 collision-owner index
-  uint8_t* dyn_cone_have_msid;       // [65536], extracted descriptor +0x68 cone-owner index
+  uint8_t* dyn_collision_have_msid;        // [65536], extracted SSDYNN01 collision-owner index
+  uint8_t* dyn_cone_have_msid;             // [65536], extracted descriptor +0x68 cone-owner index
+  uint8_t* dyn_catch_grabbable_have_msid;  // [65536], extracted Catch grabbable owner index
 
   uint8_t* track_buf;
   size_t track_sz;
@@ -565,6 +567,7 @@ static void free_table(MslAnimPoseTable* t) {
   alloc_free(t->local_base_off_by_msid);
   alloc_free(t->dyn_collision_have_msid);
   alloc_free(t->dyn_cone_have_msid);
+  alloc_free(t->dyn_catch_grabbable_have_msid);
   alloc_free(t->track_buf);
   alloc_free(t->track_part_to_index);
   alloc_free(t->track_msid_to_anim_index);
@@ -800,7 +803,7 @@ static int load_dynamics_into_table(const char* data_dir, const char* rel_path,
   static const uint8_t dyn_magic[ANIM_MAGIC_LEN] = {'S', 'S', 'D', 'Y', 'N', 'N', '0', '1'};
   const uint32_t ver = (sz >= ANIM_HDR_BASE_BYTES) ? read_u32_le(buf + 8) : 0u;
   if (sz < ANIM_HDR_BASE_BYTES || memcmp(buf, dyn_magic, ANIM_MAGIC_LEN) != 0 ||
-      ver != ANIM_DYN_VERSION_V7) {
+      ver != ANIM_DYN_VERSION_V8) {
     alloc_free(buf);
     return -1;
   }
@@ -851,6 +854,7 @@ static int load_dynamics_into_table(const char* data_dir, const char* rel_path,
   }
   uint8_t* dyn_collision_have_msid = NULL;
   uint8_t* dyn_cone_have_msid = NULL;
+  uint8_t* dyn_catch_grabbable_have_msid = NULL;
   if (off + 4u > sz) {
     alloc_free(buf);
     return -1;
@@ -886,7 +890,7 @@ static int load_dynamics_into_table(const char* data_dir, const char* rel_path,
   const uint16_t source_step_msid_count = read_u16_le(buf + off);
   off += 4u;  // source_step_msid_count + reserved
   if (source_step_msid_count != 0u) {
-    // SSDYNN01 v7 reserves a source-step owner index, but this stack intentionally hard-disables
+    // SSDYNN01 v8 reserves a source-step owner index, but this stack intentionally hard-disables
     // the runtime mode after the DamageAir2 source-step attempt was rejected. Non-empty artifacts
     // must fail loudly until the full source-order dynamic/AObj owner is implemented.
     alloc_free(buf);
@@ -926,10 +930,39 @@ static int load_dynamics_into_table(const char* data_dir, const char* rel_path,
     dyn_cone_have_msid[msid] = 1u;
   }
   off += (size_t)cone_msid_count * 2u;
+  dyn_catch_grabbable_have_msid = (uint8_t*)alloc_calloc(65536, 1);
+  if (dyn_catch_grabbable_have_msid == NULL) {
+    alloc_free(buf);
+    alloc_free(dyn_collision_have_msid);
+    alloc_free(dyn_cone_have_msid);
+    return -1;
+  }
   if (off + 4u > sz) {
     alloc_free(buf);
     alloc_free(dyn_collision_have_msid);
     alloc_free(dyn_cone_have_msid);
+    alloc_free(dyn_catch_grabbable_have_msid);
+    return -1;
+  }
+  const uint16_t catch_grabbable_msid_count = read_u16_le(buf + off);
+  off += 4u;  // catch_grabbable_msid_count + reserved
+  if (off + (size_t)catch_grabbable_msid_count * 2u > sz) {
+    alloc_free(buf);
+    alloc_free(dyn_collision_have_msid);
+    alloc_free(dyn_cone_have_msid);
+    alloc_free(dyn_catch_grabbable_have_msid);
+    return -1;
+  }
+  for (uint16_t i = 0; i < catch_grabbable_msid_count; i++) {
+    const uint16_t msid = read_u16_le(buf + off + (size_t)i * 2u);
+    dyn_catch_grabbable_have_msid[msid] = 1u;
+  }
+  off += (size_t)catch_grabbable_msid_count * 2u;
+  if (off + 4u > sz) {
+    alloc_free(buf);
+    alloc_free(dyn_collision_have_msid);
+    alloc_free(dyn_cone_have_msid);
+    alloc_free(dyn_catch_grabbable_have_msid);
     return -1;
   }
   const uint16_t collider_count = read_u16_le(buf + off);
@@ -939,6 +972,7 @@ static int load_dynamics_into_table(const char* data_dir, const char* rel_path,
     alloc_free(buf);
     alloc_free(dyn_collision_have_msid);
     alloc_free(dyn_cone_have_msid);
+    alloc_free(dyn_catch_grabbable_have_msid);
     return -1;
   }
   for (uint16_t ci = 0; ci < collider_count; ci++) {
@@ -955,6 +989,7 @@ static int load_dynamics_into_table(const char* data_dir, const char* rel_path,
   if (off != sz || seen_nodes != total_nodes) {
     alloc_free(dyn_collision_have_msid);
     alloc_free(dyn_cone_have_msid);
+    alloc_free(dyn_catch_grabbable_have_msid);
     return -1;
   }
   t->dyn_set_count = set_count;
@@ -962,6 +997,7 @@ static int load_dynamics_into_table(const char* data_dir, const char* rel_path,
   t->dyn_collider_count = collider_count;
   t->dyn_collision_have_msid = dyn_collision_have_msid;
   t->dyn_cone_have_msid = dyn_cone_have_msid;
+  t->dyn_catch_grabbable_have_msid = dyn_catch_grabbable_have_msid;
   return 0;
 }
 
@@ -1953,7 +1989,7 @@ static void dynamic_state_step(MslBatch* batch, size_t idx, const MslAnimPoseTab
     batch->state.dynamic_pose_pos_z[root_di] = base_pos[0][2];
   }
 
-  // SSDYNN01 v7's collision-owner index means this submotion consumes the live dynamic JObj
+  // SSDYNN01 v8's collision-owner index means this submotion consumes the live dynamic JObj
   // matrix for BODY hurtcaps on every supported frame, even when the current lb_8001044C update
   // resolves to the static segment vector with no nonzero correction carry.
   // refs/melee/src/melee/ft/ftdynamics.c::{ftCo_8009DD94,ftCo_8009E318}
@@ -2175,7 +2211,12 @@ void anim_pose_update_dynamic_state(MslBatch* batch) {
         batch->state.dynamic_pose_apply_collision_matrix[idx] = 0u;
         continue;
       }
-      if (t->dyn_collision_have_msid == NULL || !t->dyn_collision_have_msid[msid]) {
+      const uint8_t collision_owner =
+          (t->dyn_collision_have_msid != NULL && t->dyn_collision_have_msid[msid]) ? 1u : 0u;
+      const uint8_t catch_grabbable_owner =
+          (t->dyn_catch_grabbable_have_msid != NULL && t->dyn_catch_grabbable_have_msid[msid]) ? 1u
+                                                                                               : 0u;
+      if (!collision_owner && !catch_grabbable_owner) {
         batch->state.dynamic_pose_state_valid[idx] = 0u;
         batch->state.dynamic_pose_apply_collision_matrix[idx] = 0u;
         continue;
@@ -2195,13 +2236,13 @@ void anim_pose_update_dynamic_state(MslBatch* batch) {
                                        ? frame
                                        : (uint16_t)(t->local_frame_count_by_msid[msid] - 1u);
         for (uint16_t f = 0u; f <= max_frame; f++) {
-          dynamic_state_step(batch, idx, t, set, char_id, msid, f, 1u);
+          dynamic_state_step(batch, idx, t, set, char_id, msid, f, collision_owner);
           if (f == 0xFFFFu) {
             break;
           }
         }
       } else {
-        dynamic_state_step(batch, idx, t, set, char_id, msid, frame, 1u);
+        dynamic_state_step(batch, idx, t, set, char_id, msid, frame, collision_owner);
       }
     }
   }
@@ -2210,7 +2251,7 @@ void anim_pose_update_dynamic_state(MslBatch* batch) {
 static int dynamic_matrix_from_locals(const MslBatch* batch, size_t player_idx,
                                       const MslAnimPoseTable* t, const MslAnimDynSetData* set,
                                       uint16_t msid, uint16_t frame, uint16_t part_id,
-                                      float out_3x4[12]) {
+                                      uint8_t dynamic_matrix_mode, float out_3x4[12]) {
   enum { MAX_PATH = 96 };
   uint16_t path[MAX_PATH];
   uint16_t count = 0;
@@ -2251,8 +2292,8 @@ static int dynamic_matrix_from_locals(const MslBatch* batch, size_t player_idx,
     float local[12];
     mtx34_srt_simple(rot, pos, scl, parent_scl, local);
     mtx34_concat(world, local, world);
-    if (batch != NULL && dyn_i >= 0 && (uint16_t)dyn_i < (uint16_t)MSL_MAX_DYNAMIC_NODES &&
-        batch->state.dynamic_pose_apply_collision_matrix[player_idx]) {
+    if (batch != NULL && dynamic_matrix_mode != 0u && dyn_i >= 0 &&
+        (uint16_t)dyn_i < (uint16_t)MSL_MAX_DYNAMIC_NODES) {
       const uint16_t dyn_u = (uint16_t)dyn_i;
       const size_t di = dynamic_state_index(player_idx, dyn_u);
       if (dyn_u + 1u < batch->state.dynamic_pose_node_count[player_idx]) {
@@ -2283,6 +2324,11 @@ static int dynamic_matrix_from_locals(const MslBatch* batch, size_t player_idx,
             }
           }
         }
+      }
+      if (dynamic_matrix_mode == 2u) {
+        world[3] = batch->state.dynamic_pose_pos_x[di];
+        world[7] = batch->state.dynamic_pose_pos_y[di];
+        world[11] = batch->state.dynamic_pose_pos_z[di];
       }
     }
 
@@ -2403,7 +2449,8 @@ int anim_pose_get_collision_matrix(const MslBatch* batch, size_t player_idx, uin
     return 0;
   }
   float dyn[12];
-  if (dynamic_matrix_from_locals(batch, player_idx, t, set, msid, frame, part_id, dyn) == 0) {
+  if (dynamic_matrix_from_locals(batch, player_idx, t, set, msid, frame, part_id,
+                                 /*dynamic_matrix_mode=*/1u, dyn) == 0) {
     memcpy(out_3x4, dyn, MAT_BYTES);
   }
   return 0;
@@ -2457,7 +2504,49 @@ int anim_pose_get_collision_matrix_f32(const MslBatch* batch, size_t player_idx,
     return 0;
   }
   float dyn[12];
-  if (dynamic_matrix_from_locals(batch, player_idx, t, set, msid, frame, part_id, dyn) == 0) {
+  if (dynamic_matrix_from_locals(batch, player_idx, t, set, msid, frame, part_id,
+                                 /*dynamic_matrix_mode=*/1u, dyn) == 0) {
+    memcpy(out_3x4, dyn, MAT_BYTES);
+  }
+  return 0;
+}
+
+int anim_pose_get_catch_grabbable_matrix_f32(const MslBatch* batch, size_t player_idx,
+                                             uint16_t msid, float anim_frame, uint16_t part_id,
+                                             float out_3x4[12]) {
+  if (out_3x4 == NULL || batch == NULL) {
+    return -1;
+  }
+  const uint8_t char_id = batch->state.char_id[player_idx];
+  const float safe_frame = isfinite(anim_frame) ? anim_frame : 0.0f;
+  const uint16_t frame = msl_anim_frame_floor_u16(msl_anim_frame_sanitize_f32(safe_frame));
+  const MslAnimPoseTable* t = table_for_char(char_id);
+  if (t == NULL) {
+    return -1;
+  }
+  const uint16_t frame_count = (t->have_msid[msid] != 0u) ? t->frame_count_by_msid[msid] : 0u;
+  const uint8_t catch_dynamic_pose =
+      (batch->state.dynamic_pose_state_valid[player_idx] != 0u &&
+       batch->state.dynamic_pose_char_id[player_idx] == char_id &&
+       batch->state.dynamic_pose_msid[player_idx] == msid &&
+       (t->dyn_catch_grabbable_have_msid != NULL && t->dyn_catch_grabbable_have_msid[msid]))
+          ? 1u
+          : 0u;
+  if (catch_dynamic_pose == 0u) {
+    return -1;
+  }
+  if (matrix_from_locals_f32(t, msid, safe_frame, part_id, out_3x4) != 0) {
+    if (frame >= frame_count || anim_pose_get_matrix(char_id, msid, frame, part_id, out_3x4) != 0) {
+      return -1;
+    }
+  }
+  const MslAnimDynSetData* set = dynamic_set_for_part(t, part_id);
+  if (set == NULL) {
+    return 0;
+  }
+  float dyn[12];
+  if (dynamic_matrix_from_locals(batch, player_idx, t, set, msid, frame, part_id,
+                                 /*dynamic_matrix_mode=*/2u, dyn) == 0) {
     memcpy(out_3x4, dyn, MAT_BYTES);
   }
   return 0;

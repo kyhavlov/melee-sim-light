@@ -1,7 +1,11 @@
 from __future__ import annotations
 
-import numpy as np
+from pathlib import Path
 
+import numpy as np
+import pytest
+
+from tools.eval.dataset import INPUT_DTYPE, SEED_DTYPE
 from tools.slippi.make_dataset_from_slp import (
     _derive_fighter_8006cda4_pre_gate_consume_count_seed_lane,
 )
@@ -363,3 +367,156 @@ def test_damageflytop_same_source_backfill_crosses_active_hitlag_episode() -> No
     )
 
     assert out.tolist() == [4, 4, 4, 4, 4]
+
+
+def test_catch_pre_action_derives_immediate_fighter_8006cda4_stream_phase_only() -> None:
+    # Catch-family rows are ordinary Fighter motion states for Fighter_8006CDA4 and
+    # ftCo_8008DCE0's severe-airborne DamageFlyRoll gate, but they do not form a delayed
+    # same-source carry episode. The seed lane may therefore mark only the immediate replay-proven
+    # damage-entry row.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    n = 3
+    source_port0 = np.array([[0, 1]] * n, dtype=np.uint8)
+    all_action_id = np.array(
+        [
+            [65, 212],
+            [65, 212],
+            [65, 212],
+        ],
+        dtype=np.uint16,
+    )
+    all_action_frame = np.array(
+        [
+            [2, 0],
+            [3, 1],
+            [4, 2],
+        ],
+        dtype=np.int16,
+    )
+    all_ref_action_id = all_action_id.copy()
+    all_ref_action_id[2, 1] = 91
+
+    out = _derive_fighter_8006cda4_pre_gate_consume_count_seed_lane(
+        action_id_u16=all_action_id[:, 1],
+        action_frame_i16=all_action_frame[:, 1],
+        ref_action_id_u16=all_ref_action_id[:, 1],
+        on_ground_u8=np.ones(n, dtype=np.uint8),
+        hitlag_u16=np.zeros(n, dtype=np.uint16),
+        hitstun_u16=np.zeros(n, dtype=np.uint16),
+        state_flags_u8=np.zeros((n, 5), dtype=np.uint8),
+        last_hit_by_u8=np.zeros(n, dtype=np.uint8),
+        all_source_port0_u8=source_port0,
+        all_action_id_u16=all_action_id,
+        all_action_frame_i16=all_action_frame,
+        all_ref_action_id_u16=all_ref_action_id,
+        all_on_ground_u8=np.array([[0, 1]] * n, dtype=np.uint8),
+        all_hitlag_u16=np.zeros((n, 2), dtype=np.uint16),
+        all_hitstun_u16=np.zeros((n, 2), dtype=np.uint16),
+        all_last_hit_by_u8=np.array([[6, 0]] * n, dtype=np.uint8),
+        frame_pre_random_seed_u32=np.full(n, 1883616977, dtype=np.uint32),
+        damagefly_roll_prob=0.3,
+        victim_port=1,
+        num_players=2,
+    )
+
+    assert out.tolist() == [0, 0, 2]
+
+
+def test_catchdash_pre_action_uses_same_immediate_seed_reconstruction_boundary() -> None:
+    # The retained Catch-family extension is a named motion-state family, not a Catch-only row
+    # slice. CatchDash receives the same immediate seed-frame marker, but earlier Catch-family rows
+    # remain unmarked unless the current ref row is the replay-proven DamageFlyRoll gate.
+    n = 3
+    source_port0 = np.array([[0, 1]] * n, dtype=np.uint8)
+    all_action_id = np.array(
+        [
+            [65, 214],
+            [65, 214],
+            [65, 214],
+        ],
+        dtype=np.uint16,
+    )
+    all_action_frame = np.array(
+        [
+            [2, 0],
+            [3, 1],
+            [4, 2],
+        ],
+        dtype=np.int16,
+    )
+    all_ref_action_id = all_action_id.copy()
+    all_ref_action_id[2, 1] = 91
+
+    out = _derive_fighter_8006cda4_pre_gate_consume_count_seed_lane(
+        action_id_u16=all_action_id[:, 1],
+        action_frame_i16=all_action_frame[:, 1],
+        ref_action_id_u16=all_ref_action_id[:, 1],
+        on_ground_u8=np.ones(n, dtype=np.uint8),
+        hitlag_u16=np.zeros(n, dtype=np.uint16),
+        hitstun_u16=np.zeros(n, dtype=np.uint16),
+        state_flags_u8=np.zeros((n, 5), dtype=np.uint8),
+        last_hit_by_u8=np.zeros(n, dtype=np.uint8),
+        all_source_port0_u8=source_port0,
+        all_action_id_u16=all_action_id,
+        all_action_frame_i16=all_action_frame,
+        all_ref_action_id_u16=all_ref_action_id,
+        all_on_ground_u8=np.array([[0, 1]] * n, dtype=np.uint8),
+        all_hitlag_u16=np.zeros((n, 2), dtype=np.uint16),
+        all_hitstun_u16=np.zeros((n, 2), dtype=np.uint16),
+        all_last_hit_by_u8=np.array([[6, 0]] * n, dtype=np.uint8),
+        all_ref_last_hit_by_u8=np.array([[6, 0]] * n, dtype=np.uint8),
+        frame_pre_random_seed_u32=np.full(n, 1883616977, dtype=np.uint32),
+        damagefly_roll_prob=0.3,
+        victim_port=1,
+        num_players=2,
+    )
+
+    assert out.tolist() == [0, 0, 2]
+
+
+def test_catch_pre_action_marker_is_named_seed_reconstruction_not_raw_action_range() -> None:
+    src = Path("python/msl_preprocess_native.c").read_text()
+    assert "msl_py_action_is_catch_family" in src
+    assert "cur >= 212u" not in src
+    assert "cur <= 218u" not in src
+    assert "0x0054u" not in src
+    assert "0x005Bu" not in src
+    assert "combat_action_is_catch_family" in Path("src/combat.c").read_text()
+
+
+def test_catch_family_unconsumed_pre_gate_marker_clears_after_frame_end() -> None:
+    # Runtime guard for the Catch-family replay seed reconstruction lane:
+    # a nonzero seed marker on a Catch-family row is same-frame DamageFlyRoll-gate evidence only.
+    # If no gate consumes it during combat, frame-end cleanup must clear it so later Catch/throw
+    # gameplay cannot inherit an exact-reseed RNG phase marker.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+
+    seed_bytes = np.zeros((1, seed_stride), dtype=np.uint8)
+    seed = seed_bytes.view(SEED_DTYPE).reshape(-1)
+    seed["stage_id"][0] = np.uint32(32)
+    seed["num_players"][0] = np.uint8(2)
+    seed["char_id"][0, :2] = np.uint8(1)
+    seed["stocks"][0, :2] = np.uint8(4)
+    seed["action_id"][0, 0] = np.uint16(212)  # Catch
+    seed["action_frame"][0, 0] = np.int16(10)
+    seed["fighter_8006cda4_pre_gate_consume_count"][0, 0] = np.uint8(2)
+
+    prev_input = np.zeros((1, input_stride), dtype=np.uint8).view(INPUT_DTYPE).reshape((1,))
+    cur_input = np.zeros((1, input_stride), dtype=np.uint8).view(INPUT_DTYPE).reshape((1,))
+    prev_input_bytes = prev_input.view(np.uint8).reshape((1, input_stride))
+    cur_input_bytes = cur_input.view(np.uint8).reshape((1, input_stride))
+
+    handle = binding.init(batch_size=1, num_players=2, ucf_enabled=1, ucf_cardinals_1_0_enabled=1)
+    try:
+        binding.reseed_seed(handle, seed_bytes)
+        assert binding.debug_get_fighter_8006cda4_pre_gate_consume_count(handle, 0, 0) == 2
+        binding.step_input(handle, prev_input_bytes, cur_input_bytes)
+        assert binding.debug_get_fighter_8006cda4_pre_gate_consume_count(handle, 0, 0) == 0
+    finally:
+        binding.destroy(handle)

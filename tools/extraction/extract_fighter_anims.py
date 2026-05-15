@@ -1460,16 +1460,18 @@ def _write_fighter_dynamics_data(
     collision_msids: list[int] | None = None,
     source_step_msids: list[int] | None = None,
     cone_msids: list[int] | None = None,
+    catch_grabbable_msids: list[int] | None = None,
 ) -> Path:
     """Write extracted ftData.x2C dynamic-chain descriptors for runtime pose ownership.
 
-    Layout `SSDYNN01` v7:
+    Layout `SSDYNN01` v8:
     - set_count:u16, total_node_count:u16
     - per set: root_part:u16, node_count:u16, pos:vec3
     - per node: part:u16, pad:u16, constants[15]:f32
     - collision_msid_count:u16, reserved:u16, collision_msids:u16[]
     - source_step_msid_count:u16, reserved:u16, source_step_msids:u16[]
     - cone_msid_count:u16, reserved:u16, cone_msids:u16[]
+    - catch_grabbable_msid_count:u16, reserved:u16, catch_grabbable_msids:u16[]
     - collider_count:u16, reserved:u16
     - per collider: part:u16, pad:u16, offset:vec3, radius:f32
 
@@ -1501,7 +1503,7 @@ def _write_fighter_dynamics_data(
 
     with out_path.open("wb") as f:
         f.write(b"SSDYNN01")
-        f.write(struct.pack("<I", 7))
+        f.write(struct.pack("<I", 8))
         f.write(struct.pack("<H", len(encoded_sets)))
         f.write(struct.pack("<H", total_nodes))
         for root, pos, nodes in encoded_sets:
@@ -1527,6 +1529,10 @@ def _write_fighter_dynamics_data(
             raise RuntimeError(f"{character}: cone msids not in collision owner index: {extra}")
         f.write(struct.pack("<HH", len(cone_owner_msids), 0))
         for msid in cone_owner_msids:
+            f.write(struct.pack("<H", msid))
+        catch_owner_msids = sorted({int(msid) & 0xFFFF for msid in (catch_grabbable_msids or [])})
+        f.write(struct.pack("<HH", len(catch_owner_msids), 0))
+        for msid in catch_owner_msids:
             f.write(struct.pack("<H", msid))
         colliders_raw = []
         for dyn in dynamic_sets:
@@ -1617,6 +1623,39 @@ def _dynamic_cone_owner_msids(
     move_map = (moves.get("moves") or {}) if isinstance(moves, dict) else {}
     out: list[int] = []
     for move_name in ("ftCo_SM_Catch",):
+        move_entry = move_map.get(move_name)
+        msid = move_entry.get("submotion_id") if isinstance(move_entry, dict) else None
+        if isinstance(msid, int) and 0 <= msid <= 0xFFFF:
+            out.append(int(msid))
+    return out
+
+
+def _dynamic_catch_grabbable_owner_msids(
+    character: str,
+    moves: dict[str, object],
+    dynamic_sets: list[dict[str, object]],
+) -> list[int]:
+    """Return submotions whose grabbable hurtcaps consume live fighter dynamics for Catch.
+
+    This index is intentionally separate from the BODY collision-owner index. Dolphin
+    `ftColl_80078A2C` / `lbColl_80007ECC` probes show Fox AttackDash's part-18 grabbable tail
+    capsule consumes the live `ftData.x2C` tail chain for Catch selection, while existing BODY
+    probes and locks keep AttackDash outside the `ftColl_80078C70` dynamic BODY owner. This is a
+    Fox tail dynamic-chain Catch owner, not a generic Catch/BODY dynamic owner.
+    """
+    if character != "fox" or not dynamic_sets:
+        return []
+    # Fox is the only supported character whose extracted `ftData.x2C` dynamic chain is rooted at
+    # the tail base. Falco has no extracted dynamic set and must remain a negative guard. If another
+    # character gets a dynamic grabbable Catch owner, add its primitive evidence and table predicate
+    # here rather than broadening this Fox-tail slice.
+    fox_tail_dynamic_root_part = 17
+    root_parts = {int(dyn.get("root_part", -1)) for dyn in dynamic_sets}
+    if fox_tail_dynamic_root_part not in root_parts:
+        return []
+    move_map = (moves.get("moves") or {}) if isinstance(moves, dict) else {}
+    out: list[int] = []
+    for move_name in ("ftCo_SM_AttackDash",):
         move_entry = move_map.get(move_name)
         msid = move_entry.get("submotion_id") if isinstance(move_entry, dict) else None
         if isinstance(msid, int) and 0 <= msid <= 0xFFFF:
@@ -1746,6 +1785,7 @@ def extract_one_character(
         collision_msids=_dynamic_collision_owner_msids(character, moves, dynamic_sets),
         source_step_msids=_dynamic_source_step_owner_msids(character, moves, dynamic_sets),
         cone_msids=_dynamic_cone_owner_msids(character, moves, dynamic_sets),
+        catch_grabbable_msids=_dynamic_catch_grabbable_owner_msids(character, moves, dynamic_sets),
     )
 
     # Capture victim alignment anchor (`mv.co.capturedamage.x18`) is set from `ftData.x8->x11`.

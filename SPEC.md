@@ -5307,6 +5307,18 @@ BODY collision-space residual split and rejected seed bridge:
   - `refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4`
   - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0`
   - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA`
+- Catch-family severe-airborne damage entries use the same explicit seed lane only as immediate
+  replay seed reconstruction. `Fighter_8006CDA4` does not exclude Catch/CatchDash/CatchWait/etc.,
+  but Slippi does not expose the hidden held-item/x197C branch inputs that decide the exact
+  pre-gate stream phase. Preprocessing therefore derives a seed-frame marker/count from
+  `ref_t1.action_id` and the frame-start RNG seed for the named Catch-family motion states, does
+  not backfill across Catch frames, and runtime clears an unconsumed Catch-family marker at frame
+  end. This is exact reseed support, not source-closed RNG ownership for free-running Catch
+  gameplay.
+  Source anchors:
+  - `refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4`
+  - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0`
+  - `refs/slippi-ssbm-asm/Recording/SendFrameStart.s`
 - The same QGD path exposed two data/pose boundaries:
   - Fighter hitbox radius and offsets use GALE01's single-precision `ftAction_804D82A0`
     `.float 0.003906` literal, not exact `1/256`; this keeps the `p_ftCommonData->x7A8`
@@ -5328,6 +5340,14 @@ BODY collision-space residual split and rejected seed bridge:
   without stale carry on airborne, damage, GuardSetOff, DownBound, Cliff, throw, and special
   states. `TCH:5649` protects the formerly false AttackDash BODY row whose vanilla probe shows
   hidden Z-depth separation before `lbColl_80006E58`.
+- Catch grabbable dynamic pose is split from ordinary BODY authority. Fox `AttackDash`
+  (`ftCo_SM_AttackDash`, submotion 52) is generated in the SSDYNN01 v8 catch-grabbable owner index
+  only because self-play `ftColl_80078A2C` / `lbColl_80007ECC` probes showed Catch selection
+  consuming the live part-18 tail dynamic chain (`reports/triage/mainline_selfplay_dolphin_catch6461_probe_07ecc/`,
+  `reports/triage/mainline_selfplay_dolphin_catch6568_probe_07ecc/`), while AttackDash remains
+  excluded from the BODY dynamic-collision owner index by the existing false-BODY controls. Falco
+  and non-tail dynamic descriptors remain negative guards. This is a Fox tail dynamic-chain Catch
+  owner, not a generic Catch/BODY dynamic owner.
 - Grounded player nudge is per-fighter callback ordered, not a global post-callback pass. When an
   earlier fighter runs `ftCommon_8007E0E4`, later fighter slots can still contribute frame-start
   grounded pushbox overlap even if their own later Anim callback will enter JumpF/B. TBK `1426`

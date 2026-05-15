@@ -351,6 +351,27 @@ static inline uint8_t damage_hitlag_floorhug_attempts_downward_sdi(const MslBatc
   return (uint8_t)((timer_window_owner || first_active_common_damage_radius_crossing) ? 1u : 0u);
 }
 
+static inline uint8_t action_uses_active_hitlag_downward_sdi_floorhug(uint16_t action_id,
+                                                                      const MslBatch* batch,
+                                                                      size_t idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  // Active-hitlag OnEveryHitlag -> mpColl floorhug ownership is source-proven for DamageFly and
+  // DownDamage callback paths. Common DamageAir re-entry has its own explicit owner below; sustained
+  // same-action DamageAir continuation frames can still receive SDI displacement, but that does not
+  // by itself publish FloorPush|FloorHug against the carried floor line.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::{ftCo_8009F184,ftCo_DownDamage_Coll}
+  // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800477E0,mpColl_80044628_Floor,mpColl_80044948_Floor}
+  if (is_damage_fly_collision_action(action_id) || action_id == (uint16_t)MSL_ACT_DOWN_DAMAGE_U ||
+      action_id == (uint16_t)MSL_ACT_DOWN_DAMAGE_D) {
+    return 1u;
+  }
+  return (batch->state.phantom_damage_pending_x1898[idx] > 0.0f) ? 1u : 0u;
+}
+
 static inline uint8_t grounded_damage_hitlag_allows_downward_floor_projection(const MslBatch* batch,
                                                                               size_t idx,
                                                                               uint16_t action_id) {
@@ -543,6 +564,8 @@ static inline uint8_t action_allows_floor_edge_snap(uint16_t a) {
   // - EscapeF/EscapeB/EscapeN (rolls / spotdodge)
   // - Grounded attacks (Attack11..AttackLw4), including AttackDash and AttackS4S.
   // - Common AppealSR/SL through ftCo_AppealS_Coll -> ft_80084104.
+  // - Grounded Catch/CatchDash and the later CatchPull/CatchWait/CatchAttack/CatchCut family
+  //   through ftCo_Catch*_Coll -> ft_800841B8 -> ft_800827A0.
   // - Grounded ThrowF/B/Hi/Lw through ftCo_Throw*_Coll -> ft_800841B8 -> ft_800827A0.
   // - Fox/Falco grounded SpecialSEnd, whose collision callback uses ft_800827A0 after the main
   //   Side-B travel phase has already converted through ft_80082708 when floor is lost.
@@ -572,6 +595,9 @@ static inline uint8_t action_allows_floor_edge_snap(uint16_t a) {
   // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_Escape_Coll
   // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_Coll
   // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackS4.c::ftCo_AttackS4_Coll
+  // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+  //     ftCo_Catch_Coll,ftCo_CatchDash_Coll,ftCo_CatchPull_Coll,ftCo_CatchWait_Coll,
+  //     ftCo_CatchAttack_Coll,ftCo_CatchCut_Coll}
   // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_AppealS.c::ftCo_AppealS_Coll
   // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_Throw{F,B,Hi,Lw}_Coll
   // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveStand.c::ftCo_PassiveStand_Coll
@@ -604,6 +630,13 @@ static inline uint8_t action_allows_floor_edge_snap(uint16_t a) {
     case MSL_ACT_PASSIVE_STAND_B:
     case MSL_ACT_APPEAL_SR:
     case MSL_ACT_APPEAL_SL:
+    case MSL_ACT_CATCH:
+    case MSL_ACT_CATCH_PULL:
+    case MSL_ACT_CATCH_DASH:
+    case MSL_ACT_CATCH_DASH_PULL:
+    case MSL_ACT_CATCH_WAIT:
+    case MSL_ACT_CATCH_ATTACK:
+    case MSL_ACT_CATCH_CUT:
     case MSL_ACT_THROW_F:
     case MSL_ACT_THROW_B:
     case MSL_ACT_THROW_HI:
@@ -4689,10 +4722,24 @@ void mpcoll_ground_apply(MslBatch* batch) {
       } else {
         int hit_line_idx = -1;
         float ix = 0.0f, iy = 0.0f;
+        float damage_hitlag_exit_floor_y = 0.0f;
+        const uint8_t damage_hitlag_exit_floor_y_valid =
+            (prefer_line_idx >= 0 &&
+             floor_line_y_at_x_for_env(batch, bi, g, prefer_line_idx, batch->state.pos_x[idx],
+                                       &damage_hitlag_exit_floor_y))
+                ? 1u
+                : 0u;
+        const uint8_t damage_hitlag_exit_floor_precondition =
+            (!is_damage_fly_collision_action(action_id) ||
+             (damage_hitlag_exit_floor_y_valid &&
+              cur_bottom_y <= (damage_hitlag_exit_floor_y + k_floor_y_bias)))
+                ? 1u
+                : 0u;
         const uint8_t damage_hitlag_exit_projection_owner =
             (is_damage_collision_landing_action(action_id) &&
              batch->state.hitlag_pre_timer[idx] != 0u && batch->state.hitlag[idx] == 0u &&
-             batch->state.damage_hitlag_floorhug_latch[idx] != 0u)
+             batch->state.damage_hitlag_floorhug_latch[idx] != 0u &&
+             damage_hitlag_exit_floor_precondition)
                 ? 1u
                 : 0u;
         // DamageFlyRoll ownership lane for this floor-projection pass:
@@ -4711,7 +4758,9 @@ void mpcoll_ground_apply(MslBatch* batch) {
                 : 0u;
         const uint8_t active_damage_hitlag_stay_airborne_floor_owner =
             (batch->state.hitlag[idx] != 0u && is_damage_collision_landing_action(action_id) &&
-             prefer_line_idx >= 0 && damage_hitlag_floorhug_attempts_downward_sdi(batch, idx, c))
+             prefer_line_idx >= 0 &&
+             action_uses_active_hitlag_downward_sdi_floorhug(action_id, batch, idx) &&
+             damage_hitlag_floorhug_attempts_downward_sdi(batch, idx, c))
                 ? 1u
                 : 0u;
         const uint8_t active_damage_thrown_release_floor_owner =
@@ -4858,9 +4907,11 @@ void mpcoll_ground_apply(MslBatch* batch) {
           // - Damage entry writes `post_hitlag_cb = ftCo_Damage_OnExitHitlag`.
           // - Fighter_8006D10C invokes that callback on hitlag exit before Damage collision callback.
           // - DamageFly_Coll / Damage_Coll then resolve grounded contact via ft_80081DD4.
-          // - In the non-allow_sdi air callback path, mpColl_80046904 uses
-          //   mpColl_80044838_Floor(ignore_bottom=true) when `ecb.bottom.y > 0`, so the landing
-          //   snap projects from root pos rather than the ECB bottom.
+          // - In the non-allow_sdi air callback path, mpColl_80046904 may use
+          //   mpColl_80044838_Floor(ignore_bottom=true), but only after mpColl_80044628_Floor has
+          //   accepted the loaded ECB bottom as a floor hit. A carried active-hitlag FloorHug latch
+          //   alone is not source authority to snap a hitlag-exit DamageFly root whose current ECB
+          //   bottom remains above the floor.
           // - Restrict this to continuation frames where the current damage state has already hit
           //   the active-hitlag stay-airborne floorhug owner earlier in the same hitlag segment.
           //   Teacher-forced one-step rows do not seed that transient CollData continuation, and

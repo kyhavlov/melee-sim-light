@@ -388,20 +388,21 @@ def test_derive_grounded_overlap_hidden_pos_z_tracks_prefix_depth_lane() -> None
 
 def test_derive_grounded_overlap_hidden_pos_z_does_not_leak_outside_grounded_scope() -> None:
     # The teacher-forced hidden-depth seed is not allowed to carry stale depth through owner
-    # surfaces that are not proven action-local for this lane. Airborne, damage, GuardSetOff,
+    # surfaces that are not proven action-local for this lane. Grounded DamageHi/N/Lw still runs
+    # Fighter_procUpdate's ftCommon_8007E0E4 depth pass, but airborne DamageAir/Fly, GuardSetOff,
     # DownBound, Cliff, throw, and special rows keep replay-visible Slippi pos_z.
     # refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007DD7C,ftCommon_8007E0E4}
-    n = 9
+    n = 10
     char_id = np.zeros((n, 4), dtype=np.uint8)
     char_id[:, 0] = 1
     char_id[:, 1] = 22
     action = np.full((n, 4), 14, dtype=np.uint16)
-    action[3, 0] = 90  # DamageFlyTop
-    action[4, 0] = 181  # GuardSetOff
-    action[5, 0] = 191  # DownBoundD
-    action[6, 0] = 253  # CliffWait
-    action[7, 0] = 219  # ThrowF
-    action[8, 0] = 360  # Fox SpecialLw loop
+    action[4, 0] = 80  # DamageN3, grounded damage still participates in ftCommon_8007E0E4.
+    action[5, 0] = 181  # GuardSetOff
+    action[6, 0] = 191  # DownBoundD
+    action[7, 0] = 253  # CliffWait
+    action[8, 0] = 219  # ThrowF
+    action[9, 0] = 360  # Fox SpecialLw loop
     on_ground = np.zeros((n, 4), dtype=np.uint8)
     on_ground[:, :2] = 1
     on_ground[2, 0] = 0
@@ -427,7 +428,8 @@ def test_derive_grounded_overlap_hidden_pos_z_does_not_leak_outside_grounded_sco
 
     assert out[0, 0] == pytest.approx(0.0)
     assert out[1, 0] == pytest.approx(-0.1)
-    assert out[2:, 0].tolist() == pytest.approx([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], abs=1e-6)
+    assert out[2:5, 0].tolist() == pytest.approx([0.0, 0.0, -0.1], abs=1e-6)
+    assert out[5:, 0].tolist() == pytest.approx([0.0, 0.0, 0.0, 0.0, 0.0], abs=1e-6)
 
 
 def test_derive_turn_internals_is_causal_wrt_future_frames() -> None:

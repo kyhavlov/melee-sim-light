@@ -609,8 +609,14 @@ Source/generation:
   AttackAirN` handoff; it stops at source/ground/hitlag/action-family boundaries and never
   backfills marker `4`, which is an immediate zero-consume gate marker rather than persistent hidden
   branch state for that owner.
-- Runtime consumes the lane in `src/combat.c` immediately before the DamageFlyRoll gate, then clears
-  it.
+- For Catch-family severe-airborne damage-entry gates, exact replay seeds may materialize an
+  immediate marker/count when `ref_t1.action_id` plus the frame RNG seed identify the hidden
+  `Fighter_8006CDA4` stream phase. The lane is not backfilled across Catch frames; free-running
+  rollout uses the live owned RNG clock after the seed frame. If a Catch-family row does not
+  consume the gate in that frame, runtime clears the seed marker at frame end so it cannot leak into
+  later Catch/throw gameplay.
+- Runtime consumes the lane in `src/combat.c` immediately before the DamageFlyRoll gate, then
+  clears it. Catch-family non-consumption is also cleared at frame end.
 - For Yoshi's Story Shy Guy scheduler rows with no live Heiho item, preprocessing stores
   `seed_t.frame_pre_random_seed` from the frame being simulated (`input_t := pre(i)` /
   `ref_t1 := post(i)`) while keeping visible fighter/item/stage state from `post(i-1)`. This
@@ -755,8 +761,10 @@ Source/generation:
 
 Scope:
 - The reconstruction is intentionally limited to ordinary grounded overlap carry. It excludes
-  airborne, damage, GuardSetOff, DownBound, Cliff, throw, and special states where the current
-  owner is not proven action-local.
+  airborne DamageAir/Fly, GuardSetOff, DownBound, Cliff, throw, and special states where the
+  current owner is not proven action-local. Grounded DamageHi/N/Lw rows remain in the lane because
+  `Fighter_procUpdate` still calls `ftCommon_8007E0E4` for grounded fighters and the source
+  function has no damage-action gate.
 - Excluded rows are reset to replay-visible Slippi `pos_z`; stale hidden depth is not carried or
   decayed through those rows.
 - Missing local data leaves visible Slippi `pos_z` unchanged rather than inventing depth.
@@ -1008,8 +1016,11 @@ Characters (Fox/Falco):
       the down-held platform contact, down-held/root-clear carry while the hidden platform skip
       remains live, and the first hard-floor crossing that consumes that owner. Intermediate
       airborne frames stay unseeded unless one of those source handoff boundaries is visible.
-      `tools/slippi/preprocess_suite.py` cache version 8 is the first valid cache generation for the
-      FoD platform height source lane; cache version 7 is the first valid cache generation for the
+      `tools/slippi/preprocess_suite.py` cache version 10 is the first valid cache generation for
+      grounded DamageHi/N/Lw participation in the hidden grounded-overlap `pos_z` lane; cache
+      version 9 is the first valid cache generation for the Catch-family DamageFlyRoll pre-gate
+      stream-phase lane extension; cache version 8 is the first valid cache generation for the FoD
+      platform height source lane; cache version 7 is the first valid cache generation for the
       AttackAirHi/shallow-AttackAir FoD floor-skip semantics plus common-air walljump hidden phase
       setup/carry seeds derived from source `pos_delta.x`; older `.msl` caches can pass record-size
       checks while missing these hidden owners. The cache signature also hashes
@@ -1325,7 +1336,7 @@ Loader contract:
 - The loader allocates lookup tables only during initialization; normal gameplay sampling is fixed
   capacity and allocation-free.
 
-## `data/anims/<char>.dyn.bin` (SSDYNN01 v7)
+## `data/anims/<char>.dyn.bin` (SSDYNN01 v8)
 
 Purpose: compact, init-time-loadable fighter dynamic-chain descriptors from `ftData.x2C`. These are
 the descriptor inputs to the live collision-pose owner that feeds `lb_8000B1CC` hurtcap endpoints.
@@ -1351,7 +1362,7 @@ Source and generation:
 Binary layout (little-endian):
 - Header:
   - `magic[8] = "SSDYNN01"`
-  - `version: u32 = 7`
+  - `version: u32 = 8`
   - `set_count: u16`
   - `total_node_count: u16`
 - Per dynamic set:
@@ -1374,6 +1385,10 @@ Binary layout (little-endian):
   - `cone_msid_count: u16`
   - `reserved: u16 = 0`
   - `cone_msids: u16[cone_msid_count]`
+- Catch-grabbable owner index:
+  - `catch_grabbable_msid_count: u16`
+  - `reserved: u16 = 0`
+  - `catch_grabbable_msids: u16[catch_grabbable_msid_count]`
 - Dynamic collider index:
   - `collider_count: u16`
   - `reserved: u16 = 0`
@@ -1403,7 +1418,7 @@ Supported runtime contract:
   collision submotion is an extraction/data contract change backed by primitive evidence and
   validation-clean positive/negative locks.
 - The source-step owner index is a subset of the collision-owner index. Current generated Fox/Falco
-  data has no source-step owners. The v7 field is reserved for a future `lb_8001044C` source-step
+  data has no source-step owners. The v8 field is reserved for a future `lb_8001044C` source-step
   owner once descriptor natural direction, max-step, local dynamic JObj rotation
   writeback, dynamic collider avoidance, and source-order timing are validation-clean. Runtime
   initialization currently rejects non-empty source-step indexes so a rejected/probe-only owner
@@ -1413,23 +1428,34 @@ Supported runtime contract:
   current-segment cone approximation closes Catch timing, while SDS:299 proves applying that
   approximation to the existing CatchDash owner is overbroad. This keeps the retained cone surface
   data-owned instead of branching on submotion ids in C.
+- The catch-grabbable owner index is separate from the BODY collision-owner index. Current generated
+  data marks Fox `ftCo_SM_AttackDash` (`submotion_id=52`) because Dolphin
+  `ftColl_80078A2C`/`lbColl_80007ECC` probes on self-play Catch rows show Catch selection consuming
+  the live part-18 dynamic tail capsule
+  (`reports/triage/mainline_selfplay_dolphin_catch6461_probe_07ecc/`,
+  `reports/triage/mainline_selfplay_dolphin_catch6568_probe_07ecc/`) while BODY probes/locks keep AttackDash outside the
+  `ftColl_80078C70` collision-owner index. This is explicitly a Fox tail dynamic-chain Catch
+  grabbable owner, not a generic Catch or BODY owner; Falco and non-tail dynamic descriptors remain
+  negative guards. Runtime updates the dynamic state for these rows but applies it only through the
+  Catch grabbable matrix sampler.
 - The dynamic collider index is copied from `ftData.x2C->x8` / `fp->x1670`. Current Fox data has
   one collider on part 41 at offset `(0, 2, 0)` with radius `3.0`; Falco has none. Runtime uses
   these rows to model the `lb_8001044C` segment/sphere avoidance path, including the source
   `0.1f` skin radius from `lb_00F9.s::lb_804D7BE0`.
-- In v7, a collision-owner msid means the runtime applies the reconstructed dynamic matrix on every
+- In v8, a collision-owner msid means the runtime applies the reconstructed dynamic matrix on every
   supported frame for that submotion. It is not contingent on a nonzero current-frame
   `lb_8001044C` correction carry; `JumpB` rows proved vanilla can consume the dynamic chain even
   when the segment resolves close to the static pose.
 - Runtime carries dynamic state across sequential frames only for submotions present in the
-  collision-owner index. Non-owner local submotions clear the dynamic collision state instead of
-  preserving an unseeded hidden carry. Non-sequential reseeds reconstruct owner state from frame 0
-  through the seeded frame for the validated reconstruction mode.
+  collision-owner or catch-grabbable owner indexes. Submotions outside both owner indexes clear the
+  dynamic collision state instead of preserving an unseeded hidden carry. Non-sequential reseeds
+  reconstruct owner state from frame 0 through the seeded frame for the validated reconstruction
+  mode.
 - The descriptor `unk_68` / node `+0x68` cone clamp is retained for the supported one-set Fox tail
   surface by clamping the carried child segment against the current animation segment basis before
   the collision matrix is rebuilt. This is the locally source-owned `lb_8001044C` cone boundary
   needed by `ftCo_SM_Catch` rows; the fuller descriptor natural-direction/JObj-rotation source-step
-  subset remains reserved and must stay empty in generated v7 data until separately audited. Non-cone
+  subset remains reserved and must stay empty in generated v8 data until separately audited. Non-cone
   collision owners keep the validated base-vector approximation until that source-step owner lands
   as a separate, validation-clean change.
 - The C runtime state is indexed by player and node for the supported one-set surface. Present
@@ -1438,8 +1464,8 @@ Supported runtime contract:
 - Missing `.dyn.bin` files are allowed for synthetic pose-only tests and disable dynamic collision
   pose reconstruction. Present `.dyn.bin` files require the matching `.locals.bin` file; dynamic
   descriptors without local SRT are invalid because the runtime cannot reconstruct the JObj subtree
-  that feeds `lb_8000B1CC`. Present-but-invalid `.dyn.bin` files fail initialization. Stale v1-v6
-  dynamic artifacts are rejected because they do not carry the v7 cone-clamp owner index.
+  that feeds `lb_8000B1CC`. Present-but-invalid `.dyn.bin` files fail initialization. Stale v1-v7
+  dynamic artifacts are rejected because they do not carry the v8 catch-grabbable owner index.
 - Reseed contract: non-sequential teacher-forced seeds rebuild supported dynamic-chain state by
   initializing from frame 0 local SRT and replaying the deterministic dynamic update through the
   seeded integer animation frame. This is `O(action_frame)` on reseed/pre-combat reconstruction

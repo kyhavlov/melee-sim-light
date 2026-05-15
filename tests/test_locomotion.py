@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
+from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE, read_dataset_window
 
 
 BUTTON_X = 0x0400
@@ -51,6 +51,8 @@ ACT_ATTACK_AIR_N = 0x0041
 ACT_ATTACK_AIR_B = 0x0043
 ACT_DAMAGE_AIR_2 = 0x0055
 ACT_DAMAGE_FLY_N = 0x0058
+ACT_PASSIVE = 0x00C7
+ACT_DOWN_STAND_U = 0x00BA
 ACT_FX_SPECIAL_S_START = 0x015B
 ACT_FX_SPECIAL_S = 0x015C
 ACT_FX_SPECIAL_S_END = 0x015D
@@ -93,6 +95,8 @@ SM_ATTACK_AIR_N = 68
 SM_ATTACK_AIR_B = 70
 SM_DAMAGE_AIR_2 = 175
 SM_DAMAGE_FLY_N = 178
+SM_PASSIVE = 199
+SM_DOWN_STAND_U = 186
 SM_PASSIVE_WALL_JUMP = 203
 SM_OTTOTTO = 210
 SM_CATCH_DASH = 243
@@ -512,6 +516,82 @@ def test_dash_late_iasa_opposite_flick_enters_turn_without_same_frame_flip() -> 
     assert int(out0["animation_index"][0]) == SM_TURN
     # Turn flips later in ftCo_Turn_Anim_Inner; entry frame still keeps original facing.
     assert int(out0["facing"][0]) == 0
+
+
+def test_dash_late_iasa_same_facing_flick_reenters_dash_before_run() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    dash_iasa_x4c = float(_common_attr("dash_iasa_x4c"))
+    dash_flick_abs = float(_common_attr("dash_flick_abs"))
+    assert dash_iasa_x4c > 0.0
+    assert dash_flick_abs > 0.0
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_DASH)
+    seed["action_frame"][0, 0] = np.int16(int(dash_iasa_x4c))
+    seed["anim_frame_f32"][0, 0] = np.float32(dash_iasa_x4c)
+    seed["animation_index"][0, 0] = np.uint32(SM_DASH)
+    seed["facing"][0, 0] = np.uint8(1)  # right
+    seed["dash_x4"][0, 0] = np.uint8(0)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    prev_view = prev_inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    # Decomp: even after x4C, Dash_IASA calls ftCo_Dash_CheckInput before the Run gate. A fresh
+    # same-facing x3C/x40 flick therefore re-enters Dash through ftCo_Dash_Enter(gobj, 1) instead
+    # of falling through to fn_800CA5F0 Run.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::{
+    #   ftCo_Dash_IASA,ftCo_Dash_CheckInput,ftCo_Dash_Enter}
+    prev_view["p"]["main_x"][0, 0] = np.int8(0)
+    cur_view["p"]["main_x"][0, 0] = np.int8(int(np.ceil(dash_flick_abs * 80.0)))
+
+    out, internals = _step_once_with_internals(seed, prev_inp, inp)
+    assert int(out["action_id"][0]) == ACT_DASH
+    assert int(out["action_frame"][0]) == 1
+    assert int(out["animation_index"][0]) == SM_DASH
+    assert int(out["facing"][0]) == 1
+    assert int(internals["tilt_timer_x"][0]) == 0xFE
+
+
+def test_dash_late_iasa_same_facing_stale_hold_still_enters_run() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    dash_iasa_x4c = float(_common_attr("dash_iasa_x4c"))
+    dash_flick_abs = float(_common_attr("dash_flick_abs"))
+    tilt_max = int(_common_attr("dash_flick_tilt_max_frames"))
+    assert dash_iasa_x4c > 0.0
+    assert dash_flick_abs > 0.0
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_DASH)
+    seed["action_frame"][0, 0] = np.int16(int(dash_iasa_x4c))
+    seed["anim_frame_f32"][0, 0] = np.float32(dash_iasa_x4c)
+    seed["animation_index"][0, 0] = np.uint32(SM_DASH)
+    seed["facing"][0, 0] = np.uint8(1)  # right
+    seed["dash_x4"][0, 0] = np.uint8(0)
+    seed["tilt_timer_x"][0, 0] = np.uint8(tilt_max + 4)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    prev_view = prev_inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    held = 127
+    prev_view["p"]["main_x"][0, 0] = np.int8(held)
+    cur_view["p"]["main_x"][0, 0] = np.int8(held)
+
+    out = _step_once(seed, prev_inp, inp)
+    assert int(out["action_id"][0]) == ACT_RUN
+    assert int(out["action_frame"][0]) == 0
+    assert int(out["animation_index"][0]) == SM_RUN
 
 
 def test_dash_anim_end_wait_entry_held_opposite_stick_enters_turn() -> None:
@@ -1789,6 +1869,70 @@ def test_speciallw_end_wait_iasa_spotdodge_beats_guardon() -> None:
     assert int(out0["animation_index"][0]) == SM_ESCAPE_N
 
 
+def test_passive_anim_end_destination_wait_iasa_spotdodge_beats_guardon() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_PASSIVE)
+    seed["action_frame"][0, 0] = np.int16(25)
+    seed["anim_frame_f32"][0, 0] = np.float32(25.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_PASSIVE)
+    seed["facing"][0, 0] = np.uint8(1)  # right
+    seed["shield_hp"][0, 0] = np.float32(_common_attr("start_shield_health"))
+    seed["tilt_timer_y"][0, 0] = np.uint8(0)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view["p"]["buttons"][0, 0] = np.uint16(0)
+    cur_view["p"]["main_y"][0, 0] = np.int8(-80)
+    cur_view["p"]["l"][0, 0] = np.uint8(191)
+
+    # Decomp:
+    # - ftCo_Passive_Anim promotes to Wait through ft_8008A2BC.
+    # - Destination Wait_IASA checks ftCo_80099794 (down+shield EscapeN) before GuardOn, and the
+    #   shield-held lane is Fighter_procUpdate's synthesized HSD LR input, not just the digital
+    #   Slippi button bit.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Passive.c::ftCo_Passive_Anim
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+    # refs/melee/src/melee/ft/fighter.c:1868-1890
+    out0 = _step_once(seed, prev_inp, inp)
+    assert int(out0["action_id"][0]) == ACT_ESCAPE_N
+    assert int(out0["animation_index"][0]) == SM_ESCAPE_N
+
+
+def test_passive_non_end_frame_does_not_consume_destination_wait_iasa() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_PASSIVE)
+    seed["action_frame"][0, 0] = np.int16(20)
+    seed["anim_frame_f32"][0, 0] = np.float32(20.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_PASSIVE)
+    seed["facing"][0, 0] = np.uint8(1)  # right
+    seed["shield_hp"][0, 0] = np.float32(_common_attr("start_shield_health"))
+    seed["tilt_timer_y"][0, 0] = np.uint8(0)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view["p"]["buttons"][0, 0] = np.uint16(0)
+    cur_view["p"]["main_y"][0, 0] = np.int8(-80)
+    cur_view["p"]["l"][0, 0] = np.uint8(191)
+
+    out0 = _step_once(seed, prev_inp, inp)
+    assert int(out0["action_id"][0]) == ACT_PASSIVE
+    assert int(out0["animation_index"][0]) == SM_PASSIVE
+
+
 def test_walkslow_attackhi4_beats_guardon_on_exact_trace_inputs() -> None:
     import msl_binding
 
@@ -2801,6 +2945,172 @@ def test_wait_walk_off_enters_ottotto_grounded_without_consuming_jump() -> None:
     assert int(out["jumps_left"][0]) == 2
 
 
+@pytest.mark.integration
+def test_landing_same_ground_edge_enters_and_anchors_ottotto_feh_2531() -> None:
+    # Replay-real lock for ft_80084280's same-ground edge path:
+    # - Landing_Coll sets Collide_Edge while still grounded and ftCo_8009A3C8 enters Ottotto.
+    # - The following steady Ottotto_Coll frame remains anchored to the facing floor endpoint after
+    #   any pre-collision player-overlap displacement.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80084280
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::{
+    #   ftCo_8009A3C8,ftCo_Ottotto_Coll}
+    dataset_path = Path(
+        "datasets/aggregate_recent/replays/validation/dream_land_recent/FlippantEnchantedHorse.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+    row_2531 = read_dataset_window(str(dataset_path), 2531, 2532).samples
+    assert int(row_2531["seed_t"]["action_id"][0, 0]) == ACT_LANDING
+    assert int(row_2531["ref_t1"]["action_id"][0, 0]) == ACT_OTTOTTO
+
+    out_2531, contacts_2531 = _step_once_with_collision_contacts(
+        row_2531["seed_t"].copy(),
+        row_2531["prev_input_t"].view(np.uint8).reshape((1, input_stride)).copy(),
+        row_2531["input_t"].view(np.uint8).reshape((1, input_stride)).copy(),
+    )
+    assert int(contacts_2531["coll_env_flags"][0]) & MSL_COLLIDE_EDGE
+    assert int(out_2531["action_id"][0]) == int(row_2531["ref_t1"]["action_id"][0, 0])
+    assert float(out_2531["pos_x"][0]) == pytest.approx(
+        float(row_2531["ref_t1"]["pos_x"][0, 0]), abs=1.0e-6
+    )
+
+    row_2532 = read_dataset_window(str(dataset_path), 2532, 2533).samples
+    assert int(row_2532["seed_t"]["action_id"][0, 0]) == ACT_OTTOTTO
+    out_2532 = _step_once(
+        row_2532["seed_t"].copy(),
+        row_2532["prev_input_t"].view(np.uint8).reshape((1, input_stride)).copy(),
+        row_2532["input_t"].view(np.uint8).reshape((1, input_stride)).copy(),
+    )
+    assert int(out_2532["action_id"][0]) == int(row_2532["ref_t1"]["action_id"][0, 0])
+    assert float(out_2532["pos_x"][0]) == pytest.approx(
+        float(row_2532["ref_t1"]["pos_x"][0, 0]), abs=1.0e-6
+    )
+
+
+@pytest.mark.integration
+def test_landing_same_ground_edge_without_outward_nudge_stays_landing_mvp_3360() -> None:
+    # Negative for the retained ft_80084280 same-ground slice:
+    # - Landing_Coll can consume Collide_Edge into Ottotto, but the packaged reconstruction is the
+    #   source-visible grounded-overlap case. A no-overlap platform-edge Landing row must not use the
+    #   rough replay edge bit alone to enter Ottotto one frame early.
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80084280
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004B4B0,mpColl_8004A678_Floor}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Coll
+    dataset_path = Path(
+        "datasets/aggregate_recent/replays/validation/battlefield_recent/MediumVirtualPig.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+    row = read_dataset_window(str(dataset_path), 3360, 3361).samples
+    assert int(row["seed_t"]["action_id"][0, 1]) == ACT_LANDING
+    assert int(row["ref_t1"]["action_id"][0, 1]) == ACT_LANDING
+
+    out, contacts = _step_once_with_collision_contacts(
+        row["seed_t"].copy(),
+        row["prev_input_t"].view(np.uint8).reshape((1, input_stride)).copy(),
+        row["input_t"].view(np.uint8).reshape((1, input_stride)).copy(),
+    )
+    assert int(contacts["coll_env_flags"][1]) & MSL_COLLIDE_EDGE
+    assert int(out["action_id"][1]) == ACT_LANDING
+    assert int(out["action_id"][1]) == int(row["ref_t1"]["action_id"][0, 1])
+
+
+def test_landing_same_ground_edge_static_source_state_enters_ottotto_without_replay_dataset() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["pos_x"][0, 0] = np.float32(85.6)
+    seed["pos_y"][0, 0] = np.float32(0.0)
+    seed["pos_z"][0, 0] = np.float32(0.0)
+    seed["speed_ground_x_self"][0, 0] = np.float32(0.0)
+    seed["speed_air_x_self"][0, 0] = np.float32(0.0)
+    seed["action_id"][0, 0] = np.uint16(ACT_LANDING)
+    seed["action_frame"][0, 0] = np.int16(0)
+    seed["animation_index"][0, 0] = np.uint32(43)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    out, contacts = _step_once_with_collision_contacts(seed, prev_inp, inp)
+
+    # Source boundary: a Landing row with no self horizontal velocity has no local floor-sweep
+    # source for the edge bit, so ft_80084280 may consume same-ground Collide_Edge into Ottotto.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80084280
+    assert int(contacts["coll_env_flags"][0]) & MSL_COLLIDE_EDGE
+    assert int(out["action_id"][0]) == ACT_OTTOTTO
+
+
+def test_landing_same_ground_edge_moving_self_sweep_stays_landing_without_overlap_depth() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["pos_x"][0, 0] = np.float32(85.6)
+    seed["pos_y"][0, 0] = np.float32(0.0)
+    seed["pos_z"][0, 0] = np.float32(0.0)
+    seed["speed_ground_x_self"][0, 0] = np.float32(0.1)
+    seed["speed_air_x_self"][0, 0] = np.float32(0.0)
+    seed["action_id"][0, 0] = np.uint16(ACT_LANDING)
+    seed["action_frame"][0, 0] = np.int16(0)
+    seed["animation_index"][0, 0] = np.uint32(43)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    out, contacts = _step_once_with_collision_contacts(seed, prev_inp, inp)
+
+    # Negative boundary: rough Collide_Edge alone is not enough for moving Landing rows. Without
+    # hidden overlap depth or current overlap nudge evidence, the source-owned floor sweep keeps the
+    # row in Landing.
+    assert int(contacts["coll_env_flags"][0]) & MSL_COLLIDE_EDGE
+    assert int(out["action_id"][0]) == ACT_LANDING
+
+
+def test_landing_same_ground_edge_hidden_overlap_depth_enters_ottotto_despite_self_velocity() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["pos_x"][0, 0] = np.float32(85.6)
+    seed["pos_y"][0, 0] = np.float32(0.0)
+    seed["pos_z"][0, 0] = np.float32(0.4)
+    seed["speed_ground_x_self"][0, 0] = np.float32(0.1)
+    seed["speed_air_x_self"][0, 0] = np.float32(0.0)
+    seed["action_id"][0, 0] = np.uint16(ACT_LANDING)
+    seed["action_frame"][0, 0] = np.int16(0)
+    seed["animation_index"][0, 0] = np.uint32(43)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    out, contacts = _step_once_with_collision_contacts(seed, prev_inp, inp)
+
+    # Positive boundary: nonzero hidden `pos_z` is the prefix-causal grounded-overlap lane from
+    # ftCommon_8007DD7C/8007E0E4, so the Landing same-ground edge admission is source-tied even
+    # when the row has visible self velocity.
+    assert int(contacts["coll_env_flags"][0]) & MSL_COLLIDE_EDGE
+    assert int(out["action_id"][0]) == ACT_OTTOTTO
+
+
 def test_walk_hard_out_edge_exit_falls_instead_of_teetering() -> None:
     import msl_binding
 
@@ -3370,6 +3680,132 @@ def test_attackhi4_anim_end_wait_destination_keeps_attack_before_guard() -> None
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
     out = _step_once(seed, prev_inp, inp)
     assert int(out["action_id"][0]) == ACT_ATTACK_HI4
+
+
+def test_attackhi4_anim_end_held_b_down_falls_through_to_squat() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    end_frame = _tracks_end_frame(Path("data/anims/fox.tracks.bin"), SM_ATTACK_HI4)
+    seed["action_id"][0, 0] = np.uint16(ACT_ATTACK_HI4)
+    seed["action_frame"][0, 0] = np.int16(int(end_frame))
+    seed["animation_index"][0, 0] = np.uint32(SM_ATTACK_HI4)
+    seed["anim_frame_f32"][0, 0] = np.float32(end_frame)
+    seed["frame_speed_mul_f32"][0, 0] = np.float32(1.0)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["pos_y"][0, 0] = np.float32(0.0001)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    prev_view = prev_inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    prev_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_B)
+    prev_view["p"]["main_y"][0, 0] = np.int8(-80)
+    cur_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_B)
+    cur_view["p"]["main_y"][0, 0] = np.int8(-80)
+
+    # AttackHi4_Anim exits through ft_8008A2BC into Wait, then the destination Wait_IASA can run.
+    # SpecialLw uses ftCo_800D68C0, whose x687 gate is refreshed only by ftCo_800D688C on a B
+    # pressed-edge plus down-stick. Held B+down therefore falls through to ftCo_800D5FB0 and Squat.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackHi4.c::ftCo_AttackHi4_Anim
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{ftCo_800D688C,ftCo_800D68C0}
+    # refs/melee/src/melee/ft/fighter.c::Fighter_UnkIncrementCounters_8006ABEC
+    out = _step_once(seed, prev_inp, inp)
+    assert int(out["action_id"][0]) == ACT_SQUAT
+    assert int(out["animation_index"][0]) == SM_SQUAT
+    assert int(out["action_frame"][0]) == 1
+
+
+def test_attackhi4_anim_end_fresh_b_down_edge_can_enter_speciallw_start() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    end_frame = _tracks_end_frame(Path("data/anims/fox.tracks.bin"), SM_ATTACK_HI4)
+    seed["action_id"][0, 0] = np.uint16(ACT_ATTACK_HI4)
+    seed["action_frame"][0, 0] = np.int16(int(end_frame))
+    seed["animation_index"][0, 0] = np.uint32(SM_ATTACK_HI4)
+    seed["anim_frame_f32"][0, 0] = np.float32(end_frame)
+    seed["frame_speed_mul_f32"][0, 0] = np.float32(1.0)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["pos_y"][0, 0] = np.float32(0.0001)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_B)
+    cur_view["p"]["main_y"][0, 0] = np.int8(-80)
+
+    # Positive control for the same x687 owner: a fresh B+down edge refreshes x687 to zero before
+    # destination Wait_IASA, so ftCo_800D68C0 may enter grounded Reflector.
+    out = _step_once(seed, prev_inp, inp)
+    assert int(out["action_id"][0]) == ACT_FX_SPECIAL_LW_START
+
+
+def test_downstandu_anim_end_held_down_enters_destination_wait_squat() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    end_frame = _tracks_end_frame(Path("data/anims/fox.tracks.bin"), SM_DOWN_STAND_U)
+    seed["action_id"][0, 0] = np.uint16(ACT_DOWN_STAND_U)
+    seed["action_frame"][0, 0] = np.int16(int(end_frame))
+    seed["animation_index"][0, 0] = np.uint32(SM_DOWN_STAND_U)
+    seed["anim_frame_f32"][0, 0] = np.float32(end_frame)
+    seed["frame_speed_mul_f32"][0, 0] = np.float32(1.0)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["pos_y"][0, 0] = np.float32(0.0001)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    prev_view = prev_inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    prev_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_B)
+    prev_view["p"]["main_y"][0, 0] = np.int8(-80)
+    cur_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_B)
+    cur_view["p"]["main_y"][0, 0] = np.int8(-80)
+
+    # DownStand_Anim exits through ft_8008A2BC into Wait. The destination Wait frame can then
+    # consume the held-down Squat check via ftCo_800D5FB0; the held B is not a fresh x687 edge.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownStand.c::ftCo_DownStand_Anim
+    # refs/melee/src/melee/ft/ft_0892.c::{ft_8008A2BC,ft_8008A348}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_800D5FB0
+    out = _step_once(seed, prev_inp, inp)
+    assert int(out["action_id"][0]) == ACT_SQUAT
+    assert int(out["animation_index"][0]) == SM_SQUAT
+    assert int(out["action_frame"][0]) == 1
+
+
+def test_downstandu_anim_end_neutral_still_enters_wait() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    end_frame = _tracks_end_frame(Path("data/anims/fox.tracks.bin"), SM_DOWN_STAND_U)
+    seed["action_id"][0, 0] = np.uint16(ACT_DOWN_STAND_U)
+    seed["action_frame"][0, 0] = np.int16(int(end_frame))
+    seed["animation_index"][0, 0] = np.uint32(SM_DOWN_STAND_U)
+    seed["anim_frame_f32"][0, 0] = np.float32(end_frame)
+    seed["frame_speed_mul_f32"][0, 0] = np.float32(1.0)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["pos_y"][0, 0] = np.float32(0.0001)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    out = _step_once(seed, prev_inp, inp)
+    assert int(out["action_id"][0]) == ACT_WAIT
+    assert int(out["animation_index"][0]) == SM_WAIT1_0
 
 
 def test_attackhi4_live_smash_charge_holds_on_action_frame_2() -> None:
