@@ -3030,6 +3030,42 @@ def _derive_kb_smashcharge_active_from_post(*, post) -> np.ndarray:
     return np.zeros(len(post), dtype=np.uint8)
 
 
+def _derive_smash_charge_seed_lanes(
+    *,
+    char_id_u8: np.ndarray,
+    action_id_u16: np.ndarray,
+    anim_frame_f32: np.ndarray,
+    frame_speed_mul_f32: np.ndarray,
+    on_ground_u8: np.ndarray,
+    hitlag_u16: np.ndarray,
+    hitstun_u16: np.ndarray,
+    buttons_held_u16: np.ndarray,
+    button_mask_a: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Derive hidden fp->smash_attrs lanes from prefix-visible grounded-smash charge history.
+
+    The source owner is the start_smash_charge script event plus ftCo_800DF0D0/ftCo_800DEEB8.
+    Keep the sequential state machine in native preprocessing: this runs over every replay frame
+    and feeds one-step reseeds, so Python should not own the per-frame loop.
+    """
+
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError("native msl_binding.derive_smash_charge_seed_lanes is required; run `make build`") from exc
+    return msl_binding.derive_smash_charge_seed_lanes(
+        np.asarray(char_id_u8, dtype=np.uint8),
+        np.asarray(action_id_u16, dtype=np.uint16),
+        np.asarray(anim_frame_f32, dtype=np.float32),
+        np.asarray(frame_speed_mul_f32, dtype=np.float32),
+        np.asarray(on_ground_u8, dtype=np.uint8),
+        np.asarray(hitlag_u16, dtype=np.uint16),
+        np.asarray(hitstun_u16, dtype=np.uint16),
+        np.asarray(buttons_held_u16, dtype=np.uint16),
+        int(button_mask_a),
+    )
+
+
 def build_dataset_from_slp(
     *,
     slp_path: str,
@@ -4301,6 +4337,21 @@ def _main_impl(args) -> Dataset:
             char_fallspecial_landing_lag_frames=char_fallspecial_landing_lag_frames,
         )
         frame_speed_mul_all[:, slot] = frame_speed_mul
+        smash_state, smash_frames, smash_hold, smash_saved_rate = _derive_smash_charge_seed_lanes(
+            char_id_u8=post_char,
+            action_id_u16=post_state,
+            anim_frame_f32=post_anim_frame_f32,
+            frame_speed_mul_f32=frame_speed_mul,
+            on_ground_u8=post_on_ground,
+            hitlag_u16=post_hitlag,
+            hitstun_u16=post_hitstun,
+            buttons_held_u16=pre_buttons_physical,
+            button_mask_a=button_mask_a,
+        )
+        samples["seed_t"]["smash_charge_state"][:, slot] = smash_state[:-1]
+        samples["seed_t"]["smash_charge_frames"][:, slot] = smash_frames[:-1]
+        samples["seed_t"]["smash_charge_hold_frames_max"][:, slot] = smash_hold[:-1]
+        samples["seed_t"]["smash_charge_saved_rate_fp_q16_16"][:, slot] = smash_saved_rate[:-1]
         # Seed fp->frame_speed_mul (float) for deterministic timebase stepping.
         #
         # Decomp shape:

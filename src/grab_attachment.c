@@ -5,6 +5,7 @@
 #include "anim_pose.h"
 #include "anim_timebase.h"
 #include "char_params.h"
+#include "common_params.h"
 #include "mtx34.h"
 
 // Fighter_Part ids (GALE01).
@@ -355,6 +356,75 @@ static inline uint8_t action_is_nonlow_thrown(uint16_t action_id) {
                    action_id == (uint16_t)MSL_ACT_THROWN_HI);
 }
 
+static inline int throw_index_from_owner_action(uint16_t action_id) {
+  switch (action_id) {
+    case (uint16_t)MSL_ACT_THROW_F:
+      return 0;
+    case (uint16_t)MSL_ACT_THROW_B:
+      return 1;
+    case (uint16_t)MSL_ACT_THROW_HI:
+      return 2;
+    case (uint16_t)MSL_ACT_THROW_LW:
+      return 3;
+    default:
+      return -1;
+  }
+}
+
+static inline uint8_t attached_nonlow_throw_source_frame(float* out_frame, const MslBatch* batch,
+                                                         size_t owner_idx, size_t victim_idx,
+                                                         uint16_t owner_action,
+                                                         float owner_anim_frame) {
+  if (out_frame == NULL || batch == NULL) {
+    return 0u;
+  }
+  if (owner_action != (uint16_t)MSL_ACT_THROW_B && owner_action != (uint16_t)MSL_ACT_THROW_HI) {
+    return 0u;
+  }
+  const int throw_index = throw_index_from_owner_action(owner_action);
+  if (throw_index < 0) {
+    return 0u;
+  }
+  const MslCommonParams* c = msl_common_params();
+  const MslCharParams* owner_ch = msl_char_params(batch->state.char_id[owner_idx]);
+  const MslCharParams* victim_ch = msl_char_params(batch->state.char_id[victim_idx]);
+  if (c == NULL || owner_ch == NULL || victim_ch == NULL) {
+    return 0u;
+  }
+  float rate = 1.0f;
+  if ((owner_ch->weight_independent_throws_mask & (uint8_t)(1u << throw_index)) == 0u) {
+    if (!(victim_ch->weight > 0.0f) || !(c->throw_anim_speed_weight_mul > 0.0f)) {
+      return 0u;
+    }
+    rate = 1.0f / (victim_ch->weight * c->throw_anim_speed_weight_mul);
+  }
+  if (!(rate > 0.0f) || !isfinite(rate) || !isfinite(owner_anim_frame)) {
+    return 0u;
+  }
+
+  // Attachment pose source frame:
+  // - ftCo_800DD4B0 computes the shared throw `anim_speed` as a source float.
+  // - ftCo_800DD398 installs that same rate on thrower and thrown victim.
+  // - ftCo_800DE508 samples the live JObj via lb_8000B1CC using fp->cur_anim_frame, not the
+  //   simulator's Q16.16 action-frame guard.
+  //
+  // Keep discrete/script timing on the existing fixed-point timebase, but recover the nearest
+  // source float frame for the attachment pose sample. This is bounded to attached non-low throw
+  // placement, where the owner/victim pair and shared rate are source-owned.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD4B0,ftCo_800DD398}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508
+  const float tick_f = floorf((owner_anim_frame / rate) + 0.5f);
+  if (!(tick_f >= 0.0f) || tick_f > 1024.0f) {
+    return 0u;
+  }
+  const float source_frame = tick_f * rate;
+  if ((int)floorf(source_frame) != (int)batch->state.action_frame[owner_idx]) {
+    return 0u;
+  }
+  *out_frame = source_frame;
+  return 1u;
+}
+
 static inline uint8_t thrown_static_x1a70_offsets(float* out_y, float* out_z, const MslBatch* batch,
                                                   size_t vidx) {
   if (out_y == NULL || out_z == NULL || batch == NULL) {
@@ -680,8 +750,14 @@ static inline void grabbed_victim_anchor_world_at_owner_frame(float* out_x, floa
     // throw stay on their separate attachment paths.
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508
     // refs/melee/src/sysdolphin/baselib/aobj.c::HSD_AObjInterpretAnim
+    float pose_frame = owner_anim_frame;
+    const uint16_t owner_action = batch->state.action_id[oidx];
+    if (attached_nonlow_throw_source_frame(&pose_frame, batch, oidx, vidx, owner_action,
+                                           owner_anim_frame) == 0u) {
+      pose_frame = owner_anim_frame;
+    }
     pose_status = pose_part_origin_world_f32_facing_yrot90(
-        &ax, &ay, &az, batch, oidx, batch->state.animation_index[oidx], owner_anim_frame,
+        &ax, &ay, &az, batch, oidx, batch->state.animation_index[oidx], pose_frame,
         owner_anchor_part, batch->state.pos_x[oidx], batch->state.pos_y[oidx],
         batch->state.pos_z[oidx], owner_scale_y, batch->state.facing[oidx]);
   } else {
@@ -902,7 +978,8 @@ void grab_attachment_update_pre_collision(MslBatch* batch) {
         const uint8_t thrown_entered_from_capture_wait_pulled =
             (uint8_t)(msl_action_is_thrown_victim(cur_action) &&
                       action_is_capture_pulled_wait_victim(prev_action));
-        if (!thrown_entered_from_capture_wait_pulled &&
+        const uint8_t low_throw_entry = thrownlw_attached_to_throwlw(batch, bi, p, (int)owner);
+        if ((!thrown_entered_from_capture_wait_pulled || !low_throw_entry) &&
             batch->state.hitlag_started_frame[vidx] == 0u) {
           // Common attached Thrown* owner:
           // - Thrown* Phys/Coll are empty; ftCo_800DE508 owns victim world position through the
@@ -911,8 +988,12 @@ void grab_attachment_update_pre_collision(MslBatch* batch) {
           // - Fighter_CallAcessoryCallbacks_8006C624 returns early under x2219_b5 hitlag and only
           //   runs accessory3_cb, so the accessory1 position driver must stay frozen while the
           //   victim is in the frame's post-decrement hitlag gate.
+          // - CatchWait -> ThrowF/B/Hi entry installs the accessory callback before the later
+          //   post-Phys accessory pass. The thrower's ThrowF/B/Hi Phys root motion has already
+          //   updated the owner root by then, so non-low entry rows must run this placement after
+          //   Phys instead of keeping only the immediate entry-time anchor.
           // - Keep the already-proven low-throw entry handoff slice separate from the broader
-          //   steady attached window; the immediate `CaptureWait* -> Thrown*` row still uses the
+          //   steady attached window; its immediate `CaptureWait* -> ThrownLw` row still uses the
           //   dedicated handoff split in grab_flow.c.
           // refs/melee/src/melee/ft/fighter.c::Fighter_CallAcessoryCallbacks_8006C624
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::{

@@ -10,6 +10,7 @@
 #include "buttons.h"
 #include "common_params.h"
 #include "input_axis.h"
+#include "msl_math.h"
 #include "motion_state_owners.h"
 #include "stage_collision.h"
 
@@ -462,19 +463,23 @@ void timers_consume_post_hitlag_callbacks_pre_input(MslBatch* batch) {
       if (!batch->state.on_ground[idx]) {
         float kb_x = batch->state.speed_x_attack[idx];
         float kb_y = batch->state.speed_y_attack[idx];
-        const float kb_mag_sq = kb_x * kb_x + kb_y * kb_y;
+        const float kb_mag_sq = fmaf(kb_x, kb_x, kb_y * kb_y);
         if (kb_mag_sq >= 0.00001f) {
           const float kb_neg_x = -kb_x;
-          const float dot = kb_y * lstick_full_x + kb_neg_x * lstick_full_y;
+          // Source DI path uses PPC `fmadds` for both KB magnitude-squared and the stick
+          // projection. Keep those single-rounding operations explicit because runtime C is built
+          // with `-ffp-contract=off`.
+          // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Damage.s::ftCo_8008E5A4
+          const float dot = fmaf(kb_y, lstick_full_x, kb_neg_x * lstick_full_y);
           float dir = (dot * dot) / kb_mag_sq;
           const float cross_z = kb_x * lstick_full_y - kb_y * lstick_full_x;
           if (cross_z < 0.0f) {
             dir = -dir;
           }
-          const float kb_angle = atan2f(kb_y, kb_x) + di_max_radians * dir;
+          const float kb_angle = fmaf(di_max_radians, dir, msl_melee_atan2f(kb_y, kb_x));
           const float kb_mag = sqrtf(kb_mag_sq);
-          kb_x = kb_mag * cosf(kb_angle);
-          kb_y = kb_mag * sinf(kb_angle);
+          kb_x = kb_mag * msl_melee_cosf(kb_angle);
+          kb_y = kb_mag * msl_melee_sinf(kb_angle);
 
           // LSI: apply x1AC multiplier when digital L/R is held at hitlag exit.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnExitHitlag

@@ -12,6 +12,7 @@ from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 BUTTON_B = 0x0200
 
 ACT_WAIT = 0x000E
+ACT_DASH = 0x0014
 ACT_FX_SPECIAL_S_START = 0x015B
 ACT_FX_SPECIAL_HI_HOLD = 0x0161
 ACT_FX_SPECIAL_AIR_HI = 0x0164
@@ -23,6 +24,7 @@ ACT_FX_SPECIAL_S_END = 0x015D
 ACT_FALL = 0x001D
 
 SM_WAIT1_0 = 2
+SM_DASH = 12
 SM_FALL = 20
 
 CHAR_FOX = 1
@@ -115,6 +117,41 @@ def test_grounded_side_special_entry_divides_ground_speed_by_illusion_attr() -> 
     damped = 1.2 * _fox_attr("side_special_ground_entry_vel_mul")
     expected = (damped / _fox_attr("illusion_ground_vel_x")) - _fox_attr("gr_friction")
     assert abs(float(out["speed_ground_x_self"][0]) - expected) <= 1e-6
+
+
+def test_dash_side_special_entry_runs_dash_iasa_terminal_scalar() -> None:
+    seed = _seed_base()
+    seed["action_id"][0, 0] = np.uint16(ACT_DASH)
+    seed["action_frame"][0, 0] = np.int16(4)
+    seed["anim_frame_f32"][0, 0] = np.float32(4.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_DASH)
+    seed["facing"][0, 0] = np.uint8(0)
+    seed["facing_dir1"][0, 0] = np.int8(-1)
+    seed["speed_ground_x_self"][0, 0] = np.float32(-2.0625)
+    seed["speed_air_x_self"][0, 0] = np.float32(-2.0625)
+    if "dash_x4" in seed.dtype.names:
+        seed["dash_x4"][0, 0] = np.uint8(1)
+
+    binding = pytest.importorskip("msl_binding")
+    input_stride = int(binding.sizes()["input"])
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    inp_view = inp.view(INPUT_DTYPE).reshape((1,))
+    inp_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_B)
+    inp_view["p"]["main_x"][0, 0] = np.int8(-80)
+
+    out = _step_once(seed, prev_inp, inp)
+    assert int(out["action_id"][0]) == ACT_FX_SPECIAL_S_START
+    assert int(out["on_ground"][0]) == 1
+    # Source order:
+    # - ftCo_Dash_IASA early branch enters Side-B through ftCo_SpecialS_CheckInput/doEnter.
+    # - The Dash_IASA function then falls through to its terminal x54 gr_vel scalar.
+    # - The entered SpecialSStart Phys callback runs ft_80084F3C after that scalar, clearing this
+    #   small residual to zero instead of carrying Dash's root-motion velocity into Side-B.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialS.c::{ftCo_SpecialS_CheckInput,doEnter}
+    assert float(out["speed_ground_x_self"][0]) == pytest.approx(0.0, abs=1e-6)
+    assert float(out["speed_air_x_self"][0]) == pytest.approx(0.0, abs=1e-6)
 
 
 def test_aerial_side_special_entry_does_not_use_ground_xb8_damping() -> None:

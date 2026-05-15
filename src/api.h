@@ -412,6 +412,24 @@ typedef struct MslSeed {
   // Smash-charge knockback multiplier gate (decomp: fp->smash_attrs.state == SmashState_Charging).
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_CalcKnockback
   uint8_t kb_smashcharge_active[MSL_MAX_PLAYERS];
+  // Hidden grounded-smash charge/release state (`fp->smash_attrs`).
+  //
+  // Decomp:
+  // - `start_smash_charge` script command seeds SmashState_PreCharge and hold/damage args.
+  // - `ftCo_800DF0D0` promotes held-A precharge to Charging and later Release.
+  // - `ftCo_800DEEB8` scales released-smash HitCapsule damage from frames/hold/damage_mul.
+  //
+  // Seed representation:
+  // - state is the source SmashState enum value {0 None, 2 Charging, 3 Release}; other values are
+  //   sanitized inactive.
+  // - frames/hold/saved_rate initialize only the hidden source state. Live runtime still advances
+  //   and clears this state through the normal grounded-smash input/callback owner.
+  // refs/melee/src/melee/ft/ft_0DF0.c::{ftCo_800DEE84,ftCo_800DF0D0,ftCo_800DEEB8}
+  // refs/melee/src/melee/ft/ftaction.c::ftAction_80073008
+  uint8_t smash_charge_state[MSL_MAX_PLAYERS];
+  uint8_t smash_charge_frames[MSL_MAX_PLAYERS];
+  uint8_t smash_charge_hold_frames_max[MSL_MAX_PLAYERS];
+  int32_t smash_charge_saved_rate_fp_q16_16[MSL_MAX_PLAYERS];
   uint8_t on_ground[MSL_MAX_PLAYERS];  // 0/1
   // Hidden CollData.floor_skip seed lane.
   //

@@ -10,6 +10,7 @@
 #include "buttons.h"
 #include "char_params.h"
 #include "common_params.h"
+#include "dash_iasa.h"
 #include "input_axis.h"
 #include "laser_params.h"
 #include "motion_state_owners.h"
@@ -453,6 +454,7 @@ static inline void enter_side_special_start(MslBatch* batch, size_t idx, const M
   if (batch == NULL || c == NULL || ms == NULL || ch == NULL) {
     return;
   }
+  const uint16_t source_action_id = batch->state.action_id[idx];
   const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
   // Decomp: grounded/aerial Side-B entry reverses facing when lstick.x * facing_dir < -x220.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialS.c::ftCo_SpecialS_CheckInput
@@ -475,6 +477,13 @@ static inline void enter_side_special_start(MslBatch* batch, size_t idx, const M
     }
     batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_S_START;
     batch->state.animation_index[idx] = (uint32_t)ms->specials_ground_start;
+    if (source_action_id == (uint16_t)MSL_ACT_DASH) {
+      // Dash_IASA falls through to its terminal gr_vel scalar even when the early Side-B branch
+      // succeeds. Wait/Run/etc. grounded Side-B entries do not run this Dash callback tail.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialS.c::{ftCo_SpecialS_CheckInput,doEnter}
+      dash_iasa_apply_terminal_velocity_scalar(batch, c, idx);
+    }
   } else {
     // Decomp: aerial Side-B entry divides self_vel.x through the same attr before entering.
     // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialAirSStart_Enter

@@ -302,8 +302,12 @@ def test_specialairhi_platform_contact_writes_floor_skip_and_stays_airborne() ->
 @pytest.mark.integration
 def test_specialairhi_hard_floor_contact_still_enters_bound() -> None:
     # Negative boundary: ftCo_8009A134 only returns true on platforms. Hard-floor contact remains a
-    # SpecialHiBound owner, matching the same vanilla replay's main-floor rebound after the platform
-    # pass-through sequence.
+    # SpecialHiBound owner, but the floor hit is owned by the live XRotN-rotated JObj ECB bottom,
+    # not the root or static SSANIM ECB. This synthetic row therefore stays airborne until that
+    # bottom crosses the floor, then enters Bound on the first source-owned hard-floor contact.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+    #   ftFox_SpecialHi_RotateModel,ftFx_SpecialAirHi_Coll,ftFx_SpecialHiBound_Enter}
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_JObj,mpColl_80044628_Floor}
     import msl_binding
 
     seed = _seed_specialairhi_downward(x=-38.8, y=0.7, prev_y=2.9, ground_id=1)
@@ -322,7 +326,7 @@ def test_specialairhi_hard_floor_contact_still_enters_bound() -> None:
     try:
         msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, seed_stride)))
         rows = []
-        for _ in range(2):
+        for _ in range(3):
             msl_binding.step_input(handle, inp, inp)
             msl_binding.write_compare(handle, out)
             rows.append(out.view(COMPARE_DTYPE).reshape((1,))[0].copy())
@@ -331,7 +335,9 @@ def test_specialairhi_hard_floor_contact_still_enters_bound() -> None:
 
     assert int(rows[0]["action_id"][0]) == ACT_FX_SPECIAL_AIR_HI
     assert int(rows[0]["on_ground"][0]) == 0
-    assert int(rows[1]["action_id"][0]) == ACT_FX_SPECIAL_HI_BOUND
+    assert int(rows[1]["action_id"][0]) == ACT_FX_SPECIAL_AIR_HI
+    assert int(rows[1]["on_ground"][0]) == 0
+    assert int(rows[2]["action_id"][0]) == ACT_FX_SPECIAL_HI_BOUND
 
 
 @pytest.mark.integration

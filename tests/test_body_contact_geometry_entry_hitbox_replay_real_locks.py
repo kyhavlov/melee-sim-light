@@ -170,6 +170,52 @@ def _step_one_sample(ds, record: int) -> tuple[np.void, np.void, np.void]:
     return seed, ref, out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0]
 
 
+def _run_slp_rollout_records(
+    slp_path: Path, *, start: int, records: tuple[int, ...], ports: list[int]
+) -> dict[int, tuple[np.void, np.void]]:
+    if not slp_path.exists():
+        pytest.skip(f"missing local replay: {slp_path}")
+    ds = build_dataset_from_slp(
+        slp_path=str(slp_path),
+        ports=ports,
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    samples = ds.samples
+    assert int(samples.shape[0]) > max(records)
+    binding = _load_binding()
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    samples_u8, seed_off, prev_input_off, input_off = _dataset_byte_views(ds)
+
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+    out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(1)
+    out_by_record: dict[int, tuple[np.void, np.void]] = {}
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    try:
+        seed_bytes = samples_u8[start : start + 1, seed_off : seed_off + seed_stride].copy()
+        binding.reseed_seed_rollout(handle, seed_bytes)
+        for record in range(start, max(records) + 1):
+            prev_input_bytes = samples_u8[
+                record : record + 1, prev_input_off : prev_input_off + input_stride
+            ].copy()
+            input_bytes = samples_u8[record : record + 1, input_off : input_off + input_stride].copy()
+            binding.step_input(handle, prev_input_bytes, input_bytes)
+            if record in records:
+                binding.write_compare(handle, out_compare_bytes)
+                out_by_record[record] = (out_view[0].copy(), samples["ref_t1"][record].copy())
+    finally:
+        binding.destroy(handle)
+    return out_by_record
+
+
 @pytest.mark.integration
 def test_attackairlw_sustained_tiplog_contact_defers_grounded_dash_damage_selfplay_181413() -> None:
     # Self-play 181413 rec316 is a source-general fighter BODY tip-log boundary:
@@ -327,6 +373,71 @@ def test_grounded_attack_restart_clears_sustained_hitcapsule_latch_selfplay_1814
         assert float(out["percent"][defender]) == pytest.approx(float(ref["percent"][defender]))
     finally:
         binding.destroy(handle)
+
+
+@pytest.mark.integration
+def test_damagefly_terminal_fall_entry_blocks_fresh_enable_edge_body_selfplay_181413() -> None:
+    # Self-play 181413 rec2361 is a terminal DamageFlyTop -> Fall IASA row. The attacker has a
+    # freshly enabled AttackHi4 BODY capsule, but source order does not let that create-edge
+    # HitCapsule consume the post-IASA Fall target until the next collision frame. The rollout lock
+    # proves the terminal row stays in Fall with no immediate rehit, while the following frame still
+    # admits the real BODY hit instead of suppressing the attack family.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+    #   ftCo_8008F744,ftCo_DamageFly_IASA}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
+    # refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}
+    root = Path(__file__).resolve().parents[1]
+    slp_path = root / "replays/validation/aggregate_recent/Game_20260514T181413.slp"
+    rows = _run_slp_rollout_records(slp_path, start=0, records=(2361, 2362), ports=[1, 2])
+    defender = 0
+
+    out_2361, ref_2361 = rows[2361]
+    assert int(ref_2361["action_id"][defender]) == 29  # Fall.
+    assert int(out_2361["action_id"][defender]) == int(ref_2361["action_id"][defender])
+    assert int(out_2361["hitlag"][defender]) == int(ref_2361["hitlag"][defender]) == 0
+    assert int(out_2361["hitstun"][defender]) == int(ref_2361["hitstun"][defender]) == 0
+    assert float(out_2361["percent"][defender]) == pytest.approx(
+        float(ref_2361["percent"][defender]), abs=1e-6
+    )
+
+    out_2362, ref_2362 = rows[2362]
+    assert int(ref_2362["action_id"][defender]) == 90  # DamageFlyTop.
+    assert int(out_2362["action_id"][defender]) == int(ref_2362["action_id"][defender])
+    assert int(out_2362["hitlag"][defender]) == int(ref_2362["hitlag"][defender]) == 9
+    assert float(out_2362["percent"][defender]) > float(out_2361["percent"][defender])
+
+
+@pytest.mark.integration
+def test_damagefly_terminal_fall_entry_does_not_block_same_frame_shine_entry_ppa() -> None:
+    # Negative boundary for terminal DamageFly/DamageFall -> Fall create-edge suppression:
+    # PriceyPartialAlbatross rec2656 has p1 enter grounded SpecialLwStart from Squat on the same
+    # frame p0 is on the terminal DamageFlyTop hitstun tick. Vanilla admits the fresh Shine BODY
+    # hit before p0 can settle into Fall. The retained suppression is therefore limited to
+    # same-action attack create edges, not all newly-enabled BODY capsules near terminal damage.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLwStart_Action
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_IASA
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing validation dataset: {dataset_path}")
+
+    seed, out, ref = _step_one_row(dataset_path, 2656)
+    defender = 0
+    attacker = 1
+    assert int(seed["action_id"][defender]) == 90  # DamageFlyTop.
+    assert int(seed["hitstun"][defender]) == 1
+    assert int(seed["action_id"][attacker]) == 39  # Squat.
+    assert int(ref["action_id"][attacker]) == 360  # Fox SpecialLwStart.
+    assert int(ref["action_id"][defender]) == 90  # DamageFlyTop re-entry from Shine.
+    for field in ("action_id", "animation_index", "hitlag", "hitstun"):
+        assert int(out[field][defender]) == int(ref[field][defender]), f"defender field={field}"
+    assert int(out["hitlag"][attacker]) == int(ref["hitlag"][attacker]) == 5
+    assert float(out["percent"][defender]) == pytest.approx(float(ref["percent"][defender]))
 
 
 @pytest.mark.integration
@@ -821,7 +932,14 @@ def test_guardreflect_expired_x14_no_submotion_body_uses_guardon_hurtcaps_gat_11
     record = 11085
     defender = 0
     attacker = 1
-    seed, out, ref = _step_one_row(dataset_path, record)
+    try:
+        seed, out, ref = _step_one_row(dataset_path, record)
+    except ValueError as exc:
+        if "record_size mismatch" in str(exc):
+            raise AssertionError(
+                f"stale required validation dataset cache: rerun forced aggregate preprocess for {dataset_path}"
+            ) from exc
+        raise
 
     assert int(seed["action_id"][defender]) == 182  # GuardReflect
     assert int(seed["animation_index"][defender]) == 0xFFFFFFFF
@@ -855,7 +973,14 @@ def test_guardreflect_active_x14_no_submotion_without_guardon_provenance_stays_n
     record = 11085
     defender = 0
     attacker = 1
-    ds = read_dataset(str(dataset_path))
+    try:
+        ds = read_dataset(str(dataset_path))
+    except ValueError as exc:
+        if "record_size mismatch" in str(exc):
+            raise AssertionError(
+                f"stale required validation dataset cache: rerun forced aggregate preprocess for {dataset_path}"
+            ) from exc
+        raise
     seed = ds.samples["seed_t"][record : record + 1].copy()
     seed["guard_reflect_timer_x14"][0, defender] = np.uint8(1)
     out, _ref = _step_one_row_with_seed(dataset_path, record, seed)
@@ -1762,7 +1887,14 @@ def test_fox_catch_dynamic_tail_chain_keeps_dair_body_timing_mgs(
     if not dataset_path.exists():
         pytest.skip(f"missing local dataset: {dataset_path}")
 
-    seed, out, ref = _step_one_row(dataset_path, record)
+    try:
+        seed, out, ref = _step_one_row(dataset_path, record)
+    except ValueError as exc:
+        if "record_size mismatch" in str(exc):
+            raise AssertionError(
+                f"stale required validation dataset cache: rerun forced aggregate preprocess for {dataset_path}"
+            ) from exc
+        raise
     attacker = 0
     defender = 1
     assert int(seed["action_id"][attacker]) == 69  # AttackAirLw
@@ -1964,7 +2096,14 @@ def test_attackairn_wait_rollout_bridge_not_used_by_ordinary_one_step_his_2752()
     if not dataset_path.exists():
         pytest.skip(f"missing local dataset: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    try:
+        ds = read_dataset(str(dataset_path))
+    except ValueError as exc:
+        if "record_size mismatch" in str(exc):
+            raise AssertionError(
+                f"stale required validation dataset cache: rerun forced aggregate preprocess for {dataset_path}"
+            ) from exc
+        raise
     record = 2752
     attacker = 1
     defender = 0
@@ -2035,7 +2174,12 @@ def test_forensic_optional_attackairb_source_clear_landing_latch_suppresses_fals
     if not dataset_path.exists():
         pytest.skip(f"missing optional local self-play triage dataset: {dataset_path}")
 
-    seed, out, ref = _step_one_row(dataset_path, record)
+    try:
+        seed, out, ref = _step_one_row(dataset_path, record)
+    except ValueError as exc:
+        if "record_size mismatch" in str(exc):
+            pytest.skip(f"stale optional local self-play triage dataset: {dataset_path}")
+        raise
     attacker = 1
     defender = 0
     assert int(seed["action_id"][attacker]) == 67  # AttackAirB
@@ -2064,7 +2208,12 @@ def test_forensic_optional_attackairb_source_clear_landing_latch_requires_dense_
     if not dataset_path.exists():
         pytest.skip(f"missing optional local self-play triage dataset: {dataset_path}")
 
-    ds = read_dataset(str(dataset_path))
+    try:
+        ds = read_dataset(str(dataset_path))
+    except ValueError as exc:
+        if "record_size mismatch" in str(exc):
+            pytest.skip(f"stale optional local self-play triage dataset: {dataset_path}")
+        raise
     record = 5136
     attacker = 1
     defender = 0

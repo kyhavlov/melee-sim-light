@@ -7,10 +7,10 @@ import numpy as np
 import pytest
 
 from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
 
 
-def _run_record(dataset_path: Path, record: int) -> tuple[np.ndarray, np.ndarray]:
-    ds = read_dataset(str(dataset_path))
+def _run_dataset_record(ds, record: int) -> tuple[np.ndarray, np.ndarray]:
     samples = ds.samples
     num_records = int(samples.shape[0])
     assert num_records > record, f"dataset too short for regression check: num_records={num_records}"
@@ -49,6 +49,10 @@ def _run_record(dataset_path: Path, record: int) -> tuple[np.ndarray, np.ndarray
         return out, ref
     finally:
         binding.destroy(handle)
+
+
+def _run_record(dataset_path: Path, record: int) -> tuple[np.ndarray, np.ndarray]:
+    return _run_dataset_record(read_dataset(str(dataset_path)), record)
 
 
 def _run_rollout_records(
@@ -177,6 +181,41 @@ def test_throwhi_attached_rollout_uses_float_aobj_anchor() -> None:
 
 
 @pytest.mark.integration
+def test_throwhi_attachment_pose_uses_source_float_rate_selfplay_181413() -> None:
+    # Replay-real positive for attached ThrowHi/ThrownHi float pose sampling:
+    # ftCo_800DD4B0 computes one shared source-float throw anim_speed, ftCo_800DD398 installs it
+    # onto owner and victim, and ftCo_800DE508 samples the live JObj at fp->cur_anim_frame. The
+    # attachment pose must therefore use the source float 4/3-ish frame (e.g. 5.333333), not the
+    # simulator's Q16.16 action-frame guard (5.333328), otherwise the victim Y drifts by ~4e-5 on
+    # the frame-5 attached ThrowHi pose.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD4B0,ftCo_800DD398}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508
+    root = Path(__file__).resolve().parents[1]
+    slp_path = root / "replays/validation/aggregate_recent/Game_20260514T181413.slp"
+    if not slp_path.exists():
+        pytest.skip(f"missing local replay: {slp_path}")
+
+    record = 1047
+    victim = 0
+    owner = 1
+    ds = build_dataset_from_slp(
+        slp_path=str(slp_path),
+        ports=[1, 2],
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    out, ref = _run_dataset_record(ds, record)
+    seed = ds.samples[record]["seed_t"]
+
+    assert int(seed["action_id"][owner]) == 221  # ThrowHi
+    assert int(seed["action_id"][victim]) == 241  # ThrownHi
+    assert int(out["action_id"][0, owner]) == int(ref["action_id"][owner]) == 221
+    assert int(out["action_id"][0, victim]) == int(ref["action_id"][victim]) == 241
+    assert int(out["action_frame"][0, victim]) == int(ref["action_frame"][victim]) == 5
+    assert abs(float(out["pos_y"][0, victim]) - float(ref["pos_y"][victim])) <= 2.0e-6
+
+
+@pytest.mark.integration
 def test_throwf_attached_validation_row_strips_duplicate_transn_root() -> None:
     # Replay-real positive for grounded ThrowF/ThrownF attachment:
     # - ThrowF Phys has already carried the thrower's script TransN root into cur_pos through
@@ -207,6 +246,42 @@ def test_throwf_attached_validation_row_strips_duplicate_transn_root() -> None:
     assert abs(float(seed["pos_x"][victim]) - float(ref["pos_x"][victim])) > 3.0
     assert abs(float(out["pos_x"][0, victim]) - float(ref["pos_x"][victim])) <= 0.01
     assert abs(float(out["pos_y"][0, victim]) - float(ref["pos_y"][victim])) <= 0.03
+
+
+@pytest.mark.integration
+def test_capturewait_to_throwf_entry_runs_post_phys_attachment_selfplay_181413() -> None:
+    # Replay-real positive for CatchWait -> ThrowF / CaptureWaitLw -> ThrownF entry ordering:
+    # ftCo_800DD398 / ftCo_800DE3FC installs the thrown accessory callback during IASA, then
+    # ThrowF_Phys advances the thrower's root before Fighter_CallAcessoryCallbacks runs
+    # ftCo_800DE508 for the victim. The entry row must therefore place ThrownF from the
+    # post-Phys owner root, not from the immediate entry-time anchor.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{
+    #   ftCo_800DD398,ftCo_ThrowF_Phys}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::{ftCo_800DE3FC,ftCo_800DE508}
+    root = Path(__file__).resolve().parents[1]
+    slp_path = root / "replays/validation/aggregate_recent/Game_20260514T181413.slp"
+    if not slp_path.exists():
+        pytest.skip(f"missing local replay: {slp_path}")
+
+    record = 531
+    owner = 0
+    victim = 1
+    ds = build_dataset_from_slp(
+        slp_path=str(slp_path),
+        ports=[1, 2],
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    out, ref = _run_dataset_record(ds, record)
+    seed = ds.samples[record]["seed_t"]
+
+    assert int(seed["action_id"][owner]) == 216  # CatchWait
+    assert int(seed["action_id"][victim]) == 227  # CaptureWaitLw
+    assert int(out["action_id"][0, owner]) == int(ref["action_id"][owner]) == 219  # ThrowF
+    assert int(out["action_id"][0, victim]) == int(ref["action_id"][victim]) == 239  # ThrownF
+    assert abs(float(out["pos_x"][0, owner]) - float(ref["pos_x"][owner])) <= 1.0e-5
+    assert abs(float(out["pos_x"][0, victim]) - float(ref["pos_x"][victim])) <= 1.0e-4
+    assert abs(float(out["pos_y"][0, victim]) - float(ref["pos_y"][victim])) <= 1.0e-4
 
 
 @pytest.mark.integration

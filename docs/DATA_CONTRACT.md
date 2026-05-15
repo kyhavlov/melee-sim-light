@@ -1028,15 +1028,19 @@ Characters (Fox/Falco):
       the down-held platform contact, down-held/root-clear carry while the hidden platform skip
       remains live, and the first hard-floor crossing that consumes that owner. Intermediate
       airborne frames stay unseeded unless one of those source handoff boundaries is visible.
-      `tools/slippi/preprocess_suite.py` cache version 10 is the first valid cache generation for
-      grounded DamageHi/N/Lw participation in the hidden grounded-overlap `pos_z` lane; cache
-      version 9 is the first valid cache generation for the Catch-family DamageFlyRoll pre-gate
-      stream-phase lane extension; cache version 8 is the first valid cache generation for the FoD
-      platform height source lane; cache version 7 is the first valid cache generation for the
-      AttackAirHi/shallow-AttackAir FoD floor-skip semantics plus common-air walljump hidden phase
-      setup/carry seeds derived from source `pos_delta.x`; older `.msl` caches can pass record-size
-      checks while missing these hidden owners. The cache signature also hashes
-      `python/msl_preprocess_native.c` for native seed-lane semantic changes.
+      `tools/slippi/preprocess_suite.py` cache version 11 is the first valid cache generation for
+      attacker-side `smash_attrs` release seed lanes (`smash_charge_state`,
+      `smash_charge_frames`, `smash_charge_hold_frames_max`,
+      `smash_charge_saved_rate_fp_q16_16`) used by released grounded-smash HitCapsule damage;
+      cache version 10 is the first valid cache generation for grounded DamageHi/N/Lw participation
+      in the hidden grounded-overlap `pos_z` lane; cache version 9 is the first valid cache
+      generation for the Catch-family DamageFlyRoll pre-gate stream-phase lane extension; cache
+      version 8 is the first valid cache generation for the FoD platform height source lane; cache
+      version 7 is the first valid cache generation for the AttackAirHi/shallow-AttackAir FoD
+      floor-skip semantics plus common-air walljump hidden phase setup/carry seeds derived from
+      source `pos_delta.x`; older `.msl` caches can pass record-size checks while missing these
+      hidden owners. The cache signature also hashes `python/msl_preprocess_native.c` for native
+      seed-lane semantic changes.
     - `cliff_ledge_floor_segment_id_u16[4]` for the hidden Cliff/CollData ledge floor owner on
       immediate cliff-exit prefixes. Native seed preprocessing reconstructs it only from
       prefix-visible Cliff action + facing + generated MSLSTG01 ledge floor metadata, carries it
@@ -1782,6 +1786,18 @@ Runtime semantics (current C-core policy):
     Y-rotation here, so Z is not rotated)
   - `world = (pos_x,pos_y,pos_z) + local`
   - `radius *= fighter_scale_y` unless `ignore_fighter_scale` is set (hitbox flags bit 13).
+
+Damage hitlag-exit DI math:
+- `ftCo_Damage_OnExitHitlag -> ftCo_8008E5A4` consumes the prior-frame input snapshot before
+  current-frame `Fighter_procUpdate` input refresh, then rotates `x8c_kb_vel` through GALE01's MSL
+  `atan2f`/`sinf`/`cosf` path and PPC fused projection/angle operations.
+- Runtime keeps this as source-order gameplay math in `src/timers.c`, not a seed lane. It applies
+  only on the source post-hitlag callback boundary (`hitlag_pre_timer != 0 && hitlag == 0`) and
+  does not change grounded xF0-owned slide velocity.
+- Source paths: `refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006D10C,Fighter_procUpdate}`,
+  `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_OnExitHitlag,ftCo_8008E5A4}`,
+  `refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Damage.s::ftCo_8008E5A4`,
+  `refs/melee/src/MSL/trigf.c::{sinf,cosf}`.
 
 ## `data/hurtbox_states/<char>.bin` (MSLHURM1 v1)
 

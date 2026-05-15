@@ -216,8 +216,38 @@ def test_specialhilanding_phys_large_ground_velocity_applies_friction_without_cl
 
         out = out_bytes.view(COMPARE_DTYPE).reshape(-1)[0]
         assert int(out["action_id"][0]) == 357
-        assert float(out["speed_ground_x_self"][0]) == pytest.approx(0.5, abs=1e-6)
-        assert float(out["speed_air_x_self"][0]) == pytest.approx(0.5, abs=1e-6)
+    assert float(out["speed_ground_x_self"][0]) == pytest.approx(0.5, abs=1e-6)
+    assert float(out["speed_air_x_self"][0]) == pytest.approx(0.5, abs=1e-6)
+
+
+@pytest.mark.integration
+def test_specialairhi_floor_jobj_ecb_bottom_crossing_enters_bound_selfplay_181413() -> None:
+    # SpecialAirHi_Coll floor contact consumes the same live JObj ECB owner as the wall/ledge
+    # SpecialHi paths. Self-play 181413 rec2560 starts with a stale ledge floor id, but the rotated
+    # JObj bottom crosses FD's main floor during this frame, so ftFox_SpecialHi_IsBound enters
+    # SpecialHiBound. The preceding frame is the negative boundary: the live bottom has not crossed
+    # the floor yet and must stay in SpecialAirHi.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+    #   ftFox_SpecialHi_RotateModel,ftFx_SpecialAirHi_Coll,ftFx_SpecialHiBound_Enter}
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_JObj,mpColl_80044628_Floor}
+    _seed_2559, ref_2559, out_2559 = _run_one_step_from_slp(
+        SELFPLAY_181413_SLP, 2559, ports=[1, 2]
+    )
+    seed_2560, ref_2560, out_2560 = _run_one_step_from_slp(SELFPLAY_181413_SLP, 2560, ports=[1, 2])
+    p = 1
+
+    assert int(out_2559["action_id"][p]) == int(ref_2559["action_id"][p]) == 356
+    assert int(out_2559["action_frame"][p]) == int(ref_2559["action_frame"][p]) == 10
+    assert int(out_2559["on_ground"][p]) == int(ref_2559["on_ground"][p]) == 0
+
+    assert int(seed_2560["action_id"][p]) == 356
+    assert int(seed_2560["ground_id"][p]) == 0
+    assert float(seed_2560["pos_y"][p]) < 0.0
+    assert int(out_2560["action_id"][p]) == int(ref_2560["action_id"][p]) == 359
+    assert int(out_2560["animation_index"][p]) == int(ref_2560["animation_index"][p]) == 312
+    assert int(out_2560["ground_id"][p]) == int(ref_2560["ground_id"][p]) == 1
+    assert float(out_2560["pos_x"][p]) == pytest.approx(float(ref_2560["pos_x"][p]), abs=1e-5)
+    assert float(out_2560["pos_y"][p]) == pytest.approx(float(ref_2560["pos_y"][p]), abs=1e-6)
 
 
 @pytest.mark.integration

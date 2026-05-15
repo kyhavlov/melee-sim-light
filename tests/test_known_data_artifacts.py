@@ -1190,6 +1190,16 @@ def test_runtime_move_tables_mslftsc1_matches_legacy_json_queries() -> None:
             expected_frame = int(charge["frame"]) if charge else None
             expected_hold = int(charge["data"]["hold_frames"]) if charge else 0
             expected_mul = float(charge["data"]["damage_mul"]) if charge else 1.0
+            if charge:
+                # GALE01 opcode 56 uses ftAction_804D82A0 (`.float 0.003906`) via fmuls, not an
+                # exact 1/256 scale. Locking the source literal here prevents both the JSON and
+                # runtime table from drifting together back to exact fixed-point division.
+                source_scale = struct.unpack("<f", struct.pack("<f", 0.003906))[0]
+                source_mul = struct.unpack(
+                    "<f",
+                    struct.pack("<f", float(350) * source_scale),
+                )[0]
+                assert expected_mul == pytest.approx(source_mul, abs=1.0e-8)
             assert msl_binding.move_tables_debug_query(
                 "grounded_smash_charge_damage_mul", char_id, action_id, 0.0, 0.0
             ) == pytest.approx(expected_mul)

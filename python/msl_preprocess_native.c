@@ -26,6 +26,7 @@
 #include "../src/hurtcaps_tables.h"
 #include "../src/input_axis.h"
 #include "../src/mpcoll_ecb_points.h"
+#include "../src/move_tables.h"
 #include "../src/shield_tilt_table.h"
 #include "../src/specialhi_pose.h"
 #include "../src/stage_item_params.h"
@@ -3143,6 +3144,146 @@ PyObject* msl_derive_kneebend_internals_py(PyObject* self, PyObject* args) {
     prev_in = true;
   }
   return Py_BuildValue("NN", out_jump, out_short);
+}
+
+static inline int32_t msl_py_rate_q16_from_float(float v) {
+  if (!(v > 0.0f) || !isfinite(v)) {
+    return 0;
+  }
+  const double q = (double)v * 65536.0;
+  if (q <= 0.0) {
+    return 0;
+  }
+  if (q >= 2147483647.0) {
+    return 2147483647;
+  }
+  return (int32_t)lrint(q);
+}
+
+PyObject* msl_derive_smash_charge_seed_lanes_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* char_obj = NULL;
+  PyObject* action_obj = NULL;
+  PyObject* anim_obj = NULL;
+  PyObject* frame_speed_obj = NULL;
+  PyObject* on_ground_obj = NULL;
+  PyObject* hitlag_obj = NULL;
+  PyObject* hitstun_obj = NULL;
+  PyObject* buttons_obj = NULL;
+  int mask_a = 0;
+  if (!PyArg_ParseTuple(args, "OOOOOOOOi", &char_obj, &action_obj, &anim_obj, &frame_speed_obj,
+                        &on_ground_obj, &hitlag_obj, &hitstun_obj, &buttons_obj, &mask_a)) {
+    return NULL;
+  }
+  PyArrayObject* chr = require_contiguous_array(char_obj, NPY_UINT8, 1, "char_id_u8");
+  PyArrayObject* action = require_contiguous_array(action_obj, NPY_UINT16, 1, "action_id_u16");
+  PyArrayObject* anim = require_contiguous_array(anim_obj, NPY_FLOAT32, 1, "anim_frame_f32");
+  PyArrayObject* frame_speed =
+      require_contiguous_array(frame_speed_obj, NPY_FLOAT32, 1, "frame_speed_mul_f32");
+  PyArrayObject* on_ground = require_contiguous_array(on_ground_obj, NPY_UINT8, 1, "on_ground_u8");
+  PyArrayObject* hitlag = require_contiguous_array(hitlag_obj, NPY_UINT16, 1, "hitlag_u16");
+  PyArrayObject* hitstun = require_contiguous_array(hitstun_obj, NPY_UINT16, 1, "hitstun_u16");
+  PyArrayObject* buttons = require_contiguous_array(buttons_obj, NPY_UINT16, 1, "buttons_held_u16");
+  if (chr == NULL || action == NULL || anim == NULL || frame_speed == NULL || on_ground == NULL ||
+      hitlag == NULL || hitstun == NULL || buttons == NULL) {
+    return NULL;
+  }
+  const npy_intp n = PyArray_SIZE(action);
+  if (PyArray_SIZE(chr) != n || PyArray_SIZE(anim) != n || PyArray_SIZE(frame_speed) != n ||
+      PyArray_SIZE(on_ground) != n || PyArray_SIZE(hitlag) != n || PyArray_SIZE(hitstun) != n ||
+      PyArray_SIZE(buttons) != n) {
+    PyErr_SetString(PyExc_ValueError,
+                    "smash-charge arrays must have matching one-dimensional length");
+    return NULL;
+  }
+  if (move_tables_init() != 0) {
+    PyErr_SetString(PyExc_RuntimeError, "move_tables_init failed for smash-charge seed lanes");
+    return NULL;
+  }
+
+  npy_intp dims[1] = {n};
+  PyArrayObject* out_state = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_UINT8, 0);
+  PyArrayObject* out_frames = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_UINT8, 0);
+  PyArrayObject* out_hold = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_UINT8, 0);
+  PyArrayObject* out_saved = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_INT32, 0);
+  if (out_state == NULL || out_frames == NULL || out_hold == NULL || out_saved == NULL) {
+    Py_XDECREF(out_state);
+    Py_XDECREF(out_frames);
+    Py_XDECREF(out_hold);
+    Py_XDECREF(out_saved);
+    return NULL;
+  }
+
+  const uint8_t* ch = (const uint8_t*)PyArray_DATA(chr);
+  const uint16_t* act = (const uint16_t*)PyArray_DATA(action);
+  const float* af = (const float*)PyArray_DATA(anim);
+  const float* fs = (const float*)PyArray_DATA(frame_speed);
+  const uint8_t* ground = (const uint8_t*)PyArray_DATA(on_ground);
+  const uint16_t* hl = (const uint16_t*)PyArray_DATA(hitlag);
+  const uint16_t* hs = (const uint16_t*)PyArray_DATA(hitstun);
+  const uint16_t* btn = (const uint16_t*)PyArray_DATA(buttons);
+  uint8_t* os = (uint8_t*)PyArray_DATA(out_state);
+  uint8_t* of = (uint8_t*)PyArray_DATA(out_frames);
+  uint8_t* oh = (uint8_t*)PyArray_DATA(out_hold);
+  int32_t* orate = (int32_t*)PyArray_DATA(out_saved);
+
+  uint8_t state = 0u;
+  uint8_t frames = 0u;
+  uint8_t hold = 0u;
+  int32_t saved_rate = 1 << 16;
+  int32_t last_nonzero_rate = 1 << 16;
+  uint16_t prev_action = 0xFFFFu;
+  float prev_anim = 0.0f;
+
+  for (npy_intp i = 0; i < n; i++) {
+    const int32_t cur_rate = msl_py_rate_q16_from_float(fs[i]);
+    if (cur_rate > 0) {
+      last_nonzero_rate = cur_rate;
+    }
+
+    uint8_t hold_frames = 0u;
+
+    if (act[i] != prev_action || ground[i] == 0u || hl[i] != 0u || hs[i] != 0u) {
+      state = 0u;
+      frames = 0u;
+      hold = 0u;
+      saved_rate = last_nonzero_rate;
+    }
+
+    const uint8_t held_a = ((btn[i] & (uint16_t)mask_a) != 0u) ? 1u : 0u;
+    if (state == 2u) {
+      if (frames < 0xFFu) {
+        frames = (uint8_t)(frames + 1u);
+      }
+      if (held_a == 0u || (hold != 0u && frames >= hold)) {
+        if (hold != 0u && frames > hold) {
+          frames = hold;
+        }
+        state = 3u;
+      }
+    } else if (state == 0u) {
+      const float prev_frame = (act[i] == prev_action) ? prev_anim : af[i] - fs[i];
+      if (ground[i] != 0u && hl[i] == 0u && hs[i] == 0u && held_a != 0u &&
+          move_tables_grounded_smash_charge_crossed(ch[i], act[i], prev_frame, af[i],
+                                                    &hold_frames)) {
+        state = 2u;
+        frames = 0u;
+        hold = hold_frames;
+        saved_rate = (cur_rate > 0) ? cur_rate : last_nonzero_rate;
+      }
+    }
+
+    if (state == 2u || state == 3u) {
+      os[i] = state;
+      of[i] = frames;
+      oh[i] = hold;
+      orate[i] = saved_rate;
+    }
+    prev_action = act[i];
+    prev_anim = af[i];
+  }
+
+  return Py_BuildValue("NNNN", out_state, out_frames, out_hold, out_saved);
 }
 
 PyObject* msl_derive_magnify_damage_counter_x1910_py(PyObject* self, PyObject* args) {

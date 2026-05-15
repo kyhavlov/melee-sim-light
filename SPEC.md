@@ -2114,6 +2114,12 @@ Grounded motion-entry timing notes:
   `refs/melee/src/melee/ft/ft_0DF0.c::{ftCo_800DEE84,ftCo_800DF0D0}`, and
   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_CalcKnockback`; data:
   `data/moves/{fox,falco}.json` and `data/common/ft_common_data.json::kb_smashcharge_mul`.
+- Released grounded-smash HitCapsule damage uses the attacker-side `smash_attrs` release state.
+  `ftCo_800DF0D0` leaves `SmashState_Release` and the held-frame count live after A release;
+  `ftColl_8007ABD0` calls `ftCo_800DEEB8` before writing `HitCapsule.damage`. One-step reseeds
+  therefore carry `smash_charge_state`, held frames, hold max, and saved anim rate from the
+  prefix-visible charge episode, derived in native preprocessing from MSLFTSC1 `start_smash_charge`
+  and held-A history. This is separate from defender-side `kb_smashcharge_active`.
 - Turn post-flip facing is owned by `ftCo_Turn_Anim_Inner`: once `frames_to_turn` has expired and
   `has_turned` is set, the first steady post-flip Turn row may need facing reconstructed from the
   decomp flip even on smash-turn rows whose `x8` latch still owns later Dash admission. The repair
@@ -2979,10 +2985,16 @@ Fox/Falco special-owner split (2026-04-17):
     DownDamageU and DownDamageD also share the common `allow_sdi` / `ftCo_Damage_OnEveryHitlag`
     owner installed by `ftCo_8009F184 -> ftCo_8008DCE0`: active hitlag can consume the same
     timer-window SDI displacement, and hitlag exit consumes the same ASDI/DI lane before
-    `ftCo_8008E5A4` rotates knockback. PTE `7598/7599` locks the DownDamageU parity while the
-    preceding no-window row stays frozen.
+    `ftCo_8008E5A4` rotates knockback. The hitlag-exit DI path uses the GALE01 MSL
+    `atan2f`/`sinf`/`cosf` approximations and PPC fused multiply-add/subtract ordering for
+    `ftCo_8008E5A4`, not host libm trig, because those ULP differences carry into rollout X/Y
+    position drift after long DamageFly streaks. PTE `7598/7599` locks the DownDamageU parity while
+    the preceding no-window row stays frozen; Game_20260514T181413 `1423` locks the prior-input
+    DamageFlyN DI math.
     Sources: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Phys`,
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_8008DCE0,ftCo_Damage_OnEveryHitlag,ftCo_Damage_OnExitHitlag,ftCo_8008E5A4}`,
+    `refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Damage.s::ftCo_8008E5A4`,
+    `refs/melee/src/MSL/trigf.c::{sinf,cosf}`,
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::{ftCo_DownDamage_Phys,ftCo_DownDamage_Coll}`,
     `refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4`.
   - Slippi records `last_hit_by` in the raw controller-port domain. The replay seed now carries
@@ -3231,14 +3243,55 @@ Fox/Falco special-owner split (2026-04-17):
       `data/characters/{fox,falco}.json::side_special_ground_entry_vel_mul` and applies it only
       on grounded Side-B entry; aerial `ftCo_SpecialAir -> ftFx_SpecialAirSStart_Enter` still
       divides self velocity by the Side-B x28 attr without the grounded xB8 damping.
+      When the entry source is Dash, `ftCo_Dash_IASA` continues after the successful
+      `ftCo_SpecialS_CheckInput` call and applies its terminal `p_ftCommonData->x54` ground-velocity
+      scalar before the entered SpecialSStart physics callback runs. That Dash-only callback tail
+      is modeled separately from Wait/Run grounded Side-B entry.
     - Replay-real lock: `FavorableSuperficialPig.msl:1613` covers Run -> SpecialSStart/Main/End;
       without xB8 damping the rollout carries a large positive X residual through the whole
       Illusion/Phantasm sequence.
+      `Game_20260514T181413.msl:1532` covers Dash -> SpecialSStart clearing the residual Dash
+      velocity through the Dash-IASA terminal scalar plus SpecialSStart friction.
     Sources: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialS.c::{
     ftCo_SpecialS_CheckInput,doEnter}`,
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA`,
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput`,
     `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
     ftFx_SpecialSStart_Enter,ftFx_SpecialAirSStart_Enter}`.
+  - Self-play 181413 rollout continuation owners:
+    - CatchWait -> ThrowF/B/Hi entry installs the thrown accessory callback during IASA, then the
+      thrower's Phys callback moves the owner root before `Fighter_CallAcessoryCallbacks_8006C624`
+      places the victim. Runtime runs post-Phys placement for non-low Thrown* entry rows while
+      keeping the separate low-throw handoff split.
+    - Basic Landing entered from a late AttackAir keeps the raw `fp+0x2218` allow-interrupt bit
+      already set by `ftAction_80071950`; `ftCo_Landing_Enter_Basic` sets the Landing mv flag but
+      does not clear the raw bit before Slippi serializes `state_flags[0]`.
+    - Terminal DamageFly/DamageFall IASA can publish Fall on the same row hitstun clears, but a
+      newly enabled BODY HitCapsule from an already-running same-action attack cannot consume that
+      post-IASA target until the next collision frame. Same-frame action entries such as
+      Squat -> SpecialLwStart stay on the ordinary BODY path; already-active hitboxes and the next
+      Fall row remain ordinary BODY contacts.
+    - SpecialAirHi floor contact uses the same live JObj ECB owner as the retained wall/ledge
+      SpecialHi paths: `mpColl_LoadECB_JObj` samples collision joints after
+      `ftFox_SpecialHi_RotateModel` mutates FtPart_XRotN, and `mpColl_80044628_Floor` consumes the
+      rotated bottom sweep. A stale carried floor id does not suppress a real live bottom crossing.
+    - `Game_20260514T181413.msl:{531,1522,2361,2559,2560}` cover the retained replay-real
+      positives and adjacent controls. The remaining `rec2463+` percent residual is a larger
+      live `ifMagnify`/camera-target owner gap; it is not classified as exact RNG.
+    Sources: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{
+    ftCo_800DD398,ftCo_ThrowF_Phys}`,
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::{ftCo_800DE3FC,ftCo_800DE508}`,
+    `refs/melee/src/melee/ft/ftaction.c::{ftAction_80071950,ftAction_8007121C}`,
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll`,
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::{
+    ftCo_Landing_Enter,ftCo_Landing_Enter_Basic}`,
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+    ftCo_8008F744,ftCo_DamageFly_IASA}`,
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA`,
+    `refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}`,
+    `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+    ftFox_SpecialHi_RotateModel,ftFx_SpecialAirHi_Coll,ftFx_SpecialHiBound_Enter}`,
+    `refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_JObj,mpColl_80044628_Floor}`.
   - Blaster gun lifetime runtime slice:
     - `ftFx_SpecialNEnd_Anim` clears `fp->fv.fx.x222C_blasterGObj` before leaving
       SpecialNEnd through `ft_8008A2BC`; the gun article's
@@ -5886,7 +5939,8 @@ BODY collision-space residual split and rejected seed bridge:
   GuardSetOff ShieldDesc while hb0/hb2 still miss.
 - Released grounded smash attacks keep the smash-charge state through the hitbox release frame.
   `ftAction_80073008` extracts the start-smash-charge scalar from the action script as the low
-  16-bit argument multiplied by `0.00390625`, while `ftCo_800DEF38/ftCo_800DF0D0` preserve the
+  16-bit argument multiplied by the single-precision `ftAction_804D82A0` literal
+  (`.float 0.003906`), while `ftCo_800DEF38/ftCo_800DF0D0` preserve the
   held-frame count until release and `ftColl_8007ABD0` scales the released HitCapsule damage.
   This is attacker release-state ownership, not defender-side `kb_smashcharge_mul` ownership.
 - Grounded DownDamage with remaining hidden x0 on animation end enters DownWait through

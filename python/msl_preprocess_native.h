@@ -39,6 +39,7 @@ PyObject* msl_derive_damage_post_hitlag_cb_kind_py(PyObject* self, PyObject* arg
 PyObject* msl_derive_guard_tilt_state_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_shine_release_state_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_kneebend_internals_py(PyObject* self, PyObject* args);
+PyObject* msl_derive_smash_charge_seed_lanes_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_magnify_damage_counter_x1910_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_colanim_internals_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_capture_mash_buttons_pressed_py(PyObject* self, PyObject* args);

@@ -7,6 +7,7 @@
 
 #include "action.h"
 #include "action_ids.h"
+#include "anim_pose.h"
 #include "anim_table.h"
 #include "char_params.h"
 #include "coll_env_flags.h"
@@ -17,6 +18,8 @@
 #include "mpcoll_wall_ceil.h"
 #include "move_tables.h"
 #include "msl_math.h"
+#include "mtx34.h"
+#include "specialhi_pose.h"
 #include "state_flags.h"
 #include "stage_collision.h"
 #include "input_axis.h"
@@ -68,6 +71,188 @@ static const float k_floor_ed5c_extend = 1.0f;
 // floor-loss result at an intermediate substep instead of at the already-integrated final root.
 // refs/melee/src/melee/mp/mpcoll.c::mpColl_80043754
 static const float k_mpcoll_substep_max_delta = 6.0f;
+
+static inline uint8_t mpcoll_ground_specialhi_launch_uses_jobj_ecb(uint8_t char_id,
+                                                                   uint16_t action_id) {
+  if (char_id != 1u && char_id != 22u) {
+    return 0u;
+  }
+  return (action_id == (uint16_t)MSL_ACT_FX_SPECIAL_HI ||
+          action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI)
+             ? 1u
+             : 0u;
+}
+
+static inline uint8_t mpcoll_ground_specialhi_rotate_collision_point_xrotn(
+    const MslBatch* batch, size_t idx, uint8_t char_id, uint16_t msid, uint16_t frame_u16,
+    uint16_t part_id, float model_scale, float* io_x, float* io_y, float* io_z) {
+  if (batch == NULL || io_x == NULL || io_y == NULL || io_z == NULL ||
+      !msl_anim_part_under_xrotn(char_id, part_id)) {
+    return 0u;
+  }
+  float rotate_model = 0.0f;
+  if (!msl_specialhi_rotate_model_get_or_velocity(batch, idx, &rotate_model)) {
+    return 0u;
+  }
+
+  float m[12];
+  if (anim_pose_get_collision_matrix(batch, idx, msid, frame_u16, 2u, m) != 0) {
+    return 0u;
+  }
+  float ax0 = 0.0f, ay0 = 0.0f, az0 = 0.0f;
+  float ax1 = 0.0f, ay1 = 0.0f, az1 = 0.0f;
+  const float origin[3] = {0.0f, 0.0f, 0.0f};
+  const float local_x[3] = {1.0f, 0.0f, 0.0f};
+  msl_mtx34_mul_point(m, origin, &ax0, &ay0, &az0);
+  msl_mtx34_mul_point(m, local_x, &ax1, &ay1, &az1);
+  ax0 *= model_scale;
+  ay0 *= model_scale;
+  az0 *= model_scale;
+  ax1 *= model_scale;
+  ay1 *= model_scale;
+  az1 *= model_scale;
+
+  float axis_x = ax1 - ax0;
+  float axis_y = ay1 - ay0;
+  float axis_z = az1 - az0;
+  const float axis_len = sqrtf(axis_x * axis_x + axis_y * axis_y + axis_z * axis_z);
+  if (!(axis_len > 0.0f)) {
+    return 0u;
+  }
+  axis_x /= axis_len;
+  axis_y /= axis_len;
+  axis_z /= axis_len;
+
+  const float angle = msl_specialhi_xrotn_angle_from_rotate_model(rotate_model);
+  const float px = *io_x - ax0;
+  const float py = *io_y - ay0;
+  const float pz = *io_z - az0;
+  const float c = cosf(angle);
+  const float s = sinf(angle);
+  const float dot = axis_x * px + axis_y * py + axis_z * pz;
+  const float cross_x = axis_y * pz - axis_z * py;
+  const float cross_y = axis_z * px - axis_x * pz;
+  const float cross_z = axis_x * py - axis_y * px;
+  *io_x = ax0 + (px * c) + (cross_x * s) + (axis_x * dot * (1.0f - c));
+  *io_y = ay0 + (py * c) + (cross_y * s) + (axis_y * dot * (1.0f - c));
+  *io_z = az0 + (pz * c) + (cross_z * s) + (axis_z * dot * (1.0f - c));
+  return 1u;
+}
+
+static inline uint8_t mpcoll_ground_try_sample_specialhi_jobj_ecb(
+    MslEcbWorldPoints* out, const MslBatch* batch, size_t idx, uint8_t char_id, uint32_t anim,
+    uint16_t action_id, uint16_t frame_u16, float facing_dir, float pos_x, float pos_y) {
+  if (out == NULL || batch == NULL || !(anim <= 0xFFFFu) ||
+      !mpcoll_ground_specialhi_launch_uses_jobj_ecb(char_id, action_id)) {
+    return 0u;
+  }
+
+  const MslCharParams* ch = msl_char_params(char_id);
+  if (ch == NULL || ch->ecb_joint_count == 0u) {
+    return 0u;
+  }
+  const uint16_t msid = (uint16_t)anim;
+  const float model_scaling =
+      (isfinite(ch->model_scaling) && ch->model_scaling > 0.0f) ? ch->model_scaling : 1.0f;
+  const float model_scale = batch->state.fighter_scale_y[idx] * model_scaling;
+
+  float min_x = 0.0f;
+  float max_x = 0.0f;
+  float min_y = 0.0f;
+  float max_y = 0.0f;
+  uint8_t have = 0u;
+  for (uint16_t pi = 0; pi < ch->ecb_joint_count; pi++) {
+    const uint16_t part_id = ch->ecb_joints[pi];
+    float m[12];
+    if (anim_pose_get_collision_matrix(batch, idx, msid, frame_u16, part_id, m) != 0) {
+      return 0u;
+    }
+    const float origin[3] = {0.0f, 0.0f, 0.0f};
+    float x = 0.0f, y = 0.0f, z = 0.0f;
+    msl_mtx34_mul_point(m, origin, &x, &y, &z);
+    x *= model_scale;
+    y *= model_scale;
+    z *= model_scale;
+    (void)mpcoll_ground_specialhi_rotate_collision_point_xrotn(batch, idx, char_id, msid, frame_u16,
+                                                               part_id, model_scale, &x, &y, &z);
+
+    // SpecialHi floor collision uses the same live JObj ECB source as the retained wall/ledge
+    // owners: mpColl_LoadECB_JObj reads collision joints after ftFox_SpecialHi_RotateModel mutates
+    // FtPart_XRotN, then normalizes the ECB before mpColl_80044628_Floor consumes the bottom sweep.
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+    //   ftFox_SpecialHi_RotateModel,ftFx_SpecialAirHi_Coll}
+    // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_JObj,mpColl_80044628_Floor}
+    // refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
+    const float rel_x = facing_dir * z;
+    const float rel_y = y;
+    if (!have) {
+      min_x = max_x = rel_x;
+      min_y = max_y = rel_y;
+      have = 1u;
+    } else {
+      if (rel_x < min_x) {
+        min_x = rel_x;
+      }
+      if (rel_x > max_x) {
+        max_x = rel_x;
+      }
+      if (rel_y < min_y) {
+        min_y = rel_y;
+      }
+      if (rel_y > max_y) {
+        max_y = rel_y;
+      }
+    }
+  }
+  if (!have) {
+    return 0u;
+  }
+
+  // `mpColl_LoadECB_JObj` normalizes live JObj ECB points before floor checks. The current
+  // simulator only extracts the collision JObj origins for this SpecialHi floor path, so keep the
+  // normalized horizontal envelope bounded by the same mpColl-shaped source constants used by the
+  // retained wall/ledge owner:
+  // - +/-2.0f is mpColl's minimum side-span unit for narrowed ECB envelopes (4.0f full width).
+  // - 10.0f * fighter scale is the character-scale minimum body width used by the SpecialHi
+  //   JObj-ECB bridge when collision joints collapse during XRotN rotation.
+  // These are source-geometry clamps for the callback-local ECB, not replay-row tolerances.
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_JObj,mpColl_80042384}
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFox_SpecialHi_RotateModel
+  const float min_ecb_width = fmaxf(4.0f, 10.0f * batch->state.fighter_scale_y[idx]);
+  const float ecb_width = fabsf(max_x - min_x);
+  if (ecb_width < min_ecb_width) {
+    const float half_width = 0.5f * min_ecb_width;
+    min_x = -half_width;
+    max_x = half_width;
+  }
+  // Keep the final side extents at least +/-2.0f for the same mpColl minimum-width reason above.
+  if (max_x < 2.0f) {
+    max_x = 2.0f;
+  }
+  if (min_x > -2.0f) {
+    min_x = -2.0f;
+  }
+  if (min_y < 0.0f) {
+    min_y = 0.0f;
+  }
+  const float side_rel_y = ch->ecb_side_y_offset + (0.5f * (min_y + max_y));
+
+  out->left_rel_x = min_x;
+  out->right_rel_x = max_x;
+  out->bottom_rel_y = min_y;
+  out->top_rel_y = max_y;
+  out->side_rel_y = side_rel_y;
+  out->frame_u16 = frame_u16;
+  out->bottom_x = pos_x;
+  out->bottom_y = pos_y + min_y;
+  out->top_x = pos_x;
+  out->top_y = pos_y + max_y;
+  out->left_x = pos_x + min_x;
+  out->left_y = pos_y + side_rel_y;
+  out->right_x = pos_x + max_x;
+  out->right_y = pos_y + side_rel_y;
+  return 1u;
+}
 
 // Decomp: mpColl floor-edge helpers use +/-1 offsets from the floor endpoint when probing for
 // blocking walls before setting Collide_{Left,Right}Edge.
@@ -3838,8 +4023,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
 
       float cur_bottom_x = cur_bot.x;
       float cur_bottom_y = cur_bot.y;
-      const float prev_bottom_x = prev_bot.x;
-      const float prev_bottom_y = prev_bot.y;
+      float prev_bottom_x = prev_bot.x;
+      float prev_bottom_y = prev_bot.y;
       MslEcbWorldPoints cur_ecb_points = desired_ecb_points;
       MslEcbWorldPoints prev_ecb_points = {0};
       if (use_hidden_ecb_lifetime && have_state_cur_ecb) {
@@ -3848,7 +4033,37 @@ void mpcoll_ground_apply(MslBatch* batch) {
         msl_ecb_world_points_sample(&prev_ecb_points, char_id, anim, ecb_frame_prev,
                                     facing_dir_for_ecb, prev_x, prev_y, was_grounded);
       }
-      const float prev_side_mid_y = prev_y + (0.5f * (prev_ecb_points.top_rel_y + prev_ecb_rel));
+      if (!use_hidden_ecb_lifetime && !lock_bottom_to_zero &&
+          mpcoll_ground_specialhi_launch_uses_jobj_ecb(char_id, action_id)) {
+        MslEcbWorldPoints specialhi_cur_ecb = cur_ecb_points;
+        MslEcbWorldPoints specialhi_prev_ecb = prev_ecb_points;
+        const uint8_t have_cur_specialhi_ecb = mpcoll_ground_try_sample_specialhi_jobj_ecb(
+            &specialhi_cur_ecb, batch, idx, char_id, anim, action_id, ecb_frame, facing_dir_for_ecb,
+            x, y);
+        const uint8_t have_prev_specialhi_ecb = mpcoll_ground_try_sample_specialhi_jobj_ecb(
+            &specialhi_prev_ecb, batch, idx, char_id, anim, action_id, ecb_frame_prev,
+            facing_dir_for_ecb, prev_x, prev_y);
+        if (have_cur_specialhi_ecb) {
+          cur_ecb_points = specialhi_cur_ecb;
+          cur_bottom_x = specialhi_cur_ecb.bottom_x;
+          cur_bottom_y = specialhi_cur_ecb.bottom_y;
+          cur_bot.x = specialhi_cur_ecb.bottom_x;
+          cur_bot.y = specialhi_cur_ecb.bottom_y;
+          cur_bot.rel_y = specialhi_cur_ecb.bottom_rel_y;
+          cur_bot.frame_u16 = specialhi_cur_ecb.frame_u16;
+        }
+        if (have_prev_specialhi_ecb) {
+          prev_ecb_points = specialhi_prev_ecb;
+          prev_bottom_x = specialhi_prev_ecb.bottom_x;
+          prev_bottom_y = specialhi_prev_ecb.bottom_y;
+          prev_bot.x = specialhi_prev_ecb.bottom_x;
+          prev_bot.y = specialhi_prev_ecb.bottom_y;
+          prev_bot.rel_y = specialhi_prev_ecb.bottom_rel_y;
+          prev_bot.frame_u16 = specialhi_prev_ecb.frame_u16;
+        }
+      }
+      const float prev_side_mid_y =
+          prev_y + (0.5f * (prev_ecb_points.top_rel_y + prev_ecb_points.bottom_rel_y));
 
       // Collision env flags (subset) for Parity Project #2 (ledge grab mask parity).
       // Decomp: CollData carries env_flags and prev_env_flags across frames.
@@ -8080,6 +8295,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
           raw_current_floor_line_idx >= 0 && msl_char_params(char_id) != NULL &&
           batch->state.action_frame[idx] <=
               (int16_t)msl_char_params(char_id)->firefox_bound_delay_frames &&
+          !(prev_bottom_y > (contact_y + k_floor_y_bias) &&
+            cur_bottom_y <= (contact_y + k_floor_y_bias)) &&
           !stage_collision_floor_line_is_platform(stage_id, seed_ground_id) &&
           !floor_x_within_line_bounds(batch, bi, g, raw_current_floor_line_idx, prev_x) &&
           !stage_collision_floor_line_is_platform(stage_id, ground_id)) {

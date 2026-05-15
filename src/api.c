@@ -1453,10 +1453,29 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       }
       batch->state.ground_friction_mul[idx] = ground_friction_mul;
       batch->state.kb_smashcharge_active[idx] = seed->kb_smashcharge_active[p] ? 1u : 0u;
-      batch->state.smash_charge_state[idx] = 0u;
-      batch->state.smash_charge_frames[idx] = 0u;
-      batch->state.smash_charge_hold_frames_max[idx] = 0u;
-      batch->state.smash_charge_saved_rate_fp_q16_16[idx] = 0;
+      const uint8_t smash_state = seed->smash_charge_state[p];
+      const uint8_t smash_hold_frames_max = seed->smash_charge_hold_frames_max[p];
+      if ((smash_state == 2u || smash_state == 3u) && smash_hold_frames_max != 0u) {
+        int32_t smash_saved_rate = seed->smash_charge_saved_rate_fp_q16_16[p];
+        if (smash_saved_rate <= 0) {
+          // API/reseed guardrail: source `ftCo_800DEF38` saves a positive anim rate before
+          // entering SmashState_Charging/Release. Validation preprocessing derives that positive
+          // Q16.16 value from prefix-visible charge state, but external seed callers can supply
+          // arbitrary bytes. Keep impossible saved rates from restoring a negative/zero frame
+          // speed on release; fall back to the default 1.0 rate used by normal motion-state entry.
+          // refs/melee/src/melee/ft/ft_0DF0.c::{ftCo_800DEF38,ftCo_800DF0D0}
+          smash_saved_rate = INT32_C(1) << 16;
+        }
+        batch->state.smash_charge_state[idx] = smash_state;
+        batch->state.smash_charge_frames[idx] = seed->smash_charge_frames[p];
+        batch->state.smash_charge_hold_frames_max[idx] = smash_hold_frames_max;
+        batch->state.smash_charge_saved_rate_fp_q16_16[idx] = smash_saved_rate;
+      } else {
+        batch->state.smash_charge_state[idx] = 0u;
+        batch->state.smash_charge_frames[idx] = 0u;
+        batch->state.smash_charge_hold_frames_max[idx] = 0u;
+        batch->state.smash_charge_saved_rate_fp_q16_16[idx] = 0;
+      }
       batch->state.on_ground[idx] = seed->on_ground[p] ? 1 : 0;
       batch->state.frame_start_on_ground[idx] = batch->state.on_ground[idx];
       batch->state.ground_contact_x[idx] = 0.0f;

@@ -17,17 +17,22 @@ def _f32(v: float) -> float:
     return struct.unpack("<f", struct.pack("<f", float(v)))[0]
 
 
-# ftAction_8007121C / set_hitbox_scale do not use exact 1/256. GALE01 loads the
-# single-precision sdata2 literal ftAction_804D82A0 (`.float 0.003906`) and multiplies with
-# `fmuls`, so hitbox sizes/offsets are slightly smaller than exact /256 values. This matters at
-# `ftColl_80076ED8` phantom-boundary rows where `HitCapsule.coll_distance` is compared to x7A8.
+# Fighter action fixed-point payloads do not use exact 1/256. GALE01 loads the single-precision
+# sdata2 literal ftAction_804D82A0 (`.float 0.003906`) and multiplies with `fmuls`, so decoded
+# hitbox sizes/offsets and smash-charge damage multipliers are slightly smaller than exact /256
+# values. This matters at `ftColl_80076ED8` phantom-boundary rows and at charged-smash
+# `ftCo_800DEEB8` damage/knockback rows.
 # refs/melee/build/GALE01/asm/melee/ft/ftaction.s::ftAction_804D82A0
-# refs/melee/src/melee/ft/ftaction.c::{ftAction_8007121C,ftAction_8007169C}
-_FTACTION_HITBOX_SCALE = _f32(0.003906)
+# refs/melee/src/melee/ft/ftaction.c::{ftAction_8007121C,ftAction_8007169C,ftAction_80073008}
+_FTACTION_FIXED_POINT_SCALE = _f32(0.003906)
 
 
 def _ftaction_scaled_i16(v: int) -> float:
-    return _f32(float(v) * _FTACTION_HITBOX_SCALE)
+    return _f32(float(v) * _FTACTION_FIXED_POINT_SCALE)
+
+
+def _ftaction_scaled_u16(v: int) -> float:
+    return _f32(float(v & 0xFFFF) * _FTACTION_FIXED_POINT_SCALE)
 
 
 def _s16(v: int) -> int:
@@ -518,14 +523,14 @@ def _parse_subaction_events(
                 #
                 # GALE01 asm decodes:
                 # - hold_frames: low 10 bits of the upper halfword (word0 bits 16..25)
-                # - damage_mul : lower 16 bits of word0 scaled by 1/256.0
+                # - damage_mul : lower 16 bits of word0 scaled by ftAction_804D82A0
                 # - color_anim : top byte of word1
                 if n_words < 2:
                     pc += 4 * n_words
                     continue
                 w1 = _u32_be(archive.buf, pc + 4)
                 hold_frames = (w0 >> 16) & 0x3FF
-                damage_mul = float(w0 & 0xFFFF) * (1.0 / 256.0)
+                damage_mul = _ftaction_scaled_u16(w0)
                 color_anim = (w1 >> 24) & 0xFF
                 out.append(
                     Event(

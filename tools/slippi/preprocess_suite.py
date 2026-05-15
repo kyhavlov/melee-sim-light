@@ -19,7 +19,7 @@ from tools.eval.dataset import HEADER_DTYPE, MAGIC, SAMPLE_DTYPE, SEED_DTYPE
 # v9 invalidates same-record-size datasets generated before Catch-family severe-airborne
 # DamageFlyRoll gate rows were included in the Fighter_8006CDA4 pre-gate consume-count seed lane.
 # Record-size checks alone cannot detect this semantic.
-_CACHE_VERSION = 10
+_CACHE_VERSION = 11
 _SOURCE_INPUT_PY_TREES = ("tools/slippi",)
 _SOURCE_INPUT_FILES = ("tools/eval/dataset.py", "python/msl_preprocess_native.c")
 

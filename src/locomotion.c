@@ -98,6 +98,31 @@ static inline void grounded_attack_carry_allow_interrupt(MslBatch* batch, size_t
   batch->state.state_flags[flags_i] |= (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
 }
 
+static inline void landing_entry_carry_raw_allow_interrupt_from_source(MslBatch* batch, size_t idx,
+                                                                       uint16_t source_action,
+                                                                       uint16_t land_action) {
+  if (batch == NULL || land_action != (uint16_t)MSL_ACT_LANDING) {
+    return;
+  }
+  if (move_tables_attackair_allow_interrupt(batch->state.char_id[idx], source_action,
+                                            batch->state.anim_frame_f32[idx]) == 0u) {
+    return;
+  }
+  // Raw fp+0x2218 bit0 carry on basic Landing entry:
+  // - AttackAir scripts set fp->allow_interrupt through ftAction_80071950.
+  // - ftCo_AttackAir_Coll can enter ftCo_Landing_Enter_Basic on auto-cancel floor contact.
+  // - ftCo_Landing_Enter_Basic sets mv.co.landing.allow_interrupt=true, but does not clear the
+  //   already-live raw fp->allow_interrupt bit before Slippi serializes state_flags[0].
+  // refs/melee/src/melee/ft/ftaction.c::ftAction_80071950
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::{
+  //   ftCo_Landing_Enter,ftCo_Landing_Enter_Basic}
+  enum { MSL_STATE_FLAGS_2218_INDEX = 0 };
+  enum { MSL_STATE_FLAG_2218_ALLOW_INTERRUPT = 0x80 };
+  const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX;
+  batch->state.state_flags[flags_i] |= (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
+}
+
 static inline uint8_t action_preserves_cliff_ledge_floor_owner(uint16_t action_id) {
   switch (action_id) {
     case MSL_ACT_CLIFF_CATCH:
@@ -3332,6 +3357,7 @@ static inline void enter_landing_action_from_air(MslBatch* batch, const MslCharP
 
   batch->state.action_id[idx] = land_act;
   batch->state.animation_index[idx] = submotion_for_action(land_act);
+  landing_entry_carry_raw_allow_interrupt_from_source(batch, idx, source_act, land_act);
   if (land_act == (uint16_t)MSL_ACT_LANDING_FALL_SPECIAL) {
     // Decomp: LandingFallSpecial carries mv.co.landing.allow_interrupt from its entry helper.
     // EscapeAir_Coll passes false; FallSpecial_Coll forwards the FallSpecial source flag. This

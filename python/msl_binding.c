@@ -6499,6 +6499,9 @@ static PyMethodDef methods[] = {
     {"derive_kneebend_internals", msl_derive_kneebend_internals_py, METH_VARARGS,
      "derive_kneebend_internals(action, buttons, pressed, stick_y, cstick_y, tilt_y, thresholds, "
      "actions...) -> (jump_input, is_short_hop)"},
+    {"derive_smash_charge_seed_lanes", msl_derive_smash_charge_seed_lanes_py, METH_VARARGS,
+     "derive_smash_charge_seed_lanes(char, action, anim, frame_speed, ground, hitlag, hitstun, "
+     "buttons, a_mask) -> (state,frames,hold,saved_rate_q16)"},
     {"derive_magnify_damage_counter_x1910", msl_derive_magnify_damage_counter_x1910_py,
      METH_VARARGS,
      "derive_magnify_damage_counter_x1910(action, flags, inside, percent, optional contact lanes, "

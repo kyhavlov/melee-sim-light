@@ -338,6 +338,44 @@ static inline uint8_t combat_attackairlw_invincible_contact_rejects_body_hitlag(
   return 1u;
 }
 
+static inline uint8_t combat_damagefly_terminal_fall_entry_blocks_enable_edge_body(
+    const MslBatch* batch, size_t hb_i, size_t a_idx, size_t d_idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  if (batch->state.hitbox_enable_edge[hb_i] == 0u ||
+      batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_FALL || batch->state.hitlag[d_idx] != 0u ||
+      batch->state.hitstun[d_idx] != 0u) {
+    return 0u;
+  }
+  if (batch->state.prev_action_id[a_idx] != batch->state.action_id[a_idx]) {
+    return 0u;
+  }
+
+  const uint16_t prev = batch->state.prev_action_id[d_idx];
+  if (prev != (uint16_t)MSL_ACT_DAMAGE_FALL &&
+      !msl_motion_state_common_class_has(prev, MSL_MS_CLASS_DAMAGE_FLY)) {
+    return 0u;
+  }
+
+  // DamageFly/DamageFall terminal IASA publishes Fall on the same frame that hitstun/x221C_b6
+  // clears, but a newly-enabled BODY HitCapsule from an already-running attack does not get to
+  // consume that post-IASA target until the next collision frame. Same-frame action entries such as
+  // Squat -> SpecialLwStart create their own capsule after the action callback runs and stay on the
+  // ordinary BODY path. This keeps the source ordering local to the same-action create edge;
+  // already-active hitboxes and the next-frame Fall row are unaffected.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+  //   ftCo_8008F744,ftCo_DamageFly_IASA}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
+  // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}
+  // MSLMSO01 class coverage: `MSL_MS_CLASS_DAMAGE_FLY` owns the DamageFly* side of this terminal
+  // IASA family. DamageFall is included explicitly because the source terminal path is the common
+  // `ftCo_DamageFall_IASA` handoff, while MSLMSO's class bits describe callback ownership and do
+  // not collapse DamageFall into the DamageFly class.
+  return 1u;
+}
+
 static inline uint8_t combat_damageflylw_dynamic_high_part_rejects_body_contact(
     const MslBatch* batch, size_t a_idx, size_t d_idx, uint8_t hb_id, const MslHurtCap* cap) {
   if (batch == NULL || cap == NULL) {
@@ -8001,6 +8039,10 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
                                   ? NULL
                                   : &defender_caps[cap_id],
                               expected_body_hitlag)) {
+            overlaps = 0u;
+          }
+          if (overlaps && combat_damagefly_terminal_fall_entry_blocks_enable_edge_body(
+                              batch, hb_i, a_idx, d_idx)) {
             overlaps = 0u;
           }
           if (!overlaps && !lbcoll_overlap_evaluated) {

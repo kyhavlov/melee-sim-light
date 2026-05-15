@@ -163,7 +163,9 @@ def test_manual_charged_upsmash_releases_scaled_damage() -> None:
     falco = 1
     assert float(history[390]["percent"][falco]) == pytest.approx(28.14, abs=1e-4)
     assert int(history[397]["action_id"][falco]) == 90  # DamageFlyTop.
-    assert float(history[397]["percent"][falco]) == pytest.approx(52.749374, abs=1e-4)
+    # The retained smash-release owner uses the source `ftAction_804D82A0` single-precision
+    # 0.003906 literal rather than the rounded 1/256 approximation previously assumed here.
+    assert float(history[397]["percent"][falco]) == pytest.approx(52.747799, abs=1e-4)
     assert int(history[397]["hitstun"][falco]) >= 67
 
 

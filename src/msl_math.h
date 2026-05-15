@@ -1,5 +1,6 @@
 #pragma once
 
+#include <math.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -167,6 +168,94 @@ static inline float msl_melee_atan2f(float y, float x) {
     return msl_melee_atanf(y / x);
   }
   return msl_float_from_bits(y_sign + UINT32_C(0x3FC90FDB));
+}
+
+// GALE01 single-precision sin/cos approximations used by MSL `trigf.c`.
+//
+// Source:
+// - refs/melee/src/MSL/trigf.c::{sinf,cosf}
+// - refs/melee/src/MSL/math_data.c::{__sincos_on_quadrant,__sincos_poly}
+//
+// These helpers are intentionally local to source-exact gameplay paths. Host libm can differ by a
+// few ULPs, and those differences accumulate during long rollout knockback/position streaks.
+static inline int msl_melee_trig_quadrant(float x) {
+  const float z = (2.0f / MSL_PI_F) * x;
+  return (msl_float_bits(x) & UINT32_C(0x80000000)) ? (int)(z - 0.5f) : (int)(z + 0.5f);
+}
+
+static inline float msl_melee_trig_reduced(float x, int n) {
+  static const float k_four_over_pi_m1[] = {
+      0.25f,
+      0.0232393741608f,
+      1.70555722434e-7f,
+      1.86736494323e-11f,
+  };
+  return x - (float)n * 2.0f + k_four_over_pi_m1[0] * x + k_four_over_pi_m1[1] * x +
+         k_four_over_pi_m1[2] * x + k_four_over_pi_m1[3] * x;
+}
+
+static inline float msl_melee_sinf(float x) {
+  static const float k_on_quadrant[] = {0.0f, 1.0f, 1.0f, 0.0f, 0.0f, -1.0f, -1.0f, 0.0f};
+  static const float k_poly[] = {
+      0.0000035287617f, 0.0000003089747f, -0.0003259365f,
+      -0.00003657235f,  0.015854323f,     0.0024903931f,
+      -0.30842513f,     -0.08074551f,     1.0f,
+      0.7853982f,
+  };
+
+  int n = msl_melee_trig_quadrant(x);
+  const float y = msl_melee_trig_reduced(x, n);
+  n &= 3;
+
+  if (fabsf(y) < 3.45266983e-4f) {
+    n <<= 1;
+    return k_on_quadrant[n] + (k_on_quadrant[n + 1] * y * k_poly[9]);
+  }
+
+  const float ysq = y * y;
+  float z;
+  if (n & 1) {
+    n <<= 1;
+    z = (((k_poly[0] * ysq + k_poly[2]) * ysq + k_poly[4]) * ysq + k_poly[6]) * ysq + k_poly[8];
+    return z * k_on_quadrant[n];
+  }
+
+  n <<= 1;
+  z = ((((k_poly[1] * ysq + k_poly[3]) * ysq + k_poly[5]) * ysq + k_poly[7]) * ysq + k_poly[9]) * y;
+  return z * k_on_quadrant[n + 1];
+}
+
+static inline float msl_melee_cosf(float x) {
+  static const float k_on_quadrant[] = {0.0f, 1.0f, 1.0f, 0.0f, 0.0f, -1.0f, -1.0f, 0.0f};
+  static const float k_poly[] = {
+      0.0000035287617f, 0.0000003089747f, -0.0003259365f,
+      -0.00003657235f,  0.015854323f,     0.0024903931f,
+      -0.30842513f,     -0.08074551f,     1.0f,
+      0.7853982f,
+  };
+
+  int n = msl_melee_trig_quadrant(x);
+  const float y = msl_melee_trig_reduced(x, n);
+  n &= 3;
+
+  if (fabsf(y) < 3.45266983e-4f) {
+    n <<= 1;
+    return k_on_quadrant[n + 1] - y * k_on_quadrant[n];
+  }
+
+  const float ysq = y * y;
+  float z;
+  if (n & 1) {
+    n <<= 1;
+    z = -(
+        ((((k_poly[1] * ysq + k_poly[3]) * ysq + k_poly[5]) * ysq + k_poly[7]) * ysq + k_poly[9]) *
+        y);
+    return z * k_on_quadrant[n];
+  }
+
+  n <<= 1;
+  z = (((k_poly[0] * ysq + k_poly[2]) * ysq + k_poly[4]) * ysq + k_poly[6]) * ysq + k_poly[8];
+  return z * k_on_quadrant[n + 1];
 }
 
 static inline float msl_melee_normalize_angle(float angle) {

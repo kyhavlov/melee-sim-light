@@ -139,6 +139,12 @@ SEED_DTYPE = np.dtype(
         ("facing_dir1", _arr("i1", MAX_PLAYERS)),
         ("ground_friction_mul", _arr("<f4", MAX_PLAYERS)),
         ("kb_smashcharge_active", _arr("u1", MAX_PLAYERS)),
+        # Hidden grounded-smash charge/release state (`fp->smash_attrs`) used by
+        # ftCo_800DEEB8 released-smash damage scaling.
+        ("smash_charge_state", _arr("u1", MAX_PLAYERS)),
+        ("smash_charge_frames", _arr("u1", MAX_PLAYERS)),
+        ("smash_charge_hold_frames_max", _arr("u1", MAX_PLAYERS)),
+        ("smash_charge_saved_rate_fp_q16_16", _arr("<i4", MAX_PLAYERS)),
         ("on_ground", _arr("u1", MAX_PLAYERS)),
         # Hidden CollData.floor_skip segment id. 0xFFFF means inactive.
         # refs/melee/src/melee/mp/mpcoll.c::{mpUpdateFloorSkip,mpClearFloorSkip}
