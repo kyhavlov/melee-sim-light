@@ -27,24 +27,24 @@ validation.profile.ignored: state_flags[4]&0x80 reason=Slippi fp+0x221F camera-s
 
 == datasets/doubles_recent/replays/validation/doubles_recent/Game_20260509T152622.msl ==
 rollout.best_len: 923
-rollout.streak_count: 55
-rollout.streak_len.median: 109
+rollout.streak_count: 53
+rollout.streak_len.median: 125
 rollout.streak_len.p90: 432
 rollout.streak_len.p95: 638
 rollout.streak_len.max: 923
-rollout.first_mismatch_total: 56
-rollout.first_mismatch_seeded_total: 30
-rollout.first_mismatch_non_seeded_total: 26
+rollout.first_mismatch_total: 54
+rollout.first_mismatch_seeded_total: 29
+rollout.first_mismatch_non_seeded_total: 25
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:3257
 
 == suite summary ==
-overall.rollout.streak_count: 55
-overall.rollout.streak_len.median: 109
+overall.rollout.streak_count: 53
+overall.rollout.streak_len.median: 125
 overall.rollout.streak_len.p90: 432
 overall.rollout.streak_len.p95: 638
 overall.rollout.streak_len.max: 923
 overall.rollout.best_len.max: 923
-overall.rollout.first_mismatch_total: 56
-overall.rollout.first_mismatch_seeded_total: 30
-overall.rollout.first_mismatch_non_seeded_total: 26
+overall.rollout.first_mismatch_total: 54
+overall.rollout.first_mismatch_seeded_total: 29
+overall.rollout.first_mismatch_non_seeded_total: 25
 overall.rollout.ignored_first_mismatch_top: state_flags[4]&0x80:3257

@@ -340,6 +340,7 @@ static inline void opening_input_lock_apply_Fighter_UnkInitLoad_80068914_Inner1_
 
   batch->state.tilt_timer_x[idx] = 0xFEu;
   batch->state.tilt_timer_y[idx] = 0xFEu;
+  batch->state.tilt_timer_y_frame_start[idx] = 0xFEu;
   batch->state.x672_input_timer[idx] = 0xFEu;
   batch->state.x672_input_timer_frame_start[idx] = 0xFEu;
   batch->state.x673[idx] = 0xFEu;
@@ -537,6 +538,7 @@ int input_apply(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev_in
 
       uint8_t prev_tilt_timer_x = batch->state.tilt_timer_x[idx];
       uint8_t prev_tilt_timer_y = batch->state.tilt_timer_y[idx];
+      batch->state.tilt_timer_y_frame_start[idx] = prev_tilt_timer_y;
       const uint8_t tilt_timer_x_next =
           tilt_timer_update(prev_tilt_timer_x, stick_x, prev_stick_x, com->lstick_tilt_x_thresh);
       const uint8_t tilt_timer_y_next =

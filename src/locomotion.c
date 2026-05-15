@@ -814,6 +814,68 @@ static inline uint8_t landing_contact_is_ledge_floor(const MslBatch* batch, size
   return g->lines[(size_t)line_idx].is_ledge ? 1u : 0u;
 }
 
+static inline float landing_root_y_from_mpcoll_contact(const MslBatch* batch, size_t idx,
+                                                       size_t bi) {
+  // Decomp owner:
+  // - mpLib_8004DD90_Floor applies a +0.0001 root/floor bias to its returned correction.
+  // - Some lite mpColl helper paths store the floor plane in `ground_contact_y`; direct DD90 paths
+  //   store the already-biased projected root. Normalize the scratch lane before Landing* entry so
+  //   the post-collision state does not apply the DD90 bias twice.
+  // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Enter_Basic
+  static const float k_mplib_floor_y_bias = 0.0001f;
+  if (batch == NULL || batch->state.ground_id[idx] == 0xFFFFu) {
+    return batch != NULL ? batch->state.ground_contact_y[idx] + k_mplib_floor_y_bias : 0.0f;
+  }
+
+  const uint32_t stage_id = batch->state.stage_id[bi];
+  const int line_idx = stage_collision_floor_line_index(stage_id, batch->state.ground_id[idx]);
+  const MslStageFloorGraph* g = stage_collision_get_floor_graph(stage_id);
+  if (g == NULL || line_idx < 0 || (size_t)line_idx >= g->line_count) {
+    return batch->state.ground_contact_y[idx] + k_mplib_floor_y_bias;
+  }
+
+  if (stage_collision_floor_line_has_height_platform_transform(stage_id,
+                                                               batch->state.ground_id[idx]) &&
+      stage_collision_floor_line_height_platform_state_is_source_trusted(
+          batch, (int)bi, batch->state.ground_id[idx])) {
+    // grIzumi height-platform collision publishes the transformed floor plane through the current
+    // mpColl result; Landing* entry still owns the final mpLib_8004DD90_Floor root bias.
+    //
+    // Source/data owner:
+    // - grIzumi refreshes height-platform JObjs before the fighter map callback.
+    // - MSLSTG01 platform_transforms(kind=height) identifies the line as a live grIzumi height
+    //   owner, and `stage_fod_platform_height_source` marks the current sparse-seed contact/source
+    //   lane as trusted for this frame.
+    // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+    // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+    // data/stages/bin/griz.bin::MSLSTG01 platform_transforms
+    return batch->state.ground_contact_y[idx] + k_mplib_floor_y_bias;
+  }
+
+  MslStageFloorLine world = {0};
+  if (!stage_collision_floor_line_world(batch, (int)bi, &g->lines[(size_t)line_idx], &world)) {
+    return batch->state.ground_contact_y[idx] + k_mplib_floor_y_bias;
+  }
+
+  float floor_y = world.y0;
+  if (fabsf(world.x1 - world.x0) > 0.0001f) {
+    floor_y = world.y0 + ((world.y1 - world.y0) * (batch->state.pos_x[idx] - world.x0) /
+                          (world.x1 - world.x0));
+  }
+
+  const float contact_y = batch->state.ground_contact_y[idx];
+  const float dist_to_floor = fabsf(contact_y - floor_y);
+  const float dist_to_biased_floor = fabsf(contact_y - (floor_y + k_mplib_floor_y_bias));
+  if (dist_to_biased_floor < dist_to_floor) {
+    return contact_y;
+  }
+  if (dist_to_floor <= k_mplib_floor_y_bias) {
+    return contact_y + k_mplib_floor_y_bias;
+  }
+  return contact_y;
+}
+
 static inline uint8_t action_uses_common_air_walljump_callback(uint16_t a) {
   // These common air states route their Coll callbacks through ft_081B helpers that call
   // ftWallJump_8008169C after the floor callback declines.
@@ -3249,7 +3311,7 @@ static inline void enter_landing_action_from_air(MslBatch* batch, const MslCharP
     apply_contact_y_bridge = 0u;
   }
   if (apply_contact_y_bridge) {
-    batch->state.pos_y[idx] = batch->state.ground_contact_y[idx] + 0.0001f;
+    batch->state.pos_y[idx] = landing_root_y_from_mpcoll_contact(batch, idx, bi);
   }
 
   batch->state.fall_fast[idx] = 0;
@@ -6318,7 +6380,7 @@ void locomotion_update_post_collision(MslBatch* batch) {
           // Compatibility: some post-collision callback lanes can already be in Landing before this
           // locomotion transition resolver runs. Preserve floor-contact Y for the same decomp-owned
           // Jump/SpecialAirN collision families used by the landing bridge helper above.
-          batch->state.pos_y[idx] = batch->state.ground_contact_y[idx] + 0.0001f;
+          batch->state.pos_y[idx] = landing_root_y_from_mpcoll_contact(batch, idx, (size_t)bi);
         }
 
         if (a == (uint16_t)MSL_ACT_SHIELD_BREAK_FLY || a == (uint16_t)MSL_ACT_SHIELD_BREAK_FALL) {
@@ -6378,10 +6440,13 @@ void locomotion_update_post_collision(MslBatch* batch) {
           // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
           //   ftFx_SpecialHiFall_Coll,ftFx_SpecialHiFall_Enter
           // }
-          // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D7FC
+          // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D7FC,ftCommon_8007D6A4}
           // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+          const float landing_self_vel_x = batch->state.speed_air_x_self[idx];
           batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_HI_LANDING;
           batch->state.animation_index[idx] = (uint32_t)MSL_SM_FX_SPECIAL_HI_LANDING;
+          batch->state.speed_ground_x_self[idx] = landing_self_vel_x;
+          batch->state.speed_air_x_self[idx] = landing_self_vel_x;
           batch->state.jumps_left[idx] = ch->max_jumps;
           batch->state.fall_fast[idx] = 0u;
           msl_anim_timebase_enter_with_policy(batch, idx, 13.0f, 1.0f,

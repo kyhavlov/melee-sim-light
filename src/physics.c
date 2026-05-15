@@ -2179,6 +2179,14 @@ void physics_integrate(MslBatch* batch) {
           } else if (action_id == (uint16_t)MSL_ACT_RUN_BRAKE) {
             const float friction = ch->gr_friction * c->run_friction_mul;
             gr_vel += ground_friction_step_delta(gr_vel, friction);
+          } else if (action_id == (uint16_t)MSL_ACT_FX_SPECIAL_HI_LANDING) {
+            // Grounded Firefox/Firebird end Phys applies the character x7C ground momentum
+            // friction, then calls the common ground movement helper. Since x7C is greater than
+            // the small landing gr_vels in this family, the next frame often clears gr_vel to 0.
+            // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiLanding_Phys
+            // refs/melee/src/melee/ft/ftcommon.c::{
+            //   ftCommon_ApplyFrictionGround,ftCommon_ApplyGroundMovement}
+            gr_vel += ground_friction_step_delta(gr_vel, ch->firefox_ground_momentum_end);
           }
 
           batch->state.speed_ground_x_self[idx] = gr_vel;

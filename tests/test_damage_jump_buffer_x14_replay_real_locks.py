@@ -11,6 +11,7 @@ from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
 
 TCH = Path("datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl")
 FEH_SLP = Path("replays/validation/dream_land_recent/FlippantEnchantedHorse.slp")
+SELFPLAY_181413_SLP = Path("replays/validation/aggregate_recent/Game_20260514T181413.slp")
 
 
 def _skip_if_dataset_missing(ds_path: Path) -> None:
@@ -146,3 +147,44 @@ def test_flyreflectwall_terminal_x14_buffer_enters_jumpaerialb_replay_real() -> 
     assert int(out["jumps_left"][p]) == int(ref["jumps_left"][p]) == 0
     assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]))
     assert float(out["speed_y_self"][p]) == pytest.approx(float(ref["speed_y_self"][p]))
+
+
+@pytest.mark.integration
+def test_damagefly_terminal_x14_jump_entry_uses_buffered_xy_then_live_drift_selfplay_181413() -> None:
+    # Game_20260514T181413 1530 is a terminal DamageFlyN x14 inlineC0 row:
+    # - mv.co.damage.x14 is inside the p_ftCommonData->x1D0 buffer window,
+    # - the buffered frame-start XY owner has neutral X while the current stick is rightward,
+    # - JumpAerial entry therefore starts from neutral x velocity, then the destination
+    #   JumpAerial Phys callback applies current-stick air drift in the same frame.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{inlineC0,ftCo_DamageFly_Anim}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::{
+    #   ftCo_JumpAerial_Enter_Basic,ftCo_JumpAerial_Phys}
+    seed, ref, out = _run_one_step_from_slp(SELFPLAY_181413_SLP, 1530, ports=[1, 2])
+    p = 1
+    assert int(seed["action_id"][p]) == 88  # DamageFlyN
+    assert int(seed["hitstun"][p]) == 1
+    assert int(seed["damage_jump_buffer_x14"][p]) == 6
+
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == 27  # JumpAerialF
+    assert int(out["jumps_left"][p]) == int(ref["jumps_left"][p]) == 0
+    assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]))
+    assert float(out["speed_air_x_self"][p]) == pytest.approx(float(ref["speed_air_x_self"][p]))
+    assert float(out["speed_y_self"][p]) == pytest.approx(float(ref["speed_y_self"][p]))
+
+
+@pytest.mark.integration
+def test_damagefly_high_x14_current_button_jump_keeps_current_xy_selfplay_181413() -> None:
+    # Game_20260514T181413 859 is the adjacent negative owner: x14 is above the inlineC0 buffer
+    # window, so the row enters JumpAerial from the current-frame button jump path and must keep
+    # current-stick horizontal jump velocity rather than frame-start buffered XY.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{inlineC0,ftCo_DamageFly_IASA}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Enter_Basic
+    seed, ref, out = _run_one_step_from_slp(SELFPLAY_181413_SLP, 859, ports=[1, 2])
+    p = 0
+    assert int(seed["action_id"][p]) == 90  # DamageFlyTop
+    assert int(seed["hitstun"][p]) == 1
+    assert int(seed["damage_jump_buffer_x14"][p]) == 28
+
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == 27  # JumpAerialF
+    assert float(out["speed_air_x_self"][p]) == pytest.approx(float(ref["speed_air_x_self"][p]))
+    assert float(out["speed_air_x_self"][p]) != pytest.approx(0.0)

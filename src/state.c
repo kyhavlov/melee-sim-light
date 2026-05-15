@@ -253,6 +253,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->kneebend_is_short_hop = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->tilt_timer_x = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->tilt_timer_y = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->tilt_timer_y_frame_start = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->fall_fast = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->attackdash_x0 = (int16_t*)alloc_aligned_64(sizeof(int16_t) * bp);
   state->jab_x0 = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
@@ -594,21 +595,22 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->guard_setoff_hitlag_exit_phase_u8 || !state->guard_setoff_post_hitlag_owner_u8 ||
       !state->kneebend_jump_input || !state->guard_reflect_entry_dash_terminal_scalar ||
       !state->kneebend_is_short_hop || !state->tilt_timer_x || !state->tilt_timer_y ||
-      !state->fall_fast || !state->attackdash_x0 || !state->jab_x0 || !state->jab_rapid_count ||
-      !state->attack100_x0 || !state->attack100_x4 || !state->run_x0 || !state->runbrake_cmd0 ||
-      !state->dash_x4 || !state->shine_release_lag || !state->shine_is_release ||
-      !state->ecb_lock_timer || !state->ledge_side || !state->stage_ledge_occupant_left ||
-      !state->stage_ledge_occupant_right || !state->ledge_cooldown ||
-      !state->ledge_drop_floor_skip_segment_id || !state->cliff_ledge_floor_segment_id ||
-      !state->cliff_ledge_floor_segment_seeded || !state->fallspecial_xc ||
-      !state->fallspecial_landing_lag || !state->landing_fallspecial_allow_interrupt ||
-      !state->turn_has_turned || !state->turn_frames_to_turn || !state->walk_use_raw_input_once ||
-      !state->turn_x8 || !state->lr_press_timer || !state->x672_input_timer ||
-      !state->x672_input_timer_frame_start || !state->x673 || !state->x674 || !state->x675 ||
-      !state->x676_x || !state->x2228_b7 || !state->x677_y || !state->x678 || !state->x679_x ||
-      !state->x67A_y || !state->x679_x_frame_start || !state->x67A_y_frame_start || !state->x67B ||
-      !state->x67C || !state->x67D || !state->x67E || !state->x680 || !state->x681 ||
-      !state->x682 || !state->x683 || !state->x684 || !state->ucf_padbuf_index ||
+      !state->tilt_timer_y_frame_start || !state->fall_fast || !state->attackdash_x0 ||
+      !state->jab_x0 || !state->jab_rapid_count || !state->attack100_x0 || !state->attack100_x4 ||
+      !state->run_x0 || !state->runbrake_cmd0 || !state->dash_x4 || !state->shine_release_lag ||
+      !state->shine_is_release || !state->ecb_lock_timer || !state->ledge_side ||
+      !state->stage_ledge_occupant_left || !state->stage_ledge_occupant_right ||
+      !state->ledge_cooldown || !state->ledge_drop_floor_skip_segment_id ||
+      !state->cliff_ledge_floor_segment_id || !state->cliff_ledge_floor_segment_seeded ||
+      !state->fallspecial_xc || !state->fallspecial_landing_lag ||
+      !state->landing_fallspecial_allow_interrupt || !state->turn_has_turned ||
+      !state->turn_frames_to_turn || !state->walk_use_raw_input_once || !state->turn_x8 ||
+      !state->lr_press_timer || !state->x672_input_timer || !state->x672_input_timer_frame_start ||
+      !state->x673 || !state->x674 || !state->x675 || !state->x676_x || !state->x2228_b7 ||
+      !state->x677_y || !state->x678 || !state->x679_x || !state->x67A_y ||
+      !state->x679_x_frame_start || !state->x67A_y_frame_start || !state->x67B || !state->x67C ||
+      !state->x67D || !state->x67E || !state->x680 || !state->x681 || !state->x682 ||
+      !state->x683 || !state->x684 || !state->ucf_padbuf_index ||
       !state->ucf_padbuf_sdrop_up_frames || !state->ucf_padbuf_stick_x ||
       !state->ucf_padbuf_stick_y || !state->percent || !state->percent_temp ||
       !state->phantom_damage_pending_x1898 || !state->phantom_damage_timer_x189c ||
@@ -1030,6 +1032,7 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->kneebend_is_short_hop);
   alloc_free(state->tilt_timer_x);
   alloc_free(state->tilt_timer_y);
+  alloc_free(state->tilt_timer_y_frame_start);
   alloc_free(state->fall_fast);
   alloc_free(state->attackdash_x0);
   alloc_free(state->jab_x0);

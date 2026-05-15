@@ -1709,6 +1709,62 @@ static inline uint8_t combat_attackairb_stale_owner_continuation_candidate(
   return 1u;
 }
 
+static inline uint8_t combat_hitcapsule_is_authored_same_group_primary(const MslBatch* batch,
+                                                                       int bi, int attacker,
+                                                                       int hb_id) {
+  if (batch == NULL || bi < 0 || attacker < 0 || attacker >= (int)MSL_MAX_PLAYERS || hb_id < 0 ||
+      hb_id >= (int)MSL_MAX_HITBOXES) {
+    return 0u;
+  }
+  const size_t hb_i = idx_hitbox(bi, attacker, hb_id);
+  if (!batch->state.hitbox_enabled[hb_i]) {
+    return 0u;
+  }
+  const uint8_t hit_group = hitlist_hit_group_from_u16_7(batch->state.hitbox_u16_7[hb_i]);
+  if (hit_group >= (uint8_t)MSL_HITLIST_GROUPS) {
+    return 0u;
+  }
+  const float damage = batch->state.hitbox_damage[hb_i];
+  if (!(damage > 0.0f)) {
+    return 0u;
+  }
+
+  uint8_t saw_same_group_sibling = 0u;
+  for (int other = 0; other < MSL_MAX_HITBOXES; other++) {
+    if (other == hb_id) {
+      continue;
+    }
+    const size_t other_i = idx_hitbox(bi, attacker, other);
+    if (!batch->state.hitbox_enabled[other_i]) {
+      continue;
+    }
+    if (hitlist_hit_group_from_u16_7(batch->state.hitbox_u16_7[other_i]) != hit_group) {
+      continue;
+    }
+    const float other_damage = batch->state.hitbox_damage[other_i];
+    if (other_damage > damage) {
+      return 0u;
+    }
+    if (other_damage == damage && other < hb_id) {
+      return 0u;
+    }
+    saw_same_group_sibling = 1u;
+  }
+  // Source/data-backed same-group primary band:
+  // - `ftColl_80076ED8` receives the concrete HitCapsule selected by `ftColl_80078C70`, and
+  //   `Fighter_ProcessHit` consumes that HitCapsule's authored damage/KB payload.
+  // - Multi-capsule same-group scripts encode the source-selected primary capsule as the first
+  //   active maximum-damage HitCapsule in that group. Keep that capsule on the full BODY path;
+  //   later/equal siblings and lower-damage limb capsules may take the `coll_distance < x7A8`
+  //   phantom/tip-log branch.
+  // - This predicate is derived from active MSLHITB1 hitbox table fields (`damage`, `hit_group`,
+  //   source HitCapsule id/order), rather than an action id / row slice.
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  // data/hitboxes/{fox,falco}.bin (MSLHITB1 damage + hit_group + hitbox id/order)
+  return saw_same_group_sibling;
+}
+
 static inline uint8_t combat_enable_edge_dense_seed_suppresses_body(const MslBatch* batch, int bi,
                                                                     int attacker, int hb_id,
                                                                     int defender,
@@ -7849,7 +7905,6 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
             hitlist_rehit_frames_from_u16_7(batch->state.hitbox_u16_7[hb_i]);
         const uint8_t v1_group_seen_this_pass =
             v1_group_registered_this_pass[attacker][defender][hit_group];
-
         for (uint8_t cap_id = 0; cap_id < hurtcap_count; cap_id++) {
           const size_t cap_i = idx_hurtcap(bi, defender, (int)cap_id);
           float ax = 0.0f, ay = 0.0f, az = 0.0f;
@@ -8049,16 +8104,16 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
                      (c->phantom_overlap_max_x7a8 + c->phantom_overlap_max_x7a8))))
                   ? 1u
                   : 0u;
-          const uint8_t downed_phantom_boundary =
-              (combat_is_downed_damage_contact_action(batch->state.action_id[d_idx]) &&
-               batch->state.hitstun[d_idx] == 0u && lbcoll_overlap_valid &&
-               lbcoll_overlap_amount > 0.0f && lbcoll_overlap_amount <= c->phantom_overlap_max_x7a8)
+          const uint8_t same_group_primary_full_body =
+              (batch->state.hitbox_enable_edge[hb_i] == 0u &&
+               combat_hitcapsule_is_authored_same_group_primary(batch, bi, attacker, hb_id))
                   ? 1u
                   : 0u;
           const uint8_t fighter_phantom_tiplog_range =
               (!attackairb_stale_owner_candidate && lbcoll_overlap_valid &&
                lbcoll_overlap_amount > 0.0f &&
-               (lbcoll_overlap_amount <= c->phantom_overlap_max_x7a8 ||
+               ((!shield_active && !same_group_primary_full_body &&
+                 lbcoll_overlap_amount <= c->phantom_overlap_max_x7a8) ||
                 guard_shield_poke_phantom_boundary))
                   ? 1u
                   : 0u;
@@ -8077,21 +8132,19 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
             continue;
           }
           if (!attackairb_stale_owner_candidate && !defender_no_damage &&
-              batch->state.hitstun[d_idx] == 0u &&
-              ((!batch->state.on_ground[d_idx] && batch->state.hitbox_enable_edge[hb_i]) ||
-               guard_shield_poke_phantom_boundary || downed_phantom_boundary) &&
-              fighter_phantom_tiplog_range) {
+              batch->state.hitstun[d_idx] == 0u && fighter_phantom_tiplog_range) {
             // General fighter BODY phantom-hit lane:
             // - lbColl_8000805C writes HitCapsule.coll_distance from lbColl_80006E58.
             // - ftColl_80076ED8 routes 0 < coll_distance < p_ftCommonData->x7A8 through
             //   checkTipLog/inlineB1 instead of the percent/KB damage-state path.
-            // - Apply the matrix-radius helper on enable-edge capsules, where ftColl_8007AD18 has
-            //   just initialized x58=x4C for the live HitCapsule. Sustained capsules remain on the
-            //   damage path until the exact lbColl scalar is ported for all edge/non-edge cases,
-            //   except downed actions where ftCo_8009F0F0's contact branch uses the same
-            //   percent-temp/phantom path before any generic damage-state entry.
+            // - Apply this for source-evaluated BODY matrix overlaps below x7A8 when the defender is
+            //   not shield-active. Active same-group strict damage leaders remain on the full BODY
+            //   source path; lower-damage limb capsules and equal-damage groups keep the retained
+            //   tip-log reconstruction. Shield rows have a separate Guard/ShieldDesc owner and only
+            //   enter this lane through the guarded shield-poke predicate above.
             // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
-            // refs/melee/src/melee/ft/ftcoll.c::{checkTipLog,inlineB1,ftColl_80076ED8,ftColl_8007AD18}
+            // refs/melee/src/melee/ft/ftcoll.c::{checkTipLog,inlineB1,ftColl_80076ED8}
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::ftCo_8009F0F0
             if (!hitlist_allows_fighter_v2(batch, bi, attacker, hb_id, defender, defender_iid)) {
               continue;

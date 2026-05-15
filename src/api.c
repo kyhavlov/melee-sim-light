@@ -1697,6 +1697,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.kneebend_is_short_hop[idx] = seed->kneebend_is_short_hop[p];
       batch->state.tilt_timer_x[idx] = seed->tilt_timer_x[p];
       batch->state.tilt_timer_y[idx] = seed->tilt_timer_y[p];
+      batch->state.tilt_timer_y_frame_start[idx] = seed->tilt_timer_y[p];
       // Slippi post-frame sends the raw fp+0x221A byte as `state_flags[...,1]` and documents
       // bit 0x08 as "isFastFalling".
       // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm

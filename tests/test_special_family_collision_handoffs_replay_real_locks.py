@@ -6,7 +6,11 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE, read_dataset
+from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
+
+
+SELFPLAY_181413_SLP = Path("replays/validation/aggregate_recent/Game_20260514T181413.slp")
 
 
 @dataclass(frozen=True)
@@ -61,6 +65,159 @@ def _run_one_step(dataset_path: Path, record: int) -> tuple[np.void, np.void, np
         binding.destroy(handle)
 
     return row["seed_t"][0], row["ref_t1"][0], out_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()
+
+
+def _run_one_step_from_slp(slp_path: Path, record: int, *, ports: list[int]) -> tuple[np.void, np.void, np.void]:
+    if not slp_path.exists():
+        pytest.skip(f"missing local replay: {slp_path}")
+    binding = pytest.importorskip("msl_binding")
+    ds = build_dataset_from_slp(
+        slp_path=str(slp_path),
+        ports=ports,
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    samples = ds.samples
+    assert int(samples.shape[0]) > int(record), f"dataset too short for record={record}"
+    row = samples[int(record) : int(record) + 1]
+
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+        1, seed_stride
+    )
+    prev_input_bytes = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+        1, input_stride
+    )
+    input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+        1, input_stride
+    )
+    out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    try:
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_bytes)
+    finally:
+        binding.destroy(handle)
+
+    return row["seed_t"][0], row["ref_t1"][0], out_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("record,player", [(867, 1), (986, 0)])
+def test_specialhifall_landing_carries_self_velocity_to_ground_speed_selfplay_181413(
+    record: int, player: int
+) -> None:
+    # SpecialHiFall_Coll -> ftFx_SpecialHiFall_Enter calls ftCommon_8007D7FC before entering
+    # SpecialHiLanding. That helper delegates to ftCommon_8007D6A4, which sets gr_vel from the
+    # current self_vel.x on the landing frame.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+    #   ftFx_SpecialHiFall_Coll,ftFx_SpecialHiFall_Enter}
+    # refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D7FC,ftCommon_8007D6A4}
+    seed, ref, out = _run_one_step_from_slp(SELFPLAY_181413_SLP, record, ports=[1, 2])
+    p = int(player)
+    assert int(seed["action_id"][p]) == 358  # SpecialHiFall
+    assert int(ref["action_id"][p]) == 357  # SpecialHiLanding
+    assert int(seed["on_ground"][p]) == 0
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 1
+
+    assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=1e-6)
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+    assert float(out["speed_air_x_self"][p]) == pytest.approx(float(ref["speed_air_x_self"][p]), abs=1e-6)
+    assert float(out["speed_ground_x_self"][p]) == pytest.approx(
+        float(ref["speed_ground_x_self"][p]), abs=1e-6
+    )
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("record,player", [(868, 1), (987, 0)])
+def test_specialhilanding_phys_clears_small_landing_ground_velocity_selfplay_181413(
+    record: int, player: int
+) -> None:
+    # The following SpecialHiLanding Phys frame applies ftFox_DatAttrs.x7C as ground friction.
+    # For these carried landing velocities, that friction exceeds |gr_vel| and clears it before
+    # ground movement.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiLanding_Phys
+    # refs/melee/src/melee/ft/ftcommon.c::ftCommon_ApplyFrictionGround
+    seed, ref, out = _run_one_step_from_slp(SELFPLAY_181413_SLP, record, ports=[1, 2])
+    p = int(player)
+    assert int(seed["action_id"][p]) == 357  # SpecialHiLanding
+    assert int(ref["action_id"][p]) == 357
+    assert float(seed["speed_ground_x_self"][p]) != pytest.approx(0.0, abs=1e-7)
+
+    assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=1e-6)
+    assert float(out["speed_ground_x_self"][p]) == pytest.approx(0.0, abs=1e-7)
+    assert float(out["speed_ground_x_self"][p]) == pytest.approx(
+        float(ref["speed_ground_x_self"][p]), abs=1e-6
+    )
+
+
+def test_specialhilanding_phys_large_ground_velocity_applies_friction_without_clearing() -> None:
+    # Synthetic control for SpecialHiLanding_Phys:
+    # - ftFx_SpecialHiLanding_Phys applies character x7C ground momentum friction through
+    #   ftCommon_ApplyFrictionGround, then common ground movement.
+    # - Small carried landing velocities clear to zero in replay-real rows above; velocities larger
+    #   than x7C must remain nonzero after one friction step.
+    # - Fox and Falco share the extracted `firefox_ground_momentum_end` char-param path.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiLanding_Phys
+    # refs/melee/src/melee/ft/ftcommon.c::{ftCommon_ApplyFrictionGround,ftCommon_ApplyGroundMovement}
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    assert seed_stride == SEED_DTYPE.itemsize
+    assert input_stride == INPUT_DTYPE.itemsize
+    assert compare_stride == COMPARE_DTYPE.itemsize
+
+    for char_id in (1, 22):
+        seed = np.zeros((1,), dtype=SEED_DTYPE)
+        seed["stage_id"][0] = np.uint32(32)
+        seed["num_players"][0] = np.uint8(2)
+        seed["char_id"][0, :2] = np.uint8(char_id)
+        seed["stocks"][0, :2] = np.uint8(4)
+        seed["action_id"][0, 0] = np.uint16(357)  # SpecialHiLanding.
+        seed["animation_index"][0, 0] = np.uint32(310)
+        seed["action_frame"][0, 0] = np.int16(1)
+        seed["anim_frame_f32"][0, 0] = np.float32(1.0)
+        seed["frame_speed_mul_f32"][0, 0] = np.float32(1.0)
+        seed["on_ground"][0, 0] = np.uint8(1)
+        seed["ground_id"][0, 0] = np.uint16(0)
+        seed["speed_ground_x_self"][0, 0] = np.float32(2.0)
+        seed["speed_air_x_self"][0, 0] = np.float32(2.0)
+        seed["action_id"][0, 1] = np.uint16(14)  # Wait.
+        seed["animation_index"][0, 1] = np.uint32(2)
+        seed["on_ground"][0, 1] = np.uint8(1)
+        seed["ground_id"][0, 1] = np.uint16(0)
+
+        prev_input = np.zeros((1,), dtype=INPUT_DTYPE)
+        cur_input = np.zeros((1,), dtype=INPUT_DTYPE)
+        out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+        handle = binding.init(batch_size=1, num_players=2, ucf_enabled=1, ucf_cardinals_1_0_enabled=1)
+        try:
+            binding.reseed_seed(handle, seed.view(np.uint8).reshape(1, seed_stride))
+            binding.step_input(
+                handle,
+                prev_input.view(np.uint8).reshape(1, input_stride),
+                cur_input.view(np.uint8).reshape(1, input_stride),
+            )
+            binding.write_compare(handle, out_bytes)
+        finally:
+            binding.destroy(handle)
+
+        out = out_bytes.view(COMPARE_DTYPE).reshape(-1)[0]
+        assert int(out["action_id"][0]) == 357
+        assert float(out["speed_ground_x_self"][0]) == pytest.approx(0.5, abs=1e-6)
+        assert float(out["speed_air_x_self"][0]) == pytest.approx(0.5, abs=1e-6)
 
 
 @pytest.mark.integration

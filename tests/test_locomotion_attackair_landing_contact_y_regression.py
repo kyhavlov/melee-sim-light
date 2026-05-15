@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
 
 
 def _skip_if_required_artifacts_missing(root: Path) -> None:
@@ -118,6 +119,49 @@ def _step_one_row_with_rollout_at_record(
     seed = samples["seed_t"][record]
     ref = samples["ref_t1"][record]
     return seed, out_one, ref, out_roll
+
+
+def _run_rollout_samples_to_record(
+    samples: np.ndarray, *, num_players: int, start_record: int, target_record: int
+) -> tuple[np.void, np.void]:
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    sample_stride = int(samples.dtype.itemsize)
+    samples_u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), sample_stride)
+    seed_off = int(samples.dtype.fields["seed_t"][1])
+    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
+    input_off = int(samples.dtype.fields["input_t"][1])
+
+    seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
+    prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+    input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(num_players),
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    try:
+        seed_bytes[0, :] = samples_u8[start_record, seed_off : seed_off + seed_stride]
+        binding.reseed_seed_rollout(handle, seed_bytes)
+        for record in range(int(start_record), int(target_record) + 1):
+            prev_input_bytes[0, :] = samples_u8[
+                record, prev_input_off : prev_input_off + input_stride
+            ]
+            input_bytes[0, :] = samples_u8[record, input_off : input_off + input_stride]
+            binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+        out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()
+        ref = samples["ref_t1"][target_record].copy()
+        return out, ref
+    finally:
+        binding.destroy(handle)
 
 
 @pytest.mark.integration
@@ -320,6 +364,46 @@ def test_landing_basic_rows_keep_contact_y_parity_for_jump_and_specialairn_famil
     assert int(out["action_id"][p]) == int(ref["action_id"][p]) == 42
     assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 1
     assert abs(float(out["pos_y"][p]) - float(ref["pos_y"][p])) <= 2e-4
+
+
+@pytest.mark.integration
+def test_landingfallspecial_rollout_uses_single_mplib_floor_bias_selfplay_181413() -> None:
+    # Free-run rollout lock for mpColl floor-publication ownership:
+    # - EscapeAir_Coll enters LandingFallSpecial through ftCo_LandingFallSpecial_Enter.
+    # - mpLib_8004DD90_Floor can already publish the +0.0001 root/floor bias into the collision
+    #   contact scratch. Landing entry must not add that bias a second time when it publishes the
+    #   post-collision root Y.
+    # refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_LandingFallSpecial_Enter
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    slp_path = root / "replays/validation/aggregate_recent/Game_20260514T181413.slp"
+    if not slp_path.exists():
+        pytest.skip(f"missing local replay: {slp_path}")
+
+    ds = build_dataset_from_slp(
+        slp_path=str(slp_path),
+        ports=[1, 2],
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    samples = ds.samples
+    p = 1
+    seed_285 = samples[285]["seed_t"]
+    ref_286 = samples[286]["ref_t1"]
+    assert int(seed_285["action_id"][p]) == 236  # EscapeAir.
+    assert int(seed_285["on_ground"][p]) == 0
+    assert int(ref_286["action_id"][p]) == 43  # LandingFallSpecial.
+    assert int(ref_286["on_ground"][p]) == 1
+    assert float(ref_286["pos_y"][p]) == pytest.approx(0.0001, abs=1e-8)
+
+    out, ref = _run_rollout_samples_to_record(
+        samples, num_players=int(ds.header["num_players"]), start_record=0, target_record=286
+    )
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == 43
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 1
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=3e-8)
+    assert float(out["pos_y"][p]) != pytest.approx(0.0002000166, abs=2e-8)
 
 
 @pytest.mark.integration

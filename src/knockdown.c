@@ -608,7 +608,8 @@ static inline uint8_t damage_ground_try_wait_iasa_locomotion_subset(MslBatch* ba
 
 static inline uint8_t damage_air_try_jump_aerial(MslBatch* batch, const MslCommonParams* c,
                                                  const MslCharParams* ch, size_t idx,
-                                                 uint8_t force_jump_input) {
+                                                 uint8_t force_jump_input,
+                                                 uint8_t buffered_anim_gate_prephys) {
   if (batch == NULL || c == NULL || ch == NULL) {
     return 0u;
   }
@@ -622,10 +623,15 @@ static inline uint8_t damage_air_try_jump_aerial(MslBatch* batch, const MslCommo
     return 0u;
   }
 
-  const float stick_x =
+  const float stick_x_cur =
       apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]), c->lstick_deadzone_x);
+  const float stick_x_entry =
+      buffered_anim_gate_prephys
+          ? apply_deadzone(stick_i8_to_unit(batch->state.prev_input_main_x[idx]),
+                           c->lstick_deadzone_x)
+          : stick_x_cur;
   const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
-  const uint16_t act = jump_aerial_action_from_stick(c, stick_x, facing_dir);
+  const uint16_t act = jump_aerial_action_from_stick(c, stick_x_entry, facing_dir);
   const uint32_t msid = (act == (uint16_t)MSL_ACT_JUMP_AERIAL_F) ? (uint32_t)MSL_SM_JUMP_AERIAL_F
                                                                  : (uint32_t)MSL_SM_JUMP_AERIAL_B;
 
@@ -635,7 +641,13 @@ static inline uint8_t damage_air_try_jump_aerial(MslBatch* batch, const MslCommo
   batch->state.action_id[idx] = act;
   batch->state.animation_index[idx] = msid;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
-  batch->state.speed_air_x_self[idx] = stick_x * ch->air_jump_h_multiplier;
+  // When this is the DamageFly/Damage Anim x14 gate, the jump entry reads the buffered
+  // frame-start XY owner. The destination JumpAerial Phys callback still runs later in this same
+  // frame and applies current-stick air drift through `ft_80084DB0`, so do not pre-apply it here.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{inlineC0,ftCo_DamageFly_Anim,ftCo_Damage_Anim}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::{ftCo_JumpAerial_Enter_Basic,ftCo_JumpAerial_Phys}
+  // refs/melee/src/melee/ft/ft_081B.c::ft_80084DB0
+  batch->state.speed_air_x_self[idx] = stick_x_entry * ch->air_jump_h_multiplier;
   batch->state.speed_y_self[idx] = ch->jump_v_initial_velocity * ch->air_jump_v_multiplier;
   batch->state.tilt_timer_y[idx] = 0xFEu;
   batch->state.fall_fast[idx] = 0u;
@@ -678,7 +690,7 @@ static inline uint8_t damage_try_meteor_cancel_jump_aerial(MslBatch* batch,
   if (!damage_jump_input_from_edges(batch, c, idx)) {
     return 0u;
   }
-  return damage_air_try_jump_aerial(batch, c, ch, idx, 1u);
+  return damage_air_try_jump_aerial(batch, c, ch, idx, 1u, 0u);
 }
 
 static inline uint8_t cstick_up_edge(const MslBatch* batch, const MslCommonParams* c, size_t idx) {
@@ -1263,7 +1275,7 @@ void knockdown_update_pre_physics(MslBatch* batch) {
             const uint16_t x14 = batch->state.damage_jump_buffer_x14[idx];
             const uint8_t gate_open =
                 (x14 != 0u && (float)x14 <= c->damage_jump_buffer_window_frames) ? 1u : 0u;
-            if (gate_open && damage_air_try_jump_aerial(batch, c, ch, idx, 1u)) {
+            if (gate_open && damage_air_try_jump_aerial(batch, c, ch, idx, 1u, 1u)) {
               continue;
             }
           }
@@ -1283,7 +1295,7 @@ void knockdown_update_pre_physics(MslBatch* batch) {
           if (locomotion_attackair_try_enter_from_air_iasa(batch, c, idx)) {
             continue;
           }
-          if (damage_air_try_jump_aerial(batch, c, ch, idx, 0u)) {
+          if (damage_air_try_jump_aerial(batch, c, ch, idx, 0u, 0u)) {
             continue;
           }
           if (damagefall_iasa_try_stick_fall(batch, c, idx)) {
@@ -1336,7 +1348,7 @@ void knockdown_update_pre_physics(MslBatch* batch) {
           const uint16_t x14 = batch->state.damage_jump_buffer_x14[idx];
           const uint8_t gate_open =
               (x14 != 0u && (float)x14 <= c->damage_jump_buffer_window_frames) ? 1u : 0u;
-          if (gate_open && damage_air_try_jump_aerial(batch, c, ch, idx, 1u)) {
+          if (gate_open && damage_air_try_jump_aerial(batch, c, ch, idx, 1u, 0u)) {
             continue;
           }
           // Fall_IASA_Inner checks aerial attacks before its later JumpAerial fallback. Keep B-edge
@@ -1353,7 +1365,7 @@ void knockdown_update_pre_physics(MslBatch* batch) {
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_IASA
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_IASA_Inner
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_800CB870
-          if (damage_air_try_jump_aerial(batch, c, ch, idx, 0u)) {
+          if (damage_air_try_jump_aerial(batch, c, ch, idx, 0u, 0u)) {
             continue;
           }
         }
@@ -1368,7 +1380,7 @@ void knockdown_update_pre_physics(MslBatch* batch) {
               (x14 != 0u && (float)x14 <= c->damage_jump_buffer_window_frames) ? 1u : 0u;
           // Decomp: Damage_Anim checks the inlineC0 jump-buffer gate first.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Anim
-          if (!(gate_open && damage_air_try_jump_aerial(batch, c, ch, idx, 1u))) {
+          if (!(gate_open && damage_air_try_jump_aerial(batch, c, ch, idx, 1u, 1u))) {
             // `common_damage_airborne` is only entered while on_ground == 0, so the grounded
             // Damage_Anim -> Wait branch is unreachable here by construction.
             // Decomp airborne branch:
@@ -2509,7 +2521,7 @@ static inline uint8_t passivewall_iasa_try_air_options(MslBatch* batch, const Ms
     return 1u;
   }
   if ((batch->state.input_buttons_pressed[idx] & (uint16_t)MSL_BUTTON_B) == 0u &&
-      damage_air_try_jump_aerial(batch, c, ch, idx, 0u)) {
+      damage_air_try_jump_aerial(batch, c, ch, idx, 0u, 0u)) {
     return 1u;
   }
   return 0u;

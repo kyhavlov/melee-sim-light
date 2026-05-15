@@ -351,7 +351,12 @@ def test_fox_attack100_loop_hits_and_then_locks_into_attack100end() -> None:
     assert float(history[312]["percent"][falco]) == pytest.approx(8.0)
     assert float(history[314]["percent"][falco]) > 8.0
     # Attack100Loop restart runs ft_800892A0, giving repeated rapid-jab hits fresh attack
-    # instances for stale-queue accounting. Without that source callback, this over-damages.
+    # instances for stale-queue accounting. Runtime HitCapsule clear/copy ownership for ordinary
+    # grounded Attack* entries must not be applied to this loop-script cadence; otherwise the loop
+    # admits an extra same-window body hit before Attack100End.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+    #   ftCo_Attack100Loop_Anim,ftCo_800D6C60}
+    # refs/melee/src/melee/ft/ft_0881.c::ft_800892A0
     assert float(history[413]["percent"][falco]) == pytest.approx(16.03999900817871)
 
     assert int(history[413]["action_id"][fox]) == ACT_ATTACK_100_END

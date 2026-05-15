@@ -62,6 +62,44 @@ static inline uint8_t hitboxes_has_authoritative_hitlist_seed(const MslBatch* ba
   return batch->state.combat_hitlist_hb_valid[hb_valid_i] ? 1u : 0u;
 }
 
+static inline uint8_t hitboxes_same_action_restart_clears_hitcapsules(const MslBatch* batch,
+                                                                      size_t idx, uint8_t char_id,
+                                                                      uint16_t action_id) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  if (batch->state.prev_action_id[idx] != action_id) {
+    return 0u;
+  }
+  if (!msl_motion_state_class_has(char_id, action_id, MSL_MS_CLASS_GROUNDED_ATTACK)) {
+    return 0u;
+  }
+  if (action_id == (uint16_t)MSL_ACT_ATTACK_100_LOOP) {
+    // Attack100Loop's visible frame rewind is the rapid-jab loop/script cadence, not a
+    // same-motion Fighter_ChangeMotionState entry. Its source callback can advance stale attack
+    // instance ownership through ft_800892A0 without running the ftColl_8007AFF8 hitcapsule clear
+    // used by normal grounded Attack* motion entries.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800CE650_inline
+    // refs/melee/src/melee/ft/ft_0881.c::ft_800892A0
+    return 0u;
+  }
+  const int16_t prev_frame = batch->state.prev_action_frame[idx];
+  const int16_t cur_frame = batch->state.action_frame[idx];
+  if (prev_frame < 0 || cur_frame < 0 || cur_frame > 1 || prev_frame <= cur_frame) {
+    return 0u;
+  }
+  // Grounded Attack* IASA can enter the same motion state again on the same action id/submotion.
+  // Slippi then exposes a continuous action_id with action_frame/cur_anim_frame reset, but source
+  // still ran Fighter_ChangeMotionState and therefore ftColl_8007AFF8 before the new script's
+  // ftAction_8007121C create_hitbox commands. Treat this same-action frame rewind as a motion entry
+  // for x914 enabled/group ownership so stale HitVictim rings are not copied into the fresh attack.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_ChangeMotionState,Fighter_8006A360}
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007AFF8,ftColl_800768A0}
+  // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_AttackS3.c,ftCo_AttackHi3.c,ftCo_AttackHi4.c,ftCo_AttackLw4.c}
+  // MSLMSO01: MSL_MS_CLASS_GROUNDED_ATTACK.
+  return 1u;
+}
+
 static inline int hitboxes_seed_bridge_get_env_dmg(float dmg) {
   // Decomp (GALE01): "getEnvDmg" pattern used by collision when converting float hitbox damage to
   // the integer damage lane used by shield interactions / hitlag input.
@@ -1249,7 +1287,10 @@ void hitboxes_refresh(MslBatch* batch) {
       const uint8_t char_id = batch->state.char_id[idx];
       const uint16_t action_id = batch->state.action_id[idx];
       const uint8_t motion_entered_this_frame =
-          (action_id != batch->state.prev_action_id[idx]) ? 1u : 0u;
+          (action_id != batch->state.prev_action_id[idx] ||
+           hitboxes_same_action_restart_clears_hitcapsules(batch, idx, char_id, action_id))
+              ? 1u
+              : 0u;
       const uint8_t motion_preserves_hitcapsules =
           hitboxes_motion_state_entry_preserves_hitcapsules(char_id, action_id,
                                                             motion_entered_this_frame);

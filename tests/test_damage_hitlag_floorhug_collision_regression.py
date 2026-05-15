@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import numpy as np
 import pytest
 
 from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE, read_dataset, read_dataset_window
+from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
 
 
 _CONTACTS_DTYPE = np.dtype(
@@ -59,6 +61,46 @@ def _run_one_step_with_contacts(dataset_path: Path, record: int) -> tuple[np.nda
     handle = binding.init(
         batch_size=1,
         num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    try:
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+        binding.debug_write_collision_contacts(handle, out_contacts_bytes)
+    finally:
+        binding.destroy(handle)
+
+    out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()
+    ref = row["ref_t1"][0].copy()
+    contacts = np.frombuffer(out_contacts_bytes.tobytes(), dtype=_CONTACTS_DTYPE, count=1)[0]
+    return out, ref, contacts
+
+
+def _run_one_step_with_contacts_from_samples(
+    samples: np.ndarray, num_players: int, record: int
+) -> tuple[np.ndarray, np.ndarray, np.void]:
+    row = samples[record : record + 1]
+    assert int(row.shape[0]) == 1
+
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    contacts_stride = int(sizes["collision_contacts"])
+    assert int(_CONTACTS_DTYPE.itemsize) == contacts_stride
+
+    seed_bytes = row["seed_t"].view("u1").reshape(1, seed_stride).copy()
+    prev_input_bytes = row["prev_input_t"].view("u1").reshape(1, input_stride).copy()
+    input_bytes = row["input_t"].view("u1").reshape(1, input_stride).copy()
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+    out_contacts_bytes = np.empty((1, contacts_stride), dtype=np.uint8)
+
+    handle = binding.init(
+        batch_size=1,
+        num_players=num_players,
         ucf_enabled=1,
         ucf_cardinals_1_0_enabled=1,
     )
@@ -228,6 +270,57 @@ def test_damageflytop_active_hitlag_floorhug_stays_airborne_qgd_9683() -> None:
 
 
 @pytest.mark.integration
+def test_damageflytop_downward_sdi_bottom_above_floor_stays_airborne_selfplay_181413() -> None:
+    # Active-hitlag DamageFlyTop SDI bottom-contact boundary:
+    # - ftCo_Damage_OnEveryHitlag moves the root below FD's floor on rec1417,
+    # - the current ECB bottom is still above the floor, so mpColl_80044628_Floor has not accepted a
+    #   bottom-floor contact for mpColl_80044948_Floor to project from,
+    # - vanilla keeps the below-floor SDI root airborne; rec1420 is a later control that still
+    #   consumes ordinary OnEveryHitlag SDI without publishing a false floor projection.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpColl_80044948_Floor}
+    root = Path(__file__).resolve().parents[1]
+    slp_path = root / "replays/validation/aggregate_recent/Game_20260514T181413.slp"
+    if not slp_path.exists():
+        pytest.skip(f"missing local replay: {slp_path}")
+
+    ds = build_dataset_from_slp(
+        slp_path=str(slp_path),
+        ports=[1, 2],
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    samples = ds.samples
+    p = 1
+
+    row = samples[1417]
+    assert int(row["seed_t"]["action_id"][p]) == ACT_DAMAGE_FLY_TOP
+    assert int(row["seed_t"]["hitlag"][p]) == 7
+    assert int(row["input_t"]["p"]["main_y"][p]) < 0
+    assert float(row["seed_t"]["pos_y"][p]) == pytest.approx(0.0001, abs=1e-7)
+    assert float(row["ref_t1"]["pos_y"][p]) == pytest.approx(-4.0499, abs=1e-6)
+
+    out, ref, contacts = _run_one_step_with_contacts_from_samples(
+        samples, int(ds.header["num_players"]), 1417
+    )
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_DAMAGE_FLY_TOP
+    assert int(out["hitlag"][p]) == int(ref["hitlag"][p]) == 6
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 0
+    assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=1e-6)
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+    assert (int(contacts["coll_env_flags"][p]) & MSL_COLLIDE_FLOOR_MASK) == 0
+
+    out, ref, contacts = _run_one_step_with_contacts_from_samples(
+        samples, int(ds.header["num_players"]), 1420
+    )
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_DAMAGE_FLY_TOP
+    assert int(out["hitlag"][p]) == int(ref["hitlag"][p]) == 3
+    assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=1e-6)
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+    assert (int(contacts["coll_env_flags"][p]) & MSL_COLLIDE_FLOOR_MASK) == 0
+
+
+@pytest.mark.integration
 def test_forensic_optional_damageflyn_hitlag_exit_floorhug_latch_requires_current_ecb_floor_hit_selfplay_1045() -> None:
     # Optional replay-forensic rollout check for the self-play rec=1045 p0 cluster. Package
     # coverage for this owner is the committed synthetic guard below plus the committed aggregate
@@ -241,6 +334,11 @@ def test_forensic_optional_damageflyn_hitlag_exit_floorhug_latch_requires_curren
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
     #   ftCo_Damage_OnEveryHitlag,ftCo_Damage_OnExitHitlag,ftCo_DamageFly_Coll}
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpColl_80044838_Floor}
+    if os.environ.get("MSL_RUN_TRIAGE_FORENSICS") != "1":
+        pytest.skip(
+            "optional gitignored self-play triage forensic; set MSL_RUN_TRIAGE_FORENSICS=1"
+        )
+
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
         "reports/triage/mainline_selfplay_datasets/mainline_selfplay_20260514T083640/"

@@ -11,6 +11,7 @@ from tests.test_items_spawn_joint_replay_real_locks import (
 from tests.test_combat_ownership_seed_guardrail_locks import _DEBUG_SHIELD_CANDIDATE_DTYPE
 from tools.eval.dataset import COMPARE_DTYPE, SEED_DTYPE, read_dataset
 from tools.eval.run_longest_rollout_streaks import _load_binding
+from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
 
 
 def _step_one_row_with_seed(dataset_path: Path, record: int, seed: np.ndarray) -> tuple[np.void, np.void]:
@@ -128,6 +129,236 @@ def _step_one_row_with_inputs(
         binding.destroy(handle)
 
     return out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0], ref
+
+
+def _step_one_sample(ds, record: int) -> tuple[np.void, np.void, np.void]:
+    samples = ds.samples
+    row = samples[record : record + 1]
+    seed = row["seed_t"][0]
+    ref = row["ref_t1"][0]
+
+    binding = _load_binding()
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+        1, seed_stride
+    )
+    prev_input_bytes = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+        1, input_stride
+    )
+    input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+        1, input_stride
+    )
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    try:
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+    finally:
+        binding.destroy(handle)
+
+    return seed, ref, out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0]
+
+
+@pytest.mark.integration
+def test_attackairlw_sustained_tiplog_contact_defers_grounded_dash_damage_selfplay_181413() -> None:
+    # Self-play 181413 rec316 is a source-general fighter BODY tip-log boundary:
+    # - p0 Fox AttackAirLw has a sustained HitCapsule whose exact lbColl_80006E58 matrix overlap
+    #   against grounded p1 Dash is below common x7A8.
+    # - ftColl_80076ED8 therefore takes checkTipLog/inlineB1, starting victim hitlag and attribution
+    #   without percent/KB/damage-state entry.
+    # - rec318 is the adjacent negative: the later deeper contact is a full BODY damage hit.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,checkTipLog,inlineB1}
+    # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    slp_path = root / "replays/validation/aggregate_recent/Game_20260514T181413.slp"
+    if not slp_path.exists():
+        pytest.skip(f"missing local replay: {slp_path}")
+
+    ds = build_dataset_from_slp(
+        slp_path=str(slp_path),
+        ports=[1, 2],
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+
+    attacker = 0
+    defender = 1
+    seed, ref, out = _step_one_sample(ds, 316)
+    assert int(seed["action_id"][attacker]) == 69  # AttackAirLw.
+    assert int(seed["action_id"][defender]) == 18  # Turn.
+    assert int(ref["action_id"][defender]) == 20  # Dash.
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender])
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 3
+    assert int(out["hitstun"][defender]) == int(ref["hitstun"][defender]) == 0
+    assert float(out["percent"][defender]) == pytest.approx(float(ref["percent"][defender]))
+    assert int(out["instance_hit_by"][defender]) == int(ref["instance_hit_by"][defender])
+    assert int(out["hitlag"][attacker]) == int(ref["hitlag"][attacker]) == 0
+
+    seed, ref, out = _step_one_sample(ds, 318)
+    assert int(seed["action_id"][defender]) == 20  # Dash.
+    assert int(ref["action_id"][defender]) == 76  # DamageHi2.
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender])
+    assert int(out["hitlag"][attacker]) == int(ref["hitlag"][attacker]) == 3
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 3
+    assert int(out["hitstun"][defender]) == int(ref["hitstun"][defender]) == 17
+    assert float(out["percent"][defender]) == pytest.approx(float(ref["percent"][defender]))
+
+
+@pytest.mark.integration
+def test_attackairlw_primary_hitbox_tiny_overlap_stays_full_body_damage_prh() -> None:
+    # Negative boundary for the retained AttackAirLw BODY tip-log lane:
+    # PRH rec5032 is Fox AttackAirLw primary hitbox slot 0 against grounded Wait. The current
+    # matrix-radius overlap is tiny, but vanilla takes full BODY damage on hb0; only non-primary
+    # limb slots consume the retained matrix-overlap tip-log reconstruction until the exact
+    # lbColl_80006E58/victims_2 scalar owner is ported for every slot.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,checkTipLog,inlineB1}
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing validation dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples[5032]["seed_t"]
+    out, ref = _step_one_row_with_seed_one_step(dataset_path, 5032, seed)
+
+    attacker = 1
+    defender = 0
+    assert int(seed["action_id"][attacker]) == 69  # AttackAirLw.
+    assert int(seed["action_id"][defender]) == 14  # Wait.
+    assert int(ref["action_id"][defender]) == 80  # DamageN3.
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender])
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 6
+    assert int(out["hitlag"][attacker]) == int(ref["hitlag"][attacker]) == 6
+    assert int(out["hitstun"][defender]) == int(ref["hitstun"][defender]) == 27
+    assert float(out["percent"][defender]) == pytest.approx(float(ref["percent"][defender]))
+
+
+@pytest.mark.integration
+def test_grounded_attack_restart_clears_sustained_hitcapsule_latch_selfplay_181413() -> None:
+    # Same-action grounded Attack restart HitCapsule clear:
+    # - p0 Fox re-enters AttackHi3 without a Slippi action_id change; action_frame rewinds from
+    #   22 to 1 while the old same-source victim attribution remains visible on p1 DamageFlyN.
+    # - Source still ran Fighter_ChangeMotionState -> ftColl_8007AFF8 and the fresh
+    #   ftAction_8007121C create edge owns lbColl_80008440 clear/copy, so BODY attribution alone
+    #   must not re-materialize the old victims_1 latch for the new AttackHi3.
+    # - rec1348 is the adjacent negative: the fresh hitboxes exist but vanilla has not taken the
+    #   new BODY hit yet. rec1349 is the positive: the same fresh hitboxes enter DamageFlyTop.
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_ChangeMotionState,Fighter_8006A360}
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007AFF8,ftColl_800768A0,ftColl_80076ED8}
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008440,lbColl_8000ACFC}
+    # MSLMSO01: MSL_MS_CLASS_GROUNDED_ATTACK.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    slp_path = root / "replays/validation/aggregate_recent/Game_20260514T181413.slp"
+    if not slp_path.exists():
+        pytest.skip(f"missing local replay: {slp_path}")
+
+    ds = build_dataset_from_slp(
+        slp_path=str(slp_path),
+        ports=[1, 2],
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    samples = ds.samples
+    binding = _load_binding()
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    samples_u8, seed_off, prev_input_off, input_off = _dataset_byte_views(ds)
+
+    start = 0
+    stop = 1349
+    attacker = 0
+    defender = 1
+    seed_bytes = samples_u8[start : start + 1, seed_off : seed_off + seed_stride].copy()
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+    out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(1)
+
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    try:
+        binding.reseed_seed_rollout(handle, seed_bytes)
+        for record in range(start, stop + 1):
+            prev_input_bytes = samples_u8[
+                record : record + 1, prev_input_off : prev_input_off + input_stride
+            ].copy()
+            input_bytes = samples_u8[record : record + 1, input_off : input_off + input_stride].copy()
+            binding.step_input(handle, prev_input_bytes, input_bytes)
+            binding.write_compare(handle, out_compare_bytes)
+
+            if record == 1348:
+                out = out_view[0].copy()
+                ref = samples["ref_t1"][record]
+                assert int(samples["seed_t"][record]["action_id"][attacker]) == 56  # AttackHi3
+                assert int(ref["action_id"][defender]) == 88  # DamageFlyN
+                assert int(out["action_id"][defender]) == int(ref["action_id"][defender])
+                assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 0
+                assert int(out["hitstun"][defender]) == int(ref["hitstun"][defender])
+                assert float(out["percent"][defender]) == pytest.approx(float(ref["percent"][defender]))
+
+        out = out_view[0].copy()
+        ref = samples["ref_t1"][stop]
+        assert int(samples["seed_t"][stop]["action_id"][attacker]) == 56  # AttackHi3
+        assert int(samples["seed_t"][stop]["action_frame"][attacker]) == 5
+        assert int(ref["action_id"][defender]) == 90  # DamageFlyTop
+        for field in ("action_id", "animation_index", "hitlag", "hitstun", "instance_hit_by"):
+            assert int(out[field][defender]) == int(ref[field][defender]), f"field={field}"
+        assert float(out["percent"][defender]) == pytest.approx(float(ref["percent"][defender]))
+    finally:
+        binding.destroy(handle)
+
+
+@pytest.mark.integration
+def test_grounded_attack_restart_clear_applies_to_attackdash_tch() -> None:
+    # Grounded Attack* same-action restart clear outside the self-play Fox AttackHi3 row:
+    # TubbyCurlyHerring rec1817 is Fox AttackDash against Falco DamageFlyN. The attacker remains
+    # in AttackDash, but source has created a fresh grounded Attack* HitCapsule list for this
+    # action instance, so same-source stale BODY attribution from earlier rows cannot suppress the
+    # new hit. This proves the retained owner is the MSLMSO01 grounded-attack class boundary, not a
+    # Fox AttackHi3 replay slice.
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_ChangeMotionState,Fighter_8006A360}
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007AFF8,ftColl_800768A0,ftColl_80076ED8}
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008440,lbColl_8000ACFC}
+    # MSLMSO01: MSL_MS_CLASS_GROUNDED_ATTACK.
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing validation dataset: {dataset_path}")
+
+    seed, out, ref = _step_one_row(dataset_path, 1817)
+    attacker = 0
+    defender = 1
+    assert int(seed["action_id"][attacker]) == 50  # AttackDash.
+    assert int(seed["action_frame"][attacker]) == 4
+    assert int(seed["action_id"][defender]) == 70  # FallSpecial.
+    assert int(ref["action_id"][defender]) == 77  # DamageHi3.
+    for field in ("action_id", "animation_index", "hitlag", "hitstun", "instance_hit_by"):
+        assert int(out[field][defender]) == int(ref[field][defender]), f"field={field}"
+    assert float(out["percent"][defender]) == pytest.approx(float(ref["percent"][defender]))
 
 
 @pytest.mark.integration

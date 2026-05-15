@@ -2423,7 +2423,9 @@ Fox/Falco special-owner split (2026-04-17):
     Loop before collision and incorrectly inherit the loop/end floor-contact policy on the startup
     handoff frame.
   - `SpecialAirLw* -> SpecialLw*` and `SpecialHiFall -> SpecialHiLanding` handoffs refresh
-    `jumps_left` through the `ftCommon_8007D7FC` owner.
+    `jumps_left` through the `ftCommon_8007D7FC` owner. SpecialHiFall -> SpecialHiLanding also
+    copies live self velocity into `gr_vel` through `ftCommon_8007D6A4`; `ftFx_SpecialHiLanding_Phys`
+    then applies the character x7C ground-momentum friction before common ground movement.
   - `SpecialLwEnd` / `SpecialAirLwEnd` anim-end exits call `ftCommon_8007DB24` and
     `ftCommon_8007D92C`; the simulator now models the locked same-frame destination IASA slices
     covered by replay-real rows: grounded Wait can enter ordinary/backward Turn through
@@ -2484,6 +2486,9 @@ Fox/Falco special-owner split (2026-04-17):
     `ftCo_80096900` call writes `mv.co.fallspecial.landing_lag`; runtime carries that scalar
     (EscapeAir common `x344`, Illusion/Phantasm `da->x50`, Firefox/Firebird `da->x90`) into
     `ftCo_LandingFallSpecial_Enter` so the entry row advances at `(end_frame + 0.1) / landing_lag`.
+    Landing and `LandingFallSpecial` root-y publication consumes the same mpLib floor-contact owner
+    as ordinary floor projection; `mpLib_8004DD90_Floor` contributes the small floor bias once, so
+    entry code must not add a second simulator-local bias on top of current mpColl contact.
   - `EscapeAir_Coll` uses `ft_80082C74` and can enter `LandingFallSpecial` from the persisted
     CollData floor index. One-step reseeds can start after the previous ECB bottom has already
     crossed that floor, so runtime adds a bounded projection only when the frame-start previous ECB
@@ -2917,10 +2922,12 @@ Fox/Falco special-owner split (2026-04-17):
     x14 snapshot owner as common Damage: while `x221C_b6` is set, `ftCo_Jump_GetInput` stores
     `mv.co.damage.x0` in `mv.co.damage.x14`; after hitstun ends, `ftCo_DamageFly_Anim` consumes
     that snapshot through `inlineC0` before entering `DamageFall`, or `DamageFall_IASA` consumes it
-    through the JumpAerial path. FlyReflectWall/Ceil delegate their Anim/IASA callbacks to the
-    same DamageFly owners, so replay seed derivation must keep their active-hitstun rows in the x14
-    family. This is required for rollout carry such as QGD `DamageFlyN` x14 buffering into
-    `JumpAerialF`, and FEH `FlyReflectWall` terminal x14 buffering into `JumpAerialB`.
+    through the JumpAerial path. The JumpAerial entry row uses the buffered x/y snapshot; following
+    JumpAerial Phys rows apply live drift from current input. FlyReflectWall/Ceil delegate their
+    Anim/IASA callbacks to the same DamageFly owners, so replay seed derivation must keep their
+    active-hitstun rows in the x14 family. This is required for rollout carry such as QGD
+    `DamageFlyN` x14 buffering into `JumpAerialF`, and FEH `FlyReflectWall` terminal x14 buffering
+    into `JumpAerialB`.
     Sources: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{doIasa,inlineC0,ftCo_DamageFly_Anim,ftCo_DamageFly_IASA,ftCo_DamageFlyRoll_IASA}`,
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA`,
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_FlyReflect.c::{ftCo_FlyReflect_Anim,ftCo_FlyReflect_IASA}`.
@@ -5235,6 +5242,13 @@ BODY collision-space residual split and rejected seed bridge:
   newly enabled airborne-victim capsules (`ftColl_8007AD18` initializes `x58=x4C`) and uses the
   matrix-radius `lbColl_8000805C` helper; sustained near-threshold rows such as `QGD:8332` stay on
   the normal damage path until the exact scalar is ported for all edge/non-edge cases.
+- Fighter BODY phantom/tip-log rows use active HitCapsule data, not action-slot proxies. The
+  authored same-group primary is identified from active MSLHITB1 `damage`, `hit_group`, and source
+  HitCapsule id/order data and remains on the full BODY path; later/equal siblings and lower-damage
+  same-group limb capsules may take the victims_2 tip-log branch. Same-action grounded Attack*
+  restarts use the generated MSLMSO01 grounded-attack class for `Fighter_ChangeMotionState ->
+  ftColl_8007AFF8 -> ftColl_800768A0` HitCapsule clears; non-grounded AttackAir states are negative
+  controls.
 - Late `AttackAirB` vs `DamageFlyTop` phantom/tip-log followups now carry the same hidden delayed
   damage owner as decomp: `ftColl_80076ED8` stores phantom damage into `dmg.x1898`, starts hitlag
   through the `x1840/x18a0` branch, and `Fighter_ProcessHit` applies `ftColl_8007BE3C` when

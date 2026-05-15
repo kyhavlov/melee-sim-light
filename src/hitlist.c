@@ -4,6 +4,7 @@
 
 #include "action_ids.h"
 #include "batch_internal.h"
+#include "motion_state_owners.h"
 
 static inline uint8_t hitlist_victim_pointer_may_change(uint8_t stocks, uint16_t action_id) {
   // Decomp hitlists store a raw victim pointer (HitVictim.victim) and use pointer equality to
@@ -39,6 +40,22 @@ static inline uint8_t hitlist_specialhi_action(uint16_t action_id) {
           action_id <= (uint16_t)MSL_ACT_FX_SPECIAL_HI_BOUND)
              ? 1u
              : 0u;
+}
+
+static inline uint8_t hitlist_grounded_attack_runtime_clear_owns_empty_hitcapsule(
+    const MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  const uint16_t action_id = batch->state.action_id[idx];
+  if (!msl_motion_state_class_has(batch->state.char_id[idx], action_id,
+                                  MSL_MS_CLASS_GROUNDED_ATTACK)) {
+    return 0u;
+  }
+  if (action_id == (uint16_t)MSL_ACT_ATTACK_100_LOOP) {
+    return 0u;
+  }
+  return 1u;
 }
 
 static inline uint8_t hitlist_source_port0_for_attacker(const MslBatch* batch, size_t a_idx,
@@ -367,7 +384,11 @@ uint8_t hitlist_allows_fighter(MslBatch* batch, int bi, int attacker, int hb_id,
       const uint8_t cd_set = (seed_cd == 0xFFFFu) ? 0u : (uint8_t)(seed_cd & 0xFFu);
       (void)hitlist_insert_victims1(hit, (int)MSL_LBCOLL_INSERT_FT_SHIELD, &key, cd_set);
     }
+    const uint8_t grounded_attack_runtime_empty =
+        hitlist_grounded_attack_runtime_clear_owns_empty_hitcapsule(batch, a_idx);
     if (seed_cd == 0u && !batch->state.combat_hitlist_hb_valid[valid_i] &&
+        (batch->state.fighter_hitlist_init_gen[hb_i] != batch->state.hitlist_reseed_gen[bi] ||
+         !grounded_attack_runtime_empty) &&
         ((batch->state.hitlag_pre_timer[a_idx] != 0u &&
           batch->state.hitlag_pre_timer[v_idx] != 0u) ||
          (batch->state.hitbox_enable_edge[hb_i] == 0u && batch->state.hitstun[v_idx] != 0u)) &&
@@ -384,10 +405,13 @@ uint8_t hitlist_allows_fighter(MslBatch* batch, int bi, int attacker, int hb_id,
       //   post-decrement collision pass.
       // - After hitlag exits, the same victims_1 list continues suppressing sustained same-source
       //   hitstun contacts until a real enable-edge clear/copy event changes HitCapsule ownership.
-      // - Authoritative per-HitCapsule empty seed lanes are the source owner for exact one-step
-      //   rows; they prove this slot's victims_1 list is empty and must not be backfilled from
-      //   BODY attribution alone.
+      // - Authoritative per-HitCapsule empty seed lanes and runtime-initialized clear/copy results
+      //   are the source owner for exact rows; they prove this slot's victims_1 list is empty and
+      //   must not be backfilled from BODY attribution alone. This matters for same-action
+      //   grounded-attack restarts: Fighter_ChangeMotionState runs ftColl_8007AFF8 and the fresh
+      //   ftAction_8007121C create edge owns clear/copy even when Slippi action_id does not change.
       // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+      // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
       // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
       // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
       MslHitlistVictimEntry key;
