@@ -160,6 +160,22 @@ buffers.reset_mask[env.t, 3] = 1
 env.reset_masked()
 ```
 
+## Replay Validation
+
+For quick triage of a single Slippi replay, `tools.eval.validate_replay`
+builds a temporary `.msl` dataset and prints one-step or rollout results to
+stdout without updating the committed validation reports:
+
+```bash
+uv run python -m tools.eval.validate_replay \
+  --replay /path/to/Game.slp \
+  --mode rollout
+```
+
+Use `--mode one-step` for direct seeded one-step validation, or `--mode both`
+to run both views. By default the tool selects the human player ports from the
+replay; pass `--ports 1,2` to choose ports explicitly.
+
 ## Observation Schema
 
 `buffers.gamestate_view` is a structured NumPy view with shape
@@ -312,4 +328,3 @@ Button masks exported by `melee_sim`:
 | `BUTTON_L` | `0x0040` |
 | `BUTTON_R` | `0x0020` |
 | `BUTTON_D_UP` | `0x0008` |
-
