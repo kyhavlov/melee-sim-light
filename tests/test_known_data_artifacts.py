@@ -28,6 +28,7 @@ from tools.slippi.known_data_artifacts import (
     ITEM_ARTICLE_VERSION,
     PART_MAGIC,
     PART_VERSION,
+    SCRIPT_LEGACY_JSON_VERSION,
     SCRIPT_MAGIC,
     SCRIPT_VERSION,
     STAGE_MAGIC,
@@ -1377,7 +1378,7 @@ def test_runtime_move_tables_mslftsc1_matches_legacy_json_queries() -> None:
             "unsupported MSLSTIO1 version",
         ),
         (DREAM_WHISPY_MAGIC, DREAM_WHISPY_VERSION, read_mslwhsp1, "unsupported MSLWHSP1 version"),
-        (SCRIPT_MAGIC, SCRIPT_VERSION, read_mslftsc1_v1, "unsupported MSLFTSC1 version"),
+        (SCRIPT_MAGIC, SCRIPT_LEGACY_JSON_VERSION, read_mslftsc1_v1, "unsupported MSLFTSC1 version"),
     ],
 )
 def test_known_data_artifact_readers_reject_stale_versions(tmp_path: Path, magic, version, reader, match) -> None:

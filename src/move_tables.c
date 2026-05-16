@@ -1,1678 +1,545 @@
 #include "move_tables.h"
 
-#include <ctype.h>
-#include <errno.h>
 #include <limits.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
 #include "action_ids.h"
-#include "alloc.h"
-
-// Character id mapping follows Slippi post-frame `character` (GALE01):
-// - Fox   = 1
-// - Falco = 22
-enum { MSL_CHAR_FOX = 1, MSL_CHAR_FALCO = 22 };
-
-typedef struct MslFrameWindow {
-  int16_t start_af;  // inclusive (0-based action_frame)
-  int16_t end_af;    // exclusive (0-based action_frame)
-  uint8_t loaded;
-} MslFrameWindow;
-
-typedef struct MslThrowRelease {
-  int16_t release_af;  // inclusive (0-based action_frame)
-  uint8_t hit_idx;
-  uint8_t loaded;
-} MslThrowRelease;
-
-typedef struct MslThrowHitbox {
-  float damage;
-  uint16_t angle;
-  uint16_t kbg;
-  uint16_t wsk;
-  uint16_t bkb;
-  uint8_t element;
-  uint8_t sfx_kind;
-  uint8_t sfx_severity;
-  uint8_t loaded;
-} MslThrowHitbox;
-
-typedef struct MslSmashChargeInfo {
-  int16_t start_af;     // inclusive 0-based command frame
-  float damage_mul;     // ftCo_800DEE84 damage_mul / smash_attrs.x2120_damageMul
-  uint8_t hold_frames;  // ftCo_800DEE84 arg2 / smash_attrs.x211C_holdFrame
-  uint8_t loaded;
-} MslSmashChargeInfo;
-
-enum { MSL_FRAME_PULSES_MAX = 16 };
-typedef struct MslFramePulses {
-  int16_t frame[MSL_FRAME_PULSES_MAX];
-  uint8_t count;
-  uint8_t loaded;
-} MslFramePulses;
-
-enum { MSL_ATTACKAIR_KIND_COUNT = 5 };
-enum {
-  MSL_ATTACKAIR_KIND_N = 0,
-  MSL_ATTACKAIR_KIND_F = 1,
-  MSL_ATTACKAIR_KIND_B = 2,
-  MSL_ATTACKAIR_KIND_HI = 3,
-  MSL_ATTACKAIR_KIND_LW = 4,
-};
-
-static MslFrameWindow g_cmd0_by_char_attackair[256][MSL_ATTACKAIR_KIND_COUNT];
-static MslFrameWindow g_allow_interrupt_by_char_attackair[256][MSL_ATTACKAIR_KIND_COUNT];
-static MslFrameWindow g_hitbox_lifetime_by_char_attackair[256][MSL_ATTACKAIR_KIND_COUNT];
-static MslFrameWindow g_first_hitbox_phase_by_char_attackair[256][MSL_ATTACKAIR_KIND_COUNT];
-static MslFrameWindow g_second_create_by_char_attackair[256][MSL_ATTACKAIR_KIND_COUNT];
-static MslFrameWindow g_last_create_by_char_attackair[256][MSL_ATTACKAIR_KIND_COUNT];
-enum { MSL_GROUNDED_ATTACK_KIND_COUNT = 10 };
-enum {
-  MSL_GROUNDED_ATTACK_KIND_11 = 0,
-  MSL_GROUNDED_ATTACK_KIND_12 = 1,
-  MSL_GROUNDED_ATTACK_KIND_13 = 2,
-  MSL_GROUNDED_ATTACK_KIND_DASH = 3,
-  MSL_GROUNDED_ATTACK_KIND_S3 = 4,
-  MSL_GROUNDED_ATTACK_KIND_HI3 = 5,
-  MSL_GROUNDED_ATTACK_KIND_LW3 = 6,
-  MSL_GROUNDED_ATTACK_KIND_S4 = 7,
-  MSL_GROUNDED_ATTACK_KIND_HI4 = 8,
-  MSL_GROUNDED_ATTACK_KIND_LW4 = 9,
-};
-static MslFrameWindow g_allow_interrupt_by_char_grounded_attack[256]
-                                                               [MSL_GROUNDED_ATTACK_KIND_COUNT];
-static MslFrameWindow g_first_hitbox_phase_by_char_grounded_attack[256]
-                                                                  [MSL_GROUNDED_ATTACK_KIND_COUNT];
-static MslSmashChargeInfo g_smash_charge_by_char_grounded_attack[256]
-                                                                [MSL_GROUNDED_ATTACK_KIND_COUNT];
-static MslFrameWindow g_allow_interrupt_by_char_escape_n[256];
-static MslFrameWindow g_allow_interrupt_by_char_escape_air[256];
-static MslFrameWindow g_throw_flags_by_char_escape_f[256];
-static MslFrameWindow g_jab_combo_by_char_grounded_attack[256][MSL_GROUNDED_ATTACK_KIND_COUNT];
-static MslFrameWindow g_jab_rapid_by_char_grounded_attack[256][MSL_GROUNDED_ATTACK_KIND_COUNT];
-static MslFramePulses g_attack100_loop_end_check_by_char[256];
-static MslFrameWindow g_cmd0_by_char_dash[256];
-static MslFrameWindow g_cmd0_by_char_runbrake[256];
-static MslFrameWindow g_cmd1_by_char_turnrun[256];
-static MslFrameWindow g_cmd0_by_char_escapeair[256];
-static MslFrameWindow g_throw_flags_by_char_catch[256];
-static MslFrameWindow g_throw_flags_by_char_catchdash[256];
-static MslFrameWindow g_catchattack_grabbed_hit_by_char[256];
-enum { MSL_THROW_KIND_COUNT = 4 };
-enum {
-  MSL_THROW_KIND_F = 0,
-  MSL_THROW_KIND_B = 1,
-  MSL_THROW_KIND_HI = 2,
-  MSL_THROW_KIND_LW = 3,
-};
-enum { MSL_THROW_HITBOX_IDX_MAX = 8 };
-static MslThrowRelease g_throw_release_by_char[256][MSL_THROW_KIND_COUNT];
-static MslFrameWindow g_throw_flip_by_char[256][MSL_THROW_KIND_COUNT];
-static MslFrameWindow g_throw_cmd1_by_char[256][MSL_THROW_KIND_COUNT];
-static MslFramePulses g_throw_spawn_projectile_by_char[256][MSL_THROW_KIND_COUNT];
-static MslThrowHitbox g_throw_hitbox_by_char[256][MSL_THROW_KIND_COUNT][MSL_THROW_HITBOX_IDX_MAX];
-enum { MSL_SPECIAL_PSEUDO_RNG_ENTRIES_MAX = 64 };
-typedef struct MslPseudoRandomSfxByMsid {
-  uint16_t msid;
-  MslFramePulses pulses;
-  uint8_t random_range[MSL_FRAME_PULSES_MAX];
-} MslPseudoRandomSfxByMsid;
-typedef struct MslSpecialCmd0ByMsid {
-  uint16_t msid;
-  MslFrameWindow window;
-} MslSpecialCmd0ByMsid;
-static MslPseudoRandomSfxByMsid g_special_pseudo_rng_by_char[256]
-                                                            [MSL_SPECIAL_PSEUDO_RNG_ENTRIES_MAX];
-static uint8_t g_special_pseudo_rng_count_by_char[256];
-static MslSpecialCmd0ByMsid g_special_cmd0_by_char[256][MSL_SPECIAL_PSEUDO_RNG_ENTRIES_MAX];
-static uint8_t g_special_cmd0_count_by_char[256];
-enum { MSL_SPECIAL_CMD0_LATCH_CLEAR_TAIL_FRAMES = 2 };
-static int g_loaded = 0;
+#include "script_events.h"
 
 enum {
-  MSLFTSC1_VERSION = 1,
-  MSLFTSC1_HEADER_SIZE = 28,
-  MSLFTSC1_INDEX_RECORD_SIZE = 12,
-  MSLFTSC1_EVENT_HEADER_SIZE = 8,
-  MSL_SPECIAL_MSID_FIRST = 295,
+  MSL_SPECIAL_CMD0_LATCH_CLEAR_TAIL_FRAMES = 2,
+  MSL_MOVE_TABLE_CHAR_COUNT = 2,
+  MSL_MOVE_TABLE_MSID_CAP = 512,
+  MSL_MOVE_TABLE_CMD_VAR_COUNT = 4,
+  MSL_MOVE_TABLE_THROW_HITBOX_CAP = 4,
+  MSL_MOVE_TABLE_PULSE_CAP = 16,
+  MSL_MOVE_TABLE_SFX_PULSE_CAP = 16,
 };
 
-enum {
-  MSL_SCRIPT_EVENT_CREATE_HITBOX = 1,
-  MSL_SCRIPT_EVENT_CLEAR_HITBOXES = 6,
-  MSL_SCRIPT_EVENT_SET_CMD_VAR = 7,
-  MSL_SCRIPT_EVENT_SET_THROW_FLAGS = 8,
-  MSL_SCRIPT_EVENT_ALLOW_INTERRUPT = 9,
-  MSL_SCRIPT_EVENT_SET_THROW_SPAWN_PROJECTILE = 10,
-  MSL_SCRIPT_EVENT_SET_JAB_COMBO = 15,
-  MSL_SCRIPT_EVENT_SET_JAB_RAPID = 16,
-  MSL_SCRIPT_EVENT_START_SMASH_CHARGE = 19,
-  MSL_SCRIPT_EVENT_PSEUDO_RANDOM_SFX = 20,
-  MSL_SCRIPT_EVENT_SET_THROW_HITBOX = 21,
-};
+typedef struct MslMoveTableCachedHitbox {
+  MslThrowHitboxParams params;
+  uint8_t loaded;
+} MslMoveTableCachedHitbox;
 
-typedef struct MslScriptEntryRaw {
-  uint16_t msid;
-  uint32_t first_event;
-  uint32_t event_count;
-} MslScriptEntryRaw;
+typedef struct MslMoveTableCache {
+  MslScriptFrameWindow cmd_var_value1_closed[MSL_MOVE_TABLE_CMD_VAR_COUNT];
+  MslScriptFrameWindow cmd_var_value1_open[MSL_MOVE_TABLE_CMD_VAR_COUNT];
+  MslScriptFrameWindow allow_interrupt;
+  MslScriptFrameWindow hitbox_lifetime;
+  MslScriptFrameWindow first_create_hitbox;
+  MslScriptFrameWindow second_create_hitbox;
+  MslScriptFrameWindow last_create_hitbox;
+  MslScriptFrameWindow throw_flags_any;
+  MslScriptFrameWindow throw_flags_hit[MSL_MOVE_TABLE_THROW_HITBOX_CAP];
+  MslScriptFrameWindow catchattack_grabbed_hit;
+  MslScriptFrameWindow jab_rapid;
+  uint16_t throw_flags_pulses[MSL_MOVE_TABLE_THROW_HITBOX_CAP][MSL_MOVE_TABLE_PULSE_CAP];
+  uint8_t throw_flags_pulse_count[MSL_MOVE_TABLE_THROW_HITBOX_CAP];
+  uint16_t projectile_pulses[MSL_MOVE_TABLE_PULSE_CAP];
+  uint8_t projectile_pulse_count;
+  uint16_t sfx_pulse_frames[MSL_MOVE_TABLE_SFX_PULSE_CAP];
+  uint8_t sfx_pulse_ranges[MSL_MOVE_TABLE_SFX_PULSE_CAP];
+  uint8_t sfx_pulse_count;
+  MslMoveTableCachedHitbox throw_hitboxes[MSL_MOVE_TABLE_THROW_HITBOX_CAP];
+  int16_t jab_combo_on_frame;
+  int16_t smash_charge_frame;
+  float smash_charge_damage_mul;
+  uint8_t smash_charge_hold_frames;
+} MslMoveTableCache;
 
-typedef struct MslScriptEventRaw {
-  uint16_t frame;
-  uint16_t kind_id;
-  const char* payload;
-  uint32_t payload_len;
-} MslScriptEventRaw;
+static MslMoveTableCache g_move_cache[MSL_MOVE_TABLE_CHAR_COUNT][MSL_MOVE_TABLE_MSID_CAP];
+static int g_move_cache_loaded = 0;
 
-typedef struct MslScriptTableRaw {
-  uint8_t* file_buf;
-  size_t file_size;
-  MslScriptEntryRaw* entries;
-  MslScriptEventRaw* events;
-  uint32_t entry_count;
-  uint32_t event_count;
-} MslScriptTableRaw;
-
-static uint16_t read_le_u16(const uint8_t* p) {
-  return (uint16_t)((uint16_t)p[0] | ((uint16_t)p[1] << 8));
-}
-
-static uint32_t read_le_u32(const uint8_t* p) {
-  return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
-}
-
-static int script_entry_cmp_msid(const void* a, const void* b) {
-  const MslScriptEntryRaw* ea = (const MslScriptEntryRaw*)a;
-  const MslScriptEntryRaw* eb = (const MslScriptEntryRaw*)b;
-  return (ea->msid > eb->msid) - (ea->msid < eb->msid);
-}
-
-static void script_table_raw_free(MslScriptTableRaw* table) {
-  if (table == NULL) {
-    return;
-  }
-  alloc_free(table->events);
-  alloc_free(table->entries);
-  alloc_free(table->file_buf);
-  *table = (MslScriptTableRaw){0};
-}
-
-static int script_table_raw_load(const char* data_dir, const char* rel_path,
-                                 MslScriptTableRaw* out) {
-  if (data_dir == NULL || rel_path == NULL || out == NULL) {
-    return -1;
-  }
-  *out = (MslScriptTableRaw){0};
-
-  char path[512];
-  const int n = snprintf(path, sizeof(path), "%s/%s", data_dir, rel_path);
-  if (n <= 0 || (size_t)n >= sizeof(path)) {
-    return -1;
-  }
-
-  FILE* f = fopen(path, "rb");
-  if (f == NULL) {
-    return -1;
-  }
-  if (fseek(f, 0, SEEK_END) != 0) {
-    fclose(f);
-    return -1;
-  }
-  const long sz = ftell(f);
-  if (sz < MSLFTSC1_HEADER_SIZE) {
-    fclose(f);
-    return -1;
-  }
-  if (fseek(f, 0, SEEK_SET) != 0) {
-    fclose(f);
-    return -1;
-  }
-
-  uint8_t* buf = (uint8_t*)alloc_malloc((size_t)sz);
-  if (buf == NULL) {
-    fclose(f);
-    return -1;
-  }
-  const size_t got = fread(buf, 1, (size_t)sz, f);
-  fclose(f);
-  if (got != (size_t)sz) {
-    alloc_free(buf);
-    return -1;
-  }
-
-  if (memcmp(buf, "MSLFTSC1", 8) != 0 || read_le_u32(buf + 8) != (uint32_t)MSLFTSC1_VERSION) {
-    alloc_free(buf);
-    return -1;
-  }
-  const uint32_t entry_count = read_le_u32(buf + 12);
-  const uint32_t event_count = read_le_u32(buf + 16);
-  const uint32_t index_off = read_le_u32(buf + 20);
-  const uint32_t event_off = read_le_u32(buf + 24);
-  const uint64_t expected_event_off =
-      (uint64_t)MSLFTSC1_HEADER_SIZE + (uint64_t)entry_count * MSLFTSC1_INDEX_RECORD_SIZE;
-  if (index_off != (uint32_t)MSLFTSC1_HEADER_SIZE || event_off != expected_event_off ||
-      event_off > (uint32_t)sz) {
-    alloc_free(buf);
-    return -1;
-  }
-
-  MslScriptEntryRaw* entries =
-      (MslScriptEntryRaw*)alloc_calloc((size_t)entry_count, sizeof(MslScriptEntryRaw));
-  MslScriptEventRaw* events =
-      (MslScriptEventRaw*)alloc_calloc((size_t)event_count, sizeof(MslScriptEventRaw));
-  if (entries == NULL || events == NULL) {
-    alloc_free(events);
-    alloc_free(entries);
-    alloc_free(buf);
-    return -1;
-  }
-
-  for (uint32_t i = 0; i < entry_count; i++) {
-    const uint8_t* rec = buf + index_off + (size_t)i * MSLFTSC1_INDEX_RECORD_SIZE;
-    entries[i].msid = read_le_u16(rec);
-    entries[i].first_event = read_le_u32(rec + 4);
-    entries[i].event_count = read_le_u32(rec + 8);
-    if (entries[i].first_event > event_count ||
-        entries[i].event_count > event_count - entries[i].first_event) {
-      alloc_free(events);
-      alloc_free(entries);
-      alloc_free(buf);
-      return -1;
-    }
-  }
-
-  size_t off = (size_t)event_off;
-  for (uint32_t i = 0; i < event_count; i++) {
-    if (off + MSLFTSC1_EVENT_HEADER_SIZE > (size_t)sz) {
-      alloc_free(events);
-      alloc_free(entries);
-      alloc_free(buf);
-      return -1;
-    }
-    const uint8_t* ev = buf + off;
-    const uint32_t payload_len = read_le_u32(ev + 4);
-    if (payload_len > (uint32_t)((size_t)sz - off - MSLFTSC1_EVENT_HEADER_SIZE)) {
-      alloc_free(events);
-      alloc_free(entries);
-      alloc_free(buf);
-      return -1;
-    }
-    events[i].frame = read_le_u16(ev);
-    events[i].kind_id = read_le_u16(ev + 2);
-    events[i].payload_len = payload_len;
-    events[i].payload = (const char*)(ev + MSLFTSC1_EVENT_HEADER_SIZE);
-    off += MSLFTSC1_EVENT_HEADER_SIZE + (size_t)payload_len;
-  }
-  if (off != (size_t)sz) {
-    alloc_free(events);
-    alloc_free(entries);
-    alloc_free(buf);
-    return -1;
-  }
-
-  qsort(entries, (size_t)entry_count, sizeof(entries[0]), script_entry_cmp_msid);
-  out->file_buf = buf;
-  out->file_size = (size_t)sz;
-  out->entries = entries;
-  out->events = events;
-  out->entry_count = entry_count;
-  out->event_count = event_count;
-  return 0;
-}
-
-static const MslScriptEntryRaw* script_table_raw_find_entry(const MslScriptTableRaw* table,
-                                                            uint16_t msid) {
-  if (table == NULL || table->entries == NULL) {
-    return NULL;
-  }
-  size_t lo = 0;
-  size_t hi = table->entry_count;
-  while (lo < hi) {
-    const size_t mid = lo + (hi - lo) / 2u;
-    const uint16_t got = table->entries[mid].msid;
-    if (got == msid) {
-      return &table->entries[mid];
-    }
-    if (got < msid) {
-      lo = mid + 1u;
-    } else {
-      hi = mid;
-    }
-  }
-  return NULL;
-}
-
-static const char* json_skip_ws(const char* s) {
-  while (s && *s && isspace((unsigned char)*s)) {
-    s++;
-  }
-  return s;
-}
-
-static const char* json_parse_int(const char* s, int* out) {
-  s = json_skip_ws(s);
-  if (s == NULL) {
-    return NULL;
-  }
-  char* end = NULL;
-  errno = 0;
-  long v = strtol(s, &end, 10);
-  if (end == s || errno != 0) {
-    return NULL;
-  }
-  if (out) {
-    *out = (int)v;
-  }
-  return end;
-}
-
-static const char* json_parse_f32(const char* s, float* out) {
-  s = json_skip_ws(s);
-  if (s == NULL) {
-    return NULL;
-  }
-  char* end = NULL;
-  errno = 0;
-  const double v = strtod(s, &end);
-  if (end == s || errno != 0) {
-    return NULL;
-  }
-  if (out) {
-    *out = (float)v;
-  }
-  return end;
-}
-
-static const char* strstr_range(const char* hay, const char* hay_end, const char* needle) {
-  if (hay == NULL || hay_end == NULL || needle == NULL) {
-    return NULL;
-  }
-  const size_t nlen = strlen(needle);
-  if (nlen == 0) {
-    return hay;
-  }
-  for (const char* p = hay; p + nlen <= hay_end; p++) {
-    if (*p == *needle && memcmp(p, needle, nlen) == 0) {
-      return p;
-    }
-  }
-  return NULL;
-}
-
-static int json_get_i32_in_range(const char* start, const char* end, const char* key, int* out) {
-  if (start == NULL || end == NULL || key == NULL || out == NULL || start >= end) {
-    return -1;
-  }
-  char pat[128];
-  const int n = snprintf(pat, sizeof(pat), "\"%s\"", key);
-  if (n <= 0 || (size_t)n >= sizeof(pat)) {
-    return -1;
-  }
-  const char* p = strstr_range(start, end, pat);
-  if (p == NULL) {
-    return -1;
-  }
-  p = (const char*)memchr(p, ':', (size_t)(end - p));
-  if (p == NULL) {
-    return -1;
-  }
-  p++;
-  int v = 0;
-  if (json_parse_int(p, &v) == NULL) {
-    return -1;
-  }
-  *out = v;
-  return 0;
-}
-
-static int json_get_f32_in_range(const char* start, const char* end, const char* key, float* out) {
-  if (start == NULL || end == NULL || key == NULL || out == NULL || start >= end) {
-    return -1;
-  }
-  char pat[128];
-  const int n = snprintf(pat, sizeof(pat), "\"%s\"", key);
-  if (n <= 0 || (size_t)n >= sizeof(pat)) {
-    return -1;
-  }
-  const char* p = strstr_range(start, end, pat);
-  if (p == NULL) {
-    return -1;
-  }
-  p = (const char*)memchr(p, ':', (size_t)(end - p));
-  if (p == NULL) {
-    return -1;
-  }
-  p++;
-  float v = 0.0f;
-  if (json_parse_f32(p, &v) == NULL) {
-    return -1;
-  }
-  *out = v;
-  return 0;
-}
-
-static int json_get_bool_in_range(const char* start, const char* end, const char* key, int* out) {
-  if (start == NULL || end == NULL || key == NULL || out == NULL || start >= end) {
-    return -1;
-  }
-  char pat[128];
-  const int n = snprintf(pat, sizeof(pat), "\"%s\"", key);
-  if (n <= 0 || (size_t)n >= sizeof(pat)) {
-    return -1;
-  }
-  const char* p = strstr_range(start, end, pat);
-  if (p == NULL) {
-    return -1;
-  }
-  p = (const char*)memchr(p, ':', (size_t)(end - p));
-  if (p == NULL) {
-    return -1;
-  }
-  p = json_skip_ws(p + 1);
-  if (p == NULL || p >= end) {
-    return -1;
-  }
-  if ((size_t)(end - p) >= 4 && memcmp(p, "true", 4) == 0) {
-    *out = 1;
-    return 0;
-  }
-  if ((size_t)(end - p) >= 5 && memcmp(p, "false", 5) == 0) {
-    *out = 0;
-    return 0;
-  }
-  return -1;
-}
-
-static void frame_pulses_push(MslFramePulses* out, int frame) {
-  if (out == NULL) {
-    return;
-  }
-  if (out->count >= (uint8_t)MSL_FRAME_PULSES_MAX) {
-    return;
-  }
-  // Keep deterministic order and avoid duplicates at the same frame.
-  for (uint8_t i = 0; i < out->count; i++) {
-    if ((int)out->frame[i] == frame) {
-      return;
-    }
-  }
-  out->frame[out->count] = (int16_t)frame;
-  out->count = (uint8_t)(out->count + 1u);
-}
-
-static const char* script_event_payload_end(const MslScriptEventRaw* ev) {
-  if (ev == NULL || ev->payload == NULL) {
-    return NULL;
-  }
-  return ev->payload + ev->payload_len;
-}
-
-static const MslScriptEventRaw* script_entry_event(const MslScriptTableRaw* table,
-                                                   const MslScriptEntryRaw* entry, uint32_t i) {
-  if (table == NULL || entry == NULL || i >= entry->event_count ||
-      entry->first_event + i >= table->event_count) {
-    return NULL;
-  }
-  return &table->events[entry->first_event + i];
-}
-
-static int parse_entry_cmd_var_window(const MslScriptTableRaw* table,
-                                      const MslScriptEntryRaw* entry, int want_idx,
-                                      uint8_t open_end, MslFrameWindow* out) {
-  if (table == NULL || entry == NULL || out == NULL) {
-    return -1;
-  }
-  int on_frame = -1;
-  int off_frame = -1;
-  for (uint32_t i = 0; i < entry->event_count; i++) {
-    const MslScriptEventRaw* ev = script_entry_event(table, entry, i);
-    if (ev == NULL || ev->kind_id != MSL_SCRIPT_EVENT_SET_CMD_VAR) {
-      continue;
-    }
-    const char* end = script_event_payload_end(ev);
-    int idx = -1;
-    int value = 0;
-    if (json_get_i32_in_range(ev->payload, end, "idx", &idx) == 0 &&
-        json_get_i32_in_range(ev->payload, end, "value", &value) == 0 && idx == want_idx) {
-      if (value != 0 && on_frame < 0) {
-        on_frame = (int)ev->frame;
-      } else if (value == 0 && on_frame >= 0 && off_frame < 0) {
-        off_frame = (int)ev->frame;
-      }
-    }
-  }
-  if (on_frame < 0) {
-    return -1;
-  }
-  if (off_frame < 0) {
-    if (!open_end) {
-      return -1;
-    }
-    off_frame = INT16_MAX;
-  }
-  if (off_frame < on_frame) {
-    return -1;
-  }
-  out->start_af = (int16_t)on_frame;
-  out->end_af = (int16_t)off_frame;
-  out->loaded = 1;
-  return 0;
-}
-
-static int parse_entry_cmd0_window(const MslScriptTableRaw* table, const MslScriptEntryRaw* entry,
-                                   uint8_t open_end, MslFrameWindow* out) {
-  return parse_entry_cmd_var_window(table, entry, 0, open_end, out);
-}
-
-static int parse_entry_allow_interrupt_window(const MslScriptTableRaw* table,
-                                              const MslScriptEntryRaw* entry, MslFrameWindow* out) {
-  if (table == NULL || entry == NULL || out == NULL) {
-    return -1;
-  }
-  for (uint32_t i = 0; i < entry->event_count; i++) {
-    const MslScriptEventRaw* ev = script_entry_event(table, entry, i);
-    if (ev != NULL && ev->kind_id == MSL_SCRIPT_EVENT_ALLOW_INTERRUPT) {
-      out->start_af = (int16_t)ev->frame;
-      out->end_af = (int16_t)INT16_MAX;
-      out->loaded = 1;
+static int char_slot(uint8_t char_id) {
+  switch (char_id) {
+    case 1:
       return 0;
-    }
-  }
-  return -1;
-}
-
-static int parse_entry_second_create_hitbox_phase(const MslScriptTableRaw* table,
-                                                  const MslScriptEntryRaw* entry,
-                                                  MslFrameWindow* out) {
-  if (table == NULL || entry == NULL || out == NULL) {
-    return -1;
-  }
-  int first_frame = -1;
-  int second_frame = -1;
-  int clear_frame = -1;
-  for (uint32_t i = 0; i < entry->event_count; i++) {
-    const MslScriptEventRaw* ev = script_entry_event(table, entry, i);
-    if (ev == NULL) {
-      continue;
-    }
-    if (ev->kind_id == MSL_SCRIPT_EVENT_CREATE_HITBOX) {
-      if (first_frame < 0) {
-        first_frame = (int)ev->frame;
-        continue;
-      }
-      if (second_frame < 0 && (int)ev->frame != first_frame) {
-        second_frame = (int)ev->frame;
-      }
-    } else if (ev->kind_id == MSL_SCRIPT_EVENT_CLEAR_HITBOXES && second_frame >= 0 &&
-               (int)ev->frame >= second_frame) {
-      clear_frame = (int)ev->frame;
-      break;
-    }
-  }
-  if (second_frame < 0) {
-    return -1;
-  }
-  out->start_af = (int16_t)second_frame;
-  out->end_af = (int16_t)((clear_frame >= 0) ? clear_frame : INT16_MAX);
-  out->loaded = 1;
-  return 0;
-}
-
-static int parse_entry_hitbox_script_lifetime(const MslScriptTableRaw* table,
-                                              const MslScriptEntryRaw* entry, MslFrameWindow* out) {
-  if (table == NULL || entry == NULL || out == NULL) {
-    return -1;
-  }
-  int first_create_frame = -1;
-  int last_clear_frame = -1;
-  for (uint32_t i = 0; i < entry->event_count; i++) {
-    const MslScriptEventRaw* ev = script_entry_event(table, entry, i);
-    if (ev == NULL) {
-      continue;
-    }
-    if (ev->kind_id == MSL_SCRIPT_EVENT_CREATE_HITBOX) {
-      if (first_create_frame < 0) {
-        first_create_frame = (int)ev->frame;
-      }
-    } else if (ev->kind_id == MSL_SCRIPT_EVENT_CLEAR_HITBOXES && first_create_frame >= 0) {
-      last_clear_frame = (int)ev->frame;
-    }
-  }
-  if (first_create_frame < 0) {
-    return -1;
-  }
-  out->start_af = (int16_t)first_create_frame;
-  out->end_af = (int16_t)((last_clear_frame >= 0) ? (last_clear_frame + 1) : INT16_MAX);
-  out->loaded = 1;
-  return 0;
-}
-
-static int parse_entry_first_hitbox_phase(const MslScriptTableRaw* table,
-                                          const MslScriptEntryRaw* entry, MslFrameWindow* out) {
-  if (table == NULL || entry == NULL || out == NULL) {
-    return -1;
-  }
-  int first_create_frame = -1;
-  int first_clear_frame = -1;
-  for (uint32_t i = 0; i < entry->event_count; i++) {
-    const MslScriptEventRaw* ev = script_entry_event(table, entry, i);
-    if (ev == NULL) {
-      continue;
-    }
-    if (ev->kind_id == MSL_SCRIPT_EVENT_CREATE_HITBOX) {
-      if (first_create_frame < 0) {
-        first_create_frame = (int)ev->frame;
-      }
-    } else if (ev->kind_id == MSL_SCRIPT_EVENT_CLEAR_HITBOXES && first_create_frame >= 0) {
-      first_clear_frame = (int)ev->frame;
-      break;
-    }
-  }
-  if (first_create_frame < 0) {
-    return -1;
-  }
-  out->start_af = (int16_t)first_create_frame;
-  out->end_af = (int16_t)((first_clear_frame >= 0) ? (first_clear_frame + 1) : INT16_MAX);
-  out->loaded = 1;
-  return 0;
-}
-
-static int parse_entry_last_create_hitbox_phase(const MslScriptTableRaw* table,
-                                                const MslScriptEntryRaw* entry,
-                                                MslFrameWindow* out) {
-  if (table == NULL || entry == NULL || out == NULL) {
-    return -1;
-  }
-  int last_create_frame = -1;
-  int last_seen_create_frame = -1;
-  for (uint32_t i = 0; i < entry->event_count; i++) {
-    const MslScriptEventRaw* ev = script_entry_event(table, entry, i);
-    if (ev != NULL && ev->kind_id == MSL_SCRIPT_EVENT_CREATE_HITBOX &&
-        (int)ev->frame != last_seen_create_frame) {
-      last_seen_create_frame = (int)ev->frame;
-      last_create_frame = (int)ev->frame;
-    }
-  }
-  if (last_create_frame < 0) {
-    return -1;
-  }
-  int clear_frame = INT16_MAX;
-  for (uint32_t i = 0; i < entry->event_count; i++) {
-    const MslScriptEventRaw* ev = script_entry_event(table, entry, i);
-    if (ev != NULL && ev->kind_id == MSL_SCRIPT_EVENT_CLEAR_HITBOXES &&
-        (int)ev->frame >= last_create_frame) {
-      clear_frame = (int)ev->frame;
-      break;
-    }
-  }
-  out->start_af = (int16_t)last_create_frame;
-  out->end_af = (int16_t)clear_frame;
-  out->loaded = 1;
-  return 0;
-}
-
-static int parse_entry_start_smash_charge_info(const MslScriptTableRaw* table,
-                                               const MslScriptEntryRaw* entry,
-                                               MslSmashChargeInfo* out) {
-  if (table == NULL || entry == NULL || out == NULL) {
-    return -1;
-  }
-  for (uint32_t i = 0; i < entry->event_count; i++) {
-    const MslScriptEventRaw* ev = script_entry_event(table, entry, i);
-    if (ev == NULL || ev->kind_id != MSL_SCRIPT_EVENT_START_SMASH_CHARGE) {
-      continue;
-    }
-    const char* end = script_event_payload_end(ev);
-    int hold_frames = 0;
-    float damage_mul = 0.0f;
-    if (json_get_i32_in_range(ev->payload, end, "hold_frames", &hold_frames) == 0 &&
-        json_get_f32_in_range(ev->payload, end, "damage_mul", &damage_mul) == 0 &&
-        hold_frames > 0 && hold_frames <= 255 && damage_mul > 0.0f) {
-      out->start_af = (int16_t)ev->frame;
-      out->damage_mul = damage_mul;
-      out->hold_frames = (uint8_t)hold_frames;
-      out->loaded = 1u;
-      return 0;
-    }
-  }
-  return -1;
-}
-
-static int parse_entry_jab_combo_window(const MslScriptTableRaw* table,
-                                        const MslScriptEntryRaw* entry, MslFrameWindow* out) {
-  if (table == NULL || entry == NULL || out == NULL) {
-    return -1;
-  }
-  for (uint32_t i = 0; i < entry->event_count; i++) {
-    const MslScriptEventRaw* ev = script_entry_event(table, entry, i);
-    if (ev == NULL || ev->kind_id != MSL_SCRIPT_EVENT_SET_JAB_COMBO) {
-      continue;
-    }
-    const char* end = script_event_payload_end(ev);
-    int disabled = 0;
-    if (json_get_i32_in_range(ev->payload, end, "disabled", &disabled) == 0 && disabled == 0) {
-      out->start_af = (int16_t)ev->frame;
-      out->end_af = (int16_t)INT16_MAX;
-      out->loaded = 1;
-      return 0;
-    }
-  }
-  return -1;
-}
-
-static int parse_entry_jab_rapid_window(const MslScriptTableRaw* table,
-                                        const MslScriptEntryRaw* entry, MslFrameWindow* out) {
-  if (table == NULL || entry == NULL || out == NULL) {
-    return -1;
-  }
-  int on_frame = -1;
-  int off_frame = -1;
-  for (uint32_t i = 0; i < entry->event_count; i++) {
-    const MslScriptEventRaw* ev = script_entry_event(table, entry, i);
-    if (ev == NULL || ev->kind_id != MSL_SCRIPT_EVENT_SET_JAB_RAPID) {
-      continue;
-    }
-    const char* end = script_event_payload_end(ev);
-    int state = 0;
-    if (json_get_i32_in_range(ev->payload, end, "state", &state) != 0) {
-      continue;
-    }
-    if (state != 0 && on_frame < 0) {
-      on_frame = (int)ev->frame;
-    } else if (state == 0 && on_frame >= 0 && off_frame < 0) {
-      off_frame = (int)ev->frame;
-    }
-  }
-  if (on_frame < 0) {
-    return -1;
-  }
-  if (off_frame < 0) {
-    off_frame = INT16_MAX;
-  }
-  if (off_frame < on_frame) {
-    return -1;
-  }
-  out->start_af = (int16_t)on_frame;
-  out->end_af = (int16_t)off_frame;
-  out->loaded = 1;
-  return 0;
-}
-
-static int parse_entry_throw_flags_window(const MslScriptTableRaw* table,
-                                          const MslScriptEntryRaw* entry, int want_hit_idx,
-                                          uint8_t use_hit_idx, MslFrameWindow* out) {
-  if (table == NULL || entry == NULL || out == NULL) {
-    return -1;
-  }
-  int on_frame = -1;
-  for (uint32_t i = 0; i < entry->event_count; i++) {
-    const MslScriptEventRaw* ev = script_entry_event(table, entry, i);
-    if (ev == NULL || ev->kind_id != MSL_SCRIPT_EVENT_SET_THROW_FLAGS) {
-      continue;
-    }
-    int hit_idx = -1;
-    const char* end = script_event_payload_end(ev);
-    if (use_hit_idx && json_get_i32_in_range(ev->payload, end, "hit_idx", &hit_idx) != 0) {
-      continue;
-    }
-    if (!use_hit_idx || hit_idx == want_hit_idx) {
-      if (on_frame < 0 || (int)ev->frame < on_frame) {
-        on_frame = (int)ev->frame;
-      }
-    }
-  }
-  if (on_frame < 0) {
-    return -1;
-  }
-  out->start_af = (int16_t)on_frame;
-  out->end_af = (int16_t)INT16_MAX;
-  out->loaded = 1;
-  return 0;
-}
-
-static int parse_entry_set_throw_flags_hit_idx_pulses(const MslScriptTableRaw* table,
-                                                      const MslScriptEntryRaw* entry,
-                                                      int want_hit_idx, MslFramePulses* out) {
-  if (table == NULL || entry == NULL || out == NULL) {
-    return -1;
-  }
-  MslFramePulses pulses = {0};
-  for (uint32_t i = 0; i < entry->event_count; i++) {
-    const MslScriptEventRaw* ev = script_entry_event(table, entry, i);
-    if (ev == NULL || ev->kind_id != MSL_SCRIPT_EVENT_SET_THROW_FLAGS) {
-      continue;
-    }
-    int hit_idx = -1;
-    const char* end = script_event_payload_end(ev);
-    if (json_get_i32_in_range(ev->payload, end, "hit_idx", &hit_idx) == 0 &&
-        hit_idx == want_hit_idx) {
-      frame_pulses_push(&pulses, (int)ev->frame);
-    }
-  }
-  if (pulses.count > 0u) {
-    pulses.loaded = 1u;
-  }
-  *out = pulses;
-  return pulses.loaded ? 0 : -1;
-}
-
-static int parse_entry_catchattack_grabbed_hit_window(const MslScriptTableRaw* table,
-                                                      const MslScriptEntryRaw* entry,
-                                                      MslFrameWindow* out) {
-  if (table == NULL || entry == NULL || out == NULL) {
-    return -1;
-  }
-  int on_frame = -1;
-  int off_frame = -1;
-  for (uint32_t i = 0; i < entry->event_count; i++) {
-    const MslScriptEventRaw* ev = script_entry_event(table, entry, i);
-    if (ev == NULL) {
-      continue;
-    }
-    if (ev->kind_id == MSL_SCRIPT_EVENT_CREATE_HITBOX) {
-      int only_hit_grabbed = 0;
-      const char* end = script_event_payload_end(ev);
-      if (json_get_bool_in_range(ev->payload, end, "only_hit_grabbed", &only_hit_grabbed) == 0 &&
-          only_hit_grabbed != 0) {
-        if (on_frame < 0 || (int)ev->frame < on_frame) {
-          on_frame = (int)ev->frame;
-        }
-      }
-    } else if (ev->kind_id == MSL_SCRIPT_EVENT_CLEAR_HITBOXES && on_frame >= 0 &&
-               (int)ev->frame >= on_frame) {
-      if (off_frame < 0 || (int)ev->frame < off_frame) {
-        off_frame = (int)ev->frame;
-      }
-    }
-  }
-  if (on_frame < 0) {
-    return -1;
-  }
-  if (off_frame < 0) {
-    off_frame = on_frame + 1;
-  }
-  if (off_frame < on_frame) {
-    return -1;
-  }
-  out->start_af = (int16_t)on_frame;
-  out->end_af = (int16_t)off_frame;
-  out->loaded = 1;
-  return 0;
-}
-
-static int parse_entry_throw_release_and_hitboxes(
-    const MslScriptTableRaw* table, const MslScriptEntryRaw* entry, MslThrowRelease* out_release,
-    MslFrameWindow* out_flip, MslFrameWindow* out_cmd1, MslFramePulses* out_spawn_projectile,
-    MslThrowHitbox out_hitboxes[MSL_THROW_HITBOX_IDX_MAX]) {
-  if (table == NULL || entry == NULL || out_release == NULL || out_flip == NULL ||
-      out_cmd1 == NULL || out_spawn_projectile == NULL || out_hitboxes == NULL) {
-    return -1;
-  }
-  *out_release = (MslThrowRelease){0};
-  *out_flip = (MslFrameWindow){0};
-  *out_cmd1 = (MslFrameWindow){0};
-  *out_spawn_projectile = (MslFramePulses){0};
-  for (size_t i = 0; i < MSL_THROW_HITBOX_IDX_MAX; i++) {
-    out_hitboxes[i] = (MslThrowHitbox){0};
-  }
-  int best_release_frame = -1;
-  int best_flip_frame = -1;
-  int cmd1_on_frame = -1;
-  int cmd1_off_frame = -1;
-
-  for (uint32_t i = 0; i < entry->event_count; i++) {
-    const MslScriptEventRaw* ev = script_entry_event(table, entry, i);
-    if (ev == NULL) {
-      continue;
-    }
-    const char* end = script_event_payload_end(ev);
-    if (ev->kind_id == MSL_SCRIPT_EVENT_SET_THROW_FLAGS) {
-      int hit_idx = -1;
-      if (json_get_i32_in_range(ev->payload, end, "hit_idx", &hit_idx) == 0) {
-        if (hit_idx == 0) {
-          if (best_release_frame < 0 || (int)ev->frame < best_release_frame) {
-            best_release_frame = (int)ev->frame;
-          }
-        } else if (hit_idx == 1) {
-          if (best_flip_frame < 0 || (int)ev->frame < best_flip_frame) {
-            best_flip_frame = (int)ev->frame;
-          }
-        }
-      }
-    } else if (ev->kind_id == MSL_SCRIPT_EVENT_SET_CMD_VAR) {
-      int idx = -1;
-      int value = 0;
-      if (json_get_i32_in_range(ev->payload, end, "idx", &idx) == 0 &&
-          json_get_i32_in_range(ev->payload, end, "value", &value) == 0 && idx == 1) {
-        if (value == 1) {
-          if (cmd1_on_frame < 0 || (int)ev->frame < cmd1_on_frame) {
-            cmd1_on_frame = (int)ev->frame;
-          }
-        } else if (cmd1_on_frame >= 0 && (int)ev->frame >= cmd1_on_frame) {
-          if (cmd1_off_frame < 0 || (int)ev->frame < cmd1_off_frame) {
-            cmd1_off_frame = (int)ev->frame;
-          }
-        }
-      }
-    } else if (ev->kind_id == MSL_SCRIPT_EVENT_SET_THROW_SPAWN_PROJECTILE) {
-      frame_pulses_push(out_spawn_projectile, (int)ev->frame);
-    } else if (ev->kind_id == MSL_SCRIPT_EVENT_SET_THROW_HITBOX) {
-      int idx = 0;
-      int angle = 0;
-      int kbg = 0;
-      int wsk = 0;
-      int bkb = 0;
-      int element = 0;
-      int sfx_kind = 0;
-      int sfx_severity = 0;
-      float damage = 0.0f;
-      if (json_get_i32_in_range(ev->payload, end, "idx", &idx) == 0 &&
-          json_get_f32_in_range(ev->payload, end, "damage", &damage) == 0 &&
-          json_get_i32_in_range(ev->payload, end, "angle", &angle) == 0 &&
-          json_get_i32_in_range(ev->payload, end, "kbg", &kbg) == 0 &&
-          json_get_i32_in_range(ev->payload, end, "wsk", &wsk) == 0 &&
-          json_get_i32_in_range(ev->payload, end, "bkb", &bkb) == 0 &&
-          json_get_i32_in_range(ev->payload, end, "element", &element) == 0 &&
-          json_get_i32_in_range(ev->payload, end, "sfx_kind", &sfx_kind) == 0 &&
-          json_get_i32_in_range(ev->payload, end, "sfx_severity", &sfx_severity) == 0 && idx >= 0 &&
-          idx < (int)MSL_THROW_HITBOX_IDX_MAX && !out_hitboxes[(size_t)idx].loaded) {
-        out_hitboxes[(size_t)idx].damage = damage;
-        out_hitboxes[(size_t)idx].angle = (uint16_t)angle;
-        out_hitboxes[(size_t)idx].kbg = (uint16_t)kbg;
-        out_hitboxes[(size_t)idx].wsk = (uint16_t)wsk;
-        out_hitboxes[(size_t)idx].bkb = (uint16_t)bkb;
-        out_hitboxes[(size_t)idx].element = (uint8_t)element;
-        out_hitboxes[(size_t)idx].sfx_kind = (uint8_t)sfx_kind;
-        out_hitboxes[(size_t)idx].sfx_severity = (uint8_t)sfx_severity;
-        out_hitboxes[(size_t)idx].loaded = 1;
-      }
-    }
-  }
-  if (best_release_frame >= 0) {
-    out_release->release_af = (int16_t)best_release_frame;
-    out_release->hit_idx = 0;
-    out_release->loaded = 1;
-  }
-  if (best_flip_frame >= 0) {
-    out_flip->start_af = (int16_t)best_flip_frame;
-    out_flip->end_af = INT16_MAX;
-    out_flip->loaded = 1;
-  }
-  if (cmd1_on_frame >= 0) {
-    out_cmd1->start_af = (int16_t)cmd1_on_frame;
-    out_cmd1->end_af = (cmd1_off_frame >= 0 && cmd1_off_frame >= cmd1_on_frame)
-                           ? (int16_t)cmd1_off_frame
-                           : (int16_t)INT16_MAX;
-    out_cmd1->loaded = 1;
-  }
-  if (out_spawn_projectile->count > 0u) {
-    out_spawn_projectile->loaded = 1;
-  }
-  return 0;
-}
-
-static int parse_entry_special_pseudo_random_sfx(const MslScriptTableRaw* table,
-                                                 const MslScriptEntryRaw* entry,
-                                                 MslFramePulses* out_pulses,
-                                                 uint8_t out_ranges[MSL_FRAME_PULSES_MAX]) {
-  if (table == NULL || entry == NULL || out_pulses == NULL || out_ranges == NULL) {
-    return -1;
-  }
-  MslFramePulses pulses = {0};
-  uint8_t ranges[MSL_FRAME_PULSES_MAX] = {0};
-  for (uint32_t i = 0; i < entry->event_count; i++) {
-    const MslScriptEventRaw* ev = script_entry_event(table, entry, i);
-    if (ev == NULL || ev->kind_id != MSL_SCRIPT_EVENT_PSEUDO_RANDOM_SFX) {
-      continue;
-    }
-    const char* end = script_event_payload_end(ev);
-    int random_range = 0;
-    if (json_get_i32_in_range(ev->payload, end, "random_range", &random_range) == 0 &&
-        random_range > 0 && random_range <= 255) {
-      const uint8_t prev_count = pulses.count;
-      frame_pulses_push(&pulses, (int)ev->frame);
-      if (pulses.count > prev_count) {
-        ranges[prev_count] = (uint8_t)random_range;
-      }
-    }
-  }
-  if (pulses.count > 0u) {
-    pulses.loaded = 1u;
-  }
-  *out_pulses = pulses;
-  memcpy(out_ranges, ranges, sizeof(ranges));
-  return 0;
-}
-
-static void load_if_cmd0(const MslScriptTableRaw* table, uint8_t char_id, uint16_t msid,
-                         uint8_t open_end, MslFrameWindow* dst) {
-  const MslScriptEntryRaw* entry = script_table_raw_find_entry(table, msid);
-  MslFrameWindow win = {0};
-  if (entry != NULL && parse_entry_cmd0_window(table, entry, open_end, &win) == 0) {
-    *dst = win;
-  }
-  (void)char_id;
-}
-
-static void load_if_allow_interrupt(const MslScriptTableRaw* table, uint16_t msid,
-                                    MslFrameWindow* dst) {
-  const MslScriptEntryRaw* entry = script_table_raw_find_entry(table, msid);
-  MslFrameWindow win = {0};
-  if (entry != NULL && parse_entry_allow_interrupt_window(table, entry, &win) == 0) {
-    *dst = win;
-  }
-}
-
-static void load_if_second_create_hitbox_phase(const MslScriptTableRaw* table, uint16_t msid,
-                                               MslFrameWindow* dst) {
-  const MslScriptEntryRaw* entry = script_table_raw_find_entry(table, msid);
-  MslFrameWindow win = {0};
-  if (entry != NULL && parse_entry_second_create_hitbox_phase(table, entry, &win) == 0) {
-    *dst = win;
-  }
-}
-
-static void load_if_hitbox_script_lifetime(const MslScriptTableRaw* table, uint16_t msid,
-                                           MslFrameWindow* dst) {
-  const MslScriptEntryRaw* entry = script_table_raw_find_entry(table, msid);
-  MslFrameWindow win = {0};
-  if (entry != NULL && parse_entry_hitbox_script_lifetime(table, entry, &win) == 0) {
-    *dst = win;
-  }
-}
-
-static void load_if_first_hitbox_phase(const MslScriptTableRaw* table, uint16_t msid,
-                                       MslFrameWindow* dst) {
-  const MslScriptEntryRaw* entry = script_table_raw_find_entry(table, msid);
-  MslFrameWindow win = {0};
-  if (entry != NULL && parse_entry_first_hitbox_phase(table, entry, &win) == 0) {
-    *dst = win;
-  }
-}
-
-static void load_if_last_create_hitbox_phase(const MslScriptTableRaw* table, uint16_t msid,
-                                             MslFrameWindow* dst) {
-  const MslScriptEntryRaw* entry = script_table_raw_find_entry(table, msid);
-  MslFrameWindow win = {0};
-  if (entry != NULL && parse_entry_last_create_hitbox_phase(table, entry, &win) == 0) {
-    *dst = win;
-  }
-}
-
-static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id) {
-  if (data_dir == NULL || rel_path == NULL) {
-    return -1;
-  }
-
-  MslScriptTableRaw script = {0};
-  if (script_table_raw_load(data_dir, rel_path, &script) != 0) {
-    return -1;
-  }
-
-  load_if_cmd0(&script, char_id, (uint16_t)MSL_SM_ATTACK_AIR_N, 0,
-               &g_cmd0_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_N]);
-  load_if_cmd0(&script, char_id, (uint16_t)MSL_SM_ATTACK_AIR_F, 0,
-               &g_cmd0_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_F]);
-  load_if_cmd0(&script, char_id, (uint16_t)MSL_SM_ATTACK_AIR_B, 0,
-               &g_cmd0_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_B]);
-  load_if_cmd0(&script, char_id, (uint16_t)MSL_SM_ATTACK_AIR_HI, 0,
-               &g_cmd0_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_HI]);
-  load_if_cmd0(&script, char_id, (uint16_t)MSL_SM_ATTACK_AIR_LW, 0,
-               &g_cmd0_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_LW]);
-
-  load_if_allow_interrupt(&script, (uint16_t)MSL_SM_ATTACK_AIR_N,
-                          &g_allow_interrupt_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_N]);
-  load_if_allow_interrupt(&script, (uint16_t)MSL_SM_ATTACK_AIR_F,
-                          &g_allow_interrupt_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_F]);
-  load_if_allow_interrupt(&script, (uint16_t)MSL_SM_ATTACK_AIR_B,
-                          &g_allow_interrupt_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_B]);
-  load_if_allow_interrupt(&script, (uint16_t)MSL_SM_ATTACK_AIR_HI,
-                          &g_allow_interrupt_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_HI]);
-  load_if_allow_interrupt(&script, (uint16_t)MSL_SM_ATTACK_AIR_LW,
-                          &g_allow_interrupt_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_LW]);
-
-  load_if_hitbox_script_lifetime(
-      &script, (uint16_t)MSL_SM_ATTACK_AIR_N,
-      &g_hitbox_lifetime_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_N]);
-  load_if_hitbox_script_lifetime(
-      &script, (uint16_t)MSL_SM_ATTACK_AIR_F,
-      &g_hitbox_lifetime_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_F]);
-  load_if_hitbox_script_lifetime(
-      &script, (uint16_t)MSL_SM_ATTACK_AIR_B,
-      &g_hitbox_lifetime_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_B]);
-  load_if_hitbox_script_lifetime(
-      &script, (uint16_t)MSL_SM_ATTACK_AIR_HI,
-      &g_hitbox_lifetime_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_HI]);
-  load_if_hitbox_script_lifetime(
-      &script, (uint16_t)MSL_SM_ATTACK_AIR_LW,
-      &g_hitbox_lifetime_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_LW]);
-
-  load_if_first_hitbox_phase(
-      &script, (uint16_t)MSL_SM_ATTACK_AIR_N,
-      &g_first_hitbox_phase_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_N]);
-  load_if_first_hitbox_phase(
-      &script, (uint16_t)MSL_SM_ATTACK_AIR_F,
-      &g_first_hitbox_phase_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_F]);
-  load_if_first_hitbox_phase(
-      &script, (uint16_t)MSL_SM_ATTACK_AIR_B,
-      &g_first_hitbox_phase_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_B]);
-  load_if_first_hitbox_phase(
-      &script, (uint16_t)MSL_SM_ATTACK_AIR_HI,
-      &g_first_hitbox_phase_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_HI]);
-  load_if_first_hitbox_phase(
-      &script, (uint16_t)MSL_SM_ATTACK_AIR_LW,
-      &g_first_hitbox_phase_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_LW]);
-
-  load_if_second_create_hitbox_phase(
-      &script, (uint16_t)MSL_SM_ATTACK_AIR_N,
-      &g_second_create_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_N]);
-  load_if_second_create_hitbox_phase(
-      &script, (uint16_t)MSL_SM_ATTACK_AIR_F,
-      &g_second_create_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_F]);
-  load_if_second_create_hitbox_phase(
-      &script, (uint16_t)MSL_SM_ATTACK_AIR_B,
-      &g_second_create_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_B]);
-  load_if_second_create_hitbox_phase(
-      &script, (uint16_t)MSL_SM_ATTACK_AIR_HI,
-      &g_second_create_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_HI]);
-  load_if_second_create_hitbox_phase(
-      &script, (uint16_t)MSL_SM_ATTACK_AIR_LW,
-      &g_second_create_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_LW]);
-
-  load_if_last_create_hitbox_phase(&script, (uint16_t)MSL_SM_ATTACK_AIR_N,
-                                   &g_last_create_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_N]);
-  load_if_last_create_hitbox_phase(&script, (uint16_t)MSL_SM_ATTACK_AIR_F,
-                                   &g_last_create_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_F]);
-  load_if_last_create_hitbox_phase(&script, (uint16_t)MSL_SM_ATTACK_AIR_B,
-                                   &g_last_create_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_B]);
-  load_if_last_create_hitbox_phase(
-      &script, (uint16_t)MSL_SM_ATTACK_AIR_HI,
-      &g_last_create_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_HI]);
-  load_if_last_create_hitbox_phase(
-      &script, (uint16_t)MSL_SM_ATTACK_AIR_LW,
-      &g_last_create_by_char_attackair[char_id][MSL_ATTACKAIR_KIND_LW]);
-
-  static const uint16_t grounded_msids[MSL_GROUNDED_ATTACK_KIND_COUNT] = {
-      (uint16_t)MSL_SM_ATTACK_11,   (uint16_t)MSL_SM_ATTACK_12, (uint16_t)MSL_SM_ATTACK_13,
-      (uint16_t)MSL_SM_ATTACK_DASH, (uint16_t)MSL_SM_ATTACK_S3, (uint16_t)MSL_SM_ATTACK_HI3,
-      (uint16_t)MSL_SM_ATTACK_LW3,  (uint16_t)MSL_SM_ATTACK_S4, (uint16_t)MSL_SM_ATTACK_HI4,
-      (uint16_t)MSL_SM_ATTACK_LW4,
-  };
-  for (size_t i = 0; i < MSL_GROUNDED_ATTACK_KIND_COUNT; i++) {
-    load_if_allow_interrupt(&script, grounded_msids[i],
-                            &g_allow_interrupt_by_char_grounded_attack[char_id][i]);
-    load_if_first_hitbox_phase(&script, grounded_msids[i],
-                               &g_first_hitbox_phase_by_char_grounded_attack[char_id][i]);
-  }
-  const size_t smash_kinds[] = {MSL_GROUNDED_ATTACK_KIND_S4, MSL_GROUNDED_ATTACK_KIND_HI4,
-                                MSL_GROUNDED_ATTACK_KIND_LW4};
-  for (size_t i = 0; i < sizeof(smash_kinds) / sizeof(smash_kinds[0]); i++) {
-    const size_t kind = smash_kinds[i];
-    const MslScriptEntryRaw* entry = script_table_raw_find_entry(&script, grounded_msids[kind]);
-    MslSmashChargeInfo info = {0};
-    if (entry != NULL && parse_entry_start_smash_charge_info(&script, entry, &info) == 0) {
-      g_smash_charge_by_char_grounded_attack[char_id][kind] = info;
-    }
-  }
-
-  load_if_allow_interrupt(&script, (uint16_t)MSL_SM_ESCAPE_N,
-                          &g_allow_interrupt_by_char_escape_n[char_id]);
-  load_if_allow_interrupt(&script, (uint16_t)MSL_SM_ESCAPE_AIR,
-                          &g_allow_interrupt_by_char_escape_air[char_id]);
-
-  const MslScriptEntryRaw* entry = script_table_raw_find_entry(&script, (uint16_t)MSL_SM_ATTACK_11);
-  MslFrameWindow win = {0};
-  if (entry != NULL && parse_entry_jab_combo_window(&script, entry, &win) == 0) {
-    g_jab_combo_by_char_grounded_attack[char_id][MSL_GROUNDED_ATTACK_KIND_11] = win;
-  }
-  entry = script_table_raw_find_entry(&script, (uint16_t)MSL_SM_ATTACK_12);
-  win = (MslFrameWindow){0};
-  if (entry != NULL && parse_entry_jab_combo_window(&script, entry, &win) == 0) {
-    g_jab_combo_by_char_grounded_attack[char_id][MSL_GROUNDED_ATTACK_KIND_12] = win;
-  }
-  win = (MslFrameWindow){0};
-  if (entry != NULL && parse_entry_jab_rapid_window(&script, entry, &win) == 0) {
-    g_jab_rapid_by_char_grounded_attack[char_id][MSL_GROUNDED_ATTACK_KIND_12] = win;
-  }
-
-  entry = script_table_raw_find_entry(&script, (uint16_t)MSL_SM_ATTACK_100_LOOP);
-  MslFramePulses pulses = {0};
-  if (entry != NULL &&
-      parse_entry_set_throw_flags_hit_idx_pulses(&script, entry, 0, &pulses) == 0) {
-    g_attack100_loop_end_check_by_char[char_id] = pulses;
-  }
-
-  load_if_cmd0(&script, char_id, (uint16_t)MSL_SM_DASH, 1, &g_cmd0_by_char_dash[char_id]);
-  load_if_cmd0(&script, char_id, (uint16_t)MSL_SM_RUN_BRAKE, 1, &g_cmd0_by_char_runbrake[char_id]);
-  entry = script_table_raw_find_entry(&script, (uint16_t)MSL_SM_TURN_RUN);
-  win = (MslFrameWindow){0};
-  if (entry != NULL && parse_entry_cmd_var_window(&script, entry, 1, 1, &win) == 0) {
-    g_cmd1_by_char_turnrun[char_id] = win;
-  }
-  load_if_cmd0(&script, char_id, (uint16_t)MSL_SM_ESCAPE_AIR, 1,
-               &g_cmd0_by_char_escapeair[char_id]);
-
-  entry = script_table_raw_find_entry(&script, (uint16_t)MSL_SM_ESCAPE_F);
-  win = (MslFrameWindow){0};
-  if (entry != NULL && parse_entry_throw_flags_window(&script, entry, 0, 1, &win) == 0) {
-    g_throw_flags_by_char_escape_f[char_id] = win;
-  }
-
-  entry = script_table_raw_find_entry(&script, (uint16_t)MSL_SM_CATCH);
-  win = (MslFrameWindow){0};
-  if (entry != NULL && parse_entry_throw_flags_window(&script, entry, 0, 0, &win) == 0) {
-    g_throw_flags_by_char_catch[char_id] = win;
-  }
-  entry = script_table_raw_find_entry(&script, (uint16_t)MSL_SM_CATCH_DASH);
-  win = (MslFrameWindow){0};
-  if (entry != NULL && parse_entry_throw_flags_window(&script, entry, 0, 0, &win) == 0) {
-    g_throw_flags_by_char_catchdash[char_id] = win;
-  }
-
-  entry = script_table_raw_find_entry(&script, (uint16_t)MSL_SM_CATCH_ATTACK);
-  win = (MslFrameWindow){0};
-  if (entry != NULL && parse_entry_catchattack_grabbed_hit_window(&script, entry, &win) == 0) {
-    g_catchattack_grabbed_hit_by_char[char_id] = win;
-  }
-
-  static const uint16_t throw_msids[MSL_THROW_KIND_COUNT] = {
-      (uint16_t)MSL_SM_THROW_F, (uint16_t)MSL_SM_THROW_B, (uint16_t)MSL_SM_THROW_HI,
-      (uint16_t)MSL_SM_THROW_LW};
-  for (size_t kind = 0; kind < MSL_THROW_KIND_COUNT; kind++) {
-    entry = script_table_raw_find_entry(&script, throw_msids[kind]);
-    if (entry == NULL) {
-      continue;
-    }
-    MslThrowRelease rel = {0};
-    MslFrameWindow flip = {0};
-    MslFrameWindow cmd1 = {0};
-    MslFramePulses spawn_projectile = {0};
-    MslThrowHitbox hitboxes[MSL_THROW_HITBOX_IDX_MAX];
-    if (parse_entry_throw_release_and_hitboxes(&script, entry, &rel, &flip, &cmd1,
-                                               &spawn_projectile, hitboxes) == 0) {
-      g_throw_release_by_char[char_id][kind] = rel;
-      g_throw_flip_by_char[char_id][kind] = flip;
-      g_throw_cmd1_by_char[char_id][kind] = cmd1;
-      g_throw_spawn_projectile_by_char[char_id][kind] = spawn_projectile;
-      memcpy(g_throw_hitbox_by_char[char_id][kind], hitboxes, sizeof(hitboxes));
-    }
-  }
-
-  uint8_t cmd0_count = 0u;
-  uint8_t sfx_count = 0u;
-  for (uint32_t i = 0; i < script.entry_count; i++) {
-    entry = &script.entries[i];
-    if (entry->msid < (uint16_t)MSL_SPECIAL_MSID_FIRST) {
-      continue;
-    }
-    win = (MslFrameWindow){0};
-    if (parse_entry_cmd0_window(&script, entry, 1, &win) == 0 &&
-        cmd0_count < (uint8_t)MSL_SPECIAL_PSEUDO_RNG_ENTRIES_MAX) {
-      g_special_cmd0_by_char[char_id][cmd0_count].msid = entry->msid;
-      g_special_cmd0_by_char[char_id][cmd0_count].window = win;
-      cmd0_count = (uint8_t)(cmd0_count + 1u);
-    }
-    pulses = (MslFramePulses){0};
-    uint8_t ranges[MSL_FRAME_PULSES_MAX] = {0};
-    if (parse_entry_special_pseudo_random_sfx(&script, entry, &pulses, ranges) == 0 &&
-        pulses.count > 0u && sfx_count < (uint8_t)MSL_SPECIAL_PSEUDO_RNG_ENTRIES_MAX) {
-      g_special_pseudo_rng_by_char[char_id][sfx_count].msid = entry->msid;
-      g_special_pseudo_rng_by_char[char_id][sfx_count].pulses = pulses;
-      memcpy(g_special_pseudo_rng_by_char[char_id][sfx_count].random_range, ranges, sizeof(ranges));
-      sfx_count = (uint8_t)(sfx_count + 1u);
-    }
-  }
-  g_special_cmd0_count_by_char[char_id] = cmd0_count;
-  g_special_pseudo_rng_count_by_char[char_id] = sfx_count;
-
-  script_table_raw_free(&script);
-  return 0;
-}
-
-int move_tables_init(void) {
-  if (g_loaded) {
-    return 0;
-  }
-
-  const char* data_dir = getenv("MSL_DATA_DIR");
-  if (data_dir == NULL || data_dir[0] == '\0') {
-    data_dir = "data";
-  }
-
-  // Exact command-script windows are packed from decoded fighter scripts into MSLFTSC1.
-  // Extractor: tools/extraction/extract_fighter_script_timeline.py
-  if (load_one(data_dir, "scripts/fox.bin", MSL_CHAR_FOX) != 0) {
-    return -1;
-  }
-  if (load_one(data_dir, "scripts/falco.bin", MSL_CHAR_FALCO) != 0) {
-    return -1;
-  }
-
-  g_loaded = 1;
-  return 0;
-}
-
-static inline int attackair_kind_from_action(uint16_t a) {
-  switch (a) {
-    case MSL_ACT_ATTACK_AIR_N:
-      return MSL_ATTACKAIR_KIND_N;
-    case MSL_ACT_ATTACK_AIR_F:
-      return MSL_ATTACKAIR_KIND_F;
-    case MSL_ACT_ATTACK_AIR_B:
-      return MSL_ATTACKAIR_KIND_B;
-    case MSL_ACT_ATTACK_AIR_HI:
-      return MSL_ATTACKAIR_KIND_HI;
-    case MSL_ACT_ATTACK_AIR_LW:
-      return MSL_ATTACKAIR_KIND_LW;
+    case 22:
+      return 1;
     default:
       return -1;
   }
 }
 
-static inline int grounded_attack_kind_from_action(uint16_t a) {
+static const MslMoveTableCache* move_cache_get(uint8_t char_id, uint16_t msid) {
+  const int slot = char_slot(char_id);
+  if (slot < 0 || msid >= (uint16_t)MSL_MOVE_TABLE_MSID_CAP) {
+    return NULL;
+  }
+  return &g_move_cache[slot][msid];
+}
+
+static uint8_t frame_crossed_u16(uint16_t frame, float prev_frame, float cur_frame) {
+  const float on = (float)frame;
+  return (prev_frame < on && cur_frame >= on) ? 1u : 0u;
+}
+
+static uint8_t frame_window_contains(MslScriptFrameWindow win, float frame) {
+  return (win.loaded && frame >= (float)win.start_af && frame < (float)win.end_af) ? 1u : 0u;
+}
+
+static uint8_t frame_window_crossed(MslScriptFrameWindow win, float prev_frame, float cur_frame) {
+  return (win.loaded && frame_crossed_u16((uint16_t)win.start_af, prev_frame, cur_frame)) ? 1u : 0u;
+}
+
+static void add_unique_pulse(uint16_t* frames, uint8_t* count, uint8_t cap, uint16_t frame) {
+  if (frames == NULL || count == NULL || *count >= cap) {
+    return;
+  }
+  for (uint8_t i = 0; i < *count; i++) {
+    if (frames[i] == frame) {
+      return;
+    }
+  }
+  frames[*count] = frame;
+  *count = (uint8_t)(*count + 1u);
+}
+
+static void move_cache_build_for_msid(uint8_t char_id, uint16_t msid, MslMoveTableCache* cache) {
+  if (cache == NULL) {
+    return;
+  }
+
+  cache->jab_combo_on_frame = -1;
+  cache->smash_charge_frame = -1;
+  cache->smash_charge_damage_mul = 1.0f;
+
+  for (uint8_t idx = 0; idx < MSL_MOVE_TABLE_CMD_VAR_COUNT; idx++) {
+    (void)script_events_cmd_var_value_window(char_id, msid, idx, 1u, 0u,
+                                             &cache->cmd_var_value1_closed[idx]);
+    (void)script_events_cmd_var_value_window(char_id, msid, idx, 1u, 1u,
+                                             &cache->cmd_var_value1_open[idx]);
+  }
+  (void)script_events_allow_interrupt_window(char_id, msid, &cache->allow_interrupt);
+  (void)script_events_hitbox_lifetime(char_id, msid, &cache->hitbox_lifetime);
+  (void)script_events_first_create_hitbox_phase(char_id, msid, &cache->first_create_hitbox);
+  (void)script_events_second_create_hitbox_phase(char_id, msid, &cache->second_create_hitbox);
+  (void)script_events_last_create_hitbox_phase(char_id, msid, &cache->last_create_hitbox);
+  (void)script_events_throw_flags_window(char_id, msid, 0u, 0u, &cache->throw_flags_any);
+  (void)script_events_catchattack_grabbed_hit_window(char_id, msid,
+                                                     &cache->catchattack_grabbed_hit);
+
+  for (uint8_t hit_idx = 0; hit_idx < MSL_MOVE_TABLE_THROW_HITBOX_CAP; hit_idx++) {
+    (void)script_events_throw_flags_window(char_id, msid, hit_idx, 1u,
+                                           &cache->throw_flags_hit[hit_idx]);
+  }
+
+  int jab_rapid_on = -1;
+  int jab_rapid_off = -1;
+  const MslScriptEvent* smash =
+      script_events_first(char_id, msid, MSL_SCRIPT_EVENT_START_SMASH_CHARGE);
+  if (smash != NULL) {
+    cache->smash_charge_frame = (int16_t)smash->frame;
+    cache->smash_charge_hold_frames = smash->payload.smash_charge.hold_frames;
+    if (smash->payload.smash_charge.damage_mul > 0.0f) {
+      cache->smash_charge_damage_mul = smash->payload.smash_charge.damage_mul;
+    }
+  }
+
+  const MslScriptEventRange range = script_events_range(char_id, msid);
+  for (uint32_t i = 0; i < range.count; i++) {
+    const MslScriptEvent* ev = &range.events[i];
+    switch ((MslScriptEventKind)ev->kind_id) {
+      case MSL_SCRIPT_EVENT_SET_JAB_COMBO:
+        if (ev->payload.jab_combo.disabled == 0u && cache->jab_combo_on_frame < 0) {
+          cache->jab_combo_on_frame = (int16_t)ev->frame;
+        }
+        break;
+      case MSL_SCRIPT_EVENT_SET_JAB_RAPID:
+        if (ev->payload.state.state != 0u && jab_rapid_on < 0) {
+          jab_rapid_on = (int)ev->frame;
+        } else if (ev->payload.state.state == 0u && jab_rapid_on >= 0 && jab_rapid_off < 0) {
+          jab_rapid_off = (int)ev->frame;
+        }
+        break;
+      case MSL_SCRIPT_EVENT_SET_THROW_FLAGS:
+        if (ev->payload.throw_flags.hit_idx < MSL_MOVE_TABLE_THROW_HITBOX_CAP) {
+          const uint8_t hit_idx = ev->payload.throw_flags.hit_idx;
+          add_unique_pulse(cache->throw_flags_pulses[hit_idx],
+                           &cache->throw_flags_pulse_count[hit_idx],
+                           (uint8_t)MSL_MOVE_TABLE_PULSE_CAP, ev->frame);
+        }
+        break;
+      case MSL_SCRIPT_EVENT_SET_THROW_HITBOX:
+        if (ev->payload.throw_hitbox.idx < MSL_MOVE_TABLE_THROW_HITBOX_CAP) {
+          MslMoveTableCachedHitbox* hb = &cache->throw_hitboxes[ev->payload.throw_hitbox.idx];
+          hb->params.damage = ev->payload.throw_hitbox.damage;
+          hb->params.angle = ev->payload.throw_hitbox.angle;
+          hb->params.kbg = ev->payload.throw_hitbox.kbg;
+          hb->params.wsk = ev->payload.throw_hitbox.wsk;
+          hb->params.bkb = ev->payload.throw_hitbox.bkb;
+          hb->params.element = ev->payload.throw_hitbox.element;
+          hb->params.sfx_kind = ev->payload.throw_hitbox.sfx_kind;
+          hb->params.sfx_severity = ev->payload.throw_hitbox.sfx_severity;
+          hb->loaded = 1u;
+        }
+        break;
+      case MSL_SCRIPT_EVENT_SET_THROW_SPAWN_PROJECTILE:
+        add_unique_pulse(cache->projectile_pulses, &cache->projectile_pulse_count,
+                         (uint8_t)MSL_MOVE_TABLE_PULSE_CAP, ev->frame);
+        break;
+      case MSL_SCRIPT_EVENT_PSEUDO_RANDOM_SFX:
+        if (cache->sfx_pulse_count < (uint8_t)MSL_MOVE_TABLE_SFX_PULSE_CAP) {
+          const uint8_t n = cache->sfx_pulse_count;
+          cache->sfx_pulse_frames[n] = ev->frame;
+          cache->sfx_pulse_ranges[n] = ev->payload.pseudo_random_sfx.random_range;
+          cache->sfx_pulse_count = (uint8_t)(n + 1u);
+        }
+        break;
+      default:
+        break;
+    }
+  }
+
+  if (jab_rapid_on >= 0) {
+    if (jab_rapid_off < 0) {
+      jab_rapid_off = INT16_MAX;
+    }
+    if (jab_rapid_off >= jab_rapid_on) {
+      cache->jab_rapid = (MslScriptFrameWindow){
+          .start_af = (int16_t)jab_rapid_on, .end_af = (int16_t)jab_rapid_off, .loaded = 1u};
+    }
+  }
+}
+
+static void move_cache_build_for_char(uint8_t char_id) {
+  const int slot = char_slot(char_id);
+  if (slot < 0) {
+    return;
+  }
+  for (uint16_t msid = 0; msid < (uint16_t)MSL_MOVE_TABLE_MSID_CAP; msid++) {
+    move_cache_build_for_msid(char_id, msid, &g_move_cache[slot][msid]);
+  }
+}
+
+int move_tables_init(void) {
+  if (g_move_cache_loaded) {
+    return 0;
+  }
+  if (script_events_init() != 0) {
+    return -1;
+  }
+  memset(g_move_cache, 0, sizeof(g_move_cache));
+  move_cache_build_for_char(1u);
+  move_cache_build_for_char(22u);
+  g_move_cache_loaded = 1;
+  return 0;
+}
+
+static inline int attackair_msid_from_action(uint16_t a, uint16_t* out) {
+  if (out == NULL) {
+    return 0;
+  }
+  switch (a) {
+    case MSL_ACT_ATTACK_AIR_N:
+      *out = (uint16_t)MSL_SM_ATTACK_AIR_N;
+      return 1;
+    case MSL_ACT_ATTACK_AIR_F:
+      *out = (uint16_t)MSL_SM_ATTACK_AIR_F;
+      return 1;
+    case MSL_ACT_ATTACK_AIR_B:
+      *out = (uint16_t)MSL_SM_ATTACK_AIR_B;
+      return 1;
+    case MSL_ACT_ATTACK_AIR_HI:
+      *out = (uint16_t)MSL_SM_ATTACK_AIR_HI;
+      return 1;
+    case MSL_ACT_ATTACK_AIR_LW:
+      *out = (uint16_t)MSL_SM_ATTACK_AIR_LW;
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+static inline int grounded_attack_msid_from_action(uint16_t a, uint16_t* out) {
+  if (out == NULL) {
+    return 0;
+  }
   switch (a) {
     case MSL_ACT_ATTACK_11:
-      return MSL_GROUNDED_ATTACK_KIND_11;
+      *out = (uint16_t)MSL_SM_ATTACK_11;
+      return 1;
     case MSL_ACT_ATTACK_12:
-      return MSL_GROUNDED_ATTACK_KIND_12;
+      *out = (uint16_t)MSL_SM_ATTACK_12;
+      return 1;
     case MSL_ACT_ATTACK_13:
-      return MSL_GROUNDED_ATTACK_KIND_13;
+      *out = (uint16_t)MSL_SM_ATTACK_13;
+      return 1;
     case MSL_ACT_ATTACK_DASH:
-      return MSL_GROUNDED_ATTACK_KIND_DASH;
+      *out = (uint16_t)MSL_SM_ATTACK_DASH;
+      return 1;
     case MSL_ACT_ATTACK_S3_HI:
     case MSL_ACT_ATTACK_S3_HI_S:
     case MSL_ACT_ATTACK_S3_S:
     case MSL_ACT_ATTACK_S3_LW_S:
     case MSL_ACT_ATTACK_S3_LW:
-      return MSL_GROUNDED_ATTACK_KIND_S3;
+      *out = (uint16_t)MSL_SM_ATTACK_S3;
+      return 1;
     case MSL_ACT_ATTACK_HI3:
-      return MSL_GROUNDED_ATTACK_KIND_HI3;
+      *out = (uint16_t)MSL_SM_ATTACK_HI3;
+      return 1;
     case MSL_ACT_ATTACK_LW3:
-      return MSL_GROUNDED_ATTACK_KIND_LW3;
+      *out = (uint16_t)MSL_SM_ATTACK_LW3;
+      return 1;
     case MSL_ACT_ATTACK_S4_HI:
     case MSL_ACT_ATTACK_S4_HI_S:
     case MSL_ACT_ATTACK_S4_S:
     case MSL_ACT_ATTACK_S4_LW_S:
     case MSL_ACT_ATTACK_S4_LW:
-      return MSL_GROUNDED_ATTACK_KIND_S4;
+      *out = (uint16_t)MSL_SM_ATTACK_S4;
+      return 1;
     case MSL_ACT_ATTACK_HI4:
-      return MSL_GROUNDED_ATTACK_KIND_HI4;
+      *out = (uint16_t)MSL_SM_ATTACK_HI4;
+      return 1;
     case MSL_ACT_ATTACK_LW4:
-      return MSL_GROUNDED_ATTACK_KIND_LW4;
+      *out = (uint16_t)MSL_SM_ATTACK_LW4;
+      return 1;
     default:
-      return -1;
+      return 0;
   }
+}
+
+static inline int throw_msid_from_action(uint16_t a, uint16_t* out) {
+  if (out == NULL) {
+    return 0;
+  }
+  switch (a) {
+    case MSL_ACT_THROW_F:
+      *out = (uint16_t)MSL_SM_THROW_F;
+      return 1;
+    case MSL_ACT_THROW_B:
+      *out = (uint16_t)MSL_SM_THROW_B;
+      return 1;
+    case MSL_ACT_THROW_HI:
+      *out = (uint16_t)MSL_SM_THROW_HI;
+      return 1;
+    case MSL_ACT_THROW_LW:
+      *out = (uint16_t)MSL_SM_THROW_LW;
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+static inline uint8_t cmd_var_active(uint8_t char_id, uint16_t msid, uint8_t idx, uint8_t open_end,
+                                     float frame) {
+  if (idx >= (uint8_t)MSL_MOVE_TABLE_CMD_VAR_COUNT) {
+    return 0u;
+  }
+  const MslMoveTableCache* cache = move_cache_get(char_id, msid);
+  if (cache == NULL) {
+    return 0u;
+  }
+  const MslScriptFrameWindow win =
+      open_end ? cache->cmd_var_value1_open[idx] : cache->cmd_var_value1_closed[idx];
+  return frame_window_contains(win, frame);
+}
+
+static inline uint8_t allow_interrupt_active(uint8_t char_id, uint16_t msid, float frame) {
+  const MslMoveTableCache* cache = move_cache_get(char_id, msid);
+  return cache != NULL ? frame_window_contains(cache->allow_interrupt, frame) : 0u;
 }
 
 uint8_t move_tables_attackair_cmd0_active(uint8_t char_id, uint16_t attackair_action_id,
                                           float cur_anim_frame_f32) {
-  const int kind = attackair_kind_from_action(attackair_action_id);
-  if (kind < 0) {
-    return 0;
-  }
-
-  const MslFrameWindow win = g_cmd0_by_char_attackair[char_id][(size_t)kind];
-  if (!win.loaded) {
-    // Conservative fallback: treat as auto-cancel (no landing lag).
-    return 0;
-  }
-
-  // Decomp: ftCo_LandingAir_EnterWithLag uses fp->cmd_vars[0] to pick between LandingAir* (lag)
-  // and Landing_Enter_Basic (auto-cancel).
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c
-  //
-  // Command-script frame events are evaluated on fp->cur_anim_frame (float), not on an integer
-  // action_frame counter. Use anim_frame_f32 (seeded from Slippi state_age) as our proxy.
-  // refs/melee/src/melee/ft/ftaction.c::ftAction_80071820 (set_cmd_var)
-  return (cur_anim_frame_f32 >= (float)win.start_af && cur_anim_frame_f32 < (float)win.end_af) ? 1
-                                                                                               : 0;
+  uint16_t msid = 0;
+  return attackair_msid_from_action(attackair_action_id, &msid)
+             ? cmd_var_active(char_id, msid, 0u, 0u, cur_anim_frame_f32)
+             : 0u;
 }
 
 uint8_t move_tables_attackair_allow_interrupt(uint8_t char_id, uint16_t attackair_action_id,
                                               float cur_anim_frame_f32) {
-  const int kind = attackair_kind_from_action(attackair_action_id);
-  if (kind < 0) {
-    return 0;
-  }
+  uint16_t msid = 0;
+  return attackair_msid_from_action(attackair_action_id, &msid)
+             ? allow_interrupt_active(char_id, msid, cur_anim_frame_f32)
+             : 0u;
+}
 
-  const MslFrameWindow win = g_allow_interrupt_by_char_attackair[char_id][(size_t)kind];
-  if (!win.loaded) {
-    // Conservative fallback: treat as never-interruptible.
-    return 0;
+uint8_t move_tables_attackair_hitbox_script_lifetime(uint8_t char_id, uint16_t attackair_action_id,
+                                                     float cur_anim_frame_f32) {
+  uint16_t msid = 0;
+  if (!attackair_msid_from_action(attackair_action_id, &msid)) {
+    return 0u;
   }
+  const MslMoveTableCache* cache = move_cache_get(char_id, msid);
+  return cache != NULL ? frame_window_contains(cache->hitbox_lifetime, cur_anim_frame_f32) : 0u;
+}
 
-  // Decomp: DO_IASA gates on fp->allow_interrupt (set by the move script).
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c
-  //
-  // Source: the command script emits an "allow interrupt" cmd (ftAction_80071950), which toggles
-  // fp->allow_interrupt based on fp->cur_anim_frame (float) timing.
-  // refs/melee/src/melee/ft/ftaction.c::ftAction_80071950
-  return (cur_anim_frame_f32 >= (float)win.start_af && cur_anim_frame_f32 < (float)win.end_af) ? 1
-                                                                                               : 0;
+uint8_t move_tables_attackair_first_hitbox_phase(uint8_t char_id, uint16_t attackair_action_id,
+                                                 float cur_anim_frame_f32) {
+  uint16_t msid = 0;
+  if (!attackair_msid_from_action(attackair_action_id, &msid)) {
+    return 0u;
+  }
+  const MslMoveTableCache* cache = move_cache_get(char_id, msid);
+  return cache != NULL ? frame_window_contains(cache->first_create_hitbox, cur_anim_frame_f32) : 0u;
 }
 
 uint8_t move_tables_attackair_second_create_hitbox_phase(uint8_t char_id,
                                                          uint16_t attackair_action_id,
                                                          float cur_anim_frame_f32) {
-  const int kind = attackair_kind_from_action(attackair_action_id);
-  if (kind < 0) {
-    return 0;
+  uint16_t msid = 0;
+  if (!attackair_msid_from_action(attackair_action_id, &msid)) {
+    return 0u;
   }
-
-  const MslFrameWindow win = g_second_create_by_char_attackair[char_id][(size_t)kind];
-  if (!win.loaded) {
-    return 0;
-  }
-
-  return (cur_anim_frame_f32 >= (float)win.start_af && cur_anim_frame_f32 < (float)win.end_af) ? 1
-                                                                                               : 0;
-}
-
-uint8_t move_tables_attackair_hitbox_script_lifetime(uint8_t char_id, uint16_t attackair_action_id,
-                                                     float cur_anim_frame_f32) {
-  const int kind = attackair_kind_from_action(attackair_action_id);
-  if (kind < 0) {
-    return 0;
-  }
-
-  const MslFrameWindow win = g_hitbox_lifetime_by_char_attackair[char_id][(size_t)kind];
-  if (!win.loaded) {
-    return 0;
-  }
-
-  return (cur_anim_frame_f32 >= (float)win.start_af && cur_anim_frame_f32 < (float)win.end_af) ? 1
-                                                                                               : 0;
-}
-
-uint8_t move_tables_attackair_first_hitbox_phase(uint8_t char_id, uint16_t attackair_action_id,
-                                                 float cur_anim_frame_f32) {
-  const int kind = attackair_kind_from_action(attackair_action_id);
-  if (kind < 0) {
-    return 0;
-  }
-
-  const MslFrameWindow win = g_first_hitbox_phase_by_char_attackair[char_id][(size_t)kind];
-  if (!win.loaded) {
-    return 0;
-  }
-
-  return (cur_anim_frame_f32 >= (float)win.start_af && cur_anim_frame_f32 < (float)win.end_af) ? 1
-                                                                                               : 0;
+  const MslMoveTableCache* cache = move_cache_get(char_id, msid);
+  return cache != NULL ? frame_window_contains(cache->second_create_hitbox, cur_anim_frame_f32)
+                       : 0u;
 }
 
 int16_t move_tables_attackair_second_create_hitbox_frame(uint8_t char_id,
                                                          uint16_t attackair_action_id) {
-  const int kind = attackair_kind_from_action(attackair_action_id);
-  if (kind < 0) {
+  uint16_t msid = 0;
+  if (!attackair_msid_from_action(attackair_action_id, &msid)) {
     return -1;
   }
-
-  const MslFrameWindow win = g_second_create_by_char_attackair[char_id][(size_t)kind];
-  if (!win.loaded) {
-    return -1;
-  }
-  return win.start_af;
+  const MslMoveTableCache* cache = move_cache_get(char_id, msid);
+  return (cache != NULL && cache->second_create_hitbox.loaded)
+             ? cache->second_create_hitbox.start_af
+             : -1;
 }
 
 uint8_t move_tables_attackair_last_create_hitbox_phase(uint8_t char_id,
                                                        uint16_t attackair_action_id,
                                                        float cur_anim_frame_f32) {
-  const int kind = attackair_kind_from_action(attackair_action_id);
-  if (kind < 0) {
-    return 0;
+  uint16_t msid = 0;
+  if (!attackair_msid_from_action(attackair_action_id, &msid)) {
+    return 0u;
   }
-
-  const MslFrameWindow win = g_last_create_by_char_attackair[char_id][(size_t)kind];
-  if (!win.loaded) {
-    return 0;
-  }
-
-  return (cur_anim_frame_f32 >= (float)win.start_af && cur_anim_frame_f32 < (float)win.end_af) ? 1
-                                                                                               : 0;
+  const MslMoveTableCache* cache = move_cache_get(char_id, msid);
+  return cache != NULL ? frame_window_contains(cache->last_create_hitbox, cur_anim_frame_f32) : 0u;
 }
 
 uint8_t move_tables_grounded_attack_allow_interrupt(uint8_t char_id, uint16_t grounded_action_id,
                                                     float cur_anim_frame_f32) {
-  const int kind = grounded_attack_kind_from_action(grounded_action_id);
-  if (kind < 0) {
-    return 0;
-  }
-
-  const MslFrameWindow win = g_allow_interrupt_by_char_grounded_attack[char_id][(size_t)kind];
-  if (!win.loaded) {
-    return 0;
-  }
-
-  // Decomp: grounded Attack* input callbacks gate on fp->allow_interrupt.
-  // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_AttackDash.c,ftCo_AttackS3.c,ftCo_AttackHi3.c,ftCo_AttackHi4.c,ftCo_AttackLw4.c}
-  // Source: command-script `allow_interrupt` events in data/scripts/{fox,falco}.bin (MSLFTSC1).
-  return (cur_anim_frame_f32 >= (float)win.start_af && cur_anim_frame_f32 < (float)win.end_af) ? 1
-                                                                                               : 0;
+  uint16_t msid = 0;
+  return grounded_attack_msid_from_action(grounded_action_id, &msid)
+             ? allow_interrupt_active(char_id, msid, cur_anim_frame_f32)
+             : 0u;
 }
 
 int16_t move_tables_grounded_attack_first_create_hitbox_frame(uint8_t char_id,
                                                               uint16_t grounded_action_id) {
-  const int kind = grounded_attack_kind_from_action(grounded_action_id);
-  if (kind < 0) {
+  uint16_t msid = 0;
+  if (!grounded_attack_msid_from_action(grounded_action_id, &msid)) {
     return -1;
   }
-  const MslFrameWindow win = g_first_hitbox_phase_by_char_grounded_attack[char_id][(size_t)kind];
-  if (!win.loaded) {
-    return -1;
+  const MslMoveTableCache* cache = move_cache_get(char_id, msid);
+  return (cache != NULL && cache->first_create_hitbox.loaded) ? cache->first_create_hitbox.start_af
+                                                              : -1;
+}
+
+static const MslMoveTableCache* grounded_smash_charge_cache(uint8_t char_id,
+                                                            uint16_t grounded_action_id) {
+  uint16_t msid = 0;
+  if (!grounded_attack_msid_from_action(grounded_action_id, &msid)) {
+    return NULL;
   }
-  return win.start_af;
+  return move_cache_get(char_id, msid);
 }
 
 uint8_t move_tables_grounded_smash_charge_crossed(uint8_t char_id, uint16_t grounded_action_id,
                                                   float prev_anim_frame_f32,
                                                   float cur_anim_frame_f32,
                                                   uint8_t* out_hold_frames) {
-  const int kind = grounded_attack_kind_from_action(grounded_action_id);
-  if (kind < 0 || out_hold_frames == NULL) {
-    return 0;
+  if (out_hold_frames == NULL) {
+    return 0u;
   }
-  const MslSmashChargeInfo info = g_smash_charge_by_char_grounded_attack[char_id][(size_t)kind];
-  if (!info.loaded) {
-    return 0;
+  const MslMoveTableCache* cache = grounded_smash_charge_cache(char_id, grounded_action_id);
+  if (cache == NULL || cache->smash_charge_frame < 0 ||
+      !frame_crossed_u16((uint16_t)cache->smash_charge_frame, prev_anim_frame_f32,
+                         cur_anim_frame_f32)) {
+    return 0u;
   }
-
-  // Decomp: ftAction_80073008 runs when the movescript crosses the command frame boundary under
-  // ftAnim_8006EBA4 / ftAction_80073240. Model this as a one-shot threshold crossing in (prev, cur].
-  // refs/melee/src/melee/ft/ftaction.c::{ftAction_80073008,ftAction_80073240}
-  if (!(prev_anim_frame_f32 < (float)info.start_af && cur_anim_frame_f32 >= (float)info.start_af)) {
-    return 0;
-  }
-  *out_hold_frames = info.hold_frames;
+  *out_hold_frames = cache->smash_charge_hold_frames;
   return 1u;
 }
 
 float move_tables_grounded_smash_charge_damage_mul(uint8_t char_id, uint16_t grounded_action_id) {
-  const int kind = grounded_attack_kind_from_action(grounded_action_id);
-  if (kind < 0) {
+  const MslMoveTableCache* cache = grounded_smash_charge_cache(char_id, grounded_action_id);
+  if (cache == NULL || cache->smash_charge_frame < 0 || !(cache->smash_charge_damage_mul > 0.0f)) {
     return 1.0f;
   }
-  const MslSmashChargeInfo info = g_smash_charge_by_char_grounded_attack[char_id][(size_t)kind];
-  if (!info.loaded || !(info.damage_mul > 0.0f)) {
-    return 1.0f;
-  }
-  return info.damage_mul;
+  return cache->smash_charge_damage_mul;
 }
 
 uint8_t move_tables_escape_allow_interrupt(uint8_t char_id, uint16_t action_id,
                                            float cur_anim_frame_f32) {
-  MslFrameWindow win = {0};
   if (action_id == (uint16_t)MSL_ACT_ESCAPE_N) {
-    win = g_allow_interrupt_by_char_escape_n[char_id];
-  } else if (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR) {
-    win = g_allow_interrupt_by_char_escape_air[char_id];
-  } else {
-    return 0;
+    return allow_interrupt_active(char_id, (uint16_t)MSL_SM_ESCAPE_N, cur_anim_frame_f32);
   }
-  if (!win.loaded) {
-    return 0;
+  if (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR) {
+    return allow_interrupt_active(char_id, (uint16_t)MSL_SM_ESCAPE_AIR, cur_anim_frame_f32);
   }
+  return 0u;
+}
 
-  // Decomp: command-script allow_interrupt writes fp->allow_interrupt at runtime.
-  // refs/melee/src/melee/ft/ftaction.c::ftAction_80071950
-  return (cur_anim_frame_f32 >= (float)win.start_af && cur_anim_frame_f32 < (float)win.end_af) ? 1
-                                                                                               : 0;
+uint8_t move_tables_escapeair_cmd0_active(uint8_t char_id, float cur_anim_frame_f32) {
+  return cmd_var_active(char_id, (uint16_t)MSL_SM_ESCAPE_AIR, 0u, 1u, cur_anim_frame_f32);
+}
+
+uint8_t move_tables_special_cmd0_active_at_frame(uint8_t char_id, uint16_t msid, int action_frame) {
+  const MslMoveTableCache* cache = move_cache_get(char_id, msid);
+  if (cache == NULL || !cache->cmd_var_value1_open[0].loaded) {
+    return 0u;
+  }
+  const MslScriptFrameWindow win = cache->cmd_var_value1_open[0];
+  const int end_tail = (int)win.end_af + MSL_SPECIAL_CMD0_LATCH_CLEAR_TAIL_FRAMES;
+  return (action_frame >= (int)win.start_af && action_frame < end_tail) ? 1u : 0u;
+}
+
+uint8_t move_tables_special_cmd0_raw_active_at_frame(uint8_t char_id, uint16_t msid,
+                                                     int action_frame) {
+  const MslMoveTableCache* cache = move_cache_get(char_id, msid);
+  if (cache == NULL || !cache->cmd_var_value1_open[0].loaded) {
+    return 0u;
+  }
+  const MslScriptFrameWindow win = cache->cmd_var_value1_open[0];
+  return (action_frame >= (int)win.start_af && action_frame < (int)win.end_af) ? 1u : 0u;
 }
 
 uint8_t move_tables_escapef_should_flip_facing(uint8_t char_id, int16_t prev_action_frame,
                                                int16_t cur_action_frame) {
-  const MslFrameWindow win = g_throw_flags_by_char_escape_f[char_id];
-  if (!win.loaded) {
-    return 0;
+  const MslMoveTableCache* cache = move_cache_get(char_id, (uint16_t)MSL_SM_ESCAPE_F);
+  if (cache == NULL || !cache->throw_flags_hit[0].loaded) {
+    return 0u;
   }
-  // EscapeF consumes the set_throw_flags(hit_idx=0) bit through ftCheckThrowB3 during Anim.
-  // Model the one-shot consume as an action-frame threshold crossing within the current step.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_Escape_Anim
-  // refs/melee/src/melee/ft/inlines.h::ftCheckThrowB3
+  const MslScriptFrameWindow win = cache->throw_flags_hit[0];
   return (prev_action_frame < win.start_af && cur_action_frame >= win.start_af) ? 1u : 0u;
 }
 
 uint8_t move_tables_jab_combo_active(uint8_t char_id, uint16_t grounded_action_id,
                                      float cur_anim_frame_f32) {
-  const int kind = grounded_attack_kind_from_action(grounded_action_id);
-  if (kind < 0) {
-    return 0;
+  uint16_t msid = 0;
+  if (!grounded_attack_msid_from_action(grounded_action_id, &msid)) {
+    return 0u;
   }
-  const MslFrameWindow win = g_jab_combo_by_char_grounded_attack[char_id][(size_t)kind];
-  if (!win.loaded) {
-    return 0;
-  }
-  // Decomp: ftAction_80071AE8 sets x2218_b1 when command timeline reaches set_jab_combo.
-  // refs/melee/src/melee/ft/ftaction.c::ftAction_80071AE8
-  return (cur_anim_frame_f32 >= (float)win.start_af && cur_anim_frame_f32 < (float)win.end_af) ? 1
-                                                                                               : 0;
+  const MslMoveTableCache* cache = move_cache_get(char_id, msid);
+  return (cache != NULL && cache->jab_combo_on_frame >= 0 &&
+          cur_anim_frame_f32 >= (float)cache->jab_combo_on_frame)
+             ? 1u
+             : 0u;
 }
 
 uint8_t move_tables_jab_rapid_active(uint8_t char_id, uint16_t grounded_action_id,
                                      float cur_anim_frame_f32) {
-  const int kind = grounded_attack_kind_from_action(grounded_action_id);
-  if (kind < 0) {
-    return 0;
+  uint16_t msid = 0;
+  if (!grounded_attack_msid_from_action(grounded_action_id, &msid)) {
+    return 0u;
   }
-  const MslFrameWindow win = g_jab_rapid_by_char_grounded_attack[char_id][(size_t)kind];
-  if (!win.loaded) {
-    return 0;
-  }
-  // Decomp: ftAction_80071B28 writes x2218_b2 from set_jab_rapid command events.
-  // refs/melee/src/melee/ft/ftaction.c::ftAction_80071B28
-  return (cur_anim_frame_f32 >= (float)win.start_af && cur_anim_frame_f32 < (float)win.end_af) ? 1
-                                                                                               : 0;
+  const MslMoveTableCache* cache = move_cache_get(char_id, msid);
+  return cache != NULL ? frame_window_contains(cache->jab_rapid, cur_anim_frame_f32) : 0u;
 }
 
 uint8_t move_tables_attack100_loop_end_check_crossed(uint8_t char_id, int16_t prev_action_frame,
                                                      int16_t cur_action_frame) {
-  const MslFramePulses pulses = g_attack100_loop_end_check_by_char[char_id];
-  if (!pulses.loaded || pulses.count == 0u) {
+  const MslMoveTableCache* cache = move_cache_get(char_id, (uint16_t)MSL_SM_ATTACK_100_LOOP);
+  if (cache == NULL || cache->throw_flags_pulse_count[0] == 0u) {
     return 0u;
   }
-  for (uint8_t i = 0; i < pulses.count; i++) {
-    const int16_t on = pulses.frame[i];
+  for (uint8_t i = 0; i < cache->throw_flags_pulse_count[0]; i++) {
+    const int16_t on = (int16_t)cache->throw_flags_pulses[0][i];
     if (cur_action_frame >= prev_action_frame) {
       if (prev_action_frame < on && cur_action_frame >= on) {
         return 1u;
@@ -1685,235 +552,137 @@ uint8_t move_tables_attack100_loop_end_check_crossed(uint8_t char_id, int16_t pr
 }
 
 uint8_t move_tables_dash_cmd0_active(uint8_t char_id, float cur_anim_frame_f32) {
-  const MslFrameWindow win = g_cmd0_by_char_dash[char_id];
-  if (!win.loaded) {
-    // Conservative fallback: treat as never-enabled.
-    return 0;
-  }
-  // Command-script frame events are evaluated on fp->cur_anim_frame (float).
-  // refs/melee/src/melee/ft/ftaction.c::ftAction_80071820 (set_cmd_var)
-  return (cur_anim_frame_f32 >= (float)win.start_af && cur_anim_frame_f32 < (float)win.end_af) ? 1
-                                                                                               : 0;
+  return cmd_var_active(char_id, (uint16_t)MSL_SM_DASH, 0u, 1u, cur_anim_frame_f32);
 }
 
 uint8_t move_tables_runbrake_cmd0_active(uint8_t char_id, float cur_anim_frame_f32) {
-  const MslFrameWindow win = g_cmd0_by_char_runbrake[char_id];
-  if (!win.loaded) {
-    return 0;
-  }
-  // Command-script frame events are evaluated on fp->cur_anim_frame (float).
-  // refs/melee/src/melee/ft/ftaction.c::ftAction_80071820
-  return (cur_anim_frame_f32 >= (float)win.start_af && cur_anim_frame_f32 < (float)win.end_af) ? 1
-                                                                                               : 0;
+  return cmd_var_active(char_id, (uint16_t)MSL_SM_RUN_BRAKE, 0u, 1u, cur_anim_frame_f32);
 }
 
 uint8_t move_tables_turnrun_cmd1_active(uint8_t char_id, float cur_anim_frame_f32) {
-  const MslFrameWindow win = g_cmd1_by_char_turnrun[char_id];
-  if (!win.loaded) {
-    return 0;
-  }
-  // Command-script frame events are evaluated on fp->cur_anim_frame (float).
-  // refs/melee/src/melee/ft/ftaction.c::ftAction_80071820
-  return (cur_anim_frame_f32 >= (float)win.start_af && cur_anim_frame_f32 < (float)win.end_af) ? 1
-                                                                                               : 0;
-}
-
-uint8_t move_tables_escapeair_cmd0_active(uint8_t char_id, float cur_anim_frame_f32) {
-  const MslFrameWindow win = g_cmd0_by_char_escapeair[char_id];
-  if (!win.loaded) {
-    return 0;
-  }
-  // Command-script frame events are evaluated on fp->cur_anim_frame (float).
-  // refs/melee/src/melee/ft/ftaction.c::ftAction_80071820
-  return (cur_anim_frame_f32 >= (float)win.start_af && cur_anim_frame_f32 < (float)win.end_af) ? 1
-                                                                                               : 0;
-}
-
-uint8_t move_tables_special_cmd0_active_at_frame(uint8_t char_id, uint16_t msid, int action_frame) {
-  const uint8_t count = g_special_cmd0_count_by_char[char_id];
-  for (uint8_t i = 0; i < count; i++) {
-    const MslSpecialCmd0ByMsid* ent = &g_special_cmd0_by_char[char_id][i];
-    if (ent->msid != msid || !ent->window.loaded) {
-      continue;
-    }
-    // Command-script frames are 0-based in extracted data. SpecialN loop-repeat inference asks
-    // whether the B press happened while cmd_var[0] was active, not whether cmd_var[0] is still
-    // active on the terminal Anim callback frame.
-    // refs/melee/src/melee/ft/ftaction.c::ftAction_80071820
-    // SpecialN's IASA writes a persistent mv.fx.SpecialN.isBlasterLoop latch; the command-script
-    // clear frame ends the cmd_var window but does not itself clear a latch set by a nearby B edge.
-    // Keep a narrow terminal tail tied to the extracted clear event, not to replay ids/actions.
-    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialNLoop_Anim
-    const int end_tail = (int)ent->window.end_af + MSL_SPECIAL_CMD0_LATCH_CLEAR_TAIL_FRAMES;
-    return (action_frame >= (int)ent->window.start_af && action_frame < end_tail) ? 1u : 0u;
-  }
-  return 0u;
-}
-
-uint8_t move_tables_special_cmd0_raw_active_at_frame(uint8_t char_id, uint16_t msid,
-                                                     int action_frame) {
-  const uint8_t count = g_special_cmd0_count_by_char[char_id];
-  for (uint8_t i = 0; i < count; i++) {
-    const MslSpecialCmd0ByMsid* ent = &g_special_cmd0_by_char[char_id][i];
-    if (ent->msid != msid || !ent->window.loaded) {
-      continue;
-    }
-    return (action_frame >= (int)ent->window.start_af && action_frame < (int)ent->window.end_af)
-               ? 1u
-               : 0u;
-  }
-  return 0u;
+  return cmd_var_active(char_id, (uint16_t)MSL_SM_TURN_RUN, 1u, 1u, cur_anim_frame_f32);
 }
 
 uint8_t move_tables_catchpull_should_enter_wait(uint8_t char_id, uint16_t catch_action_id,
                                                 float cur_anim_frame_f32) {
-  // Decomp: CatchPull_Anim triggers the CatchWait transition on a throw_flags bit that is set by the
-  // move script (`set_throw_flags`) and then cleared when consumed.
-  // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::ftCo_CatchPull_Anim
-  //
-  // In this simulator, we approximate the flag mutation using extracted move script event timing:
-  // data/scripts/{fox,falco}.bin (MSLFTSC1) moves["ftCo_SM_Catch*"]["events"] set_throw_flags.
-  const MslFrameWindow win = (catch_action_id == (uint16_t)MSL_ACT_CATCH_DASH_PULL)
-                                 ? g_throw_flags_by_char_catchdash[char_id]
-                                 : g_throw_flags_by_char_catch[char_id];
-  if (!win.loaded) {
-    return 0;
+  const uint16_t msid = (catch_action_id == (uint16_t)MSL_ACT_CATCH_DASH_PULL)
+                            ? (uint16_t)MSL_SM_CATCH_DASH
+                            : (uint16_t)MSL_SM_CATCH;
+  const MslMoveTableCache* cache = move_cache_get(char_id, msid);
+  if (cache == NULL || !cache->throw_flags_any.loaded) {
+    return 0u;
   }
-  return (cur_anim_frame_f32 >= (float)win.start_af) ? 1 : 0;
+  return cur_anim_frame_f32 >= (float)cache->throw_flags_any.start_af ? 1u : 0u;
 }
 
 uint8_t move_tables_catchattack_grabbed_hit_active(uint8_t char_id, float cur_anim_frame_f32) {
-  const MslFrameWindow win = g_catchattack_grabbed_hit_by_char[char_id];
-  if (!win.loaded) {
-    return 0;
-  }
-  return (cur_anim_frame_f32 >= (float)win.start_af && cur_anim_frame_f32 < (float)win.end_af) ? 1
-                                                                                               : 0;
-}
-
-static inline int throw_kind_from_action(uint16_t a) {
-  switch (a) {
-    case MSL_ACT_THROW_F:
-      return MSL_THROW_KIND_F;
-    case MSL_ACT_THROW_B:
-      return MSL_THROW_KIND_B;
-    case MSL_ACT_THROW_HI:
-      return MSL_THROW_KIND_HI;
-    case MSL_ACT_THROW_LW:
-      return MSL_THROW_KIND_LW;
-    default:
-      return -1;
-  }
+  const MslMoveTableCache* cache = move_cache_get(char_id, (uint16_t)MSL_SM_CATCH_ATTACK);
+  return cache != NULL ? frame_window_contains(cache->catchattack_grabbed_hit, cur_anim_frame_f32)
+                       : 0u;
 }
 
 uint8_t move_tables_throw_has_release(uint8_t char_id, uint16_t throw_action_id) {
-  const int kind = throw_kind_from_action(throw_action_id);
-  if (kind < 0) {
-    return 0;
+  uint16_t msid = 0;
+  if (!throw_msid_from_action(throw_action_id, &msid)) {
+    return 0u;
   }
-  return g_throw_release_by_char[char_id][(size_t)kind].loaded ? 1 : 0;
+  const MslMoveTableCache* cache = move_cache_get(char_id, msid);
+  return (cache != NULL && cache->throw_flags_hit[0].loaded) ? 1u : 0u;
 }
 
 uint8_t move_tables_throw_release_frame(uint8_t char_id, uint16_t throw_action_id,
                                         float* out_release_af) {
   if (out_release_af == NULL) {
-    return 0;
+    return 0u;
   }
-  const int kind = throw_kind_from_action(throw_action_id);
-  if (kind < 0) {
-    return 0;
+  uint16_t msid = 0;
+  if (!throw_msid_from_action(throw_action_id, &msid)) {
+    return 0u;
   }
-  const MslThrowRelease rel = g_throw_release_by_char[char_id][(size_t)kind];
-  if (!rel.loaded) {
-    return 0;
+  const MslMoveTableCache* cache = move_cache_get(char_id, msid);
+  if (cache == NULL || !cache->throw_flags_hit[0].loaded) {
+    return 0u;
   }
-  *out_release_af = (float)rel.release_af;
-  return 1;
+  *out_release_af = (float)cache->throw_flags_hit[0].start_af;
+  return 1u;
 }
 
 uint8_t move_tables_throw_release_hit_idx(uint8_t char_id, uint16_t throw_action_id,
                                           float cur_anim_frame_f32, uint8_t* out_hit_idx) {
-  const int kind = throw_kind_from_action(throw_action_id);
-  if (kind < 0) {
-    return 0;
+  uint16_t msid = 0;
+  if (!throw_msid_from_action(throw_action_id, &msid)) {
+    return 0u;
   }
-
-  const MslThrowRelease rel = g_throw_release_by_char[char_id][(size_t)kind];
-  if (!rel.loaded) {
-    return 0;
+  const MslMoveTableCache* cache = move_cache_get(char_id, msid);
+  if (cache == NULL || !cache->throw_flags_hit[0].loaded ||
+      cur_anim_frame_f32 < (float)cache->throw_flags_hit[0].start_af) {
+    return 0u;
   }
-
-  if (cur_anim_frame_f32 >= (float)rel.release_af) {
-    if (out_hit_idx) {
-      *out_hit_idx = rel.hit_idx;
-    }
-    return 1;
+  if (out_hit_idx != NULL) {
+    *out_hit_idx = 0u;
   }
-  return 0;
+  return 1u;
 }
 
 uint8_t move_tables_throw_hitbox_params(uint8_t char_id, uint16_t throw_action_id, uint8_t hit_idx,
                                         MslThrowHitboxParams* out) {
   if (out == NULL) {
-    return 0;
+    return 0u;
   }
-  const int kind = throw_kind_from_action(throw_action_id);
-  if (kind < 0) {
-    return 0;
+  uint16_t msid = 0;
+  if (!throw_msid_from_action(throw_action_id, &msid)) {
+    return 0u;
   }
-  if (hit_idx >= (uint8_t)MSL_THROW_HITBOX_IDX_MAX) {
-    return 0;
+  const MslMoveTableCache* cache = move_cache_get(char_id, msid);
+  if (cache == NULL || hit_idx >= (uint8_t)MSL_MOVE_TABLE_THROW_HITBOX_CAP ||
+      !cache->throw_hitboxes[hit_idx].loaded) {
+    return 0u;
   }
-
-  const MslThrowHitbox hb = g_throw_hitbox_by_char[char_id][(size_t)kind][(size_t)hit_idx];
-  if (!hb.loaded) {
-    return 0;
-  }
-
-  out->damage = hb.damage;
-  out->angle = hb.angle;
-  out->kbg = hb.kbg;
-  out->wsk = hb.wsk;
-  out->bkb = hb.bkb;
-  out->element = hb.element;
-  out->sfx_kind = hb.sfx_kind;
-  out->sfx_severity = hb.sfx_severity;
-  return 1;
+  *out = cache->throw_hitboxes[hit_idx].params;
+  return 1u;
 }
 
 uint8_t move_tables_throw_should_flip_facing(uint8_t char_id, uint16_t throw_action_id,
                                              float prev_anim_frame_f32, float cur_anim_frame_f32) {
-  const int kind = throw_kind_from_action(throw_action_id);
-  if (kind < 0) {
-    return 0;
+  uint16_t msid = 0;
+  if (!throw_msid_from_action(throw_action_id, &msid)) {
+    return 0u;
   }
-  const MslFrameWindow flip = g_throw_flip_by_char[char_id][(size_t)kind];
-  if (!flip.loaded) {
-    return 0;
-  }
-  // set_throw_flags(hit_idx=1) is interpreted by ftAction_800718A4 as a "flip facing" flag that is
-  // later consumed once by ftCo_800DD724 (clearing the underlying bit).
-  // refs/melee/src/melee/ft/ftaction.c::ftAction_800718A4
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
-  //
-  // Use a "crossing" check so we don't miss the flip if frame_speed_mul > 1.0 advances the
-  // animation timebase by more than one frame in a single step.
-  const float on = (float)flip.start_af;
-  return (prev_anim_frame_f32 < on && cur_anim_frame_f32 >= on) ? 1u : 0u;
+  const MslMoveTableCache* cache = move_cache_get(char_id, msid);
+  return cache != NULL ? frame_window_crossed(cache->throw_flags_hit[1], prev_anim_frame_f32,
+                                              cur_anim_frame_f32)
+                       : 0u;
 }
 
 uint8_t move_tables_throw_cmd1_active(uint8_t char_id, uint16_t throw_action_id,
                                       float cur_anim_frame_f32) {
-  const int kind = throw_kind_from_action(throw_action_id);
-  if (kind < 0) {
-    return 0;
+  uint16_t msid = 0;
+  return throw_msid_from_action(throw_action_id, &msid)
+             ? cmd_var_active(char_id, msid, 1u, 1u, cur_anim_frame_f32)
+             : 0u;
+}
+
+static uint8_t throw_projectile_pulses(uint8_t char_id, uint16_t throw_action_id,
+                                       uint16_t* out_frames, uint8_t max_out, uint8_t* out_count) {
+  if (out_frames == NULL || out_count == NULL) {
+    return 0u;
   }
-  const MslFrameWindow win = g_throw_cmd1_by_char[char_id][(size_t)kind];
-  if (!win.loaded) {
-    return 0;
+  *out_count = 0u;
+  uint16_t msid = 0;
+  if (!throw_msid_from_action(throw_action_id, &msid)) {
+    return 0u;
   }
-  return (cur_anim_frame_f32 >= (float)win.start_af && cur_anim_frame_f32 < (float)win.end_af) ? 1u
-                                                                                               : 0u;
+  const MslMoveTableCache* cache = move_cache_get(char_id, msid);
+  if (cache == NULL) {
+    return 0u;
+  }
+  const uint8_t n =
+      cache->projectile_pulse_count < max_out ? cache->projectile_pulse_count : max_out;
+  for (uint8_t i = 0; i < n; i++) {
+    out_frames[i] = cache->projectile_pulses[i];
+  }
+  *out_count = n;
+  return *out_count != 0u ? 1u : 0u;
 }
 
 uint8_t move_tables_throw_should_spawn_projectile(uint8_t char_id, uint16_t throw_action_id,
@@ -1929,99 +698,87 @@ uint8_t move_tables_throw_crossed_projectile_pulse_frame(uint8_t char_id, uint16
                                                          float prev_anim_frame_f32,
                                                          float cur_anim_frame_f32,
                                                          int16_t* out_pulse_frame) {
-  const int kind = throw_kind_from_action(throw_action_id);
-  if (kind < 0) {
-    return 0;
+  uint16_t frames[16] = {0};
+  uint8_t count = 0u;
+  if (!throw_projectile_pulses(char_id, throw_action_id, frames,
+                               (uint8_t)(sizeof(frames) / sizeof(frames[0])), &count)) {
+    return 0u;
   }
-  const MslFramePulses pulses = g_throw_spawn_projectile_by_char[char_id][(size_t)kind];
-  if (!pulses.loaded || pulses.count == 0u) {
-    return 0;
-  }
-  // ftAction_80071974 sets throw_flags_b0 as a pulse at script-time.
-  // refs/melee/src/melee/ft/ftaction.c::ftAction_80071974
-  // Use crossing semantics so frame_speed_mul > 1.0 does not skip a pulse.
-  for (uint8_t i = 0; i < pulses.count; i++) {
-    const float on = (float)pulses.frame[i];
-    if (prev_anim_frame_f32 < on && cur_anim_frame_f32 >= on) {
+  for (uint8_t i = 0; i < count; i++) {
+    if (frame_crossed_u16(frames[i], prev_anim_frame_f32, cur_anim_frame_f32)) {
       if (out_pulse_frame != NULL) {
-        *out_pulse_frame = pulses.frame[i];
+        *out_pulse_frame = (int16_t)frames[i];
       }
       return 1u;
     }
   }
-  return 0;
+  return 0u;
 }
 
 uint8_t move_tables_throw_projectile_first_pulse_frame(uint8_t char_id, uint16_t throw_action_id,
                                                        int16_t* out_first_pulse_frame) {
   if (out_first_pulse_frame == NULL) {
-    return 0;
+    return 0u;
   }
-  const int kind = throw_kind_from_action(throw_action_id);
-  if (kind < 0) {
-    return 0;
+  uint16_t frames[16] = {0};
+  uint8_t count = 0u;
+  if (!throw_projectile_pulses(char_id, throw_action_id, frames,
+                               (uint8_t)(sizeof(frames) / sizeof(frames[0])), &count)) {
+    return 0u;
   }
-  const MslFramePulses pulses = g_throw_spawn_projectile_by_char[char_id][(size_t)kind];
-  if (!pulses.loaded || pulses.count == 0u) {
-    return 0;
-  }
-  int16_t first = pulses.frame[0];
-  for (uint8_t i = 1; i < pulses.count; i++) {
-    if (pulses.frame[i] < first) {
-      first = pulses.frame[i];
+  uint16_t first = frames[0];
+  for (uint8_t i = 1; i < count; i++) {
+    if (frames[i] < first) {
+      first = frames[i];
     }
   }
-  *out_first_pulse_frame = first;
+  *out_first_pulse_frame = (int16_t)first;
   return 1u;
 }
 
 uint8_t move_tables_throw_projectile_last_pulse_frame(uint8_t char_id, uint16_t throw_action_id,
                                                       int16_t* out_last_pulse_frame) {
   if (out_last_pulse_frame == NULL) {
-    return 0;
+    return 0u;
   }
-  const int kind = throw_kind_from_action(throw_action_id);
-  if (kind < 0) {
-    return 0;
+  uint16_t frames[16] = {0};
+  uint8_t count = 0u;
+  if (!throw_projectile_pulses(char_id, throw_action_id, frames,
+                               (uint8_t)(sizeof(frames) / sizeof(frames[0])), &count)) {
+    return 0u;
   }
-  const MslFramePulses pulses = g_throw_spawn_projectile_by_char[char_id][(size_t)kind];
-  if (!pulses.loaded || pulses.count == 0u) {
-    return 0;
-  }
-  int16_t last = pulses.frame[0];
-  for (uint8_t i = 1; i < pulses.count; i++) {
-    if (pulses.frame[i] > last) {
-      last = pulses.frame[i];
+  uint16_t last = frames[0];
+  for (uint8_t i = 1; i < count; i++) {
+    if (frames[i] > last) {
+      last = frames[i];
     }
   }
-  *out_last_pulse_frame = last;
+  *out_last_pulse_frame = (int16_t)last;
   return 1u;
 }
 
 uint8_t move_tables_throw_projectile_pulse_ordinal(uint8_t char_id, uint16_t throw_action_id,
                                                    int16_t pulse_frame, uint8_t* out_ordinal) {
   if (out_ordinal == NULL) {
-    return 0;
+    return 0u;
   }
-  const int kind = throw_kind_from_action(throw_action_id);
-  if (kind < 0) {
-    return 0;
-  }
-  const MslFramePulses pulses = g_throw_spawn_projectile_by_char[char_id][(size_t)kind];
-  if (!pulses.loaded || pulses.count == 0u) {
-    return 0;
+  uint16_t frames[16] = {0};
+  uint8_t count = 0u;
+  if (!throw_projectile_pulses(char_id, throw_action_id, frames,
+                               (uint8_t)(sizeof(frames) / sizeof(frames[0])), &count)) {
+    return 0u;
   }
   uint8_t ordinal = 0u;
-  for (uint8_t i = 0; i < pulses.count; i++) {
-    if (pulses.frame[i] <= pulse_frame) {
+  for (uint8_t i = 0; i < count; i++) {
+    if ((int16_t)frames[i] <= pulse_frame) {
       ordinal++;
     }
-    if (pulses.frame[i] == pulse_frame) {
+    if ((int16_t)frames[i] == pulse_frame) {
       *out_ordinal = ordinal;
       return 1u;
     }
   }
-  return 0;
+  return 0u;
 }
 
 uint8_t move_tables_special_pseudo_random_sfx_ranges_crossed(uint8_t char_id, uint16_t msid,
@@ -2032,30 +789,17 @@ uint8_t move_tables_special_pseudo_random_sfx_ranges_crossed(uint8_t char_id, ui
   if (out_random_ranges == NULL || max_out == 0u) {
     return 0u;
   }
-  const uint8_t n = g_special_pseudo_rng_count_by_char[char_id];
-  if (n == 0u) {
+  const MslMoveTableCache* cache = move_cache_get(char_id, msid);
+  if (cache == NULL) {
     return 0u;
   }
-  for (uint8_t i = 0; i < n; i++) {
-    const MslPseudoRandomSfxByMsid* ent = &g_special_pseudo_rng_by_char[char_id][i];
-    if (ent->msid != msid || !ent->pulses.loaded || ent->pulses.count == 0u) {
-      continue;
+  uint8_t out_n = 0u;
+  for (uint8_t i = 0; i < cache->sfx_pulse_count && out_n < max_out; i++) {
+    const float on = (float)cache->sfx_pulse_frames[i];
+    if ((prev_anim_frame_f32 < on && cur_anim_frame_f32 >= on) ||
+        (on == 0.0f && prev_anim_frame_f32 == 0.0f && cur_anim_frame_f32 > 0.0f)) {
+      out_random_ranges[out_n++] = cache->sfx_pulse_ranges[i];
     }
-    uint8_t out_n = 0u;
-    // Command-script events execute when crossing the command frame boundary.
-    // refs/melee/src/melee/ft/ftaction.c::ftAction_80071FC8
-    for (uint8_t pi = 0; pi < ent->pulses.count && out_n < max_out; pi++) {
-      const float on = (float)ent->pulses.frame[pi];
-      // Frame-0 command pulses execute on fresh motion-state entry scripts (cur_anim_frame starts at
-      // 0 and advances to 1 in the first steady frame). Preserve that entry pulse with an explicit
-      // frame-0 bridge so `on==0` events are not skipped under teacher-forced reseed snapshots.
-      // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006E9B4
-      if ((prev_anim_frame_f32 < on && cur_anim_frame_f32 >= on) ||
-          (on == 0.0f && prev_anim_frame_f32 == 0.0f && cur_anim_frame_f32 > 0.0f)) {
-        out_random_ranges[out_n++] = ent->random_range[pi];
-      }
-    }
-    return out_n;
   }
-  return 0u;
+  return out_n;
 }

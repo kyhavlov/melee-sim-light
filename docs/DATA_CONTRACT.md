@@ -1208,14 +1208,16 @@ Characters (Fox/Falco):
     - `data/moves/<char>.json`
     - `refs/melee/src/melee/ft/ftaction.c` command handlers
     - `refs/melee/src/melee/ft/types.h::gmScriptEventDefault`
-  - Binary layout: `MSLFTSC1` v1
+  - Binary layout: `MSLFTSC1` v2
     - `u8 magic[8] = "MSLFTSC1"`
-    - `u32 version = 1`
+    - `u32 version = 2`
     - `u32 entry_count`, `event_count`, `index_off`, `event_off`
     - index records: `msid`, reserved, first-event index, event count
-    - event records: `frame`, generated `event_kind_id`, payload byte length, canonical JSON payload
+    - event records: `frame`, generated `event_kind_id`, payload byte length, kind-specific binary
+      payload. Empty-payload events have length zero.
     - `data/scripts/<char>_manifest.json` maps event IDs to names and reports unknown event counts.
-  - Generated/ignored; stale/non-v1 tables must be rejected by tooling readers.
+  - Generated/ignored; stale/non-v2 runtime tables must be regenerated. Python tooling readers may
+    still accept legacy v1 JSON-payload tables for comparison/debug, but runtime C rejects them.
 - `data/shields/fox.bin`, `data/shields/falco.bin` (guard-tilt shield bubble centers; decomp-first, compact binary)
 - `data/hurtcaps/fox.bin`, `data/hurtcaps/falco.bin` (hurt capsule init tables; decomp-first, compact binary)
 - `data/hurtcaps/fox.json`, `data/hurtcaps/falco.json` (hurt capsule init tables; debug-friendly mirror; C loads `.bin` only)

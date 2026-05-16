@@ -101,6 +101,7 @@ ext = Extension(
         "src/match_flow.c",
         "src/locomotion.c",
         "src/move_tables.c",
+        "src/script_events.c",
         "src/attack_id_tables.c",
         "src/motion_state_owners.c",
         "src/attack_identity.c",
