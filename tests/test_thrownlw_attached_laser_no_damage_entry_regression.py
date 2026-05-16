@@ -56,6 +56,57 @@ def _run_record(dataset_path: Path, record: int) -> np.ndarray:
         binding.destroy(handle)
 
 
+def _run_rollout_rows(
+    dataset_path: Path, start_record: int, rows: tuple[int, ...]
+) -> dict[int, tuple[np.void, np.void]]:
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    end_record = max(rows)
+    assert 0 <= start_record <= end_record < int(samples.shape[0])
+
+    binding = importlib.import_module("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    try:
+        seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
+        prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+        input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+        out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+        out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(1)
+
+        sample_stride = int(samples.dtype.itemsize)
+        samples_u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), sample_stride)
+        seed_off = int(samples.dtype.fields["seed_t"][1])
+        prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
+        input_off = int(samples.dtype.fields["input_t"][1])
+
+        seed_bytes[0, :] = samples_u8[start_record, seed_off : seed_off + seed_stride]
+        binding.reseed_seed_rollout(handle, seed_bytes)
+
+        out: dict[int, tuple[np.void, np.void]] = {}
+        for record in range(start_record, end_record + 1):
+            prev_input_bytes[0, :] = samples_u8[
+                record, prev_input_off : prev_input_off + input_stride
+            ]
+            input_bytes[0, :] = samples_u8[record, input_off : input_off + input_stride]
+            binding.step_input(handle, prev_input_bytes, input_bytes)
+            binding.write_compare(handle, out_compare_bytes)
+            if record in rows:
+                out[record] = (out_view[0].copy(), samples["ref_t1"][record].copy())
+        return out
+    finally:
+        binding.destroy(handle)
+
+
 @pytest.mark.integration
 @pytest.mark.parametrize("record", [448, 449, 8116, 8117])
 def test_thrownlw_victim_hit_by_attached_laser_stays_thrownlw(record: int) -> None:
@@ -141,6 +192,100 @@ def test_thrownlw_victim_hit_by_attached_laser_stays_thrownlw(record: int) -> No
     assert got_laser_type == expected_laser_type
     assert got_laser_owner == expected_laser_owner
     assert got_laser_iid == expected_laser_iid
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("record", [454, 8122])
+def test_released_throwlw_live_laser_damage_uses_item_velocity_facing(record: int) -> None:
+    # Replay-real lock for the item-vs-fighter damage facing owner after ThrowLw release:
+    # - the victim starts the row in ThrownLw but the throw-release owner detaches before the live
+    #   state1 laser BODY hit enters DamageAir3,
+    # - ftColl_8007A06C item case 2 chooses the damage facing lane from item velocity/position,
+    #   not the fighter-vs-fighter attacker/victim X ordering.
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007A06C
+    # refs/melee/src/melee/it/itcoll.c::{it_8026FAC4,it_80272460}
+    # refs/melee/src/melee/it/types.h::ItemCommonData::x78_float
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/validation/"
+        "cardinal_1.0_recent/QuerulousGrandDinosaur.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    p_attacker = 0
+    p_victim = 1
+    laser_slot = 0
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record : record + 1]
+    seed = row["seed_t"]
+    ref = row["ref_t1"]
+
+    assert int(seed["action_id"][0, p_attacker]) == 0x00DE  # ThrowLw
+    assert int(seed["action_id"][0, p_victim]) == 0x00F2  # ThrownLw
+    assert int(seed["items"][0, laser_slot]["exists"]) == 1
+    assert int(seed["items"][0, laser_slot]["owner"]) == p_attacker
+    assert int(seed["items"][0, laser_slot]["state"]) != 0
+    assert int(ref["action_id"][0, p_victim]) == 0x0056  # DamageAir3
+    assert int(ref["hitlag"][0, p_victim]) > 0
+    assert int(ref["hitstun"][0, p_victim]) > 0
+
+    out = _run_record(dataset_path, record)
+
+    assert int(out["action_id"][0, p_victim]) == int(ref["action_id"][0, p_victim])
+    assert int(out["facing"][0, p_victim]) == int(ref["facing"][0, p_victim])
+    assert int(out["hitlag"][0, p_victim]) == int(ref["hitlag"][0, p_victim])
+    assert int(out["hitstun"][0, p_victim]) == int(ref["hitstun"][0, p_victim])
+    assert int(out["instance_hit_by"][0, p_victim]) == int(ref["instance_hit_by"][0, p_victim])
+
+    got_vx = np.float32(out["speed_x_attack"][0, p_victim])
+    exp_vx = np.float32(ref["speed_x_attack"][0, p_victim])
+    assert np.signbit(got_vx) == np.signbit(exp_vx)
+    np.testing.assert_allclose(got_vx, exp_vx, rtol=0.0, atol=np.float32(2e-7))
+
+
+@pytest.mark.integration
+def test_throwlw_live_laser_reentry_clears_stale_release_ecb_lock_in_rollout() -> None:
+    # Replay-real rollout lock for a ThrowLw release followed by a same-frame state1 laser BODY hit:
+    # the item hit re-enters DamageAir3 with hitlag and must not carry a stale release ECB lock into
+    # the following DamageAir_Coll map callback, otherwise Yoshi's Story floor projection misses the
+    # live damage ECB and remains below the floor.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpCollInterpolateECB}
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/"
+        "yoshis_story_recent/PhysicalElectricCapybara.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    start_record = 5621
+    target_record = 5660
+    p_victim = 1
+
+    ds = read_dataset(str(dataset_path))
+    target_seed = ds.samples[target_record]["seed_t"]
+    assert int(target_seed["action_id"][p_victim]) == 0x0056  # DamageAir3
+    assert int(target_seed["seed_prev_action_id"][p_victim]) == 0x00F2  # ThrownLw
+    assert int(target_seed["hitlag"][p_victim]) > 0
+    assert int(target_seed["ecb_lock_timer"][p_victim]) == 0
+
+    out = _run_rollout_rows(dataset_path, start_record, (target_record,))
+    got, ref = out[target_record]
+
+    assert int(got["action_id"][p_victim]) == int(ref["action_id"][p_victim])
+    assert int(got["hitlag"][p_victim]) == int(ref["hitlag"][p_victim])
+    np.testing.assert_allclose(
+        np.float32(got["pos_y"][p_victim]),
+        np.float32(ref["pos_y"][p_victim]),
+        rtol=0.0,
+        atol=np.float32(2e-6),
+    )
 
 
 @pytest.mark.integration

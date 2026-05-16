@@ -645,6 +645,93 @@ def test_landing_basic_contact_y_context_controls_remain_outside_bridge_scope(
     assert np.isfinite(float(ref["pos_y"][p]))
 
 
+def test_fall_same_floor_final_publication_waits_one_frame_then_lands_qgd() -> None:
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
+        / "QuerulousGrandDinosaur.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    p = 1
+    seed_9530, out_9530, ref_9530 = _step_one_row(dataset_path, 9530, p)
+    seed_9531, out_9531, ref_9531 = _step_one_row(dataset_path, 9531, p)
+
+    # Decomp owner:
+    # - Fall_Coll enters Landing through ft_80082B1C after the ECB-bottom floor callback.
+    # - The first same-floor root projection stays airborne; the following deeper frame lands.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80082B1C
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpColl_80044838_Floor}
+    assert int(seed_9530["action_id"][p]) == int(seed_9531["action_id"][p]) == 29
+    assert int(seed_9530["action_frame"][p]) == 4
+    assert int(seed_9531["action_frame"][p]) == 5
+    assert float(seed_9530["floor_sweep_prev_pos_y_f32"][p]) > 0.0
+    assert float(seed_9531["floor_sweep_prev_pos_y_f32"][p]) < 0.0
+    assert int(out_9530["action_id"][p]) == int(ref_9530["action_id"][p]) == 29
+    assert int(out_9530["on_ground"][p]) == int(ref_9530["on_ground"][p]) == 0
+    assert int(out_9531["action_id"][p]) == int(ref_9531["action_id"][p]) == 42
+    assert int(out_9531["on_ground"][p]) == int(ref_9531["on_ground"][p]) == 1
+    assert float(out_9531["pos_y"][p]) == pytest.approx(float(ref_9531["pos_y"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "p", "stage_id", "ground_id", "note"),
+    [
+        (
+            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+            "BlondHardHippopotamus.msl",
+            5729,
+            1,
+            32,
+            1,
+            "FD center hard floor publishes ordinary Fall landing immediately",
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+            "DistinctCaringCobra.msl",
+            6438,
+            0,
+            32,
+            2,
+            "FD ledge Fall action-entry landing publishes immediately",
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/dream_land_recent/"
+            "FlippantEnchantedHorse.msl",
+            7758,
+            1,
+            28,
+            3,
+            "non-FD legal-stage ledge Fall landing is outside the FD guard",
+        ),
+    ],
+)
+def test_fall_same_floor_final_publication_adjacent_landing_negatives(
+    dataset_rel: str, record: int, p: int, stage_id: int, ground_id: int, note: str
+) -> None:
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    seed, out, ref = _step_one_row(dataset_path, record, p)
+
+    assert int(seed["stage_id"]) == stage_id, note
+    assert int(seed["action_id"][p]) == 29, note  # Fall
+    assert int(seed["ground_id"][p]) == ground_id, note
+    assert int(ref["action_id"][p]) == 42, note  # Landing
+    assert int(ref["on_ground"][p]) == 1, note
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]), note
+    assert int(out["on_ground"][p]) == 1, note
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+
+
 @pytest.mark.integration
 @pytest.mark.parametrize(
     ("dataset_rel", "record", "p", "expected_seed_rate", "expected_ref_frame"),

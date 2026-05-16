@@ -14,6 +14,7 @@
 #include "stage_collision.h"
 #include "specialhi_pose.h"
 #include "state_flags.h"
+#include "throw_flow.h"
 
 static inline uint8_t physics_action_skip_common_air_helper_first_frame(uint16_t action_id,
                                                                         uint16_t prev_action_id,
@@ -624,28 +625,6 @@ static inline uint8_t physics_action_is_damage_fly(uint16_t action_id) {
   // - ftCo_FlyReflect_* for wall/ceiling reflect follow-up states
   // refs/melee/src/melee/ft/ftmotionstates.c::ftData_MotionStateList
   return msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_DAMAGE_FLY);
-}
-
-static inline uint8_t physics_is_pending_throw_release_victim(const MslBatch* batch, int bi,
-                                                              int victim_p) {
-  if (batch == NULL) {
-    return 0u;
-  }
-  const int num_players = (int)batch->config.num_players;
-  if (victim_p < 0 || victim_p >= num_players) {
-    return 0u;
-  }
-  for (int owner_p = 0; owner_p < num_players; owner_p++) {
-    if (owner_p == victim_p) {
-      continue;
-    }
-    const size_t oidx = msl_idx_player(bi, owner_p);
-    if (batch->state.throw_pending_victim_port[oidx] == (uint8_t)victim_p &&
-        batch->state.throw_pending_hit_idx[oidx] != 0xFFu) {
-      return 1u;
-    }
-  }
-  return 0u;
 }
 
 static inline uint8_t physics_action_is_common_damage(uint16_t action_id) {
@@ -1551,14 +1530,14 @@ void physics_integrate(MslBatch* batch) {
         continue;
       }
 
-      if (physics_is_pending_throw_release_victim(batch, bi, p)) {
-        // Shared throw-release placeholder:
+      if (throw_flow_release_pending_for_victim(batch, bi, p)) {
+        // Compatibility pending-release placeholder:
         // - ftCo_800DD724 consumes release and immediately calls ftCo_800DDDE4/ftCo_800DE7C0 in
         //   the thrower's Anim callback; the victim does not get an intervening generic Fall Phys
         //   drift frame before Damage* entry.
-        // - This simulator temporarily marks the detached victim as Fall so same-frame item
-        //   ordering can preempt the deferred throw hit. Keep that placeholder non-physical until
-        //   throw_flow_update_post_items() applies the release damage/KB owner.
+        // - Normal runtime release damage now runs in that Anim callback path. Seed/reseed
+        //   compatibility latches may still expose the detached victim as Fall; keep that
+        //   placeholder non-physical until throw_flow_update_post_items() consumes it.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD724,ftCo_800DDDE4}
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE7C0
         continue;

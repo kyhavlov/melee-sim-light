@@ -41,6 +41,7 @@ def _step_one_row(dataset_path: Path, record: int) -> tuple[np.void, np.void, np
     (
         ("ShadyDecimalStarling.msl", 5182, 1),
         ("ShadyDecimalStarling.msl", 5184, 1),
+        ("FlippantEnchantedHorse.msl", 8579, 1),
         ("FlippantEnchantedHorse.msl", 8581, 2),
     ),
 )
@@ -61,6 +62,41 @@ def test_dream_throwb_state1_lasers_match_visible_item_rows(
     assert float(out["items"][slot]["vel_y"]) == pytest.approx(
         float(ref["items"][slot]["vel_y"]), abs=5e-6
     )
+
+
+def test_dream_throwb_final_pulse_consumes_prior_laser_and_compacts_new_article() -> None:
+    dataset_path = Path(
+        "datasets/aggregate_recent/replays/validation/dream_land_recent/"
+        "FlippantEnchantedHorse.msl"
+    )
+    seed, ref, out = _step_one_row(dataset_path, 8583)
+    victim = 0
+    thrower = 1
+
+    assert int(seed["stage_id"]) == 28
+    assert int(seed["action_id"][thrower]) == 220  # ThrowB
+    assert int(seed["items"][1]["exists"]) == 1
+    assert int(seed["items"][1]["type"]) == 55
+    assert int(seed["items"][1]["state"]) == 1
+    assert int(seed["items"][1]["spawn_id"]) == 53
+
+    assert int(out["combo_count"][thrower]) == int(ref["combo_count"][thrower])
+    assert int(out["hitlag"][victim]) == int(ref["hitlag"][victim])
+    assert int(out["hitstun"][victim]) == int(ref["hitstun"][victim])
+    assert float(out["percent"][victim]) == pytest.approx(float(ref["percent"][victim]))
+    assert int(out["instance_id"][victim]) == int(ref["instance_id"][victim])
+
+    kept = out["items"][1]
+    expected = ref["items"][1]
+    assert int(kept["exists"]) == int(expected["exists"]) == 1
+    assert int(kept["type"]) == int(expected["type"]) == 55
+    assert int(kept["state"]) == int(expected["state"]) == 1
+    assert int(kept["spawn_id"]) == int(expected["spawn_id"]) == 54
+    assert float(kept["pos_x"]) == pytest.approx(float(expected["pos_x"]), abs=2e-5)
+    assert float(kept["pos_y"]) == pytest.approx(float(expected["pos_y"]), abs=2e-5)
+    assert float(kept["vel_x"]) == pytest.approx(float(expected["vel_x"]), abs=2e-5)
+    assert float(kept["vel_y"]) == pytest.approx(float(expected["vel_y"]), abs=2e-5)
+    assert int(out["items"][2]["exists"]) == int(ref["items"][2]["exists"]) == 0
 
 
 def test_throwb_laser_non_crossed_body_consume_stays_normal() -> None:

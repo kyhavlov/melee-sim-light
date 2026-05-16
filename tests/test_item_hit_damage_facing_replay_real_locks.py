@@ -117,6 +117,53 @@ def test_item_hit_damage_entry_faces_away_when_owner_right_of_victim() -> None:
 
 
 @pytest.mark.integration
+def test_ordinary_live_falco_laser_body_damage_keeps_item_velocity_facing_dcc_392() -> None:
+    # Replay-real non-ThrowLw control for ftColl_8007A06C's item BODY facing path:
+    # a normal state-0 Falco laser owned by a non-throwing fighter hits Fox, and damage entry faces
+    # away from the live laser velocity owner.
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007A06C
+    # refs/melee/src/melee/it/itcoll.c::{it_8026FAC4,it_80272460}
+    # refs/melee/src/melee/it/types.h::ItemCommonData::x78_float
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/"
+        "aggregate_recent/DistinctCaringCobra.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[392:393]
+    p = 0
+    owner = 1
+    slot = 0
+    item = row["seed_t"]["items"][0, slot]
+
+    assert int(row["seed_t"]["action_id"][0, owner]) not in (0x00DB, 0x00DC, 0x00DD, 0x00DE)
+    assert int(item["exists"]) == 1
+    assert int(item["type"]) == 55  # Falco laser
+    assert int(item["state"]) == 0
+    assert int(item["owner"]) == owner
+    assert float(item["vel_x"]) > 0.0
+    assert int(row["ref_t1"]["instance_hit_by"][0, p]) == int(item["instance_id"])
+    assert int(row["ref_t1"]["action_id"][0, p]) == 84  # DamageAir1
+    assert int(row["ref_t1"]["facing"][0, p]) == 0
+    assert float(row["ref_t1"]["speed_x_attack"][0, p]) > 0.0
+
+    binding = pytest.importorskip("msl_binding")
+    out = _step_one_row(binding=binding, row=row, num_players=int(ds.header["num_players"]))
+    assert int(out["action_id"][p]) == int(row["ref_t1"]["action_id"][0, p])
+    assert int(out["facing"][p]) == int(row["ref_t1"]["facing"][0, p])
+    assert int(out["instance_hit_by"][p]) == int(row["ref_t1"]["instance_hit_by"][0, p])
+    assert float(out["speed_x_attack"][p]) == pytest.approx(
+        float(row["ref_t1"]["speed_x_attack"][0, p]), abs=1e-6
+    )
+
+
+@pytest.mark.integration
 def test_stationary_illusion_item_damage_uses_item_position_for_facing_his_1673() -> None:
     # Replay-real positive for ftColl_8007A06C's item branch:
     # stationary/slow items use item->pos.x, not owner fighter pos.x, for fp->dmg.facing_dir_1.

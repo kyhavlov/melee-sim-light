@@ -556,6 +556,82 @@ def test_yoshi_shyguy_post_reset_export_restarts_child_delta() -> None:
     assert float(out["items"][0]["vel_x"]) == pytest.approx(0.30000001192092896, abs=1e-6)
 
 
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("record", "slot"),
+    [
+        (7581, 0),
+        (7606, 1),
+        (7628, 2),
+        (7661, 3),
+    ],
+)
+def test_yoshi_shyguy_state1_floor_contact_exports_reset_child_delta_pec(
+    record: int, slot: int
+) -> None:
+    # Active Heiho floor contact:
+    # - itHeiho_UnkMotion1_Coll sees temp_r31 == 1 and calls itHeiho_UnkMotion1_Anim_inline.
+    # - That path resets itemVar.heiho.x3C, restarts state 1, then immediately calls it_802D98C4;
+    #   the post-frame x40_vel.y export is the reset-to-current child-JObj delta, not zero.
+    # refs/melee/src/melee/it/items/itheiho.c::{itHeiho_UnkMotion1_Coll,
+    #   itHeiho_UnkMotion1_Anim_inline,it_802D98AC,it_802D98C4}
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
+        "PhysicalElectricCapybara.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip("missing local replay dataset: PhysicalElectricCapybara.msl")
+
+    out, ref = _step_one_row(dataset_path, record)
+    assert int(ref["items"][slot]["exists"]) == 1
+    assert int(ref["items"][slot]["type"]) == ITEM_KIND_HEIHO
+    assert int(ref["items"][slot]["state"]) == 1
+    assert float(ref["items"][slot]["vel_x"]) == 0.0
+    assert abs(float(ref["items"][slot]["vel_y"])) > 1.0
+    for field in ("exists", "type", "state", "spawn_id"):
+        assert int(out["items"][slot][field]) == int(ref["items"][slot][field])
+    assert float(out["items"][slot]["pos_x"]) == pytest.approx(
+        float(ref["items"][slot]["pos_x"]), abs=1e-5
+    )
+    assert float(out["items"][slot]["pos_y"]) == pytest.approx(
+        float(ref["items"][slot]["pos_y"]), abs=1e-5
+    )
+    assert float(out["items"][slot]["vel_x"]) == pytest.approx(
+        float(ref["items"][slot]["vel_x"]), abs=1e-6
+    )
+    assert float(out["items"][slot]["vel_y"]) == pytest.approx(
+        float(ref["items"][slot]["vel_y"]), abs=1e-5
+    )
+
+
+@pytest.mark.integration
+def test_yoshi_shyguy_state1_non_floor_contact_keeps_dynamic_delta_pec() -> None:
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
+        "PhysicalElectricCapybara.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip("missing local replay dataset: PhysicalElectricCapybara.msl")
+
+    out, ref = _step_one_row(dataset_path, 7580)
+    slot = 0
+    assert int(ref["items"][slot]["exists"]) == 1
+    assert int(ref["items"][slot]["type"]) == ITEM_KIND_HEIHO
+    assert int(ref["items"][slot]["state"]) == 1
+    assert float(ref["items"][slot]["vel_x"]) != 0.0
+    assert abs(float(ref["items"][slot]["vel_y"])) < 1.0
+    assert float(out["items"][slot]["vel_x"]) == pytest.approx(
+        float(ref["items"][slot]["vel_x"]), abs=1e-6
+    )
+    assert float(out["items"][slot]["vel_y"]) == pytest.approx(
+        float(ref["items"][slot]["vel_y"]), abs=1e-6
+    )
+
+
 def test_yoshi_shyguy_state0_delay_transitions_without_active_motion() -> None:
     seed = _empty_seed()
     item = seed["items"][0, 0]

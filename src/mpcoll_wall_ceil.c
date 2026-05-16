@@ -17,31 +17,7 @@
 #include "mtx34.h"
 #include "specialhi_pose.h"
 #include "stage_collision.h"
-
-static inline uint8_t mpcoll_is_pending_throw_release_victim(const MslBatch* batch, int bi, int p) {
-  if (batch == NULL) {
-    return 0u;
-  }
-  const int num_players = (int)batch->config.num_players;
-  if (p < 0 || p >= num_players) {
-    return 0u;
-  }
-  for (int owner = 0; owner < num_players; owner++) {
-    if (owner == p) {
-      continue;
-    }
-    const size_t oidx = msl_idx_player(bi, owner);
-    if (batch->state.throw_pending_victim_port[oidx] == (uint8_t)p &&
-        batch->state.throw_pending_hit_idx[oidx] != 0xFFu) {
-      // Shared ThrowF/B/Hi/Lw release owner:
-      // - release detaches the victim in ftCo_800DD724, but generic wall/ceiling mpColl does not
-      //   own the same frame before throw release / later hit resolution complete.
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD724,ftCo_800DDDE4}
-      return 1u;
-    }
-  }
-  return 0u;
-}
+#include "throw_flow.h"
 
 // Decomp constants / shapes:
 // - mpCheckCeiling treats ceilings as horizontal when |y0 - y1| <= 0.0001.
@@ -2322,16 +2298,17 @@ static uint8_t grounded_ordered_right_wall(MslBatch* batch, size_t idx,
   return 0u;
 }
 
-uint8_t mpcoll_grounded_ceiling_ordered_retry(MslBatch* batch, size_t idx,
+uint8_t mpcoll_grounded_ceiling_ordered_retry(const MslMpcollContext* ctx,
                                               const MslEcbWorldPoints* prev_ecb,
                                               MslEcbWorldPoints* cur_ecb,
                                               MslMpcollOrderedWallCeilResult* io) {
-  if (batch == NULL || prev_ecb == NULL || cur_ecb == NULL) {
+  if (ctx == NULL || ctx->batch == NULL || prev_ecb == NULL || cur_ecb == NULL) {
     return 0u;
   }
-  const int bi = (int)(idx / (size_t)MSL_MAX_PLAYERS);
-  const uint32_t stage_id = batch->state.stage_id[(size_t)bi];
-  const MslStageCeilingGraph* cg = stage_collision_get_ceiling_graph(stage_id);
+  MslBatch* batch = ctx->batch;
+  const size_t idx = ctx->idx;
+  const uint32_t stage_id = ctx->stage_id;
+  const MslStageCeilingGraph* cg = ctx->ceiling_graph;
   if (cg == NULL || cg->lines == NULL || cg->line_count == 0u) {
     return 0u;
   }
@@ -2416,7 +2393,7 @@ uint8_t mpcoll_grounded_ceiling_ordered_retry(MslBatch* batch, size_t idx,
   return 1u;
 }
 
-void mpcoll_grounded_wall_ceil_ordered_begin(MslBatch* batch, size_t idx,
+void mpcoll_grounded_wall_ceil_ordered_begin(const MslMpcollContext* ctx,
                                              const MslEcbWorldPoints* prev_ecb,
                                              const MslEcbWorldPoints* cur_ecb,
                                              MslMpcollOrderedWallCeilResult* out) {
@@ -2438,14 +2415,14 @@ void mpcoll_grounded_wall_ceil_ordered_begin(MslBatch* batch, size_t idx,
   if (out != NULL) {
     *out = result;
   }
-  if (batch == NULL || prev_ecb == NULL || cur_ecb == NULL) {
+  if (ctx == NULL || ctx->batch == NULL || prev_ecb == NULL || cur_ecb == NULL) {
     return;
   }
-  const int bi = (int)(idx / (size_t)MSL_MAX_PLAYERS);
-  const uint32_t stage_id = batch->state.stage_id[(size_t)bi];
-  const MslStageFloorGraph* fg = stage_collision_get_floor_graph(stage_id);
-  const MslStageWallGraph* lwg = stage_collision_get_left_wall_graph(stage_id);
-  const MslStageWallGraph* rwg = stage_collision_get_right_wall_graph(stage_id);
+  MslBatch* batch = ctx->batch;
+  const size_t idx = ctx->idx;
+  const MslStageFloorGraph* fg = ctx->floor_graph;
+  const MslStageWallGraph* lwg = ctx->left_wall_graph;
+  const MslStageWallGraph* rwg = ctx->right_wall_graph;
 
   // Source order for grounded inline2:
   // left wall, right wall, left wall retry, right wall retry, horizontal squeeze, then ceiling.
@@ -2488,7 +2465,7 @@ void mpcoll_grounded_wall_ceil_ordered_begin(MslBatch* batch, size_t idx,
                               result.x_after_left_wall);
   }
 
-  (void)mpcoll_grounded_ceiling_ordered_retry(batch, idx, &prev, &cur, &result);
+  (void)mpcoll_grounded_ceiling_ordered_retry(ctx, &prev, &cur, &result);
   result.cur_ecb_after = cur;
   result.squeeze_flags_all |= result.squeeze_flags;
   if (out != NULL) {
@@ -2511,7 +2488,8 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
 
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
-      const uint16_t action_id = batch->state.action_id[idx];
+      MslMpcollContext ctx = mpcoll_context_make(batch, bi, idx, stage_id, fg, cg, lwg, rwg);
+      const uint16_t action_id = ctx.action_id;
 
       const uint8_t prev_wall_kind = batch->state.wall_kind[idx];
       const uint16_t prev_wall_id = batch->state.wall_id[idx];
@@ -2560,7 +2538,7 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
           continue;
         }
       }
-      if (mpcoll_is_pending_throw_release_victim(batch, bi, p)) {
+      if (throw_flow_release_pending_for_victim(batch, bi, p)) {
         mpcoll_clear_wall_ceiling_provenance(batch, idx);
         continue;
       }
@@ -2575,8 +2553,8 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
         continue;
       }
       const uint8_t grounded_now = batch->state.on_ground[idx] ? 1u : 0u;
-      const uint8_t char_id = batch->state.char_id[idx];
-      const uint32_t anim = batch->state.animation_index[idx];
+      const uint8_t char_id = ctx.char_id;
+      const uint32_t anim = ctx.anim;
       const uint8_t damagefly_hitlag_wall_refresh =
           (uint8_t)(mpcoll_damagefly_wall_asdi_latch_action(action_id) &&
                     mpcoll_frozen_hitlag_phase(batch, idx));

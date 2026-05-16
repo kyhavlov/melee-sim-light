@@ -2062,6 +2062,7 @@ void action_update_anim_callbacks_pre_input(MslBatch* batch) {
       rebound_update_anim_callback_pre_input(batch, idx);
       shieldbreak_update_anim_callback_pre_input(batch, c, idx);
       guard_update_grounded_anim_callback_pre_input(batch, idx);
+      throw_flow_update_anim_callback_pre_input(batch, bi, p);
     }
   }
   locomotion_update_anim_callbacks_pre_input(batch);
@@ -2091,7 +2092,6 @@ void action_update(MslBatch* batch) {
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{ftCo_Catch_Anim,ftCo_CatchDash_Anim}
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
   grab_flow_update_pre_physics(batch);
-  throw_flow_update_pre_physics(batch);
   // Run knockdown/damage Anim+IASA before generic locomotion so DamageFly->DamageFall transitions
   // can feed same-frame DamageFall IASA (e.g. ftCo_800CB870 jump check) in locomotion.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_DamageFly_Anim,ftCo_DamageFlyRoll_Anim}

@@ -56,10 +56,10 @@ class _Case:
 )
 def test_throwlw_release_combo_continuation_target_pm1_both_players_strict_lock(case: _Case) -> None:
     # Replay-real lock for ThrowLw release-frame item-domain combo continuation:
-    # - Throw Anim detaches the victim before items update, then defers the throw hit to post-items.
-    # - A same-frame blaster hit can therefore land on the released victim while remaining in the
-    #   throw-laser move-id domain and should continue combo_count through ftColl_8007646C ->
-    #   ftColl_800763C0 instead of restarting at 1.
+    # - Live Throw Anim detaches/damages the victim before later item BODY contacts.
+    # - Seed/reseed compatibility latches can still expose a pending released victim to the same-frame
+    #   blaster hit; it should remain in the throw-laser move-id domain and continue combo_count
+    #   through ftColl_8007646C -> ftColl_800763C0 instead of restarting at 1.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
     # refs/melee/src/melee/ft/ftcoll.c::{ftColl_800763C0,ftColl_8007646C}
     root = Path(__file__).resolve().parents[1]

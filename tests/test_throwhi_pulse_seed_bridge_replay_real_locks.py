@@ -912,7 +912,10 @@ def test_falco_throwhi_crossed_prev_frame18_rollout_emits_second_article_pec() -
     "case",
     [
         _ThrowHiFrame24CarryCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            dataset_rel=(
+                "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
+                "GracefulAttachedTurtle.msl"
+            ),
             target_record=3426,
             thrower_port=1,
             positive=True,
@@ -921,7 +924,10 @@ def test_falco_throwhi_crossed_prev_frame18_rollout_emits_second_article_pec() -
             note="Falco ThrowHi frame-24 current-pulse carried BODY row",
         ),
         _ThrowHiFrame24CarryCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
+            dataset_rel=(
+                "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
+                "TreasuredBackKangaroo.msl"
+            ),
             target_record=5090,
             thrower_port=1,
             positive=True,
@@ -930,7 +936,10 @@ def test_falco_throwhi_crossed_prev_frame18_rollout_emits_second_article_pec() -
             note="Falco ThrowHi frame-24 crossed-prev carried BODY row",
         ),
         _ThrowHiFrame24CarryCase(
-            dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            dataset_rel=(
+                "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
+                "GracefulAttachedTurtle.msl"
+            ),
             target_record=3427,
             thrower_port=1,
             positive=False,
@@ -1002,6 +1011,55 @@ def test_falco_throwhi_frame24_carried_body_locks(case: _ThrowHiFrame24CarryCase
 
 
 @pytest.mark.integration
+def test_falco_throwhi_frame24_projectile_side_body_consumes_and_compacts_mgs() -> None:
+    # Replay-real lock for the projectile-side half of the Falco ThrowHi frame-24 callback split:
+    # - ftFx_Throw_Anim has emitted the final set_throw_spawn_projectile pulse.
+    # - The older state1 article is on the projectile side of the crossed-prev segment and is consumed
+    #   by it_8029C4D4 / it_80272460 BODY, leaving the newer article compacted into slot 1.
+    # - This is the FoD float-error outlier owner: stale slot-1 carry falsely leaves the newer
+    #   projectile in slot 2 and amplifies item_vel_y in the normalized report.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+    # refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
+    # refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C6CC,it_8029C4D4}
+    # refs/melee/src/melee/it/itcoll.c::{it_8026FAC4,it_80272460}
+    # data/moves/falco.json moves["ftCo_SM_ThrowHi"].events
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/MilkyGracefulStingray.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    seed, ref_row, out_row = _run_one_step_row(dataset_path, 1815, 0)
+    thrower = 0
+    victim = 1
+    assert int(seed["char_id"][thrower]) == 22  # Falco
+    assert int(seed["action_id"][thrower]) == 221  # ThrowHi
+    assert int(seed["action_frame"][thrower]) == 24
+    assert int(seed["throw_pulse_crossed_prev_frame"][thrower]) == 24
+    assert int(seed["throw_command_pending_pulse_frame"][thrower]) == 24
+    assert int(seed["hitlag"][victim]) == 4
+    assert int(seed["last_attack_landed"][victim]) == 0
+    assert int(seed["last_hit_by"][victim]) == thrower
+    projectile_side_x = (float(seed["pos_x"][victim]) - float(seed["pos_x"][thrower])) * float(
+        seed["items"][1]["vel_x"]
+    )
+    assert projectile_side_x > 0.0
+
+    assert int(seed["items"][1]["exists"]) == 1
+    assert int(seed["items"][2]["exists"]) == 1
+    assert int(ref_row["items"][1]["exists"]) == 1
+    assert int(ref_row["items"][2]["exists"]) == 0
+    for field in ("exists", "type", "state", "owner", "instance_id", "timer"):
+        assert out_row["items"][1][field] == ref_row["items"][1][field], field
+        assert out_row["items"][2][field] == ref_row["items"][2][field], field
+    assert float(out_row["items"][1]["vel_y"]) == pytest.approx(float(ref_row["items"][1]["vel_y"]), abs=1e-6)
+    assert int(out_row["combo_count"][thrower]) == int(ref_row["combo_count"][thrower]) == 3
+    assert float(out_row["percent"][victim]) == pytest.approx(float(ref_row["percent"][victim]), abs=1e-6)
+    assert int(out_row["hitlag"][victim]) == int(ref_row["hitlag"][victim]) == 4
+
+
+@pytest.mark.integration
 def test_throwhi_same_frame_laser_topoff_merges_kb_without_second_damage_entry() -> None:
     # PRH 6744 has two live Falco ThrowHi state1 laser articles hitting the same victim in one
     # item pass. Both contribute percent, but only the first owns the Damage entry/x2088 bump; the
@@ -1029,6 +1087,7 @@ def test_throwhi_same_frame_laser_topoff_merges_kb_without_second_damage_entry()
 
     for field in ("action_id", "action_frame", "hitlag", "hitstun", "percent", "instance_id"):
         assert out_row[field][victim] == ref_row[field][victim], field
+    assert int(out_row["facing"][victim]) == int(ref_row["facing"][victim])
     assert float(out_row["speed_x_attack"][victim]) == pytest.approx(
         float(ref_row["speed_x_attack"][victim]), abs=1e-6
     )

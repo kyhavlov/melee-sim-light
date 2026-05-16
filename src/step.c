@@ -530,6 +530,7 @@ static int step_one_frame_core(MslBatch* batch, const uint8_t* prev_input_bytes,
   //   which is a prio-1 anim callback update.
   // - combat_processhit_consume() models the post-collision ProcessHit-style cleanup (decomp prio 14),
   //   so it should remain after prio-1 callback effects.
+  items_update_pre_fighter_anim_phase(batch);
   action_update_anim_callbacks_pre_input(batch);
 
   // Decomp-shaped "ProcessHit" consume / cleanup (see combat_processhit_consume for references).
@@ -558,7 +559,7 @@ static int step_one_frame_core(MslBatch* batch, const uint8_t* prev_input_bytes,
   action_update(batch);
   // Fighter-driven item spawns (blaster guns + shots) are evaluated before physics integration so
   // they use the pre-physics fighter pose/position snapshot (decomp: prio1 Anim vs prio4 Update).
-  items_spawn_pre_physics(batch);
+  items_spawn_fighter_anim_phase(batch);
   state_flags_refresh_camera_targets_pre_physics(batch);
   physics_integrate(batch);
   // NOTE(grabbed-victim-coll):
@@ -619,7 +620,7 @@ static int step_one_frame_core(MslBatch* batch, const uint8_t* prev_input_bytes,
   hitlist_tick(batch);
   shields_refresh(batch);
   reflector_bubbles_refresh(batch);
-  items_update(batch);
+  items_update_collision_phase(batch);
   throw_flow_update_post_items(batch);
   if (run_combat) {
     combat_resolve(batch);

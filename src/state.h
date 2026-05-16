@@ -308,15 +308,16 @@ typedef struct MslStateSoA {
   // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
   // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
   uint8_t* source_clear_terminal_phase;
-  // Internal-only throw flow latch: when a throw release flag fires, we detach the victim during
-  // motion-state Anim (pre-physics), then optionally apply the throw hit later in the frame
-  // (post-items) if no other hit interrupted the victim.
+  // Internal-only compatibility/seed throw flow latch. Normal runtime release damage is owned by
+  // the thrower's motion-state Anim callback; this lane remains for teacher-forced one-step/reseed
+  // states that expose a detached pending-release victim after item collision.
   //
   // Stored on the thrower (not the victim) so we can clear it by iterating over players each frame.
   // Value: 0xFF = none, else victim port in [0..MSL_MAX_PLAYERS).
   uint8_t* throw_pending_victim_port;
-  // Internal-only throw flow latch: the throw hitbox idx to apply when throw_pending_victim_port is
-  // set. Value: 0xFF = none, else hitbox idx in [0..MSL_THROW_HITBOX_IDX_MAX).
+  // Internal-only compatibility/seed throw flow latch: the throw hitbox idx to apply when
+  // throw_pending_victim_port is set. Value: 0xFF = none, else hitbox idx in
+  // [0..MSL_THROW_HITBOX_IDX_MAX).
   uint8_t* throw_pending_hit_idx;
   // Grab/throw victim attachment internals.
   //
