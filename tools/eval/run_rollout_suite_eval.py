@@ -230,6 +230,74 @@ def _top_float_fields(rows: list[dict], *, top: int) -> list[dict]:
     )[: max(0, int(top))]
 
 
+def print_rollout_dataset_report(*, reporter: Reporter, row: dict, overlay: dict, float_top: int) -> None:
+    reporter.print()
+    reporter.print(f"== {row['dataset']} ==")
+    reporter.print(f"rollout.status: {_format_status(overlay.get('status', 'not-clean'))}")
+    reporter.print(f"rollout.best_len: {row['best_len']}")
+    reporter.print(f"rollout.streak_count: {row['total_streaks']}")
+    reporter.print(f"rollout.streak_len.median: {row['median_streak_len']}")
+    reporter.print(f"rollout.streak_len.p90: {row['p90_streak_len']}")
+    reporter.print(f"rollout.streak_len.p95: {row['p95_streak_len']}")
+    reporter.print(f"rollout.streak_len.max: {row['max_streak_len']}")
+    reporter.print(f"rollout.first_mismatch_total: {row['first_mismatch_total']}")
+    reporter.print(f"rollout.first_mismatch_seeded_total: {row['first_mismatch_seeded_total']}")
+    accepted_total = int(overlay.get("accepted_total", 0))
+    accepted_seeded_total = int(overlay.get("accepted_seeded_total", 0))
+    if accepted_total:
+        reporter.print(f"rollout.approved_exception_total: {accepted_total}")
+    if accepted_seeded_total:
+        reporter.print(f"rollout.approved_exception_seeded_total: {accepted_seeded_total}")
+    accepted = list(overlay.get("accepted", []))
+    if accepted:
+        reporter.print(
+            "rollout.approved_exceptions:",
+            " ; ".join(
+                f"rec={e['record']} p={e['player']} seeded={int(bool(e.get('seeded_break', False)))} "
+                f"{e['field']}[{e['subindex']}] "
+                f"seed/out/ref={e['seed']}/{e['out']}/{e['ref']} category={e['category']}"
+                for e in accepted[:8]
+            ),
+        )
+    stale = list(overlay.get("stale", []))
+    if stale:
+        reporter.print(
+            "rollout.stale_exceptions:",
+            " ; ".join(
+                f"rec={e['record']} p={e['player']} {e['field']}[{e['subindex']}] "
+                f"seed/out/ref={e['seed']}/{e['out']}/{e['ref']} category={e['category']}"
+                for e in stale[:8]
+            ),
+        )
+    float_overlay = dict(overlay.get("float", {}))
+    reporter.print(f"rollout.float_status: {_format_status(float_overlay.get('status', 'float-clean'))}")
+    accepted_float_total = int(float_overlay.get("accepted_float_exception_total", 0))
+    if accepted_float_total:
+        reporter.print(f"rollout.approved_float_exception_total: {accepted_float_total}")
+    float_only = list(float_overlay.get("float_only", []))
+    downstream = list(float_overlay.get("downstream", []))
+    if float_only:
+        reporter.print("rollout.float_top_errors:")
+        for i, float_row in enumerate(float_only[: max(0, int(float_top))], start=1):
+            reporter.print(f"  {i}. {_format_float_row(float_row)}")
+    if downstream:
+        reporter.print("rollout.float_top_downstream:")
+        for i, float_row in enumerate(downstream[: max(0, int(float_top))], start=1):
+            reporter.print(f"  {i}. {_format_float_row(float_row)}")
+    ignored = dict(row.get("ignored_first_mismatch_field_counts", {}))
+    ignored_seeded = dict(row.get("ignored_first_mismatch_field_counts_seeded", {}))
+    if ignored:
+        reporter.print(
+            "rollout.ignored_first_mismatch_top:",
+            " ".join(f"{k}:{v}" for k, v in sorted(ignored.items(), key=lambda kv: (-kv[1], kv[0]))[:8]),
+        )
+    if ignored_seeded:
+        reporter.print(
+            "rollout.ignored_first_mismatch_seeded_top:",
+            " ".join(f"{k}:{v}" for k, v in sorted(ignored_seeded.items(), key=lambda kv: (-kv[1], kv[0]))[:8]),
+        )
+
+
 def _scan_dataset_payload_task(task: dict) -> dict:
     root = Path(str(task["root"]))
     ds_path = Path(str(task["dataset_path"]))
@@ -518,74 +586,13 @@ def main() -> None:
         )
 
         for row in summary["dataset_summaries"]:
-            reporter.print()
-            reporter.print(f"== {row['dataset']} ==")
             overlay = dataset_overlays.get(str(row["dataset"]), {})
-            reporter.print(f"rollout.status: {_format_status(overlay.get('status', 'not-clean'))}")
-            reporter.print(f"rollout.best_len: {row['best_len']}")
-            reporter.print(f"rollout.streak_count: {row['total_streaks']}")
-            reporter.print(f"rollout.streak_len.median: {row['median_streak_len']}")
-            reporter.print(f"rollout.streak_len.p90: {row['p90_streak_len']}")
-            reporter.print(f"rollout.streak_len.p95: {row['p95_streak_len']}")
-            reporter.print(f"rollout.streak_len.max: {row['max_streak_len']}")
-            reporter.print(f"rollout.first_mismatch_total: {row['first_mismatch_total']}")
-            reporter.print(f"rollout.first_mismatch_seeded_total: {row['first_mismatch_seeded_total']}")
-            accepted_total = int(overlay.get("accepted_total", 0))
-            accepted_seeded_total = int(overlay.get("accepted_seeded_total", 0))
-            if accepted_total:
-                reporter.print(f"rollout.approved_exception_total: {accepted_total}")
-            if accepted_seeded_total:
-                reporter.print(f"rollout.approved_exception_seeded_total: {accepted_seeded_total}")
-            accepted = list(overlay.get("accepted", []))
-            if accepted:
-                reporter.print(
-                    "rollout.approved_exceptions:",
-                    " ; ".join(
-                        f"rec={e['record']} p={e['player']} seeded={int(bool(e.get('seeded_break', False)))} "
-                        f"{e['field']}[{e['subindex']}] "
-                        f"seed/out/ref={e['seed']}/{e['out']}/{e['ref']} category={e['category']}"
-                        for e in accepted[:8]
-                    ),
-                )
-            stale = list(overlay.get("stale", []))
-            if stale:
-                reporter.print(
-                    "rollout.stale_exceptions:",
-                    " ; ".join(
-                        f"rec={e['record']} p={e['player']} {e['field']}[{e['subindex']}] "
-                        f"seed/out/ref={e['seed']}/{e['out']}/{e['ref']} category={e['category']}"
-                        for e in stale[:8]
-                    ),
-                )
-            float_overlay = dict(overlay.get("float", {}))
-            reporter.print(f"rollout.float_status: {_format_status(float_overlay.get('status', 'float-clean'))}")
-            accepted_float_total = int(float_overlay.get("accepted_float_exception_total", 0))
-            if accepted_float_total:
-                reporter.print(f"rollout.approved_float_exception_total: {accepted_float_total}")
-            float_only = list(float_overlay.get("float_only", []))
-            downstream = list(float_overlay.get("downstream", []))
-            if float_only:
-                reporter.print("rollout.float_top_errors:")
-                for i, float_row in enumerate(float_only[: max(0, int(args.float_top))], start=1):
-                    reporter.print(f"  {i}. {_format_float_row(float_row)}")
-            if downstream:
-                reporter.print("rollout.float_top_downstream:")
-                for i, float_row in enumerate(downstream[: max(0, int(args.float_top))], start=1):
-                    reporter.print(f"  {i}. {_format_float_row(float_row)}")
-            ignored = dict(row.get("ignored_first_mismatch_field_counts", {}))
-            ignored_seeded = dict(row.get("ignored_first_mismatch_field_counts_seeded", {}))
-            if ignored:
-                reporter.print(
-                    "rollout.ignored_first_mismatch_top:",
-                    " ".join(f"{k}:{v}" for k, v in sorted(ignored.items(), key=lambda kv: (-kv[1], kv[0]))[:8]),
-                )
-            if ignored_seeded:
-                reporter.print(
-                    "rollout.ignored_first_mismatch_seeded_top:",
-                    " ".join(
-                        f"{k}:{v}" for k, v in sorted(ignored_seeded.items(), key=lambda kv: (-kv[1], kv[0]))[:8]
-                    ),
-                )
+            print_rollout_dataset_report(
+                reporter=reporter,
+                row=row,
+                overlay=overlay,
+                float_top=int(args.float_top),
+            )
 
         reporter.print()
         reporter.print("== suite summary ==")
