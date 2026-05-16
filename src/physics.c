@@ -1485,13 +1485,13 @@ void physics_integrate(MslBatch* batch) {
       }
 
       if (throw_flow_release_pending_for_victim(batch, bi, p)) {
-        // Shared throw-release placeholder:
+        // Compatibility pending-release placeholder:
         // - ftCo_800DD724 consumes release and immediately calls ftCo_800DDDE4/ftCo_800DE7C0 in
         //   the thrower's Anim callback; the victim does not get an intervening generic Fall Phys
         //   drift frame before Damage* entry.
-        // - This simulator temporarily marks the detached victim as Fall so same-frame item
-        //   ordering can preempt the deferred throw hit. Keep that placeholder non-physical until
-        //   throw_flow_update_post_items() applies the release damage/KB owner.
+        // - Normal runtime release damage now runs in that Anim callback path. Seed/reseed
+        //   compatibility latches may still expose the detached victim as Fall; keep that
+        //   placeholder non-physical until throw_flow_update_post_items() consumes it.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD724,ftCo_800DDDE4}
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE7C0
         continue;

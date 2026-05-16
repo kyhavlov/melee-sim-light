@@ -5022,8 +5022,9 @@ static inline void combat_mutations_pass1_future_apply_body_hit(
   uint16_t d_motion_id = batch->state.action_id[d_idx];
   if (d_motion_id == (uint16_t)MSL_ACT_FALL &&
       msl_action_is_thrown_victim(batch->state.prev_action_id[d_idx])) {
-    // Deferred throw-release bridge ownership:
-    // - This sim may transiently place the victim in FALL before deferred throw-hit consume.
+    // Compatibility pending-release bridge ownership:
+    // - Seed/reseed pending latches may transiently place the victim in FALL before compatibility
+    //   throw-hit consume.
     // - In decomp, set_throw_flags consume + throw-hit apply run while victim is still in Thrown*;
     //   there is no intermediate FALL state feeding Damage calc inputs.
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
@@ -5697,6 +5698,10 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
   }
 
   const uint16_t d_motion_id = batch->state.action_id[d_idx];
+  // Compatibility/seed pending-release lane:
+  // normal runtime ThrowLw release damage runs in throw_flow_update_anim_callback_pre_input(), but
+  // one-step/reseed rows can still expose a pending detached release victim when an item BODY hit is
+  // applied from the seed snapshot.
   const uint8_t throw_release_pending =
       (batch->state.action_id[a_idx] == (uint16_t)MSL_ACT_THROW_LW &&
        batch->state.throw_pending_victim_port[a_idx] == (uint8_t)defender &&
@@ -5793,12 +5798,12 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
       (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_FALL ||
        (batch->state.grab_owner_port[d_idx] == (uint8_t)attacker &&
         msl_action_is_grabbed_victim(batch->state.action_id[d_idx])))) {
-    // ThrowLw release + same-frame blaster ordering bridge:
+    // ThrowLw compatibility pending release + same-frame blaster ordering bridge:
     // - ftCo_800DD724 consumes set_throw_flags(0) in ThrowLw Anim and applies the throw release hit
     //   via ftCo_800DE2A8/ftCo_800DDDE4 before later frame contacts.
-    // - On replay-real one-step rows the pending release victim can still be visible as attached
-    //   `Thrown*` at the item-collision snapshot even though the common release event already
-    //   belongs to this frame.
+    // - On replay-real one-step/reseed rows the pending release victim can still be visible as
+    //   attached `Thrown*` at the item-collision snapshot even though the common release event
+    //   already belongs to this frame.
     // - Apply the pending release owner before the generic attached-victim suppression path so the
     //   later throw-side laser stacks onto the released victim instead of suppressing the release.
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_ThrowLw_Anim,ftCo_800DD724,ftCo_800DE2A8,ftCo_800DDDE4}
@@ -5956,15 +5961,15 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
   const float one = combat_damage_ftColl_804D82EC_one();
   float defender_facing_dir_1 =
       (batch->state.pos_x[d_idx] > batch->state.pos_x[a_idx]) ? -one : one;
-  if (item_is_illusion && item_damage_facing_owner_valid != 0u) {
+  if (item_damage_facing_owner_valid != 0u &&
+      !(lp != NULL && item_state == (uint8_t)1u &&
+        batch->state.action_id[a_idx] == (uint16_t)MSL_ACT_THROW_HI)) {
     // Retained item-position facing owner scope:
-    // ftColl_8007A06C's item branch uses item position for stationary/slow item damage. This
-    // package applies that source owner only to steady Fox/Falco Illusion/Phantasm ghost articles,
-    // where the hit item is represented directly by a prior-frame live item slot and no separate
-    // laser collision owner rewrites the contact geometry. Same-frame spawned Illusion articles
-    // are a callback-phase/ghostEffect owner boundary and keep the older projectile-owner facing
-    // until that family is closed. Blaster laser BODY facing likewise remains on the older
-    // projectile-owner path until the full laser DmgLog/collision owner is closed.
+    // ftColl_8007A06C's item branch uses item position for stationary/slow item damage and item
+    // velocity once the item reaches ItemCommonData->x78. Callers only set this flag for live item
+    // BODY collision records whose item pos/velocity are the collision owner's values; same-frame
+    // synthetic spawn bridges and ThrowHi's explicit thrower-facing state1 owner keep their
+    // narrower source-owner lanes.
     // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007A06C
     // refs/melee/src/melee/it/itcoll.c (case 2 item damage direction)
     // refs/melee/src/melee/it/types.h::ItemCommonData::x78_float
@@ -5985,7 +5990,7 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
       batch->state.action_id[a_idx] == (uint16_t)MSL_ACT_THROW_LW &&
       batch->state.throw_pending_victim_port[a_idx] == (uint8_t)defender &&
       batch->state.throw_pending_hit_idx[a_idx] != 0xFFu) {
-    // ThrowLw release + same-frame blaster ordering:
+    // ThrowLw compatibility pending release + same-frame blaster ordering:
     // - ftCo_800DD724 / ftCo_800DDDE4 have already installed the released victim's facing lane
     //   before the later throw-side laser overlap is processed.
     // - Keep the late pulse on that already-owned left/right sign instead of recomputing from the
@@ -6066,6 +6071,21 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
   combat_damage_enter_state(c, batch, batch_index, d_idx, defender_on_ground,
                             defender_on_ground_after, defender_hurt_height, kb_applied,
                             kb_angle_rad, meteor_cancel_raw_angle);
+  if (lp != NULL && item_state == (uint8_t)1u &&
+      batch->state.action_id[a_idx] == (uint16_t)MSL_ACT_THROW_LW &&
+      msl_action_is_thrown_victim(batch->state.seed_prev_action_id[d_idx]) &&
+      defender_on_ground == 0u && d_hl > d_hl_prev && batch->state.ecb_lock_timer[d_idx] != 0u) {
+    // Same-frame ThrowLw laser re-entry owner:
+    // ftCo_800DDDE4 may call ftCommon_8007D5D4 during release, but the later item BODY hit routes
+    // through Fighter_ProcessHit -> ftCo_8008DCE0 from an already-airborne Damage/Fall state. That
+    // airborne damage branch does not install a fresh CollData_X130 lock for the item hit; clear the
+    // stale release lock so the following DamageAir_Coll map callback consumes the live damage ECB.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpCollInterpolateECB}
+    batch->state.ecb_lock_timer[d_idx] = 0u;
+    batch->state.coll_desired_ecb_bottom_locked_owner[d_idx] = 0u;
+  }
   // Mirror Fighter_ProcessHit's damage-hitlag ownership after ftCo_8008DCE0 state entry:
   // allow_sdi and x221A_b3 are ProcessHit damage paths, not generic hitlag side effects.
   // refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006A1BC}
@@ -6082,12 +6102,12 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
   // Decomp: refs/melee/src/melee/pl/plstale.c::plStale_UpdateStaleMovesFromItem
   staling_queue_update(batch, a_idx, item_attack_id, item_attack_instance);
 
-  // ThrowLw release-frame combo-victim continuation:
-  // - Throw Anim detaches the victim immediately and defers the throw hit to post-items
-  //   (`throw_pending_victim_port` in this sim), so a same-frame blaster hit can land after
-  //   release while the attacker is still in the throw-laser attack-id domain.
-  // - When fp->x2094 was not seed-visible but the pending released victim matches this item hit,
-  //   preserve ftColl_800763C0 continuation ownership instead of restarting combo_count at 1.
+  // ThrowLw compatibility release-frame combo-victim continuation:
+  // - Live Throw Anim release detaches/damages the victim before later item BODY contacts.
+  // - Seed/reseed pending latches can expose that same released-victim relationship through
+  //   throw_pending_victim_port; when fp->x2094 was not seed-visible but the pending released
+  //   victim matches this item hit, preserve ftColl_800763C0 continuation ownership instead of
+  //   restarting combo_count at 1.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800763C0,ftColl_8007646C}
   if (batch->state.action_id[a_idx] == (uint16_t)MSL_ACT_THROW_LW &&
@@ -6184,8 +6204,8 @@ static inline uint8_t combat_apply_throw_hit_core(MslBatch* batch, int batch_ind
   }
   // Throw hit capsules store their staled float damage when the set_throw_hitbox movescript event
   // creates the capsule. Same-instance low-throw laser contacts can update the stale queue before
-  // this simulator's deferred release hit applies, but those later queue entries must not
-  // retroactively stale the already-created capsule damage.
+  // compatibility pending-release cleanup applies a seeded throw hit, but those later queue entries
+  // must not retroactively stale the already-created capsule damage.
   // refs/melee/build/GALE01/asm/melee/ft/ftaction.s::ftAction_80071E04
   // refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_8007ABD0
   const uint16_t throw_attack_instance = batch->state.attack_instance[a_idx];
@@ -6332,8 +6352,8 @@ static inline uint8_t combat_apply_throw_hit_core(MslBatch* batch, int batch_ind
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
   //
-  // Deferred throw-hit apply in this simulator happens post-items; keep only the damage-entry
-  // immediate tick here (no extra deferred tick) so release rows do not over-advance action_frame.
+  // Keep only the damage-entry immediate tick here; any compatibility pending-release caller that
+  // runs later must not add a second entry tick and over-advance action_frame.
 
   batch->state.instance_hit_by[d_idx] = batch->state.instance_id[a_idx];
   batch->state.last_hit_by[d_idx] = combat_source_port0_for_attacker(batch, a_idx, attacker);
@@ -6390,9 +6410,9 @@ static inline void combat_throw_release_apply_immediate_di(MslBatch* batch, size
   // runs the same DI velocity mutator immediately after ftCo_8008DCE0 installs throw KB:
   //   ftCo_800DD724 -> ftCo_800DDDE4 -> ftCo_800DE7C0 -> ftCo_8008E5A4
   // ftCo_800DD724 is the Throw Anim callback path, which runs before Fighter_procUpdate's
-  // current-input install. This sim defers the throw hit until post-items, so read the pre-input
-  // stick lane preserved in prev_input_main_* rather than the already-applied current input. The
-  // L/R x1AC multiplier belongs to ftCo_Damage_OnExitHitlag and is intentionally not applied here.
+  // current-input install. Read the pre-input stick lane preserved in prev_input_main_* rather than
+  // the already-applied current input; the L/R x1AC multiplier belongs to
+  // ftCo_Damage_OnExitHitlag and is intentionally not applied here.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE7C0
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008E5A4

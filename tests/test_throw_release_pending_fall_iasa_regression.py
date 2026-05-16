@@ -424,8 +424,8 @@ def test_throwhi_release_di_uses_pre_input_stick_lane() -> None:
     # Replay-real boundary for the GAT CaptureDamageLw -> ThrowHi release chain:
     # - ftCo_800DD724 runs as the Throw Anim callback before Fighter_procUpdate installs current
     #   input, then ftCo_800DE7C0 calls ftCo_8008E5A4 immediately.
-    # - This simulator defers throw-hit application until post-items, so the DI source must remain
-    #   the pre-input stick lane, not the already-applied current input_t lane.
+    # - Release DI must therefore read the pre-input stick lane, not the already-applied current
+    #   input_t lane; compatibility pending-release cleanup uses the same source lane.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE7C0
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008E5A4

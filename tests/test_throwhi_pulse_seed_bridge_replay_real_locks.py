@@ -1087,6 +1087,7 @@ def test_throwhi_same_frame_laser_topoff_merges_kb_without_second_damage_entry()
 
     for field in ("action_id", "action_frame", "hitlag", "hitstun", "percent", "instance_id"):
         assert out_row[field][victim] == ref_row[field][victim], field
+    assert int(out_row["facing"][victim]) == int(ref_row["facing"][victim])
     assert float(out_row["speed_x_attack"][victim]) == pytest.approx(
         float(ref_row["speed_x_attack"][victim]), abs=1e-6
     )

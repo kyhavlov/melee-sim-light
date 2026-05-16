@@ -1414,6 +1414,21 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.pos_x[idx] = seed->pos_x[p];
       batch->state.pos_y[idx] = seed->pos_y[p];
       batch->state.pos_z[idx] = seed->pos_z[p];
+      if (rollout_owned_after != (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED) {
+        // One-step reseed initializes hidden CollData previous/current roots from the replay-visible
+        // current root. Native mpColl prev roots are frame-local state; carrying them across reused
+        // validation batch slots can make same-frame throw-release Damage* map callbacks sweep from
+        // a previous dataset row. Free-running rollout reseed keeps its existing hidden-history
+        // initialization path so rollout starts do not perturb later stage/ledge geometry.
+        // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_JObj,mpColl_800473CC}
+        // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procMap}
+        batch->state.prev_pos_x[idx] = seed->pos_x[p];
+        batch->state.prev_pos_y[idx] = seed->pos_y[p];
+        batch->state.coll_stage_prev_pos_x[idx] = seed->pos_x[p];
+        batch->state.coll_stage_prev_pos_y[idx] = seed->pos_y[p];
+        batch->state.coll_substep_prev_pos_x[idx] = seed->pos_x[p];
+        batch->state.coll_substep_prev_pos_y[idx] = seed->pos_y[p];
+      }
       batch->state.floor_sweep_seed_prev_pos_x[idx] = seed->floor_sweep_prev_pos_x_f32[p];
       batch->state.floor_sweep_seed_prev_pos_y[idx] = seed->floor_sweep_prev_pos_y_f32[p];
       batch->state.floor_sweep_seed_prev_valid[idx] =

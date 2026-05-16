@@ -6677,7 +6677,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           batch->state.item_attack_instance[ii], batch->state.item_instance_id[ii],
           batch->state.item_type[ii], laser_state, dmg, angle, kbg, wsk, bkb, hit_hurt_height,
           element, laser_body_stale_mult, batch->state.item_pos_x[ii], batch->state.item_vel_x[ii],
-          0u);
+          1u);
       if (res == MSL_ITEM_HIT_NONE) {
         continue;
       }
@@ -7032,7 +7032,17 @@ static void yoshi_shyguy_items_update(MslBatch* batch, int bi) {
   }
 }
 
-void items_update(MslBatch* batch) {
+void items_update_pre_fighter_anim_phase(MslBatch* batch) {
+  (void)batch;
+  // Reserved item prio 0/1 phase:
+  // - Item_802693E4 decrements item hitlag and consumes deferred hitlag callbacks.
+  // - Item_80269528 advances item anim/script and lifetime.
+  // This lite sim still runs the supported article timer/anim owners in
+  // items_update_collision_phase() until each article is promoted independently.
+  // refs/melee/src/melee/it/item.c::{Item_802693E4,Item_80269528}
+}
+
+void items_update_collision_phase(MslBatch* batch) {
   if (batch == NULL) {
     return;
   }
@@ -7210,7 +7220,7 @@ void items_update_post_combat(MslBatch* batch) {
   }
 }
 
-void items_spawn_pre_physics(MslBatch* batch) {
+void items_spawn_fighter_anim_phase(MslBatch* batch) {
   if (batch == NULL) {
     return;
   }

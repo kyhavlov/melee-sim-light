@@ -2062,16 +2062,12 @@ void action_update_anim_callbacks_pre_input(MslBatch* batch) {
       rebound_update_anim_callback_pre_input(batch, idx);
       shieldbreak_update_anim_callback_pre_input(batch, c, idx);
       guard_update_grounded_anim_callback_pre_input(batch, idx);
+      throw_flow_update_anim_callback_pre_input(batch, bi, p);
     }
   }
   locomotion_update_anim_callbacks_pre_input(batch);
   blaster_update_anim_callbacks_pre_input(batch);
   grab_flow_update_anim_callbacks_pre_input(batch);
-  // Throw script release is owned by the thrower's Anim callback, before the victim can run current
-  // frame IASA from a simulator-only detached placeholder.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_Throw*_Anim,ftCo_800DD724}
-  // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
-  throw_flow_update_pre_physics(batch);
 }
 
 void action_update(MslBatch* batch) {

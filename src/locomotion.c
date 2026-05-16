@@ -3610,9 +3610,10 @@ void locomotion_update_pre(MslBatch* batch) {
       action_id = batch->state.action_id[idx];
       const uint16_t action_id_start = action_id;
 
-      // Deferred throw-release bridge guard:
-      // - In this sim, throw release detaches the victim and installs a temporary FALL bridge, then
-      //   applies the throw hit in throw_flow_update_post_items().
+      // Compatibility pending-release bridge guard:
+      // - Normal runtime throw release detaches/damages the victim in the thrower's Anim callback.
+      //   Seed/reseed pending latches can still install a temporary Fall bridge consumed by
+      //   throw_flow_update_post_items().
       // - In decomp, throw release/hit runs inside Throw Anim callback (`ftCo_800DD724` ->
       //   `ftCo_800DDDE4`) before normal victim locomotion IASA has a chance to consume aerial
       //   jump/attack inputs on that same release frame.

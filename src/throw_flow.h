@@ -12,7 +12,7 @@
 // This module is intentionally small and data-driven:
 // - release/flip timing comes from data/moves/{fox,falco}.json via move_tables APIs,
 // - damage/KB/state entry is routed through combat_apply_throw_hit().
-void throw_flow_update_pre_physics(MslBatch* batch);
+void throw_flow_update_anim_callback_pre_input(MslBatch* batch, int batch_index, int owner_p);
 
 static inline uint8_t throw_flow_release_pending_for_victim(const MslBatch* batch, int bi,
                                                             int victim_p) {
@@ -65,7 +65,6 @@ static inline uint8_t throw_flow_release_source_blocks_iasa(const MslBatch* batc
   return msl_action_is_grabbed_victim(batch->state.prev_action_id[idx]) ? 1u : 0u;
 }
 
-// Post-items pass: apply release/throw-hit after items_update() so same-frame item hits (notably
-// in-flight blaster lasers) can preempt the throw-hit when they knock the victim out of the
-// grabbed/thrown victim loop.
+// Compatibility cleanup pass for stale teacher-forced pending latches. Runtime throw release damage
+// is now applied by throw_flow_update_anim_callback_pre_input() in the source Anim callback phase.
 void throw_flow_update_post_items(MslBatch* batch);
