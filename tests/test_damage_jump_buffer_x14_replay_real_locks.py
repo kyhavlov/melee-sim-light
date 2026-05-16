@@ -10,8 +10,8 @@ from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
 
 
 TCH = Path("datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl")
-FEH_SLP = Path("replays/validation/dream_land_recent/FlippantEnchantedHorse.slp")
-SELFPLAY_181413_SLP = Path("replays/validation/aggregate_recent/Game_20260514T181413.slp")
+FEH_SLP = Path("replays/validation/dream_land_recent/FlippantEnchantedHorse.slpz")
+SELFPLAY_181413_SLP = Path("replays/validation/aggregate_recent/Game_20260514T181413.slpz")
 
 
 def _skip_if_dataset_missing(ds_path: Path) -> None:

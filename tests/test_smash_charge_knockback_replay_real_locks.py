@@ -13,14 +13,14 @@ MSL_BUTTON_A = 0x0100
 
 
 def _skip_if_dataset_missing(root: Path) -> None:
-    rel = "replays/validation/aggregate_recent/FavorableSuperficialPig.slp"
+    rel = "replays/validation/aggregate_recent/FavorableSuperficialPig.slpz"
     if not (root / rel).exists():
         pytest.skip(f"missing local replay: {rel}")
 
 
 def _build_fsp_dataset(root: Path):
     return build_dataset_from_slp(
-        slp_path=str(root / "replays/validation/aggregate_recent/FavorableSuperficialPig.slp"),
+        slp_path=str(root / "replays/validation/aggregate_recent/FavorableSuperficialPig.slpz"),
         ports=[1, 2],
         ucf_enabled=True,
         ucf_cardinals_1_0_enabled=True,
@@ -130,7 +130,7 @@ def test_attackhi4_smash_release_seed_state_accepts_selfplay_hitbox_damage() -> 
     # refs/melee/src/melee/ft/ftaction.c::ftAction_80073008
     # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007ABD0
     root = Path(__file__).resolve().parents[1]
-    slp_path = root / "replays/validation/aggregate_recent/Game_20260514T181413.slp"
+    slp_path = root / "replays/validation/aggregate_recent/Game_20260514T181413.slpz"
     if not slp_path.exists():
         pytest.skip(f"missing local replay: {slp_path}")
     ds = build_dataset_from_slp(
@@ -170,7 +170,7 @@ def test_attackhi4_smash_release_api_seed_sanitizes_bad_saved_rate() -> None:
     # derived release damage.
     # refs/melee/src/melee/ft/ft_0DF0.c::{ftCo_800DEF38,ftCo_800DF0D0}
     root = Path(__file__).resolve().parents[1]
-    slp_path = root / "replays/validation/aggregate_recent/Game_20260514T181413.slp"
+    slp_path = root / "replays/validation/aggregate_recent/Game_20260514T181413.slpz"
     if not slp_path.exists():
         pytest.skip(f"missing local replay: {slp_path}")
     ds = build_dataset_from_slp(
@@ -212,7 +212,7 @@ def test_attackhi4_short_release_seed_state_accepts_selfplay_hitbox_damage() -> 
     # refs/melee/src/melee/ft/ftaction.c::ftAction_80073008
     # refs/melee/src/melee/ft/ft_0DF0.c::{ftCo_800DF0D0,ftCo_800DEEB8}
     root = Path(__file__).resolve().parents[1]
-    slp_path = root / "replays/validation/aggregate_recent/Game_20260514T181413.slp"
+    slp_path = root / "replays/validation/aggregate_recent/Game_20260514T181413.slpz"
     if not slp_path.exists():
         pytest.skip(f"missing local replay: {slp_path}")
     ds = build_dataset_from_slp(
@@ -248,7 +248,7 @@ def test_attackhi4_smash_release_seed_state_denies_raw_uncharged_damage() -> Non
     # uncharged hitbox damage and visibly underestimates percent/knockback. This protects the seed
     # lane from being mistaken for a broad contact or stale-move workaround.
     root = Path(__file__).resolve().parents[1]
-    slp_path = root / "replays/validation/aggregate_recent/Game_20260514T181413.slp"
+    slp_path = root / "replays/validation/aggregate_recent/Game_20260514T181413.slpz"
     if not slp_path.exists():
         pytest.skip(f"missing local replay: {slp_path}")
     ds = build_dataset_from_slp(
@@ -277,7 +277,7 @@ def test_attackhi4_smash_release_api_seed_zero_hold_clears_inconsistent_state() 
     # Inconsistent external seed bytes with Release state but no saved hold window are not a valid
     # source state; reseed clears them instead of restoring a stale charged-damage lane.
     root = Path(__file__).resolve().parents[1]
-    slp_path = root / "replays/validation/aggregate_recent/Game_20260514T181413.slp"
+    slp_path = root / "replays/validation/aggregate_recent/Game_20260514T181413.slpz"
     if not slp_path.exists():
         pytest.skip(f"missing local replay: {slp_path}")
     ds = build_dataset_from_slp(

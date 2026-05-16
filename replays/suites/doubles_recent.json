@@ -6,7 +6,7 @@
   "team_attack_on": true,
   "replays": [
     {
-      "replay": "replays/validation/doubles_recent/Game_20260509T152622.slp",
+      "replay": "replays/validation/doubles_recent/Game_20260509T152622.slpz",
       "ports": [1, 2, 3, 4],
       "stage_id": 32,
       "characters": {

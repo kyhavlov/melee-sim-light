@@ -17,9 +17,12 @@ dolphin-emu-ExiAI
 # Replay corpora (keep suite definitions committed)
 replays/*.slp
 replays/**/*.slp
+replays/*.slpz
+replays/**/*.slpz
 !replays/validation/
 !replays/validation/**/
 !replays/validation/**/*.slp
+!replays/validation/**/*.slpz
 
 # Preprocessed datasets (local-only)
 datasets/

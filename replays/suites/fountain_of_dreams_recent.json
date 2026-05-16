@@ -5,19 +5,19 @@
   "ucf_cardinals_1_0_enabled": true,
   "replays": [
     {
-      "replay": "replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.slp",
+      "replay": "replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.slpz",
       "ports": [1, 2],
       "stage_id": 2,
       "characters": { "1": "Fox", "2": "Falco" }
     },
     {
-      "replay": "replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.slp",
+      "replay": "replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.slpz",
       "ports": [1, 2],
       "stage_id": 2,
       "characters": { "1": "Fox", "2": "Falco" }
     },
     {
-      "replay": "replays/validation/fountain_of_dreams_recent/MilkyGracefulStingray.slp",
+      "replay": "replays/validation/fountain_of_dreams_recent/MilkyGracefulStingray.slpz",
       "ports": [1, 2],
       "stage_id": 2,
       "characters": { "1": "Fox", "2": "Falco" }

@@ -280,7 +280,7 @@ def test_damageflytop_downward_sdi_bottom_above_floor_stays_airborne_selfplay_18
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpColl_80044948_Floor}
     root = Path(__file__).resolve().parents[1]
-    slp_path = root / "replays/validation/aggregate_recent/Game_20260514T181413.slp"
+    slp_path = root / "replays/validation/aggregate_recent/Game_20260514T181413.slpz"
     if not slp_path.exists():
         pytest.skip(f"missing local replay: {slp_path}")
 

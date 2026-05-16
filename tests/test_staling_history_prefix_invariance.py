@@ -5,6 +5,7 @@ import numpy as np
 from peppi_py import _read_slippi
 
 from tools.slippi.rollback import finalized_frame_indices
+from tools.slippi.slpz import replay_path_for_peppi
 from tools.slippi.staling_history import derive_staling_history
 
 
@@ -40,8 +41,9 @@ def test_staling_history_accounts_hidden_guardon_guard_guardoff_default_bump() -
     # SpecialN item-spawn identity copy.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
     #   ftCo_GuardOn_Anim,ftCo_800928CC,ftCo_80092908,ftCo_GuardOn_IASA,ftCo_80092C54}
-    path = "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slp"
-    game = _read_slippi(path, False)
+    path = "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz"
+    with replay_path_for_peppi(path) as slp_path:
+        game = _read_slippi(str(slp_path), False)
     frames_all = game.frames
     assert frames_all is not None
 
@@ -64,8 +66,9 @@ def test_staling_history_specialn_loop_restart_bumps_laser_stale_instance() -> N
     # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
     #   ftFx_SpecialNLoop_Anim,ftFx_SpecialAirNLoop_Anim,ftFx_SpecialN_OnChangeAction}
     # refs/melee/src/melee/ft/ft_0881.c::ft_800892A0
-    path = "replays/validation/aggregate_recent/PriceyPartialAlbatross.slp"
-    game = _read_slippi(path, False)
+    path = "replays/validation/aggregate_recent/PriceyPartialAlbatross.slpz"
+    with replay_path_for_peppi(path) as slp_path:
+        game = _read_slippi(str(slp_path), False)
     frames_all = game.frames
     assert frames_all is not None
 

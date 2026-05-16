@@ -191,7 +191,7 @@ def test_throwhi_attachment_pose_uses_source_float_rate_selfplay_181413() -> Non
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD4B0,ftCo_800DD398}
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508
     root = Path(__file__).resolve().parents[1]
-    slp_path = root / "replays/validation/aggregate_recent/Game_20260514T181413.slp"
+    slp_path = root / "replays/validation/aggregate_recent/Game_20260514T181413.slpz"
     if not slp_path.exists():
         pytest.skip(f"missing local replay: {slp_path}")
 
@@ -259,7 +259,7 @@ def test_capturewait_to_throwf_entry_runs_post_phys_attachment_selfplay_181413()
     #   ftCo_800DD398,ftCo_ThrowF_Phys}
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::{ftCo_800DE3FC,ftCo_800DE508}
     root = Path(__file__).resolve().parents[1]
-    slp_path = root / "replays/validation/aggregate_recent/Game_20260514T181413.slp"
+    slp_path = root / "replays/validation/aggregate_recent/Game_20260514T181413.slpz"
     if not slp_path.exists():
         pytest.skip(f"missing local replay: {slp_path}")
 

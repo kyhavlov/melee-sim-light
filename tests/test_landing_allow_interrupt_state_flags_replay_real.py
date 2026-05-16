@@ -9,7 +9,7 @@ from tools.eval.dataset import COMPARE_DTYPE
 from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
 
 
-SELFPLAY_181413_SLP = Path("replays/validation/aggregate_recent/Game_20260514T181413.slp")
+SELFPLAY_181413_SLP = Path("replays/validation/aggregate_recent/Game_20260514T181413.slpz")
 
 ACT_ATTACK_AIR_B = 67
 ACT_LANDING = 42

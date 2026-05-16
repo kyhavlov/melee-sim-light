@@ -5,19 +5,19 @@
   "ucf_cardinals_1_0_enabled": true,
   "replays": [
     {
-      "replay": "replays/validation/pokemon_stadium_recent/CornyDelayedOkapi.slp",
+      "replay": "replays/validation/pokemon_stadium_recent/CornyDelayedOkapi.slpz",
       "ports": [1, 2],
       "stage_id": 3,
       "characters": { "1": "Fox", "2": "Falco" }
     },
     {
-      "replay": "replays/validation/pokemon_stadium_recent/SweatyThisMallard.slp",
+      "replay": "replays/validation/pokemon_stadium_recent/SweatyThisMallard.slpz",
       "ports": [2, 4],
       "stage_id": 3,
       "characters": { "2": "Falco", "4": "Fox" }
     },
     {
-      "replay": "replays/validation/pokemon_stadium_recent/ThisVioletRaccoon.slp",
+      "replay": "replays/validation/pokemon_stadium_recent/ThisVioletRaccoon.slpz",
       "ports": [1, 2],
       "stage_id": 3,
       "characters": { "1": "Fox", "2": "Falco" }

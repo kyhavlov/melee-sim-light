@@ -17,4 +17,5 @@ dev = [
   "pytest",
   "pytest-xdist",
   "setuptools",
+  "zstandard",
 ]

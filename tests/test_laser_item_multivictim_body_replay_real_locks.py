@@ -15,8 +15,8 @@ P0_ATTACKER_HIT_BY_LASER = 0
 P1_ALREADY_IN_DAMAGE_HIT_BY_LASER = 1
 LASER_ITEM_SLOT = 1
 LASER_INSTANCE_ID = 3219
-SELFPLAY_182447_SLP = Path("replays/validation/aggregate_recent/Game_20260515T182447_frozenps.slp")
-EWT_SLP = Path("replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.slp")
+SELFPLAY_182447_SLP = Path("replays/validation/aggregate_recent/Game_20260515T182447_frozenps.slpz")
+EWT_SLP = Path("replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.slpz")
 
 ACT_DAMAGE_LW_1 = 81
 ACT_DAMAGE_AIR_1 = 84

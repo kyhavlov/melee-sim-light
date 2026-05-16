@@ -485,7 +485,7 @@ def test_fod_damagefly_rollout_uses_grizumi_collision_height_from_direct_events(
     # refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_DamageFly_Coll,ftCo_80090184}
     root = Path(__file__).resolve().parents[1]
-    slp = root / "replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.slp"
+    slp = root / "replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.slpz"
     if not slp.exists():
         pytest.skip(f"missing local replay: {slp}")
 

@@ -10,6 +10,7 @@ from tools.dolphin.patch_slp_preframe_window import (
     _load_ubjson_module,
     _parse_event_payload_sizes,
 )
+from tools.slippi.slpz import replay_path_for_peppi
 from tools.slippi.suite_io import load_suite
 
 STADIUM_TRANSFORMATION_EVENT = 0x41
@@ -17,8 +18,9 @@ STADIUM_TRANSFORMATION_EVENT = 0x41
 
 def _slippi_event_counts(path: Path) -> Counter[int]:
     ubjson = _load_ubjson_module()
-    with path.open("rb") as f:
-        root = ubjson.load(f)
+    with replay_path_for_peppi(path) as slp_path:
+        with slp_path.open("rb") as f:
+            root = ubjson.load(f)
     raw = bytearray(root["raw"])
     sizes = _parse_event_payload_sizes(raw)
     return Counter(command for _, command, _ in _iter_events(raw, sizes))
@@ -28,7 +30,8 @@ def test_pokemon_stadium_validation_replays_are_frozen() -> None:
     suite = load_suite("replays/suites/pokemon_stadium_recent.json")
     assert suite.replays
     for replay in suite.replays:
-        game = _read_slippi(str(Path(replay.replay)), False)
+        with replay_path_for_peppi(replay.replay) as slp_path:
+            game = _read_slippi(str(slp_path), False)
         assert int(game.start["stage"]) == 3
         assert bool(game.start.get("is_frozen_ps")) is True
 
@@ -38,14 +41,16 @@ def test_aggregate_pokemon_stadium_entries_are_frozen() -> None:
     ps_replays = [replay for replay in suite.replays if int(replay.stage_id or -1) == 3]
     assert ps_replays
     for replay in ps_replays:
-        game = _read_slippi(str(Path(replay.replay)), False)
+        with replay_path_for_peppi(replay.replay) as slp_path:
+            game = _read_slippi(str(slp_path), False)
         assert int(game.start["stage"]) == 3
         assert bool(game.start.get("is_frozen_ps")) is True
 
 
 def test_aggregate_derived_selfplay_stadium_fixture_is_frozen_without_transformations() -> None:
-    replay = Path("replays/validation/aggregate_recent/Game_20260515T182447_frozenps.slp")
-    game = _read_slippi(str(replay), False)
+    replay = Path("replays/validation/aggregate_recent/Game_20260515T182447_frozenps.slpz")
+    with replay_path_for_peppi(replay) as slp_path:
+        game = _read_slippi(str(slp_path), False)
     assert int(game.start["stage"]) == 3
     assert bool(game.start.get("is_frozen_ps")) is True
     assert _slippi_event_counts(replay).get(STADIUM_TRANSFORMATION_EVENT, 0) == 0

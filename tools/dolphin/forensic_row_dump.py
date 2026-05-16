@@ -9,6 +9,7 @@ from pathlib import Path
 from tools.dolphin.dolphin_engine_dump import capture_engine_dump
 from tools.dolphin.extract_engine_dump_rows import extract_to_dir
 from tools.eval.dataset import read_dataset
+from tools.slippi.slpz import replay_path_for_peppi, resolve_replay_path
 from tools.slippi.suite_io import repo_root
 
 
@@ -44,7 +45,7 @@ def _infer_replay_from_dataset(root: Path, dataset_path: Path) -> Path:
         raise ValueError(f"cannot infer replay path from dataset (missing 'replays' segment): {dataset_path}")
     idx = parts.index("replays")
     replay_rel = Path(*parts[idx:]).with_suffix(".slp")
-    replay_path = (root / replay_rel).resolve()
+    replay_path = resolve_replay_path((root / replay_rel).resolve())
     if not replay_path.exists():
         raise FileNotFoundError(f"inferred replay not found: {replay_path}")
     return replay_path
@@ -118,19 +119,20 @@ def main() -> int:
         else None
     )
     user_dir = out_dir / "dolphin_user"
-    rc, _ = capture_engine_dump(
-        replay=replay_path,
-        dolphin=args.dolphin,
-        iso=args.iso,
-        user_dir=user_dir,
-        out_bin=dump_path,
-        start_frame=start_frame,
-        end_frame=end_frame,
-        timeout=float(args.timeout),
-        collision_probe_path=collision_probe_path,
-        throw_laser_event_probe_path=throw_laser_event_probe_path,
-        laser_shield_reflect_event_probe_path=laser_shield_reflect_event_probe_path,
-    )
+    with replay_path_for_peppi(replay_path) as capture_replay_path:
+        rc, _ = capture_engine_dump(
+            replay=capture_replay_path,
+            dolphin=args.dolphin,
+            iso=args.iso,
+            user_dir=user_dir,
+            out_bin=dump_path,
+            start_frame=start_frame,
+            end_frame=end_frame,
+            timeout=float(args.timeout),
+            collision_probe_path=collision_probe_path,
+            throw_laser_event_probe_path=throw_laser_event_probe_path,
+            laser_shield_reflect_event_probe_path=laser_shield_reflect_event_probe_path,
+        )
     if rc != 0:
         raise SystemExit(f"capture failed for replay={replay_path} frame_window={start_frame}..{end_frame}")
 

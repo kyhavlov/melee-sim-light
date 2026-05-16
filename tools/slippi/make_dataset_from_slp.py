@@ -28,6 +28,7 @@ from tools.slippi.known_data_artifacts import (
 )
 from tools.slippi.motion_state_owners import read_callback_manifest, read_mslmso01_v1
 from tools.slippi.rollback import finalized_frame_indices
+from tools.slippi.slpz import replay_path_for_peppi
 from tools.slippi.suite_io import team_attack_on_from_start
 
 
@@ -3076,7 +3077,7 @@ def build_dataset_from_slp(
     ucf_cardinals_1_0_enabled: bool = False,
 ) -> Dataset:
     """
-    Build an in-memory dataset from a single .slp by reseeding with post(i-1),
+    Build an in-memory dataset from a single .slp/.slpz by reseeding with post(i-1),
     applying inputs from pre(i), and comparing to post(i).
 
     ports: optional list of 1-based ports to include (e.g. [1,2]).
@@ -3103,7 +3104,7 @@ def write_dataset_from_slp(
     ucf_cardinals_1_0_enabled: bool = False,
 ) -> None:
     """
-    Build a dataset from a single .slp and write it to the `.msl` cache format.
+    Build a dataset from a single .slp/.slpz and write it to the `.msl` cache format.
 
     ports: optional list of 1-based ports to include (e.g. [1,2]).
     """
@@ -3119,7 +3120,7 @@ def write_dataset_from_slp(
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--slp", required=True, help="Path to .slp file")
+    ap.add_argument("--slp", required=True, help="Path to .slp or .slpz file")
     ap.add_argument("--out", required=True, help="Output .msl dataset path")
     ap.add_argument(
         "--ports",
@@ -3195,7 +3196,8 @@ def _main_impl(args) -> Dataset:
         process_stick_i8_units,
     )
 
-    game = _read_slippi(args.slp, False)
+    with replay_path_for_peppi(args.slp) as peppi_path:
+        game = _read_slippi(str(peppi_path), False)
     frames_all = game.frames
     if frames_all is None or len(frames_all) == 0:
         raise ValueError("Replay has no frames")

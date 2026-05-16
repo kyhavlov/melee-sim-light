@@ -10,7 +10,7 @@ from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE, read_data
 from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
 
 
-SELFPLAY_181413_SLP = Path("replays/validation/aggregate_recent/Game_20260514T181413.slp")
+SELFPLAY_181413_SLP = Path("replays/validation/aggregate_recent/Game_20260514T181413.slpz")
 
 
 @dataclass(frozen=True)

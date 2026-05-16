@@ -20,7 +20,7 @@ _STRICT_TRANSITION_FIELDS = (
     "ground_id",
 )
 
-SELFPLAY_182447_SLP = Path("replays/validation/aggregate_recent/Game_20260515T182447_frozenps.slp")
+SELFPLAY_182447_SLP = Path("replays/validation/aggregate_recent/Game_20260515T182447_frozenps.slpz")
 
 
 def _skip_if_required_artifacts_missing(root: Path) -> None:

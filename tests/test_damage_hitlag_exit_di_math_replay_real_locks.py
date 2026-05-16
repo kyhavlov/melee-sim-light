@@ -62,7 +62,7 @@ def test_damage_hitlag_exit_di_uses_source_msl_trig_for_selfplay_launch() -> Non
     # refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Damage.s::ftCo_8008E5A4
     # refs/melee/src/MSL/trigf.c::{sinf,cosf}
     root = Path(__file__).resolve().parents[1]
-    slp_path = root / "replays/validation/aggregate_recent/Game_20260514T181413.slp"
+    slp_path = root / "replays/validation/aggregate_recent/Game_20260514T181413.slpz"
     if not slp_path.exists():
         pytest.skip(f"missing local replay: {slp_path}")
     ds = build_dataset_from_slp(
@@ -95,7 +95,7 @@ def test_damage_hitlag_exit_di_requires_prior_frame_stick_owner() -> None:
     # consumed by Fighter_8006A1BC -> Fighter_8006D10C, so the launch must not match the replay
     # output. This keeps the source-exact trig repair scoped to real hitlag-exit DI ownership.
     root = Path(__file__).resolve().parents[1]
-    slp_path = root / "replays/validation/aggregate_recent/Game_20260514T181413.slp"
+    slp_path = root / "replays/validation/aggregate_recent/Game_20260514T181413.slpz"
     if not slp_path.exists():
         pytest.skip(f"missing local replay: {slp_path}")
     ds = build_dataset_from_slp(

@@ -21,6 +21,7 @@ from tools.eval.discrete_compare_lanes import compile_discrete_compare_lanes, fi
 from tools.eval.run_longest_rollout_streaks import _parse_players
 from tools.eval.validation_profile import get_validation_profile, validation_profile_names
 from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
+from tools.slippi.slpz import resolve_replay_path
 from tools.slippi.suite_io import dataset_path_for_suite_replay, load_suite, repo_root
 
 
@@ -469,7 +470,7 @@ def collect_suite_top_float_offenders(
         dataset_obj: Dataset | None = None
         if in_memory_preprocess:
             dataset_obj = build_dataset_from_slp(
-                slp_path=str((root / entry.replay).resolve()),
+                slp_path=str(resolve_replay_path((root / entry.replay).resolve())),
                 ports=[int(p) for p in entry.ports],
                 ucf_enabled=bool(suite_obj.ucf_enabled),
                 ucf_cardinals_1_0_enabled=bool(suite_obj.ucf_cardinals_1_0_enabled),
@@ -617,7 +618,7 @@ def main() -> None:
     ap.add_argument(
         "--in-memory-preprocess",
         action="store_true",
-        help="Build suite replays directly from .slp instead of reading cached .msl datasets.",
+        help="Build suite replays directly from .slp/.slpz instead of reading cached .msl datasets.",
     )
     ap.add_argument("--json-out", type=Path, default=None)
     ap.add_argument("--tsv-out", type=Path, default=None)

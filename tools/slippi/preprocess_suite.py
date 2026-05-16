@@ -12,6 +12,7 @@ from typing import Any
 import numpy as np
 
 from tools.slippi.make_dataset_from_slp import write_dataset_from_slp
+from tools.slippi.slpz import resolve_replay_path
 from tools.slippi.suite_io import dataset_path_for_suite_replay, load_suite, repo_root
 from tools.eval.dataset import HEADER_DTYPE, MAGIC, SAMPLE_DTYPE, SEED_DTYPE
 
@@ -234,7 +235,7 @@ def main() -> None:
     build_tasks: list[dict[str, Any]] = []
 
     for entry in suite.replays:
-        slp_path = (root / entry.replay).resolve()
+        slp_path = resolve_replay_path((root / entry.replay).resolve())
         if not slp_path.exists():
             print(f"missing replay: {entry.replay}")
             missing += 1

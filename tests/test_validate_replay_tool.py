@@ -66,6 +66,42 @@ def test_validate_replay_one_step_uses_in_memory_replay_without_temp_files(
     assert sorted(p.name for p in tmp_path.iterdir()) == ["game.slp"]
 
 
+def test_validate_replay_legacy_slp_path_resolves_to_slpz(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    replay = tmp_path / "game.slp"
+    compressed_replay = tmp_path / "game.slpz"
+    compressed_replay.write_bytes(b"not a real slpz; build is monkeypatched")
+    calls: dict[str, object] = {}
+
+    def fake_build_dataset_from_slp(**kwargs):
+        calls["build"] = kwargs
+        return object()
+
+    def fake_evaluate_dataset(**kwargs):
+        kwargs["reporter"].print("legacy path ok")
+        return None
+
+    monkeypatch.setattr(validate_replay, "build_dataset_from_slp", fake_build_dataset_from_slp)
+    monkeypatch.setattr(validate_replay, "evaluate_dataset", fake_evaluate_dataset)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "validate_replay",
+            "--replay",
+            str(replay),
+            "--mode",
+            "one-step",
+        ],
+    )
+
+    validate_replay.main()
+
+    assert capsys.readouterr().out.strip() == "legacy path ok"
+    assert calls["build"]["slp_path"] == str(compressed_replay.resolve())
+
+
 def test_validate_replay_rollout_dispatches_without_writing_reports(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

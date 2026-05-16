@@ -16,7 +16,7 @@ def _write_tiny_suite(path: Path) -> dict:
         "ucf_cardinals_1_0_enabled": True,
         "replays": [
             {
-                "replay": "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slp",
+                "replay": "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
                 "ports": [1, 2],
                 "stage_id": 32,
                 "characters": {"1": "Falco", "2": "Fox"},

@@ -411,7 +411,7 @@ def test_common_air_walljump_setup_carry_consumes_fresh_stick_away_feh_lock() ->
     # data/characters/falco.json::walljump_setup_x_delta_threshold
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    slp_path = root / "replays/validation/dream_land_recent/FlippantEnchantedHorse.slp"
+    slp_path = root / "replays/validation/dream_land_recent/FlippantEnchantedHorse.slpz"
     if not slp_path.exists():
         pytest.skip(f"missing local replay: {slp_path}")
 

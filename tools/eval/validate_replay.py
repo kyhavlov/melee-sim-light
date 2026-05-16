@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-"""Validate one Slippi replay directly from its `.slp` path.
+"""Validate one Slippi replay directly from its `.slp` or `.slpz` path.
 
 Examples:
   uv run python -m tools.eval.validate_replay --replay /path/to/game.slp --mode one-step
-  uv run python -m tools.eval.validate_replay --replay /path/to/game.slp --mode rollout
+  uv run python -m tools.eval.validate_replay --replay /path/to/game.slpz --mode rollout
 """
 
 import argparse
@@ -32,6 +32,7 @@ from tools.eval.top_float_offenders import collect_dataset_top_rollout_float_off
 from tools.eval.validation_exceptions import load_validation_exceptions
 from tools.eval.validation_profile import get_validation_profile, validation_profile_names
 from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
+from tools.slippi.slpz import resolve_replay_path
 
 
 def _parse_ports(value: str | None) -> list[int] | None:
@@ -236,8 +237,8 @@ def _print_rollout(
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Validate one .slp replay without writing validation reports.")
-    ap.add_argument("--replay", required=True, type=Path, help="Path to the .slp replay.")
+    ap = argparse.ArgumentParser(description="Validate one .slp/.slpz replay without writing validation reports.")
+    ap.add_argument("--replay", required=True, type=Path, help="Path to the .slp or .slpz replay.")
     ap.add_argument("--mode", choices=("one-step", "rollout", "both"), default="one-step")
     ap.add_argument("--ports", default=None, help="Comma-separated 1-based ports; default uses human ports.")
     ap.add_argument("--chunk", type=int, default=4096, help="One-step batch size.")
@@ -271,7 +272,7 @@ def main() -> None:
     )
     args = ap.parse_args()
 
-    replay = args.replay.expanduser().resolve()
+    replay = resolve_replay_path(args.replay.expanduser().resolve())
     if not replay.exists():
         raise SystemExit(f"error: replay does not exist: {replay}")
     ports = _parse_ports(args.ports)

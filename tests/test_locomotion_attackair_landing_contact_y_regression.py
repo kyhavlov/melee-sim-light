@@ -377,7 +377,7 @@ def test_landingfallspecial_rollout_uses_single_mplib_floor_bias_selfplay_181413
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_LandingFallSpecial_Enter
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    slp_path = root / "replays/validation/aggregate_recent/Game_20260514T181413.slp"
+    slp_path = root / "replays/validation/aggregate_recent/Game_20260514T181413.slpz"
     if not slp_path.exists():
         pytest.skip(f"missing local replay: {slp_path}")
 

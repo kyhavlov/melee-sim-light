@@ -343,7 +343,7 @@ def test_specialairhi_hard_floor_contact_still_enters_bound() -> None:
 @pytest.mark.integration
 def test_escapeair_pokemon_ledge_floor_handoff_matches_vanilla_probe() -> None:
     # Vanilla reference: a Dolphin-orchestrated ledgedash probe from
-    # replays/validation/pokemon_stadium_recent/ThisVioletRaccoon.slp lands on frozen Pokemon's
+    # replays/validation/pokemon_stadium_recent/ThisVioletRaccoon.slpz lands on frozen Pokemon's
     # right ledge floor one frame after EscapeAir starts:
     #
     #   reports/triage/legal_stage_modelplay_misc/vanilla_pokemon_ledgedash
@@ -2563,7 +2563,7 @@ def test_fod_grounded_contact_derives_current_platform_height_replay_real(tmp_pa
     # data/stages/bin/griz.bin::MSLSTG01 platform_transforms
     slp = (
         Path(__file__).resolve().parents[1]
-        / "replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.slp"
+        / "replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.slpz"
     )
     if not slp.exists():
         pytest.skip(f"missing local replay: {slp}")
@@ -2616,7 +2616,7 @@ def test_fod_same_step_landing_contact_derives_hidden_platform_height_replay_rea
     # data/stages/bin/griz.bin::MSLSTG01 platform_transforms
     slp = (
         Path(__file__).resolve().parents[1]
-        / "replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.slp"
+        / "replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.slpz"
     )
     if not slp.exists():
         pytest.skip(f"missing local replay: {slp}")
@@ -2683,7 +2683,7 @@ def test_fod_soft_platform_airborne_regression_rows_stay_airborne(
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
     slp = (
         Path(__file__).resolve().parents[1]
-        / "replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.slp"
+        / "replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.slpz"
     )
     if not slp.exists():
         pytest.skip(f"missing local replay: {slp}")
@@ -2727,7 +2727,7 @@ def test_fod_prefix_platform_velocity_keeps_rollout_floor_transform_replay_real(
     # refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
     slp = (
         Path(__file__).resolve().parents[1]
-        / "replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.slp"
+        / "replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.slpz"
     )
     if not slp.exists():
         pytest.skip(f"missing local replay: {slp}")
@@ -2774,7 +2774,7 @@ def test_fod_prefix_platform_velocity_stops_at_source_target_replay_real(tmp_pat
     # data/stages/bin/griz.bin::MSLSTG01 platform_motion.fountain_platform
     slp = (
         Path(__file__).resolve().parents[1]
-        / "replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.slp"
+        / "replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.slpz"
     )
     if not slp.exists():
         pytest.skip(f"missing local replay: {slp}")

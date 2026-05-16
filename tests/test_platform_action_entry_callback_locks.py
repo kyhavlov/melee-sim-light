@@ -3119,7 +3119,7 @@ def test_fod_fall_coll_floor_skip_seed_carries_transformed_platform_pass(tmp_pat
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpUpdateFloorSkip}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    slp = root / "replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.slp"
+    slp = root / "replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.slpz"
     if not slp.exists():
         pytest.skip(f"missing local replay: {slp}")
 
@@ -3395,7 +3395,7 @@ def test_fod_attackair_shallow_transformed_platform_seed_carries_floor_owner(
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    slp = root / "replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.slp"
+    slp = root / "replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.slpz"
     if not slp.exists():
         pytest.skip(f"missing local replay: {slp}")
 

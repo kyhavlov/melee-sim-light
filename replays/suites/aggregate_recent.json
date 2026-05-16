@@ -5,7 +5,7 @@
   "ucf_cardinals_1_0_enabled": true,
   "replays": [
     {
-      "replay": "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slp",
+      "replay": "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz",
       "ports": [
         1,
         2
@@ -17,7 +17,7 @@
       }
     },
     {
-      "replay": "replays/validation/aggregate_recent/BlondHardHippopotamus.slp",
+      "replay": "replays/validation/aggregate_recent/BlondHardHippopotamus.slpz",
       "ports": [
         1,
         2
@@ -29,7 +29,7 @@
       }
     },
     {
-      "replay": "replays/validation/aggregate_recent/DistinctCaringCobra.slp",
+      "replay": "replays/validation/aggregate_recent/DistinctCaringCobra.slpz",
       "ports": [
         1,
         2
@@ -41,7 +41,7 @@
       }
     },
     {
-      "replay": "replays/validation/aggregate_recent/FavorableSuperficialPig.slp",
+      "replay": "replays/validation/aggregate_recent/FavorableSuperficialPig.slpz",
       "ports": [
         1,
         2
@@ -53,7 +53,7 @@
       }
     },
     {
-      "replay": "replays/validation/aggregate_recent/Game_20260514T181413.slp",
+      "replay": "replays/validation/aggregate_recent/Game_20260514T181413.slpz",
       "ports": [
         1,
         2
@@ -65,7 +65,7 @@
       }
     },
     {
-      "replay": "replays/validation/aggregate_recent/Game_20260515T182447_frozenps.slp",
+      "replay": "replays/validation/aggregate_recent/Game_20260515T182447_frozenps.slpz",
       "ports": [
         1,
         2
@@ -77,7 +77,7 @@
       }
     },
     {
-      "replay": "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slp",
+      "replay": "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slpz",
       "ports": [
         1,
         2
@@ -89,7 +89,7 @@
       }
     },
     {
-      "replay": "replays/validation/aggregate_recent/HilariousVillainousGiraffe.slp",
+      "replay": "replays/validation/aggregate_recent/HilariousVillainousGiraffe.slpz",
       "ports": [
         2,
         4
@@ -101,7 +101,7 @@
       }
     },
     {
-      "replay": "replays/validation/aggregate_recent/HungryImportantSnake.slp",
+      "replay": "replays/validation/aggregate_recent/HungryImportantSnake.slpz",
       "ports": [
         1,
         4
@@ -113,7 +113,7 @@
       }
     },
     {
-      "replay": "replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.slp",
+      "replay": "replays/validation/aggregate_recent/ImpassionedAlarmedTarsier.slpz",
       "ports": [
         1,
         2
@@ -125,55 +125,7 @@
       }
     },
     {
-      "replay": "replays/validation/aggregate_recent/MotionlessAggressiveJay.slp",
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 32,
-      "characters": {
-        "1": "Falco",
-        "2": "Fox"
-      }
-    },
-    {
-      "replay": "replays/validation/aggregate_recent/PositiveRevolvingHyena.slp",
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 32,
-      "characters": {
-        "1": "Falco",
-        "2": "Falco"
-      }
-    },
-    {
-      "replay": "replays/validation/aggregate_recent/PriceyPartialAlbatross.slp",
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 32,
-      "characters": {
-        "1": "Fox",
-        "2": "Falco"
-      }
-    },
-    {
-      "replay": "replays/validation/aggregate_recent/PutridJoyousOryx.slp",
-      "ports": [
-        1,
-        2
-      ],
-      "stage_id": 32,
-      "characters": {
-        "1": "Fox",
-        "2": "Fox"
-      }
-    },
-    {
-      "replay": "replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slp",
+      "replay": "replays/validation/aggregate_recent/MotionlessAggressiveJay.slpz",
       "ports": [
         1,
         2
@@ -185,7 +137,19 @@
       }
     },
     {
-      "replay": "replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slp",
+      "replay": "replays/validation/aggregate_recent/PositiveRevolvingHyena.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Falco",
+        "2": "Falco"
+      }
+    },
+    {
+      "replay": "replays/validation/aggregate_recent/PriceyPartialAlbatross.slpz",
       "ports": [
         1,
         2
@@ -197,7 +161,43 @@
       }
     },
     {
-      "replay": "replays/validation/aggregate_recent/TubbyCurlyHerring.slp",
+      "replay": "replays/validation/aggregate_recent/PutridJoyousOryx.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Fox",
+        "2": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Falco",
+        "2": "Fox"
+      }
+    },
+    {
+      "replay": "replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.slpz",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 32,
+      "characters": {
+        "1": "Fox",
+        "2": "Falco"
+      }
+    },
+    {
+      "replay": "replays/validation/aggregate_recent/TubbyCurlyHerring.slpz",
       "ports": [
         1,
         3
@@ -209,7 +209,7 @@
       }
     },
     {
-      "replay": "replays/validation/battlefield_recent/DelayedSuperbGuanaco.slp",
+      "replay": "replays/validation/battlefield_recent/DelayedSuperbGuanaco.slpz",
       "ports": [
         1,
         2
@@ -221,7 +221,7 @@
       }
     },
     {
-      "replay": "replays/validation/battlefield_recent/LoyalDishonestWren.slp",
+      "replay": "replays/validation/battlefield_recent/LoyalDishonestWren.slpz",
       "ports": [
         2,
         4
@@ -233,7 +233,7 @@
       }
     },
     {
-      "replay": "replays/validation/battlefield_recent/MediumVirtualPig.slp",
+      "replay": "replays/validation/battlefield_recent/MediumVirtualPig.slpz",
       "ports": [
         1,
         2
@@ -245,7 +245,7 @@
       }
     },
     {
-      "replay": "replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.slp",
+      "replay": "replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.slpz",
       "ports": [
         1,
         2
@@ -257,7 +257,7 @@
       }
     },
     {
-      "replay": "replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.slp",
+      "replay": "replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.slpz",
       "ports": [
         1,
         2
@@ -269,7 +269,7 @@
       }
     },
     {
-      "replay": "replays/validation/fountain_of_dreams_recent/MilkyGracefulStingray.slp",
+      "replay": "replays/validation/fountain_of_dreams_recent/MilkyGracefulStingray.slpz",
       "ports": [
         1,
         2
@@ -281,7 +281,7 @@
       }
     },
     {
-      "replay": "replays/validation/pokemon_stadium_recent/CornyDelayedOkapi.slp",
+      "replay": "replays/validation/pokemon_stadium_recent/CornyDelayedOkapi.slpz",
       "ports": [
         1,
         2
@@ -293,7 +293,7 @@
       }
     },
     {
-      "replay": "replays/validation/pokemon_stadium_recent/SweatyThisMallard.slp",
+      "replay": "replays/validation/pokemon_stadium_recent/SweatyThisMallard.slpz",
       "ports": [
         2,
         4
@@ -305,7 +305,7 @@
       }
     },
     {
-      "replay": "replays/validation/pokemon_stadium_recent/ThisVioletRaccoon.slp",
+      "replay": "replays/validation/pokemon_stadium_recent/ThisVioletRaccoon.slpz",
       "ports": [
         1,
         2
@@ -317,7 +317,7 @@
       }
     },
     {
-      "replay": "replays/validation/dream_land_recent/FlippantEnchantedHorse.slp",
+      "replay": "replays/validation/dream_land_recent/FlippantEnchantedHorse.slpz",
       "ports": [
         1,
         2
@@ -329,7 +329,7 @@
       }
     },
     {
-      "replay": "replays/validation/dream_land_recent/ShadyDecimalStarling.slp",
+      "replay": "replays/validation/dream_land_recent/ShadyDecimalStarling.slpz",
       "ports": [
         1,
         2
@@ -341,7 +341,7 @@
       }
     },
     {
-      "replay": "replays/validation/yoshis_story_recent/CheeryNumbMonkey.slp",
+      "replay": "replays/validation/yoshis_story_recent/CheeryNumbMonkey.slpz",
       "ports": [
         1,
         2
@@ -353,7 +353,7 @@
       }
     },
     {
-      "replay": "replays/validation/yoshis_story_recent/DependentSteelGrouse.slp",
+      "replay": "replays/validation/yoshis_story_recent/DependentSteelGrouse.slpz",
       "ports": [
         2,
         4
@@ -365,7 +365,7 @@
       }
     },
     {
-      "replay": "replays/validation/yoshis_story_recent/LawfulInsistentMeerkat.slp",
+      "replay": "replays/validation/yoshis_story_recent/LawfulInsistentMeerkat.slpz",
       "ports": [
         2,
         4
@@ -377,7 +377,7 @@
       }
     },
     {
-      "replay": "replays/validation/yoshis_story_recent/PhysicalElectricCapybara.slp",
+      "replay": "replays/validation/yoshis_story_recent/PhysicalElectricCapybara.slpz",
       "ports": [
         1,
         2

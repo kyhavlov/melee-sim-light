@@ -75,7 +75,7 @@ def test_specialn_laser_spawn_latches_live_blaster_attack_identity_replay_real(t
     # refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C504
     # refs/melee/src/melee/it/it_2725.c::{it_8027B0C4,it_8027B070}
     root = Path(__file__).resolve().parents[1]
-    slp = root / "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slp"
+    slp = root / "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
     if not slp.exists():
         pytest.skip(f"missing local replay: {slp}")
 
@@ -134,7 +134,7 @@ def test_reflected_item_hit_advances_new_owner_stale_queue_replay_real(tmp_path:
     # refs/melee/src/melee/pl/plstale.c::plStale_UpdateStaleMovesFromItem
     # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078998,ftColl_80077464}
     root = Path(__file__).resolve().parents[1]
-    slp = root / "replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.slp"
+    slp = root / "replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.slpz"
     if not slp.exists():
         pytest.skip(f"missing local replay: {slp}")
 

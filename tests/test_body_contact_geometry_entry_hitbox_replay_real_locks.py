@@ -228,7 +228,7 @@ def test_attackairlw_sustained_tiplog_contact_defers_grounded_dash_damage_selfpl
     # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    slp_path = root / "replays/validation/aggregate_recent/Game_20260514T181413.slp"
+    slp_path = root / "replays/validation/aggregate_recent/Game_20260514T181413.slpz"
     if not slp_path.exists():
         pytest.skip(f"missing local replay: {slp_path}")
 
@@ -311,7 +311,7 @@ def test_grounded_attack_restart_clears_sustained_hitcapsule_latch_selfplay_1814
     # MSLMSO01: MSL_MS_CLASS_GROUNDED_ATTACK.
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
-    slp_path = root / "replays/validation/aggregate_recent/Game_20260514T181413.slp"
+    slp_path = root / "replays/validation/aggregate_recent/Game_20260514T181413.slpz"
     if not slp_path.exists():
         pytest.skip(f"missing local replay: {slp_path}")
 
@@ -388,7 +388,7 @@ def test_damagefly_terminal_fall_entry_blocks_fresh_enable_edge_body_selfplay_18
     # refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
     # refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}
     root = Path(__file__).resolve().parents[1]
-    slp_path = root / "replays/validation/aggregate_recent/Game_20260514T181413.slp"
+    slp_path = root / "replays/validation/aggregate_recent/Game_20260514T181413.slpz"
     rows = _run_slp_rollout_records(slp_path, start=0, records=(2361, 2362), ports=[1, 2])
     defender = 0
 

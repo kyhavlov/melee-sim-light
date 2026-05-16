@@ -5,13 +5,13 @@
   "ucf_cardinals_1_0_enabled": true,
   "replays": [
     {
-      "replay": "replays/validation/dream_land_recent/FlippantEnchantedHorse.slp",
+      "replay": "replays/validation/dream_land_recent/FlippantEnchantedHorse.slpz",
       "ports": [1, 2],
       "stage_id": 28,
       "characters": { "1": "Fox", "2": "Falco" }
     },
     {
-      "replay": "replays/validation/dream_land_recent/ShadyDecimalStarling.slp",
+      "replay": "replays/validation/dream_land_recent/ShadyDecimalStarling.slpz",
       "ports": [1, 2],
       "stage_id": 28,
       "characters": { "1": "Fox", "2": "Falco" }
