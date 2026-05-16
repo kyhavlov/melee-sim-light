@@ -132,6 +132,50 @@ typedef struct MslCombatBodyDamageScratch {
   MslCombatBodyDamageLogEntry entries[MSL_COMBAT_BODY_DAMAGE_LOG_CAP];
 } MslCombatBodyDamageScratch;
 
+typedef enum MslCombatProcessHitSourceWrite {
+  MSL_PROCESS_HIT_SOURCE_WRITE_DIRECT = 0,
+  MSL_PROCESS_HIT_SOURCE_WRITE_COMMIT_OWNER = 1,
+} MslCombatProcessHitSourceWrite;
+
+typedef enum MslCombatProcessHitlagMode {
+  MSL_PROCESS_HITLAG_NONE = 0,
+  MSL_PROCESS_HITLAG_ASSIGN_IF_POSITIVE = 1,
+  MSL_PROCESS_HITLAG_FLAGS_IF_INCREASED = 2,
+} MslCombatProcessHitlagMode;
+
+typedef struct MslCombatProcessHitResolved {
+  int bi;
+  int attacker;
+  int defender;
+  size_t a_idx;
+  size_t d_idx;
+  uint16_t d_motion_id;
+  uint16_t d_hl;
+  uint16_t d_hl_prev;
+  float kb_applied;
+  float kb_angle_rad;
+  float kb_x;
+  float kb_y;
+  uint8_t defender_on_ground;
+  uint8_t use_grounded_kb;
+  uint8_t grounded_ecb_lock_owner;
+  uint8_t clear_x221c_on_damage_entry;
+  uint8_t apply_throw_release_di;
+  uint8_t apply_guard_reflect_followup;
+  uint8_t hurt_height;
+  uint16_t damage_state_raw_angle;
+  uint16_t instance_hit_by;
+  uint8_t last_hit_by;
+  MslCombatProcessHitSourceWrite source_write;
+  MslCombatProcessHitlagMode hitlag_mode;
+  uint8_t hitlag_sets_x221a;
+  uint8_t hitlag_allows_sdi;
+  uint8_t update_bookkeeping;
+  uint16_t stale_move_id;
+  uint16_t stale_attack_instance;
+  uint16_t combo_attack_id;
+} MslCombatProcessHitResolved;
+
 static inline uint32_t combat_hsd_rand_step(uint32_t seed) {
   // HSD global RNG LCG step:
   // refs/melee/src/sysdolphin/baselib/random.c::{HSD_Rand,HSD_Randf}
@@ -4824,6 +4868,127 @@ static inline void combat_damage_enter_state(const MslCommonParams* c, MslBatch*
   msl_anim_timebase_recompute_derived(batch, d_idx);
 }
 
+static inline void combat_processhit_apply_bookkeeping(MslBatch* batch,
+                                                       const MslCombatProcessHitResolved* ev) {
+  if (batch == NULL || ev == NULL || ev->update_bookkeeping == 0u) {
+    return;
+  }
+  staling_queue_update(batch, ev->a_idx, ev->stale_move_id, ev->stale_attack_instance);
+  combat_combo_ftColl_800763C0(batch, ev->a_idx, ev->defender, ev->d_idx, ev->combo_attack_id);
+}
+
+static inline void combat_processhit_write_source(MslBatch* batch,
+                                                  const MslCombatProcessHitResolved* ev) {
+  if (batch == NULL || ev == NULL) {
+    return;
+  }
+  batch->state.instance_hit_by[ev->d_idx] = ev->instance_hit_by;
+  if (ev->source_write == MSL_PROCESS_HIT_SOURCE_WRITE_COMMIT_OWNER) {
+    combat_processhit_commit_source_owner(batch, ev->d_idx, ev->last_hit_by);
+  } else {
+    batch->state.last_hit_by[ev->d_idx] = ev->last_hit_by;
+  }
+}
+
+static inline void combat_processhit_apply_hitlag_after_entry(
+    MslBatch* batch, const MslCombatProcessHitResolved* ev) {
+  if (batch == NULL || ev == NULL) {
+    return;
+  }
+  uint8_t apply_flags = 0u;
+  switch (ev->hitlag_mode) {
+    case MSL_PROCESS_HITLAG_ASSIGN_IF_POSITIVE:
+      if (ev->d_hl > 0u) {
+        batch->state.hitlag[ev->d_idx] = ev->d_hl;
+        combat_state_flags_set_is_hitlag(batch, ev->d_idx, ev->d_hl);
+        apply_flags = 1u;
+      }
+      break;
+    case MSL_PROCESS_HITLAG_FLAGS_IF_INCREASED:
+      apply_flags = (ev->d_hl > ev->d_hl_prev) ? 1u : 0u;
+      break;
+    case MSL_PROCESS_HITLAG_NONE:
+    default:
+      break;
+  }
+  if (apply_flags != 0u) {
+    if (ev->hitlag_allows_sdi != 0u) {
+      combat_damage_allow_sdi_set(batch, ev->d_idx);
+    }
+    if (ev->hitlag_sets_x221a != 0u) {
+      combat_state_flags_set_x221a_b3(batch, ev->d_idx);
+    }
+  }
+}
+
+static inline void combat_processhit_apply_resolved_damage(const MslCommonParams* c,
+                                                           MslBatch* batch,
+                                                           const MslCombatProcessHitResolved* ev) {
+  if (c == NULL || batch == NULL || ev == NULL) {
+    return;
+  }
+
+  // Decomp-shaped Fighter_ProcessHit consumer:
+  // - collision/item/throw producers fill the source-specific lanes in `ev`;
+  // - this helper owns the shared percent aftermath: no-KB cleanup, KB velocity/state entry,
+  //   hitstun flags, hitlag post-entry flags, source lanes, stale queue, and combo bookkeeping.
+  //
+  // Decomp/source trail:
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}
+  // refs/melee/src/melee/it/itcoll.c::it_80272460
+  if (ev->kb_applied == 0.0f) {
+    if (ev->d_hl > ev->d_hl_prev) {
+      batch->state.hitlag[ev->d_idx] = ev->d_hl;
+      combat_state_flags_set_is_hitlag(batch, ev->d_idx, ev->d_hl);
+    }
+    batch->state.speed_x_attack[ev->d_idx] = 0.0f;
+    batch->state.speed_y_attack[ev->d_idx] = 0.0f;
+    batch->state.hitstun[ev->d_idx] = 0;
+    batch->state.damage_meteor_cancel_eligible_x1a[ev->d_idx] = 0u;
+    combat_state_flags_set_is_hitstun(batch, ev->d_idx, 0);
+    combat_processhit_write_source(batch, ev);
+    combat_processhit_apply_bookkeeping(batch, ev);
+    return;
+  }
+
+  if (ev->defender_on_ground != 0u && ev->use_grounded_kb != 0u) {
+    combat_damage_install_grounded_kb(c, batch, ev->d_idx, ev->kb_applied, ev->kb_x, ev->kb_y,
+                                      ev->d_hl, ev->grounded_ecb_lock_owner);
+  } else {
+    combat_damage_calc_vel(batch, ev->d_idx, ev->kb_x, ev->kb_y);
+  }
+  if (ev->apply_throw_release_di != 0u) {
+    combat_throw_release_apply_immediate_di(batch, ev->d_idx, c);
+  }
+
+  // Decomp: ftCo_8008DCE0 clears self velocity after installing damage KB.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+  batch->state.speed_air_x_self[ev->d_idx] = 0.0f;
+  batch->state.speed_ground_x_self[ev->d_idx] = 0.0f;
+  batch->state.speed_y_self[ev->d_idx] = 0.0f;
+
+  const uint16_t hs = combat_damage_hitstun_from_kb(c, ev->kb_applied);
+  batch->state.hitstun[ev->d_idx] = hs;
+  combat_state_flags_set_is_hitstun(batch, ev->d_idx, hs);
+  if (ev->clear_x221c_on_damage_entry != 0u) {
+    combat_state_flags_clear_x221c_b0(batch, ev->d_idx);
+  }
+  combat_damage_mark_entry_time_since_hit(batch, ev->d_idx);
+
+  const uint8_t defender_on_ground_after = batch->state.on_ground[ev->d_idx] ? 1u : 0u;
+  combat_damage_enter_state(c, batch, ev->bi, ev->d_idx, ev->defender_on_ground,
+                            defender_on_ground_after, ev->hurt_height, ev->kb_applied,
+                            ev->kb_angle_rad, ev->damage_state_raw_angle);
+  combat_processhit_apply_hitlag_after_entry(batch, ev);
+  if (ev->apply_guard_reflect_followup != 0u) {
+    combat_apply_guard_reflect_body_hit_followup(c, batch, ev->d_idx, ev->d_motion_id);
+  }
+  combat_processhit_write_source(batch, ev);
+  combat_processhit_apply_bookkeeping(batch, ev);
+}
+
 static inline void combat_mutations_pass1_future_apply_body_hit_invincible(
     MslBatch* batch, size_t a_idx, size_t hb_i, uint16_t attacker_motion_id) {
   if (batch == NULL) {
@@ -5446,18 +5611,20 @@ static inline void combat_body_damage_log_apply(MslBatch* batch, int bi,
   }
 
   if (best_kb == 0.0f) {
-    if (d_hl_increased) {
-      batch->state.hitlag[d_idx] = d_hl;
-      combat_state_flags_set_is_hitlag(batch, d_idx, d_hl);
-    }
-    batch->state.speed_x_attack[d_idx] = 0.0f;
-    batch->state.speed_y_attack[d_idx] = 0.0f;
-    batch->state.hitstun[d_idx] = 0;
-    batch->state.damage_meteor_cancel_eligible_x1a[d_idx] = 0u;
-    combat_state_flags_set_is_hitstun(batch, d_idx, 0);
-    batch->state.instance_hit_by[d_idx] = e->attacker_instance_id;
-    combat_processhit_commit_source_owner(
-        batch, d_idx, combat_source_port0_for_attacker(batch, a_idx, e->attacker));
+    MslCombatProcessHitResolved ev = {0};
+    ev.bi = bi;
+    ev.attacker = e->attacker;
+    ev.defender = e->defender;
+    ev.a_idx = a_idx;
+    ev.d_idx = d_idx;
+    ev.d_motion_id = e->defender_motion_id;
+    ev.d_hl = d_hl;
+    ev.d_hl_prev = d_hl_prev;
+    ev.kb_applied = 0.0f;
+    ev.instance_hit_by = e->attacker_instance_id;
+    ev.last_hit_by = combat_source_port0_for_attacker(batch, a_idx, e->attacker);
+    ev.source_write = MSL_PROCESS_HIT_SOURCE_WRITE_COMMIT_OWNER;
+    combat_processhit_apply_resolved_damage(c, batch, &ev);
     const uint16_t defender_iid_post = batch->state.instance_id[d_idx];
     for (uint8_t i = 0u; i < scratch->count; i++) {
       const MslCombatBodyDamageLogEntry* le = &scratch->entries[i];
@@ -5492,38 +5659,36 @@ static inline void combat_body_damage_log_apply(MslBatch* batch, int bi,
 
   const float kb_x = -x * defender_facing_dir_1;
   const float kb_y = y;
-  if (!e->defender_on_ground) {
-    combat_damage_calc_vel(batch, d_idx, kb_x, kb_y);
-  } else {
-    combat_damage_install_grounded_kb(c, batch, d_idx, best_kb, kb_x, kb_y, d_hl,
-                                      (!combat_is_downed_damage_contact_action(pre_damage_action) &&
-                                       combat_shine_start_grounded_ledge_ecb_lock_owner(
-                                           batch, d_idx, batch->state.action_id[a_idx]))
-                                          ? 1u
-                                          : 0u);
-  }
-
-  batch->state.speed_air_x_self[d_idx] = 0.0f;
-  batch->state.speed_ground_x_self[d_idx] = 0.0f;
-  batch->state.speed_y_self[d_idx] = 0.0f;
-
-  const uint16_t hs = combat_damage_hitstun_from_kb(c, best_kb);
-  batch->state.hitstun[d_idx] = hs;
-  combat_state_flags_set_is_hitstun(batch, d_idx, hs);
-  combat_state_flags_clear_x221c_b0(batch, d_idx);
-  combat_damage_mark_entry_time_since_hit(batch, d_idx);
-  const uint8_t defender_on_ground_after = batch->state.on_ground[d_idx] ? 1u : 0u;
-  combat_damage_enter_state(c, batch, bi, d_idx, e->defender_on_ground, defender_on_ground_after,
-                            e->hurt_height, best_kb, kb_angle_rad, e->hitbox_angle);
-  if (d_hl > 0u) {
-    batch->state.hitlag[d_idx] = d_hl;
-    combat_state_flags_set_is_hitlag(batch, d_idx, d_hl);
-    combat_damage_allow_sdi_set(batch, d_idx);
-    combat_state_flags_set_x221a_b3(batch, d_idx);
-  }
-
-  batch->state.instance_hit_by[d_idx] = e->attacker_instance_id;
-  batch->state.last_hit_by[d_idx] = combat_source_port0_for_attacker(batch, a_idx, e->attacker);
+  MslCombatProcessHitResolved ev = {0};
+  ev.bi = bi;
+  ev.attacker = e->attacker;
+  ev.defender = e->defender;
+  ev.a_idx = a_idx;
+  ev.d_idx = d_idx;
+  ev.d_motion_id = e->defender_motion_id;
+  ev.d_hl = d_hl;
+  ev.d_hl_prev = d_hl_prev;
+  ev.kb_applied = best_kb;
+  ev.kb_angle_rad = kb_angle_rad;
+  ev.kb_x = kb_x;
+  ev.kb_y = kb_y;
+  ev.defender_on_ground = e->defender_on_ground;
+  ev.use_grounded_kb = 1u;
+  ev.grounded_ecb_lock_owner = (!combat_is_downed_damage_contact_action(pre_damage_action) &&
+                                combat_shine_start_grounded_ledge_ecb_lock_owner(
+                                    batch, d_idx, batch->state.action_id[a_idx]))
+                                   ? 1u
+                                   : 0u;
+  ev.clear_x221c_on_damage_entry = 1u;
+  ev.hurt_height = e->hurt_height;
+  ev.damage_state_raw_angle = e->hitbox_angle;
+  ev.instance_hit_by = e->attacker_instance_id;
+  ev.last_hit_by = combat_source_port0_for_attacker(batch, a_idx, e->attacker);
+  ev.source_write = MSL_PROCESS_HIT_SOURCE_WRITE_DIRECT;
+  ev.hitlag_mode = MSL_PROCESS_HITLAG_ASSIGN_IF_POSITIVE;
+  ev.hitlag_sets_x221a = 1u;
+  ev.hitlag_allows_sdi = 1u;
+  combat_processhit_apply_resolved_damage(c, batch, &ev);
 
   const uint16_t defender_iid_post = batch->state.instance_id[d_idx];
   for (uint8_t i = 0u; i < scratch->count; i++) {
@@ -5924,17 +6089,24 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
   // ftCommon_800804FC source-clear ownership without hitstun or Damage* entry.
   // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
   if (kb_applied == 0.0f) {
-    batch->state.speed_x_attack[d_idx] = 0.0f;
-    batch->state.speed_y_attack[d_idx] = 0.0f;
-    batch->state.hitstun[d_idx] = 0u;
-    batch->state.damage_meteor_cancel_eligible_x1a[d_idx] = 0u;
-    combat_state_flags_set_is_hitstun(batch, d_idx, 0u);
-    batch->state.instance_hit_by[d_idx] = item_instance_id;
-    combat_processhit_commit_source_owner(batch, d_idx,
-                                          combat_source_port0_for_attacker(batch, a_idx, attacker));
-
-    staling_queue_update(batch, a_idx, item_attack_id, item_attack_instance);
-    combat_combo_ftColl_800763C0(batch, a_idx, defender, d_idx, item_attack_id);
+    MslCombatProcessHitResolved ev = {0};
+    ev.bi = batch_index;
+    ev.attacker = attacker;
+    ev.defender = defender;
+    ev.a_idx = a_idx;
+    ev.d_idx = d_idx;
+    ev.d_motion_id = d_motion_id;
+    ev.d_hl = d_hl;
+    ev.d_hl_prev = d_hl_prev;
+    ev.kb_applied = 0.0f;
+    ev.instance_hit_by = item_instance_id;
+    ev.last_hit_by = combat_source_port0_for_attacker(batch, a_idx, attacker);
+    ev.source_write = MSL_PROCESS_HIT_SOURCE_WRITE_COMMIT_OWNER;
+    ev.update_bookkeeping = 1u;
+    ev.stale_move_id = item_attack_id;
+    ev.stale_attack_instance = item_attack_instance;
+    ev.combo_attack_id = item_attack_id;
+    combat_processhit_apply_resolved_damage(c, batch, &ev);
     if (item_is_illusion) {
       return MSL_ITEM_HIT_APPLIED_DONT_CONSUME;
     }
@@ -6034,43 +6206,39 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
   }
 
   // Item BODY hits route through Fighter_ProcessHit the same way as fighter BODY hits, so grounded
-  // victims use the same ftCo_8008DCE0 ground-vs-air KB install owner:
-  // - launch with full (kb_x, kb_y) and clear grounded state via ftCommon_8007D5D4 when the floor
-  //   normal dot KB vector is positive or the damage severity is tumble,
-  // - otherwise keep grounded and project along the floor.
-  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-  if (!defender_on_ground) {
-    combat_damage_calc_vel(batch, d_idx, kb_x, kb_y);
-  } else {
-    combat_damage_install_grounded_kb(c, batch, d_idx, kb_applied, kb_x, kb_y, d_hl,
-                                      (!combat_is_downed_damage_contact_action(d_motion_id) &&
-                                       combat_shine_start_grounded_ledge_ecb_lock_owner(
-                                           batch, d_idx, batch->state.action_id[a_idx]))
-                                          ? 1u
-                                          : 0u);
-  }
-
-  batch->state.hitstun[d_idx] = hs;
-  combat_state_flags_set_is_hitstun(batch, d_idx, hs);
-  combat_damage_mark_entry_time_since_hit(batch, d_idx);
-
-  // Decomp: item/fighter BODY hits still route through Fighter_ProcessHit -> ftCo_8008DCE0 for
-  // damage-state entry, and ftCo_8008DCE0 clears self_vel/gr_vel at block_28 before selecting the
-  // Damage* motion state.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-  batch->state.speed_air_x_self[d_idx] = 0.0f;
-  batch->state.speed_ground_x_self[d_idx] = 0.0f;
-  batch->state.speed_y_self[d_idx] = 0.0f;
-
-  // Decomp: ftCo_8008DCE0 can clear grounded state (ftCommon_8007D5D4) before selecting the
-  // damage motion state. Use the post-KB on_ground value for state entry.
-  const uint8_t defender_on_ground_after = batch->state.on_ground[d_idx] ? 1u : 0u;
+  // victims use the same ftCo_8008DCE0 ground-vs-air KB install owner.
   const uint16_t meteor_cancel_raw_angle =
       combat_item_damage_meteor_cancel_raw_angle(batch, a_idx, item_is_illusion, angle);
-  combat_damage_enter_state(c, batch, batch_index, d_idx, defender_on_ground,
-                            defender_on_ground_after, defender_hurt_height, kb_applied,
-                            kb_angle_rad, meteor_cancel_raw_angle);
+  MslCombatProcessHitResolved ev = {0};
+  ev.bi = batch_index;
+  ev.attacker = attacker;
+  ev.defender = defender;
+  ev.a_idx = a_idx;
+  ev.d_idx = d_idx;
+  ev.d_motion_id = d_motion_id;
+  ev.d_hl = d_hl;
+  ev.d_hl_prev = d_hl_prev;
+  ev.kb_applied = kb_applied;
+  ev.kb_angle_rad = kb_angle_rad;
+  ev.kb_x = kb_x;
+  ev.kb_y = kb_y;
+  ev.defender_on_ground = defender_on_ground;
+  ev.use_grounded_kb = 1u;
+  ev.grounded_ecb_lock_owner = (!combat_is_downed_damage_contact_action(d_motion_id) &&
+                                combat_shine_start_grounded_ledge_ecb_lock_owner(
+                                    batch, d_idx, batch->state.action_id[a_idx]))
+                                   ? 1u
+                                   : 0u;
+  ev.hurt_height = defender_hurt_height;
+  ev.damage_state_raw_angle = meteor_cancel_raw_angle;
+  ev.instance_hit_by = item_instance_id;
+  ev.last_hit_by = combat_source_port0_for_attacker(batch, a_idx, attacker);
+  ev.source_write = MSL_PROCESS_HIT_SOURCE_WRITE_DIRECT;
+  ev.hitlag_mode = MSL_PROCESS_HITLAG_FLAGS_IF_INCREASED;
+  ev.hitlag_sets_x221a = 1u;
+  ev.hitlag_allows_sdi = 1u;
+  ev.apply_guard_reflect_followup = 1u;
+  combat_processhit_apply_resolved_damage(c, batch, &ev);
   if (lp != NULL && item_state == (uint8_t)1u &&
       batch->state.action_id[a_idx] == (uint16_t)MSL_ACT_THROW_LW &&
       msl_action_is_thrown_victim(batch->state.seed_prev_action_id[d_idx]) &&
@@ -6086,17 +6254,6 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
     batch->state.ecb_lock_timer[d_idx] = 0u;
     batch->state.coll_desired_ecb_bottom_locked_owner[d_idx] = 0u;
   }
-  // Mirror Fighter_ProcessHit's damage-hitlag ownership after ftCo_8008DCE0 state entry:
-  // allow_sdi and x221A_b3 are ProcessHit damage paths, not generic hitlag side effects.
-  // refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006A1BC}
-  if (d_hl > d_hl_prev) {
-    combat_damage_allow_sdi_set(batch, d_idx);
-    combat_state_flags_set_x221a_b3(batch, d_idx);
-  }
-  combat_apply_guard_reflect_body_hit_followup(c, batch, d_idx, d_motion_id);
-
-  batch->state.instance_hit_by[d_idx] = item_instance_id;
-  batch->state.last_hit_by[d_idx] = combat_source_port0_for_attacker(batch, a_idx, attacker);
 
   // Stale-move queue update on successful damaging BODY hit (attacker-side).
   // Decomp: refs/melee/src/melee/pl/plstale.c::plStale_UpdateStaleMovesFromItem
@@ -6123,6 +6280,7 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
   // Combo count + last-attack tracking (attacker-side).
   // Decomp: refs/melee/src/melee/ft/ftcoll.c::ftColl_8007646C -> ftColl_800763C0(item attack id domain).
   combat_combo_ftColl_800763C0(batch, a_idx, defender, d_idx, item_attack_id);
+
   // Illusion/Phantasm body hits do not destroy the article on hit; itFoxIllusion_Logic14_DmgDealt
   // clears an item var and returns false so the article persists through the hitlag window.
   // refs/melee/src/melee/it/items/itfoxillusion.c::itFoxIllusion_Logic14_DmgDealt
@@ -6285,19 +6443,22 @@ static inline uint8_t combat_apply_throw_hit_core(MslBatch* batch, int batch_ind
   }
 
   if (kb_applied == 0.0f) {
-    batch->state.speed_x_attack[d_idx] = 0.0f;
-    batch->state.speed_y_attack[d_idx] = 0.0f;
-    batch->state.hitstun[d_idx] = 0;
-    batch->state.damage_meteor_cancel_eligible_x1a[d_idx] = 0u;
-    combat_state_flags_set_is_hitstun(batch, d_idx, 0);
-    batch->state.instance_hit_by[d_idx] = batch->state.instance_id[a_idx];
-    batch->state.last_hit_by[d_idx] = combat_source_port0_for_attacker(batch, a_idx, attacker);
-
-    if (update_bookkeeping) {
-      const uint16_t attack_instance = batch->state.attack_instance[a_idx];
-      staling_queue_update(batch, a_idx, move_id, attack_instance);
-      combat_combo_ftColl_800763C0(batch, a_idx, defender, d_idx, batch->state.attack_id[a_idx]);
-    }
+    MslCombatProcessHitResolved ev = {0};
+    ev.bi = batch_index;
+    ev.attacker = attacker;
+    ev.defender = defender;
+    ev.a_idx = a_idx;
+    ev.d_idx = d_idx;
+    ev.d_motion_id = d_motion_id;
+    ev.kb_applied = 0.0f;
+    ev.instance_hit_by = batch->state.instance_id[a_idx];
+    ev.last_hit_by = combat_source_port0_for_attacker(batch, a_idx, attacker);
+    ev.source_write = MSL_PROCESS_HIT_SOURCE_WRITE_DIRECT;
+    ev.update_bookkeeping = update_bookkeeping;
+    ev.stale_move_id = move_id;
+    ev.stale_attack_instance = batch->state.attack_instance[a_idx];
+    ev.combo_attack_id = batch->state.attack_id[a_idx];
+    combat_processhit_apply_resolved_damage(c, batch, &ev);
     return 1;
   }
 
@@ -6324,19 +6485,6 @@ static inline uint8_t combat_apply_throw_hit_core(MslBatch* batch, int batch_ind
   const float kb_x = -x * defender_facing_dir_1;
   const float kb_y = y;
 
-  combat_damage_calc_vel(batch, d_idx, kb_x, kb_y);
-  combat_throw_release_apply_immediate_di(batch, d_idx, c);
-
-  // Decomp: after setting KB velocity, ftCo_8008DCE0 clears self velocity (self_vel and gr_vel).
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0 (block_28)
-  batch->state.speed_air_x_self[d_idx] = 0.0f;
-  batch->state.speed_ground_x_self[d_idx] = 0.0f;
-  batch->state.speed_y_self[d_idx] = 0.0f;
-
-  const uint16_t hs = combat_damage_hitstun_from_kb(c, kb_applied);
-  batch->state.hitstun[d_idx] = hs;
-  combat_state_flags_set_is_hitstun(batch, d_idx, hs);
-  combat_damage_mark_entry_time_since_hit(batch, d_idx);
   // Throw-release hits do not apply hitlag in the suite (Slippi hitlag stays 0), and `x221A_b3`
   // is observed unset. Do not set it here.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
@@ -6344,8 +6492,29 @@ static inline uint8_t combat_apply_throw_hit_core(MslBatch* batch, int batch_ind
   // Throw hits mark the damaged hurtbox as "mid" in decomp (x184c_damaged_hurtbox = 1).
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
   const uint8_t hurt_height = 1u;
-  combat_damage_enter_state(c, batch, batch_index, d_idx, defender_on_ground, defender_on_ground,
-                            hurt_height, kb_applied, damage_state_angle_rad, p->angle);
+  MslCombatProcessHitResolved ev = {0};
+  ev.bi = batch_index;
+  ev.attacker = attacker;
+  ev.defender = defender;
+  ev.a_idx = a_idx;
+  ev.d_idx = d_idx;
+  ev.d_motion_id = d_motion_id;
+  ev.kb_applied = kb_applied;
+  ev.kb_angle_rad = damage_state_angle_rad;
+  ev.kb_x = kb_x;
+  ev.kb_y = kb_y;
+  ev.defender_on_ground = defender_on_ground;
+  ev.apply_throw_release_di = 1u;
+  ev.hurt_height = hurt_height;
+  ev.damage_state_raw_angle = p->angle;
+  ev.instance_hit_by = batch->state.instance_id[a_idx];
+  ev.last_hit_by = combat_source_port0_for_attacker(batch, a_idx, attacker);
+  ev.source_write = MSL_PROCESS_HIT_SOURCE_WRITE_DIRECT;
+  ev.update_bookkeeping = update_bookkeeping;
+  ev.stale_move_id = move_id;
+  ev.stale_attack_instance = batch->state.attack_instance[a_idx];
+  ev.combo_attack_id = batch->state.attack_id[a_idx];
+  combat_processhit_apply_resolved_damage(c, batch, &ev);
   // Throw-release ordering:
   // - ftCo_800DDDE4 routes into Fighter_ProcessHit damage entry, and ftCo_8008DCE0 already performs
   //   an immediate ftAnim_8006EBA4 on state change.
@@ -6354,15 +6523,6 @@ static inline uint8_t combat_apply_throw_hit_core(MslBatch* batch, int batch_ind
   //
   // Keep only the damage-entry immediate tick here; any compatibility pending-release caller that
   // runs later must not add a second entry tick and over-advance action_frame.
-
-  batch->state.instance_hit_by[d_idx] = batch->state.instance_id[a_idx];
-  batch->state.last_hit_by[d_idx] = combat_source_port0_for_attacker(batch, a_idx, attacker);
-
-  if (update_bookkeeping) {
-    const uint16_t attack_instance = batch->state.attack_instance[a_idx];
-    staling_queue_update(batch, a_idx, move_id, attack_instance);
-    combat_combo_ftColl_800763C0(batch, a_idx, defender, d_idx, batch->state.attack_id[a_idx]);
-  }
 
   return 1;
 }
