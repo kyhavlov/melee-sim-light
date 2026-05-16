@@ -1,6 +1,7 @@
 #pragma once
 
 #include "batch_internal.h"
+#include "mpcoll_context.h"
 #include "mpcoll_ecb_points.h"
 
 // mpColl-style wall + ceiling contact substrate.
@@ -51,14 +52,14 @@ typedef struct MslMpcollOrderedWallCeilResult {
 // current position and wall/ceiling contact outputs in source order, before floor resolution.
 // It is intentionally separate from the generic airborne wall/ceiling pass so floor collision can
 // consume same-frame left/right wall results.
-void mpcoll_grounded_wall_ceil_ordered_begin(MslBatch* batch, size_t idx,
+void mpcoll_grounded_wall_ceil_ordered_begin(const MslMpcollContext* ctx,
                                              const MslEcbWorldPoints* prev_ecb,
                                              const MslEcbWorldPoints* cur_ecb,
                                              MslMpcollOrderedWallCeilResult* out);
 
 // Source retry after a grounded floor hit: mpColl_8004ACE4 runs the ceiling check/collide pair
 // again after floor resolution. Returns 1 when the retry touched ceiling.
-uint8_t mpcoll_grounded_ceiling_ordered_retry(MslBatch* batch, size_t idx,
+uint8_t mpcoll_grounded_ceiling_ordered_retry(const MslMpcollContext* ctx,
                                               const MslEcbWorldPoints* prev_ecb,
                                               MslEcbWorldPoints* cur_ecb,
                                               MslMpcollOrderedWallCeilResult* io);
