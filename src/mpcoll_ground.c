@@ -1060,7 +1060,7 @@ static inline uint8_t grounded_same_step_height_platform_reproject(
   // starts on the static main floor but the sparse seed lane proves same-step platform contact,
   // Landing_Coll/ft_80084280 consumes the transformed platform floor for this callback instead of
   // stale CollData.floor.index. Keep this tied to MSLSTG01 height-platform data plus the transient
-  // SAME_STEP_CONTACT source bit; step.c clears the bit after the seeded frame.
+  // SAME_STEP_CONTACT source bit; the frame scheduler clears the bit after the seeded frame.
   // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Coll
   // refs/melee/src/melee/ft/ft_081B.c::ft_80084280
@@ -2941,7 +2941,7 @@ static uint8_t common_air_flags6_root_floor_projection(
     // Source-trusted FoD height-platform contact:
     // same-step grIzumi/mpLib contact provenance owns the current platform height for this
     // callback. Snap from the flags=6 Fall root to that generated line only for the seeded frame;
-    // step.c clears the seed source mask before subsequent rollout frames.
+    // The frame scheduler clears the seed source mask before subsequent rollout frames.
     // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
     // refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
     batch->state.pos_y[idx] = iy + k_floor_y_bias;
@@ -4811,7 +4811,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
             // retained landing owner and can later miss the DamageFly landing threshold. Keep this
             // out of ordinary grounded motion states such as Dash: a sparse seed source bit alone
             // is not source authority to replace their current floor index. The stage source mask
-            // is transient; step.c clears seed provenance after the frame, so later rollout rows
+            // is transient; the frame scheduler clears seed provenance after the frame, so later rollout rows
             // must be reasserted by live scheduler/contact ownership before this bypass can apply.
             //
             // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358

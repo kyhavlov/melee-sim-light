@@ -6,6 +6,7 @@
 #include "batch_internal.h"
 #include "char_params.h"
 #include "common_params.h"
+#include "fighter_callbacks.h"
 
 enum {
   // Decomp: ftCommon_8007D5D4 writes fp->ecb_lock = 10 on ground->air transition.
@@ -22,7 +23,8 @@ void action_update(MslBatch* batch);
 
 // Pre-input Anim-callback phase (decomp-shaped prio 1 callbacks that do not depend on current-frame
 // input edge processing). Runs after anim timebase/timers pre-input updates and before input_apply().
-void action_update_anim_callbacks_pre_input(MslBatch* batch);
+void action_update_anim_callback_pre_input_fighter(const MslFighterCallbackContext* ctx);
+void action_update_anim_callbacks_pre_input_global(MslBatch* batch);
 
 // ----------------
 // Guard / shielding

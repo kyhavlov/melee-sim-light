@@ -32,9 +32,129 @@ EVENT_IDS = {
     "set_throw_hitbox": 21,
 }
 
+_CREATE_HITBOX_FLAGS = {
+    "clank": 1 << 0,
+    "rebound": 1 << 1,
+    "hit_grounded": 1 << 2,
+    "hit_aerial": 1 << 3,
+    "use_common_bone_ids": 1 << 4,
+    "ignore_fighter_scale": 1 << 5,
+    "item_hit_interaction": 1 << 6,
+    "ignore_thrown_fighters": 1 << 7,
+    "only_hit_grabbed": 1 << 8,
+    "item_match_start_x138": 1 << 9,
+}
 
-def _canonical_payload(data: dict) -> bytes:
-    return json.dumps(data, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+def _as_u8(value: object) -> int:
+    v = int(value)
+    if not 0 <= v <= 0xFF:
+        raise ValueError(f"u8 out of range: {v}")
+    return v
+
+
+def _as_i8(value: object) -> int:
+    v = int(value)
+    if not -128 <= v <= 127:
+        raise ValueError(f"i8 out of range: {v}")
+    return v
+
+
+def _as_u16(value: object) -> int:
+    v = int(value)
+    if not 0 <= v <= 0xFFFF:
+        raise ValueError(f"u16 out of range: {v}")
+    return v
+
+
+def _as_u32(value: object) -> int:
+    v = int(value)
+    if not 0 <= v <= 0xFFFFFFFF:
+        raise ValueError(f"u32 out of range: {v}")
+    return v
+
+
+def _encode_payload(kind: str, data: dict) -> bytes:
+    if kind in {
+        "allow_interrupt",
+        "clear_hitboxes",
+        "set_throw_spawn_projectile",
+        "toggle_bone_physics",
+    }:
+        return b""
+    if kind == "set_cmd_var":
+        return struct.pack("<BBxx", _as_u8(data["idx"]), _as_u8(data["value"]))
+    if kind == "set_throw_flags":
+        return struct.pack("<Bxxx", _as_u8(data["hit_idx"]))
+    if kind in {"set_hit_status", "set_all_hurt_state", "set_jab_rapid"}:
+        return struct.pack("<Bxxx", _as_u8(data["state"]))
+    if kind == "set_hurt_state":
+        return struct.pack("<BBxx", _as_u8(data["bone_idx"]), _as_u8(data["state"]))
+    if kind == "set_jab_combo":
+        return struct.pack("<Bxxx", _as_u8(data["disabled"]))
+    if kind == "set_state_flags_221c_u16_y":
+        return struct.pack("<Hxx", _as_u16(data["flags"]))
+    if kind == "start_smash_charge":
+        return struct.pack(
+            "<BBHf",
+            _as_u8(data["hold_frames"]),
+            _as_u8(data["color_anim"]),
+            0,
+            float(data["damage_mul"]),
+        )
+    if kind == "pseudo_random_sfx":
+        return struct.pack(
+            "<BBBB",
+            _as_u8(data["random_range"]),
+            _as_u8(data["volume"]),
+            _as_u8(data["panning"]),
+            _as_u8(data["behavior"]),
+        )
+    if kind == "set_throw_hitbox":
+        return struct.pack(
+            "<BBBBHHHHf",
+            _as_u8(data["idx"]),
+            _as_u8(data["element"]),
+            _as_u8(data["sfx_kind"]),
+            _as_u8(data["sfx_severity"]),
+            _as_u16(data["angle"]),
+            _as_u16(data["kbg"]),
+            _as_u16(data["wsk"]),
+            _as_u16(data["bkb"]),
+            float(data["damage"]),
+        )
+    if kind == "create_hitbox":
+        hb = dict(data["hitbox"])
+        flags = 0
+        for key, bit in _CREATE_HITBOX_FLAGS.items():
+            if bool(hb.get(key, False)):
+                flags |= bit
+        return struct.pack(
+            "<BBBBBBbBHHHHfffffI",
+            _as_u8(hb["hitbox_id"]),
+            _as_u8(hb["bone"]),
+            _as_u8(hb["hit_group"]),
+            _as_u8(hb["element"]),
+            _as_u8(hb["sfx_kind"]),
+            _as_u8(hb["sfx_severity"]),
+            _as_i8(hb["shield_damage"]),
+            _as_u8(hb["rehit_frames"]),
+            _as_u16(hb["angle"]),
+            _as_u16(hb["kbg"]),
+            _as_u16(hb["wsk"]),
+            _as_u16(hb["bkb"]),
+            float(hb["damage"]),
+            float(hb["size"]),
+            float(hb["x_offset"]),
+            float(hb["y_offset"]),
+            float(hb["z_offset"]),
+            _as_u32(flags),
+        )
+    if kind in {"set_hitbox_damage", "set_hitbox_size", "set_hitbox_interaction", "remove_hitbox"}:
+        # These are currently unknown/unused for Fox/Falco generated data. Keep the event id
+        # reserved but require an explicit encoder before writing runtime-consumed payloads.
+        raise ValueError(f"unsupported payload for event kind {kind!r}")
+    raise ValueError(f"unsupported event kind {kind!r}")
 
 
 def _iter_entries(moves: dict) -> list[tuple[int, str, list[dict]]]:
@@ -68,10 +188,12 @@ def main() -> None:
             if kind_id is None:
                 unknown_counts[kind] = unknown_counts.get(kind, 0) + 1
                 continue
-            payload = _canonical_payload(dict(ev.get("data", {})))
-            event_payloads.append(struct.pack("<HHI", int(ev.get("frame", 0)) & 0xFFFF, kind_id, len(payload)) + payload)
+            payload = _encode_payload(kind, dict(ev.get("data", {})))
+            event_payloads.append(
+                struct.pack("<HHI", _as_u16(ev.get("frame", 0)), kind_id, len(payload)) + payload
+            )
             event_count += 1
-        index_rows.append((msid & 0xFFFF, start, event_count - start))
+        index_rows.append((_as_u16(msid), start, event_count - start))
 
     index_off = 28
     event_off = index_off + len(index_rows) * 12

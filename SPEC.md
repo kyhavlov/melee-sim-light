@@ -338,30 +338,30 @@ Extraction scripts must be deterministic and reproducible:
 
 ### Per-frame update order (must be fixed)
 
-One frame of `step()` must be ordered deterministically. The canonical implementation order lives in `src/step.c` (see also
-`docs/DECOMP_PROC_ORDER.md` for decomp context). The list below is a conceptual breakdown of phases:
+One frame of `step()` must be ordered deterministically. Public callers enter through `src/step.c`,
+but the canonical phase scheduler lives in `src/fighter_callbacks.c` (see also
+`docs/DECOMP_PROC_ORDER.md` for decomp context). The scheduler is intentionally shaped around the
+fighter proc/callback order in `refs/melee/src/melee/ft/fighter.c`:
 
-1. Sample inputs → compute per-player intents (buttons edges, stick direction, triggers).
-2. Resolve global timers (match timer not needed, but per-entity timers are).
-3. Apply state machine transitions that happen “at frame start” (e.g. exit hitlag).
-4. Movement integration:
-   - apply action-specific movement modifiers
-   - apply gravity/traction/friction
-   - integrate velocity → tentative position
-5. Stage collision resolution:
-   - resolve ground collision and grounded state
-   - resolve ledge-grab attempts and ledge state
-6. Update animation frame counters and bone transforms.
-7. Spawn/update hitboxes/hurtboxes for the new animation frame.
-8. Combat resolution:
-   - detect overlaps
-   - apply hitlag/hitstun/knockback/shield effects
-   - spawn projectiles/hit effects as needed
-9. Projectile integration and collision.
-10. Apply end-of-frame transitions (landing state, IASA-like exits if modeled here).
-11. Emit observations (or leave in buffers for `get_observations`).
+1. Frame-begin caches / transient clears.
+2. Pre-input Anim phase:
+   - install the prior-frame input snapshot for callback owners that run before current input,
+   - tick timers and post-hitlag callbacks in the `Fighter_8006A1BC` / `Fighter_8006A360` window,
+   - advance the animation timebase,
+   - run modeled per-fighter Anim callbacks through `MslFighterCallbackContext`,
+   - run global pre-input owners and ProcessHit-style cleanup that belongs after prio-1 callbacks.
+3. Input phase: apply current inputs/UCF and consume after-input hitlag callbacks.
+4. IASA phase: run match-flow and per-action IASA/state-transition owners.
+5. Phys phase: run fighter-owned item spawn hooks, camera-target flags, and velocity/root integration.
+6. Collision phase: run attachment, stage/mpColl, ledge, and post-collision action owners.
+7. Primitive refresh phase: apply deferred animation ticks, dynamic pose state, shields, hurtboxes, and hitboxes.
+8. Item collision / combat phase: tick hitlists, refresh defensive primitives, update item collision,
+   resolve combat when enabled, then run post-combat item/knockdown owners.
+9. Post-frame phase: apply deferred post-combat ticks, publish output-facing flags/timers, promote
+   previous-frame seed lanes, and clear one-step seed-owned transients.
 
-If ordering differs from Melee internally, that is acceptable only if it improves stability and doesn’t degrade behavior; however ordering must be fixed and documented because it affects determinism.
+The wrapper in `src/step.c` must stay thin. New callback-order work should extend the scheduler
+or subsystem callback bodies, not recreate a parallel frame order.
 
 ## Architecture & Performance
 
@@ -508,7 +508,7 @@ Known teacher-forcing limitations (must be tracked and eventually removed, not t
   frame-18 article was consumed immediately and only same-source victim provenance / combo state
   remains; the fighter timebase may still snap to action frame 20 on the source callback, but the
   article pulse waits for the following `ftFx_Throw_Anim` consume (`src/api.c`, `src/items.c`,
-  `src/state.{c,h}`, `src/step.c`, `src/anim_timebase.c`;
+  `src/state.{c,h}`, `src/fighter_callbacks.c`, `src/anim_timebase.c`;
   refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354},
   refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim,
   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD4B0,ftCo_800DD724},
@@ -4814,7 +4814,7 @@ Fox/Falco special-owner split (2026-04-17):
       therefore limited to first-pulse/ThrowB/final-pulse states whose matching hitlist or live-article
       owner is already replay-visible.
     - The retained ThrowHi command-cursor split treats `throw_command_pending_pulse_frame` as
-      authoritative only while the seed-owned valid bit is live. After `step.c` clears that seed
+      authoritative only while the seed-owned valid bit is live. After the frame scheduler clears that seed
       authority, rollout falls back to source-shaped live frame crossing so frame-20/frame-24
       `set_throw_spawn_projectile` pulses still serialize. This preserves the BHH same-character
       one-step negative at frame 1250 while fixing the BHH rollout from frame 2042 where later

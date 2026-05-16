@@ -8020,7 +8020,7 @@ void items_spawn_fighter_anim_phase(MslBatch* batch) {
                 //   provenance. Runtime consumes that explicit source-step owner instead of
                 //   guessing from a frame-speed threshold.
                 // - Record the crossed command as current provenance without serializing the
-                //   article in this callback; step.c promotes it to crossed-prev so the next
+                //   article in this callback; the frame scheduler promotes it to crossed-prev so the next
                 //   runtime frame takes the same source-owned path as teacher-forced `pending=20`
                 //   rows.
                 // - Keep the owner on the same-source victim provenance used by the one-step

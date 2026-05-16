@@ -1991,10 +1991,11 @@ static inline void shieldbreak_update_anim_callback_pre_input(MslBatch* batch,
   }
 }
 
-void action_update_anim_callbacks_pre_input(MslBatch* batch) {
-  if (batch == NULL) {
+void action_update_anim_callback_pre_input_fighter(const MslFighterCallbackContext* ctx) {
+  if (ctx == NULL || ctx->batch == NULL) {
     return;
   }
+  MslBatch* batch = ctx->batch;
   const MslCommonParams* c = msl_common_params();
   // Decomp ordering anchor:
   // - fighter Anim callbacks run in Fighter_8006A360 (prio 1) under !hitlag.
@@ -2002,69 +2003,72 @@ void action_update_anim_callbacks_pre_input(MslBatch* batch) {
   // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
   // Scope (current slice): only GuardReflect x14/x18 timer tick/expire is modeled here; this phase
   // must not consume current-frame input edges.
-  const int num_players = (int)batch->config.num_players;
-  for (int bi = 0; bi < batch->batch_size; bi++) {
-    for (int p = 0; p < num_players; p++) {
-      const size_t idx = msl_idx_player(bi, p);
-      {
-        const uint32_t anim_u32 = batch->state.animation_index[idx];
-        if (anim_u32 <= 0xFFFFu) {
-          const uint16_t msid = (uint16_t)anim_u32;
-          const uint16_t frame = msl_anim_frame_floor_u16(
-              msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]));
-          uint8_t air_state = 0xFFu;
-          if (airborne_state_event_get(batch->state.char_id[idx], msid, frame, &air_state) == 0) {
-            const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
-            const uint8_t max_jumps = (ch != NULL) ? ch->max_jumps : batch->state.jumps_left[idx];
-            // Movescript opcode 25 (ftAction_80071998) dispatch:
-            // state=0 -> ftCommon_8007D7FC (air->ground common helper)
-            // state=1 -> ftCommon_8007D5D4 (ground->air common helper)
-            // state=2 -> ftCommon_8007D60C (ground->air alt helper)
-            // refs/melee/src/melee/ft/ftaction.c::ftAction_80071998
-            // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D7FC,ftCommon_8007D5D4,ftCommon_8007D60C}
-            if (air_state == 0u) {
-              float gr = batch->state.speed_air_x_self[idx];
-              if (ch != NULL) {
-                const float gmax = ch->ground_max_horizontal_velocity;
-                if (gr > gmax) {
-                  gr = gmax;
-                } else if (gr < -gmax) {
-                  gr = -gmax;
-                }
-              }
-              // Common air->ground helper ownership:
-              // - ftAction_80071998 state=0 dispatches ftCommon_8007D7FC / ftCommon_8007D6A4.
-              // - ftCommon_8007D6A4 sets fp->gr_vel = fp->self_vel.x and does not zero self_vel.x.
-              // - grounded Fighter_procUpdate keeps fp->self_vel.x synchronized from fp->gr_vel.
-              // refs/melee/src/melee/ft/ftaction.c::ftAction_80071998
-              // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D7FC,ftCommon_8007D6A4}
-              // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
-              batch->state.on_ground[idx] = 1u;
-              batch->state.speed_ground_x_self[idx] = gr;
-              batch->state.speed_air_x_self[idx] = gr;
-              batch->state.jumps_left[idx] = max_jumps;
-              batch->state.ecb_lock_timer[idx] = 0u;
-            } else if (air_state == 1u) {
-              batch->state.on_ground[idx] = 0u;
-              batch->state.speed_air_x_self[idx] = batch->state.speed_ground_x_self[idx];
-              batch->state.speed_ground_x_self[idx] = 0.0f;
-              batch->state.jumps_left[idx] = (max_jumps > 0u) ? (uint8_t)(max_jumps - 1u) : 0u;
-              batch->state.ecb_lock_timer[idx] = MSL_ECB_LOCK_FRAMES_COMMON_GROUND_TO_AIR;
-            } else if (air_state == 2u) {
-              batch->state.on_ground[idx] = 0u;
-              batch->state.speed_air_x_self[idx] = batch->state.speed_ground_x_self[idx];
-              batch->state.speed_ground_x_self[idx] = 0.0f;
-              batch->state.jumps_left[idx] = 0u;
-              batch->state.ecb_lock_timer[idx] = MSL_ECB_LOCK_FRAMES_COMMON_GROUND_TO_AIR_ALT;
+  const int bi = ctx->bi;
+  const int p = ctx->p;
+  const size_t idx = ctx->idx;
+  {
+    const uint32_t anim_u32 = batch->state.animation_index[idx];
+    if (anim_u32 <= 0xFFFFu) {
+      const uint16_t msid = (uint16_t)anim_u32;
+      const uint16_t frame =
+          msl_anim_frame_floor_u16(msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]));
+      uint8_t air_state = 0xFFu;
+      if (airborne_state_event_get(batch->state.char_id[idx], msid, frame, &air_state) == 0) {
+        const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
+        const uint8_t max_jumps = (ch != NULL) ? ch->max_jumps : batch->state.jumps_left[idx];
+        // Movescript opcode 25 (ftAction_80071998) dispatch:
+        // state=0 -> ftCommon_8007D7FC (air->ground common helper)
+        // state=1 -> ftCommon_8007D5D4 (ground->air common helper)
+        // state=2 -> ftCommon_8007D60C (ground->air alt helper)
+        // refs/melee/src/melee/ft/ftaction.c::ftAction_80071998
+        // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D7FC,ftCommon_8007D5D4,ftCommon_8007D60C}
+        if (air_state == 0u) {
+          float gr = batch->state.speed_air_x_self[idx];
+          if (ch != NULL) {
+            const float gmax = ch->ground_max_horizontal_velocity;
+            if (gr > gmax) {
+              gr = gmax;
+            } else if (gr < -gmax) {
+              gr = -gmax;
             }
           }
+          // Common air->ground helper ownership:
+          // - ftAction_80071998 state=0 dispatches ftCommon_8007D7FC / ftCommon_8007D6A4.
+          // - ftCommon_8007D6A4 sets fp->gr_vel = fp->self_vel.x and does not zero self_vel.x.
+          // - grounded Fighter_procUpdate keeps fp->self_vel.x synchronized from fp->gr_vel.
+          // refs/melee/src/melee/ft/ftaction.c::ftAction_80071998
+          // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D7FC,ftCommon_8007D6A4}
+          // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+          batch->state.on_ground[idx] = 1u;
+          batch->state.speed_ground_x_self[idx] = gr;
+          batch->state.speed_air_x_self[idx] = gr;
+          batch->state.jumps_left[idx] = max_jumps;
+          batch->state.ecb_lock_timer[idx] = 0u;
+        } else if (air_state == 1u) {
+          batch->state.on_ground[idx] = 0u;
+          batch->state.speed_air_x_self[idx] = batch->state.speed_ground_x_self[idx];
+          batch->state.speed_ground_x_self[idx] = 0.0f;
+          batch->state.jumps_left[idx] = (max_jumps > 0u) ? (uint8_t)(max_jumps - 1u) : 0u;
+          batch->state.ecb_lock_timer[idx] = MSL_ECB_LOCK_FRAMES_COMMON_GROUND_TO_AIR;
+        } else if (air_state == 2u) {
+          batch->state.on_ground[idx] = 0u;
+          batch->state.speed_air_x_self[idx] = batch->state.speed_ground_x_self[idx];
+          batch->state.speed_ground_x_self[idx] = 0.0f;
+          batch->state.jumps_left[idx] = 0u;
+          batch->state.ecb_lock_timer[idx] = MSL_ECB_LOCK_FRAMES_COMMON_GROUND_TO_AIR_ALT;
         }
       }
-      rebound_update_anim_callback_pre_input(batch, idx);
-      shieldbreak_update_anim_callback_pre_input(batch, c, idx);
-      guard_update_grounded_anim_callback_pre_input(batch, idx);
-      throw_flow_update_anim_callback_pre_input(batch, bi, p);
     }
+  }
+  rebound_update_anim_callback_pre_input(batch, idx);
+  shieldbreak_update_anim_callback_pre_input(batch, c, idx);
+  guard_update_grounded_anim_callback_pre_input(batch, idx);
+  throw_flow_update_anim_callback_pre_input(batch, bi, p);
+}
+
+void action_update_anim_callbacks_pre_input_global(MslBatch* batch) {
+  if (batch == NULL) {
+    return;
   }
   locomotion_update_anim_callbacks_pre_input(batch);
   blaster_update_anim_callbacks_pre_input(batch);

@@ -17,7 +17,32 @@ STAGE_ITEM_OBJECT_VERSION = 4
 DREAM_WHISPY_MAGIC = b"MSLWHSP1"
 DREAM_WHISPY_VERSION = 1
 SCRIPT_MAGIC = b"MSLFTSC1"
-SCRIPT_VERSION = 1
+SCRIPT_VERSION = 2
+SCRIPT_LEGACY_JSON_VERSION = 1
+
+SCRIPT_EVENT_NAMES = {
+    1: "create_hitbox",
+    2: "set_hitbox_damage",
+    3: "set_hitbox_size",
+    4: "set_hitbox_interaction",
+    5: "remove_hitbox",
+    6: "clear_hitboxes",
+    7: "set_cmd_var",
+    8: "set_throw_flags",
+    9: "allow_interrupt",
+    10: "set_throw_spawn_projectile",
+    11: "set_airborne_state",
+    12: "set_hit_status",
+    13: "set_all_hurt_state",
+    14: "set_hurt_state",
+    15: "set_jab_combo",
+    16: "set_jab_rapid",
+    17: "toggle_bone_physics",
+    18: "set_state_flags_221c_u16_y",
+    19: "start_smash_charge",
+    20: "pseudo_random_sfx",
+    21: "set_throw_hitbox",
+}
 
 ITEM_ARTICLE_CHAR_DOMAIN_GALE01_FIGHTER_KIND = 1
 ITEM_ARTICLE_VALUE_U16 = 1
@@ -725,8 +750,127 @@ def dream_whispy_metadata(data_root: Path | str = Path("data")) -> DreamWhispyMe
     return read_mslwhsp1(Path(data_root) / "stage_items" / "dream_whispy.bin")
 
 
+_SCRIPT_CREATE_HITBOX_FLAG_NAMES = {
+    1 << 0: "clank",
+    1 << 1: "rebound",
+    1 << 2: "hit_grounded",
+    1 << 3: "hit_aerial",
+    1 << 4: "use_common_bone_ids",
+    1 << 5: "ignore_fighter_scale",
+    1 << 6: "item_hit_interaction",
+    1 << 7: "ignore_thrown_fighters",
+    1 << 8: "only_hit_grabbed",
+    1 << 9: "item_match_start_x138",
+}
+
+
+def _decode_script_payload(kind_id: int, payload: bytes) -> dict:
+    kind = SCRIPT_EVENT_NAMES.get(int(kind_id), "")
+    if not payload:
+        return {}
+    if kind == "set_cmd_var":
+        idx, value = struct.unpack_from("<BB", payload, 0)
+        return {"idx": int(idx), "value": int(value)}
+    if kind == "set_throw_flags":
+        (hit_idx,) = struct.unpack_from("<B", payload, 0)
+        return {"hit_idx": int(hit_idx)}
+    if kind in {"set_hit_status", "set_all_hurt_state", "set_jab_rapid"}:
+        (state,) = struct.unpack_from("<B", payload, 0)
+        return {"state": int(state)}
+    if kind == "set_hurt_state":
+        bone_idx, state = struct.unpack_from("<BB", payload, 0)
+        return {"bone_idx": int(bone_idx), "state": int(state)}
+    if kind == "set_jab_combo":
+        (disabled,) = struct.unpack_from("<B", payload, 0)
+        return {"disabled": int(disabled)}
+    if kind == "set_state_flags_221c_u16_y":
+        (flags,) = struct.unpack_from("<H", payload, 0)
+        return {"flags": int(flags)}
+    if kind == "start_smash_charge":
+        hold_frames, color_anim, _reserved, damage_mul = struct.unpack_from("<BBHf", payload, 0)
+        return {
+            "color_anim": int(color_anim),
+            "damage_mul": float(damage_mul),
+            "hold_frames": int(hold_frames),
+        }
+    if kind == "pseudo_random_sfx":
+        random_range, volume, panning, behavior = struct.unpack_from("<BBBB", payload, 0)
+        return {
+            "behavior": int(behavior),
+            "panning": int(panning),
+            "random_range": int(random_range),
+            "volume": int(volume),
+        }
+    if kind == "set_throw_hitbox":
+        idx, element, sfx_kind, sfx_severity, angle, kbg, wsk, bkb, damage = struct.unpack_from(
+            "<BBBBHHHHf", payload, 0
+        )
+        return {
+            "angle": int(angle),
+            "bkb": int(bkb),
+            "damage": float(damage),
+            "element": int(element),
+            "idx": int(idx),
+            "kbg": int(kbg),
+            "sfx_kind": int(sfx_kind),
+            "sfx_severity": int(sfx_severity),
+            "wsk": int(wsk),
+        }
+    if kind == "create_hitbox":
+        (
+            hitbox_id,
+            bone,
+            hit_group,
+            element,
+            sfx_kind,
+            sfx_severity,
+            shield_damage,
+            rehit_frames,
+            angle,
+            kbg,
+            wsk,
+            bkb,
+            damage,
+            size,
+            x_offset,
+            y_offset,
+            z_offset,
+            flags,
+        ) = struct.unpack_from("<BBBBBBbBHHHHfffffI", payload, 0)
+        hb = {
+            "angle": int(angle),
+            "bkb": int(bkb),
+            "bone": int(bone),
+            "damage": float(damage),
+            "element": int(element),
+            "hit_group": int(hit_group),
+            "hitbox_id": int(hitbox_id),
+            "kbg": int(kbg),
+            "rehit_frames": int(rehit_frames),
+            "sfx_kind": int(sfx_kind),
+            "sfx_severity": int(sfx_severity),
+            "shield_damage": int(shield_damage),
+            "size": float(size),
+            "wsk": int(wsk),
+            "x_offset": float(x_offset),
+            "y_offset": float(y_offset),
+            "z_offset": float(z_offset),
+        }
+        for bit, name in _SCRIPT_CREATE_HITBOX_FLAG_NAMES.items():
+            hb[name] = bool(int(flags) & bit)
+        return {"hitbox": hb}
+    raise ValueError(f"unsupported MSLFTSC1 v2 payload kind {kind_id}")
+
+
 def read_mslftsc1_v1(path: Path) -> ScriptTimelineMetadata:
-    buf = _require_header(path, SCRIPT_MAGIC, SCRIPT_VERSION, 28)
+    buf = path.read_bytes()
+    if len(buf) < 28:
+        raise ValueError(f"MSLFTSC1: table too small: {path}")
+    if buf[:8] != SCRIPT_MAGIC:
+        raise ValueError(f"bad MSLFTSC1 magic in {path}: {buf[:8]!r}")
+    version = struct.unpack_from("<I", buf, 8)[0]
+    if version not in {SCRIPT_VERSION, SCRIPT_LEGACY_JSON_VERSION}:
+        raise ValueError(f"unsupported MSLFTSC1 version in {path}: {version}")
     entry_count, event_count, index_off, event_off = struct.unpack_from("<IIII", buf, 12)
     if index_off != 28:
         raise ValueError(f"MSLFTSC1 bad index offset in {path}: {index_off}")
@@ -748,7 +892,11 @@ def read_mslftsc1_v1(path: Path) -> ScriptTimelineMetadata:
         frame, kind_id, payload_len = struct.unpack_from("<HHI", buf, off)
         off += 8 + int(payload_len)
         payload_start = off - int(payload_len)
-        payload = json.loads(buf[payload_start:off].decode("utf-8")) if payload_len else {}
+        raw_payload = buf[payload_start:off]
+        if version == SCRIPT_LEGACY_JSON_VERSION:
+            payload = json.loads(raw_payload.decode("utf-8")) if raw_payload else {}
+        else:
+            payload = _decode_script_payload(kind_id, raw_payload)
         events.append(ScriptTimelineEvent(frame=int(frame), kind_id=int(kind_id), payload=dict(payload)))
     if off != len(buf):
         raise ValueError(f"MSLFTSC1 trailing bytes in {path}: parsed {off} != {len(buf)}")

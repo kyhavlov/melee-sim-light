@@ -125,7 +125,7 @@ Source/generation:
   upper source for same-frame special contact owners. Multi-hitbox attack contacts keep the hitlag
   lower bound until exact per-HitCapsule shield provenance is exposed.
 - Runtime consumes the lanes in `src/combat.c` only for the current teacher-forced collision frame;
-  `src/step.c` clears them after the step. Normal rollouts leave them zero.
+  the frame scheduler clears them after the step. Normal rollouts leave them zero.
 
 Decomp contract:
 - `refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC`.
@@ -154,7 +154,7 @@ Consumer:
   `ftCo_Rebound_Phys` plus `ftCommon_800804A0`.
 - `src/action.c` consumes the hidden rate when ReboundStop leaves hitlag and when a replay seed
   starts directly on the first Rebound frame.
-- `src/step.c` clears the lane once the fighter leaves ReboundStop/Rebound.
+- `src/fighter_callbacks.c` clears the lane once the fighter leaves ReboundStop/Rebound.
 - Normal rollouts do not read replay-derived Rebound xE8/rate seeds after the initial reseed; live
   clank/ReboundStop entry computes the lanes from `dmg.x191C`.
 
@@ -1208,14 +1208,16 @@ Characters (Fox/Falco):
     - `data/moves/<char>.json`
     - `refs/melee/src/melee/ft/ftaction.c` command handlers
     - `refs/melee/src/melee/ft/types.h::gmScriptEventDefault`
-  - Binary layout: `MSLFTSC1` v1
+  - Binary layout: `MSLFTSC1` v2
     - `u8 magic[8] = "MSLFTSC1"`
-    - `u32 version = 1`
+    - `u32 version = 2`
     - `u32 entry_count`, `event_count`, `index_off`, `event_off`
     - index records: `msid`, reserved, first-event index, event count
-    - event records: `frame`, generated `event_kind_id`, payload byte length, canonical JSON payload
+    - event records: `frame`, generated `event_kind_id`, payload byte length, kind-specific binary
+      payload. Empty-payload events have length zero.
     - `data/scripts/<char>_manifest.json` maps event IDs to names and reports unknown event counts.
-  - Generated/ignored; stale/non-v1 tables must be rejected by tooling readers.
+  - Generated/ignored; stale/non-v2 runtime tables must be regenerated. Python tooling readers may
+    still accept legacy v1 JSON-payload tables for comparison/debug, but runtime C rejects them.
 - `data/shields/fox.bin`, `data/shields/falco.bin` (guard-tilt shield bubble centers; decomp-first, compact binary)
 - `data/hurtcaps/fox.bin`, `data/hurtcaps/falco.bin` (hurt capsule init tables; decomp-first, compact binary)
 - `data/hurtcaps/fox.json`, `data/hurtcaps/falco.json` (hurt capsule init tables; debug-friendly mirror; C loads `.bin` only)
