@@ -28,7 +28,7 @@ from tools.extraction.extract_motion_state_owners import (
     CLASS_LANDING_AIR,
     CLASS_LANDING_AIR_COLL,
     CLASS_LANDING_COLL,
-    CLASS_SIDEB_AIR_GROUND_LEDGE_COLL,
+    CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL,
     CLASS_SPECIALHI,
 )
 from tools.slippi.motion_state_owners import VERSION, read_callback_manifest, read_mslmso01_v1
@@ -67,9 +67,12 @@ def test_motion_state_owner_tables_cover_known_callbacks_and_flags() -> None:
     assert cb_name(0x015E, "coll") == "ftFx_SpecialAirSStart_Coll"
     assert cb_name(0x015F, "coll") == "ftFx_SpecialAirS_Coll"
     assert cb_name(0x0160, "coll") == "ftFx_SpecialAirSEnd_Coll"
-    assert int(fox.class_bits[0x015E]) & CLASS_SIDEB_AIR_GROUND_LEDGE_COLL
-    assert int(fox.class_bits[0x015F]) & CLASS_SIDEB_AIR_GROUND_LEDGE_COLL
-    assert int(fox.class_bits[0x0160]) & CLASS_SIDEB_AIR_GROUND_LEDGE_COLL
+    assert int(fox.class_bits[0x015E]) & CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL
+    assert int(fox.class_bits[0x015F]) & CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL
+    assert int(fox.class_bits[0x0160]) & CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL
+    assert int(fox.class_bits[0x0166]) & CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL
+    assert int(fox.class_bits[0x00F4]) & CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL
+    assert int(fox.class_bits[0x00FB]) & CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL
 
     assert cb_name(0x0019, "phys") == "ftCo_Jump_Phys"  # JumpF
     assert cb_name(0x0019, "coll") == "ftCo_Jump_Coll"
@@ -249,7 +252,7 @@ def test_motion_state_class_equivalence_for_migrated_predicates() -> None:
         0x013E,
         0x0140,
     }
-    sideb_air_ground_ledge_coll = {0x015E, 0x015F, 0x0160}
+    ft_check_ground_ledge_air_coll = {0x00F4, 0x00FB, 0x015E, 0x015F, 0x0160, 0x0166}
     ft80083f88_ground_to_air_coll = {
         0x0012,
         0x0018,
@@ -257,9 +260,11 @@ def test_motion_state_class_equivalence_for_migrated_predicates() -> None:
         0x0028,
         0x0029,
         0x00B7,
+        0x00B8,
         0x00BA,
         0x00BE,
         0x00BF,
+        0x00C0,
         0x00C2,
         0x00C6,
         0x00C7,
@@ -301,8 +306,8 @@ def test_motion_state_class_equivalence_for_migrated_predicates() -> None:
         assert both_have(action_id, CLASS_FT80081D0C_AIR_COLL) == (
             action_id in ft80081d0c_air_coll
         )
-        assert both_have(action_id, CLASS_SIDEB_AIR_GROUND_LEDGE_COLL) == (
-            action_id in sideb_air_ground_ledge_coll
+        assert both_have(action_id, CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL) == (
+            action_id in ft_check_ground_ledge_air_coll
         )
         assert both_have(action_id, CLASS_FT80083F88_GROUND_TO_AIR_COLL) == (
             action_id in ft80083f88_ground_to_air_coll

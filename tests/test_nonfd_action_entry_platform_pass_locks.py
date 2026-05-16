@@ -365,6 +365,70 @@ def test_fod_same_step_height_source_is_consumed_after_seeded_frame() -> None:
 
 
 @pytest.mark.integration
+def test_fod_landing_entry_same_step_height_source_reprojects_to_current_platform() -> None:
+    # PTE:5288 starts Landing on the static floor index, while the transient grIzumi same-step
+    # source bit proves that Landing_Coll/ft_80084280 should consume the current transformed FoD
+    # platform floor in this callback. This is an entry-frame owner: the adjacent sustained
+    # LandingFallSpecial negative below must not reuse the sparse seed bit.
+    # refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80084280
+    root = Path(__file__).resolve().parents[1]
+    path = root / _BASE / "fountain_of_dreams_recent/ParallelTemptingElk.msl"
+    if not path.exists():
+        pytest.skip(f"missing local dataset: {_BASE / 'fountain_of_dreams_recent/ParallelTemptingElk.msl'}")
+
+    ds = read_dataset(str(path))
+    record = 5288
+    player = 1
+    if int(ds.samples.shape[0]) <= record:
+        pytest.skip(f"dataset too short for record {record}: {path}")
+
+    row = ds.samples[record]
+    assert int(row["seed_t"]["action_id"][player]) == 42
+    assert int(row["seed_t"]["action_frame"][player]) == 0
+    assert int(row["seed_t"]["ground_id"][player]) == 5
+    assert int(row["seed_t"]["stage_fod_platform_height_source_u8"][1]) & 0x04
+    assert int(row["ref_t1"]["ground_id"][player]) == 0
+
+    out = _step_one_record(ds.samples[record : record + 1].copy(), int(ds.header["num_players"]))
+    ref = row["ref_t1"]
+    assert int(out["ground_id"][player]) == int(ref["ground_id"][player])
+    assert float(out["pos_y"][player]) == pytest.approx(float(ref["pos_y"][player]), abs=2e-4)
+
+
+@pytest.mark.integration
+def test_fod_sustained_landingfallspecial_does_not_reuse_same_step_height_source() -> None:
+    # EWT:5155 carries the same transient FoD source bit while already deep into
+    # LandingFallSpecial. Source collision remains on the current floor index; consuming the sparse
+    # seed bit here stale-lifts the fighter to the opposite height platform for one step.
+    # refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Coll
+    root = Path(__file__).resolve().parents[1]
+    path = root / _BASE / "fountain_of_dreams_recent/ElatedWearyTermite.msl"
+    if not path.exists():
+        pytest.skip(f"missing local dataset: {_BASE / 'fountain_of_dreams_recent/ElatedWearyTermite.msl'}")
+
+    ds = read_dataset(str(path))
+    record = 5155
+    player = 0
+    if int(ds.samples.shape[0]) <= record:
+        pytest.skip(f"dataset too short for record {record}: {path}")
+
+    row = ds.samples[record]
+    assert int(row["seed_t"]["action_id"][player]) == 43
+    assert int(row["seed_t"]["action_frame"][player]) == 24
+    assert int(row["seed_t"]["ground_id"][player]) == 5
+    assert int(row["seed_t"]["stage_fod_platform_height_source_u8"][1]) & 0x04
+    assert int(row["ref_t1"]["ground_id"][player]) == 5
+
+    out = _step_one_record(ds.samples[record : record + 1].copy(), int(ds.header["num_players"]))
+    ref = row["ref_t1"]
+    assert int(out["ground_id"][player]) == int(ref["ground_id"][player])
+    assert float(out["pos_y"][player]) == pytest.approx(float(ref["pos_y"][player]), abs=1e-6)
+
+
+@pytest.mark.integration
 def test_fod_jumpb_downheld_transformed_platform_skip_carries_after_release_rollout() -> None:
     # Replay-real rollout lock for common-air FoD transformed-platform pass-through:
     # JumpB_Coll uses ft_800835B0 with the ftCo_80096CC8 platform callback. A down-held crossing

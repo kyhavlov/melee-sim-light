@@ -5,6 +5,7 @@
 #include "action_ids.h"
 #include "batch_internal.h"
 #include "motion_state_owners.h"
+#include "move_tables.h"
 
 static inline uint8_t hitlist_victim_pointer_may_change(uint8_t stocks, uint16_t action_id) {
   // Decomp hitlists store a raw victim pointer (HitVictim.victim) and use pointer equality to
@@ -56,6 +57,31 @@ static inline uint8_t hitlist_grounded_attack_runtime_clear_owns_empty_hitcapsul
     return 0u;
   }
   return 1u;
+}
+
+static inline uint8_t hitlist_attackair_create_phase_runtime_clear_owns_empty_hitcapsule(
+    const MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  const uint16_t action_id = batch->state.action_id[idx];
+  if (!msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_ATTACK_AIR)) {
+    return 0u;
+  }
+  // AttackAir multi-hit clear/create bands:
+  // - ftAction_8007121C processes generated create_hitbox commands and runs ftColl_800768A0.
+  // - For later create bands, an empty runtime-initialized HitCapsule is source-owned and must not
+  //   be lazily backfilled from previous same-source BODY attribution. This preserves valid
+  //   multi-hit re-hits such as Fox/Falco DAir after the clear-all/create sequence.
+  // data/scripts/{fox,falco}.bin (MSLFTSC1 AttackAir create_hitbox phases)
+  // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_800768A0
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008440,lbColl_CopyHitCapsule}
+  const float anim_frame = batch->state.anim_frame_f32[idx];
+  return (uint8_t)(move_tables_attackair_hitbox_script_lifetime(batch->state.char_id[idx],
+                                                                action_id, anim_frame) &&
+                   !move_tables_attackair_first_hitbox_phase(batch->state.char_id[idx], action_id,
+                                                             anim_frame));
 }
 
 static inline uint8_t hitlist_source_port0_for_attacker(const MslBatch* batch, size_t a_idx,
@@ -384,11 +410,15 @@ uint8_t hitlist_allows_fighter(MslBatch* batch, int bi, int attacker, int hb_id,
       const uint8_t cd_set = (seed_cd == 0xFFFFu) ? 0u : (uint8_t)(seed_cd & 0xFFu);
       (void)hitlist_insert_victims1(hit, (int)MSL_LBCOLL_INSERT_FT_SHIELD, &key, cd_set);
     }
-    const uint8_t grounded_attack_runtime_empty =
-        hitlist_grounded_attack_runtime_clear_owns_empty_hitcapsule(batch, a_idx);
+    const uint8_t runtime_empty_source_clear =
+        (uint8_t)(batch->state.fighter_hitlist_init_gen[hb_i] ==
+                      batch->state.hitlist_reseed_gen[bi] &&
+                  (hitlist_grounded_attack_runtime_clear_owns_empty_hitcapsule(batch, a_idx) ||
+                   hitlist_attackair_create_phase_runtime_clear_owns_empty_hitcapsule(batch,
+                                                                                      a_idx)));
     if (seed_cd == 0u && !batch->state.combat_hitlist_hb_valid[valid_i] &&
         (batch->state.fighter_hitlist_init_gen[hb_i] != batch->state.hitlist_reseed_gen[bi] ||
-         !grounded_attack_runtime_empty) &&
+         !runtime_empty_source_clear) &&
         ((batch->state.hitlag_pre_timer[a_idx] != 0u &&
           batch->state.hitlag_pre_timer[v_idx] != 0u) ||
          (batch->state.hitbox_enable_edge[hb_i] == 0u && batch->state.hitstun[v_idx] != 0u)) &&
@@ -400,16 +430,16 @@ uint8_t hitlist_allows_fighter(MslBatch* batch, int bi, int attacker, int hb_id,
       //   callback path that would clear/copy HitCapsule victims_1.
       // - Some replay seeds expose only the previous x58/x4C capsule geometry plus BODY
       //   attribution (`instance_hit_by`/`last_hit_by`), not an authoritative per-HitCapsule
-      //   victim list. When both attacker and victim had hitlag at frame start, that attribution
-      //   proves the current HitCapsule already contains the victim and must suppress the first
-      //   post-decrement collision pass.
-      // - After hitlag exits, the same victims_1 list continues suppressing sustained same-source
-      //   hitstun contacts until a real enable-edge clear/copy event changes HitCapsule ownership.
+      //   victim list. When both attacker and victim had hitlag at frame start, and the current
+      //   HitCapsule has not already been initialized by the relevant active script event path in
+      //   this runtime generation, that attribution proves the current HitCapsule already contains
+      //   the victim and must suppress the first post-decrement collision pass.
       // - Authoritative per-HitCapsule empty seed lanes and runtime-initialized clear/copy results
       //   are the source owner for exact rows; they prove this slot's victims_1 list is empty and
-      //   must not be backfilled from BODY attribution alone. This matters for same-action
-      //   grounded-attack restarts: Fighter_ChangeMotionState runs ftColl_8007AFF8 and the fresh
-      //   ftAction_8007121C create edge owns clear/copy even when Slippi action_id does not change.
+      //   must not be backfilled from BODY attribution alone. This covers same-action grounded
+      //   restarts and aerial multi-hit clear/create bands: ftAction_8007121C calls
+      //   ftColl_800768A0, then lbColl_80008440/lbColl_CopyHitCapsule owns the concrete victims_1
+      //   list until a later source event changes it.
       // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
       // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
       // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C

@@ -907,9 +907,9 @@ Characters (Fox/Falco):
     - `refs/melee/src/melee/ft/ftmotionstates.c::ftData_MotionStateList`
     - `refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c::ftFx_Init_MotionStateTable`
     - `refs/melee/src/melee/ft/chara/ftFalco/ftFc_Init.c::ftFc_Init_MotionStateTable`
-  - Binary layout: `MSLMSO01` v8 (little-endian, dense tables indexed by GALE01 `action_id`)
+  - Binary layout: `MSLMSO01` v9 (little-endian, dense tables indexed by GALE01 `action_id`)
     - `u8  magic[8] = "MSLMSO01"`
-    - `u32 version = 8`
+    - `u32 version = 9`
     - `u16 action_count`
     - `u16 reserved = 0`
     - `u32` offsets for `submotion_id`, `x4_flags`, `motion_state_word`, `anim_cb_id`,
@@ -931,7 +931,13 @@ Characters (Fox/Falco):
       whose decomp bodies call `ft_80083F88(gobj)`. Runtime may use it to admit current-frame
       xF8 player-nudge floor-edge exits through `ft_80082708` / `mpColl_8004B108` without adding a
       local action-id list.
-  - Stale/non-v8 `MSLMSO01` tables must be rejected. Version 8 adds the
+    - `FT_CHECK_GROUND_LEDGE_AIR_COLL` is keyed to Fox/Falco collision callbacks whose decomp
+      bodies call `ft_CheckGroundAndLedge(gobj, CLIFFCATCH_*)` directly: aerial Side-B
+      Start/Main/End and `SpecialHiFall`. Runtime uses this callback-owner bit for the shared
+      direct `mpColl_800473CC` / `mpColl_800471F8` floor and airborne wall-envelope paths without
+      keeping a local action-family list.
+  - Stale/non-v9 `MSLMSO01` tables must be rejected. Version 9 broadens bit 20 from Side-B-only to
+    the `FT_CHECK_GROUND_LEDGE_AIR_COLL` callback-owner class. Version 8 added the
     `FT80083F88_GROUND_TO_AIR_COLL` callback class. Version 7 added `ftCo_Catch*` and grounded
     `ftCo_Throw*` callbacks to `GROUNDED_STAGE_OBJECT_CARRY_COLL` so grounded B2DC floor-persistence
     rows can consume connected legal-stage slope/flat floor handoffs without local action lists.
@@ -1028,8 +1034,10 @@ Characters (Fox/Falco):
       the down-held platform contact, down-held/root-clear carry while the hidden platform skip
       remains live, and the first hard-floor crossing that consumes that owner. Intermediate
       airborne frames stay unseeded unless one of those source handoff boundaries is visible.
-      `tools/slippi/preprocess_suite.py` cache version 11 is the first valid cache generation for
-      attacker-side `smash_attrs` release seed lanes (`smash_charge_state`,
+      `tools/slippi/preprocess_suite.py` cache version 12 is the first valid cache generation for
+      cliff-owned Damage* entry `ledge_cooldown` reconstruction (`ftCo_8008E908` setting
+      `x2064_ledgeCooldown` while old `x221D_b7` is still live); cache version 11 is the first
+      valid cache generation for attacker-side `smash_attrs` release seed lanes (`smash_charge_state`,
       `smash_charge_frames`, `smash_charge_hold_frames_max`,
       `smash_charge_saved_rate_fp_q16_16`) used by released grounded-smash HitCapsule damage;
       cache version 10 is the first valid cache generation for grounded DamageHi/N/Lw participation

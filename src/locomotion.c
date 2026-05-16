@@ -2503,6 +2503,27 @@ static inline uint8_t ottotto_edge_point_for_facing(const MslBatch* batch, int b
   return 1u;
 }
 
+static inline float ottotto_edge_root_y_for_entry(const MslBatch* batch, int bi, size_t idx,
+                                                  uint16_t ground_id, float edge_y) {
+  // Decomp owner:
+  // - ft_80084280 consumes the current CollData floor result and then ftCo_8009A3C8/8009A410
+  //   enters Ottotto. On FoD height-platform rows, grIzumi has already refreshed the live JObj floor
+  //   into mpLib before the fighter callback; the current grounded root Y is therefore the
+  //   source-owned biased floor root for this callback. Do not recompute and bias the transformed
+  //   endpoint again, or sparse source-trusted height-platform rows gain an extra tiny floor offset
+  //   that can later miss a landing threshold.
+  // refs/melee/src/melee/ft/ft_081B.c::ft_80084280
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::{ftCo_8009A3C8,ftCo_8009A410}
+  // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+  if (batch != NULL && bi >= 0 && bi < batch->batch_size &&
+      stage_collision_floor_line_has_height_platform_transform(batch->state.stage_id[(size_t)bi],
+                                                               ground_id) &&
+      stage_collision_floor_line_height_platform_state_is_source_trusted(batch, bi, ground_id)) {
+    return batch->state.pos_y[idx];
+  }
+  return edge_y + 0.0001f;
+}
+
 static inline uint8_t locomotion_floor_lines_adjacent_or_equal(const MslStageFloorGraph* g, int a,
                                                                int b) {
   if (g == NULL || a < 0 || b < 0 || (size_t)a >= g->line_count || (size_t)b >= g->line_count) {
@@ -2742,6 +2763,13 @@ static inline void enter_fall_from_grounded_floor_loss(MslBatch* batch, const Ms
   // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
   batch->state.jumps_left[idx] = ch->max_jumps > 0 ? (uint8_t)(ch->max_jumps - 1) : 0;
   batch->state.ecb_lock_timer[idx] = 10u;
+  // `ftCommon_8007D5D4` locks CollData_X130, but this generic grounded floor-loss path does not
+  // expose a fresh source desired-ECB owner. Keep desired-bottom ownership clear here; explicit
+  // producers such as JumpAerial entry, Damage launch, and replay seed lanes populate the owner
+  // separately before later floor/wall callbacks consume it.
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
+  // refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_inline
+  batch->state.coll_desired_ecb_bottom_locked_owner[idx] = 0u;
   batch->state.fall_fast[idx] = 0u;
 
   // ftCo_Fall_Enter clamps self_vel.x through ftCommon_ClampAirDrift after the motion change.
@@ -6307,7 +6335,8 @@ void locomotion_update_post_collision(MslBatch* batch) {
           batch->state.action_id[idx] = (uint16_t)MSL_ACT_OTTOTTO;
           batch->state.animation_index[idx] = (uint32_t)MSL_SM_OTTOTTO;
           batch->state.pos_x[idx] = ottotto_x;
-          batch->state.pos_y[idx] = ottotto_y + 0.0001f;
+          batch->state.pos_y[idx] =
+              ottotto_edge_root_y_for_entry(batch, bi, idx, batch->state.ground_id[idx], ottotto_y);
           batch->state.speed_air_x_self[idx] = 0.0f;
           batch->state.speed_ground_x_self[idx] = 0.0f;
           batch->state.speed_y_self[idx] = 0.0f;
@@ -6354,7 +6383,8 @@ void locomotion_update_post_collision(MslBatch* batch) {
           batch->state.action_id[idx] = (uint16_t)MSL_ACT_OTTOTTO;
           batch->state.animation_index[idx] = (uint32_t)MSL_SM_OTTOTTO;
           batch->state.pos_x[idx] = ottotto_x;
-          batch->state.pos_y[idx] = ottotto_y + 0.0001f;
+          batch->state.pos_y[idx] =
+              ottotto_edge_root_y_for_entry(batch, bi, idx, batch->state.ground_id[idx], ottotto_y);
           batch->state.speed_air_x_self[idx] = 0.0f;
           batch->state.speed_ground_x_self[idx] = 0.0f;
           batch->state.speed_y_self[idx] = 0.0f;
@@ -6378,7 +6408,8 @@ void locomotion_update_post_collision(MslBatch* batch) {
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::{
           //   ftCo_Ottotto_Coll,ftCo_OttottoWait_Coll}
           batch->state.pos_x[idx] = ottotto_x;
-          batch->state.pos_y[idx] = ottotto_y + 0.0001f;
+          batch->state.pos_y[idx] =
+              ottotto_edge_root_y_for_entry(batch, bi, idx, batch->state.ground_id[idx], ottotto_y);
           batch->state.speed_air_x_self[idx] = 0.0f;
           batch->state.speed_ground_x_self[idx] = 0.0f;
           batch->state.speed_y_self[idx] = 0.0f;
@@ -6521,7 +6552,8 @@ void locomotion_update_post_collision(MslBatch* batch) {
           batch->state.action_id[idx] = (uint16_t)MSL_ACT_OTTOTTO;
           batch->state.animation_index[idx] = (uint32_t)MSL_SM_OTTOTTO;
           batch->state.pos_x[idx] = ottotto_x;
-          batch->state.pos_y[idx] = ottotto_y + 0.0001f;
+          batch->state.pos_y[idx] =
+              ottotto_edge_root_y_for_entry(batch, bi, idx, batch->state.ground_id[idx], ottotto_y);
           batch->state.speed_air_x_self[idx] = 0.0f;
           batch->state.speed_ground_x_self[idx] = 0.0f;
           batch->state.speed_y_self[idx] = 0.0f;

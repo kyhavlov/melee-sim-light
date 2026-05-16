@@ -75,6 +75,9 @@ static inline uint8_t is_passive_stand(uint16_t a) {
 static inline uint8_t is_passive_ceil(uint16_t a) {
   return (a == (uint16_t)MSL_ACT_PASSIVE_CEIL) ? 1u : 0u;
 }
+static inline uint8_t is_missfoot(uint16_t a) {
+  return (a == (uint16_t)MSL_ACT_MISS_FOOT) ? 1u : 0u;
+}
 static inline uint8_t is_knockdown_any(uint16_t a) {
   return (is_down_any(a) || is_passive(a) || is_passive_stand(a)) ? 1u : 0u;
 }
@@ -146,6 +149,8 @@ static inline uint32_t submotion_for_down_action(uint16_t a) {
       return (uint32_t)MSL_SM_PASSIVE_STAND_B;
     case (uint16_t)MSL_ACT_PASSIVE_CEIL:
       return (uint32_t)MSL_SM_PASSIVE_CEIL;
+    case (uint16_t)MSL_ACT_MISS_FOOT:
+      return (uint32_t)MSL_SM_MISS_FOOT;
     default:
       return 0xFFFFFFFFu;
   }
@@ -1102,6 +1107,7 @@ void knockdown_update_pre_physics(MslBatch* batch) {
       const uint16_t a0 = batch->state.action_id[idx];
       const uint8_t passivewall = is_passivewall_action(a0);
       const uint8_t passive_ceil = is_passive_ceil(a0);
+      const uint8_t missfoot = is_missfoot(a0);
       const uint8_t down_damage = is_down_damage(a0);
       const uint8_t damage_fly = is_damage_fly_action(a0);
       const uint8_t damage_air = is_damage_air_action(a0);
@@ -1111,7 +1117,7 @@ void knockdown_update_pre_physics(MslBatch* batch) {
       const uint8_t common_damage_grounded =
           (uint8_t)((damage_air != 0u || damage_ground != 0u) && batch->state.on_ground[idx] != 0u);
       if (!is_knockdown_any(a0) && !down_damage && !passivewall && !damage_fly && !damage_air &&
-          !damage_ground && !passive_ceil) {
+          !damage_ground && !passive_ceil && !missfoot) {
         continue;
       }
       const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
@@ -1130,6 +1136,18 @@ void knockdown_update_pre_physics(MslBatch* batch) {
 
       const uint8_t cid = batch->state.char_id[idx];
       const float anim_frame = batch->state.anim_frame_f32[idx];
+
+      if (missfoot) {
+        // Decomp: MissFoot is the ledge-slip/floor-loss action entered by ftCo_8009F39C. Its Anim
+        // callback exits through ftCo_80090780 when the animation has no frames remaining, the same
+        // DamageFall entry helper used by terminal damage actions.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_MissFoot.c::ftCo_MissFoot_Anim
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_80090780
+        if (knockdown_anim_finished(cid, (uint16_t)MSL_SM_MISS_FOOT, anim_frame)) {
+          enter_damage_fall_from_damage_anim(batch, ch, idx);
+        }
+        continue;
+      }
 
       if (passive_ceil) {
         // Decomp: ftCo_PassiveCeil_Anim ends through ftCo_Fall_Enter.
@@ -2124,6 +2142,8 @@ static inline uint8_t damage_ground_floor_loss_should_missfoot(const MslBatch* b
   return 0u;
 }
 
+static inline void enter_fall_colldata_lock_from_ground(MslBatch* batch, size_t idx);
+
 static inline void enter_missfoot_from_damage_floor_loss(MslBatch* batch, const MslCharParams* ch,
                                                          size_t idx) {
   if (batch == NULL || ch == NULL) {
@@ -2139,6 +2159,7 @@ static inline void enter_missfoot_from_damage_floor_loss(MslBatch* batch, const 
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_MISS_FOOT;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
   batch->state.on_ground[idx] = 0u;
+  enter_fall_colldata_lock_from_ground(batch, idx);
   batch->state.jumps_left[idx] = ch->max_jumps > 0 ? (uint8_t)(ch->max_jumps - 1) : 0u;
   batch->state.speed_y_attack[idx] = 0.0f;
   if (batch->state.speed_air_x_self[idx] > ch->air_drift_max) {
@@ -2597,6 +2618,21 @@ static inline void enter_fall(MslBatch* batch, size_t idx) {
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+}
+
+static inline void enter_fall_colldata_lock_from_ground(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  // `ftCo_Fall_Enter` calls `ftCommon_8007D5D4` when the source fighter was still grounded:
+  // the fighter becomes airborne, `CollData_X130_Locked` is set for ten frames, and
+  // `mpColl_LoadECB_inline` preserves the previous desired_ecb.bottom for the following Fall_Coll
+  // callbacks. Downed floor-loss paths below enter Fall through this same source path.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
+  // refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_inline
+  batch->state.ecb_lock_timer[idx] = 10u;
+  batch->state.coll_desired_ecb_bottom_locked_owner[idx] = 1u;
 }
 
 static inline void enter_passive_ceil_from_damage_air(MslBatch* batch, size_t idx,
@@ -3155,6 +3191,7 @@ void knockdown_update_post_collision(MslBatch* batch) {
           batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
           batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL;
           msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+          enter_fall_colldata_lock_from_ground(batch, idx);
           continue;
         }
       }
@@ -3280,6 +3317,7 @@ void knockdown_update_post_collision(MslBatch* batch) {
         batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
         batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL;
         msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+        enter_fall_colldata_lock_from_ground(batch, idx);
       } else if (was_ground && !now_ground) {
         if (is_damage_ground_action(a0) &&
             damage_ground_floor_loss_should_missfoot(batch, idx, stage_id)) {
@@ -3301,6 +3339,7 @@ void knockdown_update_post_collision(MslBatch* batch) {
         batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
         batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL;
         msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+        enter_fall_colldata_lock_from_ground(batch, idx);
       }
     }
   }

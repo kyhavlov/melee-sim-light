@@ -203,10 +203,10 @@ mismatch.item_state: 0 / 117555 (0.000000)
 mismatch.item_owner: 0 / 117555 (0.000000)
 mismatch.item_instance_id: 0 / 117555 (0.000000)
 ignored_mismatch.state_flags[4]&0x80: 19 / 15674 (0.001212)
-err.pos_x: mae=0.000019 p95=0.000000 max=0.080002
+err.pos_x: mae=0.000003 p95=0.000000 max=0.050003
 err.pos_y: mae=0.000740 p95=0.000000 max=2.962500
-err.speed_air_x_self: mae=0.000019 p95=0.000000 max=0.080000
-err.speed_ground_x_self: mae=0.000026 p95=0.000000 max=0.108000
+err.speed_air_x_self: mae=0.000003 p95=0.000000 max=0.050001
+err.speed_ground_x_self: mae=0.000010 p95=0.000000 max=0.108000
 err.speed_y_self: mae=0.000379 p95=0.000000 max=2.940000
 err.speed_x_attack: mae=0.000000 p95=0.000000 max=0.000001
 err.speed_y_attack: mae=0.000008 p95=0.000000 max=0.121274
@@ -219,10 +219,10 @@ err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000126
 overall.discrete_mismatch: 10 / 948277
 overall.strict_discrete_mismatch: 29 / 948277
 overall.ignored_discrete_mismatch: 19
-overall.float_norm_mae_p95: 0.00001611
+overall.float_norm_mae_p95: 0.00001439
 
 == suite summary ==
 overall.discrete_mismatch: 73 / 4462843
 overall.strict_discrete_mismatch: 159 / 4462843
 overall.ignored_discrete_mismatch: 86
-overall.float_norm_mae_p95: 0.00002460
+overall.float_norm_mae_p95: 0.00002423

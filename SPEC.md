@@ -835,7 +835,10 @@ Recent deltas to reflect here (do not let these get “lost in chat logs”):
   terminal CliffCatch can consume same-proc CliffWait attack/escape/jump IASA but not climb/drop
   because `mv.co.cliff.x8` starts false; Cliff x1990 invulnerability is entry-owned; Z maps to
   CliffAttack before LR-lane escape; and ordinary Fall-family one-step reseeds apply the x2064
-  pre-collision cooldown tick without broadening SpecialHi ledge admission. Replay-real locks:
+  pre-collision cooldown tick without broadening SpecialHi ledge admission. Native preprocessing
+  also reconstructs the x2064 cooldown for Damage* entries that interrupt a cliff-owned fighter:
+  source `ftCo_8008E908` sets `x2064_ledgeCooldown` while old `x221D_b7` is still live, before the
+  Damage* motion-state change clears cliff ownership. Replay-real locks:
   `tests/test_ledge_collision_env_parity_replay_real_locks.py`.
 - Ledge / collision-env continuation (2026-04-19): Cliff option terminal callbacks now reuse the
   decomp Wait IASA locomotion tail after `ftCommon_8007D92C`; DownDamage same-action floor contacts

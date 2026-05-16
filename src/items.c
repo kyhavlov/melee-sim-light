@@ -1586,20 +1586,29 @@ static inline uint8_t item_laser_hitcapsule_overlaps_fighter_hitcapsule(const Ms
   return (uint8_t)(d2 <= rr * rr);
 }
 
-static inline uint8_t item_laser_fighter_hitcapsule_contact_precedes_shield_body(
+static inline uint8_t item_laser_fighter_hitcapsule_contact_mask_precedes_shield_body(
     const MslBatch* batch, int bi, int fighter, const MslLaserParams* lp, uint8_t laser_state,
     float x0, float y0, float x, float y, float ux, float uy, float sr, float laser_prev_scale_z,
     float laser_scale_z, float item_damage) {
   if (batch == NULL || lp == NULL || fighter < 0 || fighter >= (int)batch->config.num_players) {
     return 0u;
   }
+  const uint8_t non_flinch_state = (laser_state == 0u) ? lp->non_flinch : lp->state1_non_flinch;
+  if (non_flinch_state == 0u) {
+    return 0u;
+  }
   // Source ordering: ftColl_8007925C builds eligible fighter HitCapsules first, then before
   // SHIELD/BODY admission it tests item HitCapsule vs fighter HitCapsule in `catch_path` and
-  // continues the item loop when the clank/body-collision owner resolves.
+  // continues the item loop when the clank/body-collision owner resolves. Keep this registration
+  // on generated non-flinch laser states: Fox blaster shots can have fighter HitCapsule contact
+  // without entering the regular BODY damage-state path, while Falco's flinching laser BODY rows
+  // must still apply their ordinary hit.
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077970}
   // refs/melee/src/melee/lb/lbcollision.c::lbColl_80007AFC
+  // data/items/lasers.bin::MSLLASR1 non_flinch/state1_non_flinch
   const uint8_t off_n =
       (laser_state == 0u) ? lp->hitbox_offsets_x_count : lp->state1_hitbox_offsets_x_count;
+  uint8_t contact_mask = 0u;
   for (int hb = 0; hb < MSL_MAX_HITBOXES; hb++) {
     const size_t hb_i = idx_hitbox(bi, fighter, hb);
     if (!batch->state.hitbox_enabled[hb_i]) {
@@ -1620,7 +1629,7 @@ static inline uint8_t item_laser_fighter_hitcapsule_contact_precedes_shield_body
     }
     if (off_n == 0u) {
       if (item_laser_hitcapsule_overlaps_fighter_hitcapsule(batch, hb_i, x0, y0, x, y, sr)) {
-        return 1u;
+        contact_mask |= 0x01u;
       }
       continue;
     }
@@ -1632,11 +1641,13 @@ static inline uint8_t item_laser_fighter_hitcapsule_contact_precedes_shield_body
       const float sx1 = x + (ux * off_x * laser_scale_z);
       const float sy1 = y + (uy * off_x * laser_scale_z);
       if (item_laser_hitcapsule_overlaps_fighter_hitcapsule(batch, hb_i, sx0, sy0, sx1, sy1, sr)) {
-        return 1u;
+        if (oi < (uint8_t)MSL_MAX_HITBOXES) {
+          contact_mask |= (uint8_t)(1u << oi);
+        }
       }
     }
   }
-  return 0u;
+  return contact_mask;
 }
 
 static inline uint8_t item_swept_sphere_capsule_overlap_amount(
@@ -4808,17 +4819,27 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         break;
       }
 
-      if (batch->state.shield_radius[d_idx] > 0.0f &&
-          item_laser_fighter_hitcapsule_contact_precedes_shield_body(
+      const uint8_t item_hitcap_contact_mask =
+          item_laser_fighter_hitcapsule_contact_mask_precedes_shield_body(
               batch, bi, def, lp, laser_state, x0, y0, x, y, ux, uy, sr, laser_prev_scale_z,
-              laser_scale_z, ((laser_state == 0u) ? lp->damage : lp->state1_damage))) {
+              laser_scale_z, ((laser_state == 0u) ? lp->damage : lp->state1_damage));
+      if (item_hitcap_contact_mask != 0u) {
         // Fighter HitCapsule vs item HitCapsule ordering:
-        // ftColl_8007925C resolves this catch_path before ShieldDesc and BODY hurtcaps. The item
-        // callback/details for lasers remain article-owned, but the contact must suppress later
-        // item shield/BODY branches for this fighter in the same pass.
+        // ftColl_8007925C builds eligible fighter HitCapsules before the item HitCapsule loop, then
+        // resolves this catch_path before both ShieldDesc and BODY hurtcaps. When the item side is
+        // allowed to trade/clank, ftColl_80077970 registers the fighter in the contacted item's
+        // victims_1 ring through it_8026FAC4. Keep the write per HitCapsule and then let shield/BODY
+        // continue: item BODY collision tests each selected HitCapsule's victims_1 ring, so
+        // contacted slots are suppressed while unrelated item HitCapsules remain eligible.
         // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077970}
         // refs/melee/src/melee/it/itcoll.c::{it_802703E8,it_802706D0}
-        break;
+        for (int hb_id = 0; hb_id < MSL_MAX_HITBOXES; hb_id++) {
+          if ((item_hitcap_contact_mask & (uint8_t)(1u << hb_id)) == 0u) {
+            continue;
+          }
+          hitlist_register_item_hitbox_fighter(batch, bi, it, hb_id, def, def_iid,
+                                               MSL_LBCOLL_INSERT_FT_HITBOX_CONTACT, 0u);
+        }
       }
 
       // SHIELD precedence: if the item intersects the defender shield bubble, resolve as a shield

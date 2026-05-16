@@ -19,6 +19,7 @@
 #include "move_tables.h"
 #include "shield_tilt_table.h"
 #include "specialhi_pose.h"
+#include "stage_collision.h"
 
 enum { MSL_CHAR_FOX = 1, MSL_CHAR_FALCO = 22 };
 
@@ -723,8 +724,12 @@ static void hurtboxes_refresh_impl(MslBatch* batch, uint8_t geometry_mode) {
       if ((action_id == (uint16_t)MSL_ACT_DOWN_BOUND_U ||
            action_id == (uint16_t)MSL_ACT_DOWN_BOUND_D) &&
           (batch->state.prev_on_ground[idx] == 0u || batch->state.prev_action_frame[idx] > 0) &&
-          batch->state.on_ground[idx] != 0u && batch->state.hurtbox_state[idx] == 0u &&
-          batch->state.colanim_timer_x1994[idx] != 0u) {
+          batch->state.hurtbox_state[idx] == 0u &&
+          ((batch->state.on_ground[idx] != 0u && batch->state.colanim_timer_x1994[idx] != 0u) ||
+           (batch->state.on_ground[idx] == 0u && batch->state.ground_id[idx] != (uint16_t)0xFFFFu &&
+            batch->state.speed_y_self[idx] == 0.0f &&
+            stage_collision_floor_line_is_platform(batch->state.stage_id[bi],
+                                                   batch->state.ground_id[idx]) != 0u))) {
         // Narrow DownBound post-Anim hurtcaps pose bridge:
         // - DownBound callback ordering is Anim then Coll on the same frame.
         // - Seed reseed preserves the hidden DownBound x1994 timer without globally raising
@@ -732,12 +737,18 @@ static void hurtboxes_refresh_impl(MslBatch* batch, uint8_t geometry_mode) {
         //   continuing DownBound row remains in that post-Anim collision-pose episode, pre-combat
         //   hurtcaps and hit-status masks need the post-Anim frame. Already-grounded frame-0
         //   DownBound rows keep their normal current pose, preserving real downed BODY contacts.
-        //   This fixes the replay-false high-hurtcap AttackDash BODY overlap without suppressing
-        //   real grounded DownDamage contacts.
+        // - Replay post-frame can show GA_Air with a retained platform `ground_id` and zero Y
+        //   speed after DownBound_Coll's mpColl_8004B108 path. In that platform-supported
+        //   floor-resting phase, the same current-frame Anim-before-Coll pose applies even though
+        //   the visible ground byte has already flipped away from grounded.
+        //   This fixes replay-false high-hurtcap AttackDash misses without suppressing real
+        //   grounded DownDamage contacts or trusting arbitrary stale non-platform ground ids.
         // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procMap}
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::{
         //   ftCo_DownBound_Anim,ftCo_DownBound_Coll
         // }
+        // refs/melee/src/melee/ft/ft_081B.c::ft_80082708
+        // data/stages/bin/*.bin::MSLSTG01 segment.platform
         if (frame != 0xFFFFu) {
           frame = (uint16_t)(frame + 1u);
         }

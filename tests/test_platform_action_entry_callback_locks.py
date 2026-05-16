@@ -8,7 +8,9 @@ import pytest
 
 from tests.test_combat_ownership_seed_guardrail_locks import _skip_if_required_artifacts_missing
 from tests.test_colldata_ecb_substrate import _colldata_ecb_dtype
+from tools.eval.discrete_compare_lanes import compile_discrete_compare_lanes, first_mismatch_values
 from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.eval.validation_profile import get_validation_profile
 from tools.slippi.make_dataset_from_slp import _main_impl
 
 
@@ -73,9 +75,85 @@ def _run_one_step(ds, record: int, *, seed_mutator=None, input_mutator=None) -> 
             row["input_t"].view("u1").reshape(1, input_stride).copy(),
         )
         binding.write_compare(handle, out_bytes)
+        return out_bytes.view(COMPARE_DTYPE).reshape((1,))[0].copy()
     finally:
         binding.destroy(handle)
-    return out_bytes.view(COMPARE_DTYPE).reshape((1,))[0].copy()
+
+
+def _rollout_first_mismatch_through(ds, target_record: int):
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    assert compare_stride == COMPARE_DTYPE.itemsize
+
+    samples = ds.samples
+    num_players = int(ds.header["num_players"])
+    sample_stride = int(samples.dtype.itemsize)
+    samples_u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), sample_stride)
+    seed_off = int(samples.dtype.fields["seed_t"][1])
+    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
+    input_off = int(samples.dtype.fields["input_t"][1])
+
+    seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
+    prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+    input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+    out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+    out_view = out_bytes.view(COMPARE_DTYPE).reshape(1)
+    lanes = compile_discrete_compare_lanes(
+        ("action_id", "animation_index", "on_ground", "hitlag", "hitstun", "state_flags"),
+        tuple(range(num_players)),
+        profile=get_validation_profile("rl1_gameplay"),
+    )
+
+    handle = binding.init(
+        batch_size=1,
+        num_players=num_players,
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    try:
+        needs_seed = True
+        last_out = None
+        last_mismatch = None
+        for record in range(target_record + 1):
+            if needs_seed:
+                seed_bytes[0, :] = samples_u8[record, seed_off : seed_off + seed_stride]
+                binding.reseed_seed_rollout(handle, seed_bytes)
+                needs_seed = False
+            prev_input_bytes[0, :] = samples_u8[
+                record, prev_input_off : prev_input_off + input_stride
+            ]
+            input_bytes[0, :] = samples_u8[record, input_off : input_off + input_stride]
+            binding.step_input(handle, prev_input_bytes, input_bytes)
+            binding.write_compare(handle, out_bytes)
+            last_out = out_view[0].copy()
+            last_mismatch = first_mismatch_values(
+                seed_row=samples["seed_t"][record],
+                out_row=last_out,
+                ref_row=samples["ref_t1"][record],
+                lanes=lanes,
+            )
+            if last_mismatch is None:
+                continue
+
+            seed_bytes[0, :] = samples_u8[record, seed_off : seed_off + seed_stride]
+            binding.reseed_seed_rollout(handle, seed_bytes)
+            binding.step_input(handle, prev_input_bytes, input_bytes)
+            binding.write_compare(handle, out_bytes)
+            last_out = out_view[0].copy()
+            last_mismatch = first_mismatch_values(
+                seed_row=samples["seed_t"][record],
+                out_row=last_out,
+                ref_row=samples["ref_t1"][record],
+                lanes=lanes,
+            )
+            if last_mismatch is not None:
+                needs_seed = True
+        return last_out, last_mismatch
+    finally:
+        binding.destroy(handle)
 
 
 def _run_rollout_to_record(ds, start_record: int, target_record: int) -> np.void:
@@ -2614,6 +2692,41 @@ def test_fod_fall_loop_wrap_already_below_hard_floor_lands() -> None:
     for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
         assert int(out[field][p]) == int(ref[field][p]), field
     assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
+def test_nonfastfall_fall_generic_ecb_lock_does_not_stale_lift_wall_envelope() -> None:
+    # Replay-real rollout boundary for ordinary Fall near FD's left lip. A stale generic
+    # desired-bottom owner raises the current ECB bottom high enough that mpColl_80045B74 misses the
+    # current bottom->right wall edge, delaying CliffCatch. Non-fastfall Fall is outside the
+    # retained locked-bottom consumer slice; fastfall/transformed-platform Fall coverage above
+    # remains the positive owner.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Coll
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpColl_80045B74_LeftWall}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+        "ImpassionedAlarmedTarsier.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    target_record = 11572
+    p = 1
+    row = ds.samples[target_record]
+    assert int(row["seed_t"]["action_id"][p]) == ACT_FALL
+    assert int(row["seed_t"]["fall_fast"][p]) == 0
+    assert int(row["seed_t"]["ecb_lock_timer"][p]) == 0
+    assert int(row["ref_t1"]["action_id"][p]) == 252  # CliffCatch
+
+    out, mismatch = _rollout_first_mismatch_through(ds, target_record)
+    assert mismatch is None
+    assert int(out["action_id"][p]) == 252
+    assert float(out["pos_x"][p]) == pytest.approx(float(row["ref_t1"]["pos_x"][p]), abs=1e-6)
 
 
 @pytest.mark.integration

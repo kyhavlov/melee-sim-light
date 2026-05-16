@@ -127,6 +127,12 @@ static inline uint8_t msl_py_lb_8000D148(float point0_x, float point0_y, float p
   return 0u;
 }
 
+static inline uint8_t msl_py_cliff_action_any(uint16_t a);
+
+static inline uint8_t msl_py_damage_action_any(uint16_t a) {
+  return (a >= (uint16_t)MSL_ACT_DAMAGE_HI_1 && a <= (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL) ? 1u : 0u;
+}
+
 PyObject* msl_derive_combo_seed_fields_py(PyObject* self, PyObject* args) {
   (void)self;
   int num_players = 0;
@@ -3896,7 +3902,16 @@ PyObject* msl_derive_ledge_cooldown_py(PyObject* self, PyObject* args) {
   for (npy_intp t = 1; t < n; t++) {
     int cd = o[t - 1];
     if (h[t - 1] == 0u && cd > 0) cd -= 1;
-    if (a[t - 1] == 0x00FDu && a[t] >= 0x001Du && a[t] <= 0x0026u) {
+    if (a[t - 1] == (uint16_t)MSL_ACT_CLIFF_WAIT && a[t] >= 0x001Du && a[t] <= 0x0026u) {
+      cd = seed;
+    }
+    if (msl_py_cliff_action_any(a[t - 1]) && msl_py_damage_action_any(a[t])) {
+      // Cliff-owned damage entry:
+      // ftCo_8008E908 sets x2064_ledgeCooldown while old fp->x221D_b7 is still live, before
+      // Damage* Fighter_ChangeMotionState clears cliff ownership. This blocks immediate ledge
+      // regrabs after a cliff option is interrupted by damage.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008E908
+      // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
       cd = seed;
     }
     o[t] = (uint8_t)cd;

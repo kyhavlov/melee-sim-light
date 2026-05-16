@@ -77,6 +77,31 @@ static inline uint8_t combat_action_is_catch_family(uint16_t action_id) {
                                                                                             : 0u;
 }
 
+static inline uint8_t combat_catch_primary_enable_edge_rejects_down_forward(
+    const MslBatch* batch, size_t a_idx, size_t d_idx, size_t hb_i, int hb_id) {
+  if (batch == NULL || hb_id != 0) {
+    return 0u;
+  }
+  if (batch->state.action_id[a_idx] != (uint16_t)MSL_ACT_CATCH ||
+      batch->state.hitbox_element[hb_i] != (uint8_t)MSL_HIT_ELEMENT_CATCH ||
+      batch->state.hitbox_enable_edge[hb_i] == 0u) {
+    return 0u;
+  }
+  // Catch's first active frame is now expressed through active MSLHITB1-derived HitCapsule state:
+  // hb0 is the authored primary/far catch capsule, `hitbox_enable_edge` marks the script
+  // create-hitbox edge, and `element=CATCH` keeps this out of ordinary BODY/SHIELD hitboxes. The
+  // DownForward victim branch mirrors ftColl_80078A2C's grab eligibility check on the victim's
+  // current action, without baking the generated frame number (Fox/Falco Catch create at frame 6)
+  // into this gameplay predicate.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078A2C
+  // data/scripts/{fox,falco}.bin (MSLFTSC1 Catch create_hitbox hb0)
+  // data/hitboxes/{fox,falco}.bin (MSLHITB1 element=CATCH, hitbox order)
+  return (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_DOWN_FOWARD_U ||
+          batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_DOWN_FOWARD_D)
+             ? 1u
+             : 0u;
+}
+
 static inline float combat_cross2(float ax, float ay, float bx, float by) {
   return ax * by - ay * bx;
 }
@@ -3186,9 +3211,9 @@ static inline uint8_t combat_guard_reflect_final_x14_live_x18_blocks_body(const 
   // Final-x14 GuardReflect, before x18/powershield-active expiry:
   // - `ftCo_GuardReflect_Anim -> ftCo_80093BC0` has consumed the reflect x14 lane but x18/x221C_b2
   //   still represents the powershield-active owner for this callback.
-  // - Fighter-vs-fighter shield collision must not broad-promote this carried no-submotion slice to
-  //   GuardSetOff until x18 expires, and the same source window must not fall through to full BODY
-  //   damage through the simulator's guard-family hurtcap fallback.
+  // - This no-submotion source window must not enter GuardSetOff from fighter-vs-fighter shield
+  //   collision or fall through to full BODY damage through the simulator's guard-family hurtcap
+  //   fallback.
   // - Keep this to frame-start x18>1 (`seed` lane) so the next callback, where x18 reaches zero
   //   before collision, can take the ordinary GuardSetOff/ShieldDesc handoff.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardReflect_Anim,ftCo_80093BC0,ftCo_80092F2C}
@@ -4791,6 +4816,17 @@ static inline void combat_damage_enter_state(const MslCommonParams* c, MslBatch*
 
   batch->state.action_id[d_idx] = act;
   batch->state.animation_index[d_idx] = sm;
+  if (c != NULL && msl_action_is_cliff_any(pre_damage_action)) {
+    // Cliff-owned Damage entry ledge cooldown:
+    // ftCo_8008E908 tests the old `fp->x221D_b7` cliff-ownership bit and writes
+    // `fp->x2064_ledgeCooldown` before Fighter_ChangeMotionState clears the cliff state. This is
+    // the runtime counterpart to the replay seed reconstruction in
+    // msl_derive_ledge_cooldown_py; without it, free-running MissFoot can immediately regrab a
+    // ledge after a cliff option is interrupted into Damage*.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008E908
+    const uint16_t cooldown = c->ledge_cooldown_frames;
+    batch->state.ledge_cooldown[d_idx] = (cooldown > 0xFFu) ? 0xFFu : (uint8_t)cooldown;
+  }
   // Fighter_ChangeMotionState reset clears fp->x221B_b0 (shield descriptor active) on damage
   // entry, so do not carry seeded Guard no-submotion shield-active bits into Damage* states.
   // refs/melee/src/melee/ft/fighter.c (Fighter_ChangeMotionState reset block)
@@ -6893,6 +6929,10 @@ static void combat_select_catch_hits_one_mutating(MslBatch* batch, int bi) {
         if (!batch->state.hitbox_enabled[hb_i]) {
           continue;
         }
+        if (combat_catch_primary_enable_edge_rejects_down_forward(batch, a_idx, d_idx, hb_i,
+                                                                  hb_id)) {
+          continue;
+        }
         if (batch->state.hitbox_element[hb_i] != (uint8_t)MSL_HIT_ELEMENT_CATCH) {
           continue;
         }
@@ -7606,6 +7646,38 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           if (shield_seed_kind == 1u) {
             continue;
           }
+          const int16_t attackair_second_create_frame =
+              move_tables_attackair_second_create_hitbox_frame(batch->state.char_id[a_idx],
+                                                               batch->state.action_id[a_idx]);
+          const int16_t attackair_late_limb_x18_callback_frame =
+              (attackair_second_create_frame >= 0) ? (int16_t)(attackair_second_create_frame + 4)
+                                                   : -1;
+          if (shield_seed_kind == 0u && hb_id == 1 && attackair_second_create_frame >= 0 &&
+              batch->state.action_id[a_idx] == (uint16_t)MSL_ACT_ATTACK_AIR_N &&
+              msl_motion_state_has_motion_flag(batch->state.char_id[a_idx],
+                                               batch->state.action_id[a_idx],
+                                               MSL_MOTION_FLAG_SKIP_HIT) &&
+              batch->state.action_frame[a_idx] == attackair_late_limb_x18_callback_frame &&
+              combat_guard_reflect_final_x14_live_x18_blocks_body(batch, d_idx)) {
+            // AttackAirN SkipHit second-create limb / final-x18 GuardReflect handoff:
+            // - `ftCo_GuardReflect_Anim -> ftCo_80093BC0` has already consumed the shorter x14
+            //   reflect lane, but x18/x221C_b2 is still the powershield-active owner until the
+            //   next callback. BODY already honors this owner; sustained AttackAirN additionally
+            //   carries the source SkipHit/HitCapsule victim phase across the first collision
+            //   callback where the late limb slot reaches the final-x18 ShieldDesc boundary. Fox/Falco
+            //   AttackAirN's generated MSLFTSC1 script rewrites the opening frame-4 capsules at frame
+            //   8; the retained boundary is the matching frame-12 late-limb callback, not the full
+            //   late-hit lifetime. Keep this per-HitCapsule: other AttackAirN slots with live
+            //   ShieldDesc overlap must still reach GuardSetOff in the same ftColl_80078C70 pass.
+            // - When x18 reaches the final seed tick, the next callback clears the owner before
+            //   collision and the ordinary ShieldDesc handoff remains eligible.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+            //   ftCo_GuardReflect_Anim,ftCo_80093BC0,ftCo_80092F2C}
+            // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
+            // refs/melee/src/melee/ft/chara/ftCommon/forward.h::ftCo_MF_AttackAirN
+            // data/scripts/{fox,falco}.bin (MSLFTSC1 AttackAirN second create_hitbox phase)
+            continue;
+          }
           if (shield_seed_kind == 0u && guard_reflect_entry_no_submotion) {
             // Guard-origin GuardReflect no-submotion rows with x14 still active expose ReflectDesc,
             // not a normal ShieldDesc HitShield accept. Keep BODY/clank candidates live, but do not
@@ -7635,7 +7707,6 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
                                                                            shield_overlap_margin)) {
             continue;
           }
-
           const uint8_t element = batch->state.hitbox_element[hb_i];
           if (element == (uint8_t)MSL_HIT_ELEMENT_INERT) {
             // Slippi post-frame bit 0x221C:0x04 (GALE01): detection hitbox touching shield bubble.

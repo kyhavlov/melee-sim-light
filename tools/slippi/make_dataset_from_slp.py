@@ -1096,9 +1096,11 @@ def _derive_ledge_cooldown(*, action_id_u16: np.ndarray, hitlag_u16: np.ndarray,
     Decomp shape:
     - Decremented each frame under !hitlag.
       refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
-    - Set to p_ftCommonData->ledge_cooldown on certain cliff releases (notably CliffWait -> Fall).
+    - Set to p_ftCommonData->ledge_cooldown on certain cliff releases (notably CliffWait -> Fall)
+      and on Damage* entry while the previous cliff-owned x221D_b7 flag is still live.
       refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_8009AAFC
       refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::ftCo_8009A9AC
+      refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008E908
     """
 
     try:

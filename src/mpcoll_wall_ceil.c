@@ -254,21 +254,31 @@ static inline uint8_t mpcoll_action_uses_ft80081d0c_air_collision(uint16_t actio
   return msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_FT80081D0C_AIR_COLL);
 }
 
-static inline uint8_t mpcoll_action_uses_sideb_air_ground_ledge_collision(uint8_t char_id,
-                                                                          uint16_t action_id) {
-  // Fox/Falco aerial Side-B Start/Main/End collision callbacks call `ft_CheckGroundAndLedge`,
-  // which loads the airborne ECB and calls `mpColl_800473CC` or `mpColl_800471F8`. Both routes run
-  // the full `mpColl_80046904` airborne wall envelope before the floor/ledge consumers. This is the
-  // same wall source owner as the ft_80081D0C airborne collision path, not a common-air walljump
-  // callback; Side-B receives Push/Hug provenance from mpColl but has no same-callback
-  // ftWallJump_8008169C consumer.
+static inline uint8_t mpcoll_action_uses_ft_check_ground_ledge_air_collision(uint8_t char_id,
+                                                                             uint16_t action_id) {
+  // Fox/Falco aerial Side-B Start/Main/End and SpecialHiFall call `ft_CheckGroundAndLedge`, which
+  // loads the airborne ECB and calls `mpColl_800473CC` or `mpColl_800471F8`. Both routes run the
+  // full `mpColl_80046904` airborne wall envelope before floor/ledge consumers. This is the same
+  // wall source owner as the ft_80081D0C airborne collision path, not a common-air walljump
+  // callback; these actions receive Push/Hug provenance from mpColl but have no same-callback
+  // ftWallJump_8008169C consumer. The generated class also marks common `ft_80082F28` wrappers
+  // such as MissFoot/Pass, but those are not retained by this wall-envelope slice.
   // data/motion_state/owners/{fox,falco}.bin (MSLMSO01 class_bits)
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
   //   ftFx_SpecialAirSStart_Coll,ftFx_SpecialAirS_Coll,ftFx_SpecialAirSEnd_Coll}
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiFall_Coll
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_MissFoot.c::ftCo_MissFoot_Coll
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_Pass_Coll
   // refs/melee/src/melee/ft/ft_081B.c::ft_CheckGroundAndLedge
   // refs/melee/src/melee/mp/mpcoll.c::{
   //   mpColl_800473CC,mpColl_800471F8,mpColl_80046904}
-  return msl_motion_state_class_has(char_id, action_id, MSL_MS_CLASS_SIDEB_AIR_GROUND_LEDGE_COLL);
+  if (msl_motion_state_class_has(char_id, action_id, MSL_MS_CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL) ==
+      0u) {
+    return 0u;
+  }
+  const uint16_t smid = msl_motion_state_submotion_id(char_id, action_id);
+  return (uint8_t)(smid >= (uint16_t)MSL_SM_FX_SPECIAL_AIR_S_START &&
+                   smid <= (uint16_t)MSL_SM_FX_SPECIAL_HI_FALL);
 }
 
 static inline void ecb_update_rot_bounds(float x, float y, float* io_min_x, float* io_max_x,
@@ -2597,14 +2607,21 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
                                   batch->state.pos_x[idx], batch->state.pos_y[idx], was_grounded);
       sample_collision_ecb_points(&prev_ecb, batch, idx, char_id, anim, action_id, ecb_frame_prev,
                                   fd, prev_x, prev_y, was_grounded);
+      const uint8_t nonfastfall_fall_generic_lock_bottom =
+          (uint8_t)(action_id == (uint16_t)MSL_ACT_FALL && batch->state.fall_fast[idx] == 0u &&
+                    batch->state.coll_desired_ecb_bottom_locked_owner[idx] == 1u);
       if (!was_grounded && batch->state.ecb_lock_timer[idx] != 0u &&
           batch->state.coll_desired_ecb_bottom_valid[idx] != 0u &&
-          batch->state.coll_desired_ecb_bottom_locked_owner[idx] != 0u) {
+          batch->state.coll_desired_ecb_bottom_locked_owner[idx] != 0u &&
+          !nonfastfall_fall_generic_lock_bottom) {
         // Source `mpColl_LoadECB_inline` preserves CollData.desired_ecb.bottom while
         // CollData_X130_Locked is live. Wall/ceiling callbacks consume the same loaded ECB as floor
-        // callbacks; resampling the pose bottom here makes airborne ledge/lip wall envelopes too
-        // shallow during ground->air lock windows.
+        // callbacks for the retained locked-bottom family. Keep generic owner-1 non-fastfall Fall
+        // out of this wall/ceiling preserve path: the floor owner slice above already excludes
+        // non-fastfall Fall, and carrying the generic seed/runtime owner here stale-lifts the
+        // current bottom ECB after the source lock has expired.
         // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpColl_80045B74_LeftWall}
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Coll
         msl_ecb_world_points_preserve_desired_bottom_rel_y(
             &cur_ecb, batch->state.pos_x[idx], batch->state.pos_y[idx],
             batch->state.coll_desired_ecb_bottom_rel_y[idx]);
@@ -2665,12 +2682,12 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
         const uint8_t use_common_air_left_envelope = use_common_air_walljump_callback;
         const uint8_t use_ft80081d0c_left_envelope =
             mpcoll_action_uses_ft80081d0c_air_collision(action_id);
-        const uint8_t use_sideb_air_left_envelope =
-            mpcoll_action_uses_sideb_air_ground_ledge_collision(char_id, action_id);
+        const uint8_t use_ft_check_ground_ledge_air_left_envelope =
+            mpcoll_action_uses_ft_check_ground_ledge_air_collision(char_id, action_id);
         const uint8_t use_left_air_envelope =
             (uint8_t)(use_specialhi_left_envelope || use_damagefly_left_envelope ||
                       use_common_air_left_envelope || use_ft80081d0c_left_envelope ||
-                      use_sideb_air_left_envelope);
+                      use_ft_check_ground_ledge_air_left_envelope);
         const MslEcbWorldPoints* left_cur_ecb =
             use_specialhi_left_envelope ? &cur_specialhi_wall_ecb : &cur_ecb;
         const MslEcbWorldPoints* left_prev_ecb =
@@ -2689,8 +2706,14 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
         // Decomp: CollData.left_facing_wall.index persists; mpLib_8004E398_LeftWall stays attached.
         // refs/melee/src/melee/lb/types.h::CollData
         // refs/melee/src/melee/mp/mplib.c::mpLib_8004E398_LeftWall
+        const uint8_t use_jumpaerial_locked_left_wall_persistence =
+            (uint8_t)(use_common_air_left_envelope &&
+                      (action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
+                       action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_B) &&
+                      batch->state.ecb_lock_timer[idx] != 0u &&
+                      batch->state.coll_desired_ecb_bottom_locked_owner[idx] != 0u);
         if (!grounded_now && prev_wall_kind == MSL_WALL_LEFT && prefer_line_idx >= 0 &&
-            !use_left_air_envelope) {
+            (!use_left_air_envelope || use_jumpaerial_locked_left_wall_persistence)) {
           float x_corr = 0.0f;
           float nx = -1.0f, ny = 0.0f;
           const int out_line_idx =
@@ -2738,7 +2761,9 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
                                     -1);
           // Decomp: after the three point sweeps, mpColl_80045B74_LeftWall also checks the current
           // bottom->right and top->right ECB edges with mpCheckLeftWall. These add Push-only
-          // candidates; Hug remains owned by the side-point sweep above.
+          // candidates; Hug remains owned by the side-point sweep above. Keep the lite floor-chain
+          // adjacency exclusion here until the full CollData floor/wall joint-skip state is
+          // modeled; otherwise same-frame floor admission can also perturb unrelated wall pushes.
           // refs/melee/src/melee/mp/mpcoll.c::mpColl_80045B74_LeftWall
           left_wall_candidate_sweep(&candidates, lwg, left_cur_ecb->bottom_x,
                                     left_cur_ecb->bottom_y, left_cur_ecb->right_x,
@@ -2782,7 +2807,8 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
             mark_left_wall_contact(
                 batch, idx,
                 (uint8_t)((use_common_air_left_envelope || use_ft80081d0c_left_envelope ||
-                           use_sideb_air_left_envelope || use_damagefly_left_envelope)
+                           use_ft_check_ground_ledge_air_left_envelope ||
+                           use_damagefly_left_envelope)
                               ? candidates.has_hug
                               : 0u));
             ecb_points_shift_x3(&cur_ecb, &cur_right_ecb, &cur_specialhi_wall_ecb, dx);
@@ -2952,12 +2978,12 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
         const uint8_t use_common_air_right_envelope = use_common_air_walljump_callback;
         const uint8_t use_ft80081d0c_right_envelope =
             mpcoll_action_uses_ft80081d0c_air_collision(action_id);
-        const uint8_t use_sideb_air_right_envelope =
-            mpcoll_action_uses_sideb_air_ground_ledge_collision(char_id, action_id);
+        const uint8_t use_ft_check_ground_ledge_air_right_envelope =
+            mpcoll_action_uses_ft_check_ground_ledge_air_collision(char_id, action_id);
         const uint8_t use_right_air_envelope =
             (uint8_t)(use_specialhi_right_envelope || use_damagefly_right_envelope ||
                       use_common_air_right_envelope || use_ft80081d0c_right_envelope ||
-                      use_sideb_air_right_envelope);
+                      use_ft_check_ground_ledge_air_right_envelope);
         const float cur_lx = cur_right_ecb.left_x;
         const float cur_ly = cur_right_ecb.left_y;
         const float prev_lx = prev_right_ecb.left_x;
@@ -2968,8 +2994,14 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
           prefer_line_idx = stage_collision_right_wall_line_index(stage_id, prev_wall_id);
         }
 
+        const uint8_t use_jumpaerial_locked_right_wall_persistence =
+            (uint8_t)(use_common_air_right_envelope &&
+                      (action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
+                       action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_B) &&
+                      batch->state.ecb_lock_timer[idx] != 0u &&
+                      batch->state.coll_desired_ecb_bottom_locked_owner[idx] != 0u);
         if (!grounded_now && prev_wall_kind == MSL_WALL_RIGHT && prefer_line_idx >= 0 &&
-            !use_right_air_envelope) {
+            (!use_right_air_envelope || use_jumpaerial_locked_right_wall_persistence)) {
           float x_corr = 0.0f;
           float nx = 1.0f, ny = 0.0f;
           const int out_line_idx =
@@ -3015,6 +3047,8 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
           // Decomp: `mpColl_80044E10_RightWall` also checks the current bottom->left and top->left
           // ECB edges before resolving the max-X envelope. These candidates are Push-only; only
           // the side-point sweep sets Collide_RightWallHug for PassiveWall/WallJump callbacks.
+          // Preserve the lite floor-chain adjacency exclusion until CollData's source joint-skip
+          // state is modeled for this same-frame floor/wall combination.
           // refs/melee/src/melee/mp/mpcoll.c::mpColl_80044E10_RightWall
           right_wall_candidate_sweep(&candidates, rwg, cur_right_ecb.bottom_x,
                                      cur_right_ecb.bottom_y, cur_right_ecb.left_x,

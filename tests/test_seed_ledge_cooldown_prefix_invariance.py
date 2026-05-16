@@ -20,8 +20,10 @@ def test_ledge_cooldown_derivation_is_prefix_invariant() -> None:
 
     # Action ids (GALE01): cliff 252..265, fall-like 29..38.
     act_wait = 0x000E
+    act_damage_hi_2 = 0x004C
     act_cliff_wait = 0x00FD
     act_cliff_catch = 0x00FC
+    act_cliff_climb_quick = 0x00FF
     act_fall = 0x001D
 
     action_id = np.array(
@@ -37,6 +39,10 @@ def test_ledge_cooldown_derivation_is_prefix_invariant() -> None:
             *([act_cliff_catch] * 2),
             act_fall,
             *([act_fall] * 4),
+            # Cliff-owned damage entry sets the same source cooldown while old x221D_b7 is live.
+            *([act_cliff_climb_quick] * 2),
+            act_damage_hi_2,
+            *([act_damage_hi_2] * 3),
             # Trailing cliff segment (no fall transition in-range).
             *([act_cliff_wait] * 4),
         ],
@@ -57,3 +63,6 @@ def test_ledge_cooldown_derivation_is_prefix_invariant() -> None:
             common=common,
         )
         assert np.array_equal(got, full[:k])
+
+    damage_entry_idx = int(np.flatnonzero(action_id == act_damage_hi_2)[0])
+    assert int(full[damage_entry_idx]) == max(0, cooldown_frames - 1)

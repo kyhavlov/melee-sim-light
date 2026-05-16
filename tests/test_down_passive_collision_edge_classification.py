@@ -15,6 +15,8 @@ ACT_DOWN_FOWARD_U = 0x00BC
 ACT_DOWN_BACK_U = 0x00BD
 ACT_PASSIVE_STAND_F = 0x00C8
 ACT_PASSIVE_STAND_B = 0x00C9
+ACT_FALL = 0x001D
+ACT_WAIT = 0x000E
 
 # Submotion ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 SM_DOWN_WAIT_U = 184
@@ -24,6 +26,7 @@ SM_DOWN_FOWARD_U = 188
 SM_DOWN_BACK_U = 189
 SM_PASSIVE_STAND_F = 200
 SM_PASSIVE_STAND_B = 201
+SM_WAIT1_0 = 2
 
 CHAR_FOX = 1
 STAGE_FD = 32
@@ -77,6 +80,25 @@ def _seed_ground_edge_base(action_id: int, submotion_id: int, x: float) -> np.nd
     seed["animation_index"][0, 1] = np.uint32(2)  # SM_WAIT1_0
     seed["on_ground"][0, 1] = np.uint8(1)
     seed["ground_id"][0, 1] = np.uint16(_FD_MAIN_FLOOR_SEGMENT_ID)
+    return seed
+
+
+def _seed_downwait_overlap_nudge_at_right_edge(*, downwait_x: float) -> np.ndarray:
+    seed = _seed_ground_edge_base(ACT_WAIT, SM_WAIT1_0, 82.7)
+    # Put both fighters on FD's rightmost floor line. P0 is to P1's left, so common xF8 player
+    # nudge pushes P1 right by p_ftCommonData->x450 before DownWait_Coll's ft_80083F88 floor test.
+    seed["ground_id"][0, :2] = np.uint16(2)
+    seed["pos_x"][0, 0] = np.float32(downwait_x - 2.8)
+    seed["pos_x"][0, 1] = np.float32(downwait_x)
+    seed["pos_z"][0, 0] = np.float32(-0.8)
+    seed["pos_z"][0, 1] = np.float32(0.8)
+    seed["facing"][0, 0] = np.uint8(1)
+    seed["facing"][0, 1] = np.uint8(0)
+    seed["facing_dir1"][0, 0] = np.int8(1)
+    seed["facing_dir1"][0, 1] = np.int8(-1)
+    seed["action_id"][0, 1] = np.uint16(ACT_DOWN_WAIT_U)
+    seed["action_frame"][0, 1] = np.int16(15)
+    seed["animation_index"][0, 1] = np.uint32(SM_DOWN_WAIT_U)
     return seed
 
 
@@ -213,3 +235,37 @@ def test_down_wait_floor_skip_after_dd90_failure_at_chain_edge() -> None:
     assert float(out_atk["pos_x"][0]) <= 85.57 + 1.0e-3, (
         f"DownAttack edge-snap pos_x should be <= 85.57, got {out_atk['pos_x'][0]}"
     )
+
+
+@pytest.mark.integration
+def test_downwait_player_nudge_can_drive_ft80083f88_floor_loss_at_ledge() -> None:
+    """Common player nudge feeds DownWait_Coll's allow-ground-to-air floor-loss test.
+
+    The player-overlap helper (`ftCommon_8007E0E4`) runs before Fighter_procUpdate integration.
+    When the x450 nudge pushes DownWait beyond the current floor line, `ftCo_DownWait_Coll` uses
+    `ft_80083F88 -> ft_80082708 -> mpColl_8004B108` and enters Fall. This is not constrained to
+    the fighter's facing direction; the floor-loss owner follows the nudge motion segment.
+
+    refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007DD7C,ftCommon_8007E0E4}
+    refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownWait_Coll
+    refs/melee/src/melee/ft/ft_081B.c::{ft_80083F88,ft_80082708}
+    refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
+    """
+    _require_local_artifacts_or_skip()
+    seed = _seed_downwait_overlap_nudge_at_right_edge(downwait_x=85.5)
+    out = _step_once(seed)
+    assert int(out["action_id"][1]) == ACT_FALL
+    assert int(out["on_ground"][1]) == 0
+    assert int(out["jumps_left"][1]) == 1
+    assert float(out["pos_x"][1]) == pytest.approx(85.8, abs=1e-5)
+
+
+@pytest.mark.integration
+def test_downwait_player_nudge_inside_floor_span_stays_grounded() -> None:
+    """Boundary control: the same DownWait nudge is not a Fall shortcut away from the ledge."""
+    _require_local_artifacts_or_skip()
+    seed = _seed_downwait_overlap_nudge_at_right_edge(downwait_x=84.5)
+    out = _step_once(seed)
+    assert int(out["action_id"][1]) == ACT_DOWN_WAIT_U
+    assert int(out["on_ground"][1]) == 1
+    assert float(out["pos_x"][1]) == pytest.approx(84.8, abs=1e-5)

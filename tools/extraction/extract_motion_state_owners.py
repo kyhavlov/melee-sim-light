@@ -17,7 +17,7 @@ from tools.extraction.extract_attack_id_move_id import (
 
 
 FORMAT_MAGIC = b"MSLMSO01"
-FORMAT_VERSION = 8
+FORMAT_VERSION = 9
 U16_ABSENT = 0xFFFF
 
 CLASS_ATTACK_AIR = 1 << 0
@@ -40,7 +40,7 @@ CLASS_GROUNDED_STAGE_OBJECT_CARRY_COLL = 1 << 16
 CLASS_GROUNDED_ATTACK = 1 << 17
 CLASS_GUARDON_FRAME_START_X672_IASA = 1 << 18
 CLASS_FT80081D0C_AIR_COLL = 1 << 19
-CLASS_SIDEB_AIR_GROUND_LEDGE_COLL = 1 << 20
+CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL = 1 << 20
 CLASS_FT80083F88_GROUND_TO_AIR_COLL = 1 << 21
 
 
@@ -209,11 +209,15 @@ def _class_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
         "ftFx_SpecialAirSStart_Coll",
         "ftFx_SpecialAirS_Coll",
         "ftFx_SpecialAirSEnd_Coll",
+        "ftFx_SpecialHiFall_Coll",
+        "ftCo_MissFoot_Coll",
+        "ftCo_Pass_Coll",
     }:
-        # Fox/Falco aerial Side-B collision callbacks call ft_CheckGroundAndLedge directly, which
-        # snapshots CollData and tests floors/ledges without the held-down common-air platform
-        # rejection path.
-        bits |= CLASS_SIDEB_AIR_GROUND_LEDGE_COLL
+        # Fox/Falco aerial Side-B/SpecialHiFall and common MissFoot/Pass collision callbacks call
+        # ft_CheckGroundAndLedge directly (MissFoot/Pass through ft_80082F28), which snapshots
+        # CollData and runs the airborne mpColl floor/wall/ceiling owner without the held-down
+        # common-air platform rejection path.
+        bits |= CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL
     if coll_cb == "ftCo_Landing_Coll":
         bits |= CLASS_LANDING_COLL
     if coll_cb == "ftCo_LandingAir_Coll":
@@ -286,6 +290,7 @@ def _class_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
         "ftCo_Turn_Coll",
         "ftCo_Rebound_Coll",
         "ftCo_DownBound_Coll",
+        "ftCo_DownWait_Coll",
         "ftCo_DownStand_Coll",
         "ftCo_DownSpot_Coll",
         "ftCo_Passive_Coll",
@@ -481,7 +486,7 @@ def _write_manifest(out_path: Path, callback_ids: dict[str, int]) -> None:
         "GROUNDED_ATTACK": CLASS_GROUNDED_ATTACK,
         "GUARDON_FRAME_START_X672_IASA": CLASS_GUARDON_FRAME_START_X672_IASA,
         "FT80081D0C_AIR_COLL": CLASS_FT80081D0C_AIR_COLL,
-        "SIDEB_AIR_GROUND_LEDGE_COLL": CLASS_SIDEB_AIR_GROUND_LEDGE_COLL,
+        "FT_CHECK_GROUND_LEDGE_AIR_COLL": CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL,
         "FT80083F88_GROUND_TO_AIR_COLL": CLASS_FT80083F88_GROUND_TO_AIR_COLL,
     }
     symbols = [{"id": int(i), "symbol": sym} for sym, i in sorted(callback_ids.items(), key=lambda kv: kv[1])]

@@ -112,6 +112,68 @@ def _run_rollout_window_with_seed_mutator(
     return samples["ref_t1"][stop], out
 
 
+@pytest.mark.integration
+def test_guardreflect_final_x14_live_x18_blocks_early_attackairn_setoff_182447() -> None:
+    # Final-x14 / live-x18 GuardReflect shield-hit boundary:
+    # - p0 is a direct locomotion powershield no-submotion snapshot after x14 has expired, but
+    #   x18/x221C_b2 is still live at the collision callback.
+    # - BODY already treats this as a powershield-active owner; shield-hit selection must also
+    #   reject the early AttackAirN candidate, otherwise the rollout enters GuardSetOff at 3955
+    #   while vanilla stays GuardReflect until the next callback.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    #   ftCo_GuardReflect_Anim,ftCo_80093BC0,ftCo_80092F2C}
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+        "Game_20260515T182447.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    defender = 0
+    ref, out = _run_rollout_window(
+        dataset_path, 3954, 3955, ucf_enabled=True, ucf_cardinals_1_0_enabled=True
+    )
+
+    assert int(ref["action_id"][defender]) == 182  # GuardReflect.
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender])
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 0
+    assert float(out["shield_hp"][defender]) == pytest.approx(
+        float(ref["shield_hp"][defender]), abs=1e-6
+    )
+
+
+@pytest.mark.integration
+def test_guardreflect_final_x14_live_x18_next_callback_allows_attackairn_setoff_182447() -> None:
+    # Boundary for the x18 gate above: once the seed frame reaches the final x18 tick, the callback
+    # clears the powershield-active owner before collision and the ordinary ShieldDesc handoff can
+    # enter GuardSetOff.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+        "Game_20260515T182447.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    defender = 0
+    ref, out = _run_rollout_window(
+        dataset_path, 3955, 3956, ucf_enabled=True, ucf_cardinals_1_0_enabled=True
+    )
+
+    assert int(ref["action_id"][defender]) == 181  # GuardSetOff.
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender])
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 6
+    assert float(out["shield_hp"][defender]) == pytest.approx(
+        float(ref["shield_hp"][defender]), abs=1e-6
+    )
+
+
 def _run_one_step_row_with_mutators(dataset_path: Path, record: int, seed_mutator, input_mutator):
     import msl_binding
 

@@ -657,6 +657,20 @@ static inline uint8_t physics_action_is_common_damage(uint16_t action_id) {
   return msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_DAMAGE_COMMON);
 }
 
+static inline uint8_t physics_action_is_grounded_common_damage_phys(uint16_t action_id) {
+  if (msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_DAMAGE_COMMON) == 0u) {
+    return 0u;
+  }
+  // Grounded ftCo_Damage_Phys uses ft_80084F3C for the common DamageHi/N/Lw/Air family.
+  // DownDamage also delegates to ftCo_Damage_Phys in source, but this core handles the downed
+  // Phys/Anim state machine in knockdown.c so do not run the generic ground-friction writer twice.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Phys
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::ftCo_DownDamage_Phys
+  // refs/melee/src/melee/ft/ft_081B.c::ft_80084F3C
+  return (uint8_t)(action_id != (uint16_t)MSL_ACT_DOWN_DAMAGE_U &&
+                   action_id != (uint16_t)MSL_ACT_DOWN_DAMAGE_D);
+}
+
 static inline uint8_t physics_action_is_passivewall(uint16_t action_id) {
   return (action_id == (uint16_t)MSL_ACT_PASSIVE_WALL ||
           action_id == (uint16_t)MSL_ACT_PASSIVE_WALL_JUMP)
@@ -831,22 +845,32 @@ static inline uint8_t physics_action_uses_ft80084280_ottotto_edge_callback(uint1
   }
 }
 
-static inline uint8_t physics_action_uses_kneebend_ft80083f88_ground_to_air_coll(
+static inline uint8_t physics_action_uses_player_nudge_ft80083f88_ground_to_air_coll(
     uint16_t action_id) {
   // Generated MSLMSO01 marks all grounded collision callbacks whose decomp bodies call
-  // `ft_80083F88(gobj)`. The retained runtime owner here consumes only the audited KneeBend subset:
-  // SquatRv/grounded jump entry can carry the frame-start xF8 player nudge to a facing floor edge,
-  // and KneeBend_Coll then lets `ft_80082708 -> mpColl_8004B108` decide ground-to-air.
+  // `ft_80083F88(gobj)`. The retained runtime owner here consumes only audited subsets whose
+  // callback is known to allow ground-to-air after common xF8 player nudge:
+  // - KneeBend: SquatRv/grounded jump entry can carry the frame-start xF8 nudge to a facing floor
+  //   edge, and KneeBend_Coll then lets `ft_80082708 -> mpColl_8004B108` decide ground-to-air.
+  // - DownWait/DownStand: the downed wait/stand collision callbacks share the same
+  //   `ft_80083F88` chain, so overlap separation at a ledge is not clipped away before the source
+  //   floor-loss test runs.
   //
   // Other ft_80083F88 callback families remain table-visible but are not runtime-closed by this
-  // item; a broader all-class nudge edge admission caused unrelated Battlefield float drift.
+  // helper; a broader all-class nudge edge admission caused unrelated Battlefield float drift.
   //
   // refs/melee/src/melee/ft/ft_081B.c::{ft_80083F88,ft_80082708}
   // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_Coll
-  return (uint8_t)(action_id == (uint16_t)MSL_ACT_KNEE_BEND &&
-                   msl_motion_state_common_class_has(action_id,
-                                                     MSL_MS_CLASS_FT80083F88_GROUND_TO_AIR_COLL));
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::{
+  //   ftCo_DownWait_Coll,ftCo_DownStand_Coll}
+  const uint8_t audited_action = (uint8_t)(action_id == (uint16_t)MSL_ACT_KNEE_BEND ||
+                                           action_id == (uint16_t)MSL_ACT_DOWN_WAIT_U ||
+                                           action_id == (uint16_t)MSL_ACT_DOWN_WAIT_D ||
+                                           action_id == (uint16_t)MSL_ACT_DOWN_STAND_U ||
+                                           action_id == (uint16_t)MSL_ACT_DOWN_STAND_D);
+  return (uint8_t)(audited_action && msl_motion_state_common_class_has(
+                                         action_id, MSL_MS_CLASS_FT80083F88_GROUND_TO_AIR_COLL));
 }
 
 static inline uint8_t physics_nudge_reaches_facing_edge(const MslStageFloorGraph* g, int line_idx,
@@ -861,6 +885,25 @@ static inline uint8_t physics_nudge_reaches_facing_edge(const MslStageFloorGraph
     return (uint8_t)(nudge_x > 0.0f && nudged_x >= line->x1);
   }
   return (uint8_t)(nudge_x < 0.0f && nudged_x <= line->x0);
+}
+
+static inline uint8_t physics_nudge_exits_floor_span(const MslStageFloorGraph* g, int line_idx,
+                                                     float pos_x, float nudge_x) {
+  if (g == NULL || line_idx < 0 || (size_t)line_idx >= g->line_count || nudge_x == 0.0f) {
+    return 0u;
+  }
+  const MslStageFloorLine* line = &g->lines[(size_t)line_idx];
+  const float nudged_x = pos_x + nudge_x;
+  return (uint8_t)((nudge_x > 0.0f && nudged_x >= line->x1) ||
+                   (nudge_x < 0.0f && nudged_x <= line->x0));
+}
+
+static inline uint8_t physics_action_uses_downwait_player_nudge_floor_loss(uint16_t action_id) {
+  return (uint8_t)((action_id == (uint16_t)MSL_ACT_DOWN_WAIT_U ||
+                    action_id == (uint16_t)MSL_ACT_DOWN_WAIT_D ||
+                    action_id == (uint16_t)MSL_ACT_DOWN_STAND_U ||
+                    action_id == (uint16_t)MSL_ACT_DOWN_STAND_D) &&
+                   physics_action_uses_player_nudge_ft80083f88_ground_to_air_coll(action_id));
 }
 
 static inline uint8_t physics_action_is_attackdash_knockdown_overlap_owner(uint16_t action_id,
@@ -1014,10 +1057,13 @@ static inline void physics_compute_grounded_player_nudge(MslBatch* batch, int bi
             !(physics_action_uses_ft80084280_ottotto_edge_callback(batch->state.action_id[idx]) &&
               physics_nudge_reaches_facing_edge(floor_graph, self_line, batch->state.pos_x[idx],
                                                 nudge_x, batch->state.facing[idx])) &&
-            !(physics_action_uses_kneebend_ft80083f88_ground_to_air_coll(
+            !(physics_action_uses_player_nudge_ft80083f88_ground_to_air_coll(
                   batch->state.action_id[idx]) &&
-              physics_nudge_reaches_facing_edge(floor_graph, self_line, batch->state.pos_x[idx],
-                                                nudge_x, batch->state.facing[idx]))) {
+              (physics_nudge_reaches_facing_edge(floor_graph, self_line, batch->state.pos_x[idx],
+                                                 nudge_x, batch->state.facing[idx]) ||
+               (physics_action_uses_downwait_player_nudge_floor_loss(batch->state.action_id[idx]) &&
+                physics_nudge_exits_floor_span(floor_graph, self_line, batch->state.pos_x[idx],
+                                               nudge_x))))) {
           continue;
         }
         out_nudge_x[p] += nudge_x;
@@ -2047,7 +2093,8 @@ void physics_integrate(MslBatch* batch) {
             } else {
               gr_vel += ground_friction_step_delta(gr_vel, friction);
             }
-          } else if (physics_action_is_common_ground_friction_only(action_id)) {
+          } else if (physics_action_is_common_ground_friction_only(action_id) ||
+                     physics_action_is_grounded_common_damage_phys(action_id)) {
             if (action_id == (uint16_t)MSL_ACT_REBOUND &&
                 batch->state.rebound_ground_accel_2[idx] != 0.0f) {
               // Rebound's first Phys frame skips ft_80084F3C while mv.co.rebound.x0 is still live.

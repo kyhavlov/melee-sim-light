@@ -253,6 +253,9 @@ enum {
 // - refs/melee/src/melee/ft/chara/ftCommon/forward.h::ftCo_Submotion
 //   ftCo_SM_Count = 295
 enum {
+  MSL_SM_FX_SPECIAL_AIR_S_START = 304,
+  MSL_SM_FX_SPECIAL_AIR_S = 305,
+  MSL_SM_FX_SPECIAL_AIR_S_END = 306,
   MSL_SM_FX_SPECIAL_HI = 309,
   MSL_SM_FX_SPECIAL_HI_LANDING = 310,
   MSL_SM_FX_SPECIAL_HI_FALL = 311,
@@ -557,6 +560,30 @@ static inline uint8_t msl_action_is_live_shield_family(uint16_t action_id) {
     case MSL_ACT_GUARD:
     case MSL_ACT_GUARD_REFLECT:
     case MSL_ACT_GUARD_SET_OFF:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
+static inline uint8_t msl_action_is_cliff_any(uint16_t action_id) {
+  // Cliff states carry the hidden cliff ownership bit (`fp->x221D_b7`) until the next
+  // Fighter_ChangeMotionState reset. Runtime/source-seed users should share this source-family
+  // predicate rather than duplicating local Cliff action lists.
+  // refs/melee/src/melee/ft/ftcliffcommon.c::ftCliffCommon_80081370
+  switch (action_id) {
+    case MSL_ACT_CLIFF_CATCH:
+    case MSL_ACT_CLIFF_WAIT:
+    case MSL_ACT_CLIFF_CLIMB_SLOW:
+    case MSL_ACT_CLIFF_CLIMB_QUICK:
+    case MSL_ACT_CLIFF_ATTACK_SLOW:
+    case MSL_ACT_CLIFF_ATTACK_QUICK:
+    case MSL_ACT_CLIFF_ESCAPE_SLOW:
+    case MSL_ACT_CLIFF_ESCAPE_QUICK:
+    case MSL_ACT_CLIFF_JUMP_SLOW1:
+    case MSL_ACT_CLIFF_JUMP_SLOW2:
+    case MSL_ACT_CLIFF_JUMP_QUICK1:
+    case MSL_ACT_CLIFF_JUMP_QUICK2:
       return 1u;
     default:
       return 0u;

@@ -522,7 +522,7 @@ def _motion_state_owner_manifest_current(path: Path) -> bool:
         version = int(payload.get("version", -1))
     except (OSError, json.JSONDecodeError, TypeError, ValueError):
         return False
-    return payload.get("magic") == "MSLMSO01" and version == 8
+    return payload.get("magic") == "MSLMSO01" and version == 9
 
 
 def _ensure_motion_state_owner_bins() -> None:
@@ -534,7 +534,7 @@ def _ensure_motion_state_owner_bins() -> None:
                 with out.open("rb") as f:
                     magic = f.read(8)
                     ver = int.from_bytes(f.read(4), "little", signed=False)
-                if magic == b"MSLMSO01" and ver == 8:
+                if magic == b"MSLMSO01" and ver == 9:
                     continue
             except OSError:
                 pass

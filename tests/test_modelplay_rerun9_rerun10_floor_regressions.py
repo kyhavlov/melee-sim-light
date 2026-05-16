@@ -150,5 +150,8 @@ def test_modelplay_rerun10_1873_damageair_floor_clip_recovers_to_floor_contact()
 
     for frame_i in range(1852, 1879):
         assert float(history[frame_i]["pos_y"][0]) >= -0.001
-    assert int(history[1873]["hitlag"][0]) > 0
+    # The retained floor-contact owner is the thing under test here. Later collision-owner fixes can
+    # clear the old hitlag-frame timing by frame 1873 while still keeping the clipped DamageAir/Fall
+    # handoff pinned to the floor.
+    assert int(history[1868]["hitlag"][0]) > 0
     assert float(history[1873]["pos_y"][0]) == pytest.approx(0.0001, abs=0.001)

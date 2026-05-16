@@ -13,6 +13,59 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
 )
 from tests.test_post_contact_hitlag_hitlist_seed_replay_real_locks import _run_rollout_records
 from tools.eval.dataset import read_dataset
+from tools.eval.run_one_step_eval import COMPARE_DTYPE
+
+
+def _run_reseed_rollout_records(
+    ds_path: Path, start_record: int, records: tuple[int, ...]
+) -> dict[int, tuple[np.void, np.void]]:
+    ds = read_dataset(str(ds_path))
+    samples = ds.samples
+    assert int(samples.shape[0]) > max(records)
+    assert start_record <= min(records)
+
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    sample_stride = int(samples.dtype.itemsize)
+    samples_u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), sample_stride)
+    seed_off = int(samples.dtype.fields["seed_t"][1])
+    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
+    input_off = int(samples.dtype.fields["input_t"][1])
+
+    seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
+    prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+    input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+    out: dict[int, tuple[np.void, np.void]] = {}
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    try:
+        seed_bytes[0, :] = samples_u8[start_record, seed_off : seed_off + seed_stride]
+        binding.reseed_seed_rollout(handle, seed_bytes)
+        for record in range(start_record, max(records) + 1):
+            prev_input_bytes[0, :] = samples_u8[
+                record, prev_input_off : prev_input_off + input_stride
+            ]
+            input_bytes[0, :] = samples_u8[record, input_off : input_off + input_stride]
+            binding.step_input(handle, prev_input_bytes, input_bytes)
+            if record in records:
+                binding.write_compare(handle, out_compare_bytes)
+                out[record] = (
+                    samples["ref_t1"][record].copy(),
+                    out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy(),
+                )
+    finally:
+        binding.destroy(handle)
+    return out
 
 
 @pytest.mark.integration
@@ -315,3 +368,42 @@ def test_attackairlw_no_damage_contact_respects_authoritative_empty_hb_seed() ->
         ] == [0, 0, 0, 0]
     finally:
         binding.destroy(handle)
+
+
+@pytest.mark.integration
+def test_attackairlw_multihit_runtime_clear_create_allows_later_dair_rehit_182447() -> None:
+    # Runtime rollout lock for the AttackAirLw multi-hit clear/create owner:
+    # - Fox DAir first hits at 182447:2009, then hitlag freezes the attacker through the first
+    #   active band.
+    # - The generated script clears on frame 10 and creates a new same-group DAir band on frame 11.
+    #   ftAction_8007121C -> ftColl_800768A0 owns the empty HitCapsule victims_1 list after that
+    #   clear/create, so same-source BODY attribution from the prior DAir hit must not lazily
+    #   suppress the valid rec2014 re-hit.
+    # - Rows 2010/2011 are the negative boundary: before the clear/create owner, the prior
+    #   HitCapsule latch still suppresses another hit while the first band is active/frozen.
+    # refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_800768A0
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008440,lbColl_CopyHitCapsule}
+    # data/scripts/fox.bin (MSLFTSC1 ftCo_SM_AttackAirLw clear/create phases)
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/Game_20260515T182447.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    rows = _run_reseed_rollout_records(dataset_path, start_record=2008, records=(2010, 2011, 2014))
+
+    for rec in (2010, 2011):
+        ref_row, out_row = rows[rec]
+        assert int(ref_row["action_id"][0]) == int(out_row["action_id"][0]) == 76
+        assert int(ref_row["hitlag"][0]) == int(out_row["hitlag"][0])
+        assert float(out_row["percent"][0]) == pytest.approx(float(ref_row["percent"][0]), abs=1e-6)
+
+    ref_row, out_row = rows[2014]
+    assert int(ref_row["action_id"][0]) == int(out_row["action_id"][0]) == 82
+    assert int(ref_row["hitlag"][0]) == int(out_row["hitlag"][0]) == 3
+    assert int(ref_row["hitstun"][0]) == int(out_row["hitstun"][0]) == 17
+    assert float(out_row["percent"][0]) == pytest.approx(float(ref_row["percent"][0]), abs=1e-6)

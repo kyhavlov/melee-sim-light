@@ -65,6 +65,18 @@
       }
     },
     {
+      "replay": "replays/validation/aggregate_recent/Game_20260515T182447_frozenps.slp",
+      "ports": [
+        1,
+        2
+      ],
+      "stage_id": 3,
+      "characters": {
+        "1": "Fox",
+        "2": "Fox"
+      }
+    },
+    {
       "replay": "replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.slp",
       "ports": [
         1,

@@ -44,6 +44,10 @@ PTE = (
     "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
     "ParallelTemptingElk.msl"
 )
+G18447 = (
+    "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+    "Game_20260515T182447.msl"
+)
 
 
 def _run_row(
@@ -318,6 +322,28 @@ def test_specialairhi_left_wall_collision_facing_enables_tch_cliffcatch_rollout(
     assert int(got_6998_r["action_id"][p]) == int(ref_6998_r["action_id"][p]) == 252
     assert int(got_6998_r["facing"][p]) == int(ref_6998_r["facing"][p]) == 1
     assert int(contacts_6998_r["coll_env_flags"][p]) & 0x01000000
+
+
+@pytest.mark.integration
+def test_specialhifall_uses_ft_check_ground_ledge_air_wall_envelope_182447() -> None:
+    # SpecialHiFall_Coll is still part of Fox/Falco's `ft_CheckGroundAndLedge` source callback
+    # family after the launch action. It uses the full airborne `mpColl_80046904` wall envelope,
+    # not the point-local wall probe; otherwise Pokemon Stadium's left wall corner releases the root
+    # about 0.067 units too far on this direct one-step row.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiFall_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_CheckGroundAndLedge
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80046904}
+    seed, ref, got, contacts = _run_row(852, G18447)
+    p = 1
+
+    assert int(seed["action_id"][p]) == int(got["action_id"][p]) == int(ref["action_id"][p]) == 358
+    assert int(contacts["wall_kind"][p]) == 1
+    assert int(contacts["wall_id"][p]) == 106
+    assert float(got["speed_air_x_self"][p]) == pytest.approx(
+        float(ref["speed_air_x_self"][p]), abs=1e-6
+    )
+    assert float(got["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=1e-6)
+    assert float(got["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
 
 
 @pytest.mark.integration
@@ -597,6 +623,42 @@ def test_jumpaerial_runtime_preserves_pre_entry_desired_bottom_for_fod_left_wall
     assert int(got_4002["action_id"][p]) == int(ref_4002["action_id"][p]) == 27
     assert int(got_4002["on_ground"][p]) == int(ref_4002["on_ground"][p]) == 0
     assert float(got_4002["pos_x"][p]) == pytest.approx(float(ref_4002["pos_x"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
+def test_jumpaerial_locked_common_air_wall_persistence_182447() -> None:
+    # Game_20260515T182447 exposes the combined source boundary:
+    # - JumpAerialB_Coll uses the common-air ft_800835B0 callback. Its mpColl path may project from
+    #   the previous CollData left-wall index before the broader airborne envelope; skipping that
+    #   persistence lets the Pokemon Stadium left-wall lip release the root about 0.877 units right.
+    # The following JumpAerialB -> EscapeAir hard-floor landing remains a separate owner: this lock
+    # only proves the retained common-air wall projection that removes the earlier float drift.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::{
+    #   ftCo_JumpAerial_Coll,ftCo_JumpAerial_IASA}
+    # refs/melee/src/melee/ft/ft_081B.c::ft_800835B0
+    # refs/melee/src/melee/mp/mpcoll.c::mpColl_80046224_LeftWall
+    rows = _run_rollout_rows(4590, 4598, G18447, rollout_seed=True)
+    p = 1
+
+    got_4593, ref_4593, contacts_4593 = rows[4593]
+    got_4594, ref_4594, contacts_4594 = rows[4594]
+    got_4597, ref_4597, _ = rows[4597]
+
+    assert int(got_4593["action_id"][p]) == int(ref_4593["action_id"][p]) == 27
+    assert int(contacts_4593["wall_kind"][p]) == 1
+    assert int(contacts_4593["wall_id"][p]) == 108
+
+    assert int(got_4594["action_id"][p]) == int(ref_4594["action_id"][p]) == 27
+    assert int(contacts_4594["wall_kind"][p]) == 1
+    assert int(contacts_4594["wall_id"][p]) == 106
+    assert float(got_4594["pos_x"][p]) == pytest.approx(float(ref_4594["pos_x"][p]), abs=1e-6)
+    assert float(got_4594["pos_y"][p]) == pytest.approx(float(ref_4594["pos_y"][p]), abs=1e-6)
+
+    # Negative boundary: the first EscapeAir callback is still airborne; the same owner must not
+    # ground immediately on entry.
+    assert int(got_4597["action_id"][p]) == int(ref_4597["action_id"][p]) == 236
+    assert int(got_4597["on_ground"][p]) == int(ref_4597["on_ground"][p]) == 0
 
 
 @pytest.mark.integration
