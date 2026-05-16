@@ -122,14 +122,14 @@ err.speed_x_attack: mae=0.000000 p95=0.000000 max=0.010182
 err.speed_y_attack: mae=0.000065 p95=0.000000 max=1.487718
 err.percent: mae=0.000079 p95=0.000000 max=1.820000
 err.shield_hp: mae=0.000049 p95=0.000000 max=0.700001
-err.item_pos_x: mae=0.003881 p95=0.000000 max=3.790001
-err.item_pos_y: mae=0.000290 p95=0.000000 max=1.350348
-err.item_vel_x: mae=0.000055 p95=0.000000 max=0.251084
-err.item_vel_y: mae=0.000082 p95=0.000000 max=0.382914
+err.item_pos_x: mae=0.003682 p95=0.000000 max=3.790001
+err.item_pos_y: mae=0.000000 p95=0.000000 max=0.000282
+err.item_vel_x: mae=0.000001 p95=0.000000 max=0.000638
+err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000282
 overall.discrete_mismatch: 23 / 1395009
 overall.strict_discrete_mismatch: 44 / 1395009
 overall.ignored_discrete_mismatch: 21
-overall.float_norm_mae_p95: 0.00001610
+overall.float_norm_mae_p95: 0.00001563
 
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
 Records: 10222  Players/scored per record: 2  Total player-frames: 20444
@@ -225,4 +225,4 @@ overall.float_norm_mae_p95: 0.00001611
 overall.discrete_mismatch: 67 / 4462843
 overall.strict_discrete_mismatch: 153 / 4462843
 overall.ignored_discrete_mismatch: 86
-overall.float_norm_mae_p95: 0.00002389
+overall.float_norm_mae_p95: 0.00002374

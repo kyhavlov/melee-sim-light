@@ -16,6 +16,13 @@ def _dataset(root: Path):
     return read_dataset(str(path))
 
 
+def _dataset_selfplay_181413(root: Path):
+    path = root / "datasets/aggregate_recent/replays/validation/aggregate_recent/Game_20260514T181413.msl"
+    if not path.exists():
+        pytest.skip(f"missing dataset: {path}")
+    return read_dataset(str(path))
+
+
 def _step_one(ds, record: int, *, mutate_input=None) -> np.void:
     binding = _load_binding()
     sizes = binding.sizes()
@@ -100,6 +107,45 @@ def test_opening_lock_timer_one_allows_landing_jump_iasa_maj83() -> None:
     assert int(ds.samples[83]["seed_t"]["opening_input_lock_timer"][0]) == 1
     assert int(out["action_id"][0]) == int(ref["action_id"][0]) == 24
     assert int(out["action_frame"][0]) == int(ref["action_frame"][0]) == 0
+
+
+def test_opening_lock_clear_held_stick_landing_enters_walk_not_dash_game83() -> None:
+    # Game_20260514T181413:83 is the no-button horizontal hold companion to MAJ:83.
+    # The final x221D_b4-locked frame saved the physical previous-stick sample, but also reset
+    # x670 to 0xFE through Fighter_UnkInitLoad_80068914_Inner1. At the frame -40 clear boundary,
+    # Landing_IASA can read the current stick but must not classify the held stick as a dash flick.
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_Spaghetti_8006AD10,
+    #   Fighter_UnkInitLoad_80068914_Inner1}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_IASA
+    root = Path(__file__).resolve().parents[1]
+    ds = _dataset_selfplay_181413(root)
+    out = _step_one(ds, 83)
+    ref = ds.samples[83]["ref_t1"]
+
+    assert int(ds.samples[83]["seed_t"]["opening_input_lock_timer"][0]) == 1
+    assert int(ds.samples[83]["seed_t"]["frame_id"]) == -40
+    assert int(ds.samples[83]["prev_input_t"]["p"][0]["main_x"]) == 65
+    assert int(ds.samples[83]["input_t"]["p"][0]["main_x"]) == 80
+    assert int(out["action_id"][0]) == int(ref["action_id"][0]) == 15
+    assert float(out["speed_ground_x_self"][0]) == pytest.approx(float(ref["speed_ground_x_self"][0]), abs=1e-6)
+    assert float(out["pos_x"][0]) == pytest.approx(float(ref["pos_x"][0]), abs=1e-6)
+
+
+def test_opening_lock_clear_fresh_stick_landing_can_still_dash() -> None:
+    # Adjacent negative: if the previous physical stick was not already over the tilt threshold, the
+    # frame -40 clear is a fresh threshold crossing and x670 remains dash-fresh.
+    root = Path(__file__).resolve().parents[1]
+    ds = _dataset_selfplay_181413(root)
+
+    def fresh_flick(prev_input: np.ndarray, cur_input: np.ndarray) -> None:
+        prev_input["p"][0]["main_x"] = np.int8(0)
+        cur_input["p"][0]["main_x"] = np.int8(80)
+        prev_input["p"][0]["buttons"] = np.uint16(0)
+        cur_input["p"][0]["buttons"] = np.uint16(0)
+
+    out = _step_one(ds, 83, mutate_input=fresh_flick)
+    assert int(out["action_id"][0]) == 20
+    assert int(out["action_frame"][0]) == 1
 
 
 def test_opening_lock_timer_two_still_blocks_landing_jump_edge() -> None:

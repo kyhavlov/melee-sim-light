@@ -547,6 +547,27 @@ int input_apply(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev_in
       batch->state.tilt_timer_x[idx] = tilt_timer_x_next;
       batch->state.tilt_timer_y[idx] = tilt_timer_y_next;
 
+      // Opening-countdown final clear:
+      // - While fp->x221D_b4 is set, Fighter_Spaghetti saves physical stick into input.x630/x634,
+      //   then Fighter_UnkInitLoad_80068914_Inner1 blanks the live input lanes and resets x670/x671
+      //   to 0xFE.
+      // - On the frame -40 clear boundary, the saved physical previous-stick sample becomes legal
+      //   input history, but a held stick must keep the reset x670/x671 value from the prior locked
+      //   frame. A fresh threshold crossing on the clear frame still gets timer 0 and may dash.
+      // refs/melee/src/melee/ft/fighter.c::{Fighter_Spaghetti_8006AD10,
+      //   Fighter_UnkInitLoad_80068914_Inner1}
+      // refs/melee/src/melee/gm/gm_16AE.c::fn_8016B7F8
+      if (batch->state.opening_input_lock_timer[bi] == 1u && batch->state.frame_id[bi] == -40) {
+        if ((stick_x >= com->lstick_tilt_x_thresh && prev_stick_x >= com->lstick_tilt_x_thresh) ||
+            (stick_x <= -com->lstick_tilt_x_thresh && prev_stick_x <= -com->lstick_tilt_x_thresh)) {
+          batch->state.tilt_timer_x[idx] = 0xFEu;
+        }
+        if ((stick_y >= com->lstick_tilt_y_thresh && prev_stick_y >= com->lstick_tilt_y_thresh) ||
+            (stick_y <= -com->lstick_tilt_y_thresh && prev_stick_y <= -com->lstick_tilt_y_thresh)) {
+          batch->state.tilt_timer_y[idx] = 0xFEu;
+        }
+      }
+
       // UCF sdrop-up helper counter (`sdrop_up_frames`) lives in the pad buffer shared state.
       // refs/ucf/src/pad_buffer/pad_buffer.cpp::{check_ucf_sdrop, check_sdrop_up}
       //

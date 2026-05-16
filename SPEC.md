@@ -3148,10 +3148,13 @@ Fox/Falco special-owner split (2026-04-17):
     frame `-40`, value `1` represents the VS-overlay clear that runs before raw frame `-39` inputs,
     so that current input is visible to `Fighter_procUpdate`. This lets
     `Landing_IASA -> ftCo_Jump_CheckInput` consume the first legal jump edge at the VS-start
-    boundary and prevents a grounded/aerial SpecialN split one frame later. Other locked states
-    still blank inputs through
+    boundary and prevents a grounded/aerial SpecialN split one frame later. The prior locked frame
+    still saved physical stick into `input.x630/x634` before resetting x670/x671 to `0xFE`, so a
+    held horizontal stick on the clear boundary can walk but must not become a fresh dash flick; a
+    true threshold crossing on the clear frame remains dash-eligible. Other locked states still
+    blank inputs through
     `Fighter_UnkInitLoad_80068914_Inner1`. Sources:
-    `refs/melee/src/melee/ft/fighter.c::{Fighter_procUpdate,Fighter_UnkInitLoad_80068914_Inner1}`,
+    `refs/melee/src/melee/ft/fighter.c::{Fighter_procUpdate,Fighter_Spaghetti_8006AD10,Fighter_UnkInitLoad_80068914_Inner1}`,
     `refs/melee/src/melee/gm/gm_16AE.c::fn_8016B7F8`,
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_IASA`.
   - SpecialLw Loop/Turn/End IASA can consume aerial jump into `JumpAerial*`; that same callback
