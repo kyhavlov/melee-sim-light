@@ -21,6 +21,41 @@ uv pip install -e python
 `make build` is incremental by default. Use `make build BUILD_FORCE=1` only
 when you need to force a full extension rebuild.
 
+## Parallel Worktrees
+
+For parallel bug-fix work, create a sibling worktree on its own branch:
+
+```bash
+git worktree add -b bugfix/my-topic ../melee-sim-light-my-topic HEAD
+cd ../melee-sim-light-my-topic
+uv sync --dev
+make build
+```
+
+Large local assets are intentionally ignored. To avoid duplicating them, use
+hardlinks for files that tooling treats as repo-local inputs and symlinks for
+read-only source/reference trees:
+
+```bash
+cp -al ../melee-sim-light/datasets datasets
+cp -al ../melee-sim-light/replays/debug replays/debug
+rsync -a ../melee-sim-light/data/ data/
+ln -s ../melee-sim-light/_iso _iso
+find ../melee-sim-light/refs -mindepth 1 -maxdepth 1 -printf '%f\n' |
+  while read -r name; do
+    [ -e "refs/$name" ] || ln -s "../../melee-sim-light/refs/$name" "refs/$name"
+  done
+```
+
+Keep these local links out of `git status` with worktree-local excludes:
+
+```bash
+printf '/datasets\n/_iso\n' >> "$(git rev-parse --git-path info/exclude)"
+```
+
+`datasets/` can be a symlink for many commands, but hardlinks are safer because
+some triage/reporting tools intentionally print repo-relative dataset paths.
+
 ## Core Validation
 
 Fast guardrails:

@@ -30,7 +30,7 @@ from tools.eval.mismatch_taxonomy import (
 )
 from tools.eval.run_longest_rollout_streaks import _parse_csv, _parse_players, _validate_discrete_fields
 from tools.eval.validation_profile import ValidationProfile, get_validation_profile, validation_profile_names
-from tools.slippi.suite_io import dataset_path_for_suite_replay, load_suite, repo_root
+from tools.slippi.suite_io import display_path_under_repo, dataset_path_for_suite_replay, load_suite, repo_root
 
 
 DEFAULT_DISCRETE_FIELDS = (
@@ -834,7 +834,7 @@ def main() -> None:
             replay_rel_path=entry.replay,
             datasets_dir=str(args.datasets_dir),
         )
-        rel = str(ds_path.resolve().relative_to(root))
+        rel = display_path_under_repo(ds_path, root)
         if str(args.dataset_filter) and str(args.dataset_filter) not in rel:
             continue
         if ds_path.exists():
