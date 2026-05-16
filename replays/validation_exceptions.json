@@ -15,6 +15,32 @@
       "reason": "Reviewed package-boundary residual: offscreen magnifier/camera percent ownership can perturb this non-RL gameplay action selection. Keep raw validation visible; treat as accepted only for discrete rollout completion review."
     },
     {
+      "dataset": "Game_20260515T182447_frozenps.msl",
+      "record": 4665,
+      "player": 0,
+      "field": "action_id",
+      "subindex": -1,
+      "seed": 90,
+      "out": 4,
+      "ref": 6,
+      "seeded_break": false,
+      "category": "open_rng_phase_top_blast_deadupfall",
+      "reason": "Reviewed 182447 burn-down residual: DamageFlyTop crosses the top blast boundary and ftCo_800D3158 selects DeadUpFall vs DeadUpStar through HSD_Randi(100)+1 / Camera_8003010C. The deterministic pre-gate state is the same top-blast DamageFlyTop setup; exact HSD stream phase is out of scope for RL 1.0 replay rollout matching."
+    },
+    {
+      "dataset": "Game_20260515T182447_frozenps.msl",
+      "record": 4665,
+      "player": 0,
+      "field": "action_id",
+      "subindex": -1,
+      "seed": 90,
+      "out": 4,
+      "ref": 6,
+      "seeded_break": true,
+      "category": "open_rng_phase_top_blast_deadupfall",
+      "reason": "Reviewed 182447 burn-down seeded retry residual: DamageFlyTop crosses the top blast boundary and ftCo_800D3158 selects DeadUpFall vs DeadUpStar through HSD_Randi(100)+1 / Camera_8003010C. The deterministic pre-gate state is the same top-blast DamageFlyTop setup; exact HSD stream phase is out of scope for RL 1.0 replay rollout matching."
+    },
+    {
       "dataset": "HungryImportantSnake.msl",
       "record": 4397,
       "player": 0,

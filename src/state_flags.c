@@ -210,6 +210,12 @@ static inline uint8_t state_flags_221f_dead_start_action(uint16_t action_id) {
   }
 }
 
+static inline uint8_t state_flags_221f_dead_up_fall_hitcamera_action(uint16_t action_id) {
+  return (uint8_t)(action_id == (uint16_t)MSL_ACT_DEAD_UP_FALL_HIT_CAMERA ||
+                   action_id == (uint16_t)MSL_ACT_DEAD_UP_FALL_HIT_CAMERA_FLAT ||
+                   action_id == (uint16_t)MSL_ACT_DEAD_UP_FALL_HIT_CAMERA_ICE);
+}
+
 static inline uint8_t state_flags_match_flow_respawn_action(uint16_t action_id) {
   return (uint8_t)(action_id == (uint16_t)MSL_ACT_REBIRTH ||
                    action_id == (uint16_t)MSL_ACT_REBIRTH_WAIT);
@@ -1091,6 +1097,19 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
         //   `dead_up_star_phase2_frames` remaining.
         // refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s::ftCo_DeadUpStar_Anim
         // data/common/ft_common_data.json: dead_up_star_phase2_frames
+        f221f |= (uint8_t)MSL_STATE_FLAG_221F_B1;
+      }
+      if (state_flags_221f_dead_up_fall_hitcamera_action(action_id) != 0u && c != NULL &&
+          batch->state.match_flow_timer[idx] <= (uint8_t)(c->dead_up_fall_phase4_frames > 255u
+                                                              ? 255u
+                                                              : c->dead_up_fall_phase4_frames)) {
+        // DeadUpFallHitCamera phase-3 expiry latch:
+        // - ftCo_DeadUpFall_Anim case 3 sets fp->x221F_b1 and calls ftCo_800D34E0,
+        // - match_flow_update_pre_anim decrements the shared countdown and applies the stock-loss
+        //   side effect at the same phase-3 -> phase-4 boundary, and
+        // - replay-visible post-frames carry x221F_b1 from that boundary through the phase-4 hold.
+        // refs/melee/src/melee/ft/ft_0D31.c::{ftCo_DeadUpFall_Anim,ftCo_800D34E0}
+        // data/common/ft_common_data.json: dead_up_fall_phase4_frames
         f221f |= (uint8_t)MSL_STATE_FLAG_221F_B1;
       }
       if (action_id == (uint16_t)MSL_ACT_ENTRY_START) {

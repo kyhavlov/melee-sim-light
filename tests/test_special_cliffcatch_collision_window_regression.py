@@ -376,6 +376,76 @@ def test_cliff_owned_damage_entry_runtime_cooldown_blocks_rollout_false_regrab()
 
 
 @pytest.mark.integration
+def test_late_jumpaerial_escapeair_consumes_locked_desired_bottom_for_frozenps_floor_landing() -> None:
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    slp_path = root / SELFPLAY_182447_SLP
+    if not slp_path.exists():
+        pytest.skip(f"missing local replay: {slp_path}")
+
+    ds = build_dataset_from_slp(
+        slp_path=str(slp_path),
+        ports=[1, 2],
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+
+    p = 1
+    seed, ref, out = _run_one_step_from_dataset(ds, 4598)
+    assert int(seed["action_id"][p]) == 236  # EscapeAir, entered from late JumpAerialF.
+    assert int(seed["seed_prev_action_id"][p]) == 27
+    assert int(seed["seed_prev_action_frame"][p]) == 3
+    assert int(ref["action_id"][p]) == 43  # LandingFallSpecial.
+    assert int(out["action_id"][p]) == int(ref["action_id"][p])
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 1
+
+    rollout_ref, rollout_out = _run_rollout_from_dataset(ds, 4590, 4598)
+    # Source owner:
+    # - JumpAerial -> EscapeAir IASA can preserve CollData.desired_ecb.bottom into the first
+    #   EscapeAir callback when the post-Anim sweep is still above the floor.
+    # - The following EscapeAir_Coll callback consumes the preserved desired-bottom crossing as a
+    #   one-frame floor-publication owner; sustained EscapeAir continuations cannot reuse it as stale
+    #   CollData authority.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    # refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_inline
+    assert int(rollout_ref["action_id"][p]) == 43
+    assert int(rollout_out["action_id"][p]) == int(rollout_ref["action_id"][p])
+    assert int(rollout_out["on_ground"][p]) == int(rollout_ref["on_ground"][p]) == 1
+
+
+@pytest.mark.integration
+def test_deadupfall_hitcamera_phase4_sets_221f_b1_on_stock_loss_boundary() -> None:
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    slp_path = root / SELFPLAY_182447_SLP
+    if not slp_path.exists():
+        pytest.skip(f"missing local replay: {slp_path}")
+
+    ds = build_dataset_from_slp(
+        slp_path=str(slp_path),
+        ports=[1, 2],
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+
+    p = 0
+    _, ref_before, out_before = _run_one_step_from_dataset(ds, 4758)
+    assert int(ref_before["action_id"][p]) == 7  # DeadUpFallHitCamera.
+    assert int(ref_before["stocks"][p]) == 4
+    assert int(ref_before["state_flags"][p][4] & 0x40) == 0
+    assert int(out_before["state_flags"][p][4] & 0x40) == 0
+
+    seed, ref, out = _run_one_step_from_dataset(ds, 4759)
+    assert int(seed["action_id"][p]) == 7
+    assert int(seed["match_flow_timer"][p]) == 36
+    assert int(ref["stocks"][p]) == 3
+    assert int(ref["state_flags"][p][4] & 0x40) == 0x40
+    assert int(out["stocks"][p]) == int(ref["stocks"][p])
+    assert int(out["state_flags"][p][4] & 0x40) == 0x40
+
+
+@pytest.mark.integration
 def test_missfoot_anim_end_enters_damagefall_from_floor_loss_replay_real_lock() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)

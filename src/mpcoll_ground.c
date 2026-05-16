@@ -7754,24 +7754,45 @@ void mpcoll_ground_apply(MslBatch* batch) {
                (escapeair_projection_line_y + k_floor_y_bias))
               ? 1u
               : 0u;
+      const uint8_t escapeair_late_jumpaerial_desired_bottom_nonplatform_crossing =
+          (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR && ecb_lock_timer_seed > 1u &&
+           escapeair_projection_line_idx >= 0 && escapeair_projection_line_y_valid != 0u &&
+           batch->state.coll_desired_ecb_bottom_valid[idx] != 0u &&
+           (batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
+            batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_AERIAL_B) &&
+           batch->state.seed_prev_action_frame[idx] == 3 && batch->state.action_frame[idx] <= 2 &&
+           g->lines[(size_t)escapeair_projection_line_idx].segment_i ==
+               batch->state.ground_id[idx] &&
+           !stage_collision_floor_line_is_platform(
+               stage_id, g->lines[(size_t)escapeair_projection_line_idx].segment_i) &&
+           (prev_y + batch->state.coll_desired_ecb_bottom_rel_y[idx]) >
+               (escapeair_projection_line_y + k_floor_y_bias) &&
+           (y + batch->state.coll_desired_ecb_bottom_rel_y[idx]) <=
+               (escapeair_projection_line_y + k_floor_y_bias))
+              ? 1u
+              : 0u;
       if (!on_ground && action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
           ((batch->state.action_frame[idx] >= 3 &&
             (batch->state.coll_desired_ecb_bottom_locked_owner[idx] == 2u ||
              batch->state.coll_desired_ecb_bottom_locked_owner[idx] == 3u)) ||
-           escapeair_seeded_desired_bottom_nonplatform_crossing) &&
+           escapeair_seeded_desired_bottom_nonplatform_crossing ||
+           escapeair_late_jumpaerial_desired_bottom_nonplatform_crossing) &&
           ecb_lock_timer_seed > 1u && escapeair_projection_line_idx >= 0 &&
           batch->state.speed_y_self[idx] <= 0.0f) {
         // EscapeAir_Coll's mpColl_800471F8 path can admit a connected hard-floor projection even
         // when the simplified bottom sweep has already moved below the line. Live JumpAerial ->
         // EscapeAir CollData owners (internal values 2/3) use root crossing; replay-seeded owner-1
-        // rows use the explicit desired-bottom lane and require that desired bottom to cross the
-        // carried non-platform floor this frame. Sustained seeded EscapeAir continuations are not
-        // retained here: without a fresh source desired-bottom producer they must not reuse a stale
-        // CollData slice as floor authority. Already-below locked bottoms are still rejected by the
-        // publication guard below. The accepted floor remains fighter-solid and non-platform;
-        // soft-platform pass-through is still owned by the explicit locked desired-bottom slice
-        // above.
+        // rows and the late JumpAerial IASA handoff use the explicit desired-bottom lane and
+        // require that desired bottom to cross the carried non-platform floor this frame. The late
+        // handoff stays on the same source ground segment; adjacent floor traversal is owned by the
+        // older source-specific EscapeAir slices above, not this first visible callback. Sustained
+        // seeded EscapeAir continuations are not retained here: without a fresh source
+        // desired-bottom producer they must not reuse a stale CollData slice as floor authority.
+        // Already-below locked bottoms are still rejected by the publication guard below. The
+        // accepted floor remains fighter-solid and non-platform; soft-platform pass-through is still
+        // owned by the explicit locked desired-bottom slice above.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_IASA
         // refs/melee/src/melee/ft/ft_081B.c::ft_80082C74
         // refs/melee/src/melee/mp/mpcoll.c::mpColl_800471F8
         // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor

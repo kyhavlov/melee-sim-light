@@ -121,24 +121,24 @@ rollout.float_top_downstream:
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:130
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/Game_20260515T182447_frozenps.msl ==
-rollout.status: NOT-CLEAN
-rollout.best_len: 4598
-rollout.streak_count: 4
-rollout.streak_len.median: 93
-rollout.streak_len.p90: 4598
-rollout.streak_len.p95: 4598
-rollout.streak_len.max: 4598
-rollout.first_mismatch_total: 3
-rollout.first_mismatch_seeded_total: 2
+rollout.status: ACCEPTED-CLEAN
+rollout.best_len: 4665
+rollout.streak_count: 2
+rollout.streak_len.median: 844
+rollout.streak_len.p90: 4665
+rollout.streak_len.p95: 4665
+rollout.streak_len.max: 4665
+rollout.first_mismatch_total: 1
+rollout.first_mismatch_seeded_total: 1
+rollout.approved_exception_total: 1
+rollout.approved_exception_seeded_total: 1
+rollout.approved_exceptions: rec=4665 p=0 seeded=0 action_id[-1] seed/out/ref=90/4/6 category=open_rng_phase_top_blast_deadupfall ; rec=4665 p=0 seeded=1 action_id[-1] seed/out/ref=90/4/6 category=open_rng_phase_top_blast_deadupfall
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
-  1. pos_y max_err=51.0999 rec=4758 p=0 seed/ref/out=181.114/181.114/130.014 actions=7/7/7 category=unclassified
+  1. pos_y max_err=110.6 rec=4793 p=0 seed/ref/out=181.114/181.114/70.5137 actions=7/7/7 category=unclassified
   2. speed_y_self max_err=1.7 rec=4732 p=0 seed/ref/out=0/0/-1.7 actions=7/7/7 category=unclassified
   3. pos_x max_err=0.982033 rec=1429 p=1 seed/ref/out=88.3002/88.5745/89.5565 actions=251/251/251 category=unclassified
-rollout.float_top_downstream:
-  1. pos_y max_err=52.7999 rec=4759 p=0 seed/ref/out=181.114/181.114/128.314 actions=7/7/7 category=downstream_discrete_mismatch
-  2. speed_ground_x_self max_err=1.77555 rec=4598 p=1 seed/ref/out=0/1.77555/0 actions=236/43/236 category=downstream_discrete_mismatch
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:4152
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:4219
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/HilariousVillainousGiraffe.msl ==
 rollout.status: NOT-CLEAN
@@ -310,23 +310,23 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:4058
 == datasets/aggregate_recent/replays/validation/battlefield_recent/DelayedSuperbGuanaco.msl ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 1417
-rollout.streak_count: 35
+rollout.streak_count: 34
 rollout.streak_len.median: 245
 rollout.streak_len.p90: 923
 rollout.streak_len.p95: 1401
 rollout.streak_len.max: 1417
-rollout.first_mismatch_total: 36
-rollout.first_mismatch_seeded_total: 21
+rollout.first_mismatch_total: 35
+rollout.first_mismatch_seeded_total: 20
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_y max_err=116.809 rec=7120 p=1 seed/ref/out=36.0399/34.1441/150.953 actions=7/7/7 category=unclassified
   2. pos_x max_err=97.6073 rec=7084 p=1 seed/ref/out=-23.8929/-22.2303/-119.838 actions=7/7/7 category=unclassified
   3. shield_hp max_err=4.9 rec=3562 p=1 seed/ref/out=59.16/59.16/54.26 actions=181/181/181 category=unclassified
 rollout.float_top_downstream:
-  1. pos_y max_err=115.277 rec=7121 p=1 seed/ref/out=34.1441/33.9756/149.253 actions=7/7/7 category=downstream_discrete_mismatch
-  2. percent max_err=18 rec=11784 p=1 seed/ref/out=116.52/116.52/134.52 actions=29/29/90 category=downstream_discrete_mismatch
-  3. shield_hp max_err=10.5 rec=4591 p=1 seed/ref/out=60/59.72/49.22 actions=178/178/181 category=downstream_discrete_mismatch
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:3748
+  1. percent max_err=18 rec=11784 p=1 seed/ref/out=116.52/116.52/134.52 actions=29/29/90 category=downstream_discrete_mismatch
+  2. shield_hp max_err=10.5 rec=4591 p=1 seed/ref/out=60/59.72/49.22 actions=178/178/181 category=downstream_discrete_mismatch
+  3. speed_y_attack max_err=8.37927 rec=11784 p=1 seed/ref/out=0/0/8.37927 actions=29/29/90 category=downstream_discrete_mismatch
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:3782
 
 == datasets/aggregate_recent/replays/validation/battlefield_recent/LoyalDishonestWren.msl ==
 rollout.status: NOT-CLEAN
@@ -562,23 +562,23 @@ rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:1
 == datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/CornyDelayedOkapi.msl ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 2714
-rollout.streak_count: 34
-rollout.streak_len.median: 195
-rollout.streak_len.p90: 854
+rollout.streak_count: 33
+rollout.streak_len.median: 199
+rollout.streak_len.p90: 948
 rollout.streak_len.p95: 1687
 rollout.streak_len.max: 2714
-rollout.first_mismatch_total: 34
-rollout.first_mismatch_seeded_total: 20
+rollout.first_mismatch_total: 33
+rollout.first_mismatch_seeded_total: 19
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_y max_err=115.515 rec=2039 p=1 seed/ref/out=16.4803/14.6051/130.12 actions=7/7/7 category=unclassified
   2. pos_x max_err=114.425 rec=1967 p=1 seed/ref/out=17.013/17.026/-97.3991 actions=6/6/6 category=unclassified
   3. percent max_err=2 rec=6494 p=0 seed/ref/out=136.8/136.8/134.8 actions=354/354/354 category=unclassified
 rollout.float_top_downstream:
-  1. pos_y max_err=113.966 rec=2040 p=1 seed/ref/out=14.6051/14.4538/128.42 actions=7/7/7 category=downstream_discrete_mismatch
-  2. percent max_err=15 rec=3148 p=0 seed/ref/out=88.67/103.67/88.67 actions=68/91/68 category=downstream_discrete_mismatch
-  3. shield_hp max_err=7.7 rec=3902 p=1 seed/ref/out=59.72/59.44/51.74 actions=178/178/181 category=downstream_discrete_mismatch
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:6514
+  1. percent max_err=15 rec=3148 p=0 seed/ref/out=88.67/103.67/88.67 actions=68/91/68 category=downstream_discrete_mismatch
+  2. shield_hp max_err=7.7 rec=3902 p=1 seed/ref/out=59.72/59.44/51.74 actions=178/178/181 category=downstream_discrete_mismatch
+  3. speed_x_attack max_err=4.54633 rec=3980 p=0 seed/ref/out=0.280998/-4.27066/0.275667 actions=90/91/90 category=downstream_discrete_mismatch
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:6548
 
 == datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/SweatyThisMallard.msl ==
 rollout.status: NOT-CLEAN
@@ -708,16 +708,16 @@ rollout.float_top_downstream:
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:2269
 
 == suite summary ==
-overall.rollout.streak_count: 679
-overall.rollout.streak_len.median: 244
+overall.rollout.streak_count: 675
+overall.rollout.streak_len.median: 245
 overall.rollout.streak_len.p90: 1085
 overall.rollout.streak_len.p95: 1443
 overall.rollout.streak_len.max: 5727
 overall.rollout.best_len.max: 5727
-overall.rollout.first_mismatch_total: 689
-overall.rollout.first_mismatch_seeded_total: 340
-overall.rollout.approved_exception_total: 3
-overall.rollout.approved_exception_seeded_total: 1
+overall.rollout.first_mismatch_total: 685
+overall.rollout.first_mismatch_seeded_total: 337
+overall.rollout.approved_exception_total: 4
+overall.rollout.approved_exception_seeded_total: 2
 overall.rollout.status: NOT-CLEAN
 overall.rollout.approved_float_exception_total: 1
 overall.rollout.float_top_errors:
@@ -725,8 +725,8 @@ overall.rollout.float_top_errors:
   2. pos_x max_err=114.425 rec=1967 p=1 seed/ref/out=17.013/17.026/-97.3991 actions=6/6/6 category=unclassified
   3. shield_hp max_err=11.2 rec=8589 p=1 seed/ref/out=59.44/59.16/47.96 actions=182/181/181 category=unclassified
 overall.rollout.float_top_downstream:
-  1. pos_y max_err=115.277 rec=7121 p=1 seed/ref/out=34.1441/33.9756/149.253 actions=7/7/7 category=downstream_discrete_mismatch
-  2. pos_x max_err=102.951 rec=5966 p=1 seed/ref/out=-86.7898/-88.1059/14.8449 actions=88/88/191 category=downstream_discrete_mismatch
-  3. percent max_err=18 rec=9999 p=1 seed/ref/out=114.47/114.47/132.47 actions=90/90/90 category=downstream_discrete_mismatch
-overall.rollout.ignored_first_mismatch_top: state_flags[4]&0x80:107958
+  1. pos_x max_err=102.951 rec=5966 p=1 seed/ref/out=-86.7898/-88.1059/14.8449 actions=88/88/191 category=downstream_discrete_mismatch
+  2. percent max_err=18 rec=9999 p=1 seed/ref/out=114.47/114.47/132.47 actions=90/90/90 category=downstream_discrete_mismatch
+  3. pos_y max_err=16.9414 rec=10395 p=0 seed/ref/out=78.8799/78.0198/94.9612 actions=4/4/4 category=downstream_discrete_mismatch
+overall.rollout.ignored_first_mismatch_top: state_flags[4]&0x80:108093
 overall.rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:2

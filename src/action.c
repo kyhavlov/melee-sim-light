@@ -185,7 +185,8 @@ uint8_t escape_air_try_enter_from_air_locomotion(MslBatch* batch, const MslCommo
     // platform air dodges, and zero-bottom air-dodge entries keep their ordinary EscapeAir floor
     // handoff; if the entered EscapeAir root is already deep enough that bottom.y crosses the floor
     // this frame, the normal floor publication path owns the immediate LandingFallSpecial
-    // transition instead.
+    // transition instead. Later EscapeAir_Coll callbacks still must consume a real
+    // desired-bottom crossing before publishing LandingFallSpecial.
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::{
     //   ftCo_80099A58,ftCo_EscapeAir_Coll}
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_IASA

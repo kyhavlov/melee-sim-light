@@ -6002,6 +6002,21 @@ BODY collision-space residual split and rejected seed bridge:
   without a fresh edge does not enter Appeal. `ftCo_800DEAE8` selects AppealSL only when the left
   animation exists; Fox/Falco FD extracted anim data has no common AppealSL timeline, so facing-left
   rows still enter common AppealSR. HVG `588..619` locks the rollout branch.
+- Late JumpAerial -> EscapeAir floor admission consumes CollData.desired_ecb.bottom as a one-frame
+  `EscapeAir_Coll` publication owner when the post-Anim JumpAerial IASA sweep remains above a
+  non-platform floor and the following EscapeAir callback crosses that desired bottom through the
+  floor. Sustained EscapeAir continuations cannot reuse that source slice unless the current
+  callback reestablishes a fresh desired-bottom crossing. The 182447 frozen-PS replay locks the
+  positive `EscapeAir -> LandingFallSpecial` floor row.
+- DeadUpFallHitCamera publishes `fp->x221F_b1` at the phase-3 expiry boundary, the same
+  `ftCo_DeadUpFall_Anim` case that calls `ftCo_800D34E0` for stock loss. MSL uses the shared
+  DeadUpFall phase countdown from `data/common/ft_common_data.json` so the post-frame that first
+  loses stock also carries x221F_b1; the preceding phase-3 hold stays clear.
+- Top-blast DeadUpFall vs DeadUpStar selection remains exact RNG-stream-phase debt. The source gate
+  is `ftCo_800D3158` using `HSD_Randi(100)+1` and `Camera_8003010C`; deterministic pre-gate
+  top-blast DamageFlyTop state is modeled, but replay-exact HSD RNG phase is outside RL 1.0
+  rollout closure. Reviewed residual rows are kept in `replays/validation_exceptions.json` as
+  report-level approved exceptions, not simulator behavior.
 - Source anchors:
   - `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}`
   - `refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}`
@@ -6026,5 +6041,9 @@ BODY collision-space residual split and rejected seed bridge:
   - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_MissFoot.c::ftCo_8009F39C`
   - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_AppealS.c::{ftCo_800DE9B8,ftCo_800DE9D8,ftCo_800DEAE8,ftCo_AppealS_Anim}`
   - `refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_procMap}`
+  - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_IASA`
+  - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll`
+  - `refs/melee/src/melee/ft/ft_081B.c::ft_80082C74`
+  - `refs/melee/src/melee/ft/ft_0D31.c::{ftCo_DeadUpFall_Anim,ftCo_800D3158,ftCo_800D34E0}`
   - `refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_JObj,mpColl_80044E10_RightWall,mpColl_800454A4_RightWall,mpColl_80045B74_LeftWall,mpColl_80046224_LeftWall}`
   - `refs/melee/src/melee/gr/forward.h::{FLATZONE,LAST}`
