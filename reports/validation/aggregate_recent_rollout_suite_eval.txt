@@ -113,7 +113,7 @@ rollout.float_status: NOT-CLEAN
 rollout.approved_float_exception_total: 1
 rollout.float_top_errors:
   1. percent max_err=1 rec=2463 p=0 seed/ref/out=89.5214/90.5214/89.5214 actions=38/38/38 category=open_magnify
-  2. shield_hp max_err=0.279999 rec=1169 p=0 seed/ref/out=58.88/58.67/58.95 actions=178/235/235 category=unclassified
+  2. shield_hp max_err=0.00224304 rec=1917 p=1 seed/ref/out=57.535/57.42/57.4222 actions=179/24/24 category=unclassified
   3. pos_x max_err=4.57764e-05 rec=2703 p=0 seed/ref/out=132.126/133.616/133.616 actions=88/88/88 category=unclassified
 rollout.float_top_downstream:
   1. speed_y_attack max_err=0.0442023 rec=2629 p=0 seed/ref/out=0/5.69474/5.65053 actions=21/88/91 category=downstream_discrete_mismatch

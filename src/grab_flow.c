@@ -20,6 +20,35 @@ static inline void capturewait_anim_callback_apply(MslBatch* batch, const MslCom
 static inline uint8_t capture_family_frame_start_matches_current_action(const MslBatch* batch,
                                                                         size_t idx);
 
+static inline void catch_connect_apply_post_shield_release_recharge(MslBatch* batch,
+                                                                    const MslCommonParams* c,
+                                                                    size_t vidx,
+                                                                    uint16_t pre_connect_action) {
+  if (batch == NULL || c == NULL || msl_action_is_live_shield_family(pre_connect_action) == 0u) {
+    return;
+  }
+  // Catch-connect runs after the frame's Guard*_Anim drain and installs CapturePulled* before the
+  // late Fighter_ProcessHit pass. Once fn_800DAADC leaves the live ShieldDesc family, the shared
+  // `!fp->x221A_b7` shield-health recharge gate is true for the same post-frame.
+  // Use the shared GuardOn/Guard/GuardSetOff/GuardReflect family predicate: GuardSetOff is still
+  // shield-owned in source (`GuardDamage` motion with live shield state) until capture entry exits
+  // that family, so it must not drift from other ShieldDesc owners.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_UnkProcessGrab_8006CA5C,Fighter_ProcessHit_8006D1EC}
+  // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::fn_800DAADC
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_Anim,ftCo_Guard_Anim,ftCo_GuardSetOff_Anim,ftCo_800925A4}
+  if (batch->state.stocks[vidx] == 0u) {
+    return;
+  }
+  float hp = batch->state.shield_hp[vidx];
+  if (hp < c->start_shield_health) {
+    hp += c->shield_recharge_per_frame;
+    if (hp > c->start_shield_health) {
+      hp = c->start_shield_health;
+    }
+    batch->state.shield_hp[vidx] = hp;
+  }
+}
+
 static inline void clear_outgoing_hitboxes_after_catch_connect(MslBatch* batch, int bi, int p) {
   if (batch == NULL || bi < 0 || bi >= batch->batch_size || p < 0 ||
       p >= (int)batch->config.num_players) {
@@ -1308,6 +1337,8 @@ void grab_flow_on_catch_connect(MslBatch* batch, int bi, int owner_p, int victim
       batch->state.action_id[vidx] == (uint16_t)MSL_ACT_CAPTURE_PULLED_HI) {
     batch->state.last_hit_by[vidx] = 6u;
   }
+  catch_connect_apply_post_shield_release_recharge(batch, msl_common_params(), vidx,
+                                                   victim_pre_connect_action);
   enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
   enum { MSL_STATE_FLAG_221C_IS_HITSTUN = 0x02 };
   const size_t flags_i = vidx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;

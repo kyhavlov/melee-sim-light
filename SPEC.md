@@ -231,6 +231,20 @@ sim-owned**:
   refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_IASA,
   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::ftCo_Attack12_IASA,
   refs/melee/src/melee/ft/fighter.c::Fighter_Spaghetti_8006AD10).
+- Shield HP drain/recharge ordering keeps Guard entry provenance transient to the immediate
+  `GuardOn`/spotdodge callback window after entry. A frozen no-submotion `GuardOn` row can still
+  use its frame-start lightshield owner for the current drain, but the `Wait_IASA -> GuardOn` entry
+  marker is consumed after that short handoff window so it cannot stale-carry into later
+  `GuardOn_IASA` decisions.
+  Expired no-submotion `GuardReflect` terminal rows likewise drain from the frame-start
+  GuardOn/Reflect snapshot before refreshing the stored lightshield owner for the following Guard
+  row. If a catch connects after Guard* Anim drain and leaves the victim in `CapturePulled*`, the
+  same post-frame shield recharge gate applies because the live ShieldDesc family has been exited
+  before late `Fighter_ProcessHit`.
+  (`src/action.c`, `src/grab_flow.c`;
+  refs/melee/src/melee/ft/fighter.c::{Fighter_procUpdate,Fighter_UnkProcessGrab_8006CA5C,Fighter_ProcessHit_8006D1EC},
+  refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_800921DC,ftCo_800925A4,ftCo_GuardOn_IASA,ftCo_Guard_IASA,ftCo_GuardReflect_Anim},
+  refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::fn_800DAADC).
 - Shield bubble center is **data-driven** from ISO-derived shield-tilt tables and sim guard-tilt state.
   - Dash `x4` held-shield entry through `ftCo_Dash_IASA -> ftCo_80091AD8 -> ftCo_800923B4`
     installs `ShieldDesc` before item collision; same-step laser shield contact uses the live

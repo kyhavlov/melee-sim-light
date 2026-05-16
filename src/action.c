@@ -558,15 +558,7 @@ void escape_update_grounded(MslBatch* batch, const MslCommonParams* c, const Msl
 // --------
 
 static inline uint8_t is_shield_active_action(uint16_t a) {
-  switch (a) {
-    case MSL_ACT_GUARD_ON:
-    case MSL_ACT_GUARD:
-    case MSL_ACT_GUARD_REFLECT:
-    case MSL_ACT_GUARD_SET_OFF:
-      return 1;
-    default:
-      return 0;
-  }
+  return msl_action_is_live_shield_family(a);
 }
 
 static inline uint8_t guard_reflect_timer_x14_init(const MslCommonParams* c) {
@@ -790,7 +782,10 @@ static inline void enter_guard_on(MslBatch* batch, const MslCommonParams* c, siz
   batch->state.state_flags[flags_i] &= (uint8_t) ~(
       uint8_t)(MSL_STATE_FLAG_221C_B3 | MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2);
   batch->state.guard_on_entered_this_frame[idx] = 1u;
-  batch->state.guard_entry_via_wait_callback[idx] = entered_via_wait_callback ? 1u : 0u;
+  // Keep the entry-family marker through the entry callback row and its immediate frozen
+  // GuardOn_IASA handoff, then consume it below. The two ticks are runtime-only hidden source
+  // state from the same proc window, not a replay seed lane or a persistent GuardOn property.
+  batch->state.guard_entry_via_wait_callback[idx] = entered_via_wait_callback ? 2u : 0u;
   batch->state.guard_special_enable_timer_x1c[idx] = 0u;
   batch->state.guard_release_latched_xc[idx] = 0;
   batch->state.guard_x10[idx] = guard_x10_init_u8(c);
@@ -1547,6 +1542,14 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
              batch->state.animation_index[idx] == 0xFFFFFFFFu && batch->state.action_frame[idx] < 0)
                 ? 1u
                 : 0u;
+        const uint8_t guardreflect_terminal_no_submotion_snapshot =
+            (a0 == (uint16_t)MSL_ACT_GUARD_REFLECT &&
+             batch->state.animation_index[idx] == 0xFFFFFFFFu &&
+             batch->state.action_frame[idx] <= -2 &&
+             batch->state.guard_reflect_timer_x14[idx] == 0u &&
+             batch->state.guard_reflect_timer_x18[idx] == 0u)
+                ? 1u
+                : 0u;
         const uint8_t guard_exit_to_guard_off_pending =
             (!guard_setoff_carry_snapshot && batch->state.guard_release_latched_xc[idx] &&
              x10_pre == 0)
@@ -1558,7 +1561,10 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
                 ? 1u
                 : 0u;
         const uint8_t guard_snapshot_refresh_drain_split =
-            (guard_no_submotion_snapshot && trig > c->trigger_deadzone) ? 1u : 0u;
+            ((guard_no_submotion_snapshot || guardreflect_terminal_no_submotion_snapshot) &&
+             trig > c->trigger_deadzone)
+                ? 1u
+                : 0u;
         // Decomp timing note:
         // - GuardOn/Guard Anim drains shield through ftCo_800925A4 before the same frame's
         //   IASA callback can consume jump OoS via ftCo_800CB024.
@@ -1569,8 +1575,12 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
         //   the same negative-input latch that vanilla does.
         // - On that jump-consuming row, the drain still uses the pre-row lightshield owner rather
         //   than refreshing from the current trigger squeeze first.
+        // - Expired no-submotion GuardReflect terminal rows run the same GuardOn_Anim drain before
+        //   transitioning to Guard through ftCo_800928CC; the current trigger only refreshes the
+        //   stored lightshield owner for following Guard rows.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
-        //   ftCo_800921DC,ftCo_800925A4,ftCo_GuardOn_Anim,ftCo_Guard_Anim,ftCo_GuardOn_IASA,ftCo_Guard_IASA
+        //   ftCo_800921DC,ftCo_800925A4,ftCo_80093BC0,ftCo_GuardReflect_Anim,
+        //   ftCo_GuardOn_Anim,ftCo_Guard_Anim,ftCo_GuardOn_IASA,ftCo_Guard_IASA
         // }
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_800CB024
         // Runtime-only distinction: when a frozen GuardOn snapshot came from a same-frame
@@ -1592,6 +1602,13 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
           enter_shield_break_fly(batch, msl_char_params(batch->state.char_id[idx]), idx);
           return;
         }
+      }
+      // Consume the source "entered GuardOn through this callback family" marker after the first
+      // immediate GuardOn/spotdodge handoff window. Keeping it longer stale-carries the entry owner
+      // into unrelated later GuardOn_IASA rows.
+      if (batch->state.guard_entry_via_wait_callback[idx] > 0u) {
+        batch->state.guard_entry_via_wait_callback[idx] =
+            (uint8_t)(batch->state.guard_entry_via_wait_callback[idx] - 1u);
       }
 
       // Decomp: Guard IASA exits to GuardOff only once (xC && x10==0).

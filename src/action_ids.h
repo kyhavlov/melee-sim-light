@@ -551,6 +551,18 @@ typedef enum MslSubmotionId {
   MSL_SM_APPEAL_SL = 240,  // ftCo_SM_AppealSL
 } MslSubmotionId;
 
+static inline uint8_t msl_action_is_live_shield_family(uint16_t action_id) {
+  switch (action_id) {
+    case MSL_ACT_GUARD_ON:
+    case MSL_ACT_GUARD:
+    case MSL_ACT_GUARD_REFLECT:
+    case MSL_ACT_GUARD_SET_OFF:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
 static inline uint8_t msl_action_is_ground_locomotion(uint16_t action_id) {
   switch (action_id) {
     case MSL_ACT_WAIT:

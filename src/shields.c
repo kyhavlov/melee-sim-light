@@ -43,15 +43,7 @@ static inline float trigger_unit_from_input(uint16_t buttons, uint8_t l, uint8_t
 }
 
 static inline uint8_t is_shield_active_action(uint16_t a) {
-  switch (a) {
-    case MSL_ACT_GUARD_ON:
-    case MSL_ACT_GUARD:
-    case MSL_ACT_GUARD_REFLECT:
-    case MSL_ACT_GUARD_SET_OFF:
-      return 1;
-    default:
-      return 0;
-  }
+  return msl_action_is_live_shield_family(a);
 }
 
 static inline uint16_t clamp_u16(uint16_t x, uint16_t lo, uint16_t hi) {

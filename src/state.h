@@ -479,9 +479,10 @@ typedef struct MslStateSoA {
   // projectile shield precedence can distinguish same-step GuardOn entry from teacher-forced
   // frozen GuardOn seeds that merely replay as `animation_index==-1, action_frame==-1`.
   uint8_t* guard_on_entered_this_frame;
-  // Runtime-only owner bit for GuardOn entered through a same-frame `... -> Wait -> GuardOn`
-  // callback handoff. This survives the following frozen GuardOn snapshot row, where
-  // prev_action_id no longer identifies the callback source.
+  // Runtime-only owner countdown for GuardOn entered through a same-frame
+  // `... -> Wait -> GuardOn` callback handoff. This survives the immediate frozen
+  // GuardOn/spotdodge handoff window, where prev_action_id no longer identifies the callback
+  // source, then is consumed so later GuardOn rows cannot stale-carry entry provenance.
   uint8_t* guard_entry_via_wait_callback;
   // Runtime-only marker for GuardOn entered through Dash_IASA's `dash.x4 != 0` handoff into the
   // mid `ftCo_80091AD8` helper. Projectile item collision for that handoff frame has already
