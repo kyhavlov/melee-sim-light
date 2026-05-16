@@ -7855,6 +7855,29 @@ void mpcoll_ground_apply(MslBatch* batch) {
              batch->state.floor_sweep_prev_pos_y[idx] > contact_y && y < contact_y)
                 ? 1u
                 : 0u;
+        const uint8_t suppress_fall_same_floor_early_final_land =
+            // Final-publication guard for Fall_Coll's same-floor root-crossing edge:
+            // ftCo_Fall_Coll delegates landing to ft_80082B1C after mpColl's ECB-bottom floor
+            // sweep. A final root projection can see the FD ledge floor one frame before that
+            // callback publishes Landing; keep only the first same-floor ledge root crossing
+            // airborne and let the following deeper frame consume the normal landing path. Require
+            // monotonic Fall action-frame provenance so later loop-wrap Fall rows do not reuse the
+            // early-frame window. The center hard floor is deliberately excluded because ordinary
+            // Fall_Coll main-floor crossings publish Landing immediately.
+            // data/stages/bin/grnla.bin::MSLSTG01 ledge floor segment geometry
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Coll
+            // refs/melee/src/melee/ft/ft_081B.c::ft_80082B1C
+            // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpColl_80044838_Floor}
+            (action_id == (uint16_t)MSL_ACT_FALL &&
+             stage_id == (uint32_t)MSL_STAGE_FINAL_DESTINATION_LOCAL &&
+             batch->state.seed_prev_action_id[idx] == action_id &&
+             batch->state.seed_prev_action_frame[idx] <= batch->state.action_frame[idx] &&
+             batch->state.action_frame[idx] <= 5 && batch->state.speed_y_self[idx] < 0.0f &&
+             final_ground_line_idx >= 0 && (size_t)final_ground_line_idx < g->line_count &&
+             g->lines[(size_t)final_ground_line_idx].is_ledge && ground_id == seed_ground_id &&
+             batch->state.floor_sweep_prev_pos_y[idx] > contact_y && y < contact_y)
+                ? 1u
+                : 0u;
         uint8_t locked_desired_bottom_final_sweep_hit = 1u;
         if (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
             batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_ESCAPE_AIR &&
@@ -8130,6 +8153,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
         if (suppress_escapeair_transformed_remap_land || suppress_specialairhi_platform_land ||
             suppress_fallspecial_first_sustained_current_ecb_land ||
             suppress_fallspecial_same_floor_early_final_land ||
+            suppress_fall_same_floor_early_final_land ||
             suppress_specialhi_transformed_platform_land ||
             suppress_specialhi_understage_hard_floor_land ||
             suppress_specialhi_from_below_hard_floor_land ||
@@ -8157,7 +8181,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
           if (suppress_specialairhi_platform_land && batch->state.floor_skip_segment_id != NULL) {
             batch->state.floor_skip_segment_id[idx] = ground_id;
           } else if (suppress_fallspecial_first_sustained_current_ecb_land ||
-                     suppress_fallspecial_same_floor_early_final_land) {
+                     suppress_fallspecial_same_floor_early_final_land ||
+                     suppress_fall_same_floor_early_final_land) {
             batch->state.pos_y[idx] = y;
           } else if (suppress_specialhi_understage_hard_floor_land) {
             // Keep the rejected root outside the same live ECB neighborhood; otherwise the next frame

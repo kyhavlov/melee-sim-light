@@ -8082,7 +8082,7 @@ void items_spawn_pre_physics(MslBatch* batch) {
       if (is_blaster_throw && action_id == (uint16_t)MSL_ACT_THROW_LW &&
           item_type_is_falco_laser(lp->shot_itkind) &&
           batch->state.throw_pulse_crossed_curr_frame[idx] == 28u &&
-          batch->state.action_frame[idx] <= 28 && throw_seed_shot_count[p] == 0u) {
+          batch->state.action_frame[idx] <= 29 && throw_seed_shot_count[p] == 0u) {
         // Falco ThrowLw frame-28 attached BODY callback:
         // - The source predicate is the current ftAction command pulse consumed by ftFx_Throw_Anim
         //   (`throw_flags_b0`), represented either by explicit pending-command seed ownership in
@@ -8090,6 +8090,9 @@ void items_spawn_pre_physics(MslBatch* batch) {
         // - Do not require the explicit seed lane after `throw_pulse_crossed_curr_frame` proves the
         //   current frame-28 pulse; otherwise replay-seeded rollouts spawn the article but miss the
         //   same-frame attached BODY callback.
+        // - Under post-hitlag rollout, the same crossing can expose post-frame action_frame 29
+        //   after the frame-28 command is consumed. Keep ownership on the extracted pulse crossing,
+        //   with the visible action frame only bounding this immediate post-command row.
         // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
         // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
         // refs/melee/src/melee/it/itcoll.c::{it_8026FAC4,it_80272460}

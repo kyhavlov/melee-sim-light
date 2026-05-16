@@ -225,3 +225,76 @@ def test_throwlw_frame25_post_hitlag_qgd_rollout_control_does_not_hit_immediatel
     assert int(ref_row["hitlag"][victim_p]) == 0
     assert int(out_row["hitlag"][owner_p]) == 0
     assert int(out_row["hitlag"][victim_p]) == 0
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("rec", [448, 4099, 8116])
+def test_falco_throwlw_frame28_pulse_hits_when_step_visible_action_frame_is_29(
+    rec: int,
+) -> None:
+    # Positive lock for the Falco ThrowLw frame-28 pulse admitted by src/items.c through the
+    # immediate post-command action_frame 29 row. The replay seed starts on frame 28 with the
+    # extracted frame-28 pulse lane; after the Anim step the compare row is action_frame 29 and the
+    # attached BODY callback must apply hitlag in the same frame.
+    #
+    # refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+    # refs/melee/src/melee/it/itcoll.c::{it_8026FAC4,it_80272460}
+    # data/moves/falco.json moves["ftCo_SM_ThrowLw"].events
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_path = (
+        root
+        / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
+        / "QuerulousGrandDinosaur.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    owner_p = 0
+    victim_p = 1
+    seed, ref_row, out_row = _run_one_step_row(dataset_path, rec, owner_p)
+
+    assert int(seed["char_id"][owner_p]) == 22  # Falco
+    assert int(seed["action_id"][owner_p]) == 222  # ThrowLw
+    assert int(seed["action_id"][victim_p]) == 242  # ThrownLw
+    assert int(seed["grab_owner_port"][victim_p]) == owner_p
+    assert int(seed["action_frame"][owner_p]) == 28
+    assert int(seed["throw_pulse_crossed_prev_frame"][owner_p]) == 28
+    assert int(seed["throw_command_pending_pulse_frame"][owner_p]) == 0
+    assert int(ref_row["action_frame"][owner_p]) == 29
+    assert int(out_row["action_frame"][owner_p]) == 29
+    assert int(out_row["hitlag"][owner_p]) == int(ref_row["hitlag"][owner_p]) == 3
+    assert int(out_row["hitlag"][victim_p]) == int(ref_row["hitlag"][victim_p]) == 4
+
+
+@pytest.mark.integration
+def test_falco_throwlw_late_pulse_does_not_reuse_frame28_attached_callback_window() -> None:
+    # Negative lock for the same ThrowLw source family: frame-31 command ownership after
+    # action_frame 29 may spawn/serialize a laser, but must not reuse the frame-28 attached BODY
+    # callback gate or grow the <=29 window into later ThrowLw pulses.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_path = (
+        root
+        / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
+        / "QuerulousGrandDinosaur.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    rec = 453
+    owner_p = 0
+    victim_p = 1
+    seed, ref_row, out_row = _run_one_step_row(dataset_path, rec, owner_p)
+
+    assert int(seed["char_id"][owner_p]) == 22  # Falco
+    assert int(seed["action_id"][owner_p]) == 222  # ThrowLw
+    assert int(seed["action_frame"][owner_p]) == 30
+    assert int(seed["throw_command_pending_pulse_frame"][owner_p]) == 31
+    assert int(seed["throw_pulse_crossed_prev_frame"][owner_p]) == 0
+    assert int(out_row["hitlag"][owner_p]) == int(ref_row["hitlag"][owner_p]) == 0
+    assert int(out_row["hitlag"][victim_p]) == int(ref_row["hitlag"][victim_p]) == 0
+    assert int(out_row["items"][1]["exists"]) == int(ref_row["items"][1]["exists"]) == 1
