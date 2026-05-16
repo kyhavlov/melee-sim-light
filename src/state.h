@@ -262,8 +262,8 @@ typedef struct MslStateSoA {
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
   uint8_t* throw_command_deferred_pulse_frame;
   // Internal runtime producer for the current frame's throw pulse crossing.
-  // step.c promotes this to `throw_pulse_crossed_prev_frame` at end-of-frame so rollout can carry
-  // the same throw-side pulse ownership that one-step seeds expose directly.
+  // The frame scheduler promotes this to `throw_pulse_crossed_prev_frame` at end-of-frame so
+  // rollout can carry the same throw-side pulse ownership that one-step seeds expose directly.
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
   uint8_t* throw_pulse_crossed_curr_frame;
   // Source-owner clear countdown (`fp->dmg.x18C8`) with +1 bias.

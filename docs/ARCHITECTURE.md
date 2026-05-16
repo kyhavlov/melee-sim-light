@@ -16,8 +16,9 @@ Keep it updated as we add systems.
   - `api.h` / `api.c`: public C API + seed/compare packing
   - `config.h` / `config.c`: immutable runtime config (`MslConfig`)
   - `state.h` / `state.c`: hot SoA allocation/ownership (`MslStateSoA`)
-  - `step.h` / `step.c`: **frame scheduler** (ordered list of passes)
-  - `*.{h,c}` phases: `input`, `action`, `physics`, `stage_collision`, `hurtboxes`, `combat`, `items` (currently stubs)
+  - `step.h` / `step.c`: public step wrapper entry points
+  - `fighter_callbacks.h` / `fighter_callbacks.c`: **frame scheduler** (ordered list of passes)
+  - subsystem modules: `input`, `action`, `physics`, `stage_collision`, `hurtboxes`, `combat`, `items`
 - `python/`: CPython+NumPy extension (`msl_binding.c`) + build config
 - `tools/`: dataset generation and one-step suite validation
 
@@ -59,19 +60,22 @@ The “step” is structured as an explicit list of phases so we can:
 - move phases around without entangling code,
 - isolate correctness issues to a single pass.
 
-Current scheduler lives in `src/step.c` and calls passes in-order:
+Public callers enter through `src/step.c`; the actual scheduler lives in `src/fighter_callbacks.c`.
+It calls passes in decomp-shaped order:
 
-1. `input_apply` (input sampling / UCF legalization / edge detection)
-2. `action_update` (action/state transitions + per-action callbacks)
-3. `physics_integrate` (kinematics integration; gravity/traction/etc)
-4. `stage_collision_apply` (MSLSTG01 stage collision + ECB/grounding/ledge gating)
-5. `hurtboxes_refresh` (hurtboxes/hitboxes attached to bones/ECB)
-6. `combat_resolve` (hit resolution: hitlag/hitstun/KB/shield, etc)
-7. `items_update` (projectiles/items update/collision)
+1. frame-begin caches and transient clears
+2. pre-input Anim/timer callbacks
+3. input sampling / UCF legalization / edge detection
+4. IASA/state-transition callbacks
+5. fighter Phys / root integration
+6. stage/mpColl and post-collision callbacks
+7. primitive refresh (pose, shields, hurtboxes, hitboxes)
+8. item collision and combat resolution
+9. post-frame publication and one-step seed-lane cleanup
 
 Notes:
-- These functions are stubs today (the “empty sim”), but the structure is the contract.
-- If we discover ordering differences, we change the call order in `src/step.c` and keep the pass boundaries stable.
+- If we discover ordering differences, change the call order in `src/fighter_callbacks.c` and keep
+  `src/step.c` as a thin public wrapper.
 - Hitlag/hitstun gating likely requires conditional skipping/modifying of multiple passes; handle that centrally in the scheduler.
 
 ## Seeding & validation

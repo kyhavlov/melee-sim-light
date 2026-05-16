@@ -125,7 +125,7 @@ Source/generation:
   upper source for same-frame special contact owners. Multi-hitbox attack contacts keep the hitlag
   lower bound until exact per-HitCapsule shield provenance is exposed.
 - Runtime consumes the lanes in `src/combat.c` only for the current teacher-forced collision frame;
-  `src/step.c` clears them after the step. Normal rollouts leave them zero.
+  the frame scheduler clears them after the step. Normal rollouts leave them zero.
 
 Decomp contract:
 - `refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC`.
@@ -154,7 +154,7 @@ Consumer:
   `ftCo_Rebound_Phys` plus `ftCommon_800804A0`.
 - `src/action.c` consumes the hidden rate when ReboundStop leaves hitlag and when a replay seed
   starts directly on the first Rebound frame.
-- `src/step.c` clears the lane once the fighter leaves ReboundStop/Rebound.
+- `src/fighter_callbacks.c` clears the lane once the fighter leaves ReboundStop/Rebound.
 - Normal rollouts do not read replay-derived Rebound xE8/rate seeds after the initial reseed; live
   clank/ReboundStop entry computes the lanes from `dmg.x191C`.
 

@@ -80,6 +80,7 @@ ext = Extension(
         "src/stage_item_params.c",
         "src/state.c",
         "src/step.c",
+        "src/fighter_callbacks.c",
         "src/input.c",
         "src/ucf.c",
         "src/action.c",
