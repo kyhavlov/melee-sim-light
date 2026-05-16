@@ -2067,6 +2067,11 @@ void action_update_anim_callbacks_pre_input(MslBatch* batch) {
   locomotion_update_anim_callbacks_pre_input(batch);
   blaster_update_anim_callbacks_pre_input(batch);
   grab_flow_update_anim_callbacks_pre_input(batch);
+  // Throw script release is owned by the thrower's Anim callback, before the victim can run current
+  // frame IASA from a simulator-only detached placeholder.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_Throw*_Anim,ftCo_800DD724}
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+  throw_flow_update_pre_physics(batch);
 }
 
 void action_update(MslBatch* batch) {
@@ -2091,7 +2096,6 @@ void action_update(MslBatch* batch) {
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{ftCo_Catch_Anim,ftCo_CatchDash_Anim}
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
   grab_flow_update_pre_physics(batch);
-  throw_flow_update_pre_physics(batch);
   // Run knockdown/damage Anim+IASA before generic locomotion so DamageFly->DamageFall transitions
   // can feed same-frame DamageFall IASA (e.g. ftCo_800CB870 jump check) in locomotion.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_DamageFly_Anim,ftCo_DamageFlyRoll_Anim}

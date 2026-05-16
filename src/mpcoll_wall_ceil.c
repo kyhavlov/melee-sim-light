@@ -17,31 +17,7 @@
 #include "mtx34.h"
 #include "specialhi_pose.h"
 #include "stage_collision.h"
-
-static inline uint8_t mpcoll_is_pending_throw_release_victim(const MslBatch* batch, int bi, int p) {
-  if (batch == NULL) {
-    return 0u;
-  }
-  const int num_players = (int)batch->config.num_players;
-  if (p < 0 || p >= num_players) {
-    return 0u;
-  }
-  for (int owner = 0; owner < num_players; owner++) {
-    if (owner == p) {
-      continue;
-    }
-    const size_t oidx = msl_idx_player(bi, owner);
-    if (batch->state.throw_pending_victim_port[oidx] == (uint8_t)p &&
-        batch->state.throw_pending_hit_idx[oidx] != 0xFFu) {
-      // Shared ThrowF/B/Hi/Lw release owner:
-      // - release detaches the victim in ftCo_800DD724, but generic wall/ceiling mpColl does not
-      //   own the same frame before throw release / later hit resolution complete.
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD724,ftCo_800DDDE4}
-      return 1u;
-    }
-  }
-  return 0u;
-}
+#include "throw_flow.h"
 
 // Decomp constants / shapes:
 // - mpCheckCeiling treats ceilings as horizontal when |y0 - y1| <= 0.0001.
@@ -2550,7 +2526,7 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
           continue;
         }
       }
-      if (mpcoll_is_pending_throw_release_victim(batch, bi, p)) {
+      if (throw_flow_release_pending_for_victim(batch, bi, p)) {
         mpcoll_clear_wall_ceiling_provenance(batch, idx);
         continue;
       }

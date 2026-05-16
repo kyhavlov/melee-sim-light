@@ -308,7 +308,13 @@ void throw_flow_update_pre_physics(MslBatch* batch) {
           grab_attachment_apply_thrown_release_anchor_now(
               batch, bi, victim_p, owner_p, rel_anim_frame, owner_pose_facing_before_throw_flags);
 
-          // Detach immediately. Defer the throw hit to post-items.
+          // Detach immediately. Defer the throw hit to post-items, but keep the pending release
+          // latch live so input owners can preserve decomp source-IASA semantics: Thrown* IASA
+          // callbacks are empty, and the transient Fall placeholder below is a simulator scheduling
+          // bridge rather than an actionable source state.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::{
+          //   ftCo_ThrownF_IASA,ftCo_ThrownB_IASA,ftCo_ThrownHi_IASA,ftCo_ThrownLw_IASA}
           batch->state.attached_victim_port[oidx] = 0xFFu;
           batch->state.grab_owner_port[vidx] = 0xFFu;
           batch->state.throw_pending_victim_port[oidx] = (uint8_t)victim_p;

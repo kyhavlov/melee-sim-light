@@ -16,6 +16,7 @@
 #include "motion_state_owners.h"
 #include "move_tables.h"
 #include "special_msids.h"
+#include "throw_flow.h"
 
 // Character id mapping follows Slippi post-frame `character` (GALE01):
 // - Fox   = 1
@@ -182,13 +183,20 @@ static inline uint8_t damage_air_or_fly_allows_special_air_iasa(const MslBatch* 
   // - Damage_IASA calls Fall_IASA_Inner only when !fp->x221C_b6.
   // - DamageFly_IASA calls DamageFall_IASA only when !fp->x221C_b6.
   // - Fall_IASA_Inner and DamageFall_IASA both route through ftCo_SpecialAir_CheckInput.
+  // - x221C_b6 is set with the hitstun scalar on Damage entry and cleared when that scalar
+  //   reaches zero. Modelplay / one-step seeds can expose an impossible stale-clear flag byte;
+  //   keep the explicit hitstun counter as the same source lock so a victim cannot SpecialN out of
+  //   active hitstun.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
-  //   ftCo_Damage_IASA,ftCo_DamageFly_IASA}
+  //   ftCo_Damage_IASA,ftCo_DamageFly_IASA,ftCo_8008DCE0,ftCo_8008F744}
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_IASA_Inner
   const uint8_t flags_221c =
       batch->state.state_flags[idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX];
-  return ((flags_221c & (uint8_t)MSL_STATE_FLAG_221C_B6_HITSTUN) == 0u) ? 1u : 0u;
+  if ((flags_221c & (uint8_t)MSL_STATE_FLAG_221C_B6_HITSTUN) != 0u) {
+    return 0u;
+  }
+  return (batch->state.hitstun[idx] == 0u) ? 1u : 0u;
 }
 
 static inline uint8_t action_allows_special_entry_air(const MslBatch* batch, size_t idx,
@@ -205,6 +213,9 @@ static inline uint8_t action_allows_special_entry_air(const MslBatch* batch, siz
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::DO_IASA
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_FallSpecial_IASA
+  if (throw_flow_release_source_blocks_iasa(batch, idx, action_id)) {
+    return 0u;
+  }
   switch (action_id) {
     case MSL_ACT_JUMP_F:
     case MSL_ACT_JUMP_B:

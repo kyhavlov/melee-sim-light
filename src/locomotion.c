@@ -30,6 +30,7 @@
 #include "specialhi_pose.h"
 #include "stage_collision.h"
 #include "trigger_input.h"
+#include "throw_flow.h"
 
 static inline float msl_signf(float x) { return x < 0.0f ? -1.0f : 1.0f; }
 
@@ -3535,25 +3536,6 @@ static inline void enter_shieldbreak_down_from_floor_contact(MslBatch* batch,
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
 }
 
-static inline uint8_t locomotion_is_throw_release_pending_victim(const MslBatch* batch, int bi,
-                                                                 int victim_p) {
-  if (batch == NULL) {
-    return 0u;
-  }
-  const int num_players = (int)batch->config.num_players;
-  for (int owner_p = 0; owner_p < num_players; owner_p++) {
-    if (owner_p == victim_p) {
-      continue;
-    }
-    const size_t oidx = msl_idx_player(bi, owner_p);
-    if (batch->state.throw_pending_victim_port[oidx] == (uint8_t)victim_p &&
-        batch->state.throw_pending_hit_idx[oidx] != 0xFFu) {
-      return 1u;
-    }
-  }
-  return 0u;
-}
-
 void locomotion_update_pre(MslBatch* batch) {
   if (batch == NULL) {
     return;
@@ -3636,7 +3618,7 @@ void locomotion_update_pre(MslBatch* batch) {
       //   jump/attack inputs on that same release frame.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
-      if (locomotion_is_throw_release_pending_victim(batch, bi, p)) {
+      if (throw_flow_release_pending_for_victim(batch, bi, p)) {
         continue;
       }
 
