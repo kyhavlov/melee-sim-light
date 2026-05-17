@@ -1,0 +1,175 @@
+#pragma once
+
+#include <stddef.h>
+#include <stdint.h>
+
+#include "action_ids.h"
+#include "api.h"
+
+typedef struct MslGuardReflectOwner {
+  uint8_t is_guard_reflect;
+  uint8_t no_submotion;
+  uint8_t frozen_snapshot;
+  uint8_t locomotion_entry_snapshot;
+  uint8_t shield_entry_no_submotion;
+  uint8_t reflectdesc_only;
+  uint8_t active_x14_no_guardon_blocks_body;
+  uint8_t final_x14_live_x18_blocks_body;
+} MslGuardReflectOwner;
+
+static inline uint8_t msl_guard_reflect_prev_action_is_locomotion_source(uint16_t action_id) {
+  switch (action_id) {
+    case (uint16_t)MSL_ACT_WAIT:
+    case (uint16_t)MSL_ACT_WALK_SLOW:
+    case (uint16_t)MSL_ACT_WALK_MIDDLE:
+    case (uint16_t)MSL_ACT_WALK_FAST:
+    case (uint16_t)MSL_ACT_TURN:
+    case (uint16_t)MSL_ACT_DASH:
+    case (uint16_t)MSL_ACT_RUN:
+    case (uint16_t)MSL_ACT_RUN_DIRECT:
+    case (uint16_t)MSL_ACT_SQUAT:
+    case (uint16_t)MSL_ACT_SQUAT_WAIT:
+    case (uint16_t)MSL_ACT_SQUAT_RV:
+    case (uint16_t)MSL_ACT_LANDING:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
+static inline uint8_t msl_guard_reflect_timer_after_anim_tick(uint8_t seed_timer,
+                                                              uint8_t hitlag_started) {
+  if (hitlag_started != 0u || seed_timer == 0u) {
+    return seed_timer;
+  }
+  return (uint8_t)(seed_timer - 1u);
+}
+
+static inline uint8_t msl_guard_reflect_is_frozen_snapshot(const MslBatch* batch, size_t idx) {
+  if (batch == NULL || batch->state.action_id[idx] != (uint16_t)MSL_ACT_GUARD_REFLECT) {
+    return 0u;
+  }
+  // Frozen no-submotion replay snapshots before GuardReflect_Anim / ftCo_80093BC0 ownership.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+  //   ftCo_8009388C,ftCo_GuardReflect_Anim,ftCo_80093BC0}
+  enum { MSL_GUARD_REFLECT_FROZEN_ACTION_FRAME_MAX = -2 };
+  return (batch->state.action_frame[idx] <= MSL_GUARD_REFLECT_FROZEN_ACTION_FRAME_MAX) ? 1u : 0u;
+}
+
+static inline uint8_t msl_guard_reflect_is_no_submotion(const MslBatch* batch, size_t idx) {
+  return (batch != NULL && batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
+          batch->state.action_frame[idx] < 0 && batch->state.animation_index[idx] == UINT32_MAX)
+             ? 1u
+             : 0u;
+}
+
+static inline uint8_t msl_guard_reflect_is_locomotion_entry_snapshot(const MslBatch* batch,
+                                                                     size_t idx) {
+  if (!msl_guard_reflect_is_no_submotion(batch, idx) || batch->state.action_frame[idx] != -1) {
+    return 0u;
+  }
+  const uint16_t seed_prev_action = batch->state.seed_prev_action_id[idx];
+  return (msl_guard_reflect_prev_action_is_locomotion_source(seed_prev_action) &&
+          seed_prev_action != (uint16_t)MSL_ACT_GUARD_ON &&
+          seed_prev_action != (uint16_t)MSL_ACT_GUARD &&
+          seed_prev_action != (uint16_t)MSL_ACT_GUARD_REFLECT &&
+          seed_prev_action != (uint16_t)MSL_ACT_GUARD_SET_OFF)
+             ? 1u
+             : 0u;
+}
+
+static inline uint8_t msl_guard_reflect_shield_entry_no_submotion(const MslBatch* batch,
+                                                                  size_t idx) {
+  return (msl_guard_reflect_is_no_submotion(batch, idx) &&
+          batch->state.guard_reflect_timer_x14[idx] != 0u &&
+          !msl_guard_reflect_is_locomotion_entry_snapshot(batch, idx))
+             ? 1u
+             : 0u;
+}
+
+static inline uint8_t msl_guard_reflect_reflectdesc_only(const MslBatch* batch, size_t idx) {
+  if (!msl_guard_reflect_is_no_submotion(batch, idx)) {
+    return 0u;
+  }
+  // Guard-origin GuardReflect entry creates ReflectDesc only; direct locomotion entry creates
+  // ShieldDesc first. The x14_seed==1 -> x14==0 callback boundary has already recreated ShieldDesc.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+  //   ftCo_8009388C,ftCo_80093A50,ftCo_80093BC0}
+  const uint8_t x14_expired_this_callback = (batch->state.guard_reflect_timer_x14_seed[idx] == 1u &&
+                                             batch->state.guard_reflect_timer_x14[idx] == 0u &&
+                                             batch->state.guard_reflect_origin_guardon[idx] != 0u)
+                                                ? 1u
+                                                : 0u;
+  return ((batch->state.guard_reflect_timer_x14_seed[idx] != 0u ||
+           batch->state.guard_reflect_timer_x14[idx] != 0u) &&
+          !x14_expired_this_callback &&
+          !msl_guard_reflect_is_locomotion_entry_snapshot(batch, idx) &&
+          batch->state.hitlag[idx] == 0u && batch->state.hitstun[idx] == 0u)
+             ? 1u
+             : 0u;
+}
+
+static inline uint8_t msl_guard_reflect_active_x14_no_guardon_blocks_body(const MslBatch* batch,
+                                                                          size_t idx) {
+  if (!msl_guard_reflect_is_no_submotion(batch, idx)) {
+    return 0u;
+  }
+  // Active-x14 no-submotion rows without GuardOn provenance are ReflectDesc-owned until
+  // ftCo_80093BC0 reaches the expiry/recreate phase.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+  //   ftCo_8009388C,ftCo_80093A50,ftCo_GuardReflect_Anim,ftCo_80093BC0}
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}
+  return (batch->state.hitlag[idx] == 0u && batch->state.hitstun[idx] == 0u &&
+          batch->state.guard_reflect_timer_x14[idx] != 0u &&
+          batch->state.guard_reflect_origin_guardon[idx] == 0u &&
+          batch->state.prev_action_id[idx] != (uint16_t)MSL_ACT_GUARD_ON &&
+          batch->state.seed_prev_action_id[idx] != (uint16_t)MSL_ACT_GUARD_ON)
+             ? 1u
+             : 0u;
+}
+
+static inline uint8_t msl_guard_reflect_final_x14_live_x18_blocks_body(const MslBatch* batch,
+                                                                       size_t idx) {
+  if (batch == NULL || batch->state.action_id[idx] != (uint16_t)MSL_ACT_GUARD_REFLECT) {
+    return 0u;
+  }
+  // Final-x14 GuardReflect still has the x18 powershield-active owner for this callback; do not let
+  // no-submotion shield/BODY fallback consume the row until the next callback can expire x18.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+  //   ftCo_GuardReflect_Anim,ftCo_80093BC0,ftCo_80092F2C}
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC,ftColl_80076ED8}
+  return (batch->state.action_frame[idx] == -1 && batch->state.animation_index[idx] == UINT32_MAX &&
+          batch->state.hitlag[idx] == 0u && batch->state.hitstun[idx] == 0u &&
+          batch->state.guard_reflect_timer_x14_seed[idx] == 0u &&
+          batch->state.guard_reflect_timer_x14[idx] == 0u &&
+          batch->state.guard_reflect_origin_guardon[idx] == 0u &&
+          batch->state.guard_reflect_timer_x18_seed[idx] > 1u &&
+          batch->state.guard_reflect_timer_x18[idx] != 0u)
+             ? 1u
+             : 0u;
+}
+
+static inline MslGuardReflectOwner msl_guard_reflect_owner_resolve(const MslBatch* batch,
+                                                                   size_t idx) {
+  MslGuardReflectOwner owner = {0};
+  if (batch == NULL) {
+    return owner;
+  }
+  owner.is_guard_reflect =
+      (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_REFLECT) ? 1u : 0u;
+  if (!owner.is_guard_reflect) {
+    return owner;
+  }
+
+  owner.no_submotion = msl_guard_reflect_is_no_submotion(batch, idx);
+  owner.frozen_snapshot = msl_guard_reflect_is_frozen_snapshot(batch, idx);
+  owner.locomotion_entry_snapshot = msl_guard_reflect_is_locomotion_entry_snapshot(batch, idx);
+  owner.shield_entry_no_submotion = msl_guard_reflect_shield_entry_no_submotion(batch, idx);
+  owner.reflectdesc_only = msl_guard_reflect_reflectdesc_only(batch, idx);
+  owner.active_x14_no_guardon_blocks_body =
+      msl_guard_reflect_active_x14_no_guardon_blocks_body(batch, idx);
+  owner.final_x14_live_x18_blocks_body =
+      msl_guard_reflect_final_x14_live_x18_blocks_body(batch, idx);
+
+  return owner;
+}

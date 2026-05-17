@@ -44,6 +44,24 @@ _TARGETS = (
 _B1_TARGETS = (
     _Case(
         dataset_rel=(
+            "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
+            "AttachedGoodNaturedGuanaco.msl"
+        ),
+        target_record=2393,
+        port=0,
+        note="validation AGN first steady GuardSetOff row clears stale x221C_b1 on the gx10==7 full-lightshield lane",
+    ),
+    _Case(
+        dataset_rel=(
+            "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.msl"
+        ),
+        target_record=4897,
+        port=0,
+        note="validation GAT first steady GuardSetOff row clears stale x221C_b1 on the gx10==7 full-lightshield lane",
+    ),
+    _Case(
+        dataset_rel=(
             "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
             "AttachedGoodNaturedGuanaco.msl"
         ),
@@ -65,6 +83,15 @@ _B1_TARGETS = (
 _ACTIVE_TIMER_B1_TARGETS = (
     _Case(
         dataset_rel=(
+            "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.msl"
+        ),
+        target_record=6315,
+        port=0,
+        note="validation GAT GuardReflect->GuardSetOff hitlag row clears x221C_b1 once x14 has expired while x18 remains active",
+    ),
+    _Case(
+        dataset_rel=(
             "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
             "GracefulAttachedTurtle.msl"
         ),
@@ -75,6 +102,15 @@ _ACTIVE_TIMER_B1_TARGETS = (
 )
 
 _ACTIVE_TIMER_B1_NEGATIVE_CONTROLS = (
+    _Case(
+        dataset_rel=(
+            "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
+            "AttachedGoodNaturedGuanaco.msl"
+        ),
+        target_record=2390,
+        port=0,
+        note="validation AGN active-timer control keeps x221C_b1 while x14 remains live",
+    ),
     _Case(
         dataset_rel=(
             "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"

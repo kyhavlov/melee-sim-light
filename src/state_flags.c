@@ -6,6 +6,7 @@
 #include "action_ids.h"
 #include "anim_frame.h"
 #include "anim_pose.h"
+#include "combat_terminal_owner.h"
 #include "common_params.h"
 #include "char_params.h"
 #include "motion_state_owners.h"
@@ -148,54 +149,6 @@ static inline uint8_t state_flags_guard_setoff_post_hitlag_owner(const MslBatch*
     return 0u;
   }
   return batch->state.guard_setoff_post_hitlag_owner_u8[idx];
-}
-
-static inline uint8_t state_flags_guard_setoff_is_post_hitlag_handoff_row(const MslBatch* batch,
-                                                                          size_t idx) {
-  const uint8_t phase = state_flags_guard_setoff_hitlag_handoff_phase(batch, idx);
-  return (uint8_t)(phase == 2u || phase == 3u);
-}
-
-static inline uint8_t state_flags_guard_reflect_timer_after_anim_tick(uint8_t seed_timer,
-                                                                      uint8_t hitlag_started) {
-  if (hitlag_started != 0u || seed_timer == 0u) {
-    return seed_timer;
-  }
-  return (uint8_t)(seed_timer - 1u);
-}
-
-static inline uint8_t state_flags_guard_reflect_window_visible(const MslBatch* batch, size_t idx) {
-  if (batch == NULL) {
-    return 0u;
-  }
-  const uint16_t action_id = batch->state.action_id[idx];
-  if (action_id == (uint16_t)MSL_ACT_GUARD_REFLECT ||
-      action_id == (uint16_t)MSL_ACT_GUARD_SET_OFF) {
-    return (uint8_t)(batch->state.guard_reflect_timer_x14[idx] != 0u);
-  }
-  return 0u;
-}
-
-static inline uint8_t state_flags_guard_powershield_active_visible(const MslBatch* batch,
-                                                                   size_t idx) {
-  if (batch == NULL) {
-    return 0u;
-  }
-  const uint16_t action_id = batch->state.action_id[idx];
-  if (action_id == (uint16_t)MSL_ACT_GUARD_REFLECT) {
-    return (uint8_t)(batch->state.guard_reflect_timer_x18[idx] != 0u);
-  }
-  if (action_id != (uint16_t)MSL_ACT_GUARD_SET_OFF) {
-    return 0u;
-  }
-  if (batch->state.guard_reflect_timer_x18[idx] != 0u) {
-    return 1u;
-  }
-  if (state_flags_guard_setoff_is_post_hitlag_handoff_row(batch, idx) &&
-      state_flags_guard_setoff_post_hitlag_owner(batch, idx) == 2u) {
-    return 1u;
-  }
-  return 0u;
 }
 
 static inline uint8_t state_flags_221f_dead_start_action(uint16_t action_id) {
@@ -879,10 +832,10 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
           //   same callback tick rather than a destination-action hardcoded mask.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
           //   ftCo_GuardReflect_Anim,ftCo_80093BC0,ftCo_GuardReflect_IASA}
-          const uint8_t t14_after_anim = state_flags_guard_reflect_timer_after_anim_tick(
+          const uint8_t t14_after_anim = msl_guard_reflect_timer_after_anim_tick(
               batch->state.guard_reflect_timer_x14_seed[idx],
               batch->state.hitlag_started_frame[idx]);
-          const uint8_t t18_after_anim = state_flags_guard_reflect_timer_after_anim_tick(
+          const uint8_t t18_after_anim = msl_guard_reflect_timer_after_anim_tick(
               batch->state.guard_reflect_timer_x18_seed[idx],
               batch->state.hitlag_started_frame[idx]);
           if (t14_after_anim != 0u) {
