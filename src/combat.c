@@ -155,13 +155,22 @@ typedef struct MslCombatBodyDamageScratch {
   MslCombatBodyDamageLogEntry entries[MSL_COMBAT_BODY_DAMAGE_LOG_CAP];
 } MslCombatBodyDamageScratch;
 
-typedef struct MslCombatBodyDamageProducer {
+typedef enum MslCombatDamageApplyClass {
+  MSL_COMBAT_DAMAGE_REJECTED = 0,
+  MSL_COMBAT_DAMAGE_FULL = 1,
+  MSL_COMBAT_DAMAGE_PERCENT_ONLY_NO_ENTRY = 2,
+  MSL_COMBAT_DAMAGE_ATTACHED_SUPPRESSED = 3,
+  MSL_COMBAT_DAMAGE_TOP_OFF_MERGE = 4,
+} MslCombatDamageApplyClass;
+
+typedef struct MslCombatDamageProduct {
   uint16_t move_id;
   uint16_t attack_instance;
   float applied_damage;
   int hitcapsule_int_dmg;
+  int kb_damage_i;
   int env_dmg;
-} MslCombatBodyDamageProducer;
+} MslCombatDamageProduct;
 
 typedef enum MslCombatProcessHitSourceWrite {
   MSL_PROCESS_HIT_SOURCE_WRITE_DIRECT = 0,
@@ -3518,6 +3527,29 @@ static inline int combat_get_env_dmg(float dmg) {
   return (i != 0) ? i : 1;
 }
 
+static inline void combat_damage_product_init(MslCombatDamageProduct* out, uint16_t move_id,
+                                              uint16_t attack_instance, int hitcapsule_int_dmg,
+                                              int kb_damage_i) {
+  if (out == NULL) {
+    return;
+  }
+  memset(out, 0, sizeof(*out));
+  out->move_id = move_id;
+  out->attack_instance = attack_instance;
+  out->hitcapsule_int_dmg = hitcapsule_int_dmg;
+  out->kb_damage_i = kb_damage_i;
+}
+
+static inline uint8_t combat_damage_product_set_applied(MslCombatDamageProduct* product,
+                                                        float applied_damage) {
+  if (product == NULL) {
+    return 0u;
+  }
+  product->applied_damage = applied_damage;
+  product->env_dmg = combat_get_env_dmg(applied_damage);
+  return (product->env_dmg > 0) ? 1u : 0u;
+}
+
 // Source-order contact selector:
 // ftColl_80078C70 evaluates shield then BODY for one attacking HitCapsule before advancing to the
 // next HitCapsule. The simulator still applies shield mutations through a compact pair-level pass,
@@ -5093,7 +5125,7 @@ static inline void combat_processhit_clear_phantom_damage(MslBatch* batch, size_
 static inline uint8_t combat_body_damage_producer_build(const MslBatch* batch, size_t a_idx,
                                                         size_t hb_i, int int_dmg,
                                                         uint16_t attacker_attack_id,
-                                                        MslCombatBodyDamageProducer* out) {
+                                                        MslCombatDamageProduct* out) {
   if (batch == NULL || out == NULL) {
     return 0u;
   }
@@ -5105,25 +5137,89 @@ static inline uint8_t combat_body_damage_producer_build(const MslBatch* batch, s
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007ABD0}
   // refs/melee/src/melee/ft/ft_0881.c::{ft_80089118,ft_80089228}
   // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
-  memset(out, 0, sizeof(*out));
-  out->move_id = attacker_attack_id;
-  out->attack_instance = batch->state.attack_instance[a_idx];
-
   float hb_dmg = combat_apply_attacker_smash_release_damage_mul(batch, a_idx,
                                                                 batch->state.hitbox_damage[hb_i]);
-  out->hitcapsule_int_dmg = (batch->state.smash_charge_state[a_idx] == 3u) ? (int)hb_dmg : int_dmg;
+  const int hitcapsule_int_dmg =
+      (batch->state.smash_charge_state[a_idx] == 3u) ? (int)hb_dmg : int_dmg;
+  combat_damage_product_init(out, attacker_attack_id, batch->state.attack_instance[a_idx],
+                             hitcapsule_int_dmg, hitcapsule_int_dmg);
 
   const float stale_mult = staling_multiplier_for_move(batch, a_idx, out->move_id);
   if (stale_mult != 1.0f) {
     hb_dmg *= stale_mult;
   }
-  out->applied_damage = hb_dmg;
-  out->env_dmg = combat_get_env_dmg(hb_dmg);
-  return (out->env_dmg > 0) ? 1u : 0u;
+  return combat_damage_product_set_applied(out, hb_dmg);
+}
+
+static inline uint8_t combat_item_damage_product_build(const MslBatch* batch, size_t a_idx,
+                                                       uint16_t item_attack_id,
+                                                       uint16_t item_attack_instance, float damage,
+                                                       float stale_mult_override,
+                                                       MslCombatDamageProduct* out) {
+  if (batch == NULL || out == NULL) {
+    return 0u;
+  }
+
+  // Item BODY producer shape:
+  // - it_80272460 stores raw/base integer damage in HitCapsule.unk_count and staled float damage in
+  //   HitCapsule.damage through ft_80089228(owner, item->xD88, item->xD8C, ...).
+  // - The reflected-damage multiplier is item-local (`item->xC6C`) and is applied before this
+  //   product is built by the item caller when present as `stale_mult_override`.
+  // refs/melee/src/melee/it/itcoll.c::it_80272460
+  // refs/melee/src/melee/ft/ft_0881.c::ft_80089228
+  const int dmg_raw_i = (int)damage;
+  if (dmg_raw_i <= 0) {
+    return 0u;
+  }
+
+  combat_damage_product_init(out, item_attack_id, item_attack_instance, dmg_raw_i, dmg_raw_i);
+  float dmg_f = damage;
+  const float stale_mult = (stale_mult_override >= 0.0f)
+                               ? stale_mult_override
+                               : staling_multiplier_for_move(batch, a_idx, item_attack_id);
+  if (stale_mult != 1.0f) {
+    dmg_f *= stale_mult;
+  }
+  if (!combat_damage_product_set_applied(out, dmg_f)) {
+    return 0u;
+  }
+  out->kb_damage_i = out->env_dmg;
+  return 1u;
+}
+
+static inline uint8_t combat_throw_damage_product_build(const MslBatch* batch, size_t a_idx,
+                                                        const MslThrowHitboxParams* p,
+                                                        uint16_t move_id,
+                                                        MslCombatDamageProduct* out) {
+  if (batch == NULL || p == NULL || out == NULL) {
+    return 0u;
+  }
+
+  // Throw-release producer shape:
+  // - set_throw_hitbox writes HitCapsule.unk_count from the raw script damage and HitCapsule.damage
+  //   through ft_80089228 at capsule creation time.
+  // - Same-instance low-throw laser contacts can later stale-queue the same attack instance; they
+  //   must not retroactively stale the already-created throw capsule.
+  // refs/melee/build/GALE01/asm/melee/ft/ftaction.s::ftAction_80071E04
+  // refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_8007ABD0
+  const int dmg_raw_i = (int)p->damage;
+  if (dmg_raw_i <= 0) {
+    return 0u;
+  }
+
+  const uint16_t attack_instance = batch->state.attack_instance[a_idx];
+  combat_damage_product_init(out, move_id, attack_instance, dmg_raw_i, dmg_raw_i);
+  float dmg_f = p->damage;
+  const float stale_mult =
+      staling_multiplier_for_move_excluding_instance(batch, a_idx, move_id, attack_instance);
+  if (stale_mult != 1.0f) {
+    dmg_f *= stale_mult;
+  }
+  return combat_damage_product_set_applied(out, dmg_f);
 }
 
 static inline void combat_body_damage_producer_apply_attacker_side(
-    MslBatch* batch, size_t a_idx, const MslCombatBodyDamageProducer* prod,
+    MslBatch* batch, size_t a_idx, const MslCombatDamageProduct* prod,
     uint16_t attacker_motion_id) {
   if (batch == NULL || prod == NULL) {
     return;
@@ -5149,7 +5245,7 @@ static inline void combat_body_damage_log_entry_init(
     MslBatch* batch, MslCombatBodyDamageLogEntry* e, size_t a_idx, size_t d_idx, int attacker,
     int defender, size_t hb_i, size_t cap_i, uint16_t attacker_motion_id,
     uint16_t attacker_attack_id, uint8_t hit_group, uint8_t rehit_frames,
-    const MslCombatBodyDamageProducer* prod) {
+    const MslCombatDamageProduct* prod) {
   if (batch == NULL || e == NULL || prod == NULL) {
     return;
   }
@@ -5185,418 +5281,6 @@ static inline void combat_body_damage_log_entry_init(
   e->env_dmg = prod->env_dmg;
 }
 
-// Combat Mutations Pass 1 (BODY-only).
-//
-// This is the minimal "writeback" set needed for one-step eval:
-// - hitlag via decomp ftCommon_CalcHitlag
-// - attribution fields compared in-suite (instance_hit_by, last_hit_by)
-static inline void combat_mutations_pass1_future_apply_body_hit(
-    MslBatch* batch, size_t a_idx, size_t d_idx, int attacker, int defender, size_t hb_i,
-    size_t cap_i, int int_dmg, uint16_t attacker_motion_id, uint16_t attacker_attack_id) {
-  if (batch == NULL) {
-    return;
-  }
-  combat_processhit_clear_phantom_damage(batch, d_idx);
-
-  // === GALE01 Fighter_ProcessHit/TakDamage ordering (write-site checklist) ===
-  //
-  // Decomp sources:
-  // - refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
-  // - refs/melee/src/melee/ft/fighter.c::Fighter_TakeDamage_8006CC7C
-  //
-  // Inputs (collision-produced, per-frame accumulators):
-  // 1) float damage accumulator: fp->dmg.x1838_percentTemp (sum of applied float damage this frame)
-  // 2) int damage (hitlag input): fp->dmg.x183C_applied (max of getEnvDmg(applied_float_damage))
-  // 3) knockback magnitude: fp->dmg.kb_applied (float; 0.0 means "no KB path")
-  // 4) element/flags: fp->dmg.x1860_element and other collision-written fields (angle/facing/etc.)
-  //
-  // Consume / apply ordering (victim side):
-  // 5) If fp->dmg.kb_applied != 0.0:
-  //    a) Fighter_UnkTakeDamage(fp, fp->dmg.x1838_percentTemp)  // percent add (gated inside TakeDamage)
-  //    b) ftCo_Damage_CalcKnockback(fp)                         // scales/clamps kb_applied, subtracts armor
-  //    c) enter Damage state / write KB velocity / hitstun
-  // 6) Else if fp->dmg.kb_applied == 0.0 and fp->dmg.x1838_percentTemp != 0.0:
-  //    a) Fighter_UnkTakeDamage(fp, fp->dmg.x1838_percentTemp)  // percent add only (no KB path)
-  //
-  // Damage gate inside Fighter_TakeDamage_8006CC7C:
-  // 7) If (!fp->x2226_b4 || fp->x2226_b3): percent += damage_amount; clamp to 999.
-  //
-  // Hitlag (both sides, driven by per-side "max int dmg this frame"):
-  // 8) If the resolved `bool1` is nonzero, set fp->dmg.x195c_hitlag_frames = ftCommon_CalcHitlag(...)
-  //    and start hitlag (x221A_b2).
-  //
-  // End-of-frame cleanup:
-  // 9) Reset fp->dmg.x1838_percentTemp to 0 and clear per-hit accumulators/flags.
-
-  // - Set hitlag for both attacker and defender using decomp ftCommon_CalcHitlag.
-  // - Update seeded/compared attribution fields that are decomp-backed:
-  //   - instance_hit_by: fighter.dmg.x18ec_instancehitby (Slippi post offset 0x51)
-  //     refs/melee/src/melee/ft/types.h
-  //     refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
-  //     refs/slippi-wiki/SPEC.md ("Instance Hit By")
-  //   - last_hit_by: fighter.dmg.x18c4_source_ply (Slippi post offset 0x20)
-  //     refs/melee/src/melee/ft/types.h
-  //     refs/slippi-wiki/SPEC.md ("Last Hit By")
-  //
-  // NOTE (writeback reshaping pass):
-  // This BODY path aims to be GALE01-shaped for the "damage/KB writeback" fields that the one-step
-  // suite compares (percent, hitlag, hitstun, KB vel, damage-state entry). It is not yet a full
-  // collision+damage pipeline replica (e.g. armor/reflect/absorb), but it does model the collision
-  // multiplier chain that feeds ftColl_80079AB0 (attack/defense ratios and gm_8016B248()).
-  // refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_80079AB0
-  // refs/melee/src/melee/gm/gm_16AE.c::gm_8016B248
-  //
-  // Intentionally NOT set in this pass:
-  // - last_attack_landed (Slippi "Last Hitting Attack ID") requires attack-id extraction.
-  // - combo_count requires combo tracking logic beyond strict one-step mutation.
-
-  const MslCommonParams* c = msl_common_params();
-
-  // BODY damage (staling):
-  //
-  // Decomp (GALE01): collision applies stale-move multiplier to hitbox->damage (float) before
-  // converting to int via getEnvDmg and before Fighter_ProcessHit consumes the values for
-  // percent/hitlag/knockback.
-  // - Stale multiplier: refs/melee/src/melee/ft/ft_0881.c::ft_80089118
-  // - getEnvDmg pattern: refs/melee/src/melee/ft/ftcoll.c
-  // - Hitlag/percent consumption: refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
-  //
-  // Simulator policy: apply staling to the float damage that drives percent/KB, and compute the
-  // int damage input for hitlag from the staled float (decomp-shaped).
-  //
-  // Use the collision-time HitCapsule attack id, not the attacker's live motion-state field after
-  // another same-frame hit may have already mutated that fighter into Damage*. The caller snapshots
-  // `pre_combat_attack_id` before pass-1 mutations.
-  // Decomp trail:
-  // - ftColl_8007ABD0 builds HitCapsule.damage from fp->x2068 via ft_80089228 before collision,
-  // - Fighter_ProcessHit later consumes the already-staled HitCapsule damage.
-  // refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_8007ABD0
-  // refs/melee/src/melee/ft/ft_0881.c::{ft_80089118,ft_80089228}
-  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
-  const uint16_t move_id = attacker_attack_id;
-  const float stale_mult = staling_multiplier_for_move(batch, a_idx, move_id);
-
-  float hb_dmg = combat_apply_attacker_smash_release_damage_mul(batch, a_idx,
-                                                                batch->state.hitbox_damage[hb_i]);
-  const int hitcapsule_int_dmg =
-      (batch->state.smash_charge_state[a_idx] == 3u) ? (int)hb_dmg : int_dmg;
-  if (stale_mult != 1.0f) {
-    hb_dmg *= stale_mult;
-  }
-
-  // Applied damage (float) drives percent and the KB magnitude computation inputs.
-  //
-  // Decomp trail (GALE01):
-  // - Collision accumulates per-frame float damage into fp->dmg.x1838_percentTemp via ftColl_80076640.
-  //   refs/melee/src/melee/ft/ftcoll.c::ftColl_80076640
-  // - Fighter_ProcessHit consumes fp->dmg.x1838_percentTemp for percent add.
-  //   refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
-  //
-  // In this BODY-only path, `hb_dmg` is already stale-adjusted; additional modifiers/gates (armor,
-  // reflect/absorb, etc.) are handled elsewhere or require seed fields we do not yet represent.
-  const float dmg_f = hb_dmg;
-
-  // Decomp: collision converts float damage -> env int via getEnvDmg, and Fighter_ProcessHit uses
-  // a nonzero fp->dmg.x183C_applied (`bool1`) as ftCommon_CalcHitlag's `dmg` input.
-  // refs/melee/src/melee/ft/ftcoll.c::getEnvDmg + ftColl_80076640 (x183C_applied update)
-  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC (hitlag calc under `if (bool1)`)
-  //
-  // Keep two integer damage lanes:
-  // - `dmg_i`: env damage from applied float (drives hitlag path via x183C_applied)
-  // - `int_dmg`: collision HitCapsule integer lane (drives ftColl_80079AB0 KB formula)
-  // refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_80079EA8
-  const int dmg_i = combat_get_env_dmg(dmg_f);
-  if (dmg_i <= 0) {
-    return;
-  }
-
-  // Percent-temp accumulation (BODY): fp->dmg.x1838_percentTemp.
-  //
-  // Decomp trail (GALE01):
-  // - Collision accumulates per-frame float damage into fp->dmg.x1838_percentTemp via ftColl_80076640.
-  //   refs/melee/src/melee/ft/ftcoll.c::ftColl_80076640
-  // - Fighter_ProcessHit consumes it for percent add, then resets it to 0 at end of the frame.
-  //   refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
-  const float percent_pre = batch->state.percent[d_idx];
-  batch->state.percent_temp[d_idx] += dmg_f;
-  const float dmg_temp = batch->state.percent_temp[d_idx];
-
-  uint16_t d_motion_id = batch->state.action_id[d_idx];
-  if (d_motion_id == (uint16_t)MSL_ACT_FALL &&
-      msl_action_is_thrown_victim(batch->state.prev_action_id[d_idx])) {
-    // Compatibility pending-release bridge ownership:
-    // - Seed/reseed pending latches may transiently place the victim in FALL before compatibility
-    //   throw-hit consume.
-    // - In decomp, set_throw_flags consume + throw-hit apply run while victim is still in Thrown*;
-    //   there is no intermediate FALL state feeding Damage calc inputs.
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
-    d_motion_id = batch->state.prev_action_id[d_idx];
-  }
-
-  const uint8_t element = batch->state.hitbox_element[hb_i];
-  // Decomp/ASM: fp->x1960_vibrateMult electric override is victim-owned (ftColl_8007A06C writes
-  // 0x1960 on the fighter being processed as the collision victim), so attacker-side hitlag should
-  // use mul=1.0 while defender-side uses the element-derived multiplier.
-  // refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_8007A06C
-  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
-  const float d_hitlag_mul = combat_hitlag_mul_from_element(c, element);
-  const uint16_t a_hl = combat_calc_hitlag_frames(c, dmg_i, attacker_motion_id, 1.0f);
-  const uint16_t d_hl = combat_calc_hitlag_frames(c, dmg_i, d_motion_id, d_hitlag_mul);
-  if (!combat_received_kb_hitlag_owns_over_deal_hitlag(batch, a_idx) &&
-      a_hl > batch->state.hitlag[a_idx]) {
-    batch->state.hitlag[a_idx] = a_hl;
-    combat_state_flags_set_is_hitlag(batch, a_idx, a_hl);
-  }
-  const uint16_t d_hl_prev = batch->state.hitlag[d_idx];
-  const uint8_t d_hl_increased = (d_hl > d_hl_prev) ? 1u : 0u;
-
-  // Grabbed/thrown victims are driven by an attachment joint and have empty Phys/Coll callbacks in
-  // decomp; do not force a Damage* transition from a collision-confirmed hit while the victim is
-  // still attached to the thrower/grab-owner.
-  //
-  // Decomp anchors (GALE01):
-  // - Thrown victim pos driver: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508
-  // - Thrown* Phys/Coll are empty (attachment-driven loop):
-  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::{ftCo_ThrownF_Phys,ftCo_ThrownF_Coll}
-  // - Throw scripts can apply damage/hitlag via set_throw_hitbox while the victim is still Thrown*:
-  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD724
-  const uint8_t d_grab_owner = batch->state.grab_owner_port[d_idx];
-  if (d_grab_owner != 0xFFu && d_grab_owner == (uint8_t)attacker &&
-      msl_action_is_grabbed_victim(d_motion_id)) {
-    if (d_hl_increased) {
-      batch->state.hitlag[d_idx] = d_hl;
-      combat_state_flags_set_is_hitlag(batch, d_idx, d_hl);
-    }
-    // Attached grabbed/thrown victim lane ownership:
-    // - Keep instance attribution (`x18EC`) on the confirming contact, but do not overwrite
-    //   source player (`x18C4`) here.
-    // - In decomp, source-player reset ownership is timer-driven in Fighter_8006A360 via
-    //   `dmg.x18C8` expiry, not a direct write in this attached-collision branch.
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508
-    // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
-    // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
-    batch->state.instance_hit_by[d_idx] = batch->state.instance_id[a_idx];
-
-    // Decomp: Fighter_ProcessHit can set fp->x221A_b3 alongside hitlag start under KB/damage paths.
-    // For ThrowF/ThrownF style attached hits, Slippi observes x221A_b3 set even though the victim
-    // does not enter Damage* (hitstun/misc-as remains non-damage).
-    //
-    // Evidence (suite dataset):
-    // - datasets/.../AttachedGoodNaturedGuanaco.msl record=215 p0 ref_t1 has:
-    //   hitstun=0, hitlag=4, state_flags[1]=0x30 (0x20 isHitlag | 0x10 x221A_b3).
-    //
-    // Decomp anchor:
-    // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
-    if (d_hl_increased) {
-      combat_state_flags_set_x221a_b3(batch, d_idx);
-      // Keep x221C_b0 ownership on the attached fighter-vs-fighter hitlag lane; Damage no-reaction
-      // gate consumes this bit in inlineB1 while transition clears are owned by motion-state change.
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::inlineB1
-      // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
-      combat_state_flags_set_x221c_b0(batch, d_idx);
-    }
-
-    // Attacker-side staling/combo tracking still updates on the confirmed hit.
-    const uint16_t attack_instance = batch->state.attack_instance[a_idx];
-    staling_queue_update(batch, a_idx, move_id, attack_instance);
-    combat_combo_ftColl_800763C0(batch, a_idx, defender, d_idx, attacker_attack_id);
-    return;
-  }
-
-  // Knockback velocity + hitstun + damage-state entry (BODY).
-  //
-  // Decomp entry:
-  // - Fighter_ProcessHit consumes `fp->dmg.kb_applied` (computed by collision) and then:
-  //   - ftCo_Damage_CalcKnockback (scales/clamps kb_applied),
-  //   - ftCo_8008EC90 / ftCo_8008E908 -> ftCo_8008DCE0 (damage state entry, kb vel, hitstun).
-  //   refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
-  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_CalcKnockback
-  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008E908
-  //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-  const uint16_t hb_angle = batch->state.hitbox_angle[hb_i];
-  const uint16_t hb_kbg = batch->state.hitbox_kbg[hb_i];
-  const uint16_t hb_wsk = batch->state.hitbox_wsk[hb_i];
-  const uint16_t hb_bkb = batch->state.hitbox_bkb[hb_i];
-
-  const uint8_t defender_on_ground = batch->state.on_ground[d_idx] ? 1u : 0u;
-  const uint16_t pre_damage_action = batch->state.action_id[d_idx];
-  const uint8_t hurt_height = batch->state.hurtcap_height[cap_i];
-
-  const MslCharParams* d_ch = msl_char_params(batch->state.char_id[d_idx]);
-  const size_t bi = a_idx / (size_t)MSL_MAX_PLAYERS;
-  float coll_kb_mul = batch->state.match_damage_ratio[bi];
-  coll_kb_mul *= batch->state.attack_ratio[a_idx];
-  coll_kb_mul *= batch->state.defense_ratio[d_idx];
-  // NOTE: This multiplier chain is applied only to kb_applied (ftColl_80079AB0 output), not to
-  // percent add. Keep any percent/damage scaling tasks separate and decomp-backed.
-  if (!(coll_kb_mul > 0.0f)) {
-    coll_kb_mul = 1.0f;
-  }
-  const float kb_applied = combat_damage_calc_kb_applied(
-      c, d_ch, d_motion_id, percent_pre, dmg_temp, hitcapsule_int_dmg, hb_kbg, hb_wsk, hb_bkb,
-      coll_kb_mul, batch->state.dmg_x2225_b7[d_idx], batch->state.dmg_x2224_b2[d_idx],
-      batch->state.kb_smashcharge_active[d_idx]);
-  const float kb_angle_rad =
-      combat_damage_calc_angle_radians(c, hb_angle, defender_on_ground, kb_applied);
-
-  // Decomp (GALE01): Fighter_ProcessHit_8006D1EC only enters the damage/KB path when
-  // `fp->dmg.kb_applied` is nonzero via the exact conditional:
-  // - `forceAppliedOnHit = fp->dmg.kb_applied;`  (fighter.c:2839)
-  // - `if (forceAppliedOnHit) {`                 (fighter.c:2840)
-  // which then does `Fighter_UnkTakeDamage_8006CC30` + `ftCo_Damage_CalcKnockback` + damage state entry.
-  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
-  if (kb_applied == 0.0f) {
-    if (d_hl_increased) {
-      batch->state.hitlag[d_idx] = d_hl;
-      combat_state_flags_set_is_hitlag(batch, d_idx, d_hl);
-    }
-    batch->state.speed_x_attack[d_idx] = 0.0f;
-    batch->state.speed_y_attack[d_idx] = 0.0f;
-    batch->state.hitstun[d_idx] = 0;
-    batch->state.damage_meteor_cancel_eligible_x1a[d_idx] = 0u;
-    combat_state_flags_set_is_hitstun(batch, d_idx, 0);
-    batch->state.instance_hit_by[d_idx] = batch->state.instance_id[a_idx];
-    combat_processhit_commit_source_owner(batch, d_idx,
-                                          combat_source_port0_for_attacker(batch, a_idx, attacker));
-
-    // Stale-move queue update on successful damaging BODY hit (attacker-side).
-    // Decomp: refs/melee/src/melee/pl/plstale.c::plStale_UpdateStaleMovesFromFighter
-    const uint16_t attack_instance = batch->state.attack_instance[a_idx];
-    staling_queue_update(batch, a_idx, move_id, attack_instance);
-
-    // Combo count + last-attack tracking still happens on the collision-confirmed hit, even if the
-    // later damage-state path is skipped due to `fp->dmg.kb_applied == 0`.
-    // Decomp: refs/melee/src/melee/ft/ftcoll.c::ftColl_80076444 -> ftColl_800763C0(fp->x2068_attackID).
-    combat_combo_ftColl_800763C0(batch, a_idx, defender, d_idx, attacker_attack_id);
-    return;
-  }
-
-  // KB velocity + grounded/airborne interaction.
-  //
-  // Decomp entry: ftCo_8008DCE0 computes:
-  // - var_f31 = kb_applied * p_ftCommonData->x100 (kb_vel_mul),
-  // - x = var_f31 * cos(kb_angle), y = var_f31 * sin(kb_angle),
-  // - then applies sign via `-x * fp->facing_dir` after setting `fp->facing_dir = fp->dmg.facing_dir_1`.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-  float kb_vel_mag = kb_applied * c->kb_vel_mul;
-  if (!defender_on_ground && combat_damage_check_air_motion_kb_mul(c, batch, d_idx)) {
-    kb_vel_mag *= c->air_motion_kb_mul;
-  }
-
-  const float x = kb_vel_mag * cosf(kb_angle_rad);
-  const float y = kb_vel_mag * sinf(kb_angle_rad);
-
-  // Horizontal sign for knockback:
-  //
-  // Decomp:
-  // - ftCo_8008DCE0 uses `fp->dmg.facing_dir_1` (set by collision) to set `fp->facing_dir`, then flips
-  //   the KB x component via `-x * fp->facing_dir`.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-  //
-  // Decomp (GALE01): collision writes fp->dmg.facing_dir_1 as a +/-1 sign based on relative X
-  // position between the victim and the source (fighter/item), e.g.:
-  // - If victim_pos.x > src_pos.x => facing_dir_1 = -1
-  // - Else                        => facing_dir_1 = +1
-  // refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_8007A06C (0x8007A74C..0x8007A77C sets f24)
-  const uint8_t downed_damage_contact_facing_owner =
-      (uint8_t)(combat_is_downed_damage_contact_action(pre_damage_action) &&
-                (batch->state.dmg_x2224_b2[d_idx] ||
-                 batch->state.percent_temp[d_idx] < (float)c->down_damage_percent_threshold));
-  const float one = combat_damage_ftColl_804D82EC_one();
-  const float collision_facing_dir_1 =
-      (batch->state.pos_x[d_idx] > batch->state.pos_x[a_idx]) ? -one : one;
-  // DownDamage contact entry has two separate facing owners:
-  // - collision still owns `dmg.facing_dir_1`, which ftCo_8008DCE0 uses for the KB x sign before
-  //   block_44;
-  // - ftCo_8009F184 passes the fighter's current `fp->facing_dir` as arg2 so block_44 restores the
-  //   visible facing after velocity calculation.
-  //
-  // Keep those lanes separate so downed reverse-shine / jab-reset-style contacts can launch by
-  // source position without turning the downed victim around.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::ftCo_8009F184
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-  const float defender_facing_dir_1 = collision_facing_dir_1;
-  const float post_damage_facing_dir = downed_damage_contact_facing_owner
-                                           ? (batch->state.facing[d_idx] ? one : -one)
-                                           : collision_facing_dir_1;
-  batch->state.facing[d_idx] = (uint8_t)(post_damage_facing_dir > 0.0f);
-
-  const float kb_x = -x * defender_facing_dir_1;
-  const float kb_y = y;
-
-  // Ground-vs-air handling for KB velocity:
-  // - When grounded, ftCo_8008DCE0 compares the floor normal to the KB vector (lbVector_Angle) and:
-  //   - if angle < 90°, launches with full (kb_x, kb_y) and clears grounded state (ftCommon_8007D5D4),
-  //   - else (angle >= 90°) and low/med damage: keeps grounded and projects along the floor normal,
-  //   - else tumble (sev==3): launches regardless.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0 (blocks 21-28)
-  if (!defender_on_ground) {
-    combat_damage_calc_vel(batch, d_idx, kb_x, kb_y);
-  } else {
-    combat_damage_install_grounded_kb(c, batch, d_idx, kb_applied, kb_x, kb_y, d_hl,
-                                      (!combat_is_downed_damage_contact_action(pre_damage_action) &&
-                                       combat_shine_start_grounded_ledge_ecb_lock_owner(
-                                           batch, d_idx, batch->state.action_id[a_idx]))
-                                          ? 1u
-                                          : 0u);
-  }
-
-  // Decomp: after setting KB velocity, ftCo_8008DCE0 clears self velocity (self_vel and gr_vel).
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0 (block_28)
-  batch->state.speed_air_x_self[d_idx] = 0.0f;
-  batch->state.speed_ground_x_self[d_idx] = 0.0f;
-  batch->state.speed_y_self[d_idx] = 0.0f;
-
-  const uint16_t hs = combat_damage_hitstun_from_kb(c, kb_applied);
-  batch->state.hitstun[d_idx] = hs;
-  combat_state_flags_set_is_hitstun(batch, d_idx, hs);
-  combat_state_flags_clear_x221c_b0(batch, d_idx);
-  combat_damage_mark_entry_time_since_hit(batch, d_idx);
-  // Decomp: Fighter_ProcessHit can set fp->x221A_b3 alongside hitlag start under KB/damage paths
-  // (see `bool2`). The stable latch point we model here is the received-hit bool1 path, because
-  // x221A_b3 is:
-  // - set at hitlag start by Fighter_ProcessHit_8006D1EC, and
-  // - cleared when hitlag ends by Fighter_8006A1BC.
-  // refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006A1BC}
-  //
-  // This intentionally excludes throw-release damage entry (ftCo_800DDDE4) where Slippi observes
-  // hitstun without hitlag and x221A_b3 unset.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
-  const uint8_t defender_on_ground_after = batch->state.on_ground[d_idx] ? 1u : 0u;
-  combat_damage_enter_state(c, batch, (int)bi, d_idx, defender_on_ground, defender_on_ground_after,
-                            hurt_height, kb_applied, kb_angle_rad, hb_angle);
-  // Decomp ordering: Damage state entry runs before hitlag assignment in Fighter_ProcessHit.
-  // - forceAppliedOnHit path enters ftCo_8008DCE0 (ChangeMotionState + immediate ftAnim_8006EBA4),
-  // - then bool1 drives fp->dmg.x195c_hitlag_frames assignment.
-  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-  if (d_hl > 0u) {
-    // Fighter_ProcessHit priority for reciprocal BODY hits:
-    // - If this fighter received KB (`forceAppliedOnHit`), bool1 is `dmg.x183C_applied`.
-    // - Deal-hitlag lanes (`dmg.x1914`/`x1924`) are only consulted when no received KB is pending.
-    // Therefore a same-frame outgoing hitlag value already written by this simplified sequential
-    // pass must not keep a larger value than the received-hit `d_hl`.
-    // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
-    batch->state.hitlag[d_idx] = d_hl;
-    combat_state_flags_set_is_hitlag(batch, d_idx, d_hl);
-    combat_damage_allow_sdi_set(batch, d_idx);
-    combat_state_flags_set_x221a_b3(batch, d_idx);
-  }
-
-  batch->state.instance_hit_by[d_idx] = batch->state.instance_id[a_idx];
-  batch->state.last_hit_by[d_idx] = combat_source_port0_for_attacker(batch, a_idx, attacker);
-
-  // Stale-move queue update on successful damaging BODY hit (attacker-side).
-  // Decomp: refs/melee/src/melee/pl/plstale.c::plStale_UpdateStaleMovesFromFighter
-  const uint16_t attack_instance = batch->state.attack_instance[a_idx];
-  staling_queue_update(batch, a_idx, move_id, attack_instance);
-
-  // Combo count + last-attack tracking (attacker-side).
-  // Decomp: refs/melee/src/melee/ft/ftcoll.c::ftColl_80076444 -> ftColl_800763C0(fp->x2068_attackID).
-  combat_combo_ftColl_800763C0(batch, a_idx, defender, d_idx, attacker_attack_id);
-}
-
 static inline uint8_t combat_body_damage_log_record(
     MslBatch* batch, MslCombatBodyDamageScratch* scratch, size_t a_idx, size_t d_idx, int attacker,
     int defender, size_t hb_i, size_t cap_i, int int_dmg, uint16_t attacker_motion_id,
@@ -5613,7 +5297,7 @@ static inline uint8_t combat_body_damage_log_record(
   // - immediately register stale/combo side effects through ftColl_8007891C,
   // - append one DmgLogEntry for later ftColl_8007A06C best-KB selection.
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,inlineB2,ftColl_8007891C,ftColl_8007A06C}
-  MslCombatBodyDamageProducer prod;
+  MslCombatDamageProduct prod;
   if (!combat_body_damage_producer_build(batch, a_idx, hb_i, int_dmg, attacker_attack_id, &prod)) {
     return 0u;
   }
@@ -5709,7 +5393,9 @@ static inline void combat_body_damage_log_apply(MslBatch* batch, int bi,
   const uint16_t d_hl_prev = batch->state.hitlag[d_idx];
   const uint8_t d_hl_increased = (d_hl > d_hl_prev) ? 1u : 0u;
 
-  if (e->attached_grabbed_victim) {
+  MslCombatDamageApplyClass body_damage_class =
+      e->attached_grabbed_victim ? MSL_COMBAT_DAMAGE_ATTACHED_SUPPRESSED : MSL_COMBAT_DAMAGE_FULL;
+  if (body_damage_class == MSL_COMBAT_DAMAGE_ATTACHED_SUPPRESSED) {
     if (d_hl_increased) {
       batch->state.hitlag[d_idx] = d_hl;
       combat_state_flags_set_is_hitlag(batch, d_idx, d_hl);
@@ -5723,6 +5409,9 @@ static inline void combat_body_damage_log_apply(MslBatch* batch, int bi,
   }
 
   if (best_kb == 0.0f) {
+    body_damage_class = MSL_COMBAT_DAMAGE_PERCENT_ONLY_NO_ENTRY;
+  }
+  if (body_damage_class == MSL_COMBAT_DAMAGE_PERCENT_ONLY_NO_ENTRY) {
     MslCombatProcessHitResolved ev = {0};
     ev.bi = bi;
     ev.attacker = e->attacker;
@@ -5945,23 +5634,12 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,inlineB2}
   // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
   //
-  // The item apply path receives the base hitbox damage (integer-valued for Fox/Falco blasters),
-  // but hitlag/KB lanes below follow decomp ownership via getEnvDmg(staled_damage).
-  const int dmg_raw_i = (int)damage;
-  if (dmg_raw_i <= 0) {
+  // The item apply path receives the base hitbox damage (integer-valued for Fox/Falco blasters);
+  // `damage_product` keeps that raw HitCapsule lane beside the staled float ProcessHit lane.
+  MslCombatDamageProduct damage_product;
+  if (!combat_item_damage_product_build(batch, a_idx, item_attack_id, item_attack_instance, damage,
+                                        stale_mult_override, &damage_product)) {
     return MSL_ITEM_HIT_NONE;
-  }
-
-  // Decomp (GALE01): item collision applies staling to the item's hitbox damage before the
-  // float->int getEnvDmg conversion and before Fighter_ProcessHit consumes the values.
-  // refs/melee/src/melee/it/itcoll.c::it_80272460 (calls ft_80089228)
-  // refs/melee/src/melee/ft/ft_0881.c::ft_80089228
-  float dmg_f_base = damage;
-  const float stale_mult = (stale_mult_override >= 0.0f)
-                               ? stale_mult_override
-                               : staling_multiplier_for_move(batch, a_idx, item_attack_id);
-  if (stale_mult != 1.0f) {
-    dmg_f_base *= stale_mult;
   }
 
   const uint16_t d_motion_id = batch->state.action_id[d_idx];
@@ -5983,7 +5661,6 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
           ? 1u
           : 0u;
 
-  float dmg_f = dmg_f_base;
   if (d_is_attached_grabbed_victim) {
     // Damage scalar (ftCommonData.x128) applied by ftColl under certain victim/attacker gobj
     // relationships. In the grabbed-victim + item-hit edge case, the defender is attached to a
@@ -5994,17 +5671,15 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
     // Data contract: `data/common/ft_common_data.json` -> `ftcoll_damage_mul_x128`.
     // Suite anchor: required for bitwise-f32 percent parity on the attached-victim laser records
     // (e.g. QuerulousGrandDinosaur.msl records 448/8116) where ref shows a 0.91 damage increment.
-    dmg_f *= c->ftcoll_damage_mul_x128;
-  }
-
-  const int dmg_env_i = combat_get_env_dmg(dmg_f);
-  if (dmg_env_i <= 0) {
-    return MSL_ITEM_HIT_NONE;
+    if (!combat_damage_product_set_applied(
+            &damage_product, damage_product.applied_damage * c->ftcoll_damage_mul_x128)) {
+      return MSL_ITEM_HIT_NONE;
+    }
   }
 
   // Percent-temp accumulation (BODY): fp->dmg.x1838_percentTemp.
   const float percent_pre = batch->state.percent[d_idx];
-  batch->state.percent_temp[d_idx] += dmg_f;
+  batch->state.percent_temp[d_idx] += damage_product.applied_damage;
   const float dmg_temp = batch->state.percent_temp[d_idx];
 
   // Special-case: non-flinch laser hits.
@@ -6014,7 +5689,9 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
   const MslLaserParams* lp = laser_params_for_item_type(item_type);
   const uint8_t non_flinch_hit =
       (lp != NULL && ((item_state == 0u) ? lp->non_flinch : lp->state1_non_flinch) != 0u) ? 1u : 0u;
-  if (non_flinch_hit) {
+  MslCombatDamageApplyClass item_damage_class =
+      non_flinch_hit ? MSL_COMBAT_DAMAGE_PERCENT_ONLY_NO_ENTRY : MSL_COMBAT_DAMAGE_FULL;
+  if (item_damage_class == MSL_COMBAT_DAMAGE_PERCENT_ONLY_NO_ENTRY) {
     // Extracted proxy lane ownership:
     // - non_flinch is extracted into MSLLASR1 from article hitbox kbg/wsk/bkb terms
     //   (tools/extraction/extract_lasers.py), then consumed directly here.
@@ -6034,16 +5711,17 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
 
     // Stale-move queue update on successful damaging BODY hit (attacker-side).
     // Decomp: refs/melee/src/melee/pl/plstale.c::plStale_UpdateStaleMovesFromItem
-    staling_queue_update(batch, a_idx, item_attack_id, item_attack_instance);
+    staling_queue_update(batch, a_idx, damage_product.move_id, damage_product.attack_instance);
 
     // Combo count + last-attack tracking (attacker-side).
     // Decomp: refs/melee/src/melee/ft/ftcoll.c::ftColl_8007646C
-    combat_combo_ftColl_800763C0(batch, a_idx, defender, d_idx, item_attack_id);
+    combat_combo_ftColl_800763C0(batch, a_idx, defender, d_idx, damage_product.move_id);
     return MSL_ITEM_HIT_APPLIED_CONSUME_ITEM;
   }
 
   const float hitlag_mul = combat_hitlag_mul_from_element(c, element);
-  const uint16_t d_hl = combat_calc_hitlag_frames(c, dmg_env_i, d_motion_id, hitlag_mul);
+  const uint16_t d_hl =
+      combat_calc_hitlag_frames(c, damage_product.env_dmg, d_motion_id, hitlag_mul);
   const uint16_t d_hl_prev = batch->state.hitlag[d_idx];
   const uint8_t same_frame_throwhi_item_damage_topoff =
       (lp != NULL && item_state == (uint8_t)1u &&
@@ -6102,6 +5780,9 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
   // - If the defender is a grabbed/thrown victim attached to the attacker (grab_owner_port),
   //   apply percent/hitlag attribution but do not enter Damage* (no hitstun/KB state change).
   if (d_is_attached_grabbed_victim) {
+    item_damage_class = MSL_COMBAT_DAMAGE_ATTACHED_SUPPRESSED;
+  }
+  if (item_damage_class == MSL_COMBAT_DAMAGE_ATTACHED_SUPPRESSED) {
     // Attached item-hit pulses apply percent/hitlag while the victim stays in Thrown*/Capture*.
     // Because this path suppresses Damage* entry, stale Damage no-reaction state (`x221C_b0`)
     // must not carry into the frozen attached window. Low-throw laser pulse rows with the bit
@@ -6127,7 +5808,7 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
     // owning fighter. This path is intentionally scoped to (attacker == grab_owner_port).
     const uint16_t a_motion_id = batch->state.action_id[a_idx];
     // Decomp ordering for hitlag `dmg` input uses the getEnvDmg(int) derived from the *applied*
-    // staled float damage (see combat_mutations_pass1_future_apply_body_hit for the fighter-vs-fighter
+    // staled float damage (see the ftColl damage-log BODY producer for the fighter-vs-fighter
     // equivalent). For attached projectile hits, suite refs observe grab-owner hitlag=3 when
     // victim hitlag=4 for Falco lasers (damage=3 => d_hl=4; getEnvDmg(staled_damage)=1 => a_hl=3).
     //
@@ -6135,7 +5816,7 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
     // hitlag in this case is observed to *not* apply the electric multiplier.
     // refs/melee/build/GALE01/asm/melee/ft/ftcoll.s (fp->x1960_vibrateMult set site)
     // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC (passes vibrateMult into CalcHitlag)
-    const uint16_t a_hl = combat_calc_hitlag_frames(c, dmg_env_i, a_motion_id, 1.0f);
+    const uint16_t a_hl = combat_calc_hitlag_frames(c, damage_product.env_dmg, a_motion_id, 1.0f);
     if (a_hl > batch->state.hitlag[a_idx]) {
       batch->state.hitlag[a_idx] = a_hl;
       combat_state_flags_set_is_hitlag(batch, a_idx, a_hl);
@@ -6159,8 +5840,8 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
     //   last_attack_landed/combo_count in the item attack-id domain.
     // refs/melee/src/melee/pl/plstale.c::plStale_UpdateStaleMovesFromItem
     // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007646C,ftColl_800763C0}
-    staling_queue_update(batch, a_idx, item_attack_id, item_attack_instance);
-    combat_combo_ftColl_800763C0(batch, a_idx, defender, d_idx, item_attack_id);
+    staling_queue_update(batch, a_idx, damage_product.move_id, damage_product.attack_instance);
+    combat_combo_ftColl_800763C0(batch, a_idx, defender, d_idx, damage_product.move_id);
 
     return MSL_ITEM_HIT_SUPPRESSED_DONT_CONSUME;
   }
@@ -6179,7 +5860,7 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
   }
 
   const float kb_applied = combat_damage_calc_kb_applied(
-      c, d_ch, d_motion_id, percent_pre, dmg_temp, dmg_env_i, kbg, wsk, bkb, 1.0f,
+      c, d_ch, d_motion_id, percent_pre, dmg_temp, damage_product.kb_damage_i, kbg, wsk, bkb, 1.0f,
       batch->state.dmg_x2225_b7[d_idx], batch->state.dmg_x2224_b2[d_idx],
       batch->state.kb_smashcharge_active[d_idx]);
   const uint16_t hs = combat_damage_hitstun_from_kb(c, kb_applied);
@@ -6205,9 +5886,9 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
     ev.last_hit_by = combat_source_port0_for_attacker(batch, a_idx, attacker);
     ev.source_write = MSL_PROCESS_HIT_SOURCE_WRITE_COMMIT_OWNER;
     ev.update_bookkeeping = 1u;
-    ev.stale_move_id = item_attack_id;
-    ev.stale_attack_instance = item_attack_instance;
-    ev.combo_attack_id = item_attack_id;
+    ev.stale_move_id = damage_product.move_id;
+    ev.stale_attack_instance = damage_product.attack_instance;
+    ev.combo_attack_id = damage_product.move_id;
     combat_processhit_apply_resolved_damage(c, batch, &ev);
     if (item_is_illusion) {
       return MSL_ITEM_HIT_APPLIED_DONT_CONSUME;
@@ -6287,6 +5968,9 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
 
   if (same_frame_throwhi_item_damage_topoff && d_hl <= d_hl_prev &&
       hs <= batch->state.hitstun[d_idx]) {
+    item_damage_class = MSL_COMBAT_DAMAGE_TOP_OFF_MERGE;
+  }
+  if (item_damage_class == MSL_COMBAT_DAMAGE_TOP_OFF_MERGE) {
     // Same-frame ThrowHi state1 laser top-off:
     // - Multiple throw-side state1 articles can overlap the same already-damaged victim in one
     //   item pass. In vanilla, their HitCapsule damage contributes to the same
@@ -6299,8 +5983,8 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_CalcVel,ftCo_8008DCE0}
     // refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C6CC,it_8029C4D4}
     combat_damage_merge_vel_after_window(batch, d_idx, kb_x, kb_y);
-    staling_queue_update(batch, a_idx, item_attack_id, item_attack_instance);
-    combat_combo_ftColl_800763C0(batch, a_idx, defender, d_idx, item_attack_id);
+    staling_queue_update(batch, a_idx, damage_product.move_id, damage_product.attack_instance);
+    combat_combo_ftColl_800763C0(batch, a_idx, defender, d_idx, damage_product.move_id);
     if (item_is_illusion) {
       return MSL_ITEM_HIT_APPLIED_DONT_CONSUME;
     }
@@ -6359,7 +6043,7 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
 
   // Stale-move queue update on successful damaging BODY hit (attacker-side).
   // Decomp: refs/melee/src/melee/pl/plstale.c::plStale_UpdateStaleMovesFromItem
-  staling_queue_update(batch, a_idx, item_attack_id, item_attack_instance);
+  staling_queue_update(batch, a_idx, damage_product.move_id, damage_product.attack_instance);
 
   // ThrowLw compatibility release-frame combo-victim continuation:
   // - Live Throw Anim release detaches/damages the victim before later item BODY contacts.
@@ -6372,16 +6056,17 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
   if (batch->state.action_id[a_idx] == (uint16_t)MSL_ACT_THROW_LW &&
       batch->state.throw_pending_victim_port[a_idx] == (uint8_t)defender &&
       batch->state.combo_victim_port[a_idx] == 0xFFu &&
-      item_attack_id != (uint16_t)MSL_FT_MOVE_ID_DEFAULT &&
-      batch->state.attack_id[a_idx] == item_attack_id && batch->state.combo_count[a_idx] != 0u &&
-      batch->state.last_attack_landed[a_idx] == (uint8_t)item_attack_id) {
+      damage_product.move_id != (uint16_t)MSL_FT_MOVE_ID_DEFAULT &&
+      batch->state.attack_id[a_idx] == damage_product.move_id &&
+      batch->state.combo_count[a_idx] != 0u &&
+      batch->state.last_attack_landed[a_idx] == (uint8_t)damage_product.move_id) {
     batch->state.combo_victim_port[a_idx] = (uint8_t)defender;
     batch->state.combo_victim_instance_id[a_idx] = batch->state.instance_id[d_idx];
   }
 
   // Combo count + last-attack tracking (attacker-side).
   // Decomp: refs/melee/src/melee/ft/ftcoll.c::ftColl_8007646C -> ftColl_800763C0(item attack id domain).
-  combat_combo_ftColl_800763C0(batch, a_idx, defender, d_idx, item_attack_id);
+  combat_combo_ftColl_800763C0(batch, a_idx, defender, d_idx, damage_product.move_id);
 
   // Illusion/Phantasm body hits do not destroy the article on hit; itFoxIllusion_Logic14_DmgDealt
   // clears an item var and returns false so the article persists through the hitlag window.
@@ -6437,20 +6122,6 @@ static inline uint8_t combat_apply_throw_hit_core(MslBatch* batch, int batch_ind
   }
   const uint8_t defender_no_damage = (hurt_state != 0u) ? 1u : 0u;
 
-  // Decomp (GALE01):
-  // - set_throw_hitbox (ftAction_80071E04) writes the raw integer damage into HitCapsule.unk_count
-  //   and the staled float into HitCapsule.damage via ftColl_8007ABD0 -> ft_80089228(fp->x2068, fp->x206c).
-  //   refs/melee/build/GALE01/asm/melee/ft/ftaction.s::ftAction_80071E04
-  //   refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_8007ABD0
-  //
-  // In this lite sim, the throw hitbox params come from extracted move script data (base integer
-  // damage). Apply staling to the float percent write (HitCapsule.damage analog), but keep the
-  // raw integer damage (HitCapsule.unk_count analog) for hitlag/KB inputs.
-  const int dmg_raw_i = (int)p->damage;
-  if (dmg_raw_i <= 0) {
-    return 0;
-  }
-
   // Throw-hit damage ownership:
   // - set_throw_hitbox writes HitCapsule.damage through ft_80089228(fp->x2068, fp->x206c, raw_damage).
   // - On ThrowLw release rows in this family, the live attack-id lane can already be the
@@ -6462,32 +6133,21 @@ static inline uint8_t combat_apply_throw_hit_core(MslBatch* batch, int batch_ind
   if (move_id == (uint16_t)MSL_FT_MOVE_ID_DEFAULT) {
     move_id = staling_move_id_from_state(batch, a_idx);
   }
-  // Throw hit capsules store their staled float damage when the set_throw_hitbox movescript event
-  // creates the capsule. Same-instance low-throw laser contacts can update the stale queue before
-  // compatibility pending-release cleanup applies a seeded throw hit, but those later queue entries
-  // must not retroactively stale the already-created capsule damage.
-  // refs/melee/build/GALE01/asm/melee/ft/ftaction.s::ftAction_80071E04
-  // refs/melee/build/GALE01/asm/melee/ft/ftcoll.s::ftColl_8007ABD0
-  const uint16_t throw_attack_instance = batch->state.attack_instance[a_idx];
-  const float stale_mult =
-      staling_multiplier_for_move_excluding_instance(batch, a_idx, move_id, throw_attack_instance);
 
-  float dmg_f = p->damage;
-  if (stale_mult != 1.0f) {
-    dmg_f *= stale_mult;
-  }
-  const int dmg_env_i = combat_get_env_dmg(dmg_f);
-  if (dmg_env_i <= 0) {
+  MslCombatDamageProduct damage_product;
+  if (!combat_throw_damage_product_build(batch, a_idx, p, move_id, &damage_product)) {
     return 0;
   }
 
-  if (defender_no_damage) {
+  const MslCombatDamageApplyClass throw_damage_class =
+      defender_no_damage ? MSL_COMBAT_DAMAGE_REJECTED : MSL_COMBAT_DAMAGE_FULL;
+  if (throw_damage_class == MSL_COMBAT_DAMAGE_REJECTED) {
     return 0;
   }
 
   // Percent-temp accumulation (BODY): fp->dmg.x1838_percentTemp.
   const float percent_pre = batch->state.percent[d_idx];
-  batch->state.percent_temp[d_idx] += dmg_f;
+  batch->state.percent_temp[d_idx] += damage_product.applied_damage;
   const float dmg_temp = batch->state.percent_temp[d_idx];
 
   const uint16_t d_motion_id = batch->state.action_id[d_idx];
@@ -6521,9 +6181,9 @@ static inline uint8_t combat_apply_throw_hit_core(MslBatch* batch, int batch_ind
   }
 
   const float kb_applied = combat_damage_calc_kb_applied(
-      c, &d_ch_throw, d_motion_id, percent_pre, dmg_temp, dmg_raw_i, p->kbg, p->wsk, p->bkb,
-      coll_kb_mul, batch->state.dmg_x2225_b7[d_idx], batch->state.dmg_x2224_b2[d_idx],
-      batch->state.kb_smashcharge_active[d_idx]);
+      c, &d_ch_throw, d_motion_id, percent_pre, dmg_temp, damage_product.kb_damage_i, p->kbg,
+      p->wsk, p->bkb, coll_kb_mul, batch->state.dmg_x2225_b7[d_idx],
+      batch->state.dmg_x2224_b2[d_idx], batch->state.kb_smashcharge_active[d_idx]);
   const float kb_angle_rad =
       combat_damage_calc_angle_radians(c, p->angle, defender_on_ground, kb_applied);
   float damage_state_angle_rad = kb_angle_rad;
@@ -6557,8 +6217,8 @@ static inline uint8_t combat_apply_throw_hit_core(MslBatch* batch, int batch_ind
     ev.last_hit_by = combat_source_port0_for_attacker(batch, a_idx, attacker);
     ev.source_write = MSL_PROCESS_HIT_SOURCE_WRITE_DIRECT;
     ev.update_bookkeeping = update_bookkeeping;
-    ev.stale_move_id = move_id;
-    ev.stale_attack_instance = batch->state.attack_instance[a_idx];
+    ev.stale_move_id = damage_product.move_id;
+    ev.stale_attack_instance = damage_product.attack_instance;
     ev.combo_attack_id = batch->state.attack_id[a_idx];
     combat_processhit_apply_resolved_damage(c, batch, &ev);
     return 1;
@@ -6613,8 +6273,8 @@ static inline uint8_t combat_apply_throw_hit_core(MslBatch* batch, int batch_ind
   ev.last_hit_by = combat_source_port0_for_attacker(batch, a_idx, attacker);
   ev.source_write = MSL_PROCESS_HIT_SOURCE_WRITE_DIRECT;
   ev.update_bookkeeping = update_bookkeeping;
-  ev.stale_move_id = move_id;
-  ev.stale_attack_instance = batch->state.attack_instance[a_idx];
+  ev.stale_move_id = damage_product.move_id;
+  ev.stale_attack_instance = damage_product.attack_instance;
   ev.combo_attack_id = batch->state.attack_id[a_idx];
   combat_processhit_apply_resolved_damage(c, batch, &ev);
   // Throw-release ordering:

@@ -132,6 +132,14 @@ and decomp-motivated rather than arbitrary heuristics.
   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0`,
   `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}`,
   and `refs/melee/src/melee/it/itcoll.c::it_80272460`.
+- **Research note (2026-05-16, damage modifier/source shape)**: the decomp-faithful boundary is
+  still the same producer/consumer split, not a generic post-hoc damage modifier pass. `ftColl`
+  and item/throw producers populate pre-`Fighter_ProcessHit` accumulators (`x1838_percentTemp`,
+  `x183C_applied`, `kb_applied`, element/facing/source lanes) and apply pre-hit modifiers such as
+  staling before derived quantities are computed. `Fighter_ProcessHit_8006D1EC` then consumes the
+  resolved lanes once, applies common aftermath, and clears the transient damage fields. Future
+  modifier work should complete missing producer lanes or seedable internals, not add compensating
+  runtime bridges after the consumer.
 - **SHIELD minimal mutations** (current):
   - Resolve at most 1 shield hit per attacker→defender per frame (deterministic `hitbox_id` order).
   - Apply decomp-backed shield HP depletion and enter `GuardSetOff` (shieldstun) on the defender.
@@ -1383,8 +1391,11 @@ Prefer completing these projects in order rather than “patching symptoms” in
      - Which collision outcomes update which victim list and when countdowns are set/refreshed.
    - Whether fighters inline any hitlist rules (vs calling `lbColl_*` directly), and if so, what the exact equivalence is.
 
-4) **Damage modifiers parity (stale queue + multipliers + armor/no-damage gates)** (**TODO**)
+4) **Damage modifiers parity (stale queue + multipliers + armor/no-damage gates)** (**PARTIAL**)
    - Goal: make percent/hitlag/hitstun/KB numerically meaningful; stop “percent drift” being dominated by missing modifiers.
+   - Current runtime has a shared pre-`Fighter_ProcessHit` damage product for represented fighter BODY, item BODY, and throw-release
+     producers. That product keeps raw HitCapsule damage, staled/applied float damage, env-damage, KB damage, move id, and attack instance
+     together before percent/hitlag/KB/stale bookkeeping are derived.
    - Depends on: (3) for correct hit identity + timing.
 
    **Decomp entrypoints (read first; file::function)**
@@ -1428,6 +1439,8 @@ Prefer completing these projects in order rather than “patching symptoms” in
    - No-damage/armor gating internals:
      - A representation of “damage is negated/absorbed” vs “damage is applied but reduced”, plus any remaining “armor HP” style value
        if applicable (decomp shows a subtract-then-apply pattern on some flags in `ftcoll.c`).
+     - Runtime must not emulate true armor/no-KB by broad post-hoc ProcessHit gates. Missing fields such as the `x221C_b4` armor flag,
+       `dmg.x1834`, and no-KB ownership need explicit seed/runtime state before their behavior can move into the shared damage product.
 
    **Seeding rule (teacher-forced reseed: what is causal vs explicit vs engine-dump)**
    - Causally reconstructible from Slippi + extracted tables (preferred; implement in suite preprocessing):
