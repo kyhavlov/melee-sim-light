@@ -33,9 +33,14 @@ _CONTACTS_DTYPE = np.dtype(
 )
 
 MSL_COLLIDE_FLOOR_MASK = 0x18000
+ACT_DAMAGE_HI_2 = 0x004C
+ACT_DAMAGE_N_2 = 0x004F
+ACT_DAMAGE_AIR_1 = 0x0054
 ACT_DAMAGE_AIR_2 = 0x0055
 ACT_DAMAGE_AIR_3 = 0x0056
 ACT_DAMAGE_FLY_TOP = 0x005A
+ACT_ESCAPE_AIR = 0x00EC
+ACT_MISS_FOOT = 0x00FB
 ACT_THROWN_LW = 0x00F2
 
 
@@ -116,6 +121,36 @@ def _run_one_step_with_contacts_from_samples(
     ref = row["ref_t1"][0].copy()
     contacts = np.frombuffer(out_contacts_bytes.tobytes(), dtype=_CONTACTS_DTYPE, count=1)[0]
     return out, ref, contacts
+
+
+def _run_one_step_seed_arrays(
+    seed: np.ndarray, prev_input: np.ndarray, input_t: np.ndarray, num_players: int
+) -> np.ndarray:
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    seed_bytes = seed.reshape(1).view("u1").reshape(1, seed_stride).copy()
+    prev_input_bytes = prev_input.reshape(1).view("u1").reshape(1, input_stride).copy()
+    input_bytes = input_t.reshape(1).view("u1").reshape(1, input_stride).copy()
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+    handle = binding.init(
+        batch_size=1,
+        num_players=num_players,
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    try:
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+    finally:
+        binding.destroy(handle)
+
+    return out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()
 
 
 def _run_rollout_record(dataset_path: Path, start_record: int, target_record: int) -> tuple[np.void, np.void]:
@@ -225,6 +260,213 @@ def test_damageair_sustained_active_hitlag_sdi_does_not_reproject_floor_his_3643
     assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=1e-6)
     assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
     assert (int(contacts["coll_env_flags"][p]) & MSL_COLLIDE_FLOOR_MASK) == 0
+
+
+@pytest.mark.integration
+def test_grounded_damage_floor_loss_uses_fod_world_platform_for_missfoot_mgs_661() -> None:
+    # Grounded common Damage floor loss:
+    # ftCo_Damage_Coll -> ft_800848DC uses mpColl_8004B108's ledge-slip side bits to choose
+    # MissFoot vs the supplied ftCo_8008FC94 ground-to-air callback. FoD side-platform endpoints
+    # are live grIzumi JObj geometry; using static MSLSTG01 segment endpoints falsely classifies
+    # the transformed left-platform row as a facing-side ledge slip and enters MissFoot.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_Coll,ftCo_8008FC94}
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_800848DC,ft_80082708}
+    # refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+    # data/stages/bin/griz.bin::MSLSTG01 platform_transforms
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+        "MilkyGracefulStingray.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset_window(str(dataset_path), 661, 662)
+    row = ds.samples[0]
+    p = 0
+
+    assert int(row["seed_t"]["action_id"][p]) == ACT_DAMAGE_N_2
+    assert int(row["seed_t"]["on_ground"][p]) == 1
+    assert int(row["seed_t"]["ground_id"][p]) == 0
+    assert int(row["seed_t"]["hitlag"][p]) == 4
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_DAMAGE_N_2
+    assert int(row["ref_t1"]["on_ground"][p]) == 0
+
+    out, ref, _contacts = _run_one_step_with_contacts_from_samples(ds.samples, int(ds.header["num_players"]), 0)
+
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_DAMAGE_N_2
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 0
+    assert int(out["hitlag"][p]) == int(ref["hitlag"][p]) == 3
+    assert int(out["hitstun"][p]) == int(ref["hitstun"][p]) == 17
+    assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
+def test_grounded_damage_floor_loss_still_missfoots_past_facing_fod_world_endpoint_mgs_661_negative() -> None:
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+        "MilkyGracefulStingray.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset_window(str(dataset_path), 661, 662)
+    row = ds.samples[0]
+    p = 0
+    seed = row["seed_t"].copy()
+    # The transformed left-platform line is roughly [-49.5, -21.0] in world coordinates here. The
+    # replay row is past the right endpoint but facing right, so it takes the Damage callback. Flip
+    # facing to prove the same source ledge-slip owner still enters MissFoot when the live endpoint
+    # and facing-side pair actually match.
+    seed["facing"][p] = np.uint8(0)
+    seed["facing_dir1"][p] = np.int8(-1)
+
+    out = _run_one_step_seed_arrays(seed, row["prev_input_t"].copy(), row["input_t"].copy(), int(ds.header["num_players"]))
+
+    assert int(out["action_id"][p]) == ACT_MISS_FOOT
+    assert int(out["hitstun"][p]) == 0
+
+
+@pytest.mark.integration
+def test_grounded_damagehi_hitlag_exit_asdi_reprojects_to_floor_pte_633() -> None:
+    # Replay-real FoD lock for grounded Damage_Coll after post-hitlag ASDI:
+    # - Fighter_8006A1BC calls ftCo_Damage_OnExitHitlag when hitlag reaches zero.
+    # - Grounded ftCo_Damage_Coll still routes through ft_800848DC -> ft_80082708 ->
+    #   mpColl_8004B108, so the post-ASDI root is projected back onto the current hard floor.
+    # - The sibling non-damage synthetic below proves this is not a generic grounded "snap down"
+    #   path.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+    #   ftCo_Damage_OnExitHitlag,ftCo_Damage_Coll}
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_800848DC,ft_80082708}
+    # refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset_window(str(dataset_path), 633, 634)
+    row = ds.samples[0:1]
+    p = 0
+
+    assert int(row["seed_t"]["action_id"][0, p]) == ACT_DAMAGE_HI_2
+    assert int(row["seed_t"]["on_ground"][0, p]) == 1
+    assert int(row["seed_t"]["hitlag"][0, p]) == 1
+    assert int(row["prev_input_t"]["p"]["main_y"][0, p]) > 100
+    assert float(row["ref_t1"]["pos_y"][0, p]) == pytest.approx(0.0028748512, abs=1e-7)
+
+    out, ref, contacts = _run_one_step_with_contacts_from_samples(
+        row, int(ds.header["num_players"]), 0
+    )
+
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_DAMAGE_HI_2
+    assert int(out["hitlag"][p]) == int(ref["hitlag"][p]) == 0
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 1
+    assert int(out["ground_id"][p]) == int(ref["ground_id"][p]) == 5
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-7)
+    assert int(contacts["coll_env_flags"][p]) & MSL_COLLIDE_FLOOR_MASK
+
+
+def test_post_hitlag_projection_requires_grounded_damage_coll_pte_negative() -> None:
+    # Same FoD input/action shape as the grounded DamageHi post-hitlag row above, but with the
+    # victim airborne and safely above the floor. ftCo_Damage_Coll's grounded
+    # ft_800848DC/mpColl_8004B108 projection must not run from the air path.
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset_window(str(dataset_path), 633, 634)
+    row = ds.samples[0]
+    p = 0
+    seed = row["seed_t"].copy()
+    seed["on_ground"][p] = np.uint8(0)
+    seed["ground_id"][p] = np.uint16(0xFFFF)
+    seed["pos_y"][p] = np.float32(10.0)
+
+    out = _run_one_step_seed_arrays(
+        seed, row["prev_input_t"].copy(), row["input_t"].copy(), int(ds.header["num_players"])
+    )
+
+    assert int(out["action_id"][p]) == ACT_DAMAGE_HI_2
+    assert int(out["hitlag"][p]) == 0
+    assert int(out["on_ground"][p]) == 0
+    assert float(out["pos_y"][p]) > 12.0
+
+
+@pytest.mark.integration
+def test_terminal_airborne_damage_iasa_can_enter_escapeair_pte_2417() -> None:
+    # Replay-real FoD lock for the airborne common-Damage IASA delegate:
+    # - terminal DamageAir1 has cleared x221C_b6/hitstun,
+    # - ftCo_Damage_IASA forwards to ftCo_Fall_IASA_Inner, and
+    # - Fall_IASA_Inner checks EscapeAir before its AttackAir / JumpAerial fallbacks.
+    # This is not the DamageFly/DamageFall IASA ladder.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_IASA_Inner
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_80099A58
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset_window(str(dataset_path), 2417, 2418)
+    row = ds.samples[0:1]
+    p = 0
+
+    assert int(row["seed_t"]["action_id"][0, p]) == ACT_DAMAGE_AIR_1
+    assert int(row["seed_t"]["hitstun"][0, p]) == 1
+    assert int(row["input_t"]["p"]["buttons"][0, p]) & 0x0040
+    assert int(row["input_t"]["p"]["l"][0, p]) == 255
+    assert int(row["ref_t1"]["action_id"][0, p]) == ACT_ESCAPE_AIR
+
+    out, ref, _contacts = _run_one_step_with_contacts_from_samples(
+        row, int(ds.header["num_players"]), 0
+    )
+
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_ESCAPE_AIR
+    assert int(out["hitstun"][p]) == int(ref["hitstun"][p]) == 0
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 0
+
+
+def test_terminal_airborne_damage_iasa_escapeair_requires_escape_input_pte_2417_negative() -> None:
+    # Same terminal DamageAir seed with the shield/trigger press removed: the Fall_IASA_Inner
+    # EscapeAir branch must not fire without the source input predicate.
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset_window(str(dataset_path), 2417, 2418)
+    row = ds.samples[0]
+    p = 0
+    input_t = row["input_t"].copy()
+    input_t["p"]["buttons"][p] = np.uint16(0)
+    input_t["p"]["l"][p] = np.uint8(0)
+    input_t["p"]["r"][p] = np.uint8(0)
+
+    out = _run_one_step_seed_arrays(
+        row["seed_t"].copy(), row["prev_input_t"].copy(), input_t, int(ds.header["num_players"])
+    )
+
+    assert int(out["action_id"][p]) != ACT_ESCAPE_AIR
 
 
 @pytest.mark.integration

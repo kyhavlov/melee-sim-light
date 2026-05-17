@@ -67,6 +67,50 @@ def _run_one_step(*, dataset_rel: str, record: int, p: int) -> tuple[np.ndarray,
         binding.destroy(handle)
 
 
+def _run_one_step_with_seed_mutation(
+    *, dataset_rel: str, record: int, mutate_seed
+) -> tuple[np.ndarray, np.ndarray]:
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    num_records = int(samples.shape[0])
+    assert num_records > record, f"dataset too short: num_records={num_records} record={record}"
+
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    seed_t = samples[record]["seed_t"].copy()
+    mutate_seed(seed_t)
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        seed_bytes = np.frombuffer(seed_t.tobytes(order="C"), dtype=np.uint8).reshape(1, seed_stride).copy()
+        prev_input_bytes = np.frombuffer(
+            samples[record]["prev_input_t"].tobytes(order="C"), dtype=np.uint8
+        ).reshape(1, input_stride).copy()
+        input_bytes = np.frombuffer(samples[record]["input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, input_stride
+        ).copy()
+        out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+
+        out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()
+        ref = samples[record]["ref_t1"].reshape(-1)[0].copy()
+        return out, ref
+    finally:
+        binding.destroy(handle)
+
+
 def _run_one_step_with_rollout(
     *, dataset_rel: str, record: int, p: int, window_before: int = 24
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -649,3 +693,52 @@ def test_downbound_floor_endpoint_clamp_keeps_airborne_edge_rows_in_downbound(
     # refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
     assert int(out["action_id"][p]) == int(ref["action_id"][p]) == int(action_id)
     assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 0
+
+
+def test_airborne_downbound_stage_object_endpoint_cross_enters_fall_mgs_3782() -> None:
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/MilkyGracefulStingray.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[3782]
+    p = 1
+    assert int(row["seed_t"]["action_id"][p]) == 191  # DownBoundD
+    assert int(row["seed_t"]["on_ground"][p]) == 0
+    assert int(row["seed_t"]["ground_id"][p]) == 2
+    assert int(row["ref_t1"]["action_id"][p]) == 29  # Fall
+
+    out, ref = _run_one_step(dataset_rel=dataset_rel, record=3782, p=p)
+
+    # DownBound_Coll calls ft_80082708, which reports allow-ground-to-air floor loss while keeping
+    # ground_or_air airborne. On FoD stage-object platform endpoints this is a generated
+    # platform-transform floor, not a generic hard-floor ledge endpoint escape.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80082708
+    # refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == 29
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 0
+    assert int(out["ground_id"][p]) == int(ref["ground_id"][p]) == 2
+
+
+def test_airborne_downbound_stage_object_endpoint_cross_requires_platform_transform_ground_id() -> None:
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/MilkyGracefulStingray.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    def stale_nonplatform_floor(seed_t: np.void) -> None:
+        seed_t["ground_id"][1] = np.uint16(5)
+
+    out, _ref = _run_one_step_with_seed_mutation(
+        dataset_rel=dataset_rel, record=3782, mutate_seed=stale_nonplatform_floor
+    )
+
+    # The retained branch is specifically the MSLSTG01 platform-transform endpoint owner. A stale
+    # non-transform CollData.floor.index must not enter Fall through the same shortcut.
+    assert int(out["action_id"][1]) == 191  # DownBoundD
+    assert int(out["on_ground"][1]) == 0

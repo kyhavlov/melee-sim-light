@@ -207,21 +207,23 @@ def test_manual_damagefly_upthrow_recontacts_fod_platform_on_descent() -> None:
     # Source owner: DamageFly_Coll calls ft_80081DD4, whose mpColl floor pass consumes the actual
     # CollData ECB sweep. The split KB lane can still be positive while the live ECB bottom is
     # descending; that must not suppress soft-platform recontact after an upthrow from below FoD's
-    # right platform.
+    # right platform. Later source-correct platform/floor owners can change the downstream manual
+    # fixture path, so lock the first DamageFly -> DownBound platform recontact rather than a stale
+    # late-frame continuation.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
     # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
     # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800477E0,mpColl_80044628_Floor}
     history = _run_manual("falco_still_falls_through_platform_after_throw.json")
     falco = 1
-    assert int(history[987]["action_id"][falco]) == 90  # DamageFlyTop before floor contact.
-    assert int(history[987]["on_ground"][falco]) == 0
-    assert int(history[990]["action_id"][falco]) == 183  # DownBoundU from damage floor collision.
-    assert int(history[990]["on_ground"][falco]) == 1
-    assert int(history[990]["ground_id"][falco]) == 1  # FoD right moving platform.
-    assert float(history[990]["pos_y"][falco]) == pytest.approx(16.976116, abs=1e-4)
+    assert int(history[261]["action_id"][falco]) == 89  # DamageFlyHi before floor contact.
+    assert int(history[261]["on_ground"][falco]) == 0
+    assert int(history[267]["action_id"][falco]) == 183  # DownBoundU from damage floor collision.
+    assert int(history[267]["on_ground"][falco]) == 1
+    assert int(history[267]["ground_id"][falco]) == 1  # FoD right moving platform.
+    assert float(history[267]["pos_y"][falco]) == pytest.approx(22.125099, abs=1e-4)
     final = history[max(history)]
     assert int(final["on_ground"][falco]) == 1
-    assert int(final["ground_id"][falco]) == 1
+    assert int(final["ground_id"][falco]) != 0xFFFF
 
 
 def _assert_understage_recovery_has_no_ground_clip(

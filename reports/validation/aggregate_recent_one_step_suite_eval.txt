@@ -58,7 +58,7 @@ mismatch.instance_id: 0 / 14590 (0.000000)
 mismatch.last_attack_landed: 0 / 14590 (0.000000)
 mismatch.combo_count: 0 / 14590 (0.000000)
 mismatch.last_hit_by: 2 / 14590 (0.000137)
-mismatch.state_flags: 3 / 72950 (0.000041)
+mismatch.state_flags: 2 / 72950 (0.000027)
 mismatch.item_exists: 0 / 109425 (0.000000)
 mismatch.item_type: 0 / 109425 (0.000000)
 mismatch.item_state: 0 / 109425 (0.000000)
@@ -66,7 +66,7 @@ mismatch.item_owner: 0 / 109425 (0.000000)
 mismatch.item_instance_id: 0 / 109425 (0.000000)
 ignored_mismatch.state_flags[4]&0x80: 19 / 14590 (0.001302)
 err.pos_x: mae=0.000090 p95=0.000000 max=0.223244
-err.pos_y: mae=0.000408 p95=0.000000 max=2.510000
+err.pos_y: mae=0.000323 p95=0.000000 max=2.510000
 err.speed_air_x_self: mae=0.000004 p95=0.000000 max=0.063301
 err.speed_ground_x_self: mae=0.000049 p95=0.000000 max=0.142000
 err.speed_y_self: mae=0.000323 p95=0.000000 max=2.510000
@@ -78,10 +78,10 @@ err.item_pos_x: mae=0.039961 p95=0.000000 max=38.000000
 err.item_pos_y: mae=0.000022 p95=0.000000 max=0.030602
 err.item_vel_x: mae=0.007002 p95=0.000000 max=10.000000
 err.item_vel_y: mae=0.000022 p95=0.000000 max=0.030602
-overall.discrete_mismatch: 8 / 882695
-overall.strict_discrete_mismatch: 27 / 882695
+overall.discrete_mismatch: 7 / 882695
+overall.strict_discrete_mismatch: 26 / 882695
 overall.ignored_discrete_mismatch: 19
-overall.float_norm_mae_p95: 0.00003781
+overall.float_norm_mae_p95: 0.00003768
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl ==
 Records: 10174  Players/scored per record: 2  Total player-frames: 20348
@@ -111,7 +111,7 @@ mismatch.item_owner: 0 / 152610 (0.000000)
 mismatch.item_instance_id: 0 / 152610 (0.000000)
 ignored_mismatch.state_flags[4]&0x80: 25 / 20348 (0.001229)
 err.pos_x: mae=0.000407 p95=0.000000 max=0.494659
-err.pos_y: mae=0.000785 p95=0.000000 max=4.176683
+err.pos_y: mae=0.000739 p95=0.000000 max=4.176683
 err.speed_air_x_self: mae=0.000016 p95=0.000000 max=0.240000
 err.speed_ground_x_self: mae=0.000164 p95=0.000000 max=2.404796
 err.speed_y_self: mae=0.000634 p95=0.000000 max=2.940000
@@ -126,7 +126,7 @@ err.item_vel_y: mae=0.000001 p95=0.000000 max=0.000060
 overall.discrete_mismatch: 46 / 1231054
 overall.strict_discrete_mismatch: 71 / 1231054
 overall.ignored_discrete_mismatch: 25
-overall.float_norm_mae_p95: 0.00005305
+overall.float_norm_mae_p95: 0.00005298
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl ==
 Records: 9856  Players/scored per record: 2  Total player-frames: 19712
@@ -201,7 +201,7 @@ mismatch.item_owner: 0 / 182775 (0.000000)
 mismatch.item_instance_id: 0 / 182775 (0.000000)
 ignored_mismatch.state_flags[4]&0x80: 47 / 24370 (0.001929)
 err.pos_x: mae=0.000117 p95=0.000000 max=0.411377
-err.pos_y: mae=0.001284 p95=0.000000 max=3.000000
+err.pos_y: mae=0.000210 p95=0.000000 max=1.580000
 err.speed_air_x_self: mae=0.000029 p95=0.000000 max=0.411375
 err.speed_ground_x_self: mae=0.000034 p95=0.000000 max=0.135800
 err.speed_y_self: mae=0.000204 p95=0.000000 max=1.580000
@@ -216,7 +216,7 @@ err.item_vel_y: mae=0.000001 p95=0.000000 max=0.000060
 overall.discrete_mismatch: 35 / 1474385
 overall.strict_discrete_mismatch: 82 / 1474385
 overall.ignored_discrete_mismatch: 47
-overall.float_norm_mae_p95: 0.00001519
+overall.float_norm_mae_p95: 0.00001369
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/Game_20260514T181413.msl ==
 Records: 2723  Players/scored per record: 2  Total player-frames: 5446
@@ -291,7 +291,7 @@ mismatch.item_owner: 1 / 82650 (0.000012)
 mismatch.item_instance_id: 2 / 82650 (0.000024)
 ignored_mismatch.state_flags[4]&0x80: 53 / 11020 (0.004809)
 err.pos_x: mae=0.000411 p95=0.000000 max=0.982033
-err.pos_y: mae=0.001973 p95=0.000000 max=3.000000
+err.pos_y: mae=0.001701 p95=0.000000 max=2.940002
 err.speed_air_x_self: mae=0.000001 p95=0.000000 max=0.010170
 err.speed_ground_x_self: mae=0.000025 p95=0.000000 max=0.108000
 err.speed_y_self: mae=0.001701 p95=0.000000 max=2.940000
@@ -306,7 +306,7 @@ err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000060
 overall.discrete_mismatch: 25 / 666710
 overall.strict_discrete_mismatch: 78 / 666710
 overall.ignored_discrete_mismatch: 53
-overall.float_norm_mae_p95: 0.00141492
+overall.float_norm_mae_p95: 0.00141449
 
 == datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl ==
 Records: 11529  Players/scored per record: 2  Total player-frames: 23058
@@ -336,7 +336,7 @@ mismatch.item_owner: 0 / 172935 (0.000000)
 mismatch.item_instance_id: 0 / 172935 (0.000000)
 ignored_mismatch.state_flags[4]&0x80: 21 / 23058 (0.000911)
 err.pos_x: mae=0.000404 p95=0.000000 max=0.320004
-err.pos_y: mae=0.000634 p95=0.000000 max=7.826638
+err.pos_y: mae=0.000504 p95=0.000000 max=7.826638
 err.speed_air_x_self: mae=0.000084 p95=0.000000 max=0.320000
 err.speed_ground_x_self: mae=0.000045 p95=0.000000 max=0.320000
 err.speed_y_self: mae=0.000136 p95=0.000000 max=2.200000
@@ -351,7 +351,7 @@ err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000282
 overall.discrete_mismatch: 23 / 1395009
 overall.strict_discrete_mismatch: 44 / 1395009
 overall.ignored_discrete_mismatch: 21
-overall.float_norm_mae_p95: 0.00001563
+overall.float_norm_mae_p95: 0.00001544
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/HilariousVillainousGiraffe.msl ==
 Records: 9328  Players/scored per record: 2  Total player-frames: 18656
@@ -381,7 +381,7 @@ mismatch.item_owner: 0 / 139920 (0.000000)
 mismatch.item_instance_id: 0 / 139920 (0.000000)
 ignored_mismatch.state_flags[4]&0x80: 25 / 18656 (0.001340)
 err.pos_x: mae=0.000238 p95=0.000000 max=2.137131
-err.pos_y: mae=0.001371 p95=0.000000 max=5.110035
+err.pos_y: mae=0.001211 p95=0.000000 max=5.110035
 err.speed_air_x_self: mae=0.000007 p95=0.000000 max=0.127066
 err.speed_ground_x_self: mae=0.000231 p95=0.000000 max=1.900000
 err.speed_y_self: mae=0.000927 p95=0.000000 max=3.160000
@@ -396,7 +396,7 @@ err.item_vel_y: mae=0.000236 p95=0.000000 max=0.371878
 overall.discrete_mismatch: 45 / 1128688
 overall.strict_discrete_mismatch: 70 / 1128688
 overall.ignored_discrete_mismatch: 25
-overall.float_norm_mae_p95: 0.00006254
+overall.float_norm_mae_p95: 0.00006232
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl ==
 Records: 8729  Players/scored per record: 2  Total player-frames: 17458
@@ -516,7 +516,7 @@ mismatch.item_owner: 5 / 145335 (0.000034)
 mismatch.item_instance_id: 6 / 145335 (0.000041)
 ignored_mismatch.state_flags[4]&0x80: 22 / 19378 (0.001135)
 err.pos_x: mae=0.000236 p95=0.000000 max=1.153801
-err.pos_y: mae=0.000900 p95=0.000000 max=3.160000
+err.pos_y: mae=0.000745 p95=0.000000 max=3.160000
 err.speed_air_x_self: mae=0.000005 p95=0.000000 max=0.090001
 err.speed_ground_x_self: mae=0.000597 p95=0.000000 max=1.900000
 err.speed_y_self: mae=0.000745 p95=0.000000 max=3.160000
@@ -531,7 +531,7 @@ err.item_vel_y: mae=0.003023 p95=0.000000 max=4.954213
 overall.discrete_mismatch: 118 / 1172369
 overall.strict_discrete_mismatch: 140 / 1172369
 overall.ignored_discrete_mismatch: 22
-overall.float_norm_mae_p95: 0.00011933
+overall.float_norm_mae_p95: 0.00011910
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl ==
 Records: 11980  Players/scored per record: 2  Total player-frames: 23960
@@ -561,7 +561,7 @@ mismatch.item_owner: 3 / 179700 (0.000017)
 mismatch.item_instance_id: 3 / 179700 (0.000017)
 ignored_mismatch.state_flags[4]&0x80: 30 / 23960 (0.001252)
 err.pos_x: mae=0.000215 p95=0.000000 max=1.151524
-err.pos_y: mae=0.001127 p95=0.000000 max=3.240356
+err.pos_y: mae=0.000797 p95=0.000000 max=3.240356
 err.speed_air_x_self: mae=0.000045 p95=0.000000 max=0.442875
 err.speed_ground_x_self: mae=0.000172 p95=0.000000 max=0.726000
 err.speed_y_self: mae=0.000885 p95=0.000000 max=3.500000
@@ -576,7 +576,7 @@ err.item_vel_y: mae=0.000007 p95=0.000000 max=0.021540
 overall.discrete_mismatch: 110 / 1449580
 overall.strict_discrete_mismatch: 140 / 1449580
 overall.ignored_discrete_mismatch: 30
-overall.float_norm_mae_p95: 0.00006775
+overall.float_norm_mae_p95: 0.00006724
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl ==
 Records: 7937  Players/scored per record: 2  Total player-frames: 15874
@@ -741,7 +741,7 @@ mismatch.item_owner: 0 / 117555 (0.000000)
 mismatch.item_instance_id: 0 / 117555 (0.000000)
 ignored_mismatch.state_flags[4]&0x80: 19 / 15674 (0.001212)
 err.pos_x: mae=0.000003 p95=0.000000 max=0.050003
-err.pos_y: mae=0.000740 p95=0.000000 max=2.962500
+err.pos_y: mae=0.000417 p95=0.000000 max=2.940002
 err.speed_air_x_self: mae=0.000003 p95=0.000000 max=0.050001
 err.speed_ground_x_self: mae=0.000010 p95=0.000000 max=0.108000
 err.speed_y_self: mae=0.000379 p95=0.000000 max=2.940000
@@ -756,12 +756,12 @@ err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000126
 overall.discrete_mismatch: 10 / 948277
 overall.strict_discrete_mismatch: 29 / 948277
 overall.ignored_discrete_mismatch: 19
-overall.float_norm_mae_p95: 0.00001439
+overall.float_norm_mae_p95: 0.00001387
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl ==
 Records: 12416  Players/scored per record: 2  Total player-frames: 24832
-mismatch.action_id: 5 / 24832 (0.000201)
-mismatch.action_frame: 3 / 24832 (0.000121)
+mismatch.action_id: 4 / 24832 (0.000161)
+mismatch.action_frame: 2 / 24832 (0.000081)
 mismatch.on_ground: 0 / 24832 (0.000000)
 mismatch.facing: 2 / 24832 (0.000081)
 mismatch.stocks: 0 / 24832 (0.000000)
@@ -772,13 +772,13 @@ mismatch.hitstun: 1 / 24832 (0.000040)
 mismatch.l_cancel: 0 / 24832 (0.000000)
 mismatch.hurtbox_state: 3 / 24832 (0.000121)
 mismatch.ground_id: 0 / 24832 (0.000000)
-mismatch.animation_index: 5 / 24832 (0.000201)
+mismatch.animation_index: 4 / 24832 (0.000161)
 mismatch.instance_hit_by: 2 / 24832 (0.000081)
-mismatch.instance_id: 5 / 24832 (0.000201)
+mismatch.instance_id: 4 / 24832 (0.000161)
 mismatch.last_attack_landed: 3 / 24832 (0.000121)
 mismatch.combo_count: 4 / 24832 (0.000161)
 mismatch.last_hit_by: 14 / 24832 (0.000564)
-mismatch.state_flags: 4 / 124160 (0.000032)
+mismatch.state_flags: 3 / 124160 (0.000024)
 mismatch.item_exists: 1 / 186240 (0.000005)
 mismatch.item_type: 1 / 186240 (0.000005)
 mismatch.item_state: 1 / 186240 (0.000005)
@@ -786,10 +786,10 @@ mismatch.item_owner: 1 / 186240 (0.000005)
 mismatch.item_instance_id: 1 / 186240 (0.000005)
 ignored_mismatch.state_flags[4]&0x80: 33 / 24832 (0.001329)
 err.pos_x: mae=0.000217 p95=0.000000 max=2.293068
-err.pos_y: mae=0.000498 p95=0.000000 max=6.784000
+err.pos_y: mae=0.000470 p95=0.000000 max=6.784000
 err.speed_air_x_self: mae=0.000072 p95=0.000000 max=1.480000
 err.speed_ground_x_self: mae=0.000038 p95=0.000000 max=0.296211
-err.speed_y_self: mae=0.000398 p95=0.000000 max=6.783999
+err.speed_y_self: mae=0.000370 p95=0.000000 max=6.783999
 err.speed_x_attack: mae=0.000216 p95=0.000000 max=3.111742
 err.speed_y_attack: mae=0.000174 p95=0.000000 max=3.111742
 err.percent: mae=0.000724 p95=0.000000 max=12.000000
@@ -798,15 +798,15 @@ err.item_pos_x: mae=0.000674 p95=0.000000 max=1.530910
 err.item_pos_y: mae=0.007303 p95=0.000000 max=21.128674
 err.item_vel_x: mae=0.000182 p95=0.000000 max=0.526065
 err.item_vel_y: mae=0.000002 p95=0.000000 max=0.006372
-overall.discrete_mismatch: 63 / 1502336
-overall.strict_discrete_mismatch: 96 / 1502336
+overall.discrete_mismatch: 58 / 1502336
+overall.strict_discrete_mismatch: 91 / 1502336
 overall.ignored_discrete_mismatch: 33
-overall.float_norm_mae_p95: 0.00004599
+overall.float_norm_mae_p95: 0.00004508
 
 == datasets/aggregate_recent/replays/validation/battlefield_recent/DelayedSuperbGuanaco.msl ==
 Records: 12914  Players/scored per record: 2  Total player-frames: 25828
-mismatch.action_id: 15 / 25828 (0.000581)
-mismatch.action_frame: 13 / 25828 (0.000503)
+mismatch.action_id: 14 / 25828 (0.000542)
+mismatch.action_frame: 12 / 25828 (0.000465)
 mismatch.on_ground: 5 / 25828 (0.000194)
 mismatch.facing: 3 / 25828 (0.000116)
 mismatch.stocks: 0 / 25828 (0.000000)
@@ -817,9 +817,9 @@ mismatch.hitstun: 7 / 25828 (0.000271)
 mismatch.l_cancel: 0 / 25828 (0.000000)
 mismatch.hurtbox_state: 3 / 25828 (0.000116)
 mismatch.ground_id: 5 / 25828 (0.000194)
-mismatch.animation_index: 14 / 25828 (0.000542)
+mismatch.animation_index: 13 / 25828 (0.000503)
 mismatch.instance_hit_by: 8 / 25828 (0.000310)
-mismatch.instance_id: 15 / 25828 (0.000581)
+mismatch.instance_id: 14 / 25828 (0.000542)
 mismatch.last_attack_landed: 6 / 25828 (0.000232)
 mismatch.combo_count: 4 / 25828 (0.000155)
 mismatch.last_hit_by: 21 / 25828 (0.000813)
@@ -831,10 +831,10 @@ mismatch.item_owner: 5 / 193710 (0.000026)
 mismatch.item_instance_id: 5 / 193710 (0.000026)
 ignored_mismatch.state_flags[4]&0x80: 19 / 25828 (0.000736)
 err.pos_x: mae=0.006283 p95=0.000000 max=96.037529
-err.pos_y: mae=0.013737 p95=0.000000 max=40.800812
+err.pos_y: mae=0.013458 p95=0.000000 max=40.800812
 err.speed_air_x_self: mae=0.000150 p95=0.000000 max=1.942500
 err.speed_ground_x_self: mae=0.000407 p95=0.000000 max=1.997329
-err.speed_y_self: mae=0.000969 p95=0.000000 max=3.400000
+err.speed_y_self: mae=0.000880 p95=0.000000 max=3.400000
 err.speed_x_attack: mae=0.000138 p95=0.000000 max=1.477492
 err.speed_y_attack: mae=0.000617 p95=0.000000 max=8.379270
 err.percent: mae=0.001755 p95=0.000000 max=17.999992
@@ -843,10 +843,10 @@ err.item_pos_x: mae=0.149900 p95=0.000000 max=55.080002
 err.item_pos_y: mae=0.018131 p95=0.000000 max=13.752838
 err.item_vel_x: mae=0.010140 p95=0.000000 max=7.000000
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000062
-overall.discrete_mismatch: 177 / 1562594
-overall.strict_discrete_mismatch: 196 / 1562594
+overall.discrete_mismatch: 173 / 1562594
+overall.strict_discrete_mismatch: 192 / 1562594
 overall.ignored_discrete_mismatch: 19
-overall.float_norm_mae_p95: 0.00101418
+overall.float_norm_mae_p95: 0.00101103
 
 == datasets/aggregate_recent/replays/validation/battlefield_recent/LoyalDishonestWren.msl ==
 Records: 4655  Players/scored per record: 2  Total player-frames: 9310
@@ -921,7 +921,7 @@ mismatch.item_owner: 1 / 121200 (0.000008)
 mismatch.item_instance_id: 1 / 121200 (0.000008)
 ignored_mismatch.state_flags[4]&0x80: 31 / 16160 (0.001918)
 err.pos_x: mae=0.000140 p95=0.000000 max=0.299999
-err.pos_y: mae=0.001930 p95=0.000000 max=5.230457
+err.pos_y: mae=0.001754 p95=0.000000 max=5.230457
 err.speed_air_x_self: mae=0.000024 p95=0.000000 max=0.131875
 err.speed_ground_x_self: mae=0.000415 p95=0.000000 max=2.074657
 err.speed_y_self: mae=0.000821 p95=0.000000 max=2.940000
@@ -936,7 +936,7 @@ err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000061
 overall.discrete_mismatch: 104 / 977680
 overall.strict_discrete_mismatch: 135 / 977680
 overall.ignored_discrete_mismatch: 31
-overall.float_norm_mae_p95: 0.00101415
+overall.float_norm_mae_p95: 0.00101392
 
 == datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.msl ==
 Records: 11918  Players/scored per record: 2  Total player-frames: 23836
@@ -958,7 +958,7 @@ mismatch.instance_id: 9 / 23836 (0.000378)
 mismatch.last_attack_landed: 4 / 23836 (0.000168)
 mismatch.combo_count: 3 / 23836 (0.000126)
 mismatch.last_hit_by: 16 / 23836 (0.000671)
-mismatch.state_flags: 32 / 119180 (0.000269)
+mismatch.state_flags: 30 / 119180 (0.000252)
 mismatch.item_exists: 2 / 178770 (0.000011)
 mismatch.item_type: 2 / 178770 (0.000011)
 mismatch.item_state: 1 / 178770 (0.000006)
@@ -966,7 +966,7 @@ mismatch.item_owner: 2 / 178770 (0.000011)
 mismatch.item_instance_id: 2 / 178770 (0.000011)
 ignored_mismatch.state_flags[4]&0x80: 123 / 23836 (0.005160)
 err.pos_x: mae=0.000355 p95=0.000000 max=2.192791
-err.pos_y: mae=0.002060 p95=0.000000 max=7.956490
+err.pos_y: mae=0.001840 p95=0.000000 max=7.956490
 err.speed_air_x_self: mae=0.000167 p95=0.000000 max=1.045168
 err.speed_ground_x_self: mae=0.000306 p95=0.000000 max=2.108373
 err.speed_y_self: mae=0.000458 p95=0.000000 max=2.510000
@@ -978,32 +978,32 @@ err.item_pos_x: mae=0.013905 p95=0.000000 max=9.359997
 err.item_pos_y: mae=0.000000 p95=0.000000 max=0.000093
 err.item_vel_x: mae=0.000001 p95=0.000000 max=0.000208
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000062
-overall.discrete_mismatch: 181 / 1442078
-overall.strict_discrete_mismatch: 304 / 1442078
+overall.discrete_mismatch: 179 / 1442078
+overall.strict_discrete_mismatch: 302 / 1442078
 overall.ignored_discrete_mismatch: 123
-overall.float_norm_mae_p95: 0.00010395
+overall.float_norm_mae_p95: 0.00010359
 
 == datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.msl ==
 Records: 11202  Players/scored per record: 2  Total player-frames: 22404
-mismatch.action_id: 25 / 22404 (0.001116)
-mismatch.action_frame: 20 / 22404 (0.000893)
-mismatch.on_ground: 14 / 22404 (0.000625)
+mismatch.action_id: 18 / 22404 (0.000803)
+mismatch.action_frame: 14 / 22404 (0.000625)
+mismatch.on_ground: 8 / 22404 (0.000357)
 mismatch.facing: 2 / 22404 (0.000089)
 mismatch.stocks: 0 / 22404 (0.000000)
-mismatch.jumps_left: 16 / 22404 (0.000714)
+mismatch.jumps_left: 10 / 22404 (0.000446)
 mismatch.is_dead: 0 / 22404 (0.000000)
 mismatch.hitlag: 7 / 22404 (0.000312)
 mismatch.hitstun: 6 / 22404 (0.000268)
-mismatch.l_cancel: 2 / 22404 (0.000089)
+mismatch.l_cancel: 1 / 22404 (0.000045)
 mismatch.hurtbox_state: 3 / 22404 (0.000134)
-mismatch.ground_id: 13 / 22404 (0.000580)
-mismatch.animation_index: 24 / 22404 (0.001071)
+mismatch.ground_id: 12 / 22404 (0.000536)
+mismatch.animation_index: 17 / 22404 (0.000759)
 mismatch.instance_hit_by: 2 / 22404 (0.000089)
-mismatch.instance_id: 13 / 22404 (0.000580)
+mismatch.instance_id: 10 / 22404 (0.000446)
 mismatch.last_attack_landed: 3 / 22404 (0.000134)
 mismatch.combo_count: 1 / 22404 (0.000045)
 mismatch.last_hit_by: 14 / 22404 (0.000625)
-mismatch.state_flags: 28 / 112020 (0.000250)
+mismatch.state_flags: 24 / 112020 (0.000214)
 mismatch.item_exists: 4 / 168030 (0.000024)
 mismatch.item_type: 4 / 168030 (0.000024)
 mismatch.item_state: 3 / 168030 (0.000018)
@@ -1011,10 +1011,10 @@ mismatch.item_owner: 4 / 168030 (0.000024)
 mismatch.item_instance_id: 4 / 168030 (0.000024)
 ignored_mismatch.state_flags[4]&0x80: 95 / 22404 (0.004240)
 err.pos_x: mae=0.000475 p95=0.000000 max=1.789936
-err.pos_y: mae=0.003877 p95=0.000000 max=9.518478
+err.pos_y: mae=0.002677 p95=0.000000 max=9.518478
 err.speed_air_x_self: mae=0.000136 p95=0.000000 max=0.967199
-err.speed_ground_x_self: mae=0.000661 p95=0.000000 max=1.972828
-err.speed_y_self: mae=0.000847 p95=0.000000 max=3.400000
+err.speed_ground_x_self: mae=0.000351 p95=0.000000 max=1.597991
+err.speed_y_self: mae=0.000819 p95=0.000000 max=3.400000
 err.speed_x_attack: mae=0.000138 p95=0.000000 max=1.912583
 err.speed_y_attack: mae=0.000254 p95=0.000000 max=1.912583
 err.percent: mae=0.001331 p95=0.000000 max=13.000000
@@ -1023,32 +1023,32 @@ err.item_pos_x: mae=0.032265 p95=0.000000 max=18.492210
 err.item_pos_y: mae=0.010303 p95=0.000000 max=10.255612
 err.item_vel_x: mae=0.004525 p95=0.000000 max=5.000000
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000062
-overall.discrete_mismatch: 212 / 1355442
-overall.strict_discrete_mismatch: 307 / 1355442
+overall.discrete_mismatch: 171 / 1355442
+overall.strict_discrete_mismatch: 266 / 1355442
 overall.ignored_discrete_mismatch: 95
-overall.float_norm_mae_p95: 0.00011416
+overall.float_norm_mae_p95: 0.00009296
 
 == datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/MilkyGracefulStingray.msl ==
 Records: 5921  Players/scored per record: 2  Total player-frames: 11842
-mismatch.action_id: 7 / 11842 (0.000591)
-mismatch.action_frame: 7 / 11842 (0.000591)
+mismatch.action_id: 4 / 11842 (0.000338)
+mismatch.action_frame: 4 / 11842 (0.000338)
 mismatch.on_ground: 3 / 11842 (0.000253)
 mismatch.facing: 2 / 11842 (0.000169)
 mismatch.stocks: 0 / 11842 (0.000000)
 mismatch.jumps_left: 4 / 11842 (0.000338)
 mismatch.is_dead: 0 / 11842 (0.000000)
 mismatch.hitlag: 4 / 11842 (0.000338)
-mismatch.hitstun: 5 / 11842 (0.000422)
+mismatch.hitstun: 3 / 11842 (0.000253)
 mismatch.l_cancel: 0 / 11842 (0.000000)
 mismatch.hurtbox_state: 3 / 11842 (0.000253)
 mismatch.ground_id: 2 / 11842 (0.000169)
-mismatch.animation_index: 7 / 11842 (0.000591)
+mismatch.animation_index: 4 / 11842 (0.000338)
 mismatch.instance_hit_by: 2 / 11842 (0.000169)
-mismatch.instance_id: 7 / 11842 (0.000591)
+mismatch.instance_id: 4 / 11842 (0.000338)
 mismatch.last_attack_landed: 2 / 11842 (0.000169)
 mismatch.combo_count: 1 / 11842 (0.000084)
 mismatch.last_hit_by: 8 / 11842 (0.000676)
-mismatch.state_flags: 11 / 59210 (0.000186)
+mismatch.state_flags: 8 / 59210 (0.000135)
 mismatch.item_exists: 0 / 88815 (0.000000)
 mismatch.item_type: 0 / 88815 (0.000000)
 mismatch.item_state: 0 / 88815 (0.000000)
@@ -1056,7 +1056,7 @@ mismatch.item_owner: 0 / 88815 (0.000000)
 mismatch.item_instance_id: 0 / 88815 (0.000000)
 ignored_mismatch.state_flags[4]&0x80: 65 / 11842 (0.005489)
 err.pos_x: mae=0.000464 p95=0.000000 max=0.759911
-err.pos_y: mae=0.001912 p95=0.000000 max=6.118954
+err.pos_y: mae=0.001177 p95=0.000000 max=6.118954
 err.speed_air_x_self: mae=0.000008 p95=0.000000 max=0.088750
 err.speed_ground_x_self: mae=0.000012 p95=0.000000 max=0.088750
 err.speed_y_self: mae=0.000226 p95=0.000000 max=2.680000
@@ -1068,10 +1068,10 @@ err.item_pos_x: mae=0.017597 p95=0.000000 max=18.719971
 err.item_pos_y: mae=0.000000 p95=0.000000 max=0.000038
 err.item_vel_x: mae=0.000000 p95=0.000000 max=0.000145
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000011
-overall.discrete_mismatch: 75 / 716441
-overall.strict_discrete_mismatch: 140 / 716441
+overall.discrete_mismatch: 58 / 716441
+overall.strict_discrete_mismatch: 123 / 716441
 overall.ignored_discrete_mismatch: 65
-overall.float_norm_mae_p95: 0.00030658
+overall.float_norm_mae_p95: 0.00030518
 
 == datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/CornyDelayedOkapi.msl ==
 Records: 13063  Players/scored per record: 2  Total player-frames: 26126
@@ -1101,7 +1101,7 @@ mismatch.item_owner: 1 / 195945 (0.000005)
 mismatch.item_instance_id: 1 / 195945 (0.000005)
 ignored_mismatch.state_flags[4]&0x80: 127 / 26126 (0.004861)
 err.pos_x: mae=0.006477 p95=0.000000 max=103.297768
-err.pos_y: mae=0.010740 p95=0.000000 max=39.362778
+err.pos_y: mae=0.010583 p95=0.000000 max=39.362778
 err.speed_air_x_self: mae=0.000057 p95=0.000000 max=0.819625
 err.speed_ground_x_self: mae=0.000094 p95=0.000000 max=1.191347
 err.speed_y_self: mae=0.000486 p95=0.000000 max=2.800000
@@ -1116,12 +1116,12 @@ err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000011
 overall.discrete_mismatch: 128 / 1580623
 overall.strict_discrete_mismatch: 255 / 1580623
 overall.ignored_discrete_mismatch: 127
-overall.float_norm_mae_p95: 0.00023915
+overall.float_norm_mae_p95: 0.00023895
 
 == datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/SweatyThisMallard.msl ==
 Records: 10404  Players/scored per record: 2  Total player-frames: 20808
-mismatch.action_id: 13 / 20808 (0.000625)
-mismatch.action_frame: 12 / 20808 (0.000577)
+mismatch.action_id: 12 / 20808 (0.000577)
+mismatch.action_frame: 11 / 20808 (0.000529)
 mismatch.on_ground: 4 / 20808 (0.000192)
 mismatch.facing: 4 / 20808 (0.000192)
 mismatch.stocks: 0 / 20808 (0.000000)
@@ -1132,13 +1132,13 @@ mismatch.hitstun: 7 / 20808 (0.000336)
 mismatch.l_cancel: 0 / 20808 (0.000000)
 mismatch.hurtbox_state: 0 / 20808 (0.000000)
 mismatch.ground_id: 0 / 20808 (0.000000)
-mismatch.animation_index: 15 / 20808 (0.000721)
+mismatch.animation_index: 14 / 20808 (0.000673)
 mismatch.instance_hit_by: 7 / 20808 (0.000336)
-mismatch.instance_id: 8 / 20808 (0.000384)
+mismatch.instance_id: 7 / 20808 (0.000336)
 mismatch.last_attack_landed: 7 / 20808 (0.000336)
 mismatch.combo_count: 0 / 20808 (0.000000)
 mismatch.last_hit_by: 19 / 20808 (0.000913)
-mismatch.state_flags: 30 / 104040 (0.000288)
+mismatch.state_flags: 29 / 104040 (0.000279)
 mismatch.item_exists: 1 / 156060 (0.000006)
 mismatch.item_type: 1 / 156060 (0.000006)
 mismatch.item_state: 2 / 156060 (0.000013)
@@ -1146,10 +1146,10 @@ mismatch.item_owner: 1 / 156060 (0.000006)
 mismatch.item_instance_id: 1 / 156060 (0.000006)
 ignored_mismatch.state_flags[4]&0x80: 98 / 20808 (0.004710)
 err.pos_x: mae=0.000106 p95=0.000000 max=0.759018
-err.pos_y: mae=0.001499 p95=0.000000 max=6.148350
+err.pos_y: mae=0.001350 p95=0.000000 max=6.148350
 err.speed_air_x_self: mae=0.000238 p95=0.000000 max=1.500000
 err.speed_ground_x_self: mae=0.000195 p95=0.000000 max=1.500000
-err.speed_y_self: mae=0.001516 p95=0.000000 max=3.400000
+err.speed_y_self: mae=0.001487 p95=0.000000 max=3.400000
 err.speed_x_attack: mae=0.000323 p95=0.000000 max=1.654830
 err.speed_y_attack: mae=0.000669 p95=0.000000 max=4.546608
 err.percent: mae=0.003486 p95=0.000000 max=15.000000
@@ -1158,10 +1158,10 @@ err.item_pos_x: mae=0.110661 p95=0.000000 max=75.577988
 err.item_pos_y: mae=0.012743 p95=0.000000 max=17.252840
 err.item_vel_x: mae=0.003530 p95=0.000000 max=5.000000
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000062
-overall.discrete_mismatch: 149 / 1258884
-overall.strict_discrete_mismatch: 247 / 1258884
+overall.discrete_mismatch: 144 / 1258884
+overall.strict_discrete_mismatch: 242 / 1258884
 overall.ignored_discrete_mismatch: 98
-overall.float_norm_mae_p95: 0.00014236
+overall.float_norm_mae_p95: 0.00014122
 
 == datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/ThisVioletRaccoon.msl ==
 Records: 12475  Players/scored per record: 2  Total player-frames: 24950
@@ -1191,7 +1191,7 @@ mismatch.item_owner: 4 / 187125 (0.000021)
 mismatch.item_instance_id: 4 / 187125 (0.000021)
 ignored_mismatch.state_flags[4]&0x80: 119 / 24950 (0.004770)
 err.pos_x: mae=0.000192 p95=0.000000 max=3.090805
-err.pos_y: mae=0.000867 p95=0.000000 max=4.897143
+err.pos_y: mae=0.000786 p95=0.000000 max=4.897143
 err.speed_air_x_self: mae=0.000052 p95=0.000000 max=0.809250
 err.speed_ground_x_self: mae=0.000166 p95=0.000000 max=1.839160
 err.speed_y_self: mae=0.000801 p95=0.000000 max=3.400000
@@ -1206,7 +1206,7 @@ err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000074
 overall.discrete_mismatch: 110 / 1509475
 overall.strict_discrete_mismatch: 229 / 1509475
 overall.ignored_discrete_mismatch: 119
-overall.float_norm_mae_p95: 0.00008181
+overall.float_norm_mae_p95: 0.00008167
 
 == datasets/aggregate_recent/replays/validation/dream_land_recent/FlippantEnchantedHorse.msl ==
 Records: 12471  Players/scored per record: 2  Total player-frames: 24942
@@ -1460,9 +1460,9 @@ mismatch.item_state: 3 / 141585 (0.000021)
 mismatch.item_owner: 1 / 141585 (0.000007)
 mismatch.item_instance_id: 2 / 141585 (0.000014)
 ignored_mismatch.state_flags[4]&0x80: 69 / 18878 (0.003655)
-err.pos_x: mae=0.001819 p95=0.000000 max=2.472786
-err.pos_y: mae=0.002149 p95=0.000000 max=7.564011
-err.speed_air_x_self: mae=0.000372 p95=0.000000 max=2.200000
+err.pos_x: mae=0.001792 p95=0.000000 max=2.472786
+err.pos_y: mae=0.002115 p95=0.000000 max=7.564011
+err.speed_air_x_self: mae=0.000345 p95=0.000000 max=2.200000
 err.speed_ground_x_self: mae=0.000545 p95=0.000000 max=2.200000
 err.speed_y_self: mae=0.000711 p95=0.000000 max=3.183986
 err.speed_x_attack: mae=0.000551 p95=0.000000 max=2.410532
@@ -1476,10 +1476,10 @@ err.item_vel_y: mae=0.002394 p95=0.000000 max=2.975596
 overall.discrete_mismatch: 275 / 1142119
 overall.strict_discrete_mismatch: 344 / 1142119
 overall.ignored_discrete_mismatch: 69
-overall.float_norm_mae_p95: 0.00053645
+overall.float_norm_mae_p95: 0.00053530
 
 == suite summary ==
-overall.discrete_mismatch: 2756 / 35294369
-overall.strict_discrete_mismatch: 4256 / 35294369
+overall.discrete_mismatch: 2681 / 35294369
+overall.strict_discrete_mismatch: 4181 / 35294369
 overall.ignored_discrete_mismatch: 1500
-overall.float_norm_mae_p95: 0.00033541
+overall.float_norm_mae_p95: 0.00033420

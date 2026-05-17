@@ -1356,17 +1356,24 @@ void knockdown_update_pre_physics(MslBatch* batch) {
 
         if (!in_hitstun && !iasa_locked) {
           // Decomp airborne Damage_IASA:
-          // - when x221C_b6 has cleared, Damage_IASA forwards into ftCo_Fall_IASA_Inner,
-          // - if mv.co.damage.x14 is active and within p_ftCommonData->x1D0, it first ORs XY into
-          //   the input lane, and
-          // - ftCo_Fall_IASA_Inner can immediately enter JumpAerial via ftCo_800CB870.
+          // - after x221C_b6 clears, Damage_IASA first checks the mv.co.damage.x14 buffered-jump
+          //   gate; when it is active and within p_ftCommonData->x1D0, that inline doIasa owner
+          //   can enter JumpAerial before the Fall_IASA_Inner delegate,
+          // - if the x14 gate fails, Damage_IASA forwards into ftCo_Fall_IASA_Inner,
+          // - inside Fall_IASA_Inner, EscapeAir is checked before AttackAir/current-frame
+          //   JumpAerial fallback, and
+          // - the later current-frame JumpAerial fallback runs via ftCo_800CB870.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_IASA
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_IASA_Inner
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_80099A58
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_800CB870
           const uint16_t x14 = batch->state.damage_jump_buffer_x14[idx];
           const uint8_t gate_open =
               (x14 != 0u && (float)x14 <= c->damage_jump_buffer_window_frames) ? 1u : 0u;
           if (gate_open && damage_air_try_jump_aerial(batch, c, ch, idx, 1u, 0u)) {
+            continue;
+          }
+          if (escape_air_try_enter_from_air_locomotion(batch, c, idx)) {
             continue;
           }
           // Fall_IASA_Inner checks aerial attacks before its later JumpAerial fallback. Keep B-edge
@@ -1870,6 +1877,54 @@ static inline uint8_t down_bound_airborne_ledge_cross_to_fall(const MslBatch* ba
                      : (next_x < edge_x - endpoint_clamp ? 1u : 0u);
 }
 
+static inline uint8_t down_bound_airborne_stage_object_endpoint_cross_to_fall(const MslBatch* batch,
+                                                                              size_t idx, size_t bi,
+                                                                              uint32_t stage_id) {
+  if (batch == NULL || batch->state.ground_id[idx] == 0xFFFFu ||
+      fabsf(batch->state.speed_y_self[idx]) > 0.0001f) {
+    return 0u;
+  }
+  const uint16_t ground_id = batch->state.ground_id[idx];
+  if (!stage_collision_floor_line_has_platform_transform(stage_id, ground_id)) {
+    return 0u;
+  }
+  if (stage_collision_floor_line_has_height_platform_transform(stage_id, ground_id) &&
+      !stage_collision_floor_line_height_platform_state_is_source_trusted(batch, (int)bi,
+                                                                          ground_id)) {
+    return 0u;
+  }
+
+  const MslStageFloorGraph* g = stage_collision_get_floor_graph(stage_id);
+  const int line_idx = stage_collision_floor_line_index(stage_id, ground_id);
+  if (g == NULL || line_idx < 0 || (size_t)line_idx >= g->line_count) {
+    return 0u;
+  }
+  MslStageFloorLine world = {0};
+  if (!stage_collision_floor_line_world(batch, (int)bi, &g->lines[(size_t)line_idx], &world)) {
+    return 0u;
+  }
+  const float left = (world.x0 < world.x1) ? world.x0 : world.x1;
+  const float right = (world.x0 > world.x1) ? world.x0 : world.x1;
+  const float prev_x = batch->state.prev_pos_x[idx];
+  const float cur_x = batch->state.pos_x[idx];
+  if (prev_x >= left && prev_x <= right && (cur_x < left || cur_x > right)) {
+    // DownBound_Coll uses ft_80082708 -> mpColl_8004B108. For generated stage-object floor lines
+    // (FoD static top platform and source-trusted height platforms), crossing out of the persisted
+    // platform span means the allow-ground-to-air helper reports the floor loss and source
+    // immediately enters Fall while preserving airborne ground_or_air. Keep this out of generic
+    // hard-floor endpoint rows: those remain covered by the explicit ledge-cross helper above and
+    // its endpoint clamp controls.
+    //
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Coll
+    // refs/melee/src/melee/ft/ft_081B.c::ft_80082708
+    // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
+    // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+    // data/stages/bin/griz.bin::MSLSTG01 platform_transforms(kind=static_y,height)
+    return 1u;
+  }
+  return 0u;
+}
+
 static inline uint8_t down_bound_grounded_overlap_nudge_crosses_ledge(const MslBatch* batch,
                                                                       const MslCommonParams* c,
                                                                       size_t bi, int p,
@@ -2122,17 +2177,24 @@ static inline uint8_t damage_ground_floor_loss_should_missfoot(const MslBatch* b
   if (g == NULL || line_idx < 0 || (size_t)line_idx >= g->line_count) {
     return 0u;
   }
-  const MslStageFloorLine* line = &g->lines[(size_t)line_idx];
+  const int bi = (int)(idx / (size_t)MSL_MAX_PLAYERS);
+  MslStageFloorLine world = {0};
+  (void)stage_collision_floor_line_world(batch, bi, &g->lines[(size_t)line_idx], &world);
+  const MslStageFloorLine* line = &world;
   const float left = (line->x0 < line->x1) ? line->x0 : line->x1;
   const float right = (line->x0 > line->x1) ? line->x0 : line->x1;
   const float x = batch->state.pos_x[idx];
   const uint8_t facing_right = batch->state.facing[idx] ? 1u : 0u;
   // Decomp: grounded Damage_Coll calls ft_800848DC. When mpColl_8004B108 reports floor loss past
   // an open endpoint, it sets Left/RightLedgeSlip; ft_800848DC enters MissFoot only for the
-  // facing/side pair shown below, otherwise it calls the supplied air-transfer callback.
+  // facing/side pair shown below, otherwise it calls the supplied air-transfer callback. FoD
+  // side-platform endpoints are grIzumi-owned live JObj geometry, so the ledge-slip side test must
+  // use MSLSTG01 transformed world endpoints rather than static segment coordinates.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Coll
   // refs/melee/src/melee/ft/ft_081B.c::ft_800848DC
   // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
+  // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+  // data/stages/bin/griz.bin::MSLSTG01 platform_transforms
   if (x < left && facing_right) {
     return 1u;
   }
@@ -3305,9 +3367,13 @@ void knockdown_update_post_collision(MslBatch* batch) {
           continue;
         }
       } else if (!now_ground && is_down_bound(a0) &&
-                 down_bound_airborne_ledge_cross_to_fall(batch, idx, stage_id)) {
+                 (down_bound_airborne_ledge_cross_to_fall(batch, idx, stage_id) ||
+                  down_bound_airborne_stage_object_endpoint_cross_to_fall(batch, idx, (size_t)bi,
+                                                                          stage_id))) {
         // Decomp: DownBound_Coll immediately enters Fall when the allow-ground-to-air helper reports
-        // edge exit for this collision step.
+        // a floor-contact result for this collision step. The helper above covers ordinary ledge
+        // edge exit; the stage-object branch covers generated FoD platform endpoint exits that
+        // remain replay-visible as airborne CollData floor ownership.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Coll
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter
         batch->state.fall_fast[idx] = 0;

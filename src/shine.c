@@ -26,6 +26,7 @@
 // - Fox   = 1
 // - Falco = 22
 enum { MSL_CHAR_FOX = 1, MSL_CHAR_FALCO = 22 };
+enum { MSL_STAGE_FOUNTAIN_OF_DREAMS_LOCAL = 2u };
 
 static inline uint8_t is_fox_falco(uint8_t char_id) {
   return (char_id == (uint8_t)MSL_CHAR_FOX) || (char_id == (uint8_t)MSL_CHAR_FALCO);
@@ -419,6 +420,19 @@ static inline void enter_jump_aerial_basic(MslBatch* batch, size_t idx, const Ms
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{
   //   ftFx_SpecialAirLwLoop_IASA,ftFx_SpecialAirLwTurn_IASA,ftFx_SpecialAirLwEnd_Anim}
   // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
+  const uint32_t stage_id = batch->state.stage_id[idx / (size_t)MSL_MAX_PLAYERS];
+  const uint16_t ground_id = batch->state.ground_id[idx];
+  if (batch->state.coll_desired_ecb_bottom_valid[idx] != 0u && ground_id != 0xFFFFu &&
+      stage_id == (uint32_t)MSL_STAGE_FOUNTAIN_OF_DREAMS_LOCAL) {
+    // `ftCommon_8007D5D4` only sets CollData_X130_Locked; it does not reload desired_ecb.bottom.
+    // Preserve the current CollData desired bottom from the SpecialAirLw callback on FoD's
+    // stage-object platform family, so subsequent
+    // JumpAerial/EscapeAir `mpColl_LoadECB_inline` calls see the same locked bottom as vanilla.
+    // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
+    // refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_inline
+    // data/stages/bin/griz.bin::MSLSTG01 platform_transform records
+    batch->state.coll_desired_ecb_bottom_locked_owner[idx] = 1u;
+  }
   batch->state.ecb_lock_timer[idx] = 10u;
   batch->state.shine_jump_iasa_entered_this_frame[idx] = 1u;
 }
