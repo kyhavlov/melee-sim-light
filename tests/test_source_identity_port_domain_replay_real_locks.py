@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+import subprocess
+import textwrap
 
 import pytest
 
@@ -24,6 +26,87 @@ def _primary_cardinal_dataset(root: Path, name: str) -> Path:
         / "cardinal_1.0_recent"
         / name
     )
+
+
+def test_damage_source_episode_helper_maps_raw_ports_and_processhit_clear(tmp_path: Path) -> None:
+    root = Path(__file__).resolve().parents[1]
+    source = tmp_path / "damage_source_episode_test.c"
+    exe = tmp_path / "damage_source_episode_test"
+    source.write_text(
+        textwrap.dedent(
+            """
+            #include <assert.h>
+            #include <string.h>
+
+            #include "damage_source.h"
+
+            static MslBatch batch;
+            static uint8_t source_port0[MSL_MAX_PLAYERS];
+            static uint8_t last_hit_by[MSL_MAX_PLAYERS];
+            static uint16_t instance_id[MSL_MAX_PLAYERS];
+            static uint16_t instance_hit_by[MSL_MAX_PLAYERS];
+            static uint8_t source_clear_timer_x18c8[MSL_MAX_PLAYERS];
+            static uint8_t fighter_8006cda4_pre_gate_consume_count[MSL_MAX_PLAYERS];
+            static uint8_t on_ground[MSL_MAX_PLAYERS];
+
+            static void bind_state(void) {
+              memset(&batch, 0, sizeof(batch));
+              batch.config.num_players = 2;
+              batch.state.source_port0 = source_port0;
+              batch.state.last_hit_by = last_hit_by;
+              batch.state.instance_id = instance_id;
+              batch.state.instance_hit_by = instance_hit_by;
+              batch.state.source_clear_timer_x18c8 = source_clear_timer_x18c8;
+              batch.state.fighter_8006cda4_pre_gate_consume_count =
+                  fighter_8006cda4_pre_gate_consume_count;
+              batch.state.on_ground = on_ground;
+            }
+
+            int main(void) {
+              bind_state();
+              source_port0[0] = 3u;
+              source_port0[1] = 1u;
+              instance_id[0] = 444u;
+              last_hit_by[1] = 3u;
+              instance_hit_by[1] = 444u;
+              source_clear_timer_x18c8[1] = 2u;
+              fighter_8006cda4_pre_gate_consume_count[1] = 3u;
+
+              assert(msl_damage_source_port0_for_slot(&batch, 0u, 0) == 3u);
+              assert(msl_damage_source_local_slot_from_port0(&batch, 0, 2, 3u) == 0);
+              assert(msl_damage_source_victim_matches_attacker(&batch, 1u, 0u, 0) == 1u);
+
+              MslDamageSourceEpisode ep =
+                  msl_damage_source_episode_from_victim(&batch, 0, 1, 1u);
+              assert(ep.has_source == 1u);
+              assert(ep.source_slot == 0);
+              assert(ep.source_idx == 0u);
+              assert(ep.source_port0 == 3u);
+              assert(ep.source_instance_id == 444u);
+              assert(ep.instance_matches_source == 1u);
+              assert(ep.x18c8_active == 1u);
+              assert(ep.fighter_8006cda4_pre_gate_count == 3u);
+
+              on_ground[1] = 1u;
+              msl_damage_source_commit_processhit(&batch, 1u, 3u);
+              assert(last_hit_by[1] == MSL_DAMAGE_SOURCE_NONE);
+              assert(source_clear_timer_x18c8[1] == 0u);
+
+              on_ground[1] = 0u;
+              msl_damage_source_commit_processhit(&batch, 1u, 3u);
+              assert(last_hit_by[1] == 3u);
+
+              return 0;
+            }
+            """
+        ),
+        encoding="utf-8",
+    )
+    subprocess.run(
+        ["cc", "-std=c11", "-I", str(root / "src"), str(source), "-o", str(exe)],
+        check=True,
+    )
+    subprocess.run([str(exe)], check=True)
 
 
 @pytest.mark.integration

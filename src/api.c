@@ -19,6 +19,7 @@
 #include "char_params.h"
 #include "coll_env_flags.h"
 #include "common_params.h"
+#include "damage_source.h"
 #include "config.h"
 #include "special_msids.h"
 #include "move_tables.h"
@@ -854,19 +855,6 @@ static inline uint8_t msl_mask_row_selected(const uint8_t* mask_bytes, size_t ma
   return mask_bytes[(size_t)bi * mask_stride_bytes] ? 1u : 0u;
 }
 
-static int msl_seed_local_slot_from_source_port0(const MslSeed* seed, int active_players,
-                                                 uint8_t source_port0) {
-  if (seed == NULL) {
-    return -1;
-  }
-  for (int p = 0; p < active_players; p++) {
-    if (seed->source_port0[p] == source_port0) {
-      return p;
-    }
-  }
-  return -1;
-}
-
 static inline uint8_t msl_seed_has_live_yoshi_shyguy(const MslSeed* seed) {
   if (seed == NULL) {
     return 0u;
@@ -952,8 +940,8 @@ static inline uint8_t msl_reseed_seed_rollout_replay_frame_clock_owner(const Msl
       // refs/slippi-ssbm-asm/Recording/SendFrameStart.s
       return (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED;
     }
-    const int attacker =
-        msl_seed_local_slot_from_source_port0(seed, active_players, seed->last_hit_by[victim]);
+    const int attacker = msl_damage_source_seed_local_slot_from_port0(seed, active_players,
+                                                                      seed->last_hit_by[victim]);
     if (seed->fighter_8006cda4_pre_gate_consume_count[victim] >= 1u &&
         seed->fighter_8006cda4_pre_gate_consume_count[victim] <= 4u) {
       // Replay-seeded delayed Fighter_8006CDA4 stream-phase rollouts need the Slippi frame-start
@@ -2370,17 +2358,13 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       if (seed_victim < (uint8_t)active_players && seed_victim != (uint8_t)attacker_p) {
         continue;
       }
-      const uint16_t attacker_instance = batch->state.instance_id[a_idx];
       int inferred_victim_p = -1;
       for (int victim_p = 0; victim_p < active_players; victim_p++) {
         if (victim_p == attacker_p) {
           continue;
         }
         const size_t v_idx = msl_idx_player(bi, victim_p);
-        if (batch->state.last_hit_by[v_idx] != batch->state.source_port0[a_idx]) {
-          continue;
-        }
-        if (batch->state.instance_hit_by[v_idx] != attacker_instance) {
+        if (!msl_damage_source_victim_matches_attacker(batch, v_idx, a_idx, attacker_p)) {
           continue;
         }
         if (inferred_victim_p >= 0) {
@@ -2405,7 +2389,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
             continue;
           }
           const size_t v_idx = msl_idx_player(bi, victim_p);
-          if (batch->state.last_hit_by[v_idx] != batch->state.source_port0[a_idx]) {
+          if (!msl_damage_source_victim_port_matches_attacker(batch, v_idx, a_idx, attacker_p)) {
             continue;
           }
           // Terminal combo-timer rows (`x2098 == 1`) are cleared in ftColl_800764DC before combat
@@ -2645,8 +2629,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         }
         const size_t v_idx = msl_idx_player(bi, vp);
         if (batch->state.hitstun[v_idx] > 0u &&
-            batch->state.last_hit_by[v_idx] == batch->state.source_port0[idx] &&
-            batch->state.instance_hit_by[v_idx] == batch->state.instance_id[idx]) {
+            msl_damage_source_victim_matches_attacker(batch, v_idx, idx, p)) {
           same_source_victim = 1u;
           break;
         }

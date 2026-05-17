@@ -14,6 +14,7 @@
 #include "combat.h"
 #include "combat_geom.h"
 #include "common_params.h"
+#include "damage_source.h"
 #include "hit_elements.h"
 #include "hitboxes_tables.h"
 #include "hitlist.h"
@@ -47,22 +48,6 @@ static inline uint8_t slippi_metadata_low_byte_from_f32(float v) {
   uint32_t bits = 0;
   memcpy(&bits, &v, sizeof(bits));
   return (uint8_t)(bits & 0xFFu);
-}
-
-static inline uint8_t item_source_port0_for_owner(const MslBatch* batch, size_t owner_idx,
-                                                  int owner_slot) {
-  // Slippi records item/fighter source ownership in raw controller-port domain for last_hit_by;
-  // item ownership arrays still index compact local slots.
-  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
-  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
-  if (batch == NULL || owner_slot < 0 || owner_slot >= MSL_MAX_PLAYERS) {
-    return 6u;
-  }
-  const uint8_t source_port0 = batch->state.source_port0[owner_idx];
-  if (source_port0 < (uint8_t)MSL_MAX_PLAYERS) {
-    return source_port0;
-  }
-  return (uint8_t)owner_slot;
 }
 
 static inline uint8_t item_throwhi_deferred_mid_pulse_rate_source_step(int32_t rate_q16_16) {
@@ -112,15 +97,14 @@ static int throw_laser_unique_same_source_victim(const MslBatch* batch, int bi, 
     return -1;
   }
   const size_t o_idx = msl_idx_player(bi, owner);
-  const uint8_t source_port = item_source_port0_for_owner(batch, o_idx, owner);
   int candidate = -1;
   for (int vp = 0; vp < (int)batch->config.num_players; vp++) {
     if (vp == owner) {
       continue;
     }
     const size_t v_idx = msl_idx_player(bi, vp);
-    if (batch->state.hitstun[v_idx] == 0u || batch->state.last_hit_by[v_idx] != source_port ||
-        batch->state.instance_hit_by[v_idx] != batch->state.instance_id[o_idx]) {
+    if (batch->state.hitstun[v_idx] == 0u ||
+        !msl_damage_source_victim_matches_attacker(batch, v_idx, o_idx, owner)) {
       continue;
     }
     if (candidate >= 0) {
@@ -6335,7 +6319,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           batch->state.throw_pulse_crossed_prev_frame[o_idx] ==
               (uint8_t)MSL_THROWHI_PREV_PHASE_AF &&
           batch->state.hitstun[d_idx] > 0u &&
-          batch->state.last_hit_by[d_idx] == item_source_port0_for_owner(batch, o_idx, owner)) {
+          msl_damage_source_victim_port_matches_attacker(batch, d_idx, o_idx, owner)) {
         if (((batch->state.pos_x[d_idx] - batch->state.pos_x[o_idx]) * vx) <= 0.0f) {
           // Crossed-prev ThrowHi first-pulse callback carry:
           // - The retained current-frame first-pulse carry uses the throw-shot segment direction to
@@ -6489,7 +6473,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           batch->state.action_id[o_idx] == (uint16_t)MSL_ACT_THROW_B &&
           batch->state.throw_pulse_crossed_curr_frame[o_idx] != 0u &&
           batch->state.hitstun[d_idx] > 0u &&
-          batch->state.last_hit_by[d_idx] == item_source_port0_for_owner(batch, o_idx, owner) &&
+          msl_damage_source_victim_port_matches_attacker(batch, d_idx, o_idx, owner) &&
           batch->state.last_attack_landed[d_idx] != (uint8_t)lp->shot_itkind &&
           ((x - batch->state.pos_x[d_idx]) * vx) > 0.0f) {
         // Falco ThrowB same-frame pulse carry:
@@ -6566,7 +6550,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           batch->state.throw_pulse_crossed_curr_frame[o_idx] ==
               (uint8_t)owner_first_throw_pulse_af &&
           body_overlap_amount <= 0.0f && batch->state.hitstun[d_idx] > 0u &&
-          batch->state.last_hit_by[d_idx] == item_source_port0_for_owner(batch, o_idx, owner) &&
+          msl_damage_source_victim_port_matches_attacker(batch, d_idx, o_idx, owner) &&
           batch->state.last_attack_landed[d_idx] != (uint8_t)lp->shot_itkind &&
           ((batch->state.pos_x[d_idx] - batch->state.pos_x[o_idx]) * vx <= 0.0f)) {
         // ThrowHi first projectile pulse contact carry:
@@ -6598,7 +6582,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           (falco_throwhi_final_pulse_curr != 0u ||
            falco_throwhi_final_pulse_prev_non_projectile_side != 0u) &&
           batch->state.hitlag[d_idx] > 1u &&
-          batch->state.last_hit_by[d_idx] == item_source_port0_for_owner(batch, o_idx, owner) &&
+          msl_damage_source_victim_port_matches_attacker(batch, d_idx, o_idx, owner) &&
           batch->state.last_attack_landed[d_idx] == 0u) {
         // Falco ThrowHi late-pulse carried BODY contact:
         // - ThrowHi owns three one-shot throw_flags_b0 projectile pulses (18/20/24) consumed in
@@ -7447,7 +7431,7 @@ void items_spawn_fighter_anim_phase(MslBatch* batch) {
               }
               const size_t v_idx = msl_idx_player(bi, vp);
               if (batch->state.hitstun[v_idx] == 0u ||
-                  batch->state.last_hit_by[v_idx] != item_source_port0_for_owner(batch, idx, p)) {
+                  !msl_damage_source_victim_port_matches_attacker(batch, v_idx, idx, p)) {
                 continue;
               }
               if (batch->state.throw_pulse_consumed[idx] == 0u &&
@@ -7682,7 +7666,7 @@ void items_spawn_fighter_anim_phase(MslBatch* batch) {
             }
             const size_t v_idx = msl_idx_player(bi, vp);
             if (batch->state.hitstun[v_idx] > 0u &&
-                batch->state.last_hit_by[v_idx] == item_source_port0_for_owner(batch, idx, p)) {
+                msl_damage_source_victim_port_matches_attacker(batch, v_idx, idx, p)) {
               ongoing_throwhi_context = 1u;
               break;
             }
@@ -7710,8 +7694,7 @@ void items_spawn_fighter_anim_phase(MslBatch* batch) {
               }
               const size_t v_idx = msl_idx_player(bi, vp);
               if (batch->state.hitstun[v_idx] > 0u &&
-                  batch->state.last_hit_by[v_idx] == item_source_port0_for_owner(batch, idx, p) &&
-                  batch->state.instance_hit_by[v_idx] == batch->state.instance_id[idx] &&
+                  msl_damage_source_victim_matches_attacker(batch, v_idx, idx, p) &&
                   batch->state.last_attack_landed[idx] == (uint8_t)lp->shot_itkind) {
                 falco_prev18_second_article = 1u;
                 break;
@@ -7848,7 +7831,7 @@ void items_spawn_fighter_anim_phase(MslBatch* batch) {
                 }
                 const size_t v_idx = msl_idx_player(bi, vp);
                 if (batch->state.hitstun[v_idx] > 0u &&
-                    batch->state.last_hit_by[v_idx] == item_source_port0_for_owner(batch, idx, p)) {
+                    msl_damage_source_victim_port_matches_attacker(batch, v_idx, idx, p)) {
                   ongoing_throwb_context = 1u;
                   break;
                 }
@@ -7885,8 +7868,7 @@ void items_spawn_fighter_anim_phase(MslBatch* batch) {
                   }
                   const size_t v_idx = msl_idx_player(bi, vp);
                   if (batch->state.hitstun[v_idx] > 0u &&
-                      batch->state.last_hit_by[v_idx] ==
-                          item_source_port0_for_owner(batch, idx, p) &&
+                      msl_damage_source_victim_port_matches_attacker(batch, v_idx, idx, p) &&
                       throw_seed_shot_count[p] != 0u &&
                       batch->state.last_attack_landed[v_idx] == (uint8_t)lp->shot_itkind &&
                       batch->state.hitstun[v_idx] < stale_hitstun_thresh) {
@@ -8001,8 +7983,7 @@ void items_spawn_fighter_anim_phase(MslBatch* batch) {
                 }
                 const size_t v_idx = msl_idx_player(bi, vp);
                 if (batch->state.hitstun[v_idx] > 0u &&
-                    batch->state.last_hit_by[v_idx] == item_source_port0_for_owner(batch, idx, p) &&
-                    batch->state.instance_hit_by[v_idx] == batch->state.instance_id[idx]) {
+                    msl_damage_source_victim_matches_attacker(batch, v_idx, idx, p)) {
                   falco_prev18_cursor_carry = 1u;
                   break;
                 }
@@ -8053,8 +8034,7 @@ void items_spawn_fighter_anim_phase(MslBatch* batch) {
                   }
                   const size_t v_idx = msl_idx_player(bi, vp);
                   if (batch->state.hitstun[v_idx] == 0u ||
-                      batch->state.last_hit_by[v_idx] !=
-                          item_source_port0_for_owner(batch, idx, p)) {
+                      !msl_damage_source_victim_port_matches_attacker(batch, v_idx, idx, p)) {
                     continue;
                   }
                   if (stale_victim_p >= 0) {
@@ -8097,8 +8077,7 @@ void items_spawn_fighter_anim_phase(MslBatch* batch) {
                 const size_t v_idx = msl_idx_player(bi, vp);
                 if (batch->state.char_id[v_idx] == batch->state.char_id[idx] &&
                     batch->state.hitstun[v_idx] > 0u &&
-                    batch->state.last_hit_by[v_idx] == item_source_port0_for_owner(batch, idx, p) &&
-                    batch->state.instance_hit_by[v_idx] == batch->state.instance_id[idx]) {
+                    msl_damage_source_victim_matches_attacker(batch, v_idx, idx, p)) {
                   same_character_first_pulse_carry = 1u;
                   break;
                 }
@@ -8173,8 +8152,7 @@ void items_spawn_fighter_anim_phase(MslBatch* batch) {
               continue;
             }
             if (batch->state.hitstun[v_idx] == 0u ||
-                batch->state.last_hit_by[v_idx] != item_source_port0_for_owner(batch, idx, p) ||
-                batch->state.instance_hit_by[v_idx] != batch->state.instance_id[idx] ||
+                !msl_damage_source_victim_matches_attacker(batch, v_idx, idx, p) ||
                 batch->state.last_attack_landed[v_idx] == 0u) {
               continue;
             }

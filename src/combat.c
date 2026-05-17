@@ -19,6 +19,7 @@
 #include "combat_terminal_owner.h"
 #include "common_params.h"
 #include "damage_terminal_owner.h"
+#include "damage_source.h"
 #include "ecb_tables.h"
 #include "grab_flow.h"
 #include "hit_elements.h"
@@ -1820,7 +1821,7 @@ static inline uint8_t combat_enable_edge_dense_seed_suppresses_body(const MslBat
     if (batch->state.colanim_hitstun_x198c1_seed[d_idx] == 0u) {
       return 0u;
     }
-    if (batch->state.last_hit_by[d_idx] != batch->state.source_port0[a_idx]) {
+    if (!msl_damage_source_victim_port_matches_attacker(batch, d_idx, a_idx, attacker)) {
       return 0u;
     }
     if (batch->state.instance_hit_by[d_idx] == batch->state.instance_id[a_idx]) {
@@ -1900,10 +1901,8 @@ static inline uint8_t combat_attackairb_dense_seed_suppresses_full_body(const Ms
                                        (size_t)hb_id] != 0u) {
     return 0u;
   }
-  const uint8_t attacker_source_port0 =
-      (batch->state.source_port0[a_idx] < (uint8_t)MSL_MAX_PLAYERS)
-          ? batch->state.source_port0[a_idx]
-          : (uint8_t)attacker;
+  const MslDamageSourceEpisode d_source =
+      msl_damage_source_episode_from_victim(batch, bi, defender, d_idx);
   const uint8_t hit_group = hitlist_hit_group_from_u16_7(batch->state.hitbox_u16_7[hb_i]);
   if (hit_group >= (uint8_t)MSL_HITLIST_GROUPS) {
     return 0u;
@@ -1917,10 +1916,8 @@ static inline uint8_t combat_attackairb_dense_seed_suppresses_full_body(const Ms
   if (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_LANDING) {
     if (batch->state.hitlag[a_idx] != 0u || batch->state.hitstun[a_idx] != 0u ||
         batch->state.hitlag[d_idx] != 0u || batch->state.hitstun[d_idx] != 0u ||
-        batch->state.source_clear_timer_x18c8[d_idx] == 0u ||
-        batch->state.last_hit_by[d_idx] != attacker_source_port0 ||
-        batch->state.instance_hit_by[d_idx] != batch->state.instance_id[a_idx] ||
-        batch->state.combat_hitlist_cd[cd_i] != 0xFFFFu) {
+        d_source.x18c8_active == 0u || d_source.source_slot != attacker ||
+        d_source.instance_matches_source == 0u || batch->state.combat_hitlist_cd[cd_i] != 0xFFFFu) {
       return 0u;
     }
     const uint16_t seed_iid = batch->state.combat_hitlist_victim_iid[cd_i];
@@ -1946,8 +1943,7 @@ static inline uint8_t combat_attackairb_dense_seed_suppresses_full_body(const Ms
   if (batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_DAMAGE_FLY_TOP ||
       batch->state.hitlag[a_idx] != 0u || batch->state.hitstun[a_idx] != 0u ||
       batch->state.hitlag[d_idx] != 0u || batch->state.hitstun[d_idx] == 0u ||
-      batch->state.last_hit_by[d_idx] != attacker_source_port0 ||
-      batch->state.instance_hit_by[d_idx] == batch->state.instance_id[a_idx]) {
+      d_source.source_slot != attacker || d_source.instance_matches_source != 0u) {
     return 0u;
   }
   if (expected_hitlag == 0u || batch->state.hitstun[d_idx] > expected_hitlag) {
@@ -2021,13 +2017,10 @@ static inline uint8_t combat_attackairn_wait_dense_seed_suppresses_full_body(
                     (size_t)defender);
   const uint8_t dense_seed_present = (batch->state.combat_hitlist_cd[cd_i] != 0u) ? 1u : 0u;
   if (!dense_seed_present) {
-    const uint8_t attacker_source_port0 =
-        (batch->state.source_port0[a_idx] < (uint8_t)MSL_MAX_PLAYERS)
-            ? batch->state.source_port0[a_idx]
-            : (uint8_t)attacker;
-    if (batch->state.last_hit_by[d_idx] != attacker_source_port0 ||
-        batch->state.instance_hit_by[d_idx] == batch->state.instance_id[a_idx] ||
-        batch->state.source_clear_timer_x18c8[d_idx] == 0u) {
+    const MslDamageSourceEpisode d_source =
+        msl_damage_source_episode_from_victim(batch, bi, defender, d_idx);
+    if (d_source.source_slot != attacker || d_source.instance_matches_source != 0u ||
+        d_source.x18c8_active == 0u) {
       return 0u;
     }
     // Replay-rollout hidden victim provenance fallback:
@@ -2116,10 +2109,7 @@ static inline uint8_t combat_seed_hitlist_suppresses_clank_candidate(const MslBa
       return 0u;
     }
   }
-  if (batch->state.instance_hit_by[d_idx] != batch->state.instance_id[a_idx]) {
-    return 0u;
-  }
-  if (batch->state.last_hit_by[d_idx] != batch->state.source_port0[a_idx]) {
+  if (!msl_damage_source_victim_matches_attacker(batch, d_idx, a_idx, attacker)) {
     return 0u;
   }
 
@@ -4034,35 +4024,14 @@ static inline void combat_damage_mark_entry_time_since_hit(MslBatch* batch, size
 }
 
 static inline void combat_source_owner_clear_ftCommon_800804FC(MslBatch* batch, size_t d_idx) {
-  if (batch == NULL) {
-    return;
+  if (batch != NULL && batch->state.on_ground[d_idx] != 0u) {
+    msl_damage_source_clear(batch, d_idx);
   }
-  if (batch->state.on_ground[d_idx] == 0u) {
-    return;
-  }
-  // Decomp: grounded `ftCommon_800804FC` clears source owner and disables the x18C8 countdown.
-  // Fighter_ProcessHit calls this in the percent-only/no-KB path after Fighter_UnkTakeDamage.
-  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC
-  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
-  enum { MSL_LAST_HIT_BY_SOURCE_NONE = 6 };
-  batch->state.last_hit_by[d_idx] = (uint8_t)MSL_LAST_HIT_BY_SOURCE_NONE;
-  batch->state.source_clear_timer_x18c8[d_idx] = 0u;
 }
 
 static inline uint8_t combat_source_port0_for_attacker(const MslBatch* batch, size_t a_idx,
                                                        int attacker) {
-  // Slippi records dmg.x18C4_source_ply in raw controller-port domain; local attacker indices are
-  // compact dataset slots.
-  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
-  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076ED8
-  if (batch == NULL || attacker < 0 || attacker >= MSL_MAX_PLAYERS) {
-    return 6u;
-  }
-  const uint8_t source_port0 = batch->state.source_port0[a_idx];
-  if (source_port0 < (uint8_t)MSL_MAX_PLAYERS) {
-    return source_port0;
-  }
-  return (uint8_t)attacker;
+  return msl_damage_source_port0_for_slot(batch, a_idx, attacker);
 }
 
 static inline void combat_processhit_commit_source_owner(MslBatch* batch, size_t d_idx,
@@ -4070,17 +4039,7 @@ static inline void combat_processhit_commit_source_owner(MslBatch* batch, size_t
   if (batch == NULL) {
     return;
   }
-  // Decomp owner shape:
-  // - collision writes source owner before Fighter_ProcessHit,
-  // - grounded percent-only/no-KB paths then clear it via ftCommon_800804FC,
-  // - airborne rows keep the source owner live.
-  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
-  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC
-  if (batch->state.on_ground[d_idx] != 0u) {
-    combat_source_owner_clear_ftCommon_800804FC(batch, d_idx);
-    return;
-  }
-  batch->state.last_hit_by[d_idx] = source_port;
+  msl_damage_source_commit_processhit(batch, d_idx, source_port);
 }
 
 static inline uint16_t combat_damage_hitstun_from_kb(const MslCommonParams* c, float kb_applied) {
@@ -4505,7 +4464,7 @@ static inline void combat_processhit_write_source(MslBatch* batch,
   if (ev->source_write == MSL_PROCESS_HIT_SOURCE_WRITE_COMMIT_OWNER) {
     combat_processhit_commit_source_owner(batch, ev->d_idx, ev->last_hit_by);
   } else {
-    batch->state.last_hit_by[ev->d_idx] = ev->last_hit_by;
+    msl_damage_source_write_direct(batch, ev->d_idx, ev->last_hit_by);
   }
 }
 
@@ -5082,7 +5041,8 @@ static inline void combat_mutations_pass1_future_apply_body_phantom_hit(MslBatch
   batch->state.phantom_damage_source_port[d_idx] =
       (attacker >= 0 && attacker < (int)batch->config.num_players) ? (uint8_t)attacker : 0xFFu;
   batch->state.instance_hit_by[d_idx] = batch->state.instance_id[a_idx];
-  batch->state.last_hit_by[d_idx] = combat_source_port0_for_attacker(batch, a_idx, attacker);
+  msl_damage_source_write_direct(batch, d_idx,
+                                 combat_source_port0_for_attacker(batch, a_idx, attacker));
 }
 
 void combat_apply_item_phantom_hit(MslBatch* batch, int batch_index, int attacker, int defender,
@@ -5135,7 +5095,8 @@ void combat_apply_item_phantom_hit(MslBatch* batch, int batch_index, int attacke
     }
   }
   batch->state.instance_hit_by[d_idx] = item_instance_id;
-  batch->state.last_hit_by[d_idx] = combat_source_port0_for_attacker(batch, a_idx, attacker);
+  msl_damage_source_write_direct(batch, d_idx,
+                                 combat_source_port0_for_attacker(batch, a_idx, attacker));
 }
 
 MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int attacker, int defender,
@@ -5376,7 +5337,7 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
     // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
     // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
     batch->state.instance_hit_by[d_idx] = item_instance_id;
-    batch->state.last_hit_by[d_idx] = prev_last_hit_by;
+    msl_damage_source_write_direct(batch, d_idx, prev_last_hit_by);
 
     // Attached item-hit bookkeeping:
     // - Throw-side item hits on an attached victim still feed the attacker-side item-domain stale
@@ -7444,8 +7405,7 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
             (!allows_v1 && batch->state.action_id[a_idx] == (uint16_t)MSL_ACT_ATTACK_AIR_N &&
              batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_DAMAGE_FLY_TOP &&
              batch->state.hitlag[d_idx] == 0u && batch->state.hitstun[d_idx] != 0u &&
-             batch->state.last_hit_by[d_idx] ==
-                 combat_source_port0_for_attacker(batch, a_idx, attacker) &&
+             msl_damage_source_victim_port_matches_attacker(batch, d_idx, a_idx, attacker) &&
              !move_tables_attackair_second_create_hitbox_phase(batch->state.char_id[a_idx],
                                                                batch->state.action_id[a_idx],
                                                                batch->state.anim_frame_f32[a_idx]))
@@ -7620,8 +7580,7 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
               batch->state.anim_frame_f32[a_idx] < (float)(attackair_second_create_frame + 3) &&
               batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_DAMAGE_FLY_TOP &&
               batch->state.hitlag[d_idx] == 0u && batch->state.hitstun[d_idx] != 0u &&
-              batch->state.last_hit_by[d_idx] ==
-                  combat_source_port0_for_attacker(batch, a_idx, attacker)) {
+              msl_damage_source_victim_port_matches_attacker(batch, d_idx, a_idx, attacker)) {
             // AttackAirN limb HitCapsule carry:
             // - Ft_MF_SkipHit keeps prior HitCapsule state on AttackAirN entry, and
             //   ftAction_8007121C / ftColl_800768A0 preserve same-group victims_1 through the

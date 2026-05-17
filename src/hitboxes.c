@@ -9,6 +9,7 @@
 #include "anim_table.h"
 #include "char_params.h"
 #include "common_params.h"
+#include "damage_source.h"
 #include "hitboxes_tables.h"
 #include "hitlist.h"
 #include "motion_state_owners.h"
@@ -585,18 +586,7 @@ static inline uint8_t hitboxes_seed_bridge_is_guard_admission_source(uint16_t ac
 
 static inline uint8_t hitboxes_source_port0_for_attacker(const MslBatch* batch, size_t a_idx,
                                                          int attacker) {
-  // Slippi records dmg.x18C4_source_ply in raw controller-port domain; hitbox cleanup compares the
-  // replay-facing last_hit_by lane against that raw owner.
-  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
-  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076ED8
-  if (batch == NULL || attacker < 0 || attacker >= MSL_MAX_PLAYERS) {
-    return 6u;
-  }
-  const uint8_t source_port0 = batch->state.source_port0[a_idx];
-  if (source_port0 < (uint8_t)MSL_MAX_PLAYERS) {
-    return source_port0;
-  }
-  return (uint8_t)attacker;
+  return msl_damage_source_port0_for_slot(batch, a_idx, attacker);
 }
 
 static inline uint8_t hitboxes_seed_bridge_post_contact_hitlag_hitlist_applies(

@@ -7,6 +7,7 @@
 #include "anim_pose.h"
 #include "anim_timebase.h"
 #include "combat.h"
+#include "damage_source.h"
 #include "hitboxes.h"
 #include "hitlist.h"
 #include "hurtboxes.h"
@@ -52,20 +53,6 @@ static inline void clear_landing_transients(MslBatch* batch) {
   }
 }
 
-static inline int step_local_slot_from_source_port0(const MslBatch* batch, int bi, int num_players,
-                                                    uint8_t source_port0) {
-  if (batch == NULL) {
-    return -1;
-  }
-  for (int p = 0; p < num_players; p++) {
-    const size_t idx = msl_idx_player(bi, p);
-    if (batch->state.source_port0[idx] == source_port0) {
-      return p;
-    }
-  }
-  return -1;
-}
-
 static inline uint8_t step_keep_fighter_8006cda4_pre_gate_count(const MslBatch* batch, int bi,
                                                                 int p, int num_players) {
   if (batch == NULL) {
@@ -86,8 +73,8 @@ static inline uint8_t step_keep_fighter_8006cda4_pre_gate_count(const MslBatch* 
 
   if (count <= 3u && action == (uint16_t)MSL_ACT_DAMAGE_FALL && batch->state.on_ground[idx] == 0u &&
       batch->state.hitlag[idx] == 0u && batch->state.hitstun[idx] == 0u) {
-    const int attacker =
-        step_local_slot_from_source_port0(batch, bi, num_players, batch->state.last_hit_by[idx]);
+    const int attacker = msl_damage_source_local_slot_from_port0(batch, bi, num_players,
+                                                                 batch->state.last_hit_by[idx]);
     if (attacker >= 0 && attacker != p) {
       // DamageFall IASA handoff owner:
       // - DamageFly_IASA can enter DamageFall, then DamageFall_IASA can immediately admit
@@ -105,8 +92,8 @@ static inline uint8_t step_keep_fighter_8006cda4_pre_gate_count(const MslBatch* 
   if (count <= 4u && action == (uint16_t)MSL_ACT_DAMAGE_FLY_TOP &&
       batch->state.on_ground[idx] == 0u && batch->state.hitstun[idx] != 0u &&
       batch->state.instance_hit_by[idx] != 0u) {
-    const int attacker =
-        step_local_slot_from_source_port0(batch, bi, num_players, batch->state.last_hit_by[idx]);
+    const int attacker = msl_damage_source_local_slot_from_port0(batch, bi, num_players,
+                                                                 batch->state.last_hit_by[idx]);
     if (attacker >= 0 && attacker != p) {
       // DamageFlyTop hitlag-continuity owner:
       // - The explicit Fighter_8006CDA4 stream phase is replay-seeded for delayed

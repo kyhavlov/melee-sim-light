@@ -10,6 +10,7 @@
 #include "char_params.h"
 #include "combat.h"
 #include "common_params.h"
+#include "damage_source.h"
 #include "motion_state_owners.h"
 #include "move_tables.h"
 
@@ -275,7 +276,6 @@ static inline int32_t anim_timebase_non_low_throw_rate_snap_delta(const MslBatch
     const uint8_t has_ordinal = move_tables_throw_projectile_pulse_ordinal(
         char_id, action, crossed_pulse_af, &pulse_ordinal);
     if (action == (uint16_t)MSL_ACT_THROW_HI && has_ordinal && pulse_ordinal == 2u) {
-      const uint8_t source_port0 = batch->state.source_port0[idx];
       const uint8_t prior_pulse_frame = batch->state.throw_pulse_crossed_prev_frame[idx];
       uint8_t first_pulse_hit_provenance_active = 0u;
       if (prior_pulse_frame != 0u && (int16_t)prior_pulse_frame < crossed_pulse_af) {
@@ -284,8 +284,8 @@ static inline int32_t anim_timebase_non_low_throw_rate_snap_delta(const MslBatch
             continue;
           }
           const size_t v_idx = msl_idx_player(bi, vp);
-          if (batch->state.hitstun[v_idx] > 0u && batch->state.last_hit_by[v_idx] == source_port0 &&
-              batch->state.instance_hit_by[v_idx] == batch->state.instance_id[idx]) {
+          if (batch->state.hitstun[v_idx] > 0u &&
+              msl_damage_source_victim_matches_attacker(batch, v_idx, idx, p)) {
             first_pulse_hit_provenance_active = 1u;
             break;
           }

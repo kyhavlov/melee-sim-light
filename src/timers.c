@@ -9,6 +9,7 @@
 #include "anim_timebase.h"
 #include "buttons.h"
 #include "common_params.h"
+#include "damage_source.h"
 #include "input_axis.h"
 #include "msl_math.h"
 #include "motion_state_owners.h"
@@ -831,7 +832,6 @@ void timers_update_post_anim(MslBatch* batch) {
     // Seed lane uses +1 bias:
     // - source_clear_timer_x18c8 == 0 -> inactive (decomp -1)
     // - source_clear_timer_x18c8 > 0  -> active countdown + 1
-    enum { MSL_LAST_HIT_BY_SOURCE_NONE = 6 };
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
       const uint8_t flags_221f =
@@ -843,7 +843,7 @@ void timers_update_post_anim(MslBatch* batch) {
       // - ftCommon_800804FC clears x18c4_source_ply to 6 and sets x18C8 to -1 on grounded paths.
       // Keep the seeded countdown inactive when source owner is already cleared.
       // refs/melee/src/melee/ft/ftcommon.c::ftCommon_800804FC
-      if (batch->state.last_hit_by[idx] == (uint8_t)MSL_LAST_HIT_BY_SOURCE_NONE) {
+      if (batch->state.last_hit_by[idx] == (uint8_t)MSL_DAMAGE_SOURCE_NONE) {
         batch->state.source_clear_timer_x18c8[idx] = 0u;
         continue;
       }
@@ -867,8 +867,7 @@ void timers_update_post_anim(MslBatch* batch) {
       // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
       // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (last_hit_by lane)
       if (batch->state.source_clear_grounded_damage_clear_phase[idx] != 0u) {
-        batch->state.last_hit_by[idx] = (uint8_t)MSL_LAST_HIT_BY_SOURCE_NONE;
-        batch->state.source_clear_timer_x18c8[idx] = 0u;
+        msl_damage_source_clear(batch, idx);
         continue;
       }
       uint8_t t = batch->state.source_clear_timer_x18c8[idx];
@@ -897,7 +896,7 @@ void timers_update_post_anim(MslBatch* batch) {
       t--;
       batch->state.source_clear_timer_x18c8[idx] = t;
       if (t == 0u) {
-        batch->state.last_hit_by[idx] = (uint8_t)MSL_LAST_HIT_BY_SOURCE_NONE;
+        batch->state.last_hit_by[idx] = (uint8_t)MSL_DAMAGE_SOURCE_NONE;
       }
     }
 

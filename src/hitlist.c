@@ -4,6 +4,7 @@
 
 #include "action_ids.h"
 #include "batch_internal.h"
+#include "damage_source.h"
 #include "motion_state_owners.h"
 #include "move_tables.h"
 
@@ -84,15 +85,6 @@ static inline uint8_t hitlist_attackair_create_phase_runtime_clear_owns_empty_hi
                                                              anim_frame));
 }
 
-static inline uint8_t hitlist_source_port0_for_attacker(const MslBatch* batch, size_t a_idx,
-                                                        int attacker) {
-  if (batch == NULL || attacker < 0 || attacker >= MSL_MAX_PLAYERS) {
-    return 6u;
-  }
-  const uint8_t source_port0 = batch->state.source_port0[a_idx];
-  return (source_port0 < (uint8_t)MSL_MAX_PLAYERS) ? source_port0 : (uint8_t)attacker;
-}
-
 uint8_t hitlist_rollout_dense_seed_same_object_rebind_applies(const MslBatch* batch, int bi,
                                                               int attacker, int victim) {
   if (batch == NULL || bi < 0 || attacker < 0 || victim < 0 ||
@@ -115,11 +107,7 @@ uint8_t hitlist_rollout_dense_seed_same_object_rebind_applies(const MslBatch* ba
   if (batch->state.prev_action_id[a_idx] != batch->state.action_id[a_idx]) {
     return 0u;
   }
-  if (batch->state.instance_hit_by[v_idx] != batch->state.instance_id[a_idx]) {
-    return 0u;
-  }
-  if (batch->state.last_hit_by[v_idx] !=
-      hitlist_source_port0_for_attacker(batch, a_idx, attacker)) {
+  if (!msl_damage_source_victim_matches_attacker(batch, v_idx, a_idx, attacker)) {
     return 0u;
   }
   // Replay rollout dense seeds store Slippi-visible instance_id as a proxy for decomp's raw
@@ -383,11 +371,7 @@ uint8_t hitlist_allows_fighter(MslBatch* batch, int bi, int attacker, int hb_id,
     const size_t a_idx = msl_idx_player(bi, attacker);
     const size_t v_idx = msl_idx_player(bi, victim);
     const uint8_t same_source_body_attribution =
-        (batch->state.instance_hit_by[v_idx] == batch->state.instance_id[a_idx] &&
-         batch->state.last_hit_by[v_idx] ==
-             hitlist_source_port0_for_attacker(batch, a_idx, attacker))
-            ? 1u
-            : 0u;
+        msl_damage_source_victim_matches_attacker(batch, v_idx, a_idx, attacker);
     const uint16_t seed_cd = batch->state.combat_hitlist_hb_cd[hb_cd_i];
     if (batch->state.combat_hitlist_hb_valid[valid_i] && seed_cd != 0u &&
         (batch->state.hitlag_pre_timer[a_idx] != 0u ||
@@ -776,11 +760,7 @@ static void hitlist_seed_init_fighter_hitbox_from_group_impl(MslBatch* batch, in
       if (stored_iid == 0u || stored_iid != batch->state.instance_id[v_idx]) {
         continue;
       }
-      if (batch->state.instance_hit_by[v_idx] != batch->state.instance_id[a_idx]) {
-        continue;
-      }
-      if (batch->state.last_hit_by[v_idx] !=
-          hitlist_source_port0_for_attacker(batch, a_idx, attacker)) {
+      if (!msl_damage_source_victim_matches_attacker(batch, v_idx, a_idx, attacker)) {
         continue;
       }
     } else if (is_replay_rollout && !exact_replay_reseed && !use_hitbox_seed) {

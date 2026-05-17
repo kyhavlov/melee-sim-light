@@ -5,6 +5,7 @@
 
 #include "action_ids.h"
 #include "api.h"
+#include "damage_source.h"
 #include "motion_state_owners.h"
 #include "move_tables.h"
 
@@ -166,21 +167,6 @@ static inline uint8_t msl_damage_owner_attackairlw_damageflytop_fox_tail_rejects
   return (batch->state.hitlag[d_idx] == 0u) ? 1u : 0u;
 }
 
-static inline int msl_damage_owner_local_slot_from_source_port0(const MslBatch* batch, int bi,
-                                                                int num_players,
-                                                                uint8_t source_port0) {
-  if (batch == NULL || bi < 0) {
-    return -1;
-  }
-  for (int p = 0; p < num_players; p++) {
-    const size_t idx = (size_t)bi * (size_t)MSL_MAX_PLAYERS + (size_t)p;
-    if (batch->state.source_port0[idx] == source_port0) {
-      return p;
-    }
-  }
-  return -1;
-}
-
 static inline uint8_t msl_damage_owner_replay_rollout_advanced_under_rng_owner(
     const MslBatch* batch, size_t d_idx) {
   if (batch == NULL) {
@@ -242,7 +228,7 @@ static inline uint8_t msl_damage_owner_damageflyroll_pre_action_allows_gate(cons
       if (batch->state.hitlag[d_idx] != 0u && batch->state.hitstun[d_idx] != 0u) {
         const size_t bi = d_idx / (size_t)MSL_MAX_PLAYERS;
         const int num_players = (int)batch->config.num_players;
-        const int attacker = msl_damage_owner_local_slot_from_source_port0(
+        const int attacker = msl_damage_source_local_slot_from_port0(
             batch, (int)bi, num_players, batch->state.last_hit_by[d_idx]);
         if (attacker >= 0 && (size_t)attacker != (d_idx % (size_t)MSL_MAX_PLAYERS)) {
           const size_t a_idx = bi * (size_t)MSL_MAX_PLAYERS + (size_t)attacker;
@@ -257,8 +243,8 @@ static inline uint8_t msl_damage_owner_damageflyroll_pre_action_allows_gate(cons
     case (uint16_t)MSL_ACT_FX_SPECIAL_HI_FALL: {
       const size_t bi = d_idx / (size_t)MSL_MAX_PLAYERS;
       const int num_players = (int)batch->config.num_players;
-      const int attacker = msl_damage_owner_local_slot_from_source_port0(
-          batch, (int)bi, num_players, batch->state.last_hit_by[d_idx]);
+      const int attacker = msl_damage_source_local_slot_from_port0(batch, (int)bi, num_players,
+                                                                   batch->state.last_hit_by[d_idx]);
       if (attacker < 0 || (size_t)attacker == (d_idx % (size_t)MSL_MAX_PLAYERS)) {
         return 0u;
       }
@@ -277,8 +263,8 @@ static inline uint8_t msl_damage_owner_damageflyroll_pre_action_allows_gate(cons
     case (uint16_t)MSL_ACT_DAMAGE_FLY_TOP: {
       const size_t bi = d_idx / (size_t)MSL_MAX_PLAYERS;
       const int num_players = (int)batch->config.num_players;
-      const int attacker = msl_damage_owner_local_slot_from_source_port0(
-          batch, (int)bi, num_players, batch->state.last_hit_by[d_idx]);
+      const int attacker = msl_damage_source_local_slot_from_port0(batch, (int)bi, num_players,
+                                                                   batch->state.last_hit_by[d_idx]);
       if (attacker < 0 || (size_t)attacker == (d_idx % (size_t)MSL_MAX_PLAYERS)) {
         return 0u;
       }
@@ -333,8 +319,8 @@ static inline uint8_t msl_damage_owner_damageflyroll_jumpaerial_attackairb_carry
   }
   const size_t bi = d_idx / (size_t)MSL_MAX_PLAYERS;
   const int num_players = (int)batch->config.num_players;
-  const int attacker = msl_damage_owner_local_slot_from_source_port0(
-      batch, (int)bi, num_players, batch->state.last_hit_by[d_idx]);
+  const int attacker = msl_damage_source_local_slot_from_port0(batch, (int)bi, num_players,
+                                                               batch->state.last_hit_by[d_idx]);
   if (attacker < 0 || (size_t)attacker == (d_idx % (size_t)MSL_MAX_PLAYERS)) {
     return 0u;
   }
