@@ -1015,6 +1015,16 @@ def _cmd0_window(events: list[dict], *, open_end: bool) -> tuple[int, int] | Non
     return _cmd_var_window(events, 0, open_end=open_end)
 
 
+def _cmd_var_value1_pulses(events: list[dict], idx: int) -> list[int]:
+    return [
+        int(ev["frame"])
+        for ev in events
+        if ev.get("kind") == "set_cmd_var"
+        and int(ev.get("data", {}).get("idx", -1)) == idx
+        and int(ev.get("data", {}).get("value", 0)) == 1
+    ]
+
+
 def _allow_interrupt_window(events: list[dict]) -> tuple[int, int] | None:
     for ev in events:
         if ev.get("kind") == "allow_interrupt":
@@ -1341,19 +1351,26 @@ def test_runtime_move_tables_mslftsc1_matches_legacy_json_queries() -> None:
 
         special_msids = sorted(int(k) for k in moves["specials_by_msid"].keys())
         for msid in special_msids:
-            cmd0 = _cmd0_window(_special_events(moves, msid), open_end=True)
+            special_events = _special_events(moves, msid)
+            cmd0 = _cmd0_window(special_events, open_end=True)
             # Runtime intentionally keeps a two-frame latch-clear tail after the extracted clear frame.
             if cmd0 is not None and cmd0[1] < 32767:
                 cmd0 = (cmd0[0], cmd0[1] + 2)
+            cmd2_pulses = _cmd_var_value1_pulses(special_events, 2)
             sfx_ranges = [
                 (int(ev["frame"]), int(ev.get("data", {}).get("random_range", 0)))
-                for ev in _special_events(moves, msid)
+                for ev in special_events
                 if ev.get("kind") == "pseudo_random_sfx"
             ]
             for frame in range(0, 100):
                 assert msl_binding.move_tables_debug_query(
                     "special_cmd0", char_id, msid, float(frame), 0.0
                 ) == _active(cmd0, float(frame))
+                crossed_cmd2 = _crossed_frames(cmd2_pulses, frame - 1, frame)
+                expected_cmd2_pulse = crossed_cmd2[0] if crossed_cmd2 else -1
+                assert msl_binding.move_tables_debug_query(
+                    "special_cmd2_pulse", char_id, msid, float(frame - 1), float(frame)
+                ) == (int(bool(crossed_cmd2)), expected_cmd2_pulse)
                 expected_ranges = tuple(
                     random_range
                     for pulse_frame, random_range in sfx_ranges
@@ -1363,6 +1380,10 @@ def test_runtime_move_tables_mslftsc1_matches_legacy_json_queries() -> None:
                 assert msl_binding.move_tables_special_pseudo_random_sfx_ranges_crossed(
                     char_id, msid, float(frame - 1), float(frame), 16
                 ) == expected_ranges
+            if cmd2_pulses:
+                assert msl_binding.move_tables_debug_query(
+                    "special_cmd2_pulse", char_id, msid, 10.0, 0.0
+                ) == (0, -1)
 
 
 @pytest.mark.parametrize(

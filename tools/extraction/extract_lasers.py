@@ -7,35 +7,13 @@ from pathlib import Path
 
 from melee_sim.hsd_archive import parse_hsd_archive
 
-# Reuse decomp-first Pl*.dat parsers and the movescript interpreter.
+# Reuse decomp-first Pl*.dat parsers.
 from tools.extraction.extract_character_attrs import _extract_ftco_dattrs, _extract_fox_falco_laser
-from tools.extraction.extract_fighter_moves import _parse_subaction_events, _read_s_temp4_subaction_ptr
 
 
 def _f32(x: float) -> float:
     # Keep literals as Python floats but ensure they round to f32 when packed.
     return struct.unpack("<f", struct.pack("<f", float(x)))[0]
-
-
-def _shoot_frames_for_msid(arc, *, ftdata_abs: int, msid: int) -> list[int]:
-    # Decomp: ftData +0x0C is `sTemp4` (subaction table) pointer.
-    # Used by tools/extraction/extract_fighter_moves.py to map submotion id -> script pointer.
-    s_temp4_list = arc.ptr32(ftdata_abs + 0x0C)
-    if s_temp4_list == arc.data_base:
-        return []
-    sub_ptr = _read_s_temp4_subaction_ptr(arc, s_temp4_list, int(msid))
-    if sub_ptr is None:
-        return []
-    events = _parse_subaction_events(arc, sub_ptr, max_frames=120, max_steps_per_frame=10000)
-    frames: set[int] = set()
-    for ev in events:
-        if ev.kind != "set_cmd_var":
-            continue
-        idx = int(ev.data.get("idx", -1))
-        value = int(ev.data.get("value", 0))
-        if idx == 2 and value != 0:
-            frames.add(int(ev.frame))
-    return sorted(frames)
 
 
 @dataclass(frozen=True)
@@ -76,8 +54,6 @@ class LaserRecord:
     laser_state1_non_flinch: int
     state1_hitbox_x138_mask: int
     state1_hitbox_offsets_x: tuple[float, ...]
-    shoot_frames_ground: tuple[int, ...]
-    shoot_frames_air: tuple[int, ...]
 
 
 def _load_record(*, iso_dir: Path, dat_name: str, ftdata_symbol: str, char_id: int) -> LaserRecord:
@@ -102,9 +78,6 @@ def _load_record(*, iso_dir: Path, dat_name: str, ftdata_symbol: str, char_id: i
     air_start_msid = 298
     air_loop_msid = 299
     air_end_msid = 300
-
-    shoot_frames_ground = tuple(_shoot_frames_for_msid(arc, ftdata_abs=ftdata_abs, msid=ground_loop_msid))
-    shoot_frames_air = tuple(_shoot_frames_for_msid(arc, ftdata_abs=ftdata_abs, msid=air_loop_msid))
 
     # Spawn bone and local offset are decomp-defined (not stored in DAT attrs).
     # Decomp: refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialN_FtGetHoldJoint
@@ -180,30 +153,22 @@ def _load_record(*, iso_dir: Path, dat_name: str, ftdata_symbol: str, char_id: i
             laser.get("laser_state1_hitbox_x138_mask", laser.get("laser_hitbox_x138_mask", 0))
         ),
         state1_hitbox_offsets_x=hitbox_offsets_x_state1 if hitbox_offsets_x_state1 else hitbox_offsets_x,
-        shoot_frames_ground=shoot_frames_ground,
-        shoot_frames_air=shoot_frames_air,
     )
 
 
 def _pack_record(rec: LaserRecord) -> bytes:
     # Fixed-capacity payload for hot-path use (no variable-length allocations at runtime).
-    MAX_SHOOT_FRAMES = 8
     MAX_HITBOX_OFFS = 16
-
-    sg = list(rec.shoot_frames_ground)[:MAX_SHOOT_FRAMES]
-    sa = list(rec.shoot_frames_air)[:MAX_SHOOT_FRAMES]
-    sg += [0] * (MAX_SHOOT_FRAMES - len(sg))
-    sa += [0] * (MAX_SHOOT_FRAMES - len(sa))
 
     offs0 = list(rec.hitbox_offsets_x)[:MAX_HITBOX_OFFS]
     offs0 += [0.0] * (MAX_HITBOX_OFFS - len(offs0))
     offs1 = list(rec.state1_hitbox_offsets_x)[:MAX_HITBOX_OFFS]
     offs1 += [0.0] * (MAX_HITBOX_OFFS - len(offs1))
 
-    # Layout is documented in docs/DATA_CONTRACT.md (MSLLASR1 v5).
+    # Layout is documented in docs/DATA_CONTRACT.md (MSLLASR1 v6).
     out = bytearray()
     out += struct.pack(
-        "<BBHHHHHHHHHff3fHBBH",
+        "<BBHHHHHHHHHff3fH",
         int(rec.char_id) & 0xFF,
         0,
         int(rec.shot_itkind) & 0xFFFF,
@@ -221,12 +186,7 @@ def _pack_record(rec: LaserRecord) -> bytes:
         _f32(rec.spawn_off[1]),
         _f32(rec.spawn_off[2]),
         int(rec.lifetime_frames) & 0xFFFF,
-        min(len(rec.shoot_frames_ground), MAX_SHOOT_FRAMES) & 0xFF,
-        min(len(rec.shoot_frames_air), MAX_SHOOT_FRAMES) & 0xFF,
-        0,
     )
-    out += struct.pack("<" + "H" * MAX_SHOOT_FRAMES, *[int(x) & 0xFFFF for x in sg])
-    out += struct.pack("<" + "H" * MAX_SHOOT_FRAMES, *[int(x) & 0xFFFF for x in sa])
     sd = int(rec.laser_shield_damage)
     if sd < -128:
         sd = -128
@@ -285,7 +245,7 @@ def main() -> None:
     args.out.parent.mkdir(parents=True, exist_ok=True)
     with args.out.open("wb") as f:
         f.write(b"MSLLASR1")
-        f.write(struct.pack("<I", 5))
+        f.write(struct.pack("<I", 6))
         f.write(struct.pack("<H", len(recs)))
         f.write(struct.pack("<H", 0))
         for r in recs:

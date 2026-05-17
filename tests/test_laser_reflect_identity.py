@@ -32,7 +32,7 @@ def _common_attr(name: str) -> float:
 
 
 def _load_laser_shot_itkind_and_first_offset_x_and_lifetime(char_id_target: int) -> tuple[int, float, int]:
-    # data/items/lasers.bin layout: tools/extraction/extract_lasers.py (MSLLASR1 v2/v3/v4/v5).
+    # data/items/lasers.bin layout: tools/extraction/extract_lasers.py (MSLLASR1 v2..v6).
     path = "data/items/lasers.bin"
     if not Path(path).exists():
         pytest.skip(f"missing local artifact: {path}")
@@ -40,24 +40,27 @@ def _load_laser_shot_itkind_and_first_offset_x_and_lifetime(char_id_target: int)
     if buf[:8] != b"MSLLASR1":
         raise AssertionError(f"{path}: bad magic")
     (ver,) = struct.unpack_from("<I", buf, 8)
-    if ver not in (1, 2, 3, 4, 5):
+    if ver not in (1, 2, 3, 4, 5, 6):
         raise AssertionError(f"{path}: unsupported ver={ver}")
     (count,) = struct.unpack_from("<H", buf, 12)
     off = 16
 
     # Record packing (see tools/extraction/extract_lasers.py::_pack_record).
-    record_bytes = {1: 158, 2: 166, 3: 254, 4: 254, 5: 254}[int(ver)]
+    record_bytes = {1: 158, 2: 166, 3: 254, 4: 254, 5: 254, 6: 218}[int(ver)]
 
     for _ in range(int(count)):
         base = off
         char_id = int(buf[off])
         shot_itkind = int(struct.unpack_from("<H", buf, off + 2)[0])
 
-        # Match src/laser_params.c offsets:
-        # - v1 header ends at +38, v2+ header ends at +46.
-        # - then 16 u16 ground frames + 16 u16 air frames (+32 bytes).
-        off_header = 38 if int(ver) == 1 else 46
-        off_part2 = base + off_header + (8 * 2) + (8 * 2)
+        # Match src/laser_params.c offsets. v6 removed SpecialN script shoot-frame arrays; those
+        # cmd_var[2] pulses now come from MSLFTSC1/move_tables.
+        if int(ver) == 1:
+            off_part2 = base + 70
+        elif int(ver) >= 6:
+            off_part2 = base + 42
+        else:
+            off_part2 = base + 78
 
         hitbox_offsets_x_count = int(buf[off_part2 + (19 if int(ver) >= 5 else 20)])
         offs0 = off_part2 + 24
@@ -78,7 +81,7 @@ def _load_laser_shot_itkind_and_first_offset_x_and_lifetime(char_id_target: int)
 
 
 def _load_laser_shot_size_and_offsets_x(char_id_target: int) -> tuple[float, tuple[float, ...]]:
-    # data/items/lasers.bin layout: tools/extraction/extract_lasers.py (MSLLASR1 v2/v3/v4/v5).
+    # data/items/lasers.bin layout: tools/extraction/extract_lasers.py (MSLLASR1 v2..v6).
     path = Path("data/items/lasers.bin")
     if not path.exists():
         pytest.skip(f"missing local artifact: {path}")
@@ -86,17 +89,21 @@ def _load_laser_shot_size_and_offsets_x(char_id_target: int) -> tuple[float, tup
     if buf[:8] != b"MSLLASR1":
         raise AssertionError(f"{path}: bad magic")
     (ver,) = struct.unpack_from("<I", buf, 8)
-    if ver not in (1, 2, 3, 4, 5):
+    if ver not in (1, 2, 3, 4, 5, 6):
         raise AssertionError(f"{path}: unsupported ver={ver}")
     (count,) = struct.unpack_from("<H", buf, 12)
     off = 16
-    record_bytes = {1: 158, 2: 166, 3: 254, 4: 254, 5: 254}[int(ver)]
+    record_bytes = {1: 158, 2: 166, 3: 254, 4: 254, 5: 254, 6: 218}[int(ver)]
 
     for _ in range(int(count)):
         base = off
         char_id = int(buf[off])
-        off_header = 38 if int(ver) == 1 else 46
-        off_part2 = base + off_header + (8 * 2) + (8 * 2)
+        if int(ver) == 1:
+            off_part2 = base + 70
+        elif int(ver) >= 6:
+            off_part2 = base + 42
+        else:
+            off_part2 = base + 78
         size = float(struct.unpack_from("<f", buf, off_part2 + 4)[0])
         hitbox_offsets_x_count = int(buf[off_part2 + (19 if int(ver) >= 5 else 20)])
         offsets = tuple(

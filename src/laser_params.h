@@ -6,7 +6,6 @@
 extern "C" {
 #endif
 
-enum { MSL_LASER_MAX_SHOOT_FRAMES = 8 };
 enum { MSL_LASER_MAX_HITBOX_OFFS_X = 16 };
 
 typedef struct MslLaserParams {
@@ -36,12 +35,6 @@ typedef struct MslLaserParams {
   uint16_t air_start_msid;
   uint16_t air_loop_msid;
   uint16_t air_end_msid;
-
-  // Frames (integer) in the loop scripts where movescript sets cmd_var[2] nonzero (shoot trigger).
-  uint8_t shoot_frame_count_ground;
-  uint8_t shoot_frame_count_air;
-  uint16_t shoot_frames_ground[MSL_LASER_MAX_SHOOT_FRAMES];
-  uint16_t shoot_frames_air[MSL_LASER_MAX_SHOOT_FRAMES];
 
   // Laser lifetime (frames) and hitbox params (article state script).
   uint16_t lifetime_frames;

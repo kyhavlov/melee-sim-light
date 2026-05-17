@@ -167,6 +167,26 @@ uint8_t move_tables_special_cmd0_active_at_frame(uint8_t char_id, uint16_t msid,
 uint8_t move_tables_special_cmd0_raw_active_at_frame(uint8_t char_id, uint16_t msid,
                                                      int action_frame);
 
+// Returns whether a Special* command script crossed a cmd_var[2] set-to-1 pulse this frame.
+//
+// Decomp:
+// - SpecialN Loop consumes cmd_vars[2] to spawn blaster shots.
+// - SpecialS/AirS consumes cmd_vars[2] to spawn Illusion/Phantasm ghost articles.
+// refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
+//   ftFx_SpecialNLoop_Anim,ftFx_SpecialAirNLoop_Anim}
+// refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
+//   ftFx_SpecialS_Anim,ftFx_SpecialAirS_Anim,ftFox_SpecialS_CreateGhostItem}
+//
+// Source of truth: data/scripts/{fox,falco}.bin (MSLFTSC1) specials_by_msid events
+// set_cmd_var(idx=2,value=1).
+uint8_t move_tables_special_cmd2_pulse_crossed(uint8_t char_id, uint16_t msid,
+                                               float prev_anim_frame_f32, float cur_anim_frame_f32,
+                                               int16_t* out_pulse_frame);
+
+// Returns the first Special* cmd_var[2] set-to-1 pulse frame for end-entry ordering bridges.
+uint8_t move_tables_special_cmd2_first_pulse_frame(uint8_t char_id, uint16_t msid,
+                                                   int16_t* out_first_pulse_frame);
+
 // Returns whether EscapeF should consume a script-driven facing flip this frame.
 //
 // Decomp:

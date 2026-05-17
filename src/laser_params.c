@@ -93,7 +93,8 @@ int laser_params_init(void) {
   p += 8;
   const uint32_t version = read_u32_le(p);
   p += 4;
-  if (version != 1 && version != 2 && version != 3 && version != 4 && version != 5) {
+  if (version != 1 && version != 2 && version != 3 && version != 4 && version != 5 &&
+      version != 6) {
     alloc_free(buf);
     return -1;
   }
@@ -105,7 +106,10 @@ int laser_params_init(void) {
   // Record layout source:
   // - docs/DATA_CONTRACT.md (MSLLASR1)
   // - tools/extraction/extract_lasers.py
-  const size_t record_bytes = (version >= 3) ? 254u : (version == 2) ? 166u : 158u;
+  const size_t record_bytes = (version >= 6)   ? 218u
+                              : (version >= 3) ? 254u
+                              : (version == 2) ? 166u
+                                               : 158u;
   if ((size_t)(end - p) < (size_t)record_count * record_bytes) {
     alloc_free(buf);
     return -1;
@@ -136,10 +140,10 @@ int laser_params_init(void) {
       rec.spawn_off_xyz[1] = read_f32_le(p + 32);
       rec.spawn_off_xyz[2] = read_f32_le(p + 36);
       rec.lifetime_frames = read_u16_le(p + 40);
-      rec.shoot_frame_count_ground = p[42];
-      rec.shoot_frame_count_air = p[43];
-      // p[44..45] reserved
-      off = 46;
+      // MSLLASR1 v6 removed SpecialN command-script shoot frames. Those pulses are owned by
+      // MSLFTSC1/move_tables (set_cmd_var idx=2), leaving this artifact focused on laser article
+      // params.
+      off = (version >= 6) ? 42u : 78u;
     } else {
       // MSLLASR1 v1: only includes loop msids (start/end are not present).
       rec.ground_loop_msid = read_u16_le(p + 8);
@@ -150,20 +154,8 @@ int laser_params_init(void) {
       rec.spawn_off_xyz[1] = read_f32_le(p + 24);
       rec.spawn_off_xyz[2] = read_f32_le(p + 28);
       rec.lifetime_frames = read_u16_le(p + 32);
-      rec.shoot_frame_count_ground = p[34];
-      rec.shoot_frame_count_air = p[35];
-      // p[36..37] reserved
-      off = 38;
+      off = 70;
     }
-
-    for (int i = 0; i < MSL_LASER_MAX_SHOOT_FRAMES; i++) {
-      rec.shoot_frames_ground[i] = read_u16_le(p + off + (size_t)i * 2);
-    }
-    off += (size_t)MSL_LASER_MAX_SHOOT_FRAMES * 2;
-    for (int i = 0; i < MSL_LASER_MAX_SHOOT_FRAMES; i++) {
-      rec.shoot_frames_air[i] = read_u16_le(p + off + (size_t)i * 2);
-    }
-    off += (size_t)MSL_LASER_MAX_SHOOT_FRAMES * 2;
 
     rec.damage = read_f32_le(p + off);
     rec.size = read_f32_le(p + off + 4);

@@ -33,6 +33,8 @@ typedef struct MslMoveTableCache {
   MslScriptFrameWindow throw_flags_hit[MSL_MOVE_TABLE_THROW_HITBOX_CAP];
   MslScriptFrameWindow catchattack_grabbed_hit;
   MslScriptFrameWindow jab_rapid;
+  uint16_t cmd_var_value1_pulses[MSL_MOVE_TABLE_CMD_VAR_COUNT][MSL_MOVE_TABLE_PULSE_CAP];
+  uint8_t cmd_var_value1_pulse_count[MSL_MOVE_TABLE_CMD_VAR_COUNT];
   uint16_t throw_flags_pulses[MSL_MOVE_TABLE_THROW_HITBOX_CAP][MSL_MOVE_TABLE_PULSE_CAP];
   uint8_t throw_flags_pulse_count[MSL_MOVE_TABLE_THROW_HITBOX_CAP];
   uint16_t projectile_pulses[MSL_MOVE_TABLE_PULSE_CAP];
@@ -140,6 +142,15 @@ static void move_cache_build_for_msid(uint8_t char_id, uint16_t msid, MslMoveTab
   for (uint32_t i = 0; i < range.count; i++) {
     const MslScriptEvent* ev = &range.events[i];
     switch ((MslScriptEventKind)ev->kind_id) {
+      case MSL_SCRIPT_EVENT_SET_CMD_VAR:
+        if (ev->payload.cmd_var.idx < MSL_MOVE_TABLE_CMD_VAR_COUNT &&
+            ev->payload.cmd_var.value == 1u) {
+          const uint8_t idx = ev->payload.cmd_var.idx;
+          add_unique_pulse(cache->cmd_var_value1_pulses[idx],
+                           &cache->cmd_var_value1_pulse_count[idx],
+                           (uint8_t)MSL_MOVE_TABLE_PULSE_CAP, ev->frame);
+        }
+        break;
       case MSL_SCRIPT_EVENT_SET_JAB_COMBO:
         if (ev->payload.jab_combo.disabled == 0u && cache->jab_combo_on_frame < 0) {
           cache->jab_combo_on_frame = (int16_t)ev->frame;
@@ -497,6 +508,45 @@ uint8_t move_tables_special_cmd0_raw_active_at_frame(uint8_t char_id, uint16_t m
   }
   const MslScriptFrameWindow win = cache->cmd_var_value1_open[0];
   return (action_frame >= (int)win.start_af && action_frame < (int)win.end_af) ? 1u : 0u;
+}
+
+uint8_t move_tables_special_cmd2_pulse_crossed(uint8_t char_id, uint16_t msid,
+                                               float prev_anim_frame_f32, float cur_anim_frame_f32,
+                                               int16_t* out_pulse_frame) {
+  const MslMoveTableCache* cache = move_cache_get(char_id, msid);
+  if (cache == NULL || cur_anim_frame_f32 < prev_anim_frame_f32) {
+    return 0u;
+  }
+  const uint8_t idx = 2u;
+  for (uint8_t i = 0; i < cache->cmd_var_value1_pulse_count[idx]; i++) {
+    const uint16_t frame = cache->cmd_var_value1_pulses[idx][i];
+    if (frame_crossed_u16(frame, prev_anim_frame_f32, cur_anim_frame_f32)) {
+      if (out_pulse_frame != NULL) {
+        *out_pulse_frame = (int16_t)frame;
+      }
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
+uint8_t move_tables_special_cmd2_first_pulse_frame(uint8_t char_id, uint16_t msid,
+                                                   int16_t* out_first_pulse_frame) {
+  if (out_first_pulse_frame == NULL) {
+    return 0u;
+  }
+  const MslMoveTableCache* cache = move_cache_get(char_id, msid);
+  if (cache == NULL || cache->cmd_var_value1_pulse_count[2] == 0u) {
+    return 0u;
+  }
+  uint16_t first = cache->cmd_var_value1_pulses[2][0];
+  for (uint8_t i = 1; i < cache->cmd_var_value1_pulse_count[2]; i++) {
+    if (cache->cmd_var_value1_pulses[2][i] < first) {
+      first = cache->cmd_var_value1_pulses[2][i];
+    }
+  }
+  *out_first_pulse_frame = (int16_t)first;
+  return 1u;
 }
 
 uint8_t move_tables_escapef_should_flip_facing(uint8_t char_id, int16_t prev_action_frame,

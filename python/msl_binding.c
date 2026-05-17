@@ -5811,6 +5811,13 @@ static PyObject* msl_move_tables_debug_query_py(PyObject* self, PyObject* args) 
     return PyLong_FromLong((long)move_tables_special_cmd0_active_at_frame(
         (uint8_t)char_id, (uint16_t)action_or_msid, (int)a));
   }
+  if (strcmp(kind, "special_cmd2_pulse") == 0) {
+    int16_t pulse_frame = -1;
+    const uint8_t ok = move_tables_special_cmd2_pulse_crossed(
+        (uint8_t)char_id, (uint16_t)action_or_msid, f32_from_double(a), f32_from_double(b),
+        &pulse_frame);
+    return Py_BuildValue("(ii)", (int)ok, ok ? (int)pulse_frame : -1);
+  }
   if (strcmp(kind, "escapef_flip") == 0) {
     return PyLong_FromLong(
         (long)move_tables_escapef_should_flip_facing((uint8_t)char_id, (int16_t)a, (int16_t)b));

@@ -26,12 +26,14 @@ def _laser_x138_masks_by_item_type(root: Path, item_type: int) -> tuple[int, int
     assert version >= 5
     count = struct.unpack_from("<H", buf, 12)[0]
     off = 16
-    record_bytes = 254
+    record_bytes = 218 if version >= 6 else 254
+    state0_off = 42 if version >= 6 else 78
+    state1_off = 130 if version >= 6 else 166
     for _ in range(int(count)):
         shot_itkind = struct.unpack_from("<H", buf, off + 2)[0]
         if int(shot_itkind) == int(item_type):
-            state0 = struct.unpack_from("<H", buf, off + 78 + 20)[0]
-            state1 = struct.unpack_from("<H", buf, off + 166 + 20)[0]
+            state0 = struct.unpack_from("<H", buf, off + state0_off + 20)[0]
+            state1 = struct.unpack_from("<H", buf, off + state1_off + 20)[0]
             return int(state0), int(state1)
         off += record_bytes
     raise AssertionError(f"laser item_type={item_type} not found in {path}")

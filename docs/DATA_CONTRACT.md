@@ -1534,15 +1534,18 @@ Binary layout (little-endian):
     - `2`: dispatch state 2 (`ftCommon_8007D60C`)
     - `0xFF`: no opcode-25 event at this frame
 
-## `data/items/lasers.bin` (MSLLASR1 v5)
+## `data/items/lasers.bin` (MSLLASR1 v6)
 
-Purpose: compact, init-time-loadable Fox/Falco blaster laser tables (spawn + projectile + hitbox).
+Purpose: compact, init-time-loadable Fox/Falco blaster laser article tables (spawn +
+projectile + hitbox params). SpecialN command-script shoot pulses are owned by MSLFTSC1 and cached
+by `move_tables`, not duplicated in this artifact.
 
 Decomp semantics (source pointers):
 - SpecialN (fighter) spawns lasers by setting `cmd_vars[2]` from movescript and calling
   `ftFx_SpecialN_CreateBlasterShot` when `cmd_vars[2] != 0` (then clearing it).
   - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialNLoop_Anim
   - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialAirNLoop_Anim
+  - Runtime source: `data/scripts/{fox,falco}.bin` (MSLFTSC1) `set_cmd_var(idx=2,value=1)`
 - SpecialN submotion ids (Start/Loop/End; ground + air) are game-code enums:
   - refs/melee/src/melee/ft/chara/ftFox/forward.h::ftFx_Submotion
 - Laser item lifetime comes from `FoxLaserAttr.lifetime` (`Article.x4_specialAttributes`):
@@ -1567,7 +1570,7 @@ Decomp semantics (source pointers):
 Binary layout (little-endian):
 - Header:
   - `magic[8] = "MSLLASR1"`
-  - `version: u32 = 5`
+  - `version: u32 = 6`
   - `record_count: u16` (currently 2: Fox + Falco)
   - `reserved: u16 = 0`
 - Records (`record_count` entries), fixed-size:
@@ -1587,11 +1590,6 @@ Binary layout (little-endian):
   - `spawn_off_xyz: 3 * f32` (bone-local offset used by `lb_8000B1CC` in `ftFx_SpecialN_FtGetHoldJoint`;
     decomp constant, not a DAT attr)
   - `lifetime_frames: u16` (rounded from `FoxLaserAttr.lifetime`)
-  - `shoot_frame_count_ground: u8` (<= 8)
-  - `shoot_frame_count_air: u8` (<= 8)
-  - `reserved1: u16 = 0`
-  - `shoot_frames_ground[8]: 8 * u16` frames where movescript sets `cmd_vars[2] != 0` (ground loop)
-  - `shoot_frames_air[8]: 8 * u16` frames where movescript sets `cmd_vars[2] != 0` (air loop)
   - `laser_damage: f32` (from laser article hitbox script)
   - `laser_size: f32` (hitbox size/radius from laser article hitbox script)
   - `laser_angle: u16` (degrees; from laser article hitbox script)
@@ -1614,8 +1612,10 @@ Version notes:
   and uses one reserved byte for proxy-extracted `laser_non_flinch` (currently derived from KB triplet).
 - v5: reuses reserved bytes in each state hitbox-param block for `hitbox_offsets_x_count` at byte
   19 and `hitbox_x138_mask` at bytes 20..21. Record size remains 254 bytes.
+- v6: removes SpecialN command-script shoot frames; runtime uses MSLFTSC1 `set_cmd_var(idx=2)`
+  events through `move_tables`. Record size is 218 bytes.
 
-Runtime semantics (current C-core policy for v2 lasers):
+Runtime semantics (current C-core policy):
 - The simulator uses `spawn_bone_part_id` + `spawn_off_xyz` with `anim_pose_get_matrix(...)` to compute world spawn points.
 - New laser items are allocated in a fixed 15-slot pool with deterministic (stable) ordering matching dataset sorting:
   `(instance_id, spawn_id, type)`.

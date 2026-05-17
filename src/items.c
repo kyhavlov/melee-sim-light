@@ -1097,16 +1097,6 @@ static inline uint8_t throw_blaster_pulse_is_seed_stale_latch(uint16_t action_id
   return 0u;
 }
 
-enum {
-  // Fox/Falco side special "main" submotions that can emit cmd_var[2] ghost spawn pulses.
-  // Source mapping:
-  // - data/special_msids/{fox,falco}.json side_ground.main=302, side_air.main=305
-  // - data/moves/{fox,falco}.json specials_by_msid["302"/"305"].events set_cmd_var(idx=2,value=1)
-  MSL_ILLUSION_MAIN_GROUND_MSID = 302,
-  MSL_ILLUSION_MAIN_AIR_MSID = 305,
-  MSL_ILLUSION_CMDVAR2_SPAWN_ON_AF = 2,
-};
-
 static inline uint8_t action_is_illusion_dash(uint16_t action_id_u16) {
   // Ghost article spawn is owned by ftFx_SpecialS_Anim / ftFx_SpecialAirS_Anim
   // (main dash states), not Start/End states.
@@ -1136,23 +1126,37 @@ static inline uint8_t action_is_illusion_setphys(uint16_t action_id_u16) {
                                                                                            : 0u;
 }
 
-static inline uint8_t illusion_spawn_pulse_crossed(uint16_t action_id_u16, uint16_t msid,
-                                                   float prev_anim_frame_f32,
+static inline uint8_t illusion_spawn_pulse_crossed(uint8_t char_id, uint16_t action_id_u16,
+                                                   uint16_t msid, float prev_anim_frame_f32,
                                                    float cur_anim_frame_f32) {
   if (!action_is_illusion_dash(action_id_u16)) {
     return 0u;
   }
-  // Cmd-var pulse source is extracted from specials_by_msid command events:
-  // - side_ground.main (302): set_cmd_var(idx=2,value=1) at frame=2
-  // - side_air.main    (305): set_cmd_var(idx=2,value=1) at frame=2
-  // data/special_msids/{fox,falco}.json
-  // data/moves/{fox,falco}.json specials_by_msid["302"/"305"].events
-  if (msid != (uint16_t)MSL_ILLUSION_MAIN_GROUND_MSID &&
-      msid != (uint16_t)MSL_ILLUSION_MAIN_AIR_MSID) {
+  // Cmd-var pulse source is the typed MSLFTSC1 script event cache:
+  // data/scripts/{fox,falco}.bin specials_by_msid side_ground.main/side_air.main
+  // set_cmd_var(idx=2,value=1).
+  return move_tables_special_cmd2_pulse_crossed(char_id, msid, prev_anim_frame_f32,
+                                                cur_anim_frame_f32, NULL);
+}
+
+static inline uint8_t illusion_prev_main_msid_for_action(uint8_t char_id, uint16_t action_id_u16,
+                                                         uint16_t* out_msid) {
+  if (out_msid == NULL) {
     return 0u;
   }
-  const float on = (float)MSL_ILLUSION_CMDVAR2_SPAWN_ON_AF;
-  return (prev_anim_frame_f32 < on && cur_anim_frame_f32 >= on) ? 1u : 0u;
+  const MslSpecialMsids* ms = msl_special_msids(char_id);
+  if (ms == NULL) {
+    return 0u;
+  }
+  if (action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_S) {
+    *out_msid = ms->specials_ground_main;
+    return 1u;
+  }
+  if (action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S) {
+    *out_msid = ms->specials_air_main;
+    return 1u;
+  }
+  return 0u;
 }
 
 static inline int items_find_illusion_slot(const MslBatch* batch, int bi, int owner,
@@ -1203,9 +1207,9 @@ static void illusion_spawn_from_fighter(MslBatch* batch, int bi, int owner) {
   const int32_t prev_fp =
       batch->state.anim_frame_fp_q16_16[o_idx] - batch->state.frame_speed_mul_fp_q16_16[o_idx];
   const float af_prev = msl_anim_frame_sanitize_f32(msl_f32_from_q16_16(prev_fp));
-  uint8_t spawn_pulse = illusion_spawn_pulse_crossed(action_id_u16, msid, af_prev, af);
+  uint8_t spawn_pulse = illusion_spawn_pulse_crossed(char_id, action_id_u16, msid, af_prev, af);
   if (!spawn_pulse && action_is_illusion_end(action_id_u16) &&
-      batch->state.action_frame[o_idx] == 0 && batch->state.prev_action_frame[o_idx] >= 1 &&
+      batch->state.action_frame[o_idx] == 0 &&
       ((prev_action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_S &&
         action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_S_END) ||
        (prev_action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S &&
@@ -1216,14 +1220,21 @@ static void illusion_spawn_from_fighter(MslBatch* batch, int bi, int owner) {
     //   step under teacher-forced one-step execution.
     // - When main->end transition occurs on this frame, preserve the cmd_var[2] spawn pulse
     //   ownership by accepting end-entry (action_frame==0) if previous action was the matching main
-    //   and the previous action-frame already advanced into the cmd_var[2] pulse-crossing window.
+    //   and the previous action-frame already advanced into the sourced cmd_var[2] pulse-crossing
+    //   window.
     // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
     //   ftFx_SpecialS_Anim,ftFx_SpecialAirS_Anim,ftFox_SpecialS_CreateGhostItem}
     // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
     //   ftFx_SpecialSEnd_Anim,ftFx_SpecialAirSEnd_Anim}
     // data/special_msids/{fox,falco}.json side_ground.main/side_air.main
-    // data/moves/{fox,falco}.json specials_by_msid["302"/"305"].events
-    spawn_pulse = 1u;
+    // data/scripts/{fox,falco}.bin (MSLFTSC1) set_cmd_var idx=2 pulse events
+    uint16_t prev_msid = 0u;
+    int16_t first_pulse = -1;
+    if (illusion_prev_main_msid_for_action(char_id, prev_action_id_u16, &prev_msid) &&
+        move_tables_special_cmd2_first_pulse_frame(char_id, prev_msid, &first_pulse) &&
+        batch->state.prev_action_frame[o_idx] >= (int16_t)(first_pulse - 1)) {
+      spawn_pulse = 1u;
+    }
   }
   if (!spawn_pulse) {
     return;
@@ -1405,15 +1416,10 @@ static uint8_t blaster_gun_update_from_fighter(MslBatch* batch, int bi, int owne
   return spawned;
 }
 
-static inline uint8_t laser_event_frame_crossed(float prev_frame, float cur_frame,
-                                                uint16_t event_frame) {
-  const float ef = (float)event_frame;
-  return (prev_frame < ef && cur_frame >= ef) ? 1u : 0u;
-}
-
-static inline uint8_t laser_should_shoot_between_frames(const MslLaserParams* lp, uint16_t msid,
-                                                        float prev_frame, float cur_frame) {
-  if (lp == NULL) {
+static inline uint8_t laser_should_shoot_between_frames(const MslLaserParams* lp, uint8_t char_id,
+                                                        uint16_t msid, float prev_frame,
+                                                        float cur_frame) {
+  if (lp == NULL || (msid != lp->ground_loop_msid && msid != lp->air_loop_msid)) {
     return 0;
   }
   if (cur_frame < prev_frame) {
@@ -1424,23 +1430,7 @@ static inline uint8_t laser_should_shoot_between_frames(const MslLaserParams* lp
     //   ftFx_SpecialNLoop_Anim,ftFx_SpecialAirNLoop_Anim}
     return 0;
   }
-  if (msid == lp->ground_loop_msid) {
-    const uint8_t n = lp->shoot_frame_count_ground;
-    for (uint8_t i = 0; i < n && i < (uint8_t)MSL_LASER_MAX_SHOOT_FRAMES; i++) {
-      if (laser_event_frame_crossed(prev_frame, cur_frame, lp->shoot_frames_ground[i]) != 0u) {
-        return 1;
-      }
-    }
-  }
-  if (msid == lp->air_loop_msid) {
-    const uint8_t n = lp->shoot_frame_count_air;
-    for (uint8_t i = 0; i < n && i < (uint8_t)MSL_LASER_MAX_SHOOT_FRAMES; i++) {
-      if (laser_event_frame_crossed(prev_frame, cur_frame, lp->shoot_frames_air[i]) != 0u) {
-        return 1;
-      }
-    }
-  }
-  return 0;
+  return move_tables_special_cmd2_pulse_crossed(char_id, msid, prev_frame, cur_frame, NULL);
 }
 
 static inline float item_segment_segment_dist2(float p0x, float p0y, float p0z, float p1x,
@@ -7259,8 +7249,8 @@ void items_spawn_fighter_anim_phase(MslBatch* batch) {
   // Decomp: ftFx_SpecialNLoop_Anim / ftFx_SpecialAirNLoop_Anim check fp->cmd_vars[2] and spawn via
   // it_8029C6A4.
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{ftFx_SpecialNLoop_Anim,ftFx_SpecialAirNLoop_Anim}
-  // Note: This sim uses a precomputed shoot-frame list from `data/items/lasers.bin` as a proxy for
-  // cmd_vars[2] pulses.
+  // Source: data/scripts/{fox,falco}.bin (MSLFTSC1) set_cmd_var(idx=2,value=1), cached by
+  // move_tables.
   const int num_players = (int)batch->config.num_players;
   for (int bi = 0; bi < batch->batch_size; bi++) {
     const uint8_t row_had_items = items_row_has_any(batch, bi);
@@ -7316,14 +7306,22 @@ void items_spawn_fighter_anim_phase(MslBatch* batch) {
       //   ftFx_SpecialS_Anim,ftFx_SpecialAirS_Anim,ftFox_SpecialS_CreateGhostItem}
       // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
       //   ftFx_SpecialSEnd_Anim,ftFx_SpecialAirSEnd_Anim}
-      const uint8_t illusion_end_entry_bridge =
-          (batch->state.action_frame[idx] == 0 && batch->state.prev_action_frame[idx] >= 1 &&
-           ((prev_action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_S &&
-             action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_S_END) ||
-            (prev_action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S &&
-             action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_END)))
-              ? 1u
-              : 0u;
+      uint8_t illusion_end_entry_bridge = 0u;
+      if (batch->state.action_frame[idx] == 0 &&
+          ((prev_action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_S &&
+            action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_S_END) ||
+           (prev_action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S &&
+            action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_END))) {
+        uint16_t prev_msid = 0u;
+        int16_t first_pulse = -1;
+        if (illusion_prev_main_msid_for_action(batch->state.char_id[idx], prev_action_id_u16,
+                                               &prev_msid) &&
+            move_tables_special_cmd2_first_pulse_frame(batch->state.char_id[idx], prev_msid,
+                                                       &first_pulse) &&
+            batch->state.prev_action_frame[idx] >= (int16_t)(first_pulse - 1)) {
+          illusion_end_entry_bridge = 1u;
+        }
+      }
       if (batch->state.hitlag_started_frame[idx] != 0u && !illusion_end_entry_bridge) {
         continue;
       }
@@ -7366,9 +7364,8 @@ void items_spawn_fighter_anim_phase(MslBatch* batch) {
       // Source/data:
       // - refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
       //   ftFx_SpecialNLoop_Anim,ftFx_SpecialAirNLoop_Anim}
-      // - data/items/lasers.bin (MSLLASR1 shoot_frames_{ground,air}, extracted from Pl*.dat
-      //   set_cmd_var idx=2 script events by tools/extraction/extract_lasers.py)
-      uint8_t should_shoot = laser_should_shoot_between_frames(lp, msid, af_prev, af);
+      // - data/scripts/{fox,falco}.bin (MSLFTSC1) set_cmd_var idx=2 events, cached by move_tables.
+      uint8_t should_shoot = laser_should_shoot_between_frames(lp, cid, msid, af_prev, af);
       uint8_t shoot_spawn_state = 0u;
       uint8_t shoot_apply_motion_step = 0u;
       uint8_t shoot_throw_lw_late_pulse_transn_y = 0u;
@@ -7391,7 +7388,7 @@ void items_spawn_fighter_anim_phase(MslBatch* batch) {
         if (items_find_gun_slot(batch, bi, p, lp->gun_itkind) < 0) {
           continue;
         }
-        // Throw actions do not use the SpecialN loop shoot-frame table. ftAction_80071974 emits
+        // Throw actions do not use the SpecialN loop cmd_var[2] pulse lane. ftAction_80071974 emits
         // `throw_flags_b0` from set_throw_spawn_projectile script commands, and ftFx_Throw_Anim
         // consumes that one-shot pulse before calling the throw-side it_8029C6CC spawn path. Start
         // from no-shot for every throw and let only the command/crossing owners below re-enable it.

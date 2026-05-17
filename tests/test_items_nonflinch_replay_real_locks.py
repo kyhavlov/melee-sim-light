@@ -13,22 +13,22 @@ from tests.test_items_spawn_joint_replay_real_locks import (
 
 
 def _load_laser_non_flinch_by_item_type(root: Path, *, item_type: int) -> int:
-    # MSLLASR1 v4/v5 layout owned by tools/extraction/extract_lasers.py.
+    # MSLLASR1 v4..v6 layout owned by tools/extraction/extract_lasers.py.
     # refs/docs: docs/DATA_CONTRACT.md
     path = root / "data" / "items" / "lasers.bin"
     buf = path.read_bytes()
     assert buf[:8] == b"MSLLASR1"
     version = struct.unpack_from("<I", buf, 8)[0]
-    assert version in (4, 5)
+    assert version in (4, 5, 6)
     count = struct.unpack_from("<H", buf, 12)[0]
     off = 16
-    rec_bytes = 254
+    rec_bytes = 218 if version >= 6 else 254
+    state0_off = 42 if version >= 6 else 78
     for _ in range(int(count)):
         shot_itkind = struct.unpack_from("<H", buf, off + 2)[0]
         if int(shot_itkind) == int(item_type):
-            # state0 packed block starts at offset 78, and `laser_non_flinch` is +18 within that
-            # block under v4/v5 packing.
-            return int(buf[off + 78 + 18])
+            # `laser_non_flinch` is +18 within the state0 hitbox block.
+            return int(buf[off + state0_off + 18])
         off += rec_bytes
     raise AssertionError(f"item_type={item_type} not found in data/items/lasers.bin")
 
