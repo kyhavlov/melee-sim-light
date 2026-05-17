@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-import struct
 from pathlib import Path
 
 import numpy as np
 import pytest
 
 from tools.eval.dataset import SEED_DTYPE
+from tools.extraction.extract_fighter_script_timeline import EVENT_IDS
+from tools.slippi.known_data_artifacts import read_mslftsc1_v1
 
 
 # Character ids (GALE01): Slippi post-frame `character`.
@@ -24,42 +25,21 @@ HIT_GROUNDED = 1 << 9
 
 
 def _find_nonzero_hit_status_entry(path: Path) -> tuple[int, int, int] | None:
-    """Return (msid, frame, status) for any nonzero movescript hit-status entry."""
-    with path.open("rb") as f:
-        magic = f.read(8)
-        if magic != b"MSLHSTA1":
-            return None
-        (ver, frame_count, reserved, entry_count) = struct.unpack("<IHHI", f.read(12))
-        if int(ver) != 1 or int(reserved) != 0:
-            return None
-        if int(frame_count) <= 0 or int(entry_count) <= 0:
-            return None
-
-        index_recs: list[tuple[int, int]] = []
-        for _ in range(int(entry_count)):
-            (msid, _res, payload_bytes, payload_off) = struct.unpack("<HHII", f.read(12))
-            if int(_res) != 0:
-                return None
-            if int(payload_bytes) != int(frame_count):
-                return None
-            index_recs.append((int(msid), int(payload_off)))
-
-        # Prefer common invuln scripts (GALE01): EscapeN/EscapeF/EscapeB.
-        prefer = [41, 42, 43]
-        ordered = [rec for rec in index_recs if rec[0] in set(prefer)] + [
-            rec for rec in index_recs if rec[0] not in set(prefer)
-        ]
-
-        for (msid, payload_off) in ordered:
-            f.seek(payload_off)
-            payload = f.read(int(frame_count))
-            if len(payload) != int(frame_count):
-                return None
-            for frame in range(int(frame_count)):
-                st = int(payload[frame])
-                if st != 0:
-                    return (msid, frame, st)
-
+    """Return (msid, frame, status) for any nonzero MSLFTSC1 hit-status event."""
+    table = read_mslftsc1_v1(path)
+    by_msid = {
+        int(entry.msid): table.events[entry.first_event : entry.first_event + entry.event_count]
+        for entry in table.entries
+    }
+    prefer = [41, 42, 43]  # EscapeN/EscapeF/EscapeB.
+    ordered_msids = prefer + [msid for msid in sorted(by_msid) if msid not in set(prefer)]
+    for msid in ordered_msids:
+        for ev in by_msid.get(msid, ()):
+            if int(ev.kind_id) != EVENT_IDS["set_hit_status"]:
+                continue
+            status = int(ev.payload.get("state", 0))
+            if status != 0:
+                return (msid, int(ev.frame), status)
     return None
 
 
@@ -81,13 +61,13 @@ def _selected_body_hit_count(handle) -> int:
 def test_hit_status_table_gates_body_contact_selection(char_name: str, char_id: int) -> None:
     import msl_binding
 
-    path = Path("data") / "hit_status" / f"{char_name}.bin"
+    path = Path("data") / "scripts" / f"{char_name}.bin"
     if not path.exists():
-        pytest.skip(f"missing hit status artifact: {path}")
+        pytest.skip(f"missing script timeline artifact: {path}")
 
     found = _find_nonzero_hit_status_entry(path)
     if found is None:
-        pytest.skip(f"no nonzero hit status entry found in: {path}")
+        pytest.skip(f"no nonzero hit status event found in: {path}")
     (msid, frame, status) = found
     assert int(status) != 0
 

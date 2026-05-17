@@ -11,7 +11,6 @@
 #include "motion_state_owners.h"
 #include "move_tables.h"
 #include "stage_collision.h"
-#include "state_flags_221c_y_tables.h"
 
 enum { MSL_CHAR_FALCO = 22 };
 
@@ -777,7 +776,8 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
         const float anim_frame_f32 = msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]);
         const uint16_t frame = msl_anim_frame_floor_u16(anim_frame_f32);
         uint8_t y_flags = 0u;
-        if (state_flags_221c_y_get(batch->state.char_id[idx], msid, frame, &y_flags) == 0) {
+        if (move_tables_state_flags_221c_y_at_frame(batch->state.char_id[idx], msid, frame,
+                                                    &y_flags) != 0u) {
           if (y_flags & 0x4u) {
             f221c |= (uint8_t)MSL_STATE_FLAG_221C_U16_Y_VISIBLE_BIT;
           } else {

@@ -66,7 +66,7 @@ def test_passive_tech_entry_hurtbox_state_target_family(case: _PassiveTechHurtbo
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Passive.c::ftCo_8009872C
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveStand.c::ftCo_80098928
     # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B868
-    # data/hurtbox_states/{fox,falco}.bin
+    # data/scripts/{fox,falco}.bin (MSLFTSC1 set_hit_status timelines)
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
 

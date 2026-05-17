@@ -769,12 +769,12 @@ def _decode_script_payload(kind_id: int, payload: bytes) -> dict:
     if not payload:
         return {}
     if kind == "set_cmd_var":
-        idx, value = struct.unpack_from("<BB", payload, 0)
+        idx, value = struct.unpack_from("<BH", payload, 0)
         return {"idx": int(idx), "value": int(value)}
     if kind == "set_throw_flags":
         (hit_idx,) = struct.unpack_from("<B", payload, 0)
         return {"hit_idx": int(hit_idx)}
-    if kind in {"set_hit_status", "set_all_hurt_state", "set_jab_rapid"}:
+    if kind in {"set_airborne_state", "set_hit_status", "set_all_hurt_state", "set_jab_rapid"}:
         (state,) = struct.unpack_from("<B", payload, 0)
         return {"state": int(state)}
     if kind == "set_hurt_state":

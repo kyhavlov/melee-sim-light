@@ -12,10 +12,10 @@ _BASE_REL = "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_rece
 _REQUIRED_ARTIFACTS = (
     "data/moves/fox.json",
     "data/moves/falco.json",
-    "data/hit_status/fox.bin",
-    "data/hit_status/falco.bin",
-    "data/hurtbox_states/fox.bin",
-    "data/hurtbox_states/falco.bin",
+    "data/scripts/fox.bin",
+    "data/scripts/falco.bin",
+    "data/hurtcaps/fox.bin",
+    "data/hurtcaps/falco.bin",
 )
 
 

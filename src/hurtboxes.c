@@ -8,8 +8,6 @@
 #include "anim_table.h"
 #include "char_params.h"
 #include "common_params.h"
-#include "hit_status_tables.h"
-#include "hurtbox_modes_tables.h"
 #include "hurtcaps_tables.h"
 #include "input_axis.h"
 #include "items.h"
@@ -804,7 +802,7 @@ static void hurtboxes_refresh_impl(MslBatch* batch, uint8_t geometry_mode) {
         pose_frame = (uint16_t)(pose_frame + 1u);
       }
       if (!have_hit_status_override && !preserve_visible_downbound_colanim) {
-        (void)hit_status_get(char_id, msid, frame, &hit_status);
+        (void)move_tables_hit_status_at_frame(char_id, msid, frame, &hit_status);
       }
       if (hit_status != 0) {
         // Decomp timing: move-induced hit status (fp->x1988) is set by movescript opcode 26
@@ -850,17 +848,17 @@ static void hurtboxes_refresh_impl(MslBatch* batch, uint8_t geometry_mode) {
                                                 : 0u;
         // Passive / PassiveStand entry ownership:
         // - ftCo_80090184 resolves grounded tech callbacks before the post-frame snapshot.
-        // - Replay-visible entry frame 0 already carries the new motion state's hurt-status table
+        // - Replay-visible entry frame 0 already carries the new motion state's script hit-status
         //   on these tech entries, so do not defer the frame-0 table override here.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_80090184
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Passive.c::ftCo_800987D0
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveStand.c::ftCo_800989D4
-        // data/hurtbox_states/{fox,falco}.bin
+        // data/scripts/{fox,falco}.bin (MSLFTSC1 set_hit_status / hurt-state events)
         // DownStand entry from DownDamage/DownWait has the same entry-frame visibility property:
         // ftCo_80098160 enters the getup submotion before post-frame capture, and the extracted
-        // hit-status table owns the entry hurtbox_state.
+        // script hit-status timeline owns the entry hurtbox_state.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownStand.c::ftCo_80098160
-        // data/hurtbox_states/{fox,falco}.bin
+        // data/scripts/{fox,falco}.bin (MSLFTSC1 set_hit_status / hurt-state events)
         if (!(frame == 0u && batch->state.prev_action_id[idx] != cur_action &&
               !is_shine_start_entry && !is_passive_tech_entry && !is_down_stand_entry)) {
           final_hurtbox_state = hit_status;
@@ -961,7 +959,8 @@ static void hurtboxes_refresh_impl(MslBatch* batch, uint8_t geometry_mode) {
       // - Disabled/intangible capsules (movescript) and capsules with missing pose data are kept in
       //   their original slot but marked `hurtcap_enabled=0` and given radius=0.
       uint32_t can_hit_mask = 0xFFFFFFFFu;
-      (void)hurtbox_modes_can_hit_mask(char_id, msid, frame, cap_count, &can_hit_mask);
+      (void)move_tables_hurtbox_can_hit_mask_at_frame(char_id, msid, frame, cap_count,
+                                                      &can_hit_mask);
 
       uint16_t cap_part_ids[MSL_MAX_HURTCAPS];
       float cap_mats[MSL_MAX_HURTCAPS * 12u];

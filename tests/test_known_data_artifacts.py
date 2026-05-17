@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from tools.extraction.extract_fighter_parts import ANCHOR_IDS
-from tools.extraction.extract_fighter_script_timeline import EVENT_IDS
+from tools.extraction.extract_fighter_script_timeline import EVENT_IDS, RUNTIME_OWNER_EVENT_KINDS
 from tools.extraction.extract_item_articles import FIELD_SPECS, UNIT_DEGREES, UNIT_FRAMES, UNIT_ITEM_KIND, UNIT_PART_ID
 from tools.slippi.item_article_data import (
     SIM_CHAR_TO_GALE01_FIGHTER_KIND,
@@ -942,6 +942,20 @@ def test_script_timeline_known_decoded_events() -> None:
         e.frame == 9 and e.kind_id == EVENT_IDS["set_cmd_var"] and e.payload == {"idx": 1, "value": 1}
         for e in turnrun_events
     )
+    lipstick = next(e for e in fox.entries if e.msid == 128)
+    lipstick_events = fox.events[lipstick.first_event : lipstick.first_event + lipstick.event_count]
+    assert any(
+        e.frame == 5 and e.kind_id == EVENT_IDS["set_cmd_var"] and e.payload == {"idx": 0, "value": 286}
+        for e in lipstick_events
+    )
+
+
+def test_script_timeline_manifests_do_not_drop_runtime_owner_events() -> None:
+    for char_name in ("fox", "falco"):
+        manifest = json.loads(Path(f"data/scripts/{char_name}_manifest.json").read_text(encoding="utf-8"))
+        dropped = set(manifest.get("unknown_event_counts", {}))
+        dropped.update(manifest.get("unsupported_event_counts", {}))
+        assert dropped.isdisjoint(RUNTIME_OWNER_EVENT_KINDS), (char_name, sorted(dropped))
 
 
 @pytest.mark.integration
@@ -1023,6 +1037,66 @@ def _cmd_var_value1_pulses(events: list[dict], idx: int) -> list[int]:
         and int(ev.get("data", {}).get("idx", -1)) == idx
         and int(ev.get("data", {}).get("value", 0)) == 1
     ]
+
+
+def _hurtcap_bone_part_ids(char_name: str) -> list[int]:
+    path = Path("data/hurtcaps") / f"{char_name}.bin"
+    buf = path.read_bytes()
+    if buf[:8] != b"MSLHURT1":
+        raise AssertionError(f"{path}: bad magic")
+    version, cap_count, reserved = struct.unpack_from("<IHH", buf, 8)
+    if int(version) != 1 or int(reserved) != 0:
+        raise AssertionError(f"{path}: bad header")
+    out = []
+    off = 16
+    for _ in range(int(cap_count)):
+        out.append(int(struct.unpack_from("<H", buf, off)[0]))
+        off += 34
+    return out
+
+
+def _script_owner_expected_timelines(events: list[dict], cap_bones: list[int]) -> tuple[list[int], list[int], list[int], list[int]]:
+    hit_status = []
+    hurt_masks = []
+    airborne = []
+    flags_221c_y = []
+    cur_hit = 0
+    cur_hurt = [0 for _ in cap_bones]
+    cur_flags = 0
+    bone_to_cap = {}
+    for i, bone in enumerate(cap_bones):
+        bone_to_cap.setdefault(bone, i)
+    events_by_frame: dict[int, list[dict]] = {}
+    for ev in events:
+        events_by_frame.setdefault(int(ev.get("frame", 0)), []).append(ev)
+    for frame in range(0, 240):
+        air = -1
+        for ev in events_by_frame.get(frame, []):
+            kind = ev.get("kind")
+            data = dict(ev.get("data", {}))
+            if kind == "set_hit_status":
+                cur_hit = int(data.get("state", 0)) & 0xFF
+            elif kind == "set_all_hurt_state":
+                cur_hurt = [int(data.get("state", 0)) for _ in cap_bones]
+            elif kind == "set_hurt_state":
+                cap_i = bone_to_cap.get(int(data.get("bone_idx", -1)))
+                if cap_i is not None:
+                    cur_hurt[cap_i] = int(data.get("state", 0))
+            elif kind == "set_airborne_state":
+                state = int(data.get("state", -1))
+                if 0 <= state <= 2:
+                    air = state
+            elif kind == "set_state_flags_221c_u16_y":
+                cur_flags = int(data.get("flags", 0)) & 0x7
+        mask = 0
+        for cap_i, state in enumerate(cur_hurt):
+            if state == 0:
+                mask |= 1 << cap_i
+        hit_status.append(cur_hit)
+        hurt_masks.append(mask)
+        airborne.append(air)
+        flags_221c_y.append(cur_flags)
+    return hit_status, hurt_masks, airborne, flags_221c_y
 
 
 def _allow_interrupt_window(events: list[dict]) -> tuple[int, int] | None:
@@ -1171,6 +1245,7 @@ def test_runtime_move_tables_mslftsc1_matches_legacy_json_queries() -> None:
     cases = [("fox", 1), ("falco", 22)]
     for char_name, char_id in cases:
         moves = json.loads(Path(f"data/moves/{char_name}.json").read_text(encoding="utf-8"))
+        cap_bones = _hurtcap_bone_part_ids(char_name)
         for action_id, move_name in attackair:
             events = _move_events(moves, move_name)
             cmd0 = _cmd0_window(events, open_end=False)
@@ -1385,6 +1460,49 @@ def test_runtime_move_tables_mslftsc1_matches_legacy_json_queries() -> None:
                     "special_cmd2_pulse", char_id, msid, 10.0, 0.0
                 ) == (0, -1)
 
+        script_owner_cases: dict[int, list[dict]] = {}
+        relevant_kinds = {
+            "set_hit_status",
+            "set_all_hurt_state",
+            "set_hurt_state",
+            "set_airborne_state",
+            "set_state_flags_221c_u16_y",
+        }
+        for move in moves.get("moves", {}).values():
+            events = list(move.get("events", []))
+            if any(ev.get("kind") in relevant_kinds for ev in events):
+                script_owner_cases[int(move["submotion_id"])] = events
+        for msid_s, special in moves.get("specials_by_msid", {}).items():
+            events = list(special.get("events", []))
+            if any(ev.get("kind") in relevant_kinds for ev in events):
+                script_owner_cases[int(msid_s)] = events
+        for msid, events in sorted(script_owner_cases.items()):
+            hit_status, hurt_masks, airborne, flags_221c_y = _script_owner_expected_timelines(
+                events, cap_bones
+            )
+            sample_frames = {0, 1, 238, 239, 240}
+            for ev in events:
+                if ev.get("kind") in relevant_kinds:
+                    frame = int(ev.get("frame", 0))
+                    sample_frames.update({max(0, frame - 1), frame, min(240, frame + 1)})
+            cap_count = len(cap_bones)
+            cap_mask = (1 << cap_count) - 1
+            for frame in sorted(sample_frames):
+                clamp = min(frame, 239)
+                assert msl_binding.move_tables_debug_query(
+                    "hit_status", char_id, msid, float(frame), 0.0
+                ) == (1, hit_status[clamp])
+                assert msl_binding.move_tables_debug_query(
+                    "hurtbox_can_hit_mask", char_id, msid, float(frame), float(cap_count)
+                ) == (1, hurt_masks[clamp] & cap_mask)
+                assert msl_binding.move_tables_debug_query(
+                    "state_flags_221c_y", char_id, msid, float(frame), 0.0
+                ) == (1, flags_221c_y[clamp])
+                expected_air = airborne[frame] if frame < 240 else -1
+                assert msl_binding.move_tables_debug_query(
+                    "airborne_state_event", char_id, msid, float(frame), 0.0
+                ) == (int(expected_air >= 0), expected_air)
+
 
 @pytest.mark.parametrize(
     ("magic", "version", "reader", "match"),
@@ -1484,6 +1602,14 @@ def test_known_data_artifact_extractors_regenerate_stable_outputs(tmp_path: Path
             "tools.extraction.extract_fighter_script_timeline",
             "--moves",
             "data/moves/fox.json",
+            "--character",
+            "fox",
+            "--iso_dir",
+            "_iso",
+            "--melee_decomp",
+            "refs/melee",
+            "--special_msids_dir",
+            "data/special_msids",
             "--out",
             str(tmp_path / "fox_scripts.bin"),
             "--manifest",

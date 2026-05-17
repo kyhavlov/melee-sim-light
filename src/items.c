@@ -16,7 +16,6 @@
 #include "common_params.h"
 #include "hit_elements.h"
 #include "hitboxes_tables.h"
-#include "hit_status_tables.h"
 #include "hitlist.h"
 #include "item_article_params.h"
 #include "item_common_params.h"
@@ -2202,9 +2201,10 @@ static inline uint8_t laser_grounded_body_uses_lbcoll_hurt_radius(const MslBatch
   }
   uint8_t cur_hit_status = 0u;
   uint8_t prev_hit_status = 0u;
-  if (hit_status_get(batch->state.char_id[d_idx], msid, pose_frame, &cur_hit_status) != 0 ||
-      hit_status_get(batch->state.char_id[d_idx], msid, (uint16_t)(pose_frame - 1u),
-                     &prev_hit_status) != 0 ||
+  if (move_tables_hit_status_at_frame(batch->state.char_id[d_idx], msid, pose_frame,
+                                      &cur_hit_status) == 0u ||
+      move_tables_hit_status_at_frame(batch->state.char_id[d_idx], msid,
+                                      (uint16_t)(pose_frame - 1u), &prev_hit_status) == 0u ||
       cur_hit_status != 0u || prev_hit_status == 0u) {
     return 0u;
   }
@@ -2223,7 +2223,7 @@ static inline uint8_t laser_grounded_body_uses_lbcoll_hurt_radius(const MslBatch
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Down.c::ftCo_Down_Coll
   // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58,lbColl_804D7A38}
   // data/hurtcaps/{fox,falco}.bin
-  // data/hurtbox_states/{fox,falco}.bin (MSLHURM1)
+  // data/scripts/{fox,falco}.bin (MSLFTSC1 set_hit_status / hurt-state events)
   return 1u;
 }
 

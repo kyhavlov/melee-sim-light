@@ -15,7 +15,6 @@
 #include "grab_flow.h"
 #include "input_axis.h"
 #include "jump_input.h"
-#include "hit_status_tables.h"
 #include "locomotion.h"
 #include "motion_state_owners.h"
 #include "move_tables.h"
@@ -495,12 +494,12 @@ static inline void enter_shine_ground_start(MslBatch* batch, size_t idx,
     if (ov != 0xFFu) {
       hit_status = ov;
     } else {
-      (void)hit_status_get(batch->state.char_id[idx], (uint16_t)ms->speciallw_ground_start, 0u,
-                           &hit_status);
+      (void)move_tables_hit_status_at_frame(batch->state.char_id[idx],
+                                            (uint16_t)ms->speciallw_ground_start, 0u, &hit_status);
     }
   } else {
-    (void)hit_status_get(batch->state.char_id[idx], (uint16_t)ms->speciallw_ground_start, 0u,
-                         &hit_status);
+    (void)move_tables_hit_status_at_frame(batch->state.char_id[idx],
+                                          (uint16_t)ms->speciallw_ground_start, 0u, &hit_status);
   }
   if (hit_status != 0u) {
     batch->state.hurtbox_state[idx] = hit_status;
@@ -538,12 +537,12 @@ static inline void enter_shine_air_start(MslBatch* batch, size_t idx, const MslC
     if (ov != 0xFFu) {
       hit_status = ov;
     } else {
-      (void)hit_status_get(batch->state.char_id[idx], (uint16_t)ms->speciallw_air_start, 0u,
-                           &hit_status);
+      (void)move_tables_hit_status_at_frame(batch->state.char_id[idx],
+                                            (uint16_t)ms->speciallw_air_start, 0u, &hit_status);
     }
   } else {
-    (void)hit_status_get(batch->state.char_id[idx], (uint16_t)ms->speciallw_air_start, 0u,
-                         &hit_status);
+    (void)move_tables_hit_status_at_frame(batch->state.char_id[idx],
+                                          (uint16_t)ms->speciallw_air_start, 0u, &hit_status);
   }
   if (hit_status != 0u) {
     batch->state.hurtbox_state[idx] = hit_status;

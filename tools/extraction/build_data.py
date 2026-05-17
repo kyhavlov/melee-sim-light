@@ -140,15 +140,12 @@ def main() -> None:
     for d in (
         out("stages"),
         out_common.parent,
-        out("airborne_state_events"),
         out("anims"),
         out("anims_ecb"),
         out("attack_id/move_id"),
         out("characters"),
         out("ecb"),
-        out("hit_status"),
         out("hitboxes"),
-        out("hurtbox_states"),
         out("hurtcaps"),
         out("items"),
         out("items/articles"),
@@ -314,6 +311,14 @@ def main() -> None:
             [
                 "--moves",
                 str(out(f"moves/{ch}.json")),
+                "--character",
+                ch,
+                "--iso_dir",
+                str(iso_dir),
+                "--melee_decomp",
+                str(args.melee_decomp),
+                "--special_msids_dir",
+                str(out("special_msids")),
                 "--out",
                 str(out(f"scripts/{ch}.bin")),
                 "--manifest",
@@ -331,76 +336,6 @@ def main() -> None:
             "tools.extraction.extract_fighter_hitboxes",
             ["--moves", str(out(f"moves/{ch}.json")), "--out", str(out(f"hitboxes/{ch}.bin"))],
         )
-
-    # Movescript-derived hurt capsule state timelines.
-    _run(
-        "tools.extraction.extract_fighter_hurtbox_modes",
-        [
-            "--iso_dir",
-            str(iso_dir),
-            "--melee_decomp",
-            str(args.melee_decomp),
-            "--hurtcaps_dir",
-            str(out("hurtcaps")),
-            "--special_msids_dir",
-            str(out("special_msids")),
-            "--out_dir",
-            str(out("hurtbox_states")),
-            "--chars",
-            ",".join(chars),
-        ],
-    )
-
-    # Movescript-derived hit status timelines (opcode 26).
-    _run(
-        "tools.extraction.extract_fighter_hit_status",
-        [
-            "--iso_dir",
-            str(iso_dir),
-            "--melee_decomp",
-            str(args.melee_decomp),
-            "--special_msids_dir",
-            str(out("special_msids")),
-            "--out_dir",
-            str(out("hit_status")),
-            "--chars",
-            ",".join(chars),
-        ],
-    )
-
-    # Movescript-derived fp->x221C_u16_y timelines (opcode 52 / ftAction_80072C6C).
-    _run(
-        "tools.extraction.extract_fighter_state_flags_221c_y",
-        [
-            "--iso_dir",
-            str(iso_dir),
-            "--melee_decomp",
-            str(args.melee_decomp),
-            "--special_msids_dir",
-            str(out("special_msids")),
-            "--out_dir",
-            str(out("state_flags_221c_y")),
-            "--chars",
-            ",".join(chars),
-        ],
-    )
-
-    # Movescript-derived set_airborne_state timelines (opcode 25 / ftAction_80071998).
-    _run(
-        "tools.extraction.extract_fighter_airborne_state_events",
-        [
-            "--iso_dir",
-            str(iso_dir),
-            "--melee_decomp",
-            str(args.melee_decomp),
-            "--special_msids_dir",
-            str(out("special_msids")),
-            "--out_dir",
-            str(out("airborne_state_events")),
-            "--chars",
-            ",".join(chars),
-        ],
-    )
 
     # Anim matrices per needed msid (depends on data/moves + data/hurtcaps + data/characters).
     #

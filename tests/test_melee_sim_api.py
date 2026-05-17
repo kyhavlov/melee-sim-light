@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -8,6 +9,29 @@ import pytest
 import melee_sim as msl
 import melee_sim.dtypes as msl_dtypes
 from melee_sim.env_batch import _resolve_data_dir
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def _populate_data_overlay_without_legacy_script_owner_splits(dst_data_dir: Path) -> None:
+    src_data_dir = ROOT / "data"
+    dst_data_dir.mkdir(parents=True, exist_ok=True)
+    exclude_roots = {"airborne_state_events", "hit_status", "hurtbox_states", "state_flags_221c_y"}
+
+    for src in src_data_dir.rglob("*"):
+        rel = src.relative_to(src_data_dir)
+        if rel.parts and rel.parts[0] in exclude_roots:
+            continue
+        dst = dst_data_dir / rel
+        if src.is_dir():
+            dst.mkdir(parents=True, exist_ok=True)
+            continue
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            os.link(src, dst)
+        except OSError:
+            dst.write_bytes(src.read_bytes())
 
 
 def test_default_data_dir_is_dot_msl(monkeypatch, tmp_path) -> None:
@@ -30,6 +54,25 @@ def test_source_checkout_data_dir_fallback(monkeypatch, tmp_path) -> None:
     assert _resolve_data_dir(None) == str(tmp_path / "data")
     assert os.environ["MSL_DATA_DIR"] == str(tmp_path / "data")
     os.environ.pop("MSL_DATA_DIR", None)
+
+
+def test_envbatch_uses_mslftsc1_without_legacy_script_owner_splits(tmp_path) -> None:
+    data_dir = tmp_path / "data"
+    _populate_data_overlay_without_legacy_script_owner_splits(data_dir)
+    assert not (data_dir / "hit_status").exists()
+    assert not (data_dir / "hurtbox_states").exists()
+    assert (data_dir / "scripts" / "fox.bin").exists()
+    assert (data_dir / "scripts" / "falco.bin").exists()
+
+    with msl.EnvBatch(batch_size=1, length=2, data_dir=data_dir) as env:
+        buffers = env.buffers()
+        env.configure_match(buffers)
+        controller = msl.neutral_controller((buffers.length, buffers.batch_size))
+        msl.write_controller(buffers.controller_action_view, controller, player=0)
+        msl.write_controller(buffers.controller_action_view, controller, player=1)
+        env.bind(buffers)
+        env.reset_all()
+        env.step()
 
 
 def test_buffers_controller_api_steps_and_writes_done() -> None:

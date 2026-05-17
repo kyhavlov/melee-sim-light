@@ -1995,7 +1995,7 @@ typedef struct MslDebugHurtcapSlotFlags {
   uint8_t enabled;           // world slot enabled flag after hurtboxes_refresh()
   uint8_t height;            // hurtcap height class (0/1/2)
   uint8_t is_grabbable;      // hurtcap grabbable flag
-  uint8_t mode_can_hit_bit;  // bit from hurtbox_modes_can_hit_mask()
+  uint8_t mode_can_hit_bit;  // bit from MSLFTSC1-derived hurtbox can-hit mask
 
   uint8_t char_id;
   uint8_t _pad0;

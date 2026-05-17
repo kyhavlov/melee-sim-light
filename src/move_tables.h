@@ -167,6 +167,46 @@ uint8_t move_tables_special_cmd0_active_at_frame(uint8_t char_id, uint16_t msid,
 uint8_t move_tables_special_cmd0_raw_active_at_frame(uint8_t char_id, uint16_t msid,
                                                      int action_frame);
 
+// Returns the move-script hit status (fp->x1988) after executing script commands through `frame`.
+//
+// Decomp: opcode 26 dispatches ftColl_8007B62C from ftAction_80073240.
+// refs/melee/src/melee/ft/ftaction.c::{ftAction_80071A14,ftAction_80073240}
+//
+// Source of truth: data/scripts/{fox,falco}.bin (MSLFTSC1) set_hit_status events.
+uint8_t move_tables_hit_status_at_frame(uint8_t char_id, uint16_t msid, uint16_t frame,
+                                        uint8_t* out_status);
+
+// Returns the BODY-eligible hurt capsule mask after applying set_all_hurt_state/set_hurt_state
+// events through `frame`.
+//
+// Decomp: opcodes 27/28 write HurtCapsule state from the fighter command script.
+// refs/melee/src/melee/ft/ftaction.c::{ftAction_80071A50,ftAction_80071A90}
+//
+// Source of truth: data/scripts/{fox,falco}.bin (MSLFTSC1) hurt-state events plus
+// data/hurtcaps/{fox,falco}.bin capsule bone mapping.
+uint8_t move_tables_hurtbox_can_hit_mask_at_frame(uint8_t char_id, uint16_t msid, uint16_t frame,
+                                                  uint16_t cap_count, uint32_t* out_mask);
+
+// Returns script-owned x221C_u16_y low 3-bit flags after executing opcode 52 through `frame`.
+//
+// Decomp: ftAction_80072C6C writes x221C_u16_y via ft_8008A1B8(flags).
+// refs/melee/src/melee/ft/ftaction.c::ftAction_80072C6C
+// refs/melee/src/melee/ft/ft_0892.c::ft_8008A1B8
+//
+// Source of truth: data/scripts/{fox,falco}.bin (MSLFTSC1) set_state_flags_221c_u16_y events.
+uint8_t move_tables_state_flags_221c_y_at_frame(uint8_t char_id, uint16_t msid, uint16_t frame,
+                                                uint8_t* out_flags);
+
+// Returns whether a script-owned set_airborne_state event exists exactly at `frame`.
+//
+// Decomp: opcode 25 dispatches ftCommon_8007D7FC / ftCommon_8007D5D4 / ftCommon_8007D60C.
+// refs/melee/src/melee/ft/ftaction.c::ftAction_80071998
+// refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D7FC,ftCommon_8007D5D4,ftCommon_8007D60C}
+//
+// Source of truth: data/scripts/{fox,falco}.bin (MSLFTSC1) set_airborne_state events.
+uint8_t move_tables_airborne_state_event_at_frame(uint8_t char_id, uint16_t msid, uint16_t frame,
+                                                  uint8_t* out_state);
+
 // Returns whether a Special* command script crossed a cmd_var[2] set-to-1 pulse this frame.
 //
 // Decomp:

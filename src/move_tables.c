@@ -4,16 +4,19 @@
 #include <string.h>
 
 #include "action_ids.h"
+#include "hurtcaps_tables.h"
 #include "script_events.h"
 
 enum {
   MSL_SPECIAL_CMD0_LATCH_CLEAR_TAIL_FRAMES = 2,
   MSL_MOVE_TABLE_CHAR_COUNT = 2,
   MSL_MOVE_TABLE_MSID_CAP = 512,
+  MSL_MOVE_TABLE_FRAME_CAP = 240,
   MSL_MOVE_TABLE_CMD_VAR_COUNT = 4,
   MSL_MOVE_TABLE_THROW_HITBOX_CAP = 4,
   MSL_MOVE_TABLE_PULSE_CAP = 16,
   MSL_MOVE_TABLE_SFX_PULSE_CAP = 16,
+  MSL_MOVE_TABLE_NO_AIRBORNE_EVENT = 0xFF,
 };
 
 typedef struct MslMoveTableCachedHitbox {
@@ -42,6 +45,10 @@ typedef struct MslMoveTableCache {
   uint16_t sfx_pulse_frames[MSL_MOVE_TABLE_SFX_PULSE_CAP];
   uint8_t sfx_pulse_ranges[MSL_MOVE_TABLE_SFX_PULSE_CAP];
   uint8_t sfx_pulse_count;
+  uint32_t hurtbox_can_hit_mask[MSL_MOVE_TABLE_FRAME_CAP];
+  uint8_t hit_status[MSL_MOVE_TABLE_FRAME_CAP];
+  uint8_t airborne_state_event[MSL_MOVE_TABLE_FRAME_CAP];
+  uint8_t state_flags_221c_y[MSL_MOVE_TABLE_FRAME_CAP];
   MslMoveTableCachedHitbox throw_hitboxes[MSL_MOVE_TABLE_THROW_HITBOX_CAP];
   int16_t jab_combo_on_frame;
   int16_t smash_charge_frame;
@@ -97,6 +104,13 @@ static void add_unique_pulse(uint16_t* frames, uint8_t* count, uint8_t cap, uint
   *count = (uint8_t)(*count + 1u);
 }
 
+static uint32_t mask_low_bits_u32(uint16_t n) {
+  if (n >= 32u) {
+    return 0xFFFFFFFFu;
+  }
+  return (n == 0u) ? 0u : ((1u << n) - 1u);
+}
+
 static void move_cache_build_for_msid(uint8_t char_id, uint16_t msid, MslMoveTableCache* cache) {
   if (cache == NULL) {
     return;
@@ -105,6 +119,10 @@ static void move_cache_build_for_msid(uint8_t char_id, uint16_t msid, MslMoveTab
   cache->jab_combo_on_frame = -1;
   cache->smash_charge_frame = -1;
   cache->smash_charge_damage_mul = 1.0f;
+  for (uint16_t frame = 0; frame < (uint16_t)MSL_MOVE_TABLE_FRAME_CAP; frame++) {
+    cache->hurtbox_can_hit_mask[frame] = 0xFFFFFFFFu;
+    cache->airborne_state_event[frame] = (uint8_t)MSL_MOVE_TABLE_NO_AIRBORNE_EVENT;
+  }
 
   for (uint8_t idx = 0; idx < MSL_MOVE_TABLE_CMD_VAR_COUNT; idx++) {
     (void)script_events_cmd_var_value_window(char_id, msid, idx, 1u, 0u,
@@ -126,8 +144,6 @@ static void move_cache_build_for_msid(uint8_t char_id, uint16_t msid, MslMoveTab
                                            &cache->throw_flags_hit[hit_idx]);
   }
 
-  int jab_rapid_on = -1;
-  int jab_rapid_off = -1;
   const MslScriptEvent* smash =
       script_events_first(char_id, msid, MSL_SCRIPT_EVENT_START_SMASH_CHARGE);
   if (smash != NULL) {
@@ -139,6 +155,8 @@ static void move_cache_build_for_msid(uint8_t char_id, uint16_t msid, MslMoveTab
   }
 
   const MslScriptEventRange range = script_events_range(char_id, msid);
+  int jab_rapid_on = -1;
+  int jab_rapid_off = -1;
   for (uint32_t i = 0; i < range.count; i++) {
     const MslScriptEvent* ev = &range.events[i];
     switch ((MslScriptEventKind)ev->kind_id) {
@@ -202,6 +220,74 @@ static void move_cache_build_for_msid(uint8_t char_id, uint16_t msid, MslMoveTab
     }
   }
 
+  uint8_t bone_to_cap[256];
+  for (uint16_t i = 0; i < 256u; i++) {
+    bone_to_cap[i] = 0xFFu;
+  }
+  const MslHurtCap* caps = NULL;
+  uint16_t cap_count = 0u;
+  if (hurtcaps_get(char_id, &caps, &cap_count) == 0 && caps != NULL) {
+    const uint16_t n = cap_count < 32u ? cap_count : 32u;
+    for (uint16_t i = 0; i < n; i++) {
+      if (caps[i].bone_part_id < 256u && bone_to_cap[caps[i].bone_part_id] == 0xFFu) {
+        bone_to_cap[caps[i].bone_part_id] = (uint8_t)i;
+      }
+    }
+  }
+
+  uint8_t hit_status = 0u;
+  uint8_t state_flags_221c_y = 0u;
+  uint8_t hurt_state_by_cap[32];
+  for (uint8_t i = 0; i < 32u; i++) {
+    hurt_state_by_cap[i] = 0u;
+  }
+  for (uint16_t frame = 0; frame < (uint16_t)MSL_MOVE_TABLE_FRAME_CAP; frame++) {
+    uint32_t mask = 0xFFFFFFFFu;
+    for (uint32_t i = 0; i < range.count; i++) {
+      const MslScriptEvent* ev = &range.events[i];
+      if (ev->frame != frame) {
+        continue;
+      }
+      switch ((MslScriptEventKind)ev->kind_id) {
+        case MSL_SCRIPT_EVENT_SET_HIT_STATUS:
+          hit_status = ev->payload.state.state;
+          break;
+        case MSL_SCRIPT_EVENT_SET_ALL_HURT_STATE:
+          for (uint8_t cap_i = 0; cap_i < 32u; cap_i++) {
+            hurt_state_by_cap[cap_i] = ev->payload.state.state;
+          }
+          break;
+        case MSL_SCRIPT_EVENT_SET_HURT_STATE: {
+          const uint8_t cap_i = bone_to_cap[ev->payload.hurt_state.bone_idx];
+          if (cap_i < 32u) {
+            hurt_state_by_cap[cap_i] = ev->payload.hurt_state.state;
+          }
+          break;
+        }
+        case MSL_SCRIPT_EVENT_SET_AIRBORNE_STATE:
+          if (ev->payload.state.state <= 2u) {
+            cache->airborne_state_event[frame] = ev->payload.state.state;
+          }
+          break;
+        case MSL_SCRIPT_EVENT_SET_STATE_FLAGS_221C_U16_Y:
+          state_flags_221c_y = (uint8_t)(ev->payload.state_flags_221c.flags & 0x7u);
+          break;
+        default:
+          break;
+      }
+    }
+    for (uint8_t cap_i = 0; cap_i < 32u; cap_i++) {
+      if (hurt_state_by_cap[cap_i] == 0u) {
+        mask |= (1u << cap_i);
+      } else {
+        mask &= ~(1u << cap_i);
+      }
+    }
+    cache->hit_status[frame] = hit_status;
+    cache->hurtbox_can_hit_mask[frame] = mask;
+    cache->state_flags_221c_y[frame] = state_flags_221c_y;
+  }
+
   if (jab_rapid_on >= 0) {
     if (jab_rapid_off < 0) {
       jab_rapid_off = INT16_MAX;
@@ -228,6 +314,9 @@ int move_tables_init(void) {
     return 0;
   }
   if (script_events_init() != 0) {
+    return -1;
+  }
+  if (hurtcaps_tables_init() != 0) {
     return -1;
   }
   memset(g_move_cache, 0, sizeof(g_move_cache));
@@ -508,6 +597,78 @@ uint8_t move_tables_special_cmd0_raw_active_at_frame(uint8_t char_id, uint16_t m
   }
   const MslScriptFrameWindow win = cache->cmd_var_value1_open[0];
   return (action_frame >= (int)win.start_af && action_frame < (int)win.end_af) ? 1u : 0u;
+}
+
+uint8_t move_tables_hit_status_at_frame(uint8_t char_id, uint16_t msid, uint16_t frame,
+                                        uint8_t* out_status) {
+  if (out_status == NULL) {
+    return 0u;
+  }
+  *out_status = 0u;
+  const MslMoveTableCache* cache = move_cache_get(char_id, msid);
+  if (cache == NULL) {
+    return 0u;
+  }
+  uint16_t f = frame;
+  if (f >= (uint16_t)MSL_MOVE_TABLE_FRAME_CAP) {
+    f = (uint16_t)(MSL_MOVE_TABLE_FRAME_CAP - 1);
+  }
+  *out_status = cache->hit_status[f];
+  return 1u;
+}
+
+uint8_t move_tables_hurtbox_can_hit_mask_at_frame(uint8_t char_id, uint16_t msid, uint16_t frame,
+                                                  uint16_t cap_count, uint32_t* out_mask) {
+  if (out_mask == NULL) {
+    return 0u;
+  }
+  *out_mask = mask_low_bits_u32(cap_count);
+  const MslMoveTableCache* cache = move_cache_get(char_id, msid);
+  if (cache == NULL) {
+    return 0u;
+  }
+  uint16_t f = frame;
+  if (f >= (uint16_t)MSL_MOVE_TABLE_FRAME_CAP) {
+    f = (uint16_t)(MSL_MOVE_TABLE_FRAME_CAP - 1);
+  }
+  *out_mask = cache->hurtbox_can_hit_mask[f] & mask_low_bits_u32(cap_count);
+  return 1u;
+}
+
+uint8_t move_tables_state_flags_221c_y_at_frame(uint8_t char_id, uint16_t msid, uint16_t frame,
+                                                uint8_t* out_flags) {
+  if (out_flags == NULL) {
+    return 0u;
+  }
+  *out_flags = 0u;
+  const MslMoveTableCache* cache = move_cache_get(char_id, msid);
+  if (cache == NULL) {
+    return 0u;
+  }
+  uint16_t f = frame;
+  if (f >= (uint16_t)MSL_MOVE_TABLE_FRAME_CAP) {
+    f = (uint16_t)(MSL_MOVE_TABLE_FRAME_CAP - 1);
+  }
+  *out_flags = cache->state_flags_221c_y[f];
+  return 1u;
+}
+
+uint8_t move_tables_airborne_state_event_at_frame(uint8_t char_id, uint16_t msid, uint16_t frame,
+                                                  uint8_t* out_state) {
+  if (out_state == NULL) {
+    return 0u;
+  }
+  *out_state = (uint8_t)MSL_MOVE_TABLE_NO_AIRBORNE_EVENT;
+  const MslMoveTableCache* cache = move_cache_get(char_id, msid);
+  if (cache == NULL || frame >= (uint16_t)MSL_MOVE_TABLE_FRAME_CAP) {
+    return 0u;
+  }
+  const uint8_t state = cache->airborne_state_event[frame];
+  if (state == (uint8_t)MSL_MOVE_TABLE_NO_AIRBORNE_EVENT) {
+    return 0u;
+  }
+  *out_state = state;
+  return 1u;
 }
 
 uint8_t move_tables_special_cmd2_pulse_crossed(uint8_t char_id, uint16_t msid,

@@ -21,9 +21,7 @@
 #include "grab_flow.h"
 #include "hit_elements.h"
 #include "hitboxes_tables.h"
-#include "hit_status_tables.h"
 #include "hitlist.h"
-#include "hurtbox_modes_tables.h"
 #include "hurtcaps_tables.h"
 #include "input_axis.h"
 #include "item_common_params.h"
@@ -570,8 +568,8 @@ static inline uint8_t combat_shine_start_damageair_entry_pose_allows_body_contac
   }
 
   uint32_t can_hit_mask = 0xFFFFFFFFu;
-  (void)hurtbox_modes_can_hit_mask(char_id, (uint16_t)MSL_SM_DAMAGE_AIR_2, /*frame=*/0u,
-                                   cap_count_u16, &can_hit_mask);
+  (void)move_tables_hurtbox_can_hit_mask_at_frame(char_id, (uint16_t)MSL_SM_DAMAGE_AIR_2,
+                                                  /*frame=*/0u, cap_count_u16, &can_hit_mask);
   if (((can_hit_mask >> cap_id) & 0x1u) == 0u) {
     return 0u;
   }
@@ -1127,8 +1125,8 @@ static inline uint8_t combat_guardreflect_body_hurtcap_world(const MslBatch* bat
   // refs/melee/src/melee/ft/ftmotionstates.c::ftCo_MS_GuardReflect
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007B1B8,ftColl_80076ED8,ftColl_80078C70}
   uint32_t can_hit_mask = 0xFFFFFFFFu;
-  (void)hurtbox_modes_can_hit_mask(batch->state.char_id[d_idx], (uint16_t)MSL_SM_GUARD_ON, 0u,
-                                   cap_count, &can_hit_mask);
+  (void)move_tables_hurtbox_can_hit_mask_at_frame(
+      batch->state.char_id[d_idx], (uint16_t)MSL_SM_GUARD_ON, 0u, cap_count, &can_hit_mask);
   if (((can_hit_mask >> cap_id) & 0x1u) == 0u) {
     return 0u;
   }
@@ -3851,7 +3849,7 @@ static inline uint8_t combat_defender_hit_status_u8(const MslBatch* batch, size_
   // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006EBA4
   if (!(d_frame == 0u && batch->state.prev_action_id[d_idx] != cur_action &&
         !is_shine_start_entry)) {
-    (void)hit_status_get(d_char, d_msid, d_frame, &hit_status);
+    (void)move_tables_hit_status_at_frame(d_char, d_msid, d_frame, &hit_status);
   }
 
   // Decomp collision eligibility uses max(fp->x1988, fp->x198C):

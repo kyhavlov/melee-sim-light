@@ -21,6 +21,8 @@ def _skip_if_required_artifacts_missing(root: Path) -> None:
         "data/special_msids/falco.json",
         "data/moves/fox.json",
         "data/moves/falco.json",
+        "data/scripts/fox.bin",
+        "data/scripts/falco.bin",
         "data/attack_id/move_id/fox.bin",
         "data/attack_id/move_id/falco.bin",
         "data/anims/fox.bin",
@@ -29,10 +31,6 @@ def _skip_if_required_artifacts_missing(root: Path) -> None:
         "data/anims/falco.tracks.bin",
         "data/hurtcaps/fox.bin",
         "data/hurtcaps/falco.bin",
-        "data/hurtbox_states/fox.bin",
-        "data/hurtbox_states/falco.bin",
-        "data/hit_status/fox.bin",
-        "data/hit_status/falco.bin",
         "data/hitboxes/fox.bin",
         "data/hitboxes/falco.bin",
         "data/ecb/fox_bottom.bin",
@@ -46,17 +44,14 @@ def _skip_if_required_artifacts_missing(root: Path) -> None:
         pytest.skip(f"missing local data artifacts: {', '.join(missing)}")
 
 
-def _populate_data_overlay_without_state_flags_221c_y(dst_data_dir: Path) -> None:
+def _populate_data_overlay_without_legacy_script_owner_splits(dst_data_dir: Path) -> None:
     src_data_dir = ROOT / "data"
     dst_data_dir.mkdir(parents=True, exist_ok=True)
-    exclude = {
-        Path("state_flags_221c_y/fox.bin"),
-        Path("state_flags_221c_y/falco.bin"),
-    }
+    exclude_roots = {"airborne_state_events", "hit_status", "hurtbox_states", "state_flags_221c_y"}
 
     for src in src_data_dir.rglob("*"):
         rel = src.relative_to(src_data_dir)
-        if rel in exclude:
+        if rel.parts and rel.parts[0] in exclude_roots:
             continue
         dst = dst_data_dir / rel
         if src.is_dir():
@@ -70,7 +65,7 @@ def _populate_data_overlay_without_state_flags_221c_y(dst_data_dir: Path) -> Non
 
 
 @pytest.mark.integration
-def test_init_succeeds_without_state_flags_221c_y_tables() -> None:
+def test_init_succeeds_without_legacy_script_owner_split_tables() -> None:
     pytest.importorskip("msl_binding")
     _skip_if_required_artifacts_missing(ROOT)
 
@@ -78,9 +73,9 @@ def test_init_succeeds_without_state_flags_221c_y_tables() -> None:
     build_dir.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=build_dir) as td:
         data_dir = Path(td) / "data"
-        # Keep required runtime artifacts present, but remove only opcode-52 x221C_u16_y bins to
-        # lock optional-init behavior for this table specifically.
-        _populate_data_overlay_without_state_flags_221c_y(data_dir)
+        # Runtime script-owner products are cached from MSLFTSC1; stale split artifacts must not
+        # remain implicit init requirements.
+        _populate_data_overlay_without_legacy_script_owner_splits(data_dir)
 
         env = os.environ.copy()
         env["MSL_DATA_DIR"] = str(data_dir)

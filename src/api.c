@@ -26,12 +26,8 @@
 #include "ecb_tables.h"
 #include "hitboxes_tables.h"
 #include "hitlist.h"
-#include "hit_status_tables.h"
 #include "msl_math.h"
-#include "airborne_state_events_tables.h"
-#include "state_flags_221c_y_tables.h"
 #include "hitboxes.h"
-#include "hurtbox_modes_tables.h"
 #include "hurtcaps_tables.h"
 #include "hurtboxes.h"
 #include "mtx34.h"
@@ -605,11 +601,6 @@ MslBatch* msl_batch_create(int batch_size, int num_players) {
     return NULL;
   }
 
-  if (move_tables_init() != 0) {
-    msl_batch_destroy(batch);
-    return NULL;
-  }
-
   // Staling tables are optional (groundwork only): missing artifacts should not prevent running.
   (void)staling_tables_init();
 
@@ -645,12 +636,7 @@ MslBatch* msl_batch_create(int batch_size, int num_players) {
     return NULL;
   }
 
-  if (hurtbox_modes_tables_init() != 0) {
-    msl_batch_destroy(batch);
-    return NULL;
-  }
-
-  if (hit_status_tables_init() != 0) {
+  if (move_tables_init() != 0) {
     msl_batch_destroy(batch);
     return NULL;
   }
@@ -668,12 +654,6 @@ MslBatch* msl_batch_create(int batch_size, int num_players) {
     msl_batch_destroy(batch);
     return NULL;
   }
-
-  // Optional timeline table (x221C_u16_y opcode-52 lane): missing artifacts should not prevent
-  // running.
-  (void)state_flags_221c_y_tables_init();
-  // Optional movescript opcode-25 table (set_airborne_state timeline).
-  (void)airborne_state_events_tables_init();
 
   return batch;
 }
@@ -1988,7 +1968,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
           const uint16_t msid = (uint16_t)anim_u32;
           const float af = msl_anim_frame_sanitize_f32(seed->anim_frame_f32[p]);
           const uint16_t fr = msl_anim_frame_floor_u16(af);
-          (void)hit_status_get(seed->char_id[p], msid, fr, &seed_x1988);
+          (void)move_tables_hit_status_at_frame(seed->char_id[p], msid, fr, &seed_x1988);
         }
         if (seed_x1988 != 0u && seed_hurtbox_state == seed_x1988) {
           batch->state.colanim_hit_status_x198c[idx] = 0u;
@@ -4410,7 +4390,8 @@ int msl_batch_debug_hurtcap_slot_flags(const MslBatch* batch, int batch_index, i
   const uint16_t cap_count = (cap_count_u8 > (uint8_t)MSL_MAX_HURTCAPS) ? (uint16_t)MSL_MAX_HURTCAPS
                                                                         : (uint16_t)cap_count_u8;
   uint32_t can_hit_mask = 0xFFFFFFFFu;
-  (void)hurtbox_modes_can_hit_mask(out_flags->char_id, msid, frame, cap_count, &can_hit_mask);
+  (void)move_tables_hurtbox_can_hit_mask_at_frame(out_flags->char_id, msid, frame, cap_count,
+                                                  &can_hit_mask);
   out_flags->can_hit_mask = can_hit_mask;
   out_flags->mode_can_hit_bit = (uint8_t)((can_hit_mask >> cap_id) & 0x1u);
 

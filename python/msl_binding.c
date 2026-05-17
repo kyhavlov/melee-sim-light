@@ -5818,6 +5818,30 @@ static PyObject* msl_move_tables_debug_query_py(PyObject* self, PyObject* args) 
         &pulse_frame);
     return Py_BuildValue("(ii)", (int)ok, ok ? (int)pulse_frame : -1);
   }
+  if (strcmp(kind, "hit_status") == 0) {
+    uint8_t status = 0u;
+    const uint8_t ok = move_tables_hit_status_at_frame((uint8_t)char_id, (uint16_t)action_or_msid,
+                                                       (uint16_t)a, &status);
+    return Py_BuildValue("(ii)", (int)ok, (int)status);
+  }
+  if (strcmp(kind, "hurtbox_can_hit_mask") == 0) {
+    uint32_t mask = 0u;
+    const uint8_t ok = move_tables_hurtbox_can_hit_mask_at_frame(
+        (uint8_t)char_id, (uint16_t)action_or_msid, (uint16_t)a, (uint16_t)b, &mask);
+    return Py_BuildValue("(iI)", (int)ok, (unsigned int)mask);
+  }
+  if (strcmp(kind, "state_flags_221c_y") == 0) {
+    uint8_t flags = 0u;
+    const uint8_t ok = move_tables_state_flags_221c_y_at_frame(
+        (uint8_t)char_id, (uint16_t)action_or_msid, (uint16_t)a, &flags);
+    return Py_BuildValue("(ii)", (int)ok, (int)flags);
+  }
+  if (strcmp(kind, "airborne_state_event") == 0) {
+    uint8_t state = 0xFFu;
+    const uint8_t ok = move_tables_airborne_state_event_at_frame(
+        (uint8_t)char_id, (uint16_t)action_or_msid, (uint16_t)a, &state);
+    return Py_BuildValue("(ii)", (int)ok, ok ? (int)state : -1);
+  }
   if (strcmp(kind, "escapef_flip") == 0) {
     return PyLong_FromLong(
         (long)move_tables_escapef_should_flip_facing((uint8_t)char_id, (int16_t)a, (int16_t)b));

@@ -4,7 +4,6 @@
 #include <stddef.h>
 
 #include "action_ids.h"
-#include "airborne_state_events_tables.h"
 #include "anim_frame.h"
 #include "anim_timebase.h"
 #include "anim_table.h"
@@ -2013,7 +2012,8 @@ void action_update_anim_callback_pre_input_fighter(const MslFighterCallbackConte
       const uint16_t frame =
           msl_anim_frame_floor_u16(msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[idx]));
       uint8_t air_state = 0xFFu;
-      if (airborne_state_event_get(batch->state.char_id[idx], msid, frame, &air_state) == 0) {
+      if (move_tables_airborne_state_event_at_frame(batch->state.char_id[idx], msid, frame,
+                                                    &air_state) != 0u) {
         const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
         const uint8_t max_jumps = (ch != NULL) ? ch->max_jumps : batch->state.jumps_left[idx];
         // Movescript opcode 25 (ftAction_80071998) dispatch:

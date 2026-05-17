@@ -1238,7 +1238,7 @@ Recommended sequence for the next deep passes:
     `F16c=0`, `F16d=0`. Aggregate total `5106`; `F14c=400`, `F14d=66`, `F15a=10`, `F15b=104`,
     `F16a=0`, `F16b=0`, `F16c=0`, `F16d=75`. Section 6 and ledge/collision-env remain closed:
     `F17/F10c/F19/F20/F21/F22/F23/F24/F10e=0`.
-  - The EscapeF frame-20 Falco-laser BODY slice is rejected/not retained. `MSLHSTA1` explains the
+  - The EscapeF frame-20 Falco-laser BODY slice is rejected/not retained. `MSLFTSC1` explains the
     first vulnerable EscapeF frame, but the row still requires the broader live item BODY
     hurt-capsule/JObj pose-selection owner rather than an EscapeF action-frame predicate.
   - Terminal x1990 hidden-colanim item BODY guard carries one internal frame of item BODY

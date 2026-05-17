@@ -2102,7 +2102,7 @@ static inline void enter_down_stand_from_downdamage_anim(MslBatch* batch, size_t
   clear_downed_damage_state(batch, idx);
   // DownStand entry starts in the downed getup hit-status window; Slippi reports the merged
   // x1988/x198C value as hurtbox_state=2 on replay-real entry frames.
-  // data/hurtbox_states/{fox,falco}.bin
+  // data/scripts/{fox,falco}.bin (MSLFTSC1 set_hit_status / hurt-state events)
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownStand.c::ftCo_80098160
   // refs/melee/src/melee/ft/ftaction.c::ftAction_80071A14
   batch->state.hurtbox_state[idx] = 2u;

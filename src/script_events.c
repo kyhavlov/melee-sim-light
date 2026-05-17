@@ -77,7 +77,7 @@ static int decode_event_payload(MslScriptEvent* out, const uint8_t* payload, uin
         return -1;
       }
       out->payload.cmd_var.idx = payload[0];
-      out->payload.cmd_var.value = payload[1];
+      out->payload.cmd_var.value = read_le_u16(payload + 1);
       return 0;
     case MSL_SCRIPT_EVENT_SET_THROW_FLAGS:
       if (len != 4u) {
@@ -85,6 +85,7 @@ static int decode_event_payload(MslScriptEvent* out, const uint8_t* payload, uin
       }
       out->payload.throw_flags.hit_idx = payload[0];
       return 0;
+    case MSL_SCRIPT_EVENT_SET_AIRBORNE_STATE:
     case MSL_SCRIPT_EVENT_SET_HIT_STATUS:
     case MSL_SCRIPT_EVENT_SET_ALL_HURT_STATE:
     case MSL_SCRIPT_EVENT_SET_JAB_RAPID:

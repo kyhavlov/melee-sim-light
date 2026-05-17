@@ -282,7 +282,7 @@ sim-owned**:
   (`src/items.c`; refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C,
   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Down.c::ftCo_Down_Coll,
   refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58,lbColl_804D7A38};
-  data/hurtcaps/{fox,falco}.bin, data/hurtbox_states/{fox,falco}.bin).
+  data/hurtcaps/{fox,falco}.bin, data/scripts/{fox,falco}.bin).
 - Late aerial Blaster Loop terminal rows use the raw script `cmd_vars[0]` window from MSLFTSC1 as
   the BODY-contact boundary. While `ftFx_SpecialAirNLoop_IASA` still has cmd0 active, laser phantom
   and full BODY contacts remain eligible; after the script clear, terminal no-repeat
@@ -1690,14 +1690,15 @@ Counts note:
 
 “Extracted tables” columns indicate whether we currently have ISO/movescript-derived artifacts keyed by this `animation_index` (msid):
 - Hitboxes: `data/hitboxes/{fox,falco}.bin` (`MSLHITB1 v1`)
-- Hurtbox states: `data/hurtbox_states/{fox,falco}.bin` (`MSLHURM1 v1`)
-- Hit status: `data/hit_status/{fox,falco}.bin` (`MSLHSTA1 v1`)
-- IASA windows: `data/moves/{fox,falco}.json` (currently used by `src/move_tables.c` for `AttackAir*` only)
+- Script owner events: `data/scripts/{fox,falco}.bin` (`MSLFTSC1 v2`), cached by
+  `src/move_tables.c` for hit status, hurtbox state masks, airborne-state events, x221C state
+  flags, command-variable windows/pulses, and IASA/throw/script hitbox products.
 
 Counts note:
 - `suite_count` is the total occurrences across **both** `seed_t.animation_index` and `ref_t1.animation_index`, restricted
   to the first `num_players` ports in each record.
-- Table columns (`hitboxes`, `hurtbox_states`, `hit_status`, `IASA windows`) are **non-empty coverage** signals:
+- Table columns (`hitboxes`, legacy `hurtbox_states`/`hit_status`, `IASA windows`) are historical
+  **non-empty coverage** signals from before the unified `MSLFTSC1` cache:
   - `Y` means we have at least one relevant entry for that `(character, msid)` in that table.
   - `N` means no relevant entries are present for that `(character, msid)` in that table (even if the file format has a
     sparse/implicit “empty” default).
@@ -3956,7 +3957,7 @@ Fox/Falco special-owner split (2026-04-17):
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA`,
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_Enter_Smash`.
   - Rejected EscapeF frame-20 Falco-laser BODY slice:
-    - `MSLHSTA1` explains the first vulnerable EscapeF frame, but the retained runtime does not
+    - `MSLFTSC1` `set_hit_status` explains the first vulnerable EscapeF frame, but the retained runtime does not
       promote EscapeF to the grounded lbColl hurt-radius lane. Debug evidence points to the broader
       live item BODY hurt-capsule/JObj pose-selection owner; a local EscapeF action-frame slice is
       not retained.

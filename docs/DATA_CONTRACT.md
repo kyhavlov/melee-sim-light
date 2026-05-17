@@ -1223,7 +1223,6 @@ Characters (Fox/Falco):
 - `data/hurtcaps/fox.json`, `data/hurtcaps/falco.json` (hurt capsule init tables; debug-friendly mirror; C loads `.bin` only)
 - `data/hitboxes/fox.bin`, `data/hitboxes/falco.bin` (hitbox event tables; decomp-first, compact binary)
 - `data/moves/fox.json`, `data/moves/falco.json` (subaction timelines for key motions + specials; decomp-first)
-- `data/airborne_state_events/fox.bin`, `data/airborne_state_events/falco.bin` (movescript opcode-25 set_airborne_state timelines; decomp-first, compact binary)
 - `data/anims/fox.bin`, `data/anims/falco.bin` (per-msid bone matrices + TransN; decomp-first)
 - `data/anims/fox.tracks.bin`, `data/anims/falco.tracks.bin` (per-msid HSD AObj/FObj tracks; C collision-pose input)
 - `data/anims/fox.locals.bin`, `data/anims/falco.locals.bin` (per-msid JObj local SRT; C collision-pose input)
@@ -1500,40 +1499,6 @@ Supported runtime contract:
 - Multi-set dynamic state requires a future set-indexed runtime/seed surface before the loader
   contract can be widened.
 
-## `data/airborne_state_events/<char>.bin` (MSLAIRS1 v1)
-
-Purpose: compact, init-time-loadable per-msid timelines for movescript opcode-25
-`set_airborne_state` events (used by `ftAction_80071998` dispatch).
-
-Decomp semantics (source pointers):
-- Opcode-25 dispatcher:
-  - refs/melee/src/melee/ft/ftaction.c::ftAction_80071998
-- State dispatch targets:
-  - state=0 -> `ftCommon_8007D7FC` (air->ground helper)
-  - state=1 -> `ftCommon_8007D5D4` (ground->air helper)
-  - state=2 -> `ftCommon_8007D60C` (ground->air alt helper)
-  - refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D7FC,ftCommon_8007D5D4,ftCommon_8007D60C}
-
-Binary layout (little-endian):
-- Header:
-  - `magic[8] = "MSLAIRS1"`
-  - `version: u32 = 1`
-  - `frame_count: u16`
-  - `reserved: u16 = 0`
-  - `entry_count: u32`
-- Index (`entry_count` entries), each:
-  - `msid: u16`
-  - `reserved: u16 = 0`
-  - `payload_bytes: u32 = frame_count`
-  - `payload_off: u32` absolute byte offset
-- Payload:
-  - `u8 event_state[frame_count]` per entry
-  - Value domain:
-    - `0`: dispatch state 0 (`ftCommon_8007D7FC`)
-    - `1`: dispatch state 1 (`ftCommon_8007D5D4`)
-    - `2`: dispatch state 2 (`ftCommon_8007D60C`)
-    - `0xFF`: no opcode-25 event at this frame
-
 ## `data/items/lasers.bin` (MSLLASR1 v6)
 
 Purpose: compact, init-time-loadable Fox/Falco blaster laser article tables (spawn +
@@ -1808,73 +1773,6 @@ Damage hitlag-exit DI math:
   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_OnExitHitlag,ftCo_8008E5A4}`,
   `refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Damage.s::ftCo_8008E5A4`,
   `refs/melee/src/MSL/trigf.c::{sinf,cosf}`.
-
-## `data/hurtbox_states/<char>.bin` (MSLHURM1 v1)
-
-Purpose: compact, init-time-loadable movescript-derived hurt capsule state timelines keyed by submotion id.
-
-Current simulator usage:
-- Loaded at init only (no parsing/allocations on the per-frame hot path).
-- Used by `hurtboxes_refresh()` to skip/disable capsules that are not "can be hit" (disabled/intangible).
-- Used by `combat_select_body_hits_one()` to gate BODY selection via `state.hurtcap_enabled`.
-
-Binary layout (little-endian):
-- Header:
-  - `magic[8] = "MSLHURM1"`
-  - `version: u32 = 1`
-  - `frame_count: u16` fixed length for each msid payload (default extractor uses 240)
-  - `capsule_count: u16` lane count (<=32; should match `data/hurtcaps/<char>.bin` capsule_count)
-  - `entry_count: u32` number of index entries
-- Index (`entry_count` entries), each:
-  - `msid: u16` submotion id / Slippi post-frame `animation_index` (lower 16 bits)
-  - `reserved: u16 = 0`
-  - `payload_bytes: u32 = frame_count * 8`
-  - `payload_off: u32` absolute byte offset to this msid's payload
-- Payload for each msid:
-  - `states_u64[frame_count]: frame_count * u64`
-    - Each u64 is a packed array of **2-bit lanes**: lane `i` is the `HurtCapsuleState` for capsule `i`.
-    - Lane `i` corresponds to capsule `i` in `data/hurtcaps/<char>.bin` order.
-
-State lane semantics:
-- Decomp enum: `HurtCapsuleState` in `refs/melee/src/melee/lb/forward.h`:
-  - `0 = HurtCapsule_Enabled`   (can be hit; eligible for BODY)
-  - `1 = HurtCapsule_Disabled`  (not eligible)
-  - `2 = Intangible`            (not eligible)
-
-Runtime semantics (current C-core policy):
-- If there is no table entry for a given msid, the simulator treats all capsules as enabled.
-- For a given frame, only capsules with lane state == `HurtCapsule_Enabled` are eligible for BODY contacts.
-
-## `data/hit_status/<char>.bin` (MSLHSTA1 v1)
-
-Purpose: compact, init-time-loadable movescript-derived **hit status** timelines keyed by submotion id (opcode 26).
-
-Current simulator usage:
-- Loaded at init only (no parsing/allocations on the per-frame hot path).
-- Used by `combat_select_body_hits_one()` to skip BODY selection when the defender is not in "normal" hit status.
-
-Binary layout (little-endian):
-- Header:
-  - `magic[8] = "MSLHSTA1"`
-  - `version: u32 = 1`
-  - `frame_count: u16` fixed length for each msid payload (default extractor uses 240)
-  - `reserved: u16 = 0`
-  - `entry_count: u32` number of index entries
-- Index (`entry_count` entries), each:
-  - `msid: u16` submotion id / Slippi post-frame `animation_index` (lower 16 bits)
-  - `reserved: u16 = 0`
-  - `payload_bytes: u32 = frame_count * 1`
-  - `payload_off: u32` absolute byte offset to this msid's payload
-- Payload for each msid:
-  - `hit_status_u8[frame_count]: frame_count * u8`
-
-Decomp pointers:
-- `ftAction_80071A14` (opcode 26 handler) → `ftColl_8007B62C(gobj, state)`.
-  - `refs/melee/src/melee/ft/ftaction.c:539`
-  - `refs/melee/src/melee/ft/ftcoll.c`
-
-Runtime semantics (current C-core policy):
-- If there is no table entry for a given msid, the simulator treats hit status as "normal" (eligible for BODY).
 
 ## What the C core should load (minimum)
 

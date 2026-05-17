@@ -87,7 +87,7 @@ typedef struct MslScriptEvent {
   union {
     struct {
       uint8_t idx;
-      uint8_t value;
+      uint16_t value;
     } cmd_var;
     struct {
       uint8_t hit_idx;

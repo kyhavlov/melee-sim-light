@@ -299,12 +299,17 @@ def test_dash_and_run_dpad_up_plus_a_keeps_attack_priority(
 
 def test_fox_falco_common_appeal_has_no_extracted_allow_interrupt_script_event() -> None:
     # ftCo_AppealS_IASA can run only if the command script sets fp->allow_interrupt. MSLFTSC1 has
-    # no AppealSR/SL entries for current Fox/Falco, so runtime keeps common Appeal anim-end-only.
+    # no AppealSR/SL allow_interrupt events for current Fox/Falco, so runtime keeps common Appeal
+    # anim-end-only even though full-domain MSLFTSC1 includes those subactions.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AppealS.c::ftCo_AppealS_IASA
     root = Path(__file__).resolve().parents[1]
     for slug in ("fox", "falco"):
         table = read_mslftsc1_v1(root / "data" / "scripts" / f"{slug}.bin")
-        assert {239, 240}.isdisjoint({entry.msid for entry in table.entries})
+        by_msid = {
+            entry.msid: table.events[entry.first_event : entry.first_event + entry.event_count]
+            for entry in table.entries
+        }
+        assert all(int(ev.kind_id) != 9 for msid in (239, 240) for ev in by_msid.get(msid, ()))
 
 
 @pytest.mark.integration
