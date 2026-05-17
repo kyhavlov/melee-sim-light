@@ -12,9 +12,12 @@ from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE, read_data
 # Fox/Falco Shine action ids (GALE01):
 # refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c::ftFx_Init_MotionStateTable
 # (ftFx_MS_SpecialLwStart=360 .. ftFx_MS_SpecialAirLwTurn=369)
+ACT_FX_SPECIAL_LW_START = 0x0168
 ACT_FX_SPECIAL_LW_LOOP = 0x0169
 ACT_FX_SPECIAL_LW_END = 0x016B
 ACT_FX_SPECIAL_LW_TURN = 0x016C
+ACT_FX_SPECIAL_AIR_LW_START = 0x016D
+ACT_FX_SPECIAL_AIR_LW_LOOP = 0x016E
 ACT_DAMAGE_HI_1 = 0x0050
 
 ACT_WAIT = 0x000E
@@ -297,4 +300,36 @@ def test_shine_reflect_active_bit_clears_when_combat_changes_motion_state() -> N
     assert int(out["action_id"][p]) == int(ds.samples[target_record]["ref_t1"]["action_id"][p])
     assert int(out["hitlag"][p]) == int(ds.samples[target_record]["ref_t1"]["hitlag"][p])
     assert int(out["hitstun"][p]) == int(ds.samples[target_record]["ref_t1"]["hitstun"][p])
+    assert int(out["state_flags"][p, 0]) == int(ds.samples[target_record]["ref_t1"]["state_flags"][p, 0])
+
+
+@pytest.mark.integration
+def test_shine_reflect_active_bit_publishes_after_platform_pass_to_air_start() -> None:
+    # Replay-real rollout lock for SpecialLwStart -> SpecialAirLwStart on a FoD side platform:
+    # ftFx_SpecialLwStart_Pass changes motion state and then creates ReflectDesc before Slippi
+    # serializes fp+0x2218. Ordinary ground->air Start transitions do not create this descriptor.
+    #
+    # Regression target: PTE rollout from match start first differed at 304/305 only in
+    # state_flags[0] bit0x10.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLwStart_Pass
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    p = 0
+    target_record = 304
+    assert int(ds.samples[303]["ref_t1"]["action_id"][p]) == ACT_FX_SPECIAL_LW_START
+    assert int(ds.samples[target_record]["ref_t1"]["action_id"][p]) == ACT_FX_SPECIAL_AIR_LW_START
+    assert (
+        int(ds.samples[target_record]["ref_t1"]["state_flags"][p, 0])
+        & STATE_FLAG_2218_REFLECT_ACTIVE
+    ) != 0
+
+    out = _rollout_to_record(dataset_path, start_record=0, target_record=target_record)
+    assert int(out["action_id"][p]) == int(ds.samples[target_record]["ref_t1"]["action_id"][p])
     assert int(out["state_flags"][p, 0]) == int(ds.samples[target_record]["ref_t1"]["state_flags"][p, 0])

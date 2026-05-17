@@ -123,6 +123,15 @@ static inline void shine_ground_start_platform_pass_enter(MslBatch* batch, const
   batch->state.speed_y_self[idx] = c->pass_vel_y;
   batch->state.jumps_left[idx] = ch->max_jumps > 0u ? (uint8_t)(ch->max_jumps - 1u) : 0u;
   batch->state.tilt_timer_y[idx] = 0xFEu;
+  // ftFx_SpecialLwStart_Pass calls ftFx_SpecialLw_CreateReflectHit after changing into
+  // SpecialAirLwStart. Publish the same fp->reflecting bit on the destination snapshot; ordinary
+  // SpecialLwStart_GroundToAir does not call CreateReflectHit and remains seed/state owned.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLwStart_Pass
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_CreateReflectHit
+  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (fp+0x2218 -> state_flags[0])
+  enum { MSL_STATE_FLAG_2218_REFLECTING = 0x10 };
+  batch->state.state_flags[idx * (size_t)MSL_STATE_FLAGS_BYTES] |=
+      (uint8_t)MSL_STATE_FLAG_2218_REFLECTING;
   msl_anim_timebase_enter(batch, idx, anim_frame_f32, 1.0f);
 }
 
@@ -1054,6 +1063,14 @@ void shine_update_post_collision(MslBatch* batch) {
       const float cur_frame = batch->state.anim_frame_f32[idx];
 
       if (action_is_shine_ground(a) && !on_ground) {
+        const MslCommonParams* c = msl_common_params();
+        const uint32_t stage_id = batch->state.stage_id[idx / (size_t)MSL_MAX_PLAYERS];
+        const uint16_t ground_id = batch->state.ground_id[idx];
+        const uint8_t special_lw_start_platform_pass =
+            (uint8_t)(a == (uint16_t)MSL_ACT_FX_SPECIAL_LW_START && c != NULL &&
+                      ground_id != 0xFFFFu &&
+                      stage_collision_floor_line_is_platform(stage_id, ground_id) &&
+                      batch->state.speed_y_self[idx] == c->pass_vel_y);
         // Ground -> air: preserve anim frame.
         batch->state.action_id[idx] =
             (uint16_t)(a + (uint16_t)MSL_FX_SHINE_GROUND_TO_AIR_ACTION_DELTA);
@@ -1081,6 +1098,17 @@ void shine_update_post_collision(MslBatch* batch) {
         const MslCharParams* ch = msl_char_params(cid);
         if (ch != NULL) {
           batch->state.jumps_left[idx] = (ch->max_jumps > 0u) ? (uint8_t)(ch->max_jumps - 1u) : 0u;
+        }
+        if (special_lw_start_platform_pass != 0u) {
+          // The post-collision ground->air remap also sees the platform-pass form after mpColl has
+          // already produced `pass_vel_y`. Unlike ordinary SpecialLwStart_GroundToAir,
+          // ftFx_SpecialLwStart_Pass calls ftFx_SpecialLw_CreateReflectHit after the motion-state
+          // change, so publish fp->reflecting on the destination SpecialAirLwStart row.
+          // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{
+          //   ftFx_SpecialLwStart_Pass,ftFx_SpecialLwStart_GroundToAir}
+          enum { MSL_STATE_FLAG_2218_REFLECTING = 0x10 };
+          batch->state.state_flags[idx * (size_t)MSL_STATE_FLAGS_BYTES] |=
+              (uint8_t)MSL_STATE_FLAG_2218_REFLECTING;
         }
         msl_anim_timebase_enter(batch, idx, cur_frame, 1.0f);
       } else if (action_is_shine_air(a) && on_ground) {

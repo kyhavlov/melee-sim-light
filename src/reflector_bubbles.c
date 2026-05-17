@@ -144,7 +144,18 @@ void reflector_bubbles_refresh(MslBatch* batch) {
               ? 1u
               : 0u;
       if (override_shine) {
-        const uint8_t want = (action_is_shine_reflector_active(a) != 0) ? 1u : 0u;
+        // SpecialLwStart is normally not reflect-active, but ftFx_SpecialLwStart_Pass creates a
+        // ReflectDesc after changing to SpecialAirLwStart. Carry that already-live fp->reflecting
+        // bit until the Start anim reaches Loop, without admitting fresh airborne Start entries.
+        // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLwStart_Pass
+        const uint8_t shine_start_pass_reflecting =
+            ((a == (uint16_t)MSL_ACT_FX_SPECIAL_LW_START ||
+              a == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START) &&
+             (f & (uint8_t)MSL_STATE_FLAG_2218_IS_REFLECT_ACTIVE) != 0u)
+                ? 1u
+                : 0u;
+        const uint8_t want = (uint8_t)((action_is_shine_reflector_active(a) != 0) ||
+                                       (shine_start_pass_reflecting != 0u));
         if (want) {
           f |= (uint8_t)MSL_STATE_FLAG_2218_IS_REFLECT_ACTIVE;
           // Decomp: ftColl_CreateReflectHit writes ReflectDesc.x20_behavior into fp->x2218_b5.

@@ -79,6 +79,38 @@ def test_aerial_shine_loop_applies_reflector_fall_phys() -> None:
     assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
 
 
+def test_platform_pass_aerial_shine_loop_carries_gravity_delay_pte() -> None:
+    # FoD platform-pass from grounded Shine Start enters SpecialAirLwStart through
+    # ftFx_SpecialLwStart_Pass / ftCo_8009A184. The hidden reflector gravityDelay is still live
+    # when the action reaches Loop, so the first Loop frame with pass_vel_y=-0.5 must not apply the
+    # reflector fall accel yet.
+    #
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{
+    #   ftFx_SpecialLwStart_Pass,ftFx_SpecialAirLwStart_Phys,ftFx_SpecialAirLwLoop_Phys}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_8009A184
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip("missing local FoD dataset")
+
+    seed, ref, out = _run_one_step(dataset_path, 307)
+    p = 0
+    assert int(seed["action_id"][p]) == ACT_FX_SPECIAL_AIR_LW_LOOP
+    assert int(seed["action_frame"][p]) == 0
+    assert int(seed["seed_prev_action_id"][p]) == ACT_FX_SPECIAL_AIR_LW_START
+    assert float(seed["speed_y_self"][p]) == pytest.approx(-0.5, abs=1e-7)
+    assert int(ref["action_id"][p]) == ACT_FX_SPECIAL_AIR_LW_LOOP
+
+    assert int(out["action_id"][p]) == ACT_FX_SPECIAL_AIR_LW_LOOP
+    assert float(out["speed_y_self"][p]) == pytest.approx(float(ref["speed_y_self"][p]), abs=1e-7)
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+
+
 def test_aerial_shine_start_delay_does_not_apply_reflector_fall_early() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)

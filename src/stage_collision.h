@@ -191,6 +191,8 @@ uint8_t stage_collision_floor_line_stage_object_support_kind(uint32_t stage_id, 
 uint8_t stage_collision_floor_line_has_platform_transform(uint32_t stage_id, uint16_t segment_i);
 uint8_t stage_collision_floor_line_has_height_platform_transform(uint32_t stage_id,
                                                                  uint16_t segment_i);
+uint8_t stage_collision_floor_line_has_static_y_platform_transform(uint32_t stage_id,
+                                                                   uint16_t segment_i);
 float stage_collision_floor_ground_friction_mul(uint32_t stage_id, uint16_t segment_i);
 uint8_t stage_collision_floor_line_platform_transform_id(uint32_t stage_id, uint16_t segment_i,
                                                          uint8_t* platform_id_out);

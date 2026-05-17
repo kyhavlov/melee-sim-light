@@ -556,13 +556,23 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
           f2218 &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_B2;
         }
       }
+      const uint8_t shine_start_platform_pass_reflecting =
+          ((action_id == (uint16_t)MSL_ACT_FX_SPECIAL_LW_START ||
+            action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START) &&
+           (f2218 & (uint8_t)MSL_STATE_FLAG_2218_REFLECTING) != 0u)
+              ? 1u
+              : 0u;
       if (action_id != prev_action_2218 &&
-          state_flags_2218_action_owns_reflecting(batch, idx, action_id) == 0u) {
+          state_flags_2218_action_owns_reflecting(batch, idx, action_id) == 0u &&
+          shine_start_platform_pass_reflecting == 0u) {
         // Fighter_ChangeMotionState clears fp->reflecting on motion changes before the destination
         // callback can recreate a new reflector. Preserve this as a motion-change reset rather
         // than seed-carrying a stale Shine/GuardReflect descriptor into unrelated destinations
         // such as Damage*.
         // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState (fp->reflecting = false)
+        // Exception: ftFx_SpecialLwStart_Pass recreates ReflectDesc after the motion-state change
+        // to SpecialAirLwStart, so a current-frame bit already set by that pass remains live.
+        // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLwStart_Pass
         // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (fp+0x2218 -> state_flags[0])
         f2218 &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_REFLECTING;
       }
@@ -577,6 +587,17 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
         } else {
           f2218 &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_REFLECTING;
         }
+      } else if (state_flags_2218_action_owns_reflecting(batch, idx, action_id) != 0u) {
+        // Fox/Falco SpecialLw collision callbacks can change Ground<->Air Loop/Hit/Turn after
+        // reflector_bubbles_refresh() has already published the current reflector descriptor.
+        // The destination callback immediately recreates or preserves fp->reflecting, so the
+        // post-frame raw fp+0x2218 byte must publish bit0x10 for those current-frame destinations.
+        // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{
+        //   ftFx_SpecialLwLoop_GroundToAir,ftFx_SpecialAirLwLoop_AirToGround,
+        //   ftFx_SpecialLwHit_GroundToAir,ftFx_SpecialAirLwHit_AirToGround,
+        //   ftFx_SpecialLwTurn_GroundToAir,ftFx_SpecialAirLwTurn_GroundToAir}
+        // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (fp+0x2218 -> state_flags[0])
+        f2218 |= (uint8_t)MSL_STATE_FLAG_2218_REFLECTING;
       } else if (action_id == (uint16_t)MSL_ACT_GUARD_SET_OFF &&
                  prev_action_2218 == (uint16_t)MSL_ACT_GUARD_REFLECT) {
         // GuardReflect -> GuardSetOff handoff:

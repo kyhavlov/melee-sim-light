@@ -1787,6 +1787,21 @@ uint8_t stage_collision_floor_line_has_height_platform_transform(uint32_t stage_
              : 0u;
 }
 
+uint8_t stage_collision_floor_line_has_static_y_platform_transform(uint32_t stage_id,
+                                                                   uint16_t segment_i) {
+  const MslStageSlot* slot = stage_slot(stage_id);
+  if (slot == NULL || !slot->loaded) {
+    return 0u;
+  }
+  // data/stages/bin/*.bin::MSLSTG01 platform transform records distinguish static-y support
+  // transforms from dynamic grIzumi height and path-based Randall transforms.
+  // refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
+  return slot->platform_transform_kind_by_segment[segment_i] ==
+                 (uint8_t)MSLSTG01_PLATFORM_TRANSFORM_STATIC_Y
+             ? 1u
+             : 0u;
+}
+
 float stage_collision_floor_ground_friction_mul(uint32_t stage_id, uint16_t segment_i) {
   const MslStageFloorLine* line = stage_floor_line_for_segment(stage_slot(stage_id), segment_i);
   if (line == NULL || !(line->ground_friction_mul > 0.0f)) {

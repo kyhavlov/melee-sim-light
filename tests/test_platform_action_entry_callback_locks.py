@@ -1217,6 +1217,42 @@ def test_no_lock_escapeair_static_platform_overstep_stays_airborne_feh() -> None
 
 
 @pytest.mark.integration
+def test_no_lock_escapeair_ignores_fod_static_y_platform_transform_pte() -> None:
+    # FoD's center platform is a generated `static_y` platform transform, not an ordinary static
+    # soft platform. Sustained no-lock EscapeAir should not borrow the static-platform sweep owner
+    # and snap upward to line 2 when the carried CollData floor is a different transformed platform.
+    #
+    # data/stages/bin/griz.bin::MSLSTG01 platform_transforms(kind=static_y,line_id=2)
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpColl_80044628_Floor}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    record = 422
+    p = 0
+    row = ds.samples[record]
+    assert int(row["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
+    assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_ESCAPE_AIR
+    assert int(row["seed_t"]["ecb_lock_timer"][p]) == 0
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_ESCAPE_AIR
+    assert int(row["ref_t1"]["on_ground"][p]) == 0
+
+    out = _run_one_step(ds, record)
+    ref = row["ref_t1"]
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
 @pytest.mark.parametrize("record", [9669, 11255])
 def test_jumpaerial_escapeair_static_platform_deeper_step_still_lands_feh(record: int) -> None:
     # Negative controls for the static-platform overstep guard: deeper Dream Land top-platform

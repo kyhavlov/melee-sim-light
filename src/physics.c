@@ -574,10 +574,9 @@ static inline void physics_apply_specialhi_hold_air(const MslCharParams* ch, int
   }
 }
 
-static inline uint8_t physics_shine_air_applies_fall_this_frame(const MslCharParams* ch,
-                                                                uint16_t action_id,
-                                                                uint16_t prev_action_id,
-                                                                int16_t action_frame) {
+static inline uint8_t physics_shine_air_applies_fall_this_frame(
+    const MslCharParams* ch, const MslCommonParams* c, uint16_t action_id, uint16_t prev_action_id,
+    uint16_t seed_prev_action_id, int16_t action_frame, float speed_y_self) {
   if (ch == NULL || action_id < (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START ||
       action_id > (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_TURN) {
     return 0u;
@@ -595,8 +594,28 @@ static inline uint8_t physics_shine_air_applies_fall_this_frame(const MslCharPar
   if (action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START) {
     return (uint8_t)(action_frame >= (int16_t)ch->reflector_gravity_delay_frames);
   }
-  if (prev_action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START &&
-      action_id != (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START && action_frame <= 0) {
+  const uint8_t prev_was_air_start =
+      (prev_action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START) ? 1u : 0u;
+  const uint8_t seed_prev_was_air_start =
+      (seed_prev_action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START) ? 1u : 0u;
+  if (prev_was_air_start != 0u && action_id != (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START &&
+      action_frame <= 0) {
+    return 0u;
+  }
+  if (c != NULL && seed_prev_was_air_start != 0u &&
+      action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_LOOP && action_frame <= 1 &&
+      speed_y_self == c->pass_vel_y) {
+    // Grounded Reflector platform-pass path:
+    // `ftFx_SpecialLwStart_Pass` uses `ftCo_8009A184` to enter SpecialAirLwStart from the grounded
+    // Start state, so the hidden `mv.fx.SpecialLw.gravityDelay` set by
+    // `ftFox_SpecialLw_SetVars` has not been decremented by aerial Start Phys as many times as a
+    // direct aerial Reflector entry. The pass path also writes the common pass vertical velocity;
+    // use that source value to distinguish the delayed platform-pass Loop from ordinary aerial
+    // Loop rows whose countdown has expired.
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{
+    //   ftFx_SpecialLwStart_Pass,ftFx_SpecialAirLwStart_Phys,ftFx_SpecialAirLwLoop_Phys}
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_8009A184
+    // data/common/ft_common_data.json::pass_vel_y
     return 0u;
   }
   return 1u;
@@ -1637,8 +1656,9 @@ void physics_integrate(MslBatch* batch) {
                     batch->state.speed_air_x_self[idx], phys->aerial_friction);
               }
             } else if (physics_shine_air_applies_fall_this_frame(
-                           msl_char_params(batch->state.char_id[idx]), action_id,
-                           batch->state.prev_action_id[idx], action_frame)) {
+                           msl_char_params(batch->state.char_id[idx]), c, action_id,
+                           batch->state.prev_action_id[idx], batch->state.seed_prev_action_id[idx],
+                           action_frame, batch->state.speed_y_self[idx])) {
               // Aerial Reflector Phys: after the reflector gravityDelay expires, the callback uses
               // ftCommon_Fall with ftFox_DatAttrs.xAC rather than common character gravity.
               // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{

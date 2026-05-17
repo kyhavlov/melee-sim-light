@@ -6258,9 +6258,11 @@ void mpcoll_ground_apply(MslBatch* batch) {
           // EscapeAir ECB and lets mpColl_80044628_Floor admit soft platforms without the
           // ftCo_80096CC8 down-stick pass-through callback. If CollData.floor.index still names a
           // hard floor, the source floor hit can still be a static soft platform under the current
-          // ECB bottom. Scan generated static fighter-solid soft platforms (no platform transform)
-          // and require the pose ECB bottom to cross the platform during this callback; moving/
-          // height-platform rows stay on their explicit source-height owners.
+          // ECB bottom. Scan generated fighter-solid soft platforms and require the pose ECB bottom
+          // to cross the platform during this callback. FoD's generated static-y center platform is
+          // admitted only when the carried CollData.floor.index is still a static/hard floor; a
+          // carried transformed-platform floor index stays on its explicit platform source owner
+          // instead of allowing a stale static-y side snap.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
           // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
           // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpColl_80044628_Floor}
@@ -6273,11 +6275,16 @@ void mpcoll_ground_apply(MslBatch* batch) {
               prev_y + mpcoll_pose_ecb_bottom_rel_y(char_id, anim, ecb_frame, 0u);
           const float cur_pose_bottom_y =
               y + mpcoll_pose_ecb_bottom_rel_y(char_id, anim, ecb_frame_bias_next, 0u);
+          const uint16_t carried_floor_segment_i = batch->state.ground_id[idx];
+          const uint8_t carried_floor_is_transformed =
+              stage_collision_floor_line_has_platform_transform(stage_id, carried_floor_segment_i);
           if (prev_pose_bottom_y >= cur_pose_bottom_y) {
             for (size_t li = 0; li < g->line_count; li++) {
+              const uint8_t line_is_static_y_transform =
+                  stage_collision_floor_line_has_static_y_platform_transform(
+                      stage_id, g->lines[li].segment_i);
               if (!g->lines[li].is_platform ||
-                  stage_collision_floor_line_has_height_platform_transform(
-                      stage_id, g->lines[li].segment_i) ||
+                  (line_is_static_y_transform != 0u && carried_floor_is_transformed != 0u) ||
                   !floor_line_admitted_by_source_callback(batch, idx, g, stage_id, (int)li, 0xFFFFu,
                                                           c)) {
                 continue;
