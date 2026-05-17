@@ -18,6 +18,7 @@
 #include "combat_geom.h"
 #include "combat_terminal_owner.h"
 #include "common_params.h"
+#include "damage_terminal_owner.h"
 #include "ecb_tables.h"
 #include "grab_flow.h"
 #include "hit_elements.h"
@@ -425,122 +426,22 @@ static inline uint8_t combat_attackairlw_invincible_contact_rejects_body_hitlag(
 
 static inline uint8_t combat_damagefly_terminal_state_blocks_enable_edge_body(
     const MslBatch* batch, size_t hb_i, size_t a_idx, size_t d_idx, const MslHurtCap* cap) {
-  if (batch == NULL) {
-    return 0u;
-  }
-  if (batch->state.hitbox_enable_edge[hb_i] == 0u || batch->state.hitlag[d_idx] != 0u ||
-      batch->state.hitstun[d_idx] != 0u) {
-    return 0u;
-  }
-  if (batch->state.prev_action_id[a_idx] != batch->state.action_id[a_idx]) {
-    return 0u;
-  }
-
-  const uint16_t d_action = batch->state.action_id[d_idx];
-  const uint16_t d_prev = batch->state.prev_action_id[d_idx];
-  enum { MSL_FOX_DAMAGEFLY_DYNAMIC_TAIL_PART_ID = 18 };
-  const uint8_t terminal_damagefly_tail =
-      cap != NULL && batch->state.action_id[a_idx] == (uint16_t)MSL_ACT_ATTACK_HI3 &&
-      batch->state.char_id[d_idx] == (uint8_t)MSL_COMBAT_CHAR_FOX &&
-      cap->bone_part_id == (uint16_t)MSL_FOX_DAMAGEFLY_DYNAMIC_TAIL_PART_ID &&
-      msl_motion_state_common_class_has(d_action, MSL_MS_CLASS_DAMAGE_FLY) &&
-      batch->state.instance_hit_by[d_idx] != 0u;
-  const uint8_t terminal_fall_from_damage =
-      d_action == (uint16_t)MSL_ACT_FALL &&
-      (d_prev == (uint16_t)MSL_ACT_DAMAGE_FALL ||
-       msl_motion_state_common_class_has(d_prev, MSL_MS_CLASS_DAMAGE_FLY));
-  if (!terminal_damagefly_tail && !terminal_fall_from_damage) {
-    return 0u;
-  }
-
-  // DamageFly/DamageFall terminal rows remain under the damage callback episode even after hitstun
-  // reaches zero. The already-retained Fall handoff guard handles terminal DamageFly/DamageFall ->
-  // Fall. The same-action DamageFly subset is the full MSLMSO01 DamageFly class, but still bounded
-  // to AttackHi3's enable-edge BODY candidate against Fox's part-18 tail chain, where the hidden
-  // dynamic/JObj owner can expose terminal DamageFly* tail pose that a static SSANIM snapshot can
-  // over-admit one frame early. Already-active hitboxes and same-frame action entries keep their
-  // ordinary ftColl path.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
-  //   ftCo_8008F744,ftCo_DamageFly_IASA}
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
-  // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
-  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}
-  // MSLMSO01 class coverage: `MSL_MS_CLASS_DAMAGE_FLY` owns the DamageFly* side of this terminal
-  // family. DamageFall is included explicitly because the source terminal path is the common
-  // `ftCo_DamageFall_IASA` handoff, while MSLMSO's class bits describe callback ownership and do
-  // not collapse DamageFall into the DamageFly class.
-  // data/hurtcaps/fox.bin cap12 -> FtPart 18
-  // data/anims/fox.dyn.bin (SSDYNN01 dynamic tail-chain descriptors)
-  return 1u;
+  return msl_damage_owner_terminal_state_blocks_enable_edge_body(
+      batch, hb_i, a_idx, d_idx, cap != NULL ? cap->bone_part_id : 0u, cap != NULL ? 1u : 0u);
 }
 
 static inline uint8_t combat_damageflylw_dynamic_high_part_rejects_body_contact(
     const MslBatch* batch, size_t a_idx, size_t d_idx, uint8_t hb_id, const MslHurtCap* cap) {
-  if (batch == NULL || cap == NULL) {
-    return 0u;
-  }
-  if (batch->state.action_id[a_idx] != (uint16_t)MSL_ACT_ATTACK_HI3 || hb_id != 1u) {
-    return 0u;
-  }
-  if (batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_DAMAGE_FLY_LW ||
-      batch->state.hitstun[d_idx] == 0u) {
-    return 0u;
-  }
-  if (cap->bone_part_id != 18u) {
-    return 0u;
-  }
-  // Active-hitstun DamageFlyLw still exposes live Fox tail-chain JObj state that the current
-  // SSDYNN01 reconstruction does not fully carry. A Dolphin collision primitive probe of this source
-  // slice shows vanilla does not accept the part-18 high hurtcap on the pre-hit frame; the next frame
-  // accepts the lower hurtcap through ordinary ftColl_80076ED8/lbColl_8000805C selection. Keep this
-  // as a narrow dynamic-pose bridge, not a generic DamageFly or AttackHi3 geometry tolerance.
-  //
-  // This intentionally cannot key on `dynamic_pose_apply_collision_matrix`: the retained bridge is
-  // for a pre-hit active-hitstun slice where current SSDYNN01 state reconstruction is insufficient,
-  // but source/probe evidence still shows the Fox dynamic tail-chain owner rejects this high part
-  // before the next lower-part BODY hit. The surrounding action/hitbox/hitstun/part predicates are
-  // the minimal source-owned surface until the live dynamic-chain owner is fully closed.
-  // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
-  // refs/melee/src/melee/ft/ftdynamics.c::{ftCo_8009DD94,ftCo_8009E318}
-  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}
-  // refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C
-  // data/anims/fox.dyn.bin (SSDYNN01 v4 collision-owner index, part 18 in root 17 chain)
-  return 1u;
+  return msl_damage_owner_damageflylw_dynamic_high_part_rejects_body(
+      batch, a_idx, d_idx, hb_id, cap != NULL ? cap->bone_part_id : 0u, cap != NULL ? 1u : 0u);
 }
 
 static inline uint8_t combat_attackairlw_damageflytop_fox_tail_rejects_body_contact(
     const MslBatch* batch, size_t a_idx, size_t d_idx, uint8_t hb_id, const MslHurtCap* cap,
     uint16_t expected_hitlag) {
-  if (batch == NULL || cap == NULL) {
-    return 0u;
-  }
-  enum { MSL_FOX_DAMAGEFLY_DYNAMIC_TAIL_PART_ID = 18 };
-  if (batch->state.char_id[d_idx] != (uint8_t)MSL_COMBAT_CHAR_FOX ||
-      cap->bone_part_id != (uint16_t)MSL_FOX_DAMAGEFLY_DYNAMIC_TAIL_PART_ID) {
-    return 0u;
-  }
-  if (batch->state.action_id[a_idx] != (uint16_t)MSL_ACT_ATTACK_AIR_LW || hb_id != 0u) {
-    return 0u;
-  }
-  if (batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_DAMAGE_FLY_TOP ||
-      batch->state.hitstun[d_idx] == 0u || expected_hitlag == 0u ||
-      batch->state.hitstun[d_idx] > expected_hitlag) {
-    return 0u;
-  }
-  if (batch->state.hitlag[d_idx] != 0u) {
-    return 0u;
-  }
-  // Active-hitstun DamageFlyTop can still expose live Fox dynamic tail-chain state that static
-  // action-frame hurtcaps over-admit. The replay-proven CDO false DAir contact is cap12 on FtPart
-  // 18, the same dynamic-chain owner family as the DamageFlyLw/AttackHi3 bridge above. Falco cap12
-  // is not in this part-18 chain and remains on the normal BODY path (HVG:9277).
-  // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
-  // refs/melee/src/melee/ft/ftdynamics.c::{ftCo_8009DD94,ftCo_8009E318}
-  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}
-  // refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C
-  // data/hurtcaps/fox.bin cap12 -> FtPart 18
-  // data/anims/fox.dyn.bin (SSDYNN01 v4 collision-owner index, part 18 in root 17 chain)
-  return 1u;
+  return msl_damage_owner_attackairlw_damageflytop_fox_tail_rejects_body(
+      batch, a_idx, d_idx, hb_id, cap != NULL ? cap->bone_part_id : 0u, cap != NULL ? 1u : 0u,
+      expected_hitlag);
 }
 
 static inline uint8_t combat_shine_start_damageair_entry_pose_allows_body_contact(
@@ -1315,32 +1216,7 @@ static inline uint8_t combat_mtx34_inverse_point(const float m[12], float x, flo
 }
 
 static inline uint8_t combat_is_damage_or_firefox_launch_victim_action(uint16_t action_id) {
-  switch (action_id) {
-    case MSL_ACT_DAMAGE_HI_1:
-    case MSL_ACT_DAMAGE_HI_2:
-    case MSL_ACT_DAMAGE_HI_3:
-    case MSL_ACT_DAMAGE_N_1:
-    case MSL_ACT_DAMAGE_N_2:
-    case MSL_ACT_DAMAGE_N_3:
-    case MSL_ACT_DAMAGE_LW_1:
-    case MSL_ACT_DAMAGE_LW_2:
-    case MSL_ACT_DAMAGE_LW_3:
-    case MSL_ACT_DAMAGE_AIR_1:
-    case MSL_ACT_DAMAGE_AIR_2:
-    case MSL_ACT_DAMAGE_AIR_3:
-    case MSL_ACT_DAMAGE_FLY_HI:
-    case MSL_ACT_DAMAGE_FLY_N:
-    case MSL_ACT_DAMAGE_FLY_LW:
-    case MSL_ACT_DAMAGE_FLY_TOP:
-    case MSL_ACT_DAMAGE_FLY_ROLL:
-    case MSL_ACT_FLY_REFLECT_WALL:
-    case MSL_ACT_FLY_REFLECT_CEIL:
-    case MSL_ACT_FX_SPECIAL_HI:
-    case MSL_ACT_FX_SPECIAL_AIR_HI:
-      return 1u;
-    default:
-      return 0u;
-  }
+  return msl_damage_owner_is_damage_or_firefox_launch_action(action_id);
 }
 
 static inline uint8_t combat_is_damage_air_action(uint16_t action_id) {
@@ -1371,30 +1247,15 @@ static inline uint8_t combat_hitlist_victim_pointer_may_change(uint8_t stocks, u
 }
 
 static inline uint8_t combat_is_downed_damage_contact_action(uint16_t action_id) {
-  switch (action_id) {
-    case (uint16_t)MSL_ACT_DOWN_BOUND_U:
-    case (uint16_t)MSL_ACT_DOWN_WAIT_U:
-    case (uint16_t)MSL_ACT_DOWN_DAMAGE_U:
-    case (uint16_t)MSL_ACT_DOWN_BOUND_D:
-    case (uint16_t)MSL_ACT_DOWN_WAIT_D:
-    case (uint16_t)MSL_ACT_DOWN_DAMAGE_D:
-      return 1u;
-    default:
-      return 0u;
-  }
+  return msl_damage_owner_is_downed_damage_contact_action(action_id);
 }
 
 static inline uint16_t combat_down_damage_action_from_source(uint16_t action_id) {
-  // Decomp: ftCo_8009F184 selects DownDamageU only from DownWaitU; other downed source motions
-  // route to DownDamageD.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::ftCo_8009F184
-  return (action_id == (uint16_t)MSL_ACT_DOWN_WAIT_U) ? (uint16_t)MSL_ACT_DOWN_DAMAGE_U
-                                                      : (uint16_t)MSL_ACT_DOWN_DAMAGE_D;
+  return msl_damage_owner_down_damage_action_from_source(action_id);
 }
 
 static inline uint32_t combat_down_damage_submotion_from_action(uint16_t action_id) {
-  return (action_id == (uint16_t)MSL_ACT_DOWN_DAMAGE_U) ? (uint32_t)MSL_SM_DOWN_DAMAGE_U
-                                                        : (uint32_t)MSL_SM_DOWN_DAMAGE_D;
+  return msl_damage_owner_down_damage_submotion_from_action(action_id);
 }
 
 static inline uint8_t combat_float_aobj_hurtcap_pose_owner(uint16_t action_id) {
@@ -4313,241 +4174,10 @@ static inline uint8_t combat_damage_severity_u8_from_kb(const MslCommonParams* c
   return 3;
 }
 
-static int combat_local_slot_from_source_port0(const MslBatch* batch, int bi, int num_players,
-                                               uint8_t source_port0) {
-  if (batch == NULL) {
-    return -1;
-  }
-  for (int p = 0; p < num_players; p++) {
-    const size_t idx = msl_idx_player(bi, p);
-    if (batch->state.source_port0[idx] == source_port0) {
-      return p;
-    }
-  }
-  return -1;
-}
-
 static inline uint8_t combat_damageflyroll_rng_subset_allows_pre_action(const MslBatch* batch,
                                                                         size_t d_idx,
                                                                         uint16_t action_id) {
-  if (batch == NULL) {
-    return 0u;
-  }
-  const size_t bi = d_idx / (size_t)MSL_MAX_PLAYERS;
-  const uint8_t clock_owner = (batch->rollout_clock_rng_owned != NULL)
-                                  ? batch->rollout_clock_rng_owned[bi]
-                                  : (uint8_t)MSL_ROLLOUT_CLOCK_NONE;
-  const uint8_t replay_rollout =
-      (batch->replay_rollout_reseeded != NULL && batch->replay_rollout_reseeded[bi] != 0u) ? 1u
-                                                                                           : 0u;
-  const uint8_t advanced_past_reseed =
-      (batch->replay_rollout_seed_frame_id != NULL &&
-       batch->state.frame_id[bi] != batch->replay_rollout_seed_frame_id[bi])
-          ? 1u
-          : 0u;
-  // Narrowed pre-gate ownership bridge for ftCo_8008DCE0 block_33:
-  // - DamageFlyRoll RNG gate is evaluated while entering damage from Fighter_ProcessHit.
-  // - Keep the gate scoped to decomp-confirmed carry contexts until additional pre-gate
-  //   random-consumer ownership lanes are modeled.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
-  //   ftCo_Damage_Anim,ftCo_DamageFall_IASA,ftCo_8008DCE0
-  // }
-  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
-  //
-  // narrowed_temporary:
-  // - Includes Fall/Run/AttackAirLw carry windows with replay-exact RNG pulse parity in the
-  //   suite's severe-airborne damage transition families.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Anim
-  // - SpecialHiFall is admitted only when the current AttackAirB HitCapsule is on its
-  //   ftAction_8007121C enable edge; steady active contacts remain excluded.
-  // - Keep the remaining SpecialHi/Landing pre-actions excluded until their upstream RNG
-  //   consumers are represented in this runtime.
-  // refs/melee/src/melee/ft/chara/ftCommon/forward.h::ftCommon_MotionState
-  switch (action_id) {
-    case (uint16_t)MSL_ACT_DAMAGE_FALL:
-    case (uint16_t)MSL_ACT_FALL:
-    case (uint16_t)MSL_ACT_RUN:
-    case (uint16_t)MSL_ACT_JUMP_AERIAL_F:
-    case (uint16_t)MSL_ACT_JUMP_AERIAL_B:
-    case (uint16_t)MSL_ACT_LANDING_AIR_LW:
-    case (uint16_t)MSL_ACT_ATTACK_HI4:
-    case (uint16_t)MSL_ACT_ATTACK_LW3:
-    case (uint16_t)MSL_ACT_FX_SPECIAL_LW_END:
-    case (uint16_t)MSL_ACT_ATTACK_AIR_LW:
-      return 1u;
-    case (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI: {
-      // SpecialAirHi has no decomp-side exclusion from ftCo_8008DCE0's airborne severe-damage
-      // DamageFlyRoll gate. Fighter_8006CDA4 also runs for this pre-action (`motion_id != 0x145`
-      // and outside 0x122..0x123), so free-running replay rollout with an owned RNG clock must
-      // admit the gate rather than treating SpecialHi/Floor ownership as a downstream exception.
-      // Exact-row replay reseeds and teacher-forced one-step rows keep frame_pre_random_seed
-      // seed-owned: visible SpecialAirHi shape and the generic pre-gate consume-count lane do not
-      // prove the exact HSD_Randf stream phase for this owner until the rollout has advanced past
-      // the reseed frame.
-      // refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-      return (replay_rollout && advanced_past_reseed &&
-              clock_owner != (uint8_t)MSL_ROLLOUT_CLOCK_NONE)
-                 ? 1u
-                 : 0u;
-    }
-    case (uint16_t)MSL_ACT_DAMAGE_FLY_N:
-    case (uint16_t)MSL_ACT_DAMAGE_FLY_LW:
-      // DamageFlyN/Lw are source-eligible pre-actions, but exact replay seeds do not expose the
-      // HSD_Randf phase that ftCo_8008DCE0 uses for the roll branch. Admit them when the explicit
-      // Fighter_8006CDA4 stream-phase lane proves hidden pre-gate ownership or when a replay
-      // rollout has advanced beyond the reseed frame under an owned RNG clock.
-      // refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-      if (batch->state.fighter_8006cda4_pre_gate_consume_count[d_idx] != 0u) {
-        return 1u;
-      }
-      if (batch->state.hitlag[d_idx] != 0u && batch->state.hitstun[d_idx] != 0u) {
-        const int num_players = (int)batch->config.num_players;
-        const int attacker = combat_local_slot_from_source_port0(batch, (int)bi, num_players,
-                                                                 batch->state.last_hit_by[d_idx]);
-        if (attacker >= 0 && (size_t)attacker != (d_idx % (size_t)MSL_MAX_PLAYERS)) {
-          const size_t a_idx = bi * (size_t)MSL_MAX_PLAYERS + (size_t)attacker;
-          if (batch->state.action_id[a_idx] == (uint16_t)MSL_ACT_THROW_HI &&
-              batch->state.instance_hit_by[d_idx] == batch->state.instance_id[a_idx]) {
-            // ThrowHi state1 laser active-hitlag continuation:
-            // - ftFx_Throw_Anim spawns the throw-side state1 laser while ThrowHi remains active.
-            // - A later same-source laser overlap can refresh hitlag on an already damaged
-            //   DamageFlyN/Lw victim and re-enter ftCo_8008DCE0 in the same source-owned damage
-            //   episode. This path has no extra Fighter_8006CDA4 pre-gate consume to seed; the
-            //   frame RNG phase is the normal damage-entry gate phase.
-            // - Keep ordinary exact DamageFlyN/Lw reseeds excluded unless active hitlag and the
-            //   same ThrowHi source identity prove this continuation owner.
-            // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
-            // refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C6CC,it_8029C4D4}
-            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-            return 1u;
-          }
-        }
-      }
-      return (replay_rollout && advanced_past_reseed &&
-              clock_owner != (uint8_t)MSL_ROLLOUT_CLOCK_NONE)
-                 ? 1u
-                 : 0u;
-    case (uint16_t)MSL_ACT_FX_SPECIAL_HI_FALL: {
-      // SpecialHiFall carry rows are admitted only on a current AttackAirB hitbox enable-edge.
-      // Steady already-active AttackAirB contacts can still apply damage, but do not show this
-      // DamageFlyRoll gate ownership in replay-real controls.
-      // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
-      // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076808,ftColl_800768A0}
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-      const int num_players = (int)batch->config.num_players;
-      const size_t bi = d_idx / (size_t)MSL_MAX_PLAYERS;
-      const int attacker = combat_local_slot_from_source_port0(batch, (int)bi, num_players,
-                                                               batch->state.last_hit_by[d_idx]);
-      if (attacker < 0 || (size_t)attacker == (d_idx % (size_t)MSL_MAX_PLAYERS)) {
-        return 0u;
-      }
-      const size_t bi_base = bi * (size_t)MSL_MAX_PLAYERS;
-      const size_t a_idx = bi_base + (size_t)attacker;
-      if (batch->state.action_id[a_idx] != (uint16_t)MSL_ACT_ATTACK_AIR_B) {
-        return 0u;
-      }
-      const size_t hb_base = a_idx * (size_t)MSL_MAX_HITBOXES;
-      for (int hb = 0; hb < MSL_MAX_HITBOXES; hb++) {
-        if (batch->state.hitbox_enable_edge[hb_base + (size_t)hb] != 0u) {
-          return 1u;
-        }
-      }
-      return 0u;
-    }
-    case (uint16_t)MSL_ACT_DAMAGE_FLY_TOP: {
-      // narrowed_temporary:
-      // - ftCo_8008DCE0 evaluates the DamageFlyRoll RNG gate before entering a new damage
-      //   motion state, so `action_id` here is the defender pre-action from the prior frame.
-      // - In the currently modeled stream, AttackAirB create-window carry rows use an explicit
-      //   Fighter_8006CDA4 pre-gate stream-phase seed lane before this gate is evaluated.
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-      // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
-      // data/moves/{fox,falco}.json moves["ftCo_SM_AttackAirB"].events create_hitbox frame=4
-      //
-      // TODO(narrowed_temporary): Expand beyond AttackAirB once upstream pre-gate RNG consumers
-      // are represented for the regressing AttackAirF/ThrowHi windows.
-      const int num_players = (int)batch->config.num_players;
-      const size_t bi = d_idx / (size_t)MSL_MAX_PLAYERS;
-      const int attacker = combat_local_slot_from_source_port0(batch, (int)bi, num_players,
-                                                               batch->state.last_hit_by[d_idx]);
-      if (attacker < 0 || (size_t)attacker == (d_idx % (size_t)MSL_MAX_PLAYERS)) {
-        return 0u;
-      }
-      const size_t a_idx = bi * (size_t)MSL_MAX_PLAYERS + (size_t)attacker;
-      const uint16_t a_action = batch->state.action_id[a_idx];
-      const int16_t a_af = batch->state.action_frame[a_idx];
-      // AttackLw4 can refresh a same-source DamageFlyTop victim through the same ftCo_8008DCE0
-      // severe airborne damage-entry owner as AttackAirB; the replay-visible source attribution
-      // still maps to the AttackLw4 attacker for this retained row. Keep the admission local to the
-      // extracted create-hitbox command frame rather than broadening all DamageFlyTop refreshes.
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackLw4.c
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-      // data/scripts/{fox,falco}.bin (MSLFTSC1 ftCo_SM_AttackLw4 create_hitbox)
-      const int16_t attacklw4_create_frame = move_tables_grounded_attack_first_create_hitbox_frame(
-          batch->state.char_id[a_idx], a_action);
-      if (a_action == (uint16_t)MSL_ACT_ATTACK_LW4 && attacklw4_create_frame >= 0 &&
-          a_af == attacklw4_create_frame) {
-        return 1u;
-      }
-      // Create-window threshold:
-      // - AttackAirB's first create event is script frame 4. This gate is checked after the
-      //   same-frame fighter tick.
-      // - Early create-edge rows are admitted only when the explicit Fighter_8006CDA4 pre-gate
-      //   stream-phase lane proves hidden RNG ownership; steady rows keep the existing
-      //   post-create gate. The explicit zero-consume marker is required because lane value 0
-      //   means ordinary rollout/no seed-lane, not "source-proven gate with zero pre-consumes".
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim
-      // data/moves/{fox,falco}.json moves["ftCo_SM_AttackAirB"].events create_hitbox frame=4
-      if (a_action == (uint16_t)MSL_ACT_ATTACK_AIR_B &&
-          (a_af >= 6 || batch->state.fighter_8006cda4_pre_gate_consume_count[d_idx] != 0u)) {
-        return 1u;
-      }
-      return 0u;
-    }
-    case (uint16_t)MSL_ACT_ATTACK_AIR_B: {
-      // narrowed_temporary:
-      // - AttackAirB pre-action is enabled from the extracted create-window onward.
-      // - Early pre-create frames require the explicit Fighter_8006CDA4 stream-phase seed; visible
-      //   action shape alone is not enough to admit the gate.
-      // data/moves/{fox,falco}.json moves["ftCo_SM_AttackAirB"].events create_hitbox frame=4
-      const int16_t pre_af = batch->state.action_frame[d_idx];
-      return (pre_af >= 5 || batch->state.fighter_8006cda4_pre_gate_consume_count[d_idx] != 0u)
-                 ? 1u
-                 : 0u;
-    }
-    case (uint16_t)MSL_ACT_ATTACK_AIR_N:
-      // AttackAirN pre-action can reach the same ftCo_8008DCE0 DamageFlyRoll gate, but only when
-      // the replay seed proves the hidden Fighter_8006CDA4 stream phase. Visible action shape alone
-      // is not enough because Slippi does not expose item_gobj/x197C branch inputs.
-      // refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-      return (batch->state.fighter_8006cda4_pre_gate_consume_count[d_idx] != 0u) ? 1u : 0u;
-    case (uint16_t)MSL_ACT_CATCH:
-    case (uint16_t)MSL_ACT_CATCH_PULL:
-    case (uint16_t)MSL_ACT_CATCH_DASH:
-    case (uint16_t)MSL_ACT_CATCH_DASH_PULL:
-    case (uint16_t)MSL_ACT_CATCH_WAIT:
-    case (uint16_t)MSL_ACT_CATCH_ATTACK:
-    case (uint16_t)MSL_ACT_CATCH_CUT:
-      // Catch-family pre-actions are ordinary Fighter motion states for the severe-airborne
-      // ftCo_8008DCE0 DamageFlyRoll gate: Fighter_8006CDA4 does not exclude them. Exact replay
-      // seeds still need the explicit hidden pre-gate stream lane because Slippi does not expose
-      // the held-item/x197C branch inputs that can advance HSD_Randi before the gate; free-running
-      // replay rollout may use the live owned RNG clock after the seed frame.
-      // refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-      if (batch->state.fighter_8006cda4_pre_gate_consume_count[d_idx] != 0u) {
-        return 1u;
-      }
-      return (replay_rollout && advanced_past_reseed &&
-              clock_owner != (uint8_t)MSL_ROLLOUT_CLOCK_NONE)
-                 ? 1u
-                 : 0u;
-    default:
-      return 0u;
-  }
+  return msl_damage_owner_damageflyroll_pre_action_allows_gate(batch, d_idx, action_id);
 }
 
 static inline float combat_damage_ground_angle_to_floor_radians(float nx, float ny, float vx,
@@ -4654,36 +4284,10 @@ static inline void combat_damageflyroll_consume_fighter_8006cda4_pre_gate_count(
 
 static inline void combat_damageflyroll_consume_jumpaerial_attackairb_carry(MslBatch* batch, int bi,
                                                                             size_t d_idx) {
-  if (batch == NULL) {
-    return;
+  if (msl_damage_owner_damageflyroll_jumpaerial_attackairb_carry(batch, d_idx)) {
+    combat_rng_consume_step_site(batch, bi,
+                                 MSL_RNG_SITE_DAMAGE_FLY_ROLL_PRE_GATE_JUMPAERIAL_ATTACKAIRB_CARRY);
   }
-  const uint16_t pre_action = batch->state.action_id[d_idx];
-  if (pre_action != (uint16_t)MSL_ACT_JUMP_AERIAL_F &&
-      pre_action != (uint16_t)MSL_ACT_JUMP_AERIAL_B) {
-    return;
-  }
-  // Narrow carry bridge for the remaining severe-airborne AttackAirB -> JumpAerialF/B admission
-  // family:
-  // - ftCo_8008DCE0 block_33 evaluates the DamageFlyRoll gate on the defender pre-action while the
-  //   attacker is still in AttackAirB.
-  // - Keep the extra pre-gate advance scoped to the actual damage-entry row and current attacker
-  //   action, avoiding any replay-keyed behavior or broad motion-polish changes.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-  // refs/melee/src/sysdolphin/baselib/random.c::{HSD_Randi,HSD_Randf}
-  const int num_players = (int)batch->config.num_players;
-  const size_t bi_slot = d_idx / (size_t)MSL_MAX_PLAYERS;
-  const int attacker = combat_local_slot_from_source_port0(batch, (int)bi_slot, num_players,
-                                                           batch->state.last_hit_by[d_idx]);
-  if (attacker < 0 || (size_t)attacker == (d_idx % (size_t)MSL_MAX_PLAYERS)) {
-    return;
-  }
-  const size_t bi_base = bi_slot * (size_t)MSL_MAX_PLAYERS;
-  const size_t a_idx = bi_base + (size_t)attacker;
-  if (batch->state.action_id[a_idx] != (uint16_t)MSL_ACT_ATTACK_AIR_B) {
-    return;
-  }
-  combat_rng_consume_step_site(batch, bi,
-                               MSL_RNG_SITE_DAMAGE_FLY_ROLL_PRE_GATE_JUMPAERIAL_ATTACKAIRB_CARRY);
 }
 
 static inline void combat_damage_enter_state(const MslCommonParams* c, MslBatch* batch, int bi,
