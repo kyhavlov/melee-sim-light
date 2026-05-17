@@ -2360,6 +2360,8 @@ int msl_batch_debug_set_hitbox_flags(MslBatch* batch, int batch_index, int playe
                                      int hitbox_id, uint16_t hitbox_flags);
 int msl_batch_debug_set_hitbox_group(MslBatch* batch, int batch_index, int player_index,
                                      int hitbox_id, uint8_t hit_group);
+int msl_batch_debug_set_hitbox_enable_edge(MslBatch* batch, int batch_index, int player_index,
+                                           int hitbox_id, uint8_t enable_edge);
 int msl_batch_debug_set_hitbox_element(MslBatch* batch, int batch_index, int player_index,
                                        int hitbox_id, uint8_t element);
 int msl_batch_debug_set_hitbox_kb_params(MslBatch* batch, int batch_index, int player_index,
@@ -2373,6 +2375,8 @@ int msl_batch_debug_set_hurtcap_height(MslBatch* batch, int batch_index, int pla
                                        int hurtcap_id, uint8_t height);
 int msl_batch_debug_set_hurtcap_enabled(MslBatch* batch, int batch_index, int player_index,
                                         int hurtcap_id, int enabled);
+int msl_batch_debug_set_prev_action_id(MslBatch* batch, int batch_index, int player_index,
+                                       uint16_t prev_action_id);
 int msl_batch_debug_set_hitlag(MslBatch* batch, int batch_index, int player_index,
                                uint16_t hitlag_frames);
 int msl_batch_debug_set_smash_charge_state(MslBatch* batch, int batch_index, int player_index,

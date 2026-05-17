@@ -5606,6 +5606,15 @@ BODY collision-space residual split and rejected seed bridge:
   source-step/natural-direction owner for all dynamic collision msids. DamageAir2 remains excluded
   after the source-step
   experiment traded TBK/DSG/FSP/PJO rows instead of closing the shared source-order dynamic pose
+  path. Terminal Fox `DamageFly*` also keeps one same-action create-edge guard for AttackHi3 vs the
+  part-18 tail chain: QGD:7173 shows static SSANIM endpoints admitting the fresh up-tilt HitCapsule
+  one collision frame before vanilla, while QGD:7174 proves the already-live HitCapsule hits
+  normally on the following frame. The source owner is the terminal DamageFly callback episode, so
+  runtime uses MSLMSO01's `MSL_MS_CLASS_DAMAGE_FLY` instead of a Top-only action test. The guard is
+  still bounded to the source-owned terminal/create-edge/tail slice: non-Fox, non-tail, already-live
+  HitCapsules, and same-frame new action entries stay on the ordinary BODY path. A broader
+  all-DamageFly create-edge suppression without the AttackHi3/Fox-tail provenance regressed
+  aggregate one-step and rollout validation and was rejected.
   owner. Together with
   Turn internal-facing hurtcaps, authoritative HitCapsule `victims_1` preservation, GuardSetOff
   shield-hit onset lineage, swept/same-group hitbox-vs-hitbox clank, decomp-ordered clank

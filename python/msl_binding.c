@@ -4893,6 +4893,34 @@ static PyObject* msl_debug_set_hitbox_group_py(PyObject* self, PyObject* args) {
   Py_RETURN_NONE;
 }
 
+static PyObject* msl_debug_set_hitbox_enable_edge_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  int batch_index = 0;
+  int player_index = 0;
+  int hitbox_id = 0;
+  unsigned int enable_edge = 0;
+  if (!PyArg_ParseTuple(args, "OiiiI", &handle_obj, &batch_index, &player_index, &hitbox_id,
+                        &enable_edge)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+  if (enable_edge > 1u) {
+    PyErr_SetString(PyExc_ValueError, "enable_edge out of range (expected 0 or 1)");
+    return NULL;
+  }
+  const int err = msl_batch_debug_set_hitbox_enable_edge(h->batch, batch_index, player_index,
+                                                         hitbox_id, (uint8_t)enable_edge);
+  if (err != 0) {
+    PyErr_Format(PyExc_ValueError, "msl_batch_debug_set_hitbox_enable_edge failed: %d", err);
+    return NULL;
+  }
+  Py_RETURN_NONE;
+}
+
 static PyObject* msl_debug_set_hitbox_element_py(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* handle_obj = NULL;
@@ -5156,6 +5184,32 @@ static PyObject* msl_debug_set_hitlag_py(PyObject* self, PyObject* args) {
       msl_batch_debug_set_hitlag(h->batch, batch_index, player_index, (uint16_t)hitlag_frames);
   if (err != 0) {
     PyErr_Format(PyExc_ValueError, "msl_batch_debug_set_hitlag failed: %d", err);
+    return NULL;
+  }
+  Py_RETURN_NONE;
+}
+
+static PyObject* msl_debug_set_prev_action_id_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  int batch_index = 0;
+  int player_index = 0;
+  unsigned int prev_action_id = 0;
+  if (!PyArg_ParseTuple(args, "OiiI", &handle_obj, &batch_index, &player_index, &prev_action_id)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+  if (prev_action_id > 0xFFFFu) {
+    PyErr_SetString(PyExc_ValueError, "prev_action_id out of range");
+    return NULL;
+  }
+  const int err = msl_batch_debug_set_prev_action_id(h->batch, batch_index, player_index,
+                                                     (uint16_t)prev_action_id);
+  if (err != 0) {
+    PyErr_Format(PyExc_ValueError, "msl_batch_debug_set_prev_action_id failed: %d", err);
     return NULL;
   }
   Py_RETURN_NONE;
@@ -6749,6 +6803,8 @@ static PyMethodDef methods[] = {
      "debug_set_hitbox_flags(handle, batch_index, player_index, hitbox_id, hitbox_flags_u16)"},
     {"debug_set_hitbox_group", msl_debug_set_hitbox_group_py, METH_VARARGS,
      "debug_set_hitbox_group(handle, batch_index, player_index, hitbox_id, hit_group_0_7)"},
+    {"debug_set_hitbox_enable_edge", msl_debug_set_hitbox_enable_edge_py, METH_VARARGS,
+     "debug_set_hitbox_enable_edge(handle, batch_index, player_index, hitbox_id, enable_edge_u8)"},
     {"debug_set_hitbox_element", msl_debug_set_hitbox_element_py, METH_VARARGS,
      "debug_set_hitbox_element(handle, batch_index, player_index, hitbox_id, element_u8)"},
     {"debug_set_hitbox_kb_params", msl_debug_set_hitbox_kb_params_py, METH_VARARGS,
@@ -6767,6 +6823,8 @@ static PyMethodDef methods[] = {
      "debug_combat_resolve(handle) -> run combat_resolve() only"},
     {"debug_set_hitlag", msl_debug_set_hitlag_py, METH_VARARGS,
      "debug_set_hitlag(handle, batch_index, player_index, hitlag_frames_u16)"},
+    {"debug_set_prev_action_id", msl_debug_set_prev_action_id_py, METH_VARARGS,
+     "debug_set_prev_action_id(handle, batch_index, player_index, prev_action_id_u16)"},
     {"debug_set_smash_charge_state", msl_debug_set_smash_charge_state_py, METH_VARARGS,
      "debug_set_smash_charge_state(handle, batch_index, player_index, state_u8, frames_u8, "
      "hold_frames_max_u8)"},

@@ -4994,6 +4994,29 @@ int msl_batch_debug_set_hitbox_group(MslBatch* batch, int batch_index, int playe
   return 0;
 }
 
+int msl_batch_debug_set_hitbox_enable_edge(MslBatch* batch, int batch_index, int player_index,
+                                           int hitbox_id, uint8_t enable_edge) {
+  if (batch == NULL) {
+    return EINVAL;
+  }
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return EINVAL;
+  }
+  if (player_index < 0 || player_index >= MSL_MAX_PLAYERS) {
+    return EINVAL;
+  }
+  if (hitbox_id < 0 || hitbox_id >= MSL_MAX_HITBOXES) {
+    return EINVAL;
+  }
+
+  const size_t hb_i = debug_idx_hitbox(batch_index, player_index, hitbox_id);
+  // Debug-only write for ftAction_8007121C enable-edge ownership tests. Runtime gameplay sets this
+  // from script event clear/copy/create state in hitboxes_refresh().
+  batch->state.hitbox_enable_edge[hb_i] = enable_edge ? 1u : 0u;
+  batch->state.hitbox_pose_create[hb_i] = enable_edge ? 1u : batch->state.hitbox_pose_create[hb_i];
+  return 0;
+}
+
 int msl_batch_debug_set_hitbox_element(MslBatch* batch, int batch_index, int player_index,
                                        int hitbox_id, uint8_t element) {
   if (batch == NULL) {
@@ -5162,6 +5185,25 @@ int msl_batch_debug_set_hurtcap_enabled(MslBatch* batch, int batch_index, int pl
   }
   const size_t cap_i = debug_idx_hurtcap(batch_index, player_index, hurtcap_id);
   batch->state.hurtcap_enabled[cap_i] = enabled ? 1 : 0;
+  return 0;
+}
+
+int msl_batch_debug_set_prev_action_id(MslBatch* batch, int batch_index, int player_index,
+                                       uint16_t prev_action_id) {
+  if (batch == NULL) {
+    return EINVAL;
+  }
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return EINVAL;
+  }
+  if (player_index < 0 || player_index >= MSL_MAX_PLAYERS) {
+    return EINVAL;
+  }
+
+  const size_t idx = msl_idx_player(batch_index, player_index);
+  // Debug-only history write for tests that call combat directly without the frame scheduler's
+  // frame-start prev_action_id promotion.
+  batch->state.prev_action_id[idx] = prev_action_id;
   return 0;
 }
 

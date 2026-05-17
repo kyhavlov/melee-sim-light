@@ -422,13 +422,12 @@ static inline uint8_t combat_attackairlw_invincible_contact_rejects_body_hitlag(
   return 1u;
 }
 
-static inline uint8_t combat_damagefly_terminal_fall_entry_blocks_enable_edge_body(
-    const MslBatch* batch, size_t hb_i, size_t a_idx, size_t d_idx) {
+static inline uint8_t combat_damagefly_terminal_state_blocks_enable_edge_body(
+    const MslBatch* batch, size_t hb_i, size_t a_idx, size_t d_idx, const MslHurtCap* cap) {
   if (batch == NULL) {
     return 0u;
   }
-  if (batch->state.hitbox_enable_edge[hb_i] == 0u ||
-      batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_FALL || batch->state.hitlag[d_idx] != 0u ||
+  if (batch->state.hitbox_enable_edge[hb_i] == 0u || batch->state.hitlag[d_idx] != 0u ||
       batch->state.hitstun[d_idx] != 0u) {
     return 0u;
   }
@@ -436,27 +435,41 @@ static inline uint8_t combat_damagefly_terminal_fall_entry_blocks_enable_edge_bo
     return 0u;
   }
 
-  const uint16_t prev = batch->state.prev_action_id[d_idx];
-  if (prev != (uint16_t)MSL_ACT_DAMAGE_FALL &&
-      !msl_motion_state_common_class_has(prev, MSL_MS_CLASS_DAMAGE_FLY)) {
+  const uint16_t d_action = batch->state.action_id[d_idx];
+  const uint16_t d_prev = batch->state.prev_action_id[d_idx];
+  enum { MSL_FOX_DAMAGEFLY_DYNAMIC_TAIL_PART_ID = 18 };
+  const uint8_t terminal_damagefly_tail =
+      cap != NULL && batch->state.action_id[a_idx] == (uint16_t)MSL_ACT_ATTACK_HI3 &&
+      batch->state.char_id[d_idx] == (uint8_t)MSL_COMBAT_CHAR_FOX &&
+      cap->bone_part_id == (uint16_t)MSL_FOX_DAMAGEFLY_DYNAMIC_TAIL_PART_ID &&
+      msl_motion_state_common_class_has(d_action, MSL_MS_CLASS_DAMAGE_FLY) &&
+      batch->state.instance_hit_by[d_idx] != 0u;
+  const uint8_t terminal_fall_from_damage =
+      d_action == (uint16_t)MSL_ACT_FALL &&
+      (d_prev == (uint16_t)MSL_ACT_DAMAGE_FALL ||
+       msl_motion_state_common_class_has(d_prev, MSL_MS_CLASS_DAMAGE_FLY));
+  if (!terminal_damagefly_tail && !terminal_fall_from_damage) {
     return 0u;
   }
 
-  // DamageFly/DamageFall terminal IASA publishes Fall on the same frame that hitstun/x221C_b6
-  // clears, but a newly-enabled BODY HitCapsule from an already-running attack does not get to
-  // consume that post-IASA target until the next collision frame. Same-frame action entries such as
-  // Squat -> SpecialLwStart create their own capsule after the action callback runs and stay on the
-  // ordinary BODY path. This keeps the source ordering local to the same-action create edge;
-  // already-active hitboxes and the next-frame Fall row are unaffected.
+  // DamageFly/DamageFall terminal rows remain under the damage callback episode even after hitstun
+  // reaches zero. The already-retained Fall handoff guard handles terminal DamageFly/DamageFall ->
+  // Fall. The same-action DamageFly subset is the full MSLMSO01 DamageFly class, but still bounded
+  // to AttackHi3's enable-edge BODY candidate against Fox's part-18 tail chain, where the hidden
+  // dynamic/JObj owner can expose terminal DamageFly* tail pose that a static SSANIM snapshot can
+  // over-admit one frame early. Already-active hitboxes and same-frame action entries keep their
+  // ordinary ftColl path.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
   //   ftCo_8008F744,ftCo_DamageFly_IASA}
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
   // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}
   // MSLMSO01 class coverage: `MSL_MS_CLASS_DAMAGE_FLY` owns the DamageFly* side of this terminal
-  // IASA family. DamageFall is included explicitly because the source terminal path is the common
+  // family. DamageFall is included explicitly because the source terminal path is the common
   // `ftCo_DamageFall_IASA` handoff, while MSLMSO's class bits describe callback ownership and do
   // not collapse DamageFall into the DamageFly class.
+  // data/hurtcaps/fox.bin cap12 -> FtPart 18
+  // data/anims/fox.dyn.bin (SSDYNN01 dynamic tail-chain descriptors)
   return 1u;
 }
 
@@ -8018,8 +8031,12 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
                               expected_body_hitlag)) {
             overlaps = 0u;
           }
-          if (overlaps && combat_damagefly_terminal_fall_entry_blocks_enable_edge_body(
-                              batch, hb_i, a_idx, d_idx)) {
+          if (overlaps && combat_damagefly_terminal_state_blocks_enable_edge_body(
+                              batch, hb_i, a_idx, d_idx,
+                              use_guardreflect_body_fallback_caps || defender_caps == NULL ||
+                                      cap_id >= defender_cap_count_u16
+                                  ? NULL
+                                  : &defender_caps[cap_id])) {
             overlaps = 0u;
           }
           if (!overlaps && !lbcoll_overlap_evaluated) {
