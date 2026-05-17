@@ -444,51 +444,14 @@ static inline uint8_t is_spacie_specialhi_end_fallspecial_source(uint16_t a) {
 }
 
 static inline uint8_t action_uses_ftco_80096cc8_floor_callback(uint16_t a) {
-  // Source callback:
-  // - returns true for hard floors;
-  // - returns true for platform floors only when fp->input.lstick.y > p_ftCommonData->x25C;
-  // - returns false for held-down platform pass-through, so mpColl_80044628_Floor rejects the line.
-  //
-  // Decomp owners:
-  // - common-air/fallspecial collision path routes through ft_80083090_inline / mpColl_80047E14.
-  // - CliffJump2 uses ft_800835B0, which passes the same callback to ft_80083090_inline.
-  // - PassiveWall/PassiveCeil use the same common air collision helper after the tech surface bounce.
+  // MSLMSO01 marks the collision callbacks that pass ftCo_80096CC8 into the floor check. That
+  // callback accepts hard floors, accepts passable platforms only above p_ftCommonData->x25C, and
+  // rejects held-down platform pass-through. Keep this owner table-backed instead of duplicating
+  // common-air/CliffJump2/PassiveWall/PassiveCeil action ids here.
+  // data/motion_state/owners/{fox,falco}.bin::MSLMSO01 class FT80083090_PLATFORM_PASS_COLL
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_80096CC8
   // refs/melee/src/melee/ft/ft_081B.c::{ft_80083090_inline,ft_800831CC,ft_800835B0}
-  if (a == (uint16_t)MSL_ACT_ESCAPE_AIR) {
-    // EscapeAir_Coll delegates through ft_80082C74/mpColl_800471F8 rather than the
-    // ftCo_80096CC8 platform-pass callback. Do not apply the common-air down-stick platform
-    // rejection to sustained EscapeAir soft-platform floor checks.
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
-    // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
-    return 0u;
-  }
-  if (msl_motion_state_common_class_has(a, MSL_MS_CLASS_COMMON_AIR_COLL)) {
-    return 1u;
-  }
-  switch (a) {
-    case MSL_ACT_JUMP_F:
-    case MSL_ACT_JUMP_B:
-    case MSL_ACT_JUMP_AERIAL_F:
-    case MSL_ACT_JUMP_AERIAL_B:
-    case MSL_ACT_FALL:
-    case MSL_ACT_FALL_F:
-    case MSL_ACT_FALL_B:
-    case MSL_ACT_FALL_AERIAL:
-    case MSL_ACT_FALL_AERIAL_F:
-    case MSL_ACT_FALL_AERIAL_B:
-    case MSL_ACT_FALL_SPECIAL:
-    case MSL_ACT_FALL_SPECIAL_F:
-    case MSL_ACT_FALL_SPECIAL_B:
-    case MSL_ACT_CLIFF_JUMP_SLOW2:
-    case MSL_ACT_CLIFF_JUMP_QUICK2:
-    case MSL_ACT_PASSIVE_WALL:
-    case MSL_ACT_PASSIVE_WALL_JUMP:
-    case MSL_ACT_PASSIVE_CEIL:
-      return 1u;
-    default:
-      return 0u;
-  }
+  return msl_motion_state_common_class_has(a, MSL_MS_CLASS_FT80083090_PLATFORM_PASS_COLL);
 }
 
 static inline uint8_t is_just_entered_specialairn_end_from_loop(uint16_t action_id,

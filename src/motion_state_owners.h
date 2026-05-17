@@ -42,6 +42,7 @@ enum {
   MSL_MS_CLASS_FT80081D0C_AIR_COLL = 1u << 19,
   MSL_MS_CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL = 1u << 20,
   MSL_MS_CLASS_FT80083F88_GROUND_TO_AIR_COLL = 1u << 21,
+  MSL_MS_CLASS_FT80083090_PLATFORM_PASS_COLL = 1u << 22,
 };
 
 uint16_t msl_motion_state_submotion_id(uint8_t char_id, uint16_t action_id);

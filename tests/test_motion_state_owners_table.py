@@ -22,6 +22,7 @@ from tools.extraction.extract_motion_state_owners import (
     CLASS_DAMAGE_FLY_COLL,
     CLASS_GUARDON_FRAME_START_X672_IASA,
     CLASS_FT80081D0C_AIR_COLL,
+    CLASS_FT80083090_PLATFORM_PASS_COLL,
     CLASS_FT80083F88_GROUND_TO_AIR_COLL,
     CLASS_GROUNDED_ATTACK,
     CLASS_GROUNDED_STAGE_OBJECT_CARRY_COLL,
@@ -278,6 +279,26 @@ def test_motion_state_class_equivalence_for_migrated_predicates() -> None:
         0x0156,
         0x0157,
     }
+    ft80083090_platform_pass_coll = {
+        0x0019,
+        0x001A,
+        0x001B,
+        0x001C,
+        0x001D,
+        0x001E,
+        0x001F,
+        0x0020,
+        0x0021,
+        0x0022,
+        0x0023,
+        0x0024,
+        0x0025,
+        0x00CA,
+        0x00CB,
+        0x00CC,
+        0x0105,
+        0x0107,
+    }
 
     for action_id in range(max_action):
         assert both_have(action_id, CLASS_ATTACK_AIR) == (action_id in attack_air)
@@ -311,6 +332,9 @@ def test_motion_state_class_equivalence_for_migrated_predicates() -> None:
         )
         assert both_have(action_id, CLASS_FT80083F88_GROUND_TO_AIR_COLL) == (
             action_id in ft80083f88_ground_to_air_coll
+        )
+        assert both_have(action_id, CLASS_FT80083090_PLATFORM_PASS_COLL) == (
+            action_id in ft80083090_platform_pass_coll
         )
 
 

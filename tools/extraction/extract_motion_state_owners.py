@@ -17,7 +17,7 @@ from tools.extraction.extract_attack_id_move_id import (
 
 
 FORMAT_MAGIC = b"MSLMSO01"
-FORMAT_VERSION = 9
+FORMAT_VERSION = 10
 U16_ABSENT = 0xFFFF
 
 CLASS_ATTACK_AIR = 1 << 0
@@ -42,6 +42,7 @@ CLASS_GUARDON_FRAME_START_X672_IASA = 1 << 18
 CLASS_FT80081D0C_AIR_COLL = 1 << 19
 CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL = 1 << 20
 CLASS_FT80083F88_GROUND_TO_AIR_COLL = 1 << 21
+CLASS_FT80083090_PLATFORM_PASS_COLL = 1 << 22
 
 
 @dataclass(frozen=True)
@@ -205,6 +206,23 @@ def _class_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
         # source owner uses the full airborne wall/floor/ceiling collision callback without the
         # common-air walljump post-consumers.
         bits |= CLASS_FT80081D0C_AIR_COLL
+    if coll_cb in {
+        "ftCo_Jump_Coll",
+        "ftCo_JumpAerial_Coll",
+        "ftCo_Fall_Coll",
+        "ftCo_FallAerial_Coll",
+        "ftCo_FallSpecial_Coll",
+        "ftCo_CliffJump2_Coll",
+        "ftCo_PassiveWall_Coll",
+        "ftCo_PassiveCeil_Coll",
+    }:
+        # These source callbacks route their floor check through ft_80083090/ft_800831CC/
+        # ft_800835B0 with ftCo_80096CC8 as the platform callback. The callback accepts hard
+        # floors and rejects passable platforms when held down, so gameplay should ask this
+        # generated owner instead of maintaining local common-air action lists.
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_80096CC8
+        # refs/melee/src/melee/ft/ft_081B.c::{ft_80083090_inline,ft_800831CC,ft_800835B0}
+        bits |= CLASS_FT80083090_PLATFORM_PASS_COLL
     if coll_cb in {
         "ftFx_SpecialAirSStart_Coll",
         "ftFx_SpecialAirS_Coll",
@@ -488,6 +506,7 @@ def _write_manifest(out_path: Path, callback_ids: dict[str, int]) -> None:
         "FT80081D0C_AIR_COLL": CLASS_FT80081D0C_AIR_COLL,
         "FT_CHECK_GROUND_LEDGE_AIR_COLL": CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL,
         "FT80083F88_GROUND_TO_AIR_COLL": CLASS_FT80083F88_GROUND_TO_AIR_COLL,
+        "FT80083090_PLATFORM_PASS_COLL": CLASS_FT80083090_PLATFORM_PASS_COLL,
     }
     symbols = [{"id": int(i), "symbol": sym} for sym, i in sorted(callback_ids.items(), key=lambda kv: kv[1])]
     payload = {
