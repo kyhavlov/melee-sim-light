@@ -15,6 +15,7 @@ from tools.slippi.make_dataset_from_slp import _main_impl
 
 
 BUTTON_L = 0x0040
+BUTTON_R = 0x0020
 
 ACT_ESCAPE_AIR = 236
 ACT_LANDING_FALL_SPECIAL = 43
@@ -30,6 +31,7 @@ ACT_ATTACK_AIR_N = 65
 ACT_ATTACK_AIR_LW = 65
 ACT_ATTACK_AIR_F = 66
 ACT_ATTACK_AIR_HI = 68
+ACT_LANDING_AIR_N = 70
 ACT_LANDING_AIR_LW = 70
 ACT_LANDING_AIR_HI = 73
 ACT_LANDING = 42
@@ -1894,6 +1896,43 @@ def test_fod_locked_escapeair_side_platform_timer3_stays_airborne() -> None:
 
 
 @pytest.mark.integration
+def test_fod_rollout_escapeair_timer3_does_not_reuse_jumpaerial_current_bottom() -> None:
+    # Rollout boundary for the same transformed side-platform slice as the direct EWT:941 negative:
+    # after the first EscapeAir entry callback has run, source keeps only CollData.desired_ecb.bottom
+    # locked. The current ECB bottom is reloaded/interpolated from the sustained EscapeAir pose, so
+    # a free rollout must not keep the earlier JumpAerial desired bottom as current ECB authority and
+    # publish the timer-3 floor contact one frame early.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpCollInterpolateECB}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+        "ElatedWearyTermite.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+    ds = read_dataset(str(dataset_path))
+    start_record = 867
+    target_record = 941
+    p = 1
+    target = ds.samples[target_record]
+    assert int(target["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
+    assert int(target["seed_t"]["seed_prev_action_id"][p]) == ACT_ESCAPE_AIR
+    assert int(target["seed_t"]["ecb_lock_timer"][p]) == 3
+    assert int(target["ref_t1"]["action_id"][p]) == ACT_ESCAPE_AIR
+    assert int(target["ref_t1"]["on_ground"][p]) == 0
+
+    out = _run_rollout_to_record(ds, start_record, target_record)
+    ref = target["ref_t1"]
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
 def test_fod_sustained_escapeair_ledge_span_crossing_lands_without_endpoint_entry() -> None:
     # Sustained EscapeAir over FoD's side ledge floors uses the same
     # ft_80082C74/mpColl_800471F8 locked floor owner as hard-floor continuations, but it is a
@@ -2179,6 +2218,12 @@ def test_locked_escapeair_seed6_different_platform_root_projection_stays_airborn
             6897,
             1,
         ),
+        (
+            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+            "ParallelTemptingElk.msl",
+            2170,
+            1,
+        ),
     ],
 )
 def test_kneebend_escapeair_early_locked_vertical_window_still_lands(
@@ -2208,6 +2253,42 @@ def test_kneebend_escapeair_early_locked_vertical_window_still_lands(
     ref = row["ref_t1"]
     for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
         assert int(out[field][p]) == int(ref[field][p]), field
+
+
+@pytest.mark.integration
+def test_kneebend_escapeair_platform_handoff_requires_escapeair_entry() -> None:
+    # Boundary control for the fresh KneeBend -> Jump -> EscapeAir platform handoff: without the
+    # L/R edge, KneeBend_Anim still enters Jump, but Jump_IASA does not enter EscapeAir and
+    # EscapeAir_Coll cannot publish LandingFallSpecial on the same callback.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_Anim
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    record = 2170
+    p = 1
+    row = ds.samples[record]
+    assert int(row["seed_t"]["action_id"][p]) == ACT_KNEE_BEND
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_LANDING_FALL_SPECIAL
+
+    def clear_lr_edge(_prev_input: np.ndarray, input_t: np.ndarray) -> None:
+        input_t["p"][0, p]["buttons"] = np.uint16(
+            int(input_t["p"][0, p]["buttons"]) & (0xFFFF ^ (BUTTON_L | BUTTON_R))
+        )
+
+    out = _run_one_step(ds, record, input_mutator=clear_lr_edge)
+    assert int(out["action_id"][p]) in (ACT_JUMP_F, ACT_JUMP_B)
+    assert int(out["on_ground"][p]) == 0
 
 
 @pytest.mark.integration
@@ -2564,6 +2645,47 @@ def test_fod_jumpaerial_fastfall_fresh_platform_floor_contact_lands(
 
 
 @pytest.mark.integration
+def test_fod_jumpaerial_fastfall_same_step_platform_contact_lands_pte_2026() -> None:
+    # PTE:2026 starts from a carried FoD platform floor id, but grIzumi has published a
+    # same-step height-platform contact source for the left platform. That is current-frame
+    # platform authority, not stale carried floor state, so JumpAerial_Coll can publish Landing.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80084DB0
+    # refs/melee/src/melee/ft/ft_081B.c::ft_800835B0
+    # data/stages/bin/griz.bin::MSLSTG01 height platform transforms
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047E14,mpColl_80044628_Floor}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    record = 2026
+    p = 0
+    row = ds.samples[record]
+    assert int(row["seed_t"]["action_id"][p]) == ACT_JUMP_AERIAL_B
+    assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_JUMP_AERIAL_B
+    assert int(row["seed_t"]["fall_fast"][p]) == 1
+    assert int(row["seed_t"]["ground_id"][p]) == 0
+    assert int(row["seed_t"]["stage_fod_platform_height_source_u8"][1]) & 0x04
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_LANDING
+    assert int(row["ref_t1"]["on_ground"][p]) == 1
+    assert int(row["ref_t1"]["ground_id"][p]) == 0
+
+    out = _run_one_step(ds, record)
+    ref = row["ref_t1"]
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-4)
+
+
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("record", "p"),
     [
@@ -2595,6 +2717,44 @@ def test_fall_transformed_platform_fastfall_callback_lifetime_stays_airborne(
     row = ds.samples[record]
     assert int(row["seed_t"]["action_id"][p]) == ACT_FALL
     assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_FALL
+    assert int(row["seed_t"]["fall_fast"][p]) == 1
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_FALL
+    assert int(row["ref_t1"]["on_ground"][p]) == 0
+
+    out = _run_one_step(ds, record)
+    ref = row["ref_t1"]
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
+def test_fod_terminal_jump_anim_fall_uses_transformed_platform_lifetime_pte_1455() -> None:
+    # JumpF/B terminal Anim ownership enters Fall before the current map callback. On FoD height
+    # platforms this uses the same Fall_Coll transformed-platform lifetime split as sustained Fall:
+    # the first terminal Jump -> Fall callback can remain airborne instead of publishing Landing
+    # from stale carried platform floor state.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_Anim
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::{ftCo_Fall_Enter,ftCo_Fall_Coll}
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_800831CC,ft_800835B0}
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047E14,mpColl_80044628_Floor}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    record = 1455
+    p = 1
+    row = ds.samples[record]
+    assert int(row["seed_t"]["action_id"][p]) == ACT_JUMP_F
+    assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_JUMP_F
     assert int(row["seed_t"]["fall_fast"][p]) == 1
     assert int(row["ref_t1"]["action_id"][p]) == ACT_FALL
     assert int(row["ref_t1"]["on_ground"][p]) == 0
@@ -3422,8 +3582,9 @@ def test_fod_attackair_shallow_transformed_platform_seed_carries_floor_owner(
     #   height-transformed side platform can reject LandingAir* and carry the callback-local
     #   CollData floor owner into the next direct reseed row.
     # - PTE:1640/1641 cover Falco AttackAirHi around its first clear/second create boundary.
-    #   PTE:1692 covers Fox AttackAirN late-hit lifetime. PTE:7843 is a released/no-owner control
-    #   that must still publish LandingAirN normally.
+    #   PTE:1691/7960 cover no-floor-skip down-held in-span platform pass. PTE:1692 covers Fox
+    #   AttackAirN late-hit lifetime with carried floor_skip. PTE:7843/10297 are released/same-floor
+    #   controls that must still publish LandingAirN normally.
     # data/motion_state/owners/{fox,falco}.bin::MSLMSO01 submotion_id
     # data/scripts/{fox,falco}.bin::MSLFTSC1 create_hitbox/clear_hitboxes events
     # data/stages/bin/griz.bin::MSLSTG01 height platform transforms
@@ -3461,6 +3622,22 @@ def test_fod_attackair_shallow_transformed_platform_seed_carries_floor_owner(
             assert int(out[field][0]) == int(ref[field][0]), (record, field)
         assert float(out["pos_y"][0]) == pytest.approx(float(ref["pos_y"][0]), abs=1e-6)
 
+    for record in (1691, 7960):
+        row = ds.samples[record]
+        assert int(row["seed_t"]["action_id"][0]) == ACT_ATTACK_AIR_N
+        assert int(row["seed_t"]["floor_skip_segment_id_u16"][0]) == 0xFFFF
+        assert int(row["seed_t"]["floor_skip_segment_valid_u8"][0]) == 0
+        assert int(row["input_t"]["p"][0]["main_y"]) < -70
+        assert int(row["seed_t"]["ground_id"][0]) != 1
+        assert int(row["ref_t1"]["action_id"][0]) == ACT_ATTACK_AIR_N
+        assert int(row["ref_t1"]["on_ground"][0]) == 0
+
+        out = _run_one_step(ds, record)
+        ref = row["ref_t1"]
+        for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+            assert int(out[field][0]) == int(ref[field][0]), (record, field)
+        assert float(out["pos_y"][0]) == pytest.approx(float(ref["pos_y"][0]), abs=1e-6)
+
     released = ds.samples[7843]
     assert int(released["seed_t"]["action_id"][0]) == ACT_ATTACK_AIR_N
     assert int(released["seed_t"]["floor_skip_segment_id_u16"][0]) == 0xFFFF
@@ -3471,4 +3648,17 @@ def test_fod_attackair_shallow_transformed_platform_seed_carries_floor_owner(
     assert int(released_out["on_ground"][0]) == 1
     assert float(released_out["pos_y"][0]) == pytest.approx(
         float(released["ref_t1"]["pos_y"][0]), abs=2e-4
+    )
+
+    downheld = ds.samples[10297]
+    assert int(downheld["seed_t"]["action_id"][0]) == ACT_ATTACK_AIR_N
+    assert int(downheld["seed_t"]["floor_skip_segment_id_u16"][0]) == 0xFFFF
+    assert int(downheld["seed_t"]["floor_skip_segment_valid_u8"][0]) == 0
+    assert int(downheld["input_t"]["p"][0]["main_y"]) < -100
+    assert int(downheld["ref_t1"]["action_id"][0]) == ACT_LANDING_AIR_N
+    downheld_out = _run_one_step(ds, 10297)
+    assert int(downheld_out["action_id"][0]) == ACT_LANDING_AIR_N
+    assert int(downheld_out["on_ground"][0]) == 1
+    assert float(downheld_out["pos_y"][0]) == pytest.approx(
+        float(downheld["ref_t1"]["pos_y"][0]), abs=2e-4
     )

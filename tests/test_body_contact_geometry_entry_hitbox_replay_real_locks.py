@@ -995,6 +995,89 @@ def test_guardreflect_active_x14_no_submotion_without_guardon_provenance_stays_n
 
 
 @pytest.mark.integration
+def test_guardreflect_active_x14_no_guardon_allows_later_seeded_shield_ewt_1218() -> None:
+    # FoD rollout lock for the active-x14 no-submotion GuardReflect boundary:
+    # - p1 is a carried GuardReflect raw snapshot with active x14 but no GuardOn provenance.
+    # - The early p0 AttackAirB BODY candidates overlap stale serialized hurtcaps, but source
+    #   ownership is still ReflectDesc until ftCo_80093BC0 expires x14.
+    # - A later hitbox has replay-proven ShieldDesc contact and must still enter GuardSetOff with
+    #   the lower 9-damage shield hitlag. This is the source-order complement to the GAT no-BODY
+    #   negative above, not a blanket GuardReflect contact reject.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    #   ftCo_8009388C,ftCo_GuardReflect_Anim,ftCo_80093BC0,ftCo_80092F2C}
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC,ftColl_80076ED8}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / (
+        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+        "ElatedWearyTermite.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    try:
+        ds = read_dataset(str(dataset_path))
+    except ValueError as exc:
+        if "record_size mismatch" in str(exc):
+            raise AssertionError(
+                f"stale required validation dataset cache: rerun forced aggregate preprocess for {dataset_path}"
+            ) from exc
+        raise
+
+    samples = ds.samples
+    binding = _load_binding()
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    samples_u8, seed_off, prev_input_off, input_off = _dataset_byte_views(ds)
+
+    start = 1020
+    target = 1218
+    attacker = 0
+    defender = 1
+    seed = samples["seed_t"][target]
+    ref = samples["ref_t1"][target]
+    assert int(seed["action_id"][attacker]) == 67  # AttackAirB
+    assert int(seed["action_id"][defender]) == 182  # GuardReflect
+    assert int(seed["animation_index"][defender]) == 0xFFFFFFFF
+    assert int(seed["action_frame"][defender]) < 0
+    assert int(seed["guard_reflect_timer_x14"][defender]) > 0
+    assert int(seed["guard_reflect_origin_guardon_u8"][defender]) == 0
+    assert int(seed["seed_prev_action_id"][defender]) != 178  # not GuardOn
+    assert int(ref["action_id"][defender]) == 181  # GuardSetOff
+    assert int(ref["hitlag"][defender]) == 6
+
+    seed_bytes = samples_u8[start : start + 1, seed_off : seed_off + seed_stride].copy()
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+    out_view = out_compare_bytes.view(COMPARE_DTYPE).reshape(1)
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    try:
+        binding.reseed_seed_rollout(handle, seed_bytes)
+        for record in range(start, target + 1):
+            prev_input_bytes = samples_u8[
+                record : record + 1, prev_input_off : prev_input_off + input_stride
+            ].copy()
+            input_bytes = samples_u8[record : record + 1, input_off : input_off + input_stride].copy()
+            binding.step_input(handle, prev_input_bytes, input_bytes)
+            binding.write_compare(handle, out_compare_bytes)
+        out = out_view[0].copy()
+    finally:
+        binding.destroy(handle)
+
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender])
+    assert int(out["animation_index"][defender]) == int(ref["animation_index"][defender])
+    assert int(out["hitlag"][attacker]) == int(ref["hitlag"][attacker]) == 6
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 6
+    assert float(out["shield_hp"][defender]) == pytest.approx(float(ref["shield_hp"][defender]), abs=1e-5)
+
+
+@pytest.mark.integration
 def test_guardreflect_expired_x14_rollout_orders_lower_body_before_later_shield_gat_11080() -> None:
     # Rollout-real lock for the same expired-x14 GuardReflect handoff:
     # - p1 AttackAirHi hitbox 0 misses ShieldDesc but overlaps p0's GuardOn hurtcap fallback.

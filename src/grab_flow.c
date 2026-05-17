@@ -1337,6 +1337,19 @@ void grab_flow_on_catch_connect(MslBatch* batch, int bi, int owner_p, int victim
       batch->state.action_id[vidx] == (uint16_t)MSL_ACT_CAPTURE_PULLED_HI) {
     batch->state.last_hit_by[vidx] = 6u;
   }
+  {
+    // Catch-connect CapturePulled entry uses Fighter_ChangeMotionState after any same-frame
+    // GuardReflect entry. That common entry helper clears x221C_b3, but does not clear the
+    // GuardReflect timer-owned b1/b2 lanes; those remain visible on Slippi post-frame until
+    // ftCo_80093BC0 expires x14/x18.
+    // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0
+    enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
+    enum { MSL_STATE_FLAG_221C_B3 = 0x10 };
+    const size_t flags_i =
+        vidx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
+    batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B3;
+  }
   catch_connect_apply_post_shield_release_recharge(batch, msl_common_params(), vidx,
                                                    victim_pre_connect_action);
   enum { MSL_STATE_FLAGS_221C_INDEX = 3 };

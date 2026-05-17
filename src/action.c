@@ -641,6 +641,18 @@ static inline void enter_guard_reflect_common_setup(MslBatch* batch, const MslCo
   batch->state.guard_release_latched_xc[idx] = 0;
   batch->state.guard_x10[idx] = guard_x10_init_u8(c);
   batch->state.lightshield_amount[idx] = 0.0f;
+  // GuardReflect entry publishes the timer-owned x221C lanes immediately:
+  // ftCo_8009388C / ftCo_80093A50 set x221C_b3, x221C_b1, and x221C_b2 when the
+  // GuardReflect motion state is installed. A later same-frame Fighter_ChangeMotionState
+  // may clear b3, but b1/b2 remain timer-owned until ftCo_80093BC0 expires x14/x18.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_8009388C,ftCo_80093A50,ftCo_80093BC0}
+  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
+  enum { MSL_STATE_FLAG_221C_B3 = 0x10 };
+  enum { MSL_STATE_FLAG_221C_B1 = 0x40 };
+  enum { MSL_STATE_FLAG_221C_B2 = 0x20 };
+  const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
+  batch->state.state_flags[flags_i] |=
+      (uint8_t)(MSL_STATE_FLAG_221C_B3 | MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2);
 }
 
 static inline void enter_guard_reflect_from_guard(MslBatch* batch, const MslCommonParams* c,

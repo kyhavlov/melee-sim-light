@@ -3025,6 +3025,11 @@ static inline void common_pass_enter(MslBatch* batch, const MslCommonParams* c,
     batch->state.floor_skip_segment_id[idx] = ground_id;
   }
   locomotion_apply_jump_enter_ground_to_air(batch, idx);
+  if (batch->state.speed_air_x_self[idx] > ch->air_drift_max) {
+    batch->state.speed_air_x_self[idx] = ch->air_drift_max;
+  } else if (batch->state.speed_air_x_self[idx] < -ch->air_drift_max) {
+    batch->state.speed_air_x_self[idx] = -ch->air_drift_max;
+  }
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_PASS;
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_PASS;
   batch->state.speed_ground_x_self[idx] = 0.0f;

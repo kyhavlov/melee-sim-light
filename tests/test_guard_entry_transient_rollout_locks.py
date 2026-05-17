@@ -11,6 +11,7 @@ from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
 
 SELFPLAY_181413_SLP = Path("replays/validation/aggregate_recent/Game_20260514T181413.slpz")
 AGN_SLP = Path("replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz")
+EWT_SLP = Path("replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.slpz")
 
 
 def _rollout_until_from_slp(slp_path: Path, *, record: int, ports: list[int]) -> tuple[np.void, np.void, np.void]:
@@ -59,6 +60,51 @@ def _rollout_until_from_slp(slp_path: Path, *, record: int, ports: list[int]) ->
         binding.destroy(handle)
 
     return samples["seed_t"][record], samples["ref_t1"][record], out[0].copy()
+
+
+def _one_step_from_slp(slp_path: Path, *, record: int, ports: list[int]) -> tuple[np.void, np.void, np.void]:
+    if not slp_path.exists():
+        pytest.skip(f"missing local replay: {slp_path}")
+    ds = build_dataset_from_slp(
+        slp_path=str(slp_path),
+        ports=ports,
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    samples = ds.samples
+    row = samples[record : record + 1]
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
+    prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+    input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+    seed_bytes[:] = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).reshape(1, seed_stride)
+    prev_input_bytes[:] = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+        1, input_stride
+    )
+    input_bytes[:] = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).reshape(1, input_stride)
+
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    try:
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+    finally:
+        binding.destroy(handle)
+
+    out = out_compare_bytes.view(COMPARE_DTYPE).reshape(1)
+    return row["seed_t"][0], row["ref_t1"][0], out[0].copy()
 
 
 @pytest.mark.integration
@@ -125,6 +171,23 @@ def test_catch_connect_after_guard_recharges_once_after_exiting_shield_family() 
 
 
 @pytest.mark.integration
+def test_guardreflect_entry_bits_survive_same_frame_capture_pulled_lw() -> None:
+    # ElatedWearyTermite rec 3602: p1 enters GuardReflect from AttackAirN in the input callback,
+    # then p0's catch-connect callback installs CapturePulledLw in the same frame. Vanilla
+    # preserves the GuardReflect x14/x18 timer bits (x221C_b1/b2 -> 0x60) while the later
+    # Fighter_ChangeMotionState clears x221C_b3.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80093A50,ftCo_80093BC0}
+    # refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80078A2C
+    seed, ref, out = _one_step_from_slp(EWT_SLP, record=3602, ports=[1, 2])
+    p = 1
+    assert int(seed["action_id"][p]) == 41  # AttackHi3
+    assert int(ref["action_id"][p]) == int(out["action_id"][p]) == 226  # CapturePulledLw
+    assert int(ref["state_flags"][p, 3]) == 0x60
+    assert int(out["state_flags"][p, 3]) == int(ref["state_flags"][p, 3])
+
+
+@pytest.mark.integration
 def test_nonshield_catch_connect_does_not_apply_extra_shield_family_recharge() -> None:
     # AGN rec 564 captures a non-shield victim into CapturePulledLw. It gets only the ordinary
     # inactive-shield recharge, proving the catch-connect shield-family branch is not applied to
@@ -137,3 +200,4 @@ def test_nonshield_catch_connect_does_not_apply_extra_shield_family_recharge() -
     assert float(out["shield_hp"][p]) == pytest.approx(
         float(seed["shield_hp"][p]) + 0.07, abs=1e-5
     )
+    assert (int(out["state_flags"][p, 3]) & 0x60) == 0

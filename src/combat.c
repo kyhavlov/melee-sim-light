@@ -2342,6 +2342,9 @@ int combat_debug_body_matrix_overlap(const MslBatch* batch, int batch_index, int
   return 0;
 }
 
+static inline uint8_t combat_guard_reflect_active_x14_no_guardon_blocks_body(const MslBatch* batch,
+                                                                             size_t idx);
+
 static inline uint8_t combat_shield_overlap_ftcoll_80007bcc(
     const MslBatch* batch, int bi, int attacker, int defender, int hb_id, float hx, float hy,
     float hz, float hr, float shx, float shy, float shz, float shr, float shield_desc_radius,
@@ -3289,6 +3292,51 @@ static inline uint8_t combat_guard_reflect_final_x14_live_x18_blocks_body(const 
              : 0u;
 }
 
+static inline uint8_t combat_guard_reflect_active_x14_no_guardon_blocks_body(const MslBatch* batch,
+                                                                             size_t idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  // Active-x14 no-submotion GuardReflect rows without GuardOn provenance are still in the
+  // ReflectDesc-owned callback phase. `ftCo_8009388C` GuardOn-origin entries can keep a live
+  // GuardOn pose for BODY collision, and the x14-expiry callback (`ftCo_80093BC0`) later recreates
+  // ShieldDesc/hurtcaps for the expired-x14 BODY fallback. Do not use stale serialized hurtcaps
+  // from a carried active-x14 raw snapshot as generic BODY authority before that callback.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+  //   ftCo_8009388C,ftCo_80093A50,ftCo_GuardReflect_Anim,ftCo_80093BC0}
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}
+  return (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
+          batch->state.action_frame[idx] < 0 && batch->state.animation_index[idx] == UINT32_MAX &&
+          batch->state.hitlag[idx] == 0u && batch->state.hitstun[idx] == 0u &&
+          batch->state.guard_reflect_timer_x14[idx] != 0u &&
+          batch->state.guard_reflect_origin_guardon[idx] == 0u &&
+          batch->state.prev_action_id[idx] != (uint16_t)MSL_ACT_GUARD_ON &&
+          batch->state.seed_prev_action_id[idx] != (uint16_t)MSL_ACT_GUARD_ON)
+             ? 1u
+             : 0u;
+}
+
+static inline uint8_t combat_guard_reflect_active_x14_rejects_strong_attackairb_shield(
+    const MslBatch* batch, size_t a_idx, size_t d_idx, size_t hb_i) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  if (!combat_guard_reflect_active_x14_no_guardon_blocks_body(batch, d_idx)) {
+    return 0u;
+  }
+  if (batch->state.action_id[a_idx] != (uint16_t)MSL_ACT_ATTACK_AIR_B) {
+    return 0u;
+  }
+  // Direct active-x14 powershield rows keep the ReflectDesc owner for the strong early Back-Air
+  // torso/leg capsules; the lower-damage tail capsule can still reach the live ShieldDesc handoff.
+  // Express the boundary through the extracted AttackAirB damage split (15-damage strong capsules
+  // vs 9-damage tail/late capsules) rather than an EWT row or hitbox slot id.
+  // data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirB.events.create_hitbox
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80093A50,ftCo_80093BC0}
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
+  return (batch->state.hitbox_damage[hb_i] > 9.5f) ? 1u : 0u;
+}
+
 static inline uint8_t combat_shield_damage_powershield_suppressed_idx(const MslBatch* batch,
                                                                       size_t idx) {
   if (batch == NULL) {
@@ -3652,6 +3700,9 @@ static inline uint8_t combat_source_order_earlier_body_hitcapsule_precedes_shiel
       continue;
     }
     if (combat_attackairlw_invincible_contact_rejects_body_hitlag(batch, a_idx, d_idx)) {
+      continue;
+    }
+    if (combat_guard_reflect_active_x14_no_guardon_blocks_body(batch, d_idx)) {
       continue;
     }
     if (combat_guard_reflect_final_x14_live_x18_blocks_body(batch, d_idx)) {
@@ -7613,6 +7664,11 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
                                                                            shield_overlap_margin)) {
             continue;
           }
+          if (shield_seed_kind == 0u &&
+              combat_guard_reflect_active_x14_rejects_strong_attackairb_shield(batch, a_idx, d_idx,
+                                                                               hb_i)) {
+            continue;
+          }
           const uint8_t element = batch->state.hitbox_element[hb_i];
           if (element == (uint8_t)MSL_HIT_ELEMENT_INERT) {
             // Slippi post-frame bit 0x221C:0x04 (GALE01): detection hitbox touching shield bubble.
@@ -8045,6 +8101,9 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           if (combat_attackairlw_invincible_contact_rejects_body_hitlag(batch, a_idx, d_idx)) {
             continue;
           }
+          if (combat_guard_reflect_active_x14_no_guardon_blocks_body(batch, d_idx)) {
+            continue;
+          }
           if (combat_guard_reflect_final_x14_live_x18_blocks_body(batch, d_idx)) {
             continue;
           }
@@ -8374,6 +8433,9 @@ static void combat_select_body_hits_one_debug(MslBatch* batch, int bi,
         const uint8_t hit_group = hitlist_hit_group_from_u16_7(batch->state.hitbox_u16_7[hb_i]);
         (void)hit_group;
         if (!hitlist_allows_fighter(batch, bi, attacker, hb_id, defender, defender_iid)) {
+          continue;
+        }
+        if (combat_guard_reflect_active_x14_no_guardon_blocks_body(batch, d_idx)) {
           continue;
         }
 
