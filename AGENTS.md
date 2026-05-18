@@ -59,6 +59,10 @@ Current target domain:
   callback phase, model that owner explicitly instead of adding a compensating runtime path. A
   teacher-forced seed reconstruction is acceptable only when it initializes real hidden source state
   for one-step reseed and does not change free-running gameplay semantics.
+- RNG is an explicit exception to exact-state closure: do not chase full global RNG stream parity
+  while deterministic gameplay owners remain incomplete. For RNG-owned behavior, prefer
+  decomp-backed distribution/outcome parity and bounded seed surfaces over broad exact-stream
+  reconstruction unless the user explicitly asks for an RNG parity project.
 
 ### C Core + Thin Python
 - All gameplay / physics / combat logic lives in **C** under `src/`.

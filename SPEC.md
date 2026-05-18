@@ -2539,9 +2539,11 @@ Fox/Falco special-owner split (2026-04-17):
     above floor remain airborne through the existing negative locks; the rejected broad EscapeAir
     projection is not restored. Locked same-frame JumpAerial -> EscapeAir rows use the
     frame-start `CollData.last_pos` owner from `ft_80082C74`, not the older replay t-1
-    `floor_sweep_prev_pos` lane; while `CollData_X130_Locked` is live, runtime preserves the seeded
-    desired ECB bottom. On non-FD legal-stage hard floors, replay-prefix rows that expose an active
-    lock but no desired-bottom lane use the same frame-start root sweep; FD stays on the existing
+    `floor_sweep_prev_pos` lane; while `CollData_X130_Locked` is live, runtime preserves the
+    desired ECB bottom through named EscapeAir locked-bottom owners: replay-seeded CollData_X130,
+    live JumpAerial soft/height-transform provenance, and live JumpAerial hard-floor provenance.
+    On non-FD legal-stage hard floors, replay-prefix rows that expose an active lock but no
+    desired-bottom lane use the same frame-start root sweep; FD stays on the existing
     desired-bottom/locked-owner branch because owner-zero free-running FD states are a separate
     hidden-state gap. Soft platforms and ledges remain on their separate EscapeAir guards. Sources:
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll`,
@@ -2734,9 +2736,10 @@ Fox/Falco special-owner split (2026-04-17):
     aggregate validation. FoD side-platform EscapeAir rows can expose the timer-3 frame before the
     source callback publishes a floor result, but the same locked CollData desired bottom must carry
     into the timer-2 frame where `EscapeAir_Coll` accepts the transformed platform. Runtime preserves
-    FoD replay-seeded owner-1 desired-bottom rows only after the current floor decision has completed;
-    it does not let owner-1 desired-bottom evidence publish a same-frame landing. The timer-2 landing
-    still goes through the existing FoD platform bottom-sweep/root-projection owner. Sources:
+    FoD replay-seeded CollData_X130 desired-bottom rows only after the current floor decision has
+    completed; it does not let replay-seeded desired-bottom evidence publish a same-frame landing.
+    The timer-2 landing still goes through the existing FoD platform bottom-sweep/root-projection
+    owner. Sources:
     `refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4`,
     `refs/melee/src/melee/ft/ftcommon.c::ftCommon_UnlockECB`,
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll`,

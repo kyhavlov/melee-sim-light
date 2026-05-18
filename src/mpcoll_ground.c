@@ -12,6 +12,7 @@
 #include "char_params.h"
 #include "coll_env_flags.h"
 #include "common_params.h"
+#include "escapeair_collision_owner.h"
 #include "match_flow.h"
 #include "mpcoll_ecb_points.h"
 #include "motion_state_owners.h"
@@ -289,6 +290,39 @@ enum {
   MSL_STAGE_FOUNTAIN_OF_DREAMS_LOCAL = 2u,
   MSL_STAGE_FINAL_DESTINATION_LOCAL = 32u,
 };
+
+static inline uint32_t mpcoll_escapeair_final_publication_reject_bits(
+    const MslEscapeAirFinalPublicationOwners* owners) {
+  if (owners == NULL) {
+    return 0u;
+  }
+  return (owners->sustained_same_platform_lock
+              ? (uint32_t)MSL_MPCOLL_REJECT_SUSTAINED_ESCAPEAIR_SAME_PLATFORM_LOCK
+              : 0u) |
+         (owners->sustained_same_ledge_lock
+              ? (uint32_t)MSL_MPCOLL_REJECT_SUSTAINED_ESCAPEAIR_SAME_LEDGE_LOCK
+              : 0u) |
+         (owners->locked_missing_bottom_owner
+              ? (uint32_t)MSL_MPCOLL_REJECT_LOCKED_ESCAPEAIR_MISSING_BOTTOM_OWNER
+              : 0u) |
+         (owners->locked_desired_platform_without_bottom_sweep
+              ? (uint32_t)MSL_MPCOLL_REJECT_LOCKED_DESIRED_PLATFORM_WITHOUT_BOTTOM_SWEEP
+              : 0u) |
+         (owners->locked_desired_nonplatform_without_bottom_sweep
+              ? (uint32_t)MSL_MPCOLL_REJECT_LOCKED_DESIRED_NONPLATFORM_WITHOUT_BOTTOM_SWEEP
+              : 0u) |
+         (owners->kneebend_slope_entry ? (uint32_t)MSL_MPCOLL_REJECT_KNEEBEND_ESCAPEAIR_SLOPE
+                                       : 0u) |
+         (owners->jumpaerial_high_lift_ledge
+              ? (uint32_t)MSL_MPCOLL_REJECT_JUMPAERIAL_ESCAPEAIR_HIGH_LIFT_LEDGE
+              : 0u) |
+         (owners->jumpaerial_static_platform_overstep
+              ? (uint32_t)MSL_MPCOLL_REJECT_JUMPAERIAL_ESCAPEAIR_STATIC_PLATFORM_OVERSTEP
+              : 0u) |
+         (owners->cliff_horizontal_ledge_locked
+              ? (uint32_t)MSL_MPCOLL_REJECT_CLIFF_HORIZONTAL_LEDGE_LOCKED
+              : 0u);
+}
 
 typedef struct MslMpcollFloorContact {
   uint16_t ground_id;
@@ -2481,7 +2515,8 @@ static inline void mpcoll_apply_late_floor_publication_guards(
       !escapeair_stale_platform_root_handoff_hit &&
       !escapeair_fresh_jump_height_platform_handoff_hit &&
       batch->state.coll_desired_ecb_bottom_valid[idx] != 0u &&
-      batch->state.coll_desired_ecb_bottom_locked_owner[idx] != 0u &&
+      msl_escapeair_locked_bottom_owner_any(
+          batch->state.coll_desired_ecb_bottom_locked_owner[idx]) &&
       (y + batch->state.coll_desired_ecb_bottom_rel_y[idx]) >
           (publication->contact.contact_y + k_floor_y_bias)) {
     // Locked EscapeAir platform root projection is legal only after desired ECB bottom reaches the
@@ -3504,7 +3539,8 @@ static uint8_t escapeair_locked_floor_bottom_sweep_root_projection(
   //   mpColl_LoadECB_inline,mpColl_80044628_Floor,mpColl_80044838_Floor}
   float source_bottom_rel_y = prev_ecb->bottom_rel_y;
   if (batch->state.coll_desired_ecb_bottom_valid[idx] != 0u &&
-      batch->state.coll_desired_ecb_bottom_locked_owner[idx] != 0u) {
+      msl_escapeair_locked_bottom_owner_any(
+          batch->state.coll_desired_ecb_bottom_locked_owner[idx])) {
     source_bottom_rel_y = batch->state.coll_desired_ecb_bottom_rel_y[idx];
   }
   if (!(source_bottom_rel_y > k_floor_y_bias)) {
@@ -3826,7 +3862,8 @@ static uint8_t escapeair_locked_platform_root_projection(
 
     const float distinct_platform_bottom_rel_y =
         (batch->state.coll_desired_ecb_bottom_valid[idx] != 0u &&
-         batch->state.coll_desired_ecb_bottom_locked_owner[idx] != 0u)
+         msl_escapeair_locked_bottom_owner_any(
+             batch->state.coll_desired_ecb_bottom_locked_owner[idx]))
             ? batch->state.coll_desired_ecb_bottom_rel_y[idx]
             : current_pose_bottom_rel_y;
     const uint8_t distinct_platform_root_depth_owner =
@@ -3864,7 +3901,8 @@ static uint8_t escapeair_locked_platform_root_projection(
          g->lines[(size_t)out_line_idx].segment_i != batch->state.ground_id[idx] &&
          batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_ESCAPE_AIR &&
          ecb_lock_timer_seed == 6u && batch->state.coll_desired_ecb_bottom_valid[idx] != 0u &&
-         batch->state.coll_desired_ecb_bottom_locked_owner[idx] != 0u &&
+         msl_escapeair_locked_bottom_owner_any(
+             batch->state.coll_desired_ecb_bottom_locked_owner[idx]) &&
          !locked_desired_bottom_sweep_owner &&
          y_corr > (locked_desired_bottom_rel_y + fabsf(batch->state.speed_y_self[idx]) +
                    k_ecb_vertical_unit))
@@ -4476,11 +4514,12 @@ void mpcoll_ground_apply(MslBatch* batch) {
               : 0u;
       const uint8_t locked_desired_ecb_bottom_valid =
           (ecb_lock_active && batch->state.coll_desired_ecb_bottom_valid[idx] != 0u &&
-           batch->state.coll_desired_ecb_bottom_locked_owner[idx] != 0u &&
+           msl_escapeair_locked_bottom_owner_any(
+               batch->state.coll_desired_ecb_bottom_locked_owner[idx]) &&
            (escapeair_locked_jumpaerial_entry_desired_bottom_owner ||
             (!escapeair_sustained_current_ecb_uses_pose_bottom &&
-             (batch->state.coll_desired_ecb_bottom_locked_owner[idx] == 2u ||
-              batch->state.coll_desired_ecb_bottom_locked_owner[idx] == 3u)) ||
+             msl_escapeair_locked_bottom_owner_is_live_jumpaerial(
+                 batch->state.coll_desired_ecb_bottom_locked_owner[idx])) ||
             (action_id == (uint16_t)MSL_ACT_FALL && batch->state.fall_fast[idx] != 0u) ||
             is_attackair_action(action_id) ||
             msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_COMMON_AIR_COLL)))
@@ -4768,8 +4807,9 @@ void mpcoll_ground_apply(MslBatch* batch) {
               ? 1u
               : 0u;
       const uint16_t skip_platform_segment_i = platform_floor_skip_segment_id(batch, idx, stage_id);
-      const uint8_t escapeair_locked =
-          (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR && ecb_lock_active) ? 1u : 0u;
+      const MslEscapeAirCollEpisode escapeair_episode = msl_escapeair_coll_episode_make(
+          action_id, batch->state.seed_prev_action_id[idx], ecb_lock_active);
+      const uint8_t escapeair_locked = escapeair_episode.locked;
       uint8_t deep_lock_penetration = 0u;
       const uint8_t downdamage_x_axis_fresh_sdi_edge =
           ((action_id == (uint16_t)MSL_ACT_DOWN_DAMAGE_U ||
@@ -4901,7 +4941,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
           (stage_id == (uint32_t)MSL_STAGE_FINAL_DESTINATION_LOCAL ||
            stage_id == (uint32_t)MSL_STAGE_FOUNTAIN_OF_DREAMS_LOCAL) &&
           prefer_line_idx >= 0 && ecb_lock_timer_seed != 0u &&
-          (batch->state.coll_desired_ecb_bottom_locked_owner[idx] != 0u ||
+          (msl_escapeair_locked_bottom_owner_any(
+               batch->state.coll_desired_ecb_bottom_locked_owner[idx]) ||
            batch->state.seed_prev_action_id[idx] != (uint16_t)MSL_ACT_ESCAPE_AIR ||
            batch->state.coll_desired_ecb_bottom_rel_y[idx] > k_floor_y_bias) &&
           batch->state.action_frame[idx] <= 3 && batch->state.speed_y_self[idx] < 0.0f) {
@@ -4962,10 +5003,12 @@ void mpcoll_ground_apply(MslBatch* batch) {
             continue;
           }
           const uint8_t escapeair_early_root_crossing =
-              (((batch->state.coll_desired_ecb_bottom_locked_owner[idx] == 3u &&
+              (((msl_escapeair_locked_bottom_owner_is_live_hard_floor(
+                     batch->state.coll_desired_ecb_bottom_locked_owner[idx]) &&
                  (batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_ESCAPE_AIR ||
                   batch->state.seed_prev_action_frame[idx] <= 0)) ||
-                (batch->state.coll_desired_ecb_bottom_locked_owner[idx] == 0u &&
+                (!msl_escapeair_locked_bottom_owner_any(
+                     batch->state.coll_desired_ecb_bottom_locked_owner[idx]) &&
                  stage_id != (uint32_t)MSL_STAGE_FINAL_DESTINATION_LOCAL &&
                  batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_ESCAPE_AIR)) &&
                prev_y > line_y + k_floor_y_bias && y <= line_y + k_floor_y_bias)
@@ -4978,7 +5021,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
               // callback early.
               // refs/melee/src/melee/mp/mpcoll.c::{
               //   mpColl_LoadECB_inline,mpColl_80044628_Floor,mpColl_80044838_Floor}
-              (batch->state.coll_desired_ecb_bottom_locked_owner[idx] != 0u &&
+              (msl_escapeair_locked_bottom_owner_any(
+                   batch->state.coll_desired_ecb_bottom_locked_owner[idx]) &&
                prev_y + escapeair_bottom_rel0 > line_y + k_floor_y_bias &&
                y + escapeair_bottom_rel0 <= line_y + k_floor_y_bias)
                   ? 1u
@@ -4999,7 +5043,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
       if (!was_grounded && !on_ground && action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
           stage_id != (uint32_t)MSL_STAGE_FINAL_DESTINATION_LOCAL && prefer_line_idx >= 0 &&
           ecb_lock_timer_seed != 0u &&
-          batch->state.coll_desired_ecb_bottom_locked_owner[idx] == 0u &&
+          !msl_escapeair_locked_bottom_owner_any(
+              batch->state.coll_desired_ecb_bottom_locked_owner[idx]) &&
           batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_ESCAPE_AIR &&
           batch->state.action_frame[idx] <= 3 && batch->state.speed_y_self[idx] < 0.0f) {
         // Non-FD replay-prefix gap for early locked EscapeAir floor handoff:
@@ -6111,7 +6156,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
                 batch->state.action_frame[idx] <= 4 && !projected_line_is_platform &&
                 !projected_line_has_platform_transform &&
                 batch->state.coll_desired_ecb_bottom_valid[idx] != 0u &&
-                batch->state.coll_desired_ecb_bottom_locked_owner[idx] != 0u &&
+                msl_escapeair_locked_bottom_owner_any(
+                    batch->state.coll_desired_ecb_bottom_locked_owner[idx]) &&
                 batch->state.coll_desired_ecb_bottom_rel_y[idx] > k_floor_y_bias &&
                 batch->state.coll_desired_ecb_bottom_rel_y[idx] > y_corr) ||
                // Fresh JumpAerial -> EscapeAir ledge entries with no desired-bottom depth remain
@@ -6960,7 +7006,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
                batch->state.action_frame[idx] <= 4 && !hit_line_is_platform &&
                !hit_line_has_platform_transform && !escapeair_early_ledge_root_floor_owner &&
                batch->state.coll_desired_ecb_bottom_valid[idx] != 0u &&
-               batch->state.coll_desired_ecb_bottom_locked_owner[idx] != 0u &&
+               msl_escapeair_locked_bottom_owner_any(
+                   batch->state.coll_desired_ecb_bottom_locked_owner[idx]) &&
                batch->state.coll_desired_ecb_bottom_rel_y[idx] > k_floor_y_bias &&
                hit_line_idx >= 0 &&
                (cur_bottom_y + batch->state.coll_desired_ecb_bottom_rel_y[idx]) >
@@ -7809,7 +7856,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
                   // refs/melee/src/melee/mp/mpcoll.c::{
                   //   mpColl_LoadECB_inline,mpColl_80044628_Floor,mpColl_80044838_Floor}
                   (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR && ecb_lock_timer_seed != 0u &&
-                   batch->state.coll_desired_ecb_bottom_locked_owner[idx] == 0u &&
+                   !msl_escapeair_locked_bottom_owner_any(
+                       batch->state.coll_desired_ecb_bottom_locked_owner[idx]) &&
                    batch->state.coll_desired_ecb_bottom_rel_y[idx] <= k_floor_y_bias &&
                    batch->state.floor_sweep_prev_pos_y[idx] < iy)
                       ? 1u
@@ -8104,7 +8152,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
           (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR && ecb_lock_timer_seed > 1u &&
            escapeair_projection_line_idx >= 0 && escapeair_projection_line_y_valid != 0u &&
            batch->state.coll_desired_ecb_bottom_valid[idx] != 0u &&
-           batch->state.coll_desired_ecb_bottom_locked_owner[idx] == 1u &&
+           msl_escapeair_locked_bottom_owner_is_seeded(
+               batch->state.coll_desired_ecb_bottom_locked_owner[idx]) &&
            (batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
             batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_AERIAL_B) &&
            !stage_collision_floor_line_is_platform(
@@ -8134,15 +8183,15 @@ void mpcoll_ground_apply(MslBatch* batch) {
               : 0u;
       if (!on_ground && action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
           ((batch->state.action_frame[idx] >= 3 &&
-            (batch->state.coll_desired_ecb_bottom_locked_owner[idx] == 2u ||
-             batch->state.coll_desired_ecb_bottom_locked_owner[idx] == 3u)) ||
+            msl_escapeair_locked_bottom_owner_is_live_jumpaerial(
+                batch->state.coll_desired_ecb_bottom_locked_owner[idx])) ||
            escapeair_seeded_desired_bottom_nonplatform_crossing ||
            escapeair_late_jumpaerial_desired_bottom_nonplatform_crossing) &&
           ecb_lock_timer_seed > 1u && escapeair_projection_line_idx >= 0 &&
           batch->state.speed_y_self[idx] <= 0.0f) {
         // EscapeAir_Coll's mpColl_800471F8 path can admit a connected hard-floor projection even
         // when the simplified bottom sweep has already moved below the line. Live JumpAerial ->
-        // EscapeAir CollData owners (internal values 2/3) use root crossing; replay-seeded owner-1
+        // Live JumpAerial EscapeAir CollData owners use root crossing; replay-seeded CollData_X130
         // rows and the late JumpAerial IASA handoff use the explicit desired-bottom lane and
         // require that desired bottom to cross the carried non-platform floor this frame. The late
         // handoff stays on the same source ground segment; adjacent floor traversal is owned by the
@@ -8643,10 +8692,10 @@ void mpcoll_ground_apply(MslBatch* batch) {
                 batch, idx, g, stage_id, action_id, seed_ground_id, ground_id,
                 final_ground_line_idx, contact_y, y);
         uint8_t locked_desired_bottom_final_sweep_hit = 1u;
-        if (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
-            batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_ESCAPE_AIR &&
-            ecb_lock_timer_seed != 0u && batch->state.coll_desired_ecb_bottom_valid[idx] != 0u &&
-            batch->state.coll_desired_ecb_bottom_locked_owner[idx] != 0u &&
+        if (escapeair_episode.sustained && ecb_lock_timer_seed != 0u &&
+            batch->state.coll_desired_ecb_bottom_valid[idx] != 0u &&
+            msl_escapeair_locked_bottom_owner_any(
+                batch->state.coll_desired_ecb_bottom_locked_owner[idx]) &&
             final_ground_line_idx >= 0 &&
             stage_collision_floor_line_is_platform(stage_id, ground_id)) {
           int locked_sweep_line_idx = -1;
@@ -8720,7 +8769,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
             (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
              batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_ESCAPE_AIR &&
              batch->state.action_frame[idx] <= 2 && batch->state.ecb_lock_timer[idx] == 0 &&
-             batch->state.coll_desired_ecb_bottom_locked_owner[idx] == 0u &&
+             !msl_escapeair_locked_bottom_owner_any(
+                 batch->state.coll_desired_ecb_bottom_locked_owner[idx]) &&
              (batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
               batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_AERIAL_B) &&
              stage_collision_floor_line_is_platform(stage_id, ground_id) &&
@@ -8744,10 +8794,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Enter
             // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
             // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80043754}
-            (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
-             batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_ESCAPE_AIR &&
-             ecb_lock_timer_seed != 0u && batch->state.jumps_left[idx] == 0u &&
-             ground_id == seed_ground_id &&
+            (escapeair_episode.sustained && ecb_lock_timer_seed != 0u &&
+             batch->state.jumps_left[idx] == 0u && ground_id == seed_ground_id &&
              stage_collision_floor_line_is_platform(stage_id, ground_id) &&
              !stage_collision_floor_line_has_platform_transform(stage_id, ground_id) &&
              final_landing_lift < escapeair_entry_bottom_rel0 &&
@@ -8770,10 +8818,9 @@ void mpcoll_ground_apply(MslBatch* batch) {
             // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
             // refs/melee/src/melee/mp/mpcoll.c::{
             //   mpColl_800471F8,mpColl_LoadECB_inline,mpCollInterpolateECB,mpColl_80044838_Floor}
-            (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
-             batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_ESCAPE_AIR &&
-             ecb_lock_timer_seed != 0u && ground_id == seed_ground_id &&
-             seed_ground_line_is_ledge && final_ground_line_is_ledge &&
+            (escapeair_episode.sustained && ecb_lock_timer_seed != 0u &&
+             ground_id == seed_ground_id && seed_ground_line_is_ledge &&
+             final_ground_line_is_ledge &&
              !stage_collision_floor_line_is_platform(stage_id, ground_id) &&
              batch->state.coll_desired_ecb_bottom_rel_y[idx] > k_floor_y_bias &&
              batch->state.floor_sweep_prev_pos_y[idx] < contact_y && final_landing_lift >= 0.0f &&
@@ -8807,7 +8854,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
             // refs/melee/src/melee/mp/mpcoll.c::{
             //   mpColl_LoadECB_inline,mpColl_80044628_Floor,mpColl_80044838_Floor}
             (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR && ecb_lock_timer_seed != 0u &&
-             batch->state.coll_desired_ecb_bottom_locked_owner[idx] == 0u &&
+             !msl_escapeair_locked_bottom_owner_any(
+                 batch->state.coll_desired_ecb_bottom_locked_owner[idx]) &&
              batch->state.coll_desired_ecb_bottom_rel_y[idx] <= k_floor_y_bias &&
              !fresh_jumpaerial_zero_bottom_platform_projection_hit &&
              !escapeair_fresh_jump_height_platform_handoff_hit &&
@@ -8831,15 +8879,13 @@ void mpcoll_ground_apply(MslBatch* batch) {
             // segments are new floor candidates owned by the normal EscapeAir_Coll callback.
             // refs/melee/src/melee/mp/mpcoll.c::{
             //   mpColl_80044628_Floor,mpColl_80044838_Floor,mpColl_80046904}
-            (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
-             batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_ESCAPE_AIR &&
-             ecb_lock_timer_seed != 0u && ground_id == seed_ground_id &&
-             !locked_desired_bottom_final_sweep_hit)
+            (escapeair_episode.sustained && ecb_lock_timer_seed != 0u &&
+             ground_id == seed_ground_id && !locked_desired_bottom_final_sweep_hit)
                 ? 1u
                 : 0u;
         const uint8_t runtime_live_jumpaerial_nonplatform_root_crossing =
-            ((batch->state.coll_desired_ecb_bottom_locked_owner[idx] == 2u ||
-              batch->state.coll_desired_ecb_bottom_locked_owner[idx] == 3u) &&
+            (msl_escapeair_locked_bottom_owner_is_live_jumpaerial(
+                 batch->state.coll_desired_ecb_bottom_locked_owner[idx]) &&
              ecb_lock_timer_seed > 1u &&
              (!final_ground_line_is_ledge || ecb_lock_timer_seed >= 3u) &&
              prev_y > (contact_y + k_floor_y_bias) && y <= (contact_y + k_floor_y_bias) &&
@@ -8852,8 +8898,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
             // sloped floor result, but source cannot reach mpColl_80044838_Floor while the preserved
             // desired ECB bottom remains above the accepted floor.
             //
-            // Runtime owner values 2 and 3 are the JumpAerial -> EscapeAir pass-through provenance
-            // from the entry callback. They should not suppress the later same-callback
+            // Live JumpAerial -> EscapeAir pass-through provenance from the entry callback should
+            // not suppress the later same-callback
             // non-platform root crossing once EscapeAir reaches the carried hard floor; that
             // remains owned by ft_80082C74/mpColl_800471F8's non-platform path. Horizontal ledge
             // floors need the later locked interpolation phase before that root crossing is source
@@ -8861,13 +8907,12 @@ void mpcoll_ground_apply(MslBatch* batch) {
             // precondition.
             // refs/melee/src/melee/mp/mpcoll.c::{
             //   mpColl_LoadECB_inline,mpColl_80044628_Floor,mpColl_80044838_Floor}
-            (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
-             batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_ESCAPE_AIR &&
-             ecb_lock_timer_seed != 0u &&
+            (escapeair_episode.sustained && ecb_lock_timer_seed != 0u &&
              !stage_collision_floor_line_is_platform(stage_id, ground_id) &&
              !resolved_line_has_platform_transform &&
              batch->state.coll_desired_ecb_bottom_valid[idx] != 0u &&
-             batch->state.coll_desired_ecb_bottom_locked_owner[idx] != 0u &&
+             msl_escapeair_locked_bottom_owner_any(
+                 batch->state.coll_desired_ecb_bottom_locked_owner[idx]) &&
              !escapeair_early_ledge_root_floor_owner &&
              !runtime_live_jumpaerial_nonplatform_root_crossing &&
              batch->state.coll_desired_ecb_bottom_rel_y[idx] > k_floor_y_bias &&
@@ -8914,6 +8959,20 @@ void mpcoll_ground_apply(MslBatch* batch) {
              ecb_lock_timer_seed > 1u)
                 ? 1u
                 : 0u;
+        const MslEscapeAirFinalPublicationOwners escapeair_final_owners = {
+            .sustained_same_platform_lock = suppress_sustained_escapeair_same_platform_lock_land,
+            .sustained_same_ledge_lock = suppress_sustained_escapeair_same_ledge_lock_land,
+            .locked_missing_bottom_owner = suppress_locked_escapeair_missing_bottom_owner_land,
+            .locked_desired_platform_without_bottom_sweep =
+                suppress_locked_desired_platform_without_bottom_sweep,
+            .locked_desired_nonplatform_without_bottom_sweep =
+                suppress_locked_desired_nonplatform_without_bottom_sweep,
+            .kneebend_slope_entry = suppress_kneebend_escapeair_slope_final_land,
+            .jumpaerial_high_lift_ledge = suppress_jumpaerial_escapeair_high_lift_ledge_final_land,
+            .jumpaerial_static_platform_overstep =
+                suppress_jumpaerial_escapeair_static_platform_overstep_final_land,
+            .cliff_horizontal_ledge_locked = suppress_cliff_horizontal_ledge_locked_final_land,
+        };
         const uint32_t final_floor_reject_bits =
             (suppress_escapeair_transformed_remap_land
                  ? (uint32_t)MSL_MPCOLL_REJECT_ESCAPEAIR_TRANSFORMED_REMAP
@@ -8971,38 +9030,12 @@ void mpcoll_ground_apply(MslBatch* batch) {
             (suppress_fall_loop_wrap_stage_object_floor_to_hard_floor_land
                  ? (uint32_t)MSL_MPCOLL_REJECT_FALL_LOOP_WRAP_STAGE_OBJECT_FLOOR_TO_HARD_FLOOR
                  : 0u) |
-            (suppress_sustained_escapeair_same_platform_lock_land
-                 ? (uint32_t)MSL_MPCOLL_REJECT_SUSTAINED_ESCAPEAIR_SAME_PLATFORM_LOCK
-                 : 0u) |
-            (suppress_sustained_escapeair_same_ledge_lock_land
-                 ? (uint32_t)MSL_MPCOLL_REJECT_SUSTAINED_ESCAPEAIR_SAME_LEDGE_LOCK
-                 : 0u) |
-            (suppress_locked_escapeair_missing_bottom_owner_land
-                 ? (uint32_t)MSL_MPCOLL_REJECT_LOCKED_ESCAPEAIR_MISSING_BOTTOM_OWNER
-                 : 0u) |
-            (suppress_locked_desired_platform_without_bottom_sweep
-                 ? (uint32_t)MSL_MPCOLL_REJECT_LOCKED_DESIRED_PLATFORM_WITHOUT_BOTTOM_SWEEP
-                 : 0u) |
-            (suppress_locked_desired_nonplatform_without_bottom_sweep
-                 ? (uint32_t)MSL_MPCOLL_REJECT_LOCKED_DESIRED_NONPLATFORM_WITHOUT_BOTTOM_SWEEP
-                 : 0u) |
-            (suppress_kneebend_escapeair_slope_final_land
-                 ? (uint32_t)MSL_MPCOLL_REJECT_KNEEBEND_ESCAPEAIR_SLOPE
-                 : 0u) |
-            (suppress_jumpaerial_escapeair_high_lift_ledge_final_land
-                 ? (uint32_t)MSL_MPCOLL_REJECT_JUMPAERIAL_ESCAPEAIR_HIGH_LIFT_LEDGE
-                 : 0u) |
-            (suppress_jumpaerial_escapeair_static_platform_overstep_final_land
-                 ? (uint32_t)MSL_MPCOLL_REJECT_JUMPAERIAL_ESCAPEAIR_STATIC_PLATFORM_OVERSTEP
-                 : 0u) |
+            mpcoll_escapeair_final_publication_reject_bits(&escapeair_final_owners) |
             (damage_active_hitlag_root_below_bottom_above_floor_owner
                  ? (uint32_t)MSL_MPCOLL_REJECT_DAMAGE_ACTIVE_HITLAG_ROOT_BELOW_BOTTOM_ABOVE_FLOOR
                  : 0u) |
             (damage_active_hitlag_downward_sdi_airborne_owner
                  ? (uint32_t)MSL_MPCOLL_REJECT_DAMAGE_ACTIVE_HITLAG_DOWNWARD_SDI_AIRBORNE
-                 : 0u) |
-            (suppress_cliff_horizontal_ledge_locked_final_land
-                 ? (uint32_t)MSL_MPCOLL_REJECT_CLIFF_HORIZONTAL_LEDGE_LOCKED
                  : 0u);
         mpcoll_apply_final_floor_rejection_bits(
             &mpcoll_ctx, &floor_publication, final_floor_reject_bits, y, cur_bottom_x, cur_bottom_y,
@@ -9029,30 +9062,33 @@ void mpcoll_ground_apply(MslBatch* batch) {
       MslEcbWorldPoints stored_desired_ecb_points = desired_ecb_points;
       const uint8_t nonfastfall_fall_generic_lock_bottom =
           (uint8_t)(action_id == (uint16_t)MSL_ACT_FALL && batch->state.fall_fast[idx] == 0u &&
-                    batch->state.coll_desired_ecb_bottom_locked_owner[idx] == 1u);
+                    msl_escapeair_locked_bottom_owner_is_seeded(
+                        batch->state.coll_desired_ecb_bottom_locked_owner[idx]));
       uint8_t stored_locked_desired_bottom_owner =
           (use_locked_desired_ecb_bottom && ecb_lock_active &&
            !nonfastfall_fall_generic_lock_bottom)
-              ? (batch->state.coll_desired_ecb_bottom_locked_owner[idx] == 2u
-                     ? 2u
-                     : (batch->state.coll_desired_ecb_bottom_locked_owner[idx] == 3u ? 3u : 1u))
+              ? msl_escapeair_locked_bottom_owner_preserve_or_seeded(
+                    batch->state.coll_desired_ecb_bottom_locked_owner[idx])
               : 0u;
       if (!stored_locked_desired_bottom_owner && ecb_lock_active &&
-          ((action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
+          ((escapeair_episode.active &&
             ((stage_id == (uint32_t)MSL_STAGE_FOUNTAIN_OF_DREAMS_LOCAL &&
-              batch->state.coll_desired_ecb_bottom_locked_owner[idx] == 1u) ||
-             batch->state.coll_desired_ecb_bottom_locked_owner[idx] == 2u)) ||
+              msl_escapeair_locked_bottom_owner_is_seeded(
+                  batch->state.coll_desired_ecb_bottom_locked_owner[idx])) ||
+             batch->state.coll_desired_ecb_bottom_locked_owner[idx] ==
+                 (uint8_t)MSL_ESCAPEAIR_LOCKED_BOTTOM_OWNER_LIVE_JUMPAERIAL_SOFT_OR_TRANSFORM)) ||
            (stage_id == (uint32_t)MSL_STAGE_FOUNTAIN_OF_DREAMS_LOCAL &&
             (action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
              action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_B)) ||
            (action_id == (uint16_t)MSL_ACT_FALL && batch->state.fall_fast[idx] != 0u) ||
            msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_COMMON_AIR_COLL)) &&
           batch->state.coll_desired_ecb_bottom_valid[idx] != 0u &&
-          batch->state.coll_desired_ecb_bottom_locked_owner[idx] != 0u) {
+          msl_escapeair_locked_bottom_owner_any(
+              batch->state.coll_desired_ecb_bottom_locked_owner[idx])) {
         // Source `mpColl_LoadECB_inline` preserves desired_ecb.bottom while CollData_X130_Locked is
         // active. The lite floor pass keeps Jump/JumpAerial floor ownership on its existing
         // callback-phase slice above, but JumpAerial entry, sustained EscapeAir continuations
-        // (including replay-seeded owner-1 CollData_X130 rows), and subsequent airborne wall/ceiling
+        // (including replay-seeded CollData_X130 rows), and subsequent airborne wall/ceiling
         // passes still consume the same source CollData desired ECB until the lock expires. Carry
         // the preserved desired bottom without changing the already-completed floor decision.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Coll
@@ -9060,10 +9096,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
         // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpColl_80045B74_LeftWall}
         msl_ecb_world_points_preserve_desired_bottom_rel_y(
             &stored_desired_ecb_points, x, y, batch->state.coll_desired_ecb_bottom_rel_y[idx]);
-        stored_locked_desired_bottom_owner =
-            (batch->state.coll_desired_ecb_bottom_locked_owner[idx] == 2u)
-                ? 2u
-                : (batch->state.coll_desired_ecb_bottom_locked_owner[idx] == 3u ? 3u : 1u);
+        stored_locked_desired_bottom_owner = msl_escapeair_locked_bottom_owner_preserve_or_seeded(
+            batch->state.coll_desired_ecb_bottom_locked_owner[idx]);
       }
       mpcoll_store_current_ecb_points(batch, idx, &cur_ecb_points);
       mpcoll_store_desired_ecb_points(batch, idx, &stored_desired_ecb_points);

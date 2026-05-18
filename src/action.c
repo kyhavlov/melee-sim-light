@@ -10,6 +10,7 @@
 #include "buttons.h"
 #include "char_params.h"
 #include "dash_iasa.h"
+#include "escapeair_collision_owner.h"
 #include "input_axis.h"
 #include "locomotion.h"
 #include "motion_state_owners.h"
@@ -190,21 +191,17 @@ uint8_t escape_air_try_enter_from_air_locomotion(MslBatch* batch, const MslCommo
     //   ftCo_80099A58,ftCo_EscapeAir_Coll}
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_IASA
     // refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_inline
-    // Internal owner values:
-    // - 2: live JumpAerial -> EscapeAir soft-platform-stage provenance.
-    // - 3: live JumpAerial -> EscapeAir ordinary hard-floor provenance.
-    // Keep both distinct from replay-real seed owner 1 because rollout must preserve this hidden
-    // desired-bottom lifetime across sustained EscapeAir callbacks after the IASA entry frame,
-    // while FD hard-floor rows must not inherit soft-platform remap guards.
     batch->state.coll_desired_ecb_bottom_locked_owner[idx] =
-        action_stage_has_soft_platform_floor(stage_id) ? 2u : 3u;
+        msl_escapeair_locked_bottom_owner_for_live_jumpaerial_entry(
+            action_stage_has_soft_platform_floor(stage_id));
   } else if (source_is_jumpaerial) {
     // Other JumpAerial -> EscapeAir entries use the freshly loaded EscapeAir floor handoff. Clear
     // the runtime JumpAerial desired-bottom owner so platform-origin and zero-bottom air-dodges do
     // not inherit the narrower soft-platform pass-through path above. Already-seeded EscapeAir rows
     // bypass this entry callback and keep their explicit one-step seed lane.
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
-    batch->state.coll_desired_ecb_bottom_locked_owner[idx] = 0u;
+    batch->state.coll_desired_ecb_bottom_locked_owner[idx] =
+        (uint8_t)MSL_ESCAPEAIR_LOCKED_BOTTOM_OWNER_NONE;
   }
 
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_ESCAPE_AIR;
