@@ -24,3 +24,20 @@ def test_hitlist_ring_insertion_eviction_is_deterministic() -> None:
     expected14 = np.array([13, 14, *range(3, 13)], dtype=np.uint32)
     assert np.array_equal(ids14.astype(np.uint32), expected14)
 
+
+def test_hitlist_insert_cooldown_matches_lbcoll_type_switch() -> None:
+    import msl_binding
+
+    # lbColl_80008688 writes HitCapsule.x40_b4 only for the explicit refresh types. Fighter
+    # BODY/SHIELD/hitbox-contact inserts are type 0/1/3 and store x4=0, so they remain until the
+    # HitCapsule itself is cleared/copied instead of expiring on the hitbox rehit rate.
+    # refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
+    assert int(msl_binding.hitlist_insert_cd_demo(0, 7)) == 0
+    assert int(msl_binding.hitlist_insert_cd_demo(1, 7)) == 0
+    assert int(msl_binding.hitlist_insert_cd_demo(3, 7)) == 0
+
+    assert int(msl_binding.hitlist_insert_cd_demo(2, 7)) == 7
+    assert int(msl_binding.hitlist_insert_cd_demo(4, 7)) == 7
+    assert int(msl_binding.hitlist_insert_cd_demo(5, 7)) == 7
+    assert int(msl_binding.hitlist_insert_cd_demo(7, 7)) == 7
+    assert int(msl_binding.hitlist_insert_cd_demo(8, 7)) == 7

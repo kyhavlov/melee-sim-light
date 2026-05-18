@@ -236,10 +236,11 @@ static uint8_t hitlist_insert_list(MslHitlistVictimEntry* victims, uint8_t* ring
   }
 
   victims[insert_idx] = *key;
-  // Decomp: on insertion, always store the per-victim cooldown from HitCapsule.x40_b4 (cd_set).
-  // Refresh behavior (when already present) is type-dependent and handled above.
+  // lbColl_80008688 stores HitCapsule.x40_b4 only for the same type set that refreshes an existing
+  // victim entry. Fighter BODY/SHIELD/hitbox-contact inserts (types 0/1/3) write x4=0, so the
+  // victim remains present until the HitCapsule is cleared/copied instead of expiring on rehit rate.
   // refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
-  victims[insert_idx].cd = cd_set;
+  victims[insert_idx].cd = refresh_set ? cd_set : 0u;
 
   if (first_empty == cap) {
     uint8_t r = (uint8_t)(*ring + 1u);

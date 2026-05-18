@@ -6301,6 +6301,26 @@ static PyObject* msl_hitlist_ring_demo_py(PyObject* self, PyObject* args) {
   return ret;
 }
 
+static PyObject* msl_hitlist_insert_cd_demo_py(PyObject* self, PyObject* args) {
+  (void)self;
+  int type = 0;
+  int rehit_frames = 0;
+  if (!PyArg_ParseTuple(args, "ii", &type, &rehit_frames)) {
+    return NULL;
+  }
+  if (rehit_frames < 0) {
+    rehit_frames = 0;
+  }
+  if (rehit_frames > 255) {
+    rehit_frames = 255;
+  }
+
+  MslHitlistCapsule hit;
+  hitlist_capsule_clear(&hit);
+  hitlist_debug_insert_item_victims1(&hit, type, 1u, (uint8_t)rehit_frames);
+  return PyLong_FromLong((long)hit.victims_1[0].cd);
+}
+
 static PyMethodDef methods[] = {
     {"init", (PyCFunction)(void (*)(void))msl_init, METH_VARARGS | METH_KEYWORDS,
      "init(batch_size, num_players, ucf_enabled=?, ucf_cardinals_1_0_enabled=?) -> handle"},
@@ -6457,6 +6477,8 @@ static PyMethodDef methods[] = {
      "stage_match_flow_roles(stage_id) -> dict of runtime MSLSTG01 match-flow role data."},
     {"hitlist_ring_demo", msl_hitlist_ring_demo_py, METH_VARARGS,
      "hitlist_ring_demo(inserts) -> (ring, ids_u32[12]) (test-only)"},
+    {"hitlist_insert_cd_demo", msl_hitlist_insert_cd_demo_py, METH_VARARGS,
+     "hitlist_insert_cd_demo(type, rehit_frames) -> inserted victims_1 cooldown (test-only)"},
     {"debug_reset_pose_and_hitboxes_tables", msl_debug_reset_pose_and_hitboxes_tables_py,
      METH_NOARGS, "Reset pose+hitbox global tables (test-only)."},
     {"pose_points_world", msl_pose_points_world_py, METH_VARARGS,

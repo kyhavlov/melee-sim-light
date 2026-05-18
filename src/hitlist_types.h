@@ -48,7 +48,7 @@ typedef enum MslLbCollInsertType {
   // Fighter SHIELD hit insert (ftColl_80076CBC -> ftColl_80076808(..., type=1, ...) -> lbColl_80008688).
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
   MSL_LBCOLL_INSERT_FT_SHIELD = 1,
-  // Present in the decomp refresh sets; TODO: identify callsites and name precisely.
+  // Present in the decomp insert/refresh cooldown set; TODO: identify callsites and name precisely.
   // refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688 (case 2)
   // refs/melee/src/melee/lb/lbcollision.c::lbColl_80008820 (case 2)
   MSL_LBCOLL_INSERT_TODO_2 = 2,
@@ -58,11 +58,11 @@ typedef enum MslLbCollInsertType {
   // Item-vs-item clank insert (it_8026FE68 uses type=4 when hit->x41_b5 is set).
   // refs/melee/src/melee/it/itcoll.c::it_8026FE68
   MSL_LBCOLL_INSERT_IT_ITEM_CLANK_REFRESH = 4,
-  // Present in the decomp refresh sets; TODO: identify callsites and name precisely.
+  // Present in the decomp insert/refresh cooldown set; TODO: identify callsites and name precisely.
   // refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688 (case 5)
   // refs/melee/src/melee/lb/lbcollision.c::lbColl_80008820 (case 5)
   MSL_LBCOLL_INSERT_TODO_5 = 5,
-  // Present in the decomp refresh sets; TODO: identify callsites and name precisely.
+  // Present in the decomp insert/refresh cooldown set; TODO: identify callsites and name precisely.
   // refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688 (case 7)
   // refs/melee/src/melee/lb/lbcollision.c::lbColl_80008820 (case 7)
   MSL_LBCOLL_INSERT_TODO_7 = 7,
