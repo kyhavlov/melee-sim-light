@@ -20,6 +20,7 @@
 #include "hitlist.h"
 #include "item_article_params.h"
 #include "item_common_params.h"
+#include "item_reflect.h"
 #include "laser_params.h"
 #include "hurtcaps_tables.h"
 #include "motion_state_owners.h"
@@ -154,9 +155,6 @@ static inline void item_slot_clear(MslBatch* batch, size_t ii) {
   batch->state.item_pos_x[ii] = 0.0f;
   batch->state.item_pos_y[ii] = 0.0f;
   batch->state.item_damage[ii] = 0;
-  // Decomp default for non-reflected items: item->xC6C starts at identity.
-  // refs/melee/src/melee/it/item.c::Item_80269F14
-  batch->state.item_reflect_damage_mul[ii] = 1.0f;
   batch->state.item_timer[ii] = 0.0f;
   batch->state.item_hitlag[ii] = 0u;
   batch->state.item_spawn_id[ii] = 0;
@@ -164,13 +162,7 @@ static inline void item_slot_clear(MslBatch* batch, size_t ii) {
   batch->state.item_misc1[ii] = 0;
   batch->state.item_misc2[ii] = 0;
   batch->state.item_misc3[ii] = 0;
-  batch->state.item_pending_reflect_owner_port[ii] = 0xFFu;
-  batch->state.item_pending_reflect_instance_id[ii] = 0u;
-  batch->state.item_reflect_transfer_seed_port[ii] = 0xFFu;
-  batch->state.item_reflect_transfer_seed_iid[ii] = 0u;
-  batch->state.item_shield_bounce_seed_valid[ii] = 0u;
-  batch->state.item_shield_bounce_seed_vel_x[ii] = 0.0f;
-  batch->state.item_shield_bounce_seed_vel_y[ii] = 0.0f;
+  msl_item_reflect_clear_all_lanes(batch, ii);
   batch->state.item_hidden_body_hit_victim_port[ii] = 0xFFu;
   batch->state.item_hidden_body_hit_hurt_height[ii] = 0u;
   batch->state.item_hidden_callback_flags[ii] = 0u;
@@ -649,7 +641,7 @@ static void yoshi_shyguy_spawn_one(MslBatch* batch, int bi, int arg0, float pos_
   batch->state.item_pos_x[ii] = pos_x;
   batch->state.item_pos_y[ii] = pos_y;
   batch->state.item_damage[ii] = 0u;
-  batch->state.item_reflect_damage_mul[ii] = 1.0f;
+  msl_item_reflect_clear_all_lanes(batch, ii);
   batch->state.item_timer[ii] = 1400.0f;
   batch->state.item_hitlag[ii] = 0u;
   batch->state.item_spawn_id[ii] = items_next_spawn_id(batch, bi);
@@ -2638,32 +2630,6 @@ static inline uint8_t illusion_item_anim_step(MslBatch* batch, size_t ii, const 
   return 1u;
 }
 
-static inline float item_reflected_damage_lane(const MslBatch* batch, size_t item_idx,
-                                               float base_damage) {
-  if (batch == NULL || !(base_damage > 0.0f)) {
-    return base_damage;
-  }
-  // Decomp reflected-item damage lane is item-owned (`item->xC6C`), not owner-action-derived:
-  // - reflect overlap writes `item->xC6C = ReflectDesc.damage_mul`.
-  //   refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
-  // - apply path uses `(u32)(hit.damage * item->xC6C + 0.99f)`.
-  //   refs/melee/src/melee/it/item.c::Item_80269F14
-  //   refs/melee/src/melee/it/itcoll.c::it_80272460
-  float mul = batch->state.item_reflect_damage_mul[item_idx];
-  if (!(mul > 0.0f)) {
-    mul = 1.0f;
-  }
-  float tmp = base_damage * mul + 0.99f;
-  uint32_t dmg_i = 0u;
-  if (tmp > 0.0f) {
-    dmg_i = (uint32_t)tmp;
-  }
-  if (dmg_i == 0u) {
-    dmg_i = 1u;
-  }
-  return (float)dmg_i;
-}
-
 static inline void item_guard_reflect_apply_recharge(MslBatch* batch, size_t d_idx) {
   if (batch == NULL) {
     return;
@@ -2843,149 +2809,6 @@ static inline void item_guardreflect_apply_contact_drain(MslBatch* batch, size_t
   batch->state.shield_hp[d_idx] = hp;
 }
 
-static inline void item_apply_pending_powershield_reflect_speed(MslBatch* batch, size_t ii) {
-  if (batch == NULL) {
-    return;
-  }
-  const uint8_t pending_owner = batch->state.item_pending_reflect_owner_port[ii];
-  const uint16_t pending_iid = batch->state.item_pending_reflect_instance_id[ii];
-  const uint8_t pending_same_owner_speed =
-      (pending_owner < (uint8_t)batch->config.num_players && pending_iid != 0u &&
-       batch->state.item_owner[ii] == (int8_t)pending_owner &&
-       batch->state.item_instance_id[ii] == pending_iid)
-          ? 1u
-          : 0u;
-  if (pending_owner < (uint8_t)batch->config.num_players) {
-    batch->state.item_owner[ii] = (int8_t)pending_owner;
-    if (pending_iid != 0u) {
-      batch->state.item_instance_id[ii] = pending_iid;
-    }
-  }
-  batch->state.item_pending_reflect_owner_port[ii] = 0xFFu;
-  batch->state.item_pending_reflect_instance_id[ii] = 0u;
-  // Decomp ownership split:
-  // - overlap path can commit reflected orientation (`facing_dir` / angle lane) immediately,
-  // - velocity lane is consumed by item logic after reflect snapshot ownership transfer.
-  // refs/melee/src/melee/it/items/itfoxlaser.c::it_2725_Logic94_Reflected
-  // refs/melee/src/melee/it/item.c::Item_80269F14
-  const float vx = batch->state.item_vel_x[ii];
-  if (!(vx > 0.0f || vx < 0.0f)) {
-    return;
-  }
-  const float dir = batch->state.item_direction[ii];
-  const uint8_t pending_reflect =
-      (pending_same_owner_speed || (vx > 0.0f && dir < 0.0f) || (vx < 0.0f && dir > 0.0f)) ? 1u
-                                                                                           : 0u;
-  if (!pending_reflect) {
-    return;
-  }
-  // Fox/Falco laser reflected callback owner:
-  // - ftColl_80077464 snapshots ReflectDesc.x1C into item->xC70.
-  // - Item_80269F14 consumes the reflected callback before recomputing item HitCapsule damage.
-  // - itFoxLaser_Logic94_Reflected flips facing, resets scale, and adds pi to the laser angle; it
-  //   does not multiply item->xDD4_itemVar.foxlaser.speed by xC70. The next laser Anim callback
-  //   therefore rebuilds velocity with unchanged speed magnitude.
-  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
-  // refs/melee/src/melee/it/item.c::Item_80269F14
-  // refs/melee/src/melee/it/items/itfoxlaser.c::itFoxLaser_Logic94_Reflected
-  const float mul = 1.0f;
-  const float new_vx = -vx * mul;
-  const float new_vy = -batch->state.item_vel_y[ii] * mul;
-  batch->state.item_vel_x[ii] = new_vx;
-  batch->state.item_vel_y[ii] = new_vy;
-  batch->state.item_direction[ii] = (new_vx >= 0.0f) ? 1.0f : -1.0f;
-}
-
-static inline void item_apply_powershield_reflect_snapshot(MslBatch* batch, size_t ii,
-                                                           int reflector_port, float damage_mul) {
-  if (batch == NULL) {
-    return;
-  }
-  // Reflect snapshot ownership:
-  // - overlap writes owner/xDA8_short and multipliers to item-owned reflect snapshot.
-  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
-  // - item logic consumes that snapshot in Item_80269F14.
-  // refs/melee/src/melee/it/item.c::Item_80269F14
-  //
-  // Runtime model: capture pending transfer owner in hidden fixed-capacity state and commit in
-  // the next item pass (item_apply_pending_powershield_reflect_speed), matching snapshot->consume
-  // ordering above.
-  if (reflector_port >= 0 && reflector_port < (int)batch->config.num_players) {
-    const int bi = (int)(ii / (size_t)MSL_MAX_ITEMS);
-    const size_t reflector_idx = msl_idx_player(bi, reflector_port);
-    batch->state.item_pending_reflect_owner_port[ii] = (uint8_t)reflector_port;
-    batch->state.item_pending_reflect_instance_id[ii] = batch->state.instance_id[reflector_idx];
-  }
-
-  const float dmg_mul = (damage_mul > 0.0f) ? damage_mul : 1.0f;
-  // Decomp visual reflect lane flips facing/angle on overlap (`it_2725_Logic94_Reflected`) even when
-  // velocity update is consumed later by item logic (`Item_80269F14`).
-  // refs/melee/src/melee/it/items/itfoxlaser.c::it_2725_Logic94_Reflected
-  // refs/melee/src/melee/it/item.c::Item_80269F14
-  const float reflect_vx = -batch->state.item_vel_x[ii];
-  if (reflect_vx > 0.0f) {
-    batch->state.item_direction[ii] = 1.0f;
-  } else if (reflect_vx < 0.0f) {
-    batch->state.item_direction[ii] = -1.0f;
-  } else {
-    const float cur_dir = batch->state.item_direction[ii];
-    batch->state.item_direction[ii] = (cur_dir >= 0.0f) ? -1.0f : 1.0f;
-  }
-  // Keep damage ownership immediately item-owned; deferred speed apply is signaled by the
-  // reflected orientation lane (`item_direction`) and consumed in item_update_lasers().
-  //
-  // TODO(decomp/powershield-reflect-ownership-timing): transfer-frame xDA8_short
-  // (Slippi item.instance_id) remains seed-latched in this lane until the authoritative
-  // transfer ordering is extracted.
-  batch->state.item_reflect_damage_mul[ii] = dmg_mul;
-}
-
-static inline void item_commit_powershield_reflect_owner_snapshot(MslBatch* batch, size_t ii,
-                                                                  int reflector_port) {
-  if (batch == NULL || reflector_port < 0 || reflector_port >= (int)batch->config.num_players) {
-    return;
-  }
-  const int bi = (int)(ii / (size_t)MSL_MAX_ITEMS);
-  const size_t reflector_idx = msl_idx_player(bi, reflector_port);
-  batch->state.item_pending_reflect_owner_port[ii] = 0xFFu;
-  batch->state.item_pending_reflect_instance_id[ii] = 0u;
-  batch->state.item_owner[ii] = (int8_t)reflector_port;
-  batch->state.item_instance_id[ii] = batch->state.instance_id[reflector_idx];
-}
-
-static inline void item_commit_powershield_reflect_owner_snapshot_defer_speed(MslBatch* batch,
-                                                                              size_t ii,
-                                                                              int reflector_port) {
-  if (batch == NULL || reflector_port < 0 || reflector_port >= (int)batch->config.num_players) {
-    return;
-  }
-  const int bi = (int)(ii / (size_t)MSL_MAX_ITEMS);
-  const size_t reflector_idx = msl_idx_player(bi, reflector_port);
-  batch->state.item_owner[ii] = (int8_t)reflector_port;
-  batch->state.item_instance_id[ii] = batch->state.instance_id[reflector_idx];
-  batch->state.item_pending_reflect_owner_port[ii] = (uint8_t)reflector_port;
-  batch->state.item_pending_reflect_instance_id[ii] = batch->state.instance_id[reflector_idx];
-}
-
-static inline uint8_t item_reflect_transfer_flips_direction_now(const MslBatch* batch, size_t ii,
-                                                                size_t reflector_idx) {
-  if (batch == NULL) {
-    return 0u;
-  }
-  const float vx = batch->state.item_vel_x[ii];
-  if (!(vx > 0.0f || vx < 0.0f)) {
-    return 0u;
-  }
-  // Visual reflect orientation is item-callback owned (`it_2725_Logic94_Reflected`) and can lag
-  // the owner/xDA8 transfer from `Item_80269F14` after the laser has already crossed the fighter
-  // origin. Keep the same-frame direction flip on the still-approaching side; late crossed
-  // ReflectDesc transfers retain the current visual direction until the next item callback.
-  // refs/melee/src/melee/it/items/itfoxlaser.c::it_2725_Logic94_Reflected
-  // refs/melee/src/melee/it/item.c::Item_80269F14
-  return (((batch->state.item_pos_x[ii] - batch->state.pos_x[reflector_idx]) * vx) < 0.0f) ? 1u
-                                                                                           : 0u;
-}
-
 static inline void item_apply_shine_reflect_callback(MslBatch* batch, size_t ii,
                                                      size_t reflector_idx);
 
@@ -3012,24 +2835,11 @@ static inline void item_apply_seeded_reflect_transfer_after_collision(MslBatch* 
   const int bi = (int)(ii / (size_t)MSL_MAX_ITEMS);
   const size_t reflector_idx = msl_idx_player(bi, (int)seed_port);
   item_apply_shine_reflect_callback(batch, ii, reflector_idx);
-  if (batch->state.item_owner[ii] != (int8_t)seed_port &&
-      item_reflect_transfer_flips_direction_now(batch, ii, reflector_idx)) {
-    const float vx = batch->state.item_vel_x[ii];
-    if (vx > 0.0f) {
-      batch->state.item_direction[ii] = -1.0f;
-    } else if (vx < 0.0f) {
-      batch->state.item_direction[ii] = 1.0f;
-    }
-  }
-  batch->state.item_owner[ii] = (int8_t)seed_port;
-  batch->state.item_instance_id[ii] = seed_iid;
-
   const MslCommonParams* common = msl_common_params();
-  if (common != NULL && common->powershield_reflect_damage_mul > 0.0f) {
-    batch->state.item_reflect_damage_mul[ii] = common->powershield_reflect_damage_mul;
-  }
-  batch->state.item_pending_reflect_owner_port[ii] = 0xFFu;
-  batch->state.item_pending_reflect_instance_id[ii] = 0u;
+  const float damage_mul = (common != NULL && common->powershield_reflect_damage_mul > 0.0f)
+                               ? common->powershield_reflect_damage_mul
+                               : 1.0f;
+  msl_item_reflect_apply_seeded_transfer(batch, ii, seed_port, seed_iid, damage_mul);
 }
 
 static inline uint8_t item_guard_shield_bone_center_for_msid(const MslBatch* batch, size_t idx,
@@ -3474,7 +3284,7 @@ static uint8_t yoshi_shyguy_try_laser_item_hit(MslBatch* batch, int bi, int lase
             item_segment_segment_dist2(x0, y0, 0.0f, x, y, 0.0f, ax, ay, az, bx, by, bz);
         if (d2 <= rr * rr) {
           const float base_damage = (laser_state == 0u) ? lp->damage : lp->state1_damage;
-          const float damage = item_reflected_damage_lane(batch, laser_idx, base_damage);
+          const float damage = msl_item_reflect_damage_lane(batch, laser_idx, base_damage);
           yoshi_shyguy_apply_item_damage(batch, shy_idx, laser_idx, params, lp, laser_state,
                                          damage);
           item_slot_clear(batch, laser_idx);
@@ -3497,7 +3307,7 @@ static uint8_t yoshi_shyguy_try_laser_item_hit(MslBatch* batch, int bi, int lase
           // refs/melee/src/melee/it/itcoll.c::{it_802706D0,it_80270E30}
           // refs/melee/src/melee/it/items/itheiho.c::it_802D8EC8
           const float base_damage = (laser_state == 0u) ? lp->damage : lp->state1_damage;
-          const float damage = item_reflected_damage_lane(batch, laser_idx, base_damage);
+          const float damage = msl_item_reflect_damage_lane(batch, laser_idx, base_damage);
           yoshi_shyguy_apply_item_damage(batch, shy_idx, laser_idx, params, lp, laser_state,
                                          damage);
           item_slot_clear(batch, laser_idx);
@@ -3513,7 +3323,7 @@ static uint8_t yoshi_shyguy_try_laser_item_hit(MslBatch* batch, int bi, int lase
             item_segment_segment_dist2(x0, y0, 0.0f, x, y, 0.0f, ax, ay, az, bx, by, bz);
         if (d2 <= rr * rr) {
           const float base_damage = (laser_state == 0u) ? lp->damage : lp->state1_damage;
-          const float damage = item_reflected_damage_lane(batch, laser_idx, base_damage);
+          const float damage = msl_item_reflect_damage_lane(batch, laser_idx, base_damage);
           yoshi_shyguy_apply_item_damage(batch, shy_idx, laser_idx, params, lp, laser_state,
                                          damage);
           item_slot_clear(batch, laser_idx);
@@ -3648,29 +3458,6 @@ static inline uint8_t laser_try_shield_bounce_velocity_from_segment(
   *out_vx = rvx;
   *out_vy = rvy;
   return 1u;
-}
-
-static inline void item_apply_reflect_transfer(MslBatch* batch, size_t ii, size_t reflector_idx,
-                                               int reflector_port, float damage_mul,
-                                               float speed_mul) {
-  if (batch == NULL) {
-    return;
-  }
-  batch->state.item_misc2[ii] = 0u;
-  batch->state.item_misc3[ii] = 0u;
-  batch->state.item_owner[ii] = (int8_t)reflector_port;
-  // Slippi item.instance_id is item->xDA8_short; reflect apply rewrites it from the reflecting
-  // fighter snapshot (fp->x2088 / instance_id).
-  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
-  // refs/melee/src/melee/it/item.c::Item_80269F14
-  batch->state.item_instance_id[ii] = batch->state.instance_id[reflector_idx];
-  batch->state.item_reflect_damage_mul[ii] = (damage_mul > 0.0f) ? damage_mul : 1.0f;
-  const float mul = (speed_mul > 0.0f) ? speed_mul : 1.0f;
-  const float new_vx = -batch->state.item_vel_x[ii] * mul;
-  const float new_vy = -batch->state.item_vel_y[ii] * mul;
-  batch->state.item_vel_x[ii] = new_vx;
-  batch->state.item_vel_y[ii] = new_vy;
-  batch->state.item_direction[ii] = (new_vx >= 0.0f) ? 1.0f : -1.0f;
 }
 
 static inline uint8_t item_reflector_owner_is_shine_callback_state(uint16_t action_id) {
@@ -3808,8 +3595,8 @@ static inline uint8_t item_try_shine_reflect_contact(MslBatch* batch, size_t ii,
   // - ftColl_80077464 writes both multipliers to item reflect snapshot (`item->xC6C` et al).
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_CreateReflectHit,ftColl_80077464}
   item_apply_shine_reflect_callback(batch, ii, reflector_idx);
-  item_apply_reflect_transfer(batch, ii, reflector_idx, reflector_port, rch->reflector_damage_mul,
-                              rch->reflector_speed_mul);
+  msl_item_reflect_apply_immediate_transfer(batch, ii, reflector_idx, reflector_port,
+                                            rch->reflector_damage_mul, rch->reflector_speed_mul);
   return 1u;
 }
 
@@ -4477,7 +4264,7 @@ static void illusion_items_update_and_collide(MslBatch* batch, int bi) {
           if (item_guardreflect_active_timer_shield_contact_needs_drain(batch, d_idx)) {
             item_guardreflect_apply_contact_drain(batch, d_idx);
           }
-          const float dmg = item_reflected_damage_lane(batch, ii, hp.damage);
+          const float dmg = msl_item_reflect_damage_lane(batch, ii, hp.damage);
           int8_t shield_damage = hp.shield_damage;
           // Data extraction uses -128 as the unset sentinel for shield-damage delta in this lane.
           if (shield_damage == (int8_t)MSL_ILLUSION_SHIELD_DAMAGE_UNSET) {
@@ -4527,7 +4314,7 @@ static void illusion_items_update_and_collide(MslBatch* batch, int bi) {
           item_guard_reflect_body_hit_consumes_shield_state(batch, d_idx);
       const uint8_t defender_guardon_reflect_body_undo_recharge =
           item_guardon_reflect_body_hit_undoes_action_recharge(batch, d_idx);
-      const float dmg = item_reflected_damage_lane(batch, ii, hp.damage);
+      const float dmg = msl_item_reflect_damage_lane(batch, ii, hp.damage);
       const uint8_t steady_illusion_item_facing_owner =
           (chp->illusion_item_lifetime_state01_frames >= 2u &&
            batch->state.item_timer[ii] <=
@@ -4611,7 +4398,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
     // Blaster shots (itfoxlaser.c) can be spawned with msid 0 or 1:
     // refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C6A4 and ::it_8029C6CC
     const uint8_t laser_state = (batch->state.item_state[ii] != 0) ? 1u : 0u;
-    item_apply_pending_powershield_reflect_speed(batch, ii);
+    msl_item_reflect_apply_pending_laser_callback(batch, ii);
     const int owner = (int)batch->state.item_owner[ii];
 
     const uint8_t hidden_victim = batch->state.item_hidden_body_hit_victim_port[ii];
@@ -4627,7 +4414,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077C60
       // refs/melee/src/melee/it/item.c::{OnGiveDamageThink,Item_8026A294}
       float dmg = (laser_state == 0u) ? lp->damage : lp->state1_damage;
-      dmg = item_reflected_damage_lane(batch, ii, dmg);
+      dmg = msl_item_reflect_damage_lane(batch, ii, dmg);
       const uint16_t angle = (laser_state == 0u) ? lp->angle : lp->state1_angle;
       const uint16_t kbg = (laser_state == 0u) ? lp->kbg : lp->state1_kbg;
       const uint16_t wsk = (laser_state == 0u) ? lp->wsk : lp->state1_wsk;
@@ -4718,11 +4505,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
       // refs/melee/src/melee/it/item.c::{Item_8026A294,Item_80269F14}
       item_apply_seeded_reflect_transfer_after_collision(batch, ii);
-      batch->state.item_reflect_transfer_seed_port[ii] = 0xFFu;
-      batch->state.item_reflect_transfer_seed_iid[ii] = 0u;
-      batch->state.item_shield_bounce_seed_valid[ii] = 0u;
-      batch->state.item_shield_bounce_seed_vel_x[ii] = 0.0f;
-      batch->state.item_shield_bounce_seed_vel_y[ii] = 0.0f;
+      msl_item_reflect_clear_seed_lanes(batch, ii);
       batch->state.item_hidden_callback_flags[ii] = 0u;
       if (stage_line_hit != 0u) {
         if (batch->state.item_timer[ii] > 1.0f) {
@@ -5558,7 +5341,8 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
             // refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C504,it_8029C4D4}
             continue;
           }
-          if (batch->state.item_reflect_transfer_seed_port[ii] == 0xFEu) {
+          if (batch->state.item_reflect_transfer_seed_port[ii] ==
+              (uint8_t)MSL_ITEM_REFLECT_KNOWN_NONE_PORT) {
             // Replay seed knows this post-frame item has no pending ftColl_80077464 ->
             // Item_80269F14 owner transfer. Keep the collision on the shield/HitShield owner
             // rather than re-inventing a broad visible reflect overlap from Slippi state.
@@ -5811,14 +5595,14 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
             // - overlap writes owner/xDA8_short and reflect multipliers to item snapshot.
             //   refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
             // - item logic consumes snapshot in Item_80269F14; speed update may be deferred to that
-            //   pass via item_apply_pending_powershield_reflect_speed().
+            //   pass via msl_item_reflect_apply_pending_laser_callback().
             //   refs/melee/src/melee/it/item.c::Item_80269F14
             const float dmg_mul = (c != NULL && c->powershield_reflect_damage_mul > 0.0f)
                                       ? c->powershield_reflect_damage_mul
                                       : 1.0f;
             const uint8_t aged_reflect_preserve_direction =
                 (aged_reflect_owner_commit &&
-                 !item_reflect_transfer_flips_direction_now(batch, ii, d_idx))
+                 !msl_item_reflect_should_flip_direction_now(batch, ii, d_idx))
                     ? 1u
                     : 0u;
             const float aged_reflect_old_direction = batch->state.item_direction[ii];
@@ -5836,10 +5620,10 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_800939B4,ftCo_80093A50}
               // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
               // refs/melee/src/melee/it/item.c::Item_80269F14
-              batch->state.item_reflect_damage_mul[ii] = dmg_mul;
-              item_commit_powershield_reflect_owner_snapshot_defer_speed(batch, ii, def);
+              msl_item_reflect_set_damage_mul(batch, ii, dmg_mul);
+              msl_item_reflect_commit_owner_snapshot_defer_speed(batch, ii, def);
             } else {
-              item_apply_powershield_reflect_snapshot(batch, ii, def, dmg_mul);
+              msl_item_reflect_stage_snapshot_defer_velocity(batch, ii, def, dmg_mul);
               if (aged_reflect_preserve_direction) {
                 batch->state.item_direction[ii] = aged_reflect_old_direction;
               }
@@ -5857,7 +5641,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
               // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
               // refs/melee/src/melee/it/item.c::Item_80269F14
               // refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C504,it_8029C4D4}
-              item_commit_powershield_reflect_owner_snapshot(batch, ii, def);
+              msl_item_reflect_commit_owner_snapshot(batch, ii, def);
             } else if (guardon_followup_reflect_owner_commit) {
               // GuardOn follow-up powershield reflect owner/xDA8 commit:
               // - ftCo_8009388C can enter GuardReflect from GuardOn and install ReflectDesc in the
@@ -5867,7 +5651,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_IASA,ftCo_8009388C,ftCo_8009370C}
               // refs/melee/src/melee/ft/ftcoll.c::{ftColl_CreateReflectHit,ftColl_80077464}
               // refs/melee/src/melee/it/item.c::Item_80269F14
-              item_commit_powershield_reflect_owner_snapshot(batch, ii, def);
+              msl_item_reflect_commit_owner_snapshot(batch, ii, def);
             } else if (aged_reflect_owner_commit) {
               // Aged powershield reflect owner/xDA8 commit:
               // - ftColl_80077464 writes owner/xDA8 to the item reflect snapshot when the laser
@@ -5879,7 +5663,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_8009370C,ftCo_80093BC0}
               // refs/melee/src/melee/ft/ftcoll.c::{ftColl_CreateReflectHit,ftColl_80077464}
               // refs/melee/src/melee/it/item.c::{Item_80269F14,Item_80269DC8}
-              item_commit_powershield_reflect_owner_snapshot(batch, ii, def);
+              msl_item_reflect_commit_owner_snapshot(batch, ii, def);
             }
             // TODO(decomp/powershield-reflect-ownership-timing): transfer-frame xDA8_short
             // (Slippi item.instance_id) is intentionally left seed-latched in this lane until the
@@ -5984,7 +5768,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
             item_guardreflect_apply_contact_drain(batch, d_idx);
           }
           float dmg = (laser_state == 0u) ? lp->damage : lp->state1_damage;
-          dmg = item_reflected_damage_lane(batch, ii, dmg);
+          dmg = msl_item_reflect_damage_lane(batch, ii, dmg);
           const int8_t shd = (laser_state == 0u) ? lp->shield_damage : lp->state1_shield_damage;
           const uint8_t element = (laser_state == 0u) ? lp->element : lp->state1_element;
           combat_apply_item_shield_hit(batch, bi, owner, def, batch->state.item_attack_id[ii],
@@ -6528,7 +6312,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
         // refs/melee/src/melee/it/itcoll.c::it_80272460
         float dmg = lp->damage;
-        dmg = item_reflected_damage_lane(batch, ii, dmg);
+        dmg = msl_item_reflect_damage_lane(batch, ii, dmg);
         combat_apply_item_phantom_hit(batch, bi, owner, def, batch->state.item_attack_id[ii],
                                       batch->state.item_instance_id[ii], dmg, lp->element);
         const uint16_t def_iid_post = batch->state.instance_id[d_idx];
@@ -6657,7 +6441,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       // - ftColl_80076CBC (getEnvDmg pattern)
       // refs/melee/src/melee/ft/fighter.c and refs/melee/src/melee/ft/ftcoll.c
       float dmg = (laser_state == 0u) ? lp->damage : lp->state1_damage;
-      dmg = item_reflected_damage_lane(batch, ii, dmg);
+      dmg = msl_item_reflect_damage_lane(batch, ii, dmg);
       const uint16_t angle = (laser_state == 0u) ? lp->angle : lp->state1_angle;
       const uint16_t kbg = (laser_state == 0u) ? lp->kbg : lp->state1_kbg;
       const uint16_t wsk = (laser_state == 0u) ? lp->wsk : lp->state1_wsk;
@@ -6731,11 +6515,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         continue;
       }
       item_apply_seeded_reflect_transfer_after_collision(batch, ii);
-      batch->state.item_reflect_transfer_seed_port[ii] = 0xFFu;
-      batch->state.item_reflect_transfer_seed_iid[ii] = 0u;
-      batch->state.item_shield_bounce_seed_valid[ii] = 0u;
-      batch->state.item_shield_bounce_seed_vel_x[ii] = 0.0f;
-      batch->state.item_shield_bounce_seed_vel_y[ii] = 0.0f;
+      msl_item_reflect_clear_seed_lanes(batch, ii);
       batch->state.item_hidden_callback_flags[ii] = 0u;
     }
   }

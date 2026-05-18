@@ -4520,6 +4520,12 @@ Fox/Falco special-owner split (2026-04-17):
       through to `Item_80269DC8` HitShield destruction without staging a reflected owner. `MAJ:192 ->
       202` and `DCC:353` cover the HitShield side; `GAT:1287` and `GAT:2275` cover the keepalive
       side.
+    - Runtime item reflect state is centralized in `src/item_reflect.h`: the reflected damage
+      multiplier (`item->xC6C`), pending reflected owner/xDA8 snapshot (`item->xC64/xC8C`), seeded
+      transfer lane, ShieldBounced seed lane, and Fox/Falco laser reflected velocity/direction
+      callback all flow through one fixed-capacity substrate. Guard/shield/laser code may decide
+      whether `ftColl_80077464`, `ftColl_80077688`, `Item_80269F14`, or `Item_80269DC8` owns the
+      episode, but it must not hand-write the low-level reflect snapshot fields locally.
     - Late Dash/locomotion -> GuardReflect snapshots with seeded x14/x18 but no submotion can also
       hand to `Item_80269DC8` HitShield before the final x14 tick when the laser overlaps the
       `ReflectDesc.x14_size` sphere. Rows outside that source/data-backed lane stay on the

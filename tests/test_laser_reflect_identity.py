@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import subprocess
 import struct
+import textwrap
 from pathlib import Path
 
 import numpy as np
@@ -21,6 +23,146 @@ ACT_GUARD_REFLECT = 0x00B6
 CHAR_FOX = 1
 CHAR_FALCO = 22
 STAGE_FD = 32
+
+
+def test_item_reflect_episode_helper_owns_snapshot_damage_and_seed_lanes(tmp_path: Path) -> None:
+    root = Path(__file__).resolve().parents[1]
+    source = tmp_path / "item_reflect_episode_test.c"
+    exe = tmp_path / "item_reflect_episode_test"
+    source.write_text(
+        textwrap.dedent(
+            """
+            #include <assert.h>
+            #include <math.h>
+            #include <string.h>
+
+            #include "item_reflect.h"
+
+            static MslBatch batch;
+            static int8_t item_owner[MSL_MAX_ITEMS];
+            static uint16_t item_instance_id[MSL_MAX_ITEMS];
+            static float item_reflect_damage_mul[MSL_MAX_ITEMS];
+            static uint8_t item_pending_reflect_owner_port[MSL_MAX_ITEMS];
+            static uint16_t item_pending_reflect_instance_id[MSL_MAX_ITEMS];
+            static uint8_t item_reflect_transfer_seed_port[MSL_MAX_ITEMS];
+            static uint16_t item_reflect_transfer_seed_iid[MSL_MAX_ITEMS];
+            static uint8_t item_shield_bounce_seed_valid[MSL_MAX_ITEMS];
+            static float item_shield_bounce_seed_vel_x[MSL_MAX_ITEMS];
+            static float item_shield_bounce_seed_vel_y[MSL_MAX_ITEMS];
+            static float item_vel_x[MSL_MAX_ITEMS];
+            static float item_vel_y[MSL_MAX_ITEMS];
+            static float item_pos_x[MSL_MAX_ITEMS];
+            static float item_direction[MSL_MAX_ITEMS];
+            static uint8_t item_misc2[MSL_MAX_ITEMS];
+            static uint8_t item_misc3[MSL_MAX_ITEMS];
+            static uint16_t instance_id[MSL_MAX_PLAYERS];
+            static float pos_x[MSL_MAX_PLAYERS];
+
+            static int almost(float a, float b) {
+              return fabsf(a - b) < 0.00001f;
+            }
+
+            static void bind_state(void) {
+              memset(&batch, 0, sizeof(batch));
+              batch.config.num_players = 2;
+              batch.state.item_owner = item_owner;
+              batch.state.item_instance_id = item_instance_id;
+              batch.state.item_reflect_damage_mul = item_reflect_damage_mul;
+              batch.state.item_pending_reflect_owner_port = item_pending_reflect_owner_port;
+              batch.state.item_pending_reflect_instance_id = item_pending_reflect_instance_id;
+              batch.state.item_reflect_transfer_seed_port = item_reflect_transfer_seed_port;
+              batch.state.item_reflect_transfer_seed_iid = item_reflect_transfer_seed_iid;
+              batch.state.item_shield_bounce_seed_valid = item_shield_bounce_seed_valid;
+              batch.state.item_shield_bounce_seed_vel_x = item_shield_bounce_seed_vel_x;
+              batch.state.item_shield_bounce_seed_vel_y = item_shield_bounce_seed_vel_y;
+              batch.state.item_vel_x = item_vel_x;
+              batch.state.item_vel_y = item_vel_y;
+              batch.state.item_pos_x = item_pos_x;
+              batch.state.item_direction = item_direction;
+              batch.state.item_misc2 = item_misc2;
+              batch.state.item_misc3 = item_misc3;
+              batch.state.instance_id = instance_id;
+              batch.state.pos_x = pos_x;
+            }
+
+            int main(void) {
+              bind_state();
+              instance_id[1] = 222u;
+
+              msl_item_reflect_clear_all_lanes(&batch, 0u);
+              assert(almost(item_reflect_damage_mul[0], 1.0f));
+              assert(item_pending_reflect_owner_port[0] == MSL_ITEM_REFLECT_NO_PORT);
+              assert(item_reflect_transfer_seed_port[0] == MSL_ITEM_REFLECT_NO_PORT);
+              assert(item_shield_bounce_seed_valid[0] == 0u);
+
+              msl_item_reflect_set_damage_mul(&batch, 0u, 0.5f);
+              assert(almost(msl_item_reflect_damage_lane(&batch, 0u, 3.0f), 2.0f));
+
+              item_owner[0] = 0;
+              item_instance_id[0] = 111u;
+              item_vel_x[0] = 5.0f;
+              item_vel_y[0] = 1.0f;
+              item_direction[0] = 1.0f;
+              msl_item_reflect_stage_snapshot_defer_velocity(&batch, 0u, 1, 0.5f);
+              assert(item_owner[0] == 0);
+              assert(item_instance_id[0] == 111u);
+              assert(item_pending_reflect_owner_port[0] == 1u);
+              assert(item_pending_reflect_instance_id[0] == 222u);
+              assert(almost(item_direction[0], -1.0f));
+              assert(almost(item_reflect_damage_mul[0], 0.5f));
+
+              msl_item_reflect_apply_pending_laser_callback(&batch, 0u);
+              assert(item_owner[0] == 1);
+              assert(item_instance_id[0] == 222u);
+              assert(item_pending_reflect_owner_port[0] == MSL_ITEM_REFLECT_NO_PORT);
+              assert(almost(item_vel_x[0], -5.0f));
+              assert(almost(item_vel_y[0], -1.0f));
+
+              item_owner[0] = 0;
+              item_instance_id[0] = 111u;
+              item_vel_x[0] = 4.0f;
+              item_vel_y[0] = -2.0f;
+              item_direction[0] = 1.0f;
+              msl_item_reflect_apply_immediate_transfer(&batch, 0u, 1u, 1, 0.5f, 2.0f);
+              assert(item_owner[0] == 1);
+              assert(item_instance_id[0] == 222u);
+              assert(almost(item_vel_x[0], -8.0f));
+              assert(almost(item_vel_y[0], 4.0f));
+              assert(almost(item_direction[0], -1.0f));
+
+              item_owner[0] = 0;
+              item_vel_x[0] = 3.0f;
+              item_pos_x[0] = -10.0f;
+              pos_x[1] = 0.0f;
+              msl_item_reflect_apply_seeded_transfer(&batch, 0u, 1u, 333u, 0.25f);
+              assert(item_owner[0] == 1);
+              assert(item_instance_id[0] == 333u);
+              assert(almost(item_direction[0], -1.0f));
+              assert(almost(item_reflect_damage_mul[0], 0.25f));
+
+              item_reflect_transfer_seed_port[0] = 1u;
+              item_reflect_transfer_seed_iid[0] = 333u;
+              item_shield_bounce_seed_valid[0] = 1u;
+              item_shield_bounce_seed_vel_x[0] = 1.0f;
+              item_shield_bounce_seed_vel_y[0] = 2.0f;
+              msl_item_reflect_clear_seed_lanes(&batch, 0u);
+              assert(item_reflect_transfer_seed_port[0] == MSL_ITEM_REFLECT_NO_PORT);
+              assert(item_reflect_transfer_seed_iid[0] == 0u);
+              assert(item_shield_bounce_seed_valid[0] == 0u);
+              assert(almost(item_shield_bounce_seed_vel_x[0], 0.0f));
+              assert(almost(item_shield_bounce_seed_vel_y[0], 0.0f));
+
+              return 0;
+            }
+            """
+        ),
+        encoding="utf-8",
+    )
+    subprocess.run(
+        ["cc", "-std=c11", "-I", str(root / "src"), str(source), "-lm", "-o", str(exe)],
+        check=True,
+    )
+    subprocess.run([str(exe)], check=True)
 
 
 def _common_attr(name: str) -> float:
