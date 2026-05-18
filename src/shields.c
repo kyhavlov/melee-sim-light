@@ -9,6 +9,7 @@
 #include "buttons.h"
 #include "char_params.h"
 #include "common_params.h"
+#include "guard_lifecycle.h"
 #include "msl_math.h"
 #include "shield_tilt_table.h"
 
@@ -42,10 +43,6 @@ static inline float trigger_unit_from_input(uint16_t buttons, uint8_t l, uint8_t
   return trigger_u8_to_unit(m);
 }
 
-static inline uint8_t is_shield_active_action(uint16_t a) {
-  return msl_action_is_live_shield_family(a);
-}
-
 static inline uint16_t clamp_u16(uint16_t x, uint16_t lo, uint16_t hi) {
   if (x < lo) {
     return lo;
@@ -74,28 +71,6 @@ static inline float normalize_angle_0(float deg) {
     deg += 360.0f;
   }
   return deg;
-}
-
-static inline uint8_t is_guard_tilt_action(uint16_t a) {
-  switch (a) {
-    case MSL_ACT_GUARD_ON:
-    case MSL_ACT_GUARD:
-    case MSL_ACT_GUARD_REFLECT:
-      return 1;
-    default:
-      return 0;
-  }
-}
-
-static inline uint8_t guard_reflect_entry_uses_guardon_pose_source(uint16_t action_id) {
-  // Narrow proven source boundary: Dash/Landing -> GuardReflect enter through ftCo_80091A4C and
-  // can use the immediate GuardOn current-pose ShieldDesc lane. Walk -> GuardReflect has a
-  // replay-real ShieldBounced keepalive control and must remain on the normal descriptor source
-  // until its callback phase is separately proven.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_IASA
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_800939B4}
-  return (action_id == (uint16_t)MSL_ACT_DASH || action_id == (uint16_t)MSL_ACT_LANDING) ? 1u : 0u;
 }
 
 static inline float sanitize_lightshield_amount(float light) {
@@ -229,7 +204,6 @@ void shields_refresh(MslBatch* batch) {
   // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
   enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
   enum { MSL_STATE_FLAGS_221B_INDEX = 2 };
-  enum { MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE = 0x80 };
 
   // Shield bubble size follows ftCo_Guard.c's inlineB0:
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c:172-190.
@@ -259,7 +233,8 @@ void shields_refresh(MslBatch* batch) {
       float sr = 0.0f;
 
       const uint8_t stocks = batch->state.stocks[idx];
-      if (stocks != 0 && is_shield_active_action(batch->state.action_id[idx]) &&
+      if (stocks != 0 &&
+          msl_guard_lifecycle_action_has_shield_callback(batch->state.action_id[idx]) &&
           batch->state.shield_hp[idx] > 0.0f && c->start_shield_health > 0.0f) {
         const MslCharParams* ca = msl_char_params(batch->state.char_id[idx]);
         if (ca != NULL) {
@@ -313,7 +288,7 @@ void shields_refresh(MslBatch* batch) {
             batch->state.guard_tilt_x4[idx] = 0.0f;
           }
 
-          if (is_guard_tilt_action(batch->state.action_id[idx])) {
+          if (msl_guard_lifecycle_action_updates_tilt(batch->state.action_id[idx])) {
             const float x = stick_x_unit * facing_dir;
             const float y = stick_y_unit;
 
@@ -355,7 +330,8 @@ void shields_refresh(MslBatch* batch) {
                 (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_ON &&
                  batch->state.animation_index[idx] == UINT32_MAX &&
                  batch->state.action_frame[idx] < 0 &&
-                 !is_shield_active_action(batch->state.seed_prev_action_id[idx]) &&
+                 !msl_guard_lifecycle_action_has_shield_callback(
+                     batch->state.seed_prev_action_id[idx]) &&
                  tv.guard_on_xyz != NULL && tv.guard_on_frame_count > 0u)
                     ? 1u
                     : 0u;
@@ -364,7 +340,7 @@ void shields_refresh(MslBatch* batch) {
                 (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
                  batch->state.animation_index[idx] == UINT32_MAX &&
                  batch->state.action_frame[idx] < 0 &&
-                 guard_reflect_entry_uses_guardon_pose_source(guard_reflect_prev_action) &&
+                 msl_guard_reflect_entry_uses_guardon_pose_source(guard_reflect_prev_action) &&
                  guard_reflect_prev_action != (uint16_t)MSL_ACT_GUARD_ON &&
                  guard_reflect_prev_action != (uint16_t)MSL_ACT_GUARD &&
                  guard_reflect_prev_action != (uint16_t)MSL_ACT_GUARD_REFLECT &&
@@ -451,7 +427,7 @@ void shields_refresh(MslBatch* batch) {
           const float trig =
               trigger_unit_from_input(batch->state.input_buttons[idx], batch->state.input_l[idx],
                                       batch->state.input_r[idx]);
-          if (is_guard_tilt_action(batch->state.action_id[idx])) {
+          if (msl_guard_lifecycle_action_updates_tilt(batch->state.action_id[idx])) {
             // Decomp owner: `ftCo_800925A4` snapshots `fp->lightshield_amount` into
             // `mv.co.guard.x2C`, then only overwrites it when the current trigger is above the
             // shield deadzone. Released-trigger Guard/GuardOn/GuardReflect frames therefore keep
@@ -529,29 +505,29 @@ void shields_refresh(MslBatch* batch) {
 
       // Always clear when the shield is broken / absent (decomp clears x221B_b0 on break).
       if (!(batch->state.stocks[idx] != 0 && batch->state.shield_hp[idx] > 0.0f)) {
-        f &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE;
+        f &= (uint8_t) ~(uint8_t)MSL_GUARD_STATE_FLAGS_221B_IS_SHIELD_ACTIVE;
       } else if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_ON) {
         // GuardOn entry path creates shield desc via ftCo_80092450 before GuardOn motion state setup.
         // Keep fp+0x221B_b0 ownership aligned on GuardOn entry even when this frame has no resolved
         // shield bubble radius sample yet.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092450
         // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B1B8
-        f |= (uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE;
+        f |= (uint8_t)MSL_GUARD_STATE_FLAGS_221B_IS_SHIELD_ACTIVE;
       } else if (entered_guard_reflect) {
         const uint16_t prev_a = batch->state.prev_action_id[idx];
         if (prev_a == (uint16_t)MSL_ACT_GUARD_ON) {
           // GuardOn_IASA powershield path (ftCo_8009388C): clear on entry.
-          f &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE;
+          f &= (uint8_t) ~(uint8_t)MSL_GUARD_STATE_FLAGS_221B_IS_SHIELD_ACTIVE;
         } else {
           // Locomotion guard-check powershield path (ftCo_80093A50 -> ftCo_80092450): set on entry.
-          f |= (uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE;
+          f |= (uint8_t)MSL_GUARD_STATE_FLAGS_221B_IS_SHIELD_ACTIVE;
         }
       } else if (guard_reflect_timer_active) {
         // Preserve.
       } else if (sr > 0.0f) {
-        f |= (uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE;
+        f |= (uint8_t)MSL_GUARD_STATE_FLAGS_221B_IS_SHIELD_ACTIVE;
       } else {
-        f &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE;
+        f &= (uint8_t) ~(uint8_t)MSL_GUARD_STATE_FLAGS_221B_IS_SHIELD_ACTIVE;
       }
       batch->state.state_flags[flags_i] = f;
     }

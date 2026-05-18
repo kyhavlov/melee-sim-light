@@ -22,6 +22,7 @@
 #include "shine.h"
 #include "ledge.h"
 #include "grab_flow.h"
+#include "guard_lifecycle.h"
 #include "throw_flow.h"
 #include "stage_collision.h"
 
@@ -554,75 +555,6 @@ void escape_update_grounded(MslBatch* batch, const MslCommonParams* c, const Msl
 // Guard.c
 // --------
 
-static inline uint8_t is_shield_active_action(uint16_t a) {
-  return msl_action_is_live_shield_family(a);
-}
-
-static inline uint8_t guard_reflect_timer_x14_init(const MslCommonParams* c) {
-  // Decomp: GuardReflect reflect window uses p_ftCommonData->x2A4 frames.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093A50 (mv.co.guard.x14 = x2A4)
-  //
-  // Decomp: timer ticks down each GuardReflect_Anim call and expires when it drops below 0:
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0
-  //
-  // Seed/state representation uses a +1 bias so we can expire at 0 without negative values.
-  if (c == NULL) {
-    return 0;
-  }
-  uint16_t t = (uint16_t)c->powershield_reflect_frames;
-  t = (uint16_t)(t + 1u);
-  if (t > 255u) {
-    t = 255u;
-  }
-  return (uint8_t)t;
-}
-
-static inline uint8_t guard_reflect_timer_x18_init(const MslCommonParams* c) {
-  // Decomp: GuardReflect powershield-active window uses p_ftCommonData->x2B4 frames.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093A50 (mv.co.guard.x18 = x2B4)
-  //
-  // Decomp: timer ticks down in ftCo_80093BC0 and x221C_b2 clears when it drops below 0.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0
-  //
-  // Seed/state representation uses a +1 bias so we can expire at 0 without negative values.
-  if (c == NULL) {
-    return 0;
-  }
-  uint16_t t = (uint16_t)c->powershield_reflect_total_frames;
-  t = (uint16_t)(t + 1u);
-  if (t > 255u) {
-    t = 255u;
-  }
-  return (uint8_t)t;
-}
-
-static inline uint8_t guard_x10_init_u8(const MslCommonParams* c) {
-  // Decomp: mv.co.guard.x10 is initialized from p_ftCommonData->x268 on GuardOn/GuardReflect entry.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_800921DC
-  //
-  // Runtime representation note:
-  // This sim stores shield states on the Slippi no-submotion post-frame lane (`animation_index=-1`,
-  // negative action_frame). The next replay-visible GuardOn snapshot after entry carries the value
-  // observed after the first ftCo_800925A4 owner tick. Seed/runtime therefore store the same
-  // remaining-frame lane by subtracting that first owner tick from the entry constant; release
-  // gates still use the pre-decrement value within each subsequent frame.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_800921DC,ftCo_800925A4,ftCo_GuardOn_Anim}
-  if (c == NULL) {
-    return 0;
-  }
-  if (!(c->guard_x10_init_frames > 0.0f)) {
-    return 0;
-  }
-  uint16_t t = (uint16_t)c->guard_x10_init_frames;
-  if (t > 0u) {
-    t = (uint16_t)(t - 1u);
-  }
-  if (t > 255u) {
-    t = 255u;
-  }
-  return (uint8_t)t;
-}
-
 static inline void enter_guard_reflect_common_setup(MslBatch* batch, const MslCommonParams* c,
                                                     size_t idx) {
   if (batch == NULL) {
@@ -632,11 +564,11 @@ static inline void enter_guard_reflect_common_setup(MslBatch* batch, const MslCo
   // Slippi post-frame `animation_index` is frequently -1 for shield states in our datasets.
   // Keep this consistent with replay seeds/refs so validation compares cleanly.
   batch->state.animation_index[idx] = 0xFFFFFFFFu;
-  batch->state.guard_reflect_timer_x14[idx] = guard_reflect_timer_x14_init(c);
-  batch->state.guard_reflect_timer_x18[idx] = guard_reflect_timer_x18_init(c);
+  batch->state.guard_reflect_timer_x14[idx] = msl_guard_reflect_timer_x14_init(c);
+  batch->state.guard_reflect_timer_x18[idx] = msl_guard_reflect_timer_x18_init(c);
   batch->state.guard_special_enable_timer_x1c[idx] = 0u;
   batch->state.guard_release_latched_xc[idx] = 0;
-  batch->state.guard_x10[idx] = guard_x10_init_u8(c);
+  batch->state.guard_x10[idx] = msl_guard_x10_visible_guardon_init_u8(c);
   batch->state.lightshield_amount[idx] = 0.0f;
   // GuardReflect entry publishes the timer-owned x221C lanes immediately:
   // ftCo_8009388C / ftCo_80093A50 set x221C_b3, x221C_b1, and x221C_b2 when the
@@ -644,12 +576,10 @@ static inline void enter_guard_reflect_common_setup(MslBatch* batch, const MslCo
   // may clear b3, but b1/b2 remain timer-owned until ftCo_80093BC0 expires x14/x18.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_8009388C,ftCo_80093A50,ftCo_80093BC0}
   enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
-  enum { MSL_STATE_FLAG_221C_B3 = 0x10 };
-  enum { MSL_STATE_FLAG_221C_B1 = 0x40 };
-  enum { MSL_STATE_FLAG_221C_B2 = 0x20 };
   const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
   batch->state.state_flags[flags_i] |=
-      (uint8_t)(MSL_STATE_FLAG_221C_B3 | MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2);
+      (uint8_t)(MSL_GUARD_STATE_FLAGS_221C_B3 | MSL_GUARD_STATE_FLAGS_221C_B1 |
+                MSL_GUARD_STATE_FLAGS_221C_B2);
 }
 
 static inline void enter_guard_reflect_from_guard(MslBatch* batch, const MslCommonParams* c,
@@ -784,12 +714,10 @@ static inline void enter_guard_on(MslBatch* batch, const MslCommonParams* c, siz
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_800924C0
   // refs/melee/src/melee/ft/types.h (fp+0x221C bitfield mapping)
   enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
-  enum { MSL_STATE_FLAG_221C_B3 = 0x10 };
-  enum { MSL_STATE_FLAG_221C_B1 = 0x40 };
-  enum { MSL_STATE_FLAG_221C_B2 = 0x20 };
   const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
-  batch->state.state_flags[flags_i] &= (uint8_t) ~(
-      uint8_t)(MSL_STATE_FLAG_221C_B3 | MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2);
+  batch->state.state_flags[flags_i] &=
+      (uint8_t) ~(uint8_t)(MSL_GUARD_STATE_FLAGS_221C_B3 | MSL_GUARD_STATE_FLAGS_221C_B1 |
+                           MSL_GUARD_STATE_FLAGS_221C_B2);
   batch->state.guard_on_entered_this_frame[idx] = 1u;
   // Keep the entry-family marker through the entry callback row and its immediate frozen
   // GuardOn_IASA handoff, then consume it below. The two ticks are runtime-only hidden source
@@ -797,7 +725,7 @@ static inline void enter_guard_on(MslBatch* batch, const MslCommonParams* c, siz
   batch->state.guard_entry_via_wait_callback[idx] = entered_via_wait_callback ? 2u : 0u;
   batch->state.guard_special_enable_timer_x1c[idx] = 0u;
   batch->state.guard_release_latched_xc[idx] = 0;
-  batch->state.guard_x10[idx] = guard_x10_init_u8(c);
+  batch->state.guard_x10[idx] = msl_guard_x10_visible_guardon_init_u8(c);
   batch->state.lightshield_amount[idx] = 0.0f;
 }
 
@@ -1149,7 +1077,7 @@ void guard_update_shield_recharge(MslBatch* batch, const MslCommonParams* c, siz
   // descriptor on this fresh no-submotion row. The same applies while ftCo_80093BC0 leaves x14
   // active; GuardOn_Anim shield drain resumes once x14 reaches zero.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_IASA,ftCo_8009388C,ftCo_8009370C,ftCo_80093BC0,ftCo_GuardReflect_Anim}
-  if (is_shield_active_action(batch->state.action_id[idx]) &&
+  if (msl_guard_lifecycle_action_has_shield_callback(batch->state.action_id[idx]) &&
       !fresh_guardon_to_guardreflect_no_submotion && !guardreflect_active_timer_no_submotion) {
     return;
   }
@@ -1208,11 +1136,9 @@ static inline void guard_update_grounded_anim_callback_pre_input(MslBatch* batch
         // expires, matching the x18/x221C_b2 clear below.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0
         enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
-        enum { MSL_STATE_FLAG_221C_GUARD_REFLECT_X14 = 0x40 };
         const size_t flags_i =
             idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
-        batch->state.state_flags[flags_i] &=
-            (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_GUARD_REFLECT_X14;
+        batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_GUARD_STATE_FLAGS_221C_B1;
       }
       uint8_t t18 = batch->state.guard_reflect_timer_x18[idx];
       if (t18 > 0) {
@@ -1223,11 +1149,9 @@ static inline void guard_update_grounded_anim_callback_pre_input(MslBatch* batch
           // same GuardReflect_Anim callback pass.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0
           enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
-          enum { MSL_STATE_FLAG_221C_POWERSHIELD_ACTIVE = 0x20 };
           const size_t flags_i =
               idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
-          batch->state.state_flags[flags_i] &=
-              (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_POWERSHIELD_ACTIVE;
+          batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_GUARD_STATE_FLAGS_221C_B2;
         }
       }
     }
@@ -1341,11 +1265,11 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
       (a0 == (uint16_t)MSL_ACT_GUARD_ON && batch->state.action_frame[idx] < 0 &&
        batch->state.animation_index[idx] == 0xFFFFFFFFu &&
        batch->state.guard_on_entered_this_frame[idx] != 0u &&
-       !is_shield_active_action(batch->state.prev_action_id[idx]))
+       !msl_guard_lifecycle_action_has_shield_callback(batch->state.prev_action_id[idx]))
           ? 1u
           : 0u;
 
-  if (!is_shield_active_action(a0)) {
+  if (!msl_guard_lifecycle_action_has_shield_callback(a0)) {
     batch->state.guard_release_latched_xc[idx] = 0;
     batch->state.guard_x10[idx] = 0;
     batch->state.lightshield_amount[idx] = 0.0f;
@@ -1483,7 +1407,7 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
           (a0 == (uint16_t)MSL_ACT_GUARD_ON && batch->state.action_frame[idx] < 0 &&
            batch->state.animation_index[idx] == UINT32_MAX &&
            batch->state.x672_input_timer_frame_start[idx] <= 1u &&
-           !is_shield_active_action(batch->state.seed_prev_action_id[idx]) &&
+           !msl_guard_lifecycle_action_has_shield_callback(batch->state.seed_prev_action_id[idx]) &&
            msl_motion_state_common_class_has(batch->state.seed_prev_action_id[idx],
                                              MSL_MS_CLASS_GUARDON_FRAME_START_X672_IASA))
               ? 1u

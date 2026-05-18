@@ -2218,9 +2218,9 @@ Grounded motion-entry timing notes:
 
 | Read first (decomp) | Data artifacts (ISO-derived) | Code owner / gaps |
 |---|---|---|
-| `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C` (guard entry) | `data/common/ft_common_data.json` (shield health/decay/recharge constants) | `src/action.c`, `src/shields.c` |
+| `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C` (guard entry) | `data/common/ft_common_data.json` (shield health/decay/recharge constants) | `src/guard_lifecycle.h` names shared guard timers/provenance; `src/action.c`, `src/shields.c` consume it |
 | `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_80099894` (roll/spotdodge) | `data/anims/{fox,falco}.bin` (escape anim end frames) | `src/action.c` (Escape*), `src/locomotion.c` (root-motion gaps) |
-| `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardDamage_Anim` (GuardSetOff / stun loop) | `data/common/ft_common_data.json` (shieldstun duration rules) | Partial today: `src/combat.c` enters `GuardSetOff`, but per-frame behavior is incomplete |
+| `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardDamage_Anim` (GuardSetOff / stun loop) | `data/common/ft_common_data.json` (shieldstun duration rules) | `src/guard_lifecycle.h` centralizes timer/x10 representation; `src/combat.c` enters `GuardSetOff`; `src/action.c` owns per-frame GuardSetOff callbacks |
 | `refs/melee/src/melee/ft/chara/ftCommon/ftCo_ShieldBreakDown.c`, `ftCo_ShieldBreakStand.c`, `ftCo_Furafura.c` | `data/common/ft_common_data.json` (`shield_break_reset_health`, Furafura timer constants x2F8/x2FC/x300/x304) | `src/action.c` owns `ShieldBreakDown -> ShieldBreakStand -> Furafura -> Wait` and Furafura mash/timer decrement |
 
 GuardSetOff grounded motion note:
@@ -2232,6 +2232,14 @@ GuardSetOff grounded motion note:
   - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C` consumes that lane to write `gr_vel`,
   - `refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate` does not collapse `self_vel.x` onto `gr_vel` on the same frozen entry row.
 - Practical implication: do not fit item shield-hit GuardSetOff motion from replay `speed_ground_x_self` alone. The remaining blocker is the item-side `specialn_facing_dir` sign owner for those rows.
+
+Guard lifecycle substrate:
+- `src/guard_lifecycle.h` is the shared source vocabulary for GuardReflect `x14/x18` timers,
+  GuardOn/GuardSetOff `x10` representation, GuardReflect no-submotion provenance, and
+  ShieldDesc-vs-ReflectDesc ownership. This keeps `action.c`, `shields.c`, `state_flags.c`, and
+  `combat.c` aligned with the same decomp owner boundaries instead of carrying parallel local
+  predicates. Source anchors:
+  `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_800921DC,ftCo_80092450,ftCo_8009388C,ftCo_80093A50,ftCo_80093BC0,ftCo_GuardReflect_Anim,ftCo_GuardSetOff_Anim}`.
 
 GuardSetOff post-hitlag ASDI:
 - `ftCo_80092F2C` installs `post_hitlag_cb = ftCo_800932DC` on `GuardSetOff` entry.

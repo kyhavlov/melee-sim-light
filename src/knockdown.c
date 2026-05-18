@@ -13,6 +13,7 @@
 #include "char_params.h"
 #include "coll_env_flags.h"
 #include "common_params.h"
+#include "guard_lifecycle.h"
 #include "input_axis.h"
 #include "jump_input.h"
 #include "locomotion.h"
@@ -455,20 +456,12 @@ static inline uint8_t damage_ground_try_enter_guard_from_wait_iasa(MslBatch* bat
   msl_anim_timebase_seed(batch, idx, -1.0f,
                          msl_f32_from_q16_16(batch->state.frame_speed_mul_fp_q16_16[idx]));
   enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
-  enum { MSL_STATE_FLAG_221C_B3 = 0x10 };
-  enum { MSL_STATE_FLAG_221C_B1 = 0x40 };
-  enum { MSL_STATE_FLAG_221C_B2 = 0x20 };
   const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
-  batch->state.state_flags[flags_i] &= (uint8_t) ~(
-      uint8_t)(MSL_STATE_FLAG_221C_B3 | MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2);
+  batch->state.state_flags[flags_i] &=
+      (uint8_t) ~(uint8_t)(MSL_GUARD_STATE_FLAGS_221C_B3 | MSL_GUARD_STATE_FLAGS_221C_B1 |
+                           MSL_GUARD_STATE_FLAGS_221C_B2);
   batch->state.guard_release_latched_xc[idx] = 0;
-  {
-    uint16_t t = (uint16_t)c->guard_x10_init_frames;
-    if (t > 255u) {
-      t = 255u;
-    }
-    batch->state.guard_x10[idx] = (uint8_t)t;
-  }
+  batch->state.guard_x10[idx] = msl_guard_x10_raw_init_u8(c);
   batch->state.lightshield_amount[idx] = 0.0f;
   return 1u;
 }

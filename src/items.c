@@ -2001,7 +2001,8 @@ static inline uint8_t item_sphere_sphere_intersects_3d(float ax, float ay, float
 }
 
 static inline uint8_t item_prev_action_is_guard_reflect_locomotion_pose_source(uint16_t action_id) {
-  // Keep this aligned with shields.c::guard_reflect_entry_uses_guardon_pose_source: the proven
+  // Keep this aligned with guard_lifecycle.h::msl_guard_reflect_entry_uses_guardon_pose_source:
+  // the proven
   // current-pose ShieldDesc entry owner is Dash -> GuardReflect. Walk -> GuardReflect has a
   // replay-real ShieldBounced keepalive that stays on the normal shield-bubble source.
   // MSLMSO01 identifies the broad locomotion callback owners, but this same-step item contact

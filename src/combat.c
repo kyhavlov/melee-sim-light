@@ -16,7 +16,7 @@
 #include "buttons.h"
 #include "char_params.h"
 #include "combat_geom.h"
-#include "combat_terminal_owner.h"
+#include "guard_lifecycle.h"
 #include "common_params.h"
 #include "damage_terminal_owner.h"
 #include "damage_source.h"
@@ -1432,17 +1432,6 @@ static inline uint8_t combat_shield_active_action(uint16_t action_id) {
   }
 }
 
-static inline uint8_t combat_guard_x10_raw_init_u8(const MslCommonParams* c) {
-  if (c == NULL || !(c->guard_x10_init_frames > 0.0f)) {
-    return 0u;
-  }
-  uint16_t t = (uint16_t)c->guard_x10_init_frames;
-  if (t > 255u) {
-    t = 255u;
-  }
-  return (uint8_t)t;
-}
-
 static inline void combat_preserve_guard_x10_for_immediate_setoff(MslBatch* batch, size_t d_idx,
                                                                   uint16_t d_motion_id_pre,
                                                                   const MslCommonParams* c) {
@@ -1460,7 +1449,7 @@ static inline void combat_preserve_guard_x10_for_immediate_setoff(MslBatch* batc
     // shieldstun.
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
     //   ftCo_80091A4C,ftCo_800924C0,ftCo_800925A4,ftCo_80092F2C}
-    batch->state.guard_x10[d_idx] = combat_guard_x10_raw_init_u8(c);
+    batch->state.guard_x10[d_idx] = msl_guard_x10_raw_init_u8(c);
     return;
   }
 
@@ -2792,7 +2781,6 @@ static inline void combat_state_flags_clear_guard_reflecting(MslBatch* batch, si
   }
   enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
   enum { MSL_STATE_FLAGS_2218_INDEX = 0 };
-  enum { MSL_STATE_FLAG_2218_REFLECTING = 0x10 };
 
   // GuardSetOff destination reset:
   // - shield-hit transition enters GuardSetOff through Fighter_ChangeMotionState in ftCo_80092F2C,
@@ -2801,7 +2789,7 @@ static inline void combat_state_flags_clear_guard_reflecting(MslBatch* batch, si
   // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
   const size_t flags_i = idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_2218_INDEX;
-  batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_REFLECTING;
+  batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_GUARD_STATE_FLAGS_2218_REFLECTING;
 }
 
 static inline void combat_state_flags_clear_stale_guard_timer_bits_on_setoff_entry(MslBatch* batch,
@@ -2811,8 +2799,6 @@ static inline void combat_state_flags_clear_stale_guard_timer_bits_on_setoff_ent
   }
   enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
   enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
-  enum { MSL_STATE_FLAG_221C_GUARD_REFLECT_X14 = 0x40 };
-  enum { MSL_STATE_FLAG_221C_GUARD_REFLECT_X18 = 0x20 };
 
   if (batch->state.guard_reflect_timer_x14[idx] != 0u ||
       batch->state.guard_reflect_timer_x18[idx] != 0u) {
@@ -2826,8 +2812,8 @@ static inline void combat_state_flags_clear_stale_guard_timer_bits_on_setoff_ent
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
   //   ftCo_80092F2C,ftCo_8009388C,ftCo_80093A50,ftCo_80093BC0}
   const size_t flags_i = idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221C_INDEX;
-  batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)(MSL_STATE_FLAG_221C_GUARD_REFLECT_X14 |
-                                                            MSL_STATE_FLAG_221C_GUARD_REFLECT_X18);
+  batch->state.state_flags[flags_i] &=
+      (uint8_t) ~(uint8_t)(MSL_GUARD_STATE_FLAGS_221C_B1 | MSL_GUARD_STATE_FLAGS_221C_B2);
 }
 
 static inline void combat_state_flags_set_guard_reflect_timer_bits(MslBatch* batch, size_t idx) {
@@ -2836,15 +2822,13 @@ static inline void combat_state_flags_set_guard_reflect_timer_bits(MslBatch* bat
   }
   enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
   enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
-  enum { MSL_STATE_FLAG_221C_GUARD_REFLECT_X14 = 0x40 };
-  enum { MSL_STATE_FLAG_221C_GUARD_REFLECT_X18 = 0x20 };
 
   uint8_t bits = 0u;
   if (batch->state.guard_reflect_timer_x14[idx] != 0u) {
-    bits |= (uint8_t)MSL_STATE_FLAG_221C_GUARD_REFLECT_X14;
+    bits |= (uint8_t)MSL_GUARD_STATE_FLAGS_221C_B1;
   }
   if (batch->state.guard_reflect_timer_x18[idx] != 0u) {
-    bits |= (uint8_t)MSL_STATE_FLAG_221C_GUARD_REFLECT_X18;
+    bits |= (uint8_t)MSL_GUARD_STATE_FLAGS_221C_B2;
   }
   if (bits == 0u) {
     return;
@@ -3109,10 +3093,9 @@ static inline uint8_t combat_shield_damage_powershield_suppressed_idx(const MslB
       batch->state.guard_reflect_timer_x14_seed[idx] == 0u) {
     enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
     enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
-    enum { MSL_STATE_FLAG_221C_POWERSHIELD_ACTIVE = 0x20 };
     const uint8_t flags_221c =
         batch->state.state_flags[idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221C_INDEX];
-    if ((flags_221c & (uint8_t)MSL_STATE_FLAG_221C_POWERSHIELD_ACTIVE) != 0u) {
+    if ((flags_221c & (uint8_t)MSL_GUARD_STATE_FLAGS_221C_B2) != 0u) {
       return powershield_active;
     }
     powershield_active = 0u;
@@ -3128,7 +3111,6 @@ uint8_t combat_is_powershield_active_idx(const MslBatch* batch, size_t idx) {
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
   enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
   enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
-  enum { MSL_STATE_FLAG_221C_POWERSHIELD_ACTIVE = 0x20 };
   const uint8_t flags_221c =
       batch->state.state_flags[idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221C_INDEX];
   if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_REFLECT) {
@@ -3143,7 +3125,7 @@ uint8_t combat_is_powershield_active_idx(const MslBatch* batch, size_t idx) {
     // For non-frozen GuardReflect frames, gate suppression on the active reflect callback lane.
     return (batch->state.guard_reflect_timer_x14[idx] != 0u) ? 1u : 0u;
   }
-  return (flags_221c & (uint8_t)MSL_STATE_FLAG_221C_POWERSHIELD_ACTIVE) ? 1u : 0u;
+  return (flags_221c & (uint8_t)MSL_GUARD_STATE_FLAGS_221C_B2) ? 1u : 0u;
 }
 
 static inline uint8_t combat_guard_setoff_recoil_x221c_b2_idx(const MslBatch* batch, size_t idx) {
@@ -3152,10 +3134,9 @@ static inline uint8_t combat_guard_setoff_recoil_x221c_b2_idx(const MslBatch* ba
   }
   enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
   enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
-  enum { MSL_STATE_FLAG_221C_POWERSHIELD_ACTIVE = 0x20 };
   const uint8_t flags_221c =
       batch->state.state_flags[idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221C_INDEX];
-  if ((flags_221c & (uint8_t)MSL_STATE_FLAG_221C_POWERSHIELD_ACTIVE) != 0u) {
+  if ((flags_221c & (uint8_t)MSL_GUARD_STATE_FLAGS_221C_B2) != 0u) {
     return 1u;
   }
   if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_REFLECT) {
@@ -4419,10 +4400,10 @@ static inline void combat_damage_enter_state(const MslCommonParams* c, MslBatch*
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
   enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
   enum { MSL_STATE_FLAGS_221B_INDEX = 2 };
-  enum { MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE = 0x80 };
   {
     const size_t flags_i = d_idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221B_INDEX;
-    batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE;
+    batch->state.state_flags[flags_i] &=
+        (uint8_t) ~(uint8_t)MSL_GUARD_STATE_FLAGS_221B_IS_SHIELD_ACTIVE;
   }
   // Decomp: ftCo_8008DCE0 clears mv.co.damage.x14 on damage entry.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0

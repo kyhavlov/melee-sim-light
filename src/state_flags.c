@@ -6,27 +6,14 @@
 #include "action_ids.h"
 #include "anim_frame.h"
 #include "anim_pose.h"
-#include "combat_terminal_owner.h"
 #include "common_params.h"
 #include "char_params.h"
+#include "guard_lifecycle.h"
 #include "motion_state_owners.h"
 #include "move_tables.h"
 #include "stage_collision.h"
 
 enum { MSL_CHAR_FALCO = 22 };
-
-static inline uint8_t state_flags_221a_b7_action_uses_guard_shield(uint16_t action_id) {
-  switch (action_id) {
-    case MSL_ACT_GUARD_ON:
-    case MSL_ACT_GUARD:
-    case MSL_ACT_GUARD_OFF:
-    case MSL_ACT_GUARD_SET_OFF:
-    case MSL_ACT_GUARD_REFLECT:
-      return 1u;
-    default:
-      return 0u;
-  }
-}
 
 static inline uint8_t state_flags_2218_allow_interrupt_attackair_action(uint16_t action_id) {
   return msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_ATTACK_AIR);
@@ -298,7 +285,6 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
   enum { MSL_STATE_FLAG_2218_ALLOW_INTERRUPT = 0x80 };
   enum { MSL_STATE_FLAG_2218_B1 = 0x40 };
   enum { MSL_STATE_FLAG_2218_B2 = 0x20 };
-  enum { MSL_STATE_FLAG_2218_REFLECTING = 0x10 };
 
   // fp+0x221A:
   // - 0x01 = fp->x221A_b7
@@ -324,7 +310,6 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
   // (b0==0x80 ... b5==0x04), matching refs/melee/src/melee/ft/types.h + SendGamePostFrame.asm.
   // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
   // refs/melee/src/melee/ft/types.h (fp+0x221B bitfields)
-  enum { MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE = 0x80 };
   enum { MSL_STATE_FLAG_221B_B5 = 0x04 };
 
   // fp+0x221C:
@@ -352,9 +337,6 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_8009388C,ftCo_80093A50,ftCo_80093BC0}
   // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (0x221C 0x20 = Powershield Active Bool)
   // Bitfield layout: refs/melee/src/melee/ft/types.h (fp+0x221C bits 0..3 map to masks 0x80..0x10).
-  enum { MSL_STATE_FLAG_221C_B1 = 0x40 };
-  enum { MSL_STATE_FLAG_221C_B2 = 0x20 };
-  enum { MSL_STATE_FLAG_221C_B3 = 0x10 };
   enum { MSL_STATE_FLAG_221F_B0 = 0x80 };
   enum { MSL_STATE_FLAG_221F_B1 = 0x40 };
 
@@ -364,17 +346,8 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
   uint8_t guard_reflect_timer_x14_init = 0;
   uint8_t guard_x10_init = 0;
   if (c != NULL) {
-    uint16_t t = (uint16_t)c->powershield_reflect_frames;
-    t = (uint16_t)(t + 1u);
-    if (t > 255u) {
-      t = 255u;
-    }
-    guard_reflect_timer_x14_init = (uint8_t)t;
-    t = (uint16_t)c->guard_x10_init_frames;
-    if (t > 255u) {
-      t = 255u;
-    }
-    guard_x10_init = (uint8_t)t;
+    guard_reflect_timer_x14_init = msl_guard_reflect_timer_x14_init(c);
+    guard_x10_init = msl_guard_x10_raw_init_u8(c);
   }
 
   const int num_players = (int)batch->config.num_players;
@@ -511,7 +484,7 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
       const uint8_t shine_start_platform_pass_reflecting =
           ((action_id == (uint16_t)MSL_ACT_FX_SPECIAL_LW_START ||
             action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START) &&
-           (f2218 & (uint8_t)MSL_STATE_FLAG_2218_REFLECTING) != 0u)
+           (f2218 & (uint8_t)MSL_GUARD_STATE_FLAGS_2218_REFLECTING) != 0u)
               ? 1u
               : 0u;
       if (action_id != prev_action_2218 &&
@@ -526,7 +499,7 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
         // to SpecialAirLwStart, so a current-frame bit already set by that pass remains live.
         // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLwStart_Pass
         // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (fp+0x2218 -> state_flags[0])
-        f2218 &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_REFLECTING;
+        f2218 &= (uint8_t) ~(uint8_t)MSL_GUARD_STATE_FLAGS_2218_REFLECTING;
       }
       if (action_id == (uint16_t)MSL_ACT_GUARD_REFLECT) {
         // GuardReflect reflecting-owner lane:
@@ -535,9 +508,9 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
         // refs/melee/src/melee/ft/ftcoll.c::ftColl_CreateReflectHit
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0
         if (batch->state.guard_reflect_timer_x14[idx] != 0u) {
-          f2218 |= (uint8_t)MSL_STATE_FLAG_2218_REFLECTING;
+          f2218 |= (uint8_t)MSL_GUARD_STATE_FLAGS_2218_REFLECTING;
         } else {
-          f2218 &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_REFLECTING;
+          f2218 &= (uint8_t) ~(uint8_t)MSL_GUARD_STATE_FLAGS_2218_REFLECTING;
         }
       } else if (state_flags_2218_action_owns_reflecting(batch, idx, action_id) != 0u) {
         // Fox/Falco SpecialLw collision callbacks can change Ground<->Air Loop/Hit/Turn after
@@ -549,7 +522,7 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
         //   ftFx_SpecialLwHit_GroundToAir,ftFx_SpecialAirLwHit_AirToGround,
         //   ftFx_SpecialLwTurn_GroundToAir,ftFx_SpecialAirLwTurn_GroundToAir}
         // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (fp+0x2218 -> state_flags[0])
-        f2218 |= (uint8_t)MSL_STATE_FLAG_2218_REFLECTING;
+        f2218 |= (uint8_t)MSL_GUARD_STATE_FLAGS_2218_REFLECTING;
       } else if (action_id == (uint16_t)MSL_ACT_GUARD_SET_OFF &&
                  prev_action_2218 == (uint16_t)MSL_ACT_GUARD_REFLECT) {
         // GuardReflect -> GuardSetOff handoff:
@@ -560,7 +533,7 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
         // GuardSetOff admission rows can still carry the seeded `reflecting` bit.
         // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
-        f2218 &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_REFLECTING;
+        f2218 &= (uint8_t) ~(uint8_t)MSL_GUARD_STATE_FLAGS_2218_REFLECTING;
       }
       batch->state.state_flags[flags_2218_i] = f2218;
 
@@ -684,14 +657,14 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
       // refs/melee/src/melee/ft/fighter.c (Fighter_ChangeMotionState reset clears fp->x221B_b0)
       // refs/melee/src/melee/ft/chara/ftCommon/forward.h (CapturePulled*/CaptureWait*/CaptureDamage*)
       if (msl_action_is_grabbed_victim(action_id)) {
-        f221b &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE;
+        f221b &= (uint8_t) ~(uint8_t)MSL_GUARD_STATE_FLAGS_221B_IS_SHIELD_ACTIVE;
       }
       // Approximate fp->x221A_b7 from shield activation (fp->x221B_b0), but only for the
       // guard-family states that own shield descriptor lifecycle in decomp.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80092450,ftCo_8009388C,ftCo_800925A4}
       const uint8_t b7_shield_active =
-          ((f221b & (uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE) != 0u &&
-           state_flags_221a_b7_action_uses_guard_shield(batch->state.action_id[idx]))
+          ((f221b & (uint8_t)MSL_GUARD_STATE_FLAGS_221B_IS_SHIELD_ACTIVE) != 0u &&
+           msl_guard_lifecycle_action_uses_guard_shield(batch->state.action_id[idx]))
               ? 1u
               : 0u;
       if (b7_shield_active) {
@@ -764,25 +737,25 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
         const uint8_t t18 = batch->state.guard_reflect_timer_x18[idx];
         // x221C_b1 remains set until the reflect window expires (t14==0 under +1 bias).
         if (t14 != 0) {
-          f221c |= (uint8_t)MSL_STATE_FLAG_221C_B1;
+          f221c |= (uint8_t)MSL_GUARD_STATE_FLAGS_221C_B1;
         } else {
-          f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B1;
+          f221c &= (uint8_t) ~(uint8_t)MSL_GUARD_STATE_FLAGS_221C_B1;
         }
         // x221C_b2 ("Powershield Active Bool") remains set until the powershield timer expires
         // (t18==0 under +1 bias).
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0
         // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
         if (t18 != 0) {
-          f221c |= (uint8_t)MSL_STATE_FLAG_221C_B2;
+          f221c |= (uint8_t)MSL_GUARD_STATE_FLAGS_221C_B2;
         } else {
-          f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B2;
+          f221c &= (uint8_t) ~(uint8_t)MSL_GUARD_STATE_FLAGS_221C_B2;
         }
         // x221C_b3 is a 1-frame entry flag; it is set on GuardReflect entry and cleared on the
         // next Anim tick (ftCo_80093BC0).
         if (t14 == guard_reflect_timer_x14_init && guard_reflect_timer_x14_init != 0) {
-          f221c |= (uint8_t)MSL_STATE_FLAG_221C_B3;
+          f221c |= (uint8_t)MSL_GUARD_STATE_FLAGS_221C_B3;
         } else {
-          f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B3;
+          f221c &= (uint8_t) ~(uint8_t)MSL_GUARD_STATE_FLAGS_221C_B3;
         }
       } else if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_SET_OFF &&
                  prev_action != (uint16_t)MSL_ACT_GUARD_SET_OFF &&
@@ -800,24 +773,24 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
         //   ftCo_80091A4C,ftCo_800939B4,ftCo_80093A50,ftCo_GuardSetOff_Anim}
         // refs/melee/src/melee/ft/ftcoll.c::{ftColl_CreateReflectHit,ftColl_80076CBC}
         if (t14 != 0) {
-          f221c |= (uint8_t)MSL_STATE_FLAG_221C_B1;
+          f221c |= (uint8_t)MSL_GUARD_STATE_FLAGS_221C_B1;
         }
         if (t18 != 0) {
-          f221c |= (uint8_t)MSL_STATE_FLAG_221C_B2;
+          f221c |= (uint8_t)MSL_GUARD_STATE_FLAGS_221C_B2;
         }
-        f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B3;
+        f221c &= (uint8_t) ~(uint8_t)MSL_GUARD_STATE_FLAGS_221C_B3;
       } else {
         // Decomp: x221C_b3 is the 1-frame GuardReflect-entry latch written on ftCo_8009388C entry
         // and cleared by the next ftCo_80093BC0 callback pass; non-GuardReflect states do not own
         // this bit, so clear it outside GuardReflect.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_8009388C,ftCo_80093BC0}
-        f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B3;
+        f221c &= (uint8_t) ~(uint8_t)MSL_GUARD_STATE_FLAGS_221C_B3;
 
         // Decomp guard hold ownership: the reflect-window bit x221C_b1 is tied to GuardReflect
         // timer/callback ownership and should not persist through GuardOn/Guard hold windows.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_Anim,ftCo_Guard_Anim,ftCo_80093BC0}
         if (action_id == (uint16_t)MSL_ACT_GUARD_ON || action_id == (uint16_t)MSL_ACT_GUARD) {
-          f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B1;
+          f221c &= (uint8_t) ~(uint8_t)MSL_GUARD_STATE_FLAGS_221C_B1;
         }
 
         if (prev_action == (uint16_t)MSL_ACT_GUARD_REFLECT &&
@@ -839,14 +812,14 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
               batch->state.guard_reflect_timer_x18_seed[idx],
               batch->state.hitlag_started_frame[idx]);
           if (t14_after_anim != 0u) {
-            f221c |= (uint8_t)MSL_STATE_FLAG_221C_B1;
+            f221c |= (uint8_t)MSL_GUARD_STATE_FLAGS_221C_B1;
           } else {
-            f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B1;
+            f221c &= (uint8_t) ~(uint8_t)MSL_GUARD_STATE_FLAGS_221C_B1;
           }
           if (t18_after_anim != 0u) {
-            f221c |= (uint8_t)MSL_STATE_FLAG_221C_B2;
+            f221c |= (uint8_t)MSL_GUARD_STATE_FLAGS_221C_B2;
           } else {
-            f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B2;
+            f221c &= (uint8_t) ~(uint8_t)MSL_GUARD_STATE_FLAGS_221C_B2;
           }
         }
 
@@ -855,7 +828,7 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
             batch->state.action_frame[idx] == 0 && batch->state.hitlag[idx] > 0u &&
             batch->state.guard_reflect_timer_x14[idx] == 0u &&
             batch->state.guard_reflect_timer_x18[idx] > 0u &&
-            f221c == (uint8_t)(MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2)) {
+            f221c == (uint8_t)(MSL_GUARD_STATE_FLAGS_221C_B1 | MSL_GUARD_STATE_FLAGS_221C_B2)) {
           // GuardReflect -> GuardSetOff active-timer handoff:
           // - the destination GuardSetOff row still observes hitlag, so the powershield-active x18
           //   lane can remain visible,
@@ -863,15 +836,15 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
           //   expired on the destination row, that bit no longer has a live owner.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardSetOff_Anim,ftCo_80093BC0}
           // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
-          f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B1;
+          f221c &= (uint8_t) ~(uint8_t)MSL_GUARD_STATE_FLAGS_221C_B1;
         }
         if (action_id == (uint16_t)MSL_ACT_GUARD_SET_OFF && batch->state.hitlag[idx] == 0u &&
             state_flags_guard_setoff_hitlag_handoff_phase(batch, idx) == 3u &&
             state_flags_guard_setoff_post_hitlag_owner(batch, idx) == 2u &&
             batch->state.prev_action_frame[idx] > 0 &&
             batch->state.guard_reflect_timer_x14[idx] == 0u &&
-            (f221c & (uint8_t)(MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2)) ==
-                (uint8_t)(MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2)) {
+            (f221c & (uint8_t)(MSL_GUARD_STATE_FLAGS_221C_B1 | MSL_GUARD_STATE_FLAGS_221C_B2)) ==
+                (uint8_t)(MSL_GUARD_STATE_FLAGS_221C_B1 | MSL_GUARD_STATE_FLAGS_221C_B2)) {
           // GuardSetOff stale reflect-window carry on the first steady post-hitlag row:
           // - the current seeded GuardSetOff snapshot has already advanced off the frozen af0 lane,
           // - GuardSetOff_Anim/ftCo_80093BC0 owns the steady row, and
@@ -879,7 +852,7 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
           //   persist independently under its x18 lifetime.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardSetOff_Anim,ftCo_80093BC0}
           // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
-          f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B1;
+          f221c &= (uint8_t) ~(uint8_t)MSL_GUARD_STATE_FLAGS_221C_B1;
         }
         const uint8_t guardsetoff_first_steady_x10_phase =
             (batch->state.guard_x10[idx] == 7u ||
@@ -890,7 +863,7 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
             batch->state.prev_action_frame[idx] == 0 &&
             batch->state.guard_reflect_timer_x14[idx] == 0u &&
             batch->state.guard_reflect_timer_x18[idx] == 0u && guardsetoff_first_steady_x10_phase &&
-            f221c == (uint8_t)(MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2)) {
+            f221c == (uint8_t)(MSL_GUARD_STATE_FLAGS_221C_B1 | MSL_GUARD_STATE_FLAGS_221C_B2)) {
           // GuardSetOff first-steady reflect-window expiry:
           // - after prio-0 hitlag decrement, GuardSetOff_Anim / ftCo_80093BC0 owns the first steady
           //   post-hitlag row,
@@ -908,7 +881,7 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardSetOff_Anim,ftCo_80093BC0}
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
           // data/common/ft_common_data.json: guard_x10_init_frames
-          f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B1;
+          f221c &= (uint8_t) ~(uint8_t)MSL_GUARD_STATE_FLAGS_221C_B1;
         }
         if (action_id == (uint16_t)MSL_ACT_GUARD_SET_OFF &&
             prev_action == (uint16_t)MSL_ACT_GUARD_SET_OFF && batch->state.hitlag[idx] == 0u &&
@@ -916,7 +889,7 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
             batch->state.guard_reflect_timer_x14[idx] == 0u &&
             batch->state.guard_reflect_timer_x18[idx] == 0u && guard_x10_init != 0u &&
             (uint16_t)batch->state.guard_x10[idx] + 1u < (uint16_t)guard_x10_init &&
-            f221c == (uint8_t)MSL_STATE_FLAG_221C_B2) {
+            f221c == (uint8_t)MSL_GUARD_STATE_FLAGS_221C_B2) {
           // GuardSetOff steady powershield-active expiry:
           // - ftCo_80092F2C seeds mv.co.guard.x10 from ftCommonData on GuardSetOff entry,
           // - after the initial af0 carry snapshot has already self-looped back into GuardSetOff,
@@ -929,7 +902,7 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
           //   ftCo_80092F2C,ftCo_GuardSetOff_Anim,ftCo_80093BC0,ftCo_800925A4}
           // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
           // data/common/ft_common_data.json: guard_x10_init_frames
-          f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B2;
+          f221c &= (uint8_t) ~(uint8_t)MSL_GUARD_STATE_FLAGS_221C_B2;
         }
         if (action_id == (uint16_t)MSL_ACT_GUARD_SET_OFF &&
             (prev_action == (uint16_t)MSL_ACT_GUARD_SET_OFF ||
@@ -941,7 +914,7 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
             batch->state.guard_reflect_timer_x18[idx] == 0u && guard_x10_init != 0u &&
             ((uint16_t)batch->state.guard_x10[idx] + 1u == (uint16_t)guard_x10_init ||
              batch->state.guard_x10[idx] == guard_x10_init) &&
-            f221c == (uint8_t)MSL_STATE_FLAG_221C_B2) {
+            f221c == (uint8_t)MSL_GUARD_STATE_FLAGS_221C_B2) {
           // GuardSetOff carry-snapshot powershield-active expiry:
           // - the prior steady GuardSetOff callback pass has already advanced (prev_action_frame>0),
           // - the destination snapshot has re-entered a carry/entry tick with nonpositive
@@ -953,7 +926,7 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
           //   ftCo_80092F2C,ftCo_GuardSetOff_Anim,ftCo_80093BC0,ftCo_800925A4}
           // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360,Fighter_ChangeMotionState}
           // data/common/ft_common_data.json: guard_x10_init_frames
-          f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B2;
+          f221c &= (uint8_t) ~(uint8_t)MSL_GUARD_STATE_FLAGS_221C_B2;
         }
         if (action_id == (uint16_t)MSL_ACT_GUARD &&
             prev_action == (uint16_t)MSL_ACT_GUARD_SET_OFF &&
@@ -961,7 +934,7 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
             batch->state.guard_reflect_timer_x14[idx] == 0u &&
             batch->state.guard_reflect_timer_x18[idx] == 0u && guard_x10_init != 0u &&
             (uint16_t)batch->state.guard_x10[idx] + 2u == (uint16_t)guard_x10_init &&
-            f221c == (uint8_t)MSL_STATE_FLAG_221C_B2) {
+            f221c == (uint8_t)MSL_GUARD_STATE_FLAGS_221C_B2) {
           // GuardSetOff -> Guard destination carry-snapshot expiry:
           // - ftCo_GuardSetOff_Anim first calls ftCo_80093BC0, then enters Guard through
           //   ftCo_800928CC when GuardDamage has ended.
@@ -975,7 +948,7 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
           //   ftCo_GuardSetOff_Anim,ftCo_80093BC0,ftCo_800928CC}
           // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_ChangeMotionState}
           // data/common/ft_common_data.json: guard_x10_init_frames
-          f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B2;
+          f221c &= (uint8_t) ~(uint8_t)MSL_GUARD_STATE_FLAGS_221C_B2;
         }
         if (action_id == (uint16_t)MSL_ACT_GUARD_SET_OFF && batch->state.hitlag[idx] == 0u &&
             state_flags_guard_setoff_hitlag_handoff_phase(batch, idx) == 2u &&
@@ -985,7 +958,7 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
             batch->state.guard_reflect_timer_x18[idx] == 0u &&
             batch->state.lightshield_amount[idx] >= 0.999f &&
             batch->state.guard_setoff_hitlag_damage_min[idx] == 1u &&
-            batch->state.guard_x10[idx] == 5u && f221c == (uint8_t)MSL_STATE_FLAG_221C_B2) {
+            batch->state.guard_x10[idx] == 5u && f221c == (uint8_t)MSL_GUARD_STATE_FLAGS_221C_B2) {
           // GuardSetOff first-steady powershield-active expiry:
           // - after prio-0 hitlag decrement, GuardSetOff_Anim / ftCo_80093BC0 owns the first steady
           //   row,
@@ -995,7 +968,7 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
           //   seeded x221C_b2 carry.
           // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardSetOff_Anim,ftCo_80093BC0}
-          f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B2;
+          f221c &= (uint8_t) ~(uint8_t)MSL_GUARD_STATE_FLAGS_221C_B2;
         }
         if (state_flags_is_damage_action(action_id) && action_id != prev_action &&
             batch->state.action_frame[idx] == 1 && batch->state.hitlag[idx] > 0u &&
@@ -1022,8 +995,9 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
           // - Death -> Rebirth enter runs through that reset before steady Rebirth callbacks.
           // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
           // refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s::ftCo_800D4FF4
-          f221c &= (uint8_t) ~(uint8_t)(MSL_STATE_FLAG_221C_B3 | MSL_STATE_FLAG_221C_B1 |
-                                        MSL_STATE_FLAG_221C_B2);
+          f221c &=
+              (uint8_t) ~(uint8_t)(MSL_GUARD_STATE_FLAGS_221C_B3 | MSL_GUARD_STATE_FLAGS_221C_B1 |
+                                   MSL_GUARD_STATE_FLAGS_221C_B2);
         }
       }
       batch->state.state_flags[flags_221c_i] = f221c;
