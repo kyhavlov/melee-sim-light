@@ -10,6 +10,13 @@ not gameplay specification; use `SPEC.md` for source-backed mechanics.
   - validation report diffs for suite/replay movement
   - per-replay and per-stage normalized FD-vs-non-FD deltas for platform-stage work
   - rollout/disruptive clusters for stability, cascade impact, and concrete packet autopsies
+- For stage-target selection, use `uv run python -m tools.eval.stage_rollout_summary` before
+  choosing a replay. It reads existing validation reports and ranks stages by rollout first
+  mismatches per 1k records without changing canonical scoring.
+- For stage-collision owner autopsies, use
+  `uv run python -m tools.eval.locate_rollout_desyncs ... --include-stage-segments` to append
+  seed/current/ref `ground_id` metadata joined from `MSLSTG01` line kind, platform flag/transform,
+  slope, ledge, and material fields.
 - Use disruptive rollout clusters as a target selector when the owner is rollout-visible, but do
   not over-centralize on them while broad one-step/platform systems are still missing.
 - Treat repeated, early, coherent, or modelplay-visible float residuals as first-class signals.

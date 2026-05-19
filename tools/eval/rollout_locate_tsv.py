@@ -31,6 +31,9 @@ class RolloutLocateRow:
     streak_len: int
     seeded_break: bool
     cluster_key: str
+    seed_ground_id: int = -1
+    out_ground_id: int = -1
+    ref_ground_id: int = -1
 
 
 ROLLOUT_LOCATE_COLUMNS: tuple[str, ...] = (
@@ -200,4 +203,3 @@ def parse_rollout_key_fields(spec: str) -> tuple[str, ...]:
 
 def rollout_row_key(row: RolloutLocateRow, key_fields: tuple[str, ...]) -> tuple[object, ...]:
     return tuple(getattr(row, name) for name in key_fields)
-

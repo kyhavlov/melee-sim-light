@@ -23,6 +23,10 @@ from tools.eval.rollout_locate_tsv import (
 )
 from tools.eval.run_longest_rollout_streaks import _parse_csv, _parse_players, _validate_discrete_fields
 from tools.eval.validation_profile import get_validation_profile, validation_profile_names
+from tools.slippi.known_data_artifacts import (
+    read_mslstg01_v7,
+    stage_metadata_path_for_stage_id,
+)
 from tools.slippi.suite_io import dataset_path_for_suite_replay, load_suite, repo_root
 
 
@@ -39,6 +43,98 @@ class FirstMismatch:
     seed: int
     out: int
     ref: int
+    seed_ground_id: int = -1
+    out_ground_id: int = -1
+    ref_ground_id: int = -1
+
+
+STAGE_SEGMENT_COLUMNS: tuple[str, ...] = (
+    "seed_ground_id",
+    "seed_ground_kind",
+    "seed_ground_platform",
+    "seed_ground_transform",
+    "seed_ground_slope",
+    "seed_ground_ledge",
+    "seed_ground_material",
+    "current_ground_id",
+    "current_ground_kind",
+    "current_ground_platform",
+    "current_ground_transform",
+    "current_ground_slope",
+    "current_ground_ledge",
+    "current_ground_material",
+    "ref_ground_id",
+    "ref_ground_kind",
+    "ref_ground_platform",
+    "ref_ground_transform",
+    "ref_ground_slope",
+    "ref_ground_ledge",
+    "ref_ground_material",
+)
+
+_SEGMENT_KIND_NAMES = {0: "floor", 1: "ceiling", 2: "right_wall", 3: "left_wall", 4: "dynamic"}
+_TRANSFORM_KIND_NAMES = {1: "height", 2: "static_y", 3: "randall"}
+
+
+def _stage_id_for_row(ds: Dataset, row: RolloutLocateRow) -> int | None:
+    if "stage_id" not in (ds.samples.dtype.fields["seed_t"][0].names or ()):
+        return None
+    return int(ds.samples["seed_t"][int(row.record)]["stage_id"])
+
+
+def _segment_lookup_for_stage(
+    *, root: Path, stage_id: int, cache: dict[int, dict[int, dict[str, object]]]
+) -> dict[int, dict[str, object]]:
+    if stage_id in cache:
+        return cache[stage_id]
+    stage_path = stage_metadata_path_for_stage_id(stage_id, root / "data")
+    if stage_path is None or not stage_path.exists():
+        cache[stage_id] = {}
+        return cache[stage_id]
+    stage = read_mslstg01_v7(stage_path)
+    transforms = {int(rec.line_id): _TRANSFORM_KIND_NAMES.get(int(rec.kind_id), str(rec.kind_id)) for rec in stage.platform_transforms}
+    lookup: dict[int, dict[str, object]] = {}
+    for seg in stage.segments:
+        y_delta = float(seg.y1) - float(seg.y0)
+        lookup[int(seg.line_id)] = {
+            "kind": _SEGMENT_KIND_NAMES.get(int(seg.kind_id), str(seg.kind_id)),
+            "platform": "1" if (int(seg.flags) & 0x01) else "0",
+            "transform": transforms.get(int(seg.line_id), ""),
+            "slope": "1" if abs(y_delta) > 1.0e-6 else "0",
+            "ledge": "1" if (int(seg.flags) & 0x02) else "0",
+            "material": str(int(seg.lo_flags) & 0xFF),
+        }
+    cache[stage_id] = lookup
+    return lookup
+
+
+def _segment_values(segment_id: int, lookup: dict[int, dict[str, object]]) -> tuple[object, ...]:
+    if segment_id < 0 or segment_id == 0xFFFF:
+        return (segment_id, "<none>", "", "", "", "", "")
+    seg = lookup.get(int(segment_id))
+    if seg is None:
+        return (segment_id, "<missing>", "", "", "", "", "")
+    return (
+        int(segment_id),
+        seg["kind"],
+        seg["platform"],
+        seg["transform"],
+        seg["slope"],
+        seg["ledge"],
+        seg["material"],
+    )
+
+
+def stage_segment_tsv_values(
+    *, row: RolloutLocateRow, ds: Dataset, root: Path, cache: dict[int, dict[int, dict[str, object]]]
+) -> tuple[object, ...]:
+    stage_id = _stage_id_for_row(ds, row)
+    lookup = {} if stage_id is None else _segment_lookup_for_stage(root=root, stage_id=stage_id, cache=cache)
+    return (
+        *_segment_values(int(row.seed_ground_id), lookup),
+        *_segment_values(int(row.out_ground_id), lookup),
+        *_segment_values(int(row.ref_ground_id), lookup),
+    )
 
 
 def _row_from_mismatch(
@@ -74,6 +170,9 @@ def _row_from_mismatch(
         streak_len=int(streak_len),
         seeded_break=bool(seeded_break),
         cluster_key=key,
+        seed_ground_id=int(mismatch.seed_ground_id),
+        out_ground_id=int(mismatch.out_ground_id),
+        ref_ground_id=int(mismatch.ref_ground_id),
     )
 
 
@@ -220,6 +319,11 @@ def _locate_dataset_rollout_desyncs(
             seed=mm.seed,
             out=mm.out,
             ref=mm.ref,
+            seed_ground_id=int(seed[j]["ground_id"][mm.player]) if "ground_id" in seed.dtype.names else -1,
+            out_ground_id=int(out_view[0]["ground_id"][mm.player])
+            if "ground_id" in out_view.dtype.names
+            else -1,
+            ref_ground_id=int(ref[j]["ground_id"][mm.player]) if "ground_id" in ref.dtype.names else -1,
         )
 
     def attempt_from_current(j: int, *, seed_record: int | None) -> FirstMismatch | None:
@@ -326,6 +430,14 @@ def main() -> None:
     ap.add_argument("--top", type=int, default=12, help="Top-N clusters for the optional summary preview.")
     ap.add_argument("--out", type=Path, default=None, help="Optional TSV output path.")
     ap.add_argument(
+        "--include-stage-segments",
+        action="store_true",
+        help=(
+            "Append seed/current/ref ground_id metadata joined from MSLSTG01. "
+            "Report/triage-only; canonical locate columns are unchanged by default."
+        ),
+    )
+    ap.add_argument(
         "--profile",
         choices=validation_profile_names(),
         default="rl1_gameplay",
@@ -378,10 +490,12 @@ def main() -> None:
         row_limit = None
 
     rows: list[RolloutLocateRow] = []
+    datasets_by_label: dict[str, Dataset] = {}
     for ds_path, rel in filtered:
         if row_limit is not None and len(rows) >= row_limit:
             break
         ds = read_dataset(str(ds_path))
+        datasets_by_label[rel] = ds
         num_players = int(ds.header["num_players"])
         players = _parse_players(args.players, num_players=num_players)
         remaining = None if row_limit is None else max(0, row_limit - len(rows))
@@ -400,7 +514,28 @@ def main() -> None:
             )
         )
 
-    if args.out is not None:
+    if args.include_stage_segments:
+        columns = (*ROLLOUT_LOCATE_COLUMNS, *STAGE_SEGMENT_COLUMNS)
+        stage_cache: dict[int, dict[int, dict[str, object]]] = {}
+        if args.out is not None:
+            args.out.parent.mkdir(parents=True, exist_ok=True)
+        out_file = args.out.open("w", encoding="utf-8", newline="") if args.out is not None else sys.stdout
+        try:
+            writer = csv.writer(out_file, delimiter="\t", lineterminator="\n")
+            writer.writerow(columns)
+            for row in rows:
+                ds = datasets_by_label[row.dataset]
+                writer.writerow(
+                    (
+                        *row_to_tsv_values(row),
+                        *stage_segment_tsv_values(row=row, ds=ds, root=root, cache=stage_cache),
+                    )
+                )
+        finally:
+            if args.out is not None:
+                out_file.close()
+                print(f"wrote: {args.out}")
+    elif args.out is not None:
         write_rollout_locate_tsv(args.out, rows)
         print(f"wrote: {args.out}")
     else:

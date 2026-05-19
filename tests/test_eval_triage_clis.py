@@ -8,14 +8,18 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE
+from tools.eval.dataset import COMPARE_DTYPE, HEADER_DTYPE, SAMPLE_DTYPE
 from tools.eval.discrete_compare_lanes import compile_discrete_compare_lanes, first_mismatch_values
 from tools.eval.diff_locate import diff_locate_rows
 from tools.eval.diff_rollout_locate import diff_rollout_locate_rows
 from tools.eval.disruptive_rollout_desyncs import main as disruptive_rollout_desyncs_main
 from tools.eval.facing_residual_blocker_report import FacingResidualRow, build_summary
 from tools.eval.locate_discrete_mismatches import ITEM_FIELD_TO_SUBFIELD
-from tools.eval.locate_rollout_desyncs import FirstMismatch, _scan_rollout_desync_rows
+from tools.eval.locate_rollout_desyncs import (
+    FirstMismatch,
+    _scan_rollout_desync_rows,
+    stage_segment_tsv_values,
+)
 from tools.eval.locate_tsv import parse_locate_tsv
 from tools.eval.rollout_locate_tsv import (
     ROLLOUT_LOCATE_COLUMNS,
@@ -26,6 +30,7 @@ from tools.eval.rollout_locate_tsv import (
     write_rollout_locate_tsv,
 )
 from tools.eval.rollout_metrics import diff_rollout_summaries, summarize_rollout_payload, validate_rollout_payload
+from tools.eval.stage_rollout_summary import summarize_by_stage
 from tools.eval.top_triples import count_ref_out, count_triples
 
 
@@ -401,6 +406,104 @@ def test_rollout_locate_scan_fixture_emits_unseeded_and_seeded_break_rows() -> N
     assert rows[1].record == 1
     assert rows[1].streak_len == 0
     assert rows[1].seeded_break
+
+
+def test_stage_rollout_summary_normalizes_by_records(tmp_path: Path) -> None:
+    suite = tmp_path / "suite.json"
+    suite.write_text(
+        json.dumps(
+            {
+                "name": "synthetic",
+                "replays": [
+                    {"replay": "replays/a.slpz", "ports": [1, 2], "stage_id": 32},
+                    {"replay": "replays/b.slpz", "ports": [1, 2], "stage_id": 2},
+                    {"replay": "replays/c.slpz", "ports": [1, 2], "stage_id": 2},
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    rollout = tmp_path / "rollout.txt"
+    rollout.write_text(
+        "\n".join(
+            [
+                "== datasets/s/replays/a.msl ==",
+                "rollout.status: NOT-CLEAN",
+                "rollout.first_mismatch_total: 4",
+                "rollout.first_mismatch_seeded_total: 1",
+                "== datasets/s/replays/b.msl ==",
+                "rollout.status: NOT-CLEAN",
+                "rollout.first_mismatch_total: 8",
+                "rollout.first_mismatch_seeded_total: 2",
+                "== datasets/s/replays/c.msl ==",
+                "rollout.status: NOT-CLEAN",
+                "rollout.first_mismatch_total: 1",
+                "rollout.first_mismatch_seeded_total: 0",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    one_step = tmp_path / "one_step.txt"
+    one_step.write_text(
+        "\n".join(
+            [
+                "== datasets/s/replays/a.msl ==",
+                "Records: 1000  Players/scored per record: 2",
+                "== datasets/s/replays/b.msl ==",
+                "Records: 1000  Players/scored per record: 2",
+                "== datasets/s/replays/c.msl ==",
+                "Records: 500  Players/scored per record: 2",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    rows = summarize_by_stage(suite_path=suite, rollout_report=rollout, one_step_report=one_step)
+
+    assert [row.stage for row in rows] == ["Fountain of Dreams", "Final Destination"]
+    fod = rows[0]
+    assert fod.replay_count == 2
+    assert fod.records == 1500
+    assert fod.first_total == 9
+    assert fod.seeded_total == 2
+    assert fod.first_per_1k == pytest.approx(6.0)
+    assert fod.top_replay == "b"
+    assert fod.top_replay_first_total == 8
+
+
+def test_rollout_stage_segment_values_join_ground_ids_to_mslstg01_metadata() -> None:
+    header = np.zeros((), dtype=HEADER_DTYPE)
+    samples = np.zeros(2, dtype=SAMPLE_DTYPE)
+    samples["seed_t"]["stage_id"][:] = np.uint32(2)  # FoD / griz.bin.
+    ds = type("DatasetLike", (), {"samples": samples})()
+    row = RolloutLocateRow(
+        dataset="datasets/s/fod.msl",
+        record=0,
+        seed_frame=1,
+        ref_frame=2,
+        player=0,
+        field="ground_id",
+        subindex=-1,
+        seed=1,
+        out=2,
+        ref=1,
+        streak_start_record=0,
+        streak_len=0,
+        seeded_break=False,
+        cluster_key="k",
+        seed_ground_id=1,
+        out_ground_id=0xFFFF,
+        ref_ground_id=1,
+    )
+
+    values = stage_segment_tsv_values(row=row, ds=ds, root=Path.cwd(), cache={})
+    cols = values[:7]
+    assert cols[0] == 1
+    assert cols[1] == "floor"
+    assert cols[2] in ("0", "1")
+    assert cols[4] in ("0", "1")
+    assert cols[6].isdigit()
+    assert values[7:14] == (0xFFFF, "<none>", "", "", "", "", "")
 
 
 def test_discrete_compare_lanes_preserve_field_player_subindex_order() -> None:
