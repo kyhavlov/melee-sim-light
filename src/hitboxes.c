@@ -10,6 +10,7 @@
 #include "char_params.h"
 #include "common_params.h"
 #include "damage_source.h"
+#include "hit_elements.h"
 #include "hitboxes_tables.h"
 #include "hitlist.h"
 #include "motion_state_owners.h"
@@ -1987,15 +1988,25 @@ void hitboxes_refresh(MslBatch* batch) {
         batch->state.hitbox_flags[oi] = def[hi].u16_6;
         batch->state.hitbox_capsule_enabled[oi] = capsule_enabled[hi];
         batch->state.hitbox_capsule_group[oi] = capsule_group[hi];
-        // Same-frame entry capsule continuity:
-        // - ftAction_8007121C runs from the fighter anim script at proc priority 1.
-        // - ftColl_8007AE80 refreshes hitcapsules later at priority 9.
-        // - For a newly enabled capsule, ftColl_8007AD18 sets x4C from the current bone pose and
-        //   immediately copies x58 = x4C before BODY/shield collision runs.
-        // Do not synthesize a previous-action x58 for normal same-frame entries; that creates
-        // broad swept BODY contacts that vanilla never tests.
+        // Catch first-enable HitCapsule continuity:
+        // - ftAction_8007121C creates the Catch HitCapsule from script data.
+        // - ftColl_8007AD18 refreshes a newly enabled HitCapsule and copies x58=x4C before
+        //   ftColl_80078A2C tests grabbable hurtcaps through lbColl_80007ECC.
+        // Keep this publication restricted to element=CATCH. The broader BODY/hitbox x58/x4C
+        // first-enable owner is still represented by existing scoped paths; publishing every
+        // newly enabled offensive capsule here over-admits adjacent BODY/clank paths.
         // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
-        // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007AD18,ftColl_8007AE80}
+        // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007AD18,ftColl_80078A2C}
+        // refs/melee/src/melee/lb/lbcollision.c::lbColl_80007ECC
+        // data/hitboxes/{fox,falco}.bin (MSLHITB1 element=CATCH)
+        if (batch->state.hitbox_element[oi] == (uint8_t)MSL_HIT_ELEMENT_CATCH &&
+            batch->state.hitbox_enable_edge[oi] != 0u &&
+            batch->state.hitbox_prev_enabled[oi] == 0u) {
+          batch->state.hitbox_prev_enabled[oi] = 1u;
+          batch->state.hitbox_prev_x[oi] = batch->state.hitbox_x[oi];
+          batch->state.hitbox_prev_y[oi] = batch->state.hitbox_y[oi];
+          batch->state.hitbox_prev_z[oi] = batch->state.hitbox_z[oi];
+        }
         // x43_b2 ownership mapping:
         // - ftAction_8007121C create path initializes x43_b2=0.
         // - ftColl_800768A0 copy/clear transitions preserve per-slot runtime ownership otherwise.

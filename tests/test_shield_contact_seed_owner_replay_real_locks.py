@@ -759,11 +759,12 @@ def test_attackairlw_dense_hitlist_rollout_allows_fresh_guardon_shield_hit_prh()
 
 @pytest.mark.integration
 def test_attackairn_stale_dense_hitlist_open_residual_agn_new_hit_not_retained() -> None:
-    # Open residual / package-boundary negative for the current dense HitCapsule boundary:
-    # AGN:5167 still carries only a coarse dense victims_1 latch against p0's old JumpF instance.
-    # Native admits the new AttackAirN hit on the next frame, but this package does not yet expose
-    # enough per-hitbox/live HitCapsule provenance to safely close that broader owner. Keep this
-    # mismatch visible instead of presenting it as a replay-real lock.
+    # Open residual / package-boundary negative for the dense HitCapsule boundary:
+    # AGN:5167 carries only a coarse dense victims_1 latch against p0's old JumpF instance, so the
+    # first AttackAirN frame remains miss-only. On the next frame, vanilla admits the new
+    # AttackAirN HitCapsule and applies DamageFlyHi, but this package does not retain a
+    # replay-rollout-only dense trim for that behavior. Keep the row visible until a per-HitCapsule
+    # provenance/empty seed lane can close it.
     # refs/melee/src/melee/ft/ftcoll.c::ftColl_800768A0
     # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
     root = Path(__file__).resolve().parents[1]
@@ -788,10 +789,10 @@ def test_attackairn_stale_dense_hitlist_open_residual_agn_new_hit_not_retained()
 
     ref, out = _run_rollout_window(dataset_path, start, target)
     assert int(ref["action_id"][defender]) == 87  # DamageFlyHi from the native NAir hit.
-    assert int(out["action_id"][defender]) == 65
+    assert int(out["action_id"][defender]) == 65  # Still AttackAirN without retained bridge.
     assert int(out["hitlag"][defender]) == 0
     assert int(out["hitstun"][defender]) == 0
-    assert float(out["percent"][defender]) == pytest.approx(112.36532592773438)
+    assert float(out["percent"][defender]) == pytest.approx(112.36532592773438, abs=1e-6)
 
 
 @pytest.mark.integration

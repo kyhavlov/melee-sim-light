@@ -9,6 +9,7 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
+from tools.eval.dataset import COMPARE_DTYPE, read_dataset
 
 
 _DATASET = (
@@ -20,6 +21,9 @@ _BHH_DATASET = (
 _MAJ_DATASET = (
     "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl"
 )
+_MGS_DATASET = (
+    "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/MilkyGracefulStingray.msl"
+)
 
 _ACT_CATCH = 212
 _ACT_CATCH_PULL = 213
@@ -28,6 +32,40 @@ _ACT_FX_SPECIAL_LW_START = 360
 _ACT_DAMAGE_FLY_TOP = 90
 _ACT_CAPTURE_PULLED_HI = 223
 _STAGE_FINAL_DESTINATION = 32
+
+
+def _run_rollout_row(ds_path: Path, *, start_record: int, target_record: int) -> np.void:
+    binding = pytest.importorskip("msl_binding")
+    ds = read_dataset(str(ds_path))
+    samples = ds.samples
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    sample_stride = int(samples.dtype.itemsize)
+    samples_u8 = samples.view(np.uint8).reshape(int(samples.shape[0]), sample_stride)
+    seed_off = int(samples.dtype.fields["seed_t"][1])
+    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
+    input_off = int(samples.dtype.fields["input_t"][1])
+
+    seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
+    prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+    input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+    out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        seed_bytes[0, :] = samples_u8[start_record, seed_off : seed_off + seed_stride]
+        binding.reseed_seed_rollout(handle, seed_bytes)
+        for rec in range(start_record, target_record + 1):
+            prev_input_bytes[0, :] = samples_u8[rec, prev_input_off : prev_input_off + input_stride]
+            input_bytes[0, :] = samples_u8[rec, input_off : input_off + input_stride]
+            binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_bytes)
+    finally:
+        binding.destroy(handle)
+
+    return out_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()
 
 
 @pytest.mark.integration
@@ -75,6 +113,46 @@ def test_catch_collision_skeleton_scale_still_connects_nearby_positive() -> None
     assert int(ref["action_id"][victim]) == _ACT_CAPTURE_PULLED_HI
     assert int(out["action_id"][catcher]) == _ACT_CATCH_PULL
     assert int(out["action_id"][victim]) == _ACT_CAPTURE_PULLED_HI
+
+
+@pytest.mark.integration
+def test_catch_first_enable_hitcapsule_collapses_x58_for_live_rollout_mgs_1791() -> None:
+    # Live first-enable Catch HitCapsule ownership:
+    # - MGS rolls into Fox Catch frame 6 while Falco is platform-dropping in Pass.
+    # - ftAction_8007121C creates the Catch capsules, then ftColl_8007AD18 refreshes the newly
+    #   enabled HitCapsule and copies x58=x4C before ftColl_80078A2C tests grabbable hurtcaps.
+    # - A rollout that starts before the Catch cannot rely on one-step seed bootstrap for x58; the
+    #   live first-enable path must collapse the previous endpoint to the current capsule instead of
+    #   leaving it disabled/zero.
+    # refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007AD18,ftColl_80078A2C}
+    # refs/melee/src/melee/lb/lbcollision.c::lbColl_80007ECC
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    ds_path = root / _MGS_DATASET
+    if not ds_path.exists():
+        pytest.skip(f"missing local dataset: {_MGS_DATASET}")
+
+    ds = read_dataset(str(ds_path))
+    samples = ds.samples
+    start = 1785
+    target = 1791
+    catcher = 0
+    victim = 1
+    assert int(samples[target]["seed_t"]["action_id"][catcher]) == _ACT_CATCH
+    assert int(samples[target]["seed_t"]["action_frame"][catcher]) == 5
+    assert int(samples[target]["seed_t"]["action_id"][victim]) == 244  # Pass.
+    assert int(samples[target]["ref_t1"]["action_id"][catcher]) == _ACT_CATCH_PULL
+    assert int(samples[target]["ref_t1"]["action_id"][victim]) == 226  # CapturePulledLw.
+
+    out = _run_rollout_row(ds_path, start_record=start, target_record=target)
+    ref = samples[target]["ref_t1"]
+    assert int(out["action_id"][catcher]) == int(ref["action_id"][catcher]) == _ACT_CATCH_PULL
+    assert int(out["action_frame"][catcher]) == int(ref["action_frame"][catcher])
+    assert int(out["action_id"][victim]) == int(ref["action_id"][victim]) == 226
+    assert int(out["action_frame"][victim]) == int(ref["action_frame"][victim])
+    assert float(out["pos_x"][catcher]) == pytest.approx(float(ref["pos_x"][catcher]), abs=2.0e-5)
+    assert float(out["pos_x"][victim]) == pytest.approx(float(ref["pos_x"][victim]), abs=2.0e-5)
 
 
 @pytest.mark.integration

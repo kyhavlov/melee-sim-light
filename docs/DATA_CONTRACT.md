@@ -1003,6 +1003,11 @@ Characters (Fox/Falco):
     runtime. Both paths use MSLSTG01 platform transform records derived from `grIzumi`/stage
     geometry data; for the side platforms `mpLib_80055E9C` consumes the source MapLine vertex as
     `world_y = source_local_y + current_grIzumi_height * 0.75`.
+    Generated legal-stage slopes are also source floor lines, not a separate replay substrate:
+    runtime uses the MSLSTG01 line graph plus `mpLib_8004DD90_Floor` traversal to keep grounded
+    `KneeBend_Coll` and immediate `KneeBend -> Jump -> EscapeAir_Coll` handoffs on the returned
+    connected floor contact. No new seed lane is introduced for that EWT `9753/9755` owner; the
+    source evidence is the persisted CollData floor id plus the generated floor graph.
     The MSLSTG01 v9 binary platform-motion payload carries
     `platform_motion.fountain_platform` constants from `GrIz.dat::yakumono_param`
     (`home_height`, hidden target, min/max, source speed fields, RNG weights, and
@@ -1062,6 +1067,10 @@ Characters (Fox/Falco):
       Grounded-contact fallback inverts the generated collision transform
       `(root_y - source_local_y) / height_coeff`; direct `fod_platform` events remain raw grIzumi
       heights and are not treated as viewer-space/platform-world Y.
+      When a source-owned current height is within the generated grIzumi initial/target constants
+      (`platform_transform.y_const` or `platform_motion` home/min/max/hidden heights), runtime
+      collision snaps the transformed mpLib line to that extracted source constant. This keeps
+      Slippi event float rounding around named source poses from becoming gameplay floor height.
       Missing lanes in new-match/free-running runtime use the generated `grIzumi_801CC358`
       phase/timer/RNG scheduler instead of fixed platform heights.
       The floor-skip lanes are current hidden mpColl state, not t+1 replay output; seed generation

@@ -188,3 +188,55 @@ def test_attackairn_same_group_damageflytop_latch_suppresses_reseeded_rehit_on_m
                 record=rec,
                 p=p,
             )
+
+
+@pytest.mark.integration
+def test_attackairn_late_window_live_airborne_victim_mgs_open_provenance_debt() -> None:
+    # Open residual / package-boundary negative for FoD AttackAirN late-window dense provenance:
+    # - MGS:1998 starts with only the legacy dense group lane for Falco NAir group 0; no
+    #   authoritative per-HitCapsule victim lane exists.
+    # - By MGS:2002 Fox has entered a live airborne JumpB state with no hitlag/hitstun and no
+    #   Guard/Shield owner. Vanilla's second-create NAir HitCapsule admits the BODY hit; the dense
+    #   seed from the rollout start should not continue suppressing it, but this package does not
+    #   retain a replay-rollout bridge for that behavior. The durable closure is a per-HitCapsule
+    #   victims_1 provenance/empty seed lane before materialization.
+    # - The DamageFlyTop preservation test above remains the retained opposite boundary for
+    #   same-source damage victims.
+    # data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirN.events.create_hitbox
+    # refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    mgs_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+        / "MilkyGracefulStingray.msl"
+    )
+    if not mgs_path.exists():
+        pytest.skip(f"missing local dataset: {mgs_path}")
+
+    mgs = read_dataset(str(mgs_path)).samples
+    start = 1998
+    target = 2002
+    attacker = 1
+    defender = 0
+    start_seed = mgs[start]["seed_t"]
+    target_seed = mgs[target]["seed_t"]
+    target_ref = mgs[target]["ref_t1"]
+    assert int(start_seed["action_id"][attacker]) == 65  # AttackAirN
+    assert int(start_seed["combat_hitlist_cd"][attacker, 0, defender]) == 0xFFFF
+    assert int(start_seed["combat_hitlist_victim_iid"][attacker, 0, defender]) == int(
+        start_seed["instance_id"][defender]
+    )
+    assert not any(int(start_seed["combat_hitlist_hb_valid"][attacker, hb]) for hb in range(4))
+    assert int(target_seed["action_id"][defender]) == 26  # JumpB, not Damage/Guard.
+    assert int(target_seed["hitlag"][defender]) == 0
+    assert int(target_seed["hitstun"][defender]) == 0
+    assert int(target_ref["action_id"][defender]) == 86  # DamageHi from the late NAir hit.
+
+    out_roll = _run_rollout_row(mgs_path, start_record=start, target_record=target)
+    assert int(out_roll["action_id"][defender]) != int(target_ref["action_id"][defender])
+    assert int(out_roll["action_id"][defender]) == 26  # JumpB stays suppressed by dense lane.
+    assert int(out_roll["hitlag"][defender]) == 0

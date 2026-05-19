@@ -169,8 +169,9 @@ def test_attackhi3_shield_pushback_rollout_closes_agn_5167_front_door() -> None:
     assert counts_5167 == (0, 0, 0)
     assert counts_5168 == (2, 2, 1)
 
-    # The current retained package keeps this as a pre-combat hurtcap geometry lock only. The broader
-    # replay-real dense-HitCapsule rollout admission is outside this package-cleanup assertion.
+    # Package-boundary negative for the broader dense HitCapsule provenance lane: after removing
+    # the replay-rollout-only AttackAirN trim, the sim correctly keeps this row visible as open debt
+    # instead of packaging it as source-closed BODY authority.
     outs = _run_rollout_window(binding, samples, 5167, 5170)
     for record in (5167, 5168, 5169):
         out = outs[record]

@@ -365,6 +365,44 @@ def test_fod_same_step_height_source_is_consumed_after_seeded_frame() -> None:
 
 
 @pytest.mark.integration
+def test_fod_sustained_escapeair_high_lock_countdown_rejects_side_platform_root_projection() -> None:
+    # MGS:1278 is a free-run rollout boundary for the same EscapeAir_Coll source owner: a
+    # ground-jump airdodge is already in sustained EscapeAir with a high CollData lock countdown.
+    # FoD's live left platform is under the root projection, but source is still in the
+    # mpCollInterpolateECB gap and should publish LandingFallSpecial on the carried main hard
+    # floor, not on the transformed side platform, until the countdown reaches the retained
+    # side-platform publication phase.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    # refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D5D4,ftCommon_UnlockECB}
+    # refs/melee/src/melee/mp/mpcoll.c::{mpCollInterpolateECB,mpColl_80044838_Floor}
+    # data/stages/bin/griz.bin::MSLSTG01 platform_transforms(kind=height)
+    root = Path(__file__).resolve().parents[1]
+    path = root / _BASE / "fountain_of_dreams_recent/MilkyGracefulStingray.msl"
+    if not path.exists():
+        pytest.skip(f"missing local dataset: {_BASE / 'fountain_of_dreams_recent/MilkyGracefulStingray.msl'}")
+
+    start = 0
+    target = 1278
+    player = 0
+
+    ds = read_dataset(str(path))
+    if int(ds.samples.shape[0]) <= target:
+        pytest.skip(f"dataset too short for record {target}: {path}")
+    assert int(ds.samples[target]["seed_t"]["action_id"][player]) == 236  # EscapeAir.
+    assert int(ds.samples[target]["seed_t"]["seed_prev_action_id"][player]) == 236
+    assert int(ds.samples[target]["seed_t"]["stage_fod_platform_height_valid_u8"][1]) == 1
+    assert int(ds.samples[target]["seed_t"]["stage_fod_platform_height_source_u8"][1]) == 0
+    assert int(ds.samples[target]["ref_t1"]["action_id"][player]) == 43  # LandingFallSpecial.
+    assert int(ds.samples[target]["ref_t1"]["ground_id"][player]) == 5
+
+    out, ref = _rollout_record(path, start_record=start, target_record=target)
+
+    assert int(out["action_id"][player]) == int(ref["action_id"][player]) == 43
+    assert int(out["ground_id"][player]) == int(ref["ground_id"][player]) == 5
+    assert float(out["pos_y"][player]) == pytest.approx(float(ref["pos_y"][player]), abs=1e-6)
+
+
+@pytest.mark.integration
 def test_fod_landing_entry_same_step_height_source_reprojects_to_current_platform() -> None:
     # PTE:5288 starts Landing on the static floor index, while the transient grIzumi same-step
     # source bit proves that Landing_Coll/ft_80084280 should consume the current transformed FoD

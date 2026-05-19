@@ -742,3 +742,174 @@ def test_airborne_downbound_stage_object_endpoint_cross_requires_platform_transf
     # non-transform CollData.floor.index must not enter Fall through the same shortcut.
     assert int(out["action_id"][1]) == 191  # DownBoundD
     assert int(out["on_ground"][1]) == 0
+
+
+def test_terminal_damagefly_iasa_fall_collision_projects_carried_hard_floor_pte_6623() -> None:
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = "datasets/fountain_of_dreams_recent/replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[6623]
+    p = 0
+    assert int(row["seed_t"]["action_id"][p]) == 90  # DamageFlyTop
+    assert int(row["seed_t"]["hitstun"][p]) == 1
+    assert int(row["seed_t"]["on_ground"][p]) == 0
+    assert int(row["seed_t"]["ground_id"][p]) == 5
+    assert float(row["seed_t"]["floor_sweep_prev_pos_y_f32"][p]) < 0.0
+    assert int(row["ref_t1"]["action_id"][p]) == 42  # Landing
+    assert int(row["ref_t1"]["on_ground"][p]) == 1
+    assert int(row["ref_t1"]["ground_id"][p]) == 5
+
+    out, ref = _run_one_step(dataset_rel=dataset_rel, record=6623, p=p)
+
+    # Terminal DamageFly_IASA can enter Fall before the same frame's collision callback. The
+    # destination Fall_Coll (`ft_800831CC -> mpColl_80047E14(flags=6)`) still consumes the carried
+    # hard-floor CollData source and lets mpColl_80044838_Floor project an already-below-floor root
+    # to Landing.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::{ftCo_Fall_Enter,ftCo_Fall_Coll}
+    # refs/melee/src/melee/ft/ft_081B.c::ft_800831CC
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == 42
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 1
+    assert int(out["ground_id"][p]) == int(ref["ground_id"][p]) == 5
+    assert int(out["jumps_left"][p]) == int(ref["jumps_left"][p]) == 2
+    np.testing.assert_allclose(float(out["pos_y"][p]), float(ref["pos_y"][p]), atol=1e-5)
+
+
+def test_terminal_damagefly_iasa_fall_collision_requires_below_floor_carried_root() -> None:
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = "datasets/fountain_of_dreams_recent/replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    def move_carried_root_above_floor(seed_t: np.void) -> None:
+        seed_t["floor_sweep_prev_pos_y_f32"][0] = np.float32(1.5)
+
+    out, _ref = _run_one_step_with_seed_mutation(
+        dataset_rel=dataset_rel, record=6623, mutate_seed=move_carried_root_above_floor
+    )
+
+    # The owner is not a generic "DamageFly terminal row lands" shortcut. It requires the carried
+    # CollData root to already be on/below the hard floor before the terminal Fall_Coll projection.
+    assert int(out["action_id"][0]) == 29  # Fall
+    assert int(out["on_ground"][0]) == 0
+
+
+def test_grounded_damageair_floor_loss_enters_missfoot_pte_7048() -> None:
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = "datasets/fountain_of_dreams_recent/replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[7048]
+    p = 0
+    assert int(row["seed_t"]["action_id"][p]) == 86  # DamageAir3
+    assert int(row["seed_t"]["on_ground"][p]) == 1
+    assert int(row["seed_t"]["facing"][p]) == 1
+    assert int(row["ref_t1"]["action_id"][p]) == 251  # MissFoot
+    assert int(row["ref_t1"]["on_ground"][p]) == 0
+
+    out, ref = _run_one_step(dataset_rel=dataset_rel, record=7048, p=p)
+
+    # Grounded DamageAir still uses the common Damage_Coll ground branch:
+    # ftCo_Damage_Coll -> ft_800848DC -> mpColl_8004B108. The FoD live platform endpoint reports
+    # LeftLedgeSlip, and ft_800848DC enters MissFoot for a facing-right fighter crossing the left
+    # side of the transformed platform span.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_800848DC
+    # refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
+    # refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == 251
+    assert int(out["animation_index"][p]) == int(ref["animation_index"][p]) == 215
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 0
+    assert int(out["hitstun"][p]) == int(ref["hitstun"][p]) == 0
+
+
+def test_grounded_damageair_floor_loss_missfoot_requires_matching_ledge_slip_side() -> None:
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = "datasets/fountain_of_dreams_recent/replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    def face_away_from_left_ledge_slip(seed_t: np.void) -> None:
+        seed_t["facing"][0] = np.uint8(0)
+
+    out, _ref = _run_one_step_with_seed_mutation(
+        dataset_rel=dataset_rel, record=7048, mutate_seed=face_away_from_left_ledge_slip
+    )
+
+    # ft_800848DC only enters MissFoot for the ledge-slip side that matches fighter facing.
+    # The same floor-loss row with the opposite facing should route through the supplied
+    # air-transfer callback instead of using the MissFoot shortcut.
+    assert int(out["action_id"][0]) != 251
+
+
+def test_downstand_anim_end_wait_guard_entry_uses_source_overlap_nudge_pte_3551() -> None:
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = "datasets/fountain_of_dreams_recent/replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[3551]
+    p = 1
+    assert int(row["seed_t"]["action_id"][p]) == 186  # DownStandU
+    assert int(row["seed_t"]["on_ground"][p]) == 1
+    assert int(row["ref_t1"]["action_id"][p]) == 251  # MissFoot
+    assert int(row["ref_t1"]["on_ground"][p]) == 0
+
+    out, ref = _run_one_step(dataset_rel=dataset_rel, record=3551, p=p)
+
+    # Source order:
+    # - DownStand_Anim can exit to Wait in Fighter_8006A360.
+    # - The same Fighter_8006A360 pass then runs ftCommon_8007E0E4 and writes xF8 overlap nudge
+    #   before Fighter_procUpdate runs the destination Wait IASA and enters GuardOn.
+    # - GuardOn_Coll then consumes that already-applied nudge through ft_800845B4 and enters
+    #   MissFoot on ledge-slip floor loss.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownStand.c::ftCo_DownStand_Anim
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate,Fighter_procMap}
+    # refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007E0E4
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_GuardOn_Coll}
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == 251
+    assert int(out["animation_index"][p]) == int(ref["animation_index"][p]) == 215
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 0
+    assert int(out["ground_id"][p]) == int(ref["ground_id"][p]) == 7
+    assert int(out["jumps_left"][p]) == int(ref["jumps_left"][p]) == 1
+    np.testing.assert_allclose(float(out["pos_x"][p]), float(ref["pos_x"][p]), atol=1e-6)
+    np.testing.assert_allclose(float(out["pos_y"][p]), float(ref["pos_y"][p]), atol=1e-6)
+
+
+def test_wait_guard_entry_overlap_nudge_not_generic_guardon_floor_loss() -> None:
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = "datasets/fountain_of_dreams_recent/replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    def start_already_guardon(seed_t: np.void) -> None:
+        p = 1
+        seed_t["action_id"][p] = np.uint16(178)  # GuardOn
+        seed_t["animation_index"][p] = np.uint32(0xFFFFFFFF)
+        seed_t["action_frame"][p] = np.int16(-1)
+
+    out, _ref = _run_one_step_with_seed_mutation(
+        dataset_rel=dataset_rel, record=3551, mutate_seed=start_already_guardon
+    )
+
+    # The overlap nudge/floor-loss admission is tied to the current-frame Wait-callback entry
+    # marker. A steady GuardOn seed at the same edge must not inherit the DownStand/Wait source
+    # overlap gate.
+    assert int(out["action_id"][1]) != 251
+    np.testing.assert_allclose(float(out["pos_x"][1]), 63.31345748901367, atol=1e-6)

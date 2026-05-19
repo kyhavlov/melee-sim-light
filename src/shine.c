@@ -1147,7 +1147,9 @@ void shine_update_post_collision(MslBatch* batch) {
         //   ftFx_SpecialAirLwStart_AirToGround,ftFx_SpecialAirLwLoop_AirToGround,
         //   ftFx_SpecialAirLwHit_AirToGround,ftFx_SpecialAirLwEnd_AirToGround,
         //   ftFx_SpecialAirLwTurn_AirToGround}
-        // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D7FC
+        // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D7FC,ftCommon_8007D6A4}
+        const float landing_self_vel_x = batch->state.speed_air_x_self[idx];
+        batch->state.speed_ground_x_self[idx] = landing_self_vel_x;
         if (ch != NULL) {
           batch->state.jumps_left[idx] = ch->max_jumps;
         }

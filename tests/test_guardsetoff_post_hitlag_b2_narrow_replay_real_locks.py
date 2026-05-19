@@ -182,6 +182,18 @@ _SECOND_STEADY_B2_TARGETS = (
     ),
 )
 
+_SECOND_STEADY_INIT_MINUS_ONE_B2_TARGETS = (
+    _Case(
+        dataset_rel=(
+            "datasets/fountain_of_dreams_recent/replays/validation/fountain_of_dreams_recent/"
+            "ElatedWearyTermite.msl"
+        ),
+        target_record=1226,
+        port=1,
+        note="EWT FoD second steady GuardSetOff self-loop clears stale x221C_b2 at gx10==init-1",
+    ),
+)
+
 _CARRY_SNAPSHOT_B2_TARGETS = (
     _Case(
         dataset_rel=(
@@ -438,6 +450,53 @@ def test_guardsetoff_second_steady_rows_clear_b2_once_x18_owner_is_gone(case: _C
         assert int(out_row["hitlag"][p]) == int(ref_row["hitlag"][p]), case.note
         assert int(out_row["hitstun"][p]) == int(ref_row["hitstun"][p]), case.note
         assert [int(x) for x in out_row["state_flags"][p]] == [int(x) for x in ref_row["state_flags"][p]], case.note
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "case",
+    _SECOND_STEADY_INIT_MINUS_ONE_B2_TARGETS,
+    ids=lambda c: f"{Path(c.dataset_rel).stem}-rec{c.target_record}-p{c.port}",
+)
+def test_guardsetoff_second_steady_init_minus_one_row_clears_b2_after_post_hitlag_owner(
+    case: _Case,
+) -> None:
+    # Boundary complement to the gx10<init-1 locks:
+    # - the first non-hitlag GuardSetOff row can keep x221C_b2 via the explicit post-hitlag owner,
+    # - the following same-action self-loop has no post-hitlag owner and both GuardReflect timers
+    #   expired, so ftCo_GuardSetOff_Anim / ftCo_80093BC0 clears the stale powershield bit even
+    #   while guard.x10 is still init-1.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    #   ftCo_GuardSetOff_Anim,ftCo_80093BC0,ftCo_80092F2C}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_path = root / case.dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    target = ds.samples[case.target_record]
+    seed = target["seed_t"]
+    p = case.port
+    assert int(seed["action_id"][p]) == 181, case.note
+    assert int(seed["seed_prev_action_id"][p]) == 181, case.note
+    assert int(seed["seed_prev_action_frame"][p]) > 0, case.note
+    assert int(seed["action_frame"][p]) > 0, case.note
+    assert int(seed["hitlag"][p]) == 0, case.note
+    assert int(seed["guard_setoff_hitlag_exit_phase_u8"][p]) == 0, case.note
+    assert int(seed["guard_setoff_post_hitlag_owner_u8"][p]) == 0, case.note
+    assert int(seed["guard_reflect_timer_x14"][p]) == 0, case.note
+    assert int(seed["guard_reflect_timer_x18"][p]) == 0, case.note
+    assert int(seed["guard_x10"][p]) == 7, case.note
+    assert int(seed["state_flags"][p, 3]) == 32, case.note
+
+    _, ref_row, out_row = _run_one_step_row(dataset_path, case.target_record, p)
+    assert int(out_row["action_id"][p]) == int(ref_row["action_id"][p]), case.note
+    assert int(out_row["action_frame"][p]) == int(ref_row["action_frame"][p]), case.note
+    assert int(out_row["hitlag"][p]) == int(ref_row["hitlag"][p]), case.note
+    assert int(out_row["hitstun"][p]) == int(ref_row["hitstun"][p]), case.note
+    assert [int(x) for x in out_row["state_flags"][p]] == [int(x) for x in ref_row["state_flags"][p]], case.note
 
 
 @pytest.mark.integration

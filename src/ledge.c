@@ -362,6 +362,39 @@ static inline void enter_guard_on_from_cliff_end(MslBatch* batch, const MslCommo
   batch->state.lightshield_amount[idx] = 0.0f;
 }
 
+static inline void enter_guard_reflect_from_cliff_end(MslBatch* batch, const MslCommonParams* c,
+                                                      size_t idx) {
+  if (batch == NULL || c == NULL) {
+    return;
+  }
+  // Decomp Wait IASA powershield path:
+  // - CliffClimb/Attack/Escape anim end calls ftCommon_8007D92C -> ft_8008A2BC -> Wait.
+  // - The same Fighter proc can then run Wait_IASA; ftCo_80091A4C checks fresh L/R press plus
+  //   x672 before the held-shield GuardOn branch and enters GuardReflect through ftCo_800939B4.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_CliffClimb_Anim
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D92C
+  // refs/melee/src/melee/ft/ft_0892.c::{ft_8008A2BC,ft_8008A348}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_800939B4,ftCo_80093A50}
+  batch->state.action_id[idx] = (uint16_t)MSL_ACT_GUARD_REFLECT;
+  batch->state.animation_index[idx] = 0xFFFFFFFFu;
+  msl_anim_timebase_enter_with_policy(batch, idx, 0.0f, 1.0f, MSL_ANIM_ENTER_TICK_IMMEDIATE);
+  msl_anim_timebase_seed(batch, idx, -1.0f,
+                         msl_f32_from_q16_16(batch->state.frame_speed_mul_fp_q16_16[idx]));
+  batch->state.guard_reflect_timer_x14[idx] = msl_guard_reflect_timer_x14_init(c);
+  batch->state.guard_reflect_timer_x18[idx] = msl_guard_reflect_timer_x18_init(c);
+  batch->state.guard_reflect_origin_guardon[idx] = 0u;
+  batch->state.guard_special_enable_timer_x1c[idx] = 0u;
+  batch->state.guard_release_latched_xc[idx] = 0u;
+  batch->state.guard_x10[idx] = msl_guard_x10_visible_guardon_init_u8(c);
+  batch->state.lightshield_amount[idx] = 0.0f;
+  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
+  const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
+  batch->state.state_flags[flags_i] |=
+      (uint8_t)(MSL_GUARD_STATE_FLAGS_221C_B3 | MSL_GUARD_STATE_FLAGS_221C_B1 |
+                MSL_GUARD_STATE_FLAGS_221C_B2);
+}
+
 static inline void try_wait_interrupts_after_cliff_option_end(MslBatch* batch,
                                                               const MslCommonParams* c,
                                                               const MslCharParams* ch, size_t idx) {
@@ -387,6 +420,12 @@ static inline void try_wait_interrupts_after_cliff_option_end(MslBatch* batch,
 
   if (locomotion_grounded_a_attack_try_enter_from_wait_iasa(
           batch, c, idx, buttons_pressed, stick_x, stick_y, tilt_timer_x, tilt_timer_y, fd)) {
+    return;
+  }
+  enum { LR = (uint16_t)MSL_BUTTON_L | (uint16_t)MSL_BUTTON_R };
+  if ((buttons_pressed & (uint16_t)LR) != 0u &&
+      batch->state.x672_input_timer[idx] < c->powershield_reflect_window_frames) {
+    enter_guard_reflect_from_cliff_end(batch, c, idx);
     return;
   }
   if (held_lr_lane(batch, c, idx)) {

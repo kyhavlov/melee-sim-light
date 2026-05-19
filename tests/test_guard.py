@@ -203,6 +203,59 @@ def test_guard_state_does_not_reenter_guard_reflect_on_lr_edge() -> None:
         msl_binding.destroy(handle)
 
 
+def test_guardsetoff_hitlag_exit_clears_expired_reflect_window_while_x18_lives() -> None:
+    # GuardSetOff_Anim calls ftCo_80093BC0 on the first non-hitlag callback after prio-0 hitlag
+    # decrement. x221C_b1 is owned by mv.co.guard.x14 independently from x18/x221C_b2, so a row
+    # exiting hitlag with x14 expired and x18 still live publishes only x221C_b2.
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardSetOff_Anim,ftCo_80093BC0}
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["action_id"][0, 0] = np.uint16(ACT_GUARD_SET_OFF)
+    seed["action_frame"][0, 0] = np.int16(0)
+    seed["animation_index"][0, 0] = np.uint32(SM_GUARD_SET_OFF)
+    seed["anim_frame_f32"][0, 0] = np.float32(0.0)
+    seed["hitlag"][0, 0] = np.uint16(1)
+    seed["state_flags"][0, 0, 3] = np.uint8(0x60)
+    seed["guard_reflect_timer_x14"][0, 0] = np.uint8(0)
+    seed["guard_reflect_timer_x18"][0, 0] = np.uint8(2)
+    seed["guard_x10"][0, 0] = np.uint8(7)
+
+    out = _run_seed_one_step(seed, _mk_input_bytes(1, input_stride))
+    assert int(out["action_id"][0]) == ACT_GUARD_SET_OFF
+    assert int(out["hitlag"][0]) == 0
+    assert int(out["state_flags"][0, 3]) == 0x20
+
+
+def test_guardsetoff_hitlag_exit_keeps_live_reflect_window_bit() -> None:
+    # Negative boundary for the same source owner: if the x14 reflect-window timer remains live
+    # after the callback tick, x221C_b1 must not be cleared just because x18 is also live.
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    seed = _seed_base()
+    seed["action_id"][0, 0] = np.uint16(ACT_GUARD_SET_OFF)
+    seed["action_frame"][0, 0] = np.int16(0)
+    seed["animation_index"][0, 0] = np.uint32(SM_GUARD_SET_OFF)
+    seed["anim_frame_f32"][0, 0] = np.float32(0.0)
+    seed["hitlag"][0, 0] = np.uint16(1)
+    seed["state_flags"][0, 0, 3] = np.uint8(0x60)
+    seed["guard_reflect_timer_x14"][0, 0] = np.uint8(2)
+    seed["guard_reflect_timer_x18"][0, 0] = np.uint8(2)
+    seed["guard_x10"][0, 0] = np.uint8(7)
+
+    out = _run_seed_one_step(seed, _mk_input_bytes(1, input_stride))
+    assert int(out["action_id"][0]) == ACT_GUARD_SET_OFF
+    assert int(out["hitlag"][0]) == 0
+    assert int(out["state_flags"][0, 3]) == 0x60
+
+
 def test_guardoff_special_chain_requires_seeded_x1c_timer() -> None:
     import msl_binding
 

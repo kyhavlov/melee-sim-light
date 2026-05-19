@@ -11,6 +11,7 @@ from tools.eval.dataset import COMPARE_DTYPE, read_dataset
 ACT_FX_SPECIAL_AIR_LW_START = 0x016D
 ACT_FX_SPECIAL_AIR_LW_LOOP = 0x016E
 ACT_FX_SPECIAL_AIR_LW_TURN = 0x0171
+ACT_FX_SPECIAL_LW_LOOP = 0x0169
 
 
 def _skip_if_required_artifacts_missing(root: Path) -> None:
@@ -109,6 +110,67 @@ def test_platform_pass_aerial_shine_loop_carries_gravity_delay_pte() -> None:
     assert int(out["action_id"][p]) == ACT_FX_SPECIAL_AIR_LW_LOOP
     assert float(out["speed_y_self"][p]) == pytest.approx(float(ref["speed_y_self"][p]), abs=1e-7)
     assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+
+
+def test_aerial_shine_loop_landing_carries_air_x_to_ground_speed_ewt() -> None:
+    # SpecialAirLwLoop_Coll -> ftFx_SpecialAirLwLoop_AirToGround calls ftCommon_8007D7FC
+    # before entering grounded SpecialLwLoop. That helper publishes `fp->gr_vel = fp->self_vel.x`;
+    # the post-change ftCommon_ClampAirDrift does not clear the landing row's ground speed.
+    #
+    # EWT rec 8656 is the direct FoD replay-real lock: Falco lands out of aerial Shine Loop on a
+    # platform and must carry the current horizontal self velocity into the grounded speed lane.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialAirLwLoop_AirToGround
+    # refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D7FC,ftCommon_8007D6A4}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+        "ElatedWearyTermite.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip("missing local FoD dataset")
+
+    seed, ref, out = _run_one_step(dataset_path, 8656)
+    p = 1
+    assert int(seed["action_id"][p]) == ACT_FX_SPECIAL_AIR_LW_LOOP
+    assert int(ref["action_id"][p]) == ACT_FX_SPECIAL_LW_LOOP
+    assert int(ref["on_ground"][p]) == 1
+
+    assert int(out["action_id"][p]) == ACT_FX_SPECIAL_LW_LOOP
+    assert int(out["on_ground"][p]) == 1
+    assert float(out["speed_ground_x_self"][p]) == pytest.approx(
+        float(ref["speed_ground_x_self"][p]), abs=1e-6
+    )
+    assert float(out["speed_air_x_self"][p]) == pytest.approx(
+        float(ref["speed_air_x_self"][p]), abs=1e-6
+    )
+
+
+def test_grounded_shine_loop_followup_keeps_seeded_ground_speed_ewt() -> None:
+    # Negative/control for the landing handoff above: once the replay seed is already grounded
+    # SpecialLwLoop, the air->ground helper is no longer active. The grounded loop follow-up keeps
+    # the seed/source ground-speed lane rather than reapplying a landing carry.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+        "ElatedWearyTermite.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip("missing local FoD dataset")
+
+    seed, ref, out = _run_one_step(dataset_path, 8657)
+    p = 1
+    assert int(seed["action_id"][p]) == ACT_FX_SPECIAL_LW_LOOP
+    assert int(seed["on_ground"][p]) == 1
+    assert int(ref["action_id"][p]) == ACT_FX_SPECIAL_LW_LOOP
+
+    assert int(out["action_id"][p]) == ACT_FX_SPECIAL_LW_LOOP
+    assert float(out["speed_ground_x_self"][p]) == pytest.approx(
+        float(ref["speed_ground_x_self"][p]), abs=1e-6
+    )
 
 
 def test_aerial_shine_start_delay_does_not_apply_reflector_fall_early() -> None:

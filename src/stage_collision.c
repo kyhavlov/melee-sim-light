@@ -1978,7 +1978,43 @@ uint8_t stage_collision_floor_line_world(const MslBatch* batch, int bi,
                rec->platform_id < 2u) {
       const size_t idx = (size_t)bi * 2u + (size_t)rec->platform_id;
       const uint8_t height_valid = batch->state.stage_fod_platform_valid[idx];
-      const float h = height_valid ? batch->state.stage_fod_platform_height[idx] : rec->y_const;
+      const uint8_t height_source_owned =
+          ((batch->state.stage_fod_platform_height_source[idx] &
+            (uint8_t)(MSL_FOD_PLATFORM_HEIGHT_SOURCE_DIRECT_EVENT |
+                      MSL_FOD_PLATFORM_HEIGHT_SOURCE_GROUND_CONTACT |
+                      MSL_FOD_PLATFORM_HEIGHT_SOURCE_SAME_STEP_CONTACT)) != 0u ||
+           batch->state.stage_fod_platform_scheduler_valid[idx] != 0u ||
+           (batch->state.stage_fod_platform_velocity_valid[idx] != 0u &&
+            fabsf(batch->state.stage_fod_platform_velocity[idx]) > 1.0e-6f))
+              ? 1u
+              : 0u;
+      float h = height_valid ? batch->state.stage_fod_platform_height[idx] : rec->y_const;
+      if (height_valid != 0u && height_source_owned != 0u) {
+        // grIzumi creates/targets the side-platform collision JObjs from generated constants.
+        // Slippi's platform event export can round these source poses slightly below/above the
+        // JObj value; collision queries still consume the mpLib line refreshed from that JObj, so
+        // snap only named source-owned grIzumi poses to the extracted constants. A stale valid
+        // sparse height without event/contact, scheduler, or live-velocity proof keeps its raw
+        // height instead of being promoted to current source authority.
+        // refs/melee/src/melee/gr/grizumi.c::{grIzumi_801CCBDC,grIzumi_801CC358}
+        // refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
+        // data/stages/bin/griz.bin::MSLSTG01 platform_transform.y_const/platform_motion
+        if (fabsf(h - rec->y_const) <= 1.0e-3f) {
+          h = rec->y_const;
+        } else if (slot->fod_motion.loaded != 0u &&
+                   fabsf(h - slot->fod_motion.home_height) <= 1.0e-3f) {
+          h = slot->fod_motion.home_height;
+        } else if (slot->fod_motion.loaded != 0u &&
+                   fabsf(h - slot->fod_motion.max_height) <= 1.0e-3f) {
+          h = slot->fod_motion.max_height;
+        } else if (slot->fod_motion.loaded != 0u &&
+                   fabsf(h - slot->fod_motion.min_visible_height) <= 1.0e-3f) {
+          h = slot->fod_motion.min_visible_height;
+        } else if (slot->fod_motion.loaded != 0u &&
+                   fabsf(h - slot->fod_motion.hidden_target_height) <= 1.0e-3f) {
+          h = slot->fod_motion.hidden_target_height;
+        }
+      }
       if (height_valid != 0u && slot->fod_motion.loaded != 0u &&
           fabsf(h - slot->fod_motion.hidden_target_height) <= 1.0e-4f) {
         // `grIzumi_801CC358` sends the platform to the generated hidden target. Keep the hidden
@@ -2561,7 +2597,12 @@ static void stage_collision_update_fod_platform_motion(MslBatch* batch) {
     const MslStageSlot* slot = stage_slot((uint32_t)MSL_STAGE_FOUNTAIN_OF_DREAMS);
     const MslFodPlatformMotion* motion =
         (slot != NULL && slot->fod_motion.loaded) ? &slot->fod_motion : NULL;
-    for (size_t platform_id = 0; platform_id < 2u; platform_id++) {
+    for (size_t platform_order = 0; platform_order < 2u; platform_order++) {
+      // grIzumi creates the left platform from joint 4 before the right platform from joint 6.
+      // Runtime state arrays use Slippi/extracted platform ids (0=right, 1=left), so source proc
+      // order is left then right while collision/data lookup ids remain unchanged.
+      // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CBE64
+      const size_t platform_id = (platform_order == 0u) ? 1u : 0u;
       const size_t idx = (size_t)bi * 2u + platform_id;
       if (batch->state.stage_fod_platform_valid[idx] &&
           batch->state.stage_fod_platform_velocity_valid[idx] &&

@@ -871,6 +871,27 @@ static inline uint8_t physics_action_uses_player_nudge_ft80083f88_ground_to_air_
                                          action_id, MSL_MS_CLASS_FT80083F88_GROUND_TO_AIR_COLL));
 }
 
+static inline uint8_t physics_action_uses_common_damage_floor_loss_nudge(uint16_t action_id) {
+  if (physics_action_is_common_damage(action_id) == 0u) {
+    return 0u;
+  }
+  // Common Damage_Coll ground branch:
+  // - Fighter_8006A360 runs ftCommon_8007E0E4 before Fighter_procUpdate.
+  // - Fighter_procUpdate applies xF8_playerNudgeVel.x before the later Coll callback.
+  // - ftCo_Damage_Coll then calls ft_800848DC, whose ft_80082708/mpColl_8004B108 path observes
+  //   the already-nudged floor edge and can enter MissFoot.
+  //
+  // DownDamage has a separate downed callback family, so keep this owner on the common Damage
+  // ftCo_Damage_Coll family only.
+  //
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+  // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007DD7C,ftCommon_8007E0E4}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Coll
+  // refs/melee/src/melee/ft/ft_081B.c::{ft_800848DC,ft_80082708}
+  return (uint8_t)(action_id != (uint16_t)MSL_ACT_DOWN_DAMAGE_U &&
+                   action_id != (uint16_t)MSL_ACT_DOWN_DAMAGE_D);
+}
+
 static inline uint8_t physics_nudge_reaches_facing_edge(const MslStageFloorGraph* g, int line_idx,
                                                         float pos_x, float nudge_x,
                                                         uint8_t facing_right) {
@@ -902,6 +923,48 @@ static inline uint8_t physics_action_uses_downwait_player_nudge_floor_loss(uint1
                     action_id == (uint16_t)MSL_ACT_DOWN_STAND_U ||
                     action_id == (uint16_t)MSL_ACT_DOWN_STAND_D) &&
                    physics_action_uses_player_nudge_ft80083f88_ground_to_air_coll(action_id));
+}
+
+static inline uint16_t physics_common_overlap_nudge_source_action(const MslBatch* batch,
+                                                                  size_t idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  const uint16_t action_id = batch->state.action_id[idx];
+  if (action_id == (uint16_t)MSL_ACT_GUARD_ON &&
+      batch->state.guard_entry_via_wait_callback[idx] != 0u) {
+    // Source order:
+    // - Fighter_8006A360 runs Anim callback, then ftCommon_8007E0E4 common overlap nudge.
+    // - Fighter_procUpdate runs the input/IASA callback later; a destination Wait row can then
+    //   enter GuardOn through ftCo_80091A4C after the nudge pass.
+    // Use the source-visible Wait callback owner for the overlap gate, while leaving the current
+    // action as GuardOn for the later Phys/Coll callbacks.
+    // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80091A4C
+    return (uint16_t)MSL_ACT_WAIT;
+  }
+  return action_id;
+}
+
+static inline uint8_t physics_guard_entry_from_wait_nudge_can_feed_floor_loss(
+    const MslBatch* batch, const MslStageFloorGraph* g, int line_idx, size_t idx, float nudge_x) {
+  if (batch == NULL || batch->state.action_id[idx] != (uint16_t)MSL_ACT_GUARD_ON ||
+      batch->state.guard_entry_via_wait_callback[idx] == 0u) {
+    return 0u;
+  }
+  // Source order bridge for this single callback window:
+  // - ftCommon_8007E0E4 writes xF8_playerNudgeVel while the just-entered destination Wait callback
+  //   is still the source owner.
+  // - Fighter_procUpdate later admits GuardOn through Wait_IASA, applies the already-written xF8
+  //   nudge, then GuardOn_Coll can consume the resulting floor loss through ft_800845B4.
+  // This is not a generic GuardOn nudge rule; it requires the same-frame Wait-callback marker and
+  // only admits nudges that actually leave the current floor span.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate,Fighter_procMap}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_GuardOn_Coll}
+  // refs/melee/src/melee/ft/ft_081B.c::ft_800845B4
+  return physics_nudge_exits_floor_span(g, line_idx, batch->state.pos_x[idx], nudge_x);
 }
 
 static inline uint8_t physics_action_is_attackdash_knockdown_overlap_owner(uint16_t action_id,
@@ -986,6 +1049,7 @@ static inline void physics_compute_grounded_player_nudge(MslBatch* batch, int bi
 
     if (!physics_action_suppresses_self_player_nudge_x221d_b5(batch->state.action_id[idx],
                                                               batch->state.prev_action_id[idx])) {
+      const uint16_t source_action = physics_common_overlap_nudge_source_action(batch, idx);
       const float self_center_x =
           batch->state.pos_x[idx] + self->pushbox_x * (float)batch->state.facing_dir1[idx];
       for (int q = 0; q < num_players; q++) {
@@ -1052,16 +1116,20 @@ static inline void physics_compute_grounded_player_nudge(MslBatch* batch, int bi
         }
         if (!physics_floor_line_contains_or_connects_to_nudged_x(
                 floor_graph, self_line, batch->state.pos_x[idx] + nudge_x) &&
-            !(physics_action_uses_ft80084280_ottotto_edge_callback(batch->state.action_id[idx]) &&
+            !(physics_action_uses_ft80084280_ottotto_edge_callback(source_action) &&
               physics_nudge_reaches_facing_edge(floor_graph, self_line, batch->state.pos_x[idx],
                                                 nudge_x, batch->state.facing[idx])) &&
-            !(physics_action_uses_player_nudge_ft80083f88_ground_to_air_coll(
-                  batch->state.action_id[idx]) &&
+            !(physics_action_uses_player_nudge_ft80083f88_ground_to_air_coll(source_action) &&
               (physics_nudge_reaches_facing_edge(floor_graph, self_line, batch->state.pos_x[idx],
                                                  nudge_x, batch->state.facing[idx]) ||
-               (physics_action_uses_downwait_player_nudge_floor_loss(batch->state.action_id[idx]) &&
+               (physics_action_uses_downwait_player_nudge_floor_loss(source_action) &&
                 physics_nudge_exits_floor_span(floor_graph, self_line, batch->state.pos_x[idx],
-                                               nudge_x))))) {
+                                               nudge_x)))) &&
+            !(physics_action_uses_common_damage_floor_loss_nudge(source_action) &&
+              physics_nudge_exits_floor_span(floor_graph, self_line, batch->state.pos_x[idx],
+                                             nudge_x)) &&
+            !physics_guard_entry_from_wait_nudge_can_feed_floor_loss(batch, floor_graph, self_line,
+                                                                     idx, nudge_x)) {
           continue;
         }
         out_nudge_x[p] += nudge_x;

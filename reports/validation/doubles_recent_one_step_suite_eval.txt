@@ -40,35 +40,35 @@ validation.profile.ignored: state_flags[4]&0x80 reason=Slippi fp+0x221F camera-s
 
 == datasets/doubles_recent/replays/validation/doubles_recent/Game_20260509T152622.msl ==
 Records: 9560  Players/scored per record: 4  Total player-frames: 38240
-mismatch.action_id: 24 / 38240 (0.000628)
-mismatch.action_frame: 19 / 38240 (0.000497)
-mismatch.on_ground: 9 / 38240 (0.000235)
+mismatch.action_id: 23 / 38240 (0.000601)
+mismatch.action_frame: 18 / 38240 (0.000471)
+mismatch.on_ground: 8 / 38240 (0.000209)
 mismatch.facing: 2 / 38240 (0.000052)
 mismatch.stocks: 1 / 38240 (0.000026)
-mismatch.jumps_left: 10 / 38240 (0.000262)
+mismatch.jumps_left: 9 / 38240 (0.000235)
 mismatch.is_dead: 0 / 38240 (0.000000)
 mismatch.hitlag: 33 / 38240 (0.000863)
-mismatch.hitstun: 12 / 38240 (0.000314)
+mismatch.hitstun: 11 / 38240 (0.000288)
 mismatch.l_cancel: 0 / 38240 (0.000000)
 mismatch.hurtbox_state: 3 / 38240 (0.000078)
 mismatch.ground_id: 1 / 38240 (0.000026)
-mismatch.animation_index: 24 / 38240 (0.000628)
+mismatch.animation_index: 23 / 38240 (0.000601)
 mismatch.instance_hit_by: 8 / 38240 (0.000209)
-mismatch.instance_id: 20 / 38240 (0.000523)
+mismatch.instance_id: 19 / 38240 (0.000497)
 mismatch.last_attack_landed: 2 / 38240 (0.000052)
 mismatch.combo_count: 5 / 38240 (0.000131)
 mismatch.last_hit_by: 48 / 38240 (0.001255)
-mismatch.state_flags: 39 / 191200 (0.000204)
+mismatch.state_flags: 38 / 191200 (0.000199)
 mismatch.item_exists: 6 / 143400 (0.000042)
 mismatch.item_type: 6 / 143400 (0.000042)
 mismatch.item_state: 1 / 143400 (0.000007)
 mismatch.item_owner: 6 / 143400 (0.000042)
 mismatch.item_instance_id: 6 / 143400 (0.000042)
 ignored_mismatch.state_flags[4]&0x80: 77 / 38240 (0.002014)
-err.pos_x: mae=0.000630 p95=0.000000 max=3.959999
+err.pos_x: mae=0.000617 p95=0.000000 max=3.959999
 err.pos_y: mae=0.000824 p95=0.000000 max=5.652088
-err.speed_air_x_self: mae=0.000092 p95=0.000000 max=1.360000
-err.speed_ground_x_self: mae=0.000306 p95=0.000000 max=1.770646
+err.speed_air_x_self: mae=0.000088 p95=0.000000 max=1.360000
+err.speed_ground_x_self: mae=0.000302 p95=0.000000 max=1.770646
 err.speed_y_self: mae=0.000610 p95=0.000000 max=3.500000
 err.speed_x_attack: mae=0.000389 p95=0.000000 max=3.283563
 err.speed_y_attack: mae=0.000215 p95=0.000000 max=3.536400
@@ -78,13 +78,13 @@ err.item_pos_x: mae=0.134624 p95=0.000000 max=128.817566
 err.item_pos_y: mae=0.012806 p95=0.000000 max=9.942838
 err.item_vel_x: mae=0.008295 p95=0.000000 max=7.000000
 err.item_vel_y: mae=0.000009 p95=0.000000 max=0.019359
-overall.discrete_mismatch: 285 / 1596520
-overall.strict_discrete_mismatch: 362 / 1596520
+overall.discrete_mismatch: 277 / 1596520
+overall.strict_discrete_mismatch: 354 / 1596520
 overall.ignored_discrete_mismatch: 77
-overall.float_norm_mae_p95: 0.00009316
+overall.float_norm_mae_p95: 0.00009260
 
 == suite summary ==
-overall.discrete_mismatch: 285 / 1596520
-overall.strict_discrete_mismatch: 362 / 1596520
+overall.discrete_mismatch: 277 / 1596520
+overall.strict_discrete_mismatch: 354 / 1596520
 overall.ignored_discrete_mismatch: 77
-overall.float_norm_mae_p95: 0.00009316
+overall.float_norm_mae_p95: 0.00009260

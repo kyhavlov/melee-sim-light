@@ -1307,6 +1307,36 @@ static inline float combat_hurtcap_pose_sample_frame(const MslBatch* batch, size
   return combat_float_aobj_hurtcap_pose_owner(action_id) ? anim_frame_f32 : (float)pose_frame;
 }
 
+static inline uint8_t combat_body_matrix_positive_pose_reliable(const MslBatch* batch,
+                                                                size_t d_idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  const uint8_t char_id = batch->state.char_id[d_idx];
+  const uint16_t action_id = batch->state.action_id[d_idx];
+  if (msl_motion_state_class_has(char_id, action_id, MSL_MS_CLASS_COMMON_FALL)) {
+    if (batch->state.action_frame[d_idx] <= 2) {
+      return 1u;
+    }
+    // After Fall entry, replay-visible state_age is not sufficient to reconstruct the live JObj
+    // pose that ftColl_80078C70/lbColl_8000805C consumes. Dolphin collision probes on later Fall
+    // frames show `x894_currentAnimFrame` staying at 0 while the live leg JObj matrix changes.
+    // Later CommonFall BODY positives are therefore only source-backed when the ordinary
+    // world/sphere geometry path already overlaps; the generated state-age matrix may reject a
+    // false positive but must not create a matrix-only positive over a world-geometry miss without
+    // an explicit live JObj pose lane. The entry step stays eligible because
+    // Fighter_ChangeMotionState has just initialized the source JObj chain; after the normal
+    // per-frame tick this appears as action_frame 2 in the combat pass, matching DCC's frame-1
+    // seeded Fall BODY admission.
+    // refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+    // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+    // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+    // reports/triage/grape_item05_ewt1019_dolphin_collision_probe/
+    return 0u;
+  }
+  return 1u;
+}
+
 static inline uint8_t combat_attackdash_post_hitbox_collision_pose_owner(
     const MslBatch* batch, int bi, size_t idx, uint16_t action_id, uint8_t char_id,
     float anim_frame_f32, uint16_t attacker_action_id, uint8_t attacker_hitbox_active) {
@@ -7065,6 +7095,11 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
           const uint8_t baseline_overlaps =
               combat_sphere_capsule_intersects(hx, hy, hz, hr, ax, ay, az, bx, by, bz, cr, NULL);
+          if (lbcoll_overlap_valid && !baseline_overlaps &&
+              !combat_body_matrix_positive_pose_reliable(batch, d_idx)) {
+            lbcoll_overlap_valid = 0u;
+            lbcoll_overlap_amount = 0.0f;
+          }
           // The Guard-tilt matrix owner is currently reconstructed from extracted world matrices,
           // while HSD blends local JObj SRT state before matrix setup. Use that reconstructed matrix
           // as a positive owner/supplement for no-submotion tilted Guard, but do not let it reject

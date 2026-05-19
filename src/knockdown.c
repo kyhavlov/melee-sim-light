@@ -1074,8 +1074,9 @@ static inline void enter_fall(MslBatch* batch, size_t idx);
 static inline void enter_down_stand_from_downdamage_anim(MslBatch* batch, size_t idx,
                                                          uint16_t down_damage_act);
 static inline void clear_downed_damage_state(MslBatch* batch, size_t idx);
-static inline uint8_t damage_ground_floor_loss_should_missfoot(const MslBatch* batch, size_t idx,
-                                                               uint32_t stage_id);
+static inline uint8_t common_damage_ground_floor_loss_should_missfoot(const MslBatch* batch,
+                                                                      size_t idx,
+                                                                      uint32_t stage_id);
 static inline void enter_missfoot_from_damage_floor_loss(MslBatch* batch, const MslCharParams* ch,
                                                          size_t idx);
 static inline uint8_t damagefall_iasa_try_stick_fall(MslBatch* batch, const MslCommonParams* c,
@@ -1581,14 +1582,13 @@ void knockdown_update_pre_physics(MslBatch* batch) {
             enter_squat(batch, idx);
           }
 
-          // Apply the new state's Phys in the same frame (ft_80084F3C friction path).
-          //
-          // Decomp:
-          // - Wait phys uses ft_80084F3C.
-          // - Squat phys uses ft_80084F3C.
-          // - Guard phys paths also include ft_80084F3C ground friction.
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_Phys
-          down_apply_phys_friction(batch, c, ch, idx);
+          // The newly entered state's Phys still runs in the normal physics phase below this
+          // pre-physics action pass. Do not apply ft_80084F3C here as well, or DownBack/DownFoward
+          // terminal rows can lose one extra ground-friction step before the destination state's
+          // collision callback resolves edge/floor loss (for example Wait_Coll -> MissFoot).
+          // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate (Anim/IASA before Phys)
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Down.c::ftCo_Down_Anim
+          // refs/melee/src/melee/ft/ft_081B.c::ft_80084F3C
         } else {
           // Phys: ft_80084FA8 (TransN-driven ground velocity target; see down_roll_apply_phys_transn).
           down_roll_apply_phys_transn(batch, c, ch, idx);
@@ -2156,8 +2156,9 @@ static inline void enter_down_stand_from_downdamage_anim(MslBatch* batch, size_t
   batch->state.hurtbox_state[idx] = 2u;
 }
 
-static inline uint8_t damage_ground_floor_loss_should_missfoot(const MslBatch* batch, size_t idx,
-                                                               uint32_t stage_id) {
+static inline uint8_t common_damage_ground_floor_loss_should_missfoot(const MslBatch* batch,
+                                                                      size_t idx,
+                                                                      uint32_t stage_id) {
   if (batch == NULL) {
     return 0u;
   }
@@ -2178,11 +2179,13 @@ static inline uint8_t damage_ground_floor_loss_should_missfoot(const MslBatch* b
   const float right = (line->x0 > line->x1) ? line->x0 : line->x1;
   const float x = batch->state.pos_x[idx];
   const uint8_t facing_right = batch->state.facing[idx] ? 1u : 0u;
-  // Decomp: grounded Damage_Coll calls ft_800848DC. When mpColl_8004B108 reports floor loss past
-  // an open endpoint, it sets Left/RightLedgeSlip; ft_800848DC enters MissFoot only for the
-  // facing/side pair shown below, otherwise it calls the supplied air-transfer callback. FoD
-  // side-platform endpoints are grIzumi-owned live JObj geometry, so the ledge-slip side test must
-  // use MSLSTG01 transformed world endpoints rather than static segment coordinates.
+  // Decomp: all common Damage actions, including DamageAir1/2/3, use ftCo_Damage_Coll. When
+  // ground_or_air is Ground, that callback calls ft_800848DC regardless of visible action id.
+  // If mpColl_8004B108 reports floor loss past an open endpoint, it sets Left/RightLedgeSlip;
+  // ft_800848DC enters MissFoot only for the facing/side pair shown below, otherwise it calls the
+  // supplied air-transfer callback. FoD side-platform endpoints are grIzumi-owned live JObj
+  // geometry, so the ledge-slip side test must use MSLSTG01 transformed world endpoints rather
+  // than static segment coordinates.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Coll
   // refs/melee/src/melee/ft/ft_081B.c::ft_800848DC
   // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
@@ -3378,8 +3381,8 @@ void knockdown_update_post_collision(MslBatch* batch) {
         msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
         enter_fall_colldata_lock_from_ground(batch, idx);
       } else if (was_ground && !now_ground) {
-        if (is_damage_ground_action(a0) &&
-            damage_ground_floor_loss_should_missfoot(batch, idx, stage_id)) {
+        if ((is_damage_ground_action(a0) || is_damage_air_action(a0)) &&
+            common_damage_ground_floor_loss_should_missfoot(batch, idx, stage_id)) {
           enter_missfoot_from_damage_floor_loss(batch, ch, idx);
           continue;
         }

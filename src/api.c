@@ -1319,6 +1319,15 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.stage_fod_platform_scheduler_timer[pidx] = 0u;
       batch->state.stage_fod_platform_scheduler_target[pidx] = 0.0f;
       batch->state.stage_fod_platform_scheduler_valid[pidx] = 0u;
+      if (seed->stage_id == (uint32_t)MSL_STAGE_FOUNTAIN_OF_DREAMS && seed->frame_id <= -123 &&
+          batch->state.stage_fod_platform_valid[pidx]) {
+        // Match-start reseeds are equivalent to new-match init for grIzumi scheduling: once the
+        // initial JObj height is source-owned, grIzumi_801CC358 owns later platform wait/target
+        // state from the seeded frame_pre_random_seed stream. Mid-replay teacher-forced reseeds
+        // still keep this disabled unless explicit height/velocity lanes expose current state.
+        // refs/melee/src/melee/gr/grizumi.c::{grIzumi_801CCBDC,grIzumi_801CC358}
+        batch->state.stage_fod_platform_scheduler_valid[pidx] = 1u;
+      }
     }
     batch->state.stage_yoshi_shyguy_timer[bi] = seed->stage_yoshi_shyguy_timer_u16;
     batch->state.stage_yoshi_shyguy_pattern[bi] = seed->stage_yoshi_shyguy_pattern_u8 % 6u;

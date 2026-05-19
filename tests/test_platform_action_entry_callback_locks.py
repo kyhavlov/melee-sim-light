@@ -30,9 +30,11 @@ ACT_JUMP_F = 25
 ACT_ATTACK_AIR_N = 65
 ACT_ATTACK_AIR_LW = 65
 ACT_ATTACK_AIR_F = 66
+ACT_ATTACK_AIR_B = 67
 ACT_ATTACK_AIR_HI = 68
 ACT_LANDING_AIR_N = 70
 ACT_LANDING_AIR_LW = 70
+ACT_LANDING_AIR_B = 72
 ACT_LANDING_AIR_HI = 73
 ACT_LANDING = 42
 ACT_GUARD_ON = 178
@@ -624,13 +626,13 @@ def test_locked_escapeair_shallow_cliff_floor_final_snap_stays_airborne() -> Non
             2753,
             1,
         ),
-        (
-            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
-            "MilkyGracefulStingray.msl",
-            5479,
-            5554,
-            0,
-        ),
+            (
+                "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+                "MilkyGracefulStingray.msl",
+                5485,
+                5554,
+                0,
+            ),
     ],
 )
 def test_fall_ecb_lock_expiry_rollout_keeps_fastfall_airborne(
@@ -3445,6 +3447,120 @@ def test_fod_fall_coll_current_down_input_keeps_transformed_platform_pass() -> N
     assert int(out["action_id"][p]) == ACT_FALL
     assert int(out["on_ground"][p]) == 0
     assert int(out["ground_id"][p]) == int(row["seed_t"]["ground_id"][p])
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_name", "record", "p", "platform_i", "seed_action", "ref_action", "named_height"),
+    [
+        ("ElatedWearyTermite.msl", 2523, 0, 1, ACT_ATTACK_AIR_B, ACT_LANDING_AIR_B, 25.0),
+        ("ParallelTemptingElk.msl", 1395, 1, 1, ACT_FALL, ACT_LANDING, 20.0),
+    ],
+)
+def test_fod_landing_uses_named_grizumi_platform_pose_for_source_height(
+    dataset_name: str,
+    record: int,
+    p: int,
+    platform_i: int,
+    seed_action: int,
+    ref_action: int,
+    named_height: float,
+) -> None:
+    # FoD grIzumi/platform events can expose a source-owned platform pose rounded just below a
+    # generated target/initial height. Source collision consumes the JObj/mpLib line at the
+    # generated pose, not the rounded Slippi event float, before Landing_Coll / JumpAerial_Coll
+    # publishes the landing row.
+    #
+    # refs/melee/src/melee/gr/grizumi.c::{grIzumi_801CCBDC,grIzumi_801CC358}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Coll
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Coll
+    # refs/melee/src/melee/mp/mplib.c::{mpLib_80055E9C,mpLib_8004DD90_Floor}
+    # data/stages/bin/griz.bin::MSLSTG01 platform_transform/platform_motion records
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = f"datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/{dataset_name}"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record]
+    assert int(row["seed_t"]["action_id"][p]) == seed_action
+    assert int(row["seed_t"]["stage_fod_platform_height_source_u8"][platform_i]) & 0x04
+    assert abs(float(row["seed_t"]["stage_fod_platform_height_f32"][platform_i]) - named_height) < 1e-3
+    assert int(row["ref_t1"]["action_id"][p]) == ref_action
+
+    out = _run_one_step(ds, record)
+    ref = row["ref_t1"]
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
+def test_fod_landing_named_platform_pose_snap_is_not_generic_height_rounding() -> None:
+    # Boundary for the named-pose snap above: an arbitrary same-step source height near, but not at,
+    # the generated initial pose must still move the collision line by the supplied height. This
+    # keeps the owner tied to grIzumi's generated target/initial constants rather than a generic
+    # platform-y clamp.
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+    ds = read_dataset(str(dataset_path))
+    record = 1395
+    p = 1
+    platform_i = 1
+    row = ds.samples[record]
+    assert int(row["seed_t"]["stage_fod_platform_height_source_u8"][platform_i]) & 0x04
+
+    def move_outside_named_pose(seed_t: np.ndarray) -> None:
+        seed_t["stage_fod_platform_height_f32"][0, platform_i] = np.float32(20.01)
+
+    out = _run_one_step(ds, record, seed_mutator=move_outside_named_pose)
+    assert int(out["action_id"][p]) == ACT_LANDING
+    assert float(out["pos_y"][p]) > float(row["ref_t1"]["pos_y"][p]) + 0.005
+
+
+@pytest.mark.integration
+def test_fod_landing_named_platform_pose_snap_requires_current_source_owner() -> None:
+    # Boundary for stale sparse heights: a valid FoD platform height near a generated grIzumi pose
+    # is not enough to become current mpLib/JObj authority. Without the source event/contact bit or
+    # live velocity, the runtime must keep the carried sparse height instead of snapping it to a
+    # named pose.
+    # refs/melee/src/melee/gr/grizumi.c::{grIzumi_801CCBDC,grIzumi_801CC358}
+    # refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+    ds = read_dataset(str(dataset_path))
+    record = 1395
+    p = 1
+    platform_i = 1
+    row = ds.samples[record]
+    assert int(row["seed_t"]["stage_fod_platform_height_source_u8"][platform_i]) & 0x04
+
+    def make_near_named_pose_stale(seed_t: np.ndarray) -> None:
+        seed_t["stage_fod_platform_height_source_u8"][0, platform_i] = np.uint8(0)
+        seed_t["stage_fod_platform_velocity_valid_u8"][0, platform_i] = np.uint8(0)
+        seed_t["stage_fod_platform_height_valid_u8"][0, platform_i] = np.uint8(1)
+        seed_t["stage_fod_platform_height_f32"][0, platform_i] = np.float32(
+            float(row["ref_t1"]["pos_y"][p]) - 0.0005
+        )
+
+    out = _run_one_step(ds, record, seed_mutator=make_near_named_pose_stale)
+    assert int(out["action_id"][p]) != int(row["ref_t1"]["action_id"][p])
+    assert abs(float(out["pos_y"][p]) - float(row["ref_t1"]["pos_y"][p])) > 1.0e-4
 
 
 @pytest.mark.integration

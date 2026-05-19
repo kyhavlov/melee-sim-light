@@ -12,6 +12,7 @@ from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
 SELFPLAY_181413_SLP = Path("replays/validation/aggregate_recent/Game_20260514T181413.slpz")
 AGN_SLP = Path("replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz")
 EWT_SLP = Path("replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.slpz")
+PTE_SLP = Path("replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.slpz")
 
 
 def _rollout_until_from_slp(slp_path: Path, *, record: int, ports: list[int]) -> tuple[np.void, np.void, np.void]:
@@ -107,6 +108,39 @@ def _one_step_from_slp(slp_path: Path, *, record: int, ports: list[int]) -> tupl
     return row["seed_t"][0], row["ref_t1"][0], out[0].copy()
 
 
+def _one_step_sample(ds, row: np.ndarray) -> np.void:
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+        1, seed_stride
+    ).copy()
+    prev_input_bytes = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+        1, input_stride
+    ).copy()
+    input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+        1, input_stride
+    ).copy()
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    try:
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+    finally:
+        binding.destroy(handle)
+    return out_compare_bytes.view(COMPARE_DTYPE).reshape(1)[0].copy()
+
+
 @pytest.mark.integration
 def test_guardon_wait_entry_marker_does_not_stale_carry_into_later_spotdodge_rollout() -> None:
     # Game_20260514T181413 rec 1164 enters frozen no-submotion GuardOn through the grounded
@@ -185,6 +219,50 @@ def test_guardreflect_entry_bits_survive_same_frame_capture_pulled_lw() -> None:
     assert int(ref["action_id"][p]) == int(out["action_id"][p]) == 226  # CapturePulledLw
     assert int(ref["state_flags"][p, 3]) == 0x60
     assert int(out["state_flags"][p, 3]) == int(ref["state_flags"][p, 3])
+
+
+@pytest.mark.integration
+def test_cliff_option_end_wait_iasa_admits_fresh_lr_guardreflect() -> None:
+    # ParallelTemptingElk rec 3606: grounded CliffClimbQuick animation ends through
+    # ftCommon_8007D92C -> ft_8008A2BC -> Wait, then the same proc's Wait_IASA reaches
+    # ftCo_80091A4C. A fresh R press with x672 inside the powershield window must enter
+    # GuardReflect before the held-shield GuardOn branch.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_CliffClimb_Anim
+    # refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D92C
+    # refs/melee/src/melee/ft/ft_0892.c::{ft_8008A2BC,ft_8008A348}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_800939B4}
+    seed, ref, out = _one_step_from_slp(PTE_SLP, record=3606, ports=[1, 2])
+    p = 1
+    assert int(seed["action_id"][p]) == 255  # CliffClimbQuick
+    assert int(ref["action_id"][p]) == int(out["action_id"][p]) == 182  # GuardReflect
+    assert int(out["action_frame"][p]) == -1
+    assert int(out["animation_index"][p]) == 0xFFFFFFFF
+
+
+@pytest.mark.integration
+def test_cliff_option_end_held_lr_without_fresh_press_stays_guardon() -> None:
+    # Same source handoff as the positive lock, but with the L/R fresh-press edge removed. The
+    # source ftCo_80091A4C ordering should then fall through to held-shield GuardOn instead of
+    # entering GuardReflect from a stale x672 timer alone.
+    if not PTE_SLP.exists():
+        pytest.skip(f"missing local replay: {PTE_SLP}")
+    ds = build_dataset_from_slp(
+        slp_path=str(PTE_SLP),
+        ports=[1, 2],
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    row = ds.samples[3606:3607].copy()
+    p = 1
+    assert int(row["seed_t"]["action_id"][0, p]) == 255  # CliffClimbQuick
+    assert int(row["input_t"]["p"]["buttons"][0, p]) & 0x0020  # R held
+    row["prev_input_t"]["p"]["buttons"][0, p] = row["input_t"]["p"]["buttons"][0, p]
+
+    out = _one_step_sample(ds, row)
+    assert int(out["action_id"][p]) == 178  # GuardOn
+    assert int(out["action_frame"][p]) == -1
+    assert int(out["animation_index"][p]) == 0xFFFFFFFF
 
 
 @pytest.mark.integration

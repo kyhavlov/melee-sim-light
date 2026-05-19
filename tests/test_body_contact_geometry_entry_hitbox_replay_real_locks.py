@@ -296,6 +296,72 @@ def test_attackairlw_primary_hitbox_tiny_overlap_stays_full_body_damage_prh() ->
 
 
 @pytest.mark.integration
+def test_attackairlw_commonfall_matrix_only_positive_rejects_false_body_ewt_1019() -> None:
+    # ElatedWearyTermite rec1019 is a FoD rollout false hit: p0 Fox AttackAirLw hb1 sweeps near
+    # p1 Falco Fall. The ordinary world capsule misses, and Dolphin lbColl probes show vanilla
+    # lbColl_8000805C/lbColl_80006E58 also rejects the live Fall JObj pose. MSL's generated
+    # state-age Fall pose is not source-complete enough to create a matrix-only BODY positive; it
+    # may still reject contacts when the world geometry already overlaps.
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+    # reports/triage/grape_item05_ewt1019_dolphin_collision_probe/
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/fountain_of_dreams_recent/replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing validation dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples[1019]["seed_t"]
+    out, ref = _step_one_row_with_seed_one_step(dataset_path, 1019, seed)
+
+    attacker = 0
+    defender = 1
+    assert int(seed["action_id"][attacker]) == 69  # AttackAirLw.
+    assert int(seed["action_id"][defender]) == 29  # Fall.
+    assert int(ref["action_id"][defender]) == 29  # Fall; no BODY hit.
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender])
+    assert int(out["hitlag"][attacker]) == int(ref["hitlag"][attacker]) == 0
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 0
+    assert int(out["hitstun"][defender]) == int(ref["hitstun"][defender]) == 0
+    assert float(out["percent"][defender]) == pytest.approx(float(ref["percent"][defender]))
+
+
+@pytest.mark.integration
+def test_commonfall_entry_matrix_positive_still_admits_body_dcc_5574() -> None:
+    # Boundary control for the CommonFall matrix-only BODY veto: Fall entry is still eligible for
+    # source matrix positives because Fighter_ChangeMotionState has just initialized the JObj chain.
+    # DistinctCaringCobra rec5574 is a direct frame-1 Fall BODY admission from p0 AttackAirF.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing validation dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples[5574]["seed_t"]
+    out, ref = _step_one_row_with_seed_one_step(dataset_path, 5574, seed)
+
+    attacker = 0
+    defender = 1
+    assert int(seed["action_id"][attacker]) == 50  # AttackAirF.
+    assert int(seed["action_id"][defender]) == 29  # Fall.
+    assert int(seed["action_frame"][defender]) == 1
+    assert int(ref["action_id"][defender]) == 90  # DamageFlyTop.
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender])
+    assert int(out["hitlag"][attacker]) == int(ref["hitlag"][attacker]) == 4
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 4
+    assert int(out["hitstun"][defender]) == int(ref["hitstun"][defender]) == 38
+    assert float(out["percent"][defender]) == pytest.approx(float(ref["percent"][defender]))
+
+
+@pytest.mark.integration
 def test_grounded_attack_restart_clears_sustained_hitcapsule_latch_selfplay_181413() -> None:
     # Same-action grounded Attack restart HitCapsule clear:
     # - p0 Fox re-enters AttackHi3 without a Slippi action_id change; action_frame rewinds from

@@ -854,6 +854,21 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
           // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
           f221c &= (uint8_t) ~(uint8_t)MSL_GUARD_STATE_FLAGS_221C_B1;
         }
+        if (action_id == (uint16_t)MSL_ACT_GUARD_SET_OFF &&
+            batch->state.hitlag_pre_timer[idx] != 0u && batch->state.hitlag[idx] == 0u &&
+            batch->state.guard_reflect_timer_x14[idx] == 0u &&
+            batch->state.guard_reflect_timer_x18[idx] > 0u &&
+            f221c == (uint8_t)(MSL_GUARD_STATE_FLAGS_221C_B1 | MSL_GUARD_STATE_FLAGS_221C_B2)) {
+          // GuardSetOff hitlag-exit active-timer split:
+          // - Fighter_8006A1BC decrements hitlag before Fighter_8006A360 runs GuardSetOff_Anim.
+          // - GuardSetOff_Anim calls ftCo_80093BC0; that helper decrements/clears x221C_b1 from
+          //   mv.co.guard.x14 independently from the longer x18/x221C_b2 powershield-active lane.
+          // - Therefore a hitlag-exit GuardSetOff row can publish only x221C_b2 while x18 remains
+          //   live.
+          // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardSetOff_Anim,ftCo_80093BC0}
+          f221c &= (uint8_t) ~(uint8_t)MSL_GUARD_STATE_FLAGS_221C_B1;
+        }
         const uint8_t guardsetoff_first_steady_x10_phase =
             (batch->state.guard_x10[idx] == 7u ||
              (batch->state.guard_x10[idx] == 8u && batch->state.hitlag_pre_timer[idx] == 0u))
@@ -901,6 +916,26 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
           //   ftCo_80092F2C,ftCo_GuardSetOff_Anim,ftCo_80093BC0,ftCo_800925A4}
           // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006A360}
+          // data/common/ft_common_data.json: guard_x10_init_frames
+          f221c &= (uint8_t) ~(uint8_t)MSL_GUARD_STATE_FLAGS_221C_B2;
+        }
+        if (action_id == (uint16_t)MSL_ACT_GUARD_SET_OFF &&
+            prev_action == (uint16_t)MSL_ACT_GUARD_SET_OFF && batch->state.hitlag[idx] == 0u &&
+            batch->state.prev_action_frame[idx] > 0 && batch->state.action_frame[idx] > 0 &&
+            state_flags_guard_setoff_hitlag_handoff_phase(batch, idx) == 0u &&
+            state_flags_guard_setoff_post_hitlag_owner(batch, idx) == 0u &&
+            batch->state.guard_reflect_timer_x14[idx] == 0u &&
+            batch->state.guard_reflect_timer_x18[idx] == 0u && guard_x10_init != 0u &&
+            (uint16_t)batch->state.guard_x10[idx] + 1u == (uint16_t)guard_x10_init &&
+            f221c == (uint8_t)MSL_GUARD_STATE_FLAGS_221C_B2) {
+          // GuardSetOff second-steady powershield-active expiry at the init-1 countdown:
+          // - the first non-hitlag row after shield-hit can still expose x221C_b2 through the
+          //   explicit post-hitlag owner lane,
+          // - once that owner is gone, the in-place GuardSetOff self-loop is owned by
+          //   GuardSetOff_Anim / ftCo_80093BC0, and expired x18 means no live x221C_b2 source
+          //   remains even if mv.co.guard.x10 has not yet decremented below init-1.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+          //   ftCo_GuardSetOff_Anim,ftCo_80093BC0,ftCo_80092F2C}
           // data/common/ft_common_data.json: guard_x10_init_frames
           f221c &= (uint8_t) ~(uint8_t)MSL_GUARD_STATE_FLAGS_221C_B2;
         }
