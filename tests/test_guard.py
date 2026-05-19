@@ -21,11 +21,13 @@ BUTTON_B = 0x0200
 
 # Action ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 ACT_WAIT = 0x000E
+ACT_FALL = 0x001D
 ACT_GUARD_ON = 0x00B2
 ACT_GUARD = 0x00B3
 ACT_GUARD_OFF = 0x00B4
 ACT_GUARD_SET_OFF = 0x00B5
 ACT_GUARD_REFLECT = 0x00B6
+ACT_ESCAPE_B = 0x00EA
 ACT_PASS = 0x00F4
 ACT_FX_SPECIAL_LW_START = 0x0168
 ACT_ESCAPE_N = 0x00EB
@@ -507,6 +509,47 @@ def test_guardsetoff_iasa_does_not_platform_pass_while_guardon_can() -> None:
     out_guard_setoff = _run_seed_one_step(guard_setoff_seed, cur)
     assert int(out_guard_setoff["action_id"][0]) == ACT_GUARD_SET_OFF
     assert int(out_guard_setoff["on_ground"][0]) == 1
+
+
+def test_guardsetoff_platform_edge_floor_loss_preempts_destination_guard_roll() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    cstick_roll_back = _mk_input_bytes(1, input_stride)
+    cstick_roll_back.view(INPUT_DTYPE).reshape((1,))["p"]["c_x"][0, 0] = np.int8(-80)
+
+    seed = _seed_base()
+    seed["stage_id"][0] = np.uint32(STAGE_YOSHI)
+    seed["ground_id"][0, 0] = np.uint16(4)  # Yoshi top soft platform; scaled right endpoint x=15.75.
+    seed["pos_y"][0, 0] = np.float32(42.0001)
+    seed["action_id"][0, 0] = np.uint16(ACT_GUARD_SET_OFF)
+    seed["animation_index"][0, 0] = np.uint32(SM_GUARD_SET_OFF)
+    seed["action_frame"][0, 0] = np.int16(17)
+    seed["anim_frame_f32"][0, 0] = np.float32(18.0)
+    seed["speed_air_x_self"][0, 0] = np.float32(1.0)
+    seed["speed_ground_x_self"][0, 0] = np.float32(1.0)
+    seed["guard_x10"][0, 0] = np.uint8(7)
+
+    edge_seed = seed.copy()
+    edge_seed["pos_x"][0, 0] = np.float32(15.25)
+
+    # GuardSetOff_Coll still owns the source callback pass when shieldstun ends. If post-Phys
+    # ground motion carries the root past the soft-platform endpoint, ft_80084104/ft_800845B4
+    # enters Fall before the destination Guard IASA roll can publish.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    #   ftCo_GuardSetOff_Anim,ftCo_GuardSetOff_Coll}
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_80084104,ft_800845B4}
+    out_edge = _run_seed_one_step(edge_seed, cstick_roll_back)
+    assert int(out_edge["action_id"][0]) == ACT_FALL
+    assert int(out_edge["on_ground"][0]) == 0
+
+    center_seed = seed.copy()
+    center_seed["pos_x"][0, 0] = np.float32(0.0)
+    out_center = _run_seed_one_step(center_seed, cstick_roll_back)
+    assert int(out_center["action_id"][0]) != ACT_FALL
+    assert int(out_center["on_ground"][0]) == 1
 
 
 def test_guardreflect_spotdodge_preempts_platform_pass() -> None:

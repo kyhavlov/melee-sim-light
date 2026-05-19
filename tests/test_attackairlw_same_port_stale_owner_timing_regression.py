@@ -8,12 +8,14 @@ import numpy as np
 import pytest
 
 from tools.eval.dataset import COMPARE_DTYPE, SEED_DTYPE, read_dataset
+from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
 
 HIT_GROUNDED = 1 << 9
 HIT_AERIAL = 1 << 10
 
 ACT_WAIT = 0x000E
 ACT_ATTACK_HI3 = 0x0038
+ACT_ATTACK_HI4 = 0x003F
 ACT_DAMAGE_FLY_HI = 0x0057
 ACT_DAMAGE_FLY_N = 0x0058
 ACT_DAMAGE_FLY_LW = 0x0059
@@ -35,18 +37,26 @@ FOX_TAIL_CAP_ID = 12
 FOX_NON_TAIL_CAP_ID = 0
 
 
-def _step_one_row(dataset_path: Path, record: int) -> tuple[np.void, np.void]:
+def _step_one_sample(row: np.ndarray, *, num_players: int) -> tuple[np.void, np.void]:
+    return _step_one_sample_with_reseed(row, num_players=num_players, rollout_reseed=False)
+
+
+def _step_one_sample_rollout_reseed(row: np.ndarray, *, num_players: int) -> tuple[np.void, np.void]:
+    return _step_one_sample_with_reseed(row, num_players=num_players, rollout_reseed=True)
+
+
+def _step_one_sample_with_reseed(
+    row: np.ndarray, *, num_players: int, rollout_reseed: bool
+) -> tuple[np.void, np.void]:
     binding = pytest.importorskip("msl_binding")
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
     compare_stride = int(sizes["compare"])
 
-    ds = read_dataset(str(dataset_path))
-    row = ds.samples[record : record + 1]
     assert int(row.shape[0]) == 1
 
-    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    handle = binding.init(batch_size=1, num_players=num_players)
     try:
         seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).reshape(
             1, seed_stride
@@ -59,7 +69,10 @@ def _step_one_row(dataset_path: Path, record: int) -> tuple[np.void, np.void]:
         ).copy()
         out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
 
-        binding.reseed_seed(handle, seed_bytes)
+        if rollout_reseed:
+            binding.reseed_seed_rollout(handle, seed_bytes)
+        else:
+            binding.reseed_seed(handle, seed_bytes)
         binding.step_input(handle, prev_input_bytes, input_bytes)
         binding.write_compare(handle, out_bytes)
         out = out_bytes.view(COMPARE_DTYPE).reshape(-1)[0]
@@ -67,6 +80,12 @@ def _step_one_row(dataset_path: Path, record: int) -> tuple[np.void, np.void]:
         return out, ref
     finally:
         binding.destroy(handle)
+
+
+def _step_one_row(dataset_path: Path, record: int) -> tuple[np.void, np.void]:
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record : record + 1]
+    return _step_one_sample(row, num_players=int(ds.header["num_players"]))
 
 
 def _debug_attackhi3_terminal_damagefly_body_hit_applied(
@@ -392,6 +411,71 @@ def test_terminal_fall_from_damage_owner_does_not_require_concrete_cap(tmp_path:
         check=True,
     )
     subprocess.run([str(exe)], check=True)
+
+
+@pytest.mark.integration
+def test_falco_attackairlw_same_slot_late_payload_preserves_victim_latch_pec_rollout_reseed() -> None:
+    # Falco DAir's late hit payload (MSLFTSC1 frame 15) updates already-enabled hitbox slots with
+    # the same hit_group. Decomp `ftAction_8007121C` calls `ftColl_800768A0` only when a slot is
+    # disabled or changes hit_group, so this same-slot payload must preserve the existing
+    # HitCapsule.victims_1 latch. Legacy dense group seeds initialize that hidden HitCapsule
+    # provenance during reseed when the script payload is not replayed in the step; the later
+    # authoritative-empty per-HitCapsule seed owns the real hit boundary.
+    # refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_800768A0
+    # data/scripts/falco.bin (MSLFTSC1 ftCo_SM_AttackAirLw frame-15 create payload)
+    root = Path(__file__).resolve().parents[1]
+    slp_path = root / "replays/validation/yoshis_story_recent/PhysicalElectricCapybara.slpz"
+    if not slp_path.exists():
+        pytest.skip(f"missing local replay: {slp_path}")
+
+    ds = build_dataset_from_slp(
+        slp_path=str(slp_path),
+        ports=[1, 2],
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    samples = ds.samples
+    num_players = int(ds.header["num_players"])
+    attacker = 0
+    defender = 1
+
+    for record in (341, 342, 343):
+        seed_t = samples[record]["seed_t"]
+        ref_t1 = samples[record]["ref_t1"]
+        assert int(seed_t["char_id"][attacker]) == CHAR_FALCO
+        assert int(seed_t["action_id"][attacker]) == 69  # AttackAirLw
+        assert int(seed_t["action_id"][defender]) == 63  # AttackHi4
+        assert int(seed_t["combat_hitlist_cd"][attacker, 0, defender]) == 0xFFFF
+        assert all(int(v) == 0 for v in seed_t["combat_hitlist_hb_valid"][attacker])
+        assert int(ref_t1["hitlag"][defender]) == 0
+        assert int(ref_t1["hitstun"][defender]) == 0
+
+        out, ref = _step_one_sample_rollout_reseed(
+            samples[record : record + 1], num_players=num_players
+        )
+        for field in ("action_id", "hitlag", "hitstun", "percent"):
+            assert out[field][defender] == ref[field][defender], f"record={record} field={field}"
+
+    hit_record = 344
+    seed_t = samples[hit_record]["seed_t"]
+    assert any(int(seed_t["combat_hitlist_hb_valid"][attacker, hb]) != 0 for hb in (0, 1))
+    for hb in (0, 1):
+        assert int(seed_t["combat_hitlist_hb_cd"][attacker, hb, defender]) == 0
+
+    out, ref = _step_one_sample_rollout_reseed(
+        samples[hit_record : hit_record + 1], num_players=num_players
+    )
+    assert int(ref["hitlag"][attacker]) > 0
+    assert int(ref["hitlag"][defender]) > 0
+    # This lock is for the HitCapsule victims_1 boundary: the hit must be suppressed through the
+    # no-clear same-slot payload frames above, then admitted at the first per-HitCapsule empty-seed
+    # frame with the same damage/hitlag/hitstun. The exact grounded Damage* direction on the hit
+    # frame is owned by the BODY/hurtcap selection path, not by this HitCapsule-lifetime test.
+    assert int(out["action_id"][defender]) != ACT_ATTACK_HI4
+    assert int(ref["action_id"][defender]) != ACT_ATTACK_HI4
+    for field in ("hitlag", "hitstun", "percent", "last_attack_landed"):
+        assert out[field][defender] == ref[field][defender], f"hit field={field}"
 
 
 @pytest.mark.integration

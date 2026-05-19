@@ -3,12 +3,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from tests.test_combat_ownership_seed_guardrail_locks import (
     _run_one_step_row,
     _skip_if_required_artifacts_missing,
 )
+from tools.eval.dataset import COMPARE_DTYPE
+from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
 
 
 @dataclass(frozen=True)
@@ -255,10 +258,12 @@ def test_missfoot_and_slow_ledge_options_replay_real_rows_exact(case: _Case) -> 
     #   immediate L-stick jump-squat edge-loss path through KneeBend_Coll.
     # - Ottotto IASA crouch uses ftCo_800D5FB0, and Ottotto_Anim enters OttottoWait at anim end.
     # - Ottotto / OttottoWait ordinary Turn IASA uses ftCo_Turn_CheckInput after Dash/crouch.
+    # - CliffWait c-stick option routing uses ftCo_800DF79C and ftCo_8009AAFC: c-stick may
+    #   release/drop from ledge, but cannot enter CliffClimb because arg1=false.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_MissFoot.c::ftCo_MissFoot_Coll
     # refs/melee/src/melee/ft/ft_081B.c::ft_80082F28
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::{
-    #   ftCo_8009AB9C,ftCo_CliffClimb_Phys}
+    #   ftCo_8009AA0C,ftCo_8009AAFC,ftCo_8009AB9C,ftCo_CliffClimb_Phys}
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffAttack.c::ftCo_8009AEA4
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Coll
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c
@@ -293,3 +298,94 @@ def test_missfoot_and_slow_ledge_options_replay_real_rows_exact(case: _Case) -> 
     assert [int(x) for x in out_row["state_flags"][case.p].tolist()] == [
         int(x) for x in ref_row["state_flags"][case.p].tolist()
     ]
+
+
+def _physical_electric_capybara_samples() -> tuple[np.ndarray, int]:
+    root = Path(__file__).resolve().parents[1]
+    slp_path = root / "replays/validation/yoshis_story_recent/PhysicalElectricCapybara.slpz"
+    if not slp_path.exists():
+        pytest.skip(f"missing local replay: {slp_path}")
+    ds = build_dataset_from_slp(
+        slp_path=str(slp_path),
+        ports=[1, 2],
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    return ds.samples, int(ds.header["num_players"])
+
+
+def _step_one_row(row: np.ndarray, *, num_players: int) -> np.void:
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+        1, seed_stride
+    ).copy()
+    prev_input_bytes = np.frombuffer(
+        row["prev_input_t"].tobytes(order="C"), dtype=np.uint8
+    ).reshape(1, input_stride).copy()
+    input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+        1, input_stride
+    ).copy()
+    out_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+    handle = binding.init(
+        batch_size=1,
+        num_players=num_players,
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    try:
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_bytes)
+    finally:
+        binding.destroy(handle)
+    return out_bytes.view(COMPARE_DTYPE).reshape(-1)[0]
+
+
+@pytest.mark.integration
+def test_cliffwait_cstick_down_releases_from_ledge_pec_948() -> None:
+    # Yoshi's Story replay-real lock for CliffWait c-stick release/drop routing:
+    # ftCo_8009AA0C checks main-stick first, then ftCo_800DF79C c-stick option input. The c-stick
+    # path calls ftCo_8009AAFC with arg1=false, so down c-stick can release/drop from ledge but
+    # cannot start CliffClimb.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::{ftCo_8009AA0C,ftCo_8009AAFC}
+    samples, num_players = _physical_electric_capybara_samples()
+    row = samples[948:949]
+    p = 0
+
+    assert int(row["seed_t"]["action_id"][0, p]) == 253  # CliffWait
+    assert int(row["input_t"]["p"][0, p]["main_x"]) == 0
+    assert int(row["input_t"]["p"][0, p]["main_y"]) == 0
+    assert int(row["input_t"]["p"][0, p]["c_y"]) < 0
+    assert int(row["ref_t1"]["action_id"][0, p]) == 29
+    assert int(row["ref_t1"]["animation_index"][0, p]) == 20
+
+    out = _step_one_row(row, num_players=num_players)
+
+    for field in ("action_id", "animation_index", "action_frame", "speed_y_self"):
+        got = int(out[field][p]) if field != "speed_y_self" else float(out[field][p])
+        exp = int(row["ref_t1"][field][0, p]) if field != "speed_y_self" else float(row["ref_t1"][field][0, p])
+        assert got == exp, f"field={field} expected={exp} got={got}"
+
+
+@pytest.mark.integration
+def test_cliffwait_cstick_drop_requires_prior_no_option_frame() -> None:
+    # ftCo_8009AA0C sets mv.co.cliff.x8 only on frames with no main-stick or c-stick ledge option
+    # input. A held c-stick down on the previous frame therefore must not be treated as a fresh
+    # ledge-release/drop gate on the current frame.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_8009AA0C
+    samples, num_players = _physical_electric_capybara_samples()
+    row = samples[948:949].copy()
+    p = 0
+
+    row["prev_input_t"]["p"][0, p]["c_y"] = -80
+
+    out_row = _step_one_row(row, num_players=num_players)
+    assert int(row["seed_t"]["action_id"][0, p]) == 253  # CliffWait
+    assert int(out_row["action_id"][p]) == 253
+    assert int(out_row["animation_index"][p]) == 217

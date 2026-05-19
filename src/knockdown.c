@@ -1082,6 +1082,7 @@ static inline void enter_missfoot_from_damage_floor_loss(MslBatch* batch, const 
 static inline uint8_t damagefall_iasa_try_stick_fall(MslBatch* batch, const MslCommonParams* c,
                                                      size_t idx);
 static inline uint8_t is_damage_air_submotion(uint32_t smid);
+static inline uint8_t is_common_damage_submotion(uint32_t smid);
 static inline uint8_t is_damage_fly_submotion(uint32_t smid);
 static inline uint8_t damage_iasa_lockout_x221c_b6(const MslBatch* batch, size_t idx);
 
@@ -1735,7 +1736,7 @@ void knockdown_update_post_combat(MslBatch* batch) {
       if (a0 != (uint16_t)MSL_ACT_FALL) {
         continue;
       }
-      if (!is_damage_air_submotion(batch->state.animation_index[idx]) &&
+      if (!is_common_damage_submotion(batch->state.animation_index[idx]) &&
           !is_damage_fly_submotion(batch->state.animation_index[idx])) {
         continue;
       }
@@ -1829,6 +1830,16 @@ static inline uint32_t submotion_for_damage_ground_action(uint16_t a) {
 
 static inline uint8_t down_bound_airborne_ledge_cross_to_fall(const MslBatch* batch, size_t idx,
                                                               uint32_t stage_id) {
+  const uint16_t ground_id = batch->state.ground_id[idx];
+  if (ground_id != 0xFFFFu && stage_collision_floor_line_is_platform(stage_id, ground_id)) {
+    // Decomp: ftCo_DownBound_Coll delegates to ft_80082708/mpColl_8004B108 for the active
+    // CollData.floor line. Platform lines are not owned by the stage side-ledge helper below; their
+    // contact/endpoint transitions use platform line geometry and stage-object transforms.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Coll
+    // refs/melee/src/melee/ft/ft_081B.c::ft_80082708
+    // data/stages/bin/*.bin::MSLSTG01 segment platform flags
+    return 0u;
+  }
   float vx = batch->state.speed_x_attack[idx];
   if (!(vx > 0.0f || vx < 0.0f)) {
     // Decomp shape: ft_80082708 -> mpColl_8004B108 evaluates the active floor-contact motion
@@ -2240,6 +2251,26 @@ static inline uint8_t is_damage_air_submotion(uint32_t smid) {
           smid == (uint32_t)MSL_SM_DAMAGE_AIR_3)
              ? 1u
              : 0u;
+}
+
+static inline uint8_t is_common_damage_submotion(uint32_t smid) {
+  switch (smid) {
+    case (uint32_t)MSL_SM_DAMAGE_HI_1:
+    case (uint32_t)MSL_SM_DAMAGE_HI_2:
+    case (uint32_t)MSL_SM_DAMAGE_HI_3:
+    case (uint32_t)MSL_SM_DAMAGE_N_1:
+    case (uint32_t)MSL_SM_DAMAGE_N_2:
+    case (uint32_t)MSL_SM_DAMAGE_N_3:
+    case (uint32_t)MSL_SM_DAMAGE_LW_1:
+    case (uint32_t)MSL_SM_DAMAGE_LW_2:
+    case (uint32_t)MSL_SM_DAMAGE_LW_3:
+    case (uint32_t)MSL_SM_DAMAGE_AIR_1:
+    case (uint32_t)MSL_SM_DAMAGE_AIR_2:
+    case (uint32_t)MSL_SM_DAMAGE_AIR_3:
+      return 1u;
+    default:
+      return 0u;
+  }
 }
 
 static inline uint8_t is_damage_fly_submotion(uint32_t smid) {

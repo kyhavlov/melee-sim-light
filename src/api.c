@@ -1470,6 +1470,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       }
       batch->state.on_ground[idx] = seed->on_ground[p] ? 1 : 0;
       batch->state.frame_start_on_ground[idx] = batch->state.on_ground[idx];
+      batch->state.frame_start_instance_id[idx] = seed->instance_id[p];
       batch->state.ground_contact_x[idx] = 0.0f;
       batch->state.ground_contact_y[idx] = 0.0f;
       batch->state.ground_normal_x[idx] = 0.0f;
@@ -2962,6 +2963,32 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         const size_t v_idx = msl_idx_player(bi, victim);
         batch->state.combat_hitlist_cd[i] = 0xFFFFu;
         batch->state.combat_hitlist_victim_iid[i] = batch->state.instance_id[v_idx];
+      }
+    }
+
+    if (rollout_owned_after == (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED) {
+      // AttackAirLw no-clear dense HitCapsule rollout-seed initialization:
+      // Some rollout retry rows start after Falco DAir's same-slot second create payload and carry
+      // only the legacy dense hit_group victim map. Materialize that hidden BODY victims_1 state
+      // exactly for teacher-forced rollout reseed so runtime/free-run frames do not re-read dense
+      // provenance as a combat bridge. Ordinary public one-step reseeds stay on explicit
+      // per-HitCapsule seed lanes or the live script-site no-clear owner below.
+      // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+      // refs/melee/src/melee/ft/ftcoll.c::ftColl_800768A0
+      for (int attacker = 0; attacker < num_players; attacker++) {
+        if (seed->action_id[attacker] != (uint16_t)MSL_ACT_ATTACK_AIR_LW) {
+          continue;
+        }
+        for (int hb = 0; hb < MSL_MAX_HITBOXES; hb++) {
+          for (int victim = 0; victim < num_players; victim++) {
+            if (victim == attacker) {
+              continue;
+            }
+            const size_t v_idx = msl_idx_player(bi, victim);
+            (void)hitlist_seed_init_attackairlw_no_clear_dense_body(
+                batch, bi, attacker, hb, victim, batch->state.instance_id[v_idx]);
+          }
+        }
       }
     }
 

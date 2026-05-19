@@ -11,6 +11,7 @@ from tools.eval.run_longest_rollout_streaks import _load_binding
 
 
 _PPA = Path("datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl")
+_LIM = Path("datasets/aggregate_recent/replays/validation/yoshis_story_recent/LawfulInsistentMeerkat.msl")
 
 
 def _contact_dtype() -> np.dtype:
@@ -180,3 +181,40 @@ def test_damageflyhi_push_only_wall_contact_does_not_promote_passivewall_rollout
     assert int(out_5583["action_id"][p]) == int(ref_5583["action_id"][p]) == 252  # CliffCatch
     assert float(out_5583["pos_x"][p]) == pytest.approx(float(ref_5583["pos_x"][p]), abs=1e-6)
     assert float(out_5583["pos_y"][p]) == pytest.approx(float(ref_5583["pos_y"][p]), abs=2e-6)
+
+
+@pytest.mark.integration
+def test_damageflytop_left_wall_envelope_retained_boundary() -> None:
+    # DamageFlyTop rows under ftCo_DamageFly_Coll need the left-wall airborne ECB envelope on FD's
+    # positive-kb vertical-wall rows and Yoshi's transformed lower-left wall. The source mpColl owner
+    # is broader than this, but non-Yoshi negative-kb rows still need the fuller wall-candidate model
+    # before they can be admitted generally without stale wall-latch regressions.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80045B74_LeftWall,mpColl_80046224_LeftWall}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    cases = [
+        (root / _LIM, 3932, 0, -1.0),
+        (root / _LIM, 3933, 0, -1.0),
+        (
+            root / "datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl",
+            4807,
+            1,
+            1.0,
+        ),
+        (
+            root / "datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl",
+            4808,
+            1,
+            1.0,
+        ),
+    ]
+    for dataset_path, record, p, sign in cases:
+        if not dataset_path.exists():
+            pytest.skip(f"missing local dataset: {dataset_path}")
+        seed, out, ref = _step_one(dataset_path, record)
+        assert int(seed["action_id"][p]) == 90  # DamageFlyTop
+        assert float(seed["speed_x_attack"][p]) * sign > 0.0
+        assert int(out["action_id"][p]) == int(ref["action_id"][p]) == 90
+        assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=1e-6)
+        assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-6)

@@ -17,6 +17,7 @@ _BUTTON_R = 0x0020
 
 _ACT_WAIT = 14
 _ACT_DASH = 20
+_ACT_KNEE_BEND = 24
 _ACT_CATCH = 212
 _ACT_CATCH_PULL = 213
 _ACT_CATCH_DASH = 214
@@ -198,6 +199,9 @@ def test_dash_grab_enters_catchdash(dataset_name: str, record: int, attacker: in
 
     out, ref = _run_record(dataset_path, record)
     assert int(out["action_id"][0, attacker]) == int(ref["action_id"][attacker])
+    assert float(out[0]["speed_ground_x_self"][attacker]) == pytest.approx(
+        float(ref["speed_ground_x_self"][attacker]), abs=1e-6
+    )
 
 
 @pytest.mark.integration
@@ -321,6 +325,40 @@ def test_replay_catchdash_connect_enters_pull_and_capture_pulled(
     assert int(out["action_frame"][0, victim]) == int(ref["action_frame"][victim])
     assert int(out["animation_index"][0, attacker]) == int(ref["animation_index"][attacker])
     assert int(out["animation_index"][0, victim]) == int(ref["animation_index"][victim])
+
+
+@pytest.mark.integration
+def test_dash_early_x4_a_tap_jump_after_attack_s4_miss_stm_6365() -> None:
+    # Early Dash_IASA does not call AttackDash_CheckInput. In the `dash.x4 != 0 && frame <= x44`
+    # branch, after AttackS4_8008C114 misses the side-smash threshold, block_42 checks
+    # fn_800CAF78; this A+tap-jump row therefore enters KneeBend instead of AttackDash.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::fn_800CAF78
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
+        / "SweatyThisMallard.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+    record = 6365
+    p = 0
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record : record + 1]
+    seed = row["seed_t"]
+    cur = row["input_t"]["p"]
+    prev = row["prev_input_t"]["p"]
+    assert int(seed["action_id"][0, p]) == _ACT_DASH
+    assert int(seed["dash_x4"][0, p]) == 1
+    assert (int(cur["buttons"][0, p]) & _BUTTON_A) != 0
+    assert (int(prev["buttons"][0, p]) & _BUTTON_A) == 0
+    assert float(cur["main_y"][0, p]) > 0.0
+    assert int(row["ref_t1"]["action_id"][0, p]) == _ACT_KNEE_BEND
+
+    out, ref = _run_record(dataset_path, record)
+    assert int(ref["action_id"][p]) == _ACT_KNEE_BEND
+    assert int(out["action_id"][0, p]) == _ACT_KNEE_BEND
 
 
 @pytest.mark.integration

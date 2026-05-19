@@ -1,8 +1,8 @@
 {
-  "description": "Compact frame-2887 seed window for the set10 Yoshi's Story Randall fastfall landing hover repro.",
+  "description": "Compact post-start frame-2764 seed window for the set10 Yoshi's Story Randall fastfall landing hover repro.",
   "expected": {
     "landing_action_id": 42,
-    "landing_frame": 2888,
+    "landing_frame": 2765,
     "landing_submotion_id": 35,
     "player": 0,
     "randall_ground_id": 1000,
@@ -25,7 +25,7 @@
     "fall_fast": 1,
     "floor_sweep_prev_pos_x": 75.63665771484375,
     "floor_sweep_prev_pos_y": -33.249900817871094,
-    "frame_id": 2887,
+    "frame_id": 2764,
     "ground_id": 5,
     "on_ground": 0,
     "pos_x": 76.35628509521484,

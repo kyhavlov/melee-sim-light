@@ -74,6 +74,9 @@ uint8_t hitlist_allows_item_hitbox_fighter(MslBatch* batch, int bi, int item_slo
 // falling back to the legacy dense hit_group map when no per-hitbox seed is marked valid.
 void hitlist_seed_init_fighter_hitbox_from_group(MslBatch* batch, int bi, int attacker, int hb_id,
                                                  uint8_t hit_group);
+uint8_t hitlist_seed_init_attackairlw_no_clear_dense_body(MslBatch* batch, int bi, int attacker,
+                                                          int hb_id, int victim,
+                                                          uint16_t victim_iid);
 
 // Narrow seed bridge for a proven same-fighter-object dense seed lane whose Slippi-visible
 // instance_id changed before the current HitCapsule create edge. Normal dense seeds fail closed on

@@ -62,6 +62,8 @@ static inline uint8_t wait_iasa_locomotion_subset_try_enter(
     MslBatch* batch, const MslCommonParams* c, const MslCharParams* ch, size_t idx,
     uint16_t buttons, uint16_t buttons_pressed, float stick_x, float stick_y, uint8_t tilt_timer_x,
     uint8_t tilt_timer_y, float facing_dir, uint16_t action_id_start);
+static inline void enter_fall_from_grounded_floor_loss(MslBatch* batch, const MslCharParams* ch,
+                                                       size_t idx);
 
 static inline float clamp_absf(float value, float max_abs) {
   if (value > max_abs) {
@@ -1544,8 +1546,11 @@ static inline uint8_t locomotion_try_kneebend_startup_complete_jump_prepass(
   batch->state.animation_index[idx] = (uint32_t)submotion_for_action(jump_act);
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
 
+  // ftCo_800CB110 scales fp->self_vel.x, not fp->gr_vel. On sloped floors those lanes can differ:
+  // Slippi's speed_air_x_self carries self_vel.x while speed_ground_x_self carries gr_vel.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_800CB110
   const float base_x =
-      batch->state.speed_ground_x_self[idx] * ch->ground_to_air_jump_momentum_multiplier;
+      batch->state.speed_air_x_self[idx] * ch->ground_to_air_jump_momentum_multiplier;
   float h_vel = base_x + jump_stick_x * ch->jump_h_initial_velocity;
   const float h_max = ch->jump_h_max_velocity;
   if (msl_absf(h_vel) > h_max) {
@@ -2788,6 +2793,7 @@ static inline void enter_fall_from_grounded_floor_loss(MslBatch* batch, const Ms
   }
   batch->state.speed_air_x_self[idx] = air_x;
   batch->state.speed_ground_x_self[idx] = 0.0f;
+  batch->state.on_ground[idx] = 0u;
 
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL;
@@ -3005,6 +3011,53 @@ static inline uint8_t common_pass_input_gate(const MslBatch* batch, const MslCom
   return (uint8_t)(ground_id != 0xFFFFu &&
                    stage_collision_floor_line_is_platform(stage_id, ground_id) &&
                    stick_y <= -c->pass_stick_threshold && tilt_timer_y < c->pass_tilt_max_frames);
+}
+
+static inline uint8_t guardsetoff_platform_edge_floor_loss_before_destination_iasa(
+    const MslBatch* batch, size_t idx) {
+  if (batch == NULL || batch->state.action_id[idx] != (uint16_t)MSL_ACT_GUARD_SET_OFF ||
+      batch->state.hitlag[idx] != 0u) {
+    return 0u;
+  }
+  if (!anim_finished(batch->state.char_id[idx], (uint16_t)MSL_SM_GUARD_DAMAGE,
+                     batch->state.anim_frame_f32[idx])) {
+    return 0u;
+  }
+
+  const size_t bi = idx / (size_t)MSL_MAX_PLAYERS;
+  const uint32_t stage_id = batch->state.stage_id[bi];
+  const uint16_t ground_id = batch->state.ground_id[idx];
+  if (ground_id == 0xFFFFu || !stage_collision_floor_line_is_platform(stage_id, ground_id)) {
+    return 0u;
+  }
+  const int line_idx = stage_collision_floor_line_index(stage_id, ground_id);
+  const MslStageFloorGraph* g = stage_collision_get_floor_graph(stage_id);
+  if (line_idx < 0 || g == NULL || (size_t)line_idx >= g->line_count) {
+    return 0u;
+  }
+
+  MslStageFloorLine world = {0};
+  (void)stage_collision_floor_line_world(batch, (int)bi, &g->lines[(size_t)line_idx], &world);
+  const float gr_vel = batch->state.speed_ground_x_self[idx];
+  if (!isfinite(gr_vel) || gr_vel == 0.0f) {
+    return 0u;
+  }
+  const float next_root_x = batch->state.pos_x[idx] + gr_vel;
+
+  // GuardSetOff collision owner:
+  // - ftCo_GuardSetOff_Anim can finish shieldstun, but GuardSetOff_Coll still routes through the
+  //   grounded collision helper for the source callback pass.
+  // - On a soft-platform edge, `ft_80084104`/`ft_800845B4` can leave ground before any destination
+  //   Guard IASA defensive option publishes a roll. Check the post-Phys root against the generated
+  //   platform endpoint; stable in-span rows continue to the existing destination Guard IASA path.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+  //   ftCo_GuardSetOff_Anim,ftCo_GuardSetOff_Coll}
+  // refs/melee/src/melee/ft/ft_081B.c::{ft_80084104,ft_800845B4}
+  // data/stages/*.json (MSLSTG01 floor endpoint metadata)
+  if (gr_vel > 0.0f) {
+    return (uint8_t)(next_root_x > world.x1);
+  }
+  return (uint8_t)(next_root_x < world.x0);
 }
 
 static inline void common_pass_enter(MslBatch* batch, const MslCommonParams* c,
@@ -3329,7 +3382,6 @@ static inline void enter_landing_action_from_air(MslBatch* batch, const MslCharP
   if (batch == NULL || ch == NULL) {
     return;
   }
-
   const MslCommonParams* c = msl_common_params();
 
   // Landed this frame.
@@ -4570,6 +4622,11 @@ void locomotion_update_pre(MslBatch* batch) {
                 ? 1u
                 : 0u;
         const uint16_t action_id_before_guard_update = action_id;
+        if (guardsetoff_platform_edge_floor_loss_before_destination_iasa(batch, idx)) {
+          // Keep GuardSetOff live for its source collision callback below. Entering Fall here would
+          // run Fall physics one frame early; the decomp owner is the later GuardSetOff_Coll pass.
+          continue;
+        }
         guard_update_grounded(batch, c, idx, allow_guard_entry);
         action_id = batch->state.action_id[idx];
         if (turn_analog_guard_facing_flipped && action_id == MSL_ACT_TURN) {
@@ -5664,8 +5721,11 @@ void locomotion_update_pre(MslBatch* batch) {
             msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
 
             // Ground-to-air momentum + jump impulse (refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_800CB110)
+            // Source multiplies fp->self_vel.x, not fp->gr_vel. speed_air_x_self is the visible
+            // self_vel.x lane even while grounded; speed_ground_x_self is gr_vel.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_800CB110
             const float base_x =
-                batch->state.speed_ground_x_self[idx] * ch->ground_to_air_jump_momentum_multiplier;
+                batch->state.speed_air_x_self[idx] * ch->ground_to_air_jump_momentum_multiplier;
             float h_vel = base_x + jump_stick_x * ch->jump_h_initial_velocity;
             const float h_max = ch->jump_h_max_velocity;
             if (msl_absf(h_vel) > h_max) {

@@ -156,6 +156,8 @@ uint8_t script_events_second_create_hitbox_phase(uint8_t char_id, uint16_t msid,
                                                  MslScriptFrameWindow* out);
 uint8_t script_events_last_create_hitbox_phase(uint8_t char_id, uint16_t msid,
                                                MslScriptFrameWindow* out);
+uint8_t script_events_post_clear_create_hitbox_phase(uint8_t char_id, uint16_t msid,
+                                                     MslScriptFrameWindow* out);
 uint8_t script_events_hitbox_lifetime(uint8_t char_id, uint16_t msid, MslScriptFrameWindow* out);
 uint8_t script_events_catchattack_grabbed_hit_window(uint8_t char_id, uint16_t msid,
                                                      MslScriptFrameWindow* out);

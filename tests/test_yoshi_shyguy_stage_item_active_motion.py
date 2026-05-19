@@ -450,6 +450,42 @@ def test_yoshi_shyguy_state3_damage_reset_restarts_return_delay_lane() -> None:
     assert int(hitlag[3, 0]) > 0
 
 
+@pytest.mark.integration
+def test_yoshi_shyguy_low_damage_hitlag_resumes_state3_motion_cnm_601() -> None:
+    # Low-damage Heiho hitlag publication:
+    # - it_802D8EC8 enters state 3 and stores generic item hitlag.
+    # - Item_802693E4 owns the per-frame hitlag decrement before the state-3 Phys callback resumes.
+    # - CNM:592 hits Shy Guy slot 3; by CNM:601 the source-visible hitlag is zero and state-3
+    #   gravity/movement must resume. Keeping the raw, pre-decrement item hitlag freezes the item one
+    #   extra frame and later cascades into the Yoshi's Story item/laser rollout state.
+    # refs/melee/src/melee/it/item.c::{Item_802693E4,Item_802697D4}
+    # refs/melee/src/melee/it/items/itheiho.c::{it_802D8EC8,itHeiho_UnkMotion3_Phys}
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
+        "CheeryNumbMonkey.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip("missing local replay dataset: CheeryNumbMonkey.msl")
+
+    out, ref = _run_rollout_to_record(dataset_path, start_record=0, target_record=601)
+    slot = 3
+    assert int(ref["items"][slot]["exists"]) == 1
+    assert int(ref["items"][slot]["type"]) == ITEM_KIND_HEIHO
+    assert int(ref["items"][slot]["state"]) == 3
+    assert int(out["items"][slot]["state"]) == 3
+    assert float(out["items"][slot]["pos_x"]) == pytest.approx(
+        float(ref["items"][slot]["pos_x"]), abs=1e-6
+    )
+    assert float(out["items"][slot]["pos_y"]) == pytest.approx(
+        float(ref["items"][slot]["pos_y"]), abs=1e-6
+    )
+    assert float(out["items"][slot]["vel_y"]) == pytest.approx(
+        float(ref["items"][slot]["vel_y"]), abs=1e-6
+    )
+
+
 def test_yoshi_shyguy_stage_timer_derivation_is_prefix_causal() -> None:
     items = np.zeros((3, 15), dtype=SEED_DTYPE["items"].base)
     items["owner"] = np.int8(-1)
@@ -1221,6 +1257,94 @@ def test_yoshi_shyguy_reflected_laser_item_hit_uses_reflected_damage_lane() -> N
     assert int(reflected_out["items"][0]["damage"]) == 15
     assert int(reflected_out["items"][0]["state"]) == 2
     assert not any(int(item["exists"]) and int(item["type"]) == 55 for item in reflected_out["items"])
+
+
+@pytest.mark.integration
+def test_yoshi_shyguy_fighter_hitbox_hit_enters_damage_state_cnm_592() -> None:
+    # Fighter HitCapsule vs Heiho item hurtbox:
+    # - it_802703E8 tests fighter hitboxes with x42_b7 item interaction against item hurtboxes.
+    # - it_80270E30 records incoming direction/damage, then Heiho's dmg_received callback enters
+    #   the low-damage state-3 path through it_802D8EC8.
+    # This row is a Fox aerial hitbox touching the fourth Yoshi Shy Guy. Keeping the item active
+    # would stale-block the later grStory_801E3418 scheduler spawn in long rollouts.
+    # refs/melee/src/melee/it/itcoll.c::{it_802703E8,it_80270E30}
+    # refs/melee/src/melee/it/items/itheiho.c::it_802D8EC8
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    out, ref = _step_one_row(dataset_path, 592)
+    slot = 3
+    assert int(out["items"][slot]["type"]) == ITEM_KIND_HEIHO
+    assert int(out["items"][slot]["state"]) == 3
+    assert int(out["items"][slot]["state"]) == int(ref["items"][slot]["state"])
+    assert int(out["items"][slot]["damage"]) == int(ref["items"][slot]["damage"])
+    assert float(out["items"][slot]["vel_x"]) == pytest.approx(
+        float(ref["items"][slot]["vel_x"]), abs=1e-5
+    )
+    assert float(out["items"][slot]["vel_y"]) == pytest.approx(
+        float(ref["items"][slot]["vel_y"]), abs=1e-5
+    )
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("record", "attacker", "slot"),
+    [
+        (3353, 0, 0),
+        (5219, 0, 3),
+    ],
+)
+def test_yoshi_shyguy_fighter_hitbox_hit_applies_attacker_deal_hitlag(record: int, attacker: int, slot: int) -> None:
+    # Fighter HitCapsule vs item hurtbox also writes the attacker's deal-hitlag lane:
+    # - it_802703E8 calls ftColl_80076808 and writes `fighter->dmg.x1914 = dmg`.
+    # - Fighter_ProcessHit consumes x1914 through ftCommon_CalcHitlag, freezing the attacker even
+    #   when no fighter-vs-fighter BODY victim exists on the row.
+    # - `hit->damage` is the live stale-adjusted HitCapsule damage; the high-damage AttackAirB
+    #   row below proves the item damage and attacker hitlag use that same value.
+    # refs/melee/src/melee/it/itcoll.c::it_802703E8
+    # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    out, ref = _step_one_row(dataset_path, record)
+    assert int(out["hitlag"][attacker]) == int(ref["hitlag"][attacker])
+    assert int(out["items"][slot]["type"]) == ITEM_KIND_HEIHO
+    assert int(out["items"][slot]["state"]) == int(ref["items"][slot]["state"])
+    assert int(out["items"][slot]["damage"]) == int(ref["items"][slot]["damage"])
+
+
+def test_yoshi_shyguy_fighter_hitbox_hit_is_stage_and_geometry_bounded() -> None:
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples[592]["seed_t"].copy()
+
+    far_seed = seed.copy()
+    far_seed["items"][3]["pos_x"] = np.float32(80.0)
+    far_out = _step_seed(far_seed.reshape(1))
+    assert int(far_out["items"][3]["type"]) == ITEM_KIND_HEIHO
+    assert int(far_out["items"][3]["state"]) == 1
+
+    non_yoshi_seed = seed.copy()
+    non_yoshi_seed["stage_id"] = np.uint32(32)
+    non_yoshi_out = _step_seed(non_yoshi_seed.reshape(1))
+    assert int(non_yoshi_out["items"][3]["type"]) == ITEM_KIND_HEIHO
+    assert int(non_yoshi_out["items"][3]["state"]) == 1
 
 
 @pytest.mark.integration

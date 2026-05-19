@@ -4,7 +4,6 @@
 #include <math.h>
 #include <stddef.h>
 #include <stdint.h>
-
 #include "action.h"
 #include "action_ids.h"
 #include "anim_pose.h"
@@ -288,6 +287,7 @@ enum {
 
 enum {
   MSL_STAGE_FOUNTAIN_OF_DREAMS_LOCAL = 2u,
+  MSL_STAGE_YOSHIS_STORY_LOCAL = 8u,
   MSL_STAGE_FINAL_DESTINATION_LOCAL = 32u,
 };
 
@@ -2910,7 +2910,6 @@ static uint8_t fallspecial_yoshi_main_floor_first_sustained_airborne_owner(const
   if (batch == NULL) {
     return 0u;
   }
-  enum { MSL_STAGE_YOSHIS_STORY_LOCAL = 8u };
   enum { MSL_YOSHIS_STORY_MAIN_FLOOR_SEGMENT = 3u };
   // Yoshi's Story main-floor first sustained FallSpecial callback:
   // `MSLSTG01` segment 3 is the flat main floor connected to the low side ledges. On the first
@@ -4473,16 +4472,26 @@ void mpcoll_ground_apply(MslBatch* batch) {
               ? 1u
               : 0u;
       const uint8_t escapeair_471f8_uses_frame_start_last_pos =
-          // Same-frame JumpAerial -> EscapeAir IASA enters EscapeAir before Fighter_procMap. In
-          // that entry-frame source path, ft_80082C74 consumes the frame-start JumpAerial CollData
-          // root as `last_pos` before writing the post-Phys EscapeAir root into CollData.cur_pos.
-          // Already-seeded EscapeAir rows have run the entry callback on the previous frame, so
-          // their source CollData.cur_pos is the prefix floor_sweep_prev_pos seed lane instead.
-          // refs/melee/src/melee/ft/ft_081B.c::ft_80082C74
-          // refs/melee/src/melee/mp/mpcoll.c::mpColl_80043754
-          (escapeair_locked_jumpaerial_entry_desired_bottom_owner &&
+          // Same-frame JumpAerial -> EscapeAir IASA from a platform-domain floor can enter
+          // EscapeAir before Fighter_procMap. In that entry-frame source path, ft_80082C74 calls
+          // mpCollPrev after the action transition, so CollData.last_pos is the frame-start
+          // JumpAerial root and CollData.cur_pos is the post-Phys EscapeAir root. Ledge/non-
+          // platform entries keep their separate EscapeAir guards below; already-seeded EscapeAir
+          // rows have run the entry callback on the previous frame, so their source CollData.cur_pos
+          // is the prefix floor_sweep_prev_pos seed lane instead.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_IASA
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+          // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+          // refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_800471F8}
+          (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR && ecb_lock_timer_seed != 0u &&
+           (escapeair_locked_jumpaerial_entry_desired_bottom_owner ||
+            stage_collision_floor_line_is_platform(stage_id, batch->state.ground_id[idx]) ||
+            stage_collision_floor_line_has_platform_transform(stage_id,
+                                                              batch->state.ground_id[idx])) &&
            (prev_action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
-            prev_action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_B))
+            prev_action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_B) &&
+           (batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
+            batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_AERIAL_B))
               ? 1u
               : 0u;
       const float prev_x = escapeair_471f8_uses_frame_start_last_pos
@@ -4829,7 +4838,9 @@ void mpcoll_ground_apply(MslBatch* batch) {
         if ((prefer_line_idx < 0 || prefer_line_is_ledge_floor || prefer_line_is_platform_floor) &&
             cliff_ledge_line_idx >= 0 &&
             floor_line_is_runtime_fighter_solid(g, stage_id, cliff_ledge_line_idx) &&
-            g->lines[(size_t)cliff_ledge_line_idx].is_ledge) {
+            g->lines[(size_t)cliff_ledge_line_idx].is_ledge &&
+            floor_x_within_line_bounds(batch, bi, g, cliff_ledge_line_idx,
+                                       batch->state.pos_x[idx])) {
           // Source cliff/CollData floor owner:
           // CliffCatch/CliffWait store `mv.co.cliff.ledge_id`; release/drop sets
           // fp->x2064_ledgeCooldown, and the following air collision wrappers branch on that
@@ -4837,7 +4848,9 @@ void mpcoll_ground_apply(MslBatch* batch) {
           // collision callbacks while the timer is live, while Slippi-visible lastGroundId may
           // still name a stale platform, same-side ledge, or wrong-side ledge.
           // Prefer the hidden cliff floor only when the visible floor owner is missing or still a
-          // ledge/platform owner; do not replace an already-updated hard main-floor index.
+          // ledge/platform owner and the current root is still horizontally in that ledge span; a
+          // stale/wrong-side seed lane must not remap through mpLib endpoint projection to the
+          // opposite ledge. Do not replace an already-updated hard main-floor index.
           // refs/melee/src/melee/ft/ftcliffcommon.c::ftCliffCommon_80081370
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_8009AAFC
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
@@ -8281,7 +8294,10 @@ void mpcoll_ground_apply(MslBatch* batch) {
            batch->state.coll_desired_ecb_bottom_valid[idx] != 0u &&
            (batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
             batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_AERIAL_B) &&
-           batch->state.seed_prev_action_frame[idx] == 3 && batch->state.action_frame[idx] <= 2 &&
+           (batch->state.seed_prev_action_frame[idx] == 3 ||
+            (stage_id == (uint32_t)MSL_STAGE_YOSHIS_STORY_LOCAL &&
+             batch->state.seed_prev_action_frame[idx] <= 4)) &&
+           batch->state.action_frame[idx] <= 2 &&
            g->lines[(size_t)escapeair_projection_line_idx].segment_i ==
                batch->state.ground_id[idx] &&
            !stage_collision_floor_line_is_platform(

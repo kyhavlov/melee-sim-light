@@ -419,6 +419,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->attack_instance = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->frame_start_attack_id = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->frame_start_attack_instance = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
+  state->frame_start_instance_id = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->attack_identity_last_action_id = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->last_attack_landed = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->combo_count = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
@@ -651,8 +652,9 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->instance_id_x2073 || !state->motion_entry_instance_id_override ||
       !state->instance_identity_last_action_id || !state->attack_id || !state->attack_instance ||
       !state->frame_start_attack_id || !state->frame_start_attack_instance ||
-      !state->attack_identity_last_action_id || !state->last_attack_landed || !state->combo_count ||
-      !state->combo_victim_port || !state->combo_victim_instance_id || !state->combo_timer_x2098 ||
+      !state->frame_start_instance_id || !state->attack_identity_last_action_id ||
+      !state->last_attack_landed || !state->combo_count || !state->combo_victim_port ||
+      !state->combo_victim_instance_id || !state->combo_timer_x2098 ||
       !state->combo_push_timer_x2092 || !state->source_port0 || !state->last_hit_by ||
       !state->state_flags || !state->combat_hitlist_cd || !state->combat_hitlist_victim_iid ||
       !state->combat_hitlist_hb_valid || !state->combat_hitlist_hb_cd ||
@@ -1198,6 +1200,7 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->attack_instance);
   alloc_free(state->frame_start_attack_id);
   alloc_free(state->frame_start_attack_instance);
+  alloc_free(state->frame_start_instance_id);
   alloc_free(state->attack_identity_last_action_id);
   alloc_free(state->last_attack_landed);
   alloc_free(state->combo_count);

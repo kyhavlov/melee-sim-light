@@ -98,6 +98,7 @@ static inline uint8_t action_stage_has_soft_platform_floor(uint32_t stage_id) {
 
 uint8_t escape_air_try_enter_from_air_locomotion(MslBatch* batch, const MslCommonParams* c,
                                                  size_t idx) {
+  enum { MSL_STAGE_YOSHIS_STORY_LOCAL = 8u };
   if (batch == NULL || c == NULL) {
     return 0;
   }
@@ -161,8 +162,14 @@ uint8_t escape_air_try_enter_from_air_locomotion(MslBatch* batch, const MslCommo
        source_floor_x_within == 0u)
           ? 1u
           : 0u;
+  const uint8_t source_floor_is_offspan_yoshi_static_floor =
+      (stage_id == (uint32_t)MSL_STAGE_YOSHIS_STORY_LOCAL && source_floor_y_valid != 0u &&
+       source_floor_x_within == 0u && source_floor_is_platform == 0u &&
+       source_floor_has_platform_transform == 0u && batch->state.seed_prev_action_frame[idx] >= 3)
+          ? 1u
+          : 0u;
   const uint8_t escapeair_entry_bottom_sweep_still_above_floor =
-      (source_floor_is_offspan_transform ||
+      (source_floor_is_offspan_transform || source_floor_is_offspan_yoshi_static_floor ||
        (source_floor_y_valid &&
         (escapeair_entry_next_root_y + batch->state.coll_desired_ecb_bottom_rel_y[idx]) >
             (source_floor_y + 0.0001f)))
@@ -170,16 +177,20 @@ uint8_t escape_air_try_enter_from_air_locomotion(MslBatch* batch, const MslCommo
           : 0u;
   if (batch->state.ecb_lock_timer[idx] != 0u &&
       batch->state.coll_desired_ecb_bottom_valid[idx] != 0u &&
-      batch->state.coll_desired_ecb_bottom_rel_y[idx] > 0.0001f &&
-      source_floor_carries_locked_ecb && source_is_jumpaerial &&
-      batch->state.action_frame[idx] >= 1 && escapeair_entry_bottom_sweep_still_above_floor) {
+      batch->state.coll_desired_ecb_bottom_rel_y[idx] > 0.0001f && source_is_jumpaerial &&
+      batch->state.action_frame[idx] >= 1 &&
+      (escapeair_entry_bottom_sweep_still_above_floor ||
+       (!source_floor_carries_locked_ecb && stage_id == (uint32_t)MSL_STAGE_YOSHIS_STORY_LOCAL))) {
     // Runtime EscapeAir entry can happen during JumpAerial IASA before Fighter_procMap. On
     // JumpAerial pass-through from a source floor-domain line still carries CollData_X130_Locked
     // when source `ftCo_EscapeAir_Coll` calls `mpColl_LoadECB_inline`, preserving the pre-entry
     // desired_ecb.bottom for the first EscapeAir callback only while the frame-start provenance is
-    // still sustained JumpAerial and that bottom sweep is still above the carried floor. On FoD, a
-    // height-transform platform floor is also a source floor-domain line: the platform object owns
-    // the moving floor and the same CollData lock handoff, unlike ordinary soft-platform candidates.
+    // still sustained JumpAerial. On Yoshi's Story, a stale visible platform floor id can be
+    // off-domain while the following `EscapeAir_Coll` floor search is about to cross a generated
+    // sloped ledge or static platform; the preserved desired bottom still belongs to
+    // CollData_X130 rather than to that stale visible floor id. On FoD, a height-transform platform
+    // floor is also a source floor-domain line: the platform object owns the moving floor and the
+    // same CollData lock handoff, unlike ordinary soft-platform candidates.
     // If the fighter has already moved off that transformed platform's horizontal span, do not use
     // the stale platform height to clear CollData ownership; the following EscapeAir_Coll floor
     // search owns the adjacent hard-floor handoff. Fresh cliff-jump chains, ordinary non-transform
@@ -689,6 +700,37 @@ static inline uint8_t dash_iasa_try_enter_opposite_checkinput_turn_before_guard(
   dash_iasa_apply_root_motion_exit_gr_vel_clamp(batch, msl_char_params(batch->state.char_id[idx]),
                                                 idx);
   dash_iasa_apply_terminal_velocity_scalar(batch, c, idx);
+  return 1u;
+}
+
+static inline uint8_t dash_iasa_try_enter_a_tap_jump_after_attack_s4_miss(MslBatch* batch,
+                                                                          const MslCommonParams* c,
+                                                                          size_t idx) {
+  if (batch == NULL || c == NULL || batch->state.jumps_left[idx] == 0u) {
+    return 0u;
+  }
+  const uint16_t buttons_pressed = batch->state.input_buttons_pressed[idx];
+  if ((buttons_pressed & (uint16_t)MSL_BUTTON_A) == 0u) {
+    return 0u;
+  }
+  const float stick_x =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]), c->lstick_deadzone_x);
+  if (msl_absf(stick_x) >= c->dash_flick_abs &&
+      batch->state.tilt_timer_x[idx] < c->dash_flick_tilt_max_frames) {
+    return 0u;
+  }
+  const float stick_y =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
+  if (stick_y < c->tap_jump_threshold ||
+      batch->state.tilt_timer_y[idx] >= c->tap_jump_tilt_max_frames) {
+    return 0u;
+  }
+
+  batch->state.action_id[idx] = (uint16_t)MSL_ACT_KNEE_BEND;
+  batch->state.animation_index[idx] = (uint32_t)MSL_SM_KNEE_BEND;
+  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  batch->state.kneebend_jump_input[idx] = (uint8_t)MSL_JUMP_INPUT_LSTICK;
+  batch->state.kneebend_is_short_hop[idx] = 0u;
   return 1u;
 }
 
@@ -1346,10 +1388,16 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
       if (guard_try_enter_iasa_defense(batch, c, idx)) {
         return;
       }
-      // Replay-visible GuardSetOff -> Guard carry rows expose the destination Guard lockout timer
-      // after the first Guard callback phase, but without the Guard shield-hold HP drain on the
-      // transition row. Model that hidden x10 handoff here so the later `inlineC0` release gate
-      // observes the same countdown as the source sequence.
+      // Replay-visible GuardSetOff -> Guard carry rows normally expose the destination Guard
+      // lockout timer after the first Guard callback phase, but without the Guard shield-hold HP
+      // drain on the transition row. Model that hidden x10 handoff here so the later `inlineC0`
+      // release gate observes the same countdown as the source sequence.
+      //
+      // GuardSetOff shieldstun-exit carry publishes the destination Guard row after the first
+      // GuardSetOff -> Guard callback handoff. Fresh same-frame shield entries initialize x10 from
+      // raw p_ftCommonData->x268 at shield-hit entry; carried GuardSetOff rows use their seeded
+      // value. Both paths consume the ordinary carry tick here before the next Guard_IASA release
+      // gate.
       //
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
       //   ftCo_GuardSetOff_Anim,ftCo_800928CC,ftCo_Guard_IASA,ftCo_800925A4,inlineC0}
@@ -1813,9 +1861,15 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
   if (a0 == (uint16_t)MSL_ACT_DASH && batch->state.dash_x4[idx] != 0u &&
       batch->state.anim_frame_f32[idx] <= c->dash_iasa_x44) {
     // Decomp: the early Dash_IASA branch (`dash.x4 != 0 && cur_anim_frame <= x44`) checks
-    // SpecialS/item/CatchDash/AttackS4/EscapeF and then falls through without calling the guard
-    // helper. Guard/GuardReflect admission starts in the later Dash_IASA branches.
+    // SpecialS/item/CatchDash/AttackS4/EscapeF and then reaches block_42 without calling the guard
+    // helper. Guard/GuardReflect admission starts in the later Dash_IASA branches. The narrow
+    // A+tap-jump case below is the block_42 path after AttackS4_8008C114 misses the side-smash
+    // threshold.
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::fn_800CAF78
+    if (dash_iasa_try_enter_a_tap_jump_after_attack_s4_miss(batch, c, idx)) {
+      return;
+    }
     return;
   }
 

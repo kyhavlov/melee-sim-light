@@ -1232,6 +1232,36 @@ static inline uint8_t combat_is_damage_air_action(uint16_t action_id) {
   }
 }
 
+static inline uint8_t combat_residual_frame_start_hitcapsule_owner(const MslBatch* batch,
+                                                                   size_t idx) {
+  if (batch == NULL || batch->state.hitbox_count[idx] == 0u) {
+    return 0u;
+  }
+  if (!combat_is_damage_or_firefox_launch_victim_action(batch->state.action_id[idx])) {
+    return 0u;
+  }
+  if ((batch->state.action_id[idx] == (uint16_t)MSL_ACT_FX_SPECIAL_HI ||
+       batch->state.action_id[idx] == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI) &&
+      (batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_FX_SPECIAL_HI_HOLD ||
+       batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_FX_SPECIAL_HI_HOLD_AIR)) {
+    // Firefox/Firebird hold -> launch hitboxes are authored by the launch action after the
+    // transition out of Hold/HoldAir, not by a residual frame-start Damage/FlyReflect capsule.
+    // Keep the current attack instance in staling so repeated launch contacts use the stale queue
+    // state visible on the seed row.
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{ftFx_SpecialHiHold*_Anim,
+    //   ftFx_SpecialHi_Enter,ftFx_SpecialAirHi_Enter}
+    // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007ABD0,ftColl_80076ED8}
+    return 0u;
+  }
+  if (combat_is_damage_or_firefox_launch_victim_action(batch->state.prev_action_id[idx]) ||
+      batch->state.prev_action_id[idx] == batch->state.action_id[idx]) {
+    return 0u;
+  }
+  return (uint8_t)(batch->state.frame_start_attack_id[idx] != 0u &&
+                   batch->state.frame_start_attack_id[idx] != (uint16_t)MSL_FT_MOVE_ID_DEFAULT &&
+                   batch->state.frame_start_instance_id[idx] != 0u);
+}
+
 static inline uint8_t combat_hitlist_victim_pointer_may_change(uint8_t stocks, uint16_t action_id) {
   // Decomp hitlists store a victim pointer inside HitVictim; the simulator uses Slippi instance_id as
   // a proxy and only treats mismatches as a new victim when the object pointer can actually change.
@@ -1470,6 +1500,18 @@ static inline void combat_preserve_guard_x10_for_immediate_setoff(MslBatch* batc
     return;
   }
 
+  if (d_motion_id_pre == (uint16_t)MSL_ACT_GUARD_REFLECT &&
+      !msl_guard_lifecycle_action_has_shield_callback(batch->state.prev_action_id[d_idx])) {
+    // GuardReflect can be entered by the input callback earlier in this same step, then
+    // immediately consumed by shield contact. The source path has initialized shield move
+    // variables before ftCo_80092F2C, but no ordinary shield hold tick has published a row yet.
+    // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    //   ftCo_80091AD8,ftCo_80093A50,ftCo_80092F2C}
+    batch->state.guard_x10[d_idx] = msl_guard_x10_raw_init_u8(c);
+    return;
+  }
+
   if (d_motion_id_pre == (uint16_t)MSL_ACT_GUARD_ON &&
       batch->state.guard_on_entered_this_frame[d_idx] != 0u) {
     // Immediate GuardOn -> GuardSetOff contact is still in the ftCo_800924C0 entry callback phase:
@@ -1478,6 +1520,10 @@ static inline void combat_preserve_guard_x10_for_immediate_setoff(MslBatch* batc
     // no-submotion GuardOn snapshot lane stores x10 after that first hold tick; do not carry that
     // representation into same-frame GuardSetOff, or rollout exits Guard one frame early after
     // shieldstun.
+    //
+    // GuardOn shield hits are the same source owner even when the entry marker is no longer live:
+    // GuardOn_Anim is the only callback that would decrement x10, and a same-frame GuardSetOff
+    // contact bypasses that ordinary hold tick.
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
     //   ftCo_80091A4C,ftCo_800924C0,ftCo_800925A4,ftCo_80092F2C}
     batch->state.guard_x10[d_idx] = msl_guard_x10_raw_init_u8(c);
@@ -2930,6 +2976,32 @@ static inline uint8_t combat_received_kb_hitlag_owns_over_deal_hitlag(const MslB
   return 1u;
 }
 
+void combat_apply_deal_hitlag_raw_damage(MslBatch* batch, size_t idx, int damage) {
+  if (batch == NULL || damage <= 0) {
+    return;
+  }
+  const MslCommonParams* c = msl_common_params();
+  if (c == NULL) {
+    return;
+  }
+
+  // Deal-hitlag owner:
+  // - collision producers write `fp->dmg.x1914` with integer damage when an attacking HitCapsule
+  //   contacts an invincible fighter or an item hurtbox.
+  // - Fighter_ProcessHit then consumes x1914 through `ftCommon_CalcHitlag` using the attacker's
+  //   current MotionState id and default hitlag multiplier.
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_80076808}
+  // refs/melee/src/melee/it/itcoll.c::it_802703E8
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  const uint16_t motion_id = batch->state.action_id[idx];
+  const uint16_t hl = combat_calc_hitlag_frames(c, damage, motion_id, 1.0f);
+  if (!combat_received_kb_hitlag_owns_over_deal_hitlag(batch, idx) &&
+      hl > batch->state.hitlag[idx]) {
+    batch->state.hitlag[idx] = hl;
+    combat_state_flags_set_is_hitlag(batch, idx, hl);
+  }
+}
+
 static inline int combat_get_env_dmg(float dmg) {
   // Decomp (GALE01): "getEnvDmg" pattern used by collision when turning a hitbox's float damage into
   // the integer damage used for shield interactions and hitlag inputs.
@@ -4261,6 +4333,8 @@ static inline void combat_processhit_clear_phantom_damage(MslBatch* batch, size_
 static inline uint8_t combat_body_damage_producer_build(const MslBatch* batch, size_t a_idx,
                                                         size_t hb_i, int int_dmg,
                                                         uint16_t attacker_attack_id,
+                                                        uint16_t attacker_attack_instance,
+                                                        uint8_t exclude_attacker_attack_instance,
                                                         MslCombatDamageProduct* out) {
   if (batch == NULL || out == NULL) {
     return 0u;
@@ -4277,10 +4351,13 @@ static inline uint8_t combat_body_damage_producer_build(const MslBatch* batch, s
                                                                 batch->state.hitbox_damage[hb_i]);
   const int hitcapsule_int_dmg =
       (batch->state.smash_charge_state[a_idx] == 3u) ? (int)hb_dmg : int_dmg;
-  combat_damage_product_init(out, attacker_attack_id, batch->state.attack_instance[a_idx],
-                             hitcapsule_int_dmg, hitcapsule_int_dmg);
+  combat_damage_product_init(out, attacker_attack_id, attacker_attack_instance, hitcapsule_int_dmg,
+                             hitcapsule_int_dmg);
 
-  const float stale_mult = staling_multiplier_for_move(batch, a_idx, out->move_id);
+  const float stale_mult = (exclude_attacker_attack_instance != 0u)
+                               ? staling_multiplier_for_move_excluding_instance(
+                                     batch, a_idx, out->move_id, attacker_attack_instance)
+                               : staling_multiplier_for_move(batch, a_idx, out->move_id);
   if (stale_mult != 1.0f) {
     hb_dmg *= stale_mult;
   }
@@ -4380,8 +4457,8 @@ static inline void combat_body_damage_producer_apply_attacker_side(
 static inline void combat_body_damage_log_entry_init(
     MslBatch* batch, MslCombatBodyDamageLogEntry* e, size_t a_idx, size_t d_idx, int attacker,
     int defender, size_t hb_i, size_t cap_i, uint16_t attacker_motion_id,
-    uint16_t attacker_attack_id, uint8_t hit_group, uint8_t rehit_frames,
-    const MslCombatDamageProduct* prod) {
+    uint16_t attacker_attack_id, uint16_t attacker_instance_id, uint8_t hit_group,
+    uint8_t rehit_frames, const MslCombatDamageProduct* prod) {
   if (batch == NULL || e == NULL || prod == NULL) {
     return;
   }
@@ -4408,7 +4485,7 @@ static inline void combat_body_damage_log_entry_init(
       (uint8_t)(d_grab_owner != 0xFFu && d_grab_owner == (uint8_t)attacker &&
                 msl_action_is_grabbed_victim(e->defender_motion_id));
   e->attacker_attack_id = attacker_attack_id;
-  e->attacker_instance_id = batch->state.instance_id[a_idx];
+  e->attacker_instance_id = attacker_instance_id;
   e->hitbox_angle = batch->state.hitbox_angle[hb_i];
   e->hitbox_kbg = batch->state.hitbox_kbg[hb_i];
   e->hitbox_wsk = batch->state.hitbox_wsk[hb_i];
@@ -4420,7 +4497,8 @@ static inline void combat_body_damage_log_entry_init(
 static inline uint8_t combat_body_damage_log_record(
     MslBatch* batch, MslCombatBodyDamageScratch* scratch, size_t a_idx, size_t d_idx, int attacker,
     int defender, size_t hb_i, size_t cap_i, int int_dmg, uint16_t attacker_motion_id,
-    uint16_t attacker_attack_id, uint8_t hit_group, uint8_t rehit_frames) {
+    uint16_t attacker_attack_id, uint16_t attacker_attack_instance, uint16_t attacker_instance_id,
+    uint8_t exclude_attacker_attack_instance, uint8_t hit_group, uint8_t rehit_frames) {
   if (batch == NULL || scratch == NULL ||
       scratch->count >= (uint8_t)MSL_COMBAT_BODY_DAMAGE_LOG_CAP) {
     return 0u;
@@ -4434,7 +4512,9 @@ static inline uint8_t combat_body_damage_log_record(
   // - append one DmgLogEntry for later ftColl_8007A06C best-KB selection.
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,inlineB2,ftColl_8007891C,ftColl_8007A06C}
   MslCombatDamageProduct prod;
-  if (!combat_body_damage_producer_build(batch, a_idx, hb_i, int_dmg, attacker_attack_id, &prod)) {
+  if (!combat_body_damage_producer_build(batch, a_idx, hb_i, int_dmg, attacker_attack_id,
+                                         attacker_attack_instance, exclude_attacker_attack_instance,
+                                         &prod)) {
     return 0u;
   }
 
@@ -4449,8 +4529,8 @@ static inline uint8_t combat_body_damage_log_record(
 
   MslCombatBodyDamageLogEntry* e = &scratch->entries[scratch->count++];
   combat_body_damage_log_entry_init(batch, e, a_idx, d_idx, attacker, defender, hb_i, cap_i,
-                                    attacker_motion_id, attacker_attack_id, hit_group, rehit_frames,
-                                    &prod);
+                                    attacker_motion_id, attacker_attack_id, attacker_instance_id,
+                                    hit_group, rehit_frames, &prod);
   return 1u;
 }
 
@@ -6154,18 +6234,37 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
   uint8_t v1_group_registered_this_pass[MSL_MAX_PLAYERS][MSL_MAX_PLAYERS][MSL_HITLIST_GROUPS] = {
       {{0}}};
   uint16_t pre_combat_attack_id[MSL_MAX_PLAYERS] = {0};
+  uint16_t pre_combat_attack_instance[MSL_MAX_PLAYERS] = {0};
+  uint16_t pre_combat_instance_id[MSL_MAX_PLAYERS] = {0};
+  uint8_t pre_combat_residual_hitcapsule_owner[MSL_MAX_PLAYERS] = {0};
   MslCombatBodyDamageScratch body_damage_logs[MSL_MAX_PLAYERS];
   uint8_t body_damage_apply_order[MSL_MAX_PLAYERS] = {0};
   uint8_t body_damage_apply_count = 0u;
   memset(body_damage_logs, 0, sizeof(body_damage_logs));
-  // Collision attack-id snapshot:
+  // Collision attack/source snapshot:
   // - ftColl_80076444 / ftColl_800763C0 consume the attack id attached to the current collision
   //   pass, before later same-frame ProcessHit/ChangeMotionState effects can rewrite fp->x2068.
+  // - ftColl_80076ED8 writes the attacker GObj identity into the victim's damage source before
+  //   Fighter_ProcessHit mutates either fighter, so reciprocal BODY hits keep the pre-pass attacker
+  //   instance rather than a post-damage motion-state instance.
+  // - HitCapsule.damage is authored before this pass by ftColl_8007ABD0 / ft_80089228; use the
+  //   pre-pass attack instance when excluding same-instance stale queue entries.
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076444,ftColl_800763C0}
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007ABD0}
   // refs/melee/src/melee/ft/ft_0881.c::ft_800890D0
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
   for (int p = 0; p < num_players; p++) {
     const size_t idx = msl_idx_player(bi, p);
-    pre_combat_attack_id[p] = batch->state.attack_id[idx];
+    if (combat_residual_frame_start_hitcapsule_owner(batch, idx)) {
+      pre_combat_residual_hitcapsule_owner[p] = 1u;
+      pre_combat_attack_id[p] = batch->state.frame_start_attack_id[idx];
+      pre_combat_attack_instance[p] = batch->state.frame_start_attack_instance[idx];
+      pre_combat_instance_id[p] = batch->state.frame_start_instance_id[idx];
+    } else {
+      pre_combat_attack_id[p] = batch->state.attack_id[idx];
+      pre_combat_attack_instance[p] = batch->state.attack_instance[idx];
+      pre_combat_instance_id[p] = batch->state.instance_id[idx];
+    }
   }
 
   // Process HitElement_Catch fighter-vs-fighter contacts before shield/body damage selection.
@@ -7353,7 +7452,9 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
             const uint8_t first_defender_log = (body_damage_logs[defender].count == 0u) ? 1u : 0u;
             const uint8_t recorded = combat_body_damage_log_record(
                 batch, &body_damage_logs[defender], a_idx, d_idx, attacker, defender, hb_i, cap_i,
-                int_dmg, a_motion_id, pre_combat_attack_id[attacker], hit_group, rehit_frames);
+                int_dmg, a_motion_id, pre_combat_attack_id[attacker],
+                pre_combat_attack_instance[attacker], pre_combat_instance_id[attacker],
+                pre_combat_residual_hitcapsule_owner[attacker], hit_group, rehit_frames);
             if (recorded && first_defender_log &&
                 body_damage_apply_count < (uint8_t)MSL_MAX_PLAYERS) {
               body_damage_apply_order[body_damage_apply_count++] = (uint8_t)defender;

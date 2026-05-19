@@ -917,6 +917,35 @@ static inline uint8_t physics_nudge_exits_floor_span(const MslStageFloorGraph* g
                    (nudge_x < 0.0f && nudged_x <= line->x0));
 }
 
+static inline uint8_t physics_nudge_exits_guard_missfoot_edge(const MslStageFloorGraph* g,
+                                                              int line_idx, float pos_x,
+                                                              float nudge_x, uint8_t facing_right) {
+  if (g == NULL || line_idx < 0 || (size_t)line_idx >= g->line_count || nudge_x == 0.0f) {
+    return 0u;
+  }
+  const MslStageFloorLine* line = &g->lines[(size_t)line_idx];
+  const float left = (line->x0 < line->x1) ? line->x0 : line->x1;
+  const float right = (line->x0 > line->x1) ? line->x0 : line->x1;
+  const float nudged_x = pos_x + nudge_x;
+  if (facing_right) {
+    return (uint8_t)(nudge_x < 0.0f && nudged_x <= left);
+  }
+  return (uint8_t)(nudge_x > 0.0f && nudged_x >= right);
+}
+
+static inline uint8_t physics_action_uses_guard_player_nudge_floor_loss(uint16_t action_id) {
+  switch (action_id) {
+    case MSL_ACT_GUARD_ON:
+    case MSL_ACT_GUARD:
+    case MSL_ACT_GUARD_OFF:
+    case MSL_ACT_GUARD_SET_OFF:
+    case MSL_ACT_GUARD_REFLECT:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
 static inline uint8_t physics_action_uses_downwait_player_nudge_floor_loss(uint16_t action_id) {
   return (uint8_t)((action_id == (uint16_t)MSL_ACT_DOWN_WAIT_U ||
                     action_id == (uint16_t)MSL_ACT_DOWN_WAIT_D ||
@@ -1128,6 +1157,10 @@ static inline void physics_compute_grounded_player_nudge(MslBatch* batch, int bi
             !(physics_action_uses_common_damage_floor_loss_nudge(source_action) &&
               physics_nudge_exits_floor_span(floor_graph, self_line, batch->state.pos_x[idx],
                                              nudge_x)) &&
+            !(physics_action_uses_guard_player_nudge_floor_loss(source_action) &&
+              physics_nudge_exits_guard_missfoot_edge(floor_graph, self_line,
+                                                      batch->state.pos_x[idx], nudge_x,
+                                                      batch->state.facing[idx])) &&
             !physics_guard_entry_from_wait_nudge_can_feed_floor_loss(batch, floor_graph, self_line,
                                                                      idx, nudge_x)) {
           continue;

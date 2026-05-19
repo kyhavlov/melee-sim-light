@@ -572,22 +572,23 @@ def test_direct_fall_reseed_carries_seeded_cliff_floor_through_jump_and_escapeai
     landed = rows[-1]
     assert int(before["action_id"][0]) == ACT_ESCAPE_AIR
     assert int(before["on_ground"][0]) == 0
-    assert int(landed["action_id"][0]) == ACT_ESCAPE_AIR
-    assert int(landed["on_ground"][0]) == 0
+    assert int(landed["action_id"][0]) == ACT_LANDING_FALL_SPECIAL
+    assert int(landed["on_ground"][0]) == 1
+    assert int(landed["ground_id"][0]) == 2
 
 
 @pytest.mark.parametrize(
-    ("cliff_floor_id", "ledge_cooldown", "expected_grounded"),
+    ("cliff_floor_id", "ledge_cooldown", "expected_action", "expected_grounded"),
     [
-        (0xFFFF, 20, 0),  # direct later reseed without the hidden lane
-        (2, 0, 0),  # cooldown expired
-        (6, 20, 0),  # wrong-side reconstructed owner
-        (2, 20, 0),  # retained shallow cliff-floor handoff stays airborne
+        (0xFFFF, 20, ACT_ESCAPE_AIR, 0),  # direct later reseed without the hidden lane
+        (2, 0, ACT_ESCAPE_AIR, 0),  # cooldown expired
+        (6, 20, ACT_ESCAPE_AIR, 0),  # wrong-side reconstructed owner
+        (2, 20, ACT_LANDING_FALL_SPECIAL, 1),  # same-side seeded ledge floor owns handoff
     ],
 )
 @pytest.mark.integration
 def test_direct_fall_reseed_cliff_floor_owner_negative_boundaries(
-    cliff_floor_id: int, ledge_cooldown: int, expected_grounded: int
+    cliff_floor_id: int, ledge_cooldown: int, expected_action: int, expected_grounded: int
 ) -> None:
     rows = _run_direct_fall_cliff_exit_ledgedash(
         stage_id=STAGE_YOSHI,
@@ -611,7 +612,7 @@ def test_direct_fall_reseed_cliff_floor_owner_negative_boundaries(
 
     final = rows[-1]
     assert int(final["on_ground"][0]) == expected_grounded
-    assert int(final["action_id"][0]) == ACT_ESCAPE_AIR
+    assert int(final["action_id"][0]) == expected_action
 
 
 @pytest.mark.parametrize(
@@ -724,8 +725,13 @@ def test_cliff_floor_owner_covers_same_side_and_yoshi_stale_floor(
     assert int(before["action_id"][0]) == ACT_ESCAPE_AIR
     assert int(before["on_ground"][0]) == 0
     assert expected_ground in (0, 2, 6)
-    assert int(landed["action_id"][0]) == ACT_ESCAPE_AIR
-    assert int(landed["on_ground"][0]) == 0
+    if stage_id == STAGE_YOSHI:
+        assert int(landed["action_id"][0]) == ACT_LANDING_FALL_SPECIAL
+        assert int(landed["on_ground"][0]) == 1
+        assert int(landed["ground_id"][0]) == expected_ground
+    else:
+        assert int(landed["action_id"][0]) == ACT_ESCAPE_AIR
+        assert int(landed["on_ground"][0]) == 0
 
 
 def test_non_cliff_escapeair_near_yoshi_ledge_does_not_reconstruct_cliff_floor_owner() -> None:
@@ -2006,7 +2012,7 @@ def test_yoshi_randall_carries_grounded_rider_with_platform_motion() -> None:
     # and inherit the platform transform delta before projection, rather than standing at stale X
     # until the platform slides out from under them.
     # refs/melee/src/melee/gr/grstory.c::{grStory_801E3370,Ground_801C2FE0}
-    frame_id = 600
+    frame_id = 477
     x0 = 101.235443 - 11.9
     y = -13.64989
     seed = _seed_base(8, ACT_WAIT, SM_WAIT1_0, x0 + 6.0, y + 0.0001)
@@ -2030,7 +2036,7 @@ def test_yoshi_randall_carries_landing_rider_with_platform_motion() -> None:
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Coll
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c::ftCo_LandingAir_Coll
     # refs/melee/src/melee/gr/grstory.c::{grStory_801E3370,Ground_801C2FE0}
-    frame_id = 600
+    frame_id = 477
     seed = _seed_base(8, ACT_LANDING, SM_WAIT1_0, 95.8551, -13.64989 + 0.0001)
     seed["frame_id"][0] = np.int32(frame_id)
     seed["on_ground"][0, 0] = np.uint8(1)
@@ -2062,7 +2068,7 @@ def test_yoshi_randall_carries_downed_ft80084104_rider(action_id: int, submotion
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Down.c::ftCo_Down_Coll
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveStand.c::ftCo_PassiveStand_Coll
     # refs/melee/src/melee/ft/ft_081B.c::ft_80084104
-    frame_id = 600
+    frame_id = 477
     seed = _seed_base(8, action_id, submotion_id, 95.8551, -13.64989 + 0.0001)
     seed["frame_id"][0] = np.int32(frame_id)
     seed["on_ground"][0, 0] = np.uint8(1)

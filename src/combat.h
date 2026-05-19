@@ -7,6 +7,7 @@
 void combat_resolve(MslBatch* batch);
 void combat_processhit_consume(MslBatch* batch);
 uint8_t combat_is_powershield_active_idx(const MslBatch* batch, size_t idx);
+void combat_apply_deal_hitlag_raw_damage(MslBatch* batch, size_t idx, int damage);
 void combat_rng_trace_begin_frame(MslBatch* batch);
 void combat_rng_trace_end_frame(MslBatch* batch);
 float combat_rng_consume_randf_site(MslBatch* batch, int bi, uint16_t site_id);

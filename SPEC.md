@@ -132,6 +132,14 @@ and decomp-motivated rather than arbitrary heuristics.
   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0`,
   `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}`,
   and `refs/melee/src/melee/it/itcoll.c::it_80272460`.
+- **Residual frame-start HitCapsule identity**: when a fighter takes damage before the common
+  BODY resolver reaches its own still-live HitCapsule in the same frame, fighter BODY producers
+  use frame-start `fp->x2068/x206C` and frame-start fighter instance attribution for that residual
+  capsule. This matches the source split where `ftColl_8007ABD0` creates/stales the HitCapsule
+  before `Fighter_ProcessHit_8006D1EC` can rewrite the attack/source identity through a same-frame
+  Damage* entry, and prevents reciprocal hits from becoming unstaled post-damage attacks.
+  Covered by the CNM Yoshi's Story simultaneous Shine/up-smash lock in
+  `tests/test_combat_attack_id_snapshot_replay_real_locks.py`.
 - **Research note (2026-05-16, damage modifier/source shape)**: the decomp-faithful boundary is
   still the same producer/consumer split, not a generic post-hoc damage modifier pass. `ftColl`
   and item/throw producers populate pre-`Fighter_ProcessHit` accumulators (`x1838_percentTemp`,
@@ -983,12 +991,16 @@ Recent deltas to reflect here (do not let these get “lost in chat logs”):
   interactions remain open. Knocked/falling state 2/3 and low-damage return-flight state 4 blast
   clear are the generic item post-Phys owner (`Item_802697D4 -> Item_802696CC`), so they clear on
   exact side/bottom blast bounds without the active-state-1 `it_802D9714` 20-unit return margin.
+  Fighter HitCapsules with the extracted item-interaction bit can also damage active/return-flight
+  Shy Guys through the source item-hurtbox path (`it_802703E8 -> it_80270E30 -> it_802D8EC8`);
+  this is the same state-2/3 damage lifecycle as laser item-vs-item hits, not a player BODY proxy.
   Dream Land Whispy/apple scheduling is also separate and must not be substituted with replay-next lanes
   (`src/items.c`, `data/stage_items/yoshi_shyguy.bin`; refs/melee/src/melee/gr/grstory.c::grStory_801E3418,
   refs/melee/src/melee/it/items/itheiho.c::{
   it_802D8618,itHeiho_UnkMotion0_Phys,itHeiho_UnkMotion1_Phys,itHeiho_UnkMotion2_Phys,
   itHeiho_UnkMotion3_Phys,itHeiho_UnkMotion4_Phys,itHeiho_UnkMotion1_Coll,
   itHeiho_UnkMotion4_Coll,it_802D8EC8,it_802D98C4},
+  refs/melee/src/melee/it/itcoll.c::{it_802703E8,it_80270E30},
   refs/melee/src/melee/it/item.c::{Item_802697D4,Item_802696CC},
   refs/melee/src/melee/it/it_2725.c::{it_80275DFC,it_80276308}).
 - Dream Land Whispy wind is a stage-owned fighter horizontal force, not item motion. The runtime
@@ -2565,10 +2577,11 @@ Fox/Falco special-owner split (2026-04-17):
     `floor_sweep_prev_pos` lane; while `CollData_X130_Locked` is live, runtime preserves the
     desired ECB bottom through named EscapeAir locked-bottom owners: replay-seeded CollData_X130,
     live JumpAerial soft/height-transform provenance, and live JumpAerial hard-floor provenance.
-    On non-FD legal-stage hard floors, replay-prefix rows that expose an active lock but no
-    desired-bottom lane use the same frame-start root sweep; FD stays on the existing
-    desired-bottom/locked-owner branch because owner-zero free-running FD states are a separate
-    hidden-state gap. Soft platforms and ledges remain on their separate EscapeAir guards. Sources:
+    On non-FD legal-stage hard floors and platform-domain same-frame entries, replay-prefix rows
+    that expose an active lock but no desired-bottom lane use the same frame-start root sweep; FD
+    stays on the existing desired-bottom/locked-owner branch because owner-zero free-running FD
+    states are a separate hidden-state gap. Sustained soft platforms and ledges remain on their
+    separate EscapeAir guards. Sources:
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll`,
     `refs/melee/src/melee/ft/ft_081B.c::ft_80082C74`, and
     `refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpColl_80043754,mpColl_80044628_Floor,mpColl_80044838_Floor}`.
@@ -5738,6 +5751,18 @@ BODY collision-space residual split and rejected seed bridge:
   paths: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim`,
   `refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}`, and
   `refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008A5C}`.
+- AttackAirLw no-clear same-slot payloads initialize hidden HitCapsule provenance from legacy dense
+  seeds during reseed, and the live script payload path also materializes that provenance when the
+  create payload is replayed. Falco DAir's late create payload can update damage/offset fields
+  without disabling the slot or changing `hit_group`, so
+  `ftAction_8007121C` does not call the `ftColl_800768A0` clear path and the existing
+  `victims_1` latch persists until a later source clear/create or victim object boundary. Exact
+  per-HitCapsule empty seeds still own the real admit boundary (`PEC:344`), while dense fallback is
+  limited to the no-clear payload phase (`PEC:341..343`). Source paths:
+  `data/scripts/falco.bin` (`MSLFTSC1 ftCo_SM_AttackAirLw`),
+  `refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C`,
+  `refs/melee/src/melee/ft/ftcoll.c::ftColl_800768A0`, and
+  `refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}`.
 - Same-frame common locomotion entry hurtcaps now preserve the previous live JObj pose for BODY
   collision when input/IASA enters Wait/Run/Walk after the prio-1 animation tick and the entry path
   does not call an immediate `ftAnim_8006EBA4`. The replay-visible action/timebase can already be
@@ -6108,9 +6133,19 @@ BODY collision-space residual split and rejected seed bridge:
 - Late JumpAerial -> EscapeAir floor admission consumes CollData.desired_ecb.bottom as a one-frame
   `EscapeAir_Coll` publication owner when the post-Anim JumpAerial IASA sweep remains above a
   non-platform floor and the following EscapeAir callback crosses that desired bottom through the
-  floor. Sustained EscapeAir continuations cannot reuse that source slice unless the current
-  callback reestablishes a fresh desired-bottom crossing. The 182447 frozen-PS replay locks the
-  positive `EscapeAir -> LandingFallSpecial` floor row.
+  floor. Runtime preserves the live JumpAerial desired-bottom owner across the EscapeAir entry even
+  when the visible carried floor id is stale/off-domain, then allows the following Yoshi's Story
+  sloped ledge floor crossing to publish `LandingFallSpecial` through `ft_80082C74`. Sustained
+  EscapeAir continuations cannot reuse that source slice unless the current callback reestablishes a
+  fresh desired-bottom crossing. The 182447 frozen-PS replay and CNM Yoshi rollout locks cover the
+  positive `EscapeAir -> LandingFallSpecial` floor rows.
+- Airborne `DownBound*` floor-loss uses the active CollData.floor segment, not a stage side-ledge
+  proxy. `ftCo_DownBound_Coll -> ft_80082708 -> mpColl_8004B108` can enter Fall from ordinary
+  side-ledge floor loss and generated stage-object platform endpoints, but a soft-platform
+  CollData.floor row must stay on platform geometry until platform contact/endpoint ownership is
+  reestablished. Yoshi's Story soft-platform rows therefore do not consume the generic stage
+  side-ledge helper merely because the root X is near the main stage ledge; CNM `6944` and FoD MGS
+  `3782` lock the platform-vs-stage-object boundary.
 - DeadUpFallHitCamera publishes `fp->x221F_b1` at the phase-3 expiry boundary, the same
   `ftCo_DeadUpFall_Anim` case that calls `ftCo_800D34E0` for stock loss. MSL uses the shared
   DeadUpFall phase countdown from `data/common/ft_common_data.json` so the post-frame that first

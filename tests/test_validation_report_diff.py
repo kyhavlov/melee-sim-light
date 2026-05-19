@@ -156,6 +156,69 @@ def test_validation_report_diff_classifies_distribution_only_rollout_red(tmp_pat
     assert not classification.hard
 
 
+def test_validation_report_diff_classifies_suite_distribution_only_rollout_red(
+    tmp_path: Path,
+) -> None:
+    before = tmp_path / "before"
+    after = tmp_path / "after"
+    _write_reports(
+        before,
+        one_step=_one_step(total=10, strict=12, p95="0.20"),
+        rollout=_rollout(streak_count=30, first=30, seeded=8, median=100, p90=200),
+    )
+    _write_reports(
+        after,
+        one_step=_one_step(total=10, strict=12, p95="0.20"),
+        rollout=_rollout(streak_count=29, first=29, seeded=7, median=90, p90=220),
+    )
+
+    before_reports = read_report_set(str(before), before=True)
+    after_reports = read_report_set(str(after))
+    classification = classify_reds(
+        before_reports, after_reports, diff_report_sets(before_reports, after_reports)
+    )
+
+    assert any(
+        d.section == "suite" and d.metric == "overall.rollout.streak_len.median"
+        for d in classification.distribution_only
+    )
+    assert not classification.hard
+
+
+def test_validation_report_diff_keeps_suite_distribution_red_unclassified_when_hard_context_regresses(
+    tmp_path: Path,
+) -> None:
+    before = tmp_path / "before"
+    after = tmp_path / "after"
+    _write_reports(
+        before,
+        one_step=_one_step(total=10, strict=12, p95="0.20"),
+        rollout=_rollout(streak_count=30, first=30, seeded=8, median=100, p90=200),
+    )
+    _write_reports(
+        after,
+        one_step=_one_step(total=10, strict=12, p95="0.20"),
+        rollout=_rollout(streak_count=31, first=31, seeded=8, median=90, p90=220),
+    )
+
+    before_reports = read_report_set(str(before), before=True)
+    after_reports = read_report_set(str(after))
+    classification = classify_reds(
+        before_reports, after_reports, diff_report_sets(before_reports, after_reports)
+    )
+
+    assert any(
+        d.section == "suite" and d.metric == "overall.rollout.streak_len.median"
+        for d in classification.unclassified
+    )
+    assert not any(
+        d.section == "suite" and d.metric == "overall.rollout.streak_len.median"
+        for d in classification.distribution_only
+    )
+    assert any(d.metric == "overall.rollout.first_mismatch_total" for d in classification.hard)
+    assert any(d.metric == "overall.rollout.streak_count" for d in classification.hard)
+
+
 def test_validation_report_diff_fail_on_regression_exits_nonzero(tmp_path: Path) -> None:
     before = tmp_path / "before"
     after = tmp_path / "after"

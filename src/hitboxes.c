@@ -14,6 +14,7 @@
 #include "hitboxes_tables.h"
 #include "hitlist.h"
 #include "motion_state_owners.h"
+#include "move_tables.h"
 #include "msl_math.h"
 #include "mtx34.h"
 #include "specialhi_pose.h"
@@ -455,6 +456,45 @@ static inline uint8_t hitboxes_seed_reconstruct_create_edge_powershield_dense_ap
     return 1u;
   }
   return 0u;
+}
+
+static inline uint8_t hitboxes_no_clear_attackairlw_dense_seed_initializes_hitcapsule(
+    const MslBatch* batch, int bi, int attacker, int hb_id) {
+  if (batch == NULL || bi < 0 || attacker < 0 || attacker >= (int)MSL_MAX_PLAYERS || hb_id < 0 ||
+      hb_id >= (int)MSL_MAX_HITBOXES) {
+    return 0u;
+  }
+  if (batch->replay_rollout_reseeded == NULL || batch->replay_rollout_reseeded[bi] == 0u) {
+    return 0u;
+  }
+  if (hitboxes_has_authoritative_hitlist_seed(batch, bi, attacker, hb_id)) {
+    return 0u;
+  }
+  const size_t a_idx = msl_idx_player(bi, attacker);
+  const uint16_t action_id = batch->state.action_id[a_idx];
+  if (action_id != (uint16_t)MSL_ACT_ATTACK_AIR_LW ||
+      batch->state.seed_prev_action_id[a_idx] != action_id || batch->state.hitlag[a_idx] != 0u ||
+      batch->state.hitstun[a_idx] != 0u ||
+      !move_tables_attackair_second_create_hitbox_phase(batch->state.char_id[a_idx], action_id,
+                                                        batch->state.anim_frame_f32[a_idx]) ||
+      move_tables_attackair_post_clear_create_hitbox_phase(batch->state.char_id[a_idx], action_id,
+                                                           batch->state.anim_frame_f32[a_idx])) {
+    return 0u;
+  }
+  // AttackAirLw no-clear payload owner:
+  // - ftAction_8007121C calls ftColl_800768A0 only on disabled->enabled or hit_group changes.
+  // - Falco's late DAir create payload updates an already-enabled same-group HitCapsule, so the
+  //   concrete victims_1 list persists across that command.
+  // - When a replay seed exposes only the legacy dense hit_group victim map, initialize the live
+  //   HitCapsule at the script payload site rather than suppressing BODY in the combat pass. This is
+  //   teacher-forced rollout seed initialization for hidden HitCapsule provenance; source-owned
+  //   per-hitbox empty seeds still win above, and ordinary one-step/free-running gameplay carries
+  //   the live `fighter_hitlist` list normally.
+  // data/scripts/falco.bin (MSLFTSC1 ftCo_SM_AttackAirLw no-clear create_hitbox payload)
+  // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_800768A0
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+  return 1u;
 }
 
 static inline uint8_t hitboxes_seed_reconstruct_attackairn_damageflytop_dense_applies(
@@ -1774,6 +1814,12 @@ void hitboxes_refresh(MslBatch* batch) {
             }
             if (hitboxes_seed_bridge_post_contact_hitlag_hitlist_applies(batch, bi, p, (int)hb,
                                                                          new_g)) {
+              hitlist_seed_init_fighter_hitbox_from_group(batch, bi, p, (int)hb, new_g);
+            }
+          } else if (hitboxes_no_clear_attackairlw_dense_seed_initializes_hitcapsule(batch, bi, p,
+                                                                                     (int)hb)) {
+            const size_t dst_i = idx_hitbox(bi, p, hb);
+            if (!hitboxes_hitlist_has_victims1_entry(&batch->state.fighter_hitlist[dst_i])) {
               hitlist_seed_init_fighter_hitbox_from_group(batch, bi, p, (int)hb, new_g);
             }
           }

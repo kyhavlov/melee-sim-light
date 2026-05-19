@@ -571,6 +571,80 @@ def test_late_dash_guardreflect_laser_shield_hit_rollout_crosses_maj7294() -> No
 
 
 @pytest.mark.integration
+def test_wait_guardreflect_full_shield_laser_reflects_from_frame_start_wait_cnm1524() -> None:
+    # Rollout lock for the CNM Wait -> GuardReflect laser boundary:
+    # - rec=1523 publishes Wait after AttackAirB ends; rec=1524 enters GuardReflect from that
+    #   frame-start Wait through ftCo_80091A4C -> ftCo_800939B4 -> ftCo_80093A50.
+    # - Because shield HP is still the full start value, this source slice stays on ReflectDesc /
+    #   ftColl_80077464 owner transfer. The MAJ:7327 damaged-shield control above remains
+    #   Item_80269DC8 HitShield / GuardSetOff.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_800939B4,ftCo_80093A50}
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_CreateReflectHit,ftColl_80077464}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
+        "CheeryNumbMonkey.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    binding = pytest.importorskip("msl_binding")
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    start_record = 1522
+    target_record = 1524
+    p = 0
+    item_slot = 5
+
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    seed_bytes = (
+        np.frombuffer(samples[start_record : start_record + 1]["seed_t"].tobytes(order="C"), dtype=np.uint8)
+        .copy()
+        .reshape(1, seed_stride)
+    )
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        binding.reseed_seed_rollout(handle, seed_bytes)
+        out = None
+        ref = None
+        for record in range(start_record, target_record + 1):
+            prev_input_bytes = (
+                np.frombuffer(samples[record : record + 1]["prev_input_t"].tobytes(order="C"), dtype=np.uint8)
+                .copy()
+                .reshape(1, input_stride)
+            )
+            input_bytes = (
+                np.frombuffer(samples[record : record + 1]["input_t"].tobytes(order="C"), dtype=np.uint8)
+                .copy()
+                .reshape(1, input_stride)
+            )
+            binding.step_input(handle, prev_input_bytes, input_bytes)
+            binding.write_compare(handle, out_compare_bytes)
+            out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()
+            ref = samples[record]["ref_t1"]
+    finally:
+        binding.destroy(handle)
+
+    assert out is not None and ref is not None
+    assert int(ref["action_id"][p]) == 182
+    assert int(out["action_id"][p]) == int(ref["action_id"][p])
+    assert int(out["hitlag"][p]) == int(ref["hitlag"][p]) == 0
+    assert float(out["shield_hp"][p]) == pytest.approx(float(ref["shield_hp"][p]), abs=5e-4)
+    assert int(out["items"][item_slot]["exists"]) == int(ref["items"][item_slot]["exists"]) == 1
+    assert int(out["items"][item_slot]["owner"]) == int(ref["items"][item_slot]["owner"]) == p
+    assert int(out["items"][item_slot]["instance_id"]) == int(ref["items"][item_slot]["instance_id"])
+    _assert_live_laser_set_matches_ref(out_row=out, ref_row=ref, record=target_record)
+
+
+@pytest.mark.integration
 def test_late_dash_guardreflect_laser_shield_hit_rollout_crosses_maj259() -> None:
     # Rollout lock for the high-disruptive MAJ SpecialAirN laser cluster:
     # a Dash -> GuardReflect defender with seed x14=2 must consume the incoming Falco laser through

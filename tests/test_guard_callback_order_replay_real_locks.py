@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import importlib
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from tests.test_combat_ownership_seed_guardrail_locks import _run_one_step_row
+from tools.eval.dataset import COMPARE_DTYPE
 from tools.eval.dataset import read_dataset
 
 
@@ -29,6 +32,51 @@ def _dataset(rel_path: str) -> Path:
     if not dataset_path.exists():
         pytest.skip(f"missing local dataset: {dataset_path}")
     return dataset_path
+
+
+def _run_rollout_to_record(dataset_path: Path, *, start_record: int, target_record: int):
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    assert start_record <= target_record
+    assert int(samples.shape[0]) > target_record
+
+    binding = importlib.import_module("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    try:
+        seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
+        prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+        input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+        out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+        seed_bytes[:] = np.frombuffer(
+            samples[start_record]["seed_t"].tobytes(order="C"), dtype=np.uint8
+        ).reshape(1, seed_stride)
+        binding.reseed_seed_rollout(handle, seed_bytes)
+        for record in range(start_record, target_record + 1):
+            prev_input_bytes[:] = np.frombuffer(
+                samples[record]["prev_input_t"].tobytes(order="C"), dtype=np.uint8
+            ).reshape(1, input_stride)
+            input_bytes[:] = np.frombuffer(
+                samples[record]["input_t"].tobytes(order="C"), dtype=np.uint8
+            ).reshape(1, input_stride)
+            binding.step_input(handle, prev_input_bytes, input_bytes)
+
+        binding.write_compare(handle, out_compare_bytes)
+        out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0]
+        ref = samples[target_record]["ref_t1"]
+        return samples[target_record], out, ref
+    finally:
+        binding.destroy(handle)
 
 
 @pytest.mark.integration
@@ -107,6 +155,78 @@ def test_guardreflect_terminal_snapshot_gate_does_not_mask_active_timer_contact(
     _, ref_t1, out_t1 = _run_one_step_row(dataset_path, record, p)
     assert int(ref_t1["action_id"][p]) == ACT_GUARD_SET_OFF
     assert int(out_t1["action_id"][p]) != ACT_GUARD
+
+
+@pytest.mark.integration
+def test_same_frame_guardon_setoff_keeps_raw_x10_through_rollout_gat_859() -> None:
+    # GAT 847 enters GuardSetOff from a same-frame GuardOn shield contact. Source initializes
+    # mv.co.guard.x10 from the raw p_ftCommonData->x268 value before shieldstun; carrying the
+    # replay-visible no-submotion GuardOn x10 shape exits to GuardOff one rollout frame early.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    #   ftCo_80091A4C,ftCo_800924C0,ftCo_800921DC,ftCo_80092F2C,ftCo_800925A4}
+    dataset_path = _dataset(
+        "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
+        "GracefulAttachedTurtle.msl"
+    )
+    start_record = 847
+    target_record = 859
+    p = 0
+    ds = read_dataset(str(dataset_path))
+    seed_start = ds.samples[start_record]["seed_t"]
+    target = ds.samples[target_record]["seed_t"]
+    assert int(seed_start["action_id"][p]) not in {
+        ACT_GUARD_ON,
+        ACT_GUARD,
+        ACT_GUARD_SET_OFF,
+        ACT_GUARD_REFLECT,
+    }
+    assert int(ds.samples[start_record]["ref_t1"]["action_id"][p]) == ACT_GUARD_SET_OFF
+    assert int(target["action_id"][p]) == ACT_GUARD
+    assert int(target["guard_release_latched_xc"][p]) == 1
+    assert int(target["guard_x10"][p]) == 1
+
+    _, out_t1, ref_t1 = _run_rollout_to_record(
+        dataset_path, start_record=start_record, target_record=target_record
+    )
+    assert int(ref_t1["action_id"][p]) == ACT_GUARD
+    assert int(out_t1["action_id"][p]) == ACT_GUARD
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("start_record", "target_record"),
+    [
+        (4898, 4906),
+        (6318, 6326),
+    ],
+)
+def test_carried_guardsetoff_rows_still_consume_x10_before_guardoff_gat(
+    start_record: int, target_record: int
+) -> None:
+    # GuardSetOff rows already seeded inside the shieldstun sequence do not carry the fresh
+    # same-frame shield-entry owner. Their GuardSetOff_Anim -> Guard handoff exposes the ordinary
+    # decremented x10, so released shield exits to GuardOff on the same rows vanilla does.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    #   ftCo_GuardSetOff_Anim,ftCo_800928CC,ftCo_800925A4,inlineC0}
+    dataset_path = _dataset(
+        "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
+        "GracefulAttachedTurtle.msl"
+    )
+    p = 0
+    ds = read_dataset(str(dataset_path))
+    seed_start = ds.samples[start_record]["seed_t"]
+    target = ds.samples[target_record]["seed_t"]
+    assert int(seed_start["action_id"][p]) == ACT_GUARD_SET_OFF
+    assert int(seed_start["seed_prev_action_id"][p]) == ACT_GUARD_SET_OFF
+    assert int(target["action_id"][p]) == ACT_GUARD
+    assert int(target["guard_x10"][p]) == 0
+    assert int(target["guard_release_latched_xc"][p]) == 1
+
+    _, out_t1, ref_t1 = _run_rollout_to_record(
+        dataset_path, start_record=start_record, target_record=target_record
+    )
+    assert int(ref_t1["action_id"][p]) == ACT_GUARD_OFF
+    assert int(out_t1["action_id"][p]) == ACT_GUARD_OFF
 
 
 @pytest.mark.integration

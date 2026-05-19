@@ -275,7 +275,13 @@ def _is_hard_red(delta: MetricDelta) -> bool:
 
 def _distribution_hard_metrics(delta: MetricDelta) -> tuple[str, ...]:
     if delta.section == "suite":
-        return ()
+        return (
+            "overall.rollout.best_len.max",
+            "overall.rollout.streak_len.max",
+            "overall.rollout.first_mismatch_total",
+            "overall.rollout.first_mismatch_seeded_total",
+            "overall.rollout.streak_count",
+        )
     return (
         "rollout.best_len",
         "rollout.streak_len.max",
@@ -303,8 +309,14 @@ def classify_reds(
         if (
             "rollout" in delta.report
             and delta.metric
-            in {"rollout.streak_len.median", "rollout.streak_len.p90", "rollout.streak_len.p95"}
-            and delta.section != "suite"
+            in {
+                "rollout.streak_len.median",
+                "rollout.streak_len.p90",
+                "rollout.streak_len.p95",
+                "overall.rollout.streak_len.median",
+                "overall.rollout.streak_len.p90",
+                "overall.rollout.streak_len.p95",
+            }
         ):
             statuses = [
                 _metric_non_regressing(before, after, delta, metric)

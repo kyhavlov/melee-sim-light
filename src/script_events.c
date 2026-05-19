@@ -639,6 +639,39 @@ uint8_t script_events_last_create_hitbox_phase(uint8_t char_id, uint16_t msid,
   return 1u;
 }
 
+uint8_t script_events_post_clear_create_hitbox_phase(uint8_t char_id, uint16_t msid,
+                                                     MslScriptFrameWindow* out) {
+  if (out == NULL) {
+    return 0u;
+  }
+  *out = (MslScriptFrameWindow){0};
+  int first_create_after_clear = -1;
+  int last_clear_after_first_create = -1;
+  int seen_create = 0;
+  const MslScriptEventRange range = script_events_range(char_id, msid);
+  for (uint32_t i = 0; i < range.count; i++) {
+    const MslScriptEvent* ev = &range.events[i];
+    if (ev->kind_id == (uint16_t)MSL_SCRIPT_EVENT_CREATE_HITBOX) {
+      seen_create = 1;
+      if (last_clear_after_first_create >= 0 && first_create_after_clear < 0) {
+        first_create_after_clear = (int)ev->frame;
+      }
+    } else if (ev->kind_id == (uint16_t)MSL_SCRIPT_EVENT_CLEAR_HITBOXES && seen_create) {
+      last_clear_after_first_create = (int)ev->frame;
+    }
+  }
+  if (first_create_after_clear < 0) {
+    return 0u;
+  }
+  *out = (MslScriptFrameWindow){
+      .start_af = (int16_t)first_create_after_clear,
+      .end_af = (int16_t)((last_clear_after_first_create >= first_create_after_clear)
+                              ? last_clear_after_first_create + 1
+                              : INT16_MAX),
+      .loaded = 1u};
+  return 1u;
+}
+
 uint8_t script_events_catchattack_grabbed_hit_window(uint8_t char_id, uint16_t msid,
                                                      MslScriptFrameWindow* out) {
   if (out == NULL) {

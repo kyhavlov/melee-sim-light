@@ -695,6 +695,34 @@ def test_downbound_floor_endpoint_clamp_keeps_airborne_edge_rows_in_downbound(
     assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 0
 
 
+def test_yoshi_platform_downbound_does_not_use_stage_side_ledge_exit_cnm_6944() -> None:
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[6944]
+    p = 1
+    assert int(row["seed_t"]["action_id"][p]) == 191  # DownBoundD
+    assert int(row["seed_t"]["on_ground"][p]) == 0
+    assert int(row["seed_t"]["ground_id"][p]) == 1  # Yoshi's left soft platform.
+    assert int(row["ref_t1"]["action_id"][p]) == 191
+
+    out, ref = _run_one_step(dataset_rel=dataset_rel, record=6944, p=p)
+
+    # DownBound_Coll uses the active CollData.floor line. A Yoshi soft-platform row must not exit
+    # through the generic stage side-ledge helper just because the root is near the stage ledge X;
+    # platform line contact/endpoint ownership is handled by platform geometry instead.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80082708
+    # data/stages/bin/grst.bin::MSLSTG01 segment platform flags
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == 191
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 0
+    assert int(out["ground_id"][p]) == int(ref["ground_id"][p]) == 1
+
+
 def test_airborne_downbound_stage_object_endpoint_cross_enters_fall_mgs_3782() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)

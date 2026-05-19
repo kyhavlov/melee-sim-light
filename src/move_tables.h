@@ -80,6 +80,16 @@ uint8_t move_tables_attackair_last_create_hitbox_phase(uint8_t char_id,
                                                        uint16_t attackair_action_id,
                                                        float cur_anim_frame_f32);
 
+// Returns whether the AttackAir* script is in a create-hitbox phase that follows an earlier
+// clear_hitboxes command. This is the decomp distinction for whether ftAction_8007121C can run
+// ftColl_800768A0 and own an empty HitCapsule victims_1 list; same-slot create payloads without an
+// intervening clear preserve the existing list.
+//
+// Source of truth: data/scripts/{fox,falco}.bin (MSLFTSC1) create_hitbox / clear_hitboxes.
+uint8_t move_tables_attackair_post_clear_create_hitbox_phase(uint8_t char_id,
+                                                             uint16_t attackair_action_id,
+                                                             float cur_anim_frame_f32);
+
 // Returns whether grounded Attack* can be interrupted (IASA) at the given cur_anim_frame.
 //
 // Decomp:

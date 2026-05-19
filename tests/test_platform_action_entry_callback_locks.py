@@ -32,16 +32,20 @@ ACT_ATTACK_AIR_LW = 65
 ACT_ATTACK_AIR_F = 66
 ACT_ATTACK_AIR_B = 67
 ACT_ATTACK_AIR_HI = 68
+ACT_DAMAGE_AIR_2 = 85
 ACT_LANDING_AIR_N = 70
 ACT_LANDING_AIR_LW = 70
 ACT_LANDING_AIR_B = 72
 ACT_LANDING_AIR_HI = 73
 ACT_LANDING = 42
 ACT_GUARD_ON = 178
+ACT_GUARD = 179
+ACT_GUARD_OFF = 180
 ACT_GUARD_REFLECT = 182
 ACT_PASSIVE = 199
 ACT_THROW_F = 219
 ACT_ESCAPE_N = 235
+ACT_MISS_FOOT = 251
 ACT_JUMP_B = 26
 SM_ESCAPE_AIR = 44
 SM_LANDING_FALL_SPECIAL = 36
@@ -905,6 +909,50 @@ def test_replay_rollout_frame_clock_keeps_randall_phase_current_for_sideb() -> N
 
 
 @pytest.mark.integration
+def test_randall_path_uses_post_start_frame_id_for_damageair_landing_cnm_7056() -> None:
+    # Replay-real lock for Yoshi's Story Randall phase in one-step collision.
+    #
+    # Gameplay situation:
+    # - Fox is falling in DamageAir2 above the left-side Randall pass.
+    # - Vanilla lands on the cloud at CNM:7056; indexing the generated path as `frame_id - 123`
+    #   leaves Randall 123 frames stale and misses the floor.
+    #
+    # Source owner:
+    # - `frame_id` in MSL seed/compare rows is already the post-start Slippi game frame.
+    # - Randall collision consumes MSLSTG01 platform_path records refreshed by the GrSt
+    #   stage-object callback, so the path lookup uses `frame_id % 1200`.
+    # refs/melee/src/melee/gr/grstory.c::{grStory_801E3370,grStory_801E33E0}
+    # refs/melee/src/melee/gr/ground.c::Ground_801C2FE0
+    # data/stages/bin/grst.bin::MSLSTG01 platform_path records
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
+        "CheeryNumbMonkey.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    record = 7056
+    p = 1
+    row = ds.samples[record]
+    assert int(row["seed_t"]["action_id"][p]) == ACT_DAMAGE_AIR_2
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_DAMAGE_AIR_2
+    assert int(row["seed_t"]["on_ground"][p]) == 0
+    assert int(row["ref_t1"]["on_ground"][p]) == 1
+
+    out = _run_one_step(ds, record)
+    ref = row["ref_t1"]
+
+    assert int(out["action_id"][p]) == int(ref["action_id"][p])
+    assert int(out["animation_index"][p]) == int(ref["animation_index"][p])
+    assert int(out["on_ground"][p]) == 1
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2.0e-4)
+
+
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("dataset_rel", "record", "p"),
     [
@@ -1417,6 +1465,84 @@ def test_jumpaerial_escapeair_deep_yoshi_ledge_remap_still_lands() -> None:
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
+    ("dataset_rel", "start_record", "target_record", "p", "expected_ground_id"),
+    [
+        (
+            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
+            "CheeryNumbMonkey.msl",
+            3357,
+            3544,
+            1,
+            6,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
+            "CheeryNumbMonkey.msl",
+            3942,
+            4083,
+            1,
+            6,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
+            "CheeryNumbMonkey.msl",
+            6725,
+            6727,
+            1,
+            2,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
+            "LawfulInsistentMeerkat.msl",
+            3490,
+            3492,
+            1,
+            2,
+        ),
+    ],
+)
+def test_rollout_jumpaerial_escapeair_preserves_x130_bottom_to_yoshi_ledge(
+    dataset_rel: str, start_record: int, target_record: int, p: int, expected_ground_id: int
+) -> None:
+    # Rollout-real positives for JumpAerial -> EscapeAir over Yoshi's sloped ledge floors.
+    # The public one-step seed reconstructs the CollData_X130 desired-bottom lane, but free-run
+    # rollout must also carry the live JumpAerial desired ECB bottom through the EscapeAir entry.
+    # Once the following EscapeAir_Coll callback's preserved desired bottom crosses the generated
+    # sloped ledge/static-platform floor, ft_80082C74/mpColl_800471F8 publishes
+    # LandingFallSpecial. The adjacent fresh JumpAerial and shallow-remap controls above remain
+    # airborne.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpColl_800471F8}
+    # data/stages/bin/grst.bin::MSLSTG01 sloped ledge floor segments
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[target_record]
+    assert int(row["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
+    assert int(row["seed_t"]["seed_prev_action_id"][p]) in (
+        ACT_JUMP_AERIAL_F,
+        ACT_ESCAPE_AIR,
+    )
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_LANDING_FALL_SPECIAL
+    assert int(row["ref_t1"]["on_ground"][p]) == 1
+    assert int(row["ref_t1"]["ground_id"][p]) == expected_ground_id
+
+    out = _run_rollout_to_record(ds, start_record, target_record)
+    ref = row["ref_t1"]
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-4)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
     ("record", "p"),
     [
         (3516, 1),
@@ -1453,6 +1579,47 @@ def test_jumpaerial_escapeair_fd_zero_bottom_root_projection_lands(
     assert int(row["seed_t"]["ground_id"][p]) != 0xFFFF
     assert int(row["ref_t1"]["action_id"][p]) == ACT_LANDING_FALL_SPECIAL
     assert int(row["ref_t1"]["on_ground"][p]) == 1
+
+    out = _run_one_step(ds, record)
+    ref = row["ref_t1"]
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
+def test_yoshi_jumpaerial_escapeair_uses_frame_start_last_pos_for_platform_landing() -> None:
+    # Yoshi static-platform positive for a later JumpAerialB -> EscapeAir entry:
+    # IASA changes to EscapeAir before Fighter_procMap, then ft_80082C74 calls mpCollPrev in the
+    # entered EscapeAir collision callback. Source therefore sweeps from the frame-start JumpAerial
+    # CollData root/ECB to the post-Phys EscapeAir root even though the public seed's
+    # floor_sweep_prev_pos lane points at the prior replay row. The sustained EscapeAir controls
+    # below remain airborne and prevent this owner from becoming a generic platform snap.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+    # refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_800471F8,mpColl_80044628_Floor}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
+        "PhysicalElectricCapybara.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    record = 2717
+    p = 0
+    row = ds.samples[record]
+    assert int(row["seed_t"]["action_id"][p]) == ACT_JUMP_AERIAL_B
+    assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_JUMP_AERIAL_B
+    assert int(row["seed_t"]["seed_prev_action_frame"][p]) == 7
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_LANDING_FALL_SPECIAL
+    assert int(row["ref_t1"]["on_ground"][p]) == 1
+    assert int(row["ref_t1"]["ground_id"][p]) == 4
 
     out = _run_one_step(ds, record)
     ref = row["ref_t1"]
@@ -3221,6 +3388,76 @@ def test_guardon_powershield_reflect_preempts_platform_pass() -> None:
 
 
 @pytest.mark.integration
+def test_ground_jump_uses_self_vel_not_gr_vel_on_yoshi_slope_cnm_1268() -> None:
+    # Ground jump launch scales fp->self_vel.x in ftCo_800CB110. On Yoshi's sloped floor the
+    # replay-visible self_vel.x and gr_vel differ; using gr_vel adds extra horizontal launch speed
+    # that later cascades into a false shield contact.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_800CB110
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
+        "CheeryNumbMonkey.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    record = 1268
+    p = 0
+    row = ds.samples[record]
+    assert int(row["seed_t"]["action_id"][p]) == ACT_KNEE_BEND
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_JUMP_B
+    assert int(row["seed_t"]["ground_id"][p]) == 6
+    assert abs(
+        float(row["seed_t"]["speed_ground_x_self"][p])
+        - float(row["seed_t"]["speed_air_x_self"][p])
+    ) > 0.02
+
+    out = _run_one_step(ds, record)
+    ref = row["ref_t1"]
+    for field in ("action_id", "animation_index", "action_frame", "on_ground"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    assert float(out["speed_air_x_self"][p]) == pytest.approx(
+        float(ref["speed_air_x_self"][p]), abs=1e-6
+    )
+    assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
+def test_ground_jump_launch_does_not_borrow_slope_gr_vel_cnm_1268() -> None:
+    # Boundary control for the same source owner: if the self_vel.x lane is overwritten with the
+    # slope gr_vel value, the launch reproduces the rejected too-fast X speed. This locks the lane
+    # distinction instead of merely accepting the motivating row.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_800CB110
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
+        "CheeryNumbMonkey.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    record = 1268
+    p = 0
+    row = ds.samples[record]
+
+    def replace_self_vel_with_gr_vel(seed_t: np.ndarray) -> None:
+        seed_t["speed_air_x_self"][0, p] = seed_t["speed_ground_x_self"][0, p]
+
+    out = _run_one_step(ds, record, seed_mutator=replace_self_vel_with_gr_vel)
+    ref = row["ref_t1"]
+    assert int(out["action_id"][p]) == ACT_JUMP_B
+    assert float(out["speed_air_x_self"][p]) - float(ref["speed_air_x_self"][p]) > 0.02
+
+
+@pytest.mark.integration
 def test_guardon_ucf_shielddrop_suppresses_spotdodge_without_lr_edge() -> None:
     # Negative control on the same replay-real row: if the current LR input is held but not a fresh
     # edge, powershield-reflect is absent. The diagonal rim down input is an Axe-method UCF
@@ -3778,3 +4015,52 @@ def test_fod_attackair_shallow_transformed_platform_seed_carries_floor_owner(
     assert float(downheld_out["pos_y"][0]) == pytest.approx(
         float(downheld["ref_t1"]["pos_y"][0]), abs=2e-4
     )
+
+
+@pytest.mark.integration
+def test_yoshi_guard_player_nudge_floor_loss_enters_missfoot_cnm_1086() -> None:
+    # Yoshi's Story Guard floor-loss owner:
+    # - Fighter_8006A360 runs ftCommon_8007E0E4 before Fighter_procUpdate, so the common
+    #   fighter-overlap x450 nudge can move an active shield state past an open floor endpoint.
+    # - Guard/GuardOff/GuardReflect Coll callbacks call ft_800845B4, which routes a ledge-slip
+    #   floor loss behind facing into MissFoot through ftCo_8009F39C.
+    # - CNM:1085 is the in-span control. CNM:1086 is the first left-endpoint nudge that leaves
+    #   Yoshi's left sloped ledge floor while Fox still faces right, so vanilla enters MissFoot
+    #   instead of publishing the ordinary GuardOff release row.
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+    # refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007DD7C,ftCommon_8007E0E4}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    #   ftCo_Guard_Coll,ftCo_GuardOff_Coll}
+    # refs/melee/src/melee/ft/ft_081B.c::ft_800845B4
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_MissFoot.c::ftCo_8009F39C
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
+        "CheeryNumbMonkey.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+    ds = read_dataset(str(dataset_path))
+    p = 1
+
+    control = ds.samples[1085]
+    assert int(control["seed_t"]["action_id"][p]) == ACT_GUARD
+    assert int(control["ref_t1"]["action_id"][p]) == ACT_GUARD
+    control_out = _run_one_step(ds, 1085)
+    assert int(control_out["action_id"][p]) == ACT_GUARD
+    assert int(control_out["on_ground"][p]) == 1
+    assert float(control_out["pos_x"][p]) == pytest.approx(
+        float(control["ref_t1"]["pos_x"][p]), abs=1e-6
+    )
+
+    row = ds.samples[1086]
+    assert int(row["seed_t"]["action_id"][p]) == ACT_GUARD
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_MISS_FOOT
+    out = _run_one_step(ds, 1086)
+    ref = row["ref_t1"]
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=1e-6)
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)

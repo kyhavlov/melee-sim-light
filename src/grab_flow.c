@@ -9,6 +9,7 @@
 #include "buttons.h"
 #include "char_params.h"
 #include "common_params.h"
+#include "dash_iasa.h"
 #include "grab_attachment.h"
 #include "input_axis.h"
 #include "mpcoll_ground.h"
@@ -880,6 +881,7 @@ uint8_t grab_flow_try_enter_catchdash_from_iasa(MslBatch* batch, const MslCommon
   if (batch == NULL || c == NULL) {
     return 0u;
   }
+  const uint16_t pre_action = batch->state.action_id[idx];
 
   // Decomp (ftCo_800D8A38) for the CatchDash-enter subset:
   // - Requires held_inputs & HSD_PAD_LR and pressed-edge A (input.x668 & HSD_PAD_A).
@@ -900,6 +902,18 @@ uint8_t grab_flow_try_enter_catchdash_from_iasa(MslBatch* batch, const MslCommon
   }
 
   enter_catch_motion_state(batch, idx, (uint16_t)MSL_ACT_CATCH_DASH, (uint32_t)MSL_SM_CATCH_DASH);
+  if (pre_action == (uint16_t)MSL_ACT_DASH) {
+    // Fighter_ChangeMotionState applies the same previous-root-motion ground-speed clamp on
+    // Dash_IASA -> CatchDash as other Dash_IASA destinations before CatchDash_Phys runs its
+    // steady catch-friction step. This matters for Falco's high Dash velocities: source clamps to
+    // co_attrs.dash_run_terminal_velocity (1.5) and then CatchDash_Phys applies x64*gr_friction.
+    // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+    //   ftCo_800D8A38,ftCo_800D8C54,ftCo_CatchDash_Phys}
+    dash_iasa_apply_root_motion_exit_gr_vel_clamp(batch, msl_char_params(batch->state.char_id[idx]),
+                                                  idx);
+  }
   return 1u;
 }
 

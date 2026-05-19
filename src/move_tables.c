@@ -32,6 +32,7 @@ typedef struct MslMoveTableCache {
   MslScriptFrameWindow first_create_hitbox;
   MslScriptFrameWindow second_create_hitbox;
   MslScriptFrameWindow last_create_hitbox;
+  MslScriptFrameWindow post_clear_create_hitbox;
   MslScriptFrameWindow throw_flags_any;
   MslScriptFrameWindow throw_flags_hit[MSL_MOVE_TABLE_THROW_HITBOX_CAP];
   MslScriptFrameWindow catchattack_grabbed_hit;
@@ -135,6 +136,8 @@ static void move_cache_build_for_msid(uint8_t char_id, uint16_t msid, MslMoveTab
   (void)script_events_first_create_hitbox_phase(char_id, msid, &cache->first_create_hitbox);
   (void)script_events_second_create_hitbox_phase(char_id, msid, &cache->second_create_hitbox);
   (void)script_events_last_create_hitbox_phase(char_id, msid, &cache->last_create_hitbox);
+  (void)script_events_post_clear_create_hitbox_phase(char_id, msid,
+                                                     &cache->post_clear_create_hitbox);
   (void)script_events_throw_flags_window(char_id, msid, 0u, 0u, &cache->throw_flags_any);
   (void)script_events_catchattack_grabbed_hit_window(char_id, msid,
                                                      &cache->catchattack_grabbed_hit);
@@ -509,6 +512,18 @@ uint8_t move_tables_attackair_last_create_hitbox_phase(uint8_t char_id,
   }
   const MslMoveTableCache* cache = move_cache_get(char_id, msid);
   return cache != NULL ? frame_window_contains(cache->last_create_hitbox, cur_anim_frame_f32) : 0u;
+}
+
+uint8_t move_tables_attackair_post_clear_create_hitbox_phase(uint8_t char_id,
+                                                             uint16_t attackair_action_id,
+                                                             float cur_anim_frame_f32) {
+  uint16_t msid = 0;
+  if (!attackair_msid_from_action(attackair_action_id, &msid)) {
+    return 0u;
+  }
+  const MslMoveTableCache* cache = move_cache_get(char_id, msid);
+  return cache != NULL ? frame_window_contains(cache->post_clear_create_hitbox, cur_anim_frame_f32)
+                       : 0u;
 }
 
 uint8_t move_tables_grounded_attack_allow_interrupt(uint8_t char_id, uint16_t grounded_action_id,

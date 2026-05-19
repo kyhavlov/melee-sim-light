@@ -71,18 +71,21 @@ static inline uint8_t hitlist_attackair_create_phase_runtime_clear_owns_empty_hi
   }
   // AttackAir multi-hit clear/create bands:
   // - ftAction_8007121C processes generated create_hitbox commands and runs ftColl_800768A0.
-  // - For later create bands, an empty runtime-initialized HitCapsule is source-owned and must not
-  //   be lazily backfilled from previous same-source BODY attribution. This preserves valid
-  //   multi-hit re-hits such as Fox/Falco DAir after the clear-all/create sequence.
+  // - It runs ftColl_800768A0 only when the target HitCapsule slot is disabled or changes hit_group;
+  //   for the common AttackAir scripts, the data-backed signal for that empty owner is a
+  //   clear_hitboxes -> create_hitbox transition. Same-slot create payloads without an intervening
+  //   clear update damage/offsets while preserving victims_1.
+  // - For later create bands that really are enable/group-change edges, an empty runtime-initialized
+  //   HitCapsule is source-owned and must not be lazily backfilled from previous same-source BODY
+  //   attribution. This preserves valid multi-hit re-hits such as Fox DAir after clear/create while
+  //   keeping Falco DAir's no-clear late payload on the existing victim latch.
   // data/scripts/{fox,falco}.bin (MSLFTSC1 AttackAir create_hitbox phases)
   // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_800768A0
   // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80008440,lbColl_CopyHitCapsule}
   const float anim_frame = batch->state.anim_frame_f32[idx];
-  return (uint8_t)(move_tables_attackair_hitbox_script_lifetime(batch->state.char_id[idx],
-                                                                action_id, anim_frame) &&
-                   !move_tables_attackair_first_hitbox_phase(batch->state.char_id[idx], action_id,
-                                                             anim_frame));
+  return move_tables_attackair_post_clear_create_hitbox_phase(batch->state.char_id[idx], action_id,
+                                                              anim_frame);
 }
 
 uint8_t hitlist_rollout_dense_seed_same_object_rebind_applies(const MslBatch* batch, int bi,
@@ -337,6 +340,75 @@ static uint8_t hitlist_capsule_find_fighter_entry(MslBatch* batch, int bi,
     return 1u;
   }
   return 0u;
+}
+
+uint8_t hitlist_seed_init_attackairlw_no_clear_dense_body(MslBatch* batch, int bi, int attacker,
+                                                          int hb_id, int victim,
+                                                          uint16_t victim_iid) {
+  if (batch == NULL || bi < 0 || attacker < 0 || attacker >= (int)MSL_MAX_PLAYERS || hb_id < 0 ||
+      hb_id >= MSL_MAX_HITBOXES || victim < 0 || victim >= (int)MSL_MAX_PLAYERS ||
+      attacker == victim) {
+    return 0u;
+  }
+  const size_t a_idx = msl_idx_player(bi, attacker);
+  const size_t v_idx = msl_idx_player(bi, victim);
+  const uint16_t action_id = batch->state.action_id[a_idx];
+  if (action_id != (uint16_t)MSL_ACT_ATTACK_AIR_LW ||
+      batch->state.seed_prev_action_id[a_idx] != action_id || batch->state.hitlag[a_idx] != 0u ||
+      batch->state.hitstun[a_idx] != 0u || batch->state.hitlag[v_idx] != 0u ||
+      batch->state.hitstun[v_idx] != 0u ||
+      !move_tables_attackair_second_create_hitbox_phase(batch->state.char_id[a_idx], action_id,
+                                                        batch->state.anim_frame_f32[a_idx]) ||
+      move_tables_attackair_post_clear_create_hitbox_phase(batch->state.char_id[a_idx], action_id,
+                                                           batch->state.anim_frame_f32[a_idx])) {
+    return 0u;
+  }
+
+  const size_t valid_i =
+      ((size_t)bi * (size_t)MSL_MAX_PLAYERS + (size_t)attacker) * (size_t)MSL_MAX_HITBOXES +
+      (size_t)hb_id;
+  if (batch->state.combat_hitlist_hb_valid[valid_i] != 0u) {
+    return 0u;
+  }
+  const size_t hb_i = idx_fighter_hitlist(bi, attacker, hb_id);
+  const uint8_t hit_group = hitlist_hit_group_from_u16_7(batch->state.hitbox_u16_7[hb_i]);
+  if (hit_group >= (uint8_t)MSL_HITLIST_GROUPS) {
+    return 0u;
+  }
+  const size_t group_base =
+      (size_t)bi * (size_t)MSL_MAX_PLAYERS * (size_t)MSL_HITLIST_GROUPS * (size_t)MSL_MAX_PLAYERS;
+  const size_t cd_i =
+      group_base + (((size_t)attacker * (size_t)MSL_HITLIST_GROUPS + (size_t)hit_group) *
+                        (size_t)MSL_MAX_PLAYERS +
+                    (size_t)victim);
+  if (batch->state.combat_hitlist_cd[cd_i] == 0u) {
+    return 0u;
+  }
+  const uint16_t seed_iid = batch->state.combat_hitlist_victim_iid[cd_i];
+  if (seed_iid != 0u && seed_iid != victim_iid &&
+      hitlist_victim_pointer_may_change(batch->state.stocks[v_idx],
+                                        batch->state.action_id[v_idx])) {
+    return 0u;
+  }
+
+  // Falco DAir no-clear payload seed initialization:
+  // Same-slot create payloads preserve HitCapsule.victims_1 in ftAction_8007121C/ftColl_800768A0.
+  // Some rollout reseed rows start after that script callback and expose only the legacy dense
+  // hit_group map, not per-HitCapsule victims_1. Initialize the live BODY HitCapsule from that
+  // source-owned dense seed at the BODY owner boundary, then let ordinary live hitlist state own
+  // later frames. Do not feed this into the shield gate: shield acceptance has its own ShieldDesc
+  // contact seed/provenance lanes.
+  // data/scripts/falco.bin (MSLFTSC1 ftCo_SM_AttackAirLw no-clear create_hitbox payload)
+  // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_800768A0
+  // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+  MslHitlistVictimEntry key;
+  memset(&key, 0, sizeof(key));
+  key.id16 = (seed_iid != 0u) ? seed_iid : victim_iid;
+  key.kind_slot = hitlist_fighter_key((uint8_t)victim);
+  (void)hitlist_insert_victims1(&batch->state.fighter_hitlist[hb_i], (int)MSL_LBCOLL_INSERT_FT_BODY,
+                                &key, 0u);
+  return 1u;
 }
 
 uint8_t hitlist_allows_fighter(MslBatch* batch, int bi, int attacker, int hb_id, int victim,

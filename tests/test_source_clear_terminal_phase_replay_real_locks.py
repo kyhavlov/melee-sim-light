@@ -278,9 +278,9 @@ def test_source_clear_downed_recovery_terminal_parks_owner_in_rollout_cdo() -> N
 
 @pytest.mark.integration
 def test_source_clear_x18c8_starts_on_later_grounded_motion_entry_cnm() -> None:
-    # CNM:3357 starts before the later LandingFallSpecial x9_b1 motion-state entry. The current
-    # retained package does not broaden the free-running source-clear reconstruction beyond the
-    # focused one-step seed lane, so this package guard records the live rollout boundary.
+    # CNM:3357 starts before the later LandingFallSpecial x9_b1 motion-state entry. The retained
+    # Yoshi source-clear owner now carries the free-running x18c8 source-clear phase through that
+    # later grounded motion entry, so the rollout row matches the replay-visible damage source.
     #
     # Decomp/data refs:
     # - refs/melee/src/melee/ft/fighter.c::{Fighter_ChangeMotionState,Fighter_8006A360}
@@ -306,7 +306,7 @@ def test_source_clear_x18c8_starts_on_later_grounded_motion_entry_cnm() -> None:
 
     out, ref = _run_rollout_compare_row(dataset_path, start_record, clear_record)
     assert int(out["instance_hit_by"][victim]) == int(ref["instance_hit_by"][victim]) == 706
-    assert int(out["last_hit_by"][victim]) == 0
+    assert int(out["last_hit_by"][victim]) == int(ref["last_hit_by"][victim]) == 6
 
 
 @pytest.mark.integration
@@ -325,7 +325,7 @@ def test_rebirth_resets_stale_queue_before_next_stock_hit_cnm() -> None:
         pytest.skip(f"missing local dataset: {dataset_path}")
 
     ds = read_dataset(str(dataset_path))
-    start_record = 3357
+    start_record = 3604
     compare_record = 3961
     attacker = 0
     victim = 1

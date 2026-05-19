@@ -55,6 +55,8 @@ enum {
   MSL_MPCOLL_CHAR_FALCO = 22,
 };
 
+enum { MSL_STAGE_YOSHIS_STORY_LOCAL = 8u };
+
 // Wall env-flag split mirrors mpColl: every wall hit sets Push, but only the ECB side-point
 // branch sets Hug. ftWallJump_8008169C and PassiveWall entry intentionally test the Hug bit, so
 // bottom/top fallback contacts must not promote to walljump/tech authority.
@@ -2650,13 +2652,20 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
         // refs/melee/src/melee/mp/mpcoll.c::mpColl_80046224_LeftWall
         const uint8_t use_specialhi_left_envelope =
             specialhi_launch_uses_runtime_xrotn_ecb(char_id, action_id);
-        // DamageFly consumes left-wall Hug for FlyReflectWall only while knockback is moving into
-        // the left-facing wall. Keep stale/negative-kb DamageFly rows on the point-local
-        // provenance path so they can refresh wall ids without arming Hug.
+        // DamageFly's Coll callback enters the left-wall airborne envelope through mpColl. Source
+        // `mpColl_80045B74_LeftWall` is not attack-velocity-sign gated, but the current simulator's
+        // static wall candidate model still over-publishes left-wall contact on some non-Yoshi rows
+        // when negative attack velocity is admitted generally. Keep the retained slice to the
+        // validated positive-kb FD path plus Yoshi's transformed lower-left wall until the candidate
+        // model carries the full source envelope/order. Hug still comes only from the candidate side
+        // sweep below.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
+        // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80045B74_LeftWall,mpColl_80046224_LeftWall}
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FlyReflect.c::ftCo_800C15F4
         const uint8_t use_damagefly_left_envelope =
             (uint8_t)(mpcoll_damagefly_wall_asdi_latch_action(action_id) &&
-                      batch->state.speed_x_attack[idx] > 0.0f);
+                      (batch->state.stage_id[bi] == (uint32_t)MSL_STAGE_YOSHIS_STORY_LOCAL ||
+                       batch->state.speed_x_attack[idx] > 0.0f));
         const uint8_t use_common_air_left_envelope = use_common_air_walljump_callback;
         const uint8_t use_ft80081d0c_left_envelope =
             mpcoll_action_uses_ft80081d0c_air_collision(action_id);

@@ -1913,7 +1913,13 @@ static uint8_t stage_collision_platform_path_world_line(const MslStageSlot* slot
       slot->platform_path_frame_count == 0u) {
     return 0u;
   }
-  int frame = (int)((frame_id - 123) % 1200);
+  // MSL frame_id is already the post-start Slippi game frame. The generated Randall
+  // `platform_path` table is keyed in that same source clock, so do not subtract the 123 pregame
+  // record offset here; doing so uses a stale cloud phase during long rollouts.
+  // refs/melee/src/melee/gr/grstory.c::{grStory_801E3370,grStory_801E33E0}
+  // refs/melee/src/melee/gr/ground.c::Ground_801C2FE0
+  // data/stages/bin/grst.bin::MSLSTG01 platform_path records
+  int frame = (int)(frame_id % 1200);
   if (frame < 0) {
     frame += 1200;
   }

@@ -1003,6 +1003,10 @@ typedef struct MslStateSoA {
   // motion-state exit before spawning the shot article.
   uint16_t* frame_start_attack_id;        // [batch * players]
   uint16_t* frame_start_attack_instance;  // [batch * players]
+  // Internal-only frame-start fighter instance (fp+0x2070 union-as-int low half in Slippi terms).
+  // Same-frame reciprocal BODY hits can leave a frame-start HitCapsule live after the attacker has
+  // already entered Damage*; collision source attribution still points at the pre-entry fighter.
+  uint16_t* frame_start_instance_id;  // [batch * players]
   // Internal-only: last action_id for which attack_id/attack_instance were updated.
   // Used to avoid incorrectly bumping x206C on animation restarts (msl_anim_timebase_enter without
   // a motion-state change).

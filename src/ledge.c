@@ -678,8 +678,13 @@ static inline uint8_t ledge_wait_try_climb_or_drop(MslBatch* batch, const MslCom
       apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]), c->lstick_deadzone_x);
   const float stick_y =
       apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
-  if (!(msl_absf(stick_x) >= c->cliff_option_stick_threshold ||
-        msl_absf(stick_y) >= c->cliff_option_stick_threshold)) {
+  const float cstick_x = stick_i8_to_unit(batch->state.input_c_x[idx]);
+  const float cstick_y = stick_i8_to_unit(batch->state.input_c_y[idx]);
+  const uint8_t main_option = (uint8_t)(msl_absf(stick_x) >= c->cliff_option_stick_threshold ||
+                                        msl_absf(stick_y) >= c->cliff_option_stick_threshold);
+  const uint8_t cstick_option = (uint8_t)(msl_absf(cstick_x) >= c->cliff_option_stick_threshold ||
+                                          msl_absf(cstick_y) >= c->cliff_option_stick_threshold);
+  if (!main_option && !cstick_option) {
     return 0;
   }
 
@@ -693,19 +698,31 @@ static inline uint8_t ledge_wait_try_climb_or_drop(MslBatch* batch, const MslCom
       apply_deadzone(stick_i8_to_unit(batch->state.prev_input_main_x[idx]), c->lstick_deadzone_x);
   const float prev_y =
       apply_deadzone(stick_i8_to_unit(batch->state.prev_input_main_y[idx]), c->lstick_deadzone_y);
+  const float prev_cx = stick_i8_to_unit(batch->state.prev_input_c_x[idx]);
+  const float prev_cy = stick_i8_to_unit(batch->state.prev_input_c_y[idx]);
   if (msl_absf(prev_x) >= c->cliff_option_stick_threshold ||
-      msl_absf(prev_y) >= c->cliff_option_stick_threshold) {
+      msl_absf(prev_y) >= c->cliff_option_stick_threshold ||
+      msl_absf(prev_cx) >= c->cliff_option_stick_threshold ||
+      msl_absf(prev_cy) >= c->cliff_option_stick_threshold) {
     return 0;
   }
 
+  const float option_x = main_option ? stick_x : cstick_x;
+  const float option_y = main_option ? stick_y : cstick_y;
   const float fd = facing_dir(batch->state.facing[idx]);
   // Decomp: ftCo_GetLStickAngle / ftCo_GetCStickAngle compute atan2(y, ABS(x)), not atan2(y, x).
   // This keeps "away-horizontal" stick inputs near 0 radians so CliffWait option routing can rely
   // on the stick_x*facing sign gate for climb vs drop.
   // refs/melee/src/melee/ft/ftcommon.c::{ftCo_GetLStickAngle,ftCo_GetCStickAngle}
-  const float angle = atan2f(stick_y, msl_absf(stick_x));
+  const float angle = atan2f(option_y, msl_absf(option_x));
   if (angle > c->attack_angle_threshold_radians ||
-      (angle > -c->attack_angle_threshold_radians && (stick_x * fd) >= 0.0f)) {
+      (angle > -c->attack_angle_threshold_radians && (option_x * fd) >= 0.0f)) {
+    if (!main_option) {
+      // Decomp: c-stick reaches ftCo_8009AAFC with arg1=false, so it may release/drop from ledge
+      // but cannot start CliffClimb even when the angle falls in the climb branch.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_8009AA0C
+      return 0;
+    }
     // ClimbQuick entry (percent-based Quick/Slow selection is omitted for v1; suite is Quick-only).
     // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_8009AB9C
     return enter_cliff_option_percent_split(

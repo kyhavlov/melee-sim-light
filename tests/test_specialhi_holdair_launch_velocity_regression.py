@@ -250,6 +250,55 @@ def test_specialhi_holdair_launch_uses_pre_input_stick_tch_3849() -> None:
 
 
 @pytest.mark.integration
+def test_specialhi_holdair_launch_hit_uses_current_instance_stale_queue_his_1764() -> None:
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+        "HungryImportantSnake.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    record = 1764
+    attacker = 0
+    defender = 1
+    seed, out, ref, out_roll = _step_one_row_with_rollout_at_record(
+        dataset_path, record, attacker, window_before=0
+    )
+
+    assert int(seed["action_id"][attacker]) == 354  # ftFx_MS_SpecialHiHoldAir
+    assert int(ref["action_id"][attacker]) == 356  # ftFx_MS_SpecialAirHi
+    assert int(seed["action_id"][defender]) == 86  # DamageAir3
+    assert int(ref["action_id"][defender]) == 90  # DamageFlyTop
+
+    # The launch hit is created by the SpecialAirHi transition, so the same attack instance already
+    # present in the seeded stale queue must apply. Treating it as a residual frame-start capsule
+    # excluded this entry and produced an unstaled 14% hit.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+    #   ftFx_SpecialHiHoldAir_Anim,ftFx_SpecialAirHi_Enter}
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007ABD0,ftColl_80076ED8}
+    attack_id = int(seed["attack_id"][attacker])
+    attack_instance = int(seed["attack_instance"][attacker])
+    assert attack_id == 20
+    assert any(
+        int(mid) == attack_id and int(inst) == attack_instance
+        for mid, inst in zip(
+            seed["stale_move_id"][attacker], seed["stale_attack_instance"][attacker]
+        )
+    )
+
+    for got in (out, out_roll):
+        assert int(got["action_id"][defender]) == int(ref["action_id"][defender])
+        assert int(got["hitlag"][defender]) == int(ref["hitlag"][defender])
+        assert int(got["hitstun"][defender]) == int(ref["hitstun"][defender])
+        assert float(got["percent"][defender]) == pytest.approx(
+            float(ref["percent"][defender]), abs=1e-5
+        )
+
+
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("dataset_rel", "record", "p", "seed_action", "ref_action"),
     [

@@ -147,3 +147,54 @@ def test_item_domain_last_attack_does_not_inherit_body_default_id_fallback(
         f"record={record} p={p} expected item-domain last_attack_landed={exp_last_attack}, "
         f"got {got_last_attack}"
     )
+
+
+def test_same_frame_damage_keeps_residual_hitcapsule_source_identity_cnm_744() -> None:
+    # Yoshi's Story simultaneous-hit lock:
+    # - p1 Shine damages p0 early enough that p0 has already entered DamageHi1 before the BODY
+    #   resolver processes p0's still-live AttackHi4 capsule.
+    # - Source collision has already built that HitCapsule from frame-start fp->{x2068,x206C} and
+    #   the frame-start attacker GObj; ftColl_80076ED8 must therefore attribute p1's damage to the
+    #   pre-damage AttackHi4 source instead of p0's post-damage DamageHi1 instance.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007ABD0,ftColl_80076ED8}
+    # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    record = 744
+    row = ds.samples[record : record + 1]
+    seed = row["seed_t"][0]
+    ref = row["ref_t1"][0]
+
+    assert int(seed["action_id"][0]) == 63  # AttackHi4
+    assert int(seed["action_id"][1]) == 345  # SpecialAirLwLoop
+    assert int(ref["action_id"][0]) == 75  # DamageHi1
+    assert int(ref["action_id"][1]) == 90  # DamageFlyTop
+
+    out = _one_step_out_compare(ds=ds, row=row)[0]
+    for p in (0, 1):
+        assert int(out["action_id"][p]) == int(ref["action_id"][p])
+        assert int(out["hitlag"][p]) == int(ref["hitlag"][p])
+        assert np.isclose(float(out["percent"][p]), float(ref["percent"][p]), rtol=0.0, atol=1e-6)
+        assert int(out["instance_hit_by"][p]) == int(ref["instance_hit_by"][p])
+        assert int(out["last_attack_landed"][p]) == int(ref["last_attack_landed"][p])
+
+
+def test_body_damage_log_record_call_keeps_residual_exclusion_and_hit_group_order() -> None:
+    # Regression guard for the delayed BODY damage log call site. `pre_combat_residual_hitcapsule_owner`
+    # is the stale-instance exclusion flag passed into damage-product/staling calculation, while
+    # `hit_group` is the group re-registered by `combat_body_damage_log_register_accepted_hitlists`.
+    # Swapping them makes residual same-frame source hits register the accepted BODY hit under the
+    # wrong group and excludes the wrong stale attack instance.
+    src = (Path(__file__).resolve().parents[1] / "src/combat.c").read_text()
+    call_start = src.index("combat_body_damage_log_record(\n", src.index("body_damage_logs[defender]"))
+    call_end = src.index("rehit_frames);", call_start)
+    call = " ".join(src[call_start:call_end].split())
+    assert (
+        "pre_combat_attack_instance[attacker], pre_combat_instance_id[attacker], "
+        "pre_combat_residual_hitcapsule_owner[attacker], hit_group"
+    ) in call
