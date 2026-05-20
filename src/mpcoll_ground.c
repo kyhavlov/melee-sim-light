@@ -589,6 +589,80 @@ static inline uint8_t action_uses_active_hitlag_downward_sdi_floorhug(uint16_t a
   return (batch->state.phantom_damage_pending_x1898[idx] > 0.0f) ? 1u : 0u;
 }
 
+typedef struct MslMpcollDamageActiveHitlagFloorOwner {
+  uint8_t stay_airborne_floorhug;
+  uint8_t source_floor_current;
+} MslMpcollDamageActiveHitlagFloorOwner;
+
+static inline uint8_t mpcoll_damageair_action(uint16_t action_id) {
+  return (action_id == (uint16_t)MSL_ACT_DAMAGE_AIR_1 ||
+          action_id == (uint16_t)MSL_ACT_DAMAGE_AIR_2 ||
+          action_id == (uint16_t)MSL_ACT_DAMAGE_AIR_3)
+             ? 1u
+             : 0u;
+}
+
+static inline MslMpcollDamageActiveHitlagFloorOwner mpcoll_damage_active_hitlag_floor_owner(
+    const MslBatch* batch, size_t idx, uint32_t stage_id, uint16_t action_id,
+    uint8_t prefer_line_valid, uint8_t prefer_line_is_platform, uint8_t prefer_line_is_ledge,
+    uint8_t downdamage_x_axis_fresh_sdi_edge) {
+  MslMpcollDamageActiveHitlagFloorOwner out = {0u, 0u};
+  if (batch == NULL || batch->state.hitlag_pre_timer[idx] == 0u || batch->state.hitlag[idx] == 0u ||
+      batch->state.damage_hitlag_downward_sdi_consumed[idx] == 0u) {
+    return out;
+  }
+
+  // Active-hitlag SDI/floor handoff:
+  // - ftCo_Damage_OnEveryHitlag mutates cur_pos before the motion-state collision callback.
+  // - ft_80081DD4's allow-SDI path can keep a below-floor SDI root airborne via
+  //   mpColl_800477E0 / mpColl_80044948_Floor while hitlag remains frozen.
+  // - DownDamageU/D re-enter that common callback through ftCo_8009F184, but floor-adjacent rows
+  //   with a fresh x670 horizontal edge publish the horizontal displacement without treating the y
+  //   component as a below-floor stay-airborne owner; the later DownDamage_Coll path owns floor
+  //   contact. Rows whose fresh edge is vertical remain on the below-floor active-hitlag owner.
+  // - The retained non-DownDamage slice is common DamageAir* active hitlag on FD's static main hard
+  //   floor. Source routes all three DamageAir motions through Damage_Coll / mpColl_800477E0 after
+  //   consumed downward OnEveryHitlag displacement, but PS/complex hard-floor families still need a
+  //   broader callback-current floor owner before they can safely share this branch.
+  //
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+  //   ftCo_8008DCE0,ftCo_Damage_OnEveryHitlag,ftCo_Damage_Coll}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::{
+  //   ftCo_8009F184,ftCo_DownDamage_Phys,ftCo_DownDamage_Coll}
+  // refs/melee/src/melee/ft/fighter.c::Fighter_Spaghetti_8006AD10
+  // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800477E0,mpColl_80044948_Floor}
+  if (action_id == (uint16_t)MSL_ACT_DOWN_DAMAGE_U ||
+      action_id == (uint16_t)MSL_ACT_DOWN_DAMAGE_D) {
+    out.stay_airborne_floorhug = downdamage_x_axis_fresh_sdi_edge ? 0u : 1u;
+    out.source_floor_current = out.stay_airborne_floorhug;
+    return out;
+  }
+
+  if (mpcoll_damageair_action(action_id) &&
+      stage_id == (uint32_t)MSL_STAGE_FINAL_DESTINATION_LOCAL && prefer_line_valid &&
+      !prefer_line_is_platform && !prefer_line_is_ledge &&
+      isfinite(batch->state.floor_sweep_prev_pos_y[idx]) &&
+      batch->state.floor_sweep_prev_pos_y[idx] > k_floor_y_bias &&
+      batch->state.pos_y[idx] < -k_floor_y_bias) {
+    out.stay_airborne_floorhug = 1u;
+    out.source_floor_current = 1u;
+  }
+  return out;
+}
+
+static inline uint32_t mpcoll_damage_active_hitlag_floor_owner_reject_bits(
+    MslMpcollDamageActiveHitlagFloorOwner owner, uint8_t root_below_bottom_above_floor_owner) {
+  uint32_t bits = 0u;
+  if (root_below_bottom_above_floor_owner) {
+    bits |= (uint32_t)MSL_MPCOLL_REJECT_DAMAGE_ACTIVE_HITLAG_ROOT_BELOW_BOTTOM_ABOVE_FLOOR;
+  }
+  if (owner.stay_airborne_floorhug && owner.source_floor_current) {
+    bits |= (uint32_t)MSL_MPCOLL_REJECT_DAMAGE_ACTIVE_HITLAG_DOWNWARD_SDI_AIRBORNE;
+  }
+  return bits;
+}
+
 static inline uint8_t grounded_damage_hitlag_allows_downward_floor_projection(const MslBatch* batch,
                                                                               size_t idx,
                                                                               uint16_t action_id) {
@@ -5424,37 +5498,13 @@ void mpcoll_ground_apply(MslBatch* batch) {
                                 c->lstick_deadzone_x)) < c->lstick_tilt_x_thresh)
               ? 1u
               : 0u;
+      const MslMpcollDamageActiveHitlagFloorOwner damage_active_hitlag_floor_owner =
+          mpcoll_damage_active_hitlag_floor_owner(
+              batch, idx, stage_id, action_id, (uint8_t)(prefer_line_idx >= 0),
+              prefer_line_is_platform, prefer_line_is_ledge, downdamage_x_axis_fresh_sdi_edge);
       const uint8_t damage_active_hitlag_downward_sdi_airborne_owner =
-          // Active-hitlag SDI/floor handoff:
-          // - ftCo_Damage_OnEveryHitlag mutates cur_pos before the motion-state collision callback.
-          // - ft_80081DD4's allow-SDI path can keep a below-floor SDI root airborne via
-          //   mpColl_800477E0 / mpColl_80044948_Floor while hitlag remains frozen.
-          // - DownDamageU/D re-enter that common callback through ftCo_8009F184, but floor-adjacent
-          //   rows with a fresh x670 horizontal edge publish the horizontal displacement without
-          //   treating the y component as a below-floor stay-airborne owner; the later
-          //   DownDamage_Coll path owns floor contact. Rows whose fresh edge is vertical remain on
-          //   the below-floor active-hitlag owner.
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
-          //   ftCo_8008DCE0,ftCo_Damage_OnEveryHitlag}
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::{
-          //   ftCo_8009F184,ftCo_DownDamage_Phys,ftCo_DownDamage_Coll}
-          // refs/melee/src/melee/ft/fighter.c::Fighter_Spaghetti_8006AD10
-          // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
-          // - The retained non-DownDamage slice is DamageAir3 active hitlag only: source routes it
-          //   through the common Damage_Coll / mpColl_800477E0 allow-SDI floor path after a consumed
-          //   downward OnEveryHitlag displacement. DamageAir2 floor-adjacent controls stay on the
-          //   normal floor clamp path, and DamageFly* remains deferred until its separate collision
-          //   handoff owner is closed. This avoids turning generic below-floor damage poses into a
-          //   broad runtime floor-suppression bridge.
-          ((batch->state.hitlag_pre_timer[idx] != 0u && batch->state.hitlag[idx] != 0u &&
-            batch->state.damage_hitlag_downward_sdi_consumed[idx] != 0u) &&
-           (((action_id == (uint16_t)MSL_ACT_DOWN_DAMAGE_U ||
-              action_id == (uint16_t)MSL_ACT_DOWN_DAMAGE_D) &&
-             !downdamage_x_axis_fresh_sdi_edge) ||
-            (action_id == (uint16_t)MSL_ACT_DAMAGE_AIR_3 &&
-             isfinite(batch->state.floor_sweep_prev_pos_y[idx]) &&
-             batch->state.floor_sweep_prev_pos_y[idx] > k_floor_y_bias &&
-             batch->state.pos_y[idx] < -k_floor_y_bias && batch->state.speed_y_attack[idx] < 0.0f)))
+          (damage_active_hitlag_floor_owner.stay_airborne_floorhug &&
+           damage_active_hitlag_floor_owner.source_floor_current)
               ? 1u
               : 0u;
       uint8_t damage_active_hitlag_root_below_bottom_above_floor_owner = 0u;
@@ -9962,12 +10012,9 @@ void mpcoll_ground_apply(MslBatch* batch) {
             (suppress_specialairlw_start_stale_platform_land
                  ? (uint32_t)MSL_MPCOLL_REJECT_SPECIALAIRLW_START_STALE_PLATFORM
                  : 0u) |
-            (damage_active_hitlag_root_below_bottom_above_floor_owner
-                 ? (uint32_t)MSL_MPCOLL_REJECT_DAMAGE_ACTIVE_HITLAG_ROOT_BELOW_BOTTOM_ABOVE_FLOOR
-                 : 0u) |
-            (damage_active_hitlag_downward_sdi_airborne_owner
-                 ? (uint32_t)MSL_MPCOLL_REJECT_DAMAGE_ACTIVE_HITLAG_DOWNWARD_SDI_AIRBORNE
-                 : 0u);
+            mpcoll_damage_active_hitlag_floor_owner_reject_bits(
+                damage_active_hitlag_floor_owner,
+                damage_active_hitlag_root_below_bottom_above_floor_owner);
         mpcoll_apply_final_floor_rejection_bits(
             &mpcoll_ctx, &floor_publication, final_floor_reject_bits, y, cur_bottom_x, cur_bottom_y,
             cur_bot.rel_y, &prev_ecb_points, final_ground_line_idx, x, prev_y);
