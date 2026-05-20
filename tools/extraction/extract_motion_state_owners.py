@@ -17,7 +17,7 @@ from tools.extraction.extract_attack_id_move_id import (
 
 
 FORMAT_MAGIC = b"MSLMSO01"
-FORMAT_VERSION = 10
+FORMAT_VERSION = 11
 U16_ABSENT = 0xFFFF
 
 CLASS_ATTACK_AIR = 1 << 0
@@ -43,6 +43,7 @@ CLASS_FT80081D0C_AIR_COLL = 1 << 19
 CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL = 1 << 20
 CLASS_FT80083F88_GROUND_TO_AIR_COLL = 1 << 21
 CLASS_FT80083090_PLATFORM_PASS_COLL = 1 << 22
+CLASS_FT800827A0_EDGE_SNAP_COLL = 1 << 23
 
 
 @dataclass(frozen=True)
@@ -326,6 +327,45 @@ def _class_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
         # refs/melee/src/melee/ft/ft_081B.c::{ft_80083F88,ft_80082708}
         # refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
         bits |= CLASS_FT80083F88_GROUND_TO_AIR_COLL
+    if coll_cb in {
+        "ftCo_Attack11_Coll",
+        "ftCo_Attack100Start_Coll",
+        "ftCo_Attack100Loop_Coll",
+        "ftCo_Attack100End_Coll",
+        "ftCo_AttackDash_Coll",
+        "ftCo_AttackS3_Coll",
+        "ftCo_AttackHi3_Coll",
+        "ftCo_AttackLw3_Coll",
+        "ftCo_AttackS4_Coll",
+        "ftCo_AttackHi4_Coll",
+        "ftCo_AttackLw4_Coll",
+        "ftCo_Escape_Coll",
+        "ftCo_EscapeN_Coll",
+        "ftCo_AppealS_Coll",
+        "ftCo_Catch_Coll",
+        "ftCo_CatchDash_Coll",
+        "ftCo_CatchPull_Coll",
+        "ftCo_CatchDashPull_Coll",
+        "ftCo_CatchWait_Coll",
+        "ftCo_CatchAttack_Coll",
+        "ftCo_CatchCut_Coll",
+        "ftCo_ThrowF_Coll",
+        "ftCo_ThrowB_Coll",
+        "ftCo_ThrowHi_Coll",
+        "ftCo_ThrowLw_Coll",
+        "ftCo_Down_Coll",
+        "ftCo_DownAttack_Coll",
+        "ftCo_PassiveStand_Coll",
+        "ftFx_SpecialSEnd_Coll",
+    }:
+        # These grounded collision callbacks route to `ft_800827A0`, directly or through
+        # `ft_80084104` / `ft_800841B8`, and therefore consume `mpColl_8004B2DC`'s
+        # `mpColl_8004A45C_Floor` endpoint snap fallback. Keep this as generated callback
+        # ownership so runtime edge-snap admission does not maintain a parallel action-id list.
+        #
+        # refs/melee/src/melee/ft/ft_081B.c::{ft_800827A0,ft_80084104,ft_800841B8}
+        # refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004B2DC,mpColl_8004A45C_Floor}
+        bits |= CLASS_FT800827A0_EDGE_SNAP_COLL
     return bits
 
 
@@ -507,6 +547,7 @@ def _write_manifest(out_path: Path, callback_ids: dict[str, int]) -> None:
         "FT_CHECK_GROUND_LEDGE_AIR_COLL": CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL,
         "FT80083F88_GROUND_TO_AIR_COLL": CLASS_FT80083F88_GROUND_TO_AIR_COLL,
         "FT80083090_PLATFORM_PASS_COLL": CLASS_FT80083090_PLATFORM_PASS_COLL,
+        "FT800827A0_EDGE_SNAP_COLL": CLASS_FT800827A0_EDGE_SNAP_COLL,
     }
     symbols = [{"id": int(i), "symbol": sym} for sym, i in sorted(callback_ids.items(), key=lambda kv: kv[1])]
     payload = {

@@ -5579,6 +5579,15 @@ BODY collision-space residual split and rejected seed bridge:
   `refs/melee/src/melee/ft/chara/ftCommon/{ftCo_Turn.c,ftCo_KneeBend.c,ftCo_SquatRv.c}`,
   `refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108`,
   `data/motion_state/owners/{fox,falco}.bin`.
+- Grounded floor endpoint snap admission is table-backed by MSLMSO01 rather than a runtime
+  action-id list. The generated `FT800827A0_EDGE_SNAP_COLL` class marks callbacks that reach
+  `ft_800827A0 -> mpColl_8004B2DC -> mpColl_8004A45C_Floor`, including grounded attacks,
+  down-roll/down-attack, escape roll/spotdodge, catch/throw, side appeal, passive stand, and
+  grounded Side-B end. DownBound/DownWait/DownStand remain on the separate
+  `ft_80082708 -> mpColl_8004B108` ground-to-air owner. Sources:
+  `refs/melee/src/melee/ft/ft_081B.c::{ft_800827A0,ft_80084104,ft_800841B8,ft_80082708}`,
+  `refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004B2DC,mpColl_8004A45C_Floor,mpColl_8004B108}`,
+  `data/motion_state/owners/{fox,falco}.bin`.
 - FoD generated slope persistence uses the same source floor traversal in jump-squat and immediate
   EscapeAir handoffs. `KneeBend_Coll -> ft_80083F88 -> ft_80082708 -> mpColl_8004B108` consumes
   signed `mpLib_8004DD90_Floor` correction on generated slopes. If `KneeBend_Anim` enters Jump and

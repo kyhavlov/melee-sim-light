@@ -901,7 +901,8 @@ Characters (Fox/Falco):
       Wait/Walk/Run/Squat/Landing/LandingAir/grounded attack/guard, the `ftCo_Catch*` and
       grounded `ftCo_Throw*` callbacks that source routes through `ft_800841B8`, plus
       `ftCo_Down_Coll`, `ftCo_DownAttack_Coll`, and `ftCo_PassiveStand_Coll`, plus the
-      `ft_80083F88 -> ft_80082708 -> mpColl_8004B108` ground-to-air collision callback owner.
+      `ft_80083F88 -> ft_80082708 -> mpColl_8004B108` ground-to-air collision callback owner,
+      and the `ft_800827A0 -> mpColl_8004B2DC` floor-edge-snap callback owner.
       They are callback-owner
       classifications only; procedural behavior such as edge-snap branch results, ledge
       eligibility, or hidden descriptor provenance is not inferred by this artifact.
@@ -911,9 +912,9 @@ Characters (Fox/Falco):
     - `refs/melee/src/melee/ft/ftmotionstates.c::ftData_MotionStateList`
     - `refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c::ftFx_Init_MotionStateTable`
     - `refs/melee/src/melee/ft/chara/ftFalco/ftFc_Init.c::ftFc_Init_MotionStateTable`
-  - Binary layout: `MSLMSO01` v9 (little-endian, dense tables indexed by GALE01 `action_id`)
+  - Binary layout: `MSLMSO01` v11 (little-endian, dense tables indexed by GALE01 `action_id`)
     - `u8  magic[8] = "MSLMSO01"`
-    - `u32 version = 9`
+    - `u32 version = 11`
     - `u16 action_count`
     - `u16 reserved = 0`
     - `u32` offsets for `submotion_id`, `x4_flags`, `motion_state_word`, `anim_cb_id`,
@@ -940,11 +941,19 @@ Characters (Fox/Falco):
       Start/Main/End and `SpecialHiFall`. Runtime uses this callback-owner bit for the shared
       direct `mpColl_800473CC` / `mpColl_800471F8` floor and airborne wall-envelope paths without
       keeping a local action-family list.
-  - Stale/non-v9 `MSLMSO01` tables must be rejected. Version 9 broadens bit 20 from Side-B-only to
-    the `FT_CHECK_GROUND_LEDGE_AIR_COLL` callback-owner class. Version 8 added the
+    - `FT800827A0_EDGE_SNAP_COLL` is keyed to grounded callbacks that reach
+      `ft_800827A0 -> mpColl_8004B2DC -> mpColl_8004A45C_Floor`, including grounded attacks,
+      down-roll/down-attack, escape roll/spotdodge, catch/throw, appeal side, passive stand, and
+      grounded Side-B end. Runtime uses this callback-owner bit for endpoint edge-snap admission
+      instead of a local action-id list. DownBound/DownWait/DownStand stay on the separate
+      `ft_80082708 -> mpColl_8004B108` owner.
+  - Stale/non-v11 `MSLMSO01` tables must be rejected. Version 11 adds bit 23 for
+    `FT800827A0_EDGE_SNAP_COLL`. Version 9 broadened bit 20 from Side-B-only to the
+    `FT_CHECK_GROUND_LEDGE_AIR_COLL` callback-owner class. Version 8 added the
     `FT80083F88_GROUND_TO_AIR_COLL` callback class. Version 7 added `ftCo_Catch*` and grounded
-    `ftCo_Throw*` callbacks to `GROUNDED_STAGE_OBJECT_CARRY_COLL` so grounded B2DC floor-persistence
-    rows can consume connected legal-stage slope/flat floor handoffs without local action lists.
+    `ftCo_Throw*` callbacks to `GROUNDED_STAGE_OBJECT_CARRY_COLL` so grounded B2DC
+    floor-persistence rows can consume connected legal-stage slope/flat floor handoffs without
+    local action lists.
     Regenerate with
     `uv run python -m tools.extraction.extract_motion_state_owners --melee_decomp refs/melee --out_dir data/motion_state/owners --chars fox,falco`.
 - `data/stages/bin/{grnla,grnba,griz,grps,grst,grop}.bin` (stage collision/metadata; decomp-first, compact binary)

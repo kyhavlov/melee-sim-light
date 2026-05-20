@@ -22,6 +22,7 @@ from tools.extraction.extract_motion_state_owners import (
     CLASS_DAMAGE_FLY_COLL,
     CLASS_GUARDON_FRAME_START_X672_IASA,
     CLASS_FT80081D0C_AIR_COLL,
+    CLASS_FT800827A0_EDGE_SNAP_COLL,
     CLASS_FT80083090_PLATFORM_PASS_COLL,
     CLASS_FT80083F88_GROUND_TO_AIR_COLL,
     CLASS_GROUNDED_ATTACK,
@@ -299,6 +300,34 @@ def test_motion_state_class_equivalence_for_migrated_predicates() -> None:
         0x0105,
         0x0107,
     }
+    ft800827a0_edge_snap_coll = {
+        *range(0x002C, 0x0041),
+        0x00BB,
+        0x00BC,
+        0x00BD,
+        0x00C3,
+        0x00C4,
+        0x00C5,
+        0x00C8,
+        0x00C9,
+        0x00D4,
+        0x00D5,
+        0x00D6,
+        0x00D7,
+        0x00D8,
+        0x00D9,
+        0x00DA,
+        0x00DB,
+        0x00DC,
+        0x00DD,
+        0x00DE,
+        0x00E9,
+        0x00EA,
+        0x00EB,
+        0x0108,
+        0x0109,
+        0x015D,
+    }
 
     for action_id in range(max_action):
         assert both_have(action_id, CLASS_ATTACK_AIR) == (action_id in attack_air)
@@ -335,6 +364,9 @@ def test_motion_state_class_equivalence_for_migrated_predicates() -> None:
         )
         assert both_have(action_id, CLASS_FT80083090_PLATFORM_PASS_COLL) == (
             action_id in ft80083090_platform_pass_coll
+        )
+        assert both_have(action_id, CLASS_FT800827A0_EDGE_SNAP_COLL) == (
+            action_id in ft800827a0_edge_snap_coll
         )
 
 

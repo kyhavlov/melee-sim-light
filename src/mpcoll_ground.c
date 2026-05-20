@@ -892,95 +892,15 @@ static inline uint8_t mpcoll_floor_contact_from_callback_result(const MslMpcollC
 }
 
 static inline uint8_t action_allows_floor_edge_snap(uint16_t a) {
-  // Decomp: mpColl_8004A45C_Floor (edge snap) is used by mpColl_8004B2DC (flags=2), which is
-  // called by ft_800827A0. Motion states that use ft_80084104 (ft_800827A0) as their collision
-  // callback include:
-  // - DownAttack, DownForward, DownBack (DownRoll)
-  // - EscapeF/EscapeB/EscapeN (rolls / spotdodge)
-  // - Grounded attacks (Attack11..AttackLw4), including AttackDash and AttackS4S.
-  // - Common AppealSR/SL through ftCo_AppealS_Coll -> ft_80084104.
-  // - Grounded Catch/CatchDash and the later CatchPull/CatchWait/CatchAttack/CatchCut family
-  //   through ftCo_Catch*_Coll -> ft_800841B8 -> ft_800827A0.
-  // - Grounded ThrowF/B/Hi/Lw through ftCo_Throw*_Coll -> ft_800841B8 -> ft_800827A0.
-  // - Fox/Falco grounded SpecialSEnd, whose collision callback uses ft_800827A0 after the main
-  //   Side-B travel phase has already converted through ft_80082708 when floor is lost.
-  // - PassiveStandF/B tech-roll grounded continuation.
-  //
-  // DownWait/DownStand use ft_80083F88 -> ft_80082708 -> mpColl_8004B108 (allow-ground-to-air),
-  // NOT ft_80084104 -> ft_800827A0 -> mpColl_8004B2DC (edge snap).
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::{ftCo_DownWait_Coll,ftCo_DownStand_Coll}
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownAttack.c::ftCo_DownAttack_Coll
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Down.c::ftCo_Down_Coll
-  // refs/melee/src/melee/ft/ft_081B.c::{ft_80083F88,ft_80084104}
-  //
-  // Implementation note: we gate by action_id here as a proxy for "this motion state uses the
-  // ft_80084104 collision callback chain". We intentionally do not include locomotion states
-  // (Walk/Run/Dash/etc.) so walking/running off ledges still produces a ground->air transition.
-  //
-  // This lite sim uses the same edge-snap fallback when mpLib_8004DD90_Floor projection fails on
-  // a persisted floor line, to avoid spurious ground loss at floor endpoints/seams near the FD
-  // ledge.
-  //
-  // Decomp anchors:
-  // - refs/melee/src/melee/ft/ft_081B.c::ft_80084104 (calls ft_800827A0)
-  // - refs/melee/src/melee/ft/ft_081B.c::ft_800827A0 (calls mpColl_8004B2DC)
-  // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Coll
-  // - refs/melee/src/melee/ft/ft_081B.c::ft_80082708 (calls mpColl_8004B108)
-  // - refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B2DC (uses mpColl_8004A45C_Floor)
-  // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_Escape_Coll
-  // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_Coll
-  // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackS4.c::ftCo_AttackS4_Coll
-  // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
-  //     ftCo_Catch_Coll,ftCo_CatchDash_Coll,ftCo_CatchPull_Coll,ftCo_CatchWait_Coll,
-  //     ftCo_CatchAttack_Coll,ftCo_CatchCut_Coll}
-  // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_AppealS.c::ftCo_AppealS_Coll
-  // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_Throw{F,B,Hi,Lw}_Coll
-  // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveStand.c::ftCo_PassiveStand_Coll
-  if (a >= (uint16_t)MSL_ACT_ATTACK_11 && a <= (uint16_t)MSL_ACT_ATTACK_LW4) {
-    return 1;
-  }
-  switch (a) {
-    // DownBound intentionally excluded from this bucket:
-    // - generic edge-snap bucket here models ft_800827A0 -> mpColl_8004B2DC users,
-    // - DownBound_Coll uses ft_80082708 -> mpColl_8004B108 (allow-ground-to-air path) and should
-    //   not inherit the ft_800827A0 edge-snap helper semantics.
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Coll
-    // refs/melee/src/melee/ft/ft_081B.c::{ft_80082708,ft_800827A0}
-    // refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004B108,mpColl_8004B2DC}
-    // Decomp: DownWait/DownStand use ft_80083F88 -> ft_80082708 -> mpColl_8004B108
-    // (allow-ground-to-air), not ft_80084104 -> ft_800827A0 -> mpColl_8004B2DC (edge snap).
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownWait_Coll
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownStand.c::ftCo_DownStand_Coll
-    // refs/melee/src/melee/ft/ft_081B.c::{ft_80083F88,ft_80084104}
-    case MSL_ACT_DOWN_ATTACK_U:
-    case MSL_ACT_DOWN_FOWARD_U:
-    case MSL_ACT_DOWN_BACK_U:
-    case MSL_ACT_DOWN_ATTACK_D:
-    case MSL_ACT_DOWN_FOWARD_D:
-    case MSL_ACT_DOWN_BACK_D:
-    case MSL_ACT_ESCAPE_F:
-    case MSL_ACT_ESCAPE_B:
-    case MSL_ACT_ESCAPE_N:
-    case MSL_ACT_PASSIVE_STAND_F:
-    case MSL_ACT_PASSIVE_STAND_B:
-    case MSL_ACT_APPEAL_SR:
-    case MSL_ACT_APPEAL_SL:
-    case MSL_ACT_CATCH:
-    case MSL_ACT_CATCH_PULL:
-    case MSL_ACT_CATCH_DASH:
-    case MSL_ACT_CATCH_DASH_PULL:
-    case MSL_ACT_CATCH_WAIT:
-    case MSL_ACT_CATCH_ATTACK:
-    case MSL_ACT_CATCH_CUT:
-    case MSL_ACT_THROW_F:
-    case MSL_ACT_THROW_B:
-    case MSL_ACT_THROW_HI:
-    case MSL_ACT_THROW_LW:
-    case MSL_ACT_FX_SPECIAL_S_END:
-      return 1;
-    default:
-      return 0;
-  }
+  // Decomp: `mpColl_8004A45C_Floor` endpoint snap is used by `mpColl_8004B2DC`,
+  // reached through `ft_800827A0` directly or through wrappers such as `ft_80084104` and
+  // `ft_800841B8`. MSLMSO01 extracts that callback owner into a generated class, replacing the
+  // older local action-id list. DownBound/DownWait/DownStand remain excluded because they route
+  // through `ft_80082708 -> mpColl_8004B108` instead.
+  // refs/melee/src/melee/ft/ft_081B.c::{ft_800827A0,ft_80084104,ft_800841B8,ft_80082708}
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004B2DC,mpColl_8004A45C_Floor,mpColl_8004B108}
+  // data/motion_state/owners/{fox,falco}.bin (MSLMSO01 class FT800827A0_EDGE_SNAP_COLL)
+  return msl_motion_state_common_class_has(a, MSL_MS_CLASS_FT800827A0_EDGE_SNAP_COLL);
 }
 
 static inline uint8_t action_is_down_bound(uint16_t a) {
@@ -992,20 +912,12 @@ static inline uint8_t action_uses_landing_floor_release_coll(uint16_t a) {
   // (inline2 flags=1), which uses the current floor-id release helper (mpColl_8004A678_Floor)
   // rather than the generic edge-snap helper path (mpColl_8004A45C_Floor).
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Coll
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_LandingAir.c::ftCo_LandingAir_Coll
   // refs/melee/src/melee/ft/ft_081B.c::ft_80084280
   // refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004B4B0,mpColl_8004A678_Floor,mpColl_8004A45C_Floor}
-  switch (a) {
-    case MSL_ACT_LANDING:
-    case MSL_ACT_LANDING_FALL_SPECIAL:
-    case MSL_ACT_LANDING_AIR_N:
-    case MSL_ACT_LANDING_AIR_F:
-    case MSL_ACT_LANDING_AIR_B:
-    case MSL_ACT_LANDING_AIR_HI:
-    case MSL_ACT_LANDING_AIR_LW:
-      return 1u;
-    default:
-      return 0u;
-  }
+  // data/motion_state/owners/{fox,falco}.bin (MSLMSO01 classes LANDING_COLL/LANDING_AIR_COLL)
+  return (uint8_t)(msl_motion_state_common_class_has(a, MSL_MS_CLASS_LANDING_COLL) ||
+                   msl_motion_state_common_class_has(a, MSL_MS_CLASS_LANDING_AIR_COLL));
 }
 
 static inline uint8_t floor_lines_connected(const MslStageFloorGraph* g, int a, int b) {
