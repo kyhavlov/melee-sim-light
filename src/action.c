@@ -577,6 +577,7 @@ static inline void enter_guard_reflect_common_setup(MslBatch* batch, const MslCo
   batch->state.animation_index[idx] = 0xFFFFFFFFu;
   batch->state.guard_reflect_timer_x14[idx] = msl_guard_reflect_timer_x14_init(c);
   batch->state.guard_reflect_timer_x18[idx] = msl_guard_reflect_timer_x18_init(c);
+  batch->state.guard_reflect_entered_this_frame[idx] = 1u;
   batch->state.guard_special_enable_timer_x1c[idx] = 0u;
   batch->state.guard_release_latched_xc[idx] = 0;
   batch->state.guard_x10[idx] = msl_guard_x10_visible_guardon_init_u8(c);
@@ -1310,6 +1311,21 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
        !msl_guard_lifecycle_action_has_shield_callback(batch->state.prev_action_id[idx]))
           ? 1u
           : 0u;
+  const uint8_t guardreflect_fresh_entry_from_this_callback =
+      // Source ordering: GuardReflect entry helpers are reached from IASA during
+      // Fighter_procUpdate, after Fighter_8006A360 has already run this frame's Anim callback.
+      // If an earlier simulated owner in this same input-callback pass entered GuardReflect, do
+      // not let a later shared guard pass immediately run GuardReflect_Anim/GuardOn_Anim and drain
+      // shield HP one source frame early. Seeded replay rows keep this marker clear, so their
+      // normal next-frame GuardReflect drain still runs.
+      // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+      //   ftCo_8009388C,ftCo_80093A50,ftCo_GuardReflect_Anim,ftCo_800925A4}
+      (a0 == (uint16_t)MSL_ACT_GUARD_REFLECT && batch->state.action_frame[idx] < 0 &&
+       batch->state.animation_index[idx] == 0xFFFFFFFFu &&
+       batch->state.guard_reflect_entered_this_frame[idx] != 0u)
+          ? 1u
+          : 0u;
 
   if (!msl_guard_lifecycle_action_has_shield_callback(a0)) {
     batch->state.guard_release_latched_xc[idx] = 0;
@@ -1416,7 +1432,8 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
     batch->state.animation_index[idx] = 0xFFFFFFFFu;
     const uint8_t can_update = (batch->state.hitlag_started_frame[idx] == 0) ? 1 : 0;
     uint8_t guard_reflect_from_guard_pending = 0u;
-    if (guard_on_fresh_entry_from_non_shield_snapshot) {
+    if (guard_on_fresh_entry_from_non_shield_snapshot ||
+        guardreflect_fresh_entry_from_this_callback) {
       return;
     }
 
@@ -2073,6 +2090,7 @@ void action_update(MslBatch* batch) {
         batch->state.guard_entry_via_dash_91ad8[idx] = 0u;
         batch->state.guard_jump_oos_entered_this_frame[idx] = 0u;
         batch->state.guard_reflect_entry_dash_terminal_scalar[idx] = 0u;
+        batch->state.guard_reflect_entered_this_frame[idx] = 0u;
         batch->state.shine_jump_iasa_entered_this_frame[idx] = 0u;
       }
     }

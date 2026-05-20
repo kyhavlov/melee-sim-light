@@ -16,6 +16,7 @@ from tools.slippi.make_dataset_from_slp import (
     _derive_landing_fallspecial_allow_interrupt_seed_lane,
     _fod_platform_heights_from_frames,
     _fod_platform_heights_with_ground_contact,
+    _fod_hidden_return_timers,
     _fod_platform_motion_with_ground_contact,
     _derive_specialhi_rotate_model_seed_lane,
     _derive_walljump_phase_seed_lanes,
@@ -144,6 +145,10 @@ def test_seed_schema_includes_staling_fields() -> None:
     assert "stage_fod_platform_height_valid_u8" in SEED_DTYPE.fields
     assert "stage_fod_platform_velocity_f32" in SEED_DTYPE.fields
     assert "stage_fod_platform_velocity_valid_u8" in SEED_DTYPE.fields
+    assert "stage_fod_platform_deferred_velocity_f32" in SEED_DTYPE.fields
+    assert "stage_fod_platform_deferred_velocity_valid_u8" in SEED_DTYPE.fields
+    assert "stage_fod_platform_hidden_return_timer_u16" in SEED_DTYPE.fields
+    assert "stage_fod_platform_hidden_return_valid_u8" in SEED_DTYPE.fields
     assert "stage_fod_platform_height_source_u8" in SEED_DTYPE.fields
     # Prefix-causal Yoshi Shy Guy dynamic-bone velocity scratch.
     assert "item_shyguy_prev_vel_y" in SEED_DTYPE.fields
@@ -400,6 +405,87 @@ def test_fod_platform_direct_events_override_contact_fallback_owner() -> None:
     assert float(out_h[5, 1]) == pytest.approx(31.15)
 
 
+def test_fod_platform_direct_event_plus_ground_contact_derives_same_frame_velocity() -> None:
+    # Slippi FoD platform events can expose the direct grIzumi height before the grounded fighter
+    # root shows the same-frame mpLib-refreshed line. The seed lane must keep that same-frame
+    # event/contact delta as current platform velocity so grounded riders follow the next frame.
+    # refs/melee/src/melee/gr/grizumi.c::{grIzumi_801CC358,grIzumi_801CCBDC}
+    # refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
+    defaults = fountain_of_dreams_default_platform_heights(Path("data"))
+    heights = np.asarray(
+        [
+            defaults,
+            [defaults[0], 0.65],
+            defaults,
+        ],
+        dtype=np.float32,
+    )
+    valid = np.zeros((3, 2), dtype=np.uint8)
+    valid[1, 1] = np.uint8(1)
+    fresh = np.zeros((3, 2), dtype=np.uint8)
+    fresh[1, 1] = np.uint8(1)
+    contact_h = np.float32(0.80)
+    contact_y = np.float32(1.125 + float(contact_h) * 0.75)
+
+    out_h, out_v, out_vel, out_vel_v, out_source = _fod_platform_motion_with_ground_contact(
+        heights,
+        valid,
+        event_fresh_u8=fresh,
+        post_on_ground_u8=np.asarray([[0], [1], [0]], dtype=np.uint8),
+        post_ground_id_u16=np.asarray([[0xFFFF], [0], [0xFFFF]], dtype=np.uint16),
+        post_pos_y_f32=np.asarray([[0.0], [contact_y], [0.0]], dtype=np.float32),
+        line_transforms={0: (1, 0.75, 1.125)},
+        return_source=True,
+    )
+
+    assert int(out_source[1, 1]) == 0x03
+    assert int(out_v[1, 1]) == 1
+    assert int(out_vel_v[1, 1]) == 1
+    assert float(out_h[1, 1]) == pytest.approx(float(contact_h), abs=1e-6)
+    assert float(out_vel[1, 1]) == pytest.approx(0.15, abs=1e-6)
+    assert float(out_h[2, 1]) == pytest.approx(0.95, abs=1e-6)
+
+
+def test_fod_platform_direct_event_confirming_hidden_descent_preserves_velocity() -> None:
+    # A fresh direct grIzumi event that equals the height predicted by the previous direct-event
+    # velocity is not a stop boundary. The runtime frame step will advance that source motion again
+    # before fighter collision, matching grIzumi_801CC358/mpLib line refresh ordering.
+    defaults = fountain_of_dreams_default_platform_heights(Path("data"))
+    heights = np.asarray(
+        [
+            defaults,
+            [defaults[0], -0.5],
+            [defaults[0], -0.6],
+            [defaults[0], -0.7],
+            [defaults[0], -0.8],
+        ],
+        dtype=np.float32,
+    )
+    valid = np.zeros((5, 2), dtype=np.uint8)
+    valid[1:, 1] = np.uint8(1)
+    fresh = np.zeros((5, 2), dtype=np.uint8)
+    fresh[1:, 1] = np.uint8(1)
+    out_h, out_v, out_vel, out_vel_v, out_source = _fod_platform_motion_with_ground_contact(
+        heights,
+        valid,
+        event_fresh_u8=fresh,
+        post_on_ground_u8=np.asarray([[0], [0], [0], [0], [0]], dtype=np.uint8),
+        post_ground_id_u16=np.asarray(
+            [[0xFFFF], [0xFFFF], [0xFFFF], [0xFFFF], [0xFFFF]], dtype=np.uint16
+        ),
+        post_pos_y_f32=np.asarray([[0.0], [0.0], [0.0], [0.0], [0.0]], dtype=np.float32),
+        line_transforms={0: (1, 0.75, 1.125)},
+        return_source=True,
+    )
+
+    assert int(out_v[3, 1]) == 1
+    assert int(out_source[3, 1]) == 0x01
+    assert int(out_vel_v[3, 1]) == 1
+    assert float(out_vel[3, 1]) == pytest.approx(-0.1, abs=1e-6)
+    assert float(out_h[4, 1]) == pytest.approx(-0.8, abs=1e-6)
+    assert int(out_vel_v[4, 1]) == 1
+
+
 def test_fod_platform_same_step_contact_marks_source_height_without_velocity() -> None:
     defaults = fountain_of_dreams_default_platform_heights(Path("data"))
     heights = np.asarray([defaults, defaults], dtype=np.float32)
@@ -423,6 +509,39 @@ def test_fod_platform_same_step_contact_marks_source_height_without_velocity() -
     assert int(out_source[0, 1]) == 0x04
     assert int(out_source[1, 1]) == 0
     assert float(out_h[0, 1]) == pytest.approx((6.90005 - 1.125 - 0.0002) / 0.75)
+
+
+def test_fod_hidden_return_timer_reconstructs_next_upward_motion() -> None:
+    motion = fountain_of_dreams_platform_motion_params(Path("data"))
+    hidden = np.float32(motion["hidden_target_height"])
+    up_speed = np.float32(motion["up_speed"])
+    heights = np.asarray(
+        [
+            [25.0, hidden],
+            [25.0, hidden],
+            [25.0, hidden],
+            [25.0, hidden],
+            [25.0, np.float32(float(hidden) + float(up_speed) * 3.0)],
+            [25.0, np.float32(float(hidden) + float(up_speed) * 4.0)],
+        ],
+        dtype=np.float32,
+    )
+    valid = np.ones((6, 2), dtype=np.uint8)
+
+    timer, timer_valid = _fod_hidden_return_timers(
+        heights,
+        valid,
+        motion_params=motion,
+    )
+
+    # Seed rows expose the already-published platform pose for the next step. The first observed
+    # rising height is the third published movement step, so phase-4 must expire before record 1 and
+    # the first movement occurs at record 1.
+    assert int(timer_valid[0, 1]) == 1
+    assert int(timer[0, 1]) == 0
+    assert int(timer_valid[1, 1]) == 0
+    assert int(timer_valid[2, 1]) == 0
+    assert int(timer_valid[4, 1]) == 0
 
 
 def test_fod_platform_ground_contact_derivation_uses_no_future_observations() -> None:

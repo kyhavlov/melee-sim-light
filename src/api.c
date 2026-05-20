@@ -1295,12 +1295,19 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       const size_t pidx = (size_t)bi * 2u + (size_t)pi;
       const float h = seed->stage_fod_platform_height_f32[pi];
       const float v = seed->stage_fod_platform_velocity_f32[pi];
+      const float deferred_v = seed->stage_fod_platform_deferred_velocity_f32[pi];
+      const uint16_t hidden_return_timer = seed->stage_fod_platform_hidden_return_timer_u16[pi];
       batch->state.stage_fod_platform_height[pidx] = isfinite(h) ? h : 0.0f;
       batch->state.stage_fod_platform_valid[pidx] =
           (seed->stage_fod_platform_height_valid_u8[pi] && isfinite(h)) ? 1u : 0u;
       batch->state.stage_fod_platform_velocity[pidx] = isfinite(v) ? v : 0.0f;
       batch->state.stage_fod_platform_velocity_valid[pidx] =
           (seed->stage_fod_platform_velocity_valid_u8[pi] && isfinite(v)) ? 1u : 0u;
+      batch->state.stage_fod_platform_deferred_velocity[pidx] =
+          isfinite(deferred_v) ? deferred_v : 0.0f;
+      batch->state.stage_fod_platform_deferred_velocity_valid[pidx] =
+          (seed->stage_fod_platform_deferred_velocity_valid_u8[pi] && isfinite(deferred_v)) ? 1u
+                                                                                            : 0u;
       batch->state.stage_fod_platform_height_source[pidx] =
           batch->state.stage_fod_platform_valid[pidx]
               ? seed->stage_fod_platform_height_source_u8[pi]
@@ -1327,6 +1334,26 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         // still keep this disabled unless explicit height/velocity lanes expose current state.
         // refs/melee/src/melee/gr/grizumi.c::{grIzumi_801CCBDC,grIzumi_801CC358}
         batch->state.stage_fod_platform_scheduler_valid[pidx] = 1u;
+      }
+      if (seed->stage_id == (uint32_t)MSL_STAGE_FOUNTAIN_OF_DREAMS &&
+          seed->stage_fod_platform_hidden_return_valid_u8[pi] != 0u &&
+          batch->state.stage_fod_platform_valid[pidx]) {
+        float hidden_target_height = 0.0f;
+        if (stage_collision_fod_hidden_target_height(&hidden_target_height) &&
+            fabsf(batch->state.stage_fod_platform_height[pidx] - hidden_target_height) <= 1.0e-3f) {
+          // Replay rollout seeds can start during grIzumi's hidden wait after the side platform
+          // has reached the generated target and before it rises back toward home. Slippi exposes
+          // the hidden target height but not `gp->xC6`; preprocessing reconstructs that current
+          // hidden countdown from the next source-visible platform movement. This installs the
+          // real phase-4 scheduler state instead of trusting a stale sparse collision height.
+          // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+          batch->state.stage_fod_platform_scheduler_valid[pidx] = 1u;
+          batch->state.stage_fod_platform_scheduler_phase[pidx] = 4u;
+          batch->state.stage_fod_platform_scheduler_timer[pidx] = hidden_return_timer;
+          batch->state.stage_fod_platform_scheduler_target[pidx] = hidden_target_height;
+          batch->state.stage_fod_platform_velocity_valid[pidx] = 0u;
+          batch->state.stage_fod_platform_velocity[pidx] = 0.0f;
+        }
       }
     }
     batch->state.stage_yoshi_shyguy_timer[bi] = seed->stage_yoshi_shyguy_timer_u16;

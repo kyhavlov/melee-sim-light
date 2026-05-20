@@ -2856,6 +2856,52 @@ def test_fod_jumpaerial_fastfall_same_step_platform_contact_lands_pte_2026() -> 
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
+    ("start_record", "target_record", "p", "expected_seed_action"),
+    [
+        (1263, 1395, 1, ACT_FALL),
+        (1835, 2026, 0, ACT_JUMP_AERIAL_B),
+    ],
+)
+def test_fod_fall_root_crossing_height_platform_lands_in_rollout(
+    start_record: int, target_record: int, p: int, expected_seed_action: int
+) -> None:
+    # Rollout boundary for the same Fall_Coll / JumpAerial_Coll transformed-platform owner as the
+    # direct same-step locks above. The replay seed's same-step platform source bit is transient,
+    # but when the callback root crosses FoD's generated height-platform line, source
+    # mpColl_80044838_Floor can publish Landing from that current crossing instead of treating the
+    # contact as stale carried platform state.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Coll
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Coll
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047E14,mpColl_80044838_Floor}
+    # data/stages/bin/griz.bin::MSLSTG01 height platform transforms
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[target_record]
+    assert int(row["seed_t"]["action_id"][p]) == expected_seed_action
+    assert int(row["seed_t"]["fall_fast"][p]) == 1
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_LANDING
+    assert int(row["ref_t1"]["on_ground"][p]) == 1
+    assert int(row["ref_t1"]["ground_id"][p]) == 0
+
+    out = _run_rollout_to_record(ds, start_record, target_record)
+    ref = row["ref_t1"]
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-4)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
     ("record", "p"),
     [
         (1532, 0),
@@ -3731,6 +3777,49 @@ def test_fod_landing_uses_named_grizumi_platform_pose_for_source_height(
     for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
         assert int(out[field][p]) == int(ref[field][p]), field
     assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
+def test_fod_fall_locked_root_initial_pose_does_not_land_without_current_source() -> None:
+    # PTE:203 is Fall over FoD's initial/named right platform height. The live rollout carries an
+    # ECB-lock/root projection from JumpF -> Fall, but vanilla does not publish Landing until the
+    # following frame. The initial grIzumi pose is valid platform geometry, not same-frame collision
+    # authority for Fall_Coll's locked root owner.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_800831CC
+    # refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+    # data/stages/bin/griz.bin::MSLSTG01 platform_transform/platform_motion records
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+    ds = read_dataset(str(dataset_path))
+    p = 1
+
+    row203 = ds.samples[203]
+    assert int(row203["seed_t"]["action_id"][p]) == ACT_FALL
+    assert int(row203["seed_t"]["stage_fod_platform_height_source_u8"][1]) == 0
+    assert int(row203["ref_t1"]["action_id"][p]) == ACT_FALL
+
+    out203 = _run_rollout_to_record(ds, 0, 203)
+    assert int(out203["action_id"][p]) == ACT_FALL
+    assert int(out203["on_ground"][p]) == 0
+    assert int(out203["ground_id"][p]) == int(row203["ref_t1"]["ground_id"][p])
+    assert float(out203["pos_y"][p]) == pytest.approx(float(row203["ref_t1"]["pos_y"][p]), abs=1e-6)
+
+    row204 = ds.samples[204]
+    assert int(row204["ref_t1"]["action_id"][p]) == ACT_LANDING
+    out204 = _run_rollout_to_record(ds, 0, 204)
+    assert int(out204["action_id"][p]) == ACT_LANDING
+    assert int(out204["on_ground"][p]) == 1
+    assert int(out204["ground_id"][p]) == int(row204["ref_t1"]["ground_id"][p])
+    assert float(out204["pos_y"][p]) == pytest.approx(float(row204["ref_t1"]["pos_y"][p]), abs=1e-6)
 
 
 @pytest.mark.integration

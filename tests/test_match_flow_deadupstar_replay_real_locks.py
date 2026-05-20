@@ -19,6 +19,9 @@ class _DeadUpStarCase:
 
 
 _MAJ_DATASET = "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl"
+_PTE_FOD_DATASET = (
+    "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.msl"
+)
 
 
 def _dataset(root: Path, rel: str) -> Path:
@@ -62,6 +65,41 @@ def test_deadupstar_phase1_velocity_not_recomputed_after_entry_control() -> None
     assert int(out["action_frame"][0]) == int(ref["action_frame"][0]) == 2
     assert float(out["speed_y_self"][0]) == pytest.approx(float(ref["speed_y_self"][0]), abs=1e-7)
     assert float(out["pos_y"][0]) == pytest.approx(float(ref["pos_y"][0]), abs=1e-6)
+
+
+@pytest.mark.integration
+def test_deadupstar_phase1_expiry_zeroes_velocity_replay_real_lock() -> None:
+    # At phase-1 expiry, ftCo_DeadUpStar_Anim calls ftCommon_8007E2FC before the delayed stock-loss
+    # side effects. The fighter should hold the top-blast pose instead of integrating the prior
+    # phase-1 vertical velocity for one extra frame.
+    # refs/melee/src/melee/ft/ft_0D31.c::ftCo_DeadUpStar_Anim
+    # refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007E2FC
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = _dataset(root, _PTE_FOD_DATASET)
+
+    seed, ref, out = _run_one_step_row(dataset_path, 8917, 1)
+    assert int(seed["action_id"][1]) == 4
+    assert int(seed["match_flow_timer"][1]) == 46
+    assert int(out["action_id"][1]) == int(ref["action_id"][1]) == 4
+    assert int(out["stocks"][1]) == int(ref["stocks"][1]) == 1
+    assert float(out["speed_y_self"][1]) == pytest.approx(0.0, abs=1e-7)
+    assert float(out["pos_y"][1]) == pytest.approx(float(ref["pos_y"][1]), abs=1e-6)
+
+
+@pytest.mark.integration
+def test_deadupstar_phase1_velocity_persists_before_expiry_replay_real_lock() -> None:
+    # One frame earlier, phase 1 is still active. The expiry zero must not suppress the source-owned
+    # phase-1 velocity while the countdown has not crossed into phase 2.
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = _dataset(root, _PTE_FOD_DATASET)
+
+    seed, ref, out = _run_one_step_row(dataset_path, 8916, 1)
+    assert int(seed["action_id"][1]) == 4
+    assert int(seed["match_flow_timer"][1]) == 47
+    assert int(out["action_id"][1]) == int(ref["action_id"][1]) == 4
+    assert int(out["stocks"][1]) == int(ref["stocks"][1]) == 2
+    assert float(out["speed_y_self"][1]) == pytest.approx(float(ref["speed_y_self"][1]), abs=1e-7)
+    assert float(out["pos_y"][1]) == pytest.approx(float(ref["pos_y"][1]), abs=1e-6)
 
 
 @pytest.mark.integration

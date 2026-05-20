@@ -10225,6 +10225,27 @@ static inline bool msl_py_action_is_catch_family(uint16_t action_id) {
   return action_id >= (uint16_t)MSL_ACT_CATCH && action_id <= (uint16_t)MSL_ACT_CATCH_CUT;
 }
 
+static inline bool msl_py_action_is_basic_grounded_attack(uint16_t action_id) {
+  return action_id >= (uint16_t)MSL_ACT_ATTACK_11 && action_id <= (uint16_t)MSL_ACT_ATTACK_LW4;
+}
+
+static inline bool msl_py_action_is_grounded_f26_damage_entry_seed_family(uint16_t action_id,
+                                                                          int allow_kneebend) {
+  return msl_py_action_is_catch_family(action_id) ||
+         msl_py_action_is_basic_grounded_attack(action_id) || action_id == (uint16_t)MSL_ACT_DASH ||
+         (allow_kneebend != 0 && action_id == (uint16_t)MSL_ACT_KNEE_BEND);
+}
+
+static inline bool msl_py_f26_current_pre_action_allows_marker(uint16_t action_id,
+                                                               uint8_t on_ground,
+                                                               int allow_grounded_kneebend) {
+  if (on_ground == 0u) {
+    return action_id == (uint16_t)MSL_ACT_ATTACK_AIR_N ||
+           action_id == (uint16_t)MSL_ACT_ATTACK_AIR_B;
+  }
+  return msl_py_action_is_grounded_f26_damage_entry_seed_family(action_id, allow_grounded_kneebend);
+}
+
 static inline bool msl_py_action_is_airborne_damage_family(uint16_t action_id) {
   return action_id >= (uint16_t)MSL_ACT_DAMAGE_AIR_1 &&
          action_id <= (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL;
@@ -10234,15 +10255,14 @@ static int msl_py_f26_current_pre_action_marker(const uint16_t* action, const ui
                                                 const uint8_t* ground, const uint16_t* hitlag,
                                                 const uint16_t* hitstun, const uint32_t* rng_seed,
                                                 npy_intp width, npy_intp row, int p,
-                                                int stream_offset_steps, float roll_prob) {
+                                                int stream_offset_steps, float roll_prob,
+                                                int allow_grounded_kneebend) {
   const uint16_t cur = action[(row * width) + p];
   const uint8_t on_ground = ground[(row * width) + p];
   if (hitlag[(row * width) + p] != 0u || hitstun[(row * width) + p] != 0u) {
     return 0;
   }
-  if (!(((cur == (uint16_t)MSL_ACT_ATTACK_AIR_N || cur == (uint16_t)MSL_ACT_ATTACK_AIR_B) &&
-         on_ground == 0u) ||
-        (msl_py_action_is_catch_family(cur) && on_ground != 0u))) {
+  if (!msl_py_f26_current_pre_action_allows_marker(cur, on_ground, allow_grounded_kneebend)) {
     return 0;
   }
   float rolls[4];
@@ -10272,7 +10292,8 @@ static int msl_py_f26_prior_same_frame_stream_steps(
     const uint16_t* action, const uint16_t* ref_action, const uint8_t* ground,
     const uint16_t* hitlag, const uint16_t* hitstun, const uint8_t* last_hit_by,
     const uint8_t* ref_last_hit_by, const uint8_t* source_port0, const uint32_t* rng_seed,
-    npy_intp width, npy_intp row, int players, int p, float roll_prob) {
+    npy_intp width, npy_intp row, int players, int p, float roll_prob,
+    int allow_grounded_kneebend) {
   const int cur_source = msl_py_f26_source_port_for_player(last_hit_by, ref_last_hit_by,
                                                            source_port0, width, row, players, p);
   const int cur_attacker =
@@ -10286,9 +10307,9 @@ static int msl_py_f26_prior_same_frame_stream_steps(
     const int other_attacker =
         msl_py_local_slot_from_source_port(source_port0, width, row, players, other_source);
     if (other_attacker < 0 || other_attacker >= cur_attacker) continue;
-    const int marker =
-        msl_py_f26_current_pre_action_marker(action, ref_action, ground, hitlag, hitstun, rng_seed,
-                                             width, row, q, stream_steps, roll_prob);
+    const int marker = msl_py_f26_current_pre_action_marker(
+        action, ref_action, ground, hitlag, hitstun, rng_seed, width, row, q, stream_steps,
+        roll_prob, allow_grounded_kneebend);
     stream_steps += msl_py_f26_marker_stream_steps(marker);
   }
   return stream_steps;
@@ -10317,12 +10338,13 @@ PyObject* msl_derive_fighter_8006cda4_pre_gate_count_py(PyObject* self, PyObject
   double roll_prob_d = 0.0;
   int victim_port = 0;
   int num_players = 0;
-  if (!PyArg_ParseTuple(args, "OOOOOOOOOOOOOOOOOOdii", &action_obj, &frame_obj, &ref_action_obj,
+  int allow_grounded_kneebend = 0;
+  if (!PyArg_ParseTuple(args, "OOOOOOOOOOOOOOOOOOdiii", &action_obj, &frame_obj, &ref_action_obj,
                         &ground_obj, &hitlag_obj, &hitstun_obj, &flags_obj, &last_hit_by_obj,
                         &all_source_obj, &all_action_obj, &all_frame_obj, &all_ref_action_obj,
                         &all_ground_obj, &all_hitlag_obj, &all_hitstun_obj, &all_last_hit_by_obj,
                         &all_ref_last_hit_by_obj, &rng_obj, &roll_prob_d, &victim_port,
-                        &num_players)) {
+                        &num_players, &allow_grounded_kneebend)) {
     return NULL;
   }
   PyArrayObject* action = require_contiguous_array(action_obj, NPY_UINT16, 1, "action_id_u16");
@@ -10436,28 +10458,35 @@ PyObject* msl_derive_fighter_8006cda4_pre_gate_count_py(PyObject* self, PyObject
       if (ref_a[i] == (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL) {
         const int stream_steps = msl_py_f26_prior_same_frame_stream_steps(
             aa, ara, ag, ahl, ahs, alhb, arlhb, source_port, seed, width, i, num_players,
-            victim_port, roll_prob);
-        const int marker = msl_py_f26_current_pre_action_marker(
-            aa, ara, ag, ahl, ahs, seed, width, i, victim_port, stream_steps, roll_prob);
+            victim_port, roll_prob, allow_grounded_kneebend);
+        const int marker =
+            msl_py_f26_current_pre_action_marker(aa, ara, ag, ahl, ahs, seed, width, i, victim_port,
+                                                 stream_steps, roll_prob, allow_grounded_kneebend);
         o[i] = (uint8_t)marker;
       }
       continue;
     }
-    if (msl_py_action_is_catch_family(cur) && g[i] != 0u && hl[i] == 0u && hs[i] == 0u) {
+    if (g[i] != 0u && hl[i] == 0u && hs[i] == 0u &&
+        (msl_py_action_is_catch_family(cur) ||
+         ((msl_py_action_is_basic_grounded_attack(cur) || cur == (uint16_t)MSL_ACT_DASH ||
+           (allow_grounded_kneebend != 0 && cur == (uint16_t)MSL_ACT_KNEE_BEND)) &&
+          ref_a[i] == (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL))) {
       const int stream_steps = msl_py_f26_prior_same_frame_stream_steps(
           aa, ara, ag, ahl, ahs, alhb, arlhb, source_port, seed, width, i, num_players, victim_port,
-          roll_prob);
-      const int marker = msl_py_f26_current_pre_action_marker(aa, ara, ag, ahl, ahs, seed, width, i,
-                                                              victim_port, stream_steps, roll_prob);
+          roll_prob, allow_grounded_kneebend);
+      const int marker =
+          msl_py_f26_current_pre_action_marker(aa, ara, ag, ahl, ahs, seed, width, i, victim_port,
+                                               stream_steps, roll_prob, allow_grounded_kneebend);
       if (marker != 0) o[i] = (uint8_t)marker;
       continue;
     }
     if (cur == (uint16_t)MSL_ACT_ATTACK_AIR_B && g[i] == 0u && hl[i] == 0u && hs[i] == 0u) {
       const int stream_steps = msl_py_f26_prior_same_frame_stream_steps(
           aa, ara, ag, ahl, ahs, alhb, arlhb, source_port, seed, width, i, num_players, victim_port,
-          roll_prob);
-      const int marker = msl_py_f26_current_pre_action_marker(aa, ara, ag, ahl, ahs, seed, width, i,
-                                                              victim_port, stream_steps, roll_prob);
+          roll_prob, allow_grounded_kneebend);
+      const int marker =
+          msl_py_f26_current_pre_action_marker(aa, ara, ag, ahl, ahs, seed, width, i, victim_port,
+                                               stream_steps, roll_prob, allow_grounded_kneebend);
       if (marker != 0) o[i] = (uint8_t)marker;
       continue;
     }

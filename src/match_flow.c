@@ -109,6 +109,20 @@ static inline void enter_fall(MslBatch* batch, size_t idx) {
   // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
 }
 
+static inline void match_flow_zero_common_velocities(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  // ftCommon_8007E2FC clears the common velocity bundle. Match-flow callers use it at discrete
+  // phase boundaries, so model only the lanes represented in the runtime state.
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007E2FC
+  batch->state.speed_air_x_self[idx] = 0.0f;
+  batch->state.speed_ground_x_self[idx] = 0.0f;
+  batch->state.speed_y_self[idx] = 0.0f;
+  batch->state.speed_x_attack[idx] = 0.0f;
+  batch->state.speed_y_attack[idx] = 0.0f;
+}
+
 static inline float entry_x20(const MslBatch* batch, size_t idx) {
   if (batch == NULL) {
     return 0.0f;
@@ -857,6 +871,13 @@ void match_flow_update_pre_anim(MslBatch* batch) {
           // refs/melee/build/GALE01/asm/melee/ft/ft_0D31.s::ftCo_DeadUpStar_Anim
           const int phase2 = (int)c->dead_up_star_phase2_frames;
           if (phase2 > 0 && (int)prev_t == phase2 + 1) {
+            // DeadUpStar phase 1 -> 2 transition:
+            // ftCo_DeadUpStar_Anim calls ftCommon_8007E2FC before the stock-loss/dead-flow side
+            // effects, freezing the visible top-blast pose instead of carrying the phase-1
+            // vertical velocity for one more post-frame.
+            // refs/melee/src/melee/ft/ft_0D31.c::ftCo_DeadUpStar_Anim
+            // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007E2FC
+            match_flow_zero_common_velocities(batch, idx);
             if (batch->state.stocks[idx] > 0) {
               batch->state.stocks[idx] = (uint8_t)(batch->state.stocks[idx] - 1);
             }

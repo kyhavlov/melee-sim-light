@@ -247,21 +247,33 @@ typedef struct MslSeed {
   //   0=right, 1=left. Runtime converts it to world collision coordinates before floor checks.
   // - valid=0: use extracted/default startup platform heights.
   // Velocity is the current per-frame platform-height delta when recoverable from prefix events or
-  // grounded platform contact. It advances the hidden grIzumi current-height state during rollout;
-  // free-running phase/timer/RNG target selection remains out of this seed field.
+  // grounded platform contact. It advances the hidden grIzumi current-height state during rollout.
+  // Hidden-return timer reconstructs only the already-sampled phase-4 wait while the platform is
+  // parked at the generated hidden target; other free-running phase/RNG target selection remains
+  // owned by runtime.
+  // Deferred velocity is consumed only after the reseeded frame. Same-step platform contacts expose
+  // the current collision height for the landing frame before the next grIzumi velocity becomes
+  // source-visible through subsequent contact/event rows.
   // refs/melee/src/melee/gr/grizumi.c::{grIzumi_801CC358,grIzumi_801CCBDC}
   // refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
   float stage_fod_platform_height_f32[2];
   uint8_t stage_fod_platform_height_valid_u8[2];
   float stage_fod_platform_velocity_f32[2];
   uint8_t stage_fod_platform_velocity_valid_u8[2];
+  float stage_fod_platform_deferred_velocity_f32[2];
+  uint8_t stage_fod_platform_deferred_velocity_valid_u8[2];
+  // Hidden-return countdown for replay rollout seeds that start while a FoD side platform is at
+  // grIzumi's generated hidden target. This is current hidden scheduler state, not a fresh
+  // collision-height source bit: runtime installs it only when the seed height is the hidden target.
+  // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+  uint16_t stage_fod_platform_hidden_return_timer_u16[2];
+  uint8_t stage_fod_platform_hidden_return_valid_u8[2];
   // Prefix/source class for current FoD platform heights:
   // - bit 0: direct Slippi `fod_platform` current grIzumi event this frame.
   // - bit 1: current grounded contact reconstructed the platform height from mpLib line geometry.
   // - bit 2: same-step hidden contact reconstruction for the upcoming collision callback.
   //
-  // This field intentionally consumes the former two padding bytes, so dataset record size is
-  // unchanged while cache/signature semantics still invalidate stale `.msl` files.
+  // Cache/signature semantics must invalidate stale `.msl` files when this seed-surface changes.
   // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
   // refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
   uint8_t stage_fod_platform_height_source_u8[2];

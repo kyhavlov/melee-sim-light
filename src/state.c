@@ -38,6 +38,9 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->stage_fod_platform_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * b2);
   state->stage_fod_platform_velocity = (float*)alloc_aligned_64(sizeof(float) * b2);
   state->stage_fod_platform_velocity_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * b2);
+  state->stage_fod_platform_deferred_velocity = (float*)alloc_aligned_64(sizeof(float) * b2);
+  state->stage_fod_platform_deferred_velocity_valid =
+      (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * b2);
   state->stage_fod_platform_height_source = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * b2);
   state->stage_fod_platform_scheduler_phase = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * b2);
   state->stage_fod_platform_scheduler_timer = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * b2);
@@ -231,6 +234,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->guard_x10_frame_start = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->guard_reflect_entry_dash_terminal_scalar =
       (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->guard_reflect_entered_this_frame = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->guard_seed_shield_desc_active = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->state_flags_2218_frame_start = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->guard_jump_oos_entered_this_frame = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
@@ -507,6 +511,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   if (!state->frame_id || !state->frame_pre_random_seed || !state->stage_id ||
       !state->stage_fod_platform_height || !state->stage_fod_platform_valid ||
       !state->stage_fod_platform_velocity || !state->stage_fod_platform_velocity_valid ||
+      !state->stage_fod_platform_deferred_velocity ||
+      !state->stage_fod_platform_deferred_velocity_valid ||
       !state->stage_fod_platform_height_source || !state->stage_fod_platform_scheduler_phase ||
       !state->stage_fod_platform_scheduler_timer || !state->stage_fod_platform_scheduler_target ||
       !state->stage_fod_platform_scheduler_valid || !state->stage_yoshi_shyguy_timer ||
@@ -588,30 +594,31 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->guard_entry_via_wait_callback || !state->guard_entry_via_dash_91ad8 ||
       !state->guard_x10_frame_start || !state->guard_seed_shield_desc_active ||
       !state->state_flags_2218_frame_start || !state->guard_jump_oos_entered_this_frame ||
-      !state->shine_jump_iasa_entered_this_frame || !state->guard_reflect_timer_x14 ||
+      !state->shine_jump_iasa_entered_this_frame ||
+      !state->guard_reflect_entry_dash_terminal_scalar ||
+      !state->guard_reflect_entered_this_frame || !state->guard_reflect_timer_x14 ||
       !state->guard_reflect_timer_x18 || !state->guard_reflect_timer_x14_seed ||
       !state->guard_reflect_timer_x18_seed || !state->guard_reflect_origin_guardon ||
       !state->guard_special_enable_timer_x1c || !state->guard_release_latched_xc ||
       !state->guard_x10 || !state->lightshield_amount || !state->guard_setoff_hitlag_damage_min ||
       !state->guard_setoff_hitlag_exit_phase_u8 || !state->guard_setoff_post_hitlag_owner_u8 ||
-      !state->kneebend_jump_input || !state->guard_reflect_entry_dash_terminal_scalar ||
-      !state->kneebend_is_short_hop || !state->tilt_timer_x || !state->tilt_timer_y ||
-      !state->tilt_timer_y_frame_start || !state->fall_fast || !state->attackdash_x0 ||
-      !state->jab_x0 || !state->jab_rapid_count || !state->attack100_x0 || !state->attack100_x4 ||
-      !state->run_x0 || !state->runbrake_cmd0 || !state->dash_x4 || !state->shine_release_lag ||
-      !state->shine_is_release || !state->ecb_lock_timer || !state->ledge_side ||
-      !state->stage_ledge_occupant_left || !state->stage_ledge_occupant_right ||
-      !state->ledge_cooldown || !state->ledge_drop_floor_skip_segment_id ||
-      !state->cliff_ledge_floor_segment_id || !state->cliff_ledge_floor_segment_seeded ||
-      !state->fallspecial_xc || !state->fallspecial_landing_lag ||
-      !state->landing_fallspecial_allow_interrupt || !state->turn_has_turned ||
-      !state->turn_frames_to_turn || !state->walk_use_raw_input_once || !state->turn_x8 ||
-      !state->lr_press_timer || !state->x672_input_timer || !state->x672_input_timer_frame_start ||
-      !state->x673 || !state->x674 || !state->x675 || !state->x676_x || !state->x2228_b7 ||
-      !state->x677_y || !state->x678 || !state->x679_x || !state->x67A_y ||
-      !state->x679_x_frame_start || !state->x67A_y_frame_start || !state->x67B || !state->x67C ||
-      !state->x67D || !state->x67E || !state->x680 || !state->x681 || !state->x682 ||
-      !state->x683 || !state->x684 || !state->ucf_padbuf_index ||
+      !state->kneebend_jump_input || !state->kneebend_is_short_hop || !state->tilt_timer_x ||
+      !state->tilt_timer_y || !state->tilt_timer_y_frame_start || !state->fall_fast ||
+      !state->attackdash_x0 || !state->jab_x0 || !state->jab_rapid_count || !state->attack100_x0 ||
+      !state->attack100_x4 || !state->run_x0 || !state->runbrake_cmd0 || !state->dash_x4 ||
+      !state->shine_release_lag || !state->shine_is_release || !state->ecb_lock_timer ||
+      !state->ledge_side || !state->stage_ledge_occupant_left ||
+      !state->stage_ledge_occupant_right || !state->ledge_cooldown ||
+      !state->ledge_drop_floor_skip_segment_id || !state->cliff_ledge_floor_segment_id ||
+      !state->cliff_ledge_floor_segment_seeded || !state->fallspecial_xc ||
+      !state->fallspecial_landing_lag || !state->landing_fallspecial_allow_interrupt ||
+      !state->turn_has_turned || !state->turn_frames_to_turn || !state->walk_use_raw_input_once ||
+      !state->turn_x8 || !state->lr_press_timer || !state->x672_input_timer ||
+      !state->x672_input_timer_frame_start || !state->x673 || !state->x674 || !state->x675 ||
+      !state->x676_x || !state->x2228_b7 || !state->x677_y || !state->x678 || !state->x679_x ||
+      !state->x67A_y || !state->x679_x_frame_start || !state->x67A_y_frame_start || !state->x67B ||
+      !state->x67C || !state->x67D || !state->x67E || !state->x680 || !state->x681 ||
+      !state->x682 || !state->x683 || !state->x684 || !state->ucf_padbuf_index ||
       !state->ucf_padbuf_sdrop_up_frames || !state->ucf_padbuf_stick_x ||
       !state->ucf_padbuf_stick_y || !state->percent || !state->percent_temp ||
       !state->phantom_damage_pending_x1898 || !state->phantom_damage_timer_x189c ||
@@ -693,6 +700,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   memset(state->frame_id, 0, sizeof(int32_t) * b);
   memset(state->stage_fod_platform_scheduler_phase, 0, sizeof(uint8_t) * b2);
   memset(state->stage_fod_platform_height_source, 0, sizeof(uint8_t) * b2);
+  memset(state->stage_fod_platform_deferred_velocity, 0, sizeof(float) * b2);
+  memset(state->stage_fod_platform_deferred_velocity_valid, 0, sizeof(uint8_t) * b2);
   memset(state->stage_fod_platform_scheduler_timer, 0, sizeof(uint16_t) * b2);
   memset(state->stage_fod_platform_scheduler_target, 0, sizeof(float) * b2);
   memset(state->stage_fod_platform_scheduler_valid, 0, sizeof(uint8_t) * b2);
@@ -825,6 +834,8 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->stage_fod_platform_valid);
   alloc_free(state->stage_fod_platform_velocity);
   alloc_free(state->stage_fod_platform_velocity_valid);
+  alloc_free(state->stage_fod_platform_deferred_velocity);
+  alloc_free(state->stage_fod_platform_deferred_velocity_valid);
   alloc_free(state->stage_fod_platform_height_source);
   alloc_free(state->stage_fod_platform_scheduler_phase);
   alloc_free(state->stage_fod_platform_scheduler_timer);
@@ -1014,6 +1025,7 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->guard_entry_via_dash_91ad8);
   alloc_free(state->guard_x10_frame_start);
   alloc_free(state->guard_reflect_entry_dash_terminal_scalar);
+  alloc_free(state->guard_reflect_entered_this_frame);
   alloc_free(state->guard_seed_shield_desc_active);
   alloc_free(state->state_flags_2218_frame_start);
   alloc_free(state->guard_jump_oos_entered_this_frame);

@@ -27,6 +27,7 @@ ACT_ATTACK_AIR_LW = 0x0045
 ACT_SQUAT_WAIT = 0x0028
 ACT_LANDING = 0x002A
 ACT_LANDING_FALL_SPECIAL = 0x002B
+ACT_LANDING_AIR_N = 0x0046
 ACT_GUARD_ON = 0x00B2
 ACT_DAMAGE_FALL = 0x0026
 ACT_GUARD = 0x00B3
@@ -48,6 +49,7 @@ ACT_CLIFF_JUMP_SLOW2 = 0x0105
 ACT_CLIFF_WAIT = 0x00FD
 ACT_ATTACK_AIR_N = 0x0041
 ACT_ATTACK_AIR_B = 0x0043
+ACT_LANDING_AIR_B = 0x0048
 ACT_ATTACK_DASH = 0x0032
 ACT_ATTACK_S4_S = 0x003C
 ACT_ATTACK_HI4 = 0x003F
@@ -56,6 +58,7 @@ ACT_FX_SPECIAL_AIR_S_END = 0x0160
 ACT_FX_SPECIAL_HI_LANDING = 0x0165
 ACT_FX_SPECIAL_HI_FALL = 0x0166
 ACT_FX_SPECIAL_HI_BOUND = 0x0167
+ACT_FX_SPECIAL_LW_START = 0x0168
 
 SM_WAIT1_0 = 2
 SM_OTTOTTO = 210
@@ -87,6 +90,9 @@ BUTTON_Y = 0x0800
 BUTTON_R = 0x0020
 
 ACT_FX_SPECIAL_AIR_LW_START = 0x016D
+ACT_FX_SPECIAL_HI_HOLD = 0x0161
+ACT_FX_SPECIAL_HI_HOLD_AIR = 0x0162
+ACT_FX_SPECIAL_HI = 0x0163
 
 COLLIDE_LEFT_WALL_MASK = 0x0000003F
 COLLIDE_RIGHT_WALL_MASK = 0x00000FC0
@@ -1360,6 +1366,229 @@ def test_fod_match_start_rollout_reseed_enables_platform_scheduler() -> None:
     assert float(stage["fod_platform_height"][1]) != pytest.approx(20.0)
 
 
+def test_fod_mid_reseed_current_named_pose_resumes_scheduler_only_with_source() -> None:
+    # Mid-replay rollout reseeds normally do not reconstruct grIzumi's hidden phase/timer. A
+    # current source bit at a generated stationary pose proves the JObj/mpLib owner for that frame,
+    # so runtime may resume the grIzumi scheduler from that source pose. A valid sparse height with
+    # no source bit remains a stale replay carry and must not begin moving on its own.
+    #
+    # refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+    # refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    inp = _input_bytes()
+    stage_dtype = np.dtype(
+        [
+            ("fod_platform_height", ("<f4", (2,))),
+            ("fod_platform_height_valid", ("u1", (2,))),
+            ("fod_platform_height_source", ("u1", (2,))),
+        ],
+        align=False,
+    )
+
+    def run_seed(seed: np.ndarray, *, steps: int = 1400) -> np.void:
+        stage_out = np.zeros((1, int(sizes["stage_state"])), dtype=np.uint8)
+        handle = msl_binding.init(
+            batch_size=1, num_players=2, ucf_enabled=1, ucf_cardinals_1_0_enabled=1
+        )
+        try:
+            msl_binding.reseed_seed_rollout(handle, seed.view(np.uint8).reshape((1, seed_stride)))
+            for _ in range(steps):
+                msl_binding.step_input(handle, inp, inp)
+            msl_binding.debug_write_stage_state(handle, stage_out)
+            return stage_out.view(stage_dtype).reshape((1,))[0].copy()
+        finally:
+            msl_binding.destroy(handle)
+
+    sourced = _seed_base(2, ACT_WAIT, SM_WAIT1_0, 0.0, 0.0)
+    sourced["frame_id"][0] = np.int32(900)
+    sourced["stage_fod_platform_height_f32"][0] = np.array([28.0, 20.0], dtype=np.float32)
+    sourced["stage_fod_platform_height_valid_u8"][0] = np.array([1, 1], dtype=np.uint8)
+    sourced["stage_fod_platform_velocity_valid_u8"][0] = np.array([0, 0], dtype=np.uint8)
+    sourced["stage_fod_platform_height_source_u8"][0] = np.array([4, 0], dtype=np.uint8)
+
+    stale = sourced.copy()
+    stale["stage_fod_platform_height_source_u8"][0] = np.array([0, 0], dtype=np.uint8)
+
+    sourced_stage = run_seed(sourced)
+    stale_stage = run_seed(stale)
+
+    assert int(sourced_stage["fod_platform_height_valid"][0]) == 1
+    assert float(sourced_stage["fod_platform_height"][0]) < 27.0
+    assert int(sourced_stage["fod_platform_height_source"][0]) == 0
+    assert int(stale_stage["fod_platform_height_valid"][0]) == 1
+    assert float(stale_stage["fod_platform_height"][0]) == pytest.approx(28.0)
+    assert int(stale_stage["fod_platform_height_source"][0]) == 0
+
+
+@pytest.mark.integration
+def test_fod_grizumi_min_visible_stop_wait_boundary_matches_second_hidden_descent_replay_real() -> None:
+    # MGS's left FoD platform covers the grIzumi lower-visible-stop boundary from match-start
+    # rollout: the first visible descent must still start at rec720, and after reaching min-visible
+    # height the next wait phase must choose the rec1728 HSD_Randf sample, not the previous frame's
+    # sample, before hidden descent appears at rec1729.
+    # refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+    slp_path = (
+        Path(__file__).resolve().parents[1]
+        / "replays/validation/fountain_of_dreams_recent/MilkyGracefulStingray.slpz"
+    )
+    if not slp_path.exists():
+        pytest.skip(f"missing local replay: {slp_path}")
+
+    from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
+
+    import msl_binding
+
+    ds = build_dataset_from_slp(
+        slp_path=str(slp_path),
+        ports=[1, 2],
+    )
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    stage_stride = int(sizes["stage_state"])
+    stage_dtype = np.dtype(
+        [
+            ("fod_platform_height", ("<f4", (2,))),
+            ("fod_platform_height_valid", ("u1", (2,))),
+            ("fod_platform_height_source", ("u1", (2,))),
+        ],
+        align=False,
+    )
+    stage_out = np.zeros((1, stage_stride), dtype=np.uint8)
+
+    handle = msl_binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    try:
+        msl_binding.reseed_seed_rollout(
+            handle,
+            np.frombuffer(ds.samples[0]["seed_t"].tobytes(order="C"), dtype=np.uint8)
+            .copy()
+            .reshape(1, seed_stride),
+        )
+        observed: dict[int, float] = {}
+        for record in range(1730):
+            row = ds.samples[record]
+            msl_binding.step_input(
+                handle,
+                np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8)
+                .copy()
+                .reshape(1, input_stride),
+                np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8)
+                .copy()
+                .reshape(1, input_stride),
+            )
+            if record in (720, 1728, 1729):
+                msl_binding.debug_write_stage_state(handle, stage_out)
+                stage = stage_out.view(stage_dtype).reshape((1,))[0]
+                observed[record] = float(stage["fod_platform_height"][1])
+    finally:
+        msl_binding.destroy(handle)
+
+    assert observed[720] == pytest.approx(
+        float(ds.samples[720]["seed_t"]["stage_fod_platform_height_f32"][1]), abs=1e-6
+    )
+    assert observed[1728] == pytest.approx(15.0, abs=1e-6)
+    assert observed[1729] == pytest.approx(
+        float(ds.samples[1729]["seed_t"]["stage_fod_platform_height_f32"][1]), abs=1e-6
+    )
+
+
+@pytest.mark.integration
+def test_fod_platform_scheduler_rand_range_matches_grizumi_replay_real() -> None:
+    # EWT rec2523 lands AttackAirB on FoD's moving left platform only if the live grIzumi scheduler
+    # has reached the same platform height as vanilla. grIzumi calls rand_range(max,min), whose
+    # HSD_Randi(max-min) upper bound is exclusive; an inclusive wait span leaves the platform too
+    # low and the row stays airborne.
+    # refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+    # refs/melee/src/melee/gr/inlines.h::rand_range
+    # refs/melee/src/sysdolphin/baselib/random.c::HSD_Randi
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+        / "ElatedWearyTermite.msl"
+    )
+    if not path.exists():
+        pytest.skip(f"missing local dataset: {path}")
+
+    import msl_binding
+
+    ds = read_dataset(str(path))
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    stage_stride = int(sizes["stage_state"])
+    stage_dtype = np.dtype(
+        [
+            ("fod_platform_height", ("<f4", (2,))),
+            ("fod_platform_height_valid", ("u1", (2,))),
+            ("fod_platform_height_source", ("u1", (2,))),
+        ],
+        align=False,
+    )
+    out_buf = np.zeros((1, compare_stride), dtype=np.uint8)
+    stage_out = np.zeros((1, stage_stride), dtype=np.uint8)
+    p = 0
+    record = 2523
+
+    handle = msl_binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    try:
+        msl_binding.reseed_seed_rollout(
+            handle,
+            np.frombuffer(ds.samples[0]["seed_t"].tobytes(order="C"), dtype=np.uint8)
+            .copy()
+            .reshape(1, seed_stride),
+        )
+        for cur_record in range(0, record):
+            row = ds.samples[cur_record]
+            msl_binding.step_input(
+                handle,
+                np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8)
+                .copy()
+                .reshape(1, input_stride),
+                np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8)
+                .copy()
+                .reshape(1, input_stride),
+            )
+        msl_binding.debug_write_stage_state(handle, stage_out)
+        pre_stage = stage_out.view(stage_dtype).reshape((1,))[0].copy()
+
+        row = ds.samples[record]
+        msl_binding.step_input(
+            handle,
+            np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8)
+            .copy()
+            .reshape(1, input_stride),
+            np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8)
+            .copy()
+            .reshape(1, input_stride),
+        )
+        msl_binding.write_compare(handle, out_buf)
+    finally:
+        msl_binding.destroy(handle)
+
+    out = out_buf.view(COMPARE_DTYPE).reshape((1,))[0]
+    ref = ds.samples[record]["ref_t1"]
+    assert int(pre_stage["fod_platform_height_valid"][1]) == 1
+    assert float(pre_stage["fod_platform_height"][1]) == pytest.approx(25.0, abs=1e-5)
+    assert int(ds.samples[record]["seed_t"]["action_id"][p]) == ACT_ATTACK_AIR_B
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_LANDING_AIR_B
+    assert int(out["ground_id"][p]) == int(ref["ground_id"][p]) == 0
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+
+
 def test_fod_live_platform_stage_debug_reports_runtime_height_for_webplay() -> None:
     # Webplay/modelplay render FoD platforms from this debug stage-state path, so the visual
     # platform height must be the same grIzumi runtime owner value used by collision.
@@ -1395,9 +1624,9 @@ def test_fod_live_platform_stage_debug_reports_runtime_height_for_webplay() -> N
 @pytest.mark.integration
 def test_fod_sustained_landing_does_not_snap_to_live_scheduler_platform() -> None:
     # EWT rec838 is sustained Landing on the hard floor while FoD's live right-platform scheduler is
-    # valid and moving. grIzumi keeps the platform line current, but without a transient same-step
-    # contact bit or a fresh action-entry CollData handoff, Landing_Coll must preserve the carried
-    # hard-floor owner instead of snapping up to the moving platform.
+    # valid and moving. grIzumi keeps the platform line current, but Landing_Coll's fallback floor
+    # retry must still require an actual sweep/contact with that floor; this must not become generic
+    # "scheduler platform wins" behavior.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Coll
     # refs/melee/src/melee/ft/ft_081B.c::{ft_80084280,ft_800844EC}
     # refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
@@ -1882,6 +2111,39 @@ def test_fod_kneebend_follows_descending_height_platform_via_80083f88_coll() -> 
     assert float(out["pos_y"][0]) == pytest.approx(float(next_world_y) + 0.0001, abs=1e-5)
 
 
+def test_fod_landing_rider_inherits_height_platform_motion_delta() -> None:
+    # Landing_Coll uses ft_80084280 and keeps CollData.floor.index attached to the current floor.
+    # For FoD side platforms, that current floor is the grIzumi JObj-refreshed height-transform
+    # MapLine, so the grounded rider inherits velocity * MSLSTG01.height_coeff before projection.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80084280
+    # refs/melee/src/melee/gr/grizumi.c::{grIzumi_801CC358,grIzumi_801CCBDC}
+    height = np.float32(17.100000381469727)
+    velocity = np.float32(-0.1)
+    current_world_y = np.float32(1.125 + float(height) * 0.75)
+    next_world_y = np.float32(1.125 + float(np.float32(height + velocity)) * 0.75)
+
+    moving_seed = _seed_base(2, ACT_LANDING, SM_WAIT1_0, -35.0, float(current_world_y) + 0.0001)
+    moving_seed["stage_fod_platform_height_f32"][0, 1] = height
+    moving_seed["stage_fod_platform_height_valid_u8"][0, 1] = np.uint8(1)
+    moving_seed["stage_fod_platform_velocity_f32"][0, 1] = velocity
+    moving_seed["stage_fod_platform_velocity_valid_u8"][0, 1] = np.uint8(1)
+    moving_seed["on_ground"][0, 0] = np.uint8(1)
+    moving_seed["ground_id"][0, 0] = np.uint16(0)
+
+    static_seed = moving_seed.copy()
+    static_seed["stage_fod_platform_velocity_f32"][0, 1] = np.float32(0.0)
+    static_seed["stage_fod_platform_velocity_valid_u8"][0, 1] = np.uint8(1)
+
+    moving_out = _step_once(moving_seed)
+    static_out = _step_once(static_seed)
+
+    assert int(moving_out["on_ground"][0]) == 1
+    assert int(moving_out["ground_id"][0]) == 0
+    assert float(moving_out["pos_y"][0]) == pytest.approx(float(next_world_y) + 0.0001, abs=1e-5)
+    assert float(static_out["pos_y"][0]) == pytest.approx(float(current_world_y) + 0.0001, abs=1e-5)
+
+
 def test_kneebend_static_platform_does_not_gain_generic_downward_snap() -> None:
     # The 80083F88 admission above is specifically for generated moving height platforms. Static
     # platform rows keep the existing grounded anti-snap guard rather than using KneeBend as a
@@ -2110,19 +2372,23 @@ def test_fod_transformed_platform_edge_snap_uses_world_height_for_rooted_actions
         (ACT_DAMAGE_FLY_TOP, 180),
     ],
 )
-def test_fod_airborne_aerial_and_tumble_can_land_on_transformed_platform_with_down_input(
+def test_fod_source_owned_airborne_aerial_and_tumble_can_land_on_transformed_platform_with_down_input(
     action_id: int, submotion_id: int
 ) -> None:
-    # AttackAir_Coll and DamageFly_Coll do not pass ftCo_80096CC8, so held down cannot make active
-    # aerials or damage/tumble fall through FoD transformed platforms.
+    # AttackAir_Coll and DamageFly_Coll do not pass ftCo_80096CC8, so held down cannot reject a
+    # current source-owned FoD platform floor publication. Unsourced AttackAir pass-through rows are
+    # covered separately by the transformed-platform floor-skip owner.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
+    # refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor}
     height = np.float32(19.899999618530273)
     world_y = np.float32(1.125 + float(height) * 0.75)
     seed = _seed_base(2, action_id, submotion_id, -35.0, float(world_y) - 2.0)
     seed["ground_id"][0, 0] = np.uint16(0xFFFF)
     seed["stage_fod_platform_height_f32"][0, 1] = height
     seed["stage_fod_platform_height_valid_u8"][0, 1] = np.uint8(1)
+    seed["stage_fod_platform_height_source_u8"][0, 1] = np.uint8(4)
     if action_id == ACT_ATTACK_AIR_N:
         seed["action_frame"][0, 0] = np.int16(4)
         seed["anim_frame_f32"][0, 0] = np.float32(4.0)
@@ -2196,6 +2462,67 @@ def test_fod_escapeair_downward_airdodge_can_waveland_on_transformed_platform() 
 
     assert int(out["on_ground"][0]) == 1
     assert int(out["ground_id"][0]) == 0
+
+
+@pytest.mark.integration
+def test_fod_jumpaerial_escapeair_entry_can_waveland_on_static_center_platform_replay_real() -> None:
+    # EWT record 5925 enters EscapeAir from JumpAerialF during IASA, then the same
+    # EscapeAir_Coll callback lands on FoD's generated static-y center platform. Source
+    # `ft_80081D0C` writes CollData.last_pos from the frame-start JumpAerial root before
+    # `mpColl_800471F8`; the pre-entry ECB has also advanced through Fighter_8006A360 before IASA.
+    # Do not require a stale replay ecb_lock lane for this no-lock, same-frame platform waveland.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+    # refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_800471F8,mpColl_80044628_Floor}
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+        "ElatedWearyTermite.msl"
+    )
+    if not path.exists():
+        pytest.skip(f"missing local dataset: {path}")
+
+    ds = read_dataset(str(path))
+    record = 5925
+    p = 1
+    row = ds.samples[record]
+    assert int(row["seed_t"]["stage_id"]) == 2
+    assert int(row["seed_t"]["action_id"][p]) == ACT_JUMP_AERIAL_F
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_LANDING_FALL_SPECIAL
+    assert int(row["ref_t1"]["ground_id"][p]) == 2
+
+    out = _step_one_replay_row(ds, record)
+    ref = row["ref_t1"]
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=1e-6)
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-4)
+
+
+def test_fod_jumpaerial_escapeair_static_platform_sweep_requires_bottom_crossing() -> None:
+    # Negative boundary for the no-lock JumpAerial -> EscapeAir entry owner: the source
+    # `mpColl_80044628_Floor` floor hit still requires the callback-visible ECB bottom to cross the
+    # platform. A frame-start JumpAerial seed lane alone must not snap to FoD's static-y platform.
+    # refs/melee/src/melee/mp/mpcoll.c::mpColl_80044628_Floor
+    seed = _seed_base(2, ACT_ESCAPE_AIR, SM_ESCAPE_AIR, -6.0, 36.0)
+    seed["action_frame"][0, 0] = np.int16(1)
+    seed["anim_frame_f32"][0, 0] = np.float32(1.0)
+    seed["seed_prev_action_id"][0, 0] = np.uint16(ACT_JUMP_AERIAL_F)
+    seed["seed_prev_action_frame"][0, 0] = np.int16(10)
+    seed["speed_air_x_self"][0, 0] = np.float32(2.1)
+    seed["speed_y_self"][0, 0] = np.float32(-1.8)
+    seed["ground_id"][0, 0] = np.uint16(5)
+    seed["floor_sweep_prev_pos_valid_u8"][0, 0] = np.uint8(1)
+    seed["floor_sweep_prev_pos_x_f32"][0, 0] = np.float32(-8.0)
+    seed["floor_sweep_prev_pos_y_f32"][0, 0] = np.float32(30.0)
+
+    out = _step_once(seed)
+
+    assert int(out["action_id"][0]) == ACT_ESCAPE_AIR
+    assert int(out["on_ground"][0]) == 0
+    assert int(out["ground_id"][0]) == 5
 
 
 def test_fod_common_air_down_input_rejects_transformed_soft_platform_callback() -> None:
@@ -2490,6 +2817,57 @@ def test_pass_iasa_can_enter_aerial_shine() -> None:
 
 
 @pytest.mark.integration
+def test_fod_jump_to_aerial_shine_start_rejects_stale_platform_sweep_replay_real() -> None:
+    # EWT record 10580 enters aerial Shine from JumpF before Fighter_procMap. Source
+    # `ftFx_SpecialAirLwStart_Coll -> ft_80081D0C` rewrites CollData.last_pos from the current
+    # fighter root before `mpColl_800471F8`; the prior JumpF bottom sweep cannot by itself publish
+    # FoD's static center platform when the callback-current bottom is still below that platform.
+    #
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{
+    #   ftFx_SpecialAirLw_Enter,ftFx_SpecialAirLwStart_Coll}
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80081D0C
+    # refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_800471F8}
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+        "ElatedWearyTermite.msl"
+    )
+    if not path.exists():
+        pytest.skip(f"missing local dataset: {path}")
+
+    ds = read_dataset(str(path))
+    record = 10580
+    p = 1
+    row = ds.samples[record]
+    assert int(row["seed_t"]["stage_id"]) == 2
+    assert int(row["seed_t"]["action_id"][p]) == ACT_JUMP_F
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_FX_SPECIAL_AIR_LW_START
+    assert int(row["ref_t1"]["on_ground"][p]) == 0
+
+    out = _step_one_replay_row(ds, record)
+    ref = row["ref_t1"]
+
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+    assert float(out["speed_y_self"][p]) == pytest.approx(0.0, abs=1e-6)
+
+    # Boundary control: this is specifically the JumpF/B -> SpecialAirLwStart callback-lifetime
+    # owner. A non-Jump predecessor is not rejected by this guard.
+    seed = np.array([row["seed_t"]], dtype=SEED_DTYPE)
+    seed["seed_prev_action_id"][0, p] = np.uint16(ACT_FALL)
+    out2 = _step_once(
+        seed,
+        np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, -1),
+        np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, -1),
+    )
+
+    assert int(out2["action_id"][p]) == ACT_FX_SPECIAL_LW_START
+    assert int(out2["on_ground"][p]) == 1
+    assert int(out2["ground_id"][p]) == 2
+
+
+@pytest.mark.integration
 def test_guard_drop_through_replay_real_enters_pass_on_frozen_ps_platform() -> None:
     path = (
         Path(__file__).resolve().parents[1]
@@ -2659,6 +3037,129 @@ def test_fod_downbound_platform_rows_do_not_borrow_platform_carry_snap_replay_re
     assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 1
     assert int(out["ground_id"][p]) == int(ref["ground_id"][p]) == 0
     assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
+def test_fod_downbound_airborne_refreshes_source_trusted_height_platform_floor_replay_real() -> None:
+    # MGS record 1885 is airborne DownBoundD crossing the FoD left height platform. Vanilla's
+    # DownBound_Coll calls ft_80082708 -> mpColl_8004B108 and can refresh CollData.floor.index and
+    # cur_pos from the source-trusted height-platform line while still returning GA_Air to the
+    # callback.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80082708
+    # refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
+    # refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+    slp_path = (
+        Path(__file__).resolve().parents[1]
+        / "replays/validation/fountain_of_dreams_recent/MilkyGracefulStingray.slpz"
+    )
+    if not slp_path.exists():
+        pytest.skip(f"missing local replay: {slp_path}")
+
+    from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
+
+    ds = build_dataset_from_slp(
+        slp_path=str(slp_path),
+        ports=[1, 2],
+    )
+    out = _step_one_replay_row(ds, 1885)
+    row = ds.samples[1885]
+    ref = row["ref_t1"]
+    p = 1
+
+    assert int(row["seed_t"]["stage_id"]) == 2
+    assert int(row["seed_t"]["action_id"][p]) == ACT_DOWN_BOUND_D
+    assert int(row["seed_t"]["stage_fod_platform_height_source_u8"][1]) != 0
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_DOWN_BOUND_D
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 0
+    assert int(out["ground_id"][p]) == int(ref["ground_id"][p]) == 0
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
+def test_fod_downbound_airborne_height_platform_refresh_requires_current_platform_owner_replay_real() -> None:
+    # The same DownBound_Coll refresh is allowed only when the current FoD height platform is
+    # source/current-owned for this seed/current frame. Clearing both source and velocity ownership
+    # leaves the airborne row on its stale floor index instead of inventing platform authority from
+    # proximity.
+    slp_path = (
+        Path(__file__).resolve().parents[1]
+        / "replays/validation/fountain_of_dreams_recent/MilkyGracefulStingray.slpz"
+    )
+    if not slp_path.exists():
+        pytest.skip(f"missing local replay: {slp_path}")
+
+    from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
+
+    ds = build_dataset_from_slp(
+        slp_path=str(slp_path),
+        ports=[1, 2],
+    )
+    row = ds.samples[1885]
+    p = 1
+    import msl_binding
+
+    input_stride = int(msl_binding.sizes()["input"])
+    seed = np.array(row["seed_t"], dtype=SEED_DTYPE).reshape((1,))
+    seed["stage_fod_platform_height_source_u8"][0, 1] = np.uint8(0)
+    seed["stage_fod_platform_velocity_valid_u8"][0, 1] = np.uint8(0)
+    prev_input = (
+        np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8)
+        .copy()
+        .reshape(1, input_stride)
+    )
+    input_t = (
+        np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
+    )
+
+    out = _step_once(seed, prev_input, input_t)
+
+    assert int(row["seed_t"]["action_id"][p]) == ACT_DOWN_BOUND_D
+    assert int(row["seed_t"]["ground_id"][p]) == 5
+    assert int(row["seed_t"]["stage_fod_platform_velocity_valid_u8"][1]) == 1
+    assert int(out["action_id"][p]) == ACT_DOWN_BOUND_D
+    assert int(out["on_ground"][p]) == 0
+    assert int(out["ground_id"][p]) == 5
+    assert float(out["pos_y"][p]) != pytest.approx(float(row["ref_t1"]["pos_y"][p]), abs=1e-4)
+
+
+@pytest.mark.integration
+def test_fod_downbound_airborne_follows_height_platform_until_hidden_replay_real() -> None:
+    # MGS records 1886-1888 cover the continuation after DownBoundD has refreshed CollData.floor to
+    # FoD's left side-platform. DownBound_Coll uses the allow-ground-to-air path, so the fighter
+    # remains airborne while the live grIzumi platform carries cur_pos downward; once grIzumi sends
+    # the platform to the generated hidden target, mpColl refreshes the floor back to the exposed
+    # hard floor.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80082708
+    # refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
+    # refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+    # data/stages/bin/griz.bin::MSLSTG01 platform_transforms(kind=height)
+    slp_path = (
+        Path(__file__).resolve().parents[1]
+        / "replays/validation/fountain_of_dreams_recent/MilkyGracefulStingray.slpz"
+    )
+    if not slp_path.exists():
+        pytest.skip(f"missing local replay: {slp_path}")
+
+    from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
+
+    ds = build_dataset_from_slp(
+        slp_path=str(slp_path),
+        ports=[1, 2],
+    )
+    p = 1
+    for record, expected_ground_id, pos_abs in ((1886, 0, 2.0e-5), (1887, 0, 2.0e-5), (1888, 5, 1.0e-6)):
+        out = _step_one_replay_row(ds, record)
+        row = ds.samples[record]
+        ref = row["ref_t1"]
+
+        assert int(row["seed_t"]["stage_id"]) == 2
+        assert int(row["seed_t"]["action_id"][p]) == ACT_DOWN_BOUND_D
+        assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_DOWN_BOUND_D
+        assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 0
+        assert int(out["ground_id"][p]) == int(ref["ground_id"][p]) == expected_ground_id
+        assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=pos_abs)
 
 
 @pytest.mark.integration
@@ -2988,6 +3489,404 @@ def test_fod_same_step_landing_contact_derives_hidden_platform_height_replay_rea
     assert int(right_prev_out["on_ground"][p]) == int(right_prev_row["ref_t1"]["on_ground"][p]) == 0
 
 
+def test_fod_attackair_height_platform_no_current_source_stays_pending_replay_real() -> None:
+    # PTE record 3256 is AttackAirB above FoD's right transformed side platform. The sparse replay
+    # seed carries a valid named platform height, but no direct/ground/same-step contact bit and no
+    # live scheduler/velocity owner for the current callback. Vanilla keeps the first-hitbox-phase
+    # AttackAir row airborne and publishes LandingAirB on the following callback.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor}
+    # refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+    # data/stages/bin/griz.bin::MSLSTG01 platform_transforms(kind=height)
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.msl"
+    )
+    if not path.exists():
+        pytest.skip(f"missing local dataset: {path}")
+
+    ds = read_dataset(str(path))
+    record = 3256
+    p = 0
+    row = ds.samples[record]
+    assert int(row["seed_t"]["stage_id"]) == 2
+    assert int(row["seed_t"]["action_id"][p]) == ACT_ATTACK_AIR_B
+    assert int(row["seed_t"]["action_frame"][p]) == 6
+    assert int(row["seed_t"]["stage_fod_platform_height_source_u8"][0]) == 0
+    assert int(row["seed_t"]["stage_fod_platform_velocity_valid_u8"][0]) == 1
+    assert float(row["seed_t"]["stage_fod_platform_velocity_f32"][0]) == pytest.approx(0.0)
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_ATTACK_AIR_B
+    assert int(row["ref_t1"]["on_ground"][p]) == 0
+
+    out = _step_one_replay_row(ds, record)
+
+    assert int(out["action_id"][p]) == int(row["ref_t1"]["action_id"][p])
+    assert int(out["on_ground"][p]) == 0
+    assert int(out["ground_id"][p]) == int(row["ref_t1"]["ground_id"][p])
+    assert float(out["pos_y"][p]) == pytest.approx(float(row["ref_t1"]["pos_y"][p]), abs=1e-6)
+
+    seed = np.array([row["seed_t"]], dtype=row["seed_t"].dtype)
+    seed["stage_fod_platform_height_source_u8"][0, 0] = np.uint8(4)
+    prev_input = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).copy()
+    input_t = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy()
+    sourced_out = _step_once(
+        seed,
+        prev_input.reshape(1, INPUT_DTYPE.itemsize),
+        input_t.reshape(1, INPUT_DTYPE.itemsize),
+    )
+
+    assert int(sourced_out["action_id"][p]) == ACT_LANDING_AIR_B
+    assert int(sourced_out["on_ground"][p]) == 1
+    assert int(sourced_out["ground_id"][p]) == 1
+
+
+def test_fod_attackair_same_step_height_platform_source_lands_despite_down_input_replay_real() -> None:
+    # EWT record 9157 is AttackAirB crossing FoD's left height platform with down held. The seed
+    # carries MSLSTG01 same-step contact provenance for that platform, so AttackAir_Coll's
+    # ft_80082C74 -> mpColl_800471F8 floor result is current source ownership, not the
+    # ftCo_80096CC8 soft-platform pass callback. Clearing that source bit keeps the down-held
+    # in-span contact airborne, which locks the boundary away from a stage-wide AttackAir fallback.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor}
+    # refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+    # data/stages/bin/griz.bin::MSLSTG01 platform_transforms(kind=height)
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+        "ElatedWearyTermite.msl"
+    )
+    if not path.exists():
+        pytest.skip(f"missing local dataset: {path}")
+
+    ds = read_dataset(str(path))
+    record = 9157
+    p = 0
+    row = ds.samples[record]
+
+    assert int(row["seed_t"]["stage_id"]) == 2
+    assert int(row["seed_t"]["action_id"][p]) == ACT_ATTACK_AIR_B
+    assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_ATTACK_AIR_B
+    assert int(row["seed_t"]["stage_fod_platform_height_source_u8"][1]) == 4
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_LANDING
+    assert int(row["ref_t1"]["on_ground"][p]) == 1
+    assert int(row["ref_t1"]["ground_id"][p]) == 0
+
+    out = _step_one_replay_row(ds, record)
+
+    assert int(out["action_id"][p]) == ACT_LANDING
+    assert int(out["on_ground"][p]) == 1
+    assert int(out["ground_id"][p]) == 0
+    assert float(out["pos_y"][p]) == pytest.approx(float(row["ref_t1"]["pos_y"][p]), abs=1e-5)
+
+    seed = np.array([row["seed_t"]], dtype=row["seed_t"].dtype)
+    seed["stage_fod_platform_height_source_u8"][0, 1] = np.uint8(0)
+    prev_input = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).copy()
+    input_t = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy()
+    unsourced_out = _step_once(
+        seed,
+        prev_input.reshape(1, INPUT_DTYPE.itemsize),
+        input_t.reshape(1, INPUT_DTYPE.itemsize),
+    )
+
+    assert int(unsourced_out["action_id"][p]) == ACT_ATTACK_AIR_B
+    assert int(unsourced_out["on_ground"][p]) == 0
+
+
+def test_fod_landing_live_height_platform_reprojects_after_hard_floor_entry_replay_real() -> None:
+    # EWT rec1537 enters basic Landing on FoD's flat floor while the left height platform is rising
+    # underneath the callback span. On the following Landing_Coll frame, live grIzumi velocity owns
+    # the transformed platform line and mpColl_8004B4B0 can replace the carried hard floor through
+    # its floor-release/retry path. Clearing both same-step source and live velocity keeps the
+    # carried hard floor, so this is not a generic Landing platform snap.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_80084280,ft_800844EC}
+    # refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B4B0
+    # refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+    # refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+        "ElatedWearyTermite.msl"
+    )
+    if not path.exists():
+        pytest.skip(f"missing local dataset: {path}")
+
+    import msl_binding
+
+    ds = read_dataset(str(path))
+    p = 0
+    row1537 = ds.samples[1537]
+    row1538 = ds.samples[1538]
+    assert int(row1537["ref_t1"]["action_id"][p]) == ACT_LANDING
+    assert int(row1537["ref_t1"]["ground_id"][p]) == 5
+    assert int(row1538["ref_t1"]["action_id"][p]) == ACT_LANDING
+    assert int(row1538["ref_t1"]["ground_id"][p]) == 0
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    out = np.zeros((1, compare_stride), dtype=np.uint8)
+    handle = msl_binding.init(batch_size=1, num_players=2, ucf_enabled=1, ucf_cardinals_1_0_enabled=1)
+    try:
+        seed = np.array([row1537["seed_t"]], dtype=row1537["seed_t"].dtype)
+        msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, seed_stride)))
+        for row in (row1537, row1538):
+            prev_input = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).copy()
+            input_t = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy()
+            msl_binding.step_input(
+                handle,
+                prev_input.reshape(1, input_stride),
+                input_t.reshape(1, input_stride),
+            )
+        msl_binding.write_compare(handle, out)
+        rollout_out = out.view(COMPARE_DTYPE).reshape((1,))[0]
+    finally:
+        msl_binding.destroy(handle)
+
+    assert int(rollout_out["action_id"][p]) == ACT_LANDING
+    assert int(rollout_out["on_ground"][p]) == 1
+    assert int(rollout_out["ground_id"][p]) == 0
+    assert float(rollout_out["pos_y"][p]) == pytest.approx(
+        float(row1538["ref_t1"]["pos_y"][p]), abs=1e-6
+    )
+
+    no_source_seed = np.array([row1538["seed_t"]], dtype=row1538["seed_t"].dtype)
+    no_source_seed["stage_fod_platform_height_source_u8"][0, 1] = np.uint8(0)
+    no_source_seed["stage_fod_platform_velocity_valid_u8"][0, 1] = np.uint8(0)
+    prev_input = np.frombuffer(row1538["prev_input_t"].tobytes(order="C"), dtype=np.uint8).copy()
+    input_t = np.frombuffer(row1538["input_t"].tobytes(order="C"), dtype=np.uint8).copy()
+    no_source_out = _step_once(
+        no_source_seed,
+        prev_input.reshape(1, INPUT_DTYPE.itemsize),
+        input_t.reshape(1, INPUT_DTYPE.itemsize),
+    )
+    assert int(no_source_out["action_id"][p]) == ACT_LANDING
+    assert int(no_source_out["ground_id"][p]) == 5
+    assert float(no_source_out["pos_y"][p]) == pytest.approx(
+        float(row1538["seed_t"]["pos_y"][p]), abs=1e-6
+    )
+
+
+def test_fod_attackair_hard_floor_slope_lands_despite_unrelated_platform_skip_replay_real() -> None:
+    # EWT record 9739 is AttackAirN descending from FoD's main floor onto the connected right
+    # hard-floor slope while CollData.floor_skip still names the center soft platform. Source
+    # AttackAir_Coll goes through ft_80082C74 -> mpColl_800471F8: floor_skip can reject that
+    # selected soft platform, but it must not suppress a hard-floor mpCheckFloor hit or the
+    # following mpLib_8004DD90_Floor seam traversal.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor,
+    #   mpColl_80044838_Floor}
+    # refs/melee/src/melee/mp/mplib.c::{mpCheckFloor,mpLib_8004DD90_Floor}
+    # data/stages/bin/griz.bin::MSLSTG01 floor segment links/fighter_solid flags
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+        "ElatedWearyTermite.msl"
+    )
+    if not path.exists():
+        pytest.skip(f"missing local dataset: {path}")
+
+    ds = read_dataset(str(path))
+    record = 9739
+    p = 0
+    row = ds.samples[record]
+
+    assert int(row["seed_t"]["stage_id"]) == 2
+    assert int(row["seed_t"]["action_id"][p]) == ACT_ATTACK_AIR_N
+    assert int(row["seed_t"]["floor_skip_segment_valid_u8"][p]) == 1
+    assert int(row["seed_t"]["floor_skip_segment_id_u16"][p]) == 1
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_LANDING_AIR_N
+    assert int(row["ref_t1"]["ground_id"][p]) == 6
+
+    out = _step_one_replay_row(ds, record)
+
+    assert int(out["action_id"][p]) == ACT_LANDING_AIR_N
+    assert int(out["on_ground"][p]) == 1
+    assert int(out["ground_id"][p]) == 6
+    assert float(out["pos_y"][p]) == pytest.approx(float(row["ref_t1"]["pos_y"][p]), abs=1e-6)
+
+    seed = np.array([row["seed_t"]], dtype=row["seed_t"].dtype)
+    seed["pos_x"][0, p] = np.float32(40.0)
+    seed["floor_sweep_prev_pos_x_f32"][0, p] = np.float32(40.0)
+    prev_input = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).copy()
+    input_t = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy()
+    no_current_span_out = _step_once(
+        seed,
+        prev_input.reshape(1, INPUT_DTYPE.itemsize),
+        input_t.reshape(1, INPUT_DTYPE.itemsize),
+    )
+
+    assert int(no_current_span_out["action_id"][p]) == ACT_ATTACK_AIR_N
+    assert int(no_current_span_out["on_ground"][p]) == 0
+
+
+def test_fod_attackair_hard_slope_root_projection_requires_bottom_sweep_replay_real() -> None:
+    # PTE record 1701 is the same FoD right hard-floor slope family as the EWT positive above, but
+    # one callback frame earlier: the AttackAir root crosses below the generated slope while the
+    # live ECB bottom is still above it. Source `mpColl_800471F8` reaches the final
+    # `mpColl_80044838_Floor` snap only after `mpColl_80044628_Floor` accepts an ECB-bottom floor
+    # sweep, so this first root-only projection must remain airborne. Nudging the same row downward
+    # proves the guard is the bottom-sweep precondition, not a record/action-frame veto.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor,
+    #   mpColl_80044838_Floor}
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.msl"
+    )
+    if not path.exists():
+        pytest.skip(f"missing local dataset: {path}")
+
+    ds = read_dataset(str(path))
+    record = 1701
+    p = 0
+    row = ds.samples[record]
+
+    assert int(row["seed_t"]["stage_id"]) == 2
+    assert int(row["seed_t"]["action_id"][p]) == ACT_ATTACK_AIR_N
+    assert int(row["seed_t"]["floor_skip_segment_valid_u8"][p]) == 1
+    assert int(row["seed_t"]["floor_skip_segment_id_u16"][p]) == 1
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_ATTACK_AIR_N
+    assert int(row["ref_t1"]["on_ground"][p]) == 0
+
+    out = _step_one_replay_row(ds, record)
+
+    assert int(out["action_id"][p]) == ACT_ATTACK_AIR_N
+    assert int(out["on_ground"][p]) == 0
+    assert int(out["ground_id"][p]) == 5
+    assert float(out["pos_y"][p]) == pytest.approx(float(row["ref_t1"]["pos_y"][p]), abs=1e-6)
+
+    seed = np.array([row["seed_t"]], dtype=row["seed_t"].dtype)
+    seed["pos_y"][0, p] = np.float32(float(seed["pos_y"][0, p]) - 0.05)
+    seed["floor_sweep_prev_pos_y_f32"][0, p] = np.float32(
+        float(seed["floor_sweep_prev_pos_y_f32"][0, p]) - 0.05
+    )
+    prev_input = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).copy()
+    input_t = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy()
+    bottom_owned_out = _step_once(
+        seed,
+        prev_input.reshape(1, INPUT_DTYPE.itemsize),
+        input_t.reshape(1, INPUT_DTYPE.itemsize),
+    )
+
+    assert int(bottom_owned_out["action_id"][p]) == ACT_LANDING_AIR_N
+    assert int(bottom_owned_out["on_ground"][p]) == 1
+    assert int(bottom_owned_out["ground_id"][p]) == 6
+
+
+@pytest.mark.integration
+def test_fod_specialhi_holdair_platform_contact_enters_ground_hold_replay_real() -> None:
+    # PTE record 4522 is Fox/Falco SpecialHiHoldAir crossing FoD's transformed left platform during
+    # the charge/hold callback. Vanilla's collision callback takes the
+    # ftFx_SpecialHiHoldAir_Coll -> ftFx_SpecialHiHoldAir_AirToGround path, not the later launch or
+    # fall-special owners, so the visible state becomes grounded SpecialHiHold while preserving the
+    # current animation frame.
+    #
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+    #   ftFx_SpecialHiHoldAir_Coll,ftFx_SpecialHiHoldAir_AirToGround}
+    # refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D7FC,ftCommon_8007D6A4}
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.msl"
+    )
+    if not path.exists():
+        pytest.skip(f"missing local dataset: {path}")
+
+    ds = read_dataset(str(path))
+    record = 4522
+    p = 0
+    row = ds.samples[record]
+
+    assert int(row["seed_t"]["stage_id"]) == 2
+    assert int(row["seed_t"]["action_id"][p]) == ACT_FX_SPECIAL_HI_HOLD_AIR
+    assert int(row["seed_t"]["on_ground"][p]) == 0
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_FX_SPECIAL_HI_HOLD
+    assert int(row["ref_t1"]["on_ground"][p]) == 1
+    assert int(row["ref_t1"]["ground_id"][p]) == 0
+
+    out = _step_one_replay_row(ds, record)
+    ref = row["ref_t1"]
+
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=1e-6)
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-4)
+    assert float(out["speed_ground_x_self"][p]) == pytest.approx(
+        float(ref["speed_ground_x_self"][p]), abs=1e-6
+    )
+
+    prev_row = ds.samples[record - 1]
+    prev_out = _step_one_replay_row(ds, record - 1)
+    assert int(prev_row["seed_t"]["action_id"][p]) == ACT_FX_SPECIAL_HI_HOLD_AIR
+    assert int(prev_row["ref_t1"]["action_id"][p]) == ACT_FX_SPECIAL_HI_HOLD_AIR
+    assert int(prev_out["action_id"][p]) == ACT_FX_SPECIAL_HI_HOLD_AIR
+    assert int(prev_out["on_ground"][p]) == int(prev_row["ref_t1"]["on_ground"][p]) == 0
+
+
+@pytest.mark.integration
+def test_fod_specialhi_ground_hold_air_launch_carries_colldata_floor_replay_real() -> None:
+    # PTE record 4535 is grounded SpecialHiHold on FoD's transformed left platform. The anim-end
+    # path takes the aerial launch fallback because the held direction is a platform pass-through:
+    # ftFx_SpecialHiHold_Anim -> ftCommon_8007D60C -> ftFx_SpecialAirHi_Enter. Source switches
+    # ground_or_air to Air and installs the ECB lock, but it does not clear CollData.floor.index, so
+    # the same frame remains airborne SpecialAirHi with the platform floor id still visible.
+    #
+    # refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D60C
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+    #   ftFx_SpecialHiHold_Anim,ftFx_SpecialAirHi_Enter}
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "datasets/fountain_of_dreams_recent/replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.msl"
+    )
+    if not path.exists():
+        pytest.skip(f"missing local dataset: {path}")
+
+    ds = read_dataset(str(path))
+    record = 4535
+    p = 0
+    row = ds.samples[record]
+
+    assert int(row["seed_t"]["stage_id"]) == 2
+    assert int(row["seed_t"]["action_id"][p]) == ACT_FX_SPECIAL_HI_HOLD
+    assert int(row["seed_t"]["on_ground"][p]) == 1
+    assert int(row["seed_t"]["ground_id"][p]) == 0
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_FX_SPECIAL_AIR_HI
+    assert int(row["ref_t1"]["on_ground"][p]) == 0
+    assert int(row["ref_t1"]["ground_id"][p]) == 0
+
+    out = _step_one_replay_row(ds, record)
+    ref = row["ref_t1"]
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=1e-6)
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+
+    seed = np.array([row["seed_t"]], dtype=row["seed_t"].dtype)
+    seed["ground_id"][0, p] = np.uint16(0xFFFF)
+    seed["on_ground"][0, p] = np.uint8(1)
+    prev_input = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).copy()
+    input_t = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy()
+    no_floor_out = _step_once(
+        seed,
+        prev_input.reshape(1, INPUT_DTYPE.itemsize),
+        input_t.reshape(1, INPUT_DTYPE.itemsize),
+    )
+
+    assert int(no_floor_out["action_id"][p]) == ACT_FX_SPECIAL_HI
+    assert int(no_floor_out["on_ground"][p]) == 0
+    assert int(no_floor_out["ground_id"][p]) == 0xFFFF
+
+
 @pytest.mark.integration
 @pytest.mark.parametrize(
     ("record", "player", "action_id"),
@@ -3042,6 +3941,178 @@ def test_fod_soft_platform_airborne_regression_rows_stay_airborne(
     assert int(out["ground_id"][player]) == int(row["ref_t1"]["ground_id"][player])
     assert float(out["pos_x"][player]) == pytest.approx(float(row["ref_t1"]["pos_x"][player]), abs=1e-6)
     assert float(out["pos_y"][player]) == pytest.approx(float(row["ref_t1"]["pos_y"][player]), abs=2e-4)
+
+
+@pytest.mark.integration
+def test_fod_sustained_damagefly_reseed_uses_current_coll_root_replay_real(
+    tmp_path: Path,
+) -> None:
+    # PTE 7492 is sustained airborne DamageFlyTop over FoD's transformed center platform. Source
+    # `ft_80081DD4` starts DamageFly_Coll by copying the current fighter root into CollData.cur_pos
+    # before `mpColl_800473CC`, so the replay seed's callback-visible previous sweep point is the
+    # current visible root rather than the public replay row before the seed. Using that older row
+    # makes the floor sweep hit the soft platform one frame early and falsely publishes DownBound.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+    # refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_800473CC}
+    slp = (
+        Path(__file__).resolve().parents[1]
+        / "replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.slpz"
+    )
+    if not slp.exists():
+        pytest.skip(f"missing local replay: {slp}")
+
+    from tools.slippi.make_dataset_from_slp import _main_impl
+
+    out_path = tmp_path / "ParallelTemptingElk.msl"
+    _main_impl(
+        Namespace(
+            slp=str(slp),
+            out=str(out_path),
+            ports=None,
+            ucf_enabled=True,
+            ucf_cardinals_1_0_enabled=True,
+        )
+    )
+    ds = read_dataset(str(out_path))
+    record = 7492
+    p = 1
+    row = ds.samples[record]
+    seed = row["seed_t"]
+
+    assert int(seed["stage_id"]) == 2
+    assert int(seed["action_id"][p]) == ACT_DAMAGE_FLY_TOP
+    assert int(seed["on_ground"][p]) == 0
+    assert int(seed["hitlag"][p]) == 0
+    assert int(seed["hitstun"][p]) > 0
+    assert int(seed["floor_sweep_prev_pos_valid_u8"][p]) == 1
+    assert float(seed["floor_sweep_prev_pos_x_f32"][p]) == pytest.approx(
+        float(seed["pos_x"][p]), abs=1e-6
+    )
+    assert float(seed["floor_sweep_prev_pos_y_f32"][p]) == pytest.approx(
+        float(seed["pos_y"][p]), abs=1e-6
+    )
+
+    out = _step_one_replay_row(ds, record)
+    ref = row["ref_t1"]
+
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_DAMAGE_FLY_TOP
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 0
+    assert int(out["ground_id"][p]) == int(ref["ground_id"][p]) == 5
+    assert int(out["jumps_left"][p]) == int(ref["jumps_left"][p])
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
+def test_nonfod_damagefly_reseed_keeps_previous_row_hard_floor_sweep_replay_real(
+    tmp_path: Path,
+) -> None:
+    # AGN 5208 is the non-FoD hard-floor boundary for the same seed lane. Here the public previous
+    # row sweep is source-owned: the DamageFlyHi victim is already below FD floor height and vanilla
+    # resolves the hard-floor contact into Passive. The FoD transformed-platform current-root
+    # reconstruction must not broaden into ordinary hard-floor DamageFly collision.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800473CC,mpColl_80044628_Floor}
+    slp = (
+        Path(__file__).resolve().parents[1]
+        / "replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.slpz"
+    )
+    if not slp.exists():
+        pytest.skip(f"missing local replay: {slp}")
+
+    from tools.slippi.make_dataset_from_slp import _main_impl
+
+    out_path = tmp_path / "AttachedGoodNaturedGuanaco.msl"
+    _main_impl(
+        Namespace(
+            slp=str(slp),
+            out=str(out_path),
+            ports=None,
+            ucf_enabled=True,
+            ucf_cardinals_1_0_enabled=True,
+        )
+    )
+    ds = read_dataset(str(out_path))
+    record = 5208
+    p = 0
+    row = ds.samples[record]
+    seed = row["seed_t"]
+
+    assert int(seed["stage_id"]) != 2
+    assert int(seed["action_id"][p]) == 0x0057  # DamageFlyHi
+    assert int(seed["on_ground"][p]) == 0
+    assert int(seed["hitlag"][p]) == 0
+    assert int(seed["hitstun"][p]) > 0
+    assert int(seed["floor_sweep_prev_pos_valid_u8"][p]) == 1
+    assert float(seed["floor_sweep_prev_pos_y_f32"][p]) != pytest.approx(float(seed["pos_y"][p]))
+
+    out = _step_one_replay_row(ds, record)
+    ref = row["ref_t1"]
+
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_PASSIVE
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 1
+    assert int(out["ground_id"][p]) == int(ref["ground_id"][p])
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
+def test_fod_hidden_height_platform_grounded_rider_remaps_to_main_floor_replay_real() -> None:
+    # PTE 10971 has FoD's right height platform at grIzumi's hidden target. The source collision
+    # line is no longer the carried platform floor for grounded riders; mpLib remaps them to the
+    # main floor under the root.
+    # refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+    # refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.msl"
+    )
+    if not path.exists():
+        pytest.skip(f"missing local dataset: {path}")
+
+    ds = read_dataset(str(path))
+    row = ds.samples[10971]
+    out = _step_one_replay_row(ds, 10971)
+    ref = row["ref_t1"]
+    seed = row["seed_t"]
+
+    assert int(seed["stage_id"]) == 2
+    assert int(seed["stage_fod_platform_height_source_u8"][0]) & 0x02
+    assert float(seed["stage_fod_platform_height_f32"][0]) == pytest.approx(-1.0, abs=1.0e-3)
+    for p in (0, 1):
+        assert int(seed["on_ground"][p]) == 1
+        assert int(seed["ground_id"][p]) == 1
+        assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 1
+        assert int(out["ground_id"][p]) == int(ref["ground_id"][p]) == 5
+        assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1.0e-6)
+
+
+@pytest.mark.integration
+def test_fod_visible_height_platform_grounded_rider_stays_on_platform_replay_real() -> None:
+    # One frame earlier, the same current-source platform is still visible above main floor. The
+    # hidden-target remap must not convert ordinary grounded platform carry into main-floor contact.
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.msl"
+    )
+    if not path.exists():
+        pytest.skip(f"missing local dataset: {path}")
+
+    ds = read_dataset(str(path))
+    row = ds.samples[10970]
+    out = _step_one_replay_row(ds, 10970)
+    ref = row["ref_t1"]
+    seed = row["seed_t"]
+
+    assert int(seed["stage_id"]) == 2
+    assert int(seed["stage_fod_platform_height_source_u8"][0]) & 0x02
+    assert float(seed["stage_fod_platform_height_f32"][0]) < 0.0
+    assert float(seed["stage_fod_platform_height_f32"][0]) != pytest.approx(-1.0, abs=1.0e-3)
+    for p in (0, 1):
+        assert int(seed["on_ground"][p]) == 1
+        assert int(seed["ground_id"][p]) == 1
+        assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 1
+        assert int(out["ground_id"][p]) == int(ref["ground_id"][p]) == 1
 
 
 @pytest.mark.integration
@@ -3136,6 +4207,62 @@ def test_fod_prefix_platform_velocity_stops_at_source_target_replay_real(tmp_pat
 
 
 @pytest.mark.integration
+def test_fod_same_step_platform_contact_defers_velocity_until_next_frame_pte(tmp_path: Path) -> None:
+    # PTE rec3257 lands on FoD's right height platform from a same-step reconstructed contact. The
+    # current landing frame must use that current collision height without pre-advancing grIzumi,
+    # then carry the next source-visible platform velocity into sustained LandingAirB/grounded
+    # callbacks. Without the deferred velocity seed, rollout strands the rider at the first landing
+    # height and later creates a false AttackAirN/AttackAirB overlap.
+    #
+    # refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+    # refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
+    # data/stages/bin/griz.bin::MSLSTG01 platform_transforms(kind=height)
+    slp = (
+        Path(__file__).resolve().parents[1]
+        / "replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.slpz"
+    )
+    if not slp.exists():
+        pytest.skip(f"missing local replay: {slp}")
+
+    from tools.slippi.make_dataset_from_slp import _main_impl
+
+    out_path = tmp_path / "ParallelTemptingElk.msl"
+    _main_impl(
+        Namespace(
+            slp=str(slp),
+            out=str(out_path),
+            ports=None,
+            ucf_enabled=True,
+            ucf_cardinals_1_0_enabled=True,
+        )
+    )
+    ds = read_dataset(str(out_path))
+    p = 0
+    row = ds.samples[3257]
+
+    assert int(row["seed_t"]["action_id"][p]) == ACT_ATTACK_AIR_B
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_LANDING_AIR_B
+    assert int(row["seed_t"]["stage_fod_platform_height_source_u8"][0]) & 0x04
+    assert int(row["seed_t"]["stage_fod_platform_velocity_valid_u8"][0]) == 0
+    assert int(row["seed_t"]["stage_fod_platform_deferred_velocity_valid_u8"][0]) == 1
+    assert float(row["seed_t"]["stage_fod_platform_deferred_velocity_f32"][0]) == pytest.approx(
+        -0.1,
+        abs=1e-6,
+    )
+
+    direct = _step_one_replay_row(ds, 3257)
+    assert int(direct["action_id"][p]) == int(row["ref_t1"]["action_id"][p])
+    assert float(direct["pos_y"][p]) == pytest.approx(float(row["ref_t1"]["pos_y"][p]), abs=2e-4)
+
+    rollout = _rollout_replay_to_record(ds, 3257, 3352)
+    ref = ds.samples[3352]["ref_t1"]
+    assert int(rollout["action_id"][p]) == int(ref["action_id"][p]) == ACT_ATTACK_AIR_N
+    assert int(rollout["hitlag"][p]) == int(ref["hitlag"][p]) == 0
+    assert int(rollout["hitstun"][p]) == int(ref["hitstun"][p]) == 0
+    assert float(rollout["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=3e-4)
+
+
+@pytest.mark.integration
 def test_ps_attackair_platform_endpoint_uses_mpcoll_floor_edge_snap_replay_real() -> None:
     # STM record 2478 enters AttackAirLw and lands on Pokemon Stadium right-platform's left
     # endpoint. Source mpColl first accepts the floor sweep, then mpColl_80044838_Floor snaps the
@@ -3185,6 +4312,154 @@ def test_fd_damagefly_hard_floor_off_end_does_not_use_platform_endpoint_snap() -
     assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_DAMAGE_FLY_N
     assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 0
     assert int(out["ground_id"][p]) == int(ref["ground_id"][p]) == 1
+
+
+@pytest.mark.integration
+def test_fod_escapeair_locked_ledge_requires_allow_interrupt_replay_real() -> None:
+    # PTE:6401 is a sustained EscapeAir row over FoD's left generated ledge. The locked
+    # CollData/ECB seed is live, but the root is still outside mpColl's left-ledge 5-unit source
+    # band and raw fp+0x2218 allow_interrupt is clear, so the generic projection to ledge segment 3
+    # is not source-owned yet and vanilla remains airborne.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+    # refs/melee/src/melee/mp/mpcoll.c::mpColl_80044164
+    # refs/melee/src/melee/ft/types.h::Fighter::allow_interrupt (fp+0x2218:0)
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.msl"
+    )
+    if not path.exists():
+        pytest.skip(f"missing local dataset: {path}")
+
+    ds = read_dataset(str(path))
+    out = _step_one_replay_row(ds, 6401)
+    ref = ds.samples[6401]["ref_t1"]
+    seed = ds.samples[6401]["seed_t"]
+    p = 1
+
+    assert int(seed["action_id"][p]) == ACT_ESCAPE_AIR
+    assert int(seed["seed_prev_action_id"][p]) == ACT_ESCAPE_AIR
+    assert int(seed["ecb_lock_timer"][p]) == 3
+    assert int(seed["state_flags"][p][0]) & 0x80 == 0
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_ESCAPE_AIR
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 0
+    assert int(out["ground_id"][p]) == int(ref["ground_id"][p]) == 5
+
+
+@pytest.mark.integration
+def test_fod_escapeair_ledge_source_band_lands_without_allow_interrupt_replay_real() -> None:
+    # EWT:9125 is the adjacent positive boundary for the same sustained EscapeAir locked-ECB owner:
+    # raw allow_interrupt is still clear, but the callback root has moved into the left ledge's
+    # source 5-unit band, so the restored cliff floor is the owned floor result.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044164,mpColl_800471F8}
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.msl"
+    )
+    if not path.exists():
+        pytest.skip(f"missing local dataset: {path}")
+
+    ds = read_dataset(str(path))
+    out = _step_one_replay_row(ds, 9125)
+    ref = ds.samples[9125]["ref_t1"]
+    seed = ds.samples[9125]["seed_t"]
+    p = 1
+
+    assert int(seed["action_id"][p]) == ACT_ESCAPE_AIR
+    assert int(seed["seed_prev_action_id"][p]) == ACT_ESCAPE_AIR
+    assert int(seed["ecb_lock_timer"][p]) == 3
+    assert int(seed["state_flags"][p][0]) & 0x80 == 0
+    assert int(seed["cliff_ledge_floor_segment_id_u16"][p]) == 3
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_LANDING_FALL_SPECIAL
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 1
+    assert int(out["ground_id"][p]) == int(ref["ground_id"][p]) == 3
+
+
+@pytest.mark.integration
+def test_fod_escapeair_left_ledge_source_band_boundary_stays_airborne_replay_real() -> None:
+    # PTE:6402 is one frame before the source-band landing: it is still just outside the source
+    # 5-unit left-ledge band, so the same restored cliff floor must not publish LandingFallSpecial.
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.msl"
+    )
+    if not path.exists():
+        pytest.skip(f"missing local dataset: {path}")
+
+    ds = read_dataset(str(path))
+    out = _step_one_replay_row(ds, 6402)
+    ref = ds.samples[6402]["ref_t1"]
+    seed = ds.samples[6402]["seed_t"]
+    p = 1
+
+    assert int(seed["action_id"][p]) == ACT_ESCAPE_AIR
+    assert int(seed["seed_prev_action_id"][p]) == ACT_ESCAPE_AIR
+    assert int(seed["ecb_lock_timer"][p]) == 2
+    assert int(seed["cliff_ledge_floor_segment_id_u16"][p]) == 3
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_ESCAPE_AIR
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 0
+    assert int(out["ground_id"][p]) == int(ref["ground_id"][p]) == 5
+
+
+@pytest.mark.integration
+def test_fod_escapeair_allow_interrupt_ledge_handoff_still_lands_replay_real() -> None:
+    # EWT:2683 is the matching positive boundary: same sustained EscapeAir / locked ECB shape,
+    # but raw fp+0x2218 allow_interrupt is live, so the source floor handoff publishes
+    # LandingFallSpecial on the generated ledge.
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.msl"
+    )
+    if not path.exists():
+        pytest.skip(f"missing local dataset: {path}")
+
+    ds = read_dataset(str(path))
+    out = _step_one_replay_row(ds, 2683)
+    ref = ds.samples[2683]["ref_t1"]
+    seed = ds.samples[2683]["seed_t"]
+    p = 1
+
+    assert int(seed["action_id"][p]) == ACT_ESCAPE_AIR
+    assert int(seed["seed_prev_action_id"][p]) == ACT_ESCAPE_AIR
+    assert int(seed["ecb_lock_timer"][p]) == 3
+    assert int(seed["state_flags"][p][0]) & 0x80
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_LANDING_FALL_SPECIAL
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 1
+    assert int(out["ground_id"][p]) == int(ref["ground_id"][p]) == 3
+
+
+@pytest.mark.integration
+def test_fod_hidden_return_timer_reappears_platform_for_rollout_reseed_replay_real() -> None:
+    # EWT rec3270 starts a rollout while FoD's left platform is parked at grIzumi's generated
+    # hidden target. The next source-visible rising height proves the hidden phase-4 countdown; when
+    # that timer is seeded, the live scheduler has raised the platform by rec3762 and AttackAirB
+    # lands on the platform instead of falling through stale hidden geometry.
+    # refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+    # refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "datasets/fountain_of_dreams_recent/replays/validation/fountain_of_dreams_recent/"
+        / "ElatedWearyTermite.msl"
+    )
+    if not path.exists():
+        pytest.skip(f"missing local dataset: {path}")
+
+    ds = read_dataset(str(path))
+    start = 3270
+    record = 3762
+    p = 0
+    seed = ds.samples[start]["seed_t"]
+    assert int(seed["stage_fod_platform_hidden_return_valid_u8"][0]) == 1
+    assert int(seed["stage_fod_platform_hidden_return_timer_u16"][0]) > 0
+
+    out = _rollout_replay_to_record(ds, start, record)
+    ref = ds.samples[record]["ref_t1"]
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_LANDING
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 1
+    assert int(out["ground_id"][p]) == int(ref["ground_id"][p]) == 1
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-4)
 
 
 def _step_one_replay_row(ds, record: int):

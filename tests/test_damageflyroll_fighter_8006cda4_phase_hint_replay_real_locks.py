@@ -115,9 +115,9 @@ class _DamageFlyRoll8006CDA4Case:
             dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/BlondHardHippopotamus.msl",
             target_record=4065,
             victim_port=0,
-            expect_seed_count=0,
+            expect_seed_count=4,
             expect_action_id=91,
-            note="AttackHi4 carry is admitted without an extra Fighter_8006CDA4 consume (BHH aggregate)",
+            note="AttackHi4 carry uses explicit zero-consume DamageFlyRoll phase (BHH aggregate)",
         ),
         _DamageFlyRoll8006CDA4Case(
             dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl",
@@ -209,6 +209,62 @@ class _DamageFlyRoll8006CDA4Case:
             note="SpecialHiFall <- steady AttackAirB contact does not admit DamageFlyRoll (PPA aggregate)",
             expect_hb0_enable_edge=0,
         ),
+        _DamageFlyRoll8006CDA4Case(
+            dataset_rel="datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.msl",
+            target_record=2542,
+            victim_port=1,
+            expect_seed_count=4,
+            expect_action_id=91,
+            note="grounded Dash severe-airborne entry uses explicit zero-consume DamageFlyRoll phase (EWT FoD)",
+        ),
+        _DamageFlyRoll8006CDA4Case(
+            dataset_rel="datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.msl",
+            target_record=2706,
+            victim_port=1,
+            expect_seed_count=2,
+            expect_action_id=91,
+            note="grounded AttackHi3 severe-airborne entry carries double Fighter_8006CDA4 phase (EWT FoD)",
+        ),
+        _DamageFlyRoll8006CDA4Case(
+            dataset_rel="datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.msl",
+            target_record=3137,
+            victim_port=0,
+            expect_seed_count=4,
+            expect_action_id=91,
+            note="grounded AttackDash severe-airborne entry uses explicit zero-consume DamageFlyRoll phase (EWT FoD)",
+        ),
+        _DamageFlyRoll8006CDA4Case(
+            dataset_rel="datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.msl",
+            target_record=157,
+            victim_port=1,
+            expect_seed_count=0,
+            expect_action_id=90,
+            note="grounded Dash without explicit phase remains DamageFlyTop (EWT FoD)",
+        ),
+        _DamageFlyRoll8006CDA4Case(
+            dataset_rel="datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.msl",
+            target_record=4669,
+            victim_port=1,
+            expect_seed_count=4,
+            expect_action_id=91,
+            note="grounded KneeBend severe-airborne entry uses explicit zero-consume DamageFlyRoll phase (EWT FoD)",
+        ),
+        _DamageFlyRoll8006CDA4Case(
+            dataset_rel="datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.msl",
+            target_record=4446,
+            victim_port=0,
+            expect_seed_count=0,
+            expect_action_id=90,
+            note="grounded KneeBend without explicit phase remains DamageFlyTop (EWT FoD)",
+        ),
+        _DamageFlyRoll8006CDA4Case(
+            dataset_rel="datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/MilkyGracefulStingray.msl",
+            target_record=5041,
+            victim_port=0,
+            expect_seed_count=4,
+            expect_action_id=91,
+            note="grounded KneeBend zero-consume DamageFlyRoll phase generalizes across FoD replays (MGS)",
+        ),
     ],
 )
 def test_fighter_8006cda4_pre_gate_consume_count_replay_real_locks(
@@ -261,26 +317,43 @@ def test_fighter_8006cda4_pre_gate_consume_count_replay_real_locks(
         assert int(seed["action_frame"][attacker]) >= 3, case.note
     if int(case.expect_seed_count) == 3:
         attacker = int(seed["last_hit_by"][victim])
-        assert int(seed["action_id"][victim]) in {65, 90}, case.note  # AttackAirN / DamageFlyTop
+        assert int(seed["action_id"][victim]) in {
+            24,  # KneeBend
+            65,  # AttackAirN
+            90,  # DamageFlyTop
+        }, case.note
         assert int(seed["hitlag"][victim]) == 0, case.note
         if int(seed["action_id"][victim]) == 90:
             assert int(seed["hitstun"][victim]) > 0, case.note
         else:
             assert int(seed["hitstun"][victim]) == 0, case.note
-        assert int(seed["on_ground"][victim]) == 0, case.note
+        if int(seed["action_id"][victim]) == 24:
+            assert int(seed["on_ground"][victim]) == 1, case.note
+        else:
+            assert int(seed["on_ground"][victim]) == 0, case.note
         if int(seed["action_id"][victim]) == 90:
             assert attacker in (0, 1), case.note
             assert int(seed["action_id"][attacker]) == 67, case.note  # AttackAirB
             assert int(seed["action_frame"][attacker]) == 3, case.note
     if int(case.expect_seed_count) == 4:
         attacker = int(seed["last_hit_by"][victim])
-        assert int(seed["action_id"][victim]) in {65, 90}, case.note  # AttackAirN / DamageFlyTop
+        assert int(seed["action_id"][victim]) in {
+            20,  # Dash
+            24,  # KneeBend
+            50,  # AttackDash
+            63,  # AttackHi4
+            65,  # AttackAirN
+            90,  # DamageFlyTop
+        }, case.note
         assert int(seed["hitlag"][victim]) == 0, case.note
         if int(seed["action_id"][victim]) == 90:
             assert int(seed["hitstun"][victim]) > 0, case.note
         else:
             assert int(seed["hitstun"][victim]) == 0, case.note
-        assert int(seed["on_ground"][victim]) == 0, case.note
+        if int(seed["action_id"][victim]) in {20, 24, 50, 63}:
+            assert int(seed["on_ground"][victim]) == 1, case.note
+        else:
+            assert int(seed["on_ground"][victim]) == 0, case.note
         if int(seed["action_id"][victim]) == 90:
             assert attacker in (0, 1), case.note
     if int(case.expect_seed_count) in {2, 3} and int(seed["action_id"][victim]) == 65:

@@ -15,15 +15,17 @@ typedef struct MslStateSoA {
   // Fountain of Dreams dynamic platform heights, one pair per environment.
   // Platform id domain matches Slippi/grIzumi: 0=right, 1=left.
   // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
-  float* stage_fod_platform_height;              // [batch * 2]
-  uint8_t* stage_fod_platform_valid;             // [batch * 2]
-  float* stage_fod_platform_velocity;            // [batch * 2]
-  uint8_t* stage_fod_platform_velocity_valid;    // [batch * 2]
-  uint8_t* stage_fod_platform_height_source;     // [batch * 2]
-  uint8_t* stage_fod_platform_scheduler_phase;   // [batch * 2]
-  uint16_t* stage_fod_platform_scheduler_timer;  // [batch * 2]
-  float* stage_fod_platform_scheduler_target;    // [batch * 2]
-  uint8_t* stage_fod_platform_scheduler_valid;   // [batch * 2]
+  float* stage_fod_platform_height;                     // [batch * 2]
+  uint8_t* stage_fod_platform_valid;                    // [batch * 2]
+  float* stage_fod_platform_velocity;                   // [batch * 2]
+  uint8_t* stage_fod_platform_velocity_valid;           // [batch * 2]
+  float* stage_fod_platform_deferred_velocity;          // [batch * 2]
+  uint8_t* stage_fod_platform_deferred_velocity_valid;  // [batch * 2]
+  uint8_t* stage_fod_platform_height_source;            // [batch * 2]
+  uint8_t* stage_fod_platform_scheduler_phase;          // [batch * 2]
+  uint16_t* stage_fod_platform_scheduler_timer;         // [batch * 2]
+  float* stage_fod_platform_scheduler_target;           // [batch * 2]
+  uint8_t* stage_fod_platform_scheduler_valid;          // [batch * 2]
   // Yoshi's Story Shy Guy stage-object scheduler.
   // refs/melee/src/melee/gr/grstory.c::grStory_801E3418
   uint16_t* stage_yoshi_shyguy_timer;   // [batch]
@@ -503,6 +505,13 @@ typedef struct MslStateSoA {
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091AD8,ftCo_80093A50}
   uint8_t* guard_reflect_entry_dash_terminal_scalar;
+  // Runtime-only marker for GuardReflect entered during the current input-callback pass. Source
+  // calls ftCo_80093A50/ftCo_8009388C from IASA after the frame's GuardReflect Anim callback phase,
+  // so destination GuardReflect must not run an extra same-frame GuardOn_Anim shield drain.
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+  //   ftCo_8009388C,ftCo_80093A50,ftCo_GuardReflect_Anim}
+  uint8_t* guard_reflect_entered_this_frame;
   // Seed snapshot of `fp+0x221B_b0` / Slippi `isShieldActive` before current-step shield
   // descriptor callbacks mutate state_flags. Item GuardReflect ownership uses this to distinguish
   // aged descriptor-present rows from timer carry rows without replay ids.

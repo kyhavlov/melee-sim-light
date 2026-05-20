@@ -696,6 +696,8 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
       // refs/melee/src/melee/ft/ftaction.c::ftAction_80072C6C
       // refs/melee/src/melee/db/dbanim.c
       // refs/melee/src/melee/ft/types.h (fp+0x221C_u16_y : 3 at bits 7..9)
+      const uint8_t seed_x221c_y_visible =
+          (f221c & (uint8_t)MSL_STATE_FLAG_221C_U16_Y_VISIBLE_BIT) != 0u ? 1u : 0u;
       const uint32_t anim_u32 = batch->state.animation_index[idx];
       if (anim_u32 <= 0xFFFFu) {
         const uint16_t msid = (uint16_t)anim_u32;
@@ -728,6 +730,23 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
         // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Walk.c::ftCo_Walk_Enter
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D8C54
+        f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_U16_Y_VISIBLE_BIT;
+      }
+      if ((action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S &&
+           prev_action == (uint16_t)MSL_ACT_FX_SPECIAL_S && batch->state.action_frame[idx] > 0) ||
+          (action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S &&
+           prev_action == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S && seed_x221c_y_visible == 0u &&
+           batch->state.action_frame[idx] > 0)) {
+        // Fox/Falco side-special ground->air transition:
+        // - ftFx_SpecialS_GroundToAir calls Fighter_ChangeMotionState with
+        //   FTFOX_SPECIALS_COLL_FLAG and the current animation frame,
+        // - that flag set does not include Ft_MF_Unk24, so Fighter_ChangeMotionState clears
+        //   fp->x221C_u16_y,
+        // - because the destination starts past frame 0, SpecialAirS's frame-0 opcode-52 command
+        //   is not replayed. Later same-action rows preserve the hidden clear.
+        // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
+        // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::FTFOX_SPECIALS_COLL_FLAG
+        // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialS_GroundToAir
         f221c &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_U16_Y_VISIBLE_BIT;
       }
 

@@ -32,11 +32,11 @@ def _load_fixture() -> dict[str, Any]:
             ),
         },
         {
-            "start_frame": 2342,
-            "end_frame": 2452,
+            "start_frame": 2159,
+            "end_frame": 2258,
             "note": (
                 "Grounded horizontal Firefox leaves SpecialHi into FallSpecial with all jumps "
-                "consumed; X press must not double-jump out."
+                "consumed before recovery fall."
             ),
         },
     ]
@@ -131,7 +131,7 @@ def test_run_turnaround_finishes_into_run_with_post_flip_facing() -> None:
 
 
 @pytest.mark.integration
-def test_specialhi_fallspecial_consumes_jumps_before_recovery_x_press() -> None:
+def test_specialhi_fallspecial_consumes_jumps_before_recovery_fall() -> None:
     # Source owner: ftCo_80096900(..., unk=true) consumes all jumps when SpecialHi enters
     # FallSpecial, via ftCommon_8007D60C on grounded source states or ftCommon_UseAllJumps in air.
     # The manual trace presses X during the recovery fall; this must not become JumpAerial.
@@ -140,11 +140,11 @@ def test_specialhi_fallspecial_consumes_jumps_before_recovery_x_press() -> None:
     history = _replay_fixture(_load_fixture(), end_frame=2455)
 
     fox = 0
-    assert int(history[2342]["action_id"][fox]) == 353  # Grounded SpecialHi.
-    assert int(history[2434]["action_id"][fox]) == 35  # FallSpecial.
-    assert int(history[2434]["jumps_left"][fox]) == 0
+    assert int(history[2159]["action_id"][fox]) == 353  # Grounded SpecialHi.
+    assert int(history[2251]["action_id"][fox]) == 35  # FallSpecial.
+    assert int(history[2251]["jumps_left"][fox]) == 0
 
-    for frame in range(2434, 2450):
+    for frame in range(2251, 2259):
         assert int(history[frame]["action_id"][fox]) != 28  # No JumpAerialB during recovery.
         assert int(history[frame]["jumps_left"][fox]) == 0
 

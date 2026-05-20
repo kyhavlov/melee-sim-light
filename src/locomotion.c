@@ -13,6 +13,7 @@
 #include "buttons.h"
 #include "blaster.h"
 #include "char_params.h"
+#include "combat.h"
 #include "coll_env_flags.h"
 #include "common_params.h"
 #include "dash_iasa.h"
@@ -33,6 +34,53 @@
 #include "throw_flow.h"
 
 static inline float msl_signf(float x) { return x < 0.0f ? -1.0f : 1.0f; }
+
+static inline uint16_t choose_wait_anim_variant(MslBatch* batch, int bi, const MslCharParams* ch,
+                                                uint16_t current_anim) {
+  if (batch == NULL || batch->rollout_clock_rng_owned == NULL ||
+      batch->rollout_clock_rng_owned[bi] != (uint8_t)MSL_ROLLOUT_CLOCK_HSD_RAND_STREAM) {
+    // Replay seeds expose frame boundary RNG state, not the exact hidden stream phase for idle
+    // animation roulette. Do not turn exact replay one-step rows into RNG-phase mismatches; true
+    // free-running match-init rollouts own the HSD stream and take the source branch below.
+    return current_anim;
+  }
+  if (ch == NULL || ch->wait_anim_choice_count == 0u) {
+    (void)combat_rng_consume_randi_site(batch, bi, MSL_RNG_SITE_FTWAIT_ANIM_VARIANT, 100);
+    return current_anim;
+  }
+
+  const uint8_t allow_same = (current_anim == 2u || current_anim == 31u) ? 1u : 0u;
+  uint16_t fallback = current_anim;
+  for (uint8_t attempt = 0; attempt < ch->wait_anim_choice_count; attempt++) {
+    const int32_t sample =
+        combat_rng_consume_randi_site(batch, bi, MSL_RNG_SITE_FTWAIT_ANIM_VARIANT, 100) + 1;
+    int32_t accum = 0;
+    uint16_t chosen = current_anim;
+    for (uint8_t i = 0; i < ch->wait_anim_choice_count; i++) {
+      accum += (int32_t)ch->wait_anim_choice_weights[i];
+      if (sample <= accum) {
+        chosen = ch->wait_anim_choice_msids[i];
+        break;
+      }
+    }
+    if (attempt == 0u) {
+      fallback = chosen;
+    }
+    if (allow_same || chosen != current_anim) {
+      return chosen;
+    }
+  }
+
+  // Source loops until non-current when the current idle is not Wait1_0/SquatWait. Keep the hot
+  // path bounded; Fox/Falco tables have two choices, so this fallback preserves the owner shape.
+  for (uint8_t i = 0; i < ch->wait_anim_choice_count; i++) {
+    const uint16_t candidate = ch->wait_anim_choice_msids[i];
+    if (candidate != current_anim) {
+      return candidate;
+    }
+  }
+  return fallback;
+}
 
 static inline uint16_t walk_action_from_speed(const MslCommonParams* c, const MslCharParams* ch,
                                               float speed_ground_x_self);
@@ -570,8 +618,15 @@ static inline uint8_t spacie_specialhi_update(MslBatch* batch, size_t idx, uint8
         } else {
           batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI;
           if (on_ground) {
+            // Decomp: the aerial launch fallback from grounded SpecialHiHold calls
+            // ftCommon_8007D60C before ftFx_SpecialAirHi_Enter. That helper switches
+            // ground_or_air to Air and installs the ECB lock, but it does not clear
+            // CollData.floor.index; the carried floor remains visible to the same frame's
+            // SpecialAirHi_Coll / mpColl pass.
+            // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D60C
+            // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+            //   ftFx_SpecialHiHold_Anim,ftFx_SpecialAirHi_Enter}
             batch->state.on_ground[idx] = 0u;
-            batch->state.ground_id[idx] = 0xFFFFu;
             batch->state.speed_ground_x_self[idx] = 0.0f;
             batch->state.ecb_lock_timer[idx] = 5u;
           }
@@ -596,8 +651,13 @@ static inline uint8_t spacie_specialhi_update(MslBatch* batch, size_t idx, uint8
         } else {
           batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI;
           if (on_ground) {
+            // Same ftCommon_8007D60C floor-index carry as grounded SpecialHiHold. HoldAir can
+            // become grounded through the collision callback earlier in the frame, then launch
+            // through the grounded anim-end fallback without clearing CollData.floor.index.
+            // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D60C
+            // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+            //   ftFx_SpecialHiHoldAir_Anim,ftFx_SpecialAirHi_Enter}
             batch->state.on_ground[idx] = 0u;
-            batch->state.ground_id[idx] = 0xFFFFu;
             batch->state.speed_ground_x_self[idx] = 0.0f;
             batch->state.ecb_lock_timer[idx] = 5u;
           }
@@ -3878,15 +3938,15 @@ void locomotion_update_pre(MslBatch* batch) {
             anim_finished(cid, (uint16_t)MSL_SM_WAIT1_0, batch->state.anim_frame_f32[idx])) {
           // Wait_Anim does not simply let the AObj loop carry the visible frame past the end.
           // It calls ftCo_8008A7A8, which restarts the current/selected wait subanimation through
-          // ftCo_8008A6D8 / ftAnim_8006EBE8. The RNG consume for variant choice lives in
-          // anim_timebase_update_pre_input; this callback owns the replay-visible timebase reset.
+          // ftCo_8008A6D8 / ftAnim_8006EBE8. Character WaitStruct tables provide the weighted
+          // submotion choices; getAnimID consumes HSD_Randi(100)+1 for the source selection.
           // This is not Fighter_ChangeMotionState, so it must not run the motion-entry identity
           // bundle (`ft_800895E0` / `plAttack_80037B08`) or bump fp->x2088.
-          // Keep the currently modeled wait variant stable until extracted wait-variant data is
-          // promoted beyond the already-modeled RNG consume.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_Anim
-          // refs/melee/src/melee/ft/ftwaitanim.c::{ftCo_8008A7A8,ftCo_8008A6D8}
-          batch->state.animation_index[idx] = (uint32_t)MSL_SM_WAIT1_0;
+          // refs/melee/src/melee/ft/ftwaitanim.c::{ftCo_8008A7A8,ftCo_8008A6D8,getAnimID}
+          // refs/melee/src/sysdolphin/baselib/random.c::HSD_Randi
+          batch->state.animation_index[idx] =
+              choose_wait_anim_variant(batch, bi, ch, (uint16_t)batch->state.animation_index[idx]);
           msl_anim_timebase_restart(batch, idx, 0.0f, 1.0f);
           action_id = (uint16_t)MSL_ACT_WAIT;
         }
@@ -6283,6 +6343,19 @@ void locomotion_update_post_collision(MslBatch* batch) {
         if (batch->state.cliff_ledge_floor_segment_seeded != NULL) {
           batch->state.cliff_ledge_floor_segment_seeded[idx] = 0u;
         }
+      }
+      if (now_ground && ms != NULL && a == (uint16_t)MSL_ACT_FX_SPECIAL_HI_HOLD_AIR) {
+        // ftFx_SpecialHiHoldAir_Coll consumes ft_CheckGroundAndLedge and immediately routes
+        // through ftFx_SpecialHiHoldAir_AirToGround. The AirToGround handler calls
+        // ftCommon_8007D7FC, then changes to the grounded hold motion while preserving the current
+        // animation frame.
+        // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+        //   ftFx_SpecialHiHoldAir_Coll,ftFx_SpecialHiHoldAir_AirToGround}
+        // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D7FC,ftCommon_8007D6A4}
+        batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_HI_HOLD;
+        batch->state.animation_index[idx] = (uint32_t)ms->specialhi_ground_hold;
+        batch->state.speed_ground_x_self[idx] = batch->state.speed_air_x_self[idx];
+        continue;
       }
       if (!now_ground && a == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI) {
         specialhi_apply_collision_facing_dir(batch, ch, idx);

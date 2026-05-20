@@ -1907,6 +1907,18 @@ static uint8_t stage_collision_fod_platform_default_height(const MslStageSlot* s
   return 0u;
 }
 
+uint8_t stage_collision_fod_hidden_target_height(float* out) {
+  if (out == NULL) {
+    return 0u;
+  }
+  const MslStageSlot* slot = stage_slot((uint32_t)MSL_STAGE_FOUNTAIN_OF_DREAMS);
+  if (slot == NULL || slot->fod_motion.loaded == 0u) {
+    return 0u;
+  }
+  *out = slot->fod_motion.hidden_target_height;
+  return 1u;
+}
+
 static uint8_t stage_collision_platform_path_world_line(const MslStageSlot* slot, uint16_t line_id,
                                                         int32_t frame_id, MslStageFloorLine* out) {
   if (slot == NULL || out == NULL || slot->platform_path_frames == NULL ||
@@ -2021,12 +2033,18 @@ uint8_t stage_collision_floor_line_world(const MslBatch* batch, int bi,
           h = slot->fod_motion.hidden_target_height;
         }
       }
+      const uint8_t reached_hidden_this_step =
+          (uint8_t)(batch->state.stage_fod_platform_velocity_valid[idx] != 0u &&
+                    fabsf(batch->state.stage_fod_platform_velocity[idx]) > 1.0e-6f);
       if (height_valid != 0u && slot->fod_motion.loaded != 0u &&
-          fabsf(h - slot->fod_motion.hidden_target_height) <= 1.0e-4f) {
+          fabsf(h - slot->fod_motion.hidden_target_height) <= 1.0e-4f &&
+          reached_hidden_this_step == 0u) {
         // `grIzumi_801CC358` sends the platform to the generated hidden target. Keep the hidden
         // reconstruction bounded to that exact target and place the collision line below the main
         // floor so the ordinary floor solver selects Dream Land/FoD ground when a falling fighter
-        // crosses both surfaces. Visible heights use the source MapLine local-y offset below.
+        // crosses both surfaces. The frame that actually reaches the hidden target is still phase 3
+        // with a nonzero grIzumi motion delta; vanilla keeps the final visible collision pose for
+        // that callback and hides the line on the following hidden-wait phase.
         // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
         // refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
         // data/stages/bin/griz.bin::MSLSTG01 platform_motions.hidden_target_height
@@ -2113,6 +2131,31 @@ uint8_t stage_collision_floor_line_motion_delta(const MslBatch* batch, int bi,
       }
       if (dy_out != NULL) {
         *dy_out = cur.y0 - prev.y0;
+      }
+      return 1u;
+    }
+    if (rec->kind_id == (uint8_t)MSLSTG01_PLATFORM_TRANSFORM_HEIGHT &&
+        batch->state.stage_id[bi] == (uint32_t)MSL_STAGE_FOUNTAIN_OF_DREAMS &&
+        rec->platform_id < 2u) {
+      const size_t idx = (size_t)bi * 2u + (size_t)rec->platform_id;
+      if (!batch->state.stage_fod_platform_valid[idx]) {
+        return 0u;
+      }
+      if (!batch->state.stage_fod_platform_scheduler_valid[idx] &&
+          !batch->state.stage_fod_platform_velocity_valid[idx]) {
+        return 0u;
+      }
+      if (dx_out != NULL) {
+        *dx_out = 0.0f;
+      }
+      if (dy_out != NULL) {
+        // FoD side-platform collision is the generated local MapLine plus the current grIzumi
+        // platform JObj height scaled by MSLSTG01.height_coeff. Grounded riders that keep
+        // CollData.floor.index on that line inherit the same world-line delta before projection.
+        // refs/melee/src/melee/gr/grizumi.c::{grIzumi_801CC358,grIzumi_801CCBDC}
+        // refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
+        // data/stages/bin/griz.bin::MSLSTG01 platform_transforms(kind=height)
+        *dy_out = batch->state.stage_fod_platform_velocity[idx] * rec->height_coeff;
       }
       return 1u;
     }
@@ -2584,6 +2627,14 @@ uint8_t stage_collision_item_fixed_ecb_sweep_hits_floor(uint32_t stage_id, float
   return 0u;
 }
 
+static int stage_fod_rand_range_span(int min_val, int max_val) {
+  // gr/inlines.h::rand_range(max,min) calls HSD_Randi(max-min), so the upper bound is
+  // exclusive. Equality still consumes no useful range and returns the shared endpoint.
+  // refs/melee/src/melee/gr/inlines.h::rand_range
+  // refs/melee/src/sysdolphin/baselib/random.c::HSD_Randi
+  return (max_val > min_val) ? (max_val - min_val) : 1;
+}
+
 static void stage_collision_update_fod_platform_motion(MslBatch* batch) {
   if (batch == NULL) {
     return;
@@ -2613,9 +2664,58 @@ static void stage_collision_update_fod_platform_motion(MslBatch* batch) {
       if (batch->state.stage_fod_platform_valid[idx] &&
           batch->state.stage_fod_platform_velocity_valid[idx] &&
           !batch->state.stage_fod_platform_scheduler_valid[idx]) {
+        if (motion != NULL &&
+            (batch->state.stage_fod_platform_height_source[idx] &
+             (uint8_t)(MSL_FOD_PLATFORM_HEIGHT_SOURCE_DIRECT_EVENT |
+                       MSL_FOD_PLATFORM_HEIGHT_SOURCE_GROUND_CONTACT |
+                       MSL_FOD_PLATFORM_HEIGHT_SOURCE_SAME_STEP_CONTACT)) != 0u &&
+            fabsf(batch->state.stage_fod_platform_height[idx] - motion->hidden_target_height) <=
+                1.0e-3f) {
+          // Source bits mark the current grIzumi/mpLib pose for this fighter callback. Visible
+          // moving-platform source rows still apply velocity here so grounded riders follow the
+          // platform. At the generated hidden target, however, grIzumi has already published the
+          // hidden-wait target pose; a sparse replay velocity on that row is stale. Clear it so this
+          // frame stays owned by the hidden target instead of looking like the final moving frame.
+          // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+          // refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
+          batch->state.stage_fod_platform_velocity[idx] = 0.0f;
+          batch->state.stage_fod_platform_velocity_valid[idx] = 0u;
+          continue;
+        }
         batch->state.stage_fod_platform_height[idx] +=
             batch->state.stage_fod_platform_velocity[idx];
         continue;
+      }
+      if (motion != NULL && !batch->state.stage_fod_platform_scheduler_valid[idx] &&
+          batch->state.stage_fod_platform_valid[idx]) {
+        const float h0 = batch->state.stage_fod_platform_height[idx];
+        const uint8_t current_source =
+            (uint8_t)((batch->state.stage_fod_platform_height_source[idx] &
+                       (uint8_t)(MSL_FOD_PLATFORM_HEIGHT_SOURCE_DIRECT_EVENT |
+                                 MSL_FOD_PLATFORM_HEIGHT_SOURCE_GROUND_CONTACT |
+                                 MSL_FOD_PLATFORM_HEIGHT_SOURCE_SAME_STEP_CONTACT)) != 0u);
+        float initial_h = 0.0f;
+        const uint8_t at_initial = (uint8_t)(stage_collision_fod_platform_default_height(
+                                                 slot, (uint8_t)platform_id, &initial_h) &&
+                                             fabsf(h0 - initial_h) <= 1.0e-3f);
+        const uint8_t at_named_visible =
+            (uint8_t)(fabsf(h0 - motion->home_height) <= 1.0e-3f ||
+                      fabsf(h0 - motion->max_height) <= 1.0e-3f ||
+                      fabsf(h0 - motion->min_visible_height) <= 1.0e-3f);
+        const uint8_t at_hidden = (uint8_t)(fabsf(h0 - motion->hidden_target_height) <= 1.0e-3f);
+        if (current_source && (at_initial || at_named_visible || at_hidden)) {
+          // A replay/current source bit proves that grIzumi has just published the JObj/mpLib pose
+          // for this frame. If that source-owned pose is one of grIzumi's generated stationary
+          // states, resume the scheduler instead of freezing after the transient source bit is
+          // consumed. This is not exact replay RNG phase reconstruction: the next wait/target draw
+          // still comes from the rollout HSD stream.
+          // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+          // refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
+          batch->state.stage_fod_platform_scheduler_valid[idx] = 1u;
+          batch->state.stage_fod_platform_scheduler_phase[idx] = at_hidden ? 3u : 0u;
+          batch->state.stage_fod_platform_scheduler_timer[idx] = 0u;
+          batch->state.stage_fod_platform_scheduler_target[idx] = h0;
+        }
       }
       if (motion == NULL || !batch->state.stage_fod_platform_scheduler_valid[idx]) {
         continue;
@@ -2639,14 +2739,24 @@ static void stage_collision_update_fod_platform_motion(MslBatch* batch) {
       if (phase == 0u) {
         const int min_wait = (int)(motion->wait_min_frames + 0.5f);
         const int max_wait = (int)(motion->wait_max_frames + 0.5f);
-        const int span = (max_wait >= min_wait) ? (max_wait - min_wait + 1) : 1;
+        const int span = stage_fod_rand_range_span(min_wait, max_wait);
         timer = (uint16_t)(min_wait + combat_rng_consume_randi_site(
                                           batch, bi, MSL_RNG_SITE_FOD_PLATFORM_WAIT, span));
         target = h;
         phase = 1u;
       } else if (phase == 1u) {
-        if (timer != 0u) {
-          timer--;
+        const uint8_t min_visible_wait =
+            (uint8_t)(fabsf(target - motion->min_visible_height) <= 1.0e-4f);
+        // After the side platform reaches the lower visible stop, source keeps the wait boundary
+        // on the signed `xC6-- < 0` test; sampling as soon as the compact unsigned timer reaches
+        // zero picks the previous frame's HSD_Randf for the hidden-descent choice. Other waits keep
+        // the existing phase alignment because their phase-0 entry is already validated by FoD
+        // replay locks at home/max-height.
+        // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+        const uint8_t wait_elapsed =
+            (uint8_t)(min_visible_wait ? (timer == UINT16_MAX) : (timer == 0u));
+        if (!wait_elapsed) {
+          timer = (uint16_t)(timer - 1u);
         } else {
           const float total = motion->hidden_weight + motion->stay_weight + motion->move_weight;
           const float choice =
@@ -2688,15 +2798,21 @@ static void stage_collision_update_fod_platform_motion(MslBatch* batch) {
           } else {
             const int min_wait = (int)(motion->wait_min_frames + 0.5f);
             const int max_wait = (int)(motion->wait_max_frames + 0.5f);
-            const int span = (max_wait >= min_wait) ? (max_wait - min_wait + 1) : 1;
+            const int span = stage_fod_rand_range_span(min_wait, max_wait);
             timer = (uint16_t)(min_wait + combat_rng_consume_randi_site(
                                               batch, bi, MSL_RNG_SITE_FOD_PLATFORM_WAIT, span));
           }
         }
       } else if (phase == 2u) {
         const float delta = target - h;
+        // grIzumi writes xD0 directly to the target when the remaining distance is smaller than
+        // the per-frame speed. The line refresh therefore moves by the residual delta on that
+        // frame, not by zero.
+        // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+        // refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
         if (delta > 0.0f) {
           if (delta < motion->up_speed) {
+            v = delta;
             h = target;
             phase = 0u;
           } else {
@@ -2705,6 +2821,7 @@ static void stage_collision_update_fod_platform_motion(MslBatch* batch) {
           }
         } else if (delta < 0.0f) {
           if (-delta < motion->down_speed) {
+            v = delta;
             h = target;
             phase = (h < motion->min_visible_height) ? 3u : 0u;
           } else {
@@ -2717,7 +2834,7 @@ static void stage_collision_update_fod_platform_motion(MslBatch* batch) {
       } else if (phase == 3u) {
         const int min_wait = (int)(motion->hidden_wait_min_frames + 0.5f);
         const int max_wait = (int)(motion->hidden_wait_max_frames + 0.5f);
-        const int span = (max_wait >= min_wait) ? (max_wait - min_wait + 1) : 1;
+        const int span = stage_fod_rand_range_span(min_wait, max_wait);
         timer = (uint16_t)(min_wait + combat_rng_consume_randi_site(
                                           batch, bi, MSL_RNG_SITE_FOD_PLATFORM_HIDDEN_WAIT, span));
         phase = 4u;

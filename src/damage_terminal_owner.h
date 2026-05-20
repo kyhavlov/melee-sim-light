@@ -195,6 +195,16 @@ static inline uint8_t msl_damage_owner_damageflyroll_pre_action_allows_gate(cons
   if (batch == NULL) {
     return 0u;
   }
+  if (batch->state.fighter_8006cda4_pre_gate_consume_count[d_idx] != 0u) {
+    // Explicit seed-lane owner:
+    // - ftCo_8008DCE0 always runs Fighter_8006CDA4 before the DamageFlyRoll HSD_Randf gate.
+    // - Slippi does not expose the hidden Fighter_8006CDA4 branch inputs, so preprocessing records
+    //   the proven pre-gate stream phase for exact reseeds. When that lane is present, the source
+    //   owner is the seed lane itself rather than the visible pre-action family.
+    // refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    return 1u;
+  }
   // ftCo_8008DCE0 block_33 evaluates the DamageFlyRoll RNG gate during severe airborne
   // Fighter_ProcessHit entry. Visible motion state alone is insufficient for exact replay reseeds
   // when hidden Fighter_8006CDA4 pre-gate RNG consumers are not exposed, so exact rows use explicit

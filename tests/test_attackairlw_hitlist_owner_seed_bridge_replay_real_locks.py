@@ -389,7 +389,8 @@ def test_attackairlw_multihit_runtime_clear_create_allows_later_dair_rehit_18244
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
         root
-        / "datasets/aggregate_recent/replays/validation/aggregate_recent/Game_20260515T182447.msl"
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+        "Game_20260515T182447_frozenps.msl"
     )
     if not dataset_path.exists():
         pytest.skip(f"missing local dataset: {dataset_path}")

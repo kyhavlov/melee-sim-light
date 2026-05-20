@@ -576,6 +576,44 @@ def test_fod_attackair_floor_skip_still_lands_on_nonplatform_floor_rollout() -> 
 
 
 @pytest.mark.integration
+def test_fod_attackairb_downheld_root_crossing_publishes_floor_skip_rollout() -> None:
+    # Replay-real positive for sustained AttackAirB's FoD transformed-platform pass-through. PTE p1
+    # holds down while the AttackAirB root crosses below the right height-platform line before the
+    # ECB bottom sweep itself produces a floor hit. Source AttackAir_Coll still uses
+    # ft_80082C74 -> mpColl_800471F8, but CollData.floor_skip has already been published by the
+    # soft-platform pass owner, so the later platform floor candidate must stay airborne.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80082C74
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor,mpUpdateFloorSkip}
+    # data/stages/bin/griz.bin (MSLSTG01 height platform transforms)
+    root = Path(__file__).resolve().parents[1]
+    path = root / _BASE / "fountain_of_dreams_recent/ParallelTemptingElk.msl"
+    if not path.exists():
+        pytest.skip(f"missing local dataset: {_BASE / 'fountain_of_dreams_recent/ParallelTemptingElk.msl'}")
+
+    start = 1263
+    target = 1835
+    player = 1
+
+    ds = read_dataset(str(path))
+    if int(ds.samples.shape[0]) <= target:
+        pytest.skip(f"dataset too short for record {target}: {path}")
+    assert int(ds.samples[target]["seed_t"]["action_id"][player]) == 67  # AttackAirB.
+    assert int(ds.samples[target]["seed_t"]["floor_skip_segment_valid_u8"][player]) == 1
+    assert int(ds.samples[target]["seed_t"]["floor_skip_segment_id_u16"][player]) == 1
+    assert int(ds.samples[target]["ref_t1"]["action_id"][player]) == 67
+    assert int(ds.samples[target]["ref_t1"]["on_ground"][player]) == 0
+
+    out, ref = _rollout_record(path, start_record=start, target_record=target)
+
+    assert int(out["action_id"][player]) == int(ref["action_id"][player]) == 67
+    assert int(out["on_ground"][player]) == int(ref["on_ground"][player]) == 0
+    assert int(out["ground_id"][player]) == int(ref["ground_id"][player])
+    assert float(out["pos_y"][player]) == pytest.approx(float(ref["pos_y"][player]), abs=3e-4)
+
+
+@pytest.mark.integration
 def test_fod_attackairn_hard_floor_edge_root_projection_lands() -> None:
     # Replay-real positive for AttackAir_Coll's ordinary hard-floor edge handoff:
     # ft_80082C74 -> mpColl_800471F8 first accepts a connected hard-floor bottom sweep, then

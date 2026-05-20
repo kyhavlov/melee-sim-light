@@ -2764,6 +2764,19 @@ static inline uint8_t combat_shield_damage_powershield_suppressed_idx(const MslB
   if (batch == NULL) {
     return 0u;
   }
+  enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
+  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
+  const uint8_t flags_221c =
+      batch->state.state_flags[idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221C_INDEX];
+  if ((flags_221c & (uint8_t)MSL_GUARD_STATE_FLAGS_221C_B2) != 0u) {
+    // Shield-hit damage/recoil consumes the live powershield flag directly. This is intentionally
+    // broader than item reflect ownership: x14 owns ReflectDesc/item reflection, while
+    // ftColl_80076CBC and ftCo_80092F2C gate shieldDamageTaken and GuardSetOff pushback on
+    // fp->x221C_b2.
+    // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
+    return 1u;
+  }
   uint8_t powershield_active = combat_is_powershield_active_idx(batch, idx);
   if (!powershield_active) {
     return 0u;
@@ -2788,10 +2801,6 @@ static inline uint8_t combat_shield_damage_powershield_suppressed_idx(const MslB
       // expired use this branch as the older frozen-snapshot shield-damage handoff.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardReflect_Anim,ftCo_80093BC0}
       batch->state.guard_reflect_timer_x14_seed[idx] == 0u) {
-    enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
-    enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
-    const uint8_t flags_221c =
-        batch->state.state_flags[idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221C_INDEX];
     if ((flags_221c & (uint8_t)MSL_GUARD_STATE_FLAGS_221C_B2) != 0u) {
       return powershield_active;
     }
@@ -5655,6 +5664,12 @@ void combat_apply_item_shield_hit(MslBatch* batch, int batch_index, int attacker
   batch->state.action_id[d_idx] = (uint16_t)MSL_ACT_GUARD_SET_OFF;
   batch->state.animation_index[d_idx] = (uint32_t)MSL_SM_GUARD_DAMAGE;
   batch->state.tilt_timer_x[d_idx] = 0xFEu;
+  // Source x19A4 owner for GuardSetOff callbacks. Item shield contact writes the integer damage
+  // owner before ftCo_80092F2C installs the active-hitlag `ftCo_80093240` callback; that callback
+  // can consume the same source lane on later hitlag ticks after input timers advance.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077688
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80092F2C,ftCo_80093240}
+  batch->state.guard_setoff_hitlag_damage_min[d_idx] = (int_dmg > 255) ? 255u : (uint8_t)int_dmg;
   combat_state_flags_clear_guard_reflecting(batch, d_idx);
   combat_state_flags_clear_stale_guard_timer_bits_on_setoff_entry(batch, d_idx);
   combat_preserve_guard_x10_for_immediate_setoff(batch, d_idx, d_motion_id_pre, c);
@@ -5784,7 +5799,13 @@ static inline void combat_mutations_pass1_future_apply_shield_hit(MslBatch* batc
   // - Changes motion state to ftCo_MS_GuardSetOff.
   // - Sets x670_timer_lstick_tilt_x = -2.
   // - Computes shieldstun duration f (float) and sets anim rate to (0.1 + end_frame) / f.
+  // Its input x19A4 is written by ftColl_80076CBC before Fighter_ProcessHit consumes the shield
+  // contact; retain the same source lane for the active-hitlag ftCo_80093240 callback window.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80092F2C,ftCo_80093240}
   batch->state.action_id[d_idx] = (uint16_t)MSL_ACT_GUARD_SET_OFF;
+  batch->state.guard_setoff_hitlag_damage_min[d_idx] =
+      (max_int_dmg > 255) ? 255u : (uint8_t)max_int_dmg;
   // Decomp: GuardSetOff uses ftCo_SM_GuardDamage as its submotion (msid=40).
   // refs/melee/src/melee/ft/ftmotionstates.c (GuardSetOff motion-state entry uses ftCo_SM_GuardDamage)
   batch->state.animation_index[d_idx] = (uint32_t)MSL_SM_GUARD_DAMAGE;

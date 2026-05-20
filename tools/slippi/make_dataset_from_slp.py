@@ -727,6 +727,10 @@ def _fod_platform_motion_with_ground_contact(
     for fi in range(out_h.shape[0]):
         current_contact_this_frame = np.zeros(2, dtype=np.uint8)
         source_this_frame = np.zeros(2, dtype=np.uint8)
+        direct_event_height_this_frame = np.full(2, np.nan, dtype=np.float32)
+        frame_start_obs_frame = last_obs_frame.copy()
+        frame_start_obs_h = last_obs_h.copy()
+        frame_start_has_obs = has_obs.copy()
         # Replay FoD events, when present, are direct current grIzumi state for this frame. They
         # override grounded-contact fallback; the contact path exists only for sparse/missing event
         # streams. The helper above carries valid event values forward, so consume only fresh event
@@ -745,8 +749,21 @@ def _fod_platform_motion_with_ground_contact(
             if not fresh_event:
                 continue
             source_this_frame[platform_id] |= np.uint8(0x01)
+            direct_event_height_this_frame[platform_id] = event_h
             same_height = int(cur_valid[platform_id]) and abs(float(event_h - cur[platform_id])) <= 1e-6
-            if same_height:
+            predicted_motion = (
+                same_height
+                and int(cur_vel_valid[platform_id])
+                and float(cur_vel[platform_id]) < -1e-6
+            )
+            if predicted_motion:
+                # The previous frame's grIzumi hidden-descent velocity advanced `cur` to this fresh
+                # event height at the end of the last seed row. That event confirms the continuing
+                # source motion for the current row; it is not a stop boundary. Upward direct-event
+                # carry needs a separate Landing/CollData owner because current Landing rows can
+                # still reject the platform handoff even when the platform's JObj is moving.
+                pass
+            elif same_height:
                 cur_vel[platform_id] = np.float32(0.0)
                 cur_vel_valid[platform_id] = np.uint8(0)
             elif int(has_obs[platform_id]) and fi > int(last_obs_frame[platform_id]):
@@ -782,7 +799,27 @@ def _fod_platform_motion_with_ground_contact(
                 continue
             h = np.float32((y - local_y) / height_coeff)
             derived_velocity = False
-            if int(has_obs[platform_id]) and fi > int(last_obs_frame[platform_id]):
+            if int(frame_start_has_obs[platform_id]) and fi > int(frame_start_obs_frame[platform_id]):
+                # A fresh direct grIzumi event can arrive in the same frame as a grounded fighter
+                # contact. The event is source-current height, but the grounded root is the
+                # post-refresh mpLib line that should drive rider motion. Derive velocity from the
+                # previous frame-start source observation before the direct event masks it.
+                # refs/melee/src/melee/gr/grizumi.c::{grIzumi_801CC358,grIzumi_801CCBDC}
+                # refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
+                delta = np.float32(
+                    (float(h) - float(frame_start_obs_h[platform_id]))
+                    / float(fi - int(frame_start_obs_frame[platform_id]))
+                )
+                cur_vel[platform_id] = delta
+                cur_vel_valid[platform_id] = np.uint8(1)
+                derived_velocity = True
+            else:
+                direct_event_h = direct_event_height_this_frame[platform_id]
+                if np.isfinite(float(direct_event_h)) and abs(float(h - direct_event_h)) > 1e-6:
+                    cur_vel[platform_id] = np.float32(float(h) - float(direct_event_h))
+                    cur_vel_valid[platform_id] = np.uint8(1)
+                    derived_velocity = True
+            if not derived_velocity and int(has_obs[platform_id]) and fi > int(last_obs_frame[platform_id]):
                 delta = np.float32(
                     (float(h) - float(last_obs_h[platform_id]))
                     / float(fi - int(last_obs_frame[platform_id]))
@@ -856,6 +893,80 @@ def _fod_platform_motion_with_ground_contact(
     if return_source:
         return out_h, out_v, out_vel, out_vel_valid, out_source
     return out_h, out_v, out_vel, out_vel_valid
+
+
+def _fod_hidden_return_timers(
+    heights: np.ndarray,
+    valid: np.ndarray,
+    *,
+    motion_params: dict[str, float] | None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Derive hidden grIzumi return countdowns for replay rollout seeds.
+
+    When a FoD side platform is parked at the generated hidden target, replay rows expose the
+    current hidden height but not grIzumi's hidden wait timer. The next source-visible upward
+    height lets us reconstruct the current phase-4 countdown without trusting a stale sparse
+    collision height as current source authority.
+
+    refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+    data/stages/bin/griz.bin::MSLSTG01 platform_motions
+    """
+    h = np.asarray(heights, dtype=np.float32)
+    v = np.asarray(valid, dtype=np.uint8)
+    out_timer = np.zeros(h.shape, dtype=np.uint16)
+    out_valid = np.zeros(v.shape, dtype=np.uint8)
+    if motion_params is None or h.ndim != 2 or h.shape[1] != 2 or v.shape != h.shape:
+        return out_timer, out_valid
+
+    hidden = float(motion_params["hidden_target_height"])
+    up_speed = float(motion_params["up_speed"])
+    if not np.isfinite(hidden) or not np.isfinite(up_speed) or up_speed <= 0.0:
+        return out_timer, out_valid
+
+    hidden_eps = 1.0e-3
+    move_eps = max(1.0e-3, 0.25 * up_speed)
+    max_timer = np.iinfo(np.uint16).max
+    for platform_id in range(2):
+        col_h = h[:, platform_id]
+        col_valid = (v[:, platform_id] != 0) & np.isfinite(col_h)
+        hidden_rows = col_valid & (np.abs(col_h - hidden) <= hidden_eps)
+        moved_rows = col_valid & (col_h > hidden + move_eps)
+        candidate_rows = hidden_rows | moved_rows
+        if not np.any(hidden_rows) or not np.any(moved_rows):
+            continue
+
+        breaks = np.flatnonzero(~candidate_rows)
+        starts = np.concatenate(([0], breaks + 1))
+        stops = np.concatenate((breaks, [col_h.shape[0]]))
+        for start, stop in zip(starts, stops, strict=True):
+            if start >= stop:
+                continue
+            seg = slice(int(start), int(stop))
+            seg_hidden_rel = np.flatnonzero(hidden_rows[seg])
+            seg_moved_rel = np.flatnonzero(moved_rows[seg])
+            if seg_hidden_rel.size == 0 or seg_moved_rel.size == 0:
+                continue
+
+            moved_abs = seg_moved_rel + int(start)
+            moved_frames = np.maximum(
+                1,
+                np.rint((col_h[moved_abs] - hidden) / up_speed).astype(np.int64),
+            )
+            first_move_abs = np.maximum(0, moved_abs.astype(np.int64) - moved_frames)
+
+            hidden_abs = seg_hidden_rel + int(start)
+            next_moved_idx = np.searchsorted(moved_abs, hidden_abs, side="right")
+            has_next = next_moved_idx < moved_abs.size
+            if not np.any(has_next):
+                continue
+            hidden_abs = hidden_abs[has_next]
+            next_first_move = first_move_abs[next_moved_idx[has_next]]
+            timers = next_first_move - hidden_abs.astype(np.int64) - 1
+            ok = (timers >= 0) & (timers <= max_timer)
+            if np.any(ok):
+                out_timer[hidden_abs[ok], platform_id] = timers[ok].astype(np.uint16)
+                out_valid[hidden_abs[ok], platform_id] = np.uint8(1)
+    return out_timer, out_valid
 
 
 def _dir_to_facing(direction: np.ndarray) -> np.ndarray:
@@ -1776,6 +1887,7 @@ def _derive_fighter_8006cda4_pre_gate_consume_count_seed_lane(
     damagefly_roll_prob: float,
     victim_port: int,
     num_players: int,
+    allow_grounded_kneebend: bool = False,
 ) -> np.ndarray:
     """Derive the explicit Fighter_8006CDA4 pre-gate HSD_Randi consume count.
 
@@ -1816,6 +1928,9 @@ def _derive_fighter_8006cda4_pre_gate_consume_count_seed_lane(
       * Catch-family severe-airborne damage entry rows where the replay-visible RNG outcome proves
         the hidden held-item/x197C stream phase -> explicit zero-consume marker or one to three
         consumes
+      * FoD grounded KneeBend severe-airborne damage entry rows, currently scoped to the grIzumi
+        validation owner where the same hidden stream phase is replay-visible without causing
+        non-FoD rollout reshaping.
 
     Causality:
     - Runtime remains causal: it consumes only this explicit stream-phase lane.
@@ -1874,6 +1989,7 @@ def _derive_fighter_8006cda4_pre_gate_consume_count_seed_lane(
         float(damagefly_roll_prob),
         int(victim_port),
         int(num_players),
+        int(bool(allow_grounded_kneebend)),
     )
 
 
@@ -3992,6 +4108,37 @@ def _main_impl(args) -> Dataset:
         floor_prev_y[0] = post_pos_y[0]
         if floor_prev_y.shape[0] > 1:
             floor_prev_y[1:] = post_pos_y[:-2]
+        # Sustained airborne FoD DamageFly rows are a CollData lifetime exception to the generic
+        # "previous visible row" replay reconstruction above. Source ft_80081DD4 starts each
+        # DamageFly_Coll pass with:
+        #   coll.last_pos = coll.cur_pos; coll.cur_pos = fp.cur_pos
+        # before mpColl_800473CC. On FoD, the retained replay seed owner uses that
+        # callback-current root for sustained active DamageFly over transformed platforms and for
+        # already-below-main-floor hard-floor projection; focused hard-floor and open-air negatives
+        # keep ordinary DownBound/airborne outcomes intact. Non-FoD rows still use the normal
+        # previous-public-row sweep because current validation contains hard-floor contacts where
+        # that public previous-row sweep is source-owned.
+        #
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
+        # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+        # refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_800473CC}
+        act_damage_fly_hi = np.uint16(0x0057)
+        act_damage_fly_roll = np.uint16(0x005B)
+        sustained_active_damagefly = (
+            (np.uint32(stage_id) == np.uint32(2))
+            &
+            (post_state[:-1] >= act_damage_fly_hi)
+            & (post_state[:-1] <= act_damage_fly_roll)
+            & (post_on_ground[:-1] == 0)
+            & (post_hitlag[:-1] == 0)
+            & (post_hitstun[:-1] > 0)
+        )
+        if sustained_active_damagefly.shape[0] > 1:
+            sustained_active_damagefly[1:] &= post_state[1:-1] == post_state[:-2]
+        if sustained_active_damagefly.shape[0] > 0:
+            sustained_active_damagefly[0] = False
+        floor_prev_x = np.where(sustained_active_damagefly, post_pos_x[:-1], floor_prev_x)
+        floor_prev_y = np.where(sustained_active_damagefly, post_pos_y[:-1], floor_prev_y)
         samples["seed_t"]["floor_sweep_prev_pos_x_f32"][:, slot] = floor_prev_x
         samples["seed_t"]["floor_sweep_prev_pos_y_f32"][:, slot] = floor_prev_y
         samples["seed_t"]["floor_sweep_prev_pos_valid_u8"][:, slot] = np.uint8(1)
@@ -4993,6 +5140,7 @@ def _main_impl(args) -> Dataset:
                 damagefly_roll_prob=float(common["damagefly_roll_prob"]),
                 victim_port=slot,
                 num_players=num_players,
+                allow_grounded_kneebend=(int(stage_id) == 2),
             )
         )
 
@@ -5416,10 +5564,58 @@ def _main_impl(args) -> Dataset:
             motion_params=fod_motion_params,
             return_source=True,
         )
+        fod_deferred_velocity = np.zeros_like(fod_velocity, dtype=np.float32)
+        fod_deferred_velocity_valid = np.zeros_like(fod_velocity_valid, dtype=np.uint8)
+        if fod_motion_params:
+            min_stage_speed = min(
+                abs(float(fod_motion_params["down_speed"])),
+                abs(float(fod_motion_params["up_speed"])),
+            )
+            velocity_threshold = np.float32(0.5 * min_stage_speed)
+            for platform_id in range(2):
+                same_step = (fod_height_source[:, platform_id] & np.uint8(0x04)) != 0
+                no_current_velocity = fod_velocity_valid[:, platform_id] == 0
+                rows = same_step & no_current_velocity
+                if fod_velocity.shape[0] > 1:
+                    next_valid = np.zeros(fod_velocity.shape[0], dtype=np.uint8)
+                    next_value = np.zeros(fod_velocity.shape[0], dtype=np.float32)
+                    next_valid[:-1] = fod_velocity_valid[1:, platform_id]
+                    next_value[:-1] = fod_velocity[1:, platform_id]
+                    use_next = rows & (next_valid != 0) & (np.abs(next_value) >= velocity_threshold)
+                    fod_deferred_velocity[use_next, platform_id] = next_value[use_next]
+                    fod_deferred_velocity_valid[use_next, platform_id] = np.uint8(1)
+                if fod_velocity.shape[0] > 2:
+                    next2_valid = np.zeros(fod_velocity.shape[0], dtype=np.uint8)
+                    next2_value = np.zeros(fod_velocity.shape[0], dtype=np.float32)
+                    next2_valid[:-2] = fod_velocity_valid[2:, platform_id]
+                    next2_value[:-2] = fod_velocity[2:, platform_id]
+                    need_next2 = (
+                        rows
+                        & (fod_deferred_velocity_valid[:, platform_id] == 0)
+                        & (next2_valid != 0)
+                        & (np.abs(next2_value) >= velocity_threshold)
+                    )
+                    fod_deferred_velocity[need_next2, platform_id] = next2_value[need_next2]
+                    fod_deferred_velocity_valid[need_next2, platform_id] = np.uint8(1)
         samples["seed_t"]["stage_fod_platform_height_f32"] = fod_height
         samples["seed_t"]["stage_fod_platform_height_valid_u8"] = fod_valid
         samples["seed_t"]["stage_fod_platform_velocity_f32"] = fod_velocity
         samples["seed_t"]["stage_fod_platform_velocity_valid_u8"] = fod_velocity_valid
+        samples["seed_t"]["stage_fod_platform_deferred_velocity_f32"] = fod_deferred_velocity
+        samples["seed_t"][
+            "stage_fod_platform_deferred_velocity_valid_u8"
+        ] = fod_deferred_velocity_valid
+        fod_hidden_return_timer, fod_hidden_return_valid = _fod_hidden_return_timers(
+            fod_height,
+            fod_valid,
+            motion_params=fod_motion_params,
+        )
+        samples["seed_t"][
+            "stage_fod_platform_hidden_return_timer_u16"
+        ] = fod_hidden_return_timer
+        samples["seed_t"][
+            "stage_fod_platform_hidden_return_valid_u8"
+        ] = fod_hidden_return_valid
         samples["seed_t"]["stage_fod_platform_height_source_u8"] = fod_height_source
         fod_floor_skip = _derive_fod_floor_skip_segments(
             action_id_u16=samples["seed_t"]["action_id"][:, :num_players],

@@ -128,7 +128,7 @@ def test_guardreflect_final_x14_live_x18_blocks_early_attackairn_setoff_182447()
     dataset_path = (
         root
         / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "Game_20260515T182447.msl"
+        "Game_20260515T182447_frozenps.msl"
     )
     if not dataset_path.exists():
         pytest.skip(f"missing local dataset: {dataset_path}")
@@ -156,7 +156,7 @@ def test_guardreflect_final_x14_live_x18_next_callback_allows_attackairn_setoff_
     dataset_path = (
         root
         / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
-        "Game_20260515T182447.msl"
+        "Game_20260515T182447_frozenps.msl"
     )
     if not dataset_path.exists():
         pytest.skip(f"missing local dataset: {dataset_path}")
@@ -1039,6 +1039,90 @@ def test_guardreflect_x221c_b2_suppresses_fighter_shield_damage_his_lock() -> No
     assert float(out["shield_hp"][defender]) == pytest.approx(float(ref["shield_hp"][defender]))
     assert float(out["speed_ground_x_self"][defender]) == pytest.approx(
         float(ref["speed_ground_x_self"][defender])
+    )
+
+
+@pytest.mark.integration
+def test_guardreflect_x221c_b2_suppresses_fod_rollout_shield_damage_pte_lock() -> None:
+    # Runtime rollout lock for the same shield-hit owner on FoD:
+    # - p1 reaches GuardReflect with x14 expired, x18 live, and x221C_b2 still set.
+    # - ftColl_80076CBC suppresses shieldDamageTaken from x221C_b2 directly; ftCo_80092F2C also
+    #   uses that bit for powershield GuardSetOff recoil. Item-reflect authority remains x14-owned,
+    #   but fighter shield-hit damage/recoil must consume the longer x221C_b2/x18 lane.
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    defender = 1
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples["seed_t"][1642]
+    assert int(seed["action_id"][defender]) == 182  # GuardReflect.
+    assert int(seed["guard_reflect_timer_x14"][defender]) == 0
+    assert int(seed["guard_reflect_timer_x18"][defender]) == 2
+    assert int(seed["state_flags"][defender][3]) & 0x20
+
+    ref, out = _run_rollout_window(
+        dataset_path, 1263, 1642, ucf_enabled=True, ucf_cardinals_1_0_enabled=True
+    )
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender]) == 181
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 7
+    assert float(out["shield_hp"][defender]) == pytest.approx(
+        float(ref["shield_hp"][defender]), abs=1e-6
+    )
+    assert float(out["speed_ground_x_self"][defender]) == pytest.approx(
+        float(ref["speed_ground_x_self"][defender]), abs=1e-6
+    )
+
+
+@pytest.mark.integration
+def test_guardreflect_same_frame_entry_does_not_drain_until_next_source_anim_pte_lock() -> None:
+    # Runtime-positive/negative lock for the GuardReflect entry callback boundary:
+    # - p0 enters GuardReflect from a grounded Damage/Wait IASA source at PTE 5780.
+    # - Source ordering enters GuardReflect from Fighter_procUpdate after the frame's
+    #   Fighter_8006A360 Anim callback pass, so ftCo_GuardReflect_Anim -> ftCo_GuardOn_Anim
+    #   cannot drain shield HP until the next source frame.
+    # - The adjacent one-step seed at 5781 is already an established GuardReflect snapshot, so it
+    #   must still run the ordinary GuardReflect drain.
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    #   ftCo_80093A50,ftCo_GuardReflect_Anim,ftCo_800925A4}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+        "ParallelTemptingElk.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    defender = 0
+
+    ref_entry, out_entry = _run_rollout_window(dataset_path, 5317, 5780)
+    assert int(out_entry["action_id"][defender]) == int(ref_entry["action_id"][defender]) == 182
+    assert float(out_entry["shield_hp"][defender]) == pytest.approx(
+        float(ref_entry["shield_hp"][defender]), abs=1e-6
+    )
+
+    ref_next, out_next = _run_rollout_window(dataset_path, 5317, 5781)
+    assert int(out_next["action_id"][defender]) == int(ref_next["action_id"][defender]) == 182
+    assert float(out_next["shield_hp"][defender]) == pytest.approx(
+        float(ref_next["shield_hp"][defender]), abs=1e-6
+    )
+
+    seed_direct, ref_direct, out_direct = _run_one_step_row(dataset_path, 5781, defender)
+    assert int(seed_direct["action_id"][defender]) == 182
+    assert int(seed_direct["seed_prev_action_id"][defender]) != 182
+    assert float(out_direct["shield_hp"][defender]) == pytest.approx(
+        float(ref_direct["shield_hp"][defender]), abs=1e-6
     )
 
 

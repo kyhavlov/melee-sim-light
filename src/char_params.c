@@ -326,6 +326,8 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       "firefox_bound_angle_degrees",
       "firefox_bound_delay_frames",
       "rapid_jab_window",
+      "wait_anim_choice_msids",
+      "wait_anim_choice_weights",
       "ecb_joints",
       "grab_capture_anchor_part_id",
       "laser_spawn_joint_part_id",
@@ -392,6 +394,8 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
   float refl_off[3] = {0};
   float camera_off[3] = {0};
   size_t ecb_joint_count = 0u;
+  size_t wait_anim_choice_msid_count = 0u;
+  size_t wait_anim_choice_weight_count = 0u;
   if (json_get_f32(buf, "weight", &out.weight) != 0 ||
       json_get_u8_or_default(buf, "weight_independent_throws_mask", 0,
                              &out.weight_independent_throws_mask) != 0 ||
@@ -405,6 +409,13 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
       json_get_u8(buf, "turn_frames", &out.turn_frames) != 0 ||
       json_get_f32(buf, "rebound_anim_numerator_frames", &out.rebound_anim_numerator_frames) != 0 ||
       json_get_u8(buf, "rapid_jab_window", &out.rapid_jab_window) != 0 ||
+      json_get_u16_array(buf, "wait_anim_choice_msids", out.wait_anim_choice_msids,
+                         sizeof(out.wait_anim_choice_msids) / sizeof(out.wait_anim_choice_msids[0]),
+                         &wait_anim_choice_msid_count) != 0 ||
+      json_get_u16_array(
+          buf, "wait_anim_choice_weights", out.wait_anim_choice_weights,
+          sizeof(out.wait_anim_choice_weights) / sizeof(out.wait_anim_choice_weights[0]),
+          &wait_anim_choice_weight_count) != 0 ||
       json_get_u8(buf, "jump_startup_frames", &out.jump_startup_frames) != 0 ||
       json_get_f32(buf, "jump_h_initial_velocity", &out.jump_h_initial_velocity) != 0 ||
       json_get_f32(buf, "jump_v_initial_velocity", &out.jump_v_initial_velocity) != 0 ||
@@ -544,6 +555,14 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
     return -1;
   }
   out.ecb_joint_count = (uint8_t)ecb_joint_count;
+  if (wait_anim_choice_msid_count == 0u ||
+      wait_anim_choice_msid_count != wait_anim_choice_weight_count ||
+      wait_anim_choice_msid_count >
+          (sizeof(out.wait_anim_choice_msids) / sizeof(out.wait_anim_choice_msids[0]))) {
+    alloc_free(buf);
+    return -1;
+  }
+  out.wait_anim_choice_count = (uint8_t)wait_anim_choice_msid_count;
   // Backward-compatible optional fields (added for ftWalkCommon_800DFDDC parity):
   // if stale local artifacts are missing these keys, default to walk_max_vel so init keeps
   // working; regenerated extracts provide the decomp-sourced values.

@@ -45,9 +45,9 @@ rollout.first_mismatch_total: 51
 rollout.first_mismatch_seeded_total: 28
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
-  1. pos_y max_err=42.966 rec=4291 p=1 seed/ref/out=68.3996/68.3996/25.4336 actions=4/4/4 category=unclassified
-  2. pos_x max_err=10.62 rec=6629 p=2 seed/ref/out=22.7841/22.8141/12.1941 actions=179/179/179 category=unclassified
-  3. shield_hp max_err=4.2 rec=1184 p=0 seed/ref/out=52.02/52.02/47.82 actions=181/181/181 category=unclassified
+  1. pos_x max_err=10.62 rec=6629 p=2 seed/ref/out=22.7841/22.8141/12.1941 actions=179/179/179 category=unclassified
+  2. pos_y max_err=5.65209 rec=7177 p=1 seed/ref/out=0.868038/0.166287/-5.4858 actions=85/85/85 category=unclassified
+  3. shield_hp max_err=4.2 rec=1183 p=0 seed/ref/out=52.02/52.02/47.82 actions=181/181/181 category=unclassified
 rollout.float_top_downstream:
   1. percent max_err=15 rec=1179 p=0 seed/ref/out=32.52/32.52/47.52 actions=178/181/87 category=downstream_discrete_mismatch
   2. pos_x max_err=10.62 rec=6634 p=2 seed/ref/out=22.8141/22.8141/12.1941 actions=179/179/181 category=downstream_discrete_mismatch
@@ -65,9 +65,9 @@ overall.rollout.first_mismatch_total: 51
 overall.rollout.first_mismatch_seeded_total: 28
 overall.rollout.status: NOT-CLEAN
 overall.rollout.float_top_errors:
-  1. pos_y max_err=42.966 rec=4291 p=1 seed/ref/out=68.3996/68.3996/25.4336 actions=4/4/4 category=unclassified
-  2. pos_x max_err=10.62 rec=6629 p=2 seed/ref/out=22.7841/22.8141/12.1941 actions=179/179/179 category=unclassified
-  3. shield_hp max_err=4.2 rec=1184 p=0 seed/ref/out=52.02/52.02/47.82 actions=181/181/181 category=unclassified
+  1. pos_x max_err=10.62 rec=6629 p=2 seed/ref/out=22.7841/22.8141/12.1941 actions=179/179/179 category=unclassified
+  2. pos_y max_err=5.65209 rec=7177 p=1 seed/ref/out=0.868038/0.166287/-5.4858 actions=85/85/85 category=unclassified
+  3. shield_hp max_err=4.2 rec=1183 p=0 seed/ref/out=52.02/52.02/47.82 actions=181/181/181 category=unclassified
 overall.rollout.float_top_downstream:
   1. percent max_err=15 rec=1179 p=0 seed/ref/out=32.52/32.52/47.52 actions=178/181/87 category=downstream_discrete_mismatch
   2. pos_x max_err=10.62 rec=6634 p=2 seed/ref/out=22.8141/22.8141/12.1941 actions=179/179/181 category=downstream_discrete_mismatch

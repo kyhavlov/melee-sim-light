@@ -63,6 +63,57 @@ def _rollout_until_from_slp(slp_path: Path, *, record: int, ports: list[int]) ->
     return samples["seed_t"][record], samples["ref_t1"][record], out[0].copy()
 
 
+def _rollout_segment_from_slp(
+    slp_path: Path, *, start_record: int, record: int, ports: list[int]
+) -> tuple[np.void, np.void, np.void]:
+    if not slp_path.exists():
+        pytest.skip(f"missing local replay: {slp_path}")
+    assert start_record <= record
+    ds = build_dataset_from_slp(
+        slp_path=str(slp_path),
+        ports=ports,
+        ucf_enabled=True,
+        ucf_cardinals_1_0_enabled=True,
+    )
+    samples = ds.samples
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    sample_stride = int(samples.dtype.itemsize)
+    samples_u8 = samples.view(np.uint8).reshape(samples.shape[0], sample_stride)
+    seed_off = int(samples.dtype.fields["seed_t"][1])
+    prev_input_off = int(samples.dtype.fields["prev_input_t"][1])
+    input_off = int(samples.dtype.fields["input_t"][1])
+
+    seed_bytes = np.empty((1, seed_stride), dtype=np.uint8)
+    prev_input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+    input_bytes = np.empty((1, input_stride), dtype=np.uint8)
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+    out = out_compare_bytes.view(COMPARE_DTYPE).reshape(1)
+
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    try:
+        seed_bytes[0, :] = samples_u8[start_record, seed_off : seed_off + seed_stride]
+        binding.reseed_seed_rollout(handle, seed_bytes)
+        for j in range(start_record, record + 1):
+            prev_input_bytes[0, :] = samples_u8[j, prev_input_off : prev_input_off + input_stride]
+            input_bytes[0, :] = samples_u8[j, input_off : input_off + input_stride]
+            binding.step_input(handle, prev_input_bytes, input_bytes)
+            binding.write_compare(handle, out_compare_bytes)
+    finally:
+        binding.destroy(handle)
+
+    return samples["seed_t"][record], samples["ref_t1"][record], out[0].copy()
+
+
 def _one_step_from_slp(slp_path: Path, *, record: int, ports: list[int]) -> tuple[np.void, np.void, np.void]:
     if not slp_path.exists():
         pytest.skip(f"missing local replay: {slp_path}")
@@ -219,6 +270,33 @@ def test_guardreflect_entry_bits_survive_same_frame_capture_pulled_lw() -> None:
     assert int(ref["action_id"][p]) == int(out["action_id"][p]) == 226  # CapturePulledLw
     assert int(ref["state_flags"][p, 3]) == 0x60
     assert int(out["state_flags"][p, 3]) == int(ref["state_flags"][p, 3])
+
+
+@pytest.mark.integration
+def test_guardsetoff_runtime_hitlag_sdi_uses_live_shield_damage_owner() -> None:
+    # ElatedWearyTermite rec 2958: p1 is in active GuardSetOff hitlag after a runtime shield hit.
+    # Vanilla's ftColl shield contact writes x19A4 before ftCo_80092F2C installs ftCo_80093240;
+    # the callback later consumes the live x19A4/input-timer window to apply grounded shield SDI.
+    # A rollout that only seeds x19A4 from replay rows misses this free-running displacement.
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80092F2C,ftCo_80093240}
+    seed_before, ref_before, out_before = _rollout_segment_from_slp(
+        EWT_SLP, start_record=2951, record=2957, ports=[1, 2]
+    )
+    p = 1
+    assert int(seed_before["action_id"][p]) == int(ref_before["action_id"][p]) == 181
+    assert int(out_before["action_id"][p]) == 181
+    assert int(ref_before["hitlag"][p]) == int(out_before["hitlag"][p]) == 3
+    assert float(out_before["pos_x"][p]) == pytest.approx(float(ref_before["pos_x"][p]), abs=1e-6)
+
+    seed_sdi, ref_sdi, out_sdi = _rollout_segment_from_slp(
+        EWT_SLP, start_record=2951, record=2958, ports=[1, 2]
+    )
+    assert int(seed_sdi["action_id"][p]) == int(ref_sdi["action_id"][p]) == 181
+    assert int(out_sdi["action_id"][p]) == 181
+    assert int(ref_sdi["hitlag"][p]) == int(out_sdi["hitlag"][p]) == 2
+    assert float(out_sdi["pos_x"][p]) == pytest.approx(float(ref_sdi["pos_x"][p]), abs=1e-6)
+    assert abs(float(out_sdi["pos_x"][p]) - float(seed_sdi["pos_x"][p])) > 3.0
 
 
 @pytest.mark.integration

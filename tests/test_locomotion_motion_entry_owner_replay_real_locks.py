@@ -788,52 +788,51 @@ def test_noncausal_locomotion_lane_population_stays_narrow() -> None:
         67: 8,
     }
     assert primary_turn_transitions == {(18, 24)}
-    # Aggregate population moves with the retained source-owned seed lanes in this package:
-    # common-air walljump hidden setup/carry promotes five more locomotion motion-entry rows, while
-    # the guarded capture/match-flow and hidden-order families pick up the corresponding
-    # replay-prefix owners. Keep this as a population guard, not as per-row gameplay authority.
-    assert aggregate_turn == 93
-    assert aggregate_locomotion_motion == 1212
-    assert aggregate_specialn == 129
-    assert aggregate_match_flow == 405
-    assert aggregate_guard_collision == 1262
-    assert aggregate_hidden_order == 7744
+    # Aggregate population moves with the retained source-owned seed lanes in this package. Count
+    # only canonical validation datasets; stale local caches for removed/derived fixtures must not
+    # be required for this population guard.
+    assert aggregate_turn == 87
+    assert aggregate_locomotion_motion == 1182
+    assert aggregate_specialn == 125
+    assert aggregate_match_flow == 398
+    assert aggregate_guard_collision == 1242
+    assert aggregate_hidden_order == 7543
     assert aggregate_attacklw3_runtime == 0
     assert aggregate_hidden_order_families == {
-        "attack": 468,
-        "cliff": 377,
-        "damage": 757,
-        "fox_falco_special": 793,
-        "grab_capture": 995,
-        "jump_landing": 2554,
-        "locomotion": 1674,
-        "other": 126,
+        "attack": 446,
+        "cliff": 371,
+        "damage": 736,
+        "fox_falco_special": 772,
+        "grab_capture": 979,
+        "jump_landing": 2494,
+        "locomotion": 1625,
+        "other": 120,
     }
     assert dict(aggregate_hidden_order_ref_actions.most_common(25)) == {
-        43: 952,
-        39: 650,
-        18: 486,
-        360: 481,
-        20: 414,
-        25: 352,
-        42: 312,
+        43: 933,
+        39: 633,
+        18: 469,
+        360: 468,
+        20: 401,
+        25: 340,
+        42: 305,
         90: 255,
-        24: 220,
-        14: 213,
-        15: 195,
-        216: 194,
-        213: 192,
-        227: 188,
-        88: 184,
-        241: 156,
-        221: 156,
-        365: 153,
-        27: 132,
-        226: 131,
-        67: 106,
+        24: 211,
+        14: 205,
+        15: 193,
+        216: 191,
+        213: 189,
+        227: 185,
+        88: 174,
+        241: 153,
+        221: 153,
+        365: 149,
+        27: 130,
+        226: 129,
         16: 105,
-        69: 103,
-        344: 101,
-        65: 96,
+        69: 99,
+        67: 99,
+        344: 99,
+        65: 91,
     }
     assert aggregate_turn_transitions == {(18, 24)}

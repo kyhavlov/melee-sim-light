@@ -120,10 +120,21 @@ static inline void clear_seed_owned_transients_post_frame(MslBatch* batch) {
     for (int platform_id = 0; platform_id < 2; platform_id++) {
       const size_t pidx = (size_t)bi * 2u + (size_t)platform_id;
       // FoD platform-height source bits are seed/current-frame provenance for sparse replay
-      // reconstruction, not live scheduler state. Consume them during the reseeded frame, then
-      // require live velocity/scheduler/contact evidence or generated initial-height data again.
+      // reconstruction, not live scheduler state. Consume them during the reseeded frame; later
+      // frames require live velocity/scheduler/contact evidence or generated initial-height data
+      // again.
       // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
       // refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
+      if (batch->state.stage_fod_platform_deferred_velocity_valid[pidx]) {
+        // Same-step FoD platform contacts expose the current collision height for this frame before
+        // the next grIzumi velocity is source-visible. Promote that deferred velocity only after
+        // the reseeded frame so the landing frame does not pre-advance the platform.
+        batch->state.stage_fod_platform_velocity[pidx] =
+            batch->state.stage_fod_platform_deferred_velocity[pidx];
+        batch->state.stage_fod_platform_velocity_valid[pidx] = 1u;
+        batch->state.stage_fod_platform_deferred_velocity[pidx] = 0.0f;
+        batch->state.stage_fod_platform_deferred_velocity_valid[pidx] = 0u;
+      }
       batch->state.stage_fod_platform_height_source[pidx] = 0u;
     }
     for (int p = 0; p < num_players; p++) {

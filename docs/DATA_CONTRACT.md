@@ -617,12 +617,16 @@ Source/generation:
   AttackAirN` handoff; it stops at source/ground/hitlag/action-family boundaries and never
   backfills marker `4`, which is an immediate zero-consume gate marker rather than persistent hidden
   branch state for that owner.
-- For Catch-family severe-airborne damage-entry gates, exact replay seeds may materialize an
-  immediate marker/count when `ref_t1.action_id` plus the frame RNG seed identify the hidden
-  `Fighter_8006CDA4` stream phase. The lane is not backfilled across Catch frames; free-running
-  rollout uses the live owned RNG clock after the seed frame. If a Catch-family row does not
-  consume the gate in that frame, runtime clears the seed marker at frame end so it cannot leak into
-  later Catch/throw gameplay.
+- For Catch-family, grounded Dash, and basic grounded-attack severe-airborne damage-entry gates,
+  exact replay seeds may materialize an immediate marker/count when `ref_t1.action_id` plus the
+  frame RNG seed identify the hidden `Fighter_8006CDA4` stream phase. These rows are not backfilled
+  across earlier frames; free-running rollout uses the live owned RNG clock after the seed frame.
+  If such a row does not consume the gate in that frame, runtime clears the seed marker at frame end
+  so it cannot leak into later gameplay.
+- FoD grounded KneeBend severe-airborne damage-entry gates use the same immediate seed-frame
+  reconstruction for grIzumi validation rows where the hidden stream phase is replay-visible.
+  This KneeBend slice is intentionally scoped to FoD until non-FoD KneeBend variants have their
+  separate source owner; it is not backfilled and does not change free-running gameplay.
 - Runtime consumes the lane in `src/combat.c` immediately before the DamageFlyRoll gate, then
   clears it. Catch-family non-consumption is also cleared at frame end.
 - For Yoshi's Story Shy Guy scheduler rows with no live Heiho item, preprocessing stores
@@ -1011,7 +1015,11 @@ Characters (Fox/Falco):
     The MSLSTG01 v9 binary platform-motion payload carries
     `platform_motion.fountain_platform` constants from `GrIz.dat::yakumono_param`
     (`home_height`, hidden target, min/max, source speed fields, RNG weights, and
-    target-delta fields) for causal target selection and target clamping; the generated
+    target-delta fields) for causal target selection and target clamping. Runtime scheduler state
+    keeps the source lower-visible-stop boundary: the frame that reaches `min_visible_height`
+    publishes its line refresh before the next wait phase installs `xC6`, so subsequent
+    hidden-descent target selection samples the same frame-start HSD value as `grIzumi_801CC358`.
+    Mid-replay replay seeds still require explicit height/velocity/source lanes. The generated
     `griz.json` sidecar is audit/provenance only.
     Yoshi's Story adds current-domain stage-object terrain metadata: raw line `0` is
     debug-visible/non-fighter-solid and tagged with `stage_object_support_kind=yoshi_shyguy` for
@@ -1025,11 +1033,30 @@ Characters (Fox/Falco):
   - FoD seed lanes:
     - `stage_fod_platform_height_f32[2]`, `stage_fod_platform_height_valid_u8[2]`
     - `stage_fod_platform_velocity_f32[2]`, `stage_fod_platform_velocity_valid_u8[2]`
+    - `stage_fod_platform_deferred_velocity_f32[2]`,
+      `stage_fod_platform_deferred_velocity_valid_u8[2]`: one-frame deferred grIzumi velocity
+      for same-step platform-contact seeds. The same-step contact height is current collision
+      authority for the reseeded frame; this lane is promoted only after that frame so sustained
+      grounded riders follow the next source-visible platform motion without pre-advancing the
+      landing frame.
+    - `stage_fod_platform_hidden_return_timer_u16[2]`,
+      `stage_fod_platform_hidden_return_valid_u8[2]`: current hidden grIzumi phase-4 countdown
+      while a side platform is parked at `platform_motion.hidden_target_height`. Preprocessing
+      derives the timer from the next source-visible upward platform height and generated
+      `up_speed`; runtime installs it only when the seed height is still the generated hidden
+      target. This is hidden scheduler state for replay rollouts, not a collision-height source bit.
+      The derivation is vectorized over the two FoD platform lanes rather than a per-frame Python
+      scan; on 2026-05-20, a synthetic 1,000,000-row / 2-platform array completed in ~0.04s with
+      `uv run python` in this worktree.
     - `stage_fod_platform_height_source_u8[2]`: per-platform source bitmask for the current
       height (`0x01` direct Slippi `fod_platform` event, `0x02` current grounded-contact
       reconstruction, `0x04` same-step hidden contact reconstruction). This consumes the former
       FoD padding bytes and lets runtime collision trust fresh/source-owned current heights without
       trusting stale sparse carried heights.
+      Live rollout may also trust `stage_fod_platform_velocity_valid_u8` as grIzumi scheduler
+      evidence for the next Landing-family `ft_80084280 -> mpColl_8004B4B0` floor-release retry,
+      bounded by the current CollData ECB lift envelope; seed-only heights without source bits or
+      live velocity remain non-authoritative.
     - `floor_skip_segment_id_u16[4]`, `floor_skip_segment_valid_u8[4]` for hidden
       `CollData.floor_skip` carry when a replay-prefix platform pass-through episode is already
       active. For FoD height-transform `AttackAirN`/`AttackAirHi`/`AttackAirLw`, preprocessing uses
@@ -1039,7 +1066,28 @@ Characters (Fox/Falco):
       the down-held platform contact, down-held/root-clear carry while the hidden platform skip
       remains live, and the first hard-floor crossing that consumes that owner. Intermediate
       airborne frames stay unseeded unless one of those source handoff boundaries is visible.
-      `tools/slippi/preprocess_suite.py` cache version 12 is the first valid cache generation for
+      Sustained airborne FoD `DamageFly*` rows with same-action active hitstun and no hitlag seed
+      `floor_sweep_prev_pos` from the current visible root for transformed-platform stale sweeps
+      and already-below-main-floor hard-floor projection, matching `ft_80081DD4`'s
+      `coll.last_pos = coll.cur_pos; coll.cur_pos = fp.cur_pos` setup before
+      `ftCo_DamageFly_Coll` runs mpColl. FoD open-air and in-span platform contacts have focused
+      negatives; hard-floor rows on other stages keep the normal previous-public-row
+      reconstruction. This stack changes seed schema and same-record-size cache semantics:
+      `tools/slippi/preprocess_suite.py` cache version 19 is the first valid cache generation for
+      FoD hidden-return scheduler timer seed lanes; cache version 18 is the first valid cache
+      generation for FoD grounded KneeBend severe-airborne DamageFlyRoll seed-lane reconstruction;
+      cache version
+      17 is the first valid cache generation for
+      sustained FoD DamageFly current-root floor-sweep previous-position reconstruction; cache
+      version 16 is the first valid cache generation for
+      FoD same-step platform-contact deferred velocity seed lanes; cache version 15 is the first
+      valid cache generation for
+      grounded Dash/basic-attack severe-airborne DamageFlyRoll seed-lane reconstruction; cache
+      version 14 is the first valid cache generation for
+      deriving FoD grounded-contact platform velocity when a direct platform event and a grounded
+      contact expose different same-frame grIzumi heights; cache version 13 is the first valid
+      cache generation for preserving FoD direct-event platform velocity when a fresh event confirms
+      the previous grIzumi-predicted height; cache version 12 is the first valid cache generation for
       cliff-owned Damage* entry `ledge_cooldown` reconstruction (`ftCo_8008E908` setting
       `x2064_ledgeCooldown` while old `x221D_b7` is still live); cache version 11 is the first
       valid cache generation for attacker-side `smash_attrs` release seed lanes (`smash_charge_state`,

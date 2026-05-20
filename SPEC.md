@@ -769,7 +769,13 @@ Recent deltas to reflect here (do not let these get “lost in chat logs”):
   runtime admits only the platform-bottom sweep into MSLSTG01 FoD platform lines before applying the
   same root projection. Transformed side platforms retain the lock-countdown boundary (timer 3
   airborne, timer 2 publishable), while static center-platform and fresh Jump/JumpAerial entry rows
-  use their own callback-local sweep.
+  use their own callback-local sweep. Sustained airborne `DamageFly*` rows over FoD transformed
+  platforms also seed `floor_sweep_prev_pos` from the callback-visible CollData owner when the same
+  action continues in active hitstun without hitlag: `ft_80081DD4` has already copied
+  `coll.cur_pos` from the current fighter root at the start of `DamageFly_Coll`, and the hidden
+  transformed-platform state is the stale sweep source. This keeps FoD soft-platform crossings from
+  firing one frame early. Hard-floor rows on other stages keep the normal previous-public-row sweep
+  so real `DamageFly* -> Passive/DownBound` crossings remain intact.
   (`src/mpcoll_ground.c`; refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll,
   refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C},
   refs/melee/src/melee/mp/mpcoll.c::{mpColl_80043754,mpColl_80046904,mpColl_80044838_Floor});
@@ -2682,17 +2688,31 @@ Fox/Falco special-owner split (2026-04-17):
     and same-step contact reconstruction. Runtime transformed-platform trust uses that source bitmask
     to distinguish current grIzumi/mpLib platform heights from stale sparse carries without enabling
     the free-running FoD scheduler on teacher-forced replay seeds. `ParallelTemptingElk.msl:9136`
-    locks the low-left-platform same-step contact row; the long rollout cascade that starts at
-    `8596` still exposes the separate hidden FoD scheduler/RNG phase owner, because the platform
-    reappears hundreds of frames after the rollout seed and the current package does not seed the
-    remaining grIzumi wait/target phase. Sources:
+    locks the low-left-platform same-step contact row. When a rollout seed starts while a side
+    platform is parked at the generated hidden target, preprocessing may also seed the current
+    hidden-return countdown from the next source-visible upward platform height. Runtime installs
+    that lane only as grIzumi phase 4 at `platform_motion.hidden_target_height`; it is not a broad
+    sparse-height source bit and does not reconstruct arbitrary visible wait/target RNG phase.
+    The free-running match-start scheduler preserves the
+    `grIzumi_801CC358` lower-visible-stop boundary: when the platform reaches the generated
+    `min_visible_height`, source publishes that final movement frame before the next wait phase
+    installs `xC6`, so the later hidden-descent choice samples the following frame-start HSD value.
+    `MilkyGracefulStingray.msl:720/1729` locks both the first visible descent and the later hidden
+    descent decision without shifting ordinary home/max-height waits. Sources:
     `refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358`,
     `refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C`, and
     `data/stages/bin/griz.bin::MSLSTG01 platform_transforms`.
+    Same-step platform-contact rows may also seed a deferred FoD velocity: the source collision
+    height belongs to the current landing frame, while the next grIzumi delta becomes valid only
+    after that frame. Runtime promotes that deferred velocity during post-frame transient cleanup so
+    sustained grounded riders follow the moving platform without pre-advancing the landing callback.
+    `ParallelTemptingElk.msl:3257->3352` locks that boundary.
     The live match-start scheduler updates the platform geometry, but sustained `Landing` /
     `LandingAir*` callbacks still preserve their carried hard-floor CollData unless a same-step
-    contact bit or fresh action-entry handoff proves the side platform is the callback-local floor
-    owner; `ElatedWearyTermite.msl:838` locks that no-snap boundary.
+    contact bit, a fresh action-entry handoff, or live grIzumi velocity within the current CollData
+    ECB lift envelope proves the side platform is the callback-local floor owner;
+    `ElatedWearyTermite.msl:838` locks the stale no-snap boundary and
+    `ElatedWearyTermite.msl:1537->1538` locks the live moving-platform release retry.
     Source-owned FoD heights that are within generated grIzumi initial/target constants snap the
     transformed collision line to the extracted constant before mpLib floor projection. This is not
     a generic platform-y clamp: it covers named JObj poses from `MSLSTG01` (`platform_transform`
@@ -5484,14 +5504,19 @@ BODY collision-space residual split and rejected seed bridge:
   - `refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4`
   - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0`
   - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA`
-- Catch-family severe-airborne damage entries use the same explicit seed lane only as immediate
-  replay seed reconstruction. `Fighter_8006CDA4` does not exclude Catch/CatchDash/CatchWait/etc.,
-  but Slippi does not expose the hidden held-item/x197C branch inputs that decide the exact
-  pre-gate stream phase. Preprocessing therefore derives a seed-frame marker/count from
-  `ref_t1.action_id` and the frame-start RNG seed for the named Catch-family motion states, does
-  not backfill across Catch frames, and runtime clears an unconsumed Catch-family marker at frame
-  end. This is exact reseed support, not source-closed RNG ownership for free-running Catch
-  gameplay.
+- Catch-family, grounded Dash, and basic grounded-attack severe-airborne damage entries use the
+  same explicit seed lane only as immediate replay seed reconstruction. `Fighter_8006CDA4` runs
+  before the `ftCo_8008DCE0` DamageFlyRoll gate regardless of the visible pre-action, but Slippi
+  does not expose the hidden held-item/x197C branch inputs that decide the exact pre-gate stream
+  phase. Preprocessing therefore derives a seed-frame marker/count from `ref_t1.action_id` and the
+  frame-start RNG seed for the named Catch-family motion states, grounded Dash, and the common
+  grounded Attack* range; it does not backfill those grounded-entry rows across earlier frames, and
+  runtime clears an unconsumed marker at frame end. This is exact reseed support, not source-closed
+  RNG ownership for free-running grounded gameplay.
+- FoD grounded KneeBend severe-airborne entries use the same immediate seed-frame reconstruction
+  for grIzumi validation rows where the hidden stream phase is replay-visible. The KneeBend slice
+  stays scoped to FoD until non-FoD variants have a separate source owner; it is not backfilled and
+  does not alter free-running gameplay.
   Source anchors:
   - `refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4`
   - `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0`

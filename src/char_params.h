@@ -73,6 +73,17 @@ typedef struct MslCharParams {
   uint8_t rapid_jab_window;
   uint8_t _pad_u8_rapid_jab_window[3];
 
+  // Wait idle sub-animation roulette (`ftCo_8008A7A8` / `getAnimID`).
+  //
+  // Source of truth: ISO-extracted `data/characters/*.json` keys
+  // `wait_anim_choice_msids` and `wait_anim_choice_weights`, copied from the character's
+  // WaitStruct table.
+  // refs/melee/src/melee/ft/ftwaitanim.c::{ftCo_8008A7A8,getAnimID}
+  uint8_t wait_anim_choice_count;
+  uint8_t _pad_u8_wait_anim_choice[3];
+  uint16_t wait_anim_choice_msids[4];
+  uint16_t wait_anim_choice_weights[4];
+
   float jump_h_initial_velocity;
   float jump_v_initial_velocity;
   float hop_v_initial_velocity;

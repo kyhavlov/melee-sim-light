@@ -199,6 +199,7 @@ uint8_t stage_collision_floor_line_platform_transform_id(uint32_t stage_id, uint
 uint8_t stage_collision_floor_line_height_platform_state_is_source_trusted(const MslBatch* batch,
                                                                            int bi,
                                                                            uint16_t segment_i);
+uint8_t stage_collision_fod_hidden_target_height(float* out);
 // Resolve a floor line to current world coordinates for the given batch environment. Static lines
 // copy through unchanged. Dynamic FoD platform lines consume causal stage platform state.
 uint8_t stage_collision_floor_line_world(const MslBatch* batch, int bi,

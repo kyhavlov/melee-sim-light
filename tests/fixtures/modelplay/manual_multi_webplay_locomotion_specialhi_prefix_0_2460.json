@@ -33,9 +33,9 @@
       "note": "Fox Run -> TurnRun should finish into Run with post-flip facing when stick stays opposite old facing."
     },
     {
-      "start_frame": 2342,
-      "end_frame": 2452,
-      "note": "Grounded horizontal Firefox leaves SpecialHi into FallSpecial with all jumps consumed; X press must not double-jump out."
+      "start_frame": 2159,
+      "end_frame": 2258,
+      "note": "Grounded horizontal Firefox leaves SpecialHi into FallSpecial with all jumps consumed before recovery fall."
     }
   ],
   "input_ranges": [
