@@ -359,11 +359,13 @@ static inline uint8_t hurtboxes_apply_specialhi_local_xrotn(const MslBatch* batc
 static inline uint8_t hurtboxes_apply_damageflyroll_local_xrotn(
     const MslBatch* batch, size_t idx, uint8_t char_id, uint16_t msid, uint16_t pose_frame,
     uint16_t part_id, float model_scale, float* io_x, float* io_y, float* io_z) {
-  if (batch == NULL || io_x == NULL || io_y == NULL || io_z == NULL ||
-      !msl_anim_part_under_xrotn(char_id, part_id)) {
+  if (batch == NULL || io_x == NULL || io_y == NULL || io_z == NULL) {
     return 0u;
   }
   if (!hurtboxes_damageflyroll_live_xrotn_pose_owner(batch->state.action_id[idx])) {
+    return 0u;
+  }
+  if (!msl_anim_part_under_xrotn(char_id, part_id)) {
     return 0u;
   }
 
@@ -936,6 +938,10 @@ static void hurtboxes_refresh_impl(MslBatch* batch, uint8_t geometry_mode) {
       const float model_scale = hurtboxes_damageflyroll_live_xrotn_pose_owner(action_id)
                                     ? scale_y
                                     : (scale_y * model_scaling);
+      const uint8_t apply_specialhi_xrotn =
+          hurtboxes_runtime_specialhi_pose_owner(char_id, action_id);
+      const uint8_t apply_damageflyroll_xrotn =
+          hurtboxes_damageflyroll_live_xrotn_pose_owner(action_id);
       float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
       if (action_id == (uint16_t)MSL_ACT_TURN && batch->state.turn_has_turned[idx] != 0u) {
         // Standing Turn has an internal facing owner that can lead the replay-visible facing lane.
@@ -1063,16 +1069,22 @@ static void hurtboxes_refresh_impl(MslBatch* batch, uint8_t geometry_mode) {
         bx *= model_scale;
         by *= model_scale;
         bz *= model_scale;
-        (void)hurtboxes_apply_specialhi_local_xrotn(batch, idx, char_id, msid, frame,
-                                                    caps[ci].bone_part_id, facing_dir, model_scale,
-                                                    &ax, &ay, &az);
-        (void)hurtboxes_apply_specialhi_local_xrotn(batch, idx, char_id, msid, frame,
-                                                    caps[ci].bone_part_id, facing_dir, model_scale,
-                                                    &bx, &by, &bz);
-        (void)hurtboxes_apply_damageflyroll_local_xrotn(
-            batch, idx, char_id, pose_msid, 0u, caps[ci].bone_part_id, model_scale, &ax, &ay, &az);
-        (void)hurtboxes_apply_damageflyroll_local_xrotn(
-            batch, idx, char_id, pose_msid, 0u, caps[ci].bone_part_id, model_scale, &bx, &by, &bz);
+        if (apply_specialhi_xrotn) {
+          (void)hurtboxes_apply_specialhi_local_xrotn(batch, idx, char_id, msid, frame,
+                                                      caps[ci].bone_part_id, facing_dir,
+                                                      model_scale, &ax, &ay, &az);
+          (void)hurtboxes_apply_specialhi_local_xrotn(batch, idx, char_id, msid, frame,
+                                                      caps[ci].bone_part_id, facing_dir,
+                                                      model_scale, &bx, &by, &bz);
+        }
+        if (apply_damageflyroll_xrotn) {
+          (void)hurtboxes_apply_damageflyroll_local_xrotn(batch, idx, char_id, pose_msid, 0u,
+                                                          caps[ci].bone_part_id, model_scale, &ax,
+                                                          &ay, &az);
+          (void)hurtboxes_apply_damageflyroll_local_xrotn(batch, idx, char_id, pose_msid, 0u,
+                                                          caps[ci].bone_part_id, model_scale, &bx,
+                                                          &by, &bz);
+        }
 
         // Decomp: apply root facing rotation (rotY = M_PI_2 * facing_dir), mixing X/Z.
         // refs/melee/src/melee/ft/fighter.c (ftPartSetRotY(fp, 0, (M_PI_2 * fp->facing_dir)))

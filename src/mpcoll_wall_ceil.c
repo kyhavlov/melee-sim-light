@@ -97,6 +97,52 @@ static inline uint8_t wall_line_outside_box(const MslStageWallLine* l, float min
   return (uint8_t)(l->max_y < min_y || l->min_y > max_y);
 }
 
+static inline uint8_t swept_ecb_side_outside_wall_graph(
+    const MslStageWallGraph* g, float prev_side_x, float prev_side_y, float cur_side_x,
+    float cur_side_y, float prev_bottom_x, float prev_bottom_y, float cur_bottom_x,
+    float cur_bottom_y, float prev_top_x, float prev_top_y, float cur_top_x, float cur_top_y) {
+  if (g == NULL || g->lines == NULL || g->line_count == 0u) {
+    return 1u;
+  }
+  // Conservative broad phase for source mpColl wall candidate collection. If every side/bottom/top
+  // sweep and the two swept side-edge quads are outside the stage wall graph's padded bounds, all
+  // exact mpCheck{Left,Right}Wall candidate probes below are guaranteed misses.
+  const float min_a_x = min4f(prev_side_x, cur_side_x, prev_bottom_x, cur_bottom_x);
+  const float min_b_x = (prev_top_x < cur_top_x) ? prev_top_x : cur_top_x;
+  const float max_a_x = max4f(prev_side_x, cur_side_x, prev_bottom_x, cur_bottom_x);
+  const float max_b_x = (prev_top_x > cur_top_x) ? prev_top_x : cur_top_x;
+  const float min_a_y = min4f(prev_side_y, cur_side_y, prev_bottom_y, cur_bottom_y);
+  const float min_b_y = (prev_top_y < cur_top_y) ? prev_top_y : cur_top_y;
+  const float max_a_y = max4f(prev_side_y, cur_side_y, prev_bottom_y, cur_bottom_y);
+  const float max_b_y = (prev_top_y > cur_top_y) ? prev_top_y : cur_top_y;
+  const float sweep_min_x = ((min_a_x < min_b_x) ? min_a_x : min_b_x) - k_line_end_clamp;
+  const float sweep_max_x = ((max_a_x > max_b_x) ? max_a_x : max_b_x) + k_line_end_clamp;
+  const float sweep_min_y = ((min_a_y < min_b_y) ? min_a_y : min_b_y) - k_line_end_clamp;
+  const float sweep_max_y = ((max_a_y > max_b_y) ? max_a_y : max_b_y) + k_line_end_clamp;
+  return (uint8_t)(sweep_max_x < g->min_x || sweep_min_x > g->max_x || sweep_max_y < g->min_y ||
+                   sweep_min_y > g->max_y);
+}
+
+static inline uint8_t swept_ecb_top_outside_ceiling_graph(const MslStageCeilingGraph* g,
+                                                          float prev_top_x, float prev_top_y,
+                                                          float cur_top_x, float cur_top_y) {
+  if (g == NULL || g->lines == NULL || g->line_count == 0u) {
+    return 1u;
+  }
+  const float min_x = ((prev_top_x < cur_top_x) ? prev_top_x : cur_top_x) - k_line_end_clamp;
+  const float max_x = ((prev_top_x > cur_top_x) ? prev_top_x : cur_top_x) + k_line_end_clamp;
+  const float min_y = ((prev_top_y < cur_top_y) ? prev_top_y : cur_top_y) - k_line_end_clamp;
+  const float max_y = ((prev_top_y > cur_top_y) ? prev_top_y : cur_top_y) + k_line_end_clamp;
+  return (uint8_t)(max_x < g->min_x || min_x > g->max_x || max_y < g->min_y || min_y > g->max_y);
+}
+
+static inline uint8_t wall_point_outside_projectable_graph(const MslStageWallGraph* g, float x,
+                                                           float y) {
+  // Persisted-wall projection recovery accepts only +/-0.1 source seam corrections, and stage
+  // wall graph bounds are already padded for mpLib endpoint extension during load.
+  return (uint8_t)(x < g->min_x || x > g->max_x || y < g->min_y || y > g->max_y);
+}
+
 static int grounded_right_wall_floor_adjacent_line_idx(const MslStageFloorGraph* fg,
                                                        const MslStageWallGraph* rwg,
                                                        uint32_t stage_id, uint16_t ground_id) {
@@ -2122,6 +2168,12 @@ static uint8_t grounded_ordered_left_wall(MslBatch* batch, size_t idx, const Msl
   const uint32_t stage_id = batch->state.stage_id[(size_t)bi];
   const int excluded_floor_wall =
       grounded_left_wall_floor_adjacent_line_idx(fg, lwg, stage_id, batch->state.ground_id[idx]);
+  if (swept_ecb_side_outside_wall_graph(lwg, prev_ecb->right_x, prev_ecb->right_y, cur_ecb->right_x,
+                                        cur_ecb->right_y, prev_ecb->bottom_x, prev_ecb->bottom_y,
+                                        cur_ecb->bottom_x, cur_ecb->bottom_y, prev_ecb->top_x,
+                                        prev_ecb->top_y, cur_ecb->top_x, cur_ecb->top_y)) {
+    return 0u;
+  }
 
   MslWallCandidateList candidates;
   wall_candidate_list_init(&candidates);
@@ -2219,6 +2271,12 @@ static uint8_t grounded_ordered_right_wall(MslBatch* batch, size_t idx,
   const uint32_t stage_id = batch->state.stage_id[(size_t)bi];
   const int excluded_floor_wall =
       grounded_right_wall_floor_adjacent_line_idx(fg, rwg, stage_id, batch->state.ground_id[idx]);
+  if (swept_ecb_side_outside_wall_graph(rwg, prev_ecb->left_x, prev_ecb->left_y, cur_ecb->left_x,
+                                        cur_ecb->left_y, prev_ecb->bottom_x, prev_ecb->bottom_y,
+                                        cur_ecb->bottom_x, cur_ecb->bottom_y, prev_ecb->top_x,
+                                        prev_ecb->top_y, cur_ecb->top_x, cur_ecb->top_y)) {
+    return 0u;
+  }
 
   MslWallCandidateList candidates;
   wall_candidate_list_init(&candidates);
@@ -2435,6 +2493,20 @@ void mpcoll_grounded_wall_ceil_ordered_begin(const MslMpcollContext* ctx,
   MslEcbWorldPoints prev = *prev_ecb;
   ecb_points_apply_inline_horizontal_normalization(batch, idx, &cur);
   ecb_points_apply_inline_horizontal_normalization(batch, idx, &prev);
+  if (swept_ecb_side_outside_wall_graph(lwg, prev.right_x, prev.right_y, cur.right_x, cur.right_y,
+                                        prev.bottom_x, prev.bottom_y, cur.bottom_x, cur.bottom_y,
+                                        prev.top_x, prev.top_y, cur.top_x, cur.top_y) &&
+      swept_ecb_side_outside_wall_graph(rwg, prev.left_x, prev.left_y, cur.left_x, cur.left_y,
+                                        prev.bottom_x, prev.bottom_y, cur.bottom_x, cur.bottom_y,
+                                        prev.top_x, prev.top_y, cur.top_x, cur.top_y) &&
+      swept_ecb_top_outside_ceiling_graph(ctx->ceiling_graph, prev.top_x, prev.top_y, cur.top_x,
+                                          cur.top_y)) {
+    result.cur_ecb_after = cur;
+    if (out != NULL) {
+      *out = result;
+    }
+    return;
+  }
   uint8_t hit_left = 0u;
   uint8_t hit_right = 0u;
   if (grounded_ordered_left_wall(batch, idx, fg, lwg, &prev, &cur, &result.left_wall_id,
@@ -2449,17 +2521,23 @@ void mpcoll_grounded_wall_ceil_ordered_begin(const MslMpcollContext* ctx,
     result.left_right_flags |= 2u;
     result.squeeze_flags |= (uint8_t)MSL_MPCOLL_ORDERED_SQUEEZE_RIGHT_WALL;
   }
-  if (grounded_ordered_left_wall(batch, idx, fg, lwg, &prev, &cur, &result.left_wall_id,
-                                 &result.x_after_left_wall)) {
-    hit_left = 1u;
-    result.left_right_flags |= 1u;
-    result.squeeze_flags |= (uint8_t)MSL_MPCOLL_ORDERED_SQUEEZE_LEFT_WALL;
-  }
-  if (grounded_ordered_right_wall(batch, idx, fg, rwg, &prev, &cur, &result.right_wall_id,
-                                  &result.x_after_right_wall)) {
-    hit_right = 1u;
-    result.left_right_flags |= 2u;
-    result.squeeze_flags |= (uint8_t)MSL_MPCOLL_ORDERED_SQUEEZE_RIGHT_WALL;
+  if (hit_left || hit_right) {
+    // Source order retries both walls after the first left/right pair. When neither side hit, no
+    // wall helper mutated `cur`, so the retry inputs are identical and the exact mpCheck* scans
+    // are guaranteed to repeat the same misses.
+    // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004ACE4
+    if (grounded_ordered_left_wall(batch, idx, fg, lwg, &prev, &cur, &result.left_wall_id,
+                                   &result.x_after_left_wall)) {
+      hit_left = 1u;
+      result.left_right_flags |= 1u;
+      result.squeeze_flags |= (uint8_t)MSL_MPCOLL_ORDERED_SQUEEZE_LEFT_WALL;
+    }
+    if (grounded_ordered_right_wall(batch, idx, fg, rwg, &prev, &cur, &result.right_wall_id,
+                                    &result.x_after_right_wall)) {
+      hit_right = 1u;
+      result.left_right_flags |= 2u;
+      result.squeeze_flags |= (uint8_t)MSL_MPCOLL_ORDERED_SQUEEZE_RIGHT_WALL;
+    }
   }
 
   if (hit_left && hit_right) {
@@ -2837,7 +2915,8 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
             }
           }
         }
-        if (batch->state.wall_kind[idx] == 0 && !grounded_now) {
+        if (batch->state.wall_kind[idx] == 0 && !grounded_now &&
+            !wall_point_outside_projectable_graph(lwg, cur_rx, cur_ry)) {
           // Teacher-forced CollData persistence recovery:
           // - In-engine CollData can enter this frame with a persisted wall index from the prior
           //   mpColl step. One-step reseeds expose position/velocity but not that hidden index.
@@ -3073,7 +3152,8 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
             ecb_points_shift_x3(&cur_ecb, &cur_right_ecb, &cur_specialhi_wall_ecb, dx);
           }
         }
-        if (batch->state.wall_kind[idx] == 0 && !grounded_now) {
+        if (batch->state.wall_kind[idx] == 0 && !grounded_now &&
+            !wall_point_outside_projectable_graph(rwg, cur_lx, cur_ly)) {
           // Symmetric persisted-index recovery for right walls.
           // refs/melee/src/melee/lb/types.h::CollData
           // refs/melee/src/melee/mp/mplib.c::{mpLib_8004E684_RightWall,mpLineIntersectionV}

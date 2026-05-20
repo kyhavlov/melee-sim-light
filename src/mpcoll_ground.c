@@ -3743,6 +3743,49 @@ static uint8_t floor_4a908_retry(MslBatch* batch, size_t idx, int bi, const MslS
   // - Both retries require a different floor that is not connected to the persisted
   //   CollData.floor.index. Platform admission remains floor_skip/fighter-solid gated.
   // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004A908_Floor
+  // Conservative broad phase for the same source retry: if the two source sweeps' bounding box
+  // cannot overlap any disconnected floor's world-line bounds, the exact mpCheckFloor passes below
+  // would be guaranteed misses.
+  const float sweep_min_x = ((prev_bottom_x < cur_bottom_x) ? prev_bottom_x : cur_bottom_x) -
+                            (k_floor_x_end_clamp + k_ecb_vertical_unit);
+  const float sweep_max_x = ((prev_bottom_x > cur_bottom_x) ? prev_bottom_x : cur_bottom_x) +
+                            (k_floor_x_end_clamp + k_ecb_vertical_unit);
+  float sweep_min_y = cur_bottom_y;
+  float sweep_max_y = cur_bottom_y;
+  if (prev_bottom_y < sweep_min_y) {
+    sweep_min_y = prev_bottom_y;
+  }
+  if (prev_bottom_y > sweep_max_y) {
+    sweep_max_y = prev_bottom_y;
+  }
+  if (prev_side_mid_y < sweep_min_y) {
+    sweep_min_y = prev_side_mid_y;
+  }
+  if (prev_side_mid_y > sweep_max_y) {
+    sweep_max_y = prev_side_mid_y;
+  }
+  sweep_min_y -= k_ecb_vertical_unit;
+  sweep_max_y += k_ecb_vertical_unit;
+  uint8_t may_hit_disconnected_floor = 0u;
+  for (size_t li = 0; li < g->line_count; li++) {
+    if ((int)li == persisted_line_idx) {
+      continue;
+    }
+    const MslStageFloorLine l = floor_line_world_for_env(batch, bi, g, (int)li);
+    const float line_min_x = ((l.x0 < l.x1) ? l.x0 : l.x1) - k_floor_x_end_clamp;
+    const float line_max_x = ((l.x0 > l.x1) ? l.x0 : l.x1) + k_floor_x_end_clamp;
+    const float line_min_y = ((l.y0 < l.y1) ? l.y0 : l.y1) - k_ecb_vertical_unit;
+    const float line_max_y = ((l.y0 > l.y1) ? l.y0 : l.y1) + k_ecb_vertical_unit;
+    if (sweep_max_x < line_min_x || sweep_min_x > line_max_x || sweep_max_y < line_min_y ||
+        sweep_min_y > line_max_y || floor_lines_connected(g, (int)li, persisted_line_idx)) {
+      continue;
+    }
+    may_hit_disconnected_floor = 1u;
+    break;
+  }
+  if (!may_hit_disconnected_floor) {
+    return 0u;
+  }
   const float start_y[2] = {prev_bottom_y, prev_side_mid_y};
   int accepted_line_idx = -1;
   float nx = 0.0f;
