@@ -10,6 +10,7 @@
 #include "char_params.h"
 #include "common_params.h"
 #include "dash_iasa.h"
+#include "damage_terminal_owner.h"
 #include "grab_attachment.h"
 #include "guard_lifecycle.h"
 #include "input_axis.h"
@@ -159,16 +160,10 @@ static inline uint8_t action_is_catch_pull_state(uint16_t action_id) {
 }
 
 static inline uint8_t capture_pre_connect_action_is_damagefly(uint16_t action_id) {
-  switch (action_id) {
-    case (uint16_t)MSL_ACT_DAMAGE_FLY_HI:
-    case (uint16_t)MSL_ACT_DAMAGE_FLY_N:
-    case (uint16_t)MSL_ACT_DAMAGE_FLY_LW:
-    case (uint16_t)MSL_ACT_DAMAGE_FLY_TOP:
-    case (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL:
-      return 1u;
-    default:
-      return 0u;
-  }
+  // CapturePulled collision handoff needs the common DamageFly owner, including FlyReflect, from
+  // the generated MotionState class rather than a local action slice.
+  // data/motion_state/owners/{fox,falco}.bin (MSLMSO01 class DAMAGE_FLY)
+  return msl_damage_owner_is_damagefly_action(action_id);
 }
 
 static inline void maybe_enter_capture_wait_lw_grounded_handoff(MslBatch* batch, int bi,

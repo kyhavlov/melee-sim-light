@@ -17,7 +17,7 @@ from tools.extraction.extract_attack_id_move_id import (
 
 
 FORMAT_MAGIC = b"MSLMSO01"
-FORMAT_VERSION = 12
+FORMAT_VERSION = 13
 U16_ABSENT = 0xFFFF
 
 CLASS_ATTACK_AIR = 1 << 0
@@ -51,6 +51,7 @@ CLASS_GROUNDED_ATTACK_WAIT_IASA_LOCOMOTION = 1 << 27
 CLASS_GROUNDED_ATTACK_WAIT_IASA_CATCH_GUARD = 1 << 28
 CLASS_ESCAPE_AIR_COLL = 1 << 29
 CLASS_FX_SPECIALS_GROUND_B108_COLL = 1 << 30
+CLASS_FT80082B1C_BASIC_LANDING_COLL = 1 << 31
 
 
 @dataclass(frozen=True)
@@ -410,6 +411,24 @@ def _class_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
         #   ftFx_SpecialSStart_Coll,ftFx_SpecialS_Coll}
         # refs/melee/src/melee/ft/ft_081B.c::ft_80082708
         bits |= CLASS_FX_SPECIALS_GROUND_B108_COLL
+    if coll_cb in {
+        "ftCo_Fall_Coll",
+        "ftCo_FallAerial_Coll",
+        "ftCo_FallSpecial_Coll",
+        "ftCo_Jump_Coll",
+        "ftCo_JumpAerial_Coll",
+        "ftCo_CliffJump2_Coll",
+        "ftCo_MissFoot_Coll",
+        "ftFx_SpecialAirNStart_Coll",
+        "ftFx_SpecialAirNLoop_Coll",
+        "ftFx_SpecialAirNEnd_Coll",
+    }:
+        # Collision callbacks that use the basic `ft_80082B1C` landing/Wait callback after floor
+        # contact. Keep this generated from decomp callback symbols so runtime landing selection
+        # does not carry a parallel action-id list.
+        # refs/melee/src/melee/ft/ft_081B.c::{ft_80082B1C,ft_800831CC,ft_800835B0}
+        # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::*_Coll
+        bits |= CLASS_FT80082B1C_BASIC_LANDING_COLL
     return bits
 
 
@@ -621,6 +640,7 @@ def _write_manifest(out_path: Path, callback_ids: dict[str, int]) -> None:
         "GROUNDED_ATTACK_WAIT_IASA_CATCH_GUARD": CLASS_GROUNDED_ATTACK_WAIT_IASA_CATCH_GUARD,
         "ESCAPE_AIR_COLL": CLASS_ESCAPE_AIR_COLL,
         "FX_SPECIALS_GROUND_B108_COLL": CLASS_FX_SPECIALS_GROUND_B108_COLL,
+        "FT80082B1C_BASIC_LANDING_COLL": CLASS_FT80082B1C_BASIC_LANDING_COLL,
     }
     symbols = [{"id": int(i), "symbol": sym} for sym, i in sorted(callback_ids.items(), key=lambda kv: kv[1])]
     payload = {

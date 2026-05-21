@@ -9,7 +9,7 @@ import numpy as np
 
 
 MAGIC = b"MSLMSO01"
-VERSION = 12
+VERSION = 13
 
 
 @dataclass(frozen=True)

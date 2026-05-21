@@ -90,6 +90,15 @@ uint8_t move_tables_attackair_post_clear_create_hitbox_phase(uint8_t char_id,
                                                              uint16_t attackair_action_id,
                                                              float cur_anim_frame_f32);
 
+// Returns whether an AttackAir* script is in a later same-group create payload that does not pass
+// through clear_hitboxes first. Decomp keeps HitCapsule.victims_1 live across this owner because
+// ftAction_8007121C only calls ftColl_800768A0 on disabled/enabled or hit_group changes.
+//
+// Source of truth: data/scripts/{fox,falco}.bin (MSLFTSC1) create_hitbox / clear_hitboxes.
+uint8_t move_tables_attackair_same_group_payload_preserves_hitcapsule(uint8_t char_id,
+                                                                      uint16_t attackair_action_id,
+                                                                      float cur_anim_frame_f32);
+
 // Returns whether grounded Attack* can be interrupted (IASA) at the given cur_anim_frame.
 //
 // Decomp:

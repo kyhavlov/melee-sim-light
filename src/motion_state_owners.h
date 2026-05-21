@@ -51,6 +51,7 @@ enum {
   MSL_MS_CLASS_GROUNDED_ATTACK_WAIT_IASA_CATCH_GUARD = 1u << 28,
   MSL_MS_CLASS_ESCAPE_AIR_COLL = 1u << 29,
   MSL_MS_CLASS_FX_SPECIALS_GROUND_B108_COLL = 1u << 30,
+  MSL_MS_CLASS_FT80082B1C_BASIC_LANDING_COLL = 1u << 31,
 };
 
 uint16_t msl_motion_state_submotion_id(uint8_t char_id, uint16_t action_id);

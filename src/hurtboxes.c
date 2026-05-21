@@ -470,8 +470,7 @@ static inline void hurtboxes_apply_colanim_action_entry(MslBatch* batch, size_t 
   // Throw entry ownership:
   // - ftCo_800DD398 enters Throw* and calls ftColl_8007B7A4(..., x348), which sets x1994 and x198C.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DD398
-  if (action == (uint16_t)MSL_ACT_THROW_F || action == (uint16_t)MSL_ACT_THROW_B ||
-      action == (uint16_t)MSL_ACT_THROW_HI || action == (uint16_t)MSL_ACT_THROW_LW) {
+  if (msl_action_is_throw_owner(action)) {
     uint16_t rem =
         hurtboxes_timer_remaining_from_action_frame(c->colanim_throw_x1994_frames, action_frame);
     if (rem > batch->state.colanim_timer_x1994[idx]) {

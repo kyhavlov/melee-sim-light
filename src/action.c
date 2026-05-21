@@ -137,12 +137,16 @@ uint8_t escape_air_try_enter_from_air_locomotion(MslBatch* batch, const MslCommo
   const uint32_t stage_id = batch->state.stage_id[idx / (size_t)MSL_MAX_PLAYERS];
   const uint16_t source_action_id = batch->state.action_id[idx];
   const uint16_t floor_id = batch->state.ground_id[idx];
-  const uint8_t source_floor_is_platform =
-      (floor_id != 0xFFFFu && stage_collision_floor_line_is_platform(stage_id, floor_id)) ? 1u : 0u;
-  const uint8_t source_floor_has_platform_transform =
-      (floor_id != 0xFFFFu && stage_collision_floor_line_has_platform_transform(stage_id, floor_id))
+  MslStageFloorLineCaps source_floor_caps = {0};
+  const uint8_t source_floor_has_caps =
+      (floor_id != 0xFFFFu &&
+       stage_collision_floor_line_caps(stage_id, floor_id, &source_floor_caps))
           ? 1u
           : 0u;
+  const uint8_t source_floor_is_platform =
+      (source_floor_has_caps && source_floor_caps.is_platform) ? 1u : 0u;
+  const uint8_t source_floor_has_platform_transform =
+      (source_floor_has_caps && source_floor_caps.platform_transform_kind != 0u) ? 1u : 0u;
   const uint8_t source_floor_carries_locked_ecb =
       (floor_id != 0xFFFFu && (!source_floor_is_platform || source_floor_has_platform_transform))
           ? 1u

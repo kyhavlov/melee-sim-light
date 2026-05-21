@@ -5608,6 +5608,13 @@ BODY collision-space residual split and rejected seed bridge:
   `FX_SPECIALS_GROUND_B108_COLL` classes own those predicates; AttackAir platform/floor-skip
   classification is centralized through one generated callback/submotion owner helper before
   phase-specific MSLFTSC1 checks are applied.
+- Basic airborne floor-contact Wait-vs-Landing selection uses generated MSLMSO01
+  `FT80082B1C_BASIC_LANDING_COLL` ownership instead of a local action list. The class is generated
+  from collision callbacks that route through `ft_80082B1C`, including Jump/Fall/CliffJump2 and
+  Fox/Falco airborne blaster catch-hit callbacks. Sources:
+  `refs/melee/src/melee/ft/ft_081B.c::{ft_80082B1C,ft_800831CC,ft_800835B0}`,
+  `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::*_Coll`,
+  `data/motion_state/owners/{fox,falco}.bin`.
 - FoD generated slope persistence uses the same source floor traversal in jump-squat and immediate
   EscapeAir handoffs. `KneeBend_Coll -> ft_80083F88 -> ft_80082708 -> mpColl_8004B108` consumes
   signed `mpLib_8004DD90_Floor` correction on generated slopes. If `KneeBend_Anim` enters Jump and

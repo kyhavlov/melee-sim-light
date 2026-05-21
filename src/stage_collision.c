@@ -1737,6 +1737,27 @@ int stage_collision_fighter_floor_line_index(uint32_t stage_id, uint16_t segment
   return stage_slot_fighter_floor_line_index(stage_slot(stage_id), segment_i);
 }
 
+uint8_t stage_collision_floor_line_caps(uint32_t stage_id, uint16_t segment_i,
+                                        MslStageFloorLineCaps* out) {
+  const MslStageFloorLine* line = stage_floor_line_for_segment(stage_slot(stage_id), segment_i);
+  if (out != NULL) {
+    *out = (MslStageFloorLineCaps){0};
+  }
+  if (line == NULL || out == NULL) {
+    return 0u;
+  }
+  // MSLSTG01 floor-line owner packet: expose the generated source flags together so gameplay
+  // callers do not have to duplicate stage-line lookup policy for platform/transform decisions.
+  // data/stages/bin/*.bin::MSLSTG01 segment flags + platform_transform records
+  out->is_platform = line->is_platform ? 1u : 0u;
+  out->fighter_solid = line->fighter_solid ? 1u : 0u;
+  out->stage_object_support_kind = line->stage_object_support_kind;
+  out->platform_transform_kind = line->platform_transform_kind;
+  out->platform_transform_id = line->platform_transform_id;
+  out->ground_friction_mul = line->ground_friction_mul;
+  return 1u;
+}
+
 uint8_t stage_collision_floor_line_is_platform(uint32_t stage_id, uint16_t segment_i) {
   const MslStageFloorLine* line = stage_floor_line_for_segment(stage_slot(stage_id), segment_i);
   if (line == NULL) {

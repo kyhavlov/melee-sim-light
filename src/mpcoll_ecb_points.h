@@ -180,3 +180,11 @@ static inline void msl_ecb_world_points_preserve_desired_bottom_rel_y(MslEcbWorl
   out->bottom_x = pos_x;
   out->bottom_y = pos_y + bottom_rel_y;
 }
+
+static inline void msl_ecb_world_points_preserve_locked_desired_bottom_rel_y(
+    MslEcbWorldPoints* out, float pos_x, float pos_y, uint8_t locked_bottom_valid,
+    float locked_bottom_rel_y) {
+  if (locked_bottom_valid) {
+    msl_ecb_world_points_preserve_desired_bottom_rel_y(out, pos_x, pos_y, locked_bottom_rel_y);
+  }
+}

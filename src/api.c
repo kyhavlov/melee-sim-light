@@ -711,9 +711,6 @@ enum {
   MSL_STAGE_BATTLEFIELD = 31,
   // GALE01/Slippi stage id 32 for Final Destination in this simulator's target domain.
   MSL_STAGE_FINAL_DESTINATION = 32,
-  // GALE01 ItemKind constants for Yoshi's Story Shy Guys.
-  // refs/melee/src/melee/it/forward.h::It_Kind_Heiho
-  MSL_ITEM_KIND_HEIHO = 0xD2,
   // Character id mapping follows Slippi post-frame `character` (GALE01):
   // - Fox   = 1
   // - Falco = 22
@@ -859,8 +856,13 @@ static inline uint8_t msl_seed_has_live_yoshi_shyguy(const MslSeed* seed) {
   if (seed == NULL) {
     return 0u;
   }
+  const MslYoshiShyguyParams* params = stage_item_params_yoshi_shyguy();
+  if (params == NULL) {
+    return 0u;
+  }
   for (int it = 0; it < MSL_MAX_ITEMS; it++) {
-    if (seed->items[it].exists != 0u && seed->items[it].type == (uint16_t)MSL_ITEM_KIND_HEIHO) {
+    if (seed->items[it].exists != 0u &&
+        stage_item_params_is_yoshi_shyguy_item_type(params, seed->items[it].type)) {
       return 1u;
     }
   }

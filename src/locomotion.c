@@ -2758,29 +2758,21 @@ static inline uint8_t action_is_air_locomotion(uint16_t a) {
   return 0;
 }
 
-static inline uint8_t action_uses_ft80082b1c_basic_landing_callback(uint16_t a) {
-  // Callback family:
+static inline uint8_t action_uses_ft80082b1c_basic_landing_callback(uint8_t char_id, uint16_t a) {
+  // Generated from decomp MotionState collision callback symbols:
   // - Fall_Coll -> ft_800831CC(..., ft_80082B1C)
   // - Jump/JumpAerial_Coll -> ft_800835B0(..., ft_80082B1C)
   // - CliffJump2_Coll -> ft_800835B0(..., ft_80082B1C)
-  // - Fox/Falco SpecialAirN* AirCatchHit_Coll -> ft_80082B1C
-  // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_Fall.c,ftCo_Jump.c,ftCo_JumpAerial.c,ftCo_CliffJump.c}
+  // - Fox/Falco SpecialAirN* collision callbacks -> ft_80082B1C
+  // refs/melee/src/melee/ft/ft_081B.c::{ft_80082B1C,ft_800831CC,ft_800835B0}
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::*_Coll
-  // refs/melee/src/melee/ft/ft_081B.c::{ft_80082B1C,ftCo_AirCatchHit_Coll}
-  return (uint8_t)(action_is_fall_like(a) || a == (uint16_t)MSL_ACT_JUMP_F ||
-                   a == (uint16_t)MSL_ACT_JUMP_B || a == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
-                   a == (uint16_t)MSL_ACT_JUMP_AERIAL_B || a == (uint16_t)MSL_ACT_MISS_FOOT ||
-                   a == (uint16_t)MSL_ACT_CLIFF_JUMP_SLOW2 ||
-                   a == (uint16_t)MSL_ACT_CLIFF_JUMP_QUICK2 ||
-                   a == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_START ||
-                   a == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_LOOP ||
-                   a == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_END);
+  return msl_motion_state_class_has(char_id, a, MSL_MS_CLASS_FT80082B1C_BASIC_LANDING_COLL);
 }
 
 static inline uint16_t ft80082b1c_basic_landing_action(const MslBatch* batch,
                                                        const MslCommonParams* c, size_t idx,
                                                        uint16_t source_act) {
-  if (!action_uses_ft80082b1c_basic_landing_callback(source_act)) {
+  if (!action_uses_ft80082b1c_basic_landing_callback(batch->state.char_id[idx], source_act)) {
     return (uint16_t)MSL_ACT_LANDING;
   }
   // ft_80082B1C keeps gentle floor contact in the neutral grounded state when vertical self
@@ -3034,10 +3026,11 @@ static inline void locomotion_apply_jump_enter_ground_to_air(MslBatch* batch, si
   MslEcbWorldPoints desired_ecb = {0};
   msl_ecb_world_points_sample(&desired_ecb, char_id, anim, frame, facing_dir,
                               batch->state.pos_x[idx], batch->state.pos_y[idx], 0u);
-  const float locked_bottom = batch->state.coll_desired_ecb_bottom_valid[idx]
-                                  ? batch->state.coll_desired_ecb_bottom_rel_y[idx]
-                                  : desired_ecb.bottom_rel_y;
-  batch->state.coll_desired_ecb_bottom_rel_y[idx] = locked_bottom;
+  msl_ecb_world_points_preserve_locked_desired_bottom_rel_y(
+      &desired_ecb, batch->state.pos_x[idx], batch->state.pos_y[idx],
+      batch->state.coll_desired_ecb_bottom_valid[idx],
+      batch->state.coll_desired_ecb_bottom_rel_y[idx]);
+  batch->state.coll_desired_ecb_bottom_rel_y[idx] = desired_ecb.bottom_rel_y;
   batch->state.coll_desired_ecb_top_rel_y[idx] = desired_ecb.top_rel_y;
   batch->state.coll_desired_ecb_left_rel_x[idx] = desired_ecb.left_rel_x;
   batch->state.coll_desired_ecb_right_rel_x[idx] = desired_ecb.right_rel_x;

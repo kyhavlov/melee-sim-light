@@ -14,6 +14,7 @@
 #include "combat.h"
 #include "combat_geom.h"
 #include "common_params.h"
+#include "damage_terminal_owner.h"
 #include "damage_source.h"
 #include "hit_elements.h"
 #include "hitboxes_tables.h"
@@ -38,11 +39,10 @@ enum {
 };
 
 enum {
-  // Slippi stage id / GALE01 ItemKind constants for Yoshi's Story Shy Guys.
+  // Slippi stage id for Yoshi's Story Shy Guys.
   // Stage id source: tools/slippi/known_data_artifacts.py::STAGE_YOSHIS_STORY.
-  // Item kind source: refs/melee/src/melee/it/forward.h::It_Kind_Heiho.
+  // Item kind source is the extracted MSLSTIO1 `item_kind` field.
   MSL_STAGE_YOSHIS_STORY = 8,
-  MSL_ITEM_KIND_HEIHO = 0xD2,
 };
 
 static inline uint8_t slippi_metadata_low_byte_from_f32(float v) {
@@ -331,14 +331,15 @@ static inline uint32_t items_next_spawn_id(MslBatch* batch, int bi) {
   return out;
 }
 
-static uint8_t yoshi_shyguy_has_live(const MslBatch* batch, int bi) {
-  if (batch == NULL) {
+static uint8_t yoshi_shyguy_has_live(const MslBatch* batch, int bi,
+                                     const MslYoshiShyguyParams* params) {
+  if (batch == NULL || params == NULL) {
     return 0u;
   }
   for (int it = 0; it < MSL_MAX_ITEMS; it++) {
     const size_t ii = msl_idx_item(bi, it);
     if (batch->state.item_exists[ii] &&
-        batch->state.item_type[ii] == (uint16_t)MSL_ITEM_KIND_HEIHO) {
+        stage_item_params_is_yoshi_shyguy_item_type(params, batch->state.item_type[ii])) {
       return 1u;
     }
   }
@@ -630,7 +631,7 @@ static void yoshi_shyguy_spawn_one(MslBatch* batch, int bi, int arg0, float pos_
   item_slot_clear(batch, ii);
   batch->state.item_exists[ii] = 1u;
   batch->state.item_state[ii] = 0u;
-  batch->state.item_type[ii] = (uint16_t)MSL_ITEM_KIND_HEIHO;
+  batch->state.item_type[ii] = params->item_kind;
   batch->state.item_owner[ii] = -1;
   batch->state.item_instance_id[ii] = 0u;
   batch->state.item_attack_id[ii] = (uint16_t)MSL_FT_MOVE_ID_DEFAULT;
@@ -661,7 +662,7 @@ static void yoshi_shyguy_stage_update(MslBatch* batch, int bi) {
       batch->state.stage_yoshi_shyguy_valid[bi] == 0u || params == NULL) {
     return;
   }
-  if (yoshi_shyguy_has_live(batch, bi) != 0u) {
+  if (yoshi_shyguy_has_live(batch, bi, params) != 0u) {
     yoshi_shyguy_clear_rollout_rng_owner_if_live(batch, bi);
     return;
   }
@@ -814,31 +815,10 @@ static inline float item_throw_pose_facing_dir(const MslBatch* batch, size_t own
 }
 
 static inline uint8_t items_action_is_damage_family(uint16_t action_id_u16) {
-  switch (action_id_u16) {
-    case MSL_ACT_DAMAGE_FALL:
-    case MSL_ACT_DAMAGE_HI_1:
-    case MSL_ACT_DAMAGE_HI_2:
-    case MSL_ACT_DAMAGE_HI_3:
-    case MSL_ACT_DAMAGE_N_1:
-    case MSL_ACT_DAMAGE_N_2:
-    case MSL_ACT_DAMAGE_N_3:
-    case MSL_ACT_DAMAGE_LW_1:
-    case MSL_ACT_DAMAGE_LW_2:
-    case MSL_ACT_DAMAGE_LW_3:
-    case MSL_ACT_DAMAGE_AIR_1:
-    case MSL_ACT_DAMAGE_AIR_2:
-    case MSL_ACT_DAMAGE_AIR_3:
-    case MSL_ACT_DAMAGE_FLY_HI:
-    case MSL_ACT_DAMAGE_FLY_N:
-    case MSL_ACT_DAMAGE_FLY_LW:
-    case MSL_ACT_DAMAGE_FLY_TOP:
-    case MSL_ACT_DAMAGE_FLY_ROLL:
-    case MSL_ACT_FLY_REFLECT_WALL:
-    case MSL_ACT_FLY_REFLECT_CEIL:
-      return 1u;
-    default:
-      return 0u;
-  }
+  // Generated MSLMSO01 Damage/DamageFly/DamageFall collision classes cover the same damage exit
+  // callback family this item stale-owner clear follows.
+  // data/motion_state/owners/{fox,falco}.bin (DAMAGE_*_COLL classes)
+  return msl_damage_owner_is_damage_collision_landing_action(action_id_u16);
 }
 
 static inline uint8_t items_action_is_dead_family(uint16_t action_id_u16) {
@@ -3287,7 +3267,7 @@ static uint8_t yoshi_shyguy_try_laser_item_hit(MslBatch* batch, int bi, int lase
     }
     const size_t shy_idx = msl_idx_item(bi, it);
     if (!batch->state.item_exists[shy_idx] ||
-        batch->state.item_type[shy_idx] != (uint16_t)MSL_ITEM_KIND_HEIHO ||
+        !stage_item_params_is_yoshi_shyguy_item_type(params, batch->state.item_type[shy_idx]) ||
         !yoshi_shyguy_state_accepts_item_damage(batch->state.item_state[shy_idx])) {
       continue;
     }
@@ -3364,7 +3344,7 @@ static uint8_t yoshi_shyguy_try_fighter_hitbox_hit(MslBatch* batch, int bi, int 
   }
   const size_t shy_idx = msl_idx_item(bi, shyguy_slot);
   if (!batch->state.item_exists[shy_idx] ||
-      batch->state.item_type[shy_idx] != (uint16_t)MSL_ITEM_KIND_HEIHO ||
+      !stage_item_params_is_yoshi_shyguy_item_type(params, batch->state.item_type[shy_idx]) ||
       !yoshi_shyguy_state_accepts_item_damage(batch->state.item_state[shy_idx])) {
     return 0u;
   }
@@ -6646,7 +6626,7 @@ static void yoshi_shyguy_items_update(MslBatch* batch, int bi) {
   for (int it = 0; it < MSL_MAX_ITEMS; it++) {
     const size_t ii = msl_idx_item(bi, it);
     if (!batch->state.item_exists[ii] ||
-        batch->state.item_type[ii] != (uint16_t)MSL_ITEM_KIND_HEIHO) {
+        !stage_item_params_is_yoshi_shyguy_item_type(params, batch->state.item_type[ii])) {
       continue;
     }
     const uint8_t state = batch->state.item_state[ii];

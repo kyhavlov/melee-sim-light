@@ -93,6 +93,11 @@ Primary tracker:
   other plausible rollout/replay variants, implement that general owner. Do not retain a narrower
   downstream action/row/stage exception just because it fixes the current replay suite. Lack of a
   current replay exercising every variant is not a reason to avoid the general fix.
+- Source-completion work is encouraged: if a decomp/data-backed owner family is identified and
+  bounded, it is valid to implement the full owner even when some covered variants do not currently
+  have replay mismatches. Treat this as distinct from replay-fitting. Cover observed rows plus
+  practical synthetic positive/negative variants, keep validation clean, and call out in review
+  whether a packet is behavior-equivalent refactor or source-completion extension.
 - Do not stop at the first motivating row or one small owner slice during checklist burn-down.
 - Do not return with diagnosis-only prose if implementation, extraction, probes, locks, or validation remain credible local next steps.
 - Do not package bare behavior-neutral substrate work as a checkpoint by itself.

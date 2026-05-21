@@ -27,6 +27,7 @@ from tools.extraction.extract_motion_state_owners import (
     CLASS_FT80081D0C_AIR_COLL,
     CLASS_FT800827A0_EDGE_SNAP_COLL,
     CLASS_FT80083090_PLATFORM_PASS_COLL,
+    CLASS_FT80082B1C_BASIC_LANDING_COLL,
     CLASS_FT80083F88_GROUND_TO_AIR_COLL,
     CLASS_GROUNDED_ATTACK_WAIT_IASA_CATCH_GUARD,
     CLASS_GROUNDED_ATTACK_WAIT_IASA_LOCOMOTION,
@@ -99,6 +100,9 @@ def test_motion_state_owner_tables_cover_known_callbacks_and_flags() -> None:
     assert int(fox.class_bits[0x0023]) & CLASS_COMMON_AIR_PHYS
     assert int(fox.class_bits[0x0023]) & CLASS_COMMON_AIR_COLL
     assert not int(fox.class_bits[0x0023]) & CLASS_COMMON_AIR_WALLJUMP_COLL
+    assert int(fox.class_bits[0x0023]) & CLASS_FT80082B1C_BASIC_LANDING_COLL
+    assert cb_name(0x00FB, "coll") == "ftCo_MissFoot_Coll"
+    assert int(fox.class_bits[0x00FB]) & CLASS_FT80082B1C_BASIC_LANDING_COLL
 
     # Cliff ledgedash floor-owner consumer:
     # EscapeAir_Coll is the generated MotionState callback consumed by
@@ -343,6 +347,27 @@ def test_motion_state_class_equivalence_for_migrated_predicates() -> None:
         0x0105,
         0x0107,
     }
+    ft80082b1c_basic_landing_coll = {
+        0x0019,
+        0x001A,
+        0x001B,
+        0x001C,
+        0x001D,
+        0x001E,
+        0x001F,
+        0x0020,
+        0x0021,
+        0x0022,
+        0x0023,
+        0x0024,
+        0x0025,
+        0x00FB,
+        0x0105,
+        0x0107,
+        0x0158,
+        0x0159,
+        0x015A,
+    }
     ft800827a0_edge_snap_coll = {
         *range(0x002C, 0x0041),
         0x00BB,
@@ -414,6 +439,9 @@ def test_motion_state_class_equivalence_for_migrated_predicates() -> None:
         )
         assert both_have(action_id, CLASS_FT80083090_PLATFORM_PASS_COLL) == (
             action_id in ft80083090_platform_pass_coll
+        )
+        assert both_have(action_id, CLASS_FT80082B1C_BASIC_LANDING_COLL) == (
+            action_id in ft80082b1c_basic_landing_coll
         )
         assert both_have(action_id, CLASS_FT800827A0_EDGE_SNAP_COLL) == (
             action_id in ft800827a0_edge_snap_coll

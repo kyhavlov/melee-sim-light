@@ -526,6 +526,17 @@ uint8_t move_tables_attackair_post_clear_create_hitbox_phase(uint8_t char_id,
                        : 0u;
 }
 
+uint8_t move_tables_attackair_same_group_payload_preserves_hitcapsule(uint8_t char_id,
+                                                                      uint16_t attackair_action_id,
+                                                                      float cur_anim_frame_f32) {
+  return (move_tables_attackair_second_create_hitbox_phase(char_id, attackair_action_id,
+                                                           cur_anim_frame_f32) &&
+          !move_tables_attackair_post_clear_create_hitbox_phase(char_id, attackair_action_id,
+                                                                cur_anim_frame_f32))
+             ? 1u
+             : 0u;
+}
+
 uint8_t move_tables_grounded_attack_allow_interrupt(uint8_t char_id, uint16_t grounded_action_id,
                                                     float cur_anim_frame_f32) {
   uint16_t msid = 0;

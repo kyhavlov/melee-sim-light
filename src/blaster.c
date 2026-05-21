@@ -117,20 +117,18 @@ static inline uint8_t action_allows_special_entry_ground(const MslBatch* batch, 
   //
   // Keep this narrowly scoped: other ground states (including shield) have non-empty IASA callbacks
   // and may allow specials depending on per-state input checks.
+  if (msl_action_is_live_shield_family(action_id)) {
+    // Decomp: these guard-family IASA callbacks do not route through the grounded special
+    // dispatch; GuardSetOff_IASA is empty.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    //   ftCo_GuardOn_IASA,ftCo_Guard_IASA,ftCo_GuardReflect_IASA,ftCo_GuardSetOff_IASA}
+    return 0;
+  }
   switch (action_id) {
     case (uint16_t)MSL_ACT_ESCAPE_N:
     case (uint16_t)MSL_ACT_ESCAPE_F:
     case (uint16_t)MSL_ACT_ESCAPE_B:
     case (uint16_t)MSL_ACT_KNEE_BEND:
-    case (uint16_t)MSL_ACT_GUARD_ON:
-    case (uint16_t)MSL_ACT_GUARD:
-    case (uint16_t)MSL_ACT_GUARD_SET_OFF:
-    case (uint16_t)MSL_ACT_GUARD_REFLECT:
-      // Decomp: these guard-family IASA callbacks do not route through the grounded special
-      // dispatch; GuardSetOff_IASA is empty.
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
-      //   ftCo_GuardOn_IASA,ftCo_Guard_IASA,ftCo_GuardReflect_IASA,ftCo_GuardSetOff_IASA}
-      // }
       return 0;
     case (uint16_t)MSL_ACT_GUARD_OFF:
       // GuardOff_IASA runs the special/attack chain only while mv.co.guard.x1C is non-zero. x1C

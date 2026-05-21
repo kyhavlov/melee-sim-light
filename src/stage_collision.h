@@ -68,6 +68,15 @@ typedef struct MslStageFloorGraph {
   size_t line_count;
 } MslStageFloorGraph;
 
+typedef struct MslStageFloorLineCaps {
+  uint8_t is_platform;
+  uint8_t fighter_solid;
+  uint8_t stage_object_support_kind;
+  uint8_t platform_transform_kind;
+  uint8_t platform_transform_id;
+  float ground_friction_mul;
+} MslStageFloorLineCaps;
+
 typedef struct MslStageCeilingLine {
   // Endpoints in world units, ordered so that x0 >= x1 (decomp mpLib_8004E090 assumes v0 is the
   // right endpoint and v1 is the left endpoint for ceiling lines).
@@ -185,6 +194,8 @@ int stage_collision_floor_line_index(uint32_t stage_id, uint16_t segment_i);
 // tests/debug callers that intentionally need static non-platform floors only.
 const MslStageFloorGraph* stage_collision_get_fighter_floor_graph(uint32_t stage_id);
 int stage_collision_fighter_floor_line_index(uint32_t stage_id, uint16_t segment_i);
+uint8_t stage_collision_floor_line_caps(uint32_t stage_id, uint16_t segment_i,
+                                        MslStageFloorLineCaps* out);
 uint8_t stage_collision_floor_line_is_platform(uint32_t stage_id, uint16_t segment_i);
 uint8_t stage_collision_floor_line_is_runtime_fighter_solid(uint32_t stage_id, uint16_t segment_i);
 uint8_t stage_collision_floor_line_stage_object_support_kind(uint32_t stage_id, uint16_t segment_i);

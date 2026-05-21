@@ -333,10 +333,8 @@ uint8_t hitlist_seed_init_attackairlw_no_clear_dense_body(MslBatch* batch, int b
       batch->state.seed_prev_action_id[a_idx] != action_id || batch->state.hitlag[a_idx] != 0u ||
       batch->state.hitstun[a_idx] != 0u || batch->state.hitlag[v_idx] != 0u ||
       batch->state.hitstun[v_idx] != 0u ||
-      !move_tables_attackair_second_create_hitbox_phase(batch->state.char_id[a_idx], action_id,
-                                                        batch->state.anim_frame_f32[a_idx]) ||
-      move_tables_attackair_post_clear_create_hitbox_phase(batch->state.char_id[a_idx], action_id,
-                                                           batch->state.anim_frame_f32[a_idx])) {
+      !move_tables_attackair_same_group_payload_preserves_hitcapsule(
+          batch->state.char_id[a_idx], action_id, batch->state.anim_frame_f32[a_idx])) {
     return 0u;
   }
 

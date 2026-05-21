@@ -904,7 +904,8 @@ Characters (Fox/Falco):
       `ft_80083F88 -> ft_80082708 -> mpColl_8004B108` ground-to-air collision callback owner,
       the `ft_800827A0 -> mpColl_8004B2DC` floor-edge-snap callback owner, generated
       DamageAir/DamageGround submotion classes, grounded Attack* IASA owner subsets, EscapeAir
-      collision ownership, and grounded Side-B `mpColl_8004B108` ownership.
+      collision ownership, grounded Side-B `mpColl_8004B108` ownership, and `ft_80082B1C`
+      basic landing/Wait callback ownership.
       They are callback-owner
       classifications only; procedural behavior such as edge-snap branch results, ledge
       eligibility, or hidden descriptor provenance is not inferred by this artifact.
@@ -914,9 +915,9 @@ Characters (Fox/Falco):
     - `refs/melee/src/melee/ft/ftmotionstates.c::ftData_MotionStateList`
     - `refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c::ftFx_Init_MotionStateTable`
     - `refs/melee/src/melee/ft/chara/ftFalco/ftFc_Init.c::ftFc_Init_MotionStateTable`
-  - Binary layout: `MSLMSO01` v12 (little-endian, dense tables indexed by GALE01 `action_id`)
+  - Binary layout: `MSLMSO01` v13 (little-endian, dense tables indexed by GALE01 `action_id`)
     - `u8  magic[8] = "MSLMSO01"`
-    - `u32 version = 12`
+    - `u32 version = 13`
     - `u16 action_count`
     - `u16 reserved = 0`
     - `u32` offsets for `submotion_id`, `x4_flags`, `motion_state_word`, `anim_cb_id`,
@@ -956,7 +957,11 @@ Characters (Fox/Falco):
       without runtime action-family switches.
     - `ESCAPE_AIR_COLL` and `FX_SPECIALS_GROUND_B108_COLL` replace runtime magic callback-id
       comparisons for EscapeAir collision and grounded Side-B Start/Main `mpColl_8004B108` paths.
-  - Stale/non-v12 `MSLMSO01` tables must be rejected. Version 12 adds generated DamageAir/
+    - `FT80082B1C_BASIC_LANDING_COLL` is keyed to collision callbacks whose floor-contact path
+      delegates to `ft_80082B1C` for Wait-vs-Landing selection: Jump/Fall/CliffJump2 families and
+      Fox/Falco airborne blaster catch-hit callbacks.
+  - Stale/non-v13 `MSLMSO01` tables must be rejected. Version 13 adds generated
+    `FT80082B1C_BASIC_LANDING_COLL` ownership. Version 12 added generated DamageAir/
     DamageGround, grounded Attack* IASA subset, EscapeAir collision, and grounded Side-B B108
     owner bits. Version 11 added bit 23 for `FT800827A0_EDGE_SNAP_COLL`. Version 9 broadened bit 20 from Side-B-only to the
     `FT_CHECK_GROUND_LEDGE_AIR_COLL` callback-owner class. Version 8 added the

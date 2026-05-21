@@ -462,10 +462,8 @@ static inline uint8_t hitboxes_no_clear_attackairlw_dense_seed_initializes_hitca
   if (action_id != (uint16_t)MSL_ACT_ATTACK_AIR_LW ||
       batch->state.seed_prev_action_id[a_idx] != action_id || batch->state.hitlag[a_idx] != 0u ||
       batch->state.hitstun[a_idx] != 0u ||
-      !move_tables_attackair_second_create_hitbox_phase(batch->state.char_id[a_idx], action_id,
-                                                        batch->state.anim_frame_f32[a_idx]) ||
-      move_tables_attackair_post_clear_create_hitbox_phase(batch->state.char_id[a_idx], action_id,
-                                                           batch->state.anim_frame_f32[a_idx])) {
+      !move_tables_attackair_same_group_payload_preserves_hitcapsule(
+          batch->state.char_id[a_idx], action_id, batch->state.anim_frame_f32[a_idx])) {
     return 0u;
   }
   // AttackAirLw no-clear payload owner:

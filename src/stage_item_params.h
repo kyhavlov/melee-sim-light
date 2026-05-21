@@ -70,6 +70,11 @@ int stage_item_params_init(void);
 const MslYoshiShyguyParams* stage_item_params_yoshi_shyguy(void);
 const MslDreamWhispyParams* stage_item_params_dream_whispy(void);
 
+static inline uint8_t stage_item_params_is_yoshi_shyguy_item_type(
+    const MslYoshiShyguyParams* params, uint16_t item_type) {
+  return (uint8_t)(params != 0 && params->item_kind != 0u && params->item_kind == item_type);
+}
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif
