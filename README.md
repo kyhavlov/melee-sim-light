@@ -57,16 +57,21 @@ with msl.EnvBatch(batch_size=2, length=128, num_players=2) as env:
         ],
     )
 
+    fox = msl.neutral_controller((env.length, env.batch_size))
+    fox.buttons.B[0, 0] = True
+    fox.main_stick.x[0, 0] = 1.0
+    msl.write_controller(buffers.controller_action_view, fox, player=0)
+
     neutral = msl.neutral_controller((env.length, env.batch_size))
-    msl.write_controller(buffers.controller_action_view, neutral, player=0)
     msl.write_controller(buffers.controller_action_view, neutral, player=1)
 
     env.bind(buffers)
     env.reset_all()
     env.step()
 
-    next_frame = buffers.gamestate_view[1]
-    print(next_frame["frame_id"])
+    frame_1 = buffers.gamestate_view[1, 0]
+    fox_slot = frame_1["slots"][0]
+    print(frame_1["frame_id"], fox_slot["action_id"], fox_slot["pos_x"])
 
     # After consuming buffers[:128], reuse the arrays for the next chunk.
     env.reset_cursor()
