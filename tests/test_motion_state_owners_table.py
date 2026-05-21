@@ -15,16 +15,23 @@ from tools.extraction.extract_motion_state_owners import (
     CLASS_COMMON_AIR_COLL,
     CLASS_COMMON_AIR_PHYS,
     CLASS_COMMON_AIR_WALLJUMP_COLL,
+    CLASS_DAMAGE_AIR,
     CLASS_DAMAGE_COMMON,
     CLASS_DAMAGE_COMMON_COLL,
     CLASS_DAMAGE_FALL_COLL,
     CLASS_DAMAGE_FLY,
     CLASS_DAMAGE_FLY_COLL,
+    CLASS_DAMAGE_GROUND,
+    CLASS_ESCAPE_AIR_COLL,
     CLASS_GUARDON_FRAME_START_X672_IASA,
     CLASS_FT80081D0C_AIR_COLL,
     CLASS_FT800827A0_EDGE_SNAP_COLL,
     CLASS_FT80083090_PLATFORM_PASS_COLL,
     CLASS_FT80083F88_GROUND_TO_AIR_COLL,
+    CLASS_GROUNDED_ATTACK_WAIT_IASA_CATCH_GUARD,
+    CLASS_GROUNDED_ATTACK_WAIT_IASA_LOCOMOTION,
+    CLASS_GROUNDED_ATTACK_WAIT_IASA_SPECIALS,
+    CLASS_FX_SPECIALS_GROUND_B108_COLL,
     CLASS_GROUNDED_ATTACK,
     CLASS_GROUNDED_STAGE_OBJECT_CARRY_COLL,
     CLASS_LANDING_AIR,
@@ -128,10 +135,17 @@ def test_motion_state_owner_tables_cover_known_callbacks_and_flags() -> None:
 def test_motion_state_class_equivalence_for_migrated_predicates() -> None:
     fox = read_mslmso01_v1(FOX)
     falco = read_mslmso01_v1(FALCO)
+    symbols = read_callback_manifest(MANIFEST)
     max_action = min(len(fox.class_bits), len(falco.class_bits))
 
     def both_have(action_id: int, bit: int) -> bool:
         return bool(int(fox.class_bits[action_id]) & bit) and bool(int(falco.class_bits[action_id]) & bit)
+
+    def both_coll(action_id: int, symbol: str) -> bool:
+        return (
+            symbols[int(fox.coll_cb_id[action_id])] == symbol
+            and symbols[int(falco.coll_cb_id[action_id])] == symbol
+        )
 
     attack_air = {0x0041, 0x0042, 0x0043, 0x0044, 0x0045}
     attack_s3 = {0x0033, 0x0034, 0x0035, 0x0036, 0x0037}
@@ -151,6 +165,18 @@ def test_motion_state_class_equivalence_for_migrated_predicates() -> None:
         0x0056,
         0x00B9,
         0x00C1,
+    }
+    damage_air = {0x0054, 0x0055, 0x0056}
+    damage_ground = {
+        0x004B,
+        0x004C,
+        0x004D,
+        0x004E,
+        0x004F,
+        0x0050,
+        0x0051,
+        0x0052,
+        0x0053,
     }
     damage_fly = {0x0057, 0x0058, 0x0059, 0x005A, 0x005B, 0x00F7, 0x00F8}
     landing_air = {0x0046, 0x0047, 0x0048, 0x0049, 0x004A}
@@ -229,6 +255,23 @@ def test_motion_state_class_equivalence_for_migrated_predicates() -> None:
         0x00DE,
     }
     grounded_attack = {*range(0x002C, 0x0041)}
+    grounded_attack_wait_iasa_specials = {
+        *range(0x0033, 0x0039),
+        *range(0x003A, 0x0041),
+    }
+    grounded_attack_wait_iasa_locomotion = {
+        0x002C,
+        0x002D,
+        0x002E,
+        0x0032,
+        *range(0x0033, 0x0041),
+    }
+    grounded_attack_wait_iasa_catch_guard = {
+        0x002E,
+        *range(0x0033, 0x0038),
+        0x003F,
+        0x0040,
+    }
     guardon_frame_start_x672_iasa = {
         0x000E,
         0x000F,
@@ -328,12 +371,19 @@ def test_motion_state_class_equivalence_for_migrated_predicates() -> None:
         0x0109,
         0x015D,
     }
+    escape_air_coll = {0x00EC}
+    fx_specials_ground_b108_coll = {0x015B, 0x015C}
 
     for action_id in range(max_action):
         assert both_have(action_id, CLASS_ATTACK_AIR) == (action_id in attack_air)
+        assert both_have(action_id, CLASS_ATTACK_AIR) == both_coll(
+            action_id, "ftCo_AttackAir_Coll"
+        )
         assert both_have(action_id, CLASS_ATTACK_S3) == (action_id in attack_s3)
         assert both_have(action_id, CLASS_ATTACK_S4) == (action_id in attack_s4)
         assert both_have(action_id, CLASS_DAMAGE_COMMON) == (action_id in common_damage)
+        assert both_have(action_id, CLASS_DAMAGE_AIR) == (action_id in damage_air)
+        assert both_have(action_id, CLASS_DAMAGE_GROUND) == (action_id in damage_ground)
         assert both_have(action_id, CLASS_DAMAGE_FLY) == (action_id in damage_fly)
         assert both_have(action_id, CLASS_LANDING_AIR) == (action_id in landing_air)
         assert both_have(action_id, CLASS_COMMON_AIR_PHYS) == (action_id in common_air_phys)
@@ -367,6 +417,19 @@ def test_motion_state_class_equivalence_for_migrated_predicates() -> None:
         )
         assert both_have(action_id, CLASS_FT800827A0_EDGE_SNAP_COLL) == (
             action_id in ft800827a0_edge_snap_coll
+        )
+        assert both_have(action_id, CLASS_GROUNDED_ATTACK_WAIT_IASA_SPECIALS) == (
+            action_id in grounded_attack_wait_iasa_specials
+        )
+        assert both_have(action_id, CLASS_GROUNDED_ATTACK_WAIT_IASA_LOCOMOTION) == (
+            action_id in grounded_attack_wait_iasa_locomotion
+        )
+        assert both_have(action_id, CLASS_GROUNDED_ATTACK_WAIT_IASA_CATCH_GUARD) == (
+            action_id in grounded_attack_wait_iasa_catch_guard
+        )
+        assert both_have(action_id, CLASS_ESCAPE_AIR_COLL) == (action_id in escape_air_coll)
+        assert both_have(action_id, CLASS_FX_SPECIALS_GROUND_B108_COLL) == (
+            action_id in fx_specials_ground_b108_coll
         )
 
 

@@ -1222,14 +1222,7 @@ static inline uint8_t combat_is_damage_or_firefox_launch_victim_action(uint16_t 
 }
 
 static inline uint8_t combat_is_damage_air_action(uint16_t action_id) {
-  switch (action_id) {
-    case MSL_ACT_DAMAGE_AIR_1:
-    case MSL_ACT_DAMAGE_AIR_2:
-    case MSL_ACT_DAMAGE_AIR_3:
-      return 1u;
-    default:
-      return 0u;
-  }
+  return msl_damage_owner_is_damage_air_action(action_id);
 }
 
 static inline uint8_t combat_residual_frame_start_hitcapsule_owner(const MslBatch* batch,
@@ -2343,33 +2336,7 @@ static inline void combat_state_flags_set_is_hitlag(MslBatch* batch, size_t idx,
 }
 
 static inline uint8_t combat_damage_allow_sdi_owner_action(uint16_t action) {
-  switch (action) {
-    case MSL_ACT_DAMAGE_HI_1:
-    case MSL_ACT_DAMAGE_HI_2:
-    case MSL_ACT_DAMAGE_HI_3:
-    case MSL_ACT_DAMAGE_N_1:
-    case MSL_ACT_DAMAGE_N_2:
-    case MSL_ACT_DAMAGE_N_3:
-    case MSL_ACT_DAMAGE_LW_1:
-    case MSL_ACT_DAMAGE_LW_2:
-    case MSL_ACT_DAMAGE_LW_3:
-    case MSL_ACT_DAMAGE_AIR_1:
-    case MSL_ACT_DAMAGE_AIR_2:
-    case MSL_ACT_DAMAGE_AIR_3:
-    case MSL_ACT_DAMAGE_FLY_HI:
-    case MSL_ACT_DAMAGE_FLY_N:
-    case MSL_ACT_DAMAGE_FLY_LW:
-    case MSL_ACT_DAMAGE_FLY_TOP:
-    case MSL_ACT_DAMAGE_FLY_ROLL:
-    case MSL_ACT_FLY_REFLECT_WALL:
-    case MSL_ACT_FLY_REFLECT_CEIL:
-    case MSL_ACT_DAMAGE_FALL:
-    case MSL_ACT_DOWN_DAMAGE_U:
-    case MSL_ACT_DOWN_DAMAGE_D:
-      return 1u;
-    default:
-      return 0u;
-  }
+  return msl_damage_owner_allows_sdi_action(action);
 }
 
 static inline void combat_damage_allow_sdi_set(MslBatch* batch, size_t idx) {

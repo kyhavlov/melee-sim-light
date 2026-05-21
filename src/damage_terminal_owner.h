@@ -16,6 +16,39 @@ static inline uint8_t msl_damage_owner_is_damagefly_action(uint16_t action_id) {
   return msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_DAMAGE_FLY);
 }
 
+static inline uint8_t msl_damage_owner_is_damage_air_action(uint16_t action_id) {
+  return msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_DAMAGE_AIR);
+}
+
+static inline uint8_t msl_damage_owner_is_damage_ground_action(uint16_t action_id) {
+  return msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_DAMAGE_GROUND);
+}
+
+static inline uint8_t msl_damage_owner_is_damage_collision_landing_action(uint16_t action_id) {
+  return (uint8_t)(msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_DAMAGE_COMMON_COLL) ||
+                   msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_DAMAGE_FLY_COLL) ||
+                   msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_DAMAGE_FALL_COLL));
+}
+
+static inline uint8_t msl_damage_owner_is_damagefly_collision_action(uint16_t action_id) {
+  return msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_DAMAGE_FLY_COLL);
+}
+
+static inline uint8_t msl_damage_owner_allows_sdi_action(uint16_t action_id) {
+  // Damage SDI owner is motion-state data plus the source-exception DownDamage pair:
+  // Damage Hi/N/Lw, DamageAir, DamageFly/FlyReflect, and DamageFall use Damage/DamageFly/
+  // DamageFall callbacks; DownDamageU/D re-enter the damage hitlag callback through
+  // ftCo_8009F184 before their downed collision callback.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+  //   ftCo_Damage_OnEveryHitlag,ftCo_Damage_Coll,ftCo_DamageFly_Coll}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_Coll
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::{
+  //   ftCo_8009F184,ftCo_DownDamage_Coll}
+  return (uint8_t)(msl_damage_owner_is_damage_collision_landing_action(action_id) ||
+                   action_id == (uint16_t)MSL_ACT_DOWN_DAMAGE_U ||
+                   action_id == (uint16_t)MSL_ACT_DOWN_DAMAGE_D);
+}
+
 static inline uint8_t msl_damage_owner_is_damage_or_firefox_launch_action(uint16_t action_id) {
   switch (action_id) {
     case MSL_ACT_DAMAGE_HI_1:

@@ -17,7 +17,7 @@ from tools.extraction.extract_attack_id_move_id import (
 
 
 FORMAT_MAGIC = b"MSLMSO01"
-FORMAT_VERSION = 11
+FORMAT_VERSION = 12
 U16_ABSENT = 0xFFFF
 
 CLASS_ATTACK_AIR = 1 << 0
@@ -44,6 +44,13 @@ CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL = 1 << 20
 CLASS_FT80083F88_GROUND_TO_AIR_COLL = 1 << 21
 CLASS_FT80083090_PLATFORM_PASS_COLL = 1 << 22
 CLASS_FT800827A0_EDGE_SNAP_COLL = 1 << 23
+CLASS_DAMAGE_AIR = 1 << 24
+CLASS_DAMAGE_GROUND = 1 << 25
+CLASS_GROUNDED_ATTACK_WAIT_IASA_SPECIALS = 1 << 26
+CLASS_GROUNDED_ATTACK_WAIT_IASA_LOCOMOTION = 1 << 27
+CLASS_GROUNDED_ATTACK_WAIT_IASA_CATCH_GUARD = 1 << 28
+CLASS_ESCAPE_AIR_COLL = 1 << 29
+CLASS_FX_SPECIALS_GROUND_B108_COLL = 1 << 30
 
 
 @dataclass(frozen=True)
@@ -129,6 +136,34 @@ def _class_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
         bits |= CLASS_ATTACK_AIR
     if any(cb.startswith("ftCo_Attack") and not cb.startswith("ftCo_AttackAir") for cb in callbacks):
         bits |= CLASS_GROUNDED_ATTACK
+    if iasa_cb in {
+        "ftCo_AttackS3_IASA",
+        "ftCo_AttackHi3_IASA",
+        "ftCo_AttackS4_IASA",
+        "ftCo_AttackHi4_IASA",
+        "ftCo_AttackLw4_IASA",
+    }:
+        bits |= CLASS_GROUNDED_ATTACK_WAIT_IASA_SPECIALS
+    if iasa_cb in {
+        "ftCo_Attack11_IASA",
+        "ftCo_Attack12_IASA",
+        "ftCo_Attack13_IASA",
+        "ftCo_AttackDash_IASA",
+        "ftCo_AttackS3_IASA",
+        "ftCo_AttackHi3_IASA",
+        "ftCo_AttackLw3_IASA",
+        "ftCo_AttackS4_IASA",
+        "ftCo_AttackHi4_IASA",
+        "ftCo_AttackLw4_IASA",
+    }:
+        bits |= CLASS_GROUNDED_ATTACK_WAIT_IASA_LOCOMOTION
+    if iasa_cb in {
+        "ftCo_Attack13_IASA",
+        "ftCo_AttackS3_IASA",
+        "ftCo_AttackHi4_IASA",
+        "ftCo_AttackLw4_IASA",
+    }:
+        bits |= CLASS_GROUNDED_ATTACK_WAIT_IASA_CATCH_GUARD
     if iasa_cb in {
         "ftCo_Wait_IASA",
         "ftCo_Walk_IASA",
@@ -366,7 +401,38 @@ def _class_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
         # refs/melee/src/melee/ft/ft_081B.c::{ft_800827A0,ft_80084104,ft_800841B8}
         # refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004B2DC,mpColl_8004A45C_Floor}
         bits |= CLASS_FT800827A0_EDGE_SNAP_COLL
+    if coll_cb == "ftCo_EscapeAir_Coll":
+        bits |= CLASS_ESCAPE_AIR_COLL
+    if coll_cb in {"ftFx_SpecialSStart_Coll", "ftFx_SpecialS_Coll"}:
+        # Grounded Fox/Falco Side-B Start/Main collision callbacks call ft_80082708, which routes to
+        # mpColl_8004B108. Aerial Side-B has separate ft_CheckGroundAndLedge ownership above.
+        # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
+        #   ftFx_SpecialSStart_Coll,ftFx_SpecialS_Coll}
+        # refs/melee/src/melee/ft/ft_081B.c::ft_80082708
+        bits |= CLASS_FX_SPECIALS_GROUND_B108_COLL
     return bits
+
+
+def _class_bits_for_submotion(submotion_sym: str) -> int:
+    if submotion_sym in {
+        "ftCo_SM_DamageAir1",
+        "ftCo_SM_DamageAir2",
+        "ftCo_SM_DamageAir3",
+    }:
+        return CLASS_DAMAGE_AIR
+    if submotion_sym in {
+        "ftCo_SM_DamageHi1",
+        "ftCo_SM_DamageHi2",
+        "ftCo_SM_DamageHi3",
+        "ftCo_SM_DamageN1",
+        "ftCo_SM_DamageN2",
+        "ftCo_SM_DamageN3",
+        "ftCo_SM_DamageLw1",
+        "ftCo_SM_DamageLw2",
+        "ftCo_SM_DamageLw3",
+    }:
+        return CLASS_DAMAGE_GROUND
+    return 0
 
 
 def _parse_motion_state_rows(
@@ -410,7 +476,7 @@ def _parse_motion_state_rows(
             phys_cb=callbacks[2],
             coll_cb=callbacks[3],
             cam_cb=callbacks[4],
-            class_bits=_class_bits_for_callbacks(callbacks),
+            class_bits=_class_bits_for_callbacks(callbacks) | _class_bits_for_submotion(submotion_sym),
         )
         if row.action_id in out:
             raise RuntimeError(f"duplicate action id {row.action_id} in {src}")
@@ -548,6 +614,13 @@ def _write_manifest(out_path: Path, callback_ids: dict[str, int]) -> None:
         "FT80083F88_GROUND_TO_AIR_COLL": CLASS_FT80083F88_GROUND_TO_AIR_COLL,
         "FT80083090_PLATFORM_PASS_COLL": CLASS_FT80083090_PLATFORM_PASS_COLL,
         "FT800827A0_EDGE_SNAP_COLL": CLASS_FT800827A0_EDGE_SNAP_COLL,
+        "DAMAGE_AIR": CLASS_DAMAGE_AIR,
+        "DAMAGE_GROUND": CLASS_DAMAGE_GROUND,
+        "GROUNDED_ATTACK_WAIT_IASA_SPECIALS": CLASS_GROUNDED_ATTACK_WAIT_IASA_SPECIALS,
+        "GROUNDED_ATTACK_WAIT_IASA_LOCOMOTION": CLASS_GROUNDED_ATTACK_WAIT_IASA_LOCOMOTION,
+        "GROUNDED_ATTACK_WAIT_IASA_CATCH_GUARD": CLASS_GROUNDED_ATTACK_WAIT_IASA_CATCH_GUARD,
+        "ESCAPE_AIR_COLL": CLASS_ESCAPE_AIR_COLL,
+        "FX_SPECIALS_GROUND_B108_COLL": CLASS_FX_SPECIALS_GROUND_B108_COLL,
     }
     symbols = [{"id": int(i), "symbol": sym} for sym, i in sorted(callback_ids.items(), key=lambda kv: kv[1])]
     payload = {

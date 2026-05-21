@@ -902,7 +902,9 @@ Characters (Fox/Falco):
       grounded `ftCo_Throw*` callbacks that source routes through `ft_800841B8`, plus
       `ftCo_Down_Coll`, `ftCo_DownAttack_Coll`, and `ftCo_PassiveStand_Coll`, plus the
       `ft_80083F88 -> ft_80082708 -> mpColl_8004B108` ground-to-air collision callback owner,
-      and the `ft_800827A0 -> mpColl_8004B2DC` floor-edge-snap callback owner.
+      the `ft_800827A0 -> mpColl_8004B2DC` floor-edge-snap callback owner, generated
+      DamageAir/DamageGround submotion classes, grounded Attack* IASA owner subsets, EscapeAir
+      collision ownership, and grounded Side-B `mpColl_8004B108` ownership.
       They are callback-owner
       classifications only; procedural behavior such as edge-snap branch results, ledge
       eligibility, or hidden descriptor provenance is not inferred by this artifact.
@@ -912,9 +914,9 @@ Characters (Fox/Falco):
     - `refs/melee/src/melee/ft/ftmotionstates.c::ftData_MotionStateList`
     - `refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c::ftFx_Init_MotionStateTable`
     - `refs/melee/src/melee/ft/chara/ftFalco/ftFc_Init.c::ftFc_Init_MotionStateTable`
-  - Binary layout: `MSLMSO01` v11 (little-endian, dense tables indexed by GALE01 `action_id`)
+  - Binary layout: `MSLMSO01` v12 (little-endian, dense tables indexed by GALE01 `action_id`)
     - `u8  magic[8] = "MSLMSO01"`
-    - `u32 version = 11`
+    - `u32 version = 12`
     - `u16 action_count`
     - `u16 reserved = 0`
     - `u32` offsets for `submotion_id`, `x4_flags`, `motion_state_word`, `anim_cb_id`,
@@ -947,8 +949,16 @@ Characters (Fox/Falco):
       grounded Side-B end. Runtime uses this callback-owner bit for endpoint edge-snap admission
       instead of a local action-id list. DownBound/DownWait/DownStand stay on the separate
       `ft_80082708 -> mpColl_8004B108` owner.
-  - Stale/non-v11 `MSLMSO01` tables must be rejected. Version 11 adds bit 23 for
-    `FT800827A0_EDGE_SNAP_COLL`. Version 9 broadened bit 20 from Side-B-only to the
+    - `DAMAGE_AIR` / `DAMAGE_GROUND` are generated from MotionState submotion symbols and let
+      runtime damage/floor/contact owners avoid repeated local DamageAir and DamageHi/N/Lw lists.
+    - `GROUNDED_ATTACK_WAIT_IASA_*` classes are generated from grounded Attack* IASA callback
+      symbols and encode the existing Wait_IASA special, locomotion-tail, and catch/guard subsets
+      without runtime action-family switches.
+    - `ESCAPE_AIR_COLL` and `FX_SPECIALS_GROUND_B108_COLL` replace runtime magic callback-id
+      comparisons for EscapeAir collision and grounded Side-B Start/Main `mpColl_8004B108` paths.
+  - Stale/non-v12 `MSLMSO01` tables must be rejected. Version 12 adds generated DamageAir/
+    DamageGround, grounded Attack* IASA subset, EscapeAir collision, and grounded Side-B B108
+    owner bits. Version 11 added bit 23 for `FT800827A0_EDGE_SNAP_COLL`. Version 9 broadened bit 20 from Side-B-only to the
     `FT_CHECK_GROUND_LEDGE_AIR_COLL` callback-owner class. Version 8 added the
     `FT80083F88_GROUND_TO_AIR_COLL` callback class. Version 7 added `ftCo_Catch*` and grounded
     `ftCo_Throw*` callbacks to `GROUNDED_STAGE_OBJECT_CARRY_COLL` so grounded B2DC

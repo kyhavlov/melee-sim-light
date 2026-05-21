@@ -11,6 +11,7 @@
 #include "char_params.h"
 #include "coll_env_flags.h"
 #include "common_params.h"
+#include "damage_terminal_owner.h"
 #include "escapeair_collision_owner.h"
 #include "match_flow.h"
 #include "mpcoll_ecb_points.h"
@@ -366,30 +367,15 @@ static inline uint8_t is_damage_collision_landing_action(uint16_t a) {
   // - ftCo_DownDamage_Coll (air path calls ft_80081DD4 before downed follow-up handling)
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_Coll,ftCo_DamageFly_Coll}
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::ftCo_DownDamage_Coll
-  return (uint8_t)(msl_motion_state_common_class_has(a, MSL_MS_CLASS_DAMAGE_COMMON_COLL) ||
-                   msl_motion_state_common_class_has(a, MSL_MS_CLASS_DAMAGE_FLY_COLL) ||
-                   msl_motion_state_common_class_has(a, MSL_MS_CLASS_DAMAGE_FALL_COLL));
+  return msl_damage_owner_is_damage_collision_landing_action(a);
 }
 
 static inline uint8_t is_damage_fly_collision_action(uint16_t a) {
-  return msl_motion_state_common_class_has(a, MSL_MS_CLASS_DAMAGE_FLY_COLL);
+  return msl_damage_owner_is_damagefly_collision_action(a);
 }
 
 static inline uint8_t is_damage_ground_collision_action(uint16_t a) {
-  switch (a) {
-    case MSL_ACT_DAMAGE_HI_1:
-    case MSL_ACT_DAMAGE_HI_2:
-    case MSL_ACT_DAMAGE_HI_3:
-    case MSL_ACT_DAMAGE_N_1:
-    case MSL_ACT_DAMAGE_N_2:
-    case MSL_ACT_DAMAGE_N_3:
-    case MSL_ACT_DAMAGE_LW_1:
-    case MSL_ACT_DAMAGE_LW_2:
-    case MSL_ACT_DAMAGE_LW_3:
-      return 1u;
-    default:
-      return 0u;
-  }
+  return msl_damage_owner_is_damage_ground_action(a);
 }
 
 static inline uint8_t is_capture_lw_allow_ground_to_air_collision_action(uint16_t a) {
@@ -437,25 +423,15 @@ static inline uint8_t is_spacie_air_special_floor_collision_action(uint16_t a) {
 
 static inline uint8_t is_spacie_ground_sideb_allow_ground_to_air_callback(uint8_t char_id,
                                                                           uint16_t action_id) {
-  enum {
-    MSL_MSO_CB_FTFX_SPECIALSSTART_COLL = 888u,
-    MSL_MSO_CB_FTFX_SPECIALS_COLL = 892u,
-  };
-  const uint16_t coll_cb = msl_motion_state_coll_cb_id(char_id, action_id);
   // Table-backed MotionState callback owner:
   // grounded Fox/Falco Side-B Start/Main collision callbacks call ft_80082708, which routes to
   // mpColl_8004B108 -> mpColl_80043754 -> mpColl_8004ACE4. Use the generated callback identity
   // rather than a local action-id list so this owner stays tied to MSLMSO01 provenance.
-  // data/motion_state/owners/{fox,falco}.bin::MSLMSO01 coll_cb_by_action
-  // data/motion_state/owners/callback_symbols.json::{
-  //   ftFx_SpecialSStart_Coll,ftFx_SpecialS_Coll}
+  // data/motion_state/owners/{fox,falco}.bin::MSLMSO01 class FX_SPECIALS_GROUND_B108_COLL
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
   //   ftFx_SpecialSStart_Coll,ftFx_SpecialS_Coll}
   // refs/melee/src/melee/ft/ft_081B.c::ft_80082708
-  return (uint8_t)((coll_cb == (uint16_t)MSL_MSO_CB_FTFX_SPECIALSSTART_COLL ||
-                    coll_cb == (uint16_t)MSL_MSO_CB_FTFX_SPECIALS_COLL)
-                       ? 1u
-                       : 0u);
+  return msl_motion_state_class_has(char_id, action_id, MSL_MS_CLASS_FX_SPECIALS_GROUND_B108_COLL);
 }
 
 static inline uint8_t is_common_fallspecial_action(uint16_t a) {
@@ -595,11 +571,7 @@ typedef struct MslMpcollDamageActiveHitlagFloorOwner {
 } MslMpcollDamageActiveHitlagFloorOwner;
 
 static inline uint8_t mpcoll_damageair_action(uint16_t action_id) {
-  return (action_id == (uint16_t)MSL_ACT_DAMAGE_AIR_1 ||
-          action_id == (uint16_t)MSL_ACT_DAMAGE_AIR_2 ||
-          action_id == (uint16_t)MSL_ACT_DAMAGE_AIR_3)
-             ? 1u
-             : 0u;
+  return msl_damage_owner_is_damage_air_action(action_id);
 }
 
 static inline MslMpcollDamageActiveHitlagFloorOwner mpcoll_damage_active_hitlag_floor_owner(
@@ -2024,32 +1996,26 @@ static inline uint16_t platform_floor_skip_segment_id(const MslBatch* batch, siz
 }
 
 static inline uint8_t action_consumes_cliff_ledge_floor_owner(uint8_t char_id, uint16_t action_id) {
-  enum {
-    // MSLMSO01 callback_symbols.json: ftCo_EscapeAir_Coll.
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
-    MSL_MSO_CB_FTCO_ESCAPEAIR_COLL = 339u,
-  };
   // EscapeAir_Coll is the Fox/Falco cliff-exit consumer covered by the current RL1 surface:
   // ftCo_EscapeAir_Coll -> ft_80082C74 -> ft_80081D0C -> mpColl_800471F8. The hidden floor line is
   // selected through the shared CollData floor-owner path below only while source ledge-release
   // cooldown is live; this predicate is extracted MotionState callback ownership, not a replay
   // outcome or local action-id slice.
-  // data/motion_state/owners/{fox,falco}.bin (MSLMSO01 coll_cb_by_action)
+  // data/motion_state/owners/{fox,falco}.bin (MSLMSO01 class ESCAPE_AIR_COLL)
   // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
   // refs/melee/src/melee/mp/mpcoll.c::mpColl_800471F8
-  return (msl_motion_state_coll_cb_id(char_id, action_id) ==
-          (uint16_t)MSL_MSO_CB_FTCO_ESCAPEAIR_COLL)
-             ? 1u
-             : 0u;
+  return msl_motion_state_class_has(char_id, action_id, MSL_MS_CLASS_ESCAPE_AIR_COLL);
 }
 
-static inline uint8_t action_uses_shallow_attackair_platform_ecb_owner(uint8_t char_id,
-                                                                       uint16_t action_id) {
-  enum {
-    // MSLMSO01 callback_symbols.json: ftCo_AttackAir_Coll.
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
-    MSL_MSO_CB_FTCO_ATTACKAIR_COLL = 30u,
-  };
+typedef struct MslAttackAirPlatformEcbOwner {
+  uint8_t shallow;
+  uint8_t first_phase;
+  uint8_t late;
+} MslAttackAirPlatformEcbOwner;
+
+static inline MslAttackAirPlatformEcbOwner attackair_platform_ecb_owner(uint8_t char_id,
+                                                                        uint16_t action_id) {
+  MslAttackAirPlatformEcbOwner owner = {0u, 0u, 0u};
   // AttackAir_Coll is the generated MotionState collision callback for the common aerial attack
   // family. The retained FoD transformed-platform ECB-only boundary is further restricted by
   // generated submotion: replay-real AttackAirB rows expose ordinary same-platform landing
@@ -2061,56 +2027,33 @@ static inline uint8_t action_uses_shallow_attackair_platform_ecb_owner(uint8_t c
   // data/motion_state/owners/{fox,falco}.bin (MSLMSO01 submotion_id)
   // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
   // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor}
-  if (msl_motion_state_coll_cb_id(char_id, action_id) != (uint16_t)MSL_MSO_CB_FTCO_ATTACKAIR_COLL) {
-    return 0u;
+  if (msl_motion_state_class_has(char_id, action_id, MSL_MS_CLASS_ATTACK_AIR) == 0u) {
+    return owner;
   }
   const uint16_t smid = msl_motion_state_submotion_id(char_id, action_id);
-  return (smid == (uint16_t)MSL_SM_ATTACK_AIR_N || smid == (uint16_t)MSL_SM_ATTACK_AIR_LW) ? 1u
-                                                                                           : 0u;
+  if (smid == (uint16_t)MSL_SM_ATTACK_AIR_N || smid == (uint16_t)MSL_SM_ATTACK_AIR_LW) {
+    owner.shallow = 1u;
+    owner.first_phase = 1u;
+    owner.late = 1u;
+  } else if (smid == (uint16_t)MSL_SM_ATTACK_AIR_HI) {
+    owner.first_phase = 1u;
+  }
+  return owner;
+}
+
+static inline uint8_t action_uses_shallow_attackair_platform_ecb_owner(uint8_t char_id,
+                                                                       uint16_t action_id) {
+  return attackair_platform_ecb_owner(char_id, action_id).shallow;
 }
 
 static inline uint8_t action_uses_first_phase_attackair_platform_ecb_owner(uint8_t char_id,
                                                                            uint16_t action_id) {
-  enum {
-    // MSLMSO01 callback_symbols.json: ftCo_AttackAir_Coll.
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
-    MSL_MSO_CB_FTCO_ATTACKAIR_COLL = 30u,
-  };
-  // First shallow transformed-platform contacts are bounded by generated N/Hi/Lw submotion data
-  // plus the MSLFTSC1 first HitCapsule create->clear phase. This admits AttackAirHi only for that
-  // first-phase owner; later UpAir hitbox phases stay on the ordinary ft_80082C74 platform handoff.
-  // data/motion_state/owners/{fox,falco}.bin (MSLMSO01 coll_cb_by_action, submotion_id)
-  // data/scripts/{fox,falco}.bin::MSLFTSC1 create_hitbox / clear_hitboxes
-  if (msl_motion_state_coll_cb_id(char_id, action_id) != (uint16_t)MSL_MSO_CB_FTCO_ATTACKAIR_COLL) {
-    return 0u;
-  }
-  const uint16_t smid = msl_motion_state_submotion_id(char_id, action_id);
-  return (smid == (uint16_t)MSL_SM_ATTACK_AIR_N || smid == (uint16_t)MSL_SM_ATTACK_AIR_HI ||
-          smid == (uint16_t)MSL_SM_ATTACK_AIR_LW)
-             ? 1u
-             : 0u;
+  return attackair_platform_ecb_owner(char_id, action_id).first_phase;
 }
 
 static inline uint8_t action_uses_late_attackair_platform_ecb_owner(uint8_t char_id,
                                                                     uint16_t action_id) {
-  enum {
-    // MSLMSO01 callback_symbols.json: ftCo_AttackAir_Coll.
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
-    MSL_MSO_CB_FTCO_ATTACKAIR_COLL = 30u,
-  };
-  // The late/second-create transformed-platform ECB owner is generated submotion data, not the
-  // whole AttackAir_Coll class. AttackAirHi's second phase publishes the ordinary FoD platform
-  // landing path; its retained transformed-platform boundary is the first create->clear phase
-  // handled by action_uses_shallow_attackair_platform_ecb_owner plus MSLFTSC1 first-phase timing.
-  // data/motion_state/owners/{fox,falco}.bin (MSLMSO01 coll_cb_by_action, submotion_id)
-  // data/scripts/{fox,falco}.bin::MSLFTSC1 create_hitbox / clear_hitboxes
-  // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
-  if (msl_motion_state_coll_cb_id(char_id, action_id) != (uint16_t)MSL_MSO_CB_FTCO_ATTACKAIR_COLL) {
-    return 0u;
-  }
-  const uint16_t smid = msl_motion_state_submotion_id(char_id, action_id);
-  return (smid == (uint16_t)MSL_SM_ATTACK_AIR_N || smid == (uint16_t)MSL_SM_ATTACK_AIR_LW) ? 1u
-                                                                                           : 0u;
+  return attackair_platform_ecb_owner(char_id, action_id).late;
 }
 
 static inline uint8_t action_uses_sideb_air_ft_check_ground_and_ledge_floor_coll(

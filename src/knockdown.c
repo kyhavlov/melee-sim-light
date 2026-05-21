@@ -13,6 +13,7 @@
 #include "char_params.h"
 #include "coll_env_flags.h"
 #include "common_params.h"
+#include "damage_terminal_owner.h"
 #include "guard_lifecycle.h"
 #include "input_axis.h"
 #include "jump_input.h"
@@ -1758,42 +1759,15 @@ void knockdown_update_post_combat(MslBatch* batch) {
 }
 
 static inline uint8_t is_damage_fly_action(uint16_t a) {
-  switch (a) {
-    case (uint16_t)MSL_ACT_DAMAGE_FLY_HI:
-    case (uint16_t)MSL_ACT_DAMAGE_FLY_N:
-    case (uint16_t)MSL_ACT_DAMAGE_FLY_LW:
-    case (uint16_t)MSL_ACT_DAMAGE_FLY_TOP:
-    case (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL:
-    case (uint16_t)MSL_ACT_FLY_REFLECT_WALL:
-    case (uint16_t)MSL_ACT_FLY_REFLECT_CEIL:
-      return 1u;
-    default:
-      return 0u;
-  }
+  return msl_damage_owner_is_damagefly_action(a);
 }
 
 static inline uint8_t is_damage_air_action(uint16_t a) {
-  return (a == (uint16_t)MSL_ACT_DAMAGE_AIR_1 || a == (uint16_t)MSL_ACT_DAMAGE_AIR_2 ||
-          a == (uint16_t)MSL_ACT_DAMAGE_AIR_3)
-             ? 1u
-             : 0u;
+  return msl_damage_owner_is_damage_air_action(a);
 }
 
 static inline uint8_t is_damage_ground_action(uint16_t a) {
-  switch (a) {
-    case (uint16_t)MSL_ACT_DAMAGE_HI_1:
-    case (uint16_t)MSL_ACT_DAMAGE_HI_2:
-    case (uint16_t)MSL_ACT_DAMAGE_HI_3:
-    case (uint16_t)MSL_ACT_DAMAGE_N_1:
-    case (uint16_t)MSL_ACT_DAMAGE_N_2:
-    case (uint16_t)MSL_ACT_DAMAGE_N_3:
-    case (uint16_t)MSL_ACT_DAMAGE_LW_1:
-    case (uint16_t)MSL_ACT_DAMAGE_LW_2:
-    case (uint16_t)MSL_ACT_DAMAGE_LW_3:
-      return 1u;
-    default:
-      return 0u;
-  }
+  return msl_damage_owner_is_damage_ground_action(a);
 }
 
 static inline uint32_t submotion_for_common_damage_action(uint16_t a) {

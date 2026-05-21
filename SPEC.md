@@ -5588,6 +5588,26 @@ BODY collision-space residual split and rejected seed bridge:
   `refs/melee/src/melee/ft/ft_081B.c::{ft_800827A0,ft_80084104,ft_800841B8,ft_80082708}`,
   `refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004B2DC,mpColl_8004A45C_Floor,mpColl_8004B108}`,
   `data/motion_state/owners/{fox,falco}.bin`.
+- Damage family runtime predicates use generated MSLMSO01 ownership instead of repeated local
+  action lists where the decomp row already carries the distinction: `DAMAGE_AIR` and
+  `DAMAGE_GROUND` come from MotionState submotion symbols; `DAMAGE_*_COLL` classes continue to own
+  collision-callback families. Source-specific exceptions such as DownDamageU/D remain explicit
+  only where the downed callback re-enters the damage hitlag owner through `ftCo_8009F184`.
+  Sources: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c`,
+  `refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c`,
+  `data/motion_state/owners/{fox,falco}.bin`.
+- Grounded Attack* IASA delegation uses generated MSLMSO01 owner classes for the Wait_IASA
+  special, locomotion-tail, and catch/guard subsets instead of hand-maintained runtime switches.
+  These classes are keyed from decomp IASA callback symbols such as `ftCo_AttackS3_IASA`,
+  `ftCo_AttackS4_IASA`, and `ftCo_AttackDash_IASA`; procedural ordering remains in locomotion.
+  Sources: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack*.c`,
+  `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA`,
+  `data/motion_state/owners/{fox,falco}.bin`.
+- Runtime callback-owner gates no longer compare raw MSLMSO callback ids for EscapeAir collision or
+  grounded Side-B Start/Main collision. Generated `ESCAPE_AIR_COLL` and
+  `FX_SPECIALS_GROUND_B108_COLL` classes own those predicates; AttackAir platform/floor-skip
+  classification is centralized through one generated callback/submotion owner helper before
+  phase-specific MSLFTSC1 checks are applied.
 - FoD generated slope persistence uses the same source floor traversal in jump-squat and immediate
   EscapeAir handoffs. `KneeBend_Coll -> ft_80083F88 -> ft_80082708 -> mpColl_8004B108` consumes
   signed `mpLib_8004DD90_Floor` correction on generated slopes. If `KneeBend_Anim` enters Jump and

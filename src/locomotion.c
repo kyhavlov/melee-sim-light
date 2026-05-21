@@ -1459,19 +1459,16 @@ static inline uint8_t action_is_attack_s4_family(uint16_t action_id) {
 }
 
 static inline uint8_t grounded_attack_wait_iasa_specials_action(uint16_t action_id) {
-  switch (action_id) {
-    case MSL_ACT_ATTACK_HI3:
-    case MSL_ACT_ATTACK_HI4:
-    case MSL_ACT_ATTACK_LW4:
-    case MSL_ACT_ATTACK_S4_HI:
-    case MSL_ACT_ATTACK_S4_HI_S:
-    case MSL_ACT_ATTACK_S4_S:
-    case MSL_ACT_ATTACK_S4_LW_S:
-    case MSL_ACT_ATTACK_S4_LW:
-      return 1u;
-    default:
-      return action_is_attack_s3_family(action_id);
-  }
+  // Generated IASA-owner subset for grounded Attack* callbacks whose source path reaches the
+  // Wait_IASA grounded-special/attack preamble after `fp->allow_interrupt`.
+  // data/motion_state/owners/{fox,falco}.bin (MSLMSO01 class GROUNDED_ATTACK_WAIT_IASA_SPECIALS)
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackS3.c::ftCo_AttackS3_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackHi3.c::ftCo_AttackHi3_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackS4.c::ftCo_AttackS4_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackHi4.c::ftCo_AttackHi4_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackLw4.c::ftCo_AttackLw4_IASA
+  return msl_motion_state_common_class_has(action_id,
+                                           MSL_MS_CLASS_GROUNDED_ATTACK_WAIT_IASA_SPECIALS);
 }
 
 static inline uint8_t grounded_attack_wait_iasa_interrupt_dest_action(uint16_t action_id) {
@@ -1494,35 +1491,26 @@ static inline uint8_t grounded_attack_wait_iasa_interrupt_dest_action(uint16_t a
 }
 
 static inline uint8_t grounded_attack_wait_iasa_locomotion_action(uint16_t action_id) {
-  switch (action_id) {
-    case MSL_ACT_ATTACK_11:
-    case MSL_ACT_ATTACK_12:
-    case MSL_ACT_ATTACK_13:
-    case MSL_ACT_ATTACK_DASH:
-    case MSL_ACT_ATTACK_HI3:
-    case MSL_ACT_ATTACK_LW3:
-    case MSL_ACT_ATTACK_S4_HI:
-    case MSL_ACT_ATTACK_S4_HI_S:
-    case MSL_ACT_ATTACK_S4_S:
-    case MSL_ACT_ATTACK_S4_LW_S:
-    case MSL_ACT_ATTACK_S4_LW:
-    case MSL_ACT_ATTACK_HI4:
-    case MSL_ACT_ATTACK_LW4:
-      return 1u;
-    default:
-      return action_is_attack_s3_family(action_id);
-  }
+  // Generated IASA-owner subset for grounded Attack* callbacks whose source path can delegate into
+  // Wait_IASA's jump/dash/squat/turn/walk tail after `fp->allow_interrupt`.
+  // data/motion_state/owners/{fox,falco}.bin (MSLMSO01 class GROUNDED_ATTACK_WAIT_IASA_LOCOMOTION)
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+  return msl_motion_state_common_class_has(action_id,
+                                           MSL_MS_CLASS_GROUNDED_ATTACK_WAIT_IASA_LOCOMOTION);
 }
 
 static inline uint8_t grounded_attack_wait_iasa_catch_guard_action(uint16_t action_id) {
-  switch (action_id) {
-    case MSL_ACT_ATTACK_13:
-    case MSL_ACT_ATTACK_HI4:
-    case MSL_ACT_ATTACK_LW4:
-      return 1u;
-    default:
-      return action_is_attack_s3_family(action_id);
-  }
+  // Generated IASA-owner subset for grounded Attack* callbacks whose source path reaches
+  // Wait_IASA's catch/guard checks without the specialized AttackDash/AttackHi3/AttackS4 branches
+  // handled separately below.
+  // data/motion_state/owners/{fox,falco}.bin (MSLMSO01 class
+  // GROUNDED_ATTACK_WAIT_IASA_CATCH_GUARD)
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::ftCo_Attack13_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackS3.c::ftCo_AttackS3_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackHi4.c::ftCo_AttackHi4_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackLw4.c::ftCo_AttackLw4_IASA
+  return msl_motion_state_common_class_has(action_id,
+                                           MSL_MS_CLASS_GROUNDED_ATTACK_WAIT_IASA_CATCH_GUARD);
 }
 
 static inline uint8_t locomotion_has_opponent_active_catch_connect_window(const MslBatch* batch,
