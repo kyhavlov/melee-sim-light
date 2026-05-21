@@ -5906,53 +5906,48 @@ def _main_impl(args) -> Dataset:
     samples["seed_t"]["phantom_damage_timer_x189c"] = phantom_damage_timer[:-1]
     samples["seed_t"]["phantom_damage_source_port"] = phantom_damage_source_port[:-1]
 
-    if int(num_players) == 2:
-        for slot, port_1based in enumerate(src_ports):
-            st = static_by_port.get(port_1based, PortStatic(team_id=0, char_id=0, handicap=9))
-            (
-                capture_grab_timer,
-                capture_wait_counter,
-                capture_wait_anim_timer,
-                capture_wait_jump_latch,
-                capture_breakout_pending,
-            ) = derive_capture_grab_hidden_post(
-                action_id_u16=post_action_id[:, slot],
-                action_frame_i16=post_action_frame[:, slot],
-                grab_owner_port_u8=grab_owner[:, slot],
-                percent_f32=post_percent_all[:, slot],
-                buttons_pressed_u16=capture_mash_buttons_pressed[:, slot],
-                stick_x_unit=pre_stick_x_unit_2d[:, slot],
-                stick_y_unit=pre_stick_y_unit_2d[:, slot],
-                frame_speed_mul_f32=frame_speed_mul_all[:, slot],
-                grab_mash_stick_x_sign_post=grab_mash_x_sign_post[:, slot],
-                grab_mash_stick_y_sign_post=grab_mash_y_sign_post[:, slot],
-                slot_index=slot,
-                handicap=st.handicap,
-                capture_grab_timer_base=float(common["capture_grab_timer_base"]),
-                capture_grab_timer_handicap_mul=float(common["capture_grab_timer_handicap_mul"]),
-                capture_grab_timer_handicap_base=float(common["capture_grab_timer_handicap_base"]),
-                capture_grab_timer_slot_mul=float(common["capture_grab_timer_slot_mul"]),
-                capture_grab_timer_slot_base=float(common["capture_grab_timer_slot_base"]),
-                capture_grab_timer_percent_mul=float(common["capture_grab_timer_percent_mul"]),
-                capture_wait_grab_timer_decrement=float(common["capture_wait_grab_timer_decrement"]),
-                capture_wait_grab_mash_damage=float(common["capture_wait_grab_mash_damage"]),
-                capture_wait_anim_rate_hold_frames=float(common["capture_wait_anim_rate_hold_frames"]),
-                capture_wait_jump_latch_window_frames=float(
-                    common["capture_wait_jump_latch_window_frames"]
-                ),
-                grab_mash_stick_threshold=grab_mash_stick_threshold,
-            )
-            samples["seed_t"]["capture_grab_timer_f32"][:, slot] = capture_grab_timer[:-1]
-            samples["seed_t"]["capture_wait_counter_f32"][:, slot] = capture_wait_counter[:-1]
-            samples["seed_t"]["capture_wait_anim_rate_timer_f32"][:, slot] = (
-                capture_wait_anim_timer[:-1]
-            )
-            samples["seed_t"]["capture_wait_jump_latch_u8"][:, slot] = (
-                capture_wait_jump_latch[:-1]
-            )
-            samples["seed_t"]["capture_breakout_pending_u8"][:, slot] = (
-                capture_breakout_pending[:-1]
-            )
+    for slot, port_1based in enumerate(src_ports[: int(num_players)]):
+        st = static_by_port.get(port_1based, PortStatic(team_id=0, char_id=0, handicap=9))
+        (
+            capture_grab_timer,
+            capture_wait_counter,
+            capture_wait_anim_timer,
+            capture_wait_jump_latch,
+            capture_breakout_pending,
+        ) = derive_capture_grab_hidden_post(
+            action_id_u16=post_action_id[:, slot],
+            action_frame_i16=post_action_frame[:, slot],
+            grab_owner_port_u8=grab_owner[:, slot],
+            percent_f32=post_percent_all[:, slot],
+            buttons_pressed_u16=capture_mash_buttons_pressed[:, slot],
+            stick_x_unit=pre_stick_x_unit_2d[:, slot],
+            stick_y_unit=pre_stick_y_unit_2d[:, slot],
+            frame_speed_mul_f32=frame_speed_mul_all[:, slot],
+            grab_mash_stick_x_sign_post=grab_mash_x_sign_post[:, slot],
+            grab_mash_stick_y_sign_post=grab_mash_y_sign_post[:, slot],
+            slot_index=slot,
+            handicap=st.handicap,
+            capture_grab_timer_base=float(common["capture_grab_timer_base"]),
+            capture_grab_timer_handicap_mul=float(common["capture_grab_timer_handicap_mul"]),
+            capture_grab_timer_handicap_base=float(common["capture_grab_timer_handicap_base"]),
+            capture_grab_timer_slot_mul=float(common["capture_grab_timer_slot_mul"]),
+            capture_grab_timer_slot_base=float(common["capture_grab_timer_slot_base"]),
+            capture_grab_timer_percent_mul=float(common["capture_grab_timer_percent_mul"]),
+            capture_wait_grab_timer_decrement=float(common["capture_wait_grab_timer_decrement"]),
+            capture_wait_grab_mash_damage=float(common["capture_wait_grab_mash_damage"]),
+            capture_wait_anim_rate_hold_frames=float(common["capture_wait_anim_rate_hold_frames"]),
+            capture_wait_jump_latch_window_frames=float(
+                common["capture_wait_jump_latch_window_frames"]
+            ),
+            grab_mash_stick_threshold=grab_mash_stick_threshold,
+        )
+        samples["seed_t"]["capture_grab_timer_f32"][:, slot] = capture_grab_timer[:-1]
+        samples["seed_t"]["capture_wait_counter_f32"][:, slot] = capture_wait_counter[:-1]
+        samples["seed_t"]["capture_wait_anim_rate_timer_f32"][:, slot] = capture_wait_anim_timer[
+            :-1
+        ]
+        samples["seed_t"]["capture_wait_jump_latch_u8"][:, slot] = capture_wait_jump_latch[:-1]
+        samples["seed_t"]["capture_breakout_pending_u8"][:, slot] = capture_breakout_pending[:-1]
 
     # Use already-derived replay-causal seed fields for shield bubble placement:
     # - facing (post-frame)

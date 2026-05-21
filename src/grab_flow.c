@@ -82,6 +82,40 @@ static inline void enter_wait_from_catch_end(MslBatch* batch, size_t idx) {
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
 }
 
+static inline void enter_common_wait_or_fall_from_grab_cut_end(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  // Decomp: CatchCut_Anim and CaptureCut_Anim both end through ftCommon_8007D92C, which routes
+  // grounded fighters through ft_8008A2BC -> Wait and airborne fighters through ftCo_Fall_Enter.
+  // CaptureJump_Anim ends directly through ftCo_Fall_Enter and is handled by the caller.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_CatchCut_Anim
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CaptureCut.c::ftCo_CaptureCut_Anim
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D92C
+  if (batch->state.on_ground[idx] != 0u) {
+    batch->state.action_id[idx] = (uint16_t)MSL_ACT_WAIT;
+    batch->state.animation_index[idx] = (uint32_t)MSL_SM_WAIT1_0;
+  } else {
+    batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
+    batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL;
+    batch->state.ground_id[idx] = 0xFFFFu;
+  }
+  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+}
+
+static inline void enter_fall_from_capture_jump_end(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  // Decomp: CaptureJump_Anim increments its timer and, on animation end, calls ftCo_Fall_Enter.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_CaptureJump_Anim
+  batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
+  batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL;
+  batch->state.on_ground[idx] = 0u;
+  batch->state.ground_id[idx] = 0xFFFFu;
+  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+}
+
 static inline void enter_catch_wait_from_pull(MslBatch* batch, size_t oidx) {
   // Decomp: CatchPull_Anim enters CatchWait via fn_800DA1D8 (Fighter_ChangeMotionState to 0xD8).
   // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::ftCo_CatchPull_Anim
@@ -452,18 +486,22 @@ static inline uint8_t capturewait_first_steady_entry_mash_latch(const MslBatch* 
                                                                 const MslCommonParams* c,
                                                                 size_t idx) {
   if (batch == NULL || c == NULL || capturewait_is_first_steady_lifetime_row(batch, idx) == 0u ||
-      batch->state.capture_wait_anim_rate_timer[idx] != 0.0f) {
-    return 0u;
-  }
-  if (batch->state.capture_wait_counter[idx] > 2.0f) {
+      batch->state.capture_wait_counter[idx] > 2.0f) {
     return 0u;
   }
 
   const uint16_t held_or_recent =
       (uint16_t)(batch->state.input_buttons[idx] | batch->state.prev_input_buttons[idx] |
                  batch->state.input_buttons_pressed[idx]);
-  if ((held_or_recent & (uint16_t)(MSL_BUTTON_A | MSL_BUTTON_B | MSL_BUTTON_X | MSL_BUTTON_Y)) !=
-      0u) {
+  if ((held_or_recent & (uint16_t)(MSL_BUTTON_A | MSL_BUTTON_B)) != 0u) {
+    return 1u;
+  }
+  if (batch->state.capture_wait_anim_rate_timer[idx] != 0.0f) {
+    return 0u;
+  }
+  const uint16_t current_or_pressed =
+      (uint16_t)(batch->state.input_buttons[idx] | batch->state.input_buttons_pressed[idx]);
+  if ((current_or_pressed & (uint16_t)(MSL_BUTTON_X | MSL_BUTTON_Y)) != 0u) {
     return 1u;
   }
 
@@ -474,9 +512,11 @@ static inline uint8_t capturewait_first_steady_entry_mash_latch(const MslBatch* 
   // ftCommon_InitGrab resets x1A50/x1A51 before the CapturePulled -> CaptureWait handoff, and
   // mv.co.capturewait.x0 is still in its first CaptureWait_Anim lifetime interval here. This check
   // runs after the normal pre-input CaptureWait_Anim callback, so seed rows with x0==0/1 are
-  // observed as x0==1/2. Slippi seed rows can only expose the generic post-frame sign latch, so
-  // first-steady CaptureWait rows whose active entry latch would have changed from zero need this
-  // local source reconstruction.
+  // observed as x0==1/2. Slippi seed rows can only expose post-frame sign/button state; the
+  // prior-frame AB edge can still require reconstruction after the x2344 hold timer is visible.
+  // X/Y/LR and stick cases are reconstructed only before that timer is active; once x2344 is
+  // nonzero, they have either already been consumed by ftCommon_GrabMash or are owned by
+  // CaptureWait's explicit xC jump-latch path.
   // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_InitGrab,ftCommon_GrabMash}
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_CaptureWaitHi_Anim
   if (stick_x < -c->grab_mash_stick_threshold || stick_x > c->grab_mash_stick_threshold ||
@@ -641,6 +681,36 @@ static inline void enter_capture_jump_from_breakout(MslBatch* batch, const MslCo
   capture_hidden_state_clear(batch, vidx);
 }
 
+static inline void capturewait_resolve_anim_breakout_owner(MslBatch* batch,
+                                                           const MslCommonParams* c, size_t oidx,
+                                                           size_t vidx) {
+  if (batch == NULL || c == NULL || batch->state.capture_breakout_pending[vidx] == 0u) {
+    return;
+  }
+
+  // Source-order breakout owner:
+  // - CaptureWaitHi_Anim runs during the victim's prio-1 Anim callback before the grab owner's
+  //   later CatchWait/CatchAttack ownership can pummel or throw.
+  // - When fp->grab_timer reaches zero, it immediately calls ftCo_800DA698(owner, false) and then
+  //   enters CaptureCut/CaptureJump on the victim.
+  // - The simulator splits current-frame input application after the Anim phase, so the anim
+  //   callback records the source-owned pending transition and this resolver applies it before any
+  //   pummel/throw IASA or same-frame fn_800DC014 X/Y latch. This is a scheduler split, not a
+  //   replay-row bridge.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+  //   ftCo_CaptureWaitHi_Anim,ftCo_800DA698,fn_800DC070,ftCo_CatchWait_IASA}
+  enter_catch_cut_from_capture_breakout(batch, c, oidx);
+  clear_grab_linkage(batch, oidx, vidx);
+  if (batch->state.capture_wait_jump_latch[vidx] != 0u ||
+      apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[vidx]), c->lstick_deadzone_y) >=
+          c->tap_jump_threshold) {
+    enter_capture_jump_from_breakout(batch, c, vidx);
+  } else {
+    enter_capture_cut_from_breakout(batch, c, vidx);
+  }
+  batch->state.capture_breakout_pending[vidx] = 0u;
+}
+
 static inline void capturewait_anim_callback_apply(MslBatch* batch, const MslCommonParams* c,
                                                    size_t vidx, uint8_t* out_mash_active) {
   if (batch == NULL || c == NULL) {
@@ -657,14 +727,13 @@ static inline void capturewait_anim_callback_apply(MslBatch* batch, const MslCom
     *out_mash_active = mash_active;
   }
   if (batch->state.capture_grab_timer[vidx] <= 0.0f) {
-    // Decomp adjacency owner:
-    // - CaptureWaitHi_Anim decrements grab_timer and reaches the breakout gate here.
-    // - Shared CatchWait ownership still decides pummel / throw / breakout adjacency later in the
-    //   same frame's IASA path, so keep only the explicit timer/jump-latch owner state here and
-    //   resolve the actual CatchCut/CaptureCut/CaptureJump transition in CatchWait pre-physics.
+    // CaptureWaitHi_Anim reaches the source breakout gate here. Runtime resolves it through
+    // capturewait_resolve_anim_breakout_owner() after current-frame stick state is available for
+    // fn_800DC044, but before same-frame CatchWait pummel/throw IASA or fn_800DC014's X/Y latch
+    // can run.
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
-    //   ftCo_CaptureWaitHi_Anim,ftCo_CatchWait_IASA
-    // }
+    //   ftCo_CaptureWaitHi_Anim,ftCo_800DA698,fn_800DC070}
+    batch->state.capture_breakout_pending[vidx] = 1u;
     return;
   }
 
@@ -1398,6 +1467,29 @@ void grab_flow_update_anim_callbacks_pre_input(MslBatch* batch) {
       uint16_t oa = batch->state.action_id[oidx];
       uint8_t owner_catch_attack_ended = 0u;
 
+      if (oa == (uint16_t)MSL_ACT_CATCH_CUT || oa == (uint16_t)MSL_ACT_CAPTURE_CUT ||
+          oa == (uint16_t)MSL_ACT_CAPTURE_JUMP) {
+        const uint32_t msid_u32 = batch->state.animation_index[oidx];
+        uint16_t msid = 0u;
+        if (msid_u32 <= 0xFFFFu) {
+          msid = (uint16_t)msid_u32;
+        } else if (oa == (uint16_t)MSL_ACT_CATCH_CUT) {
+          msid = (uint16_t)MSL_SM_CATCH_CUT;
+        } else if (oa == (uint16_t)MSL_ACT_CAPTURE_CUT) {
+          msid = (uint16_t)MSL_SM_CAPTURE_CUT;
+        } else {
+          msid = (uint16_t)MSL_SM_CAPTURE_JUMP;
+        }
+        if (anim_finished(batch->state.char_id[oidx], msid, batch->state.anim_frame_f32[oidx])) {
+          if (oa == (uint16_t)MSL_ACT_CAPTURE_JUMP) {
+            enter_fall_from_capture_jump_end(batch, oidx);
+          } else {
+            enter_common_wait_or_fall_from_grab_cut_end(batch, oidx);
+          }
+          oa = batch->state.action_id[oidx];
+        }
+      }
+
       if (oa == (uint16_t)MSL_ACT_CATCH || oa == (uint16_t)MSL_ACT_CATCH_DASH) {
         const uint32_t msid_u32 = batch->state.animation_index[oidx];
         if (msid_u32 <= 0xFFFFu) {
@@ -1565,8 +1657,6 @@ void grab_flow_update_pre_physics(MslBatch* batch) {
         continue;
       }
 
-      int breakout_victim_p = -1;
-      size_t breakout_vidx = 0u;
       for (int victim_p = 0; victim_p < num_players; victim_p++) {
         const size_t vidx = msl_idx_player(bi, victim_p);
         if ((int)batch->state.grab_owner_port[vidx] != owner_p ||
@@ -1583,6 +1673,11 @@ void grab_flow_update_pre_physics(MslBatch* batch) {
           capturewait_anim_callback_apply(batch, c, vidx, NULL);
         }
         if ((va == (uint16_t)MSL_ACT_CAPTURE_WAIT_HI || va == (uint16_t)MSL_ACT_CAPTURE_WAIT_LW) &&
+            batch->state.capture_breakout_pending[vidx] != 0u) {
+          capturewait_resolve_anim_breakout_owner(batch, c, oidx, vidx);
+          continue;
+        }
+        if ((va == (uint16_t)MSL_ACT_CAPTURE_WAIT_HI || va == (uint16_t)MSL_ACT_CAPTURE_WAIT_LW) &&
             batch->state.capture_wait_counter[vidx] < c->capture_wait_jump_latch_window_frames &&
             (batch->state.input_buttons_pressed[vidx] & (uint16_t)MSL_BUTTON_XY) != 0u) {
           // Decomp: CaptureWait*_IASA calls fn_800DC014, which gates the jump latch on
@@ -1590,18 +1685,18 @@ void grab_flow_update_pre_physics(MslBatch* batch) {
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::fn_800DC014
           batch->state.capture_wait_jump_latch[vidx] = 1u;
         }
-        if ((va == (uint16_t)MSL_ACT_CAPTURE_WAIT_HI || va == (uint16_t)MSL_ACT_CAPTURE_WAIT_LW) &&
-            batch->state.capture_breakout_pending[vidx] != 0u) {
-          breakout_victim_p = victim_p;
-          breakout_vidx = vidx;
-        }
+      }
+
+      if (batch->state.action_id[oidx] != oa) {
+        continue;
       }
 
       if (oa != (uint16_t)MSL_ACT_CATCH_WAIT) {
         continue;
       }
 
-      // CatchWait IASA ordering: pummel check before throw check.
+      // CatchWait IASA ordering once no earlier CaptureWait breakout has replaced CatchWait:
+      // pummel check before throw check.
       // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::ftCo_CatchWait_IASA
       if (catch_input_a_pressed_edge(batch, oidx)) {
         enter_catch_attack_from_wait(batch, oidx);
@@ -1615,19 +1710,6 @@ void grab_flow_update_pre_physics(MslBatch* batch) {
       }
 
       maybe_enter_capture_wait_lw_grounded_handoff(batch, bi, owner_p, oidx);
-
-      if (breakout_victim_p >= 0) {
-        enter_catch_cut_from_capture_breakout(batch, c, oidx);
-        clear_grab_linkage(batch, oidx, breakout_vidx);
-        if (batch->state.capture_wait_jump_latch[breakout_vidx] != 0u ||
-            apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[breakout_vidx]),
-                           c->lstick_deadzone_y) >= c->tap_jump_threshold) {
-          enter_capture_jump_from_breakout(batch, c, breakout_vidx);
-        } else {
-          enter_capture_cut_from_breakout(batch, c, breakout_vidx);
-        }
-        batch->state.capture_breakout_pending[breakout_vidx] = 0u;
-      }
     }
   }
 }
