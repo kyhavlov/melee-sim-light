@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include "action.h"
 #include "action_ids.h"
+#include "attack_id_tables.h"
 #include "anim_pose.h"
 #include "anim_table.h"
 #include "char_params.h"
@@ -1311,27 +1312,39 @@ static inline uint8_t grounded_action_allows_platform_carry_y_correction(uint16_
 }
 
 static inline uint8_t grounded_action_allows_height_platform_y_correction(uint16_t action_id,
-                                                                          uint16_t action_frame) {
+                                                                          uint16_t action_frame,
+                                                                          uint8_t char_id) {
   if (grounded_action_allows_platform_carry_y_correction(action_id, action_frame)) {
     return 1u;
   }
-  // KneeBend routes through ft_80083F88 -> ft_80082708 -> mpColl_8004B108. That source path still
-  // writes CollData.cur_pos back to the fighter when the persisted floor remains valid, so a moving
-  // grIzumi platform must be allowed to apply the signed mpLib_8004DD90_Floor correction while the
-  // fighter is still grounded.
+  // KneeBend and grounded Fox/Falco SpecialN route through
+  // ft_80083F88 -> ft_80082708 -> mpColl_8004B108. That source path still writes CollData.cur_pos
+  // back to the fighter when the persisted floor remains valid, so a moving grIzumi platform must
+  // be allowed to apply the signed mpLib_8004DD90_Floor correction while the fighter is still
+  // grounded. Use MSLMSO01 for the callback owner and the decomp-derived MotionState move_id table
+  // for the grounded SpecialN distinction instead of carrying a local SpecialN action range.
   //
-  // Do not admit the whole generated FT80083F88 class here: downed callbacks share that helper but
-  // route through separate DownBound/DownWait/DownStand owners and should not inherit this
-  // KneeBend moving-platform carry.
+  // Do not admit the whole generated FT80083F88 class here: downed/passive callbacks share that
+  // helper but route through separate downed/damage owners and should not inherit this moving-
+  // platform carry.
   //
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_Coll
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
+  //   ftFx_SpecialNStart_Coll,ftFx_SpecialNLoop_Coll,ftFx_SpecialNEnd_Coll}
   // refs/melee/src/melee/ft/ft_081B.c::{ft_80083F88,ft_80082708}
   // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
   // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
   // data/motion_state/owners/{fox,falco}.bin (MSLMSO01 class FT80083F88_GROUND_TO_AIR_COLL)
-  return (uint8_t)(action_id == (uint16_t)MSL_ACT_KNEE_BEND &&
-                   msl_motion_state_common_class_has(action_id,
-                                                     MSL_MS_CLASS_FT80083F88_GROUND_TO_AIR_COLL));
+  // data/attack_id/move_id/{fox,falco}.bin (MotionState.move_id == FtMoveId_SpecialN)
+  if (!msl_motion_state_class_has(char_id, action_id, MSL_MS_CLASS_FT80083F88_GROUND_TO_AIR_COLL)) {
+    return 0u;
+  }
+  if (action_id == (uint16_t)MSL_ACT_KNEE_BEND) {
+    return 1u;
+  }
+  enum { MSL_FT_MOVE_ID_SPECIAL_N = 18u };
+  return (uint8_t)(attack_id_move_id_from_action(char_id, action_id) ==
+                   (uint16_t)MSL_FT_MOVE_ID_SPECIAL_N);
 }
 
 static inline uint8_t grounded_action_allows_stage_object_platform_carry(uint16_t action_id) {
@@ -1633,7 +1646,7 @@ static inline float mpcoll_floor_projection_lift_allowance(const MslEcbWorldPoin
 
 static inline uint8_t grounded_persistence_allows_signed_dd90_y_correction(
     const MslBatch* batch, int bi, const MslStageFloorGraph* g, int current_line_idx,
-    int projected_line_idx, uint16_t action_id, uint16_t action_frame) {
+    int projected_line_idx, size_t idx, uint16_t action_id, uint16_t action_frame) {
   if (g == NULL || projected_line_idx < 0 || (size_t)projected_line_idx >= g->line_count) {
     return 0u;
   }
@@ -1663,7 +1676,8 @@ static inline uint8_t grounded_persistence_allows_signed_dd90_y_correction(
     // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
     return 1u;
   }
-  if (grounded_action_allows_height_platform_y_correction(action_id, action_frame) &&
+  if (grounded_action_allows_height_platform_y_correction(action_id, action_frame,
+                                                          batch->state.char_id[idx]) &&
       generated_slope_owner) {
     // Yoshi's Story and FoD both expose admitted sloped floor segments in MSLSTG01. Grounded
     // persistence should keep the fighter attached through source graph traversal, including
@@ -1674,7 +1688,8 @@ static inline uint8_t grounded_persistence_allows_signed_dd90_y_correction(
     // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
     return 1u;
   }
-  if (!grounded_action_allows_height_platform_y_correction(action_id, action_frame)) {
+  if (!grounded_action_allows_height_platform_y_correction(action_id, action_frame,
+                                                           batch->state.char_id[idx])) {
     return 0u;
   }
   uint8_t platform_id = 0u;
@@ -4884,10 +4899,19 @@ void mpcoll_ground_apply(MslBatch* batch) {
       // such as hitlag SDI/ASDI remain visible to mpCheckFloor.
       // refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpCheckFloor}
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag
+      const uint8_t prev_action_is_jumpaerial =
+          (prev_action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
+           prev_action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_B)
+              ? 1u
+              : 0u;
+      const uint8_t seed_prev_action_is_jumpaerial =
+          (batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
+           batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_AERIAL_B)
+              ? 1u
+              : 0u;
       const uint8_t escapeair_locked_jumpaerial_entry_desired_bottom_owner =
           (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR && ecb_lock_timer_seed != 0u &&
-           (batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
-            batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_AERIAL_B) &&
+           seed_prev_action_is_jumpaerial &&
            (batch->state.pos_y[idx] > k_floor_y_bias ||
             batch->state.floor_sweep_prev_pos_y[idx] > k_floor_y_bias) &&
            batch->state.seed_prev_action_frame[idx] <= 2 &&
@@ -4915,13 +4939,11 @@ void mpcoll_ground_apply(MslBatch* batch) {
                stage_collision_floor_line_is_platform(stage_id, batch->state.ground_id[idx]) ||
                stage_collision_floor_line_has_platform_transform(stage_id,
                                                                  batch->state.ground_id[idx])) &&
-              (prev_action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
-               prev_action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_B)) ||
+              prev_action_is_jumpaerial) ||
              (ecb_lock_timer_seed == 0u &&
               stage_id == (uint32_t)MSL_STAGE_FOUNTAIN_OF_DREAMS_LOCAL &&
               batch->state.action_frame[idx] <= 1)) &&
-            (batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
-             batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_AERIAL_B)))
+            seed_prev_action_is_jumpaerial))
               ? 1u
               : 0u;
       const float prev_x = escapeair_471f8_uses_frame_start_last_pos
@@ -5091,8 +5113,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
       }
       const uint8_t escapeair_jumpaerial_entry =
           (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR && prev_action_id != action_id &&
-           (batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
-            batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_AERIAL_B))
+           seed_prev_action_is_jumpaerial)
               ? 1u
               : 0u;
       const uint8_t escapeair_fod_no_lock_jumpaerial_entry =
@@ -5103,6 +5124,18 @@ void mpcoll_ground_apply(MslBatch* batch) {
             batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_AERIAL_B))
               ? 1u
               : 0u;
+      const uint8_t escapeair_jumpaerial_source_entry =
+          (escapeair_jumpaerial_entry || escapeair_fod_no_lock_jumpaerial_entry) ? 1u : 0u;
+      const uint16_t escapeair_jumpaerial_source_action_id =
+          prev_action_is_jumpaerial ? prev_action_id : batch->state.seed_prev_action_id[idx];
+      const int16_t escapeair_jumpaerial_source_action_frame =
+          prev_action_is_jumpaerial ? (int16_t)(batch->state.prev_action_frame[idx] + 1)
+                                    : batch->state.seed_prev_action_frame[idx];
+      const float pre_entry_jumpaerial_ecb_rel =
+          escapeair_jumpaerial_source_entry
+              ? mpcoll_action_pose_ecb_bottom_rel_y(char_id, escapeair_jumpaerial_source_action_id,
+                                                    escapeair_jumpaerial_source_action_frame, 0u)
+              : 0.0f;
       const uint8_t escapeair_jumpaerial_prev_ecb_lifetime =
           ((escapeair_jumpaerial_entry || escapeair_fod_no_lock_jumpaerial_entry) &&
            batch->state.seed_prev_action_frame[idx] >= 4 &&
@@ -5448,6 +5481,47 @@ void mpcoll_ground_apply(MslBatch* batch) {
         }
       }
 
+      if (!was_grounded && !on_ground && stage_id == (uint32_t)MSL_STAGE_FOUNTAIN_OF_DREAMS_LOCAL &&
+          action_id == (uint16_t)MSL_ACT_ESCAPE_AIR && prev_action_id != action_id &&
+          prev_action_is_jumpaerial && prefer_line_idx >= 0 &&
+          batch->state.seed_prev_action_frame[idx] <= 2 && batch->state.action_frame[idx] <= 2) {
+        // Fresh JumpAerial -> EscapeAir ledge bottom-sweep handoff:
+        // ftCo_JumpAerial_IASA can enter EscapeAir before Fighter_procMap, then
+        // EscapeAir_Coll -> ft_80082C74 -> mpColl_800471F8 samples frame-start CollData.ecb and
+        // post-Phys EscapeAir cur_pos. The source mpCheckFloor test is a segment sweep from the
+        // pre-entry JumpAerial ECB bottom to the current EscapeAir bottom; it can hit a generated
+        // ledge even when the previous root is just outside the ledge endpoint at the side wall.
+        //
+        // Keep this to FoD generated ledge floors reached by the actual bottom sweep. Yoshi's
+        // ledge re-entry uses the same source callback family but validation shows a later ledge
+        // admission phase there, so this owner stays with the proven FoD right-wall clip until the
+        // Yoshi branch is ported separately.
+        // data/stages/bin/griz.bin::MSLSTG01 ledge floor segments + prev/next links
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_IASA
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+        // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+        // refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_800471F8,mpCheckFloor}
+        int hit_line_idx = -1;
+        float hit_x = 0.0f, hit_y = 0.0f;
+        const float source_prev_bottom_y = (prev_y + pre_entry_jumpaerial_ecb_rel);
+        if (msl_mpcheck_floor(batch, idx, bi, g, stage_id, prev_bottom_x, source_prev_bottom_y,
+                              cur_bottom_x, cur_bottom_y, skip_platform_segment_i, prefer_line_idx,
+                              -1, c, &hit_line_idx, &hit_x, &hit_y, &floor_nx, &floor_ny) &&
+            hit_line_idx >= 0 && (size_t)hit_line_idx < g->line_count &&
+            g->lines[(size_t)hit_line_idx].is_ledge &&
+            !g->lines[(size_t)hit_line_idx].is_platform &&
+            !stage_collision_floor_line_has_platform_transform(
+                stage_id, g->lines[(size_t)hit_line_idx].segment_i) &&
+            !floor_x_within_line_bounds(batch, bi, g, hit_line_idx, prev_x) &&
+            floor_x_within_line_bounds(batch, bi, g, hit_line_idx, x)) {
+          batch->state.pos_y[idx] = hit_y + k_floor_y_bias;
+          on_ground = 1u;
+          ground_id = g->lines[(size_t)hit_line_idx].segment_i;
+          contact_x = hit_x;
+          contact_y = hit_y;
+        }
+      }
+
       uint8_t escapeair_missing_bottom_hard_floor_sweep_owner = 0u;
       if (!was_grounded && !on_ground && action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
           (stage_id == (uint32_t)MSL_STAGE_FINAL_DESTINATION_LOCAL ||
@@ -5504,7 +5578,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
                                            batch->state.floor_sweep_prev_pos_x[idx]) ||
                !floor_x_within_line_bounds(batch, bi, g, line_idx, x))) {
             // FoD ledge-floor publication in this early locked EscapeAir path is an in-span
-            // callback floor continuation. Endpoint entry from outside the ledge segment remains
+            // callback floor continuation. Endpoint entry from outside the ledge segment is owned
+            // by the fresh JumpAerial -> EscapeAir bottom-sweep handoff above; other rows remain
             // airborne until a real bottom/root crossing reaches an in-span source floor result.
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
             // refs/melee/src/melee/mp/mplib.c::mpCheckFloor
@@ -5725,9 +5800,9 @@ void mpcoll_ground_apply(MslBatch* batch) {
           const uint8_t keep_capture_lw_floor_snap =
               is_capture_lw_allow_ground_to_air_collision_action(action_id);
           const uint8_t keep_slope_or_platform_floor_snap =
-              grounded_persistence_allows_signed_dd90_y_correction(batch, bi, g, prefer_line_idx,
-                                                                   resolved_line_idx, action_id,
-                                                                   batch->state.action_frame[idx]);
+              grounded_persistence_allows_signed_dd90_y_correction(
+                  batch, bi, g, prefer_line_idx, resolved_line_idx, idx, action_id,
+                  batch->state.action_frame[idx]);
           // mpLib_8004DD90_Floor returns a signed correction; for stable grounded frames we only
           // need to resolve penetration. If we are already above the floor due to upstream
           // approximation drift, avoid snapping down in the collision substrate.

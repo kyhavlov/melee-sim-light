@@ -55,6 +55,9 @@ ACT_ATTACK_S4_S = 0x003C
 ACT_ATTACK_HI4 = 0x003F
 ACT_FX_SPECIAL_AIR_HI = 0x0164
 ACT_FX_SPECIAL_AIR_S_END = 0x0160
+ACT_FX_SPECIAL_N_START = 0x0155
+ACT_FX_SPECIAL_N_LOOP = 0x0156
+ACT_FX_SPECIAL_N_END = 0x0157
 ACT_FX_SPECIAL_HI_LANDING = 0x0165
 ACT_FX_SPECIAL_HI_FALL = 0x0166
 ACT_FX_SPECIAL_HI_BOUND = 0x0167
@@ -72,6 +75,9 @@ SM_CLIFF_WAIT = 217
 SM_ATTACK_DASH = 52
 SM_ATTACK_S4 = 62
 SM_ATTACK_HI4 = 66
+SM_FX_SPECIAL_N_START = 301
+SM_FX_SPECIAL_N_LOOP = 302
+SM_FX_SPECIAL_N_END = 303
 SM_ESCAPE_AIR = 44
 SM_FX_SPECIAL_HI = 309
 SM_OTTOTTO_WAIT = 211
@@ -2111,6 +2117,53 @@ def test_fod_kneebend_follows_descending_height_platform_via_80083f88_coll() -> 
     assert float(out["pos_y"][0]) == pytest.approx(float(next_world_y) + 0.0001, abs=1e-5)
 
 
+@pytest.mark.parametrize(
+    ("action_id", "submotion_id"),
+    [
+        (ACT_FX_SPECIAL_N_START, SM_FX_SPECIAL_N_START),
+        (ACT_FX_SPECIAL_N_LOOP, SM_FX_SPECIAL_N_LOOP),
+        (ACT_FX_SPECIAL_N_END, SM_FX_SPECIAL_N_END),
+    ],
+)
+def test_fod_grounded_blaster_follows_descending_height_platform_via_80083f88_coll(
+    action_id: int, submotion_id: int
+) -> None:
+    # Grounded Fox/Falco SpecialN collision callbacks call ft_80083F88, which writes CollData.cur_pos
+    # back through mpColl_8004B108. Like KneeBend, an already-grounded blaster state on a moving
+    # grIzumi height-platform must consume the signed DD90 floor correction instead of freezing at
+    # the previous platform pose.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
+    #   ftFx_SpecialNStart_Coll,ftFx_SpecialNLoop_Coll,ftFx_SpecialNEnd_Coll}
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_80083F88,ft_80082708}
+    # refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
+    height = np.float32(14.030420303344727)
+    velocity = np.float32(-0.1)
+    current_world_y = np.float32(1.125 + float(height) * 0.75)
+    next_world_y = np.float32(1.125 + float(np.float32(height + velocity)) * 0.75)
+    seed = _seed_base(2, action_id, submotion_id, -35.982688903808594, float(current_world_y))
+    seed["stage_fod_platform_height_f32"][0, 1] = height
+    seed["stage_fod_platform_height_valid_u8"][0, 1] = np.uint8(1)
+    seed["stage_fod_platform_velocity_f32"][0, 1] = velocity
+    seed["stage_fod_platform_velocity_valid_u8"][0, 1] = np.uint8(1)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(0)
+    seed["action_frame"][0, 0] = np.int16(3)
+    seed["anim_frame_f32"][0, 0] = np.float32(3.0)
+
+    out = _step_once(seed)
+
+    assert int(out["action_id"][0]) == action_id
+    assert int(out["on_ground"][0]) == 1
+    assert int(out["ground_id"][0]) == 0
+    assert float(out["pos_y"][0]) == pytest.approx(float(next_world_y) + 0.0001, abs=1e-5)
+
+    static_seed = seed.copy()
+    static_seed["stage_fod_platform_velocity_f32"][0, 1] = np.float32(0.0)
+    static_seed["stage_fod_platform_velocity_valid_u8"][0, 1] = np.uint8(1)
+    static_out = _step_once(static_seed)
+    assert float(static_out["pos_y"][0]) == pytest.approx(float(current_world_y) + 0.0001, abs=1e-5)
+
+
 def test_fod_landing_rider_inherits_height_platform_motion_delta() -> None:
     # Landing_Coll uses ft_80084280 and keeps CollData.floor.index attached to the current floor.
     # For FoD side platforms, that current floor is the grIzumi JObj-refreshed height-transform
@@ -2523,6 +2576,87 @@ def test_fod_jumpaerial_escapeair_static_platform_sweep_requires_bottom_crossing
     assert int(out["action_id"][0]) == ACT_ESCAPE_AIR
     assert int(out["on_ground"][0]) == 0
     assert int(out["ground_id"][0]) == 5
+
+
+def test_fod_jumpaerial_escapeair_entry_preserves_pre_entry_ecb_for_right_ledge_floor() -> None:
+    # Modelplay trace lock: reports/modelplay/20260521_fod_trained_vs_base/
+    # trace_001_trained_p1_seed101/trace.json frames 8400..8404. JumpAerialF IASA enters
+    # EscapeAir near FoD's right side wall; source EscapeAir_Coll calls ft_80082C74 ->
+    # mpColl_800471F8 after mpCollPrev has copied the pre-entry JumpAerial ECB. The floor sweep is
+    # from that pre-entry ECB bottom to the current EscapeAir bottom, so it must publish the
+    # generated right ledge instead of letting the fighter pass under the stage.
+    # data/stages/bin/griz.bin::MSLSTG01 line 7 right ledge
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+    # refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_800471F8,mpCheckFloor}
+    seed = _seed_base(2, ACT_ESCAPE_AIR, SM_ESCAPE_AIR, 61.62493896484375, -2.6133792400360107)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["ground_id"][0, 0] = np.uint16(6)
+    seed["action_frame"][0, 0] = np.int16(0)
+    seed["anim_frame_f32"][0, 0] = np.float32(0.0)
+    seed["speed_air_x_self"][0, 0] = np.float32(-2.04)
+    seed["speed_y_self"][0, 0] = np.float32(-1.9011576)
+    seed["seed_prev_action_id"][0, 0] = np.uint16(ACT_JUMP_AERIAL_F)
+    seed["seed_prev_action_frame"][0, 0] = np.int16(2)
+    seed["floor_sweep_prev_pos_valid_u8"][0, 0] = np.uint8(1)
+    seed["floor_sweep_prev_pos_x_f32"][0, 0] = np.float32(63.6669235)
+    seed["floor_sweep_prev_pos_y_f32"][0, 0] = np.float32(-0.7122216)
+
+    out = _step_once(seed)
+
+    assert int(out["action_id"][0]) == ACT_LANDING_FALL_SPECIAL
+    assert int(out["on_ground"][0]) == 1
+    assert int(out["ground_id"][0]) == 7
+    assert float(out["pos_y"][0]) == pytest.approx(0.623875, abs=1e-5)
+
+
+def test_fod_jumpaerial_escapeair_right_ledge_entry_requires_early_source_phase() -> None:
+    # Frame-boundary negative for the pre-entry ECB owner above: later JumpAerial source frames do
+    # not use the fresh entry handoff even if the old trace-visible bottom path is near FoD's ledge.
+    seed = _seed_base(2, ACT_ESCAPE_AIR, SM_ESCAPE_AIR, 61.62493896484375, 3.0)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["ground_id"][0, 0] = np.uint16(6)
+    seed["action_frame"][0, 0] = np.int16(0)
+    seed["anim_frame_f32"][0, 0] = np.float32(0.0)
+    seed["speed_air_x_self"][0, 0] = np.float32(-2.04)
+    seed["speed_y_self"][0, 0] = np.float32(-0.2)
+    seed["seed_prev_action_id"][0, 0] = np.uint16(ACT_JUMP_AERIAL_F)
+    seed["seed_prev_action_frame"][0, 0] = np.int16(4)
+    seed["floor_sweep_prev_pos_valid_u8"][0, 0] = np.uint8(1)
+    seed["floor_sweep_prev_pos_x_f32"][0, 0] = np.float32(63.6669235)
+    seed["floor_sweep_prev_pos_y_f32"][0, 0] = np.float32(3.2)
+
+    out = _step_once(seed)
+
+    assert int(out["action_id"][0]) == ACT_ESCAPE_AIR
+    assert int(out["on_ground"][0]) == 0
+    assert int(out["ground_id"][0]) == 6
+
+
+def test_fod_jumpaerial_escapeair_right_ledge_entry_requires_bottom_sweep_crossing() -> None:
+    # Bottom-sweep negative for the pre-entry ECB owner above: keep the source/admitted frame window
+    # live, but place both pre-entry and current ECB bottoms above the generated right ledge floor.
+    # Preserving a JumpAerial ECB is not enough to synthesize LandingFallSpecial without the actual
+    # `mpCheckFloor` segment crossing used by EscapeAir_Coll.
+    seed = _seed_base(2, ACT_ESCAPE_AIR, SM_ESCAPE_AIR, 61.62493896484375, 10.0)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["ground_id"][0, 0] = np.uint16(6)
+    seed["action_frame"][0, 0] = np.int16(0)
+    seed["anim_frame_f32"][0, 0] = np.float32(0.0)
+    seed["speed_air_x_self"][0, 0] = np.float32(-2.04)
+    seed["speed_y_self"][0, 0] = np.float32(-0.2)
+    seed["seed_prev_action_id"][0, 0] = np.uint16(ACT_JUMP_AERIAL_F)
+    seed["seed_prev_action_frame"][0, 0] = np.int16(2)
+    seed["floor_sweep_prev_pos_valid_u8"][0, 0] = np.uint8(1)
+    seed["floor_sweep_prev_pos_x_f32"][0, 0] = np.float32(63.6669235)
+    seed["floor_sweep_prev_pos_y_f32"][0, 0] = np.float32(10.2)
+
+    out = _step_once(seed)
+
+    assert int(out["action_id"][0]) == ACT_ESCAPE_AIR
+    assert int(out["on_ground"][0]) == 0
+    assert int(out["ground_id"][0]) == 6
 
 
 def test_fod_common_air_down_input_rejects_transformed_soft_platform_callback() -> None:
