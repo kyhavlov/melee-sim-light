@@ -25,6 +25,10 @@ Current target domain:
 - Stage collision/models/coords should come from extracted game data.
 - Character animation/move/hitbox/hurtbox data should come from extracted game data.
 - Manual overrides are allowed only as explicit, small, audited overlays.
+- When touching an area that still uses local semantic lists, callback ids, action-family switches,
+  or duplicated decomp-derived predicates, check whether the distinction can be promoted to an
+  extracted/generated data substrate. If source/decomp data can express it cleanly, prefer the
+  table-backed refactor as part of the change rather than preserving another local runtime list.
 
 ### Data / Decomp Discipline
 - Gameplay logic in `src/` must be **decomp-backed or game-data-backed**.

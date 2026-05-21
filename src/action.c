@@ -1091,51 +1091,12 @@ void guard_update_shield_recharge(MslBatch* batch, const MslCommonParams* c, siz
   if (batch == NULL || c == NULL) {
     return;
   }
-
-  // Shield recharge owner:
-  // - Fighter_ProcessHit_8006D1EC runs:
-  //     if (!fp->x221A_b7 && fp->shield_health < start) fp->shield_health += x27C;
-  // - The gate is `!fp->x221A_b7` (shield inactive), not a locomotion-state family test.
-  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
-  //
-  // Empirically (and in replays), shield recharge can happen during GuardOff.
-  //
-  // Minimal sim approximation: block recharge only during states where the shield bubble is active.
-  const uint8_t fresh_guardon_to_guardreflect_no_submotion =
-      (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
-       batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_GUARD_ON &&
-       batch->state.action_frame[idx] < 0 && batch->state.animation_index[idx] == UINT32_MAX)
-          ? 1u
-          : 0u;
-  const uint8_t guardreflect_active_timer_no_submotion =
-      (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
-       batch->state.action_frame[idx] < 0 && batch->state.animation_index[idx] == UINT32_MAX &&
-       batch->state.guard_reflect_timer_x14[idx] > 0u &&
-       (batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_GUARD_ON ||
-        batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_GUARD_ON))
-          ? 1u
-          : 0u;
-  // GuardOn -> GuardReflect via ftCo_8009388C clears fp+0x221B_b0 while installing ReflectDesc;
-  // despite the GuardReflect action id, the shield-health recharge gate observes the cleared shield
-  // descriptor on this fresh no-submotion row. The same applies while ftCo_80093BC0 leaves x14
-  // active; GuardOn_Anim shield drain resumes once x14 reaches zero.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_IASA,ftCo_8009388C,ftCo_8009370C,ftCo_80093BC0,ftCo_GuardReflect_Anim}
-  if (msl_guard_lifecycle_action_has_shield_callback(batch->state.action_id[idx]) &&
-      !fresh_guardon_to_guardreflect_no_submotion && !guardreflect_active_timer_no_submotion) {
+  // Empirically (and in replays), shield recharge can happen during GuardOff; the source gate is
+  // the live shield-active bit, resolved by the shared Guard lifecycle helper.
+  if (msl_guard_lifecycle_blocks_shield_recharge(batch, idx)) {
     return;
   }
-  if (batch->state.stocks[idx] == 0) {
-    return;
-  }
-
-  float hp = batch->state.shield_hp[idx];
-  if (hp < c->start_shield_health) {
-    hp += c->shield_recharge_per_frame;
-    if (hp > c->start_shield_health) {
-      hp = c->start_shield_health;
-    }
-    batch->state.shield_hp[idx] = hp;
-  }
+  msl_guard_lifecycle_apply_shield_recharge(batch, c, idx);
 }
 
 static inline void action_update_shield_recharge_post_state(MslBatch* batch,

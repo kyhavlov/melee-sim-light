@@ -369,6 +369,39 @@ static inline uint8_t damage_jump_input_from_edges(const MslBatch* batch, const 
   return did_tap_jump(c, stick_y, batch->state.tilt_timer_y[idx]);
 }
 
+static inline uint8_t damage_buffered_jump_x14_gate_open(const MslBatch* batch,
+                                                         const MslCommonParams* c, size_t idx) {
+  if (batch == NULL || c == NULL) {
+    return 0u;
+  }
+  // Decomp: Damage_Anim/DamageFly_Anim inlineC0 and Damage_IASA all consume the same
+  // mv.co.damage.x14 gate against p_ftCommonData->x1D0 before delegating to the ordinary air/ground
+  // IASA ladder.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{inlineC0,ftCo_Damage_Anim,ftCo_Damage_IASA}
+  const uint16_t x14 = batch->state.damage_jump_buffer_x14[idx];
+  return (x14 != 0u && (float)x14 <= c->damage_jump_buffer_window_frames) ? 1u : 0u;
+}
+
+static inline void damage_snapshot_jump_buffer_x14_from_hitstun(MslBatch* batch, size_t idx) {
+  if (batch != NULL) {
+    // Decomp: doIasa snapshots mv.co.damage.x0 into mv.co.damage.x14 when ftCo_Jump_GetInput
+    // succeeds during the x221C_b6 lockout window.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::doIasa
+    batch->state.damage_jump_buffer_x14[idx] = batch->state.hitstun[idx];
+  }
+}
+
+static inline void damage_clear_terminal_post_hitlag_buffers(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  batch->state.damage_jump_buffer_x14[idx] = 0u;
+  batch->state.damage_meteor_cancel_eligible_x1a[idx] = 0u;
+  batch->state
+      .state_flags[idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_BYTE_INDEX] &=
+      (uint8_t) ~(uint8_t)MSL_STATE_FLAGS_221C_B6_MASK;
+}
+
 static inline void enter_squat(MslBatch* batch, size_t idx);
 
 static inline uint8_t damage_ground_try_enter_kneebend_from_wait_iasa(MslBatch* batch,
@@ -388,8 +421,7 @@ static inline uint8_t damage_ground_try_enter_kneebend_from_wait_iasa(MslBatch* 
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::{ftCo_Jump_CheckInput,ftCo_Jump_GetInput}
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_Enter
   uint8_t jump_input = (uint8_t)MSL_JUMP_INPUT_NONE;
-  const uint16_t x14 = batch->state.damage_jump_buffer_x14[idx];
-  if (x14 != 0u && (float)x14 <= c->damage_jump_buffer_window_frames) {
+  if (damage_buffered_jump_x14_gate_open(batch, c, idx)) {
     const float stick_y =
         apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
     const uint8_t tap_jump = did_tap_jump(c, stick_y, batch->state.tilt_timer_y[idx]);
@@ -1261,11 +1293,7 @@ void knockdown_update_pre_physics(MslBatch* batch) {
           batch->state.speed_x_attack[idx] = 0.0f;
           batch->state.speed_y_attack[idx] = 0.0f;
           batch->state.hitstun[idx] = 0u;
-          batch->state.damage_jump_buffer_x14[idx] = 0u;
-          batch->state.damage_meteor_cancel_eligible_x1a[idx] = 0u;
-          batch->state.state_flags[idx * (size_t)MSL_STATE_FLAGS_BYTES +
-                                   (size_t)MSL_STATE_FLAGS_221C_BYTE_INDEX] &=
-              (uint8_t) ~(uint8_t)MSL_STATE_FLAGS_221C_B6_MASK;
+          damage_clear_terminal_post_hitlag_buffers(batch, idx);
           continue;
         }
         if (in_hitstun && iasa_locked && damage_jump_input_from_edges(batch, c, idx)) {
@@ -1274,7 +1302,7 @@ void knockdown_update_pre_physics(MslBatch* batch) {
           // post-hitstun DamageFly_Anim / DamageFall_IASA jump gate consumes it.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
           //   doIasa,ftCo_DamageFly_IASA,ftCo_DamageFlyRoll_IASA}
-          batch->state.damage_jump_buffer_x14[idx] = batch->state.hitstun[idx];
+          damage_snapshot_jump_buffer_x14_from_hitstun(batch, idx);
         }
         if (should_enter_damage_fall) {
           if (!fly_roll) {
@@ -1286,10 +1314,8 @@ void knockdown_update_pre_physics(MslBatch* batch) {
             // - Only when that x14 gate fails does the state enter DamageFall.
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Anim
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::inlineC0
-            const uint16_t x14 = batch->state.damage_jump_buffer_x14[idx];
-            const uint8_t gate_open =
-                (x14 != 0u && (float)x14 <= c->damage_jump_buffer_window_frames) ? 1u : 0u;
-            if (gate_open && damage_air_try_jump_aerial(batch, c, ch, idx, 1u, 1u)) {
+            if (damage_buffered_jump_x14_gate_open(batch, c, idx) &&
+                damage_air_try_jump_aerial(batch, c, ch, idx, 1u, 1u)) {
               continue;
             }
           }
@@ -1337,17 +1363,13 @@ void knockdown_update_pre_physics(MslBatch* batch) {
           batch->state.speed_x_attack[idx] = 0.0f;
           batch->state.speed_y_attack[idx] = 0.0f;
           batch->state.hitstun[idx] = 0u;
-          batch->state.damage_jump_buffer_x14[idx] = 0u;
-          batch->state.damage_meteor_cancel_eligible_x1a[idx] = 0u;
-          batch->state.state_flags[idx * (size_t)MSL_STATE_FLAGS_BYTES +
-                                   (size_t)MSL_STATE_FLAGS_221C_BYTE_INDEX] &=
-              (uint8_t) ~(uint8_t)MSL_STATE_FLAGS_221C_B6_MASK;
+          damage_clear_terminal_post_hitlag_buffers(batch, idx);
           continue;
         }
         if (in_hitstun && damage_jump_input_from_edges(batch, c, idx)) {
           // Decomp: doIasa snapshots x0 into mv.co.damage.x14 when ftCo_Jump_GetInput succeeds.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::doIasa
-          batch->state.damage_jump_buffer_x14[idx] = batch->state.hitstun[idx];
+          damage_snapshot_jump_buffer_x14_from_hitstun(batch, idx);
         }
 
         if (!in_hitstun && !iasa_locked) {
@@ -1363,10 +1385,8 @@ void knockdown_update_pre_physics(MslBatch* batch) {
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_IASA_Inner
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_80099A58
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_800CB870
-          const uint16_t x14 = batch->state.damage_jump_buffer_x14[idx];
-          const uint8_t gate_open =
-              (x14 != 0u && (float)x14 <= c->damage_jump_buffer_window_frames) ? 1u : 0u;
-          if (gate_open && damage_air_try_jump_aerial(batch, c, ch, idx, 1u, 0u)) {
+          if (damage_buffered_jump_x14_gate_open(batch, c, idx) &&
+              damage_air_try_jump_aerial(batch, c, ch, idx, 1u, 0u)) {
             continue;
           }
           if (escape_air_try_enter_from_air_locomotion(batch, c, idx)) {
@@ -1396,12 +1416,10 @@ void knockdown_update_pre_physics(MslBatch* batch) {
           anim_done = anim_is_finished(cid, (uint16_t)damage_msid_u32, anim_frame);
         }
         if (anim_done && !in_hitstun && !iasa_locked) {
-          const uint16_t x14 = batch->state.damage_jump_buffer_x14[idx];
-          const uint8_t gate_open =
-              (x14 != 0u && (float)x14 <= c->damage_jump_buffer_window_frames) ? 1u : 0u;
           // Decomp: Damage_Anim checks the inlineC0 jump-buffer gate first.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Anim
-          if (!(gate_open && damage_air_try_jump_aerial(batch, c, ch, idx, 1u, 1u))) {
+          if (!(damage_buffered_jump_x14_gate_open(batch, c, idx) &&
+                damage_air_try_jump_aerial(batch, c, ch, idx, 1u, 1u))) {
             // `common_damage_airborne` is only entered while on_ground == 0, so the grounded
             // Damage_Anim -> Wait branch is unreachable here by construction.
             // Decomp airborne branch:
@@ -1446,7 +1464,7 @@ void knockdown_update_pre_physics(MslBatch* batch) {
           // predicate is modeled; broadening this producer there regresses the modelplay
           // DamageAir floor-contact control.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{doIasa,ftCo_Damage_IASA}
-          batch->state.damage_jump_buffer_x14[idx] = batch->state.hitstun[idx];
+          damage_snapshot_jump_buffer_x14_from_hitstun(batch, idx);
         }
 
         if (anim_done && !iasa_locked) {

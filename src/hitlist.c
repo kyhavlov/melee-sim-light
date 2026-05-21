@@ -8,30 +8,6 @@
 #include "motion_state_owners.h"
 #include "move_tables.h"
 
-static inline uint8_t hitlist_victim_pointer_may_change(uint8_t stocks, uint16_t action_id) {
-  // Decomp hitlists store a raw victim pointer (HitVictim.victim) and use pointer equality to
-  // decide "already hit" vs "new victim":
-  // refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688
-  //
-  // This simulator does not currently have a stable pointer identity in the seed schema, so it
-  // approximates "pointer changed" using Slippi-visible state:
-  // - stocks==0 (dead), or
-  // - in a death/respawn motion state.
-  //
-  // NOTE: This boundary is an approximation; it is not guaranteed to match every engine object
-  // lifetime transition, but it is the intended substitute for "victim pointer changed" with the
-  // current seed contract.
-  if (stocks == 0) {
-    return 1u;
-  }
-  return (action_id == (uint16_t)MSL_ACT_DEAD_DOWN || action_id == (uint16_t)MSL_ACT_DEAD_LEFT ||
-          action_id == (uint16_t)MSL_ACT_DEAD_RIGHT ||
-          action_id == (uint16_t)MSL_ACT_DEAD_UP_STAR || action_id == (uint16_t)MSL_ACT_REBIRTH ||
-          action_id == (uint16_t)MSL_ACT_REBIRTH_WAIT)
-             ? 1u
-             : 0u;
-}
-
 static inline size_t idx_fighter_hitlist(int bi, int p, int hb_id) {
   return ((size_t)bi * (size_t)MSL_MAX_PLAYERS + (size_t)p) * (size_t)MSL_MAX_HITBOXES +
          (size_t)hb_id;

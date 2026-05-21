@@ -11,6 +11,7 @@
 #include "common_params.h"
 #include "dash_iasa.h"
 #include "grab_attachment.h"
+#include "guard_lifecycle.h"
 #include "input_axis.h"
 #include "mpcoll_ground.h"
 #include "move_tables.h"
@@ -37,17 +38,7 @@ static inline void catch_connect_apply_post_shield_release_recharge(MslBatch* ba
   // refs/melee/src/melee/ft/fighter.c::{Fighter_UnkProcessGrab_8006CA5C,Fighter_ProcessHit_8006D1EC}
   // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::fn_800DAADC
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_Anim,ftCo_Guard_Anim,ftCo_GuardSetOff_Anim,ftCo_800925A4}
-  if (batch->state.stocks[vidx] == 0u) {
-    return;
-  }
-  float hp = batch->state.shield_hp[vidx];
-  if (hp < c->start_shield_health) {
-    hp += c->shield_recharge_per_frame;
-    if (hp > c->start_shield_health) {
-      hp = c->start_shield_health;
-    }
-    batch->state.shield_hp[vidx] = hp;
-  }
+  msl_guard_lifecycle_apply_shield_recharge(batch, c, vidx);
 }
 
 static inline void clear_outgoing_hitboxes_after_catch_connect(MslBatch* batch, int bi, int p) {

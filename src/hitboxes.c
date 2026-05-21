@@ -234,19 +234,6 @@ static inline uint8_t hitboxes_motion_state_entry_preserves_hitcapsules(
   return 1u;
 }
 
-static inline uint8_t hitboxes_hitlist_victim_pointer_may_change(uint8_t stocks,
-                                                                 uint16_t action_id) {
-  if (stocks == 0) {
-    return 1u;
-  }
-  return (action_id == (uint16_t)MSL_ACT_DEAD_DOWN || action_id == (uint16_t)MSL_ACT_DEAD_LEFT ||
-          action_id == (uint16_t)MSL_ACT_DEAD_RIGHT ||
-          action_id == (uint16_t)MSL_ACT_DEAD_UP_STAR || action_id == (uint16_t)MSL_ACT_REBIRTH ||
-          action_id == (uint16_t)MSL_ACT_REBIRTH_WAIT)
-             ? 1u
-             : 0u;
-}
-
 static inline uint8_t hitboxes_source_port0_for_attacker(const MslBatch* batch, size_t a_idx,
                                                          int attacker);
 
@@ -290,8 +277,8 @@ static inline uint8_t hitboxes_seed_bridge_create_edge_guard_admission_dense_app
     const size_t v_idx = msl_idx_player(bi, victim);
     const uint16_t stored_iid = batch->state.combat_hitlist_victim_iid[cd_i];
     if (stored_iid != 0u && stored_iid != batch->state.instance_id[v_idx] &&
-        hitboxes_hitlist_victim_pointer_may_change(batch->state.stocks[v_idx],
-                                                   batch->state.action_id[v_idx])) {
+        hitlist_victim_pointer_may_change(batch->state.stocks[v_idx],
+                                          batch->state.action_id[v_idx])) {
       continue;
     }
     const float v_trigger_unit =
@@ -363,8 +350,8 @@ hitboxes_teacher_seed_reconstruct_create_edge_guardon_shielddesc_miss_dense_appl
     }
     const uint16_t stored_iid = batch->state.combat_hitlist_victim_iid[cd_i];
     if (stored_iid != 0u && stored_iid != batch->state.instance_id[v_idx] &&
-        hitboxes_hitlist_victim_pointer_may_change(batch->state.stocks[v_idx],
-                                                   batch->state.action_id[v_idx])) {
+        hitlist_victim_pointer_may_change(batch->state.stocks[v_idx],
+                                          batch->state.action_id[v_idx])) {
       continue;
     }
     // Teacher-forced create-edge HitCapsule seed reconstruction:
@@ -432,8 +419,8 @@ static inline uint8_t hitboxes_seed_reconstruct_create_edge_powershield_dense_ap
     }
     const uint16_t stored_iid = batch->state.combat_hitlist_victim_iid[cd_i];
     if (stored_iid != 0u && stored_iid != batch->state.instance_id[v_idx] &&
-        hitboxes_hitlist_victim_pointer_may_change(batch->state.stocks[v_idx],
-                                                   batch->state.action_id[v_idx])) {
+        hitlist_victim_pointer_may_change(batch->state.stocks[v_idx],
+                                          batch->state.action_id[v_idx])) {
       continue;
     }
     // Teacher-forced rollout create-edge HitCapsule seed reconstruction:
@@ -533,8 +520,8 @@ static inline uint8_t hitboxes_seed_reconstruct_attackairn_damageflytop_dense_ap
     }
     const uint16_t stored_iid = batch->state.combat_hitlist_victim_iid[cd_i];
     if (stored_iid != 0u && stored_iid != batch->state.instance_id[v_idx] &&
-        hitboxes_hitlist_victim_pointer_may_change(batch->state.stocks[v_idx],
-                                                   batch->state.action_id[v_idx])) {
+        hitlist_victim_pointer_may_change(batch->state.stocks[v_idx],
+                                          batch->state.action_id[v_idx])) {
       continue;
     }
     // Seed reconstruction for a concrete HitCapsule.victims_1 owner:

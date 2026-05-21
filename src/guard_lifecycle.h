@@ -83,6 +83,56 @@ static inline uint8_t msl_guard_lifecycle_action_has_shield_callback(uint16_t ac
   return msl_action_is_live_shield_family(action_id);
 }
 
+static inline uint8_t msl_guard_lifecycle_blocks_shield_recharge(const MslBatch* batch,
+                                                                 size_t idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  const uint16_t action_id = batch->state.action_id[idx];
+  const uint8_t fresh_guardon_to_guardreflect_no_submotion =
+      (action_id == (uint16_t)MSL_ACT_GUARD_REFLECT &&
+       batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_GUARD_ON &&
+       batch->state.action_frame[idx] < 0 && batch->state.animation_index[idx] == UINT32_MAX)
+          ? 1u
+          : 0u;
+  const uint8_t guardreflect_active_timer_no_submotion =
+      (action_id == (uint16_t)MSL_ACT_GUARD_REFLECT && batch->state.action_frame[idx] < 0 &&
+       batch->state.animation_index[idx] == UINT32_MAX &&
+       batch->state.guard_reflect_timer_x14[idx] > 0u &&
+       (batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_GUARD_ON ||
+        batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_GUARD_ON))
+          ? 1u
+          : 0u;
+
+  // Shield recharge owner:
+  // - Fighter_ProcessHit_8006D1EC runs:
+  //     if (!fp->x221A_b7 && fp->shield_health < start) fp->shield_health += x27C;
+  // - The gate is `!fp->x221A_b7` (shield inactive), not a locomotion-state family test.
+  // - GuardOn -> GuardReflect via ftCo_8009388C clears fp+0x221B_b0 while installing ReflectDesc;
+  //   no-submotion GuardReflect rows with that owner therefore do not block recharge.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+  //   ftCo_GuardOn_IASA,ftCo_8009388C,ftCo_8009370C,ftCo_80093BC0,ftCo_GuardReflect_Anim}
+  return (uint8_t)(msl_guard_lifecycle_action_has_shield_callback(action_id) &&
+                   !fresh_guardon_to_guardreflect_no_submotion &&
+                   !guardreflect_active_timer_no_submotion);
+}
+
+static inline void msl_guard_lifecycle_apply_shield_recharge(MslBatch* batch,
+                                                             const MslCommonParams* c, size_t idx) {
+  if (batch == NULL || c == NULL || batch->state.stocks[idx] == 0u) {
+    return;
+  }
+  float hp = batch->state.shield_hp[idx];
+  if (hp < c->start_shield_health) {
+    hp += c->shield_recharge_per_frame;
+    if (hp > c->start_shield_health) {
+      hp = c->start_shield_health;
+    }
+    batch->state.shield_hp[idx] = hp;
+  }
+}
+
 static inline uint8_t msl_guard_lifecycle_action_uses_guard_shield(uint16_t action_id) {
   switch (action_id) {
     case MSL_ACT_GUARD_ON:

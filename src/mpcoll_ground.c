@@ -253,40 +253,38 @@ enum {
   MSL_MPCOLL_FLOOR_RESULT_GROUNDED_4A908_RETRY = 2u,
 };
 
-enum {
-  MSL_MPCOLL_REJECT_ESCAPEAIR_TRANSFORMED_REMAP = 1u << 0,
-  MSL_MPCOLL_REJECT_SPECIALAIRHI_PLATFORM = 1u << 1,
-  MSL_MPCOLL_REJECT_FALLSPECIAL_FIRST_SUSTAINED = 1u << 2,
-  MSL_MPCOLL_REJECT_FALLSPECIAL_SAME_FLOOR_EARLY = 1u << 3,
-  MSL_MPCOLL_REJECT_FALLSPECIAL_PLATFORM_NO_SOURCE_BOTTOM = 1u << 4,
-  MSL_MPCOLL_REJECT_FALL_SAME_FLOOR_EARLY = 1u << 5,
-  MSL_MPCOLL_REJECT_SPECIALHI_TRANSFORMED_PLATFORM = 1u << 6,
-  MSL_MPCOLL_REJECT_SPECIALHI_UNDERSTAGE_HARD_FLOOR = 1u << 7,
-  MSL_MPCOLL_REJECT_SPECIALHI_FROM_BELOW_HARD_FLOOR = 1u << 8,
-  MSL_MPCOLL_REJECT_SPECIALAIRHI_FLOOR_ANGLE = 1u << 9,
-  MSL_MPCOLL_REJECT_AIRBORNE_TRANSFORMED_PLATFORM_PRE_HANDOFF = 1u << 10,
-  MSL_MPCOLL_REJECT_ATTACKAIR_TRANSFORMED_PLATFORM_ECB_ONLY = 1u << 11,
-  MSL_MPCOLL_REJECT_ATTACKAIR_TRANSFORMED_PLATFORM_FLOOR_SKIP = 1u << 12,
-  MSL_MPCOLL_REJECT_ATTACKAIR_OFFSPAN_HARD_FLOOR_EDGE = 1u << 13,
-  MSL_MPCOLL_REJECT_ATTACKAIR_TRANSFORMED_PLATFORM_BELOW = 1u << 14,
-  MSL_MPCOLL_REJECT_JUMPAERIAL_TRANSFORMED_PLATFORM_FASTFALL = 1u << 15,
-  MSL_MPCOLL_REJECT_JUMPAERIAL_STATIC_PLATFORM_FROM_BELOW = 1u << 16,
-  MSL_MPCOLL_REJECT_FALL_TRANSFORMED_PLATFORM_FASTFALL = 1u << 17,
-  MSL_MPCOLL_REJECT_FALL_LOOP_WRAP_STAGE_OBJECT_FLOOR_TO_HARD_FLOOR = 1u << 18,
-  MSL_MPCOLL_REJECT_SUSTAINED_ESCAPEAIR_SAME_PLATFORM_LOCK = 1u << 19,
-  MSL_MPCOLL_REJECT_SUSTAINED_ESCAPEAIR_SAME_LEDGE_LOCK = 1u << 20,
-  MSL_MPCOLL_REJECT_LOCKED_ESCAPEAIR_MISSING_BOTTOM_OWNER = 1u << 21,
-  MSL_MPCOLL_REJECT_LOCKED_DESIRED_PLATFORM_WITHOUT_BOTTOM_SWEEP = 1u << 22,
-  MSL_MPCOLL_REJECT_LOCKED_DESIRED_NONPLATFORM_WITHOUT_BOTTOM_SWEEP = 1u << 23,
-  MSL_MPCOLL_REJECT_KNEEBEND_ESCAPEAIR_SLOPE = 1u << 24,
-  MSL_MPCOLL_REJECT_JUMPAERIAL_ESCAPEAIR_HIGH_LIFT_LEDGE = 1u << 25,
-  MSL_MPCOLL_REJECT_JUMPAERIAL_ESCAPEAIR_STATIC_PLATFORM_OVERSTEP = 1u << 26,
-  MSL_MPCOLL_REJECT_DAMAGE_ACTIVE_HITLAG_ROOT_BELOW_BOTTOM_ABOVE_FLOOR = 1u << 27,
-  MSL_MPCOLL_REJECT_DAMAGE_ACTIVE_HITLAG_DOWNWARD_SDI_AIRBORNE = 1u << 28,
-  MSL_MPCOLL_REJECT_CLIFF_HORIZONTAL_LEDGE_LOCKED = 1u << 29,
-  MSL_MPCOLL_REJECT_SPECIALAIRLW_START_STALE_PLATFORM = 1u << 30,
-  MSL_MPCOLL_REJECT_ATTACKAIR_HARD_SLOPE_ROOT_WITHOUT_BOTTOM = 1u << 31,
-};
+#define MSL_MPCOLL_REJECT_ESCAPEAIR_TRANSFORMED_REMAP (UINT64_C(1) << 0)
+#define MSL_MPCOLL_REJECT_SPECIALAIRHI_PLATFORM (UINT64_C(1) << 1)
+#define MSL_MPCOLL_REJECT_FALLSPECIAL_FIRST_SUSTAINED (UINT64_C(1) << 2)
+#define MSL_MPCOLL_REJECT_FALLSPECIAL_SAME_FLOOR_EARLY (UINT64_C(1) << 3)
+#define MSL_MPCOLL_REJECT_FALLSPECIAL_PLATFORM_NO_SOURCE_BOTTOM (UINT64_C(1) << 4)
+#define MSL_MPCOLL_REJECT_FALL_SAME_FLOOR_EARLY (UINT64_C(1) << 5)
+#define MSL_MPCOLL_REJECT_SPECIALHI_TRANSFORMED_PLATFORM (UINT64_C(1) << 6)
+#define MSL_MPCOLL_REJECT_SPECIALHI_UNDERSTAGE_HARD_FLOOR (UINT64_C(1) << 7)
+#define MSL_MPCOLL_REJECT_SPECIALHI_FROM_BELOW_HARD_FLOOR (UINT64_C(1) << 8)
+#define MSL_MPCOLL_REJECT_SPECIALAIRHI_FLOOR_ANGLE (UINT64_C(1) << 9)
+#define MSL_MPCOLL_REJECT_AIRBORNE_TRANSFORMED_PLATFORM_PRE_HANDOFF (UINT64_C(1) << 10)
+#define MSL_MPCOLL_REJECT_ATTACKAIR_TRANSFORMED_PLATFORM_ECB_ONLY (UINT64_C(1) << 11)
+#define MSL_MPCOLL_REJECT_ATTACKAIR_TRANSFORMED_PLATFORM_FLOOR_SKIP (UINT64_C(1) << 12)
+#define MSL_MPCOLL_REJECT_ATTACKAIR_OFFSPAN_HARD_FLOOR_EDGE (UINT64_C(1) << 13)
+#define MSL_MPCOLL_REJECT_ATTACKAIR_TRANSFORMED_PLATFORM_BELOW (UINT64_C(1) << 14)
+#define MSL_MPCOLL_REJECT_JUMPAERIAL_TRANSFORMED_PLATFORM_FASTFALL (UINT64_C(1) << 15)
+#define MSL_MPCOLL_REJECT_JUMPAERIAL_STATIC_PLATFORM_FROM_BELOW (UINT64_C(1) << 16)
+#define MSL_MPCOLL_REJECT_FALL_TRANSFORMED_PLATFORM_FASTFALL (UINT64_C(1) << 17)
+#define MSL_MPCOLL_REJECT_FALL_LOOP_WRAP_STAGE_OBJECT_FLOOR_TO_HARD_FLOOR (UINT64_C(1) << 18)
+#define MSL_MPCOLL_REJECT_SUSTAINED_ESCAPEAIR_SAME_PLATFORM_LOCK (UINT64_C(1) << 19)
+#define MSL_MPCOLL_REJECT_SUSTAINED_ESCAPEAIR_SAME_LEDGE_LOCK (UINT64_C(1) << 20)
+#define MSL_MPCOLL_REJECT_LOCKED_ESCAPEAIR_MISSING_BOTTOM_OWNER (UINT64_C(1) << 21)
+#define MSL_MPCOLL_REJECT_LOCKED_DESIRED_PLATFORM_WITHOUT_BOTTOM_SWEEP (UINT64_C(1) << 22)
+#define MSL_MPCOLL_REJECT_LOCKED_DESIRED_NONPLATFORM_WITHOUT_BOTTOM_SWEEP (UINT64_C(1) << 23)
+#define MSL_MPCOLL_REJECT_KNEEBEND_ESCAPEAIR_SLOPE (UINT64_C(1) << 24)
+#define MSL_MPCOLL_REJECT_JUMPAERIAL_ESCAPEAIR_HIGH_LIFT_LEDGE (UINT64_C(1) << 25)
+#define MSL_MPCOLL_REJECT_JUMPAERIAL_ESCAPEAIR_STATIC_PLATFORM_OVERSTEP (UINT64_C(1) << 26)
+#define MSL_MPCOLL_REJECT_DAMAGE_ACTIVE_HITLAG_ROOT_BELOW_BOTTOM_ABOVE_FLOOR (UINT64_C(1) << 27)
+#define MSL_MPCOLL_REJECT_DAMAGE_ACTIVE_HITLAG_DOWNWARD_SDI_AIRBORNE (UINT64_C(1) << 28)
+#define MSL_MPCOLL_REJECT_CLIFF_HORIZONTAL_LEDGE_LOCKED (UINT64_C(1) << 29)
+#define MSL_MPCOLL_REJECT_SPECIALAIRLW_START_STALE_PLATFORM (UINT64_C(1) << 30)
+#define MSL_MPCOLL_REJECT_ATTACKAIR_HARD_SLOPE_ROOT_WITHOUT_BOTTOM (UINT64_C(1) << 31)
 
 enum {
   MSL_STAGE_FOUNTAIN_OF_DREAMS_LOCAL = 2u,
@@ -294,37 +292,34 @@ enum {
   MSL_STAGE_FINAL_DESTINATION_LOCAL = 32u,
 };
 
-static inline uint32_t mpcoll_escapeair_final_publication_reject_bits(
+static inline uint64_t mpcoll_escapeair_final_publication_reject_bits(
     const MslEscapeAirFinalPublicationOwners* owners) {
   if (owners == NULL) {
     return 0u;
   }
   return (owners->sustained_same_platform_lock
-              ? (uint32_t)MSL_MPCOLL_REJECT_SUSTAINED_ESCAPEAIR_SAME_PLATFORM_LOCK
+              ? MSL_MPCOLL_REJECT_SUSTAINED_ESCAPEAIR_SAME_PLATFORM_LOCK
               : 0u) |
-         (owners->sustained_same_ledge_lock
-              ? (uint32_t)MSL_MPCOLL_REJECT_SUSTAINED_ESCAPEAIR_SAME_LEDGE_LOCK
-              : 0u) |
+         (owners->sustained_same_ledge_lock ? MSL_MPCOLL_REJECT_SUSTAINED_ESCAPEAIR_SAME_LEDGE_LOCK
+                                            : 0u) |
          (owners->locked_missing_bottom_owner
-              ? (uint32_t)MSL_MPCOLL_REJECT_LOCKED_ESCAPEAIR_MISSING_BOTTOM_OWNER
+              ? MSL_MPCOLL_REJECT_LOCKED_ESCAPEAIR_MISSING_BOTTOM_OWNER
               : 0u) |
          (owners->locked_desired_platform_without_bottom_sweep
-              ? (uint32_t)MSL_MPCOLL_REJECT_LOCKED_DESIRED_PLATFORM_WITHOUT_BOTTOM_SWEEP
+              ? MSL_MPCOLL_REJECT_LOCKED_DESIRED_PLATFORM_WITHOUT_BOTTOM_SWEEP
               : 0u) |
          (owners->locked_desired_nonplatform_without_bottom_sweep
-              ? (uint32_t)MSL_MPCOLL_REJECT_LOCKED_DESIRED_NONPLATFORM_WITHOUT_BOTTOM_SWEEP
+              ? MSL_MPCOLL_REJECT_LOCKED_DESIRED_NONPLATFORM_WITHOUT_BOTTOM_SWEEP
               : 0u) |
-         (owners->kneebend_slope_entry ? (uint32_t)MSL_MPCOLL_REJECT_KNEEBEND_ESCAPEAIR_SLOPE
-                                       : 0u) |
+         (owners->kneebend_slope_entry ? MSL_MPCOLL_REJECT_KNEEBEND_ESCAPEAIR_SLOPE : 0u) |
          (owners->jumpaerial_high_lift_ledge
-              ? (uint32_t)MSL_MPCOLL_REJECT_JUMPAERIAL_ESCAPEAIR_HIGH_LIFT_LEDGE
+              ? MSL_MPCOLL_REJECT_JUMPAERIAL_ESCAPEAIR_HIGH_LIFT_LEDGE
               : 0u) |
          (owners->jumpaerial_static_platform_overstep
-              ? (uint32_t)MSL_MPCOLL_REJECT_JUMPAERIAL_ESCAPEAIR_STATIC_PLATFORM_OVERSTEP
+              ? MSL_MPCOLL_REJECT_JUMPAERIAL_ESCAPEAIR_STATIC_PLATFORM_OVERSTEP
               : 0u) |
-         (owners->cliff_horizontal_ledge_locked
-              ? (uint32_t)MSL_MPCOLL_REJECT_CLIFF_HORIZONTAL_LEDGE_LOCKED
-              : 0u);
+         (owners->cliff_horizontal_ledge_locked ? MSL_MPCOLL_REJECT_CLIFF_HORIZONTAL_LEDGE_LOCKED
+                                                : 0u);
 }
 
 typedef struct MslMpcollFloorContact {
@@ -342,6 +337,17 @@ typedef struct MslMpcollFloorPublication {
   float cur_bottom_x;
   float cur_bottom_y;
 } MslMpcollFloorPublication;
+
+typedef struct MslMpcollFloorRejectPacket {
+  uint64_t bits;
+} MslMpcollFloorRejectPacket;
+
+static inline void mpcoll_floor_reject_add_if(MslMpcollFloorRejectPacket* packet, uint8_t condition,
+                                              uint64_t bit) {
+  if (packet != NULL && condition) {
+    packet->bits |= bit;
+  }
+}
 
 static inline float cross2(float ax, float ay, float bx, float by) { return ax * by - ay * bx; }
 
@@ -623,14 +629,14 @@ static inline MslMpcollDamageActiveHitlagFloorOwner mpcoll_damage_active_hitlag_
   return out;
 }
 
-static inline uint32_t mpcoll_damage_active_hitlag_floor_owner_reject_bits(
+static inline uint64_t mpcoll_damage_active_hitlag_floor_owner_reject_bits(
     MslMpcollDamageActiveHitlagFloorOwner owner, uint8_t root_below_bottom_above_floor_owner) {
-  uint32_t bits = 0u;
+  uint64_t bits = 0u;
   if (root_below_bottom_above_floor_owner) {
-    bits |= (uint32_t)MSL_MPCOLL_REJECT_DAMAGE_ACTIVE_HITLAG_ROOT_BELOW_BOTTOM_ABOVE_FLOOR;
+    bits |= MSL_MPCOLL_REJECT_DAMAGE_ACTIVE_HITLAG_ROOT_BELOW_BOTTOM_ABOVE_FLOOR;
   }
   if (owner.stay_airborne_floorhug && owner.source_floor_current) {
-    bits |= (uint32_t)MSL_MPCOLL_REJECT_DAMAGE_ACTIVE_HITLAG_DOWNWARD_SDI_AIRBORNE;
+    bits |= MSL_MPCOLL_REJECT_DAMAGE_ACTIVE_HITLAG_DOWNWARD_SDI_AIRBORNE;
   }
   return bits;
 }
@@ -2503,14 +2509,16 @@ static inline void mpcoll_reject_floor_publication_to_current_bottom(
                                   cur_bottom_x, cur_bottom_y);
 }
 
-static inline uint8_t mpcoll_reject_bits_have(uint32_t bits, uint32_t mask) {
+static inline uint8_t mpcoll_reject_bits_have(uint64_t bits, uint64_t mask) {
   return (uint8_t)((bits & mask) != 0u);
 }
 
 static inline void mpcoll_apply_final_floor_rejection_bits(
-    const MslMpcollContext* ctx, MslMpcollFloorPublication* publication, uint32_t bits, float y,
-    float cur_bottom_x, float cur_bottom_y, float cur_bot_rel_y,
-    const MslEcbWorldPoints* prev_ecb_points, int final_ground_line_idx, float x, float prev_y) {
+    const MslMpcollContext* ctx, MslMpcollFloorPublication* publication,
+    MslMpcollFloorRejectPacket packet, float y, float cur_bottom_x, float cur_bottom_y,
+    float cur_bot_rel_y, const MslEcbWorldPoints* prev_ecb_points, int final_ground_line_idx,
+    float x, float prev_y) {
+  const uint64_t bits = packet.bits;
   if (ctx == NULL || ctx->batch == NULL || publication == NULL || bits == 0u) {
     return;
   }
@@ -2521,21 +2529,20 @@ static inline void mpcoll_apply_final_floor_rejection_bits(
   MslBatch* batch = ctx->batch;
   const size_t idx = ctx->idx;
   const uint8_t specialairhi_platform =
-      mpcoll_reject_bits_have(bits, (uint32_t)MSL_MPCOLL_REJECT_SPECIALAIRHI_PLATFORM);
+      mpcoll_reject_bits_have(bits, MSL_MPCOLL_REJECT_SPECIALAIRHI_PLATFORM);
   uint16_t reject_ground_id =
       specialairhi_platform ? publication->contact.ground_id : batch->state.ground_id[idx];
   float reject_pos_y = batch->state.pos_y[idx];
 
   if (specialairhi_platform && batch->state.floor_skip_segment_id != NULL) {
     batch->state.floor_skip_segment_id[idx] = publication->contact.ground_id;
-  } else if (mpcoll_reject_bits_have(
-                 bits, (uint32_t)(MSL_MPCOLL_REJECT_FALLSPECIAL_FIRST_SUSTAINED |
-                                  MSL_MPCOLL_REJECT_FALLSPECIAL_SAME_FLOOR_EARLY |
-                                  MSL_MPCOLL_REJECT_FALLSPECIAL_PLATFORM_NO_SOURCE_BOTTOM |
-                                  MSL_MPCOLL_REJECT_FALL_SAME_FLOOR_EARLY))) {
-    reject_pos_y = y;
   } else if (mpcoll_reject_bits_have(bits,
-                                     (uint32_t)MSL_MPCOLL_REJECT_SPECIALHI_UNDERSTAGE_HARD_FLOOR)) {
+                                     (MSL_MPCOLL_REJECT_FALLSPECIAL_FIRST_SUSTAINED |
+                                      MSL_MPCOLL_REJECT_FALLSPECIAL_SAME_FLOOR_EARLY |
+                                      MSL_MPCOLL_REJECT_FALLSPECIAL_PLATFORM_NO_SOURCE_BOTTOM |
+                                      MSL_MPCOLL_REJECT_FALL_SAME_FLOOR_EARLY))) {
+    reject_pos_y = y;
+  } else if (mpcoll_reject_bits_have(bits, MSL_MPCOLL_REJECT_SPECIALHI_UNDERSTAGE_HARD_FLOOR)) {
     if (prev_ecb_points != NULL) {
       // Keep the rejected root outside the same live ECB neighborhood; otherwise the next frame can
       // re-accept the same inside-stage floor.
@@ -2543,57 +2550,53 @@ static inline void mpcoll_apply_final_floor_rejection_bits(
                      specialhi_understage_floor_reject_clearance(prev_ecb_points) - k_floor_y_bias;
     }
   } else if (mpcoll_reject_bits_have(
-                 bits, (uint32_t)(MSL_MPCOLL_REJECT_SPECIALHI_FROM_BELOW_HARD_FLOOR |
-                                  MSL_MPCOLL_REJECT_SPECIALAIRHI_FLOOR_ANGLE |
-                                  MSL_MPCOLL_REJECT_AIRBORNE_TRANSFORMED_PLATFORM_PRE_HANDOFF))) {
+                 bits, (MSL_MPCOLL_REJECT_SPECIALHI_FROM_BELOW_HARD_FLOOR |
+                        MSL_MPCOLL_REJECT_SPECIALAIRHI_FLOOR_ANGLE |
+                        MSL_MPCOLL_REJECT_AIRBORNE_TRANSFORMED_PLATFORM_PRE_HANDOFF))) {
     reject_pos_y = y;
-  } else if (mpcoll_reject_bits_have(
-                 bits, (uint32_t)(MSL_MPCOLL_REJECT_ATTACKAIR_TRANSFORMED_PLATFORM_ECB_ONLY |
-                                  MSL_MPCOLL_REJECT_ATTACKAIR_TRANSFORMED_PLATFORM_FLOOR_SKIP |
-                                  MSL_MPCOLL_REJECT_ATTACKAIR_OFFSPAN_HARD_FLOOR_EDGE |
-                                  MSL_MPCOLL_REJECT_ATTACKAIR_HARD_SLOPE_ROOT_WITHOUT_BOTTOM |
-                                  MSL_MPCOLL_REJECT_ATTACKAIR_TRANSFORMED_PLATFORM_BELOW))) {
-    if (mpcoll_reject_bits_have(
-            bits, (uint32_t)MSL_MPCOLL_REJECT_ATTACKAIR_TRANSFORMED_PLATFORM_ECB_ONLY)) {
+  } else if (mpcoll_reject_bits_have(bits,
+                                     (MSL_MPCOLL_REJECT_ATTACKAIR_TRANSFORMED_PLATFORM_ECB_ONLY |
+                                      MSL_MPCOLL_REJECT_ATTACKAIR_TRANSFORMED_PLATFORM_FLOOR_SKIP |
+                                      MSL_MPCOLL_REJECT_ATTACKAIR_OFFSPAN_HARD_FLOOR_EDGE |
+                                      MSL_MPCOLL_REJECT_ATTACKAIR_HARD_SLOPE_ROOT_WITHOUT_BOTTOM |
+                                      MSL_MPCOLL_REJECT_ATTACKAIR_TRANSFORMED_PLATFORM_BELOW))) {
+    if (mpcoll_reject_bits_have(bits, MSL_MPCOLL_REJECT_ATTACKAIR_TRANSFORMED_PLATFORM_ECB_ONLY)) {
       publish_attackair_transformed_platform_floor_skip_from_sweep(
           batch, idx, ctx->bi, ctx->floor_graph, ctx->stage_id, final_ground_line_idx, x, prev_y,
           y);
     } else if (mpcoll_reject_bits_have(
-                   bits, (uint32_t)MSL_MPCOLL_REJECT_ATTACKAIR_TRANSFORMED_PLATFORM_FLOOR_SKIP) &&
+                   bits, MSL_MPCOLL_REJECT_ATTACKAIR_TRANSFORMED_PLATFORM_FLOOR_SKIP) &&
                batch->state.floor_skip_segment_id != NULL) {
       batch->state.floor_skip_segment_id[idx] = 0xFFFFu;
     }
     reject_pos_y = y;
   } else if (mpcoll_reject_bits_have(
-                 bits,
-                 (uint32_t)(MSL_MPCOLL_REJECT_JUMPAERIAL_ESCAPEAIR_HIGH_LIFT_LEDGE |
-                            MSL_MPCOLL_REJECT_JUMPAERIAL_ESCAPEAIR_STATIC_PLATFORM_OVERSTEP))) {
+                 bits, (MSL_MPCOLL_REJECT_JUMPAERIAL_ESCAPEAIR_HIGH_LIFT_LEDGE |
+                        MSL_MPCOLL_REJECT_JUMPAERIAL_ESCAPEAIR_STATIC_PLATFORM_OVERSTEP))) {
+    reject_pos_y = cur_bottom_y - cur_bot_rel_y;
+  } else if (mpcoll_reject_bits_have(bits,
+                                     MSL_MPCOLL_REJECT_JUMPAERIAL_STATIC_PLATFORM_FROM_BELOW)) {
+    reject_pos_y = y;
+  } else if (mpcoll_reject_bits_have(bits,
+                                     (MSL_MPCOLL_REJECT_JUMPAERIAL_TRANSFORMED_PLATFORM_FASTFALL |
+                                      MSL_MPCOLL_REJECT_FALL_TRANSFORMED_PLATFORM_FASTFALL))) {
+    reject_pos_y = y;
+  } else if (mpcoll_reject_bits_have(
+                 bits, MSL_MPCOLL_REJECT_FALL_LOOP_WRAP_STAGE_OBJECT_FLOOR_TO_HARD_FLOOR)) {
+    reject_pos_y = y;
+  } else if (mpcoll_reject_bits_have(bits,
+                                     (MSL_MPCOLL_REJECT_SUSTAINED_ESCAPEAIR_SAME_PLATFORM_LOCK |
+                                      MSL_MPCOLL_REJECT_SUSTAINED_ESCAPEAIR_SAME_LEDGE_LOCK))) {
     reject_pos_y = cur_bottom_y - cur_bot_rel_y;
   } else if (mpcoll_reject_bits_have(
-                 bits, (uint32_t)MSL_MPCOLL_REJECT_JUMPAERIAL_STATIC_PLATFORM_FROM_BELOW)) {
-    reject_pos_y = y;
-  } else if (mpcoll_reject_bits_have(
-                 bits, (uint32_t)(MSL_MPCOLL_REJECT_JUMPAERIAL_TRANSFORMED_PLATFORM_FASTFALL |
-                                  MSL_MPCOLL_REJECT_FALL_TRANSFORMED_PLATFORM_FASTFALL))) {
-    reject_pos_y = y;
-  } else if (mpcoll_reject_bits_have(
-                 bits,
-                 (uint32_t)MSL_MPCOLL_REJECT_FALL_LOOP_WRAP_STAGE_OBJECT_FLOOR_TO_HARD_FLOOR)) {
-    reject_pos_y = y;
-  } else if (mpcoll_reject_bits_have(
-                 bits, (uint32_t)(MSL_MPCOLL_REJECT_SUSTAINED_ESCAPEAIR_SAME_PLATFORM_LOCK |
-                                  MSL_MPCOLL_REJECT_SUSTAINED_ESCAPEAIR_SAME_LEDGE_LOCK))) {
-    reject_pos_y = cur_bottom_y - cur_bot_rel_y;
-  } else if (mpcoll_reject_bits_have(
-                 bits,
-                 (uint32_t)(MSL_MPCOLL_REJECT_LOCKED_ESCAPEAIR_MISSING_BOTTOM_OWNER |
-                            MSL_MPCOLL_REJECT_LOCKED_DESIRED_PLATFORM_WITHOUT_BOTTOM_SWEEP |
-                            MSL_MPCOLL_REJECT_LOCKED_DESIRED_NONPLATFORM_WITHOUT_BOTTOM_SWEEP |
-                            MSL_MPCOLL_REJECT_KNEEBEND_ESCAPEAIR_SLOPE |
-                            MSL_MPCOLL_REJECT_SPECIALAIRLW_START_STALE_PLATFORM |
-                            MSL_MPCOLL_REJECT_DAMAGE_ACTIVE_HITLAG_DOWNWARD_SDI_AIRBORNE |
-                            MSL_MPCOLL_REJECT_DAMAGE_ACTIVE_HITLAG_ROOT_BELOW_BOTTOM_ABOVE_FLOOR |
-                            MSL_MPCOLL_REJECT_CLIFF_HORIZONTAL_LEDGE_LOCKED))) {
+                 bits, (MSL_MPCOLL_REJECT_LOCKED_ESCAPEAIR_MISSING_BOTTOM_OWNER |
+                        MSL_MPCOLL_REJECT_LOCKED_DESIRED_PLATFORM_WITHOUT_BOTTOM_SWEEP |
+                        MSL_MPCOLL_REJECT_LOCKED_DESIRED_NONPLATFORM_WITHOUT_BOTTOM_SWEEP |
+                        MSL_MPCOLL_REJECT_KNEEBEND_ESCAPEAIR_SLOPE |
+                        MSL_MPCOLL_REJECT_SPECIALAIRLW_START_STALE_PLATFORM |
+                        MSL_MPCOLL_REJECT_DAMAGE_ACTIVE_HITLAG_DOWNWARD_SDI_AIRBORNE |
+                        MSL_MPCOLL_REJECT_DAMAGE_ACTIVE_HITLAG_ROOT_BELOW_BOTTOM_ABOVE_FLOOR |
+                        MSL_MPCOLL_REJECT_CLIFF_HORIZONTAL_LEDGE_LOCKED))) {
     reject_pos_y = y;
   }
 
@@ -9803,76 +9806,75 @@ void mpcoll_ground_apply(MslBatch* batch) {
                 suppress_jumpaerial_escapeair_static_platform_overstep_final_land,
             .cliff_horizontal_ledge_locked = suppress_cliff_horizontal_ledge_locked_final_land,
         };
-        const uint32_t final_floor_reject_bits =
-            (suppress_escapeair_transformed_remap_land
-                 ? (uint32_t)MSL_MPCOLL_REJECT_ESCAPEAIR_TRANSFORMED_REMAP
-                 : 0u) |
-            (suppress_specialairhi_platform_land ? (uint32_t)MSL_MPCOLL_REJECT_SPECIALAIRHI_PLATFORM
-                                                 : 0u) |
-            (suppress_fallspecial_first_sustained_current_ecb_land
-                 ? (uint32_t)MSL_MPCOLL_REJECT_FALLSPECIAL_FIRST_SUSTAINED
-                 : 0u) |
-            (suppress_fallspecial_same_floor_early_final_land
-                 ? (uint32_t)MSL_MPCOLL_REJECT_FALLSPECIAL_SAME_FLOOR_EARLY
-                 : 0u) |
-            (suppress_fallspecial_platform_final_without_source_bottom
-                 ? (uint32_t)MSL_MPCOLL_REJECT_FALLSPECIAL_PLATFORM_NO_SOURCE_BOTTOM
-                 : 0u) |
-            (suppress_fall_same_floor_early_final_land
-                 ? (uint32_t)MSL_MPCOLL_REJECT_FALL_SAME_FLOOR_EARLY
-                 : 0u) |
-            (suppress_specialhi_transformed_platform_land
-                 ? (uint32_t)MSL_MPCOLL_REJECT_SPECIALHI_TRANSFORMED_PLATFORM
-                 : 0u) |
-            (suppress_specialhi_understage_hard_floor_land
-                 ? (uint32_t)MSL_MPCOLL_REJECT_SPECIALHI_UNDERSTAGE_HARD_FLOOR
-                 : 0u) |
-            (suppress_specialhi_from_below_hard_floor_land
-                 ? (uint32_t)MSL_MPCOLL_REJECT_SPECIALHI_FROM_BELOW_HARD_FLOOR
-                 : 0u) |
-            (suppress_specialairhi_floor_angle_land
-                 ? (uint32_t)MSL_MPCOLL_REJECT_SPECIALAIRHI_FLOOR_ANGLE
-                 : 0u) |
-            (suppress_airborne_transformed_platform_pre_handoff_land
-                 ? (uint32_t)MSL_MPCOLL_REJECT_AIRBORNE_TRANSFORMED_PLATFORM_PRE_HANDOFF
-                 : 0u) |
-            (suppress_attackair_transformed_platform_ecb_only_final_land
-                 ? (uint32_t)MSL_MPCOLL_REJECT_ATTACKAIR_TRANSFORMED_PLATFORM_ECB_ONLY
-                 : 0u) |
-            (suppress_attackair_transformed_platform_floor_skip_final_land
-                 ? (uint32_t)MSL_MPCOLL_REJECT_ATTACKAIR_TRANSFORMED_PLATFORM_FLOOR_SKIP
-                 : 0u) |
-            (suppress_attackair_offspan_hard_floor_edge_final_land
-                 ? (uint32_t)MSL_MPCOLL_REJECT_ATTACKAIR_OFFSPAN_HARD_FLOOR_EDGE
-                 : 0u) |
-            (suppress_attackair_hard_slope_root_projection_without_bottom_final_land
-                 ? (uint32_t)MSL_MPCOLL_REJECT_ATTACKAIR_HARD_SLOPE_ROOT_WITHOUT_BOTTOM
-                 : 0u) |
-            (suppress_attackair_transformed_platform_below_final_land
-                 ? (uint32_t)MSL_MPCOLL_REJECT_ATTACKAIR_TRANSFORMED_PLATFORM_BELOW
-                 : 0u) |
-            (suppress_jumpaerial_transformed_platform_fastfall_land
-                 ? (uint32_t)MSL_MPCOLL_REJECT_JUMPAERIAL_TRANSFORMED_PLATFORM_FASTFALL
-                 : 0u) |
-            (suppress_jumpaerial_static_platform_from_below_final_land
-                 ? (uint32_t)MSL_MPCOLL_REJECT_JUMPAERIAL_STATIC_PLATFORM_FROM_BELOW
-                 : 0u) |
-            (suppress_fall_transformed_platform_fastfall_land
-                 ? (uint32_t)MSL_MPCOLL_REJECT_FALL_TRANSFORMED_PLATFORM_FASTFALL
-                 : 0u) |
-            (suppress_fall_loop_wrap_stage_object_floor_to_hard_floor_land
-                 ? (uint32_t)MSL_MPCOLL_REJECT_FALL_LOOP_WRAP_STAGE_OBJECT_FLOOR_TO_HARD_FLOOR
-                 : 0u) |
-            mpcoll_escapeair_final_publication_reject_bits(&escapeair_final_owners) |
-            (suppress_specialairlw_start_stale_platform_land
-                 ? (uint32_t)MSL_MPCOLL_REJECT_SPECIALAIRLW_START_STALE_PLATFORM
-                 : 0u) |
-            mpcoll_damage_active_hitlag_floor_owner_reject_bits(
-                damage_active_hitlag_floor_owner,
-                damage_active_hitlag_root_below_bottom_above_floor_owner);
-        mpcoll_apply_final_floor_rejection_bits(
-            &mpcoll_ctx, &floor_publication, final_floor_reject_bits, y, cur_bottom_x, cur_bottom_y,
-            cur_bot.rel_y, &prev_ecb_points, final_ground_line_idx, x, prev_y);
+        MslMpcollFloorRejectPacket final_floor_reject = {0};
+        mpcoll_floor_reject_add_if(&final_floor_reject, suppress_escapeair_transformed_remap_land,
+                                   MSL_MPCOLL_REJECT_ESCAPEAIR_TRANSFORMED_REMAP);
+        mpcoll_floor_reject_add_if(&final_floor_reject, suppress_specialairhi_platform_land,
+                                   MSL_MPCOLL_REJECT_SPECIALAIRHI_PLATFORM);
+        mpcoll_floor_reject_add_if(&final_floor_reject,
+                                   suppress_fallspecial_first_sustained_current_ecb_land,
+                                   MSL_MPCOLL_REJECT_FALLSPECIAL_FIRST_SUSTAINED);
+        mpcoll_floor_reject_add_if(&final_floor_reject,
+                                   suppress_fallspecial_same_floor_early_final_land,
+                                   MSL_MPCOLL_REJECT_FALLSPECIAL_SAME_FLOOR_EARLY);
+        mpcoll_floor_reject_add_if(&final_floor_reject,
+                                   suppress_fallspecial_platform_final_without_source_bottom,
+                                   MSL_MPCOLL_REJECT_FALLSPECIAL_PLATFORM_NO_SOURCE_BOTTOM);
+        mpcoll_floor_reject_add_if(&final_floor_reject, suppress_fall_same_floor_early_final_land,
+                                   MSL_MPCOLL_REJECT_FALL_SAME_FLOOR_EARLY);
+        mpcoll_floor_reject_add_if(&final_floor_reject,
+                                   suppress_specialhi_transformed_platform_land,
+                                   MSL_MPCOLL_REJECT_SPECIALHI_TRANSFORMED_PLATFORM);
+        mpcoll_floor_reject_add_if(&final_floor_reject,
+                                   suppress_specialhi_understage_hard_floor_land,
+                                   MSL_MPCOLL_REJECT_SPECIALHI_UNDERSTAGE_HARD_FLOOR);
+        mpcoll_floor_reject_add_if(&final_floor_reject,
+                                   suppress_specialhi_from_below_hard_floor_land,
+                                   MSL_MPCOLL_REJECT_SPECIALHI_FROM_BELOW_HARD_FLOOR);
+        mpcoll_floor_reject_add_if(&final_floor_reject, suppress_specialairhi_floor_angle_land,
+                                   MSL_MPCOLL_REJECT_SPECIALAIRHI_FLOOR_ANGLE);
+        mpcoll_floor_reject_add_if(&final_floor_reject,
+                                   suppress_airborne_transformed_platform_pre_handoff_land,
+                                   MSL_MPCOLL_REJECT_AIRBORNE_TRANSFORMED_PLATFORM_PRE_HANDOFF);
+        mpcoll_floor_reject_add_if(&final_floor_reject,
+                                   suppress_attackair_transformed_platform_ecb_only_final_land,
+                                   MSL_MPCOLL_REJECT_ATTACKAIR_TRANSFORMED_PLATFORM_ECB_ONLY);
+        mpcoll_floor_reject_add_if(&final_floor_reject,
+                                   suppress_attackair_transformed_platform_floor_skip_final_land,
+                                   MSL_MPCOLL_REJECT_ATTACKAIR_TRANSFORMED_PLATFORM_FLOOR_SKIP);
+        mpcoll_floor_reject_add_if(&final_floor_reject,
+                                   suppress_attackair_offspan_hard_floor_edge_final_land,
+                                   MSL_MPCOLL_REJECT_ATTACKAIR_OFFSPAN_HARD_FLOOR_EDGE);
+        mpcoll_floor_reject_add_if(
+            &final_floor_reject,
+            suppress_attackair_hard_slope_root_projection_without_bottom_final_land,
+            MSL_MPCOLL_REJECT_ATTACKAIR_HARD_SLOPE_ROOT_WITHOUT_BOTTOM);
+        mpcoll_floor_reject_add_if(&final_floor_reject,
+                                   suppress_attackair_transformed_platform_below_final_land,
+                                   MSL_MPCOLL_REJECT_ATTACKAIR_TRANSFORMED_PLATFORM_BELOW);
+        mpcoll_floor_reject_add_if(&final_floor_reject,
+                                   suppress_jumpaerial_transformed_platform_fastfall_land,
+                                   MSL_MPCOLL_REJECT_JUMPAERIAL_TRANSFORMED_PLATFORM_FASTFALL);
+        mpcoll_floor_reject_add_if(&final_floor_reject,
+                                   suppress_jumpaerial_static_platform_from_below_final_land,
+                                   MSL_MPCOLL_REJECT_JUMPAERIAL_STATIC_PLATFORM_FROM_BELOW);
+        mpcoll_floor_reject_add_if(&final_floor_reject,
+                                   suppress_fall_transformed_platform_fastfall_land,
+                                   MSL_MPCOLL_REJECT_FALL_TRANSFORMED_PLATFORM_FASTFALL);
+        mpcoll_floor_reject_add_if(
+            &final_floor_reject, suppress_fall_loop_wrap_stage_object_floor_to_hard_floor_land,
+            MSL_MPCOLL_REJECT_FALL_LOOP_WRAP_STAGE_OBJECT_FLOOR_TO_HARD_FLOOR);
+        final_floor_reject.bits |=
+            mpcoll_escapeair_final_publication_reject_bits(&escapeair_final_owners);
+        mpcoll_floor_reject_add_if(&final_floor_reject,
+                                   suppress_specialairlw_start_stale_platform_land,
+                                   MSL_MPCOLL_REJECT_SPECIALAIRLW_START_STALE_PLATFORM);
+        final_floor_reject.bits |= mpcoll_damage_active_hitlag_floor_owner_reject_bits(
+            damage_active_hitlag_floor_owner,
+            damage_active_hitlag_root_below_bottom_above_floor_owner);
+        mpcoll_apply_final_floor_rejection_bits(&mpcoll_ctx, &floor_publication, final_floor_reject,
+                                                y, cur_bottom_x, cur_bottom_y, cur_bot.rel_y,
+                                                &prev_ecb_points, final_ground_line_idx, x, prev_y);
       }
 
       if (floor_publication.on_ground && action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
