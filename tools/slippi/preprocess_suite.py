@@ -26,7 +26,7 @@ from tools.eval.dataset import HEADER_DTYPE, MAGIC, SAMPLE_DTYPE, SEED_DTYPE
 # Record-size checks alone cannot detect this semantic.
 _CACHE_VERSION = 19
 _SOURCE_INPUT_PY_TREES = ("tools/slippi",)
-_SOURCE_INPUT_FILES = ("tools/eval/dataset.py", "python/msl_preprocess_native.c")
+_SOURCE_INPUT_FILES = ("tools/eval/dataset.py", "bindings/msl_preprocess_native.c")
 
 
 def _hash_file(path: Path) -> str:

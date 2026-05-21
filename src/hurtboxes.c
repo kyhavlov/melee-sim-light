@@ -831,7 +831,7 @@ static void hurtboxes_refresh_impl(MslBatch* batch, uint8_t geometry_mode) {
         // status) can run on the entry frame even though the transition happened post-Anim.
         // Shine Start (Fox/Falco SpecialLwStart / SpecialAirLwStart) is a decomp-anchored example.
         // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{ftFx_SpecialLw_Enter,ftFx_SpecialAirLw_Enter}
-        // docs/DECOMP_PROC_ORDER.md (prio 1 vs prio 3).
+        // Entry happens after the prio 1 Anim proc and before later callback phases.
         const uint16_t cur_action = batch->state.action_id[idx];
         const uint8_t is_shine_start_entry =
             (cur_action == (uint16_t)MSL_ACT_FX_SPECIAL_LW_START ||

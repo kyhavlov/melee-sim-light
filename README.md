@@ -176,6 +176,11 @@ Use `--mode one-step` for direct seeded one-step validation, or `--mode both`
 to run both views. By default the tool selects the human player ports from the
 replay; pass `--ports 1,2` to choose ports explicitly.
 
+## Project Notes
+
+Long-lived implementation notes live in `agent_docs/`. Start with
+`agent_docs/README.md` for the active docs index and archived cleanup candidates.
+
 ## Observation Schema
 
 `buffers.gamestate_view` is a structured NumPy view with shape

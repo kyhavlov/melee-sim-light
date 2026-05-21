@@ -816,7 +816,7 @@ Common constants:
     - `dead_up_fall_select_percent`: `p_ftCommonData->x520`, the top-blast DeadUpFall selection
       threshold compared against `HSD_Randi(100)+1` by `ftCo_800D3158`.
     - DeadUpFall/HitCamera phase timers and velocities are the adjacent `x524+` fields documented
-      in `SPEC.md`; do not treat `x520` as a phase timer.
+      in `agent_docs/SPEC.md`; do not treat `x520` as a phase timer.
   - Decomp refs: `refs/melee/src/melee/ft/ft_0D31.c::ftCo_800D3158` and
     `refs/melee/src/melee/ft/ft_0D31.c::{ftCo_DeadUpFall_Anim,ftCo_DeadUpFall_Phys}`
   - Live match config:
@@ -1124,7 +1124,7 @@ Characters (Fox/Falco):
       version 7 is the first valid cache generation for the AttackAirHi/shallow-AttackAir FoD
       floor-skip semantics plus common-air walljump hidden phase setup/carry seeds derived from
       source `pos_delta.x`; older `.msl` caches can pass record-size checks while missing these
-      hidden owners. The cache signature also hashes `python/msl_preprocess_native.c` for native
+      hidden owners. The cache signature also hashes `bindings/msl_preprocess_native.c` for native
       seed-lane semantic changes.
     - `cliff_ledge_floor_segment_id_u16[4]` for the hidden Cliff/CollData ledge floor owner on
       immediate cliff-exit prefixes. Native seed preprocessing reconstructs it only from

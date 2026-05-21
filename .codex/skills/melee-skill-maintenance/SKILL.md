@@ -21,7 +21,8 @@ Other Melee-domain skills should trigger lightweight maintenance automatically: 
 - Current schema sizes, cache versions, generated table versions, or report field churn.
 - Current simulator helper/function names unless they are stable public commands central to the workflow.
 - Temporary bridges, rejected experiments, or one-replay workarounds.
-- Claims that should live in source comments, tests, `SPEC.md`, `DATA_CONTRACT.md`, or the active worklog.
+- Claims that should live in source comments, tests, `agent_docs/SPEC.md`,
+  `agent_docs/DATA_CONTRACT.md`, or the active worklog.
 
 ## Update Procedure
 1. Decide whether the new knowledge is stable Melee-domain knowledge or current simulator state.
@@ -33,7 +34,7 @@ Other Melee-domain skills should trigger lightweight maintenance automatically: 
    - committed probe/test artifact.
 3. Add the smallest durable rule or checklist that would change future agent behavior.
 4. Keep `SKILL.md` concise. Prefer a short rule over long explanation.
-5. If a skill starts accumulating implementation details, move those details to repo docs/tests/source comments and leave only navigation guidance in the skill.
+5. If a skill starts accumulating implementation details, move those details to `agent_docs/`, tests, or source comments and leave only navigation guidance in the skill.
 
 ## Automatic Candidate Habit
 - At the end of substantial Melee engine work, ask internally: “Did this prove a stable engine fact or reusable investigation pattern?”

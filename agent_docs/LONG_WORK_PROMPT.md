@@ -4,12 +4,11 @@ I'm giving you an open-ended long-work prompt so you can work for hours while I'
 
 Before choosing the first target, read:
 - AGENTS.md
-- docs/AGENT_META_NOTES.md
-- docs/RL10_COMPLETION_CHECKLIST.md
-- docs/DATA_CONTRACT.md
-- SPEC.md
+- agent_docs/AGENT_META_NOTES.md
+- agent_docs/DATA_CONTRACT.md
+- agent_docs/SPEC.md
 
-Use docs/AGENT_META_NOTES.md as persistent process guidance, not as gameplay authority. Gameplay logic still needs source/decomp/data backing.
+Use agent_docs/AGENT_META_NOTES.md as persistent process guidance, not as gameplay authority. Gameplay logic still needs source/decomp/data backing.
 
 Worklog:
 - If a prior open worklog exists and the tree is dirty, continue from it.
@@ -56,9 +55,9 @@ Prioritization:
 
 - Prioritize source-owner closure and simulator correctness; metrics choose between plausible
   owners, but do not define the patch boundary.
-- Use the RL 1.0 scope tiers in docs/RL10_COMPLETION_CHECKLIST.md. Gameplay-critical rollout
-  owners outrank replay-exact/render-only state; low-priority camera/viewer/cosmetic lanes should
-  not drive target selection unless they feed gameplay ownership.
+- Gameplay-critical rollout owners outrank replay-exact/render-only state; low-priority
+  camera/viewer/cosmetic lanes should not drive target selection unless they feed gameplay
+  ownership.
 - Proactively remove runtime bridges/proxies/fallbacks when they are in or adjacent to the owner
   you are touching. Search the touched runtime/seed surfaces for bridge/proxy/fallback wording,
   classify each hit in the worklog, and replace real runtime bridges with the source/data owner.
@@ -107,7 +106,7 @@ Investigation rules:
 - Bridge/proxy/fallback audit terms are evidence, not naming cleanup. If the code is still a
   compensating path, keep the debt wording honest and replace the owner; do not just rename it.
 - If hidden state is required, add the smallest explicit seed/internal lane or local probe/tooling path that exposes the real owner.
-- If a hidden seed/internal lane is added or changed, immediately update C structs, Python dtype/schema, DATA_CONTRACT.md, schema guards, and preprocess notes.
+- If a hidden seed/internal lane is added or changed, immediately update C structs, Python dtype/schema, agent_docs/DATA_CONTRACT.md, schema guards, and preprocess notes.
 - Add positive and negative replay-real locks for each retained owner boundary.
 - For modelplay-visible regressions, tests must use compact fixtures under tests/fixtures/modelplay/, not full reports/modelplay/**/trace.json artifacts.
 

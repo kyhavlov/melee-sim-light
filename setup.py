@@ -53,16 +53,16 @@ class _BuildPy(build_py):
 ROOT = Path(__file__).resolve().parent
 DEPENDS = sorted(
     str(p.relative_to(ROOT))
-    for base in (ROOT / "src", ROOT / "python")
+    for base in (ROOT / "src", ROOT / "bindings")
     for p in base.rglob("*.h")
 )
 
 ext = Extension(
     name="melee_sim._native",
     sources=[
-        "python/msl_binding.c",
-        "python/msl_preprocess_native.c",
-        "python/msl_taxonomy_native.c",
+        "bindings/msl_binding.c",
+        "bindings/msl_preprocess_native.c",
+        "bindings/msl_taxonomy_native.c",
         "src/api.c",
         "src/alloc.c",
         "src/config.c",

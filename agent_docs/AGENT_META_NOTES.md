@@ -1,7 +1,7 @@
 # Agent Meta Notes
 
 These notes capture between-cycle process takeaways for long rollout/correctness work. They are
-not gameplay specification; use `SPEC.md` for source-backed mechanics.
+not gameplay specification; use `agent_docs/SPEC.md` for source-backed mechanics.
 
 ## Target Selection
 
@@ -46,7 +46,7 @@ not gameplay specification; use `SPEC.md` for source-backed mechanics.
   local paths: decomp/asm audit, extraction, probe, instrumentation, or the smallest explicit
   seed/internal lane.
 - Hidden seed/internal lanes must update the full contract surface immediately: C structs, Python
-  dtype/schema, `DATA_CONTRACT.md`, schema guards, and preprocess notes.
+  dtype/schema, `agent_docs/DATA_CONTRACT.md`, schema guards, and preprocess notes.
 - For any new action-family predicate, item-kind distinction, part/anchor id, stage segment query,
   or script-frame condition, either use the generated data tables or document why they do not
   express the needed owner.

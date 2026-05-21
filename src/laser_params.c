@@ -104,7 +104,7 @@ int laser_params_init(void) {
   p += 2;
 
   // Record layout source:
-  // - docs/DATA_CONTRACT.md (MSLLASR1)
+  // - agent_docs/DATA_CONTRACT.md (MSLLASR1)
   // - tools/extraction/extract_lasers.py
   const size_t record_bytes = (version >= 6)   ? 218u
                               : (version >= 3) ? 254u

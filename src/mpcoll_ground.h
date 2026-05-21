@@ -8,7 +8,7 @@
 //
 // Decomp pointers:
 // - Collision runs post-integration and is consumed by action logic:
-//   refs/melee/src/melee/ft/fighter.c::Fighter_procMap (prio 6) and docs/DECOMP_PROC_ORDER.md.
+//   refs/melee/src/melee/ft/fighter.c::Fighter_procMap (prio 6).
 // - ECB prev/current and floor persistence live in CollData:
 //   refs/melee/src/melee/lb/types.h::CollData.
 void mpcoll_ground_apply(MslBatch* batch);

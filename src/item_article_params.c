@@ -59,7 +59,7 @@ static uint8_t sim_char_from_gale01_fighter_kind(uint16_t gale01_kind) {
   // Runtime state uses Slippi/sim external character ids:
   // - Fox   = 1
   // - Falco = 22
-  // docs/DATA_CONTRACT.md::MSLITAR1
+  // agent_docs/DATA_CONTRACT.md::MSLITAR1
   switch (gale01_kind) {
     case 2:
       return 1u;

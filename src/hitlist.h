@@ -17,13 +17,13 @@ extern "C" {
 // refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688 and ::lbColl_80008A5C
 
 static inline uint8_t hitlist_hit_group_from_u16_7(uint16_t u16_7) {
-  // MSLHITB1 u16_7 pack (see docs/DATA_CONTRACT.md):
+  // MSLHITB1 u16_7 pack (see agent_docs/DATA_CONTRACT.md):
   // - bits 8..10: hit_group (spawn_hitbox_0.hit_group)
   return (uint8_t)((u16_7 >> 8) & 0x7u);
 }
 
 static inline uint8_t hitlist_rehit_frames_from_u16_7(uint16_t u16_7) {
-  // MSLHITB1 u16_7 pack (see docs/DATA_CONTRACT.md):
+  // MSLHITB1 u16_7 pack (see agent_docs/DATA_CONTRACT.md):
   // - low 8 bits: rehit_rate_frames (HitCapsule.x40_b4)
   return (uint8_t)(u16_7 & 0xFFu);
 }

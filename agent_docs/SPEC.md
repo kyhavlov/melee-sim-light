@@ -159,7 +159,6 @@ and decomp-motivated rather than arbitrary heuristics.
   - pri `6` / `9`: model translate + collision primitive refresh
     (`refs/melee/src/melee/ft/fighter.c::Fighter_procMap` and `refs/melee/src/melee/ft/fighter.c::Fighter_8006C80C` / `ftColl_8007AE80`)
   - pri `13`: fighter-vs-fighter collision (incl. shield overlap) (`refs/melee/src/melee/ft/fighter.c::Fighter_8006CB94` → `refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70`)
-  - See also `docs/DECOMP_PROC_ORDER.md` (proc priorities, plus the exact referenced call sites).
   - Implication: fighter-vs-fighter collision uses the **post-integration** `fp->cur_pos` translation (i.e. no “pre-physics translate” frame).
     Any sim-side compensation that effectively shifts already-computed world primitives to a different translation frame is a **current approximation**
     for an ordering mismatch, not a decomp-backed rule.
@@ -190,7 +189,7 @@ which mixes X/Z for pose-derived world primitives.
 - Pose-derived **hitboxes** and **hurtcaps** apply the same decomp-shaped root rotY90 (X/Z mix) for facing, for consistency
   across combat geometry and item spawn transforms.
 - This is **not** an SSANIM axis remap: we are only applying the decomp-facing root rotation; the extracted pose matrices
-  remain in the same canonical basis (see `docs/SSANIM_AXIS_BASIS.md`).
+  remain in the same canonical basis (see `agent_docs/SSANIM_AXIS_BASIS.md`).
 
 ### `state_flags` Ownership (seed vs derived)
 
@@ -205,7 +204,7 @@ sim-owned**:
 - `0x221C` bit `0x04` (`x221C_b5`, “detection/inert hitbox touching shield bubble”): decomp sets
   `victim_fp->x221C_b5 = true` during the fighter-vs-fighter collision pass only on the shield-overlap branch for `HitElement_Inert`
   (`refs/melee/src/melee/ft/ftcoll.c::ftColl_80078C70`), and clears it in the post-collision consumer
-  (`refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC`). See `docs/DECOMP_PROC_ORDER.md`.
+  (`refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC`).
   - **Sim timing semantics (decomp-shaped)**: this bit is set during `combat_resolve()` when we observe an inert (`HitElement_Inert`) shield
     overlap, and cleared by `combat_processhit_consume()` at the start of the *next* sim frame (our stand-in for
     `Fighter_ProcessHit_8006D1EC`). As a result, it is visible in the post-step output for one frame.
@@ -275,7 +274,7 @@ sim-owned**:
     ReflectDesc no-hit snapshot owner.
   Remaining approximations:
   - We do not yet model the full `shield_hit.bone` + `shield_hit.offset` semantics used in collision (`ftColl_8007B1B8`; refs/melee/src/melee/ft/ftcoll.c:1370-1383).
-  - We do not yet model full 3D rotation/TransN/root-motion for shield placement (see `docs/SSANIM_AXIS_BASIS.md`).
+  - We do not yet model full 3D rotation/TransN/root-motion for shield placement (see `agent_docs/SSANIM_AXIS_BASIS.md`).
 
 7) **Projectiles (lasers)**
 - Spawn and integrate laser entities.
@@ -354,9 +353,8 @@ Extraction scripts must be deterministic and reproducible:
 ### Per-frame update order (must be fixed)
 
 One frame of `step()` must be ordered deterministically. Public callers enter through `src/step.c`,
-but the canonical phase scheduler lives in `src/fighter_callbacks.c` (see also
-`docs/DECOMP_PROC_ORDER.md` for decomp context). The scheduler is intentionally shaped around the
-fighter proc/callback order in `refs/melee/src/melee/ft/fighter.c`:
+but the canonical phase scheduler lives in `src/fighter_callbacks.c`. The scheduler is intentionally
+shaped around the fighter proc/callback order in `refs/melee/src/melee/ft/fighter.c`:
 
 1. Frame-begin caches / transient clears.
 2. Pre-input Anim phase:
@@ -1035,7 +1033,7 @@ Recent deltas to reflect here (do not let these get “lost in chat logs”):
 - Ledge-grab mask ordering is now collision-stage prev/cur snapshot based (captured around `stage_collision_apply()` and consumed
   post-collision); regression locked for TreasuredBackKangaroo records 1806/1807 (`tests/test_ledge_grab_treasuredbackkangaroo_regression.py`).
 - Build now forces C extension rebuild to avoid stale `.so` issues (Makefile change).
-- ECB tz/ty axis contract is locked for RL 1.0; any axis remap is a separate audit project (see `docs/SSANIM_AXIS_BASIS.md`).
+- ECB tz/ty axis contract is locked for RL 1.0; any axis remap is a separate audit project (see `agent_docs/SSANIM_AXIS_BASIS.md`).
 - Grab/throw release is now implemented (data-driven from `data/moves/*.json`): release/detach + throw-hit apply are wired through
   `src/throw_flow.c` and `combat_apply_throw_hit()`, with throw-release regressions covered by integration tests.
 - Guard release no longer transitions to GuardOff early: `mv.co.guard.xC/x10` release lockout and `fp->lightshield_amount` latch are now
@@ -1196,7 +1194,6 @@ Prefer completing these projects in order rather than “patching symptoms” in
        `victims_2` gate + `coll_distance < p_ftCommonData->x7A8`; starts victim hitlag without percent/KB/state entry)
      - `refs/melee/src/melee/ft/fighter.c::Fighter_8006CB94` (proc that calls `ftColl_80078C70`; priority 13)
      - `refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC` (post-collision consumer; priority 14)
-     - `docs/DECOMP_PROC_ORDER.md` (priority schedule; where collision/consume sits relative to hitlag/anim/phys)
    - Item/projectile collision (must follow the same hitlist semantics):
      - `refs/melee/src/melee/it/itcoll.c::it_8026FA2C` / `it_8026FAC4` (item vs item; updates victims_1)
      - `refs/melee/src/melee/it/itcoll.c::it_8026FC00` (item victim list update for “phantom/tip log” style list; uses victims_2)
@@ -1236,7 +1233,7 @@ Prefer completing these projects in order rather than “patching symptoms” in
      - Seed values must be causally reconstructible from replay history + extracted tables (see “Seed state philosophy” above).
 
    **Step ordering contract (hitlists vs hitlag vs collision)**
-   - Decomp-shaped ordering anchor (see `docs/DECOMP_PROC_ORDER.md`):
+   - Decomp-shaped ordering anchor:
      - Hit capsule world endpoints are refreshed before fighter-vs-fighter collision (priority 9 before 13).
      - Fighter-vs-fighter collision runs at priority 13 (`ftColl_80078C70`).
      - Post-collision consumption runs at priority 14 (`Fighter_ProcessHit_8006D1EC`).
@@ -1888,7 +1885,7 @@ update the row rather than re-deriving the same plan again.
 | Read first (decomp) | Data artifacts (ISO-derived) | Code owner / gaps |
 |---|---|---|
 | `refs/melee/src/melee/ft/fighter.c::Fighter_UnkProcessDeath_80068354` | `data/stages/final_destination.json` (collision segments; includes `unit_scale`) | `src/match_flow.c` (new), `src/stage_collision.c` |
-| `refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState` | `data/common/ft_common_data.json` (common timers/constants; see `docs/DATA_CONTRACT.md`) | `src/action.c` (state transitions), `src/timers.c` |
+| `refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState` | `data/common/ft_common_data.json` (common timers/constants; see `agent_docs/DATA_CONTRACT.md`) | `src/action.c` (state transitions), `src/timers.c` |
 | `refs/melee/src/melee/ft/ft_0D4D.c::ftCo_800D4FF4` (Rebirth entry) | Vanilla `Player_GetSpawnPlatformPos` / `Player_GetFacingDirection`, currently backed by `data/stages/final_destination.json` (`respawn_points`, `cam_bounds_world`) plus replay raw player slot (`seed_t.source_port0`) | `src/match_flow.c` |
 | `refs/melee/src/melee/mp/mplib.c::mpLib_DrawZones` (blast/camera zone sources) | (Need) explicit blast zone rect for FD extracted into `data/stages/final_destination.json` (or a `data/stages/*.bin` v2) | Implemented for suite; remaining gap is extracting and consuming the canonical blastzone rect(s) from stage data. |
 
@@ -2460,7 +2457,7 @@ When a mismatch strongly suggests a missing internal that cannot be reconstructe
   `ftCo_8009A804` initializes `mv.co.cliff.x8 = 0`.
 - Grab state internals: grab attach points, breakouts, throw release frame/timers, and victim constraint mode.
 - SSANIM / ECB axis mapping contract: do not change tz/ty basis mappings in the core sim as an ad-hoc “fix”; treat any axis remap as a
-  separate audit project with explicit validation and documentation (see `docs/SSANIM_AXIS_BASIS.md`).
+  separate audit project with explicit validation and documentation (see `agent_docs/SSANIM_AXIS_BASIS.md`).
 - Tech / knockdown thresholds and state vars (tumble, tech window timers, missed-tech timers).
 - Projectile internals: per-projectile RNG/state, instance ids, and collision masks.
 - Projectile reflect bubbles: current laser reflect gate is powershield-only (requires Slippi powershield bit) and does not yet model

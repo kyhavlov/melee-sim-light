@@ -14,7 +14,7 @@ from tests.test_items_spawn_joint_replay_real_locks import (
 
 def _load_laser_non_flinch_by_item_type(root: Path, *, item_type: int) -> int:
     # MSLLASR1 v4..v6 layout owned by tools/extraction/extract_lasers.py.
-    # refs/docs: docs/DATA_CONTRACT.md
+    # Docs: agent_docs/DATA_CONTRACT.md
     path = root / "data" / "items" / "lasers.bin"
     buf = path.read_bytes()
     assert buf[:8] == b"MSLLASR1"

@@ -3334,7 +3334,7 @@ static inline uint8_t combat_defender_hit_status_u8(const MslBatch* batch, size_
   // executing ftAction_80073240 inside the prio 1 Anim proc (ftAnim_8006EBA4). If a motion-state
   // transition happens after that Anim tick (e.g. due to input/IASA), the new state's cmd script
   // does not run until next frame, so x1988 should not be treated as active on the entry frame.
-  // docs/DECOMP_PROC_ORDER.md (prio 1 vs prio 3)
+  // Decomp proc ordering: prio 1 Anim runs before prio 3 input callbacks.
   // refs/melee/src/melee/ft/ftanim.c::ftAnim_8006EBA4
   // refs/melee/src/melee/ft/ftaction.c::ftAction_80073240
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B868 (eligibility aggregates x1988/x198C)
@@ -6627,9 +6627,8 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
       // - post-Phys fighter translation (prio 4), applied to the model at prio 6/9 before
       //   the prio 13 fighter-vs-fighter collision pass.
       //
-      // Decomp-backed ordering summary: docs/DECOMP_PROC_ORDER.md ("Implications for sim step order").
-      // In particular, collision uses post-integration translation; do not shift primitives by
-      // (prev_pos - pos) here.
+      // In decomp proc order, collision uses post-integration translation; do not shift
+      // primitives by (prev_pos - pos) here.
 
       // Shield precedence (non-inert): if a HitCapsule intersects the defender shield bubble and
       // `element != HitElement_Inert`, resolve the shield hit (HP depletion, GuardSetOff, hitlag)

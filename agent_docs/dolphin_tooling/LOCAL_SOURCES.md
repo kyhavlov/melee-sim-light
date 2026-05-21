@@ -1,5 +1,8 @@
 # Local Sources of Truth (Decomp / ASM / Dolphin / Slippi)
 
+Archived note: this file preserves path conventions from the old repo. Prefer current setup notes
+in `agent_docs/DEVELOPMENT_WORKFLOWS.md` and `refs/README.md`.
+
 This project is **decomp-first**. When a mismatch is found, fixes must be grounded in local
 decompiled C and/or the disassembly with symbols.
 
@@ -40,13 +43,12 @@ or codes are altering state for recording or determinism.
 - Dump generator scripts:
   - `scripts/dolphin_engine_dump.py` — generate a single dump from a replay using playback Dolphin.
   - `scripts/engine_dump_suite.py` — generate dumps for a suite.
-- Hot-path routing (living):
-  - `docs/HOT_PATH_INDEX.md`
-- “Where do I look?” index:
-  - `docs/RESOURCE_MAP.md`
+- Hot-path routing and source lookup were old-repo docs:
+  - `agent_docs/HOT_PATH_INDEX.md` (not present in this repo)
+  - `agent_docs/RESOURCE_MAP.md` (not present in this repo)
 - Dump format docs:
-  - `docs/engine_dump_schema.md` (field index)
-  - `docs/engine_dump_layout.rs` (reference layout)
+  - `agent_docs/dolphin_tooling/engine_dump_schema.md` (field index)
+  - `agent_docs/engine_dump_layout.rs` (old repo reference layout, not present in this repo)
 - Validation:
   - `crates/ssbm_sim/src/bin/engine_dump_validate.rs` — validate sim vs one dump.
   - `crates/ssbm_sim/src/bin/engine_dump_suite.rs` — validate a suite of dumps.

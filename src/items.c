@@ -874,7 +874,7 @@ static inline uint8_t laser_grounded_body_uses_sweep(const MslBatch* batch, size
 enum {
   // Runtime state uses Slippi/sim external character ids. MSLITAR1 stores item-kind data by
   // GALE01 internal FighterKind and maps to this domain at init.
-  // docs/DATA_CONTRACT.md::MSLITAR1
+  // agent_docs/DATA_CONTRACT.md::MSLITAR1
   MSL_CHAR_FOX = 1,
   MSL_CHAR_FALCO = 22,
 };
@@ -4609,7 +4609,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
     //
     // Source of offsets: `data/items/lasers.bin` hitbox_offsets_x[] (MSLLASR1 v2), extracted
     // from the laser article state script in Pl*.dat by tools/extraction/extract_lasers.py.
-    // docs/DATA_CONTRACT.md documents the binary layout and decomp pointers.
+    // agent_docs/DATA_CONTRACT.md documents the binary layout and decomp pointers.
     if (owner < 0 || owner >= num_players) {
       continue;
     }

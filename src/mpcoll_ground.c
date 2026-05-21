@@ -1948,7 +1948,7 @@ static inline uint16_t platform_floor_skip_segment_id(const MslBatch* batch, siz
       // current same-step/direct/ground-contact floor result. Do not let that stale skip reject the
       // current-source AttackAir floor publication; no-current rows still retain the explicit
       // floor_skip/pass-through owner.
-      // docs/DATA_CONTRACT.md::FoD platform height source mask
+      // agent_docs/DATA_CONTRACT.md::FoD platform height source mask
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
       // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor}
       return 0xFFFFu;
@@ -3841,7 +3841,7 @@ static uint8_t attackair_flags0_floor_root_projection(
     // CollData floor result and then projects from the callback root; reconstruct only that
     // current-source MSLSTG01 owner here so down-held input or a stale named platform height cannot
     // synthesize AttackAir landings.
-    // docs/DATA_CONTRACT.md::FoD platform height source mask
+    // agent_docs/DATA_CONTRACT.md::FoD platform height source mask
     // data/stages/bin/griz.bin::MSLSTG01 platform_transforms(kind=height)
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
     // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor,
@@ -7908,7 +7908,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
               //
               // data/stages/bin/griz.bin::MSLSTG01 height platform transforms
               // data/scripts/{fox,falco}.bin::MSLFTSC1 create_hitbox/clear_hitboxes events
-              // docs/DATA_CONTRACT.md::FoD platform height source mask
+              // agent_docs/DATA_CONTRACT.md::FoD platform height source mask
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
               // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor}
               (hit_line_idx >= 0 && hit_line_has_height_platform_transform &&

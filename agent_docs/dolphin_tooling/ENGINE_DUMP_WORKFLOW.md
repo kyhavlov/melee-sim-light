@@ -1,5 +1,8 @@
 # Engine Dump Validation Workflow
 
+Archived note: this is historical context from the older Rust-oriented engine-dump workflow. Prefer
+current commands in `agent_docs/DEVELOPMENT_WORKFLOWS.md` unless you are auditing old provenance.
+
 This project now validates **simulator parity against live engine dumps**, not against Slippi replay
 post‑frame data. The canonical loop is:
 
@@ -100,14 +103,14 @@ Suite validation is also run by `scripts/engine_dump_suite.py` after dumps are c
 ## Debugging loop
 
 1. Run the Rust validator (or the suite script) and note the first failing frame.
-2. Use `docs/engine_dump_schema.md` (Field Reference Index) to find where each field
+2. Use `agent_docs/dolphin_tooling/engine_dump_schema.md` (Field Reference Index) to find where each field
    comes from in decomp/asm/Dolphin.
 3. Implement the missing behavior in the sim (decomp‑first), then re‑run.
 
 See also:
-- `docs/LOCAL_SOURCES.md` (where the decomp + asm + Slippi mods live locally)
-- `docs/DOLPHIN_TOOLING.md` (custom playback build + dumping details)
-- `docs/SIM_VALIDATION_TOOLING.md` (validator/suite runner and debug env vars)
+- `agent_docs/dolphin_tooling/LOCAL_SOURCES.md` (where the decomp + asm + Slippi mods live locally)
+- `agent_docs/dolphin_tooling/DOLPHIN_TOOLING.md` (custom playback build + dumping details)
+- `agent_docs/DEVELOPMENT_WORKFLOWS.md` (current validator/suite runner commands)
 
 ## Implementation policy (current phase)
 

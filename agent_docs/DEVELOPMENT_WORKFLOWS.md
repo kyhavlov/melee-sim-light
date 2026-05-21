@@ -318,7 +318,7 @@ uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba
 ```
 
 Data contract:
-- `docs/DATA_CONTRACT.md`
+- `agent_docs/DATA_CONTRACT.md`
 
 ## Notes
 

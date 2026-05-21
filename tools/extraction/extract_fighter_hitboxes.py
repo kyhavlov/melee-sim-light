@@ -192,7 +192,7 @@ def write_mslhitb1(*, moves_json_path: Path, out_path: Path) -> None:
     Build `data/hitboxes/<char>.bin` (MSLHITB1 v1) from ISO-derived `data/moves/<char>.json`.
 
     Source pointers:
-    - Binary layout: docs/DATA_CONTRACT.md (MSLHITB1 v1)
+    - Binary layout: agent_docs/DATA_CONTRACT.md (MSLHITB1 v1)
     - Move event extraction + create_hitbox decode:
       tools/extraction/extract_fighter_moves.py::_parse_subaction_events and ::_decode_create_hitbox
     - Decomp shape for create_hitbox (field meanings):

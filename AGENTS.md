@@ -70,18 +70,12 @@ Current target domain:
 
 ### C Core + Thin Python
 - All gameplay / physics / combat logic lives in **C** under `src/`.
-- Python under `python/` is a thin wrapper and tooling layer only.
+- Public Python under `melee_sim/` is a thin wrapper and tooling layer only.
+- CPython extension and native preprocessing helpers live under `bindings/`.
 - Preprocessing/eval derivation is also a hot path. Do not add per-frame/per-item Python loops,
   candidate searches, state maps, or repeated JSON/data reads to seed generation. New seed-lane
-  derivation must use native C (`python/msl_preprocess_native.c` / `msl_binding`) or include timing
+  derivation must use native C (`bindings/msl_preprocess_native.c` / `msl_binding`) or include timing
   proof that the Python path is negligible.
-
-## Current RL 1.0 Checklist
-
-Primary tracker:
-- `docs/RL10_COMPLETION_CHECKLIST.md`
-- Use its RL 1.0 scope tiers when choosing work: rollout-critical gameplay owners outrank
-  replay-exact camera/viewer/cosmetic state unless that state feeds gameplay ownership.
 
 ## Required Last-Mile Behavior
 
@@ -98,7 +92,7 @@ Primary tracker:
   have replay mismatches. Treat this as distinct from replay-fitting. Cover observed rows plus
   practical synthetic positive/negative variants, keep validation clean, and call out in review
   whether a packet is behavior-equivalent refactor or source-completion extension.
-- Do not stop at the first motivating row or one small owner slice during checklist burn-down.
+- Do not stop at the first motivating row or one small owner slice.
 - Do not return with diagnosis-only prose if implementation, extraction, probes, locks, or validation remain credible local next steps.
 - Do not package bare behavior-neutral substrate work as a checkpoint by itself.
 - Do not back out a correct source-clear mechanic solely because current validation metrics are unchanged.
@@ -108,7 +102,7 @@ Primary tracker:
 ## Working Conventions
 
 - Do not commit unless the prompt explicitly says to.
-- Prefer adding newly learned mechanics to `SPEC.md`.
+- Prefer adding newly learned mechanics to `agent_docs/SPEC.md`.
 - Never hand-edit generator-owned validation reports.
 - Triage/debug outputs default under gitignored `reports/triage/`, not `/tmp`.
 - Never key gameplay behavior on dataset name or record id.

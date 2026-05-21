@@ -47,7 +47,7 @@ typedef struct MslHitboxEvent {
 
   // Remaining extracted u16 parameters (packed directly from the .bin record).
   // The exact semantics are decomp-first but not yet wired into gameplay logic.
-  // Layout (see docs/DATA_CONTRACT.md `MSLHITB1 v1`):
+  // Layout (see agent_docs/DATA_CONTRACT.md `MSLHITB1 v1`):
   // - u16_0: angle
   // - u16_1: kbg
   // - u16_2: wsk
@@ -69,7 +69,7 @@ typedef struct MslHitboxEvent {
   uint16_t u16_7;
 } MslHitboxEvent;
 
-// MSLHITB1 v1 `u16_6` flag bits (see docs/DATA_CONTRACT.md).
+// MSLHITB1 v1 `u16_6` flag bits (see agent_docs/DATA_CONTRACT.md).
 //
 // Source pointers:
 // - tools/extraction/extract_fighter_moves.py::_decode_create_hitbox (script opcode 11 decode)

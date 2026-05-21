@@ -165,7 +165,7 @@ def _pack_record(rec: LaserRecord) -> bytes:
     offs1 = list(rec.state1_hitbox_offsets_x)[:MAX_HITBOX_OFFS]
     offs1 += [0.0] * (MAX_HITBOX_OFFS - len(offs1))
 
-    # Layout is documented in docs/DATA_CONTRACT.md (MSLLASR1 v6).
+    # Layout is documented in agent_docs/DATA_CONTRACT.md (MSLLASR1 v6).
     out = bytearray()
     out += struct.pack(
         "<BBHHHHHHHHHff3fH",

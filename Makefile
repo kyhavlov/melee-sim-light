@@ -44,7 +44,7 @@ BUILD_FORCE ?= 0
 BUILD_STAMP ?= build/msl_binding.stamp
 NATIVE_EXT_GLOB := melee_sim/_native*.so
 LEGACY_ROOT_EXT_GLOB := msl_binding*.so
-BUILD_SRCS := $(shell find src python -type f '(' -name '*.c' -o -name '*.h' ')' -print; printf '%s\n' setup.py pyproject.toml)
+BUILD_SRCS := $(shell find src bindings -type f '(' -name '*.c' -o -name '*.h' ')' -print; printf '%s\n' setup.py pyproject.toml)
 WEBPLAY_PORT ?= 8001
 HOST ?= 127.0.0.1
 OPEN ?= 1
@@ -172,11 +172,11 @@ webplay:
 
 fmt:
 	@command -v "$(CLANG_FORMAT)" >/dev/null 2>&1 || (echo "Missing clang-format (set CLANG_FORMAT=... or install it)."; exit 1)
-	@find src python -type f '(' -name '*.c' -o -name '*.h' ')' -print0 | xargs -0 "$(CLANG_FORMAT)" -i
+	@find src bindings -type f '(' -name '*.c' -o -name '*.h' ')' -print0 | xargs -0 "$(CLANG_FORMAT)" -i
 
 fmt-check:
 	@command -v "$(CLANG_FORMAT)" >/dev/null 2>&1 || (echo "Missing clang-format (set CLANG_FORMAT=... or install it)."; exit 1)
-	@find src python -type f '(' -name '*.c' -o -name '*.h' ')' -print0 | xargs -0 "$(CLANG_FORMAT)" --dry-run --Werror
+	@find src bindings -type f '(' -name '*.c' -o -name '*.h' ')' -print0 | xargs -0 "$(CLANG_FORMAT)" --dry-run --Werror
 
 check: fmt-check test
 

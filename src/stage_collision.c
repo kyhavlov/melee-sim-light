@@ -127,7 +127,7 @@ typedef struct {
 
 static MslStageSlot g_stage_slots[] = {
     // Stage ids are the Slippi/stage enum domain. Binaries are ISO-derived MSLSTG01 artifacts.
-    // docs/DATA_CONTRACT.md::MSLSTG01
+    // agent_docs/DATA_CONTRACT.md::MSLSTG01
     {.stage_id = MSL_STAGE_FOUNTAIN_OF_DREAMS, .bin_name = "griz.bin"},
     {.stage_id = MSL_STAGE_POKEMON_STADIUM, .bin_name = "grps.bin"},
     {.stage_id = MSL_STAGE_YOSHIS_STORY, .bin_name = "grst.bin"},
@@ -1414,7 +1414,7 @@ static int fd_load_floor_lines_from_mslstg01(uint32_t stage_id, const uint8_t* b
       continue;
     }
     // MSLSTG01 stores source MapLine links and world-scaled source collision segment endpoints.
-    // docs/DATA_CONTRACT.md::MSLSTG01
+    // agent_docs/DATA_CONTRACT.md::MSLSTG01
     seg_tmp[seg_n++] = fd_seg_tmp_normalized(
         kind, (uint8_t)((flags & (uint8_t)MSLSTG01_FLAG_LEDGE) != 0u),
         (uint8_t)((flags & (uint8_t)MSLSTG01_FLAG_PLATFORM) != 0u),
