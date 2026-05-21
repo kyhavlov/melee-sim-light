@@ -5,11 +5,12 @@
 Implement a **high-performance, batched, deterministic** SSBM-like simulator for RL.
 
 Current target domain:
-- **Singles (2 players)**, Fox vs Falco, UCF enabled by default.
-- The primary/control suite remains Final Destination, but RL 1.0 correctness now includes the
-  supported legal-stage aggregate: Final Destination, Battlefield, Fountain of Dreams, frozen
-  Pokemon Stadium, Yoshi's Story, and Dream Land N64.
-- The implementation must stay structured so enabling **4 players (2v2)** later is a config/codepath extension, not a rewrite.
+- **Fox vs Falco**, UCF enabled by default. (More characters coming soon)
+- RL 1.0 correctness covers the supported legal-stage aggregate: Final Destination, Battlefield,
+  Fountain of Dreams, frozen Pokemon Stadium, Yoshi's Story, and Dream Land N64.
+- Singles (2 players) remains the primary/control workflow, but the suite includes doubles
+  coverage and the runtime is expected to keep 4-player/2v2 paths viable rather than treating them
+  as a future rewrite.
 
 ## Hard Requirements
 
