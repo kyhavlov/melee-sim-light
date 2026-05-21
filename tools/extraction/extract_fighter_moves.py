@@ -4,6 +4,7 @@ import argparse
 import json
 import struct
 from dataclasses import dataclass
+from importlib import resources
 from pathlib import Path
 
 from melee_sim.hsd_archive import HsdArchive, _u32_be, parse_hsd_archive
@@ -621,6 +622,12 @@ def _parse_subaction_events(
 
 def _parse_ftco_submotion_enum(melee_decomp_root: Path) -> dict[str, int]:
     header = melee_decomp_root / "src" / "melee" / "ft" / "chara" / "ftCommon" / "forward.h"
+    if not header.exists():
+        with resources.files("tools.extraction").joinpath(
+            "source_artifacts/ftco_submotion_ids.json"
+        ).open("r", encoding="utf-8") as f:
+            raw = json.load(f)
+        return {str(k): int(v) for k, v in raw.items()}
     txt = header.read_text(encoding="utf-8", errors="replace").splitlines()
 
     in_enum = False

@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import sys
 import time
+from importlib import resources
 from pathlib import Path
 
 
@@ -42,7 +43,16 @@ def _copy_anim_outputs(character: str, *, src_dir: Path, out_dir: Path) -> None:
             shutil.copyfile(src, out_dir / f"{character}{suffix}")
 
 
-def main() -> None:
+def _copy_source_artifact(rel: str, out_path: Path) -> None:
+    src = resources.files("tools.extraction").joinpath("source_artifacts", rel)
+    if not src.is_file():
+        raise SystemExit(f"missing packaged source-derived artifact: {rel}")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with src.open("rb") as f:
+        out_path.write_bytes(f.read())
+
+
+def main(argv: list[str] | None = None) -> None:
     global _RUN_TIMINGS
     ap = argparse.ArgumentParser(description="Build ISO-derived `data/` artifacts.")
     ap.add_argument("--iso-dir", type=Path, default=Path("_iso"), help="directory containing extracted *.dat files")
@@ -66,10 +76,11 @@ def main() -> None:
     )
     ap.add_argument("--melee-decomp", type=Path, default=Path("refs/melee"), help="path to doldecomp/melee checkout")
     ap.add_argument("--timings", action="store_true", help="print per-generator wall-clock timings")
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
 
     iso_dir = args.iso_dir
     out_root = args.out_dir
+    has_melee_decomp = args.melee_decomp.exists()
 
     def out(rel: str) -> Path:
         return out_root / rel
@@ -266,42 +277,55 @@ def main() -> None:
             ",".join(chars),
         ],
     )
-    _run(
-        "tools.extraction.extract_staling_move_id",
-        [
-            "--melee_decomp",
-            str(args.melee_decomp),
-            "--out_dir",
-            str(out("staling/move_id")),
-            "--chars",
-            ",".join(chars),
-        ],
-    )
-    _run(
-        "tools.extraction.extract_attack_id_move_id",
-        [
-            "--melee_decomp",
-            str(args.melee_decomp),
-            "--out_dir",
-            str(out("attack_id/move_id")),
-            "--chars",
-            ",".join(chars),
-        ],
-    )
+    if has_melee_decomp:
+        _run(
+            "tools.extraction.extract_staling_move_id",
+            [
+                "--melee_decomp",
+                str(args.melee_decomp),
+                "--out_dir",
+                str(out("staling/move_id")),
+                "--chars",
+                ",".join(chars),
+            ],
+        )
+        _run(
+            "tools.extraction.extract_attack_id_move_id",
+            [
+                "--melee_decomp",
+                str(args.melee_decomp),
+                "--out_dir",
+                str(out("attack_id/move_id")),
+                "--chars",
+                ",".join(chars),
+            ],
+        )
+    else:
+        for ch in chars:
+            _copy_source_artifact(f"staling/move_id/{ch}.bin", out(f"staling/move_id/{ch}.bin"))
+            _copy_source_artifact(f"attack_id/move_id/{ch}.bin", out(f"attack_id/move_id/{ch}.bin"))
     # The MSLACID1 binary is the data contract for move_id, x4_flags, and MotionState +0x8/x9
     # lanes. Debug JSON from extract_attack_id_move_id is optional inspection output only and is
     # intentionally not produced by build_data.
-    _run(
-        "tools.extraction.extract_motion_state_owners",
-        [
-            "--melee_decomp",
-            str(args.melee_decomp),
-            "--out_dir",
-            str(out("motion_state/owners")),
-            "--chars",
-            ",".join(chars),
-        ],
-    )
+    if has_melee_decomp:
+        _run(
+            "tools.extraction.extract_motion_state_owners",
+            [
+                "--melee_decomp",
+                str(args.melee_decomp),
+                "--out_dir",
+                str(out("motion_state/owners")),
+                "--chars",
+                ",".join(chars),
+            ],
+        )
+    else:
+        for ch in chars:
+            _copy_source_artifact(f"motion_state/owners/{ch}.bin", out(f"motion_state/owners/{ch}.bin"))
+        _copy_source_artifact(
+            "motion_state/owners/callback_symbols.json",
+            out("motion_state/owners/callback_symbols.json"),
+        )
     # The MSLMSO01 binary is the MotionState owner/callback contract. Its callback_symbols.json
     # manifest is review/debug metadata mapping generated callback ids back to decomp symbols.
 

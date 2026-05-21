@@ -81,7 +81,7 @@ def _extract_glob(*, iso: Path, files, pattern: str, out_dir: Path, force: bool)
     return count
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description="Extract melee-sim-light data from an SSBM ISO.")
     ap.add_argument("--iso", type=Path, required=True, help="path to a valid SSBM ISO")
     ap.add_argument("--out-dir", type=Path, default=Path(".msl"), help="generated data directory")
@@ -96,7 +96,7 @@ def main() -> None:
     )
     ap.add_argument("--melee-decomp", type=Path, default=None, help="path to doldecomp/melee checkout")
     ap.add_argument("--timings", action="store_true", help="print per-generator wall-clock timings")
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
 
     iso = args.iso.expanduser().resolve()
     if not iso.is_file():
@@ -112,12 +112,6 @@ def main() -> None:
     unknown_stages = [s for s in stages if s not in _STAGE_DAT_BY_KEY]
     if unknown_stages:
         raise SystemExit(f"unsupported stage key(s): {unknown_stages!r}")
-
-    melee_decomp = args.melee_decomp.expanduser().resolve() if args.melee_decomp else _default_melee_decomp()
-    if melee_decomp is None or not melee_decomp.exists():
-        raise SystemExit(
-            "missing melee decomp checkout. Pass --melee-decomp PATH or set MELEE_SIM_MELEE_DECOMP."
-        )
 
     iso_dir.mkdir(parents=True, exist_ok=True)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -136,6 +130,7 @@ def main() -> None:
             force=args.force,
         )
 
+    melee_decomp = args.melee_decomp.expanduser().resolve() if args.melee_decomp else _default_melee_decomp()
     cmd = [
         sys.executable,
         "-m",
@@ -148,9 +143,9 @@ def main() -> None:
         ",".join(stages),
         "--chars",
         ",".join(chars),
-        "--melee-decomp",
-        str(melee_decomp),
     ]
+    if melee_decomp is not None and melee_decomp.exists():
+        cmd.extend(["--melee-decomp", str(melee_decomp)])
     if args.timings:
         cmd.append("--timings")
     print("$", " ".join(cmd), flush=True)
