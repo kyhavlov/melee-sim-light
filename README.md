@@ -10,6 +10,13 @@ NumPy API over native batch execution.
 
 From a source checkout, install dependencies and build the native extension:
 
+Prerequisites:
+
+- `uv`
+- Python 3.10 or newer
+- `make`
+- a C compiler available as `cc`
+
 ```bash
 uv sync --dev
 make build
@@ -205,6 +212,13 @@ for driving an exported WASM version of the sim with keyboard/controller input, 
 saved replay traces that can be written from sim gamestate data. It uses the
 [`@gcpreston/slippi-viewer`](https://www.npmjs.com/package/@gcpreston/slippi-viewer)
 project for game visualization:
+
+Prerequisites:
+
+- Emscripten activated so `emcc` is on `PATH`, for the WASM build
+- Node.js/npm available for the renderer build
+- generated sim data under `data/`
+- network access on the first build to download character display assets
 
 ```bash
 npm --prefix tools/viewer/slippi-viewer install
