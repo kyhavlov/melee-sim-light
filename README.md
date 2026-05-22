@@ -47,6 +47,8 @@ creating simulator batches.
 
 ## Minimal Step Loop
 
+### Python
+
 The public API is the `melee_sim` Python package. Most callers use `EnvBatch`
 and a reusable `Buffers` object:
 
@@ -88,13 +90,134 @@ with msl.EnvBatch(batch_size=2, length=128, num_players=2) as env:
     env.reset_cursor()
 ```
 
-## Core API Concepts
+Useful Python signatures:
 
-`EnvBatch` owns native simulator state for `batch_size` independent matches.
-`length` is the number of step frames in one reusable buffer chunk. `num_players`
-is usually `2`, with `4` used for doubles coverage.
+```python
+EnvBatch(
+    batch_size: int,
+    length: int = 256,
+    num_players: int = 2,
+    *,
+    data_dir: str | os.PathLike[str] | None = None,
+    ucf_enabled: bool = True,
+    ucf_cardinals_1_0_enabled: bool = False,
+) -> None
 
-`Buffers` owns the NumPy arrays passed to native code:
+env.buffers(*, observation: str = "native", action_format: str = "controller", obs_dim: int = 0) -> Buffers
+env.configure_match(buffers: Buffers, config: MatchConfig | None = None, **overrides) -> None
+env.bind(buffers: Buffers) -> None
+env.reset_all() -> None
+env.step(*, write_outputs: bool = True, write_compare: bool = False, max_frame_id: int = -1) -> None
+env.reset_cursor() -> None
+
+PlayerConfig(character: int | Character, team_id: int | None = None, facing: int | None = None)
+MatchConfig(stage: int | Stage = Stage.FINAL_DESTINATION, players: tuple[PlayerConfig, ...] | None = None, ...)
+```
+
+### C
+
+The C API in `src/api.h` exposes the same lower-level batch contract. Native integrations
+can drive the core directly. Direct C callers should set `MSL_DATA_DIR` before creating a
+batch when they want to load extracted data from `.msl` or another non-default directory:
+
+```c
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+
+#include "src/api.h"
+
+int main(void) {
+  enum { BATCH = 2, PLAYERS = 2 };
+
+  MslBatch* batch = msl_batch_create(BATCH, PLAYERS);
+  if (batch == NULL) {
+    return 1;
+  }
+
+  MslMatchConfig configs[BATCH];
+  memset(configs, 0, sizeof(configs));
+  for (int i = 0; i < BATCH; i++) {
+    configs[i].stage_id = MSL_STAGE_ID_FINAL_DESTINATION;
+    configs[i].frame_id = -123;
+    configs[i].players[0].char_id = MSL_CHAR_ID_FOX;
+    configs[i].players[1].char_id = MSL_CHAR_ID_FALCO;
+  }
+
+  if (msl_batch_init_match(batch, (const uint8_t*)configs, sizeof(configs[0])) != 0) {
+    msl_batch_destroy(batch);
+    return 1;
+  }
+
+  MslInput prev[BATCH];
+  MslInput input[BATCH];
+  memset(prev, 0, sizeof(prev));
+  memset(input, 0, sizeof(input));
+
+  if (msl_batch_step_input(batch, (const uint8_t*)prev, sizeof(prev[0]),
+                           (const uint8_t*)input, sizeof(input[0])) != 0) {
+    msl_batch_destroy(batch);
+    return 1;
+  }
+
+  uint8_t viewpoint[BATCH] = {0};
+  MeleeGamestate out[BATCH];
+  if (melee_batch_write_gamestate(batch, viewpoint, sizeof(viewpoint[0]), (uint8_t*)out,
+                                  sizeof(out[0])) != 0) {
+    msl_batch_destroy(batch);
+    return 1;
+  }
+
+  printf("frame=%d p0_action=%u p0_x=%f\n", out[0].frame_id,
+         (unsigned)out[0].slots[0].action_id, out[0].slots[0].pos_x);
+
+  msl_batch_destroy(batch);
+  return 0;
+}
+```
+
+Useful C signatures:
+
+```c
+MslBatch* msl_batch_create(int batch_size, int num_players);
+void msl_batch_destroy(MslBatch* batch);
+
+int msl_batch_init_match(MslBatch* batch, const uint8_t* config_bytes,
+                         size_t config_stride_bytes);
+int msl_batch_init_match_masked(MslBatch* batch, const uint8_t* config_bytes,
+                                size_t config_stride_bytes, const uint8_t* mask_bytes,
+                                size_t mask_stride_bytes);
+
+int msl_batch_step_input(MslBatch* batch, const uint8_t* prev_input_bytes,
+                         size_t prev_input_stride_bytes, const uint8_t* input_bytes,
+                         size_t input_stride_bytes);
+int melee_batch_write_gamestate(const MslBatch* batch, const uint8_t* viewpoint_player_bytes,
+                                size_t viewpoint_player_stride_bytes, uint8_t* out_bytes,
+                                size_t out_stride_bytes);
+```
+
+## Public API Contract
+
+The public runtime surface is the `melee_sim` Python package. The native C core
+and binding are implementation details; callers should treat `EnvBatch`,
+`Buffers`, config dataclasses, controller helpers, and dtype helpers as the
+stable API.
+
+`EnvBatch` owns native simulator state:
+
+- `batch_size`: number of independent match lanes advanced together
+- `length`: number of step frames in one reusable buffer chunk
+- `num_players`: usually `2`; `4` is supported for doubles coverage
+- `data_dir`: optional extracted data root, equivalent to setting
+  `MELEE_SIM_DATA` before construction
+
+The resolved data root is process-global native state. Choose it before
+creating simulator batches, and do not expect two `EnvBatch` instances in the
+same process to use different data roots safely.
+
+`Buffers` owns the preallocated NumPy arrays passed to native code. Runtime
+stepping does not allocate replacement buffers, so callers write into these
+arrays and reuse them across chunks:
 
 - `match_config`: initial match state for each batch lane
 - `action`: controller or raw input for each simulated frame
@@ -104,6 +227,16 @@ is usually `2`, with `4` used for doubles coverage.
 - `done`: simulator-owned done flags
 - `reset_mask`: caller-owned reset commands
 - `obs`: caller-owned flat policy observation buffer
+
+`action_format="controller"` is the default and accepts normalized controller
+values. `action_format="raw"` exposes packed native inputs for replay tooling
+and benchmarks. Both formats share the same stepping API.
+
+`gamestate` is the main simulator output. It has shape
+`(length + 1, batch_size)`: row `0` is the reset/initial state, and row `t + 1`
+is the result of stepping action row `t`. Player slots are viewpoint-relative:
+self first, then allies by source player index, then opponents by source player
+index.
 
 The normal call order is:
 
@@ -119,6 +252,10 @@ The normal call order is:
 `env.step()` consumes `action[env.t]`, advances one frame, writes
 `gamestate[env.t + 1]`, writes `terminal[env.t]` and `done[env.t]`, then
 increments `env.t`.
+
+`env.reset_all()` resets every lane and writes `gamestate[0]`. `reset_mask` is
+the per-frame caller input for masked resets; `done` is simulator output and
+does not reset lanes by itself.
 
 After consuming a full chunk, `env.reset_cursor()` sets `env.t = 0` so the same
 arrays can be reused with new actions.
