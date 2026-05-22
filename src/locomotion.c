@@ -143,8 +143,6 @@ static inline void grounded_attack_carry_allow_interrupt(MslBatch* batch, size_t
   // refs/melee/src/melee/ft/chara/ftCommon/{ftCo_AttackDash.c,ftCo_AttackS3.c,ftCo_AttackHi3.c,
   //   ftCo_AttackS4.c,ftCo_AttackHi4.c,ftCo_AttackLw4.c}
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
-  enum { MSL_STATE_FLAGS_2218_INDEX = 0 };
-  enum { MSL_STATE_FLAG_2218_ALLOW_INTERRUPT = 0x80 };
   const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX;
   batch->state.state_flags[flags_i] |= (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
 }
@@ -168,8 +166,6 @@ static inline void landing_entry_carry_raw_allow_interrupt_from_source(MslBatch*
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::{
   //   ftCo_Landing_Enter,ftCo_Landing_Enter_Basic}
-  enum { MSL_STATE_FLAGS_2218_INDEX = 0 };
-  enum { MSL_STATE_FLAG_2218_ALLOW_INTERRUPT = 0x80 };
   const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX;
   batch->state.state_flags[flags_i] |= (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
 }
@@ -2097,8 +2093,6 @@ static inline uint8_t common_appeal_try_enter_from_grounded_iasa(MslBatch* batch
   // proxy for that lane is state_flags[0] bit 0x80 (fp+0x2218_b7); clear it on Appeal entry so
   // stale seeded grounded-attack interrupt state cannot leak onto the taunt destination.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AppealS.c::ftCo_800DEAE8
-  enum { MSL_STATE_FLAGS_2218_INDEX = 0 };
-  enum { MSL_STATE_FLAG_2218_ALLOW_INTERRUPT = 0x80 };
   const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX;
   batch->state.state_flags[flags_i] &= (uint8_t)~MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
   return 1u;
@@ -2259,15 +2253,10 @@ static inline uint8_t grounded_attack_try_jab_chain_subset(
     batch->state.jab_x0[idx] = 0u;
     batch->state.attack100_x0[idx] = 0u;
     batch->state.attack100_x4[idx] = 0u;
-    enum { MSL_ATTACK100_FLAGS_2218_INDEX = 0 };
-    enum { MSL_ATTACK100_FLAG_2218_ALLOW_INTERRUPT = 0x80 };
-    enum { MSL_ATTACK100_FLAG_2218_JAB_COMBO = 0x40 };
-    enum { MSL_ATTACK100_FLAG_2218_JAB_RAPID = 0x20 };
-    const size_t flags_i =
-        idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_ATTACK100_FLAGS_2218_INDEX;
+    const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX;
     batch->state.state_flags[flags_i] &=
-        (uint8_t) ~(uint8_t)(MSL_ATTACK100_FLAG_2218_ALLOW_INTERRUPT |
-                             MSL_ATTACK100_FLAG_2218_JAB_COMBO | MSL_ATTACK100_FLAG_2218_JAB_RAPID);
+        (uint8_t) ~(uint8_t)(MSL_STATE_FLAG_2218_ALLOW_INTERRUPT | MSL_STATE_FLAG_2218_B1 |
+                             MSL_STATE_FLAG_2218_B2);
     // Attack100Start entry goes through ftCo_800D6B00, which calls ftAnim_8006EBA4
     // immediately after Fighter_ChangeMotionState; the first visible start row is frame 1.
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D6B00
@@ -2286,12 +2275,9 @@ static inline uint8_t grounded_attack_try_jab_chain_subset(
 
   // doAttack12Normal/doAttack13 clear allow_interrupt and x2218_b1 on entry.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::{doAttack12Normal,doAttack13}
-  enum { MSL_STATE_FLAGS_2218_INDEX = 0 };
-  enum { MSL_STATE_FLAG_2218_ALLOW_INTERRUPT = 0x80 };
-  enum { MSL_STATE_FLAG_2218_JAB_COMBO = 0x40 };
   const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX;
   batch->state.state_flags[flags_i] &=
-      (uint8_t) ~(uint8_t)(MSL_STATE_FLAG_2218_ALLOW_INTERRUPT | MSL_STATE_FLAG_2218_JAB_COMBO);
+      (uint8_t) ~(uint8_t)(MSL_STATE_FLAG_2218_ALLOW_INTERRUPT | MSL_STATE_FLAG_2218_B1);
   batch->state.jab_x0[idx] = 0u;
   if (action_id == (uint16_t)MSL_ACT_ATTACK_11) {
     batch->state.action_id[idx] = (uint16_t)MSL_ACT_ATTACK_12;

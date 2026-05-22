@@ -1,4 +1,5 @@
 #include "attack_id_tables.h"
+#include "ids.h"
 
 #include <errno.h>
 #include <stdio.h>
@@ -7,11 +8,6 @@
 
 #include "alloc.h"
 #include "staling.h"
-
-// Character id mapping follows Slippi post-frame `character` (GALE01):
-// - Fox   = 1
-// - Falco = 22
-enum { MSL_CHAR_FOX = 1, MSL_CHAR_FALCO = 22 };
 
 enum {
   TABLE_MAGIC_LEN = 8,
@@ -270,13 +266,13 @@ int attack_id_tables_init(void) {
   MslActionMoveIdTable fox = {0};
   MslActionMoveIdTable falco = {0};
 
-  if (load_table_for_char_into((uint8_t)MSL_CHAR_FOX, "fox", &fox) != 0) {
+  if (load_table_for_char_into((uint8_t)MSL_CHAR_ID_FOX, "fox", &fox) != 0) {
     table_free(&fox);
     table_free(&falco);
     g_load_state = -1;
     return -1;
   }
-  if (load_table_for_char_into((uint8_t)MSL_CHAR_FALCO, "falco", &falco) != 0) {
+  if (load_table_for_char_into((uint8_t)MSL_CHAR_ID_FALCO, "falco", &falco) != 0) {
     table_free(&fox);
     table_free(&falco);
     g_load_state = -1;
@@ -284,8 +280,8 @@ int attack_id_tables_init(void) {
   }
 
   memset(g_table_by_char, 0, sizeof(g_table_by_char));
-  g_table_by_char[(uint8_t)MSL_CHAR_FOX] = fox;
-  g_table_by_char[(uint8_t)MSL_CHAR_FALCO] = falco;
+  g_table_by_char[(uint8_t)MSL_CHAR_ID_FOX] = fox;
+  g_table_by_char[(uint8_t)MSL_CHAR_ID_FALCO] = falco;
   g_load_state = 1;
   return 0;
 }

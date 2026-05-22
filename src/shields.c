@@ -202,8 +202,6 @@ void shields_refresh(MslBatch* batch) {
   // State flags (5 bytes) are captured from fighter offsets:
   // (0x2218, 0x221A, 0x221B, 0x221C, 0x221F) in that order.
   // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
-  enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
-  enum { MSL_STATE_FLAGS_221B_INDEX = 2 };
 
   // Shield bubble size follows ftCo_Guard.c's inlineB0:
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c:172-190.
@@ -473,7 +471,7 @@ void shields_refresh(MslBatch* batch) {
       //
       // Slippi post-frame: `lbz r3,0x221B(REG_PlayerData)  #0x80 = isShieldActive`.
       // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
-      const size_t flags_i = idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221B_INDEX;
+      const size_t flags_i = idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221B_INDEX;
       uint8_t f = batch->state.state_flags[flags_i];
       // Decomp: fp->x221B_b0 is toggled by collision "shield desc" creation/destruction:
       // - set by ftColl_8007B1B8 (shield desc init),
@@ -505,29 +503,29 @@ void shields_refresh(MslBatch* batch) {
 
       // Always clear when the shield is broken / absent (decomp clears x221B_b0 on break).
       if (!(batch->state.stocks[idx] != 0 && batch->state.shield_hp[idx] > 0.0f)) {
-        f &= (uint8_t) ~(uint8_t)MSL_GUARD_STATE_FLAGS_221B_IS_SHIELD_ACTIVE;
+        f &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE;
       } else if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_ON) {
         // GuardOn entry path creates shield desc via ftCo_80092450 before GuardOn motion state setup.
         // Keep fp+0x221B_b0 ownership aligned on GuardOn entry even when this frame has no resolved
         // shield bubble radius sample yet.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092450
         // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B1B8
-        f |= (uint8_t)MSL_GUARD_STATE_FLAGS_221B_IS_SHIELD_ACTIVE;
+        f |= (uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE;
       } else if (entered_guard_reflect) {
         const uint16_t prev_a = batch->state.prev_action_id[idx];
         if (prev_a == (uint16_t)MSL_ACT_GUARD_ON) {
           // GuardOn_IASA powershield path (ftCo_8009388C): clear on entry.
-          f &= (uint8_t) ~(uint8_t)MSL_GUARD_STATE_FLAGS_221B_IS_SHIELD_ACTIVE;
+          f &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE;
         } else {
           // Locomotion guard-check powershield path (ftCo_80093A50 -> ftCo_80092450): set on entry.
-          f |= (uint8_t)MSL_GUARD_STATE_FLAGS_221B_IS_SHIELD_ACTIVE;
+          f |= (uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE;
         }
       } else if (guard_reflect_timer_active) {
         // Preserve.
       } else if (sr > 0.0f) {
-        f |= (uint8_t)MSL_GUARD_STATE_FLAGS_221B_IS_SHIELD_ACTIVE;
+        f |= (uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE;
       } else {
-        f &= (uint8_t) ~(uint8_t)MSL_GUARD_STATE_FLAGS_221B_IS_SHIELD_ACTIVE;
+        f &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE;
       }
       batch->state.state_flags[flags_i] = f;
     }

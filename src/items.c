@@ -1,4 +1,5 @@
 #include "items.h"
+#include "ids.h"
 
 #include <math.h>
 #include <stddef.h>
@@ -38,17 +39,16 @@ enum {
   MSL_ITEM_HIDDEN_CALLBACK_CLEAR = 1u << 0u,
 };
 
-enum {
-  // Slippi stage id for Yoshi's Story Shy Guys.
-  // Stage id source: tools/slippi/known_data_artifacts.py::STAGE_YOSHIS_STORY.
-  // Item kind source is the extracted MSLSTIO1 `item_kind` field.
-  MSL_STAGE_YOSHIS_STORY = 8,
-};
-
 static inline uint8_t slippi_metadata_low_byte_from_f32(float v) {
   uint32_t bits = 0;
   memcpy(&bits, &v, sizeof(bits));
   return (uint8_t)(bits & 0xFFu);
+}
+
+static inline uint8_t item_state_flags_2218_is_reflect_behavior_only(uint8_t flags_2218) {
+  const uint8_t mask = (uint8_t)(MSL_STATE_FLAG_2218_ALLOW_INTERRUPT | MSL_STATE_FLAG_2218_B1 |
+                                 MSL_STATE_FLAG_2218_B2 | MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR);
+  return ((flags_2218 & mask) == (uint8_t)MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR) ? 1u : 0u;
 }
 
 static inline uint8_t item_throwhi_deferred_mid_pulse_rate_source_step(int32_t rate_q16_16) {
@@ -658,7 +658,7 @@ static void yoshi_shyguy_spawn_one(MslBatch* batch, int bi, int arg0, float pos_
 
 static void yoshi_shyguy_stage_update(MslBatch* batch, int bi) {
   const MslYoshiShyguyParams* params = stage_item_params_yoshi_shyguy();
-  if (batch == NULL || batch->state.stage_id[bi] != (uint32_t)MSL_STAGE_YOSHIS_STORY ||
+  if (batch == NULL || batch->state.stage_id[bi] != (uint32_t)MSL_STAGE_ID_YOSHIS_STORY ||
       batch->state.stage_yoshi_shyguy_valid[bi] == 0u || params == NULL) {
     return;
   }
@@ -871,14 +871,6 @@ static inline uint8_t laser_grounded_body_uses_sweep(const MslBatch* batch, size
   return 1u;
 }
 
-enum {
-  // Runtime state uses Slippi/sim external character ids. MSLITAR1 stores item-kind data by
-  // GALE01 internal FighterKind and maps to this domain at init.
-  // agent_docs/DATA_CONTRACT.md::MSLITAR1
-  MSL_CHAR_FOX = 1,
-  MSL_CHAR_FALCO = 22,
-};
-
 static inline uint16_t item_article_laser_shot_kind(uint8_t char_id) {
   const MslItemArticleParams* ap = item_article_params_get(char_id);
   return ap != NULL ? ap->blaster_shot_itkind : 0u;
@@ -890,15 +882,15 @@ static inline uint16_t item_article_illusion_kind(uint8_t char_id) {
 }
 
 static inline uint8_t item_type_is_fox_laser(uint16_t item_type) {
-  return item_type == item_article_laser_shot_kind((uint8_t)MSL_CHAR_FOX) ? 1u : 0u;
+  return item_type == item_article_laser_shot_kind((uint8_t)MSL_CHAR_ID_FOX) ? 1u : 0u;
 }
 
 static inline uint8_t item_type_is_falco_laser(uint16_t item_type) {
-  return item_type == item_article_laser_shot_kind((uint8_t)MSL_CHAR_FALCO) ? 1u : 0u;
+  return item_type == item_article_laser_shot_kind((uint8_t)MSL_CHAR_ID_FALCO) ? 1u : 0u;
 }
 
 static inline uint8_t item_type_is_fox_illusion(uint16_t item_type) {
-  return item_type == item_article_illusion_kind((uint8_t)MSL_CHAR_FOX) ? 1u : 0u;
+  return item_type == item_article_illusion_kind((uint8_t)MSL_CHAR_ID_FOX) ? 1u : 0u;
 }
 
 static void throw_laser_ensure_spawn_counter_for_pulse(MslBatch* batch, int bi, int owner,
@@ -1009,8 +1001,8 @@ static inline uint8_t item_throwlw_frame25_post_hitlag_rate_allowed(uint8_t owne
   }
 
   static const uint8_t k_supported_domain_chars[] = {
-      (uint8_t)MSL_CHAR_FOX,
-      (uint8_t)MSL_CHAR_FALCO,
+      (uint8_t)MSL_CHAR_ID_FOX,
+      (uint8_t)MSL_CHAR_ID_FALCO,
   };
   int32_t slowest_supported_rate_fp = 0;
   for (size_t i = 0; i < sizeof(k_supported_domain_chars) / sizeof(k_supported_domain_chars[0]);
@@ -2145,7 +2137,7 @@ static inline uint8_t laser_grounded_body_uses_lbcoll_hurt_radius(const MslBatch
       batch->state.hurtbox_state[d_idx] != 0u) {
     return 0u;
   }
-  if (batch->state.char_id[d_idx] != (uint8_t)MSL_CHAR_FOX ||
+  if (batch->state.char_id[d_idx] != (uint8_t)MSL_CHAR_ID_FOX ||
       (batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_DOWN_BACK_U &&
        batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_DOWN_BACK_D)) {
     return 0u;
@@ -2399,7 +2391,9 @@ static inline uint8_t item_try_guard_fresh_shield_center(const MslBatch* batch, 
       ((action_id == (uint16_t)MSL_ACT_GUARD_ON || action_id == (uint16_t)MSL_ACT_GUARD) &&
        batch->state.animation_index[d_idx] == 0xFFFFFFFFu && batch->state.action_frame[d_idx] < 0 &&
        seed_prev_action_id == action_id && laser_age_frames <= 1.0f &&
-       (batch->state.state_flags[(d_idx * 5u) + 0u] & 0x40u) != 0u)
+       (batch->state.state_flags[d_idx * (size_t)MSL_STATE_FLAGS_BYTES +
+                                 (size_t)MSL_STATE_FLAGS_2218_INDEX] &
+        (uint8_t)MSL_STATE_FLAG_2218_B1) != 0u)
           ? 1u
           : 0u;
   if (!fresh_guard_on_entry && !fresh_locomotion_guard_reflect_entry &&
@@ -2767,7 +2761,9 @@ static inline uint8_t item_guardreflect_origin_x14_expired_this_callback(const M
           batch->state.guard_reflect_timer_x14_seed[d_idx] == 1u &&
           batch->state.guard_reflect_timer_x14[d_idx] == 0u &&
           batch->state.guard_reflect_origin_guardon[d_idx] != 0u &&
-          (batch->state.state_flags[d_idx * (size_t)MSL_STATE_FLAGS_BYTES] & 0x40u) == 0u)
+          (batch->state.state_flags[d_idx * (size_t)MSL_STATE_FLAGS_BYTES +
+                                    (size_t)MSL_STATE_FLAGS_2218_INDEX] &
+           (uint8_t)MSL_STATE_FLAG_2218_B1) == 0u)
              ? 1u
              : 0u;
 }
@@ -2968,7 +2964,10 @@ static inline uint8_t item_should_commit_aged_powershield_reflect_owner(
       batch->state.guard_reflect_timer_x14_seed[d_idx] <= 1u) {
     return 0u;
   }
-  if ((batch->state.state_flags[d_idx * (size_t)MSL_STATE_FLAGS_BYTES] & 0xE4u) != 0x04u) {
+  const uint8_t flags_2218 =
+      batch->state
+          .state_flags[d_idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX];
+  if (!item_state_flags_2218_is_reflect_behavior_only(flags_2218)) {
     // Raw fp+0x2218 command/interrupt bits split the same no-submotion GuardReflect geometry:
     // pure behavior (`0x04`) can commit the ReflectDesc owner transfer, while high-bit rows stay
     // on the live article / HitShield owner lane until their hidden item callback state is exposed.
@@ -3250,7 +3249,7 @@ static uint8_t yoshi_shyguy_try_laser_item_hit(MslBatch* batch, int bi, int lase
                                                float laser_scale_z) {
   const MslYoshiShyguyParams* params = stage_item_params_yoshi_shyguy();
   if (batch == NULL || lp == NULL || params == NULL ||
-      batch->state.stage_id[bi] != (uint32_t)MSL_STAGE_YOSHIS_STORY ||
+      batch->state.stage_id[bi] != (uint32_t)MSL_STAGE_ID_YOSHIS_STORY ||
       params->hurtbox_count == 0u) {
     return 0u;
   }
@@ -3338,7 +3337,7 @@ static uint8_t yoshi_shyguy_try_laser_item_hit(MslBatch* batch, int bi, int lase
 static uint8_t yoshi_shyguy_try_fighter_hitbox_hit(MslBatch* batch, int bi, int shyguy_slot,
                                                    const MslYoshiShyguyParams* params) {
   if (batch == NULL || params == NULL ||
-      batch->state.stage_id[bi] != (uint32_t)MSL_STAGE_YOSHIS_STORY ||
+      batch->state.stage_id[bi] != (uint32_t)MSL_STAGE_ID_YOSHIS_STORY ||
       params->hurtbox_count == 0u) {
     return 0u;
   }
@@ -4063,7 +4062,7 @@ static void laser_spawn_apply_falco_throwb_startup_body_callback(MslBatch* batch
   }
   const size_t o_idx = msl_idx_player(bi, owner);
   if (batch->state.action_id[o_idx] != (uint16_t)MSL_ACT_THROW_B ||
-      batch->state.char_id[o_idx] != (uint8_t)MSL_CHAR_FALCO) {
+      batch->state.char_id[o_idx] != (uint8_t)MSL_CHAR_ID_FALCO) {
     return;
   }
   const int victim = throw_laser_unique_same_source_victim(batch, bi, owner);
@@ -4120,7 +4119,7 @@ static void laser_spawn_apply_falco_throwb_final_prior_body_callback(
   }
   const size_t o_idx = msl_idx_player(bi, owner);
   if (batch->state.action_id[o_idx] != (uint16_t)MSL_ACT_THROW_B ||
-      batch->state.char_id[o_idx] != (uint8_t)MSL_CHAR_FALCO ||
+      batch->state.char_id[o_idx] != (uint8_t)MSL_CHAR_ID_FALCO ||
       item_type_is_falco_laser(lp->shot_itkind) == 0u) {
     return;
   }
@@ -5283,7 +5282,9 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
              batch->state.action_frame[d_idx] == -1 &&
              batch->state.guard_reflect_timer_x14_seed[d_idx] > 0u &&
              batch->state.guard_reflect_timer_x14[d_idx] <= 1u &&
-             (batch->state.state_flags[(d_idx * 5u) + 0u] & 0xE4u) == 0x04u)
+             item_state_flags_2218_is_reflect_behavior_only(
+                 batch->state.state_flags[d_idx * (size_t)MSL_STATE_FLAGS_BYTES +
+                                          (size_t)MSL_STATE_FLAGS_2218_INDEX]))
                 ? 1u
                 : 0u;
         const uint8_t guard_reflect_seed_final_x14_hitshield =
@@ -5623,7 +5624,9 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
               (can_powershield_reflect && laser_age_frames <= 1.0f &&
                batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
                item_prev_action_is_guardon_spawn_frame_reflect_source(seed_prev_action) &&
-               (batch->state.state_flags[d_idx * (size_t)MSL_STATE_FLAGS_BYTES] & 0x40u) == 0u)
+               (batch->state.state_flags[d_idx * (size_t)MSL_STATE_FLAGS_BYTES +
+                                         (size_t)MSL_STATE_FLAGS_2218_INDEX] &
+                (uint8_t)MSL_STATE_FLAG_2218_B1) == 0u)
                   ? 1u
                   : 0u;
           const uint8_t guardon_followup_reflect_owner_commit =
@@ -5965,7 +5968,9 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       }
       const uint8_t body_shield_adjacent =
           (batch->state.shield_radius[d_idx] > 0.0f ||
-           (batch->state.state_flags[(d_idx * (size_t)MSL_STATE_FLAGS_BYTES) + 2u] & 0x80u) != 0u ||
+           (batch->state.state_flags[d_idx * (size_t)MSL_STATE_FLAGS_BYTES +
+                                     (size_t)MSL_STATE_FLAGS_221B_INDEX] &
+            (uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE) != 0u ||
            disabled_contact_only != 0u)
               ? 1u
               : 0u;
@@ -6453,7 +6458,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
            ((batch->state.pos_x[d_idx] - batch->state.pos_x[o_idx]) * vx) <= 0.0f)
               ? 1u
               : 0u;
-      if (laser_state != 0u && batch->state.char_id[o_idx] == (uint8_t)MSL_CHAR_FALCO &&
+      if (laser_state != 0u && batch->state.char_id[o_idx] == (uint8_t)MSL_CHAR_ID_FALCO &&
           batch->state.action_id[o_idx] == (uint16_t)MSL_ACT_THROW_HI &&
           (falco_throwhi_final_pulse_curr != 0u ||
            falco_throwhi_final_pulse_prev_non_projectile_side != 0u) &&
@@ -6615,7 +6620,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
 
 static void yoshi_shyguy_items_update(MslBatch* batch, int bi) {
   const MslYoshiShyguyParams* params = stage_item_params_yoshi_shyguy();
-  if (batch == NULL || batch->state.stage_id[bi] != (uint32_t)MSL_STAGE_YOSHIS_STORY ||
+  if (batch == NULL || batch->state.stage_id[bi] != (uint32_t)MSL_STAGE_ID_YOSHIS_STORY ||
       params == NULL) {
     return;
   }
@@ -7366,7 +7371,7 @@ void items_spawn_fighter_anim_phase(MslBatch* batch) {
               }
             }
           }
-          if (action_id == (uint16_t)MSL_ACT_THROW_HI && cid == (uint8_t)MSL_CHAR_FALCO &&
+          if (action_id == (uint16_t)MSL_ACT_THROW_HI && cid == (uint8_t)MSL_CHAR_ID_FALCO &&
               pending_pulse_af == 24u && throw_seed_shot_count[p] >= 2u) {
             // Falco ThrowHi final-pulse live-article cap:
             // - The frame-24 command can be represented in the replay seed by two live state1
@@ -7552,7 +7557,7 @@ void items_spawn_fighter_anim_phase(MslBatch* batch) {
           }
         }
         if (!should_shoot) {
-          if (action_id == (uint16_t)MSL_ACT_THROW_HI && cid == (uint8_t)MSL_CHAR_FALCO &&
+          if (action_id == (uint16_t)MSL_ACT_THROW_HI && cid == (uint8_t)MSL_CHAR_ID_FALCO &&
               item_type_is_falco_laser(lp->shot_itkind) &&
               batch->state.throw_pulse_crossed_prev_frame[idx] ==
                   (uint8_t)MSL_THROWHI_PREV_PHASE_AF &&
@@ -7829,7 +7834,7 @@ void items_spawn_fighter_anim_phase(MslBatch* batch) {
             // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
             // data/moves/{fox,falco}.json set_throw_spawn_projectile pulse frames
             const int throwb_startup_carry_victim =
-                (action_id == (uint16_t)MSL_ACT_THROW_B && cid == (uint8_t)MSL_CHAR_FALCO &&
+                (action_id == (uint16_t)MSL_ACT_THROW_B && cid == (uint8_t)MSL_CHAR_ID_FALCO &&
                  has_first_pulse && crossed_pulse_af == first_pulse_af)
                     ? throw_laser_unique_same_source_victim(batch, bi, p)
                     : -1;

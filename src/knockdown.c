@@ -398,8 +398,8 @@ static inline void damage_clear_terminal_post_hitlag_buffers(MslBatch* batch, si
   batch->state.damage_jump_buffer_x14[idx] = 0u;
   batch->state.damage_meteor_cancel_eligible_x1a[idx] = 0u;
   batch->state
-      .state_flags[idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_BYTE_INDEX] &=
-      (uint8_t) ~(uint8_t)MSL_STATE_FLAGS_221C_B6_MASK;
+      .state_flags[idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX] &=
+      (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN;
 }
 
 static inline void enter_squat(MslBatch* batch, size_t idx);
@@ -488,11 +488,9 @@ static inline uint8_t damage_ground_try_enter_guard_from_wait_iasa(MslBatch* bat
   msl_anim_timebase_enter_with_policy(batch, idx, 0.0f, 1.0f, MSL_ANIM_ENTER_TICK_IMMEDIATE);
   msl_anim_timebase_seed(batch, idx, -1.0f,
                          msl_f32_from_q16_16(batch->state.frame_speed_mul_fp_q16_16[idx]));
-  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
   const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
-  batch->state.state_flags[flags_i] &=
-      (uint8_t) ~(uint8_t)(MSL_GUARD_STATE_FLAGS_221C_B3 | MSL_GUARD_STATE_FLAGS_221C_B1 |
-                           MSL_GUARD_STATE_FLAGS_221C_B2);
+  batch->state.state_flags[flags_i] &= (uint8_t) ~(
+      uint8_t)(MSL_STATE_FLAG_221C_B3 | MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2);
   batch->state.guard_release_latched_xc[idx] = 0;
   batch->state.guard_x10[idx] = msl_guard_x10_raw_init_u8(c);
   batch->state.lightshield_amount[idx] = 0.0f;
@@ -2040,7 +2038,7 @@ static inline uint8_t damage_iasa_lockout_x221c_b6(const MslBatch* batch, size_t
   // Decomp: grounded Damage callback gates (Damage_Anim and Damage_IASA) branch on fp->x221C_b6.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_Anim,ftCo_Damage_IASA}
   //
-  return msl_state_flags_221c_b6_at(batch->state.state_flags, idx);
+  return msl_state_flags_221c_hitstun_at(batch->state.state_flags, idx);
 }
 
 static inline uint8_t knockdown_anim_finished(uint8_t char_id, uint16_t msid,
@@ -2066,8 +2064,6 @@ static inline void enter_fall_from_downdamage_anim(MslBatch* batch, size_t idx) 
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
   batch->state.hitstun[idx] = 0u;
-  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
-  enum { MSL_STATE_FLAG_221C_IS_HITSTUN = 0x02 };
   const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
   batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN;
 }
@@ -2077,9 +2073,6 @@ static inline void clear_downed_damage_state(MslBatch* batch, size_t idx) {
     return;
   }
   batch->state.hitstun[idx] = 0u;
-  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
-  enum { MSL_STATE_FLAG_221C_IS_HITSTUN = 0x02 };
-  enum { MSL_STATE_FLAG_221C_IN_DAMAGE = 0x01 };
   const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
   batch->state.state_flags[flags_i] &=
       (uint8_t) ~(uint8_t)(MSL_STATE_FLAG_221C_IS_HITSTUN | MSL_STATE_FLAG_221C_IN_DAMAGE);
@@ -2230,9 +2223,6 @@ static inline void enter_missfoot_from_damage_floor_loss(MslBatch* batch, const 
   }
   batch->state.speed_ground_x_self[idx] = 0.0f;
   batch->state.hitstun[idx] = 0u;
-  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
-  enum { MSL_STATE_FLAG_221C_IS_HITSTUN = 0x02 };
-  enum { MSL_STATE_FLAG_221C_IN_DAMAGE = 0x01 };
   const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
   batch->state.state_flags[flags_i] &=
       (uint8_t) ~(uint8_t)(MSL_STATE_FLAG_221C_IS_HITSTUN | MSL_STATE_FLAG_221C_IN_DAMAGE);
@@ -2684,8 +2674,6 @@ static inline void enter_passive_wall_from_damage_air(MslBatch* batch, size_t id
     passivewall_apply_entry_wall_collision_clamp(batch, idx,
                                                  (uint16_t)batch->state.animation_index[idx]);
   }
-  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
-  enum { MSL_STATE_FLAG_221C_IS_HITSTUN = 0x02 };
   const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
   batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN;
 }
@@ -2749,8 +2737,6 @@ static inline void enter_passive_ceil_from_damage_air(MslBatch* batch, size_t id
   float transn[3] = {0.0f, 0.0f, 0.0f};
   (void)anim_pose_get_transn(char_id, (uint16_t)curr_msid, curr_frame, transn);
   batch->state.pos_y[idx] = batch->state.ceiling_contact_y[idx] + (transn[1] * ch->model_scaling);
-  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
-  enum { MSL_STATE_FLAG_221C_IS_HITSTUN = 0x02 };
   const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
   batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN;
 }
@@ -3056,8 +3042,6 @@ static inline void enter_passive_from_damage_land(MslBatch* batch, const MslChar
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveStand.c::ftCo_80098928
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownAttack.c::ftCo_8009872C
   batch->state.hitstun[idx] = 0u;
-  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
-  enum { MSL_STATE_FLAG_221C_IS_HITSTUN = 0x02 };
   const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
   batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN;
   // Passive/PassiveStand entry in ftCo_80090184 uses Fighter_ChangeMotionState via
@@ -3129,8 +3113,6 @@ static inline void enter_down_bound_from_damage_land(MslBatch* batch, const MslC
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_80090184
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_80097D40
   batch->state.hitstun[idx] = 0u;
-  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
-  enum { MSL_STATE_FLAG_221C_IS_HITSTUN = 0x02 };
   const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
   batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN;
 

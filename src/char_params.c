@@ -1,4 +1,5 @@
 #include "char_params.h"
+#include "ids.h"
 
 #include <ctype.h>
 #include <errno.h>
@@ -7,11 +8,6 @@
 #include <string.h>
 
 #include "alloc.h"
-
-// Character id mapping follows Slippi post-frame `character` (GALE01):
-// - Fox   = 1
-// - Falco = 22
-enum { MSL_CHAR_FOX = 1, MSL_CHAR_FALCO = 22 };
 
 static MslCharParams g_params_by_char[256];
 static const MslCharParams* g_params_ptr_by_char[256];
@@ -367,7 +363,7 @@ static int load_one(const char* data_dir, const char* rel_path, uint8_t char_id)
   // Helpful error when ISO-derived character attrs are missing new required fields.
   //
   // `.msl/characters/*.json` may be stale when the package is updated after data extraction.
-  if (char_id == (uint8_t)MSL_CHAR_FOX || char_id == (uint8_t)MSL_CHAR_FALCO) {
+  if (char_id == (uint8_t)MSL_CHAR_ID_FOX || char_id == (uint8_t)MSL_CHAR_ID_FALCO) {
     for (size_t i = 0; i < (sizeof(k_spacie_required_keys) / sizeof(k_spacie_required_keys[0]));
          i++) {
       const char* k = k_spacie_required_keys[i];
@@ -594,10 +590,10 @@ int char_params_init(void) {
     data_dir = "data";
   }
 
-  if (load_one(data_dir, "characters/fox.json", MSL_CHAR_FOX) != 0) {
+  if (load_one(data_dir, "characters/fox.json", MSL_CHAR_ID_FOX) != 0) {
     return -1;
   }
-  if (load_one(data_dir, "characters/falco.json", MSL_CHAR_FALCO) != 0) {
+  if (load_one(data_dir, "characters/falco.json", MSL_CHAR_ID_FALCO) != 0) {
     return -1;
   }
 

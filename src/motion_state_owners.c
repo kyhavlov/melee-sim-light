@@ -1,4 +1,5 @@
 #include "motion_state_owners.h"
+#include "ids.h"
 
 #include <errno.h>
 #include <stdio.h>
@@ -6,11 +7,6 @@
 #include <string.h>
 
 #include "alloc.h"
-
-// Character id mapping follows Slippi post-frame `character` (GALE01):
-// - Fox   = 1
-// - Falco = 22
-enum { MSL_CHAR_FOX = 1, MSL_CHAR_FALCO = 22 };
 
 enum {
   TABLE_MAGIC_LEN = 8,
@@ -248,10 +244,10 @@ int motion_state_owners_init(void) {
   if (g_load_state == -1) {
     return -1;
   }
-  if (load_table_for_char_into((uint8_t)MSL_CHAR_FOX, "fox",
-                               &g_table_by_char[(uint8_t)MSL_CHAR_FOX]) != 0 ||
-      load_table_for_char_into((uint8_t)MSL_CHAR_FALCO, "falco",
-                               &g_table_by_char[(uint8_t)MSL_CHAR_FALCO]) != 0) {
+  if (load_table_for_char_into((uint8_t)MSL_CHAR_ID_FOX, "fox",
+                               &g_table_by_char[(uint8_t)MSL_CHAR_ID_FOX]) != 0 ||
+      load_table_for_char_into((uint8_t)MSL_CHAR_ID_FALCO, "falco",
+                               &g_table_by_char[(uint8_t)MSL_CHAR_ID_FALCO]) != 0) {
     g_load_state = -1;
     return -1;
   }
@@ -327,8 +323,8 @@ uint8_t msl_motion_state_class_has(uint8_t char_id, uint16_t action_id, uint32_t
 }
 
 uint8_t msl_motion_state_common_class_has(uint16_t action_id, uint32_t class_bit) {
-  return (msl_motion_state_class_has((uint8_t)MSL_CHAR_FOX, action_id, class_bit) &&
-          msl_motion_state_class_has((uint8_t)MSL_CHAR_FALCO, action_id, class_bit))
+  return (msl_motion_state_class_has((uint8_t)MSL_CHAR_ID_FOX, action_id, class_bit) &&
+          msl_motion_state_class_has((uint8_t)MSL_CHAR_ID_FALCO, action_id, class_bit))
              ? 1u
              : 0u;
 }

@@ -1,4 +1,5 @@
 #include "shield_tilt_table.h"
+#include "ids.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -6,11 +7,6 @@
 #include <string.h>
 
 #include "alloc.h"
-
-// Character id mapping follows Slippi post-frame `character` (GALE01):
-// - Fox   = 1
-// - Falco = 22
-enum { MSL_CHAR_FOX = 1, MSL_CHAR_FALCO = 22 };
 
 enum {
   SHIELD_MAGIC_LEN = 8,
@@ -174,11 +170,11 @@ int shield_tilt_table_init(void) {
     data_dir = "data";
   }
 
-  if (load_for_char(data_dir, "shields/fox.bin", MSL_CHAR_FOX) != 0) {
+  if (load_for_char(data_dir, "shields/fox.bin", MSL_CHAR_ID_FOX) != 0) {
     return -1;
   }
-  if (load_for_char(data_dir, "shields/falco.bin", MSL_CHAR_FALCO) != 0) {
-    free_table(&g_by_char[MSL_CHAR_FOX]);
+  if (load_for_char(data_dir, "shields/falco.bin", MSL_CHAR_ID_FALCO) != 0) {
+    free_table(&g_by_char[MSL_CHAR_ID_FOX]);
     return -1;
   }
 

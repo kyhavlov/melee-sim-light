@@ -688,7 +688,7 @@ static inline uint8_t physics_damage_iasa_lockout_x221c_b6(const MslBatch* batch
   // }
   // refs/melee/src/melee/ft/ft_081B.c::{ft_80084DB0,ft_80084EEC}
   //
-  return msl_state_flags_221c_b6_at(batch->state.state_flags, idx);
+  return msl_state_flags_221c_hitstun_at(batch->state.state_flags, idx);
 }
 
 static inline float physics_apply_ftcommon_8007cf58_x_clamp(const MslCharParams* ch,

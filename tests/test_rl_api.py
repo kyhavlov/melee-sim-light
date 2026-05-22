@@ -195,6 +195,28 @@ def test_masked_match_init_resets_row1_without_changing_row0() -> None:
     assert after[1]["char_id"][:2].tolist() == [CHAR_FALCO, CHAR_FOX]
 
 
+def test_match_init_zeroed_new_game_config_uses_defaults() -> None:
+    binding = _binding_or_skip()
+    handle = _init_handle_or_skip(binding, batch_size=1)
+    try:
+        config = np.zeros(1, dtype=MATCH_CONFIG_DTYPE)
+        config[0]["stage_id"] = np.uint32(MSL_STAGE_FINAL_DESTINATION)
+        config[0]["frame_id"] = np.int32(-123)
+        config[0]["players"]["char_id"][:2] = [CHAR_FOX, CHAR_FALCO]
+        out = _compare_bytes(1)
+
+        binding.init_match(handle, _config_bytes(config))
+        binding.write_compare(handle, out)
+        row = out.view(COMPARE_DTYPE).reshape(1)[0].copy()
+    finally:
+        binding.destroy(handle)
+
+    assert int(row["num_players"]) == 2
+    assert row["stocks"][:2].tolist() == [4, 4]
+    assert row["char_id"][:2].tolist() == [CHAR_FOX, CHAR_FALCO]
+    assert row["facing"][:2].tolist() == [1, 0]
+
+
 def test_masked_match_init_does_not_refresh_unmasked_state_flags() -> None:
     binding = _binding_or_skip()
     handle = _init_handle_or_skip(binding, batch_size=2)

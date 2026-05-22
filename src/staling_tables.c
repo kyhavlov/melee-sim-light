@@ -1,4 +1,5 @@
 #include "staling_tables.h"
+#include "ids.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -6,11 +7,6 @@
 #include <string.h>
 
 #include "alloc.h"
-
-// Character id mapping follows Slippi post-frame `character` (GALE01):
-// - Fox   = 1
-// - Falco = 22
-enum { MSL_CHAR_FOX = 1, MSL_CHAR_FALCO = 22 };
 
 enum {
   MOVEID_MAGIC_LEN = 8,
@@ -249,8 +245,8 @@ int staling_tables_init(void) {
 
   // Treat missing artifacts as non-fatal (groundwork is allowed to be debug-only).
   (void)load_staling_weights();
-  (void)load_move_id_table_for_char((uint8_t)MSL_CHAR_FOX, "fox");
-  (void)load_move_id_table_for_char((uint8_t)MSL_CHAR_FALCO, "falco");
+  (void)load_move_id_table_for_char((uint8_t)MSL_CHAR_ID_FOX, "fox");
+  (void)load_move_id_table_for_char((uint8_t)MSL_CHAR_ID_FALCO, "falco");
 
   g_loaded = 1;
   return 0;

@@ -1,4 +1,5 @@
 #include "blaster.h"
+#include "ids.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -18,13 +19,8 @@
 #include "special_msids.h"
 #include "throw_flow.h"
 
-// Character id mapping follows Slippi post-frame `character` (GALE01):
-// - Fox   = 1
-// - Falco = 22
-enum { MSL_CHAR_FOX = 1, MSL_CHAR_FALCO = 22 };
-
 static inline uint8_t is_fox_falco(uint8_t char_id) {
-  return (char_id == (uint8_t)MSL_CHAR_FOX) || (char_id == (uint8_t)MSL_CHAR_FALCO);
+  return (char_id == (uint8_t)MSL_CHAR_ID_FOX) || (char_id == (uint8_t)MSL_CHAR_ID_FALCO);
 }
 
 static inline uint8_t action_is_blaster(uint16_t action_id) {
@@ -175,8 +171,6 @@ static inline uint8_t damage_air_or_fly_allows_special_air_iasa(const MslBatch* 
   if (batch == NULL) {
     return 0u;
   }
-  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
-  enum { MSL_STATE_FLAG_221C_B6_HITSTUN = 0x02 };
   // Damage/DamageFly IASA split:
   // - Damage_IASA calls Fall_IASA_Inner only when !fp->x221C_b6.
   // - DamageFly_IASA calls DamageFall_IASA only when !fp->x221C_b6.
@@ -191,7 +185,7 @@ static inline uint8_t damage_air_or_fly_allows_special_air_iasa(const MslBatch* 
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_IASA_Inner
   const uint8_t flags_221c =
       batch->state.state_flags[idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX];
-  if ((flags_221c & (uint8_t)MSL_STATE_FLAG_221C_B6_HITSTUN) != 0u) {
+  if ((flags_221c & (uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN) != 0u) {
     return 0u;
   }
   return (batch->state.hitstun[idx] == 0u) ? 1u : 0u;

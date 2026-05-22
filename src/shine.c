@@ -1,4 +1,5 @@
 #include "shine.h"
+#include "ids.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -22,14 +23,8 @@
 #include "stage_collision.h"
 #include "throw_flow.h"
 
-// Character id mapping follows Slippi post-frame `character` (GALE01):
-// - Fox   = 1
-// - Falco = 22
-enum { MSL_CHAR_FOX = 1, MSL_CHAR_FALCO = 22 };
-enum { MSL_STAGE_FOUNTAIN_OF_DREAMS_LOCAL = 2u };
-
 static inline uint8_t is_fox_falco(uint8_t char_id) {
-  return (char_id == (uint8_t)MSL_CHAR_FOX) || (char_id == (uint8_t)MSL_CHAR_FALCO);
+  return (char_id == (uint8_t)MSL_CHAR_ID_FOX) || (char_id == (uint8_t)MSL_CHAR_ID_FALCO);
 }
 
 uint8_t shine_char_supports_reflector(uint8_t char_id) {
@@ -129,7 +124,6 @@ static inline void shine_ground_start_platform_pass_enter(MslBatch* batch, const
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLwStart_Pass
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_CreateReflectHit
   // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (fp+0x2218 -> state_flags[0])
-  enum { MSL_STATE_FLAG_2218_REFLECTING = 0x10 };
   batch->state.state_flags[idx * (size_t)MSL_STATE_FLAGS_BYTES] |=
       (uint8_t)MSL_STATE_FLAG_2218_REFLECTING;
   msl_anim_timebase_enter(batch, idx, anim_frame_f32, 1.0f);
@@ -265,8 +259,6 @@ static inline uint8_t damage_air_or_fly_allows_special_air_iasa(const MslBatch* 
   if (batch == NULL) {
     return 0u;
   }
-  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
-  enum { MSL_STATE_FLAG_221C_B6_HITSTUN = 0x02 };
   // Damage/DamageFly IASA split:
   // - Damage_IASA calls Fall_IASA_Inner only when !fp->x221C_b6.
   // - DamageFly_IASA calls DamageFall_IASA only when !fp->x221C_b6.
@@ -281,7 +273,7 @@ static inline uint8_t damage_air_or_fly_allows_special_air_iasa(const MslBatch* 
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_IASA_Inner
   const uint8_t flags_221c =
       batch->state.state_flags[idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX];
-  if ((flags_221c & (uint8_t)MSL_STATE_FLAG_221C_B6_HITSTUN) != 0u) {
+  if ((flags_221c & (uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN) != 0u) {
     return 0u;
   }
   return (batch->state.hitstun[idx] == 0u) ? 1u : 0u;
@@ -423,7 +415,7 @@ static inline void enter_jump_aerial_basic(MslBatch* batch, size_t idx, const Ms
   const uint32_t stage_id = batch->state.stage_id[idx / (size_t)MSL_MAX_PLAYERS];
   const uint16_t ground_id = batch->state.ground_id[idx];
   if (batch->state.coll_desired_ecb_bottom_valid[idx] != 0u && ground_id != 0xFFFFu &&
-      stage_id == (uint32_t)MSL_STAGE_FOUNTAIN_OF_DREAMS_LOCAL) {
+      stage_id == (uint32_t)MSL_STAGE_ID_FOUNTAIN_OF_DREAMS) {
     // `ftCommon_8007D5D4` only sets CollData_X130_Locked; it does not reload desired_ecb.bottom.
     // Preserve the current CollData desired bottom from the SpecialAirLw callback on FoD's
     // stage-object platform family, so subsequent
@@ -1119,7 +1111,6 @@ void shine_update_post_collision(MslBatch* batch) {
           // change, so publish fp->reflecting on the destination SpecialAirLwStart row.
           // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{
           //   ftFx_SpecialLwStart_Pass,ftFx_SpecialLwStart_GroundToAir}
-          enum { MSL_STATE_FLAG_2218_REFLECTING = 0x10 };
           batch->state.state_flags[idx * (size_t)MSL_STATE_FLAGS_BYTES] |=
               (uint8_t)MSL_STATE_FLAG_2218_REFLECTING;
         }

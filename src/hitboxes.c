@@ -386,10 +386,6 @@ static inline uint8_t hitboxes_seed_reconstruct_create_edge_powershield_dense_ap
     return 0u;
   }
 
-  enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
-  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
-  enum { MSL_STATE_FLAG_221C_POWERSHIELD_ACTIVE = 0x20 };
-
   const size_t group_base =
       (size_t)bi * (size_t)MSL_MAX_PLAYERS * (size_t)MSL_HITLIST_GROUPS * (size_t)MSL_MAX_PLAYERS;
   for (int victim = 0; victim < (int)batch->config.num_players; victim++) {
@@ -411,9 +407,8 @@ static inline uint8_t hitboxes_seed_reconstruct_create_edge_powershield_dense_ap
       continue;
     }
     const uint8_t flags_221c =
-        batch->state.state_flags[v_idx * MSL_STATE_FLAGS_STRIDE + MSL_STATE_FLAGS_221C_INDEX];
-    const uint8_t powershield_active =
-        (flags_221c & (uint8_t)MSL_STATE_FLAG_221C_POWERSHIELD_ACTIVE) ? 1u : 0u;
+        batch->state.state_flags[v_idx * MSL_STATE_FLAGS_BYTES + MSL_STATE_FLAGS_221C_INDEX];
+    const uint8_t powershield_active = (flags_221c & (uint8_t)MSL_STATE_FLAG_221C_B2) ? 1u : 0u;
     if (!powershield_active && batch->state.guard_reflect_timer_x18[v_idx] == 0u) {
       continue;
     }

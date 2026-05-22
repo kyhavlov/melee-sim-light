@@ -1,4 +1,5 @@
 #include "anim_pose.h"
+#include "ids.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -39,11 +40,6 @@ enum {
 static const float kDynColliderSkinRadius = 0.1f;  // lb_00F9.s::lb_804D7BE0
 
 static const uint8_t k_anim_magic[ANIM_MAGIC_LEN] = {'S', 'S', 'A', 'N', 'I', 'M', '0', '1'};
-
-// Character id mapping follows Slippi post-frame `character` (GALE01):
-// - Fox   = 1
-// - Falco = 22
-enum { MSL_CHAR_FOX = 1, MSL_CHAR_FALCO = 22 };
 
 typedef struct {
   uint16_t part_id;
@@ -1407,11 +1403,11 @@ int anim_pose_init(void) {
     data_dir = "data";
   }
 
-  if (load_pose_for_char(data_dir, "anims/fox.bin", MSL_CHAR_FOX) != 0) {
+  if (load_pose_for_char(data_dir, "anims/fox.bin", MSL_CHAR_ID_FOX) != 0) {
     return -1;
   }
-  if (load_pose_for_char(data_dir, "anims/falco.bin", MSL_CHAR_FALCO) != 0) {
-    free_table(&g_table_by_char[MSL_CHAR_FOX]);
+  if (load_pose_for_char(data_dir, "anims/falco.bin", MSL_CHAR_ID_FALCO) != 0) {
+    free_table(&g_table_by_char[MSL_CHAR_ID_FOX]);
     return -1;
   }
 

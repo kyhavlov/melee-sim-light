@@ -1,4 +1,5 @@
 #include "anim_table.h"
+#include "ids.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -6,11 +7,6 @@
 #include <string.h>
 
 #include "alloc.h"
-
-// Character id mapping follows Slippi post-frame `character` (GALE01):
-// - Fox   = 1
-// - Falco = 22
-enum { MSL_CHAR_FOX = 1, MSL_CHAR_FALCO = 22 };
 
 typedef struct {
   // Submotion ids in GALE01 exceed 255 (e.g. Fox/Falco specials are in the ~295+ range).
@@ -211,10 +207,10 @@ int anim_table_init(void) {
     data_dir = "data";
   }
 
-  if (load_tracks_for_char(data_dir, "anims/fox.tracks.bin", MSL_CHAR_FOX) != 0) {
+  if (load_tracks_for_char(data_dir, "anims/fox.tracks.bin", MSL_CHAR_ID_FOX) != 0) {
     return -1;
   }
-  if (load_tracks_for_char(data_dir, "anims/falco.tracks.bin", MSL_CHAR_FALCO) != 0) {
+  if (load_tracks_for_char(data_dir, "anims/falco.tracks.bin", MSL_CHAR_ID_FALCO) != 0) {
     return -1;
   }
 

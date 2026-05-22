@@ -3,6 +3,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "buttons.h"
+#include "ids.h"
+#include "state_flags.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -15,7 +19,6 @@ enum { MSL_MAX_HITBOXES = 4 };
 // no fighter dynamics in the extracted target data. Keep fixed capacity for allocation-free
 // runtime ownership while leaving the data loader schema able to reject larger unsupported chains.
 enum { MSL_MAX_DYNAMIC_NODES = 4 };
-enum { MSL_STATE_FLAGS_BYTES = 5 };
 // Decomp: `spawn_hitbox_0.hit_group` is a 3-bit field (0..7).
 // refs/melee/src/melee/lb/types.h::spawn_hitbox_0
 enum { MSL_HITLIST_GROUPS = 8 };
@@ -37,7 +40,7 @@ enum {
 #pragma pack(push, 1)
 
 typedef struct MslInputPlayer {
-  // Bitmask of digital buttons. (Mapping is defined in tooling; keep stable.)
+  // Bitmask of digital buttons. Use MSL_BUTTON_* constants.
   uint16_t buttons;
   // Raw stick values (e.g., -128..127). Tooling defines exact conventions.
   int8_t main_x;
@@ -56,8 +59,8 @@ typedef struct MslMatchPlayerConfig {
   // GALE01/Slippi external character id. v1 validates Fox=1 / Falco=22.
   uint8_t char_id;
   uint8_t team_id;
-  // 0 = facing left, 1 = facing right. Match-start facing is caller-owned until the stage
-  // extraction exposes a decomp-backed per-spawn facing lane.
+  // 0 = facing left, 1 = facing right. Supported legal-stage match starts derive neutral-spawn
+  // facing from stage/player order, so zero-initialized new-match configs do not need this field.
   uint8_t facing;
   uint8_t _pad0;
 } MslMatchPlayerConfig;
@@ -67,11 +70,13 @@ typedef struct MslMatchConfig {
   uint32_t stage_id;
   int32_t frame_id;
   uint32_t frame_pre_random_seed;
-  // Global match damage ratio (decomp: gm_8016B248 -> StartMeleeRules.x30).
+  // Global match damage ratio (decomp: gm_8016B248 -> StartMeleeRules.x30). 0.0 means 1.0.
   float match_damage_ratio;
 
-  uint8_t num_players;  // Must match the batch config for v1.
+  // 0 means the batch's configured player count; nonzero values must match the batch.
+  uint8_t num_players;
   uint8_t is_teams;
+  // 0 means normal 4-stock start.
   uint8_t stock_count;
   // Live camera debug mode for Camera_8003010C.
   // 0 = normal gameplay camera, 1 = CAMERA_FREE.

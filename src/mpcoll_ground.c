@@ -1,4 +1,5 @@
 #include "mpcoll_ground.h"
+#include "ids.h"
 
 #include <float.h>
 #include <math.h>
@@ -287,12 +288,6 @@ enum {
 #define MSL_MPCOLL_REJECT_SPECIALAIRLW_START_STALE_PLATFORM (UINT64_C(1) << 30)
 #define MSL_MPCOLL_REJECT_ATTACKAIR_HARD_SLOPE_ROOT_WITHOUT_BOTTOM (UINT64_C(1) << 31)
 
-enum {
-  MSL_STAGE_FOUNTAIN_OF_DREAMS_LOCAL = 2u,
-  MSL_STAGE_YOSHIS_STORY_LOCAL = 8u,
-  MSL_STAGE_FINAL_DESTINATION_LOCAL = 32u,
-};
-
 static inline uint64_t mpcoll_escapeair_final_publication_reject_bits(
     const MslEscapeAirFinalPublicationOwners* owners) {
   if (owners == NULL) {
@@ -521,10 +516,7 @@ static inline uint8_t damage_hitlag_floorhug_attempts_downward_sdi(const MslBatc
   }
 
   const uint16_t action_id = batch->state.action_id[idx];
-  enum { MSL_STATE_FLAGS_221A_BYTE_INDEX = 1 };
-  const size_t flags_i =
-      idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221A_BYTE_INDEX;
-  enum { MSL_STATE_FLAG_221A_B3 = 0x10 };
+  const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221A_INDEX;
   const uint8_t sdi_tilt_window = (batch->state.tilt_timer_x[idx] < c->sdi_tilt_max_frames ||
                                    batch->state.tilt_timer_y[idx] < c->sdi_tilt_max_frames)
                                       ? 1u
@@ -618,9 +610,8 @@ static inline MslMpcollDamageActiveHitlagFloorOwner mpcoll_damage_active_hitlag_
     return out;
   }
 
-  if (mpcoll_damageair_action(action_id) &&
-      stage_id == (uint32_t)MSL_STAGE_FINAL_DESTINATION_LOCAL && prefer_line_valid &&
-      !prefer_line_is_platform && !prefer_line_is_ledge &&
+  if (mpcoll_damageair_action(action_id) && stage_id == (uint32_t)MSL_STAGE_ID_FINAL_DESTINATION &&
+      prefer_line_valid && !prefer_line_is_platform && !prefer_line_is_ledge &&
       isfinite(batch->state.floor_sweep_prev_pos_y[idx]) &&
       batch->state.floor_sweep_prev_pos_y[idx] > k_floor_y_bias &&
       batch->state.pos_y[idx] < -k_floor_y_bias) {
@@ -1153,7 +1144,7 @@ static inline uint8_t fod_hidden_height_platform_remaps_to_solid_floor(
     const MslBatch* batch, int bi, const MslStageFloorGraph* g, uint32_t stage_id,
     int current_line_idx, float root_x, float root_y, int* out_line_idx) {
   if (batch == NULL || g == NULL || g->lines == NULL || out_line_idx == NULL ||
-      stage_id != (uint32_t)MSL_STAGE_FOUNTAIN_OF_DREAMS_LOCAL || current_line_idx < 0 ||
+      stage_id != (uint32_t)MSL_STAGE_ID_FOUNTAIN_OF_DREAMS || current_line_idx < 0 ||
       (size_t)current_line_idx >= g->line_count) {
     return 0u;
   }
@@ -2706,7 +2697,7 @@ static inline void mpcoll_apply_late_floor_publication_guards(
   }
 
   if (publication->on_ground && is_common_fallspecial_action(action_id) &&
-      ctx->stage_id == (uint32_t)MSL_STAGE_FINAL_DESTINATION_LOCAL &&
+      ctx->stage_id == (uint32_t)MSL_STAGE_ID_FINAL_DESTINATION &&
       batch->state.ground_id[idx] == 1u && batch->state.seed_prev_action_id[idx] == action_id &&
       batch->state.seed_prev_action_frame[idx] <= 5 && batch->state.action_frame[idx] <= 6 &&
       batch->state.speed_y_self[idx] < 0.0f && batch->state.fall_fast[idx] != 0u &&
@@ -3225,7 +3216,7 @@ static uint8_t fallspecial_yoshi_main_floor_first_sustained_airborne_owner(const
   //   ftCo_FallSpecial_Coll,ftCo_80096CC8,ftCo_80096D28}
   // refs/melee/src/melee/mp/mpcoll.c::{
   //   mpColl_80047E14,mpColl_80044628_Floor,mpColl_80044838_Floor}
-  return (stage_id == (uint32_t)MSL_STAGE_YOSHIS_STORY_LOCAL &&
+  return (stage_id == (uint32_t)MSL_STAGE_ID_YOSHIS_STORY &&
           batch->state.ground_id[idx] == (uint16_t)MSL_YOSHIS_STORY_MAIN_FLOOR_SEGMENT &&
           batch->state.action_id[idx] == (uint16_t)MSL_ACT_FALL_SPECIAL &&
           batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_FALL_SPECIAL &&
@@ -3317,8 +3308,7 @@ static uint8_t msl_mpcoll_80047e14_fallspecial_prephysics_floor_sweep(
     return 0u;
   }
   if (hit_line_idx >= 0 && !g->lines[(size_t)hit_line_idx].is_platform &&
-      stage_id == (uint32_t)MSL_STAGE_FINAL_DESTINATION_LOCAL &&
-      batch->state.ground_id[idx] == 1u &&
+      stage_id == (uint32_t)MSL_STAGE_ID_FINAL_DESTINATION && batch->state.ground_id[idx] == 1u &&
       g->lines[(size_t)hit_line_idx].segment_i == batch->state.ground_id[idx] &&
       batch->state.seed_prev_action_id[idx] == batch->state.action_id[idx] &&
       batch->state.seed_prev_action_frame[idx] <= 5 && batch->state.action_frame[idx] <= 6 &&
@@ -3547,7 +3537,9 @@ static uint8_t msl_mpcoll_80047e14_flags6_root_floor_projection(
   }
   if (ledge_to_ledge_continuation && !locked_fall_root_owner &&
       (batch->state.action_frame[idx] <= 1 || batch->state.seed_prev_action_frame[idx] <= 0 ||
-       (batch->state.state_flags[idx * (size_t)MSL_STATE_FLAGS_BYTES] & 0x80u) == 0u)) {
+       (batch->state
+            .state_flags[idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX] &
+        (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT) == 0u)) {
     // Non-locked ledge-floor continuations still need the Fall script's allow-interrupt phase
     // before the root projection can publish Landing. Earlier fastfall ledge crossings have a
     // replay-visible floor.index, but vanilla keeps Fall airborne until the callback's script phase
@@ -3636,7 +3628,7 @@ static inline uint8_t msl_mpcoll_80047e14_reject_fallspecial_same_floor_early_fi
   //   ftCo_FallSpecial_Coll,ftCo_80096CC8,ftCo_80096D28}
   // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047E14,mpColl_80044628_Floor}
   return (uint8_t)(batch != NULL && is_common_fallspecial_action(action_id) &&
-                   stage_id == (uint32_t)MSL_STAGE_FINAL_DESTINATION_LOCAL &&
+                   stage_id == (uint32_t)MSL_STAGE_ID_FINAL_DESTINATION &&
                    batch->state.ground_id[idx] == 1u &&
                    batch->state.seed_prev_action_id[idx] == action_id &&
                    batch->state.seed_prev_action_frame[idx] <= 5 &&
@@ -3662,7 +3654,7 @@ static inline uint8_t msl_mpcoll_80047e14_reject_fall_same_floor_early_final_lan
   // refs/melee/src/melee/ft/ft_081B.c::ft_80082B1C
   // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpColl_80044838_Floor}
   return (uint8_t)(batch != NULL && g != NULL && action_id == (uint16_t)MSL_ACT_FALL &&
-                   stage_id == (uint32_t)MSL_STAGE_FINAL_DESTINATION_LOCAL &&
+                   stage_id == (uint32_t)MSL_STAGE_ID_FINAL_DESTINATION &&
                    batch->state.seed_prev_action_id[idx] == action_id &&
                    batch->state.seed_prev_action_frame[idx] <= batch->state.action_frame[idx] &&
                    batch->state.action_frame[idx] <= 5 && batch->state.speed_y_self[idx] < 0.0f &&
@@ -3813,7 +3805,7 @@ static uint8_t attackair_flags0_floor_root_projection(
                                            ? 1u
                                            : 0u;
   const uint8_t carried_floor_skip_connected_hard_floor_owner =
-      (stage_id == (uint32_t)MSL_STAGE_FOUNTAIN_OF_DREAMS_LOCAL &&
+      (stage_id == (uint32_t)MSL_STAGE_ID_FOUNTAIN_OF_DREAMS &&
        batch->state.floor_skip_segment_id[idx] != 0xFFFFu)
           ? 1u
           : 0u;
@@ -3999,7 +3991,7 @@ static uint8_t escapeair_locked_floor_bottom_sweep_root_projection(
     float* floor_ny_out) {
   if (batch == NULL || g == NULL || prev_ecb == NULL || ground_id_out == NULL ||
       batch->state.action_id[idx] != (uint16_t)MSL_ACT_ESCAPE_AIR ||
-      batch->state.stage_id[bi] != (uint32_t)MSL_STAGE_FOUNTAIN_OF_DREAMS_LOCAL ||
+      batch->state.stage_id[bi] != (uint32_t)MSL_STAGE_ID_FOUNTAIN_OF_DREAMS ||
       batch->state.ecb_lock_timer[idx] == 0u || batch->state.speed_y_self[idx] >= 0.0f) {
     return 0u;
   }
@@ -4940,8 +4932,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
                stage_collision_floor_line_has_platform_transform(stage_id,
                                                                  batch->state.ground_id[idx])) &&
               prev_action_is_jumpaerial) ||
-             (ecb_lock_timer_seed == 0u &&
-              stage_id == (uint32_t)MSL_STAGE_FOUNTAIN_OF_DREAMS_LOCAL &&
+             (ecb_lock_timer_seed == 0u && stage_id == (uint32_t)MSL_STAGE_ID_FOUNTAIN_OF_DREAMS &&
               batch->state.action_frame[idx] <= 1)) &&
             seed_prev_action_is_jumpaerial))
               ? 1u
@@ -4981,9 +4972,11 @@ void mpcoll_ground_apply(MslBatch* batch) {
           // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
           // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_LoadECB_inline}
           (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
-           stage_id == (uint32_t)MSL_STAGE_FINAL_DESTINATION_LOCAL &&
+           stage_id == (uint32_t)MSL_STAGE_ID_FINAL_DESTINATION &&
            batch->state.ground_id[idx] == 0u && ecb_lock_timer_seed >= 3u &&
-           (batch->state.state_flags[idx * (size_t)MSL_STATE_FLAGS_BYTES] & 0x80u) != 0u &&
+           (batch->state.state_flags[idx * (size_t)MSL_STATE_FLAGS_BYTES +
+                                     (size_t)MSL_STATE_FLAGS_2218_INDEX] &
+            (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT) != 0u &&
            batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_ESCAPE_AIR &&
            batch->state.seed_prev_action_frame[idx] <= 1 && batch->state.action_frame[idx] <= 3 &&
            escapeair_seed_floor_line_idx >= 0 &&
@@ -5029,7 +5022,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
           // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpCollInterpolateECB}
           (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
-           stage_id == (uint32_t)MSL_STAGE_FOUNTAIN_OF_DREAMS_LOCAL &&
+           stage_id == (uint32_t)MSL_STAGE_ID_FOUNTAIN_OF_DREAMS &&
            batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_ESCAPE_AIR &&
            batch->state.action_frame[idx] >= 2)
               ? 1u
@@ -5118,7 +5111,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
               : 0u;
       const uint8_t escapeair_fod_no_lock_jumpaerial_entry =
           (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
-           stage_id == (uint32_t)MSL_STAGE_FOUNTAIN_OF_DREAMS_LOCAL && ecb_lock_timer_seed == 0u &&
+           stage_id == (uint32_t)MSL_STAGE_ID_FOUNTAIN_OF_DREAMS && ecb_lock_timer_seed == 0u &&
            batch->state.action_frame[idx] <= 1 &&
            (batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
             batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_AERIAL_B))
@@ -5314,7 +5307,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
         const uint8_t prefer_line_is_platform_floor =
             (prefer_line_idx >= 0 && g->lines[(size_t)prefer_line_idx].is_platform) ? 1u : 0u;
         const uint8_t fod_escapeair_left_ledge_source_band =
-            (stage_id == (uint32_t)MSL_STAGE_FOUNTAIN_OF_DREAMS_LOCAL &&
+            (stage_id == (uint32_t)MSL_STAGE_ID_FOUNTAIN_OF_DREAMS &&
              action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
              batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_ESCAPE_AIR &&
              batch->state.seed_prev_action_frame[idx] <= 1 && batch->state.action_frame[idx] <= 3 &&
@@ -5481,7 +5474,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
         }
       }
 
-      if (!was_grounded && !on_ground && stage_id == (uint32_t)MSL_STAGE_FOUNTAIN_OF_DREAMS_LOCAL &&
+      if (!was_grounded && !on_ground && stage_id == (uint32_t)MSL_STAGE_ID_FOUNTAIN_OF_DREAMS &&
           action_id == (uint16_t)MSL_ACT_ESCAPE_AIR && prev_action_id != action_id &&
           prev_action_is_jumpaerial && prefer_line_idx >= 0 &&
           batch->state.seed_prev_action_frame[idx] <= 2 && batch->state.action_frame[idx] <= 2) {
@@ -5524,8 +5517,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
 
       uint8_t escapeair_missing_bottom_hard_floor_sweep_owner = 0u;
       if (!was_grounded && !on_ground && action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
-          (stage_id == (uint32_t)MSL_STAGE_FINAL_DESTINATION_LOCAL ||
-           stage_id == (uint32_t)MSL_STAGE_FOUNTAIN_OF_DREAMS_LOCAL) &&
+          (stage_id == (uint32_t)MSL_STAGE_ID_FINAL_DESTINATION ||
+           stage_id == (uint32_t)MSL_STAGE_ID_FOUNTAIN_OF_DREAMS) &&
           prefer_line_idx >= 0 && ecb_lock_timer_seed != 0u &&
           (msl_escapeair_locked_bottom_owner_any(
                batch->state.coll_desired_ecb_bottom_locked_owner[idx]) ||
@@ -5556,11 +5549,11 @@ void mpcoll_ground_apply(MslBatch* batch) {
         candidate_lines[0] = prefer_line_idx;
         candidate_lines[1] = g->lines[(size_t)prefer_line_idx].prev;
         candidate_lines[2] = g->lines[(size_t)prefer_line_idx].next;
-        candidate_lines[3] = (stage_id == (uint32_t)MSL_STAGE_FOUNTAIN_OF_DREAMS_LOCAL &&
+        candidate_lines[3] = (stage_id == (uint32_t)MSL_STAGE_ID_FOUNTAIN_OF_DREAMS &&
                               candidate_lines[1] >= 0 && (size_t)candidate_lines[1] < g->line_count)
                                  ? g->lines[(size_t)candidate_lines[1]].prev
                                  : -1;
-        candidate_lines[4] = (stage_id == (uint32_t)MSL_STAGE_FOUNTAIN_OF_DREAMS_LOCAL &&
+        candidate_lines[4] = (stage_id == (uint32_t)MSL_STAGE_ID_FOUNTAIN_OF_DREAMS &&
                               candidate_lines[2] >= 0 && (size_t)candidate_lines[2] < g->line_count)
                                  ? g->lines[(size_t)candidate_lines[2]].next
                                  : -1;
@@ -5572,7 +5565,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
                   stage_id, g->lines[(size_t)line_idx].segment_i)) {
             continue;
           }
-          if (stage_id == (uint32_t)MSL_STAGE_FOUNTAIN_OF_DREAMS_LOCAL &&
+          if (stage_id == (uint32_t)MSL_STAGE_ID_FOUNTAIN_OF_DREAMS &&
               g->lines[(size_t)line_idx].is_ledge &&
               (!floor_x_within_line_bounds(batch, bi, g, line_idx,
                                            batch->state.floor_sweep_prev_pos_x[idx]) ||
@@ -5596,7 +5589,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
                   batch->state.seed_prev_action_frame[idx] <= 0)) ||
                 (!msl_escapeair_locked_bottom_owner_any(
                      batch->state.coll_desired_ecb_bottom_locked_owner[idx]) &&
-                 stage_id != (uint32_t)MSL_STAGE_FINAL_DESTINATION_LOCAL &&
+                 stage_id != (uint32_t)MSL_STAGE_ID_FINAL_DESTINATION &&
                  batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_ESCAPE_AIR)) &&
                prev_y > line_y + k_floor_y_bias && y <= line_y + k_floor_y_bias)
                   ? 1u
@@ -5628,7 +5621,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
       }
 
       if (!was_grounded && !on_ground && action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
-          stage_id != (uint32_t)MSL_STAGE_FINAL_DESTINATION_LOCAL && prefer_line_idx >= 0 &&
+          stage_id != (uint32_t)MSL_STAGE_ID_FINAL_DESTINATION && prefer_line_idx >= 0 &&
           ecb_lock_timer_seed != 0u &&
           !msl_escapeair_locked_bottom_owner_any(
               batch->state.coll_desired_ecb_bottom_locked_owner[idx]) &&
@@ -5652,11 +5645,11 @@ void mpcoll_ground_apply(MslBatch* batch) {
         candidate_lines[0] = prefer_line_idx;
         candidate_lines[1] = g->lines[(size_t)prefer_line_idx].prev;
         candidate_lines[2] = g->lines[(size_t)prefer_line_idx].next;
-        candidate_lines[3] = (stage_id == (uint32_t)MSL_STAGE_FOUNTAIN_OF_DREAMS_LOCAL &&
+        candidate_lines[3] = (stage_id == (uint32_t)MSL_STAGE_ID_FOUNTAIN_OF_DREAMS &&
                               candidate_lines[1] >= 0 && (size_t)candidate_lines[1] < g->line_count)
                                  ? g->lines[(size_t)candidate_lines[1]].prev
                                  : -1;
-        candidate_lines[4] = (stage_id == (uint32_t)MSL_STAGE_FOUNTAIN_OF_DREAMS_LOCAL &&
+        candidate_lines[4] = (stage_id == (uint32_t)MSL_STAGE_ID_FOUNTAIN_OF_DREAMS &&
                               candidate_lines[2] >= 0 && (size_t)candidate_lines[2] < g->line_count)
                                  ? g->lines[(size_t)candidate_lines[2]].next
                                  : -1;
@@ -5670,7 +5663,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
           }
           const uint8_t line_is_ledge = g->lines[(size_t)line_idx].is_ledge ? 1u : 0u;
           const uint8_t ledge_span_owner =
-              (line_is_ledge && stage_id == (uint32_t)MSL_STAGE_FOUNTAIN_OF_DREAMS_LOCAL &&
+              (line_is_ledge && stage_id == (uint32_t)MSL_STAGE_ID_FOUNTAIN_OF_DREAMS &&
                floor_x_within_line_bounds(batch, bi, g, line_idx,
                                           batch->state.floor_sweep_prev_pos_x[idx]) &&
                floor_x_within_line_bounds(batch, bi, g, line_idx, x))
@@ -6289,7 +6282,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
         // }
         const uint8_t damageflyroll_iasa_lockout =
             (action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL &&
-             msl_state_flags_221c_b6_at(batch->state.state_flags, idx) &&
+             msl_state_flags_221c_hitstun_at(batch->state.state_flags, idx) &&
              batch->state.hitlag_pre_timer[idx] == 0u && batch->state.hitlag[idx] == 0u)
                 ? 1u
                 : 0u;
@@ -6971,9 +6964,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
                 // synthesize an immediate LandingFallSpecial as the root enters from off-end.
                 // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
                 // refs/melee/src/melee/mp/mplib.c::{mpCheckFloor,mpLib_8004DD90_Floor}
-                (stage_id == (uint32_t)MSL_STAGE_FOUNTAIN_OF_DREAMS_LOCAL &&
-                 resolved_line_is_ledge && !resolved_ledge_prev_x_in_bounds &&
-                 batch->state.action_frame[idx] <= 3)
+                (stage_id == (uint32_t)MSL_STAGE_ID_FOUNTAIN_OF_DREAMS && resolved_line_is_ledge &&
+                 !resolved_ledge_prev_x_in_bounds && batch->state.action_frame[idx] <= 3)
                     ? 1u
                     : 0u;
             const uint8_t suppress_jumpaerial_entry_shallow_ledge_projection =
@@ -7003,7 +6995,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
                 // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
                 // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpColl_80044838_Floor}
                 (cliff_ledge_floor_owner_active && is_ledge_floor && y_corr >= 0.0f &&
-                 !(stage_id == (uint32_t)MSL_STAGE_FOUNTAIN_OF_DREAMS_LOCAL &&
+                 !(stage_id == (uint32_t)MSL_STAGE_ID_FOUNTAIN_OF_DREAMS &&
                    floor_x_inside_left_ledge_source_band(batch, bi, g, prefer_line_idx,
                                                          batch->state.pos_x[idx])) &&
                  y_corr < (bottom_rel0 - k_floor_y_bias))
@@ -7738,7 +7730,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
               // refs/melee/src/melee/ft/ft_081B.c::ft_80083090
               // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047E14,mpColl_80044628_Floor}
               (is_common_fallspecial_action(action_id) && hit_line_idx >= 0 &&
-               !hit_line_is_platform && stage_id == (uint32_t)MSL_STAGE_FINAL_DESTINATION_LOCAL &&
+               !hit_line_is_platform && stage_id == (uint32_t)MSL_STAGE_ID_FINAL_DESTINATION &&
                batch->state.ground_id[idx] == 1u &&
                g->lines[(size_t)hit_line_idx].segment_i == batch->state.ground_id[idx] &&
                batch->state.seed_prev_action_id[idx] == action_id &&
@@ -7794,7 +7786,9 @@ void mpcoll_ground_apply(MslBatch* batch) {
                batch->state.action_frame[idx] <= 4 && hit_line_idx >= 0 &&
                fabsf(batch->state.speed_air_x_self[idx]) > 0.5f &&
                (iy - cur_bottom_y) > k_floor_y_bias && (iy - cur_bottom_y) < 0.35f &&
-               (batch->state.state_flags[idx * (size_t)MSL_STATE_FLAGS_BYTES] & 0x80u) == 0u)
+               (batch->state.state_flags[idx * (size_t)MSL_STATE_FLAGS_BYTES +
+                                         (size_t)MSL_STATE_FLAGS_2218_INDEX] &
+                (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT) == 0u)
                   ? 1u
                   : 0u;
           const uint8_t suppress_damageflyroll_shallow_land =
@@ -8532,7 +8526,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
                   // refs/melee/src/melee/mp/mpcoll.c::{
                   //   mpColl_LoadECB_inline,mpColl_80044628_Floor,mpColl_80044838_Floor}
                   (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
-                   stage_id == (uint32_t)MSL_STAGE_FOUNTAIN_OF_DREAMS_LOCAL &&
+                   stage_id == (uint32_t)MSL_STAGE_ID_FOUNTAIN_OF_DREAMS &&
                    ecb_lock_timer_seed != 0u &&
                    !msl_escapeair_locked_bottom_owner_any(
                        batch->state.coll_desired_ecb_bottom_locked_owner[idx]) &&
@@ -8572,14 +8566,16 @@ void mpcoll_ground_apply(MslBatch* batch) {
                   // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpColl_80044838_Floor}
                   // refs/melee/src/melee/ft/types.h::Fighter::allow_interrupt (fp+0x2218:0)
                   (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
-                   stage_id == (uint32_t)MSL_STAGE_FOUNTAIN_OF_DREAMS_LOCAL &&
+                   stage_id == (uint32_t)MSL_STAGE_ID_FOUNTAIN_OF_DREAMS &&
                    ecb_lock_timer_seed != 0u && prev_action_id == action_id &&
                    ecb_lock_timer_seed >= 2u && resolved_line_is_ledge && prefer_line_idx >= 0 &&
                    !g->lines[(size_t)prefer_line_idx].is_ledge &&
                    resolved_segment_i != seed_ground_id &&
                    !floor_x_inside_left_ledge_source_band(batch, bi, g, out_line_idx,
                                                           batch->state.pos_x[idx]) &&
-                   (batch->state.state_flags[idx * (size_t)MSL_STATE_FLAGS_BYTES] & 0x80u) == 0u)
+                   (batch->state.state_flags[idx * (size_t)MSL_STATE_FLAGS_BYTES +
+                                             (size_t)MSL_STATE_FLAGS_2218_INDEX] &
+                    (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT) == 0u)
                       ? 1u
                       : 0u;
               const uint8_t escapeair_low_floor_raw_hit_over_stale_platform_remap =
@@ -8920,7 +8916,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
            (batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
             batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_AERIAL_B) &&
            (batch->state.seed_prev_action_frame[idx] == 3 ||
-            (stage_id == (uint32_t)MSL_STAGE_YOSHIS_STORY_LOCAL &&
+            (stage_id == (uint32_t)MSL_STAGE_ID_YOSHIS_STORY &&
              batch->state.seed_prev_action_frame[idx] <= 4)) &&
            batch->state.action_frame[idx] <= 2 &&
            g->lines[(size_t)escapeair_projection_line_idx].segment_i ==
@@ -9534,7 +9530,9 @@ void mpcoll_ground_apply(MslBatch* batch) {
              !(final_ground_line_idx >= 0 && (size_t)final_ground_line_idx < g->line_count &&
                g->lines[(size_t)final_ground_line_idx].is_ledge) &&
              ground_id != batch->state.ground_id[idx] && prev_y > (contact_y + k_floor_y_bias) &&
-             (batch->state.state_flags[idx * (size_t)MSL_STATE_FLAGS_BYTES] & 0x80u) == 0u)
+             (batch->state.state_flags[idx * (size_t)MSL_STATE_FLAGS_BYTES +
+                                       (size_t)MSL_STATE_FLAGS_2218_INDEX] &
+              (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT) == 0u)
                 ? 1u
                 : 0u;
         const float final_landing_lift = contact_y - cur_bottom_y;
@@ -9725,13 +9723,14 @@ void mpcoll_ground_apply(MslBatch* batch) {
             // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
             // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpColl_80044838_Floor}
             // refs/melee/src/melee/ft/types.h::Fighter::allow_interrupt (fp+0x2218:0)
-            (stage_id == (uint32_t)MSL_STAGE_FOUNTAIN_OF_DREAMS_LOCAL &&
-             escapeair_episode.sustained && ecb_lock_timer_seed != 0u &&
-             final_ground_line_is_ledge && !seed_ground_line_is_ledge &&
-             ecb_lock_timer_seed >= 2u &&
+            (stage_id == (uint32_t)MSL_STAGE_ID_FOUNTAIN_OF_DREAMS && escapeair_episode.sustained &&
+             ecb_lock_timer_seed != 0u && final_ground_line_is_ledge &&
+             !seed_ground_line_is_ledge && ecb_lock_timer_seed >= 2u &&
              !floor_x_inside_left_ledge_source_band(batch, bi, g, final_ground_line_idx,
                                                     batch->state.pos_x[idx]) &&
-             (batch->state.state_flags[idx * (size_t)MSL_STATE_FLAGS_BYTES] & 0x80u) == 0u)
+             (batch->state.state_flags[idx * (size_t)MSL_STATE_FLAGS_BYTES +
+                                       (size_t)MSL_STATE_FLAGS_2218_INDEX] &
+              (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT) == 0u)
                 ? 1u
                 : 0u;
         const uint8_t fresh_jumpaerial_zero_bottom_platform_projection_hit =
@@ -10054,12 +10053,12 @@ void mpcoll_ground_apply(MslBatch* batch) {
               : 0u;
       if (!stored_locked_desired_bottom_owner && ecb_lock_active &&
           ((escapeair_episode.active &&
-            ((stage_id == (uint32_t)MSL_STAGE_FOUNTAIN_OF_DREAMS_LOCAL &&
+            ((stage_id == (uint32_t)MSL_STAGE_ID_FOUNTAIN_OF_DREAMS &&
               msl_escapeair_locked_bottom_owner_is_seeded(
                   batch->state.coll_desired_ecb_bottom_locked_owner[idx])) ||
              batch->state.coll_desired_ecb_bottom_locked_owner[idx] ==
                  (uint8_t)MSL_ESCAPEAIR_LOCKED_BOTTOM_OWNER_LIVE_JUMPAERIAL_SOFT_OR_TRANSFORM)) ||
-           (stage_id == (uint32_t)MSL_STAGE_FOUNTAIN_OF_DREAMS_LOCAL &&
+           (stage_id == (uint32_t)MSL_STAGE_ID_FOUNTAIN_OF_DREAMS &&
             (action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
              action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_B)) ||
            (action_id == (uint16_t)MSL_ACT_FALL && batch->state.fall_fast[idx] != 0u) ||

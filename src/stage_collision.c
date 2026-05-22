@@ -1,4 +1,5 @@
 #include "stage_collision.h"
+#include "ids.h"
 
 #include <float.h>
 #include <math.h>
@@ -74,12 +75,6 @@ static inline float stage_line_y_at_x(const MslStageFloorLine* line, float x) {
 }
 
 enum {
-  MSL_STAGE_FOUNTAIN_OF_DREAMS = 2,
-  MSL_STAGE_POKEMON_STADIUM = 3,
-  MSL_STAGE_YOSHIS_STORY = 8,
-  MSL_STAGE_DREAM_LAND_N64 = 28,
-  MSL_STAGE_BATTLEFIELD = 31,
-  MSL_STAGE_FINAL_DESTINATION = 32,
   MSL_STAGE_ID_LOOKUP_COUNT = 256,
   MSL_STAGE_SEGMENT_LOOKUP_COUNT = 65536,
 };
@@ -128,21 +123,21 @@ typedef struct {
 static MslStageSlot g_stage_slots[] = {
     // Stage ids are the Slippi/stage enum domain. Binaries are ISO-derived MSLSTG01 artifacts.
     // agent_docs/DATA_CONTRACT.md::MSLSTG01
-    {.stage_id = MSL_STAGE_FOUNTAIN_OF_DREAMS, .bin_name = "griz.bin"},
-    {.stage_id = MSL_STAGE_POKEMON_STADIUM, .bin_name = "grps.bin"},
-    {.stage_id = MSL_STAGE_YOSHIS_STORY, .bin_name = "grst.bin"},
-    {.stage_id = MSL_STAGE_DREAM_LAND_N64, .bin_name = "grop.bin"},
-    {.stage_id = MSL_STAGE_BATTLEFIELD, .bin_name = "grnba.bin"},
-    {.stage_id = MSL_STAGE_FINAL_DESTINATION, .bin_name = "grnla.bin"},
+    {.stage_id = MSL_STAGE_ID_FOUNTAIN_OF_DREAMS, .bin_name = "griz.bin"},
+    {.stage_id = MSL_STAGE_ID_POKEMON_STADIUM, .bin_name = "grps.bin"},
+    {.stage_id = MSL_STAGE_ID_YOSHIS_STORY, .bin_name = "grst.bin"},
+    {.stage_id = MSL_STAGE_ID_DREAM_LAND_N64, .bin_name = "grop.bin"},
+    {.stage_id = MSL_STAGE_ID_BATTLEFIELD, .bin_name = "grnba.bin"},
+    {.stage_id = MSL_STAGE_ID_FINAL_DESTINATION, .bin_name = "grnla.bin"},
 };
 
 static MslStageSlot* g_stage_slot_by_id[MSL_STAGE_ID_LOOKUP_COUNT] = {
-    [MSL_STAGE_FOUNTAIN_OF_DREAMS] = &g_stage_slots[0],
-    [MSL_STAGE_POKEMON_STADIUM] = &g_stage_slots[1],
-    [MSL_STAGE_YOSHIS_STORY] = &g_stage_slots[2],
-    [MSL_STAGE_DREAM_LAND_N64] = &g_stage_slots[3],
-    [MSL_STAGE_BATTLEFIELD] = &g_stage_slots[4],
-    [MSL_STAGE_FINAL_DESTINATION] = &g_stage_slots[5],
+    [MSL_STAGE_ID_FOUNTAIN_OF_DREAMS] = &g_stage_slots[0],
+    [MSL_STAGE_ID_POKEMON_STADIUM] = &g_stage_slots[1],
+    [MSL_STAGE_ID_YOSHIS_STORY] = &g_stage_slots[2],
+    [MSL_STAGE_ID_DREAM_LAND_N64] = &g_stage_slots[3],
+    [MSL_STAGE_ID_BATTLEFIELD] = &g_stage_slots[4],
+    [MSL_STAGE_ID_FINAL_DESTINATION] = &g_stage_slots[5],
 };
 
 static MslStageSlot* stage_slot_mut(uint32_t stage_id) {
@@ -1336,7 +1331,7 @@ static int stage_install_platform_motion_from_mslstg01(
     const uint8_t kind = p[0];
     const uint8_t platform_count = p[1];
     if (kind != (uint8_t)MSLSTG01_PLATFORM_MOTION_FOD ||
-        stage_id != (uint32_t)MSL_STAGE_FOUNTAIN_OF_DREAMS || platform_count < 2u) {
+        stage_id != (uint32_t)MSL_STAGE_ID_FOUNTAIN_OF_DREAMS || platform_count < 2u) {
       continue;
     }
     MslFodPlatformMotion m = {0};
@@ -1528,7 +1523,7 @@ int stage_collision_init(void) {
 
   // FD is still the default/runtime baseline, so normal init requires it. Other registered stages
   // load opportunistically and are required only when requested via stage_collision_require_stage().
-  return stage_collision_require_stage((uint32_t)MSL_STAGE_FINAL_DESTINATION) ? 0 : -1;
+  return stage_collision_require_stage((uint32_t)MSL_STAGE_ID_FINAL_DESTINATION) ? 0 : -1;
 }
 
 uint8_t stage_collision_require_stage(uint32_t stage_id) {
@@ -1852,7 +1847,7 @@ uint8_t stage_collision_floor_line_height_platform_state_is_source_trusted(const
   }
   const uint32_t stage_id = batch->state.stage_id[(size_t)bi];
   const MslStageSlot* slot = stage_slot(stage_id);
-  if (stage_id != (uint32_t)MSL_STAGE_FOUNTAIN_OF_DREAMS || slot == NULL || !slot->loaded ||
+  if (stage_id != (uint32_t)MSL_STAGE_ID_FOUNTAIN_OF_DREAMS || slot == NULL || !slot->loaded ||
       !slot->fod_motion.loaded ||
       slot->platform_transform_kind_by_segment[segment_i] !=
           (uint8_t)MSLSTG01_PLATFORM_TRANSFORM_HEIGHT) {
@@ -1932,7 +1927,7 @@ uint8_t stage_collision_fod_hidden_target_height(float* out) {
   if (out == NULL) {
     return 0u;
   }
-  const MslStageSlot* slot = stage_slot((uint32_t)MSL_STAGE_FOUNTAIN_OF_DREAMS);
+  const MslStageSlot* slot = stage_slot((uint32_t)MSL_STAGE_ID_FOUNTAIN_OF_DREAMS);
   if (slot == NULL || slot->fod_motion.loaded == 0u) {
     return 0u;
   }
@@ -2156,7 +2151,7 @@ uint8_t stage_collision_floor_line_motion_delta(const MslBatch* batch, int bi,
       return 1u;
     }
     if (rec->kind_id == (uint8_t)MSLSTG01_PLATFORM_TRANSFORM_HEIGHT &&
-        batch->state.stage_id[bi] == (uint32_t)MSL_STAGE_FOUNTAIN_OF_DREAMS &&
+        batch->state.stage_id[bi] == (uint32_t)MSL_STAGE_ID_FOUNTAIN_OF_DREAMS &&
         rec->platform_id < 2u) {
       const size_t idx = (size_t)bi * 2u + (size_t)rec->platform_id;
       if (!batch->state.stage_fod_platform_valid[idx]) {
@@ -2669,10 +2664,10 @@ static void stage_collision_update_fod_platform_motion(MslBatch* batch) {
   // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
   // refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
   for (int bi = 0; bi < batch->batch_size; bi++) {
-    if (batch->state.stage_id[bi] != (uint32_t)MSL_STAGE_FOUNTAIN_OF_DREAMS) {
+    if (batch->state.stage_id[bi] != (uint32_t)MSL_STAGE_ID_FOUNTAIN_OF_DREAMS) {
       continue;
     }
-    const MslStageSlot* slot = stage_slot((uint32_t)MSL_STAGE_FOUNTAIN_OF_DREAMS);
+    const MslStageSlot* slot = stage_slot((uint32_t)MSL_STAGE_ID_FOUNTAIN_OF_DREAMS);
     const MslFodPlatformMotion* motion =
         (slot != NULL && slot->fod_motion.loaded) ? &slot->fod_motion : NULL;
     for (size_t platform_order = 0; platform_order < 2u; platform_order++) {
@@ -2902,7 +2897,7 @@ static void stage_collision_apply_dream_whispy_wind(MslBatch* batch) {
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_GetWindOffsetVec
   // refs/melee/src/melee/gr/groldpupupu.c::fn_802112F4
   for (int bi = 0; bi < batch->batch_size; bi++) {
-    if (batch->state.stage_id[bi] != (uint32_t)MSL_STAGE_DREAM_LAND_N64 ||
+    if (batch->state.stage_id[bi] != (uint32_t)MSL_STAGE_ID_DREAM_LAND_N64 ||
         batch->state.stage_dream_whispy_wind_valid[bi] == 0u) {
       continue;
     }

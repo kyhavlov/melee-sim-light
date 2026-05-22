@@ -1,4 +1,5 @@
 #include "hurtboxes.h"
+#include "ids.h"
 
 #include <stdint.h>
 
@@ -18,8 +19,6 @@
 #include "shield_tilt_table.h"
 #include "specialhi_pose.h"
 #include "stage_collision.h"
-
-enum { MSL_CHAR_FOX = 1, MSL_CHAR_FALCO = 22 };
 
 static inline size_t idx_hurtcap(int bi, int p, int cap_i) {
   return ((size_t)bi * (size_t)MSL_MAX_PLAYERS + (size_t)p) * (size_t)MSL_MAX_HURTCAPS +
@@ -96,7 +95,7 @@ static inline uint16_t hurtboxes_timer_remaining_from_action_frame(uint16_t init
 }
 
 static inline uint8_t hurtboxes_runtime_specialhi_pose_owner(uint8_t char_id, uint16_t action_id) {
-  if (char_id != (uint8_t)MSL_CHAR_FOX && char_id != (uint8_t)MSL_CHAR_FALCO) {
+  if (char_id != (uint8_t)MSL_CHAR_ID_FOX && char_id != (uint8_t)MSL_CHAR_ID_FALCO) {
     return 0u;
   }
   switch (action_id) {
@@ -147,7 +146,7 @@ static inline uint8_t hurtboxes_guard_tilt_live_body_pose_owner(const MslBatch* 
 
 static inline uint8_t hurtboxes_side_special_end_uses_pre_anim_collision_pose(uint8_t char_id,
                                                                               uint16_t action_id) {
-  if (char_id != (uint8_t)MSL_CHAR_FOX && char_id != (uint8_t)MSL_CHAR_FALCO) {
+  if (char_id != (uint8_t)MSL_CHAR_ID_FOX && char_id != (uint8_t)MSL_CHAR_ID_FALCO) {
     return 0u;
   }
   return (uint8_t)(action_id == (uint16_t)MSL_ACT_FX_SPECIAL_S_END ||
@@ -156,7 +155,8 @@ static inline uint8_t hurtboxes_side_special_end_uses_pre_anim_collision_pose(ui
 
 static inline uint8_t hurtboxes_side_special_start_passivewalljump_entry_pose_owner(
     const MslBatch* batch, size_t idx, uint8_t char_id, uint16_t action_id) {
-  if (batch == NULL || (char_id != (uint8_t)MSL_CHAR_FOX && char_id != (uint8_t)MSL_CHAR_FALCO)) {
+  if (batch == NULL ||
+      (char_id != (uint8_t)MSL_CHAR_ID_FOX && char_id != (uint8_t)MSL_CHAR_ID_FALCO)) {
     return 0u;
   }
   if (action_id != (uint16_t)MSL_ACT_FX_SPECIAL_S_START &&

@@ -1,14 +1,10 @@
 #include "instance_id.h"
+#include "ids.h"
 
 #include <stdint.h>
 
 #include "action_ids.h"
 #include "attack_id_tables.h"
-
-// Character id mapping follows Slippi post-frame `character` (GALE01):
-// - Fox   = 1
-// - Falco = 22
-enum { MSL_CHAR_FOX = 1, MSL_CHAR_FALCO = 22 };
 
 enum {
   // Common AttackLw3 (dtilt) action id is ftCo_MS_AttackLw3 = 57 (0x0039).
@@ -17,7 +13,7 @@ enum {
 };
 
 static inline uint8_t is_fox_falco(uint8_t char_id) {
-  return (char_id == (uint8_t)MSL_CHAR_FOX) || (char_id == (uint8_t)MSL_CHAR_FALCO);
+  return (char_id == (uint8_t)MSL_CHAR_ID_FOX) || (char_id == (uint8_t)MSL_CHAR_ID_FALCO);
 }
 
 static inline uint8_t action_is_blaster_loop(uint16_t action_id) {

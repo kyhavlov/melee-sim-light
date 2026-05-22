@@ -1,4 +1,5 @@
 #include "reflector_bubbles.h"
+#include "ids.h"
 
 #include <math.h>
 #include <stddef.h>
@@ -10,13 +11,8 @@
 #include "char_params.h"
 #include "mtx34.h"
 
-// Character id mapping follows Slippi post-frame `character` (GALE01):
-// - Fox   = 1
-// - Falco = 22
-enum { MSL_CHAR_FOX = 1, MSL_CHAR_FALCO = 22 };
-
 static inline uint8_t is_fox_falco(uint8_t char_id) {
-  return (char_id == (uint8_t)MSL_CHAR_FOX) || (char_id == (uint8_t)MSL_CHAR_FALCO);
+  return (char_id == (uint8_t)MSL_CHAR_ID_FOX) || (char_id == (uint8_t)MSL_CHAR_ID_FALCO);
 }
 
 static inline uint8_t action_is_shine_reflector_active(uint16_t a) {
@@ -61,10 +57,6 @@ void reflector_bubbles_refresh(MslBatch* batch) {
   }
 
   const int num_players = (int)batch->config.num_players;
-  enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
-  enum { MSL_STATE_FLAGS_2218_INDEX = 0 };
-  enum { MSL_STATE_FLAG_2218_IS_REFLECT_ACTIVE = 0x10 };
-  enum { MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR = 0x04 };
 
   for (int bi = 0; bi < batch->batch_size; bi++) {
     for (int p = 0; p < num_players; p++) {
@@ -124,7 +116,7 @@ void reflector_bubbles_refresh(MslBatch* batch) {
       batch->state.reflector_radius[idx] = (isfinite(rr) && rr > 0.0f) ? rr : 0.0f;
 
       const size_t flags_i =
-          idx * (size_t)MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_2218_INDEX;
+          idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX;
       uint8_t f = batch->state.state_flags[flags_i];
 
       // Slippi state_flags byte0 bit0x10 mirrors fp->reflecting (GALE01 fp+0x2218 bit4).
@@ -151,13 +143,13 @@ void reflector_bubbles_refresh(MslBatch* batch) {
         const uint8_t shine_start_pass_reflecting =
             ((a == (uint16_t)MSL_ACT_FX_SPECIAL_LW_START ||
               a == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START) &&
-             (f & (uint8_t)MSL_STATE_FLAG_2218_IS_REFLECT_ACTIVE) != 0u)
+             (f & (uint8_t)MSL_STATE_FLAG_2218_REFLECTING) != 0u)
                 ? 1u
                 : 0u;
         const uint8_t want = (uint8_t)((action_is_shine_reflector_active(a) != 0) ||
                                        (shine_start_pass_reflecting != 0u));
         if (want) {
-          f |= (uint8_t)MSL_STATE_FLAG_2218_IS_REFLECT_ACTIVE;
+          f |= (uint8_t)MSL_STATE_FLAG_2218_REFLECTING;
           // Decomp: ftColl_CreateReflectHit writes ReflectDesc.x20_behavior into fp->x2218_b5.
           // Shine loop/hit/turn states recreate this lane from Fox/Falco special attrs each time
           // reflector creation is active, so state_flags[0] bit0x04 must follow reflector_behavior.
@@ -170,7 +162,7 @@ void reflector_bubbles_refresh(MslBatch* batch) {
             f &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR;
           }
         } else {
-          f &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_IS_REFLECT_ACTIVE;
+          f &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_REFLECTING;
           if ((prev_a == (uint16_t)MSL_ACT_FX_SPECIAL_LW_START ||
                prev_a == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START) &&
               batch->state.action_frame[idx] == 0) {
@@ -197,7 +189,7 @@ void reflector_bubbles_refresh(MslBatch* batch) {
         // - refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (packs fp+0x2218 into state_flags[0])
         const uint8_t want = (batch->state.guard_reflect_timer_x14[idx] > 0) ? 1u : 0u;
         if (want) {
-          f |= (uint8_t)MSL_STATE_FLAG_2218_IS_REFLECT_ACTIVE;
+          f |= (uint8_t)MSL_STATE_FLAG_2218_REFLECTING;
           if (batch->state.action_frame[idx] <= 0) {
             // GuardReflect entry builds ReflectDesc with x20_behavior=1 and
             // ftColl_CreateReflectHit copies that into fp->x2218_b5.
@@ -206,7 +198,7 @@ void reflector_bubbles_refresh(MslBatch* batch) {
             f |= (uint8_t)MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR;
           }
         } else {
-          f &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_IS_REFLECT_ACTIVE;
+          f &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_REFLECTING;
         }
         batch->state.state_flags[flags_i] = f;
       }

@@ -1,4 +1,5 @@
 #include "hurtcaps_tables.h"
+#include "ids.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -13,11 +14,6 @@ enum {
   REC_BYTES_V1 = 34
 };
 static const uint8_t k_magic[HURTCAPS_MAGIC_LEN] = {'M', 'S', 'L', 'H', 'U', 'R', 'T', '1'};
-
-// Character id mapping follows Slippi post-frame `character` (GALE01):
-// - Fox   = 1
-// - Falco = 22
-enum { MSL_CHAR_FOX = 1, MSL_CHAR_FALCO = 22 };
 
 typedef struct {
   MslHurtCap* caps;
@@ -175,11 +171,11 @@ int hurtcaps_tables_init(void) {
     data_dir = "data";
   }
 
-  if (load_for_char(data_dir, "hurtcaps/fox.bin", MSL_CHAR_FOX) != 0) {
+  if (load_for_char(data_dir, "hurtcaps/fox.bin", MSL_CHAR_ID_FOX) != 0) {
     return -1;
   }
-  if (load_for_char(data_dir, "hurtcaps/falco.bin", MSL_CHAR_FALCO) != 0) {
-    free_table(&g_table_by_char[MSL_CHAR_FOX]);
+  if (load_for_char(data_dir, "hurtcaps/falco.bin", MSL_CHAR_ID_FALCO) != 0) {
+    free_table(&g_table_by_char[MSL_CHAR_ID_FOX]);
     return -1;
   }
 

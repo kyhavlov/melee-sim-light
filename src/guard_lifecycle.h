@@ -6,14 +6,7 @@
 #include "action_ids.h"
 #include "batch_internal.h"
 #include "common_params.h"
-
-enum {
-  MSL_GUARD_STATE_FLAGS_2218_REFLECTING = 0x10,
-  MSL_GUARD_STATE_FLAGS_221B_IS_SHIELD_ACTIVE = 0x80,
-  MSL_GUARD_STATE_FLAGS_221C_B3 = 0x10,
-  MSL_GUARD_STATE_FLAGS_221C_B2 = 0x20,
-  MSL_GUARD_STATE_FLAGS_221C_B1 = 0x40,
-};
+#include "state_flags.h"
 
 typedef struct MslGuardReflectOwner {
   uint8_t is_guard_reflect;

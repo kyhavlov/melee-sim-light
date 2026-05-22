@@ -1,4 +1,5 @@
 #include "match_flow.h"
+#include "ids.h"
 
 #include "action_ids.h"
 #include "anim_table.h"
@@ -15,7 +16,6 @@
 #include "trigger_input.h"
 
 enum { MSL_ANIM_NONE_U32 = 0xFFFFFFFFu };
-enum { MSL_STAGE_POKEMON_STADIUM = 3u };
 
 static inline uint8_t match_flow_is_dead_action(uint16_t a) {
   switch (a) {
@@ -348,7 +348,7 @@ static inline void enter_rebirth(MslBatch* batch, size_t idx, const MslCommonPar
   batch->state.facing[idx] = (uint8_t)(respawn.x < 0.0f ? 1u : 0u);
   batch->state.pos_x[idx] = respawn.x;
   const float rebirth_start_y =
-      (stage_id == (uint32_t)MSL_STAGE_POKEMON_STADIUM) ? 120.0f : cam.top;
+      (stage_id == (uint32_t)MSL_STAGE_ID_POKEMON_STADIUM) ? 120.0f : cam.top;
   batch->state.pos_y[idx] = rebirth_start_y;
 
   // Rebirth fall speed is source-derived: ftCo_Rebirth_Phys computes velocity from the

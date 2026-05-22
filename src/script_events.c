@@ -1,4 +1,5 @@
 #include "script_events.h"
+#include "ids.h"
 
 #include <limits.h>
 #include <stdio.h>
@@ -8,8 +9,6 @@
 #include "alloc.h"
 
 enum {
-  MSL_CHAR_FOX = 1,
-  MSL_CHAR_FALCO = 22,
   MSLFTSC1_VERSION = 2,
   MSLFTSC1_HEADER_SIZE = 28,
   MSLFTSC1_INDEX_RECORD_SIZE = 12,
@@ -307,11 +306,11 @@ int script_events_init(void) {
   if (data_dir == NULL || data_dir[0] == '\0') {
     data_dir = "data";
   }
-  if (script_table_load(data_dir, "scripts/fox.bin", &g_tables[MSL_CHAR_FOX]) != 0) {
+  if (script_table_load(data_dir, "scripts/fox.bin", &g_tables[MSL_CHAR_ID_FOX]) != 0) {
     return -1;
   }
-  if (script_table_load(data_dir, "scripts/falco.bin", &g_tables[MSL_CHAR_FALCO]) != 0) {
-    script_table_free(&g_tables[MSL_CHAR_FOX]);
+  if (script_table_load(data_dir, "scripts/falco.bin", &g_tables[MSL_CHAR_ID_FALCO]) != 0) {
+    script_table_free(&g_tables[MSL_CHAR_ID_FOX]);
     return -1;
   }
   g_loaded = 1;

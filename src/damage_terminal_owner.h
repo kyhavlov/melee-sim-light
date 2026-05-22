@@ -4,12 +4,12 @@
 #include <stdint.h>
 
 #include "action_ids.h"
+#include "ids.h"
 #include "api.h"
 #include "damage_source.h"
 #include "motion_state_owners.h"
 #include "move_tables.h"
 
-enum { MSL_DAMAGE_OWNER_CHAR_FOX = 1, MSL_DAMAGE_OWNER_CHAR_FALCO = 22 };
 enum { MSL_DAMAGE_OWNER_FOX_DYNAMIC_TAIL_PART_ID = 18 };
 
 static inline uint8_t msl_damage_owner_is_damagefly_action(uint16_t action_id) {
@@ -107,7 +107,7 @@ static inline uint32_t msl_damage_owner_down_damage_submotion_from_action(uint16
 
 static inline uint8_t msl_damage_owner_is_fox_dynamic_tail_part(uint8_t char_id,
                                                                 uint16_t bone_part_id) {
-  return (char_id == (uint8_t)MSL_DAMAGE_OWNER_CHAR_FOX &&
+  return (char_id == (uint8_t)MSL_CHAR_ID_FOX &&
           bone_part_id == (uint16_t)MSL_DAMAGE_OWNER_FOX_DYNAMIC_TAIL_PART_ID)
              ? 1u
              : 0u;

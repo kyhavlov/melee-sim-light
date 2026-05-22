@@ -1,4 +1,5 @@
 #include "action.h"
+#include "ids.h"
 
 #include <math.h>
 #include <stddef.h>
@@ -98,7 +99,6 @@ static inline uint8_t action_stage_has_soft_platform_floor(uint32_t stage_id) {
 
 uint8_t escape_air_try_enter_from_air_locomotion(MslBatch* batch, const MslCommonParams* c,
                                                  size_t idx) {
-  enum { MSL_STAGE_YOSHIS_STORY_LOCAL = 8u };
   if (batch == NULL || c == NULL) {
     return 0;
   }
@@ -167,7 +167,7 @@ uint8_t escape_air_try_enter_from_air_locomotion(MslBatch* batch, const MslCommo
           ? 1u
           : 0u;
   const uint8_t source_floor_is_offspan_yoshi_static_floor =
-      (stage_id == (uint32_t)MSL_STAGE_YOSHIS_STORY_LOCAL && source_floor_y_valid != 0u &&
+      (stage_id == (uint32_t)MSL_STAGE_ID_YOSHIS_STORY && source_floor_y_valid != 0u &&
        source_floor_x_within == 0u && source_floor_is_platform == 0u &&
        source_floor_has_platform_transform == 0u && batch->state.seed_prev_action_frame[idx] >= 3)
           ? 1u
@@ -184,7 +184,7 @@ uint8_t escape_air_try_enter_from_air_locomotion(MslBatch* batch, const MslCommo
       batch->state.coll_desired_ecb_bottom_rel_y[idx] > 0.0001f && source_is_jumpaerial &&
       batch->state.action_frame[idx] >= 1 &&
       (escapeair_entry_bottom_sweep_still_above_floor ||
-       (!source_floor_carries_locked_ecb && stage_id == (uint32_t)MSL_STAGE_YOSHIS_STORY_LOCAL))) {
+       (!source_floor_carries_locked_ecb && stage_id == (uint32_t)MSL_STAGE_ID_YOSHIS_STORY))) {
     // Runtime EscapeAir entry can happen during JumpAerial IASA before Fighter_procMap. On
     // JumpAerial pass-through from a source floor-domain line still carries CollData_X130_Locked
     // when source `ftCo_EscapeAir_Coll` calls `mpColl_LoadECB_inline`, preserving the pre-entry
@@ -591,11 +591,9 @@ static inline void enter_guard_reflect_common_setup(MslBatch* batch, const MslCo
   // GuardReflect motion state is installed. A later same-frame Fighter_ChangeMotionState
   // may clear b3, but b1/b2 remain timer-owned until ftCo_80093BC0 expires x14/x18.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_8009388C,ftCo_80093A50,ftCo_80093BC0}
-  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
   const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
   batch->state.state_flags[flags_i] |=
-      (uint8_t)(MSL_GUARD_STATE_FLAGS_221C_B3 | MSL_GUARD_STATE_FLAGS_221C_B1 |
-                MSL_GUARD_STATE_FLAGS_221C_B2);
+      (uint8_t)(MSL_STATE_FLAG_221C_B3 | MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2);
 }
 
 static inline void enter_guard_reflect_from_guard(MslBatch* batch, const MslCommonParams* c,
@@ -760,11 +758,9 @@ static inline void enter_guard_on(MslBatch* batch, const MslCommonParams* c, siz
   // - x221C_b2 = 0
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_800924C0
   // refs/melee/src/melee/ft/types.h (fp+0x221C bitfield mapping)
-  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
   const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
-  batch->state.state_flags[flags_i] &=
-      (uint8_t) ~(uint8_t)(MSL_GUARD_STATE_FLAGS_221C_B3 | MSL_GUARD_STATE_FLAGS_221C_B1 |
-                           MSL_GUARD_STATE_FLAGS_221C_B2);
+  batch->state.state_flags[flags_i] &= (uint8_t) ~(
+      uint8_t)(MSL_STATE_FLAG_221C_B3 | MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2);
   batch->state.guard_on_entered_this_frame[idx] = 1u;
   // Keep the entry-family marker through the entry callback row and its immediate frozen
   // GuardOn_IASA handoff, then consume it below. The two ticks are runtime-only hidden source
@@ -1143,10 +1139,9 @@ static inline void guard_update_grounded_anim_callback_pre_input(MslBatch* batch
         // Decomp: ftCo_80093BC0 clears x221C_b1 when the shorter x14 reflect descriptor timer
         // expires, matching the x18/x221C_b2 clear below.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0
-        enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
         const size_t flags_i =
             idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
-        batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_GUARD_STATE_FLAGS_221C_B1;
+        batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B1;
       }
       uint8_t t18 = batch->state.guard_reflect_timer_x18[idx];
       if (t18 > 0) {
@@ -1156,10 +1151,9 @@ static inline void guard_update_grounded_anim_callback_pre_input(MslBatch* batch
           // Decomp: when mv.co.guard.x18 expires in ftCo_80093BC0, x221C_b2 is cleared in the
           // same GuardReflect_Anim callback pass.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80093BC0
-          enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
           const size_t flags_i =
               idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
-          batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_GUARD_STATE_FLAGS_221C_B2;
+          batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B2;
         }
       }
     }

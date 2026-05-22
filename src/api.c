@@ -1,4 +1,5 @@
 #include "api.h"
+#include "ids.h"
 
 #include <errno.h>
 #include <math.h>
@@ -704,25 +705,13 @@ int msl_batch_set_ucf_cardinals_1_0_enabled(MslBatch* batch, int enabled) {
 }
 
 enum {
-  MSL_STAGE_FOUNTAIN_OF_DREAMS = 2,
-  MSL_STAGE_POKEMON_STADIUM = 3,
-  MSL_STAGE_YOSHIS_STORY = 8,
-  MSL_STAGE_DREAM_LAND_N64 = 28,
-  MSL_STAGE_BATTLEFIELD = 31,
-  // GALE01/Slippi stage id 32 for Final Destination in this simulator's target domain.
-  MSL_STAGE_FINAL_DESTINATION = 32,
-  // Character id mapping follows Slippi post-frame `character` (GALE01):
-  // - Fox   = 1
-  // - Falco = 22
-  MSL_CHAR_FOX = 1,
-  MSL_CHAR_FALCO = 22,
   // Slippi post-frame sentinel for no animation/submotion.
   // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
   MSL_ANIM_NONE_U32 = 0xFFFFFFFFu,
 };
 
 static inline uint8_t msl_match_init_supported_char(uint8_t char_id) {
-  return (uint8_t)(char_id == (uint8_t)MSL_CHAR_FOX || char_id == (uint8_t)MSL_CHAR_FALCO);
+  return (uint8_t)(char_id == (uint8_t)MSL_CHAR_ID_FOX || char_id == (uint8_t)MSL_CHAR_ID_FALCO);
 }
 
 static inline uint8_t msl_match_init_point_inside_bounds(const MslStageBounds* b, float x,
@@ -757,22 +746,22 @@ static uint8_t msl_match_init_slippi_neutral_spawn_point(const MslMatchConfig* c
     MslStagePoint2 singles[MSL_MAX_PLAYERS];
     MslStagePoint2 teams[MSL_MAX_PLAYERS];
   } k_neutral_spawn[] = {
-      {MSL_STAGE_FINAL_DESTINATION,
+      {MSL_STAGE_ID_FINAL_DESTINATION,
        {{-60.0f, 10.0f}, {60.0f, 10.0f}, {-20.0f, 10.0f}, {20.0f, 10.0f}},
        {{-60.0f, 10.0f}, {-20.0f, 10.0f}, {60.0f, 10.0f}, {20.0f, 10.0f}}},
-      {MSL_STAGE_BATTLEFIELD,
+      {MSL_STAGE_ID_BATTLEFIELD,
        {{-38.8f, 35.2f}, {38.8f, 35.2f}, {0.0f, 8.0f}, {0.0f, 62.4f}},
        {{-38.8f, 35.2f}, {-38.8f, 5.0f}, {38.8f, 35.2f}, {38.8f, 5.0f}}},
-      {MSL_STAGE_YOSHIS_STORY,
+      {MSL_STAGE_ID_YOSHIS_STORY,
        {{-42.0f, 26.6f}, {42.0f, 28.0f}, {0.0f, 46.9f}, {0.0f, 4.9f}},
        {{-42.0f, 26.6f}, {-42.0f, 5.0f}, {42.0f, 28.0f}, {42.0f, 5.0f}}},
-      {MSL_STAGE_DREAM_LAND_N64,
+      {MSL_STAGE_ID_DREAM_LAND_N64,
        {{-46.6f, 37.2f}, {47.4f, 37.3f}, {0.0f, 7.0f}, {0.0f, 58.5f}},
        {{-46.6f, 37.2f}, {-46.6f, 5.0f}, {47.4f, 37.3f}, {47.4f, 5.0f}}},
-      {MSL_STAGE_FOUNTAIN_OF_DREAMS,
+      {MSL_STAGE_ID_FOUNTAIN_OF_DREAMS,
        {{-41.25f, 21.0f}, {41.25f, 27.0f}, {0.0f, 5.25f}, {0.0f, 48.0f}},
        {{-41.25f, 21.0f}, {-41.25f, 5.0f}, {41.25f, 27.0f}, {41.25f, 5.0f}}},
-      {MSL_STAGE_POKEMON_STADIUM,
+      {MSL_STAGE_ID_POKEMON_STADIUM,
        {{-40.0f, 32.0f}, {40.0f, 32.0f}, {70.0f, 7.0f}, {-70.0f, 7.0f}},
        {{-40.0f, 32.0f}, {-40.0f, 5.0f}, {40.0f, 32.0f}, {40.0f, 5.0f}}},
   };
@@ -875,7 +864,7 @@ static inline uint8_t msl_reseed_seed_rollout_replay_frame_clock_owner(const Msl
     return (uint8_t)MSL_ROLLOUT_CLOCK_NONE;
   }
   const uint8_t yoshi_shyguy_spawn_seed_owner =
-      (uint8_t)((seed->stage_id == (uint32_t)MSL_STAGE_YOSHIS_STORY &&
+      (uint8_t)((seed->stage_id == (uint32_t)MSL_STAGE_ID_YOSHIS_STORY &&
                  seed->stage_yoshi_shyguy_valid_u8 != 0u &&
                  seed->stage_yoshi_shyguy_spawn_rng_seed_valid_u8 != 0u &&
                  !msl_seed_has_live_yoshi_shyguy(seed))
@@ -1043,17 +1032,19 @@ static int msl_batch_init_match_impl(MslBatch* batch, const uint8_t* config_byte
     const uint8_t* ptr = config_bytes + (size_t)bi * config_stride_bytes;
     const MslMatchConfig* cfg = (const MslMatchConfig*)ptr;
     MslSeed* seed = &seeds[bi];
+    const uint8_t cfg_num_players =
+        cfg->num_players == 0u ? (uint8_t)active_players : cfg->num_players;
+    const uint8_t cfg_stock_count = cfg->stock_count == 0u ? 4u : cfg->stock_count;
+    const float cfg_match_damage_ratio =
+        cfg->match_damage_ratio == 0.0f ? 1.0f : cfg->match_damage_ratio;
 
-    if ((int)cfg->num_players != active_players) {
-      return EINVAL;
-    }
-    if (cfg->stock_count == 0u) {
+    if ((int)cfg_num_players != active_players) {
       return EINVAL;
     }
     if (cfg->camera_mode > (uint8_t)MSL_CAMERA_MODE_FREE) {
       return EINVAL;
     }
-    if (!(cfg->match_damage_ratio > 0.0f) || !isfinite(cfg->match_damage_ratio)) {
+    if (!(cfg_match_damage_ratio > 0.0f) || !isfinite(cfg_match_damage_ratio)) {
       return EINVAL;
     }
 
@@ -1069,8 +1060,8 @@ static int msl_batch_init_match_impl(MslBatch* batch, const uint8_t* config_byte
     seed->frame_id = cfg->frame_id;
     seed->frame_pre_random_seed = cfg->frame_pre_random_seed;
     seed->stage_id = cfg->stage_id;
-    seed->match_damage_ratio = cfg->match_damage_ratio;
-    seed->num_players = cfg->num_players;
+    seed->match_damage_ratio = cfg_match_damage_ratio;
+    seed->num_players = cfg_num_players;
     seed->is_teams = cfg->is_teams ? 1u : 0u;
 
     for (int p = 0; p < MSL_MAX_PLAYERS; p++) {
@@ -1174,7 +1165,7 @@ static int msl_batch_init_match_impl(MslBatch* batch, const uint8_t* config_byte
       seed->anim_frame_f32[p] = -1.0f;
       seed->frame_speed_mul_f32[p] = 0.0f;
       seed->jumps_left[p] = ch->max_jumps;
-      seed->stocks[p] = cfg->stock_count;
+      seed->stocks[p] = cfg_stock_count;
       seed->percent[p] = 0.0f;
       // Source: data/common/ft_common_data.json `start_shield_health`
       // Decomp: p_ftCommonData->x260, Guard/Fighter shield-health initialization.
@@ -1314,7 +1305,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
           batch->state.stage_fod_platform_valid[pidx]
               ? seed->stage_fod_platform_height_source_u8[pi]
               : 0u;
-      if (seed->stage_id == (uint32_t)MSL_STAGE_FOUNTAIN_OF_DREAMS && seed->frame_id <= -123 &&
+      if (seed->stage_id == (uint32_t)MSL_STAGE_ID_FOUNTAIN_OF_DREAMS && seed->frame_id <= -123 &&
           !batch->state.stage_fod_platform_valid[pidx] && isfinite(h)) {
         // grIzumi initializes both side-platform JObjs from stage data before the match-start
         // frame. Sparse replay streams may not emit a platform event/contact at frame -123, but the
@@ -1328,7 +1319,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.stage_fod_platform_scheduler_timer[pidx] = 0u;
       batch->state.stage_fod_platform_scheduler_target[pidx] = 0.0f;
       batch->state.stage_fod_platform_scheduler_valid[pidx] = 0u;
-      if (seed->stage_id == (uint32_t)MSL_STAGE_FOUNTAIN_OF_DREAMS && seed->frame_id <= -123 &&
+      if (seed->stage_id == (uint32_t)MSL_STAGE_ID_FOUNTAIN_OF_DREAMS && seed->frame_id <= -123 &&
           batch->state.stage_fod_platform_valid[pidx]) {
         // Match-start reseeds are equivalent to new-match init for grIzumi scheduling: once the
         // initial JObj height is source-owned, grIzumi_801CC358 owns later platform wait/target
@@ -1337,7 +1328,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         // refs/melee/src/melee/gr/grizumi.c::{grIzumi_801CCBDC,grIzumi_801CC358}
         batch->state.stage_fod_platform_scheduler_valid[pidx] = 1u;
       }
-      if (seed->stage_id == (uint32_t)MSL_STAGE_FOUNTAIN_OF_DREAMS &&
+      if (seed->stage_id == (uint32_t)MSL_STAGE_ID_FOUNTAIN_OF_DREAMS &&
           seed->stage_fod_platform_hidden_return_valid_u8[pi] != 0u &&
           batch->state.stage_fod_platform_valid[pidx]) {
         float hidden_target_height = 0.0f;
@@ -1657,8 +1648,6 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.damage_hitlag_wall_asdi_latch[idx] = 0u;
       batch->state.guard_jump_oos_entered_this_frame[idx] = 0u;
       batch->state.guard_reflect_entry_dash_terminal_scalar[idx] = 0u;
-      enum { MSL_STATE_FLAGS_221B_INDEX = 2 };
-      enum { MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE = 0x80 };
       batch->state.guard_seed_shield_desc_active[idx] =
           ((seed->state_flags[p][MSL_STATE_FLAGS_221B_INDEX] &
             (uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE) != 0u)
@@ -1752,8 +1741,6 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       //
       // On those ownership-marked rows, keep the internal seeded lane authoritative; otherwise
       // use the raw Slippi fp+0x221A isFastFalling bit for teacher-forced reseed parity.
-      enum { MSL_STATE_FLAGS_221A_INDEX = 1 };
-      enum { MSL_STATE_FLAG_221A_IS_FASTFALL = 0x08 };
       uint8_t fall_fast = seed->fall_fast[p] ? 1u : 0u;
       const uint8_t slippi_fall_fast =
           (seed->state_flags[p][MSL_STATE_FLAGS_221A_INDEX] & MSL_STATE_FLAG_221A_IS_FASTFALL) ? 1u
@@ -1937,7 +1924,6 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.hitlag[idx] = seed->hitlag[p];
       batch->state.hitlag_pre_timer[idx] = (seed->hitlag[p] != 0u) ? 1u : 0u;
       batch->state.hitlag_started_frame[idx] = 0;
-      enum { MSL_STATE_FLAG_221A_B3_LOCAL = 0x10 };
       const uint8_t seed_x221a = seed->state_flags[p][(size_t)MSL_STATE_FLAGS_221A_INDEX];
       // Teacher-forced hidden-state reconstruction for `allow_sdi` (fp+0x221A:2). Slippi does not
       // expose that bit separately, so reseed uses only visible same-frame ProcessHit signals:
@@ -1949,7 +1935,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
       batch->state.damage_allow_sdi[idx] =
           (seed->hitlag[p] != 0u && reseed_damage_allow_sdi_source_action(seed->action_id[p]) &&
-           (((seed_x221a & (uint8_t)MSL_STATE_FLAG_221A_B3_LOCAL) != 0u) ||
+           (((seed_x221a & (uint8_t)MSL_STATE_FLAG_221A_B3) != 0u) ||
             msl_motion_state_common_class_has(seed->action_id[p], MSL_MS_CLASS_DAMAGE_FLY) ||
             seed->action_id[p] == (uint16_t)MSL_ACT_DOWN_DAMAGE_U ||
             seed->action_id[p] == (uint16_t)MSL_ACT_DOWN_DAMAGE_D || phantom_damage > 0.0f))
@@ -2350,8 +2336,9 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         max_attack_inst = seed->attack_instance[p];
       }
 
-      for (int k = 0; k < 5; k++) {
-        batch->state.state_flags[idx * 5 + (size_t)k] = seed->state_flags[p][k];
+      for (int k = 0; k < MSL_STATE_FLAGS_BYTES; k++) {
+        batch->state.state_flags[idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)k] =
+            seed->state_flags[p][k];
       }
       batch->state.state_flags_2218_frame_start[idx] = seed->state_flags[p][0];
 
@@ -2641,7 +2628,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
           batch->state.throw_anim_rate_fp_q16_16[idx] != 0 ||
           !reseed_throwhi_deferred_mid_pulse_rate_source_step(
               batch->state.frame_speed_mul_fp_q16_16[idx]) ||
-          lp == NULL || char_id != (uint8_t)MSL_CHAR_FALCO ||
+          lp == NULL || char_id != (uint8_t)MSL_CHAR_ID_FALCO ||
           action != (uint16_t)MSL_ACT_THROW_HI ||
           seed->throw_command_pending_pulse_frame[p] != 0u ||
           !move_tables_throw_projectile_first_pulse_frame(char_id, action, &first_pulse_af) ||
@@ -3190,8 +3177,9 @@ int msl_batch_write_compare(const MslBatch* batch, uint8_t* out_bytes, size_t ou
       out->combo_count[p] = batch->state.combo_count[idx];
       out->last_hit_by[p] = batch->state.last_hit_by[idx];
 
-      for (int k = 0; k < 5; k++) {
-        out->state_flags[p][k] = batch->state.state_flags[idx * 5 + (size_t)k];
+      for (int k = 0; k < MSL_STATE_FLAGS_BYTES; k++) {
+        out->state_flags[p][k] =
+            batch->state.state_flags[idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)k];
       }
     }
 

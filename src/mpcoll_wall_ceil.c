@@ -1,4 +1,5 @@
 #include "mpcoll_wall_ceil.h"
+#include "ids.h"
 
 #include <float.h>
 #include <math.h>
@@ -48,14 +49,6 @@ enum {
 };
 
 enum { MSL_WALL_CANDIDATE_MAX = 9 };
-
-enum {
-  // Slippi/GALE01 character ids for the currently extracted SpecialHi collision ECB domain.
-  MSL_MPCOLL_CHAR_FOX = 1,
-  MSL_MPCOLL_CHAR_FALCO = 22,
-};
-
-enum { MSL_STAGE_YOSHIS_STORY_LOCAL = 8u };
 
 // Wall env-flag split mirrors mpColl: every wall hit sets Push, but only the ECB side-point
 // branch sets Hug. ftWallJump_8008169C and PassiveWall entry intentionally test the Hug bit, so
@@ -182,7 +175,7 @@ static int grounded_left_wall_floor_adjacent_line_idx(const MslStageFloorGraph* 
 static inline float cross2(float ax, float ay, float bx, float by) { return ax * by - ay * bx; }
 
 static inline uint8_t specialhi_launch_uses_runtime_xrotn_ecb(uint8_t char_id, uint16_t action_id) {
-  if (char_id != (uint8_t)MSL_MPCOLL_CHAR_FOX && char_id != (uint8_t)MSL_MPCOLL_CHAR_FALCO) {
+  if (char_id != (uint8_t)MSL_CHAR_ID_FOX && char_id != (uint8_t)MSL_CHAR_ID_FALCO) {
     return 0u;
   }
   switch (action_id) {
@@ -2742,7 +2735,7 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FlyReflect.c::ftCo_800C15F4
         const uint8_t use_damagefly_left_envelope =
             (uint8_t)(mpcoll_damagefly_wall_asdi_latch_action(action_id) &&
-                      (batch->state.stage_id[bi] == (uint32_t)MSL_STAGE_YOSHIS_STORY_LOCAL ||
+                      (batch->state.stage_id[bi] == (uint32_t)MSL_STAGE_ID_YOSHIS_STORY ||
                        batch->state.speed_x_attack[idx] > 0.0f));
         const uint8_t use_common_air_left_envelope = use_common_air_walljump_callback;
         const uint8_t use_ft80081d0c_left_envelope =

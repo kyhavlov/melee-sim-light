@@ -15,8 +15,6 @@
 #include "motion_state_owners.h"
 #include "stage_collision.h"
 
-enum { TIMERS_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
-
 static inline uint8_t timers_match_flow_dead_action_defers_source_clear(uint16_t action_id) {
   switch (action_id) {
     case MSL_ACT_DEAD_DOWN:
@@ -93,9 +91,6 @@ void timers_update(MslBatch* batch) {
   if (batch == NULL) {
     return;
   }
-
-  enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
-  enum { MSL_STATE_FLAGS_221A_INDEX = 1 };
   // State flags (5 bytes) are captured from fighter offsets:
   // (0x2218, 0x221A, 0x221B, 0x221C, 0x221F) in that order.
   // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
@@ -106,11 +101,9 @@ void timers_update(MslBatch* batch) {
   // consume the explicit internal `damage_allow_sdi` lane instead.
   // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
   // refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006A1BC}
-  enum { MSL_STATE_FLAG_221A_IS_HITLAG = 0x20 };
   // fp+0x221A bit 0x10 corresponds to x221A_b3 in decomp (see refs/melee/src/melee/ft/types.h).
   // Fighter_ProcessHit can set it alongside hitlag start, and Fighter_8006A1BC clears it on hitlag end.
   // refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006A1BC}
-  enum { MSL_STATE_FLAG_221A_B3 = 0x10 };
 
   // Decomp-first references (GALE01):
   //
@@ -171,7 +164,7 @@ void timers_update(MslBatch* batch) {
       //
       // Slippi post-frame: `lbz r3,0x221A(REG_PlayerData)  #0x20 = isHitlag`.
       // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
-      const size_t flags_221a_i = idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221A_INDEX;
+      const size_t flags_221a_i = idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221A_INDEX;
       uint8_t flags_221a = batch->state.state_flags[flags_221a_i];
       if (hl > 0) {
         flags_221a |= (uint8_t)MSL_STATE_FLAG_221A_IS_HITLAG;
@@ -501,10 +494,6 @@ void timers_consume_post_hitlag_callbacks_after_input(MslBatch* batch) {
   if (batch == NULL) {
     return;
   }
-  enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
-  enum { MSL_STATE_FLAGS_221A_INDEX = 1 };
-  enum { MSL_STATE_FLAG_221A_IS_HITLAG = 0x20 };
-  enum { MSL_STATE_FLAG_221A_B3 = 0x10 };
   const MslCommonParams* c = msl_common_params();
   if (c == NULL) {
     return;
@@ -580,7 +569,7 @@ void timers_consume_post_hitlag_callbacks_after_input(MslBatch* batch) {
       const float prev_lstick_full_mag_sq =
           prev_lstick_full_x * prev_lstick_full_x + prev_lstick_full_y * prev_lstick_full_y;
       const size_t flags_i =
-          idx * (size_t)MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221A_INDEX;
+          idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221A_INDEX;
       const uint8_t sdi_tilt_window = (batch->state.tilt_timer_x[idx] < c->sdi_tilt_max_frames ||
                                        batch->state.tilt_timer_y[idx] < c->sdi_tilt_max_frames)
                                           ? 1u
@@ -691,11 +680,6 @@ void timers_update_magnify_damage_post_frame(MslBatch* batch) {
     return;
   }
 
-  enum { MSL_STATE_FLAGS_STRIDE_LOCAL = MSL_STATE_FLAGS_BYTES };
-  enum { MSL_STATE_FLAGS_221F_INDEX_LOCAL = 4 };
-  enum { MSL_STATE_FLAG_221F_B0_LOCAL = 0x80 };
-  enum { MSL_STATE_FLAG_221F_B4_LOCAL = 0x08 };
-
   const int num_players = (int)batch->config.num_players;
   for (int bi = 0; bi < batch->batch_size; bi++) {
     const uint8_t replay_rollout =
@@ -706,10 +690,11 @@ void timers_update_magnify_damage_post_frame(MslBatch* batch) {
       if (replay_rollout != 0u && batch->state.magnify_damage_counter_x1910[idx] == 0u) {
         continue;
       }
-      const uint8_t flags_221f = batch->state.state_flags[idx * MSL_STATE_FLAGS_STRIDE_LOCAL +
-                                                          (size_t)MSL_STATE_FLAGS_221F_INDEX_LOCAL];
-      const uint8_t visible = (flags_221f & (uint8_t)MSL_STATE_FLAG_221F_B0_LOCAL) != 0u;
-      const uint8_t disabled = (flags_221f & (uint8_t)MSL_STATE_FLAG_221F_B4_LOCAL) != 0u;
+      const uint8_t flags_221f =
+          batch->state
+              .state_flags[idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221F_INDEX];
+      const uint8_t visible = (flags_221f & (uint8_t)MSL_STATE_FLAG_221F_B0) != 0u;
+      const uint8_t disabled = (flags_221f & (uint8_t)MSL_STATE_FLAG_221F_B4) != 0u;
       const uint8_t offscreen =
           batch->state.camera_target_point_inside_stage_cam_bounds_u8[idx] == 0u ? 1u : 0u;
       if (!visible || !offscreen || disabled ||
@@ -734,12 +719,6 @@ void timers_update_post_anim(MslBatch* batch) {
   if (batch == NULL) {
     return;
   }
-
-  enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
-  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
-  enum { MSL_STATE_FLAGS_221F_INDEX = 4 };
-  enum { MSL_STATE_FLAG_221C_IS_HITSTUN = 0x02 };
-  enum { MSL_STATE_FLAG_221F_B3 = 0x10 };
 
   // Combo timer reset constant (GALE01 p_ftCommonData->x4CC).
   const MslCommonParams* c = msl_common_params();
@@ -835,7 +814,7 @@ void timers_update_post_anim(MslBatch* batch) {
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
       const uint8_t flags_221f =
-          batch->state.state_flags[idx * MSL_STATE_FLAGS_STRIDE + MSL_STATE_FLAGS_221F_INDEX];
+          batch->state.state_flags[idx * MSL_STATE_FLAGS_BYTES + MSL_STATE_FLAGS_221F_INDEX];
       if ((flags_221f & (uint8_t)MSL_STATE_FLAG_221F_B3) != 0u) {
         continue;
       }
@@ -928,7 +907,7 @@ void timers_update_post_anim(MslBatch* batch) {
 
       const size_t v_idx = msl_idx_player(bi, (int)v_port);
       const uint8_t v_flags_221c =
-          batch->state.state_flags[v_idx * MSL_STATE_FLAGS_STRIDE + MSL_STATE_FLAGS_221C_INDEX];
+          batch->state.state_flags[v_idx * MSL_STATE_FLAGS_BYTES + MSL_STATE_FLAGS_221C_INDEX];
       const uint8_t v_is_hitstun = (v_flags_221c & MSL_STATE_FLAG_221C_IS_HITSTUN) ? 1u : 0u;
       if (!v_is_hitstun && batch->state.combo_timer_x2098[v_idx] == 0) {
         batch->state.combo_victim_port[idx] = 0xFFu;
@@ -947,7 +926,7 @@ void timers_update_post_anim(MslBatch* batch) {
       }
 
       const uint8_t flags_221c =
-          batch->state.state_flags[idx * MSL_STATE_FLAGS_STRIDE + MSL_STATE_FLAGS_221C_INDEX];
+          batch->state.state_flags[idx * MSL_STATE_FLAGS_BYTES + MSL_STATE_FLAGS_221C_INDEX];
       const uint8_t is_hitstun = (flags_221c & MSL_STATE_FLAG_221C_IS_HITSTUN) ? 1u : 0u;
       if (!is_hitstun) {
         continue;
@@ -972,7 +951,7 @@ void timers_update_post_anim(MslBatch* batch) {
           continue;
         }
         const size_t flags_221c_i =
-            idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221C_INDEX;
+            idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
         batch->state.state_flags[flags_221c_i] &=
             (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN;
 

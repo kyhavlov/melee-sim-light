@@ -1,4 +1,5 @@
 #include "special_msids.h"
+#include "ids.h"
 
 #include <ctype.h>
 #include <errno.h>
@@ -7,11 +8,6 @@
 #include <string.h>
 
 #include "alloc.h"
-
-// Character id mapping follows Slippi post-frame `character` (GALE01):
-// - Fox   = 1
-// - Falco = 22
-enum { MSL_CHAR_FOX = 1, MSL_CHAR_FALCO = 22 };
 
 static MslSpecialMsids g_msids_by_char[256];
 static uint8_t g_have_msids_by_char[256];
@@ -167,10 +163,10 @@ int special_msids_init(void) {
     data_dir = "data";
   }
 
-  if (load_one(data_dir, "special_msids/fox.json", (uint8_t)MSL_CHAR_FOX) != 0) {
+  if (load_one(data_dir, "special_msids/fox.json", (uint8_t)MSL_CHAR_ID_FOX) != 0) {
     return -1;
   }
-  if (load_one(data_dir, "special_msids/falco.json", (uint8_t)MSL_CHAR_FALCO) != 0) {
+  if (load_one(data_dir, "special_msids/falco.json", (uint8_t)MSL_CHAR_ID_FALCO) != 0) {
     return -1;
   }
 

@@ -1,4 +1,5 @@
 #include "ecb_tables.h"
+#include "ids.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -6,11 +7,6 @@
 
 #include "alloc.h"
 #include "char_params.h"
-
-// Character id mapping follows Slippi post-frame `character` (GALE01):
-// - Fox   = 1
-// - Falco = 22
-enum { MSL_CHAR_FOX = 1, MSL_CHAR_FALCO = 22 };
 
 enum {
   ECB_MAGIC_LEN = 8,
@@ -227,10 +223,10 @@ int ecb_table_init(void) {
   }
 
   // If these artifacts are missing, fail loudly so developers run `tools.extraction.build_data`.
-  if (load_table_for_char(data_dir, "ecb/fox_bottom.bin", MSL_CHAR_FOX) != 0) {
+  if (load_table_for_char(data_dir, "ecb/fox_bottom.bin", MSL_CHAR_ID_FOX) != 0) {
     return -1;
   }
-  if (load_table_for_char(data_dir, "ecb/falco_bottom.bin", MSL_CHAR_FALCO) != 0) {
+  if (load_table_for_char(data_dir, "ecb/falco_bottom.bin", MSL_CHAR_ID_FALCO) != 0) {
     return -1;
   }
 
@@ -508,10 +504,10 @@ int ecb_extents_table_init(void) {
     data_dir = "data";
   }
 
-  if (load_extents_table_for_char(data_dir, "ecb/fox_extents.bin", MSL_CHAR_FOX) != 0) {
+  if (load_extents_table_for_char(data_dir, "ecb/fox_extents.bin", MSL_CHAR_ID_FOX) != 0) {
     return -1;
   }
-  if (load_extents_table_for_char(data_dir, "ecb/falco_extents.bin", MSL_CHAR_FALCO) != 0) {
+  if (load_extents_table_for_char(data_dir, "ecb/falco_extents.bin", MSL_CHAR_ID_FALCO) != 0) {
     return -1;
   }
 

@@ -1,4 +1,5 @@
 #include "combat.h"
+#include "ids.h"
 
 #include <errno.h>
 #include <float.h>
@@ -55,8 +56,6 @@ static inline size_t idx_hurtcap(int bi, int p, int cap_i) {
   return ((size_t)bi * (size_t)MSL_MAX_PLAYERS + (size_t)p) * (size_t)MSL_MAX_HURTCAPS +
          (size_t)cap_i;
 }
-
-enum { MSL_COMBAT_CHAR_FOX = 1, MSL_COMBAT_CHAR_FALCO = 22 };
 
 static inline uint8_t combat_apply_throw_hit_core(MslBatch* batch, int batch_index, int attacker,
                                                   int defender, const MslThrowHitboxParams* p,
@@ -1290,7 +1289,7 @@ static inline uint8_t combat_float_aobj_hurtcap_pose_owner(uint16_t action_id) {
 static inline uint8_t combat_side_special_start_passivewalljump_entry_pose_owner(
     const MslBatch* batch, size_t idx, uint8_t char_id, uint16_t action_id) {
   if (batch == NULL ||
-      (char_id != (uint8_t)MSL_COMBAT_CHAR_FOX && char_id != (uint8_t)MSL_COMBAT_CHAR_FALCO)) {
+      (char_id != (uint8_t)MSL_CHAR_ID_FOX && char_id != (uint8_t)MSL_CHAR_ID_FALCO)) {
     return 0u;
   }
   if (action_id != (uint16_t)MSL_ACT_FX_SPECIAL_S_START &&
@@ -2312,8 +2311,6 @@ static inline void combat_state_flags_set_is_hitlag(MslBatch* batch, size_t idx,
   if (batch == NULL) {
     return;
   }
-  enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
-  enum { MSL_STATE_FLAGS_221A_INDEX = 1 };
   // Slippi post-frame: `lbz r3,0x221A(REG_PlayerData)  #0x20 = isHitlag`.
   //
   // Decomp-first references (GALE01):
@@ -2323,9 +2320,8 @@ static inline void combat_state_flags_set_is_hitlag(MslBatch* batch, size_t idx,
   // refs/melee/src/melee/ft/fighter.c
   // - Bitfield layout at fp+0x221A is documented in refs/melee/src/melee/ft/types.h.
   // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
-  enum { MSL_STATE_FLAG_221A_IS_HITLAG = 0x20 };
 
-  const size_t flags_i = idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221A_INDEX;
+  const size_t flags_i = idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221A_INDEX;
   uint8_t f = batch->state.state_flags[flags_i];
   if (hitlag > 0) {
     f |= (uint8_t)MSL_STATE_FLAG_221A_IS_HITLAG;
@@ -2370,11 +2366,8 @@ static inline void combat_state_flags_set_x221a_b3(MslBatch* batch, size_t idx) 
   if (batch == NULL) {
     return;
   }
-  enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
-  enum { MSL_STATE_FLAGS_221A_INDEX = 1 };
-  enum { MSL_STATE_FLAG_221A_B3 = 0x10 };
 
-  const size_t flags_i = idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221A_INDEX;
+  const size_t flags_i = idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221A_INDEX;
   batch->state.state_flags[flags_i] |= (uint8_t)MSL_STATE_FLAG_221A_B3;
 }
 
@@ -2383,17 +2376,14 @@ static inline void combat_state_flags_set_is_hitstun(MslBatch* batch, size_t idx
   if (batch == NULL) {
     return;
   }
-  enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
-  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
   // Slippi post-frame: `lbz r3,0x221C(REG_PlayerData)  #0x2 = isHitstun`.
   // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
   //
   // Decomp: `fp->x221C_b6` is set on Damage state entry and cleared when hitstun ends.
   // - set: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0 (end of function)
   // - clear: refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008F744
-  enum { MSL_STATE_FLAG_221C_IS_HITSTUN = 0x02 };
 
-  const size_t flags_i = idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221C_INDEX;
+  const size_t flags_i = idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
   uint8_t f = batch->state.state_flags[flags_i];
   if (hitstun > 0) {
     f |= (uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN;
@@ -2407,9 +2397,6 @@ static inline void combat_state_flags_set_x221c_b0(MslBatch* batch, size_t idx) 
   if (batch == NULL) {
     return;
   }
-  enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
-  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
-  enum { MSL_STATE_FLAG_221C_B0 = 0x80 };
 
   // fp+0x221C bit 0x80 ownership in attached hit windows:
   // - This bit is exposed by Slippi's post-frame byte capture at fp+0x221C.
@@ -2418,7 +2405,7 @@ static inline void combat_state_flags_set_x221c_b0(MslBatch* batch, size_t idx) 
   //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::inlineB1
   // - Generic motion-state change clears fp+0x221C lanes owned by transition reset paths.
   //   refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
-  const size_t flags_i = idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221C_INDEX;
+  const size_t flags_i = idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
   batch->state.state_flags[flags_i] |= (uint8_t)MSL_STATE_FLAG_221C_B0;
 }
 
@@ -2426,16 +2413,13 @@ static inline void combat_state_flags_clear_x221c_b0(MslBatch* batch, size_t idx
   if (batch == NULL) {
     return;
   }
-  enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
-  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
-  enum { MSL_STATE_FLAG_221C_B0 = 0x80 };
 
   // Motion-state reset ownership for fp+0x221C_b0:
   // - Fighter_ChangeMotionState clears fp->x221C_b0 on destination entry.
   // - Damage state entry uses Fighter_ChangeMotionState via ftCo_8008DCE0 / ftCo_8008EC90.
   // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_8008DCE0,ftCo_8008EC90}
-  const size_t flags_i = idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221C_INDEX;
+  const size_t flags_i = idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
   batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_B0;
 }
 
@@ -2443,8 +2427,6 @@ static inline void combat_state_flags_clear_guard_reflecting(MslBatch* batch, si
   if (batch == NULL) {
     return;
   }
-  enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
-  enum { MSL_STATE_FLAGS_2218_INDEX = 0 };
 
   // GuardSetOff destination reset:
   // - shield-hit transition enters GuardSetOff through Fighter_ChangeMotionState in ftCo_80092F2C,
@@ -2452,8 +2434,8 @@ static inline void combat_state_flags_clear_guard_reflecting(MslBatch* batch, si
   //   descriptor, even when x221C_b1/x221C_b2 timer lanes remain visible on the same row.
   // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
-  const size_t flags_i = idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_2218_INDEX;
-  batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_GUARD_STATE_FLAGS_2218_REFLECTING;
+  const size_t flags_i = idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX;
+  batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_REFLECTING;
 }
 
 static inline void combat_state_flags_clear_stale_guard_timer_bits_on_setoff_entry(MslBatch* batch,
@@ -2461,8 +2443,6 @@ static inline void combat_state_flags_clear_stale_guard_timer_bits_on_setoff_ent
   if (batch == NULL) {
     return;
   }
-  enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
-  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
 
   if (batch->state.guard_reflect_timer_x14[idx] != 0u ||
       batch->state.guard_reflect_timer_x18[idx] != 0u) {
@@ -2475,24 +2455,22 @@ static inline void combat_state_flags_clear_stale_guard_timer_bits_on_setoff_ent
   // entry must not carry a stale seeded x221C_b1/b2 post-frame lane.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
   //   ftCo_80092F2C,ftCo_8009388C,ftCo_80093A50,ftCo_80093BC0}
-  const size_t flags_i = idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221C_INDEX;
+  const size_t flags_i = idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
   batch->state.state_flags[flags_i] &=
-      (uint8_t) ~(uint8_t)(MSL_GUARD_STATE_FLAGS_221C_B1 | MSL_GUARD_STATE_FLAGS_221C_B2);
+      (uint8_t) ~(uint8_t)(MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2);
 }
 
 static inline void combat_state_flags_set_guard_reflect_timer_bits(MslBatch* batch, size_t idx) {
   if (batch == NULL) {
     return;
   }
-  enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
-  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
 
   uint8_t bits = 0u;
   if (batch->state.guard_reflect_timer_x14[idx] != 0u) {
-    bits |= (uint8_t)MSL_GUARD_STATE_FLAGS_221C_B1;
+    bits |= (uint8_t)MSL_STATE_FLAG_221C_B1;
   }
   if (batch->state.guard_reflect_timer_x18[idx] != 0u) {
-    bits |= (uint8_t)MSL_GUARD_STATE_FLAGS_221C_B2;
+    bits |= (uint8_t)MSL_STATE_FLAG_221C_B2;
   }
   if (bits == 0u) {
     return;
@@ -2504,7 +2482,7 @@ static inline void combat_state_flags_set_guard_reflect_timer_bits(MslBatch* bat
   // - The live reflecting bit itself is cleared separately through fp+0x2218.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_8009388C,ftCo_80093A50,ftCo_80093BC0}
   // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
-  const size_t flags_i = idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221C_INDEX;
+  const size_t flags_i = idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
   batch->state.state_flags[flags_i] |= bits;
 }
 
@@ -2731,11 +2709,9 @@ static inline uint8_t combat_shield_damage_powershield_suppressed_idx(const MslB
   if (batch == NULL) {
     return 0u;
   }
-  enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
-  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
   const uint8_t flags_221c =
-      batch->state.state_flags[idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221C_INDEX];
-  if ((flags_221c & (uint8_t)MSL_GUARD_STATE_FLAGS_221C_B2) != 0u) {
+      batch->state.state_flags[idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX];
+  if ((flags_221c & (uint8_t)MSL_STATE_FLAG_221C_B2) != 0u) {
     // Shield-hit damage/recoil consumes the live powershield flag directly. This is intentionally
     // broader than item reflect ownership: x14 owns ReflectDesc/item reflection, while
     // ftColl_80076CBC and ftCo_80092F2C gate shieldDamageTaken and GuardSetOff pushback on
@@ -2768,7 +2744,7 @@ static inline uint8_t combat_shield_damage_powershield_suppressed_idx(const MslB
       // expired use this branch as the older frozen-snapshot shield-damage handoff.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardReflect_Anim,ftCo_80093BC0}
       batch->state.guard_reflect_timer_x14_seed[idx] == 0u) {
-    if ((flags_221c & (uint8_t)MSL_GUARD_STATE_FLAGS_221C_B2) != 0u) {
+    if ((flags_221c & (uint8_t)MSL_STATE_FLAG_221C_B2) != 0u) {
       return powershield_active;
     }
     powershield_active = 0u;
@@ -2782,10 +2758,8 @@ uint8_t combat_is_powershield_active_idx(const MslBatch* batch, size_t idx) {
   }
   // Decomp gate at collision-time is on fp->x221C_b2 directly.
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
-  enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
-  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
   const uint8_t flags_221c =
-      batch->state.state_flags[idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221C_INDEX];
+      batch->state.state_flags[idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX];
   if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_REFLECT) {
     // GuardReflect lane split:
     // - frozen no-submotion snapshot lane keeps x18 (legacy powershield-active lane) so replay-real
@@ -2798,18 +2772,16 @@ uint8_t combat_is_powershield_active_idx(const MslBatch* batch, size_t idx) {
     // For non-frozen GuardReflect frames, gate suppression on the active reflect callback lane.
     return (batch->state.guard_reflect_timer_x14[idx] != 0u) ? 1u : 0u;
   }
-  return (flags_221c & (uint8_t)MSL_GUARD_STATE_FLAGS_221C_B2) ? 1u : 0u;
+  return (flags_221c & (uint8_t)MSL_STATE_FLAG_221C_B2) ? 1u : 0u;
 }
 
 static inline uint8_t combat_guard_setoff_recoil_x221c_b2_idx(const MslBatch* batch, size_t idx) {
   if (batch == NULL) {
     return 0u;
   }
-  enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
-  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
   const uint8_t flags_221c =
-      batch->state.state_flags[idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221C_INDEX];
-  if ((flags_221c & (uint8_t)MSL_GUARD_STATE_FLAGS_221C_B2) != 0u) {
+      batch->state.state_flags[idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX];
+  if ((flags_221c & (uint8_t)MSL_STATE_FLAG_221C_B2) != 0u) {
     return 1u;
   }
   if (batch->state.action_id[idx] == (uint16_t)MSL_ACT_GUARD_REFLECT) {
@@ -4097,12 +4069,9 @@ static inline void combat_damage_enter_state(const MslCommonParams* c, MslBatch*
   // entry, so do not carry seeded Guard no-submotion shield-active bits into Damage* states.
   // refs/melee/src/melee/ft/fighter.c (Fighter_ChangeMotionState reset block)
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-  enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
-  enum { MSL_STATE_FLAGS_221B_INDEX = 2 };
   {
-    const size_t flags_i = d_idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221B_INDEX;
-    batch->state.state_flags[flags_i] &=
-        (uint8_t) ~(uint8_t)MSL_GUARD_STATE_FLAGS_221B_IS_SHIELD_ACTIVE;
+    const size_t flags_i = d_idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221B_INDEX;
+    batch->state.state_flags[flags_i] &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE;
   }
   // Decomp: ftCo_8008DCE0 clears mv.co.damage.x14 on damage entry.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
@@ -6204,9 +6173,6 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
   const int num_players = (int)batch->config.num_players;
 
   // Slippi post-frame `state_flags` includes fp+0x221C bits at byte index 3.
-  enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
-  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
-  enum { MSL_STATE_FLAG_221C_DETECT_HITBOX_TOUCHING_SHIELD = 0x04 };
 
   // Clank bookkeeping:
   // - resolve clank hitlag/rebound once per unordered pair,
@@ -6846,7 +6812,7 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
             //
             // Set on the victim/defender (the fighter whose shield bubble was overlapped).
             const size_t d_flags_i =
-                d_idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221C_INDEX;
+                d_idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
             batch->state.state_flags[d_flags_i] |=
                 (uint8_t)MSL_STATE_FLAG_221C_DETECT_HITBOX_TOUCHING_SHIELD;
 
@@ -7489,7 +7455,6 @@ static void combat_select_body_hits_one_debug(MslBatch* batch, int bi,
 
   const int num_players = (int)batch->config.num_players;
   uint16_t written = *inout_written;
-  enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
   const MslCommonParams* c = msl_common_params();
   if (c == NULL) {
     return;
@@ -7788,16 +7753,13 @@ void combat_processhit_consume(MslBatch* batch) {
   // In this simulator, collision detection (combat_resolve) can set this bit on inert shield
   // overlaps; this consume stage clears it on the next frame, matching the intent that the bit
   // represents overlaps observed in the most recent collision pass.
-  enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
-  enum { MSL_STATE_FLAGS_221C_INDEX = 3 };
-  enum { MSL_STATE_FLAG_221C_DETECT_HITBOX_TOUCHING_SHIELD = 0x04 };
 
   const int num_players = (int)batch->config.num_players;
   for (int bi = 0; bi < batch->batch_size; bi++) {
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
       combat_processhit_apply_expired_phantom_damage(batch, bi, p, idx);
-      const size_t flags_i = idx * MSL_STATE_FLAGS_STRIDE + (size_t)MSL_STATE_FLAGS_221C_INDEX;
+      const size_t flags_i = idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
       batch->state.state_flags[flags_i] &=
           (uint8_t) ~(uint8_t)MSL_STATE_FLAG_221C_DETECT_HITBOX_TOUCHING_SHIELD;
       // fp->dmg.x1838_percentTemp is a per-frame accumulator consumed/reset by Fighter_ProcessHit.
@@ -7926,7 +7888,6 @@ int combat_debug_shield_candidate_decisions(MslBatch* batch, int batch_index,
   const MslCommonParams* c = msl_common_params();
   uint16_t written = 0;
   const int bi = batch_index;
-  enum { MSL_STATE_FLAGS_STRIDE = MSL_STATE_FLAGS_BYTES };
 
   for (int attacker = 0; attacker < num_players; attacker++) {
     const size_t a_idx = msl_idx_player(bi, attacker);
