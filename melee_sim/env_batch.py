@@ -413,12 +413,6 @@ def _resolve_data_dir(data_dir: str | os.PathLike[str] | None) -> str | None:
         os.environ["MSL_DATA_DIR"] = resolved
         return resolved
 
-    env_data = os.environ.get("MELEE_SIM_DATA")
-    if env_data:
-        resolved = str(Path(env_data).expanduser().resolve())
-        os.environ["MSL_DATA_DIR"] = resolved
-        return resolved
-
     msl_data = os.environ.get("MSL_DATA_DIR")
     if msl_data:
         return str(Path(msl_data).expanduser().resolve())
@@ -446,5 +440,5 @@ def _check_data_dir(data_dir: Path) -> None:
         raise FileNotFoundError(
             f"missing melee_sim data files under {data_dir}:\n{preview}{extra}\n"
             "Run `python -m melee_sim.extract_data --iso /path/to/SSBM.iso`, "
-            "set MELEE_SIM_DATA, or pass EnvBatch(..., data_dir=...)."
+            "set MSL_DATA_DIR, or pass EnvBatch(..., data_dir=...)."
         )

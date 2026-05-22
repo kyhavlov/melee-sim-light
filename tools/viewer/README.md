@@ -10,7 +10,8 @@ commands are repository-root relative unless stated otherwise.
 Prerequisites:
 
 - Emscripten (`emcc`) on `PATH` for WASM export of the sim
-- generated sim data under repository-root `data/`
+- extracted simulator data; defaults to repository-root `.msl/` when present,
+  or set `MSL_DATA_DIR`
 - npm dependencies installed under repository-root `tools/viewer/slippi-viewer`
 - network access on first build to fetch character display assets from Slippi Lab
 
@@ -21,7 +22,8 @@ make viewer-build
 ```
 
 `make viewer-build` writes a self-contained browser asset tree under
-repository-root `build/viewer`. Character display zips are downloaded into
+repository-root `build/viewer`. The selected simulator data directory is
+bundled into the WASM output at build time. Character display zips are downloaded into
 repository-root `build/cache/viewer-zips/` and reused on later builds after
 checksum verification.
 

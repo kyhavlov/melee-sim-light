@@ -4,56 +4,71 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 OUT_DIR="$ROOT/tools/viewer/live/public"
 
+DATA_DIR="${MSL_DATA_DIR:-}"
+if [[ -z "$DATA_DIR" ]]; then
+  if [[ -d "$ROOT/.msl" ]]; then
+    DATA_DIR="$ROOT/.msl"
+  else
+    DATA_DIR="$ROOT/data"
+  fi
+fi
+if [[ ! -d "$DATA_DIR" ]]; then
+  echo "error: extracted simulator data directory not found: $DATA_DIR" >&2
+  echo "Set MSL_DATA_DIR, or run python -m melee_sim.extract_data --iso /path/to/SSBM.iso." >&2
+  exit 1
+fi
+DATA_DIR="$(cd "$DATA_DIR" && pwd)"
+
 if ! command -v emcc >/dev/null 2>&1; then
   echo "error: emcc is not on PATH. Install/activate Emscripten before building the live viewer." >&2
   exit 1
 fi
 
 required_data=(
-  "$ROOT/data/common/ft_common_data.json"
-  "$ROOT/data/characters/fox.json"
-  "$ROOT/data/characters/falco.json"
-  "$ROOT/data/stages/battlefield.json"
-  "$ROOT/data/stages/dream_land_n64.json"
-  "$ROOT/data/stages/final_destination.json"
-  "$ROOT/data/stages/fountain_of_dreams.json"
-  "$ROOT/data/stages/pokemon_stadium.json"
-  "$ROOT/data/stages/yoshis_story.json"
-  "$ROOT/data/stages/bin/grnla.bin"
-  "$ROOT/data/stages/bin/grnba.bin"
-  "$ROOT/data/stages/bin/griz.bin"
-  "$ROOT/data/stages/bin/grps.bin"
-  "$ROOT/data/stages/bin/grst.bin"
-  "$ROOT/data/stages/bin/grop.bin"
-  "$ROOT/data/scripts/fox.bin"
-  "$ROOT/data/scripts/falco.bin"
-  "$ROOT/data/motion_state/owners/fox.bin"
-  "$ROOT/data/motion_state/owners/falco.bin"
-  "$ROOT/data/items/item_common.json"
-  "$ROOT/data/items/lasers.bin"
-  "$ROOT/data/items/articles/fox_falco.bin"
-  "$ROOT/data/stage_items/yoshi_shyguy.bin"
-  "$ROOT/data/stage_items/yoshi_shyguy.json"
-  "$ROOT/data/stage_items/dream_whispy.bin"
-  "$ROOT/data/stage_items/dream_whispy.json"
-  "$ROOT/data/anims/fox.tracks.bin"
-  "$ROOT/data/anims/falco.tracks.bin"
-  "$ROOT/data/hitboxes/fox.bin"
-  "$ROOT/data/hitboxes/falco.bin"
-  "$ROOT/data/hurtcaps/fox.bin"
-  "$ROOT/data/hurtcaps/falco.bin"
-  "$ROOT/data/ecb/fox_bottom.bin"
-  "$ROOT/data/ecb/falco_bottom.bin"
-  "$ROOT/data/ecb/fox_extents.bin"
-  "$ROOT/data/ecb/falco_extents.bin"
-  "$ROOT/data/attack_id/move_id/fox.bin"
-  "$ROOT/data/attack_id/move_id/falco.bin"
+  "$DATA_DIR/common/ft_common_data.json"
+  "$DATA_DIR/characters/fox.json"
+  "$DATA_DIR/characters/falco.json"
+  "$DATA_DIR/stages/battlefield.json"
+  "$DATA_DIR/stages/dream_land_n64.json"
+  "$DATA_DIR/stages/final_destination.json"
+  "$DATA_DIR/stages/fountain_of_dreams.json"
+  "$DATA_DIR/stages/pokemon_stadium.json"
+  "$DATA_DIR/stages/yoshis_story.json"
+  "$DATA_DIR/stages/bin/grnla.bin"
+  "$DATA_DIR/stages/bin/grnba.bin"
+  "$DATA_DIR/stages/bin/griz.bin"
+  "$DATA_DIR/stages/bin/grps.bin"
+  "$DATA_DIR/stages/bin/grst.bin"
+  "$DATA_DIR/stages/bin/grop.bin"
+  "$DATA_DIR/scripts/fox.bin"
+  "$DATA_DIR/scripts/falco.bin"
+  "$DATA_DIR/motion_state/owners/fox.bin"
+  "$DATA_DIR/motion_state/owners/falco.bin"
+  "$DATA_DIR/items/item_common.json"
+  "$DATA_DIR/items/lasers.bin"
+  "$DATA_DIR/items/articles/fox_falco.bin"
+  "$DATA_DIR/stage_items/yoshi_shyguy.bin"
+  "$DATA_DIR/stage_items/yoshi_shyguy.json"
+  "$DATA_DIR/stage_items/dream_whispy.bin"
+  "$DATA_DIR/stage_items/dream_whispy.json"
+  "$DATA_DIR/anims/fox.tracks.bin"
+  "$DATA_DIR/anims/falco.tracks.bin"
+  "$DATA_DIR/hitboxes/fox.bin"
+  "$DATA_DIR/hitboxes/falco.bin"
+  "$DATA_DIR/hurtcaps/fox.bin"
+  "$DATA_DIR/hurtcaps/falco.bin"
+  "$DATA_DIR/ecb/fox_bottom.bin"
+  "$DATA_DIR/ecb/falco_bottom.bin"
+  "$DATA_DIR/ecb/fox_extents.bin"
+  "$DATA_DIR/ecb/falco_extents.bin"
+  "$DATA_DIR/attack_id/move_id/fox.bin"
+  "$DATA_DIR/attack_id/move_id/falco.bin"
 )
 
 missing=0
 for path in "${required_data[@]}"; do
   if [[ ! -f "$path" ]]; then
-    echo "missing required data: ${path#$ROOT/}" >&2
+    echo "missing required data: ${path#$DATA_DIR/}" >&2
     missing=1
   fi
 done
@@ -81,7 +96,8 @@ emcc "${SRC_FILES[@]}" \
   -sALLOW_MEMORY_GROWTH=1 \
   -sEXPORTED_FUNCTIONS='["_malloc","_free","_msl_batch_create","_msl_batch_destroy","_msl_batch_init_match","_msl_batch_step_input","_msl_batch_write_compare","_msl_batch_debug_write_processed_input","_msl_batch_debug_write_stage_state","_msl_batch_debug_shield_display_bubbles_world"]' \
   -sEXPORTED_RUNTIME_METHODS='["HEAPU8"]' \
-  --preload-file "$ROOT/data@/data" \
+  --preload-file "$DATA_DIR@/data" \
   -o "$OUT_DIR/msl_sim.js"
 
+echo "bundled simulator data from $DATA_DIR"
 echo "wrote $OUT_DIR/msl_sim.js"

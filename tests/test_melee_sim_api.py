@@ -36,7 +36,6 @@ def _populate_data_overlay_without_legacy_script_owner_splits(dst_data_dir: Path
 
 def test_default_data_dir_is_dot_msl(monkeypatch, tmp_path) -> None:
     monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("MELEE_SIM_DATA", raising=False)
     monkeypatch.delenv("MSL_DATA_DIR", raising=False)
     (tmp_path / ".msl").mkdir()
 
@@ -47,7 +46,6 @@ def test_default_data_dir_is_dot_msl(monkeypatch, tmp_path) -> None:
 
 def test_source_checkout_data_dir_fallback(monkeypatch, tmp_path) -> None:
     monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("MELEE_SIM_DATA", raising=False)
     monkeypatch.delenv("MSL_DATA_DIR", raising=False)
     (tmp_path / "data").mkdir()
 

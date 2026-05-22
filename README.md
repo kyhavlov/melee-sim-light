@@ -37,11 +37,11 @@ uv run python -m melee_sim.extract_data --iso /path/to/SSBM.iso
 
 The extraction command writes `.msl/` in the directory where the command is run
 and can be run again in place when data needs to be refreshed. `EnvBatch()`
-loads `.msl/` by default. To use another data root, set `MELEE_SIM_DATA` or
+loads `.msl/` by default. To use another data root, set `MSL_DATA_DIR` or
 pass `data_dir`:
 
 ```bash
-MELEE_SIM_DATA=/path/to/data uv run python train.py
+MSL_DATA_DIR=/path/to/data uv run python train.py
 ```
 
 ```python
@@ -217,7 +217,8 @@ Prerequisites:
 
 - Emscripten activated so `emcc` is on `PATH`, for the WASM build
 - Node.js/npm available for the renderer build
-- generated sim data under `data/`
+- extracted simulator data; defaults to `.msl/` when present, or set
+  `MSL_DATA_DIR`
 - network access on the first build to download character display assets
 
 ```bash
@@ -247,7 +248,7 @@ stable API.
 - `length`: number of step frames in one reusable buffer chunk
 - `num_players`: usually `2`; `4` is supported for doubles coverage
 - `data_dir`: optional extracted data root, equivalent to setting
-  `MELEE_SIM_DATA` before construction
+  `MSL_DATA_DIR` before construction
 
 The resolved data root is process-global native state. Choose it before
 creating simulator batches, and do not expect two `EnvBatch` instances in the
