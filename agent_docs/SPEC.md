@@ -780,6 +780,19 @@ Recent deltas to reflect here (do not let these get “lost in chat logs”):
   (`src/mpcoll_ground.c`; refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll,
   refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C},
   refs/melee/src/melee/mp/mpcoll.c::{mpColl_80043754,mpColl_80046904,mpColl_80044838_Floor});
+- Shared floor-sweep publication (2026-05-22): airborne and moving-platform floor contacts now
+  flow through an explicit `MslMpcollFloorSweepResult` / callback-local floor result packet before
+  late rejection and final writeback. This models the source order where `mpColl_80044628_Floor`
+  first collects the ECB-bottom floor hit, `mpColl_80044838_Floor` / `mpColl_80044948_Floor` project
+  or remap that accepted line, and wrapper callbacks publish or reject one `CollData.floor` result.
+  DamageFly/DamageFall/DamageAir checks, EscapeAir/ledgedash handoffs, AttackAir platform-pass
+  cases, and Randall/FoD/Yoshi/PS moving-platform publication now share that packet instead of
+  carrying separate raw `mpCheckFloor` branches. `mpColl_8004A908_Floor` remains a distinct
+  grounded-inline retry owner because it performs the source's disconnected-floor retry after the
+  ordinary wall/ceiling/floor loop rather than the first ECB-bottom sweep.
+  (`src/mpcoll_ground.c`; refs/melee/src/melee/mp/mpcoll.c::{
+  mpColl_80044628_Floor,mpColl_80044838_Floor,mpColl_80044948_Floor,mpColl_80046904,
+  mpColl_8004A908_Floor}).
   `GuardSetOff_Anim` may enter Guard and then same-frame GuardOff through
   the normal Guard IASA release path; and terminal `GuardReflect_Anim` with an expired timer can
   snapshot into Guard before release consumption. Common-air FD walljump rows promote the hidden

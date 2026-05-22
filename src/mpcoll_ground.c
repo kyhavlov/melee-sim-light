@@ -5,6 +5,7 @@
 #include <math.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 #include "action.h"
 #include "action_ids.h"
 #include "attack_id_tables.h"
@@ -337,6 +338,29 @@ typedef struct MslMpcollFloorPublication {
 typedef struct MslMpcollFloorRejectPacket {
   uint64_t bits;
 } MslMpcollFloorRejectPacket;
+
+typedef struct MslMpcollFloorSweepResult {
+  uint8_t hit;
+  int hit_line_idx;
+  int projected_line_idx;
+  uint16_t hit_segment_id;
+  uint16_t projected_segment_id;
+  uint8_t hit_is_platform;
+  uint8_t hit_is_ledge;
+  uint8_t hit_has_platform_transform;
+  uint8_t hit_has_height_platform_transform;
+  uint8_t projected_is_platform;
+  uint8_t projected_is_ledge;
+  uint8_t projected_has_platform_transform;
+  uint8_t projected_has_height_platform_transform;
+  float hit_x;
+  float hit_y;
+  float projected_contact_x;
+  float projected_contact_y;
+  float projected_y_corr;
+  float normal_x;
+  float normal_y;
+} MslMpcollFloorSweepResult;
 
 static inline void mpcoll_floor_reject_add_if(MslMpcollFloorRejectPacket* packet, uint8_t condition,
                                               uint64_t bit) {
@@ -863,6 +887,25 @@ static inline uint8_t mpcoll_floor_contact_from_callback_result(const MslMpcollC
   io->normal_x = batch->state.coll_floor_result_normal_x[idx];
   io->normal_y = batch->state.coll_floor_result_normal_y[idx];
   return 1u;
+}
+
+static inline void mpcoll_materialize_floor_publication_result(
+    const MslMpcollContext* ctx, const MslMpcollFloorPublication* publication) {
+  if (ctx == NULL || publication == NULL || publication->on_ground == 0u ||
+      mpcoll_callback_floor_result_valid(ctx)) {
+    return;
+  }
+  // All grounded publications should enter final writeback through the same callback-local CollData
+  // floor scratch, even when a retained owner used root projection, floor-edge snap, stage-object
+  // carry, or a moving-platform handoff instead of the direct ECB-bottom sweep helper. This mirrors
+  // source wrapper shape: candidate collection owns a local floor/contact result, publication guards
+  // may still reject it, and final writeback consumes or discards that one packet.
+  // refs/melee/src/melee/mp/mpcoll.c::{
+  //   mpColl_80043754,mpColl_80044628_Floor,mpColl_80044838_Floor,mpColl_8004A908_Floor}
+  mpcoll_record_callback_floor_result(
+      ctx, (uint8_t)MSL_MPCOLL_FLOOR_RESULT_DIRECT, publication->contact.ground_id,
+      publication->contact.contact_x, publication->contact.contact_y, publication->contact.normal_x,
+      publication->contact.normal_y);
 }
 
 static inline uint8_t action_allows_floor_edge_snap(uint16_t a) {
@@ -3146,6 +3189,145 @@ static uint8_t msl_mpcheck_floor(const MslBatch* batch, size_t idx, int bi,
   return 1;
 }
 
+static inline void mpcoll_init_floor_sweep_result(MslMpcollFloorSweepResult* out) {
+  if (out == NULL) {
+    return;
+  }
+  memset(out, 0, sizeof(*out));
+  out->hit_line_idx = -1;
+  out->projected_line_idx = -1;
+  out->hit_segment_id = 0xFFFFu;
+  out->projected_segment_id = 0xFFFFu;
+  out->normal_x = 0.0f;
+  out->normal_y = 1.0f;
+}
+
+static uint8_t mpcoll_collect_bottom_sweep_hit(
+    const MslBatch* batch, size_t idx, int bi, const MslStageFloorGraph* g, uint32_t stage_id,
+    float prev_bottom_x, float prev_bottom_y, float cur_bottom_x, float cur_bottom_y,
+    uint16_t skip_platform_segment_i, int prefer_line_idx, int skip_line_idx,
+    const MslCommonParams* c, MslMpcollFloorSweepResult* out) {
+  if (out == NULL) {
+    return 0u;
+  }
+  mpcoll_init_floor_sweep_result(out);
+  if (batch == NULL || g == NULL) {
+    return 0u;
+  }
+
+  int hit_line_idx = -1;
+  float hit_x = 0.0f;
+  float hit_y = 0.0f;
+  float normal_x = 0.0f;
+  float normal_y = 1.0f;
+  if (!msl_mpcheck_floor(batch, idx, bi, g, stage_id, prev_bottom_x, prev_bottom_y, cur_bottom_x,
+                         cur_bottom_y, skip_platform_segment_i, prefer_line_idx, skip_line_idx, c,
+                         &hit_line_idx, &hit_x, &hit_y, &normal_x, &normal_y) ||
+      hit_line_idx < 0 || (size_t)hit_line_idx >= g->line_count) {
+    return 0u;
+  }
+
+  // Shared source-shaped bottom-sweep candidate collection:
+  // `mpColl_80044628_Floor` owns the current ECB-bottom sweep and writes CollData.floor/contact
+  // before projection/publication helpers decide whether the floor hit becomes grounded,
+  // stay-airborne FloorHug, or a rejected edge/platform contact. Keeping this packet explicit
+  // prevents Damage, EscapeAir, AttackAir, and moving-platform owners from carrying independent
+  // `mpCheckFloor` approximations.
+  // refs/melee/src/melee/mp/mpcoll.c::mpColl_80044628_Floor
+  // refs/melee/src/melee/mp/mplib.c::mpCheckFloor
+  const uint16_t hit_segment_id = g->lines[(size_t)hit_line_idx].segment_i;
+  out->hit = 1u;
+  out->hit_line_idx = hit_line_idx;
+  out->hit_segment_id = hit_segment_id;
+  out->hit_is_platform = g->lines[(size_t)hit_line_idx].is_platform ? 1u : 0u;
+  out->hit_is_ledge = g->lines[(size_t)hit_line_idx].is_ledge ? 1u : 0u;
+  out->hit_has_platform_transform =
+      stage_collision_floor_line_has_platform_transform(stage_id, hit_segment_id);
+  out->hit_has_height_platform_transform =
+      stage_collision_floor_line_has_height_platform_transform(stage_id, hit_segment_id);
+  out->projected_segment_id = hit_segment_id;
+  out->projected_contact_x = hit_x;
+  out->projected_contact_y = hit_y;
+  out->hit_x = hit_x;
+  out->hit_y = hit_y;
+  out->normal_x = normal_x;
+  out->normal_y = normal_y;
+  return 1u;
+}
+
+static void mpcoll_project_bottom_sweep_floor_result(const MslBatch* batch, int bi,
+                                                     const MslStageFloorGraph* g, uint32_t stage_id,
+                                                     float cur_bottom_y,
+                                                     MslMpcollFloorSweepResult* out) {
+  if (batch == NULL || g == NULL || out == NULL || out->hit == 0u || out->hit_line_idx < 0 ||
+      (size_t)out->hit_line_idx >= g->line_count) {
+    return;
+  }
+
+  // Source projection phase after a successful bottom sweep:
+  // `mpColl_80044838_Floor` / `mpColl_80044948_Floor` consume the accepted line from
+  // `mpColl_80044628_Floor` and call the floor projection/remap helper. The projection fields are
+  // deliberately stored beside the raw hit so later guards can compare raw vs remapped stage
+  // ownership without repeating line walks.
+  // refs/melee/src/melee/mp/mpcoll.c::{
+  //   mpColl_80044838_Floor,mpColl_80044948_Floor}
+  // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+  float y_corr = 0.0f;
+  const int projected_line_idx = msl_mplib_8004dd90_floor(
+      batch, bi, g, out->hit_line_idx, out->hit_x, cur_bottom_y, &y_corr, NULL, NULL);
+  const uint16_t projected_segment_id =
+      (projected_line_idx >= 0 && (size_t)projected_line_idx < g->line_count)
+          ? g->lines[(size_t)projected_line_idx].segment_i
+          : out->hit_segment_id;
+  out->projected_line_idx = projected_line_idx;
+  out->projected_segment_id = projected_segment_id;
+  out->projected_is_platform =
+      (projected_line_idx >= 0 && (size_t)projected_line_idx < g->line_count &&
+       g->lines[(size_t)projected_line_idx].is_platform)
+          ? 1u
+          : 0u;
+  out->projected_is_ledge =
+      (projected_line_idx >= 0 && (size_t)projected_line_idx < g->line_count &&
+       g->lines[(size_t)projected_line_idx].is_ledge)
+          ? 1u
+          : 0u;
+  out->projected_has_platform_transform =
+      stage_collision_floor_line_has_platform_transform(stage_id, projected_segment_id);
+  out->projected_has_height_platform_transform =
+      stage_collision_floor_line_has_height_platform_transform(stage_id, projected_segment_id);
+  out->projected_contact_x = out->hit_x;
+  out->projected_contact_y = out->hit_y;
+  out->projected_y_corr = y_corr;
+}
+
+static uint8_t mpcoll_collect_bottom_sweep_floor_result(
+    const MslBatch* batch, size_t idx, int bi, const MslStageFloorGraph* g, uint32_t stage_id,
+    float prev_bottom_x, float prev_bottom_y, float cur_bottom_x, float cur_bottom_y,
+    uint16_t skip_platform_segment_i, int prefer_line_idx, int skip_line_idx,
+    const MslCommonParams* c, MslMpcollFloorSweepResult* out) {
+  if (!mpcoll_collect_bottom_sweep_hit(batch, idx, bi, g, stage_id, prev_bottom_x, prev_bottom_y,
+                                       cur_bottom_x, cur_bottom_y, skip_platform_segment_i,
+                                       prefer_line_idx, skip_line_idx, c, out)) {
+    return 0u;
+  }
+  mpcoll_project_bottom_sweep_floor_result(batch, bi, g, stage_id, cur_bottom_y, out);
+  return 1u;
+}
+
+static uint8_t mpcoll_bottom_sweep_hits_segment(
+    const MslBatch* batch, size_t idx, int bi, const MslStageFloorGraph* g, uint32_t stage_id,
+    float prev_bottom_x, float prev_bottom_y, float cur_bottom_x, float cur_bottom_y,
+    uint16_t skip_platform_segment_i, int prefer_line_idx, int skip_line_idx,
+    const MslCommonParams* c, uint16_t target_segment_id) {
+  MslMpcollFloorSweepResult sweep = {0};
+  return (mpcoll_collect_bottom_sweep_hit(batch, idx, bi, g, stage_id, prev_bottom_x, prev_bottom_y,
+                                          cur_bottom_x, cur_bottom_y, skip_platform_segment_i,
+                                          prefer_line_idx, skip_line_idx, c, &sweep) &&
+          sweep.hit_segment_id == target_segment_id)
+             ? 1u
+             : 0u;
+}
+
 static uint8_t msl_mpcoll_80044838_floor_edge_snap_from_bottom(
     MslBatch* batch, int bi, const MslStageFloorGraph* g, int line_idx, float cur_bottom_x,
     float cur_bottom_y, uint8_t allow_hard_floor, uint16_t* ground_id_out, float* contact_x_out,
@@ -3347,16 +3529,19 @@ static uint8_t msl_mpcoll_80047e14_fallspecial_prephysics_floor_sweep(
     return 0u;
   }
 
-  int hit_line_idx = -1;
-  float ix = 0.0f;
-  float iy = 0.0f;
   float nx = 0.0f;
   float ny = 1.0f;
-  if (!msl_mpcheck_floor(batch, idx, bi, g, stage_id, prev_bottom_x, prev_bottom_y, map_bottom_x,
-                         map_bottom_y, skip_platform_segment_i, prefer_line_idx, -1, c,
-                         &hit_line_idx, &ix, &iy, &nx, &ny)) {
+  MslMpcollFloorSweepResult floor_sweep = {0};
+  if (!mpcoll_collect_bottom_sweep_hit(batch, idx, bi, g, stage_id, prev_bottom_x, prev_bottom_y,
+                                       map_bottom_x, map_bottom_y, skip_platform_segment_i,
+                                       prefer_line_idx, -1, c, &floor_sweep)) {
     return 0u;
   }
+  const int hit_line_idx = floor_sweep.hit_line_idx;
+  const float ix = floor_sweep.hit_x;
+  const float iy = floor_sweep.hit_y;
+  nx = floor_sweep.normal_x;
+  ny = floor_sweep.normal_y;
   if (hit_line_idx >= 0 && g->lines[(size_t)hit_line_idx].is_platform) {
     // Static soft platforms do not use this prephysics hard-floor helper. FallSpecial platform
     // publication remains with the normal ftCo_80096CC8-gated floor callback below, including its
@@ -3448,16 +3633,17 @@ static uint8_t msl_mpcoll_80047e14_flags6_root_floor_projection(
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_80096CC8
   // refs/melee/src/melee/mp/mpcoll.c::{
   //   mpColl_80047F40,mpColl_80044628_Floor,mpColl_80044838_Floor}
-  int hit_line_idx = -1;
-  float ix = 0.0f;
-  float iy = 0.0f;
   float nx = 0.0f;
   float ny = 1.0f;
-  if (!msl_mpcheck_floor(batch, idx, bi, g, stage_id, prev_root_x, prev_root_y, cur_root_x,
-                         cur_root_y, skip_platform_segment_i, prefer_line_idx, -1, c, &hit_line_idx,
-                         &ix, &iy, &nx, &ny)) {
-    hit_line_idx = -1;
-  }
+  MslMpcollFloorSweepResult root_sweep = {0};
+  const uint8_t root_sweep_hit = mpcoll_collect_bottom_sweep_hit(
+      batch, idx, bi, g, stage_id, prev_root_x, prev_root_y, cur_root_x, cur_root_y,
+      skip_platform_segment_i, prefer_line_idx, -1, c, &root_sweep);
+  int hit_line_idx = root_sweep_hit ? root_sweep.hit_line_idx : -1;
+  float ix = root_sweep.hit_x;
+  float iy = root_sweep.hit_y;
+  nx = root_sweep_hit ? root_sweep.normal_x : nx;
+  ny = root_sweep_hit ? root_sweep.normal_y : ny;
   const uint8_t fall_platform_callback_admits_by_input =
       (stick_i8_to_unit(batch->state.input_main_y[idx]) > c->platform_air_land_stick_y_threshold)
           ? 1u
@@ -3894,14 +4080,15 @@ static uint8_t attackair_flags0_floor_root_projection(
   // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
   // refs/melee/src/melee/mp/mpcoll.c::{
   //   mpColl_800471F8,mpColl_80044628_Floor,mpColl_80044838_Floor}
+  float nx = 0.0f;
+  float ny = 1.0f;
+  MslMpcollFloorSweepResult floor_sweep = {0};
   int hit_line_idx = -1;
   float ix = 0.0f;
   float iy = 0.0f;
-  float nx = 0.0f;
-  float ny = 1.0f;
-  if (!msl_mpcheck_floor(batch, idx, bi, g, stage_id, prev_ecb->bottom_x, prev_ecb->bottom_y,
-                         cur_ecb->bottom_x, cur_ecb->bottom_y, skip_platform_segment_i,
-                         prefer_line_idx, -1, NULL, &hit_line_idx, &ix, &iy, &nx, &ny)) {
+  if (!mpcoll_collect_bottom_sweep_hit(
+          batch, idx, bi, g, stage_id, prev_ecb->bottom_x, prev_ecb->bottom_y, cur_ecb->bottom_x,
+          cur_ecb->bottom_y, skip_platform_segment_i, prefer_line_idx, -1, NULL, &floor_sweep)) {
     // Replay seeds can expose FoD's current same-step height-platform contact after the visible ECB
     // bottom is already below the moving line. Source `mpColl_800471F8` consumes the hidden
     // CollData floor result and then projects from the callback root; reconstruct only that
@@ -3967,6 +4154,12 @@ static uint8_t attackair_flags0_floor_root_projection(
     iy = best_line_y;
     nx = best_nx;
     ny = best_ny;
+  } else {
+    hit_line_idx = floor_sweep.hit_line_idx;
+    ix = floor_sweep.hit_x;
+    iy = floor_sweep.hit_y;
+    nx = floor_sweep.normal_x;
+    ny = floor_sweep.normal_y;
   }
   if (hit_line_idx < 0 || (size_t)hit_line_idx >= g->line_count) {
     return 0u;
@@ -4079,17 +4272,17 @@ static uint8_t escapeair_locked_floor_bottom_sweep_root_projection(
     return 0u;
   }
 
-  int hit_line_idx = -1;
-  float ix = 0.0f;
-  float iy = 0.0f;
   float nx = 0.0f;
   float ny = 1.0f;
-  if (!msl_mpcheck_floor(batch, idx, bi, g, stage_id, batch->state.floor_sweep_prev_pos_x[idx],
-                         batch->state.floor_sweep_prev_pos_y[idx] + source_bottom_rel_y,
-                         batch->state.pos_x[idx], batch->state.pos_y[idx] + source_bottom_rel_y,
-                         skip_platform_segment_i, -1, -1, c, &hit_line_idx, &ix, &iy, &nx, &ny)) {
+  MslMpcollFloorSweepResult floor_sweep = {0};
+  if (!mpcoll_collect_bottom_sweep_hit(
+          batch, idx, bi, g, stage_id, batch->state.floor_sweep_prev_pos_x[idx],
+          batch->state.floor_sweep_prev_pos_y[idx] + source_bottom_rel_y, batch->state.pos_x[idx],
+          batch->state.pos_y[idx] + source_bottom_rel_y, skip_platform_segment_i, -1, -1, c,
+          &floor_sweep)) {
     return 0u;
   }
+  const int hit_line_idx = floor_sweep.hit_line_idx;
   if (hit_line_idx < 0 || (size_t)hit_line_idx >= g->line_count) {
     return 0u;
   }
@@ -4166,8 +4359,6 @@ static uint8_t escapeair_locked_floor_bottom_sweep_root_projection(
   if (floor_ny_out != NULL) {
     *floor_ny_out = ny;
   }
-  (void)ix;
-  (void)iy;
   return 1u;
 }
 
@@ -4387,24 +4578,21 @@ static uint8_t escapeair_locked_platform_root_projection(
     uint8_t locked_desired_bottom_sweep_owner = 0u;
     uint8_t locked_zero_bottom_sweep_owner = 0u;
     if (locked_desired_bottom_owner) {
-      int sweep_line_idx = -1;
       const float prev_bottom_x = batch->state.prev_pos_x[idx];
       const float prev_bottom_y = batch->state.prev_pos_y[idx] + locked_desired_bottom_rel_y;
       const float cur_bottom_x = root_x;
       const float cur_bottom_y = root_y + locked_desired_bottom_rel_y;
-      if (msl_mpcheck_floor(batch, idx, bi, g, stage_id, prev_bottom_x, prev_bottom_y, cur_bottom_x,
-                            cur_bottom_y, skip_platform_segment_i, out_line_idx, -1, c,
-                            &sweep_line_idx, NULL, NULL, NULL, NULL) &&
-          sweep_line_idx >= 0 &&
-          g->lines[(size_t)sweep_line_idx].segment_i == g->lines[(size_t)out_line_idx].segment_i) {
+      if (mpcoll_bottom_sweep_hits_segment(batch, idx, bi, g, stage_id, prev_bottom_x,
+                                           prev_bottom_y, cur_bottom_x, cur_bottom_y,
+                                           skip_platform_segment_i, out_line_idx, -1, c,
+                                           g->lines[(size_t)out_line_idx].segment_i)) {
         locked_desired_bottom_sweep_owner = 1u;
       }
       if (fabsf(locked_desired_bottom_rel_y) <= k_floor_y_bias &&
-          msl_mpcheck_floor(batch, idx, bi, g, stage_id, batch->state.prev_pos_x[idx],
-                            batch->state.prev_pos_y[idx], root_x, root_y, skip_platform_segment_i,
-                            out_line_idx, -1, c, &sweep_line_idx, NULL, NULL, NULL, NULL) &&
-          sweep_line_idx >= 0 &&
-          g->lines[(size_t)sweep_line_idx].segment_i == g->lines[(size_t)out_line_idx].segment_i) {
+          mpcoll_bottom_sweep_hits_segment(
+              batch, idx, bi, g, stage_id, batch->state.prev_pos_x[idx],
+              batch->state.prev_pos_y[idx], root_x, root_y, skip_platform_segment_i, out_line_idx,
+              -1, c, g->lines[(size_t)out_line_idx].segment_i)) {
         locked_zero_bottom_sweep_owner = 1u;
       }
     }
@@ -4552,15 +4740,15 @@ static uint8_t escapeair_locked_hard_floor_zero_bottom_root_projection(
   // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
   // refs/melee/src/melee/mp/mpcoll.c::{
   //   mpColl_LoadECB_inline,mpColl_800471F8,mpColl_80044628_Floor,mpColl_80044838_Floor}
-  int hit_line_idx = -1;
-  if (!msl_mpcheck_floor(batch, idx, bi, g, stage_id, batch->state.floor_sweep_prev_pos_x[idx],
-                         batch->state.floor_sweep_prev_pos_y[idx], batch->state.pos_x[idx],
-                         batch->state.pos_y[idx], skip_platform_segment_i, prefer_line_idx, -1, c,
-                         &hit_line_idx, NULL, NULL, NULL, NULL) ||
-      hit_line_idx < 0 || (size_t)hit_line_idx >= g->line_count ||
-      g->lines[(size_t)hit_line_idx].segment_i != g->lines[(size_t)prefer_line_idx].segment_i) {
+  MslMpcollFloorSweepResult floor_sweep = {0};
+  if (!mpcoll_collect_bottom_sweep_hit(
+          batch, idx, bi, g, stage_id, batch->state.floor_sweep_prev_pos_x[idx],
+          batch->state.floor_sweep_prev_pos_y[idx], batch->state.pos_x[idx],
+          batch->state.pos_y[idx], skip_platform_segment_i, prefer_line_idx, -1, c, &floor_sweep) ||
+      floor_sweep.hit_segment_id != g->lines[(size_t)prefer_line_idx].segment_i) {
     return 0u;
   }
+  const int hit_line_idx = floor_sweep.hit_line_idx;
 
   float y_corr = 0.0f;
   float nx = 0.0f;
@@ -4622,27 +4810,24 @@ uint8_t mpcoll_800477e0_floor_mask_probe(const MslBatch* batch, size_t idx,
                                     batch->state.floor_sweep_prev_pos_x[idx],
                                     batch->state.floor_sweep_prev_pos_y[idx], 0u);
 
-  int line_idx = -1;
-  float ix = 0.0f;
-  float iy = 0.0f;
   const uint16_t skip_platform_segment_i = platform_floor_skip_segment_id(batch, idx, stage_id);
   const MslCommonParams* c = msl_common_params();
-  if (cur_bot.y <= prev_bot.y &&
-      msl_mpcheck_floor(batch, idx, bi, g, stage_id, prev_bot.x, prev_bot.y, cur_bot.x, cur_bot.y,
-                        skip_platform_segment_i, -1, -1, c, &line_idx, &ix, &iy, NULL, NULL)) {
-    float y_corr = 0.0f;
-    const int out_line_idx =
-        msl_mplib_8004dd90_floor(batch, bi, g, line_idx, ix, cur_bot.y, &y_corr, NULL, NULL);
+  MslMpcollFloorSweepResult floor_sweep = {0};
+  if (cur_bot.y <= prev_bot.y && mpcoll_collect_bottom_sweep_floor_result(
+                                     batch, idx, bi, g, stage_id, prev_bot.x, prev_bot.y, cur_bot.x,
+                                     cur_bot.y, skip_platform_segment_i, -1, -1, c, &floor_sweep)) {
+    const int out_line_idx = floor_sweep.projected_line_idx;
     if (out_line_idx >= 0) {
       if (out != NULL) {
         out->ground_id = g->lines[(size_t)out_line_idx].segment_i;
-        out->corrected_pos_y = batch->state.pos_y[idx] + y_corr;
+        out->corrected_pos_y = batch->state.pos_y[idx] + floor_sweep.projected_y_corr;
       }
       return 1u;
     }
     if (out != NULL) {
-      out->ground_id = g->lines[(size_t)line_idx].segment_i;
-      out->corrected_pos_y = batch->state.pos_y[idx] + (iy - cur_bot.y) + k_floor_y_bias;
+      out->ground_id = floor_sweep.hit_segment_id;
+      out->corrected_pos_y =
+          batch->state.pos_y[idx] + (floor_sweep.hit_y - cur_bot.y) + k_floor_y_bias;
     }
     return 1u;
   }
@@ -5609,6 +5794,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
           ground_id = g->lines[(size_t)out_line_idx].segment_i;
           contact_x = x;
           contact_y = y + y_corr - k_floor_y_bias;
+          mpcoll_record_callback_floor_result(&mpcoll_ctx, (uint8_t)MSL_MPCOLL_FLOOR_RESULT_DIRECT,
+                                              ground_id, contact_x, contact_y, floor_nx, floor_ny);
         } else {
           float ledge_line_y = 0.0f;
           if (floor_line_y_at_x_for_env(batch, bi, g, prefer_line_idx, x, &ledge_line_y) &&
@@ -5618,6 +5805,9 @@ void mpcoll_ground_apply(MslBatch* batch) {
             ground_id = g->lines[(size_t)prefer_line_idx].segment_i;
             contact_x = x;
             contact_y = ledge_line_y;
+            mpcoll_record_callback_floor_result(&mpcoll_ctx,
+                                                (uint8_t)MSL_MPCOLL_FLOOR_RESULT_DIRECT, ground_id,
+                                                contact_x, contact_y, floor_nx, floor_ny);
           }
         }
       }
@@ -5642,24 +5832,27 @@ void mpcoll_ground_apply(MslBatch* batch) {
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
         // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
         // refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_800471F8,mpCheckFloor}
-        int hit_line_idx = -1;
-        float hit_x = 0.0f, hit_y = 0.0f;
         const float source_prev_bottom_y = (prev_y + pre_entry_jumpaerial_ecb_rel);
-        if (msl_mpcheck_floor(batch, idx, bi, g, stage_id, prev_bottom_x, source_prev_bottom_y,
-                              cur_bottom_x, cur_bottom_y, skip_platform_segment_i, prefer_line_idx,
-                              -1, c, &hit_line_idx, &hit_x, &hit_y, &floor_nx, &floor_ny) &&
-            hit_line_idx >= 0 && (size_t)hit_line_idx < g->line_count &&
-            g->lines[(size_t)hit_line_idx].is_ledge &&
-            !g->lines[(size_t)hit_line_idx].is_platform &&
-            !stage_collision_floor_line_has_platform_transform(
-                stage_id, g->lines[(size_t)hit_line_idx].segment_i) &&
-            !floor_x_within_line_bounds(batch, bi, g, hit_line_idx, prev_x) &&
-            floor_x_within_line_bounds(batch, bi, g, hit_line_idx, x)) {
+        MslMpcollFloorSweepResult floor_sweep = {0};
+        if (mpcoll_collect_bottom_sweep_hit(
+                batch, idx, bi, g, stage_id, prev_bottom_x, source_prev_bottom_y, cur_bottom_x,
+                cur_bottom_y, skip_platform_segment_i, prefer_line_idx, -1, c, &floor_sweep) &&
+            floor_sweep.hit_is_ledge && !floor_sweep.hit_is_platform &&
+            !floor_sweep.hit_has_platform_transform &&
+            !floor_x_within_line_bounds(batch, bi, g, floor_sweep.hit_line_idx, prev_x) &&
+            floor_x_within_line_bounds(batch, bi, g, floor_sweep.hit_line_idx, x)) {
+          const int hit_line_idx = floor_sweep.hit_line_idx;
+          const float hit_x = floor_sweep.hit_x;
+          const float hit_y = floor_sweep.hit_y;
+          floor_nx = floor_sweep.normal_x;
+          floor_ny = floor_sweep.normal_y;
           batch->state.pos_y[idx] = hit_y + k_floor_y_bias;
           on_ground = 1u;
           ground_id = g->lines[(size_t)hit_line_idx].segment_i;
           contact_x = hit_x;
           contact_y = hit_y;
+          mpcoll_record_callback_floor_result(&mpcoll_ctx, (uint8_t)MSL_MPCOLL_FLOOR_RESULT_DIRECT,
+                                              ground_id, contact_x, contact_y, floor_nx, floor_ny);
         }
       }
 
@@ -5764,6 +5957,9 @@ void mpcoll_ground_apply(MslBatch* batch) {
             floor_nx = 0.0f;
             floor_ny = 1.0f;
             escapeair_missing_bottom_hard_floor_sweep_owner = 1u;
+            mpcoll_record_callback_floor_result(&mpcoll_ctx,
+                                                (uint8_t)MSL_MPCOLL_FLOOR_RESULT_DIRECT, ground_id,
+                                                contact_x, contact_y, floor_nx, floor_ny);
           }
         }
       }
@@ -5836,6 +6032,9 @@ void mpcoll_ground_apply(MslBatch* batch) {
             floor_nx = 0.0f;
             floor_ny = 1.0f;
             escapeair_missing_bottom_hard_floor_sweep_owner = 1u;
+            mpcoll_record_callback_floor_result(&mpcoll_ctx,
+                                                (uint8_t)MSL_MPCOLL_FLOOR_RESULT_DIRECT, ground_id,
+                                                contact_x, contact_y, floor_nx, floor_ny);
           }
         }
       }
@@ -6059,8 +6258,6 @@ void mpcoll_ground_apply(MslBatch* batch) {
             // (ay >= by), so equality must be allowed (horizontal motion with vy==0 can still sweep).
             // refs/melee/src/melee/mp/mplib.c::mpCheckFloor (the `if (ay >= by && mpLineIntersectionH(...))` gate)
             const uint8_t can_sweep = (uint8_t)(cur_bottom_y <= prev_bottom_y);
-            int hit_line_idx = -1;
-            float ix = 0.0f, iy = 0.0f;
             const int floor_sweep_skip_line_idx =
                 // mpCheckFloor checks the current CollData.floor.index. The generic lite-sim pass
                 // skips the preferred line because ordinary floor.index projection has already
@@ -6069,44 +6266,36 @@ void mpcoll_ground_apply(MslBatch* batch) {
                 // same ledge floor rather than relying on a downstream EscapeAir exception.
                 // refs/melee/src/melee/mp/mpcoll.c::mpColl_80044628_Floor
                 cliff_ledge_floor_owner_active ? -1 : prefer_line_idx;
+            MslMpcollFloorSweepResult floor_sweep = {0};
             if (!landing_release_skip_floor_sweep && !is_common_fallspecial_action(action_id) &&
                 can_sweep &&
-                msl_mpcheck_floor(batch, idx, bi, g, stage_id, prev_bottom_x, prev_bottom_y,
-                                  cur_bottom_x, cur_bottom_y, skip_platform_segment_i,
-                                  prefer_line_idx, floor_sweep_skip_line_idx, c, &hit_line_idx, &ix,
-                                  &iy, &floor_nx, &floor_ny)) {
-              const uint8_t hit_line_is_platform =
-                  (hit_line_idx >= 0 && g->lines[(size_t)hit_line_idx].is_platform) ? 1u : 0u;
-              const uint8_t hit_line_is_ledge =
-                  (hit_line_idx >= 0 && g->lines[(size_t)hit_line_idx].is_ledge) ? 1u : 0u;
+                mpcoll_collect_bottom_sweep_floor_result(
+                    batch, idx, bi, g, stage_id, prev_bottom_x, prev_bottom_y, cur_bottom_x,
+                    cur_bottom_y, skip_platform_segment_i, prefer_line_idx,
+                    floor_sweep_skip_line_idx, c, &floor_sweep)) {
+              const int hit_line_idx = floor_sweep.hit_line_idx;
+              const int out_line_idx2 = floor_sweep.projected_line_idx;
+              const float ix = floor_sweep.hit_x;
+              const float iy = floor_sweep.hit_y;
+              const float y_corr2 = floor_sweep.projected_y_corr;
+              floor_nx = floor_sweep.normal_x;
+              floor_ny = floor_sweep.normal_y;
+              const uint8_t hit_line_is_platform = floor_sweep.hit_is_platform;
+              const uint8_t hit_line_is_ledge = floor_sweep.hit_is_ledge;
               const uint8_t hit_line_has_platform_transform =
-                  (hit_line_idx >= 0 && stage_collision_floor_line_has_platform_transform(
-                                            stage_id, g->lines[(size_t)hit_line_idx].segment_i))
-                      ? 1u
-                      : 0u;
+                  floor_sweep.hit_has_platform_transform;
               const uint8_t hit_line_has_height_platform_transform =
-                  (hit_line_idx >= 0 && stage_collision_floor_line_has_height_platform_transform(
-                                            stage_id, g->lines[(size_t)hit_line_idx].segment_i))
-                      ? 1u
-                      : 0u;
+                  floor_sweep.hit_has_height_platform_transform;
               // Decomp: desired_ecb.bottom.x is always 0.0, so clamping the ECB bottom contact X
               // corresponds to clamping the fighter position X.
               // refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_JObj
-              float y_corr2 = 0.0f;
-              const int out_line_idx2 = msl_mplib_8004dd90_floor(
-                  batch, bi, g, hit_line_idx, ix, cur_bottom_y, &y_corr2, NULL, NULL);
-              const uint16_t resolved_segment_i = (out_line_idx2 >= 0)
-                                                      ? g->lines[(size_t)out_line_idx2].segment_i
-                                                      : g->lines[(size_t)hit_line_idx].segment_i;
+              const uint16_t resolved_segment_i = floor_sweep.projected_segment_id;
               const uint8_t resolved_line_has_platform_transform =
-                  stage_collision_floor_line_has_platform_transform(stage_id, resolved_segment_i);
+                  floor_sweep.projected_has_platform_transform;
               const uint8_t resolved_line_has_height_platform_transform =
-                  stage_collision_floor_line_has_height_platform_transform(stage_id,
-                                                                           resolved_segment_i);
-              const uint8_t resolved_line_is_platform =
-                  (out_line_idx2 >= 0 && g->lines[(size_t)out_line_idx2].is_platform) ? 1u : 0u;
-              const uint8_t resolved_line_is_ledge =
-                  (out_line_idx2 >= 0 && g->lines[(size_t)out_line_idx2].is_ledge) ? 1u : 0u;
+                  floor_sweep.projected_has_height_platform_transform;
+              const uint8_t resolved_line_is_platform = floor_sweep.projected_is_platform;
+              const uint8_t resolved_line_is_ledge = floor_sweep.projected_is_ledge;
               const uint8_t escapeair_entry_locked_platform_airborne =
                   // EscapeAir's entry/locked ECB path keeps early transformed-platform crossings
                   // airborne in the source callback until the locked collision snapshot can resolve
@@ -6371,6 +6560,9 @@ void mpcoll_ground_apply(MslBatch* batch) {
                   ground_id = g->lines[(size_t)out_line_idx2].segment_i;
                   contact_x = ix;
                   contact_y = iy;
+                  mpcoll_record_callback_floor_result(
+                      &mpcoll_ctx, (uint8_t)MSL_MPCOLL_FLOOR_RESULT_DIRECT, ground_id, contact_x,
+                      contact_y, floor_nx, floor_ny);
                 } else {
                   // Sweep saw a floor segment, but projection failed (unexpected). Preserve the sweep
                   // contact point deterministically and apply the decomp-shaped +0.0001 floor bias.
@@ -6380,6 +6572,9 @@ void mpcoll_ground_apply(MslBatch* batch) {
                   ground_id = g->lines[(size_t)hit_line_idx].segment_i;
                   contact_x = ix;
                   contact_y = iy;
+                  mpcoll_record_callback_floor_result(
+                      &mpcoll_ctx, (uint8_t)MSL_MPCOLL_FLOOR_RESULT_DIRECT, ground_id, contact_x,
+                      contact_y, floor_nx, floor_ny);
                 }
               }
             } else if (!landing_release_skip_floor_sweep &&
@@ -6553,14 +6748,17 @@ void mpcoll_ground_apply(MslBatch* batch) {
           // refs/melee/src/melee/ft/ft_081B.c::ft_CheckGroundAndLedge
           // refs/melee/src/melee/mp/mpcoll.c::{
           //   mpColl_800473CC,mpColl_800471F8,mpColl_80044628_Floor,mpColl_80044838_Floor}
-          int hit_line_idx = -1;
-          float ix = 0.0f;
-          float iy = 0.0f;
-          if (msl_mpcheck_floor(batch, idx, bi, g, stage_id, prev_bottom_x, prev_bottom_y,
-                                cur_bottom_x, cur_bottom_y, skip_platform_segment_i,
-                                prefer_line_idx, -1, NULL, &hit_line_idx, &ix, &iy, &floor_nx,
-                                &floor_ny)) {
+          MslMpcollFloorSweepResult sideb_floor_sweep = {0};
+          if (mpcoll_collect_bottom_sweep_floor_result(batch, idx, bi, g, stage_id, prev_bottom_x,
+                                                       prev_bottom_y, cur_bottom_x, cur_bottom_y,
+                                                       skip_platform_segment_i, prefer_line_idx, -1,
+                                                       NULL, &sideb_floor_sweep)) {
+            const int hit_line_idx = sideb_floor_sweep.hit_line_idx;
+            const float ix = sideb_floor_sweep.hit_x;
+            const float iy = sideb_floor_sweep.hit_y;
             float y_corr = 0.0f;
+            floor_nx = sideb_floor_sweep.normal_x;
+            floor_ny = sideb_floor_sweep.normal_y;
             const int out_line_idx =
                 msl_mplib_8004dd90_floor(batch, bi, g, hit_line_idx, batch->state.pos_x[idx],
                                          batch->state.pos_y[idx], &y_corr, &floor_nx, &floor_ny);
@@ -6570,6 +6768,9 @@ void mpcoll_ground_apply(MslBatch* batch) {
               ground_id = g->lines[(size_t)out_line_idx].segment_i;
               contact_x = batch->state.pos_x[idx];
               contact_y = batch->state.pos_y[idx];
+              mpcoll_record_callback_floor_result(
+                  &mpcoll_ctx, (uint8_t)MSL_MPCOLL_FLOOR_RESULT_DIRECT, ground_id, contact_x,
+                  contact_y, floor_nx, floor_ny);
             } else if (hit_line_idx >= 0) {
               batch->state.pos_x[idx] += (ix - cur_bottom_x);
               batch->state.pos_y[idx] += (iy - cur_bottom_y) + k_floor_y_bias;
@@ -6577,6 +6778,9 @@ void mpcoll_ground_apply(MslBatch* batch) {
               ground_id = g->lines[(size_t)hit_line_idx].segment_i;
               contact_x = ix;
               contact_y = iy;
+              mpcoll_record_callback_floor_result(
+                  &mpcoll_ctx, (uint8_t)MSL_MPCOLL_FLOOR_RESULT_DIRECT, ground_id, contact_x,
+                  contact_y, floor_nx, floor_ny);
             }
           }
         }
@@ -6654,15 +6858,12 @@ void mpcoll_ground_apply(MslBatch* batch) {
                                                             proj_y, &y_corr, &floor_nx, &floor_ny);
           uint8_t active_damage_platform_floor_hit = 1u;
           if (out_line_idx >= 0 && g->lines[(size_t)out_line_idx].is_platform) {
-            int swept_line_idx = -1;
             active_damage_platform_floor_hit =
                 (cur_bottom_y <= prev_bottom_y &&
-                 msl_mpcheck_floor(batch, idx, bi, g, stage_id, prev_bottom_x, prev_bottom_y,
-                                   cur_bottom_x, cur_bottom_y, skip_platform_segment_i,
-                                   out_line_idx, -1, c, &swept_line_idx, NULL, NULL, NULL, NULL) &&
-                 swept_line_idx >= 0 &&
-                 g->lines[(size_t)swept_line_idx].segment_i ==
-                     g->lines[(size_t)out_line_idx].segment_i)
+                 mpcoll_bottom_sweep_hits_segment(batch, idx, bi, g, stage_id, prev_bottom_x,
+                                                  prev_bottom_y, cur_bottom_x, cur_bottom_y,
+                                                  skip_platform_segment_i, out_line_idx, -1, c,
+                                                  g->lines[(size_t)out_line_idx].segment_i))
                     ? 1u
                     : 0u;
           }
@@ -6866,17 +7067,10 @@ void mpcoll_ground_apply(MslBatch* batch) {
             // airborne until the loaded/interpolated ECB bottom actually crosses the source ledge
             // floor.
             // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpColl_80044838_Floor}
-            int cliff_hit_line_idx = -1;
-            cliff_ledge_floor_owner_floor_check_hit =
-                (msl_mpcheck_floor(batch, idx, bi, g, stage_id, prev_bottom_x, prev_bottom_y,
-                                   cur_bottom_x, cur_bottom_y, skip_platform_segment_i,
-                                   prefer_line_idx, -1, c, &cliff_hit_line_idx, NULL, NULL, NULL,
-                                   NULL) &&
-                 cliff_hit_line_idx >= 0 &&
-                 g->lines[(size_t)cliff_hit_line_idx].segment_i ==
-                     batch->state.cliff_ledge_floor_segment_id[idx])
-                    ? 1u
-                    : 0u;
+            cliff_ledge_floor_owner_floor_check_hit = mpcoll_bottom_sweep_hits_segment(
+                batch, idx, bi, g, stage_id, prev_bottom_x, prev_bottom_y, cur_bottom_x,
+                cur_bottom_y, skip_platform_segment_i, prefer_line_idx, -1, c,
+                batch->state.cliff_ledge_floor_segment_id[idx]);
           }
           const float cliff_ledge_floor_owner_depth_gate =
               cliff_ledge_floor_owner_active ? fabsf(msl_ecb_bottom_rel_y(char_id, anim, 0)) : 0.0f;
@@ -7612,31 +7806,29 @@ void mpcoll_ground_apply(MslBatch* batch) {
              batch->state.hitlag_pre_timer[idx] != 0u && batch->state.speed_y_attack[idx] < 0.0f)
                 ? 1u
                 : 0u;
+        MslMpcollFloorSweepResult raw_floor_sweep = {0};
         if (!on_ground && !active_damage_hitlag_airborne_floor_contact &&
             !damage_active_hitlag_downward_sdi_airborne_owner && can_sweep &&
-            msl_mpcheck_floor(batch, idx, bi, g, stage_id, prev_bottom_x, prev_bottom_y,
-                              cur_bottom_x, cur_bottom_y, skip_platform_segment_i, prefer_line_idx,
-                              -1, c, &hit_line_idx, &ix, &iy, &floor_nx, &floor_ny)) {
-          const uint8_t hit_line_is_platform =
-              (hit_line_idx >= 0 && g->lines[(size_t)hit_line_idx].is_platform) ? 1u : 0u;
+            mpcoll_collect_bottom_sweep_hit(
+                batch, idx, bi, g, stage_id, prev_bottom_x, prev_bottom_y, cur_bottom_x,
+                cur_bottom_y, skip_platform_segment_i, prefer_line_idx, -1, c, &raw_floor_sweep)) {
+          hit_line_idx = raw_floor_sweep.hit_line_idx;
+          ix = raw_floor_sweep.hit_x;
+          iy = raw_floor_sweep.hit_y;
+          floor_nx = raw_floor_sweep.normal_x;
+          floor_ny = raw_floor_sweep.normal_y;
+          const uint8_t hit_line_is_platform = raw_floor_sweep.hit_is_platform;
           const uint8_t hit_line_is_slope =
               floor_line_is_generated_stage_slope(batch, bi, g, hit_line_idx);
-          const uint8_t hit_line_is_ledge =
-              (hit_line_idx >= 0 && g->lines[(size_t)hit_line_idx].is_ledge) ? 1u : 0u;
+          const uint8_t hit_line_is_ledge = raw_floor_sweep.hit_is_ledge;
           const uint8_t hit_line_is_platform_or_slope =
               (uint8_t)((hit_line_is_platform || hit_line_is_slope) ? 1u : 0u);
           const uint8_t hit_line_is_platform_slope_or_ledge =
               (uint8_t)((hit_line_is_platform || hit_line_is_slope || hit_line_is_ledge) ? 1u : 0u);
           const uint8_t hit_line_has_platform_transform =
-              (hit_line_idx >= 0 && stage_collision_floor_line_has_platform_transform(
-                                        stage_id, g->lines[(size_t)hit_line_idx].segment_i))
-                  ? 1u
-                  : 0u;
+              raw_floor_sweep.hit_has_platform_transform;
           const uint8_t hit_line_has_height_platform_transform =
-              (hit_line_idx >= 0 && stage_collision_floor_line_has_height_platform_transform(
-                                        stage_id, g->lines[(size_t)hit_line_idx].segment_i))
-                  ? 1u
-                  : 0u;
+              raw_floor_sweep.hit_has_height_platform_transform;
           const uint8_t hit_line_x_in_strict_segment =
               (hit_line_idx >= 0 &&
                floor_x_within_line_segment_strict(batch, bi, g, hit_line_idx, cur_bottom_x))
@@ -9784,17 +9976,11 @@ void mpcoll_ground_apply(MslBatch* batch) {
                 batch->state.coll_desired_ecb_bottom_locked_owner[idx]) &&
             final_ground_line_idx >= 0 &&
             stage_collision_floor_line_is_platform(stage_id, ground_id)) {
-          int locked_sweep_line_idx = -1;
-          locked_desired_bottom_final_sweep_hit =
-              (msl_mpcheck_floor(batch, idx, bi, g, stage_id, prev_x,
-                                 prev_y + batch->state.coll_desired_ecb_bottom_rel_y[idx], x,
-                                 y + batch->state.coll_desired_ecb_bottom_rel_y[idx],
-                                 skip_platform_segment_i, final_ground_line_idx, -1, c,
-                                 &locked_sweep_line_idx, NULL, NULL, NULL, NULL) &&
-               locked_sweep_line_idx >= 0 &&
-               g->lines[(size_t)locked_sweep_line_idx].segment_i == ground_id)
-                  ? 1u
-                  : 0u;
+          locked_desired_bottom_final_sweep_hit = mpcoll_bottom_sweep_hits_segment(
+              batch, idx, bi, g, stage_id, prev_x,
+              prev_y + batch->state.coll_desired_ecb_bottom_rel_y[idx], x,
+              y + batch->state.coll_desired_ecb_bottom_rel_y[idx], skip_platform_segment_i,
+              final_ground_line_idx, -1, c, ground_id);
         }
         const uint8_t final_ground_line_is_ledge =
             (final_ground_line_idx >= 0 && (size_t)final_ground_line_idx < g->line_count &&
@@ -10186,6 +10372,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
         }
       }
 
+      mpcoll_materialize_floor_publication_result(&mpcoll_ctx, &floor_publication);
       mpcoll_apply_late_floor_publication_guards(
           &mpcoll_ctx, &floor_publication, ecb_lock_timer_seed, prefer_line_idx, seed_ground_id, y,
           prev_x, prev_bottom_x, prev_bottom_y, cur_bottom_x, cur_bottom_y, &cur_ecb_points,
