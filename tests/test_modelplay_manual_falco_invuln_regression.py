@@ -21,7 +21,7 @@ def _root() -> Path:
 
 def _load_fixture() -> dict[str, Any]:
     fixture = json.loads((_root() / FIXTURE).read_text(encoding="utf-8"))
-    assert fixture["source_trace"] == "manual_repros/falco_invuln.json"
+    assert fixture["source_trace"] == "live_capture/falco_invuln.json"
     assert fixture["input_fields"] == ["buttons", "mainX", "mainY", "cX", "cY", "l", "r"]
     assert fixture["windows"] == [
         {"start_frame": 178, "end_frame": 181, "note": "first Fox AttackAirLw BODY hit on idle Falco"},
@@ -33,7 +33,7 @@ def _load_fixture() -> dict[str, Any]:
 
 def _load_fixture_again() -> dict[str, Any]:
     fixture = json.loads((_root() / FIXTURE_AGAIN).read_text(encoding="utf-8"))
-    assert fixture["source_trace"] == "manual_repros/falco_invuln_again.json"
+    assert fixture["source_trace"] == "live_capture/falco_invuln_again.json"
     assert fixture["input_fields"] == ["buttons", "mainX", "mainY", "cX", "cY", "l", "r"]
     assert fixture["windows"] == [
         {
@@ -126,7 +126,7 @@ def _replay_fixture(
 
 @pytest.mark.integration
 def test_manual_idle_falco_repro_stays_vulnerable_and_hittable() -> None:
-    # Manual repro `manual_repros/falco_invuln.json` showed idle Falco feeling intangible in
+    # Manual repro `live_capture/falco_invuln.json` showed idle Falco feeling intangible in
     # normal gameplay. The exported trace never exposes visible invulnerability, so this lock
     # replays the compact P1 input prefix from match init and asserts the two relevant contracts:
     # Falco's output hurtbox state remains vulnerable, and the BODY overlap windows still apply
@@ -159,7 +159,7 @@ def test_manual_idle_falco_repro_stays_vulnerable_and_hittable() -> None:
 
 @pytest.mark.integration
 def test_manual_idle_falco_repro_keeps_late_wait_hurtcaps_live() -> None:
-    # `manual_repros/falco_invuln_again.json` exposed the source of the apparent intangibility:
+    # `live_capture/falco_invuln_again.json` exposed the source of the apparent intangibility:
     # Falco Wait1_0 has SSANIMT1/FObj coverage through frame 240, but the baked SSANIM01 matrices
     # cover 120 frames. BODY hurtcaps must keep sampling the live FObj track pose after frame 120.
     # Source refs: src/anim_pose.c, refs/melee/src/sysdolphin/baselib/{aobj.c,fobj.c},

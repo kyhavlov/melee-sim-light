@@ -1,5 +1,5 @@
 {
-  "source_trace": "manual_repros/respawn_odd_location_after_up_b_below_wall.json",
+  "source_trace": "live_capture/respawn_odd_location_after_up_b_below_wall.json",
   "description": "P1 Fox Up-B below the FD wall, dies, then holds down through Rebirth platform exit.",
   "seed": 9,
   "stage_id": 32,

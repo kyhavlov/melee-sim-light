@@ -229,7 +229,7 @@ def _fod_platform_heights_from_frames(
     grIzumi platform height. Missing frames carry the previous height, matching the viewer parser's
     stage-state handling.
     refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
-    tools/modelplay/viewer/src/parse/parser.ts::handleFodPlatformsEvent
+    tools/viewer/slippi-viewer/src/parse/parser.ts::handleFodPlatformsEvent
     """
     default = np.asarray(default_heights, dtype=np.float32)
     if default.shape != (2,):

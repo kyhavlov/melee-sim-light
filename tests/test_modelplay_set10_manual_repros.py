@@ -83,7 +83,7 @@ def _step_once(seed: np.ndarray) -> np.void:
 
 
 @pytest.mark.integration
-def test_webplay_set10_randall_fastfall_lands_instead_of_hovering() -> None:
+def test_live_set10_randall_fastfall_lands_instead_of_hovering() -> None:
     # Manual set10 repro: Fox fastfalls onto Randall with neutral stick. The stale source seed still
     # names Yoshi's right platform, while the live floor sweep hits Randall's generated support
     # line. Fall_Coll should publish the ordinary platform landing through
@@ -94,7 +94,7 @@ def test_webplay_set10_randall_fastfall_lands_instead_of_hovering() -> None:
     # refs/melee/src/melee/mp/mpcoll.c::mpColl_80047E14
     # refs/melee/src/melee/gr/grstory.c::{grStory_801E3370,Ground_801C2FE0}
     fixture = _load_fixture("set10_weird_randall_landing_frame_2887_seed.json")
-    assert fixture["source_trace"] == "manual_repros/set10/weird_randall_landing.json"
+    assert fixture["source_trace"] == "live_capture/set10/weird_randall_landing.json"
 
     out = _step_once(_seed_from_fixture(fixture))
     p = int(fixture["expected"]["player"])

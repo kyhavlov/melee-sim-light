@@ -34,6 +34,6 @@
     "speed_y": -3.4000000953674316,
     "submotion_id": 20
   },
-  "source_trace": "manual_repros/set10/weird_randall_landing.json",
+  "source_trace": "live_capture/set10/weird_randall_landing.json",
   "stage_id": 8
 }

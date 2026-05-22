@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>melee-sim-light viewer</title>
+    <script type="text/javascript" src="/tools/viewer/slippi-viewer/dist/index.js"></script>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      html,
+      body {
+        height: 100%;
+      }
+
+      body {
+        margin: 0;
+        background: #f7f7f4;
+        color: #20211f;
+      }
+
+      main {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 300px;
+        gap: 16px;
+        min-height: 100vh;
+        box-sizing: border-box;
+        padding: 12px;
+      }
+
+      .viewer-pane {
+        display: flex;
+        min-width: 0;
+        min-height: 0;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+      }
+
+      slippi-viewer {
+        display: block;
+        aspect-ratio: 730 / 600;
+        width: min(100%, calc((100vh - 24px) * 730 / 600));
+        max-width: 100%;
+        max-height: 100%;
+      }
+
+      aside {
+        border-left: 1px solid #d7d8d2;
+        padding-left: 16px;
+        min-height: 0;
+        overflow: auto;
+        font-size: 14px;
+        line-height: 1.4;
+      }
+
+      h1 {
+        margin: 0 0 12px;
+        font-size: 18px;
+      }
+
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+
+      button,
+      .button {
+        display: inline-block;
+        border: 1px solid #9da096;
+        background: #fff;
+        color: inherit;
+        padding: 6px 10px;
+        cursor: pointer;
+        text-decoration: none;
+      }
+
+      input[type="file"] {
+        max-width: 100%;
+      }
+
+      .status {
+        min-height: 40px;
+        margin: 0 0 12px;
+        color: #4b4d47;
+      }
+
+      .error {
+        color: #9f1d1d;
+      }
+
+      @media (max-width: 860px) {
+        main {
+          grid-template-columns: 1fr;
+        }
+
+        slippi-viewer {
+          width: 100%;
+        }
+
+        aside {
+          border-left: 0;
+          border-top: 1px solid #d7d8d2;
+          padding: 12px 0 0;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <main>
+      <section class="viewer-pane">
+        <slippi-viewer zips-base-url="/tools/viewer/slippi-viewer/public"></slippi-viewer>
+      </section>
+      <aside>
+        <h1>MSL Viewer</h1>
+        <p id="status" class="status">Load an MSL trace.</p>
+        <div class="controls">
+          <input type="file" id="choose-trace" accept=".json,.msltrace.json,application/json" />
+          <button id="clear" type="button">Clear</button>
+          <a class="button" href="/tools/viewer/live/">Live Play</a>
+        </div>
+      </aside>
+    </main>
+
+    <script type="module">
+      import { loadMslTraceFile } from "/tools/viewer/msltrace1.js";
+
+      const viewer = document.querySelector("slippi-viewer");
+      const input = document.querySelector("#choose-trace");
+      const clearButton = document.querySelector("#clear");
+      const status = document.querySelector("#status");
+
+      function setStatus(message, isError = false) {
+        status.textContent = message;
+        status.className = isError ? "status error" : "status";
+      }
+
+      input.addEventListener("change", async () => {
+        const file = input.files[0];
+        if (!file) return;
+        setStatus(`Loading ${file.name}...`);
+        try {
+          const replayData = await loadMslTraceFile(file);
+          viewer.setReplayData(replayData);
+          setStatus(`Loaded ${file.name} (${replayData.frames.length} frames).`);
+        } catch (error) {
+          console.error(error);
+          setStatus(`Failed to load trace: ${error.message}`, true);
+        }
+      });
+
+      clearButton.addEventListener("click", () => {
+        viewer.clear();
+        input.value = "";
+        setStatus("Load an MSL trace.");
+      });
+    </script>
+  </body>
+</html>

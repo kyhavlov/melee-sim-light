@@ -55,6 +55,7 @@ manual_repros/
 !tests/fixtures/modelplay/manual_repros/**/
 !tests/fixtures/modelplay/manual_repros/**/*.json
 tools/modelplay/__pycache__/
+tools/viewer/slippi-viewer/public/zips/*.zip
 __pycache__/
 *.pyc
 *.so

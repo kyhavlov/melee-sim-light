@@ -11,7 +11,7 @@
   "traces": [
     {
       "name": "spacie_upb_backwards_fastfall_neutral_ledgegrab",
-      "source_trace": "manual_repros/fox_upb_wallride_fastfall_no_ledgegrab.json",
+      "source_trace": "live_capture/fox_upb_wallride_fastfall_no_ledgegrab.json",
       "seed": 10,
       "stage_id": 32,
       "end_frame": 305,
@@ -927,7 +927,7 @@
     },
     {
       "name": "falco_left_ledge_damagefly_wall_reflect",
-      "source_trace": "manual_repros/falco_knocked_against_stage_on_ledge.json",
+      "source_trace": "live_capture/falco_knocked_against_stage_on_ledge.json",
       "seed": 3,
       "stage_id": 32,
       "end_frame": 1660,
@@ -5392,7 +5392,7 @@
     },
     {
       "name": "teeter_edges",
-      "source_trace": "manual_repros/teeter_bugs.json",
+      "source_trace": "live_capture/teeter_bugs.json",
       "seed": 4,
       "stage_id": 32,
       "end_frame": 920,
@@ -9303,7 +9303,7 @@
     },
     {
       "name": "grounded_sideb_to_ledge",
-      "source_trace": "manual_repros/grounded_sideb_to_ledge.json",
+      "source_trace": "live_capture/grounded_sideb_to_ledge.json",
       "seed": 3,
       "stage_id": 32,
       "end_frame": 570,

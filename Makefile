@@ -1,4 +1,4 @@
-.PHONY: build clean-native-shadow test test-parallel test-serial package-smoke preprocess preprocess-aggregate slpz-convert-validation slpz-convert-suite validate validate-aggregate validate-rollout validate-rollout-aggregate validate-all rollout-capture rollout-summary rollout-diff rollout-locate rollout-locate-summary rollout-locate-diff rollout-disruptive rollout-disruptive-rerank build_data webplay-build webplay fmt fmt-check check guardrail-preflight guardrail-preflight-full guardrail-baseline forensic-rows dolphin-engine-dump dolphin-extract dolphin-forensic-row build-bench-sim bench-sim FORCE
+.PHONY: build clean-native-shadow test test-parallel test-serial package-smoke preprocess preprocess-aggregate slpz-convert-validation slpz-convert-suite validate validate-aggregate validate-rollout validate-rollout-aggregate validate-all rollout-capture rollout-summary rollout-diff rollout-locate rollout-locate-summary rollout-locate-diff rollout-disruptive rollout-disruptive-rerank build_data viewer-build viewer fmt fmt-check check guardrail-preflight guardrail-preflight-full guardrail-baseline forensic-rows dolphin-engine-dump dolphin-extract dolphin-forensic-row build-bench-sim bench-sim FORCE
 
 PY := uv run python
 DATASETS_DIR ?= datasets
@@ -45,7 +45,7 @@ BUILD_STAMP ?= build/msl_binding.stamp
 NATIVE_EXT_GLOB := melee_sim/_native*.so
 LEGACY_ROOT_EXT_GLOB := msl_binding*.so
 BUILD_SRCS := $(shell find src bindings -type f '(' -name '*.c' -o -name '*.h' ')' -print; printf '%s\n' setup.py pyproject.toml)
-WEBPLAY_PORT ?= 8001
+VIEWER_PORT ?= 8001
 HOST ?= 127.0.0.1
 OPEN ?= 1
 
@@ -163,12 +163,11 @@ rollout-disruptive-rerank:
 build_data:
 	@$(PY) -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba,griz,grps,grst,grop --chars fox,falco
 
-webplay-build:
-	@tools/webplay/build_wasm.sh
-	@npm --prefix tools/modelplay/viewer run build
+viewer-build:
+	@tools/viewer/build.sh
 
-webplay:
-	@MSL_WEBPLAY_HOST="$(HOST)" MSL_WEBPLAY_PORT="$(WEBPLAY_PORT)" MSL_WEBPLAY_OPEN="$(OPEN)" node tools/webplay/webplay_server.mjs
+viewer:
+	@MSL_VIEWER_STATIC_ROOT="build/viewer" MSL_VIEWER_URL_PATH="/tools/viewer/" MSL_VIEWER_HOST="$(HOST)" MSL_VIEWER_PORT="$(VIEWER_PORT)" MSL_VIEWER_OPEN="$(OPEN)" node tools/viewer/server.mjs
 
 fmt:
 	@command -v "$(CLANG_FORMAT)" >/dev/null 2>&1 || (echo "Missing clang-format (set CLANG_FORMAT=... or install it)."; exit 1)

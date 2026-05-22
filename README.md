@@ -196,6 +196,30 @@ int melee_batch_write_gamestate(const MslBatch* batch, const uint8_t* viewpoint_
                                 size_t out_stride_bytes);
 ```
 
+## Viewer
+
+![Live viewer screenshot](viewer-live.png)
+
+There's a web viewer in `tools/viewer` that supports both a live play mode
+for driving an exported WASM version of the sim with keyboard/controller input, and watching
+saved replay traces that can be written from sim gamestate data. It uses the
+[`@gcpreston/slippi-viewer`](https://www.npmjs.com/package/@gcpreston/slippi-viewer)
+project for game visualization:
+
+```bash
+npm --prefix tools/viewer/slippi-viewer install
+make viewer-build
+make viewer
+```
+
+Open `http://127.0.0.1:8001/tools/viewer/`.
+
+Modelplay and the live viewer both write `*.msltrace.json`. The trace format is
+documented in `tools/viewer/TRACE_FORMAT.md`; it is compact JSON with
+sparse-delta frame, input, and item streams. `make viewer-build` downloads the
+display assets into `build/cache/viewer-zips/` on first use and
+verifies them by checksum on later builds.
+
 ## Public API Contract
 
 The public runtime surface is the `melee_sim` Python package. The native C core

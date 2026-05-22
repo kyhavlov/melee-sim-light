@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>melee-sim-light live viewer</title>
+    <script type="text/javascript" src="../slippi-viewer/dist/index.js"></script>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      html,
+      body {
+        height: 100%;
+      }
+
+      body {
+        margin: 0;
+        background: #f7f7f4;
+        color: #20211f;
+        overflow: hidden;
+      }
+
+      main {
+        --page-padding: 12px;
+        --sidebar-width: 280px;
+        --layout-gap: 16px;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) var(--sidebar-width);
+        gap: var(--layout-gap);
+        height: 100vh;
+        min-height: 0;
+        box-sizing: border-box;
+        padding: var(--page-padding);
+      }
+
+      .viewer-pane {
+        display: flex;
+        min-width: 0;
+        min-height: 0;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+      }
+
+      slippi-viewer {
+        display: block;
+        aspect-ratio: 730 / 600;
+        width: min(
+          100%,
+          calc((100vh - (2 * var(--page-padding))) * 730 / 600)
+        );
+        max-width: 100%;
+        max-height: 100%;
+        min-width: 0;
+      }
+
+      aside {
+        border-left: 1px solid #d7d8d2;
+        padding-left: 16px;
+        min-height: 0;
+        overflow: auto;
+        font-size: 14px;
+        line-height: 1.4;
+      }
+
+      h1 {
+        margin: 0 0 12px;
+        font-size: 18px;
+      }
+
+      dl {
+        display: grid;
+        grid-template-columns: 72px 1fr;
+        gap: 6px 10px;
+        margin: 12px 0;
+      }
+
+      dt {
+        font-weight: 700;
+      }
+
+      dd {
+        margin: 0;
+      }
+
+      .status {
+        min-height: 40px;
+        margin: 0 0 12px;
+      }
+
+      .error {
+        color: #9f1d1d;
+      }
+
+      button {
+        border: 1px solid #9da096;
+        background: #fff;
+        color: inherit;
+        padding: 6px 10px;
+        cursor: pointer;
+      }
+
+      button:disabled {
+        cursor: default;
+        opacity: 0.55;
+      }
+
+      select {
+        border: 1px solid #9da096;
+        background: #fff;
+        color: inherit;
+        padding: 5px 8px;
+      }
+
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+
+      .control-player {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+
+      .control-player span {
+        font-weight: 700;
+      }
+
+      .control-player button[aria-pressed="true"] {
+        background: #20211f;
+        color: #fff;
+        border-color: #20211f;
+      }
+
+      .stage-selector {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+
+      .stage-selector button {
+        min-width: 0;
+        padding: 6px 4px;
+        white-space: nowrap;
+      }
+
+      .stage-selector button[aria-pressed="true"] {
+        background: #20211f;
+        color: #fff;
+        border-color: #20211f;
+      }
+
+      .input-status {
+        min-height: 40px;
+        margin: 0 0 12px;
+        color: #4b4d47;
+      }
+
+      @media (max-width: 860px) {
+        body {
+          overflow: auto;
+        }
+
+        main {
+          grid-template-columns: 1fr;
+          height: auto;
+          min-height: 100vh;
+        }
+
+        .viewer-pane {
+          align-items: flex-start;
+        }
+
+        slippi-viewer {
+          width: 100%;
+        }
+
+        aside {
+          border-left: 0;
+          border-top: 1px solid #d7d8d2;
+          padding: 12px 0 0;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <main>
+      <section class="viewer-pane">
+        <slippi-viewer zips-base-url="../slippi-viewer/public"></slippi-viewer>
+      </section>
+      <aside>
+        <h1>Live Play</h1>
+        <p id="status" class="status">Loading WASM sim...</p>
+        <div class="controls">
+          <button id="reset" type="button">Reset</button>
+          <button id="save-trace" type="button">Save Trace</button>
+          <button id="connect-adapter" type="button">Connect GC Adapter</button>
+          <select id="adapter-port" aria-label="GameCube adapter port">
+            <option value="0">Port 1</option>
+            <option value="1">Port 2</option>
+            <option value="2">Port 3</option>
+            <option value="3">Port 4</option>
+          </select>
+        </div>
+        <div class="control-player" aria-label="Controlled sim player">
+          <span>Control</span>
+          <button id="control-p1" type="button" aria-pressed="true">P1</button>
+          <button id="control-p2" type="button" aria-pressed="false">P2</button>
+        </div>
+        <div id="stage-selector" class="stage-selector" aria-label="Stage selector"></div>
+        <p id="input-status" class="input-status">GameCube adapter: not connected.</p>
+        <dl>
+          <dt>Stick</dt>
+          <dd>WASD</dd>
+          <dt>C-stick</dt>
+          <dd>T/G/F/H</dd>
+          <dt>A / B</dt>
+          <dd>X / C</dd>
+          <dt>X / Y</dt>
+          <dd>V / B</dd>
+          <dt>Z</dt>
+          <dd>N</dd>
+          <dt>L / R</dt>
+          <dd>Q / E</dd>
+          <dt>Reset</dt>
+          <dd>R</dd>
+        </dl>
+      </aside>
+    </main>
+
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>

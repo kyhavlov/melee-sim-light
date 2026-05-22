@@ -391,7 +391,7 @@ def test_terminal_fall_from_damage_owner_does_not_require_concrete_cap(tmp_path:
 
               batch.state.action_id[1] = (uint16_t)MSL_ACT_DAMAGE_FLY_TOP;
               batch.state.prev_action_id[1] = (uint16_t)MSL_ACT_DAMAGE_FLY_TOP;
-              batch.state.char_id[1] = (uint8_t)MSL_DAMAGE_OWNER_CHAR_FOX;
+              batch.state.char_id[1] = (uint8_t)MSL_CHAR_ID_FOX;
               batch.state.instance_hit_by[1] = 77u;
 
               assert(msl_damage_owner_terminal_state_blocks_enable_edge_body(

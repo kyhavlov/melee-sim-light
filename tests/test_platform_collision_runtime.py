@@ -843,7 +843,7 @@ def test_cliff_ledge_floor_owner_reseed_uses_facing_not_position() -> None:
 
 
 def test_yoshi_downhill_slope_grounded_projection_tracks_floor_height() -> None:
-    # Manual webplay bug: walking/running downhill on Yoshi could keep the fighter stranded at the
+    # Manual live-viewer bug: walking/running downhill on Yoshi could keep the fighter stranded at the
     # previous higher Y. Source `mpLib_8004DD90_Floor` returns signed correction for current
     # floor.index, so grounded slope persistence must apply the downward correction too.
     # refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
@@ -1300,7 +1300,7 @@ def test_yoshi_center_raw_platform_is_debug_visible_but_not_fighter_solid() -> N
 
 
 def test_fod_live_platform_scheduler_moves_without_replay_seed() -> None:
-    # Live/webplay/new-match FoD has no Slippi current-height seed lanes. Runtime should initialize
+    # Live-viewer/new-match FoD has no Slippi current-height seed lanes. Runtime should initialize
     # grIzumi scheduler state from generated stage data and advance the C-owned platform height.
     import msl_binding
 
@@ -1595,8 +1595,8 @@ def test_fod_platform_scheduler_rand_range_matches_grizumi_replay_real() -> None
     assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
 
 
-def test_fod_live_platform_stage_debug_reports_runtime_height_for_webplay() -> None:
-    # Webplay/modelplay render FoD platforms from this debug stage-state path, so the visual
+def test_fod_live_platform_stage_debug_reports_runtime_height_for_live() -> None:
+    # Live viewer/modelplay render FoD platforms from this debug stage-state path, so the visual
     # platform height must be the same grIzumi runtime owner value used by collision.
     import msl_binding
 

@@ -1,10 +1,10 @@
 # Modelplay
 
-Throwaway pipeline for:
+Pipeline for:
 
 - running pre-existing `slippi-ai` models against the lite sim
-- exporting a browser-viewable trace
-- scrubbing that trace in a forked `slippi-viewer`
+- exporting an `MSLTRACE1` trace
+- scrubbing that trace in the shared viewer
 
 Current v0 scope:
 
@@ -24,7 +24,7 @@ uv run python -m tools.modelplay.run_model_match \
   --p2-model /path/to/model2.pkl
 ```
 
-This writes `trace.json` under `reports/triage/...`.
+This writes `trace.msltrace.json` under `reports/triage/...`.
 
 Diverse traces with the same checkpoint on both ports can use fused batched inference. This stacks
 all port/env views into one Slippi-AI `DelayedAgent` call per frame and writes one trace directory
@@ -44,8 +44,8 @@ Batch output layout:
 ```text
 reports/modelplay/<run_name>/
   summary.txt
-  env_000/trace.json
-  env_001/trace.json
+  env_000/trace.msltrace.json
+  env_001/trace.msltrace.json
   ...
 ```
 
@@ -83,19 +83,17 @@ through the final stock without needing extra flags.
 The runner also detects sustained static-state failures. If the same state repeats for
 `--static-frame-threshold` consecutive frames (default `600`), it stops early, records
 `termination_reason = "static_failure"` in `summary.txt`, and writes a trimmed
-`trace_to_failure.json` ending at the first repeated bad frame.
+`trace_to_failure.msltrace.json` ending at the first repeated bad frame.
 
 Viewer:
 
 ```bash
-cd tools/modelplay/viewer
-npm install
-npm run build
-python -m http.server 8000
+make viewer-build
+make viewer
 ```
 
 Then open:
 
-`http://127.0.0.1:8000/examples/sim/`
+`http://127.0.0.1:8001/tools/viewer/`
 
-and load the generated `trace.json`.
+and load the generated `trace.msltrace.json`.

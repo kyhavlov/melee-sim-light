@@ -136,7 +136,7 @@ uv run python -m tools.dolphin.patch_slp_preframe_window \
   --out reports/triage/<probe>/probe.slp
 ```
 
-Patch specs use raw Slippi frame numbers. Parser/viewer frame displays usually add 123, and modelplay `trace.json` frame numbers are sequential trace/viewer indices rather than native `.slp` frame ids.
+Patch specs use raw Slippi frame numbers. Parser/viewer frame displays usually add 123, and modelplay `*.msltrace.json` frame numbers are sequential trace/viewer indices rather than native `.slp` frame ids.
 
 The rerun7 frame-2124 shield investigation used this workflow: neutral/toward shield produced vanilla `GuardSetOff` with shield HP loss, while facing-away plus down-tilted shield produced vanilla damage with shield HP unchanged. That confirmed the observed hit as a legitimate shield poke, not a shield-release or sim-only bug.
 

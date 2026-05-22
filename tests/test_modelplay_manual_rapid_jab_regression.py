@@ -32,7 +32,7 @@ def _root() -> Path:
 
 def _load_fixture(path: str = RAPID_ENTRY_FIXTURE) -> dict[str, Any]:
     fixture = json.loads((_root() / path).read_text(encoding="utf-8"))
-    assert fixture["source_trace"] == "manual_repros/fox_no_rapid_jabs.json"
+    assert fixture["source_trace"] == "live_capture/fox_no_rapid_jabs.json"
     assert fixture["input_fields"] == ["buttons", "mainX", "mainY", "cX", "cY", "l", "r"]
     assert fixture["windows"] == [
         {
@@ -56,7 +56,7 @@ def _load_hit_fixture() -> dict[str, Any]:
     fixture = json.loads((_root() / RAPID_HIT_FIXTURE).read_text(encoding="utf-8"))
     assert (
         fixture["source_trace"]
-        == "manual_repros/fox_rapid_jab_doesnt_hit_and_easily_cancelled.json"
+        == "live_capture/fox_rapid_jab_doesnt_hit_and_easily_cancelled.json"
     )
     assert fixture["input_fields"] == ["buttons", "mainX", "mainY", "cX", "cY", "l", "r"]
     assert fixture["windows"] == [
@@ -336,8 +336,8 @@ def test_rapid_jab_path_uses_character_data_for_falco_too() -> None:
 
 @pytest.mark.integration
 def test_fox_attack100_loop_hits_and_then_locks_into_attack100end() -> None:
-    # This is a compact fixture from manual webplay trace
-    # manual_repros/fox_rapid_jab_doesnt_hit_and_easily_cancelled.json. It exists because the
+    # This is a compact fixture from manual live trace
+    # live_capture/fox_rapid_jab_doesnt_hit_and_easily_cancelled.json. It exists because the
     # first rapid-jab implementation exported Attack100Loop move-script hitboxes but left the
     # derived MSLHITB1 runtime hitbox tables stale, so the loop entered but never hit.
     # The compact approach omits the trace's final hard-right movement prefix: source-correct FD

@@ -11,7 +11,7 @@ import pytest
 from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE
 from tools.modelplay.sim_env import build_match_config_array
 
-FIXTURE = "tests/fixtures/modelplay/manual_webplay_combat_repros.json"
+FIXTURE = "tests/fixtures/modelplay/manual_live_combat_repros.json"
 
 MSL_COLLIDE_RIGHT_WALL_PUSH = 0x00000040
 MSL_COLLIDE_RIGHT_WALL_HUG = 0x00000800

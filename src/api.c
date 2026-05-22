@@ -1200,7 +1200,7 @@ static int msl_batch_init_match_impl(MslBatch* batch, const uint8_t* config_byte
     }
     batch->state.opening_input_lock_timer[bi] = match_flow_sim_init_opening_input_lock_timer();
     if (batch->state.stage_id[bi] == 2u) {
-      // New-match/webplay runtime has no replay current-height seed, so it owns grIzumi scheduling
+      // New-match/live-viewer runtime has no replay current-height seed, so it owns grIzumi scheduling
       // from match start. Teacher-forced reseed rows intentionally leave this disabled unless
       // causal FoD height/velocity seed lanes are present.
       // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
@@ -4847,7 +4847,7 @@ int msl_batch_debug_shield_display_bubbles_world(const MslBatch* batch, int batc
   }
 
   // Display-only correction for guard visualization:
-  // `shields_refresh` still emits the gameplay ShieldDesc center used by validation. Webplay has no
+  // `shields_refresh` still emits the gameplay ShieldDesc center used by validation. The live viewer has no
   // shield joint/model render, so draw no-tilt GuardOn/GuardReflect from the steady no-tilt pose
   // instead of the transient collision entry pose. For nonzero `mv.co.guard.x4`, blend the angled
   // Guard timeline sample against `fp->ft_data->x20->x8`, not against the timeline's neutral frame.

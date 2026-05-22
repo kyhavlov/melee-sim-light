@@ -24,7 +24,7 @@ from tools.modelplay.state_adapter import (
     MSL_STAGE_YOSHIS_STORY,
     SimFrameState,
 )
-from tools.modelplay.viewer_trace import ViewerTrace
+from tools.viewer.msltrace1 import MslTraceWriter
 
 
 CHAR_IDS = {
@@ -225,7 +225,10 @@ def main() -> int:
         name=[f"P{port}-E{env:03d}" for port in (1, 2) for env in range(args.num_traces)],
     )
 
-    traces = [ViewerTrace() for _ in range(args.num_traces)]
+    traces = [
+        MslTraceWriter(metadata={"model": {"runner": "tools.modelplay.run_model_batch"}})
+        for _ in range(args.num_traces)
+    ]
     done = np.zeros(args.num_traces, dtype=np.bool_)
     frames_run = np.zeros(args.num_traces, dtype=np.int32)
     summaries: list[dict | None] = [None for _ in range(args.num_traces)]
@@ -289,7 +292,7 @@ def main() -> int:
                 trace = traces[env]
                 trace.add_frame(state, session.last_controllers[env])
                 frames_run[env] += 1
-                current_frame = len(trace.frames) - 1
+                current_frame = trace.frame_count - 1
 
                 signature = _static_signature(state)
                 if signature == prev_signatures[env]:
@@ -348,14 +351,14 @@ def main() -> int:
                     continue
 
                 env_dir = _env_dir(out_dir, env, env_labels[env], state)
-                trace_path = env_dir / "trace.json"
+                trace_path = env_dir / "trace.msltrace.json"
                 trace.write_json(trace_path)
                 trace_to_failure_path = None
                 if static_failures[env] is not None:
-                    trace_to_failure_path = env_dir / "trace_to_failure.json"
+                    trace_to_failure_path = env_dir / "trace_to_failure.msltrace.json"
                     trace.write_json(trace_to_failure_path, frame_limit=static_failures[env]["start_frame"] + 1)
                 elif player_static_failures[env] is not None:
-                    trace_to_failure_path = env_dir / "trace_to_failure.json"
+                    trace_to_failure_path = env_dir / "trace_to_failure.msltrace.json"
                     trace.write_json(
                         trace_to_failure_path,
                         frame_limit=player_static_failures[env]["start_frame"] + 1,
@@ -376,7 +379,7 @@ def main() -> int:
             if summaries[env] is not None:
                 continue
             env_dir = _env_dir(out_dir, env, env_labels[env], state)
-            trace_path = env_dir / "trace.json"
+            trace_path = env_dir / "trace.msltrace.json"
             traces[env].write_json(trace_path)
             summaries[env] = _termination_summary(
                 state=state,

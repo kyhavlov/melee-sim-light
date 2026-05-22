@@ -2238,7 +2238,7 @@ int msl_batch_debug_set_coll_env_flags(MslBatch* batch, int batch_index, int pla
                                        uint32_t flags);
 
 // Debug-only helper: override fighter root position/facing for fixture replay setup (test-only).
-// Intended for webplay/manual repro fixtures whose first-frame root position is part of the
+// Intended for live-viewer/manual repro fixtures whose first-frame root position is part of the
 // captured prefix, not for training/rollouts.
 int msl_batch_debug_set_player_root(MslBatch* batch, int batch_index, int player_index, float pos_x,
                                     float pos_y, uint8_t facing);

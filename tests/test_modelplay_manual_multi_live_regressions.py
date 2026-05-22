@@ -11,7 +11,7 @@ import pytest
 from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE
 from tools.modelplay.sim_env import build_match_config_array
 
-FIXTURE = "tests/fixtures/modelplay/manual_respawn_odd_location_after_up_b_below_wall_prefix_0_448.json"
+FIXTURE = "tests/fixtures/modelplay/manual_multi_live_locomotion_specialhi_prefix_0_2460.json"
 
 
 def _root() -> Path:
@@ -20,23 +20,24 @@ def _root() -> Path:
 
 def _load_fixture() -> dict[str, Any]:
     fixture = json.loads((_root() / FIXTURE).read_text(encoding="utf-8"))
-    assert fixture["source_trace"] == "live_capture/respawn_odd_location_after_up_b_below_wall.json"
+    assert fixture["source_trace"] == "live_capture/multi_live.json"
     assert fixture["input_fields"] == ["buttons", "mainX", "mainY", "cX", "cY", "l", "r"]
     assert fixture["windows"] == [
         {
-            "start_frame": 202,
-            "end_frame": 313,
-            "note": "Fox Up-Bs below the left FD underside, then dies from the bottom blastzone.",
+            "start_frame": 316,
+            "end_frame": 340,
+            "note": (
+                "Fox Run -> TurnRun should finish into Run with post-flip facing when stick stays "
+                "opposite old facing."
+            ),
         },
         {
-            "start_frame": 373,
-            "end_frame": 432,
-            "note": "Rebirth descends from camera top to the respawn platform.",
-        },
-        {
-            "start_frame": 433,
-            "end_frame": 448,
-            "note": "Down-held RebirthWait exit enters Fall without stale underside ceiling projection.",
+            "start_frame": 2159,
+            "end_frame": 2258,
+            "note": (
+                "Grounded horizontal Firefox leaves SpecialHi into FallSpecial with all jumps "
+                "consumed before recovery fall."
+            ),
         },
     ]
     return fixture
@@ -109,41 +110,42 @@ def _replay_fixture(fixture: dict[str, Any], *, end_frame: int) -> dict[int, np.
 
 
 @pytest.mark.integration
-def test_rebirthwait_drop_does_not_reuse_pre_death_ceiling_contact() -> None:
-    # Manual live repro: Fox Up-B hits the FD underside before dying. The old runtime left
-    # CollData's ceiling id/env flags live through Dead*/Rebirth, so the first Fall frame after
-    # a down-held RebirthWait exit projected the respawn position back down to the underside.
-    #
-    # Source owner:
-    # - Dead* -> Rebirth runs Fighter_UnkProcessDeath_80068354 / Fighter_UnkInitReset_80067C98.
-    # - Rebirth/RebirthWait use dedicated collision callbacks instead of common Fall CollData
-    #   ceiling persistence.
-    # refs/melee/src/melee/ft/fighter.c::{
-    #   Fighter_UnkProcessDeath_80068354,Fighter_UnkInitReset_80067C98}
-    # refs/melee/src/melee/ft/ft_0D4D.c::{ftCo_Rebirth_Coll,ftCo_RebirthWait_Coll}
-    fixture = _load_fixture()
-    history = _replay_fixture(fixture, end_frame=448)
+def test_run_turnaround_finishes_into_run_with_post_flip_facing() -> None:
+    # Source owner: ftCo_TurnRun_Anim flips facing after the script-owned pivot gate, then the
+    # animation-end path calls fn_800CA644 against that post-flip facing before falling back to Wait.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_TurnRun.c::ftCo_TurnRun_Anim
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Run.c::fn_800CA644
+    history = _replay_fixture(_load_fixture(), end_frame=350)
 
     fox = 0
-    assert int(history[313]["action_id"][fox]) == 0  # DeadDown from bottom blastzone.
-    assert float(history[313]["pos_y"][fox]) < -140.0
+    assert int(history[316]["action_id"][fox]) == 19  # TurnRun entry from Run.
+    assert int(history[316]["facing"][fox]) == 0
+    assert int(history[335]["action_id"][fox]) == 19
+    assert int(history[335]["facing"][fox]) == 1
 
-    assert int(history[431]["action_id"][fox]) == 12  # Rebirth reaches platform height.
-    assert float(history[431]["pos_y"][fox]) == pytest.approx(45.0, abs=1e-3)
+    # The script-owned pivot freeze delays the animation-end handoff, but the destination remains
+    # post-flip Run rather than Wait -> Turn.
+    assert int(history[345]["action_id"][fox]) == 21
+    assert int(history[345]["facing"][fox]) == 1
+    assert int(history[346]["action_id"][fox]) == 21
 
-    assert int(history[432]["action_id"][fox]) == 29  # RebirthWait IASA exits to Fall.
-    assert float(history[432]["pos_y"][fox]) == pytest.approx(44.77, abs=1e-3)
-    assert float(history[432]["pos_y"][fox]) > 0.0
 
-    for frame in range(432, 448):
-        assert int(history[frame]["action_id"][fox]) == 29
-        assert float(history[frame]["pos_y"][fox]) > -5.0
-        assert int(history[frame]["on_ground"][fox]) == 0
+@pytest.mark.integration
+def test_specialhi_fallspecial_consumes_jumps_before_recovery_fall() -> None:
+    # Source owner: ftCo_80096900(..., unk=true) consumes all jumps when SpecialHi enters
+    # FallSpecial, via ftCommon_8007D60C on grounded source states or ftCommon_UseAllJumps in air.
+    # The manual trace presses X during the recovery fall; this must not become JumpAerial.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_80096900
+    # refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D60C,ftCommon_UseAllJumps}
+    history = _replay_fixture(_load_fixture(), end_frame=2455)
 
-    # The input is held down long before respawn, so the source x671 tilt timer is stale and Fall
-    # must not latch fastfall immediately after RebirthWait. The important regression lock is that
-    # the first Fall frames remain above stage rather than reusing stale underside ceiling contact.
-    assert int(history[448]["action_id"][fox]) == 29
-    assert float(history[448]["pos_y"][fox]) > 0.0
-    assert int(history[448]["state_flags"][fox][1]) & 0x08 == 0
-    assert int(history[448]["on_ground"][fox]) == 0
+    fox = 0
+    assert int(history[2159]["action_id"][fox]) == 353  # Grounded SpecialHi.
+    assert int(history[2251]["action_id"][fox]) == 35  # FallSpecial.
+    assert int(history[2251]["jumps_left"][fox]) == 0
+
+    for frame in range(2251, 2259):
+        assert int(history[frame]["action_id"][fox]) != 28  # No JumpAerialB during recovery.
+        assert int(history[frame]["jumps_left"][fox]) == 0
+
+    assert int(history[2450]["action_id"][fox]) == 0  # Continues falling to blastzone death.

@@ -8,7 +8,7 @@ from pathlib import Path
 from tools.modelplay.sim_env import SimSession
 from tools.modelplay.slippi_ai_bridge import build_model_agent, stop_model_agent
 from tools.modelplay.state_adapter import SimFrameState
-from tools.modelplay.viewer_trace import ViewerTrace
+from tools.viewer.msltrace1 import MslTraceWriter
 
 
 CHAR_IDS = {
@@ -193,7 +193,7 @@ def main() -> int:
         port: build_model_agent(slippi_ai_root=args.slippi_ai_root, model_path=model_path, name=name)
         for port, (model_path, name) in model_specs.items()
     }
-    trace = ViewerTrace()
+    trace = MslTraceWriter(metadata={"model": {"runner": "tools.modelplay.run_model_match"}})
 
     try:
         env_out = session.reset()
@@ -223,7 +223,7 @@ def main() -> int:
             frames_run += 1
             state = session.current_frame_state
             signature = _static_signature(state)
-            current_frame = len(trace.frames) - 1
+            current_frame = trace.frame_count - 1
             if signature == prev_signature:
                 static_repeat_count += 1
             else:
@@ -275,7 +275,7 @@ def main() -> int:
             if player_static_failure is not None:
                 break
 
-        trace_path = out_dir / "trace.json"
+        trace_path = out_dir / "trace.msltrace.json"
         trace.write_json(trace_path)
         trace_to_failure_path = None
         termination_reason = "max_frames"
@@ -283,11 +283,11 @@ def main() -> int:
             termination_reason = "game_over"
         elif static_failure is not None:
             termination_reason = "static_failure"
-            trace_to_failure_path = out_dir / "trace_to_failure.json"
+            trace_to_failure_path = out_dir / "trace_to_failure.msltrace.json"
             trace.write_json(trace_to_failure_path, frame_limit=static_failure["start_frame"] + 1)
         elif player_static_failure is not None:
             termination_reason = "player_static_failure"
-            trace_to_failure_path = out_dir / "trace_to_failure.json"
+            trace_to_failure_path = out_dir / "trace_to_failure.msltrace.json"
             trace.write_json(trace_to_failure_path, frame_limit=player_static_failure["start_frame"] + 1)
 
         summary = {

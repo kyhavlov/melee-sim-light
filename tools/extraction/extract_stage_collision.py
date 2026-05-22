@@ -259,7 +259,7 @@ def _stage_platform_transforms(stage_dat: Path) -> list[dict]:
     # vertex: world_y = source_local_y + current_height * 0.75f.
     # refs/melee/src/melee/gr/grizumi.c::{grIzumi_801CC358,grIzumi_801CCBDC}
     # refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
-    # tools/modelplay/viewer/src/components/viewer/Stage.tsx::FountainOfDreams
+    # tools/viewer/slippi-viewer/src/components/viewer/Stage.tsx::FountainOfDreams
     return [
         {
             "line_id": 0,

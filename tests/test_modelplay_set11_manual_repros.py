@@ -12,10 +12,10 @@ from tools.modelplay.sim_env import build_match_config_array
 
 
 FIXTURE_DREAMLAND_DASH_LEDGE = Path(
-    "tests/fixtures/modelplay/manual_repros/set11/dreamland_dash_dance_left_ledge_compact.json"
+    "tests/fixtures/modelplay/set11_dreamland_dash_dance_left_ledge_compact.json"
 )
 FIXTURE_YOSHI_PASS_LEDGE = Path(
-    "tests/fixtures/modelplay/manual_repros/set11/yoshi_platform_drop_ledge_grab_compact.json"
+    "tests/fixtures/modelplay/set11_yoshi_platform_drop_ledge_grab_compact.json"
 )
 
 ACT_FALL = 29

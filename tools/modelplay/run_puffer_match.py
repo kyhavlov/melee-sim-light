@@ -11,7 +11,7 @@ import numpy as np
 
 from tools.modelplay.puffer_bridge import IdleAgent, PufferAgent, RandomAgent
 from tools.modelplay.sim_env import CHAR_FALCO, CHAR_FOX, SimSession
-from tools.modelplay.viewer_trace import ViewerTrace
+from tools.viewer.msltrace1 import MslTraceWriter
 
 
 CHAR_IDS = {
@@ -92,7 +92,7 @@ def main() -> int:
     else:
         p2 = RandomAgent(np.random.default_rng(args.seed + 1))
 
-    trace = ViewerTrace()
+    trace = MslTraceWriter(metadata={"model": {"runner": "tools.modelplay.run_puffer_match"}})
     try:
         env_out = session.reset()
         trace.add_frame(session.current_frame_state, session.last_controllers)
@@ -114,7 +114,7 @@ def main() -> int:
             if int(state.stocks[0]) == 0 or int(state.stocks[1]) == 0:
                 break
 
-        trace_path = out_dir / "trace.json"
+        trace_path = out_dir / "trace.msltrace.json"
         trace.write_json(trace_path)
         summary = {
             "checkpoint": str(args.checkpoint),

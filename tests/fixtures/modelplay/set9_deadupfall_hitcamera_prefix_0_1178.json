@@ -7852,6 +7852,6 @@
     1178
   ],
   "seed": 3,
-  "source_trace": "manual_repros/set9/falco_dies_off_top_then_somehow_kicked_out_of_the_air.json",
+  "source_trace": "live_capture/set9/falco_dies_off_top_then_somehow_kicked_out_of_the_air.json",
   "stage_id": 8
 }

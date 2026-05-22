@@ -102,7 +102,7 @@ def _replay_fixture(
 
 
 @pytest.mark.integration
-def test_webplay_set9_deadupfall_hitcamera_has_no_live_body_caps_or_followup_damage() -> None:
+def test_live_set9_deadupfall_hitcamera_has_no_live_body_caps_or_followup_damage() -> None:
     # Manual set9 repro: Falco dies off the top, enters DeadUpFall/DeadUpFallHitCamera, then Fox's
     # up-air used to hit the invisible death-flow body at frame 1178. In vanilla these match-flow
     # states set fp->x2219_b1, which suppresses fighter/item collision independent of stock count.

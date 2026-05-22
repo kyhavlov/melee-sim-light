@@ -57,7 +57,7 @@ GAME_START = 0x36
 PRE_FRAME = 0x37
 
 # Slippi 0x37 pre-frame layout. These offsets are the same offsets consumed by
-# tools/modelplay/viewer/src/parse/parser.ts::parsePreFrameUpdateEvent.
+# tools/viewer/slippi-viewer/src/parse/parser.ts::parsePreFrameUpdateEvent.
 PRE_FRAME_OFFSETS = {
     "frame": 0x01,
     "player": 0x05,

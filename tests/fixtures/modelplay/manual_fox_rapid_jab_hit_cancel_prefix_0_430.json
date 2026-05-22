@@ -1,6 +1,6 @@
 {
-  "source_trace": "manual_repros/fox_rapid_jab_doesnt_hit_and_easily_cancelled.json",
-  "format": "melee-sim-light-compact-webplay-fixture-v1",
+  "source_trace": "live_capture/fox_rapid_jab_doesnt_hit_and_easily_cancelled.json",
+  "format": "melee-sim-light-compact-live-fixture-v1",
   "seed": 2,
   "stage_id": 32,
   "input_fields": [
