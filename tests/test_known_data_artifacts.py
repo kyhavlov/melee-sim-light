@@ -355,6 +355,10 @@ try:
         ("fod_platform_height", ("<f4", (2,))),
         ("fod_platform_height_valid", ("u1", (2,))),
         ("fod_platform_height_source", ("u1", (2,))),
+        ("randall_exists", "u1"),
+        ("_pad0", "V3"),
+        ("randall_x", "<f4"),
+        ("randall_y", "<f4"),
     ], align=False)
     msl_binding.step_input(handle, inp, inp)
     msl_binding.debug_write_stage_state(handle, stage)

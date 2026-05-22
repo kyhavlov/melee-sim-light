@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 
 from tools.eval.dataset import COMPARE_DTYPE, read_dataset
+from tools.modelplay.state_adapter import STAGE_DEBUG_DTYPE
 
 
 @dataclass(frozen=True)
@@ -51,14 +52,7 @@ def _step_one_record(row: np.ndarray, num_players: int):
 
 
 def _stage_state_dtype() -> np.dtype:
-    return np.dtype(
-        [
-            ("fod_platform_height", ("<f4", (2,))),
-            ("fod_platform_height_valid", ("u1", (2,))),
-            ("fod_platform_height_source", ("u1", (2,))),
-        ],
-        align=False,
-    )
+    return STAGE_DEBUG_DTYPE
 
 
 def _rollout_record(dataset_path: Path, *, start_record: int, target_record: int):

@@ -327,6 +327,11 @@ export interface StageState {
   readonly frameNumber: number;
   readonly fodLeftPlatformHeight: number;
   readonly fodRightPlatformHeight: number;
+  readonly randall?: {
+    readonly exists: boolean;
+    readonly x: number;
+    readonly y: number;
+  };
 }
 
 export interface StageStateOnLoad {

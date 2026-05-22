@@ -15,7 +15,7 @@ beginning.
 Top-level payload:
 
 ```json
-{"format":"MSLTRACE1","schemaVersion":1,"producer":{"name":"melee-sim-light","version":null},"createdAt":"2026-05-21T00:00:00Z","match":{},"inputs":{},"frames":{},"items":{},"metadata":{}}
+{"format":"MSLTRACE1","schemaVersion":1,"producer":{"name":"melee-sim-light","version":null},"createdAt":"2026-05-21T00:00:00Z","match":{},"inputs":{},"frames":{},"stage":{},"items":{},"metadata":{}}
 ```
 
 Required top-level fields:
@@ -30,6 +30,7 @@ Optional top-level fields:
 - `producer`: source that wrote the trace.
 - `createdAt`: ISO-8601 timestamp.
 - `inputs`: per-player controller input streams.
+- `stage`: sparse stage-object state used when the sim has a canonical runtime value.
 - `items`: sparse item state stream.
 - `metadata`: producer-owned extra data. The viewer must ignore unknown metadata.
 
@@ -144,6 +145,20 @@ Optional standard player fields:
 Additional player columns may be appended by adding names to `playerFields`.
 Readers must use the field list instead of hard-coded positions outside the v1
 required fields.
+
+## Stage
+
+Stage rows carry dynamic stage objects that should render from simulator-owned
+state rather than viewer-side approximations. Missing `stage` data is allowed.
+
+```json
+{"encoding":"sparse-delta-v1","keyframeInterval":60,"fields":["randallExists","randallX","randallY"],"rows":[[0,0,[0,0,0]],[1,477,[[0,1],[1,-95.9],[2,-33.2489]]]]}
+```
+
+- `randallExists`: `1` when Yoshi's Story Randall has a simulator-owned current
+  position for this frame.
+- `randallX`, `randallY`: Randall center from the same generated `MSLSTG01`
+  platform transform consumed by collision.
 
 ## Items
 

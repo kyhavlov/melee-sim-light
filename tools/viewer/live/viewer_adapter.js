@@ -1,4 +1,4 @@
-import { BUTTONS, ITEM_SIZE, compareOffsets, itemOffsets } from "./schema.js";
+import { BUTTONS, ITEM_SIZE, compareOffsets, itemOffsets, stageStateOffsets } from "./schema.js";
 
 const HURTBOX_STATES = ["vulnerable", "invulnerable", "intangible"];
 
@@ -260,8 +260,22 @@ export function viewerFrameFromCompare(
     stage: {
       frameNumber,
       // Debug stage-state platform order follows C runtime owner: 0=right, 1=left.
-      fodLeftPlatformHeight: stageState && stageState.getUint8(9) ? f32(stageState, 4) : undefined,
-      fodRightPlatformHeight: stageState && stageState.getUint8(8) ? f32(stageState, 0) : undefined,
+      fodLeftPlatformHeight:
+        stageState && stageState.getUint8(stageStateOffsets.fodValid + 1)
+          ? f32(stageState, stageStateOffsets.fodHeight + 4)
+          : undefined,
+      fodRightPlatformHeight:
+        stageState && stageState.getUint8(stageStateOffsets.fodValid)
+          ? f32(stageState, stageStateOffsets.fodHeight)
+          : undefined,
+      randall:
+        stageState && stageState.getUint8(stageStateOffsets.randallExists)
+          ? {
+              exists: true,
+              x: f32(stageState, stageStateOffsets.randallX),
+              y: f32(stageState, stageStateOffsets.randallY),
+            }
+          : undefined,
     },
   };
 }

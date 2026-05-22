@@ -160,6 +160,22 @@ static void seed_ground_normal_from_floor_id(MslBatch* batch, int bi, size_t idx
   batch->state.ground_normal_y[idx] = ny;
 }
 
+static inline uint16_t compare_public_ground_id(const MslBatch* batch, int bi, uint16_t ground_id) {
+  if (batch == NULL || bi < 0 || ground_id == 0xFFFFu) {
+    return ground_id;
+  }
+  const uint32_t stage_id = batch->state.stage_id[bi];
+  if (stage_collision_floor_line_has_randall_platform_transform(stage_id, ground_id)) {
+    // Randall is source-owned as a generated path-transformed MSLSTG01 floor for runtime CollData,
+    // but Slippi's public `lastGroundId` reports the raw Yoshi stage-object support line. Keep the
+    // generated segment internal and serialize the replay-visible raw line.
+    // refs/melee/src/melee/gr/grstory.c::{grStory_801E3370,Ground_801C2FE0}
+    // data/stages/bin/grst.bin::MSLSTG01 platform_transforms(kind=randall)
+    return 0u;
+  }
+  return ground_id;
+}
+
 static inline uint8_t reseed_action_is_damage_or_firefox_launch_victim(uint16_t action) {
   switch (action) {
     case MSL_ACT_DAMAGE_HI_1:
@@ -3169,7 +3185,7 @@ int msl_batch_write_compare(const MslBatch* batch, uint8_t* out_bytes, size_t ou
       out->hitstun[p] = batch->state.hitstun[idx];
       out->l_cancel[p] = batch->state.l_cancel[idx];
       out->hurtbox_state[p] = batch->state.hurtbox_state[idx];
-      out->ground_id[p] = batch->state.ground_id[idx];
+      out->ground_id[p] = compare_public_ground_id(batch, bi, batch->state.ground_id[idx]);
       out->animation_index[p] = batch->state.animation_index[idx];
       out->instance_hit_by[p] = batch->state.instance_hit_by[idx];
       out->instance_id[p] = batch->state.instance_id[idx];
@@ -3440,6 +3456,13 @@ int msl_batch_debug_write_stage_state(const MslBatch* batch, uint8_t* out_bytes,
           batch->state.stage_fod_platform_valid[idx] ? 1u : 0u;
       out->fod_platform_height_source[platform_id] =
           batch->state.stage_fod_platform_height_source[idx];
+    }
+    float randall_x = 0.0f;
+    float randall_y = 0.0f;
+    if (stage_collision_get_randall_position(batch, bi, &randall_x, &randall_y)) {
+      out->randall_exists = 1u;
+      out->randall_x = randall_x;
+      out->randall_y = randall_y;
     }
   }
 

@@ -103,5 +103,8 @@ def test_live_set10_randall_fastfall_lands_instead_of_hovering() -> None:
     assert int(out["animation_index"][p]) == int(fixture["expected"]["landing_submotion_id"])
     assert int(out["action_frame"][p]) == 0
     assert int(out["on_ground"][p]) == 1
-    assert int(out["ground_id"][p]) == int(fixture["expected"]["randall_ground_id"])
+    # Randall remains source-owned by the generated MSLSTG01 support line internally, but
+    # write_compare serializes Slippi's public raw Yoshi support line.
+    assert int(fixture["expected"]["randall_ground_id"]) == 1000
+    assert int(out["ground_id"][p]) == 0
     assert float(out["pos_y"][p]) == pytest.approx(float(fixture["expected"]["randall_y"]))

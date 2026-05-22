@@ -202,6 +202,14 @@ function YoshisStory() {
     ["-15.75, 42", "15.75, 42"],
   ];
   const randall = createMemo(() => {
+    const stageRandall = access("currentFrame").stage.randall;
+    if (stageRandall?.exists) {
+      const halfWidth = 5.95;
+      return [
+        [stageRandall.x - halfWidth, stageRandall.y],
+        [stageRandall.x + halfWidth, stageRandall.y],
+      ];
+    }
     // TODO: Handle new logic
     const cornerPositions: {
       [frameCount: number]: [y: number, xLeft: number];

@@ -5,6 +5,7 @@ const KEYFRAME_INTERVAL = 60;
 
 const INPUT_FIELDS = ["buttons", "mainX", "mainY", "cX", "cY", "l", "r"];
 const FRAME_FIELDS = ["frame", "randomSeed", "players"];
+const STAGE_FIELDS = ["randallExists", "randallX", "randallY"];
 const PLAYER_FIELDS = [
   "charId",
   "actionId",
@@ -268,8 +269,49 @@ function decodeInputStreams(inputs, frameCount, numPlayers) {
   return { fields, lookup, decoded };
 }
 
-function frameStage(frameNumber) {
-  return { frameNumber };
+function stageObject(frameNumber, row, lookup) {
+  const randallExists = Boolean(Number(row?.[lookup.randallExists] || 0));
+  return {
+    frameNumber,
+    randall: randallExists
+      ? {
+          exists: true,
+          x: Number(row[lookup.randallX] || 0),
+          y: Number(row[lookup.randallY] || 0),
+        }
+      : undefined,
+  };
+}
+
+function decodeStage(stage, frameCount) {
+  const fields = stage?.fields || STAGE_FIELDS;
+  const lookup = Object.fromEntries(fields.map((name, idx) => [name, idx]));
+  for (const name of STAGE_FIELDS) {
+    fieldIndex(fields, name, "stage.fields");
+  }
+  const rows = stage?.rows || [];
+  const out = new Array(frameCount);
+  let current = new Array(fields.length).fill(0);
+  let rowIndex = 0;
+  for (let frame = 0; frame < frameCount; frame += 1) {
+    while (rowIndex < rows.length && Number(rows[rowIndex][1]) === frame) {
+      const [op, rowFrame, payload] = rows[rowIndex];
+      if (Number(rowFrame) !== frame) {
+        throw new Error("invalid stage row");
+      }
+      if (op === 0) {
+        current = requireArray(payload, "stage keyframe").slice();
+      } else if (op === 1) {
+        current = current.slice();
+        applyChanges(current, payload, fields.length, "stage delta");
+      } else {
+        throw new Error(`unsupported stage op ${op}`);
+      }
+      rowIndex += 1;
+    }
+    out[frame] = stageObject(frame, current, lookup);
+  }
+  return out;
 }
 
 function viewerPlayer(frameNumber, playerIndex, row, playerLookup, inputs) {
@@ -428,6 +470,15 @@ function itemRowFromViewer(item) {
   ];
 }
 
+function stageRowFromViewer(stage) {
+  const randall = stage?.randall;
+  return [
+    randall?.exists ? 1 : 0,
+    roundNumber(Number(randall?.x || 0)),
+    roundNumber(Number(randall?.y || 0)),
+  ];
+}
+
 function encodeInputStreams(inputTrace, frameTotal, numPlayers) {
   const streams = Array.from({ length: numPlayers }, () => []);
   const previous = Array.from({ length: numPlayers }, () => null);
@@ -512,6 +563,23 @@ function encodeItemRows(replayData, frameTotal) {
   return rows;
 }
 
+function encodeStageRows(replayData, frameTotal) {
+  const rows = [];
+  let previous = null;
+  for (let frame = 0; frame < frameTotal; frame += 1) {
+    const row = stageRowFromViewer(replayData.frames[frame]?.stage);
+    const isKeyframe = frame === 0 || frame % KEYFRAME_INTERVAL === 0;
+    const changes = changedFields(previous, row);
+    if (isKeyframe || previous === null) {
+      rows.push([0, frame, row]);
+    } else if (changes.length > 0) {
+      rows.push([1, frame, changes]);
+    }
+    previous = row;
+  }
+  return rows;
+}
+
 export function replayDataToMslTrace({
   replayData,
   frameCount,
@@ -565,6 +633,12 @@ export function replayDataToMslTrace({
       playerFields: PLAYER_FIELDS,
       rows: encodeFrameRows(replayData, frameTotal, numPlayers),
     },
+    stage: {
+      encoding: SPARSE_DELTA_ENCODING,
+      keyframeInterval: KEYFRAME_INTERVAL,
+      fields: STAGE_FIELDS,
+      rows: encodeStageRows(replayData, frameTotal),
+    },
     items: {
       encoding: SPARSE_DELTA_ENCODING,
       keyframeInterval: KEYFRAME_INTERVAL,
@@ -597,6 +671,7 @@ export function mslTraceToReplayData(trace) {
   const rows = requireArray(frames.rows, "frames.rows");
   const frameCount = rows.length === 0 ? 0 : Math.max(...rows.map((row) => Number(row[1]))) + 1;
   const inputState = decodeInputStreams(trace.inputs, frameCount, players.length);
+  const stageFrames = decodeStage(trace.stage, frameCount);
   const itemFrames = decodeItems(trace.items, frameCount);
   const replayFrames = new Array(frameCount);
   let currentPlayers = null;
@@ -644,7 +719,7 @@ export function mslTraceToReplayData(trace) {
         )
       ),
       items: itemFrames[frameNumber] || [],
-      stage: frameStage(frameNumber),
+      stage: stageFrames[frameNumber],
     };
   }
   return {

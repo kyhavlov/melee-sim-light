@@ -896,6 +896,10 @@ static int fd_install_stage_segments(uint32_t stage_id, const FdSegTmp* seg_tmp,
           .y0 = s->y0,
           .x1 = s->x1,
           .y1 = s->y1,
+          .raw_x0 = s->raw_x0,
+          .raw_y0 = s->raw_y0,
+          .raw_x1 = s->raw_x1,
+          .raw_y1 = s->raw_y1,
           .is_ledge = s->ledge,
           .is_platform = s->platform,
           .fighter_solid = s->fighter_solid,
@@ -1818,6 +1822,42 @@ uint8_t stage_collision_floor_line_has_static_y_platform_transform(uint32_t stag
              : 0u;
 }
 
+uint8_t stage_collision_floor_line_has_randall_platform_transform(uint32_t stage_id,
+                                                                  uint16_t segment_i) {
+  const MslStageSlot* slot = stage_slot(stage_id);
+  if (slot == NULL || !slot->loaded) {
+    return 0u;
+  }
+  // Yoshi's Randall is extracted as a path-transformed generated stage-object floor. Keep callers
+  // keyed to MSLSTG01 transform ownership instead of stage/line constants.
+  // refs/melee/src/melee/gr/grstory.c::{grStory_801E3370,grStory_801E33E0}
+  // refs/melee/src/melee/gr/ground.c::Ground_801C2FE0
+  // data/stages/bin/grst.bin::MSLSTG01 platform_transforms(kind=randall)
+  return slot->platform_transform_kind_by_segment[segment_i] ==
+                 (uint8_t)MSLSTG01_PLATFORM_TRANSFORM_RANDALL
+             ? 1u
+             : 0u;
+}
+
+int stage_collision_randall_floor_line_index(uint32_t stage_id) {
+  const MslStageSlot* slot = stage_slot(stage_id);
+  if (slot == NULL || !slot->loaded || slot->platform_transforms == NULL ||
+      slot->platform_transform_count == 0u) {
+    return -1;
+  }
+  // Yoshi/Randall has a single generated MSLSTG01 path-transformed floor line. Resolve that owner
+  // through the extracted transform records instead of scanning every floor line in hot mpColl
+  // paths.
+  // data/stages/bin/grst.bin::MSLSTG01 platform_transforms(kind=randall)
+  for (size_t i = 0; i < slot->platform_transform_count; i++) {
+    const MslStagePlatformTransform* rec = &slot->platform_transforms[i];
+    if (rec->kind_id == (uint8_t)MSLSTG01_PLATFORM_TRANSFORM_RANDALL) {
+      return stage_slot_floor_line_index(slot, rec->line_id);
+    }
+  }
+  return -1;
+}
+
 float stage_collision_floor_ground_friction_mul(uint32_t stage_id, uint16_t segment_i) {
   const MslStageFloorLine* line = stage_floor_line_for_segment(stage_slot(stage_id), segment_i);
   if (line == NULL || !(line->ground_friction_mul > 0.0f)) {
@@ -1950,6 +1990,16 @@ static uint8_t stage_collision_platform_path_world_line(const MslStageSlot* slot
   int frame = (int)(frame_id % 1200);
   if (frame < 0) {
     frame += 1200;
+  }
+  if (slot->platform_path_frame_count >= 1200u) {
+    const MslStagePlatformPathFrame* rec = &slot->platform_path_frames[(size_t)frame];
+    if (rec->line_id == line_id && rec->frame == (uint16_t)frame) {
+      out->x0 = rec->x0;
+      out->x1 = rec->x1;
+      out->y0 = rec->y;
+      out->y1 = rec->y;
+      return 1u;
+    }
   }
   for (size_t i = 0; i < slot->platform_path_frame_count; i++) {
     const MslStagePlatformPathFrame* rec = &slot->platform_path_frames[i];
@@ -2092,24 +2142,22 @@ uint8_t stage_collision_get_randall_position(const MslBatch* batch, int bi, floa
   if (graph == NULL || graph->lines == NULL) {
     return 0u;
   }
-  for (size_t i = 0; i < graph->line_count; i++) {
-    const MslStageFloorLine* line = &graph->lines[i];
-    if (line->platform_transform_kind != (uint8_t)MSLSTG01_PLATFORM_TRANSFORM_RANDALL) {
-      continue;
-    }
-    MslStageFloorLine world = *line;
-    if (!stage_collision_floor_line_world(batch, bi, line, &world)) {
-      return 0u;
-    }
-    if (x_out != NULL) {
-      *x_out = 0.5f * (world.x0 + world.x1);
-    }
-    if (y_out != NULL) {
-      *y_out = 0.5f * (world.y0 + world.y1);
-    }
-    return 1u;
+  const int line_idx = stage_collision_randall_floor_line_index(batch->state.stage_id[bi]);
+  if (line_idx < 0 || (size_t)line_idx >= graph->line_count) {
+    return 0u;
   }
-  return 0u;
+  const MslStageFloorLine* line = &graph->lines[(size_t)line_idx];
+  MslStageFloorLine world = *line;
+  if (!stage_collision_floor_line_world(batch, bi, line, &world)) {
+    return 0u;
+  }
+  if (x_out != NULL) {
+    *x_out = 0.5f * (world.x0 + world.x1);
+  }
+  if (y_out != NULL) {
+    *y_out = 0.5f * (world.y0 + world.y1);
+  }
+  return 1u;
 }
 
 uint8_t stage_collision_floor_line_motion_delta(const MslBatch* batch, int bi,
@@ -2136,10 +2184,20 @@ uint8_t stage_collision_floor_line_motion_delta(const MslBatch* batch, int bi,
     if (rec->kind_id == (uint8_t)MSLSTG01_PLATFORM_TRANSFORM_RANDALL) {
       MslStageFloorLine prev = *line;
       MslStageFloorLine cur = *line;
-      if (!stage_collision_platform_path_world_line(slot, rec->line_id,
-                                                    batch->state.frame_id[bi] - 1, &prev) ||
-          !stage_collision_platform_path_world_line(slot, rec->line_id, batch->state.frame_id[bi],
-                                                    &cur)) {
+      int32_t cur_frame = batch->state.frame_id[bi];
+      if ((batch->rollout_clock_rng_owned != NULL &&
+           batch->rollout_clock_rng_owned[bi] != (uint8_t)MSL_ROLLOUT_CLOCK_NONE) ||
+          (batch->replay_rollout_reseeded != NULL && batch->replay_rollout_reseeded[bi] != 0u)) {
+        // Runtime step order advances `frame_id` at frame commit. GrStory updates Randall's ground
+        // object before fighter map callbacks for the output frame, so clock-owned rollouts consume
+        // the next path sample here. Non-rollout one-step probes keep the existing seed-frame
+        // semantics.
+        // refs/melee/src/melee/gr/grstory.c::{grStory_801E3370,grStory_801E33E0}
+        // refs/melee/src/melee/gr/ground.c::Ground_801C2FE0
+        cur_frame += 1;
+      }
+      if (!stage_collision_platform_path_world_line(slot, rec->line_id, cur_frame - 1, &prev) ||
+          !stage_collision_platform_path_world_line(slot, rec->line_id, cur_frame, &cur)) {
         return 0u;
       }
       if (dx_out != NULL) {

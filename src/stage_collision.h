@@ -8,6 +8,12 @@ typedef struct MslStageFloorLine {
   float y0;
   float x1;
   float y1;
+  // Source MapLine v0/v1 endpoint orientation. Floor collision uses normalized x0/x1 above, but
+  // some mpLib helpers (notably mpLib_80051BA8_Floor for ledge grab) inspect raw v0/v1.
+  float raw_x0;
+  float raw_y0;
+  float raw_x1;
+  float raw_y1;
   // ISO-derived ledge flag for this floor segment (LINE_FLAG_LEDGE / `"segments[*].ledge"`).
   // Used by ledge-grab mask computation.
   uint8_t is_ledge;
@@ -204,6 +210,9 @@ uint8_t stage_collision_floor_line_has_height_platform_transform(uint32_t stage_
                                                                  uint16_t segment_i);
 uint8_t stage_collision_floor_line_has_static_y_platform_transform(uint32_t stage_id,
                                                                    uint16_t segment_i);
+uint8_t stage_collision_floor_line_has_randall_platform_transform(uint32_t stage_id,
+                                                                  uint16_t segment_i);
+int stage_collision_randall_floor_line_index(uint32_t stage_id);
 float stage_collision_floor_ground_friction_mul(uint32_t stage_id, uint16_t segment_i);
 uint8_t stage_collision_floor_line_platform_transform_id(uint32_t stage_id, uint16_t segment_i,
                                                          uint8_t* platform_id_out);

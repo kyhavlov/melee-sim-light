@@ -1311,7 +1311,7 @@ mismatch.hitlag: 10 / 16918 (0.000591)
 mismatch.hitstun: 4 / 16918 (0.000236)
 mismatch.l_cancel: 0 / 16918 (0.000000)
 mismatch.hurtbox_state: 1 / 16918 (0.000059)
-mismatch.ground_id: 4 / 16918 (0.000236)
+mismatch.ground_id: 3 / 16918 (0.000177)
 mismatch.animation_index: 10 / 16918 (0.000591)
 mismatch.instance_hit_by: 2 / 16918 (0.000118)
 mismatch.instance_id: 8 / 16918 (0.000473)
@@ -1325,7 +1325,7 @@ mismatch.item_state: 5 / 126885 (0.000039)
 mismatch.item_owner: 1 / 126885 (0.000008)
 mismatch.item_instance_id: 1 / 126885 (0.000008)
 ignored_mismatch.state_flags[4]&0x80: 61 / 16918 (0.003606)
-err.pos_x: mae=0.001790 p95=0.000000 max=3.416641
+err.pos_x: mae=0.000783 p95=0.000000 max=3.416641
 err.pos_y: mae=0.001785 p95=0.000000 max=10.680012
 err.speed_air_x_self: mae=0.000209 p95=0.000000 max=1.460000
 err.speed_ground_x_self: mae=0.000275 p95=0.000000 max=2.488403
@@ -1338,10 +1338,10 @@ err.item_pos_x: mae=0.000823 p95=0.000000 max=3.790000
 err.item_pos_y: mae=0.000050 p95=0.000000 max=0.702896
 err.item_vel_x: mae=0.000481 p95=0.000000 max=1.921448
 err.item_vel_y: mae=0.000440 p95=0.000000 max=2.689163
-overall.discrete_mismatch: 118 / 1023539
-overall.strict_discrete_mismatch: 179 / 1023539
+overall.discrete_mismatch: 117 / 1023539
+overall.strict_discrete_mismatch: 178 / 1023539
 overall.ignored_discrete_mismatch: 61
-overall.float_norm_mae_p95: 0.00018569
+overall.float_norm_mae_p95: 0.00018493
 
 == datasets/aggregate_recent/replays/validation/yoshis_story_recent/DependentSteelGrouse.msl ==
 Records: 344  Players/scored per record: 2  Total player-frames: 688
@@ -1461,7 +1461,7 @@ mismatch.item_owner: 1 / 141585 (0.000007)
 mismatch.item_instance_id: 2 / 141585 (0.000014)
 ignored_mismatch.state_flags[4]&0x80: 69 / 18878 (0.003655)
 err.pos_x: mae=0.001788 p95=0.000000 max=2.472786
-err.pos_y: mae=0.001643 p95=0.000000 max=6.319753
+err.pos_y: mae=0.001641 p95=0.000000 max=6.319753
 err.speed_air_x_self: mae=0.000341 p95=0.000000 max=2.200000
 err.speed_ground_x_self: mae=0.000545 p95=0.000000 max=2.200000
 err.speed_y_self: mae=0.000693 p95=0.000000 max=3.183986
@@ -1479,7 +1479,7 @@ overall.ignored_discrete_mismatch: 69
 overall.float_norm_mae_p95: 0.00050690
 
 == suite summary ==
-overall.discrete_mismatch: 2355 / 35294369
-overall.strict_discrete_mismatch: 3855 / 35294369
+overall.discrete_mismatch: 2354 / 35294369
+overall.strict_discrete_mismatch: 3854 / 35294369
 overall.ignored_discrete_mismatch: 1500
-overall.float_norm_mae_p95: 0.00032692
+overall.float_norm_mae_p95: 0.00032688

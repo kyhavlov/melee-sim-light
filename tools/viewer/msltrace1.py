@@ -19,6 +19,7 @@ KEYFRAME_INTERVAL = 60
 
 INPUT_FIELDS = ["buttons", "mainX", "mainY", "cX", "cY", "l", "r"]
 FRAME_FIELDS = ["frame", "randomSeed", "players"]
+STAGE_FIELDS = ["randallExists", "randallX", "randallY"]
 PLAYER_FIELDS = [
     "charId",
     "actionId",
@@ -189,6 +190,14 @@ def _item_row(item: np.void) -> list[object]:
     ]
 
 
+def _stage_row(state: SimFrameState) -> list[object]:
+    return [
+        1 if bool(state.stage_randall_exists) else 0,
+        _json_value(float(np.float32(state.stage_randall_x))),
+        _json_value(float(np.float32(state.stage_randall_y))),
+    ]
+
+
 @dataclass
 class MslTraceWriter:
     producer_name: str = "melee-sim-light"
@@ -197,10 +206,12 @@ class MslTraceWriter:
     metadata: dict = field(default_factory=dict)
     match: dict | None = None
     frame_rows: list[list[object]] = field(default_factory=list)
+    stage_rows: list[list[object]] = field(default_factory=list)
     input_streams: list[list[list[object]]] = field(default_factory=list)
     item_rows: list[list[object]] = field(default_factory=list)
     _prev_players: list[list[object]] | None = None
     _prev_seed: int | None = None
+    _prev_stage: list[object] | None = None
     _prev_inputs: list[list[object]] = field(default_factory=list)
     _prev_items: dict[int, list[object]] = field(default_factory=dict)
     _frame_count: int = 0
@@ -239,6 +250,7 @@ class MslTraceWriter:
             )
         self._prev_players = player_rows
         self._prev_seed = seed
+        self._append_stage(trace_frame, state, is_keyframe=is_keyframe)
         self._append_inputs(trace_frame, state.num_players, controllers, is_keyframe=is_keyframe)
         self._append_items(trace_frame, state, is_keyframe=is_keyframe)
         self._frame_count += 1
@@ -297,6 +309,15 @@ class MslTraceWriter:
             self.item_rows.append([OP_DELTA, trace_frame, slot, [[0, 0]]])
             del self._prev_items[slot]
 
+    def _append_stage(self, trace_frame: int, state: SimFrameState, *, is_keyframe: bool) -> None:
+        row = _stage_row(state)
+        changes = _changed_fields(self._prev_stage, row)
+        if is_keyframe or self._prev_stage is None:
+            self.stage_rows.append([OP_KEYFRAME, trace_frame, row])
+        elif changes:
+            self.stage_rows.append([OP_DELTA, trace_frame, changes])
+        self._prev_stage = row
+
     def to_payload(self, *, frame_limit: int | None = None) -> dict:
         if self.match is None:
             raise RuntimeError("trace has no frames")
@@ -325,6 +346,12 @@ class MslTraceWriter:
                 "fields": FRAME_FIELDS,
                 "playerFields": PLAYER_FIELDS,
                 "rows": [row for row in self.frame_rows if int(row[1]) < limit],
+            },
+            "stage": {
+                "encoding": SPARSE_DELTA_ENCODING,
+                "keyframeInterval": self.keyframe_interval,
+                "fields": STAGE_FIELDS,
+                "rows": [row for row in self.stage_rows if int(row[1]) < limit],
             },
             "items": {
                 "encoding": SPARSE_DELTA_ENCODING,

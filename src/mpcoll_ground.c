@@ -1351,6 +1351,61 @@ static inline uint8_t grounded_action_allows_stage_object_platform_carry(uint16_
                                            MSL_MS_CLASS_GROUNDED_STAGE_OBJECT_CARRY_COLL);
 }
 
+static inline uint8_t mpcoll_stage_object_motion_uses_next_frame(const MslBatch* batch, int bi) {
+  if (batch == NULL || bi < 0) {
+    return 0u;
+  }
+  return (uint8_t)(((batch->rollout_clock_rng_owned != NULL &&
+                     batch->rollout_clock_rng_owned[bi] != (uint8_t)MSL_ROLLOUT_CLOCK_NONE) ||
+                    (batch->replay_rollout_reseeded != NULL &&
+                     batch->replay_rollout_reseeded[bi] != 0u))
+                       ? 1u
+                       : 0u);
+}
+
+static inline int mpcoll_find_current_randall_floor_line_at_root(const MslBatch* batch, int bi,
+                                                                 const MslStageFloorGraph* g,
+                                                                 float root_x, float root_y) {
+  if (batch == NULL || bi < 0 || g == NULL || g->lines == NULL) {
+    return -1;
+  }
+  const uint32_t stage_id = batch->state.stage_id[bi];
+  const int randall_idx = stage_collision_randall_floor_line_index(stage_id);
+  if (randall_idx < 0 || (size_t)randall_idx >= g->line_count) {
+    return -1;
+  }
+  const MslStageFloorLine* line = &g->lines[(size_t)randall_idx];
+  if (!line->is_platform || !line->fighter_solid ||
+      !stage_collision_floor_line_has_randall_platform_transform(stage_id, line->segment_i)) {
+    return -1;
+  }
+  const MslStageFloorLine world = floor_line_world_for_env(batch, bi, g, randall_idx);
+  const float min_x = (world.x0 < world.x1) ? world.x0 : world.x1;
+  const float max_x = (world.x0 > world.x1) ? world.x0 : world.x1;
+  if (root_x >= (min_x - k_floor_x_end_clamp) && root_x <= (max_x + k_floor_x_end_clamp) &&
+      fabsf(root_y - (world.y0 + k_floor_y_bias)) <= (2.0f * k_floor_y_bias)) {
+    return randall_idx;
+  }
+
+  float platform_dx = 0.0f;
+  float platform_dy = 0.0f;
+  if (!stage_collision_floor_line_motion_delta(batch, bi, line, &platform_dx, &platform_dy)) {
+    return -1;
+  }
+  const float prev_min_x = min_x - platform_dx;
+  const float prev_max_x = max_x - platform_dx;
+  const float sweep_min_x = ((prev_min_x < min_x) ? prev_min_x : min_x) - k_floor_x_end_clamp;
+  const float sweep_max_x = ((prev_max_x > max_x) ? prev_max_x : max_x) + k_floor_x_end_clamp;
+  const float prev_y = world.y0 - platform_dy;
+  const float sweep_min_y = ((prev_y < world.y0) ? prev_y : world.y0) - (2.0f * k_floor_y_bias);
+  const float sweep_max_y = ((prev_y > world.y0) ? prev_y : world.y0) + (2.0f * k_floor_y_bias);
+  if (root_x >= sweep_min_x && root_x <= sweep_max_x && root_y >= (sweep_min_y + k_floor_y_bias) &&
+      root_y <= (sweep_max_y + k_floor_y_bias)) {
+    return randall_idx;
+  }
+  return -1;
+}
+
 static inline uint8_t grounded_entry_same_step_height_platform_admits_line(
     const MslBatch* batch, int bi, size_t idx, uint32_t stage_id, uint16_t action_id,
     uint16_t selected_segment_i) {
@@ -4789,27 +4844,70 @@ void mpcoll_ground_apply(MslBatch* batch) {
                                                                      c);
 
       const uint8_t was_grounded = batch->state.prev_on_ground[idx] ? 1u : 0u;
+      const uint8_t frame_start_grounded = batch->state.frame_start_on_ground[idx] ? 1u : 0u;
       mpcoll_ctx.was_grounded = was_grounded;
       const uint8_t ecb_lock_timer_seed = batch->state.ecb_lock_timer[idx];
-      if (was_grounded && batch->state.ground_id[idx] != 0xFFFFu &&
-          grounded_action_allows_stage_object_platform_carry(action_id)) {
-        const int carry_line_idx =
+      const uint8_t stage_object_platform_carry =
+          grounded_action_allows_stage_object_platform_carry(action_id);
+      const uint8_t ft80083f88_platform_carry = grounded_action_allows_height_platform_y_correction(
+          action_id, (uint16_t)batch->state.action_frame[idx], batch->state.char_id[idx]);
+      if ((was_grounded || frame_start_grounded) && batch->state.ground_id[idx] != 0xFFFFu &&
+          (stage_object_platform_carry || ft80083f88_platform_carry)) {
+        int carry_line_idx =
             stage_collision_floor_line_index(stage_id, batch->state.ground_id[idx]);
+        if (carry_line_idx < 0 || (size_t)carry_line_idx >= g->line_count ||
+            !stage_collision_floor_line_has_randall_platform_transform(
+                stage_id, g->lines[(size_t)carry_line_idx].segment_i)) {
+          const int randall_line_idx = mpcoll_find_current_randall_floor_line_at_root(
+              batch, bi, g, batch->state.pos_x[idx], batch->state.pos_y[idx]);
+          if (randall_line_idx >= 0) {
+            // Replay-visible Yoshi/Randall ground ids can carry the raw source line while the live
+            // fighter support owner is the generated path-transformed stage-object line. Use the
+            // generated line for CollData carry.
+            //
+            // refs/melee/src/melee/gr/grstory.c::{grStory_801E3370,Ground_801C2FE0}
+            // data/stages/bin/grst.bin::MSLSTG01 platform_transforms(kind=randall)
+            carry_line_idx = randall_line_idx;
+            batch->state.ground_id[idx] = g->lines[(size_t)randall_line_idx].segment_i;
+          }
+        }
         if (carry_line_idx >= 0 && (size_t)carry_line_idx < g->line_count &&
             g->lines[(size_t)carry_line_idx].is_platform) {
           float platform_dx = 0.0f;
           float platform_dy = 0.0f;
-          if (stage_collision_floor_line_motion_delta(batch, bi, &g->lines[(size_t)carry_line_idx],
+          const uint8_t randall_path_platform =
+              stage_collision_floor_line_has_randall_platform_transform(
+                  stage_id, g->lines[(size_t)carry_line_idx].segment_i);
+          if ((stage_object_platform_carry || randall_path_platform) &&
+              stage_collision_floor_line_motion_delta(batch, bi, &g->lines[(size_t)carry_line_idx],
                                                       &platform_dx, &platform_dy)) {
             // Stage-object platform carry:
             // Randall's ground object refreshes collision before fighter map callbacks; grounded
             // riders keep CollData.floor.index and inherit the platform transform delta before
             // projection. FoD vertical carry remains owned by signed DD90 projection so replay
             // seeded height rows do not double-apply height velocity.
+            // Grounded Fox/Falco SpecialN and KneeBend also use the ft_80083F88 allow-ground-to-air
+            // path. That owner is admitted here only for Randall's path-transformed stage object;
+            // FoD height-platform correction stays in the signed DD90 floor projection path.
             // refs/melee/src/melee/gr/grstory.c::{grStory_801E3370,Ground_801C2FE0}
             // refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
+            // refs/melee/src/melee/ft/ft_081B.c::{ft_80083F88,ft_80082708}
+            // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
+            //   ftFx_SpecialNStart_Coll,ftFx_SpecialNLoop_Coll,ftFx_SpecialNEnd_Coll}
+            // data/motion_state/owners/{fox,falco}.bin
+            //   (MSLMSO01 class FT80083F88_GROUND_TO_AIR_COLL)
             batch->state.pos_x[idx] += platform_dx;
             batch->state.pos_y[idx] += platform_dy;
+            if (randall_path_platform) {
+              float line_y = 0.0f;
+              if (floor_line_y_at_x_for_env(batch, bi, g, carry_line_idx, batch->state.pos_x[idx],
+                                            &line_y)) {
+                if (mpcoll_stage_object_motion_uses_next_frame(batch, bi)) {
+                  line_y += platform_dy;
+                }
+                batch->state.pos_y[idx] = line_y + k_floor_y_bias;
+              }
+            }
           }
         }
       }
@@ -5285,6 +5383,19 @@ void mpcoll_ground_apply(MslBatch* batch) {
         prefer_line_idx = raw_current_floor_line_idx;
         if (!floor_line_is_runtime_fighter_solid(g, stage_id, prefer_line_idx)) {
           prefer_line_idx = -1;
+          if (was_grounded || frame_start_grounded) {
+            const int randall_line_idx =
+                mpcoll_find_current_randall_floor_line_at_root(batch, bi, g, x, y);
+            if (randall_line_idx >= 0) {
+              // Replay seeds can carry a raw/non-fighter Yoshi line while the live support owner is
+              // Randall's generated path-transformed floor. Use the generated line as CollData's
+              // current floor for map-collision decisions; output shape remains governed by the
+              // normal floor-publication path below.
+              // refs/melee/src/melee/gr/grstory.c::{grStory_801E3370,Ground_801C2FE0}
+              // data/stages/bin/grst.bin::MSLSTG01 platform_transforms(kind=randall)
+              prefer_line_idx = randall_line_idx;
+            }
+          }
         } else if (was_grounded) {
           int remap_line_idx = -1;
           if (fod_hidden_height_platform_remaps_to_solid_floor(
@@ -5306,6 +5417,17 @@ void mpcoll_ground_apply(MslBatch* batch) {
             (prefer_line_idx >= 0 && g->lines[(size_t)prefer_line_idx].is_ledge) ? 1u : 0u;
         const uint8_t prefer_line_is_platform_floor =
             (prefer_line_idx >= 0 && g->lines[(size_t)prefer_line_idx].is_platform) ? 1u : 0u;
+        const uint8_t yoshi_sloped_ledge_hard_floor_source_band =
+            (stage_id == (uint32_t)MSL_STAGE_ID_YOSHIS_STORY &&
+             action_id == (uint16_t)MSL_ACT_ESCAPE_AIR && cliff_ledge_line_idx >= 0 &&
+             batch->state.action_frame[idx] >= 7 &&
+             floor_line_is_generated_sloped_ledge(batch, bi, g, cliff_ledge_line_idx) &&
+             g->lines[(size_t)cliff_ledge_line_idx].x0 > 0.0f &&
+             g->lines[(size_t)cliff_ledge_line_idx].x1 > 0.0f &&
+             floor_x_within_line_bounds(batch, bi, g, cliff_ledge_line_idx,
+                                        batch->state.pos_x[idx]))
+                ? 1u
+                : 0u;
         const uint8_t fod_escapeair_left_ledge_source_band =
             (stage_id == (uint32_t)MSL_STAGE_ID_FOUNTAIN_OF_DREAMS &&
              action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
@@ -5317,7 +5439,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
                 ? 1u
                 : 0u;
         if ((prefer_line_idx < 0 || prefer_line_is_ledge_floor || prefer_line_is_platform_floor ||
-             fod_escapeair_left_ledge_source_band) &&
+             fod_escapeair_left_ledge_source_band || yoshi_sloped_ledge_hard_floor_source_band) &&
             cliff_ledge_line_idx >= 0 &&
             floor_line_is_runtime_fighter_solid(g, stage_id, cliff_ledge_line_idx) &&
             g->lines[(size_t)cliff_ledge_line_idx].is_ledge &&
@@ -5337,7 +5459,14 @@ void mpcoll_ground_apply(MslBatch* batch) {
           // already-updated hard main-floor index without that explicit EscapeAir source state.
           // FoD's flat left ledge has a dedicated source band from mpColl's ledge contact helper;
           // allow sustained EscapeAir to select the restored cliff floor only once root X is inside
-          // that 5-unit band.
+          // that 5-unit band. Yoshi's right sloped ledge is a generated hard-floor ledge span
+          // connected to a vertical wall shell; ledge-drop -> JumpAerial -> EscapeAir can leave
+          // Slippi-visible `lastGroundId` on the main floor while source `mv.co.cliff.ledge_id`
+          // still owns CollData.floor.index for the sloped ledge callback. The mirrored left ledge
+          // has replay-real deep-remap coverage through the ordinary callback path, so do not
+          // consume this hidden-lane repair there. Earlier right-side EscapeAir frames have
+          // replay-real coverage that stays airborne until the sustained callback reaches the
+          // deeper source handoff.
           // refs/melee/src/melee/ft/ftcliffcommon.c::ftCliffCommon_80081370
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_8009AAFC
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
@@ -5358,9 +5487,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
           (uint8_t)((prefer_line_is_platform || prefer_line_is_slope || prefer_line_is_ledge) ? 1u
                                                                                               : 0u);
       mpcoll_ctx.prefer_floor_line_idx = prefer_line_idx;
-      const uint8_t cliff_ledge_floor_owner_active =
-          (cliff_ledge_floor_owner_selected && prefer_line_is_ledge &&
-           action_consumes_cliff_ledge_floor_owner(char_id, action_id) &&
+      const uint8_t cliff_ledge_floor_owner_matches_current_line =
+          (prefer_line_is_ledge && action_consumes_cliff_ledge_floor_owner(char_id, action_id) &&
            batch->state.ledge_cooldown[idx] != 0 &&
            batch->state.cliff_ledge_floor_segment_id != NULL &&
            batch->state.cliff_ledge_floor_segment_id[idx] != 0xFFFFu &&
@@ -5368,6 +5496,22 @@ void mpcoll_ground_apply(MslBatch* batch) {
                                   stage_id, batch->state.cliff_ledge_floor_segment_id[idx]))
               ? 1u
               : 0u;
+      const uint8_t cliff_ledge_floor_owner_live_current_line =
+          // Live CliffWait drop/release already has source-owned `mv.co.cliff.ledge_id`, even when
+          // replay-visible CollData.floor.index still names the same cliff floor. Direct one-step
+          // seed rows use explicit seeded cliff-floor reconstruction and must not turn every
+          // current-line seed into a late EscapeAir root owner.
+          // refs/melee/src/melee/ft/ftcliffcommon.c::ftCliffCommon_80081370
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+          // refs/melee/src/melee/mp/mpcoll.c::mpColl_800471F8
+          (stage_id == (uint32_t)MSL_STAGE_ID_POKEMON_STADIUM &&
+           cliff_ledge_floor_owner_matches_current_line &&
+           batch->state.cliff_ledge_floor_segment_seeded != NULL &&
+           batch->state.cliff_ledge_floor_segment_seeded[idx] == 0u)
+              ? 1u
+              : 0u;
+      const uint8_t cliff_ledge_floor_owner_active =
+          (cliff_ledge_floor_owner_selected || cliff_ledge_floor_owner_live_current_line) ? 1u : 0u;
       const uint16_t skip_platform_segment_i = platform_floor_skip_segment_id(batch, idx, stage_id);
       const MslEscapeAirCollEpisode escapeair_episode = msl_escapeair_coll_episode_make(
           action_id, batch->state.seed_prev_action_id[idx], ecb_lock_active);
@@ -6805,6 +6949,38 @@ void mpcoll_ground_apply(MslBatch* batch) {
             contact_y = batch->state.pos_y[idx];
           }
         }
+        if (!on_ground && cliff_ledge_floor_owner_active &&
+            action_id == (uint16_t)MSL_ACT_ESCAPE_AIR && prefer_line_idx >= 0 &&
+            ecb_lock_timer_seed != 0u && batch->state.action_frame[idx] <= 2 &&
+            batch->state.speed_y_self[idx] < 0.0f) {
+          // Cliff-owned EscapeAir root crossing:
+          // ftCo_EscapeAir_Coll runs through ft_80082C74 -> ft_80081D0C -> mpColl_800471F8 while
+          // x2064 keeps the released ledge floor in CollData. The root/last_pos sweep can cross
+          // from above the stored ledge floor into its span before the raw ECB bottom reaches the
+          // ledge line; source mpColl then publishes the stored ledge floor instead of letting the
+          // airdodge pass under the stage. This is the live counterpart to the one-step seeded
+          // carried-cliff-floor owner, and it is bounded by the generated ledge line and actual
+          // current-root crossing.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+          // refs/melee/src/melee/ft/ft_081B.c::ft_80082C74
+          // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044838_Floor}
+          // Require the frame-start root to already be below the ledge floor. If the frame starts
+          // above the ledge, source waits for the normal bottom/root floor checks to mature instead
+          // of using this late cliff-floor root publication.
+          float ledge_y = 0.0f;
+          if (floor_line_y_at_x_for_env(batch, bi, g, prefer_line_idx, x, &ledge_y) &&
+              batch->state.floor_sweep_prev_pos_y[idx] > ledge_y + k_floor_y_bias &&
+              batch->state.prev_pos_y[idx] < ledge_y - k_floor_y_bias &&
+              y <= ledge_y + k_floor_y_bias &&
+              floor_x_within_line_bounds(batch, bi, g, prefer_line_idx, x)) {
+            batch->state.pos_y[idx] = ledge_y + k_floor_y_bias;
+            on_ground = 1;
+            ground_id = g->lines[(size_t)prefer_line_idx].segment_i;
+            contact_x = x;
+            contact_y = ledge_y;
+          }
+        }
+
         if (!on_ground && cliff_ledge_floor_owner_active &&
             action_id == (uint16_t)MSL_ACT_ESCAPE_AIR && prefer_line_idx >= 0 &&
             floor_line_is_generated_stage_slope(batch, bi, g, prefer_line_idx) &&

@@ -505,14 +505,20 @@ static inline uint8_t mplib_aabb_overlaps_line(float left, float bottom, float r
   return 1u;
 }
 
-static inline uint8_t mplib_select_ledge_floor_contact(uint32_t stage_id, int dir, float left,
-                                                       float bottom, float right, float top,
+static inline uint8_t mplib_select_ledge_floor_contact(uint32_t stage_id, uint16_t floor_skip,
+                                                       int dir, float left, float bottom,
+                                                       float right, float top,
                                                        const MslStageFloorLine** out_line,
                                                        float* out_contact_x, float* out_contact_y) {
   // Decomp: mpLib_80051BA8_Floor scans all ledge floor lines overlapping the query AABB, selecting
-  // the leftmost x0 when dir>0 or rightmost x1 when dir<0, and writes out_vec=(endpoint_x,endpoint_y)
-  // with out_x clamped to [left,right].
+  // the smallest raw v0.x when dir>0 or largest raw v1.x when dir<0. The source helper uses raw
+  // MapLine v0/v1 orientation for that selection, then clamps only out_vec.x into the query box;
+  // out_vec.y stays at the raw endpoint. MSLSTG01 runtime floor endpoints are normalized to
+  // x0<=x1, so this helper must explicitly consume the retained raw orientation for sloped ledges.
+  // `line_id_skip` is `CollData.floor_skip`; walking/falling off a ledge floor must not immediately
+  // reselect that same floor as a ledge-grab candidate.
   // refs/melee/src/melee/mp/mplib.c::mpLib_80051BA8_Floor
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044164,mpColl_800443C4}
   if (out_line) {
     *out_line = NULL;
   }
@@ -523,13 +529,8 @@ static inline uint8_t mplib_select_ledge_floor_contact(uint32_t stage_id, int di
     *out_contact_y = 0.0f;
   }
 
-  // The source mpLib helper scans raw MapLine v0/v1 orientation. MSLSTG01 floor lines are
-  // normalized to x0<=x1 for floor collision, so the right-stage ledge segment's inner endpoint can
-  // otherwise look like a valid "left edge" when an AABB overlaps the right ledge floor. Limit each
-  // directional cliff helper to the global ledge endpoint with matching outside-stage direction:
-  // dir>0 -> stage-left ledge, dir<0 -> stage-right ledge.
-  // refs/melee/src/melee/mp/mplib.c::mpLib_80051BA8_Floor
-  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044164,mpColl_800443C4}
+  // Limit each directional cliff helper to the global ledge endpoint with matching outside-stage
+  // direction: dir>0 -> stage-left ledge, dir<0 -> stage-right ledge.
   const MslStageFloorLine* cand0 = stage_collision_get_ledge_floor_line(stage_id, dir > 0 ? 0 : 1);
 
   const MslStageFloorLine* best = NULL;
@@ -542,20 +543,23 @@ static inline uint8_t mplib_select_ledge_floor_contact(uint32_t stage_id, int di
     if (l == NULL) {
       continue;
     }
+    if (floor_skip != 0xFFFFu && l->segment_i == floor_skip) {
+      continue;
+    }
     if (!mplib_aabb_overlaps_line(left, bottom, right, top, l->x0, l->y0, l->x1, l->y1)) {
       continue;
     }
     if (dir > 0) {
-      if (best_x > l->x0) {
+      if (best_x > l->raw_x0) {
         best = l;
-        best_x = l->x0;
-        best_y = l->y0;
+        best_x = l->raw_x0;
+        best_y = l->raw_y0;
       }
     } else if (dir < 0) {
-      if (best_x < l->x1) {
+      if (best_x < l->raw_x1) {
         best = l;
-        best_x = l->x1;
-        best_y = l->y1;
+        best_x = l->raw_x1;
+        best_y = l->raw_y1;
       }
     }
   }
@@ -715,8 +719,11 @@ static inline uint32_t ledge_grab_flags_for_fighter(
 
     const MslStageFloorLine* ledge_line = NULL;
     float contact_x = 0.0f, contact_y = 0.0f;
-    if (mplib_select_ledge_floor_contact(stage_id, /*dir=*/+1, aabb_l, aabb_b, aabb_r, aabb_t,
-                                         &ledge_line, &contact_x, &contact_y)) {
+    const uint16_t floor_skip = (batch->state.floor_skip_segment_id != NULL)
+                                    ? batch->state.floor_skip_segment_id[idx]
+                                    : 0xFFFFu;
+    if (mplib_select_ledge_floor_contact(stage_id, floor_skip, /*dir=*/+1, aabb_l, aabb_b, aabb_r,
+                                         aabb_t, &ledge_line, &contact_x, &contact_y)) {
       const float edge_x = ledge_line->x0;
       const float edge_y = ledge_line->y0;
       // Decomp: contact.x is required to be close to the floor endpoint:
@@ -765,8 +772,11 @@ static inline uint32_t ledge_grab_flags_for_fighter(
 
     const MslStageFloorLine* ledge_line = NULL;
     float contact_x = 0.0f, contact_y = 0.0f;
-    if (mplib_select_ledge_floor_contact(stage_id, /*dir=*/-1, aabb_l, aabb_b, aabb_r, aabb_t,
-                                         &ledge_line, &contact_x, &contact_y)) {
+    const uint16_t floor_skip = (batch->state.floor_skip_segment_id != NULL)
+                                    ? batch->state.floor_skip_segment_id[idx]
+                                    : 0xFFFFu;
+    if (mplib_select_ledge_floor_contact(stage_id, floor_skip, /*dir=*/-1, aabb_l, aabb_b, aabb_r,
+                                         aabb_t, &ledge_line, &contact_x, &contact_y)) {
       const float edge_x = ledge_line->x1;
       const float edge_y = ledge_line->y1;
       // Decomp: `edge.x - cd->contact.x < 5.0F`.

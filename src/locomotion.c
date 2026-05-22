@@ -9,6 +9,7 @@
 #include "anim_pose.h"
 #include "anim_timebase.h"
 #include "anim_table.h"
+#include "attack_id_tables.h"
 #include "attack_identity.h"
 #include "buttons.h"
 #include "blaster.h"
@@ -2510,6 +2511,29 @@ static inline uint8_t ottotto_edge_matches_facing(const MslBatch* batch, int bi,
   return facing ? (uint8_t)(pos_x >= line->x1) : (uint8_t)(pos_x <= line->x0);
 }
 
+static inline uint8_t dash_turn_floor_loss_is_source_facing_stage_ledge(const MslBatch* batch,
+                                                                        int bi, uint16_t ground_id,
+                                                                        uint8_t dash_source_facing,
+                                                                        float pos_x) {
+  if (batch == NULL || bi < 0) {
+    return 0u;
+  }
+  const uint32_t stage_id = batch->state.stage_id[(size_t)bi];
+  // The Turn_IASA -> Dash floor-loss carry is only needed when Dash_Coll is losing a stage ledge
+  // floor in the source-facing direction. Do not apply it to generic floor edges: those use the
+  // replay-visible facing after Turn has published, and widening this to all floor-loss rows
+  // changes existing Yoshi/Dream Land validation paths.
+  // data/stages/bin/*.bin::MSLSTG01 ledge floor ids
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::{ftCo_Turn_IASA,fn_800C9C2C}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_Coll
+  const int ledge_side = dash_source_facing ? 1 : 0;
+  const MslStageFloorLine* ledge_floor = stage_collision_get_ledge_floor_line(stage_id, ledge_side);
+  if (ledge_floor == NULL || ledge_floor->segment_i != ground_id) {
+    return 0u;
+  }
+  return ottotto_edge_matches_facing(batch, bi, ground_id, dash_source_facing, pos_x);
+}
+
 static inline uint8_t ottotto_edge_point_for_facing(const MslBatch* batch, int bi,
                                                     uint16_t ground_id, uint8_t facing,
                                                     float* x_out, float* y_out) {
@@ -2831,6 +2855,27 @@ static inline uint8_t action_is_attackair(uint16_t a) {
   // aerial attacks.
   // refs/melee/src/melee/ft/ftmotionstates.c::ftData_MotionStateList
   return msl_motion_state_common_class_has(a, MSL_MS_CLASS_ATTACK_AIR);
+}
+
+static inline uint8_t action_is_grounded_specialn_ft80083f88_floor_loss(uint8_t char_id,
+                                                                        uint16_t action_id) {
+  enum { MSL_FT_MOVE_ID_SPECIAL_N = 18u };
+  // Grounded Fox/Falco SpecialN collision callbacks call ft_80083F88, which routes floor loss
+  // through ft_80082708/mpColl_8004B108 and enters Fall. Use generated callback ownership plus the
+  // decomp-derived MotionState move_id table for the grounded SpecialN distinction; the broader
+  // FT80083F88 class also contains downed/passive callbacks whose floor-loss transitions are owned
+  // by separate downed/damage source families.
+  //
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
+  //   ftFx_SpecialNStart_Coll,ftFx_SpecialNLoop_Coll,ftFx_SpecialNEnd_Coll}
+  // refs/melee/src/melee/ft/ft_081B.c::{ft_80083F88,ft_80082708}
+  // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
+  // data/motion_state/owners/{fox,falco}.bin (MSLMSO01 class FT80083F88_GROUND_TO_AIR_COLL)
+  // data/attack_id/move_id/{fox,falco}.bin (MotionState.move_id == FtMoveId_SpecialN)
+  return (uint8_t)(msl_motion_state_class_has(char_id, action_id,
+                                              MSL_MS_CLASS_FT80083F88_GROUND_TO_AIR_COLL) &&
+                   attack_id_move_id_from_action(char_id, action_id) ==
+                       (uint16_t)MSL_FT_MOVE_ID_SPECIAL_N);
 }
 
 static inline uint16_t attackair_landing_action_for_contact(const MslBatch* batch, size_t idx,
@@ -4752,6 +4797,28 @@ void locomotion_update_pre(MslBatch* batch) {
           }
         }
 
+        // Ottotto grounded special IASA:
+        // - ftCo_Ottotto_IASA checks SpecialS, then the shared grounded B-special dispatchers,
+        //   before catch/attack/guard/jump/dash/turn/walk. Reuse the same table/data-backed
+        //   spacie special helpers as Wait-style IASA instead of adding a Teeter-only branch.
+        // - Reflector remains owned by the grounded ftCo_800D68C0 helper only when the B+down
+        //   pressed-edge lane is active and Side-B does not preempt it.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::ftCo_Ottotto_IASA
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::{
+        //   ftCo_SpecialS_CheckInput,ftCo_800D6824,ftCo_800D68C0}
+        if (action_id == (uint16_t)MSL_ACT_OTTOTTO || action_id == (uint16_t)MSL_ACT_OTTOTTO_WAIT) {
+          if (blaster_try_enter_ground_from_iasa_subset(batch, c, idx)) {
+            action_id = batch->state.action_id[idx];
+            continue;
+          }
+          if (spacie_speciallw_wait_iasa_pressed_edge(c, batch->state.char_id[idx], buttons_pressed,
+                                                      stick_x, stick_y)) {
+            shine_enter_ground_start_from_iasa(batch, idx);
+            action_id = batch->state.action_id[idx];
+            continue;
+          }
+        }
+
         // Ottotto grounded A-attack IASA:
         // - ftCo_Ottotto_IASA checks grounded A-attack inputs before guard/jump/dash/turn/walk.
         // - ftCo_OttottoWait_IASA shares the same grounded input owner, so teeter wait can enter
@@ -6250,10 +6317,35 @@ void locomotion_update_post_collision(MslBatch* batch) {
            msl_motion_state_common_class_has(a, MSL_MS_CLASS_COMMON_AIR_COLL))
               ? 1u
               : 0u;
+      const uint8_t keep_shine_platform_pass_floor_skip =
+          // Fox/Falco Reflector can enter the aerial start state through
+          // `ftFx_SpecialLwStart_Pass -> ftCo_8009A184`, which writes CollData.floor_skip for the
+          // platform currently being passed. Preserve that source floor-skip only inside the same
+          // Shine pass episode: grounded Start -> aerial Start -> sustained aerial Loop/End. This
+          // keeps modelplay platform-drop Shine from immediately snapping back to the passed
+          // platform without letting arbitrary replay seeds carry stale platform skips into
+          // unrelated aerial specials.
+          // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::{
+          //   ftFx_SpecialLwStart_Pass,ftFx_SpecialAirLwStart_Anim,ftFx_SpecialAirLwLoop_Coll,
+          //   ftFx_SpecialAirLwEnd_Coll}
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_8009A184
+          // refs/melee/src/melee/mp/mpcoll.c::{mpUpdateFloorSkip,mpColl_80044628_Floor}
+          (floor_skip_segment != 0xFFFFu && now_ground == 0u &&
+           stage_collision_floor_line_is_platform(stage_id, floor_skip_segment) &&
+           (a == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START ||
+            a == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_LOOP ||
+            a == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_END) &&
+           (batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_FX_SPECIAL_LW_START ||
+            batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_START ||
+            batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_LOOP ||
+            batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_LW_END))
+              ? 1u
+              : 0u;
       if (batch->state.floor_skip_segment_id != NULL && floor_skip_segment != 0xFFFFu &&
           a != (uint16_t)MSL_ACT_PASS && a != (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI &&
           !keep_attackair_transformed_platform_floor_skip &&
-          !keep_common_air_transformed_platform_floor_skip) {
+          !keep_common_air_transformed_platform_floor_skip &&
+          !keep_shine_platform_pass_floor_skip) {
         // Fighter_ChangeMotionState clears CollData.floor_skip via mpClearFloorSkip. The current
         // frame has already consumed the old skip in stage collision, so clear it here for later
         // contacts once Pass has handed off to jump/aerial/fall/landing owners. SpecialAirHi is the
@@ -6263,7 +6355,8 @@ void locomotion_update_post_collision(MslBatch* batch) {
         // height-transformed AttackAirN/Lw pass-through contacts can keep the same source
         // floor-skip owner live while airborne. Common-air callbacks preserve a transformed-platform
         // skip only through same-action callback continuity and the generated MSLMSO01 common-air
-        // collision class; a real Fighter_ChangeMotionState clears CollData.floor_skip.
+        // collision class. Shine preserves only the explicit platform-pass episode described
+        // above; a real unrelated Fighter_ChangeMotionState clears CollData.floor_skip.
         // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
         // refs/melee/src/melee/mp/mpcoll.c::{mpUpdateFloorSkip,mpClearFloorSkip}
         // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFox_SpecialHi_IsBound
@@ -6675,6 +6768,10 @@ void locomotion_update_post_collision(MslBatch* batch) {
             enter_fall_from_grounded_floor_loss(batch, ch, idx);
             continue;
           }
+          if (action_is_grounded_specialn_ft80083f88_floor_loss(batch->state.char_id[idx], a)) {
+            enter_fall_from_grounded_floor_loss(batch, ch, idx);
+            continue;
+          }
           // Decomp: ftFx_SpecialHiLanding_Coll enters FallSpecial when no longer grounded.
           // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiLanding_Coll
           if (a == (uint16_t)MSL_ACT_FX_SPECIAL_HI_LANDING) {
@@ -6717,6 +6814,25 @@ void locomotion_update_post_collision(MslBatch* batch) {
           const float facing_sign = batch->state.facing[idx] ? 1.0f : -1.0f;
           if (nudge_x * facing_sign > 0.0f) {
             batch->state.pos_x[idx] += nudge_x;
+          }
+        }
+
+        if (a == (uint16_t)MSL_ACT_DASH &&
+            batch->state.prev_action_id[idx] == (uint16_t)MSL_ACT_TURN &&
+            batch->state.action_frame[idx] <= 1 && batch->state.speed_air_x_self[idx] != 0.0f) {
+          const uint8_t dash_source_facing = batch->state.speed_air_x_self[idx] > 0.0f ? 1u : 0u;
+          if (dash_turn_floor_loss_is_source_facing_stage_ledge(
+                  batch, bi, batch->state.ground_id[idx], dash_source_facing,
+                  batch->state.pos_x[idx])) {
+            // Turn_IASA can route through its just-turned `x8/facing_after` lane into Dash, then
+            // Dash_Coll immediately leaves the floor through ft_800844EC. Preserve the Dash
+            // source-facing lane for the resulting Fall; otherwise the replay-visible Turn facing
+            // can make the later ledge pass test the stage ledge behind the source trajectory.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::{
+            //   ftCo_Turn_IASA,fn_800C9C2C}
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_Coll
+            // refs/melee/src/melee/ft/ft_081B.c::{ft_800844EC,ft_80082708}
+            batch->state.facing[idx] = dash_source_facing;
           }
         }
 

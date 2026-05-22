@@ -35,7 +35,11 @@ STAGE_DEBUG_DTYPE = np.dtype(
     [
         ("fod_platform_height", ("<f4", (2,))),
         ("fod_platform_height_valid", ("u1", (2,))),
-        ("_pad0", "V2"),
+        ("fod_platform_height_source", ("u1", (2,))),
+        ("randall_exists", "u1"),
+        ("_pad0", "V3"),
+        ("randall_x", "<f4"),
+        ("randall_y", "<f4"),
     ],
     align=False,
 )
@@ -243,6 +247,9 @@ class SimFrameState:
     frame_pre_random_seed: int
     stage_fod_platform_height: np.ndarray | None = None
     stage_fod_platform_height_valid: np.ndarray | None = None
+    stage_randall_exists: bool = False
+    stage_randall_x: float = 0.0
+    stage_randall_y: float = 0.0
     anim_frame_f32: np.ndarray | None = None
     frame_speed_mul_f32: np.ndarray | None = None
 
@@ -286,9 +293,15 @@ def frame_state_from_seed(seed: np.void) -> SimFrameState:
 def frame_state_from_compare(compare: np.void, stage_debug: np.void | None = None) -> SimFrameState:
     stage_fod_platform_height = None
     stage_fod_platform_height_valid = None
+    stage_randall_exists = False
+    stage_randall_x = 0.0
+    stage_randall_y = 0.0
     if stage_debug is not None:
         stage_fod_platform_height = np.array(stage_debug["fod_platform_height"], copy=True)
         stage_fod_platform_height_valid = np.array(stage_debug["fod_platform_height_valid"], copy=True)
+        stage_randall_exists = bool(stage_debug["randall_exists"])
+        stage_randall_x = float(stage_debug["randall_x"])
+        stage_randall_y = float(stage_debug["randall_y"])
     return SimFrameState(
         frame_id=int(compare["frame_id"]),
         stage_id=int(compare["stage_id"]),
@@ -320,6 +333,9 @@ def frame_state_from_compare(compare: np.void, stage_debug: np.void | None = Non
         frame_pre_random_seed=int(compare["frame_pre_random_seed"]),
         stage_fod_platform_height=stage_fod_platform_height,
         stage_fod_platform_height_valid=stage_fod_platform_height_valid,
+        stage_randall_exists=stage_randall_exists,
+        stage_randall_x=stage_randall_x,
+        stage_randall_y=stage_randall_y,
     )
 
 
@@ -429,7 +445,10 @@ def build_slippi_ai_game(state: SimFrameState, controllers: Mapping[int, object]
         p3=p3,
         stage=np.uint8(stage),
         randall_phase=np.float32(state.frame_id % 1200),
-        randall=sa_types.Randall(x=np.float32(0.0), y=np.float32(0.0)),
+        randall=sa_types.Randall(
+            x=np.float32(state.stage_randall_x if state.stage_randall_exists else 0.0),
+            y=np.float32(state.stage_randall_y if state.stage_randall_exists else 0.0),
+        ),
         items=sa_types.Items(**items),
         is_teams=np.bool_(state.is_teams),
     )

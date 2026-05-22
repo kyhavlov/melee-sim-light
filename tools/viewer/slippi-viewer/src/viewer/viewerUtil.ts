@@ -35,7 +35,10 @@ function getStartOfActionFromFrameCounter(
   const actionFrame = playerState.actionStateFrameCounter;
   if (!Number.isFinite(actionFrame) || actionFrame < 0) return undefined;
 
-  const estimatedStart = playerState.frameNumber - Math.floor(actionFrame);
+  const estimatedStart =
+    playerState.frameNumber - Math.max(0, Math.floor(actionFrame) - 1);
+  let bestFrame: number | undefined;
+  let bestError = Number.POSITIVE_INFINITY;
   for (let delta = -2; delta <= 2; delta += 1) {
     const candidateFrame = estimatedStart + delta;
     if (candidateFrame > playerState.frameNumber) continue;
@@ -48,10 +51,17 @@ function getStartOfActionFromFrameCounter(
       candidateState.actionStateId === playerState.actionStateId &&
       isActionStartBoundary(playerState, candidateState)
     ) {
-      return candidateFrame;
+      const expectedFrameCounter =
+        candidateState.actionStateFrameCounter +
+        (playerState.frameNumber - candidateFrame);
+      const error = Math.abs(expectedFrameCounter - actionFrame);
+      if (error < bestError) {
+        bestError = error;
+        bestFrame = candidateFrame;
+      }
     }
   }
-  return undefined;
+  return bestFrame;
 }
 
 export function getStartOfAction(

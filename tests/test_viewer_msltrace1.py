@@ -30,7 +30,7 @@ ITEM_DTYPE = np.dtype(
 )
 
 
-def _state(*, action_frame: int) -> SimFrameState:
+def _state(*, action_frame: int, randall_x: float = 0.0) -> SimFrameState:
     return SimFrameState(
         frame_id=action_frame,
         stage_id=32,
@@ -60,6 +60,9 @@ def _state(*, action_frame: int) -> SimFrameState:
         hurtbox_state=np.zeros(2, dtype=np.uint8),
         items=np.zeros(0, dtype=ITEM_DTYPE),
         frame_pre_random_seed=12345,
+        stage_randall_exists=randall_x != 0.0,
+        stage_randall_x=randall_x,
+        stage_randall_y=-33.2489,
     )
 
 
@@ -79,3 +82,15 @@ def test_msltrace_writer_uses_sparse_deltas(tmp_path):
     assert payload["frames"]["rows"][1][0] == 1
     assert payload["frames"]["rows"][1][2] is None
     assert payload["frames"]["rows"][1][3] == [[[2, 1]], [[2, 1]]]
+
+
+def test_msltrace_writer_serializes_sparse_randall_stage_state(tmp_path):
+    trace = MslTraceWriter()
+    trace.add_frame(_state(action_frame=0), {})
+    trace.add_frame(_state(action_frame=1, randall_x=74.423), {})
+
+    payload = trace.to_payload()
+
+    assert payload["stage"]["fields"] == ["randallExists", "randallX", "randallY"]
+    assert payload["stage"]["rows"][0] == [0, 0, [0, 0, -33.248901]]
+    assert payload["stage"]["rows"][1] == [1, 1, [[0, 1], [1, 74.422997]]]

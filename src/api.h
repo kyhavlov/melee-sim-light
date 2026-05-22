@@ -295,6 +295,13 @@ typedef struct MslDebugStageState {
   // One-step replay/source provenance for current FoD platform heights. This is debug output only;
   // runtime clears seed-provided source bits after the frame unless a live owner reasserts them.
   uint8_t fod_platform_height_source[2];
+  // Yoshi's Story Randall center as resolved from the generated GrSt platform transform used by
+  // collision. This keeps viewer/modelplay traces on the same stage-object owner as runtime.
+  // data/stages/bin/grst.bin::MSLSTG01 platform_transform=randall
+  uint8_t randall_exists;
+  uint8_t _pad0[3];
+  float randall_x;
+  float randall_y;
 } MslDebugStageState;
 
 enum {
