@@ -14,7 +14,6 @@ from .config import Character, MatchConfig, PlayerConfig, Stage
 
 
 _DEFAULT_DATA_DIR = ".msl"
-_SOURCE_CHECKOUT_DATA_DIR = "data"
 _DATA_MANIFEST = "manifest.json"
 
 _REQUIRED_DATA_FILES = (
@@ -427,13 +426,23 @@ def _resolve_data_dir(data_dir: str | os.PathLike[str] | None) -> str | None:
         os.environ["MSL_DATA_DIR"] = resolved
         return resolved
 
-    source_data = Path(_SOURCE_CHECKOUT_DATA_DIR).resolve()
-    if source_data.exists():
-        resolved = str(source_data)
-        os.environ["MSL_DATA_DIR"] = resolved
-        return resolved
+    raise FileNotFoundError(_missing_data_dir_message(default_data))
 
-    return None
+
+def _missing_data_dir_message(default_data: Path) -> str:
+    return "\n".join(
+        [
+            "melee_sim data directory not found.",
+            f"  checked default data root: {default_data}",
+            "",
+            "Run:",
+            "  python -m melee_sim.extract_data --iso /path/to/SSBM.iso",
+            "",
+            "Or set the data root explicitly:",
+            "  MSL_DATA_DIR=/path/to/.msl python your_script.py",
+            "  env = melee_sim.EnvBatch(..., data_dir='/path/to/.msl')",
+        ]
+    )
 
 
 def _check_data_dir(data_dir: Path) -> None:

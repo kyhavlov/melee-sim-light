@@ -46,14 +46,18 @@ def test_default_data_dir_is_dot_msl(monkeypatch, tmp_path) -> None:
     os.environ.pop("MSL_DATA_DIR", None)
 
 
-def test_source_checkout_data_dir_fallback(monkeypatch, tmp_path) -> None:
+def test_missing_default_data_dir_error_is_actionable(monkeypatch, tmp_path) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("MSL_DATA_DIR", raising=False)
-    (tmp_path / "data").mkdir()
 
-    assert _resolve_data_dir(None) == str(tmp_path / "data")
-    assert os.environ["MSL_DATA_DIR"] == str(tmp_path / "data")
-    os.environ.pop("MSL_DATA_DIR", None)
+    with pytest.raises(FileNotFoundError) as excinfo:
+        _resolve_data_dir(None)
+
+    msg = str(excinfo.value)
+    assert "melee_sim data directory not found" in msg
+    assert str(tmp_path / ".msl") in msg
+    assert "python -m melee_sim.extract_data --iso /path/to/SSBM.iso" in msg
+    assert "MSL_DATA_DIR=/path/to/.msl python your_script.py" in msg
 
 
 def test_data_manifest_schema_mismatch_error_is_actionable(tmp_path) -> None:
