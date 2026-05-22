@@ -523,7 +523,7 @@ def _data_schema_error_message(
             "If Python imports melee_sim from a source checkout, an in-place rebuild there is also valid:",
             "  cd /path/to/melee-sim-light && make build",
             "",
-            "Then regenerate data or point MELEE_SIM_DATA/MSL_DATA_DIR at a data root from the same checkout:",
+            "Then regenerate data or point MSL_DATA_DIR at a data root from the same checkout:",
             "  python -m melee_sim.extract_data --iso /path/to/SSBM.iso --force",
         ]
     )

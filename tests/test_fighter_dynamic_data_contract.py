@@ -278,7 +278,7 @@ def test_runtime_rejects_stale_ssanim01_v3_artifacts() -> None:
         try:
             os.environ["MSL_DATA_DIR"] = str(data_dir)
             msl_binding.debug_reset_pose_and_hitboxes_tables()
-            with pytest.raises(MemoryError):
+            with pytest.raises(RuntimeError, match="msl_batch_create failed"):
                 msl_binding.init(batch_size=1, num_players=2)
         finally:
             if old_data_dir is None:
@@ -316,7 +316,7 @@ def test_runtime_rejects_stale_ssdynn01_v3_artifacts() -> None:
         try:
             os.environ["MSL_DATA_DIR"] = str(data_dir)
             msl_binding.debug_reset_pose_and_hitboxes_tables()
-            with pytest.raises(MemoryError):
+            with pytest.raises(RuntimeError, match="msl_batch_create failed"):
                 msl_binding.init(batch_size=1, num_players=2)
         finally:
             if old_data_dir is None:
@@ -360,7 +360,7 @@ def test_runtime_rejects_nonempty_ssdynn01_source_step_index() -> None:
         try:
             os.environ["MSL_DATA_DIR"] = str(data_dir)
             msl_binding.debug_reset_pose_and_hitboxes_tables()
-            with pytest.raises(MemoryError):
+            with pytest.raises(RuntimeError, match="msl_batch_create failed"):
                 msl_binding.init(batch_size=1, num_players=2)
         finally:
             if old_data_dir is None:
@@ -651,7 +651,7 @@ def test_runtime_dynamic_loader_rejects_unsupported_present_files(name: str, set
         try:
             os.environ["MSL_DATA_DIR"] = str(data_dir)
             msl_binding.debug_reset_pose_and_hitboxes_tables()
-            with pytest.raises(MemoryError):
+            with pytest.raises(RuntimeError, match="msl_batch_create failed"):
                 msl_binding.init(batch_size=1, num_players=2)
         finally:
             if old_data_dir is None:
@@ -686,7 +686,7 @@ def test_runtime_dynamic_loader_rejects_present_dyn_without_locals() -> None:
         try:
             os.environ["MSL_DATA_DIR"] = str(data_dir)
             msl_binding.debug_reset_pose_and_hitboxes_tables()
-            with pytest.raises(MemoryError):
+            with pytest.raises(RuntimeError, match="msl_batch_create failed"):
                 msl_binding.init(batch_size=1, num_players=2)
         finally:
             if old_data_dir is None:
