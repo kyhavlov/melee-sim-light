@@ -204,6 +204,41 @@ def _extract_fox_falco_illusion_item(pl_buf: bytes, arc, *, ftdata_abs: int) -> 
     return {}
 
 
+def _extract_wait_anim_choices(buf: bytes, wait_abs: int) -> dict:
+    """Extract ftData.x24 WaitStruct roulette entries for Wait animation variants.
+
+    Source:
+    - refs/melee/src/melee/ft/types.h::ftData.x24
+    - refs/melee/src/melee/ft/ftwaitanim.c::getAnimID
+
+    The table is a sequence of `{msid, weight}` s32 pairs terminated by {-1, -1}.
+    """
+    if wait_abs < 0 or wait_abs + 8 > len(buf):
+        return {}
+    msids: list[int] = []
+    weights: list[int] = []
+    for i in range(16):
+        off = wait_abs + i * 8
+        if off + 8 > len(buf):
+            break
+        msid = int(_i32_be(buf, off + 0x00))
+        weight = int(_i32_be(buf, off + 0x04))
+        if msid == -1:
+            break
+        if msid < 0 or weight <= 0:
+            return {}
+        msids.append(msid)
+        weights.append(weight)
+        if len(msids) >= 4:
+            break
+    if not msids:
+        return {}
+    return {
+        "wait_anim_choice_msids": msids,
+        "wait_anim_choice_weights": weights,
+    }
+
+
 def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaster: bool = False) -> dict:
     buf = pl_dat.read_bytes()
     arc = parse_hsd_archive(buf)
@@ -253,6 +288,7 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
     landing_airlw_lag_frames = int(round(f(0xF8)))
 
     x44_abs = arc.ptr32(ftdata_abs + 0x44)
+    wait_anim_abs = arc.ptr32(ftdata_abs + 0x24)
     out = {
         "grab_capture_anchor_part_id": grab_capture_anchor_part_id,
         "walk_init_vel": f(0x00),
@@ -376,6 +412,7 @@ def _extract_ftco_dattrs(pl_dat: Path, *, ftdata_symbol: str, extract_fox_blaste
         # Decomp: refs/melee/src/melee/ft/types.h::FtSFX / ftData.x4C_sfx.
         "smash_sfx_num": int(_i32_be(buf, arc.ptr32(sfx_abs + 0x00) + 0x00)),
     }
+    out.update(_extract_wait_anim_choices(buf, wait_anim_abs))
     if ftdata_symbol == "ftDataFox":
         out["damage_post_hitlag_sfx_mid_num"] = 2
         out["damage_post_hitlag_sfx_high_num"] = 2
@@ -639,6 +676,7 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
         "firefox_hold_air_fall_accel",
         "firefox_direction_stick_range_min",
         "firefox_launch_duration_frames",
+        "firefox_bound_delay_frames",
         "firefox_launch_reverse_accel_start_frames",
         "firefox_launch_speed",
         "firefox_launch_reverse_accel",
@@ -690,6 +728,8 @@ def _stable_update(existing: dict, extracted: dict) -> dict:
         "camera_zoom_target_bone_part_id",
         "camera_zoom_target_offset",
         "camera_box_radius",
+        "wait_anim_choice_msids",
+        "wait_anim_choice_weights",
         "ecb_joints",
         "ecb_side_y_offset",
         "ledge_snap_x",
