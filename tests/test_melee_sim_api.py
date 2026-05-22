@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 
@@ -8,7 +9,8 @@ import pytest
 
 import melee_sim as msl
 import melee_sim.dtypes as msl_dtypes
-from melee_sim.env_batch import _resolve_data_dir
+from melee_sim import env_batch as env_batch_module
+from melee_sim.env_batch import _check_data_manifest, _resolve_data_dir
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -52,6 +54,29 @@ def test_source_checkout_data_dir_fallback(monkeypatch, tmp_path) -> None:
     assert _resolve_data_dir(None) == str(tmp_path / "data")
     assert os.environ["MSL_DATA_DIR"] == str(tmp_path / "data")
     os.environ.pop("MSL_DATA_DIR", None)
+
+
+def test_data_manifest_schema_mismatch_error_is_actionable(tmp_path) -> None:
+    runtime = env_batch_module._native.data_schema_versions()
+    manifest = {
+        "magic": "MSLDATA1",
+        "version": 1,
+        "schemas": dict(runtime),
+    }
+    manifest["schemas"]["motion_state_owners"] = int(runtime["motion_state_owners"]) + 1
+    (tmp_path / "manifest.json").write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RuntimeError) as excinfo:
+        _check_data_manifest(tmp_path)
+
+    msg = str(excinfo.value)
+    assert "data/runtime schema mismatch" in msg
+    assert "motion_state_owners" in msg
+    assert "python -m pip install --force-reinstall --no-cache-dir /path/to/melee-sim-light" in msg
+    assert "python -m melee_sim.extract_data --iso /path/to/SSBM.iso --force" in msg
 
 
 def test_envbatch_uses_mslftsc1_without_legacy_script_owner_splits(tmp_path) -> None:

@@ -64,6 +64,8 @@ static void print_generate_hint(const char* data_dir) {
           dd);
 }
 
+uint32_t motion_state_owners_format_version(void) { return k_format_version; }
+
 static int load_file_buf(const char* path, uint8_t** out_buf, size_t* out_sz, int* out_errno) {
   if (path == NULL || out_buf == NULL || out_sz == NULL) {
     return -1;

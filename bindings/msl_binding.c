@@ -28,6 +28,7 @@
 #include "../src/input_axis.h"
 #include "../src/item_article_params.h"
 #include "../src/move_tables.h"
+#include "../src/motion_state_owners.h"
 #include "../src/shield_tilt_table.h"
 #include "../src/specialhi_pose.h"
 #include "../src/staling.h"
@@ -4011,6 +4012,13 @@ static PyObject* msl_sizes(PyObject* self, PyObject* args) {
                        (int)sizeof(MslDebugCollDataEcb));
 }
 
+static PyObject* msl_data_schema_versions(PyObject* self, PyObject* args) {
+  (void)self;
+  (void)args;
+  return Py_BuildValue("{s:I,s:I}", "attack_id_move_id", attack_id_tables_format_version(),
+                       "motion_state_owners", motion_state_owners_format_version());
+}
+
 static PyObject* msl_alloc_reset(PyObject* self, PyObject* args) {
   (void)self;
   (void)args;
@@ -6452,6 +6460,8 @@ static PyMethodDef methods[] = {
     {"debug_body_matrix_overlap", msl_debug_body_matrix_overlap_py, METH_VARARGS,
      "debug_body_matrix_overlap(handle, batch_index, attacker, hb_id, defender, cap_id) -> float"},
     {"sizes", msl_sizes, METH_NOARGS, "sizes() -> dict of struct sizes"},
+    {"data_schema_versions", msl_data_schema_versions, METH_NOARGS,
+     "data_schema_versions() -> dict of extracted data schema versions expected by this runtime"},
     {"alloc_reset", msl_alloc_reset, METH_NOARGS,
      "Reset C allocation counters (debug/perf guardrail)."},
     {"alloc_stats", msl_alloc_stats, METH_NOARGS,

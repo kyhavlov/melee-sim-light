@@ -9,6 +9,9 @@ import time
 from importlib import resources
 from pathlib import Path
 
+from tools.extraction.extract_attack_id_move_id import FORMAT_VERSION as ATTACK_ID_MOVE_ID_VERSION
+from tools.extraction.extract_motion_state_owners import FORMAT_VERSION as MOTION_STATE_OWNERS_VERSION
+
 
 FTCO_SM_DAMAGEAIR2 = 175
 FTCO_SM_DAMAGEAIR3 = 176
@@ -50,6 +53,20 @@ def _copy_source_artifact(rel: str, out_path: Path) -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with src.open("rb") as f:
         out_path.write_bytes(f.read())
+
+
+def _write_data_manifest(out_root: Path, *, chars: list[str], stages: list[str]) -> None:
+    payload = {
+        "magic": "MSLDATA1",
+        "version": 1,
+        "schemas": {
+            "attack_id_move_id": ATTACK_ID_MOVE_ID_VERSION,
+            "motion_state_owners": MOTION_STATE_OWNERS_VERSION,
+        },
+        "chars": list(chars),
+        "stages": list(stages),
+    }
+    (out_root / "manifest.json").write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -456,6 +473,8 @@ def main(argv: list[str] | None = None) -> None:
             ",".join(chars),
         ],
     )
+
+    _write_data_manifest(out_root, chars=chars, stages=stage_keys)
 
     summary = {
         "stages": [str(out_stage_by_key[key]) for key in stage_keys],

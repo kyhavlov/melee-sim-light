@@ -69,6 +69,8 @@ static void print_generate_hint(const char* data_dir) {
           dd);
 }
 
+uint32_t attack_id_tables_format_version(void) { return k_format_version; }
+
 // Returns:
 // - 0 on success
 // - -2 on open failure (out_errno set)

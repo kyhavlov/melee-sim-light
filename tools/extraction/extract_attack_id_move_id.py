@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
+FORMAT_MAGIC = b"MSLACID1"
+FORMAT_VERSION = 3
 _U16_MAX = 0xFFFF
 _U32_MAX = 0xFFFF_FFFF
 
@@ -461,8 +463,6 @@ def _write_action_move_id_bin(
     #   u16 move_id[action_count] (0xFFFF means "unknown/absent"; runtime should treat as Default)
     #   u32 x4_flags[action_count] (decomp MotionState.x4_flags)
     #   u32 motion_state_word[action_count] (decomp MotionState +0x8 word: move_id + x9 bits)
-    magic = b"MSLACID1"
-    version = 3
     max_action = max(
         max(move_id_by_action.keys(), default=0),
         max(flags_by_action.keys(), default=0),
@@ -493,8 +493,8 @@ def _write_action_move_id_bin(
         motion_words[int(action_id)] = int(word) & _U32_MAX
 
     buf = bytearray()
-    buf += magic
-    buf += _u32_le(version)
+    buf += FORMAT_MAGIC
+    buf += _u32_le(FORMAT_VERSION)
     buf += _u16_le(action_count)
     buf += _u16_le(0)
     buf += _u32_le(move_toc_off)

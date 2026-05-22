@@ -11,6 +11,9 @@
 //   data/motion_state/owners/{fox,falco}.bin (MSLMSO01)
 int motion_state_owners_init(void);
 
+// Binary artifact schema version expected by this runtime.
+uint32_t motion_state_owners_format_version(void);
+
 enum {
   MSL_MOTION_FLAG_KEEP_FASTFALL = 1u << 0,
   // refs/melee/src/melee/ft/forward.h::Ft_MF_SkipHit
