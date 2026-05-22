@@ -59,9 +59,8 @@ static const char* data_dir_or_default(void) {
 static void print_generate_hint(const char* data_dir) {
   const char* dd = (data_dir != NULL && data_dir[0] != '\0') ? data_dir : "data";
   fprintf(stderr,
-          "msl: generate motion-state owner tables with:\n"
-          "  uv run python -m tools.extraction.extract_motion_state_owners "
-          "--melee_decomp refs/melee --out_dir %s/motion_state/owners --chars fox,falco\n",
+          "msl: generate a complete data root with:\n"
+          "  uv run python -m melee_sim.extract_data --iso /path/to/SSBM.iso --out-dir %s\n",
           dd);
 }
 
@@ -181,6 +180,9 @@ static int load_table_for_char_into(uint8_t char_id, const char* rel_name,
     fprintf(stderr,
             "msl: motion-state owner table bad version for char_id=%u: %s (got=%u expected=%u)\n",
             (unsigned)char_id, path, (unsigned)ver, (unsigned)k_format_version);
+    fprintf(stderr,
+            "msl: table/runtime schema mismatch; rebuild or reinstall melee-sim-light, then "
+            "regenerate .msl if needed\n");
     print_generate_hint(data_dir);
     alloc_free(buf);
     return -1;

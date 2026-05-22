@@ -1060,7 +1060,8 @@ static PyObject* msl_init(PyObject* self, PyObject* args, PyObject* kwargs) {
 
   MslBatch* batch = msl_batch_create(batch_size, num_players);
   if (batch == NULL) {
-    PyErr_SetString(PyExc_MemoryError, "msl_batch_create failed");
+    PyErr_SetString(PyExc_RuntimeError,
+                    "msl_batch_create failed; see stderr for data loading details");
     return NULL;
   }
   if (ucf_enabled != -1) {

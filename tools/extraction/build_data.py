@@ -88,6 +88,9 @@ def main(argv: list[str] | None = None) -> None:
     chars = [c.strip() for c in args.chars.split(",") if c.strip()]
     timings: list[tuple[str, float]] | None = [] if args.timings else None
     _RUN_TIMINGS = timings
+    melee_decomp_args = ["--melee_decomp", str(args.melee_decomp)] if has_melee_decomp else []
+    if not has_melee_decomp:
+        print("using packaged source-derived artifacts; refs/melee is not required", flush=True)
 
     # Sources we need in _iso.
     _require(
@@ -267,8 +270,7 @@ def main(argv: list[str] | None = None) -> None:
         [
             "--iso_dir",
             str(iso_dir),
-            "--melee_decomp",
-            str(args.melee_decomp),
+            *melee_decomp_args,
             "--out_dir",
             str(out("moves")),
             "--special_msids_dir",
@@ -339,8 +341,7 @@ def main(argv: list[str] | None = None) -> None:
                 ch,
                 "--iso_dir",
                 str(iso_dir),
-                "--melee_decomp",
-                str(args.melee_decomp),
+                *melee_decomp_args,
                 "--special_msids_dir",
                 str(out("special_msids")),
                 "--out",
