@@ -8,16 +8,14 @@ NumPy API over native batch execution.
 
 ## Quick Start
 
-From a source checkout, install dependencies and build the native extension:
-
 Prerequisites:
-
 - `uv`
 - Python 3.10 or newer
 - a C compiler available as `cc`
 
+Clone the repo:
 ```bash
-uv sync --dev
+git clone https://github.com/kyhavlov/melee-sim-light
 ```
 
 From another project, install the local checkout with `uv`:
@@ -30,10 +28,10 @@ The simulator needs extracted game data before it can create an `EnvBatch`.
 Extract it from a valid SSBM ISO:
 
 ```bash
-uv run python -m melee_sim.extract_data --iso /path/to/SSBM.iso
+uv run python -m melee_sim.extract_data --iso /path/to/SSBM.iso [--out-dir /path/to/my-msl-data]
 ```
 
-The extraction command writes `.msl/` in the directory where the command is run
+By default, the extraction command creates a `.msl/` directory where the command is run
 and can be run again in place when data needs to be refreshed. `EnvBatch()`
 loads `.msl/` by default. To use another data root, set `MSL_DATA_DIR` or
 pass `data_dir`:
@@ -54,9 +52,13 @@ creating simulator batches.
 
 ### Python
 
-The public API is the `melee_sim` Python package. Most callers use `EnvBatch`
-and a reusable `Buffers` object:
+The Python API is built around two objects:
 
+- `EnvBatch` owns the native simulator instance: batch size, player count, loaded data, and the current simulator state.
+- `Buffers` owns the reusable NumPy arrays for match config, controller input, observations, and outputs. Reusing one buffer object avoids per-step allocation.
+
+A typical RL loop creates one `EnvBatch`, creates one `Buffers` object for it, writes controller inputs into the buffers each frame, and calls `env.step()`:
+  
 ```python
 import melee_sim as msl
 
@@ -119,11 +121,17 @@ PlayerConfig(character: int | Character, team_id: int | None = None, facing: int
 MatchConfig(stage: int | Stage = Stage.FINAL_DESTINATION, players: tuple[PlayerConfig, ...] | None = None, ...)
 ```
 
-### C
+### C Native API
 
-The C API in `src/api.h` exposes the same lower-level batch contract. Native integrations
-can drive the core directly. Direct C callers should set `MSL_DATA_DIR` before creating a
-batch when they want to load extracted data from `.msl` or another non-default directory:
+The native API is built around one simulator object plus caller-owned arrays:
+
+- `MslBatch` owns the simulator instance: batch size, player count, loaded data, and current simulator state.
+- Match configs describe the starting state for each lane in the batch.
+- `MslInput` arrays provide previous/current controller inputs for each lane.
+- Output arrays such as `MeleeGamestate` receive observations after stepping.
+- Each batch function takes a pointer plus a stride, so integrations can use their own fixed memory layout and reuse it every frame.
+
+A typical native loop creates one `MslBatch`, initializes match configs, writes controller inputs each frame, calls `msl_batch_step_input()`, and writes observations into a caller-owned output array:
 
 ```c
 #include <stdint.h>
