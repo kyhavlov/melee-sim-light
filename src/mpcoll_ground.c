@@ -549,15 +549,19 @@ static inline uint8_t action_uses_active_hitlag_downward_sdi_floorhug(uint16_t a
   if (batch == NULL) {
     return 0u;
   }
-  // Active-hitlag OnEveryHitlag -> mpColl floorhug ownership is source-proven for DamageFly and
-  // DownDamage callback paths. Common DamageAir re-entry has its own explicit owner below; sustained
-  // same-action DamageAir continuation frames can still receive SDI displacement, but that does not
-  // by itself publish FloorPush|FloorHug against the carried floor line.
+  // Active-hitlag OnEveryHitlag -> mpColl floorhug ownership is shared by the common damage
+  // collision family. DamageAir1/2/3 still call `ftCo_Damage_Coll`, and `ft_80081DD4` routes the
+  // allow-SDI path through `mpColl_800477E0`, whose floor pass can raise FloorPush|FloorHug while
+  // leaving ground_or_air airborne. The caller keeps this bounded to rows with a fresh consumed
+  // downward SDI input and a current hard-floor/bottom-sweep owner; soft platforms and ledges stay
+  // rejected by the later source preconditions.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Coll
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::{ftCo_8009F184,ftCo_DownDamage_Coll}
   // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
   // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800477E0,mpColl_80044628_Floor,mpColl_80044948_Floor}
-  if (is_damage_fly_collision_action(action_id) || action_id == (uint16_t)MSL_ACT_DOWN_DAMAGE_U ||
+  if (msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_DAMAGE_COMMON_COLL) ||
+      is_damage_fly_collision_action(action_id) || action_id == (uint16_t)MSL_ACT_DOWN_DAMAGE_U ||
       action_id == (uint16_t)MSL_ACT_DOWN_DAMAGE_D) {
     return 1u;
   }
@@ -6615,6 +6619,21 @@ void mpcoll_ground_apply(MslBatch* batch) {
           }
         }
         uint8_t active_damage_hitlag_airborne_floor_contact = 0u;
+        // DamageAir1/2/3 active-hitlag floorhug is a callback-local FloorPush|FloorHug result:
+        // it prevents inside-floor tunneling while hitlag is frozen, but vanilla does not carry it
+        // as authority for the following hitlag-exit landing. Keep the post-hitlag floorhug latch on
+        // DamageFly/DownDamage/release rows whose source callbacks have the retained exit-owner
+        // proof; otherwise replay-real DamageAir rows land one frame early from stale CollData.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+        //   ftCo_Damage_OnEveryHitlag,ftCo_Damage_OnExitHitlag,ftCo_Damage_Coll,ftCo_DamageFly_Coll}
+        // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800477E0,mpColl_80044948_Floor}
+        const uint8_t active_damage_floorhug_carries_hitlag_exit_latch =
+            (is_damage_fly_collision_action(action_id) ||
+             action_id == (uint16_t)MSL_ACT_DOWN_DAMAGE_U ||
+             action_id == (uint16_t)MSL_ACT_DOWN_DAMAGE_D ||
+             active_damage_thrown_release_floor_owner)
+                ? 1u
+                : 0u;
         if (!on_ground &&
             (active_damage_hitlag_stay_airborne_floor_owner ||
              active_damage_thrown_release_floor_owner || active_common_damage_entry_floor_owner)) {
@@ -6684,7 +6703,9 @@ void mpcoll_ground_apply(MslBatch* batch) {
             contact_x = proj_x;
             contact_y = proj_y + y_corr;
             active_damage_hitlag_airborne_floor_contact = 1u;
-            batch->state.damage_hitlag_floorhug_latch[idx] = 1u;
+            if (active_damage_floorhug_carries_hitlag_exit_latch) {
+              batch->state.damage_hitlag_floorhug_latch[idx] = 1u;
+            }
           } else if (prefer_line_idx >= 0 && !g->lines[(size_t)prefer_line_idx].is_ledge &&
                      !g->lines[(size_t)prefer_line_idx].is_platform) {
             // Same active-hitlag owner, root fallback:
@@ -6719,7 +6740,9 @@ void mpcoll_ground_apply(MslBatch* batch) {
               contact_x = batch->state.pos_x[idx];
               contact_y = batch->state.pos_y[idx];
               active_damage_hitlag_airborne_floor_contact = 1u;
-              batch->state.damage_hitlag_floorhug_latch[idx] = 1u;
+              if (active_damage_floorhug_carries_hitlag_exit_latch) {
+                batch->state.damage_hitlag_floorhug_latch[idx] = 1u;
+              }
             }
           }
         }

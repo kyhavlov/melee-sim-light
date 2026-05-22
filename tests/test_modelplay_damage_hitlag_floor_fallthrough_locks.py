@@ -13,9 +13,11 @@ CHAR_FOX = 1
 ACT_ATTACK_S4_S = 60
 ACT_DAMAGE_N_2 = 79
 ACT_DAMAGE_AIR_2 = 85
+ACT_DAMAGE_AIR_3 = 86
 SM_ATTACK_S4_S = 62
 SM_DAMAGE_N_2 = 169
 SM_DAMAGE_AIR_2 = 175
+SM_DAMAGE_AIR_3 = 176
 
 
 def _stick_i8(v: float) -> np.int8:
@@ -88,6 +90,39 @@ def _damage_air2_hitlag_seed(
     seed["pos_y"][0, p] = np.float32(pos_y)
     seed["speed_x_attack"][0, p] = np.float32(0.19980676)
     seed["speed_y_attack"][0, p] = np.float32(0.9400171)
+    seed["hitlag"][0, p] = np.uint16(hitlag)
+    seed["hitstun"][0, p] = np.uint16(hitstun)
+    seed["tilt_timer_x"][0, p] = np.uint8(0)
+    seed["tilt_timer_y"][0, p] = np.uint8(0)
+    seed["state_flags"][0, p, 1] = np.uint8(0x10)
+    seed["floor_sweep_prev_pos_valid_u8"][0, p] = np.uint8(1)
+    seed["floor_sweep_prev_pos_x_f32"][0, p] = np.float32(pos_x)
+    seed["floor_sweep_prev_pos_y_f32"][0, p] = np.float32(0.0001)
+    return seed
+
+
+def _damage_air3_hitlag_seed(
+    *,
+    player: int,
+    pos_x: float,
+    pos_y: float,
+    hitlag: int,
+    hitstun: int,
+) -> np.ndarray:
+    seed = _base_seed()
+    p = int(player)
+    seed["action_id"][0, p] = np.uint16(ACT_DAMAGE_AIR_3)
+    seed["animation_index"][0, p] = np.uint32(SM_DAMAGE_AIR_3)
+    seed["action_frame"][0, p] = np.int16(1)
+    seed["anim_frame_f32"][0, p] = np.float32(1.0)
+    seed["seed_prev_action_id"][0, p] = np.uint16(ACT_DAMAGE_AIR_3)
+    seed["seed_prev_action_frame"][0, p] = np.int16(1)
+    seed["on_ground"][0, p] = np.uint8(0)
+    seed["ground_id"][0, p] = np.uint16(0)
+    seed["pos_x"][0, p] = np.float32(pos_x)
+    seed["pos_y"][0, p] = np.float32(pos_y)
+    seed["speed_x_attack"][0, p] = np.float32(0.0)
+    seed["speed_y_attack"][0, p] = np.float32(0.0)
     seed["hitlag"][0, p] = np.uint16(hitlag)
     seed["hitstun"][0, p] = np.uint16(hitstun)
     seed["tilt_timer_x"][0, p] = np.uint8(0)
@@ -195,6 +230,37 @@ def test_damageair2_active_hitlag_sdi_floorhug_does_not_fall_through_fd_seed26()
 
     assert int(out["action_id"][player]) == ACT_DAMAGE_AIR_2
     assert int(out["hitlag"][player]) == 1
+    assert int(out["on_ground"][player]) == 0
+    assert int(out["ground_id"][player]) == 1
+    assert float(out["pos_y"][player]) == pytest.approx(0.0001, abs=0.001)
+
+
+@pytest.mark.integration
+def test_damageair3_same_action_active_hitlag_sdi_floorhug_does_not_clip_fd_trace66() -> None:
+    pytest.importorskip("msl_binding")
+    # modelplay_customv1_ar_penalties_840m trace_seed66 frames 2259..2262:
+    # same-action DamageAir3 hitlag receives a fresh downward SDI input after already carrying the
+    # FD main floor as CollData.floor.index. Source still routes DamageAir3 through
+    # `ftCo_Damage_Coll -> ft_80081DD4 -> mpColl_800477E0`; the stay-airborne floor path must
+    # publish FloorPush|FloorHug instead of tunneling below the floor until hitlag ends.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+    #   ftCo_Damage_OnEveryHitlag,ftCo_Damage_Coll}
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800477E0,mpColl_80044628_Floor,mpColl_80044948_Floor}
+    player = 0
+    out = _step_once(
+        _damage_air3_hitlag_seed(
+            player=player,
+            pos_x=-38.974609375,
+            pos_y=-3.149899959564209,
+            hitlag=3,
+            hitstun=31,
+        ),
+        _input_for_player(player, main_x=-0.8375, main_y=-0.55),
+    )
+
+    assert int(out["action_id"][player]) == ACT_DAMAGE_AIR_3
+    assert int(out["hitlag"][player]) == 2
     assert int(out["on_ground"][player]) == 0
     assert int(out["ground_id"][player]) == 1
     assert float(out["pos_y"][player]) == pytest.approx(0.0001, abs=0.001)
