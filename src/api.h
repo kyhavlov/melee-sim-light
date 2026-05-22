@@ -31,6 +31,86 @@ enum {
   MSL_DAMAGE_POST_HITLAG_CB_DAMAGE_ON_EXIT = 1,
 };
 
+// -------------
+// Simulator core
+// -------------
+
+typedef struct MslBatch MslBatch;
+
+// Create a simulator batch with `batch_size` independent match lanes.
+//
+// Each lane is a separate game. `num_players` is usually 2 for singles and may be 4 for doubles.
+// The returned handle owns all native runtime storage; normal stepping does not allocate.
+MslBatch* msl_batch_create(int batch_size, int num_players);
+
+// Free a batch created by msl_batch_create().
+void msl_batch_destroy(MslBatch* batch);
+
+// Return the fixed dimensions chosen at create time.
+int msl_batch_batch_size(const MslBatch* batch);
+int msl_batch_num_players(const MslBatch* batch);
+
+// Configure controller-processing compatibility rules for the whole batch.
+// These are safe to set after create and before stepping.
+int msl_batch_set_ucf_enabled(MslBatch* batch, int enabled);
+int msl_batch_set_ucf_cardinals_1_0_enabled(MslBatch* batch, int enabled);
+
+// Start every lane from a fresh match configuration.
+//
+// `config_bytes` points at `batch_size` MslMatchConfig rows. `config_stride_bytes` is the byte
+// distance between rows and must be at least sizeof(MslMatchConfig). This is the normal reset path
+// for RL environments.
+int msl_batch_init_match(MslBatch* batch, const uint8_t* config_bytes, size_t config_stride_bytes);
+
+// Reset only selected lanes from fresh match configs.
+//
+// `mask_bytes` points at uint8_t 0/1 rows. Lanes with mask 0 keep their current state; lanes with
+// mask 1 are reset from the corresponding MslMatchConfig row.
+int msl_batch_init_match_masked(MslBatch* batch, const uint8_t* config_bytes,
+                                size_t config_stride_bytes, const uint8_t* mask_bytes,
+                                size_t mask_stride_bytes);
+
+// Restore every lane from replay/validation seed state instead of starting a new match.
+//
+// `seed_bytes` points at `batch_size` MslSeed rows. This is mainly for replay one-step tests,
+// validation, and debugging; RL rollouts usually use msl_batch_init_match().
+int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t seed_stride_bytes);
+
+// Restore replay/validation seed state with rollout-specific replay clock metadata.
+//
+// Use this for validation rollouts that repeatedly reseed after a mismatch. Normal one-step replay
+// checks should use msl_batch_reseed_seed().
+int msl_batch_reseed_seed_rollout(MslBatch* batch, const uint8_t* seed_bytes,
+                                  size_t seed_stride_bytes);
+
+// Advance every lane by one frame.
+//
+// `prev_input_bytes` and `input_bytes` point at `batch_size` MslInput rows. The previous input row
+// is needed because Melee has one-frame input-edge and hold-state mechanics.
+int msl_batch_step_input(MslBatch* batch, const uint8_t* prev_input_bytes,
+                         size_t prev_input_stride_bytes, const uint8_t* input_bytes,
+                         size_t input_stride_bytes);
+
+// Write compact replay-validation compare rows for every lane.
+//
+// Most RL callers want melee_batch_write_gamestate() instead.
+int msl_batch_write_compare(const MslBatch* batch, uint8_t* out_bytes, size_t out_stride_bytes);
+
+// Write one policy-facing game state per lane.
+//
+// `viewpoint_player_bytes` points at one uint8_t 0-based player index per lane. Output slots are
+// ordered from that player's viewpoint: self, allies, opponents, then inactive slots.
+int melee_batch_write_gamestate(const MslBatch* batch, const uint8_t* viewpoint_player_bytes,
+                                size_t viewpoint_player_stride_bytes, uint8_t* out_bytes,
+                                size_t out_stride_bytes);
+
+// Write done/terminal flags for every lane.
+//
+// `max_frame_id < 0` disables the max-frame cutoff; otherwise lanes are marked done once their
+// current frame id reaches that value.
+int msl_batch_write_terminal(const MslBatch* batch, uint8_t* out_bytes, size_t out_stride_bytes,
+                             int32_t max_frame_id);
+
 // -----------------------------
 // Packed on-disk / wire formats
 // -----------------------------
@@ -2109,58 +2189,6 @@ typedef struct MslDebugDynamicPoseState {
   float angle[MSL_MAX_DYNAMIC_NODES];
 } MslDebugDynamicPoseState;
 #pragma pack(pop)
-
-// -------------
-// Simulator core
-// -------------
-
-typedef struct MslBatch MslBatch;
-
-// Allocates a batched simulator handle and all internal SoA buffers.
-// This is the only place allocations are permitted.
-MslBatch* msl_batch_create(int batch_size, int num_players);
-
-void msl_batch_destroy(MslBatch* batch);
-
-int msl_batch_batch_size(const MslBatch* batch);
-int msl_batch_num_players(const MslBatch* batch);
-
-// Mutate small runtime toggles. Safe to call after create; does not allocate.
-int msl_batch_set_ucf_enabled(MslBatch* batch, int enabled);
-int msl_batch_set_ucf_cardinals_1_0_enabled(MslBatch* batch, int enabled);
-
-// Initialize each environment from a match config, without replay seed data.
-// configs length is batch_size; config_stride_bytes must be >= sizeof(MslMatchConfig).
-int msl_batch_init_match(MslBatch* batch, const uint8_t* config_bytes, size_t config_stride_bytes);
-// Masked variant for vector-env reset. mask entries are uint8_t 0/1; rows with 0 are untouched.
-int msl_batch_init_match_masked(MslBatch* batch, const uint8_t* config_bytes,
-                                size_t config_stride_bytes, const uint8_t* mask_bytes,
-                                size_t mask_stride_bytes);
-
-// Reseed from packed MslSeed array of length batch_size.
-// seed_stride_bytes must be >= sizeof(MslSeed).
-int msl_batch_reseed_seed(MslBatch* batch, const uint8_t* seed_bytes, size_t seed_stride_bytes);
-// Reseed for validation rollouts that need simulator-owned replay frame-clock metadata.
-// Normal teacher-forced one-step callers should use msl_batch_reseed_seed().
-int msl_batch_reseed_seed_rollout(MslBatch* batch, const uint8_t* seed_bytes,
-                                  size_t seed_stride_bytes);
-
-// Step one frame using packed inputs. The current "empty sim" stub ignores inputs.
-// input_stride_bytes must be >= sizeof(MslInput).
-int msl_batch_step_input(MslBatch* batch, const uint8_t* prev_input_bytes,
-                         size_t prev_input_stride_bytes, const uint8_t* input_bytes,
-                         size_t input_stride_bytes);
-
-// Write packed compare outputs (length batch_size).
-// out_stride_bytes must be >= sizeof(MslCompare).
-int msl_batch_write_compare(const MslBatch* batch, uint8_t* out_bytes, size_t out_stride_bytes);
-// Write one compact gamestate per batch row. viewpoint_players are 0-based player indices.
-int melee_batch_write_gamestate(const MslBatch* batch, const uint8_t* viewpoint_player_bytes,
-                                size_t viewpoint_player_stride_bytes, uint8_t* out_bytes,
-                                size_t out_stride_bytes);
-// Write terminal flags. max_frame_id < 0 disables the max-frame done condition.
-int msl_batch_write_terminal(const MslBatch* batch, uint8_t* out_bytes, size_t out_stride_bytes,
-                             int32_t max_frame_id);
 
 // Debug/validation helper: write current processed input values.
 // out_stride_bytes must be >= sizeof(MslProcessedInput).
