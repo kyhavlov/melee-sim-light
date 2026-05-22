@@ -241,142 +241,183 @@ sparse-delta frame, input, and item streams. `make viewer-build` downloads the
 display assets into `build/cache/viewer-zips/` on first use and
 verifies them by checksum on later builds.
 
-## Public API Contract
+## Runtime API Reference
 
-The public runtime surface is the `melee_sim` Python package. The native C core
-and binding are implementation details; callers should treat `EnvBatch`,
-`Buffers`, config dataclasses, controller helpers, and dtype helpers as the
-stable API.
+The native runtime surface is declared in `src/api.h`. The Python wrapper uses
+the same structs and layout, but this section describes the data model in C
+terms.
 
-`EnvBatch` owns native simulator state:
+Core runtime calls:
 
-- `batch_size`: number of independent match lanes advanced together
-- `length`: number of step frames in one reusable buffer chunk
-- `num_players`: usually `2`; `4` is supported for doubles coverage
-- `data_dir`: optional extracted data root, equivalent to setting
-  `MSL_DATA_DIR` before construction
+| call | purpose |
+| --- | --- |
+| `msl_batch_create(batch_size, num_players)` | create independent match lanes |
+| `msl_batch_destroy(batch)` | free native runtime storage |
+| `msl_batch_init_match(batch, configs, stride)` | reset every lane from `MslMatchConfig` |
+| `msl_batch_init_match_masked(batch, configs, stride, mask, mask_stride)` | reset selected lanes |
+| `msl_batch_step_input(batch, prev, prev_stride, input, input_stride)` | advance every lane one frame |
+| `melee_batch_write_gamestate(batch, viewpoints, viewpoint_stride, out, out_stride)` | write one `MeleeGamestate` per lane |
+| `msl_batch_write_terminal(batch, out, stride, max_frame_id)` | write `MslTerminal` done flags |
+| `msl_batch_reseed_seed(...)` | restore replay/validation seed state |
 
-The resolved data root is process-global native state. Choose it before
-creating simulator batches, and do not expect two `EnvBatch` instances in the
-same process to use different data roots safely.
+Data root:
 
-`Buffers` owns the preallocated NumPy arrays passed to native code. Runtime
-stepping does not allocate replacement buffers, so callers write into these
-arrays and reuse them across chunks:
+- Direct C callers should set `MSL_DATA_DIR` before `msl_batch_create()` when
+  using extracted data from `.msl/` or another non-default directory.
+- If `MSL_DATA_DIR` is unset, native loaders fall back to source-checkout
+  `data/`.
+- The resolved data root is process-global native state; choose it before
+  creating simulator batches.
 
-- `match_config`: initial match state for each batch lane
-- `action`: controller or raw input for each simulated frame
-- `gamestate`: structured native game state for frames `0..length`
-- `terminal`: terminal flags for each simulated frame
-- `reward`: caller-owned reward buffer
-- `done`: simulator-owned done flags
-- `reset_mask`: caller-owned reset commands
-- `obs`: caller-owned flat policy observation buffer
+Timing contract:
 
-`action_format="controller"` is the default and accepts normalized controller
-values. `action_format="raw"` exposes packed native inputs for replay tooling
-and benchmarks. Both formats share the same stepping API.
+- `msl_batch_init_match()` writes the initial state.
+- Each `msl_batch_step_input()` consumes a previous and current `MslInput` row.
+- Melee input logic depends on previous-frame button/stick state, so callers
+  should preserve and pass the previous input used for each lane.
+- `melee_batch_write_gamestate()` writes the post-step state currently owned by
+  the batch.
 
-`gamestate` is the main simulator output. It has shape
-`(length + 1, batch_size)`: row `0` is the reset/initial state, and row `t + 1`
-is the result of stepping action row `t`. Player slots are viewpoint-relative:
-self first, then allies by source player index, then opponents by source player
-index.
+Batch functions take a pointer plus a byte stride. This lets callers keep fixed
+arrays, struct-of-arrays wrappers, or padded records without runtime allocation.
 
-The normal call order is:
+## Native Input And Match Config
 
-1. Create `env = msl.EnvBatch(...)`.
-2. Create `buffers = env.buffers(...)`.
-3. Write match config with `env.configure_match(...)` or
-   `env.configure_matches(...)`.
-4. Write controller actions into `buffers.controller_action_view`.
-5. Call `env.bind(buffers)`.
-6. Call `env.reset_all()` to write `gamestate[0]`.
-7. Call `env.step()` repeatedly.
+`MslMatchConfig` starts or resets a lane:
 
-`env.step()` consumes `action[env.t]`, advances one frame, writes
-`gamestate[env.t + 1]`, writes `terminal[env.t]` and `done[env.t]`, then
-increments `env.t`.
+| field | type | values / range | meaning |
+| --- | --- | --- | --- |
+| `stage_id` | `uint32_t` | `MSL_STAGE_ID_*` | GALE01/Slippi stage id |
+| `frame_id` | `int32_t` | normal match start `-123` | starting frame id |
+| `frame_pre_random_seed` | `uint32_t` | any `uint32_t` | starting RNG seed |
+| `match_damage_ratio` | `float` | `0.0` or positive | global damage ratio; `0.0` means default `1.0` |
+| `num_players` | `uint8_t` | `0`, `2`, or `4` | `0` means batch default; otherwise must match batch |
+| `is_teams` | `uint8_t` | `0` or `1` | nonzero for teams |
+| `stock_count` | `uint8_t` | `0..255` | `0` means normal 4-stock start |
+| `camera_mode` | `uint8_t` | `0` or `1` | `0` normal gameplay camera, `1` free camera |
+| `players[4]` | `MslMatchPlayerConfig[4]` | active entries `< num_players` | per-player character/team/facing |
 
-`env.reset_all()` resets every lane and writes `gamestate[0]`. `reset_mask` is
-the per-frame caller input for masked resets; `done` is simulator output and
-does not reset lanes by itself.
+`MslMatchPlayerConfig`:
 
-After consuming a full chunk, `env.reset_cursor()` sets `env.t = 0` so the same
-arrays can be reused with new actions.
+| field | type | values / range | meaning |
+| --- | --- | --- | --- |
+| `char_id` | `uint8_t` | `MSL_CHAR_ID_FOX=1`, `MSL_CHAR_ID_FALCO=22` | GALE01/Slippi character id |
+| `team_id` | `uint8_t` | `0=red, 1=blue, 2=green` | team assignment |
+| `facing` | `uint8_t` | `0` or `1` | `0` left, `1` right; neutral spawn facing is derived when unset |
 
-## Actions
+`MslInput` contains one raw controller row per source player:
 
-The default action format is `controller`, matching the primitive controller
-shape used by slippi-ai:
+| field | type | values / range | native meaning |
+| --- | --- | --- | --- |
+| `p[4].buttons` | `uint16_t` | OR of `MSL_BUTTON_*` | packed digital button mask |
+| `p[4].main_x`, `main_y` | `int8_t` | `-80..80` | raw main-stick axes |
+| `p[4].c_x`, `c_y` | `int8_t` | `-80..80` | raw C-stick axes |
+| `p[4].l`, `r` | `uint8_t` | `0..255` | raw analog trigger values |
 
-- `buttons.A/B/X/Y/Z/L/R/D_UP`: `uint8` booleans
-- `main_stick_x/main_stick_y`: `float32` in `[0, 1]`
-- `c_stick_x/c_stick_y`: `float32` in `[0, 1]`
-- `shoulder`: `float32` in `[0, 1]`
+Button masks:
 
-`env.step()` converts this controller view to native input inside the binding
-before stepping. `Buffers.empty(..., action_format="raw")` keeps
-raw packed input storage for replay tooling and benchmark parity.
+| constant | value |
+| --- | --- |
+| `MSL_BUTTON_A` | `0x0100` |
+| `MSL_BUTTON_B` | `0x0200` |
+| `MSL_BUTTON_X` | `0x0400` |
+| `MSL_BUTTON_Y` | `0x0800` |
+| `MSL_BUTTON_Z` | `0x0010` |
+| `MSL_BUTTON_L` | `0x0040` |
+| `MSL_BUTTON_R` | `0x0020` |
+| `MSL_BUTTON_START` | `0x1000` |
+| `MSL_BUTTON_D_UP` | `0x0008` |
+| `MSL_BUTTON_D_DOWN` | `0x0004` |
 
-## Gamestate
+## Native Gamestate Output
 
-`buffers.gamestate_view` is a structured NumPy view over the native gamestate
-buffer. It contains:
+`MeleeGamestate` is the policy-facing state written by
+`melee_batch_write_gamestate()`.
 
-- match fields: `frame_id`, `frame_pre_random_seed`, `stage_id`, `num_players`,
-  `viewpoint_player`, `is_teams`
-- `slots[4]`: viewpoint-relative player slots with position, speeds, percent,
-  shield, action, hitlag, hitstun, character, stocks, facing, ground state,
-  jumps, `hurtbox_state`, and `invulnerable`
-- `items[15]`: fixed item slots with existence, type/state, owner, instance,
-  attack identity, position, velocity, damage, timer, spawn id, and misc bytes
-- `stage.randall`: `exists`, `x`, and `y`
-
-Player slots are ordered from the selected viewpoint: self first, then allies by
-source player index, then opponents by source player index. Unused slots have
+Player slots are viewpoint-relative: `slots[0]` is self, then allies by source
+player index, then opponents by source player index. Unused slots have
 `present == 0`.
 
-## Resets
+Top-level fields:
 
-`done[env.t]` is simulator output. `reset_mask[env.t]` is caller input.
+| field | type | values / range | shape |
+| --- | --- | --- | --- |
+| `frame_id` | `int32_t` | match frame id (starts at -123 in pre-match countdown) | scalar |
+| `frame_pre_random_seed` | `uint32_t` | any `uint32_t` | scalar |
+| `stage_id` | `uint32_t` | `MSL_STAGE_ID_*` | scalar |
+| `num_players` | `uint8_t` | `2` or `4` | scalar |
+| `viewpoint_player` | `uint8_t` | `0..num_players-1` | scalar |
+| `is_teams` | `uint8_t` | `0` or `1` | scalar |
+| `stage` | `MeleeStage` | stage-owned state | scalar |
+| `slots` | `MeleePlayer` | viewpoint-relative players | `[4]` |
+| `items` | `MeleeItem` | active/inactive item slots | `[15]` |
 
-```python
-buffers.reset_mask[env.t, env_ids] = 1
-env.reset_masked()
-```
+`MeleePlayer`:
 
-Resetting clears the previous-controller-input state for those lanes. Benchmark
-and replay-style runs that need exact parity with a preexisting input stream can
-explicitly seed previous input from an action frame:
+| field | type | values / range |
+| --- | --- | --- |
+| `present` | `uint8_t` | `0` or `1` |
+| `source_player` | `uint8_t` | `0..num_players-1` when present |
+| `team_relation` | `uint8_t` | `0` self, `1` ally, `2` opponent |
+| `team_id` | `uint8_t` | team assignment |
+| `pos_x`, `pos_y` | `float` | world coordinates |
+| `speed_air_x_self`, `speed_ground_x_self`, `speed_y_self` | `float` | self velocity components |
+| `speed_x_attack`, `speed_y_attack` | `float` | attack/knockback velocity components |
+| `percent` | `float` | damage percent, `0..999.9` |
+| `shield_hp` | `float` | shield health, `0..60` |
+| `action_id` | `uint16_t` | GALE01 action id |
+| `action_frame` | `int16_t` | current action frame |
+| `hitlag`, `hitstun` | `uint16_t` | remaining frames |
+| `char_id` | `uint8_t` | `MSL_CHAR_ID_*` |
+| `stocks` | `uint8_t` | remaining stocks |
+| `facing` | `uint8_t` | `0` left, `1` right |
+| `on_ground` | `uint8_t` | `0` or `1` |
+| `jumps_left` | `uint8_t` | remaining air jumps |
+| `hurtbox_state` | `uint8_t` | GALE01 hurtbox state id |
+| `invulnerable` | `uint8_t` | `0` or `1` |
 
-```python
-env.set_previous_input(0)
-```
+`MeleeItem` slots are fixed-capacity. Inactive slots have `exists == 0`.
 
-To change match setup for specific lanes, write new configs before a masked
-reset:
+| field | type | values / range |
+| --- | --- | --- |
+| `exists` | `uint8_t` | `0` or `1` |
+| `state` | `uint8_t` | item state id |
+| `type` | `uint16_t` | item kind/type id |
+| `owner` | `int8_t` | source player id, or `-1` if none/unknown |
+| `instance_id`, `attack_id`, `attack_instance` | `uint16_t` | attack/staling identity |
+| `direction` | `float` | facing/direction scalar |
+| `vel_x`, `vel_y` | `float` | world velocity |
+| `pos_x`, `pos_y` | `float` | world coordinates |
+| `damage` | `uint16_t` | item damage value |
+| `timer` | `float` | item timer/frame counter |
+| `spawn_id` | `uint32_t` | deterministic spawn identity |
+| `misc0`, `misc1`, `misc2`, `misc3` | `uint8_t` | item-specific bytes |
 
-```python
-env.configure_matches(
-    buffers,
-    [
-        msl.MatchConfig(players=(
-            msl.PlayerConfig(character=msl.Character.FALCO),
-            msl.PlayerConfig(character=msl.Character.FOX),
-        )),
-    ],
-    env_ids=[3],
-)
-buffers.reset_mask[env.t, 3] = 1
-env.reset_masked()
-```
+`MeleeStage` currently exposes Randall on Yoshi's Story:
 
-## Replay Validation
+| field | type | values / range |
+| --- | --- | --- |
+| `randall.exists` | `uint8_t` | `0` or `1` |
+| `randall.x`, `randall.y` | `float` | world coordinates |
 
-For quick triage of a single Slippi replay, `tools.eval.validate_replay`
-builds a temporary `.msl` dataset and prints one-step or rollout results to
-stdout without updating the committed validation reports:
+## Terminal Output
+
+`MslTerminal` is written by `msl_batch_write_terminal()`:
+
+| field | type | values / range | meaning |
+| --- | --- | --- | --- |
+| `frame_id` | `int32_t` | current frame id | current frame |
+| `stage_id` | `uint32_t` | `MSL_STAGE_ID_*` | current stage |
+| `done` | `uint8_t` | `0` or `1` | any terminal condition |
+| `match_ended` | `uint8_t` | `0` or `1` | in-game match end |
+| `stockout` | `uint8_t` | `0` or `1` | player/team out of stocks |
+| `max_frame_reached` | `uint8_t` | `0` or `1` | caller-specified frame cutoff |
+
+## Replay Validation Helper
+
+For quick triage of a single Slippi replay, `tools.eval.validate_replay` builds
+a temporary `.msl` dataset and prints one-step or rollout results to stdout
+without updating committed validation reports:
 
 ```bash
 uv run python -m tools.eval.validate_replay \
@@ -385,163 +426,5 @@ uv run python -m tools.eval.validate_replay \
 ```
 
 Use `--mode one-step` for direct seeded one-step validation, or `--mode both`
-to run both views. By default the tool selects the human player ports from the
+to run both views. By default the tool selects human player ports from the
 replay; pass `--ports 1,2` to choose ports explicitly.
-
-## Project Notes
-
-Long-lived implementation notes live in `agent_docs/`. Start with
-`agent_docs/README.md` for the active docs index and archived cleanup candidates.
-
-## Observation Schema
-
-`buffers.gamestate_view` is a structured NumPy view with shape
-`(length + 1, batch_size)` and dtype `msl.gamestate_dtype()`.
-
-```python
-row = buffers.gamestate_view[env.t, 0]
-self_slot = row["slots"][0]
-first_item = row["items"][0]
-randall = row["stage"]["randall"]
-
-print(row["frame_id"])
-print(self_slot["pos_x"], self_slot["pos_y"])
-print(first_item["exists"], first_item["type"])
-print(randall["exists"], randall["x"], randall["y"])
-```
-
-Top-level gamestate fields:
-
-| field | dtype | shape |
-| --- | --- | --- |
-| `frame_id` | `int32` | scalar |
-| `frame_pre_random_seed` | `uint32` | scalar |
-| `stage_id` | `uint32` | scalar |
-| `num_players` | `uint8` | scalar |
-| `viewpoint_player` | `uint8` | scalar |
-| `is_teams` | `uint8` | scalar |
-| `stage` | `gamestate_stage_dtype()` | scalar |
-| `slots` | `gamestate_player_dtype()` | `(4,)` |
-| `items` | `item_dtype()` | `(15,)` |
-
-`slots[4]` is viewpoint-relative: self first, then allies by source player
-index, then opponents by source player index. Unused slots have `present == 0`.
-
-| `slots` field | dtype |
-| --- | --- |
-| `present` | `uint8` |
-| `source_player` | `uint8` |
-| `team_relation` | `uint8` |
-| `team_id` | `uint8` |
-| `pos_x`, `pos_y` | `float32` |
-| `speed_air_x_self`, `speed_ground_x_self`, `speed_y_self` | `float32` |
-| `speed_x_attack`, `speed_y_attack` | `float32` |
-| `percent`, `shield_hp` | `float32` |
-| `action_id` | `uint16` |
-| `action_frame` | `int16` |
-| `hitlag`, `hitstun` | `uint16` |
-| `char_id`, `stocks`, `facing`, `on_ground` | `uint8` |
-| `jumps_left`, `hurtbox_state`, `invulnerable` | `uint8` |
-
-`items[15]` is a fixed item slot array. Inactive item slots have `exists == 0`.
-
-| `items` field | dtype |
-| --- | --- |
-| `exists`, `state` | `uint8` |
-| `type` | `uint16` |
-| `owner` | `int8` |
-| `instance_id`, `attack_id`, `attack_instance` | `uint16` |
-| `direction` | `float32` |
-| `vel_x`, `vel_y` | `float32` |
-| `pos_x`, `pos_y` | `float32` |
-| `damage` | `uint16` |
-| `timer` | `float32` |
-| `spawn_id` | `uint32` |
-| `misc0`, `misc1`, `misc2`, `misc3` | `uint8` |
-
-`stage.randall` is populated on Yoshi's Story:
-
-| `stage.randall` field | dtype |
-| --- | --- |
-| `exists` | `uint8` |
-| `x`, `y` | `float32` |
-
-## Controller Action Schema
-
-The default action format is `controller`. `buffers.controller_action_view` has
-shape `(length, batch_size)` and dtype `msl.controller_input_dtype()`.
-
-```python
-import numpy as np
-import melee_sim as msl
-
-controller = msl.neutral_controller((env.length, env.batch_size))
-
-# Hold right on the main stick for every frame and env.
-controller = controller._replace(
-    main_stick=msl.Stick(
-        x=np.full((env.length, env.batch_size), 0.8, dtype=np.float32),
-        y=np.full((env.length, env.batch_size), 0.5, dtype=np.float32),
-    ),
-)
-
-# Press A on frames 10..14.
-controller.buttons.A[10:15, :] = True
-
-msl.write_controller(buffers.controller_action_view, controller, player=0)
-```
-
-Per-player controller fields:
-
-| field | dtype | accepted range |
-| --- | --- | --- |
-| `buttons.A` | `uint8` bool | `0` or `1` |
-| `buttons.B` | `uint8` bool | `0` or `1` |
-| `buttons.X` | `uint8` bool | `0` or `1` |
-| `buttons.Y` | `uint8` bool | `0` or `1` |
-| `buttons.Z` | `uint8` bool | `0` or `1` |
-| `buttons.L` | `uint8` bool | `0` or `1` |
-| `buttons.R` | `uint8` bool | `0` or `1` |
-| `buttons.D_UP` | `uint8` bool | `0` or `1` |
-| `main_stick_x`, `main_stick_y` | `float32` | `[0, 1]` |
-| `c_stick_x`, `c_stick_y` | `float32` | `[0, 1]` |
-| `shoulder` | `float32` | `[0, 1]` |
-
-Stick values are normalized controller coordinates. `0.5` is neutral, `0.0`
-is minimum, and `1.0` is maximum. `write_controller()` broadcasts any NumPy
-shape compatible with the target action view.
-
-## Raw Action Schema
-
-Replay tooling and benchmarks can request packed native inputs instead:
-
-```python
-buffers = msl.Buffers.empty(length=128, batch_size=32, action_format="raw")
-raw = buffers.raw_action_view
-
-raw["p"][:, :, 0]["buttons"] = msl.BUTTON_A
-raw["p"][:, :, 0]["main_x"] = 80
-raw["p"][:, :, 0]["main_y"] = 0
-```
-
-Per-player raw input fields:
-
-| field | dtype | native meaning |
-| --- | --- | --- |
-| `buttons` | `uint16` | packed button mask |
-| `main_x`, `main_y` | `int8` | raw main-stick axes, usually `[-80, 80]` |
-| `c_x`, `c_y` | `int8` | raw C-stick axes, usually `[-80, 80]` |
-| `l`, `r` | `uint8` | raw trigger values |
-
-Button masks exported by `melee_sim`:
-
-| constant | value |
-| --- | --- |
-| `BUTTON_A` | `0x0100` |
-| `BUTTON_B` | `0x0200` |
-| `BUTTON_X` | `0x0400` |
-| `BUTTON_Y` | `0x0800` |
-| `BUTTON_Z` | `0x0010` |
-| `BUTTON_L` | `0x0040` |
-| `BUTTON_R` | `0x0020` |
-| `BUTTON_D_UP` | `0x0008` |
