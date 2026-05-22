@@ -30,6 +30,10 @@ Current target domain:
   or duplicated decomp-derived predicates, check whether the distinction can be promoted to an
   extracted/generated data substrate. If source/decomp data can express it cleanly, prefer the
   table-backed refactor as part of the change rather than preserving another local runtime list.
+- When adding a new runtime-required extracted JSON/bin field, update the full extraction/export
+  contract in the same change: source extractor, stable JSON key ordering / binary layout, runtime
+  required-key loader, packaged-data fallback if any, and a fresh-extract smoke path. Do not rely on
+  old checked-in/generated local data retaining the key.
 
 ### Data / Decomp Discipline
 - Gameplay logic in `src/` must be **decomp-backed or game-data-backed**.

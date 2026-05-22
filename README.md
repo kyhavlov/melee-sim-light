@@ -6,45 +6,53 @@ high-throughput RL training and replay-driven validation.
 The simulator core is C. The public Python package is `melee_sim`, with a thin
 NumPy API over native batch execution.
 
-## Install And Data
+## Quick Start
 
-Install the package with `uv` from the repository root:
+From a source checkout, install dependencies and build the native extension:
+
+```bash
+uv sync --dev
+make build
+```
+
+From another project, install the local checkout with `uv`:
 
 ```bash
 uv add "melee-sim-light @ file:///path/to/melee-sim-light"
 ```
 
-Extract simulator data from a valid SSBM ISO:
+The simulator needs extracted game data before it can create an `EnvBatch`.
+Extract it from a valid SSBM ISO:
 
 ```bash
 uv run python -m melee_sim.extract_data --iso /path/to/SSBM.iso
 ```
 
-The extraction command writes `.msl/` in the current project and skips
-already-extracted source DATs on later runs. `.msl/` is disposable generated
-data plus a DAT cache; delete it to regenerate from the ISO. `EnvBatch()` loads
-`.msl/` by default. To use another location:
+The extraction command writes `.msl/` in the directory where the command is run
+and can be run again in place when data needs to be refreshed. `EnvBatch()`
+loads `.msl/` by default. To use another data root, set `MELEE_SIM_DATA` or
+pass `data_dir`:
 
 ```bash
 MELEE_SIM_DATA=/path/to/data uv run python train.py
 ```
 
-or:
-
 ```python
 env = msl.EnvBatch(batch_size=1024, data_dir="/path/to/data")
 ```
 
-## Python API
+Source checkouts also fall back to `data/` when `.msl/` is absent. The resolved
+data directory is process-global native runtime state, so choose it before
+creating simulator batches.
 
-The main Python API is `EnvBatch` plus `Buffers`. `length` is the number of
-simulated frames in the reusable buffer chunk; `gamestate` stores one extra
-frame so initial state and every post-step state are both available.
+## Minimal Step Loop
+
+The public API is the `melee_sim` Python package. Most callers use `EnvBatch`
+and a reusable `Buffers` object:
 
 ```python
 import melee_sim as msl
 
-# Two envs, 2 players, and a reusable 128-step buffer chunk per env.
 with msl.EnvBatch(batch_size=2, length=128, num_players=2) as env:
     buffers = env.buffers()
 
@@ -57,6 +65,7 @@ with msl.EnvBatch(batch_size=2, length=128, num_players=2) as env:
         ],
     )
 
+    # Write player inputs for the whole reusable buffer chunk.
     fox = msl.neutral_controller((env.length, env.batch_size))
     fox.buttons.B[0, 0] = True
     fox.main_stick.x[0, 0] = 1.0
@@ -69,21 +78,23 @@ with msl.EnvBatch(batch_size=2, length=128, num_players=2) as env:
     env.reset_all()
     env.step()
 
+    # gamestate has one extra frame: row 0 is the reset state, row 1 is after
+    # the first step.
     frame_1 = buffers.gamestate_view[1, 0]
     fox_slot = frame_1["slots"][0]
     print(frame_1["frame_id"], fox_slot["action_id"], fox_slot["pos_x"])
 
-    # After consuming buffers[:128], reuse the arrays for the next chunk.
+    # Reuse the same arrays for the next chunk after consuming frames 0..127.
     env.reset_cursor()
 ```
 
-By default, `EnvBatch` loads extracted game data from `.msl/` in the current
-working directory. `EnvBatch(..., data_dir=...)` overrides that path, and
-`MELEE_SIM_DATA` sets the process default. Source checkouts also fall back to
-`data/` when `.msl/` is absent. The resolved data directory is treated as
-process-global native runtime state.
+## Core API Concepts
 
-`Buffers` is the canonical batched simulation layout:
+`EnvBatch` owns native simulator state for `batch_size` independent matches.
+`length` is the number of step frames in one reusable buffer chunk. `num_players`
+is usually `2`, with `4` used for doubles coverage.
+
+`Buffers` owns the NumPy arrays passed to native code:
 
 - `match_config`: initial match state for each batch lane
 - `action`: controller or raw input for each simulated frame
@@ -94,9 +105,23 @@ process-global native runtime state.
 - `reset_mask`: caller-owned reset commands
 - `obs`: caller-owned flat policy observation buffer
 
-`env.reset_all()` writes `gamestate[0]` and sets `env.t = 0`. `env.step()`
-consumes `action[env.t]`, advances one frame, writes `gamestate[env.t + 1]`,
-writes `terminal[env.t]` and `done[env.t]`, then increments `env.t`.
+The normal call order is:
+
+1. Create `env = msl.EnvBatch(...)`.
+2. Create `buffers = env.buffers(...)`.
+3. Write match config with `env.configure_match(...)` or
+   `env.configure_matches(...)`.
+4. Write controller actions into `buffers.controller_action_view`.
+5. Call `env.bind(buffers)`.
+6. Call `env.reset_all()` to write `gamestate[0]`.
+7. Call `env.step()` repeatedly.
+
+`env.step()` consumes `action[env.t]`, advances one frame, writes
+`gamestate[env.t + 1]`, writes `terminal[env.t]` and `done[env.t]`, then
+increments `env.t`.
+
+After consuming a full chunk, `env.reset_cursor()` sets `env.t = 0` so the same
+arrays can be reused with new actions.
 
 ## Actions
 
