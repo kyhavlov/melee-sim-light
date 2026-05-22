@@ -637,9 +637,11 @@ static inline uint8_t mpcoll_damageair_action(uint16_t action_id) {
 }
 
 static inline MslMpcollDamageActiveHitlagFloorOwner mpcoll_damage_active_hitlag_floor_owner(
-    const MslBatch* batch, size_t idx, uint32_t stage_id, uint16_t action_id,
-    uint8_t prefer_line_valid, uint8_t prefer_line_is_platform, uint8_t prefer_line_is_ledge,
-    uint8_t downdamage_x_axis_fresh_sdi_edge) {
+    const MslBatch* batch, size_t idx, uint16_t action_id, uint8_t prefer_line_valid,
+    uint8_t prefer_line_is_platform, uint8_t prefer_line_is_ledge, uint8_t prefer_line_is_slope,
+    uint8_t prefer_line_has_platform_transform, uint8_t prefer_line_is_fighter_solid,
+    uint8_t prefer_line_is_terminal_cardinal_hard_floor, float prefer_line_root_y,
+    float source_prev_root_y, uint8_t downdamage_x_axis_fresh_sdi_edge) {
   MslMpcollDamageActiveHitlagFloorOwner out = {0u, 0u};
   if (batch == NULL || batch->state.hitlag_pre_timer[idx] == 0u || batch->state.hitlag[idx] == 0u ||
       batch->state.damage_hitlag_downward_sdi_consumed[idx] == 0u) {
@@ -654,10 +656,14 @@ static inline MslMpcollDamageActiveHitlagFloorOwner mpcoll_damage_active_hitlag_
   //   with a fresh x670 horizontal edge publish the horizontal displacement without treating the y
   //   component as a below-floor stay-airborne owner; the later DownDamage_Coll path owns floor
   //   contact. Rows whose fresh edge is vertical remain on the below-floor active-hitlag owner.
-  // - The retained non-DownDamage slice is common DamageAir* active hitlag on FD's static main hard
-  //   floor. Source routes all three DamageAir motions through Damage_Coll / mpColl_800477E0 after
-  //   consumed downward OnEveryHitlag displacement, but PS/complex hard-floor families still need a
-  //   broader callback-current floor owner before they can safely share this branch.
+  // - The retained non-DownDamage slice is common DamageAir* active hitlag on a carried terminal
+  //   cardinal hard-floor chain: source routes all three DamageAir motions through Damage_Coll /
+  //   mpColl_800477E0 after consumed downward OnEveryHitlag displacement, and
+  //   mpColl_80044948_Floor can publish FloorPush|FloorHug while preserving airborne state once the
+  //   callback-current hard floor is the active CollData floor. Keep this keyed to MSLSTG01 line
+  //   graph metadata instead of stage id. Stadium-style connected lip graphs, soft platforms,
+  //   ledge floors, generated slopes, and transformed stage-object floors still need their
+  //   explicit bottom-sweep/source-owner proof; visible root-below-floor state alone is not enough.
   //
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
   //   ftCo_8008DCE0,ftCo_Damage_OnEveryHitlag,ftCo_Damage_Coll}
@@ -673,11 +679,12 @@ static inline MslMpcollDamageActiveHitlagFloorOwner mpcoll_damage_active_hitlag_
     return out;
   }
 
-  if (mpcoll_damageair_action(action_id) && stage_id == (uint32_t)MSL_STAGE_ID_FINAL_DESTINATION &&
-      prefer_line_valid && !prefer_line_is_platform && !prefer_line_is_ledge &&
-      isfinite(batch->state.floor_sweep_prev_pos_y[idx]) &&
-      batch->state.floor_sweep_prev_pos_y[idx] > k_floor_y_bias &&
-      batch->state.pos_y[idx] < -k_floor_y_bias) {
+  if (mpcoll_damageair_action(action_id) && prefer_line_valid && prefer_line_is_fighter_solid &&
+      !prefer_line_is_platform && !prefer_line_is_ledge && !prefer_line_is_slope &&
+      !prefer_line_has_platform_transform && prefer_line_is_terminal_cardinal_hard_floor &&
+      isfinite(prefer_line_root_y) && isfinite(source_prev_root_y) &&
+      source_prev_root_y > (prefer_line_root_y + k_floor_y_bias) &&
+      batch->state.pos_y[idx] < (prefer_line_root_y - k_floor_y_bias)) {
     out.stay_airborne_floorhug = 1u;
     out.source_floor_current = 1u;
   }
@@ -1668,6 +1675,44 @@ static inline uint8_t floor_line_is_generated_sloped_ledge(const MslBatch* batch
     return 0u;
   }
   return floor_line_is_generated_stage_slope(batch, bi, g, line_idx);
+}
+
+static inline uint8_t floor_line_is_terminal_cardinal_hard_floor(const MslBatch* batch, int bi,
+                                                                 const MslStageFloorGraph* g,
+                                                                 uint32_t stage_id, int line_idx) {
+  if (g == NULL || line_idx < 0 || (size_t)line_idx >= g->line_count) {
+    return 0u;
+  }
+  const MslStageFloorLine* line = &g->lines[(size_t)line_idx];
+  if (line->fighter_solid == 0u || line->is_platform || line->is_ledge ||
+      stage_collision_floor_line_has_platform_transform(stage_id, line->segment_i) ||
+      floor_line_is_generated_stage_slope(batch, bi, g, line_idx)) {
+    return 0u;
+  }
+  // This is the extracted line-graph shape for the source-proven cardinal-floor DamageAir active
+  // hitlag owner: a static hard-floor chain with terminal ledge endpoints and no passable/moving
+  // floor support elsewhere in the stage graph. Stages with platforms or transformed stage-object
+  // floors need an explicit bottom-sweep/source-owner proof instead of borrowing this carried-floor
+  // branch.
+  // data/stages/bin/*.bin::MSLSTG01 line flags, links, and platform transform metadata
+  for (size_t i = 0; i < g->line_count; i++) {
+    if (g->lines[i].fighter_solid != 0u &&
+        (g->lines[i].is_platform ||
+         stage_collision_floor_line_has_platform_transform(stage_id, g->lines[i].segment_i))) {
+      return 0u;
+    }
+  }
+
+  const int prev_idx = line->prev;
+  const int next_idx = line->next;
+  if (prev_idx < 0 || next_idx < 0 || (size_t)prev_idx >= g->line_count ||
+      (size_t)next_idx >= g->line_count) {
+    return 0u;
+  }
+  const MslStageFloorLine* prev = &g->lines[(size_t)prev_idx];
+  const MslStageFloorLine* next = &g->lines[(size_t)next_idx];
+  return (uint8_t)((prev->is_ledge && prev->prev < 0 && next->is_ledge && next->next < 0) ? 1u
+                                                                                          : 0u);
 }
 
 static inline int8_t platform_pass_current_raw_stick_y(const MslBatch* batch, size_t idx) {
@@ -5823,6 +5868,27 @@ void mpcoll_ground_apply(MslBatch* batch) {
           floor_line_is_generated_stage_slope(batch, bi, g, prefer_line_idx);
       const uint8_t prefer_line_is_ledge =
           (prefer_line_idx >= 0 && g->lines[(size_t)prefer_line_idx].is_ledge) ? 1u : 0u;
+      const uint8_t prefer_line_has_platform_transform =
+          (prefer_line_idx >= 0 && stage_collision_floor_line_has_platform_transform(
+                                       stage_id, g->lines[(size_t)prefer_line_idx].segment_i))
+              ? 1u
+              : 0u;
+      const uint8_t prefer_line_is_fighter_solid =
+          (prefer_line_idx >= 0 && g->lines[(size_t)prefer_line_idx].fighter_solid) ? 1u : 0u;
+      uint8_t prefer_line_is_terminal_cardinal_hard_floor = 0u;
+      if (batch->state.hitlag[idx] != 0u && batch->state.hitlag_pre_timer[idx] != 0u &&
+          batch->state.damage_hitlag_downward_sdi_consumed[idx] != 0u &&
+          mpcoll_damageair_action(action_id)) {
+        prefer_line_is_terminal_cardinal_hard_floor =
+            floor_line_is_terminal_cardinal_hard_floor(batch, bi, g, stage_id, prefer_line_idx);
+      }
+      float prefer_line_root_y = 0.0f;
+      const uint8_t prefer_line_root_y_valid =
+          (prefer_line_idx >= 0 &&
+           floor_line_y_at_x_for_env(batch, bi, g, prefer_line_idx, batch->state.pos_x[idx],
+                                     &prefer_line_root_y))
+              ? 1u
+              : 0u;
       const uint8_t prefer_line_is_platform_or_slope =
           (uint8_t)((prefer_line_is_platform || prefer_line_is_slope || prefer_line_is_ledge) ? 1u
                                                                                               : 0u);
@@ -5868,8 +5934,11 @@ void mpcoll_ground_apply(MslBatch* batch) {
               : 0u;
       const MslMpcollDamageActiveHitlagFloorOwner damage_active_hitlag_floor_owner =
           mpcoll_damage_active_hitlag_floor_owner(
-              batch, idx, stage_id, action_id, (uint8_t)(prefer_line_idx >= 0),
-              prefer_line_is_platform, prefer_line_is_ledge, downdamage_x_axis_fresh_sdi_edge);
+              batch, idx, action_id, (uint8_t)(prefer_line_idx >= 0 && prefer_line_root_y_valid),
+              prefer_line_is_platform, prefer_line_is_ledge, prefer_line_is_slope,
+              prefer_line_has_platform_transform, prefer_line_is_fighter_solid,
+              prefer_line_is_terminal_cardinal_hard_floor, prefer_line_root_y, prev_y,
+              downdamage_x_axis_fresh_sdi_edge);
       const uint8_t damage_active_hitlag_downward_sdi_airborne_owner =
           (damage_active_hitlag_floor_owner.stay_airborne_floorhug &&
            damage_active_hitlag_floor_owner.source_floor_current)

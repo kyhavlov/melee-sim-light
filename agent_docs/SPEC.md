@@ -748,12 +748,21 @@ Recent deltas to reflect here (do not let these get “lost in chat logs”):
   `Fighter_ProcessHit -> ftCo_8008DCE0`; later active-hitlag floorhug projection requires actual
   `ftCo_Damage_OnEveryHitlag` SDI-consume provenance, so a held downward stick after x670/x671 reset
   cannot repeatedly snap the frozen DamageAir root to floor bias. The stay-airborne floorhug
-  continuation may project a carried static FD hard-floor `CollData.floor.index`, but soft
+  continuation may project a carried static terminal-cardinal hard-floor `CollData.floor.index`
+  (identified from `MSLSTG01` line links/flags and absence of stage-object/passable floor support),
+  but soft
   platforms require a current `mpColl_80044628_Floor` bottom-sweep hit before
   `mpColl_80044948_Floor` can correct the root; replay-visible carried platform ids alone are not
   enough to snap active-hitlag SDI upward onto a platform. Pokemon Stadium and other complex
-  hard-floor families need a broader callback-current floor owner before sharing the FD
-  `DamageAir*` active-hitlag floorhug branch. AttackAir
+  hard-floor families are not admitted from visible floor id, root-below-floor state, or
+  root-projection eligibility alone. Dolphin probes of CDO 5521 / TVR 5994 / FSP 3593 show
+  `ft_80081DD4 -> mpColl_800477E0` loading JObj ECB with no CollData_X130 lock and positive current
+  ECB-bottom offsets; `mpColl_80044948_Floor` can use the root projection only after
+  `mpColl_80044628_Floor` has accepted the loaded bottom sweep. The rejected broad owner landed CDO
+  early because rollout drift made the root/floor relationship look valid without that source
+  bottom-sweep proof. Pokemon Stadium and other complex hard-floor families therefore need a fuller
+  callback-current CollData/loaded-ECB bottom-sweep owner before sharing that `DamageAir*`
+  active-hitlag floorhug branch. AttackAir
   same-frame IASA checks aerial B-special admission before JumpAerial (`ftCo_AttackAir.c::DO_IASA`,
   `ftCo_SpecialAir.c::ftCo_SpecialAir_CheckInput`); JumpF/JumpB -> EscapeAir floor handoff
   projects through the decomp floor wrapper (`ftCo_EscapeAir_Coll`, `ft_80082C74`,

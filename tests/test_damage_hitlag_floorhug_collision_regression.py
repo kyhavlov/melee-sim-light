@@ -39,6 +39,7 @@ ACT_DAMAGE_AIR_1 = 0x0054
 ACT_DAMAGE_AIR_2 = 0x0055
 ACT_DAMAGE_AIR_3 = 0x0056
 ACT_DAMAGE_FLY_TOP = 0x005A
+ACT_LANDING = 0x002A
 ACT_ESCAPE_AIR = 0x00EC
 ACT_MISS_FOOT = 0x00FB
 ACT_THROWN_LW = 0x00F2
@@ -912,3 +913,113 @@ def test_horizontal_only_hitlag_sdi_at_floor_height_does_not_false_land_maj_3612
     assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=1e-6)
     assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
     assert (int(contacts["coll_env_flags"][p]) & MSL_COLLIDE_FLOOR_MASK) == 0
+
+
+@pytest.mark.integration
+def test_nonfd_damageair_root_below_floor_current_ecb_bottom_above_does_not_land_cdo_5521() -> None:
+    # Non-FD DamageAir floor publication negative:
+    # engine probes for this Pokemon Stadium row show ft_80081DD4 -> mpColl_800477E0 loads JObj
+    # ECB (kind=1), with no x130 lock and a positive current ECB bottom. The fighter root is below
+    # the hard floor in the next row, but vanilla keeps DamageAir2 airborne because
+    # mpColl_80044628_Floor has not yet accepted the loaded ECB bottom sweep. Do not admit this
+    # family from visible floor id + below-root/root-projection alone.
+    # probe artifact: reports/triage/nonfd_damage_ecb_dbg_cdo5521/
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+    # refs/melee/src/melee/mp/mpcoll.c::{
+    #   mpColl_800477E0,mpColl_LoadECB_inline,mpColl_80044628_Floor,mpColl_80044948_Floor}
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/CornyDelayedOkapi.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[5521:5522]
+    p = 1
+
+    assert int(row["seed_t"]["stage_id"][0]) == 3
+    assert int(row["seed_t"]["action_id"][0, p]) == ACT_DAMAGE_AIR_2
+    assert int(row["seed_t"]["hitlag"][0, p]) == 0
+    assert int(row["seed_t"]["on_ground"][0, p]) == 0
+    assert float(row["seed_t"]["pos_y"][0, p]) < 0.0
+    assert int(row["ref_t1"]["action_id"][0, p]) == ACT_DAMAGE_AIR_2
+    assert int(row["ref_t1"]["on_ground"][0, p]) == 0
+
+    out, ref, contacts = _run_one_step_with_contacts(dataset_path, 5521)
+
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_DAMAGE_AIR_2
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 0
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+    assert (int(contacts["coll_env_flags"][p]) & MSL_COLLIDE_FLOOR_MASK) == 0
+
+
+@pytest.mark.integration
+def test_nonfd_damageair_hard_floor_exit_publication_stays_exact_tvr_5994() -> None:
+    # Non-FD hard-floor positive:
+    # This Pokemon Stadium row is the paired source-positive control for the CDO negative above.
+    # Vanilla transitions DamageAir2 -> DamageN2 with grounded FloorPush|FloorHug after the source
+    # callback bottom-sweep/projection sequence; keep that hitlag-exit publication exact without
+    # broadening active-hitlag root projection.
+    # probe artifact: reports/triage/nonfd_damage_ecb_dbg_tvr5994b/
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+    # refs/melee/src/melee/mp/mpcoll.c::{
+    #   mpColl_800477E0,mpColl_80044628_Floor,mpColl_80044838_Floor}
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/ThisVioletRaccoon.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[5994:5995]
+    p = 1
+
+    assert int(row["seed_t"]["stage_id"][0]) == 3
+    assert int(row["seed_t"]["action_id"][0, p]) == ACT_DAMAGE_AIR_2
+    assert int(row["seed_t"]["hitlag"][0, p]) == 0
+    assert int(row["ref_t1"]["action_id"][0, p]) == ACT_DAMAGE_N_2
+    assert int(row["ref_t1"]["hitlag"][0, p]) == 3
+    assert int(row["ref_t1"]["on_ground"][0, p]) == 1
+
+    out, ref, contacts = _run_one_step_with_contacts(dataset_path, 5994)
+
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_DAMAGE_N_2
+    assert int(out["hitlag"][p]) == int(ref["hitlag"][p]) == 3
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 1
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+    assert int(contacts["coll_env_flags"][p]) & MSL_COLLIDE_FLOOR_MASK
+
+
+@pytest.mark.integration
+def test_damageair_fd_hard_floor_hitlag_exit_projection_stays_exact_fsp_3593() -> None:
+    # FD hard-floor positive and root-vs-bottom boundary companion:
+    # FSP lands on hitlag exit through the same ft_80081DD4/mpColl floor publication family. This
+    # keeps the existing FD exactness and ensures the CDO non-FD negative above is not implemented
+    # by deleting DamageAir hard-floor publication wholesale.
+    # probe artifact: reports/triage/nonfd_damage_ecb_dbg_fsp3593b/
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800477E0,mpColl_80044628_Floor}
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[3593:3594]
+    p = 1
+
+    assert int(row["seed_t"]["stage_id"][0]) == 32
+    assert int(row["seed_t"]["action_id"][0, p]) == ACT_DAMAGE_AIR_2
+    assert int(row["seed_t"]["hitlag"][0, p]) == 0
+    assert int(row["ref_t1"]["action_id"][0, p]) == ACT_LANDING
+    assert int(row["ref_t1"]["on_ground"][0, p]) == 1
+
+    out, ref, contacts = _run_one_step_with_contacts(dataset_path, 3593)
+
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_LANDING
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 1
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+    assert int(contacts["coll_env_flags"][p]) & MSL_COLLIDE_FLOOR_MASK
