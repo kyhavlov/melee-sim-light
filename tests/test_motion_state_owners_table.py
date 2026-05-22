@@ -544,6 +544,56 @@ def test_stage_object_carry_class_tracks_grounded_floor_persistence_owner() -> N
     assert not has_carry(0x001D)
 
 
+@pytest.mark.integration
+def test_mpcoll_wrapper_phase_classes_cover_source_phase_overlaps() -> None:
+    fox = read_mslmso01_v1(FOX)
+    falco = read_mslmso01_v1(FALCO)
+
+    def both_have(action_id: int, bit: int) -> bool:
+        return bool(int(fox.class_bits[action_id]) & bit) and bool(
+            int(falco.class_bits[action_id]) & bit
+        )
+
+    # Source wrapper phase groups consumed by src/mpcoll_ground.c. Some states intentionally carry
+    # multiple phase bits because the source wrapper stack layers helpers, e.g. grounded Attack11
+    # preserves CollData.floor through the grounded carry owner and can still enter the
+    # ft_800827A0/mpColl_8004B2DC edge-snap phase.
+    # - ft_80083090/ft_800831CC/ft_800835B0 pass ftCo_80096CC8 for platform-pass ownership.
+    # - ft_80081D0C / ft_CheckGroundAndLedge use the direct airborne floor wrapper.
+    # - ft_80081DD4 selects DamageFly/Damage/DamageFall collision wrappers.
+    # - ft_80082708 / ft_8004B108 owns allow-ground-to-air grounded callbacks.
+    # - ft_800827A0 / ft_8004B2DC owns grounded edge-snap callbacks.
+    # refs/melee/src/melee/ft/ft_081B.c
+    # refs/melee/src/melee/mp/mpcoll.c::{
+    #   mpColl_800471F8,mpColl_800473CC,mpColl_800477E0,mpColl_8004B108,mpColl_8004B2DC}
+    assert both_have(0x0019, CLASS_FT80083090_PLATFORM_PASS_COLL)  # JumpF
+    assert both_have(0x0023, CLASS_FT80083090_PLATFORM_PASS_COLL)  # FallSpecial
+    assert not both_have(0x0041, CLASS_FT80083090_PLATFORM_PASS_COLL)  # AttackAirN
+
+    assert both_have(0x0041, CLASS_FT80081D0C_AIR_COLL)  # AttackAirN
+    assert both_have(0x00EC, CLASS_FT80081D0C_AIR_COLL)  # EscapeAir
+    assert not both_have(0x0019, CLASS_FT80081D0C_AIR_COLL)  # JumpF
+
+    assert both_have(0x015E, CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL)  # SpecialAirSStart
+    assert both_have(0x0166, CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL)  # SpecialHiFall
+    assert not both_have(0x0041, CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL)  # AttackAirN
+
+    assert both_have(0x004B, CLASS_DAMAGE_COMMON_COLL)  # DamageHi1
+    assert both_have(0x005B, CLASS_DAMAGE_FLY_COLL)  # DamageFlyRoll
+    assert both_have(0x0026, CLASS_DAMAGE_FALL_COLL)  # DamageFall
+    assert not both_have(0x0041, CLASS_DAMAGE_COMMON_COLL)  # AttackAirN
+
+    assert both_have(0x0018, CLASS_FT80083F88_GROUND_TO_AIR_COLL)  # KneeBend
+    assert both_have(0x015B, CLASS_FX_SPECIALS_GROUND_B108_COLL)  # SpecialSStart
+    assert not both_have(0x002A, CLASS_FT80083F88_GROUND_TO_AIR_COLL)  # Landing
+
+    assert both_have(0x0030, CLASS_FT800827A0_EDGE_SNAP_COLL)  # Attack11
+    assert both_have(0x0030, CLASS_GROUNDED_STAGE_OBJECT_CARRY_COLL)
+    assert both_have(0x00D4, CLASS_FT800827A0_EDGE_SNAP_COLL)  # Catch
+    assert both_have(0x00D4, CLASS_GROUNDED_STAGE_OBJECT_CARRY_COLL)
+    assert not both_have(0x00B8, CLASS_FT800827A0_EDGE_SNAP_COLL)  # DownWait
+
+
 def test_motion_state_owner_reader_rejects_stale_versions(tmp_path: Path) -> None:
     stale = tmp_path / "fox.bin"
     buf = bytearray(52)

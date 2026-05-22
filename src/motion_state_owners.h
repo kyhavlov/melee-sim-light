@@ -66,6 +66,7 @@ uint16_t msl_motion_state_phys_cb_id(uint8_t char_id, uint16_t action_id);
 uint16_t msl_motion_state_coll_cb_id(uint8_t char_id, uint16_t action_id);
 uint16_t msl_motion_state_cam_cb_id(uint8_t char_id, uint16_t action_id);
 uint8_t msl_motion_state_has_motion_flag(uint8_t char_id, uint16_t action_id, uint32_t flag_mask);
+uint32_t msl_motion_state_class_bits(uint8_t char_id, uint16_t action_id);
 uint8_t msl_motion_state_class_has(uint8_t char_id, uint16_t action_id, uint32_t class_bit);
 
 // Common helpers return true only when all currently supported Fox/Falco owner tables agree. This

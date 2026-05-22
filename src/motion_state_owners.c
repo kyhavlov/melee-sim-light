@@ -317,13 +317,19 @@ uint8_t msl_motion_state_has_motion_flag(uint8_t char_id, uint16_t action_id, ui
   return ((msl_motion_state_x4_flags(char_id, action_id) & flag_mask) == flag_mask) ? 1u : 0u;
 }
 
-uint8_t msl_motion_state_class_has(uint8_t char_id, uint16_t action_id, uint32_t class_bit) {
+uint32_t msl_motion_state_class_bits(uint8_t char_id, uint16_t action_id) {
   const MslMotionStateOwnerTable* t = table_for_char(char_id);
-  if (!in_range(t, action_id) || class_bit == 0u) {
+  if (!in_range(t, action_id)) {
     return 0u;
   }
-  const uint32_t bits = read_u32_le(t->class_bits_by_action + (size_t)action_id * 4u);
-  return ((bits & class_bit) != 0u) ? 1u : 0u;
+  return read_u32_le(t->class_bits_by_action + (size_t)action_id * 4u);
+}
+
+uint8_t msl_motion_state_class_has(uint8_t char_id, uint16_t action_id, uint32_t class_bit) {
+  if (class_bit == 0u) {
+    return 0u;
+  }
+  return ((msl_motion_state_class_bits(char_id, action_id) & class_bit) != 0u) ? 1u : 0u;
 }
 
 uint8_t msl_motion_state_common_class_has(uint16_t action_id, uint32_t class_bit) {

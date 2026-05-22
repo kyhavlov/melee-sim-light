@@ -787,12 +787,31 @@ Recent deltas to reflect here (do not let these get “lost in chat logs”):
   or remap that accepted line, and wrapper callbacks publish or reject one `CollData.floor` result.
   DamageFly/DamageFall/DamageAir checks, EscapeAir/ledgedash handoffs, AttackAir platform-pass
   cases, and Randall/FoD/Yoshi/PS moving-platform publication now share that packet instead of
-  carrying separate raw `mpCheckFloor` branches. `mpColl_8004A908_Floor` remains a distinct
-  grounded-inline retry owner because it performs the source's disconnected-floor retry after the
-  ordinary wall/ceiling/floor loop rather than the first ECB-bottom sweep.
+  carrying separate raw `mpCheckFloor` branches. `mpColl_8004A908_Floor` is modeled as an explicit
+  later source phase: it still performs the source's disconnected-floor retry after the ordinary
+  wall/ceiling/floor loop, but accepted retry contacts publish through the same callback-local floor
+  result lane with source `GROUNDED_4A908_RETRY`.
   (`src/mpcoll_ground.c`; refs/melee/src/melee/mp/mpcoll.c::{
   mpColl_80044628_Floor,mpColl_80044838_Floor,mpColl_80044948_Floor,mpColl_80046904,
   mpColl_8004A908_Floor}).
+- mpColl source phases (2026-05-22): `src/mpcoll_ground.c` now builds a callback-local
+  `MslMpcollCollDataState` view containing previous/current root positions, previous/current/desired
+  ECB points, floor index, floor skip, ECB lock state, env flags, callback floor scratch, and a
+  generated `MSLMSO01`-backed source-phase bitmask. The phase bitmask intentionally allows overlap:
+  grounded actions such as Attack11/Catch can both preserve `CollData.floor` through the grounded
+  carry owner and enter `ft_800827A0 -> mpColl_8004B2DC` endpoint snap. Platform-pass floor-skip
+  reconstruction, moving-stage support carry, ground-to-air `mpColl_8004B108` support correction,
+  and endpoint snap now consume this one phase packet instead of separate local action predicates.
+  Final publication rejections carry structured side-state (restore rule, floor-skip side effect,
+  and source phase) rather than relying only on a raw bit list; retained reject bits are diagnostics
+  for real source-phase guards. Floor contact env bits are owned by the callback floor result:
+  normal rejected floor candidates clear `Collide_Floor*`, while Damage active-hitlag
+  stay-airborne FloorPush/FloorHug records use a `STAY_AIRBORNE` floor-result source so they can
+  preserve floor-contact env flags without publishing grounded state.
+  (`src/mpcoll_ground.c`, `data/motion_state/owners/{fox,falco}.bin`; refs/melee/src/melee/ft/ft_081B.c::{
+  ft_80082C74,ft_80082708,ft_800827A0,ft_80083090,ft_800831CC,ft_80083F88},
+  refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_800473CC,mpColl_800477E0,
+  mpColl_8004B108,mpColl_8004B2DC,mpColl_8004ACE4}).
   `GuardSetOff_Anim` may enter Guard and then same-frame GuardOff through
   the normal Guard IASA release path; and terminal `GuardReflect_Anim` with an expired timer can
   snapshot into Guard before release consumption. Common-air FD walljump rows promote the hidden
