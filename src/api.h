@@ -460,6 +460,23 @@ typedef struct MslSeed {
   // data/ecb/*
   float ecb_lock_bottom_rel_y_f32[MSL_MAX_PLAYERS];
   uint8_t ecb_lock_bottom_rel_y_valid_u8[MSL_MAX_PLAYERS];
+  // Hidden active-hitlag CollData ECB envelope.
+  //
+  // Damage entry can change the replay-visible action to DamageAir/DamageFly while the source JObj
+  // collision envelope consumed by the same frozen hitlag map callbacks is still the pre-hit
+  // CollData ECB. Slippi exposes the visible action/pose, not `coll_data.ecb`; seed this envelope
+  // explicitly for one-step/reseed. Runtime free-run carries the same state in `MslState`.
+  //
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procMap}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnEveryHitlag
+  // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpCollInterpolateECB}
+  float damage_hitlag_ecb_bottom_rel_y_f32[MSL_MAX_PLAYERS];
+  float damage_hitlag_ecb_top_rel_y_f32[MSL_MAX_PLAYERS];
+  float damage_hitlag_ecb_left_rel_x_f32[MSL_MAX_PLAYERS];
+  float damage_hitlag_ecb_right_rel_x_f32[MSL_MAX_PLAYERS];
+  float damage_hitlag_ecb_side_rel_y_f32[MSL_MAX_PLAYERS];
+  uint8_t damage_hitlag_ecb_valid_u8[MSL_MAX_PLAYERS];
   // Velocities as recorded by Slippi post-frame (when available).
   float speed_air_x_self[MSL_MAX_PLAYERS];
   float speed_ground_x_self[MSL_MAX_PLAYERS];
@@ -1823,7 +1840,10 @@ typedef struct MslDebugCollDataEcb {
   uint8_t desired_valid[MSL_MAX_PLAYERS];
   uint8_t floor_result_valid[MSL_MAX_PLAYERS];
   uint8_t floor_result_source[MSL_MAX_PLAYERS];
-  uint8_t _pad0[3 * MSL_MAX_PLAYERS];
+  // Source projection mode for the callback-local floor result:
+  // bottom sweep, root projection, edge snap, stage-object carry, 4A908 retry, etc.
+  uint8_t floor_result_mode[MSL_MAX_PLAYERS];
+  uint8_t _pad0[2 * MSL_MAX_PLAYERS];
 
   uint16_t floor_result_segment_id[MSL_MAX_PLAYERS];
 

@@ -8,18 +8,28 @@ from tools.eval.dataset import COMPARE_DTYPE, SEED_DTYPE
 
 ACT_WAIT = 0x000E
 ACT_FALL = 0x001D
+ACT_DAMAGE_FLY_N = 0x0058
+ACT_ATTACK_11 = 0x002C
 ACT_ESCAPE_AIR = 0x00EC
 
 SM_WAIT1_0 = 2
 SM_FALL = 20
+SM_ATTACK_11 = 46
 SM_ESCAPE_AIR = 44
 
 CHAR_FOX = 1
 STAGE_FD = 32
 STAGE_BATTLEFIELD = 31
+STAGE_YOSHI = 8
 
 FLOOR_RESULT_DIRECT = 1
 FLOOR_RESULT_GROUNDED_4A908_RETRY = 2
+FLOOR_MODE_BOTTOM_SWEEP = 1
+FLOOR_MODE_ROOT_PROJECTION = 2
+FLOOR_MODE_EDGE_SNAP = 3
+FLOOR_MODE_STAGE_OBJECT_CARRY = 4
+FLOOR_MODE_4A908_RETRY = 5
+FLOOR_MODE_DIRECT_PUBLICATION = 7
 
 
 def _input_bytes() -> np.ndarray:
@@ -57,7 +67,8 @@ def _colldata_ecb_dtype() -> np.dtype:
             ("desired_valid", ("u1", (4,))),
             ("floor_result_valid", ("u1", (4,))),
             ("floor_result_source", ("u1", (4,))),
-            ("_pad0", ("u1", (12,))),
+            ("floor_result_mode", ("u1", (4,))),
+            ("_pad0", ("u1", (8,))),
             ("floor_result_segment_id", ("<u2", (4,))),
             ("current_bottom_rel_y", ("<f4", (4,))),
             ("current_top_rel_y", ("<f4", (4,))),
@@ -287,6 +298,7 @@ def test_callback_local_floor_result_is_stable_for_fd_hard_floor() -> None:
     assert int(compare["on_ground"][0]) == 1
     assert int(snap["floor_result_valid"][0]) == 1
     assert int(snap["floor_result_source"][0]) == FLOOR_RESULT_DIRECT
+    assert int(snap["floor_result_mode"][0]) == FLOOR_MODE_BOTTOM_SWEEP
     assert int(snap["floor_result_segment_id"][0]) == int(compare["ground_id"][0])
     assert float(snap["floor_result_contact_y"][0]) == pytest.approx(
         float(compare["pos_y"][0]) - 0.0001,
@@ -313,11 +325,82 @@ def test_callback_local_floor_result_is_stable_for_platform_floor() -> None:
     assert int(compare["ground_id"][0]) == 2
     assert int(snap["floor_result_valid"][0]) == 1
     assert int(snap["floor_result_source"][0]) == FLOOR_RESULT_DIRECT
+    assert int(snap["floor_result_mode"][0]) == FLOOR_MODE_BOTTOM_SWEEP
     assert int(snap["floor_result_segment_id"][0]) == 2
     assert float(snap["floor_result_contact_y"][0]) == pytest.approx(
         float(compare["pos_y"][0]) - 0.0001,
         abs=1e-5,
     )
+
+
+def test_callback_local_floor_result_records_direct_publication_mode() -> None:
+    seed = _seed_base(STAGE_FD, ACT_WAIT, SM_WAIT1_0, 0.0, 0.05)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(1)
+
+    compare, snap = _step_with_colldata(seed)
+
+    assert int(compare["on_ground"][0]) == 1
+    assert int(snap["floor_result_valid"][0]) == 1
+    assert int(snap["floor_result_source"][0]) == FLOOR_RESULT_DIRECT
+    assert int(snap["floor_result_mode"][0]) == FLOOR_MODE_DIRECT_PUBLICATION
+    assert int(snap["floor_result_segment_id"][0]) == int(compare["ground_id"][0])
+
+
+def test_callback_local_floor_result_records_edge_snap_mode() -> None:
+    seed = _seed_base(STAGE_FD, ACT_ATTACK_11, SM_ATTACK_11, 85.0, 0.0001)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(1)
+    seed["speed_ground_x_self"][0, 0] = np.float32(1.0)
+
+    compare, snap = _step_with_colldata(seed)
+
+    assert int(compare["on_ground"][0]) == 1
+    assert int(snap["floor_result_valid"][0]) == 1
+    assert int(snap["floor_result_source"][0]) == FLOOR_RESULT_DIRECT
+    assert int(snap["floor_result_mode"][0]) == FLOOR_MODE_EDGE_SNAP
+    assert int(snap["floor_result_segment_id"][0]) == int(compare["ground_id"][0])
+    assert float(snap["floor_result_contact_x"][0]) == pytest.approx(75.0, abs=1e-6)
+
+
+def test_callback_local_floor_result_records_root_projection_mode() -> None:
+    seed = _seed_base(STAGE_FD, ACT_FALL, SM_FALL, 0.0, -0.2)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["ground_id"][0, 0] = np.uint16(1)
+    seed["seed_prev_action_id"][0, 0] = np.uint16(ACT_DAMAGE_FLY_N)
+    seed["seed_prev_action_frame"][0, 0] = np.int16(3)
+    seed["speed_y_self"][0, 0] = np.float32(-0.1)
+    seed["speed_y_attack"][0, 0] = np.float32(-1.0)
+    seed["floor_sweep_prev_pos_x_f32"][0, 0] = np.float32(0.0)
+    seed["floor_sweep_prev_pos_y_f32"][0, 0] = np.float32(-0.15)
+    seed["floor_sweep_prev_pos_valid_u8"][0, 0] = np.uint8(1)
+
+    compare, snap = _step_with_colldata(seed)
+
+    assert int(compare["on_ground"][0]) == 1
+    assert int(snap["floor_result_valid"][0]) == 1
+    assert int(snap["floor_result_source"][0]) == FLOOR_RESULT_DIRECT
+    assert int(snap["floor_result_mode"][0]) == FLOOR_MODE_ROOT_PROJECTION
+    assert int(snap["floor_result_segment_id"][0]) == int(compare["ground_id"][0])
+
+
+def test_callback_local_floor_result_records_stage_object_carry_mode() -> None:
+    seed = _seed_base(STAGE_YOSHI, ACT_WAIT, SM_WAIT1_0, -80.0, -13.649894)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(0)
+    seed["floor_sweep_prev_pos_x_f32"][0, 0] = np.float32(-79.0)
+    seed["floor_sweep_prev_pos_y_f32"][0, 0] = np.float32(-13.649894)
+    seed["floor_sweep_prev_pos_valid_u8"][0, 0] = np.uint8(1)
+    seed["stage_yoshi_shyguy_valid_u8"][0] = np.uint8(1)
+
+    compare, snap = _step_with_colldata(seed)
+
+    assert int(compare["on_ground"][0]) == 1
+    assert int(compare["ground_id"][0]) == 0
+    assert int(snap["floor_result_valid"][0]) == 1
+    assert int(snap["floor_result_source"][0]) == FLOOR_RESULT_DIRECT
+    assert int(snap["floor_result_mode"][0]) == FLOOR_MODE_STAGE_OBJECT_CARRY
+    assert int(snap["floor_result_segment_id"][0]) == 0
 
 
 def test_callback_local_4a908_retry_result_is_retained_consumer() -> None:
@@ -334,5 +417,6 @@ def test_callback_local_4a908_retry_result_is_retained_consumer() -> None:
     assert int(compare["ground_id"][0]) == 1
     assert int(snap["floor_result_valid"][0]) == 1
     assert int(snap["floor_result_source"][0]) == FLOOR_RESULT_GROUNDED_4A908_RETRY
+    assert int(snap["floor_result_mode"][0]) == FLOOR_MODE_4A908_RETRY
     assert int(snap["floor_result_segment_id"][0]) == 1
     assert float(snap["floor_result_contact_y"][0]) == pytest.approx(float(compare["pos_y"][0]))

@@ -129,6 +129,10 @@ typedef struct MslStateSoA {
   uint8_t* coll_prev_ecb_bottom_valid;
   uint8_t* coll_desired_ecb_bottom_valid;
   uint8_t* coll_desired_ecb_bottom_locked_owner;
+  // Current CollData ECB is a frozen active-hitlag Damage envelope rather than the replay-visible
+  // Damage pose. Runtime writes this on live Damage entry; replay reseed initializes it from
+  // MslSeed::damage_hitlag_ecb_*.
+  uint8_t* coll_damage_hitlag_ecb_valid;
   // Callback-local floor result scratch from the latest mpColl-shaped map callback. Source
   // `mpColl_80043754` owns this as per-callback state: it interpolates ECB/root substeps, calls a
   // floor helper, then the wrapper callback consumes the result immediately.
@@ -136,6 +140,7 @@ typedef struct MslStateSoA {
   //   mpColl_80043754,mpColl_8004A908_Floor,mpColl_80044628_Floor}
   uint8_t* coll_floor_result_valid;
   uint8_t* coll_floor_result_source;
+  uint8_t* coll_floor_result_mode;
   uint16_t* coll_floor_result_segment_id;
   float* coll_floor_result_contact_x;
   float* coll_floor_result_contact_y;

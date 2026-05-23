@@ -8,6 +8,7 @@ import pytest
 
 from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE, read_dataset, read_dataset_window
 from tools.slippi.make_dataset_from_slp import build_dataset_from_slp
+from tests.test_colldata_ecb_substrate import _colldata_ecb_dtype, _ecb_rel_points
 
 
 _CONTACTS_DTYPE = np.dtype(
@@ -33,16 +34,62 @@ _CONTACTS_DTYPE = np.dtype(
 )
 
 MSL_COLLIDE_FLOOR_MASK = 0x18000
+FLOOR_RESULT_NONE = 0
+FLOOR_RESULT_STAY_AIRBORNE = 3
+FLOOR_MODE_NONE = 0
+FLOOR_MODE_BOTTOM_SWEEP = 1
+FLOOR_MODE_STAY_AIRBORNE_PROJECTION = 6
+ACT_ATTACK_AIR_LW = 0x0045
 ACT_DAMAGE_HI_2 = 0x004C
 ACT_DAMAGE_N_2 = 0x004F
 ACT_DAMAGE_AIR_1 = 0x0054
 ACT_DAMAGE_AIR_2 = 0x0055
 ACT_DAMAGE_AIR_3 = 0x0056
+ACT_DAMAGE_FLY_N = 0x0058
 ACT_DAMAGE_FLY_TOP = 0x005A
+ACT_DAMAGE_FLY_ROLL = 0x005B
 ACT_LANDING = 0x002A
+ACT_DOWN_BOUND_U = 0x00B7
+ACT_PASSIVE = 0x00C7
+ACT_DOWN_DAMAGE_D = 0x00C1
 ACT_ESCAPE_AIR = 0x00EC
 ACT_MISS_FOOT = 0x00FB
 ACT_THROWN_LW = 0x00F2
+SM_ATTACK_AIR_LW = 72
+SM_DAMAGE_FLY_TOP = 180
+
+
+def test_damage_hitlag_colldata_ecb_samples_previous_attackair_facing() -> None:
+    binding = pytest.importorskip("msl_binding")
+    char = np.array([1, 1], dtype=np.uint8)
+    action = np.array([ACT_ATTACK_AIR_LW, ACT_DAMAGE_FLY_TOP], dtype=np.uint16)
+    anim = np.array([SM_ATTACK_AIR_LW, SM_DAMAGE_FLY_TOP], dtype=np.uint32)
+    anim_frame = np.array([5.0, 0.0], dtype=np.float32)
+    frame_speed = np.array([1.0, 1.0], dtype=np.float32)
+    # The first visible Damage hitlag row can have already flipped facing. Source
+    # mpColl_LoadECB_inline still consumes the pre-Damage AttackAir CollData ECB, including its
+    # facing-mirrored side points.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Coll
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpColl_800477E0}
+    facing = np.array([0, 1], dtype=np.uint8)
+    on_ground = np.array([0, 0], dtype=np.uint8)
+    hitlag = np.array([0, 5], dtype=np.uint16)
+
+    bottom, top, left, right, side, valid = binding.derive_damage_hitlag_colldata_ecb(
+        char, action, anim, anim_frame, frame_speed, facing, on_ground, hitlag
+    )
+
+    prev_facing_expected = _ecb_rel_points(SM_ATTACK_AIR_LW, 6, facing=0)
+    current_facing_wrong = _ecb_rel_points(SM_ATTACK_AIR_LW, 6, facing=1)
+    assert int(valid[1]) == 1
+    assert float(bottom[1]) == pytest.approx(prev_facing_expected["bottom"])
+    assert float(top[1]) == pytest.approx(prev_facing_expected["top"])
+    assert float(left[1]) == pytest.approx(prev_facing_expected["left"])
+    assert float(right[1]) == pytest.approx(prev_facing_expected["right"])
+    assert float(side[1]) == pytest.approx(prev_facing_expected["side"])
+    assert float(left[1]) != pytest.approx(current_facing_wrong["left"])
+    assert float(right[1]) != pytest.approx(current_facing_wrong["right"])
 
 
 def _run_one_step_with_contacts(dataset_path: Path, record: int) -> tuple[np.ndarray, np.ndarray, np.void]:
@@ -82,6 +129,53 @@ def _run_one_step_with_contacts(dataset_path: Path, record: int) -> tuple[np.nda
     ref = row["ref_t1"][0].copy()
     contacts = np.frombuffer(out_contacts_bytes.tobytes(), dtype=_CONTACTS_DTYPE, count=1)[0]
     return out, ref, contacts
+
+
+def _run_one_step_with_contacts_and_colldata(
+    dataset_path: Path, record: int
+) -> tuple[np.ndarray, np.ndarray, np.void, np.void]:
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record : record + 1]
+    assert int(row.shape[0]) == 1
+
+    binding = pytest.importorskip("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    contacts_stride = int(sizes["collision_contacts"])
+    colldata_stride = int(sizes["colldata_ecb"])
+    colldata_dtype = _colldata_ecb_dtype()
+    assert int(_CONTACTS_DTYPE.itemsize) == contacts_stride
+    assert int(colldata_dtype.itemsize) == colldata_stride
+
+    seed_bytes = row["seed_t"].view("u1").reshape(1, seed_stride).copy()
+    prev_input_bytes = row["prev_input_t"].view("u1").reshape(1, input_stride).copy()
+    input_bytes = row["input_t"].view("u1").reshape(1, input_stride).copy()
+    out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+    out_contacts_bytes = np.empty((1, contacts_stride), dtype=np.uint8)
+    out_colldata_bytes = np.empty((1, colldata_stride), dtype=np.uint8)
+
+    handle = binding.init(
+        batch_size=1,
+        num_players=int(ds.header["num_players"]),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    try:
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+        binding.debug_write_collision_contacts(handle, out_contacts_bytes)
+        binding.debug_write_colldata_ecb(handle, out_colldata_bytes)
+    finally:
+        binding.destroy(handle)
+
+    out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)[0].copy()
+    ref = row["ref_t1"][0].copy()
+    contacts = np.frombuffer(out_contacts_bytes.tobytes(), dtype=_CONTACTS_DTYPE, count=1)[0]
+    colldata = np.frombuffer(out_colldata_bytes.tobytes(), dtype=colldata_dtype, count=1)[0]
+    return out, ref, contacts, colldata
 
 
 def _run_one_step_with_contacts_from_samples(
@@ -502,7 +596,7 @@ def test_damageflytop_active_hitlag_floorhug_stays_airborne_qgd_9683() -> None:
     assert int(row["ref_t1"]["on_ground"][0, p]) == 0
     assert float(row["ref_t1"]["pos_y"][0, p]) == pytest.approx(0.00010013580322265625, abs=1e-6)
 
-    out, ref, contacts = _run_one_step_with_contacts(dataset_path, 9683)
+    out, ref, contacts, colldata = _run_one_step_with_contacts_and_colldata(dataset_path, 9683)
 
     assert int(out["action_id"][p]) == int(ref["action_id"][p]) == 90
     assert int(out["hitlag"][p]) == int(ref["hitlag"][p]) == 1
@@ -510,6 +604,8 @@ def test_damageflytop_active_hitlag_floorhug_stays_airborne_qgd_9683() -> None:
     assert float(out["pos_x"][p]) == pytest.approx(float(ref["pos_x"][p]), abs=1e-6)
     assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
     assert int(contacts["coll_env_flags"][p]) & MSL_COLLIDE_FLOOR_MASK
+    assert int(colldata["floor_result_source"][p]) == FLOOR_RESULT_STAY_AIRBORNE
+    assert int(colldata["floor_result_mode"][p]) == FLOOR_MODE_STAY_AIRBORNE_PROJECTION
 
 
 @pytest.mark.integration
@@ -689,13 +785,15 @@ def test_damageflytop_active_hitlag_floorhug_does_not_trigger_early_qgd_9682() -
     assert float(row["seed_t"]["pos_y"][0, p]) == pytest.approx(-3.459904909133911, abs=1e-6)
     assert float(row["ref_t1"]["pos_y"][0, p]) == pytest.approx(-3.459904909133911, abs=1e-6)
 
-    out, ref, contacts = _run_one_step_with_contacts(dataset_path, 9682)
+    out, ref, contacts, colldata = _run_one_step_with_contacts_and_colldata(dataset_path, 9682)
 
     assert int(out["action_id"][p]) == int(ref["action_id"][p]) == 90
     assert int(out["hitlag"][p]) == int(ref["hitlag"][p]) == 2
     assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 0
     assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
     assert (int(contacts["coll_env_flags"][p]) & MSL_COLLIDE_FLOOR_MASK) == 0
+    assert int(colldata["floor_result_source"][p]) == FLOOR_RESULT_NONE
+    assert int(colldata["floor_result_mode"][p]) == FLOOR_MODE_NONE
 
 
 @pytest.mark.integration
@@ -703,7 +801,7 @@ def test_damageflytop_active_hitlag_floorhug_does_not_snap_to_ledge_floor_agn_48
     # Negative lock from AGN rec=4839 p1:
     # - active hitlag DamageFlyTop with down-right input near FD's left ledge floor segment
     # - vanilla stays airborne below the stage and does not raise FloorPush|FloorHug on this row
-    # - keep the hitlag floorhug bridge restricted to the proven main-floor continuation class
+    # - keep the hitlag floorhug owner restricted to the proven main-floor continuation class
     root = Path(__file__).resolve().parents[1]
     dataset_rel = (
         "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
@@ -731,6 +829,88 @@ def test_damageflytop_active_hitlag_floorhug_does_not_snap_to_ledge_floor_agn_48
     assert int(out["hitlag"][p]) == int(ref["hitlag"][p]) == 2
     assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 0
     assert int(out["ground_id"][p]) == int(ref["ground_id"][p]) == 1
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+    assert (int(contacts["coll_env_flags"][p]) & MSL_COLLIDE_FLOOR_MASK) == 0
+
+
+@pytest.mark.integration
+def test_damageflyn_from_damageair_active_hitlag_floorhug_projects_root_pec_870() -> None:
+    # DamageAir -> DamageFly active-hitlag floorhug:
+    # a same-frame ProcessHit can enter DamageFlyN from a prior DamageAir collision state while the
+    # victim root is below Yoshi's main hard floor. The first DamageFly_Coll callback still owns the
+    # ft_80081DD4/mpColl_800477E0 stay-airborne floor path and projects FloorPush|FloorHug without
+    # changing the fighter to grounded. This is source-family ownership, not a Yoshi row special:
+    # the paired BHH control below enters DamageFlyN from a grounded attack and must not receive
+    # this DamageAir re-entry floor authority.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+    #   ftCo_8008DCE0,ftCo_Damage_Coll,ftCo_DamageFly_Coll}
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800477E0,mpColl_80044948_Floor}
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
+        "PhysicalElectricCapybara.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[870:871]
+    p = 0
+
+    assert int(row["seed_t"]["action_id"][0, p]) == ACT_DAMAGE_FLY_N
+    assert int(row["seed_t"]["seed_prev_action_id"][0, p]) == ACT_DAMAGE_AIR_3
+    assert int(row["seed_t"]["action_frame"][0, p]) == 1
+    assert int(row["seed_t"]["hitlag"][0, p]) == 6
+    assert float(row["seed_t"]["pos_y"][0, p]) < 0.0
+    assert int(row["ref_t1"]["on_ground"][0, p]) == 0
+    assert float(row["ref_t1"]["pos_y"][0, p]) == pytest.approx(
+        0.00010013580322265625, abs=1e-6
+    )
+
+    out, ref, contacts = _run_one_step_with_contacts(dataset_path, 870)
+
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_DAMAGE_FLY_N
+    assert int(out["hitlag"][p]) == int(ref["hitlag"][p]) == 5
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 0
+    assert int(out["ground_id"][p]) == int(ref["ground_id"][p])
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+    assert int(contacts["coll_env_flags"][p]) & MSL_COLLIDE_FLOOR_MASK
+
+
+@pytest.mark.integration
+def test_damageflyn_entry_from_ground_attack_does_not_gain_damageair_floorhug_bhh_1600() -> None:
+    # Negative boundary for the DamageAir -> DamageFly entry owner above:
+    # BHH enters DamageFlyN from a grounded AttackS4S hit with the root already at floor height.
+    # Vanilla stays airborne with no FloorPush/FloorHug env flags. Do not broaden the PEC owner to
+    # all first-frame DamageFly entries or to replay-visible hitlag state alone.
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+        "BlondHardHippopotamus.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[1600:1601]
+    p = 1
+
+    assert int(row["seed_t"]["action_id"][0, p]) == ACT_DAMAGE_FLY_N
+    assert int(row["seed_t"]["seed_prev_action_id"][0, p]) == 56  # AttackS4S
+    assert int(row["seed_t"]["hitlag"][0, p]) == 6
+    assert int(row["seed_t"]["on_ground"][0, p]) == 0
+    assert float(row["seed_t"]["pos_y"][0, p]) == pytest.approx(
+        0.00009999999747378752, abs=1e-7
+    )
+
+    out, ref, contacts = _run_one_step_with_contacts(dataset_path, 1600)
+
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_DAMAGE_FLY_N
+    assert int(out["hitlag"][p]) == int(ref["hitlag"][p]) == 5
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 0
     assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
     assert (int(contacts["coll_env_flags"][p]) & MSL_COLLIDE_FLOOR_MASK) == 0
 
@@ -804,14 +984,25 @@ def test_damageflytop_downward_sdi_floorhug_uses_consumed_sdi_latch_agn_794() ->
     assert int(row["seed_t"]["hitlag"][0, p]) == 5
     assert int(row["input_t"]["p"]["main_y"][0, p]) < 0
     assert int(row["seed_t"]["tilt_timer_y"][0, p]) == 0
+    # Dolphin probe evidence in reports/triage/active_damage_agn794_forensic/ shows the first
+    # visible DamageFlyTop hitlag row still has the pre-Damage AttackAirLw loaded CollData ECB.
+    # This seed lane carries that hidden CollData pose; it is not the visible DamageFlyTop ECB.
+    assert int(row["seed_t"]["damage_hitlag_ecb_valid_u8"][0, p]) == 1
+    assert float(row["seed_t"]["damage_hitlag_ecb_bottom_rel_y_f32"][0, p]) == pytest.approx(
+        4.8131137, abs=1e-5
+    )
     assert float(row["ref_t1"]["pos_y"][0, p]) == pytest.approx(0.00010013580322265625, abs=1e-6)
 
-    out, ref, contacts = _run_one_step_with_contacts(dataset_path, 794)
+    out, ref, contacts, colldata = _run_one_step_with_contacts_and_colldata(dataset_path, 794)
 
     assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_DAMAGE_FLY_TOP
     assert int(out["hitlag"][p]) == int(ref["hitlag"][p]) == 4
     assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 0
     assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+    assert int(colldata["current_valid"][p]) == 1
+    assert float(colldata["current_bottom_rel_y"][p]) == pytest.approx(
+        float(row["seed_t"]["damage_hitlag_ecb_bottom_rel_y_f32"][0, p]), abs=1e-6
+    )
     assert int(contacts["coll_env_flags"][p]) & MSL_COLLIDE_FLOOR_MASK
 
 
@@ -941,6 +1132,7 @@ def test_nonfd_damageair_root_below_floor_current_ecb_bottom_above_does_not_land
     assert int(row["seed_t"]["action_id"][0, p]) == ACT_DAMAGE_AIR_2
     assert int(row["seed_t"]["hitlag"][0, p]) == 0
     assert int(row["seed_t"]["on_ground"][0, p]) == 0
+    assert int(row["seed_t"]["damage_hitlag_ecb_valid_u8"][0, p]) == 0
     assert float(row["seed_t"]["pos_y"][0, p]) < 0.0
     assert int(row["ref_t1"]["action_id"][0, p]) == ACT_DAMAGE_AIR_2
     assert int(row["ref_t1"]["on_ground"][0, p]) == 0
@@ -1023,3 +1215,348 @@ def test_damageair_fd_hard_floor_hitlag_exit_projection_stays_exact_fsp_3593() -
     assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 1
     assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
     assert int(contacts["coll_env_flags"][p]) & MSL_COLLIDE_FLOOR_MASK
+
+
+@pytest.mark.integration
+def test_damagefly_hitlag_exit_uses_current_loaded_ecb_not_next_stored_pose_stm_9002() -> None:
+    # DamageFly hitlag-exit current-ECB positive:
+    # `Fighter_8006D10C` consumes `ftCo_Damage_OnExitHitlag` before map, then
+    # `ftCo_DamageFly_Coll -> ft_80081DD4 -> mpColl_800473CC` loads the current DamageFlyN ECB for
+    # `mpColl_80044628_Floor`. The following-frame CollData pose is stored after the floor pass, but
+    # using it as the exit-frame sweep source leaves this Pokemon Stadium row falsely airborne.
+    #
+    # Paired negative: QGD 5120 has the same DamageFlyN hitlag-exit shape but the current loaded ECB
+    # bottom remains above FD's hard floor, so it must stay airborne. Keep both rows off stage-id
+    # branches; the distinction is source ECB bottom-sweep provenance.
+    #
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_8006D10C}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+    #   ftCo_Damage_OnExitHitlag,ftCo_DamageFly_Coll}
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800473CC,mpColl_LoadECB_inline,mpColl_80044628_Floor}
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/SweatyThisMallard.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip("missing local dataset: SweatyThisMallard.msl")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[9002:9003]
+    p = 0
+
+    assert int(row["seed_t"]["stage_id"][0]) == 3
+    assert int(row["seed_t"]["action_id"][0, p]) == ACT_DAMAGE_FLY_N
+    assert int(row["seed_t"]["hitlag"][0, p]) == 1
+    assert int(row["seed_t"]["damage_post_hitlag_cb_kind"][0, p]) == 1
+    assert int(row["ref_t1"]["action_id"][0, p]) == ACT_DOWN_BOUND_U
+    assert int(row["ref_t1"]["on_ground"][0, p]) == 1
+
+    out, ref, contacts, colldata = _run_one_step_with_contacts_and_colldata(dataset_path, 9002)
+
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_DOWN_BOUND_U
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 1
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-4)
+    assert int(colldata["floor_result_valid"][p]) == 1
+    assert int(colldata["floor_result_segment_id"][p]) == int(ref["ground_id"][p])
+    assert int(contacts["coll_env_flags"][p]) & MSL_COLLIDE_FLOOR_MASK
+    current_bottom_world = float(colldata["substep_cur_pos_y"][p]) + float(
+        colldata["current_bottom_rel_y"][p]
+    )
+    assert current_bottom_world <= 0.0
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "player", "expected_downbound"),
+    (
+        (
+            "datasets/aggregate_recent/replays/validation/dream_land_recent/ShadyDecimalStarling.msl",
+            322,
+            1,
+            ACT_DOWN_BOUND_U,
+        ),
+            (
+                "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl",
+                7569,
+                0,
+                ACT_PASSIVE,
+            ),
+    ),
+)
+def test_damageflytop_hitlag_exit_resting_hard_floor_carries_floorhug_latch(
+    dataset_rel: str, record: int, player: int, expected_downbound: int
+) -> None:
+    # DamageFlyTop resting hard-floor hitlag-exit owner:
+    # active hitlag can freeze the fighter with `ground_or_air` airborne while CollData.floor names
+    # the hard floor and FloorPush/FloorHug has already been refreshed by the DamageFly callback.
+    # On the hitlag-exit row, `ftCo_Damage_OnExitHitlag -> DamageFly_Coll -> ft_80081DD4` consumes
+    # that callback-local floor state and enters DownBound. The source boundary is floor data and
+    # loaded-bottom acceptance, not a stage id: Dream Land and Yoshi's main hard floors both qualify.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+    #   ftCo_Damage_OnExitHitlag,ftCo_DamageFly_Coll}
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800473CC,mpColl_80044628_Floor,mpColl_80044838_Floor}
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record : record + 1]
+    p = player
+    assert int(row["seed_t"]["action_id"][0, p]) == ACT_DAMAGE_FLY_TOP
+    assert int(row["seed_t"]["hitlag"][0, p]) == 1
+    assert int(row["seed_t"]["damage_post_hitlag_cb_kind"][0, p]) == 1
+    assert int(row["ref_t1"]["action_id"][0, p]) == expected_downbound
+
+    out, ref, contacts, colldata = _run_one_step_with_contacts_and_colldata(dataset_path, record)
+
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == expected_downbound
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 1
+    assert int(out["ground_id"][p]) == int(ref["ground_id"][p])
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+    assert int(colldata["floor_result_valid"][p]) == 1
+    assert int(contacts["coll_env_flags"][p]) & MSL_COLLIDE_FLOOR_MASK
+
+
+@pytest.mark.integration
+def test_damageflytop_resting_floorhug_owner_does_not_apply_to_damageflyroll() -> None:
+    # Boundary for the resting hard-floor owner above: DamageFlyRoll has separate RNG/roll physics
+    # and must not inherit the DamageFlyTop hitlag-exit latch merely because visible root/floor
+    # geometry looks similar.
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root / "datasets/aggregate_recent/replays/validation/dream_land_recent/ShadyDecimalStarling.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip("missing local dataset: ShadyDecimalStarling.msl")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples[322:323].copy()
+    p = 1
+    samples["seed_t"]["action_id"][0, p] = np.uint16(ACT_DAMAGE_FLY_ROLL)
+    samples["seed_t"]["animation_index"][0, p] = np.uint32(181)  # ftCo_SM_DamageFlyRoll
+    samples["ref_t1"]["action_id"][0, p] = np.uint16(ACT_DAMAGE_FLY_ROLL)
+    out, _ref, contacts = _run_one_step_with_contacts_from_samples(
+        samples, int(ds.header["num_players"]), 0
+    )
+
+    assert int(out["action_id"][p]) == ACT_DAMAGE_FLY_ROLL
+    assert int(out["on_ground"][p]) == 0
+    assert (int(contacts["coll_env_flags"][p]) & MSL_COLLIDE_FLOOR_MASK) == 0
+
+
+@pytest.mark.integration
+def test_damageflytop_resting_floorhug_owner_requires_frame_start_floor_contact() -> None:
+    # Boundary for the resting hard-floor owner: a carried floor id and previous floor-sweep root
+    # are not enough if the fighter is already below the floor at frame start. Source CollData lacks
+    # the same resting FloorHug state, so the row stays airborne instead of entering DownBound.
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    record = 999
+    p = 1
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record : record + 1]
+    assert int(row["seed_t"]["action_id"][0, p]) == ACT_DAMAGE_FLY_TOP
+    assert int(row["seed_t"]["hitlag"][0, p]) == 1
+    assert int(row["seed_t"]["damage_post_hitlag_cb_kind"][0, p]) == 1
+    assert float(row["seed_t"]["floor_sweep_prev_pos_y_f32"][0, p]) == pytest.approx(
+        0.0001, abs=1e-6
+    )
+    assert float(row["seed_t"]["pos_y"][0, p]) < -1.0
+    assert int(row["ref_t1"]["action_id"][0, p]) == ACT_DAMAGE_FLY_TOP
+
+    out, ref, contacts, colldata = _run_one_step_with_contacts_and_colldata(dataset_path, record)
+
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_DAMAGE_FLY_TOP
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 0
+    assert int(colldata["floor_result_valid"][p]) == 0
+    assert (int(contacts["coll_env_flags"][p]) & MSL_COLLIDE_FLOOR_MASK) == 0
+
+
+@pytest.mark.integration
+def test_damageflytop_resting_floorhug_owner_does_not_apply_to_damageflyn() -> None:
+    # DamageFlyN has separate active-hitlag/loaded-bottom floor owners. A frame-start floor-resting
+    # row in DamageFlyN must not inherit the DamageFlyTop-specific resting hard-floor hitlag-exit
+    # handoff.
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = "datasets/aggregate_recent/replays/validation/battlefield_recent/DelayedSuperbGuanaco.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    record = 781
+    p = 1
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record : record + 1]
+    assert int(row["seed_t"]["action_id"][0, p]) == ACT_DAMAGE_FLY_N
+    assert int(row["seed_t"]["hitlag"][0, p]) == 1
+    assert int(row["seed_t"]["damage_post_hitlag_cb_kind"][0, p]) == 1
+    assert float(row["seed_t"]["pos_y"][0, p]) == pytest.approx(0.0001, abs=1e-6)
+    assert int(row["ref_t1"]["action_id"][0, p]) == ACT_DAMAGE_FLY_N
+
+    out, ref, contacts, colldata = _run_one_step_with_contacts_and_colldata(dataset_path, record)
+
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_DAMAGE_FLY_N
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 0
+    assert int(colldata["floor_result_valid"][p]) == 0
+    assert (int(contacts["coll_env_flags"][p]) & MSL_COLLIDE_FLOOR_MASK) == 0
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "player", "expect_floor_result"),
+    (
+        (
+            "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
+            "CornyDelayedOkapi.msl",
+            5521,
+            1,
+            False,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
+            "ThisVioletRaccoon.msl",
+            5994,
+            1,
+            True,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+            "FavorableSuperficialPig.msl",
+            3593,
+            1,
+            True,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
+            "SweatyThisMallard.msl",
+            9002,
+            0,
+            True,
+        ),
+    ),
+)
+def test_damageair_hard_floor_publication_follows_loaded_ecb_bottom_sweep_provenance(
+    dataset_rel: str, record: int, player: int, expect_floor_result: bool
+) -> None:
+    # Source-boundary lock for the non-FD DamageAir hard-floor publication blocker:
+    # `ft_80081DD4 -> mpColl_800477E0` loads the DamageAir JObj ECB before
+    # `mpColl_80044628_Floor`. CDO has a root below the floor but the loaded current ECB bottom is
+    # still above the hard floor, so no callback floor result is source-owned. TVR/FSP cross the
+    # hard floor with the loaded ECB bottom and publish the direct floor result before the Damage
+    # state transition.
+    #
+    # probe artifacts:
+    # - reports/triage/nonfd_damage_ecb_dbg_cdo5521/
+    # - reports/triage/nonfd_damage_ecb_dbg_tvr5994b/
+    # - reports/triage/nonfd_damage_ecb_dbg_fsp3593b/
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+    # refs/melee/src/melee/mp/mpcoll.c::{
+    #   mpColl_800477E0,mpColl_LoadECB_inline,mpColl_80044628_Floor,mpColl_80044838_Floor}
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    out, ref, contacts, colldata = _run_one_step_with_contacts_and_colldata(dataset_path, record)
+    p = player
+
+    assert int(out["action_id"][p]) == int(ref["action_id"][p])
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p])
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+    assert int(colldata["current_valid"][p]) == 1
+    assert int(colldata["prev_valid"][p]) == 1
+
+    current_bottom_world = float(colldata["substep_cur_pos_y"][p]) + float(
+        colldata["current_bottom_rel_y"][p]
+    )
+    prev_bottom_world = float(colldata["substep_prev_pos_y"][p]) + float(
+        colldata["prev_bottom_rel_y"][p]
+    )
+    if expect_floor_result:
+        assert int(colldata["floor_result_valid"][p]) == 1
+        assert int(colldata["floor_result_mode"][p]) == FLOOR_MODE_BOTTOM_SWEEP
+        assert int(colldata["floor_result_segment_id"][p]) == int(ref["ground_id"][p])
+        assert int(contacts["coll_env_flags"][p]) & MSL_COLLIDE_FLOOR_MASK
+        assert prev_bottom_world > 0.0
+        assert current_bottom_world <= 0.0
+    else:
+        assert int(colldata["floor_result_valid"][p]) == 0
+        assert int(colldata["floor_result_mode"][p]) == FLOOR_MODE_NONE
+        assert (int(contacts["coll_env_flags"][p]) & MSL_COLLIDE_FLOOR_MASK) == 0
+        assert current_bottom_world > 0.0
+
+
+@pytest.mark.integration
+def test_downed_contact_downbound_entry_preserves_frame_start_airborne_ground_or_air_fsp_3713() -> None:
+    # Downed-contact source-order lock:
+    # The sim's map pass can refresh a carried DownBound floor before combat resolves AttackAirLw
+    # contact, but source ftCo_8009F0F0/ftCo_8009F184 installs DownDamageU/D from the current
+    # damage/contact callback lifetime and does not turn a frame-start airborne DownBound into a
+    # grounded publication. CollData.floor remains available for the next DownDamage_Coll callback.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::{
+    #   ftCo_8009F0F0,ftCo_8009F184,ftCo_DownDamage_Coll}
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[3713:3714]
+    p = 0
+
+    assert int(row["seed_t"]["action_id"][0, p]) == ACT_DOWN_BOUND_U
+    assert int(row["seed_t"]["action_frame"][0, p]) == 21
+    assert int(row["seed_t"]["on_ground"][0, p]) == 0
+    assert int(row["seed_t"]["ground_id"][0, p]) == 1
+    assert int(row["ref_t1"]["action_id"][0, p]) == ACT_DOWN_DAMAGE_D
+    assert int(row["ref_t1"]["on_ground"][0, p]) == 0
+
+    out, ref, contacts = _run_one_step_with_contacts(dataset_path, 3713)
+
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_DOWN_DAMAGE_D
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 0
+    assert int(out["ground_id"][p]) == int(ref["ground_id"][p]) == 1
+    assert float(out["speed_y_attack"][p]) == pytest.approx(float(ref["speed_y_attack"][p]), abs=1e-6)
+    assert float(out["speed_x_attack"][p]) == pytest.approx(float(ref["speed_x_attack"][p]), abs=1e-6)
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+    assert list(map(int, out["state_flags"][p])) == list(map(int, ref["state_flags"][p]))
+    assert int(contacts["coll_env_flags"][p]) & MSL_COLLIDE_FLOOR_MASK
+
+
+@pytest.mark.integration
+def test_downed_contact_forced_tumble_does_not_apply_to_ordinary_grounded_damage_fsp_3713() -> None:
+    # Boundary control for the explicit-DownDamage severity owner above. The same contact geometry
+    # retargeted to an ordinary grounded action must remain on the normal low-severity grounded KB
+    # projection path instead of inheriting DownDamage's forced-tumble bounce.
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[3713]
+    p = 0
+    seed = row["seed_t"].copy()
+    seed["action_id"][p] = 14  # Wait.
+    seed["action_frame"][p] = 1
+    seed["on_ground"][p] = 1
+
+    out = _run_one_step_seed_arrays(
+        seed, row["prev_input_t"].copy(), row["input_t"].copy(), int(ds.header["num_players"])
+    )
+
+    assert int(out["action_id"][p]) == ACT_DAMAGE_HI_2
+    assert int(out["on_ground"][p]) == 1
+    assert int(out["ground_id"][p]) == int(seed["ground_id"][p]) == 1
+    assert float(out["speed_y_attack"][p]) == pytest.approx(0.0, abs=1e-6)
+    assert float(out["speed_x_attack"][p]) != pytest.approx(0.0, abs=1e-6)

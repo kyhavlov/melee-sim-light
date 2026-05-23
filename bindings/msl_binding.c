@@ -4173,6 +4173,29 @@ static PyObject* msl_stage_floor_segment_py(PyObject* self, PyObject* args) {
       "next", (int)line->next, "line_index", idx);
 }
 
+static PyObject* msl_stage_topology_flags_py(PyObject* self, PyObject* args) {
+  (void)self;
+  unsigned int stage_id_u = 0;
+  if (!PyArg_ParseTuple(args, "I", &stage_id_u)) {
+    return NULL;
+  }
+  if (stage_collision_init() != 0) {
+    PyErr_SetString(PyExc_RuntimeError, "stage_collision_init failed");
+    return NULL;
+  }
+  if (!stage_collision_require_stage((uint32_t)stage_id_u)) {
+    PyErr_SetString(PyExc_RuntimeError, "requested stage collision artifact is unavailable");
+    return NULL;
+  }
+  const uint32_t stage_id = (uint32_t)stage_id_u;
+  return Py_BuildValue("{s:i,s:i,s:i}", "flat_between_sloped_ledges",
+                       (int)stage_collision_stage_has_flat_between_sloped_ledges(stage_id),
+                       "only_static_cardinal_hard_floors",
+                       (int)stage_collision_stage_has_only_static_cardinal_hard_floors(stage_id),
+                       "alternate_floor_endpoint_links",
+                       (int)stage_collision_stage_has_alternate_floor_endpoint_links(stage_id));
+}
+
 static PyObject* msl_stage_fighter_floor_segment_py(PyObject* self, PyObject* args) {
   (void)self;
   unsigned int stage_id_u = 0;
@@ -6474,6 +6497,8 @@ static PyMethodDef methods[] = {
      "item_article_params(char_id) -> dict loaded from MSLITAR1."},
     {"stage_floor_segment", msl_stage_floor_segment_py, METH_VARARGS,
      "stage_floor_segment(stage_id, segment_i) -> dict from runtime stage collision tables."},
+    {"stage_topology_flags", msl_stage_topology_flags_py, METH_VARARGS,
+     "stage_topology_flags(stage_id) -> generated stage topology predicate dict."},
     {"stage_fighter_floor_segment", msl_stage_fighter_floor_segment_py, METH_VARARGS,
      "stage_fighter_floor_segment(stage_id, segment_i) -> dict from fighter-solid floor tables."},
     {"stage_ceiling_segment", msl_stage_ceiling_segment_py, METH_VARARGS,
@@ -6584,6 +6609,9 @@ static PyMethodDef methods[] = {
     {"derive_ecb_lock_bottom_rel_y", msl_derive_ecb_lock_bottom_rel_y_py, METH_VARARGS,
      "derive_ecb_lock_bottom_rel_y(char, action, anim, anim_frame, on_ground, lock_timer) -> "
      "(float32[:], uint8[:])"},
+    {"derive_damage_hitlag_colldata_ecb", msl_derive_damage_hitlag_colldata_ecb_py, METH_VARARGS,
+     "derive_damage_hitlag_colldata_ecb(char, action, anim, anim_frame, rate, facing, ground, "
+     "hitlag) -> (bottom, top, left, right, side, valid)"},
     {"derive_turn_internals", msl_derive_turn_internals_py, METH_VARARGS,
      "derive_turn_internals(action, frame, facing, stick_x, tilt_x, dash_abs, dash_max, "
      "turn_frames, turn, turn_run) -> (frames, has_turned, x8)"},

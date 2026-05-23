@@ -77,14 +77,14 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:5865
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl ==
 rollout.status: NOT-CLEAN
-rollout.best_len: 2428
-rollout.streak_count: 13
-rollout.streak_len.median: 829
-rollout.streak_len.p90: 2199
-rollout.streak_len.p95: 2428
-rollout.streak_len.max: 2428
-rollout.first_mismatch_total: 12
-rollout.first_mismatch_seeded_total: 7
+rollout.best_len: 2763
+rollout.streak_count: 12
+rollout.streak_len.median: 680
+rollout.streak_len.p90: 2428
+rollout.streak_len.p95: 2763
+rollout.streak_len.max: 2763
+rollout.first_mismatch_total: 11
+rollout.first_mismatch_seeded_total: 6
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=12.7302 rec=9457 p=1 seed/ref/out=20.7633/20.4634/33.1936 actions=14/60/60 category=unclassified
@@ -94,7 +94,7 @@ rollout.float_top_downstream:
   1. percent max_err=11.96 rec=7078 p=1 seed/ref/out=98.27/98.27/110.23 actions=50/50/90 category=downstream_discrete_mismatch
   2. speed_y_attack max_err=6.39391 rec=7078 p=1 seed/ref/out=0/0/6.39391 actions=50/50/90 category=downstream_discrete_mismatch
   3. speed_y_self max_err=3.45 rec=9508 p=0 seed/ref/out=3.68/0/3.45 actions=25/86/25 category=downstream_discrete_mismatch
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:3777
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:5455
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/Game_20260514T181413.msl ==
 rollout.status: ACCEPTED-CLEAN
@@ -482,7 +482,7 @@ rollout.streak_len.p90: 613
 rollout.streak_len.p95: 1267
 rollout.streak_len.max: 1517
 rollout.first_mismatch_total: 19
-rollout.first_mismatch_seeded_total: 8
+rollout.first_mismatch_seeded_total: 7
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=23 rec=2230 p=1 seed/ref/out=10.5119/10.7119/-12.2881 actions=14/14/14 category=unclassified
@@ -581,13 +581,13 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:6548
 == datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/SweatyThisMallard.msl ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 2247
-rollout.streak_count: 21
-rollout.streak_len.median: 285
+rollout.streak_count: 20
+rollout.streak_len.median: 345
 rollout.streak_len.p90: 1240
 rollout.streak_len.p95: 1543
 rollout.streak_len.max: 2247
-rollout.first_mismatch_total: 20
-rollout.first_mismatch_seeded_total: 9
+rollout.first_mismatch_total: 19
+rollout.first_mismatch_seeded_total: 8
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_y max_err=18.0001 rec=7940 p=0 seed/ref/out=72.8337/72.0004/90.0005 actions=4/4/4 category=unclassified
@@ -686,34 +686,34 @@ rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:1
 
 == datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl ==
 rollout.status: NOT-CLEAN
-rollout.best_len: 1242
-rollout.streak_count: 30
+rollout.best_len: 1286
+rollout.streak_count: 29
 rollout.streak_len.median: 223
-rollout.streak_len.p90: 849
-rollout.streak_len.p95: 987
-rollout.streak_len.max: 1242
-rollout.first_mismatch_total: 33
+rollout.streak_len.p90: 987
+rollout.streak_len.p95: 1242
+rollout.streak_len.max: 1286
+rollout.first_mismatch_total: 32
 rollout.first_mismatch_seeded_total: 18
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=36.0083 rec=7055 p=0 seed/ref/out=56.5205/55.9905/19.9822 actions=35/0/0 category=unclassified
-  2. pos_y max_err=6.31975 rec=878 p=0 seed/ref/out=-3.20956/-3.6303/-9.95005 actions=88/88/88 category=unclassified
+  2. pos_y max_err=5.63058 rec=1483 p=0 seed/ref/out=34.5357/33.3588/27.7282 actions=88/88/88 category=unclassified
   3. speed_y_self max_err=1.12175 rec=3548 p=0 seed/ref/out=1.00957/-0/1.12175 actions=233/233/233 category=unclassified
 rollout.float_top_downstream:
   1. percent max_err=13.8 rec=3512 p=0 seed/ref/out=85.88/85.88/99.68 actions=178/181/87 category=downstream_discrete_mismatch
-  2. pos_y max_err=12.6687 rec=882 p=0 seed/ref/out=-5.9451/-0.718606/-13.3873 actions=88/183/88 category=downstream_discrete_mismatch
-  3. shield_hp max_err=12.6 rec=6967 p=0 seed/ref/out=58.32/45.44/58.04 actions=178/181/178 category=downstream_discrete_mismatch
+  2. shield_hp max_err=12.6 rec=6967 p=0 seed/ref/out=58.32/45.44/58.04 actions=178/181/178 category=downstream_discrete_mismatch
+  3. speed_y_attack max_err=4.3698 rec=7748 p=1 seed/ref/out=0/0/4.3698 actions=20/20/88 category=downstream_discrete_mismatch
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:2759
 
 == suite summary ==
-overall.rollout.streak_count: 541
+overall.rollout.streak_count: 538
 overall.rollout.streak_len.median: 301
-overall.rollout.streak_len.p90: 1330
-overall.rollout.streak_len.p95: 1824
+overall.rollout.streak_len.p90: 1340
+overall.rollout.streak_len.p95: 1870
 overall.rollout.streak_len.max: 6269
 overall.rollout.best_len.max: 6269
-overall.rollout.first_mismatch_total: 522
-overall.rollout.first_mismatch_seeded_total: 241
+overall.rollout.first_mismatch_total: 519
+overall.rollout.first_mismatch_seeded_total: 238
 overall.rollout.approved_exception_total: 4
 overall.rollout.approved_exception_seeded_total: 2
 overall.rollout.status: NOT-CLEAN
@@ -725,6 +725,6 @@ overall.rollout.float_top_errors:
 overall.rollout.float_top_downstream:
   1. pos_x max_err=102.951 rec=5966 p=1 seed/ref/out=-86.7898/-88.1059/14.8449 actions=88/88/191 category=downstream_discrete_mismatch
   2. percent max_err=18 rec=9999 p=1 seed/ref/out=114.47/114.47/132.47 actions=90/90/90 category=downstream_discrete_mismatch
-  3. pos_y max_err=12.6687 rec=882 p=0 seed/ref/out=-5.9451/-0.718606/-13.3873 actions=88/183/88 category=downstream_discrete_mismatch
-overall.rollout.ignored_first_mismatch_top: state_flags[4]&0x80:120031
+  3. shield_hp max_err=12.6 rec=6967 p=0 seed/ref/out=58.32/45.44/58.04 actions=178/181/178 category=downstream_discrete_mismatch
+overall.rollout.ignored_first_mismatch_top: state_flags[4]&0x80:121709
 overall.rollout.ignored_first_mismatch_seeded_top: state_flags[4]&0x80:1

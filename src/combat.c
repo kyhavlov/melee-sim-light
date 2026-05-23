@@ -201,6 +201,7 @@ typedef struct MslCombatProcessHitResolved {
   float kb_y;
   uint8_t defender_on_ground;
   uint8_t use_grounded_kb;
+  uint8_t force_tumble_severity;
   uint8_t grounded_ecb_lock_owner;
   uint8_t clear_x221c_on_damage_entry;
   uint8_t apply_throw_release_di;
@@ -3810,11 +3811,12 @@ static inline float combat_damage_ground_angle_to_floor_radians(float nx, float 
 static inline void combat_damage_install_grounded_kb(const MslCommonParams* c, MslBatch* batch,
                                                      size_t d_idx, float kb_applied, float kb_x,
                                                      float kb_y, uint16_t hitlag_frames,
+                                                     uint8_t force_tumble_severity,
                                                      uint8_t allow_damagefly_hitlag_ecb_lock) {
   const float nx = batch->state.ground_normal_x[d_idx];
   const float ny = batch->state.ground_normal_y[d_idx];
   const float angle_to_floor = combat_damage_ground_angle_to_floor_radians(nx, ny, kb_x, kb_y);
-  const uint8_t sev = combat_damage_severity_u8_from_kb(c, kb_applied);
+  const uint8_t sev = force_tumble_severity ? 3u : combat_damage_severity_u8_from_kb(c, kb_applied);
 
   // Grounded KB install owner:
   // - ftCo_8008DCE0 compares the floor normal to the raw KB vector with lbVector_Angle.
@@ -3934,6 +3936,16 @@ static inline void combat_damage_enter_state(const MslCommonParams* c, MslBatch*
     //   ftCo_8009F0F0,ftCo_8009F184}
     act = combat_down_damage_action_from_source(pre_damage_action);
     sm = combat_down_damage_submotion_from_action(act);
+    if (defender_on_ground_after != 0u && batch->state.frame_start_on_ground[d_idx] == 0u) {
+      // Downed-contact damage can be selected after this sim's map-collision pass has refreshed a
+      // carried DownBound floor, but source ftCo_8009F0F0/ftCo_8009F184 runs from the current
+      // damage/contact callback lifetime and does not turn a frame-start airborne DownBound into a
+      // grounded DownDamage publication. Preserve that pre-map airborne ground_or_air; CollData
+      // floor.index remains available for the following DownDamage_Coll callback.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::{
+      //   ftCo_8009F0F0,ftCo_8009F184,ftCo_DownDamage_Coll}
+      batch->state.on_ground[d_idx] = 0u;
+    }
   } else if (sev == 3u) {
     // High-knockback / tumble-style damage states.
     //
@@ -4182,7 +4194,8 @@ static inline void combat_processhit_apply_resolved_damage(const MslCommonParams
 
   if (ev->defender_on_ground != 0u && ev->use_grounded_kb != 0u) {
     combat_damage_install_grounded_kb(c, batch, ev->d_idx, ev->kb_applied, ev->kb_x, ev->kb_y,
-                                      ev->d_hl, ev->grounded_ecb_lock_owner);
+                                      ev->d_hl, ev->force_tumble_severity,
+                                      ev->grounded_ecb_lock_owner);
   } else {
     combat_damage_calc_vel(batch, ev->d_idx, ev->kb_x, ev->kb_y);
   }
@@ -4592,6 +4605,11 @@ static inline void combat_body_damage_log_apply(MslBatch* batch, int bi,
     return;
   }
 
+  const uint16_t pre_damage_action = batch->state.action_id[d_idx];
+  const uint8_t downed_damage_contact_facing_owner =
+      (uint8_t)(combat_is_downed_damage_contact_action(pre_damage_action) &&
+                (batch->state.dmg_x2224_b2[d_idx] ||
+                 batch->state.percent_temp[d_idx] < (float)c->down_damage_percent_threshold));
   const float kb_angle_rad =
       combat_damage_calc_angle_radians(c, e->hitbox_angle, e->defender_on_ground, best_kb);
   float kb_vel_mag = best_kb * c->kb_vel_mul;
@@ -4600,11 +4618,6 @@ static inline void combat_body_damage_log_apply(MslBatch* batch, int bi,
   }
   const float x = kb_vel_mag * cosf(kb_angle_rad);
   const float y = kb_vel_mag * sinf(kb_angle_rad);
-  const uint16_t pre_damage_action = batch->state.action_id[d_idx];
-  const uint8_t downed_damage_contact_facing_owner =
-      (uint8_t)(combat_is_downed_damage_contact_action(pre_damage_action) &&
-                (batch->state.dmg_x2224_b2[d_idx] ||
-                 batch->state.percent_temp[d_idx] < (float)c->down_damage_percent_threshold));
   const float one = combat_damage_ftColl_804D82EC_one();
   const float collision_facing_dir_1 =
       (batch->state.pos_x[d_idx] > batch->state.pos_x[a_idx]) ? -one : one;
@@ -4629,8 +4642,18 @@ static inline void combat_body_damage_log_apply(MslBatch* batch, int bi,
   ev.kb_angle_rad = kb_angle_rad;
   ev.kb_x = kb_x;
   ev.kb_y = kb_y;
+  // Downed-contact damage can be logged after this sim's map pass refreshed `on_ground`, but
+  // source `ftCo_8009F0F0 -> ftCo_8009F184 -> ftCo_8008DCE0` calls ftCo_8008DCE0 with an explicit
+  // motion-state id, which forces the internal damage severity selector (`var_r28`) to tumble even
+  // when the hitstun scalar is low. Preserve the collision target's grounded angle/floor-normal
+  // path, then let that forced-tumble branch launch/clear ground_or_air if the KB points into the
+  // floor.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::{
+  //   ftCo_8009F0F0,ftCo_8009F184,ftCo_DownDamage_Coll}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
   ev.defender_on_ground = e->defender_on_ground;
   ev.use_grounded_kb = 1u;
+  ev.force_tumble_severity = downed_damage_contact_facing_owner;
   ev.grounded_ecb_lock_owner = (!combat_is_downed_damage_contact_action(pre_damage_action) &&
                                 combat_shine_start_grounded_ledge_ecb_lock_owner(
                                     batch, d_idx, batch->state.action_id[a_idx]))

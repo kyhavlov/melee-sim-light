@@ -264,3 +264,61 @@ def test_damageair3_same_action_active_hitlag_sdi_floorhug_does_not_clip_fd_trac
     assert int(out["on_ground"][player]) == 0
     assert int(out["ground_id"][player]) == 1
     assert float(out["pos_y"][player]) == pytest.approx(0.0001, abs=0.001)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("action_id", "player", "pos_x", "pos_y", "hitlag", "hitstun", "main_x", "main_y", "c_x", "trigger"),
+    [
+        # trace_seed66 frames 4212..4214: p1 DamageAir3 has the same active-hitlag
+        # `ftCo_Damage_Coll -> mpColl_800477E0` floorhug owner as the p0 window above.
+        (ACT_DAMAGE_AIR_3, 1, -16.293006896972656, -9.155311584472656, 3, 23, -0.6375, -0.775, 0.0, 0.0),
+    ],
+)
+def test_damageair_active_hitlag_sdi_floorhug_covers_additional_trace66_windows(
+    action_id: int,
+    player: int,
+    pos_x: float,
+    pos_y: float,
+    hitlag: int,
+    hitstun: int,
+    main_x: float,
+    main_y: float,
+    c_x: float,
+    trigger: float,
+) -> None:
+    pytest.importorskip("msl_binding")
+    # Additional modelplay_customv1_ar_penalties_840m trace_seed66 floor-clip window. This keeps
+    # the same source owner as the primary lock above but guards the mirrored player slot.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+    #   ftCo_Damage_OnEveryHitlag,ftCo_Damage_Coll}
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800477E0,mpColl_80044628_Floor,mpColl_80044948_Floor}
+    if action_id == ACT_DAMAGE_AIR_3:
+        seed = _damage_air3_hitlag_seed(
+            player=player,
+            pos_x=pos_x,
+            pos_y=pos_y,
+            hitlag=hitlag,
+            hitstun=hitstun,
+        )
+        expected_action = ACT_DAMAGE_AIR_3
+    else:
+        seed = _damage_air2_hitlag_seed(
+            player=player,
+            pos_x=pos_x,
+            pos_y=pos_y,
+            hitlag=hitlag,
+            hitstun=hitstun,
+        )
+        expected_action = ACT_DAMAGE_AIR_2
+
+    out = _step_once(
+        seed,
+        _input_for_player(player, main_x=main_x, main_y=main_y, c_x=c_x, trigger=trigger),
+    )
+
+    assert int(out["action_id"][player]) == expected_action
+    assert int(out["on_ground"][player]) == 0
+    assert int(out["ground_id"][player]) == 1
+    assert float(out["pos_y"][player]) == pytest.approx(0.0001, abs=0.001)

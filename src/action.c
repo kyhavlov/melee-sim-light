@@ -166,14 +166,17 @@ uint8_t escape_air_try_enter_from_air_locomotion(MslBatch* batch, const MslCommo
        source_floor_x_within == 0u)
           ? 1u
           : 0u;
-  const uint8_t source_floor_is_offspan_yoshi_static_floor =
-      (stage_id == (uint32_t)MSL_STAGE_ID_YOSHIS_STORY && source_floor_y_valid != 0u &&
-       source_floor_x_within == 0u && source_floor_is_platform == 0u &&
-       source_floor_has_platform_transform == 0u && batch->state.seed_prev_action_frame[idx] >= 3)
+  const uint8_t source_floor_is_offspan_sloped_ledge_main_floor =
+      (source_floor_y_valid != 0u && source_floor_x_within == 0u &&
+       source_floor_is_platform == 0u && source_floor_has_platform_transform == 0u &&
+       stage_collision_floor_line_is_flat_between_sloped_ledges(stage_id, floor_id) &&
+       batch->state.seed_prev_action_frame[idx] >= 3)
           ? 1u
           : 0u;
+  const uint8_t stage_has_sloped_ledge_main_floor =
+      stage_collision_stage_has_flat_between_sloped_ledges(stage_id);
   const uint8_t escapeair_entry_bottom_sweep_still_above_floor =
-      (source_floor_is_offspan_transform || source_floor_is_offspan_yoshi_static_floor ||
+      (source_floor_is_offspan_transform || source_floor_is_offspan_sloped_ledge_main_floor ||
        (source_floor_y_valid &&
         (escapeair_entry_next_root_y + batch->state.coll_desired_ecb_bottom_rel_y[idx]) >
             (source_floor_y + 0.0001f)))
@@ -184,17 +187,17 @@ uint8_t escape_air_try_enter_from_air_locomotion(MslBatch* batch, const MslCommo
       batch->state.coll_desired_ecb_bottom_rel_y[idx] > 0.0001f && source_is_jumpaerial &&
       batch->state.action_frame[idx] >= 1 &&
       (escapeair_entry_bottom_sweep_still_above_floor ||
-       (!source_floor_carries_locked_ecb && stage_id == (uint32_t)MSL_STAGE_ID_YOSHIS_STORY))) {
+       (!source_floor_carries_locked_ecb && stage_has_sloped_ledge_main_floor))) {
     // Runtime EscapeAir entry can happen during JumpAerial IASA before Fighter_procMap. On
     // JumpAerial pass-through from a source floor-domain line still carries CollData_X130_Locked
     // when source `ftCo_EscapeAir_Coll` calls `mpColl_LoadECB_inline`, preserving the pre-entry
     // desired_ecb.bottom for the first EscapeAir callback only while the frame-start provenance is
-    // still sustained JumpAerial. On Yoshi's Story, a stale visible platform floor id can be
-    // off-domain while the following `EscapeAir_Coll` floor search is about to cross a generated
-    // sloped ledge or static platform; the preserved desired bottom still belongs to
-    // CollData_X130 rather than to that stale visible floor id. On FoD, a height-transform platform
-    // floor is also a source floor-domain line: the platform object owns the moving floor and the
-    // same CollData lock handoff, unlike ordinary soft-platform candidates.
+    // still sustained JumpAerial. On generated sloped-ledge/main-floor shells, a stale visible
+    // platform floor id can be off-domain while the following `EscapeAir_Coll` floor search is about
+    // to cross a static source floor; the preserved desired bottom still belongs to CollData_X130
+    // rather than to that stale visible floor id. On FoD, a height-transform platform floor is also
+    // a source floor-domain line: the platform object owns the moving floor and the same CollData lock
+    // handoff, unlike ordinary soft-platform candidates.
     // If the fighter has already moved off that transformed platform's horizontal span, do not use
     // the stale platform height to clear CollData ownership; the following EscapeAir_Coll floor
     // search owns the adjacent hard-floor handoff. Fresh cliff-jump chains, ordinary non-transform

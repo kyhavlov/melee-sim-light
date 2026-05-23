@@ -747,7 +747,14 @@ Recent deltas to reflect here (do not let these get “lost in chat logs”):
   resolved by the pre-hit motion-state collision callback (`Fighter_procMap`) before
   `Fighter_ProcessHit -> ftCo_8008DCE0`; later active-hitlag floorhug projection requires actual
   `ftCo_Damage_OnEveryHitlag` SDI-consume provenance, so a held downward stick after x670/x671 reset
-  cannot repeatedly snap the frozen DamageAir root to floor bias. The stay-airborne floorhug
+  cannot repeatedly snap the frozen DamageAir root to floor bias. A narrower re-entry owner exists
+  for `DamageAir* -> DamageFly*` when ProcessHit installs DamageFly while the prior DamageAir
+  collision state has already carried the root below a hard floor: the first
+  `ftCo_DamageFly_Coll -> ft_80081DD4 -> mpColl_800477E0` callback may refresh
+  FloorPush/FloorHug and project the root while staying airborne. This owner is bounded to
+  generated DamageAir previous-action provenance plus the first active DamageFly hitlag frame; it
+  does not apply to sustained DamageFly rows or grounded-attack -> DamageFly entries. The
+  stay-airborne floorhug
   continuation may project a carried static terminal-cardinal hard-floor `CollData.floor.index`
   (identified from `MSLSTG01` line links/flags and absence of stage-object/passable floor support),
   but soft
@@ -1053,9 +1060,9 @@ Recent deltas to reflect here (do not let these get “lost in chat logs”):
   refs/melee/src/melee/it/it_2725.c::{it_80275DFC,it_80276308}).
 - Dream Land Whispy wind is a stage-owned fighter horizontal force, not item motion. The runtime
   consumes generated `MSLWHSP1` GrOp.dat wind speed/rectangles and applies the current
-  `grOldPupupu.xDC` wind direction after fighter collision/platform carry, matching
-  `ftColl_GetWindOffsetVec` ordering. Teacher-forced eval derives only the current hidden wind
-  direction and remaining active-window carry prefix-causally in native preprocessing; it does not
+  `grOldPupupu.xDC` wind direction after fighter collision/platform carry, matching the current
+  validated public-output owner. Teacher-forced eval derives only the current hidden wind direction
+  and remaining active-window carry prefix-causally in native preprocessing; it does not
   seed replay-next fighter position or velocity. The carry is bounded by the source
   `grOldPupupu_802113E0` active window (`xD0` in `(45, 320)`) instead of treating every active row
   as a fresh full-length episode. This closes the dense Dream Land fighter `pos_x` p95 wind band. The remaining
@@ -2867,6 +2874,21 @@ Fox/Falco special-owner split (2026-04-17):
     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll`,
     `refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpCollInterpolateECB,mpColl_80044628_Floor,mpColl_80044838_Floor}`,
     `data/ecb/*`.
+  - Active Damage hitlag has a separate loaded-ECB owner: `Fighter_8006A360` skips Anim/Phys while
+    hitlag is active, but `ftCo_Damage_Coll` / `ftCo_DamageFly_Coll` can still call
+    `ft_80081DD4 -> mpColl_800477E0`. On the first visible Damage hitlag frame the source CollData
+    ECB can therefore still be the pre-Damage pose, even though Slippi reports the Damage action and
+    Damage animation. Teacher-forced seeds carry this hidden loaded ECB through
+    `damage_hitlag_ecb_*` lanes generated from extracted ECB tables plus `MSLMSO01` Damage collision
+    callback classes, currently only for the Dolphin-probed generated AttackAir -> Damage hitlag
+    entry family; rollout preserves it in the live CollData ECB while active Damage hitlag remains
+    live. The lane is not a floor clamp: `mpColl_80044628_Floor` must still accept the loaded bottom
+    sweep before any floor result can publish. Source/probe anchors:
+    `refs/melee/src/melee/ft/fighter.c::Fighter_8006A360`,
+    `refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4`,
+    `refs/melee/src/melee/mp/mpcoll.c::{mpColl_800477E0,mpColl_LoadECB_inline,mpCollInterpolateECB}`,
+    `data/ecb/*`, `data/motion_state_owners/*::MSLMSO01`, and
+    `reports/triage/active_damage_agn794_forensic/`.
   - FireFox/FireBird rebound ownership now includes `SpecialAirHi` floor collision into
     `SpecialHiBound` and airborne `SpecialHiBound` anim-end into common `FallSpecial`, consuming
     jumps as `ftFx_SpecialHiBound_Anim` writes `x1968_jumpsUsed = max_jumps`.

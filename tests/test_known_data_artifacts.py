@@ -830,6 +830,50 @@ def test_runtime_frozen_ps_preserves_raw_links_but_uses_fighter_solid_mask() -> 
     assert seg_by_id[81].fighter_solid is False
 
 
+def test_runtime_stage_topology_predicates_supported_legal_stages() -> None:
+    import msl_binding
+
+    expected = {
+        32: {
+            "flat_between_sloped_ledges": 0,
+            "only_static_cardinal_hard_floors": 1,
+            "alternate_floor_endpoint_links": 0,
+        },
+        31: {
+            "flat_between_sloped_ledges": 0,
+            "only_static_cardinal_hard_floors": 0,
+            "alternate_floor_endpoint_links": 0,
+        },
+        2: {
+            "flat_between_sloped_ledges": 0,
+            "only_static_cardinal_hard_floors": 0,
+            "alternate_floor_endpoint_links": 0,
+        },
+        3: {
+            "flat_between_sloped_ledges": 0,
+            "only_static_cardinal_hard_floors": 0,
+            "alternate_floor_endpoint_links": 1,
+        },
+        8: {
+            "flat_between_sloped_ledges": 1,
+            "only_static_cardinal_hard_floors": 0,
+            "alternate_floor_endpoint_links": 0,
+        },
+        28: {
+            "flat_between_sloped_ledges": 0,
+            "only_static_cardinal_hard_floors": 0,
+            "alternate_floor_endpoint_links": 0,
+        },
+    }
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        for stage_id, flags in expected.items():
+            assert msl_binding.stage_topology_flags(stage_id) == flags
+    finally:
+        msl_binding.destroy(handle)
+
+
 def test_runtime_stage_lookup_caches_match_mslstg01_for_supported_stages() -> None:
     import msl_binding
 

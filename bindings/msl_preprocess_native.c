@@ -27,6 +27,7 @@
 #include "../src/input_axis.h"
 #include "../src/mpcoll_ecb_points.h"
 #include "../src/move_tables.h"
+#include "../src/motion_state_owners.h"
 #include "../src/shield_tilt_table.h"
 #include "../src/specialhi_pose.h"
 #include "../src/stage_item_params.h"
@@ -2316,6 +2317,142 @@ PyObject* msl_derive_ecb_lock_bottom_rel_y_py(PyObject* self, PyObject* args) {
 
   PyObject* ret = Py_BuildValue("(NN)", bottom_arr, valid_arr);
   return ret;
+}
+
+PyObject* msl_derive_damage_hitlag_colldata_ecb_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* char_obj = NULL;
+  PyObject* action_obj = NULL;
+  PyObject* anim_obj = NULL;
+  PyObject* anim_frame_obj = NULL;
+  PyObject* frame_speed_obj = NULL;
+  PyObject* facing_obj = NULL;
+  PyObject* ground_obj = NULL;
+  PyObject* hitlag_obj = NULL;
+  if (!PyArg_ParseTuple(args, "OOOOOOOO", &char_obj, &action_obj, &anim_obj, &anim_frame_obj,
+                        &frame_speed_obj, &facing_obj, &ground_obj, &hitlag_obj)) {
+    return NULL;
+  }
+  PyArrayObject* char_arr = require_contiguous_array(char_obj, NPY_UINT8, 1, "char_id_u8");
+  PyArrayObject* action_arr = require_contiguous_array(action_obj, NPY_UINT16, 1, "action_id_u16");
+  PyArrayObject* anim_arr =
+      require_contiguous_array(anim_obj, NPY_UINT32, 1, "animation_index_u32");
+  PyArrayObject* anim_frame_arr =
+      require_contiguous_array(anim_frame_obj, NPY_FLOAT32, 1, "anim_frame_f32");
+  PyArrayObject* frame_speed_arr =
+      require_contiguous_array(frame_speed_obj, NPY_FLOAT32, 1, "frame_speed_mul_f32");
+  PyArrayObject* facing_arr = require_contiguous_array(facing_obj, NPY_UINT8, 1, "facing_u8");
+  PyArrayObject* ground_arr = require_contiguous_array(ground_obj, NPY_UINT8, 1, "on_ground_u8");
+  PyArrayObject* hitlag_arr = require_contiguous_array(hitlag_obj, NPY_UINT16, 1, "hitlag_u16");
+  if (char_arr == NULL || action_arr == NULL || anim_arr == NULL || anim_frame_arr == NULL ||
+      frame_speed_arr == NULL || facing_arr == NULL || ground_arr == NULL || hitlag_arr == NULL) {
+    return NULL;
+  }
+  if (ecb_extents_table_init() != 0 || ecb_table_init() != 0) {
+    PyErr_SetString(PyExc_RuntimeError, "ECB table init failed");
+    return NULL;
+  }
+  if (motion_state_owners_init() != 0) {
+    PyErr_SetString(PyExc_RuntimeError, "motion_state_owners_init failed");
+    return NULL;
+  }
+  const npy_intp n = PyArray_SIZE(char_arr);
+  if (PyArray_SIZE(action_arr) != n || PyArray_SIZE(anim_arr) != n ||
+      PyArray_SIZE(anim_frame_arr) != n || PyArray_SIZE(frame_speed_arr) != n ||
+      PyArray_SIZE(facing_arr) != n || PyArray_SIZE(ground_arr) != n ||
+      PyArray_SIZE(hitlag_arr) != n) {
+    PyErr_SetString(PyExc_ValueError,
+                    "Damage hitlag CollData ECB inputs must have matching length");
+    return NULL;
+  }
+
+  npy_intp dims[1] = {n};
+  PyArrayObject* bottom_arr = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_FLOAT32, 0);
+  PyArrayObject* top_arr = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_FLOAT32, 0);
+  PyArrayObject* left_arr = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_FLOAT32, 0);
+  PyArrayObject* right_arr = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_FLOAT32, 0);
+  PyArrayObject* side_arr = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_FLOAT32, 0);
+  PyArrayObject* valid_arr = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_UINT8, 0);
+  if (bottom_arr == NULL || top_arr == NULL || left_arr == NULL || right_arr == NULL ||
+      side_arr == NULL || valid_arr == NULL) {
+    Py_XDECREF(bottom_arr);
+    Py_XDECREF(top_arr);
+    Py_XDECREF(left_arr);
+    Py_XDECREF(right_arr);
+    Py_XDECREF(side_arr);
+    Py_XDECREF(valid_arr);
+    return NULL;
+  }
+
+  const uint8_t* char_p = (const uint8_t*)PyArray_DATA(char_arr);
+  const uint16_t* action_p = (const uint16_t*)PyArray_DATA(action_arr);
+  const uint32_t* anim_p = (const uint32_t*)PyArray_DATA(anim_arr);
+  const float* anim_frame_p = (const float*)PyArray_DATA(anim_frame_arr);
+  const float* frame_speed_p = (const float*)PyArray_DATA(frame_speed_arr);
+  const uint8_t* facing_p = (const uint8_t*)PyArray_DATA(facing_arr);
+  const uint8_t* ground_p = (const uint8_t*)PyArray_DATA(ground_arr);
+  const uint16_t* hitlag_p = (const uint16_t*)PyArray_DATA(hitlag_arr);
+  float* bottom_p = (float*)PyArray_DATA(bottom_arr);
+  float* top_p = (float*)PyArray_DATA(top_arr);
+  float* left_p = (float*)PyArray_DATA(left_arr);
+  float* right_p = (float*)PyArray_DATA(right_arr);
+  float* side_p = (float*)PyArray_DATA(side_arr);
+  uint8_t* valid_p = (uint8_t*)PyArray_DATA(valid_arr);
+
+  MslEcbWorldPoints frozen = {0};
+  uint8_t frozen_valid = 0u;
+  uint8_t prev_active = 0u;
+  for (npy_intp i = 0; i < n; i++) {
+    const uint16_t action = action_p[i];
+    const uint8_t active =
+        (ground_p[i] == 0u && hitlag_p[i] != 0u &&
+         msl_motion_state_class_has(char_p[i], action,
+                                    MSL_MS_CLASS_DAMAGE_COMMON_COLL | MSL_MS_CLASS_DAMAGE_FLY_COLL |
+                                        MSL_MS_CLASS_DAMAGE_FALL_COLL))
+            ? 1u
+            : 0u;
+    if (!active) {
+      frozen_valid = 0u;
+      prev_active = 0u;
+      continue;
+    }
+    if (!prev_active) {
+      frozen_valid = 0u;
+      if (i > 0) {
+        const uint16_t prev_action = action_p[i - 1];
+        const uint8_t prev_damage_collision = msl_motion_state_class_has(
+            char_p[i - 1], prev_action,
+            MSL_MS_CLASS_DAMAGE_COMMON_COLL | MSL_MS_CLASS_DAMAGE_FLY_COLL |
+                MSL_MS_CLASS_DAMAGE_FALL_COLL);
+        const uint8_t prev_attackair =
+            msl_motion_state_class_has(char_p[i - 1], prev_action, MSL_MS_CLASS_ATTACK_AIR);
+        if (!prev_damage_collision && prev_attackair) {
+          const float src_frame = anim_frame_p[i - 1] + frame_speed_p[i - 1];
+          const uint16_t src_ecb_frame = msl_ecb_frame_u16_from_anim_frame(src_frame);
+          const float facing_dir = facing_p[i - 1] ? 1.0f : -1.0f;
+          msl_ecb_world_points_sample(&frozen, char_p[i - 1], anim_p[i - 1], src_ecb_frame,
+                                      facing_dir, 0.0f, 0.0f, 0u);
+          if (isfinite(frozen.bottom_rel_y) && isfinite(frozen.top_rel_y) &&
+              isfinite(frozen.left_rel_x) && isfinite(frozen.right_rel_x) &&
+              isfinite(frozen.side_rel_y) && frozen.top_rel_y > frozen.bottom_rel_y &&
+              frozen.right_rel_x > frozen.left_rel_x) {
+            frozen_valid = 1u;
+          }
+        }
+      }
+    }
+    if (frozen_valid) {
+      bottom_p[i] = frozen.bottom_rel_y;
+      top_p[i] = frozen.top_rel_y;
+      left_p[i] = frozen.left_rel_x;
+      right_p[i] = frozen.right_rel_x;
+      side_p[i] = frozen.side_rel_y;
+      valid_p[i] = 1u;
+    }
+    prev_active = 1u;
+  }
+
+  return Py_BuildValue("(NNNNNN)", bottom_arr, top_arr, left_arr, right_arr, side_arr, valid_arr);
 }
 
 PyObject* msl_compute_press_timer_u8_py(PyObject* self, PyObject* args) {

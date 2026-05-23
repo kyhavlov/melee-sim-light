@@ -101,8 +101,10 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   state->coll_prev_ecb_bottom_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->coll_desired_ecb_bottom_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->coll_desired_ecb_bottom_locked_owner = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->coll_damage_hitlag_ecb_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->coll_floor_result_valid = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->coll_floor_result_source = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
+  state->coll_floor_result_mode = (uint8_t*)alloc_aligned_64(sizeof(uint8_t) * bp);
   state->coll_floor_result_segment_id = (uint16_t*)alloc_aligned_64(sizeof(uint16_t) * bp);
   state->coll_floor_result_contact_x = (float*)alloc_aligned_64(sizeof(float) * bp);
   state->coll_floor_result_contact_y = (float*)alloc_aligned_64(sizeof(float) * bp);
@@ -538,8 +540,9 @@ int state_alloc(MslStateSoA* state, int batch_size) {
       !state->coll_desired_ecb_left_rel_x || !state->coll_desired_ecb_right_rel_x ||
       !state->coll_desired_ecb_side_rel_y || !state->coll_ecb_bottom_valid ||
       !state->coll_prev_ecb_bottom_valid || !state->coll_desired_ecb_bottom_valid ||
-      !state->coll_desired_ecb_bottom_locked_owner || !state->coll_floor_result_valid ||
-      !state->coll_floor_result_source || !state->coll_floor_result_segment_id ||
+      !state->coll_desired_ecb_bottom_locked_owner || !state->coll_damage_hitlag_ecb_valid ||
+      !state->coll_floor_result_valid || !state->coll_floor_result_source ||
+      !state->coll_floor_result_mode || !state->coll_floor_result_segment_id ||
       !state->coll_floor_result_contact_x || !state->coll_floor_result_contact_y ||
       !state->coll_floor_result_normal_x || !state->coll_floor_result_normal_y ||
       !state->coll_substep_prev_pos_x || !state->coll_substep_prev_pos_y ||
@@ -775,8 +778,10 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   memset(state->coll_prev_ecb_bottom_valid, 0, sizeof(uint8_t) * bp);
   memset(state->coll_desired_ecb_bottom_valid, 0, sizeof(uint8_t) * bp);
   memset(state->coll_desired_ecb_bottom_locked_owner, 0, sizeof(uint8_t) * bp);
+  memset(state->coll_damage_hitlag_ecb_valid, 0, sizeof(uint8_t) * bp);
   memset(state->coll_floor_result_valid, 0, sizeof(uint8_t) * bp);
   memset(state->coll_floor_result_source, 0, sizeof(uint8_t) * bp);
+  memset(state->coll_floor_result_mode, 0, sizeof(uint8_t) * bp);
   memset(state->coll_floor_result_segment_id, 0xFF, sizeof(uint16_t) * bp);
   memset(state->coll_floor_result_contact_x, 0, sizeof(float) * bp);
   memset(state->coll_floor_result_contact_y, 0, sizeof(float) * bp);
@@ -896,8 +901,10 @@ void state_free(MslStateSoA* state) {
   alloc_free(state->coll_prev_ecb_bottom_valid);
   alloc_free(state->coll_desired_ecb_bottom_valid);
   alloc_free(state->coll_desired_ecb_bottom_locked_owner);
+  alloc_free(state->coll_damage_hitlag_ecb_valid);
   alloc_free(state->coll_floor_result_valid);
   alloc_free(state->coll_floor_result_source);
+  alloc_free(state->coll_floor_result_mode);
   alloc_free(state->coll_floor_result_segment_id);
   alloc_free(state->coll_floor_result_contact_x);
   alloc_free(state->coll_floor_result_contact_y);

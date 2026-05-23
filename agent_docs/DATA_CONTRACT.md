@@ -560,6 +560,37 @@ Decomp contract:
 - `refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4`
 - `refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpCollInterpolateECB}`
 
+## Replay Seed Contract: Damage Hitlag Loaded CollData ECB
+
+The replay seed contains `damage_hitlag_ecb_{bottom,top,side}_rel_y_f32[player]`,
+`damage_hitlag_ecb_{left,right}_rel_x_f32[player]`, and
+`damage_hitlag_ecb_valid_u8[player]`, the hidden `CollData.ecb` pose carried into active Damage
+hitlag collision callbacks.
+
+Domain:
+- `valid=1`: the row is airborne active hitlag in a generated Damage collision callback class
+  (`Damage_Coll`, `DamageFly_Coll`, or `DamageFall_Coll`), the previous replay pose is in the
+  generated AttackAir class, and preprocessing can reconstruct the loaded CollData ECB from that
+  previous pose plus frame-rate advance.
+- `valid=0`: reseed uses the normal runtime CollData ECB. Hitlag-exit rows and rows without active
+  Damage hitlag are not admitted through this lane.
+- Rollouts carry the same hidden ECB in `MslStateSoA.coll_*_ecb_*` while active Damage hitlag
+  remains live. It is a CollData source-state lane, not a replay position or floor-result clamp.
+
+Source/generation:
+- Generated natively by `msl_binding.derive_damage_hitlag_colldata_ecb`, called from
+  `tools/slippi/make_dataset_from_slp.py` after frame-rate/ECB-lock derivation.
+- Uses extracted `data/ecb/*` tables and generated `MSLMSO01` motion-state collision classes.
+- Dolphin probe artifact `reports/triage/active_damage_agn794_forensic/` confirms that
+  `AttachedGoodNaturedGuanaco.msl:794` enters visible `DamageFlyTop` hitlag from `AttackAirLw`
+  while the loaded CollData ECB still matches the pre-Damage AttackAir pose. Broader pre-Damage
+  action families are not admitted by this lane until separately probed.
+
+Decomp contract:
+- `refs/melee/src/melee/ft/fighter.c::Fighter_8006A360`
+- `refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4`
+- `refs/melee/src/melee/mp/mpcoll.c::{mpColl_800477E0,mpColl_LoadECB_inline,mpCollInterpolateECB}`
+
 ## Replay Seed Contract: SpecialHi rotateModel
 
 The replay seed contains `specialhi_rotate_model_f32[player]` and

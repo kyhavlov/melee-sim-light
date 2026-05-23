@@ -2725,17 +2725,18 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
             specialhi_launch_uses_runtime_xrotn_ecb(char_id, action_id);
         // DamageFly's Coll callback enters the left-wall airborne envelope through mpColl. Source
         // `mpColl_80045B74_LeftWall` is not attack-velocity-sign gated, but the current simulator's
-        // static wall candidate model still over-publishes left-wall contact on some non-Yoshi rows
-        // when negative attack velocity is admitted generally. Keep the retained slice to the
-        // validated positive-kb FD path plus Yoshi's transformed lower-left wall until the candidate
-        // model carries the full source envelope/order. Hug still comes only from the candidate side
-        // sweep below.
+        // static wall candidate model still over-publishes left-wall contact on some non-sloped-ledge
+        // shell rows when negative attack velocity is admitted generally. Keep the retained slice to
+        // the validated positive-kb FD path plus generated sloped-ledge/main-floor shell stages until
+        // the candidate model carries the full source envelope/order. Hug still comes only from the
+        // candidate side sweep below.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
         // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80045B74_LeftWall,mpColl_80046224_LeftWall}
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FlyReflect.c::ftCo_800C15F4
         const uint8_t use_damagefly_left_envelope =
             (uint8_t)(mpcoll_damagefly_wall_asdi_latch_action(action_id) &&
-                      (batch->state.stage_id[bi] == (uint32_t)MSL_STAGE_ID_YOSHIS_STORY ||
+                      (stage_collision_stage_has_flat_between_sloped_ledges(
+                           batch->state.stage_id[bi]) ||
                        batch->state.speed_x_attack[idx] > 0.0f));
         const uint8_t use_common_air_left_envelope = use_common_air_walljump_callback;
         const uint8_t use_ft80081d0c_left_envelope =

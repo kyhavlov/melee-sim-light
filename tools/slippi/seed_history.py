@@ -1478,6 +1478,48 @@ def derive_ecb_lock_bottom_rel_y(
     )
 
 
+def derive_damage_hitlag_colldata_ecb(
+    *,
+    char_id_u8: np.ndarray,
+    action_id_u16: np.ndarray,
+    animation_index_u32: np.ndarray,
+    anim_frame_f32: np.ndarray,
+    frame_speed_mul_f32: np.ndarray,
+    facing_u8: np.ndarray,
+    on_ground_u8: np.ndarray,
+    hitlag_u16: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Derive the frozen CollData ECB carried by first active Damage hitlag rows.
+
+    Decomp shape:
+    - `Fighter_8006A360` skips Anim/Phys while hitlag is active.
+    - `ftCo_Damage_Coll` still calls `ft_80081DD4 -> mpColl_800477E0`.
+    - `mpColl_LoadECB_inline` consumes the currently loaded CollData ECB, which may still be the
+      pre-Damage action pose on the first visible Damage hitlag row.
+
+    The native producer samples that previous pose from extracted ECB tables once per Damage
+    hitlag episode and carries it while hitlag remains active. It is seed reconstruction for
+    CollData state, not a replay output clamp.
+    """
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.derive_damage_hitlag_colldata_ecb is required; run `make build`"
+        ) from exc
+    return msl_binding.derive_damage_hitlag_colldata_ecb(
+        np.ascontiguousarray(char_id_u8, dtype=np.uint8).reshape(-1),
+        np.ascontiguousarray(action_id_u16, dtype=np.uint16).reshape(-1),
+        np.ascontiguousarray(animation_index_u32, dtype=np.uint32).reshape(-1),
+        np.ascontiguousarray(anim_frame_f32, dtype=np.float32).reshape(-1),
+        np.ascontiguousarray(frame_speed_mul_f32, dtype=np.float32).reshape(-1),
+        np.ascontiguousarray(facing_u8, dtype=np.uint8).reshape(-1),
+        np.ascontiguousarray(on_ground_u8, dtype=np.uint8).reshape(-1),
+        np.ascontiguousarray(hitlag_u16, dtype=np.uint16).reshape(-1),
+    )
+
+
 def derive_damage_jump_buffer_x14(
     *,
     action_id: np.ndarray,

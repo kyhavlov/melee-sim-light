@@ -2,6 +2,13 @@
 
 #include "batch_internal.h"
 
+enum {
+  MSL_STAGE_PLATFORM_TRANSFORM_NONE = 0u,
+  MSL_STAGE_PLATFORM_TRANSFORM_HEIGHT = 1u,
+  MSL_STAGE_PLATFORM_TRANSFORM_STATIC_Y = 2u,
+  MSL_STAGE_PLATFORM_TRANSFORM_RANDALL = 3u,
+};
+
 typedef struct MslStageFloorLine {
   // Endpoints in world units, ordered so that x0 <= x1.
   float x0;
@@ -59,6 +66,11 @@ typedef struct MslStageFloorLine {
   // line's runtime endpoint orientation. These are stable ISO line ids, not graph indices.
   int16_t raw_prev_id;
   int16_t raw_next_id;
+  // MSLSTG01 preserved a non-primary endpoint link for this source line. Frozen Stadium uses these
+  // alternate floor links for transformation-map adjacency that is not visible from the normalized
+  // active floor chain alone.
+  uint8_t has_alternate_endpoint_link;
+  uint8_t _pad0[1];
   // Floor-only line graph connectivity: indices into the stage's floor line array,
   // or -1 for none.
   int16_t prev;
@@ -205,6 +217,12 @@ uint8_t stage_collision_floor_line_caps(uint32_t stage_id, uint16_t segment_i,
 uint8_t stage_collision_floor_line_is_platform(uint32_t stage_id, uint16_t segment_i);
 uint8_t stage_collision_floor_line_is_runtime_fighter_solid(uint32_t stage_id, uint16_t segment_i);
 uint8_t stage_collision_floor_line_stage_object_support_kind(uint32_t stage_id, uint16_t segment_i);
+uint8_t stage_collision_floor_line_is_flat_between_sloped_ledges(uint32_t stage_id,
+                                                                 uint16_t segment_i);
+uint8_t stage_collision_stage_has_flat_between_sloped_ledges(uint32_t stage_id);
+uint8_t stage_collision_stage_has_only_static_cardinal_hard_floors(uint32_t stage_id);
+uint8_t stage_collision_stage_has_alternate_floor_endpoint_links(uint32_t stage_id);
+uint8_t stage_collision_stage_has_height_platform_transform(uint32_t stage_id);
 uint8_t stage_collision_floor_line_has_platform_transform(uint32_t stage_id, uint16_t segment_i);
 uint8_t stage_collision_floor_line_has_height_platform_transform(uint32_t stage_id,
                                                                  uint16_t segment_i);

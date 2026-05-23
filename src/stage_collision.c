@@ -118,6 +118,10 @@ typedef struct {
   MslStagePoint2 ledge_points[2];
   uint8_t have_ledge_points[2];
   int16_t ledge_floor_line_idx[2];
+  uint8_t has_flat_between_sloped_ledges;
+  uint8_t has_only_static_cardinal_hard_floors;
+  uint8_t has_alternate_floor_endpoint_links;
+  uint8_t has_height_platform_transform;
 } MslStageSlot;
 
 static MslStageSlot g_stage_slots[] = {
@@ -148,6 +152,8 @@ static MslStageSlot* stage_slot_mut(uint32_t stage_id) {
 }
 
 static const MslStageSlot* stage_slot(uint32_t stage_id) { return stage_slot_mut(stage_id); }
+
+static void stage_slot_refresh_floor_topology_flags(MslStageSlot* slot);
 
 static void stage_segment_index_lookup_reset(int16_t* lookup) {
   if (lookup == NULL) {
@@ -910,6 +916,9 @@ static int fd_install_stage_segments(uint32_t stage_id, const FdSegTmp* seg_tmp,
           .segment_i = s->segment_i,
           .raw_prev_id = -1,
           .raw_next_id = -1,
+          .has_alternate_endpoint_link =
+              (uint8_t)((s->prev_id1 >= 0 || s->next_id1 >= 0) ? 1u : 0u),
+          ._pad0 = {0},
           .prev = -1,
           .next = -1,
           .adjacent_left_wall = -1,
@@ -1126,9 +1135,6 @@ enum {
   MSLSTG01_KIND_RIGHT_WALL = 2,
   MSLSTG01_KIND_LEFT_WALL = 3,
   MSLSTG01_KIND_DYNAMIC = 4,
-  MSLSTG01_PLATFORM_TRANSFORM_HEIGHT = 1,
-  MSLSTG01_PLATFORM_TRANSFORM_STATIC_Y = 2,
-  MSLSTG01_PLATFORM_TRANSFORM_RANDALL = 3,
   MSLSTG01_PLATFORM_MOTION_FOD = 1,
 };
 
@@ -1233,6 +1239,7 @@ static int stage_install_platform_transforms_from_mslstg01(
   memset(slot->platform_transform_kind_by_segment, 0,
          sizeof(slot->platform_transform_kind_by_segment));
   memset(slot->platform_transform_id_by_segment, 0, sizeof(slot->platform_transform_id_by_segment));
+  slot->has_height_platform_transform = 0u;
   if (transform_count == 0u) {
     alloc_free(slot->platform_transforms);
     slot->platform_transforms = NULL;
@@ -1262,6 +1269,9 @@ static int stage_install_platform_transforms_from_mslstg01(
     };
     slot->platform_transform_kind_by_segment[recs[i].line_id] = recs[i].kind_id;
     slot->platform_transform_id_by_segment[recs[i].line_id] = recs[i].platform_id;
+    if (recs[i].kind_id == (uint8_t)MSL_STAGE_PLATFORM_TRANSFORM_HEIGHT) {
+      slot->has_height_platform_transform = 1u;
+    }
   }
   alloc_free(slot->platform_transforms);
   slot->platform_transforms = recs;
@@ -1505,6 +1515,7 @@ static int stage_load_slot_from_data_dir(MslStageSlot* slot, const char* data_di
     return -1;
   }
   slot->loaded = 1;
+  stage_slot_refresh_floor_topology_flags(slot);
   return 0;
 }
 
@@ -1782,6 +1793,104 @@ uint8_t stage_collision_floor_line_stage_object_support_kind(uint32_t stage_id,
   return line->stage_object_support_kind;
 }
 
+static inline uint8_t stage_floor_line_is_static_slope(const MslStageFloorLine* line) {
+  return (uint8_t)(line != NULL && line->fighter_solid != 0u && line->y0 != line->y1);
+}
+
+static uint8_t stage_floor_line_is_flat_between_sloped_ledges(const MslStageSlot* slot,
+                                                              const MslStageFloorLine* line) {
+  if (slot == NULL || !slot->loaded || line == NULL || slot->floor_lines == NULL ||
+      line->fighter_solid == 0u || line->is_platform || line->is_ledge ||
+      stage_floor_line_is_static_slope(line) || line->prev < 0 || line->next < 0 ||
+      (size_t)line->prev >= slot->floor_line_count ||
+      (size_t)line->next >= slot->floor_line_count) {
+    return 0u;
+  }
+  const MslStageFloorLine* prev = &slot->floor_lines[(size_t)line->prev];
+  const MslStageFloorLine* next = &slot->floor_lines[(size_t)line->next];
+  // Generated MSLSTG01 topology owner: the line is a flat fighter-solid floor whose immediate
+  // floor-chain neighbors are sloped ledge floors. This captures Yoshi's Story main-floor shell
+  // without a stage-id branch and remains false for ordinary flat floors, soft platforms, and
+  // transform-owned support lines.
+  // data/stages/bin/*.bin::MSLSTG01 floor flags/links/geometry
+  return (uint8_t)((prev->is_ledge && stage_floor_line_is_static_slope(prev) && next->is_ledge &&
+                    stage_floor_line_is_static_slope(next))
+                       ? 1u
+                       : 0u);
+}
+
+uint8_t stage_collision_floor_line_is_flat_between_sloped_ledges(uint32_t stage_id,
+                                                                 uint16_t segment_i) {
+  const MslStageSlot* slot = stage_slot(stage_id);
+  return stage_floor_line_is_flat_between_sloped_ledges(
+      slot, stage_floor_line_for_segment(slot, segment_i));
+}
+
+uint8_t stage_collision_stage_has_flat_between_sloped_ledges(uint32_t stage_id) {
+  const MslStageSlot* slot = stage_slot(stage_id);
+  return (uint8_t)((slot != NULL && slot->loaded && slot->has_flat_between_sloped_ledges) ? 1u
+                                                                                          : 0u);
+}
+
+uint8_t stage_collision_stage_has_only_static_cardinal_hard_floors(uint32_t stage_id) {
+  const MslStageSlot* slot = stage_slot(stage_id);
+  // Generated MSLSTG01 topology owner for stages whose fighter floor graph is only static flat
+  // hard-floor terrain. Ledge flags are allowed here because they are still floor lines in the same
+  // cardinal hard-floor shell; soft platforms, slopes, and moving stage-object support disqualify it.
+  // data/stages/bin/*.bin::MSLSTG01 floor flags/links/geometry/platform_transforms
+  return (uint8_t)((slot != NULL && slot->loaded && slot->has_only_static_cardinal_hard_floors)
+                       ? 1u
+                       : 0u);
+}
+
+uint8_t stage_collision_stage_has_alternate_floor_endpoint_links(uint32_t stage_id) {
+  const MslStageSlot* slot = stage_slot(stage_id);
+  // MSLSTG01 preserves source MapLine endpoint slot 1 links. Frozen Stadium's active floor shell
+  // uses those alternate floor links for transformation-map adjacency; this helper exposes that
+  // generated topology fact without naming Pokemon Stadium in gameplay code.
+  // data/stages/bin/*.bin::MSLSTG01 segment prev_id1/next_id1
+  return (uint8_t)((slot != NULL && slot->loaded && slot->has_alternate_floor_endpoint_links) ? 1u
+                                                                                              : 0u);
+}
+
+uint8_t stage_collision_stage_has_height_platform_transform(uint32_t stage_id) {
+  const MslStageSlot* slot = stage_slot(stage_id);
+  return (uint8_t)((slot != NULL && slot->loaded && slot->has_height_platform_transform) ? 1u : 0u);
+}
+
+static void stage_slot_refresh_floor_topology_flags(MslStageSlot* slot) {
+  if (slot == NULL || !slot->loaded || slot->floor_lines == NULL || slot->floor_line_count == 0u) {
+    return;
+  }
+
+  uint8_t saw_fighter_floor = 0u;
+  uint8_t only_static_cardinal_hard_floors = 1u;
+  uint8_t has_flat_between_sloped_ledges = 0u;
+  uint8_t has_alternate_floor_endpoint_links = 0u;
+  for (size_t i = 0; i < slot->floor_line_count; i++) {
+    const MslStageFloorLine* line = &slot->floor_lines[i];
+    if (stage_floor_line_is_flat_between_sloped_ledges(slot, line)) {
+      has_flat_between_sloped_ledges = 1u;
+    }
+    if (line->fighter_solid == 0u) {
+      continue;
+    }
+    saw_fighter_floor = 1u;
+    if (line->has_alternate_endpoint_link != 0u) {
+      has_alternate_floor_endpoint_links = 1u;
+    }
+    if (line->is_platform || line->platform_transform_kind != 0u ||
+        stage_floor_line_is_static_slope(line)) {
+      only_static_cardinal_hard_floors = 0u;
+    }
+  }
+
+  slot->has_flat_between_sloped_ledges = has_flat_between_sloped_ledges;
+  slot->has_only_static_cardinal_hard_floors =
+      (uint8_t)((saw_fighter_floor && only_static_cardinal_hard_floors) ? 1u : 0u);
+  slot->has_alternate_floor_endpoint_links = has_alternate_floor_endpoint_links;
+}
+
 uint8_t stage_collision_floor_line_has_platform_transform(uint32_t stage_id, uint16_t segment_i) {
   const MslStageSlot* slot = stage_slot(stage_id);
   if (slot == NULL || !slot->loaded) {
@@ -1802,7 +1911,7 @@ uint8_t stage_collision_floor_line_has_height_platform_transform(uint32_t stage_
   // transforms from static-y support transforms. Only the former are moving platform owners.
   // refs/melee/src/melee/gr/grizumi.c::{grIzumi_801CC358,grIzumi_801CCBDC}
   return slot->platform_transform_kind_by_segment[segment_i] ==
-                 (uint8_t)MSLSTG01_PLATFORM_TRANSFORM_HEIGHT
+                 (uint8_t)MSL_STAGE_PLATFORM_TRANSFORM_HEIGHT
              ? 1u
              : 0u;
 }
@@ -1817,7 +1926,7 @@ uint8_t stage_collision_floor_line_has_static_y_platform_transform(uint32_t stag
   // transforms from dynamic grIzumi height and path-based Randall transforms.
   // refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
   return slot->platform_transform_kind_by_segment[segment_i] ==
-                 (uint8_t)MSLSTG01_PLATFORM_TRANSFORM_STATIC_Y
+                 (uint8_t)MSL_STAGE_PLATFORM_TRANSFORM_STATIC_Y
              ? 1u
              : 0u;
 }
@@ -1834,7 +1943,7 @@ uint8_t stage_collision_floor_line_has_randall_platform_transform(uint32_t stage
   // refs/melee/src/melee/gr/ground.c::Ground_801C2FE0
   // data/stages/bin/grst.bin::MSLSTG01 platform_transforms(kind=randall)
   return slot->platform_transform_kind_by_segment[segment_i] ==
-                 (uint8_t)MSLSTG01_PLATFORM_TRANSFORM_RANDALL
+                 (uint8_t)MSL_STAGE_PLATFORM_TRANSFORM_RANDALL
              ? 1u
              : 0u;
 }
@@ -1851,7 +1960,7 @@ int stage_collision_randall_floor_line_index(uint32_t stage_id) {
   // data/stages/bin/grst.bin::MSLSTG01 platform_transforms(kind=randall)
   for (size_t i = 0; i < slot->platform_transform_count; i++) {
     const MslStagePlatformTransform* rec = &slot->platform_transforms[i];
-    if (rec->kind_id == (uint8_t)MSLSTG01_PLATFORM_TRANSFORM_RANDALL) {
+    if (rec->kind_id == (uint8_t)MSL_STAGE_PLATFORM_TRANSFORM_RANDALL) {
       return stage_slot_floor_line_index(slot, rec->line_id);
     }
   }
@@ -1890,7 +1999,7 @@ uint8_t stage_collision_floor_line_height_platform_state_is_source_trusted(const
   if (stage_id != (uint32_t)MSL_STAGE_ID_FOUNTAIN_OF_DREAMS || slot == NULL || !slot->loaded ||
       !slot->fod_motion.loaded ||
       slot->platform_transform_kind_by_segment[segment_i] !=
-          (uint8_t)MSLSTG01_PLATFORM_TRANSFORM_HEIGHT) {
+          (uint8_t)MSL_STAGE_PLATFORM_TRANSFORM_HEIGHT) {
     return 0u;
   }
 
@@ -1924,7 +2033,7 @@ uint8_t stage_collision_floor_line_height_platform_state_is_source_trusted(const
   const MslFodPlatformMotion* motion = &slot->fod_motion;
   for (size_t i = 0; i < slot->platform_transform_count; i++) {
     const MslStagePlatformTransform* rec = &slot->platform_transforms[i];
-    if (rec->line_id == segment_i && rec->kind_id == (uint8_t)MSLSTG01_PLATFORM_TRANSFORM_HEIGHT &&
+    if (rec->line_id == segment_i && rec->kind_id == (uint8_t)MSL_STAGE_PLATFORM_TRANSFORM_HEIGHT &&
         rec->platform_id == platform_id && fabsf(h - rec->y_const) <= 1.0e-3f) {
       // Source-owned initial platform pose:
       // grIzumi initializes each platform JObj from the stage data before the runtime scheduler
@@ -1954,7 +2063,7 @@ static uint8_t stage_collision_fod_platform_default_height(const MslStageSlot* s
   }
   for (size_t i = 0; i < slot->platform_transform_count; i++) {
     const MslStagePlatformTransform* rec = &slot->platform_transforms[i];
-    if (rec->kind_id == (uint8_t)MSLSTG01_PLATFORM_TRANSFORM_HEIGHT &&
+    if (rec->kind_id == (uint8_t)MSL_STAGE_PLATFORM_TRANSFORM_HEIGHT &&
         rec->platform_id == platform_id) {
       *out = rec->y_const;
       return 1u;
@@ -2050,15 +2159,15 @@ uint8_t stage_collision_floor_line_world(const MslBatch* batch, int bi,
     }
     out->x0 = rec->x0;
     out->x1 = rec->x1;
-    if (rec->kind_id == (uint8_t)MSLSTG01_PLATFORM_TRANSFORM_STATIC_Y) {
+    if (rec->kind_id == (uint8_t)MSL_STAGE_PLATFORM_TRANSFORM_STATIC_Y) {
       out->y0 = rec->y_const;
       out->y1 = rec->y_const;
-    } else if (rec->kind_id == (uint8_t)MSLSTG01_PLATFORM_TRANSFORM_RANDALL) {
+    } else if (rec->kind_id == (uint8_t)MSL_STAGE_PLATFORM_TRANSFORM_RANDALL) {
       if (!stage_collision_platform_path_world_line(slot, rec->line_id, batch->state.frame_id[bi],
                                                     out)) {
         return 0u;
       }
-    } else if (rec->kind_id == (uint8_t)MSLSTG01_PLATFORM_TRANSFORM_HEIGHT &&
+    } else if (rec->kind_id == (uint8_t)MSL_STAGE_PLATFORM_TRANSFORM_HEIGHT &&
                rec->platform_id < 2u) {
       const size_t idx = (size_t)bi * 2u + (size_t)rec->platform_id;
       const uint8_t height_valid = batch->state.stage_fod_platform_valid[idx];
@@ -2181,21 +2290,16 @@ uint8_t stage_collision_floor_line_motion_delta(const MslBatch* batch, int bi,
     if (rec->line_id != line->segment_i) {
       continue;
     }
-    if (rec->kind_id == (uint8_t)MSLSTG01_PLATFORM_TRANSFORM_RANDALL) {
+    if (rec->kind_id == (uint8_t)MSL_STAGE_PLATFORM_TRANSFORM_RANDALL) {
       MslStageFloorLine prev = *line;
       MslStageFloorLine cur = *line;
-      int32_t cur_frame = batch->state.frame_id[bi];
-      if ((batch->rollout_clock_rng_owned != NULL &&
-           batch->rollout_clock_rng_owned[bi] != (uint8_t)MSL_ROLLOUT_CLOCK_NONE) ||
-          (batch->replay_rollout_reseeded != NULL && batch->replay_rollout_reseeded[bi] != 0u)) {
-        // Runtime step order advances `frame_id` at frame commit. GrStory updates Randall's ground
-        // object before fighter map callbacks for the output frame, so clock-owned rollouts consume
-        // the next path sample here. Non-rollout one-step probes keep the existing seed-frame
-        // semantics.
-        // refs/melee/src/melee/gr/grstory.c::{grStory_801E3370,grStory_801E33E0}
-        // refs/melee/src/melee/gr/ground.c::Ground_801C2FE0
-        cur_frame += 1;
-      }
+      // Runtime step order advances `frame_id` at frame commit. GrStory updates Randall's ground
+      // object before fighter map callbacks for the output frame, so the collision callback consumes
+      // the next path sample regardless of whether the row came from free-run, one-step, or rollout
+      // reseed reconstruction.
+      // refs/melee/src/melee/gr/grstory.c::{grStory_801E3370,grStory_801E33E0}
+      // refs/melee/src/melee/gr/ground.c::Ground_801C2FE0
+      const int32_t cur_frame = batch->state.frame_id[bi] + 1;
       if (!stage_collision_platform_path_world_line(slot, rec->line_id, cur_frame - 1, &prev) ||
           !stage_collision_platform_path_world_line(slot, rec->line_id, cur_frame, &cur)) {
         return 0u;
@@ -2208,9 +2312,7 @@ uint8_t stage_collision_floor_line_motion_delta(const MslBatch* batch, int bi,
       }
       return 1u;
     }
-    if (rec->kind_id == (uint8_t)MSLSTG01_PLATFORM_TRANSFORM_HEIGHT &&
-        batch->state.stage_id[bi] == (uint32_t)MSL_STAGE_ID_FOUNTAIN_OF_DREAMS &&
-        rec->platform_id < 2u) {
+    if (rec->kind_id == (uint8_t)MSL_STAGE_PLATFORM_TRANSFORM_HEIGHT && rec->platform_id < 2u) {
       const size_t idx = (size_t)bi * 2u + (size_t)rec->platform_id;
       if (!batch->state.stage_fod_platform_valid[idx]) {
         return 0u;

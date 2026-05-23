@@ -127,6 +127,16 @@ SEED_DTYPE = np.dtype(
         # data/ecb/*
         ("ecb_lock_bottom_rel_y_f32", _arr("<f4", MAX_PLAYERS)),
         ("ecb_lock_bottom_rel_y_valid_u8", _arr("u1", MAX_PLAYERS)),
+        # Hidden active-hitlag CollData.ecb envelope. This is the source collision envelope carried
+        # into frozen Damage callbacks, which can differ from the replay-visible Damage pose.
+        # refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procMap}
+        # refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpCollInterpolateECB}
+        ("damage_hitlag_ecb_bottom_rel_y_f32", _arr("<f4", MAX_PLAYERS)),
+        ("damage_hitlag_ecb_top_rel_y_f32", _arr("<f4", MAX_PLAYERS)),
+        ("damage_hitlag_ecb_left_rel_x_f32", _arr("<f4", MAX_PLAYERS)),
+        ("damage_hitlag_ecb_right_rel_x_f32", _arr("<f4", MAX_PLAYERS)),
+        ("damage_hitlag_ecb_side_rel_y_f32", _arr("<f4", MAX_PLAYERS)),
+        ("damage_hitlag_ecb_valid_u8", _arr("u1", MAX_PLAYERS)),
         ("speed_air_x_self", _arr("<f4", MAX_PLAYERS)),
         ("speed_ground_x_self", _arr("<f4", MAX_PLAYERS)),
         ("speed_y_self", _arr("<f4", MAX_PLAYERS)),

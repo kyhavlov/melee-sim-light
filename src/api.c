@@ -122,6 +122,40 @@ static inline void reseed_store_colldata_ecb_desired(MslBatch* batch, size_t idx
   batch->state.coll_desired_ecb_side_rel_y[idx] = ecb->side_rel_y;
 }
 
+static inline uint8_t reseed_damage_hitlag_ecb_points_from_seed(MslEcbWorldPoints* out,
+                                                                const MslSeed* seed, int p) {
+  if (out == NULL || seed == NULL || p < 0 || p >= MSL_MAX_PLAYERS ||
+      seed->damage_hitlag_ecb_valid_u8[p] == 0u) {
+    return 0u;
+  }
+  const float bottom = seed->damage_hitlag_ecb_bottom_rel_y_f32[p];
+  const float top = seed->damage_hitlag_ecb_top_rel_y_f32[p];
+  const float left = seed->damage_hitlag_ecb_left_rel_x_f32[p];
+  const float right = seed->damage_hitlag_ecb_right_rel_x_f32[p];
+  const float side = seed->damage_hitlag_ecb_side_rel_y_f32[p];
+  if (!isfinite(bottom) || !isfinite(top) || !isfinite(left) || !isfinite(right) ||
+      !isfinite(side) || !(top > bottom) || !(right > left)) {
+    return 0u;
+  }
+  *out = (MslEcbWorldPoints){
+      .bottom_x = 0.0f,
+      .bottom_y = bottom,
+      .top_x = 0.0f,
+      .top_y = top,
+      .left_x = left,
+      .left_y = side,
+      .right_x = right,
+      .right_y = side,
+      .left_rel_x = left,
+      .right_rel_x = right,
+      .bottom_rel_y = bottom,
+      .top_rel_y = top,
+      .side_rel_y = side,
+      .frame_u16 = 0u,
+  };
+  return 1u;
+}
+
 static void seed_ground_normal_from_floor_id(MslBatch* batch, int bi, size_t idx, uint32_t stage_id,
                                              uint16_t ground_id) {
   // Seed CollData.floor.normal from CollData.floor.index.
@@ -2203,6 +2237,21 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         batch->state.coll_desired_ecb_bottom_valid[idx] = 1u;
         batch->state.coll_ecb_bottom_valid[idx] = 1u;
         batch->state.coll_prev_ecb_bottom_valid[idx] = 1u;
+        batch->state.coll_damage_hitlag_ecb_valid[idx] = 0u;
+        MslEcbWorldPoints damage_hitlag_ecb = {0};
+        if (reseed_damage_hitlag_ecb_points_from_seed(&damage_hitlag_ecb, seed, p)) {
+          // Active Damage hitlag can keep the pre-hit JObj collision envelope live while the
+          // replay-visible action already names DamageAir/DamageFly. Initialize the hidden
+          // CollData current/prev/desired ECB from the explicit seed lane; position is added by
+          // mpColl consumers when converting relative points to world points.
+          // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procMap}
+          // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+          // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpCollInterpolateECB}
+          reseed_store_colldata_ecb_current(batch, idx, &damage_hitlag_ecb);
+          reseed_store_colldata_ecb_prev(batch, idx, &damage_hitlag_ecb);
+          reseed_store_colldata_ecb_desired(batch, idx, &damage_hitlag_ecb);
+          batch->state.coll_damage_hitlag_ecb_valid[idx] = 1u;
+        }
       }
       batch->state.dynamic_pose_state_valid[idx] = 0u;
       batch->state.dynamic_pose_apply_collision_matrix[idx] = 0u;
@@ -3568,6 +3617,7 @@ int msl_batch_debug_write_colldata_ecb(const MslBatch* batch, uint8_t* out_bytes
       out->desired_valid[p] = batch->state.coll_desired_ecb_bottom_valid[idx];
       out->floor_result_valid[p] = batch->state.coll_floor_result_valid[idx];
       out->floor_result_source[p] = batch->state.coll_floor_result_source[idx];
+      out->floor_result_mode[p] = batch->state.coll_floor_result_mode[idx];
       out->floor_result_segment_id[p] = batch->state.coll_floor_result_segment_id[idx];
 
       out->current_bottom_rel_y[p] = batch->state.coll_ecb_bottom_rel_y[idx];

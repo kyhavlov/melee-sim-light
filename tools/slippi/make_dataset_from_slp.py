@@ -3302,6 +3302,7 @@ def _main_impl(args) -> Dataset:
         derive_run_x0,
         derive_ecb_lock_timer,
         derive_ecb_lock_bottom_rel_y,
+        derive_damage_hitlag_colldata_ecb,
         load_shield_tilt_table_meta,
         compute_tilt_timer_axis_pre_post,
         compute_tilt_timer_y_pre_post_with_fall_fast,
@@ -4788,6 +4789,36 @@ def _main_impl(args) -> Dataset:
         )
         samples["seed_t"]["ecb_lock_bottom_rel_y_f32"][:, slot] = ecb_lock_bottom_rel_y[:-1]
         samples["seed_t"]["ecb_lock_bottom_rel_y_valid_u8"][:, slot] = ecb_lock_bottom_rel_y_valid[:-1]
+        (
+            damage_hitlag_ecb_bottom,
+            damage_hitlag_ecb_top,
+            damage_hitlag_ecb_left,
+            damage_hitlag_ecb_right,
+            damage_hitlag_ecb_side,
+            damage_hitlag_ecb_valid,
+        ) = derive_damage_hitlag_colldata_ecb(
+            char_id_u8=post_char,
+            action_id_u16=post_state,
+            animation_index_u32=animation_index,
+            anim_frame_f32=post_anim_frame_f32,
+            frame_speed_mul_f32=frame_speed_mul,
+            facing_u8=post_dir,
+            on_ground_u8=post_on_ground,
+            hitlag_u16=post_hitlag,
+        )
+        # First active Damage hitlag rows can run `ftCo_Damage_Coll` while the source CollData ECB
+        # is still the pre-Damage pose. Seed that hidden loaded ECB from extracted tables so
+        # `mpColl_LoadECB_inline` uses the callback-local CollData shape rather than the visible
+        # Damage pose.
+        # refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
+        # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+        # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800477E0,mpColl_LoadECB_inline}
+        samples["seed_t"]["damage_hitlag_ecb_bottom_rel_y_f32"][:, slot] = damage_hitlag_ecb_bottom[:-1]
+        samples["seed_t"]["damage_hitlag_ecb_top_rel_y_f32"][:, slot] = damage_hitlag_ecb_top[:-1]
+        samples["seed_t"]["damage_hitlag_ecb_left_rel_x_f32"][:, slot] = damage_hitlag_ecb_left[:-1]
+        samples["seed_t"]["damage_hitlag_ecb_right_rel_x_f32"][:, slot] = damage_hitlag_ecb_right[:-1]
+        samples["seed_t"]["damage_hitlag_ecb_side_rel_y_f32"][:, slot] = damage_hitlag_ecb_side[:-1]
+        samples["seed_t"]["damage_hitlag_ecb_valid_u8"][:, slot] = damage_hitlag_ecb_valid[:-1]
         damage_jump_buffer_x14 = derive_damage_jump_buffer_x14(
             action_id=post_state,
             hitstun_u16=post_hitstun,

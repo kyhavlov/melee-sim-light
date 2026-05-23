@@ -28,6 +28,7 @@ PyObject* msl_derive_runbrake_cmd0_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_dash_x4_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_ecb_lock_timer_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_ecb_lock_bottom_rel_y_py(PyObject* self, PyObject* args);
+PyObject* msl_derive_damage_hitlag_colldata_ecb_py(PyObject* self, PyObject* args);
 PyObject* msl_compute_press_timer_u8_py(PyObject* self, PyObject* args);
 PyObject* msl_compute_lr_press_timer_x67f_py(PyObject* self, PyObject* args);
 PyObject* msl_derive_turn_internals_py(PyObject* self, PyObject* args);

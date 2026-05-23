@@ -2,7 +2,7 @@
 
 #include "batch_internal.h"
 
-// mpColl-style ground contact substrate (FD-only v1).
+// mpColl-style ground contact substrate for the supported legal-stage runtime.
 //
 // Owns: state.on_ground, state.ground_id, and collision contact metadata fields.
 //
