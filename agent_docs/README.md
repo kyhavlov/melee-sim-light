@@ -1,6 +1,6 @@
 # Agent Docs
 
-This directory holds long-lived project notes for agents and humans working on
+This directory holds long-lived project docs and scratch notes for agents working on
 `melee-sim-light`. Keep top-level files current; put historical snapshots under
 `archive/`.
 
