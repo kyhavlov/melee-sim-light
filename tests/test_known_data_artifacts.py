@@ -374,6 +374,42 @@ finally:
     assert proc.returncode == 0, proc.stderr + proc.stdout
 
 
+def test_runtime_randall_stage_state_uses_generated_path_clock() -> None:
+    # Debug/viewer stage-state export must consume the same generated GrStory/Ground_801C2FE0
+    # Randall path as gameplay collision. The runtime frame clock commits after step_input(), so
+    # after one step from frame 0 the exported platform center is MSLSTG01 platform_path frame 1.
+    stage = read_mslstg01_v7(Path("data/stages/bin/grst.bin"))
+    path = {(int(rec.line_id), int(rec.frame)): rec for rec in stage.platform_paths}
+    rec = path[(1000, 1)]
+    expected_x = 0.5 * (rec.x0 + rec.x1)
+    expected_y = rec.y
+
+    code = f"""
+import numpy as np
+import msl_binding
+from tools.modelplay.sim_env import build_match_config_array
+from tools.modelplay.state_adapter import STAGE_DEBUG_DTYPE
+
+handle = msl_binding.init(batch_size=1, num_players=2)
+try:
+    config = build_match_config_array(stage_id=8, frame_id=0, random_seed=0, char_ids=(1, 1))
+    msl_binding.init_match(handle, config.view(np.uint8).reshape((1, -1)))
+    sizes = msl_binding.sizes()
+    inp = np.zeros((1, int(sizes["input"])), dtype=np.uint8)
+    stage_out = np.zeros((1, int(sizes["stage_state"])), dtype=np.uint8)
+    msl_binding.step_input(handle, inp, inp)
+    msl_binding.debug_write_stage_state(handle, stage_out)
+    row = stage_out.view(STAGE_DEBUG_DTYPE).reshape((1,))[0]
+    assert int(row["randall_exists"]) == 1
+    assert abs(float(row["randall_x"]) - {expected_x!r}) <= 1.0e-6
+    assert abs(float(row["randall_y"]) - {expected_y!r}) <= 1.0e-6
+finally:
+    msl_binding.destroy(handle)
+"""
+    proc = subprocess.run([sys.executable, "-c", code], text=True, capture_output=True)
+    assert proc.returncode == 0, proc.stderr + proc.stdout
+
+
 def test_stage_metadata_contains_yoshi_randall_and_rejects_center_raw_platform() -> None:
     stage = read_mslstg01_v7(Path("data/stages/bin/grst.bin"))
     by_line = {int(seg.line_id): seg for seg in stage.segments}
