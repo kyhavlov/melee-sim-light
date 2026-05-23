@@ -1623,9 +1623,9 @@ void hitboxes_refresh(MslBatch* batch) {
             }
           } else if (ev->kind == (uint8_t)MSL_HITBOX_EVENT_SET_DAMAGE &&
                      ev->hitbox_id < (uint8_t)MSL_MAX_HITBOXES && have_prev[ev->hitbox_id]) {
-            // ftAction_8007169C mutates an active HitCapsule's damage only. It does not create a
+            // ftAction_8007162C mutates an active HitCapsule's damage only. It does not create a
             // HitCapsule, does not call ftColl_800768A0, and must not advance create-edge timing.
-            // refs/melee/src/melee/ft/ftaction.c::ftAction_8007169C
+            // refs/melee/src/melee/ft/ftaction.c::ftAction_8007162C
             def_prev[ev->hitbox_id].damage = ev->damage;
           } else if (ev->kind == (uint8_t)MSL_HITBOX_EVENT_CREATE &&
                      ev->hitbox_id < (uint8_t)MSL_MAX_HITBOXES) {
@@ -1714,9 +1714,9 @@ void hitboxes_refresh(MslBatch* batch) {
           }
         } else if (ev->kind == (uint8_t)MSL_HITBOX_EVENT_SET_DAMAGE &&
                    ev->hitbox_id < (uint8_t)MSL_MAX_HITBOXES && have_def[ev->hitbox_id]) {
-          // ftAction_8007169C updates damage in-place on an already-live HitCapsule. Preserve the
+          // ftAction_8007162C updates damage in-place on an already-live HitCapsule. Preserve the
           // current slot geometry/group and avoid pose_create/enable-edge side effects.
-          // refs/melee/src/melee/ft/ftaction.c::ftAction_8007169C
+          // refs/melee/src/melee/ft/ftaction.c::ftAction_8007162C
           def[ev->hitbox_id].damage = ev->damage;
         } else if (ev->kind == (uint8_t)MSL_HITBOX_EVENT_CREATE &&
                    ev->hitbox_id < (uint8_t)MSL_MAX_HITBOXES) {
@@ -1950,9 +1950,12 @@ void hitboxes_refresh(MslBatch* batch) {
         // false-positive BODY overlaps (hitlag/hitstun applied when ref has none).
         //
         // Policy:
-        //   local = (pose_mtx * offset) * scale_y;
-        //   local = rotY90(local, facing_dir);
-        //   world = pos + local.
+        //   center_local = (pose_mtx * offset) * scale_y * co_attrs.model_scaling;
+        //   center_local = rotY90(center_local, facing_dir);
+        //   world = pos + center_local.
+        // Radius intentionally differs: ftAction_8007121C stores hitbox->scale from the script
+        // size, and lbColl radius checks apply fp->x34_scale.y only unless x43_b1 ignore-scale is
+        // set; they do not multiply by co_attrs.model_scaling.
         //
         // Offset basis note (MSLHITB1):
         // `data/hitboxes/<char>.bin` stores hitbox center offsets in HitCapsule.b_offset component

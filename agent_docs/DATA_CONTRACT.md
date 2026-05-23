@@ -1826,7 +1826,7 @@ Binary layout (little-endian):
   - `kind: u8`:
     - `0`: create/set-enable (`ftAction_8007121C`)
     - `1`: clear (`clear_hitboxes`, or `hitbox_id==0xFF` clear-all)
-    - `2`: active-slot damage mutation (`ftAction_8007169C`) with no create-edge side effects
+    - `2`: active-slot damage mutation (`ftAction_8007162C`) with no create-edge side effects
   - `hitbox_id: u8` slot id (0..3 typical). If `kind==1` and `hitbox_id==0xFF`, this is a clear-all record.
   - `bone_part_id: u32` fighter part id (same domain as SSANIM `joint_parts`; pass as `part_id` to
     `anim_pose_get_matrix(...)`).
@@ -1876,11 +1876,16 @@ Runtime semantics (current C-core policy):
   consume that clear owner.
 - Pose lookup failures for a specific hitbox skip that hitbox only (do not affect anything else).
 - World-space center is pose-driven and uses the same conventions as hurtcaps/shields:
-  - `local = (pose_mtx * (x,y,z)) * fighter_scale_y`
-  - `local.x *= facing_dir` (approximation: mirror X when facing left; we do not apply a true facing
-    Y-rotation here, so Z is not rotated)
-  - `world = (pos_x,pos_y,pos_z) + local`
-  - `radius *= fighter_scale_y` unless `ignore_fighter_scale` is set (hitbox flags bit 13).
+  - `center_local = (pose_mtx * (x,y,z)) * fighter_scale_y * co_attrs.model_scaling`
+  - `center_local = rotY90(center_local, facing_dir)` using the decomp-shaped root-part facing rotation
+    (`x' = facing_dir * z`, `z' = -facing_dir * x`)
+  - `world = (pos_x,pos_y,pos_z) + center_local`
+  - `radius *= fighter_scale_y` unless `ignore_fighter_scale` is set (hitbox flags bit 13);
+    radius does **not** get `co_attrs.model_scaling`.
+  - Source/runtime references: `refs/melee/src/melee/ft/fighter.c::ftPartSetRotY` and
+    `Fighter_UpdateModelScale`, `refs/melee/src/melee/ft/ftanim.c::ftAnim_8006FA58`,
+    `refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007F6A4`, and `src/hitboxes.c`
+    HitCapsule center/radius materialization.
 
 Damage hitlag-exit DI math:
 - `ftCo_Damage_OnExitHitlag -> ftCo_8008E5A4` consumes the prior-frame input snapshot before

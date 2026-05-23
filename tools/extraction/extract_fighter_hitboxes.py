@@ -147,7 +147,7 @@ def _records_from_events(events: list[dict]) -> list[_Rec]:
             active[hb_id] = rec
             out.append(rec)
         elif kind == "set_hitbox_damage":
-            # Decomp opcode 12 (`ftAction_8007169C`) mutates an already-live HitCapsule's damage.
+            # Decomp opcode 12 (`ftAction_8007162C`) mutates an already-live HitCapsule's damage.
             # Keep this distinct from create/enable records so runtime does not replay
             # ftColl_800768A0 enable-edge clear/copy or pose-create publication.
             idx = int(ev.get("data", {}).get("idx", -1))

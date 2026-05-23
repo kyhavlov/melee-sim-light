@@ -511,9 +511,10 @@ static void hurtboxes_refresh_impl(MslBatch* batch, uint8_t geometry_mode) {
   // - Hurt capsule endpoint world positions are computed from (bone joint matrix, offsets) via
   //   lb_8000B1CC (refs/melee/src/melee/lb/lbcollision.c::checkPos), written into HurtCapsule.a_pos/b_pos.
   //
-  // We approximate that pipeline using our SSANIM01 pose sampler:
-  // - anim_pose_get_matrix(char_id, msid, frame, part_id=Fighter_Part, out_3x4)
-  // and then applying fighter translation (pos_x/pos_y/pos_z) in world space.
+  // MSL models the consumed pipeline with extracted SSANIM01/SSANIMT1 pose data, dynamic-pose
+  // state where source callbacks need it, and the same fighter translation/scale lanes consumed
+  // by HitCapsule geometry. The contact path demands this geometry lazily so debug-only readback
+  // does not define runtime BODY behavior.
 
   const int num_players = (int)batch->config.num_players;
   for (int bi = 0; bi < batch->batch_size; bi++) {
