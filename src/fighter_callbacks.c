@@ -380,9 +380,10 @@ static inline void cache_collision_stage_prev_pos(MslBatch* batch) {
   // Decomp: the ledge-grab AABB builders (mpColl_80044164 / mpColl_800443C4) consume CollData.prev_pos
   // and CollData.cur_pos as managed inside the collision substep loop (mpColl_80043754).
   //
-  // This sim does not yet implement mpColl substeps. Approximate the collision-stage prev/cur pair:
+  // This stores the collision-stage interval used by ledge-grab AABB checks:
   // - coll_stage_prev_pos: position at start of collision stage this frame
   // - coll_stage_cur_pos: position immediately after stage_collision_apply() this frame
+  // Callback-local floor substep owners that stop earlier publish their own coll_substep_* packet.
   // refs/melee/src/melee/mp/mpcoll.c::mpColl_80043754
   // refs/melee/src/melee/mp/mpcoll.c::mpColl_800443C4
   const int num_players = (int)batch->config.num_players;

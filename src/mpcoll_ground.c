@@ -3012,7 +3012,7 @@ static inline void mpcoll_apply_final_floor_rejection_bits(
     return;
   }
   // Final publication rejection is ordered because several guards can be true on the same
-  // approximation-produced floor candidate. Preserve the old source-shaped priority in one
+  // carried/projected floor candidate. Preserve the old source-shaped priority in one
   // writeback owner instead of scattering side effects across the tail.
   // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80043754,mpColl_80044628_Floor,mpColl_80044838_Floor}
   MslBatch* batch = ctx->batch;
@@ -3595,7 +3595,7 @@ static uint8_t mpcoll_collect_bottom_sweep_hit(
   // before projection/publication helpers decide whether the floor hit becomes grounded,
   // stay-airborne FloorHug, or a rejected edge/platform contact. Keeping this packet explicit
   // prevents Damage, EscapeAir, AttackAir, and moving-platform owners from carrying independent
-  // `mpCheckFloor` approximations.
+  // local floor probes.
   // refs/melee/src/melee/mp/mpcoll.c::mpColl_80044628_Floor
   // refs/melee/src/melee/mp/mplib.c::mpCheckFloor
   const MslStageFloorLine* hit_line = &g->lines[(size_t)hit_line_idx];
@@ -5711,7 +5711,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
       const uint8_t damagefly_release_entry_uses_pose_bottom =
           // Throw release can enter DamageFly with an ECB-lock countdown still active, but the
           // next DamageFly_Coll floor pass uses the current DamageFly ECB source. Keeping the
-          // generic ground->air zero-bottom approximation here hides the floor crossing on low
+          // generic ground->air zero-bottom carry here hides the floor crossing on low
           // release rows where CollData.floor.index is still valid.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
@@ -6672,8 +6672,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
                   batch, bi, g, prefer_line_idx, resolved_line_idx, idx, action_id,
                   batch->state.action_frame[idx]);
           // mpLib_8004DD90_Floor returns a signed correction; for stable grounded frames we only
-          // need to resolve penetration. If we are already above the floor due to upstream
-          // approximation drift, avoid snapping down in the collision substrate.
+          // need to resolve penetration. If we are already above the floor due to callback-local
+          // projection drift, avoid snapping down in the collision substrate.
           //
           // Exception: grounded damage hitlag rows let `ftCo_Damage_OnEveryHitlag` move `cur_pos`
           // before grounded `ftCo_Damage_Coll` re-pins the fighter to floor through
@@ -7634,9 +7634,9 @@ void mpcoll_ground_apply(MslBatch* batch) {
           // the floor while vanilla still resolves LandingFallSpecial from that same floor.index.
           // Keep this source floor-index handoff limited to rows with frame-start prev-ECB-bottom penetration and
           // post-physics root below the floor. Ledge-floor rows use this only in the early entry
-          // window covered by the locked prev-ECB approximation; later ledge handoffs are handled by
+          // window covered by the locked previous-ECB owner; later ledge handoffs are handled by
           // the root-crossing owner below, and already-below-ledge continuations stay on the normal
-          // EscapeAir lock path so the previous-ECB approximation cannot synthesize an extra
+          // EscapeAir lock path so the previous-ECB carry cannot synthesize an extra
           // LandingFallSpecial frame.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
           // refs/melee/src/melee/ft/ft_081B.c::ft_80082C74
@@ -8543,7 +8543,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
                prev_action_id == (uint16_t)MSL_ACT_ESCAPE_AIR && hit_line_idx >= 0 &&
                !hit_line_is_platform &&
                // Sustained EscapeAir without CollData_X130_Locked should not inherit the previous
-               // ECB approximation. Keep the same vertical-only early-anim gap airborne and let the
+               // ECB owner. Keep the same vertical-only early-anim gap airborne and let the
                // following EscapeAir_Coll frame own the landing if replay still reaches the floor.
                // No-lock generated ledge-floor hits are handled by the ordinary current-ECB path;
                // the locked early-window ledge case is guarded above.
@@ -8570,8 +8570,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
                   ? 1u
                   : 0u;
           const uint8_t suppress_escapeair_locked_desired_bottom_above_floor_land =
-              // CollData_X130_Locked preserves desired_ecb.bottom during EscapeAir_Coll. The lite
-              // sim's zero-bottom lock is only an approximation for rows where source actually uses
+              // CollData_X130_Locked preserves desired_ecb.bottom during EscapeAir_Coll. A
+              // zero-bottom locked owner is only authoritative for rows where source actually uses
               // the root/desired-zero handoff; if the seeded desired bottom remains above the
               // accepted floor, mpColl_80044628_Floor has not produced the source floor hit yet.
               // Keep this scoped to sustained EscapeAir lock rows so same-frame Jump/KneeBend and
@@ -8597,7 +8597,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
           const uint8_t suppress_kneebend_escapeair_slope_entry_land =
               // Fresh KneeBend -> EscapeAir can land on ordinary floor/platform callback rows, but
               // generated sloped ledge floors still route through the edge/ledge suppression side of
-              // ft_80082C74. Do not let the zero-bottom root approximation convert that first sloped
+              // ft_80082C74. Do not let the zero-bottom root owner convert that first sloped
               // ledge crossing into LandingFallSpecial.
               // data/stages/bin/*.bin::MSLSTG01 is_ledge + generated sloped floor geometry
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_Anim
@@ -10446,7 +10446,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
             // JumpAerial_Coll reaches final floor projection only after mpColl_80044628_Floor has
             // accepted a floor through ftCo_80096CC8. When a just-released platform pass has already
             // carried the JumpAerial root below a static soft platform and the generated pose ECB
-            // bottom is now shallowly below that platform, the zero-bottom/root approximation can
+            // bottom is now shallowly below that platform, the zero-bottom/root result mode can
             // synthesize Landing from a floor the source callback is still rejecting. No-pass rows
             // whose live pose bottom remains above the platform keep the ordinary landing path even
             // when their roots are below it.
@@ -10768,8 +10768,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
                 : 0u;
         const uint8_t suppress_locked_desired_platform_without_bottom_sweep =
             // `mpColl_80044838_Floor(ignore_bottom=true)` is only reached after
-            // `mpColl_80044628_Floor` sees an ECB-bottom floor crossing. Several approximation
-            // paths can publish a root snap from the carried platform floor.index before that
+            // `mpColl_80044628_Floor` sees an ECB-bottom floor crossing. Several carried root/
+            // projection result modes can publish a root snap from the carried platform floor.index before that
             // source bottom sweep happens; keep those rows airborne until the preserved
             // `desired_ecb.bottom` actually crosses the accepted platform. This is a carried
             // floor.index guard, so keep it on the same seeded platform segment; different platform
@@ -10791,7 +10791,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
                 : 0u;
         const uint8_t suppress_locked_desired_nonplatform_without_bottom_sweep =
             // Final guard for the same CollData_X130_Locked desired-bottom precondition on
-            // non-platform floors. Root/zero-bottom approximation paths may publish a hard or
+            // non-platform floors. Root/zero-bottom result modes may publish a hard or
             // sloped floor result, but source cannot reach mpColl_80044838_Floor while the preserved
             // desired ECB bottom remains above the accepted floor.
             //
@@ -10818,7 +10818,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
         const uint8_t suppress_kneebend_escapeair_slope_final_land =
             // Fresh KneeBend -> EscapeAir can publish normal hard/platform floor handoffs, but
             // generated sloped ledge floors remain owned by mpColl's floor-edge path on the entry
-            // frame. Reject final writeback from the zero-bottom approximation on those slopes.
+            // frame. Reject final writeback from the zero-bottom root owner on those slopes.
             // data/stages/bin/*.bin::MSLSTG01 is_ledge + generated sloped floor geometry
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_KneeBend.c::ftCo_KneeBend_Anim
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
@@ -10831,7 +10831,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
                 : 0u;
         const uint8_t suppress_cliff_horizontal_ledge_locked_final_land =
             // Same source owner as the floor-sweep suppression above, kept as a final publication
-            // guard because several mpColl approximation paths can accept the restored ledge floor.
+            // guard because several mpColl result modes can accept the restored ledge floor.
             // Horizontal ledge floors should not publish LandingFallSpecial while the direct
             // reseed's locked zero-bottom handoff is still earlier than the callback-local source
             // floor contact. Keep this to off-end ledge snaps and shallow in-span final snaps; once

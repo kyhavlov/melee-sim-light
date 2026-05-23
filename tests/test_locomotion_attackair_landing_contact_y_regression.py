@@ -625,7 +625,7 @@ def test_landing_airf_runtime_context_controls_stay_replay_real(
         ),
     ],
 )
-def test_landing_basic_contact_y_context_controls_remain_outside_bridge_scope(
+def test_landing_basic_contact_y_context_controls_remain_outside_source_owner_scope(
     dataset_rel: str, record: int, p: int, seed_action: int, ref_action: int
 ) -> None:
     root = Path(__file__).resolve().parents[1]
@@ -637,7 +637,7 @@ def test_landing_basic_contact_y_context_controls_remain_outside_bridge_scope(
     seed, out, ref = _step_one_row(dataset_path, record, p)
 
     # Context controls: keep action-family context and landing transition stable without enforcing
-    # fixed mismatch floors for rows outside this bridge's source-action scope.
+    # fixed mismatch floors for rows outside this source-action scope.
     assert int(seed["action_id"][p]) == int(seed_action)
     assert int(ref["action_id"][p]) == int(ref_action)
     assert int(out["action_id"][p]) == int(ref["action_id"][p]) == 42
@@ -837,7 +837,7 @@ def test_landing_fallspecial_origin_specific_frame_speed_replay_real_locks(
         ),
     ],
 )
-def test_fallspecial_af3_floor_callback_keeps_unmodeled_seam_handoff_residual(
+def test_fallspecial_af3_floor_callback_keeps_source_seam_handoff_residual(
     dataset_rel: str,
     record: int,
     p: int,
@@ -991,7 +991,7 @@ def test_landing_rows_keep_self_vel_x_synced_with_ground_velocity(
         ),
     ],
 )
-def test_landing_contact_y_bridge_runtime_rows_fall_to_landing_keep_pos_y_parity(
+def test_landing_contact_y_source_runtime_rows_fall_to_landing_keep_pos_y_parity(
     dataset_rel: str, record: int, p: int, seed_action: int, ref_action: int
 ) -> None:
     root = Path(__file__).resolve().parents[1]
@@ -1048,7 +1048,7 @@ def test_landing_contact_y_bridge_runtime_rows_fall_to_landing_keep_pos_y_parity
         ),
     ],
 )
-def test_landing_contact_y_bridge_runtime_controls_stay_reseed_sensitive(
+def test_landing_contact_y_source_runtime_controls_stay_reseed_sensitive(
     dataset_rel: str,
     record: int,
     p: int,

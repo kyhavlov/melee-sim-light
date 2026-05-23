@@ -164,10 +164,11 @@ typedef struct MslStateSoA {
   // refs/melee/src/melee/mp/mpcoll.c::mpColl_80043754
   // refs/melee/src/melee/mp/mpcoll.c::mpColl_800443C4
   //
-  // This simulator does not yet substep collision. We approximate a single collision "substep" by
-  // capturing:
+  // The frame-level collision-stage interval is captured as:
   // - coll_stage_prev_pos: fighter position immediately before stage_collision_apply() this frame
   // - coll_stage_cur_pos: fighter position immediately after stage_collision_apply() this frame
+  // Source-shaped callback substep owners that stop earlier publish coll_substep_* above; ledge
+  // AABB consumers use this interval when no earlier source packet exists.
   float* coll_stage_prev_pos_x;
   float* coll_stage_prev_pos_y;
   float* coll_stage_cur_pos_x;

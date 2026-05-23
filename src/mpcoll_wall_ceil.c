@@ -2768,7 +2768,7 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
         // SpecialHi uses a live JObj ECB source while the launch model rotates around XRotN.
         // The same sampled CollData.ecb feeds both wall sides; the right-wall path below was the
         // first retained slice, and the SpecialAirHi left-wall envelope now consumes the same
-        // scoped ECB basis instead of a static-table proxy.
+        // scoped ECB basis instead of the static fixed-ECB table.
         // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialAirHi_Coll
         // refs/melee/src/melee/mp/mpcoll.c::{
         //   mpColl_LoadECB_JObj,mpColl_80044E10_RightWall,mpColl_80045B74_LeftWall}
