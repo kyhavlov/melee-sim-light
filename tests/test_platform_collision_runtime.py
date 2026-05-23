@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from argparse import Namespace
 from pathlib import Path
 
@@ -25,6 +26,7 @@ ACT_JUMP_B = 0x001A
 ACT_JUMP_AERIAL_F = 0x001B
 ACT_JUMP_AERIAL_B = 0x001C
 ACT_FALL = 0x001D
+ACT_FALL_SPECIAL = 0x0023
 ACT_ATTACK_AIR_LW = 0x0045
 ACT_SQUAT_WAIT = 0x0028
 ACT_LANDING = 0x002A
@@ -3989,6 +3991,141 @@ def test_fod_grounded_contact_derives_current_platform_height_replay_real(tmp_pa
     assert int(out["ground_id"][p]) == int(row["ref_t1"]["ground_id"][p]) == 0
     assert float(out["pos_x"][p]) == pytest.approx(float(row["ref_t1"]["pos_x"][p]), abs=1e-6)
     assert float(out["pos_y"][p]) == pytest.approx(float(row["ref_t1"]["pos_y"][p]), abs=2e-4)
+
+
+def _decode_modelplay_input_stream(
+    stream: list[list[object]], fields: list[str], frame_count: int
+) -> list[list[object]]:
+    current: list[object] = [0] * len(fields)
+    decoded: list[list[object]] = []
+    row_index = 0
+    for frame in range(frame_count):
+        while row_index < len(stream) and int(stream[row_index][1]) <= frame:
+            op = int(stream[row_index][0])
+            row_frame = int(stream[row_index][1])
+            payload = stream[row_index][2]
+            if row_frame != frame:
+                break
+            if op == 0:
+                current = list(payload)
+            else:
+                current = current.copy()
+                for field_index, value in payload:
+                    current[int(field_index)] = value
+            row_index += 1
+        decoded.append(current.copy())
+    return decoded
+
+
+def _write_modelplay_input(
+    input_view: np.ndarray,
+    streams: list[list[list[object]]],
+    field_lookup: dict[str, int],
+    frame: int,
+) -> None:
+    for player, decoded in enumerate(streams):
+        values = decoded[frame] if frame >= 0 else [0] * len(field_lookup)
+        input_view["p"][0, player]["buttons"] = np.uint16(int(values[field_lookup["buttons"]]))
+        input_view["p"][0, player]["main_x"] = np.int8(
+            np.clip(np.rint(float(values[field_lookup["mainX"]]) * 80.0), -80, 80)
+        )
+        input_view["p"][0, player]["main_y"] = np.int8(
+            np.clip(np.rint(float(values[field_lookup["mainY"]]) * 80.0), -80, 80)
+        )
+        input_view["p"][0, player]["c_x"] = np.int8(
+            np.clip(np.rint(float(values[field_lookup["cX"]]) * 80.0), -80, 80)
+        )
+        input_view["p"][0, player]["c_y"] = np.int8(
+            np.clip(np.rint(float(values[field_lookup["cY"]]) * 80.0), -80, 80)
+        )
+        input_view["p"][0, player]["l"] = np.uint8(
+            np.clip(np.rint(float(values[field_lookup["l"]]) * 255.0), 0, 255)
+        )
+        input_view["p"][0, player]["r"] = np.uint8(
+            np.clip(np.rint(float(values[field_lookup["r"]]) * 255.0), 0, 255)
+        )
+
+
+def test_modelplay_trace111_sideb_fallspecial_fd_floor_clip_repro_lands() -> None:
+    # This compact modelplay prefix reproduces the trace_seed111 Side-B -> FallSpecial FD floor
+    # crossing from match start. The old local FallSpecial terminal-cardinal same-floor suppression
+    # kept the fighter airborne forever once the carried CollData.floor.index matched FD's main
+    # floor. Source has no such hard-floor rejection: FallSpecial_Coll calls ft_80083090 with
+    # ftCo_80096CC8, which accepts every non-platform line and then enters LandingFallSpecial when
+    # ftCo_80096D28 runs.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::{
+    #   ftCo_FallSpecial_Coll,ftCo_80096CC8,ftCo_80096D28}
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80083090
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047E14,mpColl_80044628_Floor}
+    import msl_binding
+
+    fixture_path = (
+        Path(__file__).resolve().parents[1]
+        / "tests/fixtures/modelplay/trace111_sideb_fd_floor_clip_prefix.json"
+    )
+    fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+    fields = list(fixture["input_fields"])
+    assert fields == ["buttons", "mainX", "mainY", "cX", "cY", "l", "r"]
+    field_lookup = {name: idx for idx, name in enumerate(fields)}
+    landing_frame = int(fixture["assertions"]["landing_frame"])
+    before_floor_frame = int(fixture["assertions"]["before_floor_frame"])
+    player = int(fixture["assertions"]["player"])
+    frame_count = landing_frame + 1
+    streams = [
+        _decode_modelplay_input_stream(stream, fields, frame_count)
+        for stream in fixture["input_rows"]
+    ]
+
+    players = sorted(fixture["players"], key=lambda p: int(p["port"]))
+    config = build_match_config_array(
+        num_players=len(players),
+        char_ids=tuple(int(p["charId"]) for p in players),
+        team_ids=tuple(int(p["teamId"]) for p in players),
+        facing=(1, 0),
+        stage_id=int(fixture["stage_id"]),
+        frame_id=0,
+        random_seed=int(fixture["random_seed"]),
+    )
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    prev_input = np.zeros((1, input_stride), dtype=np.uint8)
+    cur_input = np.zeros((1, input_stride), dtype=np.uint8)
+    prev_view = prev_input.view(INPUT_DTYPE).reshape((1,))
+    cur_view = cur_input.view(INPUT_DTYPE).reshape((1,))
+    out_bytes = np.zeros((1, compare_stride), dtype=np.uint8)
+    rows: dict[int, np.void] = {}
+
+    handle = msl_binding.init(
+        batch_size=1,
+        num_players=len(players),
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    try:
+        msl_binding.init_match(handle, config.view(np.uint8).reshape((1, -1)))
+        for frame in range(landing_frame):
+            _write_modelplay_input(prev_view, streams, field_lookup, frame - 1)
+            _write_modelplay_input(cur_view, streams, field_lookup, frame)
+            msl_binding.step_input(handle, prev_input, cur_input)
+            msl_binding.write_compare(handle, out_bytes)
+            if frame + 1 in {before_floor_frame, landing_frame}:
+                rows[frame + 1] = out_bytes.view(COMPARE_DTYPE).reshape((1,))[0].copy()
+    finally:
+        msl_binding.destroy(handle)
+
+    before = rows[before_floor_frame]
+    assert int(before["action_id"][player]) == ACT_FALL_SPECIAL
+    assert int(before["on_ground"][player]) == 0
+    assert float(before["pos_y"][player]) == pytest.approx(0.7258, abs=1e-3)
+
+    landed = rows[landing_frame]
+    assert int(landed["action_id"][player]) == int(fixture["assertions"]["landing_action"])
+    assert int(landed["on_ground"][player]) == 1
+    assert int(landed["ground_id"][player]) == int(fixture["assertions"]["ground_id"])
+    assert float(landed["pos_y"][player]) == pytest.approx(
+        float(fixture["assertions"]["landing_y"]), abs=2e-4
+    )
 
 
 @pytest.mark.integration

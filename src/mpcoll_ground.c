@@ -278,7 +278,6 @@ enum {
 #define MSL_MPCOLL_REJECT_ESCAPEAIR_TRANSFORMED_REMAP (UINT64_C(1) << 0)
 #define MSL_MPCOLL_REJECT_SPECIALAIRHI_PLATFORM (UINT64_C(1) << 1)
 #define MSL_MPCOLL_REJECT_FALLSPECIAL_FIRST_SUSTAINED (UINT64_C(1) << 2)
-#define MSL_MPCOLL_REJECT_FALLSPECIAL_SAME_FLOOR_EARLY (UINT64_C(1) << 3)
 #define MSL_MPCOLL_REJECT_FALLSPECIAL_PLATFORM_NO_SOURCE_BOTTOM (UINT64_C(1) << 4)
 #define MSL_MPCOLL_REJECT_FALL_SAME_FLOOR_EARLY (UINT64_C(1) << 5)
 #define MSL_MPCOLL_REJECT_SPECIALHI_TRANSFORMED_PLATFORM (UINT64_C(1) << 6)
@@ -1804,16 +1803,17 @@ static inline uint8_t floor_line_is_terminal_cardinal_hard_floor(const MslBatch*
                                                                                           : 0u);
 }
 
-static inline uint8_t fallspecial_same_terminal_cardinal_floor_early_root_crossing(
+static inline uint8_t fallspecial_sustained_same_terminal_cardinal_floor_delay(
     const MslBatch* batch, size_t idx, int bi, const MslStageFloorGraph* g, uint32_t stage_id,
     uint16_t action_id, uint16_t seed_ground_id, uint16_t ground_id, int ground_line_idx,
     float contact_y, float root_y) {
   if (batch == NULL || g == NULL || !is_common_fallspecial_action(action_id) ||
       ground_id != seed_ground_id || seed_ground_id == 0xFFFFu ||
       batch->state.seed_prev_action_id[idx] != action_id ||
-      batch->state.seed_prev_action_frame[idx] > 5 || batch->state.action_frame[idx] > 6 ||
-      batch->state.speed_y_self[idx] >= 0.0f || batch->state.fall_fast[idx] == 0u ||
-      batch->state.floor_sweep_prev_pos_y[idx] <= contact_y || root_y >= contact_y) {
+      batch->state.seed_prev_action_frame[idx] > 5 || batch->state.action_frame[idx] < 5 ||
+      batch->state.action_frame[idx] > 6 || batch->state.speed_y_self[idx] >= 0.0f ||
+      batch->state.fall_fast[idx] == 0u || batch->state.floor_sweep_prev_pos_y[idx] <= contact_y ||
+      root_y >= contact_y) {
     return 0u;
   }
 
@@ -1822,6 +1822,14 @@ static inline uint8_t fallspecial_same_terminal_cardinal_floor_early_root_crossi
       g->lines[(size_t)line_idx].segment_i != ground_id) {
     line_idx = stage_collision_floor_line_index(stage_id, ground_id);
   }
+  // Sustained fastfall FallSpecial can carry CollData.floor.index through one same-floor root
+  // crossing before the source bottom/edge floor phase publishes LandingFallSpecial. Keep this as
+  // a narrow sustained-action source policy; freshly entered aerial Side-B end -> FallSpecial
+  // reaches the same ftCo_80096CC8 hard-floor owner earlier and must not reuse this delay.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::{
+  //   ftCo_FallSpecial_Coll,ftCo_80096CC8,ftCo_80096D28}
+  // refs/melee/src/melee/ft/ft_081B.c::ft_80083090
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047E14,mpColl_80044628_Floor}
   return floor_line_is_terminal_cardinal_hard_floor(batch, bi, g, stage_id, line_idx);
 }
 
@@ -3142,21 +3150,6 @@ static inline void mpcoll_apply_late_floor_publication_guards(
                                                       cur_bottom_x, cur_bottom_y);
   }
 
-  if (publication->on_ground &&
-      fallspecial_same_terminal_cardinal_floor_early_root_crossing(
-          batch, idx, ctx->bi, ctx->floor_graph, ctx->stage_id, action_id, seed_ground_id,
-          publication->contact.ground_id,
-          stage_collision_floor_line_index(ctx->stage_id, publication->contact.ground_id),
-          publication->contact.contact_y, y)) {
-    // Same carried terminal-cardinal hard-floor early FallSpecial root crossings remain airborne
-    // until an adjacent floor/seam or later callback owns LandingFallSpecial.
-    // data/stages/bin/*.bin::MSLSTG01 floor flags/links/platform-transform metadata
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::{
-    //   ftCo_FallSpecial_Coll,ftCo_80096CC8,ftCo_80096D28}
-    mpcoll_reject_floor_publication(ctx, publication, publication->contact.ground_id, y,
-                                    publication->contact.contact_x, publication->contact.contact_y);
-  }
-
   if (damage_active_hitlag_downward_sdi_airborne_owner ||
       damage_active_hitlag_root_below_bottom_above_floor_owner) {
     // Active-hitlag damage floor candidates keep the current hitlag-callback root until the damage
@@ -3941,17 +3934,9 @@ static uint8_t msl_mpcoll_80047e14_fallspecial_prephysics_floor_sweep(
     return 0u;
   }
   if (hit_line_idx >= 0 &&
-      fallspecial_same_terminal_cardinal_floor_early_root_crossing(
+      fallspecial_sustained_same_terminal_cardinal_floor_delay(
           batch, idx, bi, g, stage_id, batch->state.action_id[idx], batch->state.ground_id[idx],
           g->lines[(size_t)hit_line_idx].segment_i, hit_line_idx, iy, batch->state.pos_y[idx])) {
-    // Terminal-cardinal hard-floor early FallSpecial owner:
-    // The callback-visible bottom sweep can cross the same generated hard floor before source
-    // publishes LandingFallSpecial. Adjacent floor/seam and platform-bearing stage graphs remain
-    // on the normal landing path.
-    // data/stages/bin/*.bin::MSLSTG01 floor flags/links/platform-transform metadata
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::{
-    //   ftCo_FallSpecial_Coll,ftCo_80096CC8,ftCo_80096D28}
-    // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047E14,mpColl_80044628_Floor}
     return 0u;
   }
   const float snap_x = map_root_x;
@@ -4245,23 +4230,6 @@ static uint8_t msl_mpcoll_80047e14_flags6_root_floor_projection(
   }
   (void)ix;
   return 1u;
-}
-
-static inline uint8_t msl_mpcoll_80047e14_reject_fallspecial_same_floor_early_final_land(
-    const MslBatch* batch, size_t idx, int bi, const MslStageFloorGraph* g, uint32_t stage_id,
-    uint16_t action_id, uint16_t seed_ground_id, uint16_t ground_id, int final_ground_line_idx,
-    float final_landing_lift, float contact_y, float root_y) {
-  // Final guard for the same terminal-cardinal hard-floor early FallSpecial callback owner handled
-  // in the direct sweep path. This catches later projection paths that can still publish a root snap
-  // on the same generated hard-floor segment.
-  // data/stages/bin/*.bin::MSLSTG01 floor flags/links/platform-transform metadata
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::{
-  //   ftCo_FallSpecial_Coll,ftCo_80096CC8,ftCo_80096D28}
-  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047E14,mpColl_80044628_Floor}
-  return (uint8_t)(final_landing_lift >= 0.0f &&
-                   fallspecial_same_terminal_cardinal_floor_early_root_crossing(
-                       batch, idx, bi, g, stage_id, action_id, seed_ground_id, ground_id,
-                       final_ground_line_idx, contact_y, root_y));
 }
 
 static inline uint8_t msl_mpcoll_80047e14_reject_fall_same_floor_early_final_land(
@@ -8731,17 +8699,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
                   ? 1u
                   : 0u;
           const uint8_t suppress_fallspecial_same_floor_early_root_crossing =
-              // FallSpecial_Coll's early terminal-cardinal hard-floor callback can cross the
-              // carried hard-floor root while source still leaves the fighter airborne; adjacent
-              // floor/seam and platform-bearing stage graphs have separate callback-visible mpColl
-              // owners and still land.
-              // data/stages/bin/*.bin::MSLSTG01 floor flags/links/platform-transform metadata
-              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::{
-              //   ftCo_FallSpecial_Coll,ftCo_80096CC8,ftCo_80096D28}
-              // refs/melee/src/melee/ft/ft_081B.c::ft_80083090
-              // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047E14,mpColl_80044628_Floor}
               (hit_line_idx >= 0 &&
-               fallspecial_same_terminal_cardinal_floor_early_root_crossing(
+               fallspecial_sustained_same_terminal_cardinal_floor_delay(
                    batch, idx, bi, g, stage_id, action_id, batch->state.ground_id[idx],
                    g->lines[(size_t)hit_line_idx].segment_i, hit_line_idx, iy,
                    batch->state.pos_y[idx]) &&
@@ -10586,10 +10545,6 @@ void mpcoll_ground_apply(MslBatch* batch) {
              final_landing_lift >= 0.0f)
                 ? 1u
                 : 0u;
-        const uint8_t suppress_fallspecial_same_floor_early_final_land =
-            msl_mpcoll_80047e14_reject_fallspecial_same_floor_early_final_land(
-                batch, idx, bi, g, stage_id, action_id, seed_ground_id, ground_id,
-                final_ground_line_idx, final_landing_lift, contact_y, y);
         const uint8_t fallspecial_final_entered_from_specialhi_end =
             (is_common_fallspecial_action(action_id) &&
              is_spacie_specialhi_end_fallspecial_source(batch->state.seed_prev_action_id[idx]))
@@ -10929,11 +10884,6 @@ void mpcoll_ground_apply(MslBatch* batch) {
         mpcoll_floor_reject_add_if_state(&final_floor_reject,
                                          suppress_fallspecial_first_sustained_current_ecb_land,
                                          MSL_MPCOLL_REJECT_FALLSPECIAL_FIRST_SUSTAINED,
-                                         MSL_MPCOLL_FLOOR_REJECT_RESTORE_CURRENT_ROOT_Y, 0u,
-                                         (uint32_t)MSL_MPCOLL_PHASE_PLATFORM_PASS);
-        mpcoll_floor_reject_add_if_state(&final_floor_reject,
-                                         suppress_fallspecial_same_floor_early_final_land,
-                                         MSL_MPCOLL_REJECT_FALLSPECIAL_SAME_FLOOR_EARLY,
                                          MSL_MPCOLL_FLOOR_REJECT_RESTORE_CURRENT_ROOT_Y, 0u,
                                          (uint32_t)MSL_MPCOLL_PHASE_PLATFORM_PASS);
         mpcoll_floor_reject_add_if_state(&final_floor_reject,
