@@ -666,6 +666,13 @@ typedef struct MslStateSoA {
   // Runtime provenance for the above owner: 1 only when restored from a teacher-forced seed lane,
   // 0 when populated by live CliffCatch/CliffWait runtime ownership.
   uint8_t* cliff_ledge_floor_segment_seeded;  // [batch * players]
+  // CliffWait climb/drop stick latch (decomp: fp->mv.co.cliff.x8).
+  // - ftCo_8009A804 initializes x8=0 on CliffWait entry.
+  // - ftCo_8009AA0C sets x8=1 when no main/c-stick option input is present.
+  // - ftCo_8009AAFC admits CliffClimb/drop only after x8 has latched.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::ftCo_8009A804
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::{ftCo_8009AA0C,ftCo_8009AAFC}
+  uint8_t* cliff_option_stick_latch_x8;  // [batch * players], 0/1
   // FallSpecial internals (seeded/derived).
   // Decomp: refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c
   uint8_t* fallspecial_xc;  // fp->mv.co.fallspecial.xC (arg1 to ftCo_80096900)

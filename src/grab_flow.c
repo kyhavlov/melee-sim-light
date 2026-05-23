@@ -840,9 +840,10 @@ static inline uint8_t catch_input_a_pressed_edge(const MslBatch* batch, size_t i
   const uint16_t pressed = batch->state.input_buttons_pressed[idx];
   // Decomp tie-down:
   // - Catch_CheckInput and CatchWait pummel check read `fp->input.x668 & HSD_PAD_A`.
-  // Sim inference:
-  // - We treat Z as satisfying the Catch-check predicate because Z is "grab" on controller and
-  //   Slippi provides raw button bits, not the internal held_inputs/x668 representation.
+  // Raw Slippi mapping:
+  // - Fighter_Spaghetti maps Z into held_inputs LR plus x668 A before Catch_CheckInput reads
+  //   those internal lanes, so the compact raw Z edge is source-equivalent to the A-edge half.
+  // refs/melee/src/melee/ft/fighter.c:1868-1890
   // refs/melee/build/GALE01/asm/melee/ft/chara/ftCommon/ftCo_Attack100.s::{ftCo_Catch_CheckInput,fn_800DA4C0}
   return ((pressed & (uint16_t)MSL_BUTTON_A) != 0 || (pressed & (uint16_t)MSL_BUTTON_Z) != 0) ? 1u
                                                                                               : 0u;
@@ -854,8 +855,8 @@ static inline uint8_t catch_input_lr_held(const MslBatch* batch, const MslCommon
     return 0u;
   }
   const uint16_t buttons = batch->state.input_buttons[idx];
-  // Sim inference: treat held Z as satisfying the LR-held half of Catch_CheckInput for the same
-  // reason as catch_input_a_pressed_edge above (raw Slippi buttons vs internal held_inputs).
+  // Raw Slippi mapping: held Z supplies the source held_inputs LR half for Catch_CheckInput.
+  // refs/melee/src/melee/ft/fighter.c:1868-1890
   if ((buttons & (uint16_t)(MSL_BUTTON_L | MSL_BUTTON_R | MSL_BUTTON_Z)) != 0) {
     return 1u;
   }

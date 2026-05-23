@@ -1264,6 +1264,44 @@ def _derive_cliff_ledge_floor_segment_id(
     )
 
 
+def _derive_cliff_option_stick_latch_x8(
+    *,
+    action_id_u16: np.ndarray,
+    main_x_i8: np.ndarray,
+    main_y_i8: np.ndarray,
+    c_x_i8: np.ndarray,
+    c_y_i8: np.ndarray,
+    common: dict,
+) -> np.ndarray:
+    """
+    Derive the CliffWait climb/drop latch `mv.co.cliff.x8` for teacher-forced reseeds.
+
+    Decomp shape:
+    - ftCo_8009A804 initializes x8=0 on CliffWait entry.
+    - ftCo_8009AA0C sets x8 when neither main stick nor c-stick is in the cliff option range.
+    - ftCo_8009AAFC admits CliffClimb/drop only after x8 is set.
+      refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::ftCo_8009A804
+      refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::{ftCo_8009AA0C,ftCo_8009AAFC}
+    """
+
+    try:
+        import msl_binding  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "native msl_binding.derive_cliff_option_stick_latch_x8 is required; run `make build`"
+        ) from exc
+    return msl_binding.derive_cliff_option_stick_latch_x8(
+        np.ascontiguousarray(np.asarray(action_id_u16, dtype=np.uint16).reshape(-1)),
+        np.ascontiguousarray(np.asarray(main_x_i8, dtype=np.int8).reshape(-1)),
+        np.ascontiguousarray(np.asarray(main_y_i8, dtype=np.int8).reshape(-1)),
+        np.ascontiguousarray(np.asarray(c_x_i8, dtype=np.int8).reshape(-1)),
+        np.ascontiguousarray(np.asarray(c_y_i8, dtype=np.int8).reshape(-1)),
+        float(common["lstick_deadzone_x"]),
+        float(common["lstick_deadzone_y"]),
+        float(common["cliff_option_stick_threshold"]),
+    )
+
+
 def _derive_match_flow_timer(*, action_id_u16: np.ndarray, port0: int, common: dict) -> np.ndarray:
     """
     Derive a per-frame decomp-shaped countdown for match-flow states.
@@ -4883,6 +4921,17 @@ def _main_impl(args) -> Dataset:
             data_root=data_root,
         )
         samples["seed_t"]["cliff_ledge_floor_segment_id_u16"][:, slot] = cliff_ledge_floor_segment_id[:-1]
+        cliff_option_stick_latch_x8 = _derive_cliff_option_stick_latch_x8(
+            action_id_u16=post_state,
+            main_x_i8=main_x_proc,
+            main_y_i8=main_y_proc,
+            c_x_i8=c_x_proc,
+            c_y_i8=c_y_proc,
+            common=common,
+        )
+        samples["seed_t"]["cliff_option_stick_latch_x8"][:, slot] = cliff_option_stick_latch_x8[
+            :-1
+        ]
         samples["seed_t"]["landing_fallspecial_allow_interrupt"][:, slot] = (
             _derive_landing_fallspecial_allow_interrupt_seed_lane(action_id_u16=post_state)[:-1]
         )

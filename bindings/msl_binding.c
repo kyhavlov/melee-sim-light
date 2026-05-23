@@ -6722,6 +6722,9 @@ static PyMethodDef methods[] = {
      METH_VARARGS,
      "derive_cliff_ledge_floor_segment_id(action, facing, on_ground, cooldown, left_floor, "
      "right_floor) -> uint16[:]"},
+    {"derive_cliff_option_stick_latch_x8", msl_derive_cliff_option_stick_latch_x8_py, METH_VARARGS,
+     "derive_cliff_option_stick_latch_x8(action, main_x, main_y, c_x, c_y, deadzones, "
+     "threshold) -> uint8[:]"},
     {"derive_match_flow_timer", msl_derive_match_flow_timer_py, METH_VARARGS,
      "derive_match_flow_timer(action, port0, common timers...) -> uint8[:]"},
     {"derive_passivewall_timer", msl_derive_passivewall_timer_py, METH_VARARGS,

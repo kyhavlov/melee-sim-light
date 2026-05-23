@@ -129,8 +129,9 @@ static inline uint8_t anim_finished(uint8_t char_id, uint16_t msid, float anim_f
   if (!(end > 0.0f)) {
     return 0;
   }
-  // Decomp gates on "frames remaining" (joint track remaining). In this sim we approximate via a
-  // simple end-frame comparison on the sanitized float timebase.
+  // Source-policy representation: decomp gates on "frames remaining" (joint track remaining).
+  // MSL's extracted animation tables expose the terminal frame, so runtime uses the matching
+  // sanitized timebase end-frame comparison.
   // refs/melee/src/melee/ft/ftanim.c::ftAnim_IsFramesRemaining
   return msl_anim_frame_sanitize_f32(anim_frame_f32) >= end;
 }
@@ -187,6 +188,16 @@ static inline uint8_t action_preserves_cliff_ledge_floor_owner(uint16_t action_i
     default:
       return 0u;
   }
+}
+
+static inline uint16_t source_x668_button_edges_with_z_a(uint16_t buttons_pressed) {
+  // Decomp: Fighter_Spaghetti maps raw Z into held HSD_PAD_A before building input.x668. Common
+  // callbacks that read `fp->input.x668 & HSD_PAD_A` therefore see a fresh Z edge as an A edge,
+  // while the public `input_buttons_pressed` lane stays in raw Slippi button space.
+  // refs/melee/src/melee/ft/fighter.c:1868-1890
+  return ((buttons_pressed & (uint16_t)MSL_BUTTON_Z) != 0u)
+             ? (uint16_t)(buttons_pressed | (uint16_t)MSL_BUTTON_A)
+             : buttons_pressed;
 }
 
 static inline uint8_t dash_anim_end_try_enter_wait_ft_8008A2BC(MslBatch* batch, size_t idx,
@@ -1157,7 +1168,8 @@ static inline uint8_t locomotion_kneebend_prepass_attackair_input_active(const M
                             batch->state.input_c_x[idx], batch->state.input_c_y[idx]) != 0u) {
     return 1u;
   }
-  const uint16_t pressed = batch->state.input_buttons_pressed[idx];
+  const uint16_t pressed =
+      source_x668_button_edges_with_z_a(batch->state.input_buttons_pressed[idx]);
   return ((pressed & (uint16_t)(MSL_BUTTON_A | MSL_BUTTON_Z)) != 0u) ? 1u : 0u;
 }
 
@@ -1210,30 +1222,17 @@ uint8_t locomotion_attackair_try_enter_from_air_iasa(MslBatch* batch, const MslC
     return 0;
   }
 
-  const uint16_t pressed = batch->state.input_buttons_pressed[idx];
+  const uint16_t pressed =
+      source_x668_button_edges_with_z_a(batch->state.input_buttons_pressed[idx]);
   const uint8_t c_edge =
       attackair_cstick_edge(c, batch->state.prev_input_c_x[idx], batch->state.prev_input_c_y[idx],
                             batch->state.input_c_x[idx], batch->state.input_c_y[idx]);
-  // Decomp input synthesis maps raw Z into held HSD_PAD_A before x668 edge construction; the
-  // Jump-family AttackAir input owner then reads `fp->input.x668 & HSD_PAD_A`.
-  //
-  // Keep this promoted only on Jump/JumpAerial source rows for now. Other aerial IASA owners share
-  // ftCo_AttackAir_CheckItemThrowInput, but modelplay shield/projectile locks still need the
-  // broader synthesized x668-A provenance separated from raw replay buttons before enabling it
-  // globally.
+  // Decomp input synthesis maps raw Z into held HSD_PAD_A before x668 edge construction; every
+  // caller of ftCo_AttackAir_CheckItemThrowInput reads `fp->input.x668 & HSD_PAD_A`, so the
+  // Z-as-A lane is common to Fall, Jump, JumpAerial, DamageFall, and related airborne IASA owners.
   // refs/melee/src/melee/ft/fighter.c:1868-1890
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_IASA
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_800CB870
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_CheckItemThrowInput
-  const uint8_t jump_z_as_a =
-      (a0 == (uint16_t)MSL_ACT_JUMP_F || a0 == (uint16_t)MSL_ACT_JUMP_B ||
-       a0 == (uint16_t)MSL_ACT_JUMP_AERIAL_F || a0 == (uint16_t)MSL_ACT_JUMP_AERIAL_B)
-          ? 1u
-          : 0u;
-  const uint8_t attack_pressed = ((pressed & (uint16_t)MSL_BUTTON_A) != 0u ||
-                                  (jump_z_as_a && (pressed & (uint16_t)MSL_BUTTON_Z) != 0u))
-                                     ? 1u
-                                     : 0u;
+  const uint8_t attack_pressed = ((pressed & (uint16_t)MSL_BUTTON_A) != 0u) ? 1u : 0u;
   if (!attack_pressed && !c_edge) {
     return 0;
   }
@@ -2119,7 +2118,8 @@ static inline uint8_t common_appeal_update(MslBatch* batch, size_t idx) {
   }
   // AppealS_IASA is gated by fp->allow_interrupt, but the current Fox/Falco script artifact has no
   // AppealSR/SL command timeline entries and therefore no data-backed allow_interrupt event for
-  // this state. Keep current scope anim-end-only until MSLFTSC1 exposes a real Appeal allow window.
+  // this state. Retained source-policy: common Appeal rows stay anim-end-only unless extracted
+  // MSLFTSC1 data owns an allow_interrupt event.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AppealS.c::ftCo_AppealS_IASA
   // data/scripts/{fox,falco}.bin (MSLFTSC1): no entries for msid 239/240.
   return 1u;
@@ -3232,7 +3232,7 @@ static inline uint8_t spacie_speciallw_pressed(const MslCommonParams* c, uint8_t
                                                uint16_t buttons_pressed, float stick_y) {
   // Fox/Falco aerial common IASA checks ftCo_SpecialAir_CheckInput before ftCo_80099A58
   // (EscapeAir). The simulator's Reflector owner runs after locomotion, so local locomotion IASA
-  // approximations must leave B+down reflector input unconsumed for that later source owner.
+  // source-order guards must leave B+down reflector input unconsumed for that later source owner.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_IASA
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_IASA
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_IASA_Inner
@@ -3854,9 +3854,9 @@ void locomotion_update_pre(MslBatch* batch) {
             action_id == MSL_ACT_SQUAT_RV) {
           const uint8_t speciallw_preempts_squat_iasa =
               // Squat/SquatWait IASA checks grounded special dispatch before AttackLw*/AttackS*
-              // branches and before the delayed platform-pass helper. Because this sim runs Shine
-              // entry after locomotion, keep B+down reflector input from being consumed by those local
-              // approximations first.
+              // branches and before the delayed platform-pass helper. Shine entry is owned by the
+              // later grounded-special phase in this runtime; this source-order policy prevents
+              // lower-priority Squat consumers from taking B+down before that owner runs.
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_IASA
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D68C0
               // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLw_Enter
@@ -4480,8 +4480,9 @@ void locomotion_update_pre(MslBatch* batch) {
                 // - ftCo_Wait_IASA checks ftCo_SpecialS_CheckInput before Squat/Turn/Walk.
                 // - ftCo_SpecialS_CheckInput consumes held-B rows once ABS(lstick.x) >=
                 //   p_ftCommonData->x218.
-                // Keep this scoped to AttackDash until grounded SpecialS delegation is modeled more
-                // broadly across the other grounded-attack callbacks.
+                // AttackDash needs this local preemption because its source callback directly
+                // delegates into Wait_IASA; other grounded-attack callbacks are handled by their
+                // family-specific IASA branches above.
                 // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackDash.c::ftCo_AttackDash_IASA
                 // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
                 // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SpecialS.c::{
@@ -4733,8 +4734,8 @@ void locomotion_update_pre(MslBatch* batch) {
           // Common Appeal admission is the ftCo_800DE9D8 tail, not generic locomotion:
           // catch / special / attack / guard have already had priority, and jump/dash/locomotion
           // remain below it. Supported decomp callers here are Wait/Walk/Turn/Squat/SquatWait/
-          // SquatRv. Dash/Run have different branch-local priority gates and stay out of this
-          // shared bucket until those full IASA chains are modeled.
+          // SquatRv. Dash/Run have different branch-local priority gates and are handled in the
+          // Dash_IASA / Run_IASA sections below.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_{Wait,Walk,Turn,Squat}.c
           continue;
         }
@@ -4819,6 +4820,18 @@ void locomotion_update_pre(MslBatch* batch) {
           }
         }
 
+        if (action_id == (uint16_t)MSL_ACT_OTTOTTO || action_id == (uint16_t)MSL_ACT_OTTOTTO_WAIT) {
+          // Ottotto / OttottoWait catch IASA:
+          // ftCo_Ottotto_IASA checks ftCo_Catch_CheckInput before grounded A-attacks and guard.
+          // The catch helper owns the raw Slippi Z -> internal held LR + x668 A mapping.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::ftCo_Ottotto_IASA
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Catch_CheckInput
+          if (grab_flow_try_enter_catch_from_iasa(batch, c, idx)) {
+            action_id = batch->state.action_id[idx];
+            continue;
+          }
+        }
+
         // Ottotto grounded A-attack IASA:
         // - ftCo_Ottotto_IASA checks grounded A-attack inputs before guard/jump/dash/turn/walk.
         // - ftCo_OttottoWait_IASA shares the same grounded input owner, so teeter wait can enter
@@ -4875,8 +4888,8 @@ void locomotion_update_pre(MslBatch* batch) {
 
         // Ottotto / OttottoWait jump IASA:
         // - ftCo_Ottotto{,Wait}_IASA routes through ftCo_Jump_CheckInput before Dash/Turn/Walk.
-        // - Keep jump entry independent from the narrower grounded A-attack bridge above; the
-        //   remaining teeter IASA branches are still blocked on broader ownership parity.
+        // - Keep jump entry independent from the earlier grounded A-attack owner above because the
+        //   source callback checks catch/attack/guard/appeal before reaching Jump.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::{
         //   ftCo_Ottotto_IASA,ftCo_OttottoWait_IASA}
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_CheckInput
@@ -5482,7 +5495,7 @@ void locomotion_update_pre(MslBatch* batch) {
         // Decomp:
         // - ftCo_RunBrake_IASA runs:
         //   - fn_800CAF78 (jump)
-        //   - (cmd_vars[0] && fn_800C9CEC) (TurnRun path; not modeled yet)
+        //   - (cmd_vars[0] && fn_800C9CEC) (TurnRun path)
         //   - ftCo_800D5FB0 (Squat check/enter)
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::ftCo_RunBrake_IASA
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_800D5FB0

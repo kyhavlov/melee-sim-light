@@ -443,6 +443,11 @@ static inline void enter_cliff_wait(MslBatch* batch, size_t idx) {
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_CLIFF_WAIT;
   batch->state.on_ground[idx] = 0;
   batch->state.fall_fast[idx] = 0;
+  // Decomp: ftCo_8009A804 initializes mv.co.cliff.x8=0. The later CliffClimb/drop IASA owner
+  // requires a neutral stick/c-stick callback to latch x8 before a stick option can be consumed.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::ftCo_8009A804
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_8009AAFC
+  batch->state.cliff_option_stick_latch_x8[idx] = 0u;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
 }
 
@@ -666,6 +671,34 @@ static inline uint8_t ledge_wait_try_jump(MslBatch* batch, const MslCommonParams
   return 0;
 }
 
+static inline uint8_t ledge_wait_has_stick_option_input(MslBatch* batch, const MslCommonParams* c,
+                                                        size_t idx) {
+  const float stick_x =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_main_x[idx]), c->lstick_deadzone_x);
+  const float stick_y =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
+  const float cstick_x = stick_i8_to_unit(batch->state.input_c_x[idx]);
+  const float cstick_y = stick_i8_to_unit(batch->state.input_c_y[idx]);
+  return (msl_absf(stick_x) >= c->cliff_option_stick_threshold ||
+          msl_absf(stick_y) >= c->cliff_option_stick_threshold ||
+          msl_absf(cstick_x) >= c->cliff_option_stick_threshold ||
+          msl_absf(cstick_y) >= c->cliff_option_stick_threshold)
+             ? 1u
+             : 0u;
+}
+
+static inline void ledge_wait_latch_stick_option_ready_if_neutral(MslBatch* batch,
+                                                                  const MslCommonParams* c,
+                                                                  size_t idx) {
+  if (!ledge_wait_has_stick_option_input(batch, c, idx)) {
+    // Decomp: ftCo_8009AA0C sets mv.co.cliff.x8 when no stick/c-stick option is present.
+    // This can happen on the same proc where CliffCatch_Anim enters CliffWait; x8 still blocks
+    // immediate climb/drop that frame, but the neutral callback prepares the next frame.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_8009AA0C
+    batch->state.cliff_option_stick_latch_x8[idx] = 1u;
+  }
+}
+
 static inline uint8_t ledge_wait_try_climb_or_drop(MslBatch* batch, const MslCommonParams* c,
                                                    int bi, int p) {
   const size_t idx = msl_idx_player(bi, p);
@@ -680,25 +713,13 @@ static inline uint8_t ledge_wait_try_climb_or_drop(MslBatch* batch, const MslCom
   const uint8_t cstick_option = (uint8_t)(msl_absf(cstick_x) >= c->cliff_option_stick_threshold ||
                                           msl_absf(cstick_y) >= c->cliff_option_stick_threshold);
   if (!main_option && !cstick_option) {
+    ledge_wait_latch_stick_option_ready_if_neutral(batch, c, idx);
     return 0;
   }
 
-  // Decomp gate: mv.co.cliff.x8 must be set (it is set when no stick/cstick option input is
-  // present, and consumed when a qualifying stick input triggers climb/drop).
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_8009AA0C
-  //
-  // Approximation for one-step reseeds: require the *previous frame's* main stick to have been
-  // below the option threshold (a "neutral reset") before allowing climb/drop this frame.
-  const float prev_x =
-      apply_deadzone(stick_i8_to_unit(batch->state.prev_input_main_x[idx]), c->lstick_deadzone_x);
-  const float prev_y =
-      apply_deadzone(stick_i8_to_unit(batch->state.prev_input_main_y[idx]), c->lstick_deadzone_y);
-  const float prev_cx = stick_i8_to_unit(batch->state.prev_input_c_x[idx]);
-  const float prev_cy = stick_i8_to_unit(batch->state.prev_input_c_y[idx]);
-  if (msl_absf(prev_x) >= c->cliff_option_stick_threshold ||
-      msl_absf(prev_y) >= c->cliff_option_stick_threshold ||
-      msl_absf(prev_cx) >= c->cliff_option_stick_threshold ||
-      msl_absf(prev_cy) >= c->cliff_option_stick_threshold) {
+  // Decomp gate: mv.co.cliff.x8 must have been latched by a previous neutral CliffWait IASA.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_8009AAFC
+  if (batch->state.cliff_option_stick_latch_x8[idx] == 0u) {
     return 0;
   }
 
@@ -902,6 +923,8 @@ void ledge_update_pre_physics(MslBatch* batch) {
           if (ledge_wait_try_attack(batch, bi, p) || ledge_wait_try_escape(batch, c, bi, p) ||
               ledge_wait_try_jump(batch, c, bi, p)) {
             a = batch->state.action_id[idx];
+          } else {
+            ledge_wait_latch_stick_option_ready_if_neutral(batch, c, idx);
           }
           a = batch->state.action_id[idx];
         }
@@ -981,14 +1004,16 @@ void ledge_update_pre_physics(MslBatch* batch) {
           // Decomp: CliffClimb_Anim (and CliffAttack/Escape) -> ftCommon_8007D92C.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_CliffClimb_Anim
           //
-          // TODO(decomp): ftCommon_8007D92C likely enters a grounded Wait-like state with proper floor
-          // clamping and residual velocity handling. For now, enter Wait on stage.
+          // Decomp: CliffClimb_Anim / CliffAttack_Anim / CliffEscape_Anim end through
+          // ftCommon_8007D92C. Supported RL 1.0 ledge options land on stage into Wait and can run
+          // Wait IASA in the same proc; the detailed floor-clamp portion is collision-owned and is
+          // covered by the ledge/platform collision locks.
           const uint16_t cliff_end_action = a;
           const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
           batch->state.ledge_side[idx] = -1;
           enter_wait_on_stage(batch, idx);
-          // Scope-narrowed bridge: keep the ftCommon_8007D92C -> Wait IASA same-proc ownership for
-          // the CliffClimb/Attack/Escape option families validated by strict lock rows.
+          // Source policy: keep the ftCommon_8007D92C -> Wait IASA same-proc ownership for the
+          // CliffClimb/Attack/Escape option families validated by strict lock rows.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_CliffClimb_Anim
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
           if (cliff_end_action == (uint16_t)MSL_ACT_CLIFF_CLIMB_SLOW ||

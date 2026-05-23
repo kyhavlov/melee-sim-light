@@ -703,6 +703,10 @@ def _run_cliff_wait_ledgedash(
     seed["on_ground"][0, 0] = np.uint8(0)
     seed["ground_id"][0, 0] = np.uint16(ground_id)
     seed["percent"][0, 0] = np.float32(percent)
+    # These synthetic ledge-dash fixtures start after CliffWait has already seen a neutral
+    # stick/c-stick IASA frame, so the source mv.co.cliff.x8 option latch is live before the
+    # first held-down ledge option input.
+    seed["cliff_option_stick_latch_x8"][0, 0] = np.uint8(1)
 
     def set_input(arr: np.ndarray, buttons: int, main_x: int, main_y: int, r: int = 0) -> None:
         view = arr.view(INPUT_DTYPE).reshape((1,))

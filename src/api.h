@@ -1242,6 +1242,15 @@ typedef struct MslSeed {
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
   // refs/melee/src/melee/mp/mpcoll.c::mpColl_800471F8
   uint16_t cliff_ledge_floor_segment_id_u16[MSL_MAX_PLAYERS];
+  // CliffWait stick-option latch (seeded; decomp-shaped).
+  //
+  // Decomp:
+  // - ftCo_8009A804 initializes `mv.co.cliff.x8 = 0` on CliffWait entry.
+  // - ftCo_8009AA0C sets x8 when neither main stick nor c-stick is in the cliff option range.
+  // - ftCo_8009AAFC admits CliffClimb/drop only once x8 has latched.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffWait.c::ftCo_8009A804
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::{ftCo_8009AA0C,ftCo_8009AAFC}
+  uint8_t cliff_option_stick_latch_x8[MSL_MAX_PLAYERS];
   // Hidden FallSpecial -> LandingFallSpecial interrupt permission carry
   // (`mv.co.fallspecial.allow_interrupt` / `mv.co.landing.allow_interrupt`).
   //

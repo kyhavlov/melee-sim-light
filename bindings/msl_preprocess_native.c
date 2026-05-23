@@ -4126,6 +4126,80 @@ PyObject* msl_derive_cliff_ledge_floor_segment_id_py(PyObject* self, PyObject* a
   return (PyObject*)out;
 }
 
+PyObject* msl_derive_cliff_option_stick_latch_x8_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* action_obj = NULL;
+  PyObject* main_x_obj = NULL;
+  PyObject* main_y_obj = NULL;
+  PyObject* c_x_obj = NULL;
+  PyObject* c_y_obj = NULL;
+  double deadzone_x = 0.0;
+  double deadzone_y = 0.0;
+  double option_threshold = 0.0;
+  if (!PyArg_ParseTuple(args, "OOOOOddd", &action_obj, &main_x_obj, &main_y_obj, &c_x_obj, &c_y_obj,
+                        &deadzone_x, &deadzone_y, &option_threshold)) {
+    return NULL;
+  }
+  PyArrayObject* action = require_contiguous_array(action_obj, NPY_UINT16, 1, "action_id_u16");
+  PyArrayObject* main_x = require_contiguous_array(main_x_obj, NPY_INT8, 1, "main_x_i8");
+  PyArrayObject* main_y = require_contiguous_array(main_y_obj, NPY_INT8, 1, "main_y_i8");
+  PyArrayObject* c_x = require_contiguous_array(c_x_obj, NPY_INT8, 1, "c_x_i8");
+  PyArrayObject* c_y = require_contiguous_array(c_y_obj, NPY_INT8, 1, "c_y_i8");
+  if (action == NULL || main_x == NULL || main_y == NULL || c_x == NULL || c_y == NULL) {
+    return NULL;
+  }
+  const npy_intp n = PyArray_SIZE(action);
+  if (PyArray_SIZE(main_x) != n || PyArray_SIZE(main_y) != n || PyArray_SIZE(c_x) != n ||
+      PyArray_SIZE(c_y) != n) {
+    PyErr_SetString(PyExc_ValueError, "cliff option latch inputs must have equal lengths");
+    return NULL;
+  }
+  npy_intp dims[1] = {n};
+  PyArrayObject* out = (PyArrayObject*)PyArray_ZEROS(1, dims, NPY_UINT8, 0);
+  if (out == NULL) return NULL;
+  const uint16_t* a = (const uint16_t*)PyArray_DATA(action);
+  const int8_t* mx = (const int8_t*)PyArray_DATA(main_x);
+  const int8_t* my = (const int8_t*)PyArray_DATA(main_y);
+  const int8_t* cx = (const int8_t*)PyArray_DATA(c_x);
+  const int8_t* cy = (const int8_t*)PyArray_DATA(c_y);
+  uint8_t* o = (uint8_t*)PyArray_DATA(out);
+  const float dz_x = (float)deadzone_x;
+  const float dz_y = (float)deadzone_y;
+  const float threshold = (float)option_threshold;
+  uint8_t latch = 0u;
+  uint16_t prev_action = 0xFFFFu;
+  for (npy_intp t = 0; t < n; t++) {
+    if (a[t] != (uint16_t)MSL_ACT_CLIFF_WAIT) {
+      latch = 0u;
+      o[t] = 0u;
+      prev_action = a[t];
+      continue;
+    }
+    if (prev_action != (uint16_t)MSL_ACT_CLIFF_WAIT) {
+      // ftCo_8009A804 initializes mv.co.cliff.x8=0 on CliffWait entry. The same visible
+      // post-frame may result from a CliffCatch Anim handoff; runtime may run the neutral x8
+      // setter in that same proc, but visible replay rows do not expose the pre-commit callback
+      // boundary, so the prefix derivation starts the new CliffWait segment unlatched.
+      latch = 0u;
+    }
+    float sx = stick_i8_to_unit(mx[t]);
+    float sy = stick_i8_to_unit(my[t]);
+    if (msl_absf(sx) < dz_x) sx = 0.0f;
+    if (msl_absf(sy) < dz_y) sy = 0.0f;
+    const float scx = stick_i8_to_unit(cx[t]);
+    const float scy = stick_i8_to_unit(cy[t]);
+    const uint8_t main_option = (uint8_t)(msl_absf(sx) >= threshold || msl_absf(sy) >= threshold);
+    const uint8_t cstick_option =
+        (uint8_t)(msl_absf(scx) >= threshold || msl_absf(scy) >= threshold);
+    if (!main_option && !cstick_option) {
+      latch = 1u;
+    }
+    o[t] = latch;
+    prev_action = a[t];
+  }
+  return (PyObject*)out;
+}
+
 PyObject* msl_derive_match_flow_timer_py(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* action_obj = NULL;

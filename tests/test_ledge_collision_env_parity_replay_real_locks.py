@@ -376,13 +376,14 @@ def test_cliffwait_cstick_down_releases_from_ledge_pec_948() -> None:
 @pytest.mark.integration
 def test_cliffwait_cstick_drop_requires_prior_no_option_frame() -> None:
     # ftCo_8009AA0C sets mv.co.cliff.x8 only on frames with no main-stick or c-stick ledge option
-    # input. A held c-stick down on the previous frame therefore must not be treated as a fresh
-    # ledge-release/drop gate on the current frame.
+    # input. The runtime consumes the explicit x8 latch; a teacher-forced seed with x8 still clear
+    # must not release/drop even if the visible previous input is also in the option range.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_8009AA0C
     samples, num_players = _physical_electric_capybara_samples()
     row = samples[948:949].copy()
     p = 0
 
+    row["seed_t"]["cliff_option_stick_latch_x8"][0, p] = 0
     row["prev_input_t"]["p"][0, p]["c_y"] = -80
 
     out_row = _step_one_row(row, num_players=num_players)

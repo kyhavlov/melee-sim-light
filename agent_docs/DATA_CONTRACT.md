@@ -1128,7 +1128,9 @@ Characters (Fox/Falco):
       `ftCo_DamageFly_Coll` runs mpColl. FoD open-air and in-span platform contacts have focused
       negatives; hard-floor rows on other stages keep the normal previous-public-row
       reconstruction. This stack changes seed schema and same-record-size cache semantics:
-      `tools/slippi/preprocess_suite.py` cache version 19 is the first valid cache generation for
+      `tools/slippi/preprocess_suite.py` cache version 20 is the first valid cache generation for
+      the CliffWait `mv.co.cliff.x8` stick-option latch seed lane; cache version 19 is the first
+      valid cache generation for
       FoD hidden-return scheduler timer seed lanes; cache version 18 is the first valid cache
       generation for FoD grounded KneeBend severe-airborne DamageFlyRoll seed-lane reconstruction;
       cache version
@@ -1163,6 +1165,11 @@ Characters (Fox/Falco):
       through Fall/JumpAerial/EscapeAir while the derived `ledge_cooldown` owner remains live, and
       clears it on grounded transfer, cooldown expiry, or non-cliff-exit action. The sentinel
       `0xFFFF` means no live owner.
+    - `cliff_option_stick_latch_x8[4]` for CliffWait `mv.co.cliff.x8`, the source latch that
+      admits CliffClimb/drop only after a neutral main-stick/c-stick CliffWait IASA. Runtime sets
+      it live in `ftCo_8009AA0C`-shaped CliffWait IASA; native preprocessing reconstructs the
+      teacher-forced seed lane from prefix-visible CliffWait action and processed stick/c-stick
+      inputs.
     - Platform ids match Slippi/grIzumi (`0=right`, `1=left`). Missing events use source-backed
       default current raw heights from `MSLSTG01` platform transform records; present events carry
       forward by replay prefix only. Consecutive prefix events or grounded platform contact derive

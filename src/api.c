@@ -1931,6 +1931,8 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
               (seeded_cliff_floor == 0xFFFFu) ? 0u : 1u;
         }
       }
+      batch->state.cliff_option_stick_latch_x8[idx] =
+          seed->cliff_option_stick_latch_x8[p] ? 1u : 0u;
       batch->state.landing_fallspecial_allow_interrupt[idx] =
           seed->landing_fallspecial_allow_interrupt[p] ? 1u : 0u;
       {
