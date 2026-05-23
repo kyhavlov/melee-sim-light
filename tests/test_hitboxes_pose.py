@@ -83,6 +83,7 @@ def _active_hitboxes_at_frame(events: list[dict], frame: int) -> dict[int, dict]
     # Mirror the C-side event application policy:
     # - kind=0: set slot=hitbox_id
     # - kind=1: clear (hitbox_id==0xFF => clear-all)
+    # - kind=2: mutate active slot damage without create-edge side effects
     active: dict[int, dict] = {}
     for ev in events:
         if int(ev["frame"]) > int(frame):
@@ -92,6 +93,11 @@ def _active_hitboxes_at_frame(events: list[dict], frame: int) -> dict[int, dict]
                 active.clear()
             else:
                 active.pop(int(ev["hitbox_id"]), None)
+            continue
+        if int(ev["kind"]) == 2:
+            hb_id = int(ev["hitbox_id"])
+            if hb_id in active:
+                active[hb_id] = {**active[hb_id], "damage": ev["damage"]}
             continue
         hb_id = int(ev["hitbox_id"])
         if 0 <= hb_id < 4:

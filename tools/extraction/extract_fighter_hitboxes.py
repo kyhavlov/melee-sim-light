@@ -10,7 +10,7 @@ stream into a compact binary table for init-time C loading.
 import argparse
 import json
 import struct
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 
@@ -20,7 +20,7 @@ _REC_BYTES = 44
 @dataclass(frozen=True)
 class _Rec:
     frame: int
-    kind: int  # 0 = set/enable, 1 = clear
+    kind: int  # 0 = set/enable, 1 = clear, 2 = active-slot damage mutation
     hitbox_id: int
     bone_part_id: int
     x: float
@@ -85,6 +85,7 @@ def _u16_7_hitlist_meta(hb: dict) -> int:
 
 def _records_from_events(events: list[dict]) -> list[_Rec]:
     out: list[_Rec] = []
+    active: dict[int, _Rec] = {}
     for ev in events:
         kind = ev.get("kind")
         frame = int(ev.get("frame", 0))
@@ -131,26 +132,56 @@ def _records_from_events(events: list[dict]) -> list[_Rec]:
             u16_6 = _hit_flags_u16(hb)
             u16_7 = _u16_7_hitlist_meta(hb)
 
-            out.append(
-                _Rec(
-                    frame=frame,
-                    kind=0,
-                    hitbox_id=hb_id,
-                    bone_part_id=bone_part_id,
-                    x=x,
-                    y=y,
-                    z=z,
-                    radius=radius,
-                    damage=damage,
-                    u16_tail=(angle, kbg, wsk, bkb, u16_4, u16_5, u16_6, u16_7),
-                )
+            rec = _Rec(
+                frame=frame,
+                kind=0,
+                hitbox_id=hb_id,
+                bone_part_id=bone_part_id,
+                x=x,
+                y=y,
+                z=z,
+                radius=radius,
+                damage=damage,
+                u16_tail=(angle, kbg, wsk, bkb, u16_4, u16_5, u16_6, u16_7),
             )
+            active[hb_id] = rec
+            out.append(rec)
+        elif kind == "set_hitbox_damage":
+            # Decomp opcode 12 (`ftAction_8007169C`) mutates an already-live HitCapsule's damage.
+            # Keep this distinct from create/enable records so runtime does not replay
+            # ftColl_800768A0 enable-edge clear/copy or pose-create publication.
+            idx = int(ev.get("data", {}).get("idx", -1))
+            if not (0 <= idx < 4) or idx not in active:
+                continue
+            rec = replace(active[idx], frame=frame, kind=2, damage=float(ev["data"]["damage"]))
+            active[idx] = rec
+            out.append(rec)
         elif kind == "clear_hitboxes":
+            active.clear()
             out.append(
                 _Rec(
                     frame=frame,
                     kind=1,
                     hitbox_id=0xFF,
+                    bone_part_id=0,
+                    x=0.0,
+                    y=0.0,
+                    z=0.0,
+                    radius=0.0,
+                    damage=0.0,
+                    u16_tail=(0, 0, 0, 0, 0, 0, 0, 0),
+                )
+            )
+        elif kind == "remove_hitbox":
+            idx = int(ev.get("data", {}).get("idx", -1))
+            if not (0 <= idx < 4):
+                continue
+            active.pop(idx, None)
+            out.append(
+                _Rec(
+                    frame=frame,
+                    kind=1,
+                    hitbox_id=idx,
                     bone_part_id=0,
                     x=0.0,
                     y=0.0,

@@ -93,6 +93,10 @@ typedef struct MslScriptEvent {
       uint8_t hit_idx;
     } throw_flags;
     struct {
+      float damage;
+      uint8_t idx;
+    } hitbox_damage;
+    struct {
       uint8_t state;
     } state;
     struct {

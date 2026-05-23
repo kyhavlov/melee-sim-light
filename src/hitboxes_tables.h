@@ -25,7 +25,7 @@ typedef struct MslHitboxEvent {
   // fp->cur_anim_frame (Slippi post-frame `state_age`, float).
   // refs/melee/src/melee/ft/ftaction.c::ftAction_80073240
   uint16_t frame;
-  uint8_t kind;       // 0 = set/enable, 1 = clear
+  uint8_t kind;       // MslHitboxEventKind
   uint8_t hitbox_id;  // 0..3 typical; 0xFF used by clear-all records.
 
   // Attachment (Fighter_Part id domain; used as anim_pose_get_matrix(..., part_id)).
@@ -43,7 +43,7 @@ typedef struct MslHitboxEvent {
   float y;
   float z;
   float radius;
-  float damage;
+  float damage;  // Create damage, or active-slot replacement damage for SET_DAMAGE records.
 
   // Remaining extracted u16 parameters (packed directly from the .bin record).
   // The exact semantics are decomp-first but not yet wired into gameplay logic.
@@ -68,6 +68,12 @@ typedef struct MslHitboxEvent {
   uint16_t u16_6;
   uint16_t u16_7;
 } MslHitboxEvent;
+
+typedef enum MslHitboxEventKind {
+  MSL_HITBOX_EVENT_CREATE = 0,
+  MSL_HITBOX_EVENT_CLEAR = 1,
+  MSL_HITBOX_EVENT_SET_DAMAGE = 2,
+} MslHitboxEventKind;
 
 // MSLHITB1 v1 `u16_6` flag bits (see agent_docs/DATA_CONTRACT.md).
 //

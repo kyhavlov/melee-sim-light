@@ -1823,7 +1823,10 @@ Binary layout (little-endian):
   - `payload_off: u32` absolute byte offset to this msid's first event record
 - Records (`rec_count` entries), each 44 bytes:
   - `frame: u16` integer timeline key (interpreted against seeded `action_frame`)
-  - `kind: u8` (`0` = set/enable, `1` = clear)
+  - `kind: u8`:
+    - `0`: create/set-enable (`ftAction_8007121C`)
+    - `1`: clear (`clear_hitboxes`, or `hitbox_id==0xFF` clear-all)
+    - `2`: active-slot damage mutation (`ftAction_8007169C`) with no create-edge side effects
   - `hitbox_id: u8` slot id (0..3 typical). If `kind==1` and `hitbox_id==0xFF`, this is a clear-all record.
   - `bone_part_id: u32` fighter part id (same domain as SSANIM `joint_parts`; pass as `part_id` to
     `anim_pose_get_matrix(...)`).
@@ -1834,7 +1837,7 @@ Binary layout (little-endian):
     - `b_offset.z := x_offset`
     refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
   - `radius: f32`
-  - `damage: f32` (stored but not yet used for resolution)
+  - `damage: f32`; for `kind==2`, the new active-slot damage value.
   - `u16_tail[8]: 8 * u16` additional extracted fields (decomp-shaped):
     - `u16_tail[0]`: `angle` (0..361; 361 is Sakurai angle sentinel)
     - `u16_tail[1]`: `kbg` (knockback growth)

@@ -84,6 +84,13 @@ static int decode_event_payload(MslScriptEvent* out, const uint8_t* payload, uin
       }
       out->payload.throw_flags.hit_idx = payload[0];
       return 0;
+    case MSL_SCRIPT_EVENT_SET_HITBOX_DAMAGE:
+      if (len != 8u) {
+        return -1;
+      }
+      out->payload.hitbox_damage.idx = payload[0];
+      out->payload.hitbox_damage.damage = read_le_f32(payload + 4);
+      return 0;
     case MSL_SCRIPT_EVENT_SET_AIRBORNE_STATE:
     case MSL_SCRIPT_EVENT_SET_HIT_STATUS:
     case MSL_SCRIPT_EVENT_SET_ALL_HURT_STATE:

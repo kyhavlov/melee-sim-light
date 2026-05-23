@@ -1493,7 +1493,8 @@ void hitboxes_refresh(MslBatch* batch) {
         if (ev->frame > pose_frame) {
           break;
         }
-        if (ev->kind == 1 || ev->hitbox_id >= (uint8_t)MSL_MAX_HITBOXES) {
+        if (ev->kind != (uint8_t)MSL_HITBOX_EVENT_CREATE ||
+            ev->hitbox_id >= (uint8_t)MSL_MAX_HITBOXES) {
           continue;
         }
         const uint8_t hb = ev->hitbox_id;
@@ -1553,7 +1554,8 @@ void hitboxes_refresh(MslBatch* batch) {
           if (ev->frame != pose_frame) {
             continue;
           }
-          if (ev->kind == 1 || ev->hitbox_id >= (uint8_t)MSL_MAX_HITBOXES) {
+          if (ev->kind != (uint8_t)MSL_HITBOX_EVENT_CREATE ||
+              ev->hitbox_id >= (uint8_t)MSL_MAX_HITBOXES) {
             continue;
           }
           const uint8_t hb = ev->hitbox_id;
@@ -1605,7 +1607,7 @@ void hitboxes_refresh(MslBatch* batch) {
 
         // Apply all events strictly before pose_frame to build the state at pose_frame-1.
         if (ev->frame < pose_frame) {
-          if (ev->kind == 1) {
+          if (ev->kind == (uint8_t)MSL_HITBOX_EVENT_CLEAR) {
             if (ev->hitbox_id == 0xFFu) {
               for (int hi = 0; hi < MSL_MAX_HITBOXES; hi++) {
                 have_prev[hi] = 0;
@@ -1619,7 +1621,14 @@ void hitboxes_refresh(MslBatch* batch) {
               preserve_skiphit_geometry[ev->hitbox_id] = 0u;
               hitboxes_clear_world_slot(batch, bi, p, (int)ev->hitbox_id);
             }
-          } else if (ev->hitbox_id < (uint8_t)MSL_MAX_HITBOXES) {
+          } else if (ev->kind == (uint8_t)MSL_HITBOX_EVENT_SET_DAMAGE &&
+                     ev->hitbox_id < (uint8_t)MSL_MAX_HITBOXES && have_prev[ev->hitbox_id]) {
+            // ftAction_8007169C mutates an active HitCapsule's damage only. It does not create a
+            // HitCapsule, does not call ftColl_800768A0, and must not advance create-edge timing.
+            // refs/melee/src/melee/ft/ftaction.c::ftAction_8007169C
+            def_prev[ev->hitbox_id].damage = ev->damage;
+          } else if (ev->kind == (uint8_t)MSL_HITBOX_EVENT_CREATE &&
+                     ev->hitbox_id < (uint8_t)MSL_MAX_HITBOXES) {
             def_prev[ev->hitbox_id] = *ev;
             have_prev[ev->hitbox_id] = 1;
           }
@@ -1687,7 +1696,7 @@ void hitboxes_refresh(MslBatch* batch) {
         //   lbColl_80008440 (clear).
         // refs/melee/src/melee/ft/ftcoll.c::ftColl_800768A0
         // refs/melee/src/melee/lb/lbcollision.c::{lbColl_CopyHitCapsule,lbColl_80008440}
-        if (ev->kind == 1) {
+        if (ev->kind == (uint8_t)MSL_HITBOX_EVENT_CLEAR) {
           if (ev->hitbox_id == 0xFFu) {
             for (int hi = 0; hi < MSL_MAX_HITBOXES; hi++) {
               have_def[hi] = 0;
@@ -1703,7 +1712,14 @@ void hitboxes_refresh(MslBatch* batch) {
             preserve_skiphit_geometry[ev->hitbox_id] = 0u;
             hitboxes_clear_world_slot(batch, bi, p, (int)ev->hitbox_id);
           }
-        } else if (ev->hitbox_id < (uint8_t)MSL_MAX_HITBOXES) {
+        } else if (ev->kind == (uint8_t)MSL_HITBOX_EVENT_SET_DAMAGE &&
+                   ev->hitbox_id < (uint8_t)MSL_MAX_HITBOXES && have_def[ev->hitbox_id]) {
+          // ftAction_8007169C updates damage in-place on an already-live HitCapsule. Preserve the
+          // current slot geometry/group and avoid pose_create/enable-edge side effects.
+          // refs/melee/src/melee/ft/ftaction.c::ftAction_8007169C
+          def[ev->hitbox_id].damage = ev->damage;
+        } else if (ev->kind == (uint8_t)MSL_HITBOX_EVENT_CREATE &&
+                   ev->hitbox_id < (uint8_t)MSL_MAX_HITBOXES) {
           const uint8_t hb = ev->hitbox_id;
           pose_create_count[hb] = (uint8_t)(pose_create_count[hb] + 1u);
           const uint8_t new_g = hitlist_hit_group_from_u16_7(ev->u16_7);

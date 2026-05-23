@@ -3955,7 +3955,7 @@ static inline uint8_t hb_events_affects_slot(const MslHitboxEvent* ev, uint8_t h
   if (ev == NULL) {
     return 0;
   }
-  if (ev->kind != 1) {
+  if (ev->kind != (uint8_t)MSL_HITBOX_EVENT_CLEAR) {
     return (ev->hitbox_id == hb_id) ? 1u : 0u;
   }
   // Clear event: hb_id==0xFF clears all.
@@ -3971,7 +3971,7 @@ static inline void debug_hb_defs_apply_event(const MslHitboxEvent* ev,
   if (ev == NULL) {
     return;
   }
-  if (ev->kind == 1) {
+  if (ev->kind == (uint8_t)MSL_HITBOX_EVENT_CLEAR) {
     if (ev->hitbox_id == 0xFFu) {
       for (int hi = 0; hi < MSL_MAX_HITBOXES; hi++) {
         have_def[hi] = 0;
@@ -3980,6 +3980,12 @@ static inline void debug_hb_defs_apply_event(const MslHitboxEvent* ev,
     }
     if (ev->hitbox_id < (uint8_t)MSL_MAX_HITBOXES) {
       have_def[ev->hitbox_id] = 0;
+    }
+    return;
+  }
+  if (ev->kind == (uint8_t)MSL_HITBOX_EVENT_SET_DAMAGE) {
+    if (ev->hitbox_id < (uint8_t)MSL_MAX_HITBOXES && have_def[ev->hitbox_id]) {
+      def[ev->hitbox_id].damage = ev->damage;
     }
     return;
   }
@@ -4165,14 +4171,20 @@ int msl_batch_debug_hitbox_event_timing(const MslBatch* batch, int batch_index, 
     if (!hb_events_affects_slot(ev, (uint8_t)hb_id)) {
       continue;
     }
-    if (ev->kind == 1) {
+    if (ev->kind == (uint8_t)MSL_HITBOX_EVENT_CLEAR) {
       enabled_prev = 0;
       u16_7_prev = 0;
       start_prev = -1;
       out_timing->last_affect_kind_le = 1u;
       out_timing->last_affect_frame_le = ev->frame;
       out_timing->last_affect_u16_7_le = 0;
-    } else {
+    } else if (ev->kind == (uint8_t)MSL_HITBOX_EVENT_SET_DAMAGE) {
+      if (enabled_prev) {
+        out_timing->last_affect_kind_le = (uint8_t)MSL_HITBOX_EVENT_SET_DAMAGE;
+        out_timing->last_affect_frame_le = ev->frame;
+        out_timing->last_affect_u16_7_le = u16_7_prev;
+      }
+    } else if (ev->kind == (uint8_t)MSL_HITBOX_EVENT_CREATE) {
       enabled_prev = 1;
       u16_7_prev = ev->u16_7;
       start_prev = (int16_t)ev->frame;
@@ -4214,7 +4226,7 @@ int msl_batch_debug_hitbox_event_timing(const MslBatch* batch, int batch_index, 
       continue;
     }
 
-    if (ev->kind == 1) {
+    if (ev->kind == (uint8_t)MSL_HITBOX_EVENT_CLEAR) {
       if (ev->hitbox_id == 0xFFu) {
         pose_clear_all++;
       } else {
@@ -4230,7 +4242,16 @@ int msl_batch_debug_hitbox_event_timing(const MslBatch* batch, int batch_index, 
       out_timing->last_affect_kind_eq = 1u;
       out_timing->last_affect_frame_eq = ev->frame;
       out_timing->last_affect_u16_7_eq = 0;
-    } else {
+    } else if (ev->kind == (uint8_t)MSL_HITBOX_EVENT_SET_DAMAGE) {
+      if (enabled_cur) {
+        out_timing->last_affect_kind_le = (uint8_t)MSL_HITBOX_EVENT_SET_DAMAGE;
+        out_timing->last_affect_frame_le = ev->frame;
+        out_timing->last_affect_u16_7_le = u16_7_cur;
+        out_timing->last_affect_kind_eq = (uint8_t)MSL_HITBOX_EVENT_SET_DAMAGE;
+        out_timing->last_affect_frame_eq = ev->frame;
+        out_timing->last_affect_u16_7_eq = u16_7_cur;
+      }
+    } else if (ev->kind == (uint8_t)MSL_HITBOX_EVENT_CREATE) {
       pose_create++;
 
       const uint8_t had_old = enabled_cur ? 1u : 0u;
@@ -4269,7 +4290,7 @@ int msl_batch_debug_hitbox_event_timing(const MslBatch* batch, int batch_index, 
       if (ev->frame <= pose_frame) {
         continue;
       }
-      if (ev->kind != 1) {
+      if (ev->kind != (uint8_t)MSL_HITBOX_EVENT_CLEAR) {
         continue;
       }
       if (!hb_events_affects_slot(ev, (uint8_t)hb_id)) {
