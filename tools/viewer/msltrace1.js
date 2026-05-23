@@ -585,6 +585,7 @@ export function replayDataToMslTrace({
   frameCount,
   inputTrace,
   producer = { name: "melee-sim-light", version: null },
+  matchStart = {},
   metadata = {},
 }) {
   if (!replayData || !replayData.settings || !Array.isArray(replayData.frames)) {
@@ -619,6 +620,12 @@ export function replayDataToMslTrace({
       isTeams: Boolean(settings.isTeams),
       players: matchPlayers,
       startFrame: 0,
+      start: {
+        traceFrame: 0,
+        simFrameId: 0,
+        randomSeed: Number(replayData.frames[0]?.randomSeed || 0),
+        ...matchStart,
+      },
     },
     inputs: {
       encoding: SPARSE_DELTA_ENCODING,

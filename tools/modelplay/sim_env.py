@@ -133,6 +133,8 @@ class SimSession:
         if start_mode not in ("replay", "sim-init"):
             raise ValueError(f"unknown start_mode: {start_mode}")
         self._start_mode = start_mode
+        self._dataset_path = None if dataset_path is None else Path(dataset_path)
+        self._start_record = int(start_record)
         self._record = int(start_record)
         self._dataset = None
         self._samples = None
@@ -184,6 +186,34 @@ class SimSession:
         self._last_controllers = {}
         self._state: SimFrameState | None = None
         self._needs_reset = True
+
+    def trace_start_info(self) -> dict[str, object]:
+        if self._start_mode == "replay":
+            return {
+                "mode": "replay",
+                "dataset": None if self._dataset_path is None else str(self._dataset_path),
+                "startRecord": int(self._start_record),
+            }
+        if self._match_config is None:
+            return {"mode": "sim-init"}
+        row = self._match_config[0]
+        return {
+            "mode": "sim-init",
+            "frameId": int(row["frame_id"]),
+            "randomSeed": int(row["frame_pre_random_seed"]),
+            "stageId": int(row["stage_id"]),
+            "stockCount": int(row["stock_count"]),
+            "numPlayers": int(row["num_players"]),
+            "isTeams": bool(row["is_teams"]),
+            "players": [
+                {
+                    "charId": int(row["players"][idx]["char_id"]),
+                    "teamId": int(row["players"][idx]["team_id"]),
+                    "facing": int(row["players"][idx]["facing"]),
+                }
+                for idx in range(int(row["num_players"]))
+            ],
+        }
 
     def close(self) -> None:
         self._binding.destroy(self._handle)
@@ -319,6 +349,8 @@ class BatchedSimSession:
         self._binding = msl_binding
         self._batch_size = int(batch_size)
         self._start_mode = start_mode
+        self._dataset_path = None if dataset_path is None else Path(dataset_path)
+        self._start_record = int(start_record)
         self._record = int(start_record)
         self._dataset = None
         self._samples = None
@@ -397,6 +429,38 @@ class BatchedSimSession:
         self._last_controllers: list[dict[int, object]] = [{} for _ in range(self._batch_size)]
         self._states: list[SimFrameState] | None = None
         self._needs_reset = np.ones(self._batch_size, dtype=np.bool_)
+
+    def trace_start_info(self, env: int) -> dict[str, object]:
+        if env < 0 or env >= self._batch_size:
+            raise IndexError(f"env out of range: {env}")
+        if self._start_mode == "replay":
+            return {
+                "mode": "replay",
+                "dataset": None if self._dataset_path is None else str(self._dataset_path),
+                "startRecord": int(self._start_record),
+                "env": int(env),
+            }
+        if self._match_config is None:
+            return {"mode": "sim-init", "env": int(env)}
+        row = self._match_config[env]
+        return {
+            "mode": "sim-init",
+            "env": int(env),
+            "frameId": int(row["frame_id"]),
+            "randomSeed": int(row["frame_pre_random_seed"]),
+            "stageId": int(row["stage_id"]),
+            "stockCount": int(row["stock_count"]),
+            "numPlayers": int(row["num_players"]),
+            "isTeams": bool(row["is_teams"]),
+            "players": [
+                {
+                    "charId": int(row["players"][idx]["char_id"]),
+                    "teamId": int(row["players"][idx]["team_id"]),
+                    "facing": int(row["players"][idx]["facing"]),
+                }
+                for idx in range(int(row["num_players"]))
+            ],
+        }
 
     @property
     def batch_size(self) -> int:

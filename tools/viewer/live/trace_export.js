@@ -1,4 +1,5 @@
 import { replayDataToMslTrace } from "../msltrace1.js";
+import { MSL_BUILD_GIT, MSL_BUILD_VERSION } from "./build_info.js";
 
 function roundInput(value) {
   return Math.round((value || 0) * 10000) / 10000;
@@ -44,6 +45,7 @@ export function saveLiveTrace({
   seed,
   inputTrace,
   sourceLabel,
+  matchStart = {},
   traceName = "",
 }) {
   if (!replayData || frameCount < 0) {
@@ -62,12 +64,14 @@ export function saveLiveTrace({
     inputTrace,
     producer: {
       name: "melee-sim-light live viewer",
-      version: null,
+      version: MSL_BUILD_VERSION,
     },
+    matchStart,
     metadata: {
       provenance: {
         source: sourceLabel,
         seed,
+        git: MSL_BUILD_GIT,
         exportedAt: exportedAt.toISOString(),
         name: trimmedTraceName || null,
       },

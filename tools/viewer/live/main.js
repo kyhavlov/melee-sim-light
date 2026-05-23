@@ -370,6 +370,15 @@ async function main() {
         seed,
         inputTrace,
         sourceLabel: inputSourceLabel(),
+        matchStart: {
+          mode: "live-sim-init",
+          traceFrame: 0,
+          simFrameId: 0,
+          randomSeed: seed,
+          stageId: selectedStageId,
+          controlledPlayer: controlledPlayer + 1,
+          inputSource: inputSourceLabel(),
+        },
         traceName,
       });
       setStatus(`Saved ${filename}. Frame ${frameCount}. ${playerStatusSuffix()}`);

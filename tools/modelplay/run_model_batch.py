@@ -226,8 +226,11 @@ def main() -> int:
     )
 
     traces = [
-        MslTraceWriter(metadata={"model": {"runner": "tools.modelplay.run_model_batch"}})
-        for _ in range(args.num_traces)
+        MslTraceWriter(
+            metadata={"model": {"runner": "tools.modelplay.run_model_batch"}},
+            match_start=session.trace_start_info(env),
+        )
+        for env in range(args.num_traces)
     ]
     done = np.zeros(args.num_traces, dtype=np.bool_)
     frames_run = np.zeros(args.num_traces, dtype=np.int32)

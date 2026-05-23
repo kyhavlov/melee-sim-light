@@ -92,7 +92,10 @@ def main() -> int:
     else:
         p2 = RandomAgent(np.random.default_rng(args.seed + 1))
 
-    trace = MslTraceWriter(metadata={"model": {"runner": "tools.modelplay.run_puffer_match"}})
+    trace = MslTraceWriter(
+        metadata={"model": {"runner": "tools.modelplay.run_puffer_match"}},
+        match_start=session.trace_start_info(),
+    )
     try:
         env_out = session.reset()
         trace.add_frame(session.current_frame_state, session.last_controllers)

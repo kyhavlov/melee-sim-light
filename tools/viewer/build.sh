@@ -5,6 +5,22 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 OUT_DIR="$ROOT/build/viewer"
 CACHE_DIR="${MSL_VIEWER_ASSET_CACHE:-$ROOT/build/cache/viewer-zips}"
 
+git_commit=""
+git_dirty=0
+if git -C "$ROOT" rev-parse --short=8 HEAD >/dev/null 2>&1; then
+  git_commit="$(git -C "$ROOT" rev-parse --short=8 HEAD)"
+  if [[ -n "$(git -C "$ROOT" status --porcelain)" ]]; then
+    git_dirty=1
+  fi
+fi
+git_version=""
+if [[ -n "$git_commit" ]]; then
+  git_version="$git_commit"
+  if [[ "$git_dirty" == "1" ]]; then
+    git_version="${git_version}+changes"
+  fi
+fi
+
 "$ROOT/tools/viewer/fetch_assets.sh"
 "$ROOT/tools/viewer/live/build_wasm.sh"
 npm --prefix "$ROOT/tools/viewer/slippi-viewer" run build
@@ -24,6 +40,7 @@ cp -R "$ROOT/tools/viewer/examples" "$OUT_DIR/tools/viewer/examples"
 
 cp "$ROOT/tools/viewer/live/index.html" "$OUT_DIR/tools/viewer/live/index.html"
 cp "$ROOT/tools/viewer/live/main.js" "$OUT_DIR/tools/viewer/live/main.js"
+cp "$ROOT/tools/viewer/live/build_info.js" "$OUT_DIR/tools/viewer/live/build_info.js"
 cp "$ROOT/tools/viewer/live/sim.js" "$OUT_DIR/tools/viewer/live/sim.js"
 cp "$ROOT/tools/viewer/live/schema.js" "$OUT_DIR/tools/viewer/live/schema.js"
 cp "$ROOT/tools/viewer/live/keyboard.js" "$OUT_DIR/tools/viewer/live/keyboard.js"
@@ -35,6 +52,12 @@ cp "$ROOT/tools/viewer/live/debug_gcadapter_hidraw.js" "$OUT_DIR/tools/viewer/li
 cp "$ROOT/tools/viewer/live/debug_gcadapter_libusb.c" "$OUT_DIR/tools/viewer/live/debug_gcadapter_libusb.c"
 cp "$ROOT/tools/viewer/live/debug_gcadapter_libusb.sh" "$OUT_DIR/tools/viewer/live/debug_gcadapter_libusb.sh"
 cp -R "$ROOT/tools/viewer/live/public" "$OUT_DIR/tools/viewer/live/public"
+if [[ -n "$git_commit" ]]; then
+  cat >"$OUT_DIR/tools/viewer/live/build_info.js" <<EOF
+export const MSL_BUILD_VERSION = "$git_version";
+export const MSL_BUILD_GIT = { commit: "$git_commit", dirty: $([[ "$git_dirty" == "1" ]] && echo true || echo false), version: "$git_version" };
+EOF
+fi
 
 cp -R "$ROOT/tools/viewer/slippi-viewer/dist" "$OUT_DIR/tools/viewer/slippi-viewer/dist"
 while IFS=$'\t' read -r filename _sha _url; do

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 
 import numpy as np
 
@@ -67,7 +68,11 @@ def _state(*, action_frame: int, randall_x: float = 0.0) -> SimFrameState:
 
 
 def test_msltrace_writer_uses_sparse_deltas(tmp_path):
-    trace = MslTraceWriter()
+    trace = MslTraceWriter(
+        producer_version="abc12345+changes",
+        metadata={"model": {"runner": "test"}},
+        match_start={"mode": "sim-init", "frameId": 0, "stockCount": 4},
+    )
     trace.add_frame(_state(action_frame=0), {})
     trace.add_frame(_state(action_frame=1), {})
 
@@ -78,10 +83,33 @@ def test_msltrace_writer_uses_sparse_deltas(tmp_path):
 
     assert "\n " not in raw
     assert payload["format"] == "MSLTRACE1"
+    assert payload["producer"]["version"] == "abc12345+changes"
+    assert payload["match"]["start"] == {
+        "mode": "sim-init",
+        "frameId": 0,
+        "stockCount": 4,
+        "traceFrame": 0,
+        "simFrameId": 0,
+        "randomSeed": 12345,
+    }
     assert payload["frames"]["rows"][0][0] == 0
     assert payload["frames"]["rows"][1][0] == 1
     assert payload["frames"]["rows"][1][2] is None
     assert payload["frames"]["rows"][1][3] == [[[2, 1]], [[2, 1]]]
+    assert payload["metadata"]["model"]["runner"] == "test"
+
+
+def test_msltrace_writer_defaults_git_provenance_when_available():
+    trace = MslTraceWriter()
+    trace.add_frame(_state(action_frame=0), {})
+
+    payload = trace.to_payload()
+
+    version = payload["producer"]["version"]
+    if version is None:
+        return
+    assert re.fullmatch(r"[0-9a-f]{8}(?:\+changes)?", version)
+    assert payload["metadata"]["provenance"]["git"]["version"] == version
 
 
 def test_msltrace_writer_serializes_sparse_randall_stage_state(tmp_path):

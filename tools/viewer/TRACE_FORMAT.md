@@ -15,7 +15,7 @@ beginning.
 Top-level payload:
 
 ```json
-{"format":"MSLTRACE1","schemaVersion":1,"producer":{"name":"melee-sim-light","version":null},"createdAt":"2026-05-21T00:00:00Z","match":{},"inputs":{},"frames":{},"stage":{},"items":{},"metadata":{}}
+{"format":"MSLTRACE1","schemaVersion":1,"producer":{"name":"melee-sim-light","version":"cc67241b+changes"},"createdAt":"2026-05-21T00:00:00Z","match":{},"inputs":{},"frames":{},"stage":{},"items":{},"metadata":{}}
 ```
 
 Required top-level fields:
@@ -27,7 +27,9 @@ Required top-level fields:
 
 Optional top-level fields:
 
-- `producer`: source that wrote the trace.
+- `producer`: source that wrote the trace. `producer.version` should be the
+  short git commit for the simulator build, with `+changes` when the producing
+  worktree had uncommitted changes.
 - `createdAt`: ISO-8601 timestamp.
 - `inputs`: per-player controller input streams.
 - `stage`: sparse stage-object state used when the sim has a canonical runtime value.
@@ -40,7 +42,7 @@ not understand.
 ## Match
 
 ```json
-{"stageId":32,"numPlayers":2,"isTeams":false,"players":[{"port":1,"charId":1,"teamId":0},{"port":2,"charId":22,"teamId":1}],"startFrame":0}
+{"stageId":32,"numPlayers":2,"isTeams":false,"players":[{"port":1,"charId":1,"teamId":0},{"port":2,"charId":22,"teamId":1}],"startFrame":0,"start":{"mode":"sim-init","traceFrame":0,"simFrameId":0,"randomSeed":12345}}
 ```
 
 - `stageId`: public MSL stage id. Use the constants in `src/ids.h`.
@@ -53,6 +55,18 @@ not understand.
   `1` for blue, and `2` for green when a team value is needed.
 - `startFrame`: first trace frame number. For sim-init traces this is normally
   `0`.
+- `start`: optional match-start provenance used for reproduction/debugging.
+  Standard fields are:
+  - `mode`: `sim-init`, `replay`, `live-sim-init`, or another producer-owned
+    start mode.
+  - `traceFrame`: trace frame where this state starts, normally `0`.
+  - `simFrameId`: simulator frame id at trace frame 0. This can differ from
+    trace frame numbering, especially for replay-reseed traces.
+  - `randomSeed`: simulator RNG seed at trace frame 0.
+  - `dataset` and `startRecord`: replay dataset path and sample index when the
+    trace starts from a replay row.
+  - `frameId`, `stageId`, `stockCount`, and `players`: sim-init match config
+    values when the trace starts from native match initialization.
 
 ## Sparse Rows
 
@@ -227,6 +241,8 @@ A conforming writer should:
 - put model-specific data under `metadata.model` rather than in required frame
   columns;
 - put reproduction/debug provenance under `metadata.provenance`.
+- include git provenance under `producer.version` and, when available,
+  `metadata.provenance.git`.
 
 The C core should not need to own JSON serialization. A future C trace API should
 write frame records into caller-owned memory; Python, JS, or downstream tooling

@@ -193,7 +193,10 @@ def main() -> int:
         port: build_model_agent(slippi_ai_root=args.slippi_ai_root, model_path=model_path, name=name)
         for port, (model_path, name) in model_specs.items()
     }
-    trace = MslTraceWriter(metadata={"model": {"runner": "tools.modelplay.run_model_match"}})
+    trace = MslTraceWriter(
+        metadata={"model": {"runner": "tools.modelplay.run_model_match"}},
+        match_start=session.trace_start_info(),
+    )
 
     try:
         env_out = session.reset()

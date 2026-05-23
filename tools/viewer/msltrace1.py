@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import json
 import math
+import subprocess
+from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from functools import lru_cache
 from pathlib import Path
 from typing import Mapping
 
@@ -62,6 +65,37 @@ ITEM_FIELDS = [
 
 OP_KEYFRAME = 0
 OP_DELTA = 1
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+@lru_cache(maxsize=1)
+def _git_build_info() -> dict[str, object] | None:
+    try:
+        commit = subprocess.check_output(
+            ["git", "rev-parse", "--short=8", "HEAD"],
+            cwd=REPO_ROOT,
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+        status = subprocess.check_output(
+            ["git", "status", "--porcelain"],
+            cwd=REPO_ROOT,
+            text=True,
+            stderr=subprocess.DEVNULL,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    dirty = bool(status.strip())
+    return {
+        "commit": commit,
+        "dirty": dirty,
+        "version": f"{commit}+changes" if dirty else commit,
+    }
+
+
+def _default_producer_version() -> str | None:
+    info = _git_build_info()
+    return None if info is None else str(info["version"])
 
 
 def _json_value(value: object) -> object:
@@ -204,6 +238,7 @@ class MslTraceWriter:
     producer_version: str | None = None
     keyframe_interval: int = KEYFRAME_INTERVAL
     metadata: dict = field(default_factory=dict)
+    match_start: dict | None = None
     match: dict | None = None
     frame_rows: list[list[object]] = field(default_factory=list)
     stage_rows: list[list[object]] = field(default_factory=list)
@@ -256,6 +291,10 @@ class MslTraceWriter:
         self._frame_count += 1
 
     def _init_match(self, state: SimFrameState) -> None:
+        start = dict(self.match_start or {})
+        start.setdefault("traceFrame", 0)
+        start.setdefault("simFrameId", int(state.frame_id))
+        start.setdefault("randomSeed", int(state.frame_pre_random_seed))
         self.match = {
             "stageId": int(state.stage_id),
             "numPlayers": int(state.num_players),
@@ -269,6 +308,7 @@ class MslTraceWriter:
                 for idx in range(state.num_players)
             ],
             "startFrame": 0,
+            "start": start,
         }
         self.input_streams = [[] for _ in range(state.num_players)]
         self._prev_inputs = [[] for _ in range(state.num_players)]
@@ -322,12 +362,21 @@ class MslTraceWriter:
         if self.match is None:
             raise RuntimeError("trace has no frames")
         limit = self._frame_count if frame_limit is None else min(frame_limit, self._frame_count)
+        metadata = deepcopy(self.metadata)
+        git_info = _git_build_info()
+        if git_info is not None:
+            provenance = metadata.setdefault("provenance", {})
+            if isinstance(provenance, dict):
+                provenance.setdefault("git", git_info)
+        producer_version = (
+            self.producer_version if self.producer_version is not None else _default_producer_version()
+        )
         return {
             "format": TRACE_FORMAT,
             "schemaVersion": SCHEMA_VERSION,
             "producer": {
                 "name": self.producer_name,
-                "version": self.producer_version,
+                "version": producer_version,
             },
             "createdAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "match": self.match,
@@ -359,7 +408,7 @@ class MslTraceWriter:
                 "fields": ITEM_FIELDS,
                 "rows": [row for row in self.item_rows if int(row[1]) < limit],
             },
-            "metadata": self.metadata,
+            "metadata": metadata,
         }
 
     def write_json(self, path: Path, *, frame_limit: int | None = None) -> None:
