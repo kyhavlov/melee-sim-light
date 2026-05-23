@@ -11,7 +11,7 @@ Durable tracker for source-first closure passes. Status vocabulary:
 | System | Status | Doc | Current Closure Level | Next Action |
 |---|---|---|---|---|
 | Collision | CLOSED | [collision.md](collision.md) | Fighter floor/wall/ceiling collision plus Randall/FoD moving floor publication are closed for supported RL 1.0 fighter gameplay on legal stages. | Reopen only from a source inventory delta or a validated trace that contradicts the closed owner model. |
-| Scheduler | OPEN | [scheduler.md](scheduler.md) | INVENTORY NEEDED | Inventory frame order, callback order, animation/IASA/physics/collision/combat sequencing, RNG clocks, and transient-state lifetime. |
+| Scheduler | CLOSED | [scheduler.md](scheduler.md) | Frame order, fighter callback order, MotionState dispatch, scheduler-owned transient lifetime, and scheduler-visible RNG clocks are closed for supported RL 1.0 gameplay. | Reopen only from a source inventory delta or a validated phase-order trace that contradicts the closed scheduler spine. |
 | Combat Hit Resolution | OPEN | [combat_hit_resolution.md](combat_hit_resolution.md) | INVENTORY NEEDED | Inventory hit detection results, ProcessHit, damage, knockback, hitlag, shield hit, hitlist/stale/source identity, and combat RNG lanes. |
 | Grab / Throw / Capture | OPEN | [grab_throw_capture.md](grab_throw_capture.md) | INVENTORY NEEDED | Inventory grab, capture, pummel, throw release, attached victims, breakout, and throw-damage ordering. |
 | Movescript Events | OPEN | [movescript_events.md](movescript_events.md) | INVENTORY NEEDED | Inventory script extraction/runtime event substrate, event ordering, timeline state, and callback-script handoffs. |
