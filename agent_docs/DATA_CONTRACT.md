@@ -1675,7 +1675,7 @@ Binary layout (little-endian):
   - `laser_bkb: u16` (base knockback; from laser article hitbox script)
   - `laser_shield_damage: i8` (signed; from laser article hitbox script)
   - `laser_element: u8` (GALE01 `HitElement` id; from laser article hitbox script)
-  - `laser_non_flinch: u8` (extracted proxy signal; currently 1 when the state's KB terms are all zero)
+  - `laser_zero_kb_damage_class: u8` (source-derived zero applied-KB damage class; 1 when the supported laser state's article HitCapsule KB terms are all zero)
   - `hitbox_offsets_x_count: u8` (<= 16)
   - `hitbox_x138_mask: u16` (bit `i` is `item->x5D4_hitboxes[i].x138` for the corresponding scripted hitbox)
   - `pad3: u8[2] = 0`
@@ -1686,7 +1686,7 @@ Version notes:
 - v2: adds SpecialN start/end msids.
 - v3: adds state=1 hitbox params (ItemStateDesc[1].xC_script).
 - v4: adds per-state `laser_element` so hitlag_mul can match decomp for electric hits (see p_ftCommonData->0x1A4),
-  and uses one reserved byte for proxy-extracted `laser_non_flinch` (currently derived from KB triplet).
+  and uses one reserved byte for source-derived `laser_zero_kb_damage_class`.
 - v5: reuses reserved bytes in each state hitbox-param block for `hitbox_offsets_x_count` at byte
   19 and `hitbox_x138_mask` at bytes 20..21. Record size remains 254 bytes.
 - v6: removes SpecialN command-script shoot frames; runtime uses MSLFTSC1 `set_cmd_var(idx=2)`
@@ -1696,6 +1696,11 @@ Runtime semantics (current C-core policy):
 - The simulator uses `spawn_bone_part_id` + `spawn_off_xyz` with `anim_pose_get_matrix(...)` to compute world spawn points.
 - New laser items are allocated in a fixed 15-slot pool with deterministic (stable) ordering matching dataset sorting:
   `(instance_id, spawn_id, type)`.
+- `laser_zero_kb_damage_class` is derived from the laser article HitCapsule KB tuple. The script
+  loader writes kbg/wsk/bkb into `HitCapsule.x24/x28/x2C`; item BODY contact writes percent-temp in
+  `ftColl_80077C60`; and `Fighter_ProcessHit_8006D1EC` enters Damage* only when applied KB is
+  nonzero. For supported Fox/Falco laser states, an all-zero KB tuple is the data-backed
+  percent-only/no-Damage-entry class. Falco states carry nonzero KB terms and use normal item BODY.
 
 ## `data/shields/<char>.bin` (MSLSHLD1 v4)
 

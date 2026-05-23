@@ -172,9 +172,9 @@ int laser_params_init(void) {
     // _iso/PlFx.dat and _iso/PlFc.dat blaster-shot article ItemStateDesc scripts (see tools/extraction/extract_character_attrs.py)
     rec.shield_damage = (int8_t)p[off + 16];
     rec.element = (version >= 4) ? p[off + 17] : 0u;
-    // MSLLASR1 v4 reserved-byte signal: extracted no-flinch proxy lane for this laser state.
+    // MSLLASR1 v4+ source-derived zero applied-KB damage class for this laser state.
     // tools/extraction/extract_lasers.py::_pack_record
-    rec.non_flinch = (version >= 4) ? p[off + 18] : 0u;
+    rec.zero_kb_damage_class = (version >= 4) ? p[off + 18] : 0u;
     if (version >= 5) {
       rec.hitbox_offsets_x_count = p[off + 19];
       rec.hitbox_x138_mask = read_u16_le(p + off + 20);
@@ -202,7 +202,7 @@ int laser_params_init(void) {
       rec.state1_bkb = read_u16_le(p + off + 14);
       rec.state1_shield_damage = (int8_t)p[off + 16];
       rec.state1_element = (version >= 4) ? p[off + 17] : 2u;
-      rec.state1_non_flinch = (version >= 4) ? p[off + 18] : 0u;
+      rec.state1_zero_kb_damage_class = (version >= 4) ? p[off + 18] : 0u;
       if (version >= 5) {
         rec.state1_hitbox_offsets_x_count = p[off + 19];
         rec.state1_hitbox_x138_mask = read_u16_le(p + off + 20);
@@ -223,7 +223,7 @@ int laser_params_init(void) {
       rec.state1_bkb = rec.bkb;
       rec.state1_element = rec.element;
       rec.state1_shield_damage = rec.shield_damage;
-      rec.state1_non_flinch = rec.non_flinch;
+      rec.state1_zero_kb_damage_class = rec.zero_kb_damage_class;
       rec.state1_hitbox_x138_mask = rec.hitbox_x138_mask;
       rec.state1_hitbox_offsets_x_count = rec.hitbox_offsets_x_count;
       for (int i = 0; i < MSL_LASER_MAX_HITBOX_OFFS_X; i++) {

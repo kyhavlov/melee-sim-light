@@ -198,14 +198,14 @@ def test_laser_fighter_hitcapsule_contact_registers_item_victim_before_later_bod
 
 @pytest.mark.integration
 def test_falco_laser_flinching_body_not_suppressed_by_attackairlw_hitcapsule_contact() -> None:
-    # Negative boundary for the non-flinch fighter-HitCapsule/item-HitCapsule victims_1 lane:
+    # Negative boundary for the zero-KB fighter-HitCapsule/item-HitCapsule victims_1 lane:
     # - EWT rec5477 has a Falco laser crossing Fox AttackAirLw HitCapsules and then taking the
     #   ordinary flinching BODY path on the same row.
-    # - The retained victims_1 registration is restricted by generated MSLLASR1 non_flinch data,
-    #   so Fox no-flinch shots can suppress later BODY without causing Falco laser hits to disappear.
+    # - The retained victims_1 registration is restricted by generated MSLLASR1 zero_kb_damage_class data,
+    #   so Fox zero-KB shots can suppress later BODY without causing Falco laser hits to disappear.
     # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077970}
     # refs/melee/src/melee/it/itcoll.c::{it_8026FAC4,it_802706D0}
-    # data/items/lasers.bin::MSLLASR1 non_flinch/state1_non_flinch
+    # data/items/lasers.bin::MSLLASR1 zero_kb_damage_class/state1_zero_kb_damage_class
     root = Path(__file__).resolve().parents[1]
     slp_path = root / EWT_SLP
     if not slp_path.exists():

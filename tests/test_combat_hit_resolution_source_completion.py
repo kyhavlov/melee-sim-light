@@ -40,15 +40,32 @@ def test_combat_source_completion_doc_tracks_audit_status() -> None:
     combat = (ROOT / "agent_docs/systems/combat_hit_resolution.md").read_text()
     progress = (ROOT / "agent_docs/systems/PROGRESS.md").read_text()
 
-    assert "| Combat Hit Resolution | OPEN | [combat_hit_resolution.md](combat_hit_resolution.md)" in progress
+    assert "| Combat Hit Resolution | CLOSED | [combat_hit_resolution.md](combat_hit_resolution.md)" in progress
     assert "| TODO" not in combat
     assert "INVENTORY NEEDED" not in combat
     assert "| BLOCKED |" not in combat
     assert "document has no BLOCKED rows" in combat
-    assert "laser non-flinch damage-class gating still uses a KB-triplet-derived MSLLASR1 proxy" in progress
+    assert "KB-triplet-derived MSLLASR1 proxy" not in progress
+    assert "KB-triplet-derived proxy" not in combat
     assert "| Item/projectile shared BODY and SHIELD boundary:" in combat
-    assert "| OPEN | Shared shield/BODY/stale substrate is modeled" in combat
+    assert "| CLOSED | Shared shield/BODY/stale substrate is modeled" in combat
     assert "src/combat.c::combat_apply_item_hit" in combat
+    assert "Fighter_ProcessHit_8006D1EC" in combat
+    assert "enters Damage* only when applied KB is nonzero" in combat
+
+
+def test_laser_zero_kb_damage_class_is_documented_as_source_derived() -> None:
+    extractor = (ROOT / "tools/extraction/extract_lasers.py").read_text()
+    laser_params = (ROOT / "src/laser_params.h").read_text()
+    combat = (ROOT / "src/combat.c").read_text()
+
+    for text in (extractor, laser_params, combat):
+        assert "Fighter_ProcessHit_8006D1EC" in text
+        assert "zero-KB-authoritative-signal" not in text
+        assert "KB-triplet-derived proxy" not in text
+    assert "_derive_zero_kb_damage_class" in extractor
+    assert "ftColl_80077C60" in extractor
+    assert "all-zero KB tuple is therefore the" in extractor
 
 
 def test_combat_runtime_phase_order_matches_source_inventory() -> None:

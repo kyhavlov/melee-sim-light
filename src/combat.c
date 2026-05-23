@@ -4868,27 +4868,30 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
   batch->state.percent_temp[d_idx] += damage_product.applied_damage;
   const float dmg_temp = batch->state.percent_temp[d_idx];
 
-  // Special-case: non-flinch laser hits.
+  // Special-case: zero-KB laser hits.
   //
   // Scope gate: only apply this rule to item kinds that are known (via ISO-extracted MSLLASR1
   // lasers.bin) to be Fox/Falco blaster shots.
   const MslLaserParams* lp = laser_params_for_item_type(item_type);
-  const uint8_t non_flinch_hit =
-      (lp != NULL && ((item_state == 0u) ? lp->non_flinch : lp->state1_non_flinch) != 0u) ? 1u : 0u;
+  const uint8_t zero_kb_damage_class_hit =
+      (lp != NULL &&
+       ((item_state == 0u) ? lp->zero_kb_damage_class : lp->state1_zero_kb_damage_class) != 0u)
+          ? 1u
+          : 0u;
   MslCombatDamageApplyClass item_damage_class =
-      non_flinch_hit ? MSL_COMBAT_DAMAGE_PERCENT_ONLY_NO_ENTRY : MSL_COMBAT_DAMAGE_FULL;
+      zero_kb_damage_class_hit ? MSL_COMBAT_DAMAGE_PERCENT_ONLY_NO_ENTRY : MSL_COMBAT_DAMAGE_FULL;
   if (item_damage_class == MSL_COMBAT_DAMAGE_PERCENT_ONLY_NO_ENTRY) {
-    // Extracted proxy lane ownership:
-    // - non_flinch is extracted into MSLLASR1 from article hitbox kbg/wsk/bkb terms
-    //   (tools/extraction/extract_lasers.py), then consumed directly here.
-    // - This narrows runtime proxy logic to data ownership instead of recomputing the triplet test
-    //   in combat, but the source signal is still derived from KB terms.
-    // TODO(decomp/non-flinch-authoritative-signal): replace this KB-triplet-derived lane with a
-    // truly authoritative decomp/data-owned no-flinch signal once identified.
+    // Source owner:
+    // - item hitbox scripts write kbg/wsk/bkb into HitCapsule.x24/x28/x2C (it_2725.c);
+    // - ftColl_80077C60 writes item BODY percent-temp/applied damage;
+    // - Fighter_ProcessHit_8006D1EC enters Damage* only when applied KB is nonzero.
+    // MSLLASR1 zero_kb_damage_class marks the supported Fox/Falco laser states whose source
+    // HitCapsule KB tuple is all zero, so these contacts consume percent without hitlag/hitstun
+    // or a fresh Damage* entry. Falco laser states carry nonzero KB terms and use normal BODY.
     batch->state.instance_hit_by[d_idx] = item_instance_id;
     combat_processhit_commit_source_owner(batch, d_idx,
                                           combat_source_port0_for_attacker(batch, a_idx, attacker));
-    // Non-flinch damage still routes through Fighter_ProcessHit's percent-temp consume without a
+    // Zero-KB damage still routes through Fighter_ProcessHit's percent-temp consume without a
     // fresh Damage* entry. Keep fp->x221C_b0 aligned to the same hidden-damage ownership so the
     // post-frame no-reaction lane does not stale-carry after the item hit is accepted.
     // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC

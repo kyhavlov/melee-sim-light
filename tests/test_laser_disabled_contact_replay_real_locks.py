@@ -71,7 +71,7 @@ def test_laser_disabled_hurtcaps_consume_item_without_damage(case: _DisabledCont
     assert int(out["instance_hit_by"][p]) == int(ref["instance_hit_by"][p]), case.note
 
 
-def test_vulnerable_nonflinch_laser_body_hit_still_applies_damage() -> None:
+def test_vulnerable_zero_kb_laser_body_hit_still_applies_damage() -> None:
     # Negative sentinel: the disabled-contact lane must not suppress ordinary vulnerable BODY hits.
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)

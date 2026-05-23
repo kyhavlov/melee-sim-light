@@ -289,6 +289,10 @@ sim-owned**:
   refs/melee/src/melee/it/itcoll.c::{it_802706D0,it_8026FAC4,it_80272460},
   refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC,
   refs/melee/src/melee/lb/lbcollision.c::lbColl_80008688).
+- Fox laser BODY hits use MSLLASR1 `zero_kb_damage_class` because the article HitCapsule
+  kbg/wsk/bkb tuple is all zero. `ftColl_80077C60` still writes percent-temp, but
+  `Fighter_ProcessHit_8006D1EC` only enters Damage* when applied KB is nonzero. Falco laser
+  states have nonzero KB terms and stay on the normal flinching item BODY path.
 - Fox DownBack terminal laser BODY uses the `ftColl_8007925C -> lbColl_8000805C` hurt-radius
   release-edge lane when the extracted hit-status table shows the current DownBack pose frame has
   just released a nonzero x1988 window. Ordinary grounded vulnerable rows, shield defensive
@@ -3500,7 +3504,7 @@ Fox/Falco special-owner split (2026-04-17):
       source lanes.
     - Replay-real locks: `PositiveRevolvingHyena.msl:{4757,4778}` cover disabled hurtcap contact
       clearing the Falco laser without damage; `TreasuredBackKangaroo.msl:197` remains a vulnerable
-      non-flinch laser BODY-hit negative control.
+      zero-KB laser BODY-hit negative control.
     - Fresh taxonomy after this slice: primary total `611` (down from `615`);
       `F14c=10`, `F14d=2`, `F15a=11`, `F15b=8`, `F16a=0`, `F16b=0`, `F16c=0`, `F16d=31`.
       Aggregate total `5401` (down from `5425`);

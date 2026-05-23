@@ -1530,19 +1530,20 @@ static inline uint8_t item_laser_fighter_hitcapsule_contact_mask_precedes_shield
   if (batch == NULL || lp == NULL || fighter < 0 || fighter >= (int)batch->config.num_players) {
     return 0u;
   }
-  const uint8_t non_flinch_state = (laser_state == 0u) ? lp->non_flinch : lp->state1_non_flinch;
-  if (non_flinch_state == 0u) {
+  const uint8_t zero_kb_damage_class_state =
+      (laser_state == 0u) ? lp->zero_kb_damage_class : lp->state1_zero_kb_damage_class;
+  if (zero_kb_damage_class_state == 0u) {
     return 0u;
   }
   // Source ordering: ftColl_8007925C builds eligible fighter HitCapsules first, then before
   // SHIELD/BODY admission it tests item HitCapsule vs fighter HitCapsule in `catch_path` and
   // continues the item loop when the clank/body-collision owner resolves. Keep this registration
-  // on generated non-flinch laser states: Fox blaster shots can have fighter HitCapsule contact
-  // without entering the regular BODY damage-state path, while Falco's flinching laser BODY rows
-  // must still apply their ordinary hit.
+  // on generated zero-KB laser states: Fox blaster shots have all-zero source KB terms and can
+  // have fighter HitCapsule contact without entering the regular BODY damage-state path, while
+  // Falco's nonzero-KB laser BODY rows must still apply their ordinary hit.
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077970}
   // refs/melee/src/melee/lb/lbcollision.c::lbColl_80007AFC
-  // data/items/lasers.bin::MSLLASR1 non_flinch/state1_non_flinch
+  // data/items/lasers.bin::MSLLASR1 zero_kb_damage_class/state1_zero_kb_damage_class
   const uint8_t off_n =
       (laser_state == 0u) ? lp->hitbox_offsets_x_count : lp->state1_hitbox_offsets_x_count;
   uint8_t contact_mask = 0u;
@@ -4040,7 +4041,7 @@ static void laser_spawn_apply_throwlw_attached_body_callback(MslBatch* batch, in
   }
   if (res != MSL_ITEM_HIT_NONE) {
     // ThrowLw late-pulse attached laser persistence:
-    // - First ThrowLw state1 pulses still take the normal non-flinch laser OnGiveDamage/destroy path.
+    // - First ThrowLw state1 pulses still take the normal zero-KB laser OnGiveDamage/destroy path.
     // - Later attached pulses are the persistent state1 subset already identified by the TransN-tail
     //   recomposition lane in laser_spawn_from_fighter(); source collision records the BODY victim
     //   per HitCapsule, so keep the article alive and seed hb0/hb1 rehit suppression.

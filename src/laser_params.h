@@ -46,12 +46,13 @@ typedef struct MslLaserParams {
   uint16_t bkb;
   uint8_t element;
   int8_t shield_damage;
-  // Extracted proxy "no flinch" signal for this laser state.
-  // Source of truth: `data/items/lasers.bin` (MSLLASR1 reserved-byte lane), currently derived in
-  // extraction from article hitbox kbg/wsk/bkb terms by tools/extraction/extract_lasers.py.
-  // TODO(decomp/non-flinch-authoritative-signal): replace with a truly authoritative no-flinch lane
-  // once identified in decomp/game data.
-  uint8_t non_flinch;
+  // Source-derived zero applied-KB damage class for this laser state.
+  // The article script writes kbg/wsk/bkb into HitCapsule.x24/x28/x2C
+  // (it_2725.c), item BODY contact writes percent-temp in ftColl_80077C60,
+  // and Fighter_ProcessHit_8006D1EC enters Damage* only when applied KB is nonzero.
+  // For supported Fox/Falco blaster article states, an all-zero KB tuple is the
+  // data-backed percent-only/no-Damage-entry class.
+  uint8_t zero_kb_damage_class;
   // Per-scripted-hitbox item->x5D4_hitboxes[id].x138 bit. ftColl_8007925C skips item hitboxes
   // with this bit clear while gm_8016B1C4() is active.
   uint16_t hitbox_x138_mask;
@@ -77,7 +78,7 @@ typedef struct MslLaserParams {
   uint16_t state1_bkb;
   uint8_t state1_element;
   int8_t state1_shield_damage;
-  uint8_t state1_non_flinch;
+  uint8_t state1_zero_kb_damage_class;
   uint16_t state1_hitbox_x138_mask;
 
   uint8_t state1_hitbox_offsets_x_count;

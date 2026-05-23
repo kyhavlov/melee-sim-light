@@ -25,34 +25,34 @@ _CASES = (
         dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
         target_record=999,
         p=0,
-        note="AGN non-flinch laser carry clears x221C_b0 on the carry row",
+        note="AGN zero-KB laser carry clears x221C_b0 on the carry row",
     ),
     _Case(
         dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl",
         target_record=2469,
         p=0,
-        note="AGN late non-flinch laser carry clears x221C_b0 on the carry row",
+        note="AGN late zero-KB laser carry clears x221C_b0 on the carry row",
     ),
     _Case(
         dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
         target_record=414,
         p=1,
-        note="GAT non-flinch laser carry clears x221C_b0 on the carry row",
+        note="GAT zero-KB laser carry clears x221C_b0 on the carry row",
     ),
     _Case(
         dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
         target_record=453,
         p=1,
-        note="TBK non-flinch laser carry clears x221C_b0 on the carry row",
+        note="TBK zero-KB laser carry clears x221C_b0 on the carry row",
     ),
 )
 
 
 @pytest.mark.integration
 @pytest.mark.parametrize("case", _CASES, ids=lambda c: f"{Path(c.dataset_rel).stem}-rec{c.target_record}-p{c.p}")
-def test_nonflinch_item_x221c_b0_rows_and_adjacent_controls_are_replay_exact(case: _Case) -> None:
-    # Replay-real lock for the non-flinch item carry lane:
-    # - accepted non-flinch item hits can add percent without a fresh Damage* entry,
+def test_zero_kb_item_x221c_b0_rows_and_adjacent_controls_are_replay_exact(case: _Case) -> None:
+    # Replay-real lock for the zero-KB item carry lane:
+    # - accepted zero-KB item hits can add percent without a fresh Damage* entry,
     # - the stale x221C_b0 carry should not persist after the accepted hit,
     # - adjacent controls must remain replay-exact.
     # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC

@@ -156,9 +156,9 @@ def test_processhit_source_owner_synthetic_source_port_mutation_changes_only_por
 
 
 @pytest.mark.integration
-def test_nonflinch_item_source_owner_synthetic_source_port_keeps_item_instance_identity() -> None:
-    # Non-flinch item hits route through the percent-only ProcessHit lane: victim percent changes,
-    # hitlag/hitstun/action stay non-flinch, `last_hit_by` is the raw owner source-port, and
+def test_zero_kb_item_source_owner_synthetic_source_port_keeps_item_instance_identity() -> None:
+    # Zero-KB item hits route through the percent-only ProcessHit lane: victim percent changes,
+    # hitlag/hitstun/action stay zero-KB, `last_hit_by` is the raw owner source-port, and
     # `instance_hit_by` is the live item instance id.
     #
     # Source anchors:
