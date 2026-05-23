@@ -1860,7 +1860,8 @@ typedef struct MslDebugCollDataEcb {
   // Source projection mode for the callback-local floor result:
   // bottom sweep, root projection, edge snap, stage-object carry, 4A908 retry, etc.
   uint8_t floor_result_mode[MSL_MAX_PLAYERS];
-  uint8_t _pad0[2 * MSL_MAX_PLAYERS];
+  uint8_t damage_hitlag_floor_contact_runtime[MSL_MAX_PLAYERS];
+  uint8_t _pad0[MSL_MAX_PLAYERS];
 
   uint16_t floor_result_segment_id[MSL_MAX_PLAYERS];
 

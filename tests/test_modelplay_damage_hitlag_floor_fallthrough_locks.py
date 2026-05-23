@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
+from tests.test_colldata_ecb_substrate import _colldata_ecb_dtype
 
 
 STAGE_FD = 32
@@ -164,6 +165,67 @@ def _step_once(seed: np.ndarray, cur_input: np.ndarray) -> np.void:
     return out.view(COMPARE_DTYPE).reshape((1,))[0].copy()
 
 
+def _step_sequence(seed: np.ndarray, inputs: list[np.ndarray]) -> list[np.void]:
+    binding = importlib.import_module("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    out = np.zeros((1, compare_stride), dtype=np.uint8)
+    prev_input = np.zeros((1, input_stride), dtype=np.uint8)
+    history: list[np.void] = []
+
+    handle = binding.init(batch_size=1, num_players=2, ucf_enabled=1, ucf_cardinals_1_0_enabled=1)
+    try:
+        binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, seed_stride)))
+        for cur_input in inputs:
+            binding.step_input(
+                handle,
+                prev_input,
+                cur_input.view(np.uint8).reshape((1, input_stride)),
+            )
+            binding.write_compare(handle, out)
+            history.append(out.view(COMPARE_DTYPE).reshape((1,))[0].copy())
+            prev_input = cur_input.view(np.uint8).reshape((1, input_stride)).copy()
+    finally:
+        binding.destroy(handle)
+    return history
+
+
+def _step_sequence_with_colldata(seed: np.ndarray, inputs: list[np.ndarray]) -> tuple[list[np.void], list[np.void]]:
+    binding = importlib.import_module("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    colldata_stride = int(sizes["colldata_ecb"])
+    colldata_dtype = _colldata_ecb_dtype()
+    assert int(colldata_dtype.itemsize) == colldata_stride
+    out = np.zeros((1, compare_stride), dtype=np.uint8)
+    colldata_out = np.zeros((1, colldata_stride), dtype=np.uint8)
+    prev_input = np.zeros((1, input_stride), dtype=np.uint8)
+    history: list[np.void] = []
+    colldata_history: list[np.void] = []
+
+    handle = binding.init(batch_size=1, num_players=2, ucf_enabled=1, ucf_cardinals_1_0_enabled=1)
+    try:
+        binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, seed_stride)))
+        for cur_input in inputs:
+            binding.step_input(
+                handle,
+                prev_input,
+                cur_input.view(np.uint8).reshape((1, input_stride)),
+            )
+            binding.write_compare(handle, out)
+            binding.debug_write_colldata_ecb(handle, colldata_out)
+            history.append(out.view(COMPARE_DTYPE).reshape((1,))[0].copy())
+            colldata_history.append(colldata_out.view(colldata_dtype).reshape((1,))[0].copy())
+            prev_input = cur_input.view(np.uint8).reshape((1, input_stride)).copy()
+    finally:
+        binding.destroy(handle)
+    return history, colldata_history
+
+
 @pytest.mark.integration
 @pytest.mark.parametrize(
     ("player", "pos_x", "hitlag", "hitstun", "main_x", "main_y", "c_x", "c_y"),
@@ -264,6 +326,158 @@ def test_damageair3_same_action_active_hitlag_sdi_floorhug_does_not_clip_fd_trac
     assert int(out["on_ground"][player]) == 0
     assert int(out["ground_id"][player]) == 1
     assert float(out["pos_y"][player]) == pytest.approx(0.0001, abs=0.001)
+
+
+@pytest.mark.integration
+def test_damageair3_hitlag_floor_contact_carries_loaded_ecb_until_later_sdi_trace103() -> None:
+    pytest.importorskip("msl_binding")
+    # modelplay_selfplay_bfloor_5006m trace_seed103 frames 4988..4994:
+    # DamageAir3 first raises active-hitlag floor contact without replay-visible grounding; a later
+    # diagonal OnEveryHitlag SDI row in the same frozen hitlag segment must consume that loaded
+    # CollData ECB/floor provenance. Without carrying the source current-ECB packet from the first
+    # contact row, the later SDI displacement leaves the root inside FD instead of applying
+    # stay-airborne FloorPush/FloorHug.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+    #   ftCo_Damage_OnEveryHitlag,ftCo_Damage_Coll}
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800477E0,mpColl_80044628_Floor,mpColl_80044948_Floor}
+    player = 0
+    seed = _damage_air3_hitlag_seed(
+        player=player,
+        pos_x=-28.62101936340332,
+        pos_y=0.0001,
+        hitlag=6,
+        hitstun=23,
+    )
+    seed["tilt_timer_x"][0, player] = np.uint8(254)
+    seed["tilt_timer_y"][0, player] = np.uint8(254)
+
+    history = _step_sequence(
+        seed,
+        [
+            _input_for_player(player, main_x=0.0, main_y=-1.0),
+            _input_for_player(player, main_x=0.0, main_y=-1.0),
+            _input_for_player(player, main_x=-0.7125, main_y=-0.7125),
+            _input_for_player(player, main_x=-0.7125, main_y=-0.7125),
+        ],
+    )
+
+    first_contact = history[0]
+    later_sdi = history[2]
+    assert int(first_contact["action_id"][player]) == ACT_DAMAGE_AIR_3
+    assert int(first_contact["hitlag"][player]) == 5
+    assert int(first_contact["on_ground"][player]) == 0
+    assert float(first_contact["pos_y"][player]) == pytest.approx(0.0001, abs=0.001)
+
+    assert int(later_sdi["action_id"][player]) == ACT_DAMAGE_AIR_3
+    assert int(later_sdi["hitlag"][player]) == 3
+    assert int(later_sdi["on_ground"][player]) == 0
+    assert int(later_sdi["ground_id"][player]) == 1
+    assert float(later_sdi["pos_y"][player]) == pytest.approx(0.0001, abs=0.001)
+
+
+@pytest.mark.integration
+def test_damageair3_seeded_hidden_ecb_does_not_seed_runtime_floor_contact() -> None:
+    pytest.importorskip("msl_binding")
+    # Teacher-forced seed rows can initialize the hidden Damage hitlag ECB envelope, but source
+    # floor/contact authority is produced only by a live mpColl floor callback. A replay seed with
+    # hidden ECB plus stale public ground_id must not manufacture the runtime-only
+    # CollData.floor/contact carry used by the trace103 multi-row floorhug owner.
+    # refs/melee/src/melee/mp/mpcoll.c::{inline0,mpColl_80044628_Floor,mpColl_80044948_Floor}
+    player = 0
+    seed = _damage_air3_hitlag_seed(
+        player=player,
+        pos_x=-28.62101936340332,
+        pos_y=-4.199899673461914,
+        hitlag=3,
+        hitstun=20,
+    )
+    seed["ground_id"][0, player] = np.uint16(1)
+    seed["damage_hitlag_ecb_valid_u8"][0, player] = np.uint8(1)
+    seed["damage_hitlag_ecb_bottom_rel_y_f32"][0, player] = np.float32(0.0)
+    seed["damage_hitlag_ecb_top_rel_y_f32"][0, player] = np.float32(8.0)
+    seed["damage_hitlag_ecb_left_rel_x_f32"][0, player] = np.float32(-3.0)
+    seed["damage_hitlag_ecb_right_rel_x_f32"][0, player] = np.float32(3.0)
+    seed["damage_hitlag_ecb_side_rel_y_f32"][0, player] = np.float32(4.0)
+    seed["tilt_timer_x"][0, player] = np.uint8(254)
+    seed["tilt_timer_y"][0, player] = np.uint8(254)
+
+    history, colldata = _step_sequence_with_colldata(
+        seed,
+        [_input_for_player(player, main_x=0.0, main_y=0.0)],
+    )
+
+    out = history[0]
+    snap = colldata[0]
+    assert int(out["action_id"][player]) == ACT_DAMAGE_AIR_3
+    assert int(out["on_ground"][player]) == 0
+    assert float(out["pos_y"][player]) < -1.0
+    assert int(snap["current_valid"][player]) == 1
+    assert int(snap["damage_hitlag_floor_contact_runtime"][player]) == 0
+
+
+@pytest.mark.integration
+def test_damageair3_runtime_floor_contact_clears_after_hitlag_ends_trace103() -> None:
+    pytest.importorskip("msl_binding")
+    # The runtime floor-contact carry is a frozen Damage hitlag CollData lifetime. Once hitlag
+    # resolves, it must clear instead of combining stale floor/contact with later non-hitlag
+    # callbacks.
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_8006D10C,Fighter_procMap}
+    # refs/melee/src/melee/mp/mpcoll.c::inline0
+    player = 0
+    seed = _damage_air3_hitlag_seed(
+        player=player,
+        pos_x=-28.62101936340332,
+        pos_y=0.0001,
+        hitlag=6,
+        hitstun=23,
+    )
+    seed["tilt_timer_x"][0, player] = np.uint8(254)
+    seed["tilt_timer_y"][0, player] = np.uint8(254)
+    inputs = [
+        _input_for_player(player, main_x=0.0, main_y=-1.0),
+        _input_for_player(player, main_x=0.0, main_y=-1.0),
+        _input_for_player(player, main_x=-0.7125, main_y=-0.7125),
+        _input_for_player(player, main_x=-0.7125, main_y=-0.7125),
+        _input_for_player(player, main_x=0.0, main_y=0.0),
+        _input_for_player(player, main_x=0.0, main_y=0.0),
+        _input_for_player(player, main_x=0.0, main_y=0.0),
+    ]
+
+    history, colldata = _step_sequence_with_colldata(seed, inputs)
+
+    assert any(int(snap["damage_hitlag_floor_contact_runtime"][player]) == 1 for snap in colldata[:4])
+    final = history[-1]
+    final_snap = colldata[-1]
+    assert int(final["hitlag"][player]) == 0
+    assert int(final["action_id"][player]) == ACT_DAMAGE_AIR_3
+    assert int(final_snap["damage_hitlag_floor_contact_runtime"][player]) == 0
+
+
+@pytest.mark.integration
+def test_attack_action_hitlag_does_not_preserve_damage_floor_contact_lifetime() -> None:
+    pytest.importorskip("msl_binding")
+    # Non-Damage hitlag has pre/post hitlag callbacks for effects, but it does not run the
+    # `ftCo_Damage_Coll -> ft_80081DD4 -> mpColl_800477E0` stay-airborne floor path. A hitlagged
+    # attack with stale public ground_id must not set the Damage runtime floor-contact carry.
+    # refs/melee/src/melee/ft/fighter.c::{Fighter_procUpdate,Fighter_procMap}
+    player = 0
+    seed = _base_seed()
+    seed["action_id"][0, player] = np.uint16(ACT_ATTACK_S4_S)
+    seed["animation_index"][0, player] = np.uint32(SM_ATTACK_S4_S)
+    seed["on_ground"][0, player] = np.uint8(0)
+    seed["ground_id"][0, player] = np.uint16(1)
+    seed["pos_x"][0, player] = np.float32(-28.62101936340332)
+    seed["pos_y"][0, player] = np.float32(-4.199899673461914)
+    seed["hitlag"][0, player] = np.uint16(3)
+
+    history, colldata = _step_sequence_with_colldata(
+        seed,
+        [_input_for_player(player, main_x=-1.0, main_y=-1.0)],
+    )
+
+    assert int(history[0]["action_id"][player]) == ACT_ATTACK_S4_S
+    assert int(colldata[0]["damage_hitlag_floor_contact_runtime"][player]) == 0
 
 
 @pytest.mark.integration

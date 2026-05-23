@@ -1055,6 +1055,10 @@ static inline uint8_t mpcoll_source_phases_preserve_grounded_floor(MslMpcollSour
   return (uint8_t)((phases & preserving) != 0u);
 }
 
+static inline uint8_t floor_line_y_at_x_for_env(const MslBatch* batch, int bi,
+                                                const MslStageFloorGraph* g, int line_idx, float x,
+                                                float* y_out);
+
 static inline void mpcoll_colldata_state_load(const MslMpcollContext* ctx,
                                               MslMpcollCollDataState* out,
                                               MslMpcollSourcePhases source_phases) {
@@ -1091,6 +1095,54 @@ static inline void mpcoll_materialize_floor_publication_result(
       ctx, (uint8_t)MSL_MPCOLL_FLOOR_RESULT_DIRECT, mode, publication->contact.ground_id,
       publication->contact.contact_x, publication->contact.contact_y, publication->contact.normal_x,
       publication->contact.normal_y);
+}
+
+static inline uint8_t mpcoll_materialize_active_damage_hitlag_stay_airborne_floor(
+    const MslMpcollContext* ctx, MslMpcollFloorPublication* publication) {
+  if (ctx == NULL || ctx->batch == NULL || ctx->floor_graph == NULL || publication == NULL ||
+      publication->on_ground != 0u || ctx->batch->state.hitlag[ctx->idx] == 0u ||
+      !is_damage_collision_landing_action(ctx->action_id) ||
+      !action_uses_active_hitlag_downward_sdi_floorhug(ctx->action_id, ctx->batch, ctx->idx) ||
+      ctx->batch->state.coll_damage_hitlag_floor_contact_runtime[ctx->idx] == 0u ||
+      (ctx->batch->state.coll_env_flags[ctx->idx] & (uint32_t)MSL_COLLIDE_FLOOR_MASK) == 0u ||
+      ctx->prefer_floor_line_idx < 0) {
+    return 0u;
+  }
+  const MslStageFloorLine* line = &ctx->floor_graph->lines[(size_t)ctx->prefer_floor_line_idx];
+  if (line->is_platform || line->is_ledge) {
+    return 0u;
+  }
+  float floor_y = 0.0f;
+  if (!floor_line_y_at_x_for_env(ctx->batch, ctx->bi, ctx->floor_graph, ctx->prefer_floor_line_idx,
+                                 ctx->batch->state.pos_x[ctx->idx], &floor_y) ||
+      ctx->batch->state.pos_y[ctx->idx] >= (floor_y - k_floor_y_bias)) {
+    return 0u;
+  }
+  // Active Damage hitlag stay-airborne writeback:
+  // source `mpColl_80044628_Floor` has already produced floor/contact/env state for this frozen
+  // Damage segment, and `mpColl_80044948_Floor` may project `CollData.cur_pos` while
+  // `CollisionFlagAir_StayAirborne` leaves ground_or_air airborne. Keep that as an airborne
+  // STAY_AIRBORNE floor-result packet so final writeback consumes the same CollData-shaped path as
+  // other floor contacts instead of patching root/contact after publication.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+  //   ftCo_Damage_OnEveryHitlag,ftCo_Damage_Coll}
+  // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+  // refs/melee/src/melee/mp/mpcoll.c::{
+  //   mpColl_800477E0,mpColl_80044628_Floor,mpColl_80044948_Floor}
+  ctx->batch->state.pos_y[ctx->idx] = floor_y + k_floor_y_bias;
+  publication->airborne_ground_id = line->segment_i;
+  publication->contact.ground_id = line->segment_i;
+  publication->contact.contact_x = ctx->batch->state.pos_x[ctx->idx];
+  publication->contact.contact_y = floor_y;
+  publication->contact.normal_x = 0.0f;
+  publication->contact.normal_y = 1.0f;
+  publication->result_mode = (uint8_t)MSL_MPCOLL_FLOOR_MODE_STAY_AIRBORNE_PROJECTION;
+  mpcoll_record_callback_floor_result_with_mode(
+      ctx, (uint8_t)MSL_MPCOLL_FLOOR_RESULT_STAY_AIRBORNE,
+      (uint8_t)MSL_MPCOLL_FLOOR_MODE_STAY_AIRBORNE_PROJECTION, line->segment_i,
+      publication->contact.contact_x, publication->contact.contact_y, publication->contact.normal_x,
+      publication->contact.normal_y);
+  return 1u;
 }
 
 static inline uint8_t mpcoll_source_phases_allow_floor_edge_snap(MslMpcollSourcePhases phases) {
@@ -1303,7 +1355,8 @@ static inline uint8_t floor_line_y_at_x_for_env(const MslBatch* batch, int bi,
 
 static inline uint8_t active_damage_hard_floor_projection_source_accepted(
     const MslBatch* batch, size_t idx, int bi, const MslStageFloorGraph* g, int out_line_idx,
-    float cur_bottom_x, float cur_bottom_y, const MslCommonParams* c) {
+    float cur_bottom_x, float cur_bottom_y, uint8_t carried_source_floor_contact,
+    const MslCommonParams* c) {
   if (batch == NULL || g == NULL || c == NULL || out_line_idx < 0 ||
       (size_t)out_line_idx >= g->line_count || g->lines[(size_t)out_line_idx].is_platform ||
       g->lines[(size_t)out_line_idx].is_ledge) {
@@ -1324,6 +1377,9 @@ static inline uint8_t active_damage_hard_floor_projection_source_accepted(
   // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
   // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpColl_80044948_Floor}
   if (batch->state.tilt_timer_y_frame_start[idx] < c->sdi_tilt_max_frames) {
+    return 1u;
+  }
+  if (carried_source_floor_contact != 0u) {
     return 1u;
   }
 
@@ -2884,19 +2940,31 @@ static inline void mpcoll_commit_grounded_floor_contact(const MslMpcollContext* 
 }
 
 static inline void mpcoll_commit_airborne_floor_state(const MslMpcollContext* ctx,
-                                                      uint16_t ground_id) {
+                                                      uint16_t ground_id,
+                                                      const MslMpcollFloorContact* contact) {
   if (ctx == NULL || ctx->batch == NULL) {
     return;
   }
-  // Airborne CollData keeps floor.index provenance but clears live contact publication.
+  // Airborne CollData usually keeps only floor.index provenance and clears live contact
+  // publication. Active Damage hitlag stay-airborne is the source exception:
+  // mpColl_80044628_Floor/mpColl_80044948_Floor can leave ground_or_air airborne while preserving
+  // callback-current floor/contact state for later frozen hitlag callbacks.
   // refs/melee/src/melee/lb/types.h::CollData
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpColl_80044948_Floor}
   MslBatch* batch = ctx->batch;
   const size_t idx = ctx->idx;
   batch->state.ground_id[idx] = ground_id;
-  batch->state.ground_normal_x[idx] = 0.0f;
-  batch->state.ground_normal_y[idx] = 1.0f;
-  batch->state.ground_contact_x[idx] = 0.0f;
-  batch->state.ground_contact_y[idx] = 0.0f;
+  if (contact != NULL) {
+    batch->state.ground_normal_x[idx] = contact->normal_x;
+    batch->state.ground_normal_y[idx] = contact->normal_y;
+    batch->state.ground_contact_x[idx] = contact->contact_x;
+    batch->state.ground_contact_y[idx] = contact->contact_y;
+  } else {
+    batch->state.ground_normal_x[idx] = 0.0f;
+    batch->state.ground_normal_y[idx] = 1.0f;
+    batch->state.ground_contact_x[idx] = 0.0f;
+    batch->state.ground_contact_y[idx] = 0.0f;
+  }
 }
 
 static inline void mpcoll_reject_floor_publication(const MslMpcollContext* ctx,
@@ -3355,6 +3423,14 @@ static inline void mpcoll_commit_final_floor_state(const MslMpcollContext* ctx,
     return;
   }
 
+  MslMpcollFloorContact airborne_contact = {0};
+  MslMpcollFloorContact* airborne_contact_ptr = NULL;
+  if (mpcoll_callback_floor_result_valid(ctx) &&
+      ctx->batch->state.coll_floor_result_source[idx] ==
+          (uint8_t)MSL_MPCOLL_FLOOR_RESULT_STAY_AIRBORNE &&
+      mpcoll_floor_contact_from_callback_result(ctx, &airborne_contact)) {
+    airborne_contact_ptr = &airborne_contact;
+  }
   if (mpcoll_callback_floor_result_valid(ctx)) {
     mpcoll_discard_callback_floor_result(ctx);
   }
@@ -3362,7 +3438,7 @@ static inline void mpcoll_commit_final_floor_state(const MslMpcollContext* ctx,
   (void)mpcoll_maybe_project_specialhi_air_launch_platform_pass(ctx, ground_id);
   (void)mpcoll_maybe_refresh_downbound_airborne_floor_index(ctx, publication->cur_bottom_x,
                                                             publication->cur_bottom_y, &ground_id);
-  mpcoll_commit_airborne_floor_state(ctx, ground_id);
+  mpcoll_commit_airborne_floor_state(ctx, ground_id, airborne_contact_ptr);
 }
 
 static uint8_t msl_mpcheck_floor(const MslBatch* batch, size_t idx, int bi,
@@ -7143,11 +7219,15 @@ void mpcoll_ground_apply(MslBatch* batch) {
              batch->state.hitlag_pre_timer[idx] == 0u && batch->state.hitlag[idx] == 0u)
                 ? 1u
                 : 0u;
+        const uint8_t active_damage_hitlag_carried_source_floor_contact =
+            (batch->state.coll_damage_hitlag_floor_contact_runtime[idx] != 0u) ? 1u : 0u;
         const uint8_t active_damage_hitlag_stay_airborne_floor_owner =
             (batch->state.hitlag[idx] != 0u && is_damage_collision_landing_action(action_id) &&
              prefer_line_idx >= 0 &&
              action_uses_active_hitlag_downward_sdi_floorhug(action_id, batch, idx) &&
-             damage_hitlag_floorhug_attempts_downward_sdi(batch, idx, c))
+             (damage_hitlag_floorhug_attempts_downward_sdi(batch, idx, c) ||
+              (active_damage_hitlag_carried_source_floor_contact &&
+               batch->state.pos_y[idx] < (prefer_line_root_y - k_floor_y_bias))))
                 ? 1u
                 : 0u;
         const uint8_t active_damage_thrown_release_floor_owner =
@@ -7413,7 +7493,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
           if (out_line_idx >= 0 && !g->lines[(size_t)out_line_idx].is_platform &&
               !g->lines[(size_t)out_line_idx].is_ledge) {
             active_damage_hard_floor_hit = active_damage_hard_floor_projection_source_accepted(
-                batch, idx, bi, g, out_line_idx, cur_bottom_x, cur_bottom_y, c);
+                batch, idx, bi, g, out_line_idx, cur_bottom_x, cur_bottom_y,
+                active_damage_hitlag_carried_source_floor_contact, c);
           }
           if (out_line_idx >= 0 && y_corr >= 0.0f &&
               // Keep this owner off ledge floor segments. mpColl edge/ledge suppression is owned
@@ -11004,6 +11085,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
             damage_active_hitlag_downward_sdi_airborne_owner,
             damage_active_hitlag_root_below_bottom_above_floor_owner);
       }
+      (void)mpcoll_materialize_active_damage_hitlag_stay_airborne_floor(&mpcoll_ctx,
+                                                                        &floor_publication);
       mpcoll_commit_final_floor_state(&mpcoll_ctx, &floor_publication);
       if (!batch->state.on_ground[idx] && action_is_down_bound(action_id) &&
           seed_ground_id != 0xFFFFu &&
@@ -11090,6 +11173,17 @@ void mpcoll_ground_apply(MslBatch* batch) {
         stored_locked_desired_bottom_owner = msl_escapeair_locked_bottom_owner_preserve_or_seeded(
             batch->state.coll_desired_ecb_bottom_locked_owner[idx]);
       }
+      const float active_damage_hitlag_contact_floor_y = batch->state.ground_contact_y[idx];
+      const uint8_t active_damage_hitlag_floor_contact_carry =
+          (batch->state.hitlag[idx] != 0u &&
+           (action_uses_active_hitlag_downward_sdi_floorhug(action_id, batch, idx) ||
+            mpcoll_damageair_action(action_id)) &&
+           (batch->state.coll_env_flags[idx] & (uint32_t)MSL_COLLIDE_FLOOR_MASK) != 0u &&
+           batch->state.ground_id[idx] != 0xFFFFu &&
+           isfinite(active_damage_hitlag_contact_floor_y) &&
+           batch->state.pos_y[idx] >= (active_damage_hitlag_contact_floor_y - k_floor_y_bias))
+              ? 1u
+              : 0u;
       if (active_damage_hitlag_ecb_carry && have_state_cur_ecb &&
           !active_damage_hitlag_ecb_consumer) {
         // Carry the source loaded ECB through frozen Damage hitlag without using it as floor
@@ -11100,9 +11194,51 @@ void mpcoll_ground_apply(MslBatch* batch) {
         cur_ecb_points = state_cur_ecb_points;
         stored_desired_ecb_points = state_cur_ecb_points;
       }
+      if (active_damage_hitlag_floor_contact_carry && !active_damage_hitlag_ecb_carry) {
+        const float floor_contact_bottom_rel =
+            active_damage_hitlag_contact_floor_y - batch->state.pos_y[idx];
+        mpcoll_ecb_world_points_from_rel(
+            &cur_ecb_points, batch->state.pos_x[idx], batch->state.pos_y[idx],
+            floor_contact_bottom_rel, cur_ecb_points.top_rel_y, cur_ecb_points.left_rel_x,
+            cur_ecb_points.right_rel_x, cur_ecb_points.side_rel_y, cur_ecb_points.frame_u16);
+        stored_desired_ecb_points = cur_ecb_points;
+      }
+      const uint8_t active_damage_hitlag_existing_floor_contact_carry =
+          (batch->state.hitlag[idx] != 0u && is_damage_collision_landing_action(action_id) &&
+           batch->state.coll_damage_hitlag_floor_contact_runtime[idx] != 0u)
+              ? 1u
+              : 0u;
       mpcoll_store_current_ecb_points(batch, idx, &cur_ecb_points);
       mpcoll_store_desired_ecb_points(batch, idx, &stored_desired_ecb_points);
-      batch->state.coll_damage_hitlag_ecb_valid[idx] = active_damage_hitlag_ecb_carry ? 1u : 0u;
+      // Active Damage hitlag can first materialize the source floor contact through the ordinary
+      // mpColl floor-env bits before a later OnEveryHitlag SDI row needs the loaded ECB/floor
+      // packet as stay-airborne FloorPush/FloorHug authority. In source, `inline0` clears
+      // `env_flags` every map callback, but `CollData.floor/contact/ecb` and `cur_pos` remain the
+      // callback-current state consumed by the next frozen hitlag map callback. Preserve that
+      // runtime-produced CollData provenance for the rest of the hitlag segment, including no-SDI
+      // continuation rows between the first contact and the later SDI consume. Teacher-forced
+      // reseed rows may initialize hidden ECB state, but they cannot seed this runtime-only
+      // floor-contact authority.
+      //
+      // Clear phase: any non-hitlag or non-Damage map callback writes zero here; `reseed_seed`
+      // clears it before applying explicit seed ECB lanes.
+      //
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+      //   ftCo_Damage_OnEveryHitlag,ftCo_Damage_Coll}
+      // refs/melee/src/melee/ft/fighter.c::{Fighter_procUpdate,Fighter_procMap}
+      // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+      // refs/melee/src/melee/mp/mpcoll.c::{
+      //   inline0,mpColl_800477E0,mpColl_80044628_Floor,mpColl_80044948_Floor}
+      batch->state.coll_damage_hitlag_ecb_valid[idx] =
+          (active_damage_hitlag_ecb_carry || active_damage_hitlag_floor_contact_carry ||
+           active_damage_hitlag_existing_floor_contact_carry)
+              ? 1u
+              : 0u;
+      batch->state.coll_damage_hitlag_floor_contact_runtime[idx] =
+          (active_damage_hitlag_floor_contact_carry ||
+           active_damage_hitlag_existing_floor_contact_carry)
+              ? 1u
+              : 0u;
       const float unlocked_fall_pose_bottom_rel =
           (action_id == (uint16_t)MSL_ACT_FALL && ecb_lock_timer <= 1u)
               ? mpcoll_pose_ecb_bottom_rel_y(char_id, anim, ecb_frame_cur, 0u)

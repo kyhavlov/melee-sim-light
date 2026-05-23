@@ -2317,6 +2317,11 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         batch->state.coll_ecb_bottom_valid[idx] = 1u;
         batch->state.coll_prev_ecb_bottom_valid[idx] = 1u;
         batch->state.coll_damage_hitlag_ecb_valid[idx] = 0u;
+        // Source clear boundary for runtime CollData floor contact: reseed is not a vanilla
+        // callback continuation. It may reconstruct explicit seed ECB state below, but it must not
+        // manufacture live `mpColl_80044628_Floor` floor-contact authority.
+        // refs/melee/src/melee/mp/mpcoll.c::{inline0,mpColl_80044628_Floor,mpColl_80044948_Floor}
+        batch->state.coll_damage_hitlag_floor_contact_runtime[idx] = 0u;
         MslEcbWorldPoints damage_hitlag_ecb = {0};
         if (reseed_damage_hitlag_ecb_points_from_seed(&damage_hitlag_ecb, seed, p)) {
           // Active Damage hitlag can keep the pre-hit JObj collision envelope live while the
@@ -3697,6 +3702,8 @@ int msl_batch_debug_write_colldata_ecb(const MslBatch* batch, uint8_t* out_bytes
       out->floor_result_valid[p] = batch->state.coll_floor_result_valid[idx];
       out->floor_result_source[p] = batch->state.coll_floor_result_source[idx];
       out->floor_result_mode[p] = batch->state.coll_floor_result_mode[idx];
+      out->damage_hitlag_floor_contact_runtime[p] =
+          batch->state.coll_damage_hitlag_floor_contact_runtime[idx];
       out->floor_result_segment_id[p] = batch->state.coll_floor_result_segment_id[idx];
 
       out->current_bottom_rel_y[p] = batch->state.coll_ecb_bottom_rel_y[idx];

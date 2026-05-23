@@ -133,6 +133,13 @@ typedef struct MslStateSoA {
   // Damage pose. Runtime writes this on live Damage entry; replay reseed initializes it from
   // MslSeed::damage_hitlag_ecb_*.
   uint8_t* coll_damage_hitlag_ecb_valid;
+  // Runtime-only CollData.floor/contact/env provenance produced by a live active-hitlag Damage
+  // map callback. Source writes this through `ftCo_Damage_Coll -> ft_80081DD4 ->
+  // mpColl_800477E0 -> mpColl_80044628_Floor/mpColl_80044948_Floor`, then later hitlag map
+  // callbacks consume the carried CollData floor/contact state before hitlag exits. Unlike
+  // coll_damage_hitlag_ecb_valid, this is not initialized from teacher-forced seed rows; reseed
+  // rows may seed the hidden ECB envelope but not runtime-produced floor contact authority.
+  uint8_t* coll_damage_hitlag_floor_contact_runtime;
   // Callback-local floor result scratch from the latest mpColl-shaped map callback. Source
   // `mpColl_80043754` owns this as per-callback state: it interpolates ECB/root substeps, calls a
   // floor helper, then the wrapper callback consumes the result immediately.
