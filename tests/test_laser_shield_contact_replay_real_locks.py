@@ -945,14 +945,14 @@ def test_steady_guard_x2218_b1_laser_uses_hitcapsule_offsets() -> None:
         ),
     ],
 )
-def test_seeded_pending_reflect_transfer_precedes_proxy_laser_collision(
+def test_seeded_pending_reflect_transfer_precedes_current_laser_collision(
     dataset_rel: str, record: int, p: int, item_slot: int, seed_action: int
 ) -> None:
     # Replay-real locks for the hidden pending-reflect priority boundary:
     # - the seed lane is prefix-causal item state, not future action fitting;
     # - ftColl_80077464 has already selected a reflector and Item_8026A294 must consume
-    #   Item_80269F14 before the simulator's proxy laser-vs-fighter pass can destroy the item
-    #   through HitShield/BODY;
+    #   Item_80269F14 before the current laser-vs-fighter pass can destroy the item through
+    #   HitShield/BODY;
     # - adjacent no-transfer rows stay covered by the GuardSetOff/ShieldBounced tests above.
     # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077464}
     # refs/melee/src/melee/it/item.c::{Item_8026A294,Item_80269F14}
@@ -1022,7 +1022,7 @@ def test_lightshield_no_submotion_guard_body_uses_frame_start_item_sample(
     # - Item_802697D4 has integrated the laser by post-frame, but Fighter_8006CB94 /
     #   ftColl_8007925C consumes the item HitCapsule BODY sample under the frame-start
     #   `fp+0x2218` guard behavior byte.
-    # - Pure behavior/x2218_b1 rows (`0x04` or `0x44`) must not let the post-motion proxy BODY
+    # - Pure behavior/x2218_b1 rows (`0x04` or `0x44`) must not let the post-motion BODY
     #   sample damage through lightshield; command/interrupt rows remain on the current item
     #   sample and are covered by adjacent GuardSetOff/body-hit locks.
     # refs/melee/src/melee/it/item.c::Item_802697D4

@@ -1250,11 +1250,12 @@ static uint8_t blaster_gun_update_from_fighter(MslBatch* batch, int bi, int owne
   const uint8_t is_throw = action_is_blaster_throw(action_id_u16);
   if (is_throw) {
     const float af_cur = items_cur_anim_frame_f32(batch, o_idx);
-    // `cmd1_cur` proxies ftFx_Throw_Anim's switch on `fp->cmd_vars[1]`:
+    // `cmd1_cur` is the MSLFTSC1/move-table-backed value of ftFx_Throw_Anim's
+    // `fp->cmd_vars[1]` switch:
     // - case 1: maintain/spawn gun-side ownership path
     // - case 2/0: clear ownership path
     //
-    // Source of truth for this proxy is extracted move script data:
+    // Source of truth is extracted move script data:
     // - `data/moves/{fox,falco}.json` set_cmd_var(idx=1) events
     // - parsed into move_tables_throw_cmd1_active()
     // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
@@ -1857,7 +1858,7 @@ static inline uint8_t item_laser_body_lbcoll_matrix_radius_overlap(
   // matrix argument present, lbColl rewrites both hurt capsule endpoint Z values. The current
   // source-closed replacement uses this for the LandingFallSpecial exact BODY owner below; the
   // broad all-state flattened-Z path still needs full phantom/hurtcap-order parity before it can
-  // replace the remaining proxy lanes.
+  // replace the remaining reduced replay-visible lanes.
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C
   // refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C
   float az = flatten_hurt_z ? batch->state.pos_z[d_idx] : batch->state.hurtcap_a_z[hi];
@@ -1870,7 +1871,7 @@ static inline uint8_t item_laser_body_lbcoll_matrix_radius_overlap(
     // ftColl_8007925C still owns item BODY by evaluating the action's source submotion through
     // lbColl_8000805C when ShieldDesc/ReflectDesc does not consume the projectile first.
     // Recompute capsule endpoints from the same motion-state collision matrix instead of
-    // consulting the stale world endpoint proxy.
+    // consulting the stale world endpoint snapshot.
     // refs/melee/src/melee/ft/ftmotionstates.c::{
     //   ftCo_MS_GuardOn,ftCo_MS_Guard,ftCo_MS_GuardSetOff,ftCo_MS_GuardReflect}
     // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C
@@ -2047,8 +2048,8 @@ static inline uint8_t item_fresh_guardon_locomotion_shielddesc_owner(const MslBa
   // Fresh grounded-locomotion GuardOn entry ShieldDesc owner:
   // generated Wait/Walk/Turn/Dash/Run/Squat IASA callbacks can install a fresh ShieldDesc through
   // ftCo_80091A4C/ftCo_80092450 before item shield collision consumes it. On this owner, the
-  // laser shield branch must use the real item HitCapsule scaleZ lane from it_8027137C / lbColl
-  // rather than the temporary steady-shield cap.
+  // laser shield branch must use the real item HitCapsule scaleZ lane from it_8027137C / lbColl,
+  // matching the same source transform used by steady shield contacts.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_80092450}
   // refs/melee/src/melee/it/itcoll.c::it_8027137C
   // refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
@@ -2196,7 +2197,7 @@ static inline uint8_t laser_body_guard_family_no_submotion_exact_lbcoll_applies(
       // ftColl_8007925C evaluates item BODY through lbColl_8000805C after ShieldDesc/ReflectDesc
       // branches. For no-submotion Guard-family replay snapshots, the motion-state table still
       // names the source collision submotion even when Slippi serializes animation_index=-1/-2.
-      // Use that matrix path instead of the reduced proxy only inside the shield-adjacent
+      // Use that matrix path instead of the reduced replay-visible sample only inside the shield-adjacent
       // Guard-family slice.
       // refs/melee/src/melee/ft/ftmotionstates.c::{
       //   ftCo_MS_GuardOn,ftCo_MS_Guard,ftCo_MS_GuardSetOff,ftCo_MS_GuardReflect}
@@ -2359,7 +2360,7 @@ static inline uint8_t laser_airborne_damagefall_uses_lbcoll_hurt_radius(
   //   but the already-spawned laser still reaches the same-frame item BODY pass.
   // - Keep the promoted lbColl hurt-radius lane on this source-owned landing handoff. The
   //   adjacent in-air SpecialAirNLoop frame is replay-real no-hit and proves the full
-  //   previous-to-current swept approximation is too broad for this DamageFall row.
+  //   previous-to-current swept source path is too broad for this DamageFall row.
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
   //   ftFx_SpecialAirNLoop_Anim,ftFx_SpecialN_GetBlasterAction}
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Enter_Basic
@@ -2699,7 +2700,7 @@ static inline uint8_t item_guardon_reflect_body_hit_undoes_action_recharge(const
   // The action-level recharge path admits fresh GuardOn -> GuardReflect rows because
   // ftCo_8009388C clears the shield descriptor. If item BODY contact immediately consumes that
   // same hidden GuardReflect owner, Fighter_ProcessHit owns the visible recharge instead; remove
-  // the pre-item approximation after the accepted BODY hit.
+  // the pre-item recharge after the accepted BODY hit.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_IASA,ftCo_8009388C}
   // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
   return (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
@@ -3095,21 +3096,22 @@ static inline float laser_collision_offset_scale(const MslLaserParams* lp, uint8
   // shield/body/reflect-specific clamps.
   float s = laser_scale_z;
   if (!(s > 0.0f)) {
-    // Narrowed temporary: reseeded rows can carry invalid/missing per-item visual scale history.
-    // Keep identity fallback until authoritative item hitcapsule scale ownership is extracted.
-    // Decomp anim floor remains 1e-3 in itFoxlaser_UnkMotion1_Anim.
+    // Seeded public item rows may predate the first laser Anim callback and therefore lack a
+    // serialized scaleZ byte. The source first Anim callback floors the live scale to 1e-3, but a
+    // missing public seed lane is an unknown scale rather than a real zero-width HitCapsule. Use
+    // identity scale for that reconstruction boundary; live rollout rows consume the computed
+    // itFoxlaser_UnkMotion1_Anim scale above.
     // refs/melee/src/melee/it/items/itfoxlaser.c::itFoxlaser_UnkMotion1_Anim
+    // refs/melee/src/melee/it/itcoll.c::it_8027137C
     s = 1.0f;
   }
-  // Narrowed temporary (replay-guarded):
-  // - until item-hit capsule transform ownership is extracted end-to-end for shield-adjacent rows,
-  //   keep identity cap for SHIELD lane and shield-adjacent BODY lane.
-  // - This preserves replay-real GuardOn/Guard no-submotion control rows while reflect/body rows
-  //   still consume the same decomp-owned scaleZ lane.
-  // TODO(narrowed_temporary/decomp-items-collision-space-shield-adjacent-cap): replace this cap
-  // with direct item hitcapsule transform ownership once extracted (it_8027137C / lbColl path).
-  // refs/melee/src/melee/it/itcoll.c::it_8027137C
+  // Shield and shield-adjacent BODY admission stay on the reduced descriptor sample unless the
+  // caller proves a fresh ShieldDesc/source HitCapsule owner. The full x58/x4C scale lane is
+  // consumed after shield admission by ShieldBounced/ReflectDesc source paths; using it for every
+  // ShieldDesc admission over-admits Guard/GuardReflect controls.
   // refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076CBC,ftColl_80077688}
+  // refs/melee/src/melee/it/item.c::Item_80269DC8
   if ((lane == MSL_LASER_COLLISION_SPACE_SHIELD ||
        (lane == MSL_LASER_COLLISION_SPACE_BODY && body_shield_adjacent)) &&
       shield_cap_enabled && s > 1.0f) {
@@ -3418,57 +3420,6 @@ static uint8_t yoshi_shyguy_try_fighter_hitbox_hit(MslBatch* batch, int bi, int 
   return 0u;
 }
 
-static inline uint8_t laser_try_shield_bounce_velocity(float vx, float vy, float shield_x,
-                                                       float shield_y, float contact_x,
-                                                       float contact_y, float* out_vx,
-                                                       float* out_vy) {
-  if (out_vx == NULL || out_vy == NULL) {
-    return 0u;
-  }
-
-  const float nx = contact_x - shield_x;
-  const float ny = contact_y - shield_y;
-  const float n2 = (nx * nx) + (ny * ny);
-  if (!(n2 > 0.0f)) {
-    return 0u;
-  }
-
-  const float inv_n = 1.0f / sqrtf(n2);
-  const float unx = nx * inv_n;
-  const float uny = ny * inv_n;
-  if (!(ny > fabsf(nx))) {
-    return 0u;
-  }
-  const float dot = (vx * unx) + (vy * uny);
-  if (!(dot < 0.0f)) {
-    return 0u;
-  }
-
-  const float rvx = vx - (2.0f * dot * unx);
-  const float rvy = vy - (2.0f * dot * uny);
-
-  // Shield-bounce ownership:
-  // - Item_80269DC8 routes eligible shield contacts through the per-item `shield_bounced`
-  //   callback instead of `hit_shield`.
-  // - Fox laser `itFoxLaser_Logic94_ShieldBounced` mirrors velocity over `item->xC58`,
-  //   keeps the projectile alive, and updates the laser angle from the mirrored velocity.
-  // refs/melee/src/melee/it/item.c::Item_80269DC8
-  // refs/melee/src/melee/it/items/itfoxlaser.c::itFoxLaser_Logic94_ShieldBounced
-  //
-  // This lite sim does not yet seed the authoritative `xDCE_flag.b5/xDCE_flag.b4/xC54/xC58`
-  // shield-bounce internals. Narrow approximation: only keep the item alive when the shield-sphere
-  // contact normal is upper-hemisphere dominant and yields an upward mirrored travel vector,
-  // matching the replay-real glancing upper-shield bounce families while leaving front-side
-  // shield hits on the destroy path below.
-  if (!(rvy > 0.0f)) {
-    return 0u;
-  }
-
-  *out_vx = rvx;
-  *out_vy = rvy;
-  return 1u;
-}
-
 static inline uint8_t laser_try_shield_bounce_velocity_from_segment(
     float vx, float vy, float shield_x, float shield_y, float shield_z, float shield_radius,
     float prev_x, float prev_y, float prev_z, float cur_x, float cur_y, float cur_z,
@@ -3732,8 +3683,10 @@ static int laser_spawn_from_fighter(MslBatch* batch, int bi, int owner, const Ms
   const uint16_t frame = msl_anim_frame_floor_u16(anim_frame_f32);
   const MslCharParams* chp = msl_char_params(char_id);
 
-  // Spawn point: lb_8000B1CC(bone_joint, offset, out) (decomp), approximated with pose matrices.
+  // Spawn point: model lb_8000B1CC(bone_joint, offset, out) with source joint id plus extracted
+  // SSANIM01 pose matrices.
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialN_FtGetHoldJoint
+  // refs/melee/src/melee/lb/lbunknown_001.c::lb_8000B1CC
   //
   // IMPORTANT (bone index domain):
   // - Decomp uses ftParts_GetBoneIndex(fp, FtPart_RThumbNb) to pick an index into fp->parts[].
@@ -3886,10 +3839,11 @@ static int laser_spawn_from_fighter(MslBatch* batch, int bi, int owner, const Ms
   float vx = spd * cosf(ang);
   float vy = spd * sinf(ang);
   if (apply_spawn_motion_step) {
-    // Throw-side intra-frame order bridge:
+    // Throw-side intra-frame order:
     // - Throw shots are emitted by ftFx_Throw_Anim and then consume item motion callbacks in-frame.
-    // - For reseeded one-step bridge rows where throw pulse ownership is seed-driven, apply one
-    //   immediate motion tick to align spawned projectile t+1 placement.
+    // - For reseeded one-step rows where throw pulse ownership is seed-driven by MSLFTSC1, apply
+    //   one immediate motion tick to align spawned projectile t+1 placement with source item
+    //   callback order.
     // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
     // refs/melee/src/melee/it/items/itfoxlaser.c::itFoxlaser_UnkMotion1_Phys
     pos_x += vx;
@@ -4582,9 +4536,9 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       // - Item_8026A294 later consumes that pending callback through Item_80269F14 before the
       //   article can be destroyed by a new reconstructed shield/BODY contact in this reseeded
       //   one-step.
-      // Keep this explicit prefix-causal seed lane ahead of the proxy fighter-collision loop; the
-      // generic post-loop apply below is still used when no competing contact would consume the
-      // article first.
+      // Keep this explicit prefix-causal seed lane ahead of the reconstructed fighter-collision
+      // loop; the generic post-loop apply below is still used when no competing contact would
+      // consume the article first.
       // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077464
       // refs/melee/src/melee/it/item.c::{Item_8026A294,Item_80269F14}
       item_apply_seeded_reflect_transfer_after_collision(batch, ii);
@@ -4600,8 +4554,9 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       continue;
     }
 
-    // Collision: laser hitbox script defines multiple hitboxes along the beam axis. Approximate as
-    // multiple spheres sampled along the projectile's velocity direction using hitbox_offsets_x.
+    // Collision: laser hitbox script defines multiple beam HitCapsules. Represent those active
+    // slots as fixed-radius samples along the source projectile axis using generated
+    // `hitbox_offsets_x`.
     //
     // Decomp: the laser model is rotated to match its velocity direction (rotY depends on
     // facing_dir=sign(vel.x), rotX depends on atan2(vel.y, vel_x)), and scaleZ ramps over time.
@@ -4619,7 +4574,8 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         batch->state.action_frame[o_idx] > 28 &&
         fabsf(batch->state.item_timer[ii] - ((float)lp->lifetime_frames - 1.0f)) <= 1.0e-5f) {
       // Late Falco ThrowLw state1 spawn callback order:
-      // - The frame-28 seed-pending bridge above owns the probe-backed immediate BODY callback.
+      // - The frame-28 seed-pending source latch above owns the probe-backed immediate BODY
+      //   callback.
       // - Later runtime-spawned state1 articles serialize at post-frame with lifeTimer decremented
       //   but do not run BODY until the following item collision callback; QGD's frame-31/32 control
       //   is the replay-real boundary for this split.
@@ -4860,7 +4816,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       // - ftCo_800924C0 installs ShieldDesc before item callbacks, so same-step item shield
       //   contact is geometry-owned rather than globally deferred.
       // - This fresh entry must use the article's actual scaleZ endpoint lane; the reduced
-      //   identity-cap proxy over-admits stale trailing laser samples on Dash controls.
+      //   descriptor sample over-admits stale trailing laser samples on Dash controls.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091AD8,ftCo_800923B4,ftCo_800924C0}
       // refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Anim,it_8029C4D4}
@@ -5117,10 +5073,9 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         //   and rebuilds the current endpoint (`x4C`) from this frame's item scale,
         // - ftColl_8007925C passes the current item scale into lbColl_80007BCC/80007DD8 for the
         //   capsule radius.
-        // Keep this on the ShieldBounced xC54/xC58 source path after a shield hit is admitted. The
-        // broad shield-overlap proxy remains on the existing reduced sample/radius lane until the
-        // native item HitCapsule list is fully represented; using the x58/x4C scale lane to admit
-        // contacts over-broadens Landing-origin GuardReflect no-contact rows.
+        // Keep this on the ShieldBounced xC54/xC58 source path after a shield hit is admitted.
+        // Shield admission itself stays on the reduced descriptor sample where source ShieldDesc
+        // ownership says HitShield, then bounce uses the full item HitCapsule x58/x4C endpoint.
         // refs/melee/src/melee/it/itcoll.c::it_8027137C
         // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077688
         // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_80007DD8}
@@ -5189,8 +5144,9 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
             // - ftColl_80077688 copies the lbColl_800077A0 result into item->xC54/xC58.
             // - Item_80269DC8 still rejects side contacts whose xC54 is beyond the item-common
             //   threshold. Preserve that predicate for every reduced laser sample, then choose the
-            //   strongest upward mirror result as the best available proxy for the native
-            //   HitCapsule segment normal.
+            //   strongest accepted upward mirror result from the enumerated source HitCapsule
+            //   offsets. Explicit item_shield_bounce_seed_* lanes override this live
+            //   reconstruction when post-frame serialization proves a hidden native result.
             // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077688
             // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007DD8,lbColl_800077A0}
             // refs/melee/src/melee/it/item.c::Item_80269DC8
@@ -5262,7 +5218,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           // Slippi does not serialize item->xC54/xC58/xDCE, but the seed lane proves
           // ftColl_80077688 already accepted ShieldDesc and Item_80269DC8 chose the
           // ShieldBounced keepalive callback. Use that hidden source owner to admit shield
-          // resolution when the reduced replay-visible shield proxy misses; do not broaden the
+          // resolution when the reduced replay-visible shield sample misses; do not broaden the
           // geometry-only carried-laser lane.
           // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077688
           // refs/melee/src/melee/it/item.c::Item_80269DC8
@@ -5338,7 +5294,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         // - otherwise the frozen GuardReflect callback keeps the article alive without staging a
         //   broad reflected-owner snapshot.
         // Use the same shield bubble from shields_refresh() / ftColl shield checks rather than the
-        // narrower reduced-offset `shield_hit` proxy above, which is only an item-hitcap sample.
+        // narrower reduced-offset `shield_hit` sample above, which is only an item-hitcap sample.
         // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076CBC,ftColl_80077688}
         // refs/melee/src/melee/it/item.c::Item_80269DC8
         const uint8_t guard_reflect_frozen_final_seed_shield_overlap =
@@ -5351,7 +5307,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
             item_should_commit_aged_powershield_reflect_owner(
                 batch, d_idx, def, x0, y0, x, y, vx, laser_age_frames, sr, laser_scale_z)) {
           // ReflectDesc collision runs before the ordinary shield/HitShield branch in
-          // ftColl_8007925C. The reduced shield proxy above can miss high scaled laser
+          // ftColl_8007925C. The reduced shield sample above can miss high scaled laser
           // HitCapsules that still overlap `fp->reflect_hit`, so admit the branch here with the
           // source-shaped ReflectDesc predicate rather than requiring ShieldDesc contact first.
           // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C
@@ -5376,8 +5332,9 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           //
           // Note: item attack_id / attack_instance remain spawn-latched for lasers in v1 (do not
           // transfer on reflect here).
-          // In v1 we do not yet derive the full GuardReflect/powershield flag bytes (fp+0x2218 /
-          // fp+0x221C) at combat-time. Gate reflect off the decomp-shaped GuardReflect action +
+          // Seeded collision-time GuardReflect/powershield ownership is represented through the
+          // replay-visible state/timer lanes available to supported laser contacts. Gate reflect
+          // off the decomp-shaped GuardReflect action +
           // timer lanes owned by ftCo_80093A50/ftCo_80093BC0:
           // - x14: reflect window (`fp->reflecting` ownership window),
           // - x18: powershield-active window (x221C_b2 lifetime).
@@ -5796,9 +5753,10 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           // Spawn-frame keepalive gate:
           // - Laser spawn initializes `scale=0` in it_8029C504 and the same-frame motion callback
           //   performs the first scale ramp in itFoxlaser_UnkMotion1_Anim before collision.
-          // - Replay-real shield-bounce keepalive rows in-suite are already-aged lasers; same-frame
-          //   gun-spawn shield contacts still resolve through the destroy path until the
-          //   authoritative `xDCE/xC54/xC58` bounce internals are promoted into seed/runtime state.
+          // - Source-owned shield-bounce keepalive rows require either explicit hidden
+          //   item_shield_bounce_seed_* provenance or a live ftColl_80077688 / Item_80269DC8
+          //   segment normal accepted below. Same-frame gun-spawn shield contacts without that
+          //   source evidence resolve through the HitShield destroy path.
           // refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C504,itFoxlaser_UnkMotion1_Anim}
           // refs/melee/src/melee/it/item.c::Item_80269DC8
           const uint8_t guard_reflect_seeded_snapshot =
@@ -5871,7 +5829,7 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
                                        batch->state.item_attack_instance[ii], dmg, shd, element,
                                        batch->state.item_pos_x[ii]);
           // Rehit suppression latch for this item: insert the post-mutation victim identity so
-          // teacher-forced reseed sees the same proxy at t+1.
+          // teacher-forced reseed sees the same item HitCapsule victim ring at t+1.
           const uint16_t def_iid_post = batch->state.instance_id[d_idx];
           hitlist_register_item_fighter(batch, bi, it, def, def_iid_post,
                                         (int)MSL_LBCOLL_INSERT_FT_SHIELD, 0);
@@ -6403,7 +6361,8 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         // - ftColl_80077C60 routes small positive `coll_distance < p_ftCommonData->x7A8` item
         //   overlaps through checkTipLog into victim hitlag only, without percent/KB/damage-state
         //   entry. Grounded BODY takes this path only when the exact lbColl HitCapsule sweep above
-        //   produced the coll_distance owner; proxy overlaps stay on the old airborne-only lane.
+        //   produced the coll_distance owner; replay-visible overlaps stay on the old airborne-only
+        //   lane.
         // - Item hitbox damage is normalized by it_80272460 before hitlag calculation; the projectile
         //   itself persists because no damage/dealt callback consumes it on this lane.
         // refs/melee/src/melee/ft/ftcoll.c::{checkTipLog,inlineB1,ftColl_80077C60}
@@ -6487,13 +6446,14 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         continue;
       }
 
-      // Seed-bridge approximation for ThrowLw late blaster pulses:
+      // Seed-owned ThrowLw late blaster pulse handoff:
       // - ftFx_Throw_Anim emits multiple throw_flags_b0 pulses during ThrowLw (data/moves
       //   set_throw_spawn_projectile @ 23/25/28/31) and spawns with it_8029C6CC (msid=1).
       // - In reseeded one-step frames deep in ThrowLw, replay refs can carry the spawned item at
       //   t+1 without a new same-frame BODY hit while the victim is still attached.
-      // - Slippi does not expose the consumed per-pulse latch for this path, so suppress the
-      //   late attached BODY re-hit in this narrow window.
+      // - The MSLFTSC1 throw pulse cursor plus attached-victim ownership reconstructs the consumed
+      //   source latch for this teacher-forced boundary, so the late attached BODY re-hit stays on
+      //   the throw script owner instead of the ordinary item BODY callback.
       // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
       // refs/melee/src/melee/ft/ftaction.c::ftAction_80071974
       int16_t last_throw_pulse_af = 0;
@@ -6872,7 +6832,7 @@ static void yoshi_shyguy_items_update(MslBatch* batch, int bi) {
       // immediately calls `it_802D98C4`, so the post-frame export is the reset-to-current child-JObj
       // delta while X stays at the floor-contact value; preserve the phase+previous-velocity pair so
       // the following Anim consumes the first ordinary child-delta frame. Return-flight state 4 keeps
-      // the older zero-export approximation until its floor-contact phase owner is completed.
+      // the zero-export source-policy lane until its floor-contact phase owner is completed.
       // refs/melee/src/melee/it/items/itheiho.c::{itHeiho_UnkMotion1_Coll,itHeiho_UnkMotion4_Coll,
       //   itHeiho_UnkMotion1_Anim_inline,it_802D9168}
       // refs/melee/src/melee/it/items/itheiho.c::{it_802D98AC,it_802D98C4}
