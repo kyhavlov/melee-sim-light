@@ -2778,16 +2778,16 @@ static inline uint8_t wall_blocks_floor_edge_probe(const MslStageWallGraph* wg, 
   return 0;
 }
 
-static inline void floor_write_edge_suppression_flags(MslBatch* batch, size_t idx,
-                                                      uint32_t stage_id,
-                                                      const MslStageFloorGraph* fg, int line_idx,
-                                                      uint8_t char_id, uint32_t anim,
-                                                      uint16_t ecb_frame, uint8_t was_grounded) {
+static inline uint32_t floor_edge_suppression_flags(MslBatch* batch, size_t idx, uint32_t stage_id,
+                                                    const MslStageFloorGraph* fg, int line_idx,
+                                                    uint8_t char_id, uint32_t anim,
+                                                    uint16_t ecb_frame, uint8_t was_grounded,
+                                                    const MslEcbWorldPoints* loaded_current_ecb) {
   if (batch == NULL || fg == NULL) {
-    return;
+    return 0u;
   }
   if (line_idx < 0 || (size_t)line_idx >= fg->line_count) {
-    return;
+    return 0u;
   }
 
   // Floor edge suppression (Collide_LeftEdge / Collide_RightEdge).
@@ -2801,9 +2801,10 @@ static inline void floor_write_edge_suppression_flags(MslBatch* batch, size_t id
   float left_x0 = 0.0f, left_y0 = 0.0f, right_x1 = 0.0f, right_y1 = 0.0f;
   const int bi = (int)(idx / (size_t)MSL_MAX_PLAYERS);
   if (!floor_chain_endpoints(batch, bi, fg, line_idx, &left_x0, &left_y0, &right_x1, &right_y1)) {
-    return;
+    return 0u;
   }
 
+  uint32_t flags = 0u;
   const float left_x = (left_x0 < right_x1) ? left_x0 : right_x1;
   const float right_x = (left_x0 < right_x1) ? right_x1 : left_x0;
   const float left_y = (left_x0 < right_x1) ? left_y0 : right_y1;
@@ -2813,37 +2814,46 @@ static inline void floor_write_edge_suppression_flags(MslBatch* batch, size_t id
   if (fighter_x <= left_x) {
     const float fd = batch->state.facing[idx] ? 1.0f : -1.0f;
     MslEcbWorldPoints ecb = {0};
-    msl_ecb_world_points_sample(&ecb, char_id, anim, ecb_frame, fd, fighter_x,
-                                batch->state.pos_y[idx], was_grounded);
+    if (loaded_current_ecb != NULL) {
+      ecb = *loaded_current_ecb;
+    } else {
+      msl_ecb_world_points_sample(&ecb, char_id, anim, ecb_frame, fd, fighter_x,
+                                  batch->state.pos_y[idx], was_grounded);
+    }
     const float probe_ax = left_x + k_floor_edge_wall_probe_x_offset;
     const float probe_ay = left_y + k_floor_edge_wall_probe_y_offset;
     const float probe_bx = left_x + (ecb.right_rel_x /* bottom.x == 0 */);
     const float probe_by = left_y + (ecb.side_rel_y - ecb.bottom_rel_y);
     const MslStageWallGraph* lwg = stage_collision_get_left_wall_graph(stage_id);
     if (!wall_blocks_floor_edge_probe(lwg, probe_ax, probe_ay, probe_bx, probe_by)) {
-      batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_RIGHT_EDGE;
+      flags |= (uint32_t)MSL_COLLIDE_RIGHT_EDGE;
       // Decomp: mpColl_8004A678_Floor also sets Collide_Edge when snapping to floor endpoints.
       // In this sim, set Collide_Edge whenever any edge suppression bit is set as a cheap parity
       // win and to future-proof other gates.
       // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004A678_Floor
-      batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_EDGE;
+      flags |= (uint32_t)MSL_COLLIDE_EDGE;
     }
   } else if (fighter_x >= right_x) {
     const float fd = batch->state.facing[idx] ? 1.0f : -1.0f;
     MslEcbWorldPoints ecb = {0};
-    msl_ecb_world_points_sample(&ecb, char_id, anim, ecb_frame, fd, fighter_x,
-                                batch->state.pos_y[idx], was_grounded);
+    if (loaded_current_ecb != NULL) {
+      ecb = *loaded_current_ecb;
+    } else {
+      msl_ecb_world_points_sample(&ecb, char_id, anim, ecb_frame, fd, fighter_x,
+                                  batch->state.pos_y[idx], was_grounded);
+    }
     const float probe_ax = right_x - k_floor_edge_wall_probe_x_offset;
     const float probe_ay = right_y + k_floor_edge_wall_probe_y_offset;
     const float probe_bx = right_x + (ecb.left_rel_x /* bottom.x == 0 */);
     const float probe_by = right_y + (ecb.side_rel_y - ecb.bottom_rel_y);
     const MslStageWallGraph* rwg = stage_collision_get_right_wall_graph(stage_id);
     if (!wall_blocks_floor_edge_probe(rwg, probe_ax, probe_ay, probe_bx, probe_by)) {
-      batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_LEFT_EDGE;
+      flags |= (uint32_t)MSL_COLLIDE_LEFT_EDGE;
       // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004A678_Floor
-      batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_EDGE;
+      flags |= (uint32_t)MSL_COLLIDE_EDGE;
     }
   }
+  return flags;
 }
 
 static inline void mpcoll_commit_grounded_floor_contact(const MslMpcollContext* ctx,
@@ -2860,11 +2870,12 @@ static inline void mpcoll_commit_grounded_floor_contact(const MslMpcollContext* 
   //   mpColl_80044628_Floor,mpColl_80046F78,mpColl_8004A45C_Floor}
   MslBatch* batch = ctx->batch;
   const size_t idx = ctx->idx;
-  batch->state.coll_env_flags[idx] |= (uint32_t)MSL_COLLIDE_FLOOR_MASK;
-  floor_write_edge_suppression_flags(
+  uint32_t env_flags = (uint32_t)MSL_COLLIDE_FLOOR_MASK;
+  env_flags |= floor_edge_suppression_flags(
       batch, idx, ctx->stage_id, ctx->floor_graph,
       stage_collision_floor_line_index(ctx->stage_id, contact->ground_id), ctx->char_id, ctx->anim,
-      ctx->ecb_frame, was_grounded);
+      ctx->ecb_frame, was_grounded, ctx->loaded_ecb != NULL ? ctx->loaded_ecb->current : NULL);
+  batch->state.coll_env_flags[idx] |= env_flags;
   batch->state.ground_id[idx] = contact->ground_id;
   batch->state.ground_normal_x[idx] = contact->normal_x;
   batch->state.ground_normal_y[idx] = contact->normal_y;
@@ -3670,11 +3681,26 @@ static uint8_t msl_mpcoll_80044628_floor_wall_adjacent_fallback(
   // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpColl_8004ACE4}
   // refs/melee/src/melee/mp/mplib.c::{
   //   mpLinePrevNonLeftWall,mpLineNextNonRightWall,mpLib_8004DD90_Floor}
-  const uint8_t side_flags[2] = {
-      (uint8_t)(wall_ceil->left_right_flags & 1u),
-      (uint8_t)((wall_ceil->left_right_flags & 2u) ? 1u : 0u),
+  const uint8_t left_wall_hit = (wall_ceil->left_wall.hit != 0u &&
+                                 wall_ceil->left_wall.mode != (uint8_t)MSL_MPCOLL_WALL_RESULT_NONE)
+                                    ? 1u
+                                    : (uint8_t)(wall_ceil->left_right_flags & 1u);
+  const uint8_t right_wall_hit =
+      (wall_ceil->right_wall.hit != 0u &&
+       wall_ceil->right_wall.mode != (uint8_t)MSL_MPCOLL_WALL_RESULT_NONE)
+          ? 1u
+          : (uint8_t)((wall_ceil->left_right_flags & 2u) ? 1u : 0u);
+  const uint8_t side_flags[2] = {left_wall_hit, right_wall_hit};
+  const uint16_t wall_segment[2] = {
+      (wall_ceil->left_wall.hit != 0u &&
+       wall_ceil->left_wall.mode != (uint8_t)MSL_MPCOLL_WALL_RESULT_NONE)
+          ? wall_ceil->left_wall.segment_id
+          : wall_ceil->left_wall_id,
+      (wall_ceil->right_wall.hit != 0u &&
+       wall_ceil->right_wall.mode != (uint8_t)MSL_MPCOLL_WALL_RESULT_NONE)
+          ? wall_ceil->right_wall.segment_id
+          : wall_ceil->right_wall_id,
   };
-  const uint16_t wall_segment[2] = {wall_ceil->left_wall_id, wall_ceil->right_wall_id};
   const MslStageRawLineKind skip_kind[2] = {MSL_STAGE_RAW_LINE_LEFT_WALL,
                                             MSL_STAGE_RAW_LINE_RIGHT_WALL};
   for (size_t side = 0; side < 2u; side++) {
@@ -5861,14 +5887,16 @@ void mpcoll_ground_apply(MslBatch* batch) {
         msl_ecb_world_points_sample(&prev_ecb_points, char_id, anim, ecb_frame_prev,
                                     facing_dir_for_ecb, prev_x, prev_y, was_grounded);
       }
+      uint8_t have_cur_specialhi_ecb = 0u;
+      uint8_t have_prev_specialhi_ecb = 0u;
       if (!use_hidden_ecb_lifetime && !lock_bottom_to_zero &&
           mpcoll_ground_specialhi_launch_uses_jobj_ecb(char_id, action_id)) {
         MslEcbWorldPoints specialhi_cur_ecb = cur_ecb_points;
         MslEcbWorldPoints specialhi_prev_ecb = prev_ecb_points;
-        const uint8_t have_cur_specialhi_ecb = mpcoll_ground_try_sample_specialhi_jobj_ecb(
+        have_cur_specialhi_ecb = mpcoll_ground_try_sample_specialhi_jobj_ecb(
             &specialhi_cur_ecb, batch, idx, char_id, anim, action_id, ecb_frame, facing_dir_for_ecb,
             x, y);
-        const uint8_t have_prev_specialhi_ecb = mpcoll_ground_try_sample_specialhi_jobj_ecb(
+        have_prev_specialhi_ecb = mpcoll_ground_try_sample_specialhi_jobj_ecb(
             &specialhi_prev_ecb, batch, idx, char_id, anim, action_id, ecb_frame_prev,
             facing_dir_for_ecb, prev_x, prev_y);
         if (have_cur_specialhi_ecb) {
@@ -5892,6 +5920,38 @@ void mpcoll_ground_apply(MslBatch* batch) {
       }
       const float prev_side_mid_y =
           prev_y + (0.5f * (prev_ecb_points.top_rel_y + prev_ecb_points.bottom_rel_y));
+      MslMpcollLoadedEcb loaded_ecb = {0};
+      uint8_t current_ecb_source_mode = lock_bottom_to_zero
+                                            ? (uint8_t)MSL_MPCOLL_ECB_SOURCE_FIXED_ZERO_BOTTOM
+                                            : (uint8_t)MSL_MPCOLL_ECB_SOURCE_FIXED_POSE;
+      uint8_t previous_ecb_source_mode = was_grounded
+                                             ? (uint8_t)MSL_MPCOLL_ECB_SOURCE_FIXED_ZERO_BOTTOM
+                                             : (uint8_t)MSL_MPCOLL_ECB_SOURCE_FIXED_POSE;
+      uint8_t desired_ecb_source_mode = current_ecb_source_mode;
+      if (use_locked_desired_ecb_bottom) {
+        current_ecb_source_mode = (uint8_t)MSL_MPCOLL_ECB_SOURCE_LOCKED_DESIRED_BOTTOM;
+        desired_ecb_source_mode = (uint8_t)MSL_MPCOLL_ECB_SOURCE_LOCKED_DESIRED_BOTTOM;
+      }
+      if (use_hidden_ecb_lifetime && have_state_cur_ecb) {
+        previous_ecb_source_mode = (uint8_t)MSL_MPCOLL_ECB_SOURCE_HIDDEN_COLLDATA;
+        if (active_damage_hitlag_ecb_consumer) {
+          current_ecb_source_mode = (uint8_t)MSL_MPCOLL_ECB_SOURCE_HIDDEN_COLLDATA;
+          desired_ecb_source_mode = (uint8_t)MSL_MPCOLL_ECB_SOURCE_HIDDEN_COLLDATA;
+        }
+      }
+      if (!use_hidden_ecb_lifetime && !lock_bottom_to_zero &&
+          mpcoll_ground_specialhi_launch_uses_jobj_ecb(char_id, action_id)) {
+        if (have_cur_specialhi_ecb) {
+          current_ecb_source_mode = (uint8_t)MSL_MPCOLL_ECB_SOURCE_JOBJ;
+        }
+        if (have_prev_specialhi_ecb) {
+          previous_ecb_source_mode = (uint8_t)MSL_MPCOLL_ECB_SOURCE_JOBJ;
+        }
+      }
+      msl_mpcoll_loaded_ecb_set_current(&loaded_ecb, &cur_ecb_points, current_ecb_source_mode);
+      msl_mpcoll_loaded_ecb_set_previous(&loaded_ecb, &prev_ecb_points, previous_ecb_source_mode);
+      msl_mpcoll_loaded_ecb_set_desired(&loaded_ecb, &desired_ecb_points, desired_ecb_source_mode);
+      mpcoll_ctx.loaded_ecb = &loaded_ecb;
 
       // Collision env flags (subset) for Parity Project #2 (ledge grab mask parity).
       // Decomp: CollData carries env_flags and prev_env_flags across frames.
@@ -6155,6 +6215,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
         mpcoll_grounded_wall_ceil_ordered_begin(&mpcoll_ctx, &prev_ecb_points, &cur_ecb_points,
                                                 &ordered_wall_ceil);
         cur_ecb_points = ordered_wall_ceil.cur_ecb_after;
+        msl_mpcoll_loaded_ecb_set_current(&loaded_ecb, &cur_ecb_points, loaded_ecb.current_mode);
         cur_bottom_x = cur_ecb_points.bottom_x;
         cur_bottom_y = cur_ecb_points.bottom_y;
       }
@@ -6935,8 +6996,9 @@ void mpcoll_ground_apply(MslBatch* batch) {
                          suppress_attackair_transformed_platform_ecb_only_land ||
                          suppress_fallspecial_b_transformed_platform_skip ||
                          suppress_cliff_horizontal_ledge_locked_zero_bottom_hit) {
-                floor_write_edge_suppression_flags(batch, idx, stage_id, g, hit_line_idx, char_id,
-                                                   anim, ecb_frame, was_grounded);
+                batch->state.coll_env_flags[idx] |=
+                    floor_edge_suppression_flags(batch, idx, stage_id, g, hit_line_idx, char_id,
+                                                 anim, ecb_frame, was_grounded, loaded_ecb.current);
               } else {
                 batch->state.pos_x[idx] += (ix - cur_bottom_x);
 
@@ -6976,8 +7038,9 @@ void mpcoll_ground_apply(MslBatch* batch) {
               // Decomp parity: mpColl_8004A45C_Floor can still set Collide_{Left,Right}Edge while
               // the floor collision pass does not report "touched_floor" (airborne), and the
               // ledge-grab block uses these bits as the `on_edge` suppression gate.
-              floor_write_edge_suppression_flags(batch, idx, stage_id, g, prefer_line_idx, char_id,
-                                                 anim, ecb_frame, was_grounded);
+              batch->state.coll_env_flags[idx] |=
+                  floor_edge_suppression_flags(batch, idx, stage_id, g, prefer_line_idx, char_id,
+                                               anim, ecb_frame, was_grounded, loaded_ecb.current);
             }
           }
         }
@@ -9119,8 +9182,9 @@ void mpcoll_ground_apply(MslBatch* batch) {
                        batch->state.floor_skip_segment_id != NULL) {
               batch->state.floor_skip_segment_id[idx] = 0xFFFFu;
             }
-            floor_write_edge_suppression_flags(batch, idx, stage_id, g, hit_line_idx, char_id, anim,
-                                               ecb_frame, was_grounded);
+            batch->state.coll_env_flags[idx] |=
+                floor_edge_suppression_flags(batch, idx, stage_id, g, hit_line_idx, char_id, anim,
+                                             ecb_frame, was_grounded, loaded_ecb.current);
           } else {
             if (out_line_idx >= 0) {
               const uint16_t resolved_segment_i = g->lines[(size_t)out_line_idx].segment_i;
@@ -9454,8 +9518,9 @@ void mpcoll_ground_apply(MslBatch* batch) {
                     batch->state.floor_skip_segment_id[idx] = 0xFFFFu;
                   }
                 }
-                floor_write_edge_suppression_flags(batch, idx, stage_id, g, hit_line_idx, char_id,
-                                                   anim, ecb_frame, was_grounded);
+                batch->state.coll_env_flags[idx] |=
+                    floor_edge_suppression_flags(batch, idx, stage_id, g, hit_line_idx, char_id,
+                                                 anim, ecb_frame, was_grounded, loaded_ecb.current);
               } else {
                 batch->state.pos_y[idx] += y_corr;
                 if (suppress_active_damage_hitlag_land) {
@@ -9515,8 +9580,9 @@ void mpcoll_ground_apply(MslBatch* batch) {
               if (!on_ground) {
                 // Propagate edge suppression bits so mpColl-shaped ledge-grab checks can apply the
                 // `on_edge` gate deterministically.
-                floor_write_edge_suppression_flags(batch, idx, stage_id, g, hit_line_idx, char_id,
-                                                   anim, ecb_frame, was_grounded);
+                batch->state.coll_env_flags[idx] |=
+                    floor_edge_suppression_flags(batch, idx, stage_id, g, hit_line_idx, char_id,
+                                                 anim, ecb_frame, was_grounded, loaded_ecb.current);
               }
             }
           }
@@ -9663,6 +9729,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
         (void)mpcoll_grounded_ceiling_ordered_retry(&mpcoll_ctx, &prev_ecb_points, &post_floor_ecb,
                                                     &ordered_wall_ceil);
         cur_ecb_points = ordered_wall_ceil.cur_ecb_after;
+        msl_mpcoll_loaded_ecb_set_current(&loaded_ecb, &cur_ecb_points, loaded_ecb.current_mode);
         cur_bottom_x = cur_ecb_points.bottom_x;
         cur_bottom_y = cur_ecb_points.bottom_y;
       }
@@ -9680,6 +9747,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
           batch->state.pos_x[idx] = substep_cur_x;
           batch->state.pos_y[idx] = substep_cur_y;
           cur_ecb_points = substep_cur_ecb;
+          msl_mpcoll_loaded_ecb_set_current(&loaded_ecb, &cur_ecb_points, loaded_ecb.current_mode);
           cur_bottom_x = substep_cur_ecb.bottom_x;
           cur_bottom_y = substep_cur_ecb.bottom_y;
           mpcoll_clear_callback_floor_result(&mpcoll_ctx, substep_prev_x, substep_prev_y,

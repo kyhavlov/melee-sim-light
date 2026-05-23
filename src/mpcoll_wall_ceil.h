@@ -32,6 +32,51 @@ enum {
   MSL_MPCOLL_ORDERED_SQUEEZE_LEFT_WALL = 8u,
 };
 
+enum {
+  MSL_MPCOLL_WALL_RESULT_NONE = 0u,
+  MSL_MPCOLL_WALL_RESULT_AIR_PERSISTENCE = 1u,
+  MSL_MPCOLL_WALL_RESULT_AIR_ENVELOPE = 2u,
+  MSL_MPCOLL_WALL_RESULT_AIR_POINT_PROJECT = 3u,
+  MSL_MPCOLL_WALL_RESULT_AIR_PERSISTED_PROJECT = 4u,
+  MSL_MPCOLL_WALL_RESULT_GROUNDED_ENVELOPE = 5u,
+  MSL_MPCOLL_WALL_RESULT_GROUNDED_POINT_PROJECT = 6u,
+};
+
+typedef struct MslMpcollWallResult {
+  uint8_t hit;
+  uint8_t side;  // 1 = left wall, 2 = right wall (mplib CollLine side)
+  uint8_t hug;
+  uint8_t mode;
+  uint16_t segment_id;
+  uint32_t env_flags;
+  float dx;
+  float contact_x;
+  float contact_y;
+  float normal_x;
+  float normal_y;
+} MslMpcollWallResult;
+
+enum {
+  MSL_MPCOLL_CEILING_RESULT_NONE = 0u,
+  MSL_MPCOLL_CEILING_RESULT_PERSISTENCE = 1u,
+  MSL_MPCOLL_CEILING_RESULT_TOP_SWEEP = 2u,
+  MSL_MPCOLL_CEILING_RESULT_ADJACENT_WALL = 3u,
+  MSL_MPCOLL_CEILING_RESULT_SPECIALHI_FLOOR_UNDERSIDE = 4u,
+};
+
+typedef struct MslMpcollCeilingResult {
+  uint8_t hit;
+  uint8_t mode;
+  uint16_t segment_id;
+  int line_idx;
+  uint32_t env_flags;
+  float dy;
+  float contact_x;
+  float contact_y;
+  float normal_x;
+  float normal_y;
+} MslMpcollCeilingResult;
+
 typedef struct MslMpcollOrderedWallCeilResult {
   uint8_t left_right_flags;  // bit 0 = left wall, bit 1 = right wall
   uint8_t squeeze_flags;     // source bits: ceiling=1, floor=2, right wall=4, left wall=8
@@ -45,6 +90,9 @@ typedef struct MslMpcollOrderedWallCeilResult {
   float x_after_right_wall;
   float y_after_ceiling;
   float y_after_floor;
+  MslMpcollWallResult left_wall;
+  MslMpcollWallResult right_wall;
+  MslMpcollCeilingResult ceiling;
   MslEcbWorldPoints cur_ecb_after;
 } MslMpcollOrderedWallCeilResult;
 

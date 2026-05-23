@@ -1,12 +1,13 @@
 #pragma once
 
-// ECB point extraction helpers for mpColl-shaped FD collision substrates.
+// ECB point extraction helpers for mpColl-shaped collision substrates.
 //
 // Scope note:
-// - This is currently **FD-only** (used by the FD stage collision substrates) and intended to
-//   support the replay-suite characters (Fox/Falco) with ISO-extracted ECB tables.
-// - The helper is written in a stage-agnostic way, but callers should not assume full stage parity
-//   or complete mpColl coverage yet; it is a shared point source to avoid per-module ECB drift.
+// - These helpers are stage-agnostic point loaders for the currently supported legal-stage
+//   collision paths. Character-specific ECB extents still come from extracted character data.
+// - They intentionally model source ECB load/provenance, not a public replay observation. Floor,
+//   wall, ceiling, and ledge-grab paths should consume the same loaded packet when they are in the
+//   same source callback phase.
 //
 // Data sources:
 // - ECB extents/bottom: `data/ecb/*` (see ecb_tables.h)
@@ -51,6 +52,51 @@ typedef struct MslEcbBottomWorldPoint {
   float rel_y;
   uint16_t frame_u16;
 } MslEcbBottomWorldPoint;
+
+typedef enum MslMpcollEcbSourceMode {
+  MSL_MPCOLL_ECB_SOURCE_NONE = 0u,
+  MSL_MPCOLL_ECB_SOURCE_FIXED_POSE = 1u,
+  MSL_MPCOLL_ECB_SOURCE_FIXED_ZERO_BOTTOM = 2u,
+  MSL_MPCOLL_ECB_SOURCE_LOCKED_DESIRED_BOTTOM = 3u,
+  MSL_MPCOLL_ECB_SOURCE_HIDDEN_COLLDATA = 4u,
+  MSL_MPCOLL_ECB_SOURCE_JOBJ = 5u,
+} MslMpcollEcbSourceMode;
+
+typedef struct MslMpcollLoadedEcb {
+  const MslEcbWorldPoints* current;
+  const MslEcbWorldPoints* previous;
+  const MslEcbWorldPoints* desired;
+  uint8_t current_mode;
+  uint8_t previous_mode;
+  uint8_t desired_mode;
+} MslMpcollLoadedEcb;
+
+static inline void msl_mpcoll_loaded_ecb_set_current(MslMpcollLoadedEcb* out,
+                                                     const MslEcbWorldPoints* ecb, uint8_t mode) {
+  if (out == NULL || ecb == NULL) {
+    return;
+  }
+  out->current = ecb;
+  out->current_mode = mode;
+}
+
+static inline void msl_mpcoll_loaded_ecb_set_previous(MslMpcollLoadedEcb* out,
+                                                      const MslEcbWorldPoints* ecb, uint8_t mode) {
+  if (out == NULL || ecb == NULL) {
+    return;
+  }
+  out->previous = ecb;
+  out->previous_mode = mode;
+}
+
+static inline void msl_mpcoll_loaded_ecb_set_desired(MslMpcollLoadedEcb* out,
+                                                     const MslEcbWorldPoints* ecb, uint8_t mode) {
+  if (out == NULL || ecb == NULL) {
+    return;
+  }
+  out->desired = ecb;
+  out->desired_mode = mode;
+}
 
 static inline uint16_t msl_ecb_frame_u16_from_anim_frame(float anim_frame_f32) {
   const float af = msl_anim_frame_sanitize_f32(anim_frame_f32);

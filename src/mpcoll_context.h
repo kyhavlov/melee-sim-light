@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #include "batch_internal.h"
+#include "mpcoll_ecb_points.h"
 #include "stage_collision.h"
 
 typedef struct MslMpcollContext {
@@ -22,6 +23,7 @@ typedef struct MslMpcollContext {
   uint16_t ecb_frame;
   uint8_t was_grounded;
   int prefer_floor_line_idx;
+  const MslMpcollLoadedEcb* loaded_ecb;
 } MslMpcollContext;
 
 // Precondition: when batch is non-NULL, idx is a valid player-state index for that batch.
@@ -47,6 +49,7 @@ static inline MslMpcollContext mpcoll_context_make(MslBatch* batch, int bi, size
       .ecb_frame = 0u,
       .was_grounded = 0u,
       .prefer_floor_line_idx = -1,
+      .loaded_ecb = NULL,
   };
   if (batch != NULL) {
     ctx.char_id = batch->state.char_id[idx];
