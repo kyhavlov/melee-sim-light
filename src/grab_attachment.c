@@ -580,8 +580,9 @@ void grab_attachment_apply_thrown_anchor_now(MslBatch* batch, int bi, int victim
   }
   // Common thrown-position owner:
   // - ftCo_800DE508 reads the reparented FtPart_XRotN world, then applies victim-side x1A70
-  //   offsets. This sim keeps the shared reparented-joint owner in runtime and carries the
-  //   victim-side residual in grab_offset_{y,z} until that lane is promoted fully live.
+  //   offsets. MSL keeps that source x1A70 vector in grab_offset_{y,z}; entry initializes it from
+  //   Fighter_Create's TransN-XRotN basis, while teacher-forced reseed reconstructs the same hidden
+  //   source state from the replay-visible attached world.
   // - ftCo_800DD724 release handling consumes that same attached world owner before detach.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::{ftCo_800DE3FC,ftCo_800DE508}
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD724,ftCo_800DDDE4}
@@ -666,10 +667,7 @@ static inline void grabbed_victim_anchor_world_at_owner_frame(float* out_x, floa
   if (out_x == NULL || out_y == NULL || out_z == NULL || batch == NULL) {
     return;
   }
-  // Approximate the `lb_8000B1CC(fp->parts[ftParts_GetBoneIndex(fp, FtPart_XRotN)].joint)` anchor used by
-  // ftCo_Thrown.c::ftCo_800DE508.
-  //
-  // Decomp-shaped structure:
+  // Source owner:
   // - Thrown enter calls ftCo_800DB368 (re-parenting/setup) and installs ftCo_800DE508 as an
   //   accessory callback to drive victim position each frame.
   //   refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::{ftCo_800DE3FC,ftCo_800DE508}
@@ -677,25 +675,21 @@ static inline void grabbed_victim_anchor_world_at_owner_frame(float* out_x, floa
   //   so its world position is driven by the owner plus the victim's own animation.
   // - The accessory callback reads that world-space joint translation via lb_8000B1CC, then adds
   //   fp->x1A70.{y,z} (scaled) onto it.
-  //
-  // Simulator approximation:
-  // - Resolve owner anchor world from ISO-extracted `grab_capture_anchor_part_id` (capturedamage.x18
-  //   source; fallback FtPart_TransN2).
-  // - Minimal-state inference: replay seeds do not carry enough internal re-parented-joint state to
-  //   reconstruct the full FtPart_XRotN world chain deterministically on their own.
-  // - Use owner-anchor world as the thrown proxy and intentionally store the residual in
-  //   grab_offset_{y,z} at reseed/entry to avoid double-count drift.
+  // - MSL represents the reparented XRotN world by sampling the owner's extracted
+  //   `grab_capture_anchor_part_id` path and stores the victim-side fp->x1A70 analog in
+  //   grab_offset_{y,z}. Those offsets are initialized from Fighter_Create's TransN-XRotN basis for
+  //   source entry rows, or reconstructed at teacher-forced reseed as explicit hidden source state.
   const size_t oidx = msl_idx_player(bi, owner_p);
-  // Decomp-shaped proxy for ftCo_Thrown.c::ftCo_800DE508:
+  // Decomp-shaped result for ftCo_Thrown.c::ftCo_800DE508:
   // - Read world translation of victim FtPart_XRotN joint (lb_8000B1CC on re-parented joint).
   // - Then apply x1A70 offsets separately in caller.
   //
-  // Proxy structure:
-  // - owner_anchor_world: owner capturedamage.x18 proxy origin in world
+  // Runtime representation:
+  // - owner_anchor_world: owner capturedamage.x18/TransN2 attachment origin in world
   //   (`grab_capture_anchor_part_id`, fallback FtPart_TransN2), using unscaled pose matrices with
   //   fighter_scale_y*model_scaling.
-  // - anchor_world := owner_anchor_world. Residual re-parent/constraint offset is represented by
-  //   grab_offset_{y,z} (fp->x1A70 analog in this sim).
+  // - victim-side x1A70 is represented by grab_offset_{y,z}; callers apply it after this anchor
+  //   sample, matching ftCo_800DE508's `pos += fp->x1A70 * scale` order.
   //
   // Decomp anchors:
   // - refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::ftCo_800DE508
@@ -705,10 +699,6 @@ static inline void grabbed_victim_anchor_world_at_owner_frame(float* out_x, floa
   float ay = batch->state.pos_y[oidx];
   float az = batch->state.pos_z[oidx];
   uint16_t owner_anchor_part = (uint16_t)MSL_FTPART_TRANSN2;
-  // Keep thrown-owner reconstruction on the older anchor proxy until the broader ThrowLw/ThrownLw
-  // attachment family is closed cleanly. The proven current fixes in this area are bookkeeping and
-  // release ordering, not a new attached-world anchor formula.
-  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::fn_800DAD18
   const MslCharParams* och = msl_char_params(batch->state.char_id[oidx]);
   if (och != NULL) {
     owner_anchor_part = och->grab_capture_anchor_part_id;
@@ -916,8 +906,8 @@ void grab_attachment_update_post_collision(MslBatch* batch) {
         continue;
       }
       if (!msl_action_is_capture_pulled_wait_damage_victim(batch->state.action_id[vidx])) {
-        // Attached Thrown* world position is now owned pre-collision by the shared callback path;
-        // do not re-run the older post-collision proxy reconstruction here.
+        // Attached Thrown* world position is owned pre-collision by the shared source callback path;
+        // do not run a second post-collision placement pass.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::{ftCo_800DE3FC,ftCo_800DE508}
       }
 
@@ -926,9 +916,9 @@ void grab_attachment_update_post_collision(MslBatch* batch) {
       //   victim position is driven each frame by an accessory callback writing fp->cur_pos
       //   (ftCo_Thrown.c::ftCo_800DE508). That means self/KB velocity terms should not be the
       //   driver of victim translation during the grabbed/thrown window.
-      // - The engine does not necessarily zero these velocity fields explicitly; we do it here as
-      //   a simulator approximation to avoid one-step drift and to prevent downstream systems (most
-      //   notably stage collision) from consulting stale motion terms for attached victims.
+      // - MSL keeps public velocity lanes non-driving while the source accessory owner controls the
+      //   position. This is representation hygiene for attached victims, not an alternate movement
+      //   owner; detach/release restores normal Damage/Thrown aftermath velocity ownership.
       batch->state.speed_air_x_self[vidx] = 0.0f;
       batch->state.speed_ground_x_self[vidx] = 0.0f;
       batch->state.speed_y_self[vidx] = 0.0f;
@@ -992,9 +982,8 @@ void grab_attachment_update_pre_collision(MslBatch* batch) {
           //   post-Phys accessory pass. The thrower's ThrowF/B/Hi Phys root motion has already
           //   updated the owner root by then, so non-low entry rows must run this placement after
           //   Phys instead of keeping only the immediate entry-time anchor.
-          // - Keep the already-proven low-throw entry handoff slice separate from the broader
-          //   steady attached window; its immediate `CaptureWait* -> ThrownLw` row still uses the
-          //   dedicated handoff split in grab_flow.c.
+          // - Low throw keeps a distinct immediate entry handoff because ftCo_800DE3FC/ftCo_800DB368
+          //   installs the reparented XRotN owner before the steady accessory callback window.
           // refs/melee/src/melee/ft/fighter.c::Fighter_CallAcessoryCallbacks_8006C624
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::{
           //   ftCo_800DE3FC,ftCo_800DE508,ftCo_ThrownF_Phys,ftCo_ThrownF_Coll,ftCo_ThrownB_Phys,

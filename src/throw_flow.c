@@ -7,50 +7,24 @@
 #include "char_params.h"
 #include "common_params.h"
 #include "combat.h"
+#include "damage_terminal_owner.h"
 #include "grab_attachment.h"
 #include "knockdown.h"
 #include "move_tables.h"
 
 #include <math.h>
 
-static inline uint8_t is_thrower_action(uint16_t a) {
-  switch (a) {
-    case (uint16_t)MSL_ACT_THROW_F:
-    case (uint16_t)MSL_ACT_THROW_B:
-    case (uint16_t)MSL_ACT_THROW_HI:
-    case (uint16_t)MSL_ACT_THROW_LW:
-      return 1u;
-    default:
-      return 0u;
-  }
-}
-
 static inline uint8_t throw_flow_action_is_damage_family(uint16_t action_id_u16) {
-  switch (action_id_u16) {
-    case MSL_ACT_DAMAGE_FALL:
-    case MSL_ACT_DAMAGE_HI_1:
-    case MSL_ACT_DAMAGE_HI_2:
-    case MSL_ACT_DAMAGE_HI_3:
-    case MSL_ACT_DAMAGE_N_1:
-    case MSL_ACT_DAMAGE_N_2:
-    case MSL_ACT_DAMAGE_N_3:
-    case MSL_ACT_DAMAGE_LW_1:
-    case MSL_ACT_DAMAGE_LW_2:
-    case MSL_ACT_DAMAGE_LW_3:
-    case MSL_ACT_DAMAGE_AIR_1:
-    case MSL_ACT_DAMAGE_AIR_2:
-    case MSL_ACT_DAMAGE_AIR_3:
-    case MSL_ACT_DAMAGE_FLY_HI:
-    case MSL_ACT_DAMAGE_FLY_N:
-    case MSL_ACT_DAMAGE_FLY_LW:
-    case MSL_ACT_DAMAGE_FLY_TOP:
-    case MSL_ACT_DAMAGE_FLY_ROLL:
-    case MSL_ACT_FLY_REFLECT_WALL:
-    case MSL_ACT_FLY_REFLECT_CEIL:
-      return 1u;
-    default:
-      return 0u;
-  }
+  // Throw release enters the same common Damage* aftermath subset as regular ProcessHit:
+  // DamageHi/N/Lw, DamageAir, DamageFly/FlyReflect, plus DamageFall's dedicated callback family.
+  // Use MSLMSO01 generated damage classes instead of a local action-id list.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD724,ftCo_800DE7C0}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_Coll,ftCo_DamageFly_Coll}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_Coll
+  return (uint8_t)(msl_damage_owner_is_damage_ground_action(action_id_u16) ||
+                   msl_damage_owner_is_damage_air_action(action_id_u16) ||
+                   msl_damage_owner_is_damagefly_action(action_id_u16) ||
+                   action_id_u16 == (uint16_t)MSL_ACT_DAMAGE_FALL);
 }
 
 static inline uint8_t throw_anim_finished(uint8_t char_id, uint16_t msid, float anim_frame_f32) {
@@ -263,7 +237,7 @@ void throw_flow_update_anim_callback_pre_input(MslBatch* batch, int bi, int owne
   }
 
   const uint16_t owner_act = batch->state.action_id[oidx];
-  if (!is_thrower_action(owner_act)) {
+  if (!msl_action_is_throw_owner(owner_act)) {
     return;
   }
 
@@ -429,7 +403,7 @@ void throw_flow_update_post_items(MslBatch* batch) {
 
       const uint8_t owner_char = batch->state.char_id[oidx];
       uint16_t throw_action = batch->state.action_id[oidx];
-      if (!is_thrower_action(throw_action)) {
+      if (!msl_action_is_throw_owner(throw_action)) {
         // Compatibility fallback for seeded pending-release lookup:
         // - Why needed: in decomp, Throw Anim handles release/throw-script timing and can then exit
         //   the throw state on the same frame (`ftCo_Throw*_Anim` does `ftCo_800DD724` then
@@ -444,7 +418,7 @@ void throw_flow_update_post_items(MslBatch* batch) {
         //   Throw{F,B,Hi,Lw}. If the thrower was interrupted/canceled into a non-throw state,
         //   fallback is disabled and no throw-hit is applied.
         const uint16_t prev_act = batch->state.prev_action_id[oidx];
-        if (!is_thrower_action(prev_act)) {
+        if (!msl_action_is_throw_owner(prev_act)) {
           continue;
         }
         throw_action = prev_act;
