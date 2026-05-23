@@ -16,12 +16,13 @@ static inline uint8_t item_type_is_illusion_article(uint16_t type) {
 // Item proc phases, named after the GALE01 item GObj procs registered in
 // refs/melee/src/melee/it/item.c::Item_8026862C.
 //
-// Current implementation status:
-// - prio 0/1/4/5/9/11/12/13 are still mostly compacted into
-//   items_update_collision_phase() until each article owner is promoted.
+// Supported RL 1.0 item families route through explicit source owners:
 // - fighter-owned article spawns run from the fighter Anim callback phase via
-//   items_spawn_fighter_anim_phase().
-// - prio 14 item post-hit callbacks run in items_update_post_combat().
+//   items_spawn_fighter_anim_phase();
+// - supported article motion/collision runs in items_update_collision_phase();
+// - item post-hit callbacks run in items_update_post_combat().
+// Full generic GObj priority for unsupported item kinds is intentionally outside the current
+// item-core gameplay scope.
 void items_update_pre_fighter_anim_phase(MslBatch* batch);
 void items_spawn_fighter_anim_phase(MslBatch* batch);
 void items_update_collision_phase(MslBatch* batch);

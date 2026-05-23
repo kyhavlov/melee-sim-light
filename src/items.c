@@ -4201,21 +4201,21 @@ static void illusion_items_update_and_collide(MslBatch* batch, int bi) {
     //   ftFx_SpecialS_Phys,ftFx_SpecialAirS_Phys,ftFx_SpecialSEnd_Phys,ftFx_SpecialAirSEnd_Phys
     // }
     //
-    // Runtime bridge:
+    // Seeded source-state owner:
     // - consume the seeded post-frame `ghostEffectPos[1]` lane for the current step,
     // - keep the paired `ghostEffectPos[0..2]` lanes in state so rollout can advance the ring as
     //   `ghost2 = ghost1; ghost1 = ghost0; ghost0 = cur_pos` instead of clobbering previous
     //   hitcapsule endpoints with current position.
     // tools/slippi/make_dataset_from_slp.py::derive_illusion_ghost_pos012
     //
-    // Known remaining Side-B/Illusion decomp lanes not yet modeled here:
+    // Retained source-policy boundary for accessory Side-B lanes:
     // - ghostEffectPos[3]
     // - blendFrames[0..3]
     // - ghostGObj
     // - fp->x2222_b2 side effects
-    // Current judgment is that those owners are accessory/ghost-visual oriented rather than part
-    // of the gameplay-critical article position/hit flow, but they remain the next decomp surface
-    // to port if a late ghost-display/state2 Side-B bug shows up.
+    // These owners drive ghost visual/accessory state around ftFox_SpecialS_SetVars and
+    // ftFox_SpecialSEnd_SetVars. Supported gameplay collision consumes ghostEffectPos[0..2] for
+    // article position/hit flow and leaves the accessory-only lanes out of item-core runtime state.
     // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
     //   ftFox_SpecialS_SetPhys,ftFox_SpecialS_SetVars,ftFox_SpecialSEnd_SetVars}
     // refs/melee/src/melee/it/items/itfoxillusion.c::{
@@ -4226,9 +4226,9 @@ static void illusion_items_update_and_collide(MslBatch* batch, int bi) {
     float base_y1 = base_y0;
     if (action_is_illusion_setphys(batch->state.action_id[o_idx])) {
       // Item collision carries the previous-to-current HitCapsule segment. The current endpoint
-      // is the decomp-owned `ghostEffectPos[1]` item position. End-state seed rows can enter with
-      // the previous x58 endpoint already shifted to `ghostEffectPos[2]`; main-state rows keep the
-      // narrower seeded item position until their remaining hitlist/callback owners are exposed.
+      // is the decomp-owned `ghostEffectPos[1]` item position. Main-state rows reload the current
+      // ghost position as the article sample; Fox end-state rows consume ghostEffectPos[2] as the
+      // previous endpoint after the source SetPhys ring has advanced into SpecialSEnd.
       // refs/melee/src/melee/it/itcoll.c::it_8027137C
       // refs/melee/src/melee/it/items/itfoxillusion.c::{
       //   itFoxillusion_UnkMotion0_Phys,itFoxillusion_UnkMotion1_Phys}
@@ -5962,11 +5962,11 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       // Laser BODY overlap parity:
       // - Decomp computes collision over projectile travel in-frame (prev_pos -> cur_pos), so a
       //   current-point-only probe can miss replay-causal same-frame hits.
-      // - Current implementation keeps the precise swept probe on the airborne path only; grounded
-      //   replay gaps are handled by the narrow miss-only LandingFallSpecial bridge below.
+      // - Supported grounded laser BODY rows use the shared swept travel owner when defender state
+      //   exposes source BODY admission. Laser-specific matrix/Z and shield-adjacent exceptions are
+      //   retained source-policy in projectiles_reflect.md; Items Core owns the shared item handoff
+      //   after candidate selection, not every laser BODY geometry subcase.
       // refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Phys,it_8029C4D4}
-      // TODO(decomp/items-grounded-body-gating): mirror full grounded BODY hurt-status/collision
-      // gating from it_80272460 + ftColl callbacks, then remove the narrow miss-only bridge below.
       // refs/melee/src/melee/it/itcoll.c::it_80272460
       // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B868
       const uint8_t use_swept_body = laser_grounded_body_uses_sweep(batch, d_idx, laser_age_frames);
@@ -6831,8 +6831,9 @@ static void yoshi_shyguy_items_update(MslBatch* batch, int bi) {
       // `itHeiho_UnkMotion1_Anim_inline` or `it_802D9168`. State 1 resets itemVar.heiho.x3C and
       // immediately calls `it_802D98C4`, so the post-frame export is the reset-to-current child-JObj
       // delta while X stays at the floor-contact value; preserve the phase+previous-velocity pair so
-      // the following Anim consumes the first ordinary child-delta frame. Return-flight state 4 keeps
-      // the zero-export source-policy lane until its floor-contact phase owner is completed.
+      // the following Anim consumes the first ordinary child-delta frame. Return-flight state 4
+      // re-enters the same `it_802D9168` return-flight owner and exports zero velocity on the
+      // contact frame before the next Anim callback refreshes its dynamic-bone delta.
       // refs/melee/src/melee/it/items/itheiho.c::{itHeiho_UnkMotion1_Coll,itHeiho_UnkMotion4_Coll,
       //   itHeiho_UnkMotion1_Anim_inline,it_802D9168}
       // refs/melee/src/melee/it/items/itheiho.c::{it_802D98AC,it_802D98C4}
@@ -6871,8 +6872,8 @@ void items_update_pre_fighter_anim_phase(MslBatch* batch) {
   // Reserved item prio 0/1 phase:
   // - Item_802693E4 decrements item hitlag and consumes deferred hitlag callbacks.
   // - Item_80269528 advances item anim/script and lifetime.
-  // This lite sim still runs the supported article timer/anim owners in
-  // items_update_collision_phase() until each article is promoted independently.
+  // Supported RL 1.0 item families run their admitted timer/anim owners in their explicit
+  // collision-phase functions; full arbitrary item GObj priority is outside current gameplay scope.
   // refs/melee/src/melee/it/item.c::{Item_802693E4,Item_80269528}
 }
 

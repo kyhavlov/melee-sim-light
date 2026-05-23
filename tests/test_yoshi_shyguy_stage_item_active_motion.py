@@ -1505,6 +1505,44 @@ def test_yoshi_shyguy_active_floor_contact_resets_anim_export_pec_1289() -> None
     assert float(out["items"][1]["vel_y"]) == pytest.approx(float(ref["items"][1]["vel_y"]))
 
 
+def test_yoshi_shyguy_return_flight_floor_contact_reenters_state4_with_zero_export() -> None:
+    seed = _empty_seed()
+    slot = 0
+    seed["items"][0, slot]["exists"] = np.uint8(1)
+    seed["items"][0, slot]["type"] = np.uint16(ITEM_KIND_HEIHO)
+    seed["items"][0, slot]["owner"] = np.int8(-1)
+    seed["items"][0, slot]["state"] = np.uint8(4)
+    seed["items"][0, slot]["spawn_id"] = np.uint32(7)
+    seed["items"][0, slot]["pos_x"] = np.float32(0.0)
+    seed["items"][0, slot]["pos_y"] = np.float32(6.0)
+    seed["items"][0, slot]["vel_x"] = np.float32(0.0)
+    seed["items"][0, slot]["vel_y"] = np.float32(-6.0)
+    seed["items"][0, slot]["direction"] = np.float32(1.0)
+    seed["item_shyguy_dyn_y_phase_valid_u8"][0, slot] = np.uint8(0)
+    seed["item_shyguy_prev_vel_y_valid"][0, slot] = np.uint8(0)
+    seed["item_shyguy_speed_index_valid_u8"][0, slot] = np.uint8(0)
+    seed["item_shyguy_delay_valid_u8"][0, slot] = np.uint8(1)
+    seed["item_shyguy_delay_u16"][0, slot] = np.uint16(0)
+
+    # Return-flight fixed-ECB floor contact:
+    # - itHeiho_UnkMotion4_Coll calls it_8026DA70, then re-enters return flight through
+    #   it_802D9168 when the fixed ECB bottom crosses a legal floor and no wall turn runs.
+    # - The contact frame keeps the already-integrated item position and exports zero x40_vel;
+    #   the next Anim callback owns the dynamic-bone delta refresh.
+    # refs/melee/src/melee/it/items/itheiho.c::{itHeiho_UnkMotion4_Coll,it_802D9168}
+    # refs/melee/src/melee/it/it_266F.c::it_8026DA70
+    out = _step_seed(seed)
+    assert int(out["items"][slot]["exists"]) == 1
+    assert int(out["items"][slot]["type"]) == ITEM_KIND_HEIHO
+    assert int(out["items"][slot]["state"]) == 4
+    assert int(out["items"][slot]["spawn_id"]) == 7
+    assert float(out["items"][slot]["pos_x"]) == pytest.approx(0.0, abs=1e-6)
+    assert float(out["items"][slot]["pos_y"]) == pytest.approx(0.0, abs=1e-6)
+    assert float(out["items"][slot]["vel_x"]) == pytest.approx(0.0, abs=1e-6)
+    assert float(out["items"][slot]["vel_y"]) == pytest.approx(0.0, abs=1e-6)
+    assert int(out["items"][slot]["owner"]) == -1
+
+
 @pytest.mark.integration
 def test_yoshi_shyguy_return_flight_generic_blast_clear_replay_real_pec_1294() -> None:
     root = Path(__file__).resolve().parents[1]
