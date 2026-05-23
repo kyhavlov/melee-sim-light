@@ -1330,8 +1330,7 @@ static PyObject* msl_debug_copy_lanes_py(PyObject* self, PyObject* args) {
   const int32_t* dst_lane_data = (const int32_t*)PyArray_DATA(dst_lanes);
   const int32_t* src_lane_data = (const int32_t*)PyArray_DATA(src_lanes);
   const int32_t count = (int32_t)PyArray_DIM(dst_lanes, 0);
-  const int err =
-      msl_batch_copy_lanes(dst->batch, src->batch, dst_lane_data, src_lane_data, count);
+  const int err = msl_batch_copy_lanes(dst->batch, src->batch, dst_lane_data, src_lane_data, count);
   if (err != 0) {
     PyErr_Format(PyExc_ValueError, "msl_batch_copy_lanes failed: %d", err);
     return NULL;

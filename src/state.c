@@ -37,12 +37,11 @@ int state_alloc(MslStateSoA* state, int batch_size) {
 #undef MSL_STATE_FIELD
 
 #define MSL_STATE_FIELD(field, element_type, allocation_elements, elements_per_lane) \
-  if (state->field == NULL) { \
-    return -1; \
+  if (state->field == NULL) {                                                        \
+    return -1;                                                                       \
   }
 #include "state_fields.inc"
 #undef MSL_STATE_FIELD
-
 
   // Initialize hitlists to a known-empty state (entry.kind_slot == 0xFF).
   for (size_t i = 0; i < b; i++) {
@@ -188,11 +187,11 @@ static int state_validate_lanes(const int32_t* lanes, int32_t count, int32_t bat
 
 static void state_copy_one_lane(MslStateSoA* dst, const MslStateSoA* src, int32_t dst_lane,
                                 int32_t src_lane) {
-#define MSL_STATE_FIELD(field, element_type, allocation_elements, elements_per_lane)          \
-  do {                                                                                       \
-    const size_t n = (size_t)(elements_per_lane);                                            \
-    memmove(&dst->field[(size_t)dst_lane * n], &src->field[(size_t)src_lane * n],            \
-            sizeof(element_type) * n);                                                       \
+#define MSL_STATE_FIELD(field, element_type, allocation_elements, elements_per_lane) \
+  do {                                                                               \
+    const size_t n = (size_t)(elements_per_lane);                                    \
+    memmove(&dst->field[(size_t)dst_lane * n], &src->field[(size_t)src_lane * n],    \
+            sizeof(element_type) * n);                                               \
   } while (0);
 #include "state_fields.inc"
 #undef MSL_STATE_FIELD
@@ -210,7 +209,6 @@ int state_copy_lanes(MslStateSoA* dst, const MslStateSoA* src, const int32_t* ds
   }
   return 0;
 }
-
 
 void state_free(MslStateSoA* state) {
   if (state == NULL) {

@@ -752,11 +752,11 @@ static int msl_batch_validate_lane_list(const int32_t* lanes, int32_t count, int
 
 static void msl_batch_copy_runtime_lane(MslBatch* dst, const MslBatch* src, int32_t dst_lane,
                                         int32_t src_lane) {
-#define MSL_BATCH_COPY_FIELD(field, element_type, elements_per_lane)                         \
-  do {                                                                                       \
-    const size_t n = (size_t)(elements_per_lane);                                            \
-    memmove(&dst->field[(size_t)dst_lane * n], &src->field[(size_t)src_lane * n],            \
-            sizeof(element_type) * n);                                                       \
+#define MSL_BATCH_COPY_FIELD(field, element_type, elements_per_lane)              \
+  do {                                                                            \
+    const size_t n = (size_t)(elements_per_lane);                                 \
+    memmove(&dst->field[(size_t)dst_lane * n], &src->field[(size_t)src_lane * n], \
+            sizeof(element_type) * n);                                            \
   } while (0)
 
   MSL_BATCH_COPY_FIELD(rollout_clock_rng_owned, uint8_t, 1u);
