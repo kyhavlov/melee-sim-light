@@ -5281,21 +5281,61 @@ void mpcoll_ground_apply(MslBatch* batch) {
   const MslCommonParams* c = msl_common_params();
 
   const int num_players = (int)batch->config.num_players;
+  uint8_t homogeneous_stage = 0u;
+  uint32_t homogeneous_stage_id = 0u;
+  const MslStageFloorGraph* homogeneous_floor_graph = NULL;
+  const MslStageCeilingGraph* homogeneous_ceiling_graph = NULL;
+  const MslStageWallGraph* homogeneous_left_wall_graph = NULL;
+  const MslStageWallGraph* homogeneous_right_wall_graph = NULL;
+  uint8_t homogeneous_has_height_platform_transform = 0u;
+  uint8_t homogeneous_has_only_static_cardinal_hard_floors = 0u;
+  uint8_t homogeneous_has_alternate_floor_endpoint_links = 0u;
+  if (batch->batch_size > 0) {
+    homogeneous_stage = 1u;
+    homogeneous_stage_id = batch->state.stage_id[0];
+    for (int bi = 1; bi < batch->batch_size; bi++) {
+      if (batch->state.stage_id[bi] != homogeneous_stage_id) {
+        homogeneous_stage = 0u;
+        break;
+      }
+    }
+    if (homogeneous_stage) {
+      homogeneous_floor_graph = stage_collision_get_floor_graph(homogeneous_stage_id);
+      homogeneous_ceiling_graph = stage_collision_get_ceiling_graph(homogeneous_stage_id);
+      homogeneous_left_wall_graph = stage_collision_get_left_wall_graph(homogeneous_stage_id);
+      homogeneous_right_wall_graph = stage_collision_get_right_wall_graph(homogeneous_stage_id);
+      homogeneous_has_height_platform_transform = stage_floor_graph_has_height_platform_transform(
+          homogeneous_stage_id, homogeneous_floor_graph);
+      homogeneous_has_only_static_cardinal_hard_floors =
+          stage_collision_stage_has_only_static_cardinal_hard_floors(homogeneous_stage_id);
+      homogeneous_has_alternate_floor_endpoint_links =
+          stage_collision_stage_has_alternate_floor_endpoint_links(homogeneous_stage_id);
+    }
+  }
   for (int bi = 0; bi < batch->batch_size; bi++) {
-    const uint32_t stage_id = batch->state.stage_id[bi];
-    const MslStageFloorGraph* g = stage_collision_get_floor_graph(stage_id);
+    const uint32_t stage_id = homogeneous_stage ? homogeneous_stage_id : batch->state.stage_id[bi];
+    const MslStageFloorGraph* g =
+        homogeneous_stage ? homogeneous_floor_graph : stage_collision_get_floor_graph(stage_id);
     if (g == NULL || g->lines == NULL || g->line_count == 0) {
       continue;
     }
     const uint8_t stage_has_height_platform_transform =
-        stage_floor_graph_has_height_platform_transform(stage_id, g);
+        homogeneous_stage ? homogeneous_has_height_platform_transform
+                          : stage_floor_graph_has_height_platform_transform(stage_id, g);
     const uint8_t stage_has_only_static_cardinal_hard_floors =
-        stage_collision_stage_has_only_static_cardinal_hard_floors(stage_id);
+        homogeneous_stage ? homogeneous_has_only_static_cardinal_hard_floors
+                          : stage_collision_stage_has_only_static_cardinal_hard_floors(stage_id);
     const uint8_t stage_has_alternate_floor_endpoint_links =
-        stage_collision_stage_has_alternate_floor_endpoint_links(stage_id);
-    const MslStageCeilingGraph* cg = stage_collision_get_ceiling_graph(stage_id);
-    const MslStageWallGraph* lwg = stage_collision_get_left_wall_graph(stage_id);
-    const MslStageWallGraph* rwg = stage_collision_get_right_wall_graph(stage_id);
+        homogeneous_stage ? homogeneous_has_alternate_floor_endpoint_links
+                          : stage_collision_stage_has_alternate_floor_endpoint_links(stage_id);
+    const MslStageCeilingGraph* cg =
+        homogeneous_stage ? homogeneous_ceiling_graph : stage_collision_get_ceiling_graph(stage_id);
+    const MslStageWallGraph* lwg = homogeneous_stage
+                                       ? homogeneous_left_wall_graph
+                                       : stage_collision_get_left_wall_graph(stage_id);
+    const MslStageWallGraph* rwg = homogeneous_stage
+                                       ? homogeneous_right_wall_graph
+                                       : stage_collision_get_right_wall_graph(stage_id);
 
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);

@@ -6189,11 +6189,22 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
   if (batch == NULL) {
     return;
   }
+  const int num_players = (int)batch->config.num_players;
+  uint8_t any_active_hitboxes = 0u;
+  for (int p = 0; p < num_players; p++) {
+    const size_t idx = msl_idx_player(bi, p);
+    if (batch->state.stocks[idx] != 0u && batch->state.hitbox_count[idx] != 0u) {
+      any_active_hitboxes = 1u;
+      break;
+    }
+  }
+  if (!any_active_hitboxes) {
+    return;
+  }
   const MslCommonParams* c = msl_common_params();
   if (c == NULL) {
     return;
   }
-  const int num_players = (int)batch->config.num_players;
 
   // Slippi post-frame `state_flags` includes fp+0x221C bits at byte index 3.
 
