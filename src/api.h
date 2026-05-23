@@ -50,6 +50,14 @@ void msl_batch_destroy(MslBatch* batch);
 int msl_batch_batch_size(const MslBatch* batch);
 int msl_batch_num_players(const MslBatch* batch);
 
+// Copy full internal simulator lane state between batches. Allocation-free.
+// Lane arrays are int32_t[count]. Repeated source lanes are allowed for broadcast. Source and
+// destination may be the same batch only when every pair is an exact self-copy or no destination
+// lane is also read as a source lane in the same call. Hazardous same-batch overlap/cycles return
+// EINVAL; this is not a lane-swap/compaction API.
+int msl_batch_copy_lanes(MslBatch* dst, const MslBatch* src, const int32_t* dst_lanes,
+                         const int32_t* src_lanes, int32_t count);
+
 // Configure controller-processing compatibility rules for the whole batch.
 // These are safe to set after create and before stepping.
 int msl_batch_set_ucf_enabled(MslBatch* batch, int enabled);

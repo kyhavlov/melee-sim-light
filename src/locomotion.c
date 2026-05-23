@@ -6610,6 +6610,16 @@ void locomotion_update_post_collision(MslBatch* batch) {
         continue;
       }
 
+      if (!was_ground && !now_ground && action_is_ground_locomotion(a)) {
+        // Runtime consistency repair for externally restored/training states: normal source
+        // collision callbacks should prevent grounded locomotion while airborne, but invalid
+        // Wait/on_ground=0 states are reachable through reset-state restoration. Route them through
+        // the existing floor-loss helper so batch stepping stays bounded instead of preserving an
+        // impossible grounded action in air.
+        enter_fall_from_grounded_floor_loss(batch, ch, idx);
+        continue;
+      }
+
       if (!was_ground && now_ground) {
         if (a == (uint16_t)MSL_ACT_LANDING &&
             landing_contact_y_bridge_matches_source(a, batch->state.action_frame[idx],

@@ -1201,4 +1201,7 @@ typedef struct MslStateSoA {
 } MslStateSoA;
 
 int state_alloc(MslStateSoA* state, int batch_size);
+int state_copy_lanes(MslStateSoA* dst, const MslStateSoA* src, const int32_t* dst_lanes,
+                     const int32_t* src_lanes, int32_t count, int32_t dst_batch_size,
+                     int32_t src_batch_size);
 void state_free(MslStateSoA* state);

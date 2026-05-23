@@ -738,6 +738,83 @@ int msl_batch_num_players(const MslBatch* batch) {
   return batch ? (int)batch->config.num_players : 0;
 }
 
+static int msl_batch_validate_lane_list(const int32_t* lanes, int32_t count, int32_t batch_size) {
+  if (lanes == NULL || count < 0 || batch_size <= 0) {
+    return EINVAL;
+  }
+  for (int32_t i = 0; i < count; i++) {
+    if (lanes[i] < 0 || lanes[i] >= batch_size) {
+      return EINVAL;
+    }
+  }
+  return 0;
+}
+
+static void msl_batch_copy_runtime_lane(MslBatch* dst, const MslBatch* src, int32_t dst_lane,
+                                        int32_t src_lane) {
+#define MSL_BATCH_COPY_FIELD(field, element_type, elements_per_lane)                         \
+  do {                                                                                       \
+    const size_t n = (size_t)(elements_per_lane);                                            \
+    memmove(&dst->field[(size_t)dst_lane * n], &src->field[(size_t)src_lane * n],            \
+            sizeof(element_type) * n);                                                       \
+  } while (0)
+
+  MSL_BATCH_COPY_FIELD(rollout_clock_rng_owned, uint8_t, 1u);
+  MSL_BATCH_COPY_FIELD(rollout_yoshi_shyguy_spawn_rng_installed, uint8_t, 1u);
+  MSL_BATCH_COPY_FIELD(replay_rollout_reseeded, uint8_t, 1u);
+  MSL_BATCH_COPY_FIELD(replay_rollout_seed_frame_id, int32_t, 1u);
+  MSL_BATCH_COPY_FIELD(camera_mode, uint8_t, 1u);
+  MSL_BATCH_COPY_FIELD(debug_hit_status_override, uint8_t, (size_t)MSL_MAX_PLAYERS);
+  MSL_BATCH_COPY_FIELD(debug_rng_shadow_seed, uint32_t, 1u);
+  MSL_BATCH_COPY_FIELD(debug_rng_seed_in, uint32_t, 1u);
+  MSL_BATCH_COPY_FIELD(debug_rng_seed_out, uint32_t, 1u);
+  MSL_BATCH_COPY_FIELD(debug_rng_site_counts, uint16_t, (size_t)MSL_RNG_SITE_COUNT);
+
+#undef MSL_BATCH_COPY_FIELD
+}
+
+static int msl_batch_copy_lanes_same_batch_is_safe(const int32_t* dst_lanes,
+                                                   const int32_t* src_lanes, int32_t count) {
+  for (int32_t i = 0; i < count; i++) {
+    if (dst_lanes[i] == src_lanes[i]) {
+      continue;
+    }
+    const int32_t overwritten_lane = dst_lanes[i];
+    for (int32_t j = 0; j < count; j++) {
+      if (src_lanes[j] == overwritten_lane) {
+        return 0;
+      }
+    }
+  }
+  return 1;
+}
+
+int msl_batch_copy_lanes(MslBatch* dst, const MslBatch* src, const int32_t* dst_lanes,
+                         const int32_t* src_lanes, int32_t count) {
+  if (dst == NULL || src == NULL || dst->config.num_players != src->config.num_players) {
+    return EINVAL;
+  }
+  int err = msl_batch_validate_lane_list(dst_lanes, count, dst->batch_size);
+  if (err != 0) {
+    return err;
+  }
+  err = msl_batch_validate_lane_list(src_lanes, count, src->batch_size);
+  if (err != 0) {
+    return err;
+  }
+  if (dst == src && !msl_batch_copy_lanes_same_batch_is_safe(dst_lanes, src_lanes, count)) {
+    return EINVAL;
+  }
+  if (state_copy_lanes(&dst->state, &src->state, dst_lanes, src_lanes, count, dst->batch_size,
+                       src->batch_size) != 0) {
+    return EINVAL;
+  }
+  for (int32_t i = 0; i < count; i++) {
+    msl_batch_copy_runtime_lane(dst, src, dst_lanes[i], src_lanes[i]);
+  }
+  return 0;
+}
+
 int msl_batch_set_ucf_enabled(MslBatch* batch, int enabled) {
   if (batch == NULL) {
     return EINVAL;

@@ -1288,6 +1288,58 @@ static PyObject* msl_init_match_masked(PyObject* self, PyObject* args) {
   Py_RETURN_NONE;
 }
 
+static PyObject* msl_debug_copy_lanes_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* dst_handle_obj = NULL;
+  PyObject* src_handle_obj = NULL;
+  PyObject* dst_lanes_obj = NULL;
+  PyObject* src_lanes_obj = NULL;
+  if (!PyArg_ParseTuple(args, "OOOO", &dst_handle_obj, &src_handle_obj, &dst_lanes_obj,
+                        &src_lanes_obj)) {
+    return NULL;
+  }
+  PyMslHandle* dst = unpack_handle(dst_handle_obj);
+  if (dst == NULL) {
+    return NULL;
+  }
+  PyMslHandle* src = unpack_handle(src_handle_obj);
+  if (src == NULL) {
+    return NULL;
+  }
+  PyArrayObject* dst_lanes = require_contiguous_array(dst_lanes_obj, NPY_INT32, 1, "dst_lanes");
+  if (dst_lanes == NULL) {
+    return NULL;
+  }
+  PyArrayObject* src_lanes = require_contiguous_array(src_lanes_obj, NPY_INT32, 1, "src_lanes");
+  if (src_lanes == NULL) {
+    return NULL;
+  }
+  if (PyArray_NDIM(dst_lanes) != 1 || PyArray_NDIM(src_lanes) != 1) {
+    PyErr_SetString(PyExc_ValueError, "lane arrays must be 1D");
+    return NULL;
+  }
+  if (PyArray_DIM(dst_lanes, 0) != PyArray_DIM(src_lanes, 0)) {
+    PyErr_SetString(PyExc_ValueError, "dst_lanes and src_lanes length mismatch");
+    return NULL;
+  }
+  if (PyArray_DIM(dst_lanes, 0) > (npy_intp)INT32_MAX) {
+    PyErr_SetString(PyExc_ValueError, "lane array too large");
+    return NULL;
+  }
+
+  const int32_t* dst_lane_data = (const int32_t*)PyArray_DATA(dst_lanes);
+  const int32_t* src_lane_data = (const int32_t*)PyArray_DATA(src_lanes);
+  const int32_t count = (int32_t)PyArray_DIM(dst_lanes, 0);
+  const int err =
+      msl_batch_copy_lanes(dst->batch, src->batch, dst_lane_data, src_lane_data, count);
+  if (err != 0) {
+    PyErr_Format(PyExc_ValueError, "msl_batch_copy_lanes failed: %d", err);
+    return NULL;
+  }
+
+  Py_RETURN_NONE;
+}
+
 static PyObject* msl_step_input(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* handle_obj = NULL;
@@ -6366,6 +6418,9 @@ static PyMethodDef methods[] = {
      "init_match(handle, match_config_bytes[batch, match_config_stride])"},
     {"init_match_masked", msl_init_match_masked, METH_VARARGS,
      "init_match_masked(handle, match_config_bytes[batch, match_config_stride], mask[batch])"},
+    {"debug_copy_lanes", msl_debug_copy_lanes_py, METH_VARARGS,
+     "debug_copy_lanes(dst_handle, src_handle, dst_lanes[int32], src_lanes[int32]) -> "
+     "DEBUG-ONLY. Exercise msl_batch_copy_lanes for focused API tests."},
     {"step_input", msl_step_input, METH_VARARGS,
      "step_input(handle, prev_input_bytes, input_bytes)"},
     {"debug_step_input_pre_combat", msl_debug_step_input_pre_combat, METH_VARARGS,
