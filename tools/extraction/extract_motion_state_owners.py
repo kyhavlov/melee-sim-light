@@ -264,14 +264,18 @@ def _class_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
         "ftFx_SpecialAirSStart_Coll",
         "ftFx_SpecialAirS_Coll",
         "ftFx_SpecialAirSEnd_Coll",
+        "ftFx_SpecialHiHoldAir_Coll",
+        "ftFx_SpecialAirHi_Coll",
         "ftFx_SpecialHiFall_Coll",
         "ftCo_MissFoot_Coll",
         "ftCo_Pass_Coll",
     }:
-        # Fox/Falco aerial Side-B/SpecialHiFall and common MissFoot/Pass collision callbacks call
-        # ft_CheckGroundAndLedge directly (MissFoot/Pass through ft_80082F28), which snapshots
-        # CollData and runs the airborne mpColl floor/wall/ceiling owner without the held-down
-        # common-air platform rejection path.
+        # Fox/Falco aerial Side-B/SpecialHi{HoldAir,AirHi,Fall} and common MissFoot/Pass
+        # collision callbacks call ft_CheckGroundAndLedge directly (MissFoot/Pass through
+        # ft_80082F28), which snapshots CollData and runs the airborne mpColl
+        # floor/wall/ceiling owner without the held-down common-air platform rejection path.
+        # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+        #   ftFx_SpecialHiHoldAir_Coll,ftFx_SpecialAirHi_Coll,ftFx_SpecialHiFall_Coll}
         bits |= CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL
     if coll_cb == "ftCo_Landing_Coll":
         bits |= CLASS_LANDING_COLL

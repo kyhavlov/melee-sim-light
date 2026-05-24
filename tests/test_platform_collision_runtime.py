@@ -50,6 +50,7 @@ ACT_PASS = 0x00F4
 ACT_OTTOTTO = 0x00F5
 ACT_OTTOTTO_WAIT = 0x00F6
 ACT_CLIFF_JUMP_SLOW2 = 0x0105
+ACT_CLIFF_CATCH = 0x00FC
 ACT_CLIFF_WAIT = 0x00FD
 ACT_ATTACK_AIR_N = 0x0041
 ACT_ATTACK_AIR_B = 0x0043
@@ -94,6 +95,7 @@ SM_PASSIVE_STAND_F = 200
 CHAR_FOX = 1
 CHAR_FALCO = 22
 STAGE_POKEMON = 3
+STAGE_FOD = 2
 STAGE_YOSHI = 8
 STAGE_BATTLEFIELD = 31
 BUTTON_L = 0x0040
@@ -111,7 +113,6 @@ ACT_FX_SPECIAL_HI = 0x0163
 COLLIDE_LEFT_WALL_MASK = 0x0000003F
 COLLIDE_RIGHT_WALL_MASK = 0x00000FC0
 COLLIDE_CEILING_MASK = 0x00006000
-
 
 def _seed_specialairhi_downward(*, x: float, y: float, prev_y: float, ground_id: int) -> np.ndarray:
     seed = _seed_base(STAGE_BATTLEFIELD, ACT_FX_SPECIAL_AIR_HI, SM_FX_SPECIAL_HI, x, y)
@@ -572,6 +573,73 @@ def test_escapeair_pokemon_cliff_ledge_floor_root_crossing_requires_frame_start_
     seed["floor_sweep_prev_pos_y_f32"][0, 0] = np.float32(0.957185)
     seed["speed_air_x_self"][0, 0] = np.float32(-0.786573)
     seed["speed_y_self"][0, 0] = np.float32(-0.786573)
+    seed["facing"][0, 0] = np.uint8(0)
+
+    out = _step_once_rollout(seed)
+
+    assert int(out["action_id"][0]) == ACT_ESCAPE_AIR
+    assert int(out["on_ground"][0]) == 0
+
+
+def test_escapeair_pokemon_jump_entry_bottom_sweep_lands_on_terminal_ledge_floor() -> None:
+    # pokemon_ledgedash_clip_are_you_fucking_kidding.msltrace.json reaches this source shape from
+    # match-start rollout: JumpB enters EscapeAir from the right ledge, the first two EscapeAir rows
+    # stay airborne, and frame 3 has a real ECB-bottom sweep through Pokemon's terminal ledge floor.
+    # Source EscapeAir_Coll still owns that bottom hit through ft_80082C74/mpColl_800471F8; this is
+    # not a stale root projection or ledge magnet.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::{
+    #   ftCo_80099A58,ftCo_EscapeAir_Coll}
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80082C74
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor}
+    seed = _seed_base(STAGE_POKEMON, ACT_ESCAPE_AIR, SM_ESCAPE_AIR, 84.435631, -3.776449)
+    seed["char_id"][0, :2] = np.uint8(CHAR_FOX)
+    seed["action_frame"][0, 0] = np.int16(2)
+    seed["anim_frame_f32"][0, 0] = np.float32(2.0)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["ground_id"][0, 0] = np.uint16(54)
+    seed["seed_prev_action_id"][0, 0] = np.uint16(ACT_JUMP_B)
+    seed["seed_prev_action_frame"][0, 0] = np.int16(3)
+    seed["ecb_lock_timer"][0, 0] = np.uint8(4)
+    seed["ledge_cooldown"][0, 0] = np.uint8(18)
+    seed["cliff_ledge_floor_segment_id_u16"][0, 0] = np.uint16(54)
+    seed["floor_sweep_prev_pos_valid_u8"][0, 0] = np.uint8(1)
+    seed["floor_sweep_prev_pos_x_f32"][0, 0] = np.float32(86.377617)
+    # floor_sweep_prev_pos_* is the callback-entry previous root used by source `mpCollPrev`.
+    seed["floor_sweep_prev_pos_y_f32"][0, 0] = np.float32(0.097050)
+    seed["speed_air_x_self"][0, 0] = np.float32(-1.748)
+    seed["speed_y_self"][0, 0] = np.float32(-1.433)
+    seed["facing"][0, 0] = np.uint8(0)
+    seed["jumps_left"][0, 0] = np.uint8(0)
+
+    out = _step_once_rollout(seed)
+
+    assert int(out["action_id"][0]) == ACT_LANDING_FALL_SPECIAL
+    assert int(out["on_ground"][0]) == 1
+    assert int(out["ground_id"][0]) == 54
+    assert float(out["pos_y"][0]) == pytest.approx(0.0001, abs=1e-6)
+
+
+def test_escapeair_pokemon_jump_entry_terminal_ledge_requires_bottom_crossing() -> None:
+    # Boundary for the source owner above: fresh JumpF/B provenance alone is not enough. If the
+    # current callback ECB bottom remains above the terminal ledge floor, the locked EscapeAir ledge
+    # suppression remains in force.
+    seed = _seed_base(STAGE_POKEMON, ACT_ESCAPE_AIR, SM_ESCAPE_AIR, 84.435631, -2.2)
+    seed["char_id"][0, :2] = np.uint8(CHAR_FOX)
+    seed["action_frame"][0, 0] = np.int16(2)
+    seed["anim_frame_f32"][0, 0] = np.float32(2.0)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["ground_id"][0, 0] = np.uint16(54)
+    seed["seed_prev_action_id"][0, 0] = np.uint16(ACT_JUMP_B)
+    seed["seed_prev_action_frame"][0, 0] = np.int16(3)
+    seed["ecb_lock_timer"][0, 0] = np.uint8(4)
+    seed["ledge_cooldown"][0, 0] = np.uint8(18)
+    seed["cliff_ledge_floor_segment_id_u16"][0, 0] = np.uint16(54)
+    seed["floor_sweep_prev_pos_valid_u8"][0, 0] = np.uint8(1)
+    seed["floor_sweep_prev_pos_x_f32"][0, 0] = np.float32(86.377617)
+    seed["floor_sweep_prev_pos_y_f32"][0, 0] = np.float32(-0.7)
+    seed["speed_air_x_self"][0, 0] = np.float32(-1.748)
+    seed["speed_y_self"][0, 0] = np.float32(-0.2)
     seed["facing"][0, 0] = np.uint8(0)
 
     out = _step_once_rollout(seed)
@@ -4126,6 +4194,97 @@ def test_modelplay_trace111_sideb_fallspecial_fd_floor_clip_repro_lands() -> Non
     assert float(landed["pos_y"][player]) == pytest.approx(
         float(fixture["assertions"]["landing_y"]), abs=2e-4
     )
+
+
+@pytest.mark.integration
+def test_manual_stage_clip_traces_roll_out_to_collision_resolution_from_match_start() -> None:
+    # Manual viewer repros:
+    # - pokemon_ledgedash_clip_are_you_fucking_kidding.msltrace.json
+    # - fox_up_b_through_fod.msltrace.json
+    # - fox_up_B_through_fod_2.msltrace.json
+    #
+    # These traces all exercise the same source class: an airborne fighter reaches the outside of a
+    # legal-stage shell or ledge from a fast movement state and must resolve through source mpColl
+    # floor/wall/ceiling ordering instead of passing into solid stage geometry.
+    # refs/melee/src/melee/mp/mpcoll.c::{
+    #   mpColl_80046904,mpColl_80044628_Floor,mpColl_80044E10_RightWall,
+    #   mpColl_800454A4_RightWall,mpColl_80045B74_LeftWall,mpColl_80046224_LeftWall}
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_CheckGroundAndLedge}
+    import msl_binding
+
+    fixture_path = (
+        Path(__file__).resolve().parents[1]
+        / "tests/fixtures/modelplay/manual_stage_clip_trace_rollout_inputs.json"
+    )
+    fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    for trace in fixture["traces"]:
+        fields = list(trace["input_fields"])
+        assert fields == ["buttons", "mainX", "mainY", "cX", "cY", "l", "r"]
+        field_lookup = {name: idx for idx, name in enumerate(fields)}
+        assertion = trace["assertion"]
+        assertions = [assertion, *trace.get("extra_assertions", [])]
+        target_frame = max(int(assertion["frame"]) for assertion in assertions)
+        player = int(assertion["player"])
+        streams = [
+            _decode_modelplay_input_stream(stream, fields, target_frame + 1)
+            for stream in trace["input_rows"]
+        ]
+        players = sorted(trace["players"], key=lambda p: int(p["port"]))
+        config = build_match_config_array(
+            num_players=len(players),
+            char_ids=tuple(int(p["charId"]) for p in players),
+            team_ids=tuple(int(p["teamId"]) for p in players),
+            facing=(1, 0),
+            stage_id=int(trace["stage_id"]),
+            frame_id=0,
+            random_seed=int(trace["random_seed"]),
+        )
+
+        prev_input = np.zeros((1, input_stride), dtype=np.uint8)
+        cur_input = np.zeros((1, input_stride), dtype=np.uint8)
+        prev_view = prev_input.view(INPUT_DTYPE).reshape((1,))
+        cur_view = cur_input.view(INPUT_DTYPE).reshape((1,))
+        out_bytes = np.zeros((1, compare_stride), dtype=np.uint8)
+
+        handle = msl_binding.init(
+            batch_size=1,
+            num_players=len(players),
+            ucf_enabled=1,
+            ucf_cardinals_1_0_enabled=1,
+        )
+        try:
+            msl_binding.init_match(handle, config.view(np.uint8).reshape((1, -1)))
+            pending_assertions = {int(a["frame"]): a for a in assertions}
+            for frame in range(1, target_frame + 1):
+                _write_modelplay_input(prev_view, streams, field_lookup, frame - 1)
+                _write_modelplay_input(cur_view, streams, field_lookup, frame)
+                msl_binding.step_input(handle, prev_input, cur_input)
+                assertion_now = pending_assertions.get(frame)
+                if assertion_now is not None:
+                    msl_binding.write_compare(handle, out_bytes)
+                    row = out_bytes.view(COMPARE_DTYPE).reshape((1,))[0]
+                    p_now = int(assertion_now["player"])
+                    assert int(row["action_id"][p_now]) == int(assertion_now["action_id"]), trace["name"]
+                    assert int(row["on_ground"][p_now]) == int(assertion_now["on_ground"]), trace["name"]
+                    assert int(row["ground_id"][p_now]) == int(assertion_now["ground_id"]), trace["name"]
+                    assert float(row["pos_y"][p_now]) >= float(assertion_now["min_y"]), trace["name"]
+                    if "min_x" in assertion_now:
+                        assert float(row["pos_x"][p_now]) >= float(assertion_now["min_x"]), trace["name"]
+                    if "max_x" in assertion_now:
+                        assert float(row["pos_x"][p_now]) <= float(assertion_now["max_x"]), trace["name"]
+            msl_binding.write_compare(handle, out_bytes)
+        finally:
+            msl_binding.destroy(handle)
+
+        row = out_bytes.view(COMPARE_DTYPE).reshape((1,))[0]
+        assert int(row["action_id"][player]) == int(assertion["action_id"]), trace["name"]
+        assert int(row["on_ground"][player]) == int(assertion["on_ground"]), trace["name"]
+        assert int(row["ground_id"][player]) == int(assertion["ground_id"]), trace["name"]
+        assert float(row["pos_y"][player]) >= float(assertion["min_y"]), trace["name"]
 
 
 @pytest.mark.integration

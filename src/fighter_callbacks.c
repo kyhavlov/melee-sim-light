@@ -347,6 +347,15 @@ static inline void promote_floor_sweep_prev_pos_post_frame(MslBatch* batch) {
       const size_t idx = msl_idx_player(bi, p);
       batch->state.floor_sweep_prev_pos_x[idx] = batch->state.prev_pos_x[idx];
       batch->state.floor_sweep_prev_pos_y[idx] = batch->state.prev_pos_y[idx];
+      // Source `mpCollPrev` preserves CollData.cur_pos across map callbacks. Wall/ceiling
+      // callbacks that enter through `ft_CheckGroundAndLedge` must sweep from the last
+      // callback-published root, while floor-sweep owners continue to consume the older
+      // `floor_sweep_prev_pos_*` lane with its one-step seed semantics.
+      // refs/melee/src/melee/ft/ft_081B.c::ft_CheckGroundAndLedge
+      // refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_80046904}
+      batch->state.coll_wall_ceil_prev_pos_x[idx] = batch->state.pos_x[idx];
+      batch->state.coll_wall_ceil_prev_pos_y[idx] = batch->state.pos_y[idx];
+      batch->state.coll_wall_ceil_prev_pos_valid[idx] = 1u;
     }
   }
 }

@@ -6304,6 +6304,21 @@ void locomotion_update_post_collision(MslBatch* batch) {
       }
 
       const uint16_t a = batch->state.action_id[idx];
+      const uint8_t frame_start_ft80083f88_floor_loss =
+          // Source grounded collision callbacks such as SquatRv_Coll are selected from the
+          // frame-start grounded action and call ft_80083F88. If Phys/edge handling clears MSL's
+          // transient `prev_on_ground` before mpColl, that callback still owns the Ground->Air
+          // floor-loss transition through ft_80082708. Use the generated callback class only for
+          // the floor-loss branch below; grounded->grounded edge/teeter publication continues to
+          // consume the post-Phys `prev_on_ground` state.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_SquatRv.c::ftCo_SquatRv_Coll
+          // refs/melee/src/melee/ft/ft_081B.c::{ft_80083F88,ft_80082708}
+          // data/motion_state/owners/{fox,falco}.bin (MSLMSO01 class FT80083F88_GROUND_TO_AIR_COLL)
+          (batch->state.frame_start_on_ground[idx] != 0u && was_ground == 0u &&
+           msl_motion_state_class_has(batch->state.char_id[idx], a,
+                                      MSL_MS_CLASS_FT80083F88_GROUND_TO_AIR_COLL))
+              ? 1u
+              : 0u;
       if (batch->state.hitlag_started_frame[idx] != 0) {
         if (!was_ground && now_ground && action_is_attackair(a)) {
           const uint16_t land = attackair_landing_action_for_contact(batch, idx, a);
@@ -6739,7 +6754,7 @@ void locomotion_update_post_collision(MslBatch* batch) {
         if (land != 0) {
           enter_landing_action_from_air(batch, ch, idx, (size_t)bi, a, land);
         }
-      } else if (was_ground && !now_ground) {
+      } else if ((was_ground || frame_start_ft80083f88_floor_loss) && !now_ground) {
         batch->state.fall_fast[idx] = 0;
 
         float ottotto_x = 0.0f;

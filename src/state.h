@@ -105,6 +105,16 @@ typedef struct MslStateSoA {
   float* floor_sweep_seed_prev_pos_x;
   float* floor_sweep_seed_prev_pos_y;
   uint8_t* floor_sweep_seed_prev_valid;
+  // Runtime CollData.cur_pos snapshot carried between wall/ceiling map callbacks. Source
+  // `ft_CheckGroundAndLedge` calls `mpCollPrev` before replacing CollData.cur_pos with the
+  // fighter's current root, so wall/ceiling `mpColl_80046904` sweeps from the previous callback's
+  // published root rather than from this frame's pre-physics root. This is runtime-produced
+  // callback state: teacher-forced reseed rows do not synthesize it from visible position.
+  // refs/melee/src/melee/ft/ft_081B.c::ft_CheckGroundAndLedge
+  // refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_80046904}
+  float* coll_wall_ceil_prev_pos_x;
+  float* coll_wall_ceil_prev_pos_y;
+  uint8_t* coll_wall_ceil_prev_pos_valid;
   // Hidden CollData ECB lifetime state. Source mpColl keeps current, prev, and desired ECB points
   // across `mpColl_LoadECB_inline` / `mpCollInterpolateECB`; floor sweeps consume this hidden
   // lifetime rather than resampling every endpoint from the visible action row.

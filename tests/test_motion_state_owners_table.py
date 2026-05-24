@@ -301,7 +301,16 @@ def test_motion_state_class_equivalence_for_migrated_predicates() -> None:
         0x013E,
         0x0140,
     }
-    ft_check_ground_ledge_air_coll = {0x00F4, 0x00FB, 0x015E, 0x015F, 0x0160, 0x0166}
+    ft_check_ground_ledge_air_coll = {
+        0x00F4,
+        0x00FB,
+        0x015E,
+        0x015F,
+        0x0160,
+        0x0162,
+        0x0164,
+        0x0166,
+    }
     ft80083f88_ground_to_air_coll = {
         0x0012,
         0x0018,

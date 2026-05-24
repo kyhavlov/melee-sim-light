@@ -965,7 +965,7 @@ mismatch.item_state: 1 / 178770 (0.000006)
 mismatch.item_owner: 2 / 178770 (0.000011)
 mismatch.item_instance_id: 2 / 178770 (0.000011)
 ignored_mismatch.state_flags[4]&0x80: 123 / 23836 (0.005160)
-err.pos_x: mae=0.000352 p95=0.000000 max=2.192791
+err.pos_x: mae=0.000326 p95=0.000000 max=2.192791
 err.pos_y: mae=0.000423 p95=0.000000 max=2.510000
 err.speed_air_x_self: mae=0.000135 p95=0.000000 max=1.045168
 err.speed_ground_x_self: mae=0.000111 p95=0.000000 max=0.773125
@@ -981,7 +981,7 @@ err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000062
 overall.discrete_mismatch: 119 / 1442078
 overall.strict_discrete_mismatch: 242 / 1442078
 overall.ignored_discrete_mismatch: 123
-overall.float_norm_mae_p95: 0.00008140
+overall.float_norm_mae_p95: 0.00008138
 
 == datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.msl ==
 Records: 11202  Players/scored per record: 2  Total player-frames: 22404
@@ -1325,7 +1325,7 @@ mismatch.item_state: 5 / 126885 (0.000039)
 mismatch.item_owner: 1 / 126885 (0.000008)
 mismatch.item_instance_id: 1 / 126885 (0.000008)
 ignored_mismatch.state_flags[4]&0x80: 61 / 16918 (0.003606)
-err.pos_x: mae=0.000783 p95=0.000000 max=3.416641
+err.pos_x: mae=0.000767 p95=0.000000 max=3.416641
 err.pos_y: mae=0.001785 p95=0.000000 max=10.680012
 err.speed_air_x_self: mae=0.000209 p95=0.000000 max=1.460000
 err.speed_ground_x_self: mae=0.000275 p95=0.000000 max=2.488403
@@ -1341,7 +1341,7 @@ err.item_vel_y: mae=0.000440 p95=0.000000 max=2.689163
 overall.discrete_mismatch: 117 / 1023539
 overall.strict_discrete_mismatch: 178 / 1023539
 overall.ignored_discrete_mismatch: 61
-overall.float_norm_mae_p95: 0.00018493
+overall.float_norm_mae_p95: 0.00018492
 
 == datasets/aggregate_recent/replays/validation/yoshis_story_recent/DependentSteelGrouse.msl ==
 Records: 344  Players/scored per record: 2  Total player-frames: 688
