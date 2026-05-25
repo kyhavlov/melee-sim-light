@@ -827,7 +827,15 @@ Recent deltas to reflect here (do not let these get “lost in chat logs”):
   `COMMON_GROUNDED_B4B0_COLL`, and `COMMON_AIRBORNE_COLL` include only common grounded/airborne
   callback families and exclude AttackAir, EscapeAir, Damage, item/projectile, catch/throw/capture,
   and Fox/Falco bespoke special callbacks. Runtime collision gates consume these wrapper-shaped
-  bits before falling back to retained later-owner classes.
+  bits before falling back to retained later-owner classes. Phase 4 adds a third generated class
+  word for the later-owner collision callbacks:
+  `PHASE4_ATTACK_AIR_COLL`, `PHASE4_ESCAPE_AIR_COLL`, `PHASE4_DAMAGE_COMMON_COLL`,
+  `PHASE4_DAMAGE_FLY_COLL`, and `PHASE4_DAMAGE_FALL_COLL`. These bits are callback-exact and
+  deliberately exclude broad `ft_80082C74` peers such as AirCatch, ItemThrowAir, cargo/capture,
+  item, and Fox/Falco bespoke specials. Runtime Phase 4 gates consume these narrow bits in the
+  AttackAir floor owner, EscapeAir ledge/locked-ECB owner, Damage collision helpers,
+  active-hitlag floorhug owner, DamageFly wall-ASDI latch, and airborne `ft_80081D0C`
+  wall/ceiling envelope before falling back to retained non-Phase4 wrappers.
   Final publication rejections carry structured side-state (restore rule, floor-skip side effect,
   and source phase) rather than relying only on a raw bit list; retained reject bits are diagnostics
   for real source-phase guards. Floor contact env bits are owned by the callback floor result:
@@ -5713,9 +5721,10 @@ BODY collision-space residual split and rejected seed bridge:
   `data/motion_state/owners/{fox,falco}.bin`.
 - Damage family runtime predicates use generated MSLMSO01 ownership instead of repeated local
   action lists where the decomp row already carries the distinction: `DAMAGE_AIR` and
-  `DAMAGE_GROUND` come from MotionState submotion symbols; `DAMAGE_*_COLL` classes continue to own
-  collision-callback families. Source-specific exceptions such as DownDamageU/D remain explicit
-  only where the downed callback re-enters the damage hitlag owner through `ftCo_8009F184`.
+  `DAMAGE_GROUND` come from MotionState submotion symbols; Phase 4 `class3_bits` select
+  `DAMAGE_COMMON_COLL`, `DAMAGE_FLY_COLL`, and `DAMAGE_FALL_COLL` collision-callback families for
+  source-phase routing. Source-specific exceptions such as DownDamageU/D remain explicit only where
+  the downed callback re-enters the damage hitlag owner through `ftCo_8009F184`.
   Sources: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c`,
   `refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c`,
   `data/motion_state/owners/{fox,falco}.bin`.

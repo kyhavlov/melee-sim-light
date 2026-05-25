@@ -668,11 +668,196 @@ Validation for completion:
 
 ### Phase 4: AttackAir, EscapeAir, And Damage Families
 
-- Port `AttackAir` and `EscapeAir` collision wrapper choice, landing handoff, ECB lock/unlock, and fall-special behavior.
-- Port damage/hitlag exit/SDI/ASDI/knockback collision integration, including passive wall/ceiling/floor outcomes.
-- Keep common wrappers authoritative; do not add downstream action exceptions for individual aerial or damage states.
-- Do not mark complete until both positive and negative tests prove source-owned collision routing.
-- Tests must include live-vs-seeded provenance boundaries, bottom-sweep versus root-projection boundaries, wrong floor/joint id negatives, expired provenance negatives, strict-span negatives, and no-crossing negatives.
+Phase 4 is the later-owner fighter collision phase for the high-risk action families deliberately
+excluded from Phase 3. Its target is to route `AttackAir`, `EscapeAir`, and Damage-family collision
+callbacks through source-shaped owner gates and the Phase 2 ordered substrate, without replay-row
+bridges or broad action exceptions.
+
+Do not spawn subagents for this work unless the user explicitly authorizes it in the current turn.
+The implementation agent owns the source read, current-code mapping, test design, and perf-risk
+check locally.
+
+Required source reads before coding:
+
+- `refs/melee/src/melee/ft/ft_081B.c`, especially wrappers around `ft_80083090`,
+  `ft_800831CC`, `ft_800835B0`, `ft_80081DD4`, `ft_80081D0C`, `ft_80082B1C`,
+  `ft_80082708`, `ft_800827A0`, and ledge/cliff handoff helpers used by these families.
+- `refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c`,
+  `ftCo_EscapeAir.c`, `ftCo_Damage.c`, damage-fly/fall source files, and adjacent common
+  transition code for landing, hitlag, SDI/ASDI, wall/ceiling/floor outcomes, and action changes.
+- `refs/melee/src/melee/mp/mpcoll.c`, especially `mpColl_80043754`, `mpColl_80046904`,
+  `mpColl_800471F8`, `mpColl_800473CC`, `mpColl_800477E0`, `mpColl_80047E14`,
+  `mpColl_8004B108`, floor skip helpers, locked/desired ECB handling, floor producer/remap
+  helpers, wall/ceiling producers, ledge/cliff admission, and `mpCollEnd*`.
+- Current MSL owner tables and runtime call sites in `src/motion_state_owners.*`,
+  `src/mpcoll_ground.c`, `src/mpcoll_wall_ceil.c`, `src/mpcoll_env.c`, `src/locomotion.c`,
+  damage/attack/ledge tests, and any existing debug CollData/ECB APIs.
+
+In-scope owner families:
+
+- `AttackAir` collision callback routing for supported Fox/Falco aerial attacks, including landing
+  handoff, platform pass-through, floor skip, endpoint/static-platform cases, wall/ceiling contact,
+  hitlag/IASA boundaries where collision ownership changes, and strict negatives for non-crossing
+  or wrong-floor candidates.
+- `EscapeAir` collision callback routing, including ledge/cliff handoff, locked desired ECB,
+  ledge-floor/root remap policy, platform/floor skip interactions, floor-loss/landing outcomes, and
+  stale-seed versus live-runtime authority.
+- Damage-family collision routing for `DamageAir`, `DamageFly`, `DamageFall`, hitlag continuation,
+  SDI/ASDI, knockback movement, hitlag-exit landing, passive wall/ceiling/floor outcomes, and
+  active-hitlag stay-airborne floor contact. Runtime-produced CollData/ECB provenance must be kept
+  distinct from teacher-forced seed reconstruction.
+
+Hard non-scope for Phase 4:
+
+- Do not implement moving-platform runtime behavior, Randall carry, FoD dynamic endpoint speed,
+  dynamic Ground callbacks, or runtime `mpBoundingCheck` `TooFar` joint mutation. Preserve existing
+  behavior and keep these deferred to Phase 6.
+- Do not route item/projectile, catch/throw/capture, generic common grounded/airborne owners already
+  completed in Phase 3, or bespoke Fox/Falco special collision families except where they are
+  directly required as negative boundaries for `AttackAir`, `EscapeAir`, or Damage.
+- Do not add replay-row fixes, trace-specific fixtures as the primary proof, dataset gates,
+  stage-name gameplay gates, y clamps, broad tolerance hacks, or local action-id lists when
+  generated MSLMSO01 owner data can express the routing.
+- Do not mark a broad family complete from one sustained/static slice. Entry, sustained,
+  transition, platform, endpoint, slope, ledge, wall/ceiling, floor-loss, hitlag, locked-ECB,
+  floor-skip, and hitlag-exit variants must either route through the owner or be explicitly
+  deferred to a named later phase with source reasoning.
+
+Implementation targets:
+
+- Extend generated MSLMSO01 owner data only where the source callback identity can express a Phase 4
+  owner boundary. Prefer generated table predicates over local action-id switches.
+- Route in-scope `AttackAir` callbacks through source-shaped owner gates that select the Phase 2
+  ordered substrate and preserve source platform-pass/floor-skip semantics.
+- Route in-scope `EscapeAir` callbacks through source-shaped owner gates that select the Phase 2
+  ordered substrate and preserve source ledge/cliff/locked-ECB semantics.
+- Route in-scope Damage callbacks through source-shaped owner gates that select the Phase 2 ordered
+  substrate and preserve source live CollData/ECB lifetime across hitlag, SDI/ASDI, and hitlag-exit
+  boundaries.
+- Replace or collapse old local suppress/reject/fallback paths only when the new owner state
+  subsumes them. Every retained fallback must be named in the report with the exact source policy or
+  later phase that owns removal.
+- Keep runtime allocation-free and deterministic. No heap allocation, formatting, dynamic buffers,
+  Python loops, nondeterministic iteration, or data reads on gameplay paths.
+
+Required tests:
+
+- Pure owner-routing tests proving generated MSLMSO01 Phase 4 classes select only the intended
+  `AttackAir`, `EscapeAir`, and Damage-family callbacks and exclude Phase 3 common owners,
+  item/projectile, catch/throw/capture, and bespoke special collision.
+- `AttackAir` tests for hard-floor landing, platform admission/rejection, floor skip clear/update,
+  endpoint/static-platform behavior, wall/ceiling contact, hitlag boundary behavior, no-crossing
+  negatives, wrong floor/joint id negatives, and excluded-owner negatives.
+- `EscapeAir` tests for ledge/cliff handoff, locked desired ECB, root-remap versus bottom-sweep
+  boundaries, platform/floor skip interactions, stale-seed negatives, expired-provenance negatives,
+  strict-span negatives, and non-ledge floors.
+- Damage-family tests for active-hitlag stay-airborne contact, runtime-produced versus seed-produced
+  provenance, SDI/ASDI floor/wall/ceiling outcomes, hitlag-exit landing, passive floor/wall/ceiling
+  outcomes, bottom-sweep versus root-projection boundaries, wrong floor/joint id negatives, expired
+  provenance negatives, and no-crossing negatives.
+- Regression tests should be owner-invariant synthetic locks first. Replay/trace locks may be kept
+  only as secondary evidence and must not define the runtime branch.
+
+Required validation:
+
+- `make build_data` if generated owner data or extraction changes
+- `make build BUILD_FORCE=1`
+- focused changed owner/collision tests
+- `make validate-all`
+- `MSL_DATA_DIR=/mnt/nvme0/projects/melee-sim-light/data make test`
+- `make fmt-check`
+- `git diff --check && git diff --cached --check`
+- `uv run python -m tools.eval.validation_report_diff --before HEAD --after reports/validation --top 220`
+- Clean-vs-dirty light `rollout_compare` bench. A small retained slowdown may be accepted only if
+  it is tied to source-correct routing and there is no obvious duplicate work left.
+
+Required report back:
+
+- Exact source functions and generated owner tables audited.
+- `AttackAir`, `EscapeAir`, and Damage owner families routed, with concrete MSL symbols and any
+  explicitly deferred variants.
+- Old suppressions/rejects/fallbacks removed, collapsed, or retained with source-policy accounting.
+- Tests added/updated and what source boundary each proves.
+- Validation and clean-vs-dirty perf numbers.
+- Whether Phase 4 is COMPLETE by this document's criteria. If incomplete, name exact remaining
+  Phase 4 work and do not move to Phase 5.
+- Leave changes uncommitted for review.
+
+Phase 4 implementation status after the class3 routing repair: COMPLETE, contingent on the
+validation list above remaining clean. The phase routes the in-scope callback families through the
+generated `MSLMSO01` v16 `class3_bits` owner word:
+
+- `PHASE4_ATTACK_AIR_COLL` owns AttackAir `ft_80082C74 -> ft_80081D0C -> mpColl_800471F8`
+  floor/wall/ceiling routing, transformed-platform floor-skip boundaries, and LandingAir handoff.
+- `PHASE4_ESCAPE_AIR_COLL` owns EscapeAir `ft_80082C74 -> ft_80081D0C -> mpColl_800471F8`
+  floor/wall/ceiling routing, ledge/cliff floor handoff, locked desired ECB lifetime, and
+  LandingFallSpecial publication.
+- `PHASE4_DAMAGE_COMMON_COLL`, `PHASE4_DAMAGE_FLY_COLL`, and `PHASE4_DAMAGE_FALL_COLL` own the
+  Damage/DamageFly/DamageFall `ft_80081DD4` / `ft_8008370C` floor-routing families, active-hitlag
+  stay-airborne floor contact, hitlag-exit landing/passive publication, and DamageFly wall/ceiling
+  contact routing.
+
+Phase 4 fallback/accounting after repair:
+
+- Removed/collapsed broad owner gates:
+  `is_attackair_action`, `action_consumes_cliff_ledge_floor_owner`,
+  `attackair_platform_ecb_owner`, `damage_terminal_owner` collision helpers,
+  `msl_escapeair_coll_episode_make`, the Damage active-hitlag floorhug gate, DamageFly wall-ASDI
+  latch gate, and the `ft_80081D0C` wall/ceiling envelope now consume `class3_bits` for Phase 4
+  families instead of broad `class_bits` or raw action ids.
+- Retained non-Phase4 broad wrappers:
+  `FT80081D0C_AIR_COLL`, `FT_CHECK_GROUND_LEDGE_AIR_COLL`, and bespoke Fox/Falco special collision
+  peers remain as explicitly retained later-owner/non-scope wrappers. They are not evidence for
+  Phase 4 completion and are covered by excluded-owner table/runtime negatives.
+- Retained AttackAir publication guards:
+  transformed-platform ECB-only, carried `floor_skip`, off-span hard-floor edge, transformed
+  platform-from-below, and hard-slope root-without-bottom guards remain because they model source
+  callback-local `CollData` floor/ECB and `mpCheckFloor` publication policy, not local replay row
+  exceptions.
+- Retained EscapeAir publication guards:
+  same-platform/same-ledge locked owners, missing locked-bottom owner, desired-platform and
+  desired-nonplatform without bottom sweep, transformed remap, strict-span, stale/expired
+  provenance, KneeBend slope entry, JumpAerial high-lift/static-platform overstep, and
+  cliff-horizontal ledge lock remain tied to source `CollData_X130_Locked`, ledge-floor ownership,
+  and `EscapeAir_Coll` bottom-sweep boundaries.
+- Retained Damage publication guards:
+  active-hitlag root-below-bottom, downward-SDI stay-airborne floorhug, DamageAir -> AttackAir
+  same-frame entry, DamageFlyRoll shallow hitlag, hitlag-exit bottom-vs-root boundaries, and
+  transformed-platform ECB-only guards remain tied to `ftCo_Damage_OnEveryHitlag`,
+  `ftCo_Damage_OnExitHitlag`, `ft_80081DD4`, and `mpColl_800477E0`/`mpColl_800473CC` source
+  policy.
+- Explicitly outside Phase 4 completion:
+  full moving-platform runtime behavior, dynamic platform endpoint speed, dynamic Ground callbacks,
+  runtime `mpBoundingCheck` `TooFar` joint mutation, separate source `left_facing_wall` /
+  `right_facing_wall` `SurfaceData`, and the fully ungated DamageFly shell-wall candidate model.
+  These are static/moving substrate follow-ups, not Phase 4 owner-table or callback-routing
+  acceptance items.
+
+Phase 4 runtime proof matrix:
+
+- `tests/test_motion_state_owners_table.py` proves generated Phase 4 class3 bits match source
+  collision callbacks and exclude common, item/projectile, catch/throw/capture, and bespoke-special
+  owners.
+- `tests/test_platform_collision_runtime.py` covers Phase 4 ordered-floor joint skip/only,
+  no-crossing negatives, static wall/ceiling contact publication, transformed-platform admission,
+  held-down platform non-rejection, DamageFall static platform admission, and excluded-owner
+  platform-skip negatives.
+- `tests/test_platform_action_entry_callback_locks.py` covers AttackAir floor-skip clear/update,
+  FoD endpoint/static-platform boundaries, EscapeAir ledge/cliff handoff, locked desired ECB,
+  root-remap versus bottom-sweep, platform/floor-skip interaction, strict-span/stale/expired
+  provenance negatives, non-ledge-floor negatives, and AttackAir/EscapeAir replay-real entry
+  boundaries.
+- `tests/test_attackair_entry_mpcoll_replay_real_locks.py` and
+  `tests/test_modelplay_20260507_platform_throw_air_locks.py` cover AttackAir wall contact and
+  hitlag-start landing boundaries.
+- `tests/test_escapeair_ledge_floor_landing_replay_real_locks.py` covers EscapeAir ledge/cliff
+  handoff and stale/provenance negatives.
+- `tests/test_damage_hitlag_floorhug_collision_regression.py`,
+  `tests/test_damagefly_hitlag_exit_wall_reflect_replay_real_locks.py`, and
+  `tests/test_damagefly_passivewalljump_replay_real_locks.py` cover Damage active-hitlag
+  stay-airborne contact, runtime-vs-seed CollData/ECB provenance, SDI/ASDI floor/wall/ceiling
+  outcomes, hitlag-exit landing, passive floor/wall/ceiling outcomes, bottom-vs-root boundaries,
+  wrong floor/joint negatives, expired-provenance negatives, and no-crossing negatives.
 
 ### Phase 5: Static Legal-Stage Validation And Cleanup
 

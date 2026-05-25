@@ -17,7 +17,7 @@ from tools.extraction.extract_attack_id_move_id import (
 
 
 FORMAT_MAGIC = b"MSLMSO01"
-FORMAT_VERSION = 15
+FORMAT_VERSION = 16
 U16_ABSENT = 0xFFFF
 
 CLASS_ATTACK_AIR = 1 << 0
@@ -59,6 +59,12 @@ CLASS2_COMMON_AIRBORNE_COLL = 1 << 2
 CLASS2_COMMON_GROUNDED_B2DC_COLL = 1 << 3
 CLASS2_COMMON_GROUNDED_B4B0_COLL = 1 << 4
 
+CLASS3_PHASE4_ATTACK_AIR_COLL = 1 << 0
+CLASS3_PHASE4_ESCAPE_AIR_COLL = 1 << 1
+CLASS3_PHASE4_DAMAGE_COMMON_COLL = 1 << 2
+CLASS3_PHASE4_DAMAGE_FLY_COLL = 1 << 3
+CLASS3_PHASE4_DAMAGE_FALL_COLL = 1 << 4
+
 
 @dataclass(frozen=True)
 class MotionStateRow:
@@ -74,6 +80,7 @@ class MotionStateRow:
     cam_cb: str
     class_bits: int
     class2_bits: int
+    class3_bits: int
 
 
 @dataclass(frozen=True)
@@ -523,6 +530,35 @@ def _class2_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int
     return bits
 
 
+def _class3_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
+    bits = 0
+    coll_cb = callbacks[3]
+    if coll_cb == "ftCo_AttackAir_Coll":
+        # Phase 4 later-owner airborne attack callback:
+        # ftCo_AttackAir_Coll -> ft_80082C74 -> ft_80081D0C -> mpColl_800471F8.
+        # This deliberately excludes AirCatch, ItemThrowAir, capture/cargo, item, and special
+        # callbacks that share the older broad FT80081D0C wrapper class.
+        bits |= CLASS3_PHASE4_ATTACK_AIR_COLL
+    if coll_cb == "ftCo_EscapeAir_Coll":
+        # Phase 4 EscapeAir callback:
+        # ftCo_EscapeAir_Coll -> ft_80082C74 -> ft_80081D0C -> mpColl_800471F8.
+        bits |= CLASS3_PHASE4_ESCAPE_AIR_COLL
+    if coll_cb in {"ftCo_Damage_Coll", "ftCo_DownDamage_Coll"}:
+        # Phase 4 common Damage / DownDamage callback:
+        # airborne path reaches ft_80081DD4; active-SDI rows select mpColl_800477E0.
+        bits |= CLASS3_PHASE4_DAMAGE_COMMON_COLL
+    if coll_cb in {"ftCo_DamageFly_Coll", "ftCo_DamageFlyRoll_Coll", "ftCo_FlyReflect_Coll"}:
+        # Phase 4 DamageFly / FlyReflect callback family. Ordinary DamageFly selects
+        # ft_80081DD4 -> mpColl_800473CC; FlyReflect uses adjacent damage wrappers, but remains a
+        # source DamageFly collision callback owner and is intentionally separate from common air.
+        bits |= CLASS3_PHASE4_DAMAGE_FLY_COLL
+    if coll_cb == "ftCo_DamageFall_Coll":
+        # Phase 4 DamageFall callback:
+        # ftCo_DamageFall_Coll -> ft_8008370C -> mpColl_800473CC on ordinary airborne floor checks.
+        bits |= CLASS3_PHASE4_DAMAGE_FALL_COLL
+    return bits
+
+
 def _class_bits_for_submotion(submotion_sym: str) -> int:
     if submotion_sym in {
         "ftCo_SM_DamageAir1",
@@ -588,6 +624,7 @@ def _parse_motion_state_rows(
             cam_cb=callbacks[4],
             class_bits=_class_bits_for_callbacks(callbacks) | _class_bits_for_submotion(submotion_sym),
             class2_bits=_class2_bits_for_callbacks(callbacks),
+            class3_bits=_class3_bits_for_callbacks(callbacks),
         )
         if row.action_id in out:
             raise RuntimeError(f"duplicate action id {row.action_id} in {src}")
@@ -634,7 +671,7 @@ def _merge_rows(common: dict[int, MotionStateRow], self_rows: dict[int, MotionSt
 def _write_table(out_path: Path, rows: dict[int, MotionStateRow], callback_ids: dict[str, int]) -> None:
     max_action = max(rows.keys(), default=0)
     action_count = max_action + 1
-    hdr_bytes = 8 + 4 + 2 + 2 + 4 * 10
+    hdr_bytes = 8 + 4 + 2 + 2 + 4 * 11
     submotion_off = hdr_bytes
     x4_flags_off = submotion_off + action_count * 2
     motion_word_off = x4_flags_off + action_count * 4
@@ -645,7 +682,8 @@ def _write_table(out_path: Path, rows: dict[int, MotionStateRow], callback_ids: 
     cam_cb_off = coll_cb_off + action_count * 2
     class_bits_off = cam_cb_off + action_count * 2
     class2_bits_off = class_bits_off + action_count * 4
-    file_bytes = class2_bits_off + action_count * 4
+    class3_bits_off = class2_bits_off + action_count * 4
+    file_bytes = class3_bits_off + action_count * 4
 
     submotion = [U16_ABSENT] * action_count
     x4_flags = [0] * action_count
@@ -657,6 +695,7 @@ def _write_table(out_path: Path, rows: dict[int, MotionStateRow], callback_ids: 
     cam_cb = [0] * action_count
     class_bits = [0] * action_count
     class2_bits = [0] * action_count
+    class3_bits = [0] * action_count
     for action_id, row in rows.items():
         submotion[action_id] = row.submotion_id
         x4_flags[action_id] = row.x4_flags
@@ -668,6 +707,7 @@ def _write_table(out_path: Path, rows: dict[int, MotionStateRow], callback_ids: 
         cam_cb[action_id] = callback_ids[row.cam_cb]
         class_bits[action_id] = row.class_bits
         class2_bits[action_id] = row.class2_bits
+        class3_bits[action_id] = row.class3_bits
 
     buf = bytearray()
     buf += FORMAT_MAGIC
@@ -685,6 +725,7 @@ def _write_table(out_path: Path, rows: dict[int, MotionStateRow], callback_ids: 
         cam_cb_off,
         class_bits_off,
         class2_bits_off,
+        class3_bits_off,
     ):
         buf += _u32_le(off)
     for value in submotion:
@@ -698,6 +739,8 @@ def _write_table(out_path: Path, rows: dict[int, MotionStateRow], callback_ids: 
     for value in class_bits:
         buf += _u32_le(value)
     for value in class2_bits:
+        buf += _u32_le(value)
+    for value in class3_bits:
         buf += _u32_le(value)
     if len(buf) != file_bytes:
         raise AssertionError((len(buf), file_bytes))
@@ -747,6 +790,13 @@ def _write_manifest(out_path: Path, callback_ids: dict[str, int]) -> None:
         "COMMON_GROUNDED_B108_COLL": CLASS2_COMMON_GROUNDED_B108_COLL,
         "COMMON_GROUNDED_COLL": CLASS2_COMMON_GROUNDED_COLL,
     }
+    classes3 = {
+        "PHASE4_ATTACK_AIR_COLL": CLASS3_PHASE4_ATTACK_AIR_COLL,
+        "PHASE4_DAMAGE_COMMON_COLL": CLASS3_PHASE4_DAMAGE_COMMON_COLL,
+        "PHASE4_DAMAGE_FALL_COLL": CLASS3_PHASE4_DAMAGE_FALL_COLL,
+        "PHASE4_DAMAGE_FLY_COLL": CLASS3_PHASE4_DAMAGE_FLY_COLL,
+        "PHASE4_ESCAPE_AIR_COLL": CLASS3_PHASE4_ESCAPE_AIR_COLL,
+    }
     symbols = [{"id": int(i), "symbol": sym} for sym, i in sorted(callback_ids.items(), key=lambda kv: kv[1])]
     payload = {
         "magic": FORMAT_MAGIC.decode("ascii"),
@@ -754,6 +804,7 @@ def _write_manifest(out_path: Path, callback_ids: dict[str, int]) -> None:
         "id_policy": "0 is NULL; nonzero ids are sorted stable callback symbol names from decomp MotionState rows",
         "classes": classes,
         "classes2": classes2,
+        "classes3": classes3,
         "symbols": symbols,
     }
     out_path.parent.mkdir(parents=True, exist_ok=True)

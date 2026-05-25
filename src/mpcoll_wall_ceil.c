@@ -280,7 +280,7 @@ static inline uint8_t specialhi_launch_uses_runtime_xrotn_ecb(uint8_t char_id, u
 }
 
 static inline uint8_t mpcoll_damagefly_wall_asdi_latch_action(uint16_t action_id) {
-  return msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_DAMAGE_FLY_COLL);
+  return msl_motion_state_common_class3_has(action_id, MSL_MS_CLASS3_PHASE4_DAMAGE_FLY_COLL);
 }
 
 static inline uint8_t mpcoll_wall_asdi_producer_action(uint16_t action_id) {
@@ -353,14 +353,35 @@ static inline uint8_t mpcoll_action_uses_common_air_walljump_callback(uint16_t a
   return msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_COMMON_AIR_WALLJUMP_COLL);
 }
 
-static inline uint8_t mpcoll_action_uses_ft80081d0c_air_collision(uint16_t action_id) {
+static inline uint8_t mpcoll_action_uses_phase4_ft80081d0c_air_collision(uint8_t char_id,
+                                                                         uint16_t action_id) {
+  return (uint8_t)(msl_motion_state_class3_has(char_id, action_id,
+                                               MSL_MS_CLASS3_PHASE4_ATTACK_AIR_COLL) ||
+                   msl_motion_state_class3_has(char_id, action_id,
+                                               MSL_MS_CLASS3_PHASE4_ESCAPE_AIR_COLL));
+}
+
+static inline uint8_t mpcoll_action_uses_retained_ft80081d0c_air_collision(uint8_t char_id,
+                                                                           uint16_t action_id) {
   // `ft_80082C74` delegates through `ft_80081D0C`, which loads the normal airborne ECB and calls
   // `mpColl_800471F8`; that source path runs the full `mpColl_80046904` airborne wall envelope on
   // both sides, but unlike common Jump/Fall callbacks it does not immediately call the walljump or
   // cliff post-consumers.
+  // AttackAir and EscapeAir route through the narrow Phase 4 class3 word before this retained
+  // broad wrapper fallback. The fallback preserves non-Phase-4 owners that share ft_80081D0C but
+  // are not accepted as Phase 4-complete behavior.
+  // data/motion_state/owners/{fox,falco}.bin (MSLMSO01 class3 PHASE4_*_COLL)
   // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
   // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80046904}
-  return msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_FT80081D0C_AIR_COLL);
+  return (
+      uint8_t)(msl_motion_state_class_has(char_id, action_id, MSL_MS_CLASS_FT80081D0C_AIR_COLL) &&
+               !mpcoll_action_uses_phase4_ft80081d0c_air_collision(char_id, action_id));
+}
+
+static inline uint8_t mpcoll_action_uses_ft80081d0c_air_collision(uint8_t char_id,
+                                                                  uint16_t action_id) {
+  return (uint8_t)(mpcoll_action_uses_phase4_ft80081d0c_air_collision(char_id, action_id) ||
+                   mpcoll_action_uses_retained_ft80081d0c_air_collision(char_id, action_id));
 }
 
 static inline uint8_t mpcoll_action_uses_ft_check_ground_ledge_air_collision(uint8_t char_id,
@@ -3148,7 +3169,7 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
                        batch->state.speed_x_attack[idx] > 0.0f));
         const uint8_t use_common_air_left_envelope = use_common_air_walljump_callback;
         const uint8_t use_ft80081d0c_left_envelope =
-            mpcoll_action_uses_ft80081d0c_air_collision(action_id);
+            mpcoll_action_uses_ft80081d0c_air_collision(char_id, action_id);
         const uint8_t use_ft_check_ground_ledge_air_left_envelope =
             mpcoll_action_uses_ft_check_ground_ledge_air_collision(char_id, action_id);
         const uint8_t use_specialhi_ft_check_ground_ledge_air_left_envelope =
@@ -3439,7 +3460,7 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
                       batch->state.speed_x_attack[idx] < 0.0f);
         const uint8_t use_common_air_right_envelope = use_common_air_walljump_callback;
         const uint8_t use_ft80081d0c_right_envelope =
-            mpcoll_action_uses_ft80081d0c_air_collision(action_id);
+            mpcoll_action_uses_ft80081d0c_air_collision(char_id, action_id);
         const uint8_t use_ft_check_ground_ledge_air_right_envelope =
             mpcoll_action_uses_ft_check_ground_ledge_air_collision(char_id, action_id);
         const uint8_t use_right_air_envelope =

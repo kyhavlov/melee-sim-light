@@ -98,6 +98,8 @@ SM_FX_SPECIAL_HI = 309
 SM_OTTOTTO_WAIT = 211
 SM_DOWN_FOWARD_U = 188
 SM_PASSIVE_STAND_F = 200
+SM_ATTACK_AIR_N = 68
+SM_DAMAGE_FLY_TOP = 180
 
 CHAR_FOX = 1
 CHAR_FALCO = 22
@@ -659,6 +661,159 @@ def test_phase3_excluded_owners_do_not_use_common_air_platform_skip(
 
     assert int(colldata["floor_skip_valid"][0]) == 0
     assert int(colldata["floor_skip_segment_id"][0]) == 0xFFFF
+
+
+@pytest.mark.parametrize(
+    ("action_id", "submotion_id", "expected_action"),
+    [
+        (ACT_ATTACK_AIR_N, SM_ATTACK_AIR_N, ACT_LANDING_AIR_N),
+        (ACT_ESCAPE_AIR, SM_ESCAPE_AIR, ACT_LANDING_FALL_SPECIAL),
+        (ACT_DAMAGE_FALL, SM_DAMAGE_FALL, ACT_DOWN_BOUND_U),
+    ],
+)
+def test_phase4_later_owners_forward_joint_filters_to_ordered_floor(
+    action_id: int, submotion_id: int, expected_action: int
+) -> None:
+    # Phase 4 AttackAir/EscapeAir/Damage callbacks route through the Phase 2 ordered floor
+    # producer, including CollData joint filters. The same crossing lands with no filter or a
+    # matching joint-only filter, and stays airborne when the owning joint is skipped or excluded.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_Coll
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpCheckFloor}
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    colldata_stride = int(sizes["colldata_ecb"])
+    floor_seg = msl_binding.stage_floor_segment(STAGE_POKEMON, 34)
+    assert floor_seg is not None
+    joint_id = int(floor_seg["joint_id"])
+
+    seed = _seed_base(STAGE_POKEMON, action_id, submotion_id, 0.0, -2.0)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["ground_id"][0, 0] = np.uint16(0xFFFF)
+    seed["speed_y_self"][0, 0] = np.float32(-10.0)
+    seed["action_frame"][0, 0] = np.int16(4)
+    seed["anim_frame_f32"][0, 0] = np.float32(4.0)
+    seed["floor_sweep_prev_pos_valid_u8"][0, 0] = np.uint8(1)
+    seed["floor_sweep_prev_pos_x_f32"][0, 0] = np.float32(0.0)
+    seed["floor_sweep_prev_pos_y_f32"][0, 0] = np.float32(12.0)
+    if action_id == ACT_DAMAGE_FALL:
+        seed["hitstun"][0, 0] = np.uint8(10)
+
+    inp = np.zeros((1, input_stride), dtype=np.uint8)
+
+    def run(skip: int, only: int) -> tuple[int, int, int, int]:
+        handle = msl_binding.init(
+            batch_size=1, num_players=2, ucf_enabled=1, ucf_cardinals_1_0_enabled=1
+        )
+        try:
+            compare = np.zeros((1, compare_stride), dtype=np.uint8)
+            colldata = np.zeros((1, colldata_stride), dtype=np.uint8)
+            msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, seed_stride)))
+            msl_binding.debug_set_mpcoll_joint_filters(handle, 0, 0, skip, only)
+            msl_binding.step_input(handle, inp, inp)
+            msl_binding.write_compare(handle, compare)
+            msl_binding.debug_write_colldata_ecb(handle, colldata)
+            row = compare.view(COMPARE_DTYPE).reshape((1,))[0]
+            snap = colldata.view(_colldata_ecb_dtype()).reshape((1,))[0]
+            return (
+                int(row["action_id"][0]),
+                int(row["on_ground"][0]),
+                int(snap["floor_result_valid"][0]),
+                int(snap["floor_result_segment_id"][0]),
+            )
+        finally:
+            msl_binding.destroy(handle)
+
+    assert run(-1, -1) == (expected_action, 1, 1, 34)
+    assert run(joint_id, -1) == (action_id, 0, 0, 0xFFFF)
+    assert run(-1, joint_id) == (expected_action, 1, 1, 34)
+    assert run(-1, joint_id + 1) == (action_id, 0, 0, 0xFFFF)
+
+
+@pytest.mark.parametrize(
+    ("action_id", "submotion_id"),
+    [
+        (ACT_ATTACK_AIR_N, SM_ATTACK_AIR_N),
+        (ACT_ESCAPE_AIR, SM_ESCAPE_AIR),
+        (ACT_DAMAGE_FALL, SM_DAMAGE_FALL),
+        (ACT_DAMAGE_FLY_TOP, SM_DAMAGE_FLY_TOP),
+    ],
+)
+def test_phase4_later_owners_reject_no_crossing_floor_sweeps(
+    action_id: int, submotion_id: int
+) -> None:
+    # Source floor producers require an actual bottom/root crossing for these callbacks. A
+    # non-crossing row must not synthesize a Phase 4 landing from action family alone.
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpColl_80044948_Floor}
+    seed = _seed_base(STAGE_POKEMON, action_id, submotion_id, 0.0, 20.0)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["ground_id"][0, 0] = np.uint16(0xFFFF)
+    seed["speed_y_self"][0, 0] = np.float32(-0.5)
+    seed["speed_y_attack"][0, 0] = np.float32(-0.5)
+    seed["hitstun"][0, 0] = np.uint8(10 if action_id == ACT_DAMAGE_FLY_TOP else 0)
+    seed["action_frame"][0, 0] = np.int16(4)
+    seed["anim_frame_f32"][0, 0] = np.float32(4.0)
+    seed["floor_sweep_prev_pos_valid_u8"][0, 0] = np.uint8(1)
+    seed["floor_sweep_prev_pos_x_f32"][0, 0] = np.float32(0.0)
+    seed["floor_sweep_prev_pos_y_f32"][0, 0] = np.float32(21.0)
+
+    out, _contacts, colldata = _step_once_with_contacts_and_colldata(seed)
+
+    assert int(out["action_id"][0]) == action_id
+    assert int(out["on_ground"][0]) == 0
+    assert int(colldata["floor_result_valid"][0]) == 0
+    assert int(colldata["floor_result_segment_id"][0]) == 0xFFFF
+
+
+@pytest.mark.parametrize(
+    ("action_id", "submotion_id"),
+    [
+        (ACT_ATTACK_AIR_N, SM_ATTACK_AIR_N),
+        (ACT_ESCAPE_AIR, SM_ESCAPE_AIR),
+        (ACT_DAMAGE_FLY_TOP, SM_DAMAGE_FLY_TOP),
+    ],
+)
+def test_phase4_later_owners_publish_wall_and_ceiling_contacts(
+    action_id: int, submotion_id: int
+) -> None:
+    # AttackAir/EscapeAir use ft_80082C74 -> ft_80081D0C -> mpColl_800471F8; DamageFly uses
+    # ft_80081DD4. Both enter the shared airborne wall/ceiling envelope through the Phase 4 owner
+    # gate, so static wall and ceiling contacts publish through the same CollData env surface.
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C,ft_80081DD4}
+    # refs/melee/src/melee/mp/mpcoll.c::mpColl_80046904
+    wall_seed = _seed_base(STAGE_YOSHI, action_id, submotion_id, 49.0, -13.0)
+    wall_seed["on_ground"][0, 0] = np.uint8(0)
+    wall_seed["ground_id"][0, 0] = np.uint16(0xFFFF)
+    wall_seed["speed_air_x_self"][0, 0] = np.float32(5.0)
+    wall_seed["speed_x_attack"][0, 0] = np.float32(5.0)
+    wall_seed["action_frame"][0, 0] = np.int16(4)
+    wall_seed["anim_frame_f32"][0, 0] = np.float32(4.0)
+    wall_seed["hitstun"][0, 0] = np.uint8(10 if action_id == ACT_DAMAGE_FLY_TOP else 0)
+
+    _wall_out, wall_contacts = _step_once_with_contacts(wall_seed)
+
+    assert int(wall_contacts["wall_kind"][0]) == 2
+    assert int(wall_contacts["wall_id"][0]) == 17
+    assert int(wall_contacts["coll_env_flags"][0]) & COLLIDE_RIGHT_WALL_MASK
+
+    ceiling_seed = _seed_base(STAGE_BATTLEFIELD, action_id, submotion_id, 0.0, -44.0)
+    ceiling_seed["on_ground"][0, 0] = np.uint8(0)
+    ceiling_seed["ground_id"][0, 0] = np.uint16(0xFFFF)
+    ceiling_seed["speed_y_self"][0, 0] = np.float32(10.0)
+    ceiling_seed["speed_y_attack"][0, 0] = np.float32(10.0)
+    ceiling_seed["action_frame"][0, 0] = np.int16(4)
+    ceiling_seed["anim_frame_f32"][0, 0] = np.float32(4.0)
+    ceiling_seed["hitstun"][0, 0] = np.uint8(10 if action_id == ACT_DAMAGE_FLY_TOP else 0)
+
+    _ceil_out, ceiling_contacts = _step_once_with_contacts(ceiling_seed)
+
+    assert int(ceiling_contacts["ceiling_id"][0]) == 8
+    assert int(ceiling_contacts["coll_env_flags"][0]) & COLLIDE_CEILING_MASK
 
 
 @pytest.mark.integration

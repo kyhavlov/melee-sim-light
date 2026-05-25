@@ -72,7 +72,7 @@ def test_build_data_uses_packaged_source_artifacts_without_decomp(tmp_path, monk
     assert (out_dir / "motion_state/owners/callback_symbols.json").exists()
     manifest = out_dir / "manifest.json"
     assert manifest.exists()
-    assert '"motion_state_owners": 15' in manifest.read_text(encoding="utf-8")
+    assert '"motion_state_owners": 16' in manifest.read_text(encoding="utf-8")
     assert not any(cmd[0] == "tools.extraction.extract_staling_move_id" for cmd in commands)
     assert not any(cmd[0] == "tools.extraction.extract_attack_id_move_id" for cmd in commands)
     assert not any(cmd[0] == "tools.extraction.extract_motion_state_owners" for cmd in commands)

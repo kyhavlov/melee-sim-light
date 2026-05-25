@@ -946,19 +946,21 @@ Characters (Fox/Falco):
     - `refs/melee/src/melee/ft/ftmotionstates.c::ftData_MotionStateList`
     - `refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c::ftFx_Init_MotionStateTable`
     - `refs/melee/src/melee/ft/chara/ftFalco/ftFc_Init.c::ftFc_Init_MotionStateTable`
-  - Binary layout: `MSLMSO01` v15 (little-endian, dense tables indexed by GALE01 `action_id`)
+  - Binary layout: `MSLMSO01` v16 (little-endian, dense tables indexed by GALE01 `action_id`)
     - `u8  magic[8] = "MSLMSO01"`
-    - `u32 version = 15`
+    - `u32 version = 16`
     - `u16 action_count`
     - `u16 reserved = 0`
     - `u32` offsets for `submotion_id`, `x4_flags`, `motion_state_word`, `anim_cb_id`,
-      `iasa_cb_id`, `phys_cb_id`, `coll_cb_id`, `cam_cb_id`, `class_bits`, and `class2_bits`
+      `iasa_cb_id`, `phys_cb_id`, `coll_cb_id`, `cam_cb_id`, `class_bits`, `class2_bits`, and
+      `class3_bits`
     - `u16 submotion_id[action_count]` (`0xFFFF` = unknown/absent)
     - `u32 x4_flags[action_count]`
     - `u32 motion_state_word[action_count]`
     - `u16 *_cb_id[action_count]` for each callback lane (`0` = `NULL`)
     - `u32 class_bits[action_count]`
     - `u32 class2_bits[action_count]`
+    - `u32 class3_bits[action_count]`
   - `data/motion_state/owners/callback_symbols.json` is review/debug metadata mapping callback IDs
     back to decomp symbol names. Runtime loads only the binary tables.
   - Class-bit examples:
@@ -997,7 +999,14 @@ Characters (Fox/Falco):
       `COMMON_GROUNDED_B4B0_COLL`, and `COMMON_AIRBORNE_COLL` select only common
       grounded/airborne callback families and deliberately exclude AttackAir, EscapeAir, Damage,
       item/projectile, catch/throw/capture, and Fox/Falco bespoke special callbacks.
-  - Stale/non-v15 `MSLMSO01` tables must be rejected. Version 15 extends `class2_bits` with
+    - `class3_bits` is the narrow Phase 4 later-owner word. `PHASE4_ATTACK_AIR_COLL`,
+      `PHASE4_ESCAPE_AIR_COLL`, `PHASE4_DAMAGE_COMMON_COLL`, `PHASE4_DAMAGE_FLY_COLL`, and
+      `PHASE4_DAMAGE_FALL_COLL` select only the source collision callbacks for AttackAir,
+      EscapeAir, and Damage-family routing. Broad peers that share wrapper helpers, including
+      AirCatch, ItemThrowAir, cargo/capture, item, and Fox/Falco bespoke special callbacks, remain
+      excluded from this word.
+  - Stale/non-v16 `MSLMSO01` tables must be rejected. Version 16 adds `class3_bits` for narrow
+    Phase 4 AttackAir/EscapeAir/Damage owner routing. Version 15 extends `class2_bits` with
     wrapper-shaped common grounded B108/B2DC/B4B0 owner classes. Version 14 added `class2_bits` for
     the narrow Phase 3 common grounded/airborne owner classes. Version 13 adds generated
     `FT80082B1C_BASIC_LANDING_COLL` ownership. Version 12 added generated DamageAir/

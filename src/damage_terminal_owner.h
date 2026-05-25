@@ -25,13 +25,16 @@ static inline uint8_t msl_damage_owner_is_damage_ground_action(uint16_t action_i
 }
 
 static inline uint8_t msl_damage_owner_is_damage_collision_landing_action(uint16_t action_id) {
-  return (uint8_t)(msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_DAMAGE_COMMON_COLL) ||
-                   msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_DAMAGE_FLY_COLL) ||
-                   msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_DAMAGE_FALL_COLL));
+  return (uint8_t)(msl_motion_state_common_class3_has(action_id,
+                                                      MSL_MS_CLASS3_PHASE4_DAMAGE_COMMON_COLL) ||
+                   msl_motion_state_common_class3_has(action_id,
+                                                      MSL_MS_CLASS3_PHASE4_DAMAGE_FLY_COLL) ||
+                   msl_motion_state_common_class3_has(action_id,
+                                                      MSL_MS_CLASS3_PHASE4_DAMAGE_FALL_COLL));
 }
 
 static inline uint8_t msl_damage_owner_is_damagefly_collision_action(uint16_t action_id) {
-  return msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_DAMAGE_FLY_COLL);
+  return msl_motion_state_common_class3_has(action_id, MSL_MS_CLASS3_PHASE4_DAMAGE_FLY_COLL);
 }
 
 static inline uint8_t msl_damage_owner_allows_sdi_action(uint16_t action_id) {

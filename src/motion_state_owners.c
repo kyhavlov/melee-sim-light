@@ -10,11 +10,11 @@
 
 enum {
   TABLE_MAGIC_LEN = 8,
-  TABLE_HDR_BYTES_V1 = 8 + 4 + 2 + 2 + 4 * 10,
+  TABLE_HDR_BYTES_V1 = 8 + 4 + 2 + 2 + 4 * 11,
 };
 
 static const uint8_t k_magic[TABLE_MAGIC_LEN] = {'M', 'S', 'L', 'M', 'S', 'O', '0', '1'};
-static const uint32_t k_format_version = 15;
+static const uint32_t k_format_version = 16;
 
 typedef struct {
   uint8_t* buf;
@@ -30,6 +30,7 @@ typedef struct {
   uint8_t* cam_cb_by_action;
   uint8_t* class_bits_by_action;
   uint8_t* class2_bits_by_action;
+  uint8_t* class3_bits_by_action;
   uint8_t have;
 } MslMotionStateOwnerTable;
 
@@ -202,7 +203,8 @@ static int load_table_for_char_into(uint8_t char_id, const char* rel_name,
   const uint32_t cam_cb_off = read_u32_le(buf + 44);
   const uint32_t class_bits_off = read_u32_le(buf + 48);
   const uint32_t class2_bits_off = read_u32_le(buf + 52);
-  const uint32_t file_bytes = class2_bits_off + (uint32_t)action_count * 4u;
+  const uint32_t class3_bits_off = read_u32_le(buf + 56);
+  const uint32_t file_bytes = class3_bits_off + (uint32_t)action_count * 4u;
 
   if (file_bytes != (uint32_t)sz) {
     fprintf(stderr,
@@ -219,7 +221,8 @@ static int load_table_for_char_into(uint8_t char_id, const char* rel_name,
       !range_ok(motion_word_off, u32_bytes, sz) || !range_ok(anim_cb_off, u16_bytes, sz) ||
       !range_ok(iasa_cb_off, u16_bytes, sz) || !range_ok(phys_cb_off, u16_bytes, sz) ||
       !range_ok(coll_cb_off, u16_bytes, sz) || !range_ok(cam_cb_off, u16_bytes, sz) ||
-      !range_ok(class_bits_off, u32_bytes, sz) || !range_ok(class2_bits_off, u32_bytes, sz)) {
+      !range_ok(class_bits_off, u32_bytes, sz) || !range_ok(class2_bits_off, u32_bytes, sz) ||
+      !range_ok(class3_bits_off, u32_bytes, sz)) {
     fprintf(stderr, "msl: motion-state owner table bad offsets for char_id=%u: %s\n",
             (unsigned)char_id, path);
     print_generate_hint(data_dir);
@@ -240,6 +243,7 @@ static int load_table_for_char_into(uint8_t char_id, const char* rel_name,
   out->cam_cb_by_action = buf + cam_cb_off;
   out->class_bits_by_action = buf + class_bits_off;
   out->class2_bits_by_action = buf + class2_bits_off;
+  out->class3_bits_by_action = buf + class3_bits_off;
   out->have = 1u;
   return 0;
 }
@@ -350,6 +354,21 @@ uint8_t msl_motion_state_class2_has(uint8_t char_id, uint16_t action_id, uint32_
   return ((msl_motion_state_class2_bits(char_id, action_id) & class_bit) != 0u) ? 1u : 0u;
 }
 
+uint32_t msl_motion_state_class3_bits(uint8_t char_id, uint16_t action_id) {
+  const MslMotionStateOwnerTable* t = table_for_char(char_id);
+  if (!in_range(t, action_id)) {
+    return 0u;
+  }
+  return read_u32_le(t->class3_bits_by_action + (size_t)action_id * 4u);
+}
+
+uint8_t msl_motion_state_class3_has(uint8_t char_id, uint16_t action_id, uint32_t class_bit) {
+  if (class_bit == 0u) {
+    return 0u;
+  }
+  return ((msl_motion_state_class3_bits(char_id, action_id) & class_bit) != 0u) ? 1u : 0u;
+}
+
 uint8_t msl_motion_state_common_class_has(uint16_t action_id, uint32_t class_bit) {
   return (msl_motion_state_class_has((uint8_t)MSL_CHAR_ID_FOX, action_id, class_bit) &&
           msl_motion_state_class_has((uint8_t)MSL_CHAR_ID_FALCO, action_id, class_bit))
@@ -360,6 +379,13 @@ uint8_t msl_motion_state_common_class_has(uint16_t action_id, uint32_t class_bit
 uint8_t msl_motion_state_common_class2_has(uint16_t action_id, uint32_t class_bit) {
   return (msl_motion_state_class2_has((uint8_t)MSL_CHAR_ID_FOX, action_id, class_bit) &&
           msl_motion_state_class2_has((uint8_t)MSL_CHAR_ID_FALCO, action_id, class_bit))
+             ? 1u
+             : 0u;
+}
+
+uint8_t msl_motion_state_common_class3_has(uint16_t action_id, uint32_t class_bit) {
+  return (msl_motion_state_class3_has((uint8_t)MSL_CHAR_ID_FOX, action_id, class_bit) &&
+          msl_motion_state_class3_has((uint8_t)MSL_CHAR_ID_FALCO, action_id, class_bit))
              ? 1u
              : 0u;
 }

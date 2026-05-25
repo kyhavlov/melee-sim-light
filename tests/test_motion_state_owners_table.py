@@ -34,6 +34,11 @@ from tools.extraction.extract_motion_state_owners import (
     CLASS2_COMMON_GROUNDED_B4B0_COLL,
     CLASS2_COMMON_GROUNDED_B108_COLL,
     CLASS2_COMMON_GROUNDED_COLL,
+    CLASS3_PHASE4_ATTACK_AIR_COLL,
+    CLASS3_PHASE4_DAMAGE_COMMON_COLL,
+    CLASS3_PHASE4_DAMAGE_FALL_COLL,
+    CLASS3_PHASE4_DAMAGE_FLY_COLL,
+    CLASS3_PHASE4_ESCAPE_AIR_COLL,
     CLASS_GROUNDED_ATTACK_WAIT_IASA_CATCH_GUARD,
     CLASS_GROUNDED_ATTACK_WAIT_IASA_LOCOMOTION,
     CLASS_GROUNDED_ATTACK_WAIT_IASA_SPECIALS,
@@ -73,6 +78,7 @@ def test_motion_state_owner_tables_cover_known_callbacks_and_flags() -> None:
     assert cb_name(0x0041, "coll") == "ftCo_AttackAir_Coll"
     assert int(fox.class_bits[0x0041]) & CLASS_ATTACK_AIR
     assert int(fox.class_bits[0x0041]) & CLASS_FT80081D0C_AIR_COLL
+    assert int(fox.class3_bits[0x0041]) & CLASS3_PHASE4_ATTACK_AIR_COLL
 
     # refs/melee/src/melee/ft/chara/ftFox/ftFx_Init.c::ftFx_Init_MotionStateTable
     assert cb_name(0x0163, "anim") == "ftFx_SpecialHi_Anim"
@@ -115,6 +121,7 @@ def test_motion_state_owner_tables_cover_known_callbacks_and_flags() -> None:
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
     assert cb_name(0x00EC, "coll") == "ftCo_EscapeAir_Coll"
     assert int(fox.coll_cb_id[0x00EC]) == 339
+    assert int(fox.class3_bits[0x00EC]) & CLASS3_PHASE4_ESCAPE_AIR_COLL
 
     assert cb_name(0x002A, "coll") == "ftCo_Landing_Coll"  # Landing
     assert int(fox.class_bits[0x002A]) & CLASS_LANDING_COLL
@@ -132,8 +139,10 @@ def test_motion_state_owner_tables_cover_known_callbacks_and_flags() -> None:
     assert int(fox.class_bits[0x0018]) & CLASS_FT80083F88_GROUND_TO_AIR_COLL
     assert cb_name(0x0026, "coll") == "ftCo_DamageFall_Coll"  # DamageFall
     assert int(fox.class_bits[0x0026]) & CLASS_DAMAGE_FALL_COLL
+    assert int(fox.class3_bits[0x0026]) & CLASS3_PHASE4_DAMAGE_FALL_COLL
     assert cb_name(0x005B, "coll") == "ftCo_DamageFlyRoll_Coll"  # DamageFlyRoll
     assert int(fox.class_bits[0x005B]) & CLASS_DAMAGE_FLY_COLL
+    assert int(fox.class3_bits[0x005B]) & CLASS3_PHASE4_DAMAGE_FLY_COLL
 
     # GuardOn carries x9_b1 in the raw MotionState +0x8 word, matching MSLACID1 continuity.
     # refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
@@ -757,9 +766,74 @@ def test_motion_state_owner_phase3_class2_matches_source_callbacks_for_all_actio
             )
 
 
+def test_motion_state_owner_phase4_class3_matches_source_callbacks_for_all_actions() -> None:
+    fox = read_mslmso01_v1(FOX)
+    falco = read_mslmso01_v1(FALCO)
+    symbols = read_callback_manifest(MANIFEST)
+
+    def expected_bits(coll_cb: str) -> int:
+        bits = 0
+        if coll_cb == "ftCo_AttackAir_Coll":
+            bits |= CLASS3_PHASE4_ATTACK_AIR_COLL
+        if coll_cb == "ftCo_EscapeAir_Coll":
+            bits |= CLASS3_PHASE4_ESCAPE_AIR_COLL
+        if coll_cb in {"ftCo_Damage_Coll", "ftCo_DownDamage_Coll"}:
+            bits |= CLASS3_PHASE4_DAMAGE_COMMON_COLL
+        if coll_cb in {"ftCo_DamageFly_Coll", "ftCo_DamageFlyRoll_Coll", "ftCo_FlyReflect_Coll"}:
+            bits |= CLASS3_PHASE4_DAMAGE_FLY_COLL
+        if coll_cb == "ftCo_DamageFall_Coll":
+            bits |= CLASS3_PHASE4_DAMAGE_FALL_COLL
+        return bits
+
+    # Exhaustive Phase 4 source-callback boundary. These are the later-owner families routed by
+    # src/mpcoll_ground.c; broad ft_80081D0C peers such as AirCatch, ItemThrowAir, Cargo, YoshiEgg,
+    # and Fox/Falco specials must stay out of this word.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+    #   ftCo_Damage_Coll,ftCo_DamageFly_Coll,ftCo_DamageFlyRoll_Coll}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_Coll
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_FlyReflect.c::ftCo_FlyReflect_Coll
+    for label, table in (("fox", fox), ("falco", falco)):
+        for action_id in range(len(table.class3_bits)):
+            coll_cb = symbols[int(table.coll_cb_id[action_id])]
+            assert int(table.class3_bits[action_id]) == expected_bits(coll_cb), (
+                label,
+                action_id,
+                coll_cb,
+            )
+
+    def both_have3(action_id: int, bit: int) -> bool:
+        return bool(int(fox.class3_bits[action_id]) & bit) and bool(
+            int(falco.class3_bits[action_id]) & bit
+        )
+
+    assert both_have3(0x0041, CLASS3_PHASE4_ATTACK_AIR_COLL)  # AttackAirN
+    assert both_have3(0x00EC, CLASS3_PHASE4_ESCAPE_AIR_COLL)  # EscapeAir
+    assert both_have3(0x0054, CLASS3_PHASE4_DAMAGE_COMMON_COLL)  # DamageAir1
+    assert both_have3(0x005A, CLASS3_PHASE4_DAMAGE_FLY_COLL)  # DamageFlyTop
+    assert both_have3(0x0026, CLASS3_PHASE4_DAMAGE_FALL_COLL)  # DamageFall
+
+    excluded = [
+        0x001D,  # Fall, Phase 3 common airborne
+        0x002A,  # Landing, Phase 3 common grounded
+        0x00CD,  # AirCatch
+        0x0115,  # ItemThrowAirF
+        0x0137,  # HammerFall
+        0x013A,  # CargoFall
+        0x013C,  # CargoThrowF
+        0x0140,  # YoshiEgg
+        0x015E,  # Fox/Falco SpecialAirSStart
+        0x016D,  # Fox/Falco SpecialAirLwStart
+    ]
+    for action_id in excluded:
+        assert int(fox.class3_bits[action_id]) == 0
+        assert int(falco.class3_bits[action_id]) == 0
+
+
 def test_motion_state_owner_reader_rejects_stale_versions(tmp_path: Path) -> None:
     stale = tmp_path / "fox.bin"
-    buf = bytearray(56)
+    buf = bytearray(60)
     buf[0:8] = b"MSLMSO01"
     struct.pack_into("<I", buf, 8, VERSION - 1)
     struct.pack_into("<H", buf, 12, 1)
@@ -788,7 +862,7 @@ def test_runtime_rejects_stale_motion_state_owner_tables(tmp_path: Path) -> None
     for ch in ("fox", "falco"):
         stale = data_dir / "motion_state" / "owners" / f"{ch}.bin"
         stale.parent.mkdir(parents=True, exist_ok=True)
-        buf = bytearray(56)
+        buf = bytearray(60)
         buf[0:8] = b"MSLMSO01"
         struct.pack_into("<I", buf, 8, VERSION - 1)
         struct.pack_into("<H", buf, 12, 1)

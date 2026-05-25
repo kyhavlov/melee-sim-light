@@ -457,7 +457,7 @@ static inline uint8_t is_capture_lw_allow_ground_to_air_collision_action(uint16_
 }
 
 static inline uint8_t is_attackair_action(uint16_t a) {
-  return msl_motion_state_common_class_has(a, MSL_MS_CLASS_ATTACK_AIR);
+  return msl_motion_state_common_class3_has(a, MSL_MS_CLASS3_PHASE4_ATTACK_AIR_COLL);
 }
 
 static inline uint8_t is_spacie_air_special_floor_collision_action(uint16_t a) {
@@ -632,7 +632,7 @@ static inline uint8_t action_uses_active_hitlag_downward_sdi_floorhug(uint16_t a
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownDamage.c::{ftCo_8009F184,ftCo_DownDamage_Coll}
   // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
   // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800477E0,mpColl_80044628_Floor,mpColl_80044948_Floor}
-  if (msl_motion_state_common_class_has(action_id, MSL_MS_CLASS_DAMAGE_COMMON_COLL) ||
+  if (msl_motion_state_common_class3_has(action_id, MSL_MS_CLASS3_PHASE4_DAMAGE_COMMON_COLL) ||
       is_damage_fly_collision_action(action_id) || action_id == (uint16_t)MSL_ACT_DOWN_DAMAGE_U ||
       action_id == (uint16_t)MSL_ACT_DOWN_DAMAGE_D) {
     return 1u;
@@ -1012,6 +1012,12 @@ static inline MslMpcollSourcePhases mpcoll_source_phases_for_motion_state(uint8_
                                                                           uint16_t action_id) {
   const uint32_t class_bits = msl_motion_state_class_bits(char_id, action_id);
   const uint32_t class2_bits = msl_motion_state_class2_bits(char_id, action_id);
+  uint32_t class3_bits = 0u;
+  if ((class_bits &
+       (MSL_MS_CLASS_ATTACK_AIR | MSL_MS_CLASS_ESCAPE_AIR_COLL | MSL_MS_CLASS_DAMAGE_COMMON_COLL |
+        MSL_MS_CLASS_DAMAGE_FLY_COLL | MSL_MS_CLASS_DAMAGE_FALL_COLL)) != 0u) {
+    class3_bits = msl_motion_state_class3_bits(char_id, action_id);
+  }
   MslMpcollSourcePhases phases = 0u;
   if ((class2_bits & MSL_MS_CLASS2_COMMON_AIRBORNE_COLL) != 0u) {
     // Phase 3 common airborne owner. Excluded airborne families may still consume the same low-level
@@ -1028,8 +1034,13 @@ static inline MslMpcollSourcePhases mpcoll_source_phases_for_motion_state(uint8_
     if ((class_bits & MSL_MS_CLASS_FT80083090_PLATFORM_PASS_COLL) != 0u) {
       phases |= (MslMpcollSourcePhases)MSL_MPCOLL_PHASE_PLATFORM_PASS;
     }
-    if ((class_bits & (MSL_MS_CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL |
-                       MSL_MS_CLASS_FT80081D0C_AIR_COLL | MSL_MS_CLASS_ESCAPE_AIR_COLL)) != 0u) {
+    if ((class3_bits &
+         (MSL_MS_CLASS3_PHASE4_ATTACK_AIR_COLL | MSL_MS_CLASS3_PHASE4_ESCAPE_AIR_COLL)) != 0u) {
+      phases |= (MslMpcollSourcePhases)MSL_MPCOLL_PHASE_AIR_471F8;
+    } else if ((class_bits & (MSL_MS_CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL |
+                              MSL_MS_CLASS_FT80081D0C_AIR_COLL)) != 0u) {
+      // Retained non-Phase-4 wrapper owners. These callbacks share the low-level airborne mpColl
+      // wrapper but are not selected by the narrow Phase 4 owner word above.
       phases |= (MslMpcollSourcePhases)MSL_MPCOLL_PHASE_AIR_471F8;
     }
   }
@@ -1048,10 +1059,11 @@ static inline MslMpcollSourcePhases mpcoll_source_phases_for_motion_state(uint8_
                             MSL_MS_CLASS_FX_SPECIALS_GROUND_B108_COLL)) != 0u) {
     phases |= (MslMpcollSourcePhases)MSL_MPCOLL_PHASE_GROUND_B108;
   }
-  if ((class_bits & MSL_MS_CLASS_DAMAGE_FLY_COLL) != 0u) {
+  if ((class3_bits &
+       (MSL_MS_CLASS3_PHASE4_DAMAGE_FLY_COLL | MSL_MS_CLASS3_PHASE4_DAMAGE_FALL_COLL)) != 0u) {
     phases |= (MslMpcollSourcePhases)MSL_MPCOLL_PHASE_AIR_473CC;
   }
-  if ((class_bits & MSL_MS_CLASS_DAMAGE_COMMON_COLL) != 0u) {
+  if ((class3_bits & MSL_MS_CLASS3_PHASE4_DAMAGE_COMMON_COLL) != 0u) {
     phases |= (MslMpcollSourcePhases)MSL_MPCOLL_PHASE_AIR_477E0;
   }
   if ((class2_bits & MSL_MS_CLASS2_COMMON_GROUNDED_B2DC_COLL) != 0u) {
@@ -2598,10 +2610,10 @@ static inline uint8_t action_consumes_cliff_ledge_floor_owner(uint8_t char_id, u
   // selected through the shared CollData floor-owner path below only while source ledge-release
   // cooldown is live; this predicate is extracted MotionState callback ownership, not a replay
   // outcome or local action-id slice.
-  // data/motion_state/owners/{fox,falco}.bin (MSLMSO01 class ESCAPE_AIR_COLL)
+  // data/motion_state/owners/{fox,falco}.bin (MSLMSO01 class3 PHASE4_ESCAPE_AIR_COLL)
   // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
   // refs/melee/src/melee/mp/mpcoll.c::mpColl_800471F8
-  return msl_motion_state_class_has(char_id, action_id, MSL_MS_CLASS_ESCAPE_AIR_COLL);
+  return msl_motion_state_class3_has(char_id, action_id, MSL_MS_CLASS3_PHASE4_ESCAPE_AIR_COLL);
 }
 
 typedef struct MslAttackAirPlatformEcbOwner {
@@ -2624,7 +2636,7 @@ static inline MslAttackAirPlatformEcbOwner attackair_platform_ecb_owner(uint8_t 
   // data/motion_state/owners/{fox,falco}.bin (MSLMSO01 submotion_id)
   // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
   // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor}
-  if (msl_motion_state_class_has(char_id, action_id, MSL_MS_CLASS_ATTACK_AIR) == 0u) {
+  if (msl_motion_state_class3_has(char_id, action_id, MSL_MS_CLASS3_PHASE4_ATTACK_AIR_COLL) == 0u) {
     return owner;
   }
   const uint16_t smid = msl_motion_state_submotion_id(char_id, action_id);
@@ -6408,6 +6420,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
           (cliff_ledge_floor_owner_selected || cliff_ledge_floor_owner_live_current_line) ? 1u : 0u;
       const uint16_t skip_platform_segment_i = coll_data.floor_skip_segment_id;
       const MslEscapeAirCollEpisode escapeair_episode = msl_escapeair_coll_episode_make(
+          msl_motion_state_class3_has(char_id, action_id, MSL_MS_CLASS3_PHASE4_ESCAPE_AIR_COLL),
           action_id, batch->state.seed_prev_action_id[idx], ecb_lock_active);
       const uint8_t escapeair_locked = escapeair_episode.locked;
       uint8_t deep_lock_penetration = 0u;

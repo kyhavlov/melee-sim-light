@@ -3,8 +3,6 @@
 
 #include <stdint.h>
 
-#include "action_ids.h"
-
 typedef enum MslEscapeAirLockedBottomOwner {
   MSL_ESCAPEAIR_LOCKED_BOTTOM_OWNER_NONE = 0u,
   MSL_ESCAPEAIR_LOCKED_BOTTOM_OWNER_SEEDED_COLL_X130 = 1u,
@@ -75,11 +73,12 @@ static inline uint8_t msl_escapeair_locked_bottom_owner_preserve_or_seeded(uint8
              : (uint8_t)MSL_ESCAPEAIR_LOCKED_BOTTOM_OWNER_SEEDED_COLL_X130;
 }
 
-static inline MslEscapeAirCollEpisode msl_escapeair_coll_episode_make(uint16_t action_id,
+static inline MslEscapeAirCollEpisode msl_escapeair_coll_episode_make(uint8_t escapeair_owner,
+                                                                      uint16_t action_id,
                                                                       uint16_t seed_prev_action_id,
                                                                       uint8_t ecb_lock_active) {
   MslEscapeAirCollEpisode episode;
-  episode.active = (uint8_t)(action_id == (uint16_t)MSL_ACT_ESCAPE_AIR);
+  episode.active = escapeair_owner ? 1u : 0u;
   episode.locked = (uint8_t)(episode.active && ecb_lock_active);
   episode.sustained = (uint8_t)(episode.active && seed_prev_action_id == action_id);
   return episode;
