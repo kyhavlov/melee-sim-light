@@ -274,8 +274,29 @@ def gamestate_dtype() -> np.dtype:
     return dtype
 
 
+@lru_cache(maxsize=1)
 def terminal_dtype() -> np.dtype:
-    return _opaque_dtype("terminal")
+    dtype = np.dtype(
+        [
+            ("frame_id", "<i4"),
+            ("stage_id", "<u4"),
+            ("done", "u1"),
+            ("match_ended", "u1"),
+            ("stockout", "u1"),
+            ("max_frame_reached", "u1"),
+            ("alive_count", "u1"),
+            ("alive_team_count", "u1"),
+            ("team_alive_mask", "u1"),
+            ("_pad0", "u1"),
+        ],
+        align=False,
+    )
+    if dtype.itemsize != sizes()["terminal"]:
+        raise RuntimeError(
+            f"terminal dtype is {dtype.itemsize} bytes, "
+            f"native struct is {sizes()['terminal']} bytes"
+        )
+    return dtype
 
 
 def view_raw(raw: np.ndarray, dtype: np.dtype) -> np.ndarray:

@@ -75,7 +75,6 @@ def _parse_stages(value: str) -> list[int]:
 
 def fill_match_configs(env: msl.EnvBatch, buffers: msl.Buffers, stages: list[int]) -> None:
     env.configure_matches(
-        buffers,
         [
             msl.MatchConfig(
                 stage=stages[bi % len(stages)],
@@ -87,6 +86,7 @@ def fill_match_configs(env: msl.EnvBatch, buffers: msl.Buffers, stages: list[int
             )
             for bi in range(buffers.batch_size)
         ],
+        buffers=buffers,
     )
 
 

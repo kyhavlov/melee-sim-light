@@ -92,7 +92,7 @@ def test_envbatch_uses_mslftsc1_without_legacy_script_owner_splits(tmp_path) -> 
     assert (data_dir / "scripts" / "falco.bin").exists()
 
     with msl.EnvBatch(batch_size=1, length=2, data_dir=data_dir) as env:
-        buffers = env.buffers()
+        buffers = env.allocate_buffers()
         env.configure_match(buffers)
         controller = msl.neutral_controller((buffers.length, buffers.batch_size))
         msl.write_controller(buffers.controller_action_view, controller, player=0)
@@ -104,7 +104,7 @@ def test_envbatch_uses_mslftsc1_without_legacy_script_owner_splits(tmp_path) -> 
 
 def test_buffers_controller_api_steps_and_writes_done() -> None:
     with msl.EnvBatch(batch_size=4, length=8) as env:
-        buffers = env.buffers()
+        buffers = env.allocate_buffers()
         env.configure_match(buffers)
         controller = msl.neutral_controller((buffers.length, buffers.batch_size))
         msl.write_controller(buffers.controller_action_view, controller, player=0)
@@ -121,9 +121,39 @@ def test_buffers_controller_api_steps_and_writes_done() -> None:
         assert env.t == 1
 
 
+def test_envbatch_owned_buffers_cover_common_step_path() -> None:
+    with msl.EnvBatch(batch_size=3, length=8) as env:
+        env.configure_match(stage=msl.Stage.BATTLEFIELD)
+        controller = msl.neutral_controller((env.length, env.batch_size))
+        msl.write_controller(env.controller_action_view, controller, player=0)
+        msl.write_controller(env.controller_action_view, controller, player=1)
+
+        env.reset_all()
+        assert np.shares_memory(env.current_frame, env.gamestate_view[0])
+        env.current_reset_mask[:] = 0
+        env.step()
+
+        assert np.shares_memory(env.current_frame, env.gamestate_view[1])
+        assert np.shares_memory(env.current_action_frame, env.controller_action_view[1])
+        assert np.all(env.done_at(0) == 0)
+        assert env.terminal_at(0).dtype == msl.terminal_dtype()
+        assert np.all(env.current_frame["stage_id"] == msl.Stage.BATTLEFIELD)
+
+
+def test_configure_matches_defaults_to_owned_buffers() -> None:
+    with msl.EnvBatch(batch_size=2, length=4) as env:
+        env.configure_matches(configs=[
+            msl.MatchConfig(stage=msl.Stage.FINAL_DESTINATION),
+            msl.MatchConfig(stage=msl.Stage.YOSHIS_STORY),
+        ])
+
+        assert int(env.match_config_view["stage_id"][0]) == msl.Stage.FINAL_DESTINATION
+        assert int(env.match_config_view["stage_id"][1]) == msl.Stage.YOSHIS_STORY
+
+
 def test_step_cursor_raises_at_length_and_can_rewind() -> None:
     with msl.EnvBatch(batch_size=1, length=1) as env:
-        buffers = env.buffers()
+        buffers = env.allocate_buffers()
         env.configure_match(buffers)
         controller = msl.neutral_controller((env.length, env.batch_size))
         msl.write_controller(buffers.controller_action_view, controller, player=0)
@@ -142,7 +172,7 @@ def test_step_cursor_raises_at_length_and_can_rewind() -> None:
 
 def test_configure_match_populates_default_fox_falco_match() -> None:
     with msl.EnvBatch(batch_size=4, length=8) as env:
-        buffers = env.buffers()
+        buffers = env.allocate_buffers()
         env.configure_match(buffers)
 
         cfg = buffers.match_config_view
@@ -162,7 +192,7 @@ def test_configure_match_populates_default_fox_falco_match() -> None:
 
 def test_configure_match_accepts_explicit_constants_and_seed() -> None:
     with msl.EnvBatch(batch_size=2, length=4) as env:
-        buffers = env.buffers()
+        buffers = env.allocate_buffers()
         env.configure_match(
             buffers,
             stage=msl.Stage.BATTLEFIELD,
@@ -186,10 +216,9 @@ def test_configure_match_accepts_explicit_constants_and_seed() -> None:
 
 def test_configure_matches_accepts_per_lane_configs_and_partial_update() -> None:
     with msl.EnvBatch(batch_size=4, length=8) as env:
-        buffers = env.buffers()
+        buffers = env.allocate_buffers()
         env.configure_match(buffers)
         env.configure_matches(
-            buffers,
             [
                 msl.MatchConfig(
                     stage=msl.Stage.BATTLEFIELD,
@@ -208,6 +237,7 @@ def test_configure_matches_accepts_per_lane_configs_and_partial_update() -> None
                     frame_pre_random_seed=200,
                 ),
             ],
+            buffers=buffers,
             env_ids=[1, 3],
         )
 
@@ -223,7 +253,7 @@ def test_configure_matches_accepts_per_lane_configs_and_partial_update() -> None
 
 def test_masked_reset_accepts_frame_mask() -> None:
     with msl.EnvBatch(batch_size=4, length=8) as env:
-        buffers = env.buffers()
+        buffers = env.allocate_buffers()
         env.configure_match(buffers)
         env.bind(buffers)
         env.reset_all()
@@ -246,7 +276,7 @@ def test_gamestate_dtype_exposes_items_randall_and_invulnerability() -> None:
     assert msl.gamestate_dtype()["items"].subdtype[0] == msl.item_dtype()
 
     with msl.EnvBatch(batch_size=2, length=2) as env:
-        buffers = env.buffers()
+        buffers = env.allocate_buffers()
         env.configure_match(buffers, stage=msl.Stage.YOSHIS_STORY)
         env.bind(buffers)
         env.reset_all()

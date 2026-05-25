@@ -68,6 +68,9 @@ class EnvBatch:
         num_players: int = 2,
         *,
         data_dir: str | os.PathLike[str] | None = None,
+        observation: str = "native",
+        action_format: str = "controller",
+        obs_dim: int = 0,
         ucf_enabled: bool = True,
         ucf_cardinals_1_0_enabled: bool = False,
     ) -> None:
@@ -88,6 +91,13 @@ class EnvBatch:
         )
         self._bound: Buffers | None = None
         self._closed = False
+        self.bind(
+            self.allocate_buffers(
+                observation=observation,
+                action_format=action_format,
+                obs_dim=obs_dim,
+            )
+        )
 
     def close(self) -> None:
         if not self._closed:
@@ -112,12 +122,63 @@ class EnvBatch:
             pass
 
     @property
-    def bound_buffers(self) -> Buffers:
+    def buffers(self) -> Buffers:
         if self._bound is None:
             raise RuntimeError("no buffers are bound")
         return self._bound
 
-    def buffers(
+    @property
+    def match_config_view(self) -> np.ndarray:
+        return self.buffers.match_config_view
+
+    @property
+    def action_view(self) -> np.ndarray:
+        return self.buffers.action_view
+
+    @property
+    def raw_action_view(self) -> np.ndarray:
+        return self.buffers.raw_action_view
+
+    @property
+    def controller_action_view(self) -> np.ndarray:
+        return self.buffers.controller_action_view
+
+    @property
+    def compare_view(self) -> np.ndarray:
+        return self.buffers.compare_view
+
+    @property
+    def gamestate_view(self) -> np.ndarray:
+        return self.buffers.gamestate_view
+
+    @property
+    def terminal_view(self) -> np.ndarray:
+        return self.buffers.terminal_view
+
+    @property
+    def current_frame(self) -> np.ndarray:
+        self._check_bound()
+        if self.t < 0 or self.t > self.length:
+            raise RuntimeError("current frame is outside the gamestate buffer")
+        return self.gamestate_view[self.t]
+
+    @property
+    def current_action_frame(self) -> np.ndarray:
+        self._check_t_in_length()
+        return self.action_view[self.t]
+
+    @property
+    def current_reset_mask(self) -> np.ndarray:
+        self._check_t_in_length()
+        return self.buffers.reset_mask[self.t]
+
+    def done_at(self, t: int) -> np.ndarray:
+        return self.buffers.done[self._checked_step_index(t)]
+
+    def terminal_at(self, t: int) -> np.ndarray:
+        return self.terminal_view[self._checked_step_index(t)]
+
+    def allocate_buffers(
         self,
         *,
         observation: str = "native",
@@ -135,7 +196,7 @@ class EnvBatch:
 
     def configure_match(
         self,
-        buffers: Buffers,
+        buffers: Buffers | None = None,
         config: MatchConfig | None = None,
         *,
         stage: int | Stage | None = None,
@@ -148,6 +209,7 @@ class EnvBatch:
         camera_mode: int | None = None,
         env_ids: Sequence[int] | np.ndarray | None = None,
     ) -> None:
+        buffers = self.buffers if buffers is None else buffers
         cfg_obj = config or MatchConfig()
         if stage is not None:
             cfg_obj = MatchConfig(
@@ -179,8 +241,8 @@ class EnvBatch:
                 cfg_obj = _replace_config(cfg_obj, frame_pre_random_seed=int(seeds))
             else:
                 self.configure_matches(
-                    buffers,
                     [_replace_config(cfg_obj, frame_pre_random_seed=int(seed)) for seed in seeds],
+                    buffers=buffers,
                     env_ids=env_ids,
                     stock_count=stock_count,
                     match_damage_ratio=match_damage_ratio,
@@ -198,13 +260,13 @@ class EnvBatch:
             cfg_obj = _replace_config(cfg_obj, camera_mode=int(camera_mode))
 
         ids = _env_ids(buffers, env_ids)
-        self.configure_matches(buffers, [cfg_obj] * len(ids), env_ids=ids)
+        self.configure_matches([cfg_obj] * len(ids), buffers=buffers, env_ids=ids)
 
     def configure_matches(
         self,
-        buffers: Buffers,
         configs: Sequence[MatchConfig],
         *,
+        buffers: Buffers | None = None,
         env_ids: Sequence[int] | np.ndarray | None = None,
         stock_count: int | None = None,
         match_damage_ratio: float | None = None,
@@ -212,6 +274,7 @@ class EnvBatch:
         camera_mode: int | None = None,
     ) -> None:
         self._check_open()
+        buffers = self.buffers if buffers is None else buffers
         self._check_buffers_compatible(buffers)
         ids = _env_ids(buffers, env_ids)
         if len(configs) != len(ids):
@@ -330,6 +393,12 @@ class EnvBatch:
     def _check_t_in_length(self) -> None:
         if self.t < 0 or self.t >= self.length:
             raise RuntimeError("buffer length exhausted; call reset_cursor(), reset_all(), or bind new buffers")
+
+    def _checked_step_index(self, t: int) -> int:
+        t = int(t)
+        if t < 0 or t >= self.length:
+            raise RuntimeError("step index is outside the step buffer")
+        return t
 
     def _check_buffers_compatible(self, buffers: Buffers) -> None:
         if buffers.batch_size < self.batch_size:

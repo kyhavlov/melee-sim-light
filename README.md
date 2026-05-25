@@ -57,16 +57,13 @@ The Python API is built around two objects:
 - `EnvBatch` owns the native simulator instance: batch size, player count, loaded data, and the current simulator state.
 - `Buffers` owns the reusable NumPy arrays for match config, controller input, observations, and outputs. Reusing one buffer object avoids per-step allocation.
 
-A typical RL loop creates one `EnvBatch`, creates one `Buffers` object for it, writes controller inputs into the buffers each frame, and calls `env.step()`:
+A typical RL loop creates one `EnvBatch`, writes controller inputs into its bound buffers, and calls `env.step()`:
   
 ```python
 import melee_sim as msl
 
 with msl.EnvBatch(batch_size=2, length=128, num_players=2) as env:
-    buffers = env.buffers()
-
     env.configure_match(
-        buffers,
         stage=msl.Stage.FINAL_DESTINATION,
         players=[
             msl.PlayerConfig(character=msl.Character.FOX),
@@ -78,18 +75,17 @@ with msl.EnvBatch(batch_size=2, length=128, num_players=2) as env:
     fox = msl.neutral_controller((env.length, env.batch_size))
     fox.buttons.B[0, 0] = True
     fox.main_stick.x[0, 0] = 1.0
-    msl.write_controller(buffers.controller_action_view, fox, player=0)
+    msl.write_controller(env.controller_action_view, fox, player=0)
 
     neutral = msl.neutral_controller((env.length, env.batch_size))
-    msl.write_controller(buffers.controller_action_view, neutral, player=1)
+    msl.write_controller(env.controller_action_view, neutral, player=1)
 
-    env.bind(buffers)
     env.reset_all()
     env.step()
 
     # gamestate has one extra frame: row 0 is the reset state, row 1 is after
     # the first step.
-    frame_1 = buffers.gamestate_view[1, 0]
+    frame_1 = env.gamestate_view[1, 0]
     fox_slot = frame_1["slots"][0]
     print(frame_1["frame_id"], fox_slot["action_id"], fox_slot["pos_x"])
 
@@ -106,12 +102,17 @@ EnvBatch(
     num_players: int = 2,
     *,
     data_dir: str | os.PathLike[str] | None = None,
+    observation: str = "native",
+    action_format: str = "controller",
+    obs_dim: int = 0,
     ucf_enabled: bool = True,
     ucf_cardinals_1_0_enabled: bool = False,
 ) -> None
 
-env.buffers(*, observation: str = "native", action_format: str = "controller", obs_dim: int = 0) -> Buffers
-env.configure_match(buffers: Buffers, config: MatchConfig | None = None, **overrides) -> None
+env.buffers -> Buffers
+env.allocate_buffers(*, observation: str = "native", action_format: str = "controller", obs_dim: int = 0) -> Buffers
+env.configure_match(buffers: Buffers | None = None, config: MatchConfig | None = None, **overrides) -> None
+env.configure_matches(configs: Sequence[MatchConfig], *, env_ids: Sequence[int] | np.ndarray | None = None, **overrides) -> None
 env.bind(buffers: Buffers) -> None
 env.reset_all() -> None
 env.step(*, write_outputs: bool = True, write_compare: bool = False, max_frame_id: int = -1) -> None

@@ -79,7 +79,7 @@ def main() -> None:
             raise SystemExit("fighter animation extractor did not import")
 
         with msl.EnvBatch(batch_size=1, length=2, data_dir={str(repo / "data")!r}) as env:
-            buffers = env.buffers()
+            buffers = env.allocate_buffers()
             env.configure_match(
                 buffers,
                 stage=msl.Stage.FINAL_DESTINATION,
