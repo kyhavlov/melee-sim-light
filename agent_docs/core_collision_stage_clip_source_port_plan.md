@@ -861,12 +861,69 @@ Phase 4 runtime proof matrix:
 
 ### Phase 5: Static Legal-Stage Validation And Cleanup
 
-- Run full validation and refresh required reports if core logic changed.
-- Audit for leftover bridge/suppress/fallback paths and either remove or account for each.
-- Audit for runtime allocations and nondeterministic iteration.
-- Update `agent_docs/SPEC.md` only with stable, source-backed mechanics learned during implementation.
-- Do not ship as complete if the pass only adds substrate without routing the in-scope owners through it.
-- A validation-clean pass with hundreds of old suppressions still active is not complete. The cleanup must reduce or justify the existing compensating collision paths.
+Phase 5 is the static legal-stage closure pass. Its target is to prove that Phases 1-4 form one
+coherent static collision system for supported fighter gameplay, remove obsolete bridge logic, and
+leave every retained suppression/fallback with source-policy accounting. This phase should not add
+new broad mechanics unless a cleanup exposes a small source-backed repair needed to make the static
+system internally consistent.
+
+Do not spawn subagents for this work unless the user explicitly authorizes it in the current turn.
+The implementation agent owns the audit, cleanup, tests, validation, and perf check locally.
+
+Required audit scope:
+
+- Static legal-stage floor/wall/ceiling/ledge/platform collision for supported Fox/Falco fighter
+  gameplay after Phases 1-4.
+- Runtime collision files: `src/mpcoll_ground.c`, `src/mpcoll_wall_ceil.c`, `src/mpcoll_env.c`,
+  `src/locomotion.c`, `src/fighter_callbacks.c`, `src/stage_collision.c`, CollData helpers, and
+  any owner helper headers touched by Phases 1-4.
+- Generated owner/data plumbing: `src/motion_state_owners.*`, MSLMSO01 extraction/readers/tests,
+  MSLSTG01 static stage metadata/query paths, and debug APIs added for collision proof.
+- Tests and docs that claim closure for static collision.
+
+Required cleanup:
+
+- Audit every `MSL_MPCOLL_REJECT_*`, `suppress_*`, `fallback`, `compat`, `bridge`, `proxy`,
+  `approx`, `temporary`, and `TODO`-style collision path in the static collision files.
+- For each audited path, do exactly one of:
+  - delete it because Phase 1-4 source state now subsumes it;
+  - convert it to the source-shaped owner/state that should have owned it;
+  - retain it with nearby source-policy comments and a row in the Phase 5 accounting table.
+- Delete dead helpers, dead debug APIs, stale comments, stale tests, and stale docs that describe
+  old bridge behavior no longer true after Phases 1-4.
+- Do not delete a source-policy guard just to reduce count. Retained guards are acceptable only when
+  backed by decomp/data/source-owner reasoning and positive/negative tests.
+- Do not route moving-platform runtime behavior here. Moving platforms remain Phase 6.
+
+Required verification:
+
+- Focused owner-invariant tests for every cleanup that changes behavior.
+- Tests or static checks proving retained suppressions/fallbacks are accounted for in this plan doc
+  or `agent_docs/SPEC.md`.
+- Static checks or focused tests proving stale collision comments do not claim unsupported
+  approximation/proxy status for completed static owners.
+- Runtime allocation/nondeterminism audit for the collision paths touched by Phases 1-4. This can
+  be source inspection plus targeted grep/static checks; do not add heavy tooling unless necessary.
+- `make build_data` if generated data or extraction changed.
+- `make build BUILD_FORCE=1`
+- focused changed collision/owner tests
+- `make validate-all`
+- `MSL_DATA_DIR=/mnt/nvme0/projects/melee-sim-light/data make test`
+- `make fmt-check`
+- `git diff --check && git diff --cached --check`
+- `uv run python -m tools.eval.validation_report_diff --before HEAD --after reports/validation --top 220`
+- Clean-vs-dirty light `rollout_compare` bench.
+
+Required report back:
+
+- List deleted, converted, and retained collision suppressions/fallbacks.
+- Explain every retained static collision guard with source-policy owner and test/proof.
+- State whether any behavior changed during cleanup and why.
+- State whether any dirty validation reports remain and why.
+- State clean-vs-dirty perf delta and whether any retained cost is expected.
+- Whether Phase 5 is COMPLETE by this document's criteria. If incomplete, name exact remaining
+  Phase 5 work and do not move to Phase 6.
+- Leave changes uncommitted for review.
 
 ### Phase 6: Moving Platforms Last
 
