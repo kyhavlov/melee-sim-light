@@ -18,6 +18,7 @@
 #include "jump_input.h"
 #include "locomotion.h"
 #include "motion_state_owners.h"
+#include "mpcoll_floor_skip.h"
 #include "move_tables.h"
 #include "special_msids.h"
 #include "stage_collision.h"
@@ -105,9 +106,8 @@ static inline void shine_ground_start_platform_pass_enter(MslBatch* batch, const
   // refs/melee/src/melee/mp/mpcoll.c::mpUpdateFloorSkip
   const uint32_t stage_id = batch->state.stage_id[idx / (size_t)MSL_MAX_PLAYERS];
   const uint16_t ground_id = batch->state.ground_id[idx];
-  if (batch->state.floor_skip_segment_id != NULL && ground_id != 0xFFFFu &&
-      stage_collision_floor_line_is_platform(stage_id, ground_id)) {
-    batch->state.floor_skip_segment_id[idx] = ground_id;
+  if (ground_id != 0xFFFFu && stage_collision_floor_line_is_platform(stage_id, ground_id)) {
+    msl_mpcoll_update_floor_skip(batch, idx, ground_id);
   }
   batch->state.on_ground[idx] = 0u;
   batch->state.pos_z[idx] = 0.0f;

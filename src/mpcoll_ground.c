@@ -17,6 +17,7 @@
 #include "escapeair_collision_owner.h"
 #include "match_flow.h"
 #include "mpcoll_ecb_points.h"
+#include "mpcoll_floor_skip.h"
 #include "motion_state_owners.h"
 #include "mpcoll_wall_ceil.h"
 #include "move_tables.h"
@@ -845,6 +846,25 @@ static inline uint8_t mpcoll_state_current_ecb_points(const MslBatch* batch, siz
   return 1u;
 }
 
+static inline uint8_t mpcoll_state_squeeze_restore_ecb_points(const MslBatch* batch, size_t idx,
+                                                              MslEcbWorldPoints* out, float pos_x,
+                                                              float pos_y, uint16_t frame_u16) {
+  if (batch == NULL || out == NULL || batch->state.coll_squeeze_restore_ecb_valid[idx] == 0u) {
+    return 0u;
+  }
+  const float bottom_rel_y = batch->state.coll_squeeze_restore_ecb_bottom_rel_y[idx];
+  const float top_rel_y = batch->state.coll_squeeze_restore_ecb_top_rel_y[idx];
+  const float left_rel_x = batch->state.coll_squeeze_restore_ecb_left_rel_x[idx];
+  const float right_rel_x = batch->state.coll_squeeze_restore_ecb_right_rel_x[idx];
+  const float side_rel_y = batch->state.coll_squeeze_restore_ecb_side_rel_y[idx];
+  if (!mpcoll_rel_ecb_is_finite(bottom_rel_y, top_rel_y, left_rel_x, right_rel_x, side_rel_y)) {
+    return 0u;
+  }
+  mpcoll_ecb_world_points_from_rel(out, pos_x, pos_y, bottom_rel_y, top_rel_y, left_rel_x,
+                                   right_rel_x, side_rel_y, frame_u16);
+  return 1u;
+}
+
 static inline void mpcoll_store_current_ecb_points(MslBatch* batch, size_t idx,
                                                    const MslEcbWorldPoints* ecb) {
   batch->state.coll_ecb_bottom_rel_y[idx] = ecb->bottom_rel_y;
@@ -906,6 +926,8 @@ static inline void mpcoll_clear_callback_floor_result(const MslMpcollContext* ct
   batch->state.coll_substep_prev_pos_y[idx] = prev_y;
   batch->state.coll_substep_cur_pos_x[idx] = cur_x;
   batch->state.coll_substep_cur_pos_y[idx] = cur_y;
+  batch->state.coll_last_pos_x[idx] = prev_x;
+  batch->state.coll_last_pos_y[idx] = prev_y;
 }
 
 static inline uint8_t mpcoll_default_floor_mode_for_source(uint8_t source) {
@@ -1080,6 +1102,11 @@ static inline void mpcoll_colldata_state_load(const MslMpcollContext* ctx,
   }
   const MslBatch* batch = ctx->batch;
   const size_t idx = ctx->idx;
+  // Minimal callback-local CollData view currently consumed by the ordered substrate. The backing
+  // SoA lanes already hold root/ECB/env/surface state; copy additional fields here only when a
+  // routed wrapper consumes them, so normal callbacks do not pay for unused ECB materialization.
+  // refs/melee/src/melee/lb/types.h::CollData
+  // refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_80043754,mpCollInterpolateECB}
   *out = (MslMpcollCollDataState){
       .floor_index = batch->state.ground_id[idx],
       .floor_skip_segment_id = platform_floor_skip_segment_id(batch, idx, ctx->stage_id),
@@ -1967,7 +1994,7 @@ static inline void publish_common_air_transformed_platform_skip_from_root_crossi
       // refs/melee/src/melee/ft/ft_081B.c::{ft_800831CC,ft_800835B0}
       // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpUpdateFloorSkip}
       // data/stages/bin/griz.bin::MSLSTG01 platform_transforms
-      batch->state.floor_skip_segment_id[idx] = segment_i;
+      msl_mpcoll_update_floor_skip(batch, idx, segment_i);
       return;
     }
   }
@@ -2030,7 +2057,7 @@ static inline void publish_attackair_transformed_platform_skip_from_root_crossin
       // refs/melee/src/melee/ft/ft_081B.c::ft_80082C74
       // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor,mpUpdateFloorSkip}
       // data/stages/bin/griz.bin::MSLSTG01 platform_transforms(kind=height)
-      batch->state.floor_skip_segment_id[idx] = segment_i;
+      msl_mpcoll_update_floor_skip(batch, idx, segment_i);
       return;
     }
   }
@@ -2330,6 +2357,52 @@ static inline float mpcoll_absmaxf(float a, float b) {
   return (aa > bb) ? aa : bb;
 }
 
+static inline void mpcoll_penultimate_interpolated_ecb(
+    MslEcbWorldPoints* out, const MslEcbWorldPoints* step_count_start_ecb,
+    const MslEcbWorldPoints* interpolation_start_ecb, const MslEcbWorldPoints* cur_ecb,
+    float last_x, float last_y, float cur_x, float cur_y) {
+  if (out == NULL || step_count_start_ecb == NULL || interpolation_start_ecb == NULL ||
+      cur_ecb == NULL) {
+    return;
+  }
+  float max_delta = mpcoll_absmaxf(cur_x - last_x, cur_y - last_y);
+  max_delta =
+      fmaxf(max_delta, mpcoll_absmaxf(cur_ecb->left_rel_x - step_count_start_ecb->left_rel_x,
+                                      cur_ecb->right_rel_x - step_count_start_ecb->right_rel_x));
+  max_delta =
+      fmaxf(max_delta, mpcoll_absmaxf(cur_ecb->top_rel_y - step_count_start_ecb->top_rel_y,
+                                      cur_ecb->side_rel_y - step_count_start_ecb->side_rel_y));
+  if (!(max_delta > k_mpcoll_substep_max_delta)) {
+    *out = *step_count_start_ecb;
+    return;
+  }
+
+  // Source `mpColl_80043754` computes the substep count from the pre-interpolation ecb delta. Then
+  // `mpCollInterpolateECB` copies that ecb into prev_ecb, optionally restores x64_ecb when b6 is
+  // set, and interpolates from the restored/current ecb toward desired_ecb.
+  // refs/melee/src/melee/mp/mpcoll.c::{
+  //   mpColl_80043754,mpCollInterpolateECB,mpCollSqueezeHorizontal,mpCollSqueezeVertical}
+  const int steps = ((int)(max_delta / k_mpcoll_substep_max_delta)) + 1;
+  if (steps <= 1) {
+    *out = *step_count_start_ecb;
+    return;
+  }
+  const float t = (float)(steps - 1) / (float)steps;
+  mpcoll_ecb_world_points_from_rel(
+      out, cur_x, cur_y,
+      interpolation_start_ecb->bottom_rel_y +
+          (cur_ecb->bottom_rel_y - interpolation_start_ecb->bottom_rel_y) * t,
+      interpolation_start_ecb->top_rel_y +
+          (cur_ecb->top_rel_y - interpolation_start_ecb->top_rel_y) * t,
+      interpolation_start_ecb->left_rel_x +
+          (cur_ecb->left_rel_x - interpolation_start_ecb->left_rel_x) * t,
+      interpolation_start_ecb->right_rel_x +
+          (cur_ecb->right_rel_x - interpolation_start_ecb->right_rel_x) * t,
+      interpolation_start_ecb->side_rel_y +
+          (cur_ecb->side_rel_y - interpolation_start_ecb->side_rel_y) * t,
+      cur_ecb->frame_u16);
+}
+
 static uint8_t grounded_sideb_substep_floor_loss(
     const MslBatch* batch, int bi, const MslStageFloorGraph* g, uint8_t char_id, uint16_t action_id,
     int prefer_line_idx, const MslEcbWorldPoints* prev_ecb, const MslEcbWorldPoints* cur_ecb,
@@ -2584,8 +2657,7 @@ static inline uint8_t floor_line_is_skipped_platform(uint32_t stage_id, const Ms
 static inline void publish_attackair_transformed_platform_floor_skip(MslBatch* batch, size_t idx,
                                                                      const MslStageFloorGraph* g,
                                                                      int line_idx) {
-  if (batch == NULL || g == NULL || batch->state.floor_skip_segment_id == NULL || line_idx < 0 ||
-      (size_t)line_idx >= g->line_count) {
+  if (batch == NULL || g == NULL || line_idx < 0 || (size_t)line_idx >= g->line_count) {
     return;
   }
   // AttackAir_Coll itself does not call mpUpdateFloorSkip, but source floor callbacks keep the
@@ -2596,7 +2668,7 @@ static inline void publish_attackair_transformed_platform_floor_skip(MslBatch* b
   // generic sweep.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
   // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor,mpUpdateFloorSkip}
-  batch->state.floor_skip_segment_id[idx] = g->lines[(size_t)line_idx].segment_i;
+  msl_mpcoll_update_floor_skip(batch, idx, g->lines[(size_t)line_idx].segment_i);
 }
 
 static inline void publish_attackair_transformed_platform_floor_skip_from_sweep(
@@ -3038,8 +3110,8 @@ static inline void mpcoll_apply_final_floor_rejection_bits(
       specialairhi_platform ? publication->contact.ground_id : batch->state.ground_id[idx];
   float reject_pos_y = batch->state.pos_y[idx];
 
-  if (specialairhi_platform && batch->state.floor_skip_segment_id != NULL) {
-    batch->state.floor_skip_segment_id[idx] = publication->contact.ground_id;
+  if (specialairhi_platform) {
+    msl_mpcoll_update_floor_skip(batch, idx, publication->contact.ground_id);
   }
   if ((packet.side_effects &
        (uint32_t)MSL_MPCOLL_FLOOR_REJECT_SIDE_ATTACKAIR_PUBLISH_SKIP_FROM_SWEEP) != 0u) {
@@ -3047,9 +3119,8 @@ static inline void mpcoll_apply_final_floor_rejection_bits(
         batch, idx, ctx->bi, ctx->floor_graph, ctx->stage_id, final_ground_line_idx, x, prev_y, y);
   }
   if ((packet.side_effects & (uint32_t)MSL_MPCOLL_FLOOR_REJECT_SIDE_ATTACKAIR_CLEAR_FLOOR_SKIP) !=
-          0u &&
-      batch->state.floor_skip_segment_id != NULL) {
-    batch->state.floor_skip_segment_id[idx] = 0xFFFFu;
+      0u) {
+    msl_mpcoll_clear_floor_skip(batch, idx);
   }
 
   switch ((MslMpcollFloorRejectRestore)packet.restore) {
@@ -3460,8 +3531,59 @@ static uint8_t msl_mpcheck_floor(const MslBatch* batch, size_t idx, int bi,
   if (g == NULL || out_line_idx == NULL) {
     return 0;
   }
+  const int16_t joint_id_skip = (batch != NULL && batch->state.mpcoll_joint_id_skip != NULL)
+                                    ? batch->state.mpcoll_joint_id_skip[idx]
+                                    : -1;
+  const int16_t joint_id_only = (batch != NULL && batch->state.mpcoll_joint_id_only != NULL)
+                                    ? batch->state.mpcoll_joint_id_only[idx]
+                                    : -1;
+
+  if (prefer_line_idx < 0 && skip_line_idx < 0 &&
+      !stage_collision_stage_has_deferred_static_floor_transform(stage_id)) {
+    const uint8_t platform_callback_admits_floor =
+        (batch == NULL || c == NULL ||
+         !action_uses_ftco_80096cc8_floor_callback(batch->state.action_id[idx]) ||
+         stick_i8_to_unit(batch->state.input_main_y[idx]) > c->platform_air_land_stick_y_threshold)
+            ? 1u
+            : 0u;
+    if (platform_callback_admits_floor) {
+      MslStageQueryHit hit = {0};
+      const uint8_t static_hit =
+          stage_collision_static_query(stage_id, (uint32_t)MSL_STAGE_QUERY_FLOOR, ax, ay, bx, by,
+                                       skip_platform_segment_i, joint_id_skip, joint_id_only, &hit);
+      if (static_hit) {
+        const int hit_line_idx = hit.line_idx;
+        if (hit_line_idx >= 0 && (size_t)hit_line_idx < g->line_count &&
+            floor_line_admitted_by_source_callback(batch, idx, g, stage_id, hit_line_idx,
+                                                   skip_platform_segment_i, c)) {
+          // Static Phase-1 substrate now owns the source-shaped mpCheckFloor sweep for
+          // no-preference floor producer calls. Dynamic/deferred platform transforms and
+          // persisted-floor preference still fall through to the graph path below.
+          // refs/melee/src/melee/mp/mplib.c::mpCheckFloor
+          // refs/melee/src/melee/mp/mpcoll.c::mpColl_80044628_Floor
+          *out_line_idx = hit_line_idx;
+          if (out_ix) {
+            *out_ix = hit.x;
+          }
+          if (out_iy) {
+            *out_iy = hit.y;
+          }
+          if (out_nx) {
+            *out_nx = hit.normal_x;
+          }
+          if (out_ny) {
+            *out_ny = hit.normal_y;
+          }
+          return 1u;
+        }
+      } else {
+        return 0u;
+      }
+    }
+  }
 
   uint8_t found = 0;
+  const uint8_t use_joint_filter = (joint_id_skip >= 0 || joint_id_only >= 0) ? 1u : 0u;
   float best_dist2 = FLT_MAX;
   int best_idx = -1;
   int best_pref = -1;
@@ -3469,7 +3591,12 @@ static uint8_t msl_mpcheck_floor(const MslBatch* batch, size_t idx, int bi,
   float best_nx = 0.0f, best_ny = 1.0f;
 
   for (size_t li = 0; li < g->line_count; li++) {
+    const MslStageFloorLine* line = &g->lines[li];
     if (skip_line_idx >= 0 && (int)li == skip_line_idx) {
+      continue;
+    }
+    if (use_joint_filter && ((joint_id_skip >= 0 && line->joint_id == joint_id_skip) ||
+                             (joint_id_only >= 0 && line->joint_id != joint_id_only))) {
       continue;
     }
     if (!floor_line_admitted_by_source_callback(batch, idx, g, stage_id, (int)li,
@@ -5879,6 +6006,16 @@ void mpcoll_ground_apply(MslBatch* batch) {
       MslEcbWorldPoints state_cur_ecb_points = {0};
       const uint8_t have_state_cur_ecb = mpcoll_state_current_ecb_points(
           batch, idx, &state_cur_ecb_points, prev_x, prev_y, ecb_frame_prev);
+      MslEcbWorldPoints squeeze_restore_ecb_points = {0};
+      const uint8_t have_squeeze_restore_ecb = mpcoll_state_squeeze_restore_ecb_points(
+          batch, idx, &squeeze_restore_ecb_points, prev_x, prev_y, ecb_frame_prev);
+      if (have_squeeze_restore_ecb) {
+        // Source `mpCollInterpolateECB` consumes x34_flags.b6 at callback interpolation time:
+        // prev_ecb receives the squeezed current ecb, ecb is restored from x64_ecb, then b6 clears.
+        // Clear before ordered producers run so a same-callback squeeze can save a fresh x64_ecb.
+        // refs/melee/src/melee/mp/mpcoll.c::mpCollInterpolateECB
+        batch->state.coll_squeeze_restore_ecb_valid[idx] = 0u;
+      }
       const uint8_t active_damage_hitlag_ecb_live_entry =
           (batch->state.hitlag_pre_timer[idx] != 0u && batch->state.hitlag[idx] != 0u &&
            is_damage_collision_landing_action(action_id) && prev_action_id != action_id &&
@@ -6016,6 +6153,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
           prev_bot.frame_u16 = specialhi_prev_ecb.frame_u16;
         }
       }
+      uint8_t callback_stopped_at_substep = 0u;
       const float prev_side_mid_y =
           prev_y + (0.5f * (prev_ecb_points.top_rel_y + prev_ecb_points.bottom_rel_y));
       MslMpcollLoadedEcb loaded_ecb = {0};
@@ -9329,10 +9467,10 @@ void mpcoll_ground_apply(MslBatch* batch) {
               // refs/melee/src/melee/ft/ft_081B.c::{ft_800831CC,ft_800835B0}
               // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpUpdateFloorSkip}
               // data/stages/bin/griz.bin::MSLSTG01 platform_transforms
-              batch->state.floor_skip_segment_id[idx] = g->lines[(size_t)hit_line_idx].segment_i;
+              msl_mpcoll_update_floor_skip(batch, idx, g->lines[(size_t)hit_line_idx].segment_i);
             } else if (suppress_attackair_transformed_platform_floor_skip_first_crossing_land &&
                        batch->state.floor_skip_segment_id != NULL) {
-              batch->state.floor_skip_segment_id[idx] = 0xFFFFu;
+              msl_mpcoll_clear_floor_skip(batch, idx);
             }
             batch->state.coll_env_flags[idx] |=
                 floor_edge_suppression_flags(batch, idx, stage_id, g, hit_line_idx, char_id, anim,
@@ -9666,8 +9804,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
                   if (suppress_projected_attackair_transformed_platform_ecb_only_land) {
                     publish_attackair_transformed_platform_floor_skip_from_sweep(
                         batch, idx, bi, g, stage_id, out_line_idx, x, prev_y, y);
-                  } else if (batch->state.floor_skip_segment_id != NULL) {
-                    batch->state.floor_skip_segment_id[idx] = 0xFFFFu;
+                  } else {
+                    msl_mpcoll_clear_floor_skip(batch, idx);
                   }
                 }
                 batch->state.coll_env_flags[idx] |=
@@ -9904,6 +10042,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
           cur_bottom_y = substep_cur_ecb.bottom_y;
           mpcoll_clear_callback_floor_result(&mpcoll_ctx, substep_prev_x, substep_prev_y,
                                              substep_cur_x, substep_cur_y);
+          callback_stopped_at_substep = 1u;
         }
       }
 
@@ -11147,15 +11286,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
           batch->state.ground_contact_y[idx] = y + platform_dy;
         }
       }
-      // Promote CollData ECB lifetime for rollout. Source interpolation copies ecb to prev_ecb
-      // before stepping toward desired_ecb; after this single-step callback pass, carry the resolved
-      // desired ECB as the next current ECB.
-      // refs/melee/src/melee/mp/mpcoll.c::mpCollInterpolateECB
-      if (have_state_cur_ecb) {
-        mpcoll_store_prev_ecb_points(batch, idx, &state_cur_ecb_points);
-      } else {
-        mpcoll_store_prev_ecb_points(batch, idx, &prev_ecb_points);
-      }
+      MslEcbWorldPoints stored_prev_ecb_points =
+          have_state_cur_ecb ? state_cur_ecb_points : prev_ecb_points;
       MslEcbWorldPoints stored_desired_ecb_points = desired_ecb_points;
       const uint8_t nonfastfall_fall_generic_lock_bottom =
           (uint8_t)(action_id == (uint16_t)MSL_ACT_FALL && batch->state.fall_fast[idx] == 0u &&
@@ -11231,6 +11363,14 @@ void mpcoll_ground_apply(MslBatch* batch) {
            batch->state.coll_damage_hitlag_floor_contact_runtime[idx] != 0u)
               ? 1u
               : 0u;
+      if (!callback_stopped_at_substep) {
+        const MslEcbWorldPoints* interpolation_start_ecb =
+            have_squeeze_restore_ecb ? &squeeze_restore_ecb_points : &stored_prev_ecb_points;
+        mpcoll_penultimate_interpolated_ecb(&stored_prev_ecb_points, &stored_prev_ecb_points,
+                                            interpolation_start_ecb, &cur_ecb_points, prev_x,
+                                            prev_y, x, y);
+      }
+      mpcoll_store_prev_ecb_points(batch, idx, &stored_prev_ecb_points);
       mpcoll_store_current_ecb_points(batch, idx, &cur_ecb_points);
       mpcoll_store_desired_ecb_points(batch, idx, &stored_desired_ecb_points);
       // Active Damage hitlag can first materialize the source floor contact through the ordinary

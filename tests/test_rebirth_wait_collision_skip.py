@@ -56,12 +56,18 @@ def test_rebirth_wait_terminal_wait1_does_not_build_collision_capsules() -> None
     prev_input = np.zeros((1, input_stride), dtype=np.uint8)
     input_t = np.zeros((1, input_stride), dtype=np.uint8)
     out_compare = np.zeros((1, compare_stride), dtype=np.uint8)
+    from tests.test_colldata_ecb_substrate import _colldata_ecb_dtype
+
+    colldata_dtype = _colldata_ecb_dtype()
+    assert int(sizes["colldata_ecb"]) == colldata_dtype.itemsize
+    out_colldata = np.zeros((1, int(sizes["colldata_ecb"])), dtype=np.uint8)
 
     handle = binding.init(batch_size=1, num_players=2)
     try:
         binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, seed_stride)))
         binding.step_input(handle, prev_input, input_t)
         binding.write_compare(handle, out_compare)
+        binding.debug_write_colldata_ecb(handle, out_colldata)
         hurtcaps, hurtcap_count = binding.hurtcaps_world(handle, 0, 0)
         hitboxes, hitbox_count = binding.hitboxes_world_full(handle, 0, 0)
     finally:
@@ -74,3 +80,6 @@ def test_rebirth_wait_terminal_wait1_does_not_build_collision_capsules() -> None
     assert int(hitbox_count) == 0
     assert not np.any(hurtcaps)
     assert not np.any(hitboxes)
+    colldata = out_colldata.view(colldata_dtype).reshape((1,))[0]
+    assert int(colldata["floor_result_valid"][0]) == 0
+    assert int(colldata["floor_skip_valid"][0]) == 0

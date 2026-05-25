@@ -12,6 +12,7 @@ from tools.modelplay.sim_env import build_match_config_array
 from tools.modelplay.state_adapter import STAGE_DEBUG_DTYPE
 from tools.slippi.known_data_artifacts import STAGE_OBJECT_SUPPORT_KIND_YOSHI_SHYGUY, read_mslstg01_v7
 from tools.slippi.seed_history import load_shield_tilt_table_meta
+from tests.test_colldata_ecb_substrate import _colldata_ecb_dtype
 
 
 ACT_WAIT = 0x000E
@@ -244,7 +245,9 @@ def _step_once(seed: np.ndarray, prev_input: np.ndarray | None = None, input_t: 
         input_t = _input_bytes()
     out = np.zeros((1, compare_stride), dtype=np.uint8)
 
-    handle = msl_binding.init(batch_size=1, num_players=2, ucf_enabled=1, ucf_cardinals_1_0_enabled=1)
+    handle = msl_binding.init(
+        batch_size=1, num_players=2, ucf_enabled=1, ucf_cardinals_1_0_enabled=1
+    )
     try:
         msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, seed_stride)))
         msl_binding.step_input(handle, prev_input, input_t)
@@ -268,7 +271,9 @@ def _step_once_rollout(
         input_t = _input_bytes()
     out = np.zeros((1, compare_stride), dtype=np.uint8)
 
-    handle = msl_binding.init(batch_size=1, num_players=2, ucf_enabled=1, ucf_cardinals_1_0_enabled=1)
+    handle = msl_binding.init(
+        batch_size=1, num_players=2, ucf_enabled=1, ucf_cardinals_1_0_enabled=1
+    )
     try:
         msl_binding.reseed_seed_rollout(handle, seed.view(np.uint8).reshape((1, seed_stride)))
         msl_binding.step_input(handle, prev_input, input_t)
@@ -294,7 +299,9 @@ def _step_once_with_contacts(
     out = np.zeros((1, compare_stride), dtype=np.uint8)
     contacts = np.zeros((1, contacts_stride), dtype=np.uint8)
 
-    handle = msl_binding.init(batch_size=1, num_players=2, ucf_enabled=1, ucf_cardinals_1_0_enabled=1)
+    handle = msl_binding.init(
+        batch_size=1, num_players=2, ucf_enabled=1, ucf_cardinals_1_0_enabled=1
+    )
     try:
         msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, seed_stride)))
         msl_binding.step_input(handle, prev_input, input_t)
@@ -303,6 +310,40 @@ def _step_once_with_contacts(
         return (
             out.view(COMPARE_DTYPE).reshape((1,))[0],
             contacts.view(_collision_contacts_dtype()).reshape((1,))[0],
+        )
+    finally:
+        msl_binding.destroy(handle)
+
+
+def _step_once_with_contacts_and_colldata(
+    seed: np.ndarray, prev_input: np.ndarray | None = None, input_t: np.ndarray | None = None
+):
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    compare_stride = int(sizes["compare"])
+    contacts_stride = int(sizes["collision_contacts"])
+    colldata_stride = int(sizes["colldata_ecb"])
+    if prev_input is None:
+        prev_input = _input_bytes()
+    if input_t is None:
+        input_t = _input_bytes()
+    out = np.zeros((1, compare_stride), dtype=np.uint8)
+    contacts = np.zeros((1, contacts_stride), dtype=np.uint8)
+    colldata = np.zeros((1, colldata_stride), dtype=np.uint8)
+
+    handle = msl_binding.init(batch_size=1, num_players=2, ucf_enabled=1, ucf_cardinals_1_0_enabled=1)
+    try:
+        msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, seed_stride)))
+        msl_binding.step_input(handle, prev_input, input_t)
+        msl_binding.write_compare(handle, out)
+        msl_binding.debug_write_collision_contacts(handle, contacts)
+        msl_binding.debug_write_colldata_ecb(handle, colldata)
+        return (
+            out.view(COMPARE_DTYPE).reshape((1,))[0],
+            contacts.view(_collision_contacts_dtype()).reshape((1,))[0],
+            colldata.view(_colldata_ecb_dtype()).reshape((1,))[0],
         )
     finally:
         msl_binding.destroy(handle)
@@ -1697,7 +1738,7 @@ def test_fod_grounded_horizontal_squeeze_records_both_wall_sides_between_walls()
     seed["ground_id"][0, 0] = np.uint16(0xFFFF)
     seed["speed_ground_x_self"][0, 0] = np.float32(-120.0)
 
-    out, contacts = _step_once_with_contacts(seed)
+    out, contacts, colldata = _step_once_with_contacts_and_colldata(seed)
     flags = int(contacts["coll_env_flags"][0])
 
     assert flags & COLLIDE_LEFT_WALL_MASK
@@ -1706,6 +1747,12 @@ def test_fod_grounded_horizontal_squeeze_records_both_wall_sides_between_walls()
     assert int(contacts["wall_kind"][0]) == 2
     assert int(contacts["wall_id"][0]) == 12
     assert int(out["on_ground"][0]) == 0
+    assert int(colldata["squeeze_restore_valid"][0]) == 1
+    assert float(colldata["squeeze_restore_left_rel_x"][0]) == pytest.approx(-2.0)
+    assert float(colldata["squeeze_restore_right_rel_x"][0]) == pytest.approx(2.0)
+    assert float(colldata["current_left_rel_x"][0]) != pytest.approx(
+        float(colldata["squeeze_restore_left_rel_x"][0])
+    )
     assert float(out["pos_x"][0]) == pytest.approx(-49.663360595703125, abs=1e-5)
     assert float(out["pos_y"][0]) == pytest.approx(-200.0, abs=1e-5)
 
@@ -1722,7 +1769,7 @@ def test_fod_grounded_floor_ceiling_retry_runs_vertical_squeeze_owner() -> None:
     seed["ground_id"][0, 0] = np.uint16(5)
     seed["speed_y_self"][0, 0] = np.float32(-80.0)
 
-    out, contacts = _step_once_with_contacts(seed)
+    out, contacts, colldata = _step_once_with_contacts_and_colldata(seed)
     flags = int(contacts["coll_env_flags"][0])
 
     assert flags & COLLIDE_CEILING_MASK
@@ -1731,7 +1778,47 @@ def test_fod_grounded_floor_ceiling_retry_runs_vertical_squeeze_owner() -> None:
     assert int(contacts["ceiling_id"][0]) == 8
     assert int(out["on_ground"][0]) == 1
     assert int(out["ground_id"][0]) == 5
+    assert int(colldata["floor_skip_valid"][0]) == 0
+    assert int(colldata["floor_skip_segment_id"][0]) == 0xFFFF
+    assert int(colldata["squeeze_restore_valid"][0]) == 1
+    assert float(colldata["squeeze_restore_top_rel_y"][0]) > 0.0
+    assert float(colldata["current_top_rel_y"][0]) < 0.0
     assert float(out["pos_y"][0]) == pytest.approx(0.0028839111328125, abs=1e-5)
+
+
+def test_fod_grounded_vertical_squeeze_restore_consumes_x64_ecb() -> None:
+    # Source mpCollInterpolateECB consumes x34_flags.b6 on the next interpolation: prev_ecb first
+    # receives the squeezed ECB, current ECB restores from x64_ecb, and b6 clears unless another
+    # squeeze is produced.
+    # refs/melee/src/melee/mp/mpcoll.c::{mpCollInterpolateECB,mpCollSqueezeVertical}
+    import msl_binding
+
+    seed = _seed_base(2, ACT_WAIT, SM_WAIT1_0, -40.0, -175.0)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(5)
+    seed["speed_y_self"][0, 0] = np.float32(-80.0)
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_t = _input_bytes()
+    colldata = np.zeros((1, int(sizes["colldata_ecb"])), dtype=np.uint8)
+
+    handle = msl_binding.init(batch_size=1, num_players=2, ucf_enabled=1, ucf_cardinals_1_0_enabled=1)
+    try:
+        msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, seed_stride)))
+        snaps = []
+        for _ in range(3):
+            msl_binding.step_input(handle, input_t, input_t)
+            msl_binding.debug_write_colldata_ecb(handle, colldata)
+            snaps.append(colldata.view(_colldata_ecb_dtype()).reshape((1,))[0].copy())
+    finally:
+        msl_binding.destroy(handle)
+
+    assert int(snaps[0]["squeeze_restore_valid"][0]) == 1
+    assert float(snaps[0]["prev_top_rel_y"][0]) < 0.0
+    assert float(snaps[0]["squeeze_restore_top_rel_y"][0]) > 0.0
+    assert int(snaps[2]["squeeze_restore_valid"][0]) == 0
+    assert float(snaps[2]["current_top_rel_y"][0]) > 0.0
 
 
 def test_yoshi_center_raw_platform_is_debug_visible_but_not_fighter_solid() -> None:

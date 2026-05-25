@@ -122,6 +122,7 @@ typedef struct {
   uint8_t has_only_static_cardinal_hard_floors;
   uint8_t has_alternate_floor_endpoint_links;
   uint8_t has_height_platform_transform;
+  uint8_t has_deferred_static_floor_transform;
 } MslStageSlot;
 
 static MslStageSlot g_stage_slots[] = {
@@ -1261,6 +1262,7 @@ static int stage_install_platform_transforms_from_mslstg01(
          sizeof(slot->platform_transform_kind_by_segment));
   memset(slot->platform_transform_id_by_segment, 0, sizeof(slot->platform_transform_id_by_segment));
   slot->has_height_platform_transform = 0u;
+  slot->has_deferred_static_floor_transform = 0u;
   if (transform_count == 0u) {
     alloc_free(slot->platform_transforms);
     slot->platform_transforms = NULL;
@@ -1292,6 +1294,10 @@ static int stage_install_platform_transforms_from_mslstg01(
     slot->platform_transform_id_by_segment[recs[i].line_id] = recs[i].platform_id;
     if (recs[i].kind_id == (uint8_t)MSL_STAGE_PLATFORM_TRANSFORM_HEIGHT) {
       slot->has_height_platform_transform = 1u;
+    }
+    if (recs[i].kind_id != (uint8_t)MSL_STAGE_PLATFORM_TRANSFORM_NONE &&
+        recs[i].kind_id != (uint8_t)MSL_STAGE_PLATFORM_TRANSFORM_STATIC_Y) {
+      slot->has_deferred_static_floor_transform = 1u;
     }
   }
   alloc_free(slot->platform_transforms);
@@ -1880,6 +1886,17 @@ uint8_t stage_collision_stage_has_height_platform_transform(uint32_t stage_id) {
   return (uint8_t)((slot != NULL && slot->loaded && slot->has_height_platform_transform) ? 1u : 0u);
 }
 
+uint8_t stage_collision_stage_has_deferred_static_floor_transform(uint32_t stage_id) {
+  const MslStageSlot* slot = stage_slot(stage_id);
+  // Static mpLib queries intentionally exclude generated moving/deferred floor transforms such as
+  // FoD height platforms and Randall. Callers that need source-current runtime transform state must
+  // keep using the graph/env path until that owner is ported.
+  // data/stages/bin/*.bin::MSLSTG01 platform_transform records
+  return (uint8_t)((slot != NULL && slot->loaded && slot->has_deferred_static_floor_transform)
+                       ? 1u
+                       : 0u);
+}
+
 static void stage_slot_refresh_floor_topology_flags(MslStageSlot* slot) {
   if (slot == NULL || !slot->loaded || slot->floor_lines == NULL || slot->floor_line_count == 0u) {
     return;
@@ -2452,6 +2469,18 @@ static inline uint8_t stage_static_line_query_active(uint8_t fighter_solid) {
   return fighter_solid ? 1u : 0u;
 }
 
+static inline uint8_t stage_static_sweep_overlaps_line(float sweep_min_x, float sweep_max_x,
+                                                       float sweep_min_y, float sweep_max_y,
+                                                       float x0, float y0, float x1, float y1,
+                                                       float pad) {
+  const float line_min_x = (x0 < x1 ? x0 : x1) - pad;
+  const float line_max_x = (x0 > x1 ? x0 : x1) + pad;
+  const float line_min_y = (y0 < y1 ? y0 : y1) - pad;
+  const float line_max_y = (y0 > y1 ? y0 : y1) + pad;
+  return (uint8_t)(line_max_x >= sweep_min_x && line_min_x <= sweep_max_x &&
+                   line_max_y >= sweep_min_y && line_min_y <= sweep_max_y);
+}
+
 static inline void stage_static_extend_endpoints(uint8_t has_prev, uint8_t has_next, float* x0,
                                                  float* y0, float* x1, float* y1) {
   // refs/melee/src/melee/mp/mplib.c::mpLib_8004ED5C
@@ -2680,13 +2709,15 @@ static inline void stage_static_normal(float x0, float y0, float x1, float y1, f
 }
 
 static inline void stage_static_hit_set(MslStageQueryHit* out, MslStageRawLineKind kind,
-                                        uint16_t segment_i, int16_t joint_id, uint16_t flags,
-                                        float ix, float iy, float nx, float ny, float dist2) {
+                                        int32_t line_idx, uint16_t segment_i, int16_t joint_id,
+                                        uint16_t flags, float ix, float iy, float nx, float ny,
+                                        float dist2) {
   if (out == NULL) {
     return;
   }
   *out = (MslStageQueryHit){
       .kind = kind,
+      .line_idx = line_idx,
       .segment_i = segment_i,
       .joint_id = joint_id,
       .flags = flags,
@@ -2699,10 +2730,10 @@ static inline void stage_static_hit_set(MslStageQueryHit* out, MslStageRawLineKi
 }
 
 static inline uint8_t stage_static_consider_hit(float ax, float ay, float ix, float iy,
-                                                MslStageRawLineKind kind, uint16_t segment_i,
-                                                int16_t joint_id, uint16_t flags, float nx,
-                                                float ny, float* best_dist2,
-                                                MslStageQueryHit* out) {
+                                                MslStageRawLineKind kind, int32_t line_idx,
+                                                uint16_t segment_i, int16_t joint_id,
+                                                uint16_t flags, float nx, float ny,
+                                                float* best_dist2, MslStageQueryHit* out) {
   const float dx = ix - ax;
   const float dy = iy - ay;
   const float dist2 = (dx * dx) + (dy * dy);
@@ -2710,7 +2741,7 @@ static inline uint8_t stage_static_consider_hit(float ax, float ay, float ix, fl
     return 0u;
   }
   *best_dist2 = dist2;
-  stage_static_hit_set(out, kind, segment_i, joint_id, flags, ix, iy, nx, ny, dist2);
+  stage_static_hit_set(out, kind, line_idx, segment_i, joint_id, flags, ix, iy, nx, ny, dist2);
   return 1u;
 }
 
@@ -2727,11 +2758,19 @@ uint8_t stage_collision_static_query(uint32_t stage_id, uint32_t checks, float x
   }
 
   float best_dist2 = FLT_MAX;
+  const uint8_t use_joint_filter = (joint_id_skip >= 0 || joint_id_only >= 0) ? 1u : 0u;
+  const float sweep_min_x = x0 < x1 ? x0 : x1;
+  const float sweep_max_x = x0 > x1 ? x0 : x1;
+  const float sweep_min_y = y0 < y1 ? y0 : y1;
+  const float sweep_max_y = y0 > y1 ? y0 : y1;
   if (checks & (uint32_t)MSL_STAGE_QUERY_FLOOR) {
     for (size_t i = 0; i < slot->floor_line_count; i++) {
       const MslStageFloorLine* line = &slot->floor_lines[i];
       if (!stage_static_floor_line_query_active(line) ||
-          !stage_static_line_allows_joint(line->joint_id, joint_id_skip, joint_id_only) ||
+          !stage_static_sweep_overlaps_line(sweep_min_x, sweep_max_x, sweep_min_y, sweep_max_y,
+                                            line->x0, line->y0, line->x1, line->y1, 1.101f) ||
+          (use_joint_filter &&
+           !stage_static_line_allows_joint(line->joint_id, joint_id_skip, joint_id_only)) ||
           (line_id_skip != 0xFFFFu && line->segment_i == line_id_skip)) {
         continue;
       }
@@ -2749,15 +2788,19 @@ uint8_t stage_collision_static_query(uint32_t stage_id, uint32_t checks, float x
       }
       float nx = 0.0f, ny = 0.0f;
       stage_static_normal(lx0, ly0, lx1, ly1, &nx, &ny);
-      (void)stage_static_consider_hit(x0, y0, ix, iy, MSL_STAGE_RAW_LINE_FLOOR, line->segment_i,
-                                      line->joint_id, line->lo_flags, nx, ny, &best_dist2, out);
+      (void)stage_static_consider_hit(x0, y0, ix, iy, MSL_STAGE_RAW_LINE_FLOOR, (int32_t)i,
+                                      line->segment_i, line->joint_id, line->lo_flags, nx, ny,
+                                      &best_dist2, out);
     }
   }
   if (checks & (uint32_t)MSL_STAGE_QUERY_CEILING) {
     for (size_t i = 0; i < slot->ceiling_line_count; i++) {
       const MslStageCeilingLine* line = &slot->ceiling_lines[i];
       if (!stage_static_line_query_active(line->fighter_solid) ||
-          !stage_static_line_allows_joint(line->joint_id, joint_id_skip, joint_id_only)) {
+          !stage_static_sweep_overlaps_line(sweep_min_x, sweep_max_x, sweep_min_y, sweep_max_y,
+                                            line->x0, line->y0, line->x1, line->y1, 1.101f) ||
+          (use_joint_filter &&
+           !stage_static_line_allows_joint(line->joint_id, joint_id_skip, joint_id_only))) {
         continue;
       }
       float lx0 = line->x0, ly0 = line->y0, lx1 = line->x1, ly1 = line->y1;
@@ -2774,15 +2817,19 @@ uint8_t stage_collision_static_query(uint32_t stage_id, uint32_t checks, float x
       }
       float nx = 0.0f, ny = 0.0f;
       stage_static_normal(lx0, ly0, lx1, ly1, &nx, &ny);
-      (void)stage_static_consider_hit(x0, y0, ix, iy, MSL_STAGE_RAW_LINE_CEILING, line->segment_i,
-                                      line->joint_id, line->lo_flags, nx, ny, &best_dist2, out);
+      (void)stage_static_consider_hit(x0, y0, ix, iy, MSL_STAGE_RAW_LINE_CEILING, (int32_t)i,
+                                      line->segment_i, line->joint_id, line->lo_flags, nx, ny,
+                                      &best_dist2, out);
     }
   }
   if (checks & (uint32_t)MSL_STAGE_QUERY_LEFT_WALL) {
     for (size_t i = 0; i < slot->left_wall_line_count; i++) {
       const MslStageWallLine* line = &slot->left_wall_lines[i];
       if (!stage_static_line_query_active(line->fighter_solid) ||
-          !stage_static_line_allows_joint(line->joint_id, joint_id_skip, joint_id_only)) {
+          !stage_static_sweep_overlaps_line(sweep_min_x, sweep_max_x, sweep_min_y, sweep_max_y,
+                                            line->x0, line->y0, line->x1, line->y1, 0.101f) ||
+          (use_joint_filter &&
+           !stage_static_line_allows_joint(line->joint_id, joint_id_skip, joint_id_only))) {
         continue;
       }
       float ix = 0.0f, iy = 0.0f;
@@ -2797,15 +2844,19 @@ uint8_t stage_collision_static_query(uint32_t stage_id, uint32_t checks, float x
       }
       float nx = 0.0f, ny = 0.0f;
       stage_static_normal(line->x0, line->y0, line->x1, line->y1, &nx, &ny);
-      (void)stage_static_consider_hit(x0, y0, ix, iy, MSL_STAGE_RAW_LINE_LEFT_WALL, line->segment_i,
-                                      line->joint_id, line->lo_flags, nx, ny, &best_dist2, out);
+      (void)stage_static_consider_hit(x0, y0, ix, iy, MSL_STAGE_RAW_LINE_LEFT_WALL, (int32_t)i,
+                                      line->segment_i, line->joint_id, line->lo_flags, nx, ny,
+                                      &best_dist2, out);
     }
   }
   if (checks & (uint32_t)MSL_STAGE_QUERY_RIGHT_WALL) {
     for (size_t i = 0; i < slot->right_wall_line_count; i++) {
       const MslStageWallLine* line = &slot->right_wall_lines[i];
       if (!stage_static_line_query_active(line->fighter_solid) ||
-          !stage_static_line_allows_joint(line->joint_id, joint_id_skip, joint_id_only)) {
+          !stage_static_sweep_overlaps_line(sweep_min_x, sweep_max_x, sweep_min_y, sweep_max_y,
+                                            line->x0, line->y0, line->x1, line->y1, 0.101f) ||
+          (use_joint_filter &&
+           !stage_static_line_allows_joint(line->joint_id, joint_id_skip, joint_id_only))) {
         continue;
       }
       float ix = 0.0f, iy = 0.0f;
@@ -2820,7 +2871,7 @@ uint8_t stage_collision_static_query(uint32_t stage_id, uint32_t checks, float x
       }
       float nx = 0.0f, ny = 0.0f;
       stage_static_normal(line->x0, line->y0, line->x1, line->y1, &nx, &ny);
-      (void)stage_static_consider_hit(x0, y0, ix, iy, MSL_STAGE_RAW_LINE_RIGHT_WALL,
+      (void)stage_static_consider_hit(x0, y0, ix, iy, MSL_STAGE_RAW_LINE_RIGHT_WALL, (int32_t)i,
                                       line->segment_i, line->joint_id, line->lo_flags, nx, ny,
                                       &best_dist2, out);
     }

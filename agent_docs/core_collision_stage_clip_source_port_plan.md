@@ -280,12 +280,9 @@ Required source reads before coding:
 - Legal-stage sources listed in the `mpLib Query Substrate And Stage Line Metadata` section
 - Current MSL files: `src/stage_collision.c`, `src/stage_collision.h`, `src/mpcoll_env.c`, `src/mpcoll_env.h`, `src/mpcoll_ground.c`, `tools/extraction/extract_stage_collision.py`, `tools/extraction/extract_stage_metadata.py`, `tools/extraction/known_data_artifacts.py`, and existing stage-data tests.
 
-Use subagents internally if available:
-
-- Source reader: summarize exact `mpLib` and stage-source metadata/query requirements.
-- MSL mapper: inspect current extracted stage data and runtime query helpers, then identify gaps, duplicate approximations, and stale local semantic lists.
-- Test designer: propose positive and negative tests for static query behavior and metadata contracts.
-- Perf reviewer: check runtime allocation, loop bounds, deterministic ordering, and hot-path state-layout risks.
+Do not spawn subagents for this work unless the user explicitly authorizes it in the current turn.
+The implementation agent owns the full source read, current-code mapping, test design, and perf-risk
+check locally. Use concise notes in the report instead of delegating these roles.
 
 Hard non-scope for Phase 1:
 
@@ -340,11 +337,183 @@ Required report back:
 
 ### Phase 2: `CollData` Lifetime And Ordered `mpColl`
 
-- Implement source-backed `CollData` begin/end, ECB load/interpolation, env flags, floor/wall/ceiling ownership, floor skip, joint skip, and speed state.
-- Port wall/ceiling/floor ordered wrappers before changing action owners.
-- Add synthetic tests for pure collision wrapper behavior independent of replay data.
-- Do not mark complete while any runtime bridge reconstructs missing collision state after the fact.
-- This phase should make the ordered common wrappers callable by action owners without duplicating floor/wall/ceiling scans in each action family.
+Phase 2 is the ordered collision substrate phase. Its target is the common `CollData`/`mpColl`
+machinery that later action owners call. It must not be a replay-row fix, an action-family routing
+pass, or a substrate-only checkpoint with no replacement of old ordered collision paths.
+
+Phase 2 acceptance is binary: the static legal-stage ordered substrate rows below must be complete,
+and rows marked `OUT_OF_SCOPE` or `DEFERRED` are not Phase 2 acceptance criteria. Broad action-owner
+routing, moving-platform/Ground-object callbacks, source `mpBoundingCheck` joint mutation, and
+separate source left/right wall `SurfaceData` lifetime are later named phases, not Phase 2 debt.
+
+Required source reads before coding:
+
+- `refs/melee/src/melee/mp/mpcoll.c`
+- `refs/melee/src/melee/mp/mpcoll.h`
+- `refs/melee/src/melee/mp/mplib.c`, only for query calls consumed by `mpColl`
+- `refs/melee/src/melee/mp/types.h`
+- `refs/melee/src/melee/lb/types.h`, especially `CollData`, `SurfaceData`, ECB fields, env/contact
+  flags, floor/wall/ceiling surface records, skip fields, and callback fields
+- `refs/melee/src/melee/ft/ft_081B.c`, only for wrapper call sites and expected callback outcomes
+- Current MSL files: `src/mpcoll_ground.c`, `src/mpcoll_wall_ceil.c`, `src/mpcoll_env.c`,
+  `src/mpcoll_context.h`, `src/mpcoll_ecb_points.h`, `src/stage_collision.c`,
+  `src/stage_collision.h`, `src/state.h`, `src/state_fields.inc`, `src/state.c`, `src/api.c`,
+  `bindings/msl_binding.c`, `src/motion_state_owners.*`, and existing collision tests.
+
+Do not spawn subagents for this work unless the user explicitly authorizes it in the current turn.
+The implementation agent owns the full source read, current-code mapping, test design, and perf-risk
+check locally:
+
+- Source read: produce a concise source-order map for `mpCollPrev`, `mpColl_80043754`,
+  `mpCollInterpolateECB`, `mpColl_80046904`, `mpColl_8004ACE4`, floor/wall/ceiling producer
+  helpers, `mpCollEnd*`, skip helpers, and squeeze/speed helpers.
+- MSL mapping: identify current split scans, bridge/suppress predicates, seed-only lanes, duplicate
+  floor/wall/ceiling producers, and which call sites can be replaced by a common ordered substrate.
+- Test design: add pure wrapper/substrate tests before replay validation. Tests must prove positive
+  and negative source-state boundaries, not just one observed trace.
+- Perf risk: check state layout, loop bounds, allocation-free behavior, deterministic ordering, and
+  whether old duplicate scans are actually removed when new ordered paths are routed.
+
+Hard non-scope for Phase 2:
+
+- Do not route broad grounded/airborne action families yet. Phase 2 may add debug/test entry points
+  or replace existing low-level wrapper helpers, but Phase 3 owns action-owner rollout routing.
+- Do not implement moving-platform runtime behavior, Randall runtime behavior, or FoD dynamic
+  platform behavior beyond preserving the Phase 1 static query contract.
+- Do not implement character-special bespoke behavior unless it is already a direct call to a common
+  `mpColl` wrapper required for the substrate.
+- Do not add replay-row locks, trace-specific fixtures, stage-name gameplay branches, y clamps,
+  tolerance broadening, or action-id exceptions.
+- Do not claim a broad source row as complete when only a slice is wired. If a function has static,
+  moving, platform, ledge, skip, remap, entry, sustained, or endpoint variants, either port all
+  in-scope static variants or split the row explicitly and leave the rest open.
+
+Implementation targets:
+
+- Model `CollData` callback lifetime in SoA/runtime state:
+  `cur_pos`, `prev_pos`, `last_pos`, current/previous/desired ECB, ECB source kind, env flags,
+  previous env flags, contact flags, floor/wall/ceiling surface ids, floor skip, joint skip,
+  joint-only, callback-local result scratch, and the source bits needed by interpolation/squeeze.
+- Port the callback lifecycle:
+  `mpCollPrev`, `mpCollCheckBounding` boundaries, `mpCollInterpolateECB`, `mpCollEnd`,
+  `mpCollEnd_inline`, `mpCollEnd_inline2`, `mpCopyCollData`, and source clear/update timing.
+  Phase 2 may keep `mpCollCheckBounding` as a static/debug AABB substrate until extracted joint
+  bounds and source `TooFar`/dynamic joint state exist; do not wire it as a generic segment filter.
+- Port ordered floor/wall/ceiling producers as reusable packet/result helpers:
+  `mpColl_80044628_Floor`, `mpColl_80044838_Floor`, `mpColl_80044948_Floor`,
+  `mpColl_80044AD8_Ceiling`, `mpColl_80044C74_Ceiling`,
+  `mpColl_80044E10_RightWall`, `mpColl_800454A4_RightWall`,
+  `mpColl_80045B74_LeftWall`, `mpColl_80046224_LeftWall`.
+- Port ordered airborne and grounded wrapper cores enough that later action owners can call one
+  common owner:
+  `mpColl_80043754`, `mpColl_80046904`, `mpColl_8004ACE4`, `mpColl_8004A908_Floor`,
+  and static legal-stage portions of `mpColl_800471F8`, `mpColl_800477E0`,
+  `mpColl_80047E14`, and `mpColl_8004B108` where they share the same ordered substrate.
+- Port skip/filter/squeeze/speed state needed by the ordered substrate:
+  `mpUpdateFloorSkip`, `mpClearFloorSkip`, joint skip, joint only, `mpCollSqueezeHorizontal`,
+  `mpCollSqueezeVertical`, static `mpCollGetSpeedFloor`, static `mpCollGetSpeedCeiling`, and
+  `mpColl_IsOnPlatform`. `mpCollGetSpeedLeftWall` / `mpCollGetSpeedRightWall` require separate
+  source `left_facing_wall` / `right_facing_wall` `SurfaceData` records and are deferred out of
+  Phase 2 rather than approximated as source-complete through singleton wall state.
+- Replace or collapse existing old-path scans/suppressions only when the new source state actually
+  subsumes them. Every retained bridge/suppress/fallback must be named in the report with the exact
+  source policy or the later phase that owns its removal.
+- Keep all new runtime paths allocation-free and deterministic. Do not allocate, format, grow
+  buffers, or use Python in gameplay/preprocess hot paths.
+
+Required tests:
+
+- Pure `CollData` lifecycle tests: callback begin/end root state, previous/current/last position,
+  ECB load/source selection, current/previous/desired ECB promotion, interpolation ordering, stale
+  seed state rejection, and callback-local scratch clear/update.
+- Ordered collision tests independent of replay rows:
+  floor-only, ceiling-only, left-wall-only, right-wall-only, floor+wall, floor+ceiling,
+  simultaneous same-distance tie, strict no-crossing, endpoint tolerance, source-order tie, and
+  remap/joint filter behavior using the Phase 1 static query substrate.
+- Skip/filter tests: floor skip clear/update, one-way platform pass-through state, joint skip,
+  joint only, wrong-joint negatives, expired skip negatives, and skip preservation/clear boundaries.
+- Wrapper-core tests:
+  airborne ordered core, grounded ordered core, floor retry, edge/squeeze behavior, env/contact
+  flag lifetime, and `mpCollEnd*` publication/clear boundaries.
+- Negative tests proving Phase 2 does not accidentally route broad action-owner behavior,
+  item-only collision, moving-platform runtime behavior, or bespoke special-only callbacks.
+- If debug/test-only API hooks are added, tests must prove they do not allocate after init and are
+  not used by normal `step_input`, `reseed_seed`, or `write_compare` paths.
+
+Required validation:
+
+- `make build_data` if any data/schema/extraction path changes
+- `make build BUILD_FORCE=1`
+- focused new/changed collision tests
+- `make validate-all`
+- `make test`
+- `make fmt-check`
+- `git diff --check && git diff --cached --check`
+- `uv run python -m tools.eval.validation_report_diff --before HEAD --after reports/validation --top 220`
+- Run the usual light `rollout_compare` clean-vs-dirty bench, because Phase 2 changes runtime
+  collision hot paths.
+
+Required report back:
+
+- Exact source files/functions audited.
+- For each target source function family, whether it is `COMPLETE`, `DEFERRED`, or `OUT_OF_SCOPE`.
+  Do not use `PARTIAL` in the Phase 2 acceptance table; split the row so the in-scope portion is
+  either complete or the phase is incomplete.
+- Concrete MSL symbols added/changed for `CollData` state, ordered producers, wrapper cores,
+  skip/squeeze/speed state, and finalizers.
+- Old scans/suppressions/fallbacks removed, collapsed, or retained with source-policy accounting.
+- Tests added and what source boundary each proves.
+- Validation and clean-vs-dirty perf results.
+- Whether Phase 2 is complete by this document's criteria. If incomplete, name the remaining
+  Phase 2 items and do not move to Phase 3.
+- Leave changes uncommitted for review.
+
+Current Phase 2 source-status report:
+
+| Source family | Status | Evidence / remaining boundary |
+| --- | --- | --- |
+| `CollData` root lifetime (`cur_pos`, `prev_pos`, `last_pos`) | COMPLETE for modeled 2D collision roots | SoA lanes cover visible `cur_pos`, callback/substep previous/current roots, wall/ceiling callback roots, and `last_pos`. Tests cover reseed/debug initialization, copy, and callback-root publication. |
+| `CollData` ECB lifetime and `mpCollInterpolateECB` | COMPLETE for current static substrate | Current/previous/desired ECB and source squeeze-restore (`x64_ecb`/b6) are modeled; tests cover load, promotion, multi-substep penultimate `prev_ecb`, stale seed rejection, and squeeze restore. |
+| `mpCollPrev` / callback-local scratch clear-update | COMPLETE for split floor/wall/ceiling producers | Floor and wall/ceiling callback-entry roots are materialized before producer scans; tests cover scratch clear/update, no stale floor result, and `last_pos`. |
+| `mpCollCheckBounding` / `mpBoundingCheck` | DEFERRED out of Phase 2 runtime | Static/debug AABB helper is source-shaped and tested only as a boundary probe. Runtime `TooFar` joint mutation, hidden/enabled joint flags, and dynamic joint counts require extracted joint-bounds and moving-platform/Ground-object state. It must not be wired as a generic segment filter in Phase 2. |
+| Floor producers `mpColl_80044628_Floor`, `mpColl_80044838_Floor`, `mpColl_80044948_Floor` | COMPLETE for Phase 2 static legal-stage substrate | Static no-preference floor sweeps use `stage_collision_static_query`; persisted/preferred, floor skip, endpoint, 4A908 retry, remap, and joint filters have synthetic coverage. FoD/Randall/deferred transform behavior is explicitly out of Phase 2 and owned by the moving-platform phase. |
+| Ceiling producers `mpColl_80044AD8_Ceiling`, `mpColl_80044C74_Ceiling` | COMPLETE for Phase 2 static legal-stage ordered substrate | Axis-aligned no-preference ceilings use source-shaped zero-delta rejection, endpoint tolerance, and deterministic ordering in the ordered graph scan; preferred/sloped graph scans remain source-policy fallbacks for current static legal stages. Tests cover ceiling-only, ECB top crossing, joint-only negative, speed, and env previous/current lifetime. |
+| Right-wall producers `mpColl_80044E10_RightWall`, `mpColl_800454A4_RightWall` | COMPLETE for static ordered substrate | Tests cover right-wall-only persistence, ECB side crossing, bottom-only Push negative for walljump, joint skip negative, speed, and env previous/current lifetime. |
+| Left-wall producers `mpColl_80045B74_LeftWall`, `mpColl_80046224_LeftWall` | COMPLETE for Phase 2 static ordered substrate | Tests cover left-wall-only persistence and previous/current env lifetime; shared candidate filtering uses the same joint/static substrate as right wall. Separate source `left_facing_wall` / `right_facing_wall` surface lifetime is not claimed here and is listed below as deferred wall-surface work. |
+| Grounded ordered wrapper `mpColl_8004ACE4` | COMPLETE for Phase 2 static ordered core | Grounded wall/ceiling prepass ordering, floor retry, floor+wall, floor+ceiling squeeze, horizontal/vertical squeeze, and floor skip are covered. Broad grounded action-owner routing is Phase 3 and is not a Phase 2 acceptance criterion. |
+| Airborne ordered wrappers `mpColl_80043754`, `mpColl_80046904`, static portions of `mpColl_800471F8`, `mpColl_800477E0`, `mpColl_80047E14`, `mpColl_8004B108` | COMPLETE for Phase 2 static ordered core | Shared floor/wall/ceiling producers and callback-local state are callable and tested through existing low-level/runtime paths. Broad airborne action-owner routing is Phase 3/4; moving platforms and Ground callbacks are deferred out of Phase 2. |
+| `mpUpdateFloorSkip`, `mpClearFloorSkip`, joint skip, joint only | COMPLETE for static substrate | Runtime lanes and helpers replace direct writes in touched paths. Tests cover skip update/clear, expired skip, platform pass-through, wrong-joint negatives, joint skip, joint only, and copy/debug exposure. |
+| `mpCollSqueezeHorizontal`, `mpCollSqueezeVertical` | COMPLETE for static squeeze state | Horizontal/vertical squeeze helpers save source restore ECB and update current/previous/desired state. `mpCollSqueezeVertical` does not write `floor_skip`; floor-skip writes remain tied only to source `mpUpdateFloorSkip` owners. Moving-platform squeeze variants remain deferred. |
+| Static `mpCollGetSpeedFloor`, static `mpCollGetSpeedCeiling`, `mpColl_IsOnPlatform` | COMPLETE for Phase 2 static floor/ceiling/platform checks | Static floors/ceilings return valid zero speed and platform flags from generated line metadata. FoD/Randall dynamic endpoint speed is deferred. |
+| `mpCollEnd`, `mpCollEnd_inline`, `mpCollEnd_inline2` | COMPLETE for Phase 2 static finalizer event helper | Static event selection covers forced/edge floor callbacks, ceiling push/hug callbacks, sentinels, and `dy = cur_pos.y - last_pos.y`. Dynamic `grDynamicAttr_801CA284` low-byte refresh and actual Ground callbacks are deferred with moving-platform/Ground-object behavior. |
+| `mpCopyCollData` | COMPLETE for modeled MSL CollData lanes | Debug-only helper copies modeled CollData root/last/root-sweep, ECB, env/contact, floor/wall/ceiling ids, `floor_skip`, `joint_id_skip`, and scratch lanes without copying `joint_id_only` or Fighter-owned action/stock/animation state. |
+| Non-scope routing guard | COMPLETE as source-token guard only | Source-token tests guard against accidentally referencing Phase 2 helpers from item-only or special-only source files. They are not proof of broad runtime non-routing; runtime non-scope is enforced by keeping Phase 2 entry points debug/test-only or low-level substrate calls and by leaving broad action-owner routing to Phase 3/4. |
+
+Deferred / out-of-scope rows not counted against Phase 2 acceptance:
+
+| Source family | Status | Owning later phase |
+| --- | --- | --- |
+| Source `left_facing_wall` / `right_facing_wall` `SurfaceData` and `mpCollGetSpeedLeftWall` / `mpCollGetSpeedRightWall` | DEFERRED | Separate wall-surface state and moving/static wall speed helpers are owned by the wall-surface/moving-platform follow-up. Phase 2 keeps singleton wall debug fields explicitly non-source-complete. |
+| Moving platforms, Randall, FoD dynamic endpoint speed, `grDynamicAttr_801CA284`, and Ground callbacks | DEFERRED | Moving-platform/Ground-object phase. |
+| Broad grounded/airborne action-owner routing through common wrappers | OUT_OF_SCOPE | Phase 3. |
+| AttackAir, EscapeAir, Damage, item-only, and bespoke special-family routing | OUT_OF_SCOPE | Phase 4 or owner-specific later phases. |
+
+Phase 2 status by this document: COMPLETE once the required validation and clean-vs-dirty
+rollout_compare bench below pass without a material retained regression.
+
+Retained fallback/source-policy accounting:
+
+- Preferred/persisted line scans remain graph-based when source needs connected-line traversal,
+  endpoint preference, wall hug/slop, or explicit skip semantics not expressible as a no-preference
+  static query. Axis-aligned wall/ceiling graph scans carry the source zero-delta rejection and
+  endpoint tolerance directly, avoiding a duplicate static-query prepass in the hot path.
+- Sloped wall/ceiling paths remain graph-scanned under the current legal-stage ordered producers.
+- FoD height platforms, Randall, dynamic `grDynamicAttr_801CA284`, source `mpBoundingCheck`
+  `TooFar` joint mutation, and Ground callbacks are deferred to the moving-platform/Ground-object
+  phase.
+- Broad common grounded/airborne and AttackAir/EscapeAir/Damage action-owner routing remains Phase
+  3/4 work; Phase 2 only makes the ordered substrate callable and replaces bounded low-level
+  producer paths.
 
 ### Phase 3: Common Grounded And Airborne Owners
 

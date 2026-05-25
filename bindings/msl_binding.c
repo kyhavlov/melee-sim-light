@@ -29,6 +29,8 @@
 #include "../src/item_article_params.h"
 #include "../src/move_tables.h"
 #include "../src/motion_state_owners.h"
+#include "../src/mpcoll_bounding.h"
+#include "../src/mpcoll_end.h"
 #include "../src/shield_tilt_table.h"
 #include "../src/specialhi_pose.h"
 #include "../src/staling.h"
@@ -1339,6 +1341,29 @@ static PyObject* msl_debug_copy_lanes_py(PyObject* self, PyObject* args) {
   Py_RETURN_NONE;
 }
 
+static PyObject* msl_debug_copy_colldata_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  int batch_index = 0;
+  int src_player_index = 0;
+  int dst_player_index = 0;
+  if (!PyArg_ParseTuple(args, "Oiii", &handle_obj, &batch_index, &src_player_index,
+                        &dst_player_index)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+  const int err =
+      msl_batch_debug_copy_colldata(h->batch, batch_index, src_player_index, dst_player_index);
+  if (err != 0) {
+    PyErr_Format(PyExc_ValueError, "msl_batch_debug_copy_colldata failed: %d", err);
+    return NULL;
+  }
+  Py_RETURN_NONE;
+}
+
 static PyObject* msl_step_input(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* handle_obj = NULL;
@@ -1461,6 +1486,30 @@ static PyObject* msl_debug_set_coll_env_flags_py(PyObject* self, PyObject* args)
   const int err = msl_batch_debug_set_coll_env_flags(h->batch, batch_index, player_index, flags);
   if (err != 0) {
     PyErr_Format(PyExc_ValueError, "msl_batch_debug_set_coll_env_flags failed: %d", err);
+    return NULL;
+  }
+  Py_RETURN_NONE;
+}
+
+static PyObject* msl_debug_set_mpcoll_joint_filters_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  int batch_index = 0;
+  int player_index = 0;
+  int joint_id_skip = -1;
+  int joint_id_only = -1;
+  if (!PyArg_ParseTuple(args, "Oiiii", &handle_obj, &batch_index, &player_index, &joint_id_skip,
+                        &joint_id_only)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+  const int err = msl_batch_debug_set_mpcoll_joint_filters(h->batch, batch_index, player_index,
+                                                           joint_id_skip, joint_id_only);
+  if (err != 0) {
+    PyErr_Format(PyExc_ValueError, "msl_batch_debug_set_mpcoll_joint_filters failed: %d", err);
     return NULL;
   }
   Py_RETURN_NONE;
@@ -4434,6 +4483,63 @@ static PyObject* msl_stage_static_query_py(PyObject* self, PyObject* args) {
                        "normal_y", (double)hit.normal_y, "dist2", (double)hit.dist2);
 }
 
+static PyObject* msl_mpcoll_check_bounding_aabb_py(PyObject* self, PyObject* args) {
+  (void)self;
+  double prev_pos_x = 0.0;
+  double prev_pos_y = 0.0;
+  double cur_pos_x = 0.0;
+  double cur_pos_y = 0.0;
+  double prev_left = 0.0;
+  double prev_right = 0.0;
+  double prev_bottom = 0.0;
+  double prev_top = 0.0;
+  double cur_left = 0.0;
+  double cur_right = 0.0;
+  double cur_bottom = 0.0;
+  double cur_top = 0.0;
+  unsigned int flags = 0u;
+  double ledge_snap_x = 0.0;
+  double ledge_snap_y = 0.0;
+  double ledge_snap_height = 0.0;
+  if (!PyArg_ParseTuple(args, "ddddddddddddIddd", &prev_pos_x, &prev_pos_y, &cur_pos_x, &cur_pos_y,
+                        &prev_left, &prev_right, &prev_bottom, &prev_top, &cur_left, &cur_right,
+                        &cur_bottom, &cur_top, &flags, &ledge_snap_x, &ledge_snap_y,
+                        &ledge_snap_height)) {
+    return NULL;
+  }
+  MslMpcollBoundingAabb aabb = {0};
+  mpcoll_check_bounding_aabb(
+      (float)prev_pos_x, (float)prev_pos_y, (float)cur_pos_x, (float)cur_pos_y, (float)prev_left,
+      (float)prev_right, (float)prev_bottom, (float)prev_top, (float)cur_left, (float)cur_right,
+      (float)cur_bottom, (float)cur_top, (uint32_t)flags, (float)ledge_snap_x, (float)ledge_snap_y,
+      (float)ledge_snap_height, &aabb);
+  return Py_BuildValue("{s:f,s:f,s:f,s:f}", "left", (double)aabb.left, "bottom",
+                       (double)aabb.bottom, "right", (double)aabb.right, "top", (double)aabb.top);
+}
+
+static PyObject* msl_mpcoll_end_publication_py(PyObject* self, PyObject* args) {
+  (void)self;
+  unsigned int floor_segment_id = 0xFFFFu;
+  unsigned int ceiling_segment_id = 0xFFFFu;
+  unsigned int env_flags = 0u;
+  int force_floor = 0;
+  int floor_arg2 = 0;
+  double cur_y = 0.0;
+  double last_y = 0.0;
+  if (!PyArg_ParseTuple(args, "IIIppdd", &floor_segment_id, &ceiling_segment_id, &env_flags,
+                        &force_floor, &floor_arg2, &cur_y, &last_y)) {
+    return NULL;
+  }
+  MslMpcollEndEvents ev = {0};
+  msl_mpcoll_end_static_events((uint16_t)floor_segment_id, (uint16_t)ceiling_segment_id,
+                               (uint32_t)env_flags, force_floor ? 1u : 0u, floor_arg2 ? 1u : 0u,
+                               (float)cur_y, (float)last_y, &ev);
+  return Py_BuildValue("{s:i,s:i,s:i,s:i,s:i,s:f}", "floor_callback", (int)ev.floor_callback,
+                       "floor_callback_arg", (int)ev.floor_callback_arg, "ceiling_callback",
+                       (int)ev.ceiling_callback, "floor_segment_id", (int)ev.floor_segment_id,
+                       "ceiling_segment_id", (int)ev.ceiling_segment_id, "dy", (double)ev.dy);
+}
+
 static PyObject* msl_stage_match_flow_roles_py(PyObject* self, PyObject* args) {
   (void)self;
   unsigned int stage_id_u = 0;
@@ -6461,6 +6567,9 @@ static PyMethodDef methods[] = {
     {"debug_copy_lanes", msl_debug_copy_lanes_py, METH_VARARGS,
      "debug_copy_lanes(dst_handle, src_handle, dst_lanes[int32], src_lanes[int32]) -> "
      "DEBUG-ONLY. Exercise msl_batch_copy_lanes for focused API tests."},
+    {"debug_copy_colldata", msl_debug_copy_colldata_py, METH_VARARGS,
+     "debug_copy_colldata(handle, batch_index, src_player, dst_player) -> DEBUG-ONLY. Copy modeled "
+     "CollData lanes without routing action owners."},
     {"step_input", msl_step_input, METH_VARARGS,
      "step_input(handle, prev_input_bytes, input_bytes)"},
     {"debug_step_input_pre_combat", msl_debug_step_input_pre_combat, METH_VARARGS,
@@ -6474,6 +6583,9 @@ static PyMethodDef methods[] = {
     {"debug_set_coll_env_flags", msl_debug_set_coll_env_flags_py, METH_VARARGS,
      "debug_set_coll_env_flags(handle, batch_index, player_index, flags) -> DEBUG-ONLY. Override "
      "coll_env_flags for a single fighter."},
+    {"debug_set_mpcoll_joint_filters", msl_debug_set_mpcoll_joint_filters_py, METH_VARARGS,
+     "debug_set_mpcoll_joint_filters(handle, batch_index, player_index, joint_skip, joint_only) -> "
+     "DEBUG-ONLY. Override CollData joint filters (-1 disables each)."},
     {"debug_set_player_root", msl_debug_set_player_root_py, METH_VARARGS,
      "debug_set_player_root(handle, batch_index, player_index, pos_x, pos_y, facing) -> "
      "DEBUG-ONLY. Override fighter root position/facing for fixture setup."},
@@ -6607,6 +6719,12 @@ static PyMethodDef methods[] = {
     {"stage_static_query", msl_stage_static_query_py, METH_VARARGS,
      "stage_static_query(stage_id, checks, x0, y0, x1, y1, line_skip, joint_skip, joint_only) -> "
      "static mpLib-style line hit dict or None."},
+    {"mpcoll_check_bounding_aabb", msl_mpcoll_check_bounding_aabb_py, METH_VARARGS,
+     "mpcoll_check_bounding_aabb(prev_x, prev_y, cur_x, cur_y, prev_l, prev_r, prev_b, prev_t, "
+     "cur_l, cur_r, cur_b, cur_t, flags, ledge_snap_x, ledge_snap_y, ledge_snap_h) -> dict"},
+    {"mpcoll_end_publication", msl_mpcoll_end_publication_py, METH_VARARGS,
+     "mpcoll_end_publication(floor_id, ceiling_id, env_flags, force_floor, floor_arg2, cur_y, "
+     "last_y) -> static mpCollEnd finalizer event dict"},
     {"stage_match_flow_roles", msl_stage_match_flow_roles_py, METH_VARARGS,
      "stage_match_flow_roles(stage_id) -> dict of runtime MSLSTG01 match-flow role data."},
     {"hitlist_ring_demo", msl_hitlist_ring_demo_py, METH_VARARGS,

@@ -130,6 +130,15 @@ typedef struct MslStateSoA {
   float* coll_prev_ecb_left_rel_x;
   float* coll_prev_ecb_right_rel_x;
   float* coll_prev_ecb_side_rel_y;
+  // Source `x64_ecb` saved by mpCollSqueezeHorizontal/Vertical while x34_flags.b6 is set.
+  // The next mpCollInterpolateECB restores this ECB after copying the squeezed current ECB into
+  // prev_ecb, then clears b6.
+  // refs/melee/src/melee/mp/mpcoll.c::{mpCollInterpolateECB,mpCollSqueezeHorizontal,mpCollSqueezeVertical}
+  float* coll_squeeze_restore_ecb_bottom_rel_y;
+  float* coll_squeeze_restore_ecb_top_rel_y;
+  float* coll_squeeze_restore_ecb_left_rel_x;
+  float* coll_squeeze_restore_ecb_right_rel_x;
+  float* coll_squeeze_restore_ecb_side_rel_y;
   float* coll_desired_ecb_bottom_rel_y;
   float* coll_desired_ecb_top_rel_y;
   float* coll_desired_ecb_left_rel_x;
@@ -137,6 +146,7 @@ typedef struct MslStateSoA {
   float* coll_desired_ecb_side_rel_y;
   uint8_t* coll_ecb_bottom_valid;
   uint8_t* coll_prev_ecb_bottom_valid;
+  uint8_t* coll_squeeze_restore_ecb_valid;
   uint8_t* coll_desired_ecb_bottom_valid;
   uint8_t* coll_desired_ecb_bottom_locked_owner;
   // Current CollData ECB is a frozen active-hitlag Damage envelope rather than the replay-visible
@@ -167,6 +177,12 @@ typedef struct MslStateSoA {
   float* coll_substep_prev_pos_y;
   float* coll_substep_cur_pos_x;
   float* coll_substep_cur_pos_y;
+  // Source CollData.last_pos root for the current/last map callback. mpColl wrappers snapshot
+  // CollData.cur_pos into last_pos before writing the fighter root to cur_pos; mpCollEnd uses it
+  // for the floor callback dy argument.
+  // refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_80043754,mpCollEnd}
+  float* coll_last_pos_x;
+  float* coll_last_pos_y;
   // Collision-stage prev/cur position snapshots used for mpColl-shaped ledge-grab AABB checks.
   //
   // Decomp: the ledge-grab block consumes CollData.prev_pos / CollData.cur_pos as managed inside
@@ -253,6 +269,11 @@ typedef struct MslStateSoA {
   uint16_t* ceiling_id;  // ISO-derived segment index (stable id).
   uint32_t* coll_env_flags;
   uint32_t* coll_prev_env_flags;
+  // Hidden CollData joint filters. Source mpLib skips all lines owned by joint_id_skip and, when
+  // joint_id_only is set, scans only that joint. -1 disables each filter.
+  // refs/melee/src/melee/lb/types.h::CollData::{joint_id_skip,joint_id_only}
+  int16_t* mpcoll_joint_id_skip;
+  int16_t* mpcoll_joint_id_only;
 
   // State machine
   uint16_t* action_id;

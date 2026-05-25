@@ -24,7 +24,9 @@
 #include "jump_input.h"
 #include "move_tables.h"
 #include "motion_state_owners.h"
+#include "mpcoll_floor_skip.h"
 #include "mpcoll_ecb_points.h"
+#include "mpcoll_wall_ceil.h"
 #include "msl_math.h"
 #include "physics.h"
 #include "shine.h"
@@ -508,10 +510,9 @@ static inline uint8_t specialhi_try_ground_launch_from_hold(MslBatch* batch, siz
   // - ftCo_8009A134 (platform pass-through) is false
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialAirHi_AirToGround
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_8009A134
-  // data/stages/bin/*.bin::MSLSTG01 platform flags
-  const uint32_t stage_id = batch->state.stage_id[idx / (size_t)MSL_MAX_PLAYERS];
-  const uint16_t ground_id = batch->state.ground_id[idx];
-  if (ground_id != 0xFFFFu && stage_collision_floor_line_is_platform(stage_id, ground_id)) {
+  // refs/melee/src/melee/mp/mpcoll.c::mpColl_IsOnPlatform
+  const int bi = (int)(idx / (size_t)MSL_MAX_PLAYERS);
+  if (mpcoll_is_on_platform(batch, bi, idx)) {
     return 0u;
   }
   if ((abs_x + abs_y) < ch->firefox_direction_stick_range_min) {
@@ -3144,10 +3145,9 @@ static inline void common_pass_enter(MslBatch* batch, const MslCommonParams* c,
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::{ftCo_8009A228,ftCo_Pass_Anim}
   // refs/melee/src/melee/mp/mpcoll.c::{mpUpdateFloorSkip,mpColl_80044628_Floor}
   const uint16_t ground_id = batch->state.ground_id[idx];
-  const uint32_t stage_id = batch->state.stage_id[idx / (size_t)MSL_MAX_PLAYERS];
-  if (batch->state.floor_skip_segment_id != NULL && ground_id != 0xFFFFu &&
-      stage_collision_floor_line_is_platform(stage_id, ground_id)) {
-    batch->state.floor_skip_segment_id[idx] = ground_id;
+  const int bi = (int)(idx / (size_t)MSL_MAX_PLAYERS);
+  if (mpcoll_is_on_platform(batch, bi, idx)) {
+    msl_mpcoll_update_floor_skip(batch, idx, ground_id);
   }
   locomotion_apply_jump_enter_ground_to_air(batch, idx);
   if (batch->state.speed_air_x_self[idx] > ch->air_drift_max) {
@@ -6383,22 +6383,22 @@ void locomotion_update_post_collision(MslBatch* batch) {
         // height-transformed AttackAirN/Lw pass-through contacts can keep the same source
         // floor-skip owner live while airborne. Common-air callbacks preserve a transformed-platform
         // skip only through same-action callback continuity and the generated MSLMSO01 common-air
-        // collision class. Shine preserves only the explicit platform-pass episode described
-        // above; a real unrelated Fighter_ChangeMotionState clears CollData.floor_skip.
+        // collision class. Shine preserves only the explicit platform-pass episode described above.
+        // A real unrelated Fighter_ChangeMotionState clears CollData.floor_skip.
         // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
         // refs/melee/src/melee/mp/mpcoll.c::{mpUpdateFloorSkip,mpClearFloorSkip}
         // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFox_SpecialHi_IsBound
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::ftCo_8009A134
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_80096CC8
-        batch->state.floor_skip_segment_id[idx] = 0xFFFFu;
+        msl_mpcoll_clear_floor_skip(batch, idx);
       }
       if (now_ground && batch->state.floor_skip_segment_id != NULL &&
           batch->state.floor_skip_segment_id[idx] != 0xFFFFu &&
           batch->state.ground_id[idx] != batch->state.floor_skip_segment_id[idx]) {
         // mpClearFloorSkip-style re-admission once another floor owns CollData.floor.index.
         // refs/melee/src/melee/mp/mpcoll.c::{mpUpdateFloorSkip,mpClearFloorSkip}
-        batch->state.floor_skip_segment_id[idx] = 0xFFFFu;
+        msl_mpcoll_clear_floor_skip(batch, idx);
       }
       if (now_ground && batch->state.ledge_drop_floor_skip_segment_id != NULL &&
           batch->state.ledge_drop_floor_skip_segment_id[idx] != 0xFFFFu) {

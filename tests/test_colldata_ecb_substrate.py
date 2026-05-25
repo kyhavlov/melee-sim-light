@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from tools.eval.dataset import COMPARE_DTYPE, SEED_DTYPE
+from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
 
 
 ACT_WAIT = 0x000E
@@ -11,6 +11,9 @@ ACT_FALL = 0x001D
 ACT_DAMAGE_FLY_N = 0x0058
 ACT_ATTACK_11 = 0x002C
 ACT_ESCAPE_AIR = 0x00EC
+ACT_GUARD = 0x00B3
+ACT_PASS = 0x00F4
+ACT_ATTACK_AIR_N = 0x0041
 
 SM_WAIT1_0 = 2
 SM_FALL = 20
@@ -22,6 +25,10 @@ STAGE_FD = 32
 STAGE_BATTLEFIELD = 31
 STAGE_YOSHI = 8
 
+BUTTON_L = 0x0040
+BUTTON_A = 0x0100
+
+FLOOR_RESULT_NONE = 0
 FLOOR_RESULT_DIRECT = 1
 FLOOR_RESULT_GROUNDED_4A908_RETRY = 2
 FLOOR_MODE_BOTTOM_SWEEP = 1
@@ -30,6 +37,11 @@ FLOOR_MODE_EDGE_SNAP = 3
 FLOOR_MODE_STAGE_OBJECT_CARRY = 4
 FLOOR_MODE_4A908_RETRY = 5
 FLOOR_MODE_DIRECT_PUBLICATION = 7
+MSL_COLLIDE_CEILING_PUSH = 0x00002000
+MSL_COLLIDE_CEILING_HUG = 0x00004000
+MSL_COLLIDE_LEFT_EDGE = 0x00100000
+MSL_COLLIDE_RIGHT_EDGE = 0x00200000
+MSL_COLLIDE_EDGE = 0x00800000
 
 
 def _input_bytes() -> np.ndarray:
@@ -71,6 +83,16 @@ def _colldata_ecb_dtype() -> np.dtype:
             ("damage_hitlag_floor_contact_runtime", ("u1", (4,))),
             ("_pad0", ("u1", (4,))),
             ("floor_result_segment_id", ("<u2", (4,))),
+            ("floor_skip_segment_id", ("<u2", (4,))),
+            ("floor_skip_valid", ("u1", (4,))),
+            ("is_on_platform", ("u1", (4,))),
+            ("floor_speed_valid", ("u1", (4,))),
+            ("left_wall_speed_valid", ("u1", (4,))),
+            ("right_wall_speed_valid", ("u1", (4,))),
+            ("ceiling_speed_valid", ("u1", (4,))),
+            ("squeeze_restore_valid", ("u1", (4,))),
+            ("joint_id_skip", ("<i2", (4,))),
+            ("joint_id_only", ("<i2", (4,))),
             ("current_bottom_rel_y", ("<f4", (4,))),
             ("current_top_rel_y", ("<f4", (4,))),
             ("current_left_rel_x", ("<f4", (4,))),
@@ -81,6 +103,11 @@ def _colldata_ecb_dtype() -> np.dtype:
             ("prev_left_rel_x", ("<f4", (4,))),
             ("prev_right_rel_x", ("<f4", (4,))),
             ("prev_side_rel_y", ("<f4", (4,))),
+            ("squeeze_restore_bottom_rel_y", ("<f4", (4,))),
+            ("squeeze_restore_top_rel_y", ("<f4", (4,))),
+            ("squeeze_restore_left_rel_x", ("<f4", (4,))),
+            ("squeeze_restore_right_rel_x", ("<f4", (4,))),
+            ("squeeze_restore_side_rel_y", ("<f4", (4,))),
             ("desired_bottom_rel_y", ("<f4", (4,))),
             ("desired_top_rel_y", ("<f4", (4,))),
             ("desired_left_rel_x", ("<f4", (4,))),
@@ -94,6 +121,40 @@ def _colldata_ecb_dtype() -> np.dtype:
             ("substep_prev_pos_y", ("<f4", (4,))),
             ("substep_cur_pos_x", ("<f4", (4,))),
             ("substep_cur_pos_y", ("<f4", (4,))),
+            ("last_pos_x", ("<f4", (4,))),
+            ("last_pos_y", ("<f4", (4,))),
+            ("floor_speed_x", ("<f4", (4,))),
+            ("floor_speed_y", ("<f4", (4,))),
+            ("left_wall_speed_x", ("<f4", (4,))),
+            ("left_wall_speed_y", ("<f4", (4,))),
+            ("right_wall_speed_x", ("<f4", (4,))),
+            ("right_wall_speed_y", ("<f4", (4,))),
+            ("ceiling_speed_x", ("<f4", (4,))),
+            ("ceiling_speed_y", ("<f4", (4,))),
+        ],
+        align=False,
+    )
+
+
+def _collision_contacts_dtype() -> np.dtype:
+    return np.dtype(
+        [
+            ("wall_kind", ("u1", (4,))),
+            ("_pad0", ("u1", (4,))),
+            ("wall_id", ("<u2", (4,))),
+            ("wall_contact_x", ("<f4", (4,))),
+            ("wall_contact_y", ("<f4", (4,))),
+            ("wall_normal_x", ("<f4", (4,))),
+            ("wall_normal_y", ("<f4", (4,))),
+            ("ceiling_id", ("<u2", (4,))),
+            ("_pad1", ("<u2", (4,))),
+            ("ceiling_contact_x", ("<f4", (4,))),
+            ("ceiling_contact_y", ("<f4", (4,))),
+            ("ceiling_normal_x", ("<f4", (4,))),
+            ("ceiling_normal_y", ("<f4", (4,))),
+            ("coll_env_flags", ("<u4", (4,))),
+            ("coll_prev_env_flags", ("<u4", (4,))),
+            ("damage_hitlag_wall_asdi_latch", ("u1", (4,))),
         ],
         align=False,
     )
@@ -121,6 +182,140 @@ def _fox_ecb_bottom_rel_y(msid: int, frame: int) -> float:
     import msl_binding
 
     return float(msl_binding.ecb_bottom_rel_y(CHAR_FOX, msid, frame))
+
+
+def test_mp_coll_check_bounding_uses_swept_current_and_prev_ecb() -> None:
+    import msl_binding
+
+    # refs/melee/src/melee/mp/mpcoll.c::mpCollCheckBounding
+    msl_binding.alloc_reset()
+    aabb = msl_binding.mpcoll_check_bounding_aabb(
+        0.0,
+        0.0,
+        20.0,
+        -2.0,
+        -4.0,
+        4.0,
+        0.0,
+        8.0,
+        -5.0,
+        5.0,
+        0.0,
+        7.0,
+        0,
+        6.0,
+        3.0,
+        20.0,
+    )
+
+    assert float(aabb["left"]) == pytest.approx(-4.0)
+    assert float(aabb["right"]) == pytest.approx(25.0)
+    assert float(aabb["bottom"]) == pytest.approx(-2.0)
+    assert float(aabb["top"]) == pytest.approx(8.0)
+    stats = msl_binding.alloc_stats()
+    assert int(stats["calls"]) == 0
+    assert int(stats["bytes"]) == 0
+
+
+def test_mp_coll_check_bounding_ledge_flag_expands_source_snap_envelope() -> None:
+    import msl_binding
+
+    # `flags & 0b100` adds ledge-snap horizontal reach and vertical snap-height bounds from both
+    # current and previous CollData roots.
+    # refs/melee/src/melee/mp/mpcoll.c::mpCollCheckBounding
+    base = msl_binding.mpcoll_check_bounding_aabb(
+        0.0,
+        0.0,
+        20.0,
+        -2.0,
+        -4.0,
+        4.0,
+        0.0,
+        8.0,
+        -5.0,
+        5.0,
+        0.0,
+        7.0,
+        0,
+        6.0,
+        3.0,
+        20.0,
+    )
+    ledge = msl_binding.mpcoll_check_bounding_aabb(
+        0.0,
+        0.0,
+        20.0,
+        -2.0,
+        -4.0,
+        4.0,
+        0.0,
+        8.0,
+        -5.0,
+        5.0,
+        0.0,
+        7.0,
+        0x4,
+        6.0,
+        3.0,
+        20.0,
+    )
+
+    assert float(ledge["left"]) == pytest.approx(float(base["left"]) - 6.0)
+    assert float(ledge["right"]) == pytest.approx(float(base["right"]) + 6.0)
+    assert float(ledge["bottom"]) == pytest.approx(-9.0)
+    assert float(ledge["top"]) == pytest.approx(13.0)
+
+
+def test_mp_coll_end_static_publication_boundary_matches_source_env_bits() -> None:
+    import msl_binding
+
+    # `mpCollEnd` routes floor finalization when forced by the wrapper or edge env bits, and routes
+    # ceiling finalization when ceiling hug/push bits are set. Dynamic Ground callbacks remain
+    # outside this static Phase 2 helper.
+    # refs/melee/src/melee/mp/mpcoll.c::{mpCollEnd,mpCollEnd_inline,mpCollEnd_inline2}
+    msl_binding.alloc_reset()
+    forced = msl_binding.mpcoll_end_publication(2, 0xFFFF, 0, True, True, 12.5, 10.0)
+    stats = msl_binding.alloc_stats()
+    assert int(stats["calls"]) == 0
+    assert int(stats["bytes"]) == 0
+    assert int(forced["floor_callback"]) == 1
+    assert int(forced["floor_callback_arg"]) == 1
+    assert int(forced["ceiling_callback"]) == 0
+    assert float(forced["dy"]) == pytest.approx(2.5)
+
+    edge = msl_binding.mpcoll_end_publication(3, 0xFFFF, MSL_COLLIDE_LEFT_EDGE, False, False, 8.0, 9.5)
+    assert int(edge["floor_callback"]) == 1
+    assert int(edge["floor_callback_arg"]) == 2
+    assert float(edge["dy"]) == pytest.approx(-1.5)
+
+    ceiling = msl_binding.mpcoll_end_publication(
+        0xFFFF, 7, MSL_COLLIDE_CEILING_PUSH | MSL_COLLIDE_RIGHT_EDGE, False, False, 1.0, -2.0
+    )
+    assert int(ceiling["floor_callback"]) == 0
+    assert int(ceiling["ceiling_callback"]) == 1
+    assert int(ceiling["ceiling_segment_id"]) == 7
+
+    assert int(msl_binding.mpcoll_end_publication(2, 0xFFFF, 0, False, False, 0.0, 0.0)["floor_callback"]) == 0
+    assert (
+        int(
+            msl_binding.mpcoll_end_publication(
+                0xFFFF, 0xFFFF, MSL_COLLIDE_LEFT_EDGE, False, False, 0.0, 0.0
+            )["floor_callback"]
+        )
+        == 0
+    )
+    for edge_bit in (MSL_COLLIDE_EDGE, MSL_COLLIDE_LEFT_EDGE, MSL_COLLIDE_RIGHT_EDGE):
+        assert int(msl_binding.mpcoll_end_publication(2, 0xFFFF, edge_bit, False, False, 0.0, 0.0)["floor_callback"]) == 1
+    for ceiling_bit in (MSL_COLLIDE_CEILING_PUSH, MSL_COLLIDE_CEILING_HUG):
+        assert int(msl_binding.mpcoll_end_publication(0xFFFF, 4, ceiling_bit, False, False, 0.0, 0.0)["ceiling_callback"]) == 1
+    assert (
+        int(
+            msl_binding.mpcoll_end_publication(
+                0xFFFF, 0xFFFF, MSL_COLLIDE_CEILING_HUG, False, False, 0.0, 0.0
+            )["ceiling_callback"]
+        )
+        == 0
+    )
 
 
 def _read_colldata_after_reseed(seed: np.ndarray) -> np.void:
@@ -158,6 +353,17 @@ def _step_with_colldata(seed: np.ndarray) -> tuple[np.void, np.void]:
         )
     finally:
         msl_binding.destroy(handle)
+
+
+def _read_colldata(handle: object) -> np.void:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    dtype = _colldata_ecb_dtype()
+    assert int(sizes["colldata_ecb"]) == dtype.itemsize
+    colldata = np.zeros((1, int(sizes["colldata_ecb"])), dtype=np.uint8)
+    msl_binding.debug_write_colldata_ecb(handle, colldata)
+    return colldata.view(dtype).reshape((1,))[0].copy()
 
 
 def test_reseed_initializes_current_prev_desired_ecb_from_current_and_prev_pose() -> None:
@@ -256,6 +462,59 @@ def test_reseed_locked_desired_ecb_bottom_lane_preserves_source_bottom() -> None
     )
 
 
+def test_reseed_floor_skip_debug_exposes_only_source_platform_skip() -> None:
+    seed = _seed_base(STAGE_BATTLEFIELD, ACT_FALL, SM_FALL, -40.0, 45.0)
+    seed["floor_skip_segment_id_u16"][0, 0] = np.uint16(2)
+    seed["floor_skip_segment_valid_u8"][0, 0] = np.uint8(1)
+
+    snap = _read_colldata_after_reseed(seed)
+
+    assert int(snap["floor_skip_valid"][0]) == 1
+    assert int(snap["floor_skip_segment_id"][0]) == 2
+
+    seed["floor_skip_segment_id_u16"][0, 0] = np.uint16(1)
+    seed["floor_skip_segment_valid_u8"][0, 0] = np.uint8(1)
+    snap_nonplatform = _read_colldata_after_reseed(seed)
+
+    assert int(snap_nonplatform["floor_skip_valid"][0]) == 0
+    assert int(snap_nonplatform["floor_skip_segment_id"][0]) == 0xFFFF
+
+
+def test_static_mpcoll_platform_and_floor_speed_helpers_use_coll_surface() -> None:
+    # Source shape:
+    # - mpColl_IsOnPlatform reads LINE_FLAG_PLATFORM from CollData.floor.index.
+    # - mpCollGetSpeedFloor calls mpGetSpeed on CollData.floor.index. Static legal-stage floors have
+    #   no endpoint delta, so they return valid zero speed.
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_IsOnPlatform,mpCollGetSpeedFloor}
+    # refs/melee/src/melee/mp/mplib.c::{mpLineGetFlags,mpGetSpeed}
+    import msl_binding
+
+    platform = msl_binding.stage_floor_segment(STAGE_BATTLEFIELD, 2)
+    hard_floor = msl_binding.stage_floor_segment(STAGE_FD, 0)
+    assert platform is not None and int(platform["is_platform"]) == 1
+    assert hard_floor is not None and int(hard_floor["is_platform"]) == 0
+
+    seed_platform = _seed_base(STAGE_BATTLEFIELD, ACT_WAIT, SM_WAIT1_0, -40.0, 27.2)
+    seed_platform["on_ground"][0, 0] = np.uint8(1)
+    seed_platform["ground_id"][0, 0] = np.uint16(2)
+    snap_platform = _read_colldata_after_reseed(seed_platform)
+
+    assert int(snap_platform["is_on_platform"][0]) == 1
+    assert int(snap_platform["floor_speed_valid"][0]) == 1
+    assert float(snap_platform["floor_speed_x"][0]) == pytest.approx(0.0)
+    assert float(snap_platform["floor_speed_y"][0]) == pytest.approx(0.0)
+
+    seed_hard = _seed_base(STAGE_FD, ACT_WAIT, SM_WAIT1_0, 0.0, 0.0)
+    seed_hard["on_ground"][0, 0] = np.uint8(1)
+    seed_hard["ground_id"][0, 0] = np.uint16(0)
+    snap_hard = _read_colldata_after_reseed(seed_hard)
+
+    assert int(snap_hard["is_on_platform"][0]) == 0
+    assert int(snap_hard["floor_speed_valid"][0]) == 1
+    assert float(snap_hard["floor_speed_x"][0]) == pytest.approx(0.0)
+    assert float(snap_hard["floor_speed_y"][0]) == pytest.approx(0.0)
+
+
 def test_mp_coll_interpolate_promotion_copies_current_to_prev_then_desired_to_current() -> None:
     seed = _seed_base(STAGE_FD, ACT_FALL, SM_FALL, 0.0, 80.0)
     seed["action_frame"][0, 0] = np.int16(6)
@@ -284,6 +543,36 @@ def test_mp_coll_interpolate_promotion_copies_current_to_prev_then_desired_to_cu
     assert float(after["current_side_rel_y"][0]) == pytest.approx(
         float(after["desired_side_rel_y"][0])
     )
+
+
+def test_mp_coll_interpolate_multisubstep_prev_ecb_is_penultimate_step() -> None:
+    seed = _seed_base(STAGE_FD, ACT_FALL, SM_FALL, 0.0, 80.0)
+    seed["action_frame"][0, 0] = np.int16(6)
+    seed["anim_frame_f32"][0, 0] = np.float32(6.0)
+    seed["seed_prev_action_id"][0, 0] = np.uint16(ACT_FALL)
+    seed["seed_prev_action_frame"][0, 0] = np.int16(5)
+    seed["floor_sweep_prev_pos_x_f32"][0, 0] = np.float32(0.0)
+    seed["floor_sweep_prev_pos_y_f32"][0, 0] = np.float32(96.0)
+    seed["floor_sweep_prev_pos_valid_u8"][0, 0] = np.uint8(1)
+
+    before = _read_colldata_after_reseed(seed)
+    compare, after = _step_with_colldata(seed)
+
+    max_delta = abs(float(compare["pos_y"][0]) - 96.0)
+    for field in ("bottom_rel_y", "top_rel_y", "left_rel_x", "right_rel_x", "side_rel_y"):
+        max_delta = max(
+            max_delta,
+            abs(float(after[f"current_{field}"][0]) - float(before[f"current_{field}"][0])),
+        )
+    steps = int(max_delta / 6.0) + 1 if max_delta > 6.0 else 1
+    assert steps > 1
+    factor = float(steps - 1) / float(steps)
+
+    for field in ("bottom_rel_y", "top_rel_y", "left_rel_x", "right_rel_x", "side_rel_y"):
+        initial = float(before[f"current_{field}"][0])
+        current = float(after[f"current_{field}"][0])
+        expected_prev = initial + (current - initial) * factor
+        assert float(after[f"prev_{field}"][0]) == pytest.approx(expected_prev)
 
 
 def test_callback_local_floor_result_is_stable_for_fd_hard_floor() -> None:
@@ -421,3 +710,319 @@ def test_callback_local_4a908_retry_result_is_retained_consumer() -> None:
     assert int(snap["floor_result_mode"][0]) == FLOOR_MODE_4A908_RETRY
     assert int(snap["floor_result_segment_id"][0]) == 1
     assert float(snap["floor_result_contact_y"][0]) == pytest.approx(float(compare["pos_y"][0]))
+
+
+def test_callback_local_4a908_retry_respects_floor_skip_without_stale_floor_result() -> None:
+    seed = _seed_base(STAGE_BATTLEFIELD, ACT_WAIT, SM_WAIT1_0, -40.0, 25.0)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(3)
+    seed["floor_sweep_prev_pos_x_f32"][0, 0] = np.float32(-40.0)
+    seed["floor_sweep_prev_pos_y_f32"][0, 0] = np.float32(26.0)
+    seed["floor_sweep_prev_pos_valid_u8"][0, 0] = np.uint8(1)
+
+    compare, snap = _step_with_colldata(seed)
+    assert int(compare["on_ground"][0]) == 1
+    assert int(compare["ground_id"][0]) == 2
+    assert int(snap["floor_result_valid"][0]) == 1
+    assert int(snap["floor_result_source"][0]) == FLOOR_RESULT_GROUNDED_4A908_RETRY
+    assert int(snap["floor_result_mode"][0]) == FLOOR_MODE_4A908_RETRY
+    assert int(snap["floor_result_segment_id"][0]) == 2
+
+    seed["floor_skip_segment_id_u16"][0, 0] = np.uint16(2)
+    seed["floor_skip_segment_valid_u8"][0, 0] = np.uint8(1)
+    compare_skip, snap_skip = _step_with_colldata(seed)
+
+    assert int(compare_skip["on_ground"][0]) == 0
+    assert int(compare_skip["ground_id"][0]) == 3
+    assert int(snap_skip["floor_skip_valid"][0]) == 0
+    assert int(snap_skip["floor_skip_segment_id"][0]) == 0xFFFF
+    assert int(snap_skip["floor_result_valid"][0]) == 0
+    assert int(snap_skip["floor_result_source"][0]) == FLOOR_RESULT_NONE
+
+
+def test_floor_skip_written_by_platform_pass_and_cleared_after_other_floor() -> None:
+    import msl_binding
+
+    seed = _seed_base(STAGE_BATTLEFIELD, ACT_GUARD, 0xFFFFFFFF, 30.0, 27.2000007629 + 0.0001)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(4)
+    seed["shield_hp"][0, 0] = np.float32(60.0)
+
+    sizes = msl_binding.sizes()
+    neutral = _input_bytes()
+    drop = _input_bytes()
+    drop_v = drop.view(INPUT_DTYPE).reshape((1,))
+    drop_v["p"]["buttons"][0, 0] = np.uint16(BUTTON_L)
+    drop_v["p"]["main_y"][0, 0] = np.int8(-55)
+    out = np.zeros((1, int(sizes["compare"])), dtype=np.uint8)
+
+    handle = msl_binding.init(
+        batch_size=1,
+        num_players=2,
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    try:
+        msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, int(sizes["seed"]))))
+        msl_binding.step_input(handle, neutral, drop)
+        pass_snap = _read_colldata(handle)
+        assert int(pass_snap["floor_skip_valid"][0]) == 1
+        assert int(pass_snap["floor_skip_segment_id"][0]) == 4
+
+        prev = drop
+        cur = drop
+        landed_on_other_floor = False
+        final_snap = pass_snap
+        for _ in range(80):
+            msl_binding.step_input(handle, prev, cur)
+            msl_binding.write_compare(handle, out)
+            row = out.view(COMPARE_DTYPE).reshape((1,))[0].copy()
+            final_snap = _read_colldata(handle)
+            if int(row["on_ground"][0]) == 1 and int(row["ground_id"][0]) != 4:
+                landed_on_other_floor = True
+                break
+            prev = cur
+
+        assert landed_on_other_floor
+        assert int(final_snap["floor_skip_valid"][0]) == 0
+        assert int(final_snap["floor_skip_segment_id"][0]) == 0xFFFF
+    finally:
+        msl_binding.destroy(handle)
+
+
+def test_floor_joint_skip_suppresses_ordered_bottom_sweep_on_static_floor() -> None:
+    # Source mpColl_80044628_Floor forwards CollData.joint_id_skip to mpCheckFloor before the
+    # candidate scan. Skipping the owning joint must leave the callback-local floor result empty
+    # even though the ECB bottom crosses the line.
+    # refs/melee/src/melee/mp/mpcoll.c::mpColl_80044628_Floor
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    colldata_dtype = _colldata_ecb_dtype()
+    assert int(sizes["colldata_ecb"]) == colldata_dtype.itemsize
+
+    floor_seg = msl_binding.stage_floor_segment(3, 34)
+    assert floor_seg is not None
+    joint_id = int(floor_seg["joint_id"])
+
+    seed = _seed_base(3, ACT_WAIT, SM_WAIT1_0, 0.0, 1.0)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["speed_y_self"][0, 0] = np.float32(-5.0)
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        inp = np.zeros((1, input_stride), dtype=np.uint8)
+        out = np.zeros((1, int(sizes["colldata_ecb"])), dtype=np.uint8)
+        msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, seed_stride)))
+        msl_binding.debug_set_mpcoll_joint_filters(handle, 0, 0, joint_id, -1)
+
+        msl_binding.alloc_reset()
+        msl_binding.step_input(handle, inp, inp)
+        msl_binding.debug_write_colldata_ecb(handle, out)
+        snap = out.view(colldata_dtype).reshape((1,))[0]
+        stats = msl_binding.alloc_stats()
+
+        assert int(stats["calls"]) == 0
+        assert int(stats["bytes"]) == 0
+        assert int(snap["floor_result_valid"][0]) == 0
+        assert int(snap["floor_result_segment_id"][0]) == 0xFFFF
+    finally:
+        msl_binding.destroy(handle)
+
+
+def test_mp_copy_colldata_copies_modeled_state_without_action_routing() -> None:
+    # Source `mpCopyCollData` copies CollData root/ECB/env/surface/skip/filter state, not the
+    # Fighter motion-state owner. This debug-only helper exercises the modeled MSL CollData lanes
+    # without routing any action family through a wrapper.
+    # refs/melee/src/melee/mp/mpcoll.c::mpCopyCollData
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    colldata_dtype = _colldata_ecb_dtype()
+    contacts_dtype = _collision_contacts_dtype()
+    assert int(sizes["colldata_ecb"]) == colldata_dtype.itemsize
+    assert int(sizes["collision_contacts"]) == contacts_dtype.itemsize
+
+    seed = _seed_base(STAGE_BATTLEFIELD, ACT_FALL, SM_FALL, -40.0, 45.0)
+    seed["action_id"][0, 1] = np.uint16(ACT_WAIT)
+    seed["animation_index"][0, 1] = np.uint32(SM_WAIT1_0)
+    seed["floor_skip_segment_id_u16"][0, 0] = np.uint16(2)
+    seed["floor_skip_segment_valid_u8"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(2)
+    seed["on_ground"][0, 0] = np.uint8(1)
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, int(sizes["seed"]))))
+        msl_binding.debug_set_mpcoll_joint_filters(handle, 0, 0, 5, 6)
+        msl_binding.debug_set_mpcoll_joint_filters(handle, 0, 1, 7, 8)
+        msl_binding.debug_set_coll_env_flags(handle, 0, 0, 0x40)
+
+        before = np.zeros((1, int(sizes["colldata_ecb"])), dtype=np.uint8)
+        msl_binding.debug_write_colldata_ecb(handle, before)
+        before_snap = before.view(colldata_dtype).reshape((1,))[0]
+        assert int(before_snap["floor_skip_valid"][0]) == 1
+        assert int(before_snap["floor_skip_valid"][1]) == 0
+        assert float(before_snap["current_top_rel_y"][0]) != pytest.approx(
+            float(before_snap["current_top_rel_y"][1])
+        )
+
+        msl_binding.alloc_reset()
+        msl_binding.debug_copy_colldata(handle, 0, 0, 1)
+        stats = msl_binding.alloc_stats()
+        assert int(stats["calls"]) == 0
+        assert int(stats["bytes"]) == 0
+
+        colldata = np.zeros((1, int(sizes["colldata_ecb"])), dtype=np.uint8)
+        contacts = np.zeros((1, int(sizes["collision_contacts"])), dtype=np.uint8)
+        compare = np.zeros((1, int(sizes["compare"])), dtype=np.uint8)
+        msl_binding.debug_write_colldata_ecb(handle, colldata)
+        msl_binding.debug_write_collision_contacts(handle, contacts)
+        msl_binding.write_compare(handle, compare)
+        snap = colldata.view(colldata_dtype).reshape((1,))[0]
+        contact_snap = contacts.view(contacts_dtype).reshape((1,))[0]
+        row = compare.view(COMPARE_DTYPE).reshape((1,))[0]
+
+        for field in (
+            "current_bottom_rel_y",
+            "current_top_rel_y",
+            "current_left_rel_x",
+            "current_right_rel_x",
+            "prev_bottom_rel_y",
+            "prev_top_rel_y",
+            "desired_bottom_rel_y",
+            "desired_top_rel_y",
+            "substep_prev_pos_x",
+            "substep_prev_pos_y",
+            "last_pos_x",
+            "last_pos_y",
+        ):
+            assert float(snap[field][1]) == pytest.approx(float(snap[field][0]))
+        assert int(snap["floor_skip_valid"][1]) == 1
+        assert int(snap["floor_skip_segment_id"][1]) == 2
+        assert int(snap["joint_id_skip"][1]) == 5
+        assert int(snap["joint_id_only"][1]) == 8
+        assert int(contact_snap["coll_env_flags"][1]) == int(contact_snap["coll_env_flags"][0])
+        assert int(row["action_id"][1]) == ACT_WAIT
+        assert int(row["action_id"][0]) == ACT_FALL
+        assert float(row["pos_x"][1]) == pytest.approx(float(row["pos_x"][0]))
+        assert float(row["pos_y"][1]) == pytest.approx(float(row["pos_y"][0]))
+
+        msl_binding.debug_set_player_root(handle, 0, 0, 70.0, 80.0, 1)
+        msl_binding.debug_set_mpcoll_joint_filters(handle, 0, 0, -1, -1)
+        msl_binding.debug_write_colldata_ecb(handle, colldata)
+        msl_binding.write_compare(handle, compare)
+        after_mutate = colldata.view(colldata_dtype).reshape((1,))[0]
+        row_after = compare.view(COMPARE_DTYPE).reshape((1,))[0]
+        assert float(row_after["pos_x"][0]) == pytest.approx(70.0)
+        assert float(row_after["pos_x"][1]) == pytest.approx(float(row["pos_x"][1]))
+        assert int(after_mutate["joint_id_skip"][0]) == -1
+        assert int(after_mutate["joint_id_skip"][1]) == 5
+        assert int(after_mutate["joint_id_only"][1]) == 8
+        assert float(after_mutate["last_pos_x"][0]) == pytest.approx(70.0)
+        assert float(after_mutate["last_pos_x"][1]) == pytest.approx(float(snap["last_pos_x"][1]))
+    finally:
+        msl_binding.destroy(handle)
+
+
+def test_reseed_clears_debug_joint_filters_before_normal_step() -> None:
+    # Joint filters are not serialized in MslSeed. A debug-mutated filter must not survive into a
+    # later reseed on a reused handle.
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    colldata_dtype = _colldata_ecb_dtype()
+    assert int(sizes["colldata_ecb"]) == colldata_dtype.itemsize
+
+    floor_seg = msl_binding.stage_floor_segment(3, 34)
+    assert floor_seg is not None
+    joint_id = int(floor_seg["joint_id"])
+
+    seed = _seed_base(3, ACT_WAIT, SM_WAIT1_0, 0.0, 1.0)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["speed_y_self"][0, 0] = np.float32(-5.0)
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        inp = np.zeros((1, input_stride), dtype=np.uint8)
+        out = np.zeros((1, int(sizes["colldata_ecb"])), dtype=np.uint8)
+        seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+
+        msl_binding.reseed_seed(handle, seed_bytes)
+        msl_binding.debug_set_mpcoll_joint_filters(handle, 0, 0, joint_id, -1)
+        msl_binding.reseed_seed(handle, seed_bytes)
+
+        msl_binding.alloc_reset()
+        msl_binding.step_input(handle, inp, inp)
+        msl_binding.debug_write_colldata_ecb(handle, out)
+        snap = out.view(colldata_dtype).reshape((1,))[0]
+        stats = msl_binding.alloc_stats()
+
+        assert int(stats["calls"]) == 0
+        assert int(stats["bytes"]) == 0
+        assert int(snap["joint_id_skip"][0]) == -1
+        assert int(snap["joint_id_only"][0]) == -1
+        assert int(snap["floor_result_valid"][0]) == 1
+        assert int(snap["floor_result_segment_id"][0]) == 34
+    finally:
+        msl_binding.destroy(handle)
+
+
+def test_colldata_last_pos_initializes_from_root_without_action_routing() -> None:
+    # Source mpColl wrappers keep CollData.last_pos as callback-local root state. Reseed/debug root
+    # helpers initialize the modeled lane from the current root without routing a fighter action.
+    # refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_80043754,mpCollEnd}
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    dtype = _colldata_ecb_dtype()
+    assert int(sizes["colldata_ecb"]) == dtype.itemsize
+    seed = _seed_base(STAGE_BATTLEFIELD, ACT_FALL, SM_FALL, -12.0, 34.0)
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    out = np.zeros((1, int(sizes["colldata_ecb"])), dtype=np.uint8)
+    try:
+        msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, int(sizes["seed"]))))
+        msl_binding.debug_write_colldata_ecb(handle, out)
+        snap = out.view(dtype).reshape((1,))[0]
+        assert float(snap["last_pos_x"][0]) == pytest.approx(-12.0)
+        assert float(snap["last_pos_y"][0]) == pytest.approx(34.0)
+
+        msl_binding.debug_set_player_root(handle, 0, 0, 22.5, 44.5, 1)
+        msl_binding.debug_write_colldata_ecb(handle, out)
+        snap = out.view(dtype).reshape((1,))[0]
+        assert float(snap["last_pos_x"][0]) == pytest.approx(22.5)
+        assert float(snap["last_pos_y"][0]) == pytest.approx(44.5)
+    finally:
+        msl_binding.destroy(handle)
+
+
+def test_colldata_debug_snapshot_does_not_allocate_after_init() -> None:
+    import msl_binding
+
+    seed = _seed_base(STAGE_BATTLEFIELD, ACT_FALL, SM_FALL, -40.0, 45.0)
+    seed["floor_skip_segment_id_u16"][0, 0] = np.uint16(2)
+    seed["floor_skip_segment_valid_u8"][0, 0] = np.uint8(1)
+    sizes = msl_binding.sizes()
+    dtype = _colldata_ecb_dtype()
+    assert int(sizes["colldata_ecb"]) == dtype.itemsize
+    colldata = np.zeros((1, int(sizes["colldata_ecb"])), dtype=np.uint8)
+
+    handle = msl_binding.init(
+        batch_size=1,
+        num_players=2,
+        ucf_enabled=1,
+        ucf_cardinals_1_0_enabled=1,
+    )
+    try:
+        msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, int(sizes["seed"]))))
+        msl_binding.alloc_reset()
+        msl_binding.debug_write_colldata_ecb(handle, colldata)
+        stats = msl_binding.alloc_stats()
+        assert int(stats["calls"]) == 0
+        assert int(stats["bytes"]) == 0
+    finally:
+        msl_binding.destroy(handle)

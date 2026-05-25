@@ -75,3 +75,44 @@ def test_mpcoll_source_comments_do_not_claim_retained_approximation_debt() -> No
     )
     for phrase in stale_collision_stage_phrases:
         assert phrase not in edited_collision_stage_comments, phrase
+
+
+def test_phase2_mpcoll_substrate_is_not_routed_through_item_or_special_only_sources() -> None:
+    # Phase 2 owns common CollData/mpColl substrate, not item-only collision routing or bespoke
+    # special-action callbacks. Keep this as a source-scope guard so future helper plumbing cannot
+    # satisfy the Phase 2 tests by entering item/special owners.
+    item_sources = "\n".join(
+        _read(path)
+        for path in (
+            "src/items.c",
+            "src/item_reflect.h",
+            "src/item_common_params.c",
+            "src/item_article_params.c",
+            "src/stage_item_params.c",
+        )
+    )
+    for token in (
+        "mpcoll_colldata_copy",
+        "mpcoll_check_bounding",
+        "mpcoll_end_static_events",
+        "stage_collision_static_query",
+        "debug_copy_colldata",
+    ):
+        assert token not in item_sources, token
+
+    special_only_sources = "\n".join(
+        _read(path)
+        for path in (
+            "src/shine.c",
+            "src/specialhi_pose.h",
+            "src/special_msids.c",
+        )
+    )
+    for token in (
+        "mpcoll_colldata_copy",
+        "mpcoll_check_bounding",
+        "mpcoll_end_static_events",
+        "stage_collision_static_query",
+        "debug_copy_colldata",
+    ):
+        assert token not in special_only_sources, token

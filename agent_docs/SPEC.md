@@ -832,6 +832,50 @@ Recent deltas to reflect here (do not let these get “lost in chat logs”):
   ft_80082C74,ft_80082708,ft_800827A0,ft_80083090,ft_800831CC,ft_80083F88},
   refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_800473CC,mpColl_800477E0,
   mpColl_8004B108,mpColl_8004B2DC,mpColl_8004ACE4}).
+- `CollData.floor_skip` runtime writes use source-shaped `mpUpdateFloorSkip` /
+  `mpClearFloorSkip` helpers (`msl_mpcoll_update_floor_skip`, `msl_mpcoll_clear_floor_skip`)
+  rather than direct lane writes in individual action files. The debug CollData snapshot exposes
+  the hidden skip id/valid bit so substrate tests can prove pass-through lifetime and clear
+  boundaries without inferring them from a later floor result (`src/mpcoll_floor_skip.h`,
+  `src/api.c`; refs/melee/src/melee/mp/mpcoll.c::{mpUpdateFloorSkip,mpClearFloorSkip}).
+- No-preference static floor sweeps in the shared `mpColl_80044628_Floor` producer now consume the
+  Phase-1 `stage_collision_static_query` substrate directly. Persisted-floor preference,
+  explicit line-index skips, and deferred runtime platform transforms (FoD height platforms and
+  Randall) remain on the graph/env path until their source owners are ported; this prevents the
+  static mpLib substrate from silently claiming moving/deferred floor state.
+  (`src/mpcoll_ground.c`, `src/stage_collision.c`; refs/melee/src/melee/mp/mplib.c::mpCheckFloor,
+  refs/melee/src/melee/mp/mpcoll.c::mpColl_80044628_Floor; data/stages/bin/*.bin::MSLSTG01
+  platform_transform records).
+- No-preference axis-aligned wall/ceiling sweeps in the ordered producers carry the Phase-1
+  source-shaped mpLib semantics directly in the graph scan: zero-delta sweeps along the line are
+  rejected, endpoint tolerance/clamping is preserved, and joint filters reject whole generated
+  `MSLSTG01` joint-owned line groups. Sloped no-hug wall/ceiling probes, wall hug/slop probes, and
+  persisted CollData wall/ceiling preference remain graph-scanned under the current legal-stage
+  ordered producers so the hot path does not run a duplicate static-query prepass.
+  (`src/mpcoll_wall_ceil.c`; refs/melee/src/melee/mp/mplib.c::{
+  mpCheckCeiling,mpCheckLeftWall,mpCheckRightWall},
+  refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044AD8_Ceiling,mpColl_80044C74_Ceiling,
+  mpColl_80044E10_RightWall,mpColl_80045B74_LeftWall}).
+- `CollData.joint_id_skip` and `CollData.joint_id_only` are explicit runtime lanes and feed the
+  shared floor, wall, and ceiling query producers. Static-query and graph fallback scans reject
+  whole joint-owned line groups through the generated `MSLSTG01` `joint_id` field; line-adjacent
+  wall exclusions remain separate until the full same-frame floor/wall joint-skip owner is ported.
+  The debug setter exists only for substrate tests and does not route action families.
+  (`src/state_fields.inc`, `src/mpcoll_ground.c`, `src/mpcoll_wall_ceil.c`;
+  refs/melee/src/melee/lb/types.h::CollData::{joint_id_skip,joint_id_only},
+  refs/melee/src/melee/mp/mplib.c::{mpCheckFloor,mpCheckCeiling,mpCheckLeftWall,mpCheckRightWall}).
+- Static legal-stage portions of `mpCollGetSpeedFloor`, `mpCollGetSpeedCeiling`, and
+  `mpColl_IsOnPlatform` are centralized in the mpColl substrate. Static active floor/ceiling
+  surfaces return valid zero speed; FoD height-platform and Randall endpoint speed remain deferred
+  to the moving-platform phase instead of consuming transformed-floor deltas through fighter hacks.
+  Wall speed debug fields are still singleton-wall approximations until MSL models source
+  `left_facing_wall` and `right_facing_wall` separately. Pass-through checks that source spells as
+  `mpColl_IsOnPlatform` now call the shared helper, and the CollData debug snapshot exposes the
+  speed-valid bits for substrate tests.
+  (`src/mpcoll_wall_ceil.c`, `src/locomotion.c`, `src/api.c`;
+  refs/melee/src/melee/mp/mpcoll.c::{mpCollGetSpeedFloor,mpCollGetSpeedLeftWall,
+  mpCollGetSpeedRightWall,mpCollGetSpeedCeiling,mpColl_IsOnPlatform},
+  refs/melee/src/melee/mp/mplib.c::{mpGetSpeed,mpLineGetFlags}).
   `GuardSetOff_Anim` may enter Guard and then same-frame GuardOff through
   the normal Guard IASA release path; and terminal `GuardReflect_Anim` with an expired timer can
   snapshot into Guard before release consumption. Common-air FD walljump rows promote the hidden
@@ -6094,6 +6138,36 @@ BODY collision-space residual split and rejected seed bridge:
   `data/motion_state/owners/{fox,falco}.bin::MSLMSO01 coll_cb_by_action`,
   `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{ftFx_SpecialS_Coll,ftFx_SpecialS_GroundToAir}`,
   and `refs/melee/src/melee/mp/mpcoll.c::{mpColl_80043754,mpColl_8004ACE4}`.
+- `mpColl_80043754` also updates `prev_ecb` on every substep through
+  `mpCollInterpolateECB`. For completed multi-substep callbacks, runtime stores the penultimate
+  interpolated ECB as `prev_ecb` and the final interpolated/desired ECB as current; retaining the
+  callback-start ECB would make later callbacks see a stale `prev_ecb` when root or ECB movement
+  exceeds the 6-unit split threshold. Sources:
+  `refs/melee/src/melee/mp/mpcoll.c::{mpColl_80043754,mpCollInterpolateECB}`.
+- `mpCollSqueezeHorizontal` / `mpCollSqueezeVertical` now preserve the source `x64_ecb` / `b6`
+  lifetime: the first squeeze saves the pre-squeeze ECB, the next `mpCollInterpolateECB` copies the
+  squeezed ECB into `prev_ecb`, restores current ECB from `x64_ecb`, clears `b6`, and then
+  interpolates toward the freshly loaded desired ECB. Runtime exposes this only through hidden
+  CollData state and debug snapshots; normal action routing is unchanged. Sources:
+  `refs/melee/src/melee/mp/mpcoll.c::{mpCollInterpolateECB,mpCollSqueezeHorizontal,mpCollSqueezeVertical}`.
+- The Phase 2 substrate has a source-shaped `mpCollCheckBounding` AABB helper for static/debug
+  wrapper tests: it computes the swept AABB from current/previous CollData root plus current/previous
+  ECB, and applies the `flags & 0b100` ledge-snap expansion exactly at the boundary where source
+  calls `mpBoundingCheck`. The helper does not route action callbacks or Ground object callbacks.
+  Sources: `src/mpcoll_bounding.h`, `refs/melee/src/melee/mp/mpcoll.c::mpCollCheckBounding`.
+- `mpCopyCollData` has a modeled-lane analogue for Phase 2 substrate tests. It copies MSL's
+  CollData-owned root, `last_pos`, previous/root-sweep, current/previous/desired/x64-squeeze ECB,
+  env/contact, floor/wall/ceiling surface, `floor_skip`, and `joint_id_skip`, but deliberately does
+  not copy `joint_id_only`, Fighter-owned action ids, animation state, stocks, or other non-CollData
+  state. The only current entry point is debug/test-only, so this does not route Ice Climbers or
+  broad action owners.
+  Sources: `src/mpcoll_colldata_copy.h`, `refs/melee/src/melee/mp/mpcoll.c::mpCopyCollData`.
+- `mpCollEnd` has a static finalizer event helper for the source publication boundary: floor
+  finalization is selected by wrapper-forced `arg1` or edge env bits, ceiling finalization by
+  ceiling hug/push env bits, and the callback `dy` is `cur_pos.y - last_pos.y`. Dynamic
+  `grDynamicAttr_801CA284` low-byte refresh and Ground callbacks remain deferred with moving
+  platform/Ground-object behavior.
+  Sources: `src/mpcoll_end.h`, `refs/melee/src/melee/mp/mpcoll.c::{mpCollEnd,mpCollEnd_inline,mpCollEnd_inline2}`.
 - Aerial Side-B Start/Main/End wall collision uses the full airborne mpColl wall envelope.
   `ftFx_SpecialAirSStart_Coll`, `ftFx_SpecialAirS_Coll`, and `ftFx_SpecialAirSEnd_Coll` call
   `ft_CheckGroundAndLedge`, which runs `mpColl_800473CC` or `mpColl_800471F8` and then

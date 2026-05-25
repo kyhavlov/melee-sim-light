@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 
 from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE
+from tests.test_colldata_ecb_substrate import _colldata_ecb_dtype
 from tests.stage_metadata_helpers import fd_stage_segments
 
 # Action ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
@@ -17,6 +18,32 @@ SM_FALL = 20
 CHAR_FALCO = 22
 MSL_COLLIDE_RIGHT_WALL_PUSH = 0x00000040
 MSL_COLLIDE_RIGHT_WALL_HUG = 0x00000800
+MSL_COLLIDE_LEFT_WALL_PUSH = 0x00000001
+MSL_COLLIDE_LEFT_WALL_HUG = 0x00000020
+
+
+def _collision_contacts_dtype() -> np.dtype:
+    return np.dtype(
+        [
+            ("wall_kind", ("u1", (4,))),
+            ("_pad0", ("u1", (4,))),
+            ("wall_id", ("<u2", (4,))),
+            ("wall_contact_x", ("<f4", (4,))),
+            ("wall_contact_y", ("<f4", (4,))),
+            ("wall_normal_x", ("<f4", (4,))),
+            ("wall_normal_y", ("<f4", (4,))),
+            ("ceiling_id", ("<u2", (4,))),
+            ("_pad1", ("<u2", (4,))),
+            ("ceiling_contact_x", ("<f4", (4,))),
+            ("ceiling_contact_y", ("<f4", (4,))),
+            ("ceiling_normal_x", ("<f4", (4,))),
+            ("ceiling_normal_y", ("<f4", (4,))),
+            ("coll_env_flags", ("<u4", (4,))),
+            ("coll_prev_env_flags", ("<u4", (4,))),
+            ("damage_hitlag_wall_asdi_latch", ("u1", (4,))),
+        ],
+        align=False,
+    )
 
 
 def _ecb_side_y_offset_for_char_id(char_id: int) -> float:
@@ -57,6 +84,34 @@ def _fd_right_wall_segment_ids() -> set[int]:
         int(seg["i"])
         for seg in fd_stage_segments()
         if seg.get("kind") == "right_wall" and not bool(seg.get("platform"))
+    }
+
+
+def _fd_pick_left_wall_segment() -> tuple[int, float, float, float, float]:
+    # Prefer a deep (under-stage) left wall segment to avoid interacting with floor.
+    walls = [
+        seg
+        for seg in fd_stage_segments()
+        if seg.get("kind") == "left_wall" and not bool(seg.get("platform"))
+    ]
+    if not walls:
+        raise AssertionError("no left_wall segments found in FD stage data")
+
+    seg = min(walls, key=lambda s: max(float(s["y0"]), float(s["y1"])))
+    return (
+        int(seg["i"]),
+        float(seg["x0"]),
+        float(seg["y0"]),
+        float(seg["x1"]),
+        float(seg["y1"]),
+    )
+
+
+def _fd_left_wall_segment_ids() -> set[int]:
+    return {
+        int(seg["i"])
+        for seg in fd_stage_segments()
+        if seg.get("kind") == "left_wall" and not bool(seg.get("platform"))
     }
 
 
@@ -186,6 +241,85 @@ def test_wall_contact_persists_across_frames_on_fd() -> None:
         assert int(c0["wall_id"][0]) in _fd_right_wall_segment_ids()
         assert int(c1["wall_kind"][0]) != 0
         assert int(c1["wall_id"][0]) == wall_i
+        assert int(c1["coll_prev_env_flags"][0]) & MSL_COLLIDE_RIGHT_WALL_PUSH
+    finally:
+        msl_binding.destroy(handle)
+
+
+def test_left_wall_contact_persists_across_frames_on_fd() -> None:
+    # Source mpColl's left-wall producer mirrors right wall ordering: it sweeps the ECB right side
+    # and publishes Collide_LeftWall* env bits.
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80045B74_LeftWall,mpColl_80046224_LeftWall}
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    contacts_stride = int(sizes["collision_contacts"])
+    contacts_dtype = _collision_contacts_dtype()
+    assert seed_stride == SEED_DTYPE.itemsize
+    assert input_stride == INPUT_DTYPE.itemsize
+    assert int(contacts_dtype.itemsize) == contacts_stride
+
+    try:
+        wall_i, wx0, wy0, wx1, wy1 = _fd_pick_left_wall_segment()
+    except AssertionError as e:
+        pytest.skip(str(e))
+
+    char_id = 1
+    msid_wait = 2
+    af = 0
+    _min_x, max_x, _min_y, max_y = msl_binding.ecb_extents_rel(char_id, msid_wait, af)
+    bottom_y = float(msl_binding.ecb_bottom_rel_y(char_id, msid_wait, af))
+    side_y = _ecb_side_y_offset_for_char_id(char_id) + 0.5 * (float(max_y) + bottom_y)
+
+    wall_y_mid = 0.5 * (float(wy0) + float(wy1))
+    wall_x_mid = 0.5 * (float(wx0) + float(wx1))
+    pos_x0 = wall_x_mid - 0.05 - float(max_x)
+    pos_y0 = wall_y_mid - side_y
+
+    seed = np.zeros((1,), dtype=SEED_DTYPE)
+    seed["stage_id"][0] = np.uint32(32)
+    seed["num_players"][0] = np.uint8(2)
+    seed["stocks"][0, :2] = np.uint8(4)
+    seed["char_id"][0, 0] = np.uint8(char_id)
+    seed["action_id"][0, 0] = np.uint16(ACT_WAIT)
+    seed["animation_index"][0, 0] = np.uint32(msid_wait)
+    seed["action_frame"][0, 0] = np.int16(af)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["facing"][0, 0] = np.uint8(1)
+    seed["pos_x"][0, 0] = np.float32(pos_x0)
+    seed["pos_y"][0, 0] = np.float32(pos_y0)
+    seed["speed_air_x_self"][0, 0] = np.float32(2.0)
+    seed["speed_y_self"][0, 0] = np.float32(0.0)
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        prev_inp = np.zeros((1, input_stride), dtype=np.uint8)
+        inp = np.zeros((1, input_stride), dtype=np.uint8)
+        out_contacts = np.zeros((1, contacts_stride), dtype=np.uint8)
+
+        msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, seed_stride)))
+
+        msl_binding.alloc_reset()
+        msl_binding.step_input(handle, prev_inp, inp)
+        msl_binding.debug_write_collision_contacts(handle, out_contacts)
+        c0 = out_contacts.view(contacts_dtype).reshape((1,))[0]
+
+        msl_binding.step_input(handle, prev_inp, inp)
+        msl_binding.debug_write_collision_contacts(handle, out_contacts)
+        c1 = out_contacts.view(contacts_dtype).reshape((1,))[0]
+
+        stats = msl_binding.alloc_stats()
+        assert int(stats["calls"]) == 0
+        assert int(stats["bytes"]) == 0
+
+        assert int(c0["wall_kind"][0]) != 0
+        assert int(c0["wall_id"][0]) in _fd_left_wall_segment_ids()
+        assert int(c0["coll_env_flags"][0]) & MSL_COLLIDE_LEFT_WALL_PUSH
+        assert int(c1["wall_kind"][0]) != 0
+        assert int(c1["wall_id"][0]) == wall_i
+        assert int(c1["coll_prev_env_flags"][0]) & MSL_COLLIDE_LEFT_WALL_PUSH
     finally:
         msl_binding.destroy(handle)
 
@@ -197,6 +331,8 @@ def test_ceiling_contact_persists_across_frames_on_fd() -> None:
     seed_stride = int(sizes["seed"])
     input_stride = int(sizes["input"])
     contacts_stride = int(sizes["collision_contacts"])
+    colldata_stride = int(sizes["colldata_ecb"])
+    colldata_dtype = _colldata_ecb_dtype()
 
     assert seed_stride == SEED_DTYPE.itemsize
     assert input_stride == INPUT_DTYPE.itemsize
@@ -231,6 +367,7 @@ def test_ceiling_contact_persists_across_frames_on_fd() -> None:
         align=False,
     )
     assert int(CONTACTS_DTYPE.itemsize) == contacts_stride
+    assert int(colldata_dtype.itemsize) == colldata_stride
 
     char_id = 1
     msid_wait = 2
@@ -265,13 +402,16 @@ def test_ceiling_contact_persists_across_frames_on_fd() -> None:
         prev_inp = np.zeros((1, input_stride), dtype=np.uint8)
         inp = np.zeros((1, input_stride), dtype=np.uint8)
         out_contacts = np.zeros((1, contacts_stride), dtype=np.uint8)
+        out_colldata = np.zeros((1, colldata_stride), dtype=np.uint8)
 
         msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, seed_stride)))
 
         msl_binding.alloc_reset()
         msl_binding.step_input(handle, prev_inp, inp)
         msl_binding.debug_write_collision_contacts(handle, out_contacts)
+        msl_binding.debug_write_colldata_ecb(handle, out_colldata)
         c0 = out_contacts.view(CONTACTS_DTYPE).reshape((1,))[0]
+        cd0 = out_colldata.view(colldata_dtype).reshape((1,))[0]
 
         msl_binding.step_input(handle, prev_inp, inp)
         msl_binding.debug_write_collision_contacts(handle, out_contacts)
@@ -282,10 +422,14 @@ def test_ceiling_contact_persists_across_frames_on_fd() -> None:
         assert int(stats["bytes"]) == 0
 
         assert int(c0["ceiling_id"][0]) == ceil_i
+        assert int(cd0["ceiling_speed_valid"][0]) == 1
+        assert float(cd0["ceiling_speed_x"][0]) == pytest.approx(0.0)
+        assert float(cd0["ceiling_speed_y"][0]) == pytest.approx(0.0)
         assert int(c1["ceiling_id"][0]) == ceil_i
         # Ceiling normal should point down (ny < 0) for the horizontal underside.
         assert float(c0["ceiling_normal_y"][0]) < 0.0
         assert float(c1["ceiling_normal_y"][0]) < 0.0
+        assert int(c1["coll_prev_env_flags"][0]) & 0x00002000
     finally:
         msl_binding.destroy(handle)
 
@@ -602,5 +746,134 @@ def test_ceiling_contact_triggers_on_ecb_top_crossing_not_root_on_fd() -> None:
 
         assert int(c0["ceiling_id"][0]) == ceil_i
         assert float(c0["ceiling_normal_y"][0]) < 0.0
+    finally:
+        msl_binding.destroy(handle)
+
+
+def test_wall_joint_skip_suppresses_ordered_wall_sweep_on_fd() -> None:
+    # Source mpColl passes CollData.joint_id_skip through every mpCheck{Left,Right}Wall call before
+    # candidate collection; skipping the owning joint must suppress the same wall contact without
+    # allocating. refs/melee/src/melee/mp/mpcoll.c::mpColl_80044E10_RightWall
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    contacts_stride = int(sizes["collision_contacts"])
+    contacts_dtype = _collision_contacts_dtype()
+    assert int(contacts_dtype.itemsize) == contacts_stride
+
+    try:
+        wall_i, wx0, wy0, wx1, wy1 = _fd_pick_right_wall_segment()
+    except AssertionError as e:
+        pytest.skip(str(e))
+    wall_seg = msl_binding.stage_right_wall_segment(32, wall_i)
+    assert wall_seg is not None
+    joint_id = int(wall_seg["joint_id"])
+
+    char_id = 1
+    msid_wait = 2
+    af = 0
+    min_x, _max_x, _min_y, max_y = msl_binding.ecb_extents_rel(char_id, msid_wait, af)
+    bottom_y = float(msl_binding.ecb_bottom_rel_y(char_id, msid_wait, af))
+    side_y = _ecb_side_y_offset_for_char_id(char_id) + 0.5 * (float(max_y) + bottom_y)
+    wall_y_mid = 0.5 * (float(wy0) + float(wy1))
+    wall_x_mid = 0.5 * (float(wx0) + float(wx1))
+
+    seed = np.zeros((1,), dtype=SEED_DTYPE)
+    seed["stage_id"][0] = np.uint32(32)
+    seed["num_players"][0] = np.uint8(2)
+    seed["stocks"][0, :2] = np.uint8(4)
+    seed["char_id"][0, 0] = np.uint8(char_id)
+    seed["action_id"][0, 0] = np.uint16(ACT_WAIT)
+    seed["animation_index"][0, 0] = np.uint32(msid_wait)
+    seed["action_frame"][0, 0] = np.int16(af)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["facing"][0, 0] = np.uint8(1)
+    seed["pos_x"][0, 0] = np.float32(wall_x_mid + 0.05 - float(min_x))
+    seed["pos_y"][0, 0] = np.float32(wall_y_mid - side_y)
+    seed["speed_air_x_self"][0, 0] = np.float32(-2.0)
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        prev_inp = np.zeros((1, input_stride), dtype=np.uint8)
+        inp = np.zeros((1, input_stride), dtype=np.uint8)
+        out_contacts = np.zeros((1, contacts_stride), dtype=np.uint8)
+        msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, seed_stride)))
+        msl_binding.debug_set_mpcoll_joint_filters(handle, 0, 0, joint_id, -1)
+
+        msl_binding.alloc_reset()
+        msl_binding.step_input(handle, prev_inp, inp)
+        msl_binding.debug_write_collision_contacts(handle, out_contacts)
+        c0 = out_contacts.view(contacts_dtype).reshape((1,))[0]
+        stats = msl_binding.alloc_stats()
+
+        assert int(stats["calls"]) == 0
+        assert int(stats["bytes"]) == 0
+        assert int(c0["wall_kind"][0]) == 0
+        assert int(c0["wall_id"][0]) == 0xFFFF
+    finally:
+        msl_binding.destroy(handle)
+
+
+def test_ceiling_joint_only_wrong_joint_suppresses_ordered_ceiling_sweep_on_fd() -> None:
+    # Source mpCheckCeiling rejects every joint except CollData.joint_id_only when that field is
+    # set. A wrong-only filter must leave the ceiling result empty.
+    # refs/melee/src/melee/mp/mplib.c::mpCheckCeiling
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    contacts_stride = int(sizes["collision_contacts"])
+    contacts_dtype = _collision_contacts_dtype()
+    assert int(contacts_dtype.itemsize) == contacts_stride
+
+    try:
+        ceil_i, cx0, cy0, cx1, cy1 = _fd_pick_horizontal_ceiling_segment()
+    except AssertionError as e:
+        pytest.skip(str(e))
+    ceil_seg = msl_binding.stage_ceiling_segment(32, ceil_i)
+    assert ceil_seg is not None
+    wrong_joint = int(ceil_seg["joint_id"]) + 1
+
+    char_id = 1
+    msid_wait = 2
+    af = 0
+    _min_x, _max_x, _min_y, max_y = msl_binding.ecb_extents_rel(char_id, msid_wait, af)
+    top_y = float(max_y)
+    ceil_y = float(cy0)
+    ceil_x_mid = 0.5 * (float(cx0) + float(cx1))
+
+    seed = np.zeros((1,), dtype=SEED_DTYPE)
+    seed["stage_id"][0] = np.uint32(32)
+    seed["num_players"][0] = np.uint8(2)
+    seed["stocks"][0, :2] = np.uint8(4)
+    seed["char_id"][0, 0] = np.uint8(char_id)
+    seed["action_id"][0, 0] = np.uint16(ACT_WAIT)
+    seed["animation_index"][0, 0] = np.uint32(msid_wait)
+    seed["action_frame"][0, 0] = np.int16(af)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["pos_x"][0, 0] = np.float32(ceil_x_mid)
+    seed["pos_y"][0, 0] = np.float32((ceil_y - top_y) - 0.05)
+    seed["speed_y_self"][0, 0] = np.float32(3.0)
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        prev_inp = np.zeros((1, input_stride), dtype=np.uint8)
+        inp = np.zeros((1, input_stride), dtype=np.uint8)
+        out_contacts = np.zeros((1, contacts_stride), dtype=np.uint8)
+        msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, seed_stride)))
+        msl_binding.debug_set_mpcoll_joint_filters(handle, 0, 0, -1, wrong_joint)
+
+        msl_binding.alloc_reset()
+        msl_binding.step_input(handle, prev_inp, inp)
+        msl_binding.debug_write_collision_contacts(handle, out_contacts)
+        c0 = out_contacts.view(contacts_dtype).reshape((1,))[0]
+        stats = msl_binding.alloc_stats()
+
+        assert int(stats["calls"]) == 0
+        assert int(stats["bytes"]) == 0
+        assert int(c0["ceiling_id"][0]) == 0xFFFF
     finally:
         msl_binding.destroy(handle)

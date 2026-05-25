@@ -116,6 +116,11 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   memset(state->coll_prev_ecb_left_rel_x, 0, sizeof(float) * bp);
   memset(state->coll_prev_ecb_right_rel_x, 0, sizeof(float) * bp);
   memset(state->coll_prev_ecb_side_rel_y, 0, sizeof(float) * bp);
+  memset(state->coll_squeeze_restore_ecb_bottom_rel_y, 0, sizeof(float) * bp);
+  memset(state->coll_squeeze_restore_ecb_top_rel_y, 0, sizeof(float) * bp);
+  memset(state->coll_squeeze_restore_ecb_left_rel_x, 0, sizeof(float) * bp);
+  memset(state->coll_squeeze_restore_ecb_right_rel_x, 0, sizeof(float) * bp);
+  memset(state->coll_squeeze_restore_ecb_side_rel_y, 0, sizeof(float) * bp);
   memset(state->coll_desired_ecb_bottom_rel_y, 0, sizeof(float) * bp);
   memset(state->coll_desired_ecb_top_rel_y, 0, sizeof(float) * bp);
   memset(state->coll_desired_ecb_left_rel_x, 0, sizeof(float) * bp);
@@ -123,6 +128,7 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   memset(state->coll_desired_ecb_side_rel_y, 0, sizeof(float) * bp);
   memset(state->coll_ecb_bottom_valid, 0, sizeof(uint8_t) * bp);
   memset(state->coll_prev_ecb_bottom_valid, 0, sizeof(uint8_t) * bp);
+  memset(state->coll_squeeze_restore_ecb_valid, 0, sizeof(uint8_t) * bp);
   memset(state->coll_desired_ecb_bottom_valid, 0, sizeof(uint8_t) * bp);
   memset(state->coll_desired_ecb_bottom_locked_owner, 0, sizeof(uint8_t) * bp);
   memset(state->coll_floor_result_valid, 0, sizeof(uint8_t) * bp);
@@ -136,6 +142,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   memset(state->coll_substep_prev_pos_y, 0, sizeof(float) * bp);
   memset(state->coll_substep_cur_pos_x, 0, sizeof(float) * bp);
   memset(state->coll_substep_cur_pos_y, 0, sizeof(float) * bp);
+  memset(state->coll_last_pos_x, 0, sizeof(float) * bp);
+  memset(state->coll_last_pos_y, 0, sizeof(float) * bp);
   memset(state->walk_anim_source_vel, 0, sizeof(float) * bp);
   memset(state->walk_retarget_tick_source_vel, 0, sizeof(float) * bp);
   memset(state->run_anim_source_vel, 0, sizeof(float) * bp);
@@ -156,6 +164,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
     state->ledge_drop_floor_skip_segment_id[i] = 0xFFFFu;
     state->cliff_ledge_floor_segment_id[i] = 0xFFFFu;
     state->cliff_ledge_floor_segment_seeded[i] = 0u;
+    state->mpcoll_joint_id_skip[i] = -1;
+    state->mpcoll_joint_id_only[i] = -1;
   }
   for (size_t i = 0; i < bph; i++) {
     state->hitbox_capsule_enabled[i] = 0u;

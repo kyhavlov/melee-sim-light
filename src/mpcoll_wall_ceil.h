@@ -25,6 +25,35 @@
 //   - refs/melee/src/common_structs.h (Collide_* env flag bit values)
 void mpcoll_wall_ceil_apply(MslBatch* batch);
 
+// Static legal-stage portions of mpCollGetSpeedFloor/Ceiling and mpColl_IsOnPlatform.
+//
+// Source speed helpers call mpGetSpeed(surface.index, coll->ecb.top, out), which returns the
+// current-line motion delta from the previous mpLib endpoint positions. Static legal-stage lines
+// have no endpoint motion, so these helpers return a valid zero speed for active static lines and
+// leave dynamic platform speed to the later moving-platform phase.
+//
+// Wall speed helpers below are debug-visible only while MSL still models wall contact as a singleton
+// wall_kind/wall_id rather than source CollData.left_facing_wall and right_facing_wall records.
+// refs/melee/src/melee/mp/mpcoll.c::{
+//   mpCollGetSpeedFloor,mpCollGetSpeedLeftWall,mpCollGetSpeedRightWall,mpCollGetSpeedCeiling,
+//   mpColl_IsOnPlatform}
+// refs/melee/src/melee/mp/mplib.c::mpGetSpeed
+uint8_t mpcoll_get_speed_floor_static(const MslBatch* batch, int batch_index, size_t idx,
+                                      float* out_x, float* out_y);
+uint8_t mpcoll_get_speed_left_wall_static(const MslBatch* batch, int batch_index, size_t idx,
+                                          float* out_x, float* out_y);
+uint8_t mpcoll_get_speed_right_wall_static(const MslBatch* batch, int batch_index, size_t idx,
+                                           float* out_x, float* out_y);
+uint8_t mpcoll_get_speed_ceiling_static(const MslBatch* batch, int batch_index, size_t idx,
+                                        float* out_x, float* out_y);
+uint8_t mpcoll_is_on_platform(const MslBatch* batch, int batch_index, size_t idx);
+
+enum {
+  MSL_MPCOLL_WALL_KIND_NONE = 0u,
+  MSL_MPCOLL_WALL_KIND_LEFT = 1u,
+  MSL_MPCOLL_WALL_KIND_RIGHT = 2u,
+};
+
 enum {
   MSL_MPCOLL_ORDERED_SQUEEZE_CEILING = 1u,
   MSL_MPCOLL_ORDERED_SQUEEZE_FLOOR = 2u,

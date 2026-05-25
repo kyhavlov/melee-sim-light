@@ -1864,6 +1864,20 @@ typedef struct MslDebugCollDataEcb {
   uint8_t _pad0[MSL_MAX_PLAYERS];
 
   uint16_t floor_result_segment_id[MSL_MAX_PLAYERS];
+  // Hidden CollData.floor_skip from mpUpdateFloorSkip/mpClearFloorSkip. 0xFFFF means none.
+  // refs/melee/src/melee/mp/mpcoll.c::{mpUpdateFloorSkip,mpClearFloorSkip}
+  uint16_t floor_skip_segment_id[MSL_MAX_PLAYERS];
+  uint8_t floor_skip_valid[MSL_MAX_PLAYERS];
+  uint8_t is_on_platform[MSL_MAX_PLAYERS];
+  uint8_t floor_speed_valid[MSL_MAX_PLAYERS];
+  uint8_t left_wall_speed_valid[MSL_MAX_PLAYERS];
+  uint8_t right_wall_speed_valid[MSL_MAX_PLAYERS];
+  uint8_t ceiling_speed_valid[MSL_MAX_PLAYERS];
+  // Source x34_flags.b6/x64_ecb restore state saved by mpCollSqueeze* and consumed by the next
+  // mpCollInterpolateECB.
+  uint8_t squeeze_restore_valid[MSL_MAX_PLAYERS];
+  int16_t joint_id_skip[MSL_MAX_PLAYERS];
+  int16_t joint_id_only[MSL_MAX_PLAYERS];
 
   float current_bottom_rel_y[MSL_MAX_PLAYERS];
   float current_top_rel_y[MSL_MAX_PLAYERS];
@@ -1876,6 +1890,12 @@ typedef struct MslDebugCollDataEcb {
   float prev_left_rel_x[MSL_MAX_PLAYERS];
   float prev_right_rel_x[MSL_MAX_PLAYERS];
   float prev_side_rel_y[MSL_MAX_PLAYERS];
+
+  float squeeze_restore_bottom_rel_y[MSL_MAX_PLAYERS];
+  float squeeze_restore_top_rel_y[MSL_MAX_PLAYERS];
+  float squeeze_restore_left_rel_x[MSL_MAX_PLAYERS];
+  float squeeze_restore_right_rel_x[MSL_MAX_PLAYERS];
+  float squeeze_restore_side_rel_y[MSL_MAX_PLAYERS];
 
   float desired_bottom_rel_y[MSL_MAX_PLAYERS];
   float desired_top_rel_y[MSL_MAX_PLAYERS];
@@ -1891,6 +1911,16 @@ typedef struct MslDebugCollDataEcb {
   float substep_prev_pos_y[MSL_MAX_PLAYERS];
   float substep_cur_pos_x[MSL_MAX_PLAYERS];
   float substep_cur_pos_y[MSL_MAX_PLAYERS];
+  float last_pos_x[MSL_MAX_PLAYERS];
+  float last_pos_y[MSL_MAX_PLAYERS];
+  float floor_speed_x[MSL_MAX_PLAYERS];
+  float floor_speed_y[MSL_MAX_PLAYERS];
+  float left_wall_speed_x[MSL_MAX_PLAYERS];
+  float left_wall_speed_y[MSL_MAX_PLAYERS];
+  float right_wall_speed_x[MSL_MAX_PLAYERS];
+  float right_wall_speed_y[MSL_MAX_PLAYERS];
+  float ceiling_speed_x[MSL_MAX_PLAYERS];
+  float ceiling_speed_y[MSL_MAX_PLAYERS];
 } MslDebugCollDataEcb;
 
 // Debug/validation helper: record a single hitbox-vs-hurtcap contact candidate.
@@ -2258,6 +2288,8 @@ int msl_batch_debug_write_collision_contacts(const MslBatch* batch, uint8_t* out
 // out_stride_bytes must be >= sizeof(MslDebugCollDataEcb).
 int msl_batch_debug_write_colldata_ecb(const MslBatch* batch, uint8_t* out_bytes,
                                        size_t out_stride_bytes);
+int msl_batch_debug_copy_colldata(MslBatch* batch, int batch_index, int src_player_index,
+                                  int dst_player_index);
 
 // Debug/validation helper: force an animation timebase reset for a single fighter without
 // changing action_id (test-only). This is useful to validate that mechanics keyed to action
@@ -2281,6 +2313,11 @@ int msl_batch_debug_step_input_pre_combat(MslBatch* batch, const uint8_t* prev_i
 // relying on the full stage-collision sweep.
 int msl_batch_debug_set_coll_env_flags(MslBatch* batch, int batch_index, int player_index,
                                        uint32_t flags);
+
+// Debug-only helper: override CollData joint filters for a single fighter (test-only).
+// Pass -1 to disable each filter.
+int msl_batch_debug_set_mpcoll_joint_filters(MslBatch* batch, int batch_index, int player_index,
+                                             int joint_id_skip, int joint_id_only);
 
 // Debug-only helper: override fighter root position/facing for fixture replay setup (test-only).
 // Intended for live-viewer/manual repro fixtures whose first-frame root position is part of the

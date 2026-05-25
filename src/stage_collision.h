@@ -202,6 +202,7 @@ enum {
 
 typedef struct MslStageQueryHit {
   MslStageRawLineKind kind;
+  int32_t line_idx;
   uint16_t segment_i;
   int16_t joint_id;
   uint16_t flags;
@@ -256,6 +257,7 @@ uint8_t stage_collision_stage_has_flat_between_sloped_ledges(uint32_t stage_id);
 uint8_t stage_collision_stage_has_only_static_cardinal_hard_floors(uint32_t stage_id);
 uint8_t stage_collision_stage_has_alternate_floor_endpoint_links(uint32_t stage_id);
 uint8_t stage_collision_stage_has_height_platform_transform(uint32_t stage_id);
+uint8_t stage_collision_stage_has_deferred_static_floor_transform(uint32_t stage_id);
 uint8_t stage_collision_floor_line_has_platform_transform(uint32_t stage_id, uint16_t segment_i);
 uint8_t stage_collision_floor_line_has_height_platform_transform(uint32_t stage_id,
                                                                  uint16_t segment_i);

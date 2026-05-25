@@ -44,7 +44,9 @@
 #include "attack_id_tables.h"
 #include "motion_state_owners.h"
 #include "ucf.h"
+#include "mpcoll_colldata_copy.h"
 #include "mpcoll_ecb_points.h"
+#include "mpcoll_wall_ceil.h"
 #include "specialhi_pose.h"
 #include "state.h"
 #include "state_flags.h"
@@ -1552,10 +1554,16 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         batch->state.coll_stage_prev_pos_y[idx] = seed->pos_y[p];
         batch->state.coll_substep_prev_pos_x[idx] = seed->pos_x[p];
         batch->state.coll_substep_prev_pos_y[idx] = seed->pos_y[p];
+        batch->state.coll_last_pos_x[idx] = seed->pos_x[p];
+        batch->state.coll_last_pos_y[idx] = seed->pos_y[p];
       }
       batch->state.coll_wall_ceil_prev_pos_x[idx] = seed->pos_x[p];
       batch->state.coll_wall_ceil_prev_pos_y[idx] = seed->pos_y[p];
       batch->state.coll_wall_ceil_prev_pos_valid[idx] = 0u;
+      batch->state.coll_last_pos_x[idx] = seed->pos_x[p];
+      batch->state.coll_last_pos_y[idx] = seed->pos_y[p];
+      batch->state.mpcoll_joint_id_skip[idx] = -1;
+      batch->state.mpcoll_joint_id_only[idx] = -1;
       batch->state.floor_sweep_seed_prev_pos_x[idx] = seed->floor_sweep_prev_pos_x_f32[p];
       batch->state.floor_sweep_seed_prev_pos_y[idx] = seed->floor_sweep_prev_pos_y_f32[p];
       batch->state.floor_sweep_seed_prev_valid[idx] =
@@ -2316,6 +2324,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         batch->state.coll_desired_ecb_bottom_locked_owner[idx] = seed_locked_bottom_valid;
         reseed_store_colldata_ecb_current(batch, idx, &prev_ecb);
         reseed_store_colldata_ecb_prev(batch, idx, &prev_ecb);
+        batch->state.coll_squeeze_restore_ecb_valid[idx] = 0u;
         batch->state.coll_desired_ecb_bottom_valid[idx] = 1u;
         batch->state.coll_ecb_bottom_valid[idx] = 1u;
         batch->state.coll_prev_ecb_bottom_valid[idx] = 1u;
@@ -3708,6 +3717,20 @@ int msl_batch_debug_write_colldata_ecb(const MslBatch* batch, uint8_t* out_bytes
       out->damage_hitlag_floor_contact_runtime[p] =
           batch->state.coll_damage_hitlag_floor_contact_runtime[idx];
       out->floor_result_segment_id[p] = batch->state.coll_floor_result_segment_id[idx];
+      out->floor_skip_segment_id[p] = batch->state.floor_skip_segment_id[idx];
+      out->floor_skip_valid[p] = (batch->state.floor_skip_segment_id[idx] != 0xFFFFu) ? 1u : 0u;
+      out->is_on_platform[p] = mpcoll_is_on_platform(batch, bi, idx);
+      out->floor_speed_valid[p] = mpcoll_get_speed_floor_static(
+          batch, bi, idx, &out->floor_speed_x[p], &out->floor_speed_y[p]);
+      out->left_wall_speed_valid[p] = mpcoll_get_speed_left_wall_static(
+          batch, bi, idx, &out->left_wall_speed_x[p], &out->left_wall_speed_y[p]);
+      out->right_wall_speed_valid[p] = mpcoll_get_speed_right_wall_static(
+          batch, bi, idx, &out->right_wall_speed_x[p], &out->right_wall_speed_y[p]);
+      out->ceiling_speed_valid[p] = mpcoll_get_speed_ceiling_static(
+          batch, bi, idx, &out->ceiling_speed_x[p], &out->ceiling_speed_y[p]);
+      out->squeeze_restore_valid[p] = batch->state.coll_squeeze_restore_ecb_valid[idx];
+      out->joint_id_skip[p] = batch->state.mpcoll_joint_id_skip[idx];
+      out->joint_id_only[p] = batch->state.mpcoll_joint_id_only[idx];
 
       out->current_bottom_rel_y[p] = batch->state.coll_ecb_bottom_rel_y[idx];
       out->current_top_rel_y[p] = batch->state.coll_ecb_top_rel_y[idx];
@@ -3720,6 +3743,13 @@ int msl_batch_debug_write_colldata_ecb(const MslBatch* batch, uint8_t* out_bytes
       out->prev_left_rel_x[p] = batch->state.coll_prev_ecb_left_rel_x[idx];
       out->prev_right_rel_x[p] = batch->state.coll_prev_ecb_right_rel_x[idx];
       out->prev_side_rel_y[p] = batch->state.coll_prev_ecb_side_rel_y[idx];
+
+      out->squeeze_restore_bottom_rel_y[p] =
+          batch->state.coll_squeeze_restore_ecb_bottom_rel_y[idx];
+      out->squeeze_restore_top_rel_y[p] = batch->state.coll_squeeze_restore_ecb_top_rel_y[idx];
+      out->squeeze_restore_left_rel_x[p] = batch->state.coll_squeeze_restore_ecb_left_rel_x[idx];
+      out->squeeze_restore_right_rel_x[p] = batch->state.coll_squeeze_restore_ecb_right_rel_x[idx];
+      out->squeeze_restore_side_rel_y[p] = batch->state.coll_squeeze_restore_ecb_side_rel_y[idx];
 
       out->desired_bottom_rel_y[p] = batch->state.coll_desired_ecb_bottom_rel_y[idx];
       out->desired_top_rel_y[p] = batch->state.coll_desired_ecb_top_rel_y[idx];
@@ -3735,6 +3765,8 @@ int msl_batch_debug_write_colldata_ecb(const MslBatch* batch, uint8_t* out_bytes
       out->substep_prev_pos_y[p] = batch->state.coll_substep_prev_pos_y[idx];
       out->substep_cur_pos_x[p] = batch->state.coll_substep_cur_pos_x[idx];
       out->substep_cur_pos_y[p] = batch->state.coll_substep_cur_pos_y[idx];
+      out->last_pos_x[p] = batch->state.coll_last_pos_x[idx];
+      out->last_pos_y[p] = batch->state.coll_last_pos_y[idx];
     }
   }
   return 0;
@@ -3763,6 +3795,24 @@ int msl_batch_debug_step_input_pre_combat(MslBatch* batch, const uint8_t* prev_i
                                    input_stride_bytes);
 }
 
+int msl_batch_debug_copy_colldata(MslBatch* batch, int batch_index, int src_player_index,
+                                  int dst_player_index) {
+  if (batch == NULL) {
+    return EINVAL;
+  }
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return EINVAL;
+  }
+  if (src_player_index < 0 || src_player_index >= MSL_MAX_PLAYERS || dst_player_index < 0 ||
+      dst_player_index >= MSL_MAX_PLAYERS) {
+    return EINVAL;
+  }
+  const size_t src = msl_idx_player(batch_index, src_player_index);
+  const size_t dst = msl_idx_player(batch_index, dst_player_index);
+  msl_mpcoll_copy_colldata_lane(batch, dst, src);
+  return 0;
+}
+
 int msl_batch_debug_set_coll_env_flags(MslBatch* batch, int batch_index, int player_index,
                                        uint32_t flags) {
   if (batch == NULL) {
@@ -3776,6 +3826,27 @@ int msl_batch_debug_set_coll_env_flags(MslBatch* batch, int batch_index, int pla
   }
   const size_t idx = msl_idx_player(batch_index, player_index);
   batch->state.coll_env_flags[idx] = flags;
+  return 0;
+}
+
+int msl_batch_debug_set_mpcoll_joint_filters(MslBatch* batch, int batch_index, int player_index,
+                                             int joint_id_skip, int joint_id_only) {
+  if (batch == NULL) {
+    return EINVAL;
+  }
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return EINVAL;
+  }
+  if (player_index < 0 || player_index >= MSL_MAX_PLAYERS) {
+    return EINVAL;
+  }
+  if (joint_id_skip < -1 || joint_id_skip > INT16_MAX || joint_id_only < -1 ||
+      joint_id_only > INT16_MAX) {
+    return EINVAL;
+  }
+  const size_t idx = msl_idx_player(batch_index, player_index);
+  batch->state.mpcoll_joint_id_skip[idx] = (int16_t)joint_id_skip;
+  batch->state.mpcoll_joint_id_only[idx] = (int16_t)joint_id_only;
   return 0;
 }
 
@@ -3811,6 +3882,9 @@ int msl_batch_debug_set_player_root(MslBatch* batch, int batch_index, int player
   batch->state.coll_substep_prev_pos_y[idx] = pos_y;
   batch->state.coll_substep_cur_pos_x[idx] = pos_x;
   batch->state.coll_substep_cur_pos_y[idx] = pos_y;
+  batch->state.coll_last_pos_x[idx] = pos_x;
+  batch->state.coll_last_pos_y[idx] = pos_y;
+  batch->state.coll_squeeze_restore_ecb_valid[idx] = 0u;
   batch->state.dynamic_pose_pos_x[idx] = pos_x;
   batch->state.dynamic_pose_pos_y[idx] = pos_y;
   batch->state.facing[idx] = facing ? 1u : 0u;
