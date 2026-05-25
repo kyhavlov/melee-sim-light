@@ -2575,7 +2575,7 @@ static inline uint16_t platform_floor_skip_segment_id(const MslBatch* batch, siz
     // - ftCo_8009A228 / ftCo_8009A184 call mpUpdateFloorSkip after entering Pass or an
     //   action-specific air pass state.
     // - mpColl_80044628_Floor rejects a platform when `floor.index == floor_skip`.
-    // Backward-compatible seed path: replay rows do not carry hidden CollData.floor_skip, so first
+    // One-step seed path: replay rows do not carry hidden CollData.floor_skip, so first
     // Pass frame reseeds recover it from the carried platform floor.index. Runtime Pass entry writes
     // `state.floor_skip_segment_id` directly.
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Pass.c::{ftCo_8009A184,ftCo_8009A228}
@@ -3890,8 +3890,9 @@ static uint8_t msl_mpcoll_80044838_floor_edge_snap_from_bottom(
     return 0u;
   }
   if (!allow_hard_floor && !g->lines[(size_t)line_idx].is_platform) {
-    // Retained owner slice: platform endpoint admission. Hard-floor off-end cases need the full
-    // same-frame mpColl scratch/order port before this fallback can be safely broadened.
+    // Retained owner slice: this helper owns platform endpoint admission only. Hard-floor off-end
+    // rows stay on the ordinary bottom-sweep/direct publication path because their source edge-snap
+    // path needs current mpColl scratch floor ownership, not this platform endpoint helper.
     return 0u;
   }
   const MslStageFloorLine l = floor_line_world_for_env(batch, bi, g, line_idx);
@@ -10250,7 +10251,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
           // live grIzumi scheduler/velocity owner. `mpColl_8004B4B0` uses the floor-release helper
           // first, then retries a floor sweep with the carried floor as `floor_skip`; a live moving
           // FoD platform can therefore replace sustained Landing's carried hard-floor CollData.
-          // Sparse seed-only platform heights still take this stale-floor fallback.
+          // Rows with only seed-provided FoD platform height and no live scheduler/contact source
+          // restore carried floor here; full moving-platform scheduling remains Phase 6.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Coll
           // refs/melee/src/melee/ft/ft_081B.c::{ft_80084280,ft_800844EC}
           // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor

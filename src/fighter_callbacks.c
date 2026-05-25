@@ -570,7 +570,7 @@ static int fighter_callbacks_input_phase(MslBatch* batch, const uint8_t* prev_in
 static void fighter_callbacks_iasa_phase(MslBatch* batch) {
   // Match flow IASA: certain match-flow states can exit based on current-frame inputs.
   // Decomp: motion state IASA callbacks run after Anim and before Phys/Coll.
-  // NOTE: match_flow_update_post_input currently includes simplified approximations (see match_flow.c).
+  // NOTE: match_flow_update_post_input owns simplified match-flow state (see match_flow.c).
   match_flow_update_post_input(batch);
 
   action_update(batch);

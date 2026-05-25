@@ -90,7 +90,7 @@ uint32_t msl_motion_state_class3_bits(uint8_t char_id, uint16_t action_id);
 uint8_t msl_motion_state_class3_has(uint8_t char_id, uint16_t action_id, uint32_t class_bit);
 
 // Common helpers return true only when all currently supported Fox/Falco owner tables agree. This
-// is for migrating common action-family predicates without introducing character-proxy logic.
+// is for migrating common action-family predicates without introducing character-id routing.
 uint8_t msl_motion_state_common_class_has(uint16_t action_id, uint32_t class_bit);
 uint8_t msl_motion_state_common_class2_has(uint16_t action_id, uint32_t class_bit);
 uint8_t msl_motion_state_common_class3_has(uint16_t action_id, uint32_t class_bit);

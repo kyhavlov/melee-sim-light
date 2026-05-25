@@ -614,10 +614,10 @@ static inline uint32_t ledge_grab_flags_for_fighter(
   //
   // Decomp: the ledge AABB builders consume `cd->ecb` (interpolated ECB), not `cd->desired_ecb`.
   //
-  // This sim does not yet maintain mpColl-style ECB interpolation state. Approximate `cd->ecb` by
-  // sampling the current-frame ECB tables (desired_frame). This keeps the sampling timebase aligned
-  // to the action frame, and avoids introducing an explicit 1-frame lag that is not guaranteed by
-  // mpCollInterpolateECB.
+  // MSL materializes this ledge-grab `cd->ecb` sample from the same ISO ECB tables and action-frame
+  // timebase used by CollData floor/wall/ceiling callbacks. The sampled state is bounded to
+  // mpColl_80044164/mpColl_800443C4 ledge AABB construction; full per-substep ECB history is owned
+  // by a later moving/substep collision pass.
   // refs/melee/src/melee/mp/mpcoll.c::mpCollInterpolateECB
   // refs/melee/src/melee/mp/mpcoll.c::mpColl_80044164
   // refs/melee/src/melee/mp/mpcoll.c::mpColl_800443C4
@@ -857,7 +857,7 @@ void mpcoll_env_update_ledge_grab(MslBatch* batch) {
       // as managed inside mpColl_80043754's collision substep loop. Those are "previous substep
       // within collision" snapshots, not previous-frame snapshots.
       //
-      // This sim does not yet implement substeps. Approximate the collision stage's prev/cur pair:
+      // MSL materializes the collision-stage prev/cur pair used by the static ledge AABB sweep:
       // - coll_stage_prev_pos: position immediately before stage_collision_apply() this frame
       // - coll_stage_cur_pos: position immediately after stage_collision_apply() this frame
       // refs/melee/src/melee/mp/mpcoll.c::mpColl_80043754
@@ -886,8 +886,8 @@ void mpcoll_env_update_ledge_grab(MslBatch* batch) {
       // - cd->cur_pos  (current substep position after collision correction)
       // and checks `cd->cur_pos.y < cd->prev_pos.y` before attempting ledge grabs.
       //
-      // This simulator does not substep collision. Approximate the mpColl substep's prev/cur pair
-      // using the within-frame pre/post integration positions:
+      // MSL materializes the mpColl prev/cur pair for the static ledge check from within-frame
+      // pre/post integration positions:
       // - prev_pos_*: position at start of physics_integrate() this frame (pre-integration)
       // - coll_stage_cur_pos_*: position immediately after stage_collision_apply() this frame
       // Note: prev_pos_* is written in physics_integrate(), so it is not a previous-frame snapshot.

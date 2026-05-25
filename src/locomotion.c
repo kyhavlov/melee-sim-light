@@ -818,10 +818,10 @@ static inline uint32_t attackair_submotion_from_action(uint16_t a) {
   }
 }
 
-static inline uint8_t landing_contact_y_bridge_matches_source(uint16_t source_act,
-                                                              uint16_t source_action_frame,
-                                                              uint16_t prev_source_act,
-                                                              uint16_t land_act) {
+static inline uint8_t landing_contact_y_owner_matches_source(uint16_t source_act,
+                                                             uint16_t source_action_frame,
+                                                             uint16_t prev_source_act,
+                                                             uint16_t land_act) {
   const uint8_t landing_basic_prev =
       (prev_source_act == (uint16_t)MSL_ACT_JUMP_F || prev_source_act == (uint16_t)MSL_ACT_JUMP_B ||
        prev_source_act == (uint16_t)MSL_ACT_FALL ||
@@ -2091,7 +2091,7 @@ static inline uint8_t common_appeal_try_enter_from_grounded_iasa(MslBatch* batch
       use_left ? (uint32_t)MSL_SM_APPEAL_SL : (uint32_t)MSL_SM_APPEAL_SR;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
   // ftCo_800DEAE8 clears fp->allow_interrupt before Fighter_ChangeMotionState. The replay-visible
-  // proxy for that lane is state_flags[0] bit 0x80 (fp+0x2218_b7); clear it on Appeal entry so
+  // lane for that state is state_flags[0] bit 0x80 (fp+0x2218_b7); clear it on Appeal entry so
   // stale seeded grounded-attack interrupt state cannot leak onto the taunt destination.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AppealS.c::ftCo_800DEAE8
   const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX;
@@ -2800,7 +2800,7 @@ static inline void enter_fall_from_grounded_floor_loss(MslBatch* batch, const Ms
   // Decomp:
   // - ft_80084104 calls ftCo_Fall_Enter when the grounded collision helper reports no floor.
   // - ft_800845B4 leaves the grounded motion on floor loss, entering MissFoot on ledge-slip flags
-  //   or Fall otherwise. This sim uses the existing Fall fallback for unmodeled MissFoot.
+  //   or Fall otherwise. Explicit ledge-slip owners enter MissFoot before this generic Fall branch.
   // - ftCo_Fall_Enter calls ftCommon_8007D5D4 if starting from GA_Ground. GuardSetOff can also
   //   route through ft_80084104 while SDI is enabled.
   // refs/melee/src/melee/ft/ft_081B.c::{ft_80084104,ft_800845B4}
@@ -3469,9 +3469,9 @@ static inline void enter_landing_action_from_air(MslBatch* batch, const MslCharP
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::{ftCo_Landing_Enter_Basic,ftCo_LandingFallSpecial_Enter}
   // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007D7FC,ftCommon_8007D6A4}
   // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
-  uint8_t apply_contact_y_bridge =
+  uint8_t apply_contact_y_owner =
       (batch->state.on_ground[idx] && landing_action_owns_root_floor_snap(land_act)) ? 1u : 0u;
-  if (apply_contact_y_bridge && source_act == (uint16_t)MSL_ACT_FALL &&
+  if (apply_contact_y_owner && source_act == (uint16_t)MSL_ACT_FALL &&
       landing_contact_is_ledge_floor(batch, idx, bi)) {
     // Keep edge/walk-off positioning owned by mpColl on ledge floor segments.
     // Decomp shape:
@@ -3479,9 +3479,9 @@ static inline void enter_landing_action_from_air(MslBatch* batch, const MslCharP
     // - mpColl floor-edge snap/ownership is handled in mpColl_8004A45C_Floor.
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Coll
     // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004A45C_Floor
-    apply_contact_y_bridge = 0u;
+    apply_contact_y_owner = 0u;
   }
-  if (apply_contact_y_bridge) {
+  if (apply_contact_y_owner) {
     batch->state.pos_y[idx] = landing_root_y_from_mpcoll_contact(batch, idx, bi);
   }
 
@@ -6641,12 +6641,12 @@ void locomotion_update_post_collision(MslBatch* batch) {
 
       if (!was_ground && now_ground) {
         if (a == (uint16_t)MSL_ACT_LANDING &&
-            landing_contact_y_bridge_matches_source(a, batch->state.action_frame[idx],
-                                                    batch->state.prev_action_id[idx],
-                                                    (uint16_t)MSL_ACT_LANDING)) {
-          // Compatibility: some post-collision callback lanes can already be in Landing before this
+            landing_contact_y_owner_matches_source(a, batch->state.action_frame[idx],
+                                                   batch->state.prev_action_id[idx],
+                                                   (uint16_t)MSL_ACT_LANDING)) {
+          // Source-order guard: some post-collision callback lanes can already be in Landing before this
           // locomotion transition resolver runs. Preserve floor-contact Y for the same decomp-owned
-          // Jump/SpecialAirN collision families used by the landing bridge helper above.
+          // Jump/SpecialAirN collision families used by the landing owner helper above.
           batch->state.pos_y[idx] = landing_root_y_from_mpcoll_contact(batch, idx, (size_t)bi);
         }
 

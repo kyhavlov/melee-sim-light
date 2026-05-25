@@ -895,6 +895,175 @@ Required cleanup:
   backed by decomp/data/source-owner reasoning and positive/negative tests.
 - Do not route moving-platform runtime behavior here. Moving platforms remain Phase 6.
 
+Phase 5 structured accounting:
+
+Each retained floor-publication reject bit and suppression predicate below is recorded by source
+owner family. A row's owner metadata applies to every exact guard name in that row. Guards are
+retained only because the source callback still has that publication precondition after Phases 1-4;
+none are retained as validation safety.
+
+#### Phase 5 Owner Accounting: AttackAir
+
+- Owner family: AttackAir.
+- Source function(s): `ftCo_AttackAir_Coll`, `ft_80082C74`, `ft_80081D0C`,
+  `mpColl_800471F8`, `mpColl_80044628_Floor`, `mpColl_80044838_Floor`,
+  `mpUpdateFloorSkip`.
+- Why retained after Phases 1-4: Phase 4 routes AttackAir through the ordered substrate, but
+  LandingAir publication still depends on callback-local bottom sweep, `floor_skip`, edge-span,
+  hard-slope, and transformed-platform source authority.
+- Test/proof: `tests/test_platform_action_entry_callback_locks.py`,
+  `tests/test_attackair_entry_mpcoll_replay_real_locks.py`,
+  `tests/test_locomotion_attackair_landing_contact_y_regression.py`.
+
+| Kind | Exact guard name(s) |
+| --- | --- |
+| Reject bit | `MSL_MPCOLL_REJECT_ATTACKAIR_HARD_SLOPE_ROOT_WITHOUT_BOTTOM`, `MSL_MPCOLL_REJECT_ATTACKAIR_OFFSPAN_HARD_FLOOR_EDGE`, `MSL_MPCOLL_REJECT_ATTACKAIR_TRANSFORMED_PLATFORM_BELOW`, `MSL_MPCOLL_REJECT_ATTACKAIR_TRANSFORMED_PLATFORM_ECB_ONLY`, `MSL_MPCOLL_REJECT_ATTACKAIR_TRANSFORMED_PLATFORM_FLOOR_SKIP` |
+| Suppression | `suppress_attackair_hard_slope_root_projection_without_bottom_final_land`, `suppress_attackair_offspan_hard_floor_edge_final_land`, `suppress_attackair_offspan_hard_floor_edge_land`, `suppress_attackair_transformed_platform_below_final_land`, `suppress_attackair_transformed_platform_ecb_only_final_land`, `suppress_attackair_transformed_platform_ecb_only_land`, `suppress_attackair_transformed_platform_floor_skip_final_land`, `suppress_attackair_transformed_platform_floor_skip_first_crossing_land`, `suppress_attackair_transformed_platform_root_below_land`, `suppress_downheld_transformed_platform_land`, `suppress_locomotion_attackair_entry_platform_land`, `suppress_projected_attackair_offspan_hard_floor_edge_land`, `suppress_projected_attackair_transformed_platform_below_land`, `suppress_projected_attackair_transformed_platform_ecb_only_land`, `suppress_projected_attackair_transformed_platform_floor_skip_land` |
+
+#### Phase 5 Owner Accounting: EscapeAir / Ledge-Cliff Handoff
+
+- Owner family: EscapeAir / ledge-cliff.
+- Source function(s): `ftCo_EscapeAir_Coll`, `ft_80082C74`, `ft_80081D0C`,
+  `mpColl_800471F8`, `mpColl_80044628_Floor`, `mpColl_80044838_Floor`,
+  `mpColl_80046904`.
+- Why retained after Phases 1-4: Phase 4 routes EscapeAir through the ordered substrate, but
+  LandingFallSpecial publication still requires live locked desired ECB, ledge/platform handoff,
+  bottom-sweep, or allow-interrupt ownership.
+- Test/proof: `tests/test_platform_action_entry_callback_locks.py`,
+  `tests/test_escapeair_ledge_floor_landing_replay_real_locks.py`.
+
+| Kind | Exact guard name(s) |
+| --- | --- |
+| Reject bit | `MSL_MPCOLL_REJECT_ESCAPEAIR_TRANSFORMED_REMAP`, `MSL_MPCOLL_REJECT_JUMPAERIAL_ESCAPEAIR_HIGH_LIFT_LEDGE`, `MSL_MPCOLL_REJECT_JUMPAERIAL_ESCAPEAIR_STATIC_PLATFORM_OVERSTEP`, `MSL_MPCOLL_REJECT_KNEEBEND_ESCAPEAIR_SLOPE`, `MSL_MPCOLL_REJECT_LOCKED_DESIRED_NONPLATFORM_WITHOUT_BOTTOM_SWEEP`, `MSL_MPCOLL_REJECT_LOCKED_DESIRED_PLATFORM_WITHOUT_BOTTOM_SWEEP`, `MSL_MPCOLL_REJECT_LOCKED_ESCAPEAIR_MISSING_BOTTOM_OWNER`, `MSL_MPCOLL_REJECT_SUSTAINED_ESCAPEAIR_SAME_LEDGE_LOCK`, `MSL_MPCOLL_REJECT_SUSTAINED_ESCAPEAIR_SAME_PLATFORM_LOCK` |
+| Suppression | `suppress_cliff_ledge_floor_shallow_projection`, `suppress_escapeair_entry_locked_platform_land`, `suppress_escapeair_jump_entry_platform_from_below`, `suppress_escapeair_late_jump_entry_platform_lifetime`, `suppress_escapeair_locked_desired_bottom_above_floor_land`, `suppress_escapeair_no_lock_vertical_af3_land`, `suppress_escapeair_platform_root_snap_without_bottom_hit`, `suppress_escapeair_root_below_projection`, `suppress_escapeair_transformed_remap_land`, `suppress_jumpaerial_escapeair_entry_land`, `suppress_jumpaerial_escapeair_high_lift_ledge_final_land`, `suppress_jumpaerial_escapeair_static_platform_overstep_final_land`, `suppress_kneebend_escapeair_slope_entry_land`, `suppress_kneebend_escapeair_slope_final_land`, `suppress_ledge_endpoint_entry_projection`, `suppress_locked_desired_nonplatform_without_bottom_sweep`, `suppress_locked_desired_platform_without_bottom_sweep`, `suppress_locked_escapeair_missing_bottom_owner_land`, `suppress_locked_ledge_land`, `suppress_locked_off_end_platform_land`, `suppress_locked_seed6_platform_land`, `suppress_locked_vertical_af3_land`, `suppress_off_end_ledge_remap_projection`, `suppress_projected_escapeair_ledge_without_allow_interrupt`, `suppress_projected_escapeair_missing_bottom_owner_land`, `suppress_projected_escapeair_off_end_ledge_land`, `suppress_projected_escapeair_off_end_platform_land`, `suppress_projected_escapeair_platform_root_snap_without_bottom_hit`, `suppress_projected_escapeair_transformed_platform_land`, `suppress_projected_jumpaerial_escapeair_shallow_ledge_land`, `suppress_same_platform_projection_from_below`, `suppress_seeded_escapeair_first_locked_land`, `suppress_sustained_escapeair_adjacent_ledge_without_allow_interrupt`, `suppress_sustained_escapeair_same_ledge_lock_land`, `suppress_sustained_escapeair_same_platform_lock_land`, `suppress_transformed_remap_projection` |
+
+#### Phase 5 Owner Accounting: Damage
+
+- Owner family: Damage.
+- Source function(s): `ftCo_Damage_Coll`, `ftCo_Damage_OnEveryHitlag`, `ft_80081DD4`,
+  `mpColl_800477E0`, `mpColl_80044628_Floor`, `mpColl_80044948_Floor`.
+- Why retained after Phases 1-4: Phase 4 routes Damage/Fly/Fall through the ordered substrate, but
+  active-hitlag and hitlag-exit Damage separate floor/contact publication from `GA_Ground` landing
+  and must reject root-only, shallow, or stale transformed-platform candidates.
+- Test/proof: `tests/test_damage_hitlag_floorhug_collision_regression.py`,
+  `tests/test_damagefly_hitlag_exit_wall_reflect_replay_real_locks.py`,
+  `tests/test_damagefly_passivewalljump_replay_real_locks.py`.
+
+| Kind | Exact guard name(s) |
+| --- | --- |
+| Reject bit | `MSL_MPCOLL_REJECT_DAMAGE_ACTIVE_HITLAG_DOWNWARD_SDI_AIRBORNE`, `MSL_MPCOLL_REJECT_DAMAGE_ACTIVE_HITLAG_ROOT_BELOW_BOTTOM_ABOVE_FLOOR` |
+| Suppression | `suppress_active_damage_hitlag_bottom_above_floor_land`, `suppress_active_damage_hitlag_land`, `suppress_damage_transformed_platform_ecb_only_land`, `suppress_damageair_attackair_entry_land`, `suppress_damageflyroll_below_floor_active_hitlag_land`, `suppress_damageflyroll_shallow_land` |
+
+#### Phase 5 Owner Accounting: Fall / FallSpecial
+
+- Owner family: Fall / FallSpecial.
+- Source function(s): `ftCo_Fall_Coll`, FallSpecial collision callback, `ft_800831CC`,
+  `ft_80082B1C`, `mpColl_800471F8`, `mpColl_80044628_Floor`.
+- Why retained after Phases 1-4: Phase 3 routes common airborne owners, but Fall/FallSpecial
+  platform, same-floor, first-sustained, and destination-action publication still depend on the
+  current callback's bottom sweep. The obsolete fresh hard-floor same-floor guard was deleted.
+- Test/proof: `tests/test_platform_collision_runtime.py`,
+  `tests/test_locomotion_attackair_landing_contact_y_regression.py`,
+  `tests/test_nonfd_action_entry_platform_pass_locks.py`.
+
+| Kind | Exact guard name(s) |
+| --- | --- |
+| Reject bit | `MSL_MPCOLL_REJECT_FALLSPECIAL_FIRST_SUSTAINED`, `MSL_MPCOLL_REJECT_FALLSPECIAL_PLATFORM_NO_SOURCE_BOTTOM`, `MSL_MPCOLL_REJECT_FALL_SAME_FLOOR_EARLY`, `MSL_MPCOLL_REJECT_FALL_TRANSFORMED_PLATFORM_FASTFALL` |
+| Suppression | `suppress_fall_ledge_floor_first_root_crossing`, `suppress_fall_same_floor_early_final_land`, `suppress_fall_transformed_platform_fastfall_land`, `suppress_fallspecial_b_transformed_platform_skip`, `suppress_fallspecial_entry_af3_land`, `suppress_fallspecial_first_sustained_current_ecb_land`, `suppress_fallspecial_platform_final_without_source_bottom`, `suppress_fallspecial_platform_first_root_crossing`, `suppress_fallspecial_same_floor_early_root_crossing`, `suppress_projected_fallspecial_first_sustained_land` |
+
+#### Phase 5 Owner Accounting: JumpAerial / Common Air
+
+- Owner family: JumpAerial / common air.
+- Source function(s): `ftCo_JumpAerial_Coll`, `ftCo_Jump_Coll`, `ft_800835B0`,
+  `ft_80082B1C`, `mpColl_80046904`, `mpColl_800471F8`.
+- Why retained after Phases 1-4: Phase 3 routes common air through the ordered substrate, but
+  soft-platform-from-below, transformed-platform fastfall, pre-handoff, and shallow ledge contacts
+  still require current bottom/root owner and wall/cliff handoff state.
+- Test/proof: `tests/test_platform_action_entry_callback_locks.py`,
+  `tests/test_nonfd_action_entry_platform_pass_locks.py`,
+  `tests/test_platform_collision_runtime.py`.
+
+| Kind | Exact guard name(s) |
+| --- | --- |
+| Reject bit | `MSL_MPCOLL_REJECT_AIRBORNE_TRANSFORMED_PLATFORM_PRE_HANDOFF`, `MSL_MPCOLL_REJECT_JUMPAERIAL_STATIC_PLATFORM_FROM_BELOW`, `MSL_MPCOLL_REJECT_JUMPAERIAL_TRANSFORMED_PLATFORM_FASTFALL` |
+| Suppression | `suppress_airborne_transformed_platform_pre_handoff_land`, `suppress_jumpaerial_entry_shallow_ledge_projection`, `suppress_jumpaerial_static_platform_from_below_final_land`, `suppress_jumpaerial_transformed_platform_fastfall_land` |
+
+#### Phase 5 Owner Accounting: SpecialHi
+
+- Owner family: SpecialHi.
+- Source function(s): `ftFx_SpecialAirHi_Coll`, `ftFx_SpecialHiFall_Coll`,
+  `ftFox_SpecialHi_IsBound`, `ftCo_8009A134`, `mpColl_800471F8`, `mpUpdateFloorSkip`.
+- Why retained after Phases 1-4: SpecialHi floor publication remains character-callback owned:
+  platform pass, floor-angle bound, JObj ECB, transformed-platform, and under-stage floor-side
+  policy cannot be replaced by generic floor publication.
+- Test/proof: `tests/test_specialhi_mpcoll_ecb_replay_real_locks.py`,
+  `tests/test_special_cliffcatch_collision_window_regression.py`.
+
+| Kind | Exact guard name(s) |
+| --- | --- |
+| Reject bit | `MSL_MPCOLL_REJECT_SPECIALAIRHI_FLOOR_ANGLE`, `MSL_MPCOLL_REJECT_SPECIALAIRHI_PLATFORM`, `MSL_MPCOLL_REJECT_SPECIALHI_FROM_BELOW_HARD_FLOOR`, `MSL_MPCOLL_REJECT_SPECIALHI_TRANSFORMED_PLATFORM`, `MSL_MPCOLL_REJECT_SPECIALHI_UNDERSTAGE_HARD_FLOOR` |
+| Suppression | `suppress_projected_specialairhi_floor_angle_land`, `suppress_projected_specialhi_from_below_hard_floor_clip`, `suppress_projected_specialhi_transformed_platform_land`, `suppress_projected_specialhi_understage_hard_floor_clip`, `suppress_specialairhi_floor_angle_land`, `suppress_specialairhi_platform_land`, `suppress_specialhi_from_below_hard_floor_land`, `suppress_specialhi_transformed_platform_land`, `suppress_specialhi_understage_hard_floor_land` |
+
+#### Phase 5 Owner Accounting: SpecialAirLw
+
+- Owner family: SpecialAirLw.
+- Source function(s): `ftFx_SpecialAirLwStart_Coll`, `mpColl_800471F8`,
+  `mpColl_80044628_Floor`.
+- Why retained after Phases 1-4: aerial Shine startup must not publish a stale previous platform
+  before current callback ECB-bottom acceptance.
+- Test/proof: `tests/test_platform_action_entry_callback_locks.py`,
+  `tests/test_special_cliffcatch_collision_window_regression.py`.
+
+| Kind | Exact guard name(s) |
+| --- | --- |
+| Reject bit | `MSL_MPCOLL_REJECT_SPECIALAIRLW_START_STALE_PLATFORM` |
+| Suppression | `suppress_specialairlw_start_stale_platform_land` |
+
+#### Phase 5 Owner Accounting: Ledge / Cliff
+
+- Owner family: Ledge / cliff.
+- Source function(s): `ftCliffCommon_*`, `ft_80082F28`, `mpColl_80046904`,
+  `mpColl_80044628_Floor`.
+- Why retained after Phases 1-4: ledge/cliff floor contact and horizontal locks are consumed by
+  the cliff owner before normal floor publication.
+- Test/proof: `tests/test_escapeair_ledge_floor_landing_replay_real_locks.py`,
+  `tests/test_special_cliffcatch_collision_window_regression.py`,
+  `tests/test_platform_action_entry_callback_locks.py`.
+
+| Kind | Exact guard name(s) |
+| --- | --- |
+| Reject bit | `MSL_MPCOLL_REJECT_CLIFF_HORIZONTAL_LEDGE_LOCKED` |
+| Suppression | `suppress_cliff_horizontal_ledge_locked_final_land`, `suppress_cliff_horizontal_ledge_locked_zero_bottom_hit` |
+
+#### Phase 5 Owner Accounting: Moving-Platform Deferral
+
+- Owner family: moving-platform deferral.
+- Source function(s): `ftCo_Landing_Coll`, `ft_80084280`, `ft_800844EC`,
+  `mpColl_8004B4B0`, `grIzumi_801CC358`, generated `stage_collision_floor_line_*` metadata.
+- Why retained after Phases 1-4: transformed/moving platform current-source or scheduler authority
+  is required before replacing carried floors. Phase 5 records the deferral and does not route
+  moving-platform runtime behavior.
+- Test/proof: `tests/test_platform_action_entry_callback_locks.py`,
+  `tests/test_platform_collision_runtime.py`, Phase 6 deferral row.
+
+| Kind | Exact guard name(s) |
+| --- | --- |
+| Reject bit | `MSL_MPCOLL_REJECT_FALL_LOOP_WRAP_STAGE_OBJECT_FLOOR_TO_HARD_FLOOR` |
+| Suppression | `suppress_fall_loop_wrap_stage_object_floor_to_hard_floor_land`, `suppress_large_distinct_platform_root_projection` |
+
+#### Phase 5 Fallback / Keyword Accounting
+
+| Audited path | Phase 5 action | Source-policy owner / proof |
+| --- | --- | --- |
+| `msl_mpcoll_80044628_floor_wall_adjacent_fallback` and adjacent wall/ceiling fallback comments | RETAINED SOURCE-POLICY | `mpColl_80044628_Floor` and `mpColl_8004ACE4` retry through connected floor/wall graph state after ordered wall/ceiling side bits. The path is bounded to source side bits, endpoint tolerance, and static graph lines. |
+| `msl_mpcoll_80044838_floor_edge_snap_from_bottom` hard-floor off-end rejection | RETAINED SOURCE-POLICY | This helper owns platform endpoint admission only. Hard-floor off-end rows stay on ordinary bottom-sweep/direct publication because their source edge snap needs current mpColl scratch floor ownership, not this platform endpoint helper. |
+| `mpcoll_action_uses_retained_ft80081d0c_air_collision` | RETAINED LATER-OWNER FALLBACK | AttackAir and EscapeAir route through Phase 4 `class3_bits`; the retained broad `FT80081D0C_AIR_COLL` wrapper is only for later/non-Phase4 owners sharing `ft_80082C74 -> ft_80081D0C -> mpColl_800471F8`. It is not accepted as Phase 4 or Phase 5 static closure evidence. |
+| Static ledge-grab ECB and prev/cur sampling in `src/mpcoll_env.c` | CONVERTED COMMENT / RETAINED SOURCE-STATE | Stale approximation wording was replaced with explicit MSL state lanes: ISO ECB-table samples and within-frame collision-stage prev/cur positions used by `mpColl_80044164`, `mpColl_800443C4`, and `mpColl_80046904`. Full per-substep/moving-platform history remains Phase 6. |
+| Landing-contact root-Y helper and generic floor-loss Fall branch in `src/locomotion.c` | CONVERTED COMMENT / RETAINED SOURCE-OWNER | Old bridge/unmodeled wording was replaced. Landing root-Y is bounded to callbacks that already published floor contact; explicit ledge-slip owners enter MissFoot before the generic `ftCo_Fall_Enter` branch. |
+| Seed-only FoD platform height restore in `src/mpcoll_ground.c` | RETAINED PHASE-6 DEFERRAL | Rows with only seed-provided FoD platform height and no live scheduler/contact source restore carried floor; full moving-platform scheduling remains Phase 6. |
+| Remaining `fallback`, `bridge`, `compat`, and `temporary` wording in `src/locomotion.c`, `src/fighter_callbacks.c`, and `src/damage_terminal_owner.h` | RETAINED NON-STATIC OWNER ACCOUNTING | Remaining occurrences are random idle selection, throw/combat/IASA/match-flow/BODY, or one-step seed ownership comments outside static legal-stage collision publication. They are not accepted as static collision closure evidence and keep nearby decomp/source comments. |
+| `stage_collision_stage_has_deferred_static_floor_transform` and `deferred_*` stage metadata helpers | RETAINED PHASE-6 DEFERRAL | These classify transformed/static floor metadata for source-policy routing and tests. They do not route moving-platform runtime behavior in Phase 5. |
+
 Required verification:
 
 - Focused owner-invariant tests for every cleanup that changes behavior.
