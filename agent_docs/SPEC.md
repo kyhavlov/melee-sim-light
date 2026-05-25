@@ -992,12 +992,21 @@ Recent deltas to reflect here (do not let these get “lost in chat logs”):
   refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C},
   refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpColl_800471F8,
   mpColl_80044628_Floor,mpColl_80044838_Floor}).
-- MSLSTG01 v9 raw `MapLine` links are exposed as runtime substrate for source-shaped
-  `mpLineGetPrev/Next` and non-kind traversal. Frozen Pokemon Stadium applies the active
+- MSLSTG01 v10 raw `MapLine` links, source flag words, and `MapJoint` ownership are exposed as
+  runtime substrate for source-shaped `mpLineGetPrev/Next`, non-kind traversal, `mpLineGetFlags`,
+  and `mpJointFromLine`-style query filters. The static legal-stage query helper consumes those
+  preloaded records for floor/ceiling/left-wall/right-wall nearest-hit scans while intentionally
+  excluding deferred moving-surface owners such as FoD height platforms and Yoshi's Randall.
+  It returns source-local segment ids; full `mpCheck*Remap` publication semantics are deferred to
+  Phase 2 (`CollData` lifetime and ordered `mpColl`) because remap is a wrapper/CollData owner.
+  Frozen Pokemon Stadium applies the active
   fighter-solid mask to walls/ceilings as well as floors, so inactive transformation/platform-side
   shell lines remain visible in data/debug output but do not participate in fighter wall collision.
-  (`src/stage_collision.c`, `src/mpcoll_wall_ceil.c`; refs/melee/src/melee/mp/mplib.c::{
-  `mpLineGetPrev`,`mpLineGetNext`,`mpCheckLeftWall`,`mpCheckRightWall`},
+  (`src/stage_collision.c`, `src/mpcoll_wall_ceil.c`, `data/stages/bin/*.bin::MSLSTG01`;
+  refs/melee/src/melee/mp/types.h::{`MapLine`,`MapJoint`};
+  refs/melee/src/melee/mp/mplib.c::{
+  `mpLineGetPrev`,`mpLineGetNext`,`mpLineGetFlags`,`mpJointFromLine`,
+  `mpCheckLeftWall`,`mpCheckRightWall`},
   refs/slippi-ssbm-asm/Online/Core/Hacks/Stadium/IngameCheckIfFrozen.asm).
 - Grounded inline2 map collision now shares one ordered wall/ceiling/floor scratch for the source
   `mpColl_8004ACE4` sequence: left/right wall candidate collection and envelope collision run

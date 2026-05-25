@@ -1024,9 +1024,9 @@ Characters (Fox/Falco):
     - `refs/melee/src/melee/gr/ground.c::Ground_801C126C`, `Ground_801C2D24`, `Ground_801C39C0`,
       `Ground_801C3BB4`
     - `refs/melee/src/melee/gr/stage.c::Stage_80224E64`, `Stage_80224E38`
-  - Binary layout: `MSLSTG01` v9
+  - Binary layout: `MSLSTG01` v10
     - `u8 magic[8] = "MSLSTG01"`
-    - `u32 version = 9`
+    - `u32 version = 10`
     - `u16 segment_count`, `stage_point_count`, `spawn_count`, `respawn_count`,
       `platform_transform_count`, `platform_transform_record_bytes`, reserved lanes
     - `f32 cam_bounds_world[left,right,top,bottom]`
@@ -1036,7 +1036,9 @@ Characters (Fox/Falco):
       raw `hi_flags/lo_flags`, raw `MapLine` links `prev_id0/next_id0/prev_id1/next_id1`,
       world-scaled endpoints
       `(x0,y0,x1,y1)` after applying `grGroundParam.x0`, and source floor material
-      `ground_friction_mul = mpLib_800569EC(lo_flags & 0xFF).x0`
+      `ground_friction_mul = mpLib_800569EC(lo_flags & 0xFF).x0`, followed by
+      `joint_id` from `mpJointFromLine`'s `MapLine.v0_idx` ownership test and a reserved `s16`
+      padding lane. Segment records are 40 bytes.
     - world-scaled raw stage-point coordinate payloads
     - world-scaled spawn point payloads `(x,y)` for stage point ids `0..3`
     - world-scaled respawn point payloads `(x,y)` for stage point ids `4..7`; missing ids `5..7`
@@ -1044,14 +1046,15 @@ Characters (Fox/Falco):
     - platform transform records: source line id, transform kind, platform id, source-local X span,
       default current height for height-owned moving lines or static world Y for static-Y records,
       and source-backed height coefficient for live moving platform collision transforms
-  - Stale/non-v9 `MSLSTG01` tables must be rejected. Version 3 added the raw `MapLine` graph links
+  - Stale/non-v10 `MSLSTG01` tables must be rejected. Version 3 added the raw `MapLine` graph links
     used by source-shaped `mpLineGetPrev/Next` traversal. Version 4 added generated fighter-solid
     line policy. Version 5 adds source/data-backed platform transform records for live platform
     world endpoints. Version 6 adds binary platform-motion records consumed by the free-running
     FoD scheduler. Version 8 adds a generated stage-object support kind in segment flag bits,
     currently used for Yoshi's Story raw Shy Guy support floor ownership. Version 9 adds the
     source floor material friction multiplier used by `ft_GetGroundFrictionMultiplier` for grounded
-    knockback decay. Regenerate supported
+    knockback decay. Version 10 expands segment records to 40 bytes and adds `joint_id` for
+    `mpJointFromLine`-shaped query filters. Regenerate supported
     stage artifacts with
     `uv run python -m tools.extraction.build_data --iso-dir _iso --stages grnla,grnba,griz,grps,grst,grop --chars fox,falco`.
   - Supported runtime stage ids: `2` Fountain of Dreams, `3` Pokemon Stadium base, `8` Yoshi's
@@ -1067,7 +1070,11 @@ Characters (Fox/Falco):
     `KneeBend_Coll` and immediate `KneeBend -> Jump -> EscapeAir_Coll` handoffs on the returned
     connected floor contact. No new seed lane is introduced for that EWT `9753/9755` owner; the
     source evidence is the persisted CollData floor id plus the generated floor graph.
-    The MSLSTG01 v9 binary platform-motion payload carries
+    Static Phase-1 query helpers return source-local `line_id`/`segment_i` records. Full
+    `mpCheck*Remap` publication semantics are deferred to Phase 2 (`CollData` Lifetime And Ordered
+    `mpColl`) because remap ownership is consumed by wrapper/CollData publication rather than the
+    standalone static scan.
+    The MSLSTG01 v10 binary platform-motion payload carries
     `platform_motion.fountain_platform` constants from `GrIz.dat::yakumono_param`
     (`home_height`, hidden target, min/max, source speed fields, RNG weights, and
     target-delta fields) for causal target selection and target clamping. Runtime scheduler state

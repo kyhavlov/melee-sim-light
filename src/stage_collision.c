@@ -368,6 +368,7 @@ typedef struct {
   int16_t next_id0;
   int16_t prev_id1;
   int16_t next_id1;
+  int16_t joint_id;
   float raw_x0;
   float raw_y0;
   float raw_x1;
@@ -377,13 +378,17 @@ typedef struct {
   float x1;
   float y1;
   float ground_friction_mul;
+  uint16_t hi_flags;
+  uint16_t lo_flags;
 } FdSegTmp;
 
 static FdSegTmp fd_seg_tmp_normalized(FdSegKind kind, uint8_t ledge, uint8_t platform,
                                       uint8_t fighter_solid, uint8_t stage_object_support_kind,
                                       uint16_t segment_i, int16_t prev_id0, int16_t next_id0,
-                                      int16_t prev_id1, int16_t next_id1, float fx0, float fy0,
-                                      float fx1, float fy1, float ground_friction_mul) {
+                                      int16_t prev_id1, int16_t next_id1, int16_t joint_id,
+                                      float fx0, float fy0, float fx1, float fy1,
+                                      float ground_friction_mul, uint16_t hi_flags,
+                                      uint16_t lo_flags) {
   // Normalize orientation to match mplib assumptions for each line kind:
   // - floor: x0 <= x1
   //   refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
@@ -451,6 +456,7 @@ static FdSegTmp fd_seg_tmp_normalized(FdSegKind kind, uint8_t ledge, uint8_t pla
       .next_id0 = next_id0,
       .prev_id1 = prev_id1,
       .next_id1 = next_id1,
+      .joint_id = joint_id,
       .raw_x0 = raw_x0,
       .raw_y0 = raw_y0,
       .raw_x1 = raw_x1,
@@ -460,6 +466,8 @@ static FdSegTmp fd_seg_tmp_normalized(FdSegKind kind, uint8_t ledge, uint8_t pla
       .x1 = fx1,
       .y1 = fy1,
       .ground_friction_mul = ground_friction_mul,
+      .hi_flags = hi_flags,
+      .lo_flags = lo_flags,
   };
 }
 
@@ -911,6 +919,10 @@ static int fd_install_stage_segments(uint32_t stage_id, const FdSegTmp* seg_tmp,
           .fighter_solid = s->fighter_solid,
           .stage_object_support_kind = s->stage_object_support_kind,
           .ground_friction_mul = s->ground_friction_mul,
+          .hi_flags = s->hi_flags,
+          .lo_flags = s->lo_flags,
+          .joint_id = s->joint_id,
+          ._pad_flags = {0},
           .has_prev_link = 0,
           .has_next_link = 0,
           .segment_i = s->segment_i,
@@ -935,6 +947,9 @@ static int fd_install_stage_segments(uint32_t stage_id, const FdSegTmp* seg_tmp,
           .fighter_solid = s->fighter_solid,
           ._pad0 = {0},
           .segment_i = s->segment_i,
+          .hi_flags = s->hi_flags,
+          .lo_flags = s->lo_flags,
+          .joint_id = s->joint_id,
           .raw_prev_id = -1,
           .raw_next_id = -1,
           .prev = -1,
@@ -955,6 +970,9 @@ static int fd_install_stage_segments(uint32_t stage_id, const FdSegTmp* seg_tmp,
           .fighter_solid = s->fighter_solid,
           ._pad0 = {0},
           .segment_i = s->segment_i,
+          .hi_flags = s->hi_flags,
+          .lo_flags = s->lo_flags,
+          .joint_id = s->joint_id,
           .raw_prev_id = -1,
           .raw_next_id = -1,
           .prev = -1,
@@ -974,6 +992,9 @@ static int fd_install_stage_segments(uint32_t stage_id, const FdSegTmp* seg_tmp,
           .has_next_link = 0,
           .fighter_solid = s->fighter_solid,
           .segment_i = s->segment_i,
+          .hi_flags = s->hi_flags,
+          .lo_flags = s->lo_flags,
+          .joint_id = s->joint_id,
           .raw_prev_id = -1,
           .raw_next_id = -1,
           .prev = -1,
@@ -1122,9 +1143,9 @@ static int fd_install_stage_segments(uint32_t stage_id, const FdSegTmp* seg_tmp,
 }
 
 enum {
-  MSLSTG01_VERSION = 9,
+  MSLSTG01_VERSION = 10,
   MSLSTG01_HEADER_BYTES = 64,
-  MSLSTG01_SEGMENT_BYTES = 36,
+  MSLSTG01_SEGMENT_BYTES = 40,
   MSLSTG01_FLAG_PLATFORM = 1,
   MSLSTG01_FLAG_LEDGE = 2,
   MSLSTG01_FLAG_FIGHTER_SOLID = 4,
@@ -1431,8 +1452,9 @@ static int fd_load_floor_lines_from_mslstg01(uint32_t stage_id, const uint8_t* b
         (uint8_t)((flags >> MSLSTG01_STAGE_OBJECT_SUPPORT_SHIFT) &
                   MSLSTG01_STAGE_OBJECT_SUPPORT_MASK),
         line_id, stage_read_s16_le(p + 8), stage_read_s16_le(p + 10), stage_read_s16_le(p + 12),
-        stage_read_s16_le(p + 14), stage_read_f32_le(p + 16), stage_read_f32_le(p + 20),
-        stage_read_f32_le(p + 24), stage_read_f32_le(p + 28), stage_read_f32_le(p + 32));
+        stage_read_s16_le(p + 14), stage_read_s16_le(p + 36), stage_read_f32_le(p + 16),
+        stage_read_f32_le(p + 20), stage_read_f32_le(p + 24), stage_read_f32_le(p + 28),
+        stage_read_f32_le(p + 32), stage_read_u16_le(p + 4), stage_read_u16_le(p + 6));
   }
   stage_install_match_flow_from_mslstg01(stage_id, buf, segment_count, stage_point_count,
                                          spawn_count, respawn_count);
@@ -2402,6 +2424,408 @@ int stage_collision_right_wall_line_index(uint32_t stage_id, uint16_t segment_i)
     return -1;
   }
   return (int)slot->right_wall_line_index_by_segment[segment_i];
+}
+
+static inline uint8_t stage_static_line_allows_joint(int16_t line_joint_id, int16_t joint_id_skip,
+                                                     int16_t joint_id_only) {
+  if (joint_id_skip >= 0 && line_joint_id == joint_id_skip) {
+    return 0u;
+  }
+  if (joint_id_only >= 0 && line_joint_id != joint_id_only) {
+    return 0u;
+  }
+  return 1u;
+}
+
+static inline uint8_t stage_static_floor_line_query_active(const MslStageFloorLine* line) {
+  if (line == NULL || !line->fighter_solid) {
+    return 0u;
+  }
+  // Static Phase-1 substrate only. Generated moving/platform-transform records remain visible in
+  // metadata but are deferred from this static query helper.
+  // data/stages/bin/*.bin::MSLSTG01 platform_transform records
+  return (uint8_t)(line->platform_transform_kind == MSL_STAGE_PLATFORM_TRANSFORM_NONE ||
+                   line->platform_transform_kind == MSL_STAGE_PLATFORM_TRANSFORM_STATIC_Y);
+}
+
+static inline uint8_t stage_static_line_query_active(uint8_t fighter_solid) {
+  return fighter_solid ? 1u : 0u;
+}
+
+static inline void stage_static_extend_endpoints(uint8_t has_prev, uint8_t has_next, float* x0,
+                                                 float* y0, float* x1, float* y1) {
+  // refs/melee/src/melee/mp/mplib.c::mpLib_8004ED5C
+  const float old_x0 = *x0;
+  const float old_y0 = *y0;
+  const float old_x1 = *x1;
+  const float old_y1 = *y1;
+  float dist = 0.0f;
+  uint8_t have_dist = 0u;
+  if (has_prev) {
+    dist = sqrtf(((*x0 - *x1) * (*x0 - *x1)) + ((*y0 - *y1) * (*y0 - *y1)));
+    have_dist = 1u;
+    if (dist > 0.001f) {
+      *x0 += (*x0 - *x1) / dist;
+      *y0 += (*y0 - *y1) / dist;
+    }
+  }
+  if (has_next) {
+    if (!have_dist) {
+      dist =
+          sqrtf(((old_x0 - old_x1) * (old_x0 - old_x1)) + ((old_y0 - old_y1) * (old_y0 - old_y1)));
+    }
+    if (dist > 0.001f) {
+      *x1 += (*x1 - *x0) / dist;
+      *y1 += (*y1 - *y0) / dist;
+    }
+  }
+}
+
+static inline uint8_t stage_static_intersect_line(float a0x, float a0y, float a1x, float a1y,
+                                                  float b0x, float b0y, float b1x, float b1y,
+                                                  float* ix_out, float* iy_out) {
+  // refs/melee/src/melee/mp/mplib.c::mpLineIntersection
+  uint8_t b1_below_a = 0u;
+  uint8_t b2_above_a = 0u;
+  if (a0x <= a1x) {
+    if ((b0x < a0x && b1x < a0x) || (a1x < b0x && a1x < b1x)) {
+      return 0u;
+    }
+  } else if ((b0x < a1x && b1x < a1x) || (a0x < b0x && a0x < b1x)) {
+    return 0u;
+  }
+  if (a0y <= a1y) {
+    if ((b0y < a0y && b1y < a0y) || (a1y < b0y && a1y < b1y)) {
+      return 0u;
+    }
+  } else if ((b0y < a1y && b1y < a1y) || (a0y < b0y && a0y < b1y)) {
+    return 0u;
+  }
+
+  const double ah = (double)a1y - (double)a0y;
+  const double d0x = (double)b0x - (double)a0x;
+  const double aw = (double)a1x - (double)a0x;
+  const double d0y = (double)b0y - (double)a0y;
+  const double hs_b0_a = (aw * d0y) - (ah * d0x);
+  if (hs_b0_a < 0.0) {
+    if (hs_b0_a < -0.1) {
+      return 0u;
+    }
+    b1_below_a = 1u;
+  }
+
+  const double d1x = (double)b1x - (double)a1x;
+  const double d1y = (double)b1y - (double)a1y;
+  const double hs_b1_a = (aw * d1y) - (ah * d1x);
+  if (hs_b1_a > 0.0) {
+    if (hs_b1_a > 0.1) {
+      return 0u;
+    }
+    b2_above_a = 1u;
+  }
+  if (hs_b0_a == 0.0 && hs_b1_a == 0.0) {
+    return 0u;
+  }
+
+  const double det = (d0x * d1y) - (d0y * d1x);
+  if (det < hs_b0_a) {
+    if (det < hs_b1_a) {
+      return 0u;
+    }
+  } else if (det > hs_b0_a && det > hs_b1_a) {
+    return 0u;
+  }
+
+  const double bw = (double)b1x - (double)b0x;
+  const double bh = (double)b1y - (double)b0y;
+  if (!((bw == 0.0 && bh == 0.0) || (b1_below_a && b2_above_a) || (hs_b0_a >= 0.0 && b2_above_a))) {
+    const double area = (bw * ah) - (bh * aw);
+    if (fabs(area) > 0.0001) {
+      const double t = ((bw * d0y) - (bh * d0x)) / area;
+      if (t > 0.0) {
+        if (t < 1.0) {
+          *ix_out = (float)((aw * t) + (double)a0x);
+          *iy_out = (float)((ah * t) + (double)a0y);
+        } else {
+          *ix_out = a1x;
+          *iy_out = a1y;
+        }
+      } else {
+        *ix_out = a0x;
+        *iy_out = a0y;
+      }
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
+static inline uint8_t stage_static_intersect_segment(float ax, float ay, float bx, float by,
+                                                     float x0, float y0, float x1, float y1,
+                                                     float* ix_out, float* iy_out) {
+  return stage_static_intersect_line(x0, y0, x1, y1, ax, ay, bx, by, ix_out, iy_out);
+}
+
+static inline uint8_t stage_static_intersect_h(float a0x, float a0y, float a1x, float b0x,
+                                               float b0y, float b1x, float b1y, float* ix_out,
+                                               float* iy_out) {
+  // refs/melee/src/melee/mp/mplib.c::mpLineIntersectionH
+  float min_ax = 0.0f;
+  float max_ax = 0.0f;
+  if (a0x < a1x) {
+    if ((b0x < a0x && b1x < a0x) || (a1x < b0x && a1x < b1x)) {
+      return 0u;
+    }
+    if ((double)b0y - (double)a0y < -0.0001 || (double)b1y - (double)a0y > 0.0001) {
+      return 0u;
+    }
+    min_ax = a0x;
+    max_ax = a1x;
+  } else {
+    if ((b0x < a1x && b1x < a1x) || (a0x < b0x && a0x < b1x)) {
+      return 0u;
+    }
+    if ((double)b1y - (double)a0y < -0.0001 || (double)b0y - (double)a0y > 0.0001) {
+      return 0u;
+    }
+    min_ax = a1x;
+    max_ax = a0x;
+  }
+  const double dby = (double)b1y - (double)b0y;
+  const double dbx = (double)b1x - (double)b0x;
+  if (fabs(dby) < 0.0001) {
+    return 0u;
+  }
+  double new_x = (dbx / dby * ((double)a0y - (double)b0y)) + (double)b0x;
+  double dx = new_x - (double)min_ax;
+  if (dx < 0.0) {
+    if (dx < -0.1) {
+      return 0u;
+    }
+    new_x = (double)min_ax;
+  }
+  dx = new_x - (double)max_ax;
+  if (dx > 0.0) {
+    if (dx > 0.1) {
+      return 0u;
+    }
+    new_x = (double)max_ax;
+  }
+  *ix_out = (float)new_x;
+  *iy_out = a0y;
+  return 1u;
+}
+
+static inline uint8_t stage_static_intersect_v(float a0x, float a0y, float a1y, float b0x,
+                                               float b0y, float b1x, float b1y, float* ix_out,
+                                               float* iy_out) {
+  // refs/melee/src/melee/mp/mplib.c::mpLineIntersectionV
+  float min_ay = 0.0f;
+  float max_ay = 0.0f;
+  if (a0y < a1y) {
+    if ((b0y < a0y && b1y < a0y) || (a1y < b0y && a1y < b1y)) {
+      return 0u;
+    }
+    if ((double)b1x - (double)a0x < -0.0001 || (double)b0x - (double)a0x > 0.0001) {
+      return 0u;
+    }
+    min_ay = a0y;
+    max_ay = a1y;
+  } else {
+    if ((b0y < a1y && b1y < a1y) || (a0y < b0y && a0y < b1y)) {
+      return 0u;
+    }
+    if ((double)b0x - (double)a0x < -0.0001 || (double)b1x - (double)a0x > 0.0001) {
+      return 0u;
+    }
+    min_ay = a1y;
+    max_ay = a0y;
+  }
+  const double dby = (double)b1y - (double)b0y;
+  const double dbx = (double)b1x - (double)b0x;
+  if (fabs(dbx) < 0.0001) {
+    return 0u;
+  }
+  double new_y = (dby / dbx * ((double)a0x - (double)b0x)) + (double)b0y;
+  double dy = new_y - (double)min_ay;
+  if (dy < 0.0) {
+    if (dy < -0.1) {
+      return 0u;
+    }
+    new_y = (double)min_ay;
+  }
+  dy = new_y - (double)max_ay;
+  if (dy > 0.0) {
+    if (dy > 0.1) {
+      return 0u;
+    }
+    new_y = (double)max_ay;
+  }
+  *ix_out = a0x;
+  *iy_out = (float)new_y;
+  return 1u;
+}
+
+static inline void stage_static_normal(float x0, float y0, float x1, float y1, float* nx_out,
+                                       float* ny_out) {
+  float nx = -(y1 - y0);
+  float ny = x1 - x0;
+  const float len = sqrtf((nx * nx) + (ny * ny));
+  if (len > 0.0f) {
+    nx /= len;
+    ny /= len;
+  }
+  *nx_out = nx;
+  *ny_out = ny;
+}
+
+static inline void stage_static_hit_set(MslStageQueryHit* out, MslStageRawLineKind kind,
+                                        uint16_t segment_i, int16_t joint_id, uint16_t flags,
+                                        float ix, float iy, float nx, float ny, float dist2) {
+  if (out == NULL) {
+    return;
+  }
+  *out = (MslStageQueryHit){
+      .kind = kind,
+      .segment_i = segment_i,
+      .joint_id = joint_id,
+      .flags = flags,
+      .x = ix,
+      .y = iy,
+      .normal_x = nx,
+      .normal_y = ny,
+      .dist2 = dist2,
+  };
+}
+
+static inline uint8_t stage_static_consider_hit(float ax, float ay, float ix, float iy,
+                                                MslStageRawLineKind kind, uint16_t segment_i,
+                                                int16_t joint_id, uint16_t flags, float nx,
+                                                float ny, float* best_dist2,
+                                                MslStageQueryHit* out) {
+  const float dx = ix - ax;
+  const float dy = iy - ay;
+  const float dist2 = (dx * dx) + (dy * dy);
+  if (!(dist2 < *best_dist2)) {
+    return 0u;
+  }
+  *best_dist2 = dist2;
+  stage_static_hit_set(out, kind, segment_i, joint_id, flags, ix, iy, nx, ny, dist2);
+  return 1u;
+}
+
+uint8_t stage_collision_static_query(uint32_t stage_id, uint32_t checks, float x0, float y0,
+                                     float x1, float y1, uint16_t line_id_skip,
+                                     int16_t joint_id_skip, int16_t joint_id_only,
+                                     MslStageQueryHit* out) {
+  const MslStageSlot* slot = stage_slot(stage_id);
+  if (out != NULL) {
+    *out = (MslStageQueryHit){0};
+  }
+  if (slot == NULL || !slot->loaded) {
+    return 0u;
+  }
+
+  float best_dist2 = FLT_MAX;
+  if (checks & (uint32_t)MSL_STAGE_QUERY_FLOOR) {
+    for (size_t i = 0; i < slot->floor_line_count; i++) {
+      const MslStageFloorLine* line = &slot->floor_lines[i];
+      if (!stage_static_floor_line_query_active(line) ||
+          !stage_static_line_allows_joint(line->joint_id, joint_id_skip, joint_id_only) ||
+          (line_id_skip != 0xFFFFu && line->segment_i == line_id_skip)) {
+        continue;
+      }
+      float lx0 = line->x0, ly0 = line->y0, lx1 = line->x1, ly1 = line->y1;
+      stage_static_extend_endpoints((uint8_t)(line->raw_prev_id >= 0),
+                                    (uint8_t)(line->raw_next_id >= 0), &lx0, &ly0, &lx1, &ly1);
+      float ix = 0.0f, iy = 0.0f;
+      const uint8_t hit =
+          (fabsf(ly0 - ly1) > 0.0001f)
+              ? stage_static_intersect_segment(x0, y0, x1, y1, lx0, ly0, lx1, ly1, &ix, &iy)
+              : ((y0 >= y1) ? stage_static_intersect_h(lx0, ly0, lx1, x0, y0, x1, y1, &ix, &iy)
+                            : 0u);
+      if (!hit) {
+        continue;
+      }
+      float nx = 0.0f, ny = 0.0f;
+      stage_static_normal(lx0, ly0, lx1, ly1, &nx, &ny);
+      (void)stage_static_consider_hit(x0, y0, ix, iy, MSL_STAGE_RAW_LINE_FLOOR, line->segment_i,
+                                      line->joint_id, line->lo_flags, nx, ny, &best_dist2, out);
+    }
+  }
+  if (checks & (uint32_t)MSL_STAGE_QUERY_CEILING) {
+    for (size_t i = 0; i < slot->ceiling_line_count; i++) {
+      const MslStageCeilingLine* line = &slot->ceiling_lines[i];
+      if (!stage_static_line_query_active(line->fighter_solid) ||
+          !stage_static_line_allows_joint(line->joint_id, joint_id_skip, joint_id_only)) {
+        continue;
+      }
+      float lx0 = line->x0, ly0 = line->y0, lx1 = line->x1, ly1 = line->y1;
+      stage_static_extend_endpoints((uint8_t)(line->raw_prev_id >= 0),
+                                    (uint8_t)(line->raw_next_id >= 0), &lx0, &ly0, &lx1, &ly1);
+      float ix = 0.0f, iy = 0.0f;
+      const uint8_t hit =
+          (fabsf(ly0 - ly1) > 0.0001f)
+              ? stage_static_intersect_segment(x0, y0, x1, y1, lx0, ly0, lx1, ly1, &ix, &iy)
+              : ((y0 <= y1) ? stage_static_intersect_h(lx0, ly0, lx1, x0, y0, x1, y1, &ix, &iy)
+                            : 0u);
+      if (!hit) {
+        continue;
+      }
+      float nx = 0.0f, ny = 0.0f;
+      stage_static_normal(lx0, ly0, lx1, ly1, &nx, &ny);
+      (void)stage_static_consider_hit(x0, y0, ix, iy, MSL_STAGE_RAW_LINE_CEILING, line->segment_i,
+                                      line->joint_id, line->lo_flags, nx, ny, &best_dist2, out);
+    }
+  }
+  if (checks & (uint32_t)MSL_STAGE_QUERY_LEFT_WALL) {
+    for (size_t i = 0; i < slot->left_wall_line_count; i++) {
+      const MslStageWallLine* line = &slot->left_wall_lines[i];
+      if (!stage_static_line_query_active(line->fighter_solid) ||
+          !stage_static_line_allows_joint(line->joint_id, joint_id_skip, joint_id_only)) {
+        continue;
+      }
+      float ix = 0.0f, iy = 0.0f;
+      const uint8_t hit = (fabsf(line->x0 - line->x1) > 0.0001f)
+                              ? stage_static_intersect_segment(x0, y0, x1, y1, line->x0, line->y0,
+                                                               line->x1, line->y1, &ix, &iy)
+                              : ((x0 <= x1) ? stage_static_intersect_v(line->x0, line->y0, line->y1,
+                                                                       x0, y0, x1, y1, &ix, &iy)
+                                            : 0u);
+      if (!hit) {
+        continue;
+      }
+      float nx = 0.0f, ny = 0.0f;
+      stage_static_normal(line->x0, line->y0, line->x1, line->y1, &nx, &ny);
+      (void)stage_static_consider_hit(x0, y0, ix, iy, MSL_STAGE_RAW_LINE_LEFT_WALL, line->segment_i,
+                                      line->joint_id, line->lo_flags, nx, ny, &best_dist2, out);
+    }
+  }
+  if (checks & (uint32_t)MSL_STAGE_QUERY_RIGHT_WALL) {
+    for (size_t i = 0; i < slot->right_wall_line_count; i++) {
+      const MslStageWallLine* line = &slot->right_wall_lines[i];
+      if (!stage_static_line_query_active(line->fighter_solid) ||
+          !stage_static_line_allows_joint(line->joint_id, joint_id_skip, joint_id_only)) {
+        continue;
+      }
+      float ix = 0.0f, iy = 0.0f;
+      const uint8_t hit = (fabsf(line->x0 - line->x1) > 0.0001f)
+                              ? stage_static_intersect_segment(x0, y0, x1, y1, line->x0, line->y0,
+                                                               line->x1, line->y1, &ix, &iy)
+                              : ((x0 >= x1) ? stage_static_intersect_v(line->x0, line->y0, line->y1,
+                                                                       x0, y0, x1, y1, &ix, &iy)
+                                            : 0u);
+      if (!hit) {
+        continue;
+      }
+      float nx = 0.0f, ny = 0.0f;
+      stage_static_normal(line->x0, line->y0, line->x1, line->y1, &nx, &ny);
+      (void)stage_static_consider_hit(x0, y0, ix, iy, MSL_STAGE_RAW_LINE_RIGHT_WALL,
+                                      line->segment_i, line->joint_id, line->lo_flags, nx, ny,
+                                      &best_dist2, out);
+    }
+  }
+  return (uint8_t)(best_dist2 < FLT_MAX);
 }
 
 uint8_t stage_collision_get_blast_bounds_world(uint32_t stage_id, MslStageBounds* out) {

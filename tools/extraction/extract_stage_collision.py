@@ -223,6 +223,7 @@ def _apply_yoshi_stage_object_policy(stage_dat: Path, segments: list[dict], unit
                 "next_id0": -1,
                 "prev_id1": -1,
                 "next_id1": -1,
+                "joint_id": -1,
                 "platform": True,
                 "ledge": False,
                 "fighter_solid": True,
@@ -616,6 +617,41 @@ def _kind_ranges(coll_abs: int, buf: bytes) -> list[tuple[str, int, int]]:
     ]
 
 
+def _joint_id_by_line(coll_abs: int, buf: bytes, arc) -> dict[int, int]:
+    # Source owner: mpJointFromLine scans MapJoint records and returns the joint whose vertex range
+    # owns the line's v0, not the line range listed on the joint.
+    # refs/melee/src/melee/mp/types.h::MapJoint
+    # refs/melee/src/melee/mp/mplib.c::mpJointFromLine
+    try:
+        lines_abs = arc.ptr32(coll_abs + 0x08)
+        joints_abs = arc.ptr32(coll_abs + 0x24)
+    except Exception:
+        return {}
+    line_count = int(_i32_be(buf, coll_abs + 0x0C))
+    joint_count = int(_i32_be(buf, coll_abs + 0x28))
+    if line_count <= 0 or joint_count <= 0:
+        return {}
+    joint_ranges: list[tuple[int, int, int]] = []
+    for joint_id in range(joint_count):
+        off = joints_abs + joint_id * 0x28
+        joint_ranges.append(
+            (
+                int(joint_id),
+                int(_s16_be(buf, off + 0x24)),
+                int(_s16_be(buf, off + 0x26)),
+            )
+        )
+    out: dict[int, int] = {}
+    for line_id in range(line_count):
+        line_off = lines_abs + line_id * 0x10
+        v0_idx = int(_u16_be(buf, line_off + 0x00))
+        for joint_id, vtx_start, vtx_count in joint_ranges:
+            if vtx_start <= v0_idx < vtx_start + vtx_count:
+                out[line_id] = joint_id
+                break
+    return out
+
+
 def _extract_segments(stage_dat: Path) -> dict:
     buf = stage_dat.read_bytes()
     arc = parse_hsd_archive(buf)
@@ -655,6 +691,7 @@ def _extract_segments(stage_dat: Path) -> dict:
             continue
         for i in range(start, start + count):
             kind_for_line[i] = kind
+    joint_for_line = _joint_id_by_line(coll_abs, buf, arc)
 
     segments: list[dict] = []
     for i in range(line_count):
@@ -693,6 +730,7 @@ def _extract_segments(stage_dat: Path) -> dict:
                 "next_id0": next_id0,
                 "prev_id1": prev_id1,
                 "next_id1": next_id1,
+                "joint_id": int(joint_for_line.get(i, -1)),
                 "platform": bool(lo_flags & LINE_FLAG_PLATFORM),
                 "ledge": bool(lo_flags & LINE_FLAG_LEDGE),
                 "fighter_solid": _fighter_solid_for_current_legal_policy(stage_dat, kind, i),

@@ -130,7 +130,7 @@ def _write_stage_bin(out: Path, data: dict) -> None:
             | ((stage_object_support_kind & 0x1F) << 3)
         )
         buf += struct.pack(
-            "<HBBHHhhhhfffff",
+            "<HBBHHhhhhfffffhh",
             int(seg["i"]) & 0xFFFF,
             KIND_ID[str(seg["kind"])] & 0xFF,
             flags & 0xFF,
@@ -145,6 +145,8 @@ def _write_stage_bin(out: Path, data: dict) -> None:
             _f32(float(seg["x1"]) * unit_scale),
             _f32(float(seg["y1"]) * unit_scale),
             _f32(_ground_friction_mul_from_lo_flags(int(seg.get("lo_flags", 0)))),
+            int(seg["joint_id"]),
+            0,
         )
     for pt in stage_points:
         buf += struct.pack(

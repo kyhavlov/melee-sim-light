@@ -51,6 +51,14 @@ typedef struct MslStageFloorLine {
   // refs/melee/src/melee/ft/ft_081B.c::ft_GetGroundFrictionMultiplier
   // data/stages/bin/*.bin::MSLSTG01 segment.ground_friction_mul
   float ground_friction_mul;
+  // Source MapLine flag words and MapJoint owner. These back mpLineGetFlags/mpLineGetNormal and
+  // mpJointFromLine-shaped query filters.
+  // refs/melee/src/melee/mp/types.h::{MapLine,MapJoint}
+  // refs/melee/src/melee/mp/mplib.c::{mpLineGetFlags,mpLineGetNormal,mpJointFromLine}
+  uint16_t hi_flags;
+  uint16_t lo_flags;
+  int16_t joint_id;
+  uint8_t _pad_flags[2];
   // Connectivity hints for mpLib_8004ED5C-style endpoint extension:
   // - has_prev_link: there exists some collision segment connected to (x0,y0)
   // - has_next_link: there exists some collision segment connected to (x1,y1)
@@ -107,6 +115,9 @@ typedef struct MslStageCeilingLine {
   uint8_t fighter_solid;
   uint8_t _pad0[1];
   uint16_t segment_i;  // ISO-derived segment index
+  uint16_t hi_flags;
+  uint16_t lo_flags;
+  int16_t joint_id;
   int16_t raw_prev_id;
   int16_t raw_next_id;
   int16_t prev;  // neighbor whose end == our start, or -1
@@ -139,6 +150,9 @@ typedef struct MslStageWallLine {
   uint8_t fighter_solid;
   uint8_t _pad0[1];
   uint16_t segment_i;  // ISO-derived segment index
+  uint16_t hi_flags;
+  uint16_t lo_flags;
+  int16_t joint_id;
   int16_t raw_prev_id;
   int16_t raw_next_id;
   int16_t prev;  // neighbor whose end == our start, or -1
@@ -178,6 +192,25 @@ typedef struct MslStagePoint2 {
   float x;
   float y;
 } MslStagePoint2;
+
+enum {
+  MSL_STAGE_QUERY_FLOOR = 1u << 0,
+  MSL_STAGE_QUERY_CEILING = 1u << 1,
+  MSL_STAGE_QUERY_LEFT_WALL = 1u << 2,
+  MSL_STAGE_QUERY_RIGHT_WALL = 1u << 3,
+};
+
+typedef struct MslStageQueryHit {
+  MslStageRawLineKind kind;
+  uint16_t segment_i;
+  int16_t joint_id;
+  uint16_t flags;
+  float x;
+  float y;
+  float normal_x;
+  float normal_y;
+  float dist2;
+} MslStageQueryHit;
 
 // Load stage collision data required by stage_collision_apply.
 // Must be called during initialization (before stepping); may allocate.
@@ -277,6 +310,17 @@ const MslStageWallGraph* stage_collision_get_right_wall_graph(uint32_t stage_id)
 int stage_collision_ceiling_line_index(uint32_t stage_id, uint16_t segment_i);
 int stage_collision_left_wall_line_index(uint32_t stage_id, uint16_t segment_i);
 int stage_collision_right_wall_line_index(uint32_t stage_id, uint16_t segment_i);
+
+// Static mpLib-style query substrate for legal-stage line data. These helpers consume preloaded
+// MSLSTG01 static line metadata only. Height-transformed FoD side platforms and Randall path lines
+// are intentionally excluded; moving-surface runtime behavior is a later source owner.
+//
+// `line_id_skip` is the floor skip line id for floor checks, or 0xFFFF for none.
+// `joint_id_skip` / `joint_id_only` mirror mpLib's joint filters; pass -1 for disabled.
+uint8_t stage_collision_static_query(uint32_t stage_id, uint32_t checks, float x0, float y0,
+                                     float x1, float y1, uint16_t line_id_skip,
+                                     int16_t joint_id_skip, int16_t joint_id_only,
+                                     MslStageQueryHit* out);
 
 // Match-flow helpers (KO/respawn/entry). Returns 1 if stage data for the given stage_id is loaded.
 uint8_t stage_collision_get_blast_bounds_world(uint32_t stage_id, MslStageBounds* out);

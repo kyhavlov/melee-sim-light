@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from melee_sim.hsd_archive import parse_hsd_archive
 from tools.extraction.extract_fighter_parts import ANCHOR_IDS
 from tools.extraction.extract_fighter_script_timeline import EVENT_IDS, RUNTIME_OWNER_EVENT_KINDS
 from tools.extraction.extract_item_articles import FIELD_SPECS, UNIT_DEGREES, UNIT_FRAMES, UNIT_ITEM_KIND, UNIT_PART_ID
@@ -58,6 +59,14 @@ SUPPORTED_STAGE_IDS_BY_BIN = {
     "grop.bin": 28,
     "grnba.bin": 31,
     "grnla.bin": 32,
+}
+SUPPORTED_STAGE_DATS_BY_BIN = {
+    "griz.bin": "GrIz.dat",
+    "grps.bin": "GrPs.dat",
+    "grst.bin": "GrSt.dat",
+    "grop.bin": "GrOp.dat",
+    "grnba.bin": "GrNBa.dat",
+    "grnla.bin": "GrNLa.dat",
 }
 
 
@@ -291,6 +300,51 @@ def test_stage_metadata_preserves_raw_mapline_links_for_supported_stages() -> No
         stage = read_mslstg01_v7(Path("data/stages/bin") / bin_name)
         seg = next(seg for seg in stage.segments if int(seg.line_id) == line_id)
         assert (int(seg.prev_id0), int(seg.next_id0), int(seg.prev_id1), int(seg.next_id1)) == expected_links
+
+
+def _source_joint_ids_by_line(stage_dat: Path) -> dict[int, int]:
+    # refs/melee/src/melee/mp/mplib.c::mpJointFromLine
+    buf = stage_dat.read_bytes()
+    arc = parse_hsd_archive(buf)
+    coll_abs = arc.get_public_offset("coll_data")
+    assert coll_abs is not None, stage_dat
+    lines_abs = arc.ptr32(coll_abs + 0x08)
+    line_count = struct.unpack_from(">i", buf, coll_abs + 0x0C)[0]
+    joints_abs = arc.ptr32(coll_abs + 0x24)
+    joint_count = struct.unpack_from(">i", buf, coll_abs + 0x28)[0]
+    joint_ranges = []
+    for joint_id in range(joint_count):
+        off = joints_abs + joint_id * 0x28
+        vtx_start = struct.unpack_from(">h", buf, off + 0x24)[0]
+        vtx_count = struct.unpack_from(">h", buf, off + 0x26)[0]
+        joint_ranges.append((joint_id, vtx_start, vtx_count))
+
+    out = {}
+    for line_id in range(line_count):
+        v0_idx = struct.unpack_from(">H", buf, lines_abs + line_id * 0x10)[0]
+        out[line_id] = -1
+        for joint_id, vtx_start, vtx_count in joint_ranges:
+            if vtx_start <= v0_idx < vtx_start + vtx_count:
+                out[line_id] = joint_id
+                break
+    return out
+
+
+@pytest.mark.integration
+def test_stage_metadata_joint_ids_match_mp_joint_from_line_for_supported_stages() -> None:
+    # Joint ownership follows mpJointFromLine's v0 vertex ownership test. It is not equivalent to
+    # MapJoint's per-kind line ranges on stages with transformed platform joints.
+    # refs/melee/src/melee/mp/types.h::{MapLine,MapJoint}
+    # refs/melee/src/melee/mp/mplib.c::mpJointFromLine
+    for bin_name, dat_name in SUPPORTED_STAGE_DATS_BY_BIN.items():
+        expected_by_line = _source_joint_ids_by_line(Path("_iso") / dat_name)
+        stage = read_mslstg01_v7(Path("data/stages/bin") / bin_name)
+        for seg in stage.segments:
+            line_id = int(seg.line_id)
+            if line_id in expected_by_line:
+                assert int(seg.joint_id) == expected_by_line[line_id], (bin_name, line_id)
+            else:
+                assert int(seg.joint_id) == -1, (bin_name, line_id)
 
 
 def test_stage_metadata_contains_fod_platform_transform_records() -> None:
@@ -726,8 +780,8 @@ def test_runtime_stage_collision_reads_mslstg01_segments(tmp_path: Path) -> None
         (i, seg) for i, seg in enumerate(stage.segments) if int(seg.kind_id) == 0 and int(seg.line_id) == 1
     )
     buf = bytearray((root_data / "stages" / "bin" / "grnla.bin").read_bytes())
-    # Segment record layout: <HBBHHhhhhfffff>, records start after the 64-byte MSLSTG01 header.
-    rec_off = 64 + record_i * 36
+    # Segment record layout: <HBBHHhhhhfffffhh>, records start after the 64-byte MSLSTG01 header.
+    rec_off = 64 + record_i * 40
     struct.pack_into("<f", buf, rec_off + 20, 5.0)
     struct.pack_into("<f", buf, rec_off + 28, 5.0)
     _copy_stage_bins(data_dir)
@@ -937,6 +991,9 @@ def test_runtime_stage_lookup_caches_match_mslstg01_for_supported_stages() -> No
                 expected_platform_id = 0 if rec is None else int(rec.platform_id)
                 assert int(runtime["platform_transform_kind"]) == expected_kind
                 assert int(runtime["platform_transform_id"]) == expected_platform_id
+                assert int(runtime["hi_flags"]) == int(seg.hi_flags)
+                assert int(runtime["lo_flags"]) == int(seg.lo_flags)
+                assert int(runtime["joint_id"]) == int(seg.joint_id)
                 assert float(runtime["ground_friction_mul"]) == pytest.approx(
                     float(seg.ground_friction_mul)
                 )
@@ -952,24 +1009,34 @@ def test_runtime_stage_lookup_caches_match_mslstg01_for_supported_stages() -> No
                 else:
                     assert runtime is not None, (stage_id, "fighter_floor", line_id)
                     assert int(runtime["line_index"]) == fighter_index_by_line[line_id]
+                    assert int(runtime["joint_id"]) == int(seg.joint_id)
 
             for expected_idx, seg in enumerate(ceilings):
                 line_id = int(seg.line_id)
                 runtime = msl_binding.stage_ceiling_segment(stage_id, line_id)
                 assert runtime is not None, (stage_id, "ceiling", line_id)
                 assert int(runtime["line_index"]) == expected_idx
+                assert int(runtime["hi_flags"]) == int(seg.hi_flags)
+                assert int(runtime["lo_flags"]) == int(seg.lo_flags)
+                assert int(runtime["joint_id"]) == int(seg.joint_id)
 
             for expected_idx, seg in enumerate(left_walls):
                 line_id = int(seg.line_id)
                 runtime = msl_binding.stage_left_wall_segment(stage_id, line_id)
                 assert runtime is not None, (stage_id, "left_wall", line_id)
                 assert int(runtime["line_index"]) == expected_idx
+                assert int(runtime["hi_flags"]) == int(seg.hi_flags)
+                assert int(runtime["lo_flags"]) == int(seg.lo_flags)
+                assert int(runtime["joint_id"]) == int(seg.joint_id)
 
             for expected_idx, seg in enumerate(right_walls):
                 line_id = int(seg.line_id)
                 runtime = msl_binding.stage_right_wall_segment(stage_id, line_id)
                 assert runtime is not None, (stage_id, "right_wall", line_id)
                 assert int(runtime["line_index"]) == expected_idx
+                assert int(runtime["hi_flags"]) == int(seg.hi_flags)
+                assert int(runtime["lo_flags"]) == int(seg.lo_flags)
+                assert int(runtime["joint_id"]) == int(seg.joint_id)
     finally:
         msl_binding.destroy(handle)
 
@@ -1663,21 +1730,31 @@ def test_mslstio1_rejects_zero_hurtbox_contract(tmp_path: Path) -> None:
 
 @pytest.mark.integration
 def test_known_data_artifact_extractors_regenerate_stable_outputs(tmp_path: Path) -> None:
-    subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "tools.extraction.extract_stage_metadata",
-            "--dat",
-            "_iso/GrNLa.dat",
-            "--out",
-            str(tmp_path / "grnla.bin"),
-            "--audit",
-            str(tmp_path / "grnla.json"),
-        ],
-        check=True,
-    )
-    assert (tmp_path / "grnla.bin").read_bytes() == Path("data/stages/bin/grnla.bin").read_bytes()
+    stage_dat_by_bin = {
+        "griz.bin": "GrIz.dat",
+        "grps.bin": "GrPs.dat",
+        "grst.bin": "GrSt.dat",
+        "grop.bin": "GrOp.dat",
+        "grnba.bin": "GrNBa.dat",
+        "grnla.bin": "GrNLa.dat",
+    }
+    for bin_name, dat_name in stage_dat_by_bin.items():
+        audit_name = bin_name.replace(".bin", ".json")
+        subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "tools.extraction.extract_stage_metadata",
+                "--dat",
+                f"_iso/{dat_name}",
+                "--out",
+                str(tmp_path / bin_name),
+                "--audit",
+                str(tmp_path / audit_name),
+            ],
+            check=True,
+        )
+        assert (tmp_path / bin_name).read_bytes() == (Path("data/stages/bin") / bin_name).read_bytes()
 
     subprocess.run(
         [
