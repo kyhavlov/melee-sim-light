@@ -2313,27 +2313,29 @@ static inline uint8_t action_is_fall_like(uint16_t a) {
   }
 }
 
+static inline uint8_t action_is_phase3_common_grounded_collision_owner(uint16_t a) {
+  // Phase 3 common grounded Coll callbacks are generated from MotionState callback identity. Keep
+  // this gate narrow: grounded attacks, catch/throw/capture, downed/damage, item, and bespoke
+  // specials stay on their retained owners even when they share lower-level mpColl helpers.
+  // refs/melee/src/melee/ft/ft_081B.c common grounded wrappers
+  // data/motion_state/owners/{fox,falco}.bin::MSLMSO01 class2_bits
+  return (uint8_t)(msl_motion_state_common_class2_has(a, MSL_MS_CLASS2_COMMON_GROUNDED_COLL) ||
+                   msl_motion_state_common_class2_has(a, MSL_MS_CLASS2_COMMON_GROUNDED_B108_COLL) ||
+                   msl_motion_state_common_class2_has(a, MSL_MS_CLASS2_COMMON_GROUNDED_B2DC_COLL) ||
+                   msl_motion_state_common_class2_has(a, MSL_MS_CLASS2_COMMON_GROUNDED_B4B0_COLL));
+}
+
 static inline uint8_t action_is_ground_locomotion(uint16_t a) {
-  if (a == MSL_ACT_WAIT || action_is_walk(a) || a == MSL_ACT_TURN || a == MSL_ACT_TURN_RUN ||
-      a == MSL_ACT_DASH || a == MSL_ACT_RUN || a == MSL_ACT_RUN_BRAKE || a == MSL_ACT_KNEE_BEND ||
-      a == MSL_ACT_SQUAT || a == MSL_ACT_SQUAT_WAIT || a == MSL_ACT_SQUAT_RV ||
-      a == (uint16_t)MSL_ACT_OTTOTTO || a == (uint16_t)MSL_ACT_OTTOTTO_WAIT ||
-      a == MSL_ACT_LANDING || a == MSL_ACT_LANDING_FALL_SPECIAL || a == MSL_ACT_LANDING_AIR_N ||
-      a == MSL_ACT_LANDING_AIR_F || a == MSL_ACT_LANDING_AIR_B || a == MSL_ACT_LANDING_AIR_HI ||
-      a == MSL_ACT_LANDING_AIR_LW || a == MSL_ACT_ESCAPE_F || a == MSL_ACT_ESCAPE_B ||
-      a == MSL_ACT_ESCAPE_N || a == MSL_ACT_ATTACK_11 || a == MSL_ACT_ATTACK_12 ||
-      a == MSL_ACT_ATTACK_13 || a == MSL_ACT_ATTACK_DASH || action_is_attack_s3_family(a) ||
-      a == MSL_ACT_ATTACK_HI3 || a == MSL_ACT_ATTACK_LW3 || a == MSL_ACT_ATTACK_S4_HI ||
-      a == MSL_ACT_ATTACK_S4_HI_S || a == MSL_ACT_ATTACK_S4_S || a == MSL_ACT_ATTACK_S4_LW_S ||
-      a == MSL_ACT_ATTACK_S4_LW || a == MSL_ACT_ATTACK_HI4 || a == MSL_ACT_ATTACK_LW4 ||
-      // Guard-family Coll callbacks route through common grounded collision helpers that leave
-      // shield and enter an airborne state when floor ownership is lost.
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
-      //   ftCo_GuardOn_Coll,ftCo_Guard_Coll,ftCo_GuardOff_Coll,
-      //   ftCo_GuardSetOff_Coll,ftCo_GuardReflect_Coll}
-      // refs/melee/src/melee/ft/ft_081B.c::{ft_80084104,ft_800845B4}
-      a == MSL_ACT_GUARD_ON || a == MSL_ACT_GUARD || a == MSL_ACT_GUARD_OFF ||
-      a == MSL_ACT_GUARD_SET_OFF || a == MSL_ACT_GUARD_REFLECT) {
+  if (action_is_phase3_common_grounded_collision_owner(a) ||
+      msl_motion_state_common_class_has(a, MSL_MS_CLASS_LANDING_AIR_COLL)) {
+    return 1;
+  }
+  if (a == MSL_ACT_ESCAPE_F || a == MSL_ACT_ESCAPE_B || a == MSL_ACT_ESCAPE_N ||
+      a == MSL_ACT_ATTACK_11 || a == MSL_ACT_ATTACK_12 || a == MSL_ACT_ATTACK_13 ||
+      a == MSL_ACT_ATTACK_DASH || action_is_attack_s3_family(a) || a == MSL_ACT_ATTACK_HI3 ||
+      a == MSL_ACT_ATTACK_LW3 || a == MSL_ACT_ATTACK_S4_HI || a == MSL_ACT_ATTACK_S4_HI_S ||
+      a == MSL_ACT_ATTACK_S4_S || a == MSL_ACT_ATTACK_S4_LW_S || a == MSL_ACT_ATTACK_S4_LW ||
+      a == MSL_ACT_ATTACK_HI4 || a == MSL_ACT_ATTACK_LW4 || a == MSL_ACT_GUARD_REFLECT) {
     return 1;
   }
   return 0;
@@ -2672,6 +2674,13 @@ static inline float ottotto_floor_loss_player_nudge_x(const MslBatch* batch,
 }
 
 static inline uint8_t action_uses_ottotto_edge_callback(uint16_t a) {
+  if (msl_motion_state_common_class2_has(a, MSL_MS_CLASS2_COMMON_GROUNDED_B4B0_COLL)) {
+    // Phase 3 common ft_80084280/mpColl_8004B4B0 owner. The generated callback bit covers Wait,
+    // Walk*, RunBrake, Landing, and LandingFallSpecial without a local action-id scan.
+    // refs/melee/src/melee/ft/ft_081B.c::ft_80084280
+    // data/motion_state/owners/{fox,falco}.bin::MSLMSO01 class2_bits
+    return 1u;
+  }
   if (msl_motion_state_common_class_has(a, MSL_MS_CLASS_LANDING_AIR_COLL)) {
     // Decomp: ftCo_LandingAir_Coll delegates to ftCo_Landing_Coll, which calls ft_80084280.
     // That common collision callback lets ftCo_8009A3C8 consume Collide_Edge and enter Ottotto
@@ -2681,27 +2690,7 @@ static inline uint8_t action_uses_ottotto_edge_callback(uint16_t a) {
     // refs/melee/src/melee/ft/ft_081B.c::ft_80084280
     return 1u;
   }
-  switch (a) {
-    case MSL_ACT_WAIT:
-    case MSL_ACT_WALK_SLOW:
-    case MSL_ACT_WALK_MIDDLE:
-    case MSL_ACT_WALK_FAST:
-    case MSL_ACT_RUN_BRAKE:
-    case MSL_ACT_LANDING:
-    case MSL_ACT_LANDING_FALL_SPECIAL:
-      // These grounded common states use the ft_80084280 family: if the floor helper reports an
-      // edge bit, ftCo_8009A3C8 enters Ottotto before falling.
-      // LandingFallSpecial shares Landing_Coll in the MotionState table.
-      // Run can enter RunBrake in IASA before collision, so the same frame's collision callback is
-      // RunBrake_Coll -> ft_80084280 rather than Run_Coll's ft_800844EC path.
-      // refs/melee/src/melee/ft/ftmotionstates.c::ftCo_MS_LandingFallSpecial
-      // refs/melee/src/melee/ft/ft_081B.c::ft_80084280
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Ottotto.c::{ftCo_8009A3C8,ftCo_8009A410}
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::ftCo_RunBrake_Coll
-      return 1u;
-    default:
-      return 0u;
-  }
+  return 0u;
 }
 
 static inline uint8_t ft80084280_ottotto_edge_admits(const MslBatch* batch,
@@ -2754,16 +2743,15 @@ static inline uint8_t ft80084280_ottotto_edge_admits(const MslBatch* batch,
 }
 
 static inline uint8_t action_is_air_locomotion(uint16_t a) {
-  if (a == MSL_ACT_JUMP_F || a == MSL_ACT_JUMP_B || a == MSL_ACT_JUMP_AERIAL_F ||
-      a == MSL_ACT_JUMP_AERIAL_B || action_is_fall_like(a) || a == MSL_ACT_FALL_SPECIAL ||
-      a == MSL_ACT_FALL_SPECIAL_F || a == MSL_ACT_FALL_SPECIAL_B || a == MSL_ACT_DAMAGE_FALL ||
-      a == MSL_ACT_PASS || a == MSL_ACT_MISS_FOOT ||
-      // Decomp: both CliffJump2 variants use ft_800835B0(..., ft_80082B1C) for collision;
-      // floor contact therefore enters the basic Landing/Wait path instead of staying in
-      // CliffJump2 while grounded.
-      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffJump.c::ftCo_CliffJump2_Coll
-      // refs/melee/src/melee/ft/ft_081B.c::{ft_800835B0,ft_80082B1C}
-      a == MSL_ACT_CLIFF_JUMP_SLOW2 || a == MSL_ACT_CLIFF_JUMP_QUICK2) {
+  if (msl_motion_state_common_class2_has(a, MSL_MS_CLASS2_COMMON_AIRBORNE_COLL)) {
+    // Phase 3 common airborne Coll callbacks: Fall/FallSpecial/Jump/JumpAerial/Pass/MissFoot and
+    // CliffJump2 route through the generated common owner. AttackAir, EscapeAir, damage, item, and
+    // bespoke specials remain explicit retained owners.
+    // refs/melee/src/melee/ft/ft_081B.c::{ft_80083090,ft_800831CC,ft_800835B0}
+    // data/motion_state/owners/{fox,falco}.bin::MSLMSO01 class2_bits
+    return 1;
+  }
+  if (msl_motion_state_common_class_has(a, MSL_MS_CLASS_DAMAGE_FALL_COLL)) {
     return 1;
   }
   return 0;

@@ -17,7 +17,7 @@ from tools.extraction.extract_attack_id_move_id import (
 
 
 FORMAT_MAGIC = b"MSLMSO01"
-FORMAT_VERSION = 13
+FORMAT_VERSION = 15
 U16_ABSENT = 0xFFFF
 
 CLASS_ATTACK_AIR = 1 << 0
@@ -53,6 +53,12 @@ CLASS_ESCAPE_AIR_COLL = 1 << 29
 CLASS_FX_SPECIALS_GROUND_B108_COLL = 1 << 30
 CLASS_FT80082B1C_BASIC_LANDING_COLL = 1 << 31
 
+CLASS2_COMMON_GROUNDED_COLL = 1 << 0
+CLASS2_COMMON_GROUNDED_B108_COLL = 1 << 1
+CLASS2_COMMON_AIRBORNE_COLL = 1 << 2
+CLASS2_COMMON_GROUNDED_B2DC_COLL = 1 << 3
+CLASS2_COMMON_GROUNDED_B4B0_COLL = 1 << 4
+
 
 @dataclass(frozen=True)
 class MotionStateRow:
@@ -67,6 +73,7 @@ class MotionStateRow:
     coll_cb: str
     cam_cb: str
     class_bits: int
+    class2_bits: int
 
 
 @dataclass(frozen=True)
@@ -436,6 +443,86 @@ def _class_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
     return bits
 
 
+def _class2_bits_for_callbacks(callbacks: tuple[str, str, str, str, str]) -> int:
+    bits = 0
+    coll_cb = callbacks[3]
+    if coll_cb in {
+        "ftCo_Wait_Coll",
+        "ftCo_Walk_Coll",
+        "ftCo_Turn_Coll",
+        "ftCo_TurnRun_Coll",
+        "ftCo_Dash_Coll",
+        "ftCo_Run_Coll",
+        "ftCo_RunDirect_Coll",
+        "ftCo_RunBrake_Coll",
+        "ftCo_Squat_Coll",
+        "ftCo_SquatWait_Coll",
+        "ftCo_SquatRv_Coll",
+        "ftCo_Landing_Coll",
+        "ftCo_GuardOn_Coll",
+        "ftCo_Guard_Coll",
+        "ftCo_GuardOff_Coll",
+        "ftCo_GuardSetOff_Coll",
+        "ftCo_Ottotto_Coll",
+        "ftCo_OttottoWait_Coll",
+    }:
+        # Phase 3 common grounded owner. This intentionally excludes grounded attacks,
+        # catch/throw/capture, item/lift/hammer, damage/downed, and character-special callbacks.
+        # refs/melee/src/melee/ft/ft_081B.c common grounded wrappers
+        bits |= CLASS2_COMMON_GROUNDED_COLL
+    if coll_cb in {
+        "ftCo_KneeBend_Coll",
+        "ftCo_Turn_Coll",
+        "ftCo_Dash_Coll",
+        "ftCo_Run_Coll",
+        "ftCo_RunDirect_Coll",
+        "ftCo_Squat_Coll",
+        "ftCo_SquatWait_Coll",
+        "ftCo_SquatRv_Coll",
+        "ftCo_GuardOn_Coll",
+        "ftCo_Guard_Coll",
+        "ftCo_GuardOff_Coll",
+        "ftCo_GuardSetOff_Coll",
+    }:
+        # Narrow Phase 3 ft_80082708/mpColl_8004B108 grounded floor-loss owner. The legacy
+        # FT80083F88 bit covers only the direct wrapper and also includes downed/passive and
+        # character-special callbacks; this word follows common source wrappers that reach B108.
+        # refs/melee/src/melee/ft/ft_081B.c::{ft_80083F88,ft_800844EC,ft_800845B4,ft_80082708}
+        bits |= CLASS2_COMMON_GROUNDED_B108_COLL
+    if coll_cb in {
+        "ftCo_TurnRun_Coll",
+        "ftCo_Ottotto_Coll",
+        "ftCo_OttottoWait_Coll",
+    }:
+        # Narrow Phase 3 ft_800827A0/mpColl_8004B2DC grounded endpoint owner.
+        # refs/melee/src/melee/ft/ft_081B.c::{ft_800827A0,ft_80084104}
+        bits |= CLASS2_COMMON_GROUNDED_B2DC_COLL
+    if coll_cb in {
+        "ftCo_Wait_Coll",
+        "ftCo_Walk_Coll",
+        "ftCo_RunBrake_Coll",
+        "ftCo_Landing_Coll",
+    }:
+        # Narrow Phase 3 ft_80084280/mpColl_8004B4B0 grounded floor-release/teeter owner.
+        # refs/melee/src/melee/ft/ft_081B.c::ft_80084280
+        bits |= CLASS2_COMMON_GROUNDED_B4B0_COLL
+    if coll_cb in {
+        "ftCo_Fall_Coll",
+        "ftCo_FallAerial_Coll",
+        "ftCo_FallSpecial_Coll",
+        "ftCo_Jump_Coll",
+        "ftCo_JumpAerial_Coll",
+        "ftCo_CliffJump2_Coll",
+        "ftCo_MissFoot_Coll",
+        "ftCo_Pass_Coll",
+    }:
+        # Phase 3 common airborne owner. This intentionally excludes AttackAir, EscapeAir, Damage,
+        # item/projectile, catch/throw/capture, and Fox/Falco bespoke special callbacks.
+        # refs/melee/src/melee/ft/ft_081B.c::{ft_80083090,ft_800831CC,ft_800835B0}
+        bits |= CLASS2_COMMON_AIRBORNE_COLL
+    return bits
+
+
 def _class_bits_for_submotion(submotion_sym: str) -> int:
     if submotion_sym in {
         "ftCo_SM_DamageAir1",
@@ -500,6 +587,7 @@ def _parse_motion_state_rows(
             coll_cb=callbacks[3],
             cam_cb=callbacks[4],
             class_bits=_class_bits_for_callbacks(callbacks) | _class_bits_for_submotion(submotion_sym),
+            class2_bits=_class2_bits_for_callbacks(callbacks),
         )
         if row.action_id in out:
             raise RuntimeError(f"duplicate action id {row.action_id} in {src}")
@@ -546,7 +634,7 @@ def _merge_rows(common: dict[int, MotionStateRow], self_rows: dict[int, MotionSt
 def _write_table(out_path: Path, rows: dict[int, MotionStateRow], callback_ids: dict[str, int]) -> None:
     max_action = max(rows.keys(), default=0)
     action_count = max_action + 1
-    hdr_bytes = 8 + 4 + 2 + 2 + 4 * 9
+    hdr_bytes = 8 + 4 + 2 + 2 + 4 * 10
     submotion_off = hdr_bytes
     x4_flags_off = submotion_off + action_count * 2
     motion_word_off = x4_flags_off + action_count * 4
@@ -556,7 +644,8 @@ def _write_table(out_path: Path, rows: dict[int, MotionStateRow], callback_ids: 
     coll_cb_off = phys_cb_off + action_count * 2
     cam_cb_off = coll_cb_off + action_count * 2
     class_bits_off = cam_cb_off + action_count * 2
-    file_bytes = class_bits_off + action_count * 4
+    class2_bits_off = class_bits_off + action_count * 4
+    file_bytes = class2_bits_off + action_count * 4
 
     submotion = [U16_ABSENT] * action_count
     x4_flags = [0] * action_count
@@ -567,6 +656,7 @@ def _write_table(out_path: Path, rows: dict[int, MotionStateRow], callback_ids: 
     coll_cb = [0] * action_count
     cam_cb = [0] * action_count
     class_bits = [0] * action_count
+    class2_bits = [0] * action_count
     for action_id, row in rows.items():
         submotion[action_id] = row.submotion_id
         x4_flags[action_id] = row.x4_flags
@@ -577,6 +667,7 @@ def _write_table(out_path: Path, rows: dict[int, MotionStateRow], callback_ids: 
         coll_cb[action_id] = callback_ids[row.coll_cb]
         cam_cb[action_id] = callback_ids[row.cam_cb]
         class_bits[action_id] = row.class_bits
+        class2_bits[action_id] = row.class2_bits
 
     buf = bytearray()
     buf += FORMAT_MAGIC
@@ -593,6 +684,7 @@ def _write_table(out_path: Path, rows: dict[int, MotionStateRow], callback_ids: 
         coll_cb_off,
         cam_cb_off,
         class_bits_off,
+        class2_bits_off,
     ):
         buf += _u32_le(off)
     for value in submotion:
@@ -604,6 +696,8 @@ def _write_table(out_path: Path, rows: dict[int, MotionStateRow], callback_ids: 
         for value in table:
             buf += _u16_le(value)
     for value in class_bits:
+        buf += _u32_le(value)
+    for value in class2_bits:
         buf += _u32_le(value)
     if len(buf) != file_bytes:
         raise AssertionError((len(buf), file_bytes))
@@ -646,12 +740,20 @@ def _write_manifest(out_path: Path, callback_ids: dict[str, int]) -> None:
         "FX_SPECIALS_GROUND_B108_COLL": CLASS_FX_SPECIALS_GROUND_B108_COLL,
         "FT80082B1C_BASIC_LANDING_COLL": CLASS_FT80082B1C_BASIC_LANDING_COLL,
     }
+    classes2 = {
+        "COMMON_AIRBORNE_COLL": CLASS2_COMMON_AIRBORNE_COLL,
+        "COMMON_GROUNDED_B2DC_COLL": CLASS2_COMMON_GROUNDED_B2DC_COLL,
+        "COMMON_GROUNDED_B4B0_COLL": CLASS2_COMMON_GROUNDED_B4B0_COLL,
+        "COMMON_GROUNDED_B108_COLL": CLASS2_COMMON_GROUNDED_B108_COLL,
+        "COMMON_GROUNDED_COLL": CLASS2_COMMON_GROUNDED_COLL,
+    }
     symbols = [{"id": int(i), "symbol": sym} for sym, i in sorted(callback_ids.items(), key=lambda kv: kv[1])]
     payload = {
         "magic": FORMAT_MAGIC.decode("ascii"),
         "version": FORMAT_VERSION,
         "id_policy": "0 is NULL; nonzero ids are sorted stable callback symbol names from decomp MotionState rows",
         "classes": classes,
+        "classes2": classes2,
         "symbols": symbols,
     }
     out_path.parent.mkdir(parents=True, exist_ok=True)

@@ -29,6 +29,7 @@ ACT_JUMP_AERIAL_B = 0x001C
 ACT_FALL = 0x001D
 ACT_FALL_SPECIAL = 0x0023
 ACT_ATTACK_AIR_LW = 0x0045
+ACT_SQUAT = 0x0027
 ACT_SQUAT_WAIT = 0x0028
 ACT_LANDING = 0x002A
 ACT_LANDING_FALL_SPECIAL = 0x002B
@@ -69,6 +70,11 @@ ACT_FX_SPECIAL_HI_FALL = 0x0166
 ACT_FX_SPECIAL_HI_BOUND = 0x0167
 ACT_FX_SPECIAL_LW_START = 0x0168
 ACT_FX_SPECIAL_LW_LOOP = 0x0169
+ACT_ITEM_PARASOL_FALL = 0x0091
+ACT_CATCH = 0x00D4
+ACT_THROW_F = 0x00DB
+ACT_CAPTURE_DAMAGE_HI = 0x00E1
+ACT_FX_SPECIAL_AIR_N_START = 0x0158
 
 SM_WAIT1_0 = 2
 SM_TURN = 10
@@ -371,6 +377,288 @@ def _collision_contacts_dtype() -> np.dtype:
         ],
         align=False,
     )
+
+
+@pytest.mark.parametrize(
+    ("action_id", "submotion_id"),
+    [
+        (ACT_WAIT, SM_WAIT1_0),
+        (ACT_WALK_MIDDLE, SM_WAIT1_0),
+        (ACT_DASH, SM_WAIT1_0),
+        (ACT_TURN, SM_TURN),
+    ],
+)
+def test_phase3_common_grounded_entry_and_sustained_actions_use_ordered_retry(
+    action_id: int, submotion_id: int
+) -> None:
+    # Phase 3 routes common grounded callbacks through the ordered mpColl substrate. This
+    # disconnected Battlefield setup requires the 4A908 floor retry after persisted-floor projection
+    # misses; mpCollEnd then publishes the accepted main-floor result.
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_80084280,ft_800844EC,ft_80083F88}
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004ACE4,mpColl_8004A908_Floor,mpCollEnd}
+    seed = _seed_base(STAGE_BATTLEFIELD, action_id, submotion_id, 30.0, -6.0)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(3)
+    seed["floor_sweep_prev_pos_x_f32"][0, 0] = np.float32(30.0)
+    seed["floor_sweep_prev_pos_y_f32"][0, 0] = np.float32(-5.0)
+    seed["floor_sweep_prev_pos_valid_u8"][0, 0] = np.uint8(1)
+
+    out, _contacts, colldata = _step_once_with_contacts_and_colldata(seed)
+
+    assert int(out["on_ground"][0]) == 1
+    assert int(out["ground_id"][0]) == 1
+    assert int(colldata["floor_result_valid"][0]) == 1
+    assert int(colldata["floor_result_segment_id"][0]) == 1
+    assert float(out["pos_y"][0]) == pytest.approx(0.0001, abs=2e-5)
+
+
+@pytest.mark.parametrize(
+    ("action_id", "submotion_id"),
+    [
+        (ACT_KNEE_BEND, SM_KNEE_BEND),
+        (ACT_SQUAT, SM_WAIT1_0),
+        (ACT_SQUAT_WAIT, SM_WAIT1_0),
+        (ACT_TURN, SM_TURN),
+    ],
+)
+def test_phase3_common_grounded_b108_floor_loss_enters_fall(
+    action_id: int, submotion_id: int
+) -> None:
+    # These common callbacks reach ft_80082708/mpColl_8004B108. When the current floor is no longer
+    # under the ECB side span, the source callback leaves ground instead of preserving a stale floor.
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_80083F88,ft_800844EC,ft_80082708}
+    # refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
+    seed = _seed_base(STAGE_BATTLEFIELD, action_id, submotion_id, -70.0, 27.2001)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(2)
+    seed["jumps_left"][0, 0] = np.uint8(2)
+    seed["floor_sweep_prev_pos_x_f32"][0, 0] = np.float32(-40.0)
+    seed["floor_sweep_prev_pos_y_f32"][0, 0] = np.float32(27.2001)
+    seed["floor_sweep_prev_pos_valid_u8"][0, 0] = np.uint8(1)
+
+    out = _step_once(seed)
+
+    assert int(out["action_id"][0]) == ACT_FALL
+    assert int(out["on_ground"][0]) == 0
+    assert int(out["ground_id"][0]) == 2
+
+
+@pytest.mark.parametrize("action_id", [ACT_LANDING, ACT_LANDING_FALL_SPECIAL])
+def test_phase3_landing_common_owner_projects_sustained_slope(action_id: int) -> None:
+    # Landing and LandingFallSpecial share ftCo_Landing_Coll -> ft_80084280. After the entry-frame
+    # handoff, sustained grounded projection follows the live slope through the common owner.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80084280
+    stage = read_mslstg01_v7(Path("data/stages/bin/grst.bin"))
+    slope = next(seg for seg in stage.segments if int(seg.line_id) == 6)
+    x = 47.0
+    seed = _seed_base(STAGE_YOSHI, action_id, SM_WAIT1_0, x, _floor_y_at(slope, x) + 0.0001)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(6)
+    seed["speed_ground_x_self"][0, 0] = np.float32(0.5)
+    seed["action_frame"][0, 0] = np.int16(2)
+    seed["anim_frame_f32"][0, 0] = np.float32(2.0)
+
+    out = _step_once(seed)
+
+    assert int(out["on_ground"][0]) == 1
+    assert int(out["ground_id"][0]) == 6
+    assert float(out["pos_y"][0]) == pytest.approx(_floor_y_at(slope, float(out["pos_x"][0])) + 0.0001, abs=2e-5)
+
+
+@pytest.mark.parametrize(
+    ("action_id", "submotion_id", "expected_action"),
+    [
+        (ACT_FALL, SM_FALL, ACT_LANDING),
+        (ACT_FALL_SPECIAL, SM_FALL, ACT_LANDING_FALL_SPECIAL),
+        (ACT_JUMP_AERIAL_F, SM_FALL, ACT_LANDING),
+        (ACT_CLIFF_JUMP_SLOW2, SM_CLIFF_JUMP_SLOW2, ACT_LANDING),
+    ],
+)
+def test_phase3_common_airborne_owners_publish_hard_floor(
+    action_id: int, submotion_id: int, expected_action: int
+) -> None:
+    # Common airborne owners use the Phase 2 floor substrate and publish the accepted hard-floor
+    # result through mpCollEnd. FallSpecial keeps the source LandingFallSpecial action boundary.
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_80083090,ft_800831CC,ft_800835B0,ft_80082B1C}
+    seed = _seed_base(STAGE_BATTLEFIELD, action_id, submotion_id, 0.0, -2.0)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["ground_id"][0, 0] = np.uint16(0xFFFF)
+    seed["speed_y_self"][0, 0] = np.float32(-10.0)
+    seed["floor_sweep_prev_pos_x_f32"][0, 0] = np.float32(0.0)
+    seed["floor_sweep_prev_pos_y_f32"][0, 0] = np.float32(6.0)
+    seed["floor_sweep_prev_pos_valid_u8"][0, 0] = np.uint8(1)
+
+    out, _contacts, colldata = _step_once_with_contacts_and_colldata(seed)
+
+    assert int(out["action_id"][0]) == expected_action
+    assert int(out["on_ground"][0]) == 1
+    assert int(out["ground_id"][0]) == 1
+    assert int(colldata["floor_result_valid"][0]) == 1
+    assert int(colldata["floor_result_segment_id"][0]) == 1
+
+
+@pytest.mark.parametrize(
+    ("action_id", "submotion_id"),
+    [
+        (ACT_FALL, SM_FALL),
+        (ACT_FALL_SPECIAL, SM_FALL),
+        (ACT_JUMP_AERIAL_F, SM_FALL),
+    ],
+)
+def test_phase3_common_airborne_platform_pass_writes_floor_skip(
+    action_id: int, submotion_id: int
+) -> None:
+    # Down-held common airborne callbacks pass ftCo_80096CC8 to platform floor checks. On
+    # source-trusted transformed FoD platforms, rejection writes CollData.floor_skip instead of
+    # landing.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_80096CC8
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpUpdateFloorSkip}
+    height = np.float32(19.899999618530273)
+    world_y = np.float32(1.125 + float(height) * 0.75)
+    seed = _seed_base(STAGE_FOD, action_id, submotion_id, -35.0, float(world_y) - 2.0)
+    seed["ground_id"][0, 0] = np.uint16(0xFFFF)
+    seed["stage_fod_platform_height_f32"][0, 1] = height
+    seed["stage_fod_platform_height_valid_u8"][0, 1] = np.uint8(1)
+    seed["stage_fod_platform_height_source_u8"][0, 1] = np.uint8(1)
+    seed["speed_y_self"][0, 0] = np.float32(-10.0)
+    seed["floor_sweep_prev_pos_valid_u8"][0, 0] = np.uint8(1)
+    seed["floor_sweep_prev_pos_x_f32"][0, 0] = np.float32(-35.0)
+    seed["floor_sweep_prev_pos_y_f32"][0, 0] = np.float32(float(world_y) + 14.0)
+    input_t = _input_bytes()
+    input_t.view(INPUT_DTYPE).reshape((1,))["p"]["main_y"][0, 0] = np.int8(-95)
+
+    out, _contacts, colldata = _step_once_with_contacts_and_colldata(seed, _input_bytes(), input_t)
+
+    assert int(out["on_ground"][0]) == 0
+    assert int(colldata["floor_skip_valid"][0]) == 1
+    assert int(colldata["floor_skip_segment_id"][0]) == 0
+
+
+def test_phase3_common_airborne_joint_skip_and_only_filter_floor_publication() -> None:
+    # The common airborne owner forwards CollData joint filters into the ordered floor query.
+    # joint_id_skip rejects the owning joint, joint_id_only admits only that joint, and a wrong
+    # only-filter leaves the floor result empty.
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpCheckFloor}
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    colldata_stride = int(sizes["colldata_ecb"])
+    compare_stride = int(sizes["compare"])
+    floor_seg = msl_binding.stage_floor_segment(STAGE_POKEMON, 34)
+    assert floor_seg is not None
+    joint_id = int(floor_seg["joint_id"])
+
+    seed = _seed_base(STAGE_POKEMON, ACT_FALL, SM_FALL, 0.0, -2.0)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["ground_id"][0, 0] = np.uint16(0xFFFF)
+    seed["speed_y_self"][0, 0] = np.float32(-5.0)
+    seed["floor_sweep_prev_pos_valid_u8"][0, 0] = np.uint8(1)
+    seed["floor_sweep_prev_pos_x_f32"][0, 0] = np.float32(0.0)
+    seed["floor_sweep_prev_pos_y_f32"][0, 0] = np.float32(5.0)
+    inp = np.zeros((1, input_stride), dtype=np.uint8)
+
+    def run_with_filters(skip: int, only: int) -> tuple[int, int, int]:
+        handle = msl_binding.init(batch_size=1, num_players=2)
+        try:
+            colldata = np.zeros((1, colldata_stride), dtype=np.uint8)
+            compare = np.zeros((1, compare_stride), dtype=np.uint8)
+            msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, seed_stride)))
+            msl_binding.debug_set_mpcoll_joint_filters(handle, 0, 0, skip, only)
+            msl_binding.step_input(handle, inp, inp)
+            msl_binding.debug_write_colldata_ecb(handle, colldata)
+            msl_binding.write_compare(handle, compare)
+            snap = colldata.view(_colldata_ecb_dtype()).reshape((1,))[0]
+            row = compare.view(COMPARE_DTYPE).reshape((1,))[0]
+            return (
+                int(snap["floor_result_valid"][0]),
+                int(snap["floor_result_segment_id"][0]),
+                int(row["on_ground"][0]),
+            )
+        finally:
+            msl_binding.destroy(handle)
+
+    assert run_with_filters(-1, -1) == (1, 34, 1)
+    assert run_with_filters(joint_id, -1) == (0, 0xFFFF, 0)
+    assert run_with_filters(-1, joint_id) == (1, 34, 1)
+    assert run_with_filters(-1, joint_id + 1) == (0, 0xFFFF, 0)
+
+
+def test_phase3_common_grounded_wall_ceiling_and_combined_contacts_are_ordered() -> None:
+    # Common grounded Wait_Coll routes through the Phase 2 ordered substrate for wall, ceiling,
+    # floor+wall, and floor+ceiling cases.
+    # refs/melee/src/melee/mp/mpcoll.c::mpColl_8004ACE4
+    wall_seed = _seed_base(STAGE_BATTLEFIELD, ACT_WAIT, SM_WAIT1_0, 90.0, -6.0)
+    wall_seed["on_ground"][0, 0] = np.uint8(1)
+    wall_seed["ground_id"][0, 0] = np.uint16(3)
+    wall_seed["floor_sweep_prev_pos_x_f32"][0, 0] = np.float32(0.0)
+    wall_seed["floor_sweep_prev_pos_y_f32"][0, 0] = np.float32(-5.0)
+    wall_seed["floor_sweep_prev_pos_valid_u8"][0, 0] = np.uint8(1)
+
+    wall_out, wall_contacts = _step_once_with_contacts(wall_seed)
+    assert int(wall_contacts["wall_kind"][0]) == 2
+    assert int(wall_contacts["wall_id"][0]) != 0xFFFF
+    assert int(wall_out["on_ground"][0]) == 1
+    assert int(wall_out["ground_id"][0]) == 1
+
+    ceil_seed = _seed_base(STAGE_FOD, ACT_WAIT, SM_WAIT1_0, -40.0, -175.0)
+    ceil_seed["on_ground"][0, 0] = np.uint8(1)
+    ceil_seed["ground_id"][0, 0] = np.uint16(5)
+    ceil_seed["speed_y_self"][0, 0] = np.float32(-80.0)
+
+    ceil_out, ceil_contacts, colldata = _step_once_with_contacts_and_colldata(ceil_seed)
+    flags = int(ceil_contacts["coll_env_flags"][0])
+    assert flags & COLLIDE_CEILING_MASK
+    assert flags & COLLIDE_FLOOR_MASK
+    assert int(ceil_contacts["ceiling_id"][0]) == 8
+    assert int(ceil_out["on_ground"][0]) == 1
+    assert int(ceil_out["ground_id"][0]) == 5
+    assert int(colldata["squeeze_restore_valid"][0]) == 1
+
+
+@pytest.mark.parametrize(
+    ("action_id", "submotion_id"),
+    [
+        (ACT_ATTACK_AIR_N, 68),
+        (ACT_ESCAPE_AIR, SM_ESCAPE_AIR),
+        (ACT_DAMAGE_FALL, SM_DAMAGE_FALL),
+        (ACT_DAMAGE_FLY_TOP, 180),
+        (ACT_ITEM_PARASOL_FALL, 0),
+        (ACT_CATCH, 0),
+        (ACT_THROW_F, 0),
+        (ACT_CAPTURE_DAMAGE_HI, 0),
+        (ACT_FX_SPECIAL_AIR_N_START, SM_FX_SPECIAL_N_START),
+        (ACT_FX_SPECIAL_AIR_LW_START, 0),
+    ],
+)
+def test_phase3_excluded_owners_do_not_use_common_air_platform_skip(
+    action_id: int, submotion_id: int
+) -> None:
+    # Negative runtime boundary for Phase 3: later-owner families may have their own collision
+    # behavior, but they must not enter the common-air ftCo_80096CC8 floor-skip route.
+    height = np.float32(19.899999618530273)
+    world_y = np.float32(1.125 + float(height) * 0.75)
+    seed = _seed_base(STAGE_FOD, action_id, submotion_id, -35.0, float(world_y) - 2.0)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["ground_id"][0, 0] = np.uint16(0xFFFF)
+    seed["stage_fod_platform_height_f32"][0, 1] = height
+    seed["stage_fod_platform_height_valid_u8"][0, 1] = np.uint8(1)
+    seed["stage_fod_platform_height_source_u8"][0, 1] = np.uint8(1)
+    seed["speed_y_self"][0, 0] = np.float32(-10.0)
+    seed["floor_sweep_prev_pos_valid_u8"][0, 0] = np.uint8(1)
+    seed["floor_sweep_prev_pos_x_f32"][0, 0] = np.float32(-35.0)
+    seed["floor_sweep_prev_pos_y_f32"][0, 0] = np.float32(float(world_y) + 14.0)
+    input_t = _input_bytes()
+    input_t.view(INPUT_DTYPE).reshape((1,))["p"]["main_y"][0, 0] = np.int8(-95)
+
+    _out, _contacts, colldata = _step_once_with_contacts_and_colldata(
+        seed, _input_bytes(), input_t
+    )
+
+    assert int(colldata["floor_skip_valid"][0]) == 0
+    assert int(colldata["floor_skip_segment_id"][0]) == 0xFFFF
 
 
 @pytest.mark.integration

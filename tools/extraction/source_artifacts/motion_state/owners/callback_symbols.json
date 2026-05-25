@@ -33,6 +33,13 @@
     "LANDING_COLL": 2048,
     "SPECIALHI": 128
   },
+  "classes2": {
+    "COMMON_AIRBORNE_COLL": 4,
+    "COMMON_GROUNDED_B108_COLL": 2,
+    "COMMON_GROUNDED_B2DC_COLL": 8,
+    "COMMON_GROUNDED_B4B0_COLL": 16,
+    "COMMON_GROUNDED_COLL": 1
+  },
   "id_policy": "0 is NULL; nonzero ids are sorted stable callback symbol names from decomp MotionState rows",
   "magic": "MSLMSO01",
   "symbols": [
@@ -3697,5 +3704,5 @@
       "symbol": "ftpickupitem_Phys"
     }
   ],
-  "version": 13
+  "version": 15
 }

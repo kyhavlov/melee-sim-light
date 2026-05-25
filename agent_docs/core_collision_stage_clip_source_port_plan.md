@@ -517,11 +517,154 @@ Retained fallback/source-policy accounting:
 
 ### Phase 3: Common Grounded And Airborne Owners
 
-- Route common grounded movement through the source-backed ground collision wrappers.
-- Route common airborne movement through the source-backed air collision wrappers.
-- Prove walk-off, landing, ledge exclusion/inclusion where applicable, wall/ceiling contact, floor skip, and joint skip behavior with synthetic tests.
-- Do not include moving platforms yet except preserving data structures that will support them later.
-- Do not accept slice-only completion. Entry, sustained, transition, endpoint, platform, slope, ledge, and wall/ceiling variants must either route through the new owner or be explicitly deferred to a later named phase.
+Phase 3 is the common action-owner routing phase. Its target is to route ordinary grounded and
+ordinary airborne fighter collision callbacks through the Phase 2 ordered substrate without
+duplicating floor/wall/ceiling scans in each action family.
+
+Do not spawn subagents for this work unless the user explicitly authorizes it in the current turn.
+The implementation agent owns the source read, current-code mapping, test design, and perf-risk
+check locally.
+
+Required source reads before coding:
+
+- `refs/melee/src/melee/ft/ft_081B.c`, especially common grounded/airborne wrappers around
+  `ft_80082708`, `ft_800827A0`, `ft_80082C74`, `ft_80082D40`, `ft_80083090`,
+  `ft_800831CC`, `ft_800835B0`, `ft_80083F88`, and adjacent wrapper variants.
+- `refs/melee/src/melee/mp/mpcoll.c`, especially `mpColl_80043754`, `mpColl_80046904`,
+  `mpColl_8004ACE4`, `mpColl_8004A908_Floor`, `mpColl_8004B108`, `mpColl_8004B2DC`,
+  `mpCollEnd*`, floor skip helpers, squeeze helpers, and static floor/wall/ceiling producers.
+- Motion-state owner data in `data/motion_state/owners/*.bin::MSLMSO01` and current generated
+  helpers in `src/motion_state_owners.*`.
+- Current MSL call sites in `src/fighter_callbacks.c`, `src/locomotion.c`,
+  `src/mpcoll_ground.c`, `src/mpcoll_wall_ceil.c`, `src/mpcoll_env.c`, `src/shine.c`, and
+  collision tests.
+
+In-scope owner families:
+
+- Common grounded locomotion/idle families whose source collision callback uses the common grounded
+  wrappers, including sustained and entry/transition variants for Wait, Walk, Dash/Run/Turn where
+  they use common ground collision, Squat/SquatWait, KneeBend, Landing/LandingFallSpecial where
+  they are not AttackAir/EscapeAir/Damage-owned, Guard/GuardOff/GuardSetOff common grounded
+  movement where collision is not combat-owned, Ottotto/MissFoot/Pass as common grounded movement,
+  and common grounded special wrappers that call the same common mpColl owner rather than bespoke
+  special collision.
+- Common airborne non-attack/non-damage/non-escape families whose source collision callback uses the
+  common airborne wrappers, including Fall/FallSpecial, JumpAerial/CliffJump aerial continuation,
+  common airborne special wrappers that call the same common mpColl owner, and wall/ceiling/landing
+  outcomes from those owners.
+- Static legal-stage variants of the above: hard floors, static soft platforms, static walls,
+  static ceilings, slopes, endpoints, ledge exclusion/inclusion where owned by the common wrapper,
+  floor skip, joint skip/only, squeeze, floor retry, and `mpCollEnd*` publication.
+
+Hard non-scope for Phase 3:
+
+- Do not implement moving-platform runtime behavior, Randall carry, FoD dynamic platform endpoint
+  speed, dynamic Ground callbacks, or runtime `mpBoundingCheck` `TooFar` joint mutation. Preserve
+  existing behavior and keep these deferred to Phase 6.
+- Do not route `AttackAir`, `EscapeAir`, Damage/DamageFly/DamageFall/DamageAir, item-only
+  collision, projectile collision, catch/throw/capture, or character-bespoke special collision
+  families. These are Phase 4 or owner-specific later phases.
+- Do not add replay-row fixes, trace-specific fixtures, dataset gates, stage-name gameplay gates,
+  y clamps, broad tolerance hacks, or local action-id lists when generated MSLMSO01 owner data can
+  express the routing.
+- Do not mark a broad owner complete from one sustained/static slice. Entry, sustained, transition,
+  endpoint, platform, slope, ledge, wall/ceiling, floor-loss, and skip variants must either route
+  through the common owner or be explicitly deferred to a named later phase with source reasoning.
+
+Implementation targets:
+
+- Route in-scope common grounded callbacks through a single source-shaped grounded owner built on
+  the Phase 2 ordered substrate (`mpColl_8004ACE4`, floor retry, endpoint/floor edge, squeeze,
+  skip, wall/ceiling prepass, floor-loss/fall handoff, and `mpCollEnd*` publication).
+- Route in-scope common airborne callbacks through a single source-shaped airborne owner built on
+  the Phase 2 ordered substrate (`mpColl_80043754` / `mpColl_80046904` style ordering, floor
+  publication/landing handoff, wall/ceiling contact, ledge exclusion/inclusion when common-owned,
+  floor skip, joint filters, and `mpCollEnd*` publication).
+- Replace or collapse old local scans/suppressions/fallbacks in in-scope action owners only when
+  the common owner subsumes them. Every retained fallback must be named in the report with the exact
+  source policy or later phase that owns removal.
+- Use generated MSLMSO01 owner classes for action routing. If table data is missing, extend
+  extraction/table helpers rather than adding a local action list, unless a small manual predicate is
+  explicitly source-backed and documented.
+- Keep runtime allocation-free and deterministic. No heap allocation, formatting, dynamic buffers,
+  Python loops, nondeterministic iteration, or data reads on gameplay paths.
+
+Required tests:
+
+- Pure owner-routing tests proving generated MSLMSO01 classes select the common grounded/airborne
+  owners and do not select AttackAir/EscapeAir/Damage/item/projectile/bespoke-special owners.
+- Grounded owner tests for entry, sustained, transition, platform, hard floor, slope, endpoint,
+  floor-loss, floor retry, squeeze, wall, ceiling, floor+wall, floor+ceiling, skip clear/update,
+  joint skip/only, and `mpCollEnd*` publication/clear boundaries.
+- Airborne owner tests for falling no-contact, hard-floor landing, platform admission/rejection,
+  wall/ceiling contact, floor skip, joint filters, endpoint/ledge exclusion where common-owned,
+  strict no-crossing negatives, and transition into grounded state.
+- Negative tests proving excluded families are not routed through Phase 3: AttackAir, EscapeAir,
+  Damage, item/projectile, and bespoke special collision.
+- Regression tests should be owner-invariant synthetic locks first. Replay/trace locks may be kept
+  only as secondary evidence and must not define the runtime branch.
+
+Required validation:
+
+- `make build_data` if generated owner data or extraction changes
+- `make build BUILD_FORCE=1`
+- focused changed collision/action-owner tests
+- `make validate-all`
+- `MSL_DATA_DIR=/mnt/nvme0/projects/melee-sim-light/data make test`
+- `make fmt-check`
+- `git diff --check && git diff --cached --check`
+- `uv run python -m tools.eval.validation_report_diff --before HEAD --after reports/validation --top 220`
+- Clean-vs-dirty light `rollout_compare` bench. A small retained slowdown may be accepted only if
+  it is tied to source-correct routing and there is no obvious duplicate work left.
+
+Required report back:
+
+- Exact source functions and generated owner tables audited.
+- In-scope grounded and airborne owner families routed, with concrete MSL symbols.
+- Excluded/deferred families and why they are not Phase 3.
+- Old scans/suppressions/fallbacks removed, collapsed, or retained with source-policy accounting.
+- Tests added/updated and what source boundary each proves.
+- Validation and clean-vs-dirty perf numbers.
+- Whether Phase 3 is COMPLETE by this document's criteria. If incomplete, name exact remaining
+  Phase 3 work and do not move to Phase 4.
+- Leave changes uncommitted for review.
+
+Phase 3 status by this document: COMPLETE for the static common grounded/airborne owner scope.
+
+Routed common owner classes:
+
+- `MSL_MS_CLASS2_COMMON_GROUNDED_COLL`: Wait/Walk/Dash/Run/Turn, Squat/SquatWait/SquatRv,
+  Landing/LandingFallSpecial, Guard common movement, and Ottotto/OttottoWait callback owners.
+- `MSL_MS_CLASS2_COMMON_GROUNDED_B108_COLL`: KneeBend, Turn/Dash/Run/RunDirect, Squat-family, and
+  Guard common callbacks that route through `ft_80082708 -> mpColl_8004B108`.
+- `MSL_MS_CLASS2_COMMON_GROUNDED_B2DC_COLL`: TurnRun/Ottotto/OttottoWait common endpoint callbacks
+  that route through `ft_800827A0 -> mpColl_8004B2DC`.
+- `MSL_MS_CLASS2_COMMON_GROUNDED_B4B0_COLL`: Wait/Walk/RunBrake and Landing/LandingFallSpecial
+  callbacks that route through `ft_80084280 -> mpColl_8004B4B0`.
+- `MSL_MS_CLASS2_COMMON_AIRBORNE_COLL`: Jump/JumpAerial, Fall/FallSpecial, CliffJump2
+  continuation, Pass, and MissFoot callback owners.
+
+Retained outside Phase 3:
+
+- AttackAir, EscapeAir, Damage/DamageFly/DamageFall/DamageAir, item/projectile, catch/throw/capture,
+  and Fox/Falco bespoke special callbacks stay on their older broad owner classes for Phase 4 or
+  later owner-specific work. They may still consume the same low-level ordered substrate, but they
+  do not enter the Phase 3 `class2_bits` common owner word.
+- Moving-platform runtime behavior, Randall carry, FoD dynamic endpoint speed, dynamic Ground
+  callbacks, and runtime `mpBoundingCheck` `TooFar` joint mutation remain Phase 6.
+
+Validation for completion:
+
+- `make build_data`
+- `make build BUILD_FORCE=1`
+- focused changed owner/collision tests
+- `make validate-all`
+- `MSL_DATA_DIR=/mnt/nvme0/projects/melee-sim-light/data make test`
+- `make fmt-check`
+- `git diff --check && git diff --cached --check`
+- `uv run python -m tools.eval.validation_report_diff --before HEAD --after reports/validation --top 220`
+- clean-vs-dirty `rollout_compare` bench retained +0.32% ns/env (`2520.229` clean,
+  `2528.372` dirty), same checksum `13352543245587097619`.
 
 ### Phase 4: AttackAir, EscapeAir, And Damage Families
 

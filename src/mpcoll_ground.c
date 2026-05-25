@@ -1011,13 +1011,42 @@ static inline uint8_t mpcoll_floor_contact_from_callback_result(const MslMpcollC
 static inline MslMpcollSourcePhases mpcoll_source_phases_for_motion_state(uint8_t char_id,
                                                                           uint16_t action_id) {
   const uint32_t class_bits = msl_motion_state_class_bits(char_id, action_id);
+  const uint32_t class2_bits = msl_motion_state_class2_bits(char_id, action_id);
   MslMpcollSourcePhases phases = 0u;
-  if ((class_bits & MSL_MS_CLASS_FT80083090_PLATFORM_PASS_COLL) != 0u) {
-    phases |= (MslMpcollSourcePhases)MSL_MPCOLL_PHASE_PLATFORM_PASS;
+  if ((class2_bits & MSL_MS_CLASS2_COMMON_AIRBORNE_COLL) != 0u) {
+    // Phase 3 common airborne owner. Excluded airborne families may still consume the same low-level
+    // phase bits below, but they must enter through their broad source-owner class, not this narrow
+    // common owner.
+    // refs/melee/src/melee/ft/ft_081B.c::{ft_80083090,ft_800831CC,ft_800835B0}
+    if ((class_bits & MSL_MS_CLASS_FT80083090_PLATFORM_PASS_COLL) != 0u) {
+      phases |= (MslMpcollSourcePhases)MSL_MPCOLL_PHASE_PLATFORM_PASS;
+    }
+    if ((class_bits & MSL_MS_CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL) != 0u) {
+      phases |= (MslMpcollSourcePhases)MSL_MPCOLL_PHASE_AIR_471F8;
+    }
+  } else {
+    if ((class_bits & MSL_MS_CLASS_FT80083090_PLATFORM_PASS_COLL) != 0u) {
+      phases |= (MslMpcollSourcePhases)MSL_MPCOLL_PHASE_PLATFORM_PASS;
+    }
+    if ((class_bits & (MSL_MS_CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL |
+                       MSL_MS_CLASS_FT80081D0C_AIR_COLL | MSL_MS_CLASS_ESCAPE_AIR_COLL)) != 0u) {
+      phases |= (MslMpcollSourcePhases)MSL_MPCOLL_PHASE_AIR_471F8;
+    }
   }
-  if ((class_bits & (MSL_MS_CLASS_FT_CHECK_GROUND_LEDGE_AIR_COLL |
-                     MSL_MS_CLASS_FT80081D0C_AIR_COLL | MSL_MS_CLASS_ESCAPE_AIR_COLL)) != 0u) {
-    phases |= (MslMpcollSourcePhases)MSL_MPCOLL_PHASE_AIR_471F8;
+  if ((class2_bits & MSL_MS_CLASS2_COMMON_GROUNDED_COLL) != 0u) {
+    // Phase 3 common grounded owner.
+    // refs/melee/src/melee/ft/ft_081B.c::{ft_80084280,ft_800844EC,ft_80084104}
+    phases |= (MslMpcollSourcePhases)MSL_MPCOLL_PHASE_GROUNDED_4ACE4;
+  } else if ((class_bits & MSL_MS_CLASS_GROUNDED_STAGE_OBJECT_CARRY_COLL) != 0u) {
+    phases |= (MslMpcollSourcePhases)MSL_MPCOLL_PHASE_GROUNDED_4ACE4;
+  }
+  if ((class2_bits & MSL_MS_CLASS2_COMMON_GROUNDED_B108_COLL) != 0u) {
+    // Phase 3 common ft_80083F88/mpColl_8004B108 owner.
+    // refs/melee/src/melee/ft/ft_081B.c::{ft_80083F88,ft_80082708}
+    phases |= (MslMpcollSourcePhases)MSL_MPCOLL_PHASE_GROUND_B108;
+  } else if ((class_bits & (MSL_MS_CLASS_FT80083F88_GROUND_TO_AIR_COLL |
+                            MSL_MS_CLASS_FX_SPECIALS_GROUND_B108_COLL)) != 0u) {
+    phases |= (MslMpcollSourcePhases)MSL_MPCOLL_PHASE_GROUND_B108;
   }
   if ((class_bits & MSL_MS_CLASS_DAMAGE_FLY_COLL) != 0u) {
     phases |= (MslMpcollSourcePhases)MSL_MPCOLL_PHASE_AIR_473CC;
@@ -1025,14 +1054,11 @@ static inline MslMpcollSourcePhases mpcoll_source_phases_for_motion_state(uint8_
   if ((class_bits & MSL_MS_CLASS_DAMAGE_COMMON_COLL) != 0u) {
     phases |= (MslMpcollSourcePhases)MSL_MPCOLL_PHASE_AIR_477E0;
   }
-  if ((class_bits & (MSL_MS_CLASS_FT80083F88_GROUND_TO_AIR_COLL |
-                     MSL_MS_CLASS_FX_SPECIALS_GROUND_B108_COLL)) != 0u) {
-    phases |= (MslMpcollSourcePhases)MSL_MPCOLL_PHASE_GROUND_B108;
-  }
-  if ((class_bits & MSL_MS_CLASS_GROUNDED_STAGE_OBJECT_CARRY_COLL) != 0u) {
-    phases |= (MslMpcollSourcePhases)MSL_MPCOLL_PHASE_GROUNDED_4ACE4;
-  }
-  if ((class_bits & MSL_MS_CLASS_FT800827A0_EDGE_SNAP_COLL) != 0u) {
+  if ((class2_bits & MSL_MS_CLASS2_COMMON_GROUNDED_B2DC_COLL) != 0u) {
+    // Phase 3 common ft_800827A0/mpColl_8004B2DC endpoint owner.
+    // refs/melee/src/melee/ft/ft_081B.c::{ft_800827A0,ft_80084104}
+    phases |= (MslMpcollSourcePhases)MSL_MPCOLL_PHASE_EDGE_SNAP;
+  } else if ((class_bits & MSL_MS_CLASS_FT800827A0_EDGE_SNAP_COLL) != 0u) {
     phases |= (MslMpcollSourcePhases)MSL_MPCOLL_PHASE_EDGE_SNAP;
   }
   return phases;
@@ -1648,9 +1674,13 @@ static inline uint8_t grounded_action_allows_platform_carry_y_correction(uint16_
   //
   // refs/melee/src/melee/ft/ft_081B.c::{ft_80084280,ft_800844EC,ft_80084104,ft_800841B8}
   // refs/melee/src/melee/mp/{mpcoll.c::mpColl_8004B2DC,mplib.c::mpLib_8004DD90_Floor}
-  // data/motion_state/owners/{fox,falco}.bin (MSLMSO01 class GROUNDED_STAGE_OBJECT_CARRY_COLL)
+  // data/motion_state/owners/{fox,falco}.bin (MSLMSO01 class2 COMMON_GROUNDED_COLL;
+  // retained later-owner class GROUNDED_STAGE_OBJECT_CARRY_COLL)
   if (action_uses_landing_floor_release_coll(action_id) && action_frame <= 1u) {
     return 0u;
+  }
+  if (msl_motion_state_common_class2_has(action_id, MSL_MS_CLASS2_COMMON_GROUNDED_COLL)) {
+    return 1u;
   }
   return msl_motion_state_common_class_has(action_id,
                                            MSL_MS_CLASS_GROUNDED_STAGE_OBJECT_CARRY_COLL);
@@ -1679,13 +1709,13 @@ static inline uint8_t grounded_action_allows_height_platform_y_correction(uint16
   // refs/melee/src/melee/ft/ft_081B.c::{ft_80083F88,ft_80082708}
   // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
   // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
-  // data/motion_state/owners/{fox,falco}.bin (MSLMSO01 class FT80083F88_GROUND_TO_AIR_COLL)
+  // data/motion_state/owners/{fox,falco}.bin (MSLMSO01 class2 COMMON_GROUNDED_B108_COLL)
   // data/attack_id/move_id/{fox,falco}.bin (MotionState.move_id == FtMoveId_SpecialN)
+  if (msl_motion_state_common_class2_has(action_id, MSL_MS_CLASS2_COMMON_GROUNDED_B108_COLL)) {
+    return 1u;
+  }
   if (!msl_motion_state_class_has(char_id, action_id, MSL_MS_CLASS_FT80083F88_GROUND_TO_AIR_COLL)) {
     return 0u;
-  }
-  if (action_id == (uint16_t)MSL_ACT_KNEE_BEND) {
-    return 1u;
   }
   enum { MSL_FT_MOVE_ID_SPECIAL_N = 18u };
   return (uint8_t)(attack_id_move_id_from_action(char_id, action_id) ==
@@ -1700,7 +1730,11 @@ static inline uint8_t grounded_action_allows_stage_object_platform_carry(uint16_
   // route through separate downed/damage owners.
   //
   // refs/melee/src/melee/ft/ft_081B.c::{ft_80084280,ft_800844EC,ft_80084104,ft_800845B4}
-  // data/motion_state/owners/{fox,falco}.bin (MSLMSO01 class GROUNDED_STAGE_OBJECT_CARRY_COLL)
+  // data/motion_state/owners/{fox,falco}.bin (MSLMSO01 class2 COMMON_GROUNDED_COLL;
+  // retained later-owner class GROUNDED_STAGE_OBJECT_CARRY_COLL)
+  if (msl_motion_state_common_class2_has(action_id, MSL_MS_CLASS2_COMMON_GROUNDED_COLL)) {
+    return 1u;
+  }
   return msl_motion_state_common_class_has(action_id,
                                            MSL_MS_CLASS_GROUNDED_STAGE_OBJECT_CARRY_COLL);
 }

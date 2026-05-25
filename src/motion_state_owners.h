@@ -57,6 +57,14 @@ enum {
   MSL_MS_CLASS_FT80082B1C_BASIC_LANDING_COLL = 1u << 31,
 };
 
+enum {
+  MSL_MS_CLASS2_COMMON_GROUNDED_COLL = 1u << 0,
+  MSL_MS_CLASS2_COMMON_GROUNDED_B108_COLL = 1u << 1,
+  MSL_MS_CLASS2_COMMON_AIRBORNE_COLL = 1u << 2,
+  MSL_MS_CLASS2_COMMON_GROUNDED_B2DC_COLL = 1u << 3,
+  MSL_MS_CLASS2_COMMON_GROUNDED_B4B0_COLL = 1u << 4,
+};
+
 uint16_t msl_motion_state_submotion_id(uint8_t char_id, uint16_t action_id);
 uint32_t msl_motion_state_x4_flags(uint8_t char_id, uint16_t action_id);
 uint32_t msl_motion_state_word(uint8_t char_id, uint16_t action_id);
@@ -68,7 +76,10 @@ uint16_t msl_motion_state_cam_cb_id(uint8_t char_id, uint16_t action_id);
 uint8_t msl_motion_state_has_motion_flag(uint8_t char_id, uint16_t action_id, uint32_t flag_mask);
 uint32_t msl_motion_state_class_bits(uint8_t char_id, uint16_t action_id);
 uint8_t msl_motion_state_class_has(uint8_t char_id, uint16_t action_id, uint32_t class_bit);
+uint32_t msl_motion_state_class2_bits(uint8_t char_id, uint16_t action_id);
+uint8_t msl_motion_state_class2_has(uint8_t char_id, uint16_t action_id, uint32_t class_bit);
 
 // Common helpers return true only when all currently supported Fox/Falco owner tables agree. This
 // is for migrating common action-family predicates without introducing character-proxy logic.
 uint8_t msl_motion_state_common_class_has(uint16_t action_id, uint32_t class_bit);
+uint8_t msl_motion_state_common_class2_has(uint16_t action_id, uint32_t class_bit);

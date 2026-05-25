@@ -9,7 +9,7 @@ import numpy as np
 
 
 MAGIC = b"MSLMSO01"
-VERSION = 13
+VERSION = 15
 
 
 @dataclass(frozen=True)
@@ -23,11 +23,12 @@ class MotionStateOwners:
     coll_cb_id: np.ndarray
     cam_cb_id: np.ndarray
     class_bits: np.ndarray
+    class2_bits: np.ndarray
 
 
 def read_mslmso01_v1(path: Path) -> MotionStateOwners:
     b = path.read_bytes()
-    if len(b) < 52:
+    if len(b) < 56:
         raise ValueError(f"MSLMSO01 table too small: {path}")
     if b[:8] != MAGIC:
         raise ValueError(f"bad MSLMSO01 magic in {path}: {b[:8]!r}")
@@ -44,14 +45,15 @@ def read_mslmso01_v1(path: Path) -> MotionStateOwners:
         coll_cb_off,
         cam_cb_off,
         class_bits_off,
-    ) = struct.unpack_from("<IIIIIIIII", b, 16)
-    file_bytes = class_bits_off + action_count * 4
+        class2_bits_off,
+    ) = struct.unpack_from("<IIIIIIIIII", b, 16)
+    file_bytes = class2_bits_off + action_count * 4
     if file_bytes != len(b):
         raise ValueError(f"MSLMSO01 size mismatch in {path}: header-derived {file_bytes} != {len(b)}")
 
     def arr(off: int, dtype: str, nbytes: int) -> np.ndarray:
         end = off + action_count * nbytes
-        if off < 52 or end > len(b):
+        if off < 56 or end > len(b):
             raise ValueError(f"MSLMSO01 bad table offset in {path}: off={off} end={end}")
         return np.frombuffer(b, dtype=dtype, count=action_count, offset=off).copy()
 
@@ -65,6 +67,7 @@ def read_mslmso01_v1(path: Path) -> MotionStateOwners:
         coll_cb_id=arr(coll_cb_off, "<u2", 2),
         cam_cb_id=arr(cam_cb_off, "<u2", 2),
         class_bits=arr(class_bits_off, "<u4", 4),
+        class2_bits=arr(class2_bits_off, "<u4", 4),
     )
 
 

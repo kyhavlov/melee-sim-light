@@ -29,6 +29,11 @@ from tools.extraction.extract_motion_state_owners import (
     CLASS_FT80083090_PLATFORM_PASS_COLL,
     CLASS_FT80082B1C_BASIC_LANDING_COLL,
     CLASS_FT80083F88_GROUND_TO_AIR_COLL,
+    CLASS2_COMMON_AIRBORNE_COLL,
+    CLASS2_COMMON_GROUNDED_B2DC_COLL,
+    CLASS2_COMMON_GROUNDED_B4B0_COLL,
+    CLASS2_COMMON_GROUNDED_B108_COLL,
+    CLASS2_COMMON_GROUNDED_COLL,
     CLASS_GROUNDED_ATTACK_WAIT_IASA_CATCH_GUARD,
     CLASS_GROUNDED_ATTACK_WAIT_IASA_LOCOMOTION,
     CLASS_GROUNDED_ATTACK_WAIT_IASA_SPECIALS,
@@ -603,9 +608,158 @@ def test_mpcoll_wrapper_phase_classes_cover_source_phase_overlaps() -> None:
     assert not both_have(0x00B8, CLASS_FT800827A0_EDGE_SNAP_COLL)  # DownWait
 
 
+def test_motion_state_owner_phase3_common_owner_classes_exclude_later_families() -> None:
+    fox = read_mslmso01_v1(FOX)
+    falco = read_mslmso01_v1(FALCO)
+
+    def both_have2(action_id: int, bit: int) -> bool:
+        return bool(int(fox.class2_bits[action_id]) & bit) and bool(
+            int(falco.class2_bits[action_id]) & bit
+        )
+
+    # Phase 3 grounded common owners:
+    # refs/melee/src/melee/ft/ft_081B.c common grounded wrappers and ft_80083F88.
+    assert both_have2(0x000E, CLASS2_COMMON_GROUNDED_COLL)  # Wait
+    assert both_have2(0x000F, CLASS2_COMMON_GROUNDED_COLL)  # WalkSlow
+    assert both_have2(0x0014, CLASS2_COMMON_GROUNDED_COLL)  # Dash
+    assert both_have2(0x0014, CLASS2_COMMON_GROUNDED_B108_COLL)
+    assert both_have2(0x0018, CLASS2_COMMON_GROUNDED_B108_COLL)  # KneeBend
+    assert both_have2(0x0027, CLASS2_COMMON_GROUNDED_COLL)  # Squat
+    assert both_have2(0x0027, CLASS2_COMMON_GROUNDED_B108_COLL)
+    assert both_have2(0x002A, CLASS2_COMMON_GROUNDED_COLL)  # Landing
+    assert both_have2(0x002A, CLASS2_COMMON_GROUNDED_B4B0_COLL)
+    assert both_have2(0x00B3, CLASS2_COMMON_GROUNDED_COLL)  # Guard
+    assert both_have2(0x00B3, CLASS2_COMMON_GROUNDED_B108_COLL)
+    assert both_have2(0x00F5, CLASS2_COMMON_GROUNDED_COLL)  # Ottotto
+    assert both_have2(0x00F5, CLASS2_COMMON_GROUNDED_B2DC_COLL)
+
+    # Phase 3 airborne common owners:
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_80083090,ft_800831CC,ft_800835B0}.
+    assert both_have2(0x0019, CLASS2_COMMON_AIRBORNE_COLL)  # JumpF
+    assert both_have2(0x001B, CLASS2_COMMON_AIRBORNE_COLL)  # JumpAerialF
+    assert both_have2(0x001D, CLASS2_COMMON_AIRBORNE_COLL)  # Fall
+    assert both_have2(0x0023, CLASS2_COMMON_AIRBORNE_COLL)  # FallSpecial
+    assert both_have2(0x00F4, CLASS2_COMMON_AIRBORNE_COLL)  # Pass
+    assert both_have2(0x00FB, CLASS2_COMMON_AIRBORNE_COLL)  # MissFoot
+    assert both_have2(0x0105, CLASS2_COMMON_AIRBORNE_COLL)  # CliffJump2Slow1
+
+    # Hard Phase 3 exclusions: AttackAir, EscapeAir, Damage, item/projectile, catch/throw/capture,
+    # and Fox/Falco bespoke special callbacks must not enter the narrow Phase 3 class word.
+    excluded = [
+        0x0030,  # Attack11
+        0x0041,  # AttackAirN
+        0x004B,  # DamageHi1
+        0x005E,  # LightThrowF
+        0x00D4,  # Catch
+        0x00DB,  # ThrowF
+        0x00E1,  # CaptureDamageHi
+        0x00EC,  # EscapeAir
+        0x0091,  # ItemParasolFall
+        0x0158,  # Fox/Falco SpecialAirNStart
+        0x015B,  # Fox/Falco SpecialSStart
+        0x015E,  # Fox/Falco SpecialAirSStart
+        0x0163,  # Fox/Falco SpecialHi
+        0x016D,  # Fox/Falco SpecialAirLwStart
+    ]
+    for action_id in excluded:
+        assert not both_have2(action_id, CLASS2_COMMON_GROUNDED_COLL)
+        assert not both_have2(action_id, CLASS2_COMMON_GROUNDED_B108_COLL)
+        assert not both_have2(action_id, CLASS2_COMMON_GROUNDED_B2DC_COLL)
+        assert not both_have2(action_id, CLASS2_COMMON_GROUNDED_B4B0_COLL)
+        assert not both_have2(action_id, CLASS2_COMMON_AIRBORNE_COLL)
+
+
+def test_motion_state_owner_phase3_class2_matches_source_callbacks_for_all_actions() -> None:
+    fox = read_mslmso01_v1(FOX)
+    falco = read_mslmso01_v1(FALCO)
+    symbols = read_callback_manifest(MANIFEST)
+
+    common_grounded = {
+        "ftCo_Wait_Coll",
+        "ftCo_Walk_Coll",
+        "ftCo_Turn_Coll",
+        "ftCo_TurnRun_Coll",
+        "ftCo_Dash_Coll",
+        "ftCo_Run_Coll",
+        "ftCo_RunDirect_Coll",
+        "ftCo_RunBrake_Coll",
+        "ftCo_Squat_Coll",
+        "ftCo_SquatWait_Coll",
+        "ftCo_SquatRv_Coll",
+        "ftCo_Landing_Coll",
+        "ftCo_GuardOn_Coll",
+        "ftCo_Guard_Coll",
+        "ftCo_GuardOff_Coll",
+        "ftCo_GuardSetOff_Coll",
+        "ftCo_Ottotto_Coll",
+        "ftCo_OttottoWait_Coll",
+    }
+    common_grounded_b108 = {
+        "ftCo_KneeBend_Coll",
+        "ftCo_Turn_Coll",
+        "ftCo_Dash_Coll",
+        "ftCo_Run_Coll",
+        "ftCo_RunDirect_Coll",
+        "ftCo_Squat_Coll",
+        "ftCo_SquatWait_Coll",
+        "ftCo_SquatRv_Coll",
+        "ftCo_GuardOn_Coll",
+        "ftCo_Guard_Coll",
+        "ftCo_GuardOff_Coll",
+        "ftCo_GuardSetOff_Coll",
+    }
+    common_grounded_b2dc = {
+        "ftCo_TurnRun_Coll",
+        "ftCo_Ottotto_Coll",
+        "ftCo_OttottoWait_Coll",
+    }
+    common_grounded_b4b0 = {
+        "ftCo_Wait_Coll",
+        "ftCo_Walk_Coll",
+        "ftCo_RunBrake_Coll",
+        "ftCo_Landing_Coll",
+    }
+    common_airborne = {
+        "ftCo_Fall_Coll",
+        "ftCo_FallAerial_Coll",
+        "ftCo_FallSpecial_Coll",
+        "ftCo_Jump_Coll",
+        "ftCo_JumpAerial_Coll",
+        "ftCo_CliffJump2_Coll",
+        "ftCo_MissFoot_Coll",
+        "ftCo_Pass_Coll",
+    }
+
+    def expected_bits(coll_cb: str) -> int:
+        bits = 0
+        if coll_cb in common_grounded:
+            bits |= CLASS2_COMMON_GROUNDED_COLL
+        if coll_cb in common_grounded_b108:
+            bits |= CLASS2_COMMON_GROUNDED_B108_COLL
+        if coll_cb in common_grounded_b2dc:
+            bits |= CLASS2_COMMON_GROUNDED_B2DC_COLL
+        if coll_cb in common_grounded_b4b0:
+            bits |= CLASS2_COMMON_GROUNDED_B4B0_COLL
+        if coll_cb in common_airborne:
+            bits |= CLASS2_COMMON_AIRBORNE_COLL
+        return bits
+
+    # Exhaustive source-callback boundary for Phase 3 routing. Later-owner callbacks can still
+    # carry older broad class_bits, but they must not enter this narrow common owner word.
+    # refs/melee/src/melee/ft/ft_081B.c common grounded/airborne wrappers.
+    for label, table in (("fox", fox), ("falco", falco)):
+        for action_id in range(len(table.class2_bits)):
+            coll_cb = symbols[int(table.coll_cb_id[action_id])]
+            assert int(table.class2_bits[action_id]) == expected_bits(coll_cb), (
+                label,
+                action_id,
+                coll_cb,
+            )
+
+
 def test_motion_state_owner_reader_rejects_stale_versions(tmp_path: Path) -> None:
     stale = tmp_path / "fox.bin"
-    buf = bytearray(52)
+    buf = bytearray(56)
     buf[0:8] = b"MSLMSO01"
     struct.pack_into("<I", buf, 8, VERSION - 1)
     struct.pack_into("<H", buf, 12, 1)
@@ -634,7 +788,7 @@ def test_runtime_rejects_stale_motion_state_owner_tables(tmp_path: Path) -> None
     for ch in ("fox", "falco"):
         stale = data_dir / "motion_state" / "owners" / f"{ch}.bin"
         stale.parent.mkdir(parents=True, exist_ok=True)
-        buf = bytearray(52)
+        buf = bytearray(56)
         buf[0:8] = b"MSLMSO01"
         struct.pack_into("<I", buf, 8, VERSION - 1)
         struct.pack_into("<H", buf, 12, 1)

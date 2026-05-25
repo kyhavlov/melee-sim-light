@@ -822,6 +822,12 @@ Recent deltas to reflect here (do not let these get “lost in chat logs”):
   carry owner and enter `ft_800827A0 -> mpColl_8004B2DC` endpoint snap. Platform-pass floor-skip
   reconstruction, moving-stage support carry, ground-to-air `mpColl_8004B108` support correction,
   and endpoint snap now consume this one phase packet instead of separate local action predicates.
+  Phase 3 adds a second generated class word for narrow common-owner routing:
+  `COMMON_GROUNDED_COLL`, `COMMON_GROUNDED_B108_COLL`, `COMMON_GROUNDED_B2DC_COLL`,
+  `COMMON_GROUNDED_B4B0_COLL`, and `COMMON_AIRBORNE_COLL` include only common grounded/airborne
+  callback families and exclude AttackAir, EscapeAir, Damage, item/projectile, catch/throw/capture,
+  and Fox/Falco bespoke special callbacks. Runtime collision gates consume these wrapper-shaped
+  bits before falling back to retained later-owner classes.
   Final publication rejections carry structured side-state (restore rule, floor-skip side effect,
   and source phase) rather than relying only on a raw bit list; retained reject bits are diagnostics
   for real source-phase guards. Floor contact env bits are owned by the callback floor result:
@@ -5682,14 +5688,13 @@ BODY collision-space residual split and rejected seed bridge:
   applied before the entered motion's collision pass observes floor loss. LDW `2581 -> 2615` locks
   the Battlefield platform overlap case where LandingFallSpecial receives the outward `+0.3` nudge,
   enters `Ottotto`, then falls from the platform edge after the frame-start Ottotto Turn IASA.
-  The same source owner is now table-backed for grounded callbacks whose decomp Coll bodies call
-  `ft_80083F88(gobj)`: generated `MSLMSO01` class `FT80083F88_GROUND_TO_AIR_COLL` identifies the
-  `ft_80082708 -> mpColl_8004B108` ground-to-air family. The retained runtime consumes only the
-  audited KneeBend subset: `MGS:616` locks the FoD top-platform `SquatRv -> KneeBend -> Fall` case
-  where the source x450 nudge moves the KneeBend root past the static platform edge before
-  collision. The broader all-grounded off-edge nudge remains gated until unrelated
-  collision-owner families are modeled; an all-class experiment caused unrelated Battlefield float
-  drift. Sources:
+  The same source owner is now table-backed for common grounded callbacks that reach
+  `ft_80082708 -> mpColl_8004B108`: generated `MSLMSO01` class2 bit
+  `COMMON_GROUNDED_B108_COLL` identifies KneeBend, Turn/Dash/Run/RunDirect, Squat-family, and
+  Guard common callbacks without admitting downed/passive, Attack, Catch/Throw/Capture, or bespoke
+  special owners. `COMMON_GROUNDED_B2DC_COLL` identifies the TurnRun/Ottotto/OttottoWait
+  `ft_800827A0 -> mpColl_8004B2DC` endpoint owner, and `COMMON_GROUNDED_B4B0_COLL` identifies the
+  `ft_80084280 -> mpColl_8004B4B0` floor-release/Ottotto owner. Sources:
   `refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}`,
   `refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007DD7C,ftCommon_8007E0E4}`,
   `refs/melee/src/melee/ft/ft_081B.c::{ft_80084280,ft_80083F88,ft_80082708}`,
