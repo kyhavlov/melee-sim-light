@@ -55,6 +55,13 @@ uint8_t move_tables_attackair_hitbox_script_lifetime(uint8_t char_id, uint16_t a
 uint8_t move_tables_attackair_first_hitbox_phase(uint8_t char_id, uint16_t attackair_action_id,
                                                  float cur_anim_frame_f32);
 
+// Returns the first create_hitbox command frame for an AttackAir* script, or -1 if absent.
+//
+// Source of truth: data/scripts/{fox,falco}.bin (MSLFTSC1)
+// moves["ftCo_SM_AttackAir*"]["events"] create_hitbox.
+int16_t move_tables_attackair_first_create_hitbox_frame(uint8_t char_id,
+                                                        uint16_t attackair_action_id);
+
 // Returns whether an AttackAir* script has reached its second distinct create_hitbox frame.
 //
 // Decomp: AttackAir_Coll runs with the command-script HitCapsule timeline already advanced by

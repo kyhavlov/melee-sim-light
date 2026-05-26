@@ -1575,9 +1575,11 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       if (batch->state.floor_sweep_seed_prev_valid[idx]) {
         batch->state.floor_sweep_prev_pos_x[idx] = seed->floor_sweep_prev_pos_x_f32[p];
         batch->state.floor_sweep_prev_pos_y[idx] = seed->floor_sweep_prev_pos_y_f32[p];
+        batch->state.floor_sweep_prev_source_owned[idx] = 1u;
       } else {
         batch->state.floor_sweep_prev_pos_x[idx] = seed->pos_x[p];
         batch->state.floor_sweep_prev_pos_y[idx] = seed->pos_y[p];
+        batch->state.floor_sweep_prev_source_owned[idx] = 0u;
       }
       batch->state.speed_air_x_self[idx] = seed->speed_air_x_self[p];
       batch->state.speed_ground_x_self[idx] = seed->speed_ground_x_self[p];
@@ -3871,6 +3873,7 @@ int msl_batch_debug_set_player_root(MslBatch* batch, int batch_index, int player
   batch->state.floor_sweep_seed_prev_pos_x[idx] = pos_x;
   batch->state.floor_sweep_seed_prev_pos_y[idx] = pos_y;
   batch->state.floor_sweep_seed_prev_valid[idx] = 0u;
+  batch->state.floor_sweep_prev_source_owned[idx] = 0u;
   batch->state.coll_wall_ceil_prev_pos_x[idx] = pos_x;
   batch->state.coll_wall_ceil_prev_pos_y[idx] = pos_y;
   batch->state.coll_wall_ceil_prev_pos_valid[idx] = 0u;

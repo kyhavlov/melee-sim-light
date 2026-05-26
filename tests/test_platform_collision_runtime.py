@@ -34,6 +34,7 @@ ACT_JUMP_AERIAL_F = 0x001B
 ACT_JUMP_AERIAL_B = 0x001C
 ACT_FALL = 0x001D
 ACT_FALL_SPECIAL = 0x0023
+ACT_ATTACK_AIR_F = 0x0042
 ACT_ATTACK_AIR_LW = 0x0045
 ACT_SQUAT = 0x0027
 ACT_SQUAT_WAIT = 0x0028
@@ -46,6 +47,9 @@ ACT_GUARD = 0x00B3
 ACT_GUARD_SET_OFF = 0x00B5
 ACT_GUARD_REFLECT = 0x00B6
 ACT_DAMAGE_FLY_N = 0x0058
+ACT_DAMAGE_N_2 = 0x004F
+ACT_DAMAGE_HI_2 = 0x004C
+ACT_DAMAGE_AIR_2 = 0x0055
 ACT_DAMAGE_FLY_TOP = 0x005A
 ACT_ESCAPE_AIR = 0x00EC
 ACT_DOWN_BOUND_U = 0x00B7
@@ -62,6 +66,7 @@ ACT_CLIFF_CATCH = 0x00FC
 ACT_CLIFF_WAIT = 0x00FD
 ACT_ATTACK_AIR_N = 0x0041
 ACT_ATTACK_AIR_B = 0x0043
+ACT_ATTACK_AIR_HI = 0x0044
 ACT_LANDING_AIR_B = 0x0048
 ACT_ATTACK_DASH = 0x0032
 ACT_ATTACK_S4_S = 0x003C
@@ -105,6 +110,12 @@ SM_OTTOTTO_WAIT = 211
 SM_DOWN_FOWARD_U = 188
 SM_PASSIVE_STAND_F = 200
 SM_ATTACK_AIR_N = 68
+SM_ATTACK_AIR_F = 69
+SM_ATTACK_AIR_B = 70
+SM_ATTACK_AIR_HI = 71
+SM_DAMAGE_N_2 = 169
+SM_DAMAGE_HI_2 = 166
+SM_DAMAGE_AIR_2 = 174
 SM_DAMAGE_FLY_TOP = 180
 
 CHAR_FOX = 1
@@ -4842,6 +4853,286 @@ def test_fod_attackair_deep_transformed_platform_crossing_still_lands_replay_rea
     # The negative boundary is the callback-owned Landing handoff; the float compare can differ by
     # the floor-y bias used when projecting against the transformed FoD platform line.
     assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-4)
+
+
+def test_fd_damageair_to_attackairhi_entry_bottom_sweep_lands_hard_floor() -> None:
+    # Damage_IASA / Fall_IASA can enter AttackAir before Fighter_procMap. The first entered
+    # AttackAir_Coll pass still consumes CollData's pre-entry current ECB as `prev_ecb`, then loads
+    # the AttackAir desired ECB before mpColl_80044628_Floor. This locks the hard-floor owner that
+    # prevents first-frame AttackAirHi entries from falling through FD after DamageAir.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::{ftCo_AttackAir_Enter,ftCo_AttackAir_Coll}
+    # refs/melee/src/melee/mp/mpcoll.c::{mpCollInterpolateECB,mpColl_800471F8,mpColl_80044628_Floor}
+    seed = _seed_base(32, ACT_ATTACK_AIR_HI, SM_ATTACK_AIR_HI, 22.546633, -6.824717)
+    p = 0
+    seed["on_ground"][0, p] = np.uint8(0)
+    seed["ground_id"][0, p] = np.uint16(0xFFFF)
+    seed["action_frame"][0, p] = np.int16(1)
+    seed["anim_frame_f32"][0, p] = np.float32(1.0)
+    seed["seed_prev_action_id"][0, p] = np.uint16(ACT_DAMAGE_AIR_2)
+    seed["seed_prev_action_frame"][0, p] = np.int16(18)
+    seed["speed_y_self"][0, p] = np.float32(-2.514217)
+    seed["speed_air_x_self"][0, p] = np.float32(0.295344)
+    seed["floor_sweep_prev_pos_valid_u8"][0, p] = np.uint8(1)
+    seed["floor_sweep_prev_pos_x_f32"][0, p] = np.float32(22.251289)
+    seed["floor_sweep_prev_pos_y_f32"][0, p] = np.float32(-4.348161)
+
+    out, _contacts, colldata = _step_once_with_contacts_and_colldata(seed)
+
+    assert int(out["action_id"][p]) == ACT_LANDING
+    assert int(out["on_ground"][p]) == 1
+    assert int(out["ground_id"][p]) == 1
+    assert float(out["pos_y"][p]) == pytest.approx(0.0001, abs=1e-7)
+    assert int(colldata["floor_result_valid"][p]) == 1
+    assert int(colldata["floor_result_segment_id"][p]) == 1
+
+    no_cross = seed.copy()
+    no_cross["floor_sweep_prev_pos_y_f32"][0, p] = np.float32(-6.0)
+    no_cross_out, _contacts2, no_cross_colldata = _step_once_with_contacts_and_colldata(no_cross)
+
+    assert int(no_cross_out["action_id"][p]) == ACT_ATTACK_AIR_HI
+    assert int(no_cross_out["on_ground"][p]) == 0
+    assert int(no_cross_out["ground_id"][p]) == 0xFFFF
+    assert int(no_cross_colldata["floor_result_valid"][p]) == 0
+
+
+@pytest.mark.parametrize(
+    ("attack_action", "attack_motion"),
+    [
+        (ACT_ATTACK_AIR_F, SM_ATTACK_AIR_F),
+        (ACT_ATTACK_AIR_B, SM_ATTACK_AIR_B),
+        (ACT_ATTACK_AIR_HI, SM_ATTACK_AIR_HI),
+    ],
+)
+def test_fd_damagefly_to_attackair_entry_bottom_sweep_lands_hard_floor(
+    attack_action: int, attack_motion: int
+) -> None:
+    # DamageFly_IASA delegates through DamageFall_IASA and can enter AttackAir before
+    # Fighter_procMap. The entered AttackAir_Coll still consumes the callback-local CollData
+    # current ECB promoted by mpCollInterpolateECB, so first-frame AttackAir* entries from
+    # DamageFlyTop must publish the hard floor when that source bottom sweep crosses it.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
+    # refs/melee/src/melee/mp/mpcoll.c::{mpCollInterpolateECB,mpColl_800471F8,mpColl_80044628_Floor}
+    seed = _seed_base(32, attack_action, attack_motion, -28.25, -7.37)
+    p = 0
+    seed["on_ground"][0, p] = np.uint8(0)
+    seed["ground_id"][0, p] = np.uint16(0xFFFF)
+    seed["action_frame"][0, p] = np.int16(1)
+    seed["anim_frame_f32"][0, p] = np.float32(1.0)
+    seed["seed_prev_action_id"][0, p] = np.uint16(ACT_DAMAGE_FLY_TOP)
+    seed["seed_prev_action_frame"][0, p] = np.int16(34)
+    seed["speed_y_self"][0, p] = np.float32(-1.85)
+    seed["speed_air_x_self"][0, p] = np.float32(-0.08)
+    seed["floor_sweep_prev_pos_valid_u8"][0, p] = np.uint8(1)
+    seed["floor_sweep_prev_pos_x_f32"][0, p] = np.float32(-28.18)
+    seed["floor_sweep_prev_pos_y_f32"][0, p] = np.float32(-4.0)
+
+    out, _contacts, colldata = _step_once_with_contacts_and_colldata(seed)
+
+    assert int(out["on_ground"][p]) == 1
+    assert int(out["ground_id"][p]) == 1
+    assert float(out["pos_y"][p]) == pytest.approx(0.0001, abs=1e-7)
+    assert int(colldata["floor_result_valid"][p]) == 1
+    assert int(colldata["floor_result_segment_id"][p]) == 1
+
+    no_cross = seed.copy()
+    no_cross["floor_sweep_prev_pos_y_f32"][0, p] = np.float32(-6.0)
+    no_cross_out, _contacts2, no_cross_colldata = _step_once_with_contacts_and_colldata(no_cross)
+
+    assert int(no_cross_out["on_ground"][p]) == 0
+    assert int(no_cross_out["ground_id"][p]) == 0xFFFF
+    assert int(no_cross_colldata["floor_result_valid"][p]) == 0
+
+
+def test_fd_active_damage_hitlag_without_current_floor_projects_hard_floor_airborne() -> None:
+    # Active Damage hitlag can move the root below a hard floor while CollData has no current
+    # floor.index. Source `ftCo_Damage_OnEveryHitlag` still routes through
+    # ft_80081DD4/mpColl_800477E0 and materializes FloorPush|FloorHug through
+    # mpColl_80044948_Floor without publishing grounded state.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+    #   ftCo_Damage_OnEveryHitlag,ftCo_Damage_Coll}
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800477E0,mpColl_80044948_Floor}
+    seed = _seed_base(32, ACT_DAMAGE_AIR_2, SM_DAMAGE_AIR_2, 9.424597, -7.469892)
+    p = 0
+    seed["char_id"][0, p] = np.uint8(CHAR_FOX)
+    seed["on_ground"][0, p] = np.uint8(0)
+    seed["ground_id"][0, p] = np.uint16(0xFFFF)
+    seed["action_frame"][0, p] = np.int16(1)
+    seed["anim_frame_f32"][0, p] = np.float32(1.0)
+    seed["seed_prev_action_id"][0, p] = np.uint16(ACT_ATTACK_AIR_B)
+    seed["seed_prev_action_frame"][0, p] = np.int16(29)
+    seed["hitlag"][0, p] = np.int16(4)
+    seed["hitstun"][0, p] = np.int16(15)
+    seed["floor_sweep_prev_pos_valid_u8"][0, p] = np.uint8(1)
+    seed["floor_sweep_prev_pos_x_f32"][0, p] = np.float32(9.821096)
+    seed["floor_sweep_prev_pos_y_f32"][0, p] = np.float32(1.930108)
+
+    out, _contacts, _colldata = _step_once_with_contacts_and_colldata(seed)
+
+    assert int(out["action_id"][p]) == ACT_DAMAGE_AIR_2
+    assert int(out["on_ground"][p]) == 0
+    assert int(out["ground_id"][p]) == 1
+    assert float(out["pos_y"][p]) == pytest.approx(0.0001, abs=1e-6)
+
+    no_hitlag = seed.copy()
+    no_hitlag["hitlag"][0, p] = np.int16(0)
+    no_hitlag_out, _contacts2, _colldata2 = _step_once_with_contacts_and_colldata(no_hitlag)
+
+    assert int(no_hitlag_out["on_ground"][p]) == 1
+    assert int(no_hitlag_out["ground_id"][p]) == 1
+
+
+@pytest.mark.parametrize(
+    ("damage_action", "damage_motion"),
+    [
+        (ACT_DAMAGE_AIR_2, SM_DAMAGE_AIR_2),
+        (ACT_DAMAGE_N_2, SM_DAMAGE_N_2),
+        (ACT_DAMAGE_HI_2, SM_DAMAGE_HI_2),
+    ],
+)
+def test_fd_damage_post_hitlag_carried_hard_floor_projects_airborne(
+    damage_action: int, damage_motion: int
+) -> None:
+    # Sustained post-hitlag Damage rows still route through
+    # ftCo_Damage_Coll -> ft_80081DD4 -> mpColl_800477E0. When CollData.floor.index already names
+    # the ordinary hard floor and the root is below it, mpColl_80044948_Floor projects the root but
+    # keeps the fighter airborne while hitstun remains active.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_Coll,ftCo_Damage_IASA}
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+    # refs/melee/src/melee/mp/mpcoll.c::{
+    #   mpColl_800477E0,mpColl_80044628_Floor,mpColl_80044948_Floor}
+    seed = _seed_base(32, damage_action, damage_motion, 49.0, -16.0)
+    p = 0
+    seed["on_ground"][0, p] = np.uint8(0)
+    seed["ground_id"][0, p] = np.uint16(1)
+    seed["action_frame"][0, p] = np.int16(12)
+    seed["anim_frame_f32"][0, p] = np.float32(12.0)
+    seed["hitstun"][0, p] = np.int16(5)
+    seed["seed_prev_action_id"][0, p] = np.uint16(damage_action)
+    seed["seed_prev_action_frame"][0, p] = np.int16(11)
+    seed["floor_sweep_prev_pos_valid_u8"][0, p] = np.uint8(1)
+    seed["floor_sweep_prev_pos_x_f32"][0, p] = np.float32(49.0)
+    seed["floor_sweep_prev_pos_y_f32"][0, p] = np.float32(-14.0)
+
+    out, _contacts, colldata = _step_once_with_contacts_and_colldata(seed)
+
+    assert int(out["action_id"][p]) == damage_action
+    assert int(out["on_ground"][p]) == 0
+    assert int(out["ground_id"][p]) == 1
+    assert float(out["pos_y"][p]) == pytest.approx(0.0001, abs=1e-7)
+    assert int(colldata["floor_result_segment_id"][p]) == 1
+
+    no_carried_floor = seed.copy()
+    no_carried_floor["ground_id"][0, p] = np.uint16(0xFFFF)
+    no_carried_out, _contacts2, no_carried_colldata = _step_once_with_contacts_and_colldata(
+        no_carried_floor
+    )
+
+    assert int(no_carried_out["action_id"][p]) == damage_action
+    assert int(no_carried_out["on_ground"][p]) == 0
+    assert int(no_carried_out["ground_id"][p]) == 0xFFFF
+    assert float(no_carried_out["pos_y"][p]) < -16.0
+    assert int(no_carried_colldata["floor_result_valid"][p]) == 0
+
+    # Visible/restored CollData.floor.index alone is not source authority. With ground_id still
+    # naming FD hard floor but no source-owned mpCollPrev packet, this must stay below-floor and
+    # airborne instead of projecting.
+    restored_only = seed.copy()
+    restored_only["ground_id"][0, p] = np.uint16(1)
+    restored_only["floor_sweep_prev_pos_valid_u8"][0, p] = np.uint8(0)
+    restored_only_out, _contacts3, restored_only_colldata = _step_once_with_contacts_and_colldata(
+        restored_only
+    )
+
+    assert int(restored_only_out["action_id"][p]) == damage_action
+    assert int(restored_only_out["on_ground"][p]) == 0
+    assert int(restored_only_out["ground_id"][p]) == 1
+    assert float(restored_only_out["pos_y"][p]) < -16.0
+    assert int(restored_only_colldata["floor_result_valid"][p]) == 0
+
+
+def test_fd_attackair_carried_connected_hard_floor_root_projection_lands() -> None:
+    # AttackAir_Coll's ft_80082C74/mpColl_800471F8 floor owner can accept a connected hard-floor
+    # candidate even when the carried CollData.floor.index is the adjacent ledge-top segment. The
+    # source-owned proof is the generated MSLSTG01 segment graph plus mpColl_80044838_Floor root
+    # projection, not an FD coordinate band.
+    #
+    # data/stages/bin/grnla.bin::MSLSTG01 segment links/fighter_solid flags
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+    # refs/melee/src/melee/mp/mpcoll.c::{
+    #   mpColl_800471F8,mpColl_80044628_Floor,mpColl_80044838_Floor}
+    seed = _seed_base(32, ACT_ATTACK_AIR_B, SM_ATTACK_AIR_B, 49.184, -16.62)
+    p = 0
+    seed["on_ground"][0, p] = np.uint8(0)
+    seed["ground_id"][0, p] = np.uint16(2)
+    seed["action_frame"][0, p] = np.int16(4)
+    seed["anim_frame_f32"][0, p] = np.float32(4.0)
+    seed["seed_prev_action_id"][0, p] = np.uint16(ACT_ATTACK_AIR_B)
+    seed["seed_prev_action_frame"][0, p] = np.int16(3)
+    seed["speed_y_self"][0, p] = np.float32(-2.0)
+    seed["floor_sweep_prev_pos_valid_u8"][0, p] = np.uint8(1)
+    seed["floor_sweep_prev_pos_x_f32"][0, p] = np.float32(49.25)
+    seed["floor_sweep_prev_pos_y_f32"][0, p] = np.float32(-14.0)
+
+    out, _contacts, colldata = _step_once_with_contacts_and_colldata(seed)
+
+    assert int(out["action_id"][p]) == ACT_LANDING_AIR_B
+    assert int(out["on_ground"][p]) == 1
+    assert int(out["ground_id"][p]) == 1
+    assert float(out["pos_y"][p]) == pytest.approx(0.0001, abs=1e-7)
+    assert int(colldata["floor_result_valid"][p]) == 1
+    assert int(colldata["floor_result_mode"][p]) == 2
+    assert int(colldata["floor_result_segment_id"][p]) == 1
+
+    # AttackAirB's first create_hitbox command is frame 4 in MSLFTSC1, and the source callback can
+    # observe that entry floor packet through the following map-callback tick. By action_frame=6, a
+    # carried hard-floor id plus mpCollPrev root packet is stale unless the normal floor producer
+    # accepts a fresh crossing.
+    sustained_stale = seed.copy()
+    sustained_stale["action_frame"][0, p] = np.int16(6)
+    sustained_stale["anim_frame_f32"][0, p] = np.float32(6.0)
+    sustained_stale_out, _contacts_sustained, sustained_colldata = (
+        _step_once_with_contacts_and_colldata(sustained_stale)
+    )
+
+    assert int(sustained_stale_out["action_id"][p]) == ACT_ATTACK_AIR_B
+    assert int(sustained_stale_out["on_ground"][p]) == 0
+    assert int(sustained_stale_out["ground_id"][p]) == 2
+    assert int(sustained_colldata["floor_result_valid"][p]) == 0
+
+    no_carried_floor = seed.copy()
+    no_carried_floor["ground_id"][0, p] = np.uint16(0xFFFF)
+    no_carried_out, _contacts2, no_carried_colldata = _step_once_with_contacts_and_colldata(
+        no_carried_floor
+    )
+
+    assert int(no_carried_out["action_id"][p]) == ACT_ATTACK_AIR_B
+    assert int(no_carried_out["on_ground"][p]) == 0
+    assert int(no_carried_out["ground_id"][p]) == 0xFFFF
+    assert int(no_carried_colldata["floor_result_valid"][p]) == 0
+
+    # Stale/reseeded carried floor state is not enough: without the source-owned mpCollPrev
+    # previous-root packet, the carried hard floor must not publish.
+    restored_only = seed.copy()
+    restored_only["action_frame"][0, p] = np.int16(6)
+    restored_only["anim_frame_f32"][0, p] = np.float32(6.0)
+    restored_only["floor_sweep_prev_pos_valid_u8"][0, p] = np.uint8(0)
+    restored_only_out, _contacts3, restored_only_colldata = _step_once_with_contacts_and_colldata(
+        restored_only
+    )
+
+    assert int(restored_only_out["action_id"][p]) == ACT_ATTACK_AIR_B
+    assert int(restored_only_out["on_ground"][p]) == 0
+    assert int(restored_only_out["ground_id"][p]) == 2
+    assert int(restored_only_colldata["floor_result_valid"][p]) == 0
 
 
 @pytest.mark.integration

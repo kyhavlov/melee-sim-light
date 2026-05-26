@@ -479,6 +479,17 @@ uint8_t move_tables_attackair_first_hitbox_phase(uint8_t char_id, uint16_t attac
   return cache != NULL ? frame_window_contains(cache->first_create_hitbox, cur_anim_frame_f32) : 0u;
 }
 
+int16_t move_tables_attackair_first_create_hitbox_frame(uint8_t char_id,
+                                                        uint16_t attackair_action_id) {
+  uint16_t msid = 0;
+  if (!attackair_msid_from_action(attackair_action_id, &msid)) {
+    return -1;
+  }
+  const MslMoveTableCache* cache = move_cache_get(char_id, msid);
+  return (cache != NULL && cache->first_create_hitbox.loaded) ? cache->first_create_hitbox.start_af
+                                                              : -1;
+}
+
 uint8_t move_tables_attackair_second_create_hitbox_phase(uint8_t char_id,
                                                          uint16_t attackair_action_id,
                                                          float cur_anim_frame_f32) {

@@ -105,6 +105,7 @@ typedef struct MslStateSoA {
   float* floor_sweep_seed_prev_pos_x;
   float* floor_sweep_seed_prev_pos_y;
   uint8_t* floor_sweep_seed_prev_valid;
+  uint8_t* floor_sweep_prev_source_owned;
   // Runtime CollData.cur_pos snapshot carried between wall/ceiling map callbacks. Source
   // `ft_CheckGroundAndLedge` calls `mpCollPrev` before replacing CollData.cur_pos with the
   // fighter's current root, so wall/ceiling `mpColl_80046904` sweeps from the previous callback's
