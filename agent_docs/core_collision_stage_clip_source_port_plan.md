@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Define the source-port scope needed to make catastrophic stage clips from core fighter mechanics structurally impossible for supported Fox/Falco legal-stage gameplay, except for explicitly deferred character-special or moving-platform cases. The implementation target is not a replay-specific patch. It is a source-backed collision ownership pass that closes the common fighter and `mpLib`/`mpColl` families used by grounded, airborne, aerial attack, air dodge, damage, knockback, wall, and ceiling gameplay on legal stages.
+Define the source-port scope needed to make catastrophic stage clips from core fighter mechanics structurally impossible for supported Fox/Falco legal-stage gameplay, except for explicitly deferred character-special cases. The implementation target is not a replay-specific patch. It is a source-backed collision ownership pass that closes the common fighter and `mpLib`/`mpColl` families used by grounded, airborne, aerial attack, air dodge, damage, knockback, wall, ceiling, static-stage, and moving-stage-platform gameplay on legal stages.
 
 This document is an implementation contract for a future coding pass. It must be validated against decomp/source, extracted stage data, synthetic coverage, and aggregate validation, not against any single known row or trace.
 
@@ -40,7 +40,7 @@ In-scope owner families:
 
 ### Lowest Priority Final Phase: Moving Stage Geometry
 
-Moving platforms are in scope only after the static legal-stage core is source-covered and validated. This phase covers platform transforms and dynamic line updates for supported legal-stage gameplay, especially Randall and Fountain of Dreams platform motion. It must not distract or block the first static-collision phases.
+Moving platforms are in scope only after the static legal-stage core is source-covered and validated. This phase covers platform transforms and dynamic line updates for supported legal-stage gameplay, especially Randall and Fountain of Dreams platform motion.
 
 The moving-geometry phase must cover:
 
@@ -1128,12 +1128,113 @@ Required report back:
   Phase 5 work and do not move to Phase 6.
 - Leave changes uncommitted for review.
 
-### Phase 6: Moving Platforms Last
+### Phase 6: Moving Platforms / Ground-Object Collision
 
-- Only begin after static-stage source coverage, tests, validation, allocation checks, and cleanup are complete.
-- Port dynamic joint transform, bounds, line position, speed, visibility/activation, and platform-specific stage owners for Randall and Fountain of Dreams platforms.
-- Add focused moving-platform tests and rerun the full static suite to prove no static collision drift.
-- Keep this phase independently revertible from static collision work.
+Phase 6 starts from the committed static-collision source-port state. Do not revisit static
+EscapeAir/ledge-cliff ownership unless a moving-platform path directly shares that owner. Do not
+spawn subagents unless the user explicitly authorizes it in the current turn.
+
+Phase 6 target:
+
+- Close common fighter collision ownership for legal-stage moving platform surfaces:
+  - Fountain of Dreams `grIzumi` side platforms.
+  - Yoshi's Story Randall.
+  - Any generated legal-stage moving/platform support line that is already represented in
+    `MSLSTG01` and consumed by common fighter `mpColl`/`mpLib` wrappers.
+- Port dynamic line world-position, activation/visibility, speed, support, and final publication
+  semantics so fighter collision consumes the same moving surface the source stage/Ground owner
+  publishes for that frame.
+- Remove or convert seed-only and compatibility fallbacks that were retained as Phase 6 deferrals
+  during static phases.
+
+Source owners to audit and cite near gameplay code:
+
+- `refs/melee/src/melee/gr/grizumi.c` and related FoD Ground callbacks for platform height,
+  target/hidden state, JObj transform, activation, and scheduler timing.
+- `refs/melee/src/melee/gr/grstory.c`, `refs/melee/src/melee/gr/groldyoshi.c`, and related Yoshi
+  Ground callbacks for Randall path clock, support state, visibility, and line publication.
+- `refs/melee/src/melee/gr/grlib.c`, `refs/melee/src/melee/gr/stage.c`, and `Ground`/dynamic attr
+  helpers such as `grDynamicAttr_801CA284` where they feed collision line transforms or speed.
+- `refs/melee/src/melee/mp/mplib.c` dynamic/remap/speed helpers consumed by common fighter
+  collision, especially `mpCollGetSpeedFloor`, `mpCollGetSpeedCeiling`,
+  `mpCollGetSpeedLeftWall`, `mpCollGetSpeedRightWall`, `mpColl_IsOnPlatform`, remap helpers, and
+  any dynamic-line query entry point used by the supported wrappers.
+- `refs/melee/src/melee/mp/mpcoll.c` finalizer and support/carry paths that read moving floor,
+  wall, or ceiling surfaces after a query result is accepted.
+
+Required implementation shape:
+
+- Add or complete one stage-collision runtime packet for moving surface state. It should expose
+  world endpoints, normal, segment id, joint id, platform/support kind, current visibility/active
+  state, source clock/state, and surface velocity. It must be allocation-free and stable across
+  batch lanes.
+- Static query helpers must continue to exclude deferred moving lines. Moving lines are admitted
+  only through the moving-surface packet/source owner, not by broadening static geometry scans.
+- Fighter `mpColl` code should consume moving surfaces through the same floor/wall/ceiling result
+  packets used by static collision. Do not add row-local FoD/Randall branches in fighter code when
+  a stage packet or generated `MSLSTG01` field can express the distinction.
+- Stage-id use is allowed only to select generated stage metadata or stage-owned runtime state. It
+  is not allowed as a gameplay shortcut such as "if FoD then accept this floor" or "if Yoshi then
+  clamp here."
+- Live runtime platform state must be separate from teacher-forced seed reconstruction. Seed lanes
+  may initialize hidden source state, but they must not create live platform/contact authority in
+  free-running gameplay without the source scheduler/contact owner.
+- Surface speed/carry must be source-owned. Standing, landing, damage floorhug, aerial landing,
+  platform pass-through, and current-floor continuation should consume the platform velocity only
+  when source would read the moving surface as current support/contact.
+- Runtime gameplay paths must stay heap-allocation-free.
+
+Phase 6 is not complete if any of these remain true:
+
+- `src/` has a moving-platform collision branch whose behavior is keyed on replay row, dataset,
+  trace name, hardcoded record, or undocumented magic coordinate.
+- FoD/Randall behavior is still routed through seed-only height/path restoration when live runtime
+  stage state should own the surface.
+- Static helpers admit moving/deferred lines as a shortcut.
+- Dynamic platform speed/carry is missing or only exposed as debug/viewer state while fighter
+  collision uses a different surface.
+- A retained fallback is justified only as "validation safety" instead of a source owner, explicit
+  Phase 6 out-of-scope boundary, or non-runtime forensic tool.
+
+Required tests:
+
+- Positive and negative synthetic owner tests for each moving platform family:
+  - FoD platform visible/hidden or active/inactive state.
+  - FoD rising/falling/current-target state and surface velocity.
+  - Randall path positions, support active/inactive state, and raw/public ground-id mapping.
+  - landing from air onto moving platform;
+  - grounded carry while standing on moving platform;
+  - platform pass-through / floor skip;
+  - edge/endpoint contact;
+  - wall/ceiling adjacency if the moving surface can produce those contacts;
+  - wrong/stale seed state does not create live contact.
+- Regression tests for existing static Phase 1-5 invariants that are most likely to be disturbed:
+  static hard floor, static ledge/cliff EscapeAir, static platform pass-through, static wall/ceiling
+  ordered collision, and Damage hitlag floor contact.
+- At least one rollout/prefix test per moving-platform family that starts before the terminal
+  contact/carry row and proves the live stage scheduler state is consumed.
+
+Required validation:
+
+- `make build_data`
+- `make build BUILD_FORCE=1`
+- focused moving-platform/static-regression tests
+- `make validate-all`
+- `MSL_DATA_DIR=/mnt/nvme0/projects/melee-sim-light/data make test`
+- `make fmt-check`
+- `git diff --check && git diff --cached --check`
+- `uv run python -m tools.eval.validation_report_diff --before HEAD --after reports/validation --top 220`
+- clean-vs-dirty `rollout_compare` benchmark with the same command used in recent phases
+
+Acceptance:
+
+- No hard or unclassified validation reds. Distribution-only movement may be accepted only if suite
+  totals are neutral/improved and the report explicitly explains the retained movement.
+- No meaningful performance regression without a source-correctness reason and a clear later
+  optimization target.
+- Phase 6 report names deleted, converted, retained, and deferred moving-platform fallbacks.
+- Static Phase 1-5 tests and validation remain clean.
+- Final status is left unstaged/uncommitted for review.
 
 ## Dirty Tree Recommendation
 
