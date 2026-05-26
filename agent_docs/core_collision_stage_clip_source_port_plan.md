@@ -867,6 +867,12 @@ leave every retained suppression/fallback with source-policy accounting. This ph
 new broad mechanics unless a cleanup exposes a small source-backed repair needed to make the static
 system internally consistent.
 
+Phase 5 is not complete if any static ledge/cliff floor publication path still depends on local
+line-shape policy such as flat-only ledge admission, stage-specific ledge bands, or generated-slope
+exceptions. For supported fighter core movement, a generated fighter-solid ledge floor is a normal
+static floor candidate. If the source-shaped floor producer accepts it for the current callback,
+publication must not be rejected solely because the line is sloped or generated.
+
 Do not spawn subagents for this work unless the user explicitly authorizes it in the current turn.
 The implementation agent owns the audit, cleanup, tests, validation, and perf check locally.
 
@@ -894,6 +900,12 @@ Required cleanup:
 - Do not delete a source-policy guard just to reduce count. Retained guards are acceptable only when
   backed by decomp/data/source-owner reasoning and positive/negative tests.
 - Do not route moving-platform runtime behavior here. Moving platforms remain Phase 6.
+- Replace static ledge/cliff floor handoff rules that are expressed as local line-shape filters with
+  source-produced floor-result ownership. EscapeAir/cliff-owned floor handoff must be driven by the
+  same source-shaped `mpColl_80044628_Floor` / `mpColl_80044838_Floor` result used for ordinary floor
+  publication, plus explicit source state such as live cliff floor id, ledge cooldown, locked ECB
+  provenance, strict span, and bottom/root crossing. Do not retain flat-only ledge rules,
+  stage-specific ledge bands, or generated-slope exceptions as static closure.
 
 Phase 5 structured accounting:
 
@@ -928,14 +940,22 @@ none are retained as validation safety.
   `mpColl_80046904`.
 - Why retained after Phases 1-4: Phase 4 routes EscapeAir through the ordered substrate, but
   LandingFallSpecial publication still requires live locked desired ECB, ledge/platform handoff,
-  bottom-sweep, or allow-interrupt ownership.
+  bottom/root floor-producer acceptance, or allow-interrupt ownership. Static cliff-owned generated
+  ledge floors are no longer filtered by flatness or generated-slope shape; the retained guards
+  consume source state only: carried cliff floor id, live ledge cooldown, strict span, and the
+  accepted source bottom/root floor producer. The remaining JumpAerial/EscapeAir high-lift ledge
+  suppressor is accounted as a separate entry-lifetime false-publication guard; it is not the
+  carried-cliff floor publication owner and is covered by adjacent replay-real negatives plus the
+  generic generated-sloped carried-floor prefix positive.
 - Test/proof: `tests/test_platform_action_entry_callback_locks.py`,
-  `tests/test_escapeair_ledge_floor_landing_replay_real_locks.py`.
+  `tests/test_escapeair_ledge_floor_landing_replay_real_locks.py`,
+  `tests/test_platform_collision_runtime.py::test_cliff_owned_sloped_ledge_floor_prefix_lands_from_jumpaerial_escapeair`,
+  and its wrong-owner/expired/off-span/no-crossing boundary companions.
 
 | Kind | Exact guard name(s) |
 | --- | --- |
 | Reject bit | `MSL_MPCOLL_REJECT_ESCAPEAIR_TRANSFORMED_REMAP`, `MSL_MPCOLL_REJECT_JUMPAERIAL_ESCAPEAIR_HIGH_LIFT_LEDGE`, `MSL_MPCOLL_REJECT_JUMPAERIAL_ESCAPEAIR_STATIC_PLATFORM_OVERSTEP`, `MSL_MPCOLL_REJECT_KNEEBEND_ESCAPEAIR_SLOPE`, `MSL_MPCOLL_REJECT_LOCKED_DESIRED_NONPLATFORM_WITHOUT_BOTTOM_SWEEP`, `MSL_MPCOLL_REJECT_LOCKED_DESIRED_PLATFORM_WITHOUT_BOTTOM_SWEEP`, `MSL_MPCOLL_REJECT_LOCKED_ESCAPEAIR_MISSING_BOTTOM_OWNER`, `MSL_MPCOLL_REJECT_SUSTAINED_ESCAPEAIR_SAME_LEDGE_LOCK`, `MSL_MPCOLL_REJECT_SUSTAINED_ESCAPEAIR_SAME_PLATFORM_LOCK` |
-| Suppression | `suppress_cliff_ledge_floor_shallow_projection`, `suppress_escapeair_entry_locked_platform_land`, `suppress_escapeair_jump_entry_platform_from_below`, `suppress_escapeair_late_jump_entry_platform_lifetime`, `suppress_escapeair_locked_desired_bottom_above_floor_land`, `suppress_escapeair_no_lock_vertical_af3_land`, `suppress_escapeair_platform_root_snap_without_bottom_hit`, `suppress_escapeair_root_below_projection`, `suppress_escapeair_transformed_remap_land`, `suppress_jumpaerial_escapeair_entry_land`, `suppress_jumpaerial_escapeair_high_lift_ledge_final_land`, `suppress_jumpaerial_escapeair_static_platform_overstep_final_land`, `suppress_kneebend_escapeair_slope_entry_land`, `suppress_kneebend_escapeair_slope_final_land`, `suppress_ledge_endpoint_entry_projection`, `suppress_locked_desired_nonplatform_without_bottom_sweep`, `suppress_locked_desired_platform_without_bottom_sweep`, `suppress_locked_escapeair_missing_bottom_owner_land`, `suppress_locked_ledge_land`, `suppress_locked_off_end_platform_land`, `suppress_locked_seed6_platform_land`, `suppress_locked_vertical_af3_land`, `suppress_off_end_ledge_remap_projection`, `suppress_projected_escapeair_ledge_without_allow_interrupt`, `suppress_projected_escapeair_missing_bottom_owner_land`, `suppress_projected_escapeair_off_end_ledge_land`, `suppress_projected_escapeair_off_end_platform_land`, `suppress_projected_escapeair_platform_root_snap_without_bottom_hit`, `suppress_projected_escapeair_transformed_platform_land`, `suppress_projected_jumpaerial_escapeair_shallow_ledge_land`, `suppress_same_platform_projection_from_below`, `suppress_seeded_escapeair_first_locked_land`, `suppress_sustained_escapeair_adjacent_ledge_without_allow_interrupt`, `suppress_sustained_escapeair_same_ledge_lock_land`, `suppress_sustained_escapeair_same_platform_lock_land`, `suppress_transformed_remap_projection` |
+| Suppression | `suppress_cliff_ledge_floor_shallow_projection`, `suppress_cliff_ledge_remap_without_live_owner`, `suppress_escapeair_entry_locked_platform_land`, `suppress_escapeair_jump_entry_platform_from_below`, `suppress_escapeair_late_jump_entry_platform_lifetime`, `suppress_escapeair_locked_desired_bottom_above_floor_land`, `suppress_escapeair_no_lock_vertical_af3_land`, `suppress_escapeair_platform_root_snap_without_bottom_hit`, `suppress_escapeair_root_below_projection`, `suppress_escapeair_transformed_remap_land`, `suppress_jumpaerial_escapeair_entry_land`, `suppress_jumpaerial_escapeair_high_lift_ledge_final_land`, `suppress_jumpaerial_escapeair_static_platform_overstep_final_land`, `suppress_kneebend_escapeair_missing_ledge_owner_entry_land`, `suppress_kneebend_escapeair_missing_ledge_owner_final_land`, `suppress_ledge_endpoint_entry_projection`, `suppress_locked_desired_nonplatform_without_bottom_sweep`, `suppress_locked_desired_platform_without_bottom_sweep`, `suppress_locked_escapeair_missing_bottom_owner_land`, `suppress_locked_ledge_land`, `suppress_locked_off_end_platform_land`, `suppress_locked_seed6_platform_land`, `suppress_locked_vertical_af3_land`, `suppress_off_end_ledge_remap_projection`, `suppress_projected_cliff_floor_without_live_owner`, `suppress_projected_escapeair_ledge_without_allow_interrupt`, `suppress_projected_escapeair_missing_bottom_owner_land`, `suppress_projected_escapeair_off_end_ledge_land`, `suppress_projected_escapeair_off_end_platform_land`, `suppress_projected_escapeair_platform_root_snap_without_bottom_hit`, `suppress_projected_escapeair_transformed_platform_land`, `suppress_projected_jumpaerial_escapeair_shallow_ledge_land`, `suppress_same_platform_projection_from_below`, `suppress_seeded_escapeair_first_locked_land`, `suppress_stale_carried_cliff_ledge_land`, `suppress_sustained_escapeair_adjacent_ledge_without_allow_interrupt`, `suppress_sustained_escapeair_same_ledge_lock_land`, `suppress_sustained_escapeair_same_platform_lock_land`, `suppress_transformed_remap_projection` |
 
 #### Phase 5 Owner Accounting: Damage
 
@@ -1024,8 +1044,10 @@ none are retained as validation safety.
 - Owner family: Ledge / cliff.
 - Source function(s): `ftCliffCommon_*`, `ft_80082F28`, `mpColl_80046904`,
   `mpColl_80044628_Floor`.
-- Why retained after Phases 1-4: ledge/cliff floor contact and horizontal locks are consumed by
-  the cliff owner before normal floor publication.
+- Why retained after Phases 1-4: ledge/cliff floor contact and locked cliff-floor publication are
+  consumed by the cliff owner before normal floor publication. The legacy reject bit name remains
+  internal, but the live suppressions are generic to carried static ledge floors and do not branch
+  on stage id, ledge band, flatness, or generated-slope shape.
 - Test/proof: `tests/test_escapeair_ledge_floor_landing_replay_real_locks.py`,
   `tests/test_special_cliffcatch_collision_window_regression.py`,
   `tests/test_platform_action_entry_callback_locks.py`.
@@ -1033,7 +1055,7 @@ none are retained as validation safety.
 | Kind | Exact guard name(s) |
 | --- | --- |
 | Reject bit | `MSL_MPCOLL_REJECT_CLIFF_HORIZONTAL_LEDGE_LOCKED` |
-| Suppression | `suppress_cliff_horizontal_ledge_locked_final_land`, `suppress_cliff_horizontal_ledge_locked_zero_bottom_hit` |
+| Suppression | `suppress_cliff_ledge_locked_final_land`, `suppress_cliff_ledge_locked_zero_bottom_hit` |
 
 #### Phase 5 Owner Accounting: Moving-Platform Deferral
 
@@ -1067,6 +1089,18 @@ none are retained as validation safety.
 Required verification:
 
 - Focused owner-invariant tests for every cleanup that changes behavior.
+- Ledge/cliff owner-invariant tests proving:
+  - generated sloped ledge floors are accepted when the source bottom sweep accepts the carried
+    cliff-owned floor;
+  - a compact Fall -> JumpAerial -> EscapeAir prefix can carry the generated sloped ledge floor
+    through live ledge cooldown and source floor-producer authority;
+  - flat ledge floors are accepted through the same owner path;
+  - wrong carried cliff floor id is rejected;
+  - expired ledge/cliff cooldown is rejected;
+  - off-span candidates are rejected;
+  - no-crossing candidates are rejected;
+  - non-ledge floors are rejected for the cliff-owned handoff path;
+  - the implementation does not branch on stage id, trace name, dataset, or a one-off ledge band.
 - Tests or static checks proving retained suppressions/fallbacks are accounted for in this plan doc
   or `agent_docs/SPEC.md`.
 - Static checks or focused tests proving stale collision comments do not claim unsupported

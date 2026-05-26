@@ -188,6 +188,67 @@ def test_mpcoll_source_comments_do_not_claim_retained_approximation_debt() -> No
             assert path in plan, path
 
 
+def test_cliff_floor_handoff_has_no_stage_or_shape_special_case() -> None:
+    ground_c = _read("src/mpcoll_ground.c")
+
+    for token in (
+        "floor_x_inside_left_ledge_source_band",
+        "floor_line_is_positive_generated_sloped_ledge_span",
+        "yoshi_sloped_ledge_hard_floor_source_band",
+        "fod_escapeair_left_ledge_source_band",
+        "FoD generated ledge",
+        "Yoshi branch",
+        "ported separately",
+    ):
+        assert token not in ground_c
+
+    selected_block = ground_c[
+        ground_c.index("uint8_t cliff_ledge_floor_owner_selected"):
+        ground_c.index("\n      const uint8_t prefer_line_is_platform =")
+    ]
+    for token in ("STAGE_", "stage_id ==", "stage_id !=", "trace", "dataset", "ledge band"):
+        assert token not in selected_block
+    assert "floor_x_within_line_segment_strict" in selected_block
+    assert "floor_line_is_generated_stage_slope" not in selected_block
+    assert "floor_line_is_generated_sloped_ledge" not in selected_block
+
+    bottom_owner_block = ground_c[
+        ground_c.index("const uint8_t hit_line_matches_carried_cliff_ledge_floor"):
+        ground_c.index("const uint8_t escapeair_sustained_floor_handoff")
+    ]
+    assert "!hit_line_is_slope" not in bottom_owner_block
+    assert "hit_line_is_carried_cliff_ledge_floor" in bottom_owner_block
+    assert "hit_line_x_in_strict_segment" in bottom_owner_block
+
+    fresh_jump_block = ground_c[
+        ground_c.index("Fresh JumpAerial -> EscapeAir ledge bottom-sweep handoff"):
+        ground_c.index("uint8_t escapeair_missing_bottom_hard_floor_sweep_owner")
+    ]
+    for token in (
+        "stage_has_height_platform_transform",
+        "STAGE_",
+        "griz.bin",
+        "FoD",
+        "Yoshi",
+        "source band",
+        "ledge band",
+        "generated-slope exception",
+        "flat-only",
+    ):
+        assert token not in fresh_jump_block
+    assert "mpcoll_collect_bottom_sweep_hit" in fresh_jump_block
+    assert "floor_sweep.hit_is_ledge" in fresh_jump_block
+    assert "floor_x_within_line_bounds" in fresh_jump_block
+
+    high_lift_block = ground_c[
+        ground_c.index("const uint8_t suppress_jumpaerial_escapeair_high_lift_ledge_final_land"):
+        ground_c.index("const uint8_t suppress_jumpaerial_escapeair_static_platform_overstep_final_land")
+    ]
+    assert "separate high-lift entry suppression, not the carried-cliff publication owner" in high_lift_block
+    assert "generated sloped carried-floor handoffs have their own prefix proof" in high_lift_block
+    assert "!final_ground_line_is_sloped_ledge" in high_lift_block
+
+
 def test_phase2_mpcoll_substrate_is_not_routed_through_item_or_special_only_sources() -> None:
     # Phase 2 owns common CollData/mpColl substrate, not item-only collision routing or bespoke
     # special-action callbacks. Keep this as a source-scope guard so future helper plumbing cannot

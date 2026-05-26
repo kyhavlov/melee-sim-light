@@ -10,7 +10,12 @@ import pytest
 from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE, read_dataset
 from tools.modelplay.sim_env import build_match_config_array
 from tools.modelplay.state_adapter import STAGE_DEBUG_DTYPE
-from tools.slippi.known_data_artifacts import STAGE_OBJECT_SUPPORT_KIND_YOSHI_SHYGUY, read_mslstg01_v7
+from tools.slippi.known_data_artifacts import (
+    STAGE_METADATA_BIN_BY_STAGE_ID,
+    STAGE_OBJECT_SUPPORT_KIND_YOSHI_SHYGUY,
+    read_mslstg01_v7,
+    stage_metadata_path_for_stage_id,
+)
 from tools.slippi.seed_history import load_shield_tilt_table_meta
 from tests.test_colldata_ecb_substrate import _colldata_ecb_dtype
 
@@ -1351,6 +1356,275 @@ def _run_direct_fall_cliff_exit_ledgedash(
     return rows
 
 
+def _first_static_ledge_floor_fixture(*, sloped: bool):
+    for stage_id in sorted(STAGE_METADATA_BIN_BY_STAGE_ID):
+        stage_path = stage_metadata_path_for_stage_id(stage_id, Path("data"))
+        assert stage_path is not None
+        stage = read_mslstg01_v7(stage_path)
+        stale_floor = next(
+            (
+                seg
+                for seg in stage.segments
+                if int(seg.kind_id) == 0
+                and bool(seg.fighter_solid)
+                and (int(seg.flags) & 2) == 0
+            ),
+            None,
+        )
+        if stale_floor is None:
+            continue
+        for seg in stage.segments:
+            if (
+                int(seg.kind_id) == 0
+                and bool(seg.fighter_solid)
+                and (int(seg.flags) & 2) != 0
+                and ((float(seg.y0) != float(seg.y1)) == sloped)
+            ):
+                return stage_id, seg, stale_floor
+    raise AssertionError("missing static ledge floor fixture")
+
+
+def _metadata_sloped_cliff_floor_prefix_fixture() -> tuple[int, int, int, float, float, int, int]:
+    stage_id, ledge_floor, stale_floor = _first_static_ledge_floor_fixture(sloped=True)
+    min_x = min(float(ledge_floor.x0), float(ledge_floor.x1))
+    max_x = max(float(ledge_floor.x0), float(ledge_floor.x1))
+    min_y = min(float(ledge_floor.y0), float(ledge_floor.y1))
+    midpoint_x = (min_x + max_x) * 0.5
+    left_ledge = midpoint_x < 0.0
+    facing = 1 if left_ledge else 0
+    outside_x = min_x - 1.92 if left_ledge else max_x + 1.92
+    start_y = min_y - 14.4
+    return (
+        stage_id,
+        int(ledge_floor.line_id),
+        int(stale_floor.line_id),
+        outside_x,
+        start_y,
+        facing,
+        1 if left_ledge else -1,
+    )
+
+
+def _run_metadata_sloped_cliff_floor_prefix(
+    *, cliff_floor_id: int | None = None, ledge_cooldown: int = 20
+) -> tuple[list[np.void], int, int]:
+    (
+        stage_id,
+        generated_sloped_ledge_floor_id,
+        stale_floor_id,
+        x,
+        y,
+        facing,
+        inward_sign,
+    ) = _metadata_sloped_cliff_floor_prefix_fixture()
+    carried_floor = generated_sloped_ledge_floor_id if cliff_floor_id is None else cliff_floor_id
+    rows = _run_direct_fall_cliff_exit_ledgedash(
+        stage_id=stage_id,
+        char_id=CHAR_FOX,
+        x=x,
+        y=y,
+        facing=facing,
+        ground_id=stale_floor_id,
+        cliff_floor_id=carried_floor,
+        ledge_cooldown=ledge_cooldown,
+        inputs=[
+            (BUTTON_Y, 96 * inward_sign, -40, 0),
+            (BUTTON_Y, 96 * inward_sign, -40, 0),
+            (BUTTON_Y, 96 * inward_sign, -40, 0),
+            (BUTTON_Y, 96 * inward_sign, -40, 0),
+            (BUTTON_Y | BUTTON_R, 80 * inward_sign, -48, 255),
+            (BUTTON_Y | BUTTON_R, 80 * inward_sign, -48, 255),
+            (BUTTON_Y | BUTTON_R, 80 * inward_sign, -48, 255),
+        ],
+    )
+    return rows, generated_sloped_ledge_floor_id, stale_floor_id
+
+
+def _seed_cliff_owned_floor_handoff(
+    *, sloped: bool, offspan: bool = False, no_crossing: bool = False, current_floor: bool = False
+) -> np.ndarray:
+    stage_id, ledge_floor, stale_floor = _first_static_ledge_floor_fixture(sloped=sloped)
+    min_x = min(float(ledge_floor.x0), float(ledge_floor.x1))
+    max_x = max(float(ledge_floor.x0), float(ledge_floor.x1))
+    x = (min_x + max_x) * 0.5
+    if offspan:
+        x = max_x + 4.0
+    dx = float(ledge_floor.x1) - float(ledge_floor.x0)
+    t = 0.0 if abs(dx) < 1e-6 else (x - float(ledge_floor.x0)) / dx
+    line_y = float(ledge_floor.y0) + ((float(ledge_floor.y1) - float(ledge_floor.y0)) * t)
+
+    seed = _seed_base(stage_id, ACT_ESCAPE_AIR, SM_ESCAPE_AIR, x, line_y - 3.474371)
+    seed["char_id"][0, :2] = np.uint8(CHAR_FOX)
+    seed["action_frame"][0, 0] = np.int16(2)
+    seed["anim_frame_f32"][0, 0] = np.float32(2.0)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["ground_id"][0, 0] = np.uint16(0xFFFF)
+    seed["seed_prev_action_id"][0, 0] = np.uint16(ACT_ESCAPE_AIR)
+    seed["seed_prev_action_frame"][0, 0] = np.int16(1)
+    seed["ecb_lock_timer"][0, 0] = np.uint8(4)
+    seed["ledge_cooldown"][0, 0] = np.uint8(22)
+    seed["cliff_ledge_floor_segment_id_u16"][0, 0] = np.uint16(int(ledge_floor.line_id))
+    seed["floor_sweep_prev_pos_valid_u8"][0, 0] = np.uint8(1)
+    seed["floor_sweep_prev_pos_x_f32"][0, 0] = np.float32(x)
+    seed["floor_sweep_prev_pos_y_f32"][0, 0] = np.float32(line_y + (-1.0 if no_crossing else 1.0))
+    seed["speed_air_x_self"][0, 0] = np.float32(0.0)
+    seed["speed_y_self"][0, 0] = np.float32(-1.598)
+    seed["facing"][0, 0] = np.uint8(0)
+    if current_floor:
+        seed["ground_id"][0, 0] = np.uint16(int(ledge_floor.line_id))
+    return seed
+
+
+@pytest.mark.integration
+def test_cliff_owned_sloped_ledge_floor_prefix_lands_from_jumpaerial_escapeair() -> None:
+    # Compact source-state prefix for the carried cliff-floor owner: start before the terminal row
+    # in Fall with live cliff floor/cooldown state, then route through JumpAerial -> EscapeAir. The
+    # generated sloped ledge floor comes from MSLSTG01 metadata and is admitted only when the current
+    # EscapeAir callback's bottom/root floor producer reaches that carried floor.
+    # refs/melee/src/melee/ft/ftcliffcommon.c::ftCliffCommon_80081370
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_8009AAFC
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpColl_80044838_Floor}
+    rows, carried_floor, _stale_floor = _run_metadata_sloped_cliff_floor_prefix()
+
+    assert any(int(row["action_id"][0]) in (ACT_JUMP_AERIAL_F, ACT_JUMP_AERIAL_B) for row in rows)
+    assert any(int(row["action_id"][0]) == ACT_ESCAPE_AIR for row in rows[:-1])
+    landed = rows[-1]
+    assert int(landed["action_id"][0]) == ACT_LANDING_FALL_SPECIAL
+    assert int(landed["on_ground"][0]) == 1
+    assert int(landed["ground_id"][0]) == carried_floor
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("cliff_floor_delta", "ledge_cooldown"),
+    [
+        (1, 20),
+        (0, 0),
+    ],
+)
+def test_cliff_owned_sloped_ledge_floor_prefix_rejects_wrong_or_expired_owner(
+    cliff_floor_delta: int, ledge_cooldown: int
+) -> None:
+    _rows, carried_floor, _stale_floor = _run_metadata_sloped_cliff_floor_prefix()
+    rows, _expected_floor, _stale_floor = _run_metadata_sloped_cliff_floor_prefix(
+        cliff_floor_id=carried_floor + cliff_floor_delta,
+        ledge_cooldown=ledge_cooldown,
+    )
+
+    final = rows[-1]
+    assert int(final["action_id"][0]) != ACT_LANDING_FALL_SPECIAL
+    assert int(final["on_ground"][0]) == 0
+
+
+@pytest.mark.parametrize("sloped", [False, True])
+def test_cliff_owned_floor_handoff_accepts_static_ledge_floor_source_sweep(sloped: bool) -> None:
+    seed = _seed_cliff_owned_floor_handoff(sloped=sloped)
+    carried_floor = int(seed["cliff_ledge_floor_segment_id_u16"][0, 0])
+    out = _step_once_rollout(seed)
+
+    assert int(out["action_id"][0]) == ACT_LANDING_FALL_SPECIAL
+    assert int(out["on_ground"][0]) == 1
+    assert int(out["ground_id"][0]) == carried_floor
+
+
+@pytest.mark.parametrize("sloped", [False, True])
+def test_cliff_owned_floor_handoff_accepts_current_carried_ledge_floor(
+    sloped: bool,
+) -> None:
+    seed = _seed_cliff_owned_floor_handoff(sloped=sloped, current_floor=True)
+    carried_floor = int(seed["cliff_ledge_floor_segment_id_u16"][0, 0])
+    out = _step_once_rollout(seed)
+
+    assert int(out["action_id"][0]) == ACT_LANDING_FALL_SPECIAL
+    assert int(out["on_ground"][0]) == 1
+    assert int(out["ground_id"][0]) == carried_floor
+
+
+@pytest.mark.parametrize("sloped", [False, True])
+def test_cliff_owned_floor_handoff_rejects_fresh_entry_current_floor_provenance(
+    sloped: bool,
+) -> None:
+    seed = _seed_cliff_owned_floor_handoff(sloped=sloped, current_floor=True)
+    carried_floor = int(seed["cliff_ledge_floor_segment_id_u16"][0, 0])
+    seed["seed_prev_action_id"][0, 0] = np.uint16(ACT_JUMP_AERIAL_F)
+    seed["seed_prev_action_frame"][0, 0] = np.int16(3)
+    seed["action_frame"][0, 0] = np.int16(1)
+    seed["anim_frame_f32"][0, 0] = np.float32(1.0)
+
+    out = _step_once_rollout(seed)
+
+    assert int(out["action_id"][0]) == ACT_ESCAPE_AIR
+    assert int(out["on_ground"][0]) == 0
+    assert int(out["ground_id"][0]) == carried_floor
+
+
+@pytest.mark.parametrize(
+    ("offspan", "no_crossing"),
+    [
+        (True, False),
+        (False, True),
+    ],
+)
+def test_cliff_owned_floor_handoff_rejects_missing_source_floor_producer(
+    offspan: bool, no_crossing: bool
+) -> None:
+    seed = _seed_cliff_owned_floor_handoff(sloped=True, offspan=offspan, no_crossing=no_crossing)
+    carried_floor = int(seed["cliff_ledge_floor_segment_id_u16"][0, 0])
+    out = _step_once_rollout(
+        seed
+    )
+
+    assert int(out["ground_id"][0]) != carried_floor
+    if no_crossing:
+        assert int(out["action_id"][0]) == ACT_ESCAPE_AIR
+        assert int(out["on_ground"][0]) == 0
+
+
+@pytest.mark.parametrize(
+    ("cliff_floor_id", "ledge_cooldown"),
+    [
+        (2, 20),
+        (6, 0),
+        (3, 20),
+        (0xFFFF, 20),
+    ],
+)
+def test_cliff_owned_floor_handoff_rejects_wrong_expired_or_nonledge_owner(
+    cliff_floor_id: int, ledge_cooldown: int
+) -> None:
+    rows = _run_direct_fall_cliff_exit_ledgedash(
+        stage_id=STAGE_YOSHI,
+        char_id=CHAR_FOX,
+        x=57.91999816894531,
+        y=-17.9,
+        facing=0,
+        ground_id=3,
+        cliff_floor_id=cliff_floor_id,
+        ledge_cooldown=ledge_cooldown,
+        inputs=[
+            (0, 0, -40, 0),
+            (0, 0, -40, 0),
+            (BUTTON_Y, -40, -40, 0),
+            (BUTTON_Y, -40, -40, 0),
+            (BUTTON_Y, -40, -40, 0),
+            (BUTTON_Y, -40, -40, 0),
+            (BUTTON_Y | BUTTON_R, -40, -40, 255),
+            (BUTTON_Y | BUTTON_R, -40, -40, 255),
+            (BUTTON_Y | BUTTON_R, -40, -40, 255),
+            (BUTTON_Y | BUTTON_R, -40, -40, 255),
+            (BUTTON_Y | BUTTON_R, -40, -40, 255),
+            (BUTTON_Y | BUTTON_R, -40, -40, 255),
+            (BUTTON_Y | BUTTON_R, -40, -40, 255),
+        ],
+    )
+
+    final = rows[-1]
+    assert int(final["action_id"][0]) != ACT_LANDING_FALL_SPECIAL
+    assert int(final["on_ground"][0]) == 0
+
+
 @pytest.mark.integration
 def test_battlefield_ledge_drop_jump_airdodge_uses_source_cliff_floor_owner() -> None:
     # Manual modelplay repro:
@@ -1400,8 +1674,8 @@ def test_battlefield_ledge_drop_jump_airdodge_uses_source_cliff_floor_owner() ->
 @pytest.mark.integration
 def test_direct_fall_reseed_carries_seeded_cliff_floor_through_jump_and_escapeair() -> None:
     # Direct one-step seeds can start after CliffWait has already released into Fall. The hidden
-    # floor owner must come from MslSeed, then carry through Fall -> JumpAerial -> EscapeAir while
-    # x2064 ledge cooldown remains live.
+    # floor owner must come from MslSeed and carry through Fall -> JumpAerial -> EscapeAir while
+    # the source bottom/root floor producer accepts the carried ledge floor.
     rows = _run_direct_fall_cliff_exit_ledgedash(
         stage_id=STAGE_YOSHI,
         char_id=CHAR_FOX,
@@ -1432,17 +1706,12 @@ def test_direct_fall_reseed_carries_seeded_cliff_floor_through_jump_and_escapeai
 
 
 @pytest.mark.integration
-def test_yoshi_right_ledge_drop_jump_airdodge_uses_seeded_cliff_floor_over_stale_main_floor() -> None:
-    # Modelplay repro:
-    # /home/kyle/Downloads/ledge_dash_though_ys.msltrace.json, Fox around frames 6022-6034.
-    #
+def test_restored_cliff_floor_without_live_source_producer_stays_airborne() -> None:
     # Source owner:
-    # - CliffCatch/CliffWait store `mv.co.cliff.ledge_id`, then CliffWait drop carries the
-    #   source CollData floor owner while x2064 ledge cooldown is live.
-    # - On Yoshi's Story, the right cliff floor is the generated sloped ledge span (MSLSTG01 line
-    #   6). Slippi-visible lastGroundId can still report main floor line 3 during the cliff-exit
-    #   JumpAerial -> EscapeAir chain, but ftCo_EscapeAir_Coll still reaches ft_80082C74 ->
-    #   mpColl_800471F8 with the source cliff floor id.
+    # - CliffCatch/CliffWait store `mv.co.cliff.ledge_id`, and x2064 ledge cooldown proves that the
+    #   cliff-owned floor lane is still live.
+    # - That restored lane is provenance, not publication. EscapeAir_Coll may publish the carried
+    #   floor only after the current callback's mpColl floor producer accepts the candidate.
     # refs/melee/src/melee/ft/ftcliffcommon.c::ftCliffCommon_80081370
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_8009AAFC
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
@@ -1478,9 +1747,8 @@ def test_yoshi_right_ledge_drop_jump_airdodge_uses_seeded_cliff_floor_over_stale
     assert int(before["action_id"][0]) == ACT_ESCAPE_AIR
     assert int(before["on_ground"][0]) == 0
     assert int(before["ground_id"][0]) == 3
-    assert int(landed["action_id"][0]) == ACT_LANDING_FALL_SPECIAL
-    assert int(landed["on_ground"][0]) == 1
-    assert int(landed["ground_id"][0]) == 6
+    assert int(landed["action_id"][0]) == ACT_ESCAPE_AIR
+    assert int(landed["on_ground"][0]) == 0
 
 
 @pytest.mark.parametrize(
@@ -1489,11 +1757,11 @@ def test_yoshi_right_ledge_drop_jump_airdodge_uses_seeded_cliff_floor_over_stale
         (0xFFFF, 20, ACT_ESCAPE_AIR, 0),
         (6, 0, ACT_CLIFF_WAIT, 0),
         (2, 20, ACT_ESCAPE_AIR, 0),
-        (6, 20, ACT_LANDING_FALL_SPECIAL, 1),
+        (6, 20, ACT_ESCAPE_AIR, 0),
     ],
 )
 @pytest.mark.integration
-def test_yoshi_right_ledge_stale_main_floor_requires_matching_cliff_floor_owner(
+def test_restored_cliff_floor_requires_live_source_producer(
     cliff_floor_id: int, ledge_cooldown: int, expected_action: int, expected_grounded: int
 ) -> None:
     rows = _run_direct_fall_cliff_exit_ledgedash(
@@ -1533,7 +1801,7 @@ def test_yoshi_right_ledge_stale_main_floor_requires_matching_cliff_floor_owner(
         (0xFFFF, 20, ACT_ESCAPE_AIR, 0),  # direct later reseed without the hidden lane
         (2, 0, ACT_ESCAPE_AIR, 0),  # cooldown expired
         (6, 20, ACT_ESCAPE_AIR, 0),  # wrong-side reconstructed owner
-        (2, 20, ACT_LANDING_FALL_SPECIAL, 1),  # same-side seeded ledge floor owns handoff
+        (2, 20, ACT_LANDING_FALL_SPECIAL, 1),  # same-side carried ledge floor owns handoff
     ],
 )
 @pytest.mark.integration
@@ -5730,122 +5998,6 @@ def test_fd_damagefly_hard_floor_off_end_does_not_use_platform_endpoint_snap() -
     assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_DAMAGE_FLY_N
     assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 0
     assert int(out["ground_id"][p]) == int(ref["ground_id"][p]) == 1
-
-
-@pytest.mark.integration
-def test_fod_escapeair_locked_ledge_requires_allow_interrupt_replay_real() -> None:
-    # PTE:6401 is a sustained EscapeAir row over FoD's left generated ledge. The locked
-    # CollData/ECB seed is live, but the root is still outside mpColl's left-ledge 5-unit source
-    # band and raw fp+0x2218 allow_interrupt is clear, so the generic projection to ledge segment 3
-    # is not source-owned yet and vanilla remains airborne.
-    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
-    # refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
-    # refs/melee/src/melee/mp/mpcoll.c::mpColl_80044164
-    # refs/melee/src/melee/ft/types.h::Fighter::allow_interrupt (fp+0x2218:0)
-    path = (
-        Path(__file__).resolve().parents[1]
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.msl"
-    )
-    if not path.exists():
-        pytest.skip(f"missing local dataset: {path}")
-
-    ds = read_dataset(str(path))
-    out = _step_one_replay_row(ds, 6401)
-    ref = ds.samples[6401]["ref_t1"]
-    seed = ds.samples[6401]["seed_t"]
-    p = 1
-
-    assert int(seed["action_id"][p]) == ACT_ESCAPE_AIR
-    assert int(seed["seed_prev_action_id"][p]) == ACT_ESCAPE_AIR
-    assert int(seed["ecb_lock_timer"][p]) == 3
-    assert int(seed["state_flags"][p][0]) & 0x80 == 0
-    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_ESCAPE_AIR
-    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 0
-    assert int(out["ground_id"][p]) == int(ref["ground_id"][p]) == 5
-
-
-@pytest.mark.integration
-def test_fod_escapeair_ledge_source_band_lands_without_allow_interrupt_replay_real() -> None:
-    # EWT:9125 is the adjacent positive boundary for the same sustained EscapeAir locked-ECB owner:
-    # raw allow_interrupt is still clear, but the callback root has moved into the left ledge's
-    # source 5-unit band, so the restored cliff floor is the owned floor result.
-    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
-    # refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
-    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044164,mpColl_800471F8}
-    path = (
-        Path(__file__).resolve().parents[1]
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.msl"
-    )
-    if not path.exists():
-        pytest.skip(f"missing local dataset: {path}")
-
-    ds = read_dataset(str(path))
-    out = _step_one_replay_row(ds, 9125)
-    ref = ds.samples[9125]["ref_t1"]
-    seed = ds.samples[9125]["seed_t"]
-    p = 1
-
-    assert int(seed["action_id"][p]) == ACT_ESCAPE_AIR
-    assert int(seed["seed_prev_action_id"][p]) == ACT_ESCAPE_AIR
-    assert int(seed["ecb_lock_timer"][p]) == 3
-    assert int(seed["state_flags"][p][0]) & 0x80 == 0
-    assert int(seed["cliff_ledge_floor_segment_id_u16"][p]) == 3
-    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_LANDING_FALL_SPECIAL
-    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 1
-    assert int(out["ground_id"][p]) == int(ref["ground_id"][p]) == 3
-
-
-@pytest.mark.integration
-def test_fod_escapeair_left_ledge_source_band_boundary_stays_airborne_replay_real() -> None:
-    # PTE:6402 is one frame before the source-band landing: it is still just outside the source
-    # 5-unit left-ledge band, so the same restored cliff floor must not publish LandingFallSpecial.
-    path = (
-        Path(__file__).resolve().parents[1]
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ParallelTemptingElk.msl"
-    )
-    if not path.exists():
-        pytest.skip(f"missing local dataset: {path}")
-
-    ds = read_dataset(str(path))
-    out = _step_one_replay_row(ds, 6402)
-    ref = ds.samples[6402]["ref_t1"]
-    seed = ds.samples[6402]["seed_t"]
-    p = 1
-
-    assert int(seed["action_id"][p]) == ACT_ESCAPE_AIR
-    assert int(seed["seed_prev_action_id"][p]) == ACT_ESCAPE_AIR
-    assert int(seed["ecb_lock_timer"][p]) == 2
-    assert int(seed["cliff_ledge_floor_segment_id_u16"][p]) == 3
-    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_ESCAPE_AIR
-    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 0
-    assert int(out["ground_id"][p]) == int(ref["ground_id"][p]) == 5
-
-
-@pytest.mark.integration
-def test_fod_escapeair_allow_interrupt_ledge_handoff_still_lands_replay_real() -> None:
-    # EWT:2683 is the matching positive boundary: same sustained EscapeAir / locked ECB shape,
-    # but raw fp+0x2218 allow_interrupt is live, so the source floor handoff publishes
-    # LandingFallSpecial on the generated ledge.
-    path = (
-        Path(__file__).resolve().parents[1]
-        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/ElatedWearyTermite.msl"
-    )
-    if not path.exists():
-        pytest.skip(f"missing local dataset: {path}")
-
-    ds = read_dataset(str(path))
-    out = _step_one_replay_row(ds, 2683)
-    ref = ds.samples[2683]["ref_t1"]
-    seed = ds.samples[2683]["seed_t"]
-    p = 1
-
-    assert int(seed["action_id"][p]) == ACT_ESCAPE_AIR
-    assert int(seed["seed_prev_action_id"][p]) == ACT_ESCAPE_AIR
-    assert int(seed["ecb_lock_timer"][p]) == 3
-    assert int(seed["state_flags"][p][0]) & 0x80
-    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_LANDING_FALL_SPECIAL
-    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 1
-    assert int(out["ground_id"][p]) == int(ref["ground_id"][p]) == 3
 
 
 @pytest.mark.integration
