@@ -6052,8 +6052,13 @@ BODY collision-space residual split and rejected seed bridge:
   relative fighter root positions in `ftColl_8007699C` inlineA0/inlineA1, not by replay-visible
   scalar facing. Teacher-forced ReboundStop hitlag-tail seeds reconstruct the pending xE8/rate
   lanes from the future visible Rebound transition; these are explicit non-causal one-step lanes.
-  Runtime clank entry writes both causally from `dmg.x191C`. This fixes FSP:5466, HHG:8674,
-  FSP:467, and the FSP:472/473 Rebound transition without a BODY admission bridge or row-id branch.
+  Runtime clank entry writes both causally from `dmg.x191C`. On Rebound anim end,
+  `ftCo_Rebound_Anim -> ft_8008A2BC -> ft_8008A348` also runs the ordinary
+  `ftCommon_8007D7FC` air-to-ground restoration before Wait when `ground_or_air` is still air;
+  MSL mirrors that only for a valid carried floor line, including the clamped
+  `self_vel.x -> gr_vel` handoff and aligned public X velocity lanes. This prevents a stale-airborne
+  Wait publication while avoiding invalid floor provenance. This fixes FSP:5466, HHG:8674, FSP:467,
+  and the FSP:472/473 Rebound transition without a BODY admission bridge or row-id branch.
 - GuardSetOff shield hits split the hidden shield-damage owners:
   `ftColl_80076CBC` writes `x19A4` as the max integer hit damage for hitlag/shieldstun, while
   `Fighter_ProcessHit_8006D1EC` consumes the separate `x19A0_shieldDamageTaken` accumulator for

@@ -210,6 +210,82 @@ def test_rebound_frame0_uses_callback_rate_and_ground_friction() -> None:
     assert float(out["speed_ground_x_self"][0]) == pytest.approx(expected_speed, abs=2e-6)
 
 
+def test_rebound_anim_end_wait_restores_ground_from_source_carried_floor() -> None:
+    seed = _seed_base()
+    fox = _fox()
+
+    seed["action_id"][0, 0] = np.uint16(ACT_REBOUND)
+    seed["animation_index"][0, 0] = np.uint32(SM_REBOUND)
+    seed["action_frame"][0, 0] = np.int16(50)
+    seed["anim_frame_f32"][0, 0] = np.float32(1000.0)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["ground_id"][0, 0] = np.uint16(1)
+    seed["pos_y"][0, 0] = np.float32(0.0001)
+    seed["ecb_lock_timer"][0, 0] = np.uint8(3)
+    seed["fall_fast"][0, 0] = np.uint8(1)
+    seed["jumps_left"][0, 0] = np.uint8(0)
+
+    out = _step_once(seed)
+
+    assert int(out["action_id"][0]) == ACT_WAIT
+    assert int(out["animation_index"][0]) == SM_WAIT1_0
+    assert int(out["on_ground"][0]) == 1
+    assert int(out["ground_id"][0]) == 1
+    assert int(out["jumps_left"][0]) == int(fox["max_jumps"])
+
+
+def test_rebound_anim_end_wait_syncs_ground_velocity_from_air_self_velocity() -> None:
+    seed = _seed_base()
+    fox = _fox()
+    common = _common()
+    air_x = 5.0
+    old_ground_x = -1.75
+    expected_entry_ground_x = float(fox["ground_max_horizontal_velocity"])
+    expected_friction = float(fox["gr_friction"])
+    if abs(expected_entry_ground_x) > float(fox["walk_max_vel"]):
+        expected_friction *= float(common["high_speed_friction_mul"])
+    expected_post_phys_ground_x = expected_entry_ground_x - expected_friction
+
+    seed["action_id"][0, 0] = np.uint16(ACT_REBOUND)
+    seed["animation_index"][0, 0] = np.uint32(SM_REBOUND)
+    seed["action_frame"][0, 0] = np.int16(50)
+    seed["anim_frame_f32"][0, 0] = np.float32(1000.0)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["ground_id"][0, 0] = np.uint16(1)
+    seed["pos_y"][0, 0] = np.float32(0.0001)
+    seed["speed_air_x_self"][0, 0] = np.float32(air_x)
+    seed["speed_ground_x_self"][0, 0] = np.float32(old_ground_x)
+
+    out = _step_once(seed)
+
+    assert int(out["action_id"][0]) == ACT_WAIT
+    assert int(out["on_ground"][0]) == 1
+    assert float(out["speed_ground_x_self"][0]) == pytest.approx(
+        expected_post_phys_ground_x, abs=2e-6
+    )
+    assert float(out["speed_air_x_self"][0]) == pytest.approx(expected_post_phys_ground_x, abs=2e-6)
+
+
+def test_rebound_anim_end_wait_does_not_publish_without_valid_carried_floor() -> None:
+    seed = _seed_base()
+    fox = _fox()
+
+    seed["action_id"][0, 0] = np.uint16(ACT_REBOUND)
+    seed["animation_index"][0, 0] = np.uint32(SM_REBOUND)
+    seed["action_frame"][0, 0] = np.int16(50)
+    seed["anim_frame_f32"][0, 0] = np.float32(1000.0)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["ground_id"][0, 0] = np.uint16(0xFFFF)
+    seed["pos_y"][0, 0] = np.float32(0.0001)
+
+    out = _step_once(seed)
+
+    assert int(out["action_id"][0]) == ACT_WAIT
+    assert int(out["animation_index"][0]) == SM_WAIT1_0
+    assert int(out["on_ground"][0]) == 0
+    assert int(out["ground_id"][0]) == 0xFFFF
+
+
 @pytest.mark.parametrize(
     ("p0_pos_x", "p1_pos_x", "p0_facing", "p1_facing"),
     [
