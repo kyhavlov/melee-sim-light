@@ -10626,7 +10626,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
           // first, then retries a floor sweep with the carried floor as `floor_skip`; a live moving
           // FoD platform can therefore replace sustained Landing's carried hard-floor CollData.
           // Rows with only seed-provided FoD platform height and no live scheduler/contact source
-          // restore carried floor here; full moving-platform scheduling remains Phase 6.
+          // restore carried floor here; this remains a source-authority guard against stale sparse
+          // height seeds, not a moving-platform deferral.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::ftCo_Landing_Coll
           // refs/melee/src/melee/ft/ft_081B.c::{ft_80084280,ft_800844EC}
           // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor

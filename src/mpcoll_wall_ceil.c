@@ -97,10 +97,31 @@ uint8_t mpcoll_get_speed_floor_static(const MslBatch* batch, int batch_index, si
   }
   if (caps.platform_transform_kind == (uint8_t)MSL_STAGE_PLATFORM_TRANSFORM_HEIGHT ||
       caps.platform_transform_kind == (uint8_t)MSL_STAGE_PLATFORM_TRANSFORM_RANDALL) {
-    // Dynamic endpoint speed is mpGetSpeed-owned moving-platform behavior, explicitly deferred
-    // from Phase 2. Static-y support records still have zero endpoint motion.
+    // Phase-6 moving floor speed uses the same source-owned platform packet as fighter support
+    // carry. Static-y support records still have zero endpoint motion.
     // refs/melee/src/melee/mp/mplib.c::{mpGetSpeed,mpLineSetPos}
-    return 0u;
+    // refs/melee/src/melee/gr/grizumi.c::{grIzumi_801CCBDC,grIzumi_801CC358}
+    // refs/melee/src/melee/gr/grstory.c::{grStory_801E3370,grStory_801E33E0}
+    const MslStageFloorGraph* graph =
+        stage_collision_get_floor_graph(batch->state.stage_id[(size_t)batch_index]);
+    const int line_idx =
+        stage_collision_floor_line_index(batch->state.stage_id[(size_t)batch_index], segment_i);
+    if (graph == NULL || line_idx < 0 || (size_t)line_idx >= graph->line_count) {
+      return 0u;
+    }
+    MslStageMovingSurfaceState surface = {0};
+    if (!stage_collision_floor_line_moving_surface_state(
+            batch, batch_index, &graph->lines[(size_t)line_idx], &surface) ||
+        surface.valid == 0u || surface.source_trusted == 0u) {
+      return 0u;
+    }
+    if (out_x != NULL) {
+      *out_x = surface.velocity_x;
+    }
+    if (out_y != NULL) {
+      *out_y = surface.velocity_y;
+    }
+    return 1u;
   }
   return mpcoll_static_speed_zero(1u, out_x, out_y);
 }

@@ -25,12 +25,12 @@
 //   - refs/melee/src/common_structs.h (Collide_* env flag bit values)
 void mpcoll_wall_ceil_apply(MslBatch* batch);
 
-// Static legal-stage portions of mpCollGetSpeedFloor/Ceiling and mpColl_IsOnPlatform.
+// Legal-stage portions of mpCollGetSpeedFloor/Ceiling and mpColl_IsOnPlatform.
 //
 // Source speed helpers call mpGetSpeed(surface.index, coll->ecb.top, out), which returns the
 // current-line motion delta from the previous mpLib endpoint positions. Static legal-stage lines
-// have no endpoint motion, so these helpers return a valid zero speed for active static lines and
-// leave dynamic platform speed to the later moving-platform phase.
+// have no endpoint motion, and FoD/Randall transformed floor lines consume the shared moving-surface
+// packet used by fighter support/carry.
 //
 // Wall speed helpers below are debug-visible only while MSL still models wall contact as a singleton
 // wall_kind/wall_id rather than source CollData.left_facing_wall and right_facing_wall records.

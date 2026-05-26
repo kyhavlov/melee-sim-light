@@ -4275,6 +4275,55 @@ static PyObject* msl_stage_floor_segment_py(PyObject* self, PyObject* args) {
       idx);
 }
 
+static PyObject* msl_debug_stage_moving_floor_surface_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  int batch_index = 0;
+  unsigned int segment_i_u = 0;
+  if (!PyArg_ParseTuple(args, "OiI", &handle_obj, &batch_index, &segment_i_u)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+  if (batch_index < 0 || batch_index >= h->batch->batch_size) {
+    PyErr_SetString(PyExc_IndexError, "batch_index out of range");
+    return NULL;
+  }
+
+  const uint32_t stage_id = h->batch->state.stage_id[(size_t)batch_index];
+  const MslStageFloorGraph* graph = stage_collision_get_floor_graph(stage_id);
+  if (graph == NULL) {
+    Py_RETURN_NONE;
+  }
+  const int idx = stage_collision_floor_line_index(stage_id, (uint16_t)segment_i_u);
+  if (idx < 0 || (size_t)idx >= graph->line_count) {
+    Py_RETURN_NONE;
+  }
+  MslStageMovingSurfaceState surface = {0};
+  if (!stage_collision_floor_line_moving_surface_state(h->batch, batch_index,
+                                                       &graph->lines[(size_t)idx], &surface)) {
+    Py_RETURN_NONE;
+  }
+  return Py_BuildValue(
+      "{s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:i,s:f,s:f,s:f,s:f,s:f,s:f,s:f,s:"
+      "f,s:f}",
+      "valid", (int)surface.valid, "active", (int)surface.active, "visible", (int)surface.visible,
+      "current_owned", (int)surface.current_owned, "source_trusted", (int)surface.source_trusted,
+      "reached_hidden_this_step", (int)surface.reached_hidden_this_step, "platform_transform_kind",
+      (int)surface.platform_transform_kind, "platform_transform_id",
+      (int)surface.platform_transform_id, "stage_object_support_kind",
+      (int)surface.stage_object_support_kind, "segment_i", (int)surface.segment_i, "joint_id",
+      (int)surface.joint_id, "source_frame", (int)surface.source_frame, "source_phase",
+      (int)surface.source_phase, "source_timer", (int)surface.source_timer, "source_bits",
+      (int)surface.source_bits, "source_target", (double)surface.source_target, "x0",
+      (double)surface.x0, "y0", (double)surface.y0, "x1", (double)surface.x1, "y1",
+      (double)surface.y1, "normal_x", (double)surface.normal_x, "normal_y",
+      (double)surface.normal_y, "velocity_x", (double)surface.velocity_x, "velocity_y",
+      (double)surface.velocity_y);
+}
+
 static PyObject* msl_stage_topology_flags_py(PyObject* self, PyObject* args) {
   (void)self;
   unsigned int stage_id_u = 0;
@@ -6650,6 +6699,9 @@ static PyMethodDef methods[] = {
      "debug_write_processed_input(handle, out_bytes)"},
     {"debug_write_stage_state", msl_debug_write_stage_state, METH_VARARGS,
      "debug_write_stage_state(handle, out_bytes)"},
+    {"debug_stage_moving_floor_surface", msl_debug_stage_moving_floor_surface_py, METH_VARARGS,
+     "debug_stage_moving_floor_surface(handle, batch_index, segment_i) -> transformed floor "
+     "surface packet or None"},
     {"debug_write_internals", msl_debug_write_internals, METH_VARARGS,
      "debug_write_internals(handle, out_bytes)"},
     {"debug_write_collision_contacts", msl_debug_write_collision_contacts, METH_VARARGS,

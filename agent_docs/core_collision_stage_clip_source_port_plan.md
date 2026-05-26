@@ -1080,11 +1080,11 @@ none are retained as validation safety.
 | `msl_mpcoll_80044628_floor_wall_adjacent_fallback` and adjacent wall/ceiling fallback comments | RETAINED SOURCE-POLICY | `mpColl_80044628_Floor` and `mpColl_8004ACE4` retry through connected floor/wall graph state after ordered wall/ceiling side bits. The path is bounded to source side bits, endpoint tolerance, and static graph lines. |
 | `msl_mpcoll_80044838_floor_edge_snap_from_bottom` hard-floor off-end rejection | RETAINED SOURCE-POLICY | This helper owns platform endpoint admission only. Hard-floor off-end rows stay on ordinary bottom-sweep/direct publication because their source edge snap needs current mpColl scratch floor ownership, not this platform endpoint helper. |
 | `mpcoll_action_uses_retained_ft80081d0c_air_collision` | RETAINED LATER-OWNER FALLBACK | AttackAir and EscapeAir route through Phase 4 `class3_bits`; the retained broad `FT80081D0C_AIR_COLL` wrapper is only for later/non-Phase4 owners sharing `ft_80082C74 -> ft_80081D0C -> mpColl_800471F8`. It is not accepted as Phase 4 or Phase 5 static closure evidence. |
-| Static ledge-grab ECB and prev/cur sampling in `src/mpcoll_env.c` | CONVERTED COMMENT / RETAINED SOURCE-STATE | Stale approximation wording was replaced with explicit MSL state lanes: ISO ECB-table samples and within-frame collision-stage prev/cur positions used by `mpColl_80044164`, `mpColl_800443C4`, and `mpColl_80046904`. Full per-substep/moving-platform history remains Phase 6. |
+| Static ledge-grab ECB and prev/cur sampling in `src/mpcoll_env.c` | CONVERTED COMMENT / RETAINED SOURCE-STATE | Stale approximation wording was replaced with explicit MSL state lanes: ISO ECB-table samples and within-frame collision-stage prev/cur positions used by `mpColl_80044164`, `mpColl_800443C4`, and `mpColl_80046904`. |
 | Landing-contact root-Y helper and generic floor-loss Fall branch in `src/locomotion.c` | CONVERTED COMMENT / RETAINED SOURCE-OWNER | Old bridge/unmodeled wording was replaced. Landing root-Y is bounded to callbacks that already published floor contact; explicit ledge-slip owners enter MissFoot before the generic `ftCo_Fall_Enter` branch. |
-| Seed-only FoD platform height restore in `src/mpcoll_ground.c` | RETAINED PHASE-6 DEFERRAL | Rows with only seed-provided FoD platform height and no live scheduler/contact source restore carried floor; full moving-platform scheduling remains Phase 6. |
+| Seed-only FoD platform height restore in `src/mpcoll_ground.c` | RETAINED SOURCE-AUTHORITY GUARD | Rows with only seed-provided FoD platform height and no live scheduler/contact source restore carried floor. Phase 6 keeps this as the source-shaped stale-sparse-height rejection boundary while live grIzumi scheduler/contact state enters through the moving-surface packet. |
 | Remaining `fallback`, `bridge`, `compat`, and `temporary` wording in `src/locomotion.c`, `src/fighter_callbacks.c`, and `src/damage_terminal_owner.h` | RETAINED NON-STATIC OWNER ACCOUNTING | Remaining occurrences are random idle selection, throw/combat/IASA/match-flow/BODY, or one-step seed ownership comments outside static legal-stage collision publication. They are not accepted as static collision closure evidence and keep nearby decomp/source comments. |
-| `stage_collision_stage_has_deferred_static_floor_transform` and `deferred_*` stage metadata helpers | RETAINED PHASE-6 DEFERRAL | These classify transformed/static floor metadata for source-policy routing and tests. They do not route moving-platform runtime behavior in Phase 5. |
+| `stage_collision_stage_has_deferred_static_floor_transform` and `deferred_*` stage metadata helpers | RETAINED STATIC-QUERY CLASSIFIER | These classify floor transform metadata for static query exclusion and tests. After Phase 6, transformed lines are still deferred from `stage_collision_static_query`, but live FoD/Randall runtime behavior is routed through the moving-surface packet. |
 
 Required verification:
 
@@ -1235,6 +1235,61 @@ Acceptance:
 - Phase 6 report names deleted, converted, retained, and deferred moving-platform fallbacks.
 - Static Phase 1-5 tests and validation remain clean.
 - Final status is left unstaged/uncommitted for review.
+
+#### Phase 6 Completion Report
+
+Status: COMPLETE by this document's criteria.
+
+Converted:
+
+- FoD and Randall generated floor transforms now route through
+  `MslStageMovingSurfaceState` / `stage_collision_floor_line_moving_surface_state`, which exposes
+  world endpoints, normal, segment id, joint id, support/transform kind, visibility/active state,
+  source clock/state, and surface velocity.
+- `stage_collision_floor_line_world`, `stage_collision_floor_line_motion_delta`, debug
+  moving-surface inspection, runtime carry, and debug `mpCollGetSpeedFloor` state consume that same
+  packet path rather than separate FoD/Randall endpoint logic.
+- Previous Phase-6 comments for seed-only FoD platform height restore and
+  `stage_collision_stage_has_deferred_static_floor_transform` were reclassified as source-authority
+  guard/static-query classifier wording, not unfinished moving-platform runtime work.
+
+Retained:
+
+- `stage_collision_static_query` still excludes height-transformed FoD and Randall path lines.
+  Moving floors are admitted only through the runtime moving-surface packet/source owner.
+- Sparse seed-only FoD platform heights without live scheduler, same-step contact, or current
+  source bits still restore carried floor in sustained Landing-style paths. This is retained as a
+  stale-provenance rejection guard, not a validation-safety fallback.
+- Wall/ceiling speed helpers remain static because supported legal-stage MSLSTG01 data does not
+  generate moving wall or ceiling surfaces; moving floor speed is handled by the packet.
+
+Deleted:
+
+- No obsolete moving-platform branch was deleted in this closure pass; existing behavior was already
+  mostly source-shaped and was consolidated behind the shared packet.
+
+Deferred:
+
+- Runtime `mpBoundingCheck` `TooFar` joint mutation remains outside this moving floor/platform
+  closure. No FoD/Randall moving-floor publication or support/carry fallback remains deferred.
+
+Validation:
+
+- `make build_data`
+- `make build BUILD_FORCE=1`
+- focused FoD/Randall/moving-platform/static-regression tests
+- `make validate-all`
+- `MSL_DATA_DIR=/mnt/nvme0/projects/melee-sim-light/data make test`
+- `make fmt-check`
+- `git diff --check && git diff --cached --check`
+- `uv run python -m tools.eval.validation_report_diff --before HEAD --after reports/validation --top 220`
+  reported no suite total changes, no replay regressions, no hard reds, no distribution-only reds,
+  and no unclassified regressions.
+- Clean-vs-dirty light `rollout_compare` bench, same command/env
+  (`MSL_DATA_DIR=/mnt/nvme0/projects/melee-sim-light/data make bench-sim
+  ARGS='--mode rollout_compare --batch 512 --frames 5000'`): clean HEAD `2714.505 ns/env_step`,
+  dirty Phase 6 packet `2722.674 ns/env_step`, same checksum `920057968263732859`, retained
+  +0.30% ns/env.
 
 ## Dirty Tree Recommendation
 

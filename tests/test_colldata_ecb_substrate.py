@@ -22,6 +22,7 @@ SM_ESCAPE_AIR = 44
 
 CHAR_FOX = 1
 STAGE_FD = 32
+STAGE_FOD = 2
 STAGE_BATTLEFIELD = 31
 STAGE_YOSHI = 8
 
@@ -513,6 +514,35 @@ def test_static_mpcoll_platform_and_floor_speed_helpers_use_coll_surface() -> No
     assert int(snap_hard["floor_speed_valid"][0]) == 1
     assert float(snap_hard["floor_speed_x"][0]) == pytest.approx(0.0)
     assert float(snap_hard["floor_speed_y"][0]) == pytest.approx(0.0)
+
+
+def test_moving_mpcoll_floor_speed_helper_uses_shared_surface_packet() -> None:
+    # Dynamic mpCollGetSpeedFloor debug state must read the same FoD/Randall surface packet as
+    # runtime support carry, not the old static-only zero-speed substrate.
+    height = np.float32(17.100000381469727)
+    velocity = np.float32(-0.1)
+    fod_seed = _seed_base(STAGE_FOD, ACT_WAIT, SM_WAIT1_0, -35.0, 1.125 + float(height) * 0.75)
+    fod_seed["on_ground"][0, 0] = np.uint8(1)
+    fod_seed["ground_id"][0, 0] = np.uint16(0)
+    fod_seed["stage_fod_platform_height_f32"][0, 1] = height
+    fod_seed["stage_fod_platform_height_valid_u8"][0, 1] = np.uint8(1)
+    fod_seed["stage_fod_platform_velocity_f32"][0, 1] = velocity
+    fod_seed["stage_fod_platform_velocity_valid_u8"][0, 1] = np.uint8(1)
+    fod_seed["stage_fod_platform_height_source_u8"][0, 1] = np.uint8(4)
+    fod_snap = _read_colldata_after_reseed(fod_seed)
+
+    assert int(fod_snap["floor_speed_valid"][0]) == 1
+    assert float(fod_snap["floor_speed_x"][0]) == pytest.approx(0.0)
+    assert float(fod_snap["floor_speed_y"][0]) == pytest.approx(float(velocity) * 0.75, abs=1e-6)
+
+    randall_seed = _seed_base(STAGE_YOSHI, ACT_WAIT, SM_WAIT1_0, 95.0, -13.64989 + 0.0001)
+    randall_seed["frame_id"][0] = np.int32(477)
+    randall_seed["on_ground"][0, 0] = np.uint8(1)
+    randall_seed["ground_id"][0, 0] = np.uint16(1000)
+    randall_snap = _read_colldata_after_reseed(randall_seed)
+
+    assert int(randall_snap["floor_speed_valid"][0]) == 1
+    assert abs(float(randall_snap["floor_speed_x"][0])) > 0.01
 
 
 def test_mp_coll_interpolate_promotion_copies_current_to_prev_then_desired_to_current() -> None:

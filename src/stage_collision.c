@@ -2198,6 +2198,165 @@ static uint8_t stage_collision_platform_path_world_line(const MslStageSlot* slot
   return 0u;
 }
 
+static int32_t stage_collision_platform_path_frame_id(int32_t frame_id) {
+  int frame = (int)(frame_id % 1200);
+  if (frame < 0) {
+    frame += 1200;
+  }
+  return (int32_t)frame;
+}
+
+static inline void stage_collision_floor_surface_normal(float x0, float y0, float x1, float y1,
+                                                        float* nx_out, float* ny_out) {
+  float nx = -(y1 - y0);
+  float ny = x1 - x0;
+  const float len = sqrtf(nx * nx + ny * ny);
+  if (len > 0.0f) {
+    nx /= len;
+    ny /= len;
+  } else {
+    nx = 0.0f;
+    ny = 1.0f;
+  }
+  if (nx_out != NULL) {
+    *nx_out = nx;
+  }
+  if (ny_out != NULL) {
+    *ny_out = ny;
+  }
+}
+
+static uint8_t stage_collision_floor_line_moving_surface_state_impl(
+    const MslBatch* batch, int bi, const MslStageFloorLine* line, uint8_t include_motion,
+    MslStageMovingSurfaceState* out) {
+  if (out != NULL) {
+    memset(out, 0, sizeof(*out));
+  }
+  if (batch == NULL || line == NULL || out == NULL || bi < 0 || bi >= batch->batch_size) {
+    return 0u;
+  }
+  const MslStageSlot* slot = stage_slot(batch->state.stage_id[bi]);
+  if (slot == NULL || slot->platform_transforms == NULL || slot->platform_transform_count == 0u) {
+    return 0u;
+  }
+  const MslStagePlatformTransform* rec =
+      stage_collision_platform_transform_for_line(slot, line->segment_i);
+  if (rec == NULL || rec->kind_id == (uint8_t)MSL_STAGE_PLATFORM_TRANSFORM_NONE) {
+    return 0u;
+  }
+
+  // Single source packet for generated platform-transform floor lines. FoD height platforms use
+  // grIzumi-owned JObj height/scheduler state; Randall uses the generated GrStory/Ground path
+  // samples. Fighter collision consumers should read this packet via world-line/result helpers
+  // instead of adding action-local FoD/Randall branches.
+  // refs/melee/src/melee/gr/grizumi.c::{grIzumi_801CCBDC,grIzumi_801CC358}
+  // refs/melee/src/melee/gr/grstory.c::{grStory_801E3370,grStory_801E33E0}
+  // refs/melee/src/melee/gr/ground.c::Ground_801C2FE0
+  // refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
+  // data/stages/bin/*.bin::MSLSTG01 platform_transform/platform_path/platform_motion records
+  out->valid = 1u;
+  out->active = 1u;
+  out->visible = 1u;
+  out->current_owned = 1u;
+  out->source_trusted = 1u;
+  out->platform_transform_kind = rec->kind_id;
+  out->platform_transform_id = rec->platform_id;
+  out->stage_object_support_kind = line->stage_object_support_kind;
+  out->segment_i = line->segment_i;
+  out->joint_id = line->joint_id;
+  out->source_frame = batch->state.frame_id[bi];
+  out->x0 = rec->x0;
+  out->x1 = rec->x1;
+  out->y0 = line->y0;
+  out->y1 = line->y1;
+
+  if (rec->kind_id == (uint8_t)MSL_STAGE_PLATFORM_TRANSFORM_STATIC_Y) {
+    out->y0 = rec->y_const;
+    out->y1 = rec->y_const;
+  } else if (rec->kind_id == (uint8_t)MSL_STAGE_PLATFORM_TRANSFORM_RANDALL) {
+    MslStageFloorLine world = *line;
+    if (!stage_collision_platform_path_world_line(slot, rec->line_id, batch->state.frame_id[bi],
+                                                  &world)) {
+      memset(out, 0, sizeof(*out));
+      return 0u;
+    }
+    out->x0 = world.x0;
+    out->x1 = world.x1;
+    out->y0 = world.y0;
+    out->y1 = world.y1;
+    out->source_frame = stage_collision_platform_path_frame_id(batch->state.frame_id[bi]);
+
+    if (include_motion != 0u) {
+      MslStageFloorLine prev = *line;
+      MslStageFloorLine cur = *line;
+      const int32_t cur_frame = batch->state.frame_id[bi] + 1;
+      if (stage_collision_platform_path_world_line(slot, rec->line_id, cur_frame - 1, &prev) &&
+          stage_collision_platform_path_world_line(slot, rec->line_id, cur_frame, &cur)) {
+        out->velocity_x = cur.x0 - prev.x0;
+        out->velocity_y = cur.y0 - prev.y0;
+      }
+    }
+  } else if (rec->kind_id == (uint8_t)MSL_STAGE_PLATFORM_TRANSFORM_HEIGHT) {
+    MslFodHeightPlatformLineState state = {0};
+    if (!stage_collision_fod_height_platform_line_state(batch, bi, slot, rec, &state)) {
+      return 1u;
+    }
+    out->valid = state.valid;
+    out->current_owned = state.current_owned;
+    out->source_trusted = state.trusted;
+    out->reached_hidden_this_step = state.reached_hidden_this_step;
+
+    float h = state.height;
+    if (state.valid != 0u && state.current_owned != 0u) {
+      if (fabsf(h - rec->y_const) <= 1.0e-3f) {
+        h = rec->y_const;
+      } else if (fabsf(h - slot->fod_motion.home_height) <= 1.0e-3f) {
+        h = slot->fod_motion.home_height;
+      } else if (fabsf(h - slot->fod_motion.max_height) <= 1.0e-3f) {
+        h = slot->fod_motion.max_height;
+      } else if (fabsf(h - slot->fod_motion.min_visible_height) <= 1.0e-3f) {
+        h = slot->fod_motion.min_visible_height;
+      } else if (fabsf(h - slot->fod_motion.hidden_target_height) <= 1.0e-3f) {
+        h = slot->fod_motion.hidden_target_height;
+      }
+    }
+    const uint8_t hidden_wait_pose =
+        (uint8_t)(state.valid != 0u &&
+                  fabsf(h - slot->fod_motion.hidden_target_height) <= 1.0e-4f &&
+                  state.reached_hidden_this_step == 0u);
+    out->visible = hidden_wait_pose ? 0u : 1u;
+    out->active = hidden_wait_pose ? 0u : 1u;
+    if (hidden_wait_pose) {
+      out->y0 = h * rec->height_coeff;
+    } else {
+      out->y0 = line->y0 + h * rec->height_coeff;
+    }
+    out->y1 = out->y0;
+    if (include_motion != 0u && rec->platform_id < 2u) {
+      const size_t idx = (size_t)bi * 2u + (size_t)rec->platform_id;
+      out->source_bits = batch->state.stage_fod_platform_height_source[idx];
+      out->source_phase = batch->state.stage_fod_platform_scheduler_phase[idx];
+      out->source_timer = batch->state.stage_fod_platform_scheduler_timer[idx];
+      out->source_target = batch->state.stage_fod_platform_scheduler_target[idx];
+      if (batch->state.stage_fod_platform_valid[idx] &&
+          (batch->state.stage_fod_platform_scheduler_valid[idx] ||
+           batch->state.stage_fod_platform_velocity_valid[idx])) {
+        out->velocity_y = batch->state.stage_fod_platform_velocity[idx] * rec->height_coeff;
+      }
+    }
+  }
+
+  stage_collision_floor_surface_normal(out->x0, out->y0, out->x1, out->y1, &out->normal_x,
+                                       &out->normal_y);
+  return 1u;
+}
+
+uint8_t stage_collision_floor_line_moving_surface_state(const MslBatch* batch, int bi,
+                                                        const MslStageFloorLine* line,
+                                                        MslStageMovingSurfaceState* out) {
+  return stage_collision_floor_line_moving_surface_state_impl(batch, bi, line, 1u, out);
+}
+
 uint8_t stage_collision_floor_line_world(const MslBatch* batch, int bi,
                                          const MslStageFloorLine* line, MslStageFloorLine* out) {
   if (line == NULL || out == NULL) {
@@ -2216,73 +2375,14 @@ uint8_t stage_collision_floor_line_world(const MslBatch* batch, int bi,
     return 1u;
   }
 
-  // Dynamic/static platform transform records are extracted from stage data/source owner notes.
-  // FoD uses grIzumi JObj height records and Yoshi's Story uses Randall path records.
-  // refs/melee/src/melee/gr/grizumi.c::{grIzumi_801CC358,grIzumi_801CCBDC}
-  // refs/melee/src/melee/gr/grstory.c::{grStory_801E3370,grStory_801E33E0}
-  // refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
-  // data/stages/bin/*.bin::MSLSTG01 platform transform records
-  const MslStagePlatformTransform* rec =
-      stage_collision_platform_transform_for_line(slot, line->segment_i);
-  if (rec == NULL) {
-    return 1u;
+  MslStageMovingSurfaceState surface = {0};
+  if (!stage_collision_floor_line_moving_surface_state_impl(batch, bi, line, 0u, &surface)) {
+    return 0u;
   }
-  out->x0 = rec->x0;
-  out->x1 = rec->x1;
-  if (rec->kind_id == (uint8_t)MSL_STAGE_PLATFORM_TRANSFORM_STATIC_Y) {
-    out->y0 = rec->y_const;
-    out->y1 = rec->y_const;
-  } else if (rec->kind_id == (uint8_t)MSL_STAGE_PLATFORM_TRANSFORM_RANDALL) {
-    if (!stage_collision_platform_path_world_line(slot, rec->line_id, batch->state.frame_id[bi],
-                                                  out)) {
-      return 0u;
-    }
-  } else if (rec->kind_id == (uint8_t)MSL_STAGE_PLATFORM_TRANSFORM_HEIGHT) {
-    MslFodHeightPlatformLineState state = {0};
-    if (!stage_collision_fod_height_platform_line_state(batch, bi, slot, rec, &state)) {
-      return 1u;
-    }
-    float h = state.height;
-    if (state.valid != 0u && state.current_owned != 0u) {
-      // grIzumi creates/targets the side-platform collision JObjs from generated constants.
-      // Slippi's platform event export can round these source poses slightly below/above the JObj
-      // value; collision queries still consume the mpLib line refreshed from that JObj, so snap
-      // only named current-owned grIzumi poses to the extracted constants. A stale valid sparse
-      // height without event/contact, scheduler, or live-velocity proof keeps its raw height
-      // instead of being promoted to current source authority.
-      // refs/melee/src/melee/gr/grizumi.c::{grIzumi_801CCBDC,grIzumi_801CC358}
-      // refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
-      // data/stages/bin/griz.bin::MSLSTG01 platform_transform.y_const/platform_motion
-      if (fabsf(h - rec->y_const) <= 1.0e-3f) {
-        h = rec->y_const;
-      } else if (fabsf(h - slot->fod_motion.home_height) <= 1.0e-3f) {
-        h = slot->fod_motion.home_height;
-      } else if (fabsf(h - slot->fod_motion.max_height) <= 1.0e-3f) {
-        h = slot->fod_motion.max_height;
-      } else if (fabsf(h - slot->fod_motion.min_visible_height) <= 1.0e-3f) {
-        h = slot->fod_motion.min_visible_height;
-      } else if (fabsf(h - slot->fod_motion.hidden_target_height) <= 1.0e-3f) {
-        h = slot->fod_motion.hidden_target_height;
-      }
-    }
-    if (state.valid != 0u && fabsf(h - slot->fod_motion.hidden_target_height) <= 1.0e-4f &&
-        state.reached_hidden_this_step == 0u) {
-      // `grIzumi_801CC358` sends the platform to the generated hidden target. Keep the hidden
-      // reconstruction bounded to that exact target and place the collision line below the main
-      // floor so the ordinary floor solver selects Dream Land/FoD ground when a falling fighter
-      // crosses both surfaces. The frame that actually reaches the hidden target is still phase 3
-      // with a nonzero grIzumi motion delta; vanilla keeps the final visible collision pose for
-      // that callback and hides the line on the following hidden-wait phase.
-      // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
-      // refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
-      // data/stages/bin/griz.bin::MSLSTG01 platform_motions.hidden_target_height
-      out->y0 = h * rec->height_coeff;
-      out->y1 = out->y0;
-      return 1u;
-    }
-    out->y0 = line->y0 + h * rec->height_coeff;
-    out->y1 = out->y0;
-  }
+  out->x0 = surface.x0;
+  out->y0 = surface.y0;
+  out->x1 = surface.x1;
+  out->y1 = surface.y1;
   return 1u;
 }
 
@@ -2341,52 +2441,31 @@ uint8_t stage_collision_floor_line_motion_delta(const MslBatch* batch, int bi,
   if (rec == NULL) {
     return 0u;
   }
-  if (rec->kind_id == (uint8_t)MSL_STAGE_PLATFORM_TRANSFORM_RANDALL) {
-    MslStageFloorLine prev = *line;
-    MslStageFloorLine cur = *line;
-    // Runtime step order advances `frame_id` at frame commit. GrStory updates Randall's ground
-    // object before fighter map callbacks for the output frame, so the collision callback consumes
-    // the next path sample regardless of whether the row came from free-run, one-step, or rollout
-    // reseed reconstruction.
-    // refs/melee/src/melee/gr/grstory.c::{grStory_801E3370,grStory_801E33E0}
-    // refs/melee/src/melee/gr/ground.c::Ground_801C2FE0
-    const int32_t cur_frame = batch->state.frame_id[bi] + 1;
-    if (!stage_collision_platform_path_world_line(slot, rec->line_id, cur_frame - 1, &prev) ||
-        !stage_collision_platform_path_world_line(slot, rec->line_id, cur_frame, &cur)) {
-      return 0u;
-    }
-    if (dx_out != NULL) {
-      *dx_out = cur.x0 - prev.x0;
-    }
-    if (dy_out != NULL) {
-      *dy_out = cur.y0 - prev.y0;
-    }
-    return 1u;
+  MslStageMovingSurfaceState surface = {0};
+  if (!stage_collision_floor_line_moving_surface_state(batch, bi, line, &surface)) {
+    return 0u;
   }
-  if (rec->kind_id == (uint8_t)MSL_STAGE_PLATFORM_TRANSFORM_HEIGHT && rec->platform_id < 2u) {
-    const size_t idx = (size_t)bi * 2u + (size_t)rec->platform_id;
-    if (!batch->state.stage_fod_platform_valid[idx]) {
-      return 0u;
-    }
-    if (!batch->state.stage_fod_platform_scheduler_valid[idx] &&
-        !batch->state.stage_fod_platform_velocity_valid[idx]) {
-      return 0u;
-    }
-    if (dx_out != NULL) {
-      *dx_out = 0.0f;
-    }
-    if (dy_out != NULL) {
-      // FoD side-platform collision is the generated local MapLine plus the current grIzumi
-      // platform JObj height scaled by MSLSTG01.height_coeff. Grounded riders that keep
-      // CollData.floor.index on that line inherit the same world-line delta before projection.
-      // refs/melee/src/melee/gr/grizumi.c::{grIzumi_801CC358,grIzumi_801CCBDC}
-      // refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
-      // data/stages/bin/griz.bin::MSLSTG01 platform_transforms(kind=height)
-      *dy_out = batch->state.stage_fod_platform_velocity[idx] * rec->height_coeff;
-    }
-    return 1u;
+  if (rec->kind_id == (uint8_t)MSL_STAGE_PLATFORM_TRANSFORM_HEIGHT && surface.valid == 0u) {
+    return 0u;
   }
-  return 0u;
+  if (rec->kind_id != (uint8_t)MSL_STAGE_PLATFORM_TRANSFORM_RANDALL &&
+      rec->kind_id != (uint8_t)MSL_STAGE_PLATFORM_TRANSFORM_HEIGHT) {
+    return 0u;
+  }
+  if (dx_out != NULL) {
+    *dx_out = surface.velocity_x;
+  }
+  if (dy_out != NULL) {
+    *dy_out = surface.velocity_y;
+  }
+  return (uint8_t)(surface.velocity_x != 0.0f || surface.velocity_y != 0.0f ||
+                   rec->kind_id == (uint8_t)MSL_STAGE_PLATFORM_TRANSFORM_RANDALL ||
+                   (rec->kind_id == (uint8_t)MSL_STAGE_PLATFORM_TRANSFORM_HEIGHT &&
+                    rec->platform_id < 2u &&
+                    (batch->state.stage_fod_platform_scheduler_valid[(size_t)bi * 2u +
+                                                                     (size_t)rec->platform_id] ||
+                     batch->state.stage_fod_platform_velocity_valid[(size_t)bi * 2u +
+                                                                    (size_t)rec->platform_id])));
 }
 
 const MslStageCeilingGraph* stage_collision_get_ceiling_graph(uint32_t stage_id) {

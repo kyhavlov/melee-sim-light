@@ -11,6 +11,7 @@ from tools.eval.dataset import COMPARE_DTYPE, INPUT_DTYPE, SEED_DTYPE, read_data
 from tools.modelplay.sim_env import build_match_config_array
 from tools.modelplay.state_adapter import STAGE_DEBUG_DTYPE
 from tools.slippi.known_data_artifacts import (
+    STAGE_PLATFORM_MOTION_KIND_FOD,
     STAGE_METADATA_BIN_BY_STAGE_ID,
     STAGE_OBJECT_SUPPORT_KIND_YOSHI_SHYGUY,
     read_mslstg01_v7,
@@ -2570,6 +2571,100 @@ def test_yoshi_randall_stage_debug_reports_runtime_position_for_viewer() -> None
     assert int(stage["randall_exists"]) == 1
     assert np.isfinite(float(stage["randall_x"]))
     assert float(stage["randall_y"]) == pytest.approx(-33.248901, abs=1e-5)
+
+
+def _moving_surface_packet_after_seed(seed: np.ndarray, segment_i: int) -> dict[str, object] | None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    handle = msl_binding.init(batch_size=1, num_players=2, ucf_enabled=1, ucf_cardinals_1_0_enabled=1)
+    try:
+        msl_binding.reseed_seed_rollout(handle, seed.view(np.uint8).reshape((1, seed_stride)))
+        return msl_binding.debug_stage_moving_floor_surface(handle, 0, segment_i)
+    finally:
+        msl_binding.destroy(handle)
+
+
+def test_fod_moving_surface_packet_reports_current_height_velocity_and_hidden_visibility() -> None:
+    # Phase-6 moving floors use one stage-collision runtime surface packet: grIzumi-owned height,
+    # visibility, source bits, and motion delta are exposed together before fighter mpColl consumes
+    # the transformed floor result.
+    # refs/melee/src/melee/gr/grizumi.c::{grIzumi_801CCBDC,grIzumi_801CC358}
+    # refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
+    stage = read_mslstg01_v7(Path("data/stages/bin/griz.bin"))
+    motion = next(m for m in stage.platform_motions if m.kind_id == STAGE_PLATFORM_MOTION_KIND_FOD)
+
+    height = np.float32(17.100000381469727)
+    velocity = np.float32(-0.1)
+    seed = _seed_base(STAGE_FOD, ACT_WAIT, SM_WAIT1_0, -35.0, 1.125 + float(height) * 0.75)
+    seed["stage_fod_platform_height_f32"][0, 1] = height
+    seed["stage_fod_platform_height_valid_u8"][0, 1] = np.uint8(1)
+    seed["stage_fod_platform_velocity_f32"][0, 1] = velocity
+    seed["stage_fod_platform_velocity_valid_u8"][0, 1] = np.uint8(1)
+    seed["stage_fod_platform_height_source_u8"][0, 1] = np.uint8(4)
+
+    live = _moving_surface_packet_after_seed(seed, 0)
+    assert live is not None
+    assert int(live["segment_i"]) == 0
+    assert int(live["platform_transform_kind"]) == 1
+    assert int(live["platform_transform_id"]) == 1
+    assert int(live["valid"]) == 1
+    assert int(live["active"]) == 1
+    assert int(live["visible"]) == 1
+    assert int(live["current_owned"]) == 1
+    assert int(live["source_bits"]) == 4
+    assert float(live["y0"]) == pytest.approx(1.125 + float(height) * 0.75, abs=1e-6)
+    assert float(live["velocity_y"]) == pytest.approx(float(velocity) * 0.75, abs=1e-6)
+    assert float(live["normal_x"]) == pytest.approx(0.0, abs=1e-7)
+    assert float(live["normal_y"]) == pytest.approx(1.0, abs=1e-7)
+
+    hidden_seed = seed.copy()
+    hidden_seed["stage_fod_platform_height_f32"][0, 1] = np.float32(motion.hidden_target_height)
+    hidden_seed["stage_fod_platform_velocity_f32"][0, 1] = np.float32(0.0)
+    hidden_seed["stage_fod_platform_velocity_valid_u8"][0, 1] = np.uint8(0)
+    hidden_seed["stage_fod_platform_height_source_u8"][0, 1] = np.uint8(1)
+
+    hidden = _moving_surface_packet_after_seed(hidden_seed, 0)
+    assert hidden is not None
+    assert int(hidden["valid"]) == 1
+    assert int(hidden["current_owned"]) == 1
+    assert int(hidden["source_trusted"]) == 1
+    assert int(hidden["active"]) == 0
+    assert int(hidden["visible"]) == 0
+    assert int(hidden["reached_hidden_this_step"]) == 0
+    assert float(hidden["y0"]) == pytest.approx(float(motion.hidden_target_height) * 0.75, abs=1e-6)
+    assert float(hidden["velocity_y"]) == pytest.approx(0.0, abs=1e-7)
+
+
+def test_yoshi_randall_moving_surface_packet_uses_generated_path_and_velocity() -> None:
+    # Randall's packet is sourced from the generated GrStory/Ground_801C2FE0 path samples, including
+    # the same one-frame platform delta consumed by grounded support/carry callbacks.
+    # refs/melee/src/melee/gr/grstory.c::{grStory_801E3370,grStory_801E33E0}
+    # refs/melee/src/melee/gr/ground.c::Ground_801C2FE0
+    stage = read_mslstg01_v7(Path("data/stages/bin/grst.bin"))
+    path = {(int(rec.line_id), int(rec.frame)): rec for rec in stage.platform_paths}
+    frame_id = 477
+    rec = path[(1000, frame_id)]
+    next_rec = path[(1000, frame_id + 1)]
+
+    seed = _seed_base(STAGE_YOSHI, ACT_WAIT, SM_WAIT1_0, 95.0, float(rec.y) + 0.0001)
+    seed["frame_id"][0] = np.int32(frame_id)
+
+    surface = _moving_surface_packet_after_seed(seed, 1000)
+    assert surface is not None
+    assert int(surface["segment_i"]) == 1000
+    assert int(surface["platform_transform_kind"]) == 3
+    assert int(surface["active"]) == 1
+    assert int(surface["visible"]) == 1
+    assert int(surface["current_owned"]) == 1
+    assert int(surface["source_trusted"]) == 1
+    assert int(surface["source_frame"]) == frame_id
+    assert float(surface["x0"]) == pytest.approx(float(rec.x0), abs=1e-6)
+    assert float(surface["x1"]) == pytest.approx(float(rec.x1), abs=1e-6)
+    assert float(surface["y0"]) == pytest.approx(float(rec.y), abs=1e-6)
+    assert float(surface["velocity_x"]) == pytest.approx(float(next_rec.x0 - rec.x0), abs=1e-6)
+    assert float(surface["velocity_y"]) == pytest.approx(float(next_rec.y - rec.y), abs=1e-6)
 
 
 def test_fod_live_platform_scheduler_moves_without_replay_seed() -> None:

@@ -6178,9 +6178,9 @@ BODY collision-space residual split and rejected seed bridge:
   Sources: `src/mpcoll_colldata_copy.h`, `refs/melee/src/melee/mp/mpcoll.c::mpCopyCollData`.
 - `mpCollEnd` has a static finalizer event helper for the source publication boundary: floor
   finalization is selected by wrapper-forced `arg1` or edge env bits, ceiling finalization by
-  ceiling hug/push env bits, and the callback `dy` is `cur_pos.y - last_pos.y`. Dynamic
-  `grDynamicAttr_801CA284` low-byte refresh and Ground callbacks remain deferred with moving
-  platform/Ground-object behavior.
+  ceiling hug/push env bits, and the callback `dy` is `cur_pos.y - last_pos.y`. FoD/Randall moving
+  floor speed/carry now consume the shared stage moving-surface packet; no legal-stage MSLSTG01
+  moving wall/ceiling packet is currently generated.
   Sources: `src/mpcoll_end.h`, `refs/melee/src/melee/mp/mpcoll.c::{mpCollEnd,mpCollEnd_inline,mpCollEnd_inline2}`.
 - Aerial Side-B Start/Main/End wall collision uses the full airborne mpColl wall envelope.
   `ftFx_SpecialAirSStart_Coll`, `ftFx_SpecialAirS_Coll`, and `ftFx_SpecialAirSEnd_Coll` call

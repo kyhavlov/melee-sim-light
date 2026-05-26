@@ -103,6 +103,34 @@ typedef struct MslStageFloorLineCaps {
   float ground_friction_mul;
 } MslStageFloorLineCaps;
 
+typedef struct MslStageMovingSurfaceState {
+  uint8_t valid;
+  uint8_t active;
+  uint8_t visible;
+  uint8_t current_owned;
+  uint8_t source_trusted;
+  uint8_t reached_hidden_this_step;
+  uint8_t platform_transform_kind;
+  uint8_t platform_transform_id;
+  uint8_t stage_object_support_kind;
+  uint8_t source_phase;
+  uint16_t segment_i;
+  int16_t joint_id;
+  int32_t source_frame;
+  uint16_t source_timer;
+  uint8_t source_bits;
+  uint8_t _pad0[1];
+  float source_target;
+  float x0;
+  float y0;
+  float x1;
+  float y1;
+  float normal_x;
+  float normal_y;
+  float velocity_x;
+  float velocity_y;
+} MslStageMovingSurfaceState;
+
 typedef struct MslStageCeilingLine {
   // Endpoints in world units, ordered so that x0 >= x1 (decomp mpLib_8004E090 assumes v0 is the
   // right endpoint and v1 is the left endpoint for ceiling lines).
@@ -273,6 +301,12 @@ uint8_t stage_collision_floor_line_height_platform_state_is_source_trusted(const
                                                                            int bi,
                                                                            uint16_t segment_i);
 uint8_t stage_collision_fod_hidden_target_height(float* out);
+// Resolve a generated platform-transform floor into one source-owned runtime surface packet.
+// Static callers should continue to use `stage_collision_static_query`; this packet is the only
+// moving/platform-transform admission path for fighter collision and debug inspection.
+uint8_t stage_collision_floor_line_moving_surface_state(const MslBatch* batch, int bi,
+                                                        const MslStageFloorLine* line,
+                                                        MslStageMovingSurfaceState* out);
 // Resolve a floor line to current world coordinates for the given batch environment. Static lines
 // copy through unchanged. Dynamic FoD platform lines consume causal stage platform state.
 uint8_t stage_collision_floor_line_world(const MslBatch* batch, int bi,
@@ -315,7 +349,8 @@ int stage_collision_right_wall_line_index(uint32_t stage_id, uint16_t segment_i)
 
 // Static mpLib-style query substrate for legal-stage line data. These helpers consume preloaded
 // MSLSTG01 static line metadata only. Height-transformed FoD side platforms and Randall path lines
-// are intentionally excluded; moving-surface runtime behavior is a later source owner.
+// are intentionally excluded; moving-surface runtime behavior is admitted through
+// stage_collision_floor_line_moving_surface_state().
 //
 // `line_id_skip` is the floor skip line id for floor checks, or 0xFFFF for none.
 // `joint_id_skip` / `joint_id_only` mirror mpLib's joint filters; pass -1 for disabled.

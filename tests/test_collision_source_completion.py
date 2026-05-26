@@ -169,7 +169,8 @@ def test_mpcoll_source_comments_do_not_claim_retained_approximation_debt() -> No
     for token in (
         "msl_mpcoll_80044838_floor_edge_snap_from_bottom",
         "Seed-only FoD platform height restore",
-        "RETAINED PHASE-6 DEFERRAL",
+        "RETAINED SOURCE-AUTHORITY GUARD",
+        "RETAINED STATIC-QUERY CLASSIFIER",
         "RETAINED NON-STATIC OWNER ACCOUNTING",
     ):
         assert token in plan, token
@@ -247,6 +248,44 @@ def test_cliff_floor_handoff_has_no_stage_or_shape_special_case() -> None:
     assert "separate high-lift entry suppression, not the carried-cliff publication owner" in high_lift_block
     assert "generated sloped carried-floor handoffs have their own prefix proof" in high_lift_block
     assert "!final_ground_line_is_sloped_ledge" in high_lift_block
+
+
+def test_phase6_moving_surface_owner_is_packet_driven_not_replay_or_stage_shortcut() -> None:
+    stage_c = _read("src/stage_collision.c")
+    moving_owner = stage_c[
+        stage_c.index("uint8_t stage_collision_floor_line_moving_surface_state"):
+        stage_c.index("const MslStageCeilingGraph* stage_collision_get_ceiling_graph")
+    ]
+
+    assert "stage_collision_floor_line_moving_surface_state_impl(batch, bi, line, 0u, &surface)" in moving_owner
+    assert "stage_collision_floor_line_moving_surface_state_impl(batch, bi, line, 1u, out)" in moving_owner
+    assert "stage_collision_platform_path_world_line" in moving_owner
+    assert "stage_collision_fod_height_platform_line_state" in moving_owner
+    assert "stage_fod_platform_velocity" in moving_owner
+
+    for token in (
+        "trace",
+        "dataset",
+        ".msl",
+        ".slp",
+        "replay record",
+        "hardcoded record",
+        "stage_id ==",
+        "stage_id !=",
+        "MSL_STAGE_ID_FOUNTAIN_OF_DREAMS",
+        "MSL_STAGE_ID_YOSHIS_STORY",
+        "ledge band",
+        "source band",
+    ):
+        assert token not in moving_owner, token
+
+    static_floor_filter = stage_c[
+        stage_c.index("static inline uint8_t stage_static_floor_line_query_active"):
+        stage_c.index("static inline uint8_t stage_static_line_query_active")
+    ]
+    assert "MSL_STAGE_PLATFORM_TRANSFORM_HEIGHT" not in static_floor_filter
+    assert "MSL_STAGE_PLATFORM_TRANSFORM_RANDALL" not in static_floor_filter
+    assert "MSL_STAGE_PLATFORM_TRANSFORM_STATIC_Y" in static_floor_filter
 
 
 def test_phase2_mpcoll_substrate_is_not_routed_through_item_or_special_only_sources() -> None:
