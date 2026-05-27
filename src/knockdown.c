@@ -1919,6 +1919,52 @@ static inline uint8_t down_bound_airborne_stage_object_endpoint_cross_to_fall(co
   return 0u;
 }
 
+static inline uint8_t down_bound_airborne_static_platform_endpoint_cross_to_fall(
+    const MslBatch* batch, size_t idx, size_t bi, uint32_t stage_id) {
+  if (batch == NULL || batch->state.ground_id[idx] == 0xFFFFu ||
+      fabsf(batch->state.speed_y_self[idx]) > 0.0001f) {
+    return 0u;
+  }
+  const uint16_t ground_id = batch->state.ground_id[idx];
+  if (!stage_collision_floor_line_is_platform(stage_id, ground_id) ||
+      stage_collision_floor_line_has_platform_transform(stage_id, ground_id)) {
+    return 0u;
+  }
+
+  const MslStageFloorGraph* g = stage_collision_get_floor_graph(stage_id);
+  const int line_idx = stage_collision_floor_line_index(stage_id, ground_id);
+  if (g == NULL || line_idx < 0 || (size_t)line_idx >= g->line_count) {
+    return 0u;
+  }
+  MslStageFloorLine world = {0};
+  if (!stage_collision_floor_line_world(batch, (int)bi, &g->lines[(size_t)line_idx], &world)) {
+    return 0u;
+  }
+  const float left = (world.x0 < world.x1) ? world.x0 : world.x1;
+  const float right = (world.x0 > world.x1) ? world.x0 : world.x1;
+  const float prev_x = isfinite(batch->state.floor_sweep_prev_pos_x[idx])
+                           ? batch->state.floor_sweep_prev_pos_x[idx]
+                           : batch->state.prev_pos_x[idx];
+  const float cur_x = batch->state.pos_x[idx];
+  enum { MSL_DOWNBOUND_FLOOR_ENDPOINT_CLAMP_MILLI = 100 };
+  const float endpoint_clamp = (float)MSL_DOWNBOUND_FLOOR_ENDPOINT_CLAMP_MILLI * 0.001f;
+  const uint8_t prev_in_span =
+      (prev_x >= left - endpoint_clamp && prev_x <= right + endpoint_clamp) ? 1u : 0u;
+  if (!prev_in_span) {
+    return 0u;
+  }
+  // DownBound_Coll uses ft_80082708 -> mpColl_8004B108 for its active CollData.floor line. Static
+  // soft platforms use the same source floor-span test as generated stage-object platforms; once
+  // the current floor-sweep/root segment exits the carried platform span, the helper reports
+  // GA_Ground and DownBound_Coll immediately enters Fall.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Coll
+  // refs/melee/src/melee/ft/ft_081B.c::ft_80082708
+  // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
+  // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+  // data/stages/bin/*.bin::MSLSTG01 segment platform flags
+  return (uint8_t)((cur_x < left - endpoint_clamp || cur_x > right + endpoint_clamp) ? 1u : 0u);
+}
+
 static inline uint8_t down_bound_grounded_overlap_nudge_crosses_ledge(const MslBatch* batch,
                                                                       const MslCommonParams* c,
                                                                       size_t bi, int p,
@@ -3370,10 +3416,13 @@ void knockdown_update_post_collision(MslBatch* batch) {
       } else if (!now_ground && is_down_bound(a0) &&
                  (down_bound_airborne_ledge_cross_to_fall(batch, idx, stage_id) ||
                   down_bound_airborne_stage_object_endpoint_cross_to_fall(batch, idx, (size_t)bi,
-                                                                          stage_id))) {
+                                                                          stage_id) ||
+                  down_bound_airborne_static_platform_endpoint_cross_to_fall(batch, idx, (size_t)bi,
+                                                                             stage_id))) {
         // Decomp: DownBound_Coll immediately enters Fall when the allow-ground-to-air helper reports
         // a floor-contact result for this collision step. The helper above covers ordinary ledge
-        // edge exit; the stage-object branch covers generated FoD platform endpoint exits that
+        // edge exit; the stage-object branch covers generated FoD platform endpoint exits; and the
+        // static-platform branch covers ordinary legal-stage soft platform endpoint exits that
         // remain replay-visible as airborne CollData floor ownership.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Coll
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter

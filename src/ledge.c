@@ -205,6 +205,23 @@ static inline void enter_fall(MslBatch* batch, size_t idx) {
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
 }
 
+static inline void enter_fall_keep_fastfall(MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return;
+  }
+  const uint8_t keep_fastfall = batch->state.fall_fast[idx] ? 1u : 0u;
+  batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
+  batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL;
+  batch->state.on_ground[idx] = 0;
+  // Decomp: CliffJump2_Anim exits through ftCo_Fall_Enter, whose ChangeMotionState call uses
+  // Ft_MF_KeepFastFall before the destination Fall Phys callback can run this frame.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffJump.c::ftCo_CliffJump2_Anim
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter
+  // refs/melee/src/melee/ft/fighter.c (KeepFastFall gate inside Fighter_ChangeMotionState)
+  msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+  batch->state.fall_fast[idx] = keep_fastfall;
+}
+
 static inline void enter_wait_on_stage(MslBatch* batch, size_t idx) {
   if (batch == NULL) {
     return;
@@ -990,7 +1007,7 @@ void ledge_update_pre_physics(MslBatch* batch) {
           // Decomp: ftCo_CliffJump2_Anim -> Fall_Enter.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffJump.c::ftCo_CliffJump2_Anim
           batch->state.prev_action_id[idx] = a;
-          enter_fall(batch, idx);
+          enter_fall_keep_fastfall(batch, idx);
           a = batch->state.action_id[idx];
         }
       } else if (a == (uint16_t)MSL_ACT_CLIFF_CLIMB_SLOW ||

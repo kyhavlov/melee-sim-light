@@ -5157,10 +5157,10 @@ static uint8_t escapeair_locked_floor_bottom_sweep_root_projection(
 static uint8_t escapeair_locked_platform_root_projection(
     MslBatch* batch, size_t idx, int bi, const MslStageFloorGraph* g, uint32_t stage_id,
     uint16_t skip_platform_segment_i, uint8_t ecb_lock_timer_seed, float start_pose_bottom_rel_y,
-    float current_pose_bottom_rel_y, float current_pose_top_rel_y,
-    uint8_t locked_desired_bottom_owner, float locked_desired_bottom_rel_y, uint16_t* ground_id_out,
-    float* contact_x_out, float* contact_y_out, float* floor_nx_out, float* floor_ny_out,
-    const MslCommonParams* c) {
+    float current_pose_bottom_rel_y, float current_loaded_bottom_rel_y,
+    float current_pose_top_rel_y, uint8_t locked_desired_bottom_owner,
+    float locked_desired_bottom_rel_y, uint16_t* ground_id_out, float* contact_x_out,
+    float* contact_y_out, float* floor_nx_out, float* floor_ny_out, const MslCommonParams* c) {
   const uint8_t fresh_jumpaerial_zero_bottom_entry =
       (batch != NULL &&
        (batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
@@ -5313,6 +5313,8 @@ static uint8_t escapeair_locked_platform_root_projection(
             : 0u;
     const uint8_t fresh_jump_escapeair_entry =
         (fresh_jumpaerial_escapeair_entry || fresh_kneebend_jump_escapeair_entry) ? 1u : 0u;
+    const uint8_t sustained_escapeair =
+        (batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_ESCAPE_AIR) ? 1u : 0u;
     const uint8_t fresh_kneebend_same_entry_floor =
         (!fresh_kneebend_jump_escapeair_entry || out_line_idx == entry_ground_line_idx) ? 1u : 0u;
     const uint8_t fresh_jump_platform_root_crossing_owner =
@@ -5388,6 +5390,34 @@ static uint8_t escapeair_locked_platform_root_projection(
         locked_zero_bottom_sweep_owner = 1u;
       }
     }
+    uint8_t locked_loaded_ecb_bottom_sweep_owner = 0u;
+    if (!locked_desired_bottom_owner && (fresh_jump_escapeair_entry || sustained_escapeair) &&
+        start_pose_bottom_rel_y > current_loaded_bottom_rel_y + k_floor_y_bias) {
+      // EscapeAir_Coll consumes the CollData ECB loaded for the callback, not just the serialized
+      // desired-bottom lane. In late locked callbacks the previous loaded ECB bottom can still be
+      // above a soft platform while the current loaded bottom has collapsed back toward the root;
+      // mpColl_80044628_Floor accepts that live bottom sweep before mpColl_80044838_Floor projects
+      // the root. This is the generic ft_80082C74/mpColl_800471F8 platform owner and covers both
+      // fresh JumpAerial -> EscapeAir and sustained EscapeAir callbacks without a replay-specific
+      // action-frame cap.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+      // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+      // refs/melee/src/melee/mp/mpcoll.c::{
+      //   mpColl_LoadECB_inline,mpCollInterpolateECB,mpColl_80044628_Floor,mpColl_80044838_Floor}
+      const float source_prev_root_x = isfinite(batch->state.floor_sweep_prev_pos_x[idx])
+                                           ? batch->state.floor_sweep_prev_pos_x[idx]
+                                           : batch->state.prev_pos_x[idx];
+      const float source_prev_root_y = isfinite(batch->state.floor_sweep_prev_pos_y[idx])
+                                           ? batch->state.floor_sweep_prev_pos_y[idx]
+                                           : batch->state.prev_pos_y[idx];
+      if (mpcoll_bottom_sweep_hits_segment(batch, idx, bi, g, stage_id, source_prev_root_x,
+                                           source_prev_root_y + start_pose_bottom_rel_y, root_x,
+                                           root_y + current_loaded_bottom_rel_y,
+                                           skip_platform_segment_i, out_line_idx, -1, c,
+                                           g->lines[(size_t)out_line_idx].segment_i)) {
+        locked_loaded_ecb_bottom_sweep_owner = 1u;
+      }
+    }
 
     const float distinct_platform_bottom_rel_y =
         (batch->state.coll_desired_ecb_bottom_valid[idx] != 0u &&
@@ -5454,6 +5484,7 @@ static uint8_t escapeair_locked_platform_root_projection(
          !suppress_large_distinct_platform_root_projection &&
          (fresh_jump_platform_root_crossing_owner || distinct_platform_root_depth_owner ||
           fresh_jump_platform_below_crossing_owner || locked_zero_bottom_sweep_owner ||
+          locked_loaded_ecb_bottom_sweep_owner ||
           (batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_ESCAPE_AIR &&
            ((ecb_lock_timer_seed >= 5u && ecb_lock_timer_seed <= 7u &&
              y_corr >= current_pose_bottom_rel_y && y_corr <= current_pose_top_rel_y) ||
@@ -7899,6 +7930,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
                 batch, idx, bi, g, stage_id, skip_platform_segment_i, ecb_lock_timer_seed,
                 msl_ecb_bottom_rel_y(char_id, anim, (int)ecb_frame_cur),
                 msl_ecb_bottom_rel_y(char_id, anim, escapeair_callback_pose_frame),
+                cur_ecb_points.bottom_rel_y,
                 msl_ecb_top_rel_y(char_id, anim, escapeair_callback_pose_frame),
                 escapeair_locked_desired_root_owner,
                 batch->state.coll_desired_ecb_bottom_rel_y[idx], &ground_id, &contact_x, &contact_y,

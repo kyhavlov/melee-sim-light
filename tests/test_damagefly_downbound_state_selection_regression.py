@@ -772,6 +772,68 @@ def test_airborne_downbound_stage_object_endpoint_cross_requires_platform_transf
     assert int(out["on_ground"][1]) == 0
 
 
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "p", "expected_action"),
+    [
+        (
+            "datasets/aggregate_recent/replays/validation/battlefield_recent/"
+            "LoyalDishonestWren.msl",
+            4090,
+            0,
+            183,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
+            "CornyDelayedOkapi.msl",
+            1147,
+            0,
+            183,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/dream_land_recent/"
+            "FlippantEnchantedHorse.msl",
+            1387,
+            0,
+            183,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/yoshis_story_recent/"
+            "CheeryNumbMonkey.msl",
+            4563,
+            1,
+            183,
+        ),
+    ],
+)
+def test_airborne_downbound_static_platform_endpoint_cross_enters_fall_replay_real(
+    dataset_rel: str, record: int, p: int, expected_action: int
+) -> None:
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record]
+    assert int(row["seed_t"]["action_id"][p]) == expected_action  # DownBoundU
+    assert int(row["ref_t1"]["on_ground"][p]) == 0
+    assert int(row["ref_t1"]["action_id"][p]) == 29  # Fall
+
+    out, ref = _run_one_step(dataset_rel=dataset_rel, record=record, p=p)
+
+    # DownBound_Coll delegates to ft_80082708/mpColl_8004B108 for the active CollData.floor line.
+    # Static soft-platform endpoint crossings use the same source floor-span owner as generated
+    # platform lines; once the carried floor span is crossed, source enters Fall.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80082708
+    # refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
+    # data/stages/bin/*.bin::MSLSTG01 segment platform flags
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == 29
+    assert int(out["animation_index"][p]) == int(ref["animation_index"][p])
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 0
+    assert int(out["ground_id"][p]) == int(ref["ground_id"][p])
+
+
 def test_terminal_damagefly_iasa_fall_collision_projects_carried_hard_floor_pte_6623() -> None:
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)

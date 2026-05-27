@@ -23,6 +23,14 @@ class _Case:
     ref_vy: float
 
 
+@dataclass(frozen=True)
+class _FastfallAnimEndCase:
+    dataset_rel: str
+    record: int
+    p: int
+    seed_action: int
+
+
 _AGG_VALID = "datasets/aggregate_recent/replays/validation/aggregate_recent"
 _PRIMARY_CARDINAL = "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent"
 
@@ -69,6 +77,27 @@ _CASES = [
     ),
 ]
 
+_FASTFALL_ANIM_END_CASES = [
+    _FastfallAnimEndCase(
+        f"{_AGG_VALID}/HilariousVillainousGiraffe.msl",
+        6170,
+        1,
+        263,  # CliffJumpQuick2
+    ),
+    _FastfallAnimEndCase(
+        f"{_AGG_VALID}/PositiveRevolvingHyena.msl",
+        8136,
+        0,
+        261,  # CliffJumpSlow2
+    ),
+    _FastfallAnimEndCase(
+        "datasets/aggregate_recent/replays/validation/yoshis_story_recent/PhysicalElectricCapybara.msl",
+        7314,
+        1,
+        261,  # CliffJumpSlow2
+    ),
+]
+
 
 @pytest.mark.integration
 @pytest.mark.parametrize("case", _CASES)
@@ -106,3 +135,36 @@ def test_cliffjump2_common_air_helper_x0_gate_replay_real(case: _Case) -> None:
     )
     assert float(out_row["pos_x"][case.p]) == pytest.approx(float(ref_row["pos_x"][case.p]), abs=1e-6)
     assert float(out_row["pos_y"][case.p]) == pytest.approx(float(ref_row["pos_y"][case.p]), abs=1e-6)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("case", _FASTFALL_ANIM_END_CASES)
+def test_cliffjump2_anim_end_fall_enter_keeps_fastfall_replay_real(
+    case: _FastfallAnimEndCase,
+) -> None:
+    # Decomp ownership lock for CliffJump2 animation end:
+    # - ftCo_CliffJump2_Anim enters ordinary Fall through ftCo_Fall_Enter.
+    # - ftCo_Fall_Enter passes Ft_MF_KeepFastFall, so a live fastfall latch survives the motion
+    #   change and Fall Phys applies fastfall terminal velocity on the same frame.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffJump.c::ftCo_CliffJump2_Anim
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / case.dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+
+    seed_row, ref_row, out_row = _run_one_step_row(
+        dataset_path, case.record, case.p, rng_damage_fly_roll_gate=True
+    )
+    assert int(seed_row["action_id"][case.p]) == case.seed_action
+    assert int(seed_row["state_flags"][case.p, 1]) & 0x08
+    assert int(ref_row["action_id"][case.p]) == 29  # Fall
+    assert int(ref_row["state_flags"][case.p, 1]) & 0x08
+
+    for field in ("action_id", "action_frame", "animation_index", "on_ground", "hitlag", "hitstun"):
+        assert int(out_row[field][case.p]) == int(ref_row[field][case.p]), field
+    assert int(out_row["state_flags"][case.p, 1]) & 0x08
+    assert float(out_row["speed_y_self"][case.p]) == pytest.approx(
+        float(ref_row["speed_y_self"][case.p]), abs=1e-6
+    )

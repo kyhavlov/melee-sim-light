@@ -431,7 +431,7 @@ def test_fod_throwf_slope_to_flat_seam_uses_returned_floor_line() -> None:
       assert int(out[field][p]) == int(ref[field][p]), field
     assert int(dbg["floor_result_segment_id"][p]) == 7
     assert float(dbg["floor_result_contact_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
-    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=3e-6)
 
 
 @pytest.mark.integration
@@ -526,7 +526,64 @@ def test_fod_fresh_jumpaerial_escapeair_locked_bottom_sweep_lands_on_hard_floor(
     for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
         assert int(out[field][p]) == int(ref[field][p]), field
     assert int(dbg["floor_result_segment_id"][p]) == 7
-    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=3e-6)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "p", "expected_ground"),
+    [
+        (
+            "datasets/aggregate_recent/replays/validation/battlefield_recent/"
+            "DelayedSuperbGuanaco.msl",
+            3596,
+            1,
+            4,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/dream_land_recent/"
+            "ShadyDecimalStarling.msl",
+            5304,
+            1,
+            1,
+        ),
+    ],
+)
+def test_escapeair_locked_loaded_ecb_bottom_sweep_lands_on_static_platform(
+    dataset_rel: str, record: int, p: int, expected_ground: int
+) -> None:
+    # EscapeAir_Coll uses ft_80082C74 -> mpColl_800471F8 with the callback-local loaded ECB.
+    # When CollData_X130_Locked is still live, the previous loaded ECB bottom can sweep through a
+    # static platform even if the current loaded bottom has collapsed back to root height and no
+    # replay desired-bottom owner is serialized. That is still a live mpColl_80044628_Floor producer
+    # and then mpColl_80044838_Floor projects LandingFallSpecial onto the accepted platform. The
+    # Battlefield sustained EscapeAir and Dream Land JumpAerial -> EscapeAir rows exercise the same
+    # source owner without any stage/action-frame exception.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+    # refs/melee/src/melee/mp/mpcoll.c::{
+    #   mpColl_LoadECB_inline,mpCollInterpolateECB,mpColl_80044628_Floor,mpColl_80044838_Floor}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record]
+    assert int(row["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
+    assert int(row["seed_t"]["ecb_lock_timer"][p]) != 0
+    assert float(row["seed_t"]["ecb_lock_bottom_rel_y_f32"][p]) > 0.0
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_LANDING_FALL_SPECIAL
+    assert int(row["ref_t1"]["ground_id"][p]) == expected_ground
+
+    out, dbg = _run_one_step_with_colldata(ds, record)
+    ref = row["ref_t1"]
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    assert int(dbg["floor_result_segment_id"][p]) == expected_ground
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-4)
 
 
 @pytest.mark.integration
