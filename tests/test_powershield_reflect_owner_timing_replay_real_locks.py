@@ -197,6 +197,16 @@ def test_aged_powershield_reflect_commits_owner_xda8(case: _AgedCommitCase) -> N
         ),
         _Case(
             dataset_rel=(
+                "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
+                "GracefulAttachedTurtle.msl"
+            ),
+            target_record=2274,
+            spawn_id=65,
+            item_type=55,
+            note="aged powershield broadphase-only ReflectDesc row does not transfer",
+        ),
+        _Case(
+            dataset_rel=(
                 "datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/"
                 "GracefulAttachedTurtle.msl"
             ),
@@ -235,6 +245,16 @@ def test_aged_powershield_reflect_commits_owner_xda8(case: _AgedCommitCase) -> N
             item_type=55,
             note="aged GuardReflect timer carry without x221B shield descriptor does not transfer B",
         ),
+        _Case(
+            dataset_rel=(
+                "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+                "MotionlessAggressiveJay.msl"
+            ),
+            target_record=7384,
+            spawn_id=166,
+            item_type=55,
+            note="aged GuardReflect shield-bounce source owner blocks reflect transfer",
+        ),
     ],
 )
 def test_aged_powershield_reflect_does_not_broad_transfer_controls(case: _Case) -> None:
@@ -245,7 +265,14 @@ def test_aged_powershield_reflect_does_not_broad_transfer_controls(case: _Case) 
     #   descriptor is active.
     # - DCC/TCH rows carry GuardReflect timer bits but not the shield descriptor, so they remain on
     #   item shield/hit ownership instead of `ftColl_80077464` reflect-owner transfer.
+    # - GAT high-lane rows can pass lbColl's 20x broadphase but miss the exact ReflectDesc.x2A8
+    #   result; broadphase alone is not source authority to transfer owner/xDA8.
+    # - MAJ shield-bounce rows already expose Item_80269DC8's ShieldBounced owner; that hidden
+    #   callback result has precedence over reconstructing a reflected-owner snapshot from visible
+    #   GuardReflect timers.
     # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007B1B8,ftColl_80077464}
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_80006E58}
+    # refs/melee/src/melee/it/item.c::Item_80269DC8
     # refs/melee/src/melee/it/item.c::{Item_80269F14,Item_80269DC8}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)

@@ -355,25 +355,25 @@ overall.float_norm_mae_p95: 0.00001128
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/HilariousVillainousGiraffe.msl ==
 Records: 9328  Players/scored per record: 2  Total player-frames: 18656
-mismatch.action_id: 4 / 18656 (0.000214)
-mismatch.action_frame: 3 / 18656 (0.000161)
+mismatch.action_id: 3 / 18656 (0.000161)
+mismatch.action_frame: 2 / 18656 (0.000107)
 mismatch.on_ground: 1 / 18656 (0.000054)
 mismatch.facing: 2 / 18656 (0.000107)
 mismatch.stocks: 0 / 18656 (0.000000)
 mismatch.jumps_left: 1 / 18656 (0.000054)
 mismatch.is_dead: 0 / 18656 (0.000000)
-mismatch.hitlag: 2 / 18656 (0.000107)
+mismatch.hitlag: 1 / 18656 (0.000054)
 mismatch.hitstun: 0 / 18656 (0.000000)
 mismatch.l_cancel: 0 / 18656 (0.000000)
 mismatch.hurtbox_state: 0 / 18656 (0.000000)
 mismatch.ground_id: 0 / 18656 (0.000000)
-mismatch.animation_index: 4 / 18656 (0.000214)
+mismatch.animation_index: 3 / 18656 (0.000161)
 mismatch.instance_hit_by: 0 / 18656 (0.000000)
-mismatch.instance_id: 4 / 18656 (0.000214)
+mismatch.instance_id: 3 / 18656 (0.000161)
 mismatch.last_attack_landed: 0 / 18656 (0.000000)
 mismatch.combo_count: 0 / 18656 (0.000000)
 mismatch.last_hit_by: 12 / 18656 (0.000643)
-mismatch.state_flags: 11 / 93280 (0.000118)
+mismatch.state_flags: 10 / 93280 (0.000107)
 mismatch.item_exists: 0 / 139920 (0.000000)
 mismatch.item_type: 0 / 139920 (0.000000)
 mismatch.item_state: 0 / 139920 (0.000000)
@@ -383,20 +383,20 @@ ignored_mismatch.state_flags[4]&0x80: 25 / 18656 (0.001340)
 err.pos_x: mae=0.000238 p95=0.000000 max=2.137131
 err.pos_y: mae=0.001161 p95=0.000000 max=5.110035
 err.speed_air_x_self: mae=0.000007 p95=0.000000 max=0.127066
-err.speed_ground_x_self: mae=0.000231 p95=0.000000 max=1.900000
+err.speed_ground_x_self: mae=0.000198 p95=0.000000 max=1.900000
 err.speed_y_self: mae=0.000877 p95=0.000000 max=3.160000
 err.speed_x_attack: mae=0.000136 p95=0.000000 max=2.529661
 err.speed_y_attack: mae=0.000000 p95=0.000000 max=0.000001
 err.percent: mae=0.000054 p95=0.000000 max=1.000000
-err.shield_hp: mae=0.000377 p95=0.000000 max=4.900002
+err.shield_hp: mae=0.000114 p95=0.000000 max=2.099998
 err.item_pos_x: mae=0.048921 p95=0.000000 max=55.080002
 err.item_pos_y: mae=0.000353 p95=0.000000 max=0.400000
 err.item_vel_x: mae=0.000013 p95=0.000000 max=0.013923
 err.item_vel_y: mae=0.000236 p95=0.000000 max=0.371878
-overall.discrete_mismatch: 44 / 1128688
-overall.strict_discrete_mismatch: 69 / 1128688
+overall.discrete_mismatch: 38 / 1128688
+overall.strict_discrete_mismatch: 63 / 1128688
 overall.ignored_discrete_mismatch: 25
-overall.float_norm_mae_p95: 0.00006073
+overall.float_norm_mae_p95: 0.00005789
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl ==
 Records: 8729  Players/scored per record: 2  Total player-frames: 17458
@@ -1479,7 +1479,7 @@ overall.ignored_discrete_mismatch: 69
 overall.float_norm_mae_p95: 0.00050289
 
 == suite summary ==
-overall.discrete_mismatch: 2296 / 35294369
-overall.strict_discrete_mismatch: 3796 / 35294369
+overall.discrete_mismatch: 2290 / 35294369
+overall.strict_discrete_mismatch: 3790 / 35294369
 overall.ignored_discrete_mismatch: 1500
-overall.float_norm_mae_p95: 0.00032533
+overall.float_norm_mae_p95: 0.00032524

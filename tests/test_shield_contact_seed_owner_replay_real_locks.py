@@ -416,6 +416,72 @@ def test_guard_shielddesc_runtime_pose_accepts_prh_rollout_contact() -> None:
 
 
 @pytest.mark.integration
+def test_guardreflect_reflectdesc_can_transfer_laser_without_live_shielddesc_gat() -> None:
+    # Runtime-positive item ReflectDesc owner:
+    # - p0 is GuardReflect from the GuardOn-origin source path. ftCo_8009388C clears ShieldDesc
+    #   (`fp+0x221B_b0`) while ReflectDesc remains live through x14.
+    # - ftColl_8007925C checks `fp->reflecting && hurt->x41_b7` and probes ReflectDesc before the
+    #   later ShieldDesc branch, so the aged laser transfers to p0 instead of entering GuardSetOff.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077464}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_8009388C,ftCo_8009370C}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
+        "GracefulAttachedTurtle.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    defender = 0
+    ref, out = _run_rollout_window(dataset_path, 4706, 4829)
+
+    assert int(ref["action_id"][defender]) == 182  # GuardReflect, not GuardSetOff.
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender])
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 0
+    assert float(out["shield_hp"][defender]) == pytest.approx(
+        float(ref["shield_hp"][defender]), abs=1e-6
+    )
+    assert int(out["items"][0]["exists"]) == int(ref["items"][0]["exists"]) == 1
+    assert int(out["items"][0]["owner"]) == int(ref["items"][0]["owner"]) == defender
+    assert int(out["items"][0]["instance_id"]) == int(ref["items"][0]["instance_id"])
+    assert float(out["items"][0]["vel_x"]) == pytest.approx(float(ref["items"][0]["vel_x"]))
+
+
+@pytest.mark.integration
+def test_guard_illusion_shielddesc_uses_current_root_x_hvg() -> None:
+    # Runtime-positive item ShieldDesc owner:
+    # - p0 is a no-submotion Guard snapshot with a live ShieldDesc bit.
+    # - Falco Phantasm item collision is owned by ftColl_8007925C's item-vs-fighter ShieldDesc
+    #   path. The current item callback consumes the fighter root/bone owner for the horizontal
+    #   ShieldDesc sample; stale visible shield bubble x must not make BODY take the item first.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077688}
+    # refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80092450,ftCo_80091D58}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+        "HilariousVillainousGiraffe.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    defender = 0
+    ref, out = _run_rollout_window(dataset_path, 771, 894, ucf_enabled=True)
+
+    assert int(ref["action_id"][defender]) == 181  # GuardSetOff.
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender])
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 5
+    assert int(out["hitstun"][defender]) == int(ref["hitstun"][defender]) == 0
+    assert float(out["shield_hp"][defender]) == pytest.approx(
+        float(ref["shield_hp"][defender]), abs=1e-6
+    )
+
+
+@pytest.mark.integration
 def test_guardsetoff_hitlag_reseed_carries_replay_proven_shield_hitlist() -> None:
     # Replay-proven GuardSetOff shield-hit onset must seed the accepted HitCapsule victims_1 list
     # through the frozen hitlag episode. Without this post-hit seed, rollout reseeds inside hitlag
