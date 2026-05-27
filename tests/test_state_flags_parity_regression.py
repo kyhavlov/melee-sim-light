@@ -229,6 +229,72 @@ def _run_case(c: _Case) -> None:
             seed_hitstun=0,
             ref_hitstun=0,
         ),
+        # AttackAir entry clears fp->allow_interrupt before same-frame ProcessHit can replace the
+        # visible action with Damage*. These replay-real rows all start from a stale seed bit
+        # (0x80) plus another command bit (0x40), enter AttackAir through airborne IASA, then take a
+        # BODY hit; vanilla publishes the Damage* row with only 0x40 remaining.
+        #
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_EnterFromMsid
+        # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+        _Case(
+            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/HilariousVillainousGiraffe.msl",
+            record=8953,
+            p=0,
+            byte=0,
+            seed_byte=0xC0,
+            ref_byte=0x40,
+            note="AttackAir entry clears stale allow_interrupt before same-frame DamageFlyLw hit",
+            seed_action_id=0x0019,
+            ref_action_id=0x0059,
+            seed_hitlag=0,
+            ref_hitlag=7,
+        ),
+        _Case(
+            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl",
+            record=5542,
+            p=1,
+            byte=0,
+            seed_byte=0xC0,
+            ref_byte=0x40,
+            note="DamageFlyHi same-frame hit after AttackAir entry clears allow_interrupt",
+            seed_action_id=0x005A,
+            ref_action_id=0x0057,
+            seed_hitlag=0,
+            ref_hitlag=6,
+        ),
+        _Case(
+            dataset_rel="datasets/aggregate_recent/replays/validation/battlefield_recent/MediumVirtualPig.msl",
+            record=7217,
+            p=1,
+            byte=0,
+            seed_byte=0xC0,
+            ref_byte=0x40,
+            note="DamageFlyN same-frame hit after AttackAir entry clears allow_interrupt",
+            seed_action_id=0x001D,
+            ref_action_id=0x0058,
+            seed_hitlag=0,
+            ref_hitlag=8,
+        ),
+        # ProcessHit can interrupt Attack11 after the same source frame's set_jab_combo script
+        # command has set fp+0x2218_b1. Damage entry does not clear that bit, so the first visible
+        # DamageFlyHi row carries x2218_b1 from the interrupted Attack11 script owner.
+        #
+        # refs/melee/src/melee/ft/ftaction.c::ftAction_80071AE8
+        # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+        # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::{ftCo_Attack11_IASA,checkAttack12}
+        _Case(
+            dataset_rel="datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl",
+            record=7274,
+            p=0,
+            byte=0,
+            seed_byte=0x04,
+            ref_byte=0x44,
+            note="Attack11 same-frame Damage entry carries live set_jab_combo x2218_b1",
+            seed_action_id=0x002C,
+            ref_action_id=0x0057,
+            seed_hitlag=0,
+            ref_hitlag=6,
+        ),
         # 0x221C (state_flags[3]) bit 0x02 isHitstun.
         _Case(
             dataset_rel=(
@@ -333,6 +399,61 @@ def test_state_flags_2218_allow_interrupt_attackairb_window_active_parity() -> N
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
+    "c",
+    [
+        _Case(
+            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/FavorableSuperficialPig.msl",
+            record=6071,
+            p=0,
+            byte=0,
+            seed_byte=0x20,
+            ref_byte=0xA0,
+            note="DamageFlyN entry inherits live AttackLw3 allow_interrupt",
+            seed_action_id=0x0039,
+            ref_action_id=0x0058,
+            seed_hitlag=0,
+            ref_hitlag=6,
+        ),
+        _Case(
+            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl",
+            record=11909,
+            p=1,
+            byte=0,
+            seed_byte=0x00,
+            ref_byte=0x80,
+            note="DamageFlyN entry inherits live EscapeN allow_interrupt",
+            seed_action_id=0x00EB,
+            ref_action_id=0x0058,
+            seed_hitlag=0,
+            ref_hitlag=8,
+        ),
+        _Case(
+            dataset_rel="datasets/aggregate_recent/replays/validation/yoshis_story_recent/LawfulInsistentMeerkat.msl",
+            record=5818,
+            p=0,
+            byte=0,
+            seed_byte=0xC0,
+            ref_byte=0x40,
+            note="DamageN2 entry clears stale allow_interrupt when Squat source has no authority",
+            seed_action_id=0x0027,
+            ref_action_id=0x004F,
+            seed_hitlag=0,
+            ref_hitlag=4,
+        ),
+    ],
+)
+def test_state_flags_2218_damage_entry_bounded_source_allow_interrupt(c: _Case) -> None:
+    # ProcessHit/Damage entry does not synthesize allow_interrupt. For these bounded source
+    # owners, the post-frame fp+0x2218 bit0 mirrors the interrupted source action's command-script
+    # authority; otherwise stale seeded allow clears.
+    # refs/melee/src/melee/ft/ftaction.c::ftAction_80071950
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B62C
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c
+    _run_case(c)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
     ("record", "p", "ref_action", "ref_bit_set", "note"),
     [
         (
@@ -408,5 +529,119 @@ def test_state_flags_2218_grounded_attack_anim_end_allow_interrupt_owner(
         assert out_action == ref_action, note
         assert (out_byte & 0x80 != 0) == ref_bit_set, note
         assert out_byte == int(row["ref_t1"]["state_flags"][0, p, 0]), note
+    finally:
+        binding.destroy(handle)
+
+
+@pytest.mark.integration
+def test_attack11_jab_chain_uses_source_x668_z_as_a_edge() -> None:
+    # Attack11_IASA -> checkAttack12 reads `fp->input.x668 & HSD_PAD_A`; source input synthesis
+    # folds raw Z into that A bit before callbacks run. A seeded Attack11 row with live x2218_b1
+    # and a Z edge must therefore consume the same jab-chain owner as an A edge.
+    #
+    # refs/melee/src/melee/ft/fighter.c:1868-1896
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::{ftCo_Attack11_IASA,checkAttack12}
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/PutridJoyousOryx.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    record = 7447
+    p = 0
+    row = ds.samples[record : record + 1]
+    assert int(row["seed_t"]["action_id"][0, p]) == 0x002C
+    assert int(row["seed_t"]["state_flags"][0, p, 0]) & 0x40
+    assert (int(row["prev_input_t"]["p"]["buttons"][0, p]) & 0x0010) == 0
+    assert (int(row["input_t"]["p"]["buttons"][0, p]) & 0x0010) != 0
+    assert int(row["ref_t1"]["action_id"][0, p]) == 0x002D
+
+    binding = importlib.import_module("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, seed_stride
+        ).copy()
+        prev_input_bytes = np.frombuffer(
+            row["prev_input_t"].tobytes(order="C"), dtype=np.uint8
+        ).reshape(1, input_stride).copy()
+        input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, input_stride
+        ).copy()
+        out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+        out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
+
+        for field in ("action_id", "action_frame", "animation_index", "instance_id"):
+            assert int(out[field][0, p]) == int(row["ref_t1"][field][0, p]), field
+        assert [int(x) for x in out["state_flags"][0, p]] == [
+            int(x) for x in row["ref_t1"]["state_flags"][0, p]
+        ]
+    finally:
+        binding.destroy(handle)
+
+
+@pytest.mark.integration
+def test_attack11_jab_chain_z_does_not_reedge_already_held_source_a() -> None:
+    # The raw-Z fold happens before the source input edge is computed. If A was already held on the
+    # previous frame, pressing Z must not synthesize a second `input.x668 & HSD_PAD_A` edge for
+    # checkAttack12.
+    #
+    # refs/melee/src/melee/ft/fighter.c:1868-1896
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::checkAttack12
+    root = Path(__file__).resolve().parents[1]
+    dataset_rel = "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    record = 2559
+    p = 1
+    row = ds.samples[record : record + 1]
+    assert int(row["seed_t"]["action_id"][0, p]) == 0x002C
+    assert int(row["seed_t"]["state_flags"][0, p, 0]) & 0x40
+    assert (int(row["prev_input_t"]["p"]["buttons"][0, p]) & 0x0100) != 0
+    assert (int(row["input_t"]["p"]["buttons"][0, p]) & 0x0110) == 0x0110
+    assert int(row["ref_t1"]["action_id"][0, p]) == 0x002C
+
+    binding = importlib.import_module("msl_binding")
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, seed_stride
+        ).copy()
+        prev_input_bytes = np.frombuffer(
+            row["prev_input_t"].tobytes(order="C"), dtype=np.uint8
+        ).reshape(1, input_stride).copy()
+        input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).reshape(
+            1, input_stride
+        ).copy()
+        out_compare_bytes = np.empty((1, compare_stride), dtype=np.uint8)
+
+        binding.reseed_seed(handle, seed_bytes)
+        binding.step_input(handle, prev_input_bytes, input_bytes)
+        binding.write_compare(handle, out_compare_bytes)
+        out = out_compare_bytes.view(COMPARE_DTYPE).reshape(-1)
+
+        for field in ("action_id", "action_frame", "animation_index", "instance_id"):
+            assert int(out[field][0, p]) == int(row["ref_t1"][field][0, p]), field
+        assert [int(x) for x in out["state_flags"][0, p]] == [
+            int(x) for x in row["ref_t1"]["state_flags"][0, p]
+        ]
     finally:
         binding.destroy(handle)

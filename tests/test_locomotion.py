@@ -594,6 +594,72 @@ def test_dash_late_iasa_same_facing_stale_hold_still_enters_run() -> None:
     assert int(out["animation_index"][0]) == SM_RUN
 
 
+def test_dash_phys_preserves_exact_terminal_ground_velocity() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    terminal = np.float32(_fox_attr("dash_run_terminal_velocity"))
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_DASH)
+    seed["action_frame"][0, 0] = np.int16(8)
+    seed["anim_frame_f32"][0, 0] = np.float32(8.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_DASH)
+    seed["facing"][0, 0] = np.uint8(1)
+    seed["speed_ground_x_self"][0, 0] = terminal
+    seed["speed_air_x_self"][0, 0] = terminal
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    prev_view = prev_inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    prev_view["p"]["main_x"][0, 0] = np.int8(127)
+    cur_view["p"]["main_x"][0, 0] = np.int8(127)
+
+    # Source ftCommon_8007C98C does not apply a traction correction when Dash is already exactly
+    # at the held-stick target velocity; above-target rows still clamp down separately.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_Phys
+    # refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007C98C
+    out = _step_once(seed, prev_inp, inp)
+    assert int(out["action_id"][0]) == ACT_DASH
+    assert float(out["speed_ground_x_self"][0]) == pytest.approx(float(terminal), abs=1e-6)
+    assert float(out["speed_air_x_self"][0]) == pytest.approx(float(terminal), abs=1e-6)
+
+
+def test_dash_phys_above_terminal_still_clamps_down() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    terminal = np.float32(_fox_attr("dash_run_terminal_velocity"))
+
+    seed = _seed_base()
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["action_id"][0, 0] = np.uint16(ACT_DASH)
+    seed["action_frame"][0, 0] = np.int16(8)
+    seed["anim_frame_f32"][0, 0] = np.float32(8.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_DASH)
+    seed["facing"][0, 0] = np.uint8(1)
+    seed["speed_ground_x_self"][0, 0] = np.float32(float(terminal) + 0.08)
+    seed["speed_air_x_self"][0, 0] = np.float32(float(terminal) + 0.08)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    prev_view = prev_inp.view(INPUT_DTYPE).reshape((1,))
+    cur_view = inp.view(INPUT_DTYPE).reshape((1,))
+    prev_view["p"]["main_x"][0, 0] = np.int8(127)
+    cur_view["p"]["main_x"][0, 0] = np.int8(127)
+
+    out = _step_once(seed, prev_inp, inp)
+    assert int(out["action_id"][0]) == ACT_DASH
+    assert float(out["speed_ground_x_self"][0]) < float(seed["speed_ground_x_self"][0, 0])
+    assert float(out["speed_ground_x_self"][0]) >= float(terminal)
+
+
 def test_dash_anim_end_wait_entry_held_opposite_stick_enters_turn() -> None:
     import msl_binding
 
@@ -3357,6 +3423,11 @@ def test_damageflyn_wall_tech_enters_passivewalljump_on_right_wall_hug() -> None
 
 
 def test_turn_reseed_does_not_flip_immediately_when_action_frame_is_0() -> None:
+    # A teacher-forced action_frame=0 Turn seed is treated like a just-entered Turn source frame:
+    # ftAnim_8006EBA4 has already advanced the visible frame, and Turn_Anim's facing flip belongs
+    # to the following fighter procs rather than the seed boundary.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_Anim
     seed = _seed_base()
     seed["on_ground"][0, 0] = np.uint8(1)
     seed["action_id"][0, 0] = np.uint16(ACT_TURN)
@@ -3377,7 +3448,7 @@ def test_turn_reseed_does_not_flip_immediately_when_action_frame_is_0() -> None:
     assert int(out0["action_id"][0]) == ACT_TURN
     assert int(out0["facing"][0]) == 1
     assert int(out1["action_id"][0]) == ACT_TURN
-    assert int(out1["facing"][0]) == 0
+    assert int(out1["facing"][0]) == 1
     assert int(out2["action_id"][0]) == ACT_TURN
     assert int(out2["facing"][0]) == 0
 

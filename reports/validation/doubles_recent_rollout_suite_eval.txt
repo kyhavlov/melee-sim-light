@@ -36,13 +36,13 @@ validation.exceptions: replays/validation_exceptions.json mode=report-overlay ca
 == datasets/doubles_recent/replays/validation/doubles_recent/Game_20260509T152622.msl ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 923
-rollout.streak_count: 50
-rollout.streak_len.median: 109
-rollout.streak_len.p90: 432
+rollout.streak_count: 47
+rollout.streak_len.median: 129
+rollout.streak_len.p90: 548
 rollout.streak_len.p95: 645
 rollout.streak_len.max: 923
-rollout.first_mismatch_total: 51
-rollout.first_mismatch_seeded_total: 28
+rollout.first_mismatch_total: 47
+rollout.first_mismatch_seeded_total: 24
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=10.62 rec=6629 p=2 seed/ref/out=22.7841/22.8141/12.1941 actions=179/179/179 category=unclassified
@@ -55,14 +55,14 @@ rollout.float_top_downstream:
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:3870
 
 == suite summary ==
-overall.rollout.streak_count: 50
-overall.rollout.streak_len.median: 109
-overall.rollout.streak_len.p90: 432
+overall.rollout.streak_count: 47
+overall.rollout.streak_len.median: 129
+overall.rollout.streak_len.p90: 548
 overall.rollout.streak_len.p95: 645
 overall.rollout.streak_len.max: 923
 overall.rollout.best_len.max: 923
-overall.rollout.first_mismatch_total: 51
-overall.rollout.first_mismatch_seeded_total: 28
+overall.rollout.first_mismatch_total: 47
+overall.rollout.first_mismatch_seeded_total: 24
 overall.rollout.status: NOT-CLEAN
 overall.rollout.float_top_errors:
   1. pos_x max_err=10.62 rec=6629 p=2 seed/ref/out=22.7841/22.8141/12.1941 actions=179/179/179 category=unclassified

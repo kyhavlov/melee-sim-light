@@ -70,6 +70,14 @@ class _DamageGroundWaitIasaCase:
             note="DamageN2 grounded Wait_IASA turn branch",
         ),
         _DamageGroundWaitIasaCase(
+            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl",
+            record=2081,
+            player=1,
+            expected_action_id=18,  # Turn
+            expected_animation_index=10,  # ftCo_SM_Turn
+            note="DamageN1 anim-end Wait_IASA Turn does not run Turn_Anim again in the same frame",
+        ),
+        _DamageGroundWaitIasaCase(
             dataset_rel="datasets/fox_falco_fd_ucf084_recent/replays/debug/cardinal_1.0_recent/TreasuredBackKangaroo.msl",
             record=5068,
             player=0,

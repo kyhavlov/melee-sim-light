@@ -1263,6 +1263,12 @@ uint8_t locomotion_attackair_try_enter_from_air_iasa(MslBatch* batch, const MslC
 
   batch->state.action_id[idx] = act;
   batch->state.animation_index[idx] = smid;
+  // ftCo_AttackAir_EnterFromMsid clears fp->allow_interrupt before Fighter_ChangeMotionState.
+  // Keep the raw Slippi fp+0x2218 bit in sync even when the same frame's ProcessHit overwrites the
+  // visible action with Damage* before state_flags.c can sample the transient AttackAir state.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_EnterFromMsid
+  const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX;
+  batch->state.state_flags[flags_i] &= (uint8_t)~MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
   // Decomp entry immediately calls `ftAnim_8006EBA4`, so the same frame's Phys/Coll callbacks
   // see the first AttackAir pose/ECB rather than the raw frame-0 motion-entry pose.
@@ -2204,9 +2210,11 @@ uint8_t locomotion_wait_iasa_locomotion_subset_try_enter(
                                                action_id_start);
 }
 
-static inline uint8_t grounded_attack_try_jab_chain_subset(
-    MslBatch* batch, const MslCharParams* ch, size_t idx, uint8_t char_id, uint16_t action_id_start,
-    uint16_t action_id, uint16_t buttons, uint16_t buttons_pressed, float script_frame) {
+static inline uint8_t grounded_attack_try_jab_chain_subset(MslBatch* batch, const MslCharParams* ch,
+                                                           size_t idx, uint8_t char_id,
+                                                           uint16_t action_id_start,
+                                                           uint16_t action_id, uint16_t buttons,
+                                                           float script_frame) {
   if (batch == NULL) {
     return 0u;
   }
@@ -2242,8 +2250,12 @@ static inline uint8_t grounded_attack_try_jab_chain_subset(
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_Attack_800D6A50
   // data/characters/{fox,falco}.json::rapid_jab_window
   // data/moves/{fox,falco}.json moves["ftCo_SM_Attack12"]["events"] set_jab_rapid
-  const uint16_t buttons_released = (uint16_t)(batch->state.prev_input_buttons[idx] & ~buttons);
-  if (((buttons_pressed | buttons_released) & (uint16_t)MSL_BUTTON_A) != 0u &&
+  const uint16_t source_prev_buttons =
+      source_x668_button_edges_with_z_a(batch->state.prev_input_buttons[idx]);
+  const uint16_t source_buttons = source_x668_button_edges_with_z_a(buttons);
+  const uint16_t source_buttons_pressed = (uint16_t)(source_buttons & ~source_prev_buttons);
+  const uint16_t buttons_released = (uint16_t)(source_prev_buttons & ~source_buttons);
+  if (((source_buttons_pressed | buttons_released) & (uint16_t)MSL_BUTTON_A) != 0u &&
       batch->state.jab_rapid_count[idx] < 255u) {
     batch->state.jab_rapid_count[idx] = (uint8_t)(batch->state.jab_rapid_count[idx] + 1u);
   }
@@ -2266,9 +2278,11 @@ static inline uint8_t grounded_attack_try_jab_chain_subset(
     return 1u;
   }
   const uint8_t jab_combo_active = move_tables_jab_combo_active(char_id, action_id, script_frame);
-  // Input edge -> jab intent latch (mv.co.attack1.x0 = true) in checkAttack12/checkAttack13.
+  // Source input.x668 already folds raw Z into the A bit before Attack11/12 IASA reads it, so the
+  // jab intent latch uses the same synthesized edge lane as grounded attack selectors.
+  // refs/melee/src/melee/ft/fighter.c:1868-1896
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::{checkAttack12,checkAttack13}
-  if ((buttons_pressed & (uint16_t)MSL_BUTTON_A) != 0u) {
+  if ((source_buttons_pressed & (uint16_t)MSL_BUTTON_A) != 0u) {
     batch->state.jab_x0[idx] = 1u;
   }
   if (batch->state.jab_x0[idx] == 0u || jab_combo_active == 0u) {
@@ -4105,7 +4119,18 @@ void locomotion_update_pre(MslBatch* batch) {
 
         // Turn: decomp `frames_to_turn` countdown + flip on 0 (Anim step).
         // Only tick if Turn was already active at frame start (avoid flip on same-frame entry).
-        if (action_id_start == MSL_ACT_TURN) {
+        // Same-frame Turn entry from an earlier callback (for example Damage_Anim -> Wait ->
+        // Wait_IASA -> Turn) has already consumed ftAnim_8006EBA4 for this source frame. Do not
+        // run Turn_Anim's facing flip until the next fighter proc.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Anim
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_Anim
+        const uint8_t turn_entered_after_frame_start =
+            (batch->state.action_frame[idx] <= 1 &&
+             batch->state.seed_prev_action_id[idx] != (uint16_t)MSL_ACT_TURN)
+                ? 1u
+                : 0u;
+        if (action_id_start == MSL_ACT_TURN && turn_entered_after_frame_start == 0u) {
           const int16_t turn_first_steady_postflip_af = (int16_t)(ch->turn_frames + 2);
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c:56-88 (ftCo_Turn_Anim_Inner)
           // Basic-Turn first steady post-flip facing reconstruction:
@@ -4228,7 +4253,7 @@ void locomotion_update_pre(MslBatch* batch) {
           if (grounded_attack_submotion_from_action(action_id) != 0xFFFFFFFFu) {
             const float grounded_attack_script_frame = batch->state.anim_frame_f32[idx];
             if (grounded_attack_try_jab_chain_subset(batch, ch, idx, cid, action_id_start,
-                                                     action_id, buttons, buttons_pressed,
+                                                     action_id, buttons,
                                                      grounded_attack_script_frame)) {
               action_id = batch->state.action_id[idx];
             }

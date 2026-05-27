@@ -103,6 +103,14 @@ static inline float ground_accel_step_delta(float gr_vel, float accel, float tar
   if (target_vel == 0.0f) {
     return ground_friction_step_delta(gr_vel, friction);
   }
+  // Source ftCommon_8007C98C clamps toward the target velocity without applying a traction
+  // correction when the fighter is already exactly at target. This matters for Dash at terminal
+  // speed: held-stick Dash should preserve terminal gr_vel, while above-terminal rows still
+  // clamp back down.
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007C98C
+  if (gr_vel == target_vel) {
+    return 0.0f;
+  }
 
   float a = accel;
   if (!(gr_vel * a < 0.0f)) {

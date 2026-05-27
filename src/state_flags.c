@@ -98,6 +98,21 @@ static inline uint8_t state_flags_2218_attack12_allow_interrupt_action(uint16_t 
   return (uint8_t)(action_id == (uint16_t)MSL_ACT_ATTACK_12);
 }
 
+static inline uint8_t state_flags_action_allow_interrupt_at_frame(uint8_t char_id,
+                                                                  uint16_t action_id, float frame) {
+  if (state_flags_2218_allow_interrupt_attackair_action(action_id)) {
+    return move_tables_attackair_allow_interrupt(char_id, action_id, frame);
+  }
+  if (state_flags_2218_allow_interrupt_grounded_attack_action(action_id) ||
+      state_flags_2218_attack12_allow_interrupt_action(action_id)) {
+    return move_tables_grounded_attack_allow_interrupt(char_id, action_id, frame);
+  }
+  if (action_id == (uint16_t)MSL_ACT_ESCAPE_N || action_id == (uint16_t)MSL_ACT_ESCAPE_AIR) {
+    return move_tables_escape_allow_interrupt(char_id, action_id, frame);
+  }
+  return 0u;
+}
+
 static inline uint8_t state_flags_2218_action_owns_reflecting(const MslBatch* batch, size_t idx,
                                                               uint16_t action_id) {
   switch (action_id) {
@@ -514,6 +529,51 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
         // refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C
         f2218 &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_REFLECTING;
+      }
+      const uint8_t modeled_damage_entry_flag_owner =
+          (state_flags_is_damage_action(action_id) && action_id != prev_action &&
+           batch->state.prev_action_frame[idx] >= 0 &&
+           ((prev_action == (uint16_t)MSL_ACT_SQUAT && action_id == (uint16_t)MSL_ACT_DAMAGE_N_2) ||
+            (prev_action == (uint16_t)MSL_ACT_ATTACK_LW3 &&
+             action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_N) ||
+            (prev_action == (uint16_t)MSL_ACT_ESCAPE_N &&
+             action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_N)))
+              ? 1u
+              : 0u;
+      if (modeled_damage_entry_flag_owner) {
+        // ProcessHit/Damage entry does not synthesize allow_interrupt. For these bounded source
+        // owners, the post-frame fp+0x2218 bit0 mirrors the interrupted source action's
+        // command-script authority; otherwise stale seeded allow clears. Broader Damage-entry flag
+        // inheritance needs hidden source phase that is not modeled for every DamageFly/DamageFall
+        // family yet.
+        // refs/melee/src/melee/ft/ftaction.c::ftAction_80071950
+        // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B62C
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c
+        const float source_frame = (float)(batch->state.prev_action_frame[idx] + 1);
+        if (state_flags_action_allow_interrupt_at_frame(batch->state.char_id[idx], prev_action,
+                                                        source_frame)) {
+          f2218 |= (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
+        } else {
+          f2218 &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
+        }
+      }
+      if (state_flags_is_damage_action(action_id) && action_id != prev_action &&
+          batch->state.prev_action_frame[idx] >= 0 &&
+          (prev_action == (uint16_t)MSL_ACT_ATTACK_11 ||
+           prev_action == (uint16_t)MSL_ACT_ATTACK_12)) {
+        // ProcessHit can interrupt Attack11/12 after the current source frame's command script has
+        // toggled x2218_b1. Damage entry itself does not clear that jab-combo bit, so the
+        // destination Damage* row carries the source script result rather than the stale seed byte.
+        // refs/melee/src/melee/ft/ftaction.c::ftAction_80071AE8
+        // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack1.c::{ftCo_Attack11_IASA,checkAttack12}
+        // data/moves/{fox,falco}.json moves["ftCo_SM_Attack11"]["events"] set_jab_combo
+        const float source_frame = (float)(batch->state.prev_action_frame[idx] + 1);
+        if (move_tables_jab_combo_active(batch->state.char_id[idx], prev_action, source_frame)) {
+          f2218 |= (uint8_t)MSL_STATE_FLAG_2218_B1;
+        } else {
+          f2218 &= (uint8_t) ~(uint8_t)MSL_STATE_FLAG_2218_B1;
+        }
       }
       batch->state.state_flags[flags_2218_i] = f2218;
 
