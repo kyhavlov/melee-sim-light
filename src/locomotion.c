@@ -18,6 +18,7 @@
 #include "coll_env_flags.h"
 #include "common_params.h"
 #include "dash_iasa.h"
+#include "escapeair_collision_owner.h"
 #include "grab_flow.h"
 #include "input.h"
 #include "input_axis.h"
@@ -3270,7 +3271,29 @@ static inline uint8_t locomotion_try_enter_jump_aerial_iasa(
   }
 
   const uint16_t act = jump_aerial_action_from_stick(c, stick_x, facing_dir);
+  const uint32_t stage_id = batch->state.stage_id[idx / (size_t)MSL_MAX_PLAYERS];
+  const uint16_t entry_ground_id = batch->state.ground_id[idx];
+  const uint8_t entry_ground_is_soft_or_transform =
+      (entry_ground_id != 0xFFFFu &&
+       (stage_collision_floor_line_is_platform(stage_id, entry_ground_id) ||
+        stage_collision_floor_line_has_platform_transform(stage_id, entry_ground_id)))
+          ? 1u
+          : 0u;
   locomotion_apply_jump_enter_ground_to_air(batch, idx);
+  if (batch->state.coll_desired_ecb_bottom_valid[idx] != 0u) {
+    // ftCo_JumpAerial_Enter_Basic calls ftCommon_8007D5D4 before the motion-state change. The
+    // source owner is a live air-jump CollData_X130 lock, not a teacher-forced seed lane; retain
+    // that identity from the current floor metadata so the JumpAerial callback and any same-proc
+    // EscapeAir handoff keep consuming the locked desired bottom through mpColl_LoadECB_inline.
+    // Do not classify from stage-wide platform presence: a stale hard-floor ground id on a platform
+    // stage is not soft-platform source authority.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Enter_Basic
+    // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
+    // refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_inline
+    batch->state.coll_desired_ecb_bottom_locked_owner[idx] =
+        msl_escapeair_locked_bottom_owner_for_live_jumpaerial_entry(
+            entry_ground_is_soft_or_transform);
+  }
   batch->state.action_id[idx] = act;
   batch->state.animation_index[idx] = submotion_for_action(act);
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);

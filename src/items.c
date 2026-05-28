@@ -5090,7 +5090,21 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           shy = batch->state.pos_y[d_idx];
           shz = batch->state.pos_z[d_idx];
         }
-
+        if (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
+            batch->state.action_frame[d_idx] == -1 &&
+            batch->state.animation_index[d_idx] == UINT32_MAX &&
+            batch->state.guard_reflect_timer_x14_seed[d_idx] == 1u &&
+            batch->state.seed_prev_action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT) {
+          // On the final visible GuardReflect tick, ReflectDesc ownership is still live but the
+          // ordinary ShieldDesc branch no longer consumes the stale GuardOn x-offset serialized in
+          // shield_x. Source has cleared/rebuilt descriptor state through GuardReflect_Anim /
+          // ftCo_80093BC0 before item collision; keep ShieldDesc's horizontal sample on the fighter
+          // root while preserving the live shield bone height. The longer x18/x221C_b2 lifetime is
+          // consumed later by ftCo_80092F2C's recoil multiplier, not by this descriptor sample.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardReflect_Anim,ftCo_80093BC0}
+          // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077688}
+          shx = batch->state.pos_x[d_idx];
+        }
         uint8_t shield_hit = 0;
         uint8_t shield_bounce_contact_found = 0;
         uint8_t shield_bounce_source_allows = 0;
@@ -5112,6 +5126,13 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
              batch->state.action_frame[d_idx] < 0 &&
              batch->state.animation_index[d_idx] == 0xFFFFFFFFu &&
              batch->state.hitlag[d_idx] == 0u && batch->state.hitstun[d_idx] == 0u)
+                ? 1u
+                : 0u;
+        const uint8_t guard_reflect_final_seed_point_sample =
+            (defender_guard_reflect_no_submotion_snapshot &&
+             batch->state.action_frame[d_idx] == -1 &&
+             batch->state.guard_reflect_timer_x14_seed[d_idx] == 1u &&
+             batch->state.seed_prev_action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT)
                 ? 1u
                 : 0u;
         // Keep the early geometry lane ownership-consistent with the later GuardSetOff owner gate by
@@ -5220,14 +5241,18 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         // - Replayed carried lasers in this settled snapshot stay on the point sample; broad
         //   authored-offset sweeps over-admit GAT/QGD carried-shot controls.
         // - Lasers in the frame-start `fp+0x2218_b5` behavior lane use the authored HitCapsule
-        //   offsets for the immediate shield callback only while the owner is still in the SpecialN
-        //   loop callback phase that owns the shot. The x2218_b2 and x2218_b0 command/interrupt
-        //   lanes stay on the settled point sample; GuardOn entry rows have their separate
-        //   command-pose gate above.
+        //   offsets for the immediate shield callback only while the owner is still in the
+        //   SpecialN loop callback phase that owns the shot.
+        // - The raw x2218_b1 live-article lane is already item-callback provenance from the current
+        //   ftColl pass, so it also consumes the current item HitCapsule segment even when the
+        //   fighter owner has already left SpecialN.
+        // - The x2218_b2 and x2218_b0 command/interrupt lanes stay on the settled point sample;
+        //   GuardOn entry rows have their separate command-pose gate above.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
         //   ftCo_GuardOn_Anim,ftCo_800928CC,ftCo_Guard_IASA}
         // refs/melee/src/melee/it/items/itfoxlaser.c::{
         //   it_8029C504,itFoxlaser_UnkMotion1_Anim,itFoxlaser_UnkMotion1_Phys,it_8029C4D4}
+        // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077688}
         // refs/melee/src/melee/ft/ftcoll.c::ftColl_CreateReflectHit
         // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm (fp+0x2218 byte)
         const uint16_t laser_owner_action =
@@ -5235,6 +5260,14 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         const uint8_t laser_owner_specialn_loop =
             (laser_owner_action == (uint16_t)MSL_ACT_FX_SPECIAL_N_LOOP ||
              laser_owner_action == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_LOOP)
+                ? 1u
+                : 0u;
+        const uint8_t guard_hold_live_article_carried_laser =
+            (defender_guard_hold_no_submotion_snapshot &&
+             (batch->state.state_flags_2218_frame_start[d_idx] &
+              (uint8_t)(MSL_STATE_FLAG_2218_ALLOW_INTERRUPT | MSL_STATE_FLAG_2218_B1 |
+                        MSL_STATE_FLAG_2218_B2 | MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR)) ==
+                 (uint8_t)MSL_STATE_FLAG_2218_B1)
                 ? 1u
                 : 0u;
         const uint8_t guard_hold_pure_behavior_carried_laser =
@@ -5247,18 +5280,38 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
              (batch->state.state_flags_2218_frame_start[d_idx] & 0xA4u) == 0x84u)
                 ? 1u
                 : 0u;
-        const float shield_probe_x =
-            (defender_guard_hold_no_submotion_snapshot && !guard_hold_pure_behavior_carried_laser)
-                ? x0
-                : x;
-        const float shield_probe_y =
-            (defender_guard_hold_no_submotion_snapshot && !guard_hold_pure_behavior_carried_laser)
-                ? y0
-                : y;
+        const uint8_t guard_hold_current_segment_carried_laser =
+            (guard_hold_pure_behavior_carried_laser || guard_hold_live_article_carried_laser) ? 1u
+                                                                                              : 0u;
+        const uint8_t guard_on_landing_carried_live_article_point_sample =
+            (guard_on_no_submotion_snapshot && !laser_owner_specialn_loop &&
+             (batch->state.state_flags_2218_frame_start[d_idx] &
+              (uint8_t)(MSL_STATE_FLAG_2218_ALLOW_INTERRUPT | MSL_STATE_FLAG_2218_B1 |
+                        MSL_STATE_FLAG_2218_B2 | MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR)) ==
+                 (uint8_t)(MSL_STATE_FLAG_2218_ALLOW_INTERRUPT | MSL_STATE_FLAG_2218_B1))
+                ? 1u
+                : 0u;
+        const uint8_t shield_uses_point_sample =
+            ((defender_guard_hold_no_submotion_snapshot &&
+              !guard_hold_current_segment_carried_laser) ||
+             guard_on_landing_carried_live_article_point_sample)
+                ? 1u
+                : 0u;
+        const float shield_probe_x = shield_uses_point_sample ? x0 : x;
+        const float shield_probe_y = shield_uses_point_sample ? y0 : y;
 
         uint8_t off_n =
             (laser_state == 0u) ? lp->hitbox_offsets_x_count : lp->state1_hitbox_offsets_x_count;
-        if (defender_guard_hold_no_submotion_snapshot && !guard_hold_pure_behavior_carried_laser) {
+        if (shield_uses_point_sample || guard_reflect_final_seed_point_sample) {
+          // Settled GuardOn/Guard carried laser sample:
+          // Once the laser owner has left the SpecialN callback that owns the current segment,
+          // replay-visible live-article bits alone do not authorize a fresh shield sweep. Source
+          // item collision consumes the carried point sample from the article callback state
+          // exposed by the post-frame row; fresh SpecialN-loop rows keep the current-segment path.
+          // refs/melee/src/melee/it/items/itfoxlaser.c::{
+          //   itFoxlaser_UnkMotion1_Phys,it_8029C4D4}
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+          //   ftCo_GuardOn_Anim,ftCo_800928CC}
           off_n = 0u;
         }
         // Decomp consumes one shared scaleZ transform chain for laser collision spaces
@@ -5473,10 +5526,18 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
                     : 0u;
           }
         }
+        // Seed x14==1 is still a live ReflectDesc tick on steady GuardReflect rows; it is not an
+        // independent broad ShieldDesc hit. Let those rows use the actual item HitCapsule
+        // `shield_hit` result above, or the final-x14 handoff only when the current ShieldDesc
+        // point still overlaps the item. ReflectDesc lifetime alone is not Item_80269DC8
+        // HitShield authority.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardReflect_Anim,ftCo_80093BC0}
+        // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077688}
         const uint8_t guard_reflect_seed_final_x14_hitshield =
             (guard_reflect_pure_final_x14_base &&
              batch->state.guard_reflect_timer_x14_seed[d_idx] == 1u &&
-             guard_reflect_final_x14_reflectdesc_hitshield)
+             guard_reflect_final_x14_reflectdesc_hitshield &&
+             item_sphere_sphere_intersects_2d(x, y, sr, shx, shy, shr))
                 ? 1u
                 : 0u;
         const uint8_t guard_reflect_post_callback_final_x14_hitshield =
@@ -6017,7 +6078,6 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
             }
             break;
           }
-
           float shield_bounce_vx = 0.0f;
           float shield_bounce_vy = 0.0f;
           // Spawn-frame keepalive gate:

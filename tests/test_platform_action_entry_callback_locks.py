@@ -677,6 +677,48 @@ def test_locked_escapeair_shallow_cliff_floor_final_snap_stays_airborne() -> Non
 
 
 @pytest.mark.integration
+def test_sustained_escapeair_desired_bottom_platform_sweep_publishes_despite_downheld_rollout() -> None:
+    # EscapeAir_Coll delegates to ft_80082C74 -> ft_80081D0C -> mpColl_800471F8. That path calls
+    # mpColl_80044628_Floor with cb=NULL, so a pass-through stick does not reject a soft platform
+    # once the preserved desired ECB bottom has accepted the current callback's floor sweep.
+    #
+    # Regression target: a JumpAerial -> EscapeAir rollout over Battlefield's right platform was
+    # kept airborne by treating down-held input as an independent platform-pass veto after the
+    # source bottom sweep had already hit the carried platform.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+    # refs/melee/src/melee/mp/mpcoll.c::{
+    #   mpColl_800471F8,mpColl_80046904,mpColl_80044628_Floor,mpColl_80044838_Floor}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/battlefield_recent/DelayedSuperbGuanaco.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    start_record = 3558
+    target_record = 3596
+    p = 1
+    row = ds.samples[target_record]
+    assert int(row["seed_t"]["action_id"][p]) == ACT_ESCAPE_AIR
+    assert int(row["seed_t"]["seed_prev_action_id"][p]) == ACT_ESCAPE_AIR
+    assert int(row["input_t"]["p"][p]["main_y"]) < 0
+    assert int(row["ref_t1"]["action_id"][p]) == ACT_LANDING_FALL_SPECIAL
+    assert int(row["ref_t1"]["on_ground"][p]) == 1
+    assert int(row["ref_t1"]["ground_id"][p]) == 4
+
+    out = _run_rollout_to_record(ds, start_record, target_record)
+    ref = row["ref_t1"]
+    for field in ("action_id", "animation_index", "action_frame", "on_ground", "ground_id"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("dataset_rel", "start_record", "target_record", "p"),
     [

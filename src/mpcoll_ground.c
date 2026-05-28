@@ -5509,8 +5509,21 @@ static uint8_t escapeair_locked_platform_root_projection(
     uint8_t locked_desired_bottom_sweep_owner = 0u;
     uint8_t locked_zero_bottom_sweep_owner = 0u;
     if (locked_desired_bottom_owner) {
-      const float prev_bottom_x = batch->state.prev_pos_x[idx];
-      const float prev_bottom_y = batch->state.prev_pos_y[idx] + locked_desired_bottom_rel_y;
+      // Source ft_80081D0C publishes `coll->last_pos` to mpColl_800471F8; one-step and rollout
+      // paths preserve that callback-local root in the explicit floor-sweep lane. Use it for the
+      // locked desired-bottom floor producer as well as for the loaded-ECB producer below, otherwise
+      // same-callback JumpAerial/EscapeAir handoffs can miss a platform crossing when public
+      // `prev_pos` has already advanced past the producer start.
+      // refs/melee/src/melee/ft/ft_081B.c::ft_80081D0C
+      // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor}
+      const float source_prev_root_x = isfinite(batch->state.floor_sweep_prev_pos_x[idx])
+                                           ? batch->state.floor_sweep_prev_pos_x[idx]
+                                           : batch->state.prev_pos_x[idx];
+      const float source_prev_root_y = isfinite(batch->state.floor_sweep_prev_pos_y[idx])
+                                           ? batch->state.floor_sweep_prev_pos_y[idx]
+                                           : batch->state.prev_pos_y[idx];
+      const float prev_bottom_x = source_prev_root_x;
+      const float prev_bottom_y = source_prev_root_y + locked_desired_bottom_rel_y;
       const float cur_bottom_x = root_x;
       const float cur_bottom_y = root_y + locked_desired_bottom_rel_y;
       if (mpcoll_bottom_sweep_hits_segment(batch, idx, bi, g, stage_id, prev_bottom_x,
@@ -11732,15 +11745,19 @@ void mpcoll_ground_apply(MslBatch* batch) {
             // extracted platform pass threshold and the snap is shallower than the entered
             // EscapeAir ECB bottom. Deeper penetrations have already reached the source
             // ft_80082C74/mpColl_800471F8 floor handoff. Ground-jump airdodges keep one jump
-            // available and still land through EscapeAir_Coll's normal floor callback.
+            // available and still land through EscapeAir_Coll's normal floor callback. Once
+            // mpColl_80044628_Floor has accepted the preserved desired-bottom crossing, held-down
+            // input is not a platform-pass reject for this owner: mpColl_800471F8 calls
+            // mpColl_80044628_Floor with cb=NULL.
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_Enter
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Enter
             // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
-            // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80043754}
+            // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80043754,mpColl_80044628_Floor}
             (escapeair_episode.sustained && ecb_lock_timer_seed != 0u &&
              batch->state.jumps_left[idx] == 0u && ground_id == seed_ground_id &&
              stage_collision_floor_line_is_platform(stage_id, ground_id) &&
+             !locked_desired_bottom_final_sweep_hit &&
              !stage_collision_floor_line_has_platform_transform(stage_id, ground_id) &&
              final_landing_lift < escapeair_entry_bottom_rel0 &&
              (batch->state.ledge_drop_floor_skip_segment_id == NULL ||

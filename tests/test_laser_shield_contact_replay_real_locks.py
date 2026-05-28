@@ -143,6 +143,55 @@ def test_falco_laser_shield_contact_enters_guardsetoff_and_despawns_laser(
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
+    ("record", "p", "item_slot"),
+    [
+        (702, 1, 0),
+        (5586, 1, 0),
+    ],
+)
+def test_guardreflect_final_x14_reflectdesc_lifetime_without_shielddesc_overlap_stays_reflect(
+    record: int, p: int, item_slot: int
+) -> None:
+    # Negative controls for the MAJ:202/259 final-x14 positives above: x14==1 proves ReflectDesc
+    # lifetime, but source Item_80269DC8 only enters HitShield when the live item collision also
+    # reaches ShieldDesc. A far laser in the ReflectDesc lane must remain GuardReflect-owned rather
+    # than inventing a broad GuardSetOff handoff.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardReflect_Anim,ftCo_80093BC0}
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077688}
+    # refs/melee/src/melee/it/item.c::Item_80269DC8
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    seed_row, ref_row, out_row = _run_one_step_row(dataset_path, record, p)
+
+    assert int(seed_row["action_id"][p]) == 182
+    assert int(seed_row["action_frame"][p]) == -1
+    assert int(seed_row["animation_index"][p]) == 0xFFFFFFFF
+    assert int(seed_row["guard_reflect_timer_x14"][p]) == 1
+    assert int(seed_row["guard_reflect_timer_x18"][p]) > 0
+    assert int(ref_row["action_id"][p]) == 182
+
+    assert int(out_row["action_id"][p]) == 182
+    assert int(out_row["hitlag"][p]) == int(ref_row["hitlag"][p]) == 0
+    assert abs(float(out_row["shield_hp"][p]) - float(ref_row["shield_hp"][p])) <= 5e-4
+    for field in ("exists", "type", "state", "owner", "instance_id"):
+        assert int(out_row["items"][item_slot][field]) == int(
+            ref_row["items"][item_slot][field]
+        ), (
+            f"record={record} item={item_slot} field={field} "
+            f"expected={int(ref_row['items'][item_slot][field])} "
+            f"got={int(out_row['items'][item_slot][field])}"
+        )
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
     ("record", "should_transfer"),
     [
         (118, True),
@@ -1103,6 +1152,68 @@ def test_high_flag_laser_steady_guard_does_not_hit_immediately() -> None:
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "p", "item_slot"),
+    [
+        (
+            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+            "MotionlessAggressiveJay.msl",
+            5398,
+            1,
+            0,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+            "PriceyPartialAlbatross.msl",
+            5170,
+            0,
+            1,
+        ),
+    ],
+)
+def test_live_article_x2218_b1_steady_guard_laser_enters_guardsetoff(
+    dataset_rel: str, record: int, p: int, item_slot: int
+) -> None:
+    # Positive for the raw x2218_b1 steady-Guard item owner:
+    # - the defender is a frozen settled Guard row (`af=-1`, `anim=-1`) with raw fp+0x2218_b1 set,
+    # - source `ftColl_8007925C` consumes the current item HitCapsule segment against ShieldDesc,
+    #   then `ftColl_80077688`/`Item_80269DC8` resolves GuardSetOff/HitShield.
+    # - this differs from the pure behavior lane above, which is phase-limited to live SpecialN
+    #   loop ownership, and from high command/interrupt lanes that stay on the point sample.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077688}
+    # refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Phys,it_8029C4D4}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    seed_row, ref_row, out_row = _run_one_step_row(dataset_path, record, p)
+
+    assert int(seed_row["action_id"][p]) == 179
+    assert int(seed_row["action_frame"][p]) == -1
+    assert int(seed_row["animation_index"][p]) == 0xFFFFFFFF
+    assert int(seed_row["state_flags"][p][0]) == 0x40
+    assert int(seed_row["items"][item_slot]["exists"]) == 1
+    assert int(seed_row["items"][item_slot]["type"]) == 55
+    assert int(ref_row["action_id"][p]) == 181
+
+    assert int(out_row["action_id"][p]) == 181
+    assert int(out_row["hitlag"][p]) == int(ref_row["hitlag"][p])
+    assert int(out_row["hitstun"][p]) == int(ref_row["hitstun"][p])
+    assert abs(float(out_row["shield_hp"][p]) - float(ref_row["shield_hp"][p])) <= 5e-4
+
+    for field in ("exists", "type", "state", "owner", "instance_id"):
+        assert int(out_row["items"][item_slot][field]) == int(
+            ref_row["items"][item_slot][field]
+        ), (
+            f"record={record} item={item_slot} field={field} "
+            f"expected={int(ref_row['items'][item_slot][field])} "
+            f"got={int(out_row['items'][item_slot][field])}"
+        )
+
+
+@pytest.mark.integration
 def test_landing_carried_laser_pure_x2218_steady_guard_stays_point_sample() -> None:
     # Negative for the pure-x2218 steady-Guard branch:
     # - DCC:2231 has the pure fp+0x2218 behavior byte, but the projectile is already in the
@@ -1134,6 +1245,42 @@ def test_landing_carried_laser_pure_x2218_steady_guard_stays_point_sample() -> N
     assert int(ref_row["action_id"][p]) == 179
 
     assert int(out_row["action_id"][p]) == 179
+    assert int(out_row["hitlag"][p]) == 0
+    assert int(out_row["hitstun"][p]) == 0
+    assert abs(float(out_row["shield_hp"][p]) - float(ref_row["shield_hp"][p])) <= 5e-4
+
+
+@pytest.mark.integration
+def test_landing_carried_laser_steady_guardon_live_article_stays_point_sample() -> None:
+    # Negative for the steady GuardOn live-article lane:
+    # - PRH:5877 carries a laser after the owner has already left SpecialN and is in Landing.
+    # - The raw live-article/allow-interrupt bits prove item callback provenance, not a fresh
+    #   current-segment shield sweep. Source stays GuardOn with only GuardOn_Anim shield drain.
+    # refs/melee/src/melee/it/items/itfoxlaser.c::{itFoxlaser_UnkMotion1_Phys,it_8029C4D4}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_Anim,ftCo_800928CC}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+        "PositiveRevolvingHyena.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    p = 0
+    seed_row, ref_row, out_row = _run_one_step_row(dataset_path, 5877, p)
+
+    assert int(seed_row["action_id"][p]) == 178  # GuardOn.
+    assert int(seed_row["action_frame"][p]) == -1
+    assert int(seed_row["animation_index"][p]) == 0xFFFFFFFF
+    assert int(seed_row["state_flags"][p][0]) == 0xC0
+    assert int(seed_row["action_id"][1]) == 42  # Landing, not SpecialN loop.
+    assert int(seed_row["items"][0]["exists"]) == 1
+    assert int(seed_row["items"][0]["type"]) == 55
+    assert int(ref_row["action_id"][p]) == 178
+
+    assert int(out_row["action_id"][p]) == 178
     assert int(out_row["hitlag"][p]) == 0
     assert int(out_row["hitstun"][p]) == 0
     assert abs(float(out_row["shield_hp"][p]) - float(ref_row["shield_hp"][p])) <= 5e-4
