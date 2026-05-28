@@ -3801,6 +3801,53 @@ static PyObject* msl_debug_hurtcap_geometry_valid_py(PyObject* self, PyObject* a
   return PyLong_FromLong((long)valid);
 }
 
+static PyObject* msl_debug_hurtcap_matrix_valid_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  int batch_index = 0;
+  int player_index = 0;
+  int cap_id = 0;
+  if (!PyArg_ParseTuple(args, "Oiii", &handle_obj, &batch_index, &player_index, &cap_id)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+
+  uint8_t valid = 0u;
+  const int err =
+      msl_batch_debug_hurtcap_matrix_valid(h->batch, batch_index, player_index, cap_id, &valid);
+  if (err != 0) {
+    PyErr_Format(PyExc_ValueError, "msl_batch_debug_hurtcap_matrix_valid failed: %d", err);
+    return NULL;
+  }
+  return PyLong_FromLong((long)valid);
+}
+
+static PyObject* msl_debug_poison_hurtcap_matrix_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  int batch_index = 0;
+  int player_index = 0;
+  int cap_id = 0;
+  if (!PyArg_ParseTuple(args, "Oiii", &handle_obj, &batch_index, &player_index, &cap_id)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+
+  const int err =
+      msl_batch_debug_poison_hurtcap_matrix(h->batch, batch_index, player_index, cap_id);
+  if (err != 0) {
+    PyErr_Format(PyExc_ValueError, "msl_batch_debug_poison_hurtcap_matrix failed: %d", err);
+    return NULL;
+  }
+  Py_RETURN_NONE;
+}
+
 static PyObject* msl_debug_dynamic_pose_state_py(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* handle_obj = NULL;
@@ -6729,6 +6776,10 @@ static PyMethodDef methods[] = {
      "bytes[1,sizeof(MslDebugHurtcapSlotFlags)]"},
     {"debug_hurtcap_geometry_valid", msl_debug_hurtcap_geometry_valid_py, METH_VARARGS,
      "debug_hurtcap_geometry_valid(handle, batch_index, player_index) -> 0/1"},
+    {"debug_hurtcap_matrix_valid", msl_debug_hurtcap_matrix_valid_py, METH_VARARGS,
+     "debug_hurtcap_matrix_valid(handle, batch_index, player_index, cap_id) -> 0/1"},
+    {"debug_poison_hurtcap_matrix", msl_debug_poison_hurtcap_matrix_py, METH_VARARGS,
+     "debug_poison_hurtcap_matrix(handle, batch_index, player_index, cap_id)"},
     {"debug_dynamic_pose_state", msl_debug_dynamic_pose_state_py, METH_VARARGS,
      "debug_dynamic_pose_state(handle, batch_index, player_index) -> "
      "bytes[1,sizeof(MslDebugDynamicPoseState)]"},

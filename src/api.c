@@ -55,6 +55,8 @@
 #include "knockdown.h"
 #include "locomotion.h"
 
+static inline void invalidate_hurtcap_matrix_lane(MslBatch* batch, int bi);
+
 static inline void reseed_ecb_rel_points_sample(MslEcbWorldPoints* out, uint8_t char_id,
                                                 uint32_t anim, float anim_frame_f32,
                                                 float facing_dir, uint8_t force_zero) {
@@ -570,6 +572,16 @@ MslBatch* msl_batch_create(int batch_size, int num_players) {
   memset(batch->debug_hit_status_override, 0xFF,
          (size_t)batch_size * (size_t)MSL_MAX_PLAYERS * sizeof(uint8_t));
 
+  const size_t hurtcap_count =
+      (size_t)batch_size * (size_t)MSL_MAX_PLAYERS * (size_t)MSL_MAX_HURTCAPS;
+  batch->hurtcap_matrix_valid = (uint8_t*)alloc_malloc(hurtcap_count * sizeof(uint8_t));
+  batch->hurtcap_matrix = (float*)alloc_malloc(hurtcap_count * 12u * sizeof(float));
+  if (batch->hurtcap_matrix_valid == NULL || batch->hurtcap_matrix == NULL) {
+    msl_batch_destroy(batch);
+    return NULL;
+  }
+  memset(batch->hurtcap_matrix_valid, 0, hurtcap_count * sizeof(uint8_t));
+
   batch->debug_rng_shadow_seed = (uint32_t*)alloc_malloc((size_t)batch_size * sizeof(uint32_t));
   batch->debug_rng_seed_in = (uint32_t*)alloc_malloc((size_t)batch_size * sizeof(uint32_t));
   batch->debug_rng_seed_out = (uint32_t*)alloc_malloc((size_t)batch_size * sizeof(uint32_t));
@@ -723,6 +735,8 @@ void msl_batch_destroy(MslBatch* batch) {
   alloc_free(batch->debug_rng_seed_out);
   alloc_free(batch->debug_rng_seed_in);
   alloc_free(batch->debug_rng_shadow_seed);
+  alloc_free(batch->hurtcap_matrix);
+  alloc_free(batch->hurtcap_matrix_valid);
   alloc_free(batch->debug_hit_status_override);
   alloc_free(batch->camera_mode);
   alloc_free(batch->replay_rollout_seed_frame_id);
@@ -767,6 +781,10 @@ static void msl_batch_copy_runtime_lane(MslBatch* dst, const MslBatch* src, int3
   MSL_BATCH_COPY_FIELD(replay_rollout_seed_frame_id, int32_t, 1u);
   MSL_BATCH_COPY_FIELD(camera_mode, uint8_t, 1u);
   MSL_BATCH_COPY_FIELD(debug_hit_status_override, uint8_t, (size_t)MSL_MAX_PLAYERS);
+  MSL_BATCH_COPY_FIELD(hurtcap_matrix_valid, uint8_t,
+                       (size_t)MSL_MAX_PLAYERS * (size_t)MSL_MAX_HURTCAPS);
+  MSL_BATCH_COPY_FIELD(hurtcap_matrix, float,
+                       (size_t)MSL_MAX_PLAYERS*(size_t)MSL_MAX_HURTCAPS * 12u);
   MSL_BATCH_COPY_FIELD(debug_rng_shadow_seed, uint32_t, 1u);
   MSL_BATCH_COPY_FIELD(debug_rng_seed_in, uint32_t, 1u);
   MSL_BATCH_COPY_FIELD(debug_rng_seed_out, uint32_t, 1u);
@@ -1396,6 +1414,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
     if (!stage_collision_stage_available(seed->stage_id)) {
       return ENOENT;
     }
+    invalidate_hurtcap_matrix_lane(batch, bi);
 
     // Initialize per-environment global counters from seeded values.
     // - stale_attack_instance_counter: seeded as next after max observed attack_instance lanes.
@@ -4644,6 +4663,22 @@ static inline size_t debug_idx_hurtcap(int bi, int p, int cap_i) {
          (size_t)cap_i;
 }
 
+static inline void debug_invalidate_hurtcap_matrix(MslBatch* batch, int bi, int p, int cap_i) {
+  if (batch == NULL || batch->hurtcap_matrix_valid == NULL) {
+    return;
+  }
+  batch->hurtcap_matrix_valid[debug_idx_hurtcap(bi, p, cap_i)] = 0u;
+}
+
+static inline void invalidate_hurtcap_matrix_lane(MslBatch* batch, int bi) {
+  if (batch == NULL || batch->hurtcap_matrix_valid == NULL || bi < 0) {
+    return;
+  }
+  const size_t base = (size_t)bi * (size_t)MSL_MAX_PLAYERS * (size_t)MSL_MAX_HURTCAPS;
+  memset(&batch->hurtcap_matrix_valid[base], 0,
+         (size_t)MSL_MAX_PLAYERS * (size_t)MSL_MAX_HURTCAPS * sizeof(uint8_t));
+}
+
 int msl_batch_debug_hurtcap_slot_flags(const MslBatch* batch, int batch_index, int player_index,
                                        int cap_id, MslDebugHurtcapSlotFlags* out_flags) {
   if (batch == NULL || out_flags == NULL) {
@@ -4710,6 +4745,45 @@ int msl_batch_debug_hurtcap_geometry_valid(const MslBatch* batch, int batch_inde
   }
   const size_t idx = msl_idx_player(batch_index, player_index);
   *out_valid = batch->state.hurtcap_geometry_valid[idx] ? 1u : 0u;
+  return 0;
+}
+
+int msl_batch_debug_hurtcap_matrix_valid(const MslBatch* batch, int batch_index, int player_index,
+                                         int cap_id, uint8_t* out_valid) {
+  if (batch == NULL || out_valid == NULL) {
+    return EINVAL;
+  }
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return EINVAL;
+  }
+  if (player_index < 0 || player_index >= MSL_MAX_PLAYERS) {
+    return EINVAL;
+  }
+  if (cap_id < 0 || cap_id >= MSL_MAX_HURTCAPS) {
+    return EINVAL;
+  }
+  const size_t cap_i = debug_idx_hurtcap(batch_index, player_index, cap_id);
+  *out_valid = batch->hurtcap_matrix_valid[cap_i] ? 1u : 0u;
+  return 0;
+}
+
+int msl_batch_debug_poison_hurtcap_matrix(MslBatch* batch, int batch_index, int player_index,
+                                          int cap_id) {
+  if (batch == NULL) {
+    return EINVAL;
+  }
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return EINVAL;
+  }
+  if (player_index < 0 || player_index >= MSL_MAX_PLAYERS) {
+    return EINVAL;
+  }
+  if (cap_id < 0 || cap_id >= MSL_MAX_HURTCAPS) {
+    return EINVAL;
+  }
+  const size_t cap_i = debug_idx_hurtcap(batch_index, player_index, cap_id);
+  memset(&batch->hurtcap_matrix[(size_t)cap_i * 12u], 0, sizeof(float) * 12u);
+  batch->hurtcap_matrix_valid[cap_i] = 1u;
   return 0;
 }
 
@@ -5405,6 +5479,7 @@ int msl_batch_debug_clear_hurtcaps_world(MslBatch* batch, int batch_index, int p
     batch->state.hurtcap_radius[cap_i] = 0.0f;
     batch->state.hurtcap_is_grabbable[cap_i] = 0;
     batch->state.hurtcap_height[cap_i] = 0;
+    debug_invalidate_hurtcap_matrix(batch, batch_index, player_index, cap_id);
   }
 
   return 0;
@@ -5435,6 +5510,7 @@ int msl_batch_debug_set_hurtcap_world(MslBatch* batch, int batch_index, int play
   batch->state.hurtcap_b_y[cap_i] = by;
   batch->state.hurtcap_b_z[cap_i] = bz;
   batch->state.hurtcap_radius[cap_i] = radius;
+  debug_invalidate_hurtcap_matrix(batch, batch_index, player_index, hurtcap_id);
 
   const size_t idx = msl_idx_player(batch_index, player_index);
   uint8_t count = batch->state.hurtcap_count[idx];

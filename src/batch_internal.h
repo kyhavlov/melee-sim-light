@@ -73,6 +73,12 @@ struct MslBatch {
   // Value 0xFF means "no override; use table lookup".
   uint8_t* debug_hit_status_override;
 
+  // Runtime-only collision-pose matrices sampled while building hurtcap endpoints. Combat's
+  // ordinary BODY matrix-radius path consumes the same matrix later in the frame. This deliberately
+  // stays out of serialized state so existing replay datasets keep their schema.
+  uint8_t* hurtcap_matrix_valid;  // [batch * players * caps]
+  float* hurtcap_matrix;          // [batch * players * caps * 12]
+
   // Debug/triage RNG observability (no gameplay ownership by default):
   // - Shadow RNG stream starts from frame_pre_random_seed each step.
   // - Per-site consume counts are indexed by MSL_RNG_SITE_*.

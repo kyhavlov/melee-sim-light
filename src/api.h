@@ -2385,6 +2385,10 @@ int msl_batch_debug_hurtcap_slot_flags(const MslBatch* batch, int batch_index, i
                                        int cap_id, MslDebugHurtcapSlotFlags* out_flags);
 int msl_batch_debug_hurtcap_geometry_valid(const MslBatch* batch, int batch_index, int player_index,
                                            uint8_t* out_valid);
+int msl_batch_debug_hurtcap_matrix_valid(const MslBatch* batch, int batch_index, int player_index,
+                                         int cap_id, uint8_t* out_valid);
+int msl_batch_debug_poison_hurtcap_matrix(MslBatch* batch, int batch_index, int player_index,
+                                          int cap_id);
 // Debug/testing helper: return the current exact AttackAirB continuation overlap amount for one
 // attacker hitbox / defender hurtcap pair.
 int msl_batch_debug_attackairb_continuation_overlap(const MslBatch* batch, int batch_index,

@@ -1632,33 +1632,44 @@ static inline uint8_t combat_body_overlap_lbColl_80006E58_matrix_radius(
   const float hurt_cp_z = az + t * (bz - az);
 
   float m[12];
-  const uint16_t pose_frame = combat_attackdash_post_hitbox_collision_pose_owner(
-                                  batch, bi, d_idx, action_id, char_id, anim_frame_f32,
-                                  attacker_action_id, attacker_hitbox_active)
-                                  ? (uint16_t)(frame + 1u)
-                                  : frame;
-  uint16_t combat_pose_frame = pose_frame;
-  if (side_special_start_pre_anim_pose && combat_pose_frame > 0u && combat_pose_frame != 0xFFFFu) {
-    // Same PassiveWallJump -> Side-B Start collision-pose owner as hurtboxes.c.
-    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
-    //   ftFx_SpecialSStart_Anim,ftFx_SpecialAirSStart_Anim,ftFx_SpecialSStart_Coll,
-    //   ftFx_SpecialAirSStart_Coll}
-    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::ftCo_PassiveWall_IASA
-    // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076ED8
-    // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
-    combat_pose_frame = (uint16_t)(combat_pose_frame - 1u);
+  const uint8_t attackdash_post_hitbox_pose = combat_attackdash_post_hitbox_collision_pose_owner(
+      batch, bi, d_idx, action_id, char_id, anim_frame_f32, attacker_action_id,
+      attacker_hitbox_active);
+  const size_t cap_i = idx_hurtcap(bi, defender, cap_id);
+  const uint8_t can_use_cached_matrix =
+      (!use_catch_grabbable_pose && !attackdash_post_hitbox_pose &&
+       !side_special_start_pre_anim_pose && !combat_guard_tilt_live_body_pose_owner(batch, d_idx) &&
+       batch->hurtcap_matrix_valid[cap_i] != 0u)
+          ? 1u
+          : 0u;
+  if (can_use_cached_matrix) {
+    memcpy(m, &batch->hurtcap_matrix[(size_t)cap_i * 12u], sizeof(m));
+  } else {
+    const uint16_t pose_frame = attackdash_post_hitbox_pose ? (uint16_t)(frame + 1u) : frame;
+    uint16_t combat_pose_frame = pose_frame;
+    if (side_special_start_pre_anim_pose && combat_pose_frame > 0u &&
+        combat_pose_frame != 0xFFFFu) {
+      // Same PassiveWallJump -> Side-B Start collision-pose owner as hurtboxes.c.
+      // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
+      //   ftFx_SpecialSStart_Anim,ftFx_SpecialAirSStart_Anim,ftFx_SpecialSStart_Coll,
+      //   ftFx_SpecialAirSStart_Coll}
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_PassiveWall.c::ftCo_PassiveWall_IASA
+      // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076ED8
+      // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+      combat_pose_frame = (uint16_t)(combat_pose_frame - 1u);
+    }
+    const float pose_sample_frame = combat_hurtcap_pose_sample_frame(
+        batch, d_idx, char_id, msid, action_id, anim_frame_f32, combat_pose_frame);
+    const int matrix_status =
+        use_catch_grabbable_pose ? anim_pose_get_catch_grabbable_matrix_f32(
+                                       batch, d_idx, msid, pose_sample_frame, cap->bone_part_id, m)
+                                 : anim_pose_get_collision_matrix_f32(
+                                       batch, d_idx, msid, pose_sample_frame, cap->bone_part_id, m);
+    if (matrix_status != 0) {
+      return 0u;
+    }
+    (void)combat_apply_guard_tilt_live_body_matrix(batch, d_idx, char_id, cap->bone_part_id, m);
   }
-  const float pose_sample_frame = combat_hurtcap_pose_sample_frame(
-      batch, d_idx, char_id, msid, action_id, anim_frame_f32, combat_pose_frame);
-  const int matrix_status = use_catch_grabbable_pose
-                                ? anim_pose_get_catch_grabbable_matrix_f32(
-                                      batch, d_idx, msid, pose_sample_frame, cap->bone_part_id, m)
-                                : anim_pose_get_collision_matrix_f32(
-                                      batch, d_idx, msid, pose_sample_frame, cap->bone_part_id, m);
-  if (matrix_status != 0) {
-    return 0u;
-  }
-  (void)combat_apply_guard_tilt_live_body_matrix(batch, d_idx, char_id, cap->bone_part_id, m);
   if (out_evaluated) {
     *out_evaluated = 1u;
   }

@@ -2,6 +2,7 @@
 #include "ids.h"
 
 #include <stdint.h>
+#include <string.h>
 
 #include "action_ids.h"
 #include "anim_frame.h"
@@ -540,6 +541,7 @@ static void hurtboxes_refresh_impl(MslBatch* batch, uint8_t geometry_mode) {
         batch->state.hurtcap_b_y[hi] = 0.0f;
         batch->state.hurtcap_b_z[hi] = 0.0f;
         batch->state.hurtcap_radius[hi] = 0.0f;
+        batch->hurtcap_matrix_valid[hi] = 0u;
         batch->state.hurtcap_is_grabbable[hi] = 0;
         batch->state.hurtcap_height[hi] = 0;
       }
@@ -1033,6 +1035,10 @@ static void hurtboxes_refresh_impl(MslBatch* batch, uint8_t geometry_mode) {
           continue;
         }
         const float* m = &cap_mats[(size_t)ci * 12u];
+        if (use_guard_tilt_body_pose == 0u) {
+          memcpy(&batch->hurtcap_matrix[(size_t)hi * 12u], m, sizeof(float) * 12u);
+          batch->hurtcap_matrix_valid[hi] = 1u;
+        }
         float ax = 0.0f, ay = 0.0f, az = 0.0f;
         float bx = 0.0f, by = 0.0f, bz = 0.0f;
         msl_mtx34_mul_point(m, caps[ci].a_offset, &ax, &ay, &az);
