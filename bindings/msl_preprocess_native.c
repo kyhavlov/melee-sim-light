@@ -8761,7 +8761,15 @@ PyObject* msl_derive_item_hidden_callback_seed_lanes_py(PyObject* self, PyObject
         const float dx = rvx[idx] - svx[idx];
         const float dy = rvy[idx] - svy[idx];
         if (isfinite(svx[idx]) && isfinite(svy[idx]) && isfinite(rvx[idx]) && isfinite(rvy[idx]) &&
-            (dx * dx + dy * dy) > 0.25f) {
+            (dx * dx + dy * dy) > 1.0e-6f) {
+          // Hidden ShieldBounced xC58 provenance can be a shallow mirror, especially for
+          // GuardReflect -> ShieldDesc fallthrough where the source lbColl normal is almost
+          // vertical. A large velocity-delta threshold drops real Item_80269DC8 ownership and
+          // forces runtime to guess from public item velocity. Guard context plus same laser
+          // identity/same owner are the source filter; the epsilon only rejects serialization noise.
+          // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80077688,ftColl_8007925C}
+          // refs/melee/src/melee/it/item.c::Item_80269DC8
+          // refs/melee/src/melee/it/items/itfoxlaser.c::itFoxLaser_Logic94_ShieldBounced
           bvalid[idx] = 1u;
           bvx[idx] = rvx[idx];
           bvy[idx] = rvy[idx];

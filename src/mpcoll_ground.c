@@ -2421,6 +2421,140 @@ static int msl_mplib_8004dd90_floor(const MslBatch* batch, int bi, const MslStag
   return cur;
 }
 
+static uint8_t mpcoll_grounded_final_root_flat_seam_remap(const MslMpcollContext* ctx,
+                                                          MslMpcollFloorContact* contact) {
+  if (ctx == NULL || ctx->batch == NULL || ctx->floor_graph == NULL || contact == NULL ||
+      !ctx->was_grounded) {
+    return 0u;
+  }
+  MslBatch* batch = ctx->batch;
+  const size_t idx = ctx->idx;
+  const int line_idx = stage_collision_floor_line_index(ctx->stage_id, contact->ground_id);
+  if (line_idx < 0 || (size_t)line_idx >= ctx->floor_graph->line_count) {
+    return 0u;
+  }
+
+  const MslStageFloorLine line =
+      floor_line_world_for_env(batch, ctx->bi, ctx->floor_graph, line_idx);
+  if (line.is_platform || line.platform_transform_kind != MSL_STAGE_PLATFORM_TRANSFORM_NONE ||
+      fabsf(line.y1 - line.y0) > k_floor_horiz_dy_thresh ||
+      floor_x_within_line_segment_strict(batch, ctx->bi, ctx->floor_graph, line_idx,
+                                         batch->state.pos_x[idx])) {
+    return 0u;
+  }
+
+  float y_corr = 0.0f;
+  float nx = 0.0f;
+  float ny = 1.0f;
+  const int root_line_idx =
+      msl_mplib_8004dd90_floor(batch, ctx->bi, ctx->floor_graph, line_idx, batch->state.pos_x[idx],
+                               batch->state.pos_y[idx], &y_corr, &nx, &ny);
+  if (root_line_idx < 0 || root_line_idx == line_idx ||
+      (size_t)root_line_idx >= ctx->floor_graph->line_count ||
+      !floor_lines_connected(ctx->floor_graph, line_idx, root_line_idx)) {
+    return 0u;
+  }
+
+  const MslStageFloorLine root_line =
+      floor_line_world_for_env(batch, ctx->bi, ctx->floor_graph, root_line_idx);
+  if (root_line.is_platform ||
+      root_line.platform_transform_kind != MSL_STAGE_PLATFORM_TRANSFORM_NONE ||
+      fabsf(root_line.y1 - root_line.y0) > k_floor_horiz_dy_thresh ||
+      fabsf(root_line.y0 - line.y0) > k_floor_y_bias) {
+    return 0u;
+  }
+
+  // Grounded mpColl's final floor.index belongs to CollData.cur_pos/root after the full
+  // mpColl_8004ACE4 substep sequence, not only the first accepted ECB-bottom projection. Source
+  // can apply grounded squeeze/overlap corrections before final floor writeback; at flat connected
+  // legal-stage seams, mpLib_8004DD90_Floor then returns the adjacent floor line once the final
+  // root is past the persisted segment endpoint.
+  // refs/melee/src/melee/ft/ft_081B.c::ft_80082708
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004B108,mpColl_8004ACE4}
+  // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+  // data/stages/bin/*.bin::MSLSTG01 floor prev/next links
+  contact->ground_id = ctx->floor_graph->lines[(size_t)root_line_idx].segment_i;
+  contact->contact_x = batch->state.pos_x[idx];
+  contact->contact_y = batch->state.pos_y[idx] + y_corr - k_floor_y_bias;
+  contact->normal_x = nx;
+  contact->normal_y = ny;
+  return 1u;
+}
+
+static uint8_t mpcoll_refresh_grounded_root_flat_seam(MslBatch* batch, int bi, size_t idx,
+                                                      uint32_t stage_id,
+                                                      const MslStageFloorGraph* g) {
+  if (batch == NULL || g == NULL || batch->state.on_ground[idx] == 0u ||
+      batch->state.ground_id[idx] == 0xFFFFu) {
+    return 0u;
+  }
+  const int line_idx = stage_collision_floor_line_index(stage_id, batch->state.ground_id[idx]);
+  if (line_idx < 0 || (size_t)line_idx >= g->line_count) {
+    return 0u;
+  }
+  const MslStageFloorLine line = floor_line_world_for_env(batch, bi, g, line_idx);
+  if (line.is_platform || line.platform_transform_kind != MSL_STAGE_PLATFORM_TRANSFORM_NONE ||
+      fabsf(line.y1 - line.y0) > k_floor_horiz_dy_thresh ||
+      floor_x_within_line_segment_strict(batch, bi, g, line_idx, batch->state.pos_x[idx])) {
+    return 0u;
+  }
+
+  float y_corr = 0.0f;
+  float nx = 0.0f;
+  float ny = 1.0f;
+  const int root_line_idx = msl_mplib_8004dd90_floor(
+      batch, bi, g, line_idx, batch->state.pos_x[idx], batch->state.pos_y[idx], &y_corr, &nx, &ny);
+  if (root_line_idx < 0 || root_line_idx == line_idx || (size_t)root_line_idx >= g->line_count ||
+      !floor_lines_connected(g, line_idx, root_line_idx)) {
+    return 0u;
+  }
+
+  const MslStageFloorLine root_line = floor_line_world_for_env(batch, bi, g, root_line_idx);
+  if (root_line.is_platform ||
+      root_line.platform_transform_kind != MSL_STAGE_PLATFORM_TRANSFORM_NONE ||
+      fabsf(root_line.y1 - root_line.y0) > k_floor_horiz_dy_thresh ||
+      fabsf(root_line.y0 - line.y0) > k_floor_y_bias) {
+    return 0u;
+  }
+
+  // Source stage displacement can move grounded `cur_pos` after the main mpColl floor pass while
+  // leaving CollData.floor on the same connected legal-stage floor chain. Refresh the final
+  // floor.index from mpLib_8004DD90_Floor so post-frame state names the floor under the root after
+  // that displacement, rather than the earlier ECB-bottom projection.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_GetWindOffsetVec
+  // refs/melee/src/melee/gr/groldpupupu.c::fn_802112F4
+  // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+  // data/stages/bin/*.bin::MSLSTG01 floor prev/next links
+  batch->state.ground_id[idx] = g->lines[(size_t)root_line_idx].segment_i;
+  batch->state.ground_contact_x[idx] = batch->state.pos_x[idx];
+  batch->state.ground_contact_y[idx] = batch->state.pos_y[idx] + y_corr - k_floor_y_bias;
+  batch->state.ground_normal_x[idx] = nx;
+  batch->state.ground_normal_y[idx] = ny;
+  if (batch->state.coll_floor_result_valid[idx] != 0u) {
+    batch->state.coll_floor_result_segment_id[idx] = batch->state.ground_id[idx];
+    batch->state.coll_floor_result_contact_x[idx] = batch->state.ground_contact_x[idx];
+    batch->state.coll_floor_result_contact_y[idx] = batch->state.ground_contact_y[idx];
+    batch->state.coll_floor_result_normal_x[idx] = nx;
+    batch->state.coll_floor_result_normal_y[idx] = ny;
+  }
+  return 1u;
+}
+
+void mpcoll_ground_refresh_grounded_root_floor_index(MslBatch* batch, int batch_index,
+                                                     int player_index) {
+  if (batch == NULL || batch_index < 0 || batch_index >= batch->batch_size || player_index < 0 ||
+      player_index >= (int)batch->config.num_players) {
+    return;
+  }
+  const uint32_t stage_id = batch->state.stage_id[(size_t)batch_index];
+  const MslStageFloorGraph* g = stage_collision_get_floor_graph(stage_id);
+  if (g == NULL) {
+    return;
+  }
+  const size_t idx = msl_idx_player(batch_index, player_index);
+  (void)mpcoll_refresh_grounded_root_flat_seam(batch, batch_index, idx, stage_id, g);
+}
+
 static inline float mpcoll_absmaxf(float a, float b) {
   const float aa = fabsf(a);
   const float bb = fabsf(b);
@@ -3771,7 +3905,10 @@ static inline void mpcoll_commit_final_floor_state(const MslMpcollContext* ctx,
   batch->state.on_ground[idx] = on_ground;
   if (on_ground) {
     MslMpcollFloorContact contact = publication->contact;
-    if (!mpcoll_floor_contact_from_callback_result(ctx, &contact)) {
+    const uint8_t has_callback_floor_contact =
+        mpcoll_floor_contact_from_callback_result(ctx, &contact);
+    const uint8_t final_root_remapped = mpcoll_grounded_final_root_flat_seam_remap(ctx, &contact);
+    if (!has_callback_floor_contact || final_root_remapped) {
       // Source mpColl keeps the accepted floor result local to the callback before the wrapper
       // consumes it. Mirror ordinary direct floor hits here so every grounded publication reaches
       // final writeback through the same CollData-shaped scratch lane as explicit 4A908 retries.
@@ -11620,7 +11757,10 @@ void mpcoll_ground_apply(MslBatch* batch) {
             // ledge floor segments. EscapeAir_Coll should not publish LandingFallSpecial from a
             // shallow final writeback on the same carried ledge floor when the floor-sweep source
             // row was already below that floor. It stays airborne until the entered EscapeAir ECB
-            // reaches the source ft_80082C74/mpColl_800471F8 floor handoff depth.
+            // reaches the source ft_80082C74/mpColl_800471F8 floor handoff depth. Once the locked
+            // desired bottom actually sweeps through the carried ledge/floor this callback,
+            // mpColl_80044628_Floor has produced the source authority needed by
+            // mpColl_80044838_Floor, so do not suppress that publication here.
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
             // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
             // refs/melee/src/melee/mp/mpcoll.c::{
@@ -11630,6 +11770,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
              final_ground_line_is_ledge &&
              !stage_collision_floor_line_is_platform(stage_id, ground_id) &&
              !escapeair_live_cliff_ledge_source_floor_owner &&
+             !locked_desired_bottom_final_sweep_hit &&
              batch->state.coll_desired_ecb_bottom_rel_y[idx] > k_floor_y_bias &&
              batch->state.floor_sweep_prev_pos_y[idx] < contact_y && final_landing_lift >= 0.0f &&
              final_landing_lift < escapeair_entry_bottom_rel0)
@@ -12144,6 +12285,23 @@ void mpcoll_ground_apply(MslBatch* batch) {
         mpcoll_store_current_ecb_points(batch, idx, &unlocked_current_ecb);
         mpcoll_store_desired_ecb_points(batch, idx, &unlocked_desired_ecb);
         batch->state.ecb_lock_timer[idx] = 0u;
+      }
+      if (batch->state.on_ground[idx] && batch->state.ground_id[idx] != 0xFFFFu) {
+        MslMpcollFloorContact final_root_contact = {
+            .ground_id = batch->state.ground_id[idx],
+            .contact_x = batch->state.ground_contact_x[idx],
+            .contact_y = batch->state.ground_contact_y[idx],
+            .normal_x = batch->state.ground_normal_x[idx],
+            .normal_y = batch->state.ground_normal_y[idx],
+        };
+        if (mpcoll_grounded_final_root_flat_seam_remap(&mpcoll_ctx, &final_root_contact)) {
+          mpcoll_record_callback_floor_result_with_mode(
+              &mpcoll_ctx, (uint8_t)MSL_MPCOLL_FLOOR_RESULT_DIRECT,
+              (uint8_t)MSL_MPCOLL_FLOOR_MODE_DIRECT_PUBLICATION, final_root_contact.ground_id,
+              final_root_contact.contact_x, final_root_contact.contact_y,
+              final_root_contact.normal_x, final_root_contact.normal_y);
+          mpcoll_commit_grounded_floor_contact(&mpcoll_ctx, &final_root_contact, was_grounded);
+        }
       }
       batch->state.coll_prev_ecb_bottom_valid[idx] = 1u;
       batch->state.coll_ecb_bottom_valid[idx] = 1u;

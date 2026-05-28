@@ -20,6 +20,7 @@ _ACT_ATTACK_DASH = 50
 _ACT_ATTACK_S3 = 53
 _ACT_ATTACK_HI3 = 56
 _ACT_ATTACK_LW3 = 57
+_ACT_GUARD_ON = 178
 
 _SM_ATTACK_DASH = 52
 
@@ -259,3 +260,72 @@ def test_attackdash_wait_iasa_dash_transition_agg_2351_p1() -> None:
     out, _ = _run_record(dataset_path, record)
     assert int(out["action_id"][0, p]) == int(row["ref_t1"]["action_id"][0, p])
     assert int(out["animation_index"][0, p]) == int(row["ref_t1"]["animation_index"][0, p])
+
+
+@pytest.mark.integration
+def test_attacklw3_iasa_destination_walk_does_not_run_same_frame_guardon() -> None:
+    # Replay-real lock for AttackLw3 IASA callback consumption:
+    # - ftCo_AttackLw3_IASA can enter the locomotion subset through Wait-style helpers.
+    # - Once that MotionState callback returns, Fighter_procUpdate does not run the destination
+    #   Walk IASA in the same frame, so the newborn Walk state must not admit GuardOn from the
+    #   same held L/R input.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackLw3.c::ftCo_AttackLw3_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Wait.c::ftCo_Wait_IASA
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    record = 3488
+    p = 1
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record : record + 1]
+
+    assert int(row["seed_t"]["action_id"][0, p]) == _ACT_ATTACK_LW3
+    assert int(row["seed_t"]["action_frame"][0, p]) == 27
+    assert int(row["seed_t"]["animation_index"][0, p]) == 59
+    assert int(row["ref_t1"]["action_id"][0, p]) == _ACT_WALK_SLOW
+    assert int(row["ref_t1"]["animation_index"][0, p]) == 7
+    assert int(row["ref_t1"]["hitlag"][0, p]) == 0
+    assert int(row["ref_t1"]["hitstun"][0, p]) == 0
+    assert int(row["input_t"]["p"][0, p]["buttons"]) & (0x20 | 0x40)
+
+    out, _ = _run_record(dataset_path, record)
+    assert int(out["action_id"][0, p]) == int(row["ref_t1"]["action_id"][0, p])
+    assert int(out["action_id"][0, p]) != _ACT_GUARD_ON
+    assert int(out["action_frame"][0, p]) == int(row["ref_t1"]["action_frame"][0, p])
+    assert int(out["animation_index"][0, p]) == int(row["ref_t1"]["animation_index"][0, p])
+
+
+@pytest.mark.integration
+def test_attacklw3_downheld_stops_before_later_turn_walk_iasa_owner() -> None:
+    # AttackLw3_IASA checks Squat before Turn/Walk. The runtime's AttackLw3 helper deliberately
+    # leaves the Squat/terminal crouch handoff to the existing AttackLw3_Anim owner, so down-held
+    # rows must not skip that omitted source owner and enter Turn/Walk in the same callback.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackLw3.c::ftCo_AttackLw3_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_800D5FB0
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+
+    dataset_rel = "datasets/aggregate_recent/replays/validation/aggregate_recent/PositiveRevolvingHyena.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    record = 362
+    p = 1
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record : record + 1]
+
+    assert int(row["seed_t"]["action_id"][0, p]) == _ACT_ATTACK_LW3
+    assert int(row["ref_t1"]["action_id"][0, p]) == _ACT_ATTACK_LW3
+    assert _stick_i8_to_unit(int(row["input_t"]["p"][0, p]["main_y"])) < -0.6875
+
+    out, _ = _run_record(dataset_path, record)
+    assert int(out["action_id"][0, p]) == int(row["ref_t1"]["action_id"][0, p])
+    assert int(out["animation_index"][0, p]) == int(row["ref_t1"]["animation_index"][0, p])
+    assert int(out["action_frame"][0, p]) == int(row["ref_t1"]["action_frame"][0, p])

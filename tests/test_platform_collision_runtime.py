@@ -4315,7 +4315,7 @@ def test_frozen_pokemon_stadium_inactive_transform_policy_covers_floor_wall_ceil
 
 
 def test_squat_down_input_enters_pass_and_skips_source_platform() -> None:
-    seed = _seed_base(31, ACT_SQUAT_WAIT, 0, -40.0, 27.200000762939453)
+    seed = _seed_base(31, ACT_SQUAT, 0, -40.0, 27.200000762939453)
     seed["on_ground"][0, 0] = np.uint8(1)
     seed["ground_id"][0, 0] = np.uint16(2)
     seed["action_frame"][0, 0] = np.int16(3)

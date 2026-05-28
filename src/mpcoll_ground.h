@@ -13,6 +13,11 @@
 //   refs/melee/src/melee/lb/types.h::CollData.
 void mpcoll_ground_apply(MslBatch* batch);
 
+// Refresh one grounded CollData.floor after a source stage displacement update that runs after the
+// main map-collision floor pass.
+void mpcoll_ground_refresh_grounded_root_floor_index(MslBatch* batch, int batch_index,
+                                                     int player_index);
+
 typedef struct MslMpcollFloorMaskResult {
   uint16_t ground_id;
   float corrected_pos_y;

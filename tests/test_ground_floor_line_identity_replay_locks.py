@@ -104,6 +104,62 @@ def test_grounded_dash_entry_uses_connected_floor_projection_result(
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "p"),
+    [
+        (
+            "datasets/aggregate_recent/replays/validation/dream_land_recent/"
+            "FlippantEnchantedHorse.msl",
+            2340,
+            1,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/dream_land_recent/"
+            "FlippantEnchantedHorse.msl",
+            4985,
+            1,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/dream_land_recent/"
+            "ShadyDecimalStarling.msl",
+            739,
+            0,
+        ),
+    ],
+)
+def test_whispy_wind_grounded_root_crossing_flat_seam_refreshes_floor_index(
+    dataset_rel: str, record: int, p: int
+) -> None:
+    # Dream Land Whispy wind is a stage displacement after the main grounded floor pass. If wind
+    # moves the root across a connected flat floor seam, the post-frame CollData.floor index follows
+    # the final root through the same mpLib_8004DD90_Floor prev/next traversal instead of keeping
+    # the earlier ECB-bottom projection segment.
+    #
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_GetWindOffsetVec
+    # refs/melee/src/melee/gr/groldpupupu.c::fn_802112F4
+    # refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
+    # data/stages/bin/grop.bin::MSLSTG01 floor prev/next links
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record]
+    assert int(row["seed_t"]["on_ground"][p]) == 1
+    assert int(row["ref_t1"]["on_ground"][p]) == 1
+    assert int(row["seed_t"]["ground_id"][p]) != int(row["ref_t1"]["ground_id"][p])
+    assert int(row["seed_t"]["stage_dream_whispy_wind_valid_u8"]) == 1
+
+    out = _run_one_step(ds, record)
+    ref = row["ref_t1"]
+    for field in ("action_id", "action_frame", "animation_index", "on_ground", "ground_id"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
 def test_grounded_dash_entry_does_not_rewrite_floor_without_connected_seam() -> None:
     # Synthetic negative: the retained owner consumes the mpLib connected-floor projection result.
     # A center-stage FD Dash entry with no seam traversal keeps the current floor.index.

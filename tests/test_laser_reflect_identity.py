@@ -165,6 +165,93 @@ def test_item_reflect_episode_helper_owns_snapshot_damage_and_seed_lanes(tmp_pat
     subprocess.run([str(exe)], check=True)
 
 
+def test_item_hidden_callback_seed_lanes_keep_shallow_shieldbounced_velocity() -> None:
+    import msl_binding  # type: ignore
+
+    seed_exists = np.zeros((1, 15), dtype=np.uint8)
+    seed_type = np.zeros((1, 15), dtype=np.uint16)
+    seed_owner = np.full((1, 15), -1, dtype=np.int8)
+    seed_iid = np.zeros((1, 15), dtype=np.uint16)
+    seed_spawn = np.zeros((1, 15), dtype=np.uint32)
+    seed_vx = np.zeros((1, 15), dtype=np.float32)
+    seed_vy = np.zeros((1, 15), dtype=np.float32)
+    ref_exists = np.zeros((1, 15), dtype=np.uint8)
+    ref_type = np.zeros((1, 15), dtype=np.uint16)
+    ref_owner = np.full((1, 15), -1, dtype=np.int8)
+    ref_iid = np.zeros((1, 15), dtype=np.uint16)
+    ref_spawn = np.zeros((1, 15), dtype=np.uint32)
+    ref_vx = np.zeros((1, 15), dtype=np.float32)
+    ref_vy = np.zeros((1, 15), dtype=np.float32)
+    seed_action = np.zeros((1, 4), dtype=np.uint16)
+    ref_action = np.zeros((1, 4), dtype=np.uint16)
+    laser_lut = np.zeros(65536, dtype=np.uint8)
+
+    seed_exists[0, 0] = 1
+    seed_type[0, 0] = 55
+    seed_owner[0, 0] = 0
+    seed_iid[0, 0] = 16
+    seed_spawn[0, 0] = 2
+    seed_vx[0, 0] = 5.0
+    ref_exists[0, 0] = 1
+    ref_type[0, 0] = 55
+    ref_owner[0, 0] = 0
+    ref_iid[0, 0] = 16
+    ref_spawn[0, 0] = 2
+    ref_vx[0, 0] = np.float32(4.9860768)
+    ref_vy[0, 0] = np.float32(0.37187797)
+    seed_action[0, 1] = ACT_GUARD_REFLECT
+    ref_action[0, 1] = 181  # GuardSetOff
+    laser_lut[55] = 1
+
+    _, _, bounce_valid, bounce_vx, bounce_vy, *_ = msl_binding.derive_item_hidden_callback_seed_lanes(
+        seed_exists,
+        seed_type,
+        seed_owner,
+        seed_iid,
+        seed_spawn,
+        seed_vx,
+        seed_vy,
+        ref_exists,
+        ref_type,
+        ref_owner,
+        ref_iid,
+        ref_spawn,
+        ref_vx,
+        ref_vy,
+        seed_action,
+        ref_action,
+        laser_lut,
+        2,
+    )
+    assert int(bounce_valid[0, 0]) == 1
+    assert float(bounce_vx[0, 0]) == pytest.approx(float(ref_vx[0, 0]), abs=1e-7)
+    assert float(bounce_vy[0, 0]) == pytest.approx(float(ref_vy[0, 0]), abs=1e-7)
+
+    ref_vx[0, 0] = np.float32(5.0)
+    ref_vy[0, 0] = np.float32(0.0005)
+    _, _, bounce_valid, *_ = msl_binding.derive_item_hidden_callback_seed_lanes(
+        seed_exists,
+        seed_type,
+        seed_owner,
+        seed_iid,
+        seed_spawn,
+        seed_vx,
+        seed_vy,
+        ref_exists,
+        ref_type,
+        ref_owner,
+        ref_iid,
+        ref_spawn,
+        ref_vx,
+        ref_vy,
+        seed_action,
+        ref_action,
+        laser_lut,
+        2,
+    )
+    assert int(bounce_valid[0, 0]) == 0
+
+
 def _common_attr(name: str) -> float:
     import json
     from pathlib import Path

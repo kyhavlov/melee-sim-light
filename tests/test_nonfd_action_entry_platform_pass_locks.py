@@ -134,6 +134,38 @@ def _rollout_record(dataset_path: Path, *, start_record: int, target_record: int
             "Squat pass countdown enters Pass after the source x470 delay",
         ),
         _ActionCase(
+            "dream_land_recent/FlippantEnchantedHorse.msl",
+            6815,
+            0,
+            39,
+            244,
+            "Squat consumes an armed platform-pass countdown after x671 advances to the consume frame",
+        ),
+        _ActionCase(
+            "dream_land_recent/FlippantEnchantedHorse.msl",
+            11757,
+            1,
+            39,
+            244,
+            "Squat platform-pass countdown consumption does not re-run the original x671 arm gate",
+        ),
+        _ActionCase(
+            "battlefield_recent/MediumVirtualPig.msl",
+            5677,
+            1,
+            40,
+            40,
+            "SquatWait does not consume Squat's delayed platform-pass countdown",
+        ),
+        _ActionCase(
+            "yoshis_story_recent/LawfulInsistentMeerkat.msl",
+            4975,
+            0,
+            40,
+            40,
+            "SquatWait held-down platform row stays SquatWait because ftCo_Squat_IASA_inline is not called",
+        ),
+        _ActionCase(
             "battlefield_recent/DelayedSuperbGuanaco.msl",
             5521,
             1,
@@ -227,8 +259,11 @@ def test_nonfd_action_entry_platform_pass_replay_real_locks(case: _ActionCase) -
     # Source owners:
     # - AttackAir_Coll and Fox/Falco SpecialAirN*_Coll load a locked ECB through mpColl while
     #   CollData_X130_Locked is active after a ground-to-air handoff.
-    # - Squat_IASA arms mv.co.squat.x4 through ftCo_80099F9C, returns, then only decrements the
-    #   hidden countdown on later frames before calling ftCo_8009A228.
+        # - Squat_IASA arms mv.co.squat.x4 through ftCo_80099F9C, returns, then only decrements the
+        #   hidden countdown on later frames before calling ftCo_8009A228.
+        #   The later countdown consumer does not re-check the original x671 arming window.
+    # - SquatWait_IASA calls ftCo_80099F9C but not ftCo_Squat_IASA_inline, so held-down SquatWait
+    #   rows may arm the hidden pass state but cannot consume the countdown into Pass.
     # - Fall/Jump/MissFoot and AirCatchHit collision callbacks share ft_80082B1C's
     #   ftCo_800D0EC8 Wait/Landing velocity split.
     # - LandingFallSpecial uses ftCo_Landing_Coll, so edge floor-loss can enter Ottotto through
@@ -247,6 +282,7 @@ def test_nonfd_action_entry_platform_pass_replay_real_locks(case: _ActionCase) -
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
     # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::*_Coll
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::ftCo_Squat_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_SquatWait.c::ftCo_SquatWait_IASA
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
     # refs/melee/src/melee/mp/mpcoll.c::mpClearFloorSkip
     # refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_800471F8}

@@ -3040,6 +3040,8 @@ static inline uint8_t item_should_commit_aged_powershield_reflect_owner(
                                               reflect_z, reflect_extent)) {
     return 0u;
   }
+  const uint8_t exact_reflect_hit = item_swept_sphere_sphere_intersects_3d(
+      x0, y0, 0.0f, x, y, 0.0f, hit_r, reflect_x, reflect_y, reflect_z, reflect_r);
   const uint8_t carried_guardreflect_followup =
       (batch->state.action_frame[d_idx] <= -2 &&
        batch->state.prev_action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
@@ -3047,9 +3049,10 @@ static inline uint8_t item_should_commit_aged_powershield_reflect_owner(
           ? 1u
           : 0u;
   const uint8_t post_crossing_side = (((x - reflect_x) * vx) > 0.0f) ? 1u : 0u;
-  if (carried_guardreflect_followup &&
-      !item_swept_sphere_sphere_intersects_3d(x0, y0, 0.0f, x, y, 0.0f, hit_r, reflect_x, reflect_y,
-                                              reflect_z, reflect_r)) {
+  if (batch->state.seed_prev_action_id[d_idx] == (uint16_t)MSL_ACT_LANDING && !exact_reflect_hit) {
+    return 0u;
+  }
+  if (carried_guardreflect_followup && !exact_reflect_hit) {
     return 0u;
   }
   if (!post_crossing_side && !carried_guardreflect_followup) {
@@ -3062,6 +3065,9 @@ static inline uint8_t item_should_commit_aged_powershield_reflect_owner(
   //   (`fp+0x221B_b0`), because ftCo_8009388C clears ShieldDesc while ReflectDesc remains live,
   // - ReflectDesc.x14_size comes from p_ftCommonData->x2A8,
   // - `lbColl_80007BCC` scales the ISO-extracted item HitCapsule radius by `item->scl`,
+  // - Landing-origin GuardReflect snapshots keep ShieldDesc live; if exact ReflectDesc contact
+  //   misses there, source falls through to Item_80269DC8 HitShield instead of using the x20
+  //   broad-phase extent as reflected-owner proof,
   // - x14 final-tick exclusion keeps Item_80269DC8 HitShield destruction on its owner lane.
   // - carried GuardReflect follow-up snapshots in the raw fp+0x2218_b1 live-article lane can keep
   //   the source ReflectDesc owner only when the exact x2A8 + item-HitCapsule overlap passes;
@@ -4974,8 +4980,8 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
       // - ftCo_GuardReflect_Anim ticks x14 before chaining GuardOn_Anim; while the seeded frozen
       //   snapshot still has more than one x14 tick left, the reflect-window owner has not yet
       //   handed the row to the regular shield-hit / GuardSetOff path.
-      // - When x14 reaches the final visible tick, the next row can enter GuardSetOff through the
-      //   normal shield-hit owner.
+      // - Final visible x14 rows use the explicit HitShield handoff below; rows without that
+      //   source geometry stay on GuardReflect, and rows with it may enter GuardSetOff.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardReflect_Anim,ftCo_80093BC0,ftCo_80092F2C}
       const uint8_t guard_reflect_active_window_no_submotion_snapshot =
           (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_GUARD_REFLECT &&
@@ -5016,7 +5022,13 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80093A50,ftCo_80092450,ftCo_800921DC}
         shr = item_guard_shield_radius_from_state(batch, common, d_idx);
       }
-      if (shr > 0.0f && !guard_on_entry_from_landing && !guard_reflect_entry_from_landing &&
+      const uint8_t guard_reflect_same_frame_landing_entry =
+          (guard_reflect_entry_from_landing &&
+           batch->state.guard_reflect_timer_x14_seed[d_idx] == 0u &&
+           batch->state.guard_reflect_timer_x18_seed[d_idx] == 0u)
+              ? 1u
+              : 0u;
+      if (shr > 0.0f && !guard_on_entry_from_landing && !guard_reflect_same_frame_landing_entry &&
           !shield_fresh_dash_guardreflect_full_shield_snapshot &&
           !shield_dash_guardon_followup_guard_reflect_snapshot) {
         // Use derived shield bubble center from shields_refresh() (same geometry used by the
@@ -5106,9 +5118,19 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
                 x, y, 0.0f, sr, reflect_x, reflect_y, reflect_z, reflect_r);
           }
         }
+        const uint8_t guard_reflect_late_locomotion_shield_desc_overlap =
+            (guard_reflect_late_locomotion_snapshot_base &&
+             batch->state.seed_prev_action_id[d_idx] == (uint16_t)MSL_ACT_LANDING &&
+             item_state_flags_2218_is_reflect_behavior_only(
+                 batch->state.state_flags[d_idx * (size_t)MSL_STATE_FLAGS_BYTES +
+                                          (size_t)MSL_STATE_FLAGS_2218_INDEX]) &&
+             item_sphere_sphere_intersects_2d(x, y, sr, shx, shy, shr))
+                ? 1u
+                : 0u;
         const uint8_t guard_reflect_late_locomotion_hitshield_handoff =
             (guard_reflect_late_locomotion_snapshot_base &&
-             guard_reflect_late_locomotion_reflect_desc_overlap)
+             (guard_reflect_late_locomotion_reflect_desc_overlap ||
+              guard_reflect_late_locomotion_shield_desc_overlap))
                 ? 1u
                 : 0u;
         const uint8_t guard_reflect_same_frame_locomotion_entry_bounce_normal =
@@ -5388,14 +5410,35 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
                                           (size_t)MSL_STATE_FLAGS_2218_INDEX]))
                 ? 1u
                 : 0u;
+        uint8_t guard_reflect_final_x14_reflectdesc_hitshield = 0u;
+        if (guard_reflect_pure_final_x14_base && common != NULL &&
+            common->powershield_reflect_size > 0.0f) {
+          float reflect_x = 0.0f;
+          float reflect_y = 0.0f;
+          float reflect_z = 0.0f;
+          if (item_guard_reflect_center_xyz(batch, d_idx, &reflect_x, &reflect_y, &reflect_z)) {
+            const float reflect_r =
+                common->powershield_reflect_size * batch->state.fighter_scale_y[d_idx];
+            const float hit_r = item_laser_reflect_hit_radius(sr, laser_scale_z);
+            enum { MSL_LBCOLL_HIT_RESULT_EXTENT = 20 };
+            const float reflect_extent = reflect_r * (float)MSL_LBCOLL_HIT_RESULT_EXTENT;
+            guard_reflect_final_x14_reflectdesc_hitshield =
+                item_swept_sphere_sphere_intersects_3d(x0, y0, 0.0f, x, y, 0.0f, hit_r, reflect_x,
+                                                       reflect_y, reflect_z, reflect_extent)
+                    ? 1u
+                    : 0u;
+          }
+        }
         const uint8_t guard_reflect_seed_final_x14_hitshield =
             (guard_reflect_pure_final_x14_base &&
-             batch->state.guard_reflect_timer_x14_seed[d_idx] == 1u)
+             batch->state.guard_reflect_timer_x14_seed[d_idx] == 1u &&
+             guard_reflect_final_x14_reflectdesc_hitshield)
                 ? 1u
                 : 0u;
         const uint8_t guard_reflect_post_callback_final_x14_hitshield =
             (guard_reflect_pure_final_x14_base &&
              batch->state.guard_reflect_timer_x14_seed[d_idx] > 1u &&
+             guard_reflect_final_x14_reflectdesc_hitshield &&
              item_sphere_sphere_intersects_2d(x, y, sr, shx, shy, shr))
                 ? 1u
                 : 0u;
@@ -5415,9 +5458,9 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
             if (fabsf(y_delta) <= reflect_lane_r) {
               // Final-x14 GuardReflect HitShield handoff:
               // - ftCo_GuardReflect_Anim ticks mv.co.guard.x14 before GuardOn_Anim; final visible
-              //   x14 rows can hand contact to item shield resolution. The seed-final row keeps
-              //   the existing frozen-x14 lane; post-callback seed>1 rows additionally require
-              //   live ShieldDesc bubble overlap below.
+              //   x14 rows can hand contact to item shield resolution only when the item
+              //   HitCapsule sweeps through the source ReflectDesc extent. The x14 timer alone is
+              //   ReflectDesc lifetime, not Item_80269DC8 HitShield authority.
               // - Item_80269DC8 chooses the hit_shield callback when the bounce predicate
               //   (`xDCE_flag.b5/xDCE_flag.b4/xC54`) is not set; Fox laser HitShield destroys.
               // - Use the same ReflectDesc x2A8 vertical lane as the aged reflect branch to avoid
@@ -5428,7 +5471,31 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
               shield_hit = 1u;
               shield_hit_contact_x = x;
               shield_hit_contact_y = y;
-              shield_bounce_contact_found = 0u;
+              if (guard_reflect_late_locomotion_shield_desc_overlap) {
+                // The Landing-origin ReflectDesc miss can still fall through to a live ShieldDesc
+                // owner on this same row. In that path ftColl_80077688 computes the item
+                // xC54/xC58 bounce result before Item_80269DC8 chooses ShieldBounced vs HitShield,
+                // so preserve the bounce predicate instead of forcing the generic final-x14
+                // destroy path.
+                // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077688}
+                // refs/melee/src/melee/it/item.c::Item_80269DC8
+                float trial_bounce_vx = 0.0f;
+                float trial_bounce_vy = 0.0f;
+                if (laser_try_shield_bounce_velocity_from_segment(
+                        vx, vy, bounce_shx, bounce_shy, bounce_shz, shield_bounce_shield_radius, x0,
+                        y0, 0.0f, x, y, 0.0f, shield_bounce_radius, &trial_bounce_vx,
+                        &trial_bounce_vy)) {
+                  shield_bounce_contact_found = 1u;
+                  shield_bounce_source_allows = 1u;
+                  shield_bounce_source_vx = trial_bounce_vx;
+                  shield_bounce_source_vy = trial_bounce_vy;
+                  shield_bounce_best_vy = trial_bounce_vy;
+                } else {
+                  shield_bounce_contact_found = 0u;
+                }
+              } else {
+                shield_bounce_contact_found = 0u;
+              }
             }
           }
         }
@@ -5869,6 +5936,21 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
             // ftCommonData x2B0 directly (or identity) for these rows.
             break;
           }
+          if (guard_reflect_late_locomotion_snapshot_base &&
+              batch->state.seed_prev_action_id[d_idx] == (uint16_t)MSL_ACT_LANDING &&
+              item_state_flags_2218_is_reflect_behavior_only(
+                  batch->state.state_flags[d_idx * (size_t)MSL_STATE_FLAGS_BYTES +
+                                           (size_t)MSL_STATE_FLAGS_2218_INDEX]) &&
+              shield_hit) {
+            // ReflectDesc miss -> ShieldDesc fallthrough:
+            // ftColl_8007925C checks ReflectDesc first, then continues to the ordinary ShieldDesc
+            // branch when the live shield descriptor accepts the same item HitCapsule. A
+            // Landing/locomotion-origin GuardReflect active-x14 row must therefore not keep the
+            // article reflect-owned merely because the broad ReflectDesc phase ran.
+            // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077688}
+            // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_80006E58}
+            powershield_reflect_hitshield_handoff = 1u;
+          }
           if ((guard_reflect_active_window_no_submotion_snapshot ||
                guardon_followup_reflect_miss_keepalive ||
                (guard_reflect_frozen_final_seed_keepalive_snapshot &&
@@ -5920,6 +6002,35 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
                batch->state.shield_hp[d_idx] >= common->start_shield_health - (lp->damage + 0.5f))
                   ? 1u
                   : 0u;
+          const uint8_t guard_reflect_landing_shielddesc_bounce_handoff =
+              (guard_reflect_late_locomotion_snapshot_base &&
+               batch->state.seed_prev_action_id[d_idx] == (uint16_t)MSL_ACT_LANDING &&
+               item_state_flags_2218_is_reflect_behavior_only(
+                   batch->state.state_flags[d_idx * (size_t)MSL_STATE_FLAGS_BYTES +
+                                            (size_t)MSL_STATE_FLAGS_2218_INDEX]) &&
+               shield_hit)
+                  ? 1u
+                  : 0u;
+          if (guard_reflect_landing_shielddesc_bounce_handoff &&
+              (!shield_bounce_contact_found || !shield_bounce_source_allows)) {
+            // Some Landing-origin GuardReflect fallthrough rows are admitted by the live
+            // ShieldDesc predicate after the reduced laser HitCapsule sample has missed. Rebuild
+            // the ftColl_80077688/Item_80269DC8 bounce normal from the same item segment before
+            // choosing ShieldBounced vs HitShield.
+            // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077688}
+            // refs/melee/src/melee/it/item.c::Item_80269DC8
+            float trial_bounce_vx = 0.0f;
+            float trial_bounce_vy = 0.0f;
+            if (laser_try_shield_bounce_velocity_from_segment(
+                    vx, vy, bounce_shx, bounce_shy, bounce_shz, shield_bounce_shield_radius, x0, y0,
+                    0.0f, x, y, 0.0f, shield_bounce_radius, &trial_bounce_vx, &trial_bounce_vy)) {
+              shield_bounce_contact_found = 1u;
+              shield_bounce_source_allows = 1u;
+              shield_bounce_source_vx = trial_bounce_vx;
+              shield_bounce_source_vy = trial_bounce_vy;
+              shield_bounce_best_vy = trial_bounce_vy;
+            }
+          }
           uint8_t can_shield_bounce = 0u;
           if (shield_bounce_contact_found && shield_bounce_seed_valid) {
             // Seeded hidden xC58/xDCE shield-bounce result:
@@ -5936,7 +6047,8 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
           } else if (shield_bounce_contact_found && shield_bounce_source_allows &&
                      !shield_dash_91ad8_guardon_same_step &&
                      !guard_reflect_stale_x18_hitshield_snapshot &&
-                     !guard_reflect_pure_final_x14_hitshield &&
+                     (!guard_reflect_pure_final_x14_hitshield ||
+                      guard_reflect_landing_shielddesc_bounce_handoff) &&
                      // Late locomotion->GuardReflect frozen snapshots can already resolve
                      // projectile contact through the regular shield-hit / GuardSetOff owner lane
                      // while the shot is only one frame old. Allow the normal shield-bounce
@@ -5955,6 +6067,11 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
                      // refs/melee/src/melee/lb/lbcollision.c::lbColl_80007DD8
                      // refs/melee/src/melee/it/item.c::Item_80269DC8
                      // refs/melee/src/melee/it/items/itfoxlaser.c::itFoxLaser_Logic94_ShieldBounced
+                     // Landing-origin GuardReflect rows whose exact ReflectDesc missed but whose
+                     // live ShieldDesc accepted the same laser use this same ShieldBounced owner.
+                     // Do not let the replay-visible final-x14 snapshot force a destroy path after
+                     // ftColl_8007925C has fallen through to ftColl_80077688.
+                     // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077688}
                      (laser_age_frames > 1.0f || defender_guard_reflect_late_locomotion_snapshot) &&
                      shield_bounce_hp_allows) {
             shield_bounce_vx = shield_bounce_source_vx;

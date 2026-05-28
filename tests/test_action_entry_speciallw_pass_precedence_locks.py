@@ -10,6 +10,7 @@ from tools.eval.dataset import COMPARE_DTYPE, read_dataset
 
 
 ACT_PASS = 88
+ACT_SQUAT_WAIT = 80
 ACT_ESCAPE_AIR = 236
 ACT_FX_SPECIAL_LW_START = 360
 ACT_FX_SPECIAL_AIR_LW_START = 365
@@ -83,7 +84,12 @@ def test_squat_speciallw_preempts_platform_pass(rel_path: str, record: int, port
         assert int(out[field][port]) == int(ref[field][port]), field
 
 
-def test_squat_platform_pass_still_runs_without_speciallw_button() -> None:
+def test_squatwait_platform_pass_does_not_consume_without_speciallw_button() -> None:
+    # Source owner split:
+    # `SquatWait_IASA` can arm platform pass state through ftCo_80099F9C, but it does not run the
+    # Squat consume path in the same callback. Clearing B must therefore avoid SpecialLw while
+    # keeping this row in SquatWait rather than inventing a Pass consume.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::{ftCo_Squat_IASA,ftCo_SquatWait_IASA}
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
     dataset_path = (
@@ -105,7 +111,7 @@ def test_squat_platform_pass_still_runs_without_speciallw_button() -> None:
         )
 
     out = _run_one_step(ds, 3031, seed_mutator=clear_b)
-    assert int(out["action_id"][1]) in (ACT_PASS, ACT_ESCAPE_AIR)
+    assert int(out["action_id"][1]) == ACT_SQUAT_WAIT
     assert int(out["action_id"][1]) != ACT_FX_SPECIAL_LW_START
 
 

@@ -4683,9 +4683,10 @@ Fox/Falco special-owner split (2026-04-17):
       `HitCapsule.x58` endpoint uses prior visual scaleZ, the current `HitCapsule.x4C` endpoint uses
       current visual scaleZ, and the item HitCapsule radius uses the current item scale. This keeps
       `GAT:5223 -> 5280`, `MAJ:751 -> 763/766`, and `AGN:4036 -> 4044/4045` alive through the bounce
-      so later item slots do not compact over the laser. The exact native `xC58` normal still carries
-      a small velocity/angle-byte residual on GAT/MAJ/AGN because the runtime has a reduced
-      ShieldDesc matrix proxy rather than the full live `fp->shield_hit` JObj matrix state.
+      so later item slots do not compact over the laser. Teacher-forced rows whose public Slippi
+      state hides the exact `ftColl_80077688` `xC58` normal must use the explicit
+      `item_shield_bounce_valid/vx/vy` seed lane; runtime no longer falls back to the incoming item
+      velocity when `lbColl_800077A0` reconstruction cannot prove the bounce normal.
       The runtime still serializes the Slippi metadata low bytes for laser `foxlaser.scale`
       (`item+0xDD7`) and `foxlaser.angle` (`item+0xDDB`) from the live item-var model, so rollout
       does not rely on teacher-forced item metadata after spawn/bounce.

@@ -3650,6 +3650,7 @@ static void stage_collision_apply_dream_whispy_wind(MslBatch* batch) {
       if (stage_collision_whispy_point_inside(batch->state.pos_x[idx], batch->state.pos_y[idx],
                                               left, right, params->rect_bottom, params->rect_top)) {
         batch->state.pos_x[idx] += x_add;
+        mpcoll_ground_refresh_grounded_root_floor_index(batch, bi, p);
       }
     }
     batch->state.stage_dream_whispy_wind_timer[bi]--;

@@ -140,6 +140,52 @@ def test_landing_guardreflect_laser_no_contact_row_stays_replay_real() -> None:
 
 
 @pytest.mark.integration
+def test_landing_guardreflect_followup_uses_shielddesc_shieldbounced_after_reflectdesc_miss() -> None:
+    # Landing -> GuardReflect follow-up boundary:
+    # - The prior row enters GuardReflect via ftCo_80091A4C -> ftCo_800939B4.
+    # - On the next item pass, ftColl_8007925C checks ReflectDesc before ShieldDesc, but
+    #   lbColl_80007BCC's x20 broad-phase extent is not by itself a reflected-owner proof.
+    # - When exact ReflectDesc contact misses and ShieldDesc contact accepts, the source owner is
+    #   Item_80269DC8 ShieldBounced plus ftCo_80092F2C GuardSetOff, so the laser survives with the
+    #   source bounce velocity instead of taking the generic HitShield destroy path.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077464,ftColl_80077688}
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_80007BCC,lbColl_80006E58}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/aggregate_recent/replays/validation/aggregate_recent/HilariousVillainousGiraffe.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    record = 133
+    p = 1
+    seed_t, out_t, ref_t = _step_one_row(dataset_path, record)
+
+    assert int(seed_t["action_id"][p]) == 182  # GuardReflect
+    assert int(seed_t["seed_prev_action_id"][p]) == 42  # Landing-origin powershield entry
+    assert int(seed_t["guard_reflect_timer_x14"][p]) == 2
+    assert int(ref_t["action_id"][p]) == 181  # GuardSetOff
+    assert int(ref_t["hitlag"][p]) == 4
+    assert float(ref_t["shield_hp"][p]) < float(seed_t["shield_hp"][p])
+
+    for field in ("action_id", "action_frame", "animation_index", "hitlag", "instance_id"):
+        assert int(out_t[field][p]) == int(ref_t[field][p]), f"{dataset_rel}: field={field}"
+    assert float(out_t["shield_hp"][p]) == pytest.approx(float(ref_t["shield_hp"][p]), abs=1e-6)
+    assert [int(x) for x in out_t["state_flags"][p]] == [int(x) for x in ref_t["state_flags"][p]]
+    for slot in (0, 1):
+        for field in ("exists", "type", "owner", "instance_id"):
+            assert int(out_t["items"][slot][field]) == int(ref_t["items"][slot][field]), (
+                f"{dataset_rel}: slot={slot} field={field}"
+            )
+    for field in ("pos_x", "pos_y", "vel_x", "vel_y", "direction"):
+        assert float(out_t["items"][0][field]) == pytest.approx(
+            float(ref_t["items"][0][field]), abs=1e-5
+        ), f"{dataset_rel}: item0 {field}"
+
+
+@pytest.mark.integration
 def test_landing_turn_guardon_followup_reflect_miss_preserves_laser_for_body_hit() -> None:
     # Replay-real lock for the PPA GuardOn -> GuardReflect follow-up miss:
     # - Landing -> Turn can enter GuardOn through ftCo_80091A4C before the next item pass.
@@ -364,6 +410,100 @@ def test_guardon_guardreflect_no_submotion_hurtcaps_allow_shine_body_hit() -> No
     assert int(mut_out["hitstun"][defender]) == 0
     assert float(mut_out["percent"][defender]) == pytest.approx(float(mut_seed["percent"][defender]), abs=1e-6)
     assert int(mut_out["hitlag"][attacker]) == 0
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "p"),
+    [
+        (
+            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+            "PositiveRevolvingHyena.msl",
+            944,
+            1,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/battlefield_recent/"
+            "DelayedSuperbGuanaco.msl",
+            2554,
+            0,
+        ),
+    ],
+)
+def test_guardreflect_final_x14_without_reflectdesc_hitshield_stays_reflect(
+    dataset_rel: str, record: int, p: int
+) -> None:
+    # Final-x14 GuardReflect item rows still need source item HitCapsule vs ReflectDesc geometry
+    # before Item_80269DC8 can own a HitShield/GuardSetOff handoff. The visible x14 timer alone is
+    # not authority to leave GuardReflect.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardReflect_Anim,ftCo_80093BC0}
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_CreateReflectHit,ftColl_8007925C}
+    # refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    seed, out, ref = _step_one_row(dataset_path, record)
+    assert int(seed["action_id"][p]) == 182  # GuardReflect
+    assert int(seed["action_frame"][p]) < 0
+    assert int(seed["animation_index"][p]) == 0xFFFFFFFF
+    assert int(seed["guard_reflect_timer_x14"][p]) == 1
+    assert int(seed["guard_reflect_timer_x18"][p]) > 0
+    assert int(np.count_nonzero(seed["items"]["exists"])) > 0
+
+    assert int(ref["action_id"][p]) == 182  # GuardReflect
+    assert int(ref["hitlag"][p]) == 0
+    assert int(out["action_id"][p]) == int(ref["action_id"][p])
+    assert int(out["hitlag"][p]) == int(ref["hitlag"][p])
+    assert float(out["shield_hp"][p]) == pytest.approx(float(ref["shield_hp"][p]), abs=1e-6)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("dataset_rel", "record", "p"),
+    [
+        (
+            "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+            "MotionlessAggressiveJay.msl",
+            202,
+            1,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.msl",
+            6315,
+            0,
+        ),
+    ],
+)
+def test_guardreflect_final_x14_with_reflectdesc_hitshield_enters_setoff(
+    dataset_rel: str, record: int, p: int
+) -> None:
+    # Positive side of the same owner: when the item HitCapsule/ReflectDesc solve accepts the final
+    # x14 row, Item_80269DC8 owns HitShield and GuardSetOff publication.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardReflect_Anim,ftCo_80093BC0}
+    # refs/melee/src/melee/it/item.c::Item_80269DC8
+    # refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    seed, out, ref = _step_one_row(dataset_path, record)
+    assert int(seed["action_id"][p]) == 182  # GuardReflect
+    assert int(seed["action_frame"][p]) < 0
+    assert int(seed["animation_index"][p]) == 0xFFFFFFFF
+    assert int(seed["guard_reflect_timer_x14"][p]) == 1
+    assert int(np.count_nonzero(seed["items"]["exists"])) > 0
+
+    assert int(ref["action_id"][p]) == 181  # GuardSetOff
+    assert int(ref["hitlag"][p]) > 0
+    assert int(out["action_id"][p]) == int(ref["action_id"][p])
+    assert int(out["hitlag"][p]) == int(ref["hitlag"][p])
+    assert float(out["shield_hp"][p]) == pytest.approx(float(ref["shield_hp"][p]), abs=1e-6)
 
 
 @pytest.mark.integration
