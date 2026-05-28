@@ -1284,17 +1284,7 @@ void hitboxes_refresh(MslBatch* batch) {
   for (int bi = 0; bi < batch->batch_size; bi++) {
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
-      uint8_t x43_b2_prev[MSL_MAX_HITBOXES] = {0};
-      uint8_t seeded_prev_enabled[MSL_MAX_HITBOXES] = {0};
-      float seeded_prev_x[MSL_MAX_HITBOXES] = {0.0f};
-      float seeded_prev_y[MSL_MAX_HITBOXES] = {0.0f};
-      float seeded_prev_z[MSL_MAX_HITBOXES] = {0.0f};
-      uint8_t capsule_enabled[MSL_MAX_HITBOXES] = {0};
-      uint8_t capsule_group[MSL_MAX_HITBOXES] = {0};
-      uint8_t preserve_skiphit_geometry[MSL_MAX_HITBOXES] = {0};
-      uint8_t preserved_skiphit_count = 0u;
       uint8_t preserve_frozen_hitlag_hitboxes = 0u;
-      uint8_t preserved_hitbox_count = 0u;
       const uint8_t char_id = batch->state.char_id[idx];
       const uint16_t action_id = batch->state.action_id[idx];
       const uint8_t motion_entered_this_frame =
@@ -1320,6 +1310,38 @@ void hitboxes_refresh(MslBatch* batch) {
           batch->state.action_id[idx] == batch->state.prev_action_id[idx]) {
         preserve_frozen_hitlag_hitboxes = 1u;
       }
+
+      const uint32_t anim_u32 = batch->state.animation_index[idx];
+      const MslHitboxEvent* events = NULL;
+      uint16_t event_count = 0;
+      const uint8_t have_hitbox_events =
+          (anim_u32 <= 0xFFFFu &&
+           hitboxes_get_events(char_id, (uint16_t)anim_u32, &events, &event_count) == 0 &&
+           events != NULL && event_count != 0u)
+              ? 1u
+              : 0u;
+      if (batch->state.hitbox_count[idx] == 0u && batch->state.hitbox_prev_bootstrap[idx] == 0u &&
+          motion_entered_this_frame == 0u && motion_preserves_hitcapsules == 0u &&
+          preserve_frozen_hitlag_hitboxes == 0u && have_hitbox_events == 0u) {
+        // Source ftAction hitbox work is driven by extracted create/clear/set-damage script events
+        // and by existing x914 HitCapsule state. Sustained no-script/no-capsule rows have no
+        // HitCapsule clear/copy/geometry owner to run, and the fixed slots were already zero from
+        // the earlier clear frame. Skip the per-slot scratch/clear pass for that common case.
+        // refs/melee/src/melee/ft/ftaction.c::{ftAction_8007121C,ftAction_8007162C}
+        // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007AD18,ftColl_8007AFF8}
+        continue;
+      }
+
+      uint8_t x43_b2_prev[MSL_MAX_HITBOXES] = {0};
+      uint8_t seeded_prev_enabled[MSL_MAX_HITBOXES] = {0};
+      float seeded_prev_x[MSL_MAX_HITBOXES] = {0.0f};
+      float seeded_prev_y[MSL_MAX_HITBOXES] = {0.0f};
+      float seeded_prev_z[MSL_MAX_HITBOXES] = {0.0f};
+      uint8_t capsule_enabled[MSL_MAX_HITBOXES] = {0};
+      uint8_t capsule_group[MSL_MAX_HITBOXES] = {0};
+      uint8_t preserve_skiphit_geometry[MSL_MAX_HITBOXES] = {0};
+      uint8_t preserved_skiphit_count = 0u;
+      uint8_t preserved_hitbox_count = 0u;
 
       // Clear fixed slots for stable debug readback.
       for (int hi = 0; hi < MSL_MAX_HITBOXES; hi++) {
@@ -1439,7 +1461,6 @@ void hitboxes_refresh(MslBatch* batch) {
       // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLw_Enter
       // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
       // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007AD18,ftColl_800768A0}
-      const uint32_t anim_u32 = batch->state.animation_index[idx];
       if (anim_u32 > 0xFFFFu) {
         continue;
       }
@@ -1448,10 +1469,7 @@ void hitboxes_refresh(MslBatch* batch) {
       const uint16_t msid = (uint16_t)anim_u32;
       const uint16_t pose_frame = msl_anim_frame_floor_u16(anim_frame_f32);
 
-      const MslHitboxEvent* events = NULL;
-      uint16_t event_count = 0;
-      if (hitboxes_get_events(char_id, msid, &events, &event_count) != 0 || events == NULL ||
-          event_count == 0) {
+      if (have_hitbox_events == 0u) {
         if (preserved_skiphit_count != 0u) {
           batch->state.hitbox_count[idx] = preserved_skiphit_count;
         }

@@ -1073,6 +1073,50 @@ static inline uint8_t action_is_illusion_setphys(uint16_t action_id_u16) {
                                                                                            : 0u;
 }
 
+static inline uint8_t action_can_own_fighter_anim_article_spawn(uint16_t action_id_u16) {
+  if (action_is_illusion_dash(action_id_u16) || action_is_illusion_end(action_id_u16)) {
+    return 1u;
+  }
+  return (blaster_gun_state_from_action_id(action_id_u16) != 9u) ? 1u : 0u;
+}
+
+static inline uint8_t items_row_has_fighter_anim_article_source(const MslBatch* batch, int bi,
+                                                                int num_players) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  for (int p = 0; p < num_players; p++) {
+    const size_t idx = msl_idx_player(bi, p);
+    const uint16_t action_id_u16 = batch->state.action_id[idx];
+    if (action_can_own_fighter_anim_article_spawn(action_id_u16)) {
+      return 1u;
+    }
+    const uint16_t prev_action_id_u16 = batch->state.prev_action_id[idx];
+    if (batch->state.action_frame[idx] == 0 &&
+        ((prev_action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_S &&
+          action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_S_END) ||
+         (prev_action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S &&
+          action_id_u16 == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_S_END))) {
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
+static inline uint8_t items_row_has_illusion_setphys_source(const MslBatch* batch, int bi,
+                                                            int num_players) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  for (int p = 0; p < num_players; p++) {
+    const size_t idx = msl_idx_player(bi, p);
+    if (action_is_illusion_setphys(batch->state.action_id[idx])) {
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
 static inline uint8_t illusion_spawn_pulse_crossed(uint8_t char_id, uint16_t action_id_u16,
                                                    uint16_t msid, float prev_anim_frame_f32,
                                                    float cur_anim_frame_f32) {
@@ -7143,10 +7187,22 @@ void items_update_collision_phase(MslBatch* batch) {
     return;
   }
 
+  const int num_players = (int)batch->config.num_players;
   for (int bi = 0; bi < batch->batch_size; bi++) {
-    const int num_players = (int)batch->config.num_players;
-    yoshi_shyguy_stage_update(batch, bi);
+    if (batch->state.stage_id[bi] == (uint32_t)MSL_STAGE_ID_YOSHIS_STORY &&
+        batch->state.stage_yoshi_shyguy_valid[bi] != 0u) {
+      yoshi_shyguy_stage_update(batch, bi);
+    }
     const uint8_t row_had_items = items_row_has_any(batch, bi);
+    if (row_had_items == 0u &&
+        items_row_has_illusion_setphys_source(batch, bi, num_players) == 0u) {
+      // With no live item GObj and no Side-B SetPhys owner, the collision item phase has no
+      // supported RL 1.0 item state to advance for this row. Yoshi Shy Guy stage ownership ran
+      // above only on its extracted stage source.
+      // refs/melee/src/melee/it/item.c::{Item_802693E4,Item_80269528,Item_802697D4}
+      // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFox_SpecialS_SetPhys
+      continue;
+    }
 
     if (row_had_items != 0u) {
       // Stage-owned Shy Guys are not fighter articles; run their admitted stage-item slice before
@@ -7339,6 +7395,19 @@ void items_spawn_fighter_anim_phase(MslBatch* batch) {
   const int num_players = (int)batch->config.num_players;
   for (int bi = 0; bi < batch->batch_size; bi++) {
     const uint8_t row_had_items = items_row_has_any(batch, bi);
+    if (row_had_items == 0u &&
+        items_row_has_fighter_anim_article_source(batch, bi, num_players) == 0u) {
+      // Source item work in this phase is either an existing item GObj callback or a fighter Anim
+      // callback that can spawn/own Fox/Falco articles (blaster gun/shot, throw shot, illusion
+      // ghost). Rows with no live items and no article-owning motion state have no item GObj to
+      // tick and no ftFx_Special{N,S}/Throw article spawn callback to consume.
+      // refs/melee/src/melee/it/item.c::Item_8026862C
+      // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
+      //   ftFx_SpecialN_Enter,ftFx_SpecialNLoop_Anim,ftFx_Throw_Anim}
+      // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::{
+      //   ftFx_SpecialS_Anim,ftFx_SpecialAirS_Anim,ftFox_SpecialS_CreateGhostItem}
+      continue;
+    }
 
     // Stack-local per-step/per-batch-row scratch: reset once each row iteration.
     // This does not persist in SoA state across frames/reseed.
