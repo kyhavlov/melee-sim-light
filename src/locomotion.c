@@ -610,6 +610,9 @@ static inline void specialhi_apply_collision_facing_dir(MslBatch* batch, const M
              batch->state.wall_kind[idx] == 2u) {
     nx = batch->state.wall_normal_x[idx];
     ny = batch->state.wall_normal_y[idx];
+  } else if ((env & (uint32_t)MSL_COLLIDE_FLOOR_MASK) != 0u) {
+    nx = batch->state.ground_normal_x[idx];
+    ny = batch->state.ground_normal_y[idx];
   } else {
     return;
   }
@@ -622,8 +625,9 @@ static inline void specialhi_apply_collision_facing_dir(MslBatch* batch, const M
     return;
   }
 
-  // Decomp: after the SpecialAirHi wall/ceiling angle predicate, ftFx_SpecialAirHi_Coll writes
-  // `fp->facing_dir = sign(fp->self_vel.x)` and recomputes rotateModel from self_vel.
+  // Decomp: after the SpecialAirHi floor/wall/ceiling angle predicate,
+  // ftFx_SpecialAirHi_Coll writes `fp->facing_dir = sign(fp->self_vel.x)` and recomputes
+  // rotateModel from self_vel.
   // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialAirHi_Coll
   // Source key: data/characters/{fox,falco}.json::firefox_bound_angle_degrees
   batch->state.facing[idx] = (uint8_t)(vx >= 0.0f);

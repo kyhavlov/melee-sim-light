@@ -322,9 +322,12 @@ void throw_flow_update_anim_callback_pre_input(MslBatch* batch, int bi, int owne
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD724,ftCo_800DDDE4}
         // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
         // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80043754,mpCheckFloor}
+        batch->state.floor_sweep_prev_pos_x[vidx] = release_sweep_root_x;
+        batch->state.floor_sweep_prev_pos_y[vidx] = release_sweep_root_y;
         batch->state.floor_sweep_seed_prev_pos_x[vidx] = release_sweep_root_x;
         batch->state.floor_sweep_seed_prev_pos_y[vidx] = release_sweep_root_y;
         batch->state.floor_sweep_seed_prev_valid[vidx] = 1u;
+        batch->state.floor_sweep_prev_source_owned[vidx] = 1u;
       }
 
       // Detach immediately. If the throw hit is suppressed by hurt status, keep the victim in a

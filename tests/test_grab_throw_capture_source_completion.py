@@ -93,6 +93,29 @@ def test_throw_release_callback_order_stays_anim_before_compatibility_cleanup() 
     )
 
 
+def test_throw_release_floor_sweep_prev_endpoint_is_live_for_release_probe() -> None:
+    # ftCo_800DDDE4 calls mpColl_800471F8 during the same Throw release callback that detaches and
+    # damages the victim. Keep the pre-release attached root in the live sweep endpoint before the
+    # release-local DamageFly floor probe; the seed lane is only the next-frame replay surface.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::{ftCo_800DD724,ftCo_800DDDE4}
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpCollPrev,mpColl_80043754}
+    source = (ROOT / "src/throw_flow.c").read_text()
+    body = _function_body(source, "throw_flow_update_anim_callback_pre_input")
+
+    _assert_ordered(
+        body,
+        [
+            "const float release_sweep_root_x = batch->state.pos_x[vidx]",
+            "grab_attachment_apply_thrown_release_anchor_now",
+            "batch->state.floor_sweep_prev_pos_x[vidx] = release_sweep_root_x",
+            "batch->state.floor_sweep_prev_pos_y[vidx] = release_sweep_root_y",
+            "batch->state.floor_sweep_seed_prev_pos_x[vidx] = release_sweep_root_x",
+            "batch->state.floor_sweep_seed_prev_valid[vidx] = 1u",
+            "knockdown_try_throw_release_damage_floor_contact",
+        ],
+    )
+
+
 def test_thrown_attachment_comments_match_closed_source_owner() -> None:
     source = (ROOT / "src/grab_attachment.c").read_text()
     checked_bodies = [

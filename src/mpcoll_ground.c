@@ -10700,6 +10700,24 @@ void mpcoll_ground_apply(MslBatch* batch) {
                          damage_active_hitlag_root_below_bottom_above_floor_owner ||
                          damage_active_hitlag_downward_sdi_airborne_owner ||
                          suppress_damageflyroll_below_floor_active_hitlag_land) {
+                if (suppress_projected_specialairhi_floor_angle_land) {
+                  // SpecialAirHi_Coll consumes ft_CheckGroundAndLedge -> mpColl_800473CC. Source
+                  // stays airborne for shallow floor.normal/self_vel contacts, but
+                  // mpColl_80044948_Floor still applies the floor correction and leaves the
+                  // CollData floor env flags/normal for the callback's facing/rotateModel update.
+                  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+                  //   ftFx_SpecialAirHi_Coll,ftFox_SpecialHi_IsBound}
+                  // refs/melee/src/melee/mp/mpcoll.c::{
+                  //   mpColl_800473CC,mpColl_80044628_Floor,mpColl_80044948_Floor}
+                  batch->state.pos_y[idx] += y_corr;
+                  ground_id = resolved_segment_i;
+                  contact_x = proj_x;
+                  contact_y = proj_y + y_corr;
+                  mpcoll_record_callback_floor_result_with_mode(
+                      &mpcoll_ctx, (uint8_t)MSL_MPCOLL_FLOOR_RESULT_STAY_AIRBORNE,
+                      (uint8_t)MSL_MPCOLL_FLOOR_MODE_STAY_AIRBORNE_PROJECTION, ground_id, contact_x,
+                      contact_y, floor_nx, floor_ny);
+                }
                 if (suppress_projected_attackair_transformed_platform_ecb_only_land ||
                     suppress_projected_attackair_transformed_platform_floor_skip_land) {
                   if (suppress_projected_attackair_transformed_platform_ecb_only_land) {
@@ -12213,7 +12231,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
         mpcoll_floor_reject_add_if_state(&final_floor_reject,
                                          suppress_specialairhi_floor_angle_land,
                                          MSL_MPCOLL_REJECT_SPECIALAIRHI_FLOOR_ANGLE,
-                                         MSL_MPCOLL_FLOOR_REJECT_RESTORE_CURRENT_ROOT_Y, 0u,
+                                         MSL_MPCOLL_FLOOR_REJECT_RESTORE_KEEP_CURRENT, 0u,
                                          (uint32_t)MSL_MPCOLL_PHASE_GROUND_B108);
         mpcoll_floor_reject_add_if_state(
             &final_floor_reject, suppress_airborne_transformed_platform_pre_handoff_land,

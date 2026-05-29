@@ -875,6 +875,38 @@ def test_specialairhi_platform_contact_writes_floor_skip_and_stays_airborne() ->
 
 
 @pytest.mark.integration
+def test_specialairhi_shallow_hard_floor_contact_keeps_floor_correction_airborne() -> None:
+    # Source split: ftFx_SpecialAirHi_Coll calls ft_CheckGroundAndLedge -> mpColl_800473CC.
+    # A shallow floor.normal/self_vel angle does not enter SpecialHiBound, but mpColl's
+    # stay-airborne floor path still applies the floor correction and leaves floor env flags for
+    # the callback's facing/rotateModel update.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+    #   ftFx_SpecialAirHi_Coll,ftFox_SpecialHi_IsBound}
+    # refs/melee/src/melee/mp/mpcoll.c::{
+    #   mpColl_800473CC,mpColl_80044628_Floor,mpColl_80044948_Floor}
+    import msl_binding
+
+    seed = _seed_specialairhi_downward(x=-38.8, y=-8.0, prev_y=0.0, ground_id=1)
+    seed["speed_air_x_self"][0, 0] = np.float32(-10.0)
+    seed["speed_y_self"][0, 0] = np.float32(-0.1)
+    seed["action_frame"][0, 0] = np.int16(1)
+    seed["anim_frame_f32"][0, 0] = np.float32(1.0)
+    seed["facing"][0, 0] = np.uint8(1)
+
+    got, contacts, colldata = _step_once_with_contacts_and_colldata(seed)
+
+    assert int(got["action_id"][0]) == ACT_FX_SPECIAL_AIR_HI
+    assert int(got["on_ground"][0]) == 0
+    assert int(got["ground_id"][0]) == 1
+    assert int(got["facing"][0]) == 0
+    assert int(contacts["coll_env_flags"][0]) & COLLIDE_FLOOR_MASK
+    assert int(colldata["floor_result_segment_id"][0]) == 1
+    assert float(colldata["floor_result_normal_x"][0]) == pytest.approx(0.0, abs=1e-6)
+    assert float(colldata["floor_result_normal_y"][0]) == pytest.approx(1.0, abs=1e-6)
+    assert float(got["pos_y"][0]) == pytest.approx(0.0001, abs=1e-5)
+
+
+@pytest.mark.integration
 def test_specialairhi_hard_floor_contact_still_enters_bound() -> None:
     # Negative boundary: ftCo_8009A134 only returns true on platforms. Hard-floor contact remains a
     # SpecialHiBound owner, but the floor hit is owned by the live XRotN-rotated JObj ECB bottom,

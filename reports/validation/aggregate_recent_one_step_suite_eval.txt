@@ -816,7 +816,7 @@ mismatch.hitlag: 7 / 25828 (0.000271)
 mismatch.hitstun: 7 / 25828 (0.000271)
 mismatch.l_cancel: 0 / 25828 (0.000000)
 mismatch.hurtbox_state: 2 / 25828 (0.000077)
-mismatch.ground_id: 5 / 25828 (0.000194)
+mismatch.ground_id: 4 / 25828 (0.000155)
 mismatch.animation_index: 11 / 25828 (0.000426)
 mismatch.instance_hit_by: 7 / 25828 (0.000271)
 mismatch.instance_id: 12 / 25828 (0.000465)
@@ -831,7 +831,7 @@ mismatch.item_owner: 4 / 193710 (0.000021)
 mismatch.item_instance_id: 4 / 193710 (0.000021)
 ignored_mismatch.state_flags[4]&0x80: 19 / 25828 (0.000736)
 err.pos_x: mae=0.006283 p95=0.000000 max=96.037529
-err.pos_y: mae=0.013236 p95=0.000000 max=40.800812
+err.pos_y: mae=0.012866 p95=0.000000 max=40.800812
 err.speed_air_x_self: mae=0.000150 p95=0.000000 max=1.942500
 err.speed_ground_x_self: mae=0.000339 p95=0.000000 max=1.997329
 err.speed_y_self: mae=0.000880 p95=0.000000 max=3.400000
@@ -843,10 +843,10 @@ err.item_pos_x: mae=0.146847 p95=0.000000 max=55.080002
 err.item_pos_y: mae=0.013322 p95=0.000000 max=9.839051
 err.item_vel_x: mae=0.008392 p95=0.000000 max=7.000000
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000062
-overall.discrete_mismatch: 152 / 1562594
-overall.strict_discrete_mismatch: 171 / 1562594
+overall.discrete_mismatch: 151 / 1562594
+overall.strict_discrete_mismatch: 170 / 1562594
 overall.ignored_discrete_mismatch: 19
-overall.float_norm_mae_p95: 0.00099768
+overall.float_norm_mae_p95: 0.00099718
 
 == datasets/aggregate_recent/replays/validation/battlefield_recent/LoyalDishonestWren.msl ==
 Records: 4655  Players/scored per record: 2  Total player-frames: 9310
@@ -1479,7 +1479,7 @@ overall.ignored_discrete_mismatch: 69
 overall.float_norm_mae_p95: 0.00050151
 
 == suite summary ==
-overall.discrete_mismatch: 1974 / 35294369
-overall.strict_discrete_mismatch: 3474 / 35294369
+overall.discrete_mismatch: 1973 / 35294369
+overall.strict_discrete_mismatch: 3473 / 35294369
 overall.ignored_discrete_mismatch: 1500
-overall.float_norm_mae_p95: 0.00032064
+overall.float_norm_mae_p95: 0.00032062
