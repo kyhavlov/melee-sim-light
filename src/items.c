@@ -2995,6 +2995,38 @@ static inline uint8_t item_no_submotion_guard_shielddesc_root_x_owner(const MslB
   return (flags_221b & (uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE) != 0u ? 1u : 0u;
 }
 
+static inline uint8_t item_laser_no_submotion_guard_entry_shielddesc_root_x_owner(
+    const MslBatch* batch, size_t d_idx, uint8_t shield_bounce_seed_valid) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  if (batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_GUARD_REFLECT ||
+      batch->state.action_frame[d_idx] >= 0 || batch->state.animation_index[d_idx] != UINT32_MAX ||
+      batch->state.hitlag[d_idx] != 0u || batch->state.hitstun[d_idx] != 0u) {
+    return 0u;
+  }
+  const uint8_t flags_221b =
+      batch->state
+          .state_flags[d_idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221B_INDEX];
+  if ((flags_221b & (uint8_t)MSL_STATE_FLAG_221B_IS_SHIELD_ACTIVE) == 0u) {
+    return 0u;
+  }
+  if (shield_bounce_seed_valid == 0u) {
+    return 0u;
+  }
+  // No-submotion GuardReflect ShieldBounced root-x owner:
+  // Slippi can serialize GuardReflect with animation_index=-1 while the current item callback is
+  // still using the source ShieldDesc JObj rebuilt by GuardReflect callback code. The replay-visible
+  // shield bubble can carry a guard-bone horizontal sample from a different callback boundary; retry
+  // only the ShieldDesc item lane with the fighter root X while retaining the source shield
+  // height/radius. Require explicit hidden ShieldBounced seed provenance so active-window keepalive
+  // controls do not become generic shield-hit publications.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80092450,ftCo_80091D58,ftCo_80093A50}
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077688}
+  // refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
+  return 1u;
+}
+
 static inline float item_laser_reflect_hit_radius(float laser_radius, float laser_scale_z) {
   // `lbColl_80007BCC` passes `item->scl` into the item HitCapsule distance offset unless the
   // capsule opts out (`x43_b1`). Fox/Falco laser HitCapsules use the ordinary scaled lane, while
@@ -5582,6 +5614,76 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
             shield_bounce_best_vy = trial_bounce_vy;
           }
         }
+        if (!shield_hit &&
+            item_laser_no_submotion_guard_entry_shielddesc_root_x_owner(
+                batch, d_idx, shield_bounce_seed_valid)) {
+          const float root_shx = batch->state.pos_x[d_idx];
+          for (uint8_t oi = 0; oi < off_n && oi < (uint8_t)MSL_LASER_MAX_HITBOX_OFFS_X; oi++) {
+            const float off_x =
+                (laser_state == 0u) ? lp->hitbox_offsets_x[oi] : lp->state1_hitbox_offsets_x[oi];
+            const float s = off_x * laser_offset_scale;
+            const float sx0 = x0 + (ux * s);
+            const float sy0 = y0 + (uy * s);
+            const float sx = shield_probe_x + (ux * s);
+            const float sy = shield_probe_y + (uy * s);
+            if (!item_swept_sphere_sphere_intersects_3d(sx0, sy0, 0.0f, sx, sy, 0.0f, sr,
+                                                        root_shx, shy, shz, shr)) {
+              continue;
+            }
+            shield_hit = 1u;
+            shield_hit_contact_x = sx;
+            shield_hit_contact_y = sy;
+            shield_bounce_contact_found = 1u;
+            {
+              // ShieldBounced normal still comes from ftColl_80077688's item/shield contact
+              // result. Only the ShieldDesc horizontal owner is retried at root X; the bounce
+              // velocity is either seed-proven xC58 or reconstructed from the same accepted source
+              // segment.
+              // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077688
+              // refs/melee/src/melee/lb/lbcollision.c::lbColl_80007DD8
+              // refs/melee/src/melee/it/item.c::Item_80269DC8
+              const float bounce_prev_s = off_x * laser_prev_scale_z;
+              const float bounce_cur_s = off_x * laser_scale_z;
+              const float bounce_sx0 = x0 + (ux * bounce_prev_s);
+              const float bounce_sy0 = y0 + (uy * bounce_prev_s);
+              const float bounce_sx = shield_probe_x + (ux * bounce_cur_s);
+              const float bounce_sy = shield_probe_y + (uy * bounce_cur_s);
+              float trial_bounce_vx = 0.0f;
+              float trial_bounce_vy = 0.0f;
+              if (laser_try_shield_bounce_velocity_from_segment(
+                      vx, vy, root_shx, bounce_shy, bounce_shz, shield_bounce_shield_radius,
+                      bounce_sx0, bounce_sy0, 0.0f, bounce_sx, bounce_sy, 0.0f,
+                      shield_bounce_radius, &trial_bounce_vx, &trial_bounce_vy) &&
+                  trial_bounce_vy > shield_bounce_best_vy) {
+                shield_bounce_source_allows = 1u;
+                shield_bounce_source_vx = trial_bounce_vx;
+                shield_bounce_source_vy = trial_bounce_vy;
+                shield_bounce_best_vy = trial_bounce_vy;
+              }
+            }
+            break;
+          }
+          if (!shield_hit && off_n == 0 &&
+              item_swept_sphere_sphere_intersects_3d(x0, y0, 0.0f, shield_probe_x,
+                                                     shield_probe_y, 0.0f, sr, root_shx, shy, shz,
+                                                     shr)) {
+            shield_hit = 1u;
+            shield_hit_contact_x = shield_probe_x;
+            shield_hit_contact_y = shield_probe_y;
+            shield_bounce_contact_found = 1u;
+            float trial_bounce_vx = 0.0f;
+            float trial_bounce_vy = 0.0f;
+            if (laser_try_shield_bounce_velocity_from_segment(
+                    vx, vy, root_shx, bounce_shy, bounce_shz, shield_bounce_shield_radius, x0, y0,
+                    0.0f, shield_probe_x, shield_probe_y, 0.0f, shield_bounce_radius,
+                    &trial_bounce_vx, &trial_bounce_vy)) {
+              shield_bounce_source_allows = 1u;
+              shield_bounce_source_vx = trial_bounce_vx;
+              shield_bounce_source_vy = trial_bounce_vy;
+              shield_bounce_best_vy = trial_bounce_vy;
+            }
+          }
+        }
         if (!shield_hit && shield_bounce_seed_valid &&
             item_guard_seed_shield_desc_active(batch, d_idx)) {
           // Hidden ShieldBounced admission:
@@ -5847,6 +5949,17 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
             powershield_reflect_hitshield_handoff = 1u;
           }
           if (guard_reflect_late_locomotion_hitshield_handoff && !can_powershield_reflect) {
+            powershield_reflect_hitshield_handoff = 1u;
+          }
+          if (shield_bounce_seed_valid && shield_hit) {
+            // Hidden ShieldBounced source owner:
+            // item_shield_bounce_seed_* is the only serialized proof we have that
+            // ftColl_80077688/Item_80269DC8 already chose the shield-bounce callback for this
+            // live item/shield contact. Do not let the broader active GuardReflect keepalive below
+            // suppress the same source-owned HitShield/ShieldBounced handoff.
+            // refs/melee/src/melee/ft/ftcoll.c::ftColl_80077688
+            // refs/melee/src/melee/it/item.c::Item_80269DC8
+            // refs/melee/src/melee/it/items/itfoxlaser.c::itFoxLaser_Logic94_ShieldBounced
             powershield_reflect_hitshield_handoff = 1u;
           }
           // Fresh locomotion->GuardReflect snapshot bridge:

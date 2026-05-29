@@ -1715,6 +1715,25 @@ static inline void enter_fall_keep_fastfall_ftco_fall_enter(MslBatch* batch, siz
   batch->state.fall_fast[idx] = keep_fastfall;
 }
 
+static inline void ftco_fall_enter_clamp_air_drift_x(MslBatch* batch, const MslCharParams* ch,
+                                                     size_t idx) {
+  if (batch == NULL || ch == NULL) {
+    return;
+  }
+  // ftCo_Fall_Enter calls ftCommon_ClampAirDrift after Fighter_ChangeMotionState. Keep this helper
+  // on the source owner that currently reaches the validated anim-end path; other local FallEnter
+  // wrappers need separate phase-order proof before sharing it.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_ClampAirDrift
+  float air_x = batch->state.speed_air_x_self[idx];
+  if (air_x > ch->air_drift_max) {
+    air_x = ch->air_drift_max;
+  } else if (air_x < -ch->air_drift_max) {
+    air_x = -ch->air_drift_max;
+  }
+  batch->state.speed_air_x_self[idx] = air_x;
+}
+
 static inline uint8_t grounded_a_attack_try_enter_from_iasa(
     MslBatch* batch, const MslCommonParams* c, size_t idx, uint16_t buttons_pressed, float stick_x,
     float stick_y, uint8_t tilt_timer_x, uint8_t tilt_timer_y, float facing_dir,
@@ -6198,6 +6217,7 @@ void locomotion_update_pre(MslBatch* batch) {
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter
             enter_fall_keep_fastfall_ftco_fall_enter(batch, idx);
+            ftco_fall_enter_clamp_air_drift_x(batch, ch, idx);
             action_id = (uint16_t)MSL_ACT_FALL;
             is_attack_air = 0;
             is_air_loco = 1;

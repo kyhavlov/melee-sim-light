@@ -1488,8 +1488,21 @@ static inline uint8_t combat_shield_active_action(uint16_t action_id) {
 
 static inline void combat_preserve_guard_x10_for_immediate_setoff(MslBatch* batch, size_t d_idx,
                                                                   uint16_t d_motion_id_pre,
-                                                                  const MslCommonParams* c) {
+                                                                  const MslCommonParams* c,
+                                                                  uint8_t fighter_powershield_active) {
   if (batch == NULL) {
+    return;
+  }
+
+  if (fighter_powershield_active) {
+    // Fighter shield contact with fp->x221C_b2 set takes the powershield-active branch in
+    // ftColl_80076CBC, which calls ftCo_80094138 before ftCo_80092F2C. That source helper arms
+    // guard.x1C and clears guard.x10; do not restore the frame-start x10 for this owner.
+    // Item shield contact is separate (`ftColl_80077688`) and passes false here because it does not
+    // call ftCo_80094138.
+    // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076CBC,ftColl_80077688}
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    //   ftCo_80094138,ftCo_80092F2C}
     return;
   }
 
@@ -5648,7 +5661,7 @@ void combat_apply_item_shield_hit(MslBatch* batch, int batch_index, int attacker
   batch->state.guard_setoff_hitlag_damage_min[d_idx] = (int_dmg > 255) ? 255u : (uint8_t)int_dmg;
   combat_state_flags_clear_guard_reflecting(batch, d_idx);
   combat_state_flags_clear_stale_guard_timer_bits_on_setoff_entry(batch, d_idx);
-  combat_preserve_guard_x10_for_immediate_setoff(batch, d_idx, d_motion_id_pre, c);
+  combat_preserve_guard_x10_for_immediate_setoff(batch, d_idx, d_motion_id_pre, c, 0u);
 
   const float ls_stun =
       (light * (c->shield_stun_lightshield_max - c->shield_stun_lightshield_min)) +
@@ -5787,7 +5800,8 @@ static inline void combat_mutations_pass1_future_apply_shield_hit(MslBatch* batc
   batch->state.animation_index[d_idx] = (uint32_t)MSL_SM_GUARD_DAMAGE;
   combat_state_flags_clear_guard_reflecting(batch, d_idx);
   combat_state_flags_clear_stale_guard_timer_bits_on_setoff_entry(batch, d_idx);
-  combat_preserve_guard_x10_for_immediate_setoff(batch, d_idx, d_motion_id_pre, c);
+  combat_preserve_guard_x10_for_immediate_setoff(batch, d_idx, d_motion_id_pre, c,
+                                                 powershield_active);
 
   // Decomp: fp->x670_timer_lstick_tilt_x = -2.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C

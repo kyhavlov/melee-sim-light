@@ -236,6 +236,42 @@ def test_landing_turn_guardon_followup_reflect_miss_preserves_laser_for_body_hit
 
 
 @pytest.mark.integration
+def test_guardreflect_no_submotion_seeded_shieldbounced_handoff_beats_active_keepalive() -> None:
+    # Hidden ShieldBounced precedence:
+    # When the seed lane proves Item_80269DC8 already chose ShieldBounced for a live ShieldDesc
+    # contact, active GuardReflect keepalive must not suppress the shield-hit/GuardSetOff handoff.
+    # The item velocity is the source xC58 result, not an incoming-velocity fallback.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007925C,ftColl_80077688}
+    # refs/melee/src/melee/it/item.c::Item_80269DC8
+    # refs/melee/src/melee/it/items/itfoxlaser.c::itFoxLaser_Logic94_ShieldBounced
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/MotionlessAggressiveJay.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    record = 7384
+    p = 1
+    seed, out, ref = _step_one_row(dataset_path, record)
+    assert int(seed["action_id"][p]) == 182  # GuardReflect
+    assert int(seed["action_frame"][p]) < 0
+    assert int(seed["animation_index"][p]) == 0xFFFFFFFF
+    assert int(seed["guard_reflect_timer_x14"][p]) > 1
+    assert int(seed["item_shield_bounce_valid"][0]) == 1
+    assert int(ref["action_id"][p]) == 181  # GuardSetOff
+
+    for field in ("action_id", "action_frame", "animation_index", "hitlag", "hitstun"):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    assert float(out["shield_hp"][p]) == pytest.approx(float(ref["shield_hp"][p]), abs=1e-6)
+    assert int(out["items"][0]["exists"]) == int(ref["items"][0]["exists"]) == 1
+    assert float(out["items"][0]["vel_x"]) == pytest.approx(float(ref["items"][0]["vel_x"]), abs=1e-6)
+    assert float(out["items"][0]["vel_y"]) == pytest.approx(float(ref["items"][0]["vel_y"]), abs=1e-6)
+
+
+@pytest.mark.integration
 def test_doubles_no_submotion_guard_laser_uses_source_item_contact_sample() -> None:
     # Replay-real lock for same-team doubles blaster shots crossing no-submotion Guard-family rows:
     # - Slippi serializes Guard/GuardReflect as animation_index=-1 while x221B_b0 still proves a

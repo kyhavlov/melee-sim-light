@@ -230,6 +230,53 @@ def test_carried_guardsetoff_rows_still_consume_x10_before_guardoff_gat(
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize(
+    ("rel_path", "start_record", "target_record", "p"),
+    [
+        (
+            "datasets/aggregate_recent/replays/validation/battlefield_recent/"
+            "MediumVirtualPig.msl",
+            6175,
+            6190,
+            1,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
+            "SweatyThisMallard.msl",
+            2440,
+            2454,
+            1,
+        ),
+    ],
+)
+def test_powershield_guardsetoff_terminal_release_keeps_ftco_80094138_x10_clear(
+    rel_path: str, start_record: int, target_record: int, p: int
+) -> None:
+    # Fighter shield contact with x221C_b2 live calls ftCo_80094138 before entering GuardSetOff;
+    # that helper clears mv.co.guard.x10. The later GuardSetOff_Anim -> Guard handoff must therefore
+    # let destination Guard_IASA exit to GuardOff on release, even if the replay-derived carry lane
+    # still shows the pre-clear x10 value.
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    #   ftCo_80094138,ftCo_80092F2C,ftCo_GuardSetOff_Anim,ftCo_Guard_IASA}
+    dataset_path = _dataset(rel_path)
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples[target_record]["seed_t"]
+    assert int(seed["action_id"][p]) == ACT_GUARD_SET_OFF
+    assert int(seed["guard_x10"][p]) > 0
+    assert any(
+        int(ds.samples[r]["seed_t"]["state_flags"][p, 3]) & 0x20
+        for r in range(start_record, target_record)
+    )
+
+    _, out_t1, ref_t1 = _run_rollout_to_record(
+        dataset_path, start_record=start_record, target_record=target_record
+    )
+    assert int(ref_t1["action_id"][p]) == ACT_GUARD_OFF
+    assert int(out_t1["action_id"][p]) == ACT_GUARD_OFF
+
+
+@pytest.mark.integration
 def test_guardreflect_no_submotion_x18_does_not_consume_guard_catch_cdo_replay_lock() -> None:
     # GuardReflect no-submotion snapshots whose x14 ReflectDesc timer is still live do not expose a
     # fresh Catch_CheckInput A+LR consume on the same frozen row.
