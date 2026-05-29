@@ -22,6 +22,7 @@
 #include "common_params.h"
 #include "damage_source.h"
 #include "config.h"
+#include "escapeair_collision_owner.h"
 #include "special_msids.h"
 #include "move_tables.h"
 #include "match_flow.h"
@@ -1581,6 +1582,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.coll_wall_ceil_prev_pos_valid[idx] = 0u;
       batch->state.coll_last_pos_x[idx] = seed->pos_x[p];
       batch->state.coll_last_pos_y[idx] = seed->pos_y[p];
+      batch->state.coll_escapeair_floor_producer_runtime[idx] = 0u;
       batch->state.mpcoll_joint_id_skip[idx] = -1;
       batch->state.mpcoll_joint_id_only[idx] = -1;
       batch->state.floor_sweep_seed_prev_pos_x[idx] = seed->floor_sweep_prev_pos_x_f32[p];
@@ -2355,6 +2357,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         // manufacture live `mpColl_80044628_Floor` floor-contact authority.
         // refs/melee/src/melee/mp/mpcoll.c::{inline0,mpColl_80044628_Floor,mpColl_80044948_Floor}
         batch->state.coll_damage_hitlag_floor_contact_runtime[idx] = 0u;
+        batch->state.coll_escapeair_floor_producer_runtime[idx] = 0u;
         MslEcbWorldPoints damage_hitlag_ecb = {0};
         if (reseed_damage_hitlag_ecb_points_from_seed(&damage_hitlag_ecb, seed, p)) {
           // Active Damage hitlag can keep the pre-hit JObj collision envelope live while the
@@ -3732,11 +3735,14 @@ int msl_batch_debug_write_colldata_ecb(const MslBatch* batch, uint8_t* out_bytes
       out->current_valid[p] = batch->state.coll_ecb_bottom_valid[idx];
       out->prev_valid[p] = batch->state.coll_prev_ecb_bottom_valid[idx];
       out->desired_valid[p] = batch->state.coll_desired_ecb_bottom_valid[idx];
+      out->desired_locked_owner[p] = batch->state.coll_desired_ecb_bottom_locked_owner[idx];
       out->floor_result_valid[p] = batch->state.coll_floor_result_valid[idx];
       out->floor_result_source[p] = batch->state.coll_floor_result_source[idx];
       out->floor_result_mode[p] = batch->state.coll_floor_result_mode[idx];
       out->damage_hitlag_floor_contact_runtime[p] =
           batch->state.coll_damage_hitlag_floor_contact_runtime[idx];
+      out->escapeair_floor_producer_runtime[p] =
+          batch->state.coll_escapeair_floor_producer_runtime[idx];
       out->floor_result_segment_id[p] = batch->state.coll_floor_result_segment_id[idx];
       out->floor_skip_segment_id[p] = batch->state.floor_skip_segment_id[idx];
       out->floor_skip_valid[p] = (batch->state.floor_skip_segment_id[idx] != 0xFFFFu) ? 1u : 0u;
@@ -3868,6 +3874,28 @@ int msl_batch_debug_set_mpcoll_joint_filters(MslBatch* batch, int batch_index, i
   const size_t idx = msl_idx_player(batch_index, player_index);
   batch->state.mpcoll_joint_id_skip[idx] = (int16_t)joint_id_skip;
   batch->state.mpcoll_joint_id_only[idx] = (int16_t)joint_id_only;
+  return 0;
+}
+
+int msl_batch_debug_set_escapeair_floor_producer_runtime(MslBatch* batch, int batch_index,
+                                                         int player_index, uint8_t authority,
+                                                         uint8_t desired_owner) {
+  if (batch == NULL) {
+    return EINVAL;
+  }
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return EINVAL;
+  }
+  if (player_index < 0 || player_index >= MSL_MAX_PLAYERS) {
+    return EINVAL;
+  }
+  if (desired_owner > (uint8_t)MSL_ESCAPEAIR_LOCKED_BOTTOM_OWNER_LIVE_JUMPAERIAL_HARD_FLOOR) {
+    return EINVAL;
+  }
+  const size_t idx = msl_idx_player(batch_index, player_index);
+  batch->state.coll_escapeair_floor_producer_runtime[idx] = authority ? 1u : 0u;
+  batch->state.coll_desired_ecb_bottom_locked_owner[idx] =
+      msl_escapeair_locked_bottom_owner_normalize(desired_owner);
   return 0;
 }
 

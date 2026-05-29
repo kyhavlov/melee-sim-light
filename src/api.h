@@ -1855,13 +1855,14 @@ typedef struct MslDebugCollDataEcb {
   uint8_t current_valid[MSL_MAX_PLAYERS];
   uint8_t prev_valid[MSL_MAX_PLAYERS];
   uint8_t desired_valid[MSL_MAX_PLAYERS];
+  uint8_t desired_locked_owner[MSL_MAX_PLAYERS];
   uint8_t floor_result_valid[MSL_MAX_PLAYERS];
   uint8_t floor_result_source[MSL_MAX_PLAYERS];
   // Source projection mode for the callback-local floor result:
   // bottom sweep, root projection, edge snap, stage-object carry, 4A908 retry, etc.
   uint8_t floor_result_mode[MSL_MAX_PLAYERS];
   uint8_t damage_hitlag_floor_contact_runtime[MSL_MAX_PLAYERS];
-  uint8_t _pad0[MSL_MAX_PLAYERS];
+  uint8_t escapeair_floor_producer_runtime[MSL_MAX_PLAYERS];
 
   uint16_t floor_result_segment_id[MSL_MAX_PLAYERS];
   // Hidden CollData.floor_skip from mpUpdateFloorSkip/mpClearFloorSkip. 0xFFFF means none.
@@ -2318,6 +2319,13 @@ int msl_batch_debug_set_coll_env_flags(MslBatch* batch, int batch_index, int pla
 // Pass -1 to disable each filter.
 int msl_batch_debug_set_mpcoll_joint_filters(MslBatch* batch, int batch_index, int player_index,
                                              int joint_id_skip, int joint_id_only);
+
+// Debug-only helper: arm the runtime EscapeAir floor-producer authority lane for a single fighter
+// (test-only). `desired_owner` uses MslEscapeAirLockedBottomOwner values; normal reseed/step paths
+// remain the source owner for gameplay.
+int msl_batch_debug_set_escapeair_floor_producer_runtime(MslBatch* batch, int batch_index,
+                                                         int player_index, uint8_t authority,
+                                                         uint8_t desired_owner);
 
 // Debug-only helper: override fighter root position/facing for fixture replay setup (test-only).
 // Intended for live-viewer/manual repro fixtures whose first-frame root position is part of the

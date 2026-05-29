@@ -161,6 +161,14 @@ typedef struct MslStateSoA {
   // coll_damage_hitlag_ecb_valid, this is not initialized from teacher-forced seed rows; reseed
   // rows may seed the hidden ECB envelope but not runtime-produced floor contact authority.
   uint8_t* coll_damage_hitlag_floor_contact_runtime;
+  // Runtime-only EscapeAir floor producer authority. Source writes this only when the live
+  // `EscapeAir_Coll -> ft_80082C74 -> ft_80081D0C -> mpColl_800471F8` floor path accepts the
+  // current carried floor; teacher-forced/reseed rows may restore CollData.floor/ECB state but
+  // cannot seed this callback-local authority.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+  // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor,mpColl_80044838_Floor}
+  uint8_t* coll_escapeair_floor_producer_runtime;
   // Callback-local floor result scratch from the latest mpColl-shaped map callback. Source
   // `mpColl_80043754` owns this as per-callback state: it interpolates ECB/root substeps, calls a
   // floor helper, then the wrapper callback consumes the result immediately.

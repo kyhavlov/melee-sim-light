@@ -85,6 +85,7 @@ MSL_STATE_FIELD(coll_desired_ecb_bottom_valid, uint8_t, bp, (size_t)MSL_MAX_PLAY
 MSL_STATE_FIELD(coll_desired_ecb_bottom_locked_owner, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(coll_damage_hitlag_ecb_valid, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(coll_damage_hitlag_floor_contact_runtime, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
+MSL_STATE_FIELD(coll_escapeair_floor_producer_runtime, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(coll_floor_result_valid, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(coll_floor_result_source, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(coll_floor_result_mode, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)

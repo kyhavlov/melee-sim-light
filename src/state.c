@@ -131,6 +131,8 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   memset(state->coll_squeeze_restore_ecb_valid, 0, sizeof(uint8_t) * bp);
   memset(state->coll_desired_ecb_bottom_valid, 0, sizeof(uint8_t) * bp);
   memset(state->coll_desired_ecb_bottom_locked_owner, 0, sizeof(uint8_t) * bp);
+  memset(state->coll_damage_hitlag_floor_contact_runtime, 0, sizeof(uint8_t) * bp);
+  memset(state->coll_escapeair_floor_producer_runtime, 0, sizeof(uint8_t) * bp);
   memset(state->coll_floor_result_valid, 0, sizeof(uint8_t) * bp);
   memset(state->coll_floor_result_source, 0, sizeof(uint8_t) * bp);
   memset(state->coll_floor_result_segment_id, 0xFF, sizeof(uint16_t) * bp);

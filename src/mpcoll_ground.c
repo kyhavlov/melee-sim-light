@@ -978,6 +978,21 @@ static inline void mpcoll_record_callback_floor_result(const MslMpcollContext* c
       normal_x, normal_y);
 }
 
+static inline void mpcoll_record_escapeair_floor_producer_runtime_authority(
+    const MslMpcollContext* ctx) {
+  if (ctx == NULL || ctx->batch == NULL) {
+    return;
+  }
+  // Runtime-only source-authority lane for EscapeAir_Coll floor publication. This is deliberately
+  // separate from replay-visible CollData.floor/ground_id and from reseeded desired-bottom lanes:
+  // only the current live callback can write it. The map-collision callback snapshots the bit, then
+  // clears it unless a live producer reasserts it for the next callback.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+  // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor,mpColl_80044838_Floor}
+  ctx->batch->state.coll_escapeair_floor_producer_runtime[ctx->idx] = 1u;
+}
+
 static inline uint8_t mpcoll_callback_floor_result_valid(const MslMpcollContext* ctx) {
   if (ctx == NULL || ctx->batch == NULL) {
     return 0u;
@@ -1464,6 +1479,27 @@ static inline uint8_t floor_line_y_at_x_for_env(const MslBatch* batch, int bi,
   }
   const float t = (x - l.x0) / dx;
   *y_out = l.y0 + ((l.y1 - l.y0) * t);
+  return 1u;
+}
+
+static inline uint8_t floor_line_normal_for_env(const MslBatch* batch, int bi,
+                                                const MslStageFloorGraph* g, int line_idx,
+                                                float* nx_out, float* ny_out) {
+  if (nx_out == NULL || ny_out == NULL || g == NULL || line_idx < 0 ||
+      (size_t)line_idx >= g->line_count) {
+    return 0u;
+  }
+  const MslStageFloorLine l = floor_line_world_for_env(batch, bi, g, line_idx);
+  float nx = -(l.y1 - l.y0);
+  float ny = l.x1 - l.x0;
+  const float len = sqrtf(nx * nx + ny * ny);
+  if (!(len > 0.0f)) {
+    return 0u;
+  }
+  nx /= len;
+  ny /= len;
+  *nx_out = nx;
+  *ny_out = ny;
   return 1u;
 }
 
@@ -6266,6 +6302,52 @@ void mpcoll_ground_apply(MslBatch* batch) {
                                ? batch->state.prev_pos_y[idx]
                                : batch->state.floor_sweep_prev_pos_y[idx];
       mpcoll_clear_callback_floor_result(&mpcoll_ctx, prev_x, prev_y, x, y);
+      if (action_id != (uint16_t)MSL_ACT_ESCAPE_AIR) {
+        batch->state.coll_escapeair_floor_producer_runtime[idx] = 0u;
+      }
+      const int escapeair_entry_floor_line_idx =
+          (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
+           batch->state.prev_action_id[idx] != action_id && batch->state.ground_id[idx] != 0xFFFFu)
+              ? stage_collision_floor_line_index(stage_id, batch->state.ground_id[idx])
+              : -1;
+      float escapeair_entry_floor_y = 0.0f;
+      const uint8_t escapeair_entry_floor_y_valid =
+          (escapeair_entry_floor_line_idx >= 0 &&
+           floor_line_y_at_x_for_env(batch, bi, g, escapeair_entry_floor_line_idx, x,
+                                     &escapeair_entry_floor_y))
+              ? 1u
+              : 0u;
+      if (escapeair_entry_floor_y_valid != 0u &&
+          msl_escapeair_locked_bottom_owner_is_live_jumpaerial(
+              batch->state.coll_desired_ecb_bottom_locked_owner[idx]) &&
+          batch->state.coll_desired_ecb_bottom_valid[idx] != 0u &&
+          !stage_collision_floor_line_is_platform(stage_id, batch->state.ground_id[idx]) &&
+          !stage_collision_floor_line_has_platform_transform(stage_id,
+                                                             batch->state.ground_id[idx]) &&
+          !g->lines[(size_t)escapeair_entry_floor_line_idx].is_ledge &&
+          !floor_line_is_generated_sloped_ledge(batch, bi, g, escapeair_entry_floor_line_idx) &&
+          y > (escapeair_entry_floor_y + k_floor_y_bias) &&
+          y <= (escapeair_entry_floor_y + batch->state.coll_desired_ecb_bottom_rel_y[idx] +
+                k_floor_y_bias)) {
+        // The first live EscapeAir_Coll callback after JumpAerial entry can carry a hard-floor
+        // producer even before the public root crosses the line. Require the current callback root
+        // to have reached the carried desired-bottom floor envelope; later sustained EscapeAir
+        // callbacks and restored seeds with only visible floor/root state cannot create this
+        // runtime-only authority.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+        // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+        // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_inline,mpColl_800471F8}
+        mpcoll_record_escapeair_floor_producer_runtime_authority(&mpcoll_ctx);
+      }
+      const uint8_t escapeair_floor_producer_authority_in =
+          (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
+           msl_escapeair_locked_bottom_owner_is_live_jumpaerial(
+               batch->state.coll_desired_ecb_bottom_locked_owner[idx]))
+              ? batch->state.coll_escapeair_floor_producer_runtime[idx]
+              : 0u;
+      if (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR) {
+        batch->state.coll_escapeair_floor_producer_runtime[idx] = 0u;
+      }
 
       // ECB bottom point for floor collision.
       // Decomp: mpLib_8004DD90_Floor and mpCheckFloor consume the ECB bottom point.
@@ -10908,6 +10990,91 @@ void mpcoll_ground_apply(MslBatch* batch) {
                                      &escapeair_projection_line_y))
               ? 1u
               : 0u;
+      float escapeair_projection_line_nx = 0.0f;
+      float escapeair_projection_line_ny = 1.0f;
+      const uint8_t escapeair_projection_line_normal_valid =
+          floor_line_normal_for_env(batch, bi, g, escapeair_projection_line_idx,
+                                    &escapeair_projection_line_nx, &escapeair_projection_line_ny);
+      uint8_t escapeair_live_nonplatform_root_floor_authority = 0u;
+      const uint16_t escapeair_live_carried_floor_id = batch->state.ground_id[idx];
+      const uint8_t escapeair_live_carried_same_hard_floor =
+          (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR && ecb_lock_timer_seed > 1u &&
+           escapeair_projection_line_idx >= 0 &&
+           (size_t)escapeair_projection_line_idx < g->line_count &&
+           msl_escapeair_locked_bottom_owner_is_live_jumpaerial(
+               batch->state.coll_desired_ecb_bottom_locked_owner[idx]) &&
+           escapeair_live_carried_floor_id != 0xFFFFu &&
+           g->lines[(size_t)escapeair_projection_line_idx].segment_i ==
+               escapeair_live_carried_floor_id &&
+           !g->lines[(size_t)escapeair_projection_line_idx].is_ledge &&
+           !stage_collision_floor_line_is_platform(stage_id, escapeair_live_carried_floor_id) &&
+           !stage_collision_floor_line_has_platform_transform(stage_id,
+                                                              escapeair_live_carried_floor_id) &&
+           escapeair_projection_line_y_valid != 0u && escapeair_projection_line_normal_valid != 0u)
+              ? 1u
+              : 0u;
+      const uint8_t escapeair_current_root_crosses_carried_floor =
+          (escapeair_live_carried_same_hard_floor &&
+           prev_y > (escapeair_projection_line_y + k_floor_y_bias) &&
+           y <= (escapeair_projection_line_y + k_floor_y_bias))
+              ? 1u
+              : 0u;
+      const uint8_t escapeair_next_root_reaches_carried_floor =
+          (escapeair_live_carried_same_hard_floor &&
+           y > (escapeair_projection_line_y + k_floor_y_bias) &&
+           (y + batch->state.speed_y_self[idx]) <= (escapeair_projection_line_y + k_floor_y_bias))
+              ? 1u
+              : 0u;
+      if (!on_ground && action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
+          escapeair_floor_producer_authority_in != 0u &&
+          escapeair_current_root_crosses_carried_floor) {
+        // Sustained JumpAerial -> EscapeAir hard-floor handoff:
+        // source `EscapeAir_Coll` runs the live ft_80082C74/mpColl_800471F8 floor producer with
+        // the runtime CollData_X130 owner written by the earlier JumpAerial/EscapeAir callback.
+        // This admits only the carried same non-platform floor after the current callback root
+        // projection consumes that live producer. Restored one-step CollData.floor/desired-bottom
+        // state does not set the live owner and therefore cannot publish through this lane.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+        // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+        // refs/melee/src/melee/mp/mpcoll.c::{
+        //   mpColl_800471F8,mpColl_80044628_Floor,mpColl_80044838_Floor}
+        batch->state.pos_y[idx] = escapeair_projection_line_y + k_floor_y_bias;
+        on_ground = 1u;
+        ground_id = escapeair_live_carried_floor_id;
+        contact_x = x;
+        contact_y = escapeair_projection_line_y;
+        floor_nx = escapeair_projection_line_nx;
+        floor_ny = escapeair_projection_line_ny;
+        floor_result_mode = (uint8_t)MSL_MPCOLL_FLOOR_MODE_ROOT_PROJECTION;
+        escapeair_live_nonplatform_root_floor_authority = 1u;
+        mpcoll_record_callback_floor_result_with_mode(
+            &mpcoll_ctx, (uint8_t)MSL_MPCOLL_FLOOR_RESULT_DIRECT, floor_result_mode, ground_id,
+            contact_x, contact_y, floor_nx, floor_ny);
+        mpcoll_record_escapeair_floor_producer_runtime_authority(&mpcoll_ctx);
+      }
+      if (!on_ground && escapeair_floor_producer_authority_in != 0u &&
+          escapeair_next_root_reaches_carried_floor) {
+        // Source-owned current-floor continuation for the next EscapeAir_Coll callback: the live
+        // carried hard floor is still the same CollData floor and the current callback's root
+        // projection velocity reaches it before the next map pass. Reseed rows and non-EscapeAir
+        // callbacks cannot set this lane, so it is not a visible ground_id/root-crossing substitute.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+        // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+        // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor}
+        mpcoll_record_escapeair_floor_producer_runtime_authority(&mpcoll_ctx);
+      }
+      if (!on_ground && escapeair_floor_producer_authority_in != 0u &&
+          escapeair_live_carried_same_hard_floor &&
+          y > (escapeair_projection_line_y + k_floor_y_bias)) {
+        // The live EscapeAir_Coll floor producer remains current while the same carried hard-floor
+        // callback stays airborne above the floor. Keep the runtime-only authority until the later
+        // root projection consumes it; restored seeds cannot enter this path because they never set
+        // `escapeair_floor_producer_authority_in`.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+        // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+        // refs/melee/src/melee/mp/mpcoll.c::mpColl_800471F8
+        mpcoll_record_escapeair_floor_producer_runtime_authority(&mpcoll_ctx);
+      }
       const uint8_t escapeair_seeded_desired_bottom_nonplatform_crossing =
           (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR && ecb_lock_timer_seed > 1u &&
            escapeair_projection_line_idx >= 0 && escapeair_projection_line_y_valid != 0u &&
@@ -10967,11 +11134,25 @@ void mpcoll_ground_apply(MslBatch* batch) {
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_IASA
         // refs/melee/src/melee/ft/ft_081B.c::ft_80082C74
-        // refs/melee/src/melee/mp/mpcoll.c::mpColl_800471F8
+        // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor}
         // refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
         float escapeair_y_corr = 0.0f;
         float escapeair_nx = 0.0f;
         float escapeair_ny = 1.0f;
+        const uint8_t live_jumpaerial_root_floor_producer =
+            (msl_escapeair_locked_bottom_owner_is_live_jumpaerial(
+                 batch->state.coll_desired_ecb_bottom_locked_owner[idx]) &&
+             escapeair_floor_producer_authority_in != 0u && ecb_lock_timer_seed > 1u &&
+             escapeair_projection_line_idx >= 0 &&
+             (size_t)escapeair_projection_line_idx < g->line_count &&
+             g->lines[(size_t)escapeair_projection_line_idx].segment_i == seed_ground_id &&
+             !g->lines[(size_t)escapeair_projection_line_idx].is_ledge &&
+             !stage_collision_floor_line_is_platform(stage_id, seed_ground_id) &&
+             !stage_collision_floor_line_has_platform_transform(stage_id, seed_ground_id) &&
+             escapeair_projection_line_y_valid != 0u &&
+             escapeair_current_root_crosses_carried_floor)
+                ? 1u
+                : 0u;
         const int escapeair_line_idx =
             msl_mplib_8004dd90_floor(batch, bi, g, escapeair_projection_line_idx, x, y,
                                      &escapeair_y_corr, &escapeair_nx, &escapeair_ny);
@@ -10984,10 +11165,16 @@ void mpcoll_ground_apply(MslBatch* batch) {
           floor_nx = escapeair_nx;
           floor_ny = escapeair_ny;
           on_ground = 1u;
+          if (live_jumpaerial_root_floor_producer && ground_id == seed_ground_id &&
+              escapeair_line_idx == escapeair_projection_line_idx) {
+            escapeair_live_nonplatform_root_floor_authority = 1u;
+            mpcoll_record_escapeair_floor_producer_runtime_authority(&mpcoll_ctx);
+          }
         } else if (escapeair_projection_line_idx >= 0 &&
                    !stage_collision_floor_line_is_platform(
                        stage_id, g->lines[(size_t)escapeair_projection_line_idx].segment_i)) {
           if (escapeair_projection_line_y_valid != 0u &&
+              escapeair_projection_line_normal_valid != 0u &&
               (y <= escapeair_projection_line_y + k_floor_y_bias ||
                (y > escapeair_projection_line_y + k_floor_y_bias &&
                 (y + batch->state.speed_y_self[idx]) <=
@@ -10995,10 +11182,36 @@ void mpcoll_ground_apply(MslBatch* batch) {
             ground_id = g->lines[(size_t)escapeair_projection_line_idx].segment_i;
             contact_x = x;
             contact_y = escapeair_projection_line_y;
-            floor_nx = 0.0f;
-            floor_ny = 1.0f;
+            floor_nx = escapeair_projection_line_nx;
+            floor_ny = escapeair_projection_line_ny;
             on_ground = 1u;
+            if (live_jumpaerial_root_floor_producer) {
+              escapeair_live_nonplatform_root_floor_authority = 1u;
+              mpcoll_record_escapeair_floor_producer_runtime_authority(&mpcoll_ctx);
+            }
           }
+        }
+        if (!escapeair_live_nonplatform_root_floor_authority && on_ground &&
+            msl_escapeair_locked_bottom_owner_is_live_jumpaerial(
+                batch->state.coll_desired_ecb_bottom_locked_owner[idx]) &&
+            ecb_lock_timer_seed > 1u && ground_id == seed_ground_id &&
+            !stage_collision_floor_line_is_platform(stage_id, ground_id) &&
+            !stage_collision_floor_line_has_platform_transform(stage_id, ground_id) &&
+            (escapeair_projection_line_idx < 0 ||
+             (size_t)escapeair_projection_line_idx >= g->line_count ||
+             !g->lines[(size_t)escapeair_projection_line_idx].is_ledge) &&
+            escapeair_floor_producer_authority_in != 0u && prev_y > (contact_y + k_floor_y_bias) &&
+            y <= (contact_y + k_floor_y_bias)) {
+          // Current live EscapeAir callback has accepted the carried non-platform floor through
+          // the same root-projection producer above. This is source authority only because the
+          // CollData_X130 owner is runtime-written by JumpAerial/EscapeAir callback flow; direct
+          // reseed rows with a restored floor id and root crossing keep owner=seeded/none and
+          // therefore cannot publish through this lane.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+          // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+          // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor}
+          escapeair_live_nonplatform_root_floor_authority = 1u;
+          mpcoll_record_escapeair_floor_producer_runtime_authority(&mpcoll_ctx);
         }
       }
 
@@ -11898,6 +12111,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
              !stage_collision_floor_line_is_platform(stage_id, ground_id) &&
              !resolved_line_has_platform_transform && !escapeair_early_ledge_root_floor_owner &&
              !runtime_live_jumpaerial_nonplatform_root_crossing &&
+             !escapeair_live_nonplatform_root_floor_authority &&
+             escapeair_floor_producer_authority_in == 0u &&
              batch->state.coll_desired_ecb_bottom_valid[idx] != 0u &&
              msl_escapeair_locked_bottom_owner_any(
                  batch->state.coll_desired_ecb_bottom_locked_owner[idx]) &&
