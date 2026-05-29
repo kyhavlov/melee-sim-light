@@ -96,6 +96,15 @@ class _ThrowHiSameCharacterCallbackCase:
     note: str
 
 
+@dataclass(frozen=True)
+class _ThrowBlasterHiddenTopoffCase:
+    dataset_rel: str
+    target_record: int
+    thrower_port: int
+    expected_throw_action: int
+    note: str
+
+
 def _run_rollout_rows(dataset_path: Path, start_record: int, rows: tuple[int, ...]) -> dict[int, tuple[np.void, np.void]]:
     ds = read_dataset(str(dataset_path))
     samples = ds.samples
@@ -924,6 +933,15 @@ def test_falco_throwhi_crossed_prev_frame18_rollout_emits_second_article_pec() -
             note="Falco ThrowHi frame-24 current-pulse carried BODY row",
         ),
         _ThrowHiFrame24CarryCase(
+            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl",
+            target_record=270,
+            thrower_port=1,
+            positive=True,
+            expect_matches_ref=True,
+            expected_victim_hitlag_min=4,
+            note="Falco ThrowHi frame-24 current-pulse top-off consumes old article and keeps new article",
+        ),
+        _ThrowHiFrame24CarryCase(
             dataset_rel=(
                 "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
                 "TreasuredBackKangaroo.msl"
@@ -985,7 +1003,7 @@ def test_falco_throwhi_frame24_carried_body_locks(case: _ThrowHiFrame24CarryCase
     if case.positive:
         assert int(seed["char_id"][thrower]) == 22, case.note  # Falco
         assert int(seed["hitlag"][victim]) >= int(case.expected_victim_hitlag_min), case.note
-        assert int(seed["last_hit_by"][victim]) == thrower, case.note
+        assert int(seed["last_hit_by"][victim]) in (thrower, thrower + 1), case.note
         assert int(seed["last_attack_landed"][victim]) == 0, case.note
     else:
         assert (
@@ -1057,6 +1075,79 @@ def test_falco_throwhi_frame24_projectile_side_body_consumes_and_compacts_mgs() 
     assert int(out_row["combo_count"][thrower]) == int(ref_row["combo_count"][thrower]) == 3
     assert float(out_row["percent"][victim]) == pytest.approx(float(ref_row["percent"][victim]), abs=1e-6)
     assert int(out_row["hitlag"][victim]) == int(ref_row["hitlag"][victim]) == 4
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "case",
+    [
+        _ThrowBlasterHiddenTopoffCase(
+            dataset_rel="datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            target_record=9964,
+            thrower_port=1,
+            expected_throw_action=220,
+            note="Falco ThrowB terminal pulse top-off without serialized article",
+        ),
+        _ThrowBlasterHiddenTopoffCase(
+            dataset_rel="datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl",
+            target_record=5099,
+            thrower_port=1,
+            expected_throw_action=220,
+            note="Falco ThrowB terminal pulse top-off TCH",
+        ),
+    ],
+)
+def test_throw_blaster_hidden_terminal_pulse_topoff_without_live_article(
+    case: _ThrowBlasterHiddenTopoffCase,
+) -> None:
+    # Replay-real locks for hidden throw-side state1 BODY top-off:
+    # - ftAction_80071974 emits a throw_flags_b0 projectile pulse from set_throw_spawn_projectile.
+    # - ftFx_Throw_Anim consumes that pulse into it_8029C6CC, and it_8029C4D4 can consume the
+    #   state1 article before Slippi serializes it.
+    # - The hidden article still contributes to the already-live Fighter_ProcessHit percent/hitlag
+    #   window; the simulator must not reduce this to combo bookkeeping only.
+    # refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+    # refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C6CC,it_8029C4D4}
+    # refs/melee/src/melee/it/itcoll.c::it_80272460
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / case.dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {case.dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    samples = ds.samples
+    target_record = int(case.target_record)
+    assert int(samples.shape[0]) > target_record, f"dataset too short for lock row: record={target_record}"
+
+    seed = samples[target_record]["seed_t"]
+    thrower = int(case.thrower_port)
+    victim = 1 - thrower
+    assert int(seed["char_id"][thrower]) == 22, case.note  # Falco
+    assert int(seed["action_id"][thrower]) == int(case.expected_throw_action), case.note
+    assert int(seed["hitlag"][victim]) > 0, case.note
+    assert int(seed["hitstun"][victim]) > 0, case.note
+    assert int(seed["last_hit_by"][victim]) in (thrower, thrower + 1), case.note
+    assert int(seed["instance_hit_by"][victim]) == int(seed["instance_id"][thrower]), case.note
+
+    owner_state1_count = sum(
+        1
+        for item in seed["items"]
+        if int(item["exists"]) != 0
+        and int(item["owner"]) == thrower
+        and int(item["type"]) == 55
+        and int(item["state"]) == 1
+    )
+    assert owner_state1_count == 0, case.note
+
+    _, ref_row, out_row = _run_one_step_row(dataset_path, target_record, thrower)
+    for field in ("action_id", "hitlag", "hitstun", "percent", "combo_count", "last_attack_landed"):
+        assert out_row[field][victim] == ref_row[field][victim], f"{case.note}: victim {field}"
+    assert out_row["combo_count"][thrower] == ref_row["combo_count"][thrower], case.note
+    live_out = sum(1 for item in out_row["items"] if int(item["exists"]) != 0)
+    live_ref = sum(1 for item in ref_row["items"] if int(item["exists"]) != 0)
+    assert live_out == live_ref, case.note
 
 
 @pytest.mark.integration

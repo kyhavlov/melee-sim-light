@@ -1323,6 +1323,93 @@ def test_yoshi_shyguy_fighter_hitbox_hit_applies_attacker_deal_hitlag(record: in
     assert int(out["items"][slot]["damage"]) == int(ref["items"][slot]["damage"])
 
 
+@pytest.mark.integration
+@pytest.mark.parametrize("record", [5006, 5007])
+def test_yoshi_shyguy_fighter_hitbox_scaled_hurtbox_rejects_edge_near_miss(record: int) -> None:
+    # Fighter HitCapsule vs Heiho item hurtbox is source-owned by lbColl_8000805C. That path
+    # evaluates the item hurtbox through item->scl; Yoshi's extracted MSLSTIO1 scale is smaller
+    # than the raw hurtbox radius and rejects these AttackAirB edge near-misses. The adjacent
+    # positives above keep real Shy Guy hits admitted through the same owner.
+    # refs/melee/src/melee/it/itcoll.c::it_802703E8
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+    # data/stage_items/yoshi_shyguy.bin::MSLSTIO1 collision_ecb_scale
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    out, ref = _step_one_row(dataset_path, record)
+    assert int(out["hitlag"][0]) == 0
+    assert int(out["hitlag"][0]) == int(ref["hitlag"][0])
+    assert int(out["items"][0]["type"]) == ITEM_KIND_HEIHO
+    assert int(out["items"][0]["state"]) == int(ref["items"][0]["state"])
+    assert int(out["items"][0]["damage"]) == int(ref["items"][0]["damage"])
+    assert float(out["items"][0]["vel_x"]) == pytest.approx(
+        float(ref["items"][0]["vel_x"]), abs=1e-6
+    )
+    assert float(out["items"][0]["vel_y"]) == pytest.approx(
+        float(ref["items"][0]["vel_y"]), abs=1e-6
+    )
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("record", [3375, 3376])
+def test_yoshi_shyguy_return_flight_same_action_hitlist_rejects_rehit(record: int) -> None:
+    # Return-flight Heiho has already passed through it_802703E8/it_802D8EC8. Source
+    # ftColl_80076808 has inserted the item pointer into the attacker's same-hit_group HitCapsules,
+    # so the continuing AttackAirN must not re-damage the same item when teacher-forced reseed
+    # restores only the visible state-4/damage fields.
+    # refs/melee/src/melee/it/itcoll.c::it_802703E8
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80076808
+    # refs/melee/src/melee/lb/lbcollision.c::lbColl_8000ACFC
+    # refs/melee/src/melee/it/items/itheiho.c::{it_802D8EC8,it_802D9168}
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    out, ref = _step_one_row(dataset_path, record)
+    assert int(out["hitlag"][0]) == 0
+    assert int(out["hitlag"][0]) == int(ref["hitlag"][0])
+    assert int(out["items"][0]["type"]) == ITEM_KIND_HEIHO
+    assert int(out["items"][0]["state"]) == int(ref["items"][0]["state"])
+    assert int(out["items"][0]["damage"]) == int(ref["items"][0]["damage"])
+
+
+@pytest.mark.integration
+def test_yoshi_shyguy_return_flight_same_action_unproven_victim_does_not_seed_suppress() -> None:
+    # Same action + state-4 + damaged Heiho is not enough to infer source victims_1 ownership.
+    # CNM 617 has that visible shape but source still admits the AttackAirLw item hit. The seed
+    # bridge must therefore only materialize the continuing-group victim lane it can prove, then let
+    # hitlist_allows_fighter_item own the final no-rehit decision.
+    # refs/melee/src/melee/it/itcoll.c::it_802703E8
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_80076808
+    # refs/melee/src/melee/lb/lbcollision.c::lbColl_8000ACFC
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/yoshis_story_recent/CheeryNumbMonkey.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples[617]["seed_t"]
+    out, ref = _step_one_row(dataset_path, 617)
+    assert int(seed["items"][3]["state"]) == 4
+    assert int(seed["items"][3]["damage"]) != 0
+    assert int(seed["seed_prev_action_id"][0]) == int(seed["action_id"][0])
+
+    assert int(out["hitlag"][0]) == int(ref["hitlag"][0]) == 3
+    assert int(out["instance_hit_by"][0]) == int(ref["instance_hit_by"][0])
+
+
 def test_yoshi_shyguy_fighter_hitbox_hit_is_stage_and_geometry_bounded() -> None:
     root = Path(__file__).resolve().parents[1]
     dataset_path = (

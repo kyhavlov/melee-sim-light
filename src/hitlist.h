@@ -63,6 +63,8 @@ void hitlist_tick(MslBatch* batch);
 // Decomp anchor: refs/melee/src/melee/lb/lbcollision.c::lbColl_8000ACFC
 uint8_t hitlist_allows_fighter(MslBatch* batch, int bi, int attacker, int hb_id, int victim,
                                uint16_t victim_iid);
+uint8_t hitlist_allows_fighter_item(MslBatch* batch, int bi, int attacker, int hb_id, int item_slot,
+                                    uint32_t item_spawn_id);
 uint8_t hitlist_allows_fighter_live_collision(MslBatch* batch, int bi, int attacker, int hb_id,
                                               int victim, uint16_t victim_iid);
 // Returns 1 if the phantom/tip-log lane (victims_2) does not already contain (victim).
@@ -75,6 +77,12 @@ uint8_t hitlist_allows_fighter_v2(MslBatch* batch, int bi, int attacker, int hb_
 void hitlist_register_fighter_group(MslBatch* batch, int bi, int attacker, uint8_t hit_group,
                                     int victim, uint16_t victim_iid, int type,
                                     uint8_t rehit_frames);
+// Registers an item victim in every enabled fighter HitCapsule with the same hit_group.
+// Source owner: it_802703E8 -> ftColl_80076808 stores the item pointer in the fighter hitbox's
+// victims_1 list before the item damage callback runs.
+void hitlist_register_fighter_group_item(MslBatch* batch, int bi, int attacker, uint8_t hit_group,
+                                         int item_slot, uint32_t item_spawn_id, int type,
+                                         uint8_t rehit_frames);
 // Registers a phantom/tip-log victim across all enabled hitboxes in the same hit_group.
 // Decomp anchor: refs/melee/src/melee/ft/ftcoll.c::{inlineB0,ftColl_80076ED8}
 void hitlist_register_fighter_group_v2(MslBatch* batch, int bi, int attacker, uint8_t hit_group,

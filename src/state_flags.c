@@ -543,14 +543,27 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
       if (modeled_damage_entry_flag_owner) {
         // ProcessHit/Damage entry does not synthesize allow_interrupt. For these bounded source
         // owners, the post-frame fp+0x2218 bit0 mirrors the interrupted source action's
-        // command-script authority; otherwise stale seeded allow clears. Broader Damage-entry flag
-        // inheritance needs hidden source phase that is not modeled for every DamageFly/DamageFall
-        // family yet.
+        // command-script/source-state authority; otherwise stale seeded allow clears. Squat's
+        // source owner is not an action-script allow_interrupt event: when grounded Squat remains
+        // grounded through Fighter_ProcessHit -> ftCo_8008DCE0, Fighter_ChangeMotionState does not
+        // clear the live fp->allow_interrupt bit, so the destination DamageN2 row carries the
+        // frame-start byte. If the same Squat hit launches airborne, the stale seeded carry is not
+        // a grounded Damage entry owner and must clear.
+        // Broader Damage-entry flag inheritance needs hidden source phase that is not modeled for
+        // every DamageFly/DamageFall family yet.
         // refs/melee/src/melee/ft/ftaction.c::ftAction_80071950
         // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B62C
-        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
         const float source_frame = (float)(batch->state.prev_action_frame[idx] + 1);
-        if (state_flags_action_allow_interrupt_at_frame(batch->state.char_id[idx], prev_action,
+        const uint8_t grounded_squat_damage_entry_carries_source_allow =
+            (prev_action == (uint16_t)MSL_ACT_SQUAT && action_id == (uint16_t)MSL_ACT_DAMAGE_N_2 &&
+             batch->state.on_ground[idx] != 0u &&
+             (batch->state.state_flags_2218_frame_start[idx] &
+              (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT) != 0u)
+                ? 1u
+                : 0u;
+        if (grounded_squat_damage_entry_carries_source_allow ||
+            state_flags_action_allow_interrupt_at_frame(batch->state.char_id[idx], prev_action,
                                                         source_frame)) {
           f2218 |= (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT;
         } else {

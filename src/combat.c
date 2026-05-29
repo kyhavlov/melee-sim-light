@@ -4923,9 +4923,10 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
   const uint16_t d_hl =
       combat_calc_hitlag_frames(c, damage_product.env_dmg, d_motion_id, hitlag_mul);
   const uint16_t d_hl_prev = batch->state.hitlag[d_idx];
-  const uint8_t same_frame_throwhi_item_damage_topoff =
+  const uint8_t same_frame_throw_laser_item_damage_topoff =
       (lp != NULL && item_state == (uint8_t)1u &&
-       batch->state.action_id[a_idx] == (uint16_t)MSL_ACT_THROW_HI &&
+       (batch->state.action_id[a_idx] == (uint16_t)MSL_ACT_THROW_B ||
+        batch->state.action_id[a_idx] == (uint16_t)MSL_ACT_THROW_HI) &&
        batch->state.hitlag_pre_timer[d_idx] == 0u && d_hl_prev > 0u &&
        batch->state.hitstun[d_idx] > 0u &&
        batch->state.instance_hit_by[d_idx] == item_instance_id &&
@@ -5166,12 +5167,12 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
   const float kb_x = -defender_facing_dir_1 * (kb_vel_mag * cosf(kb_angle_rad));
   const float kb_y = kb_vel_mag * sinf(kb_angle_rad);
 
-  if (same_frame_throwhi_item_damage_topoff && d_hl <= d_hl_prev &&
+  if (same_frame_throw_laser_item_damage_topoff && d_hl <= d_hl_prev &&
       hs <= batch->state.hitstun[d_idx]) {
     item_damage_class = MSL_COMBAT_DAMAGE_TOP_OFF_MERGE;
   }
   if (item_damage_class == MSL_COMBAT_DAMAGE_TOP_OFF_MERGE) {
-    // Same-frame ThrowHi state1 laser top-off:
+    // Same-frame throw-side state1 laser top-off:
     // - Multiple throw-side state1 articles can overlap the same already-damaged victim in one
     //   item pass. In vanilla, their HitCapsule damage contributes to the same
     //   Fighter_ProcessHit percent-temp frame, but the first accepted hit owns the Damage entry and
@@ -5179,6 +5180,8 @@ MslItemHitResult combat_apply_item_hit(MslBatch* batch, int batch_index, int att
     // - The later article can still contribute to the ftCo_Damage_CalcVel merge. The simulator
     //   processes items serially, so without this boundary it sees x18AC reset by the first entry
     //   and incorrectly treats the later top-off as a fresh replace + Damage entry.
+    // - ThrowB and ThrowHi share the same ftFx_Throw_Anim throw_flags_b0 item producer and state1
+    //   BODY callback; ThrowLw attached-victim pulses use the separate grabbed-victim owner above.
     // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
     // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_CalcVel,ftCo_8008DCE0}
     // refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C6CC,it_8029C4D4}

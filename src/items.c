@@ -3271,6 +3271,59 @@ static inline uint8_t yoshi_shyguy_state_accepts_item_damage(uint8_t state) {
   return (state == 1u || state == 4u) ? 1u : 0u;
 }
 
+static inline uint8_t yoshi_shyguy_seed_return_flight_same_action_rehit_suppresses(
+    const MslBatch* batch, size_t p_idx, size_t shy_idx, size_t hb_i) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  if (batch->state.item_state[shy_idx] != 4u || batch->state.item_damage[shy_idx] == 0u) {
+    return 0u;
+  }
+  if (batch->state.hitlag[p_idx] != 0u || batch->state.hitstun[p_idx] != 0u) {
+    return 0u;
+  }
+  if (batch->state.hitbox_enable_edge[hb_i] != 0u) {
+    return 0u;
+  }
+  // Teacher-forced reseed can restore Heiho's low-damage return-flight state without serializing
+  // the fighter HitCapsule's item victim pointer. If the same fighter action is continuing, source
+  // ftColl_80076808's victims_1 latch from the prior it_802703E8 hit still suppresses continuing
+  // same-group HitCapsules from damaging the same item again. A hitbox enable edge is a new
+  // source-created HitCapsule, so same action/state4/damaged-item alone is not enough to infer the
+  // victims_1 entry. This bridge only materializes the missing item victim lane; all suppression
+  // still flows through hitlist_allows_fighter_item below.
+  // refs/melee/src/melee/it/itcoll.c::it_802703E8
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076808
+  // refs/melee/src/melee/lb/lbcollision.c::lbColl_8000ACFC
+  // refs/melee/src/melee/it/items/itheiho.c::{it_802D8EC8,it_802D9168}
+  return (batch->state.seed_prev_action_id[p_idx] == batch->state.action_id[p_idx]) ? 1u : 0u;
+}
+
+static inline void yoshi_shyguy_seed_return_flight_publish_fresh_prefix_velocity(
+    MslBatch* batch, size_t shy_idx, const MslYoshiShyguyParams* params) {
+  if (batch == NULL || params == NULL || batch->state.item_state[shy_idx] != 4u ||
+      batch->state.item_shyguy_delay_valid[shy_idx] == 0u ||
+      batch->state.item_shyguy_delay[shy_idx] < 18u) {
+    return;
+  }
+  // Fresh return-flight prefix after the low-damage callback: it_802D9168 initializes x24=20 and
+  // state-4 Anim/Phys publish the source speed/dynamic-bone velocity for the immediate carried
+  // item-hitlist rows. Later x24 rows stay on the broader return-flight export owner below.
+  // refs/melee/src/melee/it/items/itheiho.c::{it_802D8EC8,it_802D9168,
+  //   itHeiho_UnkMotion4_Anim,itHeiho_UnkMotion4_Phys}
+  if (batch->state.item_shyguy_speed_index_valid[shy_idx] != 0u) {
+    const uint8_t speed_index =
+        batch->state.item_shyguy_speed_index[shy_idx] % MSL_YOSHI_SHYGUY_SPEED_COUNT;
+    batch->state.item_vel_x[shy_idx] = params->speed[speed_index] * params->state4_speed_mul *
+                                       batch->state.item_direction[shy_idx];
+  }
+  if (batch->state.item_shyguy_dyn_y_phase_valid[shy_idx] != 0u) {
+    const uint8_t phase_before =
+        (uint8_t)((batch->state.item_shyguy_dyn_y_phase[shy_idx] + 255u) & 0xFFu);
+    batch->state.item_vel_y[shy_idx] = yoshi_shyguy_vel_y_from_phase(params, phase_before, 4u);
+  }
+}
+
 static inline float yoshi_shyguy_item_kb_applied(const MslCommonParams* c,
                                                  const MslYoshiShyguyParams* params, uint16_t kbg,
                                                  uint16_t wsk, uint16_t bkb, int damage_i) {
@@ -3511,6 +3564,20 @@ static uint8_t yoshi_shyguy_try_fighter_hitbox_hit(MslBatch* batch, int bi, int 
           !(batch->state.hitbox_damage[hb_i] > 0.0f)) {
         continue;
       }
+      const uint8_t hit_group = hitlist_hit_group_from_u16_7(batch->state.hitbox_u16_7[hb_i]);
+      const uint8_t rehit_frames = hitlist_rehit_frames_from_u16_7(batch->state.hitbox_u16_7[hb_i]);
+      const uint8_t seed_rehit_suppresses =
+          yoshi_shyguy_seed_return_flight_same_action_rehit_suppresses(batch, p_idx, shy_idx, hb_i);
+      if (seed_rehit_suppresses) {
+        yoshi_shyguy_seed_return_flight_publish_fresh_prefix_velocity(batch, shy_idx, params);
+        hitlist_register_fighter_group_item(batch, bi, p, hit_group, shyguy_slot,
+                                            batch->state.item_spawn_id[shy_idx],
+                                            (int)MSL_LBCOLL_INSERT_FT_BODY, rehit_frames);
+      }
+      if (!hitlist_allows_fighter_item(batch, bi, p, hb, shyguy_slot,
+                                       batch->state.item_spawn_id[shy_idx])) {
+        continue;
+      }
 
       const float hx1 = batch->state.hitbox_x[hb_i];
       const float hy1 = batch->state.hitbox_y[hb_i];
@@ -3529,7 +3596,13 @@ static uint8_t yoshi_shyguy_try_fighter_hitbox_hit(MslBatch* batch, int bi, int 
         const float bx = batch->state.item_pos_x[shy_idx] + params->hurtbox_b_offset[hi][0];
         const float by = batch->state.item_pos_y[shy_idx] + params->hurtbox_b_offset[hi][1];
         const float bz = params->hurtbox_b_offset[hi][2];
-        const float rr = hr + params->hurtbox_scale[hi];
+        // Heiho item hurtboxes are tested through lbColl_8000805C with the item object's `scl`
+        // scale. MSLSTIO1 exposes that source scale as collision_ecb_scale; using the raw hurtbox
+        // radius over-admits near-miss fighter/item contacts at the Shy Guy edge.
+        // refs/melee/src/melee/it/itcoll.c::it_802703E8
+        // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+        // data/stage_items/yoshi_shyguy.bin::MSLSTIO1 collision_ecb_scale
+        const float rr = hr + params->hurtbox_scale[hi] * params->collision_ecb_scale;
         const float d2 =
             item_segment_segment_dist2(hx0, hy0, hz0, hx1, hy1, hz1, ax, ay, az, bx, by, bz);
         if (d2 > rr * rr) {
@@ -3555,6 +3628,9 @@ static uint8_t yoshi_shyguy_try_fighter_hitbox_hit(MslBatch* batch, int bi, int 
         yoshi_shyguy_apply_damage_common(
             batch, shy_idx, params, batch->state.hitbox_angle[hb_i], batch->state.hitbox_kbg[hb_i],
             batch->state.hitbox_wsk[hb_i], batch->state.hitbox_bkb[hb_i], hit_damage, dir);
+        hitlist_register_fighter_group_item(batch, bi, p, hit_group, shyguy_slot,
+                                            batch->state.item_spawn_id[shy_idx],
+                                            (int)MSL_LBCOLL_INSERT_FT_BODY, rehit_frames);
         combat_apply_deal_hitlag_raw_damage(batch, p_idx, hit_damage_i);
         return 1u;
       }
@@ -4207,6 +4283,37 @@ static void laser_spawn_apply_falco_throwb_startup_body_callback(MslBatch* batch
     hitlist_register_item_hitbox_fighter(batch, bi, slot, 0, victim, victim_iid,
                                          (int)MSL_LBCOLL_INSERT_FT_BODY, 0);
   }
+}
+
+static MslItemHitResult throw_laser_apply_hidden_state1_body_topoff(MslBatch* batch, int bi,
+                                                                    int owner, int victim,
+                                                                    const MslLaserParams* lp) {
+  if (batch == NULL || lp == NULL || owner < 0 || victim < 0) {
+    return MSL_ITEM_HIT_NONE;
+  }
+  const size_t o_idx = msl_idx_player(bi, owner);
+  const size_t v_idx = msl_idx_player(bi, victim);
+  if (batch->state.hitlag[v_idx] == 0u || batch->state.hitstun[v_idx] == 0u ||
+      !msl_damage_source_victim_port_matches_attacker(batch, v_idx, o_idx, owner)) {
+    return MSL_ITEM_HIT_NONE;
+  }
+
+  // Hidden throw-pulse BODY top-off:
+  // - ftAction emits one throw_flags_b0 pulse and ftFx_Throw_Anim consumes it by spawning a state1
+  //   throw laser through it_8029C6CC.
+  // - Some terminal/callback phases consume that state1 article before Slippi serializes it, but
+  //   the BODY callback still contributes to the already-live Fighter_ProcessHit percent/hitlag
+  //   window. Use the same state1 item BODY producer as visible throw lasers, without leaving an
+  //   extra runtime article behind.
+  // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+  // refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C6CC,it_8029C4D4}
+  // refs/melee/src/melee/it/itcoll.c::it_80272460
+  return combat_apply_item_hit(
+      batch, bi, owner, victim, batch->state.attack_id[o_idx], batch->state.attack_instance[o_idx],
+      batch->state.instance_id[o_idx], lp->shot_itkind, 1u, lp->state1_damage, lp->state1_angle,
+      lp->state1_kbg, lp->state1_wsk, lp->state1_bkb, 1u, lp->state1_element, -1.0f,
+      batch->state.pos_x[o_idx], batch->state.facing[o_idx] ? 1.0f : -1.0f, 0u);
 }
 
 static void laser_spawn_apply_falco_throwb_final_prior_body_callback(
@@ -6808,6 +6915,22 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
         // refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C4D4
         // refs/melee/src/melee/it/itcoll.c::it_80272460
         // data/moves/falco.json moves["ftCo_SM_ThrowHi"].events
+        if (falco_throwhi_final_pulse_curr != 0u) {
+          const MslItemHitResult topoff_res = combat_apply_item_hit(
+              batch, bi, owner, def, batch->state.item_attack_id[ii],
+              batch->state.item_attack_instance[ii], batch->state.item_instance_id[ii],
+              batch->state.item_type[ii], batch->state.item_state[ii], lp->state1_damage,
+              lp->state1_angle, lp->state1_kbg, lp->state1_wsk, lp->state1_bkb, hit_hurt_height,
+              lp->state1_element, -1.0f, batch->state.item_pos_x[ii], batch->state.item_vel_x[ii],
+              0u);
+          if (topoff_res == MSL_ITEM_HIT_APPLIED_CONSUME_ITEM) {
+            item_slot_clear(batch, ii);
+            break;
+          }
+          if (topoff_res != MSL_ITEM_HIT_NONE) {
+            continue;
+          }
+        }
         continue;
       }
 
@@ -7145,9 +7268,8 @@ static void yoshi_shyguy_items_update(MslBatch* batch, int bi) {
       }
     }
     if (state == 4u && turn_delay_started_positive != 0u) {
-      // Return-flight x24 turn/camera delay: Phys uses the source X speed for position, but the
-      // post-frame item velocity is still the dynamic-bone/export velocity from Anim for the delay
-      // prefix.
+      // Return-flight x24 turn/camera delay: keep the existing broad export owner for rows whose
+      // dynamic-bone provenance is not reasserted by a live source item-hitlist bridge below.
       // refs/melee/src/melee/it/items/itheiho.c::{it_802D9168,itHeiho_UnkMotion4_Phys}
       export_vel_x = batch->state.item_vel_x[ii];
       export_vel_y = batch->state.item_vel_y[ii];
@@ -8164,13 +8286,18 @@ void items_spawn_fighter_anim_phase(MslBatch* batch) {
                   //   owned by ftAction/ftFx_Throw_Anim.
                   // - In terminal ongoing-hitstun rows, item BODY callback/source bookkeeping is
                   //   represented without a live article at t+1. Suppress replaying the terminal
-                  //   article and advance only item-domain combo bookkeeping.
+                  //   article, but still let the hidden state1 BODY producer top off the live
+                  //   Fighter_ProcessHit percent/hitlag window when source victim identity matches.
                   // refs/melee/src/melee/ft/ftaction.c::{ftAction_80071974,ftAction_80073354}
                   // refs/melee/src/melee/ft/chara/ftFox/ftFx_Throw_Anim
                   // refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C6CC,it_8029C4D4}
                   // refs/melee/src/melee/it/itcoll.c::{it_8026FA2C,it_8026FAC4,it_80272460}
                   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007646C,ftColl_800763C0}
-                  throw_laser_advance_combo_bookkeeping(batch, bi, p, callback_victim);
+                  const MslItemHitResult hidden_res = throw_laser_apply_hidden_state1_body_topoff(
+                      batch, bi, p, callback_victim, lp);
+                  if (hidden_res == MSL_ITEM_HIT_NONE) {
+                    throw_laser_advance_combo_bookkeeping(batch, bi, p, callback_victim);
+                  }
                   continue;
                 }
               }
