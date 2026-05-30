@@ -327,3 +327,19 @@ def test_phase2_mpcoll_substrate_is_not_routed_through_item_or_special_only_sour
         "debug_copy_colldata",
     ):
         assert token not in special_only_sources, token
+
+
+def test_specialhi_jobj_ecb_floor_owner_stays_launch_scoped_until_full_packet() -> None:
+    ground_c = _read("src/mpcoll_ground.c")
+    helper_match = re.search(
+        r"static inline uint8_t mpcoll_ground_specialhi_uses_jobj_ecb"
+        r"\([^)]*\) \{(?P<body>.*?)\n\}",
+        ground_c,
+        flags=re.DOTALL,
+    )
+    assert helper_match is not None
+    helper_body = helper_match.group("body")
+
+    assert "MSL_ACT_FX_SPECIAL_AIR_HI" in helper_body
+    assert "MSL_ACT_FX_SPECIAL_HI_FALL" not in helper_body
+    assert "mpColl_LoadECB_JObj" in helper_body

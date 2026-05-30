@@ -3485,6 +3485,22 @@ int melee_batch_write_gamestate(const MslBatch* batch, const uint8_t* viewpoint_
       out->stage.randall.x = randall_x;
       out->stage.randall.y = randall_y;
     }
+    if (batch->state.stage_id[bi] == MSL_STAGE_ID_FOUNTAIN_OF_DREAMS) {
+      // grIzumi owns the live side-platform JObj heights; expose the same runtime state that
+      // collision uses so policy/detector code does not have to infer platform provenance from
+      // public root rows.
+      //
+      // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+      // data/stages/bin/griz.bin::MSLSTG01 platform_transforms(kind=height)
+      const size_t right_idx = (size_t)bi * 2u + 0u;
+      const size_t left_idx = (size_t)bi * 2u + 1u;
+      const uint8_t right_valid = batch->state.stage_fod_platform_valid[right_idx];
+      const uint8_t left_valid = batch->state.stage_fod_platform_valid[left_idx];
+      out->stage.fod_platforms.right =
+          right_valid ? batch->state.stage_fod_platform_height[right_idx] : 0.0f;
+      out->stage.fod_platforms.left =
+          left_valid ? batch->state.stage_fod_platform_height[left_idx] : 0.0f;
+    }
     const size_t vp_idx = msl_idx_player(bi, (int)vp);
     const uint8_t vp_team = batch->state.team_id[vp_idx];
     int slot = 0;

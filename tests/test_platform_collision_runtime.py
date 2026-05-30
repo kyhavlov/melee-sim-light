@@ -48,6 +48,7 @@ ACT_GUARD_SET_OFF = 0x00B5
 ACT_GUARD_REFLECT = 0x00B6
 ACT_DAMAGE_FLY_N = 0x0058
 ACT_DAMAGE_N_2 = 0x004F
+ACT_DAMAGE_LW_3 = 0x0053
 ACT_DAMAGE_HI_2 = 0x004C
 ACT_DAMAGE_AIR_2 = 0x0055
 ACT_DAMAGE_FLY_TOP = 0x005A
@@ -114,6 +115,7 @@ SM_ATTACK_AIR_F = 69
 SM_ATTACK_AIR_B = 70
 SM_ATTACK_AIR_HI = 71
 SM_DAMAGE_N_2 = 169
+SM_DAMAGE_LW_3 = 173
 SM_DAMAGE_HI_2 = 166
 SM_DAMAGE_AIR_2 = 174
 SM_DAMAGE_FLY_TOP = 180
@@ -123,6 +125,7 @@ CHAR_FALCO = 22
 STAGE_POKEMON = 3
 STAGE_FOD = 2
 STAGE_YOSHI = 8
+STAGE_DREAM_LAND = 28
 STAGE_BATTLEFIELD = 31
 BUTTON_L = 0x0040
 BUTTON_A = 0x0100
@@ -5018,6 +5021,50 @@ def test_fd_active_damage_hitlag_without_current_floor_projects_hard_floor_airbo
 
     assert int(no_hitlag_out["on_ground"][p]) == 1
     assert int(no_hitlag_out["ground_id"][p]) == 1
+
+
+def test_dream_land_damage_ground_to_attackair_entry_consumes_damage_ecb_floor_crossing() -> None:
+    # Damage_IASA can enter AttackAir before the frame's map callback. Source AttackAir_Coll then
+    # consumes CollData's current DamageLw3 ECB as prev_ecb before loading the entered AttackAir
+    # desired ECB. This is the live owner for the Dream Land DamageLw3 -> AttackAirN hard-floor
+    # crossing; it is not a root-only rescue or a carried public ground_id shortcut.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::{
+    #   ftCo_AttackAir_Enter,ftCo_AttackAir_Coll}
+    # refs/melee/src/melee/mp/mpcoll.c::{mpCollInterpolateECB,mpColl_80044628_Floor}
+    seed = _seed_base(STAGE_DREAM_LAND, ACT_ATTACK_AIR_N, SM_ATTACK_AIR_N, 22.043, -9.66)
+    p = 0
+    seed["on_ground"][0, p] = np.uint8(0)
+    seed["ground_id"][0, p] = np.uint16(0xFFFF)
+    seed["action_frame"][0, p] = np.int16(1)
+    seed["anim_frame_f32"][0, p] = np.float32(1.0)
+    seed["seed_prev_action_id"][0, p] = np.uint16(ACT_DAMAGE_LW_3)
+    seed["seed_prev_action_frame"][0, p] = np.int16(26)
+    seed["speed_y_self"][0, p] = np.float32(-2.5)
+    seed["floor_sweep_prev_pos_valid_u8"][0, p] = np.uint8(1)
+    seed["floor_sweep_prev_pos_x_f32"][0, p] = np.float32(22.264)
+    seed["floor_sweep_prev_pos_y_f32"][0, p] = np.float32(-7.107)
+
+    out, _contacts, colldata = _step_once_with_contacts_and_colldata(seed)
+
+    assert int(out["action_id"][p]) == ACT_LANDING
+    assert int(out["on_ground"][p]) == 1
+    assert int(out["ground_id"][p]) == 4
+    assert float(out["pos_y"][p]) == pytest.approx(0.0089, abs=1e-6)
+    assert int(colldata["floor_result_valid"][p]) == 1
+    assert int(colldata["floor_result_segment_id"][p]) == 4
+
+    restored_only = seed.copy()
+    restored_only["floor_sweep_prev_pos_valid_u8"][0, p] = np.uint8(0)
+    restored_only_out, _contacts2, restored_only_colldata = _step_once_with_contacts_and_colldata(
+        restored_only
+    )
+
+    assert int(restored_only_out["action_id"][p]) == ACT_ATTACK_AIR_N
+    assert int(restored_only_out["on_ground"][p]) == 0
+    assert int(restored_only_out["ground_id"][p]) == 0xFFFF
+    assert int(restored_only_colldata["floor_result_valid"][p]) == 0
 
 
 @pytest.mark.parametrize(

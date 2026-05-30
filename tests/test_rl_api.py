@@ -49,7 +49,13 @@ GAMESTATE_RANDALL_DTYPE = np.dtype(
     align=False,
 )
 
-GAMESTATE_STAGE_DTYPE = np.dtype([("randall", GAMESTATE_RANDALL_DTYPE)], align=False)
+GAMESTATE_STAGE_DTYPE = np.dtype(
+    [
+        ("randall", GAMESTATE_RANDALL_DTYPE),
+        ("fod_platforms", [("left", "<f4"), ("right", "<f4")]),
+    ],
+    align=False,
+)
 GAMESTATE_ITEM_DTYPE = COMPARE_DTYPE["items"].subdtype[0]
 
 GAMESTATE_DTYPE = np.dtype(

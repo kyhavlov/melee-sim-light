@@ -53,11 +53,15 @@ static const float k_mpcoll_substep_max_delta = 6.0f;
 static inline uint16_t platform_floor_skip_segment_id(const MslBatch* batch, size_t idx,
                                                       uint32_t stage_id);
 
-static inline uint8_t mpcoll_ground_specialhi_launch_uses_jobj_ecb(uint8_t char_id,
-                                                                   uint16_t action_id) {
+static inline uint8_t mpcoll_ground_specialhi_uses_jobj_ecb(uint8_t char_id, uint16_t action_id) {
   if (char_id != 1u && char_id != 22u) {
     return 0u;
   }
+  // Source owner: SpecialAirHi_Coll routes through ft_CheckGroundAndLedge, whose mpColl path
+  // consumes the live JObj/CollData ECB rather than a public root-only floor probe.
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+  //   ftFx_SpecialAirHi_Coll,ftFox_SpecialHi_RotateModel}
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_JObj,mpColl_800473CC}
   return (action_id == (uint16_t)MSL_ACT_FX_SPECIAL_HI ||
           action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI)
              ? 1u
@@ -124,7 +128,7 @@ static inline uint8_t mpcoll_ground_try_sample_specialhi_jobj_ecb(
     MslEcbWorldPoints* out, const MslBatch* batch, size_t idx, uint8_t char_id, uint32_t anim,
     uint16_t action_id, uint16_t frame_u16, float facing_dir, float pos_x, float pos_y) {
   if (out == NULL || batch == NULL || !(anim <= 0xFFFFu) ||
-      !mpcoll_ground_specialhi_launch_uses_jobj_ecb(char_id, action_id)) {
+      !mpcoll_ground_specialhi_uses_jobj_ecb(char_id, action_id)) {
     return 0u;
   }
 
@@ -6607,14 +6611,14 @@ void mpcoll_ground_apply(MslBatch* batch) {
             action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_END))
               ? 1u
               : 0u;
-      const uint8_t damageair_entry_attackair_ecb_consumer =
+      const uint8_t damage_entry_attackair_ecb_consumer =
           // Damage_IASA / Fall_IASA can enter AttackAir before Fighter_procMap, but
           // AttackAir_Coll still consumes the callback-local CollData current ECB promoted by
           // mpCollInterpolateECB before loading the entered AttackAir desired ECB. Use the
-          // generated damage-owner table for the source action family. Fighter_8006A360 advances the
-          // entered action before Fighter_procMap, so the first map-callback pass is visible here as
-          // action_frame 2. Keep this as an entry-frame CollData lifetime, not an AttackAir-wide floor
-          // shortcut.
+          // generated damage-owner tables for both DamageAir* and ground DamageHi/N/Lw source
+          // families. Fighter_8006A360 advances the entered action before Fighter_procMap, so the
+          // first map-callback pass is visible here as action_frame 2. Keep this as an entry-frame
+          // CollData lifetime, not an AttackAir-wide floor shortcut.
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_IASA
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_IASA_Inner
           // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::{
@@ -6622,12 +6626,14 @@ void mpcoll_ground_apply(MslBatch* batch) {
           // refs/melee/src/melee/mp/mpcoll.c::{mpCollInterpolateECB,mpColl_80044628_Floor}
           (is_attackair_action(action_id) && batch->state.action_frame[idx] <= 2 &&
            (msl_damage_owner_is_damage_air_action(prev_action_id) ||
-            msl_damage_owner_is_damage_air_action(batch->state.seed_prev_action_id[idx])))
+            msl_damage_owner_is_damage_air_action(batch->state.seed_prev_action_id[idx]) ||
+            is_damage_ground_collision_action(prev_action_id) ||
+            is_damage_ground_collision_action(batch->state.seed_prev_action_id[idx])))
               ? 1u
               : 0u;
       const uint8_t use_hidden_ecb_lifetime =
           (have_state_cur_ecb && !lock_bottom_to_zero &&
-           (jumpaerial_entry_ecb_consumer || damageair_entry_attackair_ecb_consumer ||
+           (jumpaerial_entry_ecb_consumer || damage_entry_attackair_ecb_consumer ||
             active_damage_hitlag_ecb_consumer))
               ? 1u
               : (escapeair_jumpaerial_prev_ecb_lifetime && !use_locked_desired_ecb_bottom);
@@ -6695,8 +6701,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
       }
       uint8_t have_cur_specialhi_ecb = 0u;
       uint8_t have_prev_specialhi_ecb = 0u;
-      if (!use_hidden_ecb_lifetime && !lock_bottom_to_zero &&
-          mpcoll_ground_specialhi_launch_uses_jobj_ecb(char_id, action_id)) {
+      uint8_t specialhi_jobj_ecb_active = mpcoll_ground_specialhi_uses_jobj_ecb(char_id, action_id);
+      if (!use_hidden_ecb_lifetime && !lock_bottom_to_zero && specialhi_jobj_ecb_active) {
         MslEcbWorldPoints specialhi_cur_ecb = cur_ecb_points;
         MslEcbWorldPoints specialhi_prev_ecb = prev_ecb_points;
         have_cur_specialhi_ecb = mpcoll_ground_try_sample_specialhi_jobj_ecb(
@@ -6746,8 +6752,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
           desired_ecb_source_mode = (uint8_t)MSL_MPCOLL_ECB_SOURCE_HIDDEN_COLLDATA;
         }
       }
-      if (!use_hidden_ecb_lifetime && !lock_bottom_to_zero &&
-          mpcoll_ground_specialhi_launch_uses_jobj_ecb(char_id, action_id)) {
+      if (!use_hidden_ecb_lifetime && !lock_bottom_to_zero && specialhi_jobj_ecb_active) {
         if (have_cur_specialhi_ecb) {
           current_ecb_source_mode = (uint8_t)MSL_MPCOLL_ECB_SOURCE_JOBJ;
         }

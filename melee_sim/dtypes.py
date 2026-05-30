@@ -190,7 +190,13 @@ def gamestate_randall_dtype() -> np.dtype:
 
 @lru_cache(maxsize=1)
 def gamestate_stage_dtype() -> np.dtype:
-    return np.dtype([("randall", gamestate_randall_dtype())], align=False)
+    return np.dtype(
+        [
+            ("randall", gamestate_randall_dtype()),
+            ("fod_platforms", [("left", "<f4"), ("right", "<f4")]),
+        ],
+        align=False,
+    )
 
 
 @lru_cache(maxsize=1)

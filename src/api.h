@@ -215,8 +215,14 @@ typedef struct MeleeRandall {
   float y;
 } MeleeRandall;
 
+typedef struct MeleeFoDPlatforms {
+  float left;
+  float right;
+} MeleeFoDPlatforms;
+
 typedef struct MeleeStage {
   MeleeRandall randall;
+  MeleeFoDPlatforms fod_platforms;
 } MeleeStage;
 
 typedef struct MeleeItem {
