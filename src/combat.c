@@ -1486,10 +1486,9 @@ static inline uint8_t combat_shield_active_action(uint16_t action_id) {
   }
 }
 
-static inline void combat_preserve_guard_x10_for_immediate_setoff(MslBatch* batch, size_t d_idx,
-                                                                  uint16_t d_motion_id_pre,
-                                                                  const MslCommonParams* c,
-                                                                  uint8_t fighter_powershield_active) {
+static inline void combat_preserve_guard_x10_for_immediate_setoff(
+    MslBatch* batch, size_t d_idx, uint16_t d_motion_id_pre, const MslCommonParams* c,
+    uint8_t fighter_powershield_active) {
   if (batch == NULL) {
     return;
   }

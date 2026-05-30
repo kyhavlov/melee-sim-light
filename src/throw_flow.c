@@ -8,6 +8,7 @@
 #include "common_params.h"
 #include "combat.h"
 #include "damage_terminal_owner.h"
+#include "ecb_tables.h"
 #include "grab_attachment.h"
 #include "knockdown.h"
 #include "move_tables.h"
@@ -70,6 +71,33 @@ static inline void enter_fall_release(MslBatch* batch, size_t idx) {
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_FALL;
   batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL;
   msl_anim_timebase_restart(batch, idx, 0.0f, 1.0f);
+}
+
+static inline void throw_release_source_colldata_last_pos(float* out_x, float* out_y,
+                                                          const MslBatch* batch, size_t owner_idx) {
+  if (out_x == NULL || out_y == NULL || batch == NULL) {
+    return;
+  }
+  float bottom_rel_y = batch->state.coll_ecb_bottom_rel_y[owner_idx];
+  float top_rel_y = batch->state.coll_ecb_top_rel_y[owner_idx];
+  if (!isfinite(bottom_rel_y) || !isfinite(top_rel_y)) {
+    const uint32_t owner_anim = batch->state.animation_index[owner_idx];
+    const int owner_frame = (int)msl_anim_frame_floor_u16(
+        msl_anim_frame_sanitize_f32(batch->state.anim_frame_f32[owner_idx]));
+    bottom_rel_y = msl_ecb_bottom_rel_y(batch->state.char_id[owner_idx], owner_anim, owner_frame);
+    top_rel_y = msl_ecb_top_rel_y(batch->state.char_id[owner_idx], owner_anim, owner_frame);
+  }
+
+  // Throw release CollData owner:
+  // ftCo_800DDDE4 writes released-fighter CollData.last_pos from the thrower root plus inline3=0
+  // and inline2=0.5*(thrower.coll_data.ecb.top.y + bottom.y), then calls mpColl_800471F8. MSL's
+  // same-frame throw-hit bridge still consumes the attached-victim root; this packet feeds the
+  // next callback's ft_80081DD4/mpColl sweep only.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+  // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80043754}
+  *out_x = batch->state.pos_x[owner_idx];
+  *out_y = batch->state.pos_y[owner_idx] + 0.5f * (top_rel_y + bottom_rel_y);
 }
 
 static inline void throw_flow_apply_deferred_throw_hit_kb_decay(MslBatch* batch,
@@ -312,6 +340,10 @@ void throw_flow_update_anim_callback_pre_input(MslBatch* batch, int bi, int owne
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Thrown.c::{ftCo_800DE3FC,ftCo_800DE508}
       const float release_sweep_root_x = batch->state.pos_x[vidx];
       const float release_sweep_root_y = batch->state.pos_y[vidx];
+      float source_release_last_pos_x = release_sweep_root_x;
+      float source_release_last_pos_y = release_sweep_root_y;
+      throw_release_source_colldata_last_pos(&source_release_last_pos_x, &source_release_last_pos_y,
+                                             batch, oidx);
       grab_attachment_apply_thrown_release_anchor_now(batch, bi, victim_p, owner_p, rel_anim_frame,
                                                       owner_pose_facing_before_throw_flags);
       if (isfinite(release_sweep_root_x) && isfinite(release_sweep_root_y)) {
@@ -324,8 +356,8 @@ void throw_flow_update_anim_callback_pre_input(MslBatch* batch, int bi, int owne
         // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80043754,mpCheckFloor}
         batch->state.floor_sweep_prev_pos_x[vidx] = release_sweep_root_x;
         batch->state.floor_sweep_prev_pos_y[vidx] = release_sweep_root_y;
-        batch->state.floor_sweep_seed_prev_pos_x[vidx] = release_sweep_root_x;
-        batch->state.floor_sweep_seed_prev_pos_y[vidx] = release_sweep_root_y;
+        batch->state.floor_sweep_seed_prev_pos_x[vidx] = source_release_last_pos_x;
+        batch->state.floor_sweep_seed_prev_pos_y[vidx] = source_release_last_pos_y;
         batch->state.floor_sweep_seed_prev_valid[vidx] = 1u;
         batch->state.floor_sweep_prev_source_owned[vidx] = 1u;
       }

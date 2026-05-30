@@ -5614,9 +5614,8 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
             shield_bounce_best_vy = trial_bounce_vy;
           }
         }
-        if (!shield_hit &&
-            item_laser_no_submotion_guard_entry_shielddesc_root_x_owner(
-                batch, d_idx, shield_bounce_seed_valid)) {
+        if (!shield_hit && item_laser_no_submotion_guard_entry_shielddesc_root_x_owner(
+                               batch, d_idx, shield_bounce_seed_valid)) {
           const float root_shx = batch->state.pos_x[d_idx];
           for (uint8_t oi = 0; oi < off_n && oi < (uint8_t)MSL_LASER_MAX_HITBOX_OFFS_X; oi++) {
             const float off_x =
@@ -5626,8 +5625,8 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
             const float sy0 = y0 + (uy * s);
             const float sx = shield_probe_x + (ux * s);
             const float sy = shield_probe_y + (uy * s);
-            if (!item_swept_sphere_sphere_intersects_3d(sx0, sy0, 0.0f, sx, sy, 0.0f, sr,
-                                                        root_shx, shy, shz, shr)) {
+            if (!item_swept_sphere_sphere_intersects_3d(sx0, sy0, 0.0f, sx, sy, 0.0f, sr, root_shx,
+                                                        shy, shz, shr)) {
               continue;
             }
             shield_hit = 1u;
@@ -5664,9 +5663,8 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
             break;
           }
           if (!shield_hit && off_n == 0 &&
-              item_swept_sphere_sphere_intersects_3d(x0, y0, 0.0f, shield_probe_x,
-                                                     shield_probe_y, 0.0f, sr, root_shx, shy, shz,
-                                                     shr)) {
+              item_swept_sphere_sphere_intersects_3d(x0, y0, 0.0f, shield_probe_x, shield_probe_y,
+                                                     0.0f, sr, root_shx, shy, shz, shr)) {
             shield_hit = 1u;
             shield_hit_contact_x = shield_probe_x;
             shield_hit_contact_y = shield_probe_y;

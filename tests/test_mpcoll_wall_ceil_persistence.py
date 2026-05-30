@@ -13,8 +13,11 @@ from tests.stage_metadata_helpers import fd_stage_segments
 # Action ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 ACT_WAIT = 0x000E
 ACT_FALL = 0x001D
+ACT_DAMAGE_FLY_N = 0x0058
 ACT_PASSIVE_WALL_JUMP = 0x00CB
+ACT_FLY_REFLECT_WALL = 0x00F7
 SM_FALL = 20
+SM_DAMAGE_FLY_N = 178
 CHAR_FALCO = 22
 MSL_COLLIDE_RIGHT_WALL_PUSH = 0x00000040
 MSL_COLLIDE_RIGHT_WALL_HUG = 0x00000800
@@ -113,6 +116,19 @@ def _fd_left_wall_segment_ids() -> set[int]:
         for seg in fd_stage_segments()
         if seg.get("kind") == "left_wall" and not bool(seg.get("platform"))
     }
+
+
+def _fd_vertical_left_wall_segment() -> tuple[int, float]:
+    for seg in fd_stage_segments():
+        if (
+            seg.get("kind") == "left_wall"
+            and not bool(seg.get("platform"))
+            and abs(float(seg["x0"]) - float(seg["x1"])) < 1e-3
+            and min(float(seg["y0"]), float(seg["y1"])) <= -10.5
+            and max(float(seg["y0"]), float(seg["y1"])) >= 0.0
+        ):
+            return int(seg["i"]), float(seg["x0"])
+    raise AssertionError("no FD vertical left wall segment found")
 
 
 def _fd_pick_horizontal_ceiling_segment() -> tuple[int, float, float, float, float]:
@@ -322,6 +338,108 @@ def test_left_wall_contact_persists_across_frames_on_fd() -> None:
         assert int(c1["coll_prev_env_flags"][0]) & MSL_COLLIDE_LEFT_WALL_PUSH
     finally:
         msl_binding.destroy(handle)
+
+
+def _step_damagefly_left_wall_seed(hitlag_frames: int, wall_kind_seed: int) -> tuple[np.void, np.void]:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    compare_stride = int(sizes["compare"])
+    contacts_stride = int(sizes["collision_contacts"])
+    contacts_dtype = _collision_contacts_dtype()
+    assert seed_stride == SEED_DTYPE.itemsize
+    assert input_stride == INPUT_DTYPE.itemsize
+    assert int(contacts_dtype.itemsize) == contacts_stride
+
+    wall_i, _wall_x = _fd_vertical_left_wall_segment()
+
+    seed = np.zeros((1,), dtype=SEED_DTYPE)
+    seed["stage_id"][0] = np.uint32(32)
+    seed["num_players"][0] = np.uint8(2)
+    seed["stocks"][0, :2] = np.uint8(4)
+    seed["char_id"][0, :2] = np.array([CHAR_FALCO, 1], dtype=np.uint8)
+    seed["handicap"][0, :2] = np.uint8(9)
+    seed["frame_speed_mul_f32"][0, :2] = np.float32(1.0)
+    seed["facing"][0, 0] = np.uint8(1)
+    seed["facing_dir1"][0, 0] = np.float32(1.0)
+    seed["action_id"][0, 0] = np.uint16(ACT_DAMAGE_FLY_N)
+    seed["animation_index"][0, 0] = np.uint32(SM_DAMAGE_FLY_N)
+    seed["action_frame"][0, 0] = np.int16(1)
+    seed["anim_frame_f32"][0, 0] = np.float32(1.0)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    # Position mirrors the source-owner witness: live hitlag after a SpecialAirHi wall scrape, with
+    # the root inside FD but the carried CollData left-wall id/env still source-owned.
+    seed["pos_x"][0, 0] = np.float32(-83.83)
+    seed["pos_y"][0, 0] = np.float32(-11.545)
+    seed["speed_x_attack"][0, 0] = np.float32(4.0)
+    seed["speed_y_attack"][0, 0] = np.float32(-4.0)
+    seed["seed_prev_action_id"][0, 0] = np.uint16(0x0164)  # SpecialAirHi.
+    seed["mpcoll_wall_kind_seed_u8"][0, 0] = np.uint8(wall_kind_seed)
+    seed["mpcoll_wall_id_seed_u16"][0, 0] = np.uint16(wall_i)
+
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    try:
+        prev_inp = np.zeros((1, input_stride), dtype=np.uint8)
+        inp = np.zeros((1, input_stride), dtype=np.uint8)
+        out_compare = np.zeros((1, compare_stride), dtype=np.uint8)
+        out_contacts = np.zeros((1, contacts_stride), dtype=np.uint8)
+
+        msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, seed_stride)))
+        if hitlag_frames:
+            msl_binding.debug_set_hitlag(handle, 0, 0, int(hitlag_frames))
+
+        msl_binding.alloc_reset()
+        msl_binding.step_input(handle, prev_inp, inp)
+        msl_binding.write_compare(handle, out_compare)
+        msl_binding.debug_write_collision_contacts(handle, out_contacts)
+        stats = msl_binding.alloc_stats()
+        assert int(stats["calls"]) == 0
+        assert int(stats["bytes"]) == 0
+
+        out = out_compare.view(COMPARE_DTYPE).reshape((1,))[0].copy()
+        contacts = out_contacts.view(contacts_dtype).reshape((1,))[0].copy()
+        return out, contacts
+    finally:
+        msl_binding.destroy(handle)
+
+
+def test_damagefly_hitlag_left_wall_env_persists_from_live_colldata() -> None:
+    # Source owner: active-hitlag DamageFly still runs the map callback path through
+    # ftCo_DamageFly_Coll -> ft_80081DD4 -> mpColl_800473CC/477E0. When the current callback
+    # carries same-side CollData wall env and wall id, mpLib's persisted wall projection owns
+    # FlyReflectWall instead of letting the root continue through FD's wall shell.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80046904,mpColl_800473CC,mpColl_800477E0}
+    out, contacts = _step_damagefly_left_wall_seed(hitlag_frames=5, wall_kind_seed=1)
+
+    assert int(out["action_id"][0]) == ACT_FLY_REFLECT_WALL
+    assert int(contacts["wall_kind"][0]) == 1
+    assert int(contacts["wall_id"][0]) == _fd_vertical_left_wall_segment()[0]
+    assert int(contacts["coll_env_flags"][0]) & MSL_COLLIDE_LEFT_WALL_HUG
+    assert int(contacts["coll_prev_env_flags"][0]) & MSL_COLLIDE_LEFT_WALL_HUG
+    assert float(out["speed_x_attack"][0]) < 0.0
+
+
+@pytest.mark.parametrize(
+    ("hitlag_frames", "wall_kind_seed"),
+    [
+        (0, 1),  # restored wall id/env without live DamageFly hitlag callback authority.
+        (5, 2),  # wrong-side carried wall env must not satisfy the left-wall owner.
+    ],
+)
+def test_damagefly_stale_or_wrong_side_wall_seed_does_not_persist(
+    hitlag_frames: int, wall_kind_seed: int
+) -> None:
+    out, contacts = _step_damagefly_left_wall_seed(
+        hitlag_frames=hitlag_frames, wall_kind_seed=wall_kind_seed
+    )
+
+    assert int(out["action_id"][0]) == ACT_DAMAGE_FLY_N
+    assert int(contacts["wall_kind"][0]) == 0
+    assert int(contacts["coll_env_flags"][0]) == 0
 
 
 def test_ceiling_contact_persists_across_frames_on_fd() -> None:

@@ -3228,9 +3228,22 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
                        action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_B) &&
                       batch->state.ecb_lock_timer[idx] != 0u &&
                       batch->state.coll_desired_ecb_bottom_locked_owner[idx] != 0u);
+        // DamageFly active-hitlag map callbacks still run the source CollData wall path:
+        // Fighter_procMap -> ftCo_DamageFly_Coll -> ft_80081DD4 -> mpColl_800473CC/477E0.
+        // If the current callback carries a same-side CollData wall env bit and wall index, the
+        // persisted mpLib wall projection owns the hitlag wall response. A restored wall id alone
+        // is not enough; require live hitlag plus the previous env flag promoted from CollData.
+        // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procMap}
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
+        // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+        // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800473CC,mpColl_800477E0,mpColl_80046904}
+        const uint8_t use_damagefly_hitlag_left_wall_persistence =
+            (uint8_t)(use_damagefly_left_envelope && mpcoll_active_hitlag_phase(batch, idx) &&
+                      (batch->state.coll_prev_env_flags[idx] &
+                       (uint32_t)MSL_COLLIDE_LEFT_WALL_MASK) != 0u);
         if (!grounded_now && prev_wall_kind == MSL_WALL_LEFT && prefer_line_idx >= 0 &&
             (!use_left_air_envelope || use_jumpaerial_locked_left_wall_persistence ||
-             use_specialhi_left_envelope)) {
+             use_specialhi_left_envelope || use_damagefly_hitlag_left_wall_persistence)) {
           float x_corr = 0.0f;
           float nx = -1.0f, ny = 0.0f;
           const int out_line_idx =
@@ -3506,9 +3519,16 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
                        action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_B) &&
                       batch->state.ecb_lock_timer[idx] != 0u &&
                       batch->state.coll_desired_ecb_bottom_locked_owner[idx] != 0u);
+        // Mirror the left-wall DamageFly active-hitlag persistence for the right-facing wall side.
+        // The source owner is the same live CollData wall index/env path, not a public root clamp.
+        // refs/melee/src/melee/mp/mplib.c::mpLib_8004E684_RightWall
+        const uint8_t use_damagefly_hitlag_right_wall_persistence =
+            (uint8_t)(use_damagefly_right_envelope && mpcoll_active_hitlag_phase(batch, idx) &&
+                      (batch->state.coll_prev_env_flags[idx] &
+                       (uint32_t)MSL_COLLIDE_RIGHT_WALL_MASK) != 0u);
         if (!grounded_now && prev_wall_kind == MSL_WALL_RIGHT && prefer_line_idx >= 0 &&
             (!use_right_air_envelope || use_jumpaerial_locked_right_wall_persistence ||
-             use_specialhi_right_envelope)) {
+             use_specialhi_right_envelope || use_damagefly_hitlag_right_wall_persistence)) {
           float x_corr = 0.0f;
           float nx = 1.0f, ny = 0.0f;
           const int out_line_idx =
