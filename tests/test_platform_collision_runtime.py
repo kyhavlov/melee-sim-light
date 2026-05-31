@@ -4734,6 +4734,30 @@ def test_fod_jumpaerial_escapeair_right_ledge_entry_requires_bottom_sweep_crossi
     assert int(out["ground_id"][0]) == 6
 
 
+def test_damage_entry_escapeair_hidden_ecb_owner_is_live_callback_state() -> None:
+    # Source discipline guard for the Damage/DamageAir -> EscapeAir ECB lifetime:
+    # ftCo_Damage_IASA can enter EscapeAir before Fighter_procMap, and EscapeAir_Coll then consumes
+    # mpCollInterpolateECB's pre-entry CollData current ECB as prev_ecb. This owner must stay tied to
+    # live `prev_action_id` plus the stored CollData ECB packet, not teacher-forced
+    # seed_prev_action_id or public root/ground_id state.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_IASA
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    # refs/melee/src/melee/mp/mpcoll.c::{mpCollInterpolateECB,mpColl_800471F8}
+    src = Path("src/mpcoll_ground.c").read_text()
+    start = src.index("const uint8_t damage_entry_escapeair_ecb_consumer")
+    end = src.index("const uint8_t use_hidden_ecb_lifetime", start)
+    helper = src[start:end]
+    assert "prev_action_id != action_id" in helper
+    assert "batch->state.action_frame[idx] <= 2" in helper
+    assert "msl_damage_owner_is_damage_air_action(prev_action_id)" in helper
+    assert "is_damage_ground_collision_action(prev_action_id)" in helper
+    assert "batch->state.seed_prev_action_id" not in helper
+    use_hidden = src[end : src.index("const float state_cur_ecb_rel", end)]
+    assert "have_state_cur_ecb" in use_hidden
+    assert "damage_entry_escapeair_ecb_consumer" in use_hidden
+
+
 def test_fod_common_air_down_input_rejects_transformed_soft_platform_callback() -> None:
     # Ordinary Fall still passes ftCo_80096CC8, including on transformed FoD platform lines. Held
     # down should pass through here, while AttackAir/EscapeAir/Damage owners above remain admitted.
