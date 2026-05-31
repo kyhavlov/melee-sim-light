@@ -147,10 +147,6 @@ uint8_t escape_air_try_enter_from_air_locomotion(MslBatch* batch, const MslCommo
       (source_floor_has_caps && source_floor_caps.is_platform) ? 1u : 0u;
   const uint8_t source_floor_has_platform_transform =
       (source_floor_has_caps && source_floor_caps.platform_transform_kind != 0u) ? 1u : 0u;
-  const uint8_t source_floor_carries_locked_ecb =
-      (floor_id != 0xFFFFu && (!source_floor_is_platform || source_floor_has_platform_transform))
-          ? 1u
-          : 0u;
   const uint8_t source_is_jumpaerial = (source_action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_F ||
                                         source_action_id == (uint16_t)MSL_ACT_JUMP_AERIAL_B)
                                            ? 1u
@@ -160,6 +156,15 @@ uint8_t escape_air_try_enter_from_air_locomotion(MslBatch* batch, const MslCommo
   const uint8_t source_floor_y_valid =
       action_floor_line_y_at_x(batch, idx, stage_id, floor_id, batch->state.pos_x[idx],
                                &source_floor_y, &source_floor_x_within);
+  const uint8_t source_floor_carries_locked_ecb =
+      (floor_id != 0xFFFFu && (!source_floor_is_platform || source_floor_has_platform_transform))
+          ? 1u
+          : 0u;
+  const uint8_t source_floor_is_offspan_ordinary_platform =
+      (source_floor_is_platform && source_floor_has_platform_transform == 0u &&
+       source_floor_x_within == 0u)
+          ? 1u
+          : 0u;
   const float escapeair_entry_next_root_y = batch->state.pos_y[idx] + vy;
   const uint8_t source_floor_is_offspan_transform =
       (source_floor_has_platform_transform && source_floor_y_valid != 0u &&
@@ -212,7 +217,9 @@ uint8_t escape_air_try_enter_from_air_locomotion(MslBatch* batch, const MslCommo
     // refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_inline
     batch->state.coll_desired_ecb_bottom_locked_owner[idx] =
         msl_escapeair_locked_bottom_owner_for_live_jumpaerial_entry(
-            action_stage_has_soft_platform_floor(stage_id));
+            source_floor_is_offspan_ordinary_platform
+                ? 0u
+                : action_stage_has_soft_platform_floor(stage_id));
   } else if (source_is_jumpaerial) {
     // Other JumpAerial -> EscapeAir entries use the freshly loaded EscapeAir floor handoff. Clear
     // the runtime JumpAerial desired-bottom owner so platform-origin and zero-bottom air-dodges do

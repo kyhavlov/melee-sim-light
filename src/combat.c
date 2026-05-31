@@ -22,6 +22,7 @@
 #include "damage_terminal_owner.h"
 #include "damage_source.h"
 #include "ecb_tables.h"
+#include "escapeair_collision_owner.h"
 #include "grab_flow.h"
 #include "hit_elements.h"
 #include "hitboxes_tables.h"
@@ -35,6 +36,7 @@
 #include "msl_math.h"
 #include "mtx34.h"
 #include "move_tables.h"
+#include "mpcoll_ecb_points.h"
 #include "shielddesc_geometry.h"
 #include "shield_tilt_table.h"
 #include "stage_collision.h"
@@ -2543,11 +2545,31 @@ static inline void combat_apply_ftCommon_8007D5D4_ground_to_air(MslBatch* batch,
     return;
   }
   // Decomp common helper ownership:
-  // - ftCommon_8007D5D4 sets ground_or_air=Air, gr_vel=0, jumpsUsed=1, ecb_lock=10.
+  // - ftCommon_8007D5D4 sets ground_or_air=Air, gr_vel=0, jumpsUsed=1, ecb_lock=10, and
+  //   CollData_X130_Locked.
   // - Damage entry / throw-release lanes call this helper when launching victim airborne.
   // refs/melee/src/melee/ft/ftcommon.c::ftCommon_8007D5D4
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Throw.c::ftCo_800DDDE4
+  const uint8_t char_id = batch->state.char_id[idx];
+  const uint32_t anim = batch->state.animation_index[idx];
+  const uint16_t frame = msl_ecb_frame_u16_from_anim_frame(batch->state.anim_frame_f32[idx]);
+  const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+  MslEcbWorldPoints desired_ecb = {0};
+  msl_ecb_world_points_sample(&desired_ecb, char_id, anim, frame, facing_dir,
+                              batch->state.pos_x[idx], batch->state.pos_y[idx], 0u);
+  msl_ecb_world_points_preserve_locked_desired_bottom_rel_y(
+      &desired_ecb, batch->state.pos_x[idx], batch->state.pos_y[idx],
+      batch->state.coll_desired_ecb_bottom_valid[idx],
+      batch->state.coll_desired_ecb_bottom_rel_y[idx]);
+  batch->state.coll_desired_ecb_bottom_rel_y[idx] = desired_ecb.bottom_rel_y;
+  batch->state.coll_desired_ecb_top_rel_y[idx] = desired_ecb.top_rel_y;
+  batch->state.coll_desired_ecb_left_rel_x[idx] = desired_ecb.left_rel_x;
+  batch->state.coll_desired_ecb_right_rel_x[idx] = desired_ecb.right_rel_x;
+  batch->state.coll_desired_ecb_side_rel_y[idx] = desired_ecb.side_rel_y;
+  batch->state.coll_desired_ecb_bottom_valid[idx] = 1u;
+  batch->state.coll_desired_ecb_bottom_locked_owner[idx] =
+      (uint8_t)MSL_ESCAPEAIR_LOCKED_BOTTOM_OWNER_SEEDED_COLL_X130;
   batch->state.on_ground[idx] = 0u;
   batch->state.ecb_lock_timer[idx] = MSL_ECB_LOCK_FRAMES_COMMON_GROUND_TO_AIR;
   // Narrow ownership parity for this lane: keep existing velocity ownership in its current

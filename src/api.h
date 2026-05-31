@@ -1869,8 +1869,28 @@ typedef struct MslDebugCollDataEcb {
   uint8_t floor_result_mode[MSL_MAX_PLAYERS];
   uint8_t damage_hitlag_floor_contact_runtime[MSL_MAX_PLAYERS];
   uint8_t escapeair_floor_producer_runtime[MSL_MAX_PLAYERS];
+  uint8_t floor_probe_valid[MSL_MAX_PLAYERS];
+  uint8_t floor_probe_owner[MSL_MAX_PLAYERS];
+  uint8_t floor_probe_reject_reason[MSL_MAX_PLAYERS];
+  uint8_t floor_probe_raw_bottom_sweep_hit[MSL_MAX_PLAYERS];
+  uint8_t floor_probe_projection_hit[MSL_MAX_PLAYERS];
+  uint8_t floor_probe_carried_source_owned[MSL_MAX_PLAYERS];
+  uint8_t floor_probe_carried_runtime_owned[MSL_MAX_PLAYERS];
+  uint8_t floor_sweep_prev_source_owned[MSL_MAX_PLAYERS];
+  uint8_t floor_sweep_prev_runtime_owned[MSL_MAX_PLAYERS];
+  uint8_t damage_allow_sdi[MSL_MAX_PLAYERS];
+  uint8_t damage_hitlag_downward_sdi_consumed[MSL_MAX_PLAYERS];
+  uint8_t tilt_timer_y_frame_start[MSL_MAX_PLAYERS];
+  uint8_t tilt_timer_y[MSL_MAX_PLAYERS];
 
   uint16_t floor_result_segment_id[MSL_MAX_PLAYERS];
+  uint64_t floor_probe_reject_bits[MSL_MAX_PLAYERS];
+  uint32_t floor_probe_source_phases[MSL_MAX_PLAYERS];
+  uint16_t floor_probe_carried_segment_id[MSL_MAX_PLAYERS];
+  uint16_t floor_probe_candidate_segment_id[MSL_MAX_PLAYERS];
+  uint16_t floor_probe_projected_segment_id[MSL_MAX_PLAYERS];
+  int16_t floor_probe_candidate_line_idx[MSL_MAX_PLAYERS];
+  int16_t floor_probe_projected_line_idx[MSL_MAX_PLAYERS];
   // Hidden CollData.floor_skip from mpUpdateFloorSkip/mpClearFloorSkip. 0xFFFF means none.
   // refs/melee/src/melee/mp/mpcoll.c::{mpUpdateFloorSkip,mpClearFloorSkip}
   uint16_t floor_skip_segment_id[MSL_MAX_PLAYERS];
@@ -1914,10 +1934,16 @@ typedef struct MslDebugCollDataEcb {
   float floor_result_contact_y[MSL_MAX_PLAYERS];
   float floor_result_normal_x[MSL_MAX_PLAYERS];
   float floor_result_normal_y[MSL_MAX_PLAYERS];
+  float floor_probe_prev_bottom_x[MSL_MAX_PLAYERS];
+  float floor_probe_prev_bottom_y[MSL_MAX_PLAYERS];
+  float floor_probe_cur_bottom_x[MSL_MAX_PLAYERS];
+  float floor_probe_cur_bottom_y[MSL_MAX_PLAYERS];
   float substep_prev_pos_x[MSL_MAX_PLAYERS];
   float substep_prev_pos_y[MSL_MAX_PLAYERS];
   float substep_cur_pos_x[MSL_MAX_PLAYERS];
   float substep_cur_pos_y[MSL_MAX_PLAYERS];
+  float floor_sweep_prev_pos_x[MSL_MAX_PLAYERS];
+  float floor_sweep_prev_pos_y[MSL_MAX_PLAYERS];
   float last_pos_x[MSL_MAX_PLAYERS];
   float last_pos_y[MSL_MAX_PLAYERS];
   float floor_speed_x[MSL_MAX_PLAYERS];
@@ -2332,6 +2358,11 @@ int msl_batch_debug_set_mpcoll_joint_filters(MslBatch* batch, int batch_index, i
 int msl_batch_debug_set_escapeair_floor_producer_runtime(MslBatch* batch, int batch_index,
                                                          int player_index, uint8_t authority,
                                                          uint8_t desired_owner);
+
+// Debug-only helper: arm runtime-produced floor-sweep provenance for hard-floor source-owner tests.
+// Normal gameplay writes this lane from Fighter_procMap/post-frame CollData promotion.
+int msl_batch_debug_set_floor_sweep_prev_runtime(MslBatch* batch, int batch_index, int player_index,
+                                                 float pos_x, float pos_y, uint8_t authority);
 
 // Debug-only helper: override fighter root position/facing for fixture replay setup (test-only).
 // Intended for live-viewer/manual repro fixtures whose first-frame root position is part of the

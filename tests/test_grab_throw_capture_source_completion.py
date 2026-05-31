@@ -113,6 +113,7 @@ def test_throw_release_floor_sweep_prev_endpoint_is_live_for_release_probe() -> 
             "batch->state.floor_sweep_prev_pos_y[vidx] = release_sweep_root_y",
             "batch->state.floor_sweep_seed_prev_pos_x[vidx] = source_release_last_pos_x",
             "batch->state.floor_sweep_seed_prev_valid[vidx] = 1u",
+            "batch->state.floor_sweep_prev_runtime_owned[vidx] = 1u",
             "knockdown_try_throw_release_damage_floor_contact",
         ],
     )

@@ -106,6 +106,12 @@ typedef struct MslStateSoA {
   float* floor_sweep_seed_prev_pos_y;
   uint8_t* floor_sweep_seed_prev_valid;
   uint8_t* floor_sweep_prev_source_owned;
+  // Subset of floor_sweep_prev_source_owned produced by normal runtime post-frame promotion or a
+  // live source callback. Teacher-forced reseed can supply a source-owned sweep endpoint for one
+  // frame, but it must not prove current callback authority for hard-body floor publication.
+  // refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_80043754}
+  // refs/melee/src/melee/ft/fighter.c::Fighter_procMap
+  uint8_t* floor_sweep_prev_runtime_owned;
   // Runtime CollData.cur_pos snapshot carried between wall/ceiling map callbacks. Source
   // `ft_CheckGroundAndLedge` calls `mpCollPrev` before replacing CollData.cur_pos with the
   // fighter's current root, so wall/ceiling `mpColl_80046904` sweeps from the previous callback's
@@ -182,6 +188,27 @@ typedef struct MslStateSoA {
   float* coll_floor_result_contact_y;
   float* coll_floor_result_normal_x;
   float* coll_floor_result_normal_y;
+  // Debug-only mpColl floor-owner probe. These fields are written from existing collision
+  // decision points and exported only by debug_write_colldata_ecb; they are not gameplay authority.
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_800477E0,mpColl_80047E14}
+  uint8_t* coll_floor_probe_valid;
+  uint8_t* coll_floor_probe_owner;
+  uint8_t* coll_floor_probe_reject_reason;
+  uint8_t* coll_floor_probe_raw_bottom_sweep_hit;
+  uint8_t* coll_floor_probe_projection_hit;
+  uint8_t* coll_floor_probe_carried_source_owned;
+  uint8_t* coll_floor_probe_carried_runtime_owned;
+  uint64_t* coll_floor_probe_reject_bits;
+  uint32_t* coll_floor_probe_source_phases;
+  uint16_t* coll_floor_probe_carried_segment_id;
+  uint16_t* coll_floor_probe_candidate_segment_id;
+  uint16_t* coll_floor_probe_projected_segment_id;
+  int16_t* coll_floor_probe_candidate_line_idx;
+  int16_t* coll_floor_probe_projected_line_idx;
+  float* coll_floor_probe_prev_bottom_x;
+  float* coll_floor_probe_prev_bottom_y;
+  float* coll_floor_probe_cur_bottom_x;
+  float* coll_floor_probe_cur_bottom_y;
   float* coll_substep_prev_pos_x;
   float* coll_substep_prev_pos_y;
   float* coll_substep_cur_pos_x;

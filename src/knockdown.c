@@ -3208,7 +3208,8 @@ void knockdown_try_throw_release_damage_floor_contact(MslBatch* batch, size_t bi
   if (c == NULL || ch == NULL) {
     return;
   }
-  if (!is_damage_fly_action(batch->state.action_id[idx])) {
+  if (!is_damage_fly_action(batch->state.action_id[idx]) &&
+      batch->state.action_id[idx] != (uint16_t)MSL_ACT_DAMAGE_FALL) {
     return;
   }
 

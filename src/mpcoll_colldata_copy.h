@@ -20,6 +20,9 @@ static inline void msl_mpcoll_copy_colldata_lane(MslBatch* batch, size_t dst, si
   batch->state.prev_pos_y[dst] = batch->state.prev_pos_y[src];
   batch->state.floor_sweep_prev_pos_x[dst] = batch->state.floor_sweep_prev_pos_x[src];
   batch->state.floor_sweep_prev_pos_y[dst] = batch->state.floor_sweep_prev_pos_y[src];
+  batch->state.floor_sweep_prev_source_owned[dst] = batch->state.floor_sweep_prev_source_owned[src];
+  batch->state.floor_sweep_prev_runtime_owned[dst] =
+      batch->state.floor_sweep_prev_runtime_owned[src];
   batch->state.coll_wall_ceil_prev_pos_x[dst] = batch->state.coll_wall_ceil_prev_pos_x[src];
   batch->state.coll_wall_ceil_prev_pos_y[dst] = batch->state.coll_wall_ceil_prev_pos_y[src];
   batch->state.coll_wall_ceil_prev_pos_valid[dst] = batch->state.coll_wall_ceil_prev_pos_valid[src];

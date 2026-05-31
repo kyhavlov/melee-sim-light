@@ -1602,6 +1602,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         batch->state.floor_sweep_prev_pos_y[idx] = seed->pos_y[p];
         batch->state.floor_sweep_prev_source_owned[idx] = 0u;
       }
+      batch->state.floor_sweep_prev_runtime_owned[idx] = 0u;
       batch->state.speed_air_x_self[idx] = seed->speed_air_x_self[p];
       batch->state.speed_ground_x_self[idx] = seed->speed_ground_x_self[p];
       batch->state.speed_y_self[idx] = seed->speed_y_self[p];
@@ -3759,7 +3760,36 @@ int msl_batch_debug_write_colldata_ecb(const MslBatch* batch, uint8_t* out_bytes
           batch->state.coll_damage_hitlag_floor_contact_runtime[idx];
       out->escapeair_floor_producer_runtime[p] =
           batch->state.coll_escapeair_floor_producer_runtime[idx];
+      out->floor_probe_valid[p] = batch->state.coll_floor_probe_valid[idx];
+      out->floor_probe_owner[p] = batch->state.coll_floor_probe_owner[idx];
+      out->floor_probe_reject_reason[p] = batch->state.coll_floor_probe_reject_reason[idx];
+      out->floor_probe_raw_bottom_sweep_hit[p] =
+          batch->state.coll_floor_probe_raw_bottom_sweep_hit[idx];
+      out->floor_probe_projection_hit[p] = batch->state.coll_floor_probe_projection_hit[idx];
+      out->floor_probe_carried_source_owned[p] =
+          batch->state.coll_floor_probe_carried_source_owned[idx];
+      out->floor_probe_carried_runtime_owned[p] =
+          batch->state.coll_floor_probe_carried_runtime_owned[idx];
+      out->floor_sweep_prev_source_owned[p] = batch->state.floor_sweep_prev_source_owned[idx];
+      out->floor_sweep_prev_runtime_owned[p] = batch->state.floor_sweep_prev_runtime_owned[idx];
+      out->damage_allow_sdi[p] = batch->state.damage_allow_sdi[idx];
+      out->damage_hitlag_downward_sdi_consumed[p] =
+          batch->state.damage_hitlag_downward_sdi_consumed[idx];
+      out->tilt_timer_y_frame_start[p] = batch->state.tilt_timer_y_frame_start[idx];
+      out->tilt_timer_y[p] = batch->state.tilt_timer_y[idx];
       out->floor_result_segment_id[p] = batch->state.coll_floor_result_segment_id[idx];
+      out->floor_probe_reject_bits[p] = batch->state.coll_floor_probe_reject_bits[idx];
+      out->floor_probe_source_phases[p] = batch->state.coll_floor_probe_source_phases[idx];
+      out->floor_probe_carried_segment_id[p] =
+          batch->state.coll_floor_probe_carried_segment_id[idx];
+      out->floor_probe_candidate_segment_id[p] =
+          batch->state.coll_floor_probe_candidate_segment_id[idx];
+      out->floor_probe_projected_segment_id[p] =
+          batch->state.coll_floor_probe_projected_segment_id[idx];
+      out->floor_probe_candidate_line_idx[p] =
+          batch->state.coll_floor_probe_candidate_line_idx[idx];
+      out->floor_probe_projected_line_idx[p] =
+          batch->state.coll_floor_probe_projected_line_idx[idx];
       out->floor_skip_segment_id[p] = batch->state.floor_skip_segment_id[idx];
       out->floor_skip_valid[p] = (batch->state.floor_skip_segment_id[idx] != 0xFFFFu) ? 1u : 0u;
       out->is_on_platform[p] = mpcoll_is_on_platform(batch, bi, idx);
@@ -3804,10 +3834,16 @@ int msl_batch_debug_write_colldata_ecb(const MslBatch* batch, uint8_t* out_bytes
       out->floor_result_contact_y[p] = batch->state.coll_floor_result_contact_y[idx];
       out->floor_result_normal_x[p] = batch->state.coll_floor_result_normal_x[idx];
       out->floor_result_normal_y[p] = batch->state.coll_floor_result_normal_y[idx];
+      out->floor_probe_prev_bottom_x[p] = batch->state.coll_floor_probe_prev_bottom_x[idx];
+      out->floor_probe_prev_bottom_y[p] = batch->state.coll_floor_probe_prev_bottom_y[idx];
+      out->floor_probe_cur_bottom_x[p] = batch->state.coll_floor_probe_cur_bottom_x[idx];
+      out->floor_probe_cur_bottom_y[p] = batch->state.coll_floor_probe_cur_bottom_y[idx];
       out->substep_prev_pos_x[p] = batch->state.coll_substep_prev_pos_x[idx];
       out->substep_prev_pos_y[p] = batch->state.coll_substep_prev_pos_y[idx];
       out->substep_cur_pos_x[p] = batch->state.coll_substep_cur_pos_x[idx];
       out->substep_cur_pos_y[p] = batch->state.coll_substep_cur_pos_y[idx];
+      out->floor_sweep_prev_pos_x[p] = batch->state.floor_sweep_prev_pos_x[idx];
+      out->floor_sweep_prev_pos_y[p] = batch->state.floor_sweep_prev_pos_y[idx];
       out->last_pos_x[p] = batch->state.coll_last_pos_x[idx];
       out->last_pos_y[p] = batch->state.coll_last_pos_y[idx];
     }
@@ -3915,6 +3951,31 @@ int msl_batch_debug_set_escapeair_floor_producer_runtime(MslBatch* batch, int ba
   return 0;
 }
 
+int msl_batch_debug_set_floor_sweep_prev_runtime(MslBatch* batch, int batch_index, int player_index,
+                                                 float pos_x, float pos_y, uint8_t authority) {
+  if (batch == NULL || !isfinite(pos_x) || !isfinite(pos_y)) {
+    return EINVAL;
+  }
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return EINVAL;
+  }
+  if (player_index < 0 || player_index >= MSL_MAX_PLAYERS) {
+    return EINVAL;
+  }
+  const size_t idx = msl_idx_player(batch_index, player_index);
+  // Debug-only source-authority test hook. Runtime normally sets this from post-frame CollData
+  // promotion or live release callbacks; tests use it to prove hard-floor publication consumes
+  // runtime-owned mpCollPrev state rather than teacher-forced seed state.
+  // refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_80043754}
+  // refs/melee/src/melee/ft/fighter.c::Fighter_procMap
+  batch->state.floor_sweep_prev_pos_x[idx] = pos_x;
+  batch->state.floor_sweep_prev_pos_y[idx] = pos_y;
+  batch->state.floor_sweep_seed_prev_valid[idx] = 0u;
+  batch->state.floor_sweep_prev_source_owned[idx] = authority ? 1u : 0u;
+  batch->state.floor_sweep_prev_runtime_owned[idx] = authority ? 1u : 0u;
+  return 0;
+}
+
 int msl_batch_debug_set_player_root(MslBatch* batch, int batch_index, int player_index, float pos_x,
                                     float pos_y, uint8_t facing) {
   if (batch == NULL || !isfinite(pos_x) || !isfinite(pos_y)) {
@@ -3937,6 +3998,7 @@ int msl_batch_debug_set_player_root(MslBatch* batch, int batch_index, int player
   batch->state.floor_sweep_seed_prev_pos_y[idx] = pos_y;
   batch->state.floor_sweep_seed_prev_valid[idx] = 0u;
   batch->state.floor_sweep_prev_source_owned[idx] = 0u;
+  batch->state.floor_sweep_prev_runtime_owned[idx] = 0u;
   batch->state.coll_wall_ceil_prev_pos_x[idx] = pos_x;
   batch->state.coll_wall_ceil_prev_pos_y[idx] = pos_y;
   batch->state.coll_wall_ceil_prev_pos_valid[idx] = 0u;

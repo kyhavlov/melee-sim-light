@@ -18,7 +18,11 @@ from tools.slippi.known_data_artifacts import (
     stage_metadata_path_for_stage_id,
 )
 from tools.slippi.seed_history import load_shield_tilt_table_meta
-from tests.test_colldata_ecb_substrate import _colldata_ecb_dtype
+from tests.test_colldata_ecb_substrate import (
+    FLOOR_MODE_BOTTOM_SWEEP,
+    FLOOR_MODE_ROOT_PROJECTION,
+    _colldata_ecb_dtype,
+)
 
 
 ACT_WAIT = 0x000E
@@ -41,15 +45,18 @@ ACT_SQUAT_WAIT = 0x0028
 ACT_LANDING = 0x002A
 ACT_LANDING_FALL_SPECIAL = 0x002B
 ACT_LANDING_AIR_N = 0x0046
+ACT_LANDING_AIR_LW = 0x004A
 ACT_GUARD_ON = 0x00B2
 ACT_DAMAGE_FALL = 0x0026
 ACT_GUARD = 0x00B3
 ACT_GUARD_SET_OFF = 0x00B5
 ACT_GUARD_REFLECT = 0x00B6
 ACT_DAMAGE_FLY_N = 0x0058
+ACT_DAMAGE_N_1 = 0x004E
 ACT_DAMAGE_N_2 = 0x004F
 ACT_DAMAGE_LW_3 = 0x0053
 ACT_DAMAGE_HI_2 = 0x004C
+ACT_DAMAGE_AIR_1 = 0x0054
 ACT_DAMAGE_AIR_2 = 0x0055
 ACT_DAMAGE_FLY_TOP = 0x005A
 ACT_ESCAPE_AIR = 0x00EC
@@ -87,12 +94,15 @@ ACT_CATCH = 0x00D4
 ACT_THROW_F = 0x00DB
 ACT_CAPTURE_DAMAGE_HI = 0x00E1
 ACT_FX_SPECIAL_AIR_N_START = 0x0158
+ACT_MISS_FOOT = 0x00FB
 
 SM_WAIT1_0 = 2
 SM_TURN = 10
 SM_OTTOTTO = 210
 SM_KNEE_BEND = 15
 SM_JUMP_F = 16
+SM_JUMP_AERIAL_F = 18
+SM_JUMP_AERIAL_B = 19
 SM_FALL = 20
 SM_DAMAGE_FALL = 33
 SM_PASS = 209
@@ -110,13 +120,18 @@ SM_FX_SPECIAL_HI = 309
 SM_OTTOTTO_WAIT = 211
 SM_DOWN_FOWARD_U = 188
 SM_PASSIVE_STAND_F = 200
+SM_PASS = 209
+SM_MISS_FOOT = 215
 SM_ATTACK_AIR_N = 68
 SM_ATTACK_AIR_F = 69
 SM_ATTACK_AIR_B = 70
 SM_ATTACK_AIR_HI = 71
+SM_ATTACK_AIR_LW = 72
+SM_DAMAGE_N_1 = 168
 SM_DAMAGE_N_2 = 169
 SM_DAMAGE_LW_3 = 173
 SM_DAMAGE_HI_2 = 166
+SM_DAMAGE_AIR_1 = 174
 SM_DAMAGE_AIR_2 = 174
 SM_DAMAGE_FLY_TOP = 180
 
@@ -142,6 +157,7 @@ ACT_FX_SPECIAL_HI = 0x0163
 COLLIDE_LEFT_WALL_MASK = 0x0000003F
 COLLIDE_RIGHT_WALL_MASK = 0x00000FC0
 COLLIDE_CEILING_MASK = 0x00006000
+COLLIDE_LEFT_LEDGE_GRAB = 0x01000000
 
 def _seed_specialairhi_downward(*, x: float, y: float, prev_y: float, ground_id: int) -> np.ndarray:
     seed = _seed_base(STAGE_BATTLEFIELD, ACT_FX_SPECIAL_AIR_HI, SM_FX_SPECIAL_HI, x, y)
@@ -344,7 +360,10 @@ def _step_once_with_contacts(
 
 
 def _step_once_with_contacts_and_colldata(
-    seed: np.ndarray, prev_input: np.ndarray | None = None, input_t: np.ndarray | None = None
+    seed: np.ndarray,
+    prev_input: np.ndarray | None = None,
+    input_t: np.ndarray | None = None,
+    floor_sweep_runtime: tuple[int, float, float, bool] | None = None,
 ):
     import msl_binding
 
@@ -364,6 +383,11 @@ def _step_once_with_contacts_and_colldata(
     handle = msl_binding.init(batch_size=1, num_players=2, ucf_enabled=1, ucf_cardinals_1_0_enabled=1)
     try:
         msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, seed_stride)))
+        if floor_sweep_runtime is not None:
+            player, x, y, authority = floor_sweep_runtime
+            msl_binding.debug_set_floor_sweep_prev_runtime(
+                handle, 0, player, float(x), float(y), int(authority)
+            )
         msl_binding.step_input(handle, prev_input, input_t)
         msl_binding.write_compare(handle, out)
         msl_binding.debug_write_collision_contacts(handle, contacts)
@@ -4042,6 +4066,593 @@ def test_fod_jumpaerial_escapeair_static_platform_sweep_requires_bottom_crossing
     assert int(out["ground_id"][0]) == 5
 
 
+def _seed_fod_airborne_hard_floor_crossing(
+    action_id: int,
+    motion_id: int,
+    *,
+    x: float,
+    y: float,
+    prev_y: float,
+    ground_id: int = 0,
+    action_frame: int = 10,
+    speed_y: float = -3.4,
+) -> np.ndarray:
+    seed = _seed_base(STAGE_FOD, action_id, motion_id, x, y)
+    p = 0
+    seed["on_ground"][0, p] = np.uint8(0)
+    seed["ground_id"][0, p] = np.uint16(ground_id)
+    seed["action_frame"][0, p] = np.int16(action_frame)
+    seed["anim_frame_f32"][0, p] = np.float32(float(action_frame))
+    seed["speed_y_self"][0, p] = np.float32(speed_y)
+    seed["speed_air_x_self"][0, p] = np.float32(0.1)
+    seed["floor_sweep_prev_pos_valid_u8"][0, p] = np.uint8(1)
+    seed["floor_sweep_prev_pos_x_f32"][0, p] = np.float32(x)
+    seed["floor_sweep_prev_pos_y_f32"][0, p] = np.float32(prev_y)
+    return seed
+
+
+@pytest.mark.parametrize(
+    ("action_id", "motion_id"),
+    [
+        (ACT_JUMP_AERIAL_F, SM_JUMP_AERIAL_F),
+        (ACT_JUMP_AERIAL_B, SM_JUMP_AERIAL_B),
+    ],
+)
+def test_fod_common_air_hard_floor_bottom_sweep_over_stale_platform_lands(
+    action_id: int, motion_id: int
+) -> None:
+    # JumpAerial_Coll uses the generated common-air ftCo_80096CC8 owner and reaches
+    # ft_80083090_inline -> mpColl_80047E14 -> mpColl_80044628_Floor. A carried FoD transformed
+    # platform floor id is not authority, but the live callback-local ECB bottom sweep still must
+    # publish the ordinary hard floor when it crosses the stage shell.
+    #
+    # data/motion_state/owners/{fox,falco}.bin::MSLMSO01 class FT80083090_PLATFORM_PASS_COLL
+    # data/stages/bin/griz.bin::MSLSTG01 fighter_solid/platform_transform metadata
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_80083090_inline,ft_800835B0}
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_80047E14,mpColl_80044628_Floor}
+    seed = _seed_fod_airborne_hard_floor_crossing(
+        action_id,
+        motion_id,
+        x=51.5,
+        y=-6.8,
+        prev_y=3.0,
+        ground_id=5,
+    )
+    seed["floor_sweep_prev_pos_x_f32"][0, 0] = np.float32(50.0)
+
+    source_seed_out, _contacts0, source_seed_colldata = _step_once_with_contacts_and_colldata(seed)
+    runtime_false_out, _contacts1, runtime_false_colldata = _step_once_with_contacts_and_colldata(
+        seed, floor_sweep_runtime=(0, 50.0, 3.0, False)
+    )
+
+    assert int(source_seed_out["on_ground"][0]) == 1
+    assert int(source_seed_out["ground_id"][0]) == 6
+    assert int(source_seed_colldata["floor_result_valid"][0]) == 1
+    assert int(source_seed_colldata["floor_result_segment_id"][0]) == 6
+    assert int(runtime_false_out["on_ground"][0]) == 1
+    assert int(runtime_false_out["ground_id"][0]) == 6
+    assert int(runtime_false_colldata["floor_result_valid"][0]) == 1
+    assert int(runtime_false_colldata["floor_result_segment_id"][0]) == 6
+
+    out, _contacts, colldata = _step_once_with_contacts_and_colldata(
+        seed, floor_sweep_runtime=(0, 50.0, 3.0, True)
+    )
+
+    assert int(out["action_id"][0]) == ACT_LANDING
+    assert int(out["on_ground"][0]) == 1
+    assert int(out["ground_id"][0]) == 5
+    assert float(out["pos_y"][0]) == pytest.approx(0.002875, abs=1e-6)
+    assert int(colldata["floor_result_valid"][0]) == 1
+    assert int(colldata["floor_result_segment_id"][0]) == 5
+    assert int(colldata["floor_result_mode"][0]) == FLOOR_MODE_BOTTOM_SWEEP
+
+    no_cross = _seed_fod_airborne_hard_floor_crossing(
+        action_id, motion_id, x=-41.3, y=-6.797, prev_y=-8.5
+    )
+    no_cross_out, _contacts2, no_cross_colldata = _step_once_with_contacts_and_colldata(
+        no_cross, floor_sweep_runtime=(0, -41.3, -8.5, True)
+    )
+
+    assert int(no_cross_out["on_ground"][0]) == 0
+    assert int(no_cross_out["ground_id"][0]) == 0
+    assert int(no_cross_colldata["floor_result_valid"][0]) == 0
+
+    active_hitlag = seed.copy()
+    active_hitlag["hitlag"][0, 0] = np.uint8(2)
+    active_hitlag_out, _contacts3, active_hitlag_colldata = (
+        _step_once_with_contacts_and_colldata(
+            active_hitlag, floor_sweep_runtime=(0, -16.875, -3.4, True)
+        )
+    )
+
+    assert int(active_hitlag_out["on_ground"][0]) == 1
+    assert int(active_hitlag_out["ground_id"][0]) == 5
+    assert int(active_hitlag_colldata["floor_result_valid"][0]) == 1
+    assert int(active_hitlag_colldata["floor_result_segment_id"][0]) == 5
+
+
+def test_jumpaerial_hard_floor_runtime_authority_is_explicit_static_guard() -> None:
+    # The JumpAerial hard-floor repair must consume runtime-produced mpCollPrev state, not merely a
+    # teacher-forced source-owned seed endpoint. Keep a static lock next to the dynamic positive
+    # above so a future refactor cannot silently remove that source-authority gate.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_Coll
+    # refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_80047E14,mpColl_80044628_Floor}
+    src = Path("src/mpcoll_ground.c").read_text()
+    helper = src[
+        src.index("static uint8_t msl_mpcoll_80047e14_common_air_hard_floor_bottom_sweep") :
+        src.index("static uint8_t msl_mpcoll_80047e14_flags6_root_floor_projection")
+    ]
+    assert "mpcoll_floor_sweep_prev_root_is_runtime_owned(batch, idx)" in helper
+    assert "MSL_ACT_JUMP_AERIAL_F" in helper
+    assert "MSL_ACT_JUMP_AERIAL_B" in helper
+
+
+def test_fall_fast_same_hard_floor_bottom_sweep_is_bounded_static_guard() -> None:
+    # Fall_Coll uses `ft_800831CC -> mpColl_80047F40(flags=6)`. The retained Fall slice is not the
+    # rejected broad Fall helper: it is limited to sustained fastfall rows already carrying the same
+    # ordinary hard-floor CollData id or a live platform floor that the source platform callback can
+    # reject before accepting the hard floor below, plus offspan carried ledges connected to an
+    # ordinary hard floor. Every lane still requires a runtime-owned ECB-bottom sweep. No-floor
+    # rows, in-span ledge continuation, and root-only projection stay outside this owner.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_800831CC
+    # refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_80047F40,mpColl_80044628_Floor}
+    src = Path("src/mpcoll_ground.c").read_text()
+    helper = src[
+        src.index("static uint8_t msl_mpcoll_80047e14_common_air_hard_floor_bottom_sweep") :
+        src.index("static uint8_t msl_mpcoll_80047e14_flags6_root_floor_projection")
+    ]
+    assert "fall_fast_same_hard_floor_owner" in helper
+    assert "fall_fast_platform_to_hard_floor_owner" in helper
+    assert "fall_carried_ledge_to_connected_hard_floor_owner" in helper
+    assert "MSL_ACT_FALL" in helper
+    assert "batch->state.fall_fast[idx] != 0u" in helper
+    assert "floor_sweep.projected_segment_id != batch->state.ground_id[idx]" in helper
+    assert "floor_sweep.projected_segment_id == batch->state.ground_id[idx]" in helper
+    assert "carried->is_platform" in helper
+    assert "carried->is_ledge" in helper
+    assert "!floor_x_within_line_segment_strict" in helper
+    assert "floor_lines_connected(g, fall_carried_line_idx, floor_sweep.projected_line_idx)" in helper
+    assert "mpcoll_floor_sweep_prev_root_is_runtime_owned(batch, idx)" in helper
+    assert "mpcoll_collect_bottom_sweep_hard_floor_result" in helper
+    assert "no-floor rows" in helper
+    assert "live platform" in helper
+    assert "in-span ledge continuation" in helper
+    assert "root-only projections" in helper
+
+
+def test_fod_fall_offspan_carried_ledge_bottom_sweep_lands_connected_hard_floor() -> None:
+    # Fall_Coll does not use the carried ledge id as a hard rejection. When the live callback has
+    # moved off that ledge and `mpColl_80047F40` accepts the connected hard floor through the
+    # callback-local bottom sweep, source lands on the hard floor. An in-span carried ledge or a
+    # no-crossing endpoint must not publish through this repair.
+    #
+    # data/stages/bin/griz.bin::MSLSTG01 line connectivity and ledge/fighter_solid metadata
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_800831CC
+    # refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_80047F40,mpColl_80044628_Floor}
+    seed = _seed_fod_airborne_hard_floor_crossing(
+        ACT_FALL,
+        SM_FALL,
+        x=38.0,
+        y=-6.0,
+        prev_y=2.0,
+        ground_id=7,
+        action_frame=2,
+        speed_y=-3.5,
+    )
+    seed["fall_fast"][0, 0] = np.uint8(0)
+
+    out, _contacts, colldata = _step_once_with_contacts_and_colldata(
+        seed, floor_sweep_runtime=(0, 38.0, 2.0, True)
+    )
+
+    assert int(out["action_id"][0]) == ACT_LANDING
+    assert int(out["on_ground"][0]) == 1
+    assert int(out["ground_id"][0]) == 5
+    assert float(out["pos_y"][0]) == pytest.approx(0.002875, abs=1e-6)
+    assert int(colldata["floor_result_valid"][0]) == 1
+    assert int(colldata["floor_result_segment_id"][0]) == 5
+    assert int(colldata["floor_result_mode"][0]) == FLOOR_MODE_BOTTOM_SWEEP
+
+    in_span_ledge = seed.copy()
+    in_span_ledge["pos_x"][0, 0] = np.float32(76.0)
+    in_span_ledge["floor_sweep_prev_pos_x_f32"][0, 0] = np.float32(76.0)
+    in_span_out, _contacts1, in_span_colldata = _step_once_with_contacts_and_colldata(
+        in_span_ledge, floor_sweep_runtime=(0, 76.0, 2.0, True)
+    )
+
+    assert int(in_span_out["on_ground"][0]) == 0
+    assert int(in_span_out["ground_id"][0]) == 7
+    assert int(in_span_colldata["floor_result_valid"][0]) == 0
+
+    no_cross = _seed_fod_airborne_hard_floor_crossing(
+        ACT_FALL,
+        SM_FALL,
+        x=38.0,
+        y=-6.0,
+        prev_y=-8.5,
+        ground_id=7,
+        action_frame=2,
+        speed_y=-3.5,
+    )
+    no_cross["fall_fast"][0, 0] = np.uint8(0)
+    no_cross_out, _contacts2, no_cross_colldata = _step_once_with_contacts_and_colldata(
+        no_cross, floor_sweep_runtime=(0, 38.0, -8.5, True)
+    )
+
+    assert int(no_cross_out["on_ground"][0]) == 0
+    assert int(no_cross_out["ground_id"][0]) == 7
+    assert int(no_cross_colldata["floor_result_valid"][0]) == 0
+
+
+def test_fod_attackair_live_hard_floor_bottom_sweep_over_stale_platform_lands() -> None:
+    # AttackAir_Coll's live ft_80082C74 -> ft_80081D0C -> mpColl_800471F8 floor producer can keep
+    # scanning after a transformed-platform candidate leaves the fighter airborne. The retained path
+    # requires a same-callback hard-floor bottom sweep and the generated AIR_471F8 source phase.
+    #
+    # data/motion_state/owners/{fox,falco}.bin::MSLMSO01 phase AIR_471F8
+    # data/stages/bin/griz.bin::MSLSTG01 fighter_solid/platform_transform metadata
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor}
+    seed = _seed_fod_airborne_hard_floor_crossing(
+        ACT_ATTACK_AIR_LW, SM_ATTACK_AIR_LW, x=23.0, y=-6.8, prev_y=-3.4
+    )
+
+    out, _contacts, colldata = _step_once_with_contacts_and_colldata(
+        seed, floor_sweep_runtime=(0, 23.0, -3.4, True)
+    )
+
+    assert int(out["action_id"][0]) == ACT_LANDING_AIR_LW
+    assert int(out["on_ground"][0]) == 1
+    assert int(out["ground_id"][0]) == 5
+    assert float(out["pos_y"][0]) == pytest.approx(0.002875, abs=1e-7)
+    assert int(colldata["floor_result_valid"][0]) == 1
+    assert int(colldata["floor_result_segment_id"][0]) == 5
+
+    no_cross = _seed_fod_airborne_hard_floor_crossing(
+        ACT_ATTACK_AIR_LW, SM_ATTACK_AIR_LW, x=23.0, y=-6.8, prev_y=-8.5
+    )
+    no_cross_out, _contacts2, no_cross_colldata = _step_once_with_contacts_and_colldata(
+        no_cross, floor_sweep_runtime=(0, 23.0, -8.5, True)
+    )
+
+    assert int(no_cross_out["on_ground"][0]) == 0
+    assert int(no_cross_out["ground_id"][0]) == 0
+    assert int(no_cross_colldata["floor_result_valid"][0]) == 0
+
+def test_fod_escapeair_live_hard_floor_bottom_sweep_over_stale_platform_lands() -> None:
+    # EscapeAir_Coll uses `ft_80082C74 -> ft_80081D0C -> mpColl_800471F8`. A stale platform
+    # CollData.floor id does not block the current callback from accepting an ordinary hard-floor
+    # ECB-bottom sweep. The owner is the live runtime mpCollPrev bottom sweep, not public root state.
+    #
+    # data/motion_state/owners/{fox,falco}.bin::MSLMSO01 phase AIR_471F8
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+    # refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_800471F8,mpColl_80044628_Floor}
+    seed = _seed_fod_airborne_hard_floor_crossing(
+        ACT_ESCAPE_AIR,
+        SM_ESCAPE_AIR,
+        x=19.6,
+        y=-6.8,
+        prev_y=-3.4,
+        ground_id=1,
+        action_frame=1,
+        speed_y=-1.4,
+    )
+
+    out, _contacts, colldata = _step_once_with_contacts_and_colldata(
+        seed, floor_sweep_runtime=(0, 19.6, -3.4, True)
+    )
+
+    assert int(out["action_id"][0]) == ACT_LANDING_FALL_SPECIAL
+    assert int(out["on_ground"][0]) == 1
+    assert int(out["ground_id"][0]) == 5
+    assert int(colldata["floor_result_valid"][0]) == 1
+    assert int(colldata["floor_result_segment_id"][0]) == 5
+    assert int(colldata["floor_result_mode"][0]) == FLOOR_MODE_BOTTOM_SWEEP
+
+    no_cross = _seed_fod_airborne_hard_floor_crossing(
+        ACT_ESCAPE_AIR,
+        SM_ESCAPE_AIR,
+        x=19.6,
+        y=-6.8,
+        prev_y=-8.5,
+        ground_id=1,
+        action_frame=1,
+        speed_y=-1.4,
+    )
+    no_cross_out, _contacts2, no_cross_colldata = _step_once_with_contacts_and_colldata(
+        no_cross, floor_sweep_runtime=(0, 19.6, -8.5, True)
+    )
+
+    assert int(no_cross_out["on_ground"][0]) == 0
+    assert int(no_cross_out["ground_id"][0]) == 1
+    assert int(no_cross_colldata["floor_result_valid"][0]) == 0
+
+
+def test_fod_damageair_live_hard_floor_publication_requires_runtime_prev_root_packet() -> None:
+    # DamageAir uses ftCo_Damage_Coll -> ft_80081DD4. When a live Damage callback has already
+    # carried a FoD transformed-platform candidate and the callback-local source root crosses the
+    # hard floor, mpColl_800477E0 can resolve the ordinary hard-floor contact. A restored/public
+    # ground_id plus the same visible position must not publish it.
+    #
+    # data/motion_state/owners/{fox,falco}.bin::MSLMSO01 phase AIR_477E0
+    # data/stages/bin/griz.bin::MSLSTG01 fighter_solid/platform_transform metadata
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800477E0,mpColl_80044628_Floor}
+    seed = _seed_fod_airborne_hard_floor_crossing(
+        ACT_DAMAGE_AIR_2,
+        SM_DAMAGE_AIR_2,
+        x=-26.886,
+        y=-15.402,
+        prev_y=1.0,
+        action_frame=11,
+        speed_y=-2.3,
+    )
+
+    out, _contacts, colldata = _step_once_with_contacts_and_colldata(
+        seed, floor_sweep_runtime=(0, -26.886, 1.0, True)
+    )
+
+    assert int(out["action_id"][0]) == ACT_DAMAGE_AIR_2
+    assert int(out["on_ground"][0]) == 1
+    assert int(out["ground_id"][0]) == 5
+    assert float(out["pos_y"][0]) > -15.0
+    assert int(colldata["floor_result_valid"][0]) == 1
+    assert int(colldata["floor_result_mode"][0]) in (FLOOR_MODE_BOTTOM_SWEEP, FLOOR_MODE_ROOT_PROJECTION)
+    assert int(colldata["floor_result_segment_id"][0]) == 5
+
+    restored_only = seed.copy()
+    restored_only["floor_sweep_prev_pos_valid_u8"][0, 0] = np.uint8(0)
+    restored_only_out, _contacts2, restored_only_colldata = _step_once_with_contacts_and_colldata(
+        restored_only
+    )
+
+    assert int(restored_only_out["action_id"][0]) == ACT_DAMAGE_AIR_2
+    assert int(restored_only_out["on_ground"][0]) == 0
+    assert int(restored_only_out["ground_id"][0]) == 0
+    assert float(restored_only_out["pos_y"][0]) < -15.0
+    assert int(restored_only_colldata["floor_result_valid"][0]) == 0
+
+
+def test_fod_damageair_root_projection_requires_prev_root_segment_hit() -> None:
+    # Root projection is not a current-X clamp. Even with runtime-owned previous-root provenance, a
+    # previous root that is above the hard floor but whose previous-to-current root segment misses
+    # the floor must not enter the root-projection owner. Use FoD's sloped right lip: the previous
+    # root is above the candidate at the current X, but below the line at its own X, so the real
+    # previous-root-to-current-root segment does not cross the line.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800477E0,mpColl_80044628_Floor}
+    import msl_binding
+
+    lip = msl_binding.stage_floor_segment(STAGE_FOD, 6)
+    assert lip is not None
+    x0 = float(lip["x0"])
+    y0 = float(lip["y0"])
+    x1 = float(lip["x1"])
+    y1 = float(lip["y1"])
+    cur_x = np.float32(51.5)
+    prev_x = np.float32(52.0)
+    line_y_at_cur = y0 + ((y1 - y0) * ((float(cur_x) - x0) / (x1 - x0)))
+    prev_y = np.float32(line_y_at_cur + 0.1)
+
+    seed = _seed_fod_airborne_hard_floor_crossing(
+        ACT_DAMAGE_AIR_2,
+        SM_DAMAGE_AIR_2,
+        x=float(cur_x),
+        y=-1.0,
+        prev_y=float(prev_y),
+        ground_id=6,
+        action_frame=11,
+        speed_y=-2.3,
+    )
+    seed["floor_sweep_prev_pos_valid_u8"][0, 0] = np.uint8(0)
+
+    _out, _contacts, colldata = _step_once_with_contacts_and_colldata(
+        seed, floor_sweep_runtime=(0, float(prev_x), float(prev_y), True)
+    )
+
+    assert int(colldata["floor_result_valid"][0]) == 0
+    assert int(colldata["floor_result_mode"][0]) != FLOOR_MODE_ROOT_PROJECTION
+
+
+def test_yoshi_damageair_non_sdi_uses_live_colldata_last_pos_for_hard_floor() -> None:
+    # Non-allow_sdi DamageAir rows route through `ftCo_Damage_Coll -> ft_80081DD4 ->
+    # mpColl_800473CC`. Source copies CollData.cur_pos into last_pos before loading the current
+    # ECB, so a live callback carrying Yoshi's side platform can still publish the main hard floor
+    # when the previous CollData bottom to current ECB-bottom segment crosses it. Restored
+    # floor-sweep provenance must not enter this owner, and a no-crossing endpoint must not publish.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+    # refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_800473CC,mpColl_80044628_Floor}
+    seed = _seed_base(STAGE_YOSHI, ACT_DAMAGE_AIR_1, SM_DAMAGE_AIR_1, -37.0, -5.0)
+    p = 0
+    seed["char_id"][0, p] = np.uint8(CHAR_FALCO)
+    seed["char_id"][0, 1] = np.uint8(CHAR_FALCO)
+    seed["on_ground"][0, p] = np.uint8(0)
+    seed["ground_id"][0, p] = np.uint16(1)
+    seed["action_frame"][0, p] = np.int16(3)
+    seed["anim_frame_f32"][0, p] = np.float32(3.0)
+    seed["hitlag"][0, p] = np.uint8(0)
+    seed["hitstun"][0, p] = np.uint8(7)
+    seed["speed_y_self"][0, p] = np.float32(-0.7)
+    seed["speed_y_attack"][0, p] = np.float32(0.2)
+    seed["floor_sweep_prev_pos_valid_u8"][0, p] = np.uint8(1)
+    seed["floor_sweep_prev_pos_x_f32"][0, p] = np.float32(-37.0)
+    seed["floor_sweep_prev_pos_y_f32"][0, p] = np.float32(-5.0)
+
+    out, _contacts, colldata = _step_once_with_contacts_and_colldata(
+        seed, floor_sweep_runtime=(p, -37.0, -5.0, True)
+    )
+
+    assert int(out["on_ground"][p]) == 1
+    assert int(out["ground_id"][p]) == 3
+    assert float(out["pos_y"][p]) == pytest.approx(0.0001, abs=1e-6)
+    assert int(colldata["floor_result_valid"][p]) == 1
+    assert int(colldata["floor_result_segment_id"][p]) == 3
+    assert int(colldata["floor_probe_owner"][p]) == 4
+    assert int(colldata["floor_probe_reject_reason"][p]) == 6
+    assert int(colldata["floor_probe_raw_bottom_sweep_hit"][p]) == 1
+    assert int(colldata["floor_probe_projection_hit"][p]) == 1
+
+    restored_only = seed.copy()
+    restored_only["floor_sweep_prev_pos_valid_u8"][0, p] = np.uint8(0)
+    restored_out, _contacts2, restored_colldata = _step_once_with_contacts_and_colldata(
+        restored_only, floor_sweep_runtime=(p, -37.0, -5.0, False)
+    )
+
+    assert int(restored_colldata["floor_probe_owner"][p]) != 4
+
+    no_cross = seed.copy()
+    no_cross["pos_y"][0, p] = np.float32(-4.5)
+    no_cross["floor_sweep_prev_pos_y_f32"][0, p] = np.float32(-4.5)
+    no_cross_out, _contacts3, no_cross_colldata = _step_once_with_contacts_and_colldata(
+        no_cross, floor_sweep_runtime=(p, -37.0, -4.5, True)
+    )
+
+    assert int(no_cross_out["on_ground"][p]) == 0
+    assert int(no_cross_out["ground_id"][p]) == 1
+    assert int(no_cross_colldata["floor_result_valid"][p]) == 0
+
+
+def test_fod_ground_damage_active_hitlag_sdi_platform_to_hard_floor_stays_airborne() -> None:
+    # Ground DamageHi/N/Lw uses the same `ftCo_Damage_OnEveryHitlag -> ftCo_Damage_Coll ->
+    # ft_80081DD4 -> mpColl_800477E0` floor owner as airborne Damage. When live downward SDI moves
+    # a platform-carried DamageHi row through FoD's ordinary hard floor, source records
+    # FloorPush/FloorHug contact while preserving airborne Damage. A stale platform row with no live
+    # SDI consumption or a no-crossing endpoint must not publish the hard floor.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+    #   ftCo_Damage_OnEveryHitlag,ftCo_Damage_Coll}
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800477E0,mpColl_80044628_Floor,
+    #   mpColl_80044948_Floor}
+    seed = _seed_fod_airborne_hard_floor_crossing(
+        ACT_DAMAGE_HI_2,
+        SM_DAMAGE_HI_2,
+        x=-16.875,
+        y=-3.0,
+        prev_y=1.1251,
+        ground_id=0,
+        action_frame=1,
+        speed_y=0.0,
+    )
+    seed["hitlag"][0, 0] = np.uint16(2)
+    seed["hitstun"][0, 0] = np.uint16(6)
+    seed["state_flags"][0, 0, 1] = np.uint8(0x30)
+    seed["state_flags"][0, 0, 3] = np.uint8(0x02)
+    seed["tilt_timer_y"][0, 0] = np.uint8(1)
+    prev_input = _input_bytes()
+    input_t = _input_bytes()
+    input_t.view(INPUT_DTYPE).reshape((1,))["p"]["main_y"][0, 0] = np.int8(-127)
+
+    out, _contacts, colldata = _step_once_with_contacts_and_colldata(
+        seed, prev_input, input_t
+    )
+
+    assert int(out["action_id"][0]) == ACT_DAMAGE_HI_2
+    assert int(out["on_ground"][0]) == 0
+    assert int(out["ground_id"][0]) == 5
+    assert float(out["pos_y"][0]) > -15.0
+    assert int(colldata["floor_result_valid"][0]) == 0
+    assert int(colldata["floor_result_segment_id"][0]) == 5
+    assert int(colldata["floor_result_mode"][0]) == 0
+
+    stale_no_sdi = seed.copy()
+    stale_no_sdi_out, _contacts2, stale_no_sdi_colldata = _step_once_with_contacts_and_colldata(
+        stale_no_sdi
+    )
+
+    assert int(stale_no_sdi_out["on_ground"][0]) == 0
+    assert int(stale_no_sdi_out["ground_id"][0]) == 0
+    assert float(stale_no_sdi_out["pos_y"][0]) < -2.0
+    assert int(stale_no_sdi_colldata["floor_result_valid"][0]) == 0
+
+    no_cross = seed.copy()
+    no_cross["floor_sweep_prev_pos_y_f32"][0, 0] = np.float32(-4.0)
+    no_cross_out, _contacts3, no_cross_colldata = _step_once_with_contacts_and_colldata(
+        no_cross, prev_input, input_t
+    )
+
+    assert int(no_cross_out["on_ground"][0]) == 0
+    assert int(no_cross_out["ground_id"][0]) == 0
+    assert float(no_cross_out["pos_y"][0]) < -2.0
+    assert int(no_cross_colldata["floor_result_valid"][0]) == 0
+
+    src = Path("src/mpcoll_ground.c").read_text()
+    assert "active_ground_damage_platform_hard_floor_sweep_owner" in src
+    assert "damage_hitlag_floorhug_attempts_downward_sdi(batch, idx, c)" in src
+
+
+def test_fod_ground_damage_hitlag_exit_platform_to_hard_floor_bottom_sweep_lands() -> None:
+    # Ground Damage_Coll can be made airborne during hitlag by `ftCommon_8007D5D4` while its
+    # CollData.floor.index still names FoD's transformed platform. On the hitlag-exit callback,
+    # source `ft_80081DD4 -> mpColl_800477E0 -> mpColl_80044628_Floor` consumes the callback-local
+    # zero-bottom ECB and may publish the ordinary hard floor crossed by that bottom sweep.
+    #
+    # The no-crossing half proves the branch is a real bottom-sweep owner, not a platform ground_id
+    # or root-y rescue.
+    #
+    # data/motion_state/owners/{fox,falco}.bin::MSLMSO01 DAMAGE_COMMON_COLL
+    # data/stages/bin/griz.bin::MSLSTG01 fighter_solid/platform_transform metadata
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+    #   ftCo_8008DCE0,ftCo_Damage_OnExitHitlag,ftCo_Damage_Coll}
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800477E0,mpColl_80044628_Floor}
+    seed = _seed_fod_airborne_hard_floor_crossing(
+        ACT_DAMAGE_N_1,
+        SM_DAMAGE_N_1,
+        x=-22.0,
+        y=-1.78,
+        prev_y=1.1251,
+        ground_id=0,
+        action_frame=1,
+        speed_y=-0.17,
+    )
+    seed["hitlag"][0, 0] = np.uint16(1)
+    seed["hitstun"][0, 0] = np.uint16(5)
+    seed["speed_y_attack"][0, 0] = np.float32(0.25)
+    seed["ecb_lock_timer"][0, 0] = np.uint8(1)
+
+    out, _contacts, colldata = _step_once_with_contacts_and_colldata(seed)
+
+    assert int(out["action_id"][0]) == ACT_DAMAGE_N_1
+    assert int(out["on_ground"][0]) == 1
+    assert int(out["ground_id"][0]) == 5
+    assert float(out["pos_y"][0]) == pytest.approx(0.002875, abs=1e-7)
+    assert int(colldata["floor_result_valid"][0]) == 1
+    assert int(colldata["floor_result_segment_id"][0]) == 5
+    assert int(colldata["floor_result_mode"][0]) == FLOOR_MODE_BOTTOM_SWEEP
+
+    no_cross = seed.copy()
+    no_cross["floor_sweep_prev_pos_y_f32"][0, 0] = np.float32(-2.0)
+    no_cross_out, _contacts2, no_cross_colldata = _step_once_with_contacts_and_colldata(no_cross)
+
+    assert int(no_cross_out["on_ground"][0]) == 0
+    assert int(no_cross_out["ground_id"][0]) == 0
+    assert int(no_cross_colldata["floor_result_valid"][0]) == 0
+
+
+def test_ground_damage_hitlag_exit_hard_floor_owner_static_guard() -> None:
+    # Keep the active ground-damage owner tied to the source hitlag-exit platform-carry shape. It must
+    # not decay into a broad "Damage root below hard floor" publication branch.
+    src = Path("src/mpcoll_ground.c").read_text()
+    start = src.index("Ground DamageHi/N/Lw hitlag-exit floor producer:")
+    helper = src[start - 900 : start + 1600]
+    assert "batch->state.hitlag_pre_timer[idx] != 0u" in helper
+    assert "raw_current_floor_line_idx >= 0" in helper
+    assert "MSL_STAGE_PLATFORM_TRANSFORM_NONE" in helper
+    assert "mpcoll_collect_bottom_sweep_hard_floor_result" in helper
+
+
 def test_fod_jumpaerial_escapeair_entry_preserves_pre_entry_ecb_for_right_ledge_floor() -> None:
     # Modelplay trace lock: reports/modelplay/20260521_fod_trained_vs_base/
     # trace_001_trained_p1_seed101/trace.json frames 8400..8404. JumpAerialF IASA enters
@@ -5021,6 +5632,185 @@ def test_fd_active_damage_hitlag_without_current_floor_projects_hard_floor_airbo
 
     assert int(no_hitlag_out["on_ground"][p]) == 1
     assert int(no_hitlag_out["ground_id"][p]) == 1
+
+
+def test_fod_active_damageair_sdi_hard_floor_floorhug_over_stale_platform() -> None:
+    # DamageAir active hitlag can consume downward SDI through `ftCo_Damage_OnEveryHitlag` while
+    # CollData.floor.index still names a FoD one-way platform. Source then runs the same
+    # `Damage_Coll -> ft_80081DD4 -> mpColl_800477E0` floor producer, so the current hard-floor
+    # ECB-bottom sweep can publish FloorPush/FloorHug while keeping the fighter airborne. This is
+    # not a stale platform ground_id rescue: the negative removes runtime mpCollPrev authority.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+    #   ftCo_Damage_OnEveryHitlag,ftCo_Damage_Coll}
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800477E0,mpColl_80044628_Floor,
+    #   mpColl_80044948_Floor}
+    seed = _seed_fod_airborne_hard_floor_crossing(
+        ACT_DAMAGE_AIR_2,
+        SM_DAMAGE_AIR_2,
+        x=3.22,
+        y=-10.48,
+        prev_y=-4.93,
+        ground_id=1,
+        action_frame=1,
+        speed_y=0.0,
+    )
+    p = 0
+    seed["hitlag"][0, p] = np.uint8(2)
+    seed["hitstun"][0, p] = np.uint8(9)
+    seed["char_id"][0, p] = np.uint8(CHAR_FALCO)
+    seed["char_id"][0, 1] = np.uint8(CHAR_FALCO)
+    seed["state_flags"][0, p, 1] = np.uint8(0x30)
+    seed["seed_prev_action_id"][0, p] = np.uint16(ACT_FX_SPECIAL_AIR_N_START)
+
+    input_t = _input_bytes()
+    input_t.view(INPUT_DTYPE).reshape((1,))["p"]["main_y"][0, p] = np.int8(-80)
+
+    out, contacts, colldata = _step_once_with_contacts_and_colldata(
+        seed, input_t=input_t, floor_sweep_runtime=(p, 5.40, -4.0, True)
+    )
+
+    assert int(out["action_id"][p]) == ACT_DAMAGE_AIR_2
+    assert int(out["on_ground"][p]) == 0
+    assert int(out["ground_id"][p]) == 5
+    assert float(out["pos_y"][p]) > -6.0
+    assert int(contacts["coll_env_flags"][p]) & COLLIDE_FLOOR_MASK
+    assert int(colldata["floor_result_segment_id"][p]) == 5
+
+    restored_only = seed.copy()
+    restored_out, _contacts2, restored_colldata = _step_once_with_contacts_and_colldata(
+        restored_only, input_t=input_t
+    )
+
+    assert int(restored_out["action_id"][p]) == ACT_DAMAGE_AIR_2
+    assert int(restored_out["on_ground"][p]) == 0
+    assert int(restored_out["ground_id"][p]) == 1
+    assert float(restored_out["pos_y"][p]) < -10.0
+    assert int(restored_colldata["floor_result_valid"][p]) == 0
+
+
+def test_fod_damage_active_hitlag_sdi_uses_callback_last_pos_for_hard_floor() -> None:
+    # Active-hitlag common Damage uses `ftCo_Damage_OnEveryHitlag` before
+    # `ftCo_Damage_Coll -> ft_80081DD4`. Source `ft_80081DD4` copies the pre-SDI
+    # CollData.cur_pos into last_pos, then writes the SDI-mutated root, so the floor producer sees
+    # the frame-start-to-current bottom sweep even when the persisted floor id still names a FoD
+    # platform. Without the live SDI callback displacement, the same restored platform floor id and
+    # public root row must not create hard-floor authority.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+    #   ftCo_Damage_OnEveryHitlag,ftCo_Damage_Coll}
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+    # refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_800477E0,mpColl_80044628_Floor,
+    #   mpColl_80044948_Floor}
+    seed = _seed_fod_airborne_hard_floor_crossing(
+        ACT_DAMAGE_HI_2,
+        SM_DAMAGE_HI_2,
+        x=-16.875,
+        y=-3.0,
+        prev_y=-3.0,
+        ground_id=0,
+        action_frame=1,
+        speed_y=0.0,
+    )
+    p = 0
+    seed["char_id"][0, p] = np.uint8(CHAR_FALCO)
+    seed["char_id"][0, 1] = np.uint8(CHAR_FALCO)
+    seed["hitlag"][0, p] = np.uint8(3)
+    seed["hitstun"][0, p] = np.uint8(9)
+    seed["state_flags"][0, p, 1] = np.uint8(0x30)
+    seed["state_flags"][0, p, 3] = np.uint8(0x02)
+    seed["tilt_timer_y"][0, p] = np.uint8(1)
+    seed["seed_prev_action_id"][0, p] = np.uint16(ACT_FX_SPECIAL_AIR_N_START)
+    seed["floor_sweep_prev_pos_valid_u8"][0, p] = np.uint8(0)
+
+    input_t = _input_bytes()
+    input_t.view(INPUT_DTYPE).reshape((1,))["p"]["main_y"][0, p] = np.int8(-127)
+
+    out, contacts, colldata = _step_once_with_contacts_and_colldata(seed, input_t=input_t)
+
+    assert int(out["action_id"][p]) == ACT_DAMAGE_HI_2
+    assert int(out["on_ground"][p]) == 0
+    assert int(out["ground_id"][p]) == 5
+    assert float(out["pos_y"][p]) > -6.0
+    assert int(contacts["coll_env_flags"][p]) & COLLIDE_FLOOR_MASK
+    assert int(colldata["floor_result_segment_id"][p]) == 5
+    assert int(colldata["floor_probe_owner"][p]) == 2
+    assert int(colldata["floor_probe_reject_reason"][p]) == 6
+    assert int(colldata["floor_probe_raw_bottom_sweep_hit"][p]) == 1
+    assert int(colldata["floor_probe_projection_hit"][p]) == 1
+    assert float(colldata["substep_prev_pos_y"][p]) == pytest.approx(-3.0, abs=1e-6)
+    assert float(colldata["substep_cur_pos_y"][p]) < -8.0
+
+    restored_no_sdi = seed.copy()
+    restored_out, _contacts2, restored_colldata = _step_once_with_contacts_and_colldata(
+        restored_no_sdi
+    )
+
+    assert int(restored_out["action_id"][p]) == ACT_DAMAGE_HI_2
+    assert int(restored_out["on_ground"][p]) == 0
+    assert int(restored_out["ground_id"][p]) == 0
+    assert float(restored_out["pos_y"][p]) == pytest.approx(-3.0, abs=1e-6)
+    assert int(restored_colldata["floor_result_valid"][p]) == 0
+
+
+def test_fod_damageair_active_hitlag_sdi_uses_callback_last_pos_for_hard_floor() -> None:
+    # Airborne DamageAir uses the same live `ftCo_Damage_OnEveryHitlag -> ftCo_Damage_Coll ->
+    # ft_80081DD4` source owner as ground Damage. The hard-floor publication requires the current
+    # callback to consume downward SDI and then sweep from the callback-local previous CollData
+    # position. A restored platform floor id plus an already-below-floor root is not enough.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+    #   ftCo_Damage_OnEveryHitlag,ftCo_Damage_Coll}
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+    # refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_800477E0,mpColl_80044628_Floor,
+    #   mpColl_80044948_Floor}
+    seed = _seed_fod_airborne_hard_floor_crossing(
+        ACT_DAMAGE_AIR_2,
+        SM_DAMAGE_AIR_2,
+        x=3.22,
+        y=-3.0,
+        prev_y=-3.0,
+        ground_id=1,
+        action_frame=1,
+        speed_y=0.0,
+    )
+    p = 0
+    seed["char_id"][0, p] = np.uint8(CHAR_FALCO)
+    seed["char_id"][0, 1] = np.uint8(CHAR_FALCO)
+    seed["hitlag"][0, p] = np.uint8(3)
+    seed["hitstun"][0, p] = np.uint8(9)
+    seed["state_flags"][0, p, 1] = np.uint8(0x30)
+    seed["state_flags"][0, p, 3] = np.uint8(0x02)
+    seed["tilt_timer_y"][0, p] = np.uint8(1)
+    seed["seed_prev_action_id"][0, p] = np.uint16(ACT_FX_SPECIAL_AIR_N_START)
+    seed["floor_sweep_prev_pos_valid_u8"][0, p] = np.uint8(0)
+
+    input_t = _input_bytes()
+    input_t.view(INPUT_DTYPE).reshape((1,))["p"]["main_y"][0, p] = np.int8(-127)
+
+    out, contacts, colldata = _step_once_with_contacts_and_colldata(seed, input_t=input_t)
+
+    assert int(out["action_id"][p]) == ACT_DAMAGE_AIR_2
+    assert int(out["on_ground"][p]) == 0
+    assert int(out["ground_id"][p]) == 5
+    assert float(out["pos_y"][p]) > -6.0
+    assert int(contacts["coll_env_flags"][p]) & COLLIDE_FLOOR_MASK
+    assert int(colldata["floor_result_segment_id"][p]) == 5
+    assert int(colldata["floor_probe_owner"][p]) == 2
+    assert int(colldata["floor_probe_reject_reason"][p]) == 6
+    assert int(colldata["floor_probe_raw_bottom_sweep_hit"][p]) == 1
+    assert int(colldata["damage_hitlag_downward_sdi_consumed"][p]) == 1
+
+    restored_no_sdi = seed.copy()
+    restored_out, _contacts2, restored_colldata = _step_once_with_contacts_and_colldata(
+        restored_no_sdi
+    )
+
+    assert int(restored_out["on_ground"][p]) == 0
+    assert int(restored_out["ground_id"][p]) == 1
+    assert float(restored_out["pos_y"][p]) == pytest.approx(-3.0, abs=1e-6)
+    assert int(restored_colldata["floor_result_valid"][p]) == 0
 
 
 def test_dream_land_damage_ground_to_attackair_entry_consumes_damage_ecb_floor_crossing() -> None:

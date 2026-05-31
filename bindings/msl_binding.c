@@ -1540,6 +1540,31 @@ static PyObject* msl_debug_set_escapeair_floor_producer_runtime_py(PyObject* sel
   Py_RETURN_NONE;
 }
 
+static PyObject* msl_debug_set_floor_sweep_prev_runtime_py(PyObject* self, PyObject* args) {
+  (void)self;
+  PyObject* handle_obj = NULL;
+  int batch_index = 0;
+  int player_index = 0;
+  float pos_x = 0.0f;
+  float pos_y = 0.0f;
+  unsigned int authority = 0;
+  if (!PyArg_ParseTuple(args, "OiiffI", &handle_obj, &batch_index, &player_index, &pos_x, &pos_y,
+                        &authority)) {
+    return NULL;
+  }
+  PyMslHandle* h = unpack_handle(handle_obj);
+  if (h == NULL) {
+    return NULL;
+  }
+  const int err = msl_batch_debug_set_floor_sweep_prev_runtime(h->batch, batch_index, player_index,
+                                                               pos_x, pos_y, (uint8_t)authority);
+  if (err != 0) {
+    PyErr_Format(PyExc_ValueError, "msl_batch_debug_set_floor_sweep_prev_runtime failed: %d", err);
+    return NULL;
+  }
+  Py_RETURN_NONE;
+}
+
 static PyObject* msl_debug_set_player_root_py(PyObject* self, PyObject* args) {
   (void)self;
   PyObject* handle_obj = NULL;
@@ -6711,6 +6736,9 @@ static PyMethodDef methods[] = {
      msl_debug_set_escapeair_floor_producer_runtime_py, METH_VARARGS,
      "debug_set_escapeair_floor_producer_runtime(handle, batch_index, player_index, authority, "
      "desired_owner) -> DEBUG-ONLY. Override EscapeAir floor-producer authority for tests."},
+    {"debug_set_floor_sweep_prev_runtime", msl_debug_set_floor_sweep_prev_runtime_py, METH_VARARGS,
+     "debug_set_floor_sweep_prev_runtime(handle, batch_index, player_index, x, y, authority) -> "
+     "DEBUG-ONLY. Override runtime floor-sweep provenance for tests."},
     {"debug_set_player_root", msl_debug_set_player_root_py, METH_VARARGS,
      "debug_set_player_root(handle, batch_index, player_index, pos_x, pos_y, facing) -> "
      "DEBUG-ONLY. Override fighter root position/facing for fixture setup."},
