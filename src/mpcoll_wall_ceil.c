@@ -51,6 +51,54 @@ enum {
 
 enum { MSL_WALL_CANDIDATE_MAX = 9 };
 
+static inline uint8_t mpcoll_wall_ceil_prev_action_is_fall_iasa_escapeair_source(
+    uint16_t action_id) {
+  // Fall-family IASA can enter EscapeAir before the same frame's map callback. The entered
+  // EscapeAir_Coll consumes the frame-start CollData wall/floor provenance through
+  // ft_80082C74/mpColl_800471F8. Keep ledge-adjacent wall publication to that callback owner;
+  // JumpAerial/KneeBend EscapeAir entries use separate floor producers and must not inherit this
+  // persisted-wall lane.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_IASA_Inner
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::{
+  //   ftCo_80099A58,ftCo_EscapeAir_Coll}
+  // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+  // refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_800471F8}
+  switch (action_id) {
+    case MSL_ACT_FALL:
+    case MSL_ACT_FALL_F:
+    case MSL_ACT_FALL_B:
+    case MSL_ACT_FALL_AERIAL:
+    case MSL_ACT_FALL_AERIAL_F:
+    case MSL_ACT_FALL_AERIAL_B:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
+static inline uint8_t mpcoll_wall_ceil_escapeair_fall_iasa_source_owner(const MslBatch* batch,
+                                                                        size_t idx) {
+  if (mpcoll_wall_ceil_prev_action_is_fall_iasa_escapeair_source(
+          batch->state.prev_action_id[idx])) {
+    return 1u;
+  }
+  // One-step reseeds can already be in EscapeAir after the Fall IASA transition, so the frame
+  // scheduler caches EscapeAir as `prev_action_id`. The explicit seed snapshot may stand in for
+  // frame-start Fall only when the caller also proves live runtime wall/floor CollData provenance.
+  return mpcoll_wall_ceil_prev_action_is_fall_iasa_escapeair_source(
+      batch->state.seed_prev_action_id[idx]);
+}
+
+static inline uint8_t mpcoll_wall_ceil_prev_root_runtime_owned(const MslBatch* batch, size_t idx) {
+  // Source `mpCollPrev` is callback-local runtime state. Requiring this lane prevents
+  // teacher-forced/restored wall ids from manufacturing a Fall -> EscapeAir ledge-wall handoff.
+  // refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_80046904}
+  // refs/melee/src/melee/ft/fighter.c::Fighter_procMap
+  return (uint8_t)(batch->state.coll_wall_ceil_prev_pos_valid[idx] != 0u &&
+                   isfinite(batch->state.coll_wall_ceil_prev_pos_x[idx]) &&
+                   isfinite(batch->state.coll_wall_ceil_prev_pos_y[idx]));
+}
+
 static inline float min4f(float a, float b, float c, float d) {
   float m = (a < b) ? a : b;
   m = (c < m) ? c : m;
@@ -3344,6 +3392,71 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
             ecb_points_shift_x3(&cur_ecb, &cur_right_ecb, &cur_specialhi_wall_ecb, dx);
           }
         }
+        if (batch->state.wall_kind[idx] == 0 && action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
+            mpcoll_wall_ceil_escapeair_fall_iasa_source_owner(batch, idx) &&
+            batch->state.action_frame[idx] <= 1 && fg != NULL && fg->lines != NULL &&
+            batch->state.ground_id[idx] != 0xFFFFu &&
+            mpcoll_wall_ceil_prev_root_runtime_owned(batch, idx)) {
+          // Left-side mirror of the Fall-family -> EscapeAir ledge-floor wall handoff below. The
+          // source owner is not the public wall id by itself: it is the live callback-local
+          // mpCollPrev root plus the carried ledge floor's MSLSTG01 adjacent wall link.
+          //
+          // data/stages/bin/*.bin::MSLSTG01 floor adjacency + left-wall graph links
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+          // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+          // refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_800471F8,mpColl_80046904}
+          // refs/melee/src/melee/mp/mplib.c::{mpCheckLeftWall,mpLineIntersectionV}
+          const int carried_floor_idx =
+              stage_collision_floor_line_index(stage_id, batch->state.ground_id[idx]);
+          const MslStageFloorLine* carried_floor =
+              (carried_floor_idx >= 0 && (size_t)carried_floor_idx < fg->line_count)
+                  ? &fg->lines[(size_t)carried_floor_idx]
+                  : NULL;
+          const int adjacent_left_wall_idx =
+              (carried_floor != NULL && carried_floor->fighter_solid != 0u &&
+               carried_floor->is_ledge != 0u && carried_floor->is_platform == 0u &&
+               carried_floor->y0 == carried_floor->y1 &&
+               carried_floor->platform_transform_kind == MSL_STAGE_PLATFORM_TRANSFORM_NONE)
+                  ? carried_floor->adjacent_left_wall
+                  : -1;
+          if (adjacent_left_wall_idx >= 0 && (size_t)adjacent_left_wall_idx < lwg->line_count &&
+              prev_wall_kind == MSL_WALL_LEFT &&
+              prev_wall_id == lwg->lines[(size_t)adjacent_left_wall_idx].segment_i) {
+            float x_corr = 0.0f;
+            float nx = -1.0f;
+            float ny = 0.0f;
+            const int out_line_idx = left_wall_e398_project(lwg, adjacent_left_wall_idx, cur_rx,
+                                                            cur_ry, &x_corr, &nx, &ny);
+            if (out_line_idx >= 0 && x_corr < 0.0f) {
+              MslMpcollWallResult wall = mpcoll_wall_result_make(
+                  MSL_WALL_LEFT, 0u, MSL_MPCOLL_WALL_RESULT_AIR_POINT_PROJECT,
+                  lwg->lines[(size_t)out_line_idx].segment_i, x_corr, cur_rx + x_corr, cur_ry, nx,
+                  ny);
+              mpcoll_commit_wall_result(batch, idx, &wall);
+              ecb_points_shift_x3(&cur_ecb, &cur_right_ecb, &cur_specialhi_wall_ecb, x_corr);
+            } else {
+              MslStageQueryHit hit = {0};
+              if (stage_collision_static_query(stage_id, (uint32_t)MSL_STAGE_QUERY_LEFT_WALL,
+                                               callback_prev_x, callback_prev_y,
+                                               batch->state.pos_x[idx], batch->state.pos_y[idx],
+                                               0xFFFFu, joint_id_skip, joint_id_only, &hit) &&
+                  hit.line_idx >= 0 && (size_t)hit.line_idx < lwg->line_count &&
+                  lwg->lines[(size_t)hit.line_idx].fighter_solid != 0u &&
+                  (hit.line_idx == adjacent_left_wall_idx ||
+                   wall_lines_connected_prev_next(lwg, adjacent_left_wall_idx, hit.line_idx))) {
+                const float dx = hit.x - batch->state.pos_x[idx];
+                if (dx < 0.0f) {
+                  MslMpcollWallResult wall = mpcoll_wall_result_make(
+                      MSL_WALL_LEFT, 0u, MSL_MPCOLL_WALL_RESULT_AIR_POINT_PROJECT,
+                      lwg->lines[(size_t)hit.line_idx].segment_i, dx, hit.x, hit.y, hit.normal_x,
+                      hit.normal_y);
+                  mpcoll_commit_wall_result(batch, idx, &wall);
+                  ecb_points_shift_x3(&cur_ecb, &cur_right_ecb, &cur_specialhi_wall_ecb, dx);
+                }
+              }
+            }
+          }
+        }
         if (batch->state.wall_kind[idx] == 0 &&
             (!use_left_air_envelope || use_damagefly_left_envelope)) {
           float ix = 0.0f, iy = 0.0f;
@@ -3607,6 +3720,74 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
                 candidates.first_iy, envelope_nx, envelope_ny);
             mpcoll_commit_wall_result(batch, idx, &wall);
             ecb_points_shift_x3(&cur_ecb, &cur_right_ecb, &cur_specialhi_wall_ecb, dx);
+          }
+        }
+        if (batch->state.wall_kind[idx] == 0 && action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
+            mpcoll_wall_ceil_escapeair_fall_iasa_source_owner(batch, idx) &&
+            batch->state.action_frame[idx] <= 1 && fg != NULL && fg->lines != NULL &&
+            batch->state.ground_id[idx] != 0xFFFFu &&
+            mpcoll_wall_ceil_prev_root_runtime_owned(batch, idx)) {
+          // Fresh ledge-floor -> EscapeAir entry can carry a source right-wall index without a
+          // same-frame right-wall env bit. Keep this to the persisted CollData wall owner expressed
+          // by MSLSTG01: the carried floor must be an ordinary cardinal fighter-solid ledge floor,
+          // that floor must name an adjacent right wall, and the current side point must still
+          // project on that same wall line. Sloped ledge-floor entries stay on their floor producer
+          // path instead of turning this into a root-local wall rescue.
+          //
+          // data/stages/bin/*.bin::MSLSTG01 floor adjacency + right-wall graph links
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+          // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+          // refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_800471F8,mpColl_80046904}
+          // refs/melee/src/melee/mp/mplib.c::{mpCheckRightWall,mpLineIntersectionV}
+          const int carried_floor_idx =
+              stage_collision_floor_line_index(stage_id, batch->state.ground_id[idx]);
+          const MslStageFloorLine* carried_floor =
+              (carried_floor_idx >= 0 && (size_t)carried_floor_idx < fg->line_count)
+                  ? &fg->lines[(size_t)carried_floor_idx]
+                  : NULL;
+          const int adjacent_right_wall_idx =
+              (carried_floor != NULL && carried_floor->fighter_solid != 0u &&
+               carried_floor->is_ledge != 0u && carried_floor->is_platform == 0u &&
+               carried_floor->y0 == carried_floor->y1 &&
+               carried_floor->platform_transform_kind == MSL_STAGE_PLATFORM_TRANSFORM_NONE)
+                  ? carried_floor->adjacent_right_wall
+                  : -1;
+          if (adjacent_right_wall_idx >= 0 && (size_t)adjacent_right_wall_idx < rwg->line_count &&
+              prev_wall_kind == MSL_WALL_RIGHT &&
+              prev_wall_id == rwg->lines[(size_t)adjacent_right_wall_idx].segment_i) {
+            float x_corr = 0.0f;
+            float nx = 1.0f;
+            float ny = 0.0f;
+            const int out_line_idx = right_wall_e684_project(rwg, adjacent_right_wall_idx, cur_lx,
+                                                             cur_ly, &x_corr, &nx, &ny);
+            if (out_line_idx >= 0 && x_corr > 0.0f) {
+              MslMpcollWallResult wall = mpcoll_wall_result_make(
+                  MSL_WALL_RIGHT, 0u, MSL_MPCOLL_WALL_RESULT_AIR_POINT_PROJECT,
+                  rwg->lines[(size_t)out_line_idx].segment_i, x_corr, cur_lx + x_corr, cur_ly, nx,
+                  ny);
+              mpcoll_commit_wall_result(batch, idx, &wall);
+              ecb_points_shift_x3(&cur_ecb, &cur_right_ecb, &cur_specialhi_wall_ecb, x_corr);
+            } else {
+              MslStageQueryHit hit = {0};
+              if (stage_collision_static_query(stage_id, (uint32_t)MSL_STAGE_QUERY_RIGHT_WALL,
+                                               callback_prev_x, callback_prev_y,
+                                               batch->state.pos_x[idx], batch->state.pos_y[idx],
+                                               0xFFFFu, joint_id_skip, joint_id_only, &hit) &&
+                  hit.line_idx >= 0 && (size_t)hit.line_idx < rwg->line_count &&
+                  rwg->lines[(size_t)hit.line_idx].fighter_solid != 0u &&
+                  (hit.line_idx == adjacent_right_wall_idx ||
+                   wall_lines_connected_prev_next(rwg, adjacent_right_wall_idx, hit.line_idx))) {
+                const float dx = hit.x - batch->state.pos_x[idx];
+                if (dx > 0.0f) {
+                  MslMpcollWallResult wall = mpcoll_wall_result_make(
+                      MSL_WALL_RIGHT, 0u, MSL_MPCOLL_WALL_RESULT_AIR_POINT_PROJECT,
+                      rwg->lines[(size_t)hit.line_idx].segment_i, dx, hit.x, hit.y, hit.normal_x,
+                      hit.normal_y);
+                  mpcoll_commit_wall_result(batch, idx, &wall);
+                  ecb_points_shift_x3(&cur_ecb, &cur_right_ecb, &cur_specialhi_wall_ecb, dx);
+                }
+              }
+            }
           }
         }
         if (batch->state.wall_kind[idx] == 0 && !grounded_now &&

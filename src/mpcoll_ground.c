@@ -527,6 +527,42 @@ static inline uint8_t is_common_fallspecial_action(uint16_t a) {
   }
 }
 
+static inline uint8_t mpcoll_ground_prev_action_is_fall_iasa_escapeair_source(uint16_t action_id) {
+  // Fall-family IASA can enter EscapeAir before the same frame's map callback. The entered
+  // EscapeAir_Coll consumes the frame-start CollData root/ECB through ft_80082C74/mpColl_800471F8.
+  // This helper intentionally does not include JumpAerial/KneeBend: those owners have distinct
+  // floor-producer lanes and should not inherit Fall's ledge-endpoint floor handoff.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_IASA_Inner
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::{
+  //   ftCo_80099A58,ftCo_EscapeAir_Coll}
+  // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+  // refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_800471F8}
+  switch (action_id) {
+    case MSL_ACT_FALL:
+    case MSL_ACT_FALL_F:
+    case MSL_ACT_FALL_B:
+    case MSL_ACT_FALL_AERIAL:
+    case MSL_ACT_FALL_AERIAL_F:
+    case MSL_ACT_FALL_AERIAL_B:
+      return 1u;
+    default:
+      return 0u;
+  }
+}
+
+static inline uint8_t mpcoll_ground_escapeair_fall_iasa_source_owner(const MslBatch* batch,
+                                                                     size_t idx) {
+  if (mpcoll_ground_prev_action_is_fall_iasa_escapeair_source(batch->state.prev_action_id[idx])) {
+    return 1u;
+  }
+  // Teacher-forced one-step rows can start directly in EscapeAir after the Fall IASA transition,
+  // so `cache_prev_action_state` sees EscapeAir instead of the frame-start Fall action. Accept the
+  // explicit seed snapshot only together with the live runtime floor-sweep provenance required by
+  // the caller; seeded action history alone is not source authority.
+  return mpcoll_ground_prev_action_is_fall_iasa_escapeair_source(
+      batch->state.seed_prev_action_id[idx]);
+}
+
 static inline uint8_t is_spacie_specialhi_end_fallspecial_source(uint16_t a) {
   switch (a) {
     case MSL_ACT_FX_SPECIAL_HI_FALL:
@@ -7797,6 +7833,56 @@ void mpcoll_ground_apply(MslBatch* batch) {
                 (uint8_t)MSL_MPCOLL_FLOOR_MODE_ROOT_PROJECTION, ground_id, contact_x, contact_y,
                 floor_nx, floor_ny);
           }
+        }
+      }
+
+      if (!was_grounded && !on_ground && action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
+          mpcoll_ground_escapeair_fall_iasa_source_owner(batch, idx) &&
+          batch->state.action_frame[idx] <= 1 &&
+          mpcoll_floor_sweep_prev_root_is_runtime_owned(batch, idx) && prefer_line_idx >= 0 &&
+          (size_t)prefer_line_idx < g->line_count) {
+        // Same-frame Fall -> EscapeAir carried ledge endpoint floor handoff:
+        // when Fall IASA enters EscapeAir before Fighter_procMap, source EscapeAir_Coll consumes
+        // CollData.prev/cur roots through `mpColl_800471F8 -> mpColl_80044628_Floor`. FD-style
+        // terminal ledge rows can start exactly on the floor endpoint; mpLineIntersectionH admits
+        // a small +/-0.1 endpoint overshoot and clamps the hit to the endpoint. Keep this path to a
+        // live runtime-owned previous root, the same carried fighter-solid cardinal ledge floor,
+        // and an actual above/on-floor to below-floor crossing. Restored visible ground_id or
+        // JumpAerial/KneeBend entries cannot enter this owner.
+        //
+        // data/stages/bin/*.bin::MSLSTG01 ledge floor flags + source endpoints
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_IASA_Inner
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+        // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+        // refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_800471F8,mpColl_80044628_Floor}
+        // refs/melee/src/melee/mp/mplib.c::mpLineIntersectionH
+        const MslStageFloorLine* carried_line = &g->lines[(size_t)prefer_line_idx];
+        const uint8_t carried_cardinal_ledge_floor =
+            (uint8_t)(carried_line->segment_i == batch->state.ground_id[idx] &&
+                      carried_line->is_platform == 0u && carried_line->is_ledge != 0u &&
+                      carried_line->platform_transform_kind == MSL_STAGE_PLATFORM_TRANSFORM_NONE &&
+                      fabsf(carried_line->y1 - carried_line->y0) <= k_floor_horiz_dy_thresh &&
+                      floor_line_is_runtime_fighter_solid(g, stage_id, prefer_line_idx));
+        float prev_floor_y = 0.0f;
+        float cur_floor_y = 0.0f;
+        if (carried_cardinal_ledge_floor &&
+            floor_line_y_at_x_for_env(batch, bi, g, prefer_line_idx,
+                                      batch->state.floor_sweep_prev_pos_x[idx], &prev_floor_y) &&
+            floor_line_y_at_x_for_env(batch, bi, g, prefer_line_idx, x, &cur_floor_y) &&
+            batch->state.floor_sweep_prev_pos_y[idx] >= (prev_floor_y - k_floor_horiz_dy_thresh) &&
+            batch->state.floor_sweep_prev_pos_y[idx] <= (prev_floor_y + k_floor_y_bias) &&
+            y < (cur_floor_y - k_floor_horiz_dy_thresh)) {
+          batch->state.pos_y[idx] = cur_floor_y + k_floor_y_bias;
+          on_ground = 1u;
+          ground_id = carried_line->segment_i;
+          contact_x = x;
+          contact_y = cur_floor_y;
+          floor_nx = 0.0f;
+          floor_ny = 1.0f;
+          mpcoll_record_callback_floor_result_with_mode(
+              &mpcoll_ctx, (uint8_t)MSL_MPCOLL_FLOOR_RESULT_DIRECT,
+              (uint8_t)MSL_MPCOLL_FLOOR_MODE_BOTTOM_SWEEP, ground_id, contact_x, contact_y,
+              floor_nx, floor_ny);
         }
       }
 

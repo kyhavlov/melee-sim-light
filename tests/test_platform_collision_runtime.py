@@ -142,6 +142,7 @@ STAGE_FOD = 2
 STAGE_YOSHI = 8
 STAGE_DREAM_LAND = 28
 STAGE_BATTLEFIELD = 31
+STAGE_FD = 32
 BUTTON_L = 0x0040
 BUTTON_A = 0x0100
 BUTTON_B = 0x0200
@@ -364,6 +365,8 @@ def _step_once_with_contacts_and_colldata(
     prev_input: np.ndarray | None = None,
     input_t: np.ndarray | None = None,
     floor_sweep_runtime: tuple[int, float, float, bool] | None = None,
+    wall_ceil_runtime: tuple[int, float, float, bool] | None = None,
+    prev_action_runtime: tuple[int, int] | None = None,
 ):
     import msl_binding
 
@@ -383,9 +386,17 @@ def _step_once_with_contacts_and_colldata(
     handle = msl_binding.init(batch_size=1, num_players=2, ucf_enabled=1, ucf_cardinals_1_0_enabled=1)
     try:
         msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, seed_stride)))
+        if prev_action_runtime is not None:
+            player, action_id = prev_action_runtime
+            msl_binding.debug_set_prev_action_id(handle, 0, player, int(action_id))
         if floor_sweep_runtime is not None:
             player, x, y, authority = floor_sweep_runtime
             msl_binding.debug_set_floor_sweep_prev_runtime(
+                handle, 0, player, float(x), float(y), int(authority)
+            )
+        if wall_ceil_runtime is not None:
+            player, x, y, authority = wall_ceil_runtime
+            msl_binding.debug_set_wall_ceil_prev_runtime(
                 handle, 0, player, float(x), float(y), int(authority)
             )
         msl_binding.step_input(handle, prev_input, input_t)
@@ -6362,6 +6373,274 @@ def test_manual_stage_clip_traces_roll_out_to_collision_resolution_from_match_st
         assert int(row["on_ground"][player]) == int(assertion["on_ground"]), trace["name"]
         assert int(row["ground_id"][player]) == int(assertion["ground_id"]), trace["name"]
         assert float(row["pos_y"][player]) >= float(assertion["min_y"]), trace["name"]
+
+
+def _fd_fall_escapeair_ledge_seed(
+    *,
+    side: str,
+    prev_action: int = ACT_FALL,
+    floor_id: int | None = None,
+    wall_id: int | None = None,
+    current_x: float | None = None,
+    current_y: float = -2.0,
+) -> np.ndarray:
+    assert side in ("left", "right")
+    if floor_id is None:
+        floor_id = 2 if side == "right" else 0
+    if wall_id is None:
+        wall_id = 9 if side == "right" else 11
+    if current_x is None:
+        current_x = 85.5 if side == "right" else -85.5
+    seed = _seed_base(STAGE_FD, ACT_ESCAPE_AIR, SM_ESCAPE_AIR, current_x, current_y)
+    seed["char_id"][0, :2] = np.uint8(CHAR_FOX)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["ground_id"][0, 0] = np.uint16(floor_id)
+    seed["seed_prev_action_id"][0, 0] = np.uint16(prev_action)
+    seed["seed_prev_action_frame"][0, 0] = np.int16(12)
+    seed["action_frame"][0, 0] = np.int16(1)
+    seed["anim_frame_f32"][0, 0] = np.float32(1.0)
+    seed["speed_air_x_self"][0, 0] = np.float32(-1.0 if side == "right" else 1.0)
+    seed["speed_y_self"][0, 0] = np.float32(-1.4)
+    seed["mpcoll_wall_kind_seed_u8"][0, 0] = np.uint8(2 if side == "right" else 1)
+    seed["mpcoll_wall_id_seed_u16"][0, 0] = np.uint16(wall_id)
+    seed["facing"][0, 0] = np.uint8(0 if side == "right" else 1)
+    return seed
+
+
+def _fd_ledge_endpoint(side: str) -> float:
+    import msl_binding
+
+    floor_id = 2 if side == "right" else 0
+    floor = msl_binding.stage_floor_segment(STAGE_FD, floor_id)
+    assert int(floor["is_ledge"]) == 1
+    return float(floor["x1"] if side == "right" else floor["x0"])
+
+
+def test_fd_fall_escapeair_adjacent_ledge_wall_requires_live_runtime_provenance() -> None:
+    # Fall-family IASA can enter EscapeAir before the frame's collision callback. Source
+    # EscapeAir_Coll consumes live mpCollPrev wall/floor provenance; a restored public wall id is
+    # not enough to publish FD's adjacent ledge wall.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_IASA_Inner
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+    # refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_800471F8,mpColl_80046904}
+    endpoint_x = _fd_ledge_endpoint("right")
+    seed = _fd_fall_escapeair_ledge_seed(side="right", current_x=endpoint_x - 0.05, current_y=-8.0)
+    seed["action_frame"][0, 0] = np.int16(0)
+    seed["anim_frame_f32"][0, 0] = np.float32(0.0)
+    seed["speed_air_x_self"][0, 0] = np.float32(0.0)
+
+    out, contacts, _colldata = _step_once_with_contacts_and_colldata(
+        seed,
+        wall_ceil_runtime=(0, endpoint_x + 0.05, -8.0, True),
+        prev_action_runtime=(0, ACT_FALL),
+    )
+
+    assert int(out["action_id"][0]) == ACT_ESCAPE_AIR
+    assert int(contacts["wall_kind"][0]) == 2
+    assert int(contacts["wall_id"][0]) == 9
+    assert int(contacts["coll_env_flags"][0]) & COLLIDE_RIGHT_WALL_MASK
+
+    stale_seed = _fd_fall_escapeair_ledge_seed(
+        side="right", current_x=endpoint_x - 0.05, current_y=-8.0
+    )
+    stale_seed["action_frame"][0, 0] = np.int16(0)
+    stale_seed["anim_frame_f32"][0, 0] = np.float32(0.0)
+    stale_seed["speed_air_x_self"][0, 0] = np.float32(0.0)
+    stale_out, stale_contacts, _stale_colldata = _step_once_with_contacts_and_colldata(
+        stale_seed,
+        wall_ceil_runtime=(0, endpoint_x + 0.05, -8.0, False),
+        prev_action_runtime=(0, ACT_FALL),
+    )
+
+    assert int(stale_out["action_id"][0]) == ACT_ESCAPE_AIR
+    assert int(stale_contacts["wall_kind"][0]) == 0
+    assert int(stale_contacts["coll_env_flags"][0]) & COLLIDE_RIGHT_WALL_MASK == 0
+
+
+def test_fd_fall_escapeair_adjacent_ledge_wall_has_left_mirror() -> None:
+    # Same Fall -> EscapeAir source owner, mirrored through MSLSTG01's left-wall adjacency.
+    endpoint_x = _fd_ledge_endpoint("left")
+    seed = _fd_fall_escapeair_ledge_seed(side="left", current_x=endpoint_x + 0.05, current_y=-8.0)
+    seed["action_frame"][0, 0] = np.int16(0)
+    seed["anim_frame_f32"][0, 0] = np.float32(0.0)
+    seed["speed_air_x_self"][0, 0] = np.float32(0.0)
+
+    _out, contacts, _colldata = _step_once_with_contacts_and_colldata(
+        seed,
+        wall_ceil_runtime=(0, endpoint_x - 0.05, -8.0, True),
+        prev_action_runtime=(0, ACT_FALL),
+    )
+
+    assert int(contacts["wall_kind"][0]) == 1
+    assert int(contacts["wall_id"][0]) == 11
+    assert int(contacts["coll_env_flags"][0]) & COLLIDE_LEFT_WALL_MASK
+
+
+@pytest.mark.parametrize("prev_action", [ACT_JUMP_AERIAL_F, ACT_KNEE_BEND])
+def test_fd_jump_and_kneebend_escapeair_do_not_use_fall_adjacent_ledge_wall_owner(
+    prev_action: int,
+) -> None:
+    endpoint_x = _fd_ledge_endpoint("right")
+    seed = _fd_fall_escapeair_ledge_seed(
+        side="right", prev_action=prev_action, current_x=endpoint_x - 0.05, current_y=-8.0
+    )
+    seed["action_frame"][0, 0] = np.int16(0)
+    seed["anim_frame_f32"][0, 0] = np.float32(0.0)
+    seed["speed_air_x_self"][0, 0] = np.float32(0.0)
+
+    _out, contacts, _colldata = _step_once_with_contacts_and_colldata(
+        seed,
+        wall_ceil_runtime=(0, endpoint_x + 0.05, -8.0, True),
+        prev_action_runtime=(0, prev_action),
+    )
+
+    assert int(contacts["wall_kind"][0]) == 0
+    assert int(contacts["coll_env_flags"][0]) & COLLIDE_RIGHT_WALL_MASK == 0
+
+
+def test_fd_fall_escapeair_adjacent_ledge_wall_rejects_wrong_carried_floor_and_wall() -> None:
+    endpoint_x = _fd_ledge_endpoint("right")
+    wrong_floor = _fd_fall_escapeair_ledge_seed(
+        side="right", floor_id=1, current_x=endpoint_x - 0.05, current_y=-8.0
+    )
+    wrong_floor["action_frame"][0, 0] = np.int16(0)
+    wrong_floor["anim_frame_f32"][0, 0] = np.float32(0.0)
+    wrong_floor["speed_air_x_self"][0, 0] = np.float32(0.0)
+    _out, contacts, _colldata = _step_once_with_contacts_and_colldata(
+        wrong_floor,
+        wall_ceil_runtime=(0, endpoint_x + 0.05, -8.0, True),
+        prev_action_runtime=(0, ACT_FALL),
+    )
+    assert int(contacts["wall_kind"][0]) == 0
+
+    wrong_wall = _fd_fall_escapeair_ledge_seed(
+        side="right", wall_id=10, current_x=endpoint_x - 0.05, current_y=-8.0
+    )
+    wrong_wall["action_frame"][0, 0] = np.int16(0)
+    wrong_wall["anim_frame_f32"][0, 0] = np.float32(0.0)
+    wrong_wall["speed_air_x_self"][0, 0] = np.float32(0.0)
+    _out, contacts, _colldata = _step_once_with_contacts_and_colldata(
+        wrong_wall,
+        wall_ceil_runtime=(0, endpoint_x + 0.05, -8.0, True),
+        prev_action_runtime=(0, ACT_FALL),
+    )
+    assert int(contacts["wall_kind"][0]) == 0
+
+    wrong_side = _fd_fall_escapeair_ledge_seed(
+        side="right", current_x=endpoint_x - 0.05, current_y=-8.0
+    )
+    wrong_side["action_frame"][0, 0] = np.int16(0)
+    wrong_side["anim_frame_f32"][0, 0] = np.float32(0.0)
+    wrong_side["speed_air_x_self"][0, 0] = np.float32(0.0)
+    wrong_side["mpcoll_wall_kind_seed_u8"][0, 0] = np.uint8(1)
+    _out, contacts, _colldata = _step_once_with_contacts_and_colldata(
+        wrong_side,
+        wall_ceil_runtime=(0, endpoint_x + 0.05, -8.0, True),
+        prev_action_runtime=(0, ACT_FALL),
+    )
+    assert int(contacts["wall_kind"][0]) == 0
+
+
+def test_fd_fall_escapeair_endpoint_floor_handoff_uses_runtime_floor_sweep_tolerance() -> None:
+    # The floor half of the same source path goes through mpColl_80044628_Floor and
+    # mpLineIntersectionH's endpoint tolerance. A live previous bottom/root point just over the FD
+    # ledge endpoint can land on the carried terminal floor; a restored floor id cannot.
+    #
+    # refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_800471F8,mpColl_80044628_Floor}
+    # refs/melee/src/melee/mp/mplib.c::mpLineIntersectionH
+    endpoint_x = _fd_ledge_endpoint("right")
+    seed = _fd_fall_escapeair_ledge_seed(
+        side="right", current_x=endpoint_x - 0.03, current_y=-2.5
+    )
+    seed["action_frame"][0, 0] = np.int16(0)
+    seed["anim_frame_f32"][0, 0] = np.float32(0.0)
+    seed["speed_y_self"][0, 0] = np.float32(-0.2)
+
+    out, _contacts, colldata = _step_once_with_contacts_and_colldata(
+        seed,
+        floor_sweep_runtime=(0, endpoint_x + 0.05, 0.0001, True),
+        prev_action_runtime=(0, ACT_FALL),
+    )
+
+    assert int(out["action_id"][0]) == ACT_LANDING_FALL_SPECIAL
+    assert int(out["on_ground"][0]) == 1
+    assert int(out["ground_id"][0]) == 2
+    assert int(colldata["floor_result_valid"][0]) == 1
+    assert int(colldata["floor_result_mode"][0]) == FLOOR_MODE_BOTTOM_SWEEP
+    assert float(out["pos_y"][0]) == pytest.approx(0.0001, abs=2e-4)
+
+    stale_seed = _fd_fall_escapeair_ledge_seed(
+        side="right", current_x=endpoint_x - 0.03, current_y=-2.5
+    )
+    stale_seed["action_frame"][0, 0] = np.int16(0)
+    stale_seed["anim_frame_f32"][0, 0] = np.float32(0.0)
+    stale_seed["speed_y_self"][0, 0] = np.float32(-0.2)
+    stale_out, _stale_contacts, stale_colldata = _step_once_with_contacts_and_colldata(
+        stale_seed,
+        floor_sweep_runtime=(0, endpoint_x + 0.05, 0.0001, False),
+        prev_action_runtime=(0, ACT_FALL),
+    )
+
+    assert int(stale_out["action_id"][0]) == ACT_ESCAPE_AIR
+    assert int(stale_out["on_ground"][0]) == 0
+    assert int(stale_colldata["floor_result_valid"][0]) == 0
+
+
+@pytest.mark.parametrize("prev_action", [ACT_JUMP_AERIAL_F, ACT_KNEE_BEND])
+def test_fd_jump_and_kneebend_escapeair_do_not_use_fall_endpoint_floor_owner(
+    prev_action: int,
+) -> None:
+    endpoint_x = _fd_ledge_endpoint("right")
+    seed = _fd_fall_escapeair_ledge_seed(
+        side="right", prev_action=prev_action, current_x=endpoint_x - 0.03, current_y=-2.5
+    )
+    seed["action_frame"][0, 0] = np.int16(0)
+    seed["anim_frame_f32"][0, 0] = np.float32(0.0)
+    seed["speed_y_self"][0, 0] = np.float32(-0.2)
+
+    out, _contacts, colldata = _step_once_with_contacts_and_colldata(
+        seed,
+        floor_sweep_runtime=(0, endpoint_x + 0.05, 0.0001, True),
+        prev_action_runtime=(0, prev_action),
+    )
+
+    assert int(out["action_id"][0]) == ACT_ESCAPE_AIR
+    assert int(out["on_ground"][0]) == 0
+    assert int(colldata["floor_result_valid"][0]) == 0
+
+
+def test_fd_fall_escapeair_endpoint_floor_handoff_rejects_offspan_and_wrong_floor() -> None:
+    endpoint_x = _fd_ledge_endpoint("right")
+    offspan_seed = _fd_fall_escapeair_ledge_seed(
+        side="right", current_x=endpoint_x + 0.35, current_y=-2.5
+    )
+    offspan_seed["action_frame"][0, 0] = np.int16(0)
+    offspan_seed["anim_frame_f32"][0, 0] = np.float32(0.0)
+    offspan_seed["speed_air_x_self"][0, 0] = np.float32(0.0)
+    offspan_seed["speed_y_self"][0, 0] = np.float32(-0.2)
+    out, _contacts, colldata = _step_once_with_contacts_and_colldata(
+        offspan_seed,
+        floor_sweep_runtime=(0, endpoint_x + 0.05, 0.0001, True),
+        prev_action_runtime=(0, ACT_FALL),
+    )
+    assert int(out["action_id"][0]) == ACT_ESCAPE_AIR
+    assert int(colldata["floor_result_valid"][0]) == 0
+
+    wrong_floor_seed = _fd_fall_escapeair_ledge_seed(
+        side="right", floor_id=1, current_x=endpoint_x - 0.03, current_y=-2.5
+    )
+    wrong_floor_seed["action_frame"][0, 0] = np.int16(0)
+    wrong_floor_seed["anim_frame_f32"][0, 0] = np.float32(0.0)
+    wrong_floor_seed["speed_y_self"][0, 0] = np.float32(-0.2)
+    out, _contacts, colldata = _step_once_with_contacts_and_colldata(
+        wrong_floor_seed,
+        floor_sweep_runtime=(0, endpoint_x + 0.05, 0.0001, True),
+        prev_action_runtime=(0, ACT_FALL),
+    )
+    assert int(out["action_id"][0]) == ACT_ESCAPE_AIR
+    assert int(colldata["floor_result_valid"][0]) == 0
 
 
 @pytest.mark.integration

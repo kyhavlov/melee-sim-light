@@ -2384,6 +2384,11 @@ int msl_batch_debug_set_escapeair_floor_producer_runtime(MslBatch* batch, int ba
 int msl_batch_debug_set_floor_sweep_prev_runtime(MslBatch* batch, int batch_index, int player_index,
                                                  float pos_x, float pos_y, uint8_t authority);
 
+// Debug-only helper: arm runtime-produced wall/ceiling previous-root provenance for source-owner
+// tests. Normal gameplay writes this lane from Fighter_procMap callback-local mpCollPrev state.
+int msl_batch_debug_set_wall_ceil_prev_runtime(MslBatch* batch, int batch_index, int player_index,
+                                               float pos_x, float pos_y, uint8_t authority);
+
 // Debug-only helper: override fighter root position/facing for fixture replay setup (test-only).
 // Intended for live-viewer/manual repro fixtures whose first-frame root position is part of the
 // captured prefix, not for training/rollouts.

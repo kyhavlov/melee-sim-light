@@ -4004,6 +4004,29 @@ int msl_batch_debug_set_floor_sweep_prev_runtime(MslBatch* batch, int batch_inde
   return 0;
 }
 
+int msl_batch_debug_set_wall_ceil_prev_runtime(MslBatch* batch, int batch_index, int player_index,
+                                               float pos_x, float pos_y, uint8_t authority) {
+  if (batch == NULL || !isfinite(pos_x) || !isfinite(pos_y)) {
+    return EINVAL;
+  }
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return EINVAL;
+  }
+  if (player_index < 0 || player_index >= MSL_MAX_PLAYERS) {
+    return EINVAL;
+  }
+  const size_t idx = msl_idx_player(batch_index, player_index);
+  // Debug-only source-authority test hook. Runtime normally promotes this from the live
+  // Fighter_procMap/mpCollPrev callback-local root before wall/ceiling collision; tests use it to
+  // prove wall handoff rejects restored CollData wall ids without live source provenance.
+  // refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_80046904}
+  // refs/melee/src/melee/ft/fighter.c::Fighter_procMap
+  batch->state.coll_wall_ceil_prev_pos_x[idx] = pos_x;
+  batch->state.coll_wall_ceil_prev_pos_y[idx] = pos_y;
+  batch->state.coll_wall_ceil_prev_pos_valid[idx] = authority ? 1u : 0u;
+  return 0;
+}
+
 int msl_batch_debug_set_player_root(MslBatch* batch, int batch_index, int player_index, float pos_x,
                                     float pos_y, uint8_t facing) {
   if (batch == NULL || !isfinite(pos_x) || !isfinite(pos_y)) {
