@@ -3777,9 +3777,18 @@ int msl_batch_debug_write_colldata_ecb(const MslBatch* batch, uint8_t* out_bytes
           batch->state.damage_hitlag_downward_sdi_consumed[idx];
       out->tilt_timer_y_frame_start[p] = batch->state.tilt_timer_y_frame_start[idx];
       out->tilt_timer_y[p] = batch->state.tilt_timer_y[idx];
-      out->floor_result_segment_id[p] = batch->state.coll_floor_result_segment_id[idx];
+      out->ledge_side[p] = batch->state.ledge_side[idx];
+      out->ledge_cooldown[p] = batch->state.ledge_cooldown[idx];
+      out->cliff_ledge_floor_segment_seeded[p] = batch->state.cliff_ledge_floor_segment_seeded[idx];
+      out->specialhi_rotate_model_action[p] =
+          msl_specialhi_rotate_model_action(batch->state.action_id[idx]) ? 1u : 0u;
+      out->specialhi_rotate_model_valid[p] =
+          msl_specialhi_rotate_model_get(batch, idx, &out->specialhi_rotate_model[p]) ? 1u : 0u;
+
       out->floor_probe_reject_bits[p] = batch->state.coll_floor_probe_reject_bits[idx];
       out->floor_probe_source_phases[p] = batch->state.coll_floor_probe_source_phases[idx];
+      out->floor_result_segment_id[p] = batch->state.coll_floor_result_segment_id[idx];
+      out->cliff_ledge_floor_segment_id[p] = batch->state.cliff_ledge_floor_segment_id[idx];
       out->floor_probe_carried_segment_id[p] =
           batch->state.coll_floor_probe_carried_segment_id[idx];
       out->floor_probe_candidate_segment_id[p] =
@@ -3846,6 +3855,25 @@ int msl_batch_debug_write_colldata_ecb(const MslBatch* batch, uint8_t* out_bytes
       out->floor_sweep_prev_pos_y[p] = batch->state.floor_sweep_prev_pos_y[idx];
       out->last_pos_x[p] = batch->state.coll_last_pos_x[idx];
       out->last_pos_y[p] = batch->state.coll_last_pos_y[idx];
+      if (out->specialhi_rotate_model_action[p] != 0u && out->current_valid[p] != 0u) {
+        // Scanner/debug packet for source `mpColl_LoadECB_JObj` / SpecialHi rotated collision
+        // state. The gameplay owner writes CollData ECB extents; this only publishes the
+        // callback-local collision body so root-only stage-body checks can distinguish real
+        // penetration from legal rotated/JObj ECB provenance.
+        // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_JObj,mpCollInterpolateECB}
+        // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFox_SpecialHi_RotateModel
+        const float pos_x = batch->state.pos_x[idx];
+        const float pos_y = batch->state.pos_y[idx];
+        out->specialhi_collision_ecb_valid[p] = 1u;
+        out->specialhi_ecb_bottom_x[p] = pos_x;
+        out->specialhi_ecb_bottom_y[p] = pos_y + out->current_bottom_rel_y[p];
+        out->specialhi_ecb_top_x[p] = pos_x;
+        out->specialhi_ecb_top_y[p] = pos_y + out->current_top_rel_y[p];
+        out->specialhi_ecb_left_x[p] = pos_x + out->current_left_rel_x[p];
+        out->specialhi_ecb_left_y[p] = pos_y + out->current_side_rel_y[p];
+        out->specialhi_ecb_right_x[p] = pos_x + out->current_right_rel_x[p];
+        out->specialhi_ecb_right_y[p] = pos_y + out->current_side_rel_y[p];
+      }
     }
   }
   return 0;

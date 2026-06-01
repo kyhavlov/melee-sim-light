@@ -14,11 +14,13 @@ ACT_ESCAPE_AIR = 0x00EC
 ACT_GUARD = 0x00B3
 ACT_PASS = 0x00F4
 ACT_ATTACK_AIR_N = 0x0041
+ACT_FX_SPECIAL_HI_FALL = 0x0166
 
 SM_WAIT1_0 = 2
 SM_FALL = 20
 SM_ATTACK_11 = 46
 SM_ESCAPE_AIR = 44
+SM_FX_SPECIAL_HI_FALL = 311
 
 CHAR_FOX = 1
 STAGE_FD = 32
@@ -97,9 +99,16 @@ def _colldata_ecb_dtype() -> np.dtype:
             ("damage_hitlag_downward_sdi_consumed", ("u1", (4,))),
             ("tilt_timer_y_frame_start", ("u1", (4,))),
             ("tilt_timer_y", ("u1", (4,))),
-            ("floor_result_segment_id", ("<u2", (4,))),
+            ("ledge_side", ("i1", (4,))),
+            ("ledge_cooldown", ("u1", (4,))),
+            ("cliff_ledge_floor_segment_seeded", ("u1", (4,))),
+            ("specialhi_rotate_model_valid", ("u1", (4,))),
+            ("specialhi_rotate_model_action", ("u1", (4,))),
+            ("specialhi_collision_ecb_valid", ("u1", (4,))),
             ("floor_probe_reject_bits", ("<u8", (4,))),
             ("floor_probe_source_phases", ("<u4", (4,))),
+            ("floor_result_segment_id", ("<u2", (4,))),
+            ("cliff_ledge_floor_segment_id", ("<u2", (4,))),
             ("floor_probe_carried_segment_id", ("<u2", (4,))),
             ("floor_probe_candidate_segment_id", ("<u2", (4,))),
             ("floor_probe_projected_segment_id", ("<u2", (4,))),
@@ -151,6 +160,15 @@ def _colldata_ecb_dtype() -> np.dtype:
             ("floor_sweep_prev_pos_y", ("<f4", (4,))),
             ("last_pos_x", ("<f4", (4,))),
             ("last_pos_y", ("<f4", (4,))),
+            ("specialhi_rotate_model", ("<f4", (4,))),
+            ("specialhi_ecb_bottom_x", ("<f4", (4,))),
+            ("specialhi_ecb_bottom_y", ("<f4", (4,))),
+            ("specialhi_ecb_top_x", ("<f4", (4,))),
+            ("specialhi_ecb_top_y", ("<f4", (4,))),
+            ("specialhi_ecb_left_x", ("<f4", (4,))),
+            ("specialhi_ecb_left_y", ("<f4", (4,))),
+            ("specialhi_ecb_right_x", ("<f4", (4,))),
+            ("specialhi_ecb_right_y", ("<f4", (4,))),
             ("floor_speed_x", ("<f4", (4,))),
             ("floor_speed_y", ("<f4", (4,))),
             ("left_wall_speed_x", ("<f4", (4,))),
@@ -1053,6 +1071,59 @@ def test_colldata_last_pos_initializes_from_root_without_action_routing() -> Non
         snap = out.view(dtype).reshape((1,))[0]
         assert float(snap["last_pos_x"][0]) == pytest.approx(22.5)
         assert float(snap["last_pos_y"][0]) == pytest.approx(44.5)
+    finally:
+        msl_binding.destroy(handle)
+
+
+def test_colldata_debug_exports_cliff_and_specialhi_source_provenance() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    dtype = _colldata_ecb_dtype()
+    assert int(sizes["colldata_ecb"]) == dtype.itemsize
+
+    seed = _seed_base(STAGE_YOSHI, ACT_ESCAPE_AIR, SM_ESCAPE_AIR, 34.0, -15.0)
+    seed["ledge_cooldown"][0, 0] = np.uint8(21)
+    seed["cliff_ledge_floor_segment_id_u16"][0, 0] = np.uint16(6)
+    seed["specialhi_rotate_model_valid_u8"][0, 0] = np.uint8(0)
+    handle = msl_binding.init(batch_size=1, num_players=2)
+    out = np.zeros((1, int(sizes["colldata_ecb"])), dtype=np.uint8)
+    try:
+        msl_binding.reseed_seed(handle, seed.view(np.uint8).reshape((1, int(sizes["seed"]))))
+        msl_binding.debug_write_colldata_ecb(handle, out)
+        snap = out.view(dtype).reshape((1,))[0]
+        assert int(snap["ledge_cooldown"][0]) == 21
+        assert int(snap["cliff_ledge_floor_segment_id"][0]) == 6
+        assert int(snap["cliff_ledge_floor_segment_seeded"][0]) == 1
+
+        specialhi = _seed_base(STAGE_FOD, ACT_FX_SPECIAL_HI_FALL, SM_FX_SPECIAL_HI_FALL, 0.0, -20.0)
+        specialhi["action_frame"][0, 0] = np.int16(10)
+        specialhi["anim_frame_f32"][0, 0] = np.float32(10.0)
+        specialhi["specialhi_rotate_model_valid_u8"][0, 0] = np.uint8(1)
+        specialhi["specialhi_rotate_model_f32"][0, 0] = np.float32(-0.75)
+        msl_binding.reseed_seed(
+            handle, specialhi.view(np.uint8).reshape((1, int(sizes["seed"])))
+        )
+        msl_binding.debug_write_colldata_ecb(handle, out)
+        snap = out.view(dtype).reshape((1,))[0]
+        assert int(snap["specialhi_rotate_model_action"][0]) == 1
+        assert int(snap["specialhi_rotate_model_valid"][0]) == 1
+        assert float(snap["specialhi_rotate_model"][0]) == pytest.approx(-0.75)
+        assert int(snap["specialhi_collision_ecb_valid"][0]) == 1
+        assert float(snap["specialhi_ecb_bottom_y"][0]) >= -20.0
+        unrot_left, unrot_right, _unrot_min_y, unrot_top = msl_binding.ecb_extents_rel(
+            CHAR_FOX, SM_FX_SPECIAL_HI_FALL, 10
+        )
+        unrot_bottom = msl_binding.ecb_bottom_rel_y(CHAR_FOX, SM_FX_SPECIAL_HI_FALL, 10)
+        # Source `mpColl_LoadECB_JObj` consumes SpecialHi's live FtPart_XRotN/JObj collision ECB,
+        # not public root or fixed ECB extents. The debug packet must expose that hidden collision
+        # body so scanner root-depth rows cannot be recategorized from action id alone.
+        # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFox_SpecialHi_RotateModel
+        # refs/melee/src/melee/mp/mpcoll.c::mpColl_LoadECB_JObj
+        assert float(snap["current_left_rel_x"][0]) != pytest.approx(float(unrot_left))
+        assert float(snap["current_right_rel_x"][0]) != pytest.approx(float(unrot_right))
+        assert float(snap["current_bottom_rel_y"][0]) != pytest.approx(float(unrot_bottom))
+        assert float(snap["current_top_rel_y"][0]) != pytest.approx(float(unrot_top))
     finally:
         msl_binding.destroy(handle)
 

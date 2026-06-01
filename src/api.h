@@ -1882,10 +1882,21 @@ typedef struct MslDebugCollDataEcb {
   uint8_t damage_hitlag_downward_sdi_consumed[MSL_MAX_PLAYERS];
   uint8_t tilt_timer_y_frame_start[MSL_MAX_PLAYERS];
   uint8_t tilt_timer_y[MSL_MAX_PLAYERS];
+  // Scanner/debug-only source provenance for ledge/cliff and SpecialHi rotated ECB owners.
+  // refs/melee/src/melee/ft/ftcliffcommon.c::ftCo_CliffCatch_Phys
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFox_SpecialHi_RotateModel
+  int8_t ledge_side[MSL_MAX_PLAYERS];
+  uint8_t ledge_cooldown[MSL_MAX_PLAYERS];
+  uint8_t cliff_ledge_floor_segment_seeded[MSL_MAX_PLAYERS];
+  uint8_t specialhi_rotate_model_valid[MSL_MAX_PLAYERS];
+  uint8_t specialhi_rotate_model_action[MSL_MAX_PLAYERS];
+  uint8_t specialhi_collision_ecb_valid[MSL_MAX_PLAYERS];
 
-  uint16_t floor_result_segment_id[MSL_MAX_PLAYERS];
   uint64_t floor_probe_reject_bits[MSL_MAX_PLAYERS];
   uint32_t floor_probe_source_phases[MSL_MAX_PLAYERS];
+  uint16_t floor_result_segment_id[MSL_MAX_PLAYERS];
+  uint16_t cliff_ledge_floor_segment_id[MSL_MAX_PLAYERS];
   uint16_t floor_probe_carried_segment_id[MSL_MAX_PLAYERS];
   uint16_t floor_probe_candidate_segment_id[MSL_MAX_PLAYERS];
   uint16_t floor_probe_projected_segment_id[MSL_MAX_PLAYERS];
@@ -1946,6 +1957,15 @@ typedef struct MslDebugCollDataEcb {
   float floor_sweep_prev_pos_y[MSL_MAX_PLAYERS];
   float last_pos_x[MSL_MAX_PLAYERS];
   float last_pos_y[MSL_MAX_PLAYERS];
+  float specialhi_rotate_model[MSL_MAX_PLAYERS];
+  float specialhi_ecb_bottom_x[MSL_MAX_PLAYERS];
+  float specialhi_ecb_bottom_y[MSL_MAX_PLAYERS];
+  float specialhi_ecb_top_x[MSL_MAX_PLAYERS];
+  float specialhi_ecb_top_y[MSL_MAX_PLAYERS];
+  float specialhi_ecb_left_x[MSL_MAX_PLAYERS];
+  float specialhi_ecb_left_y[MSL_MAX_PLAYERS];
+  float specialhi_ecb_right_x[MSL_MAX_PLAYERS];
+  float specialhi_ecb_right_y[MSL_MAX_PLAYERS];
   float floor_speed_x[MSL_MAX_PLAYERS];
   float floor_speed_y[MSL_MAX_PLAYERS];
   float left_wall_speed_x[MSL_MAX_PLAYERS];
