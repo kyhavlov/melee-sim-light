@@ -6800,17 +6800,17 @@ def test_manual_stage_clip_traces_roll_out_to_collision_resolution_from_match_st
 def test_attackairlw_transformed_platform_owner_guards_stay_source_shaped() -> None:
     source = (Path(__file__).resolve().parents[1] / "src/mpcoll_ground.c").read_text(encoding="utf-8")
     match = re.search(
-        r"const uint8_t final_attackairlw_live_platform_publication_owner\s*="
-        r"\s*(.*?)\?\s*1u\s*:\s*0u;",
+        r"static inline uint8_t mpcoll_attackairlw_air471f8_live_platform_publication_owner"
+        r"\s*\([^)]*\)\s*\{(.*?)\n\}",
         source,
         flags=re.S,
     )
     assert match is not None
     final_body = match.group(1)
     assert "MSL_ACT_ATTACK_AIR_LW" in final_body
-    assert "final_ground_line_idx >= 0" in final_body
-    assert "resolved_line_has_platform_transform" in final_body
-    assert "final_attackair_second_create_frame" in final_body
+    assert "floor->line_idx >= 0" in final_body
+    assert "floor->has_platform_transform" in final_body
+    assert "second_create_frame" in final_body
     assert "skip_platform_segment_i" in final_body
     assert "floor_sweep_prev_source_owned" in final_body
     assert "mpcoll_floor_sweep_prev_root_is_runtime_owned" in final_body
@@ -6822,6 +6822,7 @@ def test_attackairlw_transformed_platform_owner_guards_stay_source_shaped() -> N
     assert "ftCo_AttackAir.c::ftCo_AttackAir_Coll" in source_window
     assert "mpColl_800471F8" in source_window
     assert "mpColl_80044628_Floor" in source_window
+    assert "!final_attackairlw_live_platform_publication_owner" in source
 
 
 def _fd_fall_escapeair_ledge_seed(

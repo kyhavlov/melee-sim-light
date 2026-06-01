@@ -343,6 +343,18 @@ typedef struct MslMpcollFloorPublication {
   float cur_bottom_y;
 } MslMpcollFloorPublication;
 
+typedef struct MslMpcollFinalFloorLineState {
+  int line_idx;
+  const MslStageFloorLine* line;
+  uint8_t has_platform_transform;
+  uint8_t has_height_platform_transform;
+  uint8_t height_same_step_contact;
+  uint8_t height_live_scheduler_source;
+  uint8_t height_current_source;
+  uint8_t line_y_valid;
+  float line_y;
+} MslMpcollFinalFloorLineState;
+
 typedef struct MslMpcollFloorRejectPacket {
   uint64_t bits;
   uint32_t source_phases;
@@ -3299,6 +3311,75 @@ static inline uint8_t action_uses_first_phase_attackair_platform_ecb_owner(uint8
 static inline uint8_t action_uses_late_attackair_platform_ecb_owner(uint8_t char_id,
                                                                     uint16_t action_id) {
   return attackair_platform_ecb_owner(char_id, action_id).late;
+}
+
+static inline MslMpcollFinalFloorLineState mpcoll_final_floor_line_state(
+    const MslBatch* batch, int bi, const MslStageFloorGraph* g, uint32_t stage_id,
+    uint16_t ground_id, float root_x) {
+  MslMpcollFinalFloorLineState out = {
+      .line_idx = stage_collision_floor_line_index(stage_id, ground_id),
+      .line = NULL,
+      .has_platform_transform = 0u,
+      .has_height_platform_transform = 0u,
+      .height_same_step_contact = 0u,
+      .height_live_scheduler_source = 0u,
+      .height_current_source = 0u,
+      .line_y_valid = 0u,
+      .line_y = 0.0f,
+  };
+  if (g == NULL || out.line_idx < 0 || (size_t)out.line_idx >= g->line_count) {
+    return out;
+  }
+
+  out.line = &g->lines[(size_t)out.line_idx];
+  out.has_platform_transform =
+      (out.line->platform_transform_kind != MSL_STAGE_PLATFORM_TRANSFORM_NONE) ? 1u : 0u;
+  out.has_height_platform_transform =
+      (out.line->platform_transform_kind == MSL_STAGE_PLATFORM_TRANSFORM_HEIGHT) ? 1u : 0u;
+  if (out.has_height_platform_transform) {
+    const uint8_t source_trusted =
+        stage_collision_floor_line_height_platform_state_is_source_trusted(batch, bi, ground_id);
+    if (source_trusted) {
+      out.height_same_step_contact =
+          stage_height_platform_line_has_same_step_contact_source(batch, bi, stage_id, ground_id);
+    }
+    out.height_live_scheduler_source =
+        stage_height_platform_line_has_live_scheduler_source(batch, bi, stage_id, ground_id);
+    out.height_current_source =
+        stage_height_platform_line_has_current_source(batch, bi, stage_id, ground_id);
+  }
+  out.line_y_valid =
+      floor_line_y_at_x_for_env(batch, bi, g, out.line_idx, root_x, &out.line_y) ? 1u : 0u;
+  return out;
+}
+
+static inline uint8_t mpcoll_attackairlw_air471f8_live_platform_publication_owner(
+    const MslBatch* batch, size_t idx, const MslMpcollFinalFloorLineState* floor,
+    uint16_t action_id, int16_t second_create_frame, uint16_t skip_platform_segment_i) {
+  if (batch == NULL || floor == NULL || floor->line == NULL) {
+    return 0u;
+  }
+  // AttackAirLw_Coll reaches final AIR_471F8 publication after the floor producer has accepted the
+  // transformed platform line. This is source authority from the callback-local floor producer, not
+  // carried `ground_id`: old ECB-only/floor-skip suppression must not reclassify the accepted floor.
+  //
+  // Bound this to the callback pass before/at the authored second create_hitbox command; later DAir
+  // frames retain the existing transformed-platform pass/floor-skip owner.
+  //
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
+  // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+  // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor}
+  return (uint8_t)((action_id == (uint16_t)MSL_ACT_ATTACK_AIR_LW &&
+                    batch->state.action_id[idx] == (uint16_t)MSL_ACT_ATTACK_AIR_LW &&
+                    floor->line_idx >= 0 && floor->has_platform_transform &&
+                    second_create_frame >= 0 &&
+                    batch->state.action_frame[idx] <= (uint16_t)second_create_frame &&
+                    !(skip_platform_segment_i != 0xFFFFu &&
+                      floor->line->segment_i == skip_platform_segment_i) &&
+                    batch->state.floor_sweep_prev_source_owned[idx] != 0u &&
+                    mpcoll_floor_sweep_prev_root_is_runtime_owned(batch, idx))
+                       ? 1u
+                       : 0u);
 }
 
 static inline uint8_t action_uses_sideb_air_ft_check_ground_and_ledge_floor_coll(
@@ -12886,68 +12967,22 @@ void mpcoll_ground_apply(MslBatch* batch) {
           .cur_bottom_y = cur_bottom_y,
       };
       if (floor_publication.on_ground) {
-        const int final_ground_line_idx = stage_collision_floor_line_index(stage_id, ground_id);
-        const MslStageFloorLine* final_ground_line =
-            (final_ground_line_idx >= 0 && (size_t)final_ground_line_idx < g->line_count)
-                ? &g->lines[(size_t)final_ground_line_idx]
-                : NULL;
-        const uint8_t resolved_line_has_platform_transform =
-            (final_ground_line != NULL &&
-             final_ground_line->platform_transform_kind != MSL_STAGE_PLATFORM_TRANSFORM_NONE)
-                ? 1u
-                : 0u;
+        const MslMpcollFinalFloorLineState final_floor =
+            mpcoll_final_floor_line_state(batch, bi, g, stage_id, ground_id, x);
+        const int final_ground_line_idx = final_floor.line_idx;
+        const uint8_t resolved_line_has_platform_transform = final_floor.has_platform_transform;
+        const uint8_t resolved_line_has_height_platform_transform =
+            final_floor.has_height_platform_transform;
         const int16_t final_attackair_second_create_frame =
             move_tables_attackair_second_create_hitbox_frame(char_id, action_id);
         const uint8_t final_attackairlw_live_platform_publication_owner =
-            // AttackAirLw_Coll reaches this final AIR_471F8 publication after the floor producer
-            // has accepted the transformed platform line. Do not reclassify that source-owned
-            // platform floor as the older ECB-only/floor-skip owner: the next frame otherwise
-            // falls through FoD's side platform and lands on the main floor.
-            //
-            // Bound this to the callback pass before/at the authored second create_hitbox command:
-            // later DAir frames retain the existing transformed-platform pass/floor-skip owner.
-            //
-            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
-            // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
-            // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor}
-            (action_id == (uint16_t)MSL_ACT_ATTACK_AIR_LW &&
-             batch->state.action_id[idx] == (uint16_t)MSL_ACT_ATTACK_AIR_LW &&
-             final_ground_line_idx >= 0 && resolved_line_has_platform_transform &&
-             final_attackair_second_create_frame >= 0 &&
-             batch->state.action_frame[idx] <= (uint16_t)final_attackair_second_create_frame &&
-             !(skip_platform_segment_i != 0xFFFFu &&
-               g->lines[(size_t)final_ground_line_idx].segment_i == skip_platform_segment_i) &&
-             batch->state.floor_sweep_prev_source_owned[idx] != 0u &&
-             mpcoll_floor_sweep_prev_root_is_runtime_owned(batch, idx))
-                ? 1u
-                : 0u;
-        const uint8_t resolved_line_has_height_platform_transform =
-            (final_ground_line != NULL &&
-             final_ground_line->platform_transform_kind == MSL_STAGE_PLATFORM_TRANSFORM_HEIGHT)
-                ? 1u
-                : 0u;
-        const uint8_t resolved_line_height_platform_source_trusted =
-            (resolved_line_has_height_platform_transform &&
-             stage_collision_floor_line_height_platform_state_is_source_trusted(batch, bi,
-                                                                                ground_id))
-                ? 1u
-                : 0u;
-        uint8_t resolved_line_height_platform_same_step_contact = 0u;
-        if (resolved_line_height_platform_source_trusted) {
-          uint8_t platform_id = 0u;
-          if (stage_collision_floor_line_platform_transform_id(stage_id, ground_id, &platform_id) &&
-              platform_id < 2u &&
-              (batch->state
-                   .stage_fod_platform_height_source[(size_t)bi * 2u + (size_t)platform_id] &
-               (uint8_t)MSL_FOD_PLATFORM_HEIGHT_SOURCE_SAME_STEP_CONTACT) != 0u) {
-            resolved_line_height_platform_same_step_contact = 1u;
-          }
-        }
+            mpcoll_attackairlw_air471f8_live_platform_publication_owner(
+                batch, idx, &final_floor, action_id, final_attackair_second_create_frame,
+                skip_platform_segment_i);
+        const uint8_t resolved_line_height_platform_same_step_contact =
+            final_floor.height_same_step_contact;
         const uint8_t resolved_line_height_platform_live_scheduler_source =
-            (resolved_line_has_height_platform_transform &&
-             stage_height_platform_line_has_live_scheduler_source(batch, bi, stage_id, ground_id))
-                ? 1u
-                : 0u;
+            final_floor.height_live_scheduler_source;
         const uint8_t resolved_specialhi_height_platform_current_source =
             (resolved_line_height_platform_same_step_contact ||
              resolved_line_height_platform_live_scheduler_source)
@@ -13085,13 +13120,8 @@ void mpcoll_ground_apply(MslBatch* batch) {
              !stage_collision_floor_line_is_platform(stage_id, ground_id))
                 ? 1u
                 : 0u;
-        float jump_transformed_platform_line_y = 0.0f;
-        const uint8_t jump_transformed_platform_line_valid =
-            (final_ground_line_idx >= 0 &&
-             floor_line_y_at_x_for_env(batch, bi, g, final_ground_line_idx, x,
-                                       &jump_transformed_platform_line_y))
-                ? 1u
-                : 0u;
+        const float jump_transformed_platform_line_y = final_floor.line_y;
+        const uint8_t jump_transformed_platform_line_valid = final_floor.line_y_valid;
         const uint8_t transformed_platform_root_crossed_this_frame =
             (jump_transformed_platform_line_valid &&
              prev_y > (jump_transformed_platform_line_y + k_floor_y_bias) &&
@@ -13133,10 +13163,7 @@ void mpcoll_ground_apply(MslBatch* batch) {
                 ? 1u
                 : 0u;
         const uint8_t resolved_line_height_platform_current_source =
-            (resolved_line_has_height_platform_transform &&
-             stage_height_platform_line_has_current_source(batch, bi, stage_id, ground_id))
-                ? 1u
-                : 0u;
+            final_floor.height_current_source;
         const uint8_t final_attackair_transformed_platform_downheld_inspan_pass =
             // Final-publication variant of the strict in-span down-held FoD height-platform
             // AttackAir pass above. Endpoint-extension, same-floor, and current-source contacts
@@ -13146,10 +13173,11 @@ void mpcoll_ground_apply(MslBatch* batch) {
             //
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
             // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor}
-            (final_ground_line_idx >= 0 && resolved_line_has_height_platform_transform &&
+            (final_ground_line_idx >= 0 && final_floor.line != NULL &&
+             resolved_line_has_height_platform_transform &&
              !resolved_line_height_platform_current_source &&
              !resolved_line_height_platform_live_scheduler_source &&
-             g->lines[(size_t)final_ground_line_idx].segment_i != batch->state.ground_id[idx] &&
+             final_floor.line->segment_i != batch->state.ground_id[idx] &&
              floor_x_within_line_segment_strict(batch, bi, g, final_ground_line_idx, x) &&
              platform_pass_input_below_raw_threshold(batch, idx, c))
                 ? 1u
