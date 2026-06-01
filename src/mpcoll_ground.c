@@ -12896,6 +12896,31 @@ void mpcoll_ground_apply(MslBatch* batch) {
              final_ground_line->platform_transform_kind != MSL_STAGE_PLATFORM_TRANSFORM_NONE)
                 ? 1u
                 : 0u;
+        const int16_t final_attackair_second_create_frame =
+            move_tables_attackair_second_create_hitbox_frame(char_id, action_id);
+        const uint8_t final_attackairlw_live_platform_publication_owner =
+            // AttackAirLw_Coll reaches this final AIR_471F8 publication after the floor producer
+            // has accepted the transformed platform line. Do not reclassify that source-owned
+            // platform floor as the older ECB-only/floor-skip owner: the next frame otherwise
+            // falls through FoD's side platform and lands on the main floor.
+            //
+            // Bound this to the callback pass before/at the authored second create_hitbox command:
+            // later DAir frames retain the existing transformed-platform pass/floor-skip owner.
+            //
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
+            // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+            // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor}
+            (action_id == (uint16_t)MSL_ACT_ATTACK_AIR_LW &&
+             batch->state.action_id[idx] == (uint16_t)MSL_ACT_ATTACK_AIR_LW &&
+             final_ground_line_idx >= 0 && resolved_line_has_platform_transform &&
+             final_attackair_second_create_frame >= 0 &&
+             batch->state.action_frame[idx] <= (uint16_t)final_attackair_second_create_frame &&
+             !(skip_platform_segment_i != 0xFFFFu &&
+               g->lines[(size_t)final_ground_line_idx].segment_i == skip_platform_segment_i) &&
+             batch->state.floor_sweep_prev_source_owned[idx] != 0u &&
+             mpcoll_floor_sweep_prev_root_is_runtime_owned(batch, idx))
+                ? 1u
+                : 0u;
         const uint8_t resolved_line_has_height_platform_transform =
             (final_ground_line != NULL &&
              final_ground_line->platform_transform_kind == MSL_STAGE_PLATFORM_TRANSFORM_HEIGHT)
@@ -13129,8 +13154,6 @@ void mpcoll_ground_apply(MslBatch* batch) {
              platform_pass_input_below_raw_threshold(batch, idx, c))
                 ? 1u
                 : 0u;
-        const int16_t final_attackair_second_create_frame =
-            move_tables_attackair_second_create_hitbox_frame(char_id, action_id);
         const uint8_t final_attackair_height_platform_no_current_first_phase =
             // Final-publication variant of the FoD side-platform current-source boundary above.
             // A named platform height can reconstruct the line, but AttackAir_Coll still needs a
@@ -13189,18 +13212,19 @@ void mpcoll_ground_apply(MslBatch* batch) {
             // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
             // refs/melee/src/melee/mp/mpcoll.c::{
             //   mpColl_800471F8,mpColl_80044628_Floor,mpColl_80044838_Floor}
-            (final_attackair_height_platform_no_current_first_phase ||
-             (final_attackair_transformed_platform_pass_owner_active &&
-              resolved_line_has_height_platform_transform && prev_action_id == action_id &&
-              first_phase_attackair_platform_ecb_owner &&
-              move_tables_attackair_first_hitbox_phase(char_id, action_id,
-                                                       batch->state.anim_frame_f32[idx]) &&
-              jump_transformed_platform_line_valid && y < jump_transformed_platform_line_y &&
-              (final_attackair_transformed_platform_shallow_first_contact ||
-               (jump_transformed_platform_bottom_penetration > k_floor_y_bias &&
-                jump_transformed_platform_bottom_penetration <= k_ecb_vertical_unit &&
-                final_attackair_transformed_platform_prev_below_depth <=
-                    (2.0f * k_ecb_vertical_unit)))))
+            (!final_attackairlw_live_platform_publication_owner &&
+             (final_attackair_height_platform_no_current_first_phase ||
+              (final_attackair_transformed_platform_pass_owner_active &&
+               resolved_line_has_height_platform_transform && prev_action_id == action_id &&
+               first_phase_attackair_platform_ecb_owner &&
+               move_tables_attackair_first_hitbox_phase(char_id, action_id,
+                                                        batch->state.anim_frame_f32[idx]) &&
+               jump_transformed_platform_line_valid && y < jump_transformed_platform_line_y &&
+               (final_attackair_transformed_platform_shallow_first_contact ||
+                (jump_transformed_platform_bottom_penetration > k_floor_y_bias &&
+                 jump_transformed_platform_bottom_penetration <= k_ecb_vertical_unit &&
+                 final_attackair_transformed_platform_prev_below_depth <=
+                     (2.0f * k_ecb_vertical_unit))))))
                 ? 1u
                 : 0u;
         const uint8_t suppress_attackair_transformed_platform_floor_skip_final_land =

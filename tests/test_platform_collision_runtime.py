@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from argparse import Namespace
 from pathlib import Path
 
@@ -95,6 +96,8 @@ ACT_THROW_F = 0x00DB
 ACT_CAPTURE_DAMAGE_HI = 0x00E1
 ACT_FX_SPECIAL_AIR_N_START = 0x0158
 ACT_MISS_FOOT = 0x00FB
+
+MPCOLL_REJECT_ATTACKAIR_TRANSFORMED_PLATFORM_ECB_ONLY = 1 << 11
 
 SM_WAIT1_0 = 2
 SM_TURN = 10
@@ -4335,6 +4338,298 @@ def test_fod_attackair_live_hard_floor_bottom_sweep_over_stale_platform_lands() 
     assert int(no_cross_out["ground_id"][0]) == 0
     assert int(no_cross_colldata["floor_result_valid"][0]) == 0
 
+
+def _seed_fod_attackair_height_platform_crossing(action_id: int, submotion_id: int) -> tuple[np.ndarray, float]:
+    height = np.float32(20.0)
+    platform_y = np.float32(1.125 + float(height) * 0.75)
+    seed = _seed_base(STAGE_FOD, action_id, submotion_id, -35.0, float(platform_y) - 4.0)
+    seed["char_id"][0, 0] = np.uint8(CHAR_FALCO)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["ground_id"][0, 0] = np.uint16(5)
+    seed["seed_prev_action_id"][0, 0] = np.uint16(action_id)
+    seed["action_frame"][0, 0] = np.int16(15)
+    seed["anim_frame_f32"][0, 0] = np.float32(15.0)
+    seed["speed_y_self"][0, 0] = np.float32(-3.5)
+    seed["stage_fod_platform_height_f32"][0, 1] = height
+    seed["stage_fod_platform_height_valid_u8"][0, 1] = np.uint8(1)
+    seed["stage_fod_platform_height_source_u8"][0, 1] = np.uint8(0)
+    seed["floor_sweep_prev_pos_valid_u8"][0, 0] = np.uint8(1)
+    seed["floor_sweep_prev_pos_x_f32"][0, 0] = np.float32(-35.0)
+    seed["floor_sweep_prev_pos_y_f32"][0, 0] = np.float32(float(platform_y) + 2.0)
+    return seed, float(platform_y)
+
+
+def _seed_yoshi_attackair_randall_crossing(
+    action_id: int = ACT_ATTACK_AIR_LW,
+    submotion_id: int = SM_ATTACK_AIR_LW,
+    *,
+    frame_id: int = 477,
+) -> tuple[np.ndarray, float, float, object]:
+    stage = read_mslstg01_v7(Path("data/stages/bin/grst.bin"))
+    path = {(int(rec.line_id), int(rec.frame)): rec for rec in stage.platform_paths}
+    rec = path[(1000, frame_id)]
+    x = 0.5 * (float(rec.x0) + float(rec.x1))
+    y = float(rec.y)
+    seed = _seed_base(STAGE_YOSHI, action_id, submotion_id, x, y - 4.0)
+    seed["char_id"][0, 0] = np.uint8(CHAR_FALCO)
+    seed["frame_id"][0] = np.int32(frame_id)
+    seed["on_ground"][0, 0] = np.uint8(0)
+    seed["ground_id"][0, 0] = np.uint16(5)
+    seed["seed_prev_action_id"][0, 0] = np.uint16(action_id)
+    seed["action_frame"][0, 0] = np.int16(15)
+    seed["anim_frame_f32"][0, 0] = np.float32(15.0)
+    seed["speed_y_self"][0, 0] = np.float32(-3.5)
+    seed["floor_sweep_prev_pos_valid_u8"][0, 0] = np.uint8(1)
+    seed["floor_sweep_prev_pos_x_f32"][0, 0] = np.float32(x)
+    seed["floor_sweep_prev_pos_y_f32"][0, 0] = np.float32(y + 2.0)
+    return seed, x, y, rec
+
+
+def test_attackairlw_runtime_owned_fod_platform_sweep_lands_from_main_floor_provenance() -> None:
+    # AttackAir_Coll -> ft_80082C74 -> mpColl_800471F8 is common to aerial attacks. A live
+    # runtime-owned bottom sweep on FoD's current height-platform line publishes LandingAirLw from
+    # main-floor provenance. AttackAir_Coll uses mpColl_800471F8 without the
+    # ftCo_80096CC8 platform-pass callback, so current down-held stick is not a source reason to
+    # reject a live bottom sweep. A restored/source-seed endpoint without runtime ownership remains
+    # pending to avoid inventing live platform authority from sparse seed geometry.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_80096CC8
+    # data/motion_state/owners/{fox,falco}.bin::MSLMSO01 submotion_id
+    # data/scripts/{fox,falco}.bin::MSLFTSC1 create_hitbox/clear_hitboxes events
+    # refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_800471F8,
+    #   mpColl_80044628_Floor,mpColl_80044838_Floor}
+    action_id = ACT_ATTACK_AIR_LW
+    seed, platform_y = _seed_fod_attackair_height_platform_crossing(
+        action_id, SM_ATTACK_AIR_LW
+    )
+    input_t = _input_bytes()
+    input_view = input_t.view(INPUT_DTYPE).reshape((1,))
+    input_view["p"]["main_y"][0, 0] = np.int8(0)
+    input_view["p"]["c_y"][0, 0] = np.int8(-80)
+
+    out, _contacts, colldata = _step_once_with_contacts_and_colldata(
+        seed,
+        _input_bytes(),
+        input_t,
+        floor_sweep_runtime=(0, -35.0, float(platform_y) + 2.0, True),
+        prev_action_runtime=(0, action_id),
+    )
+
+    assert int(out["action_id"][0]) == ACT_LANDING_AIR_LW
+    assert int(out["on_ground"][0]) == 1
+    assert int(out["ground_id"][0]) == 0
+    assert float(out["pos_y"][0]) == pytest.approx(float(platform_y) + 0.0001, abs=1e-6)
+    assert int(colldata["floor_sweep_prev_runtime_owned"][0]) == 1
+    assert int(colldata["floor_result_valid"][0]) == 1
+    assert int(colldata["floor_result_segment_id"][0]) == 0
+    assert int(colldata["floor_skip_valid"][0]) == 0
+
+    downheld_pass = seed.copy()
+    downheld_input = _input_bytes()
+    downheld_view = downheld_input.view(INPUT_DTYPE).reshape((1,))
+    downheld_view["p"]["main_y"][0, 0] = np.int8(-95)
+    downheld_view["p"]["c_y"][0, 0] = np.int8(0)
+    downheld_out, _contacts_down, downheld_colldata = _step_once_with_contacts_and_colldata(
+        downheld_pass,
+        _input_bytes(),
+        downheld_input,
+        floor_sweep_runtime=(0, -35.0, float(platform_y) + 2.0, True),
+        prev_action_runtime=(0, action_id),
+    )
+
+    assert int(downheld_out["action_id"][0]) == ACT_LANDING_AIR_LW
+    assert int(downheld_out["on_ground"][0]) == 1
+    assert int(downheld_out["ground_id"][0]) == 0
+    assert int(downheld_colldata["floor_result_valid"][0]) == 1
+    assert int(downheld_colldata["floor_result_segment_id"][0]) == 0
+
+    carried_skip = seed.copy()
+    carried_skip["floor_skip_segment_valid_u8"][0, 0] = np.uint8(1)
+    carried_skip["floor_skip_segment_id_u16"][0, 0] = np.uint16(0)
+    carried_skip_out, _contacts2, carried_skip_colldata = _step_once_with_contacts_and_colldata(
+        carried_skip,
+        _input_bytes(),
+        input_t,
+        floor_sweep_runtime=(0, -35.0, float(platform_y) + 2.0, True),
+        prev_action_runtime=(0, action_id),
+    )
+
+    assert int(carried_skip_out["action_id"][0]) == action_id
+    assert int(carried_skip_out["on_ground"][0]) == 0
+    assert int(carried_skip_colldata["floor_result_valid"][0]) == 0
+    assert int(carried_skip_colldata["floor_skip_valid"][0]) == 1
+    assert int(carried_skip_colldata["floor_skip_segment_id"][0]) == 0
+
+
+def test_attackairlw_runtime_owned_randall_sweep_lands_from_main_floor_provenance() -> None:
+    # Same AttackAir_Coll -> mpColl_800471F8 floor producer boundary as the FoD DAir fix, but on
+    # Yoshi's generated Randall path line. Runtime CollData should publish internal segment 1000
+    # while public compare maps it back to raw Yoshi line 0.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
+    # refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor}
+    # refs/melee/src/melee/gr/grstory.c::{grStory_801E3370,grStory_801E33E0}
+    # data/stages/bin/grst.bin::MSLSTG01 platform_transforms(kind=randall)
+    seed, x, randall_y, _rec = _seed_yoshi_attackair_randall_crossing()
+
+    out, _contacts, colldata = _step_once_with_contacts_and_colldata(
+        seed,
+        floor_sweep_runtime=(0, x, randall_y + 2.0, True),
+        prev_action_runtime=(0, ACT_ATTACK_AIR_LW),
+    )
+
+    assert int(out["action_id"][0]) == ACT_LANDING_AIR_LW
+    assert int(out["on_ground"][0]) == 1
+    assert int(out["ground_id"][0]) == 0
+    assert float(out["pos_y"][0]) == pytest.approx(randall_y + 0.0001, abs=1e-5)
+    assert int(colldata["floor_result_valid"][0]) == 1
+    assert int(colldata["floor_result_segment_id"][0]) == 1000
+    assert int(colldata["floor_sweep_prev_runtime_owned"][0]) == 1
+    assert (
+        int(colldata["floor_probe_reject_bits"][0])
+        & MPCOLL_REJECT_ATTACKAIR_TRANSFORMED_PLATFORM_ECB_ONLY
+    ) == 0
+
+
+def test_attackairlw_randall_platform_boundaries_reject_stale_or_invalid_sweeps() -> None:
+    # Randall should not get a looser version of the FoD platform admission. The same-platform
+    # floor-skip owner, off-span sweeps, and no-crossing sweeps stay rejected even though the stage
+    # path packet can reconstruct the generated transformed line.
+    #
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor,mpUpdateFloorSkip}
+    # data/stages/bin/grst.bin::MSLSTG01 platform_path line 1000
+    seed, x, randall_y, rec = _seed_yoshi_attackair_randall_crossing()
+    input_t = _input_bytes()
+
+    carried_skip = seed.copy()
+    carried_skip["floor_skip_segment_valid_u8"][0, 0] = np.uint8(1)
+    carried_skip["floor_skip_segment_id_u16"][0, 0] = np.uint16(1000)
+    carried_skip_out, _contacts, carried_skip_colldata = _step_once_with_contacts_and_colldata(
+        carried_skip,
+        _input_bytes(),
+        input_t,
+        floor_sweep_runtime=(0, x, randall_y + 2.0, True),
+        prev_action_runtime=(0, ACT_ATTACK_AIR_LW),
+    )
+
+    assert int(carried_skip_out["action_id"][0]) == ACT_ATTACK_AIR_LW
+    assert int(carried_skip_out["on_ground"][0]) == 0
+    assert int(carried_skip_colldata["floor_result_valid"][0]) == 0
+
+    offspan_x = float(rec.x1) + 8.0
+    offspan = seed.copy()
+    offspan["pos_x"][0, 0] = np.float32(offspan_x)
+    offspan["floor_sweep_prev_pos_x_f32"][0, 0] = np.float32(offspan_x)
+    offspan_out, _contacts2, offspan_colldata = _step_once_with_contacts_and_colldata(
+        offspan,
+        _input_bytes(),
+        input_t,
+        floor_sweep_runtime=(0, offspan_x, randall_y + 2.0, True),
+        prev_action_runtime=(0, ACT_ATTACK_AIR_LW),
+    )
+
+    assert int(offspan_out["action_id"][0]) == ACT_ATTACK_AIR_LW
+    assert int(offspan_out["on_ground"][0]) == 0
+    assert int(offspan_colldata["floor_result_valid"][0]) == 0
+
+    no_cross = seed.copy()
+    no_cross["pos_y"][0, 0] = np.float32(randall_y + 4.0)
+    no_cross["floor_sweep_prev_pos_y_f32"][0, 0] = np.float32(randall_y + 6.0)
+    no_cross_out, _contacts3, no_cross_colldata = _step_once_with_contacts_and_colldata(
+        no_cross,
+        _input_bytes(),
+        input_t,
+        floor_sweep_runtime=(0, x, randall_y + 6.0, True),
+        prev_action_runtime=(0, ACT_ATTACK_AIR_LW),
+    )
+
+    assert int(no_cross_out["action_id"][0]) == ACT_ATTACK_AIR_LW
+    assert int(no_cross_out["on_ground"][0]) == 0
+    assert int(no_cross_colldata["floor_result_valid"][0]) == 0
+
+
+def test_attackairlw_seed_only_height_platform_crossing_stays_on_floor_skip_owner() -> None:
+    # Falco DAir witness boundary: the source-shaped repair is the live AttackAir_Coll floor sweep,
+    # not a sparse seed/root fallback. Without runtime-owned previous-floor provenance, the same
+    # height-platform crossing stays airborne on the restored platform/floor-skip owner instead of
+    # manufacturing a landing from public geometry.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor}
+    seed, _platform_y = _seed_fod_attackair_height_platform_crossing(
+        ACT_ATTACK_AIR_LW, SM_ATTACK_AIR_LW
+    )
+    seed["pos_x"][0, 0] = np.float32(-70.0)
+    seed["floor_sweep_prev_pos_x_f32"][0, 0] = np.float32(-70.0)
+    seed["floor_sweep_prev_pos_y_f32"][0, 0] = np.float32(seed["pos_y"][0, 0] - 8.0)
+    input_t = _input_bytes()
+    input_view = input_t.view(INPUT_DTYPE).reshape((1,))
+    input_view["p"]["main_y"][0, 0] = np.int8(0)
+    input_view["p"]["c_y"][0, 0] = np.int8(-80)
+
+    out, _contacts, colldata = _step_once_with_contacts_and_colldata(
+        seed, _input_bytes(), input_t, prev_action_runtime=(0, ACT_ATTACK_AIR_LW)
+    )
+
+    assert int(out["action_id"][0]) == ACT_ATTACK_AIR_LW
+    assert int(out["on_ground"][0]) == 0
+    assert int(colldata["floor_result_valid"][0]) == 0
+    assert int(colldata["floor_skip_valid"][0]) == 0
+
+
+def test_attackair_current_owned_height_platform_and_action_entry_floor_skip_boundaries() -> None:
+    # A current grIzumi/mpLib height-platform source proves the platform pose for sustained
+    # AttackAir_Coll when no source floor_skip is live. Seed-only/restored floor_skip state, and
+    # action-entry AttackAir carrying a previous callback's floor_skip, remain rejected until their
+    # own callback proves a new floor owner.
+    #
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
+    # refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_800471F8,mpColl_80044628_Floor}
+    seed, platform_y = _seed_fod_attackair_height_platform_crossing(
+        ACT_ATTACK_AIR_N, SM_ATTACK_AIR_N
+    )
+    seed["stage_fod_platform_height_source_u8"][0, 1] = np.uint8(4)
+    input_t = _input_bytes()
+    input_t.view(INPUT_DTYPE).reshape((1,))["p"]["main_y"][0, 0] = np.int8(-95)
+
+    sustained_out, _contacts, sustained_colldata = _step_once_with_contacts_and_colldata(
+        seed,
+        _input_bytes(),
+        input_t,
+        floor_sweep_runtime=(0, -35.0, platform_y + 2.0, True),
+        prev_action_runtime=(0, ACT_ATTACK_AIR_N),
+    )
+
+    assert int(sustained_out["action_id"][0]) == ACT_LANDING_AIR_N
+    assert int(sustained_out["on_ground"][0]) == 1
+    assert int(sustained_out["ground_id"][0]) == 0
+    assert int(sustained_colldata["floor_result_valid"][0]) == 1
+    assert int(sustained_colldata["floor_result_segment_id"][0]) == 0
+    assert int(sustained_colldata["floor_skip_valid"][0]) == 0
+
+    entry = seed.copy()
+    entry["stage_fod_platform_height_source_u8"][0, 1] = np.uint8(0)
+    entry["floor_skip_segment_valid_u8"][0, 0] = np.uint8(1)
+    entry["floor_skip_segment_id_u16"][0, 0] = np.uint16(0)
+    entry["seed_prev_action_id"][0, 0] = np.uint16(ACT_JUMP_AERIAL_F)
+    entry_out, _contacts2, entry_colldata = _step_once_with_contacts_and_colldata(
+        entry,
+        _input_bytes(),
+        input_t,
+        floor_sweep_runtime=(0, -35.0, platform_y + 2.0, True),
+        prev_action_runtime=(0, ACT_JUMP_AERIAL_F),
+    )
+
+    assert int(entry_out["action_id"][0]) == ACT_ATTACK_AIR_N
+    assert int(entry_out["on_ground"][0]) == 0
+    assert int(entry_colldata["floor_result_valid"][0]) == 0
+    assert int(entry_colldata["floor_skip_valid"][0]) == 1
+    assert int(entry_colldata["floor_skip_segment_id"][0]) == 0
+
+
 def test_fod_escapeair_live_hard_floor_bottom_sweep_over_stale_platform_lands() -> None:
     # EscapeAir_Coll uses `ft_80082C74 -> ft_80081D0C -> mpColl_800471F8`. A stale platform
     # CollData.floor id does not block the current callback from accepting an ordinary hard-floor
@@ -6315,7 +6610,11 @@ def test_manual_stage_clip_traces_roll_out_to_collision_resolution_from_match_st
         field_lookup = {name: idx for idx, name in enumerate(fields)}
         assertion = trace["assertion"]
         assertions = [assertion, *trace.get("extra_assertions", [])]
-        target_frame = max(int(assertion["frame"]) for assertion in assertions)
+        dair_windows = list(trace.get("dair_platform_windows", []))
+        target_frame = max(
+            [int(assertion["frame"]) for assertion in assertions]
+            + [int(window["end"]) + 1 for window in dair_windows]
+        )
         player = int(assertion["player"])
         streams = [
             _decode_modelplay_input_stream(stream, fields, target_frame + 1)
@@ -6337,6 +6636,10 @@ def test_manual_stage_clip_traces_roll_out_to_collision_resolution_from_match_st
         prev_view = prev_input.view(INPUT_DTYPE).reshape((1,))
         cur_view = cur_input.view(INPUT_DTYPE).reshape((1,))
         out_bytes = np.zeros((1, compare_stride), dtype=np.uint8)
+        colldata_stride = int(sizes["colldata_ecb"])
+        colldata_bytes = np.zeros((1, colldata_stride), dtype=np.uint8)
+        rows_by_frame: dict[int, np.void] = {}
+        colldata_by_frame: dict[int, np.void] = {}
 
         handle = msl_binding.init(
             batch_size=1,
@@ -6352,9 +6655,18 @@ def test_manual_stage_clip_traces_roll_out_to_collision_resolution_from_match_st
                 _write_modelplay_input(cur_view, streams, field_lookup, frame)
                 msl_binding.step_input(handle, prev_input, cur_input)
                 assertion_now = pending_assertions.get(frame)
-                if assertion_now is not None:
+                if assertion_now is not None or dair_windows:
                     msl_binding.write_compare(handle, out_bytes)
                     row = out_bytes.view(COMPARE_DTYPE).reshape((1,))[0]
+                    if assertion_now is not None:
+                        rows_by_frame[frame] = row.copy()
+                    if dair_windows:
+                        msl_binding.debug_write_colldata_ecb(handle, colldata_bytes)
+                        rows_by_frame[frame] = row.copy()
+                        colldata_by_frame[frame] = (
+                            colldata_bytes.view(_colldata_ecb_dtype()).reshape((1,))[0].copy()
+                        )
+                if assertion_now is not None:
                     p_now = int(assertion_now["player"])
                     assert int(row["action_id"][p_now]) == int(assertion_now["action_id"]), trace["name"]
                     assert int(row["on_ground"][p_now]) == int(assertion_now["on_ground"]), trace["name"]
@@ -6368,11 +6680,148 @@ def test_manual_stage_clip_traces_roll_out_to_collision_resolution_from_match_st
         finally:
             msl_binding.destroy(handle)
 
-        row = out_bytes.view(COMPARE_DTYPE).reshape((1,))[0]
+        for window in dair_windows:
+            p_now = player
+            expected_ground_id = int(window["expected_ground_id"])
+            start = int(window["start"])
+            end = int(window["end"])
+            observed_source_platform_candidate = False
+            ecb_only_reject_frames: list[int] = []
+            for frame in range(start, end + 1):
+                row = rows_by_frame.get(frame)
+                colldata = colldata_by_frame.get(frame)
+                if row is None or colldata is None:
+                    continue
+                if int(row["action_id"][p_now]) != ACT_ATTACK_AIR_LW:
+                    continue
+                source_platform_evidence = (
+                    int(colldata["floor_probe_candidate_segment_id"][p_now]) == expected_ground_id
+                    or int(colldata["floor_probe_projected_segment_id"][p_now]) == expected_ground_id
+                    or int(colldata["floor_result_segment_id"][p_now]) == expected_ground_id
+                    or int(row["ground_id"][p_now]) == expected_ground_id
+                )
+                observed_source_platform_candidate = (
+                    observed_source_platform_candidate or source_platform_evidence
+                )
+                if (
+                    source_platform_evidence
+                    and int(colldata["floor_probe_reject_bits"][p_now])
+                    & MPCOLL_REJECT_ATTACKAIR_TRANSFORMED_PLATFORM_ECB_ONLY
+                ):
+                    ecb_only_reject_frames.append(frame)
+            outcome = str(window["outcome"])
+            if outcome == "platform_landing":
+                landing_frame = int(window["landing_frame"])
+                landing_row = rows_by_frame[landing_frame]
+                landing_colldata = colldata_by_frame[landing_frame]
+                observed_platform_resolution = (
+                    int(landing_row["action_id"][p_now]) == ACT_LANDING_AIR_LW
+                    and int(landing_row["on_ground"][p_now]) == 1
+                    and int(landing_row["ground_id"][p_now]) == expected_ground_id
+                )
+                assert (
+                    int(landing_colldata["floor_probe_reject_bits"][p_now])
+                    & MPCOLL_REJECT_ATTACKAIR_TRANSFORMED_PLATFORM_ECB_ONLY
+                ) == 0, (trace["name"], window, landing_frame)
+                landed_on_main_floor = any(
+                    int(rows_by_frame[frame]["action_id"][p_now]) == ACT_LANDING_AIR_LW
+                    and int(rows_by_frame[frame]["on_ground"][p_now]) == 1
+                    and int(rows_by_frame[frame]["ground_id"][p_now]) == 5
+                    for frame in range(start, landing_frame + 1)
+                    if frame in rows_by_frame
+                )
+                saw_attackairlw = any(
+                    int(rows_by_frame[frame]["action_id"][p_now]) == ACT_ATTACK_AIR_LW
+                    for frame in range(start, end + 1)
+                    if frame in rows_by_frame
+                )
+                # Hitlag can delay the source floor result until after the original audit window,
+                # but this is still the same AttackAirLw_Coll platform owner.
+                assert saw_attackairlw, (trace["name"], window)
+                assert (
+                    observed_source_platform_candidate
+                    or observed_platform_resolution
+                    or int(window.get("hitlag_window", 0)) == 1
+                ), (
+                    trace["name"],
+                    window,
+                )
+                assert not ecb_only_reject_frames, (trace["name"], window, ecb_only_reject_frames)
+                assert int(landing_row["action_id"][p_now]) == ACT_LANDING_AIR_LW, (
+                    trace["name"],
+                    window,
+                )
+                assert int(landing_row["on_ground"][p_now]) == 1, (trace["name"], window)
+                assert int(landing_row["ground_id"][p_now]) == expected_ground_id, (
+                    trace["name"],
+                    window,
+                )
+                assert not landed_on_main_floor, (trace["name"], window)
+            elif outcome == "trajectory_diverged":
+                diverged_by_frame = int(window["diverged_by_frame"])
+                diverged_row = rows_by_frame[diverged_by_frame]
+                assert diverged_by_frame < start, (trace["name"], window)
+                diverged_by_window_start = int(window["diverged_by_window_start"])
+                source_windows = [
+                    source_window
+                    for source_window in dair_windows
+                    if int(source_window["start"]) == diverged_by_window_start
+                ]
+                assert len(source_windows) == 1, (trace["name"], window)
+                source_window = source_windows[0]
+                assert str(source_window["outcome"]) == "platform_landing", (trace["name"], window)
+                assert int(source_window["landing_frame"]) == diverged_by_frame, (
+                    trace["name"],
+                    window,
+                )
+                assert int(source_window["expected_ground_id"]) == int(window["diverged_ground_id"]), (
+                    trace["name"],
+                    window,
+                )
+                assert int(diverged_row["action_id"][p_now]) == ACT_LANDING_AIR_LW, (
+                    trace["name"],
+                    window,
+                )
+                assert int(diverged_row["on_ground"][p_now]) == 1, (trace["name"], window)
+                assert int(diverged_row["ground_id"][p_now]) == int(window["diverged_ground_id"]), (
+                    trace["name"],
+                    window,
+                )
+            else:
+                raise AssertionError((trace["name"], window))
+
+        row = rows_by_frame.get(int(assertion["frame"]), out_bytes.view(COMPARE_DTYPE).reshape((1,))[0])
         assert int(row["action_id"][player]) == int(assertion["action_id"]), trace["name"]
         assert int(row["on_ground"][player]) == int(assertion["on_ground"]), trace["name"]
         assert int(row["ground_id"][player]) == int(assertion["ground_id"]), trace["name"]
         assert float(row["pos_y"][player]) >= float(assertion["min_y"]), trace["name"]
+
+
+def test_attackairlw_transformed_platform_owner_guards_stay_source_shaped() -> None:
+    source = (Path(__file__).resolve().parents[1] / "src/mpcoll_ground.c").read_text(encoding="utf-8")
+    match = re.search(
+        r"const uint8_t final_attackairlw_live_platform_publication_owner\s*="
+        r"\s*(.*?)\?\s*1u\s*:\s*0u;",
+        source,
+        flags=re.S,
+    )
+    assert match is not None
+    final_body = match.group(1)
+    assert "MSL_ACT_ATTACK_AIR_LW" in final_body
+    assert "final_ground_line_idx >= 0" in final_body
+    assert "resolved_line_has_platform_transform" in final_body
+    assert "final_attackair_second_create_frame" in final_body
+    assert "skip_platform_segment_i" in final_body
+    assert "floor_sweep_prev_source_owned" in final_body
+    assert "mpcoll_floor_sweep_prev_root_is_runtime_owned" in final_body
+    assert "platform_pass_input_below_raw_threshold" not in final_body
+    assert "batch->state.ground_id[idx]" not in final_body
+    source_window = source[
+        max(0, match.start() - 900) : min(len(source), match.end() + 500)
+    ]
+    assert "ftCo_AttackAir.c::ftCo_AttackAir_Coll" in source_window
+    assert "mpColl_800471F8" in source_window
+    assert "mpColl_80044628_Floor" in source_window
 
 
 def _fd_fall_escapeair_ledge_seed(
