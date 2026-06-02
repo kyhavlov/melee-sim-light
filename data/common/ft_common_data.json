@@ -261,5 +261,6 @@
   "walljump_input_window_frames": 130.0,
   "walljump_startup_timer_frames": 5,
   "walljump_stick_x_threshold": 0.800000011920929,
-  "walljump_tilt_x_max_frames": 3.0
+  "walljump_tilt_x_max_frames": 3.0,
+  "z_button_trigger_value": 0.3499999940395355
 }

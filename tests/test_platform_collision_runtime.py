@@ -7168,13 +7168,11 @@ def test_fod_same_step_landing_contact_derives_hidden_platform_height_replay_rea
     assert float(right_out["pos_x"][p]) == pytest.approx(
         float(right_row["ref_t1"]["pos_x"][p]), abs=1e-6
     )
-    # SpecialHiFall's same-step FoD platform contact consumes `mpLib_8004DD90_Floor`'s source
-    # floor-bias publication. The replay float is one bias unit lower, but the action/ground owner
-    # and source current-height lane are the package lock here.
-    # refs/melee/src/melee/mp/mplib.c::mpLib_8004DD90_Floor
-    assert float(right_out["pos_y"][p]) == pytest.approx(
-        float(right_row["ref_t1"]["pos_y"][p]) + 1.0e-4, abs=1e-5
-    )
+    # SpecialHiFall's same-step FoD platform contact uses the common landing root snap from the
+    # current mpColl floor contact before SpecialHiLanding entry.
+    # refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::ftFx_SpecialHiFall_Enter
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCommon_8007D7FC
+    assert float(right_out["pos_y"][p]) == pytest.approx(float(right_row["ref_t1"]["pos_y"][p]), abs=1e-5)
 
     right_prev_row = ds.samples[10983]
     right_prev_out = _step_one_replay_row(ds, 10983)

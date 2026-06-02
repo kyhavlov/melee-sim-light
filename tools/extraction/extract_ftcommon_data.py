@@ -57,6 +57,10 @@ def main() -> None:
         "lstick_tilt_x_thresh": float(_f32_be(buf, ft_common_abs + 0x08)),
         "lstick_tilt_y_thresh": float(_f32_be(buf, ft_common_abs + 0x0C)),
         "trigger_deadzone": float(_f32_be(buf, ft_common_abs + 0x10)),
+        # Fighter input synthesis: if Z is held, x650 is forced to p_ftCommonData->x14 after the
+        # L/R held-input path, so GuardOn/Guard drain and ShieldDesc geometry consume this value.
+        # refs/melee/src/melee/ft/fighter.c:1868-1892
+        "z_button_trigger_value": float(_f32_be(buf, ft_common_abs + 0x14)),
         # Walk / turn / run thresholds (ftwalkcommon.c / ftCo_Turn.c / ftCo_Run.c / ftCo_TurnRun.c).
         # These are `p_ftCommonData->x24`, `x28`, `x2C`, `x34`, `x38`, `x58`, `x474` in
         # doldecomp naming.

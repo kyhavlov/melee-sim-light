@@ -6895,6 +6895,7 @@ void locomotion_update_post_collision(MslBatch* batch) {
           batch->state.speed_air_x_self[idx] = landing_self_vel_x;
           batch->state.jumps_left[idx] = ch->max_jumps;
           batch->state.fall_fast[idx] = 0u;
+          batch->state.pos_y[idx] = landing_root_y_from_mpcoll_contact(batch, idx, (size_t)bi);
           msl_anim_timebase_enter_with_policy(batch, idx, 13.0f, 1.0f,
                                               MSL_ANIM_ENTER_TICK_IMMEDIATE);
           continue;

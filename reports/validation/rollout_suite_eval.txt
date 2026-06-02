@@ -78,18 +78,18 @@ rollout.ignored_first_mismatch_top: state_flags[4]&0x80:6406
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
 rollout.status: NOT-CLEAN
 rollout.best_len: 6269
-rollout.streak_count: 7
-rollout.streak_len.median: 672
+rollout.streak_count: 6
+rollout.streak_len.median: 719
 rollout.streak_len.p90: 6269
 rollout.streak_len.p95: 6269
 rollout.streak_len.max: 6269
-rollout.first_mismatch_total: 6
+rollout.first_mismatch_total: 5
 rollout.first_mismatch_seeded_total: 0
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=6.14925 rec=1406 p=1 seed/ref/out=7.67315/6.44566/12.5949 actions=196/196/196 category=unclassified
   2. percent max_err=2 rec=10099 p=1 seed/ref/out=140.63/141.63/139.63 actions=354/354/354 category=unclassified
-  3. shield_hp max_err=1.72898 rec=8243 p=1 seed/ref/out=59.802/59.769/58.04 actions=178/178/178 category=unclassified
+  3. speed_y_self max_err=0.6 rec=3128 p=1 seed/ref/out=-3.4/-3.4/-2.8 actions=86/42/42 category=unclassified
 rollout.float_top_downstream:
   1. shield_hp max_err=8.4 rec=1446 p=1 seed/ref/out=58.6/49.92/58.32 actions=182/181/182 category=downstream_discrete_mismatch
   2. speed_ground_x_self max_err=2.47971 rec=9106 p=1 seed/ref/out=-1.07971/-0.999712/1.48 actions=182/182/181 category=downstream_discrete_mismatch
@@ -117,19 +117,19 @@ rollout.float_top_downstream:
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:2552
 
 == suite summary ==
-overall.rollout.streak_count: 40
-overall.rollout.streak_len.median: 496
-overall.rollout.streak_len.p90: 2367
-overall.rollout.streak_len.p95: 2537
+overall.rollout.streak_count: 39
+overall.rollout.streak_len.median: 522
+overall.rollout.streak_len.p90: 2491
+overall.rollout.streak_len.p95: 3106
 overall.rollout.streak_len.max: 6269
 overall.rollout.best_len.max: 6269
-overall.rollout.first_mismatch_total: 36
+overall.rollout.first_mismatch_total: 35
 overall.rollout.first_mismatch_seeded_total: 5
 overall.rollout.status: NOT-CLEAN
 overall.rollout.float_top_errors:
   1. pos_x max_err=11.4627 rec=3136 p=0 seed/ref/out=-122.431/-123.558/-135.021 actions=247/0/0 category=unclassified
   2. percent max_err=2 rec=10099 p=1 seed/ref/out=140.63/141.63/139.63 actions=354/354/354 category=unclassified
-  3. shield_hp max_err=1.72898 rec=8243 p=1 seed/ref/out=59.802/59.769/58.04 actions=178/178/178 category=unclassified
+  3. speed_ground_x_self max_err=1.344 rec=5128 p=1 seed/ref/out=0.9725/0.672/-0.672 actions=179/181/181 category=unclassified
 overall.rollout.float_top_downstream:
   1. percent max_err=12 rec=7047 p=1 seed/ref/out=26.83/26.83/38.83 actions=90/90/86 category=downstream_discrete_mismatch
   2. pos_x max_err=8.89196 rec=5168 p=1 seed/ref/out=15.0431/14.5261/5.63413 actions=65/65/65 category=downstream_discrete_mismatch

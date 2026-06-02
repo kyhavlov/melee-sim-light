@@ -1,4 +1,5 @@
 #include "action.h"
+
 #include "ids.h"
 
 #include <math.h>
@@ -454,6 +455,22 @@ static inline uint8_t guard_entry_via_wait_callback_from_current_row(const MslBa
   return 0u;
 }
 
+static inline float guard_x650_from_input(const MslCommonParams* c, uint16_t buttons, uint8_t l,
+                                          uint8_t r) {
+  // Fighter input synthesis writes the source trigger lane in this order:
+  // - analog max(L, R), deadzoned by p_ftCommonData->x10;
+  // - digital L/R forces held_inputs|=HSD_PAD_LR and x650=1.0f;
+  // - held Z then forces held_inputs|=HSD_PAD_LR|HSD_PAD_A and x650=p_ftCommonData->x14.
+  // GuardOn entry (`ftCo_800921DC`) and hold drain (`ftCo_800925A4`) consume that x650 value,
+  // which differs from the boolean "shield is held" predicate.
+  // refs/melee/src/melee/ft/fighter.c:1868-1892
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_800921DC,ftCo_800925A4}
+  if ((buttons & (uint16_t)MSL_BUTTON_Z) != 0u && c != NULL) {
+    return c->z_button_trigger_value;
+  }
+  return msl_trigger_unit_from_input(buttons, l, r);
+}
+
 static inline uint8_t escape_try_enter_spotdodge_from_guard(MslBatch* batch,
                                                             const MslCommonParams* c, size_t idx) {
   if (batch == NULL || c == NULL) {
@@ -835,7 +852,29 @@ static inline void enter_guard_on(MslBatch* batch, const MslCommonParams* c, siz
   batch->state.guard_special_enable_timer_x1c[idx] = 0u;
   batch->state.guard_release_latched_xc[idx] = 0;
   batch->state.guard_x10[idx] = msl_guard_x10_visible_guardon_init_u8(c);
-  batch->state.lightshield_amount[idx] = 0.0f;
+  {
+    // GuardOn entry lightshield owner:
+    // ftCo_800924C0 calls ftCo_800921DC before returning to the current callback. That source
+    // helper initializes `fp->lightshield_amount` from the current `input.x650` trigger lane, so
+    // every GuardOn entry path must publish the same held-trigger latch before the first GuardOn
+    // drain. Keep this in the entry helper instead of only the generic grounded IASA call site:
+    // Damage/Wait-style handoffs can enter GuardOn through the same source helper.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_800924C0,ftCo_800921DC}
+    const float denom = 1.0f - c->trigger_deadzone;
+    if (denom > 0.0f) {
+      const float trig = guard_x650_from_input(
+          c, batch->state.input_buttons[idx], batch->state.input_l[idx], batch->state.input_r[idx]);
+      float light = (trig - c->trigger_deadzone) / denom;
+      if (light < 0.0f) {
+        light = 0.0f;
+      } else if (light > 1.0f) {
+        light = 1.0f;
+      }
+      batch->state.lightshield_amount[idx] = light;
+    } else {
+      batch->state.lightshield_amount[idx] = 0.0f;
+    }
+  }
 }
 
 static inline void enter_guard_hold(MslBatch* batch, size_t idx) {
@@ -1362,8 +1401,11 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
   }
   batch->state.guard_reflect_entry_dash_terminal_scalar[idx] = 0u;
 
-  const float trig = msl_trigger_unit_from_input(
-      batch->state.input_buttons[idx], batch->state.input_l[idx], batch->state.input_r[idx]);
+  const float trig = guard_x650_from_input(c, batch->state.input_buttons[idx],
+                                           batch->state.input_l[idx], batch->state.input_r[idx]);
+  const float anim_trig =
+      guard_x650_from_input(c, batch->state.prev_input_buttons[idx], batch->state.prev_input_l[idx],
+                            batch->state.prev_input_r[idx]);
   // Decomp uses held_inputs & HSD_PAD_LR for guard entry/release ownership.
   // Keep this aligned with the input owner that builds the sim's LR-held lane:
   // - digital L/R,
@@ -1376,6 +1418,21 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
   const uint8_t shield_held_inputs =
       (((held_buttons & (uint16_t)(LR | MSL_BUTTON_Z)) != 0u) || (trig > c->trigger_deadzone)) ? 1u
                                                                                                : 0u;
+  const uint8_t guard_anim_held_shield_x650_transition =
+      // Source ordering boundary:
+      // GuardOn/Guard Anim can consume the frame-start `input.x650` for the shield-hold drain before
+      // the same frame's input callback observes a shield trigger transition such as Z->L, L->Z, or
+      // no-trigger -> hard analog while the no-submotion Guard lifecycle is still active. Scope this
+      // to rows where shield remains held on the current sample; release-to-none rows keep the
+      // seed/current trigger surface so a stale previous L sample cannot recreate hard-shield
+      // geometry.
+      // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_Spaghetti_8006AD10}
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_Anim,ftCo_800925A4}
+      (shield_held_inputs && batch->state.animation_index[idx] == UINT32_MAX &&
+       batch->state.action_frame[idx] < 0 && anim_trig != trig)
+          ? 1u
+          : 0u;
+  const float guard_drain_trig = guard_anim_held_shield_x650_transition ? anim_trig : trig;
   const uint8_t guard_x10_seed = batch->state.guard_x10[idx];
 
   // Guard release lockout (mv.co.guard.xC + mv.co.guard.x10) is modeled explicitly and seeded via
@@ -1561,11 +1618,6 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
              batch->state.action_frame[idx] < 0)
                 ? 1u
                 : 0u;
-        const uint8_t guard_no_submotion_snapshot =
-            ((a0 == (uint16_t)MSL_ACT_GUARD_ON || a0 == (uint16_t)MSL_ACT_GUARD) &&
-             batch->state.animation_index[idx] == 0xFFFFFFFFu && batch->state.action_frame[idx] < 0)
-                ? 1u
-                : 0u;
         const uint8_t guardreflect_terminal_no_submotion_snapshot =
             (a0 == (uint16_t)MSL_ACT_GUARD_REFLECT &&
              batch->state.animation_index[idx] == 0xFFFFFFFFu &&
@@ -1585,23 +1637,22 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
                 ? 1u
                 : 0u;
         const uint8_t guard_snapshot_refresh_drain_split =
-            ((guard_no_submotion_snapshot || guardreflect_terminal_no_submotion_snapshot) &&
-             trig > c->trigger_deadzone)
+            (guardreflect_terminal_no_submotion_snapshot && guard_drain_trig > c->trigger_deadzone)
                 ? 1u
                 : 0u;
         // Decomp timing note:
         // - GuardOn/Guard Anim drains shield through ftCo_800925A4 before the same frame's
         //   IASA callback can consume jump OoS via ftCo_800CB024.
-        // - Frozen Slippi GuardOn/Guard snapshots do not expose the in-progress guard pose/timer
-        //   timeline. On a snapshot row with a fresh trigger squeeze, preserve the carried
-        //   lightshield owner for *this row's* drain, but still refresh the stored
-        //   `lightshield_amount` from the current squeeze so the following Guard/GuardOff row sees
-        //   the same negative-input latch that vanilla does.
-        // - On that jump-consuming row, the drain still uses the pre-row lightshield owner rather
-        //   than refreshing from the current trigger squeeze first.
+        // - Fighter_8006A360 runs Anim before Fighter_Spaghetti_8006AD10 installs the next
+        //   controller sample for IASA. The shield hold drain therefore consumes the frame-start
+        //   `input.x650` (our prev_input_* lanes), while release/IASA gates below use the current
+        //   held input.
+        // - Ordinary GuardOn/Guard snapshots still follow ftCo_800925A4 order: refresh
+        //   `lightshield_amount` from Anim-visible input.x650 first, then drain using that value.
         // - Expired no-submotion GuardReflect terminal rows run the same GuardOn_Anim drain before
-        //   transitioning to Guard through ftCo_800928CC; the current trigger only refreshes the
-        //   stored lightshield owner for following Guard rows.
+        //   transitioning to Guard through ftCo_800928CC. That terminal bridge preserves the carried
+        //   lightshield owner for this row's drain, then refreshes the stored value for following
+        //   Guard rows.
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
         //   ftCo_800921DC,ftCo_800925A4,ftCo_80093BC0,ftCo_GuardReflect_Anim,
         //   ftCo_GuardOn_Anim,ftCo_Guard_Anim,ftCo_GuardOn_IASA,ftCo_Guard_IASA
@@ -1618,9 +1669,10 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
           // no-op
         } else if (guard_snapshot_refresh_drain_split) {
           shield_break_pending =
-              apply_shield_hold_drain_preserve_drain_refresh_store(batch, c, idx, trig);
+              apply_shield_hold_drain_preserve_drain_refresh_store(batch, c, idx, guard_drain_trig);
         } else {
-          shield_break_pending = apply_shield_hold_drain(batch, c, idx, trig, guard_jump_pending);
+          shield_break_pending =
+              apply_shield_hold_drain(batch, c, idx, guard_drain_trig, guard_jump_pending);
         }
         if (shield_break_pending) {
           enter_shield_break_fly(batch, msl_char_params(batch->state.char_id[idx]), idx);
@@ -1946,14 +1998,6 @@ void guard_update_grounded(MslBatch* batch, const MslCommonParams* c, size_t idx
             : 0u;
     enter_guard_on(batch, c, idx, guard_entry_via_wait_callback_from_current_row(batch, idx));
     batch->state.guard_entry_via_dash_91ad8[idx] = entered_via_dash_91ad8;
-    {
-      // Initialize lightshield_amount from the current trigger input (decomp updates this on entry
-      // via ftCo_800921DC and then per-frame via ftCo_800925A4).
-      const float denom = 1.0f - c->trigger_deadzone;
-      if (denom > 0.0f) {
-        batch->state.lightshield_amount[idx] = clamp01((trig - c->trigger_deadzone) / denom);
-      }
-    }
     if (dash_iasa_guard_admission_reaches_terminal_scalar(batch, c, idx, a0, a0_anim_frame)) {
       dash_iasa_apply_root_motion_exit_gr_vel_clamp(
           batch, msl_char_params(batch->state.char_id[idx]), idx);

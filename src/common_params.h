@@ -14,9 +14,10 @@ typedef struct MslCommonParams {
   // Deadzones / input thresholds
   float lstick_deadzone_x;
   float lstick_deadzone_y;
-  float lstick_tilt_x_thresh;  // p_ftCommonData->x8_someStickThreshold
-  float lstick_tilt_y_thresh;  // p_ftCommonData->xC
-  float trigger_deadzone;      // p_ftCommonData->x10 (trigger deadzone used for held_inputs L/R)
+  float lstick_tilt_x_thresh;    // p_ftCommonData->x8_someStickThreshold
+  float lstick_tilt_y_thresh;    // p_ftCommonData->xC
+  float trigger_deadzone;        // p_ftCommonData->x10 (trigger deadzone used for held_inputs L/R)
+  float z_button_trigger_value;  // p_ftCommonData->x14 (input.x650 value forced by held Z)
 
   // Stick angle threshold used by several common IASA checks (including cliff/ledge options).
   // Decomp: p_ftCommonData->x20 (radians), used by e.g. ftCo_CliffClimb.c::ftCo_8009AAFC.

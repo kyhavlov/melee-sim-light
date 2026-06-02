@@ -885,6 +885,12 @@ Common constants:
       nudge lane.
     - `player_nudge_z_max`: `p_ftCommonData->x458`, consumed by the non-transformed depth clamp in
       `ftCommon_8007E0E4`.
+  - Guard input synthesis constants:
+    - `z_button_trigger_value`: `p_ftCommonData->x14`, the source `input.x650` value forced when
+      held Z maps into the LR/A shield lane. GuardOn entry and shield-hold drain consume this lane
+      rather than recomputing lightshield amount from the analog trigger alone.
+  - Decomp refs: `refs/melee/src/melee/ft/fighter.c:1868-1892` and
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_800921DC,ftCo_800925A4}`.
   - Decomp refs: `refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007DD7C,ftCommon_8007E0E4}`
 
 Characters (Fox/Falco):
