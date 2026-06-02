@@ -993,3 +993,100 @@ def test_qgd_downstream_rng_exception_rows_are_one_step_replay_exact() -> None:
         _assert_transition_identity_lock_fields_match_ref(
             out_row=out, ref_row=ref, record=record, p=p
         )
+
+
+@pytest.mark.integration
+def test_gat_initial_rng_exception_row_is_one_step_replay_exact() -> None:
+    # GAT accepted-exception proof for the first rollout boundary:
+    # the seed row is a SpecialAirHi victim struck by AttackAirLw, and the one-step transition
+    # matches every deterministic combat/source field except the ftCo_8008DCE0 DamageFlyN vs
+    # DamageFlyRoll RNG branch.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
+    # refs/melee/src/sysdolphin/baselib/random.c::HSD_Randf
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
+        "GracefulAttachedTurtle.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    record = 3106
+    p = 0
+    seed, ref, out = _run_one_step_row(dataset_path, record, p)
+    assert int(seed["action_id"][p]) == 356  # SpecialAirHi.
+    assert int(seed["fighter_8006cda4_pre_gate_consume_count"][p]) == 0
+    assert int(seed["last_hit_by"][p]) == 1
+    assert int(seed["action_id"][1]) == 69  # AttackAirLw source.
+    assert int(seed["action_frame"][1]) == 4
+    assert int(ref["action_id"][p]) == 91  # DamageFlyRoll.
+    assert int(out["action_id"][p]) == 88  # DamageFlyN from the alternate free-running RNG phase.
+
+    for field in (
+        "action_frame",
+        "hitlag",
+        "hitstun",
+        "instance_id",
+        "instance_hit_by",
+        "last_hit_by",
+        "combo_count",
+        "last_attack_landed",
+    ):
+        assert int(out[field][p]) == int(ref[field][p]), field
+    for field in (
+        "percent",
+        "pos_x",
+        "pos_y",
+        "speed_air_x_self",
+        "speed_y_self",
+        "speed_x_attack",
+        "speed_y_attack",
+    ):
+        assert float(out[field][p]) == pytest.approx(float(ref[field][p])), field
+    assert out["state_flags"][p].tolist() == ref["state_flags"][p].tolist()
+
+    _assert_transition_identity_lock_fields_match_ref(
+        out_row=out, ref_row=ref, record=record, p=1
+    )
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("record", "p", "seed_action", "ref_action"),
+    [
+        (3629, 0, 178, 178),
+        (3630, 0, 178, 181),
+        (3639, 0, 181, 181),
+        (5717, 0, 239, 91),
+        (6213, 1, 24, 75),
+        (6713, 1, 43, 43),
+        (6805, 0, 358, 87),
+        (8597, 1, 352, 43),
+        (11134, 1, 74, 91),
+    ],
+)
+def test_gat_downstream_exception_rows_are_one_step_action_exact(
+    record: int, p: int, seed_action: int, ref_action: int
+) -> None:
+    # These rows are first mismatches only in free-running rollout after the accepted GAT rec=3106
+    # DamageFlyRoll RNG stream branch. Direct one-step replay seeds choose the reference action,
+    # proving the visible later actions are not local combat, shield, collision, or item owners.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
+        "GracefulAttachedTurtle.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    seed, ref, out = _run_one_step_row(dataset_path, record, p)
+    assert int(seed["action_id"][p]) == seed_action
+    assert int(ref["action_id"][p]) == ref_action
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ref_action

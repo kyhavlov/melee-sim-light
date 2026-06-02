@@ -559,6 +559,80 @@ def test_phasea_lock_gat_11164_action_and_stateflag3_window(
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
+    ("dataset_rel", "record", "p", "expected_action", "expected_on_ground"),
+    [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/validation/"
+            "cardinal_1.0_recent/GracefulAttachedTurtle.msl",
+            11167,
+            1,
+            191,
+            1,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+            "ParallelTemptingElk.msl",
+            9396,
+            0,
+            91,
+            0,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl",
+            7519,
+            0,
+            91,
+            0,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/aggregate_recent/PutridJoyousOryx.msl",
+            2684,
+            1,
+            91,
+            0,
+        ),
+    ],
+    ids=[
+        "gat_falco_terminal_damageflyroll_lands",
+        "pte_nonterminal_damageflyroll_airborne",
+        "his_fox_lower_terminal_damageflyroll_airborne",
+        "pjo_fox_lower_terminal_damageflyroll_airborne",
+    ],
+)
+def test_damageflyroll_live_jobj_terminal_floor_turnover_window(
+    dataset_rel: str, record: int, p: int, expected_action: int, expected_on_ground: int
+) -> None:
+    # DamageFlyRoll_Coll consumes ft_80081DD4 after ftCo_DamageFlyRoll_Phys has applied
+    # ft_80084EEC and doFlyRoll's live XRotN JObj pose. GAT 11167 is the terminal-downward Falco
+    # turnover row; the Fox controls protect the rejected broad carried-floor projection.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+    #   ftCo_DamageFlyRoll_Phys,doFlyRoll,ftCo_DamageFlyRoll_Coll}
+    # refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+    # refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_JObj,mpColl_800473CC}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record]
+    assert int(row["seed_t"]["action_id"][p]) == 91  # DamageFlyRoll
+    assert int(row["seed_t"]["on_ground"][p]) == 0
+    if expected_on_ground:
+        assert int(row["seed_t"]["hitlag"][p]) == 0
+    assert int(row["seed_t"]["state_flags"][p, 3]) & 0x02
+    assert int(row["ref_t1"]["action_id"][p]) == expected_action
+    assert int(row["ref_t1"]["on_ground"][p]) == expected_on_ground
+
+    out, ref = _run_one_step(dataset_rel=dataset_rel, record=record, p=p)
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == expected_action
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == expected_on_ground
+    np.testing.assert_allclose(float(out["pos_y"][p]), float(ref["pos_y"][p]), atol=1e-6)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
     ("record", "expect_ref_instance_id"),
     [
         (2376, 509),

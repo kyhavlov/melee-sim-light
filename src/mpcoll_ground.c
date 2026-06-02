@@ -124,6 +124,186 @@ static inline uint8_t mpcoll_ground_specialhi_rotate_collision_point_xrotn(
   return 1u;
 }
 
+static inline uint8_t mpcoll_ground_damageflyroll_xrotn_angle_from_velocity(const MslBatch* batch,
+                                                                            size_t idx,
+                                                                            float* out_angle) {
+  if (batch == NULL || out_angle == NULL) {
+    return 0u;
+  }
+  const float vx = batch->state.speed_air_x_self[idx] + batch->state.speed_x_attack[idx];
+  const float vy = batch->state.speed_y_self[idx] + batch->state.speed_y_attack[idx];
+  if (!(isfinite(vx) && isfinite(vy)) || (vx == 0.0f && vy == 0.0f)) {
+    return 0u;
+  }
+  const float facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+  *out_angle = facing_dir * atan2f(vx, vy);
+  return 1u;
+}
+
+static inline uint8_t mpcoll_ground_damageflyroll_uses_jobj_ecb(uint16_t action_id) {
+  return action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL ? 1u : 0u;
+}
+
+static inline uint8_t mpcoll_ground_damageflyroll_rotate_collision_point_xrotn(
+    const MslBatch* batch, size_t idx, uint8_t char_id, uint16_t msid, uint16_t part_id,
+    float model_scale, float* io_x, float* io_y, float* io_z) {
+  if (batch == NULL || io_x == NULL || io_y == NULL || io_z == NULL ||
+      !msl_anim_part_under_xrotn(char_id, part_id)) {
+    return 0u;
+  }
+  float angle = 0.0f;
+  if (!mpcoll_ground_damageflyroll_xrotn_angle_from_velocity(batch, idx, &angle)) {
+    return 0u;
+  }
+
+  float m[12];
+  if (anim_pose_get_collision_matrix(batch, idx, msid, 0u, 2u, m) != 0) {
+    return 0u;
+  }
+  float ax0 = 0.0f, ay0 = 0.0f, az0 = 0.0f;
+  float ax1 = 0.0f, ay1 = 0.0f, az1 = 0.0f;
+  const float origin[3] = {0.0f, 0.0f, 0.0f};
+  const float local_x[3] = {1.0f, 0.0f, 0.0f};
+  msl_mtx34_mul_point(m, origin, &ax0, &ay0, &az0);
+  msl_mtx34_mul_point(m, local_x, &ax1, &ay1, &az1);
+  ax0 *= model_scale;
+  ay0 *= model_scale;
+  az0 *= model_scale;
+  ax1 *= model_scale;
+  ay1 *= model_scale;
+  az1 *= model_scale;
+
+  float axis_x = ax1 - ax0;
+  float axis_y = ay1 - ay0;
+  float axis_z = az1 - az0;
+  const float axis_len = sqrtf(axis_x * axis_x + axis_y * axis_y + axis_z * axis_z);
+  if (!(axis_len > 0.0f)) {
+    return 0u;
+  }
+  axis_x /= axis_len;
+  axis_y /= axis_len;
+  axis_z /= axis_len;
+
+  const float px = *io_x - ax0;
+  const float py = *io_y - ay0;
+  const float pz = *io_z - az0;
+  const float c = cosf(angle);
+  const float s = sinf(angle);
+  const float dot = axis_x * px + axis_y * py + axis_z * pz;
+  const float cross_x = axis_y * pz - axis_z * py;
+  const float cross_y = axis_z * px - axis_x * pz;
+  const float cross_z = axis_x * py - axis_y * px;
+  *io_x = ax0 + (px * c) + (cross_x * s) + (axis_x * dot * (1.0f - c));
+  *io_y = ay0 + (py * c) + (cross_y * s) + (axis_y * dot * (1.0f - c));
+  *io_z = az0 + (pz * c) + (cross_z * s) + (axis_z * dot * (1.0f - c));
+  return 1u;
+}
+
+static inline uint8_t mpcoll_ground_try_sample_damageflyroll_jobj_ecb(
+    MslEcbWorldPoints* out, const MslBatch* batch, size_t idx, uint8_t char_id, uint32_t anim,
+    uint16_t action_id, uint16_t frame_u16, float facing_dir, float pos_x, float pos_y) {
+  if (out == NULL || batch == NULL || !(anim <= 0xFFFFu) ||
+      !mpcoll_ground_damageflyroll_uses_jobj_ecb(action_id)) {
+    return 0u;
+  }
+
+  const MslCharParams* ch = msl_char_params(char_id);
+  if (ch == NULL || ch->ecb_joint_count == 0u) {
+    return 0u;
+  }
+  const uint16_t msid = (uint16_t)anim;
+  const float model_scaling =
+      (isfinite(ch->model_scaling) && ch->model_scaling > 0.0f) ? ch->model_scaling : 1.0f;
+  const float model_scale = batch->state.fighter_scale_y[idx] * model_scaling;
+
+  float min_x = 0.0f;
+  float max_x = 0.0f;
+  float min_y = 0.0f;
+  float max_y = 0.0f;
+  uint8_t have = 0u;
+  for (uint16_t pi = 0; pi < ch->ecb_joint_count; pi++) {
+    const uint16_t part_id = ch->ecb_joints[pi];
+    float m[12];
+    if (anim_pose_get_collision_matrix(batch, idx, msid, frame_u16, part_id, m) != 0) {
+      return 0u;
+    }
+    const float origin[3] = {0.0f, 0.0f, 0.0f};
+    float x = 0.0f, y = 0.0f, z = 0.0f;
+    msl_mtx34_mul_point(m, origin, &x, &y, &z);
+    x *= model_scale;
+    y *= model_scale;
+    z *= model_scale;
+    (void)mpcoll_ground_damageflyroll_rotate_collision_point_xrotn(
+        batch, idx, char_id, msid, part_id, model_scale, &x, &y, &z);
+
+    // DamageFlyRoll floor collision consumes the same live XRotN JObj pose as BODY/hurtcap
+    // selection: ftCo_8008DCE0 and ftCo_DamageFlyRoll_Phys call doFlyRoll before the map callback,
+    // then ft_80081DD4 loads the collision ECB from those live JObjs.
+    // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+    //   ftCo_8008DCE0,doFlyRoll,ftCo_DamageFlyRoll_Phys,ftCo_DamageFlyRoll_Coll}
+    // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+    // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_JObj,mpColl_800473CC}
+    // refs/melee/src/melee/lb/lb_00B0.c::lb_8000B1CC
+    const float rel_x = facing_dir * z;
+    const float rel_y = y;
+    if (!have) {
+      min_x = max_x = rel_x;
+      min_y = max_y = rel_y;
+      have = 1u;
+    } else {
+      if (rel_x < min_x) {
+        min_x = rel_x;
+      }
+      if (rel_x > max_x) {
+        max_x = rel_x;
+      }
+      if (rel_y < min_y) {
+        min_y = rel_y;
+      }
+      if (rel_y > max_y) {
+        max_y = rel_y;
+      }
+    }
+  }
+  if (!have) {
+    return 0u;
+  }
+
+  const float min_ecb_width = fmaxf(4.0f, 10.0f * batch->state.fighter_scale_y[idx]);
+  const float ecb_width = fabsf(max_x - min_x);
+  if (ecb_width < min_ecb_width) {
+    const float half_width = 0.5f * min_ecb_width;
+    min_x = -half_width;
+    max_x = half_width;
+  }
+  if (max_x < 2.0f) {
+    max_x = 2.0f;
+  }
+  if (min_x > -2.0f) {
+    min_x = -2.0f;
+  }
+  if (min_y < 0.0f) {
+    min_y = 0.0f;
+  }
+  const float side_rel_y = ch->ecb_side_y_offset + (0.5f * (min_y + max_y));
+
+  out->left_rel_x = min_x;
+  out->right_rel_x = max_x;
+  out->bottom_rel_y = min_y;
+  out->top_rel_y = max_y;
+  out->side_rel_y = side_rel_y;
+  out->frame_u16 = frame_u16;
+  out->bottom_x = pos_x;
+  out->bottom_y = pos_y + min_y;
+  out->top_x = pos_x;
+  out->top_y = pos_y + max_y;
+  out->left_x = pos_x + min_x;
+  out->left_y = pos_y + side_rel_y;
+  out->right_x = pos_x + max_x;
+  out->right_y = pos_y + side_rel_y;
+  return 1u;
+}
+
 static inline uint8_t mpcoll_ground_try_sample_specialhi_jobj_ecb(
     MslEcbWorldPoints* out, const MslBatch* batch, size_t idx, uint8_t char_id, uint32_t anim,
     uint16_t action_id, uint16_t frame_u16, float facing_dir, float pos_x, float pos_y) {
@@ -7541,7 +7721,14 @@ void mpcoll_ground_apply(MslBatch* batch) {
       }
       uint8_t have_cur_specialhi_ecb = 0u;
       uint8_t have_prev_specialhi_ecb = 0u;
+      uint8_t have_cur_damageflyroll_ecb = 0u;
+      uint8_t have_prev_damageflyroll_ecb = 0u;
       uint8_t specialhi_jobj_ecb_active = mpcoll_ground_specialhi_uses_jobj_ecb(char_id, action_id);
+      uint8_t damageflyroll_jobj_ecb_active =
+          (mpcoll_ground_damageflyroll_uses_jobj_ecb(action_id) &&
+           batch->state.speed_y_self[idx] <= -(3.0f * k_ecb_vertical_unit))
+              ? 1u
+              : 0u;
       if (!use_hidden_ecb_lifetime && !lock_bottom_to_zero && specialhi_jobj_ecb_active) {
         MslEcbWorldPoints specialhi_cur_ecb = cur_ecb_points;
         MslEcbWorldPoints specialhi_prev_ecb = prev_ecb_points;
@@ -7570,6 +7757,34 @@ void mpcoll_ground_apply(MslBatch* batch) {
           prev_bot.frame_u16 = specialhi_prev_ecb.frame_u16;
         }
       }
+      if (!use_hidden_ecb_lifetime && !lock_bottom_to_zero && damageflyroll_jobj_ecb_active) {
+        MslEcbWorldPoints damageflyroll_cur_ecb = cur_ecb_points;
+        MslEcbWorldPoints damageflyroll_prev_ecb = prev_ecb_points;
+        have_cur_damageflyroll_ecb = mpcoll_ground_try_sample_damageflyroll_jobj_ecb(
+            &damageflyroll_cur_ecb, batch, idx, char_id, anim, action_id, ecb_frame,
+            facing_dir_for_ecb, x, y);
+        have_prev_damageflyroll_ecb = mpcoll_ground_try_sample_damageflyroll_jobj_ecb(
+            &damageflyroll_prev_ecb, batch, idx, char_id, anim, action_id, ecb_frame_prev,
+            facing_dir_for_ecb, prev_x, prev_y);
+        if (have_cur_damageflyroll_ecb) {
+          cur_ecb_points = damageflyroll_cur_ecb;
+          cur_bottom_x = damageflyroll_cur_ecb.bottom_x;
+          cur_bottom_y = damageflyroll_cur_ecb.bottom_y;
+          cur_bot.x = damageflyroll_cur_ecb.bottom_x;
+          cur_bot.y = damageflyroll_cur_ecb.bottom_y;
+          cur_bot.rel_y = damageflyroll_cur_ecb.bottom_rel_y;
+          cur_bot.frame_u16 = damageflyroll_cur_ecb.frame_u16;
+        }
+        if (have_prev_damageflyroll_ecb) {
+          prev_ecb_points = damageflyroll_prev_ecb;
+          prev_bottom_x = damageflyroll_prev_ecb.bottom_x;
+          prev_bottom_y = damageflyroll_prev_ecb.bottom_y;
+          prev_bot.x = damageflyroll_prev_ecb.bottom_x;
+          prev_bot.y = damageflyroll_prev_ecb.bottom_y;
+          prev_bot.rel_y = damageflyroll_prev_ecb.bottom_rel_y;
+          prev_bot.frame_u16 = damageflyroll_prev_ecb.frame_u16;
+        }
+      }
       uint8_t callback_stopped_at_substep = 0u;
       const float prev_side_mid_y =
           prev_y + (0.5f * (prev_ecb_points.top_rel_y + prev_ecb_points.bottom_rel_y));
@@ -7592,11 +7807,18 @@ void mpcoll_ground_apply(MslBatch* batch) {
           desired_ecb_source_mode = (uint8_t)MSL_MPCOLL_ECB_SOURCE_HIDDEN_COLLDATA;
         }
       }
-      if (!use_hidden_ecb_lifetime && !lock_bottom_to_zero && specialhi_jobj_ecb_active) {
+      if (!use_hidden_ecb_lifetime && !lock_bottom_to_zero &&
+          (specialhi_jobj_ecb_active || damageflyroll_jobj_ecb_active)) {
         if (have_cur_specialhi_ecb) {
           current_ecb_source_mode = (uint8_t)MSL_MPCOLL_ECB_SOURCE_JOBJ;
         }
         if (have_prev_specialhi_ecb) {
+          previous_ecb_source_mode = (uint8_t)MSL_MPCOLL_ECB_SOURCE_JOBJ;
+        }
+        if (have_cur_damageflyroll_ecb) {
+          current_ecb_source_mode = (uint8_t)MSL_MPCOLL_ECB_SOURCE_JOBJ;
+        }
+        if (have_prev_damageflyroll_ecb) {
           previous_ecb_source_mode = (uint8_t)MSL_MPCOLL_ECB_SOURCE_JOBJ;
         }
       }
@@ -9911,7 +10133,28 @@ void mpcoll_ground_apply(MslBatch* batch) {
               &damageflyroll_root_proj_y_corr, &floor_nx, &floor_ny);
           if (damageflyroll_root_proj_line_idx >= 0 && damageflyroll_root_proj_y_corr >= 0.0f) {
             damageflyroll_root_proj_ready = 1u;
-            if (damageflyroll_root_proj_y_corr >= damageflyroll_side_y_thresh) {
+            // DamageFlyRoll terminal-downward live-pose turnover:
+            // ftCo_DamageFlyRoll_Phys applies ft_80084EEC (gravity clamped by character terminal
+            // velocity), calls doFlyRoll, then DamageFlyRoll_Coll consumes the live JObj ECB through
+            // ft_80081DD4. Keep the near-side-depth root projection on that live JObj owner and a
+            // terminal downward self-velocity; lower-terminal Fox rows with the same carried hard
+            // floor remain airborne until their source bottom/root contact actually turns over.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+            //   ftCo_DamageFlyRoll_Phys,doFlyRoll,ftCo_DamageFlyRoll_Coll}
+            // refs/melee/src/melee/ft/ft_084E.c::ft_80084EEC
+            // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+            // refs/melee/src/melee/mp/mpcoll.c::{mpColl_LoadECB_JObj,mpColl_800473CC,
+            //   mpColl_80044838_Floor}
+            const uint8_t damageflyroll_terminal_downward_root_owner =
+                (have_cur_damageflyroll_ecb != 0u &&
+                 batch->state.speed_y_self[idx] <= -(3.0f * k_ecb_vertical_unit))
+                    ? 1u
+                    : 0u;
+            if ((damageflyroll_jobj_ecb_active == 0u &&
+                 damageflyroll_root_proj_y_corr >= damageflyroll_side_y_thresh) ||
+                (damageflyroll_terminal_downward_root_owner &&
+                 damageflyroll_root_proj_y_corr + k_ecb_vertical_unit >=
+                     damageflyroll_side_y_thresh)) {
               damageflyroll_deep_side_penetration = 1u;
               const float root_x = batch->state.pos_x[idx];
               const float root_y = batch->state.pos_y[idx];
