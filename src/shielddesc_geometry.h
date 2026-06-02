@@ -318,10 +318,27 @@ static inline uint8_t msl_shielddesc_fighter_overlap_ftcoll_80007bcc(
        batch->state.hitbox_pose_create[hb_i])
           ? 1u
           : 0u;
+  // Persistent AttackAirLw capsules can still meet the callback-local ShieldDesc.size term after
+  // `ftCo_80093BC0` expires x14/x18 and recreates ShieldDesc. Keep this to direct no-submotion
+  // GuardReflect with no x18 ownership; broader sustained GuardReflect size terms over-admit
+  // adjacent shield/body boundaries.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80093BC0,ftCo_80092450}
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007AD18,ftColl_80078C70}
+  // refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
+  const uint8_t guardreflect_expired_no_submotion_attackairlw_persistent_size_lane =
+      (guardreflect_final_x14_no_submotion && batch->state.action_frame[d_idx] == -1 &&
+       batch->state.guard_reflect_timer_x18_seed[d_idx] == 0u &&
+       batch->state.guard_reflect_timer_x18[d_idx] == 0u && shr > 0.0f &&
+       batch->state.hitbox_prev_enabled[hb_i] &&
+       batch->state.action_id[a_idx] == (uint16_t)MSL_ACT_ATTACK_AIR_LW &&
+       batch->state.animation_index[a_idx] == (uint32_t)MSL_SM_ATTACK_AIR_LW)
+          ? 1u
+          : 0u;
   const float shield_desc_term =
-      (shield_desc_lane_active &&
-       (guardon_entry_enable_edge_size_lane || attackairlw_fresh_guardon_shielddesc_size_lane ||
-        guardreflect_expired_no_submotion_enable_edge_size_lane))
+      ((shield_desc_lane_active &&
+        (guardon_entry_enable_edge_size_lane || attackairlw_fresh_guardon_shielddesc_size_lane ||
+         guardreflect_expired_no_submotion_enable_edge_size_lane)) ||
+       guardreflect_expired_no_submotion_attackairlw_persistent_size_lane)
           ? shield_desc_world_r
           : 0.0f;
 

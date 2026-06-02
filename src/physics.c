@@ -2203,8 +2203,17 @@ void physics_integrate(MslBatch* batch) {
             }
           } else if (physics_action_is_common_ground_friction_only(action_id) ||
                      physics_action_is_grounded_common_damage_phys(action_id)) {
-            if (action_id == (uint16_t)MSL_ACT_REBOUND &&
-                batch->state.rebound_ground_accel_2[idx] != 0.0f) {
+            if ((action_id == (uint16_t)MSL_ACT_DOWN_BOUND_U ||
+                 action_id == (uint16_t)MSL_ACT_DOWN_BOUND_D) &&
+                physics_action_is_damage_fly(batch->state.seed_prev_action_id[idx])) {
+              // DownBound has already run its source Phys callback in knockdown_update_pre_physics.
+              // On the first frame after DamageFly_Coll enters DownBound, routing the row through
+              // this generic ground-friction bucket would apply ft_80084F3C twice.
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+              //   ftCo_DamageFly_Coll,ftCo_80090184}
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Phys
+            } else if (action_id == (uint16_t)MSL_ACT_REBOUND &&
+                       batch->state.rebound_ground_accel_2[idx] != 0.0f) {
               // Rebound's first Phys frame skips ft_80084F3C while mv.co.rebound.x0 is still live.
               // The queued xE8_ground_accel_2 from ftCommon_800804A0 applies to post-frame gr_vel
               // after movement for this frame has used the old ground speed.

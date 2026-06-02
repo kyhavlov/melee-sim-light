@@ -957,3 +957,39 @@ def test_damageflyn_without_stream_phase_rejects_exact_reseed_damageflyroll_prh_
     for q in (0, 1):
         _assert_transition_lock_fields_match_ref(out_row=out_row, ref_row=ref_row, record=8390, p=q)
     assert site1_count == 0, f"unexpected DamageFlyRoll gate pulse at exact reseed row"
+
+
+@pytest.mark.integration
+def test_qgd_downstream_rng_exception_rows_are_one_step_replay_exact() -> None:
+    # QGD accepted-exception proof for downstream rows after the open ftCo_8008DCE0 DamageFlyRoll
+    # stream branch:
+    # - 8387 is a SpecialHiHoldAir/Shine damage-state row in the full rollout, but a live one-step
+    #   segment from the same seed selects vanilla DamageFlyN exactly.
+    # - 9106 is a later GuardReflect row in the full rollout, but the exact seed row preserves
+    #   GuardReflect, proving it is not the rejected GuardReflect action/timer or ShieldDesc
+    #   descriptor-lifetime owner.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    # refs/melee/src/sysdolphin/baselib/random.c::HSD_Randf
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
+        "QuerulousGrandDinosaur.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    cases = (
+        (8387, 0, 354, 88, 6, 32),
+        (9106, 1, 182, 182, 0, 0),
+    )
+    for record, p, seed_action, ref_action, ref_hitlag, ref_hitstun in cases:
+        seed, ref, out = _run_one_step_row(dataset_path, record, p)
+        assert int(seed["action_id"][p]) == seed_action
+        assert int(ref["action_id"][p]) == ref_action
+        assert int(ref["hitlag"][p]) == ref_hitlag
+        assert int(ref["hitstun"][p]) == ref_hitstun
+        _assert_transition_identity_lock_fields_match_ref(
+            out_row=out, ref_row=ref, record=record, p=p
+        )

@@ -43,28 +43,36 @@ def _rollout(
     median: int,
     p90: int,
     replay_streak_count: int | None = None,
+    best_len: int = 1000,
+    approved_exception_total: int = 0,
 ) -> str:
     replay_streak = streak_count if replay_streak_count is None else replay_streak_count
+    approved = (
+        f"rollout.approved_exception_total: {approved_exception_total}\n"
+        if approved_exception_total
+        else ""
+    )
     return f"""
 suite: synthetic
 
 == datasets/suite/Foo.msl ==
-rollout.best_len: 1000
+rollout.best_len: {best_len}
 rollout.streak_count: {replay_streak}
 rollout.streak_len.median: {median}
 rollout.streak_len.p90: {p90}
 rollout.streak_len.p95: {p90}
-rollout.streak_len.max: 1000
+rollout.streak_len.max: {best_len}
 rollout.first_mismatch_total: {first}
 rollout.first_mismatch_seeded_total: {seeded}
+{approved}
 
 == suite summary ==
 overall.rollout.streak_count: {streak_count}
 overall.rollout.streak_len.median: {median}
 overall.rollout.streak_len.p90: {p90}
 overall.rollout.streak_len.p95: {p90}
-overall.rollout.streak_len.max: 1000
-overall.rollout.best_len.max: 1000
+overall.rollout.streak_len.max: {best_len}
+overall.rollout.best_len.max: {best_len}
 overall.rollout.first_mismatch_total: {first}
 overall.rollout.first_mismatch_seeded_total: {seeded}
 """
@@ -154,6 +162,68 @@ def test_validation_report_diff_classifies_distribution_only_rollout_red(tmp_pat
 
     assert any(d.metric == "rollout.streak_len.median" for d in classification.distribution_only)
     assert not classification.hard
+
+
+def test_validation_report_diff_classifies_exception_backed_best_len_red_as_distribution_only(
+    tmp_path: Path,
+) -> None:
+    before = tmp_path / "before"
+    after = tmp_path / "after"
+    _write_reports(
+        before,
+        one_step=_one_step(total=10, strict=12, p95="0.20"),
+        rollout=_rollout(streak_count=30, first=30, seeded=8, median=100, p90=700),
+    )
+    _write_reports(
+        after,
+        one_step=_one_step(total=10, strict=12, p95="0.20"),
+        rollout=_rollout(
+            streak_count=28,
+            first=28,
+            seeded=8,
+            median=120,
+            p90=600,
+            best_len=800,
+            approved_exception_total=1,
+        ),
+    )
+
+    before_reports = read_report_set(str(before), before=True)
+    after_reports = read_report_set(str(after))
+    classification = classify_reds(
+        before_reports, after_reports, diff_report_sets(before_reports, after_reports)
+    )
+
+    assert any(d.metric == "rollout.best_len" for d in classification.distribution_only)
+    assert any(d.metric == "rollout.streak_len.max" for d in classification.distribution_only)
+    assert any(d.metric == "overall.rollout.best_len.max" for d in classification.distribution_only)
+    assert any(d.metric == "overall.rollout.streak_len.max" for d in classification.distribution_only)
+    assert not classification.hard
+    assert not classification.unclassified
+
+
+def test_validation_report_diff_keeps_unapproved_best_len_red_hard(tmp_path: Path) -> None:
+    before = tmp_path / "before"
+    after = tmp_path / "after"
+    _write_reports(
+        before,
+        one_step=_one_step(total=10, strict=12, p95="0.20"),
+        rollout=_rollout(streak_count=30, first=30, seeded=8, median=100, p90=700),
+    )
+    _write_reports(
+        after,
+        one_step=_one_step(total=10, strict=12, p95="0.20"),
+        rollout=_rollout(streak_count=28, first=28, seeded=8, median=120, p90=600, best_len=800),
+    )
+
+    before_reports = read_report_set(str(before), before=True)
+    after_reports = read_report_set(str(after))
+    classification = classify_reds(
+        before_reports, after_reports, diff_report_sets(before_reports, after_reports)
+    )
+
+    assert any(d.metric == "rollout.best_len" for d in classification.hard)
+    assert any(d.metric == "overall.rollout.best_len.max" for d in classification.hard)
 
 
 def test_validation_report_diff_classifies_suite_distribution_only_rollout_red(

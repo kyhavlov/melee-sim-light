@@ -1,5 +1,6 @@
 #include "knockdown.h"
 
+#include <float.h>
 #include <limits.h>
 #include <math.h>
 
@@ -42,6 +43,17 @@ static inline float knockdown_clamp_absf(float value, float max_abs) {
 
 static inline uint8_t is_down_bound(uint16_t a) {
   return (a == (uint16_t)MSL_ACT_DOWN_BOUND_U || a == (uint16_t)MSL_ACT_DOWN_BOUND_D) ? 1u : 0u;
+}
+static inline uint8_t down_bound_floor_loss_after_damagefly_entry(const MslBatch* batch,
+                                                                  size_t idx) {
+  return (is_down_bound(batch->state.action_id[idx]) &&
+          batch->state.frame_start_on_ground[idx] != 0u && batch->state.ground_id[idx] != 0xFFFFu &&
+          is_down_bound(batch->state.seed_prev_action_id[idx]) &&
+          batch->state.seed_prev_action_frame[idx] == 0 &&
+          fabsf(batch->state.speed_x_attack[idx]) <= FLT_EPSILON &&
+          fabsf(batch->state.speed_y_attack[idx]) <= FLT_EPSILON)
+             ? 1u
+             : 0u;
 }
 static inline uint8_t is_down_wait(uint16_t a) {
   return (a == (uint16_t)MSL_ACT_DOWN_WAIT_U || a == (uint16_t)MSL_ACT_DOWN_WAIT_D) ? 1u : 0u;
@@ -3435,6 +3447,23 @@ void knockdown_update_post_collision(MslBatch* batch) {
         batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL;
         msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
         enter_fall_colldata_lock_from_ground(batch, idx);
+      } else if (!now_ground && down_bound_floor_loss_after_damagefly_entry(batch, idx)) {
+        // First DownBound floor-loss publication after DamageFly_Coll entry:
+        // DownBound_Coll calls ft_80082708/mpColl_8004B108 after the DownBound Phys tick. When
+        // that callback-local allow-ground-to-air publication keeps the DownBound motion visible,
+        // source does not carry the just-consumed ground velocity into an airborne self velocity.
+        // Preserve the callback-local root and clear the downed velocity bundle.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+        //   ftCo_DamageFly_Coll,ftCo_80090184}
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::{
+        //   ftCo_DownBound_Phys,ftCo_DownBound_Coll}
+        // refs/melee/src/melee/mp/mpcoll.c::mpColl_8004B108
+        batch->state.pos_x[idx] = batch->state.prev_pos_x[idx];
+        batch->state.speed_air_x_self[idx] = 0.0f;
+        batch->state.speed_ground_x_self[idx] = 0.0f;
+        batch->state.speed_y_self[idx] = 0.0f;
+        batch->state.speed_x_attack[idx] = 0.0f;
+        batch->state.speed_y_attack[idx] = 0.0f;
       } else if (was_ground && !now_ground) {
         if ((is_damage_ground_action(a0) || is_damage_air_action(a0)) &&
             common_damage_ground_floor_loss_should_missfoot(batch, idx, stage_id)) {

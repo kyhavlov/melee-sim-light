@@ -49,6 +49,13 @@ ROLLOUT_METRICS: dict[str, str] = {
     "overall.rollout.first_mismatch_seeded_total": "lower",
 }
 
+ROLLOUT_METADATA_METRICS: frozenset[str] = frozenset(
+    {
+        "rollout.approved_exception_total",
+        "rollout.approved_exception_seeded_total",
+    }
+)
+
 
 @dataclass(frozen=True)
 class MetricValue:
@@ -148,7 +155,7 @@ def parse_report(text: str, *, label: str) -> dict[str, dict[str, MetricValue]]:
         if metric is None:
             continue
         key = metric.group("key")
-        if key not in wanted:
+        if key not in wanted and key not in ROLLOUT_METADATA_METRICS:
             continue
         sections.setdefault(section, {})[key] = _parse_metric_value(metric.group("value"))
     return sections
@@ -175,6 +182,9 @@ def diff_report_sets(
         for section, before_metrics in before_sections.items():
             after_metrics = after_sections.get(section, {})
             for metric, before_value in before_metrics.items():
+                direction = directions.get(metric)
+                if direction is None:
+                    continue
                 after_value = after_metrics.get(metric)
                 if after_value is None:
                     continue
@@ -187,7 +197,7 @@ def diff_report_sets(
                         metric=metric,
                         before=before_value,
                         after=after_value,
-                        direction=directions[metric],
+                        direction=direction,
                     )
                 )
     return deltas
@@ -291,6 +301,72 @@ def _distribution_hard_metrics(delta: MetricDelta) -> tuple[str, ...]:
     )
 
 
+def _is_rollout_streak_distribution_metric(metric: str) -> bool:
+    return metric in {
+        "rollout.best_len",
+        "rollout.streak_len.median",
+        "rollout.streak_len.p90",
+        "rollout.streak_len.p95",
+        "rollout.streak_len.max",
+        "overall.rollout.best_len.max",
+        "overall.rollout.streak_len.median",
+        "overall.rollout.streak_len.p90",
+        "overall.rollout.streak_len.p95",
+        "overall.rollout.streak_len.max",
+    }
+
+
+def _suite_distribution_metric_to_replay_metric(metric: str) -> str:
+    return {
+        "overall.rollout.best_len.max": "rollout.best_len",
+        "overall.rollout.streak_len.median": "rollout.streak_len.median",
+        "overall.rollout.streak_len.p90": "rollout.streak_len.p90",
+        "overall.rollout.streak_len.p95": "rollout.streak_len.p95",
+        "overall.rollout.streak_len.max": "rollout.streak_len.max",
+    }.get(metric, metric)
+
+
+def _rollout_first_count_metrics(delta: MetricDelta) -> tuple[str, str]:
+    if delta.section == "suite":
+        return ("overall.rollout.first_mismatch_total", "overall.rollout.streak_count")
+    return ("rollout.first_mismatch_total", "rollout.streak_count")
+
+
+def _rollout_first_counts_non_regressing(
+    before: dict[str, dict[str, dict[str, MetricValue]]],
+    after: dict[str, dict[str, dict[str, MetricValue]]],
+    delta: MetricDelta,
+) -> bool:
+    first_metric, streak_metric = _rollout_first_count_metrics(delta)
+    first_ok = _metric_non_regressing(before, after, delta, first_metric)
+    streak_ok = _metric_non_regressing(before, after, delta, streak_metric)
+    return first_ok is True and streak_ok is True
+
+
+def _section_has_approved_rollout_exception(
+    after: dict[str, dict[str, dict[str, MetricValue]]],
+    delta: MetricDelta,
+) -> bool:
+    if delta.section == "suite":
+        return False
+    accepted = _metric_value(after, delta, "rollout.approved_exception_total")
+    return accepted is not None and accepted.value > 0
+
+
+def _is_exception_backed_replay_distribution_only(
+    before: dict[str, dict[str, dict[str, MetricValue]]],
+    after: dict[str, dict[str, dict[str, MetricValue]]],
+    delta: MetricDelta,
+) -> bool:
+    return (
+        "rollout" in delta.report
+        and delta.section != "suite"
+        and _is_rollout_streak_distribution_metric(delta.metric)
+        and _rollout_first_counts_non_regressing(before, after, delta)
+        and _section_has_approved_rollout_exception(after, delta)
+    )
+
+
 def classify_reds(
     before: dict[str, dict[str, dict[str, MetricValue]]],
     after: dict[str, dict[str, dict[str, MetricValue]]],
@@ -299,9 +375,32 @@ def classify_reds(
     hard: list[MetricDelta] = []
     distribution_only: list[MetricDelta] = []
     unclassified: list[MetricDelta] = []
+    rows = tuple(deltas)
+    exception_backed_replay_metrics = {
+        (delta.report, delta.metric)
+        for delta in rows
+        if delta.is_regression
+        and _is_exception_backed_replay_distribution_only(before, after, delta)
+    }
 
-    for delta in deltas:
+    for delta in rows:
         if not delta.is_regression:
+            continue
+        if _is_exception_backed_replay_distribution_only(before, after, delta):
+            distribution_only.append(delta)
+            continue
+        if (
+            "rollout" in delta.report
+            and delta.section == "suite"
+            and _is_rollout_streak_distribution_metric(delta.metric)
+            and _rollout_first_counts_non_regressing(before, after, delta)
+            and (
+                delta.report,
+                _suite_distribution_metric_to_replay_metric(delta.metric),
+            )
+            in exception_backed_replay_metrics
+        ):
+            distribution_only.append(delta)
             continue
         if _is_hard_red(delta):
             hard.append(delta)

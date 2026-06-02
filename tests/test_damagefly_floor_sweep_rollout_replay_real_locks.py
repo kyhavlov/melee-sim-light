@@ -14,9 +14,11 @@ ACT_DAMAGE_FLY_N = 0x0058
 ACT_DAMAGE_FLY_TOP = 0x005A
 ACT_DAMAGE_AIR_3 = 0x0056
 ACT_DOWN_BOUND_U = 0x00B7
+ACT_DOWN_BOUND_D = 0x00BF
 ACT_PASSIVE = 0x00C7
 ACT_PASSIVE_STAND_F = 0x00C8
 ACT_PASSIVE_STAND_B = 0x00C9
+ACT_GUARD_REFLECT = 0x00B6
 
 
 def _skip_if_required_artifacts_missing(root: Path) -> None:
@@ -48,6 +50,14 @@ def _dataset_path(root: Path) -> Path:
 
 def _aggregate_dataset_path(root: Path, name: str) -> Path:
     dataset_rel = f"datasets/aggregate_recent/replays/validation/aggregate_recent/{name}.msl"
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+    return dataset_path
+
+
+def _cardinal_dataset_path(root: Path, name: str) -> Path:
+    dataset_rel = f"datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/{name}.msl"
     dataset_path = root / dataset_rel
     if not dataset_path.exists():
         pytest.skip(f"missing local dataset: {dataset_rel}")
@@ -226,6 +236,64 @@ def test_ground_to_air_damage_entry_ecb_lock_survives_hitlag_for_downbound_hando
     assert int(out_8349["hitstun"][p]) == int(ref_8349["hitstun"][p]) == 0
     assert float(out_8349["pos_x"][p]) == pytest.approx(float(ref_8349["pos_x"][p]), abs=2e-6)
     assert float(out_8349["pos_y"][p]) == pytest.approx(float(ref_8349["pos_y"][p]), abs=2e-6)
+
+
+@pytest.mark.integration
+def test_damageflytop_downboundd_entry_uses_single_phys_tick_then_clears_floor_loss_qgd() -> None:
+    # Replay-real lock for QGD p1:
+    # - DamageFly_Coll reaches ftCo_80090184 -> DownBoundD on rec=1377.
+    # - The next DownBoundD Phys callback owns exactly one ft_80084F3C friction tick; applying the
+    #   simulator's generic grounded friction bucket a second time drifts the later GuardReflect
+    #   shield contact into an early GuardSetOff.
+    # - On the first DownBoundD floor-loss publication, DownBound_Coll keeps the visible DownBound
+    #   motion but does not carry the consumed ground velocity as airborne self velocity.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+    #   ftCo_DamageFly_Coll,ftCo_80090184}
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::{
+    #   ftCo_DownBound_Phys,ftCo_DownBound_Coll}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = _cardinal_dataset_path(root, "QuerulousGrandDinosaur")
+
+    p = 1
+    by_record = _run_rollout_records(
+        dataset_path,
+        1320,
+        (1377, 1378, 1379, 1380, 1443),
+        ucf_cardinals_1_0_enabled=True,
+    )
+
+    ref_1377, out_1377 = by_record[1377]
+    assert int(out_1377["action_id"][p]) == int(ref_1377["action_id"][p]) == ACT_DOWN_BOUND_D
+    assert int(out_1377["on_ground"][p]) == int(ref_1377["on_ground"][p]) == 1
+    assert float(out_1377["speed_ground_x_self"][p]) == pytest.approx(
+        float(ref_1377["speed_ground_x_self"][p]), abs=1e-7
+    )
+
+    ref_1378, out_1378 = by_record[1378]
+    assert int(out_1378["action_id"][p]) == int(ref_1378["action_id"][p]) == ACT_DOWN_BOUND_D
+    assert int(out_1378["on_ground"][p]) == int(ref_1378["on_ground"][p]) == 1
+    assert float(out_1378["pos_x"][p]) == pytest.approx(float(ref_1378["pos_x"][p]), abs=2e-6)
+    assert float(out_1378["speed_ground_x_self"][p]) == pytest.approx(
+        float(ref_1378["speed_ground_x_self"][p]), abs=1e-7
+    )
+
+    ref_1379, out_1379 = by_record[1379]
+    assert int(out_1379["action_id"][p]) == int(ref_1379["action_id"][p]) == ACT_DOWN_BOUND_D
+    assert int(out_1379["on_ground"][p]) == int(ref_1379["on_ground"][p]) == 0
+    assert float(out_1379["pos_x"][p]) == pytest.approx(float(ref_1379["pos_x"][p]), abs=2e-6)
+    assert float(out_1379["speed_air_x_self"][p]) == pytest.approx(0.0)
+
+    ref_1380, out_1380 = by_record[1380]
+    assert int(out_1380["action_id"][p]) == int(ref_1380["action_id"][p]) == ACT_DOWN_BOUND_D
+    assert int(out_1380["on_ground"][p]) == int(ref_1380["on_ground"][p]) == 0
+    assert float(out_1380["pos_x"][p]) == pytest.approx(float(ref_1380["pos_x"][p]), abs=2e-6)
+    assert float(out_1380["speed_air_x_self"][p]) == pytest.approx(0.0)
+
+    ref_1443, out_1443 = by_record[1443]
+    assert int(out_1443["action_id"][p]) == int(ref_1443["action_id"][p]) == ACT_GUARD_REFLECT
+    assert int(out_1443["hitlag"][p]) == int(ref_1443["hitlag"][p]) == 0
+    assert float(out_1443["shield_hp"][p]) == pytest.approx(float(ref_1443["shield_hp"][p]))
 
 
 @pytest.mark.integration

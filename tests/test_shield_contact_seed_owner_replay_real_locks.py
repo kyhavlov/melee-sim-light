@@ -1035,6 +1035,44 @@ def test_direct_guardreflect_guardon_pose_age_reaches_late_attackairn_contact_cd
 
 
 @pytest.mark.integration
+def test_expired_guardreflect_persistent_attackairlw_size_lane_hits_qgd() -> None:
+    # Runtime-positive for direct no-submotion GuardReflect after x14/x18 expiry:
+    # - p1 entered GuardReflect from the direct powershield path, so `ftCo_80093BC0` recreates
+    #   ShieldDesc through `ftCo_80092450` when the timers expire.
+    # - Falco AttackAirLw's persistent HitCapsule is already live; the callback-local
+    #   `lbColl_80007BCC` ShieldDesc.size term reaches the rec=1446 shield hit, while the adjacent
+    #   rec=1445 callback remains outside the accepted overlap.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80093A50,ftCo_80093BC0,ftCo_80092450}
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007AD18,ftColl_80078C70,ftColl_80076CBC}
+    # refs/melee/src/melee/lb/lbcollision.c::lbColl_80007BCC
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
+        / "QuerulousGrandDinosaur.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    attacker = 0
+    defender = 1
+
+    ref_miss, out_miss = _run_rollout_window(dataset_path, 1320, 1445)
+    assert int(ref_miss["action_id"][defender]) == 182  # GuardReflect
+    assert int(out_miss["action_id"][defender]) == 182
+    assert int(out_miss["hitlag"][defender]) == int(ref_miss["hitlag"][defender]) == 0
+
+    ref, out = _run_rollout_window(dataset_path, 1320, 1446)
+    assert int(ref["action_id"][defender]) == 181  # GuardSetOff
+    assert int(out["action_id"][defender]) == 181
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 7
+    assert int(out["hitlag"][attacker]) == int(ref["hitlag"][attacker]) == 7
+    assert int(out["hitstun"][defender]) == int(ref["hitstun"][defender]) == 0
+    assert float(out["shield_hp"][defender]) == pytest.approx(float(ref["shield_hp"][defender]))
+
+
+@pytest.mark.integration
 def test_carried_guardreflect_powershield_window_blocks_early_attackairb_hitshield() -> None:
     # Runtime-negative/positive boundary for a carried GuardReflect powershield window. QGD 9104
     # starts from GuardReflect with x18 still live; ftCo_80093BC0 has not yet cleared x221C_b2, so

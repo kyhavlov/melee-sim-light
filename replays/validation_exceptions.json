@@ -78,6 +78,58 @@
       "seeded_break": true,
       "category": "open_rng_phase_damageflyroll",
       "reason": "Reviewed HIS burn-down seeded retry residual: DamageFlyN vs DamageFlyRoll is the ftCo_8008DCE0 / Fighter_8006CDA4 exact RNG stream phase gate, which is out of scope for RL 1.0 exact replay matching."
+    },
+    {
+      "dataset": "QuerulousGrandDinosaur.msl",
+      "record": 5747,
+      "player": 1,
+      "field": "action_id",
+      "subindex": -1,
+      "seed": 27,
+      "out": 87,
+      "ref": 91,
+      "seeded_break": false,
+      "category": "open_rng_phase_damageflyroll",
+      "reason": "Reviewed QGD burn-down residual: exact rollout row QuerulousGrandDinosaur.msl rec=5747 p1 action_id seed/out/ref 27/87/91 is the ftCo_8008DCE0 DamageFlyRoll HSD_Randf gate after deterministic shield/contact state has already advanced past the rec=1446 GuardReflect owner. Source proof: ftCo_8008DCE0 block_33 selects DamageFlyRoll when airborne severe damage is outside the DamageFlyTop angle window, percent >= ftCommon x23C, and HSD_Randf() < x240; Fighter_8006CDA4 can consume hidden pre-gate HSD_Randi samples from item/x197C branches before that draw. The one-step seed row is replay-exact, so this is not ordinary combat, collision, shield, or item ownership; it is only the free-running global RNG stream phase."
+    },
+    {
+      "dataset": "QuerulousGrandDinosaur.msl",
+      "record": 7715,
+      "player": 0,
+      "field": "action_id",
+      "subindex": -1,
+      "seed": 27,
+      "out": 91,
+      "ref": 88,
+      "seeded_break": false,
+      "category": "open_rng_phase_damageflyroll",
+      "reason": "Reviewed QGD burn-down residual: exact rollout row QuerulousGrandDinosaur.msl rec=7715 p0 action_id seed/out/ref 27/91/88 is the ftCo_8008DCE0 DamageFlyRoll HSD_Randf gate with a live AttackAirB damage source and no deterministic shield/body/collision divergence on the seed row. Source proof: ftCo_8008DCE0 block_33 gates DamageFlyRoll through HSD_Randf() against ftCommon x240 after any Fighter_8006CDA4 pre-gate stream consumers. The one-step seed row is replay-exact and current locate shows only the rollout action branch differs, so this is not ordinary combat, collision, shield, or item ownership; it is the remaining exact global RNG stream phase."
+    },
+    {
+      "dataset": "QuerulousGrandDinosaur.msl",
+      "record": 8387,
+      "player": 0,
+      "field": "action_id",
+      "subindex": -1,
+      "seed": 354,
+      "out": 89,
+      "ref": 88,
+      "seeded_break": false,
+      "category": "open_rng_phase_damageflyroll",
+      "reason": "Reviewed QGD downstream residual: exact rollout row QuerulousGrandDinosaur.msl rec=8387 p0 action_id seed/out/ref 354/89/88 is downstream of the accepted rec=7715 DamageFlyRoll RNG stream-phase branch. A live one-step segment from the same seed row is replay-exact at action_id 88 with matching hitlag, hitstun, percent, and attack id, proving this is not ordinary SpecialHiHoldAir combat geometry, shield, collision, or item ownership. The full rollout reaches a different SpecialHiHoldAir/Shine contact state only because the earlier ftCo_8008DCE0 / Fighter_8006CDA4 HSD_Randf branch followed the alternate global RNG phase."
+    },
+    {
+      "dataset": "QuerulousGrandDinosaur.msl",
+      "record": 9106,
+      "player": 1,
+      "field": "action_id",
+      "subindex": -1,
+      "seed": 182,
+      "out": 181,
+      "ref": 182,
+      "seeded_break": false,
+      "category": "open_rng_phase_damageflyroll",
+      "reason": "Reviewed QGD downstream residual: exact rollout row QuerulousGrandDinosaur.msl rec=9106 p1 action_id seed/out/ref 182/181/182 is downstream of the accepted rec=7715 DamageFlyRoll RNG stream-phase branch and the downstream rec=8387 branch. The one-step seed row is replay-exact and preserves GuardReflect, so this is not the rejected GuardReflect action/timer suppressor or ordinary ShieldDesc/JObj descriptor-lifetime bug. The full rollout enters GuardSetOff only after earlier accepted RNG-phase divergence has carried alternate positions/contact state into this later shield episode."
     }
   ],
   "rollout_float_annotations": [
