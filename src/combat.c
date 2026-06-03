@@ -2033,8 +2033,32 @@ static inline uint8_t combat_attackairb_dense_seed_suppresses_full_body(const Ms
   if (expected_hitlag == 0u || batch->state.hitstun[d_idx] > expected_hitlag) {
     return 0u;
   }
-  if (batch->state.combat_hitlist_cd[cd_i] != 0xFFFFu) {
-    return 0u;
+  const uint16_t dense_cd = batch->state.combat_hitlist_cd[cd_i];
+  if (dense_cd != 0xFFFFu) {
+    if (dense_cd != 0u) {
+      return 0u;
+    }
+    if (batch->replay_rollout_reseeded == NULL || batch->replay_rollout_reseeded[bi] == 0u) {
+      return 0u;
+    }
+    const int16_t second_create_frame = move_tables_attackair_second_create_hitbox_frame(
+        batch->state.char_id[a_idx], batch->state.action_id[a_idx]);
+    if (second_create_frame < 0 ||
+        batch->state.action_frame[a_idx] < (int16_t)(second_create_frame + 4)) {
+      return 0u;
+    }
+    // Replay-rollout terminal DamageFlyTop source fallback:
+    // - A rollout seeded before the current AttackAirB episode has no replay dense hit_group lane
+    //   for the later terminal frame, and the first-create clear may have consumed the live
+    //   HitCapsule list before the late BODY horizon.
+    // - The victim's damage attribution still proves the same attacker port owns the current
+    //   DamageFlyTop state while the current attacker instance is not the accepted BODY source.
+    //   Use that source-owned provenance only inside the current hit's expected hitlag horizon,
+    //   and only in replay rollout where this hidden HitCapsule state is otherwise unobservable.
+    // refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006A360}
+    // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_80076808}
+    // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+    return 1u;
   }
   const uint16_t seed_iid = batch->state.combat_hitlist_victim_iid[cd_i];
   if (seed_iid != 0u && seed_iid != defender_iid) {
@@ -6889,6 +6913,23 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           if (shield_seed_kind == 0u &&
               combat_guard_reflect_active_x14_rejects_strong_attackairb_shield(batch, a_idx, d_idx,
                                                                                hb_i)) {
+            continue;
+          }
+          if (shield_seed_kind == 0u &&
+              batch->state.action_id[a_idx] == (uint16_t)MSL_ACT_ATTACK_AIR_B &&
+              combat_guard_reflect_final_x14_live_x18_blocks_body(batch, d_idx) &&
+              batch->state.facing[a_idx] == batch->state.facing[d_idx]) {
+            // GuardReflect final-x18 same-facing ShieldDesc side owner:
+            // - At the x14-expired/x18-live callback, direct no-submotion GuardReflect still owns
+            //   the powershield-active side lane. Same-facing AttackAirB rows on this boundary can
+            //   expose a broad shield sphere overlap while the source ShieldDesc side test remains
+            //   a miss until the next callback clears x18.
+            // - Opposite-facing final-x18 AttackAirB controls with accepted ShieldDesc provenance
+            //   remain on the normal GuardSetOff path; this is a side/pose discriminator, not a
+            //   character-pair or replay-row branch.
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+            //   ftCo_GuardReflect_Anim,ftCo_80093BC0,ftCo_80092F2C}
+            // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
             continue;
           }
           const uint8_t element = batch->state.hitbox_element[hb_i];

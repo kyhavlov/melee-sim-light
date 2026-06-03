@@ -1101,12 +1101,124 @@ def test_carried_guardreflect_powershield_window_blocks_early_attackairb_hitshie
     assert int(out_blocked["action_id"][defender]) == 182
     assert int(out_blocked["hitlag"][defender]) == int(ref_blocked["hitlag"][defender]) == 0
 
+    ref_final_x18, out_final_x18 = _run_rollout_window(
+        dataset_path, 8939, 9106, ucf_enabled=True, ucf_cardinals_1_0_enabled=True
+    )
+    assert int(ref_final_x18["action_id"][defender]) == 182  # GuardReflect.
+    assert int(out_final_x18["action_id"][defender]) == int(ref_final_x18["action_id"][defender])
+    assert int(out_final_x18["hitlag"][defender]) == int(ref_final_x18["hitlag"][defender]) == 0
+    assert float(out_final_x18["shield_hp"][defender]) == pytest.approx(
+        float(ref_final_x18["shield_hp"][defender]), abs=1e-6
+    )
+
     ref_accept, out_accept = _run_rollout_window(dataset_path, 8939, 9107)
     assert int(ref_accept["action_id"][defender]) == 181
     assert int(out_accept["action_id"][defender]) == 181
     assert int(out_accept["hitlag"][defender]) > 0
     assert int(ref_accept["hitlag"][defender]) == 5
     assert float(out_accept["shield_hp"][defender]) < float(ref_blocked["shield_hp"][defender])
+
+
+@pytest.mark.integration
+def test_opposite_facing_final_x18_attackairb_shielddesc_still_enters_setoff_dsg() -> None:
+    # Positive control for the QGD final-x18 suppressor above:
+    # - DSG 3559 is also AttackAirB vs x14-expired/x18-live GuardReflect, but source ShieldDesc
+    #   provenance accepts the hit. The side/pose boundary must therefore stay on the normal
+    #   GuardSetOff path rather than becoming a broad final-x18 AttackAirB reject.
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{
+    #   ftCo_GuardReflect_Anim,ftCo_80093BC0,ftCo_80092F2C}
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076CBC}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/battlefield_recent/"
+        "DelayedSuperbGuanaco.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    attacker = 0
+    defender = 1
+    ds = read_dataset(str(dataset_path))
+    seed = ds.samples["seed_t"][3559]
+    assert int(seed["action_id"][attacker]) == 67  # AttackAirB.
+    assert int(seed["action_id"][defender]) == 182  # GuardReflect.
+    assert int(seed["guard_reflect_timer_x14"][defender]) == 0
+    assert int(seed["guard_reflect_timer_x18"][defender]) == 2
+    assert float(seed["facing"][attacker]) != float(seed["facing"][defender])
+    assert all(
+        int(seed["combat_shield_contact_hb_kind"][attacker, hb, defender]) == 2
+        for hb in range(4)
+    )
+
+    ref, out = _run_rollout_window(
+        dataset_path, 3558, 3559, ucf_enabled=True, ucf_cardinals_1_0_enabled=True
+    )
+    assert int(ref["action_id"][defender]) == 181  # GuardSetOff.
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender])
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 5
+    assert float(out["shield_hp"][defender]) == pytest.approx(float(ref["shield_hp"][defender]))
+
+
+@pytest.mark.integration
+def test_attackairb_terminal_damageflytop_source_attribution_suppresses_qgd_rehit() -> None:
+    # AttackAirB terminal DamageFlyTop source attribution:
+    # - The rollout starts before QGD's dense hitlist seed exists, so the late BODY path must use
+    #   live damage attribution (`last_hit_by` + stale `instance_hit_by`) plus the current hitlag
+    #   horizon rather than reconstructing a first-create dense victims_1 list.
+    # - At QGD 8636, vanilla keeps Fox in DamageFlyTop with no percent change; a full BODY rehit
+    #   would enter DamageFlyN and add 9%.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_80076808}
+    # refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
+        "QuerulousGrandDinosaur.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    defender = 1
+    ref, out = _run_rollout_window(
+        dataset_path, 8513, 8636, ucf_enabled=True, ucf_cardinals_1_0_enabled=True
+    )
+    assert int(ref["action_id"][defender]) == 90  # DamageFlyTop.
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender])
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 0
+    assert int(out["hitstun"][defender]) == int(ref["hitstun"][defender]) == 4
+    assert float(out["percent"][defender]) == pytest.approx(float(ref["percent"][defender]))
+
+
+@pytest.mark.integration
+def test_attackairb_terminal_damageflytop_horizon_allows_dcc_fresh_full_hit() -> None:
+    # Positive control for the QGD terminal-source suppressor:
+    # - DCC 3152 is another AttackAirB vs DamageFlyTop rollout with no live per-capsule seed in the
+    #   long rollout state, but remaining hitstun is outside the current hit's hitlag horizon.
+    # - The stale source attribution therefore must not suppress the fresh full BODY hit.
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_80076808}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/aggregate_recent/"
+        "DistinctCaringCobra.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    defender = 0
+    ref, out = _run_rollout_window(
+        dataset_path, 3138, 3152, ucf_enabled=True, ucf_cardinals_1_0_enabled=True
+    )
+    assert int(ref["action_id"][defender]) == 88  # DamageFlyN from the accepted BODY hit.
+    assert int(out["action_id"][defender]) == int(ref["action_id"][defender])
+    assert int(out["hitlag"][defender]) == int(ref["hitlag"][defender]) == 6
+    assert int(out["hitstun"][defender]) == int(ref["hitstun"][defender]) == 45
+    assert float(out["percent"][defender]) == pytest.approx(float(ref["percent"][defender]))
 
 
 @pytest.mark.integration
