@@ -176,7 +176,7 @@ overall.float_norm_mae_p95: 0.00001356
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.msl ==
 Records: 7837  Players/scored per record: 2  Total player-frames: 15674
 mismatch.action_id: 0 / 15674 (0.000000)
-mismatch.action_frame: 1 / 15674 (0.000064)
+mismatch.action_frame: 0 / 15674 (0.000000)
 mismatch.on_ground: 0 / 15674 (0.000000)
 mismatch.facing: 0 / 15674 (0.000000)
 mismatch.stocks: 0 / 15674 (0.000000)
@@ -193,7 +193,7 @@ mismatch.instance_id: 0 / 15674 (0.000000)
 mismatch.last_attack_landed: 0 / 15674 (0.000000)
 mismatch.combo_count: 0 / 15674 (0.000000)
 mismatch.last_hit_by: 4 / 15674 (0.000255)
-mismatch.state_flags: 4 / 78370 (0.000051)
+mismatch.state_flags: 3 / 78370 (0.000038)
 mismatch.item_exists: 0 / 117555 (0.000000)
 mismatch.item_type: 0 / 117555 (0.000000)
 mismatch.item_state: 0 / 117555 (0.000000)
@@ -213,13 +213,13 @@ err.item_pos_x: mae=0.007896 p95=0.000000 max=3.790001
 err.item_pos_y: mae=0.000000 p95=0.000000 max=0.000126
 err.item_vel_x: mae=0.000001 p95=0.000000 max=0.000213
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000126
-overall.discrete_mismatch: 10 / 948277
-overall.strict_discrete_mismatch: 29 / 948277
+overall.discrete_mismatch: 8 / 948277
+overall.strict_discrete_mismatch: 27 / 948277
 overall.ignored_discrete_mismatch: 19
 overall.float_norm_mae_p95: 0.00001368
 
 == suite summary ==
-overall.discrete_mismatch: 45 / 4462843
-overall.strict_discrete_mismatch: 131 / 4462843
+overall.discrete_mismatch: 43 / 4462843
+overall.strict_discrete_mismatch: 129 / 4462843
 overall.ignored_discrete_mismatch: 86
 overall.float_norm_mae_p95: 0.00001637

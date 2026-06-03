@@ -6214,11 +6214,15 @@ void locomotion_update_pre(MslBatch* batch) {
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c
       if (is_attack_air) {
         const uint32_t anim = batch->state.animation_index[idx];
-        if (anim != 0xFFFFFFFFu && anim <= 0xFFFFu) {
+        if (batch->state.on_ground[idx] == 0u && anim != 0xFFFFFFFFu && anim <= 0xFFFFu) {
           if (anim_finished(batch->state.char_id[idx], (uint16_t)anim,
                             batch->state.anim_frame_f32[idx])) {
             // Decomp: ftCo_AttackAir_Anim enters Fall via ftCo_Fall_Enter (KeepFastFall set).
+            // This anim owner is the airborne AttackAir path; grounded AttackAir continuation is
+            // owned by the floor-contact/grounded callback path and must not synthesize an
+            // intermediate Fall motion-state entry before grounded IASA can enter Squat/Wait.
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Coll
             // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter
             enter_fall_keep_fastfall_ftco_fall_enter(batch, idx);
             ftco_fall_enter_clamp_air_drift_x(batch, ch, idx);
@@ -6393,6 +6397,15 @@ void locomotion_update_pre(MslBatch* batch) {
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c
         if (allow_interrupt) {
           if (escape_air_try_enter_from_air_locomotion(batch, c, idx)) {
+            continue;
+          }
+
+          // Aerial attack re-entry from AttackAir DO_IASA:
+          // DO_IASA calls checkItemThrowInput before the JumpAerial helper, and that helper routes
+          // A/c-stick input back through ftCo_AttackAir_EnterFromMsid for ordinary Fox/Falco rows.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::{
+          //   DO_IASA,checkItemThrowInput,ftCo_AttackAir_EnterFromMsid}
+          if (locomotion_attackair_try_enter_from_air_iasa(batch, c, idx)) {
             continue;
           }
 

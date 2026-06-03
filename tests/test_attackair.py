@@ -198,6 +198,32 @@ def test_attackair_anim_end_enters_fall() -> None:
     assert int(out["action_frame"][0]) == 0
 
 
+def test_grounded_attackair_anim_end_does_not_synthesize_fall() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    end_frame = _tracks_end_frame(Path("data/anims/fox.tracks.bin"), SM_ATTACK_AIR_N)
+
+    seed = _seed_air_base()
+    seed["action_id"][0, 0] = np.uint16(ACT_ATTACK_AIR_N)
+    seed["action_frame"][0, 0] = np.int16(math.ceil(end_frame))
+    seed["anim_frame_f32"][0, 0] = np.float32(end_frame)
+    seed["frame_speed_mul_f32"][0, 0] = np.float32(1.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_ATTACK_AIR_N)
+    seed["pos_y"][0, 0] = np.float32(0.0001)
+    seed["on_ground"][0, 0] = np.uint8(1)
+    seed["ground_id"][0, 0] = np.uint16(0)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+
+    out = _step_once(seed, prev_inp, inp)
+    assert int(out["action_id"][0]) != ACT_FALL
+    assert int(out["animation_index"][0]) != SM_FALL
+
+
 def test_attackair_iasa_gates_airdodge_and_double_jump() -> None:
     import msl_binding
 
@@ -280,6 +306,36 @@ def test_attackair_iasa_gates_airdodge_and_double_jump() -> None:
     assert int(out["animation_index"][0]) == SM_JUMP_AERIAL_F
     assert int(out["action_frame"][0]) == 0
     assert int(out["jumps_left"][0]) == 1
+
+
+def test_attackair_iasa_can_enter_fresh_attackair_before_double_jump() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    input_stride = int(sizes["input"])
+
+    iasa_frame = _attackair_allow_interrupt_frame("ftCo_SM_AttackAirN")
+    assert iasa_frame > 0
+
+    seed = _seed_air_base()
+    seed["action_id"][0, 0] = np.uint16(ACT_ATTACK_AIR_N)
+    seed["action_frame"][0, 0] = np.int16(iasa_frame - 1)
+    seed["anim_frame_f32"][0, 0] = np.float32(iasa_frame - 1)
+    seed["frame_speed_mul_f32"][0, 0] = np.float32(1.0)
+    seed["animation_index"][0, 0] = np.uint32(SM_ATTACK_AIR_N)
+    seed["jumps_left"][0, 0] = np.uint8(2)
+
+    prev_inp = _mk_input_bytes(1, input_stride)
+    inp = _mk_input_bytes(1, input_stride)
+    inp_view = inp.view(INPUT_DTYPE).reshape((1,))
+    inp_view["p"]["buttons"][0, 0] = np.uint16(BUTTON_X)
+    inp_view["p"]["c_x"][0, 0] = np.int8(-80)
+
+    out = _step_once(seed, prev_inp, inp)
+    assert int(out["action_id"][0]) == ACT_ATTACK_AIR_B
+    assert int(out["animation_index"][0]) == SM_ATTACK_AIR_B
+    assert int(out["action_frame"][0]) == 1
+    assert int(out["jumps_left"][0]) == 2
 
 
 def test_attackairb_allow_interrupt_probe_clamps_at_entry_frame() -> None:
