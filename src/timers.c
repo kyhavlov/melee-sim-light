@@ -415,6 +415,18 @@ void timers_consume_post_hitlag_callbacks_pre_input(MslBatch* batch) {
       if (batch->state.frame_speed_mul_fp_q16_16[idx] == 0) {
         batch->state.frame_speed_mul_fp_q16_16[idx] = (int32_t)MSL_Q16_16_ONE;
       }
+      if (a == (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL &&
+          batch->state.damageflyroll_runtime_x1994_on_exit[idx] != 0u &&
+          c->colanim_damage_x1994_frames > batch->state.colanim_timer_x1994[idx]) {
+        // Runtime-owned DamageFlyRoll hitlag-exit colanim producer:
+        // ftCo_Damage_OnExitHitlag calls ftColl_8007B7A4(..., p_ftCommonData->x130). The producer
+        // is armed by live ProcessHit DamageFlyRoll entry, not by visible DamageFlyRoll action
+        // shape alone, so replay-seeded hitlag rows without that runtime source stay seed-owned.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_Damage_OnExitHitlag
+        // refs/melee/src/melee/ft/ftcoll.c::{ftColl_8007B7A4,ftColl_8007B868}
+        batch->state.colanim_timer_x1994[idx] = c->colanim_damage_x1994_frames;
+      }
+      batch->state.damageflyroll_runtime_x1994_on_exit[idx] = 0u;
 
       const float lstick_x = stick_i8_to_unit(batch->state.prev_input_main_x[idx]);
       const float lstick_y = stick_i8_to_unit(batch->state.prev_input_main_y[idx]);

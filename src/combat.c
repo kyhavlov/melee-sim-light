@@ -3964,6 +3964,32 @@ static inline void combat_damageflyroll_consume_fighter_8006cda4_pre_gate_count(
   batch->state.fighter_8006cda4_pre_gate_consume_count[d_idx] = 0u;
 }
 
+static inline void combat_damageflyroll_consume_damageflytop_attackairb_live_count(
+    MslBatch* batch, int bi, size_t d_idx, size_t a_idx, int attacker) {
+  if (batch == NULL || attacker < 0 || (size_t)attacker == (d_idx % (size_t)MSL_MAX_PLAYERS)) {
+    return;
+  }
+  if (batch->state.fighter_8006cda4_pre_gate_consume_count[d_idx] != 0u ||
+      batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_DAMAGE_FLY_TOP ||
+      batch->state.action_id[a_idx] != (uint16_t)MSL_ACT_ATTACK_AIR_B ||
+      batch->state.action_frame[a_idx] < 7) {
+    return;
+  }
+  // Live DamageFlyTop -> late BAir pre-gate owner:
+  // `Fighter_8006CDA4` runs before the `ftCo_8008DCE0` DamageFlyRoll gate. Replay seed generation
+  // uses the same source-backed rule for late AttackAirB hits against DamageFlyTop: after the early
+  // create-edge window, the current source episode owns exactly two pre-gate HSD_Randi advances.
+  // Runtime combat observes the post-animation live frame, so source seed frame 6+ is live frame
+  // 7+. Keep this tied to the current ProcessHit attacker, not stale `last_hit_by` provenance.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+  // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}
+  (void)combat_rng_consume_randi_site(
+      batch, bi, MSL_RNG_SITE_DAMAGE_FLY_ROLL_PRE_GATE_FIGHTER_8006CDA4_PRIMARY, 1);
+  (void)combat_rng_consume_randi_site(
+      batch, bi, MSL_RNG_SITE_DAMAGE_FLY_ROLL_PRE_GATE_FIGHTER_8006CDA4_SECONDARY, 1);
+}
+
 static inline void combat_damageflyroll_consume_jumpaerial_attackairb_carry(MslBatch* batch, int bi,
                                                                             size_t d_idx,
                                                                             size_t a_idx,
@@ -4075,6 +4101,8 @@ static inline void combat_damage_enter_state(const MslCommonParams* c, MslBatch*
             percent_cur >= (float)c->damagefly_roll_percent_threshold) {
           combat_damageflyroll_consume_jumpaerial_attackairb_carry(batch, bi, d_idx, source_a_idx,
                                                                    source_attacker);
+          combat_damageflyroll_consume_damageflytop_attackairb_live_count(
+              batch, bi, d_idx, source_a_idx, source_attacker);
           combat_damageflyroll_consume_fighter_8006cda4_pre_gate_count(batch, bi, d_idx);
           const float roll =
               combat_rng_consume_randf_site(batch, bi, MSL_RNG_SITE_DAMAGE_FLY_ROLL_GATE);
@@ -4224,6 +4252,17 @@ static inline void combat_processhit_apply_hitlag_after_entry(
       break;
   }
   if (apply_flags != 0u) {
+    if (batch->state.action_id[ev->d_idx] == (uint16_t)MSL_ACT_DAMAGE_FLY_ROLL) {
+      // Runtime DamageFlyRoll hitlag-exit x1994 provenance:
+      // - ftCo_8008DCE0 installs ftCo_Damage_OnExitHitlag for this live ProcessHit damage entry.
+      // - The callback later calls ftColl_8007B7A4(..., p_ftCommonData->x130), which arms x1994.
+      // - Keep this as internal source state rather than inferring from arbitrary replay-seeded
+      //   DamageFlyRoll action/hitlag rows.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+      //   ftCo_8008DCE0,ftCo_Damage_OnExitHitlag}
+      // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007B7A4
+      batch->state.damageflyroll_runtime_x1994_on_exit[ev->d_idx] = 1u;
+    }
     if (ev->hitlag_allows_sdi != 0u) {
       combat_damage_allow_sdi_set(batch, ev->d_idx);
     }
@@ -7301,8 +7340,23 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
           // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
           const uint8_t baseline_overlaps =
               combat_sphere_capsule_intersects(hx, hy, hz, hr, ax, ay, az, bx, by, bz, cr, NULL);
+          const uint8_t damageflytop_attackairhi_hb0_matrix_only_unreliable =
+              (batch->state.action_id[d_idx] == (uint16_t)MSL_ACT_DAMAGE_FLY_TOP &&
+               batch->state.action_id[a_idx] == (uint16_t)MSL_ACT_ATTACK_AIR_HI && hb_id == 0 &&
+               batch->state.hitlag[d_idx] == 0u && batch->state.hitstun[d_idx] <= 3u)
+                  ? 1u
+                  : 0u;
           if (lbcoll_overlap_valid && !baseline_overlaps &&
-              !combat_body_matrix_positive_pose_reliable(batch, d_idx)) {
+              (!combat_body_matrix_positive_pose_reliable(batch, d_idx) ||
+               damageflytop_attackairhi_hb0_matrix_only_unreliable)) {
+            // Terminal DamageFlyTop / UpAir hb0 BODY candidate owner:
+            // TBK:5248 shows source contact on UpAir hb1 while hb0 is a matrix-only false
+            // positive from replay-reconstructed terminal DamageFlyTop JObj pose. Keep the
+            // decomp-shaped matrix path for other DamageFlyTop contacts; only reject this
+            // matrix-only lower UpAir capsule over a world-space miss.
+            // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}
+            // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}
+            // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
             lbcoll_overlap_valid = 0u;
             lbcoll_overlap_amount = 0.0f;
           }

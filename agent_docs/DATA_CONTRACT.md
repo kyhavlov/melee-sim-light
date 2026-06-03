@@ -665,6 +665,10 @@ Source/generation:
 - For DamageFlyTop delayed gates, counts `1..3` and marker `4` may be carried backward only across
   the same-source airborne hitstun episode, including same-source active-hitlag rows. Counts
   `1..3` carry hidden stream phase; marker `4` carries only zero-consume gate-admission provenance.
+  Runtime can also source the deterministic late `AttackAirB` current-hit slice directly: when the
+  current ProcessHit source is seed-frame `AttackAirB` frame 6+ (post-animation live frame 7+)
+  against a `DamageFlyTop` victim, it consumes the same two `Fighter_8006CDA4` pre-gate RNG
+  advances without consulting stale `last_hit_by`.
 - For replay-proven AttackAirN pre-action delayed gates, only nonzero consume counts `1..3` may be
   carried backward. AttackAirN carry may cross the same-source `DamageFlyTop -> DamageFall_IASA ->
   AttackAirN` handoff; it stops at source/ground/hitlag/action-family boundaries and never
@@ -705,8 +709,10 @@ Source/generation:
 - `reseed_seed_rollout()` advances `frame_pre_random_seed` only for explicit replay-frame RNG-clock
   owners. The no-live-Heiho Yoshi Shy Guy scheduler no longer uses the generic `+0x10000` frame
   clock; it installs `stage_yoshi_shyguy_spawn_rng_seed_u32` at the zero-timer callback. Other
-  data-backed blaster capture/throw episodes still use replay-frame RNG clock ownership. This is
-  rollout-only metadata ownership: normal
+  data-backed blaster capture/throw episodes still use replay-frame RNG clock ownership, including
+  post-detach victims that remain in same-source throw-laser hitstun while a live owner blaster
+  article proves the `ftFx_Throw_Anim` / `itFoxlaser` callback episode. This is rollout-only
+  metadata ownership: normal
   `reseed_seed()` keeps `frame_id` / `frame_pre_random_seed` seed-owned after the preprocessing
   phase choice above initializes the simulated frame's source RNG seed, while validation rollout
   carries `frame_id` for all replay rollouts and carries the Slippi frame-start RNG seed only through

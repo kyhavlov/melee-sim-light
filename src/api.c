@@ -1006,6 +1006,50 @@ static inline uint8_t msl_seed_has_live_yoshi_shyguy(const MslSeed* seed) {
   return 0u;
 }
 
+static inline uint8_t msl_seed_has_live_owner_blaster_article(const MslSeed* seed, int owner,
+                                                              const MslLaserParams* lp) {
+  if (seed == NULL || lp == NULL || owner < 0 || owner >= MSL_MAX_PLAYERS) {
+    return 0u;
+  }
+  for (int it = 0; it < MSL_MAX_ITEMS; it++) {
+    const MslItem* item = &seed->items[it];
+    if (item->exists == 0u || item->owner != (int8_t)owner) {
+      continue;
+    }
+    if (item->type == lp->gun_itkind || item->type == lp->shot_itkind) {
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
+static inline uint8_t msl_seed_has_other_unseeded_damageflyroll_gate_candidate(const MslSeed* seed,
+                                                                               int active_players,
+                                                                               int seeded_victim) {
+  if (seed == NULL) {
+    return 0u;
+  }
+  const MslCommonParams* common = msl_common_params();
+  if (common == NULL) {
+    return 0u;
+  }
+  const float roll_threshold = (float)common->damagefly_roll_percent_threshold;
+  for (int p = 0; p < active_players; p++) {
+    if (p == seeded_victim || seed->fighter_8006cda4_pre_gate_consume_count[p] != 0u ||
+        seed->on_ground[p] != 0u || seed->hitlag[p] != 0u || seed->percent[p] < roll_threshold) {
+      continue;
+    }
+    const uint16_t action = seed->action_id[p];
+    if (action == (uint16_t)MSL_ACT_ATTACK_AIR_B && seed->action_frame[p] >= 5) {
+      return 1u;
+    }
+    if (action == (uint16_t)MSL_ACT_ATTACK_AIR_N || action == (uint16_t)MSL_ACT_DAMAGE_FLY_TOP) {
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
 static inline uint8_t msl_reseed_seed_rollout_replay_frame_clock_owner(const MslSeed* seed,
                                                                        int active_players) {
   if (seed == NULL) {
@@ -1061,6 +1105,43 @@ static inline uint8_t msl_reseed_seed_rollout_replay_frame_clock_owner(const Msl
       return (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED;
     }
   }
+  for (int owner = 0; owner < active_players; owner++) {
+    const uint16_t owner_action = seed->action_id[owner];
+    if (!msl_action_is_throw_owner(owner_action)) {
+      continue;
+    }
+    const MslLaserParams* lp = laser_params_get(seed->char_id[owner]);
+    if (lp == NULL || lp->shot_itkind == 0u ||
+        !msl_seed_has_live_owner_blaster_article(seed, owner, lp)) {
+      continue;
+    }
+    for (int victim = 0; victim < active_players; victim++) {
+      if (victim == owner || seed->hitstun[victim] == 0u) {
+        continue;
+      }
+      const int attacker = msl_damage_source_seed_local_slot_from_port0(seed, active_players,
+                                                                        seed->last_hit_by[victim]);
+      if (attacker != owner) {
+        continue;
+      }
+      if (seed->instance_hit_by[victim] == 0u ||
+          seed->instance_hit_by[victim] != seed->instance_id[owner]) {
+        continue;
+      }
+      // Post-detach throw-side blaster rollout clock:
+      // A victim can leave the grabbed action while still carrying same-source throw-laser hitstun.
+      // The article family and source-instance provenance prove the ftFx_Throw_Anim /
+      // itFoxlaser callback episode that can reach a delayed ftCo_8008DCE0 DamageFlyRoll gate.
+      // Keep this in the replay-rollout clock selector so normal one-step reseeds continue to use
+      // their exact serialized frame_pre_random_seed.
+      // refs/slippi-ssbm-asm/Recording/SendFrameStart.s
+      // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+      // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+      // refs/melee/src/melee/it/items/itfoxlaser.c::{it_8029C6CC,it_8029C4D4}
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+      return (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED;
+    }
+  }
   MslStageBounds blast_bounds = {0};
   const uint8_t have_blast_bounds =
       stage_collision_get_blast_bounds_world(seed->stage_id, &blast_bounds);
@@ -1085,11 +1166,17 @@ static inline uint8_t msl_reseed_seed_rollout_replay_frame_clock_owner(const Msl
         seed->fighter_8006cda4_pre_gate_consume_count[victim] <= 4u) {
       // Replay-seeded delayed Fighter_8006CDA4 stream-phase rollouts need the Slippi frame-start
       // RNG clock to advance until combat consumes the later DamageFlyRoll gate. This rollout-only
-      // clock owner is separate from normal one-step reseed metadata.
+      // clock owner is separate from normal one-step reseed metadata. Do not promote the global
+      // replay clock when another player has an unseeded DamageFlyRoll gate candidate in the same
+      // batch: Slippi exposes one frame-start stream, and without that second gate's hidden
+      // Fighter_8006CDA4 phase, advancing the global seed for the seeded victim can perturb the
+      // unrelated gate.
       // refs/slippi-ssbm-asm/Recording/SendFrameStart.s
       // refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-      return (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED;
+      if (!msl_seed_has_other_unseeded_damageflyroll_gate_candidate(seed, active_players, victim)) {
+        return (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED;
+      }
     }
     if (attacker < 0 || attacker == victim) {
       continue;

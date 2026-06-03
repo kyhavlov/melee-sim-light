@@ -164,6 +164,9 @@ static inline void clear_seed_owned_transients_post_frame(MslBatch* batch) {
           batch->state.hitlag_pre_timer[idx] == 0u && batch->state.hitlag[idx] == 0u) {
         batch->state.damage_hitlag_wall_asdi_latch[idx] = 0u;
       }
+      if (batch->state.hitlag_pre_timer[idx] == 0u && batch->state.hitlag[idx] == 0u) {
+        batch->state.damageflyroll_runtime_x1994_on_exit[idx] = 0u;
+      }
       // `seed_t.source_clear_processhit_damage_pending_phase` is a one-step bridge for hidden
       // ProcessHit-owned source clear. Consume within this frame only.
       // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC

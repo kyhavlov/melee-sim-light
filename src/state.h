@@ -939,6 +939,10 @@ typedef struct MslStateSoA {
   uint16_t* colanim_timer_x1990;      // [batch * players]
   uint16_t* colanim_timer_x1994;      // [batch * players]
   uint8_t* colanim_lock_x2221_b0;     // [batch * players] (0/1)
+  // Runtime ProcessHit provenance for DamageFlyRoll hitlag-exit x1994.
+  // Set only by a live ftCo_8008DCE0 DamageFlyRoll entry that starts hitlag; consumed by
+  // ftCo_Damage_OnExitHitlag's ftColl_8007B7A4 x1994 producer.
+  uint8_t* damageflyroll_runtime_x1994_on_exit;  // [batch * players]
   // Explicit seed-only proof that replay-history extraction saw x198C=1/x1994 under active
   // hitstun while the visible merged hurtbox_state stayed vulnerable. This is consumed only by
   // narrow collision-owner bridges that need the hidden provenance; it must not raise generic

@@ -135,4 +135,5 @@ def test_attackairhi_next_row_authoritative_empty_hitcapsule_allows_tbk_5248_hit
     out, ref = _step_row_with_seed(dataset_path, 5248, seed)
     assert int(out["action_id"][victim]) == int(ref["action_id"][victim]) == ACT_DAMAGE_AIR_2
     assert int(out["hitlag"][victim]) == int(ref["hitlag"][victim]) == 5
+    assert int(out["hitstun"][victim]) == int(ref["hitstun"][victim]) == 16
     assert float(out["percent"][victim]) == pytest.approx(float(ref["percent"][victim]), abs=1e-6)

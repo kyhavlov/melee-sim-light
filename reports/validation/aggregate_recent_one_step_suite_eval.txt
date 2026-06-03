@@ -723,7 +723,7 @@ mismatch.stocks: 0 / 15674 (0.000000)
 mismatch.jumps_left: 0 / 15674 (0.000000)
 mismatch.is_dead: 0 / 15674 (0.000000)
 mismatch.hitlag: 0 / 15674 (0.000000)
-mismatch.hitstun: 1 / 15674 (0.000064)
+mismatch.hitstun: 0 / 15674 (0.000000)
 mismatch.l_cancel: 0 / 15674 (0.000000)
 mismatch.hurtbox_state: 0 / 15674 (0.000000)
 mismatch.ground_id: 0 / 15674 (0.000000)
@@ -746,17 +746,17 @@ err.speed_air_x_self: mae=0.000000 p95=0.000000 max=0.000059
 err.speed_ground_x_self: mae=0.000010 p95=0.000000 max=0.108000
 err.speed_y_self: mae=0.000379 p95=0.000000 max=2.940000
 err.speed_x_attack: mae=0.000000 p95=0.000000 max=0.000001
-err.speed_y_attack: mae=0.000008 p95=0.000000 max=0.121274
+err.speed_y_attack: mae=0.000000 p95=0.000000 max=0.000000
 err.percent: mae=0.000027 p95=0.000000 max=0.209991
 err.shield_hp: mae=0.000001 p95=0.000000 max=0.000717
 err.item_pos_x: mae=0.007896 p95=0.000000 max=3.790001
 err.item_pos_y: mae=0.000000 p95=0.000000 max=0.000126
 err.item_vel_x: mae=0.000001 p95=0.000000 max=0.000213
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000126
-overall.discrete_mismatch: 8 / 948277
-overall.strict_discrete_mismatch: 27 / 948277
+overall.discrete_mismatch: 7 / 948277
+overall.strict_discrete_mismatch: 26 / 948277
 overall.ignored_discrete_mismatch: 19
-overall.float_norm_mae_p95: 0.00001368
+overall.float_norm_mae_p95: 0.00001342
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/TubbyCurlyHerring.msl ==
 Records: 12416  Players/scored per record: 2  Total player-frames: 24832
@@ -1479,7 +1479,7 @@ overall.ignored_discrete_mismatch: 69
 overall.float_norm_mae_p95: 0.00050151
 
 == suite summary ==
-overall.discrete_mismatch: 1963 / 35294369
-overall.strict_discrete_mismatch: 3463 / 35294369
+overall.discrete_mismatch: 1962 / 35294369
+overall.strict_discrete_mismatch: 3462 / 35294369
 overall.ignored_discrete_mismatch: 1500
-overall.float_norm_mae_p95: 0.00032033
+overall.float_norm_mae_p95: 0.00032032
