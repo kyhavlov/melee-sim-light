@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -14,6 +15,19 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
     _skip_if_required_artifacts_missing,
 )
 from tools.eval.dataset import read_dataset
+
+
+def _trace_site_count(trace_path: Path, *, start_record: int, record: int, site_id: int) -> int:
+    total = 0
+    with trace_path.open("r", encoding="utf-8") as fh:
+        reader = csv.DictReader(fh, delimiter="\t")
+        for row in reader:
+            if int(row["site_id"]) != int(site_id):
+                continue
+            if start_record + int(row["step"]) != int(record):
+                continue
+            total += int(row["call_count"])
+    return total
 
 
 @dataclass(frozen=True)
@@ -419,6 +433,45 @@ def test_gat_top_f26_rollout_advances_replay_frame_rng_clock_to_delayed_damagefl
 
     ref_target, out_target, _ = rows[8633]
     assert int(out_target["action_id"][1]) == int(ref_target["action_id"][1]) == 91
+
+
+@pytest.mark.integration
+def test_qgd_damageflyroll_site8_uses_current_processhit_source_not_stale_last_hit_by() -> None:
+    # QGD rec5747 locks the source-owned site-8 carry before the DamageFlyRoll gate. The carry is
+    # owned by the current ProcessHit source (`ev->a_idx`/`ev->attacker`), not by the victim's
+    # replay-visible `last_hit_by` byte, which is written after damage entry in source order.
+    # refs/melee/src/melee/ft/ftcoll.c::ftColl_8007A06C
+    # refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_rel = (
+        "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
+        "QuerulousGrandDinosaur.msl"
+    )
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    def _poison_visible_last_hit_by(seed_t):
+        seed_t["last_hit_by"][0, :] = 6
+
+    trace_path = root / "reports/triage/qgd5747_site8_current_processhit_source.tsv"
+    rows = _run_rollout_window_rows_with_trace(
+        dataset_path,
+        start_record=5747,
+        window_records=(5747, 5748, 5749),
+        rng_damage_fly_roll_gate=True,
+        trace_path=trace_path,
+        seed_mutator=_poison_visible_last_hit_by,
+    )
+
+    ref_row, out_row, site1_count = rows[5747]
+    assert site1_count == 1
+    assert _trace_site_count(trace_path, start_record=5747, record=5747, site_id=8) == 1
+    assert int(out_row["action_id"][1]) == int(ref_row["action_id"][1]) == 91
+    assert int(out_row["hitlag"][1]) == int(ref_row["hitlag"][1])
+    assert int(out_row["hitstun"][1]) == int(ref_row["hitstun"][1])
 
 
 @pytest.mark.integration

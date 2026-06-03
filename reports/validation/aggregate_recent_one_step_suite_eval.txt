@@ -201,7 +201,7 @@ mismatch.item_owner: 0 / 182775 (0.000000)
 mismatch.item_instance_id: 0 / 182775 (0.000000)
 ignored_mismatch.state_flags[4]&0x80: 47 / 24370 (0.001929)
 err.pos_x: mae=0.000088 p95=0.000000 max=0.299999
-err.pos_y: mae=0.000089 p95=0.000000 max=1.580000
+err.pos_y: mae=0.000065 p95=0.000000 max=1.580000
 err.speed_air_x_self: mae=0.000003 p95=0.000000 max=0.080000
 err.speed_ground_x_self: mae=0.000025 p95=0.000000 max=0.108000
 err.speed_y_self: mae=0.000089 p95=0.000000 max=1.580000
@@ -216,7 +216,7 @@ err.item_vel_y: mae=0.000001 p95=0.000000 max=0.000060
 overall.discrete_mismatch: 30 / 1474385
 overall.strict_discrete_mismatch: 77 / 1474385
 overall.ignored_discrete_mismatch: 47
-overall.float_norm_mae_p95: 0.00000568
+overall.float_norm_mae_p95: 0.00000564
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/Game_20260514T181413.msl ==
 Records: 2723  Players/scored per record: 2  Total player-frames: 5446
@@ -561,7 +561,7 @@ mismatch.item_owner: 2 / 179700 (0.000011)
 mismatch.item_instance_id: 2 / 179700 (0.000011)
 ignored_mismatch.state_flags[4]&0x80: 30 / 23960 (0.001252)
 err.pos_x: mae=0.000190 p95=0.000000 max=1.151524
-err.pos_y: mae=0.000734 p95=0.000000 max=3.240356
+err.pos_y: mae=0.000717 p95=0.000000 max=3.240356
 err.speed_air_x_self: mae=0.000020 p95=0.000000 max=0.442875
 err.speed_ground_x_self: mae=0.000133 p95=0.000000 max=0.726000
 err.speed_y_self: mae=0.000829 p95=0.000000 max=3.500000
@@ -576,7 +576,7 @@ err.item_vel_y: mae=0.000007 p95=0.000000 max=0.021540
 overall.discrete_mismatch: 74 / 1449580
 overall.strict_discrete_mismatch: 104 / 1449580
 overall.ignored_discrete_mismatch: 30
-overall.float_norm_mae_p95: 0.00005415
+overall.float_norm_mae_p95: 0.00005413
 
 == datasets/aggregate_recent/replays/validation/aggregate_recent/PriceyPartialAlbatross.msl ==
 Records: 7937  Players/scored per record: 2  Total player-frames: 15874
@@ -696,7 +696,7 @@ mismatch.item_owner: 0 / 153330 (0.000000)
 mismatch.item_instance_id: 0 / 153330 (0.000000)
 ignored_mismatch.state_flags[4]&0x80: 27 / 20444 (0.001321)
 err.pos_x: mae=0.000208 p95=0.000000 max=0.299999
-err.pos_y: mae=0.000313 p95=0.000000 max=2.200000
+err.pos_y: mae=0.000293 p95=0.000000 max=2.200000
 err.speed_air_x_self: mae=0.000000 p95=0.000000 max=0.000059
 err.speed_ground_x_self: mae=0.000003 p95=0.000000 max=0.054000
 err.speed_y_self: mae=0.000316 p95=0.000000 max=2.200000
@@ -711,7 +711,7 @@ err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000045
 overall.discrete_mismatch: 15 / 1236862
 overall.strict_discrete_mismatch: 42 / 1236862
 overall.ignored_discrete_mismatch: 27
-overall.float_norm_mae_p95: 0.00001359
+overall.float_norm_mae_p95: 0.00001356
 
 == datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/TreasuredBackKangaroo.msl ==
 Records: 7837  Players/scored per record: 2  Total player-frames: 15674

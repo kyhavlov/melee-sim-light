@@ -32,6 +32,8 @@ ACT_SQUAT_WAIT = 0x0028
 ACT_GUARD_REFLECT = 0x00B6
 ACT_GUARD_SET_OFF = 0x00B5
 ACT_DAMAGE_N1 = 0x004E
+ACT_ATTACK_AIR_B = 0x0043
+ACT_DAMAGE_FLY_TOP = 0x005A
 
 # Submotion ids (GALE01): refs/melee/src/melee/ft/chara/ftCommon/forward.h
 SM_WAIT1_0 = 2
@@ -1452,6 +1454,66 @@ def test_combat_resolve_rehit_suppression_clears_on_instance_id_change() -> None
     finally:
         msl_binding.destroy(handle)
         del handle
+
+
+def test_attackairb_live_hitcapsule_carry_suppresses_full_body_from_hitlist() -> None:
+    import msl_binding
+
+    sizes = msl_binding.sizes()
+    seed_stride = int(sizes["seed"])
+    compare_stride = int(sizes["compare"])
+    assert seed_stride == SEED_DTYPE.itemsize
+    assert compare_stride == COMPARE_DTYPE.itemsize
+
+    def run_case(*, carry_hitlist: bool, action_frame: int) -> np.ndarray:
+        handle = msl_binding.init(batch_size=1, num_players=2)
+        try:
+            seed = _seed_base()
+            seed["on_ground"][0, :2] = np.uint8(0)
+            seed["action_id"][0, 0] = np.uint16(ACT_ATTACK_AIR_B)
+            seed["action_frame"][0, 0] = np.int16(action_frame)
+            seed["anim_frame_f32"][0, 0] = np.float32(action_frame)
+            seed["action_id"][0, 1] = np.uint16(ACT_DAMAGE_FLY_TOP)
+            seed["hitstun"][0, 1] = np.uint16(5)
+            seed["percent"][0, 1] = np.float32(10.0)
+            if carry_hitlist:
+                seed["hitlag"][0, 1] = np.uint16(1)
+                seed["combat_hitlist_hb_valid"][0, 0, 0] = np.uint8(1)
+                seed["combat_hitlist_hb_cd"][0, 0, 0, 1] = np.uint16(HITLIST_CD_INDEFINITE)
+                seed["combat_hitlist_hb_victim_iid"][0, 0, 0, 1] = seed["instance_id"][0, 1]
+
+            seed_bytes = seed.view(np.uint8).reshape((1, seed_stride))
+            msl_binding.reseed_seed(handle, seed_bytes)
+            if carry_hitlist:
+                msl_binding.debug_set_hitlag(handle, 0, 1, 0)
+
+            msl_binding.debug_clear_hitboxes_world(handle, 0, 0)
+            msl_binding.debug_set_hitbox_world(handle, 0, 0, 0, 0.0, 0.0, 0.0, 10.0, 9.0, 1)
+            msl_binding.debug_set_hitbox_flags(handle, 0, 0, 0, int(HIT_AERIAL))
+            msl_binding.debug_set_hitbox_group(handle, 0, 0, 0, 0)
+            msl_binding.debug_clear_hurtcaps_world(handle, 0, 1)
+            msl_binding.debug_set_hurtcap_world(
+                handle, 0, 1, 0, -0.5, 0.0, 0.0, 0.5, 0.0, 0.0, 0.5
+            )
+
+            msl_binding.debug_combat_resolve(handle)
+            return _read_compare(handle).copy()
+        finally:
+            msl_binding.destroy(handle)
+
+    suppressed = run_case(carry_hitlist=True, action_frame=20)
+    assert int(suppressed["hitlag"][0]) == 0
+    assert int(suppressed["hitlag"][1]) == 0
+    assert float(suppressed["percent"][1]) == pytest.approx(10.0)
+
+    no_carry = run_case(carry_hitlist=False, action_frame=20)
+    assert int(no_carry["hitlag"][0]) > 0
+    assert int(no_carry["hitlag"][1]) > 0
+    assert int(no_carry["instance_hit_by"][1]) == 111
+
+    early_callback = run_case(carry_hitlist=True, action_frame=9)
+    assert int(early_callback["hitlag"][0]) > 0
+    assert int(early_callback["hitlag"][1]) > 0
 
 
 def test_combat_resolve_powershield_blocks_shield_hp_depletion_but_keeps_hitlag() -> None:

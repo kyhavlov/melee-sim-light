@@ -10,6 +10,7 @@ from tools.eval.dataset import COMPARE_DTYPE, read_dataset
 
 ACT_DAMAGE_FALL = 0x0026
 ACT_DAMAGE_FLY_N = 0x0058
+STATE_FLAG_2218_ALLOW_INTERRUPT = 0x80
 
 
 def _skip_if_required_artifacts_missing(root: Path) -> None:
@@ -32,7 +33,7 @@ def _dataset_path(root: Path, rel: str) -> Path:
     return dataset_path
 
 
-def _run_one_step(dataset_path: Path, record: int) -> tuple[np.void, np.void, np.void]:
+def _run_one_step(dataset_path: Path, record: int, seed_mutator=None) -> tuple[np.void, np.void, np.void]:
     binding = pytest.importorskip("msl_binding")
     sizes = binding.sizes()
     seed_stride = int(sizes["seed"])
@@ -43,9 +44,10 @@ def _run_one_step(dataset_path: Path, record: int) -> tuple[np.void, np.void, np
     row = ds.samples[record : record + 1]
     assert int(row.shape[0]) == 1
 
-    seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
-        1, seed_stride
-    )
+    seed_t = row["seed_t"].copy()
+    if seed_mutator is not None:
+        seed_mutator(seed_t)
+    seed_bytes = np.frombuffer(seed_t.tobytes(order="C"), dtype=np.uint8).copy().reshape(1, seed_stride)
     prev_input_bytes = np.frombuffer(
         row["prev_input_t"].tobytes(order="C"), dtype=np.uint8
     ).copy().reshape(1, input_stride)
@@ -95,8 +97,38 @@ def test_steady_damagefall_keeps_seed_driven_current_frame_displacement() -> Non
     seed, ref, out = _run_one_step(dataset_path, 2959)
     p = 0
     assert int(seed["action_id"][p]) == ACT_DAMAGE_FALL
+    assert (int(seed["state_flags"][p, 0]) & STATE_FLAG_2218_ALLOW_INTERRUPT) == 0
     assert int(ref["action_id"][p]) == ACT_DAMAGE_FALL
 
     assert int(out["action_id"][p]) == ACT_DAMAGE_FALL
     assert float(out["speed_y_self"][p]) == pytest.approx(float(ref["speed_y_self"][p]), abs=1e-7)
     assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+
+
+def test_steady_damagefall_allow_interrupt_uses_pre_integration_gravity() -> None:
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = _dataset_path(
+        root,
+        "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
+        "QuerulousGrandDinosaur.msl",
+    )
+
+    seed, ref, out = _run_one_step(dataset_path, 8326)
+    p = 0
+    assert int(seed["action_id"][p]) == ACT_DAMAGE_FALL
+    assert (int(seed["state_flags"][p, 0]) & STATE_FLAG_2218_ALLOW_INTERRUPT) != 0
+    assert int(ref["action_id"][p]) == ACT_DAMAGE_FALL
+    assert float(out["speed_y_self"][p]) == pytest.approx(float(ref["speed_y_self"][p]), abs=1e-7)
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+
+    def _clear_allow_interrupt(seed_t):
+        seed_t["state_flags"][0, p, 0] = np.uint8(
+            int(seed_t["state_flags"][0, p, 0]) & ~STATE_FLAG_2218_ALLOW_INTERRUPT
+        )
+
+    _, _, out_without_flag = _run_one_step(dataset_path, 8326, seed_mutator=_clear_allow_interrupt)
+    assert float(out_without_flag["speed_y_self"][p]) == pytest.approx(
+        float(ref["speed_y_self"][p]), abs=1e-7
+    )
+    assert float(out_without_flag["pos_y"][p]) != pytest.approx(float(ref["pos_y"][p]), abs=1e-6)

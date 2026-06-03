@@ -139,6 +139,43 @@ static inline uint16_t hitboxes_seed_bridge_shield_hitlag_frames(const MslCommon
   return (uint16_t)hl_i;
 }
 
+static inline uint16_t hitboxes_seed_bridge_body_hitlag_frames(const MslCommonParams* c, float dmg,
+                                                               uint16_t motion_id,
+                                                               uint8_t element) {
+  if (c == NULL) {
+    return 0;
+  }
+  const int dmg_i = hitboxes_seed_bridge_get_env_dmg(dmg);
+  if (dmg_i <= 0) {
+    return 0;
+  }
+  // Decomp (GALE01): ftCommon_CalcHitlag for BODY damage.
+  //
+  // Fighter_ProcessHit consumes `fp->x1960_vibrateMult` after ftColl_8007A06C writes the electric
+  // multiplier for HitElement_Electric. The seed bridge uses this only as a horizon check for
+  // source-owned HitCapsule victim-list lifetime; it does not mutate runtime gameplay state.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_CalcHitlag
+  // refs/melee/build/GALE01/asm/melee/ft/ftcoll.s (search for `stfs f0, 0x1960`)
+  const float tmp_f = (float)dmg_i * c->hitlag_dmg_mul + c->hitlag_base;
+  int hl_i = (int)tmp_f;
+  float mul = (element == (uint8_t)MSL_HIT_ELEMENT_ELECTRIC) ? c->hitlag_electric_mul : 1.0f;
+  if (!(mul > 0.0f)) {
+    mul = 1.0f;
+  }
+  hl_i = (int)((float)hl_i * mul);
+  if (motion_id == (uint16_t)MSL_ACT_SQUAT || motion_id == (uint16_t)MSL_ACT_SQUAT_WAIT) {
+    hl_i = (int)((float)hl_i * c->hitlag_squat_mul);
+  }
+  if (hl_i < 0) {
+    hl_i = 0;
+  }
+  if (hl_i > 0xFFFF) {
+    hl_i = 0xFFFF;
+  }
+  return (uint16_t)hl_i;
+}
+
 static inline void hitboxes_seed_bridge_entry_clear(MslHitlistVictimEntry* e) {
   if (e == NULL) {
     return;
@@ -1018,6 +1055,27 @@ static void hitboxes_seed_bridge_trim_impossible_indefinite(
     if (attacker_action == (uint16_t)MSL_ACT_ATTACK_AIR_B &&
         v_action == (uint16_t)MSL_ACT_DAMAGE_FLY_TOP && batch->state.hitlag[v_idx] == 0u &&
         batch->state.hitstun[v_idx] != 0u && batch->state.instance_hit_by[v_idx] != attacker_iid) {
+      const uint16_t body_hitlag = hitboxes_seed_bridge_body_hitlag_frames(
+          c, def->damage, v_action, (uint8_t)(def->u16_4 & 0xFFu));
+      if (batch->state.hitstun[v_idx] <= body_hitlag) {
+        // Late AttackAirB -> active DamageFlyTop dense latch:
+        // - Within the current hit's hitlag horizon, the coarse replay dense victims_1 lane can
+        //   still be the source-owned stale HitCapsule latch even when BODY attribution names an
+        //   older AttackAirB action instance. Preserve it so full BODY damage waits until the
+        //   source-owned contact path reaches either the phantom/tip-log branch or a later
+        //   post-horizon full hit.
+        // - Once remaining hitstun exceeds this hit's expected hitlag horizon, DCC-style
+        //   continuation rows prove the old dense proxy is stale and must clear for the live
+        //   AttackAirB instance.
+        // - Use BODY hitlag, not the shorter shield-lane horizon used by generic neutral trims,
+        //   because this latch models ftColl_80076ED8/Fighter_ProcessHit BODY registration.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_AttackAir.c::ftCo_AttackAir_Anim
+        // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+        // refs/melee/src/melee/ft/ftcommon.c::ftCommon_CalcHitlag
+        // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}
+        // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+        continue;
+      }
       // AttackAirB active-damage stale dense latch:
       // - AttackAirB owns multi-create HitCapsule refresh through ftAction_8007121C /
       //   ftColl_800768A0, but the dense group seed has no per-HitCapsule insertion provenance.

@@ -1441,6 +1441,22 @@ Prefer completing these projects in order rather than “patching symptoms” in
      `refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076CBC,ftColl_80076ED8}`,
      `refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}`,
      `refs/melee/src/melee/lb/types.h::HitCapsule`.
+   - Late AttackAirB -> active DamageFlyTop hitlist carry:
+     Fox/Falco Back-Air carries `Ft_MF_SkipHit`, and the extracted second-create band rewrites the
+     same hit group with 9-damage late capsules. Runtime may suppress full BODY only when an actual
+     dense or per-HitCapsule victims_1 provenance lane is present. Full BODY suppression for the
+     live per-HitCapsule lane starts at the generated second-create callback-age boundary
+     (`second_create + 4`); the earlier late callback remains damage-eligible for source
+     full-overlap rows. Dense replay seeds are retained only inside the BODY `ftCommon_CalcHitlag`
+     horizon and trimmed after the post-horizon stale boundary. QGD `8636` remains an open
+     per-HitCapsule provenance gap; the rejected Falco Back-Air -> Fox materialization slice is not
+     retained.
+     Source anchors:
+     `data/motion_state/owners/{fox,falco}.bin` (`MSLMSO01` `Ft_MF_SkipHit`),
+     `data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirB.events.create_hitbox`,
+     `refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState`,
+     `refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}`,
+     `refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}`.
    - GuardOn-origin GuardReflect powershield hidden victims_1 latch:
      `ftColl_80076CBC` registers the attacker HitCapsule victim through `ftColl_80076808` before
      the `x221C_b2` powershield branch suppresses ordinary shield damage / GuardSetOff effects.
@@ -4030,6 +4046,10 @@ Fox/Falco special-owner split (2026-04-17):
       suppressed BODY overlap, and GuardOn-origin frozen BODY handoffs, stay on their existing
       boundaries. CDO `12022 -> 12050/12051` locks the BODY negative then GuardSetOff positive; MAJ
       `4166 -> 4472` and GAT `11080 -> 11085` remain controls.
+      This owner does not currently extend to Falco Back-Air -> Fox ShieldDesc handoff rows without
+      explicit per-HitCapsule ShieldDesc provenance. QGD `9106` remains exact as a one-step row and
+      currently appears only downstream of the open QGD `8636` deterministic AttackAirB carry
+      divergence in full rollout; the rejected char-pair shield predicate is not retained.
     - The same `ftCo_8009388C` GuardOn -> GuardReflect path keeps the live GuardOn JObj pose for
       fighter-vs-fighter BODY hurtcaps on no-submotion snapshots. Runtime admits the GuardReflect
       submotion hurtcap fallback only when the transition provenance is GuardOn: live
@@ -6386,6 +6406,24 @@ BODY collision-space residual split and rejected seed bridge:
   top-blast DamageFlyTop state is modeled, but replay-exact HSD RNG phase is outside RL 1.0
   rollout closure. Reviewed residual rows are kept in `replays/validation_exceptions.json` as
   report-level approved exceptions, not simulator behavior.
+- RNG site ledger (runtime site ids are from `src/batch_internal.h`):
+  - DamageFlyRoll gate: `ftCo_8008DCE0` severe airborne damage, after pre-gate consumers; site `1`
+    (`MSL_RNG_SITE_DAMAGE_FLY_ROLL_GATE`); runtime supported for the current subset. QGD affected.
+  - Fighter_8006CDA4 pre-gate consumers: `Fighter_8006CDA4` stream-phase hints before the
+    DamageFlyRoll gate; sites `5..7`; runtime supported through explicit seed counts. QGD affected.
+  - JumpAerial/AttackAirB carry consume: current `ProcessHit`/DmgLog source before the
+    DamageFlyRoll gate; site `8`; runtime now uses the current hit source rather than stale
+    victim `last_hit_by`. QGD affected at records 5747 and 7715.
+  - Top-blast selection: `ftCo_800D3158` `HSD_Randi(100)+1`; site `23`; runtime site exists, but
+    full replay stream phase remains residual. QGD not currently affected.
+  - Yoshi Shy Guy scheduler/spawn: Yoshi stage item scheduler `HSD_Randi` calls; sites `9..16`;
+    runtime site ids exist for replay-clock accounting. QGD not affected on FD.
+  - FoD platform scheduler: Fountain platform random scheduler; sites `17..22`; runtime site ids
+    exist for platform replay-clock accounting. QGD not affected on FD.
+  - Wait animation variant: common Wait random animation variant; site `3`; runtime site id exists.
+    QGD not affected in the selected rows.
+  - Pseudo-random SFX and electric clank: common pseudo-SFX site `4` and
+    `ftColl_800784B4` electric clank SFX site `2`; runtime site ids exist. QGD not affected.
 - Source anchors:
   - `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}`
   - `refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000805C,lbColl_80006E58}`

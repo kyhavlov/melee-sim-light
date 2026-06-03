@@ -711,23 +711,41 @@ static inline float physics_apply_ftcommon_8007cf58_x_clamp(const MslCharParams*
   return air_apply_friction_step(vel_x, friction);
 }
 
-static inline uint8_t physics_action_use_pre_integration_common_air_gravity(uint16_t action_id) {
+static inline uint8_t physics_damagefall_seed_allow_interrupt(const MslBatch* batch, size_t idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  const size_t flags_i = idx * (size_t)MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_2218_INDEX;
+  return (batch->state.state_flags[flags_i] & (uint8_t)MSL_STATE_FLAG_2218_ALLOW_INTERRUPT) ? 1u
+                                                                                            : 0u;
+}
+
+static inline uint8_t physics_action_use_pre_integration_common_air_gravity(const MslBatch* batch,
+                                                                            size_t idx,
+                                                                            uint16_t action_id) {
   // Decomp: many common airborne action states call `ft_80084DB0` from their phys callbacks, which
   // runs `ftCommon_CheckFallFast` + `ftCommon_Fall/FallFast` (mutating `self_vel.y`) before
   // `Fighter_procUpdate` integrates `cur_pos`.
   // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
   // refs/melee/src/melee/ft/ft_081B.c::ft_80084DB0
   //
-  // However, in the v1 teacher-forced reseed loop we currently treat Damage*/hitstun-y states as
-  // mostly seed-driven. Applying the common fall helper for DamageFall shifts `pos_y` by ~grav on
-  // some frames and can cause match-flow blastzone false positives (stocks decremented) vs the
-  // replay reference.
+  // However, in the v1 teacher-forced reseed loop some steady DamageFall rows still carry a
+  // seed-driven current-frame displacement surface. Applying the common fall helper before
+  // integration for every such row can cause match-flow blastzone false positives (stocks
+  // decremented) vs the replay reference.
   //
   // Repro (suite): `AttachedGoodNaturedGuanaco.msl` record=2959 p=0 (DamageFall) crosses FD blast
   // bottom and triggers `MSL_ACT_DEAD_DOWN` when we apply common gravity pre-integration.
   //
-  // Until DamageFall's full physics path is modeled (including its interaction with hitstun/KB),
-  // keep the ordering fix for locomotion/attackair states but exclude DamageFall here.
+  // QGD's post-hitstun DamageFall source row carries the replay-exposed `fp+0x2218` allow-interrupt
+  // lane after `DamageFall_IASA` is active. For that terminal lane, use the decomp callback order
+  // (`DamageFall_Phys -> ft_80084DB0`) before integration; keep the older bridge for steady rows
+  // without that source lane until the remaining DamageFall seed surface is closed.
+  //
+  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_Phys
+  // refs/melee/src/melee/ft/ft_081B.c::ft_80084DB0
   // Note:
   // - Common airborne Damage states (for example DamageAir2) route through ftCo_Damage_Phys,
   //   which calls ft_80084DB0 when x221C_b6 is clear.
@@ -736,13 +754,19 @@ static inline uint8_t physics_action_use_pre_integration_common_air_gravity(uint
   if (!msl_action_allows_fastfall(action_id)) {
     return (uint8_t)(action_id == (uint16_t)MSL_ACT_DAMAGE_AIR_2);
   }
-  return (uint8_t)(action_id != (uint16_t)MSL_ACT_DAMAGE_FALL);
+  if (action_id == (uint16_t)MSL_ACT_DAMAGE_FALL) {
+    return physics_damagefall_seed_allow_interrupt(batch, idx);
+  }
+  return 1u;
 }
 
-static inline uint8_t physics_action_use_post_integration_common_air_gravity(uint16_t action_id) {
+static inline uint8_t physics_action_use_post_integration_common_air_gravity(const MslBatch* batch,
+                                                                             size_t idx,
+                                                                             uint16_t action_id) {
   // Temporary v1 compatibility: update `speed_y_self` for next frame without affecting current
   // frame displacement (see note above).
-  return (uint8_t)(action_id == (uint16_t)MSL_ACT_DAMAGE_FALL);
+  return (uint8_t)(action_id == (uint16_t)MSL_ACT_DAMAGE_FALL &&
+                   !physics_damagefall_seed_allow_interrupt(batch, idx));
 }
 
 static inline uint8_t physics_damagefall_entry_uses_pre_integration_phys(uint16_t action_id,
@@ -1805,7 +1829,8 @@ void physics_integrate(MslBatch* batch) {
                       batch->state.speed_air_x_self[idx], phys->aerial_friction);
                 }
               }
-            } else if (physics_action_use_pre_integration_common_air_gravity(action_id) ||
+            } else if (physics_action_use_pre_integration_common_air_gravity(batch, idx,
+                                                                             action_id) ||
                        physics_damagefall_entry_uses_pre_integration_phys(
                            action_id, batch->state.prev_action_id[idx], action_frame) ||
                        damage_uses_common_air_helper) {
@@ -2438,7 +2463,7 @@ void physics_integrate(MslBatch* batch) {
       // Post-integration gravity update for states we intentionally keep "seed-driven" for current
       // frame displacement (notably DamageFall; see helper docs above).
       if (!on_ground && !physics_is_match_flow_airborne(action_id) &&
-          physics_action_use_post_integration_common_air_gravity(action_id) &&
+          physics_action_use_post_integration_common_air_gravity(batch, idx, action_id) &&
           !physics_damagefall_entry_uses_pre_integration_phys(
               action_id, batch->state.prev_action_id[idx], action_frame)) {
         const MslCharParams* phys = msl_char_params(batch->state.char_id[idx]);

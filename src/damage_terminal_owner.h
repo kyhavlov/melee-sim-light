@@ -354,7 +354,7 @@ static inline uint8_t msl_damage_owner_damageflyroll_pre_action_allows_gate(cons
 }
 
 static inline uint8_t msl_damage_owner_damageflyroll_jumpaerial_attackairb_carry(
-    const MslBatch* batch, size_t d_idx) {
+    const MslBatch* batch, size_t d_idx, size_t a_idx, int attacker_slot) {
   if (batch == NULL) {
     return 0u;
   }
@@ -363,13 +363,15 @@ static inline uint8_t msl_damage_owner_damageflyroll_jumpaerial_attackairb_carry
       pre_action != (uint16_t)MSL_ACT_JUMP_AERIAL_B) {
     return 0u;
   }
-  const size_t bi = d_idx / (size_t)MSL_MAX_PLAYERS;
-  const int num_players = (int)batch->config.num_players;
-  const int attacker = msl_damage_source_local_slot_from_port0(batch, (int)bi, num_players,
-                                                               batch->state.last_hit_by[d_idx]);
-  if (attacker < 0 || (size_t)attacker == (d_idx % (size_t)MSL_MAX_PLAYERS)) {
+  if (attacker_slot < 0 || attacker_slot >= (int)batch->config.num_players ||
+      (size_t)attacker_slot == (d_idx % (size_t)MSL_MAX_PLAYERS)) {
     return 0u;
   }
-  const size_t a_idx = bi * (size_t)MSL_MAX_PLAYERS + (size_t)attacker;
+  // The carry is owned by the current ProcessHit/DmgLog source, not the victim's prior
+  // replay-visible `last_hit_by` value. The source lane is written after ftCo_8008DCE0 damage
+  // entry, while the RNG gate and this pre-gate consume run during that entry.
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007A06C
+  // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
   return (batch->state.action_id[a_idx] == (uint16_t)MSL_ACT_ATTACK_AIR_B) ? 1u : 0u;
 }

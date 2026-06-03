@@ -3941,8 +3941,10 @@ static inline void combat_damageflyroll_consume_fighter_8006cda4_pre_gate_count(
 }
 
 static inline void combat_damageflyroll_consume_jumpaerial_attackairb_carry(MslBatch* batch, int bi,
-                                                                            size_t d_idx) {
-  if (msl_damage_owner_damageflyroll_jumpaerial_attackairb_carry(batch, d_idx)) {
+                                                                            size_t d_idx,
+                                                                            size_t a_idx,
+                                                                            int attacker) {
+  if (msl_damage_owner_damageflyroll_jumpaerial_attackairb_carry(batch, d_idx, a_idx, attacker)) {
     combat_rng_consume_step_site(batch, bi,
                                  MSL_RNG_SITE_DAMAGE_FLY_ROLL_PRE_GATE_JUMPAERIAL_ATTACKAIRB_CARRY);
   }
@@ -3952,7 +3954,8 @@ static inline void combat_damage_enter_state(const MslCommonParams* c, MslBatch*
                                              size_t d_idx, uint8_t defender_on_ground_before,
                                              uint8_t defender_on_ground_after, uint8_t hurt_height,
                                              float kb_applied, float kb_angle_rad,
-                                             uint16_t raw_kb_angle) {
+                                             uint16_t raw_kb_angle, size_t source_a_idx,
+                                             int source_attacker) {
   if (batch == NULL) {
     return;
   }
@@ -4046,7 +4049,8 @@ static inline void combat_damage_enter_state(const MslCommonParams* c, MslBatch*
         const float percent_cur = batch->state.percent[d_idx] + batch->state.percent_temp[d_idx];
         if (damagefly_roll_rng_subset_ok &&
             percent_cur >= (float)c->damagefly_roll_percent_threshold) {
-          combat_damageflyroll_consume_jumpaerial_attackairb_carry(batch, bi, d_idx);
+          combat_damageflyroll_consume_jumpaerial_attackairb_carry(batch, bi, d_idx, source_a_idx,
+                                                                   source_attacker);
           combat_damageflyroll_consume_fighter_8006cda4_pre_gate_count(batch, bi, d_idx);
           const float roll =
               combat_rng_consume_randf_site(batch, bi, MSL_RNG_SITE_DAMAGE_FLY_ROLL_GATE);
@@ -4265,7 +4269,7 @@ static inline void combat_processhit_apply_resolved_damage(const MslCommonParams
   const uint8_t defender_on_ground_after = batch->state.on_ground[ev->d_idx] ? 1u : 0u;
   combat_damage_enter_state(c, batch, ev->bi, ev->d_idx, ev->defender_on_ground,
                             defender_on_ground_after, ev->hurt_height, ev->kb_applied,
-                            ev->kb_angle_rad, ev->damage_state_raw_angle);
+                            ev->kb_angle_rad, ev->damage_state_raw_angle, ev->a_idx, ev->attacker);
   combat_processhit_apply_hitlag_after_entry(batch, ev);
   if (ev->apply_guard_reflect_followup != 0u) {
     combat_apply_guard_reflect_body_hit_followup(c, batch, ev->d_idx, ev->d_motion_id);
@@ -7162,6 +7166,29 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
                 : 0u;
         const uint8_t allows_v1 =
             hitlist_allows_fighter(batch, bi, attacker, hb_id, defender, defender_iid);
+        const int16_t attackairb_second_create_frame =
+            move_tables_attackair_second_create_hitbox_frame(batch->state.char_id[a_idx],
+                                                             batch->state.action_id[a_idx]);
+        const int16_t attackairb_late_carry_callback_frame =
+            (attackairb_second_create_frame >= 0) ? (int16_t)(attackairb_second_create_frame + 4)
+                                                  : -1;
+        // AttackAirB live HitCapsule carry:
+        // - The stale-owner continuation path below must still allow the tip-log/phantom branch to
+        //   run for replay-clock rows where the hidden victims_1 list is reconstructed from the
+        //   SkipHit source owner.
+        // - Full BODY suppression begins only after the generated late-create band has survived to
+        //   the matching callback-age boundary. The earlier late callback remains damage-eligible
+        //   when source geometry reaches a full BODY overlap.
+        // data/motion_state/owners/{fox,falco}.bin (MSLMSO01 x4_flags Ft_MF_SkipHit)
+        // data/scripts/{fox,falco}.bin (MSLFTSC1 AttackAirB second create_hitbox phase)
+        // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}
+        // refs/melee/src/melee/lb/lbcollision.c::{lbColl_80006E58,lbColl_8000ACFC}
+        const uint8_t attackairb_live_hitlist_suppresses_full_body =
+            (!allows_v1 && attackairb_stale_owner_candidate &&
+             attackairb_late_carry_callback_frame >= 0 &&
+             batch->state.action_frame[a_idx] >= attackairb_late_carry_callback_frame)
+                ? 1u
+                : 0u;
         // AttackAirN first-window contact boundary:
         // - Dense seed materialization can carry a same-source DamageFlyTop victim pointer from an
         //   older attacker action instance when per-HitCapsule seed data is unavailable.
@@ -7477,6 +7504,7 @@ static void combat_select_body_hits_one_mutating(MslBatch* batch, int bi) {
             break;
           }
           if (dense_seed_suppresses_body || attackairb_dense_seed_suppresses_full_body ||
+              attackairb_live_hitlist_suppresses_full_body ||
               attackairn_wait_dense_seed_suppresses_full_body) {
             continue;
           }
