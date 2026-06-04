@@ -1546,8 +1546,10 @@ Prefer completing these projects in order rather than “patching symptoms” in
      narrow lane, combat consumes the dense seed after phantom/tip-log handling to suppress the
      immediate stale BODY rehit. The x198C proof is stored as a seed-only internal bit and does not
      raise generic BODY hit-status, because broad x198C=1 hitstun reseeding regresses unrelated
-     contacts. Aerial SpecialLwStart remains excluded; `QuerulousGrandDinosaur.msl:235` proves the
-     same dense/x198C shape can still be a real aerial Shine hit. Positive lock:
+     contacts. Runtime rollouts seeded before the dense lane can also prove the same owner from a
+     terminal same-source DamageFlyTop victim whose `instance_hit_by` differs from the entering
+     Shine instance. Aerial SpecialLwStart remains excluded; `QuerulousGrandDinosaur.msl:235`
+     proves the same dense/x198C shape can still be a real aerial Shine hit. Positive lock:
      `DistinctCaringCobra.msl:6431`.
      Source anchors:
      `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialLw.c::ftFx_SpecialLw_Enter`,
@@ -2394,7 +2396,11 @@ Grounded motion-entry timing notes:
   `ftCo_Turn_IASA` temporarily exposes `mv.co.turn.facing_after`, then `ftCo_Jump_CheckInput` can
   enter KneeBend in the same callback, but Slippi only exposes the winning facing on the next
   post-frame. The `turn_kneebend_facing_override_u8` lane is non-causal, Turn-only, and does not
-  change the general facing owner for later Turn phases.
+  change the general facing owner for later Turn phases. Free-running replay rollout may also
+  reconstruct the same source owner only on first-tick Wait-owned Turn entries that enter
+  KneeBend through the XY button-jump branch; tap-jump Turn -> KneeBend rows keep the ordinary
+  restored-facing path. DCC `3280 -> 3296` locks the button-jump positive, while FSP `5340 ->
+  5343` locks the tap-jump negative.
 - TurnRun final-frame down-stick rows use the decomp-shaped exit path:
   `ftCo_TurnRun_Anim` checks `fn_800CA644`; when the hidden exit microphase rejects Run, it enters
   Wait through `ft_8008A2BC` and the destination `Wait_IASA` selector owns Squat. The runtime keeps
@@ -5678,6 +5684,15 @@ BODY collision-space residual split and rejected seed bridge:
   phantom contacts; teacher-forced seeds carry the minimal hidden lane for active phantom-hitlag
   rows so one-step can apply the terminal percent/stale/combo side effects without replay-row
   branches. QGD `8638..8642` protects the contact, hitlag SDI, and terminal delayed damage expiry.
+- Terminal `DamageFlyTop` phantom/tip-log expiry can also be source-visible after the serialized
+  x1898/x189C lanes are empty. Source still owns `post_hitlag_cb = ftCo_Damage_OnExitHitlag` for
+  DamageFlyTop entry, and `Fighter_ProcessHit_8006D1EC` decrements x189C before ordinary damage
+  resolution. Runtime admits this reconstruction only after replay rollout has advanced past the
+  seed frame, where the hidden callback lane can be source-live but no longer teacher-forced by the
+  one-step seed. The visible proof is the terminal x18AC/hitstun phase with a live source episode;
+  the runtime applies the minimum `ftColl_8007BE3C` phantom damage/stale bookkeeping once. This is
+  callback ownership, not a row-local percent patch; DCC `9367 -> 9685` locks the terminal expiry
+  and later hitstun consequence.
 - Late `AttackAirB` full-BODY continuation from `DamageFlyTop` also needs per-HitCapsule
   provenance, not the dense same-group fallback alone. The dense group seed cannot distinguish the
   outer late BAir capsule from inner late capsules; QGD-style controls keep the outer hb1
@@ -5701,6 +5716,19 @@ BODY collision-space residual split and rejected seed bridge:
   `DamageFlyTop` hitstun segments, that marker carries backward as gate-admission provenance for
   zero pre-gate consumes (`PRH:1593 -> 1612`); it still does not represent persistent stream phase
   and is not backfilled for AttackAirN pre-action segments.
+  Reciprocal same-frame aerial trades use the DmgLog-selected current HitCapsule payload as the
+  replay-rollout owner for the DamageFlyRoll gate. Authored strong `AttackAirB` payload
+  (15/361/100/0 on hb0/hb1) carries one `Fighter_8006CDA4` pre-gate consume into the paired
+  `AttackAirN` victim, while authored late `AttackAirN` payload (9/361/100/0) admits the paired
+  `AttackAirB` victim's zero-consume gate marker. DCC `4968` locks both sides and proves the source
+  is current ProcessHit/DmgLog payload, not stale `last_hit_by`.
+  Strong `AttackAirLw` meteor payload into terminal `DamageFlyTop` has a timer-order side effect:
+  the prior DamageFlyTop callback consumes the terminal hitstun tick before the new damage entry is
+  serialized. Runtime subtracts exactly one hitstun frame only for a carried DmgLog-selected
+  12/290/100/10 HitCapsule after AttackAirLw's extracted create-hitbox frame, with live
+  HitCapsule previous-position provenance. First-create DAir contacts keep the ordinary
+  `ftCo_ScaleBy154` hitstun result; DCC `7083` locks the carried positive, while EWT `8696` and
+  MVP `1163` lock first-create negatives.
   Capture/throw blaster episodes use the same rollout-only frame-start RNG clock owner when a
   grabbed victim is still attached to a data-backed blaster thrower. TBK `2712 -> 2752` proves the
   path: `CatchAttack/CaptureDamageHi` enters `ThrowHi/ThrownHi`, frame-20/24 throw-side lasers are

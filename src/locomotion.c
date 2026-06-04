@@ -5346,7 +5346,9 @@ void locomotion_update_pre(MslBatch* batch) {
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::fn_800C9C2C
         if (action_id == MSL_ACT_TURN && action_id_start == MSL_ACT_TURN) {
           uint8_t turn_attack_facing_flipped = 0u;
+          uint8_t turn_facing_after = batch->state.facing[idx];
           if (!batch->state.turn_has_turned[idx]) {
+            turn_facing_after = batch->state.facing[idx] ? 0u : 1u;
             batch->state.facing[idx] = batch->state.facing[idx] ? 0u : 1u;
             facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
             turn_attack_facing_flipped = 1u;
@@ -5374,10 +5376,37 @@ void locomotion_update_pre(MslBatch* batch) {
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_IASA
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_CheckInput
               const uint8_t turn_kb_face = batch->state.turn_kneebend_facing_override[idx];
+              uint8_t turn_kb_source_face_valid = 0u;
+              uint8_t turn_kb_source_face = batch->state.facing[idx];
               if (turn_attack_facing_flipped && turn_kb_face >= 1u && turn_kb_face <= 2u) {
-                batch->state.facing[idx] = (turn_kb_face == 2u) ? 1u : 0u;
-                facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
+                turn_kb_source_face = (turn_kb_face == 2u) ? 1u : 0u;
+                turn_kb_source_face_valid = 1u;
                 batch->state.turn_kneebend_facing_override[idx] = 0u;
+              } else if (turn_attack_facing_flipped &&
+                         batch->state.turn_frames_to_turn[idx] + 1u == ch->turn_frames &&
+                         batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_WAIT &&
+                         j_in == MSL_JUMP_INPUT_XY &&
+                         batch->state.input_main_y[idx] >
+                             (int8_t)(-c->smash_stick_threshold * (float)MSL_STICK_MAX_I8) &&
+                         stick_i8_to_unit(batch->state.prev_input_main_y[idx]) >
+                             -c->tap_jump_release_threshold &&
+                         batch->replay_rollout_reseeded != NULL &&
+                         batch->replay_rollout_reseeded[bi] != 0u) {
+                // Source-owned Turn -> KneeBend hidden-facing lane:
+                // `ftCo_Turn_IASA` exposes `mv.co.turn.facing_after` before the Jump_CheckInput
+                // branch, so first-tick XY button jumps from Wait-owned Turn can carry that
+                // hidden facing. Exact one-step rows are seed-owned and must use the explicit
+                // `turn_kneebend_facing_override_u8` lane; this fallback reconstructs only
+                // free-running replay rollout segments after the hidden lane was not serialized at
+                // the reseed boundary. L-stick tap-jump rows stay on the restored-facing path.
+                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Turn.c::ftCo_Turn_IASA
+                // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_CheckInput
+                turn_kb_source_face = turn_facing_after;
+                turn_kb_source_face_valid = 1u;
+              }
+              if (turn_kb_source_face_valid) {
+                batch->state.facing[idx] = turn_kb_source_face;
+                facing_dir = batch->state.facing[idx] ? 1.0f : -1.0f;
               }
               batch->state.kneebend_jump_input[idx] = (uint8_t)j_in;
               batch->state.kneebend_is_short_hop[idx] = 0;

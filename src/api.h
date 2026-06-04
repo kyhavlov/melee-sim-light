@@ -2580,6 +2580,13 @@ int msl_batch_debug_set_prev_action_id(MslBatch* batch, int batch_index, int pla
                                        uint16_t prev_action_id);
 int msl_batch_debug_set_hitlag(MslBatch* batch, int batch_index, int player_index,
                                uint16_t hitlag_frames);
+int msl_batch_debug_set_damage_source(MslBatch* batch, int batch_index, int player_index,
+                                      uint8_t last_hit_by, uint16_t instance_hit_by);
+int msl_batch_debug_set_damage_phase(MslBatch* batch, int batch_index, int player_index,
+                                     uint16_t action_id, uint16_t hitstun,
+                                     int16_t damage_time_since_hit, uint8_t on_ground);
+int msl_batch_debug_set_phantom_damage(MslBatch* batch, int batch_index, int player_index,
+                                       float pending_damage, uint16_t timer, uint8_t source_slot);
 int msl_batch_debug_set_smash_charge_state(MslBatch* batch, int batch_index, int player_index,
                                            uint8_t state, uint8_t frames, uint8_t hold_frames_max);
 int msl_batch_debug_set_rollout_clock_mode(MslBatch* batch, int batch_index, uint8_t mode);

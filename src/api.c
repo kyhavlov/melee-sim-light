@@ -5968,6 +5968,69 @@ int msl_batch_debug_set_hitlag(MslBatch* batch, int batch_index, int player_inde
   return 0;
 }
 
+int msl_batch_debug_set_damage_source(MslBatch* batch, int batch_index, int player_index,
+                                      uint8_t last_hit_by, uint16_t instance_hit_by) {
+  if (batch == NULL) {
+    return EINVAL;
+  }
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return EINVAL;
+  }
+  if (player_index < 0 || player_index >= MSL_MAX_PLAYERS) {
+    return EINVAL;
+  }
+
+  const size_t idx = msl_idx_player(batch_index, player_index);
+  // Debug-only source owner write for replay-real tests that stop immediately before combat and
+  // perturb the hidden ftColl/Fighter_ProcessHit damage-source episode.
+  batch->state.last_hit_by[idx] = last_hit_by;
+  batch->state.instance_hit_by[idx] = instance_hit_by;
+  return 0;
+}
+
+int msl_batch_debug_set_damage_phase(MslBatch* batch, int batch_index, int player_index,
+                                     uint16_t action_id, uint16_t hitstun,
+                                     int16_t damage_time_since_hit, uint8_t on_ground) {
+  if (batch == NULL) {
+    return EINVAL;
+  }
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return EINVAL;
+  }
+  if (player_index < 0 || player_index >= MSL_MAX_PLAYERS) {
+    return EINVAL;
+  }
+
+  const size_t idx = msl_idx_player(batch_index, player_index);
+  // Debug-only phase write for tests that stop immediately before combat to perturb the
+  // DamageFly/HitCapsule owner predicates without replay-row branches.
+  batch->state.action_id[idx] = action_id;
+  batch->state.hitstun[idx] = hitstun;
+  batch->state.damage_time_since_hit_x18ac[idx] = damage_time_since_hit;
+  batch->state.on_ground[idx] = on_ground ? 1u : 0u;
+  return 0;
+}
+
+int msl_batch_debug_set_phantom_damage(MslBatch* batch, int batch_index, int player_index,
+                                       float pending_damage, uint16_t timer, uint8_t source_slot) {
+  if (batch == NULL) {
+    return EINVAL;
+  }
+  if (batch_index < 0 || batch_index >= batch->batch_size) {
+    return EINVAL;
+  }
+  if (player_index < 0 || player_index >= MSL_MAX_PLAYERS) {
+    return EINVAL;
+  }
+
+  const size_t idx = msl_idx_player(batch_index, player_index);
+  // Debug-only phantom/tip-log lane write for boundary tests around fp->dmg.x1898/x189C.
+  batch->state.phantom_damage_pending_x1898[idx] = pending_damage;
+  batch->state.phantom_damage_timer_x189c[idx] = timer;
+  batch->state.phantom_damage_source_port[idx] = source_slot;
+  return 0;
+}
+
 int msl_batch_debug_set_smash_charge_state(MslBatch* batch, int batch_index, int player_index,
                                            uint8_t state, uint8_t frames, uint8_t hold_frames_max) {
   if (batch == NULL) {
