@@ -42,6 +42,8 @@ def test_item_reflect_episode_helper_owns_snapshot_damage_and_seed_lanes(tmp_pat
             static int8_t item_owner[MSL_MAX_ITEMS];
             static uint16_t item_instance_id[MSL_MAX_ITEMS];
             static float item_reflect_damage_mul[MSL_MAX_ITEMS];
+            static uint8_t item_stale_damage_valid[MSL_MAX_ITEMS];
+            static float item_stale_damage_mul[MSL_MAX_ITEMS];
             static uint8_t item_pending_reflect_owner_port[MSL_MAX_ITEMS];
             static uint16_t item_pending_reflect_instance_id[MSL_MAX_ITEMS];
             static uint8_t item_reflect_transfer_seed_port[MSL_MAX_ITEMS];
@@ -68,6 +70,8 @@ def test_item_reflect_episode_helper_owns_snapshot_damage_and_seed_lanes(tmp_pat
               batch.state.item_owner = item_owner;
               batch.state.item_instance_id = item_instance_id;
               batch.state.item_reflect_damage_mul = item_reflect_damage_mul;
+              batch.state.item_stale_damage_valid = item_stale_damage_valid;
+              batch.state.item_stale_damage_mul = item_stale_damage_mul;
               batch.state.item_pending_reflect_owner_port = item_pending_reflect_owner_port;
               batch.state.item_pending_reflect_instance_id = item_pending_reflect_instance_id;
               batch.state.item_reflect_transfer_seed_port = item_reflect_transfer_seed_port;
@@ -91,11 +95,14 @@ def test_item_reflect_episode_helper_owns_snapshot_damage_and_seed_lanes(tmp_pat
 
               msl_item_reflect_clear_all_lanes(&batch, 0u);
               assert(almost(item_reflect_damage_mul[0], 1.0f));
+              assert(item_stale_damage_valid[0] == 0u);
               assert(item_pending_reflect_owner_port[0] == MSL_ITEM_REFLECT_NO_PORT);
               assert(item_reflect_transfer_seed_port[0] == MSL_ITEM_REFLECT_NO_PORT);
               assert(item_shield_bounce_seed_valid[0] == 0u);
 
               msl_item_reflect_set_damage_mul(&batch, 0u, 0.5f);
+              assert(item_stale_damage_valid[0] == 0u);
+              assert(almost(item_stale_damage_mul[0], 1.0f));
               assert(almost(msl_item_reflect_damage_lane(&batch, 0u, 3.0f), 2.0f));
 
               item_owner[0] = 0;

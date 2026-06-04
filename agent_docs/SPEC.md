@@ -454,6 +454,12 @@ Process:
 Notes:
 - This is “teacher-forced” evaluation: it answers “is our one-step transition function correct on the support of real gameplay states?”
 - Reseeding must be deterministic and should avoid “cheating” by copying fields that the simulator is supposed to derive (e.g., if we track derived timers, we should seed only what is observable/authoritative for that frame).
+- `validation_report_diff` red classification treats rollout streak-distribution reshuffles as clean only when both
+  `first_mismatch_total` and `streak_count` are non-regressing for the same report/section. The raw movement list still
+  prints median/best/max regressions, but they are not hard/distribution/unclassified reds under that policy because no
+  new first mismatch or streak is introduced. One-step `float_norm_mae_p95` movements are likewise clean only when the
+  corresponding discrete and strict-discrete counts are non-regressing. This is a validation semantics change, not
+  gameplay proof; gameplay changes still require source/data-backed owners and focused controls.
 
 Known teacher-forcing limitations (must be tracked and eventually removed, not treated as “engine truth”):
 - Input-history tilt timers (`x670`/`x671`), TURN internals (`frames_to_turn`/`has_turned`), and KneeBend internals (`jump_input`/`is_short_hop`) are derived during preprocessing and are part of the seed schema.
@@ -1552,6 +1558,13 @@ Prefer completing these projects in order rather than “patching symptoms” in
    - Current runtime has a shared pre-`Fighter_ProcessHit` damage product for represented fighter BODY, item BODY, and throw-release
      producers. That product keeps raw HitCapsule damage, staled/applied float damage, env-damage, KB damage, move id, and attack instance
      together before percent/hitlag/KB/stale bookkeeping are derived.
+   - Fighter and item HitCapsule damage can be frozen source state, not always a live stale-table lookup. `src/hitboxes.c`
+     preserves `hitbox_stale_damage_{valid,mul}` only across source-owned Ft_MF_SkipHit / HitCapsule preservation
+     cases, and clears it on generic motion changes, script clear, create, and `set_hitbox_damage` rebuild paths where
+     `ftColl_8007ABD0` would rebuild `HitCapsule.damage`. `src/items.c` / `src/api.c` similarly model Fox/Falco laser
+     `it_80272460` create-time stale damage when concrete article/stale-queue/source-victim provenance exists; reflected
+     ownership, non-laser items, already-staled shot instances, missing live blaster article, or ambiguous same-source
+     victims stay on ordinary live stale lookup.
    - Depends on: (3) for correct hit identity + timing.
 
    **Decomp entrypoints (read first; file::function)**

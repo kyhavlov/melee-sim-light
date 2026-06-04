@@ -18,6 +18,7 @@
 #include "msl_math.h"
 #include "mtx34.h"
 #include "specialhi_pose.h"
+#include "staling.h"
 #include "trigger_input.h"
 
 static inline size_t idx_hitbox(int bi, int p, int hb_i) {
@@ -33,6 +34,8 @@ static inline void hitboxes_clear_world_slot(MslBatch* batch, int bi, int p, int
   batch->state.hitbox_z[oi] = 0.0f;
   batch->state.hitbox_radius[oi] = 0.0f;
   batch->state.hitbox_damage[oi] = 0.0f;
+  batch->state.hitbox_stale_damage_valid[oi] = 0u;
+  batch->state.hitbox_stale_damage_mul[oi] = 1.0f;
   batch->state.hitbox_bone_part_id[oi] = 0;
   batch->state.hitbox_u16_0[oi] = 0;
   batch->state.hitbox_u16_1[oi] = 0;
@@ -63,6 +66,40 @@ static inline uint8_t hitboxes_has_authoritative_hitlist_seed(const MslBatch* ba
       ((size_t)bi * (size_t)MSL_MAX_PLAYERS + (size_t)attacker) * (size_t)MSL_MAX_HITBOXES +
       (size_t)hb;
   return batch->state.combat_hitlist_hb_valid[hb_valid_i] ? 1u : 0u;
+}
+
+static inline float hitboxes_source_hitcapsule_stale_damage_mul(const MslBatch* batch,
+                                                                size_t fighter_idx) {
+  if (batch == NULL) {
+    return 1.0f;
+  }
+  const uint16_t move_id = staling_move_id_from_state(batch, fighter_idx);
+  return staling_multiplier_for_move(batch, fighter_idx, move_id);
+}
+
+static inline uint8_t hitboxes_source_hitcapsule_stale_damage_owner_applies(
+    const MslBatch* batch, size_t fighter_idx, const MslHitboxEvent* ev) {
+  if (batch == NULL || ev == NULL) {
+    return 0u;
+  }
+  if (batch->state.action_id[fighter_idx] != (uint16_t)MSL_ACT_ATTACK_AIR_B) {
+    return 0u;
+  }
+  if (ev->kind != (uint8_t)MSL_HITBOX_EVENT_CREATE || ev->damage != 15.0f) {
+    return 0u;
+  }
+  // Source HitCapsule damage freeze for the strong AttackAirB create edge:
+  // data/moves/{fox,falco}.json gives only the frame-4 hb0/hb1 AttackAirB create commands 15
+  // damage; hb2 and the later refresh are weak 9-damage capsules and stay on live stale lookup.
+  // ftAction_8007121C builds the create_hitbox command, ftColl_8007ABD0 stores staled float damage
+  // into HitCapsule.damage via ft_80089228, and later ProcessHit consumes that frozen lane even
+  // after same-instance stale updates. Keep the retained runtime surface on the source create edge;
+  // broader moves still use the existing live-stale approximation until their rows are proven.
+  // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007ABD0
+  // refs/melee/src/melee/ft/ft_0881.c::{ft_80089118,ft_80089228}
+  // data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirB.events.create_hitbox
+  return 1u;
 }
 
 static inline uint8_t hitboxes_same_action_restart_clears_hitcapsules(const MslBatch* batch,
@@ -600,21 +637,20 @@ static inline uint8_t hitboxes_seed_bridge_attackairhi_damageflytop_create_dense
         group_base + (((size_t)attacker * (size_t)MSL_HITLIST_GROUPS + (size_t)hit_group) *
                           (size_t)MSL_MAX_PLAYERS +
                       (size_t)victim);
-    if (batch->state.combat_hitlist_cd[cd_i] == 0u) {
-      continue;
-    }
     const size_t v_idx = msl_idx_player(bi, victim);
     if (batch->state.action_id[v_idx] != (uint16_t)MSL_ACT_DAMAGE_FLY_TOP ||
         batch->state.hitlag[v_idx] != 0u || batch->state.hitstun[v_idx] == 0u ||
         batch->state.hitstun[v_idx] > expected_hitlag ||
-        batch->state.last_hit_by[v_idx] != attacker_source_port0 ||
-        batch->state.combat_hitlist_victim_iid[cd_i] != batch->state.instance_id[v_idx]) {
+        batch->state.last_hit_by[v_idx] != attacker_source_port0) {
       continue;
     }
     if (create_frame == 0xFFFFu) {
       continue;
     }
-    return 1u;
+    if (batch->state.combat_hitlist_cd[cd_i] != 0u &&
+        batch->state.combat_hitlist_victim_iid[cd_i] == batch->state.instance_id[v_idx]) {
+      return 1u;
+    }
   }
   return 0u;
 }
@@ -1397,6 +1433,8 @@ void hitboxes_refresh(MslBatch* batch) {
       float seeded_prev_z[MSL_MAX_HITBOXES] = {0.0f};
       uint8_t capsule_enabled[MSL_MAX_HITBOXES] = {0};
       uint8_t capsule_group[MSL_MAX_HITBOXES] = {0};
+      uint8_t stale_damage_valid[MSL_MAX_HITBOXES] = {0};
+      float stale_damage_mul[MSL_MAX_HITBOXES] = {0.0f};
       uint8_t preserve_skiphit_geometry[MSL_MAX_HITBOXES] = {0};
       uint8_t preserved_skiphit_count = 0u;
       uint8_t preserved_hitbox_count = 0u;
@@ -1407,6 +1445,10 @@ void hitboxes_refresh(MslBatch* batch) {
         x43_b2_prev[hi] = batch->state.hitbox_x43_b2[oi];
         capsule_enabled[hi] = batch->state.hitbox_capsule_enabled[oi];
         capsule_group[hi] = batch->state.hitbox_capsule_group[oi];
+        stale_damage_valid[hi] = batch->state.hitbox_stale_damage_valid[oi] ? 1u : 0u;
+        stale_damage_mul[hi] = (batch->state.hitbox_stale_damage_mul[oi] > 0.0f)
+                                   ? batch->state.hitbox_stale_damage_mul[oi]
+                                   : 1.0f;
         if (motion_entered_this_frame && !motion_preserves_hitcapsules) {
           // Fighter_ChangeMotionState calls ftColl_8007AFF8 unless Ft_MF_SkipHit is set. That
           // disables x914 slots but does not erase their victim rings; a later create edge owns
@@ -1462,6 +1504,8 @@ void hitboxes_refresh(MslBatch* batch) {
         batch->state.hitbox_z[oi] = 0.0f;
         batch->state.hitbox_radius[oi] = 0.0f;
         batch->state.hitbox_damage[oi] = 0.0f;
+        batch->state.hitbox_stale_damage_valid[oi] = 0u;
+        batch->state.hitbox_stale_damage_mul[oi] = 1.0f;
         batch->state.hitbox_bone_part_id[oi] = 0;
         batch->state.hitbox_u16_0[oi] = 0;
         batch->state.hitbox_u16_1[oi] = 0;
@@ -1778,6 +1822,8 @@ void hitboxes_refresh(MslBatch* batch) {
               have_def[hi] = 0;
               x43_b2_cur[hi] = 0u;
               capsule_enabled[hi] = 0u;
+              stale_damage_valid[hi] = 0u;
+              stale_damage_mul[hi] = 1.0f;
               preserve_skiphit_geometry[hi] = 0u;
               hitboxes_clear_world_slot(batch, bi, p, hi);
             }
@@ -1785,6 +1831,8 @@ void hitboxes_refresh(MslBatch* batch) {
             have_def[ev->hitbox_id] = 0;
             x43_b2_cur[ev->hitbox_id] = 0u;
             capsule_enabled[ev->hitbox_id] = 0u;
+            stale_damage_valid[ev->hitbox_id] = 0u;
+            stale_damage_mul[ev->hitbox_id] = 1.0f;
             preserve_skiphit_geometry[ev->hitbox_id] = 0u;
             hitboxes_clear_world_slot(batch, bi, p, (int)ev->hitbox_id);
           }
@@ -1793,7 +1841,10 @@ void hitboxes_refresh(MslBatch* batch) {
           // ftAction_8007162C updates damage in-place on an already-live HitCapsule. Preserve the
           // current slot geometry/group and avoid pose_create/enable-edge side effects.
           // refs/melee/src/melee/ft/ftaction.c::ftAction_8007162C
+          // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007ABD0
           def[ev->hitbox_id].damage = ev->damage;
+          stale_damage_valid[ev->hitbox_id] = 0u;
+          stale_damage_mul[ev->hitbox_id] = 1.0f;
         } else if (ev->kind == (uint8_t)MSL_HITBOX_EVENT_CREATE &&
                    ev->hitbox_id < (uint8_t)MSL_MAX_HITBOXES) {
           const uint8_t hb = ev->hitbox_id;
@@ -1805,6 +1856,11 @@ void hitboxes_refresh(MslBatch* batch) {
 
           def[hb] = *ev;
           have_def[hb] = 1;
+          const uint8_t stale_owner =
+              hitboxes_source_hitcapsule_stale_damage_owner_applies(batch, idx, ev);
+          stale_damage_valid[hb] = stale_owner;
+          stale_damage_mul[hb] =
+              stale_owner ? hitboxes_source_hitcapsule_stale_damage_mul(batch, idx) : 1.0f;
 
           const uint8_t enable_edge = (!had_old || old_g != new_g) ? 1u : 0u;
           pose_create_enable_edge[hb] = enable_edge;
@@ -2089,6 +2145,9 @@ void hitboxes_refresh(MslBatch* batch) {
         batch->state.hitbox_z[oi] = cz;
         batch->state.hitbox_radius[oi] = radius;
         batch->state.hitbox_damage[oi] = def[hi].damage;
+        batch->state.hitbox_stale_damage_valid[oi] = stale_damage_valid[hi] ? 1u : 0u;
+        batch->state.hitbox_stale_damage_mul[oi] =
+            (stale_damage_mul[hi] > 0.0f) ? stale_damage_mul[hi] : 1.0f;
         batch->state.hitbox_bone_part_id[oi] = def[hi].bone_part_id;
         batch->state.hitbox_u16_0[oi] = def[hi].u16_0;
         batch->state.hitbox_u16_1[oi] = def[hi].u16_1;

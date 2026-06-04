@@ -720,6 +720,32 @@ static inline uint8_t physics_damagefall_seed_allow_interrupt(const MslBatch* ba
                                                                                             : 0u;
 }
 
+static inline uint8_t physics_damagefall_source_fastfall_latch(const MslBatch* batch,
+                                                               const MslCommonParams* c,
+                                                               size_t idx) {
+  if (batch == NULL || c == NULL || batch->state.action_id[idx] != (uint16_t)MSL_ACT_DAMAGE_FALL ||
+      batch->state.fall_fast[idx] != 0u || !(batch->state.speed_y_self[idx] < 0.0f)) {
+    return 0u;
+  }
+  const float stick_y =
+      apply_deadzone(stick_i8_to_unit(batch->state.input_main_y[idx]), c->lstick_deadzone_y);
+  if (!(stick_y <= -c->fastfall_stick_threshold) ||
+      !(batch->state.tilt_timer_y[idx] < c->fastfall_tilt_max_frames)) {
+    return 0u;
+  }
+  // DamageFall fastfall latch order:
+  // - DamageFall_Phys delegates to ft_80084DB0.
+  // - ft_80084DB0 calls ftCommon_CheckFallFast before ftCommon_Fall/FallFast.
+  // - Fighter_procUpdate then integrates cur_pos with the newly latched fastfall self_vel.y.
+  // Keep this narrower than the older steady DamageFall compatibility bridge: it only flips rows
+  // whose current input/timer state proves the source fastfall latch fires this frame.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DamageFall.c::ftCo_DamageFall_Phys
+  // refs/melee/src/melee/ft/ft_081B.c::ft_80084DB0
+  // refs/melee/src/melee/ft/ftcommon.c::ftCommon_CheckFallFast
+  // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+  return 1u;
+}
+
 static inline uint8_t physics_action_use_pre_integration_common_air_gravity(const MslBatch* batch,
                                                                             size_t idx,
                                                                             uint16_t action_id) {
@@ -755,7 +781,8 @@ static inline uint8_t physics_action_use_pre_integration_common_air_gravity(cons
     return (uint8_t)(action_id == (uint16_t)MSL_ACT_DAMAGE_AIR_2);
   }
   if (action_id == (uint16_t)MSL_ACT_DAMAGE_FALL) {
-    return physics_damagefall_seed_allow_interrupt(batch, idx);
+    return (uint8_t)(physics_damagefall_seed_allow_interrupt(batch, idx) ||
+                     physics_damagefall_source_fastfall_latch(batch, msl_common_params(), idx));
   }
   return 1u;
 }

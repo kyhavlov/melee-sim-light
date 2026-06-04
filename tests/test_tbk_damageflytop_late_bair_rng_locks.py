@@ -84,10 +84,10 @@ def test_tbk_damageflytop_late_bair_live_source_supplies_pre_gate_count() -> Non
 
 
 @pytest.mark.integration
-def test_tbk_damageflytop_early_bair_create_edge_does_not_use_late_pre_gate_count() -> None:
-    # The late-Bair source owner starts after the create-edge phase. TBK 3907 is an early BAir
-    # frame-3 DamageFlyTop contact; with the direct replay seed lane removed, it must not receive
-    # the late two-consume runtime owner.
+def test_tbk_damageflytop_early_bair_selected_hitcapsule_source_supplies_pre_gate_count() -> None:
+    # TBK 3907 is a frame-3 AttackAirB DamageFlyTop contact whose selected BODY source capsule
+    # owns the same Fighter_8006CDA4 pre-gate consume count as the replay seed lane. This lock keeps
+    # the owner on HitCapsule provenance rather than a stale direct seed lane or generic action row.
     root = Path(__file__).resolve().parents[1]
     ds = read_dataset(str(_dataset_path(root)))
     record = 3907
@@ -104,5 +104,4 @@ def test_tbk_damageflytop_early_bair_create_edge_does_not_use_late_pre_gate_coun
     seed[0]["fighter_8006cda4_pre_gate_consume_count"][victim] = np.uint8(0)
     out = _step_one_with_seed(seed, row, num_players=int(ds.header["num_players"]))
 
-    assert int(out["action_id"][victim]) == ACT_DAMAGE_FLY_N
-    assert int(out["action_id"][victim]) != ACT_DAMAGE_FLY_ROLL
+    assert int(out["action_id"][victim]) == ACT_DAMAGE_FLY_ROLL

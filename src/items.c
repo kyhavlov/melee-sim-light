@@ -138,6 +138,66 @@ static void throw_laser_advance_combo_bookkeeping(MslBatch* batch, int bi, int o
   batch->state.combo_victim_instance_id[o_idx] = batch->state.instance_id[v_idx];
 }
 
+static inline float item_hitcapsule_stale_damage_mul(const MslBatch* batch, size_t item_idx,
+                                                     size_t owner_idx, uint16_t attack_id) {
+  if (batch == NULL) {
+    return 1.0f;
+  }
+  if (batch->state.item_stale_damage_valid[item_idx] != 0u &&
+      batch->state.item_stale_damage_mul[item_idx] > 0.0f) {
+    return batch->state.item_stale_damage_mul[item_idx];
+  }
+  if (attack_id == (uint16_t)MSL_FT_MOVE_ID_DEFAULT) {
+    return 1.0f;
+  }
+  return staling_multiplier_for_move(batch, owner_idx, attack_id);
+}
+
+static inline uint8_t item_spawn_has_unique_same_source_damage_victim(const MslBatch* batch, int bi,
+                                                                      int owner) {
+  if (batch == NULL || owner < 0 || owner >= (int)batch->config.num_players) {
+    return 0u;
+  }
+  const size_t o_idx = msl_idx_player(bi, owner);
+  int candidate = -1;
+  for (int vp = 0; vp < (int)batch->config.num_players; vp++) {
+    if (vp == owner) {
+      continue;
+    }
+    const size_t v_idx = msl_idx_player(bi, vp);
+    const uint8_t victim_in_damage_episode =
+        (batch->state.hitstun[v_idx] != 0u ||
+         msl_damage_owner_is_damage_or_firefox_launch_action(batch->state.action_id[v_idx]))
+            ? 1u
+            : 0u;
+    if (victim_in_damage_episode == 0u ||
+        !msl_damage_source_victim_port_matches_attacker(batch, v_idx, o_idx, owner)) {
+      continue;
+    }
+    if (candidate >= 0) {
+      return 0u;
+    }
+    candidate = vp;
+  }
+  return (candidate >= 0) ? 1u : 0u;
+}
+
+static inline uint8_t item_stale_queue_contains_instance(const MslBatch* batch, size_t owner_idx,
+                                                         uint16_t attack_id,
+                                                         uint16_t attack_instance) {
+  if (batch == NULL || attack_id == (uint16_t)MSL_FT_MOVE_ID_DEFAULT || attack_instance == 0u) {
+    return 0u;
+  }
+  const size_t base = owner_idx * (size_t)MSL_STALE_QUEUE_SIZE;
+  for (int i = 0; i < MSL_STALE_QUEUE_SIZE; i++) {
+    if (batch->state.stale_move_id[base + (size_t)i] == attack_id &&
+        batch->state.stale_attack_instance[base + (size_t)i] == attack_instance) {
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
 static inline void item_slot_clear(MslBatch* batch, size_t ii) {
   if (batch == NULL) {
     return;
@@ -155,6 +215,8 @@ static inline void item_slot_clear(MslBatch* batch, size_t ii) {
   batch->state.item_pos_x[ii] = 0.0f;
   batch->state.item_pos_y[ii] = 0.0f;
   batch->state.item_damage[ii] = 0;
+  batch->state.item_stale_damage_valid[ii] = 0u;
+  batch->state.item_stale_damage_mul[ii] = 1.0f;
   batch->state.item_timer[ii] = 0.0f;
   batch->state.item_hitlag[ii] = 0u;
   batch->state.item_spawn_id[ii] = 0;
@@ -222,6 +284,8 @@ static inline void item_slot_swap(MslBatch* batch, size_t a, size_t b) {
   SWAP(float, batch->state.item_pos_x);
   SWAP(float, batch->state.item_pos_y);
   SWAP(uint16_t, batch->state.item_damage);
+  SWAP(uint8_t, batch->state.item_stale_damage_valid);
+  SWAP(float, batch->state.item_stale_damage_mul);
   SWAP(float, batch->state.item_reflect_damage_mul);
   SWAP(float, batch->state.item_timer);
   SWAP(uint8_t, batch->state.item_hitlag);
@@ -887,6 +951,66 @@ static inline uint8_t item_type_is_fox_laser(uint16_t item_type) {
 
 static inline uint8_t item_type_is_falco_laser(uint16_t item_type) {
   return item_type == item_article_laser_shot_kind((uint8_t)MSL_CHAR_ID_FALCO) ? 1u : 0u;
+}
+
+static inline uint8_t item_spawn_laser_freezes_stale_damage(
+    const MslBatch* batch, int bi, int owner, uint16_t item_type, uint16_t item_attack_id,
+    uint16_t item_attack_instance, uint8_t spawn_state, uint8_t is_blaster_throw) {
+  if (batch == NULL ||
+      (item_type_is_fox_laser(item_type) == 0u && item_type_is_falco_laser(item_type) == 0u) ||
+      owner < 0 || owner >= (int)batch->config.num_players) {
+    return 0u;
+  }
+  if (is_blaster_throw != 0u && item_attack_id != (uint16_t)MSL_FT_MOVE_ID_DEFAULT) {
+    // Throw-side blaster script commands (`it_8029C6CC`) create the laser and immediately run
+    // it_80272460 from the throw article identity. No later visible state is needed to prove the
+    // frozen item HitCapsule.damage lane.
+    // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+    // refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C6CC
+    return 1u;
+  }
+  if (spawn_state != 0u) {
+    return 0u;
+  }
+  const size_t o_idx = msl_idx_player(bi, owner);
+  if (item_attack_id != (uint16_t)MSL_FT_MOVE_ID_DEFAULT && item_attack_instance != 0u) {
+    for (int it = 0; it < MSL_MAX_ITEMS; it++) {
+      const size_t ii = msl_idx_item(bi, it);
+      if (batch->state.item_exists[ii] == 0u || batch->state.item_owner[ii] != (int8_t)owner ||
+          batch->state.item_type[ii] != item_type ||
+          batch->state.item_attack_id[ii] != item_attack_id ||
+          batch->state.item_attack_instance[ii] == 0u ||
+          batch->state.item_attack_instance[ii] == item_attack_instance) {
+        continue;
+      }
+      if (item_stale_queue_contains_instance(batch, o_idx, item_attack_id,
+                                             batch->state.item_attack_instance[ii]) == 0u) {
+        // Overlapping same-owner same-type live laser with a different attack instance that is not
+        // in the stale queue proves the older shot has not yet reached plStale_UpdateStaleMovesFromItem.
+        // The new shot's HitCapsule.damage must therefore stay frozen at its create-time stale
+        // multiplier rather than being recomputed after the older shot eventually stales.
+        // refs/melee/src/melee/it/itcoll.c::it_80272460
+        // refs/melee/src/melee/pl/plstale.c::plStale_UpdateStaleMovesFromItem
+        return 1u;
+      }
+    }
+  }
+  if (batch->state.last_attack_landed[o_idx] == (uint8_t)item_attack_id &&
+      item_attack_id != (uint16_t)MSL_FT_MOVE_ID_DEFAULT) {
+    // Runtime-only source order: the owner already landed this attack id before the current laser
+    // create callback, but Slippi does not expose the just-created laser's frozen damage float.
+    // Keep this gate tied to the attack identity, not replay row or dataset identity.
+    // refs/melee/src/melee/ft/fighter.c::Fighter_ProcessHit_8006D1EC
+    // refs/melee/src/melee/it/itcoll.c::it_80272460
+    return 1u;
+  }
+  if (item_attack_id == (uint16_t)MSL_FT_MOVE_ID_DEFAULT) {
+    return 0u;
+  }
+  // Last fallback: exactly one current victim carrying same-source damage proves the create-time
+  // laser belongs to the ongoing source hit episode. Multiple same-source victims are ambiguous and
+  // intentionally do not freeze the stale lane.
+  return item_spawn_has_unique_same_source_damage_victim(batch, bi, owner);
 }
 
 static inline uint8_t item_type_is_fox_illusion(uint16_t item_type) {
@@ -3888,7 +4012,8 @@ static inline uint8_t item_try_shine_reflect_contact(MslBatch* batch, size_t ii,
 static int laser_spawn_from_fighter(MslBatch* batch, int bi, int owner, const MslLaserParams* lp,
                                     uint8_t spawn_state, uint8_t apply_spawn_motion_step,
                                     uint8_t throw_lw_late_pulse_transn_y, int seed_hitlist_victim,
-                                    uint16_t seed_hitlist_victim_iid, uint8_t seed_hitlist_mask) {
+                                    uint16_t seed_hitlist_victim_iid, uint8_t seed_hitlist_mask,
+                                    uint8_t is_blaster_throw) {
   if (batch == NULL || lp == NULL) {
     return -1;
   }
@@ -4129,6 +4254,24 @@ static int laser_spawn_from_fighter(MslBatch* batch, int bi, int owner, const Ms
   }
   batch->state.item_attack_id[ii] = item_attack_id;
   batch->state.item_attack_instance[ii] = item_attack_instance;
+  // Laser HitCapsule stale-damage owner:
+  // - it_802790C0 creates item HitCapsules from the item script and calls it_80272460.
+  // - it_80272460 freezes HitCapsule.damage when the item hitbox is created by applying
+  //   ft_80089228(owner, item->xD88, item->xD8C, raw_damage).
+  // - Fighter-spawned Fox/Falco shots copy the owner's x2068/x206C attack identity at spawn. When
+  //   overlapping live shots prove a previous shot's stale update has not happened yet, preserve
+  //   the new shot's frozen HitCapsule.damage before that later queue mutation can restale it.
+  // refs/melee/src/melee/it/it_2725.c::it_802790C0
+  // refs/melee/src/melee/it/itcoll.c::it_80272460
+  // refs/melee/src/melee/ft/ft_0881.c::ft_80089228
+  // refs/melee/src/melee/it/items/itfoxlaser.c::it_8029C6CC
+  // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_Throw_Anim
+  const uint8_t freeze_stale_damage =
+      item_spawn_laser_freezes_stale_damage(batch, bi, owner, lp->shot_itkind, item_attack_id,
+                                            item_attack_instance, spawn_state, is_blaster_throw);
+  batch->state.item_stale_damage_valid[ii] = freeze_stale_damage;
+  batch->state.item_stale_damage_mul[ii] =
+      freeze_stale_damage ? staling_multiplier_for_move(batch, o_idx, item_attack_id) : 1.0f;
   // Slippi item.instance_id is item->xDA8_short. On spawn with a fighter parent, xDA8_short copies
   // fighter->x2088 (fighter instance_id) in the generic item spawn path.
   // refs/melee/src/melee/it/it_2725.c::it_8027B070
@@ -4966,8 +5109,8 @@ static void lasers_update_and_collide(MslBatch* batch, int bi) {
     }
 
     const size_t stale_owner_idx = msl_idx_player(bi, owner);
-    const float laser_body_stale_mult =
-        staling_multiplier_for_move(batch, stale_owner_idx, batch->state.item_attack_id[ii]);
+    const float laser_body_stale_mult = item_hitcapsule_stale_damage_mul(
+        batch, ii, stale_owner_idx, batch->state.item_attack_id[ii]);
     uint8_t clear_after_body_damage_pass = 0u;
     for (int def = 0; def < num_players; def++) {
       if (def == owner) {
@@ -8687,10 +8830,10 @@ void items_spawn_fighter_anim_phase(MslBatch* batch) {
             batch, bi, p, lp->gun_itkind, action_id, cid,
             batch->state.throw_pulse_crossed_curr_frame[idx]);
       }
-      const int spawned_slot =
-          laser_spawn_from_fighter(batch, bi, p, lp, shoot_spawn_state, shoot_apply_motion_step,
-                                   shoot_throw_lw_late_pulse_transn_y, shoot_seed_hitlist_victim,
-                                   shoot_seed_hitlist_victim_iid, shoot_seed_hitlist_mask);
+      const int spawned_slot = laser_spawn_from_fighter(
+          batch, bi, p, lp, shoot_spawn_state, shoot_apply_motion_step,
+          shoot_throw_lw_late_pulse_transn_y, shoot_seed_hitlist_victim,
+          shoot_seed_hitlist_victim_iid, shoot_seed_hitlist_mask, is_blaster_throw);
       (void)spawned_slot;
       if (is_blaster_throw && action_id == (uint16_t)MSL_ACT_THROW_LW &&
           shoot_throw_lw_late_pulse_transn_y != 0u && item_type_is_fox_laser(lp->shot_itkind) &&

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import json
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -17,6 +18,35 @@ from tests.test_combat_ownership_seed_guardrail_locks import (
 from tools.eval.dataset import read_dataset
 
 
+def test_attackairb_damageflytop_runtime_predicate_matches_extracted_source_data() -> None:
+    root = Path(__file__).resolve().parents[1]
+    for char_name in ("fox", "falco"):
+        moves = json.loads((root / "data/moves" / f"{char_name}.json").read_text(encoding="utf-8"))
+        bair_events = moves["moves"]["ftCo_SM_AttackAirB"]["events"]
+        creates = [ev for ev in bair_events if ev["kind"] == "create_hitbox"]
+        strong = [
+            (int(ev["frame"]), int(ev["data"]["hitbox"]["hitbox_id"]))
+            for ev in creates
+            if float(ev["data"]["hitbox"]["damage"]) == pytest.approx(15.0)
+        ]
+        weak = [
+            (int(ev["frame"]), int(ev["data"]["hitbox"]["hitbox_id"]))
+            for ev in creates
+            if float(ev["data"]["hitbox"]["damage"]) == pytest.approx(9.0)
+        ]
+        assert strong == [(4, 0), (4, 1)]
+        assert weak == [(4, 2), (8, 0), (8, 1), (8, 2)]
+
+        hurtcaps = json.loads(
+            (root / "data/hurtcaps" / f"{char_name}.json").read_text(encoding="utf-8")
+        )
+        cap2 = hurtcaps["capsules"][2]
+        cap12 = hurtcaps["capsules"][12]
+        assert int(cap2["height"]) == 2
+        assert int(cap12["height"]) == 1
+        assert float(cap12["scale"]) == pytest.approx(1.62, abs=1e-6)
+
+
 def _trace_site_count(trace_path: Path, *, start_record: int, record: int, site_id: int) -> int:
     total = 0
     with trace_path.open("r", encoding="utf-8") as fh:
@@ -28,6 +58,62 @@ def _trace_site_count(trace_path: Path, *, start_record: int, record: int, site_
                 continue
             total += int(row["call_count"])
     return total
+
+
+def _selected_body_hitbox_hurtcap(
+    dataset_path: Path, record: int, attacker: int, defender: int
+) -> tuple[int, int]:
+    import numpy as np
+
+    binding = pytest.importorskip("msl_binding")
+    ds = read_dataset(str(dataset_path))
+    row = ds.samples[record : record + 1]
+    sizes = binding.sizes()
+    seed_stride = int(sizes["seed"])
+    input_stride = int(sizes["input"])
+    seed_bytes = np.frombuffer(row["seed_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, seed_stride)
+    prev_input_bytes = np.frombuffer(row["prev_input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(
+        1, input_stride
+    )
+    input_bytes = np.frombuffer(row["input_t"].tobytes(order="C"), dtype=np.uint8).copy().reshape(1, input_stride)
+    selected_dtype = np.dtype(
+        [
+            ("attacker", "u1"),
+            ("defender", "u1"),
+            ("hitbox_id", "u1"),
+            ("hurtcap_id", "u1"),
+            ("attacker_msid", "<u2"),
+            ("attacker_action_frame", "<i2"),
+            ("hitbox_x", "<f4"),
+            ("hitbox_y", "<f4"),
+            ("hitbox_z", "<f4"),
+            ("hitbox_radius", "<f4"),
+            ("hitbox_damage", "<f4"),
+            ("hurtcap_ax", "<f4"),
+            ("hurtcap_ay", "<f4"),
+            ("hurtcap_az", "<f4"),
+            ("hurtcap_bx", "<f4"),
+            ("hurtcap_by", "<f4"),
+            ("hurtcap_bz", "<f4"),
+            ("hurtcap_radius", "<f4"),
+        ],
+        align=False,
+    )
+    handle = binding.init(batch_size=1, num_players=int(ds.header["num_players"]))
+    try:
+        binding.reseed_seed(handle, seed_bytes)
+        binding.debug_step_input_pre_combat(handle, prev_input_bytes, input_bytes)
+        raw, count = binding.debug_combat_select_body_hits(handle, 0, 64)
+    finally:
+        binding.destroy(handle)
+    assert int(raw.shape[1]) == int(selected_dtype.itemsize)
+    selected = raw.reshape(-1).view(selected_dtype)[:count]
+    for row_selected in selected:
+        if int(row_selected["attacker"]) == attacker and int(row_selected["defender"]) == defender:
+            return int(row_selected["hitbox_id"]), int(row_selected["hurtcap_id"])
+    raise AssertionError(
+        f"record={record} attacker={attacker} defender={defender} has no selected BODY hit"
+    )
 
 
 @dataclass(frozen=True)
@@ -857,6 +943,148 @@ def test_damageflytop_f26_runtime_maps_raw_source_port_before_attacker_lookup() 
     _, ref_row, out_row = _run_one_step_row(dataset_path, 3907, 1, seed_mutator=_noncompact_ports)
     assert int(ref_row["action_id"][1]) == 91
     assert int(out_row["action_id"][1]) == 91
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    (
+        "dataset_rel",
+        "record",
+        "attacker",
+        "victim",
+        "selected_hb",
+        "selected_cap",
+        "expected_ref_action",
+        "expected_out_action",
+    ),
+    [
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
+            "TreasuredBackKangaroo.msl",
+            3907,
+            0,
+            1,
+            0,
+            12,
+            91,
+            91,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
+            "TreasuredBackKangaroo.msl",
+            6380,
+            1,
+            0,
+            1,
+            2,
+            91,
+            91,
+        ),
+        (
+            "datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/"
+            "GracefulAttachedTurtle.msl",
+            6495,
+            1,
+            0,
+            1,
+            0,
+            88,
+            88,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/aggregate_recent/HungryImportantSnake.msl",
+            2461,
+            0,
+            1,
+            0,
+            0,
+            88,
+            88,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+            "MilkyGracefulStingray.msl",
+            2608,
+            0,
+            1,
+            0,
+            0,
+            88,
+            88,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/dream_land_recent/"
+            "ShadyDecimalStarling.msl",
+            3351,
+            0,
+            1,
+            0,
+            7,
+            88,
+            88,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
+            "ThisVioletRaccoon.msl",
+            4541,
+            0,
+            1,
+            0,
+            1,
+            91,
+            88,
+        ),
+        (
+            "datasets/aggregate_recent/replays/validation/pokemon_stadium_recent/"
+            "ThisVioletRaccoon.msl",
+            9398,
+            1,
+            0,
+            0,
+            2,
+            87,
+            87,
+        ),
+    ],
+)
+def test_attackairb_damageflytop_runtime_phase_requires_selected_hurtcap_provenance(
+    dataset_rel: str,
+    record: int,
+    attacker: int,
+    victim: int,
+    selected_hb: int,
+    selected_cap: int,
+    expected_ref_action: int,
+    expected_out_action: int,
+) -> None:
+    # Runtime fallback for AttackAirB -> DamageFlyTop Fighter_8006CDA4 phase is owned by the
+    # selected ftColl_80076ED8 BODY source, not just visible AttackAirB shape. TBK's remaining
+    # rows select cap-12 or hb1/cap-2 source pairs from data/hurtcaps/{fox,falco}.json; aggregate
+    # low/root, cap-1, and hb0/cap2 selected pairs stay on their ordinary DamageFlyN/Hi source path
+    # unless an explicit seed lane supplies stream phase.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
+    # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}
+    root = Path(__file__).resolve().parents[1]
+    _skip_if_required_artifacts_missing(root)
+    dataset_path = root / dataset_rel
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_rel}")
+
+    got_hb, got_cap = _selected_body_hitbox_hurtcap(dataset_path, record, attacker, victim)
+    assert (got_hb, got_cap) == (selected_hb, selected_cap)
+
+    def _clear_seed_phase(seed_t):
+        seed_t["fighter_8006cda4_pre_gate_consume_count"][0, victim] = 0
+
+    _, ref_row, out_row = _run_one_step_row(
+        dataset_path,
+        record,
+        victim,
+        seed_mutator=_clear_seed_phase,
+    )
+    assert int(ref_row["action_id"][victim]) == expected_ref_action
+    assert int(out_row["action_id"][victim]) == expected_out_action
 
 
 @pytest.mark.integration

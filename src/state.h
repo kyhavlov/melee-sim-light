@@ -1022,6 +1022,18 @@ typedef struct MslStateSoA {
   float* hitbox_z;
   float* hitbox_radius;
   float* hitbox_damage;
+  // Source-owned stale multiplier for HitCapsule.damage.
+  //
+  // Decomp ownership:
+  // - ftAction_8007121C / ftAction_8007162C call ftColl_8007ABD0 when create/set-damage commands
+  //   fire.
+  // - ftColl_8007ABD0 writes HitCapsule.damage after ft_80089228 applies the current stale table.
+  // - Later stale-queue inserts from the same live HitCapsule must not retroactively restale it.
+  // refs/melee/src/melee/ft/ftaction.c::{ftAction_8007121C,ftAction_8007162C}
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007ABD0
+  // refs/melee/src/melee/ft/ft_0881.c::ft_80089228
+  uint8_t* hitbox_stale_damage_valid;
+  float* hitbox_stale_damage_mul;
   uint16_t* hitbox_bone_part_id;
   uint16_t* hitbox_u16_0;
   uint16_t* hitbox_u16_1;
@@ -1232,6 +1244,13 @@ typedef struct MslStateSoA {
   float* item_pos_x;               // [batch * MSL_MAX_ITEMS]
   float* item_pos_y;               // [batch * MSL_MAX_ITEMS]
   uint16_t* item_damage;           // [batch * MSL_MAX_ITEMS]
+  // Item HitCapsule.damage stale scalar captured when it_80272460 builds the item hitbox.
+  // Slippi does not expose this float lane; runtime-created projectiles keep it source-owned here
+  // so later stale queue writes do not retroactively change already-created item HitCapsules.
+  // refs/melee/src/melee/it/itcoll.c::it_80272460
+  // refs/melee/src/melee/ft/ft_0881.c::ft_80089228
+  uint8_t* item_stale_damage_valid;  // [batch * MSL_MAX_ITEMS]
+  float* item_stale_damage_mul;      // [batch * MSL_MAX_ITEMS]
   // Per-item reflected damage multiplier lane (decomp: item->xC6C).
   //
   // Decomp trail:

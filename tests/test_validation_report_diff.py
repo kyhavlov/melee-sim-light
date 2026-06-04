@@ -140,7 +140,9 @@ def test_validation_report_diff_classifies_hard_reds(tmp_path: Path) -> None:
     assert not classification.distribution_only
 
 
-def test_validation_report_diff_classifies_distribution_only_rollout_red(tmp_path: Path) -> None:
+def test_validation_report_diff_treats_improved_first_counts_as_clean_streak_reshuffle(
+    tmp_path: Path,
+) -> None:
     before = tmp_path / "before"
     after = tmp_path / "after"
     _write_reports(
@@ -160,11 +162,12 @@ def test_validation_report_diff_classifies_distribution_only_rollout_red(tmp_pat
         before_reports, after_reports, diff_report_sets(before_reports, after_reports)
     )
 
-    assert any(d.metric == "rollout.streak_len.median" for d in classification.distribution_only)
     assert not classification.hard
+    assert not classification.distribution_only
+    assert not classification.unclassified
 
 
-def test_validation_report_diff_classifies_exception_backed_best_len_red_as_distribution_only(
+def test_validation_report_diff_treats_improved_first_counts_best_len_drop_as_clean_reshuffle(
     tmp_path: Path,
 ) -> None:
     before = tmp_path / "before"
@@ -194,15 +197,14 @@ def test_validation_report_diff_classifies_exception_backed_best_len_red_as_dist
         before_reports, after_reports, diff_report_sets(before_reports, after_reports)
     )
 
-    assert any(d.metric == "rollout.best_len" for d in classification.distribution_only)
-    assert any(d.metric == "rollout.streak_len.max" for d in classification.distribution_only)
-    assert any(d.metric == "overall.rollout.best_len.max" for d in classification.distribution_only)
-    assert any(d.metric == "overall.rollout.streak_len.max" for d in classification.distribution_only)
     assert not classification.hard
+    assert not classification.distribution_only
     assert not classification.unclassified
 
 
-def test_validation_report_diff_keeps_unapproved_best_len_red_hard(tmp_path: Path) -> None:
+def test_validation_report_diff_keeps_best_len_red_hard_when_first_counts_regress(
+    tmp_path: Path,
+) -> None:
     before = tmp_path / "before"
     after = tmp_path / "after"
     _write_reports(
@@ -213,7 +215,7 @@ def test_validation_report_diff_keeps_unapproved_best_len_red_hard(tmp_path: Pat
     _write_reports(
         after,
         one_step=_one_step(total=10, strict=12, p95="0.20"),
-        rollout=_rollout(streak_count=28, first=28, seeded=8, median=120, p90=600, best_len=800),
+        rollout=_rollout(streak_count=31, first=31, seeded=8, median=120, p90=600, best_len=800),
     )
 
     before_reports = read_report_set(str(before), before=True)
@@ -226,7 +228,7 @@ def test_validation_report_diff_keeps_unapproved_best_len_red_hard(tmp_path: Pat
     assert any(d.metric == "overall.rollout.best_len.max" for d in classification.hard)
 
 
-def test_validation_report_diff_classifies_suite_distribution_only_rollout_red(
+def test_validation_report_diff_treats_suite_improved_first_counts_as_clean_streak_reshuffle(
     tmp_path: Path,
 ) -> None:
     before = tmp_path / "before"
@@ -248,11 +250,9 @@ def test_validation_report_diff_classifies_suite_distribution_only_rollout_red(
         before_reports, after_reports, diff_report_sets(before_reports, after_reports)
     )
 
-    assert any(
-        d.section == "suite" and d.metric == "overall.rollout.streak_len.median"
-        for d in classification.distribution_only
-    )
     assert not classification.hard
+    assert not classification.distribution_only
+    assert not classification.unclassified
 
 
 def test_validation_report_diff_keeps_suite_distribution_red_unclassified_when_hard_context_regresses(

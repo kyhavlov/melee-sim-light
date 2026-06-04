@@ -325,6 +325,13 @@ static inline uint8_t msl_damage_owner_damageflyroll_pre_action_allows_gate(cons
       }
       if (a_action == (uint16_t)MSL_ACT_ATTACK_AIR_B &&
           (a_af >= 6 || batch->state.fighter_8006cda4_pre_gate_consume_count[d_idx] != 0u)) {
+        // AttackAirB DamageFlyTop replay-clock gate admission starts at the extracted
+        // create_hitbox frame. Fighter_8006CDA4's hidden pre-gate owner still supplies the stream
+        // phase in combat.c; this helper only decides whether the source family is eligible for
+        // ftCo_8008DCE0's DamageFlyRoll gate.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
+        // refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
+        // data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirB.events.create_hitbox
         return 1u;
       }
       return 0u;

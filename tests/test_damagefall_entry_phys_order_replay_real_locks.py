@@ -122,13 +122,14 @@ def test_steady_damagefall_allow_interrupt_uses_pre_integration_gravity() -> Non
     assert float(out["speed_y_self"][p]) == pytest.approx(float(ref["speed_y_self"][p]), abs=1e-7)
     assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
 
-    def _clear_allow_interrupt(seed_t):
+    def _clear_descent(seed_t):
         seed_t["state_flags"][0, p, 0] = np.uint8(
             int(seed_t["state_flags"][0, p, 0]) & ~STATE_FLAG_2218_ALLOW_INTERRUPT
         )
+        seed_t["speed_y_self"][0, p] = np.float32(0.1)
 
-    _, _, out_without_flag = _run_one_step(dataset_path, 8326, seed_mutator=_clear_allow_interrupt)
-    assert float(out_without_flag["speed_y_self"][p]) == pytest.approx(
+    _, _, out_without_descent = _run_one_step(dataset_path, 8326, seed_mutator=_clear_descent)
+    assert float(out_without_descent["speed_y_self"][p]) != pytest.approx(
         float(ref["speed_y_self"][p]), abs=1e-7
     )
-    assert float(out_without_flag["pos_y"][p]) != pytest.approx(float(ref["pos_y"][p]), abs=1e-6)
+    assert float(out_without_descent["pos_y"][p]) != pytest.approx(float(ref["pos_y"][p]), abs=1e-6)

@@ -45,6 +45,13 @@ static inline void msl_item_reflect_set_damage_mul(MslBatch* batch, size_t item_
     return;
   }
   batch->state.item_reflect_damage_mul[item_idx] = (damage_mul > 0.0f) ? damage_mul : 1.0f;
+  // Item_80269F14 rebuilds the reflected item's HitCapsule damage through it_80272460. Clear the
+  // pre-reflect stale scalar so the rebuilt owner path can use the current owner's stale table
+  // instead of the projectile's original spawn-time lane.
+  // refs/melee/src/melee/it/item.c::Item_80269F14
+  // refs/melee/src/melee/it/itcoll.c::it_80272460
+  batch->state.item_stale_damage_valid[item_idx] = 0u;
+  batch->state.item_stale_damage_mul[item_idx] = 1.0f;
 }
 
 static inline float msl_item_reflect_damage_lane(const MslBatch* batch, size_t item_idx,

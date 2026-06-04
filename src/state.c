@@ -191,10 +191,14 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   for (size_t i = 0; i < bph; i++) {
     state->hitbox_capsule_enabled[i] = 0u;
     state->hitbox_capsule_group[i] = 0u;
+    state->hitbox_stale_damage_valid[i] = 0u;
+    state->hitbox_stale_damage_mul[i] = 1.0f;
     state->fighter_hitlist_init_gen[i] = 0u;
     hitlist_capsule_clear(&state->fighter_hitlist[i]);
   }
   for (size_t i = 0; i < bi; i++) {
+    state->item_stale_damage_valid[i] = 0u;
+    state->item_stale_damage_mul[i] = 1.0f;
     state->item_hitlag[i] = 0u;
   }
   for (size_t i = 0; i < bi * (size_t)MSL_MAX_HITBOXES; i++) {

@@ -353,6 +353,112 @@ static inline uint16_t item_seed_bridge_attack_id(const MslBatch* batch, int bi,
   return attack_id;
 }
 
+static inline float reseed_staling_multiplier_before_latest_instance(const MslBatch* batch,
+                                                                     size_t fighter_idx,
+                                                                     uint16_t move_id,
+                                                                     uint16_t latest_instance,
+                                                                     uint8_t* out_valid) {
+  if (out_valid != NULL) {
+    *out_valid = 0u;
+  }
+  if (batch == NULL || move_id == 0xFFFFu || move_id == (uint16_t)MSL_FT_MOVE_ID_DEFAULT ||
+      latest_instance == 0u) {
+    return 1.0f;
+  }
+  const float* weights = staling_weights_table();
+  if (weights == NULL) {
+    return 1.0f;
+  }
+
+  const uint8_t qi_raw = batch->state.stale_queue_index[fighter_idx];
+  const uint8_t qi = (qi_raw < (uint8_t)MSL_STALE_QUEUE_SIZE) ? qi_raw : 0u;
+  const int latest_pos = (qi != 0u) ? (int)qi - 1 : (int)MSL_STALE_QUEUE_SIZE - 1;
+  const size_t base = fighter_idx * (size_t)MSL_STALE_QUEUE_SIZE;
+  if (batch->state.stale_move_id[base + (size_t)latest_pos] != move_id ||
+      batch->state.stale_attack_instance[base + (size_t)latest_pos] != latest_instance) {
+    return 1.0f;
+  }
+
+  float mult = 1.0f;
+  int pos = (latest_pos != 0) ? latest_pos - 1 : (int)MSL_STALE_QUEUE_SIZE - 1;
+  for (int i = 0; i < 9; i++) {
+    const uint16_t mid = batch->state.stale_move_id[base + (size_t)pos];
+    if (mid == 0u) {
+      break;
+    }
+    if (mid == move_id) {
+      mult -= weights[i];
+    }
+    pos = (pos != 0) ? pos - 1 : (int)MSL_STALE_QUEUE_SIZE - 1;
+  }
+  if (out_valid != NULL) {
+    *out_valid = 1u;
+  }
+  return mult;
+}
+
+static inline uint8_t reseed_seeded_laser_stale_damage_owner(const MslBatch* batch, int bi,
+                                                             const MslSeed* seed,
+                                                             const MslItem* item,
+                                                             uint16_t item_attack_id,
+                                                             float* out_stale_mul) {
+  if (out_stale_mul != NULL) {
+    *out_stale_mul = 1.0f;
+  }
+  if (batch == NULL || seed == NULL || item == NULL || out_stale_mul == NULL ||
+      item->exists == 0u || item->owner < 0 || item->owner >= (int8_t)batch->config.num_players ||
+      item_attack_id == (uint16_t)MSL_FT_MOVE_ID_DEFAULT || item->attack_instance == 0u) {
+    return 0u;
+  }
+  const MslLaserParams* lp = laser_params_for_item_type(item->type);
+  if (lp == NULL || item->type != lp->shot_itkind) {
+    return 0u;
+  }
+
+  const int owner = (int)item->owner;
+  const size_t owner_idx = msl_idx_player(bi, owner);
+  uint16_t blaster_article_instance = 0u;
+  for (int it = 0; it < MSL_MAX_ITEMS; it++) {
+    const MslItem* other = &seed->items[it];
+    if (other == item || other->exists == 0u || other->owner != item->owner ||
+        other->type != lp->gun_itkind || other->attack_id != item_attack_id ||
+        other->attack_instance == 0u || other->attack_instance == item->attack_instance) {
+      continue;
+    }
+    if (blaster_article_instance != 0u) {
+      return 0u;
+    }
+    blaster_article_instance = other->attack_instance;
+  }
+  if (blaster_article_instance == 0u) {
+    return 0u;
+  }
+
+  uint8_t valid = 0u;
+  const float mul = reseed_staling_multiplier_before_latest_instance(
+      batch, owner_idx, item_attack_id, blaster_article_instance, &valid);
+  if (valid == 0u || !(mul > 0.0f)) {
+    return 0u;
+  }
+  // Seeded live laser HitCapsule.damage:
+  // - it_802790C0 / item script create calls it_80272460, which stores HitCapsule.damage after
+  //   ft_80089228 has applied the owner's stale table.
+  // - Slippi seed rows expose live item xD88/xD8C and the owner's stale table, but not the already
+  //   frozen HitCapsule.damage float. When a later blaster-article stale update occupies the
+  //   latest table slot, recomputing from the seed table re-stales older live shots.
+  // - The live owner blaster article plus the latest stale-table entry is concrete source
+  //   provenance for rewinding exactly that post-create insertion before freezing the seeded shot.
+  // - If the shot's own instance is already in the stale queue, or if there is no unique live
+  //   same-source blaster article, the hidden frozen damage cannot be reconstructed from Slippi
+  //   seed state and this helper deliberately leaves the item on the ordinary live stale lookup.
+  // refs/melee/src/melee/it/it_2725.c::{it_8027B070,it_802790C0}
+  // refs/melee/src/melee/it/itcoll.c::it_80272460
+  // refs/melee/src/melee/ft/ft_0881.c::{ft_80089118,ft_80089228}
+  // refs/melee/src/melee/pl/plstale.c::plStale_UpdateStaleMovesFromItem
+  *out_stale_mul = mul;
+  return 1u;
+}
+
 static inline uint16_t colanim_timer_remaining_from_action_frame(uint16_t init_frames,
                                                                  int16_t action_frame) {
   if (init_frames == 0u) {
@@ -2603,6 +2709,8 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
         batch->state.hitbox_x43_b2[hb_i] = 0u;
         batch->state.hitbox_capsule_enabled[hb_i] = 0u;
         batch->state.hitbox_capsule_group[hb_i] = 0u;
+        batch->state.hitbox_stale_damage_valid[hb_i] = 0u;
+        batch->state.hitbox_stale_damage_mul[hb_i] = 1.0f;
       }
 
       if (seed->attack_instance[p] > max_attack_inst) {
@@ -2762,6 +2870,15 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.item_pos_x[ii] = item->pos_x;
       batch->state.item_pos_y[ii] = item->pos_y;
       batch->state.item_damage[ii] = item->damage;
+      batch->state.item_stale_damage_valid[ii] = 0u;
+      batch->state.item_stale_damage_mul[ii] = 1.0f;
+      float seeded_laser_stale_mul = 1.0f;
+      if (reseed_seeded_laser_stale_damage_owner(batch, bi, seed, item,
+                                                 batch->state.item_attack_id[ii],
+                                                 &seeded_laser_stale_mul) != 0u) {
+        batch->state.item_stale_damage_valid[ii] = 1u;
+        batch->state.item_stale_damage_mul[ii] = seeded_laser_stale_mul;
+      }
       float reflect_mul = seed->item_reflect_damage_mul[it];
       if (!(reflect_mul > 0.0f)) {
         reflect_mul = 1.0f;
@@ -5513,6 +5630,8 @@ int msl_batch_debug_clear_hitboxes_world(MslBatch* batch, int batch_index, int p
     batch->state.hitbox_x43_b2[hb_i] = 0u;
     batch->state.hitbox_capsule_enabled[hb_i] = 0u;
     batch->state.hitbox_capsule_group[hb_i] = 0u;
+    batch->state.hitbox_stale_damage_valid[hb_i] = 0u;
+    batch->state.hitbox_stale_damage_mul[hb_i] = 1.0f;
   }
 
   // Debug helper: approximate the engine's "clear hitboxes" behavior by also resetting rehit
@@ -5545,6 +5664,8 @@ int msl_batch_debug_set_hitbox_world(MslBatch* batch, int batch_index, int playe
   batch->state.hitbox_z[hb_i] = z;
   batch->state.hitbox_radius[hb_i] = radius;
   batch->state.hitbox_damage[hb_i] = damage;
+  batch->state.hitbox_stale_damage_valid[hb_i] = 0u;
+  batch->state.hitbox_stale_damage_mul[hb_i] = 1.0f;
   if (!enabled) {
     batch->state.hitbox_x43_b2[hb_i] = 0u;
   }

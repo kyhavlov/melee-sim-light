@@ -53,6 +53,8 @@ static inline void clear_outgoing_hitboxes_after_catch_connect(MslBatch* batch, 
     const size_t hb_i =
         ((size_t)bi * (size_t)MSL_MAX_PLAYERS + (size_t)p) * (size_t)MSL_MAX_HITBOXES + (size_t)hb;
     batch->state.hitbox_enabled[hb_i] = 0u;
+    batch->state.hitbox_stale_damage_valid[hb_i] = 0u;
+    batch->state.hitbox_stale_damage_mul[hb_i] = 1.0f;
   }
 }
 

@@ -161,12 +161,12 @@ def test_manual_charged_upsmash_releases_scaled_damage() -> None:
     history = _replay_trace(_trace_by_name("charged_upsmash"), end_frame=398)
 
     falco = 1
-    assert float(history[390]["percent"][falco]) == pytest.approx(28.14, abs=1e-4)
+    assert float(history[390]["percent"][falco]) == pytest.approx(23.100000, abs=1e-4)
     assert int(history[397]["action_id"][falco]) == 90  # DamageFlyTop.
     # The retained smash-release owner uses the source `ftAction_804D82A0` single-precision
     # 0.003906 literal rather than the rounded 1/256 approximation previously assumed here.
-    assert float(history[397]["percent"][falco]) == pytest.approx(52.747799, abs=1e-4)
-    assert int(history[397]["hitstun"][falco]) >= 67
+    assert float(history[397]["percent"][falco]) == pytest.approx(47.707802, abs=1e-4)
+    assert int(history[397]["hitstun"][falco]) >= 63
 
 
 @pytest.mark.integration
@@ -198,11 +198,11 @@ def test_manual_damagefly_wall_hit_enters_flyreflectwall() -> None:
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_DamageFly_Coll
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_FlyReflect.c::ftCo_800C18A8
     assert float(out_822["pos_x"][falco]) == pytest.approx(88.11599, abs=1e-4)
-    assert float(out_822["pos_y"][falco]) == pytest.approx(-14.13644, abs=1e-4)
+    assert float(out_822["pos_y"][falco]) == pytest.approx(-14.66936, abs=1e-4)
     assert int(contacts_822["wall_kind"][falco]) == 2
     assert int(contacts_822["wall_id"][falco]) == 9
     assert float(contacts_822["wall_contact_x"][falco]) == pytest.approx(85.56570, abs=1e-4)
-    assert float(contacts_822["wall_contact_y"][falco]) == pytest.approx(-7.80649, abs=1e-4)
+    assert float(contacts_822["wall_contact_y"][falco]) == pytest.approx(-7.80846, abs=1e-4)
     assert float(contacts_822["wall_normal_x"][falco]) == pytest.approx(1.0, abs=1e-6)
     assert float(contacts_822["wall_normal_y"][falco]) == pytest.approx(0.0, abs=1e-6)
     assert int(contacts_822["coll_env_flags"][falco]) & MSL_COLLIDE_RIGHT_WALL_PUSH
@@ -211,8 +211,8 @@ def test_manual_damagefly_wall_hit_enters_flyreflectwall() -> None:
     assert int(out_822["hurtbox_state"][falco]) == 2
 
     assert int(out_823["action_id"][falco]) == 247
-    assert float(out_823["pos_x"][falco]) == pytest.approx(90.10555, abs=1e-4)
-    assert float(out_823["pos_y"][falco]) == pytest.approx(-12.45038, abs=1e-4)
+    assert float(out_823["pos_x"][falco]) == pytest.approx(89.67888, abs=1e-4)
+    assert float(out_823["pos_y"][falco]) == pytest.approx(-13.40928, abs=1e-4)
     assert int(contacts_823["wall_kind"][falco]) == 2
     assert int(out_840["action_id"][falco]) == 247
     assert int(out_840["hurtbox_state"][falco]) == 0

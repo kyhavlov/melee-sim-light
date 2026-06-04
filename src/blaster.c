@@ -8,6 +8,7 @@
 #include "anim_frame.h"
 #include "anim_table.h"
 #include "anim_timebase.h"
+#include "attack_identity.h"
 #include "buttons.h"
 #include "char_params.h"
 #include "common_params.h"
@@ -747,13 +748,17 @@ static inline void blaster_update_active_timeline_player(MslBatch* batch, const 
         const uint8_t had_fastfall = batch->state.fall_fast[idx] ? 1u : 0u;
         if (specialn_is_blaster_loop_requested(batch, idx)) {
           // Loop -> Loop: request another shot cycle.
-          // Decomp: Loop restarts itself via Fighter_ChangeMotionState without KeepFastFall.
-          // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::ftFx_SpecialNLoop_Anim
+          // Decomp: Loop restarts itself via Fighter_ChangeMotionState without KeepFastFall, then
+          // ftFx_SpecialN_OnChangeAction calls ft_800892A0 before the shot accessory callback.
+          // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialN.c::{
+          //   ftFx_SpecialNLoop_Anim,ftFx_SpecialN_OnChangeAction,ftFx_SpecialN_CreateBlasterShot}
+          // refs/melee/src/melee/ft/ft_0881.c::ft_800892A0
           batch->state.fall_fast[idx] = 0;
           if (had_fastfall != 0u) {
             batch->state.tilt_timer_y[idx] = 0xFEu;
           }
           msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+          attack_identity_restart_same_move_ft_800892A0(batch, idx);
         } else {
           batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_N_END;
           batch->state.animation_index[idx] = (uint32_t)lp->ground_end_msid;
@@ -800,6 +805,7 @@ static inline void blaster_update_active_timeline_player(MslBatch* batch, const 
             batch->state.tilt_timer_y[idx] = 0xFEu;
           }
           msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+          attack_identity_restart_same_move_ft_800892A0(batch, idx);
         } else {
           batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_END;
           batch->state.animation_index[idx] = (uint32_t)lp->air_end_msid;
@@ -1067,6 +1073,7 @@ void blaster_update_pre_physics(MslBatch* batch) {
                 batch->state.tilt_timer_y[idx] = 0xFEu;
               }
               msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+              attack_identity_restart_same_move_ft_800892A0(batch, idx);
             } else {
               const uint8_t had_fastfall = batch->state.fall_fast[idx] ? 1u : 0u;
               batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_N_END;
@@ -1114,6 +1121,7 @@ void blaster_update_pre_physics(MslBatch* batch) {
                 batch->state.tilt_timer_y[idx] = 0xFEu;
               }
               msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
+              attack_identity_restart_same_move_ft_800892A0(batch, idx);
             } else {
               const uint8_t had_fastfall = batch->state.fall_fast[idx] ? 1u : 0u;
               batch->state.action_id[idx] = (uint16_t)MSL_ACT_FX_SPECIAL_AIR_N_END;

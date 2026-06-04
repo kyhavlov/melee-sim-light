@@ -5149,8 +5149,9 @@ def test_damagefall_lands_on_static_platform(stage_id: int, line_id: int, x: flo
 def test_common_air_down_input_rejects_soft_platform_callback() -> None:
     # ftCo_80096CC8 is passed to common-air floor collision through ft_80083090_inline.
     # The callback rejects platform floors while stick Y is held at/below p_ftCommonData->x25C, so
-    # the same Battlefield platform sweep stays airborne for Fall but still admits DamageFall, whose
-    # collision owner does not pass the soft-platform callback.
+    # the same Battlefield platform sweep stays airborne for Fall. DamageFall's source collision
+    # owner admits the platform with neutral stick, but source fastfall/down-input behavior keeps
+    # the soft platform rejected while stick Y is held down.
     #
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_FallSpecial.c::ftCo_80096CC8
     # refs/melee/src/melee/ft/ft_081B.c::{ft_80083090_inline,ft_8008370C}
@@ -5171,11 +5172,14 @@ def test_common_air_down_input_rejects_soft_platform_callback() -> None:
     damage["floor_sweep_prev_pos_x_f32"][0, 0] = np.float32(-40.0)
     damage["floor_sweep_prev_pos_y_f32"][0, 0] = np.float32(40.0)
     damage_out = _step_once(damage, _input_bytes(), input_t)
+    neutral_damage_out = _step_once(damage, _input_bytes(), _input_bytes())
 
     assert int(fall_out["on_ground"][0]) == 0
     assert int(fall_out["ground_id"][0]) == 0xFFFF
-    assert int(damage_out["on_ground"][0]) == 1
-    assert int(damage_out["ground_id"][0]) == 2
+    assert int(damage_out["on_ground"][0]) == 0
+    assert int(damage_out["ground_id"][0]) != 2
+    assert int(neutral_damage_out["on_ground"][0]) == 1
+    assert int(neutral_damage_out["ground_id"][0]) == 2
 
 
 def test_jump_up_through_platform_does_not_ground_from_below() -> None:

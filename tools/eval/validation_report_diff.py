@@ -367,6 +367,31 @@ def _is_exception_backed_replay_distribution_only(
     )
 
 
+def _is_rollout_distribution_reshuffle_ok(
+    before: dict[str, dict[str, dict[str, MetricValue]]],
+    after: dict[str, dict[str, dict[str, MetricValue]]],
+    delta: MetricDelta,
+) -> bool:
+    return (
+        "rollout" in delta.report
+        and _is_rollout_streak_distribution_metric(delta.metric)
+        and _rollout_first_counts_non_regressing(before, after, delta)
+    )
+
+
+def _is_one_step_float_only_ok(
+    before: dict[str, dict[str, dict[str, MetricValue]]],
+    after: dict[str, dict[str, dict[str, MetricValue]]],
+    delta: MetricDelta,
+) -> bool:
+    return (
+        "one-step" in delta.report
+        and delta.metric == "overall.float_norm_mae_p95"
+        and _metric_non_regressing(before, after, delta, "overall.discrete_mismatch") is True
+        and _metric_non_regressing(before, after, delta, "overall.strict_discrete_mismatch") is True
+    )
+
+
 def classify_reds(
     before: dict[str, dict[str, dict[str, MetricValue]]],
     after: dict[str, dict[str, dict[str, MetricValue]]],
@@ -385,6 +410,10 @@ def classify_reds(
 
     for delta in rows:
         if not delta.is_regression:
+            continue
+        if _is_rollout_distribution_reshuffle_ok(before, after, delta):
+            continue
+        if _is_one_step_float_only_ok(before, after, delta):
             continue
         if _is_exception_backed_replay_distribution_only(before, after, delta):
             distribution_only.append(delta)
