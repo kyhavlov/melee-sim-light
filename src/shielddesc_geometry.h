@@ -189,6 +189,14 @@ static inline uint8_t msl_shielddesc_fighter_overlap_ftcoll_80007bcc(
        fabsf(batch->state.guard_tilt_x4[d_idx]) <= FLT_EPSILON)
           ? 1u
           : 0u;
+  const uint8_t guardon_raise_tilted_attackairlw_model_scale_lane =
+      (guardon_raise_shield_no_submotion_attackair_x10 &&
+       batch->state.action_id[a_idx] == (uint16_t)MSL_ACT_ATTACK_AIR_LW &&
+       batch->state.animation_index[a_idx] == (uint32_t)MSL_SM_ATTACK_AIR_LW &&
+       batch->state.hitbox_damage[hb_i] == 9.0f &&
+       fabsf(batch->state.guard_tilt_x4[d_idx]) > FLT_EPSILON)
+          ? 1u
+          : 0u;
   if (guardon_raise_shield_no_submotion_attackair_x10) {
     MslShieldTiltTableView tv;
     if (msl_shield_tilt_table_view(batch->state.char_id[d_idx], &tv) == 0 && tv.xyz != NULL &&
@@ -363,10 +371,20 @@ static inline uint8_t msl_shielddesc_fighter_overlap_ftcoll_80007bcc(
       (shield_extent_bridge_active || shine_start_enable_edge) ? 1.0f : 0.2f;
   const float shield_extent_env_r =
       shield_extent_lane_active ? (shield_desc_world_r * shield_extent_scale) : 0.0f;
-  const float shield_matrix_radius = shr * ((guardreflect_final_x14_no_submotion ||
-                                             guardon_raise_shield_no_submotion_attackair_x10)
-                                                ? 1.0f
-                                                : shield_owner_model_scale);
+  // Tilted GuardOn raise-shield vs the authored 9-damage late AttackAirLw capsule uses the
+  // authored shield matrix radius after the live tilt table sample. Other no-submotion GuardOn
+  // raise rows retain the source no-model-scale path; broadening the model-scale lane into early
+  // 12-damage DAir, AttackAirHi/B, or GuardReflect creates false GuardSetOff contacts in aggregate
+  // controls.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_GuardOn_Anim,ftCo_80091E78}
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_80076CBC
+  // data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirLw.events.create_hitbox
+  const uint8_t shield_matrix_uses_unscaled_radius =
+      (uint8_t)((guardreflect_final_x14_no_submotion ||
+                 guardon_raise_shield_no_submotion_attackair_x10) &&
+                guardon_raise_tilted_attackairlw_model_scale_lane == 0u);
+  const float shield_matrix_radius =
+      shr * (shield_matrix_uses_unscaled_radius ? 1.0f : shield_owner_model_scale);
   const float rr = hr + shield_matrix_radius + shield_desc_term + shield_extent_env_r;
   float d2 = 0.0f;
 

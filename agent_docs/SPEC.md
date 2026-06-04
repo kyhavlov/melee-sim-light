@@ -5648,6 +5648,17 @@ BODY collision-space residual split and rejected seed bridge:
   the vulnerable damage guard in `ftColl_80076ED8`, so preprocessing preserves that hidden
   per-HitCapsule lineage from current-row invincible/no-damage hitlag/hurtbox-state evidence rather
   than hiding Falco CliffAttack data.
+- Continuous grounded CliffClimb/CliffAttack/CliffEscape option frames carry `fp->x221D_b5`, the
+  same self-nudge suppressor used by continuous Escape frames. `Fighter_8006A360` runs Anim and the
+  common `ftCommon_8007E0E4` fighter-overlap pass before the later IASA/input callback, so same-frame
+  CliffWait-to-option entries do not suppress the current-frame self pass; only rows whose current
+  and previous motion states are already ledge options carry the source bit into the nudge phase.
+  `GAT:8226` locks the positive CliffAttackQuick self-suppression boundary that later controls the
+  SideB floor crossing. Source anchors: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_8009AB9C`,
+  `refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffAttack.c::ftCo_8009AEA4`,
+  `refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffEscape.c::ftCo_8009B040`,
+  `refs/melee/src/melee/ft/fighter.c::Fighter_8006A360`, and
+  `refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007E0E4,ftCommon_8007DD7C}`.
 - Enable-edge BODY phantom/tip-log rows now use the decomp `ftColl_80076ED8` branch where
   `0 < HitCapsule.coll_distance < p_ftCommonData->x7A8`. The kept runtime subset is limited to
   newly enabled airborne-victim capsules (`ftColl_8007AD18` initializes `x58=x4C`) and uses the
@@ -5741,6 +5752,18 @@ BODY collision-space residual split and rejected seed bridge:
   grounded Attack* range; it does not backfill those grounded-entry rows across earlier frames, and
   runtime clears an unconsumed marker at frame end. This is exact reseed support, not source-closed
   RNG ownership for free-running grounded gameplay.
+- LandingAirLw frame 1..15 can also reach a one-consume `Fighter_8006CDA4` pre-gate phase before
+  `ftCo_8008DCE0`'s DamageFlyRoll gate, but free-running rollout only admits that phase from a
+  concrete current `ProcessHit` source: the defender is still in LandingAirLw before damage entry,
+  the selected DmgLog source names an active attacker HitCapsule, and the authored payload matches
+  the extracted common DownAttackU ground-sweep hitboxes (`damage=6`, Sakurai angle, `kbg=50`,
+  `bkb=80`). Visible LandingAirLw or DownAttackU action shape alone is not enough to advance the RNG
+  stream. `GAT:11134` locks the positive; the adjacent trace rows remain cold for the hidden
+  pre-gate site. Source anchors:
+  `refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006CDA4}`,
+  `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0`,
+  `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}`, and
+  `data/moves/{fox,falco}.json::moves.ftCo_SM_DownAttackU.events.create_hitbox`.
 - FoD grounded KneeBend severe-airborne entries use the same immediate seed-frame reconstruction
   for grIzumi validation rows where the hidden stream phase is replay-visible. The KneeBend slice
   stays scoped to FoD until non-FoD variants have a separate source owner; it is not backfilled and

@@ -3286,7 +3286,7 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
         // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
         // refs/melee/src/melee/mp/mpcoll.c::{mpColl_800473CC,mpColl_800477E0,mpColl_80046904}
         const uint8_t use_damagefly_hitlag_left_wall_persistence =
-            (uint8_t)(use_damagefly_left_envelope && mpcoll_active_hitlag_phase(batch, idx) &&
+            (uint8_t)(use_damagefly_left_envelope && damagefly_hitlag_wall_refresh &&
                       (batch->state.coll_prev_env_flags[idx] &
                        (uint32_t)MSL_COLLIDE_LEFT_WALL_MASK) != 0u);
         const uint8_t use_generic_left_wall_persistence =
@@ -3729,7 +3729,7 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
         // The source owner is the same live CollData wall index/env path, not a public root clamp.
         // refs/melee/src/melee/mp/mplib.c::mpLib_8004E684_RightWall
         const uint8_t use_damagefly_hitlag_right_wall_persistence =
-            (uint8_t)(use_damagefly_right_envelope && mpcoll_active_hitlag_phase(batch, idx) &&
+            (uint8_t)(use_damagefly_right_envelope && damagefly_hitlag_wall_refresh &&
                       (batch->state.coll_prev_env_flags[idx] &
                        (uint32_t)MSL_COLLIDE_RIGHT_WALL_MASK) != 0u);
         const uint8_t use_generic_right_wall_persistence =

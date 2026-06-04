@@ -820,10 +820,15 @@ static inline uint8_t dash_iasa_try_enter_a_tap_jump_after_attack_s4_miss(MslBat
   return 1u;
 }
 
+static inline uint8_t guard_on_entry_source_can_feed_followup_reflect(uint16_t action_id) {
+  return action_id == (uint16_t)MSL_ACT_LANDING ? 1u : 0u;
+}
+
 static inline void enter_guard_on(MslBatch* batch, const MslCommonParams* c, size_t idx,
                                   uint8_t entered_via_wait_callback) {
   // Decomp entry: ftCo_80091A4C -> ftCo_800923B4 -> ftCo_800924C0.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c:66-69 and :313-327.
+  const uint16_t source_action = batch->state.action_id[idx];
   batch->state.action_id[idx] = (uint16_t)MSL_ACT_GUARD_ON;
   batch->state.animation_index[idx] = 0xFFFFFFFFu;
   // Decomp: ftCo_800924C0 calls ftAnim_8006EBA4 immediately after ChangeMotionState.
@@ -849,6 +854,14 @@ static inline void enter_guard_on(MslBatch* batch, const MslCommonParams* c, siz
   // GuardOn_IASA handoff, then consume it below. The two ticks are runtime-only hidden source
   // state from the same proc window, not a replay seed lane or a persistent GuardOn property.
   batch->state.guard_entry_via_wait_callback[idx] = entered_via_wait_callback ? 2u : 0u;
+  // Source-entry latch for the immediate GuardOn -> GuardReflect item ReflectDesc owner.
+  // Landing's callback can enter GuardOn one frame before GuardOn_IASA consumes the LR edge into
+  // ftCo_8009388C; run-family GuardOn controls remain on their ordinary item owner unless the
+  // older seed/action lanes already prove the source GuardOn owner.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::*_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_GuardOn_IASA,ftCo_8009388C}
+  batch->state.guard_on_entry_reflect_source_latch[idx] =
+      guard_on_entry_source_can_feed_followup_reflect(source_action) ? 2u : 0u;
   batch->state.guard_special_enable_timer_x1c[idx] = 0u;
   batch->state.guard_release_latched_xc[idx] = 0;
   batch->state.guard_x10[idx] = msl_guard_x10_visible_guardon_init_u8(c);
@@ -2151,6 +2164,10 @@ void action_update(MslBatch* batch) {
         batch->state.guard_jump_oos_entered_this_frame[idx] = 0u;
         batch->state.guard_reflect_entry_dash_terminal_scalar[idx] = 0u;
         batch->state.guard_reflect_entered_this_frame[idx] = 0u;
+        if (batch->state.guard_on_entry_reflect_source_latch[idx] != 0u) {
+          batch->state.guard_on_entry_reflect_source_latch[idx] =
+              (uint8_t)(batch->state.guard_on_entry_reflect_source_latch[idx] - 1u);
+        }
         batch->state.shine_jump_iasa_entered_this_frame[idx] = 0u;
       }
     }

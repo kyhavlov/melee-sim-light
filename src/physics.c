@@ -824,16 +824,20 @@ static inline uint8_t physics_action_is_guardsetoff_turnover_owner(uint16_t acti
 
 static inline uint8_t physics_action_suppresses_self_player_nudge_x221d_b5(
     uint16_t action_id, uint16_t prev_action_id) {
-  // Decomp: Escape entry (`ftCo_80099314`) sets `fp->x221D_b5 = true`; common grounded
-  // fighter-overlap nudge (`ftCommon_8007E0E4`) skips the self `ftCommon_8007DD7C` pass while that
-  // bit is set. The peer can still nudge away because `ftCommon_8007DD7C` does not filter the
-  // other fighter on x221D_b5.
+  // Decomp: Escape entry (`ftCo_80099314`) and grounded CliffClimb/CliffAttack/CliffEscape option
+  // entries set `fp->x221D_b5 = true`; common grounded fighter-overlap nudge (`ftCommon_8007E0E4`)
+  // skips the self `ftCommon_8007DD7C` pass while that bit is set. The peer can still nudge away
+  // because `ftCommon_8007DD7C` does not filter the other fighter on x221D_b5.
   //
   // Source ordering boundary:
   // - Fighter_8006A360 runs Anim + ftCommon_8007E0E4 before the later IASA/input proc.
-  // - Same-frame Guard_IASA -> Escape* entries set x221D_b5 after the current frame's common
-  //   nudge pass, so only continuous Escape frames suppress the self pass here.
+  // - Same-frame Guard_IASA -> Escape* and CliffWait_IASA -> Cliff option entries set x221D_b5
+  //   after the current frame's common nudge pass, so only continuous frames suppress the self pass
+  //   here.
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Escape.c::ftCo_80099314
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffClimb.c::ftCo_8009AB9C
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffAttack.c::ftCo_8009AEA4
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_CliffEscape.c::ftCo_8009B040
   // refs/melee/src/melee/ft/fighter.c::Fighter_8006A360
   // refs/melee/src/melee/ft/ftcommon.c::{ftCommon_8007E0E4,ftCommon_8007DD7C}
   const uint8_t current_escape =
@@ -846,7 +850,27 @@ static inline uint8_t physics_action_suppresses_self_player_nudge_x221d_b5(
        prev_action_id == (uint16_t)MSL_ACT_ESCAPE_F || prev_action_id == (uint16_t)MSL_ACT_ESCAPE_B)
           ? 1u
           : 0u;
-  return (uint8_t)(current_escape && prev_escape);
+  if (current_escape && prev_escape) {
+    return 1u;
+  }
+
+  const uint8_t current_cliff_option = (action_id == (uint16_t)MSL_ACT_CLIFF_CLIMB_SLOW ||
+                                        action_id == (uint16_t)MSL_ACT_CLIFF_CLIMB_QUICK ||
+                                        action_id == (uint16_t)MSL_ACT_CLIFF_ATTACK_SLOW ||
+                                        action_id == (uint16_t)MSL_ACT_CLIFF_ATTACK_QUICK ||
+                                        action_id == (uint16_t)MSL_ACT_CLIFF_ESCAPE_SLOW ||
+                                        action_id == (uint16_t)MSL_ACT_CLIFF_ESCAPE_QUICK)
+                                           ? 1u
+                                           : 0u;
+  const uint8_t prev_cliff_option = (prev_action_id == (uint16_t)MSL_ACT_CLIFF_CLIMB_SLOW ||
+                                     prev_action_id == (uint16_t)MSL_ACT_CLIFF_CLIMB_QUICK ||
+                                     prev_action_id == (uint16_t)MSL_ACT_CLIFF_ATTACK_SLOW ||
+                                     prev_action_id == (uint16_t)MSL_ACT_CLIFF_ATTACK_QUICK ||
+                                     prev_action_id == (uint16_t)MSL_ACT_CLIFF_ESCAPE_SLOW ||
+                                     prev_action_id == (uint16_t)MSL_ACT_CLIFF_ESCAPE_QUICK)
+                                        ? 1u
+                                        : 0u;
+  return (uint8_t)(current_cliff_option && prev_cliff_option);
 }
 
 static inline uint8_t physics_floor_lines_adjacent_or_equal(const MslStageFloorGraph* g, int a,
@@ -2064,9 +2088,15 @@ void physics_integrate(MslBatch* batch) {
       // We include `speed_*_attack` in position integration (because it affects where the character is this frame),
       // but we exclude it from gravity/fastfall updates (which operate on `self_vel` only; knockback has its own
       // separate decay/physics paths in-engine, and is currently teacher-forced from the seed).
-      float vx_self =
-          on_ground ? batch->state.speed_ground_x_self[idx] : batch->state.speed_air_x_self[idx];
-      if (on_ground) {
+      const uint8_t downbound_ground_phys_before_floor_loss =
+          (uint8_t)(batch->state.frame_start_on_ground[idx] != 0u && on_ground == 0u &&
+                    (action_id == (uint16_t)MSL_ACT_DOWN_BOUND_U ||
+                     action_id == (uint16_t)MSL_ACT_DOWN_BOUND_D));
+      const uint8_t ground_phys_for_frame =
+          (uint8_t)(on_ground || downbound_ground_phys_before_floor_loss);
+      float vx_self = ground_phys_for_frame ? batch->state.speed_ground_x_self[idx]
+                                            : batch->state.speed_air_x_self[idx];
+      if (ground_phys_for_frame) {
         // Grounded locomotion velocity update (single writer):
         // - Decomp: Phys callbacks like ft_80084F3C/ftWalkCommon_800E0060/ftCo_Dash_Phys/ftCo_Run_Phys
         //   compute a ground accel/friction step via ftCommon_ApplyFrictionGround or ftCommon_8007C98C.
@@ -2409,7 +2439,7 @@ void physics_integrate(MslBatch* batch) {
           vx_self = use_grounded_self_vel_for_frame ? grounded_self_vel_for_frame : gr_vel;
         }
       }
-      if (on_ground) {
+      if (ground_phys_for_frame) {
         // Decomp: grounded movement helpers always run ftCommon_ApplyGroundMovement, which projects
         // scalar gr_vel onto CollData.floor.normal before Fighter_procUpdate integrates position.
         // Our `speed_ground_x_self` lane is fp->gr_vel; `speed_air_x_self` / `speed_y_self` are the
@@ -2417,6 +2447,14 @@ void physics_integrate(MslBatch* batch) {
         // and refreshed by mpColl after the frame's floor pass.
         // refs/melee/src/melee/ft/ftcommon.c::ftCommon_ApplyGroundMovement
         // refs/melee/src/melee/ft/ft_081B.c::{ft_80084F3C,ft_80085030,ft_800850E0}
+        //
+        // DownBound nuance:
+        // - ftCo_DownBound_Phys runs `ft_80084F3C` before ftCo_DownBound_Coll can publish a
+        //   ground-to-air floor-loss result through `ft_80082708`.
+        // - The frame's self-velocity has already been projected from `gr_vel`, so do not fall
+        //   back to stale airborne self_vel.x just because the post-collision row is GA_Air.
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::{
+        //   ftCo_DownBound_Phys,ftCo_DownBound_Coll}
         float floor_nx = batch->state.ground_normal_x[idx];
         float floor_ny = batch->state.ground_normal_y[idx];
         if (floor_nx == 0.0f && floor_ny == 0.0f) {

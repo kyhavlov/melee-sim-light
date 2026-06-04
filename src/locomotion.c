@@ -6446,9 +6446,14 @@ void locomotion_update_pre(MslBatch* batch) {
               msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
             } else {
               // Decomp: ground Jump_Anim enters Fall through ftCo_Fall_Enter (KeepFastFall set).
+              // ftCo_Fall_Enter immediately calls ftCommon_ClampAirDrift before the destination
+              // Fall Phys callback runs in the same Fighter proc. Without this clamp, terminal
+              // JumpF/B rows can carry super-max air drift into Fall for one frame.
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Jump.c::ftCo_Jump_Anim
               // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter
+              // refs/melee/src/melee/ft/ftcommon.c::ftCommon_ClampAirDrift
               enter_fall_keep_fastfall_ftco_fall_enter(batch, idx);
+              ftco_fall_enter_clamp_air_drift_x(batch, ch, idx);
             }
           }
         }

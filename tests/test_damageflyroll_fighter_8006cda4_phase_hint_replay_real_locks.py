@@ -1277,13 +1277,14 @@ def test_qgd_downstream_rng_exception_rows_are_one_step_replay_exact() -> None:
 
 
 @pytest.mark.integration
-def test_gat_initial_rng_exception_row_is_one_step_replay_exact() -> None:
-    # GAT accepted-exception proof for the first rollout boundary:
-    # the seed row is a SpecialAirHi victim struck by AttackAirLw, and the one-step transition
-    # matches every deterministic combat/source field except the ftCo_8008DCE0 DamageFlyN vs
-    # DamageFlyRoll RNG branch.
+def test_gat_initial_damageflyroll_row_is_source_owned_one_step_replay_exact() -> None:
+    # GAT rec3106 is the first removed exception row: the seed row is a SpecialAirHi victim struck
+    # by a concrete strong AttackAirLw ProcessHit source, so the source-owned Fighter_8006CDA4 /
+    # ftCo_8008DCE0 stream path now selects replay's DamageFlyRoll instead of the old alternate
+    # free-running DamageFlyN phase.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
     # refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
+    # refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}
     # refs/melee/src/sysdolphin/baselib/random.c::HSD_Randf
     root = Path(__file__).resolve().parents[1]
     _skip_if_required_artifacts_missing(root)
@@ -1304,7 +1305,7 @@ def test_gat_initial_rng_exception_row_is_one_step_replay_exact() -> None:
     assert int(seed["action_id"][1]) == 69  # AttackAirLw source.
     assert int(seed["action_frame"][1]) == 4
     assert int(ref["action_id"][p]) == 91  # DamageFlyRoll.
-    assert int(out["action_id"][p]) == 88  # DamageFlyN from the alternate free-running RNG phase.
+    assert int(out["action_id"][p]) == 91
 
     for field in (
         "action_frame",
@@ -1352,9 +1353,9 @@ def test_gat_initial_rng_exception_row_is_one_step_replay_exact() -> None:
 def test_gat_downstream_exception_rows_are_one_step_action_exact(
     record: int, p: int, seed_action: int, ref_action: int
 ) -> None:
-    # These rows are first mismatches only in free-running rollout after the accepted GAT rec=3106
-    # DamageFlyRoll RNG stream branch. Direct one-step replay seeds choose the reference action,
-    # proving the visible later actions are not local combat, shield, collision, or item owners.
+    # These rows used to be approved downstream rows after the open GAT rec3106 DamageFlyRoll RNG
+    # stream branch. Direct one-step replay seeds choose the reference action, proving the visible
+    # later actions are not local combat, shield, collision, or item owners.
     # refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
     # refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
     root = Path(__file__).resolve().parents[1]

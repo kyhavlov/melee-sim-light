@@ -65,9 +65,9 @@ mismatch.item_state: 0 / 109425 (0.000000)
 mismatch.item_owner: 0 / 109425 (0.000000)
 mismatch.item_instance_id: 0 / 109425 (0.000000)
 ignored_mismatch.state_flags[4]&0x80: 19 / 14590 (0.001302)
-err.pos_x: mae=0.000076 p95=0.000000 max=0.080002
+err.pos_x: mae=0.000072 p95=0.000000 max=0.080002
 err.pos_y: mae=0.000323 p95=0.000000 max=2.510000
-err.speed_air_x_self: mae=0.000004 p95=0.000000 max=0.063301
+err.speed_air_x_self: mae=0.000000 p95=0.000000 max=0.000059
 err.speed_ground_x_self: mae=0.000049 p95=0.000000 max=0.142000
 err.speed_y_self: mae=0.000323 p95=0.000000 max=2.510000
 err.speed_x_attack: mae=0.000096 p95=0.000000 max=1.406667
@@ -81,11 +81,11 @@ err.item_vel_y: mae=0.000022 p95=0.000000 max=0.030602
 overall.discrete_mismatch: 6 / 882695
 overall.strict_discrete_mismatch: 25 / 882695
 overall.ignored_discrete_mismatch: 19
-overall.float_norm_mae_p95: 0.00003767
+overall.float_norm_mae_p95: 0.00003741
 
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl ==
 Records: 11529  Players/scored per record: 2  Total player-frames: 23058
-mismatch.action_id: 1 / 23058 (0.000043)
+mismatch.action_id: 0 / 23058 (0.000000)
 mismatch.action_frame: 2 / 23058 (0.000087)
 mismatch.on_ground: 0 / 23058 (0.000000)
 mismatch.facing: 0 / 23058 (0.000000)
@@ -97,7 +97,7 @@ mismatch.hitstun: 0 / 23058 (0.000000)
 mismatch.l_cancel: 0 / 23058 (0.000000)
 mismatch.hurtbox_state: 2 / 23058 (0.000087)
 mismatch.ground_id: 0 / 23058 (0.000000)
-mismatch.animation_index: 1 / 23058 (0.000043)
+mismatch.animation_index: 0 / 23058 (0.000000)
 mismatch.instance_hit_by: 0 / 23058 (0.000000)
 mismatch.instance_id: 0 / 23058 (0.000000)
 mismatch.last_attack_landed: 0 / 23058 (0.000000)
@@ -110,9 +110,9 @@ mismatch.item_state: 0 / 172935 (0.000000)
 mismatch.item_owner: 0 / 172935 (0.000000)
 mismatch.item_instance_id: 0 / 172935 (0.000000)
 ignored_mismatch.state_flags[4]&0x80: 21 / 23058 (0.000911)
-err.pos_x: mae=0.000375 p95=0.000000 max=0.300003
+err.pos_x: mae=0.000186 p95=0.000000 max=0.300000
 err.pos_y: mae=0.000124 p95=0.000000 max=2.200000
-err.speed_air_x_self: mae=0.000054 p95=0.000000 max=0.090001
+err.speed_air_x_self: mae=0.000048 p95=0.000000 max=0.084500
 err.speed_ground_x_self: mae=0.000016 p95=0.000000 max=0.108000
 err.speed_y_self: mae=0.000095 p95=0.000000 max=2.200000
 err.speed_x_attack: mae=0.000000 p95=0.000000 max=0.000001
@@ -123,10 +123,10 @@ err.item_pos_x: mae=0.003682 p95=0.000000 max=3.790001
 err.item_pos_y: mae=0.000000 p95=0.000000 max=0.000282
 err.item_vel_x: mae=0.000001 p95=0.000000 max=0.000638
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000282
-overall.discrete_mismatch: 13 / 1395009
-overall.strict_discrete_mismatch: 34 / 1395009
+overall.discrete_mismatch: 11 / 1395009
+overall.strict_discrete_mismatch: 32 / 1395009
 overall.ignored_discrete_mismatch: 21
-overall.float_norm_mae_p95: 0.00000765
+overall.float_norm_mae_p95: 0.00000713
 
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
 Records: 10222  Players/scored per record: 2  Total player-frames: 20444
@@ -219,7 +219,7 @@ overall.ignored_discrete_mismatch: 19
 overall.float_norm_mae_p95: 0.00001336
 
 == suite summary ==
-overall.discrete_mismatch: 41 / 4462843
-overall.strict_discrete_mismatch: 127 / 4462843
+overall.discrete_mismatch: 39 / 4462843
+overall.strict_discrete_mismatch: 125 / 4462843
 overall.ignored_discrete_mismatch: 86
-overall.float_norm_mae_p95: 0.00001630
+overall.float_norm_mae_p95: 0.00001608

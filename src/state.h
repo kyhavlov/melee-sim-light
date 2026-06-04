@@ -574,6 +574,12 @@ typedef struct MslStateSoA {
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Dash.c::ftCo_Dash_IASA
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091AD8,ftCo_800923B4}
   uint8_t* guard_entry_via_dash_91ad8;
+  // Runtime-only countdown for Landing -> GuardOn entries whose callback source can feed the
+  // next-frame GuardOn -> GuardReflect item ReflectDesc owner. This is a source-entry latch, not a
+  // replay row key; it decays across the immediate frozen GuardOn handoff window.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Landing.c::*_IASA
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::{ftCo_80091A4C,ftCo_8009388C}
+  uint8_t* guard_on_entry_reflect_source_latch;
   // Runtime-only snapshot of mv.co.guard.x10 at the beginning of the current fighter action
   // callback. Shield contact can enter GuardSetOff later in the same frame; that contact preserves
   // the pre-GuardOn/Guard hold-tick x10 owner rather than the post-callback decremented value.
