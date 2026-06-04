@@ -826,7 +826,6 @@ static void hitlist_seed_init_fighter_hitbox_from_group_impl(MslBatch* batch, in
        batch->state.frame_id[bi] == batch->replay_rollout_seed_frame_id[bi])
           ? 1u
           : 0u;
-
   size_t out_i = 0;
   for (int v = 0; v < (int)batch->config.num_players && out_i < (size_t)MSL_HITLIST_VICTIM_CAP;
        v++) {

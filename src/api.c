@@ -2722,6 +2722,8 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
             seed->state_flags[p][k];
       }
       batch->state.state_flags_2218_frame_start[idx] = seed->state_flags[p][0];
+      batch->state.state_flags_221c_frame_start[idx] =
+          seed->state_flags[p][MSL_STATE_FLAGS_221C_INDEX];
 
       // Stale-move (staling) queue snapshot.
       uint8_t stale_qi = seed->stale_queue_index[p];
@@ -3376,9 +3378,11 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       // AttackAirLw no-clear dense HitCapsule rollout-seed initialization:
       // Some rollout retry rows start after Falco DAir's same-slot second create payload and carry
       // only the legacy dense hit_group victim map. Materialize that hidden BODY victims_1 state
-      // exactly for teacher-forced rollout reseed so runtime/free-run frames do not re-read dense
-      // provenance as a combat bridge. Ordinary public one-step reseeds stay on explicit
-      // per-HitCapsule seed lanes or the live script-site no-clear owner below.
+      // exactly for replay rollout reseeds so runtime/free-run frames do not re-read dense
+      // provenance as a combat bridge. This is independent of replay-clock RNG ownership: the
+      // source owner is the current HitCapsule.victims_1 list preserved through
+      // ftColl_800768A0. Ordinary public one-step reseeds stay on explicit per-HitCapsule seed
+      // lanes or the live script-site no-clear owner below.
       // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
       // refs/melee/src/melee/ft/ftcoll.c::ftColl_800768A0
       for (int attacker = 0; attacker < num_players; attacker++) {

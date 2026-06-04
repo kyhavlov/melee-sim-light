@@ -1454,8 +1454,8 @@ Prefer completing these projects in order rather than “patching symptoms” in
      live per-HitCapsule lane starts at the generated second-create callback-age boundary
      (`second_create + 4`); the earlier late callback remains damage-eligible for source
      full-overlap rows. Dense replay seeds are retained only inside the BODY `ftCommon_CalcHitlag`
-     horizon and trimmed after the post-horizon stale boundary. QGD `8636` remains an open
-     per-HitCapsule provenance gap; the rejected Falco Back-Air -> Fox materialization slice is not
+     horizon and trimmed after the post-horizon stale boundary. The retained QGD closure uses this
+     per-HitCapsule provenance; the rejected Falco Back-Air -> Fox materialization slice is not
      retained.
      Source anchors:
      `data/motion_state/owners/{fox,falco}.bin` (`MSLMSO01` `Ft_MF_SkipHit`),
@@ -1463,6 +1463,66 @@ Prefer completing these projects in order rather than “patching symptoms” in
      `refs/melee/src/melee/ft/fighter.c::Fighter_ChangeMotionState`,
      `refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}`,
      `refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}`.
+   - AttackAirB -> AttackAirB DamageFlyRoll current-ProcessHit RNG owner:
+     `ftCo_8008DCE0` reaches the DamageFlyRoll gate after `Fighter_8006CDA4`'s held-item/x197C
+     branch can consume RNG. Exact one-step rows keep that stream phase seed-owned, but replay
+     rollout advances from the source-owned current ProcessHit clock when deterministic pre-gate
+     state, live attacker/defender ownership, and the concrete authored strong Back-Air
+     HitCapsule source are aligned. Runtime therefore admits only rollout-advanced DamageFlyRoll
+     rows whose selected DmgLog source is a live strong AttackAirB capsule; ordinary one-step
+     reseeds and visible AttackAirB-vs-AttackAirB shapes without that source provenance remain on
+     the seed-owned path. Lock: `AttachedGoodNaturedGuanaco.msl:2694`; aggregate control:
+     `Game_20260509T152622.msl:3756`.
+     Source anchors:
+     `refs/melee/src/melee/ft/fighter.c::{Fighter_ProcessHit_8006D1EC,Fighter_8006CDA4}`,
+     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0`,
+     `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076ED8,ftColl_8007A06C}`,
+     `data/moves/{fox,falco}.json::moves.ftCo_SM_AttackAirB.events.create_hitbox`.
+   - AttackAirLw -> active DamageFlyTop dynamic-tail BODY boundary:
+     Fox's dynamic tail-chain collision owner (FtPart 18) can reject Falco DAir BODY candidates
+     while the victim remains in active DamageFlyTop hitstun. The hb0 terminal reject stays bounded
+     to the final hitlag horizon; AGG shows hb1's paired DAir capsule rejects before the next
+     same-source hitlag horizon and releases once hitstun reaches that horizon. The owner is the
+     source dynamic part chain, not the attacker/victim character pair; Falco's corresponding
+     hurtcap slot is not part 18 and stays on ordinary BODY selection. Lock:
+     `AttachedGoodNaturedGuanaco.msl:7047/7048`.
+     Source anchors:
+     `refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate`,
+     `refs/melee/src/melee/ft/ftdynamics.c::{ftCo_8009DD94,ftCo_8009E318}`,
+     `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}`,
+     `refs/melee/src/melee/lb/lbcollision.c::lbColl_8000805C`,
+     `data/hurtcaps/fox.bin` cap12 -> FtPart 18,
+     `data/anims/fox.dyn.bin` part-18 dynamic chain.
+   - DamageFly active-hitlag wall-ASDI provenance:
+     `ftCo_Damage_OnExitHitlag` projects ASDI only from wall contact provenance observed by the
+     active DamageFly collision callback. A persisted CollData wall id is not enough: AGG carries a
+     stale right-wall id through AttackLw4 -> DamageFlyN hitlag while the DamageFly-specific
+     right-wall envelope is inactive (positive KB), and projecting ASDI from that stale id shifts
+     the victim three units away from the replay before the later DAir. DamageFly actions therefore
+     cannot fall through the generic persisted-wall branch; they must use the explicit
+     DamageFly-hitlag same-side wall persistence owner with CollData env evidence. Existing
+     DamageFlyRoll/FlyReflectWall controls keep the positive wall-hug path. Lock:
+     `AttachedGoodNaturedGuanaco.msl:7163/7164/7263`; aggregate control:
+     `GracefulAttachedTurtle.msl:3113`.
+     Source anchors:
+     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_OnExitHitlag,ftCo_DamageFly_Coll}`,
+     `refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_procMap}`,
+     `refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_800454A4_RightWall,mpColl_80045B74_LeftWall}`.
+   - GuardReflect powershield -> GuardSetOff low-damage DAir recoil:
+     `ftColl_80076CBC` writes the defender's x19A4 max-int-damage and x19AC recoil sign before the
+     `fp->x221C_b2` powershield branch suppresses x19A0 shield-damage accumulation. For Fox's
+     extracted 3/2-damage AttackAirLw multihit capsules, the powershield-active GuardSetOff recoil
+     scalar consumes the current authored HitCapsule payload while shield HP and ordinary BODY
+     damage stay on the existing stale/applied collision-damage path. Re-staling x19A4 through the
+     live stale queue under-publishes the recoil by 0.09 at AGG:2390, which later makes AGG:2491
+     fall one frame early. This split is bounded to x221C_b2 GuardSetOff recoil and the extracted
+     low-damage AttackAirLw create payload; it is not a character-pair or record predicate. Lock:
+     `AttachedGoodNaturedGuanaco.msl:2390/2491`.
+     Source anchors:
+     `refs/melee/src/melee/ft/ftcoll.c::{ftColl_80076CBC,ftColl_8007ABD0}`,
+     `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_80092F2C`,
+     `refs/melee/build/GALE01/asm/melee/ft/ftcoll.s:0x80076D1C..0x80076E64`,
+     `data/moves/fox.json::moves.ftCo_SM_AttackAirLw.events.create_hitbox`.
    - GuardOn-origin GuardReflect powershield hidden victims_1 latch:
      `ftColl_80076CBC` registers the attacker HitCapsule victim through `ftColl_80076808` before
      the `x221C_b2` powershield branch suppresses ordinary shield damage / GuardSetOff effects.

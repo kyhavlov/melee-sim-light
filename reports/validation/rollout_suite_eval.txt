@@ -34,25 +34,21 @@ validation.profile.ignored: state_flags[4]&0x80 reason=Slippi fp+0x221F camera-s
 validation.exceptions: replays/validation_exceptions.json mode=report-overlay canonical_raw_metrics_unchanged
 
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/AttachedGoodNaturedGuanaco.msl ==
-rollout.status: NOT-CLEAN
-rollout.best_len: 2491
-rollout.streak_count: 9
-rollout.streak_len.median: 216
-rollout.streak_len.p90: 2491
-rollout.streak_len.p95: 2491
-rollout.streak_len.max: 2491
-rollout.first_mismatch_total: 8
-rollout.first_mismatch_seeded_total: 1
+rollout.status: RAW-CLEAN
+rollout.best_len: 7295
+rollout.streak_count: 1
+rollout.streak_len.median: 7295
+rollout.streak_len.p90: 7295
+rollout.streak_len.p95: 7295
+rollout.streak_len.max: 7295
+rollout.first_mismatch_total: 0
+rollout.first_mismatch_seeded_total: 0
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
-  1. pos_x max_err=8.89196 rec=5167 p=1 seed/ref/out=15.5801/15.0431/6.15113 actions=65/65/65 category=unclassified
-  2. speed_ground_x_self max_err=1.344 rec=5128 p=1 seed/ref/out=0.9725/0.672/-0.672 actions=179/181/181 category=unclassified
-  3. speed_air_x_self max_err=1.184 rec=5133 p=1 seed/ref/out=0.8925/0.592/-0.592 actions=181/181/181 category=unclassified
-rollout.float_top_downstream:
-  1. percent max_err=12 rec=7047 p=1 seed/ref/out=26.83/26.83/38.83 actions=90/90/86 category=downstream_discrete_mismatch
-  2. pos_x max_err=8.89196 rec=5168 p=1 seed/ref/out=15.0431/14.5261/5.63413 actions=65/65/65 category=downstream_discrete_mismatch
-  3. speed_y_attack max_err=2.94102 rec=7263 p=1 seed/ref/out=0/-2.94102/0 actions=356/87/356 category=downstream_discrete_mismatch
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:3641
+  1. pos_x max_err=3.08841 rec=2613 p=1 seed/ref/out=73.5924/80.2222/77.1337 actions=356/356/356 category=unclassified
+  2. pos_y max_err=1.12705 rec=6622 p=0 seed/ref/out=-30.8362/-31.0282/-32.1552 actions=354/354/354 category=unclassified
+  3. percent max_err=1 rec=6115 p=0 seed/ref/out=146.735/147.735/146.735 actions=38/38/38 category=unclassified
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:5493
 
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl ==
 rollout.status: ACCEPTED-CLEAN
@@ -113,23 +109,23 @@ rollout.float_top_errors:
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:4813
 
 == suite summary ==
-overall.rollout.streak_count: 22
-overall.rollout.streak_len.median: 500
-overall.rollout.streak_len.p90: 3106
-overall.rollout.streak_len.p95: 7837
+overall.rollout.streak_count: 14
+overall.rollout.streak_len.median: 522
+overall.rollout.streak_len.p90: 7837
+overall.rollout.streak_len.p95: 10222
 overall.rollout.streak_len.max: 10222
 overall.rollout.best_len.max: 10222
-overall.rollout.first_mismatch_total: 18
-overall.rollout.first_mismatch_seeded_total: 2
+overall.rollout.first_mismatch_total: 10
+overall.rollout.first_mismatch_seeded_total: 1
 overall.rollout.approved_exception_total: 10
 overall.rollout.approved_exception_seeded_total: 1
-overall.rollout.status: NOT-CLEAN
+overall.rollout.status: ACCEPTED-CLEAN
 overall.rollout.float_top_errors:
   1. pos_x max_err=11.4627 rec=3136 p=0 seed/ref/out=-122.431/-123.558/-135.021 actions=247/0/0 category=unclassified
   2. percent max_err=2 rec=10099 p=1 seed/ref/out=140.63/141.63/139.63 actions=354/354/354 category=unclassified
-  3. speed_ground_x_self max_err=1.344 rec=5128 p=1 seed/ref/out=0.9725/0.672/-0.672 actions=179/181/181 category=unclassified
+  3. pos_y max_err=1.12705 rec=6622 p=0 seed/ref/out=-30.8362/-31.0282/-32.1552 actions=354/354/354 category=unclassified
 overall.rollout.float_top_downstream:
-  1. percent max_err=12 rec=7047 p=1 seed/ref/out=26.83/26.83/38.83 actions=90/90/86 category=downstream_discrete_mismatch
-  2. pos_x max_err=8.89196 rec=5168 p=1 seed/ref/out=15.0431/14.5261/5.63413 actions=65/65/65 category=downstream_discrete_mismatch
-  3. shield_hp max_err=5.6 rec=3630 p=0 seed/ref/out=45.0043/39.1243/44.7243 actions=178/181/178 category=downstream_discrete_mismatch
-overall.rollout.ignored_first_mismatch_top: state_flags[4]&0x80:24124
+  1. shield_hp max_err=5.6 rec=3630 p=0 seed/ref/out=45.0043/39.1243/44.7243 actions=178/181/178 category=downstream_discrete_mismatch
+  2. pos_y max_err=4.01045 rec=8597 p=1 seed/ref/out=-2.89033/0.000100136/-4.01035 actions=352/43/352 category=downstream_discrete_mismatch
+  3. percent max_err=1.8 rec=6213 p=1 seed/ref/out=81.26/83.06/81.26 actions=24/75/24 category=downstream_discrete_mismatch
+overall.rollout.ignored_first_mismatch_top: state_flags[4]&0x80:25976

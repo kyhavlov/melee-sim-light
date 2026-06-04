@@ -427,7 +427,7 @@ static inline void cache_collision_stage_cur_pos(MslBatch* batch) {
   }
 }
 
-static inline void cache_frame_start_state_flags_2218(MslBatch* batch) {
+static inline void cache_frame_start_state_flags(MslBatch* batch) {
   if (batch == NULL) {
     return;
   }
@@ -438,6 +438,9 @@ static inline void cache_frame_start_state_flags_2218(MslBatch* batch) {
       batch->state.state_flags_2218_frame_start[idx] =
           batch->state.state_flags[idx * (size_t)MSL_STATE_FLAGS_BYTES +
                                    (size_t)MSL_STATE_FLAGS_2218_INDEX];
+      batch->state.state_flags_221c_frame_start[idx] =
+          batch->state.state_flags[idx * (size_t)MSL_STATE_FLAGS_BYTES +
+                                   (size_t)MSL_STATE_FLAGS_221C_INDEX];
     }
   }
 }
@@ -475,7 +478,7 @@ static void fighter_callbacks_begin_frame_phase(MslBatch* batch) {
   cache_prev_action_state(batch);
   cache_floor_sweep_prev_pos(batch);
   cache_guard_reflect_timer_seed_snapshots(batch);
-  cache_frame_start_state_flags_2218(batch);
+  cache_frame_start_state_flags(batch);
   cache_damagefly_hitlag_exit_sweep_root(batch);
 }
 

@@ -3289,8 +3289,12 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
             (uint8_t)(use_damagefly_left_envelope && mpcoll_active_hitlag_phase(batch, idx) &&
                       (batch->state.coll_prev_env_flags[idx] &
                        (uint32_t)MSL_COLLIDE_LEFT_WALL_MASK) != 0u);
+        const uint8_t use_generic_left_wall_persistence =
+            (uint8_t)(!use_left_air_envelope &&
+                      (!mpcoll_damagefly_wall_asdi_latch_action(action_id) ||
+                       !mpcoll_active_hitlag_phase(batch, idx)));
         if (!grounded_now && prev_wall_kind == MSL_WALL_LEFT && prefer_line_idx >= 0 &&
-            (!use_left_air_envelope || use_jumpaerial_locked_left_wall_persistence ||
+            (use_generic_left_wall_persistence || use_jumpaerial_locked_left_wall_persistence ||
              use_specialhi_left_envelope || use_damagefly_hitlag_left_wall_persistence)) {
           float x_corr = 0.0f;
           float nx = -1.0f, ny = 0.0f;
@@ -3390,6 +3394,95 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
                 candidates.first_iy, envelope_nx, envelope_ny);
             mpcoll_commit_wall_result(batch, idx, &wall);
             ecb_points_shift_x3(&cur_ecb, &cur_right_ecb, &cur_specialhi_wall_ecb, dx);
+          }
+        }
+        if (batch->state.wall_kind[idx] == 0 && !grounded_now &&
+            action_id == (uint16_t)MSL_ACT_FALL && batch->state.fall_fast[idx] != 0u &&
+            use_common_air_left_envelope && fg != NULL && fg->lines != NULL &&
+            batch->state.ground_id[idx] != 0xFFFFu) {
+          const int carried_floor_idx =
+              stage_collision_floor_line_index(stage_id, batch->state.ground_id[idx]);
+          const MslStageFloorLine* carried_floor =
+              (carried_floor_idx >= 0 && (size_t)carried_floor_idx < fg->line_count)
+                  ? &fg->lines[(size_t)carried_floor_idx]
+                  : NULL;
+          if (carried_floor != NULL && carried_floor->fighter_solid != 0u &&
+              carried_floor->is_ledge != 0u && carried_floor->is_platform == 0u &&
+              carried_floor->platform_transform_kind == MSL_STAGE_PLATFORM_TRANSFORM_NONE) {
+            int adjacent_left_wall_idx = carried_floor->adjacent_left_wall;
+            if (adjacent_left_wall_idx < 0) {
+              MslStageRawLineKind raw_kind = MSL_STAGE_RAW_LINE_UNKNOWN;
+              uint16_t raw_segment = 0xFFFFu;
+              if (stage_collision_raw_line_prev_non_kind(stage_id, carried_floor->segment_i,
+                                                         MSL_STAGE_RAW_LINE_FLOOR, &raw_kind,
+                                                         &raw_segment) &&
+                  raw_kind == MSL_STAGE_RAW_LINE_LEFT_WALL) {
+                adjacent_left_wall_idx =
+                    stage_collision_left_wall_line_index(stage_id, raw_segment);
+              }
+            }
+            MslEcbWorldPoints fall_ledge_jobj_ecb = *left_cur_ecb;
+            const MslEcbWorldPoints* fall_ledge_cur_ecb = left_cur_ecb;
+            if (try_sample_jobj_ecb_points(&fall_ledge_jobj_ecb, batch, idx, char_id, anim,
+                                           action_id, ecb_frame, fd, batch->state.pos_x[idx],
+                                           batch->state.pos_y[idx])) {
+              fall_ledge_cur_ecb = &fall_ledge_jobj_ecb;
+            }
+            msl_ecb_world_points_preserve_desired_bottom_rel_y(
+                &fall_ledge_jobj_ecb, batch->state.pos_x[idx], batch->state.pos_y[idx], 0.0f);
+            fall_ledge_jobj_ecb.left_rel_x = -2.0f;
+            fall_ledge_jobj_ecb.right_rel_x = 2.0f;
+            fall_ledge_jobj_ecb.left_x = batch->state.pos_x[idx] - 2.0f;
+            fall_ledge_jobj_ecb.right_x = batch->state.pos_x[idx] + 2.0f;
+            fall_ledge_cur_ecb = &fall_ledge_jobj_ecb;
+            MslStageQueryHit hit = {0};
+            const uint8_t query_hit =
+                (uint8_t)(adjacent_left_wall_idx >= 0 &&
+                          stage_collision_static_query(
+                              stage_id, (uint32_t)MSL_STAGE_QUERY_LEFT_WALL,
+                              fall_ledge_cur_ecb->bottom_x, fall_ledge_cur_ecb->bottom_y,
+                              fall_ledge_cur_ecb->right_x, fall_ledge_cur_ecb->right_y, 0xFFFFu,
+                              joint_id_skip, joint_id_only, &hit));
+            if (query_hit && hit.line_idx >= 0 && (size_t)hit.line_idx < lwg->line_count &&
+                (hit.line_idx == adjacent_left_wall_idx ||
+                 wall_lines_connected_prev_next(lwg, adjacent_left_wall_idx, hit.line_idx))) {
+              // Fastfall Fall_Coll carried-ledge wall envelope:
+              // `ftCo_Fall_Coll -> ft_800831CC -> mpColl_80047E14` runs the common-air
+              // `mpColl_80045B74_LeftWall` pass before floor publication. A carried ledge
+              // CollData.floor.index gives the source floor-wall adjacency, and the current
+              // bottom->right JObj ECB edge can collect that adjacent wall even when the
+              // replay-visible fixed ECB table has a lifted bottom. Resolve through the shared
+              // `mpColl_80046224_LeftWall` envelope rather than a root clamp so the vertex
+              // projection comes from generated stage geometry and the loaded Fall ECB.
+              //
+              // data/motion_state/owners/{fox,falco}.bin::MSLMSO01 COMMON_AIR_WALLJUMP_COLL
+              // data/characters/{fox,falco}.json::ecb_joints
+              // data/stages/bin/*.bin::MSLSTG01 floor adjacent_left_wall + ledge metadata
+              // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Coll
+              // refs/melee/src/melee/ft/ft_081B.c::ft_800831CC
+              // refs/melee/src/melee/mp/mpcoll.c::{
+              //   mpColl_LoadECB_JObj,mpColl_80045B74_LeftWall,mpColl_80046224_LeftWall}
+              MslWallCandidateList fall_ledge_candidates;
+              wall_candidate_list_init(&fall_ledge_candidates);
+              left_wall_candidate_add(&fall_ledge_candidates, lwg, hit.line_idx, 0u, hit.x, hit.y);
+              float envelope_x = 0.0f;
+              int envelope_line_idx = -1;
+              float envelope_nx = -1.0f;
+              float envelope_ny = 0.0f;
+              if (left_wall_air_envelope_min_x(stage_id, lwg, &fall_ledge_candidates,
+                                               fall_ledge_cur_ecb, batch->state.pos_x[idx],
+                                               batch->state.pos_y[idx], &envelope_x,
+                                               &envelope_line_idx, &envelope_nx, &envelope_ny)) {
+                const float dx = envelope_x - batch->state.pos_x[idx];
+                MslMpcollWallResult wall =
+                    mpcoll_wall_result_make(MSL_WALL_LEFT, fall_ledge_candidates.has_hug,
+                                            MSL_MPCOLL_WALL_RESULT_AIR_ENVELOPE,
+                                            lwg->lines[(size_t)envelope_line_idx].segment_i, dx,
+                                            hit.x, hit.y, envelope_nx, envelope_ny);
+                mpcoll_commit_wall_result(batch, idx, &wall);
+                ecb_points_shift_x3(&cur_ecb, &cur_right_ecb, &cur_specialhi_wall_ecb, dx);
+              }
+            }
           }
         }
         if (batch->state.wall_kind[idx] == 0 && action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
@@ -3639,8 +3732,12 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
             (uint8_t)(use_damagefly_right_envelope && mpcoll_active_hitlag_phase(batch, idx) &&
                       (batch->state.coll_prev_env_flags[idx] &
                        (uint32_t)MSL_COLLIDE_RIGHT_WALL_MASK) != 0u);
+        const uint8_t use_generic_right_wall_persistence =
+            (uint8_t)(!use_right_air_envelope &&
+                      (!mpcoll_damagefly_wall_asdi_latch_action(action_id) ||
+                       !mpcoll_active_hitlag_phase(batch, idx)));
         if (!grounded_now && prev_wall_kind == MSL_WALL_RIGHT && prefer_line_idx >= 0 &&
-            (!use_right_air_envelope || use_jumpaerial_locked_right_wall_persistence ||
+            (use_generic_right_wall_persistence || use_jumpaerial_locked_right_wall_persistence ||
              use_specialhi_right_envelope || use_damagefly_hitlag_right_wall_persistence)) {
           float x_corr = 0.0f;
           float nx = 1.0f, ny = 0.0f;

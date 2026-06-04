@@ -1118,6 +1118,25 @@ static inline uint8_t mpcoll_state_squeeze_restore_ecb_points(const MslBatch* ba
   return 1u;
 }
 
+static inline uint8_t mpcoll_state_desired_ecb_points(const MslBatch* batch, size_t idx,
+                                                      MslEcbWorldPoints* out, float pos_x,
+                                                      float pos_y, uint16_t frame_u16) {
+  if (batch == NULL || out == NULL || batch->state.coll_desired_ecb_bottom_valid[idx] == 0u) {
+    return 0u;
+  }
+  const float bottom_rel_y = batch->state.coll_desired_ecb_bottom_rel_y[idx];
+  const float top_rel_y = batch->state.coll_desired_ecb_top_rel_y[idx];
+  const float left_rel_x = batch->state.coll_desired_ecb_left_rel_x[idx];
+  const float right_rel_x = batch->state.coll_desired_ecb_right_rel_x[idx];
+  const float side_rel_y = batch->state.coll_desired_ecb_side_rel_y[idx];
+  if (!mpcoll_rel_ecb_is_finite(bottom_rel_y, top_rel_y, left_rel_x, right_rel_x, side_rel_y)) {
+    return 0u;
+  }
+  mpcoll_ecb_world_points_from_rel(out, pos_x, pos_y, bottom_rel_y, top_rel_y, left_rel_x,
+                                   right_rel_x, side_rel_y, frame_u16);
+  return 1u;
+}
+
 static inline void mpcoll_store_current_ecb_points(MslBatch* batch, size_t idx,
                                                    const MslEcbWorldPoints* ecb) {
   batch->state.coll_ecb_bottom_rel_y[idx] = ecb->bottom_rel_y;
@@ -7562,6 +7581,9 @@ void mpcoll_ground_apply(MslBatch* batch) {
       MslEcbWorldPoints state_cur_ecb_points = {0};
       const uint8_t have_state_cur_ecb = mpcoll_state_current_ecb_points(
           batch, idx, &state_cur_ecb_points, prev_x, prev_y, ecb_frame_prev);
+      MslEcbWorldPoints state_desired_ecb_points = {0};
+      const uint8_t have_state_desired_ecb = mpcoll_state_desired_ecb_points(
+          batch, idx, &state_desired_ecb_points, prev_x, prev_y, ecb_frame_prev);
       MslEcbWorldPoints squeeze_restore_ecb_points = {0};
       const uint8_t have_squeeze_restore_ecb = mpcoll_state_squeeze_restore_ecb_points(
           batch, idx, &squeeze_restore_ecb_points, prev_x, prev_y, ecb_frame_prev);
@@ -14395,6 +14417,20 @@ void mpcoll_ground_apply(MslBatch* batch) {
         mpcoll_penultimate_interpolated_ecb(&stored_prev_ecb_points, &stored_prev_ecb_points,
                                             interpolation_start_ecb, &cur_ecb_points, prev_x,
                                             prev_y, x, y);
+      }
+      if (specialhi_jobj_ecb_active && have_state_desired_ecb) {
+        // SpecialHi's collision callback loads CollData.ecb from live JObj collision joints after
+        // ftFox_SpecialHi_RotateModel mutates XRotN. `mpCollInterpolateECB` moves the current ECB
+        // to the frame-start desired ECB, then the next callback's `mpCollPrev` observes that
+        // packet while `desired_ecb` has advanced again. Publish that frame-start desired packet
+        // as current/prev for the ongoing launch instead of the fixed-pose floor query ECB.
+        // refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialHi.c::{
+        //   ftFox_SpecialHi_RotateModel,ftFx_SpecialAirHi_Coll}
+        // refs/melee/src/melee/ft/fighter.c::Fighter_procMap
+        // refs/melee/src/melee/mp/mpcoll.c::{
+        //   mpColl_LoadECB_JObj,mpCollInterpolateECB,mpCollPrev,mpColl_80043754}
+        cur_ecb_points = state_desired_ecb_points;
+        stored_prev_ecb_points = state_desired_ecb_points;
       }
       mpcoll_store_prev_ecb_points(batch, idx, &stored_prev_ecb_points);
       mpcoll_store_current_ecb_points(batch, idx, &cur_ecb_points);

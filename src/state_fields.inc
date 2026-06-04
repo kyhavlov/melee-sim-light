@@ -241,6 +241,7 @@ MSL_STATE_FIELD(guard_reflect_entry_dash_terminal_scalar, uint8_t, bp, (size_t)M
 MSL_STATE_FIELD(guard_reflect_entered_this_frame, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(guard_seed_shield_desc_active, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(state_flags_2218_frame_start, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
+MSL_STATE_FIELD(state_flags_221c_frame_start, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(guard_jump_oos_entered_this_frame, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(shine_jump_iasa_entered_this_frame, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)
 MSL_STATE_FIELD(guard_reflect_timer_x14, uint8_t, bp, (size_t)MSL_MAX_PLAYERS)

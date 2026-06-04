@@ -731,6 +731,7 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
       // 0x221C: isHitstun derived from hitstun frames left.
       const size_t flags_221c_i = idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221C_INDEX;
       uint8_t f221c = batch->state.state_flags[flags_221c_i];
+      const uint8_t f221c_frame_start = batch->state.state_flags_221c_frame_start[idx];
       const uint8_t down_damage_hitstun_flag_carry =
           (state_flags_is_down_damage_action(batch->state.action_id[idx]) &&
            (f221c & (uint8_t)MSL_STATE_FLAG_221C_IS_HITSTUN) != 0u)
@@ -1105,6 +1106,23 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
           f221c &= (uint8_t) ~(uint8_t)(MSL_STATE_FLAG_221C_B3 | MSL_STATE_FLAG_221C_B1 |
                                         MSL_STATE_FLAG_221C_B2);
         }
+      }
+      if (action_id == (uint16_t)MSL_ACT_FALL && prev_action != (uint16_t)MSL_ACT_FALL &&
+          (f221c & (uint8_t)(MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2)) ==
+              (uint8_t)(MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2) &&
+          (f221c_frame_start & (uint8_t)(MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2)) !=
+              (uint8_t)(MSL_STATE_FLAG_221C_B1 | MSL_STATE_FLAG_221C_B2) &&
+          (f2218 & (uint8_t)(MSL_STATE_FLAG_2218_ALLOW_INTERRUPT | MSL_STATE_FLAG_2218_B1 |
+                             MSL_STATE_FLAG_2218_B2 | MSL_STATE_FLAG_2218_REFLECTING)) == 0u) {
+        // Fall entry can carry raw fp+0x2218_b5 together with the companion x221C carry lane:
+        // Fighter_ChangeMotionState clears reflecting/x2218_b6 but not x2218_b5, and the common
+        // Fall row can publish that raw behavior bit even without an active reflector descriptor.
+        // Keep this to fresh Fall entries with the paired x221C carry visible so ordinary Dash
+        // walk-off rows and reflector-owned states stay on their explicit owners.
+        // refs/melee/build/GALE01/asm/melee/ft/fighter.s::Fighter_ChangeMotionState
+        // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter
+        f2218 |= (uint8_t)MSL_STATE_FLAG_2218_REFLECT_BEHAVIOR;
+        batch->state.state_flags[flags_2218_i] = f2218;
       }
       batch->state.state_flags[flags_221c_i] = f221c;
 

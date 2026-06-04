@@ -184,16 +184,24 @@ static inline uint8_t msl_damage_owner_attackairlw_damageflytop_fox_tail_rejects
   if (!msl_damage_owner_is_fox_dynamic_tail_part(batch->state.char_id[d_idx], cap_bone_part_id)) {
     return 0u;
   }
-  if (batch->state.action_id[a_idx] != (uint16_t)MSL_ACT_ATTACK_AIR_LW || hb_id != 0u) {
+  if (batch->state.action_id[a_idx] != (uint16_t)MSL_ACT_ATTACK_AIR_LW || hb_id > 1u) {
     return 0u;
   }
   if (batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_DAMAGE_FLY_TOP ||
-      batch->state.hitstun[d_idx] == 0u || expected_hitlag == 0u ||
-      batch->state.hitstun[d_idx] > expected_hitlag) {
+      batch->state.hitstun[d_idx] == 0u || expected_hitlag == 0u) {
+    return 0u;
+  }
+  if (hb_id == 0u && batch->state.hitstun[d_idx] > expected_hitlag) {
+    return 0u;
+  }
+  if (hb_id == 1u && batch->state.hitstun[d_idx] <= expected_hitlag) {
     return 0u;
   }
   // Active-hitstun DamageFlyTop uses the same Fox dynamic tail-chain owner as the DamageFlyLw high
-  // part bridge. Falco's corresponding cap is not part 18 and stays on ordinary BODY selection.
+  // part bridge. Falco AttackAirLw hb0/hb1 are the paired same-group DAir body capsules; hb0's
+  // replay-proven reject is terminal, while hb1's dynamic-tail reject applies before the next
+  // same-source hitlag horizon and releases once hitstun decays to that horizon. Falco's
+  // corresponding victim cap is not part 18 and stays on ordinary BODY selection.
   // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
   // refs/melee/src/melee/ft/ftdynamics.c::{ftCo_8009DD94,ftCo_8009E318}
   // refs/melee/src/melee/ft/ftcoll.c::{ftColl_80078C70,ftColl_80076ED8}
@@ -261,11 +269,12 @@ static inline uint8_t msl_damage_owner_damageflyroll_pre_action_allows_gate(cons
     case (uint16_t)MSL_ACT_ATTACK_AIR_LW:
       return 1u;
     case (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI:
-      // Exact replay rows keep the HSD_Randf phase seed-owned; free-running rollout after reseed can
-      // use the owned RNG clock for this source-eligible pre-action.
+      // Exact replay rows keep the HSD_Randf phase seed-owned. Free-running rollout must still use
+      // the current ProcessHit source owner before admitting this pre-action; visible
+      // SpecialAirHi shape plus an advanced RNG clock is not enough to prove the damage source.
       // refs/melee/src/melee/ft/fighter.c::Fighter_8006CDA4
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::ftCo_8008DCE0
-      return msl_damage_owner_replay_rollout_advanced_under_rng_owner(batch, d_idx);
+      return 0u;
     case (uint16_t)MSL_ACT_DAMAGE_FLY_N:
     case (uint16_t)MSL_ACT_DAMAGE_FLY_LW: {
       if (batch->state.fighter_8006cda4_pre_gate_consume_count[d_idx] != 0u) {

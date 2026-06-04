@@ -393,7 +393,6 @@ hitboxes_teacher_seed_reconstruct_create_edge_guardon_shielddesc_miss_dense_appl
       batch->state.hitlag[a_idx] != 0u || batch->state.hitstun[a_idx] != 0u) {
     return 0u;
   }
-
   const size_t group_base =
       (size_t)bi * (size_t)MSL_MAX_PLAYERS * (size_t)MSL_HITLIST_GROUPS * (size_t)MSL_MAX_PLAYERS;
   const size_t shield_base =
@@ -515,9 +514,9 @@ static inline uint8_t hitboxes_seed_reconstruct_create_edge_powershield_dense_ap
 }
 
 static inline uint8_t hitboxes_no_clear_attackairlw_dense_seed_initializes_hitcapsule(
-    const MslBatch* batch, int bi, int attacker, int hb_id) {
+    const MslBatch* batch, int bi, int attacker, int hb_id, uint8_t hit_group) {
   if (batch == NULL || bi < 0 || attacker < 0 || attacker >= (int)MSL_MAX_PLAYERS || hb_id < 0 ||
-      hb_id >= (int)MSL_MAX_HITBOXES) {
+      hb_id >= (int)MSL_MAX_HITBOXES || hit_group >= (uint8_t)MSL_HITLIST_GROUPS) {
     return 0u;
   }
   if (batch->replay_rollout_reseeded == NULL || batch->replay_rollout_reseeded[bi] == 0u) {
@@ -535,6 +534,25 @@ static inline uint8_t hitboxes_no_clear_attackairlw_dense_seed_initializes_hitca
           batch->state.char_id[a_idx], action_id, batch->state.anim_frame_f32[a_idx])) {
     return 0u;
   }
+  uint8_t dense_seed_present = 0u;
+  const size_t group_base =
+      (size_t)bi * (size_t)MSL_MAX_PLAYERS * (size_t)MSL_HITLIST_GROUPS * (size_t)MSL_MAX_PLAYERS;
+  for (int victim = 0; victim < (int)batch->config.num_players; victim++) {
+    if (victim == attacker) {
+      continue;
+    }
+    const size_t cd_i =
+        group_base + (((size_t)attacker * (size_t)MSL_HITLIST_GROUPS + (size_t)hit_group) *
+                          (size_t)MSL_MAX_PLAYERS +
+                      (size_t)victim);
+    if (batch->state.combat_hitlist_cd[cd_i] != 0u) {
+      dense_seed_present = 1u;
+      break;
+    }
+  }
+  if (dense_seed_present == 0u) {
+    return 0u;
+  }
   // AttackAirLw no-clear payload owner:
   // - ftAction_8007121C calls ftColl_800768A0 only on disabled->enabled or hit_group changes.
   // - Falco's late DAir create payload updates an already-enabled same-group HitCapsule, so the
@@ -549,6 +567,64 @@ static inline uint8_t hitboxes_no_clear_attackairlw_dense_seed_initializes_hitca
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_800768A0
   // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
   return 1u;
+}
+
+static inline uint8_t hitboxes_active_attackairlw_dense_seed_initializes_hitcapsule(
+    const MslBatch* batch, int bi, int attacker, int hb_id, uint8_t hit_group) {
+  if (batch == NULL || bi < 0 || attacker < 0 || attacker >= (int)MSL_MAX_PLAYERS || hb_id < 0 ||
+      hb_id >= (int)MSL_MAX_HITBOXES || hit_group >= (uint8_t)MSL_HITLIST_GROUPS) {
+    return 0u;
+  }
+  if (batch->replay_rollout_reseeded == NULL || batch->replay_rollout_reseeded[bi] == 0u) {
+    return 0u;
+  }
+  if (hitboxes_has_authoritative_hitlist_seed(batch, bi, attacker, hb_id)) {
+    return 0u;
+  }
+  const size_t a_idx = msl_idx_player(bi, attacker);
+  const uint16_t action_id = batch->state.action_id[a_idx];
+  if (action_id != (uint16_t)MSL_ACT_ATTACK_AIR_LW ||
+      batch->state.seed_prev_action_id[a_idx] != action_id || batch->state.hitlag[a_idx] != 0u ||
+      batch->state.hitstun[a_idx] != 0u) {
+    return 0u;
+  }
+  const uint8_t attacker_source_port0 = hitboxes_source_port0_for_attacker(batch, a_idx, attacker);
+  const size_t group_base =
+      (size_t)bi * (size_t)MSL_MAX_PLAYERS * (size_t)MSL_HITLIST_GROUPS * (size_t)MSL_MAX_PLAYERS;
+  for (int victim = 0; victim < (int)batch->config.num_players; victim++) {
+    if (victim == attacker) {
+      continue;
+    }
+    const size_t cd_i =
+        group_base + (((size_t)attacker * (size_t)MSL_HITLIST_GROUPS + (size_t)hit_group) *
+                          (size_t)MSL_MAX_PLAYERS +
+                      (size_t)victim);
+    if (batch->state.combat_hitlist_cd[cd_i] == 0u) {
+      continue;
+    }
+    const size_t v_idx = msl_idx_player(bi, victim);
+    const uint16_t stored_iid = batch->state.combat_hitlist_victim_iid[cd_i];
+    if (stored_iid == 0u || stored_iid != batch->state.instance_id[v_idx]) {
+      continue;
+    }
+    if (batch->state.action_id[v_idx] != (uint16_t)MSL_ACT_DAMAGE_FLY_TOP ||
+        batch->state.hitstun[v_idx] == 0u ||
+        batch->state.last_hit_by[v_idx] != attacker_source_port0) {
+      continue;
+    }
+    // Active AttackAirLw HitCapsule seed owner:
+    // - replay rollout reseed can begin during an already-active Falco DAir window, before the
+    //   simulator has a live victims_1 list for the current x914 slot.
+    // - The dense group seed names the current victim object, while visible DamageFlyTop hitstun
+    //   and last_hit_by prove the same source owner is still active. Materialize the hidden
+    //   HitCapsule.victims_1 list at the active-snapshot owner boundary instead of admitting an
+    //   early BODY rehit.
+    // data/scripts/falco.bin (MSLFTSC1 ftCo_SM_AttackAirLw active hitboxes)
+    // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}
+    // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008688}
+    return 1u;
+  }
+  return 0u;
 }
 
 static inline uint8_t hitboxes_seed_reconstruct_attackairn_damageflytop_dense_applies(
@@ -1929,6 +2005,16 @@ void hitboxes_refresh(MslBatch* batch) {
                 // refs/melee/src/melee/lb/lbcollision.c::{lbColl_8000ACFC,lbColl_80008A5C}
                 // refs/melee/src/melee/ft/ftcoll.c::{ftColl_800768A0,ftColl_80076ED8}
                 hitlist_seed_init_fighter_hitbox_from_group(batch, bi, p, (int)hb, new_g);
+              } else if (hitboxes_no_clear_attackairlw_dense_seed_initializes_hitcapsule(
+                             batch, bi, p, (int)hb, new_g)) {
+                // Replay-rollout start can enter one script tick before the same-group DAir
+                // payload; if MSL has no prior live capsule in that seed, the dense group entry is
+                // the only source-owned proof that ftColl_800768A0 should copy/preserve
+                // HitCapsule.victims_1 instead of clearing the slot on this create edge.
+                // data/scripts/falco.bin (MSLFTSC1 ftCo_SM_AttackAirLw)
+                // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+                // refs/melee/src/melee/ft/ftcoll.c::ftColl_800768A0
+                hitlist_seed_init_fighter_hitbox_from_group(batch, bi, p, (int)hb, new_g);
               } else {
                 hitlist_capsule_clear(&batch->state.fighter_hitlist[dst_i]);
                 batch->state.fighter_hitlist_init_gen[dst_i] = hitlist_gen;
@@ -1944,8 +2030,8 @@ void hitboxes_refresh(MslBatch* batch) {
                                                                          new_g)) {
               hitlist_seed_init_fighter_hitbox_from_group(batch, bi, p, (int)hb, new_g);
             }
-          } else if (hitboxes_no_clear_attackairlw_dense_seed_initializes_hitcapsule(batch, bi, p,
-                                                                                     (int)hb)) {
+          } else if (hitboxes_no_clear_attackairlw_dense_seed_initializes_hitcapsule(
+                         batch, bi, p, (int)hb, new_g)) {
             const size_t dst_i = idx_hitbox(bi, p, hb);
             if (!hitboxes_hitlist_has_victims1_entry(&batch->state.fighter_hitlist[dst_i])) {
               hitlist_seed_init_fighter_hitbox_from_group(batch, bi, p, (int)hb, new_g);
@@ -1998,9 +2084,26 @@ void hitboxes_refresh(MslBatch* batch) {
                     first_create_damage[hi], pose_frame, seed_materialized_now, 1u);
               }
             } else {
-              hitboxes_seed_bridge_trim_impossible_indefinite(
-                  batch, bi, p, hi, &def[hi], first_create_frame[hi], second_create_frame[hi],
-                  first_create_damage[hi], pose_frame, 0u, 1u);
+              const uint8_t g = hitlist_hit_group_from_u16_7(def[hi].u16_7);
+              if (!hitboxes_hitlist_has_victims1_entry(&batch->state.fighter_hitlist[hl_i]) &&
+                  (hitboxes_active_attackairlw_dense_seed_initializes_hitcapsule(batch, bi, p, hi,
+                                                                                 g) ||
+                   hitboxes_no_clear_attackairlw_dense_seed_initializes_hitcapsule(batch, bi, p, hi,
+                                                                                   g))) {
+                // Active no-event rollout seed repair:
+                // the current x914 slot was marked initialized by reseed, but its hidden
+                // victims_1 list is absent. If the extracted AttackAirLw no-clear phase and dense
+                // group seed prove the source HitCapsule persisted, materialize that concrete
+                // victims_1 state before BODY collision can admit an early rehit.
+                // data/scripts/falco.bin (MSLFTSC1 ftCo_SM_AttackAirLw)
+                // refs/melee/src/melee/ft/ftaction.c::ftAction_8007121C
+                // refs/melee/src/melee/ft/ftcoll.c::ftColl_800768A0
+                hitlist_seed_init_fighter_hitbox_from_group(batch, bi, p, hi, g);
+              } else {
+                hitboxes_seed_bridge_trim_impossible_indefinite(
+                    batch, bi, p, hi, &def[hi], first_create_frame[hi], second_create_frame[hi],
+                    first_create_damage[hi], pose_frame, 0u, 1u);
+              }
             }
           }
         }

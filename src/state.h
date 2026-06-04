@@ -604,6 +604,12 @@ typedef struct MslStateSoA {
   // refs/melee/src/melee/ft/ftcoll.c::ftColl_CreateReflectHit
   // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
   uint8_t* state_flags_2218_frame_start;
+  // Runtime-only frame-start snapshot of raw fp+0x221C / Slippi state_flags[3].
+  // State-flag publication can need to distinguish frame-start carries from same-frame source
+  // owners after callbacks have already mutated the live post-frame byte.
+  // refs/melee/src/melee/ft/types.h (fp+0x221C bitfield layout)
+  // refs/slippi-ssbm-asm/Recording/SendGamePostFrame.asm
+  uint8_t* state_flags_221c_frame_start;
   // Runtime-only marker for Guard/GuardOn/GuardReflect/GuardOff IASA entering KneeBend through
   // ftCo_800CB024 in the current step. The decomp input callback runs once per frame, so a fresh
   // Guard -> KneeBend handoff must not also consume KneeBend_IASA before the next frame.
