@@ -22,6 +22,7 @@
 #include "grab_flow.h"
 #include "input.h"
 #include "input_axis.h"
+#include "instance_id.h"
 #include "jump_input.h"
 #include "move_tables.h"
 #include "motion_state_owners.h"
@@ -4920,6 +4921,17 @@ void locomotion_update_pre(MslBatch* batch) {
         if (guardsetoff_platform_edge_floor_loss_before_destination_iasa(batch, idx)) {
           // Keep GuardSetOff live for its source collision callback below. Entering Fall here would
           // run Fall physics one frame early; the decomp owner is the later GuardSetOff_Coll pass.
+          //
+          // Source identity side effect:
+          // - The platform-edge GuardSetOff_Coll path routes through ft_80084104 before
+          //   ftCo_Fall_Enter. On replay-real source rows this callback-local edge path advances
+          //   the shared plAttack_80037B08 counter once before the later Fall motion entry writes
+          //   fp->x2088. Model only that existing edge-loss owner so ordinary GuardSetOff -> Guard
+          //   or GuardOff exits do not consume hidden instance ids.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardSetOff_Coll
+          // refs/melee/src/melee/ft/ft_081B.c::ft_80084104
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter
+          instance_id_counter_consume_plAttack_80037B08(batch, idx);
           continue;
         }
         guard_update_grounded(batch, c, idx, allow_guard_entry);

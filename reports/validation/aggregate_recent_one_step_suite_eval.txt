@@ -1345,25 +1345,25 @@ overall.float_norm_mae_p95: 0.00015161
 
 == datasets/aggregate_recent/replays/validation/yoshis_story_recent/DependentSteelGrouse.msl ==
 Records: 344  Players/scored per record: 2  Total player-frames: 688
-mismatch.action_id: 1 / 688 (0.001453)
+mismatch.action_id: 0 / 688 (0.000000)
 mismatch.action_frame: 0 / 688 (0.000000)
 mismatch.on_ground: 0 / 688 (0.000000)
-mismatch.facing: 1 / 688 (0.001453)
+mismatch.facing: 0 / 688 (0.000000)
 mismatch.stocks: 0 / 688 (0.000000)
 mismatch.jumps_left: 0 / 688 (0.000000)
 mismatch.is_dead: 0 / 688 (0.000000)
-mismatch.hitlag: 1 / 688 (0.001453)
-mismatch.hitstun: 1 / 688 (0.001453)
+mismatch.hitlag: 0 / 688 (0.000000)
+mismatch.hitstun: 0 / 688 (0.000000)
 mismatch.l_cancel: 0 / 688 (0.000000)
 mismatch.hurtbox_state: 0 / 688 (0.000000)
 mismatch.ground_id: 0 / 688 (0.000000)
-mismatch.animation_index: 1 / 688 (0.001453)
-mismatch.instance_hit_by: 1 / 688 (0.001453)
+mismatch.animation_index: 0 / 688 (0.000000)
+mismatch.instance_hit_by: 0 / 688 (0.000000)
 mismatch.instance_id: 0 / 688 (0.000000)
-mismatch.last_attack_landed: 1 / 688 (0.001453)
-mismatch.combo_count: 1 / 688 (0.001453)
-mismatch.last_hit_by: 1 / 688 (0.001453)
-mismatch.state_flags: 2 / 3440 (0.000581)
+mismatch.last_attack_landed: 0 / 688 (0.000000)
+mismatch.combo_count: 0 / 688 (0.000000)
+mismatch.last_hit_by: 0 / 688 (0.000000)
+mismatch.state_flags: 0 / 3440 (0.000000)
 mismatch.item_exists: 0 / 5160 (0.000000)
 mismatch.item_type: 0 / 5160 (0.000000)
 mismatch.item_state: 0 / 5160 (0.000000)
@@ -1372,21 +1372,21 @@ mismatch.item_instance_id: 0 / 5160 (0.000000)
 ignored_mismatch.state_flags[4]&0x80: 4 / 688 (0.005814)
 err.pos_x: mae=0.000000 p95=0.000000 max=0.000004
 err.pos_y: mae=0.002297 p95=0.000000 max=1.580000
-err.speed_air_x_self: mae=0.002577 p95=0.000000 max=1.773100
-err.speed_ground_x_self: mae=0.002708 p95=0.000000 max=1.773100
+err.speed_air_x_self: mae=0.000000 p95=0.000000 max=0.000000
+err.speed_ground_x_self: mae=0.000131 p95=0.000000 max=0.090000
 err.speed_y_self: mae=0.002878 p95=0.000000 max=1.580000
 err.speed_x_attack: mae=0.000000 p95=0.000000 max=0.000000
 err.speed_y_attack: mae=0.000000 p95=0.000000 max=0.000000
-err.percent: mae=0.010174 p95=0.000000 max=7.000000
+err.percent: mae=0.000000 p95=0.000000 max=0.000000
 err.shield_hp: mae=0.000102 p95=0.000000 max=0.070000
 err.item_pos_x: mae=0.014251 p95=0.000000 max=3.790001
 err.item_pos_y: mae=0.000000 p95=0.000000 max=0.000004
 err.item_vel_x: mae=0.001045 p95=0.000000 max=0.300000
 err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000000
-overall.discrete_mismatch: 11 / 41624
-overall.strict_discrete_mismatch: 15 / 41624
+overall.discrete_mismatch: 0 / 41624
+overall.strict_discrete_mismatch: 4 / 41624
 overall.ignored_discrete_mismatch: 4
-overall.float_norm_mae_p95: 0.00049578
+overall.float_norm_mae_p95: 0.00011196
 
 == datasets/aggregate_recent/replays/validation/yoshis_story_recent/LawfulInsistentMeerkat.msl ==
 Records: 5984  Players/scored per record: 2  Total player-frames: 11968
@@ -1479,7 +1479,7 @@ overall.ignored_discrete_mismatch: 69
 overall.float_norm_mae_p95: 0.00050131
 
 == suite summary ==
-overall.discrete_mismatch: 1896 / 35294369
-overall.strict_discrete_mismatch: 3396 / 35294369
+overall.discrete_mismatch: 1885 / 35294369
+overall.strict_discrete_mismatch: 3385 / 35294369
 overall.ignored_discrete_mismatch: 1500
-overall.float_norm_mae_p95: 0.00031860
+overall.float_norm_mae_p95: 0.00031811

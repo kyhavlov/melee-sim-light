@@ -603,24 +603,20 @@ rollout.float_top_errors:
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:7125
 
 == datasets/aggregate_recent/replays/validation/yoshis_story_recent/DependentSteelGrouse.msl ==
-rollout.status: NOT-CLEAN
-rollout.best_len: 296
-rollout.streak_count: 2
-rollout.streak_len.median: 47
-rollout.streak_len.p90: 296
-rollout.streak_len.p95: 296
-rollout.streak_len.max: 296
-rollout.first_mismatch_total: 1
-rollout.first_mismatch_seeded_total: 1
+rollout.status: RAW-CLEAN
+rollout.best_len: 344
+rollout.streak_count: 1
+rollout.streak_len.median: 344
+rollout.streak_len.p90: 344
+rollout.streak_len.p95: 344
+rollout.streak_len.max: 344
+rollout.first_mismatch_total: 0
+rollout.first_mismatch_seeded_total: 0
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. shield_hp max_err=0.0699997 rec=232 p=1 seed/ref/out=59.72/59.79/59.72 actions=181/29/29 category=unclassified
   2. pos_x max_err=7.62939e-06 rec=264 p=1 seed/ref/out=42.3085/44.4622/44.4622 actions=20/20/20 category=unclassified
   3. pos_y max_err=1.90735e-06 rec=19 p=1 seed/ref/out=28/28.0449/28.0449 actions=322/323/323 category=unclassified
-rollout.float_top_downstream:
-  1. percent max_err=7 rec=296 p=1 seed/ref/out=0/7/0 actions=23/80/39 category=downstream_discrete_mismatch
-  2. speed_air_x_self max_err=1.7731 rec=296 p=1 seed/ref/out=-1.9331/0/-1.7731 actions=23/80/39 category=downstream_discrete_mismatch
-  3. speed_ground_x_self max_err=1.7731 rec=296 p=1 seed/ref/out=-1.9331/0/-1.7731 actions=23/80/39 category=downstream_discrete_mismatch
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:1
 
 == datasets/aggregate_recent/replays/validation/yoshis_story_recent/LawfulInsistentMeerkat.msl ==
@@ -666,14 +662,14 @@ rollout.float_top_downstream:
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:2885
 
 == suite summary ==
-overall.rollout.streak_count: 375
+overall.rollout.streak_count: 374
 overall.rollout.streak_len.median: 344
 overall.rollout.streak_len.p90: 1709
 overall.rollout.streak_len.p95: 2763
 overall.rollout.streak_len.max: 11529
 overall.rollout.best_len.max: 11529
-overall.rollout.first_mismatch_total: 350
-overall.rollout.first_mismatch_seeded_total: 141
+overall.rollout.first_mismatch_total: 349
+overall.rollout.first_mismatch_seeded_total: 140
 overall.rollout.approved_exception_total: 4
 overall.rollout.approved_exception_seeded_total: 2
 overall.rollout.status: NOT-CLEAN

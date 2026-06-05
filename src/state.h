@@ -318,6 +318,9 @@ typedef struct MslStateSoA {
 
   // State machine
   uint16_t* action_id;
+  // Internal-only frame-start action snapshot. Some callback-local owners publish a later action
+  // before item/fighter collision still consumes the frame-start source episode.
+  uint16_t* frame_start_action_id;
   // Replay-true previous action snapshot (t-1 -> t), seeded from dataset history for entry-shaped
   // one-step rows. Separate from the runtime cache below.
   uint16_t* seed_prev_action_id;
@@ -1137,6 +1140,9 @@ typedef struct MslStateSoA {
   uint16_t* instance_identity_last_action_id;  // [batch * players]
   uint16_t* attack_id;  // GALE01 fp->x2068_attackID (seeded; replay-history derived)
   uint16_t* attack_instance;
+  // Internal-only frame-start submotion. Same-callback item/fighter collision can consume the
+  // source collision pose after a later action publication has already replaced animation_index.
+  uint32_t* frame_start_animation_index;  // [batch * players]
   // Internal-only frame-start copy of x2068/x206C. Item spawn callbacks use this to recover the
   // live Blaster Loop attack identity when the simulator has already applied a same-frame
   // motion-state exit before spawning the shot article.

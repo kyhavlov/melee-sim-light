@@ -1902,6 +1902,8 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       }
       batch->state.on_ground[idx] = seed->on_ground[p] ? 1 : 0;
       batch->state.frame_start_on_ground[idx] = batch->state.on_ground[idx];
+      batch->state.frame_start_action_id[idx] = seed->action_id[p];
+      batch->state.frame_start_animation_index[idx] = seed->animation_index[p];
       batch->state.frame_start_instance_id[idx] = seed->instance_id[p];
       batch->state.ground_contact_x[idx] = 0.0f;
       batch->state.ground_contact_y[idx] = 0.0f;

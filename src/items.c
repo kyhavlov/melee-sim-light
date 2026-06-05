@@ -2686,6 +2686,104 @@ static inline uint8_t item_type_is_spacie_illusion(uint16_t type) {
   return item_article_params_is_illusion_item_type(type);
 }
 
+static inline uint8_t illusion_item_body_runbrake_squat_pose_owner(const MslBatch* batch,
+                                                                   size_t d_idx, uint16_t* out_msid,
+                                                                   uint16_t* out_pose_frame) {
+  if (batch == NULL || out_msid == NULL || out_pose_frame == NULL) {
+    return 0u;
+  }
+  if (batch->state.action_id[d_idx] != (uint16_t)MSL_ACT_SQUAT ||
+      batch->state.action_frame[d_idx] != 1 || batch->state.on_ground[d_idx] == 0u ||
+      batch->state.frame_start_on_ground[d_idx] == 0u) {
+    return 0u;
+  }
+  if (batch->state.frame_start_action_id[d_idx] != (uint16_t)MSL_ACT_RUN_BRAKE ||
+      batch->state.frame_start_animation_index[d_idx] != (uint32_t)MSL_SM_RUN_BRAKE) {
+    return 0u;
+  }
+  const uint32_t frame_start_msid = batch->state.frame_start_animation_index[d_idx];
+  if (frame_start_msid > 0xFFFFu) {
+    return 0u;
+  }
+  // RunBrake frame-0 input handoff into same-frame crouch:
+  // - ftCo_RunBrake_IASA can enter Squat through ftCo_800D5FB0 -> ftCo_Squat_Enter after
+  //   Fighter_8006A360 has already interpreted the just-entered RunBrake pose for this callback
+  //   frame.
+  // - The already-live Illusion/Phantasm article is processed in the same item-vs-fighter pass
+  //   through ftColl_8007925C. For this callback-local handoff, the BODY candidate is owned by
+  //   RunBrake pose frame 0 before the later Squat publication.
+  // - Keep this out of generic hurtbox refresh: Squat_Enter has its own immediate ftAnim tick, and
+  //   this source owner is specifically the live item BODY pass observing the frame-0 RunBrake
+  //   episode.
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::{ftCo_RunBrake_Anim,ftCo_RunBrake_IASA}
+  // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::{ftCo_800D5FB0,ftCo_Squat_Enter}
+  // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}
+  // refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C
+  *out_msid = (uint16_t)frame_start_msid;
+  *out_pose_frame = 0u;
+  return 1u;
+}
+
+static inline uint8_t item_swept_sphere_capsule_intersects_fighter_pose(
+    const MslBatch* batch, int bi, int defender, float sx0, float sy0, float sx1, float sy1,
+    float sr, int cap_i, uint16_t msid, uint16_t pose_frame, uint8_t* out_hurt_height) {
+  if (batch == NULL || !(sr > 0.0f)) {
+    return 0u;
+  }
+  const size_t d_idx = msl_idx_player(bi, defender);
+  const uint8_t char_id = batch->state.char_id[d_idx];
+  const MslHurtCap* caps = NULL;
+  uint16_t cap_count = 0u;
+  if (hurtcaps_get(char_id, &caps, &cap_count) != 0 || caps == NULL || cap_i < 0 ||
+      (uint16_t)cap_i >= cap_count) {
+    return 0u;
+  }
+  const MslHurtCap* cap = &caps[cap_i];
+  float m[12];
+  if (anim_pose_get_collision_matrix_f32(batch, d_idx, msid, (float)pose_frame, cap->bone_part_id,
+                                         m) != 0) {
+    return 0u;
+  }
+  const MslCharParams* chp = msl_char_params(char_id);
+  const float model_scaling =
+      (chp != NULL && isfinite(chp->model_scaling) && chp->model_scaling > 0.0f)
+          ? chp->model_scaling
+          : 1.0f;
+  const float model_scale = batch->state.fighter_scale_y[d_idx] * model_scaling;
+  if (!(model_scale > 0.0f)) {
+    return 0u;
+  }
+  float la_x = 0.0f, la_y = 0.0f, la_z = 0.0f;
+  float lb_x = 0.0f, lb_y = 0.0f, lb_z = 0.0f;
+  msl_mtx34_mul_point(m, cap->a_offset, &la_x, &la_y, &la_z);
+  msl_mtx34_mul_point(m, cap->b_offset, &lb_x, &lb_y, &lb_z);
+  la_x *= model_scale;
+  la_y *= model_scale;
+  la_z *= model_scale;
+  lb_x *= model_scale;
+  lb_y *= model_scale;
+  lb_z *= model_scale;
+  const float facing_dir = batch->state.facing[d_idx] ? 1.0f : -1.0f;
+  const float ax = batch->state.pos_x[d_idx] + facing_dir * la_z;
+  const float ay = batch->state.pos_y[d_idx] + la_y;
+  const float az = batch->state.pos_z[d_idx] - facing_dir * la_x;
+  const float bx = batch->state.pos_x[d_idx] + facing_dir * lb_z;
+  const float by = batch->state.pos_y[d_idx] + lb_y;
+  const float bz = batch->state.pos_z[d_idx] - facing_dir * lb_x;
+  const float cr = cap->scale * model_scale;
+  const float rr = sr + cr;
+  const float d2 =
+      item_segment_segment_dist2(sx0, sy0, 0.0f, sx1, sy1, 0.0f, ax, ay, az, bx, by, bz);
+  if (d2 > rr * rr) {
+    return 0u;
+  }
+  if (out_hurt_height) {
+    const size_t hi = idx_hurtcap(bi, defender, cap_i);
+    *out_hurt_height = batch->state.hurtcap_height[hi];
+  }
+  return 1u;
+}
+
 uint8_t items_row_has_fighter_collision_demand(const MslBatch* batch, int bi) {
   if (batch == NULL || bi < 0 || bi >= batch->batch_size) {
     return 0u;
@@ -5123,6 +5221,29 @@ static void illusion_items_update_and_collide(MslBatch* batch, int bi) {
                                                  &hit_hurt_height)) {
           hit = 1u;
           break;
+        }
+      }
+      if (!hit) {
+        uint16_t source_msid = 0u;
+        uint16_t source_pose_frame = 0u;
+        if (illusion_item_body_runbrake_squat_pose_owner(batch, d_idx, &source_msid,
+                                                         &source_pose_frame)) {
+          const MslHurtCap* caps = NULL;
+          uint16_t source_cap_n = 0u;
+          if (hurtcaps_get(batch->state.char_id[d_idx], &caps, &source_cap_n) == 0 &&
+              caps != NULL) {
+            const uint16_t limit = source_cap_n < (uint16_t)MSL_MAX_HURTCAPS
+                                       ? source_cap_n
+                                       : (uint16_t)MSL_MAX_HURTCAPS;
+            for (uint16_t ci = 0u; ci < limit; ci++) {
+              if (item_swept_sphere_capsule_intersects_fighter_pose(
+                      batch, bi, def, x0, y0, x1, y1, hp.radius, (int)ci, source_msid,
+                      source_pose_frame, &hit_hurt_height)) {
+                hit = 1u;
+                break;
+              }
+            }
+          }
         }
       }
       if (!hit) {

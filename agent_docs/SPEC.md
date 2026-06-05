@@ -3599,6 +3599,38 @@ Fox/Falco special-owner split (2026-04-17):
     `refs/melee/src/melee/it/items/itfoxillusion.c::{
     itFoxIllusion_Logic14_DmgDealt,itFoxillusion_UnkMotion0_Anim,itFoxillusion_UnkMotion2_Anim}`,
     `refs/melee/src/melee/ft/chara/ftFox/ftFx_SpecialS.c::ftFx_SpecialS_CheckGhostRemove`.
+  - Illusion / Phantasm same-callback BODY pose ownership:
+    - `DependentSteelGrouse.msl:296` starts the defender in just-entered `RunBrake`
+      (`action_frame=0`); `ftCo_RunBrake_IASA` can enter `Squat` through
+      `ftCo_800D5FB0 -> ftCo_Squat_Enter` before the still-live Falco Phantasm article resolves
+      BODY collision in the item/fighter pass. The accepted BODY candidate is owned by
+      `RunBrake` pose frame 0, not by a generic frame-start RunBrake reconstruction and not by
+      the freshly published Squat hurtcaps.
+    - Runtime keeps internal frame-start action/submotion lanes (`frame_start_action_id`,
+      `frame_start_animation_index`) and admits this fallback only for grounded `Squat af=1`
+      entered from frame-start `RunBrake`/`ftCo_SM_RunBrake`, and the retained test asserts the
+      motivating source row is `action_frame=0`. Negative locks mutate the frame-start source
+      action and cover adjacent pre-hit/post-hit rows, so this is not a generic Squat,
+      frame-start RunBrake, or Phantasm overlap rule.
+    - The same rollout also needs the upstream source identity side effect from the soft-platform
+      `GuardSetOff_Coll -> ft_80084104 -> ftCo_Fall_Enter` edge path: source advances the shared
+      `plAttack_80037B08` counter once before Fall entry writes `fp->x2088`. Runtime models only
+      that bounded GuardSetOff platform-edge owner; direct global intermediate `instance_id` parity
+      still has unrelated gaps, but the later Phantasm spawn copies the corrected owner identity
+      through `it_8027B070`, giving replay-real `instance_hit_by` at the BODY contact.
+    - Replay-real locks: `DependentSteelGrouse.msl:296` covers the RunBrake-pose BODY hit and item
+      attribution; `DependentSteelGrouse.msl:{295,297}` cover adjacent non-early and post-hit
+      controls.
+    Sources: `refs/melee/src/melee/ft/chara/ftCommon/ftCo_RunBrake.c::{
+    ftCo_RunBrake_Anim,ftCo_RunBrake_IASA}`,
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Squat.c::{
+    ftCo_800D5FB0,ftCo_Squat_Enter}`,
+    `refs/melee/src/melee/ft/fighter.c::{Fighter_8006A360,Fighter_procUpdate}`,
+    `refs/melee/src/melee/ft/ftcoll.c::ftColl_8007925C`,
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Guard.c::ftCo_GuardSetOff_Coll`,
+    `refs/melee/src/melee/ft/ft_081B.c::ft_80084104`,
+    `refs/melee/src/melee/ft/chara/ftCommon/ftCo_Fall.c::ftCo_Fall_Enter`,
+    `refs/melee/src/melee/it/it_2725.c::it_8027B070`.
   - Grounded Illusion / Phantasm entry velocity runtime slice:
     - Grounded Side-B input enters through the common `ftCo_SpecialS_CheckInput -> doEnter`
       owner before the character-specific `ftFx_SpecialSStart_Enter` path. `doEnter` damps
