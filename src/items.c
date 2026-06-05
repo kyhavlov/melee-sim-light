@@ -446,8 +446,8 @@ static inline void yoshi_shyguy_install_rollout_spawn_rng_seed(MslBatch* batch, 
   if (batch->rollout_yoshi_shyguy_spawn_rng_installed != NULL) {
     batch->rollout_yoshi_shyguy_spawn_rng_installed[bi] = 1u;
   }
-  if (batch->debug_rng_shadow_seed != NULL) {
-    batch->debug_rng_shadow_seed[bi] = seed;
+  if (batch->rng_shadow_seed != NULL) {
+    batch->rng_shadow_seed[bi] = seed;
   }
   if (batch->debug_rng_seed_in != NULL) {
     batch->debug_rng_seed_in[bi] = seed;

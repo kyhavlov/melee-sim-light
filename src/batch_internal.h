@@ -81,10 +81,12 @@ struct MslBatch {
   uint8_t* hurtcap_matrix_valid;  // [batch * players * caps]
   float* hurtcap_matrix;          // [batch * players * caps * 12]
 
-  // Debug/triage RNG observability (no gameplay ownership by default):
-  // - Shadow RNG stream starts from frame_pre_random_seed each step.
-  // - Per-site consume counts are indexed by MSL_RNG_SITE_*.
-  // - Optional TSV trace writes to MSL_RNG_TRACE_PATH when set.
+  // RNG ownership and trace state:
+  // - rng_shadow_seed starts from frame_pre_random_seed each step and advances through modeled
+  //   source-owned RNG consumers.
+  // - rng_site_counts records per-MSL_RNG_SITE_* consumes and participates in replay-clock RNG
+  //   ownership decisions.
+  // Debug trace output remains separately named debug_* and writes to MSL_RNG_TRACE_PATH when set.
   // - DamageFlyRoll gate is enabled by default; set MSL_RNG_ENABLE_DAMAGE_FLY_ROLL_GATE=1
   //   as a debug/triage kill-switch (disable) for ablations.
   // - Pseudo-random SFX command consumption is enabled by default; set
@@ -94,10 +96,10 @@ struct MslBatch {
   uint8_t debug_rng_trace_enabled;
   void* debug_rng_trace_file;
   uint64_t debug_rng_trace_step_counter;
-  uint32_t* debug_rng_shadow_seed;  // [batch]
-  uint32_t* debug_rng_seed_in;      // [batch]
-  uint32_t* debug_rng_seed_out;     // [batch]
-  uint16_t* debug_rng_site_counts;  // [batch * MSL_RNG_SITE_COUNT]
+  uint32_t* rng_shadow_seed;     // [batch]
+  uint32_t* debug_rng_seed_in;   // [batch]
+  uint32_t* debug_rng_seed_out;  // [batch]
+  uint16_t* rng_site_counts;     // [batch * MSL_RNG_SITE_COUNT]
 };
 
 static inline size_t msl_idx_player(int bi, int p) {

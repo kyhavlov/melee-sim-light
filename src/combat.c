@@ -242,7 +242,7 @@ static inline uint16_t combat_hsd_rand_u16_consume_site(MslBatch* batch, int bi,
   if (batch == NULL || bi < 0 || bi >= batch->batch_size) {
     return 0u;
   }
-  if (batch->debug_rng_shadow_seed == NULL || batch->debug_rng_site_counts == NULL) {
+  if (batch->rng_shadow_seed == NULL || batch->rng_site_counts == NULL) {
     return 0u;
   }
   if (site_id >= (uint16_t)MSL_RNG_SITE_COUNT) {
@@ -250,12 +250,12 @@ static inline uint16_t combat_hsd_rand_u16_consume_site(MslBatch* batch, int bi,
   }
   const size_t bi_u = (size_t)bi;
   const size_t site_i = bi_u * (size_t)MSL_RNG_SITE_COUNT + (size_t)site_id;
-  if (batch->debug_rng_site_counts[site_i] != 0xFFFFu) {
-    batch->debug_rng_site_counts[site_i]++;
+  if (batch->rng_site_counts[site_i] != 0xFFFFu) {
+    batch->rng_site_counts[site_i]++;
   }
-  uint32_t seed = batch->debug_rng_shadow_seed[bi_u];
+  uint32_t seed = batch->rng_shadow_seed[bi_u];
   seed = combat_hsd_rand_step(seed);
-  batch->debug_rng_shadow_seed[bi_u] = seed;
+  batch->rng_shadow_seed[bi_u] = seed;
   return (uint16_t)(seed >> 16);
 }
 
@@ -284,23 +284,23 @@ void combat_rng_consume_step_site(MslBatch* batch, int bi, uint16_t site_id) {
 }
 
 void combat_rng_trace_begin_frame(MslBatch* batch) {
-  if (batch == NULL || batch->debug_rng_shadow_seed == NULL || batch->debug_rng_seed_in == NULL ||
-      batch->debug_rng_seed_out == NULL || batch->debug_rng_site_counts == NULL) {
+  if (batch == NULL || batch->rng_shadow_seed == NULL || batch->debug_rng_seed_in == NULL ||
+      batch->debug_rng_seed_out == NULL || batch->rng_site_counts == NULL) {
     return;
   }
   for (int bi = 0; bi < batch->batch_size; bi++) {
     const size_t bi_u = (size_t)bi;
     uint32_t seed_in = batch->state.frame_pre_random_seed[bi_u];
-    batch->debug_rng_shadow_seed[bi_u] = seed_in;
+    batch->rng_shadow_seed[bi_u] = seed_in;
     batch->debug_rng_seed_in[bi_u] = seed_in;
     batch->debug_rng_seed_out[bi_u] = seed_in;
-    memset(batch->debug_rng_site_counts + bi_u * (size_t)MSL_RNG_SITE_COUNT, 0,
+    memset(batch->rng_site_counts + bi_u * (size_t)MSL_RNG_SITE_COUNT, 0,
            (size_t)MSL_RNG_SITE_COUNT * sizeof(uint16_t));
   }
 }
 
 void combat_rng_trace_end_frame(MslBatch* batch) {
-  if (batch == NULL || batch->debug_rng_shadow_seed == NULL || batch->debug_rng_seed_out == NULL) {
+  if (batch == NULL || batch->rng_shadow_seed == NULL || batch->debug_rng_seed_out == NULL) {
     return;
   }
   FILE* trace_file = NULL;
@@ -310,9 +310,8 @@ void combat_rng_trace_end_frame(MslBatch* batch) {
   const uint64_t step_id = batch->debug_rng_trace_step_counter++;
   for (int bi = 0; bi < batch->batch_size; bi++) {
     const size_t bi_u = (size_t)bi;
-    batch->debug_rng_seed_out[bi_u] = batch->debug_rng_shadow_seed[bi_u];
-    if (trace_file == NULL || batch->debug_rng_seed_in == NULL ||
-        batch->debug_rng_site_counts == NULL) {
+    batch->debug_rng_seed_out[bi_u] = batch->rng_shadow_seed[bi_u];
+    if (trace_file == NULL || batch->debug_rng_seed_in == NULL || batch->rng_site_counts == NULL) {
       continue;
     }
     const int32_t frame_id = batch->state.frame_id[bi_u];
@@ -320,7 +319,7 @@ void combat_rng_trace_end_frame(MslBatch* batch) {
     const uint32_t seed_out = batch->debug_rng_seed_out[bi_u];
     for (uint16_t site_id = 1; site_id < (uint16_t)MSL_RNG_SITE_COUNT; site_id++) {
       const size_t site_i = bi_u * (size_t)MSL_RNG_SITE_COUNT + (size_t)site_id;
-      const uint16_t count = batch->debug_rng_site_counts[site_i];
+      const uint16_t count = batch->rng_site_counts[site_i];
       (void)fprintf(trace_file, "%llu\t%d\t%d\t%u\t%u\t%u\t%u\n", (unsigned long long)step_id, bi,
                     (int)frame_id, seed_in, seed_out, (unsigned int)site_id, (unsigned int)count);
     }
@@ -336,19 +335,18 @@ void combat_rng_use_next_replay_frame_seed_if_unconsumed(MslBatch* batch, int bi
 }
 
 void combat_rng_set_replay_frame_seed_if_unconsumed(MslBatch* batch, int bi, uint32_t seed) {
-  if (batch == NULL || batch->debug_rng_shadow_seed == NULL ||
-      batch->debug_rng_site_counts == NULL || batch->rollout_clock_rng_owned == NULL || bi < 0 ||
-      bi >= batch->batch_size ||
+  if (batch == NULL || batch->rng_shadow_seed == NULL || batch->rng_site_counts == NULL ||
+      batch->rollout_clock_rng_owned == NULL || bi < 0 || bi >= batch->batch_size ||
       batch->rollout_clock_rng_owned[bi] != (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED) {
     return;
   }
   const size_t base = (size_t)bi * (size_t)MSL_RNG_SITE_COUNT;
   for (uint16_t site_id = 1; site_id < (uint16_t)MSL_RNG_SITE_COUNT; site_id++) {
-    if (batch->debug_rng_site_counts[base + (size_t)site_id] != 0u) {
+    if (batch->rng_site_counts[base + (size_t)site_id] != 0u) {
       return;
     }
   }
-  batch->debug_rng_shadow_seed[(size_t)bi] = seed;
+  batch->rng_shadow_seed[(size_t)bi] = seed;
 }
 
 static inline uint8_t sphere_sphere_intersects(float ax, float ay, float az, float ar, float bx,

@@ -689,20 +689,20 @@ MslBatch* msl_batch_create(int batch_size, int num_players) {
   }
   memset(batch->hurtcap_matrix_valid, 0, hurtcap_count * sizeof(uint8_t));
 
-  batch->debug_rng_shadow_seed = (uint32_t*)alloc_malloc((size_t)batch_size * sizeof(uint32_t));
+  batch->rng_shadow_seed = (uint32_t*)alloc_malloc((size_t)batch_size * sizeof(uint32_t));
   batch->debug_rng_seed_in = (uint32_t*)alloc_malloc((size_t)batch_size * sizeof(uint32_t));
   batch->debug_rng_seed_out = (uint32_t*)alloc_malloc((size_t)batch_size * sizeof(uint32_t));
-  batch->debug_rng_site_counts =
+  batch->rng_site_counts =
       (uint16_t*)alloc_malloc((size_t)batch_size * (size_t)MSL_RNG_SITE_COUNT * sizeof(uint16_t));
-  if (batch->debug_rng_shadow_seed == NULL || batch->debug_rng_seed_in == NULL ||
-      batch->debug_rng_seed_out == NULL || batch->debug_rng_site_counts == NULL) {
+  if (batch->rng_shadow_seed == NULL || batch->debug_rng_seed_in == NULL ||
+      batch->debug_rng_seed_out == NULL || batch->rng_site_counts == NULL) {
     msl_batch_destroy(batch);
     return NULL;
   }
-  memset(batch->debug_rng_shadow_seed, 0, (size_t)batch_size * sizeof(uint32_t));
+  memset(batch->rng_shadow_seed, 0, (size_t)batch_size * sizeof(uint32_t));
   memset(batch->debug_rng_seed_in, 0, (size_t)batch_size * sizeof(uint32_t));
   memset(batch->debug_rng_seed_out, 0, (size_t)batch_size * sizeof(uint32_t));
-  memset(batch->debug_rng_site_counts, 0,
+  memset(batch->rng_site_counts, 0,
          (size_t)batch_size * (size_t)MSL_RNG_SITE_COUNT * sizeof(uint16_t));
 
   batch->debug_rng_enable_damage_fly_roll_gate = 0u;
@@ -838,10 +838,10 @@ void msl_batch_destroy(MslBatch* batch) {
   if (batch->debug_rng_trace_file != NULL) {
     (void)fclose((FILE*)batch->debug_rng_trace_file);
   }
-  alloc_free(batch->debug_rng_site_counts);
+  alloc_free(batch->rng_site_counts);
   alloc_free(batch->debug_rng_seed_out);
   alloc_free(batch->debug_rng_seed_in);
-  alloc_free(batch->debug_rng_shadow_seed);
+  alloc_free(batch->rng_shadow_seed);
   alloc_free(batch->hurtcap_matrix);
   alloc_free(batch->hurtcap_matrix_valid);
   alloc_free(batch->debug_hit_status_override);
@@ -892,10 +892,10 @@ static void msl_batch_copy_runtime_lane(MslBatch* dst, const MslBatch* src, int3
                        (size_t)MSL_MAX_PLAYERS * (size_t)MSL_MAX_HURTCAPS);
   MSL_BATCH_COPY_FIELD(hurtcap_matrix, float,
                        (size_t)MSL_MAX_PLAYERS*(size_t)MSL_MAX_HURTCAPS * 12u);
-  MSL_BATCH_COPY_FIELD(debug_rng_shadow_seed, uint32_t, 1u);
+  MSL_BATCH_COPY_FIELD(rng_shadow_seed, uint32_t, 1u);
   MSL_BATCH_COPY_FIELD(debug_rng_seed_in, uint32_t, 1u);
   MSL_BATCH_COPY_FIELD(debug_rng_seed_out, uint32_t, 1u);
-  MSL_BATCH_COPY_FIELD(debug_rng_site_counts, uint16_t, (size_t)MSL_RNG_SITE_COUNT);
+  MSL_BATCH_COPY_FIELD(rng_site_counts, uint16_t, (size_t)MSL_RNG_SITE_COUNT);
 
 #undef MSL_BATCH_COPY_FIELD
 }
