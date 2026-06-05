@@ -3379,6 +3379,21 @@ def test_derive_magnify_damage_counter_x1910_backfills_observed_ticks_and_resets
     assert contact_percent_gain.tolist() == [0, 0, 0, 0]
 
 
+def test_camera_target_point_inside_uses_mslstg01_camera_bounds() -> None:
+    # FoD's MSLSTG01 camera point bounds are narrower than the hand-authored display range. The
+    # magnify damage owner uses the point-only Camera_80030CD8 branch input, not radius overlap.
+    # refs/melee/src/melee/ft/ftlib.c::ftLib_80086A8C
+    # refs/melee/src/melee/cm/camera.c::Camera_80030CD8
+    # data/stages/bin/griz.bin::MSLSTG01 cam_bounds_world
+    inside = derive_camera_target_point_inside_stage_cam_bounds(
+        stage_id_u32=2,
+        camera_target_world_x_f32=np.array([0.0, 126.08677, -124.0], dtype=np.float32),
+        camera_target_world_y_f32=np.array([0.0, 98.49836, 20.0], dtype=np.float32),
+        camera_box_radius_f32=np.array([11.2, 11.2, 11.2], dtype=np.float32),
+    )
+    assert inside.tolist() == [1, 0, 0]
+
+
 def test_derive_rebirth_camera_anchor_y_prefix_invariant() -> None:
     action_prefix = np.array([0x0000, 0x000C, 0x000C, 0x000C, 0x0014], dtype=np.uint16)
     full = derive_rebirth_camera_anchor_y(

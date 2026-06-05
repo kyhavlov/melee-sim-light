@@ -2916,6 +2916,18 @@ Fox/Falco special-owner split (2026-04-17):
     `refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358`,
     `refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C`, and
     `data/stages/bin/griz.bin::MSLSTG01 platform_transforms`.
+    Replay-prefix seeds may also carry a direct-event-proven visible-choice lane: a source Slippi
+    `fod_platform` event parks a side platform at home, then a later fresh downward event proves the
+    already-sampled `grIzumi_801CC358` wait/target episode. The lane stores the compact wait timer
+    and the `frame_pre_random_seed` from the source move-start boundary (`move_start - 1` in the
+    seed row representation), and runtime consumes it only while the platform is still at home in
+    phase 0. This is not a generic FoD replay-seed bridge: sparse carried heights with no direct
+    home/downward episode do not set it, and same-step collision still needs normal platform-source
+    bits. `MilkyGracefulStingray.msl:5344` is the positive; clearing the lane leaves AttackAirLw
+    airborne with the platform still high, while `ElatedWearyTermite.msl` lower-visible-stop locks
+    keep the ordinary signed wait boundary from broadening to unrelated visible waits. Sources:
+    `refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358` and
+    `refs/slippi-ssbm-asm/Recording/SendFrameStart.s`.
     Same-step platform-contact rows may also seed a deferred FoD velocity: the source collision
     height belongs to the current landing frame, while the next grIzumi delta becomes valid only
     after that frame. Runtime promotes that deferred velocity during post-frame transient cleanup so
@@ -6599,6 +6611,20 @@ BODY collision-space residual split and rejected seed bridge:
     row consumes the two-step prefix.
   - Pseudo-random SFX and electric clank: common pseudo-SFX site `4` and
     `ftColl_800784B4` electric clank SFX site `2`; runtime site ids exist. QGD not affected.
+- Magnifying-glass damage counter owner:
+  - `Fighter_procUpdate` increments `fp->dmg.x1910` only when `ifMagnify_802FC998` reports the
+    player offscreen, player rules permit magnify damage, x221F_b4 is clear, and percent is below
+    `p_ftCommonData->x7B0`; the tick applies `p_ftCommonData->x7B4` damage and resets at x7AC.
+  - The seed lane `magnify_damage_counter_x1910` is still the primary replay owner because
+    `Camera_80031144`, `Player_GetMoreFlagsBit3`, and ifMagnify state are hidden. Runtime consumes
+    nonzero seeded episodes and admits fresh replay-rollout zero-counter starts only for the
+    bounded DamageFlyHi/N source-visible owner: x221F_b0 already live, point-only
+    `Camera_80030CD8` outside using `MSLSTG01 cam_bounds_world`, and `Camera_80030CFC(...,15)`
+    overlap true. DamageFlyLw/Top/Roll cannot fresh-start from visible pose reconstruction and may
+    only consume nonzero seeded episodes.
+  - MGS locks: `rec2919` (DamageFlyN -> SpecialAirNLoop percent tick) and `rec5687` (DamageFlyHi
+    episode feeding the later hitstun boundary). DCC controls: `rec9362/9685` keep DamageFlyTop/Lw
+    visible rows from starting an unproven x1910 episode.
 - Source anchors:
   - `refs/melee/src/melee/ft/ftwaitanim.c::{ftCo_8008A7A8,ftCo_8008A6D8,getAnimID}`
   - `refs/melee/src/melee/ft/ft_0D31.c::ftCo_DeadUpStar_Anim`

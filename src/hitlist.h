@@ -89,6 +89,12 @@ void hitlist_register_fighter_group_v2(MslBatch* batch, int bi, int attacker, ui
                                        int victim, uint16_t victim_iid, int type,
                                        uint8_t rehit_frames);
 
+// Registers a fighter victim in one fighter HitCapsule's victims_1 list.
+// Source owner: materializing an already-populated per-HitCapsule victims_1 ring when the current
+// source episode proves that slot's hidden list, but same-group slots are not proven.
+void hitlist_register_fighter_hitbox(MslBatch* batch, int bi, int attacker, int hb_id, int victim,
+                                     uint16_t victim_iid, int type, uint8_t rehit_frames);
+
 // Registers a fighter victim in one item hitbox capsule's victim list (victims_1).
 // Decomp anchor (items): refs/melee/src/melee/it/itcoll.c::it_8026FA2C / it_8026FAC4
 void hitlist_register_item_hitbox_fighter(MslBatch* batch, int bi, int item_slot, int hitbox_id,

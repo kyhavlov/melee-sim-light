@@ -16,6 +16,7 @@ from tools.slippi.make_dataset_from_slp import (
     _derive_landing_fallspecial_allow_interrupt_seed_lane,
     _fod_platform_heights_from_frames,
     _fod_platform_heights_with_ground_contact,
+    _fod_visible_choice_lanes,
     _fod_hidden_return_timers,
     _fod_platform_motion_with_ground_contact,
     _derive_specialhi_rotate_model_seed_lane,
@@ -149,6 +150,9 @@ def test_seed_schema_includes_staling_fields() -> None:
     assert "stage_fod_platform_deferred_velocity_valid_u8" in SEED_DTYPE.fields
     assert "stage_fod_platform_hidden_return_timer_u16" in SEED_DTYPE.fields
     assert "stage_fod_platform_hidden_return_valid_u8" in SEED_DTYPE.fields
+    assert "stage_fod_platform_visible_choice_timer_u16" in SEED_DTYPE.fields
+    assert "stage_fod_platform_visible_choice_valid_u8" in SEED_DTYPE.fields
+    assert "stage_fod_platform_visible_choice_rng_seed_u32" in SEED_DTYPE.fields
     assert "stage_fod_platform_height_source_u8" in SEED_DTYPE.fields
     # Prefix-causal Yoshi Shy Guy dynamic-bone velocity scratch.
     assert "item_shyguy_prev_vel_y" in SEED_DTYPE.fields
@@ -540,6 +544,42 @@ def test_fod_hidden_return_timer_reconstructs_next_upward_motion() -> None:
     assert int(timer_valid[0, 1]) == 1
     assert int(timer[0, 1]) == 0
     assert int(timer_valid[1, 1]) == 0
+
+
+def test_fod_visible_choice_lane_uses_source_move_start_seed() -> None:
+    motion = fountain_of_dreams_platform_motion_params(Path("data"))
+    home = np.float32(motion["home_height"])
+    heights = np.asarray(
+        [
+            [25.0, home],
+            [25.0, home],
+            [25.0, home],
+            [25.0, home],
+            [25.0, home],
+            [25.0, np.float32(float(home) - 0.1)],
+            [25.0, np.float32(float(home) - 0.2)],
+        ],
+        dtype=np.float32,
+    )
+    valid = np.ones((7, 2), dtype=np.uint8)
+    fresh = np.zeros((7, 2), dtype=np.uint8)
+    fresh[1, 1] = np.uint8(1)
+    fresh[5, 1] = np.uint8(1)
+    seeds = np.asarray([0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70], dtype=np.uint32)
+
+    timer, timer_valid, rng_seed = _fod_visible_choice_lanes(
+        heights,
+        valid,
+        fresh,
+        seeds,
+        motion_params=motion,
+    )
+
+    assert int(timer_valid[0, 1]) == 1
+    assert int(timer_valid[1, 1]) == 1
+    assert int(timer_valid[2, 1]) == 0
+    assert int(timer[0, 1]) == 0
+    assert int(rng_seed[0, 1]) == 0x50
     assert int(timer_valid[2, 1]) == 0
     assert int(timer_valid[4, 1]) == 0
 

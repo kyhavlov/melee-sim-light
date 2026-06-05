@@ -397,6 +397,7 @@ def test_runtime_fod_scheduler_uses_binary_motion_without_audit_json(tmp_path: P
 import numpy as np
 import msl_binding
 from tools.modelplay.sim_env import build_match_config_array
+from tools.modelplay.state_adapter import STAGE_DEBUG_DTYPE
 
 handle = msl_binding.init(batch_size=1, num_players=2)
 try:
@@ -405,18 +406,9 @@ try:
     sizes = msl_binding.sizes()
     inp = np.zeros((1, int(sizes["input"])), dtype=np.uint8)
     stage = np.zeros((1, int(sizes["stage_state"])), dtype=np.uint8)
-    dtype = np.dtype([
-        ("fod_platform_height", ("<f4", (2,))),
-        ("fod_platform_height_valid", ("u1", (2,))),
-        ("fod_platform_height_source", ("u1", (2,))),
-        ("randall_exists", "u1"),
-        ("_pad0", "V3"),
-        ("randall_x", "<f4"),
-        ("randall_y", "<f4"),
-    ], align=False)
     msl_binding.step_input(handle, inp, inp)
     msl_binding.debug_write_stage_state(handle, stage)
-    row = stage.view(dtype).reshape((1,))[0]
+    row = stage.view(STAGE_DEBUG_DTYPE).reshape((1,))[0]
     assert int(row["fod_platform_height_valid"][0]) == 1
     assert int(row["fod_platform_height_valid"][1]) == 1
 finally:

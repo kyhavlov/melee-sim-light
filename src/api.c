@@ -1156,6 +1156,41 @@ static inline uint8_t msl_seed_has_other_unseeded_damageflyroll_gate_candidate(c
   return 0u;
 }
 
+static inline uint8_t msl_seed_has_fod_platform_scheduler_rng_owner(const MslSeed* seed) {
+  if (seed == NULL || seed->stage_id != (uint32_t)MSL_STAGE_ID_FOUNTAIN_OF_DREAMS) {
+    return 0u;
+  }
+  for (int pi = 0; pi < 2; pi++) {
+    const float h = seed->stage_fod_platform_height_f32[pi];
+    if (!isfinite(h)) {
+      continue;
+    }
+    if (seed->frame_id <= -123) {
+      // Match-start FoD rows carry extracted grIzumi initial side-platform heights even when the
+      // sparse replay event stream has not yet emitted `fod_platform` current-height events.
+      // `msl_batch_reseed_seed_impl` installs the scheduler from the same source-owned initial
+      // JObj/mpLib pose, so its later wait/choice/target draws need the Slippi frame-start RNG
+      // clock rather than a frozen seed.
+      // refs/melee/src/melee/gr/grizumi.c::{grIzumi_801CCBDC,grIzumi_801CC358}
+      // refs/slippi-ssbm-asm/Recording/SendFrameStart.s
+      return 1u;
+    }
+    if (seed->stage_fod_platform_height_valid_u8[pi] != 0u &&
+        (seed->stage_fod_platform_velocity_valid_u8[pi] != 0u ||
+         seed->stage_fod_platform_hidden_return_valid_u8[pi] != 0u ||
+         seed->stage_fod_platform_visible_choice_valid_u8[pi] != 0u ||
+         seed->stage_fod_platform_height_source_u8[pi] != 0u)) {
+      // Mid-replay FoD rollout seeds only own scheduler RNG when the seed exposes a source current
+      // platform state that `msl_batch_reseed_seed_impl` can promote into grIzumi scheduler state:
+      // current velocity, hidden-return countdown, or direct/contact source publication.
+      // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+      // refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
+      return 1u;
+    }
+  }
+  return 0u;
+}
+
 static inline uint8_t msl_reseed_seed_rollout_replay_frame_clock_owner(const MslSeed* seed,
                                                                        int active_players) {
   if (seed == NULL) {
@@ -1178,6 +1213,18 @@ static inline uint8_t msl_reseed_seed_rollout_replay_frame_clock_owner(const Msl
       // refs/melee/src/melee/if/ifstatus.c::ifStatus_802F6EA4
       return (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED;
     }
+  }
+  if (msl_seed_has_fod_platform_scheduler_rng_owner(seed) != 0u) {
+    // Replay rollout clock ownership for Fountain of Dreams platform scheduling:
+    // grIzumi's side-platform state is source-owned when the seed installs a scheduler episode
+    // from match-start JObj heights or explicit current source lanes. The scheduler consumes HSD
+    // RNG at bounded sites for wait duration, hide/stay/move choice, target amount/side, and hidden
+    // wait. Slippi serializes the frame-start seed, so replay rollouts through this source-owned
+    // stage episode must advance that clock until the next platform RNG consume instead of sampling
+    // from the stale reseed frame.
+    // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+    // refs/slippi-ssbm-asm/Recording/SendFrameStart.s
+    return (uint8_t)MSL_ROLLOUT_CLOCK_REPLAY_FRAME_SEED;
   }
   for (int victim = 0; victim < active_players; victim++) {
     const uint16_t victim_action = seed->action_id[victim];
@@ -1632,6 +1679,7 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       const float v = seed->stage_fod_platform_velocity_f32[pi];
       const float deferred_v = seed->stage_fod_platform_deferred_velocity_f32[pi];
       const uint16_t hidden_return_timer = seed->stage_fod_platform_hidden_return_timer_u16[pi];
+      const uint16_t visible_choice_timer = seed->stage_fod_platform_visible_choice_timer_u16[pi];
       batch->state.stage_fod_platform_height[pidx] = isfinite(h) ? h : 0.0f;
       batch->state.stage_fod_platform_valid[pidx] =
           (seed->stage_fod_platform_height_valid_u8[pi] && isfinite(h)) ? 1u : 0u;
@@ -1660,7 +1708,14 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.stage_fod_platform_scheduler_phase[pidx] = 0u;
       batch->state.stage_fod_platform_scheduler_timer[pidx] = 0u;
       batch->state.stage_fod_platform_scheduler_target[pidx] = 0.0f;
+      batch->state.stage_fod_platform_scheduler_wait_origin[pidx] = 0u;
+      batch->state.stage_fod_platform_scheduler_next_frame_rng[pidx] = 0u;
       batch->state.stage_fod_platform_scheduler_valid[pidx] = 0u;
+      batch->state.stage_fod_platform_visible_choice_timer[pidx] = visible_choice_timer;
+      batch->state.stage_fod_platform_visible_choice_rng_seed[pidx] =
+          seed->stage_fod_platform_visible_choice_rng_seed_u32[pi];
+      batch->state.stage_fod_platform_visible_choice_valid[pidx] =
+          seed->stage_fod_platform_visible_choice_valid_u8[pi] != 0u ? 1u : 0u;
       if (seed->stage_id == (uint32_t)MSL_STAGE_ID_FOUNTAIN_OF_DREAMS && seed->frame_id <= -123 &&
           batch->state.stage_fod_platform_valid[pidx]) {
         // Match-start reseeds are equivalent to new-match init for grIzumi scheduling: once the
@@ -1686,6 +1741,8 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
           batch->state.stage_fod_platform_scheduler_phase[pidx] = 4u;
           batch->state.stage_fod_platform_scheduler_timer[pidx] = hidden_return_timer;
           batch->state.stage_fod_platform_scheduler_target[pidx] = hidden_target_height;
+          batch->state.stage_fod_platform_scheduler_wait_origin[pidx] = 0u;
+          batch->state.stage_fod_platform_scheduler_next_frame_rng[pidx] = 0u;
           batch->state.stage_fod_platform_velocity_valid[pidx] = 0u;
           batch->state.stage_fod_platform_velocity[pidx] = 0.0f;
         }
@@ -1946,9 +2003,13 @@ static int msl_batch_reseed_seed_impl(MslBatch* batch, const uint8_t* seed_bytes
       batch->state.camera_target_world_y_f32[idx] = camera_target_world_y;
       batch->state.camera_target_world_z_f32[idx] = camera_target_world_z;
       batch->state.camera_box_radius_f32[idx] = camera_box_radius;
+      batch->state.camera_target_live_pose_valid[idx] = 0u;
+      batch->state.magnify_damage_runtime_visibility_owner[idx] = 0u;
       batch->state.camera_target_point_inside_stage_cam_bounds_u8[idx] =
           seed->camera_target_point_inside_stage_cam_bounds_u8[p] ? 1u : 0u;
       batch->state.magnify_damage_counter_x1910[idx] = seed->magnify_damage_counter_x1910[p];
+      batch->state.magnify_damage_seed_episode_active[idx] =
+          (seed->magnify_damage_counter_x1910[p] != 0u) ? 1u : 0u;
       batch->state.downwait_timer[idx] = seed->downwait_timer[p];
       batch->state.passivewall_timer[idx] = seed->passivewall_timer[p];
       batch->state.passivewall_jump_latch[idx] = 0u;
@@ -3850,6 +3911,14 @@ int msl_batch_debug_write_stage_state(const MslBatch* batch, uint8_t* out_bytes,
           batch->state.stage_fod_platform_valid[idx] ? 1u : 0u;
       out->fod_platform_height_source[platform_id] =
           batch->state.stage_fod_platform_height_source[idx];
+      out->fod_platform_scheduler_phase[platform_id] =
+          batch->state.stage_fod_platform_scheduler_phase[idx];
+      out->fod_platform_scheduler_valid[platform_id] =
+          batch->state.stage_fod_platform_scheduler_valid[idx] ? 1u : 0u;
+      out->fod_platform_scheduler_timer[platform_id] =
+          batch->state.stage_fod_platform_scheduler_timer[idx];
+      out->fod_platform_scheduler_target[platform_id] =
+          batch->state.stage_fod_platform_scheduler_target[idx];
     }
     float randall_x = 0.0f;
     float randall_y = 0.0f;

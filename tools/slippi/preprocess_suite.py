@@ -17,6 +17,7 @@ from tools.slippi.suite_io import dataset_path_for_suite_replay, load_suite, rep
 from tools.eval.dataset import HEADER_DTYPE, MAGIC, SAMPLE_DTYPE, SEED_DTYPE
 
 
+# v21 invalidates datasets generated before FoD visible-choice scheduler seed lanes.
 # v19 invalidates datasets generated before FoD hidden-return scheduler timer seed lanes.
 # v18 invalidates same-record-size FoD grounded KneeBend severe-airborne DamageFlyRoll seed-lane
 # reconstruction.
@@ -24,7 +25,7 @@ from tools.eval.dataset import HEADER_DTYPE, MAGIC, SAMPLE_DTYPE, SEED_DTYPE
 # reconstructed floor_sweep_prev_pos from callback-visible CollData.cur_pos instead of the older
 # public replay row before the seed.
 # Record-size checks alone cannot detect this semantic.
-_CACHE_VERSION = 20
+_CACHE_VERSION = 21
 _SOURCE_INPUT_PY_TREES = ("tools/slippi",)
 _SOURCE_INPUT_FILES = ("tools/eval/dataset.py", "bindings/msl_preprocess_native.c")
 

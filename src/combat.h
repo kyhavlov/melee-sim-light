@@ -10,6 +10,8 @@ uint8_t combat_is_powershield_active_idx(const MslBatch* batch, size_t idx);
 void combat_apply_deal_hitlag_raw_damage(MslBatch* batch, size_t idx, int damage);
 void combat_rng_trace_begin_frame(MslBatch* batch);
 void combat_rng_trace_end_frame(MslBatch* batch);
+void combat_rng_use_next_replay_frame_seed_if_unconsumed(MslBatch* batch, int bi);
+void combat_rng_set_replay_frame_seed_if_unconsumed(MslBatch* batch, int bi, uint32_t seed);
 float combat_rng_consume_randf_site(MslBatch* batch, int bi, uint16_t site_id);
 int32_t combat_rng_consume_randi_site(MslBatch* batch, int bi, uint16_t site_id, int32_t max_val);
 void combat_rng_consume_step_site(MslBatch* batch, int bi, uint16_t site_id);

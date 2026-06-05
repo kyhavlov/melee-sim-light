@@ -2807,7 +2807,9 @@ def test_fod_match_start_rollout_reseed_enables_platform_scheduler() -> None:
     assert int(stage["fod_platform_height_valid"][0]) == 1
     assert float(stage["fod_platform_height"][0]) < 27.0
     assert int(stage["fod_platform_height_valid"][1]) == 1
-    assert float(stage["fod_platform_height"][1]) != pytest.approx(20.0)
+    assert int(stage["fod_platform_scheduler_valid"][1]) == 1
+    assert int(stage["fod_platform_scheduler_phase"][1]) == 1
+    assert int(stage["fod_platform_scheduler_timer"][1]) > 0
 
 
 def test_fod_mid_reseed_current_named_pose_resumes_scheduler_only_with_source() -> None:
@@ -2849,7 +2851,7 @@ def test_fod_mid_reseed_current_named_pose_resumes_scheduler_only_with_source() 
     stale = sourced.copy()
     stale["stage_fod_platform_height_source_u8"][0] = np.array([0, 0], dtype=np.uint8)
 
-    sourced_stage = run_seed(sourced)
+    sourced_stage = run_seed(sourced, steps=3500)
     stale_stage = run_seed(stale)
 
     assert int(sourced_stage["fod_platform_height_valid"][0]) == 1
@@ -8042,6 +8044,45 @@ def test_fod_hidden_return_timer_reappears_platform_for_rollout_reseed_replay_re
     assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=1e-4)
 
 
+@pytest.mark.integration
+def test_fod_visible_choice_seed_lands_mgs_attackairlw_on_current_platform() -> None:
+    # MGS starts at match init and later reaches a Slippi-direct left-platform episode: source
+    # publishes home height, then a fresh downward grIzumi move toward 16.977386. The seed lane
+    # carries only that direct-event-proven wait/choice seed, so rollout reaches the current
+    # platform at record 5344 and AttackAirLw lands; clearing it restores the old high-platform miss.
+    # refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+    # refs/slippi-ssbm-asm/Recording/SendFrameStart.s
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+        / "MilkyGracefulStingray.msl"
+    )
+    if not path.exists():
+        pytest.skip(f"missing local dataset: {path}")
+
+    ds = read_dataset(str(path))
+    start = 0
+    record = 5344
+    p = 0
+    seed = np.array(ds.samples[start]["seed_t"], dtype=SEED_DTYPE).reshape((1,))
+    assert int(seed["stage_fod_platform_visible_choice_valid_u8"][0, 1]) == 1
+    assert int(seed["stage_fod_platform_visible_choice_timer_u16"][0, 1]) == 952
+    assert int(seed["stage_fod_platform_visible_choice_rng_seed_u32"][0, 1]) == 0x1205135C
+
+    out = _rollout_replay_to_record(ds, start, record)
+    ref = ds.samples[record]["ref_t1"]
+
+    assert int(out["action_id"][p]) == int(ref["action_id"][p]) == ACT_LANDING_AIR_LW
+    assert int(out["on_ground"][p]) == int(ref["on_ground"][p]) == 1
+    assert int(out["ground_id"][p]) == int(ref["ground_id"][p]) == 0
+    assert float(out["pos_y"][p]) == pytest.approx(float(ref["pos_y"][p]), abs=2e-4)
+
+    seed["stage_fod_platform_visible_choice_valid_u8"][0, 1] = np.uint8(0)
+    stale_out = _rollout_replay_to_record_from_seed(ds, seed, start, record)
+    assert int(stale_out["action_id"][p]) == ACT_ATTACK_AIR_LW
+    assert int(stale_out["on_ground"][p]) == 0
+
+
 def _step_one_replay_row(ds, record: int):
     import msl_binding
 
@@ -8075,6 +8116,16 @@ def _step_one_replay_row(ds, record: int):
 
 
 def _rollout_replay_to_record(ds, start_record: int, target_record: int):
+    seed = np.array(ds.samples[start_record]["seed_t"], dtype=SEED_DTYPE).reshape((1,))
+    return _rollout_replay_to_record_from_seed(ds, seed, start_record, target_record)
+
+
+def _rollout_replay_to_record_from_seed(
+    ds,
+    seed: np.ndarray,
+    start_record: int,
+    target_record: int,
+):
     import msl_binding
 
     sizes = msl_binding.sizes()
@@ -8092,9 +8143,7 @@ def _rollout_replay_to_record(ds, start_record: int, target_record: int):
     try:
         msl_binding.reseed_seed_rollout(
             handle,
-            np.frombuffer(ds.samples[start_record]["seed_t"].tobytes(order="C"), dtype=np.uint8)
-            .copy()
-            .reshape(1, seed_stride),
+            np.frombuffer(seed.tobytes(order="C"), dtype=np.uint8).copy().reshape(1, seed_stride),
         )
         for record in range(start_record, target_record + 1):
             row = ds.samples[record]

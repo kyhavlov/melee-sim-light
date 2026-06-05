@@ -4062,14 +4062,17 @@ void mpcoll_wall_ceil_apply(MslBatch* batch) {
       // DamageFly_Coll evidence for ftCo_Damage_OnExitHitlag wall-ASDI projection. Retain the
       // existing source-backed left-wall SpecialHi envelope slice only when the previous CollData
       // wall mask proves continuing left-wall provenance; right-wall damage-entry scrapes remain
-      // open and must not stale-project ASDI on hitlag exit.
+      // open and must not stale-project ASDI on hitlag exit. The same-frame SpecialHi bridge is
+      // bounded to MSLSTG01 axis-aligned wall-shell normals; angled side-wall contacts publish
+      // SpecialHi collision but do not become DamageFly wall-ASDI provenance.
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{ftCo_Damage_OnExitHitlag,ftCo_DamageFly_Coll}
       // refs/melee/src/melee/ft/fighter.c::{Fighter_8006A1BC,Fighter_procMap}
       const uint8_t active_hitlag_phase = mpcoll_active_hitlag_phase(batch, idx);
       const uint8_t same_frame_specialhi_continuing_left_wall =
           (action_id == (uint16_t)MSL_ACT_FX_SPECIAL_AIR_HI &&
            batch->state.wall_kind[idx] == MSL_WALL_LEFT &&
-           (batch->state.coll_prev_env_flags[idx] & (uint32_t)MSL_COLLIDE_LEFT_WALL_MASK) != 0u)
+           (batch->state.coll_prev_env_flags[idx] & (uint32_t)MSL_COLLIDE_LEFT_WALL_MASK) != 0u &&
+           fabsf(batch->state.wall_normal_y[idx]) <= 1.0e-4f)
               ? 1u
               : 0u;
       if (mpcoll_wall_asdi_producer_action(action_id) &&

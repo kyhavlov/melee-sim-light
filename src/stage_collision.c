@@ -3455,6 +3455,8 @@ static void stage_collision_update_fod_platform_motion(MslBatch* batch) {
           batch->state.stage_fod_platform_scheduler_phase[idx] = at_hidden ? 3u : 0u;
           batch->state.stage_fod_platform_scheduler_timer[idx] = 0u;
           batch->state.stage_fod_platform_scheduler_target[idx] = h0;
+          batch->state.stage_fod_platform_scheduler_wait_origin[idx] = 0u;
+          batch->state.stage_fod_platform_scheduler_next_frame_rng[idx] = 0u;
         }
       }
       if (motion == NULL || !batch->state.stage_fod_platform_scheduler_valid[idx]) {
@@ -3469,6 +3471,8 @@ static void stage_collision_update_fod_platform_motion(MslBatch* batch) {
         batch->state.stage_fod_platform_valid[idx] = 1u;
         batch->state.stage_fod_platform_scheduler_target[idx] = h;
         batch->state.stage_fod_platform_scheduler_phase[idx] = 0u;
+        batch->state.stage_fod_platform_scheduler_wait_origin[idx] = 0u;
+        batch->state.stage_fod_platform_scheduler_next_frame_rng[idx] = 0u;
       }
 
       float h = batch->state.stage_fod_platform_height[idx];
@@ -3476,28 +3480,47 @@ static void stage_collision_update_fod_platform_motion(MslBatch* batch) {
       uint8_t phase = batch->state.stage_fod_platform_scheduler_phase[idx];
       uint16_t timer = batch->state.stage_fod_platform_scheduler_timer[idx];
       float target = batch->state.stage_fod_platform_scheduler_target[idx];
+      uint8_t wait_origin = batch->state.stage_fod_platform_scheduler_wait_origin[idx];
+      uint8_t next_frame_rng = batch->state.stage_fod_platform_scheduler_next_frame_rng[idx];
       if (phase == 0u) {
+        const uint8_t visible_choice_seeded =
+            (uint8_t)(batch->state.stage_fod_platform_visible_choice_valid[idx] != 0u &&
+                      fabsf(h - motion->home_height) <= 1.0e-4f);
+        const uint8_t hidden_return_wait = visible_choice_seeded;
+        if (next_frame_rng != 0u) {
+          combat_rng_use_next_replay_frame_seed_if_unconsumed(batch, bi);
+        }
         const int min_wait = (int)(motion->wait_min_frames + 0.5f);
         const int max_wait = (int)(motion->wait_max_frames + 0.5f);
         const int span = stage_fod_rand_range_span(min_wait, max_wait);
-        timer = (uint16_t)(min_wait + combat_rng_consume_randi_site(
-                                          batch, bi, MSL_RNG_SITE_FOD_PLATFORM_WAIT, span));
+        timer = visible_choice_seeded
+                    ? batch->state.stage_fod_platform_visible_choice_timer[idx]
+                    : (uint16_t)(min_wait + combat_rng_consume_randi_site(
+                                                batch, bi, MSL_RNG_SITE_FOD_PLATFORM_WAIT, span));
         target = h;
         phase = 1u;
+        wait_origin = hidden_return_wait ? 2u : 0u;
+        next_frame_rng = 0u;
       } else if (phase == 1u) {
         const uint8_t min_visible_wait =
             (uint8_t)(fabsf(target - motion->min_visible_height) <= 1.0e-4f);
-        // After the side platform reaches the lower visible stop, source keeps the wait boundary
-        // on the signed `xC6-- < 0` test; sampling as soon as the compact unsigned timer reaches
-        // zero picks the previous frame's HSD_Randf for the hidden-descent choice. Other waits keep
-        // the existing phase alignment because their phase-0 entry is already validated by FoD
-        // replay locks at home/max-height.
+        // Source gates visible waits with signed `xC6-- < 0`. Existing FoD replay locks show the
+        // ordinary home/max waits aligned at zero in this compact replay-clock model, but
+        // lower-visible waits and waits installed immediately after a hidden return need the signed
+        // underflow boundary to sample the same source frame.
         // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
-        const uint8_t wait_elapsed =
-            (uint8_t)(min_visible_wait ? (timer == UINT16_MAX) : (timer == 0u));
+        const uint8_t signed_wait =
+            (uint8_t)(min_visible_wait || wait_origin == 1u || wait_origin == 2u);
+        const uint8_t wait_elapsed = (uint8_t)(signed_wait ? (timer == UINT16_MAX) : (timer == 0u));
         if (!wait_elapsed) {
           timer = (uint16_t)(timer - 1u);
         } else {
+          if (wait_origin == 2u) {
+            combat_rng_set_replay_frame_seed_if_unconsumed(
+                batch, bi, batch->state.stage_fod_platform_visible_choice_rng_seed[idx]);
+            batch->state.stage_fod_platform_visible_choice_valid[idx] = 0u;
+          }
+          next_frame_rng = 0u;
           const float total = motion->hidden_weight + motion->stay_weight + motion->move_weight;
           const float choice =
               combat_rng_consume_randf_site(batch, bi, MSL_RNG_SITE_FOD_PLATFORM_CHOICE) * total;
@@ -3541,10 +3564,13 @@ static void stage_collision_update_fod_platform_motion(MslBatch* batch) {
             const int span = stage_fod_rand_range_span(min_wait, max_wait);
             timer = (uint16_t)(min_wait + combat_rng_consume_randi_site(
                                               batch, bi, MSL_RNG_SITE_FOD_PLATFORM_WAIT, span));
+            wait_origin = 1u;
           }
         }
       } else if (phase == 2u) {
         const float delta = target - h;
+        const uint8_t hidden_return_to_home =
+            (uint8_t)(next_frame_rng != 0u && fabsf(target - motion->home_height) <= 1.0e-4f);
         // grIzumi writes xD0 directly to the target when the remaining distance is smaller than
         // the per-frame speed. The line refresh therefore moves by the residual delta on that
         // frame, not by zero.
@@ -3555,21 +3581,26 @@ static void stage_collision_update_fod_platform_motion(MslBatch* batch) {
             v = delta;
             h = target;
             phase = 0u;
+            next_frame_rng = hidden_return_to_home;
           } else {
             v = motion->up_speed;
             h += v;
+            next_frame_rng = hidden_return_to_home;
           }
         } else if (delta < 0.0f) {
+          next_frame_rng = 0u;
           if (-delta < motion->down_speed) {
             v = delta;
             h = target;
             phase = (h < motion->min_visible_height) ? 3u : 0u;
+            next_frame_rng = 0u;
           } else {
             v = -motion->down_speed;
             h += v;
           }
         } else {
           phase = 0u;
+          next_frame_rng = 0u;
         }
       } else if (phase == 3u) {
         const int min_wait = (int)(motion->hidden_wait_min_frames + 0.5f);
@@ -3578,15 +3609,20 @@ static void stage_collision_update_fod_platform_motion(MslBatch* batch) {
         timer = (uint16_t)(min_wait + combat_rng_consume_randi_site(
                                           batch, bi, MSL_RNG_SITE_FOD_PLATFORM_HIDDEN_WAIT, span));
         phase = 4u;
+        wait_origin = 0u;
       } else if (phase == 4u) {
         if (timer != 0u) {
           timer--;
         } else {
           target = motion->home_height;
           phase = 2u;
+          wait_origin = 0u;
+          next_frame_rng = 0u;
         }
       } else {
         phase = 0u;
+        wait_origin = 0u;
+        next_frame_rng = 0u;
       }
 
       batch->state.stage_fod_platform_height[idx] = h;
@@ -3595,6 +3631,8 @@ static void stage_collision_update_fod_platform_motion(MslBatch* batch) {
       batch->state.stage_fod_platform_scheduler_phase[idx] = phase;
       batch->state.stage_fod_platform_scheduler_timer[idx] = timer;
       batch->state.stage_fod_platform_scheduler_target[idx] = target;
+      batch->state.stage_fod_platform_scheduler_wait_origin[idx] = wait_origin;
+      batch->state.stage_fod_platform_scheduler_next_frame_rng[idx] = next_frame_rng;
     }
   }
 }
@@ -3604,6 +3642,43 @@ static uint8_t stage_collision_whispy_point_inside(float x, float y, float left,
   // Source helper uses strict interior checks after normalizing rectangle endpoints.
   // refs/melee/src/melee/gr/groldpupupu.c::grOldPupupu_8021128C
   return (uint8_t)(left < x && x < right && bottom < y && y < top);
+}
+
+static void stage_collision_publish_fod_ground_contact_height_sources(MslBatch* batch) {
+  if (batch == NULL) {
+    return;
+  }
+  const int num_players = (int)batch->config.num_players;
+  for (int bi = 0; bi < batch->batch_size; bi++) {
+    if (batch->state.stage_id[bi] != (uint32_t)MSL_STAGE_ID_FOUNTAIN_OF_DREAMS) {
+      continue;
+    }
+    for (int p = 0; p < num_players; p++) {
+      const size_t idx = msl_idx_player(bi, p);
+      if (batch->state.on_ground[idx] == 0u || batch->state.ground_id[idx] == 0xFFFFu) {
+        continue;
+      }
+      uint8_t platform_id = 0u;
+      if (!stage_collision_floor_line_platform_transform_id(
+              batch->state.stage_id[bi], batch->state.ground_id[idx], &platform_id) ||
+          platform_id >= 2u) {
+        continue;
+      }
+      const size_t pidx = (size_t)bi * 2u + (size_t)platform_id;
+      if (batch->state.stage_fod_platform_valid[pidx] == 0u) {
+        continue;
+      }
+      // A live CollData floor on an FoD height-platform line proves that mpLib has current JObj
+      // authority for that side-platform pose this frame. Publish the same ground-contact source
+      // bit that replay preprocessing derives from grounded platform contact so later fighters in
+      // this collision pass can consume source-owned transformed-platform height.
+      // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+      // refs/melee/src/melee/mp/mplib.c::mpLib_80055E9C
+      // refs/melee/src/melee/mp/mpcoll.c::{mpColl_80044628_Floor,mpColl_8004B108}
+      batch->state.stage_fod_platform_height_source[pidx] |=
+          (uint8_t)MSL_FOD_PLATFORM_HEIGHT_SOURCE_GROUND_CONTACT;
+    }
+  }
 }
 
 static void stage_collision_apply_dream_whispy_wind(MslBatch* batch) {
@@ -3666,6 +3741,7 @@ void stage_collision_apply(MslBatch* batch) {
     return;
   }
   stage_collision_update_fod_platform_motion(batch);
+  stage_collision_publish_fod_ground_contact_height_sources(batch);
   // Ground contact substrate (mpColl-shaped): owns on_ground/ground_id for loaded MSLSTG01 stages.
   mpcoll_ground_apply(batch);
   // Wall + ceiling contact substrate (mpColl-shaped): owns wall/ceiling contact metadata.

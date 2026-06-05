@@ -184,6 +184,54 @@ static inline uint8_t state_flags_camera_target_live_pose_action(uint16_t action
                    state_flags_match_flow_respawn_action(action_id) != 0u);
 }
 
+static inline uint8_t state_flags_magnify_live_fighter_action(uint16_t action_id) {
+  // `fp->x221F_b0` is also a dead-flow/camera-subject bit. The magnifying-glass visibility owner is
+  // only source-owned for live fighter states where Fighter_procUpdate can run the x1910 damage
+  // counter.
+  // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+  // refs/melee/src/melee/if/ifmagnify.c::ifMagnify_802FC998
+  switch (action_id) {
+    case (uint16_t)MSL_ACT_DEAD_DOWN:
+    case (uint16_t)MSL_ACT_DEAD_LEFT:
+    case (uint16_t)MSL_ACT_DEAD_RIGHT:
+    case (uint16_t)MSL_ACT_DEAD_UP_STAR:
+    case (uint16_t)MSL_ACT_REBIRTH:
+    case (uint16_t)MSL_ACT_REBIRTH_WAIT:
+    case (uint16_t)MSL_ACT_ENTRY:
+    case (uint16_t)MSL_ACT_ENTRY_START:
+    case (uint16_t)MSL_ACT_ENTRY_END:
+      return 0u;
+    default:
+      return 1u;
+  }
+}
+
+static inline uint8_t state_flags_magnify_runtime_visibility_action(uint16_t action_id) {
+  // Replay rollout fresh-start ownership is bounded to DamageFlyHi/N rows whose source-visible
+  // x221F_b0 proves ftLib_80086A8C admitted the current camera subject to the magnifying-glass
+  // display. Other live fighter actions can consume a seeded nonzero x1910 episode in timers.c, but
+  // they cannot start a zero-counter rollout episode from camera geometry alone.
+  // refs/melee/src/melee/ft/ftcamera.c::ftCamera_UpdateCameraBox
+  // refs/melee/src/melee/ft/ftlib.c::{ftLib_800866DC,ftLib_80086A8C}
+  // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+  return (uint8_t)(action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_HI ||
+                   action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_N);
+}
+
+static inline uint8_t state_flags_camera_point_inside_stage_cam_bounds(const MslBatch* batch,
+                                                                       size_t idx) {
+  if (batch == NULL) {
+    return 0u;
+  }
+  MslStageBounds cam = {0};
+  if (!stage_collision_get_cam_bounds_world(batch->state.stage_id[idx / MSL_MAX_PLAYERS], &cam)) {
+    return 0u;
+  }
+  const float x = batch->state.camera_target_world_x_f32[idx];
+  const float y = batch->state.camera_target_world_y_f32[idx];
+  return (uint8_t)(x >= cam.left && x < cam.right && y >= cam.bottom && y < cam.top);
+}
+
 static inline uint8_t state_flags_camera_overlap_stage_cam_bounds(const MslBatch* batch, size_t idx,
                                                                   float tolerance) {
   if (batch == NULL) {
@@ -215,6 +263,7 @@ static inline void state_flags_refresh_camera_target_from_pose(MslBatch* batch, 
   if (batch == NULL) {
     return;
   }
+  batch->state.camera_target_live_pose_valid[idx] = 0u;
   const MslCharParams* ch = msl_char_params(batch->state.char_id[idx]);
   if (ch == NULL || ch->camera_box_radius <= 0.0f) {
     return;
@@ -262,6 +311,9 @@ static inline void state_flags_refresh_camera_target_from_pose(MslBatch* batch, 
   batch->state.camera_target_world_z_f32[idx] = batch->state.pos_z[idx] - facing_dir * lx;
   batch->state.camera_box_radius_f32[idx] =
       ch->camera_box_radius * batch->state.fighter_scale_y[idx];
+  batch->state.camera_target_point_inside_stage_cam_bounds_u8[idx] =
+      state_flags_camera_point_inside_stage_cam_bounds(batch, idx);
+  batch->state.camera_target_live_pose_valid[idx] = 1u;
 }
 
 void state_flags_refresh_camera_targets_pre_physics(MslBatch* batch) {
@@ -352,6 +404,9 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
     }
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
+      const uint8_t replay_rollout =
+          (batch->replay_rollout_reseeded != NULL && batch->replay_rollout_reseeded[bi] != 0u) ? 1u
+                                                                                               : 0u;
       if (batch->state.stocks[idx] == 0u && batch->state.char_id[idx] == 0u &&
           batch->state.action_id[idx] == (uint16_t)MSL_ACT_DEAD_DOWN) {
         // Eliminated player slots have no live Fighter owner; Slippi exposes the inactive slot with
@@ -1267,6 +1322,46 @@ static void state_flags_refresh_post_frame_impl(MslBatch* batch, const uint8_t* 
         // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c
         // data/stages/final_destination.json: cam_bounds_world
         f221f |= (uint8_t)MSL_STATE_FLAG_221F_B0;
+      }
+      const uint8_t damage_fly_magnify_start_supported =
+          (action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_HI ||
+           action_id == (uint16_t)MSL_ACT_DAMAGE_FLY_N)
+              ? 1u
+              : 0u;
+      const uint8_t damage_fly_magnify_requires_seed_visible =
+          (state_flags_is_damage_fly_action(action_id) != 0u &&
+           (damage_fly_magnify_start_supported == 0u ||
+            (f221f & (uint8_t)MSL_STATE_FLAG_221F_B0) == 0u))
+              ? 1u
+              : 0u;
+      if (batch->state.camera_target_live_pose_valid[idx] != 0u &&
+          !batch->state.camera_target_point_inside_stage_cam_bounds_u8[idx] &&
+          state_flags_camera_overlap_stage_cam_bounds(batch, idx, 15.0f) &&
+          state_flags_magnify_runtime_visibility_action(action_id) != 0u &&
+          damage_fly_magnify_requires_seed_visible == 0u) {
+        // Runtime Firefox/Firebird camera visibility owner:
+        // - ftCamera_UpdateCameraBox/ftLib_800866DC refresh the current camera subject point,
+        // - ftLib_80086A8C sets x221F_b0 when Camera_80030CD8 reports the subject point is
+        //   off-screen while Camera_80030CFC still admits it to the magnifying-glass display,
+        // - the magnify damage timer consumes this companion owner before it starts a replay-rollout
+        //   counter from zero. DamageFlyHi/N can start a fresh source-visible offscreen episode; the
+        //   Lw/Top/Roll families stay out of this fresh-start owner because their replay-hidden hit
+        //   pose can differ from the visible DamageFly animation point used by the lightweight matrix
+        //   reconstruction, while nonzero seeded x1910 episodes remain consumed by timers.c.
+        // refs/melee/src/melee/ft/ftcamera.c::ftCamera_UpdateCameraBox
+        // refs/melee/src/melee/ft/ftlib.c::{ftLib_800866DC,ftLib_80086A8C}
+        // refs/melee/src/melee/cm/camera.c::{Camera_80030CD8,Camera_80030CFC}
+        if (replay_rollout != 0u) {
+          f221f |= (uint8_t)MSL_STATE_FLAG_221F_B0;
+        }
+        batch->state.magnify_damage_runtime_visibility_owner[idx] = 1u;
+      } else if (!batch->state.camera_target_point_inside_stage_cam_bounds_u8[idx]) {
+        batch->state.magnify_damage_runtime_visibility_owner[idx] = 0u;
+      } else {
+        batch->state.magnify_damage_runtime_visibility_owner[idx] = 0u;
+        if (batch->state.magnify_damage_counter_x1910[idx] == 0u) {
+          batch->state.magnify_damage_seed_episode_active[idx] = 0u;
+        }
       }
       batch->state.state_flags[flags_221c_i] = f221c;
       batch->state.state_flags[flags_221f_i] = f221f;

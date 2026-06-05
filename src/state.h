@@ -15,17 +15,22 @@ typedef struct MslStateSoA {
   // Fountain of Dreams dynamic platform heights, one pair per environment.
   // Platform id domain matches Slippi/grIzumi: 0=right, 1=left.
   // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
-  float* stage_fod_platform_height;                     // [batch * 2]
-  uint8_t* stage_fod_platform_valid;                    // [batch * 2]
-  float* stage_fod_platform_velocity;                   // [batch * 2]
-  uint8_t* stage_fod_platform_velocity_valid;           // [batch * 2]
-  float* stage_fod_platform_deferred_velocity;          // [batch * 2]
-  uint8_t* stage_fod_platform_deferred_velocity_valid;  // [batch * 2]
-  uint8_t* stage_fod_platform_height_source;            // [batch * 2]
-  uint8_t* stage_fod_platform_scheduler_phase;          // [batch * 2]
-  uint16_t* stage_fod_platform_scheduler_timer;         // [batch * 2]
-  float* stage_fod_platform_scheduler_target;           // [batch * 2]
-  uint8_t* stage_fod_platform_scheduler_valid;          // [batch * 2]
+  float* stage_fod_platform_height;                      // [batch * 2]
+  uint8_t* stage_fod_platform_valid;                     // [batch * 2]
+  float* stage_fod_platform_velocity;                    // [batch * 2]
+  uint8_t* stage_fod_platform_velocity_valid;            // [batch * 2]
+  float* stage_fod_platform_deferred_velocity;           // [batch * 2]
+  uint8_t* stage_fod_platform_deferred_velocity_valid;   // [batch * 2]
+  uint8_t* stage_fod_platform_height_source;             // [batch * 2]
+  uint8_t* stage_fod_platform_scheduler_phase;           // [batch * 2]
+  uint16_t* stage_fod_platform_scheduler_timer;          // [batch * 2]
+  float* stage_fod_platform_scheduler_target;            // [batch * 2]
+  uint8_t* stage_fod_platform_scheduler_wait_origin;     // [batch * 2]
+  uint8_t* stage_fod_platform_scheduler_next_frame_rng;  // [batch * 2]
+  uint8_t* stage_fod_platform_scheduler_valid;           // [batch * 2]
+  uint16_t* stage_fod_platform_visible_choice_timer;     // [batch * 2]
+  uint32_t* stage_fod_platform_visible_choice_rng_seed;  // [batch * 2]
+  uint8_t* stage_fod_platform_visible_choice_valid;      // [batch * 2]
   // Yoshi's Story Shy Guy stage-object scheduler.
   // refs/melee/src/melee/gr/grstory.c::grStory_801E3418
   uint16_t* stage_yoshi_shyguy_timer;   // [batch]
@@ -463,6 +468,16 @@ typedef struct MslStateSoA {
   float* camera_target_world_y_f32;
   float* camera_target_world_z_f32;
   float* camera_box_radius_f32;
+  // Runtime proof that the camera target/radius and inside-bounds predicate were refreshed from
+  // current fighter pose this frame.
+  // refs/melee/src/melee/ft/ftcamera.c::ftCamera_UpdateCameraBox
+  // refs/melee/src/melee/ft/ftlib.c::{ftLib_800866DC,ftLib_80086A8C}
+  uint8_t* camera_target_live_pose_valid;
+  // Runtime-owned magnifying-glass visibility admission from ftLib_80086A8C. This is distinct from
+  // the replay-visible seed bit so timers can start counters only from source-owned live camera
+  // state, not stale teacher-forced snapshots.
+  uint8_t* magnify_damage_runtime_visibility_owner;
+  uint8_t* magnify_damage_seed_episode_active;
   // Current-row Camera_80030CD8-style point-inside-stage-cam predicate, seeded from the promoted
   // camera target point plus ISO stage camera bounds.
   // refs/melee/src/melee/ft/ftlib.c::ftLib_80086A8C

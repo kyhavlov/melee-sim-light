@@ -309,11 +309,15 @@ typedef struct MslDebugStageState {
   // One-step replay/source provenance for current FoD platform heights. This is debug output only;
   // runtime clears seed-provided source bits after the frame unless a live owner reasserts them.
   uint8_t fod_platform_height_source[2];
+  uint8_t fod_platform_scheduler_phase[2];
+  uint8_t fod_platform_scheduler_valid[2];
+  uint16_t fod_platform_scheduler_timer[2];
+  float fod_platform_scheduler_target[2];
   // Yoshi's Story Randall center as resolved from the generated GrSt platform transform used by
   // collision. This keeps viewer/modelplay traces on the same stage-object owner as runtime.
   // data/stages/bin/grst.bin::MSLSTG01 platform_transform=randall
   uint8_t randall_exists;
-  uint8_t _pad0[3];
+  uint8_t _pad0[1];
   float randall_x;
   float randall_y;
 } MslDebugStageState;
@@ -374,6 +378,15 @@ typedef struct MslSeed {
   // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
   uint16_t stage_fod_platform_hidden_return_timer_u16[2];
   uint8_t stage_fod_platform_hidden_return_valid_u8[2];
+  // Visible-choice replay-prefix state for a source-direct FoD episode: Slippi has published a
+  // home-height platform event and later a fresh downward platform movement, proving grIzumi's
+  // already-sampled wait timer and HSD seed for the visible target choice. Runtime consumes it only
+  // from home-height phase-0 scheduler state, so it does not bridge arbitrary sparse replay rows.
+  // refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+  // refs/slippi-ssbm-asm/Recording/SendFrameStart.s
+  uint16_t stage_fod_platform_visible_choice_timer_u16[2];
+  uint8_t stage_fod_platform_visible_choice_valid_u8[2];
+  uint32_t stage_fod_platform_visible_choice_rng_seed_u32[2];
   // Prefix/source class for current FoD platform heights:
   // - bit 0: direct Slippi `fod_platform` current grIzumi event this frame.
   // - bit 1: current grounded contact reconstructed the platform height from mpLib line geometry.
@@ -868,9 +881,9 @@ typedef struct MslSeed {
   // Consumer:
   // - Runtime Fighter_procUpdate model increments this counter while offscreen and applies the
   //   source-owned 1% magnifying-glass damage when it reaches the interval. Replay-seeded rollouts
-  //   consume only nonzero backfilled counter episodes; they do not start new magnify episodes from
-  //   replay-visible camera bits alone because `Camera_80031144`/`Player_GetMoreFlagsBit3` remain
-  //   hidden.
+  //   consume nonzero backfilled counter episodes. Fresh zero-counter starts remain blocked except
+  //   for the bounded DamageFlyHi/N owner where runtime has a source-visible x221F_b0 bit, a
+  //   point-outside Camera_80030CD8 result, and a Camera_80030CFC overlap admission.
   //
   // Fallback:
   // - 0 means no elapsed offscreen frames; live/non-replay starts build the counter causally.

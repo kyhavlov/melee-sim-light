@@ -63,8 +63,8 @@ rollout.first_mismatch_seeded_total: 0
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=11.4627 rec=3136 p=0 seed/ref/out=-122.431/-123.558/-135.021 actions=247/0/0 category=unclassified
-  2. percent max_err=1 rec=11423 p=1 seed/ref/out=126.66/127.66/126.66 actions=27/27/27 category=unclassified
-  3. speed_air_x_self max_err=0.64325 rec=3126 p=0 seed/ref/out=0.632875/0.64325/0 actions=247/247/247 category=unclassified
+  2. speed_air_x_self max_err=0.64325 rec=3126 p=0 seed/ref/out=0.632875/0.64325/0 actions=247/247/247 category=unclassified
+  3. shield_hp max_err=0.282024 rec=944 p=0 seed/ref/out=49.9524/50.0224/50.3044 actions=182/75/75 category=unclassified
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:8347
 
 == datasets/fox_falco_fd_ucf084_recent/replays/validation/cardinal_1.0_recent/QuerulousGrandDinosaur.msl ==
@@ -80,7 +80,7 @@ rollout.first_mismatch_seeded_total: 0
 rollout.float_status: NOT-CLEAN
 rollout.float_top_errors:
   1. pos_x max_err=3.80643 rec=9373 p=0 seed/ref/out=82.0671/86.3517/82.5452 actions=356/356/356 category=unclassified
-  2. percent max_err=2 rec=10099 p=1 seed/ref/out=140.63/141.63/139.63 actions=354/354/354 category=unclassified
+  2. percent max_err=1 rec=7816 p=0 seed/ref/out=110.18/110.18/111.18 actions=38/38/38 category=unclassified
   3. speed_y_self max_err=0.6 rec=3128 p=1 seed/ref/out=-3.4/-3.4/-2.8 actions=86/42/42 category=unclassified
 rollout.ignored_first_mismatch_top: state_flags[4]&0x80:9264
 
@@ -113,6 +113,6 @@ overall.rollout.first_mismatch_seeded_total: 0
 overall.rollout.status: RAW-CLEAN
 overall.rollout.float_top_errors:
   1. pos_x max_err=11.4627 rec=3136 p=0 seed/ref/out=-122.431/-123.558/-135.021 actions=247/0/0 category=unclassified
-  2. percent max_err=2 rec=10099 p=1 seed/ref/out=140.63/141.63/139.63 actions=354/354/354 category=unclassified
-  3. pos_y max_err=1.12705 rec=6622 p=0 seed/ref/out=-30.8362/-31.0282/-32.1552 actions=354/354/354 category=unclassified
+  2. pos_y max_err=1.12705 rec=6622 p=0 seed/ref/out=-30.8362/-31.0282/-32.1552 actions=354/354/354 category=unclassified
+  3. percent max_err=1 rec=6115 p=0 seed/ref/out=146.735/147.735/146.735 actions=38/38/38 category=unclassified
 overall.rollout.ignored_first_mismatch_top: state_flags[4]&0x80:27917

@@ -178,3 +178,76 @@ def test_magnify_rollout_does_not_start_from_unproven_camera_rows() -> None:
 
     out = _run_rollout(ds, start, stop)
     assert float(out["percent"][p]) == pytest.approx(float(ref["percent"][p]), abs=1e-5)
+
+
+@pytest.mark.integration
+def test_magnify_rollout_mgs_damagefly_hi_n_source_visible_episode_ticks() -> None:
+    # MGS carries two source-owned magnify damage episodes through FoD edge camera rows:
+    # - DamageFlyN -> SpecialAirNLoop reaches the 60th offscreen frame at rec2919.
+    # - DamageFlyHi -> SpecialLwEnd/AttackAirN reaches the later hit with the +1 percent already
+    #   applied, which is the rec5687 hitstun boundary.
+    # DamageFly fresh starts require the source-visible x221F_b0 bit and the point-only
+    # Camera_80030CD8 lane; this is not an action/row proxy.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+    # refs/melee/src/melee/ft/ftlib.c::ftLib_80086A8C
+    # refs/melee/src/melee/cm/camera.c::{Camera_80030CD8,Camera_80030CFC}
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root
+        / "datasets/aggregate_recent/replays/validation/fountain_of_dreams_recent/"
+        "MilkyGracefulStingray.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    p = 1
+
+    first_tick = 2919
+    first_seed = ds.samples[first_tick]["seed_t"]
+    first_ref = ds.samples[first_tick]["ref_t1"]
+    assert int(first_seed["action_id"][p]) == 345  # SpecialAirNLoop.
+    assert int(first_seed["magnify_damage_counter_x1910"][p]) == 59
+    assert int(first_seed["camera_target_point_inside_stage_cam_bounds_u8"][p]) == 0
+    assert int(first_seed["state_flags"][p, 4]) & 0x80
+    first_out = _run_rollout(ds, 2855, first_tick)
+    assert float(first_out["percent"][p]) == pytest.approx(float(first_ref["percent"][p]), abs=1e-5)
+
+    hit_record = 5687
+    hit_ref = ds.samples[hit_record]["ref_t1"]
+    second_seed = ds.samples[5621]["seed_t"]
+    assert int(second_seed["action_id"][p]) == 354  # SpecialLwTurn.
+    assert int(second_seed["magnify_damage_counter_x1910"][p]) == 59
+    assert int(second_seed["camera_target_point_inside_stage_cam_bounds_u8"][p]) == 0
+    hit_out = _run_rollout(ds, 5564, hit_record)
+    assert float(hit_out["percent"][p]) == pytest.approx(float(hit_ref["percent"][p]), abs=1e-5)
+    assert int(hit_out["hitstun"][p]) == int(hit_ref["hitstun"][p]) == 61
+
+
+@pytest.mark.integration
+def test_magnify_rollout_dcc_damagefly_lw_top_visible_rows_do_not_start_episode() -> None:
+    # DCC has source-visible DamageFlyTop rows with camera point outside but no ifMagnify damage
+    # tick. Fresh DamageFly starts are therefore limited to the Hi/N source-visible owner; Lw/Top/Roll
+    # rows can only consume an already-seeded nonzero x1910 episode.
+    # refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+    # refs/melee/src/melee/if/ifmagnify.c::ifMagnify_802FC998
+    root = Path(__file__).resolve().parents[1]
+    dataset_path = (
+        root / "datasets/aggregate_recent/replays/validation/aggregate_recent/DistinctCaringCobra.msl"
+    )
+    if not dataset_path.exists():
+        pytest.skip(f"missing local dataset: {dataset_path}")
+
+    ds = read_dataset(str(dataset_path))
+    p = 1
+    visible_top = ds.samples[9362]["seed_t"]
+    assert int(visible_top["action_id"][p]) == 90  # DamageFlyTop.
+    assert int(visible_top["magnify_damage_counter_x1910"][p]) == 0
+    assert int(visible_top["camera_target_point_inside_stage_cam_bounds_u8"][p]) == 0
+    assert int(visible_top["state_flags"][p, 4]) & 0x80
+
+    hit_record = 9685
+    hit_ref = ds.samples[hit_record]["ref_t1"]
+    hit_out = _run_rollout(ds, 9300, hit_record)
+    assert float(hit_out["percent"][p]) == pytest.approx(float(hit_ref["percent"][p]), abs=1e-5)
+    assert int(hit_out["hitstun"][p]) == int(hit_ref["hitstun"][p]) == 122

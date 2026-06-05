@@ -969,6 +969,95 @@ def _fod_hidden_return_timers(
     return out_timer, out_valid
 
 
+def _fod_visible_choice_lanes(
+    heights: np.ndarray,
+    valid: np.ndarray,
+    fresh: np.ndarray | None,
+    frame_pre_random_seed: np.ndarray,
+    *,
+    motion_params: dict[str, float] | None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Derive a bounded FoD visible-move choice seed from direct platform events.
+
+    Slippi direct `fod_platform` events expose the source grIzumi trajectory. When a platform parks
+    at home and later emits a fresh direct downward movement, the source has already sampled the
+    visible wait and the choice/target RNG for that episode. Carry only that direct-event-proven
+    episode seed so replay rollout can reproduce the same FoD choice without changing ordinary
+    free-running scheduler behavior.
+
+    refs/melee/src/melee/gr/grizumi.c::grIzumi_801CC358
+    refs/slippi-ssbm-asm/Recording/SendFrameStart.s
+    """
+    h = np.asarray(heights, dtype=np.float32)
+    v = np.asarray(valid, dtype=np.uint8)
+    seed = np.asarray(frame_pre_random_seed, dtype=np.uint32)
+    out_timer = np.zeros(h.shape, dtype=np.uint16)
+    out_valid = np.zeros(v.shape, dtype=np.uint8)
+    out_rng = np.zeros(h.shape, dtype=np.uint32)
+    if (
+        motion_params is None
+        or fresh is None
+        or h.ndim != 2
+        or h.shape[1] != 2
+        or v.shape != h.shape
+        or fresh.shape != h.shape
+        or seed.shape[0] != h.shape[0]
+    ):
+        return out_timer, out_valid, out_rng
+
+    home = float(motion_params["home_height"])
+    down_speed = float(motion_params["down_speed"])
+    eps = max(1.0e-3, 0.25 * abs(down_speed))
+    for platform_id in range(2):
+        event_mask = (v[:, platform_id] != 0) & (fresh[:, platform_id] != 0)
+        event_idx = np.flatnonzero(event_mask)
+        if event_idx.size == 0:
+            continue
+
+        event_h = h[event_idx, platform_id]
+        home_events = event_idx[np.abs(event_h - home) <= eps].astype(np.int64)
+        move_events = event_idx[event_h < home - eps].astype(np.int64)
+        if home_events.size == 0 or move_events.size == 0:
+            continue
+
+        prev_home_pos = np.searchsorted(home_events, move_events, side="right") - 1
+        has_home = prev_home_pos >= 0
+        if not np.any(has_home):
+            continue
+        move_events = move_events[has_home]
+        paired_home = home_events[prev_home_pos[has_home]]
+
+        # `grIzumi_801CC358` has one pending visible-choice source episode per platform. The first
+        # fresh downward direct event after a home event consumes that home event; repeated direct
+        # rows from the same move do not produce additional seed lanes.
+        _, first_for_home = np.unique(paired_home, return_index=True)
+        paired_home = paired_home[first_for_home]
+        move_events = move_events[first_for_home]
+
+        branch_frame = move_events - 1
+        timers = move_events - paired_home - 4
+        ok = (
+            (branch_frame > paired_home)
+            & (branch_frame < h.shape[0])
+            & (timers >= 0)
+            & (timers <= np.iinfo(np.uint16).max)
+        )
+        if not np.any(ok):
+            continue
+
+        paired_home = paired_home[ok]
+        move_events = move_events[ok]
+        timers = timers[ok]
+        branch_frame = branch_frame[ok]
+
+        latest = int(np.argmax(paired_home))
+        rows = slice(0, int(paired_home[latest]) + 1)
+        out_timer[rows, platform_id] = np.uint16(timers[latest])
+        out_rng[rows, platform_id] = np.uint32(seed[int(branch_frame[latest])])
+        out_valid[rows, platform_id] = np.uint8(1)
+    return out_timer, out_valid, out_rng
+
+
 def _dir_to_facing(direction: np.ndarray) -> np.ndarray:
     # direction is float: -1 (left) or +1 (right); map to 0/1.
     return (direction > 0).astype(np.uint8)
@@ -5696,6 +5785,26 @@ def _main_impl(args) -> Dataset:
         samples["seed_t"][
             "stage_fod_platform_hidden_return_valid_u8"
         ] = fod_hidden_return_valid
+        (
+            fod_visible_choice_timer,
+            fod_visible_choice_valid,
+            fod_visible_choice_rng_seed,
+        ) = _fod_visible_choice_lanes(
+            fod_height,
+            fod_valid,
+            None if fod_fresh is None else fod_fresh[:-1],
+            samples["seed_t"]["frame_pre_random_seed"],
+            motion_params=fod_motion_params,
+        )
+        samples["seed_t"][
+            "stage_fod_platform_visible_choice_timer_u16"
+        ] = fod_visible_choice_timer
+        samples["seed_t"][
+            "stage_fod_platform_visible_choice_valid_u8"
+        ] = fod_visible_choice_valid
+        samples["seed_t"][
+            "stage_fod_platform_visible_choice_rng_seed_u32"
+        ] = fod_visible_choice_rng_seed
         samples["seed_t"]["stage_fod_platform_height_source_u8"] = fod_height_source
         fod_floor_skip = _derive_fod_floor_skip_segments(
             action_id_u16=samples["seed_t"]["action_id"][:, :num_players],

@@ -699,20 +699,38 @@ void timers_update_magnify_damage_post_frame(MslBatch* batch) {
                                                                                              : 0u;
     for (int p = 0; p < num_players; p++) {
       const size_t idx = msl_idx_player(bi, p);
-      if (replay_rollout != 0u && batch->state.magnify_damage_counter_x1910[idx] == 0u) {
-        continue;
-      }
       const uint8_t flags_221f =
           batch->state
               .state_flags[idx * MSL_STATE_FLAGS_BYTES + (size_t)MSL_STATE_FLAGS_221F_INDEX];
       const uint8_t visible = (flags_221f & (uint8_t)MSL_STATE_FLAG_221F_B0) != 0u;
+      // Replay rollout magnify ownership:
+      // - nonzero x1910 seeds are teacher-forced terminal/current episodes,
+      // - zero-counter replay rollouts may start only when state_flags has just admitted an
+      //   explicit runtime ftCamera_UpdateCameraBox / ftLib_80086A8C magnifying-glass owner.
+      // refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate
+      // refs/melee/src/melee/ft/ftcamera.c::ftCamera_UpdateCameraBox
+      // refs/melee/src/melee/ft/ftlib.c::ftLib_80086A8C
+      if (replay_rollout != 0u && batch->state.magnify_damage_counter_x1910[idx] == 0u &&
+          (batch->state.magnify_damage_runtime_visibility_owner[idx] == 0u ||
+           batch->state.magnify_damage_seed_episode_active[idx] != 0u)) {
+        continue;
+      }
       const uint8_t disabled = (flags_221f & (uint8_t)MSL_STATE_FLAG_221F_B4) != 0u;
+      const uint8_t seed_episode_offscreen =
+          (replay_rollout != 0u && batch->state.magnify_damage_seed_episode_active[idx] != 0u &&
+           batch->state.magnify_damage_counter_x1910[idx] != 0u)
+              ? 1u
+              : 0u;
       const uint8_t offscreen =
-          batch->state.camera_target_point_inside_stage_cam_bounds_u8[idx] == 0u ? 1u : 0u;
+          (seed_episode_offscreen != 0u ||
+           batch->state.camera_target_point_inside_stage_cam_bounds_u8[idx] == 0u)
+              ? 1u
+              : 0u;
       if (!visible || !offscreen || disabled ||
           timers_magnify_live_fighter_action(batch->state.action_id[idx]) == 0u ||
           !(batch->state.percent[idx] < (float)c->magnify_damage_percent_limit)) {
         batch->state.magnify_damage_counter_x1910[idx] = 0u;
+        batch->state.magnify_damage_seed_episode_active[idx] = 0u;
         continue;
       }
 

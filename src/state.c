@@ -54,7 +54,12 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   memset(state->stage_fod_platform_deferred_velocity_valid, 0, sizeof(uint8_t) * b2);
   memset(state->stage_fod_platform_scheduler_timer, 0, sizeof(uint16_t) * b2);
   memset(state->stage_fod_platform_scheduler_target, 0, sizeof(float) * b2);
+  memset(state->stage_fod_platform_scheduler_wait_origin, 0, sizeof(uint8_t) * b2);
+  memset(state->stage_fod_platform_scheduler_next_frame_rng, 0, sizeof(uint8_t) * b2);
   memset(state->stage_fod_platform_scheduler_valid, 0, sizeof(uint8_t) * b2);
+  memset(state->stage_fod_platform_visible_choice_timer, 0, sizeof(uint16_t) * b2);
+  memset(state->stage_fod_platform_visible_choice_rng_seed, 0, sizeof(uint32_t) * b2);
+  memset(state->stage_fod_platform_visible_choice_valid, 0, sizeof(uint8_t) * b2);
   memset(state->stage_yoshi_shyguy_spawn_rng_seed, 0, sizeof(uint32_t) * b);
   memset(state->stage_yoshi_shyguy_spawn_rng_valid, 0, sizeof(uint8_t) * b);
   memset(state->stage_dream_whispy_wind_dir, 0, sizeof(uint8_t) * b);
@@ -62,6 +67,9 @@ int state_alloc(MslStateSoA* state, int batch_size) {
   memset(state->stage_dream_whispy_wind_timer, 0, sizeof(uint16_t) * b);
   memset(state->item_spawn_id_counter, 0, sizeof(uint32_t) * b);
   memset(state->dynamic_pose_state_valid, 0, sizeof(uint8_t) * bp);
+  memset(state->camera_target_live_pose_valid, 0, sizeof(uint8_t) * bp);
+  memset(state->magnify_damage_runtime_visibility_owner, 0, sizeof(uint8_t) * bp);
+  memset(state->magnify_damage_seed_episode_active, 0, sizeof(uint8_t) * bp);
   memset(state->dynamic_pose_apply_collision_matrix, 0, sizeof(uint8_t) * bp);
   memset(state->dynamic_pose_node_count, 0, sizeof(uint8_t) * bp);
   memset(state->dynamic_pose_char_id, 0, sizeof(uint8_t) * bp);

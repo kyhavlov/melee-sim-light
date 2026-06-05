@@ -236,9 +236,15 @@ Source/generation:
 - Because `fp->x221F_b0` also covers match-flow/dead-flow camera-subject visibility, both seed
   derivation and runtime exclude dead/rebirth/entry states from this magnifying-glass approximation.
 - Replay-seeded validation rollouts consume a nonzero backfilled counter until it ticks or becomes
-  ineligible, but they do not start a new magnify episode from counter `0` using replay-visible
-  camera bits alone. The RL1 profile intentionally ignores the camera-box visibility bit, so the
-  explicit hidden counter is the rollout seed owner for magnify damage, not raw `state_flags[4]&0x80`.
+  ineligible. Fresh zero-counter starts are blocked from raw replay-visible camera bits alone except
+  for the bounded DamageFlyHi/N source-visible owner: runtime must have x221F_b0 live, the
+  point-only `Camera_80030CD8` predicate outside stage camera bounds, and the
+  `Camera_80030CFC(..., 15)` magnify overlap admission. DamageFlyLw/Top/Roll rows remain negative
+  controls because their replay-hidden hit pose can differ from the lightweight visible-pose
+  reconstruction; those rows may only consume already-seeded nonzero x1910 episodes.
+  The RL1 profile intentionally ignores the camera-box visibility bit, so the explicit hidden
+  counter/source-owner pair is the rollout owner for magnify damage, not raw
+  `state_flags[4]&0x80`.
 
 Decomp/data contract:
 - `refs/melee/src/melee/ft/fighter.c::Fighter_procUpdate`.
@@ -1186,15 +1192,15 @@ Characters (Fox/Falco):
       `ftCo_DamageFly_Coll` runs mpColl. FoD open-air and in-span platform contacts have focused
       negatives; hard-floor rows on other stages keep the normal previous-public-row
       reconstruction. This stack changes seed schema and same-record-size cache semantics:
-      `tools/slippi/preprocess_suite.py` cache version 20 is the first valid cache generation for
-      the CliffWait `mv.co.cliff.x8` stick-option latch seed lane; cache version 19 is the first
-      valid cache generation for
-      FoD hidden-return scheduler timer seed lanes; cache version 18 is the first valid cache
+      `tools/slippi/preprocess_suite.py` cache version 21 is the first valid cache generation for
+      FoD visible-choice scheduler timer/RNG seed lanes; cache version 20 is the first valid cache
+      generation for the CliffWait `mv.co.cliff.x8` stick-option latch seed lane; cache version 19
+      is the first valid cache generation for FoD hidden-return scheduler timer seed lanes; cache
+      version 18 is the first valid cache
       generation for FoD grounded KneeBend severe-airborne DamageFlyRoll seed-lane reconstruction;
-      cache version
-      17 is the first valid cache generation for
-      sustained FoD DamageFly current-root floor-sweep previous-position reconstruction; cache
-      version 16 is the first valid cache generation for
+      cache version 17 is the first valid cache generation for sustained FoD DamageFly current-root
+      floor-sweep previous-position reconstruction; cache version 16 is the first valid cache
+      generation for
       FoD same-step platform-contact deferred velocity seed lanes; cache version 15 is the first
       valid cache generation for
       grounded Dash/basic-attack severe-airborne DamageFlyRoll seed-lane reconstruction; cache

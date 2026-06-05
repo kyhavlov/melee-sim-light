@@ -52,7 +52,7 @@ rollout.float_top_downstream:
   1. percent max_err=15 rec=1179 p=0 seed/ref/out=32.52/32.52/47.52 actions=178/181/87 category=downstream_discrete_mismatch
   2. pos_x max_err=10.62 rec=6634 p=2 seed/ref/out=22.8141/22.8141/12.1941 actions=179/179/181 category=downstream_discrete_mismatch
   3. shield_hp max_err=10.5 rec=6634 p=2 seed/ref/out=52.09/51.81/41.31 actions=179/179/181 category=downstream_discrete_mismatch
-rollout.ignored_first_mismatch_top: state_flags[4]&0x80:3960
+rollout.ignored_first_mismatch_top: state_flags[4]&0x80:3863
 
 == suite summary ==
 overall.rollout.streak_count: 44
@@ -72,4 +72,4 @@ overall.rollout.float_top_downstream:
   1. percent max_err=15 rec=1179 p=0 seed/ref/out=32.52/32.52/47.52 actions=178/181/87 category=downstream_discrete_mismatch
   2. pos_x max_err=10.62 rec=6634 p=2 seed/ref/out=22.8141/22.8141/12.1941 actions=179/179/181 category=downstream_discrete_mismatch
   3. shield_hp max_err=10.5 rec=6634 p=2 seed/ref/out=52.09/51.81/41.31 actions=179/179/181 category=downstream_discrete_mismatch
-overall.rollout.ignored_first_mismatch_top: state_flags[4]&0x80:3960
+overall.rollout.ignored_first_mismatch_top: state_flags[4]&0x80:3863
