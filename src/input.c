@@ -413,7 +413,10 @@ int input_apply_pre_input_snapshot(MslBatch* batch, const uint8_t* prev_input_by
       // refs/melee/src/melee/ft/fighter.c::{
       //   Fighter_Spaghetti_8006AD10_Inner1,Fighter_Spaghetti_8006AD10
       // }
-      if (batch->state.hitlag_started_frame[idx] == 0u) {
+      const uint8_t source_hitlag_latch_active =
+          (batch->state.hitlag_started_frame[idx] != 0u || batch->state.hitlag[idx] != 0u) ? 1u
+                                                                                           : 0u;
+      if (source_hitlag_latch_active == 0u) {
         batch->state.input_buttons_pressed[idx] = 0u;
         batch->state.input_buttons_released[idx] = 0u;
       }
@@ -481,7 +484,10 @@ int input_apply(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev_in
       //   Fighter_Spaghetti_8006AD10_Inner1,Fighter_Spaghetti_8006AD10
       // }
       // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownAttack.c::ftCo_800986B0
-      if (batch->state.hitlag_started_frame[idx] != 0u) {
+      const uint8_t source_hitlag_latch_active =
+          (batch->state.hitlag_started_frame[idx] != 0u || batch->state.hitlag[idx] != 0u) ? 1u
+                                                                                           : 0u;
+      if (source_hitlag_latch_active != 0u) {
         batch->state.input_buttons_pressed[idx] =
             (uint16_t)(batch->state.input_buttons_pressed[idx] | raw_pressed);
         batch->state.input_buttons_released[idx] =
@@ -655,7 +661,7 @@ int input_apply(MslBatch* batch, const uint8_t* prev_input_bytes, size_t prev_in
               ? 1u
               : 0u;
       uint8_t pressed_lr_lane = (held_lr_lane_now != 0u && held_lr_lane_prev == 0u) ? 1u : 0u;
-      if (batch->state.hitlag_started_frame[idx] != 0u && batch->state.lr_press_timer[idx] == 0u) {
+      if (source_hitlag_latch_active != 0u && batch->state.lr_press_timer[idx] == 0u) {
         // x67F consumes the same hitlag-latched x668 edge as the other fighter input-history
         // timers. If an LR-lane edge was already latched before or during active hitlag, the
         // timer continues to observe that edge until hitlag clears; this is the predicate used by

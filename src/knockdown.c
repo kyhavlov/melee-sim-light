@@ -3447,6 +3447,27 @@ void knockdown_update_post_collision(MslBatch* batch) {
         batch->state.animation_index[idx] = (uint32_t)MSL_SM_FALL;
         msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
         enter_fall_colldata_lock_from_ground(batch, idx);
+        if (batch->state.action_frame[idx] == 0 &&
+            batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_DAMAGE_FLY_TOP &&
+            stage_collision_floor_line_is_platform(stage_id, batch->state.ground_id[idx]) &&
+            !stage_collision_floor_line_has_platform_transform(stage_id,
+                                                               batch->state.ground_id[idx])) {
+          // First DownBound frame after a terminal DamageFlyTop soft-platform contact:
+          // DamageFly_Coll enters DownBound through ftCo_80090184, then DownBound_Coll reaches
+          // ft_80082708 -> mpColl_8004B108 on the same source callback. For this carried
+          // soft-platform floor-loss result, the published Fall root is the callback-local contact
+          // substep rather than the fully integrated public KB endpoint. Keep the correction on the
+          // DownBound floor-loss branch itself; sustained DownBound, hard ledges, transformed
+          // platforms, and non-Top DamageFly entries keep ordinary Fighter_procUpdate KB
+          // integration.
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Damage.c::{
+          //   ftCo_DamageFly_Coll,ftCo_80090184}
+          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_DownBound.c::ftCo_DownBound_Coll
+          // refs/melee/src/melee/mp/mpcoll.c::{mpColl_8004B108,mpCollPrev,mpColl_8004ACE4}
+          // data/stages/bin/*.bin::MSLSTG01 segment platform flags
+          batch->state.pos_x[idx] =
+              (float)(batch->state.prev_pos_x[idx] + (0.5f * batch->state.speed_x_attack[idx]));
+        }
       } else if (!now_ground && down_bound_floor_loss_after_damagefly_entry(batch, idx)) {
         // First DownBound floor-loss publication after DamageFly_Coll entry:
         // DownBound_Coll calls ft_80082708/mpColl_8004B108 after the DownBound Phys tick. When

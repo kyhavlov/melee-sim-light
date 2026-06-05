@@ -491,7 +491,6 @@ enum {
 #define MSL_MPCOLL_REJECT_CLIFF_HORIZONTAL_LEDGE_LOCKED (UINT64_C(1) << 29)
 #define MSL_MPCOLL_REJECT_SPECIALAIRLW_START_STALE_PLATFORM (UINT64_C(1) << 30)
 #define MSL_MPCOLL_REJECT_ATTACKAIR_HARD_SLOPE_ROOT_WITHOUT_BOTTOM (UINT64_C(1) << 31)
-
 typedef enum MslMpcollFloorRejectRestore {
   MSL_MPCOLL_FLOOR_REJECT_RESTORE_NONE = 0u,
   MSL_MPCOLL_FLOOR_REJECT_RESTORE_KEEP_CURRENT = 1u,
@@ -7283,6 +7282,23 @@ void mpcoll_ground_apply(MslBatch* batch) {
            batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_AERIAL_B)
               ? 1u
               : 0u;
+      const uint8_t prev_action_is_jump =
+          (prev_action_id == (uint16_t)MSL_ACT_JUMP_F || prev_action_id == (uint16_t)MSL_ACT_JUMP_B)
+              ? 1u
+              : 0u;
+      const uint8_t seed_prev_action_is_jump =
+          (batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_F ||
+           batch->state.seed_prev_action_id[idx] == (uint16_t)MSL_ACT_JUMP_B)
+              ? 1u
+              : 0u;
+      const uint8_t fresh_lr_edge = ((batch->state.input_buttons_pressed[idx] &
+                                      (uint16_t)(MSL_BUTTON_L | MSL_BUTTON_R)) != 0u)
+                                        ? 1u
+                                        : 0u;
+      // TODO: Once the current rollout burn-down stabilizes, fold this accumulating floor-owner
+      // logic into a bounded collision-result packet. Floor sweep start provenance,
+      // callback/source authority, suppress/reject reason, and final publication should be carried
+      // as explicit fields instead of adding more scattered owner booleans here.
       const uint8_t escapeair_locked_jumpaerial_entry_desired_bottom_owner =
           (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR && ecb_lock_timer_seed != 0u &&
            seed_prev_action_is_jumpaerial &&
@@ -7293,22 +7309,21 @@ void mpcoll_ground_apply(MslBatch* batch) {
             batch->state.prev_action_frame[idx] <= 2))
               ? 1u
               : 0u;
-      const uint8_t escapeair_471f8_uses_frame_start_last_pos =
-          // Same-frame JumpAerial -> EscapeAir IASA from a platform-domain floor can enter
-          // EscapeAir before Fighter_procMap. In that entry-frame source path, ft_80082C74 calls
-          // mpCollPrev after the action transition, so CollData.last_pos is the frame-start
-          // JumpAerial root and CollData.cur_pos is the post-Phys EscapeAir root. This also matters
-          // for no-lock FoD static-y platform wavelands: the pre-entry CollData root/ECB has already
-          // been advanced by Fighter_8006A360 before IASA changes the motion state, so using the
-          // older replay floor_sweep_prev_pos endpoint misses the source bottom sweep. Already
-          // seeded EscapeAir rows have run the entry callback on the previous frame, so their source
-          // CollData.cur_pos is the prefix floor_sweep_prev_pos seed lane instead.
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_IASA
-          // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
-          // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
-          // refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_800471F8}
-          (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
-           (((ecb_lock_timer_seed != 0u &&
+      // Same-frame JumpAerial -> EscapeAir IASA from a platform-domain floor can enter EscapeAir
+      // before Fighter_procMap. In that entry-frame source path, ft_80082C74 calls mpCollPrev after
+      // the action transition, so CollData.last_pos is the frame-start JumpAerial root and
+      // CollData.cur_pos is the post-Phys EscapeAir root. This also matters for no-lock FoD
+      // static-y platform wavelands: the pre-entry CollData root/ECB has already been advanced by
+      // Fighter_8006A360 before IASA changes the motion state, so using the older replay
+      // floor_sweep_prev_pos endpoint misses the source bottom sweep. Already seeded EscapeAir rows
+      // have run the entry callback on the previous frame, so their source CollData.cur_pos is the
+      // prefix floor_sweep_prev_pos seed lane instead.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_JumpAerial.c::ftCo_JumpAerial_IASA
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+      // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+      // refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_800471F8}
+      const uint8_t escapeair_jumpaerial_frame_start_owner =
+          ((((ecb_lock_timer_seed != 0u &&
               (escapeair_locked_jumpaerial_entry_desired_bottom_owner ||
                stage_collision_floor_line_is_platform(stage_id, batch->state.ground_id[idx]) ||
                stage_collision_floor_line_has_platform_transform(stage_id,
@@ -7319,10 +7334,65 @@ void mpcoll_ground_apply(MslBatch* batch) {
             seed_prev_action_is_jumpaerial))
               ? 1u
               : 0u;
-      const float prev_x = escapeair_471f8_uses_frame_start_last_pos
+      // Late frame-start JumpF/B -> EscapeAir on a fresh shield edge keeps the frame-start
+      // CollData root for the first EscapeAir_Coll mpCollPrev sweep while the source jump ECB lock
+      // still has two frames remaining. The following lock-1 frame has already advanced the
+      // callback-local root far enough that EscapeAir keeps the ordinary post-entry floor sweep.
+      // refs/melee/src/melee/ft/chara/ftCommon/ftCo_EscapeAir.c::ftCo_EscapeAir_Coll
+      // refs/melee/src/melee/ft/ft_081B.c::{ft_80082C74,ft_80081D0C}
+      // refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_800471F8}
+      const uint8_t escapeair_late_jump_fresh_edge_owner =
+          (ecb_lock_timer_seed == 2u && fresh_lr_edge != 0u && prev_action_is_jump &&
+           seed_prev_action_is_jump && batch->state.seed_prev_action_frame[idx] == 6 &&
+           batch->state.action_frame[idx] <= 1)
+              ? 1u
+              : 0u;
+      const uint8_t escapeair_471f8_uses_frame_start_last_pos =
+          (action_id == (uint16_t)MSL_ACT_ESCAPE_AIR &&
+           (escapeair_jumpaerial_frame_start_owner != 0u ||
+            escapeair_late_jump_fresh_edge_owner != 0u))
+              ? 1u
+              : 0u;
+      uint8_t damagefly_frame_start_bottom_above_carried_floor = 0u;
+      if (is_damage_fly_collision_action(action_id) && batch->state.hitlag[idx] == 0u &&
+          batch->state.hitstun[idx] != 0u &&
+          batch->state.floor_sweep_prev_runtime_owned[idx] != 0u &&
+          isfinite(batch->state.prev_pos_x[idx]) && isfinite(batch->state.prev_pos_y[idx]) &&
+          isfinite(cur_bot.rel_y)) {
+        const int carried_floor_line_idx =
+            stage_collision_floor_line_index(stage_id, batch->state.ground_id[idx]);
+        float carried_floor_y = 0.0f;
+        if (carried_floor_line_idx >= 0 &&
+            floor_line_y_at_x_for_env(batch, bi, g, carried_floor_line_idx,
+                                      batch->state.prev_pos_x[idx], &carried_floor_y) &&
+            (batch->state.prev_pos_y[idx] + cur_bot.rel_y) > (carried_floor_y + k_floor_y_bias)) {
+          damagefly_frame_start_bottom_above_carried_floor = 1u;
+        }
+      }
+      const uint8_t damagefly_473cc_uses_colldata_last_pos =
+          // DamageFly_Coll calls ft_80081DD4, which copies CollData.cur_pos to last_pos before
+          // writing the integrated fighter root into cur_pos and calling mpColl_800473CC. When the
+          // callback-entry bottom is still above the carried floor, the current CollData root is the
+          // authoritative sweep start and older floor_sweep_prev_pos state can synthesize a stale
+          // DownBound. If the callback-entry bottom is already below the carried floor, keep the
+          // older CollData floor-sweep root so source floor penetration/crossing rows still resolve.
+          // refs/melee/src/melee/ft/ft_081B.c::ft_80081DD4
+          // refs/melee/src/melee/mp/mpcoll.c::{mpCollPrev,mpColl_800473CC,mpColl_80043754}
+          // data/stages/bin/*.bin::MSLSTG01 carried floor segment geometry
+          (is_damage_fly_collision_action(action_id) && batch->state.hitlag[idx] == 0u &&
+           batch->state.hitstun[idx] != 0u &&
+           batch->state.floor_sweep_prev_runtime_owned[idx] != 0u &&
+           damagefly_frame_start_bottom_above_carried_floor != 0u &&
+           (prev_action_id == action_id || batch->state.seed_prev_action_id[idx] == action_id) &&
+           isfinite(batch->state.prev_pos_x[idx]) && isfinite(batch->state.prev_pos_y[idx]))
+              ? 1u
+              : 0u;
+      const float prev_x = escapeair_471f8_uses_frame_start_last_pos ? batch->state.prev_pos_x[idx]
+                           : damagefly_473cc_uses_colldata_last_pos
                                ? batch->state.prev_pos_x[idx]
                                : batch->state.floor_sweep_prev_pos_x[idx];
-      const float prev_y = escapeair_471f8_uses_frame_start_last_pos
+      const float prev_y = escapeair_471f8_uses_frame_start_last_pos ? batch->state.prev_pos_y[idx]
+                           : damagefly_473cc_uses_colldata_last_pos
                                ? batch->state.prev_pos_y[idx]
                                : batch->state.floor_sweep_prev_pos_y[idx];
       mpcoll_clear_callback_floor_result(&mpcoll_ctx, prev_x, prev_y, x, y);

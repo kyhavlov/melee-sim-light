@@ -290,12 +290,12 @@ mismatch.item_state: 2 / 82650 (0.000024)
 mismatch.item_owner: 1 / 82650 (0.000012)
 mismatch.item_instance_id: 2 / 82650 (0.000024)
 ignored_mismatch.state_flags[4]&0x80: 53 / 11020 (0.004809)
-err.pos_x: mae=0.000410 p95=0.000000 max=0.982033
+err.pos_x: mae=0.000408 p95=0.000000 max=0.982033
 err.pos_y: mae=0.001701 p95=0.000000 max=2.940002
 err.speed_air_x_self: mae=0.000000 p95=0.000000 max=0.000427
 err.speed_ground_x_self: mae=0.000025 p95=0.000000 max=0.108000
 err.speed_y_self: mae=0.001701 p95=0.000000 max=2.940000
-err.speed_x_attack: mae=0.000002 p95=0.000000 max=0.026971
+err.speed_x_attack: mae=0.000000 p95=0.000000 max=0.000000
 err.speed_y_attack: mae=0.000000 p95=0.000000 max=0.000001
 err.percent: mae=0.000272 p95=0.000000 max=3.000000
 err.shield_hp: mae=0.000015 p95=0.000000 max=0.070000
@@ -306,7 +306,7 @@ err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000060
 overall.discrete_mismatch: 24 / 666710
 overall.strict_discrete_mismatch: 77 / 666710
 overall.ignored_discrete_mismatch: 53
-overall.float_norm_mae_p95: 0.00141444
+overall.float_norm_mae_p95: 0.00141427
 
 == datasets/aggregate_recent/replays/validation/cardinal_1.0_recent/GracefulAttachedTurtle.msl ==
 Records: 11529  Players/scored per record: 2  Total player-frames: 23058
@@ -790,8 +790,8 @@ err.pos_y: mae=0.000414 p95=0.000000 max=6.784000
 err.speed_air_x_self: mae=0.000066 p95=0.000000 max=1.480000
 err.speed_ground_x_self: mae=0.000036 p95=0.000000 max=0.296211
 err.speed_y_self: mae=0.000370 p95=0.000000 max=6.783999
-err.speed_x_attack: mae=0.000215 p95=0.000000 max=3.111742
-err.speed_y_attack: mae=0.000127 p95=0.000000 max=3.111742
+err.speed_x_attack: mae=0.000216 p95=0.000000 max=3.111742
+err.speed_y_attack: mae=0.000128 p95=0.000000 max=3.111742
 err.percent: mae=0.000544 p95=0.000000 max=12.000000
 err.shield_hp: mae=0.000006 p95=0.000000 max=0.070000
 err.item_pos_x: mae=0.000145 p95=0.000000 max=0.344872
@@ -801,7 +801,7 @@ err.item_vel_y: mae=0.000000 p95=0.000000 max=0.000008
 overall.discrete_mismatch: 43 / 1502336
 overall.strict_discrete_mismatch: 76 / 1502336
 overall.ignored_discrete_mismatch: 33
-overall.float_norm_mae_p95: 0.00004097
+overall.float_norm_mae_p95: 0.00004108
 
 == datasets/aggregate_recent/replays/validation/battlefield_recent/DelayedSuperbGuanaco.msl ==
 Records: 12914  Players/scored per record: 2  Total player-frames: 25828
@@ -875,12 +875,12 @@ mismatch.item_state: 0 / 69825 (0.000000)
 mismatch.item_owner: 0 / 69825 (0.000000)
 mismatch.item_instance_id: 0 / 69825 (0.000000)
 ignored_mismatch.state_flags[4]&0x80: 16 / 9310 (0.001719)
-err.pos_x: mae=0.000118 p95=0.000000 max=0.380005
+err.pos_x: mae=0.000064 p95=0.000000 max=0.380005
 err.pos_y: mae=0.001783 p95=0.000000 max=7.336668
 err.speed_air_x_self: mae=0.000041 p95=0.000000 max=0.380000
 err.speed_ground_x_self: mae=0.000214 p95=0.000000 max=1.990521
 err.speed_y_self: mae=0.000875 p95=0.000000 max=3.170000
-err.speed_x_attack: mae=0.000032 p95=0.000000 max=0.296842
+err.speed_x_attack: mae=0.000000 p95=0.000000 max=0.000001
 err.speed_y_attack: mae=0.000255 p95=0.000000 max=2.373939
 err.percent: mae=0.000000 p95=0.000000 max=0.000000
 err.shield_hp: mae=0.000000 p95=0.000000 max=0.000481
@@ -891,7 +891,7 @@ err.item_vel_y: mae=0.000001 p95=0.000000 max=0.000062
 overall.discrete_mismatch: 30 / 563255
 overall.strict_discrete_mismatch: 46 / 563255
 overall.ignored_discrete_mismatch: 16
-overall.float_norm_mae_p95: 0.00005757
+overall.float_norm_mae_p95: 0.00005531
 
 == datasets/aggregate_recent/replays/validation/battlefield_recent/MediumVirtualPig.msl ==
 Records: 8080  Players/scored per record: 2  Total player-frames: 16160
@@ -1482,4 +1482,4 @@ overall.float_norm_mae_p95: 0.00050149
 overall.discrete_mismatch: 1956 / 35294369
 overall.strict_discrete_mismatch: 3456 / 35294369
 overall.ignored_discrete_mismatch: 1500
-overall.float_norm_mae_p95: 0.00032015
+overall.float_norm_mae_p95: 0.00032012

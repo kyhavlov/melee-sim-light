@@ -901,10 +901,10 @@ static inline void enter_catch_motion_state(MslBatch* batch, size_t idx, uint16_
   // - Fighter_ChangeMotionState(..., msid, ..., anim_start=0.0f, anim_speed=1.0f)
   // refs/melee/src/melee/ft/chara/ftCommon/ftCo_Attack100.c::ftCo_800D8C54
   // Sim mapping note:
-  // - `speed_{x,y}_attack` are transient additive velocity lanes consumed by physics integration.
-  //   Clear them on catch entry so stale knockback/attack carry does not leak into grab startup.
-  batch->state.speed_x_attack[idx] = 0.0f;
-  batch->state.speed_y_attack[idx] = 0.0f;
+  // - `speed_{x,y}_attack` map the source fp->x8c_kb_vel lane, not fp->x74_anim_vel. Keep
+  //   residual knockback/attack velocity live across Catch/CatchDash entry; Fighter_procUpdate
+  //   still integrates x8c_kb_vel after the catch motion-state helper runs.
+  // refs/melee/src/melee/ft/types.h::{x74_anim_vel,x8c_kb_vel}
   batch->state.action_id[idx] = action_id;
   batch->state.animation_index[idx] = submotion;
   msl_anim_timebase_enter(batch, idx, 0.0f, 1.0f);
